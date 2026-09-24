@@ -74,6 +74,13 @@ func ExtractFieldInfo(md protoreflect.MessageDescriptor) []FieldInfo {
 			continue
 		}
 
+		// A message-only field never reaches the workflow (the activity
+		// wrapper clears it after the node's save_message), so it is not
+		// part of the node's CEL-visible output and must not validate.
+		if IsMessageOnly(fd) {
+			continue
+		}
+
 		info := FieldInfo{
 			Name:       string(fd.Name()),
 			Type:       protoKindToType(fd),
@@ -128,6 +135,13 @@ func ExtractFieldInfo(md protoreflect.MessageDescriptor) []FieldInfo {
 	}
 
 	return result
+}
+
+// IsMessageOnly reports whether a field is annotated
+// [(reliant) = {message_only: true}]: persisted with the node's message, then
+// cleared from the activity result before it is returned to the workflow.
+func IsMessageOnly(fd protoreflect.FieldDescriptor) bool {
+	return getFieldMeta(fd).GetMessageOnly()
 }
 
 // getFieldMeta extracts the (reliant) FieldMeta extension from a field's options.

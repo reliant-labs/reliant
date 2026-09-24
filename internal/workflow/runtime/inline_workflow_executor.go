@@ -265,9 +265,13 @@ func (e *InlineWorkflowExecutor) loadAndMergePresets(subInputs map[string]interf
 		"presets", presets,
 	)
 
+	// Preset names belong to the scope the workflow node lives in: its nodes,
+	// inputs, workflow, and the enclosing loop's iter when inside one.
 	evalCtx := &wfcel.EdgeEvalContext{
-		Nodes:  e.nodeOutputs,
-		Inputs: e.workflowInputs,
+		Nodes:    e.nodeOutputs,
+		Inputs:   e.workflowInputs,
+		Workflow: workflowContextToTyped(buildWorkflowContext(e.workflowID, e.workflowName, e.chatID, e.workflowInputs)),
+		Iter:     e.enclosingIter(),
 	}
 	return applyPresets(presets, subInputs, evalCtx, e.loadPresetParams, e.logger, e.nodeID)
 }
@@ -454,8 +458,8 @@ func (e *InlineWorkflowExecutor) compileSubWorkflowSemantics() error {
 func (e *InlineWorkflowExecutor) buildSubWorkflowInputs() map[string]interface{} {
 	inputs, _, err := e.buildSubWorkflowInputsWithOwnership()
 	if err != nil {
-		// Only reachable from tests and the parity simulator, which construct
-		// executors without presets. The real execution path calls
+		// Only reachable from tests, which construct executors without
+		// presets. The real execution path calls
 		// buildSubWorkflowInputsWithOwnership and propagates this error.
 		panic(err)
 	}
@@ -689,7 +693,9 @@ func (e *InlineWorkflowExecutor) executeSubWorkflow() (map[string]interface{}, e
 	)
 
 	// Create state machine for sub-workflow
-	stateMachine := NewSimplifiedStateMachine(e.workflowID, e.subWorkflow)
+	bodyScope := subWorkflowScope(e.enclosingIter())
+	stateMachine := NewSimplifiedStateMachine(e.workflowID, e.subWorkflow).
+		WithLoopScope(func() *LoopScope { return bodyScope })
 
 	// Create step executor for sub-workflow.
 	//
@@ -711,6 +717,7 @@ func (e *InlineWorkflowExecutor) executeSubWorkflow() (map[string]interface{}, e
 		subNodeOutputs,
 		e.childTracker,
 	).WithLoopContext(stepLoopNodeID, e.loopIteration).
+		WithEnclosingIter(e.enclosingIterMap()).
 		WithNodePathPrefix(e.nodePath()).
 		WithExecContext(e.execContext).
 		WithProjectPath(e.projectPath).
@@ -791,7 +798,7 @@ func (e *InlineWorkflowExecutor) executeSubWorkflow() (map[string]interface{}, e
 			skipped, skipEvt, condErr := skipNodeIfConditionFalse(
 				e.ctx, node, subNodeOutputs, subInputs,
 				e.workflowID, e.chatID, e.subWorkflowName, e.logger,
-				nil,
+				bodyScope,
 				e.nodePath(),
 			)
 			if condErr != nil {
@@ -887,7 +894,6 @@ func (e *InlineWorkflowExecutor) executeSubWorkflow() (map[string]interface{}, e
 						e.ctx,
 						node,
 						inlineOutput,
-						subNodeOutputs,
 						e.workflowID,
 						e.subWorkflowName,
 						e.chatID,
@@ -902,7 +908,8 @@ func (e *InlineWorkflowExecutor) executeSubWorkflow() (map[string]interface{}, e
 							"nestedNodeID", nid,
 							"error", err,
 						)
-						// Don't fail - save_message errors are logged but non-fatal
+						// Same as the nested node's own failure above.
+						return nil, fmt.Errorf("save_message for nested workflow %s: %w", nid, err)
 					}
 				}
 
@@ -1161,7 +1168,7 @@ func (e *InlineWorkflowExecutor) executeApproval(
 		workflowInputs,
 		e.workflowID,
 		triggered.Event.WorkflowName,
-		model.BuildIterContext(e.loopIteration),
+		e.enclosingIterMap(),
 		nil,
 		e.execContext,
 		e.chatID,
@@ -1187,7 +1194,7 @@ func (e *InlineWorkflowExecutor) executeAskQuestion(
 ) (map[string]interface{}, error) {
 	node := triggered.Node
 	event := triggered.Event
-	iterCtx := model.BuildIterContext(e.loopIteration)
+	iterCtx := e.enclosingIterMap()
 	evalResult, err := EvaluateNodeConfig(
 		node,
 		nodeOutputs,
@@ -1277,7 +1284,7 @@ func (e *InlineWorkflowExecutor) executeNestedWorkflow(
 	nid := node.GetId()
 
 	// Use helpers for consistent context building
-	iterCtx := model.BuildIterContext(e.loopIteration)
+	iterCtx := e.enclosingIterMap()
 
 	// Evaluate node config
 	evalResult, err := EvaluateNodeConfig(
@@ -1418,7 +1425,7 @@ func (e *InlineWorkflowExecutor) executeNestedRouter(
 	nid := node.GetId()
 
 	// Evaluate node config
-	iterCtx := model.BuildIterContext(e.loopIteration)
+	iterCtx := e.enclosingIterMap()
 	evalResult, err := EvaluateNodeConfig(
 		node,
 		subNodeOutputs,
@@ -1464,60 +1471,35 @@ func (e *InlineWorkflowExecutor) executeNestedRouter(
 	return routerExec.Execute()
 }
 
-// evaluateOutputsMap evaluates a map of CEL expressions against the given context.
-// Each entry in outputsMap maps an output name to a CEL expression string.
-// Returns a map of output names to their evaluated values.
-func evaluateOutputsMap(outputsMap map[string]string, celContext map[string]interface{}, logger log.Logger) (map[string]interface{}, error) {
-	outputs := make(map[string]interface{})
-	for name, expr := range outputsMap {
-		// Unwrap template syntax if present.
-		// TrimSpace first: YAML folded scalars (>) append a trailing newline
-		// which would cause the "}}" suffix check to fail.
-		exprStr := strings.TrimSpace(expr)
-		if len(exprStr) > 4 && exprStr[:2] == "{{" && exprStr[len(exprStr)-2:] == "}}" {
-			exprStr = exprStr[2 : len(exprStr)-2]
-		}
-
-		result, err := evaluateCELValue(exprStr, celContext)
-		if err != nil {
-			logger.Warn("Output evaluation failed",
-				"output", name,
-				"expr", expr,
-				"error", err,
-			)
-			// Set to nil on error rather than failing
-			outputs[name] = nil
-			continue
-		}
-
-		if result == nil {
-			logger.Warn("Output evaluated to nil",
-				"output", name,
-				"expr", expr,
-			)
-		}
-		outputs[name] = result
+// evaluateOutputs evaluates the sub-workflow's declared outputs exactly like
+// every other declared-output site (root workflow, loop iteration): through
+// EvaluateDeclaredOutputs, i.e. a NodeResolutionContext over the sub-workflow's
+// completed nodes, its inputs, `workflow`, and the enclosing loop's iter (read
+// from the inputs the loop published). A failing expression fails the node.
+func (e *InlineWorkflowExecutor) evaluateOutputs(nodeOutputs, inputs map[string]interface{}) (map[string]interface{}, error) {
+	workflowContext := buildWorkflowContext(e.workflowID, e.subWorkflowName, e.chatID, inputs)
+	if iterMap := e.enclosingIterMap(); iterMap != nil {
+		workflowContext["iter"] = iterMap
 	}
-
-	return outputs, nil
+	return EvaluateDeclaredOutputs(e.subWorkflow.GetOutputs(), nodeOutputs, workflowContext, e.subWorkflow, e.logger)
 }
 
-// evaluateOutputs evaluates the sub-workflow's output expressions
-func (e *InlineWorkflowExecutor) evaluateOutputs(nodeOutputs, inputs map[string]interface{}) (map[string]interface{}, error) {
-	if len(e.subWorkflow.Outputs) == 0 {
-		// No outputs defined - return step outputs as-is
-		return nodeOutputs, nil
+// enclosingIterMap is the `iter` of the loop this sub-workflow node runs in —
+// the full context (item/key included) the loop published into the inputs it
+// handed this node — or nil outside a loop. Every expression in the sub-workflow
+// body (node config, conditions, edges, declared outputs) sees this one iter.
+func (e *InlineWorkflowExecutor) enclosingIterMap() map[string]interface{} {
+	if e.loopNodeID == "" {
+		return nil
 	}
-
-	// Build context for CEL evaluation
-	celContext := map[string]interface{}{
-		"nodes": nodeOutputs,
-		"workflow": map[string]interface{}{
-			"inputs": inputs,
-		},
+	if iterMap, ok := e.workflowInputs["iter"].(map[string]interface{}); ok {
+		return iterMap
 	}
+	return model.BuildIterContext(e.loopIteration)
+}
 
-	return evaluateOutputsMap(e.subWorkflow.Outputs, celContext, e.logger)
+func (e *InlineWorkflowExecutor) enclosingIter() *model.IterContext {
+	return iterContextFromMap(e.enclosingIterMap())
 }
 
 // emitThreadCreated emits a thread_created event for threads owned by this node.

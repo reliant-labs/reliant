@@ -187,7 +187,7 @@ func TestBuiltinWorkflowTemplateResolution(t *testing.T) {
 			require.NoError(t, err, "Should read builtin workflow: %s", name)
 
 			// ResolveAndParseWorkflow is what the runtime uses
-			wf, err := runtime.ResolveAndParseWorkflow(data, map[string]interface{}{})
+			wf, err := runtime.ResolveAndParseWorkflow(data, map[string]interface{}{}, nil)
 			require.NoError(t, err, "ResolveAndParseWorkflow should succeed for builtin://%s", name)
 			require.NotNil(t, wf, "Workflow should not be nil")
 			assert.Equal(t, name, wf.GetName(), "Workflow name should match")

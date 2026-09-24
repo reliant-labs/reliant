@@ -482,7 +482,7 @@ Save messages only under certain conditions.
 - id: verify
   run: go test ./...
   save_message:
-    condition: "{{output.exit_code != 0}}"
+    condition: "output.exit_code != 0"
     role: user
     content: |
       Tests failed. Please fix:
@@ -886,7 +886,7 @@ nodes:
     run: npm test
     save_message:
       role: user
-      condition: "{{output.exit_code == 0}}"
+      condition: "output.exit_code == 0"
       content: "Test passed but should fail. Rewrite the test to actually catch the bug."
 
   - id: fix_loop

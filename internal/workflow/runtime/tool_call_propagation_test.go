@@ -475,14 +475,7 @@ func TestSaveMessageConfig_OutputToolCallsResolution(t *testing.T) {
 		result, err := evaluateSaveMessageConfig(
 			config,
 			activityOutput,
-			workflowContext,
-			map[string]interface{}{}, // nodeOutputs
-			"chat-123",
-			"thread-0",
-			"workflow-123",
-			"call_llm",
-			nil, // execContext
-			nil, // iter (not in a loop)
+			testSaveMessageScope(workflowContext, "chat-123", "thread-0", "workflow-123", "call_llm", nil),
 		)
 
 		require.NoError(t, err)
@@ -519,14 +512,7 @@ func TestSaveMessageConfig_OutputToolCallsResolution(t *testing.T) {
 		result, err := evaluateSaveMessageConfig(
 			config,
 			activityOutput,
-			workflowContext,
-			map[string]interface{}{},
-			"chat-123",
-			"thread-0",
-			"workflow-123",
-			"call_llm",
-			nil, // execContext
-			nil, // iter (not in a loop)
+			testSaveMessageScope(workflowContext, "chat-123", "thread-0", "workflow-123", "call_llm", nil),
 		)
 
 		require.NoError(t, err)
@@ -563,14 +549,7 @@ func TestSaveMessageConfig_OutputToolCallsResolution(t *testing.T) {
 		result, err := evaluateSaveMessageConfig(
 			config,
 			activityOutput,
-			workflowContext,
-			map[string]interface{}{},
-			"chat-123",
-			"thread-0",
-			"workflow-123",
-			"call_llm",
-			nil, // execContext
-			nil, // iter (not in a loop)
+			testSaveMessageScope(workflowContext, "chat-123", "thread-0", "workflow-123", "call_llm", nil),
 		)
 
 		require.NoError(t, err, "null tool_calls must not error — CEL null normalizes to nil")
@@ -618,14 +597,7 @@ func TestSaveMessageConfig_OutputToolCallsResolution(t *testing.T) {
 		result, err := evaluateSaveMessageConfig(
 			config,
 			activityOutput,
-			workflowContext,
-			map[string]interface{}{},
-			"chat-123",
-			"thread-0",
-			"workflow-123",
-			"call_llm",
-			nil, // execContext
-			nil, // iter (not in a loop)
+			testSaveMessageScope(workflowContext, "chat-123", "thread-0", "workflow-123", "call_llm", nil),
 		)
 
 		require.NoError(t, err)

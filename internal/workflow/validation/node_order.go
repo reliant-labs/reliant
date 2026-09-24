@@ -2,12 +2,9 @@
 package validation
 
 import (
-	"fmt"
 	"strings"
 
-	"github.com/google/cel-go/cel"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	wfcel "github.com/reliant-labs/reliant/internal/workflow/cel"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 )
 
@@ -51,15 +48,6 @@ import (
 // "predecessor never ran" world this analysis warns about on router-skip and
 // parallel paths. The has()-guard discipline this validation enforces is what
 // makes workflows resumable mid-graph; weakening it silently breaks resume.
-
-// nodeOrderScope describes the evaluation scope of an expression for ordering
-// validation: which node it belongs to and whether it evaluates after that
-// node completes (save_message, outbound edge conditions) or before it starts
-// (config, inject, node condition).
-type nodeOrderScope struct {
-	nodeID    string
-	afterNode bool
-}
 
 // computeGuaranteedBefore computes G(B) for every node in the workflow.
 // The workflow graph is validated acyclic before CEL validation runs; a
@@ -224,108 +212,4 @@ func intersectSets(sets []map[string]bool) map[string]bool {
 		}
 	}
 	return result
-}
-
-// warnNodeOrderingCompiled checks a single CEL expression for unguarded
-// nodes.<id> references to nodes that are not guaranteed to have executed
-// when the expression is evaluated.
-//
-// Guarded accesses — has(nodes.X...), null comparisons, optional chaining —
-// are exempt (detectConditionalNodeAccess machinery). Nodes with their own
-// condition are exempt here: the conditional-access warning already covers
-// them, and their output KEY is present even when skipped.
-//
-// Severity:
-//   - ERROR when the referenced node provably runs AFTER the current node
-//     (currentNode ∈ G(referenced)) — the reference can never be satisfied.
-//   - WARNING otherwise — the node exists but is not on every path from the
-//     workflow entry to this node (router dispatch, parallel branch).
-func warnNodeOrderingCompiled(expr string, path []string, scope *nodeOrderScope, typeCtx *WorkflowTypeContext, result *Result) {
-	if scope == nil || typeCtx == nil || typeCtx.GuaranteedBefore == nil {
-		return
-	}
-	guaranteed, ok := typeCtx.GuaranteedBefore[scope.nodeID]
-	if !ok {
-		return
-	}
-
-	// Build the set of nodes that are NOT safe to reference from this scope.
-	unsafeSet := make(map[string]bool)
-	for nodeID := range typeCtx.NodeTypes {
-		if nodeID == scope.nodeID {
-			// Self-references: config fields evaluate before the node runs and
-			// are covered by other validations; save_message uses output.*.
-			continue
-		}
-		if guaranteed[nodeID] {
-			continue
-		}
-		if _, isConditional := typeCtx.ConditionalNodes[nodeID]; isConditional {
-			// Covered by the conditional-access warning; the skip output keeps
-			// the nodes.<id> key present even when the condition is false.
-			continue
-		}
-		unsafeSet[nodeID] = true
-	}
-	if len(unsafeSet) == 0 {
-		return
-	}
-
-	// Parse with a dyn environment so the original nodes.X.field syntax is
-	// preserved for AST-based access detection (same approach as
-	// warnConditionalNodeAccessCompiled).
-	env, err := cel.NewEnv(
-		cel.Variable(string(wfcel.CELNodes), cel.DynType),
-		cel.Variable(string(wfcel.CELInputs), cel.DynType),
-		cel.Variable(string(wfcel.CELWorkflow), cel.DynType),
-		cel.Variable(string(wfcel.CELOutput), cel.DynType),
-		cel.Variable(string(wfcel.CELOutputs), cel.DynType),
-		cel.Variable(string(wfcel.CELIter), cel.DynType),
-	)
-	if err != nil {
-		return
-	}
-	compiledAst, issues := env.Compile(expr)
-	if issues != nil && issues.Err() != nil {
-		return
-	}
-
-	for _, access := range detectConditionalNodeAccess(compiledAst, unsafeSet) {
-		refID := access.NodeID
-		if refGuaranteed, ok := typeCtx.GuaranteedBefore[refID]; ok && refGuaranteed[scope.nodeID] {
-			// The referenced node always runs after the current node.
-			result.Add(&Error{
-				Severity: SeverityError,
-				Category: CategoryNodeOrdering,
-				Path:     path,
-				Message: fmt.Sprintf(
-					"references '%s', but node '%s' always executes AFTER node '%s' — nodes.%s can never be populated when this expression is evaluated",
-					access.Path, refID, scope.nodeID, refID,
-				),
-				Suggestion: fmt.Sprintf("reference a node that runs before '%s', or restructure the edges", scope.nodeID),
-			})
-			continue
-		}
-
-		suggestion := fmt.Sprintf(
-			"guard the access: {{has(nodes.%s) ? %s : '<fallback>'}}, or restructure edges so '%s' always runs before '%s'",
-			refID, access.Path, refID, scope.nodeID,
-		)
-		if access.Path != "nodes."+refID {
-			suggestion = fmt.Sprintf(
-				"guard the access: {{has(nodes.%s) && has(%s) ? %s : '<fallback>'}}, or restructure edges so '%s' always runs before '%s'",
-				refID, access.Path, access.Path, refID, scope.nodeID,
-			)
-		}
-		result.Add(&Error{
-			Severity: SeverityWarning,
-			Category: CategoryNodeOrdering,
-			Path:     path,
-			Message: fmt.Sprintf(
-				"references '%s', but node '%s' is not guaranteed to have executed before node '%s' (it is not on every path from the workflow entry — e.g. a router dispatch or parallel branch can skip it); at runtime this fails with \"no such key: %s\" when the node has not run",
-				access.Path, refID, scope.nodeID, refID,
-			),
-			Suggestion: suggestion,
-		})
-	}
 }

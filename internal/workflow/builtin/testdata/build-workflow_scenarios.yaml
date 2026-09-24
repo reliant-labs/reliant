@@ -11,7 +11,7 @@
 #   - build_workflow        type: workflow, ref: builtin://get-it-right (BLACK BOX)
 #
 # All workflow nodes are treated as black boxes since they reference external workflows.
-# The simulator mocks each node's output directly (same pattern as forge-one-shot).
+# Each node's output is mocked directly (same pattern as forge-one-shot).
 
 ---
 name: happy_path

@@ -84,13 +84,21 @@ func (s *ChatService) resumeInputForInterruptedRun(ctx context.Context, workflow
 		logging.Warn("Failed to load workflow checkpoint - resuming with engine fallbacks",
 			"workflowID", workflowID, "error", err)
 	}
-	if cp == nil {
-		return &v2.ResumeInput{}
+	resume := &v2.ResumeInput{}
+	if cp != nil {
+		resume.NodeID = cp.NodeID
+		resume.LoopIteration = int(cp.LoopIteration)
 	}
-	return &v2.ResumeInput{
-		NodeID:        cp.NodeID,
-		LoopIteration: int(cp.LoopIteration),
+	// Background spawns ran as goroutines inside the dead execution, so they
+	// died with it. The new run relaunches every one that never reported back,
+	// on its existing thread and tool call, from the durable rows.
+	spawns, err := v2.ResumableSpawnsFromDurableState(ctx, s.database, workflowID)
+	if err != nil {
+		logging.Warn("Failed to derive live background spawns - resuming without them",
+			"workflowID", workflowID, "error", err)
 	}
+	resume.Spawns = spawns
+	return resume
 }
 
 // saveIncomingMessages atomically persists the system and user messages a send

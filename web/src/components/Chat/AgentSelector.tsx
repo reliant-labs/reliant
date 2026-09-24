@@ -3,6 +3,7 @@ import { Users, ChevronDown, Check, Workflow } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { Tooltip } from "../ui/Tooltip";
 import { useWorkflows } from "../../store/globalDataStore";
+import { isRunnable } from "../workflow/workflowDraftStatus";
 
 interface AgentSelectorProps {
   // Current selection (agent name or workflow name)
@@ -138,14 +139,14 @@ export function AgentSelector({
               </button>
 
               {/* Workflows Section - only show usable workflows (valid and not hidden) */}
-              {workflows.filter((w) => w.is_valid && !w.is_hidden).length > 0 && (
+              {workflows.filter(isRunnable).length > 0 && (
                 <>
                   <div
                     className="px-3 py-1.5 text-2xs font-semibold uppercase tracking-wide text-muted-foreground border-t border-border/30 bg-muted/30"
                   >
                     Workflows
                   </div>
-                  {workflows.filter((w) => w.is_valid && !w.is_hidden).map((workflow) => {
+                  {workflows.filter(isRunnable).map((workflow) => {
                     const isSelected = value === workflow.name;
                     return (
                       <button

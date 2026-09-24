@@ -18,7 +18,7 @@ export interface WorkflowDef {
   source: "builtin" | "user" | "project"; // Where the workflow comes from
   updated_at?: string;
   is_hidden?: boolean; // Whether the workflow is hidden from the workflow dropdown
-  is_valid?: boolean; // Whether the workflow passes validation
+  status?: "draft" | "complete"; // Lifecycle: drafts are never runnable
 }
 
 interface Model {

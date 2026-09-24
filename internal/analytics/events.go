@@ -133,7 +133,8 @@ type WorkflowDraftSavedMetrics struct {
 	WorkflowSlug string `json:"workflowSlug"`
 	WorkflowName string `json:"workflowName"`
 	IsNew        bool   `json:"isNew"`   // true if created, false if modified
-	IsValid      bool   `json:"isValid"` // Whether the workflow passed validation
+	IsValid      bool   `json:"isValid"` // Whether the definition passed validation at save time (computed, never stored)
+	Status       string `json:"status"`  // Resulting lifecycle: "draft" or "complete"
 }
 
 // PageVisitedMetrics tracks page/panel navigation

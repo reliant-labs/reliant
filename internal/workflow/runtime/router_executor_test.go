@@ -393,6 +393,31 @@ func TestParseRoutingDecision(t *testing.T) {
 		assert.Equal(t, "fallback", executor.decision.Prompt)
 	})
 
+	// A candidate workflow that declares no presets (default-router's
+	// builtin://one-ring and builtin://implement-review) can only be selected
+	// with NO preset — there is none to name, and the schema's preset enum
+	// offers nothing for it. Rejecting the empty preset made those candidates
+	// unroutable: every decision for them failed.
+	t.Run("accepts empty preset for a candidate with no presets", func(t *testing.T) {
+		executor := newExecutor("agent")
+		executor.candidates = append(executor.candidates, routerWorkflowInfo{Ref: "builtin://one-ring"})
+		err := executor.parseRoutingDecision(&reliantv1.CallLLMOutput{
+			ResponseText: `{"workflow":"builtin://one-ring","preset":"","prompt":"build it","reasoning":"multi-phase"}`,
+		})
+		require.NoError(t, err)
+		require.NotNil(t, executor.decision)
+		assert.Equal(t, "builtin://one-ring", executor.decision.Workflow)
+		assert.Equal(t, "", executor.decision.Preset)
+	})
+
+	t.Run("rejects empty preset for a candidate that has presets", func(t *testing.T) {
+		executor := newExecutor("")
+		err := executor.parseRoutingDecision(&reliantv1.CallLLMOutput{
+			ResponseText: `{"workflow":"builtin://agent","preset":"","prompt":"x","reasoning":"y"}`,
+		})
+		require.Error(t, err)
+	})
+
 	t.Run("errors when both empty", func(t *testing.T) {
 		executor := newExecutor("")
 		err := executor.parseRoutingDecision(&reliantv1.CallLLMOutput{})

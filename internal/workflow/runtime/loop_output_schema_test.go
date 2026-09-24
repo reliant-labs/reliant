@@ -19,7 +19,7 @@ import (
 // are registered by internal/workflow/runtime/activities's init(), and that
 // package imports this one, so importing it back is an import cycle. Every
 // value-level assertion therefore lives in
-// internal/workflow/runtime/scenariotemporal, where the registry is populated.
+// internal/workflow/scenario/runner, where the registry is populated.
 // TestEvaluateDeclaredOutputs_NoSchemaRegisteredDegradesToLegacyBehavior below
 // pins what happens in exactly this no-schema situation.
 

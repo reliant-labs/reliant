@@ -1,7 +1,15 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useLocation, useNavigate } from "@tanstack/react-router";
 import { getParentRouteNavigateOptions } from "../../lib/routeParent";
-import { WorkflowBuilder } from "./WorkflowBuilder";
+import {
+  WorkflowBuilder,
+  type SaveResult,
+  type StatusChangeResult,
+} from "./WorkflowBuilder";
+import {
+  isCompleteSaveRejection,
+  type DraftStatus,
+} from "./workflowDraftStatus";
 import { WorkflowHub } from "./WorkflowHub";
 import { WorkflowParseErrorView } from "./WorkflowParseErrorView";
 import { WorkflowHeader } from "./WorkflowHeader";
@@ -62,6 +70,10 @@ function workflowDefToResponse(def: WorkflowDef): WorkflowResponse {
     nodes: [], // Hub only needs metadata, not full nodes
     edges: [],
     isHidden: def.is_hidden || false,
+    // The cached (chat-safe) list only holds runnable workflows; drafts and
+    // their findings arrive with the detailed (include_hidden) listing.
+    status: def.status ?? "complete",
+    validationErrors: [],
   };
 }
 
@@ -89,6 +101,9 @@ export function WorkflowBuilderPage({
     "builtin" | "user" | "project"
   >("user");
   const [workflowVersion, setWorkflowVersion] = useState<number>(0);
+  // Lifecycle of the stored workflow. New workflows start as drafts; builtin
+  // and project workflows are always complete (and read-only here).
+  const [draftStatus, setDraftStatus] = useState<DraftStatus>("draft");
   // Track draft ID - loaded from existing workflow (for LLM tool calls)
   const [draftId, setDraftId] = useState<string | undefined>(undefined);
 
@@ -131,6 +146,9 @@ export function WorkflowBuilderPage({
   // Session ID for new/unsaved workflows - used as a stable key for localStorage before workflow is saved
   // This is a ref to avoid unnecessary re-renders
   const workflowSessionIdRef = useRef<string | undefined>(undefined);
+  // Set by WorkflowBuilder to "save the current canvas as a draft" — the
+  // action a rejected save of a complete workflow offers from its toast.
+  const saveAsDraftRef = useRef<(() => Promise<void>) | null>(null);
   // Track last workflow that failed to save due to OCC conflict (for force save retry)
   // (Variable removed - was unused)
   // Local workflow state for detailed data (updated_at, full steps, etc.)
@@ -293,12 +311,14 @@ export function WorkflowBuilderPage({
             workflow,
             version,
             yamlDefinition: newYaml,
+            status: newStatus,
           } = await getWorkflowByDraftId(projectId, newDraftId);
           if (cancelled) return;
           if (workflow) {
             setEditingWorkflow(workflow);
             setWorkflowVersion(version);
             setYamlDefinition(newYaml);
+            setDraftStatus(newStatus);
           } else {
             setEditingWorkflow(undefined);
           }
@@ -348,7 +368,9 @@ export function WorkflowBuilderPage({
           parseError: loadedParseError,
           rawDefinition: loadedRawDefinition,
           yamlDefinition: loadedYamlDef,
+          status: loadedStatus,
         } = await getWorkflowWithDraftId(projectId, workflowName);
+        setDraftStatus(loadedStatus);
 
         // Handle parse error - show error view with chat available
         if (loadedParseError) {
@@ -444,7 +466,10 @@ export function WorkflowBuilderPage({
     return () => window.removeEventListener("keydown", handleEscape, true);
   }, [currentView, onClose]);
 
-  const handleSave = async (workflow: Workflow) => {
+  const handleSave = async (
+    workflow: Workflow,
+    intent?: DraftStatus,
+  ): Promise<SaveResult> => {
     if (tourMode) {
       toast.info("Tour mode — changes are not saved", { duration: 4000 });
       return { success: true, validationErrors: [] };
@@ -456,6 +481,9 @@ export function WorkflowBuilderPage({
 
     try {
       // Pass the builder chat ID, expected version for OCC, and draft ID for ID-based updates (allows renames)
+      // No intent keeps the stored status: drafts stay drafts, and a complete
+      // workflow stays complete — so the backend rejects a save that would
+      // make it invalid rather than silently taking it out of service.
       const response = await workflowGrpc.saveWorkflow(
         projectId,
         workflow,
@@ -463,11 +491,29 @@ export function WorkflowBuilderPage({
         workflowVersion || undefined,
         undefined,
         draftId,
+        intent,
       );
 
       if (!response.success) {
+        if (isCompleteSaveRejection(response)) {
+          // A complete workflow can't be saved with errors. Nothing was
+          // stored; show the errors inline and offer the way forward.
+          toast.error("Not saved — this workflow is complete, and complete workflows must pass validation.", {
+            duration: 12000,
+            description: "Fix the errors, or save it as a draft (it will stop being runnable until you mark it complete again).",
+            action: {
+              label: "Save as draft",
+              onClick: () => {
+                void saveAsDraftRef.current?.();
+              },
+            },
+          });
+          return { success: false, rejected: true, validationErrors: response.validationErrors };
+        }
         throw new Error(response.message || "Failed to save workflow");
       }
+
+      setDraftStatus(response.status);
 
       // Update builderChatId from response (may be new or updated)
       if (response.builderChatId) {
@@ -541,6 +587,8 @@ export function WorkflowBuilderPage({
           source: "user" as const,
           nodes: (workflow.nodes || []) as unknown as ResponseStep[],
           edges: (workflow.edges || []) as unknown as ResponseEdge[],
+          status: response.status,
+          validationErrors: response.validationErrors,
         });
         return updated;
       });
@@ -553,6 +601,7 @@ export function WorkflowBuilderPage({
       return {
         success: true,
         validationErrors: response.validationErrors,
+        status: response.status,
       };
     } catch (err) {
       console.error("Workflow save failed:", err);
@@ -610,6 +659,44 @@ export function WorkflowBuilderPage({
 
       // CRITICAL: Re-throw the error to signal failure to WorkflowBuilder
       throw err;
+    }
+  };
+
+  // "Mark complete" / "Move to draft". Marking complete validates the STORED
+  // definition server-side; the builder only enables it when the canvas is
+  // saved and error-free, but the server is the gate.
+  const handleSetStatus = async (status: DraftStatus): Promise<StatusChangeResult> => {
+    if (!projectId || !draftId) {
+      toast.error("Save the workflow first", { duration: 4000 });
+      return { success: false, validationErrors: [] };
+    }
+    try {
+      const response = await workflowGrpc.setWorkflowStatus(
+        projectId,
+        draftId,
+        status,
+        workflowVersion || undefined,
+      );
+      setDraftStatus(response.status);
+      if (response.version) setWorkflowVersion(response.version);
+      if (response.success) {
+        toast.success(
+          status === "complete"
+            ? "Marked complete — this workflow can now be run"
+            : "Moved to draft — it won't run until you mark it complete again",
+          { duration: 4000 },
+        );
+        await refreshWorkflowList();
+      } else {
+        toast.error(response.message || "Could not change status", { duration: 8000 });
+      }
+      return { success: response.success, validationErrors: response.validationErrors };
+    } catch (err) {
+      console.error("Failed to change workflow status:", err);
+      toast.error(err instanceof Error ? err.message : "Failed to change workflow status", {
+        duration: 8000,
+      });
+      return { success: false, validationErrors: [] };
     }
   };
 
@@ -930,6 +1017,9 @@ export function WorkflowBuilderPage({
     <div className="h-full w-full bg-background">
       <WorkflowBuilder
         onSave={handleSave}
+        draftStatus={workflowSource === "user" ? draftStatus : "complete"}
+        onSetStatus={handleSetStatus}
+        saveAsDraftRef={saveAsDraftRef}
         initialWorkflow={editingWorkflow}
         initialName={initialWorkflowName}
         onBack={handleBack}

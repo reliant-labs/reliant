@@ -29,7 +29,7 @@
 #   max_retries (integer): default 2, min 1, max 5
 #
 # NOTE: For loop scenarios, provide events for EACH iteration in order.
-#       The simulator consumes events sequentially per node name.
+#       Events are consumed in order per node name.
 
 ---
 name: happy_path_no_retry
@@ -294,7 +294,7 @@ events:
       thread_token_count: 100
 
   # DELIBERATE black box, and it must stay one. This is the fixture that
-  # scenariotemporal's TestTransparencyGateIsPerNodeNotPerName uses to prove the
+  # scenario/runner's TestTransparencyGateIsPerNodeNotPerName uses to prove the
   # transparency gate is keyed per NODE PATH and not per sub-workflow NAME:
   # get-it-right references builtin://agent at BOTH implement and refactor, so
   # the invariant needs a scenario that opens one and mocks the other as a unit.

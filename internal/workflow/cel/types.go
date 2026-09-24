@@ -92,14 +92,16 @@ type CELEvalContext interface {
 // EDGE EVAL CONTEXT
 // =============================================================================
 
-// EdgeEvalContext is used for edge/transition condition evaluation.
-// Available namespaces: nodes, inputs, workflow, iter, outputs.
+// EdgeEvalContext is used for edge case conditions, node conditions, loop
+// `items` and preset-name templates.
+// Available namespaces: nodes, inputs, workflow, iter, plus outputs inside a
+// loop body (see withLoopOutputs).
 type EdgeEvalContext struct {
 	Nodes    map[string]interface{} // dynamic — node outputs vary
 	Inputs   map[string]interface{} // dynamic — depends on workflow def
 	Workflow *model.WorkflowContext // typed
 	Iter     *model.IterContext     // typed — nil when not in a loop
-	Outputs  map[string]interface{} // dynamic — loop outputs
+	Outputs  map[string]interface{} // enclosing loop's previous-iteration outputs; nil outside a loop body
 }
 
 func (c *EdgeEvalContext) Activation() map[string]interface{} {
@@ -123,20 +125,24 @@ func (c *EdgeEvalContext) Activation() map[string]interface{} {
 }
 
 func (c *EdgeEvalContext) Namespaces() []CELNamespace {
-	return []CELNamespace{CELInputs, CELWorkflow, CELNodes, CELIter, CELOutputs}
+	return withLoopOutputs([]CELNamespace{CELInputs, CELWorkflow, CELNodes, CELIter}, c.Outputs)
 }
 
 // =============================================================================
 // LOOP EVAL CONTEXT
 // =============================================================================
 
-// LoopEvalContext is used for while condition evaluation inside loops.
-// Available namespaces: iter, outputs, inputs, nodes (optional).
+// LoopEvalContext is used for a loop's own `while` and `key` expressions.
+// Available namespaces: iter (the loop's OWN current iteration), inputs, nodes
+// (the scope the loop node lives in), workflow, plus outputs for `while` (the
+// iteration's declared outputs; see withLoopOutputs). `key` is evaluated before
+// any iteration has run, so it carries no outputs.
 type LoopEvalContext struct {
-	Iter    *model.IterContext     // typed — compile-time enforced
-	Outputs map[string]interface{} // dynamic — depends on workflow def
-	Inputs  map[string]interface{} // dynamic — depends on workflow def
-	Nodes   map[string]interface{} // optional — parent node outputs for while conditions that reference nodes.*
+	Iter     *model.IterContext     // typed — compile-time enforced
+	Outputs  map[string]interface{} // the iteration's declared outputs (while); nil for key
+	Inputs   map[string]interface{} // dynamic — depends on workflow def
+	Nodes    map[string]interface{} // parent-scope node outputs
+	Workflow *model.WorkflowContext // typed
 }
 
 func (c *LoopEvalContext) Activation() map[string]interface{} {
@@ -153,11 +159,14 @@ func (c *LoopEvalContext) Activation() map[string]interface{} {
 	if c.Nodes != nil {
 		m[string(CELNodes)] = c.Nodes
 	}
+	if c.Workflow != nil {
+		m[string(CELWorkflow)] = c.Workflow
+	}
 	return EnsureNamespaceDefaults(m, c.Namespaces())
 }
 
 func (c *LoopEvalContext) Namespaces() []CELNamespace {
-	return []CELNamespace{CELIter, CELOutputs, CELInputs, CELNodes}
+	return withLoopOutputs([]CELNamespace{CELIter, CELInputs, CELNodes, CELWorkflow}, c.Outputs)
 }
 
 // =============================================================================
@@ -165,8 +174,12 @@ func (c *LoopEvalContext) Namespaces() []CELNamespace {
 // =============================================================================
 
 // PostActivityContext is used for save_message content/condition evaluation after
-// an activity runs.
-// Available namespaces: output, inputs, nodes, workflow, iter.
+// a node runs.
+// Available namespaces: output, inputs, workflow, iter.
+//
+// `nodes` is deliberately NOT available: a node's save_message is written by
+// whoever executes the node — for an activity, the worker, which has no view of
+// sibling node outputs. The environment is the same wherever the save runs.
 //
 // iter is included so a save_message declared on a node inside a loop can reference
 // the loop iteration (e.g. "## Attempt {{iter.iteration + 1}}"), exactly like the
@@ -176,7 +189,6 @@ func (c *LoopEvalContext) Namespaces() []CELNamespace {
 type PostActivityContext struct {
 	Output   interface{}            // the activity result
 	Inputs   map[string]interface{} // dynamic — depends on workflow def
-	Nodes    map[string]interface{} // dynamic — node outputs vary
 	Workflow *model.WorkflowContext // typed
 	Iter     *model.IterContext     // typed — nil when not in a loop
 }
@@ -189,9 +201,6 @@ func (c *PostActivityContext) Activation() map[string]interface{} {
 	if c.Inputs != nil {
 		m[string(CELInputs)] = c.Inputs
 	}
-	if c.Nodes != nil {
-		m[string(CELNodes)] = c.Nodes
-	}
 	if c.Workflow != nil {
 		m[string(CELWorkflow)] = c.Workflow
 	}
@@ -202,20 +211,26 @@ func (c *PostActivityContext) Activation() map[string]interface{} {
 }
 
 func (c *PostActivityContext) Namespaces() []CELNamespace {
-	return []CELNamespace{CELOutput, CELInputs, CELNodes, CELWorkflow, CELIter}
+	return SaveMessageCELEnvConfig().Namespaces
 }
 
 // =============================================================================
 // NODE RESOLUTION CONTEXT
 // =============================================================================
 
-// NodeResolutionContext is used for resolving node config/args CEL expressions.
-// Available namespaces: inputs, nodes, iter, workflow.
+// NodeResolutionContext is used for resolving node config/args CEL expressions
+// (including thread.inject) and declared workflow outputs.
+// Available namespaces: inputs, nodes, iter, workflow, plus outputs inside a
+// loop body (see withLoopOutputs).
 type NodeResolutionContext struct {
 	Inputs   map[string]interface{} // dynamic — depends on workflow def
 	Nodes    map[string]interface{} // dynamic — node outputs vary
 	Iter     *model.IterContext     // typed — nil when not in a loop
 	Workflow *model.WorkflowContext // typed
+	// Outputs is the enclosing loop's PREVIOUS iteration outputs. Non-nil
+	// (empty at iteration 0, always empty in a parallel iteration) inside a
+	// loop body; nil everywhere else, which leaves `outputs` undeclared.
+	Outputs map[string]interface{}
 }
 
 func (c *NodeResolutionContext) Activation() map[string]interface{} {
@@ -232,9 +247,91 @@ func (c *NodeResolutionContext) Activation() map[string]interface{} {
 	if c.Workflow != nil {
 		m[string(CELWorkflow)] = c.Workflow
 	}
+	if c.Outputs != nil {
+		m[string(CELOutputs)] = c.Outputs
+	}
 	return EnsureNamespaceDefaults(m, c.Namespaces())
 }
 
 func (c *NodeResolutionContext) Namespaces() []CELNamespace {
-	return []CELNamespace{CELInputs, CELNodes, CELIter, CELWorkflow}
+	return withLoopOutputs([]CELNamespace{CELInputs, CELNodes, CELIter, CELWorkflow}, c.Outputs)
+}
+
+// withLoopOutputs appends `outputs` to a context's fixed namespaces when the
+// context carries loop outputs.
+//
+// `outputs` is the one namespace whose presence depends on WHERE an expression
+// sits rather than on which kind of expression it is: it exists inside a loop
+// (the previous iteration's declared outputs for a body expression, the
+// just-finished iteration's for `while`) and nowhere else. Every runtime site
+// populates it with a non-nil map exactly when it is inside a loop, so "non-nil"
+// is the in-loop signal. Declaring it outside a loop would compile
+// `outputs.x` and then fail with "no such key" at runtime — validation reads
+// these same Namespaces(), so undeclared is the honest answer.
+func withLoopOutputs(fixed []CELNamespace, outputs map[string]interface{}) []CELNamespace {
+	if outputs == nil {
+		return fixed
+	}
+	return append(fixed, CELOutputs)
+}
+
+// =============================================================================
+// ROUTER OUTPUT CONTEXT
+// =============================================================================
+
+// RouterOutputContext is used for a router node's declared `outputs`, evaluated
+// after the selected workflow finished.
+// Available namespaces: outputs (the SELECTED workflow's outputs), inputs,
+// workflow. `outputs` here is the routed child's result, not loop outputs: a
+// router's output mapping is written in terms of what it routed to.
+type RouterOutputContext struct {
+	Outputs  map[string]interface{} // the selected workflow's outputs
+	Inputs   map[string]interface{} // dynamic — depends on workflow def
+	Workflow *model.WorkflowContext // typed
+}
+
+func (c *RouterOutputContext) Activation() map[string]interface{} {
+	m := make(map[string]interface{})
+	if c.Outputs != nil {
+		m[string(CELOutputs)] = c.Outputs
+	}
+	if c.Inputs != nil {
+		m[string(CELInputs)] = c.Inputs
+	}
+	if c.Workflow != nil {
+		m[string(CELWorkflow)] = c.Workflow
+	}
+	return EnsureNamespaceDefaults(m, c.Namespaces())
+}
+
+func (c *RouterOutputContext) Namespaces() []CELNamespace {
+	return []CELNamespace{CELOutputs, CELInputs, CELWorkflow}
+}
+
+// =============================================================================
+// WORKFLOW TEMPLATE CONTEXT
+// =============================================================================
+
+// WorkflowTemplateContext is used for the templates resolved once, when a
+// workflow definition is loaded, before any node runs (see
+// runtime.ResolveWorkflowTemplates): only inputs and workflow exist yet.
+// Available namespaces: inputs, workflow.
+type WorkflowTemplateContext struct {
+	Inputs   map[string]interface{} // dynamic — depends on workflow def
+	Workflow *model.WorkflowContext // typed
+}
+
+func (c *WorkflowTemplateContext) Activation() map[string]interface{} {
+	m := make(map[string]interface{})
+	if c.Inputs != nil {
+		m[string(CELInputs)] = c.Inputs
+	}
+	if c.Workflow != nil {
+		m[string(CELWorkflow)] = c.Workflow
+	}
+	return EnsureNamespaceDefaults(m, c.Namespaces())
+}
+
+func (c *WorkflowTemplateContext) Namespaces() []CELNamespace {
+	return TemplateResolutionCELEnvConfig().Namespaces
 }

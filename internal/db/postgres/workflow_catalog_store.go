@@ -104,46 +104,36 @@ func (s *workflowCatalogStore) ListWorkflowDraftsByUser(ctx context.Context, use
 	return workflowDraftsFromPG(rows), nil
 }
 
-func (s *workflowCatalogStore) ListUsableWorkflowsByUser(ctx context.Context, userID string) ([]*core.WorkflowDraft, error) {
-	rows, err := s.q.ListUsableWorkflowsByUser(ctx, userID)
+func (s *workflowCatalogStore) UpdateWorkflowDraft(ctx context.Context, draft *core.WorkflowDraft) error {
+	_, err := s.q.UpdateWorkflowDraft(ctx, pgdb.UpdateWorkflowDraftParams{
+		Name:        draft.Name,
+		Slug:        draft.Slug,
+		Description: workflowPtrToNullString(draft.Description),
+		Definition:  draft.Definition,
+		Status:      workflowStatusToPG(draft.Status),
+		IsHidden:    draft.IsHidden,
+		ID:          draft.ID,
+	})
+	return err
+}
+
+func (s *workflowCatalogStore) UpdateWorkflowDraftDefinition(ctx context.Context, id string, name string, slug string, definition string, status core.WorkflowDraftStatus) error {
+	_, err := s.q.UpdateWorkflowDraftDefinition(ctx, pgdb.UpdateWorkflowDraftDefinitionParams{
+		Name:       name,
+		Slug:       slug,
+		Definition: definition,
+		Status:     workflowStatusToPG(status),
+		ID:         id,
+	})
+	return err
+}
+
+func (s *workflowCatalogStore) SetWorkflowDraftStatus(ctx context.Context, id string, status core.WorkflowDraftStatus) (*core.WorkflowDraft, error) {
+	row, err := s.q.SetWorkflowDraftStatus(ctx, pgdb.SetWorkflowDraftStatusParams{Status: workflowStatusToPG(status), ID: id})
 	if err != nil {
 		return nil, err
 	}
-	return workflowDraftsFromPG(rows), nil
-}
-
-func (s *workflowCatalogStore) UpdateWorkflowDraft(ctx context.Context, draft *core.WorkflowDraft) error {
-	var isValid int64
-	if draft.IsValid {
-		isValid = 1
-	}
-	_, err := s.q.UpdateWorkflowDraft(ctx, pgdb.UpdateWorkflowDraftParams{
-		Name:             draft.Name,
-		Slug:             draft.Slug,
-		Description:      workflowPtrToNullString(draft.Description),
-		Definition:       draft.Definition,
-		IsValid:          isValid,
-		ValidationErrors: workflowPtrToNullString(draft.ValidationErrors),
-		IsHidden:         draft.IsHidden,
-		ID:               draft.ID,
-	})
-	return err
-}
-
-func (s *workflowCatalogStore) UpdateWorkflowDraftDefinition(ctx context.Context, id string, name string, slug string, definition string, isValid bool, validationErrors *string) error {
-	var isValidInt int64
-	if isValid {
-		isValidInt = 1
-	}
-	_, err := s.q.UpdateWorkflowDraftDefinition(ctx, pgdb.UpdateWorkflowDraftDefinitionParams{
-		Name:             name,
-		Slug:             slug,
-		Definition:       definition,
-		IsValid:          isValidInt,
-		ValidationErrors: workflowPtrToNullString(validationErrors),
-		ID:               id,
-	})
-	return err
+	return workflowDraftFromPG(row), nil
 }
 
 func (s *workflowCatalogStore) SetWorkflowDraftHidden(ctx context.Context, id string, isHidden bool) (*core.WorkflowDraft, error) {
@@ -376,21 +366,20 @@ func (s *workflowCatalogStore) DeleteWorkflowScenariosByDraft(ctx context.Contex
 
 func workflowDraftFromPG(sw pgdb.WorkflowDraft) *core.WorkflowDraft {
 	return &core.WorkflowDraft{
-		ID:               sw.ID,
-		UserID:           sw.UserID,
-		Name:             sw.Name,
-		Slug:             sw.Slug,
-		Description:      workflowNullStringToPtr(sw.Description),
-		Definition:       sw.Definition,
-		IsValid:          sw.IsValid != 0,
-		ValidationErrors: workflowNullStringToPtr(sw.ValidationErrors),
-		SourcePath:       workflowNullStringToPtr(sw.SourcePath),
-		ForkedFrom:       workflowNullStringToPtr(sw.ForkedFrom),
-		ChatID:           workflowNullStringToPtr(sw.ChatID),
-		CreatedAt:        sw.CreatedAt,
-		UpdatedAt:        sw.UpdatedAt,
-		IsHidden:         sw.IsHidden,
-		Version:          sw.Version,
+		ID:          sw.ID,
+		UserID:      sw.UserID,
+		Name:        sw.Name,
+		Slug:        sw.Slug,
+		Description: workflowNullStringToPtr(sw.Description),
+		Definition:  sw.Definition,
+		Status:      core.WorkflowDraftStatus(sw.Status),
+		SourcePath:  workflowNullStringToPtr(sw.SourcePath),
+		ForkedFrom:  workflowNullStringToPtr(sw.ForkedFrom),
+		ChatID:      workflowNullStringToPtr(sw.ChatID),
+		CreatedAt:   sw.CreatedAt,
+		UpdatedAt:   sw.UpdatedAt,
+		IsHidden:    sw.IsHidden,
+		Version:     sw.Version,
 	}
 }
 
@@ -403,50 +392,38 @@ func workflowDraftsFromPG(rows []pgdb.WorkflowDraft) []*core.WorkflowDraft {
 }
 
 func workflowDraftToCreateParams(draft *core.WorkflowDraft) pgdb.CreateWorkflowDraftParams {
-	var isValid int64
-	if draft.IsValid {
-		isValid = 1
-	}
-
 	return pgdb.CreateWorkflowDraftParams{
-		ID:               draft.ID,
-		UserID:           draft.UserID,
-		Name:             draft.Name,
-		Slug:             draft.Slug,
-		Description:      workflowPtrToNullString(draft.Description),
-		Definition:       draft.Definition,
-		IsValid:          isValid,
-		ValidationErrors: workflowPtrToNullString(draft.ValidationErrors),
-		SourcePath:       workflowPtrToNullString(draft.SourcePath),
-		ForkedFrom:       workflowPtrToNullString(draft.ForkedFrom),
-		ChatID:           workflowPtrToNullString(draft.ChatID),
-		CreatedAt:        draft.CreatedAt,
-		UpdatedAt:        draft.UpdatedAt,
-		IsHidden:         draft.IsHidden,
+		ID:          draft.ID,
+		UserID:      draft.UserID,
+		Name:        draft.Name,
+		Slug:        draft.Slug,
+		Description: workflowPtrToNullString(draft.Description),
+		Definition:  draft.Definition,
+		Status:      workflowStatusToPG(draft.Status),
+		SourcePath:  workflowPtrToNullString(draft.SourcePath),
+		ForkedFrom:  workflowPtrToNullString(draft.ForkedFrom),
+		ChatID:      workflowPtrToNullString(draft.ChatID),
+		CreatedAt:   draft.CreatedAt,
+		UpdatedAt:   draft.UpdatedAt,
+		IsHidden:    draft.IsHidden,
 	}
 }
 
 func workflowDraftToUpsertParams(draft *core.WorkflowDraft) pgdb.UpsertWorkflowDraftParams {
-	var isValid int64
-	if draft.IsValid {
-		isValid = 1
-	}
-
 	return pgdb.UpsertWorkflowDraftParams{
-		ID:               draft.ID,
-		UserID:           draft.UserID,
-		Name:             draft.Name,
-		Slug:             draft.Slug,
-		Description:      workflowPtrToNullString(draft.Description),
-		Definition:       draft.Definition,
-		IsValid:          isValid,
-		ValidationErrors: workflowPtrToNullString(draft.ValidationErrors),
-		SourcePath:       workflowPtrToNullString(draft.SourcePath),
-		ForkedFrom:       workflowPtrToNullString(draft.ForkedFrom),
-		ChatID:           workflowPtrToNullString(draft.ChatID),
-		CreatedAt:        draft.CreatedAt,
-		UpdatedAt:        draft.UpdatedAt,
-		IsHidden:         draft.IsHidden,
+		ID:          draft.ID,
+		UserID:      draft.UserID,
+		Name:        draft.Name,
+		Slug:        draft.Slug,
+		Description: workflowPtrToNullString(draft.Description),
+		Definition:  draft.Definition,
+		Status:      workflowStatusToPG(draft.Status),
+		SourcePath:  workflowPtrToNullString(draft.SourcePath),
+		ForkedFrom:  workflowPtrToNullString(draft.ForkedFrom),
+		ChatID:      workflowPtrToNullString(draft.ChatID),
+		CreatedAt:   draft.CreatedAt,
+		UpdatedAt:   draft.UpdatedAt,
+		IsHidden:    draft.IsHidden,
 	}
 }
 
@@ -549,6 +526,15 @@ func presetToUpdateParams(preset *core.Preset) (pgdb.UpdatePresetParams, error) 
 		Params:      string(paramsJSON),
 		ID:          preset.ID,
 	}, nil
+}
+
+// workflowStatusToPG maps an unset status to draft — the safe default: an
+// unset status must never make a workflow runnable.
+func workflowStatusToPG(status core.WorkflowDraftStatus) string {
+	if status == "" {
+		return string(core.WorkflowDraftStatusDraft)
+	}
+	return string(status)
 }
 
 func workflowPtrToNullString(s *string) sql.NullString {

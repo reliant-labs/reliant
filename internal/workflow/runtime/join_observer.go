@@ -26,8 +26,8 @@ const JoinsSatisfiedQuery = "get_joins_satisfied"
 // joinObserver records the joins a run satisfied, in order.
 //
 // It records rather than decides: the only caller is the satisfaction branch of
-// processJoinEvents, which is the single shared implementation both the real
-// runtime and the fast simulator use to decide a join fired. Nothing here can
+// processJoinEvents, the single implementation that decides a join fired.
+// Nothing here can
 // change whether a join is satisfied or what happens next.
 type joinObserver struct {
 	paths []string

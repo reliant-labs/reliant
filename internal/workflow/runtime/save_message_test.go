@@ -106,15 +106,8 @@ func TestEvaluateSaveMessageConfig_NullAttachments(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			evalResult, err := evaluateSaveMessageConfig(
 				tc.config,
-				map[string]interface{}{}, // activityOutput
-				tc.workflowContext,
-				map[string]interface{}{}, // nodeOutputs
-				"chat-123",
-				"thread-path",
-				"workflow-123",
-				"step-id",
-				nil, // execContext
-				nil, // iter (not in a loop)
+				map[string]interface{}{},
+				testSaveMessageScope(tc.workflowContext, "chat-123", "thread-path", "workflow-123", "step-id", nil),
 			)
 
 			if tc.expectError {
@@ -176,15 +169,8 @@ func TestEvaluateSaveMessageConfig_IterInContent(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			evalResult, err := evaluateSaveMessageConfig(
 				config,
-				map[string]interface{}{}, // activityOutput
-				workflowContext,
-				map[string]interface{}{}, // nodeOutputs
-				"chat-123",
-				"thread-path",
-				"workflow-123",
-				"step-id",
-				nil, // execContext
-				tc.iter,
+				map[string]interface{}{},
+				testSaveMessageScope(workflowContext, "chat-123", "thread-path", "workflow-123", "step-id", tc.iter),
 			)
 
 			require.NoError(t, err)
@@ -210,15 +196,8 @@ func TestEvaluateSaveMessageConfig_ThreadField(t *testing.T) {
 
 		evalResult, err := evaluateSaveMessageConfig(
 			config,
-			map[string]interface{}{}, // activityOutput
-			workflowContext,
-			map[string]interface{}{}, // nodeOutputs
-			"chat-123",
-			defaultThread,
-			"workflow-123",
-			"step-id",
-			nil, // execContext
-			nil, // iter (not in a loop)
+			map[string]interface{}{},
+			testSaveMessageScope(workflowContext, "chat-123", defaultThread, "workflow-123", "step-id", nil),
 		)
 
 		require.NoError(t, err)
@@ -587,14 +566,7 @@ func TestEvaluateSaveMessageConfig_ThinkingOutput(t *testing.T) {
 			result, err := evaluateSaveMessageConfig(
 				config,
 				tc.activityOutput,
-				workflowContext,
-				map[string]interface{}{}, // nodeOutputs
-				"chat-123",
-				"thread-path",
-				"workflow-123",
-				"step-id",
-				nil, // execContext
-				nil, // iter (not in a loop)
+				testSaveMessageScope(workflowContext, "chat-123", "thread-path", "workflow-123", "step-id", nil),
 			)
 
 			if tc.expectError {
@@ -675,14 +647,7 @@ func TestEvaluateSaveMessageConfig_ModelAndAgent(t *testing.T) {
 			result, err := evaluateSaveMessageConfig(
 				config,
 				tc.activityOutput,
-				tc.workflowContext,
-				map[string]interface{}{}, // nodeOutputs
-				"chat-123",
-				"thread-path",
-				"workflow-123",
-				"step-id",
-				nil, // execContext
-				nil, // iter
+				testSaveMessageScope(tc.workflowContext, "chat-123", "thread-path", "workflow-123", "step-id", nil),
 			)
 
 			require.NoError(t, err)
@@ -763,4 +728,12 @@ func TestConvertToToolResults_MalformedAttachmentIDsIsAnError(t *testing.T) {
 	}}); err == nil {
 		t.Error("expected an error when attachment_ids is not an array")
 	}
+}
+
+// testSaveMessageScope builds a save_message scope from a workflow context map
+// with an explicit thread, for tests that evaluate a config directly.
+func testSaveMessageScope(workflowContext map[string]interface{}, chatID, thread, workflowID, stepID string, iter *model.IterContext) saveMessageScope {
+	scope := newWorkflowSaveMessageScope(workflowContext, chatID, workflowID, stepID, iter)
+	scope.Thread = thread
+	return scope
 }

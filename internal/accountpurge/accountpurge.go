@@ -48,6 +48,17 @@
 // billable to nobody, with no record of how far the delete got. The whole
 // sequence runs in one transaction so it either completes or changes nothing
 // and can be retried.
+//
+// # temporal_payload_blobs is deliberately not purged here
+//
+// That table holds claim-checked Temporal payloads (internal/temporal/claimcheck):
+// large activity inputs/results offloaded from workflow history. Rows are
+// content-addressed by sha256 and carry no user_id, so there is no per-user
+// delete to issue — and one blob may be shared by identical payloads from
+// several runs. A purged user's blobs stop being referenced once their
+// workflows end and are deleted by the api-server's GC within the horizon
+// (claimcheck.DefaultGCHorizon, 30 days, env RELIANT_PAYLOAD_BLOB_GC_HORIZON).
+// That horizon is this table's data-retention bound.
 package accountpurge
 
 import (

@@ -53,7 +53,13 @@ type FieldMeta struct {
 	// Optional cleanup behavior hint for UI/client preprocessing.
 	CleanupSemantics *string `protobuf:"bytes,12,opt,name=cleanup_semantics,json=cleanupSemantics,proto3,oneof" json:"cleanup_semantics,omitempty"`
 	// Whether this field is required.
-	Required      bool `protobuf:"varint,14,opt,name=required,proto3" json:"required,omitempty"`
+	Required bool `protobuf:"varint,14,opt,name=required,proto3" json:"required,omitempty"`
+	// message_only marks an activity OUTPUT field that exists only to be
+	// persisted with the node's save_message. The ActivityWrapper evaluates
+	// save_message against the full result, then clears every message_only
+	// field before the result is returned to the workflow — so it never enters
+	// Temporal history, and CEL (nodes.<id>.<field>) cannot reference it.
+	MessageOnly   bool `protobuf:"varint,15,opt,name=message_only,json=messageOnly,proto3" json:"message_only,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -179,6 +185,13 @@ func (x *FieldMeta) GetRequired() bool {
 	return false
 }
 
+func (x *FieldMeta) GetMessageOnly() bool {
+	if x != nil {
+		return x.MessageOnly
+	}
+	return false
+}
+
 // NodeMeta describes metadata for a workflow node args message.
 type NodeMeta struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -300,7 +313,7 @@ var File_reliant_v1_annotations_proto protoreflect.FileDescriptor
 const file_reliant_v1_annotations_proto_rawDesc = "" +
 	"\n" +
 	"\x1creliant/v1/annotations.proto\x12\n" +
-	"reliant.v1\x1a google/protobuf/descriptor.proto\"\x82\x04\n" +
+	"reliant.v1\x1a google/protobuf/descriptor.proto\"\xa5\x04\n" +
 	"\tFieldMeta\x12 \n" +
 	"\vdescription\x18\x01 \x01(\tR\vdescription\x12\x1f\n" +
 	"\venum_values\x18\x02 \x01(\tR\n" +
@@ -316,7 +329,8 @@ const file_reliant_v1_annotations_proto_rawDesc = "" +
 	" \x01(\tH\x02R\vplaceholder\x88\x01\x01\x12/\n" +
 	"\x13visibility_contexts\x18\v \x03(\tR\x12visibilityContexts\x120\n" +
 	"\x11cleanup_semantics\x18\f \x01(\tH\x03R\x10cleanupSemantics\x88\x01\x01\x12\x1a\n" +
-	"\brequired\x18\x0e \x01(\bR\brequiredB\f\n" +
+	"\brequired\x18\x0e \x01(\bR\brequired\x12!\n" +
+	"\fmessage_only\x18\x0f \x01(\bR\vmessageOnlyB\f\n" +
 	"\n" +
 	"_min_valueB\f\n" +
 	"\n" +

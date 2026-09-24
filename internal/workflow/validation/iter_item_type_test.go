@@ -335,6 +335,8 @@ func TestTypedIterCELCompilation(t *testing.T) {
 		OutputFields: make(map[string]*FieldInfo),
 		NodeTypes:    make(map[string]string),
 		Registry:     sharedRegistry,
+		// Inside an items loop: iter carries item and key.
+		IterScope: iterItems,
 		IterItemFields: map[string]*FieldInfo{
 			"name": {Name: "name", Kind: reflect.String},
 			"goal": {Name: "goal", Kind: reflect.String},

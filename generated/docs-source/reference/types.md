@@ -60,7 +60,7 @@ Automatic message saving after node completion
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `condition` | string | No | - |
+| `condition` | bool | No | Raw CEL condition (no {{ }}) that must return bool; the message is saved only when true |
 | `role` | string | No | - |
 | `content` | string | No | - |
 | `tool_calls` | string | No | - |
@@ -121,6 +121,7 @@ Extended thinking content from LLM
 |-------|------|----------|-------------|
 | `content` | string | No | - |
 | `signature` | string | No | - |
+| `redacted` | string | No | - |
 
 ---
 
@@ -146,6 +147,7 @@ Result from executing a tool call
 
 | Field | Type | Description |
 |-------|------|-------------|
+| `attachment_ids` | string[] | - |
 | `content` | string | - |
 | `is_error` | bool | - |
 | `name` | string | - |

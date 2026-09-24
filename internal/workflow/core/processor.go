@@ -9,7 +9,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 )
 
-// WorkflowEvent is the state-machine input event used by runtime and simulator.
+// WorkflowEvent is the state-machine input event used by the runtime.
 type WorkflowEvent struct {
 	ID           string                 `json:"id"`
 	WorkflowID   string                 `json:"workflow_id"`
@@ -31,6 +31,13 @@ type ProcessInput struct {
 	Events         []*WorkflowEvent
 	NodeOutputs    map[string]interface{}
 	WorkflowInputs map[string]interface{}
+	// Iter and LoopOutputs are the loop namespaces of the scope being routed:
+	// set when the graph is a loop body, nil at the top level and in a
+	// sub-workflow body. Edge case conditions see exactly the `iter` and
+	// `outputs` the scope's node conditions see; without them `iter.iteration`
+	// read 0 on every iteration and `outputs.x` failed "no such key".
+	Iter        *model.IterContext
+	LoopOutputs map[string]interface{}
 }
 
 // WorkflowProcessorState tracks pure state-machine state between calls.
@@ -93,7 +100,7 @@ func (p *WorkflowProcessor) Process(
 				continue
 			}
 
-			targetNodeIDs, err := p.matchEdgeTargets(event, edge, input.NodeOutputs, input.WorkflowInputs)
+			targetNodeIDs, err := p.matchEdgeTargets(event, edge, input)
 			if err != nil {
 				return currentState, nil, err
 			}
@@ -120,21 +127,22 @@ func (p *WorkflowProcessor) Process(
 func (p *WorkflowProcessor) matchEdgeTargets(
 	event *WorkflowEvent,
 	edge *reliantv1.Edge,
-	nodeOutputs map[string]interface{},
-	workflowInputs map[string]interface{},
+	input ProcessInput,
 ) ([]string, error) {
 	if len(edge.GetCases()) == 0 {
 		return edge.GetDefault(), nil
 	}
 
 	edgeContext := &wfcel.EdgeEvalContext{
-		Nodes:  nodeOutputs,
-		Inputs: workflowInputs,
+		Nodes:  input.NodeOutputs,
+		Inputs: input.WorkflowInputs,
 		Workflow: &model.WorkflowContext{
 			ID:     event.WorkflowID,
 			Name:   event.WorkflowName,
-			Branch: branchFromInputs(workflowInputs),
+			Branch: branchFromInputs(input.WorkflowInputs),
 		},
+		Iter:    input.Iter,
+		Outputs: input.LoopOutputs,
 	}
 
 	for _, edgeCase := range edge.GetCases() {

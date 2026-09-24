@@ -8,7 +8,7 @@ weight: 60
 =============================================================================
 GENERATED FILE - DO NOT EDIT DIRECTLY
 
-Source: internal/workflow/runtime/simulator/types.go
+Source: internal/workflow/scenario/types.go
 Generator: tools/docgen/scenarios
 Regenerate: make generate-scenario-schema
 =============================================================================
@@ -232,6 +232,7 @@ expect:
 | `error_node` | string | No | ErrorNode specifies which node should produce the error. |
 | `node_outputs` | map[string]object | No | NodeOutputs specifies expected output values for specific nodes. |
 | `outputs` | object | No | Outputs specifies expected values for the workflow's declared outputs. |
+| `messages` | object | No | Messages asserts on the messages the run saved to the thread, keyed by |
 
 ---
 
@@ -244,8 +245,9 @@ The `node` field on events targets specific nodes by ID:
 - **Inner workflow nodes**: `node: "workflow_id.inner_node_id"` (for `type: workflow` with `inline:`)
 - **Nested structures**: `node: "outer.inner.node_id"`
 
-For inline loops and inline workflow nodes, the simulator executes each inner node individually, evaluates conditions, and tracks skipped nodes with their qualified IDs.
-For ref-based nodes, the default is black-box mocking with the ref name. If the runner can resolve the reference and the scenario targets qualified inner nodes, the simulator executes the referenced workflow internally instead.
+Scenarios run on the real workflow runtime; only activities (LLM calls, tool execution, …) are mocked. Inline loops and inline workflow nodes always execute their inner nodes, evaluating conditions and tracking skipped nodes by qualified ID.
+A ref-based node (`ref: builtin://agent`) is black-boxed by default: an event on the node itself (`node: "review"`) supplies its whole output. If the scenario targets qualified inner nodes (`node: "review.agent_loop.call_llm"`), the referenced workflow executes for real instead. A loop node can be black-boxed the same way with `black_box: true` — the event then supplies the loop's aggregate output (`_results`, `_iterations`, declared outputs).
+Events are always keyed by node path, never by ref URL: `node: "builtin://agent"` is a validation error.
 
 **Event matching:**
 - Events with a `node` field are matched to that specific node

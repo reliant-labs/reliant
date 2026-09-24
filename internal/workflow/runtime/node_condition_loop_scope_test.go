@@ -50,11 +50,6 @@ func TestNodeConditionSeesIterAndPreviousIterationOutputs(t *testing.T) {
 			wantRun bool
 		}{
 			{
-				name:    "no loop scope at all — a plain workflow node still runs",
-				scope:   nil,
-				wantRun: true,
-			},
-			{
 				name:    "iteration 0: nothing has happened yet",
 				scope:   &LoopScope{Iter: &model.IterContext{Iteration: 0}, Outputs: map[string]interface{}{}},
 				wantRun: true,
@@ -103,16 +98,24 @@ func TestNodeConditionSeesIterAndPreviousIterationOutputs(t *testing.T) {
 		require.False(t, got, "iter must be the CURRENT iteration, not a zero value")
 	})
 
-	// The silent half. Without a scope these namespaces are still DECLARED, so the
-	// expression compiles and quietly reads an empty map — a wrong answer, not an
-	// error. Pinning it is what stops the gap being reintroduced as "it compiles,
-	// so it works".
-	t.Run("a scopeless condition reads outputs as empty rather than failing", func(t *testing.T) {
+	// The silent half used to be that `outputs` was declared everywhere, so a
+	// scopeless condition compiled and quietly read an empty map. `outputs` is
+	// now declared exactly where it is populated: outside a loop body a
+	// reference is a compile error (which validation reports up front), and
+	// inside one it is never undeclared — loopBodyScope makes iteration 0 the
+	// empty map.
+	t.Run("outside a loop body outputs is undeclared", func(t *testing.T) {
 		node := conditionNode("guarded", "has(outputs.eval_strategy)")
-		got, err := evaluateNodeCondition(node, nil, inputs, nil, nil)
-		require.NoError(t, err, "the namespace is declared, so this compiles either way")
-		require.False(t, got,
-			"with no loop scope the map is empty — which is precisely why this had to be "+
-				"plumbed rather than left to fail loudly")
+		_, err := evaluateNodeCondition(node, nil, inputs, nil, nil)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "undeclared reference to 'outputs'")
+	})
+
+	t.Run("a loop body at iteration 0 declares outputs as the empty map", func(t *testing.T) {
+		node := conditionNode("guarded", "!has(outputs.eval_strategy)")
+		got, err := evaluateNodeCondition(node, nil, inputs, nil,
+			loopBodyScope(&model.IterContext{Iteration: 0}, nil))
+		require.NoError(t, err)
+		require.True(t, got)
 	})
 }

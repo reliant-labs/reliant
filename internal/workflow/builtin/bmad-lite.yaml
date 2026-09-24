@@ -54,10 +54,12 @@ inputs:
     description: Extended thinking level
 
 outputs:
-  vision: "{{nodes.ideate.response_text}}"
-  requirements: "{{nodes.requirements.response_text}}"
-  architecture: "{{nodes.architecture.response_text}}"
-  implementation: "{{nodes.implement.response_text}}"
+  # classify can start at ANY phase, so earlier phases may never run: guard
+  # each read, or the run fails at completion with "no such key: <phase>".
+  vision: "{{has(nodes.ideate) && has(nodes.ideate.response_text) ? nodes.ideate.response_text : ''}}"
+  requirements: "{{has(nodes.requirements) && has(nodes.requirements.response_text) ? nodes.requirements.response_text : ''}}"
+  architecture: "{{has(nodes.architecture) && has(nodes.architecture.response_text) ? nodes.architecture.response_text : ''}}"
+  implementation: "{{has(nodes.implement) && has(nodes.implement.response_text) ? nodes.implement.response_text : ''}}"
 
 nodes:
   # ── Router: Classify ────────────────────────────────────────────────────────

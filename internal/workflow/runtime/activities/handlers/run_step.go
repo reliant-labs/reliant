@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/toolexec"
+	activitytypes "github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
 	"go.temporal.io/sdk/activity"
 )
@@ -32,6 +33,9 @@ type ExecuteRunStepInput struct {
 	LoopIteration  int                      `json:"loop_iteration"`            // Loop context: iteration index (0-indexed)
 	DaemonSelector *toolexec.DaemonSelector `json:"daemon_selector,omitempty"` // Target daemon for execution
 	LogFile        string                   `json:"log_file,omitempty"`        // Redirect stdout+stderr to this file (daemon-side)
+	// SaveMessage delegates the run node's save_message to the ActivityWrapper
+	// (see types.SaveMessageRequest). The handler never reads it.
+	SaveMessage *activitytypes.SaveMessageRequest `json:"save_message,omitempty" reliant:"-"`
 }
 
 // ExecuteRunStepOutput is the output from ExecuteRunStep activity

@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	wfcel "github.com/reliant-labs/reliant/internal/workflow/cel"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 )
 
@@ -171,8 +172,9 @@ func ResolveDaemonSelectorProto(ds *reliantv1.DaemonSelectorProto) *DaemonSelect
 }
 
 // ResolveCelDaemonSelector evaluates a CelDaemonSelector and returns a DaemonSelectorValue.
-// For literal values, returns directly. For CEL expressions, evaluates against the given context.
-func ResolveCelDaemonSelector(cds *reliantv1.CelDaemonSelector, celContext map[string]interface{}) (*DaemonSelectorValue, error) {
+// For literal values, returns directly. For CEL expressions, evaluates against
+// the scope of the workflow or node that declares the selector.
+func ResolveCelDaemonSelector(cds *reliantv1.CelDaemonSelector, scope *wfcel.NodeResolutionContext) (*DaemonSelectorValue, error) {
 	if cds == nil {
 		return nil, nil
 	}
@@ -180,7 +182,7 @@ func ResolveCelDaemonSelector(cds *reliantv1.CelDaemonSelector, celContext map[s
 	case *reliantv1.CelDaemonSelector_Literal:
 		return ResolveDaemonSelectorProto(v.Literal), nil
 	case *reliantv1.CelDaemonSelector_Expr:
-		result, err := evaluateCELTemplate(v.Expr, celContext)
+		result, err := wfcel.EvaluateTemplate(v.Expr, scope)
 		if err != nil {
 			return nil, fmt.Errorf("evaluating daemon selector expression: %w", err)
 		}
@@ -190,21 +192,15 @@ func ResolveCelDaemonSelector(cds *reliantv1.CelDaemonSelector, celContext map[s
 	}
 }
 
-// buildWorkflowCELContext creates a minimal CEL context for evaluating workflow-level fields.
-// Used for daemon selector evaluation before the main execution loop starts.
-func buildWorkflowCELContext(workflowID, workflowName string, inputs map[string]interface{}, nodeOutputs map[string]interface{}) map[string]interface{} {
-	if nodeOutputs == nil {
-		nodeOutputs = make(map[string]interface{})
+// workflowDaemonScope is the scope of a WORKFLOW-level daemon selector,
+// evaluated before any node has run: inputs and workflow, with no completed
+// nodes and no loop.
+func workflowDaemonScope(workflowID, workflowName, chatID string, inputs map[string]interface{}) *wfcel.NodeResolutionContext {
+	return &wfcel.NodeResolutionContext{
+		Inputs:   inputs,
+		Nodes:    map[string]interface{}{},
+		Workflow: workflowContextToTyped(buildWorkflowContext(workflowID, workflowName, chatID, inputs)),
 	}
-	ctx := make(map[string]interface{})
-	ctx["inputs"] = inputs
-	ctx["workflow"] = map[string]interface{}{
-		"id":   workflowID,
-		"name": workflowName,
-	}
-	ctx["nodes"] = nodeOutputs
-	ctx["iter"] = map[string]interface{}{"iteration": 0, "index": 0}
-	return ctx
 }
 
 // daemonSelectorFromCELResult converts a CEL evaluation result to a DaemonSelectorValue.

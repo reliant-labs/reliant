@@ -136,70 +136,6 @@ func convertCELToNative(v interface{}) interface{} {
 	return wfcel.ConvertToNative(v)
 }
 
-// evaluateCELTemplate evaluates a string that may contain {{...}} template expressions.
-// - Strings without {{...}} are returned as-is (literals)
-// - Strings with {{...}} have those sections CEL-evaluated and interpolated
-// - Pure {{expression}} strings return the expression's native type (not string)
-//
-// NOTE: Handles YAML multi-line strings (| operator) by trimming leading/trailing whitespace
-// before checking for pure expressions. This allows {{expr}} to be recognized as a native type
-// even when surrounded by YAML indentation.
-func evaluateCELTemplate(expr string, context map[string]interface{}) (interface{}, error) {
-	if expr == "" {
-		return "", nil
-	}
-
-	// Trim whitespace to handle YAML multi-line strings (| operator).
-	// This is critical for pure expression detection - YAML indentation should not
-	// cause {{expr}} to be treated as a mixed string.
-	trimmed := strings.TrimSpace(expr)
-	if trimmed == "" {
-		return "", nil
-	}
-
-	// Find all template expressions in the trimmed string
-	matches := extractTemplateExpressions(trimmed)
-
-	// No template expressions - return trimmed string as-is
-	if len(matches) == 0 {
-		return trimmed, nil
-	}
-
-	// Check if this is a pure expression (entire trimmed string is just {{expr}})
-	// In this case, we return the expression's native type, not a string
-	if len(matches) == 1 && isPureExpressionWithWhitespace(trimmed, matches[0]) {
-		return evaluateCELValue(matches[0].expr, context)
-	}
-
-	// Mixed string with embedded expressions - interpolate to string
-	var result strings.Builder
-	lastEnd := 0
-
-	for _, match := range matches {
-		// Append literal text before this expression
-		result.WriteString(trimmed[lastEnd:match.start])
-
-		// Extract and evaluate the expression
-		value, err := evaluateCELValue(match.expr, context)
-		if err != nil {
-			return nil, fmt.Errorf("template expression '{{%s}}': %w", match.expr, err)
-		}
-
-		// Convert value to string for interpolation
-		// Arrays are joined with commas (useful for spawn:workflow({{presets}}) syntax)
-		if value != nil {
-			result.WriteString(valueToInterpolatedString(value))
-		}
-
-		lastEnd = match.end
-	}
-
-	// Append remaining literal text after last expression
-	result.WriteString(trimmed[lastEnd:])
-
-	return result.String(), nil
-}
-
 // EvaluateNodeConfig evaluates node config using wfcel.ResolveCELFields.
 // This walks the proto node message, finds all CelX wrapper fields with
 // expr set, evaluates them, and sets the literal value.
@@ -209,11 +145,11 @@ func evaluateCELTemplate(expr string, context map[string]interface{}) (interface
 // - workflow.*: Workflow metadata (id, name only)
 // - inputs.*: User-provided inputs (thread, auto_approve, etc.)
 // - nodes.*: Step outputs via nodes.<step_id>.<field>
-// - iter.*: Loop iteration context (iter.iteration) - only inside loops
-// - outputs.*: Previous loop iteration's evaluated outputs (only inside loops)
+// - iter.*: Loop iteration context (iteration, index, item, key) - only inside loops
+// - outputs.*: The enclosing loop's previous-iteration outputs - only inside a loop body
 //
 // iterContext: Loop iteration context as map. Pass nil when not in a loop.
-// loopOutputs: Previous iteration's evaluated workflow outputs. Pass nil when not in a loop.
+// loopOutputs: loopBodyOutputs(prev) inside a loop body; nil everywhere else.
 // execContext: ExecutionContext for thread/message/loop data.
 func EvaluateNodeConfig(
 	node *reliantv1.Node,
@@ -222,7 +158,7 @@ func EvaluateNodeConfig(
 	workflowName string, // workflow.name
 	inputs map[string]interface{}, // inputs.* namespace
 	iterContext map[string]interface{}, // Loop iteration context (nil if not in a loop)
-	loopOutputs map[string]interface{}, // Previous iteration outputs for outputs.* namespace (nil if not in a loop)
+	loopOutputs map[string]interface{}, // Enclosing loop's previous-iteration outputs (non-nil iff inside a loop body)
 	execContext *ExecutionContext, // Execution context (thread, message, loop, parent)
 ) (*reliantv1.Node, error) {
 	// Build CEL evaluator using centralized builder.
@@ -236,29 +172,13 @@ func EvaluateNodeConfig(
 		builder = builder.WithExecContext(execContext)
 	}
 	if iterContext != nil {
-		iter := &model.IterContext{}
-		if iterVal, ok := iterContext["iteration"].(int); ok {
-			iter.Iteration = iterVal
-			iter.Index = iterVal
-		}
-		if indexVal, ok := iterContext["index"].(int); ok {
-			iter.Index = indexVal
-		}
-		if itemVal, ok := iterContext["item"]; ok {
-			iter.Item = itemVal
-		}
-		if keyVal, ok := iterContext["key"].(string); ok {
-			iter.Key = keyVal
-		}
-		builder = builder.WithIter(iter)
+		builder = builder.WithIter(iterContextFromMap(iterContext))
 	}
+	// `outputs` is declared exactly when the caller is inside a loop body and
+	// passes the enclosing loop's previous-iteration outputs (loopBodyOutputs:
+	// empty at iteration 0). Outside a loop it stays undeclared.
 	if loopOutputs != nil {
 		builder = builder.WithOutputs(loopOutputs)
-	} else if iterContext != nil {
-		// In a loop but no previous iteration outputs yet (iteration 0).
-		// Declare outputs as an empty map so CEL compilation succeeds for
-		// expressions that reference outputs.* behind a ternary guard.
-		builder = builder.WithOutputs(make(map[string]interface{}))
 	}
 
 	// Apply model defaults for node types that have a model field.

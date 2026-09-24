@@ -34,6 +34,12 @@ type RuntimeContext struct {
 	// an assistant or tool message belongs to the run that produced it.
 	MessageIdempotencyKey string `json:"message_idempotency_key,omitempty"`
 
+	// SaveMessage, when set, delegates this node's save_message to the
+	// ActivityWrapper: the worker writes the message right after the activity
+	// returns. Nil means the workflow does not want the activity to save
+	// anything (no save_message, or the workflow saves it itself).
+	SaveMessage *SaveMessageRequest `json:"save_message,omitempty"`
+
 	// Loop context
 	LoopNodeID    string `json:"loop_node_id,omitempty"`
 	LoopIteration int    `json:"loop_iteration,omitempty"`
@@ -50,10 +56,9 @@ type RuntimeContext struct {
 	// would change what those rows mean. NodePath is observability and test
 	// assertion only, and is deliberately not persisted anywhere.
 	//
-	// The dotted convention matches what scenarios already use for `reached:` /
-	// `not_reached:` and what the fast simulator emits (simulator.go builds
-	// "loop_id.inner_node" the same way), which is what lets the Temporal-backed
-	// harness report the same node names the simulator does.
+	// The dotted convention matches what scenarios use for `reached:` /
+	// `not_reached:`, which is what lets the scenario runner report node names
+	// a scenario can assert on.
 	NodePath string `json:"node_path,omitempty"`
 
 	// Context sequence for compaction

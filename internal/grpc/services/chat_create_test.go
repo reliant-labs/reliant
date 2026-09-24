@@ -50,17 +50,16 @@ nodes:
 `)
 
 	require.NoError(t, repo.CreateWorkflowDraft(ctx, &db.WorkflowDraft{
-		ID:               uuid.NewString(),
-		UserID:           "test-user",
-		Name:             "Invalid Spawn Tree",
-		Slug:             "invalid-spawn-tree",
-		Definition:       invalidWorkflow,
-		IsValid:          true,
-		ValidationErrors: nil,
-		CreatedAt:        now,
-		UpdatedAt:        now,
-		IsHidden:         false,
-		Version:          1,
+		ID:         uuid.NewString(),
+		UserID:     "test-user",
+		Name:       "Invalid Spawn Tree",
+		Slug:       "invalid-spawn-tree",
+		Definition: invalidWorkflow,
+		Status:     db.WorkflowDraftStatusComplete,
+		CreatedAt:  now,
+		UpdatedAt:  now,
+		IsHidden:   false,
+		Version:    1,
 	}))
 
 	service := &ChatService{database: repo}
@@ -106,17 +105,16 @@ nodes:
 `)
 
 	require.NoError(t, repo.CreateWorkflowDraft(ctx, &db.WorkflowDraft{
-		ID:               uuid.NewString(),
-		UserID:           "test-user",
-		Name:             "Required Param Workflow",
-		Slug:             "required-param-workflow",
-		Definition:       requiredWorkflow,
-		IsValid:          true,
-		ValidationErrors: nil,
-		CreatedAt:        now,
-		UpdatedAt:        now,
-		IsHidden:         false,
-		Version:          1,
+		ID:         uuid.NewString(),
+		UserID:     "test-user",
+		Name:       "Required Param Workflow",
+		Slug:       "required-param-workflow",
+		Definition: requiredWorkflow,
+		Status:     db.WorkflowDraftStatusComplete,
+		CreatedAt:  now,
+		UpdatedAt:  now,
+		IsHidden:   false,
+		Version:    1,
 	}))
 
 	service := &ChatService{database: repo}
@@ -162,17 +160,16 @@ nodes:
 `)
 
 	require.NoError(t, repo.CreateWorkflowDraft(ctx, &db.WorkflowDraft{
-		ID:               uuid.NewString(),
-		UserID:           "test-user",
-		Name:             "Valid Spawn Tree",
-		Slug:             "valid-spawn-tree",
-		Definition:       validWorkflow,
-		IsValid:          true,
-		ValidationErrors: nil,
-		CreatedAt:        now,
-		UpdatedAt:        now,
-		IsHidden:         false,
-		Version:          1,
+		ID:         uuid.NewString(),
+		UserID:     "test-user",
+		Name:       "Valid Spawn Tree",
+		Slug:       "valid-spawn-tree",
+		Definition: validWorkflow,
+		Status:     db.WorkflowDraftStatusComplete,
+		CreatedAt:  now,
+		UpdatedAt:  now,
+		IsHidden:   false,
+		Version:    1,
 	}))
 
 	service := &ChatService{database: repo}
@@ -220,17 +217,16 @@ nodes:
 `)
 
 	require.NoError(t, repo.CreateWorkflowDraft(ctx, &db.WorkflowDraft{
-		ID:               uuid.NewString(),
-		UserID:           "test-user",
-		Name:             "Agent",
-		Slug:             "agent",
-		Definition:       workflowWithWorkflowNameSpawn,
-		IsValid:          true,
-		ValidationErrors: nil,
-		CreatedAt:        now,
-		UpdatedAt:        now,
-		IsHidden:         false,
-		Version:          1,
+		ID:         uuid.NewString(),
+		UserID:     "test-user",
+		Name:       "Agent",
+		Slug:       "agent",
+		Definition: workflowWithWorkflowNameSpawn,
+		Status:     db.WorkflowDraftStatusComplete,
+		CreatedAt:  now,
+		UpdatedAt:  now,
+		IsHidden:   false,
+		Version:    1,
 	}))
 
 	service := &ChatService{database: repo}

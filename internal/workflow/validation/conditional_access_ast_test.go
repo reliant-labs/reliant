@@ -2,450 +2,162 @@
 package validation
 
 import (
+	"sort"
 	"testing"
 
-	"github.com/google/cel-go/cel"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
-// TestAST_DirectAccess_Unsafe tests that direct access to conditional nodes is detected as unsafe.
-func TestAST_DirectAccess_Unsafe(t *testing.T) {
+// These tests pin the guard analysis (guarded_access.go) at the AST level:
+// which reads of a maybe-absent `nodes.<id>` are protected, and which are not.
+//
+// Every "protected" verdict below corresponds to an expression that evaluates
+// WITHOUT error at runtime when the node is absent, and every "unprotected"
+// one to an expression that fails with "no such key". The CEL behaviours this
+// relies on were verified against wfcel.EvaluateValue:
+//
+//	has(m.k) && m.k != ''      => false, no error
+//	m.?k.orValue('x')          => 'x'
+//	'k' in m                   => false
+//	m.k != null                => no such key: k   <- NOT a guard for absence
+//	m.k == 1 && has(m.k)       => false            (&& absorbs the error)
+//	m.k == 1 || !has(m.k)      => true             (|| absorbs the error)
+
+// absentNodes classifies every nodes.<id> in ids as possibly absent.
+func absentNodes(ids ...string) func([]string) []accessRisk {
+	set := map[string]bool{}
+	for _, id := range ids {
+		set[id] = true
+	}
+	return func(segs []string) []accessRisk {
+		if len(segs) >= 2 && segs[0] == "nodes" && set[segs[1]] {
+			return []accessRisk{{path: segs[:2], kind: riskAbsent, severity: SeverityError, message: segs[1]}}
+		}
+		return nil
+	}
+}
+
+// nullableAt classifies the value at path as possibly null.
+func nullableAt(path ...string) func([]string) []accessRisk {
+	return func(segs []string) []accessRisk {
+		if len(segs) >= len(path) && pathKey(segs[:len(path)]) == pathKey(path) {
+			return []accessRisk{{path: path, kind: riskNull, severity: SeverityError, message: pathKey(path)}}
+		}
+		return nil
+	}
+}
+
+func unguarded(expr string, classify func([]string) []accessRisk) []string {
+	var out []string
+	for _, f := range analyzeGuardedAccess(expr, newFactSet(), classify) {
+		out = append(out, f.message)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func TestGuardedAccess_AbsentNode(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
-		name     string
-		expr     string
-		expected []string // expected unsafe node IDs
+		name      string
+		expr      string
+		unguarded []string
 	}{
-		{
-			name:     "simple field access",
-			expr:     "nodes.conditional_node.output",
-			expected: []string{"conditional_node"},
-		},
-		{
-			name:     "nested field access",
-			expr:     "nodes.conditional_node.message.content",
-			expected: []string{"conditional_node"},
-		},
-		{
-			name:     "multiple conditional nodes",
-			expr:     "nodes.cond1.output + nodes.cond2.output",
-			expected: []string{"cond1", "cond2"},
-		},
-		{
-			name:     "complex expression",
-			expr:     "size(nodes.conditional_node.message.content) > 10",
-			expected: []string{"conditional_node"},
-		},
-	}
+		// Direct reads fail.
+		{"simple field access", "nodes.c.output", []string{"c"}},
+		{"nested field access", "nodes.c.message.content", []string{"c"}},
+		{"multiple nodes", "nodes.c1.output + nodes.c2.output", []string{"c1", "c2"}},
+		{"inside size()", "size(nodes.c.message.content) > 10", []string{"c"}},
+		{"deeply nested", "nodes.c.message.content.text.value", []string{"c"}},
+		{"ternary condition", "nodes.c.output > 10 ? 'high' : 'low'", []string{"c"}},
+		{"comprehension body", "[1, 2, 3].map(x, x * nodes.c.multiplier)", []string{"c"}},
+		{"disjunction does not guard its operands", "(nodes.c1.value > 5 || nodes.c2.value < 10) && nodes.other.flag", []string{"c1", "c2"}},
 
+		// != null reads the key first: NOT a guard for an absent node.
+		{"null comparison is not an absence guard", "nodes.c != null && nodes.c.output", []string{"c"}},
+		{"reverse null comparison", "null != nodes.c", []string{"c"}},
+		{"field null check", "nodes.c.output != null", []string{"c"}},
+
+		// has() / ?. / in are error-free presence tests.
+		{"has on node", "has(nodes.c) && nodes.c.output == 'x'", nil},
+		// has(x.f) evaluates x: when the node itself is absent it fails
+		// ("no such key: c"), so it guards the field, not the node.
+		{"has on field does not guard an absent node", "has(nodes.c.output) ? nodes.c.output : ''", []string{"c"}},
+		{"has on node then field", "has(nodes.c) && has(nodes.c.output) ? nodes.c.output : ''", nil},
+		{"optional select", "nodes.?c.output.orValue('x')", nil},
+		{"optional select on field", "nodes.c.?output.orValue('x')", []string{"c"}},
+		{"in operator", "'c' in nodes && nodes.c.output == 'x'", nil},
+		{"hasValue", "nodes.?c.hasValue() && nodes.c.output == 'x'", nil},
+
+		// Guard position: && and || absorb errors in either operand order.
+		{"guard after the read under &&", "nodes.c.output == 'x' && has(nodes.c)", nil},
+		{"negated guard under ||", "!has(nodes.c) || nodes.c.output == 'x'", nil},
+		{"negated guard after the read under ||", "nodes.c.output == 'x' || !has(nodes.c)", nil},
+
+		// Guards only protect the branch they dominate.
+		{"ternary protects the true branch only", "has(nodes.c) ? nodes.c.output : nodes.c.fallback", []string{"c"}},
+		{"negated ternary protects the false branch", "!has(nodes.c) ? '' : nodes.c.output", nil},
+		{"mixed guarded and unguarded", "has(nodes.safe) && nodes.unsafe.output", []string{"unsafe"}},
+		{"guard on one node does not cover another", "has(nodes.c1) ? nodes.c2.output : ''", []string{"c2"}},
+		{"disjunctive guard proves neither", "(has(nodes.c1) || has(nodes.c2)) && nodes.c1.output == 'x'", []string{"c1"}},
+		{"conjunctive guard under negation", "!(has(nodes.c1) && has(nodes.c2)) || nodes.c2.output == 'x'", nil},
+
+		// String contents are not reads.
+		{"string literal", "'nodes.c.output'", nil},
+	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			env, err := cel.NewEnv(
-				cel.Variable("nodes", cel.DynType),
-			)
-			require.NoError(t, err)
-
-			compiledAst, issues := env.Compile(tt.expr)
-			require.Nil(t, issues)
-
-			// Mark all referenced nodes as conditional
-			conditionalNodes := make(map[string]bool)
-			for _, nodeID := range tt.expected {
-				conditionalNodes[nodeID] = true
-			}
-
-			unsafe := detectConditionalNodeAccess(compiledAst, conditionalNodes)
-
-			require.Len(t, unsafe, len(tt.expected), "unexpected number of unsafe accesses")
-
-			// Check that all expected nodes are detected
-			foundNodes := make(map[string]bool)
-			for _, access := range unsafe {
-				foundNodes[access.NodeID] = true
-			}
-
-			for _, expectedNode := range tt.expected {
-				assert.True(t, foundNodes[expectedNode], "expected to find unsafe access to node %s", expectedNode)
-			}
+			t.Parallel()
+			assert.Equal(t, tt.unguarded, unguarded(tt.expr, absentNodes("c", "c1", "c2", "safe", "unsafe")), tt.expr)
 		})
 	}
 }
 
-// TestAST_OptionalChaining_Safe tests that optional chaining is correctly identified as safe.
-// Note: CEL's optional chaining syntax uses macros and requires EnableMacroCallTracking
-func TestAST_OptionalChaining_Safe(t *testing.T) {
+// A null value (a response tool the LLM did not call) fails only when read
+// BENEATH; != null is a valid guard for it, and has() on a child is too.
+func TestGuardedAccess_NullValue(t *testing.T) {
 	t.Parallel()
+	classify := nullableAt("output", "response_data", "audit")
 	tests := []struct {
-		name string
-		expr string
+		name      string
+		expr      string
+		unguarded bool
 	}{
-		{
-			name: "optional field access",
-			expr: "nodes.?conditional_node.output",
-		},
-		{
-			name: "optional nested field access",
-			expr: "nodes.?conditional_node.message.content",
-		},
-		{
-			name: "optional with fallback",
-			expr: "nodes.?conditional_node.output.orValue('default')",
-		},
+		{"read beneath null", "output.response_data.audit.approved", true},
+		{"reading the null itself is fine", "output.response_data.audit == null", false},
+		{"!= null guards", "output.response_data.audit != null && output.response_data.audit.approved", false},
+		{"== null ternary guards the false branch", "output.response_data.audit == null ? false : output.response_data.audit.approved", false},
+		{"has on a child guards", "has(output.response_data.audit.approved) && output.response_data.audit.approved", false},
+		{"optional chaining", "output.response_data.?audit.?approved.orValue(false)", false},
+		{"'in' proves presence, not non-null", "'audit' in output.response_data && output.response_data.audit.approved", true},
 	}
-
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			env, err := cel.NewEnv(
-				cel.Variable("nodes", cel.DynType),
-				cel.EnableMacroCallTracking(),
-			)
-			require.NoError(t, err)
-
-			compiledAst, issues := env.Compile(tt.expr)
-			if issues != nil && issues.Err() != nil {
-				t.Skipf("Optional chaining not supported in this CEL version: %v", issues.Err())
-				return
-			}
-
-			conditionalNodes := map[string]bool{
-				"conditional_node": true,
-			}
-
-			unsafe := detectConditionalNodeAccess(compiledAst, conditionalNodes)
-			assert.Empty(t, unsafe, "optional chaining should be safe")
-		})
-	}
-}
-
-// TestAST_HasCheck_Safe tests that has() checks are correctly identified as safe.
-func TestAST_HasCheck_Safe(t *testing.T) {
-	t.Parallel()
-	tests := []struct {
-		name string
-		expr string
-	}{
-		{
-			name: "has on node",
-			expr: "has(nodes.conditional_node)",
-		},
-
-		{
-			name: "has with logical or",
-			expr: "has(nodes.conditional_node) || false",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			env, err := cel.NewEnv(
-				cel.Variable("nodes", cel.DynType),
-			)
-			require.NoError(t, err)
-
-			compiledAst, issues := env.Compile(tt.expr)
-			require.Nil(t, issues)
-
-			conditionalNodes := map[string]bool{
-				"conditional_node": true,
-			}
-
-			unsafe := detectConditionalNodeAccess(compiledAst, conditionalNodes)
-			assert.Empty(t, unsafe, "has() check should make access safe")
-		})
-	}
-}
-
-// TestAST_NullComparison_Safe tests that null comparisons are correctly identified as safe.
-func TestAST_NullComparison_Safe(t *testing.T) {
-	t.Parallel()
-	tests := []struct {
-		name string
-		expr string
-	}{
-		{
-			name: "not equal to null",
-			expr: "nodes.conditional_node != null",
-		},
-		{
-			name: "equal to null",
-			expr: "nodes.conditional_node == null",
-		},
-		{
-			name: "reverse not equal",
-			expr: "null != nodes.conditional_node",
-		},
-		{
-			name: "reverse equal",
-			expr: "null == nodes.conditional_node",
-		},
-
-		{
-			name: "field null check",
-			expr: "nodes.conditional_node.output != null",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			env, err := cel.NewEnv(
-				cel.Variable("nodes", cel.DynType),
-			)
-			require.NoError(t, err)
-
-			compiledAst, issues := env.Compile(tt.expr)
-			require.Nil(t, issues)
-
-			conditionalNodes := map[string]bool{
-				"conditional_node": true,
-			}
-
-			unsafe := detectConditionalNodeAccess(compiledAst, conditionalNodes)
-			assert.Empty(t, unsafe, "null comparison should make access safe")
-		})
-	}
-}
-
-// TestAST_StringLiteral_NoFalsePositive tests that string literals don't trigger false positives.
-func TestAST_StringLiteral_NoFalsePositive(t *testing.T) {
-	t.Parallel()
-	tests := []struct {
-		name string
-		expr string
-	}{
-		{
-			name: "string literal with nodes",
-			expr: `"nodes.conditional_node.output"`,
-		},
-		{
-			name: "string with template-like syntax",
-			expr: `"Result: nodes.x.y"`,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			env, err := cel.NewEnv()
-			require.NoError(t, err)
-
-			compiledAst, issues := env.Compile(tt.expr)
-			require.Nil(t, issues)
-
-			conditionalNodes := map[string]bool{
-				"conditional_node": true,
-				"x":                true,
-			}
-
-			unsafe := detectConditionalNodeAccess(compiledAst, conditionalNodes)
-			assert.Empty(t, unsafe, "string literals should not trigger warnings")
-		})
-	}
-}
-
-// TestAST_MultipleNodes_MixedSafety tests expressions with both safe and unsafe accesses.
-func TestAST_MultipleNodes_MixedSafety(t *testing.T) {
-	t.Parallel()
-	tests := []struct {
-		name           string
-		expr           string
-		expectedUnsafe []string
-	}{
-		{
-			name:           "safe and unsafe mixed",
-			expr:           "has(nodes.safe_node) && nodes.unsafe_node.output",
-			expectedUnsafe: []string{"unsafe_node"},
-		},
-		{
-			name:           "null check for one, direct for another",
-			expr:           "nodes.checked != null && nodes.unchecked.output",
-			expectedUnsafe: []string{"unchecked"},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			env, err := cel.NewEnv(
-				cel.Variable("nodes", cel.DynType),
-			)
-			require.NoError(t, err)
-
-			compiledAst, issues := env.Compile(tt.expr)
-			require.Nil(t, issues)
-
-			conditionalNodes := map[string]bool{
-				"safe_node":     true,
-				"unsafe_node":   true,
-				"checked":       true,
-				"unchecked":     true,
-				"optional_node": true,
-				"direct_node":   true,
-			}
-
-			unsafe := detectConditionalNodeAccess(compiledAst, conditionalNodes)
-
-			require.Len(t, unsafe, len(tt.expectedUnsafe), "unexpected number of unsafe accesses")
-
-			foundNodes := make(map[string]bool)
-			for _, access := range unsafe {
-				foundNodes[access.NodeID] = true
-			}
-
-			for _, expectedNode := range tt.expectedUnsafe {
-				assert.True(t, foundNodes[expectedNode], "expected to find unsafe access to node %s", expectedNode)
-			}
-		})
-	}
-}
-
-// TestAST_NestedAccess tests deeply nested field access patterns.
-func TestAST_NestedAccess(t *testing.T) {
-	t.Parallel()
-	tests := []struct {
-		name     string
-		expr     string
-		expected []string
-	}{
-		{
-			name:     "deeply nested unsafe",
-			expr:     "nodes.cond.message.content.text.value",
-			expected: []string{"cond"},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			env, err := cel.NewEnv(
-				cel.Variable("nodes", cel.DynType),
-			)
-			require.NoError(t, err)
-
-			compiledAst, issues := env.Compile(tt.expr)
-			require.Nil(t, issues)
-
-			conditionalNodes := map[string]bool{
-				"cond": true,
-			}
-
-			unsafe := detectConditionalNodeAccess(compiledAst, conditionalNodes)
-
-			if len(tt.expected) == 0 {
-				assert.Empty(t, unsafe)
+			t.Parallel()
+			got := unguarded(tt.expr, classify)
+			if tt.unguarded {
+				assert.NotEmpty(t, got, tt.expr)
 			} else {
-				require.Len(t, unsafe, len(tt.expected))
-				foundNodes := make(map[string]bool)
-				for _, access := range unsafe {
-					foundNodes[access.NodeID] = true
-				}
-				for _, expectedNode := range tt.expected {
-					assert.True(t, foundNodes[expectedNode])
-				}
+				assert.Empty(t, got, tt.expr)
 			}
 		})
 	}
 }
 
-// TestAST_ComplexExpressions tests complex real-world expressions.
-func TestAST_ComplexExpressions(t *testing.T) {
+// A gating condition's facts protect the expressions it gates.
+func TestGuardedAccess_GateFacts(t *testing.T) {
 	t.Parallel()
-	tests := []struct {
-		name           string
-		expr           string
-		expectedUnsafe []string
-	}{
-		{
-			name:           "ternary with unsafe",
-			expr:           "nodes.cond1.output > 10 ? 'high' : 'low'",
-			expectedUnsafe: []string{"cond1"},
-		},
+	gate := provenByCondition("has(nodes.c) && nodes.c.status == 'ok'")
+	findings := analyzeGuardedAccess("nodes.c.output", gate, absentNodes("c"))
+	assert.Empty(t, findings)
 
-		{
-			name:           "list comprehension unsafe",
-			expr:           "[1, 2, 3].map(x, x * nodes.cond1.multiplier)",
-			expectedUnsafe: []string{"cond1"},
-		},
-		{
-			name:           "complex boolean logic",
-			expr:           "(nodes.cond1.value > 5 || nodes.cond2.value < 10) && nodes.regular.flag",
-			expectedUnsafe: []string{"cond1", "cond2"},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			env, err := cel.NewEnv(
-				cel.Variable("nodes", cel.DynType),
-			)
-			require.NoError(t, err)
-
-			compiledAst, issues := env.Compile(tt.expr)
-			if issues != nil && issues.Err() != nil {
-				t.Skipf("Expression doesn't compile (may use unsupported syntax): %v", issues.Err())
-				return
-			}
-
-			conditionalNodes := map[string]bool{
-				"cond1": true,
-				"cond2": true,
-			}
-
-			unsafe := detectConditionalNodeAccess(compiledAst, conditionalNodes)
-
-			if len(tt.expectedUnsafe) == 0 {
-				assert.Empty(t, unsafe, "expected no unsafe accesses")
-			} else {
-				require.Len(t, unsafe, len(tt.expectedUnsafe), "unexpected number of unsafe accesses")
-				foundNodes := make(map[string]bool)
-				for _, access := range unsafe {
-					foundNodes[access.NodeID] = true
-				}
-				for _, expectedNode := range tt.expectedUnsafe {
-					assert.True(t, foundNodes[expectedNode], "expected to find unsafe access to node %s", expectedNode)
-				}
-			}
-		})
-	}
+	disjunctive := provenByCondition("has(nodes.c) || inputs.force")
+	findings = analyzeGuardedAccess("nodes.c.output", disjunctive, absentNodes("c"))
+	assert.Len(t, findings, 1, "a disjunctive gate proves nothing about nodes.c")
 }
 
-// TestAST_UnconditionalNodes tests that unconditional nodes don't trigger warnings.
-func TestAST_UnconditionalNodes(t *testing.T) {
+func TestGuardedAccess_UnparseableExpressionReportsNothing(t *testing.T) {
 	t.Parallel()
-	expr := "nodes.regular_node.output + nodes.another_regular.value"
-
-	env, err := cel.NewEnv(
-		cel.Variable("nodes", cel.DynType),
-	)
-	require.NoError(t, err)
-
-	compiledAst, issues := env.Compile(expr)
-	require.Nil(t, issues)
-
-	// Empty conditional nodes map
-	conditionalNodes := map[string]bool{}
-
-	unsafe := detectConditionalNodeAccess(compiledAst, conditionalNodes)
-	assert.Empty(t, unsafe, "unconditional nodes should not trigger warnings")
-}
-
-// TestAST_EmptyExpression tests handling of empty/nil expressions.
-func TestAST_EmptyExpression(t *testing.T) {
-	t.Parallel()
-	conditionalNodes := map[string]bool{
-		"cond": true,
-	}
-
-	// Test with nil AST
-	unsafe := detectConditionalNodeAccess(nil, conditionalNodes)
-	assert.Empty(t, unsafe, "nil AST should return empty result")
-
-	// Test with empty conditional nodes
-	env, err := cel.NewEnv(
-		cel.Variable("nodes", cel.DynType),
-	)
-	require.NoError(t, err)
-
-	compiledAst, issues := env.Compile("nodes.cond.output")
-	require.Nil(t, issues)
-
-	unsafe = detectConditionalNodeAccess(compiledAst, map[string]bool{})
-	assert.Empty(t, unsafe, "empty conditional nodes should return empty result")
+	assert.Empty(t, analyzeGuardedAccess("nodes.c.", newFactSet(), absentNodes("c")))
+	assert.Empty(t, analyzeGuardedAccess("", newFactSet(), absentNodes("c")))
 }

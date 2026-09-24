@@ -59,7 +59,7 @@ nodes:
 		Name:       "Listed Valid Workflow",
 		Slug:       "listed-valid-workflow",
 		Definition: validWorkflow,
-		IsValid:    true,
+		Status:     db.WorkflowDraftStatusComplete,
 		CreatedAt:  now,
 		UpdatedAt:  now,
 		IsHidden:   false,
@@ -71,7 +71,7 @@ nodes:
 		Name:       "Listed Invalid Workflow",
 		Slug:       "listed-invalid-workflow",
 		Definition: invalidWorkflow,
-		IsValid:    false,
+		Status:     db.WorkflowDraftStatusDraft,
 		CreatedAt:  now,
 		UpdatedAt:  now,
 		IsHidden:   false,
@@ -83,7 +83,7 @@ nodes:
 		Name:       "Listed Hidden Workflow",
 		Slug:       "listed-hidden-workflow",
 		Definition: validWorkflow,
-		IsValid:    true,
+		Status:     db.WorkflowDraftStatusComplete,
 		CreatedAt:  now,
 		UpdatedAt:  now,
 		IsHidden:   true,
@@ -111,7 +111,7 @@ nodes:
 		require.NotContains(t, userWorkflowSlugs, "listed-hidden-workflow")
 
 		listedWorkflow := userWorkflowSlugs["listed-valid-workflow"]
-		require.True(t, listedWorkflow.IsValid)
+		require.Equal(t, reliantv1.WorkflowDraftStatus_WORKFLOW_DRAFT_STATUS_COMPLETE, listedWorkflow.Status)
 		require.False(t, listedWorkflow.IsHidden)
 		require.NotNil(t, listedWorkflow.DraftId)
 
@@ -136,7 +136,9 @@ nodes:
 		require.Contains(t, userWorkflowSlugs, "listed-valid-workflow")
 		require.Contains(t, userWorkflowSlugs, "listed-invalid-workflow")
 		require.Contains(t, userWorkflowSlugs, "listed-hidden-workflow")
-		require.False(t, userWorkflowSlugs["listed-invalid-workflow"].IsValid)
+		invalid := userWorkflowSlugs["listed-invalid-workflow"]
+		require.Equal(t, reliantv1.WorkflowDraftStatus_WORKFLOW_DRAFT_STATUS_DRAFT, invalid.Status)
+		require.NotEmpty(t, invalid.ValidationErrors, "findings are computed on read")
 		require.True(t, userWorkflowSlugs["listed-hidden-workflow"].IsHidden)
 	})
 }

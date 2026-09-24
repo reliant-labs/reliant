@@ -64,11 +64,9 @@ func runInlineSave(
 			node,
 			activityOutput,
 			workflowContext,
-			map[string]interface{}{},
 			"chat-1",
 			"wf-1",
-			"", 0,
-			&ExecutionContext{WorkflowID: "wf-1", ChatID: "chat-1", Thread: "thread-1"},
+			"", 0, nil,
 			"",
 		)
 	})

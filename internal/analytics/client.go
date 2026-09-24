@@ -528,6 +528,7 @@ func (c *Client) TrackWorkflowDraftSaved(metrics WorkflowDraftSavedMetrics) {
 		"workflowName": metrics.WorkflowName,
 		"isNew":        metrics.IsNew,
 		"isValid":      metrics.IsValid,
+		"status":       metrics.Status,
 	}
 	c.Track(EventWorkflowDraftSaved, metadata)
 }

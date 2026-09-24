@@ -392,11 +392,15 @@ type TemporalWorkflowState struct {
 	// Progress-watchdog inputs (only populated while IsRunning). Together
 	// they define the suspicious "quiescent" shape: a running workflow with
 	// zero pending work whose HistoryLength has stopped growing.
-	HistoryLength          int64 // WorkflowExecutionInfo.HistoryLength
-	HasPendingWorkflowTask bool  // any pending workflow task (any state)
-	PendingActivityCount   int   // pending activities (any state)
-	PendingChildrenCount   int   // pending Temporal child workflows
-	PendingNexusCount      int   // pending nexus operations
+	HistoryLength int64 // WorkflowExecutionInfo.HistoryLength
+	// HistorySizeBytes is WorkflowExecutionInfo.HistorySizeBytes. Read with
+	// HistoryLength to decide whether a reset is futile: a reset forks inside
+	// the current history, so a run at EITHER cap is reborn at it.
+	HistorySizeBytes       int64
+	HasPendingWorkflowTask bool // any pending workflow task (any state)
+	PendingActivityCount   int  // pending activities (any state)
+	PendingChildrenCount   int  // pending Temporal child workflows
+	PendingNexusCount      int  // pending nexus operations
 
 	// WasTerminated distinguishes a hard TERMINATE from the other closed
 	// statuses that also map to Failed (FAILED, TIMED_OUT). It matters
@@ -622,6 +626,7 @@ func (r *Reconciler) getTemporalWorkflowState(ctx context.Context, workflowID st
 
 		// Progress-watchdog inputs: history growth + pending-work census.
 		state.HistoryLength = descResp.WorkflowExecutionInfo.HistoryLength
+		state.HistorySizeBytes = descResp.WorkflowExecutionInfo.HistorySizeBytes
 		state.HasPendingWorkflowTask = descResp.PendingWorkflowTask != nil
 		state.PendingActivityCount = len(descResp.PendingActivities)
 		state.PendingChildrenCount = len(descResp.PendingChildren)
@@ -894,8 +899,15 @@ func (r *Reconciler) reconcileWorkflow(ctx context.Context, wf *db.Workflow, pol
 		// must not be reset forever. Once the guard gives up, skip the reset and
 		// go straight to terminate + mark failed (routing the next user message
 		// to the coarse restart, which runs current code with no old history).
-		resetSkippedByGuard := !r.resetGuard.Allow(wf.ID, temporalState.HistoryLength)
-		if !resetSkippedByGuard {
+		//
+		// A run at Temporal's history cap is never reset either: the reset
+		// forks from inside the oversized history, so the new run is born at
+		// the cap and is terminated again within a few events. Same fallback
+		// as the guard — terminate + mark failed, so the next user message
+		// takes the coarse restart with an empty history.
+		resetSkippedByHistoryLimit := v2workflow.HistoryAtLimit(temporalState.HistoryLength, temporalState.HistorySizeBytes)
+		resetSkippedByGuard := !resetSkippedByHistoryLimit && !r.resetGuard.Allow(wf.ID, temporalState.HistoryLength)
+		if !resetSkippedByGuard && !resetSkippedByHistoryLimit {
 			if err := r.recoverStuckWorkflowByReset(ctx, wf, temporalState); err == nil {
 				r.resetGuard.Record(wf.ID, temporalState.HistoryLength)
 				r.clearStuckObservation(wf.ID)
@@ -914,7 +926,16 @@ func (r *Reconciler) reconcileWorkflow(ctx context.Context, wf *db.Workflow, pol
 		}
 
 		terminateDetail := "reset recovery failed"
-		if resetSkippedByGuard {
+		if resetSkippedByHistoryLimit {
+			terminateDetail = "at Temporal's history limit (reset would fork inside the oversized history)"
+			logging.Error("[Reconciler] Stuck workflow is at Temporal's history limit - terminating instead of resetting",
+				"workflowID", wf.ID,
+				"chatID", wf.ChatID,
+				"historyLength", temporalState.HistoryLength,
+				"historySizeBytes", temporalState.HistorySizeBytes,
+			)
+			r.recordAnomaly(stats, anomalyResetFailedTerminated)
+		} else if resetSkippedByGuard {
 			terminateDetail = "reset-attempt guard exhausted (repeated resets made no progress)"
 			logging.Error("[Reconciler] Reset-attempt guard exhausted for stuck workflow - terminating and marking as failed",
 				"workflowID", wf.ID,
@@ -1735,7 +1756,24 @@ func (r *Reconciler) repairStrandedBackgroundSpawns(ctx context.Context, stats *
 
 	repaired := 0
 	undeliverable := 0
+	resumableByChat := map[string]bool{}
 	for _, call := range stranded {
+		// A spawn whose ROOT execution died but is still resumable is not
+		// stranded — it is waiting to be relaunched. Both resume paths bring
+		// it back: reset-and-replay re-runs its goroutine, and the coarse
+		// fresh restart (the only path for a history-limit death) relaunches
+		// it from its backgrounded tool_calls row. Closing it here would
+		// write a "lost in transit" report that permanently occupies the
+		// spawn's one terminal-report slot, so the relaunched spawn's real
+		// result could never reach its parent.
+		resumable, seen := resumableByChat[call.ChatID]
+		if !seen {
+			resumable = r.rootAwaitingResume(ctx, call.ChatID)
+			resumableByChat[call.ChatID] = resumable
+		}
+		if resumable {
+			continue
+		}
 		if call.ParentThreadID == nil || *call.ParentThreadID == "" {
 			// tool_calls.thread_id is nilable in general (a call can be
 			// recorded before its message is finalized), but a spawn old
@@ -1815,6 +1853,31 @@ func (r *Reconciler) repairStrandedBackgroundSpawns(ctx context.Context, stats *
 		)
 	}
 	return repaired + undeliverable, nil
+}
+
+// rootAwaitingResume reports whether a chat's root run ended FAILED with its
+// position checkpoint still recorded — the state the next user message
+// resumes from, relaunching the run's background spawns (see
+// repairStrandedBackgroundSpawns). Completed and cancelled runs delete their
+// checkpoint, so a checkpoint on a failed root is exactly "resumable".
+//
+// Errs toward "not awaiting resume" when anything cannot be read, preserving
+// the repair's pre-existing behaviour rather than hiding a stranded spawn.
+func (r *Reconciler) rootAwaitingResume(ctx context.Context, chatID string) bool {
+	chat, err := r.repo.GetChat(ctx, chatID)
+	if err != nil || chat == nil {
+		return false
+	}
+	rootID := chat.MainThreadID()
+	if rootID == "" {
+		return false
+	}
+	root, err := r.repo.GetWorkflow(ctx, rootID)
+	if err != nil || root == nil || root.Status != db.Failed() {
+		return false
+	}
+	checkpoint, err := r.repo.GetWorkflowCheckpoint(ctx, rootID)
+	return err == nil && checkpoint != nil
 }
 
 // recipientThreadIsTerminal reports whether a mailbox recipient's loop has

@@ -180,7 +180,7 @@ func applyDefaults(inputs map[string]interface{}, schemas map[string]*reliantv1.
 					if def := model.GetInputDefault(nestedInput); def != nil {
 						value = def
 					} else if includeZeroValues {
-						value = zeroValueForType(model.GetInputType(nestedInput))
+						value = inputZeroValue(nestedInput)
 					} else {
 						continue
 					}
@@ -206,7 +206,7 @@ func applyDefaults(inputs map[string]interface{}, schemas map[string]*reliantv1.
 			if def := model.GetInputDefault(input); def != nil {
 				value = def
 			} else if includeZeroValues {
-				value = zeroValueForType(model.GetInputType(input))
+				value = inputZeroValue(input)
 			} else {
 				continue
 			}
@@ -262,22 +262,52 @@ func coerceToType(value interface{}, typeName string) (interface{}, bool) {
 	}
 }
 
-func zeroValueForType(schemaType string) interface{} {
-	switch schemaType {
-	case "string", "enum":
+// inputZeroValue is the value a declared input is bound to at run time when the
+// caller supplied nothing and the schema has no default. Every declared input
+// is bound, so `{{inputs.x}}` never fails with "no such key" — it reads the
+// zero of x's type instead. (Required-ness is checked BEFORE this, by
+// validation.ValidateInputs; this only runs once that has passed.)
+//
+// The zero has the CEL type a caller-supplied value would have, so it composes
+// with the operators authors already use: `inputs.tools + ['x']`, `size(...)`,
+// `inputs.flag == true`, `k in inputs.opts`.
+//
+//   - string, message                      → ""
+//   - integer → 0, number → 0.0, boolean → false
+//   - array, tools, attachments            → []
+//   - object, any                          → {}
+//   - enum, preset                         → "" ([] when multi). Deliberately
+//     NOT the first allowed value: that would silently select a real option
+//     the caller never chose.
+//   - model                                → null. An empty selector must stay
+//     "unset" so model resolution falls through to its own default; size(null)
+//     is 0, so it is still safe to test.
+func inputZeroValue(input *reliantv1.Input) interface{} {
+	switch model.GetInputType(input) {
+	case "string", "message":
 		return ""
-	case "model":
-		return nil
 	case "integer":
 		return int64(0)
 	case "number":
 		return float64(0)
 	case "boolean":
 		return false
-	case "array", "tools":
+	case "array", "tools", "attachments":
 		return []interface{}{}
-	case "object":
+	case "object", "any":
 		return map[string]interface{}{}
+	case "enum":
+		if input.GetEnumInput().GetMulti() {
+			return []interface{}{}
+		}
+		return ""
+	case "preset":
+		if input.GetPresetInput().GetMulti() {
+			return []interface{}{}
+		}
+		return ""
+	case "model":
+		return nil
 	default:
 		return ""
 	}

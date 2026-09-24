@@ -42,12 +42,12 @@ edges:
   - from: execute_tools
     cases:
       - to: done
-        condition: "nodes.execute_tools.response_data.review.verdict == 'approve'"
+        condition: "nodes.execute_tools.response_data.review != null && nodes.execute_tools.response_data.review.verdict == 'approve'"
   - from: done
     to: ~
 outputs:
-  verdict: "{{nodes.execute_tools.response_data.review.verdict}}"
-  confidence: "{{nodes.execute_tools.response_data.review.confidence}}"
+  verdict: "{{has(nodes.execute_tools.response_data.review.verdict) ? nodes.execute_tools.response_data.review.verdict : ''}}"
+  confidence: "{{has(nodes.execute_tools.response_data.review.confidence) ? nodes.execute_tools.response_data.review.confidence : 0.0}}"
 `
 
 	wf, err := wfyaml.ParseWorkflow([]byte(workflowYAML))
@@ -185,6 +185,9 @@ nodes:
     type: execute_tools
     args:
       tool_calls: "{{nodes.call_llm.tool_calls}}"
+edges:
+  - from: call_llm
+    to: execute_tools
 outputs:
   # Accessing response_data without a defined response tool - should be lenient
   result: "{{nodes.execute_tools.response_data.some_tool.field}}"

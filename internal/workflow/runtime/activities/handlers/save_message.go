@@ -95,12 +95,14 @@ func (a *SaveMessageActivity) Category() schema.ActivityCategory {
 }
 
 // Execute saves a message using the threads.Service.
-// It extracts Temporal activity info for idempotency and delegates to the service.
-func (a *SaveMessageActivity) Execute(ctx context.Context, input ActivityInput) (reliantv1.SaveMessageOutput, error) {
+// It extracts Temporal activity info for idempotency and delegates to
+// WriteMessage, the one write path shared with the ActivityWrapper's
+// delegated save_message.
+func (a *SaveMessageActivity) Execute(ctx context.Context, input ActivityInput) (*reliantv1.SaveMessageOutput, error) {
 	rtx := input.Runtime
 	protoArgs := model.GetSaveMessageNodeArgs(input.Node)
 	if protoArgs == nil {
-		return reliantv1.SaveMessageOutput{}, fmt.Errorf("expected save_message node, got %s", model.NodeType(input.Node))
+		return nil, fmt.Errorf("expected save_message node, got %s", model.NodeType(input.Node))
 	}
 
 	info := activity.GetInfo(ctx)
@@ -124,6 +126,23 @@ func (a *SaveMessageActivity) Execute(ctx context.Context, input ActivityInput) 
 		}
 	}
 
+	return a.WriteMessage(ctx, rtx, protoArgs, activityID, info.Attempt)
+}
+
+// WriteMessage persists one resolved message — the single write path for a
+// node's message, whether the SaveMessage activity or the ActivityWrapper
+// (runtime.MessageWriter) is writing it.
+//
+// idempotencyKey and attempt drive threads.SaveMessage's retry semantics:
+// attempt 1 returns an existing row with that key, a later attempt replaces
+// it. An assistant message converges on rtx.AssistantMessageID when set.
+func (a *SaveMessageActivity) WriteMessage(
+	ctx context.Context,
+	rtx RuntimeContext,
+	protoArgs *reliantv1.SaveMessageNodeArgs,
+	idempotencyKey string,
+	attempt int32,
+) (*reliantv1.SaveMessageOutput, error) {
 	// Convert proto types to Go types
 	resolvedToolCalls := protoToolCallsToMessage(protoArgs.GetResolvedToolCalls())
 	resolvedToolResults := protoToolResultsToMessage(protoArgs.GetResolvedToolResults())
@@ -179,15 +198,15 @@ func (a *SaveMessageActivity) Execute(ctx context.Context, input ActivityInput) 
 		DisplayStyle:  parseDisplayStyle(protoArgs.GetResolvedDisplayStyle()),
 		WorkflowID:    workflowID,
 		StepID:        rtx.StepID,
-		ActivityID:    &activityID,
-		AttemptNumber: info.Attempt,
+		ActivityID:    &idempotencyKey,
+		AttemptNumber: attempt,
 		MessageID:     fixedMessageID,
 	})
 	if err != nil {
-		return reliantv1.SaveMessageOutput{}, err
+		return nil, err
 	}
 
-	return reliantv1.SaveMessageOutput{
+	return &reliantv1.SaveMessageOutput{
 		MessageId:        result.MessageID,
 		Thread:           rtx.Thread,
 		ToolCalls:        messageToolCallsToProto(resolvedToolCalls),

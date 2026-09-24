@@ -12,88 +12,74 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/workflow/builtin"
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
-	"github.com/reliant-labs/reliant/internal/workflow/runtime/simulator"
+	wfscenario "github.com/reliant-labs/reliant/internal/workflow/scenario"
+	"github.com/reliant-labs/reliant/internal/workflow/scenario/runner"
 	"github.com/reliant-labs/reliant/internal/workflow/validation"
 	wfyaml "github.com/reliant-labs/reliant/internal/workflow/yaml"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
-
-	// Import activities to trigger init() which registers activity schemas.
-	_ "github.com/reliant-labs/reliant/internal/workflow/runtime/activities"
 )
 
-// TestBuiltinWorkflowScenarios runs all scenario tests for builtin workflows.
-//
-// For each builtin workflow (e.g., agent.yaml), it looks for a scenario file
-// at testdata/<workflow-name>_scenarios.yaml and runs each scenario through
-// the simulator engine.
-//
-// Scenario files can contain multiple YAML documents separated by ---.
+// TestBuiltinWorkflowScenarios runs every builtin scenario — both
+// testdata/<workflow>_scenarios.yaml and scenarios/<workflow>/*.yaml — on the
+// scenario runner, i.e. through the REAL DynamicWorkflow with only the
+// activity layer mocked. There is no allowlist of known failures: a scenario
+// that does not pass here is a scenario the runtime does not satisfy.
 func TestBuiltinWorkflowScenarios(t *testing.T) {
 	t.Parallel()
-	// Get all builtin workflows
 	entries, err := builtin.BuiltinWorkflowsFS.ReadDir(".")
 	require.NoError(t, err, "Failed to read builtin workflows directory")
 
+	ran := 0
 	for _, entry := range entries {
 		if entry.IsDir() || (!strings.HasSuffix(entry.Name(), ".yaml") && !strings.HasSuffix(entry.Name(), ".yml")) {
 			continue
 		}
 
 		workflowFile := entry.Name()
-		workflowName := strings.TrimSuffix(workflowFile, ".yaml")
-		workflowName = strings.TrimSuffix(workflowName, ".yml")
+		workflowName := strings.TrimSuffix(strings.TrimSuffix(workflowFile, ".yaml"), ".yml")
 
-		// Load the workflow
 		workflowData, err := builtin.BuiltinWorkflowsFS.ReadFile(workflowFile)
 		require.NoError(t, err, "Failed to read workflow %s", workflowFile)
 
 		wf, err := v2.ParseWorkflowProtoBytesWithLoader(workflowData, builtinLoader)
 		require.NoError(t, err, "Failed to parse workflow %s", workflowFile)
 
-		// Run full structural validation (same as runtime uses)
+		// Full structural validation (same as the runtime uses).
 		result := validation.StaticAnalysis(wf, builtinLoader)
 		require.NoError(t, result.AsError(), "Workflow validation failed for %s", workflowFile)
 
-		// Find scenarios for this workflow
 		scenarios, err := loadScenariosForWorkflow(workflowName)
-		if err != nil {
-			// No scenarios file is OK - just skip this workflow
-			continue
+		if err != nil || len(scenarios) == 0 {
+			continue // no scenarios is fine
 		}
-
-		if len(scenarios) == 0 {
-			continue
-		}
+		ran += len(scenarios)
 
 		t.Run(workflowName, func(t *testing.T) {
-			engine := simulator.NewEngine(wf)
-
-			for _, scenario := range scenarios {
-				t.Run(scenario.Name, func(t *testing.T) {
-					result := engine.RunScenario(scenario)
-
-					// Report detailed results on failure
-					if result.Status != simulator.StatusPassed {
-						t.Logf("Scenario: %s", scenario.Name)
-						t.Logf("Description: %s", scenario.Description)
-						t.Logf("Outcome: %s", result.Execution.Outcome)
-						t.Logf("Nodes reached: %v", result.Execution.NodesReached)
-						if result.Execution.Error != nil {
-							t.Logf("Error: %s (node: %s)", result.Execution.Error.Message, result.Execution.Error.Node)
-						}
-						for _, mismatch := range result.Mismatches {
-							t.Errorf("Mismatch: %s", mismatch)
-						}
+			t.Parallel()
+			r := runner.NewRunner(wf)
+			for _, sc := range scenarios {
+				t.Run(sc.Name, func(t *testing.T) {
+					res := r.Run(sc)
+					if res.Status == wfscenario.StatusPassed {
+						return
 					}
-
-					assert.Equal(t, simulator.StatusPassed, result.Status,
-						"Scenario %q failed with %d mismatches", scenario.Name, len(result.Mismatches))
+					t.Logf("Description: %s", sc.Description)
+					t.Logf("Outcome: %s", res.Execution.Outcome)
+					t.Logf("Nodes reached: %v", res.Execution.NodesReached)
+					if res.Execution.Error != nil {
+						t.Logf("Error: %s", res.Execution.Error.Message)
+					}
+					for _, m := range res.Mismatches {
+						t.Errorf("Mismatch: %s", m)
+					}
+					t.Errorf("scenario %q: status %s", sc.Name, res.Status)
 				})
 			}
 		})
 	}
+	require.NotZero(t, ran, "no builtin scenarios were found")
 }
 
 // loadScenariosForWorkflow loads all scenarios for a workflow from BOTH sources:
@@ -102,8 +88,8 @@ func TestBuiltinWorkflowScenarios(t *testing.T) {
 //
 // This mirrors the CLI's scenario discovery (findScenariosForWorkflow in
 // cmd/reliant/commands/workflow.go) so `go test` exercises every scenario.
-func loadScenariosForWorkflow(workflowName string) ([]*simulator.Scenario, error) {
-	var allScenarios []*simulator.Scenario
+func loadScenariosForWorkflow(workflowName string) ([]*wfscenario.Scenario, error) {
+	var allScenarios []*wfscenario.Scenario
 
 	// Co-located testdata file
 	scenarioFile := "testdata/" + workflowName + "_scenarios.yaml"
@@ -143,15 +129,15 @@ func loadScenariosForWorkflow(workflowName string) ([]*simulator.Scenario, error
 
 // scenarioFile is a wrapper format for scenario files with an array of scenarios
 type scenarioFile struct {
-	APIVersion string                `yaml:"apiVersion"`
-	Scenarios  []*simulator.Scenario `yaml:"scenarios"`
+	APIVersion string                 `yaml:"apiVersion"`
+	Scenarios  []*wfscenario.Scenario `yaml:"scenarios"`
 }
 
 // parseMultiDocYAML parses a YAML file with either:
 // 1. Multiple documents separated by --- (each is a scenario)
 // 2. A wrapper format with apiVersion and scenarios array
-func parseMultiDocYAML(data []byte) ([]*simulator.Scenario, error) {
-	var scenarios []*simulator.Scenario
+func parseMultiDocYAML(data []byte) ([]*wfscenario.Scenario, error) {
+	var scenarios []*wfscenario.Scenario
 
 	// First try to parse as wrapper format
 	var wrapper scenarioFile
@@ -162,7 +148,7 @@ func parseMultiDocYAML(data []byte) ([]*simulator.Scenario, error) {
 	// Fall back to multi-document format
 	decoder := yaml.NewDecoder(bytes.NewReader(data))
 	for {
-		var scenario simulator.Scenario
+		var scenario wfscenario.Scenario
 		err := decoder.Decode(&scenario)
 		if err == io.EOF {
 			break

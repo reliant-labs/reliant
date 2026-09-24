@@ -128,8 +128,13 @@ message CelDaemonSelector {
 // Thread behavior: For workflow nodes with thread.mode "fork" or "new", the
 // save_message saves to the PARENT workflow's thread, not the child's thread.
 message SaveMessageConfig {
-  // Condition is a CEL expression that must evaluate to true for the message to be saved.
-  CelString condition = 1;
+  // Tag 1 was `CelString condition`. The condition is now raw CEL like every
+  // other condition field; the old tag is reserved so a stored config in the
+  // old shape fails to decode instead of silently mis-decoding.
+  reserved 1;
+  // Condition is a raw CEL expression (no {{ }}) over output, inputs, workflow
+  // and iter that must evaluate to bool; the message is saved only when true.
+  DirectCelBool condition = 8 [(reliant) = {description: "Raw CEL condition (no {{ }}) that must return bool; the message is saved only when true"}];
   // Role is the message role: "user", "assistant", "system", "tool".
   CelString role = 2;
   // Content is the message text content.
@@ -1273,7 +1278,10 @@ message CallLLMOutput {
   string response_text = 2;
   repeated ToolCallMsg tool_calls = 3;
   int32 token_count = 4;
-  ThinkingOutput thinking = 5;
+  // Thinking is persisted with the assistant message by the worker-side
+  // save_message and then stripped from the result the workflow receives:
+  // signatures are large, and nothing in a workflow reads them.
+  ThinkingOutput thinking = 5 [(reliant) = {message_only: true}];
   string upstream_request_id = 6; // Provider request correlation ID (e.g. x-oai-request-id)
   string upstream_proxyman_id = 7; // Proxyman flow correlation ID (e.g. x-proxyman-id)
   // Structured data from a response_tool call. When the node is configured with a

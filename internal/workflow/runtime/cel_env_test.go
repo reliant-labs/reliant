@@ -36,24 +36,6 @@ func TestCELEnvConfigs(t *testing.T) {
 	}
 }
 
-// TestNewCELEnvFromContext verifies auto-detection of namespaces
-func TestNewCELEnvFromContext(t *testing.T) {
-	t.Parallel()
-	ctx := map[string]interface{}{
-		"inputs":   map[string]interface{}{"mode": "auto"},
-		"workflow": map[string]interface{}{"id": "test"},
-		"steps":    map[string]interface{}{},
-	}
-
-	env, err := wfcel.NewEnvFromContext(ctx, true)
-	require.NoError(t, err)
-
-	// Should compile expressions using detected namespaces
-	ast, issues := env.Compile("inputs.mode == 'auto'")
-	require.Nil(t, issues.Err())
-	require.NotNil(t, ast)
-}
-
 // TestEnsureNamespaceDefaults verifies namespace defaults are set
 func TestEnsureNamespaceDefaults(t *testing.T) {
 	t.Parallel()

@@ -15,7 +15,6 @@ description: Full pipeline succeeds, all reviews pass on first iteration
 
 inputs:
   mode: auto
-  yield: false
   website_url: "https://example.com"
   deck_purpose: seed
   pitch_deck_dir: "pitch-deck"

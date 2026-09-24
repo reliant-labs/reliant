@@ -4,11 +4,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/preset"
+	wfcel "github.com/reliant-labs/reliant/internal/workflow/cel"
 	"github.com/reliant-labs/reliant/internal/workflow/core"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
@@ -225,7 +227,7 @@ func (r *RouterExecutor) Execute() (map[string]interface{}, error) {
 
 	// Evaluate declared outputs if present
 	if declaredOutputs := args.GetOutputs(); len(declaredOutputs) > 0 {
-		evaluated, err := evaluateOutputsMap(declaredOutputs, output, r.logger)
+		evaluated, err := evaluateRouterOutputs(declaredOutputs, childOutputs, r.celScope())
 		if err != nil {
 			return nil, fmt.Errorf("failed to evaluate router outputs: %w", err)
 		}
@@ -233,6 +235,12 @@ func (r *RouterExecutor) Execute() (map[string]interface{}, error) {
 			output[k] = v
 		}
 	}
+
+	// The selected workflow ran as a synthetic node carrying the ROUTER's id,
+	// so it reported the child's outputs at this path; the router's own output
+	// (the decision plus `outputs`) is what the graph actually publishes here.
+	// Observation only — a no-op unless an observer is attached.
+	recordStructuralCompleted(r.ctx, r.nodePath(), output)
 
 	return output, nil
 }
@@ -631,13 +639,21 @@ func (r *RouterExecutor) parseRoutingDecision(output *reliantv1.CallLLMOutput) e
 	if decision.Workflow == "" {
 		return fmt.Errorf("routing decision has empty workflow selection")
 	}
-	if decision.Preset == "" {
-		return fmt.Errorf("routing decision has empty preset selection")
-	}
-
 	selectedCandidate, ok := r.candidateForWorkflow(decision.Workflow)
 	if !ok {
 		return fmt.Errorf("routing decision selected unknown workflow %q", decision.Workflow)
+	}
+
+	// A candidate with no presets is selected with none: there is nothing to
+	// name, and applyPresets skips an empty name. Only a candidate that HAS
+	// presets requires one.
+	if len(selectedCandidate.Presets) == 0 {
+		decision.Preset = ""
+		r.decision = &decision
+		return nil
+	}
+	if decision.Preset == "" {
+		return fmt.Errorf("routing decision has empty preset selection")
 	}
 
 	if !presetAllowedForCandidate(selectedCandidate, decision.Preset) {
@@ -868,4 +884,47 @@ func routerThreadTitle(decision *routerDecision) string {
 		return workflow + " / " + decision.Preset
 	}
 	return workflow
+}
+
+// celScope is the inputs/workflow half of the router's declared-output scope.
+func (r *RouterExecutor) celScope() *wfcel.RouterOutputContext {
+	return &wfcel.RouterOutputContext{
+		Inputs:   r.workflowInputs,
+		Workflow: workflowContextToTyped(buildWorkflowContext(r.workflowID, r.workflowName, r.chatID, r.workflowInputs)),
+	}
+}
+
+// evaluateRouterOutputs evaluates a router's declared outputs against the
+// selected workflow's outputs (wfcel.RouterOutputContext). Each entry is a CEL
+// expression, bare (`outputs.message`) or templated (`{{outputs.message}}`).
+// A failing expression fails the router, like every other declared output.
+func evaluateRouterOutputs(declared map[string]string, childOutputs map[string]interface{}, scope *wfcel.RouterOutputContext) (map[string]interface{}, error) {
+	ctx := *scope
+	ctx.Outputs = childOutputs
+	if ctx.Outputs == nil {
+		ctx.Outputs = map[string]interface{}{}
+	}
+	names := make([]string, 0, len(declared))
+	for name := range declared {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	result := make(map[string]interface{}, len(declared))
+	for _, name := range names {
+		expr := strings.TrimSpace(declared[name])
+		var (
+			val interface{}
+			err error
+		)
+		if strings.Contains(expr, "{{") {
+			val, err = wfcel.EvaluateTemplate(expr, &ctx)
+		} else {
+			val, err = wfcel.EvaluateValue(expr, &ctx)
+		}
+		if err != nil {
+			return nil, fmt.Errorf("output %q: %w", name, err)
+		}
+		result[name] = val
+	}
+	return result, nil
 }

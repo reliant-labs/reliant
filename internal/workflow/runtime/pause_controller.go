@@ -34,7 +34,7 @@ type PauseController struct {
 	// already threads through every executor (main loop, inline workflows,
 	// loop iterations, spawned threads), so consecutive "no daemon connected"
 	// failures are counted across the whole run. nil when not wired
-	// (simulator, tests).
+	// (tests).
 	DaemonOffline *DaemonOfflineCircuitBreaker
 
 	// Cancelled reports whether the user asked to cancel the thread this
@@ -49,7 +49,7 @@ type PauseController struct {
 	// The DB was still marked cancelled, so the UI said "cancelled" while the
 	// spawn wrote another twelve messages over the next seventeen minutes.
 	//
-	// nil when not wired (simulator, tests, non-spawn executors).
+	// nil when not wired (tests, non-spawn executors).
 	Cancelled func() bool
 }
 

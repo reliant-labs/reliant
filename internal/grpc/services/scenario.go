@@ -21,7 +21,8 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
-	"github.com/reliant-labs/reliant/internal/workflow/runtime/simulator"
+	wfscenario "github.com/reliant-labs/reliant/internal/workflow/scenario"
+	"github.com/reliant-labs/reliant/internal/workflow/scenario/runner"
 )
 
 // ScenarioService implements the ScenarioService RPC handlers
@@ -171,15 +172,13 @@ func (s *ScenarioService) CreateScenario(
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("failed to parse workflow: %w", err))
 	}
 
-	// Convert proto scenario to simulator scenario
-	simScenario := protoToSimulatorScenario(req.Msg.Scenario)
+	// Convert proto scenario to the scenario type
+	simScenario := protoToScenario(req.Msg.Scenario)
 
-	var result *simulator.ScenarioResult
+	var result *wfscenario.ScenarioResult
 	if req.Msg.Run {
-		// Run the simulation
 		workflowLoader := createScenarioWorkflowLoader(s.database, ctx, userID, req.Msg.ProjectId)
-		engine := simulator.NewEngineWithLoader(wf, workflowLoader)
-		result = engine.RunScenario(simScenario)
+		result = runner.New(wf, runner.Options{Loader: workflowLoader}).RunContext(ctx, simScenario)
 	}
 
 	var savedScenario *reliantv1.Scenario
@@ -229,7 +228,7 @@ func (s *ScenarioService) CreateScenario(
 	}
 
 	if result != nil {
-		resp.Result = simulatorResultToProto(result)
+		resp.Result = scenarioResultToProto(result)
 	}
 
 	return connect.NewResponse(resp), nil
@@ -245,7 +244,7 @@ func (s *ScenarioService) RunScenario(
 		return nil, connect.NewError(connect.CodeUnauthenticated, fmt.Errorf("user not authenticated"))
 	}
 
-	var simScenario *simulator.Scenario
+	var simScenario *wfscenario.Scenario
 	var workflowYAML string
 	var isProjectScenario bool
 	projectID := req.Msg.ProjectId
@@ -303,7 +302,7 @@ func (s *ScenarioService) RunScenario(
 				return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("scenario not found: %s", filename))
 			}
 
-			var scenario simulator.Scenario
+			var scenario wfscenario.Scenario
 			if err := yaml.Unmarshal([]byte(found.YAMLContent), &scenario); err != nil {
 				return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("failed to parse scenario: %w", err))
 			}
@@ -344,7 +343,7 @@ func (s *ScenarioService) RunScenario(
 				return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("scenario has no associated workflow"))
 			}
 
-			simScenario = dbScenarioToSimulator(dbScenario)
+			simScenario = dbScenarioToScenario(dbScenario)
 		}
 	} else if req.Msg.Scenario != nil && req.Msg.WorkflowSlug != "" {
 		// Run an ad-hoc scenario
@@ -353,7 +352,7 @@ func (s *ScenarioService) RunScenario(
 			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("workflow not found: %s", req.Msg.WorkflowSlug))
 		}
 		workflowYAML = draft.Definition
-		simScenario = protoToSimulatorScenario(req.Msg.Scenario)
+		simScenario = protoToScenario(req.Msg.Scenario)
 	} else {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("scenario_id or (workflow_slug + scenario) required"))
 	}
@@ -364,10 +363,8 @@ func (s *ScenarioService) RunScenario(
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("failed to parse workflow: %w", err))
 	}
 
-	// Run the simulation
 	workflowLoader := createScenarioWorkflowLoader(s.database, ctx, userID, projectID)
-	engine := simulator.NewEngineWithLoader(wf, workflowLoader)
-	result := engine.RunScenario(simScenario)
+	result := runner.New(wf, runner.Options{Loader: workflowLoader}).RunContext(ctx, simScenario)
 
 	// Update last run result if this was a saved DB scenario (not project scenarios)
 	if req.Msg.ScenarioId != "" && !isProjectScenario {
@@ -381,7 +378,7 @@ func (s *ScenarioService) RunScenario(
 	}
 
 	return connect.NewResponse(&reliantv1.RunScenarioResponse{
-		Result: simulatorResultToProto(result),
+		Result: scenarioResultToProto(result),
 	}), nil
 }
 
@@ -443,7 +440,7 @@ func (s *ScenarioService) UploadScenario(
 	}
 
 	// Validate the YAML is a valid scenario
-	var scenario simulator.Scenario
+	var scenario wfscenario.Scenario
 	if err := yaml.Unmarshal([]byte(req.Msg.YamlContent), &scenario); err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid scenario YAML: %w", err))
 	}
@@ -482,7 +479,7 @@ func (s *ScenarioService) UploadScenario(
 	scenarioID := fmt.Sprintf("project:%s:%s", req.Msg.WorkflowSlug, filename)
 
 	// Convert to proto for response
-	protoScenario, err := simulatorScenarioToProto(&scenario, scenarioID, filePath)
+	protoScenario, err := scenarioToProtoScenario(&scenario, scenarioID, filePath)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to convert scenario: %w", err))
 	}
@@ -573,8 +570,8 @@ func (s *ScenarioService) ExportScenario(
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("scenario not found: %s", req.Msg.ScenarioId))
 	}
 
-	// Convert to simulator.Scenario for YAML export
-	simScenario := dbScenarioToSimulator(dbScenario)
+	// Convert to wfscenario.Scenario for YAML export
+	simScenario := dbScenarioToScenario(dbScenario)
 
 	// Marshal to YAML
 	yamlData, err := yaml.Marshal(simScenario)
@@ -619,17 +616,17 @@ func scenarioToProto(s *db.WorkflowScenario) (*reliantv1.Scenario, error) {
 	}
 
 	// Parse the full scenario YAML and convert to proto
-	var scenario simulator.Scenario
+	var scenario wfscenario.Scenario
 	if err := yaml.Unmarshal([]byte(s.Events), &scenario); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal scenario events: %w", err)
 	}
-	events, err := simulatorEventsToProto(scenario.Events)
+	events, err := scenarioEventsToProto(scenario.Events)
 	if err != nil {
 		return nil, err
 	}
 	proto.Events = events
 	if scenario.Expect != nil {
-		proto.Expect = simulatorExpectToProto(scenario.Expect)
+		proto.Expect = scenarioExpectToProto(scenario.Expect)
 	}
 
 	// Parse last run result from JSON
@@ -644,15 +641,15 @@ func scenarioToProto(s *db.WorkflowScenario) (*reliantv1.Scenario, error) {
 	return proto, nil
 }
 
-func protoToSimulatorScenario(p *reliantv1.ScenarioDefinition) *simulator.Scenario {
+func protoToScenario(p *reliantv1.ScenarioDefinition) *wfscenario.Scenario {
 	if p == nil {
 		return nil
 	}
 
-	s := &simulator.Scenario{
+	s := &wfscenario.Scenario{
 		Name:        p.Name,
 		Description: p.Description,
-		Events:      make([]simulator.SimulatedEvent, len(p.Events)),
+		Events:      make([]wfscenario.SimulatedEvent, len(p.Events)),
 	}
 
 	// Parse inputs from JSON
@@ -665,7 +662,7 @@ func protoToSimulatorScenario(p *reliantv1.ScenarioDefinition) *simulator.Scenar
 
 	// Convert events
 	for i, e := range p.Events {
-		event := simulator.SimulatedEvent{
+		event := wfscenario.SimulatedEvent{
 			Node: e.Node,
 		}
 
@@ -682,8 +679,8 @@ func protoToSimulatorScenario(p *reliantv1.ScenarioDefinition) *simulator.Scenar
 
 	// Convert expectation
 	if p.Expect != nil {
-		s.Expect = &simulator.Expectation{
-			Outcome:       simulator.ExpectedOutcome(p.Expect.Outcome),
+		s.Expect = &wfscenario.Expectation{
+			Outcome:       wfscenario.ExpectedOutcome(p.Expect.Outcome),
 			Reached:       p.Expect.Reached,
 			NotReached:    p.Expect.NotReached,
 			ErrorContains: p.Expect.ErrorContains,
@@ -694,19 +691,19 @@ func protoToSimulatorScenario(p *reliantv1.ScenarioDefinition) *simulator.Scenar
 	return s
 }
 
-func dbScenarioToSimulator(s *db.WorkflowScenario) *simulator.Scenario {
+func dbScenarioToScenario(s *db.WorkflowScenario) *wfscenario.Scenario {
 	if s == nil {
 		return nil
 	}
 
-	var sim simulator.Scenario
+	var sim wfscenario.Scenario
 	if err := yaml.Unmarshal([]byte(s.Events), &sim); err != nil {
-		return &simulator.Scenario{Name: s.Name}
+		return &wfscenario.Scenario{Name: s.Name}
 	}
 	return &sim
 }
 
-func simulatorEventsToProto(events []simulator.SimulatedEvent) ([]*reliantv1.SimulatedEvent, error) {
+func scenarioEventsToProto(events []wfscenario.SimulatedEvent) ([]*reliantv1.SimulatedEvent, error) {
 	var protoEvents []*reliantv1.SimulatedEvent
 	for _, e := range events {
 		pe := &reliantv1.SimulatedEvent{
@@ -724,7 +721,7 @@ func simulatorEventsToProto(events []simulator.SimulatedEvent) ([]*reliantv1.Sim
 	return protoEvents, nil
 }
 
-func simulatorExpectToProto(e *simulator.Expectation) *reliantv1.ScenarioExpectation {
+func scenarioExpectToProto(e *wfscenario.Expectation) *reliantv1.ScenarioExpectation {
 	if e == nil {
 		return nil
 	}
@@ -737,7 +734,7 @@ func simulatorExpectToProto(e *simulator.Expectation) *reliantv1.ScenarioExpecta
 	}
 }
 
-func simulatorResultToProto(r *simulator.ScenarioResult) *reliantv1.ScenarioResult {
+func scenarioResultToProto(r *wfscenario.ScenarioResult) *reliantv1.ScenarioResult {
 	if r == nil {
 		return nil
 	}
@@ -803,13 +800,13 @@ func discoverProjectScenariosFromDB(repo db.Repository, ctx context.Context, pro
 
 	var scenarios []*reliantv1.Scenario
 	for _, stored := range workflowScenarios {
-		var simScenario simulator.Scenario
+		var simScenario wfscenario.Scenario
 		if err := yaml.Unmarshal([]byte(stored.YAMLContent), &simScenario); err != nil {
 			return nil, fmt.Errorf("failed to parse stored scenario %s: %w", stored.Name, err)
 		}
 
 		scenarioID := fmt.Sprintf("project:%s:%s", workflowSlug, stored.Name)
-		proto, err := simulatorScenarioToProto(&simScenario, scenarioID, "")
+		proto, err := scenarioToProtoScenario(&simScenario, scenarioID, "")
 		if err != nil {
 			return nil, fmt.Errorf("failed to convert scenario %s: %w", stored.Name, err)
 		}
@@ -819,13 +816,13 @@ func discoverProjectScenariosFromDB(repo db.Repository, ctx context.Context, pro
 	return scenarios, nil
 }
 
-// simulatorScenarioToProto converts a simulator.Scenario to a proto Scenario
-func simulatorScenarioToProto(s *simulator.Scenario, id, filePath string) (*reliantv1.Scenario, error) {
+// scenarioToProtoScenario converts a wfscenario.Scenario to a proto Scenario
+func scenarioToProtoScenario(s *wfscenario.Scenario, id, filePath string) (*reliantv1.Scenario, error) {
 	if s == nil {
 		return nil, nil
 	}
 
-	events, err := simulatorEventsToProto(s.Events)
+	events, err := scenarioEventsToProto(s.Events)
 	if err != nil {
 		return nil, err
 	}
@@ -837,6 +834,6 @@ func simulatorScenarioToProto(s *simulator.Scenario, id, filePath string) (*reli
 		Source:      "project",
 		Path:        filePath,
 		Events:      events,
-		Expect:      simulatorExpectToProto(s.Expect),
+		Expect:      scenarioExpectToProto(s.Expect),
 	}, nil
 }

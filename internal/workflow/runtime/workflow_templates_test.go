@@ -2,6 +2,7 @@
 package runtime
 
 import (
+	wfcel "github.com/reliant-labs/reliant/internal/workflow/cel"
 	"testing"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -192,12 +193,7 @@ func TestTemplateResolution(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Build context in the expected format
-			// Use inputs.X directly - NOT workflow.inputs.X
-			// See cel_env.go for namespace documentation
-			context := map[string]interface{}{
-				"inputs": tt.inputs,
-			}
+			context := &wfcel.WorkflowTemplateContext{Inputs: tt.inputs}
 
 			got, err := resolveTemplateString(tt.template, context)
 
@@ -408,7 +404,7 @@ func TestResolveWorkflowMap(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			resolved, err := ResolveWorkflowTemplates(tt.raw, tt.inputs)
+			resolved, err := ResolveWorkflowTemplates(tt.raw, tt.inputs, nil)
 
 			if tt.wantErr {
 				assert.Error(t, err)
@@ -530,7 +526,7 @@ func TestEndToEndWithTypedStruct(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Step 1: Resolve templates
-			resolved, err := ResolveWorkflowTemplates(tt.raw, tt.inputs)
+			resolved, err := ResolveWorkflowTemplates(tt.raw, tt.inputs, nil)
 			require.NoError(t, err)
 
 			// Step 2: Parse to proto
@@ -568,7 +564,7 @@ nodes:
 		inputs := map[string]interface{}{"max_turns": 75}
 
 		// Should resolve and parse with actual value
-		wf, err := ResolveAndParseWorkflow(yaml, inputs)
+		wf, err := ResolveAndParseWorkflow(yaml, inputs, nil)
 		require.NoError(t, err)
 		assert.Equal(t, "loop", wf.Nodes[0].GetType())
 		loop := wf.Nodes[0].GetLoop()
@@ -597,7 +593,7 @@ nodes:
 `)
 		inputs := map[string]interface{}{"total_items": 500, "batch_size": 25}
 
-		wf, err := ResolveAndParseWorkflow(yamlWithArithmetic, inputs)
+		wf, err := ResolveAndParseWorkflow(yamlWithArithmetic, inputs, nil)
 		require.NoError(t, err)
 		assert.Equal(t, "loop", wf.Nodes[0].GetType())
 		loop := wf.Nodes[0].GetLoop()
@@ -632,7 +628,7 @@ nodes:
 		inputs := map[string]interface{}{"max_turns": 100}
 
 		// Resolve templates with inputs
-		resolved, err := ResolveAndParseWorkflow(yaml, inputs)
+		resolved, err := ResolveAndParseWorkflow(yaml, inputs, nil)
 		require.NoError(t, err)
 		assert.Equal(t, "loop", resolved.Nodes[0].GetType())
 		loop1 := resolved.Nodes[0].GetLoop()
@@ -644,7 +640,7 @@ nodes:
 		inputs := map[string]interface{}{"max_turns": 25}
 
 		// Resolve templates
-		wf, err := ResolveAndParseWorkflow(yaml, inputs)
+		wf, err := ResolveAndParseWorkflow(yaml, inputs, nil)
 		require.NoError(t, err)
 		assert.Equal(t, "loop", wf.Nodes[0].GetType())
 		loop2 := wf.Nodes[0].GetLoop()
@@ -684,7 +680,7 @@ func TestOutputsNotResolvedAtLoadTime(t *testing.T) {
 		inputs := map[string]interface{}{"max_turns": 50}
 
 		// This should NOT fail even though outputs reference undefined nodes.*
-		resolved, err := ResolveWorkflowTemplates(raw, inputs)
+		resolved, err := ResolveWorkflowTemplates(raw, inputs, nil)
 		require.NoError(t, err, "ResolveWorkflowTemplates should not try to resolve outputs")
 
 		// Node templates should be resolved
@@ -730,7 +726,7 @@ outputs:
 		inputs := map[string]interface{}{"max_turns": 25}
 
 		// This should NOT fail
-		wf, err := ResolveAndParseWorkflow(yaml, inputs)
+		wf, err := ResolveAndParseWorkflow(yaml, inputs, nil)
 		require.NoError(t, err, "ResolveAndParseWorkflow should not try to resolve outputs")
 
 		// Node templates should be resolved
@@ -778,7 +774,7 @@ func TestNodeInputsNotResolvedAtLoadTime(t *testing.T) {
 		inputs := map[string]interface{}{"max_turns": 50}
 
 		// This should NOT fail even though inputs reference undefined fields
-		resolved, err := ResolveWorkflowTemplates(raw, inputs)
+		resolved, err := ResolveWorkflowTemplates(raw, inputs, nil)
 		require.NoError(t, err, "ResolveWorkflowTemplates should not try to resolve node inputs")
 
 		// while should be resolved (it's a typed field)
@@ -829,7 +825,7 @@ nodes:
 		inputs := map[string]interface{}{"max_turns": 25}
 
 		// This should NOT fail
-		wf, err := ResolveAndParseWorkflow(yaml, inputs)
+		wf, err := ResolveAndParseWorkflow(yaml, inputs, nil)
 		require.NoError(t, err, "ResolveAndParseWorkflow should not try to resolve node inputs")
 
 		// while should be resolved
@@ -867,7 +863,7 @@ nodes:
 
 		inputs := map[string]interface{}{}
 
-		resolved, err := ResolveWorkflowTemplates(raw, inputs)
+		resolved, err := ResolveWorkflowTemplates(raw, inputs, nil)
 		require.NoError(t, err, "save_message should not be resolved")
 
 		nodes := resolved["nodes"].([]interface{})

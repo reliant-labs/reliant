@@ -13,7 +13,6 @@ description: Loop outputs (slide_pipeline._completed, slides_loop.verdict) are a
 
 inputs:
   mode: auto
-  yield: false
   website_url: "https://example.com"
   deck_purpose: seed
   pitch_deck_dir: "pitch-deck"

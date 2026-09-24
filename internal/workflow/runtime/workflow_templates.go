@@ -5,6 +5,8 @@ import (
 	"fmt"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	wfcel "github.com/reliant-labs/reliant/internal/workflow/cel"
+	"github.com/reliant-labs/reliant/internal/workflow/model"
 	wfyaml "github.com/reliant-labs/reliant/internal/workflow/yaml"
 	yaml "gopkg.in/yaml.v3"
 )
@@ -37,15 +39,12 @@ import (
 //   - topLevelSkip: Skip workflow.outputs (e.g., outputs.final_result)
 //   - runtimeEvaluatedKeys: Skip ANY outputs inside nodes subtree (e.g., nodes[0].loop.inline.outputs)
 //     This covers inline loop outputs which reference nodes.* from the loop body.
-func ResolveWorkflowTemplates(raw map[string]interface{}, inputs map[string]interface{}) (map[string]interface{}, error) {
-	// Build the context for template resolution
-	// Templates use "inputs.X" format directly - NOT workflow.inputs.X
-	// See cel_env.go for namespace documentation
-	context := map[string]interface{}{
-		"inputs": inputs,
-		// workflow.* provides metadata only, NOT inputs
-		"workflow": map[string]interface{}{},
+func ResolveWorkflowTemplates(raw map[string]interface{}, inputs map[string]interface{}, workflowCtx *model.WorkflowContext) (map[string]interface{}, error) {
+	// Load-time scope: inputs and workflow metadata, nothing else exists yet.
+	if workflowCtx == nil {
+		workflowCtx = &model.WorkflowContext{}
 	}
+	context := &wfcel.WorkflowTemplateContext{Inputs: inputs, Workflow: workflowCtx}
 
 	// topLevelSkip: Keys to skip at workflow root (only applies to direct children of workflow)
 	topLevelSkip := map[string]bool{
@@ -95,7 +94,7 @@ func ResolveWorkflowTemplates(raw map[string]interface{}, inputs map[string]inte
 // - insideNodeSubtree: true when inside ANY node element from the nodes array (inherited by all descendants)
 func resolveWorkflowTemplatesRecursive(
 	value interface{},
-	context map[string]interface{},
+	context wfcel.CELEvalContext,
 	topLevelSkip map[string]bool,
 	runtimeEvaluatedKeys map[string]bool,
 	insideNodeSubtree bool,
@@ -171,12 +170,10 @@ func isMapValue(v interface{}) bool {
 // returns the actual typed value (int, bool, etc).
 // If the string contains mixed content, returns string with interpolated values.
 // Supports full CEL expressions: arithmetic, conditionals, function calls.
-func resolveTemplateString(s string, context map[string]interface{}) (interface{}, error) {
-	// Use the existing evaluateCELTemplate which handles all the cases:
-	// - No template: returns string as-is
-	// - Pure expression: returns native type
-	// - Mixed content: interpolates to string
-	return evaluateCELTemplate(s, context)
+func resolveTemplateString(s string, context wfcel.CELEvalContext) (interface{}, error) {
+	// No template: returned as-is. Pure expression: native type. Mixed
+	// content: interpolated to a string.
+	return wfcel.EvaluateTemplate(s, context)
 }
 
 // parseResolvedWorkflow parses a raw workflow map (with templates already resolved)
@@ -194,7 +191,7 @@ func parseResolvedWorkflow(resolved map[string]interface{}) (*reliantv1.Workflow
 // the provided inputs, then parses to a proto V2Workflow.
 //
 // Use this at runtime when inputs are available.
-func ResolveAndParseWorkflow(yamlData []byte, inputs map[string]interface{}) (*reliantv1.Workflow, error) {
+func ResolveAndParseWorkflow(yamlData []byte, inputs map[string]interface{}, workflowCtx *model.WorkflowContext) (*reliantv1.Workflow, error) {
 	// Parse to raw map
 	var raw map[string]interface{}
 	if err := yaml.Unmarshal(yamlData, &raw); err != nil {
@@ -202,7 +199,7 @@ func ResolveAndParseWorkflow(yamlData []byte, inputs map[string]interface{}) (*r
 	}
 
 	// Resolve all templates
-	resolved, err := ResolveWorkflowTemplates(raw, inputs)
+	resolved, err := ResolveWorkflowTemplates(raw, inputs, workflowCtx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve workflow templates: %w", err)
 	}

@@ -14,6 +14,7 @@ import (
 	"reflect"
 	"strings"
 
+	wfcel "github.com/reliant-labs/reliant/internal/workflow/cel"
 	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
@@ -70,6 +71,11 @@ func GetInputDefaults(activityName string) map[string]interface{} {
 }
 
 // GetOutputDefaults returns a map with all fields from an activity's output type set to zero values.
+//
+// These are the zeros for a node that did NOT run (loop-output typed-zero
+// substitution): sub-message fields stay nil there, because "no structured
+// response" is not the same as an empty one. To complete the result of a node
+// that DID run, use FillOutputDefaults.
 func GetOutputDefaults(activityName string) map[string]interface{} {
 	info, ok := activityTypes[activityName]
 	if !ok || info.OutputType == nil {
@@ -77,6 +83,54 @@ func GetOutputDefaults(activityName string) map[string]interface{} {
 	}
 
 	return getFieldDefaults(info.OutputType)
+}
+
+// outputDescriptor resolves an activity's proto output descriptor: the
+// registered output type when it is a proto message, else the node-type output
+// declared in the workflow proto (the registry validation types node outputs
+// with). The fallback matters wherever activity registration has not run.
+func outputDescriptor(activityName string) protoreflect.MessageDescriptor {
+	if info, ok := activityTypes[activityName]; ok {
+		if md := protoDescriptorOf(info.OutputType); md != nil {
+			return md
+		}
+		if info.OutputType != nil {
+			return nil // a registered non-proto output: reflection describes it
+		}
+	}
+	if md, ok := wfcel.OutputDescriptorForActivity(activityName); ok {
+		return md
+	}
+	return nil
+}
+
+// FillOutputDefaults completes the decoded result of an activity that RAN, in
+// place, so it carries every field its output type declares — recursively,
+// from the output message's proto descriptor (see output_defaults.go): a
+// missing field gets its zero value (an unset sub-message becomes its zero
+// shape, not nil), a present sub-message is completed the same way, and so is
+// each element of a present repeated message field. Present values are never
+// overwritten, and message_only fields are never added. Returns output (a new
+// map when output is nil). A registered non-proto output gets a top-level fill
+// from Go reflection.
+func FillOutputDefaults(activityName string, output map[string]interface{}) map[string]interface{} {
+	if output == nil {
+		output = make(map[string]interface{})
+	}
+	if md := outputDescriptor(activityName); md != nil {
+		fillProtoMessage(md, output)
+		return output
+	}
+	info, ok := activityTypes[activityName]
+	if !ok || info.OutputType == nil {
+		return output
+	}
+	for field, value := range getFieldDefaults(info.OutputType) {
+		if _, exists := output[field]; !exists {
+			output[field] = value
+		}
+	}
+	return output
 }
 
 // getFieldDefaults uses reflection to extract all JSON field names and their zero values.

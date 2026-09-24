@@ -8,7 +8,7 @@
 # 5. complete saves final summary
 #
 # The implementations node is a parallel loop with inline sub-workflow.
-# Provide one mock per iteration — the simulator assembles them into _results.
+# Provide one mock per iteration — the loop assembles them into _results.
 
 name: happy_path
 description: All 3 implementations complete, reviewer selects candidate 2 via use_winner strategy

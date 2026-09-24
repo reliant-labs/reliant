@@ -39,6 +39,8 @@ import { inputDefToSchema } from '../../lib/nodeFieldAdapter'
 import type { InputDef } from '../../lib/inputHelpers'
 import { getInputPresetConfig, getInputDefault, getInputDescription, setInputEnumValues } from '../../lib/inputHelpers'
 import { useModels, useGlobalDataStore } from '../../store/globalDataStore'
+import { DraftStatusBadge } from './DraftStatusBadge'
+import { splitFindings, type DraftStatus, type Finding } from './workflowDraftStatus'
 import { useThinkingCapability, reconcileThinkingLevel } from '../../hooks/useThinkingCapability'
 
 // =============================================================================
@@ -49,6 +51,10 @@ interface WorkflowItem {
   name: string
   description?: string
   source?: 'builtin' | 'user' | 'project'
+  /** Lifecycle; drafts are never runnable. Absent ⇒ complete (builtin/project). */
+  status?: DraftStatus
+  /** Current findings, computed on read by the backend. */
+  validationErrors?: Finding[]
   is_hidden?: boolean
   has_preset_groups?: boolean // True if workflow has any tags that can have presets
   builderChatId?: string
@@ -136,6 +142,8 @@ interface WorkflowCardProps {
   source?: 'builtin' | 'user' | 'project'
   isDefaultWorkflow?: boolean
   isHidden?: boolean
+  /** Set for a draft: how many validation errors it currently has. */
+  draftErrorCount?: number
   presetDefaults?: Record<string, string>
   isBuilderActive?: boolean
   onClick: () => void
@@ -153,6 +161,7 @@ function WorkflowCard({
   source,
   isDefaultWorkflow,
   isHidden,
+  draftErrorCount,
   presetDefaults,
   isBuilderActive,
   onClick,
@@ -224,6 +233,7 @@ function WorkflowCard({
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <h3 className="font-medium text-foreground">{displayName}</h3>
+            {draftErrorCount !== undefined && <DraftStatusBadge errorCount={draftErrorCount} />}
             {isHidden && (
               <span className="text-2xs px-1.5 py-0.5 rounded bg-zinc-500/10 text-zinc-500 font-medium uppercase flex items-center gap-1">
                 <EyeOff className="w-2.5 h-2.5" />
@@ -1864,13 +1874,19 @@ export function WorkflowHub({
         source={workflow.source}
         isDefaultWorkflow={defaultWorkflow === workflow.name}
         isHidden={getIsHidden(workflow)}
+        draftErrorCount={
+          workflow.status === 'draft'
+            ? splitFindings(workflow.validationErrors ?? []).errors.length
+            : undefined
+        }
         presetDefaults={getPresetDefaults(workflow.name)}
         isBuilderActive={activeBuilderWorkflows.has(workflow.name)}
         onClick={() => onSelectWorkflow(workflow.name)}
         onDelete={workflow.source === 'user' ? () => handleDeleteWorkflow(workflow.name) : undefined}
         onExport={workflow.source === 'user' && onExportWorkflow ? () => handleExportWorkflow(workflow.name) : undefined}
         onCopy={projectId ? () => handleCopyWorkflow(workflow.name) : undefined}
-        onSetDefault={onSetDefaultWorkflow ? () => handleSetDefault(workflow.name) : undefined}
+        // A default must be runnable, so drafts cannot be made the default.
+        onSetDefault={onSetDefaultWorkflow && workflow.status !== 'draft' ? () => handleSetDefault(workflow.name) : undefined}
         onConfigurePresets={hasPresetSupport ? () => setPresetConfigWorkflow(workflow.name) : undefined}
         onToggleVisibility={() => handleToggleVisibility(workflow)}
       />

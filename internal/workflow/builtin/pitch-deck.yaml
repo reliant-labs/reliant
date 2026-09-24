@@ -857,10 +857,13 @@ nodes:
           FOUNDER BRIEF:
           {{has(nodes.founder_interview) && has(nodes.founder_interview.response_text) ? nodes.founder_interview.response_text : '(Not run this session — read pitch-deck-content/phase-3-interview/founder-brief.md if it exists.)'}}
     save_message:
+      # builtin://structured-agent outputs only `response` and `completed`
+      # (no response_text); `response` is null when the plan tool was never
+      # called.
       role: assistant
       content: |
         ## Deck Plan
-        {{output.response_text}}
+        {{output.response != null ? output.response.narrative_arc + '\n\n' + string(size(output.response.slides)) + ' slides planned.' : 'No deck plan was submitted.'}}
 
   - id: slide_pipeline
     type: loop

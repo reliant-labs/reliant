@@ -14,6 +14,8 @@ import (
 	"time"
 
 	"github.com/google/cel-go/cel"
+	"github.com/google/cel-go/common/env"
+	"github.com/google/cel-go/common/overloads"
 	"github.com/google/cel-go/common/types"
 	"github.com/google/cel-go/common/types/ref"
 	"github.com/google/cel-go/common/types/traits"
@@ -57,14 +59,15 @@ func DefaultCELEnvConfig() CELEnvConfig {
 }
 
 // SaveMessageCELEnvConfig returns config for save_message expression evaluation.
-// Includes: inputs, workflow, nodes, output
+// Includes: output, inputs, workflow, iter. `nodes` is excluded on purpose — see
+// PostActivityContext.
 func SaveMessageCELEnvConfig() CELEnvConfig {
 	return CELEnvConfig{
 		Namespaces: []CELNamespace{
+			CELOutput,
 			CELInputs,
 			CELWorkflow,
-			CELNodes,
-			CELOutput,
+			CELIter,
 		},
 		IncludeStdLib:          true,
 		IncludeCustomFunctions: true,
@@ -74,6 +77,10 @@ func SaveMessageCELEnvConfig() CELEnvConfig {
 // LoopWhileCELEnvConfig returns config for loop while expression evaluation.
 // Includes: outputs, iter, inputs (for iteration limits via inputs.max_turns etc.),
 // and nodes (for while conditions that reference parent node outputs).
+//
+// Custom functions are included: the runtime evaluates `while` through
+// evaluateRaw, which always has them, so the preset must describe the same
+// function set or it would type-check a different language than runs.
 func LoopWhileCELEnvConfig() CELEnvConfig {
 	return CELEnvConfig{
 		Namespaces: []CELNamespace{
@@ -83,7 +90,7 @@ func LoopWhileCELEnvConfig() CELEnvConfig {
 			CELNodes,
 		},
 		IncludeStdLib:          true,
-		IncludeCustomFunctions: false,
+		IncludeCustomFunctions: true,
 	}
 }
 
@@ -126,7 +133,7 @@ func NewEnv(config CELEnvConfig) (*cel.Env, error) {
 	var opts []cel.EnvOption
 
 	if config.IncludeStdLib {
-		opts = append(opts, cel.StdLib())
+		opts = append(opts, StdLib())
 	}
 
 	// Enable OptionalTypes for ?. syntax (optional field access on potentially-skipped nodes)
@@ -156,33 +163,9 @@ func NewEnv(config CELEnvConfig) (*cel.Env, error) {
 		opts = append(opts, CustomFunctions()...)
 	}
 
-	return cel.NewEnv(opts...)
-}
-
-// NewEnvFromContext creates a CEL environment based on which keys are present in the context.
-// This auto-detects which namespaces to include.
-func NewEnvFromContext(ctx map[string]interface{}, includeCustomFunctions bool) (*cel.Env, error) {
-	config := CELEnvConfig{
-		IncludeStdLib:          true,
-		IncludeCustomFunctions: includeCustomFunctions,
-	}
-
-	namespaceOrder := []CELNamespace{
-		CELInputs,
-		CELWorkflow,
-		CELNodes,
-		CELIter,
-		CELOutput,
-		CELOutputs,
-	}
-
-	for _, ns := range namespaceOrder {
-		if _, ok := ctx[string(ns)]; ok {
-			config.Namespaces = append(config.Namespaces, ns)
-		}
-	}
-
-	return NewEnv(config)
+	// NewCustomEnv, not NewEnv: cel.NewEnv always starts from cel-go's full
+	// stdlib, which would reintroduce the singleton size() that StdLib replaces.
+	return cel.NewCustomEnv(opts...)
 }
 
 // EnsureNamespaceDefaults ensures all required namespaces have at least defaults.
@@ -227,6 +210,79 @@ func getNamespaceDecl(ns CELNamespace) cel.EnvOption {
 		// Dynamic namespaces (inputs, nodes, output, outputs)
 		return cel.Variable(string(ns), cel.DynType)
 	}
+}
+
+// =============================================================================
+// STANDARD LIBRARY
+// =============================================================================
+
+// StdLib is the CEL standard library as every workflow evaluation site sees it:
+// cel-go's stdlib with ONE deliberate change — size() of null is 0.
+//
+// A workflow reads a lot of values that are legitimately null: an unset
+// response_data, an optional response-tool field the model left out, a
+// coalesce() that fell through. `size(x) > 0` over those failed the step with
+// "no such overload: size", so every author had to write
+// `x != null && size(x) > 0`. Treating null as empty removes that class of
+// failure without making anything else lenient: `null + 'x'`, `null > 1` and
+// friends still fail, and size() of an int is still a type error.
+//
+// Only null is forgiven. An ABSENT key (`size(inputs.nope)`, `size(m.missing)`)
+// still fails with "no such key" — the error is raised by the field access,
+// before size() is ever called. Guard those with has() or `?.`.
+//
+// It is tied to the stdlib rather than to CustomFunctions so that every
+// environment that has size() at all gets the same semantics, including the
+// loop-while environment, which carries no custom functions.
+//
+// cel-go binds size() as a single "singleton" implementation, and a singleton
+// cannot be combined with added overloads, so the function is excluded from the
+// stdlib and redeclared whole with per-overload bindings. Because cel.NewEnv
+// always pre-loads the full stdlib, an environment using this must be built
+// with cel.NewCustomEnv.
+func StdLib() cel.EnvOption {
+	return cel.Lib(stdLibrary{})
+}
+
+type stdLibrary struct{}
+
+func (stdLibrary) CompileOptions() []cel.EnvOption {
+	return []cel.EnvOption{
+		cel.StdLib(cel.StdLibSubset(&env.LibrarySubset{
+			ExcludeFunctions: []*env.Function{env.NewFunction(overloads.Size)},
+		})),
+		nullSafeSizeFunction(),
+	}
+}
+
+func (stdLibrary) ProgramOptions() []cel.ProgramOption { return nil }
+
+// nullSafeSizeFunction declares size() with the stdlib's overloads plus a null
+// overload (global and receiver form) that returns 0.
+func nullSafeSizeFunction() cel.EnvOption {
+	sizeOf := cel.UnaryBinding(func(val ref.Val) ref.Val {
+		sizer, ok := val.(traits.Sizer)
+		if !ok {
+			return types.NoSuchOverloadErr()
+		}
+		return sizer.Size()
+	})
+	sizeOfNull := cel.UnaryBinding(func(ref.Val) ref.Val { return types.IntZero })
+	listOfA := cel.ListType(cel.TypeParamType("A"))
+	mapOfAB := cel.MapType(cel.TypeParamType("A"), cel.TypeParamType("B"))
+
+	return cel.Function(overloads.Size,
+		cel.Overload(overloads.SizeString, []*cel.Type{cel.StringType}, cel.IntType, sizeOf),
+		cel.MemberOverload(overloads.SizeStringInst, []*cel.Type{cel.StringType}, cel.IntType, sizeOf),
+		cel.Overload(overloads.SizeBytes, []*cel.Type{cel.BytesType}, cel.IntType, sizeOf),
+		cel.MemberOverload(overloads.SizeBytesInst, []*cel.Type{cel.BytesType}, cel.IntType, sizeOf),
+		cel.Overload(overloads.SizeList, []*cel.Type{listOfA}, cel.IntType, sizeOf),
+		cel.MemberOverload(overloads.SizeListInst, []*cel.Type{listOfA}, cel.IntType, sizeOf),
+		cel.Overload(overloads.SizeMap, []*cel.Type{mapOfAB}, cel.IntType, sizeOf),
+		cel.MemberOverload(overloads.SizeMapInst, []*cel.Type{mapOfAB}, cel.IntType, sizeOf),
+		cel.Overload("size_null", []*cel.Type{cel.NullType}, cel.IntType, sizeOfNull),
+		cel.MemberOverload("null_size", []*cel.Type{cel.NullType}, cel.IntType, sizeOfNull),
+	)
 }
 
 // =============================================================================

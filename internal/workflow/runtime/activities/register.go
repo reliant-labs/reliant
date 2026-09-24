@@ -29,7 +29,7 @@ var nodeTypeActivities = map[string]nodeTypeActivityDef{
 	model.NodeTypeCompact:        {"Compact", reflect.TypeOf(reliantv1.CompactArgs{}), reflect.TypeOf(handlers.CompactOutput{})},
 	model.NodeTypeCreateWorktree: {"CreateWorktree", reflect.TypeOf(reliantv1.CreateWorktreeArgs{}), reflect.TypeOf(handlers.CreateWorktreeOutput{})},
 	model.NodeTypeAskQuestion:    {"AskQuestion", reflect.TypeOf(reliantv1.AskQuestionArgs{}), reflect.TypeOf((*reliantv1.AskQuestionOutput)(nil))},
-	model.NodeTypeSaveMessage:    {"SaveMessage", reflect.TypeOf(reliantv1.SaveMessageNodeArgs{}), reflect.TypeOf(reliantv1.SaveMessageOutput{})},
+	model.NodeTypeSaveMessage:    {"SaveMessage", reflect.TypeOf(reliantv1.SaveMessageNodeArgs{}), reflect.TypeOf((*reliantv1.SaveMessageOutput)(nil))},
 	model.NodeTypeInvokeTool:     {"InvokeTool", reflect.TypeOf(reliantv1.InvokeToolArgs{}), reflect.TypeOf((*reliantv1.InvokeToolOutput)(nil))},
 }
 
@@ -154,7 +154,11 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 	// MESSAGE PROCESSING ACTIVITIES
 	// ========================================================================
 
-	v2.RegisterActivity(registry, handlers.NewSaveMessageActivity(deps.Repo))
+	saveMessage := handlers.NewSaveMessageActivity(deps.Repo)
+	v2.RegisterActivity(registry, saveMessage)
+	// A node's save_message is written by the worker that executes the node,
+	// through the same write path as the SaveMessage activity.
+	registry.SetMessageWriter(saveMessage)
 	v2.RegisterActivity(registry, handlers.NewCallLLMActivity(deps.Repo, deps.StreamingHub, deps.ToolsFactory, deps.ConfigProvider, deps.DriverResolver, deps.MCPBinder))
 
 	// ========================================================================

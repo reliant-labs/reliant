@@ -118,3 +118,55 @@ func (r *Repo) ListSpawnChildren(ctx context.Context, threadID string) ([]*Spawn
 	}
 	return children, nil
 }
+
+// LiveBackgroundSpawn is one background spawn still open inside a root
+// execution — backgrounded, with no terminal report to its parent. See
+// ListLiveBackgroundSpawns.
+type LiveBackgroundSpawn struct {
+	ToolCallID string
+	// ParentThreadID is the thread that issued the spawn (the mailbox
+	// recipient of its eventual report).
+	ParentThreadID    string
+	ToolInput         []byte
+	ChildWorkflowID   string
+	ChildThreadID     string
+	IssuingWorkflowID string
+	// Depth is 0 for a spawn issued by the root, 1 for one issued by a
+	// top-level spawn, and so on.
+	Depth int
+}
+
+// ListLiveBackgroundSpawns returns every background spawn issued anywhere in
+// rootWorkflowID's execution that has not reported back, parents before
+// children. This is the durable record the coarse fresh restart relaunches
+// from when the root execution died with spawns in flight.
+func (r *Repo) ListLiveBackgroundSpawns(ctx context.Context, rootWorkflowID string) ([]*LiveBackgroundSpawn, error) {
+	if rootWorkflowID == "" {
+		return nil, fmt.Errorf("root workflow ID cannot be empty")
+	}
+	if r.DB == nil {
+		return nil, fmt.Errorf("repository has no database connection")
+	}
+	rows, err := pgdb.New(r.DB.DB(ctx)).ListLiveBackgroundSpawnsForWorkflow(ctx, rootWorkflowID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list live background spawns: %w", err)
+	}
+	spawns := make([]*LiveBackgroundSpawn, 0, len(rows))
+	for _, row := range rows {
+		if !row.ParentThreadID.Valid || row.ParentThreadID.String == "" {
+			// No recipient to report to; relaunching it would produce a
+			// report nobody can be addressed.
+			continue
+		}
+		spawns = append(spawns, &LiveBackgroundSpawn{
+			ToolCallID:        row.ToolCallID,
+			ParentThreadID:    row.ParentThreadID.String,
+			ToolInput:         row.ToolInput,
+			ChildWorkflowID:   row.ChildWorkflowID,
+			ChildThreadID:     row.ChildThreadID,
+			IssuingWorkflowID: row.IssuingWorkflowID,
+			Depth:             int(row.Depth),
+		})
+	}
+	return spawns, nil
+}

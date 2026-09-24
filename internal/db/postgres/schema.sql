@@ -766,6 +766,18 @@ CREATE TABLE public.tasks (
 );
 
 --
+-- Name: temporal_payload_blobs; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.temporal_payload_blobs (
+    key text NOT NULL,
+    data bytea NOT NULL,
+    size_bytes integer NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    last_referenced_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+--
 -- Name: threads; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -885,15 +897,15 @@ CREATE TABLE public.workflow_drafts (
     slug text NOT NULL,
     description text,
     definition text NOT NULL,
-    is_valid bigint NOT NULL,
-    validation_errors text,
     source_path text,
     forked_from text,
     is_hidden boolean NOT NULL,
     chat_id text,
     created_at timestamp with time zone NOT NULL,
     updated_at timestamp with time zone NOT NULL,
-    version bigint NOT NULL
+    version bigint NOT NULL,
+    status text DEFAULT 'draft'::text NOT NULL,
+    CONSTRAINT workflow_drafts_status_valid CHECK ((status = ANY (ARRAY['draft'::text, 'complete'::text])))
 );
 
 --
@@ -1346,6 +1358,13 @@ ALTER TABLE ONLY public.tasks
     ADD CONSTRAINT tasks_pkey PRIMARY KEY (id);
 
 --
+-- Name: temporal_payload_blobs temporal_payload_blobs_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.temporal_payload_blobs
+    ADD CONSTRAINT temporal_payload_blobs_pkey PRIMARY KEY (key);
+
+--
 -- Name: threads threads_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1785,6 +1804,12 @@ CREATE INDEX idx_task_deps_to ON public.task_dependencies USING btree (to_task_i
 --
 
 CREATE INDEX idx_task_deps_type ON public.task_dependencies USING btree (dependency_type);
+
+--
+-- Name: idx_temporal_payload_blobs_last_ref; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_temporal_payload_blobs_last_ref ON public.temporal_payload_blobs USING btree (last_referenced_at);
 
 --
 -- Name: idx_threads_origin; Type: INDEX; Schema: public; Owner: -

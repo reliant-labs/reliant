@@ -29,7 +29,7 @@ nodes:
         tags: [flagship]
   - id: check_condition
     type: call_llm
-    condition: "{{inputs.enabled}}"
+    condition: "inputs.enabled"
     args:
       model:
         tags: [flagship]
@@ -47,9 +47,10 @@ nodes:
 	result := NewResult()
 	ValidateCELWithCompilation(wf, result, nil)
 
-	// Should have a warning about conditional access
-	warnings := result.Warnings()
-	require.NotEmpty(t, warnings, "expected warning about conditional node access")
+	// A skipped call_llm publishes only the skip marker, so reading
+	// .message is a run-time "no such key" — an ERROR (G1).
+	warnings := result.Errors()
+	require.NotEmpty(t, warnings, "expected an error about conditional node access")
 
 	found := false
 	for _, w := range warnings {
@@ -60,7 +61,7 @@ nodes:
 			t.Logf("Found expected warning: %s", w.Message)
 		}
 	}
-	assert.True(t, found, "expected warning about conditional node 'check_condition'")
+	assert.True(t, found, "expected an error about conditional node 'check_condition'")
 }
 
 // TestWarnConditionalNodeAccess_UnconditionalNode tests that NO warning is generated
@@ -113,7 +114,7 @@ nodes:
         tags: [flagship]
   - id: conditional_step
     type: call_llm
-    condition: "{{inputs.enabled}}"
+    condition: "inputs.enabled"
     args:
       model:
         tags: [flagship]
@@ -157,7 +158,7 @@ nodes:
         tags: [flagship]
   - id: conditional_step
     type: call_llm
-    condition: "{{inputs.enabled}}"
+    condition: "inputs.enabled"
     args:
       model:
         tags: [flagship]
@@ -200,7 +201,7 @@ nodes:
         tags: [flagship]
   - id: conditional_step
     type: call_llm
-    condition: "{{inputs.enabled}}"
+    condition: "inputs.enabled"
     args:
       model:
         tags: [flagship]
@@ -243,7 +244,7 @@ nodes:
         tags: [flagship]
   - id: conditional_step
     type: call_llm
-    condition: "{{inputs.enabled}}"
+    condition: "inputs.enabled"
     args:
       model:
         tags: [flagship]
@@ -336,7 +337,7 @@ nodes:
         tags: [flagship]
   - id: conditional_step
     type: call_llm
-    condition: "{{inputs.enabled}}"
+    condition: "inputs.enabled"
     args:
       model:
         tags: [flagship]
@@ -387,7 +388,7 @@ nodes:
         tags: [flagship]
   - id: conditional_step
     type: call_llm
-    condition: "{{inputs.enabled}}"
+    condition: "inputs.enabled"
     args:
       model:
         tags: [flagship]
@@ -434,13 +435,13 @@ nodes:
         tags: [flagship]
   - id: cond1
     type: call_llm
-    condition: "{{inputs.enabled1}}"
+    condition: "inputs.enabled1"
     args:
       model:
         tags: [flagship]
   - id: cond2
     type: call_llm
-    condition: "{{inputs.enabled2}}"
+    condition: "inputs.enabled2"
     args:
       model:
         tags: [flagship]

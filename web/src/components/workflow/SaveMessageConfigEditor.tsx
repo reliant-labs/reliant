@@ -8,7 +8,7 @@ import {
   normalizeProtoFieldValue,
   shouldOmitProtoFieldValue,
 } from '../../types/workflowFieldSchema'
-import { normalizeCelString } from '../../lib/celAdapter'
+import { directCel, normalizeCelString } from '../../lib/celAdapter'
 
 interface SaveMessageConfigEditorProps {
   config?: SaveMessageConfig
@@ -84,9 +84,10 @@ const SAVE_MESSAGE_FIELD_SCHEMAS: ProtoFieldSchema[] = [
     label: 'Condition',
     widget: 'text',
     valueKind: 'string',
-    celCapable: true,
-    helpText: 'Only save if this CEL expression evaluates to true',
-    placeholder: '{{output.text != ""}}',
+    celExpressionOnly: true,
+    helpText:
+      'Raw CEL expression (no {{ }}) that must return bool; the message is saved only when true. Available: output.*, inputs.*, workflow.*, iter.*',
+    placeholder: "output.exit_code != 0",
     omitIfEmpty: true,
   },
 ]
@@ -110,6 +111,14 @@ function compactSaveMessageConfig(config: SaveMessageConfig | undefined): SaveMe
     const normalizedValue = normalizeProtoFieldValue(schema, rawValue)
 
     if (shouldOmitProtoFieldValue(schema, normalizedValue)) {
+      continue
+    }
+
+    if (fieldKey === 'condition') {
+      // Raw CEL (DirectCelBool), like every other condition field.
+      if (typeof normalizedValue === 'string') {
+        nextConfig[fieldKey] = directCel(normalizedValue)
+      }
       continue
     }
 

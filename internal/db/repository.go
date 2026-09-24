@@ -186,6 +186,10 @@ type Repository interface {
 	// this cannot return another thread's children), joined to each child's
 	// live workflow/thread state. Backs spawn_status's listing mode.
 	ListSpawnChildren(ctx context.Context, threadID string) ([]*SpawnChild, error)
+	// ListLiveBackgroundSpawns returns every background spawn issued anywhere
+	// in a root execution that has not reported back — the spawns a coarse
+	// fresh restart of that root must relaunch.
+	ListLiveBackgroundSpawns(ctx context.Context, rootWorkflowID string) ([]*LiveBackgroundSpawn, error)
 	// SpawnToolCallIDsByChildThread maps child thread id -> the spawn tool
 	// call that started it, for one chat. threads has no
 	// spawned_by_tool_call_id column, so the reconnect snapshot recovers the
@@ -597,7 +601,7 @@ type Repository interface {
 
 	// Workflow Drafts - User-owned workflows (available across all projects)
 	// Project-specific workflows come from .reliant/workflows/*.yaml files (read-only)
-	// A workflow is "usable" when is_valid=true AND is_hidden=false.
+	// A workflow is "usable" when status='complete' AND is_hidden=false.
 	CreateWorkflowDraft(ctx context.Context, draft *WorkflowDraft) error
 	UpsertWorkflowDraft(ctx context.Context, draft *WorkflowDraft) (*WorkflowDraft, error)
 	GetWorkflowDraft(ctx context.Context, id string) (*WorkflowDraft, error)
@@ -607,9 +611,9 @@ type Repository interface {
 	GetWorkflowDraftBySourcePath(ctx context.Context, userID, sourcePath string) (*WorkflowDraft, error)
 	GetUsableWorkflowBySlug(ctx context.Context, userID, slug string) (*WorkflowDraft, error)
 	ListWorkflowDraftsByUser(ctx context.Context, userID string) ([]*WorkflowDraft, error)
-	ListUsableWorkflowsByUser(ctx context.Context, userID string) ([]*WorkflowDraft, error)
 	UpdateWorkflowDraft(ctx context.Context, draft *WorkflowDraft) error
-	UpdateWorkflowDraftDefinition(ctx context.Context, id string, name string, slug string, definition string, isValid bool, validationErrors *string) error
+	UpdateWorkflowDraftDefinition(ctx context.Context, id string, name string, slug string, definition string, status WorkflowDraftStatus) error
+	SetWorkflowDraftStatus(ctx context.Context, id string, status WorkflowDraftStatus) (*WorkflowDraft, error)
 	SetWorkflowDraftHidden(ctx context.Context, id string, isHidden bool) (*WorkflowDraft, error)
 	DeleteWorkflowDraft(ctx context.Context, id string) error
 	DeleteWorkflowDraftBySlug(ctx context.Context, userID, slug string) error

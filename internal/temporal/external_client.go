@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/instanceid"
+	"github.com/reliant-labs/reliant/internal/temporal/claimcheck"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/log"
 	"google.golang.org/grpc"
@@ -21,6 +22,13 @@ type ExternalClientConfig struct {
 	Port      int    // Temporal frontend port (e.g. 7233)
 	Namespace string // Temporal namespace (e.g. "reliant")
 	LogLevel  string // "silent", "debug", "info", "warn", "error" — defaults to slog.Default()
+
+	// PayloadStore holds claim-checked payload blobs (see claimcheck). Every
+	// process that reads or writes the namespace's histories must set it to
+	// the same store, or it cannot decode what the others wrote. Nil installs
+	// the codec without a store: nothing is offloaded, and decoding a
+	// claim-check reference fails with claimcheck.ErrNoStore.
+	PayloadStore claimcheck.Store
 }
 
 // NewExternalClient creates a Temporal SDK client connected to an external Temporal server.
@@ -50,7 +58,7 @@ func NewExternalClient(ctx context.Context, cfg ExternalClientConfig) (client.Cl
 		// instance id makes the machine segment stable while keeping the pid
 		// and hostname that made the default readable.
 		Identity:      instanceid.WorkerIdentity(),
-		DataConverter: NewFlexibleDataConverter(),
+		DataConverter: NewFlexibleDataConverter(WithPayloadStore(cfg.PayloadStore)),
 		ConnectionOptions: client.ConnectionOptions{
 			DialOptions: []grpc.DialOption{
 				grpc.WithKeepaliveParams(keepalive.ClientParameters{

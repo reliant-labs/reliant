@@ -232,7 +232,7 @@ func TestWriteWorkflow_UpdateExisting(t *testing.T) {
 		Name:       "Original Name",
 		Slug:       "original-name",
 		Definition: validWorkflowYAML,
-		IsValid:    true,
+		Status:     db.WorkflowDraftStatusComplete,
 		CreatedAt:  now,
 		UpdatedAt:  now,
 	}
@@ -312,7 +312,7 @@ func TestWriteWorkflow_ConflictDetection(t *testing.T) {
 		Name:       "Conflict Test",
 		Slug:       "conflict-test-12345678",
 		Definition: validWorkflowYAML,
-		IsValid:    true,
+		Status:     db.WorkflowDraftStatusComplete,
 		CreatedAt:  now,
 		UpdatedAt:  now,
 	}
@@ -440,7 +440,7 @@ nodes:
 		assert.Contains(t, resp.Content, "name is required")
 	})
 
-	t.Run("saves invalid YAML with validation errors", func(t *testing.T) {
+	t.Run("rejects a workflow with validation errors when complete:true and saves nothing", func(t *testing.T) {
 		draft := createDraft(t)
 		// YAML is valid but workflow structure is invalid (missing entry)
 		invalidWorkflow := `name: invalid-workflow
@@ -449,8 +449,9 @@ nodes:
     type: call_llm
 `
 		params := WriteWorkflowParams{
-			ID:      draft.ID,
-			Content: invalidWorkflow,
+			ID:       draft.ID,
+			Content:  invalidWorkflow,
+			Complete: boolPtr(true),
 		}
 
 		inputJSON, _ := json.Marshal(params)
@@ -461,15 +462,12 @@ nodes:
 		})
 
 		require.NoError(t, err)
-		// Should still save but report validation errors
-		assert.False(t, resp.IsError, "Should not be an error: %s", resp.Content) // Not an error - saved with warnings
-		assert.Contains(t, resp.Content, "validation errors")
+		assert.True(t, resp.IsError, "validation errors must block a complete write: %s", resp.Content)
+		assert.Contains(t, resp.Content, "must pass validation")
 
-		// Verify it was still saved
-		var result WriteWorkflowResult
-		err = json.Unmarshal([]byte(resp.Metadata), &result)
+		stored, err := repo.GetWorkflowDraft(context.Background(), draft.ID)
 		require.NoError(t, err)
-		assert.NotEmpty(t, result.ID)
+		assert.Equal(t, draft.Definition, stored.Definition, "the rejected content must not be persisted")
 	})
 }
 
@@ -628,21 +626,16 @@ func TestCreateWorkflow_WithInvalidContent(t *testing.T) {
 	tool := NewCreateWorkflowTool(repo)
 	ctx := createTestContext(t, "")
 
+	// Does not parse as a workflow: rejected even as a draft.
 	invalidYAML := "name: broken\nnodes: not-a-list"
 	inputJSON, _ := json.Marshal(CreateWorkflowParams{Content: &invalidYAML})
 	resp, err := tool.Run(ctx, ToolCall{ID: "test-1", Name: "create_workflow", Input: string(inputJSON)})
 	require.NoError(t, err)
-	// Should still succeed (saves with validation errors)
-	assert.False(t, resp.IsError, "Should not be an error: %s", resp.Content)
-	assert.Contains(t, resp.Content, "validation errors")
+	assert.True(t, resp.IsError, "unparseable content must block the create: %s", resp.Content)
+	assert.Contains(t, resp.Content, "NOT created")
 
-	var result CreateWorkflowResult
-	err = json.Unmarshal([]byte(resp.Metadata), &result)
+	// Nothing was created.
+	existing, err := repo.GetWorkflowDraftBySlug(context.Background(), "test-user", "broken")
 	require.NoError(t, err)
-	assert.NotEmpty(t, result.ID)
-
-	// Draft should exist but be marked invalid
-	draft, err := repo.GetWorkflowDraft(context.Background(), result.ID)
-	require.NoError(t, err)
-	assert.False(t, draft.IsValid)
+	assert.Nil(t, existing)
 }

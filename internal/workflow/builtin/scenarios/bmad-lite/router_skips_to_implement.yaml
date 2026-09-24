@@ -1,0 +1,43 @@
+# Router enters mid-pipeline: declared outputs of phases that never ran
+#
+# The classify router may start at ANY phase. When it picks `implement`,
+# ideate, requirements and architecture never execute, so nodes.ideate (and
+# the others) are ABSENT from the node outputs when the workflow completes.
+#
+# The declared outputs used to read `{{nodes.ideate.response_text}}` bare,
+# which fails the whole run at completion with "no such key: ideate" — the
+# F2 failure shape from specs/template-validation-gaps.md (one-ring's
+# plan_summary, which that workflow had already fixed). Validation now
+# rejects that read (node not guaranteed to have executed when the workflow
+# completes); this scenario proves the guarded outputs complete and report
+# empty strings for the phases that were skipped.
+
+name: router_skips_to_implement
+description: Router starts at implement; outputs for phases that never ran resolve to empty instead of failing the run
+
+events:
+  - node: classify
+    output:
+      selected_node: implement
+      reasoning: "Design is done — go straight to implementation."
+
+  - node: implement
+    black_box: true
+    output:
+      message:
+        role: assistant
+        text: "Implemented the planned tasks."
+      response_text: "Implemented the planned tasks."
+
+  - node: complete
+    output: {}
+
+expect:
+  outcome: completed
+  reached: [classify, implement, complete]
+  not_reached: [ideate, requirements, architecture]
+  outputs:
+    vision: ""
+    requirements: ""
+    architecture: ""
+    implementation: "Implemented the planned tasks."

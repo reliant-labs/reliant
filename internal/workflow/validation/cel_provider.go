@@ -39,6 +39,13 @@ func (p *workflowTypeProvider) FindStructType(structType string) (*types.Type, b
 	case "inputs":
 		return types.NewTypeTypeWithParam(types.NewObjectType("inputs")), true
 	case "outputs":
+		// Only where the site declares `outputs`: answering the type name
+		// elsewhere makes a bare `outputs.x` resolve as a type literal
+		// ("type 'type(outputs)' does not support field selection") instead
+		// of the real error, an undeclared reference.
+		if p.typeCtx != nil && p.typeCtx.OutputsUndeclared {
+			return nil, false
+		}
 		return types.NewTypeTypeWithParam(types.NewObjectType("outputs")), true
 	case "output":
 		if p.typeCtx != nil && p.typeCtx.CurrentNodeOutputType != nil {
@@ -46,7 +53,7 @@ func (p *workflowTypeProvider) FindStructType(structType string) (*types.Type, b
 		}
 		return nil, false
 	case "iter":
-		if p.typeCtx != nil && p.typeCtx.IterItemFields != nil {
+		if p.typeCtx != nil {
 			return types.NewTypeTypeWithParam(types.NewObjectType("iter")), true
 		}
 		return nil, false
@@ -122,9 +129,7 @@ func (p *workflowTypeProvider) FindStructFieldNames(structType string) ([]string
 		return p.findCurrentOutputFieldNames()
 
 	case "iter":
-		if p.typeCtx.IterItemFields != nil {
-			return []string{"iteration", "index", "item", "key"}, true
-		}
+		return iterFieldNames(p.typeCtx.IterScope), true
 	case "__iter_item":
 		if p.typeCtx.IterItemFields != nil {
 			names := make([]string, 0, len(p.typeCtx.IterItemFields))
@@ -382,18 +387,30 @@ func (p *workflowTypeProvider) findCurrentOutputFieldNames() ([]string, bool) {
 	return nil, false
 }
 
+// findIterFieldType types iter.<field> for the site's iter scope (G5): the
+// runtime binds only {iteration, index} outside items loops, so iter.item
+// and iter.key are undefined fields there — a compile error naming the rule
+// rather than a runtime "no such key: item".
 func (p *workflowTypeProvider) findIterFieldType(fieldName string) (*types.FieldType, bool) {
-	if p.typeCtx == nil || p.typeCtx.IterItemFields == nil {
+	if p.typeCtx == nil {
 		return nil, false
 	}
 	switch fieldName {
 	case "iteration", "index":
 		return &types.FieldType{Type: types.IntType}, true
+	}
+	if p.typeCtx.IterScope != iterItems {
+		return nil, false
+	}
+	switch fieldName {
 	case "key":
 		return &types.FieldType{Type: types.StringType}, true
 	case "item":
-		// iter.item is an object with known fields from the inferred schema.
-		return &types.FieldType{Type: types.NewObjectType("__iter_item")}, true
+		if p.typeCtx.IterItemFields != nil {
+			// iter.item is an object with known fields from the inferred schema.
+			return &types.FieldType{Type: types.NewObjectType("__iter_item")}, true
+		}
+		return &types.FieldType{Type: types.DynType}, true
 	default:
 		return nil, false
 	}

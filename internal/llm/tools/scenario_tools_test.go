@@ -5,25 +5,25 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/reliant-labs/reliant/internal/workflow/runtime/simulator"
+	wfscenario "github.com/reliant-labs/reliant/internal/workflow/scenario"
 )
 
-// failingRoutingResult mirrors what the simulator produces for a routing test
+// failingRoutingResult mirrors what the runner produces for a routing test
 // that took the wrong branch: `handle_question` was skipped rather than run,
 // `handle_command` ran instead, and the scenario asserted the opposite.
-func failingRoutingResult() *simulator.ScenarioResult {
-	return &simulator.ScenarioResult{
-		Status:   simulator.StatusFailed,
+func failingRoutingResult() *wfscenario.ScenarioResult {
+	return &wfscenario.ScenarioResult{
+		Status:   wfscenario.StatusFailed,
 		Scenario: "routes_question_to_handler",
-		Execution: simulator.ExecutionDetails{
+		Execution: wfscenario.ExecutionDetails{
 			NodesReached:   []string{"classify", "handle_question", "handle_command", "respond"},
 			NodesCompleted: []string{"classify", "handle_command", "respond"},
 			NodesSkipped:   []string{"handle_question"},
-			NodeStates: map[string]simulator.NodeExecutionState{
-				"classify":        simulator.StateCompleted,
-				"handle_question": simulator.StateSkipped,
-				"handle_command":  simulator.StateCompleted,
-				"respond":         simulator.StateCompleted,
+			NodeStates: map[string]wfscenario.NodeExecutionState{
+				"classify":        wfscenario.StateCompleted,
+				"handle_question": wfscenario.StateSkipped,
+				"handle_command":  wfscenario.StateCompleted,
+				"respond":         wfscenario.StateCompleted,
 			},
 			Outcome:    "completed",
 			DurationMs: 4,
@@ -37,8 +37,8 @@ func failingRoutingResult() *simulator.ScenarioResult {
 				"route":  "command",
 			},
 		},
-		Expected: &simulator.Expectation{
-			Outcome:    simulator.OutcomeCompleted,
+		Expected: &wfscenario.Expectation{
+			Outcome:    wfscenario.OutcomeCompleted,
 			Completed:  []string{"handle_question"},
 			NotReached: []string{"handle_command"},
 		},
@@ -91,7 +91,7 @@ func TestFormatScenarioResult_FailureNamesExpectationAndNode(t *testing.T) {
 // verbose formatter pushes the workflow YAML out of the model's context.
 func TestFormatScenarioResult_PassStaysSmall(t *testing.T) {
 	result := failingRoutingResult()
-	result.Status = simulator.StatusPassed
+	result.Status = wfscenario.StatusPassed
 	result.Mismatches = nil
 
 	out := formatScenarioResultInternal(result)
@@ -109,22 +109,22 @@ func TestFormatScenarioResult_PassStaysSmall(t *testing.T) {
 
 // TestFormatScenarioResult_ErrorShowsFailingNode covers the error outcome path.
 func TestFormatScenarioResult_ErrorShowsFailingNode(t *testing.T) {
-	result := &simulator.ScenarioResult{
-		Status:   simulator.StatusError,
+	result := &wfscenario.ScenarioResult{
+		Status:   wfscenario.StatusError,
 		Scenario: "handles_llm_error",
-		Execution: simulator.ExecutionDetails{
+		Execution: wfscenario.ExecutionDetails{
 			NodesReached:   []string{"call_llm"},
 			NodesCompleted: []string{},
 			Outcome:        "error",
 			DurationMs:     1,
-			Error: &simulator.ErrorDetails{
+			Error: &wfscenario.ErrorDetails{
 				Node:       "call_llm",
 				Step:       "evaluate",
 				Message:    "rate limit exceeded",
 				Expression: "${{ steps.call_llm.output }}",
 			},
 		},
-		Expected: &simulator.Expectation{Outcome: simulator.OutcomeCompleted},
+		Expected: &wfscenario.Expectation{Outcome: wfscenario.OutcomeCompleted},
 		Mismatches: []string{
 			`expected outcome "completed" but got "error"`,
 		},

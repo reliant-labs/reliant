@@ -1,0 +1,81 @@
+# Migration with some import lanes switched off
+#
+# Proves two migrate.yaml fixes on the real runtime:
+#
+# 1. final_summary's inject. migrate_memory / migrate_mcp / migrate_skills each
+#    carry a `condition` on their import_* input. A user who unchecks a lane
+#    gets that node CONDITION-SKIPPED: the runtime publishes the skip output
+#    ({skipped: true}) under nodes.<id>, so the key exists but has no
+#    response_text. The inject guarded with `has(nodes.migrate_memory)` —
+#    TRUE for a skipped node — and then read `.response_text`, failing the run
+#    with "no such key: response_text" at the very last step. Validation now
+#    rejects that read (a skipped node's output has no 'response_text').
+#
+# 2. The results join. The workflows lane ends at exactly ONE of
+#    no_workflow_candidates / workflow_builder_loop, and both used to feed the
+#    `join_results` all-join directly, so it waited forever on the branch not
+#    taken. The lane now has its own any-join (workflows_done).
+#
+# final_summary is EXECUTED (the qualified id makes its builtin://agent ref
+# transparent), so its inject is compiled and evaluated.
+
+name: memory_import_disabled
+description: Import lanes off, no workflow candidates — the skipped lanes and the untaken workflows branch do not stop the final summary
+
+inputs:
+  import_memory: false
+  import_mcp: false
+  import_skills: false
+
+events:
+  - node: announce
+    output: {}
+
+  - node: discover
+    black_box: true
+    output:
+      message:
+        role: assistant
+        text: "Found a CLAUDE.md and two MCP servers."
+      response_text: "Found a CLAUDE.md and two MCP servers."
+
+  - node: confirm_intent
+    output: {}
+
+  - node: confirm
+    output:
+      approval_id: "approval_1"
+      status: approved
+      action_taken: approve
+      data: {}
+
+  - node: migration_started
+    output: {}
+
+  # The analysis ran and found nothing worth building.
+  - node: analyze_workflows
+    black_box: true
+    output:
+      completed: true
+      response:
+        summary: "No reusable commands found."
+        workflow_candidates: []
+
+  - node: no_workflow_candidates
+    output: {}
+
+  - node: final_summary.agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: "Migration complete. Memory, MCP and skills were skipped."
+      response_text: "Migration complete. Memory, MCP and skills were skipped."
+      tool_calls: []
+
+expect:
+  outcome: completed
+  skipped: [migrate_memory, migrate_mcp, migrate_skills]
+  completed: [analyze_workflows, final_summary]
+  not_reached: [workflow_builder_loop]
+  outputs:
+    response_text: "Migration complete. Memory, MCP and skills were skipped."

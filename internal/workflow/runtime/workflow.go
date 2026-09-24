@@ -68,6 +68,47 @@ type ResumeInput struct {
 	// iteration so max-iteration guards keep counting from where they were;
 	// thread history carries the actual content.
 	LoopIteration int `json:"loop_iteration,omitempty"`
+	// Spawns are the background spawns that were live when the predecessor
+	// ended. The successor relaunches each one on its SAME tool call, thread
+	// and child workflow id — no new thread, no seed message — before
+	// entering the resume node. Filled by a continue-as-new handoff (exact
+	// loop positions) and by the coarse fresh restart from durable tool_calls
+	// rows (see ResumableSpawnsFromDurableState).
+	Spawns []SpawnHandoff `json:"spawns,omitempty"`
+	// AwaitSpawnsFirst: the predecessor's resume loop was parked waiting on
+	// its background spawns, not about to take a turn, so the successor waits
+	// on the relaunched spawns before its first iteration.
+	AwaitSpawnsFirst bool `json:"await_spawns_first,omitempty"`
+}
+
+// SpawnHandoff is one background spawn carried across an execution boundary.
+// Everything the successor needs to relaunch it in resume mode; its
+// conversation state is the child thread's history, not anything here.
+type SpawnHandoff struct {
+	ToolCallID       string `json:"tool_call_id"`
+	ParentThread     string `json:"parent_thread"`
+	ChildThread      string `json:"child_thread"`
+	ChildWorkflowID  string `json:"child_workflow_id"`
+	ParentWorkflowID string `json:"parent_workflow_id"`
+	Preset           string `json:"preset,omitempty"`
+	Title            string `json:"title,omitempty"`
+	// ChildInputs are the spawn node's args (buildSpawnChildInputs output).
+	// Empty for a record derived from durable state; the successor rebuilds
+	// them from its own inputs.
+	ChildInputs      map[string]interface{} `json:"child_inputs,omitempty"`
+	SpawnDepth       int                    `json:"spawn_depth,omitempty"`
+	ParentPermission string                 `json:"parent_permission,omitempty"`
+	// LoopIteration is the agent-loop iteration the spawn resumes at: the
+	// boundary it parked at, or its last recorded boundary if it was carried
+	// by the hard backstop mid-iteration.
+	LoopIteration int `json:"loop_iteration,omitempty"`
+	// AwaitSpawnsFirst: the spawn was parked on its OWN background spawns,
+	// so its relaunched loop waits on them before taking a turn.
+	AwaitSpawnsFirst bool `json:"await_spawns_first,omitempty"`
+	// Cancelled records a cancel_thread that reached the predecessor after
+	// the spawn parked. The successor re-applies it before relaunching, so
+	// the spawn stops at its first boundary instead of running on.
+	Cancelled bool `json:"cancelled,omitempty"`
 }
 
 // ChatContext provides chat-level data for CEL evaluation (chat.id)
@@ -204,6 +245,31 @@ type ChildWorkflowTracker struct {
 	// compares against the value it observed, exactly as it does for
 	// completions.
 	threadWakes map[string]int
+
+	// ── Continue-as-new handoff (continue_as_new.go) ──────────────────────
+
+	// handoffCapable is true while a top-level loop that can emit
+	// ContinueAsNew is executing. Nothing requests a handoff otherwise: a
+	// spawn that parked with no one able to hand off would wait forever.
+	handoffCapable int
+	// handoffRequested is set once history pressure crosses the soft
+	// threshold while handoffCapable. Every spawn loop parks at its next
+	// iteration boundary; the top-level loop hands off once all have.
+	handoffRequested bool
+	// handoffHard is set past the hard threshold: stop waiting for spawns to
+	// park and carry them from their last recorded boundary.
+	handoffHard bool
+
+	// chatID keys the test seam in currentHistoryPressure.
+	chatID string
+	// pauseArmed reports whether a pause is armed; an armed pause blocks the
+	// handoff (a resume signal must not be dropped).
+	pauseArmed func() bool
+
+	// spawnCancelled reports whether a cancel_thread targeted a spawn, by
+	// either of its ids. Read when building handoffs so a cancel that landed
+	// after the spawn parked survives into the successor.
+	spawnCancelled func(toolCallID, childThread string) bool
 }
 
 // detachedSpawnRecord is one live background spawn, tracked from the moment
@@ -215,6 +281,23 @@ type detachedSpawnRecord struct {
 	ChatID       string
 	ParentThread string
 	ChildThread  string
+
+	// handoff is everything a successor execution needs to relaunch this
+	// spawn in resume mode (see SpawnHandoff). Its LoopIteration is kept at
+	// the spawn loop's most recent iteration boundary.
+	handoff SpawnHandoff
+
+	// parked is set when the spawn stopped at an iteration boundary for a
+	// continue-as-new handoff. A parked spawn is still LIVE — its parent
+	// keeps waiting on it, the UI keeps showing it running — but it no
+	// longer holds up the handoff.
+	parked bool
+
+	// resumeArmed makes the spawn's agent loop start at handoff.LoopIteration
+	// (and, with handoff.AwaitSpawnsFirst, wait on its own children before
+	// its first turn). Consumed by the first loop start, so a transient retry
+	// of the relaunched spawn restarts at iteration 0 as any spawn retry does.
+	resumeArmed bool
 }
 
 // registerDetachedSpawn records a new in-flight background spawn against its
@@ -297,6 +380,50 @@ func (t *ChildWorkflowTracker) listLiveDetachedSpawns() []*detachedSpawnRecord {
 	}
 	sort.Slice(records, func(i, j int) bool { return records[i].ToolCallID < records[j].ToolCallID })
 	return records
+}
+
+// liveSpawnFor returns the live detached spawn running on childThread, or nil.
+func (t *ChildWorkflowTracker) liveSpawnFor(childThread string) *detachedSpawnRecord {
+	if t == nil || childThread == "" {
+		return nil
+	}
+	for _, rec := range t.liveDetachedSpawns {
+		if rec.ChildThread == childThread {
+			return rec
+		}
+	}
+	return nil
+}
+
+// allLiveSpawnsParked reports whether every live detached spawn has parked for
+// the handoff (vacuously true when none are live).
+func (t *ChildWorkflowTracker) allLiveSpawnsParked() bool {
+	for _, rec := range t.liveDetachedSpawns {
+		if !rec.parked {
+			return false
+		}
+	}
+	return true
+}
+
+// spawnHandoffs snapshots every live detached spawn as a SpawnHandoff, sorted
+// by tool_call_id (deterministic order for the continuation input and for the
+// successor's relaunch commands). A cancel that reached a parked spawn is
+// folded in so the successor honours it.
+func (t *ChildWorkflowTracker) spawnHandoffs() []SpawnHandoff {
+	live := t.listLiveDetachedSpawns()
+	if len(live) == 0 {
+		return nil
+	}
+	out := make([]SpawnHandoff, 0, len(live))
+	for _, rec := range live {
+		h := rec.handoff
+		if t.spawnCancelled != nil && t.spawnCancelled(rec.ToolCallID, rec.ChildThread) {
+			h.Cancelled = true
+		}
+		out = append(out, h)
+	}
+	return out
 }
 
 // RegisterThreadInputs registers a thread's input map for later query/update access.
@@ -573,7 +700,8 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	// STEP 5.6: If workflow has templates, resolve them with actual inputs
 	var wf *reliantv1.Workflow
 	if loadedWf.HasTemplates {
-		wf, err = ResolveAndParseWorkflow(loadedWf.YAML, input.Inputs)
+		wf, err = ResolveAndParseWorkflow(loadedWf.YAML, input.Inputs,
+			workflowContextToTyped(buildWorkflowContext(workflowID, input.WorkflowName, input.ChatID, input.Inputs)))
 		if err != nil {
 			notifyWorkflowError(ctx, input.ChatID, workflowID, input.WorkflowName, thread, "template_resolution_error", err.Error())
 			return nil, fmt.Errorf("failed to resolve workflow templates: %w", err)
@@ -606,8 +734,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	// This sets the default daemon for all tool execution in this workflow.
 	// Individual nodes can override with their own daemon field.
 	if wf.Daemon != nil {
-		celCtx := buildWorkflowCELContext(workflowID, input.WorkflowName, input.Inputs, nil)
-		ds, err := ResolveCelDaemonSelector(wf.Daemon, celCtx)
+		ds, err := ResolveCelDaemonSelector(wf.Daemon, workflowDaemonScope(workflowID, input.WorkflowName, input.ChatID, input.Inputs))
 		if err != nil {
 			notifyWorkflowError(ctx, input.ChatID, workflowID, input.WorkflowName, thread, "daemon_resolution_error", err.Error())
 			return nil, fmt.Errorf("failed to resolve workflow daemon selector: %w", err)
@@ -790,6 +917,9 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	// are stubbed by the layered orphan repair in LoadMessagesForLLM before
 	// the first LLM call.
 	resumeTarget, resumeLoopIteration := resolveResumeTarget(wf, input.Resume, logger)
+	// The resume position applies to the first entry into the resume loop
+	// only; later triggers of the same loop (e.g. via edges) start fresh.
+	resumeLoopApplied := false
 	var pendingResumeStep *core.TriggeredNode
 	if resumeTarget != nil {
 		logger.Info("[Workflow Runtime] Resume mode: entering directly at resume node",
@@ -957,6 +1087,13 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	// is recorded for the spawn's loop to observe.
 	setupCancelThreadHandler(ctx, cancelledThreads, workflowID)
 
+	// Continue-as-new handoff state (continue_as_new.go).
+	childTracker.chatID = input.ChatID
+	childTracker.pauseArmed = pauser.PauseArmed
+	childTracker.spawnCancelled = func(toolCallID, childThread string) bool {
+		return cancelledThreads[toolCallID] || cancelledThreads[childThread]
+	}
+
 	interruptCoordinator := NewThreadInterruptCoordinator(ctx, workflowID)
 	makeThreadInterrupt := func(thread string) *ThreadInterrupt {
 		return interruptCoordinator.ForThread(thread)
@@ -976,22 +1113,6 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 		DaemonOffline: daemonOfflineBreaker,
 	}
 
-	// STEP 8.65: Replay-versioning gate for position checkpoints.
-	// The checkpoint writes below add new activity commands at node-entry /
-	// loop-iteration boundaries. Histories recorded before this change must
-	// keep replaying WITHOUT those commands, or every in-flight run wedges
-	// with a non-determinism error on deploy (TMPRL1100 — the exact incident
-	// class the checkpoints exist to recover from). GetVersion returns
-	// DefaultVersion when replaying pre-change histories (checkpoints off)
-	// and 1 for new executions (checkpoints on).
-	checkpointsEnabled := workflow.GetVersion(ctx, "position-checkpoints", workflow.DefaultVersion, 1) >= 1
-
-	// STEP 8.66: Replay-versioning gate for ContinueAsNew at the agent-loop
-	// iteration boundary. Same hazard as the checkpoints above: the check adds
-	// commands (and eventually a CONTINUE_AS_NEW close command) where
-	// pre-change histories have none.
-	continueAsNewEnabled := workflow.GetVersion(ctx, continueAsNewVersionGate, workflow.DefaultVersion, 1) >= 1
-
 	// STEP 8.7: Create step executor for unified step lifecycle
 	executor := NewStepExecutor(
 		ctx,
@@ -1010,9 +1131,12 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 		WithThreadInterrupts(makeThreadInterrupt(execCtx.Thread)).
 		WithMakeThreadInterrupt(makeThreadInterrupt)
 
-	// Create save message function for join nodes
+	// Create save message function for join nodes. A failed save fails the
+	// join like any other node failure; processJoinEvents has no error
+	// channel, so the error is held here and checked right after it returns.
+	var joinSaveErr error
 	joinSaveMessageFunc := func(node *reliantv1.Node, output map[string]interface{}) {
-		if node.GetSaveMessage() == nil {
+		if node.GetSaveMessage() == nil || joinSaveErr != nil {
 			return
 		}
 		workflowContext := buildWorkflowContext(workflowID, input.WorkflowName, input.ChatID, input.Inputs)
@@ -1021,20 +1145,31 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 			node,
 			output,
 			workflowContext,
-			nodeOutputs,
 			input.ChatID,
 			workflowID,
 			"", // Join nodes don't have loop context
 			0,
-			nil, // No execContext for join nodes
-			"",  // No pre-allocated assistant message id for join nodes
+			nil,
+			"", // No pre-allocated assistant message id for join nodes
 		)
 		if err != nil {
 			logger.Error("[Workflow Runtime] Join save_message failed",
 				"joinID", node.GetId(),
 				"error", err,
 			)
+			joinSaveErr = fmt.Errorf("save_message for join %s: %w", node.GetId(), err)
 		}
+	}
+
+	// STEP 8.9: Relaunch background spawns the predecessor carried across
+	// its boundary (continue-as-new handoff, or the coarse fresh restart's
+	// durable-state derivation), before the resume node is entered so the
+	// resumed loop sees them live and waits on them rather than exiting.
+	if input.Resume != nil && len(input.Resume.Spawns) > 0 {
+		// execCtx.ProjectPath, not the local projectPath: the spawn path reads
+		// rtx.ProjectPath, which is the execution context's.
+		relaunchCarriedSpawns(ctx, input.Resume.Spawns, input.ChatID, execCtx.ProjectPath, input.Inputs,
+			childTracker, cancelledThreads, makeThreadPauseCtrl, makeThreadInterrupt)
 	}
 
 	// STEP 9: Main workflow loop
@@ -1062,6 +1197,11 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 			// Top level: a node's path is its own id.
 			recordJoinSatisfied(ctx, joinID)
 		}, workflow.Now(ctx))
+		if joinSaveErr != nil {
+			notifyWorkflowError(ctx, input.ChatID, workflowID, input.WorkflowName, thread,
+				"save_message_error", joinSaveErr.Error())
+			return nil, joinSaveErr
+		}
 
 		// Collect node router completion events before they're consumed by FindTriggeredNodes.
 		// These need fallback dispatch if no edges match.
@@ -1180,7 +1320,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 			// loop executor checkpoints per iteration ({loopID, iteration}),
 			// which both marks the position and preserves iteration progress.
 			// Cheap boundary: one write per node entry, never per activity.
-			if checkpointsEnabled && step.Node.GetType() != model.NodeTypeLoop {
+			if step.Node.GetType() != model.NodeTypeLoop {
 				notifyWorkflowCheckpoint(ctx, input.ChatID, workflowID, step.Node.GetId(), 0)
 			}
 
@@ -1268,38 +1408,44 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 				// marks the position AND preserves iteration progress so a
 				// resumed run re-enters at the recorded iteration (keeping
 				// max-iteration guards honest). Top-level loops only — nested
-				// loops are not resume targets. Version-gated: pre-change
-				// histories must replay without these commands.
-				if checkpointsEnabled {
-					loopExecutor = loopExecutor.WithIterationCheckpoint(func(iteration int) {
-						notifyWorkflowCheckpoint(ctx, input.ChatID, workflowID, loopStepID, iteration)
-					})
-				}
+				// loops are not resume targets.
+				loopExecutor = loopExecutor.WithIterationCheckpoint(func(iteration int) {
+					notifyWorkflowCheckpoint(ctx, input.ChatID, workflowID, loopStepID, iteration)
+				})
 
 				// ContinueAsNew before the history grows past the point where
 				// Temporal terminates the run. Top-level loops only: this ends
 				// the entire execution, so a nested loop must not reach it.
-				// Version-gated for the same reason the checkpoints are —
-				// pre-change histories must replay without these commands.
-				if continueAsNewEnabled {
-					loopExecutor = loopExecutor.WithContinueAsNewCheck(func(iteration int) error {
-						if !readyToContinueAsNew(ctx, childTracker, pauser.PauseArmed()) {
-							return nil
-						}
-						return newContinueAsNewError(ctx, input, loopStepID, iteration)
-					})
-				}
+				//
+				// Live background spawns are carried across, not waited out:
+				// a requested handoff parks each at its own iteration
+				// boundary, and the check fires once all have parked (or the
+				// hard threshold is passed). The await variant runs while the
+				// loop is parked on its spawns, which takes no boundary.
+				loopExecutor = loopExecutor.WithContinueAsNewCheck(func(iteration int) error {
+					if !readyToContinueAsNew(ctx, childTracker, pauser.PauseArmed()) {
+						return nil
+					}
+					return newContinueAsNewError(ctx, input, loopStepID, iteration, childTracker, false)
+				}).WithContinueAsNewAwaitCheck(func(iteration int) error {
+					if !childTracker.handoffReady(ctx) {
+						return nil
+					}
+					return newContinueAsNewError(ctx, input, loopStepID, iteration, childTracker, true)
+				})
 
 				// Resume mode: re-enter the resume-target loop at the recorded
 				// iteration. Applied once — subsequent triggers of the same
 				// loop (e.g. via edges) start fresh at iteration 0.
-				if resumeLoopIteration > 0 && resumeTarget != nil && loopStepID == resumeTarget.GetId() {
-					loopExecutor = loopExecutor.WithStartIteration(resumeLoopIteration)
-					resumeLoopIteration = 0
+				if resumeTarget != nil && loopStepID == resumeTarget.GetId() && !resumeLoopApplied {
+					loopExecutor = loopExecutor.WithStartIteration(resumeLoopIteration).
+						WithAwaitSpawnsFirst(input.Resume != nil && input.Resume.AwaitSpawnsFirst)
+					resumeLoopApplied = true
 				}
 
 				// Execute loop inline with retry-on-exhaustion support
 				var loopOutput *reliantv1.LoopOutput
+				childTracker.handoffCapable++
 			retryLoop:
 				for {
 					var execErr error
@@ -1364,6 +1510,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 					// Success - break out of retry loop
 					break retryLoop
 				}
+				childTracker.handoffCapable--
 
 				// Store loop output for edge routing
 				// Sub-workflow outputs are surfaced directly: nodes.loop_id.field
@@ -1378,7 +1525,6 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 						ctx,
 						step.Node,
 						loopOutputMap,
-						nodeOutputs,
 						workflowID,
 						input.WorkflowName,
 						input.ChatID,
@@ -1392,7 +1538,10 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 							"stepID", step.Node.GetId(),
 							"error", err,
 						)
-						// Don't fail - save_message errors are logged but non-fatal
+						notifyWorkflowError(ctx, input.ChatID, workflowID, input.WorkflowName, thread,
+							"save_message_error",
+							fmt.Sprintf("Loop step '%s' save_message failed: %s", step.Node.GetId(), err.Error()))
+						return nil, fmt.Errorf("save_message for loop step %s: %w", step.Node.GetId(), err)
 					}
 				}
 
@@ -2169,7 +2318,6 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 						ctx,
 						running.Node,
 						running.Output,
-						nodeOutputs,
 						workflowID,
 						input.WorkflowName,
 						input.ChatID,
@@ -2183,7 +2331,10 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 							"stepID", running.StepID,
 							"error", err,
 						)
-						// Don't fail - save_message errors are logged but non-fatal
+						notifyWorkflowError(ctx, input.ChatID, workflowID, input.WorkflowName, thread,
+							"save_message_error",
+							fmt.Sprintf("Inline workflow '%s' save_message failed: %s", running.StepID, err.Error()))
+						return nil, fmt.Errorf("save_message for inline workflow %s: %w", running.StepID, err)
 					}
 				}
 
@@ -2699,8 +2850,7 @@ func parseSpawnToolCall(ctx workflow.Context, spawnToolCall *reliantv1.ToolCallM
 	logger := workflow.GetLogger(ctx)
 	toolCallID := spawnToolCall.GetId()
 
-	// Shared with the simulator so both lanes agree on what a spawn tool call
-	// says — see spawn_node.go.
+	// See spawn_node.go for what a spawn tool call says.
 	parsed, err := parseSpawnToolInput(spawnToolCall.GetInput())
 	if err != nil {
 		logger.Error("[ExecuteTools] Failed to parse spawn tool input",
@@ -3000,8 +3150,7 @@ func prepareSpawnInline(
 		},
 	}
 
-	// Build proto V2Node for the InlineWorkflowExecutor. Shared with the
-	// simulator so both lanes name the node identically — see spawn_node.go.
+	// Build proto V2Node for the InlineWorkflowExecutor — see spawn_node.go.
 	spawnNode := newSpawnNode(config.toolCallID, targetWorkflow, config.presetName, childInputs)
 
 	// Spawn nodes are already fully resolved (no CEL), so use the proto node directly.
@@ -3045,6 +3194,10 @@ func prepareSpawnInline(
 // the transient-error retry loop and the completion/failure status
 // notifications. Called from a detached workflow.Go goroutine — its return
 // value is reported via the parent's mailbox (see dispatchSpawnBackground).
+//
+// Returns nil when the spawn PARKED for a continue-as-new handoff: nothing is
+// reported, and the spawn stays registered as live for the successor to
+// relaunch.
 func runSpawnInlineChild(
 	ctx workflow.Context,
 	config *spawnChildWorkflowConfig,
@@ -3120,6 +3273,17 @@ func runSpawnInlineChild(
 		_, execErr = inlineExecutor.Execute()
 		if execErr == nil {
 			break // Success
+		}
+
+		// Parked for a continue-as-new handoff: not a completion, not a
+		// failure. Report nothing — the successor relaunches this spawn on
+		// the same tool call and thread, and IT reports the outcome.
+		if errors.Is(execErr, errSpawnHandoff) {
+			logger.Info("[SpawnInline] Spawn parked for continue-as-new handoff",
+				"toolCallID", config.toolCallID,
+				"childWorkflowID", config.childWorkflowID,
+			)
+			return nil
 		}
 
 		// A user cancellation is terminal and must NOT be retried — retrying
@@ -3246,8 +3410,6 @@ func dispatchSpawnBackground(
 	makeThreadPauseCtrl func(string) *PauseController,
 	makeThreadInterrupt func(string) *ThreadInterrupt,
 ) *spawnInlineResult {
-	logger := workflow.GetLogger(ctx)
-
 	prep := prepareSpawnInline(ctx, config, projectPath, chatID, parentWorkflowID, parentThread, workflowInputs, makeThreadPauseCtrl)
 	if prep.earlyResult != nil {
 		// Prep itself failed (thread validation, child init) — nothing was
@@ -3267,8 +3429,55 @@ func dispatchSpawnBackground(
 		ChatID:       chatID,
 		ParentThread: parentThread,
 		ChildThread:  config.childThread,
+		handoff:      spawnHandoffFor(config, prep, parentWorkflowID, parentThread),
 	})
 
+	startDetachedSpawn(ctx, config, chatID, parentWorkflowID, parentThread, projectPath, workflowInputs, childTracker, makeThreadPauseCtrl, makeThreadInterrupt, prep)
+
+	// Determine thread title for the handle text: explicit title if
+	// provided, otherwise preset name — same rule prepareSpawnInline used to
+	// create the thread.
+	threadTitle := prep.threadTitle
+	if threadTitle == "" {
+		threadTitle = config.childThread
+	}
+
+	handleText := fmt.Sprintf(
+		"Spawned %q as agent_id: %s (status: running)\n\n"+
+			"<system>\n"+
+			"This agent is running in the background. Its result is NOT in this tool result.\n"+
+			"You will be notified when it finishes. Continue with other work, or use spawn_send\n"+
+			"to give it new instructions, or spawn_status to check its progress.\n"+
+			"</system>",
+		threadTitle, config.childThread,
+	)
+
+	return &spawnInlineResult{
+		ToolCallID: config.toolCallID,
+		Content:    handleText,
+		IsError:    false,
+	}
+}
+
+// startDetachedSpawn runs a registered background spawn's turns on a
+// workflow.Go goroutine and reports its outcome into the PARENT's mailbox when
+// it finishes. Shared by a fresh dispatch and by a successor execution's
+// relaunch of a carried spawn — which is what gives the parent exactly one
+// report per spawn however many executions it spans.
+func startDetachedSpawn(
+	ctx workflow.Context,
+	config *spawnChildWorkflowConfig,
+	chatID string,
+	parentWorkflowID string,
+	parentThread string,
+	projectPath string,
+	workflowInputs map[string]interface{},
+	childTracker *ChildWorkflowTracker,
+	makeThreadPauseCtrl func(string) *PauseController,
+	makeThreadInterrupt func(string) *ThreadInterrupt,
+	prep *spawnPrepResult,
+) {
+	logger := workflow.GetLogger(ctx)
 	workflow.Go(ctx, func(gCtx workflow.Context) {
 		// A panic inside this coroutine cannot be caught by the recover() in
 		// handleWorkflowCompletion — recover only works within the goroutine
@@ -3292,6 +3501,11 @@ func dispatchSpawnBackground(
 		}()
 
 		result := runSpawnInlineChild(gCtx, config, chatID, parentWorkflowID, projectPath, workflowInputs, childTracker, makeThreadPauseCtrl, makeThreadInterrupt, prep)
+		if result == nil {
+			// Parked for a continue-as-new handoff. Still live; the
+			// successor relaunches it and reports its outcome.
+			return
+		}
 
 		enqueueCtx := workflow.WithActivityOptions(gCtx, workflow.ActivityOptions{
 			StartToCloseTimeout: 30 * time.Second,
@@ -3326,29 +3540,164 @@ func dispatchSpawnBackground(
 
 		childTracker.completeDetachedSpawn(config.toolCallID, parentThread)
 	})
+}
 
-	// Determine thread title for the handle text: explicit title if
-	// provided, otherwise preset name — same rule prepareSpawnInline used to
-	// create the thread.
-	threadTitle := prep.threadTitle
-	if threadTitle == "" {
-		threadTitle = config.childThread
+// spawnHandoffFor is the record a successor execution needs to relaunch this
+// spawn (see SpawnHandoff).
+func spawnHandoffFor(config *spawnChildWorkflowConfig, prep *spawnPrepResult, parentWorkflowID, parentThread string) SpawnHandoff {
+	h := SpawnHandoff{
+		ToolCallID:       config.toolCallID,
+		ParentThread:     parentThread,
+		ChildThread:      config.childThread,
+		ChildWorkflowID:  config.childWorkflowID,
+		ParentWorkflowID: parentWorkflowID,
+		Preset:           config.presetName,
+		Title:            config.title,
+	}
+	if prep != nil && prep.childExecContext != nil {
+		h.SpawnDepth = prep.childExecContext.SpawnDepth
+		h.ParentPermission = prep.childExecContext.ParentPermission
+	}
+	if prep != nil && prep.spawnNode != nil {
+		h.ChildInputs = map[string]interface{}{}
+		for key, value := range prep.spawnNode.GetWorkflow().GetArgs() {
+			h.ChildInputs[key] = value.AsInterface()
+		}
+	}
+	return h
+}
+
+// relaunchCarriedSpawns restarts every background spawn a predecessor
+// execution carried across its boundary (ResumeInput.Spawns), BEFORE the
+// successor enters its resume node — so the resumed loop sees them live.
+//
+// Each relaunch is RESUME mode on the existing machinery: same tool call id,
+// same child workflow id and thread, no new thread and no seed message (the
+// thread already holds the spawn's conversation), re-registered in the live
+// registry so the parent waits on it and its eventual report lands exactly
+// once. A cancel that reached the spawn in the predecessor is re-applied
+// first, so it stops at its first boundary.
+//
+// Order matters only for determinism: handoffs arrive sorted (parents before
+// children for a durable-state derivation, by tool_call_id otherwise).
+func relaunchCarriedSpawns(
+	ctx workflow.Context,
+	spawns []SpawnHandoff,
+	chatID string,
+	projectPath string,
+	workflowInputs map[string]interface{},
+	childTracker *ChildWorkflowTracker,
+	cancelledThreads map[string]bool,
+	makeThreadPauseCtrl func(string) *PauseController,
+	makeThreadInterrupt func(string) *ThreadInterrupt,
+) {
+	logger := workflow.GetLogger(ctx)
+	for _, handoff := range spawns {
+		if handoff.ToolCallID == "" || handoff.ChildThread == "" || handoff.ParentThread == "" {
+			logger.Warn("[SpawnRelaunch] Skipping incomplete carried spawn", "toolCallID", handoff.ToolCallID)
+			continue
+		}
+		if handoff.Cancelled {
+			cancelledThreads[handoff.ToolCallID] = true
+			cancelledThreads[handoff.ChildThread] = true
+		}
+		config := &spawnChildWorkflowConfig{
+			toolCallID:      handoff.ToolCallID,
+			childWorkflowID: handoff.ChildWorkflowID,
+			childThread:     handoff.ChildThread,
+			presetName:      handoff.Preset,
+			title:           handoff.Title,
+			isResumption:    true,
+		}
+		if config.childWorkflowID == "" {
+			config.childWorkflowID = DeterministicWorkflowID(handoff.ParentWorkflowID, handoff.ToolCallID)
+		}
+		prep := prepareSpawnRelaunch(config, handoff, chatID, projectPath, workflowInputs, makeThreadPauseCtrl)
+
+		rec := &detachedSpawnRecord{
+			ToolCallID:   handoff.ToolCallID,
+			ChatID:       chatID,
+			ParentThread: handoff.ParentThread,
+			ChildThread:  handoff.ChildThread,
+			handoff:      handoff,
+			resumeArmed:  true,
+		}
+		rec.handoff.Cancelled = false
+		childTracker.registerDetachedSpawn(rec)
+		logger.Info("[SpawnRelaunch] Relaunching carried background spawn",
+			"toolCallID", handoff.ToolCallID,
+			"childThread", handoff.ChildThread,
+			"loopIteration", handoff.LoopIteration,
+			"awaitSpawnsFirst", handoff.AwaitSpawnsFirst,
+		)
+		startDetachedSpawn(ctx, config, chatID, handoff.ParentWorkflowID, handoff.ParentThread, projectPath, workflowInputs, childTracker, makeThreadPauseCtrl, makeThreadInterrupt, prep)
+	}
+}
+
+// prepareSpawnRelaunch is prepareSpawnInline for a carried spawn: the thread
+// and workflow rows already exist and the tool result has long settled, so
+// there is nothing to create, validate or announce — only the execution
+// context and spawn node to rebuild, from the handoff rather than from a
+// freshly parsed tool call.
+func prepareSpawnRelaunch(
+	config *spawnChildWorkflowConfig,
+	handoff SpawnHandoff,
+	chatID string,
+	projectPath string,
+	workflowInputs map[string]interface{},
+	makeThreadPauseCtrl func(string) *PauseController,
+) *spawnPrepResult {
+	pauseCtrl := makeThreadPauseCtrl(config.childThread)
+	if pauseCtrl != nil {
+		threadCancelled := pauseCtrl.Cancelled
+		toolCallCancelled := makeThreadPauseCtrl(config.toolCallID).Cancelled
+		pauseCtrl.Cancelled = func() bool {
+			return (threadCancelled != nil && threadCancelled()) ||
+				(toolCallCancelled != nil && toolCallCancelled())
+		}
 	}
 
-	handleText := fmt.Sprintf(
-		"Spawned %q as agent_id: %s (status: running)\n\n"+
-			"<system>\n"+
-			"This agent is running in the background. Its result is NOT in this tool result.\n"+
-			"You will be notified when it finishes. Continue with other work, or use spawn_send\n"+
-			"to give it new instructions, or spawn_status to check its progress.\n"+
-			"</system>",
-		threadTitle, config.childThread,
-	)
-
-	return &spawnInlineResult{
-		ToolCallID: config.toolCallID,
-		Content:    handleText,
-		IsError:    false,
+	childInputs := handoff.ChildInputs
+	if childInputs == nil {
+		childInputs = buildSpawnChildInputs(workflowInputs)
+	}
+	threadTitle := config.title
+	if threadTitle == "" {
+		threadTitle = config.presetName
+	}
+	spawnDepth := handoff.SpawnDepth
+	if spawnDepth == 0 {
+		spawnDepth = 1
+	}
+	parentPermission := handoff.ParentPermission
+	if parentPermission == "" {
+		parentPermission = resolveParentPermission(workflowInputs)
+	}
+	childExecContext := &ExecutionContext{
+		WorkflowID:       config.childWorkflowID,
+		ChatID:           chatID,
+		WorkflowName:     spawnTargetWorkflow,
+		Thread:           config.childThread,
+		ThreadMode:       model.ThreadModeInherit,
+		ThreadTitle:      threadTitle,
+		ParentThread:     handoff.ParentThread,
+		ProjectPath:      projectPath,
+		SpawnDepth:       spawnDepth,
+		ParentPermission: parentPermission,
+		Parent: &ParentContext{
+			WorkflowID: handoff.ParentWorkflowID,
+			StepPath:   "spawn_tool",
+		},
+	}
+	spawnNode := newSpawnNode(config.toolCallID, spawnTargetWorkflow, config.presetName, childInputs)
+	return &spawnPrepResult{
+		targetWorkflow:   spawnTargetWorkflow,
+		childExecContext: childExecContext,
+		spawnNode:        spawnNode,
+		evalResult:       spawnNode,
+		threadTitle:      threadTitle,
+		spawnStatusOpts:  &toolCallStatusOpts{ChildWorkflowID: config.childWorkflowID},
+		pauseCtrl:        pauseCtrl,
 	}
 }
 
@@ -3399,6 +3748,16 @@ func fetchSpawnResult(
 		Content:    prefixedContent,
 		IsError:    isError,
 	}
+}
+
+// toolBatchAssembledByWorkflow reports whether an execute_tools batch's result
+// is assembled by the workflow (it contains spawn or ask_user calls, which run
+// workflow-side and are merged with the regular tools' results) rather than
+// being the ExecuteTools activity's own result. It decides who executes the
+// node, and therefore who writes its save_message.
+func toolBatchAssembledByWorkflow(evalNode *reliantv1.Node) bool {
+	split := splitProtoToolCalls(evalNode.GetExecuteTools().GetResolvedToolCalls())
+	return len(split.spawnToolCalls) > 0 || len(split.askUserToolCalls) > 0
 }
 
 // executeToolsWithSpawnSupport handles ExecuteTools action with special support for "spawn" tool calls.

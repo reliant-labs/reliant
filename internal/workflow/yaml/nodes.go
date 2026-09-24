@@ -702,7 +702,7 @@ func unmarshalSaveMessageConfig(node *yaml.Node) (*reliantv1.SaveMessageConfig, 
 		var err error
 		switch key {
 		case yamlKeyCondition:
-			sm.Condition, err = unmarshalCelString(val)
+			sm.Condition, err = unmarshalDirectCelBool(val)
 		case "role":
 			sm.Role, err = unmarshalCelString(val)
 		case "content":
@@ -1258,7 +1258,9 @@ func marshalStringList(strs []string) *yaml.Node {
 
 func marshalSaveMessageConfig(sm *reliantv1.SaveMessageConfig) (*yaml.Node, error) {
 	m := &yaml.Node{Kind: yaml.MappingNode}
-	marshalCelStringField(m, yamlKeyCondition, sm.Condition)
+	if cn, _ := marshalDirectCelBool(sm.Condition); cn != nil {
+		m.Content = append(m.Content, scalarNode(yamlKeyCondition, ""), cn)
+	}
 	marshalCelStringField(m, "role", sm.Role)
 	marshalCelStringField(m, "content", sm.Content)
 	marshalCelStringField(m, "tool_calls", sm.ToolCalls)

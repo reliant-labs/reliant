@@ -81,8 +81,8 @@ edges:
 			strings.Contains(strings.Join(issue.Path, "."), "founder_interview") &&
 			strings.Contains(strings.Join(issue.Path, "."), "inject") {
 			found = true
-			assert.Equal(t, SeverityWarning, issue.Severity,
-				"router-skippable upstream reference should be a warning (node exists and may have run)")
+			assert.Equal(t, SeverityError, issue.Severity,
+				"an unguarded read of a router-skippable node fails at runtime (\"no such key\"), so it is an error (G1)")
 			assert.Contains(t, issue.Message, "no such key",
 				"message should explain the runtime failure mode")
 			assert.Contains(t, issue.Suggestion, "has(nodes.scrape_website)",
@@ -310,8 +310,8 @@ edges:
 
 	result := StaticAnalysis(wf, nil)
 	issues := orderingIssues(result)
-	require.NotEmpty(t, issues, "parallel sibling reference should warn")
-	assert.Equal(t, SeverityWarning, issues[0].Severity)
+	require.NotEmpty(t, issues, "parallel sibling reference must be flagged")
+	assert.Equal(t, SeverityError, issues[0].Severity, "a parallel sibling may not have run yet: runtime \"no such key\" (G1)")
 }
 
 // TestNodeOrdering_ConditionalNodeCoveredByConditionalWarning: nodes with

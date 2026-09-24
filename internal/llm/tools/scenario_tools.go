@@ -2,6 +2,7 @@
 package tools
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -17,7 +18,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/rctx"
 	"github.com/reliant-labs/reliant/internal/workflow/builtin"
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
-	"github.com/reliant-labs/reliant/internal/workflow/runtime/simulator"
+	wfscenario "github.com/reliant-labs/reliant/internal/workflow/scenario"
 	wfyaml "github.com/reliant-labs/reliant/internal/workflow/yaml"
 	"gopkg.in/yaml.v3"
 )
@@ -27,16 +28,16 @@ import (
 // =============================================================================
 //
 // There is exactly ONE definition of the scenario format:
-// simulator.Scenario / Expectation / SimulatedEvent. The tools parse stored
+// wfscenario.Scenario / Expectation / SimulatedEvent. The tools parse stored
 // YAML straight into it.
 //
 // This file used to declare a private mirror (ScenarioParam / ExpectationParam
-// / SimulatedEventParam) and copy it field-by-field onto the simulator types.
+// / SimulatedEventParam) and copy it field-by-field onto the scenario types.
 // The mirror drifted, and every field it forgot was silently DISCARDED —
 // Expectation.Completed, Expectation.Skipped and Expectation.Outputs, plus the
 // whole typed-event mode on SimulatedEvent. A scenario asserting
 // `completed: [x]` for a node that was merely skipped therefore reported PASS
-// through the tools while CI (which unmarshals into simulator.Scenario
+// through the tools while CI (which unmarshals into wfscenario.Scenario
 // directly) enforced the assertion for real.
 //
 // The mirror existed only to hang jsonschema tags off, and nothing ever
@@ -374,7 +375,8 @@ type WriteScenarioParams struct {
 }
 
 type writeScenarioTool struct {
-	repo db.Repository
+	repo   db.Repository
+	runner ScenarioRunner
 }
 
 const (
@@ -437,8 +439,8 @@ or name) only to write a scenario on a different workflow.
 }`
 )
 
-func NewWriteScenarioTool(repo db.Repository) Tool {
-	tool := &writeScenarioTool{repo: repo}
+func NewWriteScenarioTool(repo db.Repository, runner ScenarioRunner) Tool {
+	tool := &writeScenarioTool{repo: repo, runner: runner}
 	return NewToolWrapper[WriteScenarioParams, ToolResponse](tool)
 }
 
@@ -535,7 +537,10 @@ func (t *writeScenarioTool) Execute(ctx *rctx.ToolContext, args WriteScenarioPar
 		}
 	}
 
-	return runScenarioByName(ctx, t.repo, draft, args.Name)
+	if t.runner == nil {
+		return NewTextResponse(fmt.Sprintf("Scenario '%s' saved. Scenario execution is not available in this process, so it was not run.", args.Name)), nil
+	}
+	return runScenarioByName(ctx, t.repo, t.runner, draft, args.Name)
 }
 
 // =============================================================================
@@ -617,8 +622,15 @@ type RunScenarioParams struct {
 }
 
 type runScenarioTool struct {
-	repo db.Repository
+	repo   db.Repository
+	runner ScenarioRunner
 }
+
+// ScenarioRunner executes one scenario against a workflow on the real
+// DynamicWorkflow (internal/workflow/scenario/runner). Injected rather than
+// imported: the runner registers the runtime's activities, which import this
+// package, so a direct import would be a cycle.
+type ScenarioRunner func(ctx context.Context, wf *reliantv1.Workflow, sc *wfscenario.Scenario, loader func(ref string) (*reliantv1.Workflow, error)) *wfscenario.ScenarioResult
 
 const (
 	RunScenarioToolName        = "run_scenario"
@@ -633,8 +645,8 @@ The workflow defaults to the one this chat is editing. Pass id (a workflow UUID,
 slug, or name) only to run a scenario on a different workflow.`
 )
 
-func NewRunScenarioTool(repo db.Repository) Tool {
-	tool := &runScenarioTool{repo: repo}
+func NewRunScenarioTool(repo db.Repository, runner ScenarioRunner) Tool {
+	tool := &runScenarioTool{repo: repo, runner: runner}
 	return NewToolWrapper[RunScenarioParams, ToolResponse](tool)
 }
 
@@ -664,7 +676,11 @@ func (t *runScenarioTool) Execute(ctx *rctx.ToolContext, args RunScenarioParams)
 		return NewTextErrorResponse(err.Error()), nil
 	}
 
-	return runScenarioByName(ctx, t.repo, draft, args.Name)
+	if t.runner == nil {
+		return NewTextErrorResponse("Scenario execution is not available in this process"), nil
+	}
+
+	return runScenarioByName(ctx, t.repo, t.runner, draft, args.Name)
 }
 
 // =============================================================================
@@ -672,7 +688,7 @@ func (t *runScenarioTool) Execute(ctx *rctx.ToolContext, args RunScenarioParams)
 // =============================================================================
 
 // runScenarioByName runs a scenario and returns the formatted result
-func runScenarioByName(ctx *rctx.ToolContext, repo db.Repository, draft *db.WorkflowDraft, name string) (ToolResponse, error) {
+func runScenarioByName(ctx *rctx.ToolContext, repo db.Repository, runner ScenarioRunner, draft *db.WorkflowDraft, name string) (ToolResponse, error) {
 	scenario, err := repo.GetWorkflowScenarioByName(ctx, draft.ID, name)
 	if err != nil {
 		return NewTextErrorResponse(fmt.Sprintf("Failed to find scenario: %v", err)), nil
@@ -687,16 +703,12 @@ func runScenarioByName(ctx *rctx.ToolContext, repo db.Repository, draft *db.Work
 		return NewTextErrorResponse(fmt.Sprintf("Failed to parse workflow: %v", err)), nil
 	}
 
-	// Convert stored scenario to simulator types
-	simScenario, err := dbScenarioToSimulatorInternal(scenario)
+	parsed, err := dbScenarioToScenarioInternal(scenario)
 	if err != nil {
 		return NewTextErrorResponse(fmt.Sprintf("Failed to parse scenario: %v", err)), nil
 	}
 
-	// Run the simulation
-	workflowLoader := createScenarioWorkflowLoader(ctx, repo)
-	engine := simulator.NewEngineWithLoader(wf, workflowLoader)
-	result := engine.RunScenario(simScenario)
+	result := runner(ctx, wf, parsed, createScenarioWorkflowLoader(ctx, repo))
 
 	// Update the result in the database
 	resultJSON, err := result.ToJSON()
@@ -819,16 +831,16 @@ func loadScenarioProjectWorkflow(ctx *rctx.ToolContext, repo db.Repository, proj
 	return wf, nil
 }
 
-// dbScenarioToSimulatorInternal parses a stored scenario into the simulator's
-// own type. This is the same unmarshal the builtin-scenario CI suite performs
+// dbScenarioToScenarioInternal parses a stored scenario into the scenario
+// package's own type. This is the same unmarshal the builtin-scenario CI suite performs
 // (internal/workflow/builtin/scenarios_test.go), so the tools and CI cannot
 // disagree about what a scenario file means.
-func dbScenarioToSimulatorInternal(s *db.WorkflowScenario) (*simulator.Scenario, error) {
-	var scenario simulator.Scenario
-	if err := yaml.Unmarshal([]byte(s.Events), &scenario); err != nil {
+func dbScenarioToScenarioInternal(s *db.WorkflowScenario) (*wfscenario.Scenario, error) {
+	var parsed wfscenario.Scenario
+	if err := yaml.Unmarshal([]byte(s.Events), &parsed); err != nil {
 		return nil, fmt.Errorf("failed to parse scenario YAML: %w", err)
 	}
-	return &scenario, nil
+	return &parsed, nil
 }
 
 // Budgets for the scenario result text. This string is fed straight into a
@@ -841,9 +853,9 @@ const (
 	scenarioTotalOutputBudget = 8   // number of nodes whose outputs are printed
 )
 
-// formatScenarioResultInternal renders a simulation result for an LLM.
+// formatScenarioResultInternal renders a scenario result for an LLM.
 //
-// The simulator already knows far more than "which nodes were reached" — it
+// The runner already knows far more than "which nodes were reached" — it
 // distinguishes completed from skipped nodes, records each node's actual
 // output, and evaluates the workflow's declared outputs. Without that, a failed
 // routing assertion is undebuggable: "handle_question was not completed" reads
@@ -852,17 +864,17 @@ const (
 //
 // This only changes the text returned to the model. The persisted JSON
 // (result.ToJSON, read by the UI) is untouched.
-func formatScenarioResultInternal(result *simulator.ScenarioResult) string {
+func formatScenarioResultInternal(result *wfscenario.ScenarioResult) string {
 	var sb strings.Builder
 	exec := &result.Execution
 
 	status := string(result.Status)
 	switch result.Status {
-	case simulator.StatusPassed:
+	case wfscenario.StatusPassed:
 		status = "✓ PASSED"
-	case simulator.StatusFailed:
+	case wfscenario.StatusFailed:
 		status = "✗ FAILED"
-	case simulator.StatusError:
+	case wfscenario.StatusError:
 		status = "⚠ ERROR"
 	}
 
@@ -886,7 +898,7 @@ func formatScenarioResultInternal(result *simulator.ScenarioResult) string {
 	if len(exec.NodesSkipped) > 0 {
 		fmt.Fprintf(&sb, "skipped:   %s\n", joinNodesOrNone(exec.NodesSkipped))
 	}
-	if errored := scenarioNodesInState(exec, simulator.StateError); len(errored) > 0 {
+	if errored := scenarioNodesInState(exec, wfscenario.StateError); len(errored) > 0 {
 		fmt.Fprintf(&sb, "errored:   %s\n", joinNodesOrNone(errored))
 	}
 	// Anything scheduled but classified as neither completed nor skipped would
@@ -961,7 +973,7 @@ func formatScenarioResultInternal(result *simulator.ScenarioResult) string {
 // a node that was skipped gets "(handle_question was skipped)" attached —
 // turning "it wasn't completed" into an actionable statement about which
 // condition to look at.
-func annotateMismatchWithNodeState(mismatch string, exec *simulator.ExecutionDetails) string {
+func annotateMismatchWithNodeState(mismatch string, exec *wfscenario.ExecutionDetails) string {
 	if len(exec.NodeStates) == 0 {
 		return mismatch
 	}
@@ -982,7 +994,7 @@ func annotateMismatchWithNodeState(mismatch string, exec *simulator.ExecutionDet
 }
 
 // scenarioNodesInState collects nodes sitting in a given execution state.
-func scenarioNodesInState(exec *simulator.ExecutionDetails, want simulator.NodeExecutionState) []string {
+func scenarioNodesInState(exec *wfscenario.ExecutionDetails, want wfscenario.NodeExecutionState) []string {
 	var nodes []string
 	for _, node := range sortedStateKeys(exec.NodeStates) {
 		if exec.NodeStates[node] == want {
@@ -994,7 +1006,7 @@ func scenarioNodesInState(exec *simulator.ExecutionDetails, want simulator.NodeE
 
 // scenarioUnaccountedNodes returns nodes that were scheduled but appear in
 // neither the completed nor the skipped list.
-func scenarioUnaccountedNodes(exec *simulator.ExecutionDetails) []string {
+func scenarioUnaccountedNodes(exec *wfscenario.ExecutionDetails) []string {
 	accounted := make(map[string]bool, len(exec.NodesCompleted)+len(exec.NodesSkipped))
 	for _, node := range exec.NodesCompleted {
 		accounted[node] = true
@@ -1003,7 +1015,7 @@ func scenarioUnaccountedNodes(exec *simulator.ExecutionDetails) []string {
 		accounted[node] = true
 	}
 	for node, state := range exec.NodeStates {
-		if state == simulator.StateError {
+		if state == wfscenario.StateError {
 			accounted[node] = true
 		}
 	}
@@ -1058,7 +1070,7 @@ func sortedNodeOutputKeys(m map[string]map[string]interface{}) []string {
 	return keys
 }
 
-func sortedStateKeys(m map[string]simulator.NodeExecutionState) []string {
+func sortedStateKeys(m map[string]wfscenario.NodeExecutionState) []string {
 	keys := make([]string, 0, len(m))
 	for k := range m {
 		keys = append(keys, k)

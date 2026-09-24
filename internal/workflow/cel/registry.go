@@ -2,6 +2,7 @@ package wfcel
 
 import (
 	"strings"
+	"sync"
 	"unicode"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -165,6 +166,17 @@ func (r *TypeRegistry) OutputFieldsForNodeType(nodeType string) []FieldInfo {
 		return nil
 	}
 	return ExtractFieldInfo(md)
+}
+
+// defaultTypeRegistry is built once: it is a pure function of the compiled-in
+// proto descriptors.
+var defaultTypeRegistry = sync.OnceValue(NewTypeRegistry)
+
+// OutputDescriptorForActivity returns the output message descriptor for an
+// activity name ("CallLLM" → the call_llm node's output), from the same
+// registry validation types node outputs with.
+func OutputDescriptorForActivity(activityName string) (protoreflect.MessageDescriptor, bool) {
+	return defaultTypeRegistry().OutputForNodeType(pascalToSnake(activityName))
 }
 
 // NodeTypes returns all registered node type names.

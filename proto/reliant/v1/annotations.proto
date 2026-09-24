@@ -48,6 +48,13 @@ message FieldMeta {
 
   // Whether this field is required.
   bool required = 14;
+
+  // message_only marks an activity OUTPUT field that exists only to be
+  // persisted with the node's save_message. The ActivityWrapper evaluates
+  // save_message against the full result, then clears every message_only
+  // field before the result is returned to the workflow — so it never enters
+  // Temporal history, and CEL (nodes.<id>.<field>) cannot reference it.
+  bool message_only = 15;
 }
 
 // NodeMeta describes metadata for a workflow node args message.

@@ -5346,7 +5346,8 @@ reliant workflow scenario list [workflow-path] [flags]
 
 Run scenario tests against workflows
 
-Runs scenario tests against workflow definitions using the simulator engine.
+Runs scenario tests against workflow definitions on the real workflow runtime
+(DynamicWorkflow in an in-memory Temporal environment; only activities are mocked).
 Scenarios are discovered from co-located *_scenarios.yaml files or from
 scenarios/<workflow-name>/ directories.
 

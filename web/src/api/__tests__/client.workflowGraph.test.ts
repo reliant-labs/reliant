@@ -29,7 +29,7 @@ function wireWorkflow() {
     stepCount: 17,
     source: 'builtin',
     isHidden: false,
-    isValid: true,
+    status: 'complete',
     nodes: Array.from({ length: 17 }, (_, i) => ({ id: `n${i}` })),
     edges: Array.from({ length: 16 }, (_, i) => ({
       from: `n${i}`,
@@ -73,7 +73,7 @@ describe('api.workflows.list', () => {
       step_count: 17,
       source: 'builtin',
       is_hidden: false,
-      is_valid: true,
+      status: 'complete',
     })
   })
 

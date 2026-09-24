@@ -148,7 +148,8 @@ type Querier interface {
 	// Workflows are owned by users and available across all projects
 	// Project-specific workflows come from .reliant/workflows/*.yaml files (read-only)
 	// A workflow is "usable" (shows in agent selector, can be loaded at runtime)
-	// when is_hidden = 0 AND is_valid = 1.
+	// when status = 'complete' AND is_hidden = false. Validity is never stored: it
+	// is computed on read and re-checked at run start.
 	CreateWorkflowDraft(ctx context.Context, arg CreateWorkflowDraftParams) (WorkflowDraft, error)
 	// Workflow Scenarios - Test scenarios for workflow simulation
 	// Scenarios define event sequences to test workflow behavior
@@ -397,6 +398,23 @@ type Querier interface {
 	ListDependenciesByPlan(ctx context.Context, planID string) ([]TaskDependency, error)
 	ListHiddenItemDefaults(ctx context.Context, itemType int32) ([]ListHiddenItemDefaultsRow, error)
 	ListItemDefaults(ctx context.Context, itemType int32) ([]ListItemDefaultsRow, error)
+	// Every background spawn issued anywhere inside one root execution that is
+	// still open: tool_calls.status = 6 (backgrounded) and no terminal report in
+	// its parent's mailbox. A background spawn is a goroutine inside the ROOT's
+	// Temporal execution — at every depth — so when that execution dies (the
+	// history-limit terminate is the case this exists for) these are exactly the
+	// spawns the coarse fresh restart must relaunch.
+	//
+	// Walks the workflow tree from the root: a spawn's child row carries the id
+	// of the workflow that ISSUED it as parent_id (the root for a top-level spawn,
+	// the spawning child's id for a nested one). Deliberately NOT filtered on the
+	// child rows' state: the reconciler's reap may already have marked them
+	// terminal, and that is an echo of the root dying, not of the child
+	// finishing. A spawn the stranded-spawn repair already closed has left status
+	// 6 and has a report, so it is not returned — its parent was told, and
+	// relaunching it would report twice. Ordered parents-before-children (depth),
+	// then by id, so a relaunch registers an issuing spawn before its own.
+	ListLiveBackgroundSpawnsForWorkflow(ctx context.Context, rootWorkflowID string) ([]ListLiveBackgroundSpawnsForWorkflowRow, error)
 	ListMessages(ctx context.Context, chatID string) ([]Message, error)
 	// Messages in a single context window with seq >= from_seq, ascending, and
 	// optionally seq < to_seq (NULL means unbounded above). Used to bound a
@@ -570,8 +588,6 @@ type Querier interface {
 	ListToolCallResultsByMessageIDs(ctx context.Context, messageIds []sql.NullString) ([]ToolCallResult, error)
 	ListToolCallsByChat(ctx context.Context, chatID string) ([]ToolCall, error)
 	ListToolCallsByMessageIDs(ctx context.Context, messageIds []sql.NullString) ([]ToolCall, error)
-	// List workflows that are usable (valid and not hidden)
-	ListUsableWorkflowsByUser(ctx context.Context, userID string) ([]WorkflowDraft, error)
 	// List all presets for a user (both global and project-specific)
 	ListUserPresets(ctx context.Context, userID string) ([]Preset, error)
 	// List presets for a specific project (includes both global and project-specific)
@@ -725,6 +741,9 @@ type Querier interface {
 	SetDefaultPresetAssignment(ctx context.Context, arg SetDefaultPresetAssignmentParams) error
 	SetVisibilityOverride(ctx context.Context, arg SetVisibilityOverrideParams) error
 	SetWorkflowDraftHidden(ctx context.Context, arg SetWorkflowDraftHiddenParams) (WorkflowDraft, error)
+	// Move a draft between 'draft' and 'complete'. The caller validates before
+	// marking complete; this query only records the decision.
+	SetWorkflowDraftStatus(ctx context.Context, arg SetWorkflowDraftStatusParams) (WorkflowDraft, error)
 	// Record the run's verdict (Node.outcome of the terminal node it reached).
 	// Written once at completion and never reconciled from Temporal, unlike status:
 	// a graph that routes to its `failed` node is a COMPLETED Temporal execution,

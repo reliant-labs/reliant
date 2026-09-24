@@ -15,7 +15,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file reliant/v1/annotations.proto.
  */
 export const file_reliant_v1_annotations: GenFile = /*@__PURE__*/
-  fileDesc("ChxyZWxpYW50L3YxL2Fubm90YXRpb25zLnByb3RvEgpyZWxpYW50LnYxIukCCglGaWVsZE1ldGESEwoLZGVzY3JpcHRpb24YASABKAkSEwoLZW51bV92YWx1ZXMYAiABKAkSDwoHdWlfaGludBgDIAEoCRIOCgZoaWRkZW4YBCABKAgSEAoIY2F0ZWdvcnkYBSABKAkSFQoNZGVmYXVsdF92YWx1ZRgGIAEoCRIWCgltaW5fdmFsdWUYByABKAFIAIgBARIWCgltYXhfdmFsdWUYCCABKAFIAYgBARINCgVsYWJlbBgJIAEoCRIYCgtwbGFjZWhvbGRlchgKIAEoCUgCiAEBEhsKE3Zpc2liaWxpdHlfY29udGV4dHMYCyADKAkSHgoRY2xlYW51cF9zZW1hbnRpY3MYDCABKAlIA4gBARIQCghyZXF1aXJlZBgOIAEoCEIMCgpfbWluX3ZhbHVlQgwKCl9tYXhfdmFsdWVCDgoMX3BsYWNlaG9sZGVyQhQKEl9jbGVhbnVwX3NlbWFudGljcyJ/CghOb2RlTWV0YRIRCglub2RlX3R5cGUYASABKAkSFAoMZGlzcGxheV9uYW1lGAIgASgJEhMKC2Rlc2NyaXB0aW9uGAMgASgJEhUKDWlzX3N0cnVjdHVyYWwYBCABKAgSEAoIY2F0ZWdvcnkYBSABKAkSDAoEaWNvbhgGIAEoCTpTCgdyZWxpYW50Eh0uZ29vZ2xlLnByb3RvYnVmLkZpZWxkT3B0aW9ucxjQhgMgASgLMhUucmVsaWFudC52MS5GaWVsZE1ldGFSB3JlbGlhbnSIAQE6VwoJbm9kZV9tZXRhEh8uZ29vZ2xlLnByb3RvYnVmLk1lc3NhZ2VPcHRpb25zGNGGAyABKAsyFC5yZWxpYW50LnYxLk5vZGVNZXRhUghub2RlTWV0YYgBAUI6WjhnaXRodWIuY29tL3JlbGlhbnQtbGFicy9yZWxpYW50L2dlbi9yZWxpYW50L3YxO3JlbGlhbnR2MWIGcHJvdG8z", [file_google_protobuf_descriptor]);
+  fileDesc("ChxyZWxpYW50L3YxL2Fubm90YXRpb25zLnByb3RvEgpyZWxpYW50LnYxIv8CCglGaWVsZE1ldGESEwoLZGVzY3JpcHRpb24YASABKAkSEwoLZW51bV92YWx1ZXMYAiABKAkSDwoHdWlfaGludBgDIAEoCRIOCgZoaWRkZW4YBCABKAgSEAoIY2F0ZWdvcnkYBSABKAkSFQoNZGVmYXVsdF92YWx1ZRgGIAEoCRIWCgltaW5fdmFsdWUYByABKAFIAIgBARIWCgltYXhfdmFsdWUYCCABKAFIAYgBARINCgVsYWJlbBgJIAEoCRIYCgtwbGFjZWhvbGRlchgKIAEoCUgCiAEBEhsKE3Zpc2liaWxpdHlfY29udGV4dHMYCyADKAkSHgoRY2xlYW51cF9zZW1hbnRpY3MYDCABKAlIA4gBARIQCghyZXF1aXJlZBgOIAEoCBIUCgxtZXNzYWdlX29ubHkYDyABKAhCDAoKX21pbl92YWx1ZUIMCgpfbWF4X3ZhbHVlQg4KDF9wbGFjZWhvbGRlckIUChJfY2xlYW51cF9zZW1hbnRpY3MifwoITm9kZU1ldGESEQoJbm9kZV90eXBlGAEgASgJEhQKDGRpc3BsYXlfbmFtZRgCIAEoCRITCgtkZXNjcmlwdGlvbhgDIAEoCRIVCg1pc19zdHJ1Y3R1cmFsGAQgASgIEhAKCGNhdGVnb3J5GAUgASgJEgwKBGljb24YBiABKAk6UwoHcmVsaWFudBIdLmdvb2dsZS5wcm90b2J1Zi5GaWVsZE9wdGlvbnMY0IYDIAEoCzIVLnJlbGlhbnQudjEuRmllbGRNZXRhUgdyZWxpYW50iAEBOlcKCW5vZGVfbWV0YRIfLmdvb2dsZS5wcm90b2J1Zi5NZXNzYWdlT3B0aW9ucxjRhgMgASgLMhQucmVsaWFudC52MS5Ob2RlTWV0YVIIbm9kZU1ldGGIAQFCOlo4Z2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vcmVsaWFudC92MTtyZWxpYW50djFiBnByb3RvMw", [file_google_protobuf_descriptor]);
 
 /**
  * FieldMeta provides metadata for workflow proto fields.
@@ -114,6 +114,17 @@ export type FieldMeta = Message<"reliant.v1.FieldMeta"> & {
    * @generated from field: bool required = 14;
    */
   required: boolean;
+
+  /**
+   * message_only marks an activity OUTPUT field that exists only to be
+   * persisted with the node's save_message. The ActivityWrapper evaluates
+   * save_message against the full result, then clears every message_only
+   * field before the result is returned to the workflow — so it never enters
+   * Temporal history, and CEL (nodes.<id>.<field>) cannot reference it.
+   *
+   * @generated from field: bool message_only = 15;
+   */
+  messageOnly: boolean;
 };
 
 /**

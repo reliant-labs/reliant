@@ -21,7 +21,7 @@
 #   max_retries (integer): default 5, min 1, max 15
 #
 # NOTE: For loop scenarios, provide events for EACH iteration in order.
-#       The simulator consumes events sequentially per node name.
+#       Events are consumed in order per node name.
 #       The cleanup node is a 'run' type and does not need events.
 
 ---
