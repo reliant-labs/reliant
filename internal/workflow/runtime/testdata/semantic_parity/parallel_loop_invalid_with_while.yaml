@@ -25,18 +25,5 @@ validation:
   use_workflow_loader: false
   error_contains: "parallel loop cannot use 'while'"
 
-simulator:
-  expected_status: error
-  scenario:
-    name: invalid_parallel_loop_with_while
-    inputs:
-      components: [auth]
-    events:
-      - node: builtin://agent
-        output:
-          response_text: "should not matter"
-    expect:
-      outcome: error
-
 runtime:
   checks: []

@@ -2850,8 +2850,7 @@ func parseSpawnToolCall(ctx workflow.Context, spawnToolCall *reliantv1.ToolCallM
 	logger := workflow.GetLogger(ctx)
 	toolCallID := spawnToolCall.GetId()
 
-	// Shared with the simulator so both lanes agree on what a spawn tool call
-	// says — see spawn_node.go.
+	// See spawn_node.go for what a spawn tool call says.
 	parsed, err := parseSpawnToolInput(spawnToolCall.GetInput())
 	if err != nil {
 		logger.Error("[ExecuteTools] Failed to parse spawn tool input",
@@ -3151,8 +3150,7 @@ func prepareSpawnInline(
 		},
 	}
 
-	// Build proto V2Node for the InlineWorkflowExecutor. Shared with the
-	// simulator so both lanes name the node identically — see spawn_node.go.
+	// Build proto V2Node for the InlineWorkflowExecutor — see spawn_node.go.
 	spawnNode := newSpawnNode(config.toolCallID, targetWorkflow, config.presetName, childInputs)
 
 	// Spawn nodes are already fully resolved (no CEL), so use the proto node directly.

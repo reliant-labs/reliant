@@ -386,7 +386,7 @@ func (e *StepExecutor) Start(triggeredStep *core.TriggeredNode) *RunningStep {
 			"stepID", node.GetId(),
 			"stepType", stepType,
 		)
-		future = e.executeFailActivity(fmt.Sprintf("workflow node %s should be handled inline", node.GetId()))
+		future = e.executeFailActivity(node, fmt.Sprintf("workflow node %s should be handled inline", node.GetId()))
 		activityName = "InlineWorkflowError"
 
 	case model.NodeTypeRun:
@@ -399,7 +399,7 @@ func (e *StepExecutor) Start(triggeredStep *core.TriggeredNode) *RunningStep {
 			"stepID", node.GetId(),
 			"stepType", stepType,
 		)
-		future = e.executeFailActivity(fmt.Sprintf("approval node %s should be handled inline", node.GetId()))
+		future = e.executeFailActivity(node, fmt.Sprintf("approval node %s should be handled inline", node.GetId()))
 		activityName = "InlineApprovalError"
 
 	case model.NodeTypeAskQuestion:
@@ -411,7 +411,7 @@ func (e *StepExecutor) Start(triggeredStep *core.TriggeredNode) *RunningStep {
 			future, activityName, saveDelegated = e.startAction(node, evalResult, preallocatedMessageID)
 		} else {
 			e.logger.Error("[StepExecutor] Unknown step type", "stepType", stepType, "stepID", node.GetId())
-			future = e.executeFailActivity("unknown step type: " + stepType)
+			future = e.executeFailActivity(node, "unknown step type: "+stepType)
 			activityName = "UnknownStepType"
 		}
 	}
@@ -726,7 +726,7 @@ func deepCopyJSONValue(value interface{}) interface{} {
 
 // startFailedStep returns a RunningStep that will immediately fail.
 func (e *StepExecutor) startFailedStep(node *reliantv1.Node, event *core.WorkflowEvent, err error) *RunningStep {
-	future := e.executeFailActivity(fmt.Sprintf("CEL evaluation failed for step %s: %v", node.GetId(), err))
+	future := e.executeFailActivity(node, fmt.Sprintf("CEL evaluation failed for step %s: %v", node.GetId(), err))
 	return &RunningStep{
 		ActivityID:   node.GetId(), // Set to StepID for backwards compat
 		StepID:       node.GetId(),
@@ -1001,15 +1001,19 @@ func callLLMIdempotencyKey(workflowID, stepID, loopNodeID string, loopIteration 
 }
 
 // executeFailActivity returns a future that will fail with the given message.
-func (e *StepExecutor) executeFailActivity(errorMsg string) workflow.Future {
+// node_path names the failing node's qualified position so the failure can be
+// attributed (the scenario runner reports it as the error node); the FailStep
+// handler itself ignores it.
+func (e *StepExecutor) executeFailActivity(node *reliantv1.Node, errorMsg string) workflow.Future {
 	return workflow.ExecuteActivity(
 		workflow.WithActivityOptions(e.getActivityCtx(), workflow.ActivityOptions{
 			StartToCloseTimeout: time.Second,
 		}),
 		"FailStep",
 		map[string]interface{}{
-			"chat_id": e.chatID,
-			"error":   errorMsg,
+			"chat_id":   e.chatID,
+			"error":     errorMsg,
+			"node_path": joinNodePath(e.nodePathPrefix, node.GetId()),
 		},
 	)
 }

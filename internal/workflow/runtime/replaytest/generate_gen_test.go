@@ -227,7 +227,7 @@ func TestGenerateFixture_RouterDispatch(t *testing.T) {
 		Name:       "replay-router",
 		Slug:       "replay-router",
 		Definition: replayRouterWorkflowYAML,
-		IsValid:    true,
+		Status:     db.WorkflowDraftStatusComplete,
 		CreatedAt:  now,
 		UpdatedAt:  now,
 	}), "create router workflow draft")

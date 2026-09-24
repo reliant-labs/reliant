@@ -35,7 +35,7 @@ export const api = {
           step_count: w.stepCount,
           source: w.source,
           is_hidden: w.isHidden || false,
-          is_valid: w.isValid !== false, // Default to true for builtin/project workflows
+          status: w.status, // "draft" | "complete"; builtin/project are always complete
           // The graph travels on the wire already, and dropping it here made
           // the app contradict itself one tap apart: the catalog row read
           // `step_count` and said "17 steps", while the detail screen read

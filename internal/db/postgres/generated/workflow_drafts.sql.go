@@ -17,7 +17,7 @@ UPDATE workflow_drafts SET
     updated_at = NOW(),
     version = version + 1
 WHERE id = $2
-RETURNING id, user_id, name, slug, description, definition, is_valid, validation_errors, source_path, forked_from, is_hidden, chat_id, created_at, updated_at, version
+RETURNING id, user_id, name, slug, description, definition, source_path, forked_from, is_hidden, chat_id, created_at, updated_at, version, status
 `
 
 type AssociateChatWithDraftParams struct {
@@ -35,8 +35,6 @@ func (q *Queries) AssociateChatWithDraft(ctx context.Context, arg AssociateChatW
 		&i.Slug,
 		&i.Description,
 		&i.Definition,
-		&i.IsValid,
-		&i.ValidationErrors,
 		&i.SourcePath,
 		&i.ForkedFrom,
 		&i.IsHidden,
@@ -44,6 +42,7 @@ func (q *Queries) AssociateChatWithDraft(ctx context.Context, arg AssociateChatW
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Version,
+		&i.Status,
 	)
 	return i, err
 }
@@ -63,34 +62,34 @@ const createWorkflowDraft = `-- name: CreateWorkflowDraft :one
 
 INSERT INTO workflow_drafts (
     id, user_id, name, slug, description, definition,
-    is_valid, validation_errors, source_path,
+    status, source_path,
     forked_from, chat_id, created_at, updated_at, is_hidden, version
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 1)
-RETURNING id, user_id, name, slug, description, definition, is_valid, validation_errors, source_path, forked_from, is_hidden, chat_id, created_at, updated_at, version
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 1)
+RETURNING id, user_id, name, slug, description, definition, source_path, forked_from, is_hidden, chat_id, created_at, updated_at, version, status
 `
 
 type CreateWorkflowDraftParams struct {
-	ID               string         `json:"id"`
-	UserID           string         `json:"user_id"`
-	Name             string         `json:"name"`
-	Slug             string         `json:"slug"`
-	Description      sql.NullString `json:"description"`
-	Definition       string         `json:"definition"`
-	IsValid          int64          `json:"is_valid"`
-	ValidationErrors sql.NullString `json:"validation_errors"`
-	SourcePath       sql.NullString `json:"source_path"`
-	ForkedFrom       sql.NullString `json:"forked_from"`
-	ChatID           sql.NullString `json:"chat_id"`
-	CreatedAt        time.Time      `json:"created_at"`
-	UpdatedAt        time.Time      `json:"updated_at"`
-	IsHidden         bool           `json:"is_hidden"`
+	ID          string         `json:"id"`
+	UserID      string         `json:"user_id"`
+	Name        string         `json:"name"`
+	Slug        string         `json:"slug"`
+	Description sql.NullString `json:"description"`
+	Definition  string         `json:"definition"`
+	Status      string         `json:"status"`
+	SourcePath  sql.NullString `json:"source_path"`
+	ForkedFrom  sql.NullString `json:"forked_from"`
+	ChatID      sql.NullString `json:"chat_id"`
+	CreatedAt   time.Time      `json:"created_at"`
+	UpdatedAt   time.Time      `json:"updated_at"`
+	IsHidden    bool           `json:"is_hidden"`
 }
 
 // Workflow Drafts - Simplified user-owned workflows
 // Workflows are owned by users and available across all projects
 // Project-specific workflows come from .reliant/workflows/*.yaml files (read-only)
 // A workflow is "usable" (shows in agent selector, can be loaded at runtime)
-// when is_hidden = 0 AND is_valid = 1.
+// when status = 'complete' AND is_hidden = false. Validity is never stored: it
+// is computed on read and re-checked at run start.
 func (q *Queries) CreateWorkflowDraft(ctx context.Context, arg CreateWorkflowDraftParams) (WorkflowDraft, error) {
 	row := q.db.QueryRowContext(ctx, createWorkflowDraft,
 		arg.ID,
@@ -99,8 +98,7 @@ func (q *Queries) CreateWorkflowDraft(ctx context.Context, arg CreateWorkflowDra
 		arg.Slug,
 		arg.Description,
 		arg.Definition,
-		arg.IsValid,
-		arg.ValidationErrors,
+		arg.Status,
 		arg.SourcePath,
 		arg.ForkedFrom,
 		arg.ChatID,
@@ -116,8 +114,6 @@ func (q *Queries) CreateWorkflowDraft(ctx context.Context, arg CreateWorkflowDra
 		&i.Slug,
 		&i.Description,
 		&i.Definition,
-		&i.IsValid,
-		&i.ValidationErrors,
 		&i.SourcePath,
 		&i.ForkedFrom,
 		&i.IsHidden,
@@ -125,6 +121,7 @@ func (q *Queries) CreateWorkflowDraft(ctx context.Context, arg CreateWorkflowDra
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Version,
+		&i.Status,
 	)
 	return i, err
 }
@@ -154,8 +151,8 @@ func (q *Queries) DeleteWorkflowDraftBySlug(ctx context.Context, arg DeleteWorkf
 }
 
 const getUsableWorkflowBySlug = `-- name: GetUsableWorkflowBySlug :one
-SELECT id, user_id, name, slug, description, definition, is_valid, validation_errors, source_path, forked_from, is_hidden, chat_id, created_at, updated_at, version FROM workflow_drafts 
-WHERE user_id = $1 AND slug = $2 AND is_valid = 1 AND is_hidden = false
+SELECT id, user_id, name, slug, description, definition, source_path, forked_from, is_hidden, chat_id, created_at, updated_at, version, status FROM workflow_drafts 
+WHERE user_id = $1 AND slug = $2 AND status = 'complete' AND is_hidden = false
 `
 
 type GetUsableWorkflowBySlugParams struct {
@@ -174,8 +171,6 @@ func (q *Queries) GetUsableWorkflowBySlug(ctx context.Context, arg GetUsableWork
 		&i.Slug,
 		&i.Description,
 		&i.Definition,
-		&i.IsValid,
-		&i.ValidationErrors,
 		&i.SourcePath,
 		&i.ForkedFrom,
 		&i.IsHidden,
@@ -183,12 +178,13 @@ func (q *Queries) GetUsableWorkflowBySlug(ctx context.Context, arg GetUsableWork
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Version,
+		&i.Status,
 	)
 	return i, err
 }
 
 const getWorkflowDraft = `-- name: GetWorkflowDraft :one
-SELECT id, user_id, name, slug, description, definition, is_valid, validation_errors, source_path, forked_from, is_hidden, chat_id, created_at, updated_at, version FROM workflow_drafts WHERE id = $1
+SELECT id, user_id, name, slug, description, definition, source_path, forked_from, is_hidden, chat_id, created_at, updated_at, version, status FROM workflow_drafts WHERE id = $1
 `
 
 func (q *Queries) GetWorkflowDraft(ctx context.Context, id string) (WorkflowDraft, error) {
@@ -201,8 +197,6 @@ func (q *Queries) GetWorkflowDraft(ctx context.Context, id string) (WorkflowDraf
 		&i.Slug,
 		&i.Description,
 		&i.Definition,
-		&i.IsValid,
-		&i.ValidationErrors,
 		&i.SourcePath,
 		&i.ForkedFrom,
 		&i.IsHidden,
@@ -210,12 +204,13 @@ func (q *Queries) GetWorkflowDraft(ctx context.Context, id string) (WorkflowDraf
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Version,
+		&i.Status,
 	)
 	return i, err
 }
 
 const getWorkflowDraftByChatID = `-- name: GetWorkflowDraftByChatID :one
-SELECT id, user_id, name, slug, description, definition, is_valid, validation_errors, source_path, forked_from, is_hidden, chat_id, created_at, updated_at, version FROM workflow_drafts WHERE chat_id = $1
+SELECT id, user_id, name, slug, description, definition, source_path, forked_from, is_hidden, chat_id, created_at, updated_at, version, status FROM workflow_drafts WHERE chat_id = $1
 `
 
 func (q *Queries) GetWorkflowDraftByChatID(ctx context.Context, chatID sql.NullString) (WorkflowDraft, error) {
@@ -228,8 +223,6 @@ func (q *Queries) GetWorkflowDraftByChatID(ctx context.Context, chatID sql.NullS
 		&i.Slug,
 		&i.Description,
 		&i.Definition,
-		&i.IsValid,
-		&i.ValidationErrors,
 		&i.SourcePath,
 		&i.ForkedFrom,
 		&i.IsHidden,
@@ -237,12 +230,13 @@ func (q *Queries) GetWorkflowDraftByChatID(ctx context.Context, chatID sql.NullS
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Version,
+		&i.Status,
 	)
 	return i, err
 }
 
 const getWorkflowDraftByName = `-- name: GetWorkflowDraftByName :one
-SELECT id, user_id, name, slug, description, definition, is_valid, validation_errors, source_path, forked_from, is_hidden, chat_id, created_at, updated_at, version FROM workflow_drafts 
+SELECT id, user_id, name, slug, description, definition, source_path, forked_from, is_hidden, chat_id, created_at, updated_at, version, status FROM workflow_drafts 
 WHERE user_id = $1 AND LOWER(name) = LOWER($2)
 `
 
@@ -263,8 +257,6 @@ func (q *Queries) GetWorkflowDraftByName(ctx context.Context, arg GetWorkflowDra
 		&i.Slug,
 		&i.Description,
 		&i.Definition,
-		&i.IsValid,
-		&i.ValidationErrors,
 		&i.SourcePath,
 		&i.ForkedFrom,
 		&i.IsHidden,
@@ -272,12 +264,13 @@ func (q *Queries) GetWorkflowDraftByName(ctx context.Context, arg GetWorkflowDra
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Version,
+		&i.Status,
 	)
 	return i, err
 }
 
 const getWorkflowDraftBySlug = `-- name: GetWorkflowDraftBySlug :one
-SELECT id, user_id, name, slug, description, definition, is_valid, validation_errors, source_path, forked_from, is_hidden, chat_id, created_at, updated_at, version FROM workflow_drafts 
+SELECT id, user_id, name, slug, description, definition, source_path, forked_from, is_hidden, chat_id, created_at, updated_at, version, status FROM workflow_drafts 
 WHERE user_id = $1 AND slug = $2
 `
 
@@ -297,8 +290,6 @@ func (q *Queries) GetWorkflowDraftBySlug(ctx context.Context, arg GetWorkflowDra
 		&i.Slug,
 		&i.Description,
 		&i.Definition,
-		&i.IsValid,
-		&i.ValidationErrors,
 		&i.SourcePath,
 		&i.ForkedFrom,
 		&i.IsHidden,
@@ -306,12 +297,13 @@ func (q *Queries) GetWorkflowDraftBySlug(ctx context.Context, arg GetWorkflowDra
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Version,
+		&i.Status,
 	)
 	return i, err
 }
 
 const getWorkflowDraftBySourcePath = `-- name: GetWorkflowDraftBySourcePath :one
-SELECT id, user_id, name, slug, description, definition, is_valid, validation_errors, source_path, forked_from, is_hidden, chat_id, created_at, updated_at, version FROM workflow_drafts 
+SELECT id, user_id, name, slug, description, definition, source_path, forked_from, is_hidden, chat_id, created_at, updated_at, version, status FROM workflow_drafts 
 WHERE user_id = $1 AND source_path = $2
 `
 
@@ -330,8 +322,6 @@ func (q *Queries) GetWorkflowDraftBySourcePath(ctx context.Context, arg GetWorkf
 		&i.Slug,
 		&i.Description,
 		&i.Definition,
-		&i.IsValid,
-		&i.ValidationErrors,
 		&i.SourcePath,
 		&i.ForkedFrom,
 		&i.IsHidden,
@@ -339,12 +329,13 @@ func (q *Queries) GetWorkflowDraftBySourcePath(ctx context.Context, arg GetWorkf
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Version,
+		&i.Status,
 	)
 	return i, err
 }
 
 const getWorkflowsForkedFrom = `-- name: GetWorkflowsForkedFrom :many
-SELECT id, user_id, name, slug, description, definition, is_valid, validation_errors, source_path, forked_from, is_hidden, chat_id, created_at, updated_at, version FROM workflow_drafts 
+SELECT id, user_id, name, slug, description, definition, source_path, forked_from, is_hidden, chat_id, created_at, updated_at, version, status FROM workflow_drafts 
 WHERE user_id = $1 AND forked_from = $2
 `
 
@@ -370,8 +361,6 @@ func (q *Queries) GetWorkflowsForkedFrom(ctx context.Context, arg GetWorkflowsFo
 			&i.Slug,
 			&i.Description,
 			&i.Definition,
-			&i.IsValid,
-			&i.ValidationErrors,
 			&i.SourcePath,
 			&i.ForkedFrom,
 			&i.IsHidden,
@@ -379,52 +368,7 @@ func (q *Queries) GetWorkflowsForkedFrom(ctx context.Context, arg GetWorkflowsFo
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.Version,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listUsableWorkflowsByUser = `-- name: ListUsableWorkflowsByUser :many
-SELECT id, user_id, name, slug, description, definition, is_valid, validation_errors, source_path, forked_from, is_hidden, chat_id, created_at, updated_at, version FROM workflow_drafts 
-WHERE user_id = $1 AND is_valid = 1 AND is_hidden = false
-ORDER BY name ASC
-`
-
-// List workflows that are usable (valid and not hidden)
-func (q *Queries) ListUsableWorkflowsByUser(ctx context.Context, userID string) ([]WorkflowDraft, error) {
-	rows, err := q.db.QueryContext(ctx, listUsableWorkflowsByUser, userID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []WorkflowDraft{}
-	for rows.Next() {
-		var i WorkflowDraft
-		if err := rows.Scan(
-			&i.ID,
-			&i.UserID,
-			&i.Name,
-			&i.Slug,
-			&i.Description,
-			&i.Definition,
-			&i.IsValid,
-			&i.ValidationErrors,
-			&i.SourcePath,
-			&i.ForkedFrom,
-			&i.IsHidden,
-			&i.ChatID,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.Version,
+			&i.Status,
 		); err != nil {
 			return nil, err
 		}
@@ -440,7 +384,7 @@ func (q *Queries) ListUsableWorkflowsByUser(ctx context.Context, userID string) 
 }
 
 const listWorkflowDraftsByUser = `-- name: ListWorkflowDraftsByUser :many
-SELECT id, user_id, name, slug, description, definition, is_valid, validation_errors, source_path, forked_from, is_hidden, chat_id, created_at, updated_at, version FROM workflow_drafts 
+SELECT id, user_id, name, slug, description, definition, source_path, forked_from, is_hidden, chat_id, created_at, updated_at, version, status FROM workflow_drafts 
 WHERE user_id = $1
 ORDER BY updated_at DESC
 `
@@ -462,8 +406,6 @@ func (q *Queries) ListWorkflowDraftsByUser(ctx context.Context, userID string) (
 			&i.Slug,
 			&i.Description,
 			&i.Definition,
-			&i.IsValid,
-			&i.ValidationErrors,
 			&i.SourcePath,
 			&i.ForkedFrom,
 			&i.IsHidden,
@@ -471,6 +413,7 @@ func (q *Queries) ListWorkflowDraftsByUser(ctx context.Context, userID string) (
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.Version,
+			&i.Status,
 		); err != nil {
 			return nil, err
 		}
@@ -491,7 +434,7 @@ UPDATE workflow_drafts SET
     updated_at = NOW(),
     version = version + 1
 WHERE id = $2
-RETURNING id, user_id, name, slug, description, definition, is_valid, validation_errors, source_path, forked_from, is_hidden, chat_id, created_at, updated_at, version
+RETURNING id, user_id, name, slug, description, definition, source_path, forked_from, is_hidden, chat_id, created_at, updated_at, version, status
 `
 
 type SetWorkflowDraftHiddenParams struct {
@@ -509,8 +452,6 @@ func (q *Queries) SetWorkflowDraftHidden(ctx context.Context, arg SetWorkflowDra
 		&i.Slug,
 		&i.Description,
 		&i.Definition,
-		&i.IsValid,
-		&i.ValidationErrors,
 		&i.SourcePath,
 		&i.ForkedFrom,
 		&i.IsHidden,
@@ -518,6 +459,45 @@ func (q *Queries) SetWorkflowDraftHidden(ctx context.Context, arg SetWorkflowDra
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Version,
+		&i.Status,
+	)
+	return i, err
+}
+
+const setWorkflowDraftStatus = `-- name: SetWorkflowDraftStatus :one
+UPDATE workflow_drafts SET
+    status = $1,
+    updated_at = NOW(),
+    version = version + 1
+WHERE id = $2
+RETURNING id, user_id, name, slug, description, definition, source_path, forked_from, is_hidden, chat_id, created_at, updated_at, version, status
+`
+
+type SetWorkflowDraftStatusParams struct {
+	Status string `json:"status"`
+	ID     string `json:"id"`
+}
+
+// Move a draft between 'draft' and 'complete'. The caller validates before
+// marking complete; this query only records the decision.
+func (q *Queries) SetWorkflowDraftStatus(ctx context.Context, arg SetWorkflowDraftStatusParams) (WorkflowDraft, error) {
+	row := q.db.QueryRowContext(ctx, setWorkflowDraftStatus, arg.Status, arg.ID)
+	var i WorkflowDraft
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Name,
+		&i.Slug,
+		&i.Description,
+		&i.Definition,
+		&i.SourcePath,
+		&i.ForkedFrom,
+		&i.IsHidden,
+		&i.ChatID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Version,
+		&i.Status,
 	)
 	return i, err
 }
@@ -528,24 +508,22 @@ UPDATE workflow_drafts SET
     slug = $2,
     description = $3,
     definition = $4,
-    is_valid = $5,
-    validation_errors = $6,
-    is_hidden = $7,
+    status = $5,
+    is_hidden = $6,
     updated_at = NOW(),
     version = version + 1
-WHERE id = $8
-RETURNING id, user_id, name, slug, description, definition, is_valid, validation_errors, source_path, forked_from, is_hidden, chat_id, created_at, updated_at, version
+WHERE id = $7
+RETURNING id, user_id, name, slug, description, definition, source_path, forked_from, is_hidden, chat_id, created_at, updated_at, version, status
 `
 
 type UpdateWorkflowDraftParams struct {
-	Name             string         `json:"name"`
-	Slug             string         `json:"slug"`
-	Description      sql.NullString `json:"description"`
-	Definition       string         `json:"definition"`
-	IsValid          int64          `json:"is_valid"`
-	ValidationErrors sql.NullString `json:"validation_errors"`
-	IsHidden         bool           `json:"is_hidden"`
-	ID               string         `json:"id"`
+	Name        string         `json:"name"`
+	Slug        string         `json:"slug"`
+	Description sql.NullString `json:"description"`
+	Definition  string         `json:"definition"`
+	Status      string         `json:"status"`
+	IsHidden    bool           `json:"is_hidden"`
+	ID          string         `json:"id"`
 }
 
 func (q *Queries) UpdateWorkflowDraft(ctx context.Context, arg UpdateWorkflowDraftParams) (WorkflowDraft, error) {
@@ -554,8 +532,7 @@ func (q *Queries) UpdateWorkflowDraft(ctx context.Context, arg UpdateWorkflowDra
 		arg.Slug,
 		arg.Description,
 		arg.Definition,
-		arg.IsValid,
-		arg.ValidationErrors,
+		arg.Status,
 		arg.IsHidden,
 		arg.ID,
 	)
@@ -567,8 +544,6 @@ func (q *Queries) UpdateWorkflowDraft(ctx context.Context, arg UpdateWorkflowDra
 		&i.Slug,
 		&i.Description,
 		&i.Definition,
-		&i.IsValid,
-		&i.ValidationErrors,
 		&i.SourcePath,
 		&i.ForkedFrom,
 		&i.IsHidden,
@@ -576,6 +551,7 @@ func (q *Queries) UpdateWorkflowDraft(ctx context.Context, arg UpdateWorkflowDra
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Version,
+		&i.Status,
 	)
 	return i, err
 }
@@ -585,21 +561,19 @@ UPDATE workflow_drafts SET
     name = $1,
     slug = $2,
     definition = $3,
-    is_valid = $4,
-    validation_errors = $5,
+    status = $4,
     updated_at = NOW(),
     version = version + 1
-WHERE id = $6
-RETURNING id, user_id, name, slug, description, definition, is_valid, validation_errors, source_path, forked_from, is_hidden, chat_id, created_at, updated_at, version
+WHERE id = $5
+RETURNING id, user_id, name, slug, description, definition, source_path, forked_from, is_hidden, chat_id, created_at, updated_at, version, status
 `
 
 type UpdateWorkflowDraftDefinitionParams struct {
-	Name             string         `json:"name"`
-	Slug             string         `json:"slug"`
-	Definition       string         `json:"definition"`
-	IsValid          int64          `json:"is_valid"`
-	ValidationErrors sql.NullString `json:"validation_errors"`
-	ID               string         `json:"id"`
+	Name       string `json:"name"`
+	Slug       string `json:"slug"`
+	Definition string `json:"definition"`
+	Status     string `json:"status"`
+	ID         string `json:"id"`
 }
 
 func (q *Queries) UpdateWorkflowDraftDefinition(ctx context.Context, arg UpdateWorkflowDraftDefinitionParams) (WorkflowDraft, error) {
@@ -607,8 +581,7 @@ func (q *Queries) UpdateWorkflowDraftDefinition(ctx context.Context, arg UpdateW
 		arg.Name,
 		arg.Slug,
 		arg.Definition,
-		arg.IsValid,
-		arg.ValidationErrors,
+		arg.Status,
 		arg.ID,
 	)
 	var i WorkflowDraft
@@ -619,8 +592,6 @@ func (q *Queries) UpdateWorkflowDraftDefinition(ctx context.Context, arg UpdateW
 		&i.Slug,
 		&i.Description,
 		&i.Definition,
-		&i.IsValid,
-		&i.ValidationErrors,
 		&i.SourcePath,
 		&i.ForkedFrom,
 		&i.IsHidden,
@@ -628,6 +599,7 @@ func (q *Queries) UpdateWorkflowDraftDefinition(ctx context.Context, arg UpdateW
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Version,
+		&i.Status,
 	)
 	return i, err
 }
@@ -638,7 +610,7 @@ UPDATE workflow_drafts SET
     updated_at = NOW(),
     version = version + 1
 WHERE id = $2
-RETURNING id, user_id, name, slug, description, definition, is_valid, validation_errors, source_path, forked_from, is_hidden, chat_id, created_at, updated_at, version
+RETURNING id, user_id, name, slug, description, definition, source_path, forked_from, is_hidden, chat_id, created_at, updated_at, version, status
 `
 
 type UpdateWorkflowForkedFromParams struct {
@@ -657,8 +629,6 @@ func (q *Queries) UpdateWorkflowForkedFrom(ctx context.Context, arg UpdateWorkfl
 		&i.Slug,
 		&i.Description,
 		&i.Definition,
-		&i.IsValid,
-		&i.ValidationErrors,
 		&i.SourcePath,
 		&i.ForkedFrom,
 		&i.IsHidden,
@@ -666,6 +636,7 @@ func (q *Queries) UpdateWorkflowForkedFrom(ctx context.Context, arg UpdateWorkfl
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Version,
+		&i.Status,
 	)
 	return i, err
 }
@@ -673,37 +644,35 @@ func (q *Queries) UpdateWorkflowForkedFrom(ctx context.Context, arg UpdateWorkfl
 const upsertWorkflowDraft = `-- name: UpsertWorkflowDraft :one
 INSERT INTO workflow_drafts (
     id, user_id, name, slug, description, definition,
-    is_valid, validation_errors, source_path,
+    status, source_path,
     forked_from, chat_id, created_at, updated_at, is_hidden, version
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 1)
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 1)
 ON CONFLICT(user_id, slug) DO UPDATE SET
     name = excluded.name,
     description = excluded.description,
     definition = excluded.definition,
-    is_valid = excluded.is_valid,
-    validation_errors = excluded.validation_errors,
+    status = excluded.status,
     is_hidden = excluded.is_hidden,
     -- Don't update forked_from on upsert to preserve origin
     updated_at = NOW(),
     version = workflow_drafts.version + 1
-RETURNING id, user_id, name, slug, description, definition, is_valid, validation_errors, source_path, forked_from, is_hidden, chat_id, created_at, updated_at, version
+RETURNING id, user_id, name, slug, description, definition, source_path, forked_from, is_hidden, chat_id, created_at, updated_at, version, status
 `
 
 type UpsertWorkflowDraftParams struct {
-	ID               string         `json:"id"`
-	UserID           string         `json:"user_id"`
-	Name             string         `json:"name"`
-	Slug             string         `json:"slug"`
-	Description      sql.NullString `json:"description"`
-	Definition       string         `json:"definition"`
-	IsValid          int64          `json:"is_valid"`
-	ValidationErrors sql.NullString `json:"validation_errors"`
-	SourcePath       sql.NullString `json:"source_path"`
-	ForkedFrom       sql.NullString `json:"forked_from"`
-	ChatID           sql.NullString `json:"chat_id"`
-	CreatedAt        time.Time      `json:"created_at"`
-	UpdatedAt        time.Time      `json:"updated_at"`
-	IsHidden         bool           `json:"is_hidden"`
+	ID          string         `json:"id"`
+	UserID      string         `json:"user_id"`
+	Name        string         `json:"name"`
+	Slug        string         `json:"slug"`
+	Description sql.NullString `json:"description"`
+	Definition  string         `json:"definition"`
+	Status      string         `json:"status"`
+	SourcePath  sql.NullString `json:"source_path"`
+	ForkedFrom  sql.NullString `json:"forked_from"`
+	ChatID      sql.NullString `json:"chat_id"`
+	CreatedAt   time.Time      `json:"created_at"`
+	UpdatedAt   time.Time      `json:"updated_at"`
+	IsHidden    bool           `json:"is_hidden"`
 }
 
 // Create or update a workflow draft
@@ -716,8 +685,7 @@ func (q *Queries) UpsertWorkflowDraft(ctx context.Context, arg UpsertWorkflowDra
 		arg.Slug,
 		arg.Description,
 		arg.Definition,
-		arg.IsValid,
-		arg.ValidationErrors,
+		arg.Status,
 		arg.SourcePath,
 		arg.ForkedFrom,
 		arg.ChatID,
@@ -733,8 +701,6 @@ func (q *Queries) UpsertWorkflowDraft(ctx context.Context, arg UpsertWorkflowDra
 		&i.Slug,
 		&i.Description,
 		&i.Definition,
-		&i.IsValid,
-		&i.ValidationErrors,
 		&i.SourcePath,
 		&i.ForkedFrom,
 		&i.IsHidden,
@@ -742,6 +708,7 @@ func (q *Queries) UpsertWorkflowDraft(ctx context.Context, arg UpsertWorkflowDra
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Version,
+		&i.Status,
 	)
 	return i, err
 }

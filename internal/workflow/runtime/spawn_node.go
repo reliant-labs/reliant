@@ -10,13 +10,9 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
-// This file holds the parts of the spawn contract that BOTH execution lanes
-// need: the real Temporal runtime (workflow.go) and the fast simulator
-// (simulator.go). They are here rather than duplicated because the two lanes
-// are compared scenario-for-scenario by the parity test, and a second copy of
-// "what a spawn is" would drift into exactly the divergence that test exists
-// to catch. splitProtoToolCalls is the third shared piece and already lives in
-// workflow.go, in this same package.
+// This file holds the pure parts of the spawn contract: what a spawn tool
+// call's input means and how the synthetic node that runs it is named.
+// splitProtoToolCalls, the third piece, lives in workflow.go.
 
 // spawnNodeIDPrefix is prepended to a spawn tool call's id to name the
 // synthetic sub-workflow node the spawn executes as. A spawn is not a node the
@@ -71,10 +67,9 @@ type spawnToolInput struct {
 
 // parseSpawnToolInput decodes a spawn tool call's input JSON.
 //
-// Pure, and deliberately free of workflow.Context: the simulator has no
-// Temporal context and must reach the same decision about what a spawn tool
-// call means. The real runtime's parseSpawnToolCall wraps this with the
-// logging and workflow-id derivation only it can do.
+// Pure, and deliberately free of workflow.Context, so it is unit-testable on
+// its own. parseSpawnToolCall wraps this with the logging and workflow-id
+// derivation that need the workflow.
 //
 // The input may arrive wrapped in a metadata envelope
 // ({"input": "<raw>", "__reliant_tool_meta__": {...}}); the envelope is

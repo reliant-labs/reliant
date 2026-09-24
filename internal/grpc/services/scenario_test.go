@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -77,7 +78,7 @@ edges: []
 		Name:       "Parent Flow",
 		Slug:       "parent-flow",
 		Definition: parentWorkflow,
-		IsValid:    true,
+		Status:     db.WorkflowDraftStatusComplete,
 		CreatedAt:  now,
 		UpdatedAt:  now,
 	}))
@@ -118,4 +119,73 @@ edges: []
 	require.NoError(t, err)
 	require.Equal(t, "passed", resp.Msg.Result.Status, "mismatches: %v", resp.Msg.Result.Mismatches)
 	require.Contains(t, resp.Msg.Result.Execution.NodesReached, "child.draft")
+}
+
+// runtimeOnlyWorkflow / runtimeOnlyScenario are a shape the retired graph
+// simulator and the real runtime disagreed on: after an approval is DENIED,
+// the runtime re-enters the loop (its `while` still sees the denied turn's
+// tool_calls) and calls the LLM again, while the simulator ended the loop. The
+// scenario supplies only the simulator's single call_llm event, so it PASSED
+// on the simulator and must fail on the runtime with an exhausted-mocks
+// mismatch — the proof that the RPC executes on the runtime.
+const runtimeOnlyWorkflow = `name: denied-loop
+apiVersion: "1.0"
+entry: [agent_loop]
+nodes:
+  - id: agent_loop
+    type: loop
+    while: size(outputs.tool_calls) > 0
+    inline:
+      outputs:
+        tool_calls: "{{nodes.call_llm.tool_calls}}"
+      entry: [call_llm]
+      nodes:
+        - id: call_llm
+          type: call_llm
+          args:
+            model: {tags: [fast]}
+        - id: approval
+          type: approval
+          args:
+            title: Approve?
+        - id: execute_tools
+          type: execute_tools
+          args:
+            tool_calls: "{{nodes.call_llm.tool_calls}}"
+      edges:
+        - from: call_llm
+          cases:
+            - to: approval
+              condition: size(nodes.call_llm.tool_calls) > 0
+        - from: approval
+          cases:
+            - to: execute_tools
+              condition: nodes.approval.status == 'approved'
+`
+
+func TestScenarioService_RunScenario_ExecutesOnTheRuntime(t *testing.T) {
+	service, repo, userID, _, ctx := setupTestScenarioService(t)
+	now := time.Now().UTC()
+	require.NoError(t, repo.CreateWorkflowDraft(ctx, &db.WorkflowDraft{
+		ID: uuid.NewString(), UserID: userID, Name: "Denied Loop", Slug: "denied-loop",
+		Definition: runtimeOnlyWorkflow, Status: db.WorkflowDraftStatusComplete,
+		CreatedAt: now, UpdatedAt: now,
+	}))
+
+	resp, err := service.RunScenario(ctx, connect.NewRequest(&reliantv1.RunScenarioRequest{
+		WorkflowSlug: "denied-loop",
+		Scenario: &reliantv1.ScenarioDefinition{
+			Name: "denied_once",
+			Events: []*reliantv1.SimulatedEvent{
+				{Node: "agent_loop.call_llm", OutputJson: `{"response_text":"rm it","tool_calls":[{"id":"c1","name":"shell","input":"{}"}]}`},
+				{Node: "agent_loop.approval", OutputJson: `{"status":"denied"}`},
+			},
+			Expect: &reliantv1.ScenarioExpectation{Outcome: "completed"},
+		},
+	}))
+	require.NoError(t, err)
+	require.Equal(t, "failed", resp.Msg.Result.Status)
+	require.Contains(t, strings.Join(resp.Msg.Result.Mismatches, "\n"),
+		`scenario exhausted its mocks for node "agent_loop.call_llm"`,
+		"the runtime re-enters the loop after a denial; the retired simulator did not")
 }

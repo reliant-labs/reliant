@@ -3,6 +3,7 @@ package core
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"time"
 )
 
@@ -10,23 +11,52 @@ import (
 // Workflows are available across all projects. Project-specific workflows come from
 // .reliant/workflows/*.yaml files (read-only, not stored in DB).
 // A workflow is "usable" (shows in agent selector, can be loaded at runtime)
-// when IsValid=true and IsHidden=false.
+// when Status is WorkflowDraftStatusComplete and IsHidden=false. Validity is never
+// stored — it is computed on read and re-checked at run start.
 type WorkflowDraft struct {
-	ID               string    `json:"id"`
-	UserID           string    `json:"user_id"`
-	Name             string    `json:"name"` // Display name (can have spaces, caps)
-	Slug             string    `json:"slug"` // Runtime reference name (lowercase, hyphenated)
-	Description      *string   `json:"description,omitempty"`
-	Definition       string    `json:"definition"`            // YAML workflow definition
-	IsValid          bool      `json:"is_valid"`              // Passes validation
-	ValidationErrors *string   `json:"validation_errors"`     // JSON array of errors
-	SourcePath       *string   `json:"source_path,omitempty"` // Original file path if imported
-	ForkedFrom       *string   `json:"forked_from,omitempty"` // Origin workflow (e.g., "builtin://agent")
-	ChatID           *string   `json:"chat_id,omitempty"`     // Associated chat for implicit lookup
-	CreatedAt        time.Time `json:"created_at"`
-	UpdatedAt        time.Time `json:"updated_at"`
-	IsHidden         bool      `json:"is_hidden"`
-	Version          int64     `json:"version"` // OCC version number
+	ID          string              `json:"id"`
+	UserID      string              `json:"user_id"`
+	Name        string              `json:"name"` // Display name (can have spaces, caps)
+	Slug        string              `json:"slug"` // Runtime reference name (lowercase, hyphenated)
+	Description *string             `json:"description,omitempty"`
+	Definition  string              `json:"definition"`            // YAML workflow definition
+	Status      WorkflowDraftStatus `json:"status"`                // draft (work in progress) or complete (runnable)
+	SourcePath  *string             `json:"source_path,omitempty"` // Original file path if imported
+	ForkedFrom  *string             `json:"forked_from,omitempty"` // Origin workflow (e.g., "builtin://agent")
+	ChatID      *string             `json:"chat_id,omitempty"`     // Associated chat for implicit lookup
+	CreatedAt   time.Time           `json:"created_at"`
+	UpdatedAt   time.Time           `json:"updated_at"`
+	IsHidden    bool                `json:"is_hidden"`
+	Version     int64               `json:"version"` // OCC version number
+}
+
+// WorkflowDraftStatus is a stored workflow's lifecycle state.
+type WorkflowDraftStatus string
+
+const (
+	// WorkflowDraftStatusDraft is work in progress: saved as-is, possibly invalid,
+	// never runnable and never offered where a runnable workflow is required.
+	WorkflowDraftStatusDraft WorkflowDraftStatus = "draft"
+	// WorkflowDraftStatusComplete passed validation when it was marked complete and
+	// is runnable. Every later save must keep it valid.
+	WorkflowDraftStatusComplete WorkflowDraftStatus = "complete"
+)
+
+// Valid reports whether s is a known status.
+func (s WorkflowDraftStatus) Valid() bool {
+	return s == WorkflowDraftStatusDraft || s == WorkflowDraftStatusComplete
+}
+
+// WorkflowDraftNotRunnableError is returned by GetUsableWorkflowBySlug when
+// the slug names a visible workflow that is still a draft. Runtime paths
+// (run start, `ref:`, spawn, routers, scenarios) surface it instead of a bare
+// "not found", so the user learns the one action that fixes it.
+type WorkflowDraftNotRunnableError struct {
+	Slug string
+}
+
+func (e *WorkflowDraftNotRunnableError) Error() string {
+	return fmt.Sprintf("workflow %q is a draft and cannot run — mark it complete first", e.Slug)
 }
 
 // WorkflowScenario represents a test scenario for a workflow.
@@ -73,9 +103,9 @@ type WorkflowCatalogStore interface {
 	GetWorkflowDraftBySourcePath(ctx context.Context, userID, sourcePath string) (*WorkflowDraft, error)
 	GetUsableWorkflowBySlug(ctx context.Context, userID, slug string) (*WorkflowDraft, error)
 	ListWorkflowDraftsByUser(ctx context.Context, userID string) ([]*WorkflowDraft, error)
-	ListUsableWorkflowsByUser(ctx context.Context, userID string) ([]*WorkflowDraft, error)
 	UpdateWorkflowDraft(ctx context.Context, draft *WorkflowDraft) error
-	UpdateWorkflowDraftDefinition(ctx context.Context, id string, name string, slug string, definition string, isValid bool, validationErrors *string) error
+	UpdateWorkflowDraftDefinition(ctx context.Context, id string, name string, slug string, definition string, status WorkflowDraftStatus) error
+	SetWorkflowDraftStatus(ctx context.Context, id string, status WorkflowDraftStatus) (*WorkflowDraft, error)
 	SetWorkflowDraftHidden(ctx context.Context, id string, isHidden bool) (*WorkflowDraft, error)
 	DeleteWorkflowDraft(ctx context.Context, id string) error
 	DeleteWorkflowDraftBySlug(ctx context.Context, userID, slug string) error

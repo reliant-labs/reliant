@@ -2,14 +2,15 @@
 -- Workflows are owned by users and available across all projects
 -- Project-specific workflows come from .reliant/workflows/*.yaml files (read-only)
 -- A workflow is "usable" (shows in agent selector, can be loaded at runtime)
--- when is_hidden = 0 AND is_valid = 1.
+-- when status = 'complete' AND is_hidden = false. Validity is never stored: it
+-- is computed on read and re-checked at run start.
 
 -- name: CreateWorkflowDraft :one
 INSERT INTO workflow_drafts (
     id, user_id, name, slug, description, definition,
-    is_valid, validation_errors, source_path,
+    status, source_path,
     forked_from, chat_id, created_at, updated_at, is_hidden, version
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 1)
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 1)
 RETURNING *;
 
 -- name: GetWorkflowDraft :one
@@ -33,31 +34,24 @@ SELECT * FROM workflow_drafts
 WHERE user_id = $1
 ORDER BY updated_at DESC;
 
--- name: ListUsableWorkflowsByUser :many
--- List workflows that are usable (valid and not hidden)
-SELECT * FROM workflow_drafts 
-WHERE user_id = $1 AND is_valid = 1 AND is_hidden = false
-ORDER BY name ASC;
-
 -- name: GetUsableWorkflowBySlug :one
 -- Get a usable workflow by slug (for runtime loading)
 SELECT * FROM workflow_drafts 
-WHERE user_id = $1 AND slug = $2 AND is_valid = 1 AND is_hidden = false;
+WHERE user_id = $1 AND slug = $2 AND status = 'complete' AND is_hidden = false;
 
 -- name: UpsertWorkflowDraft :one
 -- Create or update a workflow draft
 -- Unique on (user_id, slug)
 INSERT INTO workflow_drafts (
     id, user_id, name, slug, description, definition,
-    is_valid, validation_errors, source_path,
+    status, source_path,
     forked_from, chat_id, created_at, updated_at, is_hidden, version
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 1)
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 1)
 ON CONFLICT(user_id, slug) DO UPDATE SET
     name = excluded.name,
     description = excluded.description,
     definition = excluded.definition,
-    is_valid = excluded.is_valid,
-    validation_errors = excluded.validation_errors,
+    status = excluded.status,
     is_hidden = excluded.is_hidden,
     -- Don't update forked_from on upsert to preserve origin
     updated_at = NOW(),
@@ -70,12 +64,11 @@ UPDATE workflow_drafts SET
     slug = $2,
     description = $3,
     definition = $4,
-    is_valid = $5,
-    validation_errors = $6,
-    is_hidden = $7,
+    status = $5,
+    is_hidden = $6,
     updated_at = NOW(),
     version = version + 1
-WHERE id = $8
+WHERE id = $7
 RETURNING *;
 
 -- name: UpdateWorkflowDraftDefinition :one
@@ -83,11 +76,10 @@ UPDATE workflow_drafts SET
     name = $1,
     slug = $2,
     definition = $3,
-    is_valid = $4,
-    validation_errors = $5,
+    status = $4,
     updated_at = NOW(),
     version = version + 1
-WHERE id = $6
+WHERE id = $5
 RETURNING *;
 
 -- name: DeleteWorkflowDraft :exec
@@ -137,6 +129,16 @@ RETURNING *;
 -- name: SetWorkflowDraftHidden :one
 UPDATE workflow_drafts SET
     is_hidden = $1,
+    updated_at = NOW(),
+    version = version + 1
+WHERE id = $2
+RETURNING *;
+
+-- name: SetWorkflowDraftStatus :one
+-- Move a draft between 'draft' and 'complete'. The caller validates before
+-- marking complete; this query only records the decision.
+UPDATE workflow_drafts SET
+    status = $1,
     updated_at = NOW(),
     version = version + 1
 WHERE id = $2

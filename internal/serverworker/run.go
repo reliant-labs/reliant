@@ -12,6 +12,8 @@ import (
 	"syscall"
 	"time"
 
+	scenariorunner "github.com/reliant-labs/reliant/internal/workflow/scenario/runner"
+
 	"go.temporal.io/sdk/client"
 
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
@@ -172,6 +174,10 @@ func Run(ctx context.Context, opts Options) error {
 		// generate_image executes here, inside the ExecuteTools activity, so
 		// this is the wiring that actually decides whether the tool works.
 		ImageGeneratorResolver: resolveImageGenerator,
+		// run_scenario / write_scenario execute on the real runtime via the
+		// scenario runner; injected because the runner imports this package's
+		// dependents.
+		ScenarioRunner: scenariorunner.RunScenario,
 	})
 	remoteExecutor := toolexec.NewRemoteExecutor(nil)
 

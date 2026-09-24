@@ -70,7 +70,7 @@ type SubWorkflowContract struct {
 	DefaultInputs     map[string]any
 }
 
-// CompiledSemantics is the normalized semantic contract output used across runtime/simulator/validation.
+// CompiledSemantics is the normalized semantic contract output used across runtime and validation.
 type CompiledSemantics struct {
 	CanonicalWorkflowRef string
 	SubWorkflows         map[string]SubWorkflowContract

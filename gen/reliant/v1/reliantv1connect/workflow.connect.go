@@ -73,6 +73,9 @@ const (
 	// WorkflowServiceAssociateChatWithWorkflowDraftProcedure is the fully-qualified name of the
 	// WorkflowService's AssociateChatWithWorkflowDraft RPC.
 	WorkflowServiceAssociateChatWithWorkflowDraftProcedure = "/reliant.v1.WorkflowService/AssociateChatWithWorkflowDraft"
+	// WorkflowServiceSetWorkflowStatusProcedure is the fully-qualified name of the WorkflowService's
+	// SetWorkflowStatus RPC.
+	WorkflowServiceSetWorkflowStatusProcedure = "/reliant.v1.WorkflowService/SetWorkflowStatus"
 	// ScenarioServiceListScenariosProcedure is the fully-qualified name of the ScenarioService's
 	// ListScenarios RPC.
 	ScenarioServiceListScenariosProcedure = "/reliant.v1.ScenarioService/ListScenarios"
@@ -97,8 +100,9 @@ const (
 type WorkflowServiceClient interface {
 	// ListWorkflows returns all available workflows from DB + builtins
 	ListWorkflows(context.Context, *connect.Request[v1.ListWorkflowsRequest]) (*connect.Response[v1.ListWorkflowsResponse], error)
-	// SaveWorkflow creates or updates a workflow in the database
-	// Always validates and saves. Workflow is usable when valid and not hidden.
+	// SaveWorkflow creates or updates a workflow in the database.
+	// A draft is stored as-is (validation findings are returned, not enforced);
+	// a complete workflow must pass validation or nothing is stored.
 	SaveWorkflow(context.Context, *connect.Request[v1.SaveWorkflowRequest]) (*connect.Response[v1.SaveWorkflowResponse], error)
 	// GetWorkflow returns a specific workflow by slug
 	GetWorkflow(context.Context, *connect.Request[v1.GetWorkflowRequest]) (*connect.Response[v1.GetWorkflowResponse], error)
@@ -124,6 +128,10 @@ type WorkflowServiceClient interface {
 	// AssociateChatWithWorkflowDraft links a chat to a workflow draft
 	// Called after chat creation to enable tools to find the draft
 	AssociateChatWithWorkflowDraft(context.Context, *connect.Request[v1.AssociateChatWithWorkflowDraftRequest]) (*connect.Response[v1.AssociateChatWithWorkflowDraftResponse], error)
+	// SetWorkflowStatus moves a stored workflow between draft and complete.
+	// Marking complete validates the current definition and is rejected (with
+	// the errors) when it is invalid; moving to draft always succeeds.
+	SetWorkflowStatus(context.Context, *connect.Request[v1.SetWorkflowStatusRequest]) (*connect.Response[v1.SetWorkflowStatusResponse], error)
 }
 
 // NewWorkflowServiceClient constructs a client for the reliant.v1.WorkflowService service. By
@@ -209,6 +217,12 @@ func NewWorkflowServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(workflowServiceMethods.ByName("AssociateChatWithWorkflowDraft")),
 			connect.WithClientOptions(opts...),
 		),
+		setWorkflowStatus: connect.NewClient[v1.SetWorkflowStatusRequest, v1.SetWorkflowStatusResponse](
+			httpClient,
+			baseURL+WorkflowServiceSetWorkflowStatusProcedure,
+			connect.WithSchema(workflowServiceMethods.ByName("SetWorkflowStatus")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -226,6 +240,7 @@ type workflowServiceClient struct {
 	builderChat                    *connect.Client[v1.BuilderChatRequest, v1.BuilderChatResponse]
 	createWorkflowDraft            *connect.Client[v1.CreateWorkflowDraftRequest, v1.CreateWorkflowDraftResponse]
 	associateChatWithWorkflowDraft *connect.Client[v1.AssociateChatWithWorkflowDraftRequest, v1.AssociateChatWithWorkflowDraftResponse]
+	setWorkflowStatus              *connect.Client[v1.SetWorkflowStatusRequest, v1.SetWorkflowStatusResponse]
 }
 
 // ListWorkflows calls reliant.v1.WorkflowService.ListWorkflows.
@@ -288,12 +303,18 @@ func (c *workflowServiceClient) AssociateChatWithWorkflowDraft(ctx context.Conte
 	return c.associateChatWithWorkflowDraft.CallUnary(ctx, req)
 }
 
+// SetWorkflowStatus calls reliant.v1.WorkflowService.SetWorkflowStatus.
+func (c *workflowServiceClient) SetWorkflowStatus(ctx context.Context, req *connect.Request[v1.SetWorkflowStatusRequest]) (*connect.Response[v1.SetWorkflowStatusResponse], error) {
+	return c.setWorkflowStatus.CallUnary(ctx, req)
+}
+
 // WorkflowServiceHandler is an implementation of the reliant.v1.WorkflowService service.
 type WorkflowServiceHandler interface {
 	// ListWorkflows returns all available workflows from DB + builtins
 	ListWorkflows(context.Context, *connect.Request[v1.ListWorkflowsRequest]) (*connect.Response[v1.ListWorkflowsResponse], error)
-	// SaveWorkflow creates or updates a workflow in the database
-	// Always validates and saves. Workflow is usable when valid and not hidden.
+	// SaveWorkflow creates or updates a workflow in the database.
+	// A draft is stored as-is (validation findings are returned, not enforced);
+	// a complete workflow must pass validation or nothing is stored.
 	SaveWorkflow(context.Context, *connect.Request[v1.SaveWorkflowRequest]) (*connect.Response[v1.SaveWorkflowResponse], error)
 	// GetWorkflow returns a specific workflow by slug
 	GetWorkflow(context.Context, *connect.Request[v1.GetWorkflowRequest]) (*connect.Response[v1.GetWorkflowResponse], error)
@@ -319,6 +340,10 @@ type WorkflowServiceHandler interface {
 	// AssociateChatWithWorkflowDraft links a chat to a workflow draft
 	// Called after chat creation to enable tools to find the draft
 	AssociateChatWithWorkflowDraft(context.Context, *connect.Request[v1.AssociateChatWithWorkflowDraftRequest]) (*connect.Response[v1.AssociateChatWithWorkflowDraftResponse], error)
+	// SetWorkflowStatus moves a stored workflow between draft and complete.
+	// Marking complete validates the current definition and is rejected (with
+	// the errors) when it is invalid; moving to draft always succeeds.
+	SetWorkflowStatus(context.Context, *connect.Request[v1.SetWorkflowStatusRequest]) (*connect.Response[v1.SetWorkflowStatusResponse], error)
 }
 
 // NewWorkflowServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -400,6 +425,12 @@ func NewWorkflowServiceHandler(svc WorkflowServiceHandler, opts ...connect.Handl
 		connect.WithSchema(workflowServiceMethods.ByName("AssociateChatWithWorkflowDraft")),
 		connect.WithHandlerOptions(opts...),
 	)
+	workflowServiceSetWorkflowStatusHandler := connect.NewUnaryHandler(
+		WorkflowServiceSetWorkflowStatusProcedure,
+		svc.SetWorkflowStatus,
+		connect.WithSchema(workflowServiceMethods.ByName("SetWorkflowStatus")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/reliant.v1.WorkflowService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case WorkflowServiceListWorkflowsProcedure:
@@ -426,6 +457,8 @@ func NewWorkflowServiceHandler(svc WorkflowServiceHandler, opts ...connect.Handl
 			workflowServiceCreateWorkflowDraftHandler.ServeHTTP(w, r)
 		case WorkflowServiceAssociateChatWithWorkflowDraftProcedure:
 			workflowServiceAssociateChatWithWorkflowDraftHandler.ServeHTTP(w, r)
+		case WorkflowServiceSetWorkflowStatusProcedure:
+			workflowServiceSetWorkflowStatusHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -481,6 +514,10 @@ func (UnimplementedWorkflowServiceHandler) CreateWorkflowDraft(context.Context, 
 
 func (UnimplementedWorkflowServiceHandler) AssociateChatWithWorkflowDraft(context.Context, *connect.Request[v1.AssociateChatWithWorkflowDraftRequest]) (*connect.Response[v1.AssociateChatWithWorkflowDraftResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.WorkflowService.AssociateChatWithWorkflowDraft is not implemented"))
+}
+
+func (UnimplementedWorkflowServiceHandler) SetWorkflowStatus(context.Context, *connect.Request[v1.SetWorkflowStatusRequest]) (*connect.Response[v1.SetWorkflowStatusResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.WorkflowService.SetWorkflowStatus is not implemented"))
 }
 
 // ScenarioServiceClient is a client for the reliant.v1.ScenarioService service.

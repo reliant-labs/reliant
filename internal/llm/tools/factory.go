@@ -36,6 +36,11 @@ type ToolsOptions struct {
 	// that image generation is unavailable here, which is correct for the
 	// daemon runtime.
 	ImageGeneratorResolver ImageGeneratorResolver
+	// ScenarioRunner executes run_scenario on the real DynamicWorkflow.
+	// Injected because the runner imports the runtime's activities, which
+	// import this package. Optional: nil means run_scenario reports that
+	// scenario execution is unavailable here (the daemon runtime).
+	ScenarioRunner ScenarioRunner
 }
 
 // ToolsFactory is a global factory for creating tool instances
@@ -384,7 +389,7 @@ func (f *ToolsFactory) EditScenario() Tool {
 }
 
 func (f *ToolsFactory) WriteScenario() Tool {
-	return NewWriteScenarioTool(f.opts.Repo)
+	return NewWriteScenarioTool(f.opts.Repo, f.opts.ScenarioRunner)
 }
 
 func (f *ToolsFactory) DeleteScenario() Tool {
@@ -392,7 +397,7 @@ func (f *ToolsFactory) DeleteScenario() Tool {
 }
 
 func (f *ToolsFactory) RunScenario() Tool {
-	return NewRunScenarioTool(f.opts.Repo)
+	return NewRunScenarioTool(f.opts.Repo, f.opts.ScenarioRunner)
 }
 
 // GetToolByName returns a tool by name using the given execution-time MCP runtime.

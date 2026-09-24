@@ -11,9 +11,9 @@ package runtime
 // Keeping only the outermost prefix (what the loop-scoped LoopNodeID does, by
 // design) makes the path unrecoverable from two levels down.
 //
-// The dotted form is the convention scenarios already use for `reached:` /
-// `not_reached:` and the one the fast simulator emits, so a path built here is
-// directly comparable to a simulator node id.
+// The dotted form is the convention scenarios use for `reached:` /
+// `not_reached:`, so a path built here is directly comparable to a scenario's
+// node id.
 //
 // An empty prefix yields the bare id: a top-level node's path is its own id.
 func joinNodePath(prefix, nodeID string) string {

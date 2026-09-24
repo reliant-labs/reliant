@@ -8,9 +8,9 @@
 # 5. complete
 #
 # NOTE: implementations is a parallel loop with inline sub-workflow.
-# The simulator runs per-iteration mocking: provide one event per iteration (3 total).
+# Per-iteration mocking: provide one event per iteration (3 total).
 # Each event's output matches the inline outputs: worktree_path, worktree_branch, response_text.
-# The simulator assembles these into _results keyed by candidate number.
+# The loop assembles these into _results keyed by candidate number.
 #
 # review is a `type: workflow` node referencing builtin://structured-agent (BLACK BOX).
 # synthesizer is a `type: workflow` node referencing builtin://agent (BLACK BOX).

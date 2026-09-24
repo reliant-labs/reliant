@@ -205,7 +205,7 @@ nodes:
 		Name:       "Worktree Invariant Workflow",
 		Slug:       "worktree-invariant-workflow",
 		Definition: trivialWorkflow,
-		IsValid:    true,
+		Status:     db.WorkflowDraftStatusComplete,
 		CreatedAt:  now,
 		UpdatedAt:  now,
 		Version:    1,

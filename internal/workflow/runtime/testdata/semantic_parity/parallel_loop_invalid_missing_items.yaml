@@ -20,14 +20,5 @@ validation:
   use_workflow_loader: false
   error_contains: "parallel loop requires 'items'"
 
-simulator:
-  expected_status: error
-  scenario:
-    name: invalid_parallel_loop_missing_items
-    inputs: {}
-    events: []
-    expect:
-      outcome: error
-
 runtime:
   checks: []

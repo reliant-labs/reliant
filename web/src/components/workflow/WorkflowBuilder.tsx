@@ -59,7 +59,16 @@ import {
   Settings2,
   Lock,
   ExternalLink,
+  CheckCircle2,
+  PencilRuler,
 } from "lucide-react";
+import { Tooltip } from "../ui/Tooltip";
+import { DraftStatusBadge } from "./DraftStatusBadge";
+import {
+  markCompleteBlockers,
+  splitFindings,
+  type DraftStatus,
+} from "./workflowDraftStatus";
 import { WorkflowInfoPopover } from "./WorkflowInfoPopover";
 // Auto-save removed - using explicit save only
 import {
@@ -90,11 +99,30 @@ import { WorkflowNodeCallbacksProvider } from "./WorkflowNodeCallbacksContext";
 /** Result of a save operation */
 export interface SaveResult {
   success: boolean;
-  validationErrors: Array<{ message: string }>;
+  /** Findings for the saved definition (errors, then "warning:*"). */
+  validationErrors: ValidationError[];
+  /** Status after the save (absent in tour mode). */
+  status?: DraftStatus;
+  /** True when validation blocked a save of a complete workflow (nothing stored). */
+  rejected?: boolean;
+}
+
+/** Result of marking a workflow complete / moving it to draft. */
+export interface StatusChangeResult {
+  success: boolean;
+  validationErrors: ValidationError[];
 }
 
 interface WorkflowBuilderProps {
-  onSave?: (workflow: Workflow) => void | Promise<void | SaveResult>;
+  /** Saves the canvas. `intent` overrides the stored status (e.g. "draft"
+   * to take a complete workflow back to work in progress). */
+  onSave?: (workflow: Workflow, intent?: DraftStatus) => void | Promise<void | SaveResult>;
+  /** Lifecycle of the stored workflow; builtin/project are "complete". */
+  draftStatus?: DraftStatus;
+  /** Marks the stored workflow complete (validated server-side) or moves it to draft. */
+  onSetStatus?: (status: DraftStatus) => Promise<StatusChangeResult>;
+  /** Filled in by the builder with a "save the canvas as a draft" action. */
+  saveAsDraftRef?: React.MutableRefObject<(() => Promise<void>) | null>;
   initialWorkflow?: Workflow;
   /** Initial name for new workflows (from random generation) */
   initialName?: string;
@@ -142,6 +170,9 @@ interface WorkflowBuilderProps {
 
 function WorkflowBuilderInner({
   onSave,
+  draftStatus = "complete",
+  onSetStatus,
+  saveAsDraftRef,
   initialWorkflow,
   initialName,
   onBack,
@@ -743,7 +774,7 @@ function WorkflowBuilderInner({
     [nodes],
   );
 
-  const handleSave = useCallback(async () => {
+  const handleSave = useCallback(async (intent?: DraftStatus) => {
     if (isBuiltinWorkflow) {
       toast.error(
         'Use "Create a Copy" to create your own copy of this workflow',
@@ -762,27 +793,73 @@ function WorkflowBuilderInner({
     const builtWorkflow = buildWorkflow();
 
     try {
-      const result = await onSave?.(builtWorkflow);
+      const result = await onSave?.(builtWorkflow, intent);
+
+      // Show the findings for what was just saved (or refused) inline. The
+      // badge counts errors only; warnings ride along in the popover.
+      if (result && typeof result === "object") {
+        const findings = result.validationErrors || [];
+        setValidationErrors(findings);
+        setValidationStatus(
+          splitFindings(findings).errors.length === 0 ? "valid" : "invalid",
+        );
+        if (result.rejected) {
+          // Nothing was stored: keep the edits dirty so they aren't lost.
+          return;
+        }
+      }
 
       setLoadedWorkflowName(builtWorkflow.name);
       setHasModifications(false);
 
-      // Update validation status from save result
-      if (
-        result &&
-        typeof result === "object" &&
-        "validationErrors" in result
-      ) {
-        const errors = result.validationErrors || [];
-        setValidationErrors(errors as ValidationError[]);
-        setValidationStatus(errors.length === 0 ? "valid" : "invalid");
-      }
-
-      toast.success("Workflow saved", { duration: 2000 });
+      const savedAsDraft =
+        result && typeof result === "object" && result.status === "draft";
+      toast.success(savedAsDraft ? "Saved as draft" : "Workflow saved", {
+        duration: 2000,
+      });
     } catch (error) {
       console.error("Save failed:", error);
     }
   }, [buildWorkflow, onSave, workflow.name, isBuiltinWorkflow, nodes, edges]);
+
+  // Offered by a rejected save of a complete workflow: store the canvas as a
+  // draft instead (it stops being runnable until marked complete again).
+  useEffect(() => {
+    if (!saveAsDraftRef) return;
+    saveAsDraftRef.current = () => handleSave("draft");
+    return () => {
+      saveAsDraftRef.current = null;
+    };
+  }, [saveAsDraftRef, handleSave]);
+
+  const [isChangingStatus, setIsChangingStatus] = useState(false);
+  const markCompleteReasons = useMemo(
+    () =>
+      markCompleteBlockers({
+        errors: validationStatus === "invalid" ? validationErrors : [],
+        hasUnsavedChanges: hasModifications,
+        isSaving: isChangingStatus,
+      }),
+    [validationStatus, validationErrors, hasModifications, isChangingStatus],
+  );
+
+  const handleSetStatus = useCallback(
+    async (status: DraftStatus) => {
+      if (!onSetStatus) return;
+      setIsChangingStatus(true);
+      try {
+        const result = await onSetStatus(status);
+        const findings = result.validationErrors || [];
+        setValidationErrors(findings);
+        setValidationStatus(
+          splitFindings(findings).errors.length === 0 ? "valid" : "invalid",
+        );
+      } finally {
+        setIsChangingStatus(false);
+      }
+    },
+    [onSetStatus],
+  );
 
   // Save and exit handler
   const handleSaveAndExit = useCallback(async () => {
@@ -1401,6 +1478,16 @@ function WorkflowBuilderInner({
                 className="ml-2"
               />
             )}
+            {!isEditingLoop && !isBuiltinWorkflow && draftStatus === "draft" && (
+              <DraftStatusBadge
+                errorCount={
+                  validationStatus === "invalid"
+                    ? splitFindings(validationErrors).errors.length
+                    : 0
+                }
+                className="ml-2"
+              />
+            )}
           </div>
           <div className="flex gap-2 flex-shrink-0">
             {isEditingLoop && isBuiltinWorkflow ? (
@@ -1481,16 +1568,57 @@ function WorkflowBuilderInner({
                   <Copy className="w-4 h-4" />
                   Duplicate
                 </button>
+                {onSetStatus && draftStatus === "complete" && (
+                  <Tooltip content="Take this workflow out of service to make edits that may be invalid along the way. It won't run until you mark it complete again.">
+                    <button
+                      onClick={() => void handleSetStatus("draft")}
+                      disabled={isChangingStatus || isChatBusy}
+                      className={headerButtonClass}
+                      data-testid="workflow-move-to-draft"
+                    >
+                      <PencilRuler className="w-4 h-4" />
+                      Move to draft
+                    </button>
+                  </Tooltip>
+                )}
                 <button
-                  onClick={handleSave}
+                  onClick={() => void handleSave()}
                   disabled={!hasModifications || isChatBusy}
                   title={
                     isChatBusy ? "Wait for assistant to finish" : undefined
                   }
-                  className={primaryHeaderButtonClass}
+                  className={
+                    draftStatus === "draft" ? secondaryHeaderButtonClass : primaryHeaderButtonClass
+                  }
                 >
-                  {isChatBusy ? "Working..." : "Save"}
+                  {isChatBusy
+                    ? "Working..."
+                    : draftStatus === "draft"
+                      ? "Save draft"
+                      : "Save"}
                 </button>
+                {onSetStatus && draftStatus === "draft" && (
+                  <Tooltip
+                    content={
+                      markCompleteReasons.length > 0
+                        ? `Can't mark complete yet: ${markCompleteReasons.join(" ")}`
+                        : "Validate and make this workflow runnable"
+                    }
+                  >
+                    {/* The wrapper keeps the tooltip working while the button is disabled. */}
+                    <span className="inline-flex">
+                      <button
+                        onClick={() => void handleSetStatus("complete")}
+                        disabled={markCompleteReasons.length > 0 || isChatBusy}
+                        className={primaryHeaderButtonClass}
+                        data-testid="workflow-mark-complete"
+                      >
+                        <CheckCircle2 className="w-4 h-4" />
+                        Mark complete
+                      </button>
+                    </span>
+                  </Tooltip>
+                )}
               </>
             )}
           </div>

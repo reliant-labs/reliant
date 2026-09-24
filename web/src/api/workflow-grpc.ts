@@ -26,8 +26,14 @@ import {
   ImportWorkflowRequestSchema,
   ExportWorkflowRequestSchema,
   SetWorkflowVisibilityRequestSchema,
+  SetWorkflowStatusRequestSchema,
   CopyWorkflowRequestSchema,
 } from "../gen/reliant/v1/workflow_pb";
+import {
+  draftStatusFromProto,
+  draftStatusToProto,
+  type DraftStatus,
+} from "../components/workflow/workflowDraftStatus";
 
 type Workflow = PublicWorkflow;
 type Step = PublicStep;
@@ -109,7 +115,10 @@ export interface WorkflowResponse {
   description?: string;
   stepCount: number;
   source: "builtin" | "user" | "project";
-  isValid?: boolean;
+  /** Lifecycle; builtin and project workflows are always "complete". */
+  status: DraftStatus;
+  /** Current findings, computed on read (errors, then "warning:*"). */
+  validationErrors: ValidationError[];
   nodes: Step[];
   edges: Edge[];
   updatedAt?: string;
@@ -152,6 +161,7 @@ export interface SaveWorkflowResponse {
   success: boolean;
   message: string;
   workflow?: Workflow;
+  /** Whether THIS request's definition passed validation. */
   isValid: boolean;
   validationErrors: ValidationError[];
   id: string;
@@ -159,6 +169,16 @@ export interface SaveWorkflowResponse {
   builderChatId?: string;
   version: number;
   yamlDefinition?: string;
+  /** Resulting status; meaningful only when success. */
+  status: DraftStatus;
+}
+
+export interface SetWorkflowStatusResponse {
+  success: boolean;
+  message: string;
+  status: DraftStatus;
+  validationErrors: ValidationError[];
+  version: number;
 }
 
 export interface ImportWorkflowResponse {
@@ -171,6 +191,7 @@ export interface ImportWorkflowResponse {
   validationErrors: ValidationError[];
   conflict: boolean;
   existingId: string;
+  status: DraftStatus;
 }
 
 export interface ExportWorkflowResponse {
@@ -200,7 +221,8 @@ function listItemToResponse(proto: ProtoWorkflowListItem): WorkflowResponse {
     edges: proto.edges,
     updatedAt: proto.updatedAt || undefined,
     builderChatId: proto.builderChatId || undefined,
-    isValid: proto.isValid !== false,
+    status: draftStatusFromProto(proto.status),
+    validationErrors: [...(proto.validationErrors || [])],
     isHidden: proto.isHidden || false,
     hasPresetGroups: proto.hasPresetGroups || false,
     draftId: proto.draftId || undefined,
@@ -265,6 +287,8 @@ export const workflowGrpc = {
     source?: "builtin" | "project" | "user";
     sourcePath?: string;
     yamlDefinition?: string;
+    status: DraftStatus;
+    validationErrors: ValidationError[];
   }> {
     const client = grpcClient.workflow();
     const request = create(GetWorkflowRequestSchema, {
@@ -279,6 +303,8 @@ export const workflowGrpc = {
       sourceRaw = "user";
     }
     const source = sourceRaw as "builtin" | "project" | "user";
+    const status = draftStatusFromProto(response.status);
+    const validationErrors = [...(response.validationErrors || [])];
 
     if (response.parseError) {
       return {
@@ -290,6 +316,8 @@ export const workflowGrpc = {
         source,
         sourcePath: response.sourcePath || undefined,
         yamlDefinition: response.yamlDefinition || undefined,
+        status,
+        validationErrors,
       };
     }
 
@@ -304,6 +332,8 @@ export const workflowGrpc = {
       source,
       sourcePath: response.sourcePath || undefined,
       yamlDefinition: response.yamlDefinition || undefined,
+      status,
+      validationErrors,
     };
   },
 
@@ -364,7 +394,12 @@ export const workflowGrpc = {
   },
 
   /**
-   * Save a workflow (creates or updates)
+   * Save a workflow (creates or updates).
+   *
+   * `status` is the intent: "draft" stores as-is (findings returned, not
+   * enforced); "complete" validates and rejects on errors; omitted keeps the
+   * current status (new workflows start as drafts), so re-saving a complete
+   * workflow is gated.
    */
   async saveWorkflow(
     projectId: string,
@@ -373,6 +408,7 @@ export const workflowGrpc = {
     expectedVersion?: number,
     sourcePath?: string,
     draftId?: string,
+    status?: DraftStatus,
   ): Promise<SaveWorkflowResponse> {
     const client = grpcClient.workflow();
     const request = create(SaveWorkflowRequestSchema, {
@@ -382,6 +418,7 @@ export const workflowGrpc = {
       expectedVersion: expectedVersion ? BigInt(expectedVersion) : undefined,
       sourcePath: sourcePath || undefined,
       draftId: draftId || undefined,
+      status: status ? draftStatusToProto(status) : undefined,
     });
     const response = await client.saveWorkflow(request);
     return {
@@ -395,6 +432,35 @@ export const workflowGrpc = {
       builderChatId: response.builderChatId || undefined,
       version: Number(response.version),
       yamlDefinition: response.yamlDefinition || undefined,
+      status: draftStatusFromProto(response.status),
+    };
+  },
+
+  /**
+   * Move a stored workflow between draft and complete. Marking complete
+   * validates the stored definition and is rejected (success=false, with the
+   * errors) when it is invalid.
+   */
+  async setWorkflowStatus(
+    projectId: string,
+    draftId: string,
+    status: DraftStatus,
+    expectedVersion?: number,
+  ): Promise<SetWorkflowStatusResponse> {
+    const client = grpcClient.workflow();
+    const request = create(SetWorkflowStatusRequestSchema, {
+      projectId,
+      draftId,
+      status: draftStatusToProto(status),
+      expectedVersion: expectedVersion ? BigInt(expectedVersion) : undefined,
+    });
+    const response = await client.setWorkflowStatus(request);
+    return {
+      success: response.success,
+      message: response.message,
+      status: draftStatusFromProto(response.status),
+      validationErrors: [...response.validationErrors],
+      version: Number(response.version),
     };
   },
 
@@ -427,6 +493,7 @@ export const workflowGrpc = {
       validationErrors: response.validationErrors,
       conflict: response.conflict,
       existingId: response.existingId,
+      status: draftStatusFromProto(response.status),
     };
   },
 

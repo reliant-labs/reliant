@@ -3,7 +3,7 @@ title: "Testing Workflows"
 description: "Validate workflow structure and test runtime behavior before deploying"
 ---
 
-Reliant provides two levels of workflow testing: **static validation** catches structural problems in your workflow definition, and **scenario testing** verifies runtime behavior with simulated events. Together, they ensure your workflows are both well-formed and behave correctly.
+Reliant provides two levels of workflow testing: **static validation** catches structural problems in your workflow definition, and **scenario testing** verifies runtime behavior with mocked events. Together, they ensure your workflows are both well-formed and behave correctly.
 
 ## Static Validation
 
@@ -44,7 +44,7 @@ Scenario testing lets you verify workflow runtime behavior without running real 
 
 ### How It Works
 
-The scenario simulator executes your workflow's node graph, but instead of calling real activities, it uses your mocked events to produce node outputs. It follows the same edge routing, condition evaluation, and loop logic as the real executor.
+Scenarios run on the real workflow runtime — the same engine that executes your workflow in a chat — inside an in-memory environment. Only the activity layer (LLM calls, tool execution, worktree and daemon operations) is replaced: each activity's result comes from your mocked events. Edge routing, conditions, loops, joins, sub-workflows, spawns, CEL evaluation and `save_message` resolution are all production code, so a passing scenario proves the workflow actually runs. Any activity a scenario cannot mock fails the run by name; nothing ever executes for real.
 
 ### Scenario Structure
 
@@ -183,24 +183,15 @@ events:
     text: "Inner step done"
 ```
 
-#### How inline simulation works
+#### How inner nodes execute
 
-For **inline loops** with an `inline:` definition, the simulator:
-1. Creates a sub-state-machine for the inline workflow
-2. Executes each inner node individually per iteration
-3. Evaluates conditions on inner nodes and skips those with false conditions
-4. Evaluates edges within the loop to determine node ordering
-5. Calls the mocker with qualified IDs like `loop_id.inner_node_id`
-6. Evaluates the `while` condition after each iteration
-7. If the sub-workflow declares `outputs:`, evaluates them for the `while` condition
+**Inline loops** and **inline workflow nodes** always execute their bodies. Each inner node's mock is looked up by its qualified ID (`loop_id.inner_node_id`, `workflow_id.inner_node_id`), inner conditions skip nodes exactly as they do at runtime, and a loop's `while` and declared `outputs:` are evaluated after each iteration.
 
-For **inline workflow nodes** with `type: workflow` and `inline:`, the simulator:
-1. Creates a sub-state-machine for the inline workflow
-2. Evaluates conditions on each inner node and tracks false conditions as skipped
-3. Executes inner nodes using qualified IDs like `workflow_id.inner_node_id`
-4. Evaluates the sub-workflow's `outputs:` expressions if declared
+**Referenced** loops or workflows (`ref:`) are black-boxed by default: an event on the node itself (`node: review`) supplies the node's whole output, and the referenced workflow's body does not run. When the scenario targets qualified inner nodes (`node: review.agent_loop.call_llm`), the referenced workflow is loaded and executes for real instead.
 
-For **referenced** loops or workflows with `ref:`, the simulator uses black-box mocking with the ref name by default. When the scenario targets qualified inner nodes and the runner can resolve the referenced workflow, it executes that referenced workflow internally instead.
+To mock a **loop** as a unit — its body does not run — set `black_box: true` on its event; the event's output is the loop's aggregate output (`_results`, `_iterations`, declared outputs) exactly as downstream nodes read it.
+
+Events are always keyed by **node path**. Keying an event by a workflow ref (`node: builtin://agent`) is a validation error: one ref can back many nodes, so name the node that references it.
 
 ### Expectations
 
@@ -291,7 +282,7 @@ expect:
 
 #### Multi-Iteration Loop
 
-Provide events for each iteration. The simulator consumes events per-node sequentially:
+Provide events for each iteration. Events for the same node are consumed in order, one per execution:
 
 ```yaml
 name: loop_three_iterations

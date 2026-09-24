@@ -13,7 +13,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	"github.com/reliant-labs/reliant/internal/workflow/validation"
 	wfyaml "github.com/reliant-labs/reliant/internal/workflow/yaml"
-	"google.golang.org/protobuf/types/known/structpb"
 	"gopkg.in/yaml.v3"
 )
 
@@ -24,7 +23,6 @@ type semanticParityFixture struct {
 	WorkflowYAML         string                          `yaml:"workflow_yaml"`
 	Core                 semanticParityCoreSection       `yaml:"core"`
 	Validation           semanticParityValidationSection `yaml:"validation"`
-	Simulator            semanticParitySimulatorSection  `yaml:"simulator"`
 	Runtime              semanticParityRuntimeSection    `yaml:"runtime"`
 }
 
@@ -44,36 +42,6 @@ type semanticParityValidationSection struct {
 	ShouldPass        bool   `yaml:"should_pass"`
 	UseWorkflowLoader bool   `yaml:"use_workflow_loader"`
 	ErrorContains     string `yaml:"error_contains"`
-}
-
-type semanticParitySimulatorSection struct {
-	ExpectedStatus string                  `yaml:"expected_status"`
-	Scenario       *semanticParityScenario `yaml:"scenario"`
-}
-
-type semanticParityScenario struct {
-	Name   string                        `yaml:"name"`
-	Inputs map[string]interface{}        `yaml:"inputs"`
-	Events []semanticParityScenarioEvent `yaml:"events"`
-	Expect *semanticParityScenarioExpect `yaml:"expect"`
-}
-
-type semanticParityScenarioEvent struct {
-	Node      string                   `yaml:"node"`
-	Type      string                   `yaml:"type"`
-	Text      string                   `yaml:"text"`
-	ToolCalls []semanticParityToolCall `yaml:"tool_calls"`
-	Output    map[string]interface{}   `yaml:"output"`
-}
-
-type semanticParityToolCall struct {
-	Name  string                 `yaml:"name"`
-	Input map[string]interface{} `yaml:"input"`
-}
-
-type semanticParityScenarioExpect struct {
-	Outcome string   `yaml:"outcome"`
-	Reached []string `yaml:"reached"`
 }
 
 type semanticParityRuntimeSection struct {
@@ -169,21 +137,6 @@ func TestSemanticParityFixtures(t *testing.T) {
 				}
 			})
 
-			if fixture.Simulator.Scenario != nil {
-				t.Run("simulator_execution_expectations", func(t *testing.T) {
-					if validationErr != nil && !fixture.Validation.ShouldPass {
-						if fixture.Simulator.ExpectedStatus != "error" {
-							t.Fatalf("simulator status mismatch: got %q want %q (%s)", "error", fixture.Simulator.ExpectedStatus, validationErr.Error())
-						}
-						return
-					}
-					status, mismatch := runSemanticParityScenario(workflowDef, canonicalRef, builtinLoader, fixture.Simulator.Scenario)
-					if status != fixture.Simulator.ExpectedStatus {
-						t.Fatalf("simulator status mismatch: got %q want %q (%s)", status, fixture.Simulator.ExpectedStatus, mismatch)
-					}
-				})
-			}
-
 			if len(fixture.Runtime.Checks) > 0 {
 				t.Run("runtime_targeted_semantic_paths", func(t *testing.T) {
 					semantics, semErr := CompileRuntimeSemantics(workflowDef, canonicalRef)
@@ -207,105 +160,6 @@ func TestSemanticParityFixtures(t *testing.T) {
 				})
 			}
 		})
-	}
-}
-
-func runSemanticParityScenario(
-	workflowDef *reliantv1.Workflow,
-	canonicalRef string,
-	loader func(string) (*reliantv1.Workflow, error),
-	scenario *semanticParityScenario,
-) (string, string) {
-	eventByNode := make(map[string][]semanticParityScenarioEvent)
-	for _, event := range scenario.Events {
-		eventByNode[event.Node] = append(eventByNode[event.Node], event)
-	}
-	consumedByNode := make(map[string]int)
-
-	hasInternalEvents := func(prefix string) bool {
-		for nodeID := range eventByNode {
-			if strings.HasPrefix(nodeID, prefix) {
-				return true
-			}
-		}
-		return false
-	}
-
-	stepMocker := func(stepID string, _ map[string]interface{}) map[string]interface{} {
-		events := eventByNode[stepID]
-		index := consumedByNode[stepID]
-		if index >= len(events) {
-			return map[string]interface{}{}
-		}
-		consumedByNode[stepID] = index + 1
-		return semanticParityEventToOutput(events[index])
-	}
-
-	sim := NewWorkflowSimulator(workflowDef, SimulatorConfig{
-		WorkflowInputs:       scenario.Inputs,
-		MaxIterations:        100,
-		HasInternalEvents:    hasInternalEvents,
-		WorkflowLoader:       loader,
-		CanonicalWorkflowRef: canonicalRef,
-	})
-
-	runErr := sim.Run(stepMocker)
-
-	if scenario.Expect != nil {
-		if scenario.Expect.Outcome == "error" {
-			if runErr == nil {
-				return "failed", "expected error outcome but simulation completed"
-			}
-			return "passed", ""
-		}
-		if runErr != nil {
-			return "error", runErr.Error()
-		}
-		visited := sim.GetVisitedSteps()
-		for _, expectedNode := range scenario.Expect.Reached {
-			if !stringSliceContains(visited, expectedNode) {
-				return "failed", fmt.Sprintf("expected reached node %q, got %v", expectedNode, visited)
-			}
-		}
-	}
-
-	for nodeID, events := range eventByNode {
-		if consumedByNode[nodeID] < len(events) {
-			return "failed", fmt.Sprintf("unconsumed events for %s", nodeID)
-		}
-	}
-
-	if runErr != nil {
-		return "error", runErr.Error()
-	}
-	return "passed", ""
-}
-
-func semanticParityEventToOutput(event semanticParityScenarioEvent) map[string]interface{} {
-	if event.Output != nil {
-		return event.Output
-	}
-
-	switch event.Type {
-	case "llm_response":
-		toolCalls := make([]interface{}, 0, len(event.ToolCalls))
-		for _, toolCall := range event.ToolCalls {
-			inputValue, _ := structpb.NewStruct(toolCall.Input)
-			toolCalls = append(toolCalls, map[string]interface{}{
-				"name":  toolCall.Name,
-				"input": inputValue.AsMap(),
-			})
-		}
-		return map[string]interface{}{
-			"message": map[string]interface{}{
-				"role": "assistant",
-				"text": event.Text,
-			},
-			"response_text": event.Text,
-			"tool_calls":    toolCalls,
-		}
-	default:
-		return map[string]interface{}{}
 	}
 }
 

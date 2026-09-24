@@ -4027,16 +4027,27 @@ func (r *Repo) GetWorkflowDraftBySourcePath(ctx context.Context, userID, sourceP
 	return r.workflowCatalog.GetWorkflowDraftBySourcePath(ctx, userID, sourcePath)
 }
 
+// GetUsableWorkflowBySlug returns the runnable (complete, visible) workflow
+// with this slug, or (nil, nil) when there is none. A visible DRAFT with the
+// slug is reported as *WorkflowDraftNotRunnableError rather than hidden behind
+// "not found": the workflow exists, and the fix is to mark it complete.
 func (r *Repo) GetUsableWorkflowBySlug(ctx context.Context, userID, slug string) (*WorkflowDraft, error) {
-	return r.workflowCatalog.GetUsableWorkflowBySlug(ctx, userID, slug)
+	usable, err := r.workflowCatalog.GetUsableWorkflowBySlug(ctx, userID, slug)
+	if err != nil || usable != nil {
+		return usable, err
+	}
+	draft, err := r.workflowCatalog.GetWorkflowDraftBySlug(ctx, userID, slug)
+	if err != nil {
+		return nil, err
+	}
+	if draft != nil && !draft.IsHidden && draft.Status != WorkflowDraftStatusComplete {
+		return nil, &WorkflowDraftNotRunnableError{Slug: slug}
+	}
+	return nil, nil
 }
 
 func (r *Repo) ListWorkflowDraftsByUser(ctx context.Context, userID string) ([]*WorkflowDraft, error) {
 	return r.workflowCatalog.ListWorkflowDraftsByUser(ctx, userID)
-}
-
-func (r *Repo) ListUsableWorkflowsByUser(ctx context.Context, userID string) ([]*WorkflowDraft, error) {
-	return r.workflowCatalog.ListUsableWorkflowsByUser(ctx, userID)
 }
 
 func (r *Repo) UpdateWorkflowDraft(ctx context.Context, draft *WorkflowDraft) error {
@@ -4047,8 +4058,12 @@ func (r *Repo) UpdateWorkflowDraft(ctx context.Context, draft *WorkflowDraft) er
 	return r.workflowCatalog.UpdateWorkflowDraft(ctx, draft)
 }
 
-func (r *Repo) UpdateWorkflowDraftDefinition(ctx context.Context, id string, name string, slug string, definition string, isValid bool, validationErrors *string) error {
-	return r.workflowCatalog.UpdateWorkflowDraftDefinition(ctx, id, name, slug, definition, isValid, validationErrors)
+func (r *Repo) UpdateWorkflowDraftDefinition(ctx context.Context, id string, name string, slug string, definition string, status WorkflowDraftStatus) error {
+	return r.workflowCatalog.UpdateWorkflowDraftDefinition(ctx, id, name, slug, definition, status)
+}
+
+func (r *Repo) SetWorkflowDraftStatus(ctx context.Context, id string, status WorkflowDraftStatus) (*WorkflowDraft, error) {
+	return r.workflowCatalog.SetWorkflowDraftStatus(ctx, id, status)
 }
 
 func (r *Repo) SetWorkflowDraftHidden(ctx context.Context, id string, isHidden bool) (*WorkflowDraft, error) {

@@ -629,21 +629,20 @@ type WorkflowCheckpoint struct {
 }
 
 type WorkflowDraft struct {
-	ID               string         `json:"id"`
-	UserID           string         `json:"user_id"`
-	Name             string         `json:"name"`
-	Slug             string         `json:"slug"`
-	Description      sql.NullString `json:"description"`
-	Definition       string         `json:"definition"`
-	IsValid          int64          `json:"is_valid"`
-	ValidationErrors sql.NullString `json:"validation_errors"`
-	SourcePath       sql.NullString `json:"source_path"`
-	ForkedFrom       sql.NullString `json:"forked_from"`
-	IsHidden         bool           `json:"is_hidden"`
-	ChatID           sql.NullString `json:"chat_id"`
-	CreatedAt        time.Time      `json:"created_at"`
-	UpdatedAt        time.Time      `json:"updated_at"`
-	Version          int64          `json:"version"`
+	ID          string         `json:"id"`
+	UserID      string         `json:"user_id"`
+	Name        string         `json:"name"`
+	Slug        string         `json:"slug"`
+	Description sql.NullString `json:"description"`
+	Definition  string         `json:"definition"`
+	SourcePath  sql.NullString `json:"source_path"`
+	ForkedFrom  sql.NullString `json:"forked_from"`
+	IsHidden    bool           `json:"is_hidden"`
+	ChatID      sql.NullString `json:"chat_id"`
+	CreatedAt   time.Time      `json:"created_at"`
+	UpdatedAt   time.Time      `json:"updated_at"`
+	Version     int64          `json:"version"`
+	Status      string         `json:"status"`
 }
 
 type WorkflowScenario struct {

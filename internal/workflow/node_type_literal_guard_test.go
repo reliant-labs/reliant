@@ -96,9 +96,6 @@ func TestNoRawNodeTypeLiteralsInProductionFiles(t *testing.T) {
 		"runtime/loop_executor.go": {
 			"loop": {},
 		},
-		"runtime/simulator.go": {
-			"loop": {},
-		},
 		"runtime/node_output_store.go": {
 			"workflow": {},
 		},

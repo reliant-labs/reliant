@@ -572,6 +572,17 @@ type ContextWindow = core.ContextWindow
 // WorkflowDraft is an alias to the shared core workflow draft model.
 type WorkflowDraft = core.WorkflowDraft
 
+// WorkflowDraftStatus is a stored workflow's lifecycle (draft / complete).
+type WorkflowDraftStatus = core.WorkflowDraftStatus
+
+// WorkflowDraftNotRunnableError reports that a slug names a draft.
+type WorkflowDraftNotRunnableError = core.WorkflowDraftNotRunnableError
+
+const (
+	WorkflowDraftStatusDraft    = core.WorkflowDraftStatusDraft
+	WorkflowDraftStatusComplete = core.WorkflowDraftStatusComplete
+)
+
 // WorkflowScenario is an alias to the shared core workflow scenario model.
 type WorkflowScenario = core.WorkflowScenario
 

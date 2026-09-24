@@ -1,6 +1,6 @@
 # Migration with some import lanes switched off
 #
-# Proves two migrate.yaml fixes on the REAL runtime (scenariotemporal):
+# Proves two migrate.yaml fixes on the real runtime:
 #
 # 1. final_summary's inject. migrate_memory / migrate_mcp / migrate_skills each
 #    carry a `condition` on their import_* input. A user who unchecks a lane

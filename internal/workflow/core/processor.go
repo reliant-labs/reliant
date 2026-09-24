@@ -9,7 +9,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 )
 
-// WorkflowEvent is the state-machine input event used by runtime and simulator.
+// WorkflowEvent is the state-machine input event used by the runtime.
 type WorkflowEvent struct {
 	ID           string                 `json:"id"`
 	WorkflowID   string                 `json:"workflow_id"`

@@ -21,7 +21,8 @@ import (
 	skillscore "github.com/reliant-labs/reliant/internal/skills/core"
 	"github.com/reliant-labs/reliant/internal/workflow/builtin"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime"
-	"github.com/reliant-labs/reliant/internal/workflow/runtime/simulator"
+	wfscenario "github.com/reliant-labs/reliant/internal/workflow/scenario"
+	"github.com/reliant-labs/reliant/internal/workflow/scenario/runner"
 	"github.com/reliant-labs/reliant/internal/workflow/validation"
 	wfyaml "github.com/reliant-labs/reliant/internal/workflow/yaml"
 )
@@ -987,7 +988,8 @@ func newWorkflowScenarioRunCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "run [workflow-path]",
 		Short: "Run scenario tests against workflows",
-		Long: `Runs scenario tests against workflow definitions using the simulator engine.
+		Long: `Runs scenario tests against workflow definitions on the real workflow runtime
+(DynamicWorkflow in an in-memory Temporal environment; only activities are mocked).
 Scenarios are discovered from co-located *_scenarios.yaml files or from
 scenarios/<workflow-name>/ directories.
 
@@ -1054,7 +1056,7 @@ type workflowWithScenarios struct {
 	WorkflowFile string
 	WorkflowName string
 	Source       string // "project" or "builtin"
-	Scenarios    []*simulator.Scenario
+	Scenarios    []*wfscenario.Scenario
 }
 
 // scenarioRunResult captures the result of running scenarios for one workflow.
@@ -1115,8 +1117,8 @@ func runWorkflowScenarios(_ *cobra.Command, args []string, dir string, verbose, 
 			break
 		}
 
-		// Load the workflow proto
-		engine, err := loadWorkflowProto(wf)
+		// Load the workflow and its scenario runner
+		scenarioRunner, err := loadScenarioRunner(wf)
 		if err != nil {
 			result := scenarioRunResult{
 				Workflow: wf.WorkflowName,
@@ -1124,7 +1126,7 @@ func runWorkflowScenarios(_ *cobra.Command, args []string, dir string, verbose, 
 				Source:   wf.Source,
 				Scenarios: []scenarioResultSummary{{
 					Name:   "(load)",
-					Status: string(simulator.StatusError),
+					Status: string(wfscenario.StatusError),
 					Error:  err.Error(),
 				}},
 			}
@@ -1161,7 +1163,7 @@ func runWorkflowScenarios(_ *cobra.Command, args []string, dir string, verbose, 
 			}
 
 			start := time.Now()
-			result := engine.RunScenario(scenario)
+			result := scenarioRunner.Run(scenario)
 			duration := time.Since(start).Milliseconds()
 
 			summary := scenarioResultSummary{
@@ -1170,7 +1172,7 @@ func runWorkflowScenarios(_ *cobra.Command, args []string, dir string, verbose, 
 				DurationMs: duration,
 			}
 
-			if result.Status != simulator.StatusPassed {
+			if result.Status != wfscenario.StatusPassed {
 				hasFailures = true
 				summary.Mismatches = result.Mismatches
 				if result.Execution.Error != nil {
@@ -1184,7 +1186,7 @@ func runWorkflowScenarios(_ *cobra.Command, args []string, dir string, verbose, 
 				printScenarioResult(summary, wf.WorkflowName, verbose)
 			}
 
-			if result.Status != simulator.StatusPassed && failFast {
+			if result.Status != wfscenario.StatusPassed && failFast {
 				stopped = true
 			}
 		}
@@ -1314,17 +1316,17 @@ func discoverWorkflowsWithScenarios(args []string, dir string, includeBuiltins b
 // Checks:
 // 1. Co-located <name>_scenarios.yaml
 // 2. scenarios/<name>/ directory
-func findScenariosForWorkflow(workflowFile string) []*simulator.Scenario {
+func findScenariosForWorkflow(workflowFile string) []*wfscenario.Scenario {
 	dir := filepath.Dir(workflowFile)
 	base := filepath.Base(workflowFile)
 	name := strings.TrimSuffix(base, filepath.Ext(base))
 
-	var allScenarios []*simulator.Scenario
+	var allScenarios []*wfscenario.Scenario
 
 	// Check co-located <name>_scenarios.yaml
 	for _, ext := range []string{".yaml", ".yml"} {
 		colocated := filepath.Join(dir, name+"_scenarios"+ext)
-		if scenarios, err := simulator.LoadScenariosFromFile(colocated); err == nil {
+		if scenarios, err := wfscenario.LoadScenariosFromFile(colocated); err == nil {
 			allScenarios = append(allScenarios, scenarios...)
 		}
 	}
@@ -1332,7 +1334,7 @@ func findScenariosForWorkflow(workflowFile string) []*simulator.Scenario {
 	// Check scenarios/<name>/ directory
 	scenarioDir := filepath.Join(dir, "scenarios", name)
 	if info, err := os.Stat(scenarioDir); err == nil && info.IsDir() {
-		if scenarios, err := simulator.LoadScenariosFromDir(scenarioDir); err == nil {
+		if scenarios, err := wfscenario.LoadScenariosFromDir(scenarioDir); err == nil {
 			allScenarios = append(allScenarios, scenarios...)
 		}
 	}
@@ -1362,7 +1364,7 @@ func discoverBuiltinScenarios() []workflowWithScenarios {
 			continue
 		}
 
-		scenarios, err := simulator.ParseScenarioYAML(data)
+		scenarios, err := wfscenario.ParseScenarioYAML(data)
 		if err != nil || len(scenarios) == 0 {
 			continue
 		}
@@ -1378,9 +1380,11 @@ func discoverBuiltinScenarios() []workflowWithScenarios {
 	return results
 }
 
-// loadWorkflowProto loads a workflow into its proto representation.
-// Handles both project files (from disk) and builtins (from embedded FS).
-func loadWorkflowProto(wf workflowWithScenarios) (*simulator.Engine, error) {
+// loadScenarioRunner loads a workflow and returns the scenario runner for it,
+// which executes scenarios on the real DynamicWorkflow. Handles both project
+// files (from disk) and builtins (from embedded FS); a project workflow's
+// project:// refs resolve from sibling files in its directory.
+func loadScenarioRunner(wf workflowWithScenarios) (*runner.Runner, error) {
 	var data []byte
 	var err error
 
@@ -1398,7 +1402,28 @@ func loadWorkflowProto(wf workflowWithScenarios) (*simulator.Engine, error) {
 		return nil, fmt.Errorf("parsing workflow: %w", err)
 	}
 
-	return simulator.NewEngine(parsedWf), nil
+	var loader runner.WorkflowLoader
+	if wf.Source != "builtin" {
+		loader = projectDirWorkflowLoader(filepath.Dir(wf.WorkflowFile))
+	}
+	return runner.New(parsedWf, runner.Options{Loader: loader}), nil
+}
+
+// projectDirWorkflowLoader resolves project refs ("project://deploy", or a
+// bare "deploy") to <dir>/<name>.yaml / .yml. builtin:// refs are resolved by
+// the runner itself.
+func projectDirWorkflowLoader(dir string) runner.WorkflowLoader {
+	return func(ref string) (*reliantv1.Workflow, error) {
+		name := strings.TrimPrefix(strings.TrimSpace(ref), "project://")
+		for _, ext := range []string{".yaml", ".yml"} {
+			data, err := os.ReadFile(filepath.Join(dir, name+ext))
+			if err != nil {
+				continue
+			}
+			return wfyaml.ParseWorkflow(data)
+		}
+		return nil, fmt.Errorf("workflow %q not found in %s", ref, dir)
+	}
 }
 
 // workflowNameFromFile extracts a workflow name from the YAML, falling back to filename.
@@ -1417,10 +1442,10 @@ func workflowNameFromFile(path string) string {
 }
 
 func printScenarioResult(s scenarioResultSummary, workflowName string, verbose bool) {
-	switch simulator.ScenarioStatus(s.Status) {
-	case simulator.StatusPassed:
+	switch wfscenario.ScenarioStatus(s.Status) {
+	case wfscenario.StatusPassed:
 		fmt.Printf("  \u2713 %s/%s (%dms)\n", workflowName, s.Name, s.DurationMs)
-	case simulator.StatusFailed:
+	case wfscenario.StatusFailed:
 		fmt.Printf("  \u2717 %s/%s (%dms)\n", workflowName, s.Name, s.DurationMs)
 		if verbose {
 			for _, m := range s.Mismatches {
@@ -1432,7 +1457,7 @@ func printScenarioResult(s scenarioResultSummary, workflowName string, verbose b
 				fmt.Printf("      ... and %d more (use --verbose)\n", len(s.Mismatches)-1)
 			}
 		}
-	case simulator.StatusError:
+	case wfscenario.StatusError:
 		fmt.Printf("  ! %s/%s (%dms)\n", workflowName, s.Name, s.DurationMs)
 		if s.Error != "" {
 			fmt.Printf("      Error: %s\n", s.Error)
@@ -1449,12 +1474,12 @@ func printScenarioSummary(results []scenarioRunResult) {
 	passed, failed, errored := 0, 0, 0
 	for _, wf := range results {
 		for _, s := range wf.Scenarios {
-			switch simulator.ScenarioStatus(s.Status) {
-			case simulator.StatusPassed:
+			switch wfscenario.ScenarioStatus(s.Status) {
+			case wfscenario.StatusPassed:
 				passed++
-			case simulator.StatusFailed:
+			case wfscenario.StatusFailed:
 				failed++
-			case simulator.StatusError:
+			case wfscenario.StatusError:
 				errored++
 			}
 		}

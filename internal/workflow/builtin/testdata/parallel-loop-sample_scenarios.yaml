@@ -7,11 +7,11 @@ inputs:
     - billing
 
 events:
-  - node: builtin://agent
+  - node: run_checks
     output:
       status: pass
       response_text: auth passed
-  - node: builtin://agent
+  - node: run_checks
     output:
       status: fail
       response_text: billing failed
@@ -45,7 +45,7 @@ inputs:
     - auth
 
 events:
-  - node: builtin://agent
+  - node: run_checks
     output:
       status: pass
       response_text: auth passed

@@ -24,6 +24,65 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// WorkflowDraftStatus is a stored workflow's lifecycle.
+//
+// Validity is never stored: it is computed on read and at the two gates
+// (marking complete, and loading for execution).
+type WorkflowDraftStatus int32
+
+const (
+	// In a request: keep the workflow's current status (a new workflow starts
+	// as a draft). Never returned for a stored workflow.
+	WorkflowDraftStatus_WORKFLOW_DRAFT_STATUS_UNSPECIFIED WorkflowDraftStatus = 0
+	// Work in progress: saved as-is, may be invalid, never runnable, and never
+	// offered where a runnable workflow is required.
+	WorkflowDraftStatus_WORKFLOW_DRAFT_STATUS_DRAFT WorkflowDraftStatus = 1
+	// Passed validation when it was marked complete; runnable. Saving it again
+	// re-validates, and a save that would make it invalid is rejected.
+	WorkflowDraftStatus_WORKFLOW_DRAFT_STATUS_COMPLETE WorkflowDraftStatus = 2
+)
+
+// Enum value maps for WorkflowDraftStatus.
+var (
+	WorkflowDraftStatus_name = map[int32]string{
+		0: "WORKFLOW_DRAFT_STATUS_UNSPECIFIED",
+		1: "WORKFLOW_DRAFT_STATUS_DRAFT",
+		2: "WORKFLOW_DRAFT_STATUS_COMPLETE",
+	}
+	WorkflowDraftStatus_value = map[string]int32{
+		"WORKFLOW_DRAFT_STATUS_UNSPECIFIED": 0,
+		"WORKFLOW_DRAFT_STATUS_DRAFT":       1,
+		"WORKFLOW_DRAFT_STATUS_COMPLETE":    2,
+	}
+)
+
+func (x WorkflowDraftStatus) Enum() *WorkflowDraftStatus {
+	p := new(WorkflowDraftStatus)
+	*p = x
+	return p
+}
+
+func (x WorkflowDraftStatus) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (WorkflowDraftStatus) Descriptor() protoreflect.EnumDescriptor {
+	return file_reliant_v1_workflow_proto_enumTypes[0].Descriptor()
+}
+
+func (WorkflowDraftStatus) Type() protoreflect.EnumType {
+	return &file_reliant_v1_workflow_proto_enumTypes[0]
+}
+
+func (x WorkflowDraftStatus) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use WorkflowDraftStatus.Descriptor instead.
+func (WorkflowDraftStatus) EnumDescriptor() ([]byte, []int) {
+	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{0}
+}
+
 // WorkflowListItem represents a workflow in list responses with additional metadata
 type WorkflowListItem struct {
 	state       protoimpl.MessageState `protogen:"open.v1"`
@@ -41,10 +100,14 @@ type WorkflowListItem struct {
 	IsHidden        bool              `protobuf:"varint,12,opt,name=is_hidden,json=isHidden,proto3" json:"is_hidden,omitempty"`                                                        // Whether the workflow is hidden from the hub
 	BuilderChatId   *string           `protobuf:"bytes,13,opt,name=builder_chat_id,json=builderChatId,proto3,oneof" json:"builder_chat_id,omitempty"`                                  // Chat ID associated with this workflow (if any)
 	HasPresetGroups bool              `protobuf:"varint,14,opt,name=has_preset_groups,json=hasPresetGroups,proto3" json:"has_preset_groups,omitempty"`                                 // True if workflow has any tags (top-level or group) that can have presets
-	IsValid         bool              `protobuf:"varint,15,opt,name=is_valid,json=isValid,proto3" json:"is_valid,omitempty"`                                                           // True if workflow passes validation (always true for builtin/project)
 	DraftId         *string           `protobuf:"bytes,16,opt,name=draft_id,json=draftId,proto3,oneof" json:"draft_id,omitempty"`                                                      // Draft ID for user workflows (stable ID for lookups, not present for builtin/project)
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// Lifecycle. Builtin and project workflows are always COMPLETE.
+	Status WorkflowDraftStatus `protobuf:"varint,17,opt,name=status,proto3,enum=reliant.v1.WorkflowDraftStatus" json:"status,omitempty"`
+	// Current validation findings, computed on read (errors, then warnings typed
+	// "warning:<category>"). Empty for builtin and project workflows.
+	ValidationErrors []*ValidationError `protobuf:"bytes,18,rep,name=validation_errors,json=validationErrors,proto3" json:"validation_errors,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *WorkflowListItem) Reset() {
@@ -168,18 +231,25 @@ func (x *WorkflowListItem) GetHasPresetGroups() bool {
 	return false
 }
 
-func (x *WorkflowListItem) GetIsValid() bool {
-	if x != nil {
-		return x.IsValid
-	}
-	return false
-}
-
 func (x *WorkflowListItem) GetDraftId() string {
 	if x != nil && x.DraftId != nil {
 		return *x.DraftId
 	}
 	return ""
+}
+
+func (x *WorkflowListItem) GetStatus() WorkflowDraftStatus {
+	if x != nil {
+		return x.Status
+	}
+	return WorkflowDraftStatus_WORKFLOW_DRAFT_STATUS_UNSPECIFIED
+}
+
+func (x *WorkflowListItem) GetValidationErrors() []*ValidationError {
+	if x != nil {
+		return x.ValidationErrors
+	}
+	return nil
 }
 
 // HighlightSpan represents a character range to highlight in the condition
@@ -617,8 +687,13 @@ type GetWorkflowResponse struct {
 	Version        int64                  `protobuf:"varint,8,opt,name=version,proto3" json:"version,omitempty"`                                         // Current version number for OCC (0 for builtins)
 	SourcePath     *string                `protobuf:"bytes,9,opt,name=source_path,json=sourcePath,proto3,oneof" json:"source_path,omitempty"`            // File path for project workflows (enables save-back-to-file)
 	YamlDefinition string                 `protobuf:"bytes,10,opt,name=yaml_definition,json=yamlDefinition,proto3" json:"yaml_definition,omitempty"`     // Canonical YAML definition of the workflow (always populated)
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// Lifecycle of a user workflow; COMPLETE for builtin and project workflows.
+	Status WorkflowDraftStatus `protobuf:"varint,11,opt,name=status,proto3,enum=reliant.v1.WorkflowDraftStatus" json:"status,omitempty"`
+	// Current validation findings for a user workflow, computed on read (errors,
+	// then warnings typed "warning:<category>").
+	ValidationErrors []*ValidationError `protobuf:"bytes,12,rep,name=validation_errors,json=validationErrors,proto3" json:"validation_errors,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *GetWorkflowResponse) Reset() {
@@ -712,6 +787,20 @@ func (x *GetWorkflowResponse) GetYamlDefinition() string {
 		return x.YamlDefinition
 	}
 	return ""
+}
+
+func (x *GetWorkflowResponse) GetStatus() WorkflowDraftStatus {
+	if x != nil {
+		return x.Status
+	}
+	return WorkflowDraftStatus_WORKFLOW_DRAFT_STATUS_UNSPECIFIED
+}
+
+func (x *GetWorkflowResponse) GetValidationErrors() []*ValidationError {
+	if x != nil {
+		return x.ValidationErrors
+	}
+	return nil
 }
 
 type DeleteWorkflowRequest struct {
@@ -1130,8 +1219,12 @@ type SaveWorkflowRequest struct {
 	ExpectedVersion *int64      `protobuf:"varint,8,opt,name=expected_version,json=expectedVersion,proto3,oneof" json:"expected_version,omitempty"` // OCC: expected version number - fails if workflow was modified since
 	SourcePath      *string     `protobuf:"bytes,9,opt,name=source_path,json=sourcePath,proto3,oneof" json:"source_path,omitempty"`                 // If set, write YAML back to this file (for project workflow edits)
 	DraftId         *string     `protobuf:"bytes,10,opt,name=draft_id,json=draftId,proto3,oneof" json:"draft_id,omitempty"`                         // If provided, update this draft by ID (allows renames)
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// Intent. DRAFT stores as-is; COMPLETE validates and rejects on errors;
+	// UNSPECIFIED keeps the current status (new workflows start as drafts), so
+	// re-saving a complete workflow is gated like COMPLETE.
+	Status        WorkflowDraftStatus `protobuf:"varint,11,opt,name=status,proto3,enum=reliant.v1.WorkflowDraftStatus" json:"status,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *SaveWorkflowRequest) Reset() {
@@ -1220,19 +1313,27 @@ func (x *SaveWorkflowRequest) GetDraftId() string {
 	return ""
 }
 
+func (x *SaveWorkflowRequest) GetStatus() WorkflowDraftStatus {
+	if x != nil {
+		return x.Status
+	}
+	return WorkflowDraftStatus_WORKFLOW_DRAFT_STATUS_UNSPECIFIED
+}
+
 type SaveWorkflowResponse struct {
 	state    protoimpl.MessageState `protogen:"open.v1"`
 	Success  bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`  // True if operation succeeded
 	Message  string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`   // Status message
 	Workflow *Workflow              `protobuf:"bytes,3,opt,name=workflow,proto3" json:"workflow,omitempty"` // Saved workflow
 	// Field 4 removed (was published)
-	IsValid          bool               `protobuf:"varint,5,opt,name=is_valid,json=isValid,proto3" json:"is_valid,omitempty"`                           // True if workflow passed validation
-	ValidationErrors []*ValidationError `protobuf:"bytes,6,rep,name=validation_errors,json=validationErrors,proto3" json:"validation_errors,omitempty"` // Validation errors (if any)
-	Id               string             `protobuf:"bytes,7,opt,name=id,proto3" json:"id,omitempty"`                                                     // Database ID of the saved workflow
-	Slug             string             `protobuf:"bytes,8,opt,name=slug,proto3" json:"slug,omitempty"`                                                 // Runtime reference slug
-	BuilderChatId    *string            `protobuf:"bytes,9,opt,name=builder_chat_id,json=builderChatId,proto3,oneof" json:"builder_chat_id,omitempty"`  // Chat ID associated with this workflow (if any)
-	Version          int64              `protobuf:"varint,11,opt,name=version,proto3" json:"version,omitempty"`                                         // Current version number for OCC
-	YamlDefinition   string             `protobuf:"bytes,12,opt,name=yaml_definition,json=yamlDefinition,proto3" json:"yaml_definition,omitempty"`      // Canonical YAML definition of the saved workflow
+	IsValid          bool                `protobuf:"varint,5,opt,name=is_valid,json=isValid,proto3" json:"is_valid,omitempty"`                           // True if this request's definition passed validation
+	ValidationErrors []*ValidationError  `protobuf:"bytes,6,rep,name=validation_errors,json=validationErrors,proto3" json:"validation_errors,omitempty"` // This request's validation findings (errors, then warnings)
+	Id               string              `protobuf:"bytes,7,opt,name=id,proto3" json:"id,omitempty"`                                                     // Database ID of the saved workflow
+	Slug             string              `protobuf:"bytes,8,opt,name=slug,proto3" json:"slug,omitempty"`                                                 // Runtime reference slug
+	BuilderChatId    *string             `protobuf:"bytes,9,opt,name=builder_chat_id,json=builderChatId,proto3,oneof" json:"builder_chat_id,omitempty"`  // Chat ID associated with this workflow (if any)
+	Version          int64               `protobuf:"varint,11,opt,name=version,proto3" json:"version,omitempty"`                                         // Current version number for OCC
+	YamlDefinition   string              `protobuf:"bytes,12,opt,name=yaml_definition,json=yamlDefinition,proto3" json:"yaml_definition,omitempty"`      // Canonical YAML definition of the saved workflow
+	Status           WorkflowDraftStatus `protobuf:"varint,13,opt,name=status,proto3,enum=reliant.v1.WorkflowDraftStatus" json:"status,omitempty"`       // Resulting status (unset when nothing was stored)
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
 }
@@ -1337,13 +1438,21 @@ func (x *SaveWorkflowResponse) GetYamlDefinition() string {
 	return ""
 }
 
+func (x *SaveWorkflowResponse) GetStatus() WorkflowDraftStatus {
+	if x != nil {
+		return x.Status
+	}
+	return WorkflowDraftStatus_WORKFLOW_DRAFT_STATUS_UNSPECIFIED
+}
+
 type ImportWorkflowRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	ProjectId     string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`          // Required: project ID
-	YamlContent   []byte                 `protobuf:"bytes,2,opt,name=yaml_content,json=yamlContent,proto3" json:"yaml_content,omitempty"`    // YAML file content
-	Scope         ConfigScope            `protobuf:"varint,3,opt,name=scope,proto3,enum=reliant.v1.ConfigScope" json:"scope,omitempty"`      // Where to import: global, project, or worktree
-	WorktreeId    *string                `protobuf:"bytes,4,opt,name=worktree_id,json=worktreeId,proto3,oneof" json:"worktree_id,omitempty"` // Required if scope is worktree
-	Overwrite     bool                   `protobuf:"varint,5,opt,name=overwrite,proto3" json:"overwrite,omitempty"`                          // If true, overwrite existing workflow with same slug
+	ProjectId     string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`               // Required: project ID
+	YamlContent   []byte                 `protobuf:"bytes,2,opt,name=yaml_content,json=yamlContent,proto3" json:"yaml_content,omitempty"`         // YAML file content
+	Scope         ConfigScope            `protobuf:"varint,3,opt,name=scope,proto3,enum=reliant.v1.ConfigScope" json:"scope,omitempty"`           // Where to import: global, project, or worktree
+	WorktreeId    *string                `protobuf:"bytes,4,opt,name=worktree_id,json=worktreeId,proto3,oneof" json:"worktree_id,omitempty"`      // Required if scope is worktree
+	Overwrite     bool                   `protobuf:"varint,5,opt,name=overwrite,proto3" json:"overwrite,omitempty"`                               // If true, overwrite existing workflow with same slug
+	Status        WorkflowDraftStatus    `protobuf:"varint,6,opt,name=status,proto3,enum=reliant.v1.WorkflowDraftStatus" json:"status,omitempty"` // Intent; same semantics as SaveWorkflowRequest.status
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1413,6 +1522,13 @@ func (x *ImportWorkflowRequest) GetOverwrite() bool {
 	return false
 }
 
+func (x *ImportWorkflowRequest) GetStatus() WorkflowDraftStatus {
+	if x != nil {
+		return x.Status
+	}
+	return WorkflowDraftStatus_WORKFLOW_DRAFT_STATUS_UNSPECIFIED
+}
+
 type ImportWorkflowResponse struct {
 	state            protoimpl.MessageState `protogen:"open.v1"`
 	Success          bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
@@ -1420,10 +1536,11 @@ type ImportWorkflowResponse struct {
 	Workflow         *Workflow              `protobuf:"bytes,3,opt,name=workflow,proto3" json:"workflow,omitempty"`               // Imported workflow
 	Id               string                 `protobuf:"bytes,4,opt,name=id,proto3" json:"id,omitempty"`                           // Database ID
 	Slug             string                 `protobuf:"bytes,5,opt,name=slug,proto3" json:"slug,omitempty"`                       // Runtime reference slug
-	IsValid          bool                   `protobuf:"varint,6,opt,name=is_valid,json=isValid,proto3" json:"is_valid,omitempty"` // Whether workflow passed validation
+	IsValid          bool                   `protobuf:"varint,6,opt,name=is_valid,json=isValid,proto3" json:"is_valid,omitempty"` // Whether this request's definition passed validation
 	ValidationErrors []*ValidationError     `protobuf:"bytes,7,rep,name=validation_errors,json=validationErrors,proto3" json:"validation_errors,omitempty"`
-	Conflict         bool                   `protobuf:"varint,8,opt,name=conflict,proto3" json:"conflict,omitempty"`                      // True if slug already exists (when overwrite=false)
-	ExistingId       string                 `protobuf:"bytes,9,opt,name=existing_id,json=existingId,proto3" json:"existing_id,omitempty"` // ID of existing workflow (if conflict)
+	Conflict         bool                   `protobuf:"varint,8,opt,name=conflict,proto3" json:"conflict,omitempty"`                                  // True if slug already exists (when overwrite=false)
+	ExistingId       string                 `protobuf:"bytes,9,opt,name=existing_id,json=existingId,proto3" json:"existing_id,omitempty"`             // ID of existing workflow (if conflict)
+	Status           WorkflowDraftStatus    `protobuf:"varint,10,opt,name=status,proto3,enum=reliant.v1.WorkflowDraftStatus" json:"status,omitempty"` // Resulting status (unset when nothing was stored)
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
 }
@@ -1519,6 +1636,13 @@ func (x *ImportWorkflowResponse) GetExistingId() string {
 		return x.ExistingId
 	}
 	return ""
+}
+
+func (x *ImportWorkflowResponse) GetStatus() WorkflowDraftStatus {
+	if x != nil {
+		return x.Status
+	}
+	return WorkflowDraftStatus_WORKFLOW_DRAFT_STATUS_UNSPECIFIED
 }
 
 type ExportWorkflowRequest struct {
@@ -3209,8 +3333,11 @@ func (x *ExportScenarioResponse) GetFilename() string {
 // CreateWorkflowDraftRequest creates an empty draft for the workflow builder.
 // Called when user clicks "New Workflow" to get a draft ID before any chat starts.
 type CreateWorkflowDraftRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ProjectId     string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"` // Required: project context
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	ProjectId string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"` // Required: project context
+	// Intent; UNSPECIFIED and DRAFT create a draft. COMPLETE validates the
+	// starting template first.
+	Status        WorkflowDraftStatus `protobuf:"varint,2,opt,name=status,proto3,enum=reliant.v1.WorkflowDraftStatus" json:"status,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3252,11 +3379,19 @@ func (x *CreateWorkflowDraftRequest) GetProjectId() string {
 	return ""
 }
 
+func (x *CreateWorkflowDraftRequest) GetStatus() WorkflowDraftStatus {
+	if x != nil {
+		return x.Status
+	}
+	return WorkflowDraftStatus_WORKFLOW_DRAFT_STATUS_UNSPECIFIED
+}
+
 type CreateWorkflowDraftResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	DraftId       string                 `protobuf:"bytes,1,opt,name=draft_id,json=draftId,proto3" json:"draft_id,omitempty"` // UUID of the created draft
-	Slug          string                 `protobuf:"bytes,2,opt,name=slug,proto3" json:"slug,omitempty"`                      // Generated slug for the draft
-	Name          string                 `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`                      // Generated display name (e.g., "swift-fox-a1b2")
+	DraftId       string                 `protobuf:"bytes,1,opt,name=draft_id,json=draftId,proto3" json:"draft_id,omitempty"`                     // UUID of the created draft
+	Slug          string                 `protobuf:"bytes,2,opt,name=slug,proto3" json:"slug,omitempty"`                                          // Generated slug for the draft
+	Name          string                 `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`                                          // Generated display name (e.g., "swift-fox-a1b2")
+	Status        WorkflowDraftStatus    `protobuf:"varint,4,opt,name=status,proto3,enum=reliant.v1.WorkflowDraftStatus" json:"status,omitempty"` // Status the workflow was created with
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3312,6 +3447,157 @@ func (x *CreateWorkflowDraftResponse) GetName() string {
 	return ""
 }
 
+func (x *CreateWorkflowDraftResponse) GetStatus() WorkflowDraftStatus {
+	if x != nil {
+		return x.Status
+	}
+	return WorkflowDraftStatus_WORKFLOW_DRAFT_STATUS_UNSPECIFIED
+}
+
+type SetWorkflowStatusRequest struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	ProjectId       string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`                          // Required: project context
+	DraftId         string                 `protobuf:"bytes,2,opt,name=draft_id,json=draftId,proto3" json:"draft_id,omitempty"`                                // Required: the stored workflow
+	Status          WorkflowDraftStatus    `protobuf:"varint,3,opt,name=status,proto3,enum=reliant.v1.WorkflowDraftStatus" json:"status,omitempty"`            // Required: DRAFT or COMPLETE
+	ExpectedVersion *int64                 `protobuf:"varint,4,opt,name=expected_version,json=expectedVersion,proto3,oneof" json:"expected_version,omitempty"` // OCC: fails if the workflow changed since it was loaded
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *SetWorkflowStatusRequest) Reset() {
+	*x = SetWorkflowStatusRequest{}
+	mi := &file_reliant_v1_workflow_proto_msgTypes[46]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetWorkflowStatusRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetWorkflowStatusRequest) ProtoMessage() {}
+
+func (x *SetWorkflowStatusRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_workflow_proto_msgTypes[46]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetWorkflowStatusRequest.ProtoReflect.Descriptor instead.
+func (*SetWorkflowStatusRequest) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{46}
+}
+
+func (x *SetWorkflowStatusRequest) GetProjectId() string {
+	if x != nil {
+		return x.ProjectId
+	}
+	return ""
+}
+
+func (x *SetWorkflowStatusRequest) GetDraftId() string {
+	if x != nil {
+		return x.DraftId
+	}
+	return ""
+}
+
+func (x *SetWorkflowStatusRequest) GetStatus() WorkflowDraftStatus {
+	if x != nil {
+		return x.Status
+	}
+	return WorkflowDraftStatus_WORKFLOW_DRAFT_STATUS_UNSPECIFIED
+}
+
+func (x *SetWorkflowStatusRequest) GetExpectedVersion() int64 {
+	if x != nil && x.ExpectedVersion != nil {
+		return *x.ExpectedVersion
+	}
+	return 0
+}
+
+type SetWorkflowStatusResponse struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	Success          bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"` // False when COMPLETE was rejected by validation
+	Message          string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
+	Status           WorkflowDraftStatus    `protobuf:"varint,3,opt,name=status,proto3,enum=reliant.v1.WorkflowDraftStatus" json:"status,omitempty"`        // Status after the call
+	ValidationErrors []*ValidationError     `protobuf:"bytes,4,rep,name=validation_errors,json=validationErrors,proto3" json:"validation_errors,omitempty"` // Current findings (errors, then warnings)
+	Version          int64                  `protobuf:"varint,5,opt,name=version,proto3" json:"version,omitempty"`                                          // Version after the call (for OCC)
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *SetWorkflowStatusResponse) Reset() {
+	*x = SetWorkflowStatusResponse{}
+	mi := &file_reliant_v1_workflow_proto_msgTypes[47]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetWorkflowStatusResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetWorkflowStatusResponse) ProtoMessage() {}
+
+func (x *SetWorkflowStatusResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_workflow_proto_msgTypes[47]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetWorkflowStatusResponse.ProtoReflect.Descriptor instead.
+func (*SetWorkflowStatusResponse) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{47}
+}
+
+func (x *SetWorkflowStatusResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *SetWorkflowStatusResponse) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
+func (x *SetWorkflowStatusResponse) GetStatus() WorkflowDraftStatus {
+	if x != nil {
+		return x.Status
+	}
+	return WorkflowDraftStatus_WORKFLOW_DRAFT_STATUS_UNSPECIFIED
+}
+
+func (x *SetWorkflowStatusResponse) GetValidationErrors() []*ValidationError {
+	if x != nil {
+		return x.ValidationErrors
+	}
+	return nil
+}
+
+func (x *SetWorkflowStatusResponse) GetVersion() int64 {
+	if x != nil {
+		return x.Version
+	}
+	return 0
+}
+
 // AssociateChatWithWorkflowDraftRequest links a chat to a workflow draft.
 // Called after chat creation so tools can find the draft by chat ID.
 type AssociateChatWithWorkflowDraftRequest struct {
@@ -3324,7 +3610,7 @@ type AssociateChatWithWorkflowDraftRequest struct {
 
 func (x *AssociateChatWithWorkflowDraftRequest) Reset() {
 	*x = AssociateChatWithWorkflowDraftRequest{}
-	mi := &file_reliant_v1_workflow_proto_msgTypes[46]
+	mi := &file_reliant_v1_workflow_proto_msgTypes[48]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3336,7 +3622,7 @@ func (x *AssociateChatWithWorkflowDraftRequest) String() string {
 func (*AssociateChatWithWorkflowDraftRequest) ProtoMessage() {}
 
 func (x *AssociateChatWithWorkflowDraftRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_workflow_proto_msgTypes[46]
+	mi := &file_reliant_v1_workflow_proto_msgTypes[48]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3349,7 +3635,7 @@ func (x *AssociateChatWithWorkflowDraftRequest) ProtoReflect() protoreflect.Mess
 
 // Deprecated: Use AssociateChatWithWorkflowDraftRequest.ProtoReflect.Descriptor instead.
 func (*AssociateChatWithWorkflowDraftRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{46}
+	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{48}
 }
 
 func (x *AssociateChatWithWorkflowDraftRequest) GetChatId() string {
@@ -3374,7 +3660,7 @@ type AssociateChatWithWorkflowDraftResponse struct {
 
 func (x *AssociateChatWithWorkflowDraftResponse) Reset() {
 	*x = AssociateChatWithWorkflowDraftResponse{}
-	mi := &file_reliant_v1_workflow_proto_msgTypes[47]
+	mi := &file_reliant_v1_workflow_proto_msgTypes[49]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3386,7 +3672,7 @@ func (x *AssociateChatWithWorkflowDraftResponse) String() string {
 func (*AssociateChatWithWorkflowDraftResponse) ProtoMessage() {}
 
 func (x *AssociateChatWithWorkflowDraftResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_workflow_proto_msgTypes[47]
+	mi := &file_reliant_v1_workflow_proto_msgTypes[49]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3399,7 +3685,7 @@ func (x *AssociateChatWithWorkflowDraftResponse) ProtoReflect() protoreflect.Mes
 
 // Deprecated: Use AssociateChatWithWorkflowDraftResponse.ProtoReflect.Descriptor instead.
 func (*AssociateChatWithWorkflowDraftResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{47}
+	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{49}
 }
 
 var File_reliant_v1_workflow_proto protoreflect.FileDescriptor
@@ -3407,7 +3693,7 @@ var File_reliant_v1_workflow_proto protoreflect.FileDescriptor
 const file_reliant_v1_workflow_proto_rawDesc = "" +
 	"\n" +
 	"\x19reliant/v1/workflow.proto\x12\n" +
-	"reliant.v1\x1a\x1cgoogle/protobuf/struct.proto\x1a\x17reliant/v1/common.proto\x1a\x1creliant/v1/workflow_v2.proto\"\x81\x06\n" +
+	"reliant.v1\x1a\x1cgoogle/protobuf/struct.proto\x1a\x17reliant/v1/common.proto\x1a\x1creliant/v1/workflow_v2.proto\"\xf9\x06\n" +
 	"\x10WorkflowListItem\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1a\n" +
 	"\bfilename\x18\x02 \x01(\tR\bfilename\x12 \n" +
@@ -3424,9 +3710,10 @@ const file_reliant_v1_workflow_proto_rawDesc = "" +
 	"updated_at\x18\v \x01(\tH\x00R\tupdatedAt\x88\x01\x01\x12\x1b\n" +
 	"\tis_hidden\x18\f \x01(\bR\bisHidden\x12+\n" +
 	"\x0fbuilder_chat_id\x18\r \x01(\tH\x01R\rbuilderChatId\x88\x01\x01\x12*\n" +
-	"\x11has_preset_groups\x18\x0e \x01(\bR\x0fhasPresetGroups\x12\x19\n" +
-	"\bis_valid\x18\x0f \x01(\bR\aisValid\x12\x1e\n" +
-	"\bdraft_id\x18\x10 \x01(\tH\x02R\adraftId\x88\x01\x01\x1aL\n" +
+	"\x11has_preset_groups\x18\x0e \x01(\bR\x0fhasPresetGroups\x12\x1e\n" +
+	"\bdraft_id\x18\x10 \x01(\tH\x02R\adraftId\x88\x01\x01\x127\n" +
+	"\x06status\x18\x11 \x01(\x0e2\x1f.reliant.v1.WorkflowDraftStatusR\x06status\x12H\n" +
+	"\x11validation_errors\x18\x12 \x03(\v2\x1b.reliant.v1.ValidationErrorR\x10validationErrors\x1aL\n" +
 	"\vInputsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12'\n" +
 	"\x05value\x18\x02 \x01(\v2\x11.reliant.v1.InputR\x05value:\x028\x01\x1a:\n" +
@@ -3435,7 +3722,7 @@ const file_reliant_v1_workflow_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\r\n" +
 	"\v_updated_atB\x12\n" +
 	"\x10_builder_chat_idB\v\n" +
-	"\t_draft_id\"O\n" +
+	"\t_draft_idJ\x04\b\x0f\x10\x10R\bis_valid\"O\n" +
 	"\rHighlightSpan\x12\x14\n" +
 	"\x05start\x18\x01 \x01(\x05R\x05start\x12\x10\n" +
 	"\x03end\x18\x02 \x01(\x05R\x03end\x12\x16\n" +
@@ -3478,7 +3765,7 @@ const file_reliant_v1_workflow_proto_rawDesc = "" +
 	"worktreeId\x88\x01\x01\x12\x1e\n" +
 	"\bdraft_id\x18\x04 \x01(\tH\x01R\adraftId\x88\x01\x01B\x0e\n" +
 	"\f_worktree_idB\v\n" +
-	"\t_draft_id\"\xc1\x03\n" +
+	"\t_draft_id\"\xc4\x04\n" +
 	"\x13GetWorkflowResponse\x120\n" +
 	"\bworkflow\x18\x01 \x01(\v2\x14.reliant.v1.WorkflowR\bworkflow\x12\x16\n" +
 	"\x06source\x18\x02 \x01(\tR\x06source\x12\x1e\n" +
@@ -3491,7 +3778,9 @@ const file_reliant_v1_workflow_proto_rawDesc = "" +
 	"\vsource_path\x18\t \x01(\tH\x04R\n" +
 	"sourcePath\x88\x01\x01\x12'\n" +
 	"\x0fyaml_definition\x18\n" +
-	" \x01(\tR\x0eyamlDefinitionB\v\n" +
+	" \x01(\tR\x0eyamlDefinition\x127\n" +
+	"\x06status\x18\v \x01(\x0e2\x1f.reliant.v1.WorkflowDraftStatusR\x06status\x12H\n" +
+	"\x11validation_errors\x18\f \x03(\v2\x1b.reliant.v1.ValidationErrorR\x10validationErrorsB\v\n" +
 	"\t_draft_idB\x12\n" +
 	"\x10_builder_chat_idB\x0e\n" +
 	"\f_parse_errorB\x11\n" +
@@ -3529,7 +3818,7 @@ const file_reliant_v1_workflow_proto_rawDesc = "" +
 	"\x10workflow_updated\x18\x02 \x01(\bR\x0fworkflowUpdated\x120\n" +
 	"\bworkflow\x18\x03 \x01(\v2\x14.reliant.v1.WorkflowR\bworkflow\x127\n" +
 	"\n" +
-	"tool_calls\x18\x04 \x03(\v2\x18.reliant.v1.ToolCallInfoR\ttoolCalls\"\xba\x03\n" +
+	"tool_calls\x18\x04 \x03(\v2\x18.reliant.v1.ToolCallInfoR\ttoolCalls\"\xf3\x03\n" +
 	"\x13SaveWorkflowRequest\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x120\n" +
@@ -3542,12 +3831,13 @@ const file_reliant_v1_workflow_proto_rawDesc = "" +
 	"\vsource_path\x18\t \x01(\tH\x03R\n" +
 	"sourcePath\x88\x01\x01\x12\x1e\n" +
 	"\bdraft_id\x18\n" +
-	" \x01(\tH\x04R\adraftId\x88\x01\x01B\x0e\n" +
+	" \x01(\tH\x04R\adraftId\x88\x01\x01\x127\n" +
+	"\x06status\x18\v \x01(\x0e2\x1f.reliant.v1.WorkflowDraftStatusR\x06statusB\x0e\n" +
 	"\f_worktree_idB\x12\n" +
 	"\x10_builder_chat_idB\x13\n" +
 	"\x11_expected_versionB\x0e\n" +
 	"\f_source_pathB\v\n" +
-	"\t_draft_idJ\x04\b\a\x10\b\"\x8f\x03\n" +
+	"\t_draft_idJ\x04\b\a\x10\b\"\xc8\x03\n" +
 	"\x14SaveWorkflowResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\x120\n" +
@@ -3558,9 +3848,10 @@ const file_reliant_v1_workflow_proto_rawDesc = "" +
 	"\x04slug\x18\b \x01(\tR\x04slug\x12+\n" +
 	"\x0fbuilder_chat_id\x18\t \x01(\tH\x00R\rbuilderChatId\x88\x01\x01\x12\x18\n" +
 	"\aversion\x18\v \x01(\x03R\aversion\x12'\n" +
-	"\x0fyaml_definition\x18\f \x01(\tR\x0eyamlDefinitionB\x12\n" +
+	"\x0fyaml_definition\x18\f \x01(\tR\x0eyamlDefinition\x127\n" +
+	"\x06status\x18\r \x01(\x0e2\x1f.reliant.v1.WorkflowDraftStatusR\x06statusB\x12\n" +
 	"\x10_builder_chat_idJ\x04\b\n" +
-	"\x10\v\"\xdc\x01\n" +
+	"\x10\v\"\x95\x02\n" +
 	"\x15ImportWorkflowRequest\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12!\n" +
@@ -3568,8 +3859,9 @@ const file_reliant_v1_workflow_proto_rawDesc = "" +
 	"\x05scope\x18\x03 \x01(\x0e2\x17.reliant.v1.ConfigScopeR\x05scope\x12$\n" +
 	"\vworktree_id\x18\x04 \x01(\tH\x00R\n" +
 	"worktreeId\x88\x01\x01\x12\x1c\n" +
-	"\toverwrite\x18\x05 \x01(\bR\toverwriteB\x0e\n" +
-	"\f_worktree_id\"\xc4\x02\n" +
+	"\toverwrite\x18\x05 \x01(\bR\toverwrite\x127\n" +
+	"\x06status\x18\x06 \x01(\x0e2\x1f.reliant.v1.WorkflowDraftStatusR\x06statusB\x0e\n" +
+	"\f_worktree_id\"\xfd\x02\n" +
 	"\x16ImportWorkflowResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\x120\n" +
@@ -3580,7 +3872,9 @@ const file_reliant_v1_workflow_proto_rawDesc = "" +
 	"\x11validation_errors\x18\a \x03(\v2\x1b.reliant.v1.ValidationErrorR\x10validationErrors\x12\x1a\n" +
 	"\bconflict\x18\b \x01(\bR\bconflict\x12\x1f\n" +
 	"\vexisting_id\x18\t \x01(\tR\n" +
-	"existingId\"\x80\x01\n" +
+	"existingId\x127\n" +
+	"\x06status\x18\n" +
+	" \x01(\x0e2\x1f.reliant.v1.WorkflowDraftStatusR\x06status\"\x80\x01\n" +
 	"\x15ExportWorkflowRequest\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x12\n" +
@@ -3730,18 +4024,37 @@ const file_reliant_v1_workflow_proto_rawDesc = "" +
 	"scenarioId\"W\n" +
 	"\x16ExportScenarioResponse\x12!\n" +
 	"\fyaml_content\x18\x01 \x01(\tR\vyamlContent\x12\x1a\n" +
-	"\bfilename\x18\x02 \x01(\tR\bfilename\";\n" +
+	"\bfilename\x18\x02 \x01(\tR\bfilename\"t\n" +
 	"\x1aCreateWorkflowDraftRequest\x12\x1d\n" +
 	"\n" +
-	"project_id\x18\x01 \x01(\tR\tprojectId\"`\n" +
+	"project_id\x18\x01 \x01(\tR\tprojectId\x127\n" +
+	"\x06status\x18\x02 \x01(\x0e2\x1f.reliant.v1.WorkflowDraftStatusR\x06status\"\x99\x01\n" +
 	"\x1bCreateWorkflowDraftResponse\x12\x19\n" +
 	"\bdraft_id\x18\x01 \x01(\tR\adraftId\x12\x12\n" +
 	"\x04slug\x18\x02 \x01(\tR\x04slug\x12\x12\n" +
-	"\x04name\x18\x03 \x01(\tR\x04name\"[\n" +
+	"\x04name\x18\x03 \x01(\tR\x04name\x127\n" +
+	"\x06status\x18\x04 \x01(\x0e2\x1f.reliant.v1.WorkflowDraftStatusR\x06status\"\xd2\x01\n" +
+	"\x18SetWorkflowStatusRequest\x12\x1d\n" +
+	"\n" +
+	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x19\n" +
+	"\bdraft_id\x18\x02 \x01(\tR\adraftId\x127\n" +
+	"\x06status\x18\x03 \x01(\x0e2\x1f.reliant.v1.WorkflowDraftStatusR\x06status\x12.\n" +
+	"\x10expected_version\x18\x04 \x01(\x03H\x00R\x0fexpectedVersion\x88\x01\x01B\x13\n" +
+	"\x11_expected_version\"\xec\x01\n" +
+	"\x19SetWorkflowStatusResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\x127\n" +
+	"\x06status\x18\x03 \x01(\x0e2\x1f.reliant.v1.WorkflowDraftStatusR\x06status\x12H\n" +
+	"\x11validation_errors\x18\x04 \x03(\v2\x1b.reliant.v1.ValidationErrorR\x10validationErrors\x12\x18\n" +
+	"\aversion\x18\x05 \x01(\x03R\aversion\"[\n" +
 	"%AssociateChatWithWorkflowDraftRequest\x12\x17\n" +
 	"\achat_id\x18\x01 \x01(\tR\x06chatId\x12\x19\n" +
 	"\bdraft_id\x18\x02 \x01(\tR\adraftId\"(\n" +
-	"&AssociateChatWithWorkflowDraftResponse2\x8f\t\n" +
+	"&AssociateChatWithWorkflowDraftResponse*\x81\x01\n" +
+	"\x13WorkflowDraftStatus\x12%\n" +
+	"!WORKFLOW_DRAFT_STATUS_UNSPECIFIED\x10\x00\x12\x1f\n" +
+	"\x1bWORKFLOW_DRAFT_STATUS_DRAFT\x10\x01\x12\"\n" +
+	"\x1eWORKFLOW_DRAFT_STATUS_COMPLETE\x10\x022\xf3\t\n" +
 	"\x0fWorkflowService\x12V\n" +
 	"\rListWorkflows\x12 .reliant.v1.ListWorkflowsRequest\x1a!.reliant.v1.ListWorkflowsResponse\"\x00\x12S\n" +
 	"\fSaveWorkflow\x12\x1f.reliant.v1.SaveWorkflowRequest\x1a .reliant.v1.SaveWorkflowResponse\"\x00\x12P\n" +
@@ -3754,7 +4067,8 @@ const file_reliant_v1_workflow_proto_rawDesc = "" +
 	"\fCopyWorkflow\x12\x1f.reliant.v1.CopyWorkflowRequest\x1a .reliant.v1.CopyWorkflowResponse\"\x00\x12P\n" +
 	"\vBuilderChat\x12\x1e.reliant.v1.BuilderChatRequest\x1a\x1f.reliant.v1.BuilderChatResponse\"\x00\x12h\n" +
 	"\x13CreateWorkflowDraft\x12&.reliant.v1.CreateWorkflowDraftRequest\x1a'.reliant.v1.CreateWorkflowDraftResponse\"\x00\x12\x89\x01\n" +
-	"\x1eAssociateChatWithWorkflowDraft\x121.reliant.v1.AssociateChatWithWorkflowDraftRequest\x1a2.reliant.v1.AssociateChatWithWorkflowDraftResponse\"\x002\xa7\x04\n" +
+	"\x1eAssociateChatWithWorkflowDraft\x121.reliant.v1.AssociateChatWithWorkflowDraftRequest\x1a2.reliant.v1.AssociateChatWithWorkflowDraftResponse\"\x00\x12b\n" +
+	"\x11SetWorkflowStatus\x12$.reliant.v1.SetWorkflowStatusRequest\x1a%.reliant.v1.SetWorkflowStatusResponse\"\x002\xa7\x04\n" +
 	"\x0fScenarioService\x12V\n" +
 	"\rListScenarios\x12 .reliant.v1.ListScenariosRequest\x1a!.reliant.v1.ListScenariosResponse\"\x00\x12Y\n" +
 	"\x0eCreateScenario\x12!.reliant.v1.CreateScenarioRequest\x1a\".reliant.v1.CreateScenarioResponse\"\x00\x12P\n" +
@@ -3775,145 +4089,164 @@ func file_reliant_v1_workflow_proto_rawDescGZIP() []byte {
 	return file_reliant_v1_workflow_proto_rawDescData
 }
 
-var file_reliant_v1_workflow_proto_msgTypes = make([]protoimpl.MessageInfo, 50)
+var file_reliant_v1_workflow_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_reliant_v1_workflow_proto_msgTypes = make([]protoimpl.MessageInfo, 52)
 var file_reliant_v1_workflow_proto_goTypes = []any{
-	(*WorkflowListItem)(nil),                       // 0: reliant.v1.WorkflowListItem
-	(*HighlightSpan)(nil),                          // 1: reliant.v1.HighlightSpan
-	(*ValidationError)(nil),                        // 2: reliant.v1.ValidationError
-	(*ListWorkflowsRequest)(nil),                   // 3: reliant.v1.ListWorkflowsRequest
-	(*ListWorkflowsResponse)(nil),                  // 4: reliant.v1.ListWorkflowsResponse
-	(*InvalidWorkflow)(nil),                        // 5: reliant.v1.InvalidWorkflow
-	(*GetWorkflowRequest)(nil),                     // 6: reliant.v1.GetWorkflowRequest
-	(*GetWorkflowResponse)(nil),                    // 7: reliant.v1.GetWorkflowResponse
-	(*DeleteWorkflowRequest)(nil),                  // 8: reliant.v1.DeleteWorkflowRequest
-	(*DeleteWorkflowResponse)(nil),                 // 9: reliant.v1.DeleteWorkflowResponse
-	(*ValidateWorkflowRequest)(nil),                // 10: reliant.v1.ValidateWorkflowRequest
-	(*ValidateWorkflowResponse)(nil),               // 11: reliant.v1.ValidateWorkflowResponse
-	(*BuilderChatRequest)(nil),                     // 12: reliant.v1.BuilderChatRequest
-	(*ToolCallInfo)(nil),                           // 13: reliant.v1.ToolCallInfo
-	(*BuilderChatResponse)(nil),                    // 14: reliant.v1.BuilderChatResponse
-	(*SaveWorkflowRequest)(nil),                    // 15: reliant.v1.SaveWorkflowRequest
-	(*SaveWorkflowResponse)(nil),                   // 16: reliant.v1.SaveWorkflowResponse
-	(*ImportWorkflowRequest)(nil),                  // 17: reliant.v1.ImportWorkflowRequest
-	(*ImportWorkflowResponse)(nil),                 // 18: reliant.v1.ImportWorkflowResponse
-	(*ExportWorkflowRequest)(nil),                  // 19: reliant.v1.ExportWorkflowRequest
-	(*ExportWorkflowResponse)(nil),                 // 20: reliant.v1.ExportWorkflowResponse
-	(*SetWorkflowVisibilityRequest)(nil),           // 21: reliant.v1.SetWorkflowVisibilityRequest
-	(*SetWorkflowVisibilityResponse)(nil),          // 22: reliant.v1.SetWorkflowVisibilityResponse
-	(*CopyWorkflowRequest)(nil),                    // 23: reliant.v1.CopyWorkflowRequest
-	(*CopyWorkflowResponse)(nil),                   // 24: reliant.v1.CopyWorkflowResponse
-	(*SimulatedEvent)(nil),                         // 25: reliant.v1.SimulatedEvent
-	(*ScenarioExpectation)(nil),                    // 26: reliant.v1.ScenarioExpectation
-	(*ScenarioDefinition)(nil),                     // 27: reliant.v1.ScenarioDefinition
-	(*ErrorDetails)(nil),                           // 28: reliant.v1.ErrorDetails
-	(*ExecutionDetails)(nil),                       // 29: reliant.v1.ExecutionDetails
-	(*ScenarioResult)(nil),                         // 30: reliant.v1.ScenarioResult
-	(*Scenario)(nil),                               // 31: reliant.v1.Scenario
-	(*ListScenariosRequest)(nil),                   // 32: reliant.v1.ListScenariosRequest
-	(*ListScenariosResponse)(nil),                  // 33: reliant.v1.ListScenariosResponse
-	(*CreateScenarioRequest)(nil),                  // 34: reliant.v1.CreateScenarioRequest
-	(*CreateScenarioResponse)(nil),                 // 35: reliant.v1.CreateScenarioResponse
-	(*RunScenarioRequest)(nil),                     // 36: reliant.v1.RunScenarioRequest
-	(*RunScenarioResponse)(nil),                    // 37: reliant.v1.RunScenarioResponse
-	(*DeleteScenarioRequest)(nil),                  // 38: reliant.v1.DeleteScenarioRequest
-	(*DeleteScenarioResponse)(nil),                 // 39: reliant.v1.DeleteScenarioResponse
-	(*UploadScenarioRequest)(nil),                  // 40: reliant.v1.UploadScenarioRequest
-	(*UploadScenarioResponse)(nil),                 // 41: reliant.v1.UploadScenarioResponse
-	(*ExportScenarioRequest)(nil),                  // 42: reliant.v1.ExportScenarioRequest
-	(*ExportScenarioResponse)(nil),                 // 43: reliant.v1.ExportScenarioResponse
-	(*CreateWorkflowDraftRequest)(nil),             // 44: reliant.v1.CreateWorkflowDraftRequest
-	(*CreateWorkflowDraftResponse)(nil),            // 45: reliant.v1.CreateWorkflowDraftResponse
-	(*AssociateChatWithWorkflowDraftRequest)(nil),  // 46: reliant.v1.AssociateChatWithWorkflowDraftRequest
-	(*AssociateChatWithWorkflowDraftResponse)(nil), // 47: reliant.v1.AssociateChatWithWorkflowDraftResponse
-	nil,              // 48: reliant.v1.WorkflowListItem.InputsEntry
-	nil,              // 49: reliant.v1.WorkflowListItem.OutputsEntry
-	(*Node)(nil),     // 50: reliant.v1.Node
-	(*Edge)(nil),     // 51: reliant.v1.Edge
-	(*Workflow)(nil), // 52: reliant.v1.Workflow
-	(ConfigScope)(0), // 53: reliant.v1.ConfigScope
-	(*Input)(nil),    // 54: reliant.v1.Input
+	(WorkflowDraftStatus)(0),                       // 0: reliant.v1.WorkflowDraftStatus
+	(*WorkflowListItem)(nil),                       // 1: reliant.v1.WorkflowListItem
+	(*HighlightSpan)(nil),                          // 2: reliant.v1.HighlightSpan
+	(*ValidationError)(nil),                        // 3: reliant.v1.ValidationError
+	(*ListWorkflowsRequest)(nil),                   // 4: reliant.v1.ListWorkflowsRequest
+	(*ListWorkflowsResponse)(nil),                  // 5: reliant.v1.ListWorkflowsResponse
+	(*InvalidWorkflow)(nil),                        // 6: reliant.v1.InvalidWorkflow
+	(*GetWorkflowRequest)(nil),                     // 7: reliant.v1.GetWorkflowRequest
+	(*GetWorkflowResponse)(nil),                    // 8: reliant.v1.GetWorkflowResponse
+	(*DeleteWorkflowRequest)(nil),                  // 9: reliant.v1.DeleteWorkflowRequest
+	(*DeleteWorkflowResponse)(nil),                 // 10: reliant.v1.DeleteWorkflowResponse
+	(*ValidateWorkflowRequest)(nil),                // 11: reliant.v1.ValidateWorkflowRequest
+	(*ValidateWorkflowResponse)(nil),               // 12: reliant.v1.ValidateWorkflowResponse
+	(*BuilderChatRequest)(nil),                     // 13: reliant.v1.BuilderChatRequest
+	(*ToolCallInfo)(nil),                           // 14: reliant.v1.ToolCallInfo
+	(*BuilderChatResponse)(nil),                    // 15: reliant.v1.BuilderChatResponse
+	(*SaveWorkflowRequest)(nil),                    // 16: reliant.v1.SaveWorkflowRequest
+	(*SaveWorkflowResponse)(nil),                   // 17: reliant.v1.SaveWorkflowResponse
+	(*ImportWorkflowRequest)(nil),                  // 18: reliant.v1.ImportWorkflowRequest
+	(*ImportWorkflowResponse)(nil),                 // 19: reliant.v1.ImportWorkflowResponse
+	(*ExportWorkflowRequest)(nil),                  // 20: reliant.v1.ExportWorkflowRequest
+	(*ExportWorkflowResponse)(nil),                 // 21: reliant.v1.ExportWorkflowResponse
+	(*SetWorkflowVisibilityRequest)(nil),           // 22: reliant.v1.SetWorkflowVisibilityRequest
+	(*SetWorkflowVisibilityResponse)(nil),          // 23: reliant.v1.SetWorkflowVisibilityResponse
+	(*CopyWorkflowRequest)(nil),                    // 24: reliant.v1.CopyWorkflowRequest
+	(*CopyWorkflowResponse)(nil),                   // 25: reliant.v1.CopyWorkflowResponse
+	(*SimulatedEvent)(nil),                         // 26: reliant.v1.SimulatedEvent
+	(*ScenarioExpectation)(nil),                    // 27: reliant.v1.ScenarioExpectation
+	(*ScenarioDefinition)(nil),                     // 28: reliant.v1.ScenarioDefinition
+	(*ErrorDetails)(nil),                           // 29: reliant.v1.ErrorDetails
+	(*ExecutionDetails)(nil),                       // 30: reliant.v1.ExecutionDetails
+	(*ScenarioResult)(nil),                         // 31: reliant.v1.ScenarioResult
+	(*Scenario)(nil),                               // 32: reliant.v1.Scenario
+	(*ListScenariosRequest)(nil),                   // 33: reliant.v1.ListScenariosRequest
+	(*ListScenariosResponse)(nil),                  // 34: reliant.v1.ListScenariosResponse
+	(*CreateScenarioRequest)(nil),                  // 35: reliant.v1.CreateScenarioRequest
+	(*CreateScenarioResponse)(nil),                 // 36: reliant.v1.CreateScenarioResponse
+	(*RunScenarioRequest)(nil),                     // 37: reliant.v1.RunScenarioRequest
+	(*RunScenarioResponse)(nil),                    // 38: reliant.v1.RunScenarioResponse
+	(*DeleteScenarioRequest)(nil),                  // 39: reliant.v1.DeleteScenarioRequest
+	(*DeleteScenarioResponse)(nil),                 // 40: reliant.v1.DeleteScenarioResponse
+	(*UploadScenarioRequest)(nil),                  // 41: reliant.v1.UploadScenarioRequest
+	(*UploadScenarioResponse)(nil),                 // 42: reliant.v1.UploadScenarioResponse
+	(*ExportScenarioRequest)(nil),                  // 43: reliant.v1.ExportScenarioRequest
+	(*ExportScenarioResponse)(nil),                 // 44: reliant.v1.ExportScenarioResponse
+	(*CreateWorkflowDraftRequest)(nil),             // 45: reliant.v1.CreateWorkflowDraftRequest
+	(*CreateWorkflowDraftResponse)(nil),            // 46: reliant.v1.CreateWorkflowDraftResponse
+	(*SetWorkflowStatusRequest)(nil),               // 47: reliant.v1.SetWorkflowStatusRequest
+	(*SetWorkflowStatusResponse)(nil),              // 48: reliant.v1.SetWorkflowStatusResponse
+	(*AssociateChatWithWorkflowDraftRequest)(nil),  // 49: reliant.v1.AssociateChatWithWorkflowDraftRequest
+	(*AssociateChatWithWorkflowDraftResponse)(nil), // 50: reliant.v1.AssociateChatWithWorkflowDraftResponse
+	nil,              // 51: reliant.v1.WorkflowListItem.InputsEntry
+	nil,              // 52: reliant.v1.WorkflowListItem.OutputsEntry
+	(*Node)(nil),     // 53: reliant.v1.Node
+	(*Edge)(nil),     // 54: reliant.v1.Edge
+	(*Workflow)(nil), // 55: reliant.v1.Workflow
+	(ConfigScope)(0), // 56: reliant.v1.ConfigScope
+	(*Input)(nil),    // 57: reliant.v1.Input
 }
 var file_reliant_v1_workflow_proto_depIdxs = []int32{
-	50, // 0: reliant.v1.WorkflowListItem.nodes:type_name -> reliant.v1.Node
-	51, // 1: reliant.v1.WorkflowListItem.edges:type_name -> reliant.v1.Edge
-	48, // 2: reliant.v1.WorkflowListItem.inputs:type_name -> reliant.v1.WorkflowListItem.InputsEntry
-	49, // 3: reliant.v1.WorkflowListItem.outputs:type_name -> reliant.v1.WorkflowListItem.OutputsEntry
-	1,  // 4: reliant.v1.ValidationError.highlights:type_name -> reliant.v1.HighlightSpan
-	0,  // 5: reliant.v1.ListWorkflowsResponse.workflows:type_name -> reliant.v1.WorkflowListItem
-	5,  // 6: reliant.v1.ListWorkflowsResponse.invalid_workflows:type_name -> reliant.v1.InvalidWorkflow
-	52, // 7: reliant.v1.GetWorkflowResponse.workflow:type_name -> reliant.v1.Workflow
-	52, // 8: reliant.v1.ValidateWorkflowRequest.workflow:type_name -> reliant.v1.Workflow
-	2,  // 9: reliant.v1.ValidateWorkflowResponse.errors:type_name -> reliant.v1.ValidationError
-	52, // 10: reliant.v1.BuilderChatRequest.workflow:type_name -> reliant.v1.Workflow
-	52, // 11: reliant.v1.BuilderChatResponse.workflow:type_name -> reliant.v1.Workflow
-	13, // 12: reliant.v1.BuilderChatResponse.tool_calls:type_name -> reliant.v1.ToolCallInfo
-	52, // 13: reliant.v1.SaveWorkflowRequest.workflow:type_name -> reliant.v1.Workflow
-	53, // 14: reliant.v1.SaveWorkflowRequest.scope:type_name -> reliant.v1.ConfigScope
-	52, // 15: reliant.v1.SaveWorkflowResponse.workflow:type_name -> reliant.v1.Workflow
-	2,  // 16: reliant.v1.SaveWorkflowResponse.validation_errors:type_name -> reliant.v1.ValidationError
-	53, // 17: reliant.v1.ImportWorkflowRequest.scope:type_name -> reliant.v1.ConfigScope
-	52, // 18: reliant.v1.ImportWorkflowResponse.workflow:type_name -> reliant.v1.Workflow
-	2,  // 19: reliant.v1.ImportWorkflowResponse.validation_errors:type_name -> reliant.v1.ValidationError
-	52, // 20: reliant.v1.ExportWorkflowResponse.workflow:type_name -> reliant.v1.Workflow
-	0,  // 21: reliant.v1.SetWorkflowVisibilityResponse.workflow:type_name -> reliant.v1.WorkflowListItem
-	52, // 22: reliant.v1.CopyWorkflowResponse.workflow:type_name -> reliant.v1.Workflow
-	25, // 23: reliant.v1.ScenarioDefinition.events:type_name -> reliant.v1.SimulatedEvent
-	26, // 24: reliant.v1.ScenarioDefinition.expect:type_name -> reliant.v1.ScenarioExpectation
-	28, // 25: reliant.v1.ExecutionDetails.error:type_name -> reliant.v1.ErrorDetails
-	29, // 26: reliant.v1.ScenarioResult.execution:type_name -> reliant.v1.ExecutionDetails
-	26, // 27: reliant.v1.ScenarioResult.expected:type_name -> reliant.v1.ScenarioExpectation
-	25, // 28: reliant.v1.Scenario.events:type_name -> reliant.v1.SimulatedEvent
-	26, // 29: reliant.v1.Scenario.expect:type_name -> reliant.v1.ScenarioExpectation
-	30, // 30: reliant.v1.Scenario.last_run_result:type_name -> reliant.v1.ScenarioResult
-	31, // 31: reliant.v1.ListScenariosResponse.scenarios:type_name -> reliant.v1.Scenario
-	27, // 32: reliant.v1.CreateScenarioRequest.scenario:type_name -> reliant.v1.ScenarioDefinition
-	31, // 33: reliant.v1.CreateScenarioResponse.scenario:type_name -> reliant.v1.Scenario
-	30, // 34: reliant.v1.CreateScenarioResponse.result:type_name -> reliant.v1.ScenarioResult
-	27, // 35: reliant.v1.RunScenarioRequest.scenario:type_name -> reliant.v1.ScenarioDefinition
-	30, // 36: reliant.v1.RunScenarioResponse.result:type_name -> reliant.v1.ScenarioResult
-	31, // 37: reliant.v1.UploadScenarioResponse.scenario:type_name -> reliant.v1.Scenario
-	54, // 38: reliant.v1.WorkflowListItem.InputsEntry.value:type_name -> reliant.v1.Input
-	3,  // 39: reliant.v1.WorkflowService.ListWorkflows:input_type -> reliant.v1.ListWorkflowsRequest
-	15, // 40: reliant.v1.WorkflowService.SaveWorkflow:input_type -> reliant.v1.SaveWorkflowRequest
-	6,  // 41: reliant.v1.WorkflowService.GetWorkflow:input_type -> reliant.v1.GetWorkflowRequest
-	8,  // 42: reliant.v1.WorkflowService.DeleteWorkflow:input_type -> reliant.v1.DeleteWorkflowRequest
-	10, // 43: reliant.v1.WorkflowService.ValidateWorkflow:input_type -> reliant.v1.ValidateWorkflowRequest
-	17, // 44: reliant.v1.WorkflowService.ImportWorkflow:input_type -> reliant.v1.ImportWorkflowRequest
-	19, // 45: reliant.v1.WorkflowService.ExportWorkflow:input_type -> reliant.v1.ExportWorkflowRequest
-	21, // 46: reliant.v1.WorkflowService.SetWorkflowVisibility:input_type -> reliant.v1.SetWorkflowVisibilityRequest
-	23, // 47: reliant.v1.WorkflowService.CopyWorkflow:input_type -> reliant.v1.CopyWorkflowRequest
-	12, // 48: reliant.v1.WorkflowService.BuilderChat:input_type -> reliant.v1.BuilderChatRequest
-	44, // 49: reliant.v1.WorkflowService.CreateWorkflowDraft:input_type -> reliant.v1.CreateWorkflowDraftRequest
-	46, // 50: reliant.v1.WorkflowService.AssociateChatWithWorkflowDraft:input_type -> reliant.v1.AssociateChatWithWorkflowDraftRequest
-	32, // 51: reliant.v1.ScenarioService.ListScenarios:input_type -> reliant.v1.ListScenariosRequest
-	34, // 52: reliant.v1.ScenarioService.CreateScenario:input_type -> reliant.v1.CreateScenarioRequest
-	36, // 53: reliant.v1.ScenarioService.RunScenario:input_type -> reliant.v1.RunScenarioRequest
-	38, // 54: reliant.v1.ScenarioService.DeleteScenario:input_type -> reliant.v1.DeleteScenarioRequest
-	40, // 55: reliant.v1.ScenarioService.UploadScenario:input_type -> reliant.v1.UploadScenarioRequest
-	42, // 56: reliant.v1.ScenarioService.ExportScenario:input_type -> reliant.v1.ExportScenarioRequest
-	4,  // 57: reliant.v1.WorkflowService.ListWorkflows:output_type -> reliant.v1.ListWorkflowsResponse
-	16, // 58: reliant.v1.WorkflowService.SaveWorkflow:output_type -> reliant.v1.SaveWorkflowResponse
-	7,  // 59: reliant.v1.WorkflowService.GetWorkflow:output_type -> reliant.v1.GetWorkflowResponse
-	9,  // 60: reliant.v1.WorkflowService.DeleteWorkflow:output_type -> reliant.v1.DeleteWorkflowResponse
-	11, // 61: reliant.v1.WorkflowService.ValidateWorkflow:output_type -> reliant.v1.ValidateWorkflowResponse
-	18, // 62: reliant.v1.WorkflowService.ImportWorkflow:output_type -> reliant.v1.ImportWorkflowResponse
-	20, // 63: reliant.v1.WorkflowService.ExportWorkflow:output_type -> reliant.v1.ExportWorkflowResponse
-	22, // 64: reliant.v1.WorkflowService.SetWorkflowVisibility:output_type -> reliant.v1.SetWorkflowVisibilityResponse
-	24, // 65: reliant.v1.WorkflowService.CopyWorkflow:output_type -> reliant.v1.CopyWorkflowResponse
-	14, // 66: reliant.v1.WorkflowService.BuilderChat:output_type -> reliant.v1.BuilderChatResponse
-	45, // 67: reliant.v1.WorkflowService.CreateWorkflowDraft:output_type -> reliant.v1.CreateWorkflowDraftResponse
-	47, // 68: reliant.v1.WorkflowService.AssociateChatWithWorkflowDraft:output_type -> reliant.v1.AssociateChatWithWorkflowDraftResponse
-	33, // 69: reliant.v1.ScenarioService.ListScenarios:output_type -> reliant.v1.ListScenariosResponse
-	35, // 70: reliant.v1.ScenarioService.CreateScenario:output_type -> reliant.v1.CreateScenarioResponse
-	37, // 71: reliant.v1.ScenarioService.RunScenario:output_type -> reliant.v1.RunScenarioResponse
-	39, // 72: reliant.v1.ScenarioService.DeleteScenario:output_type -> reliant.v1.DeleteScenarioResponse
-	41, // 73: reliant.v1.ScenarioService.UploadScenario:output_type -> reliant.v1.UploadScenarioResponse
-	43, // 74: reliant.v1.ScenarioService.ExportScenario:output_type -> reliant.v1.ExportScenarioResponse
-	57, // [57:75] is the sub-list for method output_type
-	39, // [39:57] is the sub-list for method input_type
-	39, // [39:39] is the sub-list for extension type_name
-	39, // [39:39] is the sub-list for extension extendee
-	0,  // [0:39] is the sub-list for field type_name
+	53, // 0: reliant.v1.WorkflowListItem.nodes:type_name -> reliant.v1.Node
+	54, // 1: reliant.v1.WorkflowListItem.edges:type_name -> reliant.v1.Edge
+	51, // 2: reliant.v1.WorkflowListItem.inputs:type_name -> reliant.v1.WorkflowListItem.InputsEntry
+	52, // 3: reliant.v1.WorkflowListItem.outputs:type_name -> reliant.v1.WorkflowListItem.OutputsEntry
+	0,  // 4: reliant.v1.WorkflowListItem.status:type_name -> reliant.v1.WorkflowDraftStatus
+	3,  // 5: reliant.v1.WorkflowListItem.validation_errors:type_name -> reliant.v1.ValidationError
+	2,  // 6: reliant.v1.ValidationError.highlights:type_name -> reliant.v1.HighlightSpan
+	1,  // 7: reliant.v1.ListWorkflowsResponse.workflows:type_name -> reliant.v1.WorkflowListItem
+	6,  // 8: reliant.v1.ListWorkflowsResponse.invalid_workflows:type_name -> reliant.v1.InvalidWorkflow
+	55, // 9: reliant.v1.GetWorkflowResponse.workflow:type_name -> reliant.v1.Workflow
+	0,  // 10: reliant.v1.GetWorkflowResponse.status:type_name -> reliant.v1.WorkflowDraftStatus
+	3,  // 11: reliant.v1.GetWorkflowResponse.validation_errors:type_name -> reliant.v1.ValidationError
+	55, // 12: reliant.v1.ValidateWorkflowRequest.workflow:type_name -> reliant.v1.Workflow
+	3,  // 13: reliant.v1.ValidateWorkflowResponse.errors:type_name -> reliant.v1.ValidationError
+	55, // 14: reliant.v1.BuilderChatRequest.workflow:type_name -> reliant.v1.Workflow
+	55, // 15: reliant.v1.BuilderChatResponse.workflow:type_name -> reliant.v1.Workflow
+	14, // 16: reliant.v1.BuilderChatResponse.tool_calls:type_name -> reliant.v1.ToolCallInfo
+	55, // 17: reliant.v1.SaveWorkflowRequest.workflow:type_name -> reliant.v1.Workflow
+	56, // 18: reliant.v1.SaveWorkflowRequest.scope:type_name -> reliant.v1.ConfigScope
+	0,  // 19: reliant.v1.SaveWorkflowRequest.status:type_name -> reliant.v1.WorkflowDraftStatus
+	55, // 20: reliant.v1.SaveWorkflowResponse.workflow:type_name -> reliant.v1.Workflow
+	3,  // 21: reliant.v1.SaveWorkflowResponse.validation_errors:type_name -> reliant.v1.ValidationError
+	0,  // 22: reliant.v1.SaveWorkflowResponse.status:type_name -> reliant.v1.WorkflowDraftStatus
+	56, // 23: reliant.v1.ImportWorkflowRequest.scope:type_name -> reliant.v1.ConfigScope
+	0,  // 24: reliant.v1.ImportWorkflowRequest.status:type_name -> reliant.v1.WorkflowDraftStatus
+	55, // 25: reliant.v1.ImportWorkflowResponse.workflow:type_name -> reliant.v1.Workflow
+	3,  // 26: reliant.v1.ImportWorkflowResponse.validation_errors:type_name -> reliant.v1.ValidationError
+	0,  // 27: reliant.v1.ImportWorkflowResponse.status:type_name -> reliant.v1.WorkflowDraftStatus
+	55, // 28: reliant.v1.ExportWorkflowResponse.workflow:type_name -> reliant.v1.Workflow
+	1,  // 29: reliant.v1.SetWorkflowVisibilityResponse.workflow:type_name -> reliant.v1.WorkflowListItem
+	55, // 30: reliant.v1.CopyWorkflowResponse.workflow:type_name -> reliant.v1.Workflow
+	26, // 31: reliant.v1.ScenarioDefinition.events:type_name -> reliant.v1.SimulatedEvent
+	27, // 32: reliant.v1.ScenarioDefinition.expect:type_name -> reliant.v1.ScenarioExpectation
+	29, // 33: reliant.v1.ExecutionDetails.error:type_name -> reliant.v1.ErrorDetails
+	30, // 34: reliant.v1.ScenarioResult.execution:type_name -> reliant.v1.ExecutionDetails
+	27, // 35: reliant.v1.ScenarioResult.expected:type_name -> reliant.v1.ScenarioExpectation
+	26, // 36: reliant.v1.Scenario.events:type_name -> reliant.v1.SimulatedEvent
+	27, // 37: reliant.v1.Scenario.expect:type_name -> reliant.v1.ScenarioExpectation
+	31, // 38: reliant.v1.Scenario.last_run_result:type_name -> reliant.v1.ScenarioResult
+	32, // 39: reliant.v1.ListScenariosResponse.scenarios:type_name -> reliant.v1.Scenario
+	28, // 40: reliant.v1.CreateScenarioRequest.scenario:type_name -> reliant.v1.ScenarioDefinition
+	32, // 41: reliant.v1.CreateScenarioResponse.scenario:type_name -> reliant.v1.Scenario
+	31, // 42: reliant.v1.CreateScenarioResponse.result:type_name -> reliant.v1.ScenarioResult
+	28, // 43: reliant.v1.RunScenarioRequest.scenario:type_name -> reliant.v1.ScenarioDefinition
+	31, // 44: reliant.v1.RunScenarioResponse.result:type_name -> reliant.v1.ScenarioResult
+	32, // 45: reliant.v1.UploadScenarioResponse.scenario:type_name -> reliant.v1.Scenario
+	0,  // 46: reliant.v1.CreateWorkflowDraftRequest.status:type_name -> reliant.v1.WorkflowDraftStatus
+	0,  // 47: reliant.v1.CreateWorkflowDraftResponse.status:type_name -> reliant.v1.WorkflowDraftStatus
+	0,  // 48: reliant.v1.SetWorkflowStatusRequest.status:type_name -> reliant.v1.WorkflowDraftStatus
+	0,  // 49: reliant.v1.SetWorkflowStatusResponse.status:type_name -> reliant.v1.WorkflowDraftStatus
+	3,  // 50: reliant.v1.SetWorkflowStatusResponse.validation_errors:type_name -> reliant.v1.ValidationError
+	57, // 51: reliant.v1.WorkflowListItem.InputsEntry.value:type_name -> reliant.v1.Input
+	4,  // 52: reliant.v1.WorkflowService.ListWorkflows:input_type -> reliant.v1.ListWorkflowsRequest
+	16, // 53: reliant.v1.WorkflowService.SaveWorkflow:input_type -> reliant.v1.SaveWorkflowRequest
+	7,  // 54: reliant.v1.WorkflowService.GetWorkflow:input_type -> reliant.v1.GetWorkflowRequest
+	9,  // 55: reliant.v1.WorkflowService.DeleteWorkflow:input_type -> reliant.v1.DeleteWorkflowRequest
+	11, // 56: reliant.v1.WorkflowService.ValidateWorkflow:input_type -> reliant.v1.ValidateWorkflowRequest
+	18, // 57: reliant.v1.WorkflowService.ImportWorkflow:input_type -> reliant.v1.ImportWorkflowRequest
+	20, // 58: reliant.v1.WorkflowService.ExportWorkflow:input_type -> reliant.v1.ExportWorkflowRequest
+	22, // 59: reliant.v1.WorkflowService.SetWorkflowVisibility:input_type -> reliant.v1.SetWorkflowVisibilityRequest
+	24, // 60: reliant.v1.WorkflowService.CopyWorkflow:input_type -> reliant.v1.CopyWorkflowRequest
+	13, // 61: reliant.v1.WorkflowService.BuilderChat:input_type -> reliant.v1.BuilderChatRequest
+	45, // 62: reliant.v1.WorkflowService.CreateWorkflowDraft:input_type -> reliant.v1.CreateWorkflowDraftRequest
+	49, // 63: reliant.v1.WorkflowService.AssociateChatWithWorkflowDraft:input_type -> reliant.v1.AssociateChatWithWorkflowDraftRequest
+	47, // 64: reliant.v1.WorkflowService.SetWorkflowStatus:input_type -> reliant.v1.SetWorkflowStatusRequest
+	33, // 65: reliant.v1.ScenarioService.ListScenarios:input_type -> reliant.v1.ListScenariosRequest
+	35, // 66: reliant.v1.ScenarioService.CreateScenario:input_type -> reliant.v1.CreateScenarioRequest
+	37, // 67: reliant.v1.ScenarioService.RunScenario:input_type -> reliant.v1.RunScenarioRequest
+	39, // 68: reliant.v1.ScenarioService.DeleteScenario:input_type -> reliant.v1.DeleteScenarioRequest
+	41, // 69: reliant.v1.ScenarioService.UploadScenario:input_type -> reliant.v1.UploadScenarioRequest
+	43, // 70: reliant.v1.ScenarioService.ExportScenario:input_type -> reliant.v1.ExportScenarioRequest
+	5,  // 71: reliant.v1.WorkflowService.ListWorkflows:output_type -> reliant.v1.ListWorkflowsResponse
+	17, // 72: reliant.v1.WorkflowService.SaveWorkflow:output_type -> reliant.v1.SaveWorkflowResponse
+	8,  // 73: reliant.v1.WorkflowService.GetWorkflow:output_type -> reliant.v1.GetWorkflowResponse
+	10, // 74: reliant.v1.WorkflowService.DeleteWorkflow:output_type -> reliant.v1.DeleteWorkflowResponse
+	12, // 75: reliant.v1.WorkflowService.ValidateWorkflow:output_type -> reliant.v1.ValidateWorkflowResponse
+	19, // 76: reliant.v1.WorkflowService.ImportWorkflow:output_type -> reliant.v1.ImportWorkflowResponse
+	21, // 77: reliant.v1.WorkflowService.ExportWorkflow:output_type -> reliant.v1.ExportWorkflowResponse
+	23, // 78: reliant.v1.WorkflowService.SetWorkflowVisibility:output_type -> reliant.v1.SetWorkflowVisibilityResponse
+	25, // 79: reliant.v1.WorkflowService.CopyWorkflow:output_type -> reliant.v1.CopyWorkflowResponse
+	15, // 80: reliant.v1.WorkflowService.BuilderChat:output_type -> reliant.v1.BuilderChatResponse
+	46, // 81: reliant.v1.WorkflowService.CreateWorkflowDraft:output_type -> reliant.v1.CreateWorkflowDraftResponse
+	50, // 82: reliant.v1.WorkflowService.AssociateChatWithWorkflowDraft:output_type -> reliant.v1.AssociateChatWithWorkflowDraftResponse
+	48, // 83: reliant.v1.WorkflowService.SetWorkflowStatus:output_type -> reliant.v1.SetWorkflowStatusResponse
+	34, // 84: reliant.v1.ScenarioService.ListScenarios:output_type -> reliant.v1.ListScenariosResponse
+	36, // 85: reliant.v1.ScenarioService.CreateScenario:output_type -> reliant.v1.CreateScenarioResponse
+	38, // 86: reliant.v1.ScenarioService.RunScenario:output_type -> reliant.v1.RunScenarioResponse
+	40, // 87: reliant.v1.ScenarioService.DeleteScenario:output_type -> reliant.v1.DeleteScenarioResponse
+	42, // 88: reliant.v1.ScenarioService.UploadScenario:output_type -> reliant.v1.UploadScenarioResponse
+	44, // 89: reliant.v1.ScenarioService.ExportScenario:output_type -> reliant.v1.ExportScenarioResponse
+	71, // [71:90] is the sub-list for method output_type
+	52, // [52:71] is the sub-list for method input_type
+	52, // [52:52] is the sub-list for extension type_name
+	52, // [52:52] is the sub-list for extension extendee
+	0,  // [0:52] is the sub-list for field type_name
 }
 
 func init() { file_reliant_v1_workflow_proto_init() }
@@ -3933,18 +4266,20 @@ func file_reliant_v1_workflow_proto_init() {
 	file_reliant_v1_workflow_proto_msgTypes[17].OneofWrappers = []any{}
 	file_reliant_v1_workflow_proto_msgTypes[19].OneofWrappers = []any{}
 	file_reliant_v1_workflow_proto_msgTypes[23].OneofWrappers = []any{}
+	file_reliant_v1_workflow_proto_msgTypes[46].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_reliant_v1_workflow_proto_rawDesc), len(file_reliant_v1_workflow_proto_rawDesc)),
-			NumEnums:      0,
-			NumMessages:   50,
+			NumEnums:      1,
+			NumMessages:   52,
 			NumExtensions: 0,
 			NumServices:   2,
 		},
 		GoTypes:           file_reliant_v1_workflow_proto_goTypes,
 		DependencyIndexes: file_reliant_v1_workflow_proto_depIdxs,
+		EnumInfos:         file_reliant_v1_workflow_proto_enumTypes,
 		MessageInfos:      file_reliant_v1_workflow_proto_msgTypes,
 	}.Build()
 	File_reliant_v1_workflow_proto = out.File

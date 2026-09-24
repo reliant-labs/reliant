@@ -769,7 +769,7 @@ func validateGuardedAccess(expr string, path []string, scope *nodeOrderScope, ty
 //
 // The runtime cannot be imported here (it imports this package), so the rule
 // is restated from the proto descriptors, and
-// scenariotemporal.TestTypedZeroRescueParity pins the two against each other
+// scenario/runner.TestTypedZeroRescueParity pins the two against each other
 // for every node type the registry knows.
 func rescuedByTypedZero(expr string, typeCtx *WorkflowTypeContext) bool {
 	nodeID, field, ok := parseBareNodeField(expr)

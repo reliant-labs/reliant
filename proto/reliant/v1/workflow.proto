@@ -18,8 +18,9 @@ service WorkflowService {
   // ListWorkflows returns all available workflows from DB + builtins
   rpc ListWorkflows(ListWorkflowsRequest) returns (ListWorkflowsResponse) {}
 
-  // SaveWorkflow creates or updates a workflow in the database
-  // Always validates and saves. Workflow is usable when valid and not hidden.
+  // SaveWorkflow creates or updates a workflow in the database.
+  // A draft is stored as-is (validation findings are returned, not enforced);
+  // a complete workflow must pass validation or nothing is stored.
   rpc SaveWorkflow(SaveWorkflowRequest) returns (SaveWorkflowResponse) {}
 
   // GetWorkflow returns a specific workflow by slug
@@ -56,6 +57,11 @@ service WorkflowService {
   // Called after chat creation to enable tools to find the draft
   rpc AssociateChatWithWorkflowDraft(AssociateChatWithWorkflowDraftRequest) returns (AssociateChatWithWorkflowDraftResponse) {}
 
+  // SetWorkflowStatus moves a stored workflow between draft and complete.
+  // Marking complete validates the current definition and is rejected (with
+  // the errors) when it is invalid; moving to draft always succeeds.
+  rpc SetWorkflowStatus(SetWorkflowStatusRequest) returns (SetWorkflowStatusResponse) {}
+
 }
 
 // ============================================
@@ -63,6 +69,22 @@ service WorkflowService {
 // ============================================
 // Legacy flattened workflow messages were removed after WorkflowService
 // request/response contracts fully migrated to V2 types in workflow_v2.proto.
+
+// WorkflowDraftStatus is a stored workflow's lifecycle.
+//
+// Validity is never stored: it is computed on read and at the two gates
+// (marking complete, and loading for execution).
+enum WorkflowDraftStatus {
+  // In a request: keep the workflow's current status (a new workflow starts
+  // as a draft). Never returned for a stored workflow.
+  WORKFLOW_DRAFT_STATUS_UNSPECIFIED = 0;
+  // Work in progress: saved as-is, may be invalid, never runnable, and never
+  // offered where a runnable workflow is required.
+  WORKFLOW_DRAFT_STATUS_DRAFT = 1;
+  // Passed validation when it was marked complete; runnable. Saving it again
+  // re-validates, and a save that would make it invalid is rejected.
+  WORKFLOW_DRAFT_STATUS_COMPLETE = 2;
+}
 
 // WorkflowListItem represents a workflow in list responses with additional metadata
 message WorkflowListItem {
@@ -80,8 +102,14 @@ message WorkflowListItem {
   bool is_hidden = 12; // Whether the workflow is hidden from the hub
   optional string builder_chat_id = 13; // Chat ID associated with this workflow (if any)
   bool has_preset_groups = 14; // True if workflow has any tags (top-level or group) that can have presets
-  bool is_valid = 15; // True if workflow passes validation (always true for builtin/project)
+  reserved 15; // Removed: is_valid (a cached verdict; see status + validation_errors)
+  reserved "is_valid";
   optional string draft_id = 16; // Draft ID for user workflows (stable ID for lookups, not present for builtin/project)
+  // Lifecycle. Builtin and project workflows are always COMPLETE.
+  WorkflowDraftStatus status = 17;
+  // Current validation findings, computed on read (errors, then warnings typed
+  // "warning:<category>"). Empty for builtin and project workflows.
+  repeated ValidationError validation_errors = 18;
 }
 
 // ============================================
@@ -158,6 +186,11 @@ message GetWorkflowResponse {
   int64 version = 8;             // Current version number for OCC (0 for builtins)
   optional string source_path = 9;  // File path for project workflows (enables save-back-to-file)
   string yaml_definition = 10;     // Canonical YAML definition of the workflow (always populated)
+  // Lifecycle of a user workflow; COMPLETE for builtin and project workflows.
+  WorkflowDraftStatus status = 11;
+  // Current validation findings for a user workflow, computed on read (errors,
+  // then warnings typed "warning:<category>").
+  repeated ValidationError validation_errors = 12;
 }
 
 // ============================================
@@ -228,6 +261,10 @@ message SaveWorkflowRequest {
   optional int64 expected_version = 8; // OCC: expected version number - fails if workflow was modified since
   optional string source_path = 9;   // If set, write YAML back to this file (for project workflow edits)
   optional string draft_id = 10;     // If provided, update this draft by ID (allows renames)
+  // Intent. DRAFT stores as-is; COMPLETE validates and rejects on errors;
+  // UNSPECIFIED keeps the current status (new workflows start as drafts), so
+  // re-saving a complete workflow is gated like COMPLETE.
+  WorkflowDraftStatus status = 11;
 }
 
 message SaveWorkflowResponse {
@@ -235,14 +272,15 @@ message SaveWorkflowResponse {
   string message = 2;                // Status message
   Workflow workflow = 3;             // Saved workflow
   // Field 4 removed (was published)
-  bool is_valid = 5;                 // True if workflow passed validation
-  repeated ValidationError validation_errors = 6; // Validation errors (if any)
+  bool is_valid = 5;                 // True if this request's definition passed validation
+  repeated ValidationError validation_errors = 6; // This request's validation findings (errors, then warnings)
   string id = 7;                     // Database ID of the saved workflow
   string slug = 8;                   // Runtime reference slug
   optional string builder_chat_id = 9; // Chat ID associated with this workflow (if any)
   reserved 10;                       // Removed: updated_at (replaced by version)
   int64 version = 11;                // Current version number for OCC
   string yaml_definition = 12;       // Canonical YAML definition of the saved workflow
+  WorkflowDraftStatus status = 13;   // Resulting status (unset when nothing was stored)
 }
 
 // ============================================
@@ -255,6 +293,7 @@ message ImportWorkflowRequest {
   ConfigScope scope = 3;             // Where to import: global, project, or worktree
   optional string worktree_id = 4;   // Required if scope is worktree
   bool overwrite = 5;                // If true, overwrite existing workflow with same slug
+  WorkflowDraftStatus status = 6;    // Intent; same semantics as SaveWorkflowRequest.status
 }
 
 message ImportWorkflowResponse {
@@ -263,10 +302,11 @@ message ImportWorkflowResponse {
   Workflow workflow = 3;             // Imported workflow
   string id = 4;                     // Database ID
   string slug = 5;                   // Runtime reference slug
-  bool is_valid = 6;                 // Whether workflow passed validation
+  bool is_valid = 6;                 // Whether this request's definition passed validation
   repeated ValidationError validation_errors = 7;
   bool conflict = 8;                 // True if slug already exists (when overwrite=false)
   string existing_id = 9;            // ID of existing workflow (if conflict)
+  WorkflowDraftStatus status = 10;   // Resulting status (unset when nothing was stored)
 }
 
 // ============================================
@@ -506,12 +546,31 @@ message ExportScenarioResponse {
 // Called when user clicks "New Workflow" to get a draft ID before any chat starts.
 message CreateWorkflowDraftRequest {
   string project_id = 1;              // Required: project context
+  // Intent; UNSPECIFIED and DRAFT create a draft. COMPLETE validates the
+  // starting template first.
+  WorkflowDraftStatus status = 2;
 }
 
 message CreateWorkflowDraftResponse {
   string draft_id = 1;                // UUID of the created draft
   string slug = 2;                    // Generated slug for the draft
   string name = 3;                    // Generated display name (e.g., "swift-fox-a1b2")
+  WorkflowDraftStatus status = 4;     // Status the workflow was created with
+}
+
+message SetWorkflowStatusRequest {
+  string project_id = 1;              // Required: project context
+  string draft_id = 2;                // Required: the stored workflow
+  WorkflowDraftStatus status = 3;     // Required: DRAFT or COMPLETE
+  optional int64 expected_version = 4; // OCC: fails if the workflow changed since it was loaded
+}
+
+message SetWorkflowStatusResponse {
+  bool success = 1;                   // False when COMPLETE was rejected by validation
+  string message = 2;
+  WorkflowDraftStatus status = 3;     // Status after the call
+  repeated ValidationError validation_errors = 4; // Current findings (errors, then warnings)
+  int64 version = 5;                  // Version after the call (for OCC)
 }
 
 // AssociateChatWithWorkflowDraftRequest links a chat to a workflow draft.

@@ -37,43 +37,5 @@ validation:
   should_pass: true
   use_workflow_loader: false
 
-simulator:
-  expected_status: passed
-  scenario:
-    name: parallel_loop_list_then_map
-    inputs:
-      components:
-        - name: auth
-          spec: login flow
-        - name: billing
-          spec: invoice flow
-      component_map:
-        auth:
-          spec: login flow
-        billing:
-          spec: invoice flow
-    events:
-      - node: builtin://agent
-        output:
-          response_text: "list auth complete"
-          component: auth
-      - node: builtin://agent
-        output:
-          response_text: "list billing complete"
-          component: billing
-      - node: builtin://agent
-        output:
-          response_text: "map auth complete"
-          component: auth
-      - node: builtin://agent
-        output:
-          response_text: "map billing complete"
-          component: billing
-    expect:
-      outcome: completed
-      reached:
-        - implement_all
-        - map_all
-
 runtime:
   checks: []

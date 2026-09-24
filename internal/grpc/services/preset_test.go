@@ -301,7 +301,7 @@ nodes:
 		Name:       "Custom Agent Draft",
 		Slug:       "custom-agent-draft",
 		Definition: workflowYAML,
-		IsValid:    true,
+		Status:     db.WorkflowDraftStatusComplete,
 		IsHidden:   false,
 		Version:    1,
 	})

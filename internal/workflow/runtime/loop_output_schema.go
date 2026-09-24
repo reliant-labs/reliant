@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/workflow/model"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
 )
 
@@ -153,7 +154,7 @@ func substitutableZero(v interface{}) bool {
 // Only container zeros are offered — see substitutableZero. A scalar or nil
 // default is reported as unavailable, which leaves the original error in place.
 func nodeFieldZeroValue(node *reliantv1.Node, fieldPath []string) (interface{}, bool) {
-	activityName := nodeActivityName(node)
+	activityName := NodeActivityName(node)
 	if activityName == "" {
 		return nil, false
 	}
@@ -215,8 +216,8 @@ func substituteTypedZero(
 }
 
 // outputSubstitutionLogger is the only logging this needs. Declared at the
-// consumer, like joinLogger, so the simulator's one-method simLogger satisfies
-// it without implementing the whole temporal log.Logger surface.
+// consumer, like joinLogger, so a one-method test logger satisfies it without
+// implementing the whole temporal log.Logger surface.
 type outputSubstitutionLogger interface {
 	Warn(msg string, keyvals ...interface{})
 }
@@ -234,4 +235,30 @@ func logTypedZeroSubstitution(logger outputSubstitutionLogger, outputName, expr,
 		"nodeID", nodeID,
 		"substituted", value,
 	)
+}
+
+// nodeTypeToActivityNameOverrides lists node types whose activity name the
+// snake_case -> PascalCase rule cannot derive. `run` is structural but
+// dispatches ExecuteRunStep.
+var nodeTypeToActivityNameOverrides = map[string]string{
+	model.NodeTypeRun: "ExecuteRunStep",
+}
+
+// NodeActivityName is the registered activity a node dispatches (and whose
+// output schema describes the node's output), or "" for a structural node that
+// dispatches none. The scenario runner uses it to register exactly the
+// activities a graph can reach, so it can never drift from the dispatcher.
+func NodeActivityName(node *reliantv1.Node) string {
+	if node == nil {
+		return ""
+	}
+	// Check overrides first — handles structural nodes like "run" that have
+	// registered activity types with output schemas.
+	if override, ok := nodeTypeToActivityNameOverrides[node.GetType()]; ok {
+		return override
+	}
+	if !isActivityType(node.GetType()) {
+		return ""
+	}
+	return nodeTypeToActivityName(node.GetType())
 }

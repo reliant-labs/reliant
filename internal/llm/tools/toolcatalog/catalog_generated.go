@@ -76,8 +76,9 @@ var generatedToolParams = map[string]ToolParams{
 	},
 	"create_workflow": {
 		Bindable: map[string]struct{}{
-			"content": {},
-			"name":    {},
+			"complete": {},
+			"content":  {},
+			"name":     {},
 		},
 		Unbindable: map[string]string{},
 	},
@@ -111,6 +112,7 @@ var generatedToolParams = map[string]ToolParams{
 	},
 	"edit_workflow": {
 		Bindable: map[string]struct{}{
+			"complete":         {},
 			"expected_version": {},
 			"id":               {},
 			"new_string":       {},
@@ -435,6 +437,7 @@ var generatedToolParams = map[string]ToolParams{
 	},
 	"write_workflow": {
 		Bindable: map[string]struct{}{
+			"complete":         {},
 			"content":          {},
 			"expected_version": {},
 			"id":               {},

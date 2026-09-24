@@ -4,13 +4,18 @@
 # 1. LLM responds with tool calls
 # 2. Approval node is triggered (manual mode)
 # 3. User denies the request
-# 4. Tools do NOT execute — iteration ends with no tool execution
-# 5. Loop exits because the denied iteration produces no tool output,
-#    so the next while-check sees the last call_llm's tool_calls but
-#    approval was denied, ending the iteration without execute_tools
+# 4. Tools do NOT execute — the iteration ends without execute_tools
+# 5. The agent gets another turn: the loop's `while` still sees the denied
+#    iteration's tool_calls, so it re-enters call_llm. That is the intended
+#    product behavior (agent.yaml: "No edge when denied - iteration ends, loop
+#    continues"): the deny RPC writes the denial reason back as the tool
+#    result (ApprovalService.createDenialMessage), and the model must react to
+#    it — explain, propose an alternative, or ask — rather than the turn
+#    ending on an assistant message whose tool calls have no results.
+# 6. The model responds without tool calls and the loop exits.
 #
-# This verifies that denying approval prevents tool execution and
-# the agent can recover gracefully without crashing.
+# This verifies that denying approval prevents tool execution and that the
+# agent recovers by responding to the denial.
 
 name: manual_mode_denied
 description: Manual mode, user denies approval, tools do not execute
@@ -33,8 +38,16 @@ events:
     output:
       status: "denied"
 
+  # The agent reacts to the denial on its next turn, without tools
+  - node: agent_loop.call_llm
+    type: llm_response
+    text: "Understood — I won't delete that file. How would you like to proceed?"
+
 expect:
   outcome: completed
+  node_outputs:
+    agent_loop:
+      _iterations: 2
   reached:
     - agent_loop
     - agent_loop.call_llm

@@ -1909,8 +1909,8 @@ func (e *InlineLoopExecutor) executeIteration() (map[string]interface{}, error) 
 //   - iter.*: Loop iteration context (iter.iteration)
 //   - inputs.*: Workflow inputs (for iteration limits like inputs.max_turns)
 //   - nodes.*: the PARENT scope's node outputs (the scope the loop node lives
-//     in), matching the simulator's evaluateLoopWhileStrict. Omitting it made
-//     every `while` that reads nodes.* fail "no such key" at runtime only.
+//     in). Omitting it made every `while` that reads nodes.* fail "no such
+//     key" after iteration 0.
 //   - workflow.*: workflow metadata, available at every site.
 func (e *InlineLoopExecutor) evaluateWhileCondition(outputs map[string]interface{}) (bool, error) {
 	whileExpr := model.DirectCelExpr(model.GetLoopArgs(e.loopStep.Node).GetWhile())

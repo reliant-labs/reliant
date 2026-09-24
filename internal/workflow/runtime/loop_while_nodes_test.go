@@ -9,11 +9,10 @@ import (
 	"go.temporal.io/sdk/testsuite"
 )
 
-// A loop's `while` may read the PARENT scope's node outputs (nodes.*), the
-// same scope the simulator's evaluateLoopWhileStrict evaluates it in. The real
+// A loop's `while` may read the PARENT scope's node outputs (nodes.*). The
 // InlineLoopExecutor used to build its while context without Nodes, so any
 // such condition failed with "no such key" after iteration 0 — while the
-// simulator, which does pass nodes, reported the workflow green. The builtin
+// retired graph simulator, which did pass nodes, reported the workflow green. The builtin
 // forge-migrate port_loop (`size(nodes.inventory.response.components)`) and
 // migrate's workflow_builder_loop are the shapes that broke.
 const loopWhileReadsParentNodesYAML = `

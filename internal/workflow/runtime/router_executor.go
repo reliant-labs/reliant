@@ -236,6 +236,12 @@ func (r *RouterExecutor) Execute() (map[string]interface{}, error) {
 		}
 	}
 
+	// The selected workflow ran as a synthetic node carrying the ROUTER's id,
+	// so it reported the child's outputs at this path; the router's own output
+	// (the decision plus `outputs`) is what the graph actually publishes here.
+	// Observation only — a no-op unless an observer is attached.
+	recordStructuralCompleted(r.ctx, r.nodePath(), output)
+
 	return output, nil
 }
 
@@ -633,13 +639,21 @@ func (r *RouterExecutor) parseRoutingDecision(output *reliantv1.CallLLMOutput) e
 	if decision.Workflow == "" {
 		return fmt.Errorf("routing decision has empty workflow selection")
 	}
-	if decision.Preset == "" {
-		return fmt.Errorf("routing decision has empty preset selection")
-	}
-
 	selectedCandidate, ok := r.candidateForWorkflow(decision.Workflow)
 	if !ok {
 		return fmt.Errorf("routing decision selected unknown workflow %q", decision.Workflow)
+	}
+
+	// A candidate with no presets is selected with none: there is nothing to
+	// name, and applyPresets skips an empty name. Only a candidate that HAS
+	// presets requires one.
+	if len(selectedCandidate.Presets) == 0 {
+		decision.Preset = ""
+		r.decision = &decision
+		return nil
+	}
+	if decision.Preset == "" {
+		return fmt.Errorf("routing decision has empty preset selection")
 	}
 
 	if !presetAllowedForCandidate(selectedCandidate, decision.Preset) {

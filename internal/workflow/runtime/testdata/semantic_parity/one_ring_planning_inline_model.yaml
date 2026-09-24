@@ -17,35 +17,6 @@ validation:
   should_pass: true
   use_workflow_loader: false
 
-simulator:
-  expected_status: passed
-  scenario:
-    name: one_ring_plan_only
-    inputs:
-      mode: auto
-      model: gpt-5
-      ask: false
-      steps: [plan]
-      max_retries: 3
-      temperature: 1.0
-      thinking_level: medium
-      lint_command: ""
-      lint_log: "./data/one-ring/lint.log"
-      test_command: ""
-      test_log: "./data/one-ring/test.log"
-      build_command: ""
-      build_log: "./data/one-ring/build.log"
-      start_app_command: ""
-    events:
-      - node: planning.plan
-        output:
-          response_text: "Plan complete"
-    expect:
-      outcome: completed
-      reached:
-        - planning
-        - planning.plan
-
 runtime:
   checks:
     - type: one_ring_nested_plan_inherits_model

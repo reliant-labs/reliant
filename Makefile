@@ -359,10 +359,10 @@ generate-schema:
 	@$(GOCMD) run ./tools/docgen/schema/... $(REFERENCE_DIR)/workflow-schema.md
 	@echo "$(GREEN)✅ Workflow schema reference generated$(NC)"
 
-## generate-scenario-schema: Generate scenario schema reference from simulator types
+## generate-scenario-schema: Generate scenario schema reference from internal/workflow/scenario types
 generate-scenario-schema:
 	@echo "$(YELLOW)Generating scenario schema reference...$(NC)"
-	@$(GOCMD) run ./tools/docgen/scenarios/... internal/workflow/runtime/simulator $(REFERENCE_DIR)/scenario-schema.md
+	@$(GOCMD) run ./tools/docgen/scenarios/... internal/workflow/scenario $(REFERENCE_DIR)/scenario-schema.md
 	@echo "$(GREEN)✅ Scenario schema reference generated$(NC)"
 
 ## generate-refcheck: Validate reference data from proto descriptors

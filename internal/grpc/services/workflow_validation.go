@@ -7,8 +7,10 @@ import (
 	"strings"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/db"
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
 	"github.com/reliant-labs/reliant/internal/workflow/validation"
+	wfyaml "github.com/reliant-labs/reliant/internal/workflow/yaml"
 )
 
 // workflowCheck is the outcome of validating a workflow definition the way
@@ -73,17 +75,67 @@ func (c workflowCheck) summary() string {
 // validateWorkflowDefinition validates a YAML definition with the user's
 // workflow loader.
 func (s *WorkflowService) validateWorkflowDefinition(ctx context.Context, userID string, definition []byte) workflowCheck {
-	result, err := v2.ValidateYAMLResult(definition, s.createValidationWorkflowLoader(ctx, userID))
+	self, err := wfyaml.ParseWorkflow(definition)
+	if err != nil {
+		return workflowCheck{parseErr: fmt.Errorf("failed to parse workflow: %w", err)}
+	}
+	result, err := v2.ValidateYAMLResult(definition, s.createValidationWorkflowLoader(ctx, userID, self))
 	if err != nil {
 		return workflowCheck{parseErr: err}
 	}
 	return workflowCheck{result: result}
 }
 
-// saveRejectedMessage is the response message for a save that validation
-// blocked. The draft is NOT persisted: a stored draft is runnable by `ref:`
-// and by chats, and run start rejects the same errors — saving it would only
-// defer the failure to the moment someone runs it.
-func saveRejectedMessage(c workflowCheck) string {
-	return "Workflow not saved: fix the validation errors first — " + strings.TrimSpace(c.summary())
+// errorCount is the number of validation errors (a parse failure counts as one).
+func (c workflowCheck) errorCount() int {
+	if c.parseErr != nil {
+		return 1
+	}
+	if c.result == nil {
+		return 0
+	}
+	return len(c.result.Errors())
+}
+
+// completeRejectedMessage is the response message when validation blocks a
+// workflow from being (or staying) complete. Nothing is stored: a complete
+// workflow is runnable, and run start rejects the same errors.
+func completeRejectedMessage(c workflowCheck) string {
+	return "Workflow not saved: a complete workflow must pass validation — fix the errors or save it as a draft. " + strings.TrimSpace(c.summary())
+}
+
+// resolveDraftStatus decides the status a save stores. An explicit intent
+// wins; otherwise an existing workflow keeps its status (so re-saving a
+// complete workflow stays gated) and a new one starts as a draft.
+func resolveDraftStatus(requested reliantv1.WorkflowDraftStatus, existing *db.WorkflowDraft) db.WorkflowDraftStatus {
+	switch requested {
+	case reliantv1.WorkflowDraftStatus_WORKFLOW_DRAFT_STATUS_COMPLETE:
+		return db.WorkflowDraftStatusComplete
+	case reliantv1.WorkflowDraftStatus_WORKFLOW_DRAFT_STATUS_DRAFT:
+		return db.WorkflowDraftStatusDraft
+	}
+	if existing != nil && existing.Status == db.WorkflowDraftStatusComplete {
+		return db.WorkflowDraftStatusComplete
+	}
+	return db.WorkflowDraftStatusDraft
+}
+
+// draftStatusToProto maps a stored status onto the wire enum.
+func draftStatusToProto(status db.WorkflowDraftStatus) reliantv1.WorkflowDraftStatus {
+	if status == db.WorkflowDraftStatusComplete {
+		return reliantv1.WorkflowDraftStatus_WORKFLOW_DRAFT_STATUS_COMPLETE
+	}
+	return reliantv1.WorkflowDraftStatus_WORKFLOW_DRAFT_STATUS_DRAFT
+}
+
+// draftSavedMessage is the success message for a stored save. A draft with
+// errors says what stands between it and being runnable.
+func draftSavedMessage(status db.WorkflowDraftStatus, c workflowCheck) string {
+	if status == db.WorkflowDraftStatusComplete {
+		return "Workflow saved successfully"
+	}
+	if n := c.errorCount(); n > 0 {
+		return fmt.Sprintf("Saved as draft with %d validation error(s) — fix them before marking it complete", n)
+	}
+	return "Saved as draft — mark it complete to make it runnable"
 }

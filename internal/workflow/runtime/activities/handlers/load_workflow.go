@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"regexp"
 	"strings"
@@ -187,17 +188,24 @@ func (a *LoadWorkflowActivity) loadWorkflowByNameWithRaw(ctx context.Context, wo
 	}
 
 	// Try user DB draft first
-	yamlData, loaded, err := a.loadDBWorkflowWithRaw(ctx, workflowName, wfCtx)
-	if err == nil {
+	yamlData, loaded, dbErr := a.loadDBWorkflowWithRaw(ctx, workflowName, wfCtx)
+	if dbErr == nil {
 		return yamlData, loaded, nil
 	}
 
 	// Try stored project workflow (synced by daemon)
-	yamlData, loaded, err = a.loadStoredProjectWorkflowWithRaw(ctx, workflowName, wfCtx)
+	yamlData, loaded, err := a.loadStoredProjectWorkflowWithRaw(ctx, workflowName, wfCtx)
 	if err == nil {
 		return yamlData, loaded, nil
 	}
 
+	// A user workflow that exists but is still a draft is not runnable. Say
+	// so — "not found" would send the user looking for a workflow they can
+	// see in their list.
+	var notRunnable *db.WorkflowDraftNotRunnableError
+	if errors.As(dbErr, &notRunnable) {
+		return nil, nil, dbErr
+	}
 	return nil, nil, fmt.Errorf("workflow not found: %s", workflowName)
 }
 
@@ -213,6 +221,8 @@ func (a *LoadWorkflowActivity) loadDBWorkflowWithRaw(ctx context.Context, workfl
 
 	slug := generateWorkflowSlug(workflowName)
 
+	// Only a complete workflow runs; a draft comes back as
+	// *db.WorkflowDraftNotRunnableError.
 	draft, err := a.repo.GetUsableWorkflowBySlug(ctx, wfCtx.userID, slug)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to look up workflow '%s': %w", workflowName, err)

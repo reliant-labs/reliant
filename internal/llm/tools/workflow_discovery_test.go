@@ -68,9 +68,10 @@ func TestListWorkflowsToGetWorkflowRoundTrip(t *testing.T) {
 	listing := runListWorkflows(t, repo, "")
 
 	cells := listWorkflowsRow(t, listing, draft.Slug)
-	require.Len(t, cells, 5, "expected Workflow | ID | Source | Valid | Description")
+	require.Len(t, cells, 6, "expected Workflow | ID | Source | Status | Valid | Description")
 	assert.Equal(t, "user", cells[2])
-	assert.Equal(t, "✓", cells[3])
+	assert.Equal(t, "complete", cells[3])
+	assert.Equal(t, "✓", cells[4])
 
 	t.Run("the slug from the listing fetches the workflow", func(t *testing.T) {
 		resp := runGetWorkflow(t, repo, "", draft.Slug)
@@ -168,23 +169,27 @@ func mustParseInt64(t *testing.T, s string) int64 {
 	return n
 }
 
-// TestListWorkflowsHidesStaleInvalidDraft: a draft stored with is_valid=true
-// whose definition fails validation TODAY (the validator got stricter after it
-// was saved) must not be offered. list_workflows validates on read; the stored
-// flag alone would keep rendering a ✓ for a workflow run start rejects.
-func TestListWorkflowsHidesStaleInvalidDraft(t *testing.T) {
+// TestListWorkflowsShowsStatusAndComputedValidity: list_workflows shows each
+// visible user workflow with its lifecycle status and validity computed NOW —
+// a complete workflow whose definition fails validation today (the validator
+// got stricter) is marked ✗, never a stale ✓. Drafts are listed too (agents
+// iterate on them), labeled as drafts.
+func TestListWorkflowsShowsStatusAndComputedValidity(t *testing.T) {
 	t.Parallel()
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 
-	draft := createValidPersistDraft(t, repo)
-	require.Contains(t, runListWorkflows(t, repo, ""), draft.Slug)
+	complete := createValidPersistDraft(t, repo)
+	draft := createPersistDraft(t, repo, db.WorkflowDraftStatusDraft)
 
-	// Simulate staleness directly in the row: broken content, stored flag
-	// still claiming valid. (The editing tools can no longer produce this.)
-	broken := strings.Replace(draft.Definition, "entry: [agent]", "entry: [no-such-node]", 1)
-	require.NoError(t, repo.UpdateWorkflowDraftDefinition(context.Background(), draft.ID, draft.Name, draft.Slug, broken, true, nil))
+	// Simulate staleness directly in the row: broken content, still complete.
+	// (The editing tools can no longer produce this.)
+	broken := strings.Replace(complete.Definition, "entry: [agent]", "entry: [no-such-node]", 1)
+	require.NoError(t, repo.UpdateWorkflowDraftDefinition(context.Background(), complete.ID, complete.Name, complete.Slug, broken, db.WorkflowDraftStatusComplete))
 
-	assert.NotContains(t, runListWorkflows(t, repo, ""), draft.Slug,
-		"a draft that fails validation now must be hidden even though its stored is_valid is true")
+	out := runListWorkflows(t, repo, "")
+	assert.Regexp(t, "`"+complete.Slug+"`"+`[^\n]*\| complete \| ✗ \|`, out,
+		"a complete workflow that fails validation now must be marked invalid")
+	assert.Regexp(t, "`"+draft.Slug+"`"+`[^\n]*\| draft \| ✓ \|`, out,
+		"a draft is listed with its status and computed validity")
 }

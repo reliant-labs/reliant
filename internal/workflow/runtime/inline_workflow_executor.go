@@ -458,8 +458,8 @@ func (e *InlineWorkflowExecutor) compileSubWorkflowSemantics() error {
 func (e *InlineWorkflowExecutor) buildSubWorkflowInputs() map[string]interface{} {
 	inputs, _, err := e.buildSubWorkflowInputsWithOwnership()
 	if err != nil {
-		// Only reachable from tests and the parity simulator, which construct
-		// executors without presets. The real execution path calls
+		// Only reachable from tests, which construct executors without
+		// presets. The real execution path calls
 		// buildSubWorkflowInputsWithOwnership and propagates this error.
 		panic(err)
 	}

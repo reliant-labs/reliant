@@ -5,8 +5,8 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
-import { fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
+import type { GenEnum, GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
+import { enumDesc, fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
 import { file_google_protobuf_struct } from "@bufbuild/protobuf/wkt";
 import type { ConfigScope } from "./common_pb";
 import { file_reliant_v1_common } from "./common_pb";
@@ -18,7 +18,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file reliant/v1/workflow.proto.
  */
 export const file_reliant_v1_workflow: GenFile = /*@__PURE__*/
-  fileDesc("ChlyZWxpYW50L3YxL3dvcmtmbG93LnByb3RvEgpyZWxpYW50LnYxItMEChBXb3JrZmxvd0xpc3RJdGVtEgwKBG5hbWUYASABKAkSEAoIZmlsZW5hbWUYAiABKAkSEwoLZGVzY3JpcHRpb24YAyABKAkSEgoKc3RlcF9jb3VudBgEIAEoBRIOCgZzb3VyY2UYBSABKAkSHwoFbm9kZXMYByADKAsyEC5yZWxpYW50LnYxLk5vZGUSHwoFZWRnZXMYCCADKAsyEC5yZWxpYW50LnYxLkVkZ2USOAoGaW5wdXRzGAkgAygLMigucmVsaWFudC52MS5Xb3JrZmxvd0xpc3RJdGVtLklucHV0c0VudHJ5EjoKB291dHB1dHMYCiADKAsyKS5yZWxpYW50LnYxLldvcmtmbG93TGlzdEl0ZW0uT3V0cHV0c0VudHJ5EhcKCnVwZGF0ZWRfYXQYCyABKAlIAIgBARIRCglpc19oaWRkZW4YDCABKAgSHAoPYnVpbGRlcl9jaGF0X2lkGA0gASgJSAGIAQESGQoRaGFzX3ByZXNldF9ncm91cHMYDiABKAgSEAoIaXNfdmFsaWQYDyABKAgSFQoIZHJhZnRfaWQYECABKAlIAogBARpACgtJbnB1dHNFbnRyeRILCgNrZXkYASABKAkSIAoFdmFsdWUYAiABKAsyES5yZWxpYW50LnYxLklucHV0OgI4ARouCgxPdXRwdXRzRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4AUINCgtfdXBkYXRlZF9hdEISChBfYnVpbGRlcl9jaGF0X2lkQgsKCV9kcmFmdF9pZCI7Cg1IaWdobGlnaHRTcGFuEg0KBXN0YXJ0GAEgASgFEgsKA2VuZBgCIAEoBRIOCgZyZWFzb24YAyABKAkivgEKD1ZhbGlkYXRpb25FcnJvchIMCgR0eXBlGAEgASgJEg8KB21lc3NhZ2UYAiABKAkSEgoKc3VnZ2VzdGlvbhgDIAEoCRISCgplZGdlX2luZGV4GAQgASgFEhEKCWVkZ2VfZnJvbRgFIAEoCRIPCgdjYXNlX3RvGAYgASgJEhEKCWNvbmRpdGlvbhgHIAEoCRItCgpoaWdobGlnaHRzGAggAygLMhkucmVsaWFudC52MS5IaWdobGlnaHRTcGFuImwKFExpc3RXb3JrZmxvd3NSZXF1ZXN0EhIKCnByb2plY3RfaWQYASABKAkSGAoLd29ya3RyZWVfaWQYAiABKAlIAIgBARIWCg5pbmNsdWRlX2hpZGRlbhgDIAEoCEIOCgxfd29ya3RyZWVfaWQijwEKFUxpc3RXb3JrZmxvd3NSZXNwb25zZRIvCgl3b3JrZmxvd3MYASADKAsyHC5yZWxpYW50LnYxLldvcmtmbG93TGlzdEl0ZW0SDQoFdG90YWwYAiABKAUSNgoRaW52YWxpZF93b3JrZmxvd3MYAyADKAsyGy5yZWxpYW50LnYxLkludmFsaWRXb3JrZmxvdyJNCg9JbnZhbGlkV29ya2Zsb3cSDAoEbmFtZRgBIAEoCRIOCgZzb3VyY2UYAiABKAkSDAoEcGF0aBgDIAEoCRIOCgZlcnJvcnMYBCADKAkihAEKEkdldFdvcmtmbG93UmVxdWVzdBISCgpwcm9qZWN0X2lkGAEgASgJEgwKBG5hbWUYAiABKAkSGAoLd29ya3RyZWVfaWQYAyABKAlIAIgBARIVCghkcmFmdF9pZBgEIAEoCUgBiAEBQg4KDF93b3JrdHJlZV9pZEILCglfZHJhZnRfaWQi1wIKE0dldFdvcmtmbG93UmVzcG9uc2USJgoId29ya2Zsb3cYASABKAsyFC5yZWxpYW50LnYxLldvcmtmbG93Eg4KBnNvdXJjZRgCIAEoCRIVCghkcmFmdF9pZBgDIAEoCUgAiAEBEhwKD2J1aWxkZXJfY2hhdF9pZBgEIAEoCUgBiAEBEhgKC3BhcnNlX2Vycm9yGAYgASgJSAKIAQESGwoOcmF3X2RlZmluaXRpb24YByABKAlIA4gBARIPCgd2ZXJzaW9uGAggASgDEhgKC3NvdXJjZV9wYXRoGAkgASgJSASIAQESFwoPeWFtbF9kZWZpbml0aW9uGAogASgJQgsKCV9kcmFmdF9pZEISChBfYnVpbGRlcl9jaGF0X2lkQg4KDF9wYXJzZV9lcnJvckIRCg9fcmF3X2RlZmluaXRpb25CDgoMX3NvdXJjZV9wYXRoSgQIBRAGImMKFURlbGV0ZVdvcmtmbG93UmVxdWVzdBISCgpwcm9qZWN0X2lkGAEgASgJEgwKBG5hbWUYAiABKAkSGAoLd29ya3RyZWVfaWQYAyABKAlIAIgBAUIOCgxfd29ya3RyZWVfaWQiOgoWRGVsZXRlV29ya2Zsb3dSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIEg8KB21lc3NhZ2UYAiABKAkiVQoXVmFsaWRhdGVXb3JrZmxvd1JlcXVlc3QSEgoKcHJvamVjdF9pZBgBIAEoCRImCgh3b3JrZmxvdxgCIAEoCzIULnJlbGlhbnQudjEuV29ya2Zsb3ciVgoYVmFsaWRhdGVXb3JrZmxvd1Jlc3BvbnNlEg0KBXZhbGlkGAEgASgIEisKBmVycm9ycxgCIAMoCzIbLnJlbGlhbnQudjEuVmFsaWRhdGlvbkVycm9yInUKEkJ1aWxkZXJDaGF0UmVxdWVzdBISCgpwcm9qZWN0X2lkGAEgASgJEhIKCnNlc3Npb25faWQYAiABKAkSDwoHbWVzc2FnZRgDIAEoCRImCgh3b3JrZmxvdxgEIAEoCzIULnJlbGlhbnQudjEuV29ya2Zsb3ciLAoMVG9vbENhbGxJbmZvEgwKBG5hbWUYASABKAkSDgoGcmVzdWx0GAIgASgJIpYBChNCdWlsZGVyQ2hhdFJlc3BvbnNlEg8KB21lc3NhZ2UYASABKAkSGAoQd29ya2Zsb3dfdXBkYXRlZBgCIAEoCBImCgh3b3JrZmxvdxgDIAEoCzIULnJlbGlhbnQudjEuV29ya2Zsb3cSLAoKdG9vbF9jYWxscxgEIAMoCzIYLnJlbGlhbnQudjEuVG9vbENhbGxJbmZvIt0CChNTYXZlV29ya2Zsb3dSZXF1ZXN0EhIKCnByb2plY3RfaWQYASABKAkSJgoId29ya2Zsb3cYAiABKAsyFC5yZWxpYW50LnYxLldvcmtmbG93EiYKBXNjb3BlGAQgASgOMhcucmVsaWFudC52MS5Db25maWdTY29wZRIYCgt3b3JrdHJlZV9pZBgFIAEoCUgAiAEBEhwKD2J1aWxkZXJfY2hhdF9pZBgGIAEoCUgBiAEBEh0KEGV4cGVjdGVkX3ZlcnNpb24YCCABKANIAogBARIYCgtzb3VyY2VfcGF0aBgJIAEoCUgDiAEBEhUKCGRyYWZ0X2lkGAogASgJSASIAQFCDgoMX3dvcmt0cmVlX2lkQhIKEF9idWlsZGVyX2NoYXRfaWRCEwoRX2V4cGVjdGVkX3ZlcnNpb25CDgoMX3NvdXJjZV9wYXRoQgsKCV9kcmFmdF9pZEoECAcQCCKmAgoUU2F2ZVdvcmtmbG93UmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCBIPCgdtZXNzYWdlGAIgASgJEiYKCHdvcmtmbG93GAMgASgLMhQucmVsaWFudC52MS5Xb3JrZmxvdxIQCghpc192YWxpZBgFIAEoCBI2ChF2YWxpZGF0aW9uX2Vycm9ycxgGIAMoCzIbLnJlbGlhbnQudjEuVmFsaWRhdGlvbkVycm9yEgoKAmlkGAcgASgJEgwKBHNsdWcYCCABKAkSHAoPYnVpbGRlcl9jaGF0X2lkGAkgASgJSACIAQESDwoHdmVyc2lvbhgLIAEoAxIXCg95YW1sX2RlZmluaXRpb24YDCABKAlCEgoQX2J1aWxkZXJfY2hhdF9pZEoECAoQCyKmAQoVSW1wb3J0V29ya2Zsb3dSZXF1ZXN0EhIKCnByb2plY3RfaWQYASABKAkSFAoMeWFtbF9jb250ZW50GAIgASgMEiYKBXNjb3BlGAMgASgOMhcucmVsaWFudC52MS5Db25maWdTY29wZRIYCgt3b3JrdHJlZV9pZBgEIAEoCUgAiAEBEhEKCW92ZXJ3cml0ZRgFIAEoCEIOCgxfd29ya3RyZWVfaWQi7QEKFkltcG9ydFdvcmtmbG93UmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCBIPCgdtZXNzYWdlGAIgASgJEiYKCHdvcmtmbG93GAMgASgLMhQucmVsaWFudC52MS5Xb3JrZmxvdxIKCgJpZBgEIAEoCRIMCgRzbHVnGAUgASgJEhAKCGlzX3ZhbGlkGAYgASgIEjYKEXZhbGlkYXRpb25fZXJyb3JzGAcgAygLMhsucmVsaWFudC52MS5WYWxpZGF0aW9uRXJyb3ISEAoIY29uZmxpY3QYCCABKAgSEwoLZXhpc3RpbmdfaWQYCSABKAkiYwoVRXhwb3J0V29ya2Zsb3dSZXF1ZXN0EhIKCnByb2plY3RfaWQYASABKAkSDAoEc2x1ZxgCIAEoCRIYCgt3b3JrdHJlZV9pZBgDIAEoCUgAiAEBQg4KDF93b3JrdHJlZV9pZCJ5ChZFeHBvcnRXb3JrZmxvd1Jlc3BvbnNlEg8KB3N1Y2Nlc3MYASABKAgSFAoMeWFtbF9jb250ZW50GAIgASgMEhAKCGZpbGVuYW1lGAMgASgJEiYKCHdvcmtmbG93GAQgASgLMhQucmVsaWFudC52MS5Xb3JrZmxvdyJTChxTZXRXb3JrZmxvd1Zpc2liaWxpdHlSZXF1ZXN0EhIKCnByb2plY3RfaWQYASABKAkSDAoEc2x1ZxgCIAEoCRIRCglpc19oaWRkZW4YAyABKAgicQodU2V0V29ya2Zsb3dWaXNpYmlsaXR5UmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCBIPCgdtZXNzYWdlGAIgASgJEi4KCHdvcmtmbG93GAMgASgLMhwucmVsaWFudC52MS5Xb3JrZmxvd0xpc3RJdGVtIowBChNDb3B5V29ya2Zsb3dSZXF1ZXN0EhIKCnByb2plY3RfaWQYASABKAkSEwoLc291cmNlX3NsdWcYAiABKAkSFQoIbmV3X25hbWUYAyABKAlIAIgBARIYCgt3b3JrdHJlZV9pZBgEIAEoCUgBiAEBQgsKCV9uZXdfbmFtZUIOCgxfd29ya3RyZWVfaWQiegoUQ29weVdvcmtmbG93UmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCBIPCgdtZXNzYWdlGAIgASgJEiYKCHdvcmtmbG93GAMgASgLMhQucmVsaWFudC52MS5Xb3JrZmxvdxIMCgRzbHVnGAQgASgJEgoKAmlkGAUgASgJIjMKDlNpbXVsYXRlZEV2ZW50EgwKBG5vZGUYASABKAkSEwoLb3V0cHV0X2pzb24YAiABKAkieAoTU2NlbmFyaW9FeHBlY3RhdGlvbhIPCgdvdXRjb21lGAEgASgJEg8KB3JlYWNoZWQYAiADKAkSEwoLbm90X3JlYWNoZWQYAyADKAkSFgoOZXJyb3JfY29udGFpbnMYBCABKAkSEgoKZXJyb3Jfbm9kZRgFIAEoCSKpAQoSU2NlbmFyaW9EZWZpbml0aW9uEgwKBG5hbWUYASABKAkSEwoLZGVzY3JpcHRpb24YAiABKAkSKgoGZXZlbnRzGAMgAygLMhoucmVsaWFudC52MS5TaW11bGF0ZWRFdmVudBIvCgZleHBlY3QYBCABKAsyHy5yZWxpYW50LnYxLlNjZW5hcmlvRXhwZWN0YXRpb24SEwoLaW5wdXRzX2pzb24YBSABKAkiTwoMRXJyb3JEZXRhaWxzEgwKBG5vZGUYASABKAkSDAoEc3RlcBgCIAEoCRIPCgdtZXNzYWdlGAMgASgJEhIKCmV4cHJlc3Npb24YBCABKAkieAoQRXhlY3V0aW9uRGV0YWlscxIVCg1ub2Rlc19yZWFjaGVkGAEgAygJEg8KB291dGNvbWUYAiABKAkSJwoFZXJyb3IYAyABKAsyGC5yZWxpYW50LnYxLkVycm9yRGV0YWlscxITCgtkdXJhdGlvbl9tcxgEIAEoAyKvAQoOU2NlbmFyaW9SZXN1bHQSDgoGc3RhdHVzGAEgASgJEhUKDXNjZW5hcmlvX25hbWUYAiABKAkSLwoJZXhlY3V0aW9uGAMgASgLMhwucmVsaWFudC52MS5FeGVjdXRpb25EZXRhaWxzEjEKCGV4cGVjdGVkGAQgASgLMh8ucmVsaWFudC52MS5TY2VuYXJpb0V4cGVjdGF0aW9uEhIKCm1pc21hdGNoZXMYBSADKAki1gIKCFNjZW5hcmlvEgoKAmlkGAEgASgJEhkKEXdvcmtmbG93X2RyYWZ0X2lkGAIgASgJEg8KB3VzZXJfaWQYAyABKAkSDAoEbmFtZRgEIAEoCRITCgtkZXNjcmlwdGlvbhgFIAEoCRIqCgZldmVudHMYBiADKAsyGi5yZWxpYW50LnYxLlNpbXVsYXRlZEV2ZW50Ei8KBmV4cGVjdBgHIAEoCzIfLnJlbGlhbnQudjEuU2NlbmFyaW9FeHBlY3RhdGlvbhIXCg9sYXN0X3J1bl9zdGF0dXMYCCABKAkSMwoPbGFzdF9ydW5fcmVzdWx0GAkgASgLMhoucmVsaWFudC52MS5TY2VuYXJpb1Jlc3VsdBISCgpjcmVhdGVkX2F0GAogASgJEhIKCnVwZGF0ZWRfYXQYCyABKAkSDgoGc291cmNlGAwgASgJEgwKBHBhdGgYDSABKAkiQQoUTGlzdFNjZW5hcmlvc1JlcXVlc3QSEgoKcHJvamVjdF9pZBgBIAEoCRIVCg13b3JrZmxvd19zbHVnGAIgASgJIlcKFUxpc3RTY2VuYXJpb3NSZXNwb25zZRInCglzY2VuYXJpb3MYASADKAsyFC5yZWxpYW50LnYxLlNjZW5hcmlvEhUKDXNjZW5hcmlvc19kaXIYAiABKAkipgEKFUNyZWF0ZVNjZW5hcmlvUmVxdWVzdBISCgpwcm9qZWN0X2lkGAEgASgJEhUKDXdvcmtmbG93X3NsdWcYAiABKAkSFQoNd29ya2Zsb3dfeWFtbBgDIAEoCRIwCghzY2VuYXJpbxgEIAEoCzIeLnJlbGlhbnQudjEuU2NlbmFyaW9EZWZpbml0aW9uEgsKA3J1bhgFIAEoCBIMCgRzYXZlGAYgASgIIo4BChZDcmVhdGVTY2VuYXJpb1Jlc3BvbnNlEg8KB3N1Y2Nlc3MYASABKAgSDwoHbWVzc2FnZRgCIAEoCRImCghzY2VuYXJpbxgDIAEoCzIULnJlbGlhbnQudjEuU2NlbmFyaW8SKgoGcmVzdWx0GAQgASgLMhoucmVsaWFudC52MS5TY2VuYXJpb1Jlc3VsdCKGAQoSUnVuU2NlbmFyaW9SZXF1ZXN0EhIKCnByb2plY3RfaWQYASABKAkSEwoLc2NlbmFyaW9faWQYAiABKAkSFQoNd29ya2Zsb3dfc2x1ZxgDIAEoCRIwCghzY2VuYXJpbxgEIAEoCzIeLnJlbGlhbnQudjEuU2NlbmFyaW9EZWZpbml0aW9uIkEKE1J1blNjZW5hcmlvUmVzcG9uc2USKgoGcmVzdWx0GAEgASgLMhoucmVsaWFudC52MS5TY2VuYXJpb1Jlc3VsdCJAChVEZWxldGVTY2VuYXJpb1JlcXVlc3QSEgoKcHJvamVjdF9pZBgBIAEoCRITCgtzY2VuYXJpb19pZBgCIAEoCSI6ChZEZWxldGVTY2VuYXJpb1Jlc3BvbnNlEg8KB3N1Y2Nlc3MYASABKAgSDwoHbWVzc2FnZRgCIAEoCSJqChVVcGxvYWRTY2VuYXJpb1JlcXVlc3QSEgoKcHJvamVjdF9pZBgBIAEoCRIVCg13b3JrZmxvd19zbHVnGAIgASgJEhAKCGZpbGVuYW1lGAMgASgJEhQKDHlhbWxfY29udGVudBgEIAEoCSJwChZVcGxvYWRTY2VuYXJpb1Jlc3BvbnNlEg8KB3N1Y2Nlc3MYASABKAgSDwoHbWVzc2FnZRgCIAEoCRIMCgRwYXRoGAMgASgJEiYKCHNjZW5hcmlvGAQgASgLMhQucmVsaWFudC52MS5TY2VuYXJpbyJAChVFeHBvcnRTY2VuYXJpb1JlcXVlc3QSEgoKcHJvamVjdF9pZBgBIAEoCRITCgtzY2VuYXJpb19pZBgCIAEoCSJAChZFeHBvcnRTY2VuYXJpb1Jlc3BvbnNlEhQKDHlhbWxfY29udGVudBgBIAEoCRIQCghmaWxlbmFtZRgCIAEoCSIwChpDcmVhdGVXb3JrZmxvd0RyYWZ0UmVxdWVzdBISCgpwcm9qZWN0X2lkGAEgASgJIksKG0NyZWF0ZVdvcmtmbG93RHJhZnRSZXNwb25zZRIQCghkcmFmdF9pZBgBIAEoCRIMCgRzbHVnGAIgASgJEgwKBG5hbWUYAyABKAkiSgolQXNzb2NpYXRlQ2hhdFdpdGhXb3JrZmxvd0RyYWZ0UmVxdWVzdBIPCgdjaGF0X2lkGAEgASgJEhAKCGRyYWZ0X2lkGAIgASgJIigKJkFzc29jaWF0ZUNoYXRXaXRoV29ya2Zsb3dEcmFmdFJlc3BvbnNlMo8JCg9Xb3JrZmxvd1NlcnZpY2USVgoNTGlzdFdvcmtmbG93cxIgLnJlbGlhbnQudjEuTGlzdFdvcmtmbG93c1JlcXVlc3QaIS5yZWxpYW50LnYxLkxpc3RXb3JrZmxvd3NSZXNwb25zZSIAElMKDFNhdmVXb3JrZmxvdxIfLnJlbGlhbnQudjEuU2F2ZVdvcmtmbG93UmVxdWVzdBogLnJlbGlhbnQudjEuU2F2ZVdvcmtmbG93UmVzcG9uc2UiABJQCgtHZXRXb3JrZmxvdxIeLnJlbGlhbnQudjEuR2V0V29ya2Zsb3dSZXF1ZXN0Gh8ucmVsaWFudC52MS5HZXRXb3JrZmxvd1Jlc3BvbnNlIgASWQoORGVsZXRlV29ya2Zsb3cSIS5yZWxpYW50LnYxLkRlbGV0ZVdvcmtmbG93UmVxdWVzdBoiLnJlbGlhbnQudjEuRGVsZXRlV29ya2Zsb3dSZXNwb25zZSIAEl8KEFZhbGlkYXRlV29ya2Zsb3cSIy5yZWxpYW50LnYxLlZhbGlkYXRlV29ya2Zsb3dSZXF1ZXN0GiQucmVsaWFudC52MS5WYWxpZGF0ZVdvcmtmbG93UmVzcG9uc2UiABJZCg5JbXBvcnRXb3JrZmxvdxIhLnJlbGlhbnQudjEuSW1wb3J0V29ya2Zsb3dSZXF1ZXN0GiIucmVsaWFudC52MS5JbXBvcnRXb3JrZmxvd1Jlc3BvbnNlIgASWQoORXhwb3J0V29ya2Zsb3cSIS5yZWxpYW50LnYxLkV4cG9ydFdvcmtmbG93UmVxdWVzdBoiLnJlbGlhbnQudjEuRXhwb3J0V29ya2Zsb3dSZXNwb25zZSIAEm4KFVNldFdvcmtmbG93VmlzaWJpbGl0eRIoLnJlbGlhbnQudjEuU2V0V29ya2Zsb3dWaXNpYmlsaXR5UmVxdWVzdBopLnJlbGlhbnQudjEuU2V0V29ya2Zsb3dWaXNpYmlsaXR5UmVzcG9uc2UiABJTCgxDb3B5V29ya2Zsb3cSHy5yZWxpYW50LnYxLkNvcHlXb3JrZmxvd1JlcXVlc3QaIC5yZWxpYW50LnYxLkNvcHlXb3JrZmxvd1Jlc3BvbnNlIgASUAoLQnVpbGRlckNoYXQSHi5yZWxpYW50LnYxLkJ1aWxkZXJDaGF0UmVxdWVzdBofLnJlbGlhbnQudjEuQnVpbGRlckNoYXRSZXNwb25zZSIAEmgKE0NyZWF0ZVdvcmtmbG93RHJhZnQSJi5yZWxpYW50LnYxLkNyZWF0ZVdvcmtmbG93RHJhZnRSZXF1ZXN0GicucmVsaWFudC52MS5DcmVhdGVXb3JrZmxvd0RyYWZ0UmVzcG9uc2UiABKJAQoeQXNzb2NpYXRlQ2hhdFdpdGhXb3JrZmxvd0RyYWZ0EjEucmVsaWFudC52MS5Bc3NvY2lhdGVDaGF0V2l0aFdvcmtmbG93RHJhZnRSZXF1ZXN0GjIucmVsaWFudC52MS5Bc3NvY2lhdGVDaGF0V2l0aFdvcmtmbG93RHJhZnRSZXNwb25zZSIAMqcECg9TY2VuYXJpb1NlcnZpY2USVgoNTGlzdFNjZW5hcmlvcxIgLnJlbGlhbnQudjEuTGlzdFNjZW5hcmlvc1JlcXVlc3QaIS5yZWxpYW50LnYxLkxpc3RTY2VuYXJpb3NSZXNwb25zZSIAElkKDkNyZWF0ZVNjZW5hcmlvEiEucmVsaWFudC52MS5DcmVhdGVTY2VuYXJpb1JlcXVlc3QaIi5yZWxpYW50LnYxLkNyZWF0ZVNjZW5hcmlvUmVzcG9uc2UiABJQCgtSdW5TY2VuYXJpbxIeLnJlbGlhbnQudjEuUnVuU2NlbmFyaW9SZXF1ZXN0Gh8ucmVsaWFudC52MS5SdW5TY2VuYXJpb1Jlc3BvbnNlIgASWQoORGVsZXRlU2NlbmFyaW8SIS5yZWxpYW50LnYxLkRlbGV0ZVNjZW5hcmlvUmVxdWVzdBoiLnJlbGlhbnQudjEuRGVsZXRlU2NlbmFyaW9SZXNwb25zZSIAElkKDlVwbG9hZFNjZW5hcmlvEiEucmVsaWFudC52MS5VcGxvYWRTY2VuYXJpb1JlcXVlc3QaIi5yZWxpYW50LnYxLlVwbG9hZFNjZW5hcmlvUmVzcG9uc2UiABJZCg5FeHBvcnRTY2VuYXJpbxIhLnJlbGlhbnQudjEuRXhwb3J0U2NlbmFyaW9SZXF1ZXN0GiIucmVsaWFudC52MS5FeHBvcnRTY2VuYXJpb1Jlc3BvbnNlIgBCOlo4Z2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vcmVsaWFudC92MTtyZWxpYW50djFiBnByb3RvMw", [file_google_protobuf_struct, file_reliant_v1_common, file_reliant_v1_workflow_v2]);
+  fileDesc("ChlyZWxpYW50L3YxL3dvcmtmbG93LnByb3RvEgpyZWxpYW50LnYxIroFChBXb3JrZmxvd0xpc3RJdGVtEgwKBG5hbWUYASABKAkSEAoIZmlsZW5hbWUYAiABKAkSEwoLZGVzY3JpcHRpb24YAyABKAkSEgoKc3RlcF9jb3VudBgEIAEoBRIOCgZzb3VyY2UYBSABKAkSHwoFbm9kZXMYByADKAsyEC5yZWxpYW50LnYxLk5vZGUSHwoFZWRnZXMYCCADKAsyEC5yZWxpYW50LnYxLkVkZ2USOAoGaW5wdXRzGAkgAygLMigucmVsaWFudC52MS5Xb3JrZmxvd0xpc3RJdGVtLklucHV0c0VudHJ5EjoKB291dHB1dHMYCiADKAsyKS5yZWxpYW50LnYxLldvcmtmbG93TGlzdEl0ZW0uT3V0cHV0c0VudHJ5EhcKCnVwZGF0ZWRfYXQYCyABKAlIAIgBARIRCglpc19oaWRkZW4YDCABKAgSHAoPYnVpbGRlcl9jaGF0X2lkGA0gASgJSAGIAQESGQoRaGFzX3ByZXNldF9ncm91cHMYDiABKAgSFQoIZHJhZnRfaWQYECABKAlIAogBARIvCgZzdGF0dXMYESABKA4yHy5yZWxpYW50LnYxLldvcmtmbG93RHJhZnRTdGF0dXMSNgoRdmFsaWRhdGlvbl9lcnJvcnMYEiADKAsyGy5yZWxpYW50LnYxLlZhbGlkYXRpb25FcnJvchpACgtJbnB1dHNFbnRyeRILCgNrZXkYASABKAkSIAoFdmFsdWUYAiABKAsyES5yZWxpYW50LnYxLklucHV0OgI4ARouCgxPdXRwdXRzRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4AUINCgtfdXBkYXRlZF9hdEISChBfYnVpbGRlcl9jaGF0X2lkQgsKCV9kcmFmdF9pZEoECA8QEFIIaXNfdmFsaWQiOwoNSGlnaGxpZ2h0U3BhbhINCgVzdGFydBgBIAEoBRILCgNlbmQYAiABKAUSDgoGcmVhc29uGAMgASgJIr4BCg9WYWxpZGF0aW9uRXJyb3ISDAoEdHlwZRgBIAEoCRIPCgdtZXNzYWdlGAIgASgJEhIKCnN1Z2dlc3Rpb24YAyABKAkSEgoKZWRnZV9pbmRleBgEIAEoBRIRCgllZGdlX2Zyb20YBSABKAkSDwoHY2FzZV90bxgGIAEoCRIRCgljb25kaXRpb24YByABKAkSLQoKaGlnaGxpZ2h0cxgIIAMoCzIZLnJlbGlhbnQudjEuSGlnaGxpZ2h0U3BhbiJsChRMaXN0V29ya2Zsb3dzUmVxdWVzdBISCgpwcm9qZWN0X2lkGAEgASgJEhgKC3dvcmt0cmVlX2lkGAIgASgJSACIAQESFgoOaW5jbHVkZV9oaWRkZW4YAyABKAhCDgoMX3dvcmt0cmVlX2lkIo8BChVMaXN0V29ya2Zsb3dzUmVzcG9uc2USLwoJd29ya2Zsb3dzGAEgAygLMhwucmVsaWFudC52MS5Xb3JrZmxvd0xpc3RJdGVtEg0KBXRvdGFsGAIgASgFEjYKEWludmFsaWRfd29ya2Zsb3dzGAMgAygLMhsucmVsaWFudC52MS5JbnZhbGlkV29ya2Zsb3ciTQoPSW52YWxpZFdvcmtmbG93EgwKBG5hbWUYASABKAkSDgoGc291cmNlGAIgASgJEgwKBHBhdGgYAyABKAkSDgoGZXJyb3JzGAQgAygJIoQBChJHZXRXb3JrZmxvd1JlcXVlc3QSEgoKcHJvamVjdF9pZBgBIAEoCRIMCgRuYW1lGAIgASgJEhgKC3dvcmt0cmVlX2lkGAMgASgJSACIAQESFQoIZHJhZnRfaWQYBCABKAlIAYgBAUIOCgxfd29ya3RyZWVfaWRCCwoJX2RyYWZ0X2lkIsADChNHZXRXb3JrZmxvd1Jlc3BvbnNlEiYKCHdvcmtmbG93GAEgASgLMhQucmVsaWFudC52MS5Xb3JrZmxvdxIOCgZzb3VyY2UYAiABKAkSFQoIZHJhZnRfaWQYAyABKAlIAIgBARIcCg9idWlsZGVyX2NoYXRfaWQYBCABKAlIAYgBARIYCgtwYXJzZV9lcnJvchgGIAEoCUgCiAEBEhsKDnJhd19kZWZpbml0aW9uGAcgASgJSAOIAQESDwoHdmVyc2lvbhgIIAEoAxIYCgtzb3VyY2VfcGF0aBgJIAEoCUgEiAEBEhcKD3lhbWxfZGVmaW5pdGlvbhgKIAEoCRIvCgZzdGF0dXMYCyABKA4yHy5yZWxpYW50LnYxLldvcmtmbG93RHJhZnRTdGF0dXMSNgoRdmFsaWRhdGlvbl9lcnJvcnMYDCADKAsyGy5yZWxpYW50LnYxLlZhbGlkYXRpb25FcnJvckILCglfZHJhZnRfaWRCEgoQX2J1aWxkZXJfY2hhdF9pZEIOCgxfcGFyc2VfZXJyb3JCEQoPX3Jhd19kZWZpbml0aW9uQg4KDF9zb3VyY2VfcGF0aEoECAUQBiJjChVEZWxldGVXb3JrZmxvd1JlcXVlc3QSEgoKcHJvamVjdF9pZBgBIAEoCRIMCgRuYW1lGAIgASgJEhgKC3dvcmt0cmVlX2lkGAMgASgJSACIAQFCDgoMX3dvcmt0cmVlX2lkIjoKFkRlbGV0ZVdvcmtmbG93UmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCBIPCgdtZXNzYWdlGAIgASgJIlUKF1ZhbGlkYXRlV29ya2Zsb3dSZXF1ZXN0EhIKCnByb2plY3RfaWQYASABKAkSJgoId29ya2Zsb3cYAiABKAsyFC5yZWxpYW50LnYxLldvcmtmbG93IlYKGFZhbGlkYXRlV29ya2Zsb3dSZXNwb25zZRINCgV2YWxpZBgBIAEoCBIrCgZlcnJvcnMYAiADKAsyGy5yZWxpYW50LnYxLlZhbGlkYXRpb25FcnJvciJ1ChJCdWlsZGVyQ2hhdFJlcXVlc3QSEgoKcHJvamVjdF9pZBgBIAEoCRISCgpzZXNzaW9uX2lkGAIgASgJEg8KB21lc3NhZ2UYAyABKAkSJgoId29ya2Zsb3cYBCABKAsyFC5yZWxpYW50LnYxLldvcmtmbG93IiwKDFRvb2xDYWxsSW5mbxIMCgRuYW1lGAEgASgJEg4KBnJlc3VsdBgCIAEoCSKWAQoTQnVpbGRlckNoYXRSZXNwb25zZRIPCgdtZXNzYWdlGAEgASgJEhgKEHdvcmtmbG93X3VwZGF0ZWQYAiABKAgSJgoId29ya2Zsb3cYAyABKAsyFC5yZWxpYW50LnYxLldvcmtmbG93EiwKCnRvb2xfY2FsbHMYBCADKAsyGC5yZWxpYW50LnYxLlRvb2xDYWxsSW5mbyKOAwoTU2F2ZVdvcmtmbG93UmVxdWVzdBISCgpwcm9qZWN0X2lkGAEgASgJEiYKCHdvcmtmbG93GAIgASgLMhQucmVsaWFudC52MS5Xb3JrZmxvdxImCgVzY29wZRgEIAEoDjIXLnJlbGlhbnQudjEuQ29uZmlnU2NvcGUSGAoLd29ya3RyZWVfaWQYBSABKAlIAIgBARIcCg9idWlsZGVyX2NoYXRfaWQYBiABKAlIAYgBARIdChBleHBlY3RlZF92ZXJzaW9uGAggASgDSAKIAQESGAoLc291cmNlX3BhdGgYCSABKAlIA4gBARIVCghkcmFmdF9pZBgKIAEoCUgEiAEBEi8KBnN0YXR1cxgLIAEoDjIfLnJlbGlhbnQudjEuV29ya2Zsb3dEcmFmdFN0YXR1c0IOCgxfd29ya3RyZWVfaWRCEgoQX2J1aWxkZXJfY2hhdF9pZEITChFfZXhwZWN0ZWRfdmVyc2lvbkIOCgxfc291cmNlX3BhdGhCCwoJX2RyYWZ0X2lkSgQIBxAIItcCChRTYXZlV29ya2Zsb3dSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIEg8KB21lc3NhZ2UYAiABKAkSJgoId29ya2Zsb3cYAyABKAsyFC5yZWxpYW50LnYxLldvcmtmbG93EhAKCGlzX3ZhbGlkGAUgASgIEjYKEXZhbGlkYXRpb25fZXJyb3JzGAYgAygLMhsucmVsaWFudC52MS5WYWxpZGF0aW9uRXJyb3ISCgoCaWQYByABKAkSDAoEc2x1ZxgIIAEoCRIcCg9idWlsZGVyX2NoYXRfaWQYCSABKAlIAIgBARIPCgd2ZXJzaW9uGAsgASgDEhcKD3lhbWxfZGVmaW5pdGlvbhgMIAEoCRIvCgZzdGF0dXMYDSABKA4yHy5yZWxpYW50LnYxLldvcmtmbG93RHJhZnRTdGF0dXNCEgoQX2J1aWxkZXJfY2hhdF9pZEoECAoQCyLXAQoVSW1wb3J0V29ya2Zsb3dSZXF1ZXN0EhIKCnByb2plY3RfaWQYASABKAkSFAoMeWFtbF9jb250ZW50GAIgASgMEiYKBXNjb3BlGAMgASgOMhcucmVsaWFudC52MS5Db25maWdTY29wZRIYCgt3b3JrdHJlZV9pZBgEIAEoCUgAiAEBEhEKCW92ZXJ3cml0ZRgFIAEoCBIvCgZzdGF0dXMYBiABKA4yHy5yZWxpYW50LnYxLldvcmtmbG93RHJhZnRTdGF0dXNCDgoMX3dvcmt0cmVlX2lkIp4CChZJbXBvcnRXb3JrZmxvd1Jlc3BvbnNlEg8KB3N1Y2Nlc3MYASABKAgSDwoHbWVzc2FnZRgCIAEoCRImCgh3b3JrZmxvdxgDIAEoCzIULnJlbGlhbnQudjEuV29ya2Zsb3cSCgoCaWQYBCABKAkSDAoEc2x1ZxgFIAEoCRIQCghpc192YWxpZBgGIAEoCBI2ChF2YWxpZGF0aW9uX2Vycm9ycxgHIAMoCzIbLnJlbGlhbnQudjEuVmFsaWRhdGlvbkVycm9yEhAKCGNvbmZsaWN0GAggASgIEhMKC2V4aXN0aW5nX2lkGAkgASgJEi8KBnN0YXR1cxgKIAEoDjIfLnJlbGlhbnQudjEuV29ya2Zsb3dEcmFmdFN0YXR1cyJjChVFeHBvcnRXb3JrZmxvd1JlcXVlc3QSEgoKcHJvamVjdF9pZBgBIAEoCRIMCgRzbHVnGAIgASgJEhgKC3dvcmt0cmVlX2lkGAMgASgJSACIAQFCDgoMX3dvcmt0cmVlX2lkInkKFkV4cG9ydFdvcmtmbG93UmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCBIUCgx5YW1sX2NvbnRlbnQYAiABKAwSEAoIZmlsZW5hbWUYAyABKAkSJgoId29ya2Zsb3cYBCABKAsyFC5yZWxpYW50LnYxLldvcmtmbG93IlMKHFNldFdvcmtmbG93VmlzaWJpbGl0eVJlcXVlc3QSEgoKcHJvamVjdF9pZBgBIAEoCRIMCgRzbHVnGAIgASgJEhEKCWlzX2hpZGRlbhgDIAEoCCJxCh1TZXRXb3JrZmxvd1Zpc2liaWxpdHlSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIEg8KB21lc3NhZ2UYAiABKAkSLgoId29ya2Zsb3cYAyABKAsyHC5yZWxpYW50LnYxLldvcmtmbG93TGlzdEl0ZW0ijAEKE0NvcHlXb3JrZmxvd1JlcXVlc3QSEgoKcHJvamVjdF9pZBgBIAEoCRITCgtzb3VyY2Vfc2x1ZxgCIAEoCRIVCghuZXdfbmFtZRgDIAEoCUgAiAEBEhgKC3dvcmt0cmVlX2lkGAQgASgJSAGIAQFCCwoJX25ld19uYW1lQg4KDF93b3JrdHJlZV9pZCJ6ChRDb3B5V29ya2Zsb3dSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIEg8KB21lc3NhZ2UYAiABKAkSJgoId29ya2Zsb3cYAyABKAsyFC5yZWxpYW50LnYxLldvcmtmbG93EgwKBHNsdWcYBCABKAkSCgoCaWQYBSABKAkiMwoOU2ltdWxhdGVkRXZlbnQSDAoEbm9kZRgBIAEoCRITCgtvdXRwdXRfanNvbhgCIAEoCSJ4ChNTY2VuYXJpb0V4cGVjdGF0aW9uEg8KB291dGNvbWUYASABKAkSDwoHcmVhY2hlZBgCIAMoCRITCgtub3RfcmVhY2hlZBgDIAMoCRIWCg5lcnJvcl9jb250YWlucxgEIAEoCRISCgplcnJvcl9ub2RlGAUgASgJIqkBChJTY2VuYXJpb0RlZmluaXRpb24SDAoEbmFtZRgBIAEoCRITCgtkZXNjcmlwdGlvbhgCIAEoCRIqCgZldmVudHMYAyADKAsyGi5yZWxpYW50LnYxLlNpbXVsYXRlZEV2ZW50Ei8KBmV4cGVjdBgEIAEoCzIfLnJlbGlhbnQudjEuU2NlbmFyaW9FeHBlY3RhdGlvbhITCgtpbnB1dHNfanNvbhgFIAEoCSJPCgxFcnJvckRldGFpbHMSDAoEbm9kZRgBIAEoCRIMCgRzdGVwGAIgASgJEg8KB21lc3NhZ2UYAyABKAkSEgoKZXhwcmVzc2lvbhgEIAEoCSJ4ChBFeGVjdXRpb25EZXRhaWxzEhUKDW5vZGVzX3JlYWNoZWQYASADKAkSDwoHb3V0Y29tZRgCIAEoCRInCgVlcnJvchgDIAEoCzIYLnJlbGlhbnQudjEuRXJyb3JEZXRhaWxzEhMKC2R1cmF0aW9uX21zGAQgASgDIq8BCg5TY2VuYXJpb1Jlc3VsdBIOCgZzdGF0dXMYASABKAkSFQoNc2NlbmFyaW9fbmFtZRgCIAEoCRIvCglleGVjdXRpb24YAyABKAsyHC5yZWxpYW50LnYxLkV4ZWN1dGlvbkRldGFpbHMSMQoIZXhwZWN0ZWQYBCABKAsyHy5yZWxpYW50LnYxLlNjZW5hcmlvRXhwZWN0YXRpb24SEgoKbWlzbWF0Y2hlcxgFIAMoCSLWAgoIU2NlbmFyaW8SCgoCaWQYASABKAkSGQoRd29ya2Zsb3dfZHJhZnRfaWQYAiABKAkSDwoHdXNlcl9pZBgDIAEoCRIMCgRuYW1lGAQgASgJEhMKC2Rlc2NyaXB0aW9uGAUgASgJEioKBmV2ZW50cxgGIAMoCzIaLnJlbGlhbnQudjEuU2ltdWxhdGVkRXZlbnQSLwoGZXhwZWN0GAcgASgLMh8ucmVsaWFudC52MS5TY2VuYXJpb0V4cGVjdGF0aW9uEhcKD2xhc3RfcnVuX3N0YXR1cxgIIAEoCRIzCg9sYXN0X3J1bl9yZXN1bHQYCSABKAsyGi5yZWxpYW50LnYxLlNjZW5hcmlvUmVzdWx0EhIKCmNyZWF0ZWRfYXQYCiABKAkSEgoKdXBkYXRlZF9hdBgLIAEoCRIOCgZzb3VyY2UYDCABKAkSDAoEcGF0aBgNIAEoCSJBChRMaXN0U2NlbmFyaW9zUmVxdWVzdBISCgpwcm9qZWN0X2lkGAEgASgJEhUKDXdvcmtmbG93X3NsdWcYAiABKAkiVwoVTGlzdFNjZW5hcmlvc1Jlc3BvbnNlEicKCXNjZW5hcmlvcxgBIAMoCzIULnJlbGlhbnQudjEuU2NlbmFyaW8SFQoNc2NlbmFyaW9zX2RpchgCIAEoCSKmAQoVQ3JlYXRlU2NlbmFyaW9SZXF1ZXN0EhIKCnByb2plY3RfaWQYASABKAkSFQoNd29ya2Zsb3dfc2x1ZxgCIAEoCRIVCg13b3JrZmxvd195YW1sGAMgASgJEjAKCHNjZW5hcmlvGAQgASgLMh4ucmVsaWFudC52MS5TY2VuYXJpb0RlZmluaXRpb24SCwoDcnVuGAUgASgIEgwKBHNhdmUYBiABKAgijgEKFkNyZWF0ZVNjZW5hcmlvUmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCBIPCgdtZXNzYWdlGAIgASgJEiYKCHNjZW5hcmlvGAMgASgLMhQucmVsaWFudC52MS5TY2VuYXJpbxIqCgZyZXN1bHQYBCABKAsyGi5yZWxpYW50LnYxLlNjZW5hcmlvUmVzdWx0IoYBChJSdW5TY2VuYXJpb1JlcXVlc3QSEgoKcHJvamVjdF9pZBgBIAEoCRITCgtzY2VuYXJpb19pZBgCIAEoCRIVCg13b3JrZmxvd19zbHVnGAMgASgJEjAKCHNjZW5hcmlvGAQgASgLMh4ucmVsaWFudC52MS5TY2VuYXJpb0RlZmluaXRpb24iQQoTUnVuU2NlbmFyaW9SZXNwb25zZRIqCgZyZXN1bHQYASABKAsyGi5yZWxpYW50LnYxLlNjZW5hcmlvUmVzdWx0IkAKFURlbGV0ZVNjZW5hcmlvUmVxdWVzdBISCgpwcm9qZWN0X2lkGAEgASgJEhMKC3NjZW5hcmlvX2lkGAIgASgJIjoKFkRlbGV0ZVNjZW5hcmlvUmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCBIPCgdtZXNzYWdlGAIgASgJImoKFVVwbG9hZFNjZW5hcmlvUmVxdWVzdBISCgpwcm9qZWN0X2lkGAEgASgJEhUKDXdvcmtmbG93X3NsdWcYAiABKAkSEAoIZmlsZW5hbWUYAyABKAkSFAoMeWFtbF9jb250ZW50GAQgASgJInAKFlVwbG9hZFNjZW5hcmlvUmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCBIPCgdtZXNzYWdlGAIgASgJEgwKBHBhdGgYAyABKAkSJgoIc2NlbmFyaW8YBCABKAsyFC5yZWxpYW50LnYxLlNjZW5hcmlvIkAKFUV4cG9ydFNjZW5hcmlvUmVxdWVzdBISCgpwcm9qZWN0X2lkGAEgASgJEhMKC3NjZW5hcmlvX2lkGAIgASgJIkAKFkV4cG9ydFNjZW5hcmlvUmVzcG9uc2USFAoMeWFtbF9jb250ZW50GAEgASgJEhAKCGZpbGVuYW1lGAIgASgJImEKGkNyZWF0ZVdvcmtmbG93RHJhZnRSZXF1ZXN0EhIKCnByb2plY3RfaWQYASABKAkSLwoGc3RhdHVzGAIgASgOMh8ucmVsaWFudC52MS5Xb3JrZmxvd0RyYWZ0U3RhdHVzInwKG0NyZWF0ZVdvcmtmbG93RHJhZnRSZXNwb25zZRIQCghkcmFmdF9pZBgBIAEoCRIMCgRzbHVnGAIgASgJEgwKBG5hbWUYAyABKAkSLwoGc3RhdHVzGAQgASgOMh8ucmVsaWFudC52MS5Xb3JrZmxvd0RyYWZ0U3RhdHVzIqUBChhTZXRXb3JrZmxvd1N0YXR1c1JlcXVlc3QSEgoKcHJvamVjdF9pZBgBIAEoCRIQCghkcmFmdF9pZBgCIAEoCRIvCgZzdGF0dXMYAyABKA4yHy5yZWxpYW50LnYxLldvcmtmbG93RHJhZnRTdGF0dXMSHQoQZXhwZWN0ZWRfdmVyc2lvbhgEIAEoA0gAiAEBQhMKEV9leHBlY3RlZF92ZXJzaW9uIrcBChlTZXRXb3JrZmxvd1N0YXR1c1Jlc3BvbnNlEg8KB3N1Y2Nlc3MYASABKAgSDwoHbWVzc2FnZRgCIAEoCRIvCgZzdGF0dXMYAyABKA4yHy5yZWxpYW50LnYxLldvcmtmbG93RHJhZnRTdGF0dXMSNgoRdmFsaWRhdGlvbl9lcnJvcnMYBCADKAsyGy5yZWxpYW50LnYxLlZhbGlkYXRpb25FcnJvchIPCgd2ZXJzaW9uGAUgASgDIkoKJUFzc29jaWF0ZUNoYXRXaXRoV29ya2Zsb3dEcmFmdFJlcXVlc3QSDwoHY2hhdF9pZBgBIAEoCRIQCghkcmFmdF9pZBgCIAEoCSIoCiZBc3NvY2lhdGVDaGF0V2l0aFdvcmtmbG93RHJhZnRSZXNwb25zZSqBAQoTV29ya2Zsb3dEcmFmdFN0YXR1cxIlCiFXT1JLRkxPV19EUkFGVF9TVEFUVVNfVU5TUEVDSUZJRUQQABIfChtXT1JLRkxPV19EUkFGVF9TVEFUVVNfRFJBRlQQARIiCh5XT1JLRkxPV19EUkFGVF9TVEFUVVNfQ09NUExFVEUQAjLzCQoPV29ya2Zsb3dTZXJ2aWNlElYKDUxpc3RXb3JrZmxvd3MSIC5yZWxpYW50LnYxLkxpc3RXb3JrZmxvd3NSZXF1ZXN0GiEucmVsaWFudC52MS5MaXN0V29ya2Zsb3dzUmVzcG9uc2UiABJTCgxTYXZlV29ya2Zsb3cSHy5yZWxpYW50LnYxLlNhdmVXb3JrZmxvd1JlcXVlc3QaIC5yZWxpYW50LnYxLlNhdmVXb3JrZmxvd1Jlc3BvbnNlIgASUAoLR2V0V29ya2Zsb3cSHi5yZWxpYW50LnYxLkdldFdvcmtmbG93UmVxdWVzdBofLnJlbGlhbnQudjEuR2V0V29ya2Zsb3dSZXNwb25zZSIAElkKDkRlbGV0ZVdvcmtmbG93EiEucmVsaWFudC52MS5EZWxldGVXb3JrZmxvd1JlcXVlc3QaIi5yZWxpYW50LnYxLkRlbGV0ZVdvcmtmbG93UmVzcG9uc2UiABJfChBWYWxpZGF0ZVdvcmtmbG93EiMucmVsaWFudC52MS5WYWxpZGF0ZVdvcmtmbG93UmVxdWVzdBokLnJlbGlhbnQudjEuVmFsaWRhdGVXb3JrZmxvd1Jlc3BvbnNlIgASWQoOSW1wb3J0V29ya2Zsb3cSIS5yZWxpYW50LnYxLkltcG9ydFdvcmtmbG93UmVxdWVzdBoiLnJlbGlhbnQudjEuSW1wb3J0V29ya2Zsb3dSZXNwb25zZSIAElkKDkV4cG9ydFdvcmtmbG93EiEucmVsaWFudC52MS5FeHBvcnRXb3JrZmxvd1JlcXVlc3QaIi5yZWxpYW50LnYxLkV4cG9ydFdvcmtmbG93UmVzcG9uc2UiABJuChVTZXRXb3JrZmxvd1Zpc2liaWxpdHkSKC5yZWxpYW50LnYxLlNldFdvcmtmbG93VmlzaWJpbGl0eVJlcXVlc3QaKS5yZWxpYW50LnYxLlNldFdvcmtmbG93VmlzaWJpbGl0eVJlc3BvbnNlIgASUwoMQ29weVdvcmtmbG93Eh8ucmVsaWFudC52MS5Db3B5V29ya2Zsb3dSZXF1ZXN0GiAucmVsaWFudC52MS5Db3B5V29ya2Zsb3dSZXNwb25zZSIAElAKC0J1aWxkZXJDaGF0Eh4ucmVsaWFudC52MS5CdWlsZGVyQ2hhdFJlcXVlc3QaHy5yZWxpYW50LnYxLkJ1aWxkZXJDaGF0UmVzcG9uc2UiABJoChNDcmVhdGVXb3JrZmxvd0RyYWZ0EiYucmVsaWFudC52MS5DcmVhdGVXb3JrZmxvd0RyYWZ0UmVxdWVzdBonLnJlbGlhbnQudjEuQ3JlYXRlV29ya2Zsb3dEcmFmdFJlc3BvbnNlIgASiQEKHkFzc29jaWF0ZUNoYXRXaXRoV29ya2Zsb3dEcmFmdBIxLnJlbGlhbnQudjEuQXNzb2NpYXRlQ2hhdFdpdGhXb3JrZmxvd0RyYWZ0UmVxdWVzdBoyLnJlbGlhbnQudjEuQXNzb2NpYXRlQ2hhdFdpdGhXb3JrZmxvd0RyYWZ0UmVzcG9uc2UiABJiChFTZXRXb3JrZmxvd1N0YXR1cxIkLnJlbGlhbnQudjEuU2V0V29ya2Zsb3dTdGF0dXNSZXF1ZXN0GiUucmVsaWFudC52MS5TZXRXb3JrZmxvd1N0YXR1c1Jlc3BvbnNlIgAypwQKD1NjZW5hcmlvU2VydmljZRJWCg1MaXN0U2NlbmFyaW9zEiAucmVsaWFudC52MS5MaXN0U2NlbmFyaW9zUmVxdWVzdBohLnJlbGlhbnQudjEuTGlzdFNjZW5hcmlvc1Jlc3BvbnNlIgASWQoOQ3JlYXRlU2NlbmFyaW8SIS5yZWxpYW50LnYxLkNyZWF0ZVNjZW5hcmlvUmVxdWVzdBoiLnJlbGlhbnQudjEuQ3JlYXRlU2NlbmFyaW9SZXNwb25zZSIAElAKC1J1blNjZW5hcmlvEh4ucmVsaWFudC52MS5SdW5TY2VuYXJpb1JlcXVlc3QaHy5yZWxpYW50LnYxLlJ1blNjZW5hcmlvUmVzcG9uc2UiABJZCg5EZWxldGVTY2VuYXJpbxIhLnJlbGlhbnQudjEuRGVsZXRlU2NlbmFyaW9SZXF1ZXN0GiIucmVsaWFudC52MS5EZWxldGVTY2VuYXJpb1Jlc3BvbnNlIgASWQoOVXBsb2FkU2NlbmFyaW8SIS5yZWxpYW50LnYxLlVwbG9hZFNjZW5hcmlvUmVxdWVzdBoiLnJlbGlhbnQudjEuVXBsb2FkU2NlbmFyaW9SZXNwb25zZSIAElkKDkV4cG9ydFNjZW5hcmlvEiEucmVsaWFudC52MS5FeHBvcnRTY2VuYXJpb1JlcXVlc3QaIi5yZWxpYW50LnYxLkV4cG9ydFNjZW5hcmlvUmVzcG9uc2UiAEI6WjhnaXRodWIuY29tL3JlbGlhbnQtbGFicy9yZWxpYW50L2dlbi9yZWxpYW50L3YxO3JlbGlhbnR2MWIGcHJvdG8z", [file_google_protobuf_struct, file_reliant_v1_common, file_reliant_v1_workflow_v2]);
 
 /**
  * WorkflowListItem represents a workflow in list responses with additional metadata
@@ -110,18 +110,26 @@ export type WorkflowListItem = Message<"reliant.v1.WorkflowListItem"> & {
   hasPresetGroups: boolean;
 
   /**
-   * True if workflow passes validation (always true for builtin/project)
-   *
-   * @generated from field: bool is_valid = 15;
-   */
-  isValid: boolean;
-
-  /**
    * Draft ID for user workflows (stable ID for lookups, not present for builtin/project)
    *
    * @generated from field: optional string draft_id = 16;
    */
   draftId?: string | undefined;
+
+  /**
+   * Lifecycle. Builtin and project workflows are always COMPLETE.
+   *
+   * @generated from field: reliant.v1.WorkflowDraftStatus status = 17;
+   */
+  status: WorkflowDraftStatus;
+
+  /**
+   * Current validation findings, computed on read (errors, then warnings typed
+   * "warning:<category>"). Empty for builtin and project workflows.
+   *
+   * @generated from field: repeated reliant.v1.ValidationError validation_errors = 18;
+   */
+  validationErrors: ValidationError[];
 };
 
 /**
@@ -444,6 +452,21 @@ export type GetWorkflowResponse = Message<"reliant.v1.GetWorkflowResponse"> & {
    * @generated from field: string yaml_definition = 10;
    */
   yamlDefinition: string;
+
+  /**
+   * Lifecycle of a user workflow; COMPLETE for builtin and project workflows.
+   *
+   * @generated from field: reliant.v1.WorkflowDraftStatus status = 11;
+   */
+  status: WorkflowDraftStatus;
+
+  /**
+   * Current validation findings for a user workflow, computed on read (errors,
+   * then warnings typed "warning:<category>").
+   *
+   * @generated from field: repeated reliant.v1.ValidationError validation_errors = 12;
+   */
+  validationErrors: ValidationError[];
 };
 
 /**
@@ -723,6 +746,15 @@ export type SaveWorkflowRequest = Message<"reliant.v1.SaveWorkflowRequest"> & {
    * @generated from field: optional string draft_id = 10;
    */
   draftId?: string | undefined;
+
+  /**
+   * Intent. DRAFT stores as-is; COMPLETE validates and rejects on errors;
+   * UNSPECIFIED keeps the current status (new workflows start as drafts), so
+   * re-saving a complete workflow is gated like COMPLETE.
+   *
+   * @generated from field: reliant.v1.WorkflowDraftStatus status = 11;
+   */
+  status: WorkflowDraftStatus;
 };
 
 /**
@@ -760,14 +792,14 @@ export type SaveWorkflowResponse = Message<"reliant.v1.SaveWorkflowResponse"> & 
   /**
    * Field 4 removed (was published)
    *
-   * True if workflow passed validation
+   * True if this request's definition passed validation
    *
    * @generated from field: bool is_valid = 5;
    */
   isValid: boolean;
 
   /**
-   * Validation errors (if any)
+   * This request's validation findings (errors, then warnings)
    *
    * @generated from field: repeated reliant.v1.ValidationError validation_errors = 6;
    */
@@ -807,6 +839,13 @@ export type SaveWorkflowResponse = Message<"reliant.v1.SaveWorkflowResponse"> & 
    * @generated from field: string yaml_definition = 12;
    */
   yamlDefinition: string;
+
+  /**
+   * Resulting status (unset when nothing was stored)
+   *
+   * @generated from field: reliant.v1.WorkflowDraftStatus status = 13;
+   */
+  status: WorkflowDraftStatus;
 };
 
 /**
@@ -854,6 +893,13 @@ export type ImportWorkflowRequest = Message<"reliant.v1.ImportWorkflowRequest"> 
    * @generated from field: bool overwrite = 5;
    */
   overwrite: boolean;
+
+  /**
+   * Intent; same semantics as SaveWorkflowRequest.status
+   *
+   * @generated from field: reliant.v1.WorkflowDraftStatus status = 6;
+   */
+  status: WorkflowDraftStatus;
 };
 
 /**
@@ -899,7 +945,7 @@ export type ImportWorkflowResponse = Message<"reliant.v1.ImportWorkflowResponse"
   slug: string;
 
   /**
-   * Whether workflow passed validation
+   * Whether this request's definition passed validation
    *
    * @generated from field: bool is_valid = 6;
    */
@@ -923,6 +969,13 @@ export type ImportWorkflowResponse = Message<"reliant.v1.ImportWorkflowResponse"
    * @generated from field: string existing_id = 9;
    */
   existingId: string;
+
+  /**
+   * Resulting status (unset when nothing was stored)
+   *
+   * @generated from field: reliant.v1.WorkflowDraftStatus status = 10;
+   */
+  status: WorkflowDraftStatus;
 };
 
 /**
@@ -1889,6 +1942,14 @@ export type CreateWorkflowDraftRequest = Message<"reliant.v1.CreateWorkflowDraft
    * @generated from field: string project_id = 1;
    */
   projectId: string;
+
+  /**
+   * Intent; UNSPECIFIED and DRAFT create a draft. COMPLETE validates the
+   * starting template first.
+   *
+   * @generated from field: reliant.v1.WorkflowDraftStatus status = 2;
+   */
+  status: WorkflowDraftStatus;
 };
 
 /**
@@ -1922,6 +1983,13 @@ export type CreateWorkflowDraftResponse = Message<"reliant.v1.CreateWorkflowDraf
    * @generated from field: string name = 3;
    */
   name: string;
+
+  /**
+   * Status the workflow was created with
+   *
+   * @generated from field: reliant.v1.WorkflowDraftStatus status = 4;
+   */
+  status: WorkflowDraftStatus;
 };
 
 /**
@@ -1930,6 +1998,91 @@ export type CreateWorkflowDraftResponse = Message<"reliant.v1.CreateWorkflowDraf
  */
 export const CreateWorkflowDraftResponseSchema: GenMessage<CreateWorkflowDraftResponse> = /*@__PURE__*/
   messageDesc(file_reliant_v1_workflow, 45);
+
+/**
+ * @generated from message reliant.v1.SetWorkflowStatusRequest
+ */
+export type SetWorkflowStatusRequest = Message<"reliant.v1.SetWorkflowStatusRequest"> & {
+  /**
+   * Required: project context
+   *
+   * @generated from field: string project_id = 1;
+   */
+  projectId: string;
+
+  /**
+   * Required: the stored workflow
+   *
+   * @generated from field: string draft_id = 2;
+   */
+  draftId: string;
+
+  /**
+   * Required: DRAFT or COMPLETE
+   *
+   * @generated from field: reliant.v1.WorkflowDraftStatus status = 3;
+   */
+  status: WorkflowDraftStatus;
+
+  /**
+   * OCC: fails if the workflow changed since it was loaded
+   *
+   * @generated from field: optional int64 expected_version = 4;
+   */
+  expectedVersion?: bigint | undefined;
+};
+
+/**
+ * Describes the message reliant.v1.SetWorkflowStatusRequest.
+ * Use `create(SetWorkflowStatusRequestSchema)` to create a new message.
+ */
+export const SetWorkflowStatusRequestSchema: GenMessage<SetWorkflowStatusRequest> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_workflow, 46);
+
+/**
+ * @generated from message reliant.v1.SetWorkflowStatusResponse
+ */
+export type SetWorkflowStatusResponse = Message<"reliant.v1.SetWorkflowStatusResponse"> & {
+  /**
+   * False when COMPLETE was rejected by validation
+   *
+   * @generated from field: bool success = 1;
+   */
+  success: boolean;
+
+  /**
+   * @generated from field: string message = 2;
+   */
+  message: string;
+
+  /**
+   * Status after the call
+   *
+   * @generated from field: reliant.v1.WorkflowDraftStatus status = 3;
+   */
+  status: WorkflowDraftStatus;
+
+  /**
+   * Current findings (errors, then warnings)
+   *
+   * @generated from field: repeated reliant.v1.ValidationError validation_errors = 4;
+   */
+  validationErrors: ValidationError[];
+
+  /**
+   * Version after the call (for OCC)
+   *
+   * @generated from field: int64 version = 5;
+   */
+  version: bigint;
+};
+
+/**
+ * Describes the message reliant.v1.SetWorkflowStatusResponse.
+ * Use `create(SetWorkflowStatusResponseSchema)` to create a new message.
+ */
+export const SetWorkflowStatusResponseSchema: GenMessage<SetWorkflowStatusResponse> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_workflow, 47);
 
 /**
  * AssociateChatWithWorkflowDraftRequest links a chat to a workflow draft.
@@ -1958,7 +2111,7 @@ export type AssociateChatWithWorkflowDraftRequest = Message<"reliant.v1.Associat
  * Use `create(AssociateChatWithWorkflowDraftRequestSchema)` to create a new message.
  */
 export const AssociateChatWithWorkflowDraftRequestSchema: GenMessage<AssociateChatWithWorkflowDraftRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_workflow, 46);
+  messageDesc(file_reliant_v1_workflow, 48);
 
 /**
  * Empty response - success indicated by lack of error
@@ -1973,7 +2126,47 @@ export type AssociateChatWithWorkflowDraftResponse = Message<"reliant.v1.Associa
  * Use `create(AssociateChatWithWorkflowDraftResponseSchema)` to create a new message.
  */
 export const AssociateChatWithWorkflowDraftResponseSchema: GenMessage<AssociateChatWithWorkflowDraftResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_workflow, 47);
+  messageDesc(file_reliant_v1_workflow, 49);
+
+/**
+ * WorkflowDraftStatus is a stored workflow's lifecycle.
+ *
+ * Validity is never stored: it is computed on read and at the two gates
+ * (marking complete, and loading for execution).
+ *
+ * @generated from enum reliant.v1.WorkflowDraftStatus
+ */
+export enum WorkflowDraftStatus {
+  /**
+   * In a request: keep the workflow's current status (a new workflow starts
+   * as a draft). Never returned for a stored workflow.
+   *
+   * @generated from enum value: WORKFLOW_DRAFT_STATUS_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * Work in progress: saved as-is, may be invalid, never runnable, and never
+   * offered where a runnable workflow is required.
+   *
+   * @generated from enum value: WORKFLOW_DRAFT_STATUS_DRAFT = 1;
+   */
+  DRAFT = 1,
+
+  /**
+   * Passed validation when it was marked complete; runnable. Saving it again
+   * re-validates, and a save that would make it invalid is rejected.
+   *
+   * @generated from enum value: WORKFLOW_DRAFT_STATUS_COMPLETE = 2;
+   */
+  COMPLETE = 2,
+}
+
+/**
+ * Describes the enum reliant.v1.WorkflowDraftStatus.
+ */
+export const WorkflowDraftStatusSchema: GenEnum<WorkflowDraftStatus> = /*@__PURE__*/
+  enumDesc(file_reliant_v1_workflow, 0);
 
 /**
  * WorkflowService handles workflow CRUD operations and validation
@@ -1992,8 +2185,9 @@ export const WorkflowService: GenService<{
     output: typeof ListWorkflowsResponseSchema;
   },
   /**
-   * SaveWorkflow creates or updates a workflow in the database
-   * Always validates and saves. Workflow is usable when valid and not hidden.
+   * SaveWorkflow creates or updates a workflow in the database.
+   * A draft is stored as-is (validation findings are returned, not enforced);
+   * a complete workflow must pass validation or nothing is stored.
    *
    * @generated from rpc reliant.v1.WorkflowService.SaveWorkflow
    */
@@ -2105,6 +2299,18 @@ export const WorkflowService: GenService<{
     methodKind: "unary";
     input: typeof AssociateChatWithWorkflowDraftRequestSchema;
     output: typeof AssociateChatWithWorkflowDraftResponseSchema;
+  },
+  /**
+   * SetWorkflowStatus moves a stored workflow between draft and complete.
+   * Marking complete validates the current definition and is rejected (with
+   * the errors) when it is invalid; moving to draft always succeeds.
+   *
+   * @generated from rpc reliant.v1.WorkflowService.SetWorkflowStatus
+   */
+  setWorkflowStatus: {
+    methodKind: "unary";
+    input: typeof SetWorkflowStatusRequestSchema;
+    output: typeof SetWorkflowStatusResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_reliant_v1_workflow, 0);

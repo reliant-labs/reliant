@@ -26,7 +26,7 @@ func createResolverDraft(t *testing.T, repo db.Repository, chatID *string) *db.W
 		Name:       "Resolver Draft " + unique,
 		Slug:       "resolver-draft-" + unique,
 		Definition: validWorkflowYAML,
-		IsValid:    true,
+		Status:     db.WorkflowDraftStatusComplete,
 		ChatID:     chatID,
 		CreatedAt:  now,
 		UpdatedAt:  now,

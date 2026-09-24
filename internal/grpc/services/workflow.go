@@ -4,6 +4,7 @@ package services
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/rand"
 	"path/filepath"
@@ -138,7 +139,7 @@ func (s *WorkflowService) ListWorkflows(
 			Edges:           protoWf.Edges,
 			Inputs:          protoWf.Inputs,
 			HasPresetGroups: rpcWorkflowHasPresetGroups(protoWf),
-			IsValid:         true,
+			Status:          reliantv1.WorkflowDraftStatus_WORKFLOW_DRAFT_STATUS_COMPLETE,
 		}
 	}
 
@@ -170,52 +171,28 @@ func (s *WorkflowService) ListWorkflows(
 	}
 
 	// 3. Load user's workflows from database (user-owned, available across all projects).
-	// Default listing is chat-safe and only returns runnable drafts. Management UIs such as
-	// the Workflow Hub can opt into the full draft list with include_hidden=true.
-	//
-	// "Runnable" is decided by validating each draft NOW, never by the stored
-	// is_valid flag: that flag was computed at save time and goes stale when
-	// validation gets stricter, which would list a draft CreateChat then
-	// rejects (or hide one it would accept).
+	// Default listing is chat-safe: only workflows a run would accept — status
+	// complete, visible, and passing validation NOW (validity is never stored;
+	// a complete workflow can fall behind a stricter validator). Management UIs
+	// such as the Workflow Hub opt into every workflow, drafts included, with
+	// include_hidden=true; each carries its status and current findings.
 	dbDrafts, err := s.database.ListWorkflowDraftsByUser(ctx, userID)
 	if err != nil {
 		logging.Error("Failed to list workflows from database", "error", err, "user_id", userID, "include_hidden", req.Msg.IncludeHidden)
 		// Continue with builtins and project workflows
 	} else {
 		for _, draft := range dbDrafts {
-			draftValid := s.validateWorkflowDefinition(ctx, userID, []byte(draft.Definition)).valid()
-			if !req.Msg.IncludeHidden && (draft.IsHidden || !draftValid) {
+			if !req.Msg.IncludeHidden && (draft.IsHidden || draft.Status != db.WorkflowDraftStatusComplete) {
 				continue
 			}
-			// Parse the stored definition to get workflow details
-			protoWf, err := parseWorkflowYAML([]byte(draft.Definition))
+			check := s.validateWorkflowDefinition(ctx, userID, []byte(draft.Definition))
+			if !req.Msg.IncludeHidden && !check.valid() {
+				continue
+			}
+			item, err := userWorkflowListItem(draft, check)
 			if err != nil {
 				logging.Error("Failed to parse stored workflow", "error", err, "id", draft.ID, "name", draft.Name)
 				continue
-			}
-
-			draftID := draft.ID // Copy for pointer
-			item := &reliantv1.WorkflowListItem{
-				Name:        draft.Name,
-				Filename:    draft.Slug,
-				Description: protoWf.Description,
-				StepCount:   int32(len(protoWf.Nodes)),
-				Source:      "user",
-				Nodes:       protoWf.Nodes,
-				Edges:       protoWf.Edges,
-				Inputs:      protoWf.Inputs,
-				IsHidden:    draft.IsHidden,
-				// Computed now, not read from the stored flag: the flag was
-				// right when the draft was saved and goes stale the moment
-				// validation gets stricter.
-				IsValid:         draftValid,
-				BuilderChatId:   draft.ChatID,
-				HasPresetGroups: rpcWorkflowHasPresetGroups(protoWf),
-				DraftId:         &draftID,
-			}
-			if !draft.UpdatedAt.IsZero() {
-				updatedAt := draft.UpdatedAt.Format(time.RFC3339)
-				item.UpdatedAt = &updatedAt
 			}
 			// Use draft.Slug directly as the map key - this is the stable runtime identifier.
 			workflowsBySlug[draft.Slug] = item
@@ -262,6 +239,37 @@ func (s *WorkflowService) ListWorkflows(
 	}), nil
 }
 
+// userWorkflowListItem renders a stored workflow for list responses, with its
+// lifecycle status and the validation findings computed for it now.
+func userWorkflowListItem(draft *db.WorkflowDraft, check workflowCheck) (*reliantv1.WorkflowListItem, error) {
+	protoWf, err := parseWorkflowYAML([]byte(draft.Definition))
+	if err != nil {
+		return nil, err
+	}
+	draftID := draft.ID // Copy for pointer
+	item := &reliantv1.WorkflowListItem{
+		Name:             draft.Name,
+		Filename:         draft.Slug,
+		Description:      protoWf.Description,
+		StepCount:        int32(len(protoWf.Nodes)),
+		Source:           "user",
+		Nodes:            protoWf.Nodes,
+		Edges:            protoWf.Edges,
+		Inputs:           protoWf.Inputs,
+		IsHidden:         draft.IsHidden,
+		BuilderChatId:    draft.ChatID,
+		HasPresetGroups:  rpcWorkflowHasPresetGroups(protoWf),
+		DraftId:          &draftID,
+		Status:           draftStatusToProto(draft.Status),
+		ValidationErrors: check.protoErrors(true),
+	}
+	if !draft.UpdatedAt.IsZero() {
+		updatedAt := draft.UpdatedAt.Format(time.RFC3339)
+		item.UpdatedAt = &updatedAt
+	}
+	return item, nil
+}
+
 // discoverProjectWorkflowsFromDB loads project workflows from the stored config record (synced by daemon).
 // Returns both valid workflows and invalid workflows that failed to parse.
 func discoverProjectWorkflowsFromDB(repo db.Repository, ctx context.Context, projectID string) ([]*reliantv1.WorkflowListItem, []*reliantv1.InvalidWorkflow) {
@@ -306,7 +314,7 @@ func discoverProjectWorkflowsFromDB(repo db.Repository, ctx context.Context, pro
 			Edges:           protoWf.Edges,
 			Inputs:          protoWf.Inputs,
 			HasPresetGroups: rpcWorkflowHasPresetGroups(protoWf),
-			IsValid:         true,
+			Status:          reliantv1.WorkflowDraftStatus_WORKFLOW_DRAFT_STATUS_COMPLETE,
 		})
 	}
 
@@ -507,29 +515,35 @@ func (s *WorkflowService) SaveWorkflow(
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to marshal workflow: %w", err))
 	}
 
-	// Validate exactly as run start will. Errors BLOCK the save — for the
-	// draft and for a project-file write-back alike: a stored workflow is
-	// runnable (by chats and by `ref:`), and run start rejects the same
-	// errors, so persisting it would only defer the failure to whoever runs
-	// it next. Warnings are returned alongside a successful save.
+	// Validate exactly as run start will. Whether errors BLOCK depends on
+	// what is being stored (specs/workflow-draft-lifecycle.md): a draft is work
+	// in progress and is stored as-is with its findings returned; anything
+	// runnable — a complete workflow, or a project file, which runs straight
+	// from disk — must pass, because run start rejects the same errors.
 	check := s.validateWorkflowDefinition(ctx, userID, definitionYAML)
-	if !check.valid() {
+	isValid := check.valid()
+	validationErrors := check.protoErrors(true)
+	rejected := func(message string) *connect.Response[reliantv1.SaveWorkflowResponse] {
 		return connect.NewResponse(&reliantv1.SaveWorkflowResponse{
 			Success:          false,
-			Message:          saveRejectedMessage(check),
+			Message:          message,
 			Workflow:         protoWf,
 			IsValid:          false,
-			ValidationErrors: check.protoErrors(true),
+			ValidationErrors: validationErrors,
 			Slug:             slug,
 			YamlDefinition:   string(definitionYAML),
-		}), nil
+		})
 	}
-	isValid := true
-	validationErrors := check.protoErrors(true)
-	var validationErrorsJSON *string
+	if check.parseErr != nil {
+		// Nothing structural to store, even as a draft.
+		return rejected("Workflow not saved: it could not be parsed — " + check.summary()), nil
+	}
 
 	// Handle project file write-back if source_path is provided
 	if sourcePath := req.Msg.GetSourcePath(); sourcePath != "" {
+		if !isValid {
+			return rejected("Workflow not saved: project workflows run straight from the file, so they must pass validation — " + check.summary()), nil
+		}
 		// Validate that the source path is within the project's .reliant/workflows directory
 		project, err := s.database.GetProject(ctx, req.Msg.ProjectId)
 		if err != nil {
@@ -588,6 +602,11 @@ func (s *WorkflowService) SaveWorkflow(
 	// Use existing user workflow check result from earlier
 	existing := existingUserWorkflow
 
+	status := resolveDraftStatus(req.Msg.GetStatus(), existing)
+	if status == db.WorkflowDraftStatusComplete && !isValid {
+		return rejected(completeRejectedMessage(check)), nil
+	}
+
 	// OCC: Check for conflicts if expected_version is provided
 	if existing != nil && req.Msg.ExpectedVersion != nil {
 		if existing.Version != *req.Msg.ExpectedVersion {
@@ -617,19 +636,22 @@ func (s *WorkflowService) SaveWorkflow(
 	}
 
 	draft := &db.WorkflowDraft{
-		ID:               draftID,
-		UserID:           userID,
-		Name:             protoWf.Name,
-		Slug:             slug,
-		Description:      ptr.StringIfNotEmpty(protoWf.Description),
-		Definition:       string(definitionYAML),
-		IsValid:          isValid,
-		ValidationErrors: validationErrorsJSON,
-		SourcePath:       nil,
-		ForkedFrom:       nil,
-		ChatID:           chatID,
-		CreatedAt:        now,
-		UpdatedAt:        now,
+		ID:          draftID,
+		UserID:      userID,
+		Name:        protoWf.Name,
+		Slug:        slug,
+		Description: ptr.StringIfNotEmpty(protoWf.Description),
+		Definition:  string(definitionYAML),
+		Status:      status,
+		SourcePath:  nil,
+		ForkedFrom:  nil,
+		ChatID:      chatID,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+	if existing != nil {
+		// A rename updates by ID and writes every column; keep visibility.
+		draft.IsHidden = existing.IsHidden
 	}
 
 	// Save to database
@@ -661,20 +683,20 @@ func (s *WorkflowService) SaveWorkflow(
 		WorkflowName: protoWf.Name,
 		IsNew:        !isUpdate,
 		IsValid:      isValid,
+		Status:       string(status),
 	})
-
-	message := "Workflow saved successfully"
 
 	logging.Info("SaveWorkflow completed",
 		"name", protoWf.Name,
 		"slug", slug,
 		"user_id", userID,
 		"is_valid", isValid,
+		"status", status,
 	)
 
 	resp := &reliantv1.SaveWorkflowResponse{
 		Success:          true,
-		Message:          message,
+		Message:          draftSavedMessage(status, check),
 		Workflow:         protoWf,
 		IsValid:          isValid,
 		ValidationErrors: validationErrors,
@@ -683,6 +705,7 @@ func (s *WorkflowService) SaveWorkflow(
 		BuilderChatId:    saved.ChatID,
 		Version:          saved.Version,
 		YamlDefinition:   string(definitionYAML),
+		Status:           draftStatusToProto(saved.Status),
 	}
 	return connect.NewResponse(resp), nil
 }
@@ -716,29 +739,9 @@ func (s *WorkflowService) SetWorkflowVisibility(
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to update workflow visibility: %w", err))
 	}
 
-	// Convert to response
-	// We need to re-parse the definition to get proto details for WorkflowListItem
-	protoWf, err := parseWorkflowYAML([]byte(updatedDraft.Definition))
+	item, err := userWorkflowListItem(updatedDraft, s.validateWorkflowDefinition(ctx, userID, []byte(updatedDraft.Definition)))
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to parse stored workflow: %w", err))
-	}
-
-	item := &reliantv1.WorkflowListItem{
-		Name:            updatedDraft.Name,
-		Filename:        updatedDraft.Slug,
-		Description:     protoWf.Description,
-		StepCount:       int32(len(protoWf.Nodes)),
-		Source:          "user",
-		Nodes:           protoWf.Nodes,
-		Edges:           protoWf.Edges,
-		Inputs:          protoWf.Inputs,
-		IsHidden:        updatedDraft.IsHidden,
-		IsValid:         s.validateWorkflowDefinition(ctx, auth.MustGetUserID(ctx), []byte(updatedDraft.Definition)).valid(),
-		HasPresetGroups: rpcWorkflowHasPresetGroups(protoWf),
-	}
-	if !updatedDraft.UpdatedAt.IsZero() {
-		updatedAt := updatedDraft.UpdatedAt.Format(time.RFC3339)
-		item.UpdatedAt = &updatedAt
 	}
 
 	return connect.NewResponse(&reliantv1.SetWorkflowVisibilityResponse{
@@ -843,13 +846,22 @@ func (s *WorkflowService) CreateWorkflowDraft(
 	definition := defaultNewWorkflowTemplate()
 	definition = strings.Replace(definition, "name: agent", "name: "+name, 1)
 
+	// A new workflow is a draft unless the caller asks for complete, which
+	// is gated like any other transition to complete.
+	status := resolveDraftStatus(req.Msg.GetStatus(), nil)
+	if status == db.WorkflowDraftStatusComplete {
+		if check := s.validateWorkflowDefinition(ctx, userID, []byte(definition)); !check.valid() {
+			return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("%s", completeRejectedMessage(check)))
+		}
+	}
+
 	draft := &db.WorkflowDraft{
 		ID:         draftID,
 		UserID:     userID,
 		Name:       name,
 		Slug:       slug,
 		Definition: definition,
-		IsValid:    false,
+		Status:     status,
 		CreatedAt:  now,
 		UpdatedAt:  now,
 	}
@@ -872,6 +884,80 @@ func (s *WorkflowService) CreateWorkflowDraft(
 		DraftId: draftID,
 		Slug:    slug,
 		Name:    name,
+		Status:  draftStatusToProto(status),
+	}), nil
+}
+
+// SetWorkflowStatus moves a stored workflow between draft and complete.
+// Marking complete validates the CURRENT definition exactly as run start will
+// and is rejected with the errors when it is invalid. Moving to draft always
+// succeeds — it is how a user takes a complete workflow back to make edits
+// that are invalid along the way.
+func (s *WorkflowService) SetWorkflowStatus(
+	ctx context.Context,
+	req *connect.Request[reliantv1.SetWorkflowStatusRequest],
+) (*connect.Response[reliantv1.SetWorkflowStatusResponse], error) {
+	if req.Msg.ProjectId == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("project_id is required"))
+	}
+	if req.Msg.DraftId == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("draft_id is required"))
+	}
+	var target db.WorkflowDraftStatus
+	switch req.Msg.Status {
+	case reliantv1.WorkflowDraftStatus_WORKFLOW_DRAFT_STATUS_COMPLETE:
+		target = db.WorkflowDraftStatusComplete
+	case reliantv1.WorkflowDraftStatus_WORKFLOW_DRAFT_STATUS_DRAFT:
+		target = db.WorkflowDraftStatusDraft
+	default:
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("status must be DRAFT or COMPLETE"))
+	}
+
+	userID := auth.MustGetUserID(ctx)
+	if err := s.projectBelongsToUser(ctx, req.Msg.ProjectId, userID); err != nil {
+		return nil, err
+	}
+
+	draft, err := s.database.GetWorkflowDraft(ctx, req.Msg.DraftId)
+	if err != nil || draft == nil || draft.UserID != userID {
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("workflow not found"))
+	}
+	if req.Msg.ExpectedVersion != nil && draft.Version != *req.Msg.ExpectedVersion {
+		return nil, connect.NewError(connect.CodeAborted, fmt.Errorf(
+			"workflow was modified since you last loaded it (expected version: %d, current version: %d) - please reload and retry",
+			*req.Msg.ExpectedVersion, draft.Version))
+	}
+
+	check := s.validateWorkflowDefinition(ctx, userID, []byte(draft.Definition))
+	if target == db.WorkflowDraftStatusComplete && !check.valid() {
+		return connect.NewResponse(&reliantv1.SetWorkflowStatusResponse{
+			Success:          false,
+			Message:          "Not marked complete: fix the validation errors first — " + check.summary(),
+			Status:           draftStatusToProto(draft.Status),
+			ValidationErrors: check.protoErrors(true),
+			Version:          draft.Version,
+		}), nil
+	}
+
+	updated := draft
+	if draft.Status != target {
+		updated, err = s.database.SetWorkflowDraftStatus(ctx, draft.ID, target)
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to update workflow status: %w", err))
+		}
+		logging.Info("Workflow status changed", "draft_id", draft.ID, "slug", draft.Slug, "from", draft.Status, "to", target, "user_id", userID)
+	}
+
+	message := "Workflow marked complete — it can now be run"
+	if target == db.WorkflowDraftStatusDraft {
+		message = "Workflow moved to draft — it will not run until it is marked complete again"
+	}
+	return connect.NewResponse(&reliantv1.SetWorkflowStatusResponse{
+		Success:          true,
+		Message:          message,
+		Status:           draftStatusToProto(updated.Status),
+		ValidationErrors: check.protoErrors(true),
+		Version:          updated.Version,
 	}), nil
 }
 
@@ -947,12 +1033,14 @@ func (s *WorkflowService) GetWorkflow(
 		}
 
 		return connect.NewResponse(&reliantv1.GetWorkflowResponse{
-			Workflow:       protoWf,
-			Source:         "user",
-			DraftId:        &draft.ID,
-			BuilderChatId:  draft.ChatID,
-			Version:        draft.Version,
-			YamlDefinition: draft.Definition,
+			Workflow:         protoWf,
+			Source:           "user",
+			DraftId:          &draft.ID,
+			BuilderChatId:    draft.ChatID,
+			Version:          draft.Version,
+			YamlDefinition:   draft.Definition,
+			Status:           draftStatusToProto(draft.Status),
+			ValidationErrors: s.validateWorkflowDefinition(ctx, userID, []byte(draft.Definition)).protoErrors(true),
 		}), nil
 	}
 
@@ -977,6 +1065,7 @@ func (s *WorkflowService) GetWorkflow(
 			Workflow:       protoWf,
 			Source:         "builtin",
 			YamlDefinition: string(data),
+			Status:         reliantv1.WorkflowDraftStatus_WORKFLOW_DRAFT_STATUS_COMPLETE,
 		}), nil
 	}
 
@@ -993,6 +1082,7 @@ func (s *WorkflowService) GetWorkflow(
 				Workflow:       projectWf,
 				Source:         "project",
 				YamlDefinition: yamlContent,
+				Status:         reliantv1.WorkflowDraftStatus_WORKFLOW_DRAFT_STATUS_COMPLETE,
 			}), nil
 		}
 	}
@@ -1021,16 +1111,19 @@ func (s *WorkflowService) GetWorkflow(
 			Version:       draft.Version,
 			ParseError:    &parseErr,
 			RawDefinition: &draft.Definition,
+			Status:        draftStatusToProto(draft.Status),
 		}), nil
 	}
 
 	return connect.NewResponse(&reliantv1.GetWorkflowResponse{
-		Workflow:       protoWf,
-		Source:         "user",
-		DraftId:        &draft.ID,
-		BuilderChatId:  draft.ChatID,
-		Version:        draft.Version,
-		YamlDefinition: draft.Definition,
+		Workflow:         protoWf,
+		Source:           "user",
+		DraftId:          &draft.ID,
+		BuilderChatId:    draft.ChatID,
+		Version:          draft.Version,
+		YamlDefinition:   draft.Definition,
+		Status:           draftStatusToProto(draft.Status),
+		ValidationErrors: s.validateWorkflowDefinition(ctx, userID, []byte(draft.Definition)).protoErrors(true),
 	}), nil
 }
 
@@ -1122,22 +1215,23 @@ func (s *WorkflowService) ImportWorkflow(
 		}), nil
 	}
 
-	// Same rule as SaveWorkflow: an import with validation errors is not
-	// stored.
+	// Same rule as SaveWorkflow: a draft import is stored as-is with its
+	// findings; a complete one (explicit, or overwriting a complete workflow)
+	// must pass validation.
 	check := s.validateWorkflowDefinition(ctx, userID, req.Msg.YamlContent)
-	if !check.valid() {
+	isValid := check.valid()
+	validationErrors := check.protoErrors(true)
+	status := resolveDraftStatus(req.Msg.GetStatus(), existing)
+	if status == db.WorkflowDraftStatusComplete && !isValid {
 		return connect.NewResponse(&reliantv1.ImportWorkflowResponse{
 			Success:          false,
-			Message:          "Workflow not imported: fix the validation errors first — " + check.summary(),
+			Message:          "Workflow not imported: a complete workflow must pass validation — fix the errors or import it as a draft. " + check.summary(),
 			Workflow:         protoWf,
 			Slug:             slug,
 			IsValid:          false,
-			ValidationErrors: check.protoErrors(true),
+			ValidationErrors: validationErrors,
 		}), nil
 	}
-	isValid := true
-	validationErrors := check.protoErrors(true)
-	var validationErrorsJSON *string
 
 	// Use the original YAML content directly for storage (it's already valid YAML)
 	definitionYAML := req.Msg.YamlContent
@@ -1151,19 +1245,18 @@ func (s *WorkflowService) ImportWorkflow(
 	}
 
 	draft := &db.WorkflowDraft{
-		ID:               draftID,
-		UserID:           userID,
-		Name:             protoWf.Name,
-		Slug:             slug,
-		Description:      nil,
-		Definition:       string(definitionYAML),
-		IsValid:          isValid,
-		ValidationErrors: validationErrorsJSON,
-		SourcePath:       nil,
-		ForkedFrom:       nil,
-		ChatID:           nil,
-		CreatedAt:        now,
-		UpdatedAt:        now,
+		ID:          draftID,
+		UserID:      userID,
+		Name:        protoWf.Name,
+		Slug:        slug,
+		Description: nil,
+		Definition:  string(definitionYAML),
+		Status:      status,
+		SourcePath:  nil,
+		ForkedFrom:  nil,
+		ChatID:      nil,
+		CreatedAt:   now,
+		UpdatedAt:   now,
 	}
 
 	// Upsert to database
@@ -1179,15 +1272,24 @@ func (s *WorkflowService) ImportWorkflow(
 		"overwrite", existing != nil,
 	)
 
+	message := "Workflow imported successfully"
+	if status == db.WorkflowDraftStatusDraft {
+		message = "Workflow imported as a draft"
+		if n := check.errorCount(); n > 0 {
+			message = fmt.Sprintf("Workflow imported as a draft with %d validation error(s) — fix them before marking it complete", n)
+		}
+	}
+
 	return connect.NewResponse(&reliantv1.ImportWorkflowResponse{
 		Success:          true,
-		Message:          "Workflow imported successfully",
+		Message:          message,
 		Workflow:         protoWf,
 		Id:               saved.ID,
 		Slug:             slug,
 		IsValid:          isValid,
 		ValidationErrors: validationErrors,
 		Conflict:         false,
+		Status:           draftStatusToProto(saved.Status),
 	}), nil
 }
 
@@ -1371,8 +1473,16 @@ func (s *WorkflowService) ValidateWorkflow(
 }
 
 // createValidationWorkflowLoader creates a WorkflowLoader for validation.
-// It resolves builtin:// refs from the embedded FS and user workflows from the database.
-func (s *WorkflowService) createValidationWorkflowLoader(ctx context.Context, userID string) v2.WorkflowLoader {
+// It resolves builtin:// refs from the embedded FS and user workflows from the
+// database the way run start does: only a complete workflow loads, and a draft
+// child is an error (a parent that refs a draft would fail at run start). The
+// workflow being validated resolves to itself, so a workflow that spawns
+// itself can be validated — and marked complete — while it is still a draft.
+func (s *WorkflowService) createValidationWorkflowLoader(ctx context.Context, userID string, self *reliantv1.Workflow) v2.WorkflowLoader {
+	selfSlug := ""
+	if self != nil {
+		selfSlug = generateSlug(self.GetName())
+	}
 	return func(ref string) (*reliantv1.Workflow, error) {
 		// Handle builtin:// protocol
 		if strings.HasPrefix(ref, "builtin://") {
@@ -1384,13 +1494,22 @@ func (s *WorkflowService) createValidationWorkflowLoader(ctx context.Context, us
 			return wfyaml.ParseWorkflow(data)
 		}
 
-		// Try loading user workflow draft from DB
 		slug := generateSlug(ref)
 		if slug == "" {
 			return nil, nil
 		}
-		draft, err := s.database.GetWorkflowDraftBySlug(ctx, userID, slug)
-		if err != nil || draft == nil || draft.Definition == "" {
+		if slug == selfSlug {
+			return self, nil
+		}
+		draft, err := s.database.GetUsableWorkflowBySlug(ctx, userID, slug)
+		if err != nil {
+			var notRunnable *db.WorkflowDraftNotRunnableError
+			if errors.As(err, &notRunnable) {
+				return nil, err
+			}
+			return nil, nil
+		}
+		if draft == nil || draft.Definition == "" {
 			return nil, nil // not found — let validation continue
 		}
 		return wfyaml.ParseWorkflow([]byte(draft.Definition))

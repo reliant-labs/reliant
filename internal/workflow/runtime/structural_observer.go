@@ -18,10 +18,8 @@ import (
 // it. Two consequences, and this query fixes both:
 //
 //   - The node's evaluated outputs are invisible. get-it-right's `attempt` loop
-//     publishes `eval_strategy` and `review_grade`, the workflow-level outputs
-//     derived from them agree byte-for-byte with the fast simulator, and yet
-//     the per-node view held only the `_iterations` count the harness
-//     synthesized from checkpoints.
+//     publishes `eval_strategy` and `review_grade`, yet the per-node view held
+//     only the `_iterations` count the harness synthesized from checkpoints.
 //   - Its COMPLETION is invisible. A per-iteration WorkflowCheckpoint proves a
 //     loop was entered, so it lands in `reached`, but nothing marks the moment
 //     it finished — one-ring's `impl_loop` could never be asserted completed.

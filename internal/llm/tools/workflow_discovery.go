@@ -68,7 +68,8 @@ func (t *listWorkflowsTool) Execute(ctx *rctx.ToolContext, args ListWorkflowsPar
 		id          string // draft UUID; empty for builtin and project workflows, which have no row
 		description string
 		source      string
-		isValid     bool
+		status      string // "draft" or "complete"
+		isValid     bool   // computed now, never stored
 	}
 	var workflows []workflowInfo
 
@@ -108,6 +109,7 @@ func (t *listWorkflowsTool) Execute(ctx *rctx.ToolContext, args ListWorkflowsPar
 					name:        wf.Name,
 					description: desc,
 					source:      "builtin",
+					status:      string(db.WorkflowDraftStatusComplete),
 					isValid:     true,
 				})
 			}
@@ -139,6 +141,7 @@ func (t *listWorkflowsTool) Execute(ctx *rctx.ToolContext, args ListWorkflowsPar
 							name:        sw.Slug,
 							description: desc,
 							source:      "project",
+							status:      string(db.WorkflowDraftStatusComplete),
 							isValid:     true,
 						})
 					}
@@ -147,18 +150,16 @@ func (t *listWorkflowsTool) Execute(ctx *rctx.ToolContext, args ListWorkflowsPar
 		}
 	}
 
-	// Get user's usable workflows (valid and not hidden)
+	// Get the user's visible workflows — drafts included, since the agent
+	// iterates on them — each with its status and validity computed NOW
+	// (validity is never stored; it goes stale when validation gets stricter).
 	if (source == "all" || source == "user") && t.repo != nil {
 		userID, ok := auth.GetUserIDFromContext(ctx)
 		if ok && userID != "" {
-			// Every draft, filtered by validity computed NOW: the stored
-			// is_valid flag was right at save time and goes stale when
-			// validation gets stricter, so the agent would be offered a
-			// workflow that run start then rejects.
 			userWorkflows, err := t.repo.ListWorkflowDraftsByUser(ctx, userID)
 			if err == nil {
 				for _, wf := range userWorkflows {
-					if wf.IsHidden || validateWorkflowForTool(ctx, t.repo, wf.Definition).hasErrors() {
+					if wf.IsHidden {
 						continue
 					}
 					desc := "(no description)"
@@ -171,7 +172,8 @@ func (t *listWorkflowsTool) Execute(ctx *rctx.ToolContext, args ListWorkflowsPar
 						id:          wf.ID,
 						description: desc,
 						source:      "user",
-						isValid:     true,
+						status:      string(wf.Status),
+						isValid:     !validateWorkflowForTool(ctx, t.repo, wf.Definition).hasErrors(),
 					})
 				}
 			}
@@ -191,8 +193,8 @@ func (t *listWorkflowsTool) Execute(ctx *rctx.ToolContext, args ListWorkflowsPar
 		return NewTextResponse(sb.String()), nil
 	}
 
-	sb.WriteString("| Workflow | ID | Source | Valid | Description |\n")
-	sb.WriteString("|----------|----|--------|-------|-------------|\n")
+	sb.WriteString("| Workflow | ID | Source | Status | Valid | Description |\n")
+	sb.WriteString("|----------|----|--------|--------|-------|-------------|\n")
 	for _, wf := range workflows {
 		desc := wf.description
 		if len(desc) > 200 {
@@ -206,7 +208,7 @@ func (t *listWorkflowsTool) Execute(ctx *rctx.ToolContext, args ListWorkflowsPar
 		if wf.id != "" {
 			id = "`" + wf.id + "`"
 		}
-		fmt.Fprintf(&sb, "| `%s` | %s | %s | %s | %s |\n", wf.name, id, wf.source, valid, desc)
+		fmt.Fprintf(&sb, "| `%s` | %s | %s | %s | %s | %s |\n", wf.name, id, wf.source, wf.status, valid, desc)
 	}
 
 	// The Workflow column holds whatever handle that source has — a draft slug,
@@ -376,12 +378,17 @@ func formatWorkflowDraftResponse(draft *db.WorkflowDraft, check workflowToolChec
 
 	fmt.Fprintf(&sb, "# Workflow: %s\n\n", draft.Name)
 	fmt.Fprintf(&sb, "**ID:** `%s`\n", draft.ID)
-	// Status is computed now, from the same validation as the section
-	// below — never the stored flag, which can disagree with it.
-	if check.hasErrors() {
-		sb.WriteString("**Status:** has errors\n")
-	} else {
-		sb.WriteString("**Status:** valid\n")
+	// Lifecycle is stored; validity is computed now, from the same
+	// validation as the section below.
+	switch {
+	case draft.Status == db.WorkflowDraftStatusComplete && check.hasErrors():
+		sb.WriteString("**Status:** complete, but it fails validation now — it will not run until fixed\n")
+	case draft.Status == db.WorkflowDraftStatusComplete:
+		sb.WriteString("**Status:** complete (runnable)\n")
+	case check.hasErrors():
+		sb.WriteString("**Status:** draft (not runnable) — has validation errors\n")
+	default:
+		sb.WriteString("**Status:** draft (not runnable) — valid; mark it complete with `complete: true`\n")
 	}
 	if draft.IsHidden {
 		sb.WriteString("**Visibility:** hidden\n")

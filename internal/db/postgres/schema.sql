@@ -897,15 +897,15 @@ CREATE TABLE public.workflow_drafts (
     slug text NOT NULL,
     description text,
     definition text NOT NULL,
-    is_valid bigint NOT NULL,
-    validation_errors text,
     source_path text,
     forked_from text,
     is_hidden boolean NOT NULL,
     chat_id text,
     created_at timestamp with time zone NOT NULL,
     updated_at timestamp with time zone NOT NULL,
-    version bigint NOT NULL
+    version bigint NOT NULL,
+    status text DEFAULT 'draft'::text NOT NULL,
+    CONSTRAINT workflow_drafts_status_valid CHECK ((status = ANY (ARRAY['draft'::text, 'complete'::text])))
 );
 
 --
