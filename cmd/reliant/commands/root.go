@@ -42,7 +42,6 @@ Reliant server components.`,
 	root.AddCommand(newVersionCmd())
 	root.AddCommand(newForgeCmd())
 	root.AddCommand(newPreviewURLCmd())
-	root.AddCommand(newContextCmd())
 	root.AddCommand(newDBCmd())
 
 	return root

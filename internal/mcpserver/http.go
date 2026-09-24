@@ -3,6 +3,8 @@
 package mcpserver
 
 import (
+	fat "github.com/reliant-labs/forge/pkg/accesstoken"
+
 	"context"
 	"encoding/json"
 	"errors"
@@ -46,7 +48,13 @@ const RootMountPath = "/{$}"
 
 // HTTPDeps are the collaborators the HTTP surface needs.
 type HTTPDeps struct {
-	Store  connectorgrant.Store
+	Store connectorgrant.Store
+
+	// Credentials resolves connector credentials — `rlat_` access tokens
+	// with mcp:connector bound to one grant — through the token authority.
+	// Nil means only OAuth bearers are accepted.
+	Credentials CredentialIntrospector
+
 	Sender CommandSender
 	Waker  WorkspaceWaker
 	Logger *slog.Logger
@@ -75,6 +83,12 @@ type HTTPDeps struct {
 	// ConsentBaseURL is where the consent screen lives, used to tell a client
 	// where to send its user when a choice is needed.
 	ConsentBaseURL string
+}
+
+// CredentialIntrospector resolves a presented `rlat_` to its principal.
+// Satisfied by the token authority (tokenauthority.Authority).
+type CredentialIntrospector interface {
+	Introspect(ctx context.Context, token string) (*fat.Principal, error)
 }
 
 // OAuthTokenValidator validates an OAuth access token and returns the user it
@@ -112,6 +126,7 @@ func NewHTTPHandler(deps HTTPDeps) (http.Handler, error) {
 
 	authenticator := &connectorAuth{
 		store:       deps.Store,
+		credentials: deps.Credentials,
 		oauth:       deps.OAuth,
 		tokens:      deps.TokenValidator,
 		bindings:    deps.Bindings,
@@ -170,8 +185,9 @@ func sessionFrom(ctx context.Context) *Session {
 //
 // Two credential kinds are accepted, deliberately:
 //
-//   - A connector credential (rlnt_conn_), which names a grant directly. This
-//     is what works today from Claude Desktop and the API, with no browser.
+//   - A connector credential — an `rlat_` access token with mcp:connector,
+//     bound to one grant. This is what works from Claude Desktop and the API,
+//     with no browser.
 //   - An OAuth access token from the configured authorization server, which is
 //     what consumer mobile clients produce. It identifies a USER, so the grant
 //     is resolved from the user's connectors rather than carried by the token.
@@ -181,6 +197,7 @@ func sessionFrom(ctx context.Context) *Session {
 // comes from the grant, which the user authored and can revoke.
 type connectorAuth struct {
 	store       connectorgrant.Store
+	credentials CredentialIntrospector
 	oauth       OAuthConfig
 	tokens      OAuthTokenValidator
 	bindings    BindingStore
@@ -226,10 +243,11 @@ func (a *connectorAuth) middleware(next http.Handler) http.Handler {
 		// owns the workspace rather than introducing a service credential
 		// that could wake anyone's.
 		//
-		// Connector credentials (rlnt_conn_) are deliberately excluded: they
-		// are not accepted by the control plane, and passing one would only
-		// produce a confusing auth failure at the far end.
-		if !connectorgrant.IsCredentialFormat(token) {
+		// Connector credentials (`rlat_`) are deliberately excluded: a
+		// connector credential grants mcp:connector only, and forwarding it
+		// as the user would only produce a confusing auth failure at the far
+		// end.
+		if !fat.HasFormat(token) {
 			ctx = withCallerToken(ctx, token)
 		}
 		next.ServeHTTP(w, r.WithContext(ctx))
@@ -253,8 +271,8 @@ func CallerToken(ctx context.Context) string {
 
 // resolve turns a bearer token into a session.
 func (a *connectorAuth) resolve(r *http.Request, token string) (*Session, error) {
-	if connectorgrant.IsCredentialFormat(token) {
-		grant, err := a.store.GetGrantByTokenHash(r.Context(), connectorgrant.HashCredential(token))
+	if fat.HasFormat(token) {
+		grant, err := a.grantForCredential(r.Context(), token)
 		if err != nil {
 			return nil, err
 		}
@@ -283,6 +301,32 @@ func (a *connectorAuth) resolve(r *http.Request, token string) (*Session, error)
 	}
 	a.touch(r, sess.GrantID)
 	return sess, nil
+}
+
+// grantForCredential resolves a connector credential to its LIVE grant.
+//
+// The credential must be a live access token carrying mcp:connector and bound
+// to a connector resource; the grant it names must be live and belong to the
+// token's acting user. All three failures read identically to the caller.
+func (a *connectorAuth) grantForCredential(ctx context.Context, token string) (*connectorgrant.Grant, error) {
+	if a.credentials == nil {
+		return nil, errors.New("connector credentials are not configured")
+	}
+	p, err := a.credentials.Introspect(ctx, token)
+	if err != nil {
+		return nil, err
+	}
+	if !p.Scopes.Permits(fat.ScopeMCPConnector) || p.Resource == nil || p.Resource.Kind != fat.ResourceConnector {
+		return nil, connectorgrant.ErrNotFound
+	}
+	grant, err := a.store.GetGrantByID(ctx, p.Resource.ID)
+	if err != nil {
+		return nil, err
+	}
+	if grant.UserID != p.ActingUserID {
+		return nil, connectorgrant.ErrNotFound
+	}
+	return grant, nil
 }
 
 // oauthClientID identifies the calling application.

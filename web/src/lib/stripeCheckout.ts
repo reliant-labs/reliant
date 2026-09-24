@@ -25,7 +25,7 @@
  * not reported.
  */
 
-import { CheckoutUiMode } from "@/gen/controlplane/v1/public/billing_service_pb";
+import { CheckoutUiMode } from "@/gen/controlplane/services/billing/v1/billing_pb";
 
 import { getAppURL } from "./constants";
 

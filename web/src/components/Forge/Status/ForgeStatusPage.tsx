@@ -78,10 +78,11 @@ export function ForgeStatusPage() {
    * is correct: the panel below will be rendering that same outcome's
    * explanation.
    */
-  const envNames = useMemo(() => {
-    if (topology.data?.kind !== "report") return [];
-    return environments(topology.data.report).map((env) => env.env);
-  }, [topology.data]);
+  const envRows = useMemo(
+    () => (topology.data?.kind === "report" ? environments(topology.data.report) : []),
+    [topology.data]
+  );
+  const envNames = useMemo(() => envRows.map((env) => env.env), [envRows]);
 
   /**
    * If the ledger turns out not to declare the selected env, move to the first
@@ -117,6 +118,7 @@ export function ForgeStatusPage() {
 
       <EnvTabs
         envs={envNames}
+        envRows={envRows}
         selected={selectedEnv}
         onSelect={selectEnv}
         isLoading={topology.isLoading}

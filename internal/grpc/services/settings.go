@@ -1071,7 +1071,7 @@ func (s *SettingsService) GetProviderStatuses(ctx context.Context, req *connect.
 		statuses = append(statuses, status)
 	}
 
-	// Reliant provider is configured once the user has synced an rlnt_ key
+	// Reliant provider is configured once the user has synced an rlat_ LLM key
 	// from control-plane via SyncReliantProvider.
 	reliantStatus := &reliantv1.ProviderStatus{
 		Provider:         "reliant",
@@ -1604,8 +1604,14 @@ func (s *SettingsService) CompleteClaudeOAuth(ctx context.Context, req *connect.
 	}), nil
 }
 
-// SyncReliantProvider mints (or rehydrates) the user's internal Reliant API key
-// via control-plane and persists it locally as the "reliant" provider credential.
+// SyncReliantProvider mints the user's LLM gateway key via control-plane and
+// persists it locally as the "reliant" provider credential.
+//
+// The key is an `rlat_` access token (llm:invoke, acting as the user) for the
+// device controlplane.ReliantProviderKeyName. Control-plane returns a NEW
+// plaintext on every call and revokes this device's previous key in the same
+// transaction — it never re-serves a stored plaintext — so created/rotated
+// come from whether a previous key was replaced, not from comparing strings.
 func (s *SettingsService) SyncReliantProvider(ctx context.Context, req *connect.Request[reliantv1.SyncReliantProviderRequest]) (*connect.Response[reliantv1.SyncReliantProviderResponse], error) {
 	userID := auth.MustGetUserID(ctx)
 
@@ -1618,17 +1624,16 @@ func (s *SettingsService) SyncReliantProvider(ctx context.Context, req *connect.
 		return nil, connect.NewError(connect.CodeUnauthenticated, fmt.Errorf("missing user JWT for control-plane call"))
 	}
 
-	plaintext, err := s.controlPlaneClient.IssueMyReliantAPIKey(ctx, jwt)
+	key, err := s.controlPlaneClient.MintLLMKey(ctx, jwt, controlplane.ReliantProviderKeyName)
 	if err != nil {
-		logging.Error("Failed to issue Reliant API key via control-plane", "error", err)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to issue Reliant API key: %w", err))
+		logging.Error("Failed to mint Reliant LLM key via control-plane", "error", err)
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to mint Reliant LLM key: %w", err))
 	}
-	plaintext = strings.TrimSpace(plaintext)
+	plaintext := strings.TrimSpace(key.Plaintext)
 	if plaintext == "" {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("control-plane returned empty Reliant API key"))
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("control-plane returned an empty Reliant LLM key"))
 	}
 
-	previous, _ := s.database.GetProviderAPIKey(ctx, userID, "reliant")
 	if err := s.database.SetProviderAPIKey(ctx, userID, "reliant", plaintext); err != nil {
 		logging.Error("Failed to persist Reliant provider API key", "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to persist Reliant API key"))
@@ -1638,8 +1643,8 @@ func (s *SettingsService) SyncReliantProvider(ctx context.Context, req *connect.
 		logging.Warn("Failed to emit config_health refetch after SyncReliantProvider", "error", err)
 	}
 
-	created := strings.TrimSpace(previous) == ""
-	rotated := !created && strings.TrimSpace(previous) != plaintext
+	created := !key.Rotated
+	rotated := key.Rotated
 
 	maskedKey := ""
 	if len(plaintext) > 8 {

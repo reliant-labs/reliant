@@ -66,7 +66,7 @@ export interface ForgeSecretEntry {
 
 export interface ForgeSecretsReport {
   env?: string;
-  /** "file" | "none" | "external". An unrecognised kind is treated as unknown. */
+  /** "file" | "hosted" | "none" | "external". An unrecognised kind is treated as unknown. */
   provider?: string;
   store_path?: string;
   /** Whether the store file exists AT ALL. Distinct from "exists and is empty". */
@@ -87,12 +87,14 @@ export interface ForgeSecretsReport {
  * topology.ts: an unrecognised provider must not be assumed to be `file`, or a
  * newer forge would have its secrets rendered as a wall of false failures.
  */
-export type SecretProviderKind = "file" | "external" | "none" | "unknown";
+export type SecretProviderKind = "file" | "hosted" | "external" | "none" | "unknown";
 
 export function providerKind(report: ForgeSecretsReport | null | undefined): SecretProviderKind {
   switch (report?.provider) {
     case "file":
       return "file";
+    case "hosted":
+      return "hosted";
     case "external":
       return "external";
     case "none":
@@ -107,13 +109,17 @@ export function providerKind(report: ForgeSecretsReport | null | undefined): Sec
  * present/missing is a claim forge is in a position to make.
  */
 export function providerHoldsValues(kind: SecretProviderKind): boolean {
-  return kind === "file";
+  // hosted: forge listed the control plane's store to build the report, so
+  // present/missing is an observation, exactly as for a file it read.
+  return kind === "file" || kind === "hosted";
 }
 
 export function providerLabel(kind: SecretProviderKind): string {
   switch (kind) {
     case "file":
       return "File store";
+    case "hosted":
+      return "Managed store";
     case "external":
       return "External secret manager";
     case "none":
@@ -128,6 +134,8 @@ export function providerExplanation(kind: SecretProviderKind): string {
   switch (kind) {
     case "file":
       return "Forge holds the values for this environment in a store file on disk, so it can say which declared secrets have a value and which do not.";
+    case "hosted":
+      return "The environment's control plane holds the values. Forge listed that store's names, so it can say which declared secrets have a value — never what the value is.";
     case "external":
       return "An external secret manager holds the values. Forge does not have them and did not look, so it cannot say whether any of these are set — that is unknown here, not missing.";
     case "none":
@@ -177,7 +185,7 @@ export function storeKeyCount(report: ForgeSecretsReport | null | undefined): nu
 export function storeState(report: ForgeSecretsReport | null | undefined): SecretStoreState {
   const kind = providerKind(report);
   if (kind === "external") return "external";
-  if (kind !== "file") return "unconfigured";
+  if (!providerHoldsValues(kind)) return "unconfigured";
   if (report?.store_exists !== true) return "absent";
   return storeKeyCount(report) > 0 ? "populated" : "empty";
 }
@@ -214,7 +222,7 @@ export function presenceOf(
 ): SecretPresence {
   const kind = providerKind(report);
   if (kind === "external") return "not-held";
-  if (kind !== "file") return "undetermined";
+  if (!providerHoldsValues(kind)) return "undetermined";
   if (entry.present === true) return "present";
   if (entry.present === false) return "missing";
   return "undetermined";

@@ -99,17 +99,9 @@ func (s *ConnectorService) grantForConsent(
 		if err != nil {
 			return nil, "", connect.NewError(connect.CodeInvalidArgument, err)
 		}
-		raw, hash, prefix, err := connectorgrant.GenerateCredential()
+		raw, err := s.createGrantWithCredential(ctx, grant)
 		if err != nil {
-			return nil, "", connect.NewError(connect.CodeInternal,
-				fmt.Errorf("mint connector credential: %w", err))
-		}
-		grant.TokenHash = hash
-		grant.TokenPrefix = prefix
-
-		if err := s.store.CreateGrant(ctx, grant); err != nil {
-			return nil, "", connect.NewError(connect.CodeInternal,
-				fmt.Errorf("create connector: %w", err))
+			return nil, "", connect.NewError(connect.CodeInternal, err)
 		}
 		return grant, raw, nil
 

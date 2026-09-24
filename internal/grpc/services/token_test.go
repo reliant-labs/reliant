@@ -3,131 +3,71 @@ package services
 
 import (
 	"context"
-	"database/sql"
 	"strings"
-	"sync"
 	"testing"
-	"time"
 
 	"connectrpc.com/connect"
+	fat "github.com/reliant-labs/forge/pkg/accesstoken"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
-	"github.com/reliant-labs/reliant/internal/db"
-	"github.com/reliant-labs/reliant/internal/pat"
+	"github.com/reliant-labs/reliant/internal/tokenauthority"
 )
 
-// fakeTokenStore is a minimal in-memory pat.Store for exercising the
-// TokenService handlers without a database. Only the api-kind lifecycle paths
-// (create / list / revoke-by-user) are backed; the daemon-only methods are
-// no-ops. This keeps the handler tests hermetic — the mint/validate behavior
-// itself is covered by internal/pat's own service tests.
-type fakeTokenStore struct {
-	mu   sync.Mutex
-	rows map[string]*db.DaemonPAT // by ID
+func newTokenSvc() (*TokenService, *tokenauthority.Memory) {
+	authority := tokenauthority.NewMemory()
+	return NewTokenService(authority), authority
 }
 
-func newFakeTokenStore() *fakeTokenStore {
-	return &fakeTokenStore{rows: map[string]*db.DaemonPAT{}}
-}
-
-func (f *fakeTokenStore) CreateDaemonPAT(_ context.Context, p *db.DaemonPAT) error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	cp := *p
-	f.rows[p.ID] = &cp
-	return nil
-}
-
-func (f *fakeTokenStore) GetDaemonPATByTokenHash(_ context.Context, hash string) (*db.DaemonPAT, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	for _, p := range f.rows {
-		if p.TokenHash == hash {
-			cp := *p
-			return &cp, nil
-		}
-	}
-	return nil, sql.ErrNoRows
-}
-
-func (f *fakeTokenStore) ListDaemonPATsByUserIDAndKind(_ context.Context, userID, kind string) ([]*db.DaemonPAT, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	var out []*db.DaemonPAT
-	for _, p := range f.rows {
-		if p.UserID == userID && p.Kind == kind {
-			cp := *p
-			out = append(out, &cp)
-		}
-	}
-	return out, nil
-}
-
-func (f *fakeTokenStore) RevokeDaemonPATByUserID(_ context.Context, userID, id, kind string) (bool, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	p, ok := f.rows[id]
-	if !ok || p.UserID != userID || p.Kind != kind || p.RevokedAt != nil {
-		return false, nil
-	}
-	now := time.Now().UTC()
-	p.RevokedAt = &now
-	return true, nil
-}
-
-func (f *fakeTokenStore) RevokeDaemonPATsByUserID(context.Context, string, bool) error { return nil }
-func (f *fakeTokenStore) RevokeDaemonPATsByDaemonID(context.Context, string) (int, error) {
-	return 0, nil
-}
-func (f *fakeTokenStore) UpdateDaemonPATLastUsed(context.Context, string) error { return nil }
-
-func newTokenSvc() *TokenService {
-	return NewTokenService(pat.NewService(newFakeTokenStore()))
-}
-
-// tokenAuthCtx returns a context carrying an authenticated identity, as the
-// auth interceptor would populate after validating a bearer.
+// tokenAuthCtx returns a context carrying an interactive-session identity, as
+// the auth interceptor populates after validating a session JWT.
 func tokenAuthCtx(userID string) context.Context {
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, userID)
 	return context.WithValue(ctx, auth.UserEmailContextKey, userID+"@example.com")
 }
 
-// sessionReq tags a request with a non-PAT (interactive-session) bearer.
-func sessionReq[T any](msg *T) *connect.Request[T] {
-	r := connect.NewRequest(msg)
-	r.Header().Set("Authorization", "Bearer session-jwt")
-	return r
+// machineAuthCtx is tokenAuthCtx for a caller authenticated by an `rlat_`
+// reliant:api token.
+func machineAuthCtx(userID string) context.Context {
+	return auth.WithMachineToken(tokenAuthCtx(userID), &fat.Principal{
+		TokenID: "tok-1", ActingUserID: userID, Scopes: fat.SetOf(fat.ScopeReliantAPI),
+	})
 }
 
-// patBearerReq tags a request with an rlnt_pat_ bearer.
-func patBearerReq[T any](msg *T) *connect.Request[T] {
-	r := connect.NewRequest(msg)
-	r.Header().Set("Authorization", "Bearer rlnt_pat_"+strings.Repeat("a", 40))
-	return r
-}
+func req[T any](msg *T) *connect.Request[T] { return connect.NewRequest(msg) }
 
 func TestTokenServiceCreateListRevokeFlow(t *testing.T) {
-	svc := newTokenSvc()
+	svc, authority := newTokenSvc()
 
-	// Create (session-authed).
-	createResp, err := svc.CreateToken(tokenAuthCtx("user-1"), sessionReq(&reliantv1.CreateTokenRequest{Name: "ci"}))
+	createResp, err := svc.CreateToken(tokenAuthCtx("user-1"), req(&reliantv1.CreateTokenRequest{
+		Name: "ci", Kind: reliantv1.TokenKind_TOKEN_KIND_API,
+	}))
 	if err != nil {
 		t.Fatalf("CreateToken: %v", err)
 	}
-	if !auth.IsPATFormat(createResp.Msg.GetToken()) {
-		t.Errorf("raw token %q is not unified rlnt_pat_ format", createResp.Msg.GetToken())
+	raw := createResp.Msg.GetToken()
+	if !auth.IsAccessTokenFormat(raw) {
+		t.Errorf("raw token %q is not an rlat_ access token", raw)
 	}
 	info := createResp.Msg.GetInfo()
-	if info.GetId() == "" || info.GetName() != "ci" {
+	if info.GetId() == "" || info.GetName() != "ci" || info.GetKind() != reliantv1.TokenKind_TOKEN_KIND_API {
 		t.Errorf("create response missing metadata: %+v", info)
 	}
-	if !strings.HasPrefix(createResp.Msg.GetToken(), info.GetTokenPrefix()) {
+	if !strings.HasPrefix(raw, info.GetTokenPrefix()) {
 		t.Errorf("token prefix %q does not prefix the raw token", info.GetTokenPrefix())
 	}
 
+	// The minted token acts as the caller with exactly the kind's scope.
+	p, err := authority.Introspect(context.Background(), raw)
+	if err != nil {
+		t.Fatalf("Introspect: %v", err)
+	}
+	if p.ActingUserID != "user-1" || !p.Scopes.Permits(fat.ScopeReliantAPI) || p.Scopes.Permits(fat.ScopeDaemonConnect) {
+		t.Errorf("principal = %+v, want user-1 with reliant:api only", p)
+	}
+
 	// List returns the token, never the secret.
-	listResp, err := svc.ListTokens(tokenAuthCtx("user-1"), sessionReq(&reliantv1.ListTokensRequest{}))
+	listResp, err := svc.ListTokens(tokenAuthCtx("user-1"), req(&reliantv1.ListTokensRequest{}))
 	if err != nil {
 		t.Fatalf("ListTokens: %v", err)
 	}
@@ -135,99 +75,152 @@ func TestTokenServiceCreateListRevokeFlow(t *testing.T) {
 		t.Fatalf("list = %+v, want the created token", listResp.Msg.GetTokens())
 	}
 
-	// Another user sees nothing.
-	otherList, err := svc.ListTokens(tokenAuthCtx("user-2"), sessionReq(&reliantv1.ListTokensRequest{}))
+	// Another user sees nothing and cannot revoke it.
+	otherList, err := svc.ListTokens(tokenAuthCtx("user-2"), req(&reliantv1.ListTokensRequest{}))
 	if err != nil {
 		t.Fatalf("ListTokens(other): %v", err)
 	}
 	if len(otherList.Msg.GetTokens()) != 0 {
 		t.Fatalf("other user sees %d tokens, want 0", len(otherList.Msg.GetTokens()))
 	}
-
-	// Foreign revoke 404s; owner revoke succeeds; double revoke 404s.
-	if _, err := svc.RevokeToken(tokenAuthCtx("user-2"), sessionReq(&reliantv1.RevokeTokenRequest{Id: info.GetId()})); connect.CodeOf(err) != connect.CodeNotFound {
+	if _, err := svc.RevokeToken(tokenAuthCtx("user-2"), req(&reliantv1.RevokeTokenRequest{Id: info.GetId()})); connect.CodeOf(err) != connect.CodeNotFound {
 		t.Errorf("foreign revoke code = %v, want NotFound", connect.CodeOf(err))
 	}
-	if _, err := svc.RevokeToken(tokenAuthCtx("user-1"), sessionReq(&reliantv1.RevokeTokenRequest{Id: info.GetId()})); err != nil {
-		t.Errorf("owner revoke: %v", err)
+
+	// Owner revoke kills the token at the authority.
+	if _, err := svc.RevokeToken(tokenAuthCtx("user-1"), req(&reliantv1.RevokeTokenRequest{Id: info.GetId()})); err != nil {
+		t.Fatalf("owner revoke: %v", err)
 	}
-	if _, err := svc.RevokeToken(tokenAuthCtx("user-1"), sessionReq(&reliantv1.RevokeTokenRequest{Id: info.GetId()})); connect.CodeOf(err) != connect.CodeNotFound {
-		t.Errorf("double revoke code = %v, want NotFound", connect.CodeOf(err))
+	if _, err := authority.Introspect(context.Background(), raw); err == nil {
+		t.Error("revoked token still introspects as live")
+	}
+	listResp, err = svc.ListTokens(tokenAuthCtx("user-1"), req(&reliantv1.ListTokensRequest{}))
+	if err != nil {
+		t.Fatalf("ListTokens after revoke: %v", err)
+	}
+	if len(listResp.Msg.GetTokens()) != 0 {
+		t.Errorf("revoked token still listed: %+v", listResp.Msg.GetTokens())
 	}
 }
 
-// TestTokenServiceCreateRejectsPAT pins the JWT-only rule for issuance: a PAT
-// bearer can never mint another PAT, enforced in the handler because the
-// interceptor accepts both credential kinds on this service.
-func TestTokenServiceCreateRejectsPAT(t *testing.T) {
-	svc := newTokenSvc()
+func TestTokenServiceKindsMapToScopesAndFilter(t *testing.T) {
+	svc, authority := newTokenSvc()
+	ctx := tokenAuthCtx("user-1")
 
-	_, err := svc.CreateToken(tokenAuthCtx("user-1"), patBearerReq(&reliantv1.CreateTokenRequest{Name: "x"}))
-	if connect.CodeOf(err) != connect.CodeUnauthenticated {
-		t.Fatalf("PAT-authed create code = %v, want Unauthenticated", connect.CodeOf(err))
+	daemon, err := svc.CreateToken(ctx, req(&reliantv1.CreateTokenRequest{Name: "laptop", Kind: reliantv1.TokenKind_TOKEN_KIND_DAEMON}))
+	if err != nil {
+		t.Fatalf("create daemon: %v", err)
 	}
-	if err == nil || !strings.Contains(err.Error(), "interactive session") {
+	if _, err := svc.CreateToken(ctx, req(&reliantv1.CreateTokenRequest{Name: "ci", Kind: reliantv1.TokenKind_TOKEN_KIND_API})); err != nil {
+		t.Fatalf("create api: %v", err)
+	}
+	p, err := authority.Introspect(context.Background(), daemon.Msg.GetToken())
+	if err != nil {
+		t.Fatalf("Introspect: %v", err)
+	}
+	if !p.Scopes.Permits(fat.ScopeDaemonConnect) || p.Scopes.Permits(fat.ScopeReliantAPI) {
+		t.Errorf("daemon token scopes = %v, want daemon:connect only", p.Scopes.Strings())
+	}
+
+	onlyDaemon, err := svc.ListTokens(ctx, req(&reliantv1.ListTokensRequest{Kind: reliantv1.TokenKind_TOKEN_KIND_DAEMON}))
+	if err != nil {
+		t.Fatalf("ListTokens(DAEMON): %v", err)
+	}
+	if got := onlyDaemon.Msg.GetTokens(); len(got) != 1 || got[0].GetKind() != reliantv1.TokenKind_TOKEN_KIND_DAEMON || got[0].GetName() != "laptop" {
+		t.Errorf("DAEMON list = %+v, want the one daemon token", got)
+	}
+	all, err := svc.ListTokens(ctx, req(&reliantv1.ListTokensRequest{}))
+	if err != nil {
+		t.Fatalf("ListTokens: %v", err)
+	}
+	if len(all.Msg.GetTokens()) != 2 {
+		t.Errorf("unfiltered list has %d tokens, want 2", len(all.Msg.GetTokens()))
+	}
+}
+
+// Tokens of scopes this surface does not manage (LLM keys, connector
+// credentials) are the user's too, but never listed here.
+func TestTokenServiceListHidesForeignKinds(t *testing.T) {
+	svc, authority := newTokenSvc()
+	if _, err := authority.MintForUser(context.Background(), tokenauthority.MintRequest{
+		UserID: "user-1", Name: "llm", Scopes: []fat.Scope{fat.ScopeLLMInvoke},
+	}); err != nil {
+		t.Fatalf("MintForUser: %v", err)
+	}
+	resp, err := svc.ListTokens(tokenAuthCtx("user-1"), req(&reliantv1.ListTokensRequest{}))
+	if err != nil {
+		t.Fatalf("ListTokens: %v", err)
+	}
+	if len(resp.Msg.GetTokens()) != 0 {
+		t.Errorf("list = %+v, want the llm:invoke key hidden", resp.Msg.GetTokens())
+	}
+}
+
+// A machine credential can never mint a credential.
+func TestTokenServiceCreateRejectsMachineCaller(t *testing.T) {
+	svc, _ := newTokenSvc()
+	_, err := svc.CreateToken(machineAuthCtx("user-1"), req(&reliantv1.CreateTokenRequest{
+		Name: "x", Kind: reliantv1.TokenKind_TOKEN_KIND_API,
+	}))
+	if connect.CodeOf(err) != connect.CodePermissionDenied {
+		t.Fatalf("machine-authed create code = %v, want PermissionDenied", connect.CodeOf(err))
+	}
+	if !strings.Contains(err.Error(), "interactive session") {
 		t.Errorf("error = %v, want an interactive-session message", err)
 	}
 }
 
-// TestTokenServiceListRevokeAcceptPAT is the complement: list and revoke work
-// with a PAT bearer (a headless CI caller can inspect and rotate its own
-// tokens without a browser login).
-func TestTokenServiceListRevokeAcceptPAT(t *testing.T) {
-	svc := newTokenSvc()
-
-	created, err := svc.CreateToken(tokenAuthCtx("user-1"), sessionReq(&reliantv1.CreateTokenRequest{Name: "ci"}))
+// List and revoke work for a machine caller: headless CI can inspect and
+// retire its own tokens without a browser login.
+func TestTokenServiceListRevokeAcceptMachineCaller(t *testing.T) {
+	svc, _ := newTokenSvc()
+	created, err := svc.CreateToken(tokenAuthCtx("user-1"), req(&reliantv1.CreateTokenRequest{
+		Name: "ci", Kind: reliantv1.TokenKind_TOKEN_KIND_API,
+	}))
 	if err != nil {
 		t.Fatalf("CreateToken: %v", err)
 	}
-	id := created.Msg.GetInfo().GetId()
-
-	if _, err := svc.ListTokens(tokenAuthCtx("user-1"), patBearerReq(&reliantv1.ListTokensRequest{})); err != nil {
-		t.Errorf("PAT-authed list: %v", err)
+	if _, err := svc.ListTokens(machineAuthCtx("user-1"), req(&reliantv1.ListTokensRequest{})); err != nil {
+		t.Errorf("machine-authed list: %v", err)
 	}
-	if _, err := svc.RevokeToken(tokenAuthCtx("user-1"), patBearerReq(&reliantv1.RevokeTokenRequest{Id: id})); err != nil {
-		t.Errorf("PAT-authed revoke: %v", err)
+	if _, err := svc.RevokeToken(machineAuthCtx("user-1"), req(&reliantv1.RevokeTokenRequest{Id: created.Msg.GetInfo().GetId()})); err != nil {
+		t.Errorf("machine-authed revoke: %v", err)
 	}
 }
 
 func TestTokenServiceCreateValidation(t *testing.T) {
-	svc := newTokenSvc()
-
-	if _, err := svc.CreateToken(tokenAuthCtx("user-1"), sessionReq(&reliantv1.CreateTokenRequest{Name: ""})); connect.CodeOf(err) != connect.CodeInvalidArgument {
-		t.Errorf("empty name code = %v, want InvalidArgument", connect.CodeOf(err))
+	svc, _ := newTokenSvc()
+	ctx := tokenAuthCtx("user-1")
+	cases := map[string]*reliantv1.CreateTokenRequest{
+		"empty name":   {Name: "", Kind: reliantv1.TokenKind_TOKEN_KIND_API},
+		"long name":    {Name: strings.Repeat("n", maxTokenNameLen+1), Kind: reliantv1.TokenKind_TOKEN_KIND_API},
+		"negative ttl": {Name: "x", Kind: reliantv1.TokenKind_TOKEN_KIND_API, TtlSeconds: -5},
+		"no kind":      {Name: "x"},
 	}
-	if _, err := svc.CreateToken(tokenAuthCtx("user-1"), sessionReq(&reliantv1.CreateTokenRequest{Name: "x", TtlSeconds: -5})); connect.CodeOf(err) != connect.CodeInvalidArgument {
-		t.Errorf("negative ttl code = %v, want InvalidArgument", connect.CodeOf(err))
-	}
-	// Duplicate active name is rejected (keeps revoke-by-name unambiguous).
-	if _, err := svc.CreateToken(tokenAuthCtx("user-1"), sessionReq(&reliantv1.CreateTokenRequest{Name: "dup"})); err != nil {
-		t.Fatalf("first create: %v", err)
-	}
-	if _, err := svc.CreateToken(tokenAuthCtx("user-1"), sessionReq(&reliantv1.CreateTokenRequest{Name: "dup"})); connect.CodeOf(err) != connect.CodeInvalidArgument {
-		t.Errorf("duplicate name code = %v, want InvalidArgument", connect.CodeOf(err))
+	for name, msg := range cases {
+		if _, err := svc.CreateToken(ctx, req(msg)); connect.CodeOf(err) != connect.CodeInvalidArgument {
+			t.Errorf("%s: code = %v, want InvalidArgument", name, connect.CodeOf(err))
+		}
 	}
 }
 
 func TestTokenServiceRequiresIdentity(t *testing.T) {
-	svc := newTokenSvc()
+	svc, _ := newTokenSvc()
 	anon := context.Background()
-
-	// CreateToken clears the PAT gate (session bearer) but still needs a user.
-	if _, err := svc.CreateToken(anon, sessionReq(&reliantv1.CreateTokenRequest{Name: "x"})); connect.CodeOf(err) != connect.CodeUnauthenticated {
+	if _, err := svc.CreateToken(anon, req(&reliantv1.CreateTokenRequest{Name: "x", Kind: reliantv1.TokenKind_TOKEN_KIND_API})); connect.CodeOf(err) != connect.CodeUnauthenticated {
 		t.Errorf("create without identity code = %v, want Unauthenticated", connect.CodeOf(err))
 	}
-	if _, err := svc.ListTokens(anon, sessionReq(&reliantv1.ListTokensRequest{})); connect.CodeOf(err) != connect.CodeUnauthenticated {
+	if _, err := svc.ListTokens(anon, req(&reliantv1.ListTokensRequest{})); connect.CodeOf(err) != connect.CodeUnauthenticated {
 		t.Errorf("list without identity code = %v, want Unauthenticated", connect.CodeOf(err))
 	}
-	if _, err := svc.RevokeToken(anon, sessionReq(&reliantv1.RevokeTokenRequest{Id: "x"})); connect.CodeOf(err) != connect.CodeUnauthenticated {
+	if _, err := svc.RevokeToken(anon, req(&reliantv1.RevokeTokenRequest{Id: "x"})); connect.CodeOf(err) != connect.CodeUnauthenticated {
 		t.Errorf("revoke without identity code = %v, want Unauthenticated", connect.CodeOf(err))
 	}
 }
 
 func TestTokenServiceRevokeRequiresID(t *testing.T) {
-	svc := newTokenSvc()
-	if _, err := svc.RevokeToken(tokenAuthCtx("user-1"), sessionReq(&reliantv1.RevokeTokenRequest{Id: ""})); connect.CodeOf(err) != connect.CodeInvalidArgument {
+	svc, _ := newTokenSvc()
+	if _, err := svc.RevokeToken(tokenAuthCtx("user-1"), req(&reliantv1.RevokeTokenRequest{Id: ""})); connect.CodeOf(err) != connect.CodeInvalidArgument {
 		t.Errorf("empty id code = %v, want InvalidArgument", connect.CodeOf(err))
 	}
 }

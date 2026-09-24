@@ -7,7 +7,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Daemon } from "@/services/controlPlane/daemon";
-import { DaemonStatus } from "@/gen/controlplane/v1/public/shared_pb";
+import { DaemonStatus } from "@/gen/controlplane/controlplane/v1/shared_pb";
 
 // ── Mock the daemon service module ────────────────────────────
 

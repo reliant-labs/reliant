@@ -14,17 +14,23 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
+	fat "github.com/reliant-labs/forge/pkg/accesstoken"
+
 	"github.com/reliant-labs/reliant/internal/connectorgrant"
+	"github.com/reliant-labs/reliant/internal/tokenauthority"
 )
 
 // memStore is an in-memory grant store. The SQL store has its own integration
 // tests against Postgres; these tests are about the HTTP and protocol layer.
 type memStore struct {
 	mu       sync.Mutex
-	grants   map[string]*connectorgrant.Grant         // keyed by token hash
+	grants   map[string]*connectorgrant.Grant         // keyed by grant id
 	bindings map[string]*connectorgrant.ClientBinding // keyed by userID|clientID
 	audit    []*connectorgrant.AuditRecord
 	auditC   chan struct{}
+
+	// creds is the token authority connector credentials are minted in.
+	creds *tokenauthority.Memory
 }
 
 func newMemStore() *memStore {
@@ -32,23 +38,36 @@ func newMemStore() *memStore {
 		grants:   map[string]*connectorgrant.Grant{},
 		bindings: map[string]*connectorgrant.ClientBinding{},
 		auditC:   make(chan struct{}, 16),
+		creds:    tokenauthority.NewMemory(),
 	}
 }
 
-func (m *memStore) CreateGrant(_ context.Context, g *connectorgrant.Grant) error {
-	m.grants[g.TokenHash] = g
+// credentialFor mints the `rlat_` connector credential for grantID, exactly as
+// ConnectorService does: mcp:connector, bound to connector:<grantID>, acting
+// as the grant's owner.
+func (m *memStore) credentialFor(t *testing.T, grantID, userID string) string {
+	t.Helper()
+	minted, err := m.creds.MintForUser(context.Background(), tokenauthority.MintRequest{
+		UserID: userID, Name: "connector:" + grantID,
+		Scopes:   []fat.Scope{fat.ScopeMCPConnector},
+		Resource: &fat.Resource{Kind: fat.ResourceConnector, ID: grantID},
+	})
+	require.NoError(t, err)
+	return minted.Plaintext
+}
+
+func (m *memStore) SetTokenPrefix(_ context.Context, id, prefix string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if g, ok := m.grants[id]; ok {
+		g.TokenPrefix = prefix
+	}
 	return nil
 }
 
-func (m *memStore) GetGrantByTokenHash(_ context.Context, hash string) (*connectorgrant.Grant, error) {
-	g, ok := m.grants[hash]
-	if !ok {
-		return nil, connectorgrant.ErrNotFound
-	}
-	if err := g.IsLive(time.Now()); err != nil {
-		return nil, connectorgrant.ErrNotFound
-	}
-	return g, nil
+func (m *memStore) CreateGrant(_ context.Context, g *connectorgrant.Grant) error {
+	m.grants[g.ID] = g
+	return nil
 }
 
 func (m *memStore) ListGrantsByUser(_ context.Context, userID string) ([]*connectorgrant.Grant, error) {
@@ -180,22 +199,19 @@ func newTestHTTPServer(t *testing.T, sender CommandSender) (string, string, *mem
 	t.Helper()
 
 	store := newMemStore()
-	raw, hash, prefix, err := connectorgrant.GenerateCredential()
-	require.NoError(t, err)
+	raw := store.credentialFor(t, "grant-http", "user-1")
 
 	require.NoError(t, store.CreateGrant(context.Background(), &connectorgrant.Grant{
 		ID:           "grant-http",
 		UserID:       "user-1",
 		DaemonID:     "daemon-1",
 		Name:         "test connector",
-		TokenHash:    hash,
-		TokenPrefix:  prefix,
 		AllowedTools: ReadOnlyToolNames(),
 		PathRoot:     "/workspace",
 		ExecMode:     connectorgrant.ExecDeny,
 	}))
 
-	handler, err := NewHTTPHandler(HTTPDeps{Store: store, Sender: sender})
+	handler, err := NewHTTPHandler(HTTPDeps{Store: store, Credentials: store.creds, Sender: sender})
 	require.NoError(t, err)
 
 	srv := httptest.NewServer(handler)
@@ -319,8 +335,21 @@ func TestMCPDeniedCallIsAudited(t *testing.T) {
 
 func TestUnauthenticatedRequestsRejected(t *testing.T) {
 	store := newMemStore()
-	handler, err := NewHTTPHandler(HTTPDeps{Store: store, Sender: &fakeSender{}})
+	handler, err := NewHTTPHandler(HTTPDeps{Store: store, Credentials: store.creds, Sender: &fakeSender{}})
 	require.NoError(t, err)
+
+	unknown, err := fat.Mint()
+	require.NoError(t, err)
+	apiOnly, err := store.creds.MintForUser(context.Background(), tokenauthority.MintRequest{
+		UserID: "user-1", Name: "api", Scopes: []fat.Scope{fat.ScopeReliantAPI},
+	})
+	require.NoError(t, err)
+	// A live grant owned by user-1, and a credential bound to it but acting
+	// as user-2: the binding alone must not be enough.
+	require.NoError(t, store.CreateGrant(context.Background(), &connectorgrant.Grant{
+		ID: "grant-other", UserID: "user-1", DaemonID: "daemon-1",
+		AllowedTools: ReadOnlyToolNames(), PathRoot: "/workspace", ExecMode: connectorgrant.ExecDeny,
+	}))
 
 	srv := httptest.NewServer(handler)
 	defer srv.Close()
@@ -331,8 +360,10 @@ func TestUnauthenticatedRequestsRejected(t *testing.T) {
 	}{
 		{"no credential", ""},
 		{"not a bearer", "Basic abc123"},
-		{"wrong credential kind", "Bearer rlnt_pat_thisisapatnotaconnector"},
-		{"unknown connector credential", "Bearer rlnt_conn_0000000000000000000000000000000000000000"},
+		{"retired connector credential", "Bearer rlnt_conn_0000000000000000000000000000000000000000"},
+		{"unknown access token", "Bearer " + unknown.Plaintext},
+		{"access token without mcp:connector", "Bearer " + apiOnly.Plaintext},
+		{"connector token for another user's grant", "Bearer " + store.credentialFor(t, "grant-other", "user-2")},
 	}
 
 	for _, tc := range cases {
@@ -358,22 +389,19 @@ func TestUnauthenticatedRequestsRejected(t *testing.T) {
 // per request rather than once per session.
 func TestRevokedCredentialStopsWorkingImmediately(t *testing.T) {
 	store := newMemStore()
-	raw, hash, prefix, err := connectorgrant.GenerateCredential()
-	require.NoError(t, err)
+	raw := store.credentialFor(t, "grant-revoke", "user-1")
 
 	grant := &connectorgrant.Grant{
 		ID:           "grant-revoke",
 		UserID:       "user-1",
 		DaemonID:     "daemon-1",
-		TokenHash:    hash,
-		TokenPrefix:  prefix,
 		AllowedTools: ReadOnlyToolNames(),
 		PathRoot:     "/workspace",
 		ExecMode:     connectorgrant.ExecDeny,
 	}
 	require.NoError(t, store.CreateGrant(context.Background(), grant))
 
-	handler, err := NewHTTPHandler(HTTPDeps{Store: store, Sender: &fakeSender{}})
+	handler, err := NewHTTPHandler(HTTPDeps{Store: store, Credentials: store.creds, Sender: &fakeSender{}})
 	require.NoError(t, err)
 	srv := httptest.NewServer(handler)
 	defer srv.Close()
@@ -403,4 +431,39 @@ func TestNewHTTPHandlerRequiresDeps(t *testing.T) {
 
 	_, err = NewHTTPHandler(HTTPDeps{Store: newMemStore()})
 	require.Error(t, err, "a handler without a command sender must not be constructed")
+}
+
+// TestRevokedTokenStopsWorkingImmediately is the other half: the grant is
+// still live, but its credential was revoked at the token authority (what
+// RevokeConnector does via RevokeResource). The next request must fail.
+func TestRevokedTokenStopsWorkingImmediately(t *testing.T) {
+	store := newMemStore()
+	require.NoError(t, store.CreateGrant(context.Background(), &connectorgrant.Grant{
+		ID: "grant-token-revoke", UserID: "user-1", DaemonID: "daemon-1",
+		AllowedTools: ReadOnlyToolNames(), PathRoot: "/workspace", ExecMode: connectorgrant.ExecDeny,
+	}))
+	raw := store.credentialFor(t, "grant-token-revoke", "user-1")
+
+	handler, err := NewHTTPHandler(HTTPDeps{Store: store, Credentials: store.creds, Sender: &fakeSender{}})
+	require.NoError(t, err)
+	srv := httptest.NewServer(handler)
+	defer srv.Close()
+
+	doRequest := func() int {
+		req, err := http.NewRequest(http.MethodPost, srv.URL+MountPath, nil)
+		require.NoError(t, err)
+		req.Header.Set("Authorization", "Bearer "+raw)
+		resp, err := http.DefaultClient.Do(req)
+		require.NoError(t, err)
+		defer func() { _ = resp.Body.Close() }()
+		return resp.StatusCode
+	}
+
+	require.NotEqual(t, http.StatusUnauthorized, doRequest(), "credential should work before revocation")
+	n, err := store.creds.RevokeResource(context.Background(),
+		fat.Resource{Kind: fat.ResourceConnector, ID: "grant-token-revoke"})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, n)
+	require.Equal(t, http.StatusUnauthorized, doRequest(),
+		"a credential revoked at the authority must stop working on the very next request")
 }

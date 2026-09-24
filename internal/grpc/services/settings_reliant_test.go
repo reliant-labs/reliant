@@ -17,18 +17,20 @@ import (
 
 type fakeControlPlaneClient struct {
 	issueKey       string
+	issueRotated   bool
 	issueErr       error
 	issueCallCount int
 	lastIssueJWT   string
+	lastDevice     string
 }
 
-func (f *fakeControlPlaneClient) IssueMyReliantAPIKey(ctx context.Context, jwt string) (string, error) {
+func (f *fakeControlPlaneClient) MintLLMKey(_ context.Context, jwt, deviceName string) (controlplane.LLMKey, error) {
 	f.issueCallCount++
-	f.lastIssueJWT = jwt
+	f.lastIssueJWT, f.lastDevice = jwt, deviceName
 	if f.issueErr != nil {
-		return "", f.issueErr
+		return controlplane.LLMKey{}, f.issueErr
 	}
-	return f.issueKey, nil
+	return controlplane.LLMKey{Plaintext: f.issueKey, Rotated: f.issueRotated}, nil
 }
 
 // DeleteCurrentUserAccount satisfies controlplane.Client. The settings tests
@@ -45,7 +47,7 @@ func TestSettingsService_SyncReliantProvider_PersistsKeyAndEmitsRefetch(t *testi
 	jwt := "test-jwt-token"
 	auth.SetUserJWT(userID, jwt)
 
-	fake := &fakeControlPlaneClient{issueKey: "rlnt_abcdef0123456789"}
+	fake := &fakeControlPlaneClient{issueKey: "rlat_abcdef0123456789abcdef0123456789"}
 	svc := NewSettingsService(repo, nil).WithControlPlaneClient(fake)
 
 	ctx := newSettingsServiceTestContext()
@@ -62,32 +64,44 @@ func TestSettingsService_SyncReliantProvider_PersistsKeyAndEmitsRefetch(t *testi
 
 	stored, err := repo.GetProviderAPIKey(ctx, userID, "reliant")
 	require.NoError(t, err)
-	assert.Equal(t, "rlnt_abcdef0123456789", stored)
+	assert.Equal(t, "rlat_abcdef0123456789abcdef0123456789", stored)
 
 	assert.Equal(t, 1, fake.issueCallCount)
 	assert.Equal(t, jwt, fake.lastIssueJWT)
+	assert.Equal(t, controlplane.ReliantProviderKeyName, fake.lastDevice)
 }
 
-func TestSettingsService_SyncReliantProvider_IdempotentReturnsSameKey(t *testing.T) {
+// TestSettingsService_SyncReliantProvider_RotationComesFromControlPlane: each
+// sync mints a NEW plaintext, so "rotated" is what control-plane reports (a
+// previous key for this device was replaced) — never a plaintext comparison.
+// The previous-plaintext heuristic would call every re-sync "rotated", even the
+// first sync after a local DB reset.
+func TestSettingsService_SyncReliantProvider_RotationComesFromControlPlane(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
 
 	userID := "test-user"
-	jwt := "test-jwt-token"
-	auth.SetUserJWT(userID, jwt)
+	auth.SetUserJWT(userID, "test-jwt-token")
+	require.NoError(t, repo.SetProviderAPIKey(context.Background(), userID, "reliant", "rlat_previous0000000000000000000000000"))
 
-	existing := "rlnt_existing0123456789"
-	require.NoError(t, repo.SetProviderAPIKey(context.Background(), userID, "reliant", existing))
-
-	fake := &fakeControlPlaneClient{issueKey: existing}
+	fake := &fakeControlPlaneClient{issueKey: "rlat_next000000000000000000000000000000", issueRotated: true}
 	svc := NewSettingsService(repo, nil).WithControlPlaneClient(fake)
-
 	resp, err := svc.SyncReliantProvider(newSettingsServiceTestContext(), connect.NewRequest(&reliantv1.SyncReliantProviderRequest{}))
 	require.NoError(t, err)
-
+	assert.True(t, resp.Msg.RotatedKey)
 	assert.False(t, resp.Msg.CreatedKey)
+
+	stored, err := repo.GetProviderAPIKey(context.Background(), userID, "reliant")
+	require.NoError(t, err)
+	assert.Equal(t, "rlat_next000000000000000000000000000000", stored)
+
+	// A local store holding a key does NOT make a fresh control-plane mint a
+	// rotation: control-plane is the authority on whether one was replaced.
+	fake.issueRotated = false
+	resp, err = svc.SyncReliantProvider(newSettingsServiceTestContext(), connect.NewRequest(&reliantv1.SyncReliantProviderRequest{}))
+	require.NoError(t, err)
+	assert.True(t, resp.Msg.CreatedKey)
 	assert.False(t, resp.Msg.RotatedKey)
-	assert.True(t, resp.Msg.Synced)
 }
 
 func TestSettingsService_SyncReliantProvider_MissingJWTUnauthenticated(t *testing.T) {
@@ -97,7 +111,7 @@ func TestSettingsService_SyncReliantProvider_MissingJWTUnauthenticated(t *testin
 	// Different user, no JWT registered.
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "user-without-jwt")
 
-	fake := &fakeControlPlaneClient{issueKey: "rlnt_should_not_be_used"}
+	fake := &fakeControlPlaneClient{issueKey: "rlat_should_not_be_used"}
 	svc := NewSettingsService(repo, nil).WithControlPlaneClient(fake)
 
 	_, err := svc.SyncReliantProvider(ctx, connect.NewRequest(&reliantv1.SyncReliantProviderRequest{}))

@@ -155,6 +155,38 @@ export interface ForgeTopologyEnv {
   env: string;
   /** deploy/kcl/<env>/ exists in THIS checkout. False is a real state, not a failure. */
   declared?: boolean;
+  /**
+   * WHERE this env's workloads run: hosted | cluster | compose | host |
+   * external | static | mixed. Always set by a forge that knows the field for
+   * a declared env; absent from an older forge. Read it through
+   * destinationOf, which maps anything unrecognised to `unknown` — never to
+   * `cluster`.
+   */
+  destination?: string;
+  /** Hosted only: the control plane's normalized base URL. */
+  endpoint?: string;
+  /**
+   * Hosted only: the control plane's id for this env. EMPTY when the env has
+   * never been ensured (first `forge env deploy` creates it) — forge never
+   * fabricates one, and neither may anything reading this.
+   */
+  environment_id?: string;
+  /** Where THIS env's promotions are recorded (a control-plane URL or the promotion log). Display only. */
+  ledger?: string;
+  /** The current ledger entry's kind: "promote" or "rollback". */
+  kind?: string;
+  /**
+   * Hosted only: the control plane's env-level verdict (unknown | converging |
+   * converged | diverged | degraded) — forge's roll-up of the workloads below.
+   * Read through hostedVerdictOf; absent or unrecognised is `unknown`.
+   */
+  verdict?: string;
+  /** Hosted only: one row per deployed workload, observed through the control plane. */
+  workloads?: ForgeHostedWorkload[];
+  // Forge also emits `hosted: true` on this row. It is deliberately NOT typed:
+  // forge derives it from the same `forge.ControlPlane` declaration that sets
+  // `destination: "hosted"`, so it carries no fact `destination` lacks, and a
+  // second spelling of "is this hosted" is a second place for them to disagree.
   /** Ever promoted. False is normal — the env has declared nothing to be wrong about. */
   bound?: boolean;
   release?: string;
@@ -169,6 +201,256 @@ export interface ForgeTopologyEnv {
   images?: ForgeTopologyImage[];
   /** Forge's explanation of a state that would otherwise look like missing data. */
   note?: string;
+}
+
+/**
+ * One hosted workload as forge reports it — forge's
+ * `deploytarget.HostedWorkloadStatus`, the same object under topology's
+ * `workloads[]` and status's `hosted_workloads[]`. Every field optional: a
+ * workload row missing a field must render rather than throw.
+ */
+export interface ForgeHostedWorkload {
+  name?: string;
+  /** backend | database | static. */
+  tier?: string;
+  /** The public hostname the control plane assigned, when it has one. */
+  hostname?: string;
+  /** The full URL a human would open. Preferred over hostname when present. */
+  url?: string;
+  /** The control plane's verdict: unknown | converging | converged | diverged | degraded. */
+  verdict?: string;
+  verdict_reason?: string;
+  /** The observation vocabulary: pending | progressing | ready | degraded | suspended | deleted | unknown. */
+  observed_state?: string;
+  /** The digest the control plane observed running. */
+  observed_digest?: string;
+  /** The digest the published spec asks for. */
+  desired_digest?: string;
+  /** Forge's own drift call (observed ≠ desired). Read, never re-derived here. */
+  drifted?: boolean;
+  /** The control plane's last error for this workload, if any. */
+  last_error?: string;
+}
+
+// ── Destination ─────────────────────────────────────────────────────────────
+
+/**
+ * Where an environment's workloads run. `unknown` is NOT one of forge's
+ * values — it is this build's answer to a value it does not recognise, or to a
+ * forge too old to say. It must never fold into `cluster`: that would put
+ * kube-context language in front of an env that has no kube context, and it
+ * would claim a fact nobody reported.
+ */
+export type EnvDestination =
+  | "hosted"
+  | "cluster"
+  | "compose"
+  | "host"
+  | "external"
+  | "static"
+  | "mixed"
+  | "unknown";
+
+const DESTINATIONS: readonly EnvDestination[] = [
+  "hosted",
+  "cluster",
+  "compose",
+  "host",
+  "external",
+  "static",
+  "mixed",
+];
+
+export function destinationOf(
+  env: Pick<ForgeTopologyEnv, "destination"> | null | undefined
+): EnvDestination {
+  const raw = (env?.destination ?? "").trim().toLowerCase();
+  return DESTINATIONS.includes(raw as EnvDestination) ? (raw as EnvDestination) : "unknown";
+}
+
+export function destinationLabel(destination: EnvDestination): string {
+  switch (destination) {
+    case "hosted":
+      return "Hosted";
+    case "cluster":
+      return "Cluster";
+    case "compose":
+      return "Compose";
+    case "host":
+      return "Host";
+    case "external":
+      return "External";
+    case "static":
+      return "Static";
+    case "mixed":
+      return "Mixed";
+    default:
+      return "Unknown";
+  }
+}
+
+export function destinationExplanation(destination: EnvDestination): string {
+  switch (destination) {
+    case "hosted":
+      return "Deployed through a control plane. There is no kube context to name: the control plane runs the workloads and reports their state.";
+    case "cluster":
+      return "Deployed to a Kubernetes cluster this environment's KCL declares, by kube context.";
+    case "compose":
+      return "Run with docker compose on the machine running forge.";
+    case "host":
+      return "Run as host processes on the machine running forge.";
+    case "external":
+      return "Deployed by an external target forge hands off to (for example a static host's CLI).";
+    case "static":
+      return "A static site published to object storage or a CDN.";
+    case "mixed":
+      return "Workloads in this environment go to more than one kind of destination.";
+    default:
+      return "Forge did not say where this environment runs, or said something this version of reliant does not recognise. It is not assumed to be a cluster.";
+  }
+}
+
+/** True only for a destination that deploys by kube context. `mixed` may include one. */
+export function usesKubeContext(destination: EnvDestination): boolean {
+  return destination === "cluster" || destination === "mixed";
+}
+
+/**
+ * endpointHost trims a control-plane URL to the host a human recognises.
+ * Falls back to the raw string rather than to nothing — an unparseable
+ * endpoint is still the only thing that says where this env lives.
+ */
+export function endpointHost(endpoint: string | undefined): string {
+  const raw = (endpoint ?? "").trim();
+  if (raw === "") return "";
+  try {
+    return new URL(raw).host;
+  } catch {
+    return raw;
+  }
+}
+
+/**
+ * hostedWorkloadsOf returns the workload rows forge reported on a TOPOLOGY
+ * env row, tolerating none. (`env status` names the same list
+ * `hosted_workloads` — see status.ts hostedWorkloadsOfStatus.)
+ */
+export function hostedWorkloadsOf(env: ForgeTopologyEnv | null | undefined): ForgeHostedWorkload[] {
+  return workloadRows(env?.workloads);
+}
+
+/** workloadRows filters a forge workload array down to objects, tolerating anything. */
+export function workloadRows(value: unknown): ForgeHostedWorkload[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((w): w is ForgeHostedWorkload => !!w && typeof w === "object");
+}
+
+/**
+ * workloadLastError is the error worth showing on a row: forge's last_error,
+ * but only while the workload is DEGRADED (a known-bad verdict or an observed
+ * `degraded` state). A last_error on a workload that has since converged is
+ * history, and painting it beside a green verdict would contradict the verdict.
+ */
+export function workloadLastError(workload: ForgeHostedWorkload): string {
+  const error = (workload.last_error ?? "").trim();
+  if (error === "") return "";
+  const degraded =
+    verdictCertainty(hostedVerdictOf(workload.verdict)) === "known-bad" ||
+    (workload.observed_state ?? "").trim().toLowerCase() === "degraded";
+  return degraded ? error : "";
+}
+
+/** workloadLink is what a human opens: the URL, else https://hostname, else nothing. */
+export function workloadLink(workload: ForgeHostedWorkload): string {
+  const url = (workload.url ?? "").trim();
+  if (url !== "") return url;
+  const host = (workload.hostname ?? "").trim();
+  return host !== "" ? `https://${host}` : "";
+}
+
+/**
+ * The control plane's verdict vocabulary (forge's deploystate). An
+ * unrecognised or absent verdict is `unknown`, never `converged`.
+ */
+export type HostedVerdict = "unknown" | "converging" | "converged" | "diverged" | "degraded";
+
+const VERDICTS: readonly HostedVerdict[] = ["unknown", "converging", "converged", "diverged", "degraded"];
+
+export function hostedVerdictOf(value: string | undefined): HostedVerdict {
+  let raw = (value ?? "").trim().toLowerCase();
+  // Tolerate the proto enum spelling (DEPLOY_VERDICT_CONVERGED) as well as
+  // forge's lower-case one — both name the same five states.
+  if (raw.startsWith("deploy_verdict_")) raw = raw.slice("deploy_verdict_".length);
+  return VERDICTS.includes(raw as HostedVerdict) ? (raw as HostedVerdict) : "unknown";
+}
+
+/** Places a verdict in the three-level certainty vocabulary. Converging is not yet good. */
+export function verdictCertainty(verdict: HostedVerdict): Certainty {
+  switch (verdict) {
+    case "converged":
+      return "known-good";
+    case "diverged":
+    case "degraded":
+      return "known-bad";
+    default:
+      return "unknown";
+  }
+}
+
+/**
+ * The words a reader sees for a verdict. forge's names (converged, diverged…)
+ * are control-loop vocabulary; these say what each means for the person
+ * looking at the app. The five stay distinct — none collapses onto another —
+ * and none reuses "Degraded", which the rest of the console already spends on
+ * a WARNING (workloadVocabulary, the status verdict): forge's `degraded` means
+ * "not serving", which is known-bad, not a warning.
+ */
+export function verdictLabel(verdict: HostedVerdict): string {
+  switch (verdict) {
+    case "converged":
+      return "Healthy";
+    case "converging":
+      return "Settling";
+    case "diverged":
+      return "Drifted";
+    case "degraded":
+      return "Not serving";
+    default:
+      return "Not checked";
+  }
+}
+
+/** One sentence per verdict, for the tooltip — what forge measured, not what it resembles. */
+export function verdictExplanation(verdict: HostedVerdict): string {
+  switch (verdict) {
+    case "converged":
+      return "Running what was published, and has held steady past the stability window.";
+    case "converging":
+      return "Running what was published, but not yet stable for long enough to call healthy.";
+    case "diverged":
+      return "What is running no longer matches what was published.";
+    case "degraded":
+      return "Not serving traffic, whether or not it matches what was published.";
+    default:
+      return "The control plane has not reported on this, so its health is not known. This is neither healthy nor broken.";
+  }
+}
+
+/**
+ * The env's one-word health. forge's env-level `verdict` when it sent one;
+ * otherwise the WORST workload verdict, because an env is only as healthy as
+ * its least healthy workload — and an env with no workloads is not checked,
+ * never healthy.
+ */
+export function envHostedVerdict(env: Pick<ForgeTopologyEnv, "verdict" | "workloads">): HostedVerdict {
+  const declared = hostedVerdictOf(env.verdict);
+  if (declared !== "unknown") return declared;
+  const workloads = workloadRows(env.workloads);
+  if (workloads.length === 0) return "unknown";
+  const rank: Record<HostedVerdict, number> = { degraded: 4, diverged: 3, unknown: 2, converging: 1, converged: 0 };
+  return workloads
+    .map((w) => hostedVerdictOf(w.verdict))
+    .reduce((worst, v) => (rank[v] > rank[worst] ? v : worst), "converged" as HostedVerdict);
 }
 
 export interface ForgeTopologyTally {

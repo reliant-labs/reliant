@@ -7,7 +7,7 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { VirtuosoMockContext } from "react-virtuoso";
-import { DaemonSize, DaemonStatus, DaemonType } from "@/gen/controlplane/v1/public/shared_pb";
+import { DaemonSize, DaemonStatus, DaemonType } from "@/gen/controlplane/controlplane/v1/shared_pb";
 import type { Daemon } from "@/services/controlPlane/daemon";
 
 const mocks = vi.hoisted(() => ({
@@ -40,7 +40,7 @@ function daemon(overrides: Partial<Daemon> = {}): Daemon {
     id: "d1",
     name: "work-box",
     status: DaemonStatus.ACTIVE,
-    size: DaemonSize.SMALL,
+    size: DaemonSize.DAEMON_SIZE_SMALL,
     ...overrides,
   } as Daemon;
 }
@@ -80,7 +80,7 @@ describe("MobileDaemonList", () => {
       expect(mocks.createDaemon).toHaveBeenCalledWith({
         name: "phone-box",
         daemonType: DaemonType.MANAGED,
-        size: DaemonSize.SMALL,
+        size: DaemonSize.DAEMON_SIZE_SMALL,
         idleTimeout: "30m",
         gitRepo: undefined,
         gitBranch: "main",

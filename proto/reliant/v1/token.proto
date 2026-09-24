@@ -5,72 +5,81 @@ package reliant.v1;
 
 option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
 
-// TokenService manages user API tokens: rlnt_pat_ personal access tokens of
-// kind='api' that authenticate CLI and automation requests through the same
-// interceptor path as a Supabase JWT. It is the Connect replacement for the
-// former POST/GET/DELETE /api/v1/tokens JSON surface; the single mint/list/
-// revoke/validate implementation lives in internal/pat.Service, and these
-// handlers are thin wrappers over it.
+// TokenService is reliant's ONE surface for machine credentials. Every token
+// it mints is an `rlat_` access token (forge/pkg/accesstoken) — the same
+// credential control-plane issues; there is no reliant-specific family.
 //
-// Auth:
-//   - CreateToken requires an interactive session (a Supabase JWT). A PAT
-//     cannot mint a PAT — you bootstrap an API token from a browser login.
-//     The interceptor accepts both JWTs and api-kind PATs, so this rule is
-//     enforced in the handler by rejecting PAT bearers. (Mirrors the
-//     DaemonTokenService rule that token issuance is session-authed.)
-//   - ListTokens and RevokeToken accept either credential (JWT or api-kind
-//     PAT) and are strictly owner- and kind-scoped: a caller only ever sees
-//     or revokes their own api-kind tokens. This lets a headless CI caller
-//     that holds only a PAT inspect and rotate its own tokens without a
-//     browser login, while never being able to escalate by minting new ones.
+// It is a thin facade over the deployment's token authority
+// (internal/tokenauthority): control-plane's access_tokens in a hosted
+// deployment, reliant's own access_tokens table when self-hosted. Clients call
+// ONE endpoint either way.
+//
+// Tokens act AS THE CALLER. The KIND picks the authority:
+//   - TOKEN_KIND_DAEMON: daemon:connect — connects a daemon to the gateway.
+//   - TOKEN_KIND_API:    reliant:api    — authenticates CLI/automation calls
+//                        exactly as the caller's session would.
+//
+// Auth: minting requires an interactive session. A machine credential can
+// never mint a credential — the general no-mint-beyond-your-scopes rule with
+// token:write never granted. List and revoke accept the caller's API token too
+// (strictly scoped to the caller), so headless automation can rotate itself.
 service TokenService {
-  // CreateToken mints a new api-kind PAT for the authenticated user and
-  // returns the raw token exactly once (it is never retrievable again).
-  // Session-authed (JWT) only.
+  // CreateToken mints a token acting as the caller. The raw secret is
+  // returned exactly once. Session (JWT) only.
   rpc CreateToken(CreateTokenRequest) returns (CreateTokenResponse) {}
-
-  // ListTokens returns metadata for every api-kind token owned by the caller.
-  // Token secrets and hashes are never returned.
+  // ListTokens returns the caller's live tokens of one kind (or all kinds).
   rpc ListTokens(ListTokensRequest) returns (ListTokensResponse) {}
-
-  // RevokeToken marks one of the caller's api-kind tokens revoked. Subsequent
-  // uses of that token fail auth.
+  // RevokeToken revokes one of the caller's tokens, immediately.
   rpc RevokeToken(RevokeTokenRequest) returns (RevokeTokenResponse) {}
 }
 
-// CreateTokenRequest is the CreateToken input.
-message CreateTokenRequest {
-  string name = 1;         // Human-readable token name (required, must be unique among the caller's active tokens)
-  int64 ttl_seconds = 2;   // Lifetime in seconds; 0 (or absent) means the token never expires
+enum TokenKind {
+  TOKEN_KIND_UNSPECIFIED = 0;
+  TOKEN_KIND_DAEMON = 1;
+  TOKEN_KIND_API = 2;
 }
 
-// TokenInfo is the metadata view of an api-kind token. It never carries the
-// raw secret or the stored hash. Timestamps are RFC 3339; empty means unset.
+message CreateTokenRequest {
+  string name = 1;        // Human-readable label (required)
+  int64 ttl_seconds = 2;  // Lifetime in seconds; 0 means the token never expires
+  TokenKind kind = 3;     // Required
+}
+
+// TokenInfo is a token's metadata. It never carries the secret or its hash.
+// Timestamps are RFC 3339; empty means unset.
 message TokenInfo {
+  // Tag 7 was `string revoked_at` (the retired PAT listing). Reserved, never
+  // reused: a new field on tag 7 would decode an old client's timestamp string
+  // as a different wire type.
+  reserved 7;
+  reserved "revoked_at";
+
   string id = 1;
   string name = 2;
-  string token_prefix = 3;  // First chars for display (e.g. "rlnt_pat_AbCd...")
+  string token_prefix = 3;  // Display identifier, e.g. "rlat_A3f9Kd2p"
   string created_at = 4;
-  string last_used_at = 5;  // empty if never used
-  string expires_at = 6;    // empty if no expiry
-  string revoked_at = 7;    // empty if active
+  string last_used_at = 5;
+  string expires_at = 6;
+  bool ephemeral = 8;
+  string daemon_id = 9;     // Set when the token is bound to one daemon
+  TokenKind kind = 10;
 }
 
-// CreateTokenResponse carries the new token's metadata plus the raw secret,
-// which is returned exactly once.
 message CreateTokenResponse {
   TokenInfo info = 1;
-  string token = 2;  // Raw PAT — display once, cannot be retrieved again
+  string token = 2;  // Raw rlat_ token — shown once, never retrievable again
 }
 
-message ListTokensRequest {}
+message ListTokensRequest {
+  TokenKind kind = 1;  // UNSPECIFIED lists every kind
+}
 
 message ListTokensResponse {
   repeated TokenInfo tokens = 1;
 }
 
 message RevokeTokenRequest {
-  string id = 1;  // ID of the token to revoke
+  string id = 1;
 }
 
 message RevokeTokenResponse {}

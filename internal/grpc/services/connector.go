@@ -10,6 +10,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	fat "github.com/reliant-labs/forge/pkg/accesstoken"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
@@ -17,6 +18,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/connectorgrant"
 	"github.com/reliant-labs/reliant/internal/mcpserver"
 	"github.com/reliant-labs/reliant/internal/ospath"
+	"github.com/reliant-labs/reliant/internal/tokenauthority"
 )
 
 // ConnectorService is the JWT-authed surface for managing connector grants.
@@ -28,14 +30,51 @@ type ConnectorService struct {
 
 	store connectorgrant.Store
 
+	// tokens mints and revokes each grant's credential: an `rlat_` access
+	// token with mcp:connector, bound to resource connector:<grantID>,
+	// acting as the grant's user. The grant row holds the POLICY; the token
+	// authority holds the credential.
+	tokens tokenauthority.Authority
+
 	// publicURL is the externally reachable base URL, used to tell the user
 	// where to point their MCP client.
 	publicURL string
 }
 
 // NewConnectorService constructs the service.
-func NewConnectorService(store connectorgrant.Store, publicURL string) *ConnectorService {
-	return &ConnectorService{store: store, publicURL: publicURL}
+func NewConnectorService(store connectorgrant.Store, tokens tokenauthority.Authority, publicURL string) *ConnectorService {
+	return &ConnectorService{store: store, tokens: tokens, publicURL: publicURL}
+}
+
+// connectorResource is the binding a grant's credential carries.
+func connectorResource(grantID string) fat.Resource {
+	return fat.Resource{Kind: fat.ResourceConnector, ID: grantID}
+}
+
+// createGrantWithCredential stores the grant, then mints its credential bound
+// to it. The grant must exist first (the credential names it); if minting
+// fails, the grant is revoked so no credential-less grant looks usable.
+func (s *ConnectorService) createGrantWithCredential(ctx context.Context, grant *connectorgrant.Grant) (string, error) {
+	if err := s.store.CreateGrant(ctx, grant); err != nil {
+		return "", fmt.Errorf("create connector: %w", err)
+	}
+	res := connectorResource(grant.ID)
+	minted, err := s.tokens.MintForUser(ctx, tokenauthority.MintRequest{
+		UserID:    grant.UserID,
+		Name:      "connector: " + grant.Name,
+		Scopes:    []fat.Scope{fat.ScopeMCPConnector},
+		Resource:  &res,
+		ExpiresAt: grant.ExpiresAt,
+	})
+	if err != nil {
+		_, _ = s.store.RevokeGrant(ctx, grant.UserID, grant.ID)
+		return "", fmt.Errorf("mint connector credential: %w", err)
+	}
+	grant.TokenPrefix = minted.DisplayPrefix
+	if err := s.store.SetTokenPrefix(ctx, grant.ID, minted.DisplayPrefix); err != nil {
+		return "", err
+	}
+	return minted.Plaintext, nil
 }
 
 // CreateConnector mints a credential bound to one daemon.
@@ -54,20 +93,14 @@ func (s *ConnectorService) CreateConnector(
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
 
-	raw, hash, prefix, err := connectorgrant.GenerateCredential()
+	raw, err := s.createGrantWithCredential(ctx, grant)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("mint connector credential: %w", err))
-	}
-	grant.TokenHash = hash
-	grant.TokenPrefix = prefix
-
-	if err := s.store.CreateGrant(ctx, grant); err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("create connector: %w", err))
+		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 
 	return connect.NewResponse(&reliantv1.CreateConnectorResponse{
 		Connector: toProtoConnector(grant),
-		// Returned exactly once. Everything after this point holds only the hash.
+		// Returned exactly once; the authority holds only its hash.
 		Credential: raw,
 		McpUrl:     s.mcpURL(),
 	}), nil
@@ -280,6 +313,13 @@ func (s *ConnectorService) RevokeConnector(
 	revoked, err := s.store.RevokeGrant(ctx, userID, id)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("revoke connector: %w", err))
+	}
+	// Kill the credential too, not only the policy: the grant is re-checked
+	// per call, but a revoked grant must leave no live token behind.
+	if revoked {
+		if _, err := s.tokens.RevokeResource(ctx, connectorResource(id)); err != nil {
+			return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("revoke connector credential: %w", err))
+		}
 	}
 	return connect.NewResponse(&reliantv1.RevokeConnectorResponse{Revoked: revoked}), nil
 }

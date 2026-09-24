@@ -224,13 +224,24 @@ deps: setup-hooks
 proto-generate:
 	@echo "$(YELLOW)Generating code from protobuf definitions...$(NC)"
 	@PATH="$(shell pwd)/web/node_modules/.bin:$(PATH)" buf generate
+	@$(MAKE) --no-print-directory proto-generate-controlplane
 	@echo "$(GREEN)✅ Protobuf code generated$(NC)"
 
 ## proto-generate-go: Generate only Go code from protobuf definitions
+## (also regenerates the control-plane client, Go + TS, from proto-vendor/ so
+## the generate-drift CI job covers it)
 proto-generate-go:
 	@echo "$(YELLOW)Generating Go code from protobuf definitions...$(NC)"
 	@buf generate --template buf.gen-go-only.yaml
+	@$(MAKE) --no-print-directory proto-generate-controlplane
 	@echo "$(GREEN)✅ Go protobuf code generated$(NC)"
+
+## proto-generate-controlplane: Generate the control-plane clients (Go + TS) from
+## proto-vendor/controlplane/ — a generated export of control-plane's public
+## contract. To pull a new contract first: node .github/scripts/sync-controlplane-proto.mjs
+proto-generate-controlplane:
+	@rm -rf gen/controlplane web/src/gen/controlplane
+	@PATH="$(shell pwd)/web/node_modules/.bin:$(PATH)" buf generate --template buf.gen.controlplane.yaml
 
 ## proto-lint: Lint protobuf files
 proto-lint:

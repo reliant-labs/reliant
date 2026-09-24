@@ -175,8 +175,8 @@ describe('transport call sites', () => {
 
   it('grpc-client::getControlPlaneTransport returns null when same-origin (http-served renderer)', async () => {
     // Same-origin (Vite-proxy) model: web-dev AND electron-dev are served over
-    // http(s), so getControlPlaneTransport returns null and DaemonRegistry/
-    // DaemonToken fall through to the same-origin getTransport() — their
+    // http(s), so getControlPlaneTransport returns null and its callers
+    // fall through to the same-origin getTransport() — their
     // `reliant.v1.*` paths are proxied to reliant-api, CORS-free. jsdom's
     // window.location.protocol is "http:", so isSameOriginTransport() is true
     // here. The absolute VITE_CONTROL_PLANE_API_URL is never used as a transport

@@ -36,13 +36,15 @@
  *   problem — while a reader who assumes `wait` will read them as fine.
  */
 
-import { Boxes, Layers, Package, ShieldCheck, Target } from "lucide-react";
+import { AlertTriangle, Boxes, Layers, Package, ShieldCheck, Target } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Tooltip } from "@/components/ui/Tooltip";
 import {
   blockingFindings,
   guardVerdictOf,
+  hostedEndpoint,
+  isHostedPlan,
   isMultiCluster,
   pinningOf,
   preflightRan,
@@ -68,12 +70,20 @@ export interface DeployPlanViewProps {
 }
 
 export function DeployPlanView({ plan, showRollout = true }: DeployPlanViewProps) {
+  // A hosted plan renders no Kubernetes manifests — the control plane builds
+  // the workloads from the promoted release — so forge's images/resources
+  // lists come back empty BY CONSTRUCTION. Rendering them anyway reads
+  // "0 digest-pinned … 0 resources": a plan that ships nothing, which is the
+  // opposite of the truth. They are shown for hosted only if forge filled them.
+  const hosted = isHostedPlan(plan);
+  const showImages = !hosted || (plan.images?.images?.length ?? 0) > 0;
+  const showResources = !hosted || (plan.resources?.length ?? 0) > 0;
   return (
     <div className="space-y-4" data-testid="deploy-plan">
       <TargetPanel plan={plan} />
       <PreflightPanel plan={plan} />
-      <ImagesPanel plan={plan} />
-      <ResourcesPanel plan={plan} />
+      {showImages && <ImagesPanel plan={plan} />}
+      {showResources && <ResourcesPanel plan={plan} />}
       {showRollout && <RolloutPanel plan={plan} />}
     </div>
   );
@@ -91,6 +101,7 @@ export function DeployPlanView({ plan, showRollout = true }: DeployPlanViewProps
  * count stated in words so a reader cannot skim past it.
  */
 export function TargetPanel({ plan }: { plan: ForgeDeployReport }) {
+  if (isHostedPlan(plan)) return <HostedTargetPanel plan={plan} />;
   const contexts = targetContexts(plan);
   const multi = isMultiCluster(plan);
   const namespace = plan.target?.namespace ?? "";
@@ -206,6 +217,85 @@ export function TargetPanel({ plan }: { plan: ForgeDeployReport }) {
 }
 
 /**
+ * WHERE A HOSTED DEPLOY LANDS: a control plane and one of its environments.
+ *
+ * NO KUBE-CONTEXT LANGUAGE, deliberately and entirely. A hosted env has no
+ * cluster the operator can name or check — the control plane runs the
+ * workloads — so "cluster", "context" and "kubeconfig" here would send a
+ * reader to kubectl looking for something that is not theirs to look at. The
+ * two facts that matter are the endpoint (which control plane) and the
+ * environment id (which of its environments), and an empty id is stated as
+ * "created on this deploy", never left blank or guessed.
+ */
+function HostedTargetPanel({ plan }: { plan: ForgeDeployReport }) {
+  const endpoint = hostedEndpoint(plan);
+  const environmentId = (plan.target?.environment_id ?? "").trim();
+  const verdict = guardVerdictOf(plan.guard?.verdict);
+
+  return (
+    <section
+      data-testid="deploy-target"
+      data-destination="hosted"
+      className={cn(
+        "space-y-2 rounded-lg px-4 py-3",
+        verdict === "refuse"
+          ? "border border-solid border-destructive/50 bg-destructive/10"
+          : "border border-solid border-warning/50 bg-warning/10"
+      )}
+    >
+      <div className="flex items-center gap-2 text-foreground">
+        <Target className="h-4 w-4 shrink-0" aria-hidden="true" />
+        <h3 className="text-sm font-medium" data-testid="deploy-target-heading">
+          {!endpoint
+            ? "This hosted environment names no control plane"
+            : environmentId
+              ? `This updates the live hosted environment ${plan.env ?? ""}`.trim()
+              : `This creates the hosted environment ${plan.env ?? ""}`.trim()}
+        </h3>
+      </div>
+
+      <dl className="grid gap-x-4 gap-y-1 text-xs sm:grid-cols-[auto_1fr]">
+        <dt className="text-muted-foreground">Control plane</dt>
+        <dd className="font-mono text-sm font-medium text-foreground" data-testid="deploy-target-endpoint">
+          {endpoint || "—"}
+        </dd>
+        <dt className="text-muted-foreground">Environment ID</dt>
+        <dd className="font-mono text-foreground" data-testid="deploy-target-environment-id">
+          {environmentId || (
+            <span className="font-sans text-muted-foreground">
+              none yet — this deploy creates it
+            </span>
+          )}
+        </dd>
+      </dl>
+
+      {verdict === "refuse" && (
+        <div
+          data-testid="deploy-guard-refused"
+          className="space-y-1 rounded-md border border-solid border-destructive/50 bg-destructive/10 px-3 py-2"
+        >
+          <p className="text-xs font-medium text-destructive">Forge will not deploy this environment.</p>
+          {plan.guard?.reason && (
+            <p className="text-2xs text-muted-foreground">Reason: {plan.guard.reason}</p>
+          )}
+          {plan.guard?.fix && (
+            <p className="text-2xs text-foreground" data-testid="deploy-guard-fix">
+              {plan.guard.fix}
+            </p>
+          )}
+        </div>
+      )}
+
+      <p className="text-2xs text-muted-foreground" data-testid="deploy-release">
+        {plan.release
+          ? `Shipping release ${plan.release}'s pinned digests.`
+          : "This environment has no release binding. A hosted deploy ships only promoted digests, so forge will refuse it until you promote a release."}
+      </p>
+    </section>
+  );
+}
+
+/**
  * THE PREFLIGHT. Two failure modes to separate, and they look nothing alike.
  *
  * A BLOCKING finding means the deploy will fail — a referenced Secret key or
@@ -239,10 +329,15 @@ export function PreflightPanel({ plan }: { plan: ForgeDeployReport }) {
         <span
           data-testid="deploy-preflight-status"
           className={cn(
-            "text-2xs",
-            preflightRan(status) ? "text-muted-foreground" : "text-warning"
+            "inline-flex items-center gap-1 text-2xs",
+            preflightRan(status) ? "text-muted-foreground" : "font-medium text-foreground"
           )}
         >
+          {/* Not-ran keeps its warning hue on the ICON; amber text on the card
+              measured 2.1:1 in light. */}
+          {!preflightRan(status) && (
+            <AlertTriangle className="h-3 w-3 shrink-0 text-warning" aria-hidden="true" />
+          )}
           {PREFLIGHT_STATUS_LABELS[status]}
         </span>
       </div>

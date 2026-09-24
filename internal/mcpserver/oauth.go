@@ -33,7 +33,7 @@ import (
 // lifetime, revocation, and consent semantics twice, with the two able to
 // disagree.
 //
-// Connector credentials (rlnt_conn_) remain supported alongside this. They are
+// Connector credentials (`rlat_`, mcp:connector) remain supported alongside this. They are
 // what makes the endpoint usable from Claude Desktop and the API today,
 // without an interactive browser flow.
 

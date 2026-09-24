@@ -24,6 +24,11 @@
  * the server re-checks. The full set is displayed here again so the blast radius
  * is on screen at the moment of the click, not only further up the page.
  *
+ * HOSTED: THE SAME GUARD, DIFFERENT NOUN. A hosted plan's token carries the
+ * control-plane endpoint instead of a kube context, and the operator types
+ * the endpoint's host. The copy never says "cluster" or "context" for it —
+ * see HostedTargetPanel.
+ *
  * There is no field, toggle or "force" affordance for --skip-preflight or
  * --no-digest, and there must never be. They are deliberate overrides for a human
  * who has weighed the consequence; a button is a footgun.
@@ -36,8 +41,10 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import {
+  confirmPhrase,
   deployTokenFor,
   describeDeployToken,
+  isHostedPlan,
   isMultiCluster,
   targetContexts,
   type ForgeDeployReport,
@@ -70,8 +77,11 @@ export function DeployConfirmStep({
   // authorise a deploy — see deployTokenFor for why no default is safe, and note
   // that the cluster half has no "unset" spelling at all.
   const token = deployTokenFor(plan);
+  const isHostedPlanDoc = isHostedPlan(plan);
 
-  const contextMatches = !!token && typedContext.trim() === token.expectedDeclaredContext;
+  const hosted = !!token?.hosted;
+  const phrase = token ? confirmPhrase(token) : "";
+  const contextMatches = !!token && typedContext.trim() === phrase;
   const canStart = !!token && acknowledged && contextMatches && !isStarting;
 
   return (
@@ -108,20 +118,24 @@ export function DeployConfirmStep({
           )}
 
           <div className="space-y-1.5 rounded-lg border border-solid border-destructive/50 bg-destructive/10 px-3 py-2">
-            <p className="flex items-center gap-1.5 text-xs font-medium text-destructive">
-              <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-              This applies manifests to a live cluster. It cannot be undone from git.
+            <p className="flex items-center gap-1.5 text-xs font-medium text-foreground">
+              {/* Hue on the icon and the panel; the sentence itself is
+                  foreground — destructive text on its own tint measured
+                  3.6:1 in dark, too low for the most important line here. */}
+              <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-destructive" aria-hidden="true" />
+              {hosted
+                ? "This publishes to a live hosted environment. It cannot be undone from git."
+                : "This applies manifests to a live cluster. It cannot be undone from git."}
             </p>
             <label htmlFor={typedContextId} className="block text-2xs text-muted-foreground">
-              Type{" "}
-              <span className="font-mono text-foreground">{token.expectedDeclaredContext}</span> to
-              confirm the cluster.
+              Type <span className="font-mono text-foreground">{phrase}</span> to confirm the{" "}
+              {hosted ? "control plane this deploys through" : "cluster"}.
             </label>
             <Input
               id={typedContextId}
               value={typedContext}
               onChange={(event) => setTypedContext(event.target.value)}
-              placeholder={token.expectedDeclaredContext}
+              placeholder={phrase}
               autoComplete="off"
               spellCheck={false}
               className="font-mono text-xs"
@@ -138,7 +152,8 @@ export function DeployConfirmStep({
           className="rounded-lg border border-dashed border-destructive/50 px-3 py-2 text-xs text-destructive"
         >
           This plan cannot authorise a deploy of {env || "this environment"}: it does not name a
-          declared cluster, or forge&apos;s own guard refused it. Re-plan to try again.
+          declared {isHostedPlanDoc ? "control plane" : "cluster"}, or forge&apos;s own guard refused it.
+          Re-plan to try again.
         </p>
       )}
 
@@ -158,7 +173,9 @@ export function DeployConfirmStep({
           {isStarting
             ? "Starting deploy…"
             : token
-              ? `Deploy ${env} to ${token.expectedDeclaredContext}`
+              ? hosted
+                ? `Deploy ${env} via ${phrase}`
+                : `Deploy ${env} to ${phrase}`
               : `Deploy ${env}`}
         </Button>
       </div>

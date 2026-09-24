@@ -41,9 +41,10 @@
 
 import { cn } from "@/lib/utils";
 import { Card } from "@/components/ui";
-import type { ForgeOutcome } from "@/services/forge/topology";
+import { destinationOf, endpointHost, type ForgeOutcome } from "@/services/forge/topology";
 import {
   checksOf,
+  hostedWorkloadsOfStatus,
   verdictOf,
   verdictSentence,
   type EnvStatusVerdict,
@@ -56,6 +57,7 @@ import {
   ForgeUnsupported,
   NotForgeProject,
 } from "../ForgeStates";
+import { HostedWorkloadList } from "../DestinationBadge";
 import { CheckRow } from "./CheckRow";
 import { DispositionLegend } from "./DispositionLegend";
 
@@ -148,6 +150,12 @@ export function EnvStatusPanel({
 
   return (
     <div className="space-y-4" data-testid="forge-env-status">
+      {/* For a hosted env the first question is "is it serving?", and the
+          control plane is the only thing that can answer it — so its section
+          comes FIRST, above the runtime checks, which run on this machine and
+          say nothing about the hosted workloads. */}
+      {destinationOf(report) === "hosted" && <HostedStatusSummary report={report} env={reportEnv} />}
+
       <header className="space-y-3">
         <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
           {/* Prose heading, so it is not monospaced. The env name beside it IS
@@ -236,6 +244,46 @@ export function EnvStatusPanel({
         <ServiceSummary services={report.services} />
       )}
     </div>
+  );
+}
+
+/**
+ * A hosted env's workloads as the control plane reports them — from the
+ * status document's `hosted_workloads` (NOT `workloads`, which here is the
+ * cluster inventory). Same row component as the topology screen, so a
+ * workload's URL, verdict, drift and error read identically on both.
+ */
+function HostedStatusSummary({ report, env }: { report: ForgeEnvStatusReport; env: string }) {
+  const workloads = hostedWorkloadsOfStatus(report);
+  const host = endpointHost(report.endpoint);
+  const deployed = (report.environment_id ?? "").trim() !== "";
+  return (
+    <section className="space-y-2" data-testid="forge-status-hosted">
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <h2 className="text-base font-semibold text-foreground">Hosted workloads</h2>
+        <span className="text-xs text-muted-foreground">
+          as reported by the control plane
+          {host && (
+            <>
+              {" "}
+              at <span className="font-mono text-foreground">{host}</span>
+            </>
+          )}
+        </span>
+      </div>
+      <Card variant="default" size="sm" hover={false} className="space-y-2 border-border">
+        {workloads.length > 0 ? (
+          <HostedWorkloadList envName={env} workloads={workloads} />
+        ) : (
+          <p className="text-xs text-muted-foreground" data-testid="forge-status-hosted-empty">
+            {report.hosted_note ||
+              (deployed
+                ? "The control plane reported no workloads for this environment. That is not a statement that they are healthy."
+                : "Nothing has been deployed here yet — the first deploy creates this environment on the control plane.")}
+          </p>
+        )}
+      </Card>
+    </section>
   );
 }
 

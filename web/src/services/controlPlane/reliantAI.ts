@@ -13,17 +13,17 @@
  * `getControlPlaneClient` transport (auth + tracing + upgrade-modal chain).
  */
 
-import { LLMGatewayService } from "@/gen/controlplane/v1/public/llm_gateway_service_pb";
+import { LLMGatewayService } from "@/gen/controlplane/services/llm_gateway/v1/llm_gateway_pb";
 import {
   BillingService,
   RedeemedCouponKind,
-} from "@/gen/controlplane/v1/public/billing_service_pb";
+} from "@/gen/controlplane/services/billing/v1/billing_pb";
 import type {
   LLMKey,
   LLMSpendEntry,
   WalletOverview,
   ReliantOverview,
-} from "@/gen/controlplane/v1/public/shared_pb";
+} from "@/gen/controlplane/controlplane/v1/shared_pb";
 import { getControlPlaneClient } from "./client";
 import { hasControlPlane } from "./config";
 

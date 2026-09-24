@@ -1,0 +1,1208 @@
+/**
+ * Settings → Machines section.
+ *
+ * Ports admin-web's "Workspaces" (daemons) management into reliant-web as a
+ * self-contained settings panel, using ONLY public control-plane RPCs
+ * (controlplane.v1.DaemonService + BillingService) for lifecycle. Data access
+ * lives in `@/services/controlPlane/environments`; this file is presentation +
+ * local UI state only.
+ *
+ * Layout: a single machines view (list / create / detail). Everything is
+ * rendered inside /settings/environments; the detail view is internal
+ * component state (no nested route needed). An optional `?daemon=<id>` search
+ * param deep-links straight into a detail view (used by the onboarding
+ * DaemonConnectingGate "View logs" action). Daemon access tokens are managed
+ * in the standalone System → Access Tokens settings section.
+ */
+import React, { useMemo, useState } from "react";
+import { createPortal } from "react-dom";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useSearch } from "@tanstack/react-router";
+import { timestampDate, type Timestamp } from "@bufbuild/protobuf/wkt";
+import {
+  Activity,
+  AlertTriangle,
+  ArrowLeft,
+  Check,
+  Clock,
+  Copy,
+  Cpu,
+  ExternalLink,
+  GitBranch,
+  Pause,
+  Play,
+  Plus,
+  RefreshCw,
+  Server,
+  Shield,
+  Laptop,
+  Trash2,
+  X,
+} from "lucide-react";
+
+import { cn } from "@/lib/utils";
+import { capabilities } from "@/services/controlPlane/capabilities";
+import {
+  Button,
+  Badge,
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  EmptyState,
+  PageHeader,
+  StatusDot,
+  Table,
+  Tbody,
+  Td,
+  Th,
+  Thead,
+  Tr,
+  type BadgeVariant,
+  type StatusDotVariant,
+} from "./ui";
+import {
+  DaemonSize,
+  DaemonStatus,
+  DaemonType,
+  PortAccessMode,
+  createEnvironment,
+  deleteDaemon,
+  describeError,
+  getComputeSubscription,
+  getDaemon,
+  listDaemons,
+  listPortAccessRules,
+  portAccessRulesQueryKey,
+  removePortAccess,
+  resumeEnvironment,
+  setPortAccess,
+  suspendDaemon,
+  type Daemon,
+  type PortAccessRule,
+} from "@/services/controlPlane/environments";
+import { SelfHostedDaemonConnect } from "@/components/Projects/SelfHostedDaemonConnect";
+import { getComputeEligibility } from "@/services/controlPlane/billing";
+import { useGoToBilling } from "@/hooks/useGoToBilling";
+// The overage formatter, shared with the billing purchase grid so the two
+// surfaces cannot disagree about how a rate is written.
+import { formatOverageRate } from "./billingUtils";
+
+// ── Query keys ──────────────────────────────────────────────────────────────
+const QK = {
+  daemons: ["cp", "environments", "list"] as const,
+  daemon: (id: string) => ["cp", "environments", "detail", id] as const,
+  // Shared with the header DetectedPortsChip's one-click-public toggle so a
+  // "Make public" there invalidates this panel's rules query and vice-versa.
+  ports: portAccessRulesQueryKey,
+  computeSub: ["cp", "environments", "computeSubscription"] as const,
+  computeEligibility: ["cp", "environments", "computeEligibility"] as const,
+};
+
+// ── Status presentation ─────────────────────────────────────────────────────
+type WsStatus = "active" | "suspended" | "failed" | "pending" | "disconnected";
+
+const statusFromEnum: Record<number, WsStatus> = {
+  [DaemonStatus.ACTIVE]: "active",
+  [DaemonStatus.SUSPENDED]: "suspended",
+  [DaemonStatus.FAILED]: "failed",
+  [DaemonStatus.PENDING]: "pending",
+  [DaemonStatus.DISCONNECTED]: "disconnected",
+};
+
+const statusBadge: Record<WsStatus, { label: string; variant: BadgeVariant }> = {
+  active: { label: "Active", variant: "success" },
+  suspended: { label: "Suspended", variant: "warning" },
+  failed: { label: "Failed", variant: "error" },
+  pending: { label: "Pending", variant: "neutral" },
+  disconnected: { label: "Disconnected", variant: "error" },
+};
+
+const statusDotVariant: Record<WsStatus, StatusDotVariant> = {
+  active: "active",
+  suspended: "paused",
+  failed: "error",
+  pending: "pending",
+  disconnected: "error",
+};
+
+function daemonStatus(d: Daemon): WsStatus {
+  return statusFromEnum[d.status] ?? "pending";
+}
+
+function isExternalDaemon(d: Pick<Daemon, "daemonType">): boolean {
+  return d.daemonType === DaemonType.EXTERNAL;
+}
+
+// A UUID (v4-shaped, 36 chars with dashes at the standard offsets) is not a
+// name a person chose — it's what the control-plane falls back to when a
+// self-hosted daemon connects without registering one (see
+// control-plane/internal/natsio/daemon_event_consumer.go). Render something
+// readable instead: the hostname if we have one, else a short id-derived tag.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function looksLikeBareUuid(name: string): boolean {
+  return UUID_RE.test(name.trim());
+}
+
+export function daemonDisplayName(d: Pick<Daemon, "id" | "name" | "hostname">): string {
+  const name = d.name?.trim() ?? "";
+  const isPlaceholder = !name || name === d.id || looksLikeBareUuid(name);
+  if (!isPlaceholder) return name;
+  if (d.hostname?.trim()) return d.hostname.trim();
+  const shortId = (d.id || "").slice(0, 8);
+  return shortId ? `Self-hosted machine (${shortId})` : "Self-hosted machine";
+}
+
+// ── Size tiers (plan-gated) ─────────────────────────────────────────────────
+//
+// Specs only. These four carried a per-minute price — $0.02 / $0.04 / $0.08 /
+// $0.16 — which was a client-side table of what machines cost, sitting on the
+// button that creates one. Nothing on the wire states a per-size rate: the
+// server states a per-PLAN overage rate, and that is the only number here
+// anyone can reconcile against a charge. Same defect as the per-plan-id price
+// tables that were deleted from billingUtils, one step closer to the money.
+const SIZE_TIERS = [
+  { value: DaemonSize.DAEMON_SIZE_SMALL, name: "small", label: "Small", specs: "1 CPU · 2GB RAM" },
+  { value: DaemonSize.DAEMON_SIZE_MEDIUM, name: "medium", label: "Medium", specs: "2 CPU · 4GB RAM" },
+  { value: DaemonSize.DAEMON_SIZE_LARGE, name: "large", label: "Large", specs: "4 CPU · 8GB RAM" },
+  { value: DaemonSize.DAEMON_SIZE_XL, name: "xl", label: "XL", specs: "8 CPU · 16GB RAM" },
+] as const;
+
+const sizeLabel: Record<number, string> = {
+  [DaemonSize.DAEMON_SIZE_SMALL]: "Small",
+  [DaemonSize.DAEMON_SIZE_MEDIUM]: "Medium",
+  [DaemonSize.DAEMON_SIZE_LARGE]: "Large",
+  [DaemonSize.DAEMON_SIZE_XL]: "XL",
+};
+
+// ── Copy for the un-funded state ────────────────────────────────────────────
+//
+// Both strings name the COUPON first, then the plan, because the server's own
+// denial does — checkDaemonSizeAllowed returns "redeem a coupon code or
+// subscribe to a compute plan to start a machine", and that ordering is
+// deliberate: since the signup auto-grant was removed every brand-new account
+// lands here, and a code is the path most of them were handed. A prompt that
+// says only "subscribe" hides the option the user is holding.
+//
+// This replaced a `<Badge variant="neutral">` — a bordered pill that looked
+// like a button, did nothing on click, and named no way forward at all.
+const NO_FUNDING_CTA = "Redeem a coupon or choose a plan";
+const NO_FUNDING_DESCRIPTION =
+  "Redeem a coupon code or subscribe to a compute plan to start a machine. Machines run on the compute sizes your plan allows.";
+
+const IDLE_TIMEOUT_OPTIONS = [
+  { value: "15m", label: "15 minutes" },
+  { value: "30m", label: "30 minutes" },
+  { value: "1h", label: "1 hour" },
+  { value: "2h", label: "2 hours" },
+  { value: "4h", label: "4 hours" },
+] as const;
+
+/**
+ * Which sizes may this caller run, per the server?
+ *
+ * The answer arrives on `GetCurrentUserComputeEligibility.allowed_daemon_sizes`
+ * as wire strings ("small", "medium", …); this maps them onto the tiers this
+ * page can render. Sizes the client has no tier for are dropped rather than
+ * guessed at.
+ *
+ * It used to be derived here from the compute SUBSCRIPTION, which is the bug
+ * this replaces: a coupon grants machine minutes and no subscription, so that
+ * derivation decided a fully-entitled user could run nothing. The server
+ * resolves the set — from the plan, or from plan_compute_free when there is
+ * none — and the client no longer holds an opinion about it.
+ *
+ * It is a membership test, not a ladder: an allowed set of `[small, large]`
+ * without `medium` offers exactly that.
+ */
+function sizeTiersFromWire(allowedDaemonSizes: string[]): DaemonSize[] {
+  return SIZE_TIERS.filter((t) => allowedDaemonSizes.includes(t.name)).map(
+    (t) => t.value,
+  );
+}
+
+const accessModeLabel: Record<number, string> = {
+  [PortAccessMode.PUBLIC]: "Public",
+  [PortAccessMode.AUTHENTICATED]: "Authenticated",
+  [PortAccessMode.TOKEN]: "Token",
+  [PortAccessMode.UNSPECIFIED]: "Unspecified",
+};
+
+// ── Date helpers ────────────────────────────────────────────────────────────
+function fmtTimestamp(ts?: Timestamp): string {
+  if (!ts) return "—";
+  try {
+    return timestampDate(ts).toLocaleString();
+  } catch {
+    return "—";
+  }
+}
+
+// ── Inline Modal ────────────────────────────────────────────────────────────
+function Modal({
+  open,
+  onClose,
+  title,
+  children,
+  maxWidth = "max-w-lg",
+}: {
+  open: boolean;
+  onClose: () => void;
+  title: string;
+  children: React.ReactNode;
+  maxWidth?: string;
+}) {
+  if (!open) return null;
+  return createPortal(
+    <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/60" onClick={onClose} aria-hidden />
+      <div
+        role="dialog"
+        aria-modal="true"
+        className={cn(
+          "relative z-10 w-full overflow-hidden rounded-lg border border-border bg-card shadow-xl",
+          maxWidth,
+        )}
+      >
+        <div className="flex items-center justify-between border-b border-border px-5 py-4">
+          <h2 className="text-sm font-semibold text-foreground">{title}</h2>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+            aria-label="Close"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <div className="max-h-[70vh] overflow-y-auto px-5 py-4">{children}</div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+function Field({ label, htmlFor, children }: { label: React.ReactNode; htmlFor?: string; children: React.ReactNode }) {
+  return (
+    <div className="mb-4">
+      <label htmlFor={htmlFor} className="mb-1.5 block text-sm font-medium text-foreground">
+        {label}
+      </label>
+      {children}
+    </div>
+  );
+}
+
+const inputCls =
+  "w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring";
+
+function ErrorNote({ message }: { message?: string }) {
+  if (!message) return null;
+  return (
+    <div className="mb-4 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+      {message}
+    </div>
+  );
+}
+
+// ── Self-hosted setup instructions ──────────────────────────────────────────
+/**
+ * "Run Reliant on your own machine" — the download + install + connect steps.
+ *
+ * The body is `SelfHostedDaemonConnect`, the SAME component onboarding's
+ * ComputeStep and the ProjectPicker's connect modal render. That is
+ * deliberate: download URLs, the Homebrew cask, the token step, and the
+ * `reliant daemon start` command (which varies by deployment — see
+ * lib/cli-commands) then have exactly one source of truth. Passing
+ * mode="reference" drops the bootstrap-only flow control, since a user on
+ * this page usually already has a working machine and is adding another.
+ */
+function SelfHostedSetupCard() {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="inline-flex items-center gap-2">
+          <Laptop className="h-4 w-4 text-muted-foreground" />
+          Run Reliant on your own machine
+        </CardTitle>
+        <p className="text-sm text-muted-foreground">
+          Install the desktop app or CLI on a laptop or server, then connect it
+          with an access token. It shows up here once it connects.
+        </p>
+      </CardHeader>
+      <CardContent>
+        <SelfHostedDaemonConnect mode="reference" />
+      </CardContent>
+    </Card>
+  );
+}
+
+// ── Root section ────────────────────────────────────────────────────────────
+export function MachinesSection() {
+  const search = useSearch({ strict: false }) as { daemon?: string };
+  // Deep-link: ?daemon=<id> opens the detail view directly.
+  const [selectedId, setSelectedId] = useState<string | null>(search.daemon ?? null);
+
+  // Without a control plane there are no managed machines to list, but the
+  // self-hosted path is exactly the one that still works — so the setup
+  // instructions matter MORE here, not less.
+  if (!capabilities.cloudDaemons) {
+    return (
+      <div className="mx-auto max-w-4xl space-y-6">
+        <PageHeader title="Machines" subtitle="Managed and self-hosted machines that run your projects." />
+        <EmptyState
+          icon={Server}
+          title="Machines unavailable"
+          description="Machines are managed by the Reliant control plane, which isn't configured for this build. Connect a self-hosted machine to keep working locally."
+        />
+        <SelfHostedSetupCard />
+      </div>
+    );
+  }
+
+  return (
+    <div className="mx-auto max-w-5xl">
+      {selectedId ? (
+        <EnvironmentDetail daemonId={selectedId} onBack={() => setSelectedId(null)} />
+      ) : (
+        <div className="space-y-6">
+          <div>
+            <PageHeader
+              title="Machines"
+              subtitle="Managed and self-hosted machines that run your projects."
+            />
+            <EnvironmentsList onOpenDetail={(id) => setSelectedId(id)} />
+          </div>
+          <SelfHostedSetupCard />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Machines list + create ──────────────────────────────────────────────────
+function EnvironmentsList({ onOpenDetail }: { onOpenDetail: (id: string) => void }) {
+  const qc = useQueryClient();
+  const [statusFilter, setStatusFilter] = useState<number>(DaemonStatus.UNSPECIFIED);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<Daemon | null>(null);
+  const [actionError, setActionError] = useState("");
+  // Routes to /settings/billing?tab=plans — the place a coupon is redeemed and
+  // a plan is bought. Shared with every other "go buy compute" call site so
+  // the destination cannot drift; see the hook's own header.
+  const goToBilling = useGoToBilling();
+
+  const daemonsQ = useQuery({
+    queryKey: QK.daemons,
+    queryFn: async () => (await listDaemons()).daemons,
+    staleTime: 10_000,
+    refetchInterval: 15_000,
+  });
+
+  // THE GATE. GetCurrentUserComputeEligibility is the server's own prediction
+  // of internal/svcdaemon.checkDaemonSizeAllowed, and it is the only thing that
+  // decides whether machine creation is offered here.
+  //
+  // This page used to gate on getComputeSubscription() alone, which is a
+  // strictly narrower rule than the server's: a redeemed compute coupon grants
+  // machine MINUTES and no subscription, so that check reported "not
+  // subscribed" for a user the server would have happily started a machine
+  // for, and replaced New Machine with a dead badge telling them to subscribe.
+  // Predicting a server rule by reimplementing a piece of it is how that
+  // happened; asking the server is how it stops happening.
+  const eligibilityQ = useQuery({
+    queryKey: QK.computeEligibility,
+    queryFn: () => getComputeEligibility(),
+    staleTime: 30_000,
+  });
+  const allowedSizes = useMemo(
+    () => sizeTiersFromWire(eligibilityQ.data?.allowedDaemonSizes ?? []),
+    [eligibilityQ.data?.allowedDaemonSizes],
+  );
+  // Both halves are required and they are different facts: eligibility is
+  // "is there funding at all", sizes is "is there anything runnable". The
+  // server enforces both, so offering a Create button that satisfies only one
+  // would just move the denial to after the click.
+  const canCreate = Boolean(eligibilityQ.data?.eligible) && allowedSizes.length > 0;
+
+  // Not part of the gate — the per-minute overage rate is a display fact that
+  // only an active subscription states, and the eligibility response
+  // deliberately carries no price. A coupon-funded user has no subscription
+  // and therefore no rate to show, which is the truthful answer rather than a
+  // zero standing in for one.
+  const computeSubQ = useQuery({
+    queryKey: QK.computeSub,
+    queryFn: () => getComputeSubscription(),
+    staleTime: 30_000,
+  });
+  const plan = computeSubQ.data?.plan;
+
+  const invalidate = () => qc.invalidateQueries({ queryKey: QK.daemons });
+
+  const suspendMut = useMutation({
+    mutationFn: (id: string) => suspendDaemon(id),
+    onSuccess: () => { setActionError(""); invalidate(); },
+    onError: (e) => setActionError(describeError(e, "Failed to suspend machine")),
+  });
+  const resumeMut = useMutation({
+    mutationFn: (id: string) => resumeEnvironment(id),
+    onSuccess: () => { setActionError(""); invalidate(); },
+    onError: (e) => setActionError(describeError(e, "Failed to resume machine")),
+  });
+  const deleteMut = useMutation({
+    mutationFn: (id: string) => deleteDaemon(id),
+    onSuccess: () => { setDeleteTarget(null); setActionError(""); invalidate(); },
+    onError: (e) => setActionError(describeError(e, "Failed to delete machine")),
+  });
+
+  // The status filter applies globally across both groups (rather than one
+  // dropdown per group) — a user picking "Suspended" wants every suspended
+  // machine, cloud or self-hosted, and a second dropdown for a section that's
+  // often empty would be clutter without a real use case.
+  const daemons = (daemonsQ.data ?? []).filter(
+    (d) => statusFilter === DaemonStatus.UNSPECIFIED || d.status === statusFilter,
+  );
+  const managedDaemons = daemons.filter((d) => !isExternalDaemon(d));
+  const selfHostedDaemons = daemons.filter((d) => isExternalDaemon(d));
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <select
+          value={String(statusFilter)}
+          onChange={(e) => setStatusFilter(Number(e.target.value))}
+          className={cn(inputCls, "w-44")}
+        >
+          <option value={String(DaemonStatus.UNSPECIFIED)}>All statuses</option>
+          <option value={String(DaemonStatus.PENDING)}>Pending</option>
+          <option value={String(DaemonStatus.ACTIVE)}>Active</option>
+          <option value={String(DaemonStatus.SUSPENDED)}>Suspended</option>
+          <option value={String(DaemonStatus.FAILED)}>Failed</option>
+          <option value={String(DaemonStatus.DISCONNECTED)}>Disconnected</option>
+        </select>
+        {canCreate ? (
+          <Button onClick={() => setCreateOpen(true)}>
+            <Plus className="h-4 w-4" /> New Machine
+          </Button>
+        ) : !eligibilityQ.isLoading ? (
+          <Button variant="outline" onClick={goToBilling}>
+            {NO_FUNDING_CTA}
+          </Button>
+        ) : null}
+      </div>
+
+      {actionError && <ErrorNote message={actionError} />}
+
+      {daemonsQ.isLoading ? (
+        <Card>
+          <CardContent className="text-sm text-muted-foreground">Loading machines…</CardContent>
+        </Card>
+      ) : daemonsQ.error ? (
+        <Card>
+          <CardContent>
+            <p className="text-sm font-medium text-destructive">Failed to load machines</p>
+            <p className="mt-1 text-sm text-muted-foreground">{describeError(daemonsQ.error)}</p>
+            <Button variant="outline" size="sm" className="mt-3" onClick={() => daemonsQ.refetch()}>
+              <RefreshCw className="h-3.5 w-3.5" /> Retry
+            </Button>
+          </CardContent>
+        </Card>
+      ) : daemons.length === 0 ? (
+        <EmptyState
+          icon={Server}
+          title="No machines"
+          description={
+            canCreate
+              ? "Create your first cloud machine."
+              : NO_FUNDING_DESCRIPTION
+          }
+          action={
+            canCreate ? (
+              <Button onClick={() => setCreateOpen(true)}>
+                <Plus className="h-4 w-4" /> New Machine
+              </Button>
+            ) : (
+              <Button variant="outline" onClick={goToBilling}>
+                {NO_FUNDING_CTA}
+              </Button>
+            )
+          }
+        />
+      ) : (
+        <div className="space-y-6">
+          {managedDaemons.length > 0 && (
+            <div className="space-y-2">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Cloud machines
+              </h3>
+              <ManagedMachinesTable
+                daemons={managedDaemons}
+                onOpenDetail={onOpenDetail}
+                onDelete={setDeleteTarget}
+                onSuspend={(id) => suspendMut.mutate(id)}
+                onResume={(id) => resumeMut.mutate(id)}
+                busy={suspendMut.isPending || resumeMut.isPending}
+              />
+            </div>
+          )}
+          {selfHostedDaemons.length > 0 && (
+            <div className="space-y-2">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Self-hosted machines
+              </h3>
+              <SelfHostedMachinesTable
+                daemons={selfHostedDaemons}
+                onOpenDetail={onOpenDetail}
+                onRemove={setDeleteTarget}
+              />
+            </div>
+          )}
+        </div>
+      )}
+
+      <CreateEnvironmentModal
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        allowedSizes={allowedSizes}
+        overageCentsPerMinute={
+          plan?.structuredLimits?.daemonOveragePerMinuteCents ?? 0
+        }
+        onCreated={() => { setCreateOpen(false); invalidate(); }}
+      />
+
+      <RemoveMachineModal
+        target={deleteTarget}
+        isPending={deleteMut.isPending}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={() => deleteTarget && deleteMut.mutate(deleteTarget.id)}
+      />
+    </div>
+  );
+}
+
+function ManagedMachinesTable({
+  daemons,
+  onOpenDetail,
+  onDelete,
+  onSuspend,
+  onResume,
+  busy,
+}: {
+  daemons: Daemon[];
+  onOpenDetail: (id: string) => void;
+  onDelete: (d: Daemon) => void;
+  onSuspend: (id: string) => void;
+  onResume: (id: string) => void;
+  busy: boolean;
+}) {
+  return (
+    <Table>
+      <Thead>
+        <Tr>
+          <Th>Name</Th>
+          <Th>Status</Th>
+          <Th>Resources</Th>
+          <Th>Created</Th>
+          <Th className="text-right">Actions</Th>
+        </Tr>
+      </Thead>
+      <Tbody>
+        {daemons.map((d) => {
+          const status = daemonStatus(d);
+          const badge = statusBadge[status];
+          const isSuspended = d.status === DaemonStatus.SUSPENDED;
+          const resources =
+            [d.resources?.cpuRequest, d.resources?.memoryRequest, d.storageSize]
+              .filter(Boolean)
+              .join(" · ") || "—";
+          return (
+            <Tr key={d.id}>
+              <Td>
+                <button
+                  type="button"
+                  onClick={() => onOpenDetail(d.id)}
+                  className="font-medium text-foreground hover:text-primary hover:underline"
+                >
+                  {daemonDisplayName(d)}
+                </button>
+              </Td>
+              <Td>
+                <StatusDot variant={statusDotVariant[status]} label={badge.label} />
+              </Td>
+              <Td className="text-muted-foreground">{resources}</Td>
+              <Td className="text-muted-foreground">{fmtTimestamp(d.createdAt)}</Td>
+              <Td className="text-right">
+                <div className="inline-flex items-center gap-1">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={busy}
+                    onClick={() => (isSuspended ? onResume(d.id) : onSuspend(d.id))}
+                  >
+                    {isSuspended ? <Play className="h-4 w-4" /> : <Pause className="h-4 w-4" />}
+                    {isSuspended ? "Resume" : "Suspend"}
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={() => onDelete(d)}>
+                    <Trash2 className="h-4 w-4 text-destructive" />
+                  </Button>
+                </div>
+              </Td>
+            </Tr>
+          );
+        })}
+      </Tbody>
+    </Table>
+  );
+}
+
+function SelfHostedMachinesTable({
+  daemons,
+  onOpenDetail,
+  onRemove,
+}: {
+  daemons: Daemon[];
+  onOpenDetail: (id: string) => void;
+  onRemove: (d: Daemon) => void;
+}) {
+  return (
+    <Table>
+      <Thead>
+        <Tr>
+          <Th>Name</Th>
+          <Th>Status</Th>
+          <Th>Platform</Th>
+          <Th>Last seen</Th>
+          <Th className="text-right">Actions</Th>
+        </Tr>
+      </Thead>
+      <Tbody>
+        {daemons.map((d) => {
+          const status = daemonStatus(d);
+          const badge = statusBadge[status];
+          const connected = d.status === DaemonStatus.ACTIVE;
+          const lastSeen = connected
+            ? "Connected now"
+            : fmtTimestamp(d.disconnectedAt);
+          return (
+            <Tr key={d.id}>
+              <Td>
+                <button
+                  type="button"
+                  onClick={() => onOpenDetail(d.id)}
+                  className="font-medium text-foreground hover:text-primary hover:underline"
+                >
+                  {daemonDisplayName(d)}
+                </button>
+              </Td>
+              <Td>
+                <StatusDot variant={statusDotVariant[status]} label={badge.label} />
+              </Td>
+              <Td className="text-muted-foreground">{d.platform || "—"}</Td>
+              <Td className="text-muted-foreground">{lastSeen}</Td>
+              <Td className="text-right">
+                <Button variant="ghost" size="sm" onClick={() => onRemove(d)}>
+                  <Trash2 className="h-4 w-4 text-destructive" /> Remove
+                </Button>
+              </Td>
+            </Tr>
+          );
+        })}
+      </Tbody>
+    </Table>
+  );
+}
+
+// Removing a self-hosted machine's row and deleting a cloud machine are
+// different actions in the user's mental model — one tears down real
+// infrastructure, the other just forgets a laptop that will reappear the
+// next time it connects (UpsertExternalDaemonConnected un-deletes on
+// reconnect). Same modal, type-conditional copy.
+function RemoveMachineModal({
+  target,
+  isPending,
+  onClose,
+  onConfirm,
+}: {
+  target: Daemon | null;
+  isPending: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  const external = target ? isExternalDaemon(target) : false;
+  const title = external ? "Forget This Machine" : "Delete Machine";
+  const confirmLabel = external ? "Forget" : "Delete";
+  const confirmingLabel = external ? "Forgetting…" : "Deleting…";
+
+  return (
+    <Modal open={target !== null} onClose={onClose} title={title}>
+      <p className="text-sm text-muted-foreground">
+        {external ? (
+          <>
+            Remove <span className="font-semibold text-foreground">{target && daemonDisplayName(target)}</span> from
+            this list? This only removes the connection record here — it does not affect the actual machine, and it
+            will reappear if that machine reconnects.
+          </>
+        ) : (
+          <>
+            Are you sure you want to delete{" "}
+            <span className="font-semibold text-foreground">{target?.name}</span>? This action cannot be undone.
+          </>
+        )}
+      </p>
+      <div className="mt-6 flex justify-end gap-3">
+        <Button variant="outline" onClick={onClose}>Cancel</Button>
+        <Button variant="danger" isLoading={isPending} onClick={onConfirm}>
+          {isPending ? confirmingLabel : confirmLabel}
+        </Button>
+      </div>
+    </Modal>
+  );
+}
+
+function CreateEnvironmentModal({
+  open,
+  onClose,
+  allowedSizes,
+  overageCentsPerMinute,
+  onCreated,
+}: {
+  open: boolean;
+  onClose: () => void;
+  // Always a list, never null. The nullable form used to mean "no plan, so
+  // nothing is known"; the server now answers the size question directly, so
+  // an empty list means exactly "no size may be started" and there is no
+  // third, unknowable state to model.
+  allowedSizes: DaemonSize[];
+  overageCentsPerMinute: number;
+  onCreated: () => void;
+}) {
+  const [name, setName] = useState("");
+  const [gitRepo, setGitRepo] = useState("");
+  const [idleTimeout, setIdleTimeout] = useState("30m");
+  // No hardcoded default. MEDIUM used to be it, so a small-only plan opened
+  // this modal with a size the server would refuse already selected. null
+  // means "not yet chosen"; `effectiveSize` resolves it to the first size the
+  // plan actually allows.
+  const [size, setSize] = useState<DaemonSize | null>(null);
+  const [error, setError] = useState("");
+
+  const tiers = useMemo(
+    () => SIZE_TIERS.filter((t) => allowedSizes.includes(t.value)),
+    [allowedSizes],
+  );
+
+  // Keep the selection inside the plan's allowed set, and default to the
+  // first allowed size rather than to a constant. Undefined when the plan
+  // allows nothing at all, which is what makes Create unclickable.
+  const effectiveSize = useMemo((): DaemonSize | undefined => {
+    if (allowedSizes.length === 0) return undefined;
+    return size !== null && allowedSizes.includes(size) ? size : allowedSizes[0];
+  }, [allowedSizes, size]);
+
+  const createMut = useMutation({
+    mutationFn: () => {
+      // Refuse rather than guess. A size the plan does not allow is one the
+      // server rejects at CreateDaemon time, and guessing here would surface
+      // that as a mysterious failure after the user pressed Create.
+      if (effectiveSize === undefined) {
+        throw new Error("Your plan does not allow any machine sizes.");
+      }
+      return createEnvironment({ name: name.trim(), size: effectiveSize, idleTimeout, gitRepo: gitRepo.trim() || undefined });
+    },
+    onSuccess: () => {
+      setName("");
+      setGitRepo("");
+      setIdleTimeout("30m");
+      setError("");
+      onCreated();
+    },
+    onError: (e) => setError(describeError(e, "Failed to create machine")),
+  });
+
+  return (
+    <Modal open={open} onClose={onClose} title="Create Machine" maxWidth="max-w-xl">
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          setError("");
+          createMut.mutate();
+        }}
+      >
+        <Field label="Name" htmlFor="env-name">
+          <input
+            id="env-name"
+            required
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="my-machine"
+            className={inputCls}
+          />
+        </Field>
+
+        <Field
+          label={
+            <span className="inline-flex items-center gap-1.5">
+              <GitBranch className="h-4 w-4 text-muted-foreground" /> Repository
+              <span className="text-xs font-normal text-muted-foreground">(optional)</span>
+            </span>
+          }
+          htmlFor="env-repo"
+        >
+          <input
+            id="env-repo"
+            type="url"
+            value={gitRepo}
+            onChange={(e) => setGitRepo(e.target.value)}
+            placeholder="https://github.com/owner/repo.git"
+            className={inputCls}
+          />
+          <p className="mt-1 text-xs text-muted-foreground">Automatic cloning is coming in a follow-up release.</p>
+        </Field>
+
+        <Field label={<span className="inline-flex items-center gap-1.5"><Cpu className="h-4 w-4 text-muted-foreground" /> Size</span>}>
+          {/* A real radiogroup, not a row of styled buttons: this is a
+              single-choice control and assistive tech should be told so. */}
+          <div role="radiogroup" aria-label="Size" className="grid grid-cols-2 gap-2 md:grid-cols-4">
+            {tiers.map((t) => {
+              const selected = effectiveSize === t.value;
+              return (
+                <button
+                  key={t.value}
+                  type="button"
+                  role="radio"
+                  aria-checked={selected}
+                  onClick={() => setSize(t.value)}
+                  className={cn(
+                    "rounded-lg border-2 p-3 text-left transition-colors",
+                    selected ? "border-primary bg-primary/5" : "border-border bg-card hover:border-muted-foreground/40",
+                  )}
+                >
+                  <div className="text-sm font-semibold text-foreground">{t.label}</div>
+                  <div className="mt-1 text-xs text-muted-foreground">{t.specs}</div>
+                </button>
+              );
+            })}
+          </div>
+          {tiers.length === 0 && (
+            <p className="text-xs text-muted-foreground">No sizes available on your current plan.</p>
+          )}
+          {tiers.length > 0 && tiers.length < SIZE_TIERS.length && (
+            <p className="mt-2 text-xs text-muted-foreground">Larger sizes are gated by your compute plan.</p>
+          )}
+          {/* The one rate the server actually states. It replaces four
+              per-size rates the client invented; every size on a plan draws
+              from the same bucket of included minutes and overflows at the
+              same plan rate, so a per-size price implied a weighting the
+              metering does not do. */}
+          {tiers.length > 0 && overageCentsPerMinute > 0 && (
+            <p className="mt-2 text-xs text-muted-foreground">
+              Included hours are shared across machines. Beyond them, usage is
+              billed at {formatOverageRate(overageCentsPerMinute)}.
+            </p>
+          )}
+        </Field>
+
+        <Field
+          label={<span className="inline-flex items-center gap-1.5"><Clock className="h-4 w-4 text-muted-foreground" /> Auto-suspend after inactivity</span>}
+          htmlFor="env-idle"
+        >
+          <select id="env-idle" value={idleTimeout} onChange={(e) => setIdleTimeout(e.target.value)} className={inputCls}>
+            {IDLE_TIMEOUT_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
+          <p className="mt-1 text-xs text-muted-foreground">Suspended machines are not billed.</p>
+        </Field>
+
+        <ErrorNote message={error} />
+
+        <div className="flex justify-end gap-3 border-t border-border pt-4">
+          <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
+          <Button type="submit" isLoading={createMut.isPending} disabled={!name.trim() || tiers.length === 0}>
+            {createMut.isPending ? "Creating…" : "Create"}
+          </Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+// ── Machine detail ──────────────────────────────────────────────────────────
+function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="flex justify-between gap-4 border-b border-border py-2 last:border-0">
+      <dt className="text-sm text-muted-foreground">{label}</dt>
+      <dd className="text-right text-sm font-medium text-foreground">{value || "—"}</dd>
+    </div>
+  );
+}
+
+function EnvironmentDetail({ daemonId, onBack }: { daemonId: string; onBack: () => void }) {
+  const qc = useQueryClient();
+  const [error, setError] = useState("");
+  const [deleteOpen, setDeleteOpen] = useState(false);
+
+  const daemonQ = useQuery({
+    queryKey: QK.daemon(daemonId),
+    queryFn: () => getDaemon(daemonId),
+    refetchInterval: 15_000,
+  });
+  const daemon = daemonQ.data?.daemon;
+  const workspaceBaseDomain = daemonQ.data?.workspaceBaseDomain ?? "";
+
+  const refetchAll = () => {
+    qc.invalidateQueries({ queryKey: QK.daemon(daemonId) });
+    qc.invalidateQueries({ queryKey: QK.daemons });
+  };
+
+  const suspendMut = useMutation({
+    mutationFn: () => suspendDaemon(daemonId),
+    onSuccess: () => { setError(""); refetchAll(); },
+    onError: (e) => setError(describeError(e, "Failed to suspend machine")),
+  });
+  const resumeMut = useMutation({
+    mutationFn: () => resumeEnvironment(daemonId),
+    onSuccess: () => { setError(""); refetchAll(); },
+    onError: (e) => setError(describeError(e, "Failed to resume machine")),
+  });
+  const deleteMut = useMutation({
+    mutationFn: () => deleteDaemon(daemonId),
+    onSuccess: () => { setDeleteOpen(false); qc.invalidateQueries({ queryKey: QK.daemons }); onBack(); },
+    onError: (e) => setError(describeError(e, "Failed to delete machine")),
+  });
+
+  const status = daemon ? daemonStatus(daemon) : "pending";
+  const badge = statusBadge[status];
+  const connected = daemon?.status === DaemonStatus.ACTIVE;
+  const isSuspended = daemon?.status === DaemonStatus.SUSPENDED;
+  const busy = suspendMut.isPending || resumeMut.isPending || deleteMut.isPending;
+  const external = daemon ? isExternalDaemon(daemon) : false;
+
+  return (
+    <div className="space-y-6">
+      <button
+        type="button"
+        onClick={onBack}
+        className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+      >
+        <ArrowLeft className="h-4 w-4" /> Back to Machines
+      </button>
+
+      {daemonQ.isLoading ? (
+        <Card><CardContent className="text-sm text-muted-foreground">Loading machine…</CardContent></Card>
+      ) : daemonQ.error ? (
+        <Card><CardContent className="text-sm text-destructive">{describeError(daemonQ.error)}</CardContent></Card>
+      ) : !daemon ? (
+        <Card><CardContent className="text-sm text-muted-foreground">Machine not found.</CardContent></Card>
+      ) : (
+        <>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-wrap items-center gap-3">
+              <h2 className="text-xl font-semibold text-foreground">{daemonDisplayName(daemon)}</h2>
+              <Badge label={badge.label} variant={badge.variant} />
+              <Badge label={connected ? "Connected" : "Disconnected"} variant={connected ? "success" : "neutral"} />
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              {!external && (
+                <Button variant="outline" disabled={busy} onClick={() => (isSuspended ? resumeMut.mutate() : suspendMut.mutate())}>
+                  {isSuspended ? <><Play className="h-4 w-4" /> Resume</> : <><Pause className="h-4 w-4" /> Suspend</>}
+                </Button>
+              )}
+              <Button variant="danger" disabled={busy} onClick={() => setDeleteOpen(true)}>
+                <Trash2 className="h-4 w-4" /> {external ? "Remove" : "Delete"}
+              </Button>
+            </div>
+          </div>
+
+          {error && <ErrorNote message={error} />}
+
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+            <Card>
+              <CardHeader><CardTitle className="inline-flex items-center gap-2"><Server className="h-4 w-4 text-muted-foreground" /> Overview</CardTitle></CardHeader>
+              <CardContent>
+                <dl>
+                  {external ? (
+                    <>
+                      <InfoRow label="Hostname" value={daemon.hostname} />
+                      <InfoRow label="Platform" value={daemon.platform} />
+                    </>
+                  ) : (
+                    <>
+                      <InfoRow label="Size" value={sizeLabel[daemon.size] ?? "Custom"} />
+                      <InfoRow label="Storage" value={daemon.storageSize} />
+                    </>
+                  )}
+                  <InfoRow label="Created" value={fmtTimestamp(daemon.createdAt)} />
+                  <InfoRow label="Updated" value={fmtTimestamp(daemon.updatedAt)} />
+                </dl>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader><CardTitle className="inline-flex items-center gap-2"><Activity className="h-4 w-4 text-muted-foreground" /> Status & Activity</CardTitle></CardHeader>
+              <CardContent>
+                <dl>
+                  <InfoRow label="Connection" value={<Badge label={connected ? "Connected" : "Disconnected"} variant={connected ? "success" : "neutral"} />} />
+                  <InfoRow label="Connected at" value={fmtTimestamp(daemon.connectedAt)} />
+                  {!external && <InfoRow label="Idle timeout" value={daemon.idleTimeout || "Not set"} />}
+                  <InfoRow label="Last status" value={daemon.lastStatusMessage} />
+                </dl>
+              </CardContent>
+            </Card>
+          </div>
+
+          <PortAccessPanel daemonId={daemon.id} workspaceBaseDomain={workspaceBaseDomain} />
+
+          <RemoveMachineModal
+            target={deleteOpen ? daemon : null}
+            isPending={deleteMut.isPending}
+            onClose={() => setDeleteOpen(false)}
+            onConfirm={() => deleteMut.mutate()}
+          />
+        </>
+      )}
+    </div>
+  );
+}
+
+function PortAccessPanel({ daemonId, workspaceBaseDomain }: { daemonId: string; workspaceBaseDomain: string }) {
+  const qc = useQueryClient();
+  const [port, setPort] = useState("");
+  const [mode, setMode] = useState<PortAccessMode>(PortAccessMode.PUBLIC);
+  const [error, setError] = useState("");
+  const [createdToken, setCreatedToken] = useState<string | null>(null);
+
+  const rulesQ = useQuery({
+    queryKey: QK.ports(daemonId),
+    queryFn: () => listPortAccessRules(daemonId),
+  });
+  const rules: PortAccessRule[] = rulesQ.data ?? [];
+
+  const invalidate = () => qc.invalidateQueries({ queryKey: QK.ports(daemonId) });
+
+  const addMut = useMutation({
+    mutationFn: () => setPortAccess({ daemonId, port: parseInt(port, 10), accessMode: mode }),
+    onSuccess: (res) => {
+      if (res.accessToken) setCreatedToken(res.accessToken);
+      setPort("");
+      setMode(PortAccessMode.PUBLIC);
+      setError("");
+      invalidate();
+    },
+    onError: (e) => setError(describeError(e, "Failed to add port rule")),
+  });
+  const removeMut = useMutation({
+    mutationFn: (p: number) => removePortAccess(daemonId, p),
+    onSuccess: () => invalidate(),
+    onError: (e) => setError(describeError(e, "Failed to remove port rule")),
+  });
+
+  return (
+    <Card>
+      <CardHeader><CardTitle className="inline-flex items-center gap-2"><Shield className="h-4 w-4 text-muted-foreground" /> Port Access</CardTitle></CardHeader>
+      <CardContent>
+        <form
+          className="flex flex-wrap items-end gap-3"
+          onSubmit={(e) => {
+            e.preventDefault();
+            const p = parseInt(port, 10);
+            if (!p || p < 1 || p > 65535) return;
+            setError("");
+            addMut.mutate();
+          }}
+        >
+          <div className="flex-1 min-w-[8rem]">
+            <label htmlFor="port" className="mb-1.5 block text-sm font-medium text-foreground">Port</label>
+            <input id="port" type="number" min={1} max={65535} value={port} onChange={(e) => setPort(e.target.value)} placeholder="3000" className={inputCls} />
+          </div>
+          <div className="flex-1 min-w-[10rem]">
+            <label htmlFor="mode" className="mb-1.5 block text-sm font-medium text-foreground">Access mode</label>
+            <select id="mode" value={String(mode)} onChange={(e) => setMode(Number(e.target.value) as PortAccessMode)} className={inputCls}>
+              <option value={String(PortAccessMode.PUBLIC)}>Public</option>
+              <option value={String(PortAccessMode.AUTHENTICATED)}>Authenticated</option>
+              <option value={String(PortAccessMode.TOKEN)}>Token</option>
+            </select>
+          </div>
+          <Button type="submit" isLoading={addMut.isPending} disabled={!port}>
+            <Plus className="h-4 w-4" /> Add
+          </Button>
+        </form>
+
+        {error && <div className="mt-3"><ErrorNote message={error} /></div>}
+
+        {rules.length === 0 ? (
+          <p className="mt-4 text-center text-sm text-muted-foreground">No port access rules. Add one above to expose a port.</p>
+        ) : (
+          <div className="mt-4">
+            <Table>
+              <Thead>
+                <Tr>
+                  <Th>Port</Th>
+                  <Th>Access</Th>
+                  <Th>URL</Th>
+                  <Th className="text-right">Actions</Th>
+                </Tr>
+              </Thead>
+              <Tbody>
+                {rules.map((r) => {
+                  const url = workspaceBaseDomain ? workspaceBaseDomain.replace("{port}", String(r.port)) : "";
+                  const removing = removeMut.isPending && removeMut.variables === r.port;
+                  return (
+                    <Tr key={r.id}>
+                      <Td className="font-mono">{r.port}</Td>
+                      <Td><Badge label={accessModeLabel[r.accessMode] ?? "Unknown"} variant="neutral" /></Td>
+                      <Td>
+                        {url ? (
+                          <a href={url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 font-mono text-xs text-primary hover:underline">
+                            {url} <ExternalLink className="h-3 w-3" />
+                          </a>
+                        ) : "—"}
+                      </Td>
+                      <Td className="text-right">
+                        <Button variant="ghost" size="sm" disabled={removing} onClick={() => removeMut.mutate(r.port)}>
+                          <Trash2 className="h-4 w-4 text-destructive" /> {removing ? "Removing…" : "Remove"}
+                        </Button>
+                      </Td>
+                    </Tr>
+                  );
+                })}
+              </Tbody>
+            </Table>
+          </div>
+        )}
+
+        <TokenRevealModal token={createdToken} onClose={() => setCreatedToken(null)} title="Port Access Token Created" />
+      </CardContent>
+    </Card>
+  );
+}
+
+// Shared "copy this once" reveal modal for newly-minted tokens.
+function TokenRevealModal({ token, onClose, title }: { token: string | null; onClose: () => void; title: string }) {
+  const [copied, setCopied] = useState(false);
+  async function copy() {
+    if (!token) return;
+    await navigator.clipboard.writeText(token);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+  return (
+    <Modal open={token !== null} onClose={() => { setCopied(false); onClose(); }} title={title}>
+      <div className="space-y-4">
+        <div className="flex items-start gap-3 rounded-md border border-warning/30 bg-warning/10 p-3">
+          <AlertTriangle className="mt-0.5 h-5 w-5 flex-shrink-0 text-warning" />
+          <p className="text-sm text-foreground">Copy this token now. You won't be able to see it again.</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <code className="flex-1 overflow-x-auto rounded-md border border-border/60 bg-background px-3 py-2 font-mono text-sm text-foreground">{token}</code>
+          <Button variant="outline" onClick={copy}>
+            {copied ? <><Check className="h-4 w-4 text-success" /> Copied</> : <><Copy className="h-4 w-4" /> Copy</>}
+          </Button>
+        </div>
+        <div className="flex justify-end">
+          <Button onClick={() => { setCopied(false); onClose(); }}>Done</Button>
+        </div>
+      </div>
+    </Modal>
+  );
+}

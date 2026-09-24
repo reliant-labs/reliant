@@ -56,9 +56,9 @@ type Grant struct {
 	DaemonID string
 	Name     string
 
-	// TokenHash is the SHA-256 hex digest of the credential. The plaintext is
-	// shown once at creation and never stored.
-	TokenHash   string
+	// TokenPrefix is the display prefix of the grant's credential. The
+	// credential itself is an `rlat_` access token (mcp:connector, bound to
+	// resource connector:<ID>) held by the token authority, not here.
 	TokenPrefix string
 
 	// AllowedTools holds MCP tool names, the vocabulary the user consented to.
@@ -126,12 +126,9 @@ type AuditRecord struct {
 
 // Store persists grants and audit records.
 type Store interface {
+	// SetTokenPrefix records the display prefix of a grant's credential.
+	SetTokenPrefix(ctx context.Context, id, prefix string) error
 	CreateGrant(ctx context.Context, g *Grant) error
-
-	// GetGrantByTokenHash resolves a credential. It returns live grants only:
-	// revoked and expired rows come back as errors rather than as grants the
-	// caller must remember to re-check.
-	GetGrantByTokenHash(ctx context.Context, tokenHash string) (*Grant, error)
 
 	ListGrantsByUser(ctx context.Context, userID string) ([]*Grant, error)
 	GetGrant(ctx context.Context, userID, id string) (*Grant, error)

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Mail, ArrowUpRight, ShieldCheck } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 import { Modal } from "./ui/Modal";
-import { BillingService } from "@/gen/controlplane/v1/public/billing_service_pb";
+import { BillingService } from "@/gen/controlplane/services/billing/v1/billing_pb";
 import { getControlPlaneClient } from "../services/controlPlane/client";
 import { useAuthStore } from "@/store/authStore";
 import { logger } from "../lib/logger";

@@ -15,7 +15,6 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
-	"github.com/reliant-labs/reliant/internal/cliconfig"
 	"github.com/reliant-labs/reliant/internal/execfollow"
 )
 
@@ -97,8 +96,7 @@ type superviseHarness struct {
 
 func newSuperviseHarness(t *testing.T) *superviseHarness {
 	t.Helper()
-	tmpHome := t.TempDir()
-	t.Setenv("HOME", tmpHome)
+	isolateCLI(t)
 
 	h := &superviseHarness{
 		chat:     &superviseChatService{},
@@ -116,21 +114,8 @@ func newSuperviseHarness(t *testing.T) *superviseHarness {
 	h.server = httptest.NewServer(mux)
 	t.Cleanup(h.server.Close)
 
-	cfgPath, err := cliconfig.DefaultPath()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.HasPrefix(cfgPath, tmpHome) {
-		t.Fatalf("config path %q escaped temp HOME %q", cfgPath, tmpHome)
-	}
-	if err := cliconfig.SaveTo(cfgPath, &cliconfig.Config{
-		CurrentContext: "test",
-		Contexts: map[string]*cliconfig.Context{
-			"test": {Server: h.server.URL, Token: "rlnt_pat_test00000000000000000000000000"},
-		},
-	}); err != nil {
-		t.Fatal(err)
-	}
+	loginFor(t, h.server.URL, "rlat_test000000000000000000000000000")
+	t.Setenv(envServerURL, h.server.URL)
 	return h
 }
 
@@ -470,13 +455,8 @@ func TestWatchRendersBoundariesAndQuestion(t *testing.T) {
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
-	cfgPath, _ := cliconfig.DefaultPath()
-	if err := cliconfig.SaveTo(cfgPath, &cliconfig.Config{
-		CurrentContext: "test",
-		Contexts:       map[string]*cliconfig.Context{"test": {Server: srv.URL, Token: "rlnt_pat_test00000000000000000000000000"}},
-	}); err != nil {
-		t.Fatal(err)
-	}
+	loginFor(t, srv.URL, "rlat_test000000000000000000000000000")
+	t.Setenv(envServerURL, srv.URL)
 
 	stdout, _, err := h.run(t, "", "workflow", "watch", "chat-1", "--interval", "10ms")
 	if err != nil {

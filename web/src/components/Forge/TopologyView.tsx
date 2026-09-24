@@ -5,7 +5,7 @@
  *
  * PURE PROPS BY DESIGN. It takes an outcome and callbacks and owns no data
  * fetching, mirroring the split the repo already uses between
- * services/controlPlane/environments.ts and Settings/cloud/environments.tsx.
+ * services/controlPlane/environments.ts and Settings/cloud/machines.tsx.
  * That is what lets the visual contract be tested by handing it a report object
  * rather than by standing up a query client and a transport.
  *
@@ -16,7 +16,7 @@
  * project with many images.
  *
  * It is a REAL table: every fact an env carries — release, lag, promote time,
- * cluster — gets its own `<td>` under its own `<th scope="col">`, and the
+ * where it runs (a cluster, or for a hosted env its control plane) — gets its own `<td>` under its own `<th scope="col">`, and the
  * actions sit in a right-aligned column of their own. One row is one line.
  * (It previously stacked all of those into the row header's flex column, which
  * produced ~200px rows next to image cells on a single baseline.)
@@ -178,8 +178,10 @@ export function TopologyView({
                 <th scope="col" className={HEADER_CELL}>
                   Promoted
                 </th>
+                {/* "Runs on", not "Cluster": a hosted env has no cluster to
+                    name, and its cell shows the control plane instead. */}
                 <th scope="col" className={HEADER_CELL}>
-                  Cluster
+                  Runs on
                 </th>
                 {images.map((image) => (
                   <th key={image} scope="col" className={HEADER_CELL}>

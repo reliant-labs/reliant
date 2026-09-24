@@ -27,7 +27,7 @@ import (
 const daemonAttachmentStaleThreshold = 90 * time.Second
 
 // DaemonRegistryService handles daemon registry queries (list/get/resolve/resume).
-// Token CRUD lives in DaemonTokenService; PAT introspection lives in DaemonAuthService.
+// Daemon credentials are `rlat_` access tokens managed through TokenService.
 type DaemonRegistryService struct {
 	reliantv1connect.UnimplementedDaemonRegistryServiceHandler
 	database db.Repository

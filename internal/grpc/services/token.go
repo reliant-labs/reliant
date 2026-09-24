@@ -3,164 +3,202 @@ package services
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 	"time"
 
 	"connectrpc.com/connect"
+	fat "github.com/reliant-labs/forge/pkg/accesstoken"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
-	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
-	"github.com/reliant-labs/reliant/internal/pat"
+	"github.com/reliant-labs/reliant/internal/tokenauthority"
 )
 
-// TokenService is the Connect surface for managing user API tokens (api-kind
-// rlnt_pat_ PATs). It is a thin wrapper over the single mint/list/revoke
-// implementation in internal/pat.Service — it never hashes, validates, or
-// stores tokens itself.
-//
-// It replaces the former POST/GET/DELETE /api/v1/tokens JSON handler. The auth
-// interceptor accepts both Supabase JWTs and api-kind PATs on these
-// procedures, so the "a PAT cannot mint a PAT" rule is enforced in
-// CreateToken (see requireInteractiveSession); ListTokens and RevokeToken
-// accept either credential and are strictly owner- and kind-scoped by the
-// underlying service.
+// maxTokenNameLen bounds a token label.
+const maxTokenNameLen = 128
+
+// TokenService is reliant's ONE machine-credential surface — a thin facade
+// over the deployment's token authority (control-plane when hosted, the local
+// store when self-hosted). It never hashes, validates or stores a token.
 type TokenService struct {
 	reliantv1connect.UnimplementedTokenServiceHandler
-	patService *pat.Service
+	authority tokenauthority.Authority
 }
 
-// NewTokenService constructs the api-token management service.
-func NewTokenService(patService *pat.Service) *TokenService {
-	return &TokenService{patService: patService}
+// NewTokenService constructs the facade over authority.
+func NewTokenService(authority tokenauthority.Authority) *TokenService {
+	return &TokenService{authority: authority}
 }
 
-// requireInteractiveSession enforces the JWT-only rule for token issuance: a
-// PAT bearer can never mint another PAT. The interceptor has already validated
-// whatever bearer is present (JWT or api-kind PAT) and populated the identity;
-// here we re-inspect the raw Authorization header and reject PAT-format
-// bearers. This mirrors the DaemonTokenService rule (which the gRPC
-// interceptor enforces for that whole service) and the JWT-only middleware the
-// deleted HTTP surface used.
-func requireInteractiveSession(authHeader string) error {
-	bearer := strings.TrimPrefix(authHeader, "Bearer ")
-	if auth.IsPATFormat(bearer) {
-		return connect.NewError(connect.CodeUnauthenticated,
-			fmt.Errorf("token management requires an interactive session"))
+// scopeForKind maps the wire kind onto its one scope.
+func scopeForKind(kind reliantv1.TokenKind) (fat.Scope, error) {
+	switch kind {
+	case reliantv1.TokenKind_TOKEN_KIND_DAEMON:
+		return fat.ScopeDaemonConnect, nil
+	case reliantv1.TokenKind_TOKEN_KIND_API:
+		return fat.ScopeReliantAPI, nil
+	default:
+		return "", connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("kind is required (DAEMON or API)"))
 	}
-	return nil
 }
 
-// tokenInfoProto is the metadata view of an api-kind token. It never carries
-// the raw secret or the stored hash.
-func tokenInfoProto(p *db.DaemonPAT) *reliantv1.TokenInfo {
+func kindForScopes(scopes []string) reliantv1.TokenKind {
+	for _, s := range scopes {
+		switch fat.Scope(s) {
+		case fat.ScopeDaemonConnect:
+			return reliantv1.TokenKind_TOKEN_KIND_DAEMON
+		case fat.ScopeReliantAPI:
+			return reliantv1.TokenKind_TOKEN_KIND_API
+		}
+	}
+	return reliantv1.TokenKind_TOKEN_KIND_UNSPECIFIED
+}
+
+// callerUser returns the authenticated user and whether the caller is a
+// machine credential rather than an interactive session.
+func callerUser(ctx context.Context) (string, bool, error) {
+	userID, ok := auth.GetUserIDFromContext(ctx)
+	if !ok || userID == "" {
+		return "", false, connect.NewError(connect.CodeUnauthenticated, fmt.Errorf("unauthenticated"))
+	}
+	_, isMachine := auth.MachineTokenFromContext(ctx)
+	return userID, isMachine, nil
+}
+
+func formatTime(t *time.Time) string {
+	if t == nil {
+		return ""
+	}
+	return t.UTC().Format(time.RFC3339)
+}
+
+func tokenInfoProto(t tokenauthority.TokenInfo) *reliantv1.TokenInfo {
 	info := &reliantv1.TokenInfo{
-		Id:          p.ID,
-		Name:        p.Name,
-		TokenPrefix: p.TokenPrefix,
-		CreatedAt:   p.CreatedAt.UTC().Format(time.RFC3339),
+		Id:          t.ID,
+		Name:        t.Name,
+		TokenPrefix: t.DisplayPrefix,
+		CreatedAt:   t.CreatedAt.UTC().Format(time.RFC3339),
+		LastUsedAt:  formatTime(t.LastUsedAt),
+		ExpiresAt:   formatTime(t.ExpiresAt),
+		Kind:        kindForScopes(t.Scopes),
+		Ephemeral:   t.Ephemeral,
 	}
-	if p.LastUsedAt != nil {
-		info.LastUsedAt = p.LastUsedAt.UTC().Format(time.RFC3339)
-	}
-	if p.ExpiresAt != nil {
-		info.ExpiresAt = p.ExpiresAt.UTC().Format(time.RFC3339)
-	}
-	if p.RevokedAt != nil {
-		info.RevokedAt = p.RevokedAt.UTC().Format(time.RFC3339)
+	if t.Resource != nil && t.Resource.Kind == fat.ResourceDaemon {
+		info.DaemonId = t.Resource.ID
 	}
 	return info
 }
 
-// CreateToken mints a new api-kind PAT for the authenticated user. Session
-// (JWT) authed only — a PAT cannot mint a PAT.
+func authorityError(op string, err error) error {
+	switch {
+	case tokenauthority.IsNotFound(err):
+		return connect.NewError(connect.CodeNotFound, fmt.Errorf("token not found"))
+	case tokenauthority.IsInvalidGrant(err):
+		return connect.NewError(connect.CodeInvalidArgument, err)
+	}
+	logging.Error("token authority failed", "op", op, "error", tokenauthority.Describe(err))
+	return connect.NewError(connect.CodeUnavailable, fmt.Errorf("token service unavailable"))
+}
+
+// CreateToken mints a token acting as the caller. Interactive session only: a
+// machine credential never mints a credential.
 func (s *TokenService) CreateToken(
-	ctx context.Context,
-	req *connect.Request[reliantv1.CreateTokenRequest],
+	ctx context.Context, req *connect.Request[reliantv1.CreateTokenRequest],
 ) (*connect.Response[reliantv1.CreateTokenResponse], error) {
-	if err := requireInteractiveSession(req.Header().Get("Authorization")); err != nil {
+	userID, isMachine, err := callerUser(ctx)
+	if err != nil {
 		return nil, err
 	}
-
-	userID, ok := auth.GetUserIDFromContext(ctx)
-	if !ok || userID == "" {
-		return nil, connect.NewError(connect.CodeUnauthenticated, fmt.Errorf("unauthenticated"))
+	if isMachine {
+		return nil, connect.NewError(connect.CodePermissionDenied,
+			fmt.Errorf("token management requires an interactive session; a token cannot mint a token"))
 	}
-	email, _ := auth.GetUserEmailFromContext(ctx)
-
+	scope, err := scopeForKind(req.Msg.GetKind())
+	if err != nil {
+		return nil, err
+	}
+	name := strings.TrimSpace(req.Msg.GetName())
+	if name == "" || len(name) > maxTokenNameLen {
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("name is required (at most %d characters)", maxTokenNameLen))
+	}
 	if req.Msg.GetTtlSeconds() < 0 {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("ttl_seconds must not be negative"))
 	}
-
-	raw, tok, err := s.patService.CreateAPIToken(ctx, userID, email, req.Msg.GetName(),
-		time.Duration(req.Msg.GetTtlSeconds())*time.Second)
-	if err != nil {
-		// CreateAPIToken failures are user-facing validation errors (empty or
-		// too-long name, duplicate active name, negative ttl) — the same cases
-		// the deleted HTTP handler returned 400 for.
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	var expiresAt *time.Time
+	if ttl := req.Msg.GetTtlSeconds(); ttl > 0 {
+		at := time.Now().Add(time.Duration(ttl) * time.Second)
+		expiresAt = &at
 	}
 
-	logging.Info("API token created", "user_id", userID, "token_id", tok.ID, "name", tok.Name)
+	minted, err := s.authority.MintForUser(ctx, tokenauthority.MintRequest{
+		UserID: userID, Name: name, Scopes: []fat.Scope{scope}, ExpiresAt: expiresAt,
+	})
+	if err != nil {
+		return nil, authorityError("create", err)
+	}
+	logging.Info("access token created", "user_id", userID, "token_id", minted.TokenID, "scope", scope)
 	return connect.NewResponse(&reliantv1.CreateTokenResponse{
-		Info:  tokenInfoProto(tok),
-		Token: raw,
+		Info: &reliantv1.TokenInfo{
+			Id:          minted.TokenID,
+			Name:        name,
+			TokenPrefix: minted.DisplayPrefix,
+			CreatedAt:   time.Now().UTC().Format(time.RFC3339),
+			ExpiresAt:   formatTime(minted.ExpiresAt),
+			Kind:        req.Msg.GetKind(),
+		},
+		Token: minted.Plaintext,
 	}), nil
 }
 
-// ListTokens returns metadata for every api-kind token owned by the caller.
-// Accepts either a JWT or an api-kind PAT (owner-scoped by the service).
+// ListTokens lists the caller's live tokens, optionally of one kind.
 func (s *TokenService) ListTokens(
-	ctx context.Context,
-	req *connect.Request[reliantv1.ListTokensRequest],
+	ctx context.Context, req *connect.Request[reliantv1.ListTokensRequest],
 ) (*connect.Response[reliantv1.ListTokensResponse], error) {
-	_ = req
-	userID, ok := auth.GetUserIDFromContext(ctx)
-	if !ok || userID == "" {
-		return nil, connect.NewError(connect.CodeUnauthenticated, fmt.Errorf("unauthenticated"))
-	}
-
-	toks, err := s.patService.ListAPITokens(ctx, userID)
+	userID, _, err := callerUser(ctx)
 	if err != nil {
-		logging.Error("Failed to list api tokens", "user_id", userID, "error", err)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list tokens"))
+		return nil, err
 	}
-
-	out := make([]*reliantv1.TokenInfo, 0, len(toks))
-	for _, tok := range toks {
-		out = append(out, tokenInfoProto(tok))
+	var scope fat.Scope
+	if req.Msg.GetKind() != reliantv1.TokenKind_TOKEN_KIND_UNSPECIFIED {
+		if scope, err = scopeForKind(req.Msg.GetKind()); err != nil {
+			return nil, err
+		}
+	}
+	tokens, err := s.authority.ListForUser(ctx, userID, scope)
+	if err != nil {
+		return nil, authorityError("list", err)
+	}
+	out := make([]*reliantv1.TokenInfo, 0, len(tokens))
+	for _, t := range tokens {
+		// This surface manages reliant's own kinds; LLM keys and connector
+		// credentials have their own surfaces.
+		if kindForScopes(t.Scopes) == reliantv1.TokenKind_TOKEN_KIND_UNSPECIFIED {
+			continue
+		}
+		out = append(out, tokenInfoProto(t))
 	}
 	return connect.NewResponse(&reliantv1.ListTokensResponse{Tokens: out}), nil
 }
 
-// RevokeToken marks one of the caller's api-kind tokens revoked. Accepts
-// either a JWT or an api-kind PAT (owner- and kind-scoped by the service).
+// RevokeToken revokes one of the caller's tokens.
 func (s *TokenService) RevokeToken(
-	ctx context.Context,
-	req *connect.Request[reliantv1.RevokeTokenRequest],
+	ctx context.Context, req *connect.Request[reliantv1.RevokeTokenRequest],
 ) (*connect.Response[reliantv1.RevokeTokenResponse], error) {
-	userID, ok := auth.GetUserIDFromContext(ctx)
-	if !ok || userID == "" {
-		return nil, connect.NewError(connect.CodeUnauthenticated, fmt.Errorf("unauthenticated"))
+	userID, _, err := callerUser(ctx)
+	if err != nil {
+		return nil, err
 	}
-
-	id := req.Msg.GetId()
+	id := strings.TrimSpace(req.Msg.GetId())
 	if id == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("token id is required"))
 	}
-
-	if err := s.patService.RevokeAPIToken(ctx, userID, id); err != nil {
-		if errors.Is(err, pat.ErrTokenNotFound) {
-			return nil, connect.NewError(connect.CodeNotFound, err)
-		}
-		logging.Error("Failed to revoke api token", "user_id", userID, "token_id", id, "error", err)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to revoke token"))
+	if err := s.authority.RevokeForUser(ctx, userID, id); err != nil {
+		return nil, authorityError("revoke", err)
 	}
-
-	logging.Info("API token revoked", "user_id", userID, "token_id", id)
+	logging.Info("access token revoked", "user_id", userID, "token_id", id)
 	return connect.NewResponse(&reliantv1.RevokeTokenResponse{}), nil
 }

@@ -213,7 +213,7 @@ export function ComputeSubscriptionCheckout({
       {/* Set apart by a rule and a recess, not by a tint. `bg-muted/20` here
           was a 20%-alpha wash that vanished on dark themes and reversed
           direction on light ones — see the elevation note in
-          Settings/cloud/ui/card.tsx. `bg-background` recesses in both. */}
+          forge-ui/card.tsx. `bg-background` recesses in both. */}
       <section className="space-y-2 border-t border-border bg-background p-5">
         <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           Or use a code

@@ -112,10 +112,13 @@
  * floating slab on a dark one. `--background` is the only token that
  * recesses in BOTH modes, and it is already what reliant's own elevation
  * rule prescribes for an inset (see the comment block atop
- * components/Settings/cloud/ui/card.tsx). Hence:
+ * components/forge-ui/card.tsx). Hence:
  *
  *   surface        → --card        (primary surface: cards, panels)
  *   surface-muted  → --background  (inset/subtle fill — NEVER --muted)
+ *   surface-sunken → --background  (forge's dedicated inset token; the
+ *                                   elevation rule lives in
+ *                                   components/forge-ui/card.tsx)
  *
  * `--muted` stays what reliant says it is: interaction state only.
  *
@@ -147,6 +150,9 @@
   /* Surfaces — see the muted-inversion trap above before changing these. */
   --color-surface: hsl(var(--card));
   --color-surface-muted: hsl(var(--background));
+  /* forge's inset token (ui/card.tsx CardInset). --background is the only
+     reliant token below --card in every scheme, light and dark. */
+  --color-surface-sunken: hsl(var(--background));
   --color-border: hsl(var(--border));
   --color-border-strong: hsl(var(--input));
   /* Text ramp — three forge rungs onto reliant's two plus a derived third. */

@@ -10,7 +10,7 @@
  */
 
 import { ConnectError, Code } from "@connectrpc/connect";
-import type { Plan } from "@/gen/controlplane/v1/public/shared_pb";
+import type { Plan } from "@/gen/controlplane/controlplane/v1/shared_pb";
 
 export type WalletBalanceState = "healthy" | "low" | "empty";
 

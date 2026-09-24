@@ -167,9 +167,9 @@ export function DeployUsageSection({
         <span className="font-medium text-foreground">
           These are estimates, not an invoice.
         </span>{" "}
-        Usage is measured after the fact by a sweeper that reads your running
-        services, then priced against your plan. Your final invoice is produced
-        when the period closes and may differ.
+        We measure what your deployments are running once a minute and price
+        it against your plan, so figures trail slightly behind. Your final
+        invoice is produced when the period closes and may differ.
       </p>
 
       {/*

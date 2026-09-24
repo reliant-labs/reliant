@@ -3,16 +3,17 @@ import { create } from "@bufbuild/protobuf";
 import { Copy, Check, Plus, Trash2, Loader2 } from "lucide-react";
 import { grpcClient } from "../../api/grpc-client";
 import {
-  ListDaemonTokensRequestSchema,
-  CreateDaemonTokenRequestSchema,
-  RevokeDaemonTokenRequestSchema,
-} from "../../gen/reliant/v1/daemon_token_pb";
-import type { DaemonTokenInfo } from "../../gen/reliant/v1/daemon_token_pb";
+  ListTokensRequestSchema,
+  CreateTokenRequestSchema,
+  RevokeTokenRequestSchema,
+  TokenKind,
+} from "../../gen/reliant/v1/token_pb";
+import type { TokenInfo } from "../../gen/reliant/v1/token_pb";
 import { Button } from "../ui/Button";
 import { Input } from "../ui/Input";
 
 export function TokenSettings() {
-  const [tokens, setTokens] = useState<DaemonTokenInfo[]>([]);
+  const [tokens, setTokens] = useState<TokenInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [newTokenName, setNewTokenName] = useState("");
@@ -26,8 +27,8 @@ export function TokenSettings() {
     try {
       setError(null);
       const res = await grpcClient
-        .daemonToken()
-        .listDaemonTokens(create(ListDaemonTokensRequestSchema, {}));
+        .token()
+        .listTokens(create(ListTokensRequestSchema, { kind: TokenKind.DAEMON }));
       setTokens(res.tokens);
     } catch (err) {
       console.error("Failed to fetch tokens:", err);
@@ -47,9 +48,12 @@ export function TokenSettings() {
     setError(null);
     try {
       const res = await grpcClient
-        .daemonToken()
-        .createDaemonToken(
-          create(CreateDaemonTokenRequestSchema, { name: newTokenName.trim() })
+        .token()
+        .createToken(
+          create(CreateTokenRequestSchema, {
+            name: newTokenName.trim(),
+            kind: TokenKind.DAEMON,
+          })
         );
       setNewTokenRaw(res.token);
       setNewTokenName("");
@@ -67,10 +71,8 @@ export function TokenSettings() {
     setError(null);
     try {
       await grpcClient
-        .daemonToken()
-        .revokeDaemonToken(
-          create(RevokeDaemonTokenRequestSchema, { tokenId: id })
-        );
+        .token()
+        .revokeToken(create(RevokeTokenRequestSchema, { id }));
       setRevokingId(null);
       await fetchTokens();
     } catch (err) {
@@ -94,7 +96,9 @@ export function TokenSettings() {
     });
   };
 
-  const activeTokens = tokens.filter((t) => !t.revoked);
+  // TokenService.ListTokens returns only LIVE tokens; revoked ones are
+  // filtered server-side.
+  const activeTokens = tokens;
 
   return (
     <div className="space-y-6">

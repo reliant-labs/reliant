@@ -51,6 +51,7 @@ import {
   useUndeleteManagedSecret,
 } from "@/hooks/forge-queries";
 import { environments } from "@/services/forge/topology";
+import { managedStoreTarget } from "@/services/forge/secretStore";
 import { surfaceMode, type SecretSurfaceRow } from "@/services/forge/secretSurface";
 import PageHeader from "@/components/forge-ui/page_header";
 
@@ -99,13 +100,22 @@ export function ForgeSecretsPage() {
     [setSearch]
   );
 
-  const envNames = useMemo(
-    () =>
-      topology.data?.kind === "report"
-        ? environments(topology.data.report).map((env) => env.env)
-        : [],
+  const envRows = useMemo(
+    () => (topology.data?.kind === "report" ? environments(topology.data.report) : []),
     [topology.data]
   );
+  const envNames = useMemo(() => envRows.map((env) => env.env), [envRows]);
+
+  // The managed store is keyed by the env's CONTROL-PLANE id, which only
+  // forge's topology report can supply (hosted envs, once ensured). No id —
+  // a non-hosted env, or one never deployed — means no lookup, and the view
+  // says why instead of guessing. Null until topology has answered, so
+  // nothing is decided on missing facts.
+  const storeTarget = useMemo(() => {
+    if (!selectedEnv || topology.data?.kind !== "report") return null;
+    return managedStoreTarget(envRows.find((env) => env.env === selectedEnv));
+  }, [selectedEnv, topology.data, envRows]);
+  const environmentId = storeTarget?.kind === "lookup" ? storeTarget.environmentId : null;
 
   // Settle on the first environment once the list is known, and re-settle if
   // the selection disappears. Nothing is guessed before the list arrives.
@@ -116,13 +126,13 @@ export function ForgeSecretsPage() {
   }, [envNames, selectedEnv, selectEnv]);
 
   const secrets = useForgeSecrets(projectId, selectedEnv);
-  const managed = useManagedSecrets(projectId, selectedEnv);
-  const versions = useManagedSecretVersions(projectId, selectedEnv, secretParam ?? null);
+  const managed = useManagedSecrets(projectId, selectedEnv, storeTarget);
+  const versions = useManagedSecretVersions(projectId, selectedEnv, environmentId, secretParam ?? null);
 
-  const setMutation = useSetManagedSecret(projectId, selectedEnv);
-  const deleteMutation = useDeleteManagedSecret(projectId, selectedEnv);
-  const undeleteMutation = useUndeleteManagedSecret(projectId, selectedEnv);
-  const destroyMutation = useDestroyManagedSecret(projectId, selectedEnv);
+  const setMutation = useSetManagedSecret(projectId, selectedEnv, environmentId);
+  const deleteMutation = useDeleteManagedSecret(projectId, selectedEnv, environmentId);
+  const undeleteMutation = useUndeleteManagedSecret(projectId, selectedEnv, environmentId);
+  const destroyMutation = useDestroyManagedSecret(projectId, selectedEnv, environmentId);
 
   /**
    * Modal state. `null` closed; `{ existing: null }` create; `{ existing }` set
@@ -238,6 +248,7 @@ export function ForgeSecretsPage() {
 
       <EnvTabs
         envs={envNames}
+        envRows={envRows}
         selected={selectedEnv}
         onSelect={selectEnv}
         isLoading={topology.isLoading}

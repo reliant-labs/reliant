@@ -278,7 +278,7 @@ export function OnboardingCheckout(props: OnboardingCheckoutProps) {
 
       {/* Set apart by a rule and a recess, not by a tint — the same treatment
           the compute checkout's coupon section gets. See the elevation note in
-          Settings/cloud/ui/card.tsx for why `bg-muted` is not it. */}
+          forge-ui/card.tsx for why `bg-muted` is not it. */}
       <section className="space-y-2 border-t border-border bg-background p-5">
         <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           Or use a code

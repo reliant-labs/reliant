@@ -103,8 +103,9 @@ class BackendManager {
     // processes on different ports:
     //
     //   apiUrl         (RELIANT_SERVER_URL) — the daemon's --server target.
-    //                    In cloud-dev this is admin-server; the daemon hits
-    //                    admin-server's forwarder for CreateDaemonToken.
+    //                    In cloud-dev this is admin-server. It keys
+    //                    daemon.json; the daemon credential itself is minted
+    //                    from rendererApiUrl (reliant.v1.TokenService).
     //
     //   rendererApiUrl (RELIANT_API_URL)    — the URL the renderer's MAIN
     //                    Connect transport hits for reliant.v1.* services
@@ -1964,7 +1965,12 @@ class BackendManager {
   async ensureDaemonCreds() {
     return daemonCreds.ensureDaemonPATForOrigin({
       authStorage: this.authStorage,
+      // daemon.json is keyed by the daemon's --server origin...
       apiUrl: this.apiUrl,
+      // ...but the credential is minted by reliant.v1.TokenService, which only
+      // reliant's api-server serves. In cloud-dev --server is admin-server,
+      // which does not; in a packaged build the two are the same host.
+      mintApiUrl: this.rendererApiUrl || this.apiUrl,
       gatewayUrl: this.gatewayUrl || process.env.RELIANT_GATEWAY_URL || '',
       // GoTrue provider for the pre-mint session refresh. Same precedence
       // family as the rest of the config: the daemon-side names

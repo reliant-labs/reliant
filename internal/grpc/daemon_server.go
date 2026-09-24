@@ -44,7 +44,8 @@ type DaemonConfig struct {
 	ToolsDaemonService *services.ToolsDaemonService
 	ToolExecutor       *toolexec.RemoteExecutor
 
-	PATValidator auth.PATValidator
+	// DaemonTokens resolves daemons' `rlat_` credentials (uncached).
+	DaemonTokens auth.AccessTokenIntrospector
 
 	TLSCertFile string
 	TLSKeyFile  string
@@ -63,7 +64,7 @@ func NewDaemonServer(cfg *DaemonConfig) *DaemonServer {
 		panic("grpc daemon server requires a non-nil ToolsDaemonService")
 	}
 
-	daemonAuthInterceptor, err := interceptors.NewDaemonAuthInterceptor(cfg.PATValidator)
+	daemonAuthInterceptor, err := interceptors.NewDaemonAuthInterceptor(cfg.DaemonTokens)
 	if err != nil {
 		panic(fmt.Sprintf("grpc daemon server auth interceptor setup failed: %v", err))
 	}

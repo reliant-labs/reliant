@@ -3,26 +3,39 @@ package interceptors
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
 	"connectrpc.com/connect"
+	fat "github.com/reliant-labs/forge/pkg/accesstoken"
 	"github.com/reliant-labs/reliant/internal/auth"
 )
 
-// DaemonAuthInterceptor authenticates tools-daemon connections using
-// Personal Access Tokens (PATs). The interceptor validates the bearer token
-// against the database and injects the user identity into context.
+// DaemonAuthInterceptor authenticates daemon connections to the gateway.
+//
+// The credential is an `rlat_` access token carrying daemon:connect and acting
+// as a user, resolved by the deployment's token authority — control-plane's
+// Introspect when hosted, the local store when self-hosted. It runs ONCE PER
+// CONNECT against an UNCACHED introspector: a connect is rare, and a daemon
+// stream is the highest-value surface, so a revoked credential is refused on
+// its very next connect. Anything not shaped like an `rlat_` is refused
+// before a round trip.
+//
+// A token bound to a daemon (resource daemon:<id>) authenticates as that
+// daemon only: the bound id is placed on the context, and the gateway uses it
+// as the daemon's authoritative identity instead of guessing from hostname.
 type DaemonAuthInterceptor struct {
-	validator auth.PATValidator
+	tokens auth.AccessTokenIntrospector
 }
 
-// NewDaemonAuthInterceptor creates an interceptor that validates PATs.
-func NewDaemonAuthInterceptor(validator auth.PATValidator) (*DaemonAuthInterceptor, error) {
-	if validator == nil {
-		return nil, fmt.Errorf("PAT validator is required")
+// NewDaemonAuthInterceptor creates an interceptor that validates daemon
+// credentials through tokens.
+func NewDaemonAuthInterceptor(tokens auth.AccessTokenIntrospector) (*DaemonAuthInterceptor, error) {
+	if tokens == nil {
+		return nil, fmt.Errorf("daemon credential introspector is required")
 	}
-	return &DaemonAuthInterceptor{validator: validator}, nil
+	return &DaemonAuthInterceptor{tokens: tokens}, nil
 }
 
 func (i *DaemonAuthInterceptor) authenticate(ctx context.Context, header func(string) string) (context.Context, error) {
@@ -30,23 +43,36 @@ func (i *DaemonAuthInterceptor) authenticate(ctx context.Context, header func(st
 	if authHeader == "" {
 		return nil, connect.NewError(connect.CodeUnauthenticated, fmt.Errorf("missing authorization token"))
 	}
-
 	rawToken := strings.TrimPrefix(authHeader, "Bearer ")
 	if rawToken == authHeader {
 		return nil, connect.NewError(connect.CodeUnauthenticated, fmt.Errorf("invalid authorization header format"))
 	}
 	rawToken = strings.TrimSpace(rawToken)
-
-	userID, _, daemonID, err := i.validator.ValidatePAT(ctx, rawToken)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeUnauthenticated, fmt.Errorf("invalid daemon auth token: %w", err))
+	if !auth.IsAccessTokenFormat(rawToken) {
+		return nil, connect.NewError(connect.CodeUnauthenticated,
+			fmt.Errorf("daemon credential must be an rlat_ access token; re-register the daemon"))
 	}
 
-	// Always inject user ID into context — PAT-based auth always resolves to a user
-	ctx = context.WithValue(ctx, auth.UserIDContextKey, userID)
-	// Inject PAT-bound daemon ID (may be empty for unbound PATs)
-	if daemonID != "" {
-		ctx = context.WithValue(ctx, auth.DaemonIDContextKey, daemonID)
+	p, err := i.tokens.Introspect(ctx, rawToken)
+	if err != nil {
+		if errors.Is(err, auth.ErrAccessTokenInactive) {
+			return nil, connect.NewError(connect.CodeUnauthenticated, fmt.Errorf("invalid daemon auth token"))
+		}
+		// The authority is unreachable: our outage, not the daemon's bad
+		// credential. Unavailable makes the daemon retry instead of
+		// discarding a good token.
+		return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("daemon credential verification unavailable: %w", err))
+	}
+	if !p.Scopes.Permits(fat.ScopeDaemonConnect) || p.ActingUserID == "" {
+		return nil, connect.NewError(connect.CodeUnauthenticated, fmt.Errorf("token does not grant daemon:connect"))
+	}
+	if p.Resource != nil && p.Resource.Kind != fat.ResourceDaemon {
+		return nil, connect.NewError(connect.CodeUnauthenticated, fmt.Errorf("token is bound to a non-daemon resource"))
+	}
+
+	ctx = context.WithValue(ctx, auth.UserIDContextKey, p.ActingUserID)
+	if p.Resource != nil {
+		ctx = context.WithValue(ctx, auth.DaemonIDContextKey, p.Resource.ID)
 	}
 	return ctx, nil
 }

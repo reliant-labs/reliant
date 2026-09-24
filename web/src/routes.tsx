@@ -254,6 +254,17 @@ const oauthConsentRoute = createRoute({
   ),
 })
 
+// CLI login consent (`forge login`, `reliant auth login`). The control plane's
+// /oauth/authorize validates the CLI's PKCE request and sends the browser here,
+// because this app holds the end-user session. Root-level and unguarded for the
+// same reason as /oauth/consent: the page signs the user in itself and must
+// keep the whole query string across that detour.
+const cliLoginRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/oauth/cli',
+  component: lazyRouteComponent(() => import('./components/Auth/CliLogin'), 'CliLogin'),
+})
+
 const proxyAuthRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/auth/proxy',
@@ -704,6 +715,7 @@ const routeTree = rootRoute.addChildren([
   oauthCallbackRoute,
   githubOAuthCallbackRoute,
   oauthConsentRoute,
+  cliLoginRoute,
   proxyAuthRoute,
   resetPasswordRoute,
   verifyEmailRoute,
