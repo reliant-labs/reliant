@@ -209,6 +209,53 @@ type Expectation struct {
 	// (e.g., "response.choice": "complete"). Partial matching: only the
 	// specified paths are checked.
 	Outputs map[string]interface{} `json:"outputs,omitempty" yaml:"outputs,omitempty"`
+
+	// Messages asserts on the messages the run saved to the thread, keyed by
+	// the node that saved them (qualified ids, as elsewhere). A node's
+	// messages come from its `save_message:` block, or — for a save_message
+	// node — from the node itself.
+	//
+	// Only the Temporal backend (scenariotemporal) observes saves: it runs the
+	// real save_message resolution — condition, templates, content-free guard
+	// — against each mocked result. The fast simulator records none, so it
+	// reports a messages expectation as unverifiable instead of passing it.
+	//
+	//	messages:
+	//	  audited_loop.execute_audit:
+	//	    saved: true
+	//	    content_contains: "Do not delete test files"
+	//	  audited_loop.save_approved_response:
+	//	    saved: false
+	Messages map[string]MessageExpectation `json:"messages,omitempty" yaml:"messages,omitempty"`
+}
+
+// MessageExpectation asserts on the messages one node saved during a run.
+type MessageExpectation struct {
+	// Saved: true requires at least one saved message, false requires none
+	// (the condition was false, the node never ran, or the message was
+	// content-free). Omit to assert only on content.
+	Saved *bool `json:"saved,omitempty" yaml:"saved,omitempty"`
+
+	// Count, when set, is the exact number of messages the node saved (a
+	// node inside a loop saves once per iteration).
+	Count *int `json:"count,omitempty" yaml:"count,omitempty"`
+
+	// Role, when set, must equal the role of every saved message.
+	Role string `json:"role,omitempty" yaml:"role,omitempty"`
+
+	// ContentContains: each string must appear in at least one saved
+	// message's content.
+	ContentContains []string `json:"content_contains,omitempty" yaml:"content_contains,omitempty"`
+
+	// ContentNotContains: no saved message's content may contain any of these.
+	ContentNotContains []string `json:"content_not_contains,omitempty" yaml:"content_not_contains,omitempty"`
+}
+
+// SavedMessage is one message a run saved, as resolved by the runtime.
+type SavedMessage struct {
+	Node    string `json:"node"`
+	Role    string `json:"role"`
+	Content string `json:"content"`
 }
 
 // Scenario defines a complete test case for a workflow.
@@ -312,6 +359,11 @@ type ExecutionDetails struct {
 	DurationMs      int64                             `json:"duration_ms"`
 	NodeOutputs     map[string]map[string]interface{} `json:"node_outputs,omitempty"`     // Actual outputs from each node
 	WorkflowOutputs map[string]interface{}            `json:"workflow_outputs,omitempty"` // Evaluated workflow-level outputs (nil if none declared)
+
+	// SavedMessages lists every message the run saved, in order. Nil means
+	// the backend does not observe saves (the fast simulator); empty means
+	// it does and nothing was saved.
+	SavedMessages []SavedMessage `json:"saved_messages,omitempty"`
 }
 
 // ErrorDetails contains information about an error that occurred

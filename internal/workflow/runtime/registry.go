@@ -440,6 +440,18 @@ type ActivityWrapper[I any, O any] struct {
 	activity   func(ctx context.Context, input I) (O, error)
 	repo       db.Repository
 	workKind   lifecycle.WorkKind
+	// messageWriter supplies the writer for a delegated save_message (see
+	// activity_message_save.go). A func so the registry's writer is read at
+	// execution time, not captured at registration.
+	messageWriter func() MessageWriter
+}
+
+// writer returns the injected message writer, or nil.
+func (w *ActivityWrapper[I, O]) writer() MessageWriter {
+	if w.messageWriter == nil {
+		return nil
+	}
+	return w.messageWriter()
 }
 
 // NewActivityWrapper creates a new type-safe activity wrapper.
@@ -799,6 +811,41 @@ func (w *ActivityWrapper[I, O]) Execute(ctx context.Context, input I) (O, error)
 
 		return zeroOutput, execErr
 	}
+
+	// Rule 1: the node's save_message is written here, by the executor of
+	// the node, before the result is handed back. A write that cannot be
+	// completed fails the activity so Temporal retries it; the message is
+	// never silently dropped.
+	//
+	// Not for a cancelled activity. An interrupted turn returns its partial
+	// with a nil error, persists that partial itself (CallLLM's
+	// persistInterruptedTurn), and the workflow discards a cancelled
+	// activity's result — the step is re-dispatched and the re-run saves.
+	// Saving here would write on a dead context, fail, and report the user's
+	// own pause as a chat error.
+	if ctx.Err() != nil {
+		logging.Info("[ActivityWrapper] Activity context cancelled; skipping node save_message",
+			"activityType", activityType,
+			"activityID", activityID,
+			"stepID", stepID)
+	} else if saveErr := w.saveActivityMessage(ctx, input, inputInfo, info, result); saveErr != nil {
+		logging.Warn("[ActivityWrapper] Node save_message failed; failing the activity so it retries",
+			"activityType", activityType,
+			"activityID", activityID,
+			"stepID", stepID,
+			"attemptNumber", attemptNumber,
+			"error", saveErr)
+		w.writeErrorEvent(ctx, input, activityType, activityID, attemptNumber, workflowID, saveErr, maxAttempts)
+		w.writeStepExecution(ctx, workflowID, stepID, activityType, nil, saveErr, durationMs, inputInfo.LoopNodeID, inputInfo.LoopIteration)
+		errMsg := saveErr.Error()
+		w.emitNodeExecutionEvent(ctx, "failed", false, stepID, activityType, chatID, workflowID, activityID, &startTime, &endTime, &durationMs, nil, &errMsg)
+		return zeroOutput, saveErr
+	}
+
+	// Rule 2: message-only fields were persisted with the message above (or
+	// had no message to go to); either way they never go back to the
+	// workflow.
+	clearMessageOnlyFields(&result)
 
 	logging.Info("[ActivityWrapper] Activity execution completed",
 		"activityType", activityType,
@@ -1638,6 +1685,8 @@ type ActivityRegistry struct {
 	repo        db.Repository
 	activities  map[string]interface{}  // activity name -> wrapped activity function
 	outputTypes map[string]reflect.Type // activity name -> output type for schema introspection
+	// messageWriter writes a node's delegated save_message; see SetMessageWriter.
+	messageWriter MessageWriter
 }
 
 // NewActivityRegistry creates a new activity registry
@@ -1696,18 +1745,48 @@ func registerActivityInternal[TInput any, TOutput any](
 	kind lifecycle.WorkKind,
 ) {
 	name := act.Name()
+	wrappedFn := wrapActivity(registry, name, act.Execute, kind)
 
+	// Store the wrapped function and output type
+	registry.activities[name] = wrappedFn
+
+	// Store output type for schema introspection (enables GetOutputDefaults)
+	var o TOutput
+	registry.outputTypes[name] = reflect.TypeOf(o)
+
+	// Register input/output types with schema for static validation.
+	// This enables validation of activity input field names and output field references.
+	//
+	// NOTE: Some activities (e.g., V2_CallLLM) pre-register in init() with flat input types
+	// to allow workflows to use args like `model: "claude-4-sonnet"` instead of nested
+	// `node: { model: "..." }`. Don't overwrite those registrations.
+	if !schema.IsActivityTypeRegistered(name) {
+		var i TInput
+		schema.RegisterActivityType(name, reflect.TypeOf(i), reflect.TypeOf(o))
+	}
+}
+
+// wrapActivity builds the function registered with Temporal for one activity:
+// the ActivityWrapper (heartbeat, panic recovery, step rows, node events, the
+// delegated save_message, message-only stripping) plus error classification.
+func wrapActivity[TInput any, TOutput any](
+	registry *ActivityRegistry,
+	name string,
+	execute func(context.Context, TInput) (TOutput, error),
+	kind lifecycle.WorkKind,
+) func(context.Context, TInput) (TOutput, error) {
 	// Create an ActivityWrapper that handles:
 	// - Heartbeating for fast cancellation detection
 	// - Panic recovery with proper error propagation
 	// - Chat updates dual-write for UI tracking
 	// - Structured logging and observability
-	wrapper := NewActivityWrapper(name, act.Execute, registry.repo)
+	wrapper := NewActivityWrapper(name, execute, registry.repo)
 	wrapper.workKind = kind
+	wrapper.messageWriter = func() MessageWriter { return registry.messageWriter }
 
 	// Wrap with error classification middleware
 	// The function signature matches what Temporal expects for typed activities
-	wrappedFn := func(ctx context.Context, input TInput) (TOutput, error) {
+	return func(ctx context.Context, input TInput) (TOutput, error) {
 		// Pre-execution middleware (logging)
 		logger := getActivityLogger(ctx)
 		activityInfo := activity.GetInfo(ctx)
@@ -1744,24 +1823,6 @@ func registerActivityInternal[TInput any, TOutput any](
 		logger.Info("[Workflow Runtime Registry] Activity completed", "activity", name)
 
 		return output, nil
-	}
-
-	// Store the wrapped function and output type
-	registry.activities[name] = wrappedFn
-
-	// Store output type for schema introspection (enables GetOutputDefaults)
-	var o TOutput
-	registry.outputTypes[name] = reflect.TypeOf(o)
-
-	// Register input/output types with schema for static validation.
-	// This enables validation of activity input field names and output field references.
-	//
-	// NOTE: Some activities (e.g., V2_CallLLM) pre-register in init() with flat input types
-	// to allow workflows to use args like `model: "claude-4-sonnet"` instead of nested
-	// `node: { model: "..." }`. Don't overwrite those registrations.
-	if !schema.IsActivityTypeRegistered(name) {
-		var i TInput
-		schema.RegisterActivityType(name, reflect.TypeOf(i), reflect.TypeOf(o))
 	}
 }
 

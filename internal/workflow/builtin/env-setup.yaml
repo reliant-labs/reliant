@@ -1233,6 +1233,9 @@ nodes:
                 Follow your system prompt validation protocol steps 1-9 systematically.
                 Submit your grade via the submit_validation tool.
           save_message:
+            # No submitted grade means nothing to report; the loop's while
+            # condition handles the missing verdict.
+            condition: "has(output.response) && output.response != null"
             role: assistant
             content: |
               ## Validation: {{output.response.grade}}

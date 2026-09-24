@@ -186,6 +186,10 @@ type Repository interface {
 	// this cannot return another thread's children), joined to each child's
 	// live workflow/thread state. Backs spawn_status's listing mode.
 	ListSpawnChildren(ctx context.Context, threadID string) ([]*SpawnChild, error)
+	// ListLiveBackgroundSpawns returns every background spawn issued anywhere
+	// in a root execution that has not reported back — the spawns a coarse
+	// fresh restart of that root must relaunch.
+	ListLiveBackgroundSpawns(ctx context.Context, rootWorkflowID string) ([]*LiveBackgroundSpawn, error)
 	// SpawnToolCallIDsByChildThread maps child thread id -> the spawn tool
 	// call that started it, for one chat. threads has no
 	// spawned_by_tool_call_id column, so the reconnect snapshot recovers the

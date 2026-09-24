@@ -168,10 +168,11 @@ func mustParseInt64(t *testing.T, s string) int64 {
 	return n
 }
 
-// TestListWorkflowsMarksBrokenDraftInvalid ties (a) to the discovery surface:
-// once an edit persists is_valid=false the workflow drops out of the usable
-// list entirely, rather than continuing to render a ✓.
-func TestListWorkflowsMarksBrokenDraftInvalid(t *testing.T) {
+// TestListWorkflowsHidesStaleInvalidDraft: a draft stored with is_valid=true
+// whose definition fails validation TODAY (the validator got stricter after it
+// was saved) must not be offered. list_workflows validates on read; the stored
+// flag alone would keep rendering a ✓ for a workflow run start rejects.
+func TestListWorkflowsHidesStaleInvalidDraft(t *testing.T) {
 	t.Parallel()
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
@@ -179,17 +180,11 @@ func TestListWorkflowsMarksBrokenDraftInvalid(t *testing.T) {
 	draft := createValidPersistDraft(t, repo)
 	require.Contains(t, runListWorkflows(t, repo, ""), draft.Slug)
 
-	inputJSON, err := json.Marshal(EditWorkflowParams{
-		ID:        draft.ID,
-		OldString: "entry: [agent]",
-		NewString: "entry: [no-such-node]",
-	})
-	require.NoError(t, err)
-	_, err = NewEditWorkflowTool(repo).Run(createTestContext(t, ""), ToolCall{
-		ID: "break", Name: EditWorkflowToolName, Input: string(inputJSON),
-	})
-	require.NoError(t, err)
+	// Simulate staleness directly in the row: broken content, stored flag
+	// still claiming valid. (The editing tools can no longer produce this.)
+	broken := strings.Replace(draft.Definition, "entry: [agent]", "entry: [no-such-node]", 1)
+	require.NoError(t, repo.UpdateWorkflowDraftDefinition(context.Background(), draft.ID, draft.Name, draft.Slug, broken, true, nil))
 
 	assert.NotContains(t, runListWorkflows(t, repo, ""), draft.Slug,
-		"list_workflows reads ListUsableWorkflowsByUser, which filters is_valid = 1")
+		"a draft that fails validation now must be hidden even though its stored is_valid is true")
 }

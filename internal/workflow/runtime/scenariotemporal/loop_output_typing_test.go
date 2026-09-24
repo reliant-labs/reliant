@@ -395,8 +395,10 @@ func TestTypeErrorsStillRaise(t *testing.T) {
 
 	cases := map[string]string{
 		"arithmetic on a string input": "{{inputs.max_turns - 1}}",
-		"size of a null field":         "{{size(nodes.call_llm.response_data)}}",
-		"arithmetic on a node field":   "{{nodes.call_llm.response_text - 1}}",
+		// size(null) is 0 (wfcel.StdLib), but nothing else about null is
+		// lenient: concatenating a null field is still a type error.
+		"concat onto a null field":   "{{nodes.call_llm.response_data + 'x'}}",
+		"arithmetic on a node field": "{{nodes.call_llm.response_text - 1}}",
 	}
 
 	for name, expr := range cases {
@@ -409,6 +411,21 @@ func TestTypeErrorsStillRaise(t *testing.T) {
 			require.Error(t, err, "a type error is wrong, not absent — it must still fail loudly")
 		})
 	}
+}
+
+// size(null) is 0 at every CEL site (wfcel.StdLib): a null field has no
+// elements. This is the one null leniency; the case above pins that the
+// others still raise.
+func TestSizeOfNullFieldIsZero(t *testing.T) {
+	t.Parallel()
+	outputs := map[string]string{"n": "{{size(nodes.call_llm.response_data)}}"}
+	wf := callLLMWorkflow(outputs)
+	nodeOutputs := map[string]interface{}{
+		"call_llm": map[string]interface{}{"response_data": nil},
+	}
+	got, err := runtime.EvaluateDeclaredOutputs(outputs, nodeOutputs, map[string]interface{}{}, wf, nil)
+	require.NoError(t, err)
+	require.EqualValues(t, 0, got["n"])
 }
 
 // A misspelled node id must keep raising rather than resolving to a zero. This

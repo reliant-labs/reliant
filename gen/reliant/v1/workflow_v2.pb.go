@@ -843,8 +843,9 @@ func (*CelDaemonSelector_Expr) isCelDaemonSelector_Value() {}
 // save_message saves to the PARENT workflow's thread, not the child's thread.
 type SaveMessageConfig struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Condition is a CEL expression that must evaluate to true for the message to be saved.
-	Condition *CelString `protobuf:"bytes,1,opt,name=condition,proto3" json:"condition,omitempty"`
+	// Condition is a raw CEL expression (no {{ }}) over output, inputs, workflow
+	// and iter that must evaluate to bool; the message is saved only when true.
+	Condition *DirectCelBool `protobuf:"bytes,8,opt,name=condition,proto3" json:"condition,omitempty"`
 	// Role is the message role: "user", "assistant", "system", "tool".
 	Role *CelString `protobuf:"bytes,2,opt,name=role,proto3" json:"role,omitempty"`
 	// Content is the message text content.
@@ -891,7 +892,7 @@ func (*SaveMessageConfig) Descriptor() ([]byte, []int) {
 	return file_reliant_v1_workflow_v2_proto_rawDescGZIP(), []int{11}
 }
 
-func (x *SaveMessageConfig) GetCondition() *CelString {
+func (x *SaveMessageConfig) GetCondition() *DirectCelBool {
 	if x != nil {
 		return x.Condition
 	}
@@ -5206,14 +5207,17 @@ func (x *ThinkingOutput) GetRedacted() string {
 
 // CallLLMOutput is the output from call_llm nodes.
 type CallLLMOutput struct {
-	state              protoimpl.MessageState `protogen:"open.v1"`
-	Message            *MessageOutput         `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
-	ResponseText       string                 `protobuf:"bytes,2,opt,name=response_text,json=responseText,proto3" json:"response_text,omitempty"`
-	ToolCalls          []*ToolCallMsg         `protobuf:"bytes,3,rep,name=tool_calls,json=toolCalls,proto3" json:"tool_calls,omitempty"`
-	TokenCount         int32                  `protobuf:"varint,4,opt,name=token_count,json=tokenCount,proto3" json:"token_count,omitempty"`
-	Thinking           *ThinkingOutput        `protobuf:"bytes,5,opt,name=thinking,proto3" json:"thinking,omitempty"`
-	UpstreamRequestId  string                 `protobuf:"bytes,6,opt,name=upstream_request_id,json=upstreamRequestId,proto3" json:"upstream_request_id,omitempty"`    // Provider request correlation ID (e.g. x-oai-request-id)
-	UpstreamProxymanId string                 `protobuf:"bytes,7,opt,name=upstream_proxyman_id,json=upstreamProxymanId,proto3" json:"upstream_proxyman_id,omitempty"` // Proxyman flow correlation ID (e.g. x-proxyman-id)
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	Message      *MessageOutput         `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
+	ResponseText string                 `protobuf:"bytes,2,opt,name=response_text,json=responseText,proto3" json:"response_text,omitempty"`
+	ToolCalls    []*ToolCallMsg         `protobuf:"bytes,3,rep,name=tool_calls,json=toolCalls,proto3" json:"tool_calls,omitempty"`
+	TokenCount   int32                  `protobuf:"varint,4,opt,name=token_count,json=tokenCount,proto3" json:"token_count,omitempty"`
+	// Thinking is persisted with the assistant message by the worker-side
+	// save_message and then stripped from the result the workflow receives:
+	// signatures are large, and nothing in a workflow reads them.
+	Thinking           *ThinkingOutput `protobuf:"bytes,5,opt,name=thinking,proto3" json:"thinking,omitempty"`
+	UpstreamRequestId  string          `protobuf:"bytes,6,opt,name=upstream_request_id,json=upstreamRequestId,proto3" json:"upstream_request_id,omitempty"`    // Provider request correlation ID (e.g. x-oai-request-id)
+	UpstreamProxymanId string          `protobuf:"bytes,7,opt,name=upstream_proxyman_id,json=upstreamProxymanId,proto3" json:"upstream_proxyman_id,omitempty"` // Proxyman flow correlation ID (e.g. x-proxyman-id)
 	// Structured data from a response_tool call. When the node is configured with a
 	// response_tool and the LLM returns a tool call to it, CallLLM parses the tool
 	// call input JSON and stores it here. Consumers can read this directly instead
@@ -6876,9 +6880,10 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\x11CelDaemonSelector\x12;\n" +
 	"\aliteral\x18\x01 \x01(\v2\x1f.reliant.v1.DaemonSelectorProtoH\x00R\aliteral\x12\x14\n" +
 	"\x04expr\x18\x02 \x01(\tH\x00R\x04exprB\a\n" +
-	"\x05value\"\xed\x03\n" +
-	"\x11SaveMessageConfig\x123\n" +
-	"\tcondition\x18\x01 \x01(\v2\x15.reliant.v1.CelStringR\tcondition\x12)\n" +
+	"\x05value\"\xd7\x04\n" +
+	"\x11SaveMessageConfig\x12\x96\x01\n" +
+	"\tcondition\x18\b \x01(\v2\x19.reliant.v1.DirectCelBoolB]\x82\xb5\x18Y\n" +
+	"WRaw CEL condition (no {{ }}) that must return bool; the message is saved only when trueR\tcondition\x12)\n" +
 	"\x04role\x18\x02 \x01(\v2\x15.reliant.v1.CelStringR\x04role\x12/\n" +
 	"\acontent\x18\x03 \x01(\v2\x15.reliant.v1.CelStringR\acontent\x124\n" +
 	"\n" +
@@ -6886,7 +6891,7 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\ftool_results\x18\x05 \x01(\v2\x15.reliant.v1.CelStringR\vtoolResults\x12\x92\x01\n" +
 	"\vattachments\x18\x06 \x01(\v2\x15.reliant.v1.CelStringBY\x82\xb5\x18U\n" +
 	"SAttachment IDs to attach to the saved message. CEL expression must return []string.R\vattachments\x12B\n" +
-	"\rdisplay_style\x18\a \x01(\v2\x15.reliant.v1.CelStringB\x06\x82\xb5\x18\x02 \x01R\fdisplayStyle\"\xa4\x02\n" +
+	"\rdisplay_style\x18\a \x01(\v2\x15.reliant.v1.CelStringB\x06\x82\xb5\x18\x02 \x01R\fdisplayStyleJ\x04\b\x01\x10\x02\"\xa4\x02\n" +
 	"\fThreadConfig\x12X\n" +
 	"\x04mode\x18\x01 \x01(\tBD\x82\xb5\x18@\n" +
 	",Thread mode: inherit (default), new, or fork\x12\x10inherit|new|forkR\x04mode\x12_\n" +
@@ -7346,15 +7351,15 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\x0eThinkingOutput\x12\x18\n" +
 	"\acontent\x18\x01 \x01(\tR\acontent\x12\x1c\n" +
 	"\tsignature\x18\x02 \x01(\tR\tsignature\x12\x1a\n" +
-	"\bredacted\x18\x03 \x01(\tR\bredacted\"\xbf\x05\n" +
+	"\bredacted\x18\x03 \x01(\tR\bredacted\"\xc7\x05\n" +
 	"\rCallLLMOutput\x123\n" +
 	"\amessage\x18\x01 \x01(\v2\x19.reliant.v1.MessageOutputR\amessage\x12#\n" +
 	"\rresponse_text\x18\x02 \x01(\tR\fresponseText\x126\n" +
 	"\n" +
 	"tool_calls\x18\x03 \x03(\v2\x17.reliant.v1.ToolCallMsgR\ttoolCalls\x12\x1f\n" +
 	"\vtoken_count\x18\x04 \x01(\x05R\n" +
-	"tokenCount\x126\n" +
-	"\bthinking\x18\x05 \x01(\v2\x1a.reliant.v1.ThinkingOutputR\bthinking\x12.\n" +
+	"tokenCount\x12>\n" +
+	"\bthinking\x18\x05 \x01(\v2\x1a.reliant.v1.ThinkingOutputB\x06\x82\xb5\x18\x02x\x01R\bthinking\x12.\n" +
 	"\x13upstream_request_id\x18\x06 \x01(\tR\x11upstreamRequestId\x120\n" +
 	"\x14upstream_proxyman_id\x18\a \x01(\tR\x12upstreamProxymanId\x12<\n" +
 	"\rresponse_data\x18\b \x01(\v2\x17.google.protobuf.StructR\fresponseData\x12\x12\n" +
@@ -7615,7 +7620,7 @@ var file_reliant_v1_workflow_v2_proto_depIdxs = []int32{
 	8,   // 1: reliant.v1.CelModelSelector.literal:type_name -> reliant.v1.ModelSelector
 	80,  // 2: reliant.v1.DaemonSelectorProto.labels:type_name -> reliant.v1.DaemonSelectorProto.LabelsEntry
 	9,   // 3: reliant.v1.CelDaemonSelector.literal:type_name -> reliant.v1.DaemonSelectorProto
-	0,   // 4: reliant.v1.SaveMessageConfig.condition:type_name -> reliant.v1.CelString
+	6,   // 4: reliant.v1.SaveMessageConfig.condition:type_name -> reliant.v1.DirectCelBool
 	0,   // 5: reliant.v1.SaveMessageConfig.role:type_name -> reliant.v1.CelString
 	0,   // 6: reliant.v1.SaveMessageConfig.content:type_name -> reliant.v1.CelString
 	0,   // 7: reliant.v1.SaveMessageConfig.tool_calls:type_name -> reliant.v1.CelString

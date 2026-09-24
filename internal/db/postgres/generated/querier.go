@@ -397,6 +397,23 @@ type Querier interface {
 	ListDependenciesByPlan(ctx context.Context, planID string) ([]TaskDependency, error)
 	ListHiddenItemDefaults(ctx context.Context, itemType int32) ([]ListHiddenItemDefaultsRow, error)
 	ListItemDefaults(ctx context.Context, itemType int32) ([]ListItemDefaultsRow, error)
+	// Every background spawn issued anywhere inside one root execution that is
+	// still open: tool_calls.status = 6 (backgrounded) and no terminal report in
+	// its parent's mailbox. A background spawn is a goroutine inside the ROOT's
+	// Temporal execution — at every depth — so when that execution dies (the
+	// history-limit terminate is the case this exists for) these are exactly the
+	// spawns the coarse fresh restart must relaunch.
+	//
+	// Walks the workflow tree from the root: a spawn's child row carries the id
+	// of the workflow that ISSUED it as parent_id (the root for a top-level spawn,
+	// the spawning child's id for a nested one). Deliberately NOT filtered on the
+	// child rows' state: the reconciler's reap may already have marked them
+	// terminal, and that is an echo of the root dying, not of the child
+	// finishing. A spawn the stranded-spawn repair already closed has left status
+	// 6 and has a report, so it is not returned — its parent was told, and
+	// relaunching it would report twice. Ordered parents-before-children (depth),
+	// then by id, so a relaunch registers an issuing spawn before its own.
+	ListLiveBackgroundSpawnsForWorkflow(ctx context.Context, rootWorkflowID string) ([]ListLiveBackgroundSpawnsForWorkflowRow, error)
 	ListMessages(ctx context.Context, chatID string) ([]Message, error)
 	// Messages in a single context window with seq >= from_seq, ascending, and
 	// optionally seq < to_seq (NULL means unbounded above). Used to bound a

@@ -20,6 +20,10 @@ import (
 // execute. A ternary like `iter.iteration == 0 ? "first" : outputs.feedback`
 // fails compilation if outputs is not declared, even though the false branch
 // is never evaluated on iteration 0.
+//
+// Contract: `outputs` is declared exactly when the caller passes non-nil loop
+// outputs. Every loop-body caller passes loopBodyOutputs(prev), which is the
+// empty map at iteration 0; outside a loop body the namespace is undeclared.
 func TestLoopIteration0_OutputsNamespaceDeclared(t *testing.T) {
 	t.Run("ternary guarding outputs compiles on iteration 0", func(t *testing.T) {
 		node := makeProtoTestNode("write_deck", "builtin://agent",
@@ -41,8 +45,8 @@ func TestLoopIteration0_OutputsNamespaceDeclared(t *testing.T) {
 			map[string]interface{}{ // iterContext — loop iteration 0
 				"iteration": 0,
 			},
-			nil, // loopOutputs — nil on iteration 0
-			nil, // execContext
+			loopBodyOutputs(nil), // loopOutputs — no previous iteration yet
+			nil,                  // execContext
 		)
 
 		require.NoError(t, err, "CEL compilation should succeed — outputs must be declared even on iteration 0")
@@ -107,5 +111,17 @@ func TestLoopIteration0_OutputsNamespaceDeclared(t *testing.T) {
 
 		require.Error(t, err, "outputs should not be declared outside of loop context")
 		assert.Contains(t, err.Error(), "outputs")
+	})
+
+	t.Run("outside a loop body outputs is undeclared", func(t *testing.T) {
+		node := makeProtoTestNode("top", "builtin://agent",
+			&reliantv1.InjectConfig{
+				Role:    makeCelLiteral("user"),
+				Content: &reliantv1.CelString{Value: &reliantv1.CelString_Expr{Expr: `{{has(outputs.x) ? "a" : "b"}}`}},
+			}, false)
+		_, err := EvaluateNodeConfig(node, map[string]interface{}{}, "wf", "wf",
+			map[string]interface{}{}, nil, nil, nil)
+		require.Error(t, err, "a top-level node has no loop outputs; outputs.* must not compile")
+		assert.Contains(t, err.Error(), "undeclared reference to 'outputs'")
 	})
 }

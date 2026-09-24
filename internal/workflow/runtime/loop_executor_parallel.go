@@ -170,9 +170,13 @@ func (e *InlineLoopExecutor) evaluateItems() ([]interface{}, error) {
 	}
 
 	// Build CEL context for evaluating the items expression
+	// `items` belongs to the scope the loop node lives in: that scope's nodes,
+	// and the ENCLOSING loop's iter (nil — defaulted — at the top level).
 	evalCtx := &wfcel.EdgeEvalContext{
-		Nodes:  e.nodeOutputs,
-		Inputs: e.workflowInputs,
+		Nodes:    e.nodeOutputs,
+		Inputs:   e.workflowInputs,
+		Workflow: e.celWorkflow(),
+		Iter:     e.enclosingIter(),
 	}
 	rawResult, err := wfcel.EvaluateTemplate(itemsExpr, evalCtx)
 	if err != nil {
@@ -203,6 +207,7 @@ func (e *InlineLoopExecutor) evaluateItems() ([]interface{}, error) {
 // If keyExpr is provided, evaluates it per iteration. Otherwise uses string(index).
 func (e *InlineLoopExecutor) resolveIterationKeys(items []interface{}, keyExpr string) ([]string, error) {
 	keys := make([]string, len(items))
+	workflowCtx := e.celWorkflow()
 
 	for i, item := range items {
 		if keyExpr == "" {
@@ -230,8 +235,10 @@ func (e *InlineLoopExecutor) resolveIterationKeys(items []interface{}, keyExpr s
 			}
 
 			evalCtx := &wfcel.LoopEvalContext{
-				Iter:   iterCtxObj,
-				Inputs: e.workflowInputs,
+				Iter:     iterCtxObj,
+				Inputs:   e.workflowInputs,
+				Nodes:    e.nodeOutputs,
+				Workflow: workflowCtx,
 			}
 			result, err := wfcel.EvaluateTemplate(keyExpr, evalCtx)
 			if err != nil {
@@ -309,7 +316,11 @@ func (e *InlineLoopExecutor) executeParallelIteration(
 	iterNodeOutputs := make(map[string]interface{})
 
 	// Create state machine for sub-workflow
-	iterStateMachine := NewSimplifiedStateMachine(e.workflowID, e.subWorkflow)
+	// Parallel iterations run concurrently: no previous iteration, so the
+	// body's `outputs` is the empty map.
+	parallelScope := loopBodyScope(&model.IterContext{Iteration: index, Index: index, Item: resolvedItem, Key: key}, nil)
+	iterStateMachine := NewSimplifiedStateMachine(e.workflowID, e.subWorkflow).
+		WithLoopScope(func() *LoopScope { return parallelScope })
 
 	// Unique activity ID prefix for this iteration (prevents collision)
 	activityPrefix := fmt.Sprintf("%spar-%s-iter%d-", e.activityIDPrefix, e.loopID, index)
@@ -331,6 +342,9 @@ func (e *InlineLoopExecutor) executeParallelIteration(
 		iterNodeOutputs,
 		e.childTracker,
 	).WithLoopContext(e.loopID, index).
+		// Parallel iterations run concurrently: no previous iteration, so
+		// `outputs` is always the empty map.
+		WithLoopBodyOutputs(nil).
 		WithNodePathPrefix(e.nodePath()).
 		WithExecContext(iterExecContext).
 		WithProjectPath(e.projectPath).
@@ -393,9 +407,7 @@ func (e *InlineLoopExecutor) executeParallelIteration(
 			skipped, skipEvt, condErr := skipNodeIfConditionFalse(
 				gCtx, step.Node, iterNodeOutputs, iterInputs,
 				e.workflowID, e.chatID, e.workflowIdentity(), e.logger,
-				// Parallel iterations run concurrently, so there is no "previous
-				// iteration" to expose as `outputs` — only `iter`.
-				&LoopScope{Iter: &model.IterContext{Iteration: index, Index: index, Item: resolvedItem, Key: key}},
+				parallelScope,
 				e.nodePath(),
 			)
 			if condErr != nil {
@@ -459,7 +471,7 @@ func (e *InlineLoopExecutor) executeParallelIteration(
 
 				evalResult, err := EvaluateNodeConfig(
 					step.Node, iterNodeOutputs, e.workflowID, e.workflowIdentity(),
-					iterInputs, iterCtx, nil, iterExecContext,
+					iterInputs, iterCtx, loopBodyOutputs(nil), iterExecContext,
 				)
 				if err != nil {
 					result.Error = fmt.Errorf("step %s config evaluation failed: %w", step.Node.GetId(), err)
@@ -569,11 +581,14 @@ func (e *InlineLoopExecutor) executeParallelIteration(
 
 				// Execute save_message if configured
 				if step.Node.GetSaveMessage() != nil {
-					_, _ = ExecuteSaveMessageForNode(
-						gCtx, step.Node, inlineOutput, iterNodeOutputs,
+					if _, err := ExecuteSaveMessageForNode(
+						gCtx, step.Node, inlineOutput,
 						e.workflowID, e.workflowIdentity(), e.chatID,
 						iterInputs, iterExecContext, e.loopID, index,
-					)
+					); err != nil {
+						result.Error = fmt.Errorf("save_message for inline workflow %s: %w", step.Node.GetId(), err)
+						return result
+					}
 				}
 
 				events = append(events, &core.WorkflowEvent{
@@ -597,7 +612,7 @@ func (e *InlineLoopExecutor) executeParallelIteration(
 					step.Node, iterNodeOutputs, iterInputs,
 					e.workflowID, e.workflowIdentity(),
 					model.BuildParallelIterContext(index, resolvedItem, key),
-					nil, // concurrent iterations have no "previous iteration" outputs
+					loopBodyOutputs(nil), // concurrent iterations have no "previous iteration" outputs
 					iterExecContext, e.chatID,
 					e.loopID, index,
 					joinNodePath(e.nodePath(), step.Node.GetId()),
@@ -703,7 +718,7 @@ func (e *InlineLoopExecutor) buildParallelIterationInputs(
 		e.workflowIdentity(),
 		e.workflowInputs,
 		iterCtx,
-		nil,
+		loopBodyOutputs(nil),
 		e.execContext,
 	)
 	if err != nil {
@@ -713,14 +728,16 @@ func (e *InlineLoopExecutor) buildParallelIterationInputs(
 	iterInputs := make(map[string]interface{})
 	if len(model.GetLoopArgs(e.loopStep.Node).GetPresets()) > 0 {
 		presetEvalCtx := &wfcel.EdgeEvalContext{
-			Nodes:  e.nodeOutputs,
-			Inputs: e.workflowInputs,
+			Nodes:    e.nodeOutputs,
+			Inputs:   e.workflowInputs,
+			Workflow: e.celWorkflow(),
 			Iter: &model.IterContext{
 				Iteration: index,
 				Index:     index,
 				Item:      item,
 				Key:       key,
 			},
+			Outputs: loopBodyOutputs(nil),
 		}
 		if err := e.loadAndMergePresets(ctx, iterInputs, presetEvalCtx); err != nil {
 			e.logger.Warn("[InlineLoop] Failed to load presets for parallel iteration",
@@ -806,7 +823,7 @@ func (e *InlineLoopExecutor) buildParallelIterExecContext(
 				e.workflowIdentity(),
 				e.workflowInputs,
 				iterCtx,
-				nil,
+				loopBodyOutputs(nil),
 				e.execContext,
 			)
 			if err != nil {

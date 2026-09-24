@@ -370,7 +370,7 @@ Use ` + "`condition`" + ` to skip nodes based on runtime state:
 ` + "```yaml" + `
 - id: cleanup
   type: run
-  condition: "{{nodes.process.exit_code != 0}}"
+  condition: "nodes.process.exit_code != 0"
   run: "rm -rf temp/"
 ` + "```" + `
 

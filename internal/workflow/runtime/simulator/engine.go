@@ -186,6 +186,9 @@ func (e *Engine) RunScenario(scenario *Scenario) *ScenarioResult {
 	// Surface false-pass hazards regardless of status: the whole point is that
 	// the run may have passed while never exercising what it claims to.
 	result.Warnings = AnalyzeFalsePasses(scenario, e.workflow, &execution, WorkflowRefLoader(e.workflowLoader), routerMocks)
+	if w := messagesUnverifiedWarning(scenario, &execution); w != "" {
+		result.Warnings = append(result.Warnings, w)
+	}
 
 	// Check for unconsumed events - indicates misconfigured scenario
 	unconsumed := mockerState.UnconsumedEvents()
@@ -531,6 +534,8 @@ func CheckExpectations(expect *Expectation, execution *ExecutionDetails) []strin
 				fmt.Sprintf("expected error at node %q but error occurred at %q", expect.ErrorNode, execution.Error.Node))
 		}
 	}
+
+	mismatches = append(mismatches, checkMessageExpectations(expect.Messages, execution.SavedMessages)...)
 
 	// Check workflow-level outputs (dotted paths into structured values)
 	for path, expectedValue := range expect.Outputs {

@@ -10,6 +10,14 @@ description: |
 
 entry: [conversation]
 
+# The conversation's final assistant turn — the same contract as
+# builtin://agent. Without declared outputs a ref publishes its raw node map
+# ({conversation: …}), so callers reading `response_text` (build-workflow's
+# scope_conversation.save_message) failed with "no such key".
+outputs:
+  message: "{{nodes.conversation.message}}"
+  response_text: "{{nodes.conversation.response_text}}"
+
 inputs:
   model:
     type: model

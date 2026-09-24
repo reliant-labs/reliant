@@ -113,6 +113,18 @@ type InlineLoopExecutor struct {
 	// continuing as new ends the whole execution, so a nested loop must never
 	// be able to trigger it.
 	continueAsNewCheck func(iteration int) error
+
+	// continueAsNewAwaitCheck is continueAsNewCheck for the moment the loop
+	// is PARKED in awaitLiveDetachedSpawns: a thread waiting on its spawns
+	// takes no iteration boundary, so without this the handoff could never
+	// fire while it waits (chat 0e15fdba: no check ran for the whole wait).
+	// Set alongside continueAsNewCheck, top-level loops only.
+	continueAsNewAwaitCheck func(iteration int) error
+
+	// awaitSpawnsFirst makes the first pass of a resumed loop wait on the
+	// thread's (relaunched) background spawns before taking a turn: the
+	// predecessor was parked there, not about to call the LLM.
+	awaitSpawnsFirst bool
 }
 
 // threadForError is the thread this loop's failures belong to, or "" when the
@@ -263,6 +275,35 @@ func (e *InlineLoopExecutor) WithContinueAsNewCheck(fn func(iteration int) error
 	return e
 }
 
+// WithContinueAsNewAwaitCheck sets the handoff check evaluated while the loop
+// is parked in awaitLiveDetachedSpawns. Only DynamicWorkflow sets this.
+func (e *InlineLoopExecutor) WithContinueAsNewAwaitCheck(fn func(iteration int) error) *InlineLoopExecutor {
+	e.continueAsNewAwaitCheck = fn
+	return e
+}
+
+// WithAwaitSpawnsFirst makes the loop wait on its thread's background spawns
+// before its first iteration (resume of a predecessor that was parked there).
+func (e *InlineLoopExecutor) WithAwaitSpawnsFirst(await bool) *InlineLoopExecutor {
+	e.awaitSpawnsFirst = await
+	return e
+}
+
+// spawnHandoffRecord is the live background spawn whose OWN agent loop this
+// is, or nil. A spawn runs builtin://agent under a node named
+// spawnNodeID(toolCallID) (runSpawnInlineChild), so its agent loop is exactly
+// the loop whose path prefix is that node and whose thread is the spawn's
+// child thread. Loops nested inside its body have a longer prefix and are not
+// park points: the spawn parks at its own loop's boundary, like the top-level
+// loop does.
+func (e *InlineLoopExecutor) spawnHandoffRecord() *detachedSpawnRecord {
+	rec := e.childTracker.liveSpawnFor(e.GetThread())
+	if rec == nil || e.nodePathPrefix != spawnNodeID(rec.ToolCallID) {
+		return nil
+	}
+	return rec
+}
+
 // WithInvocationContract sets the core semantic contract for this loop invocation.
 func (e *InlineLoopExecutor) WithInvocationContract(contract core.SubWorkflowContract) *InlineLoopExecutor {
 	e.invocationContract = &contract
@@ -321,12 +362,28 @@ func (e *InlineLoopExecutor) GetThread() string {
 // signal wake, never a new activity. This is the "MUST NOT SPIN" requirement
 // — asserted directly in the loop-lifetime test (see spawn_test.go).
 func (e *InlineLoopExecutor) awaitLiveDetachedSpawns() bool {
+	resume, _ := e.awaitLiveDetachedSpawnsOrHandoff()
+	return resume
+}
+
+// awaitLiveDetachedSpawnsOrHandoff is awaitLiveDetachedSpawns plus the two
+// continue-as-new exits a parked thread must still be able to take:
+//
+//   - a top-level loop (continueAsNewAwaitCheck set) returns the ContinueAsNew
+//     error once every live spawn has parked for the handoff;
+//   - a background spawn's own agent loop returns errSpawnHandoff as soon as
+//     a handoff is requested — it is parked on ITS children, which is a
+//     boundary, so it parks immediately (spec step 5).
+//
+// Both are evaluated inside the Await predicate because that is the only
+// thing Temporal re-evaluates while the goroutine is parked.
+func (e *InlineLoopExecutor) awaitLiveDetachedSpawnsOrHandoff() (bool, error) {
 	if e.childTracker == nil {
-		return false
+		return false, nil
 	}
 	thread := e.GetThread()
 	if thread == "" || !e.childTracker.hasLiveDetachedSpawns(thread) {
-		return false
+		return false, nil
 	}
 
 	// A cancel that arrives while this thread is parked must be observed
@@ -354,7 +411,27 @@ func (e *InlineLoopExecutor) awaitLiveDetachedSpawns() bool {
 			"loopID", e.loopID,
 			"thread", thread,
 		)
-		return false
+		return false, nil
+	}
+
+	spawnRec := e.spawnHandoffRecord()
+	var handoffErr error
+	handoffNow := func() bool {
+		if handoffErr != nil {
+			return true
+		}
+		if spawnRec != nil {
+			e.childTracker.refreshHandoffRequest(e.ctx)
+			if e.childTracker.handoffRequested {
+				handoffErr = e.parkSpawn(spawnRec, e.iteration, true)
+				return true
+			}
+			return false
+		}
+		if e.continueAsNewAwaitCheck != nil {
+			handoffErr = e.continueAsNewAwaitCheck(e.iteration)
+		}
+		return handoffErr != nil
 	}
 
 	startCompletions := e.childTracker.detachedCompletionCount(thread)
@@ -367,6 +444,7 @@ func (e *InlineLoopExecutor) awaitLiveDetachedSpawns() bool {
 		// inside the predicate because that is the only thing Temporal
 		// re-evaluates while the goroutine is parked.
 		return e.pauseCtrl.IsCancelled() ||
+			handoffNow() ||
 			threadInterrupt.InterruptedSince(startInterruptEpoch) ||
 			e.childTracker.detachedCompletionCount(thread) > startCompletions ||
 			e.childTracker.threadWakeCount(thread) > startWakes ||
@@ -375,7 +453,10 @@ func (e *InlineLoopExecutor) awaitLiveDetachedSpawns() bool {
 		// Workflow cancellation while waiting — let the normal cancellation
 		// path (checked at the top of the next iteration, or the caller
 		// unwinding) handle it; there is nothing more to wait for here.
-		return false
+		return false, nil
+	}
+	if handoffErr != nil && !e.pauseCtrl.IsCancelled() {
+		return false, handoffErr
 	}
 	// Distinguish "something finished" from "nothing left to wait on" (spec
 	// §6.3's `completed > 0` vs `pending == 0` split): waking only because
@@ -402,11 +483,29 @@ func (e *InlineLoopExecutor) awaitLiveDetachedSpawns() bool {
 	// loop to re-enter and deliver that result. The boundary check stops the
 	// thread either way, but saying so here keeps the answer unambiguous.
 	if e.pauseCtrl.IsCancelled() {
-		return false
+		return false, nil
 	}
 	return threadInterrupt.InterruptedSince(startInterruptEpoch) ||
 		e.childTracker.detachedCompletionCount(thread) > startCompletions ||
-		e.childTracker.threadWakeCount(thread) > startWakes
+		e.childTracker.threadWakeCount(thread) > startWakes, nil
+}
+
+// parkSpawn records a background spawn as parked at iteration for the
+// continue-as-new handoff and returns errSpawnHandoff. awaitingChildren marks
+// a spawn parked on its OWN background spawns, whose relaunched loop must wait
+// on them again before taking a turn.
+func (e *InlineLoopExecutor) parkSpawn(rec *detachedSpawnRecord, iteration int, awaitingChildren bool) error {
+	rec.parked = true
+	rec.handoff.LoopIteration = iteration
+	rec.handoff.AwaitSpawnsFirst = awaitingChildren
+	e.logger.Info("[InlineLoop] Background spawn parked for continue-as-new handoff",
+		"loopID", e.loopID,
+		"thread", e.GetThread(),
+		"toolCallID", rec.ToolCallID,
+		"iteration", iteration,
+		"awaitingChildren", awaitingChildren,
+	)
+	return errSpawnHandoff
 }
 
 func (e *InlineLoopExecutor) inputPolicy() core.InputPolicy {
@@ -654,6 +753,16 @@ func (e *InlineLoopExecutor) execute() (*reliantv1.LoopOutput, error) {
 	// Track outputs from the last iteration
 	var lastIterationOutputs map[string]interface{}
 
+	// A background spawn relaunched by a successor execution resumes its
+	// agent loop at the boundary it was carried from. Consumed once, so a
+	// transient-error retry of the spawn starts over like any spawn retry.
+	spawnRec := e.spawnHandoffRecord()
+	if spawnRec != nil && spawnRec.resumeArmed {
+		spawnRec.resumeArmed = false
+		e.startIteration = spawnRec.handoff.LoopIteration
+		e.awaitSpawnsFirst = spawnRec.handoff.AwaitSpawnsFirst
+	}
+
 	// Resume-at-position: begin at the checkpointed iteration instead of 0.
 	// Guarded on e.iteration == 0 so a re-Execute() of the same executor never
 	// rewinds real progress. Pause no longer causes such a re-Execute (it is
@@ -673,6 +782,16 @@ func (e *InlineLoopExecutor) execute() (*reliantv1.LoopOutput, error) {
 		"subWorkflowNodes", len(e.subWorkflow.GetNodes()),
 		"subWorkflowEdges", len(e.subWorkflow.GetEdges()),
 	)
+
+	// A resumed loop whose predecessor was parked waiting on its spawns
+	// waits on the relaunched ones before taking a turn. If nothing is live
+	// (they all finished, or none relaunched) it simply proceeds.
+	if e.awaitSpawnsFirst {
+		e.awaitSpawnsFirst = false
+		if _, err := e.awaitLiveDetachedSpawnsOrHandoff(); err != nil {
+			return nil, err
+		}
+	}
 
 	// Main loop - continues while 'while' condition is true
 	for {
@@ -750,6 +869,20 @@ func (e *InlineLoopExecutor) execute() (*reliantv1.LoopOutput, error) {
 			}
 		}
 
+		// A background spawn's agent loop parks here — the same boundary,
+		// after the same checkpoint-equivalent bookkeeping and before any
+		// work — when a handoff has been requested. Otherwise it records
+		// this boundary, which is where the hard backstop carries it from
+		// if it has not parked by then.
+		if spawnRec != nil {
+			spawnRec.handoff.LoopIteration = e.iteration
+			spawnRec.handoff.AwaitSpawnsFirst = false
+			e.childTracker.refreshHandoffRequest(e.ctx)
+			if e.childTracker.handoffRequested {
+				return nil, e.parkSpawn(spawnRec, e.iteration, false)
+			}
+		}
+
 		// Execute this iteration
 		iterOutputs, err := e.executeIteration()
 		if err != nil {
@@ -788,7 +921,15 @@ func (e *InlineLoopExecutor) execute() (*reliantv1.LoopOutput, error) {
 			// background spawn still in flight — see
 			// awaitLiveDetachedSpawns for why this blocks instead of adding
 			// a third `while` disjunct.
-			if e.awaitLiveDetachedSpawns() {
+			resume, handoffErr := e.awaitLiveDetachedSpawnsOrHandoff()
+			if handoffErr != nil {
+				e.logger.Info("[InlineLoop] Handing off while parked on background spawns",
+					"loopID", e.loopID,
+					"iteration", e.iteration,
+				)
+				return nil, handoffErr
+			}
+			if resume {
 				e.logger.Info("[InlineLoop] Detached spawn(s) completed, re-entering loop",
 					"loopID", e.loopID,
 					"iteration", e.iteration-1,
@@ -920,6 +1061,27 @@ func (e *InlineLoopExecutor) buildIterCtx() map[string]interface{} {
 	return model.BuildIterContext(e.iteration)
 }
 
+// bodyScope is the loop namespaces of the CURRENT iteration's body: this
+// loop's iter and its previous iteration's outputs. Node conditions and edge
+// case conditions in the body both read it.
+func (e *InlineLoopExecutor) bodyScope() *LoopScope {
+	return loopBodyScope(e.buildIterContextModel(), e.prevIterOutputs)
+}
+
+// celWorkflow is the `workflow` namespace for this loop's own expressions
+// (items, key, while, presets).
+func (e *InlineLoopExecutor) celWorkflow() *model.WorkflowContext {
+	return workflowContextToTyped(buildWorkflowContext(e.workflowID, e.workflowIdentity(), e.chatID, e.workflowInputs))
+}
+
+// enclosingIter is the `iter` of the loop ENCLOSING this one — the scope this
+// loop's `items` expression belongs to — or nil at the top level. The
+// enclosing loop publishes it into the inputs it hands this executor.
+func (e *InlineLoopExecutor) enclosingIter() *model.IterContext {
+	iterMap, _ := e.workflowInputs["iter"].(map[string]interface{})
+	return iterContextFromMap(iterMap)
+}
+
 // buildIterContextModel returns the IterContext struct for CEL eval contexts.
 func (e *InlineLoopExecutor) buildIterContextModel() *model.IterContext {
 	ic := &model.IterContext{Iteration: e.iteration, Index: e.iteration}
@@ -949,7 +1111,9 @@ func (e *InlineLoopExecutor) buildIterationInputs() (map[string]interface{}, err
 		e.workflowIdentity(),
 		e.workflowInputs,
 		iterCtx,
-		nil, // loopOutputs - this is the loop's own config eval, not inner nodes
+		// The loop's own per-iteration config (args, thread.inject) sees this
+		// loop's iteration and its previous iteration's outputs, like its body.
+		loopBodyOutputs(e.prevIterOutputs),
 		e.execContext,
 	)
 	if err != nil {
@@ -959,9 +1123,11 @@ func (e *InlineLoopExecutor) buildIterationInputs() (map[string]interface{}, err
 	iterInputs := make(map[string]interface{})
 	if len(model.GetLoopArgs(e.loopStep.Node).GetPresets()) > 0 {
 		presetEvalCtx := &wfcel.EdgeEvalContext{
-			Nodes:  e.nodeOutputs,
-			Inputs: e.workflowInputs,
-			Iter:   e.buildIterContextModel(),
+			Nodes:    e.nodeOutputs,
+			Inputs:   e.workflowInputs,
+			Workflow: e.celWorkflow(),
+			Iter:     e.buildIterContextModel(),
+			Outputs:  loopBodyOutputs(e.prevIterOutputs),
 		}
 		// No fallback: continuing without the preset runs the iteration under
 		// the workflow's defaults — a different model and tool set than the
@@ -1016,7 +1182,8 @@ func (e *InlineLoopExecutor) executeIteration() (map[string]interface{}, error) 
 	)
 
 	// Create state machine for sub-workflow
-	iterStateMachine := NewSimplifiedStateMachine(e.workflowID, e.subWorkflow)
+	iterStateMachine := NewSimplifiedStateMachine(e.workflowID, e.subWorkflow).
+		WithLoopScope(e.bodyScope)
 
 	// Create step executor for this iteration
 	// Derive iteration-specific execution context
@@ -1037,6 +1204,7 @@ func (e *InlineLoopExecutor) executeIteration() (map[string]interface{}, error) 
 		iterNodeOutputs,
 		e.childTracker,
 	).WithLoopContext(e.loopID, e.iteration).
+		WithLoopBodyOutputs(e.prevIterOutputs).
 		WithNodePathPrefix(e.nodePath()).
 		WithExecContext(iterExecContext).
 		WithProjectPath(e.projectPath).
@@ -1134,7 +1302,7 @@ func (e *InlineLoopExecutor) executeIteration() (map[string]interface{}, error) 
 			skipped, skipEvt, condErr := skipNodeIfConditionFalse(
 				e.ctx, step.Node, iterNodeOutputs, iterInputs,
 				e.workflowID, e.chatID, e.workflowIdentity(), e.logger,
-				&LoopScope{Iter: e.buildIterContextModel(), Outputs: e.prevIterOutputs},
+				e.bodyScope(),
 				e.nodePath(),
 			)
 			if condErr != nil {
@@ -1261,7 +1429,7 @@ func (e *InlineLoopExecutor) executeIteration() (map[string]interface{}, error) 
 					e.workflowIdentity(),
 					iterInputs,
 					nestedIterCtx,
-					e.prevIterOutputs, // previous iteration outputs for outputs.* namespace
+					loopBodyOutputs(e.prevIterOutputs),
 					e.execContext,
 				)
 				if err != nil {
@@ -1449,7 +1617,6 @@ func (e *InlineLoopExecutor) executeIteration() (map[string]interface{}, error) 
 						e.ctx,
 						step.Node,
 						inlineOutput,
-						iterNodeOutputs,
 						e.workflowID,
 						e.workflowIdentity(),
 						e.chatID,
@@ -1465,7 +1632,8 @@ func (e *InlineLoopExecutor) executeIteration() (map[string]interface{}, error) 
 							"stepID", step.Node.GetId(),
 							"error", err,
 						)
-						// Don't fail the workflow - save_message errors are logged but non-fatal
+						// Same as the node's own failure above: let the loop handle it.
+						return nil, fmt.Errorf("save_message for inline workflow %s: %w", step.Node.GetId(), err)
 					}
 				}
 
@@ -1515,7 +1683,7 @@ func (e *InlineLoopExecutor) executeIteration() (map[string]interface{}, error) 
 				exec, err := approvalExecutionFromNode(
 					step.Node, iterNodeOutputs, iterInputs,
 					e.workflowID, e.workflowIdentity(), e.buildIterCtx(),
-					e.prevIterOutputs, iterExecContext, e.chatID,
+					loopBodyOutputs(e.prevIterOutputs), iterExecContext, e.chatID,
 					e.loopID, e.iteration,
 					joinNodePath(e.nodePath(), step.Node.GetId()),
 					e.logger,
@@ -1740,6 +1908,10 @@ func (e *InlineLoopExecutor) executeIteration() (map[string]interface{}, error) 
 //   - outputs.*: Sub-workflow outputs from the current iteration
 //   - iter.*: Loop iteration context (iter.iteration)
 //   - inputs.*: Workflow inputs (for iteration limits like inputs.max_turns)
+//   - nodes.*: the PARENT scope's node outputs (the scope the loop node lives
+//     in), matching the simulator's evaluateLoopWhileStrict. Omitting it made
+//     every `while` that reads nodes.* fail "no such key" at runtime only.
+//   - workflow.*: workflow metadata, available at every site.
 func (e *InlineLoopExecutor) evaluateWhileCondition(outputs map[string]interface{}) (bool, error) {
 	whileExpr := model.DirectCelExpr(model.GetLoopArgs(e.loopStep.Node).GetWhile())
 
@@ -1751,10 +1923,15 @@ func (e *InlineLoopExecutor) evaluateWhileCondition(outputs map[string]interface
 		"outputs", redactValue(outputs),
 	)
 
+	// outputs is declared to CEL iff the field is non-nil, and a while
+	// condition always has it in scope — an iteration that produced no
+	// outputs is an empty map (loopBodyOutputs), not an undeclared namespace.
 	ctx := &wfcel.LoopEvalContext{
-		Iter:    e.buildIterContextModel(),
-		Outputs: outputs,
-		Inputs:  e.workflowInputs,
+		Iter:     e.buildIterContextModel(),
+		Outputs:  loopBodyOutputs(outputs),
+		Inputs:   e.workflowInputs,
+		Nodes:    e.nodeOutputs,
+		Workflow: e.celWorkflow(),
 	}
 	result, err := wfcel.EvaluateBool(whileExpr, ctx)
 	if err != nil {

@@ -107,9 +107,12 @@ func TestGetCELCompletions_NodeOutputSchemas(t *testing.T) {
 		require.True(t, ok, "call_llm schema must exist")
 
 		fieldNames := fieldNamesFromCELFields(s.Fields)
-		for _, expected := range []string{"response_text", "tool_calls", "token_count", "thinking"} {
+		for _, expected := range []string{"response_text", "tool_calls", "token_count"} {
 			assert.Contains(t, fieldNames, expected, "call_llm output should have field %q", expected)
 		}
+		// thinking is message_only: persisted with the message, stripped from
+		// the result the workflow receives, so it must not be offered to CEL.
+		assert.NotContains(t, fieldNames, "thinking", "message_only fields are not readable from CEL")
 	})
 
 	t.Run("run output fields", func(t *testing.T) {

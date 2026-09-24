@@ -2,7 +2,6 @@
 package tools
 
 import (
-	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -12,7 +11,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/rctx"
 	"github.com/reliant-labs/reliant/internal/workflow/builtin"
-	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
 	"gopkg.in/yaml.v3"
 )
 
@@ -130,19 +128,21 @@ func (t *createWorkflowTool) Execute(ctx *rctx.ToolContext, args CreateWorkflowP
 
 	slug := generateSlugFromName(workflowName)
 
-	// Validate the YAML (informational only — save regardless)
-	validationErr := validateWorkflowYAML(definition)
+	// Validate exactly as run start will; errors block the save.
+	check := validateWorkflowForTool(ctx, t.repo, definition)
+	if check.hasErrors() {
+		return NewTextErrorResponse(check.rejection("created")), nil
+	}
 
 	draft := &db.WorkflowDraft{
-		ID:               draftID,
-		UserID:           userID,
-		Name:             workflowName,
-		Slug:             slug,
-		Definition:       definition,
-		IsValid:          validationErr == nil,
-		ValidationErrors: serializeValidationError(validationErr),
-		CreatedAt:        now,
-		UpdatedAt:        now,
+		ID:         draftID,
+		UserID:     userID,
+		Name:       workflowName,
+		Slug:       slug,
+		Definition: definition,
+		IsValid:    true,
+		CreatedAt:  now,
+		UpdatedAt:  now,
 	}
 
 	if err := t.repo.CreateWorkflowDraft(ctx, draft); err != nil {
@@ -155,19 +155,10 @@ func (t *createWorkflowTool) Execute(ctx *rctx.ToolContext, args CreateWorkflowP
 		Slug: slug,
 	}
 
-	var responseText string
-	if validationErr != nil {
-		responseText = fmt.Sprintf(
-			"Workflow '%s' created with validation errors:\n\n%v\n\n"+
-				"ID: %s\nSlug: %s\n\nUse `get_workflow` to view, `edit_workflow` or `write_workflow` to fix.",
-			workflowName, validationErr, draftID, slug,
-		)
-	} else {
-		responseText = fmt.Sprintf(
-			"Workflow '%s' created successfully.\n\nID: %s\nSlug: %s\n\nUse `get_workflow` to view the full definition, or `edit_workflow`/`write_workflow` to modify it.",
-			workflowName, draftID, slug,
-		)
-	}
+	responseText := check.withWarnings(fmt.Sprintf(
+		"Workflow '%s' created successfully.\n\nID: %s\nSlug: %s\n\nUse `get_workflow` to view the full definition, or `edit_workflow`/`write_workflow` to modify it.",
+		workflowName, draftID, slug,
+	))
 
 	return WithResponseMetadata(NewTextResponse(responseText), result), nil
 }
@@ -284,8 +275,12 @@ func (t *editWorkflowTool) Execute(ctx *rctx.ToolContext, args EditWorkflowParam
 
 	newContent := strings.Replace(oldContent, args.OldString, args.NewString, 1)
 
-	// Validate the new YAML (but save regardless)
-	validationErr := validateWorkflowYAML(newContent)
+	// Validate exactly as run start will; errors block the save, and the
+	// stored draft is left as it was.
+	check := validateWorkflowForTool(ctx, t.repo, newContent)
+	if check.hasErrors() {
+		return NewTextErrorResponse(check.rejection("updated")), nil
+	}
 
 	// Extract name from the updated YAML to keep draft name in sync
 	var wfMeta struct {
@@ -294,7 +289,7 @@ func (t *editWorkflowTool) Execute(ctx *rctx.ToolContext, args EditWorkflowParam
 	if err := yaml.Unmarshal([]byte(newContent), &wfMeta); err != nil {
 		workflowName := draft.Name
 		slug := generateSlugFromName(workflowName)
-		if err := t.repo.UpdateWorkflowDraftDefinition(ctx, draft.ID, workflowName, slug, newContent, validationErr == nil, serializeValidationError(validationErr)); err != nil {
+		if err := t.repo.UpdateWorkflowDraftDefinition(ctx, draft.ID, workflowName, slug, newContent, true, nil); err != nil {
 			return NewTextErrorResponse(fmt.Sprintf("Failed to save workflow: %v", err)), nil
 		}
 		return NewTextResponse(fmt.Sprintf(
@@ -309,20 +304,11 @@ func (t *editWorkflowTool) Execute(ctx *rctx.ToolContext, args EditWorkflowParam
 	slug := generateSlugFromName(workflowName)
 
 	// Save the updated draft with synced name
-	if err := t.repo.UpdateWorkflowDraftDefinition(ctx, draft.ID, workflowName, slug, newContent, validationErr == nil, serializeValidationError(validationErr)); err != nil {
+	if err := t.repo.UpdateWorkflowDraftDefinition(ctx, draft.ID, workflowName, slug, newContent, true, nil); err != nil {
 		return NewTextErrorResponse(fmt.Sprintf("Failed to save workflow: %v", err)), nil
 	}
 
-	if validationErr != nil {
-		return NewTextResponse(fmt.Sprintf(
-			"Workflow saved with validation errors:\n\n%v\n\n"+
-				"Your changes were saved. You can use `edit_workflow` to make further modifications, "+
-				"or `write_workflow` to replace the entire content.",
-			validationErr,
-		)), nil
-	}
-
-	return NewTextResponse("Workflow updated successfully.\n\nUse `get_workflow` to see the full result."), nil
+	return NewTextResponse(check.withWarnings("Workflow updated successfully.\n\nUse `get_workflow` to see the full result.")), nil
 }
 
 // =============================================================================
@@ -424,8 +410,11 @@ func (t *writeWorkflowTool) Execute(ctx *rctx.ToolContext, args WriteWorkflowPar
 		return NewTextErrorResponse("Workflow name is required. Provide it via the 'name' parameter or in the YAML content."), nil
 	}
 
-	// Validate the YAML (but save regardless)
-	validationErr := validateWorkflowYAML(args.Content)
+	// Validate exactly as run start will; errors block the save.
+	check := validateWorkflowForTool(ctx, t.repo, args.Content)
+	if check.hasErrors() {
+		return NewTextErrorResponse(check.rejection("saved")), nil
+	}
 
 	draft, err := resolveWorkflowDraft(ctx, t.repo, args.ID)
 	if err != nil {
@@ -454,7 +443,7 @@ func (t *writeWorkflowTool) Execute(ctx *rctx.ToolContext, args WriteWorkflowPar
 	}
 
 	// Save the updated draft with synced name/slug
-	if err := t.repo.UpdateWorkflowDraftDefinition(ctx, draft.ID, draft.Name, draft.Slug, args.Content, validationErr == nil, serializeValidationError(validationErr)); err != nil {
+	if err := t.repo.UpdateWorkflowDraftDefinition(ctx, draft.ID, draft.Name, draft.Slug, args.Content, true, nil); err != nil {
 		return NewTextErrorResponse(fmt.Sprintf("Failed to save workflow: %v", err)), nil
 	}
 	var created bool // always false - we only update
@@ -473,20 +462,10 @@ func (t *writeWorkflowTool) Execute(ctx *rctx.ToolContext, args WriteWorkflowPar
 		action = "created"
 	}
 
-	var responseText string
-	if validationErr != nil {
-		responseText = fmt.Sprintf(
-			"Workflow '%s' %s with validation errors:\n\n%v\n\n"+
-				"Your changes were saved. You can use `edit_workflow` to make further modifications.\n\n"+
-				"ID: %s\nSlug: %s (use in ref: fields)",
-			draft.Name, action, validationErr, draft.ID, draft.Slug,
-		)
-	} else {
-		responseText = fmt.Sprintf(
-			"Workflow '%s' %s successfully.\n\nID: %s\nSlug: %s (use in ref: fields)\n\nUse `get_workflow` to see the full result.",
-			draft.Name, action, draft.ID, draft.Slug,
-		)
-	}
+	responseText := check.withWarnings(fmt.Sprintf(
+		"Workflow '%s' %s successfully.\n\nID: %s\nSlug: %s (use in ref: fields)\n\nUse `get_workflow` to see the full result.",
+		draft.Name, action, draft.ID, draft.Slug,
+	))
 
 	return WithResponseMetadata(NewTextResponse(responseText), result), nil
 }
@@ -494,48 +473,6 @@ func (t *writeWorkflowTool) Execute(ctx *rctx.ToolContext, args WriteWorkflowPar
 // =============================================================================
 // HELPER FUNCTIONS
 // =============================================================================
-
-// serializeValidationError renders a validation failure for the
-// workflow_drafts.validation_errors column, or nil when the workflow is valid.
-//
-// The column is a JSON array of strings — the shape WorkflowService.SaveWorkflow
-// and ImportWorkflow already write — so a draft the agent broke and a draft the
-// canvas broke read back identically.
-//
-// This travels with is_valid and is not decoration: is_valid gates
-// ListUsableWorkflowsByUser and GetUsableWorkflowBySlug, so saving a broken
-// workflow as valid leaves it loadable by `ref:` at runtime.
-func serializeValidationError(validationErr error) *string {
-	if validationErr == nil {
-		return nil
-	}
-	encoded, err := json.Marshal([]string{validationErr.Error()})
-	if err != nil {
-		// A []string cannot fail to marshal, but never drop the signal: an
-		// unserializable error must still leave the row marked invalid.
-		fallback := validationErr.Error()
-		return &fallback
-	}
-	serialized := string(encoded)
-	return &serialized
-}
-
-// validateWorkflowYAML parses and validates the workflow YAML
-func validateWorkflowYAML(content string) error {
-	// First check it's valid YAML
-	var raw interface{}
-	if err := yaml.Unmarshal([]byte(content), &raw); err != nil {
-		return fmt.Errorf("invalid YAML syntax: %w", err)
-	}
-
-	// Try to parse as a workflow using the v2 parser
-	_, err := v2.ParseWorkflowProtoBytes([]byte(content))
-	if err != nil {
-		return fmt.Errorf("workflow validation failed: %w", err)
-	}
-
-	return nil
-}
 
 // generateSlugFromName creates a URL-safe slug from a workflow name
 func generateSlugFromName(name string) string {

@@ -53,59 +53,84 @@ func toFloat64(v interface{}) float64 {
 	return 0
 }
 
-// evaluateSaveMessageConfig evaluates a SaveMessageConfig's CEL expressions against
-// the activity output and workflow context, returning a types.SaveMessageInput.
+// saveMessageScope is everything a save_message may read besides `output`,
+// plus the identifiers the resulting message is written under.
 //
-// Thread Resolution (with save_message.thread field):
-//   - If config.Thread is specified, it's evaluated and used as the target thread
-//   - Thread is always inherited from execution context (workflowThread parameter)
-//
-// The evaluated thread is exposed in the result so callers can:
-//   - Include it in step output (nodes.<id>.thread)
+// The save_message CEL environment is exactly output, inputs, workflow and
+// iter. `nodes` is deliberately absent: a node's save_message is written by
+// whoever executes the node, which for an activity is the worker, and the
+// worker has no view of sibling node outputs (reading them at completion time
+// was racy anyway). The same scope is used whether the workflow or the worker
+// performs the save, so a template means the same thing in both places.
+type saveMessageScope struct {
+	Inputs    map[string]interface{}
+	Workflow  *model.WorkflowContext
+	Iter      *model.IterContext
+	AgentName string
+
+	ChatID     string
+	Thread     string
+	WorkflowID string
+	StepID     string // "<node>-save"
+}
+
+// celContext is the CEL activation for a save_message template or condition.
+func (s saveMessageScope) celContext(output map[string]interface{}) *wfcel.PostActivityContext {
+	return &wfcel.PostActivityContext{
+		Output:   output,
+		Inputs:   s.Inputs,
+		Workflow: s.Workflow,
+		Iter:     s.Iter,
+	}
+}
+
+// newWorkflowSaveMessageScope builds the scope for a save the workflow performs
+// itself, from the workflow context map.
+func newWorkflowSaveMessageScope(workflowContext map[string]interface{}, chatID, workflowID, stepID string, iter *model.IterContext) saveMessageScope {
+	inputs, _ := workflowContext[workflowContextKeyInputs].(map[string]interface{})
+	thread, _ := inputs["thread"].(string)
+	return saveMessageScope{
+		Inputs:     inputs,
+		Workflow:   workflowContextToTyped(workflowContext),
+		Iter:       iter,
+		AgentName:  saveMessageAgentName(workflowContext),
+		ChatID:     chatID,
+		Thread:     thread,
+		WorkflowID: workflowID,
+		StepID:     stepID,
+	}
+}
+
+// saveMessageAgentName is the agent/workflow identity persisted to
+// messages.agent: an explicit agent_name input, else the workflow name (e.g.
+// "builtin://agent", "get-it-right"). Empty when neither is present.
+func saveMessageAgentName(workflowContext map[string]interface{}) string {
+	if v, ok := workflowContext[workflowContextKeyAgentName].(string); ok && v != "" {
+		return v
+	}
+	v, _ := workflowContext[workflowContextKeyName].(string)
+	return v
+}
+
+// evaluateSaveMessageConfig evaluates a SaveMessageConfig's CEL expressions
+// against the activity output and the scope, returning a types.SaveMessageInput.
 //
 // The `output` namespace is populated with the activity's output fields:
 //   - output.message.role, output.message.text (standard MessageOutput)
 //   - output.tool_calls, output.tool_results, output.input_tokens, etc.
 //
-// Default values are used when fields are not specified in the config:
-//   - role: output.message.role
-//   - content: output.message.text
-//
-// Parameters:
-//   - workflowThread: The workflow's thread (required, used if config.Thread is empty)
-//   - execContext: Execution context for thread.* access in CEL (optional but recommended)
+// Every field is evaluated as written; an empty config evaluates to a message
+// with no role, which callers treat as "nothing to save".
 func evaluateSaveMessageConfig(
 	config *reliantv1.SaveMessageConfig,
 	activityOutput map[string]interface{},
-	workflowContext map[string]interface{},
-	nodeOutputs map[string]interface{},
-	chatID string,
-	workflowThread string,
-	workflowID string,
-	stepID string,
-	execContext *ExecutionContext,
-	iter *model.IterContext,
+	scope saveMessageScope,
 ) (*types.SaveMessageInput, error) {
 	if config == nil {
 		return nil, nil
 	}
 
-	// Extract inputs from workflowContext map
-	var inputs map[string]interface{}
-	if i, ok := workflowContext[workflowContextKeyInputs].(map[string]interface{}); ok {
-		inputs = i
-	}
-
-	// Build typed CEL context for save_message evaluation. iter is populated when the
-	// save_message runs inside a loop so content templates like "{{iter.iteration}}"
-	// resolve instead of failing CEL compilation (which is swallowed as non-fatal).
-	ctx := &wfcel.PostActivityContext{
-		Output:   activityOutput,
-		Inputs:   inputs,
-		Nodes:    nodeOutputs,
-		Workflow: workflowContextToTyped(workflowContext),
-		Iter:     iter,
-	}
+	ctx := scope.celContext(activityOutput)
 
 	// Helper to evaluate a CEL expression and return the value
 	evalString := func(expr string, defaultExpr string) (string, error) {
@@ -267,17 +292,6 @@ func evaluateSaveMessageConfig(
 		}
 	}
 
-	// Auto-extract the agent/workflow identity from the workflow context so
-	// messages.agent records which agent produced the message. Prefer an explicit
-	// agent_name input, falling back to the workflow name (e.g. "builtin://agent",
-	// "get-it-right"). Empty when neither is present.
-	var agentName string
-	if v, ok := workflowContext[workflowContextKeyAgentName].(string); ok && v != "" {
-		agentName = v
-	} else if v, ok := workflowContext[workflowContextKeyName].(string); ok {
-		agentName = v
-	}
-
 	attachments, err := evalStringArray(model.CelStringRaw(config.GetAttachments()))
 	if err != nil {
 		return nil, fmt.Errorf("attachments: %w", err)
@@ -325,13 +339,12 @@ func evaluateSaveMessageConfig(
 		}
 	}
 
-	// Thread is always inherited from the workflow's execution context
-	// No explicit thread field - messages are saved to the current thread
-
+	// Thread is always inherited from the executing thread; there is no
+	// explicit thread field — messages are saved to the current thread.
 	return &types.SaveMessageInput{
-		ChatID:       chatID,
-		Thread:       workflowThread,
-		StepID:       stepID,
+		ChatID:       scope.ChatID,
+		Thread:       scope.Thread,
+		StepID:       scope.StepID,
 		Role:         role,
 		DisplayStyle: displayStyle,
 		Content:      content,
@@ -341,8 +354,8 @@ func evaluateSaveMessageConfig(
 		TokenCount:   tokenCount,
 		Cost:         cost,
 		Model:        modelName,
-		Agent:        agentName,
-		WorkflowID:   workflowID,
+		Agent:        scope.AgentName,
+		WorkflowID:   scope.WorkflowID,
 		Thinking:     thinkingOutput,
 	}, nil
 }
@@ -462,267 +475,106 @@ func convertToToolResults(maps []map[string]interface{}) ([]message.ToolResult, 
 	return result, nil
 }
 
-// ExecuteSaveMessageForNode is a convenience wrapper for executeSaveMessageInline that handles
-// building the workflow context with thread from execContext. This reduces code duplication
-// in loop_executor and inline_workflow_executor.
-//
-// Parameters:
-//   - ctx: Temporal workflow context
-//   - node: The proto node with SaveMessage config
-//   - output: The activity/workflow output (accessible via output.* in CEL)
-//   - nodeOutputs: Completed step outputs (accessible via nodes.* in CEL)
-//   - workflowID, workflowName, chatID: Workflow identifiers
-//   - inputs: Workflow inputs
-//   - execContext: Execution context (provides thread)
-//   - loopNodeID, loopIteration: Loop context (can be empty/0 if not in loop)
-func ExecuteSaveMessageForNode(
-	ctx workflow.Context,
-	node *reliantv1.Node,
-	output map[string]interface{},
-	nodeOutputs map[string]interface{},
-	workflowID string,
-	workflowName string,
-	chatID string,
-	inputs map[string]interface{},
-	execContext *ExecutionContext,
-	loopNodeID string,
-	loopIteration int,
-) (map[string]interface{}, error) {
-	if node.GetSaveMessage() == nil {
-		return nil, nil
+// saveMessageSkip names why a resolved save_message writes nothing. Empty
+// means there is a message to write.
+type saveMessageSkip string
+
+const (
+	saveSkipNone        saveMessageSkip = ""
+	saveSkipCondition   saveMessageSkip = "condition not met"
+	saveSkipNoRole      saveMessageSkip = "no role"
+	saveSkipContentFree saveMessageSkip = "content-free assistant message"
+	saveSkipNoConfig    saveMessageSkip = "no save_message"
+)
+
+// logSaveMessageSkip records why a save_message wrote nothing. A content-free
+// assistant turn should be impossible upstream (except the deliberate
+// assistant-tail yield in call_llm), so it stays greppable at WARN.
+func logSaveMessageSkip(logger interface {
+	Info(string, ...interface{})
+	Warn(string, ...interface{})
+}, stepID string, skip saveMessageSkip) {
+	if skip == saveSkipContentFree {
+		logger.Warn("[SaveMessage] Skipping an assistant message with no content, tool calls or thinking — "+
+			"there is no row to write. Expected only for the assistant-tail yield in call_llm; "+
+			"anywhere else it means a turn reached save with nothing in it.",
+			"stepID", stepID)
+		return
 	}
-
-	logger := workflow.GetLogger(ctx)
-	logger.Info("[SaveMessage] Executing save_message for node",
-		"nodeID", node.GetId(),
-	)
-
-	// Build workflow context for CEL evaluation
-	workflowContext := buildWorkflowContext(
-		workflowID,
-		workflowName,
-		chatID,
-		inputs,
-	)
-
-	// Add thread to context from execContext
-	if execContext != nil && execContext.Thread != "" {
-		if ctxInputs, ok := workflowContext[workflowContextKeyInputs].(map[string]interface{}); ok {
-			ctxInputs["thread"] = execContext.Thread
-		} else {
-			workflowContext[workflowContextKeyInputs] = map[string]interface{}{"thread": execContext.Thread}
-		}
-	}
-
-	return executeSaveMessageInline(
-		ctx,
-		node,
-		output,
-		workflowContext,
-		nodeOutputs,
-		chatID,
-		workflowID,
-		loopNodeID,
-		loopIteration,
-		execContext, // Pass through for thread.* namespace access in CEL
-		"",          // No pre-allocated assistant message id in this path
-	)
+	logger.Info("[SaveMessage] Skipping save", "stepID", stepID, "reason", string(skip))
 }
 
-// executeSaveMessageInline executes the SaveMessage activity inline after another activity completes.
-// This is called from handleActivityCompletion when a node has save_message config.
-// Returns the SaveMessage output (contains thread_token_count, message_id, etc.) for merging into step output.
+// resolveSaveMessage is THE save_message decision, made identically by the
+// workflow (for outputs it assembles) and by the ActivityWrapper (for the
+// activity it just ran): evaluate the condition, evaluate the config, and
+// decline the rows that must not be written. It never writes anything.
 //
-// This is the PREFERRED pattern for message persistence in workflows.
-// Inline save_message enables proper frontend activity indicator integration.
-// See docs/action-changes-spec.md for usage guidance.
-//
-// The execContext parameter is optional but recommended for inline workflow nodes.
-// It provides thread context for proper message persistence.
-func executeSaveMessageInline(
-	ctx workflow.Context,
-	node *reliantv1.Node,
-	activityOutput map[string]interface{},
-	workflowContext map[string]interface{},
-	nodeOutputs map[string]interface{},
-	chatID string,
-	workflowID string,
-	loopNodeID string,
-	loopIteration int,
-	execContext *ExecutionContext,
-	preallocatedMessageID string,
-) (map[string]interface{}, error) {
-	sm := node.GetSaveMessage()
-	if sm == nil {
-		return nil, nil
-	}
-	nid := node.GetId()
-
-	logger := workflow.GetLogger(ctx)
-
-	// When this save_message runs inside a loop iteration, expose the iteration to
-	// CEL as iter.* for both the condition and the content templates. loopNodeID is
-	// the authoritative "in a loop" signal (all callers set it alongside
-	// loopIteration). Without this, templates such as "{{iter.iteration + 1}}" fail
-	// CEL compilation on the undeclared iter variable; that error is logged but
-	// swallowed as non-fatal by the loop executor, so the message is silently never
-	// saved — which is how the get-it-right feedback bridge broke.
-	var iterCtx *model.IterContext
-	if loopNodeID != "" {
-		iterCtx = &model.IterContext{Iteration: loopIteration, Index: loopIteration}
+// Returns the message to write, or a skip reason with a nil message.
+func resolveSaveMessage(
+	config *reliantv1.SaveMessageConfig,
+	output map[string]interface{},
+	scope saveMessageScope,
+) (*types.SaveMessageInput, saveMessageSkip, error) {
+	if config == nil {
+		return nil, saveSkipNoConfig, nil
 	}
 
-	// Check condition if specified
-	condStr := model.CelStringRaw(sm.GetCondition())
-	if condStr != "" {
-		// Extract inputs from workflowContext for typed CEL context
-		var condInputs map[string]interface{}
-		if inputs, ok := workflowContext[workflowContextKeyInputs].(map[string]interface{}); ok {
-			condInputs = inputs
-		}
-		// Build typed CEL context for condition evaluation
-		condCtx := &wfcel.PostActivityContext{
-			Output:   activityOutput,
-			Inputs:   condInputs,
-			Nodes:    nodeOutputs,
-			Workflow: workflowContextToTyped(workflowContext),
-			Iter:     iterCtx,
-		}
-		conditionResult, err := wfcel.EvaluateTemplate(condStr, condCtx)
+	// The condition is raw CEL that must return bool, like every other
+	// condition field (node condition, edge case, loop while). A non-bool
+	// result is an error, never "truthy": a condition that cannot decide must
+	// not silently save.
+	if condExpr := model.DirectCelExpr(config.GetCondition()); condExpr != "" {
+		shouldSave, err := wfcel.EvaluateBool(condExpr, scope.celContext(output))
 		if err != nil {
-			logger.Error("[SaveMessage] Failed to evaluate condition",
-				"stepID", nid,
-				"condition", condStr,
-				"error", err,
-			)
-			return nil, fmt.Errorf("failed to evaluate save_message condition: %w", err)
+			return nil, saveSkipNone, fmt.Errorf("evaluating save_message condition %q: %w", condExpr, err)
 		}
-
-		// Check if condition is truthy
-		shoudSave := false
-		switch v := conditionResult.(type) {
-		case bool:
-			shoudSave = v
-		case nil:
-			shoudSave = false
-		default:
-			// Non-nil, non-bool values are truthy
-			shoudSave = true
-		}
-
-		if !shoudSave {
-			logger.Info("[SaveMessage] Skipping save - condition not met",
-				"stepID", nid,
-				"condition", condStr,
-			)
-			return nil, nil
+		if !shouldSave {
+			return nil, saveSkipCondition, nil
 		}
 	}
 
-	logger.Info("[SaveMessage] Evaluating inline save_message config",
-		"stepID", nid,
-		"chatID", chatID,
-	)
-
-	// Get thread from workflow inputs - required
-	var thread string
-	if wfInputs, ok := workflowContext[workflowContextKeyInputs].(map[string]interface{}); ok {
-		if tp, ok := wfInputs["thread"].(string); ok && tp != "" {
-			thread = tp
-		}
-	}
-	if thread == "" {
-		return nil, fmt.Errorf("thread not found in workflow inputs for save_message (node: %s)", nid)
+	if scope.Thread == "" {
+		return nil, saveSkipNone, fmt.Errorf("no thread to save the message to (step %s)", scope.StepID)
 	}
 
-	// Evaluate the save_message config
-	evalResult, err := evaluateSaveMessageConfig(
-		sm,
-		activityOutput,
-		workflowContext,
-		nodeOutputs,
-		chatID,
-		thread,
-		workflowID,
-		nid+"-save", // Step ID with -save suffix to indicate inline save
-		execContext, // Pass through for thread.* namespace access
-		iterCtx,     // Loop iteration for iter.* in content templates
-	)
+	saveInput, err := evaluateSaveMessageConfig(config, output, scope)
 	if err != nil {
-		logger.Error("[SaveMessage] Failed to evaluate save_message config",
-			"stepID", nid,
-			"error", err,
-		)
-		return nil, fmt.Errorf("failed to evaluate save_message config: %w", err)
+		return nil, saveSkipNone, fmt.Errorf("evaluating save_message: %w", err)
 	}
-
-	// Skip if no result or no role (indicates nothing to save)
-	if evalResult == nil || evalResult.Role == "" {
-		logger.Debug("[SaveMessage] Skipping save - no role specified",
-			"stepID", nid,
-		)
-		return nil, nil
-	}
-
-	saveInput := evalResult
-	// Delta identity: persist the assistant message under its pre-allocated
-	// streaming id. The activity honors this only when Role is "assistant".
-	saveInput.AssistantMessageID = preallocatedMessageID
-
-	// Inject loop context if executing within a loop
-	if loopNodeID != "" {
-		saveInput.LoopNodeID = loopNodeID
-		saveInput.LoopIteration = loopIteration
+	if saveInput == nil || saveInput.Role == "" {
+		return nil, saveSkipNoRole, nil
 	}
 
 	// An assistant message with nothing in it cannot be written — SaveMessage's
 	// validator refuses the row, because a blockless assistant row is durable
-	// poison for the thread. Dispatching the activity anyway buys five failing
-	// attempts, an ERROR per attempt, and (now that activity failures reach the
-	// chat) an error banner the user cannot act on.
+	// poison for the thread. Attempting the write anyway buys five failing
+	// attempts, an ERROR per attempt, and an error banner the user cannot act
+	// on.
 	//
 	// Since call_llm substitutes text for any turn the provider left empty, the
 	// only thing that still arrives here content-free is the deliberate
-	// assistant-tail yield, which HAS nothing to save. Declining the dispatch
-	// says that outright instead of expressing it as a failed write.
+	// assistant-tail yield, which HAS nothing to save. Declining the write says
+	// that outright instead of expressing it as a failed write.
 	//
 	// A thinking signature or a sealed redacted block counts as content, and
 	// must mirror the write guard in threads.validateSaveMessageOpts exactly.
 	// If this predicate is stricter than that one, the row is dropped here
 	// without ever reaching the validator — which is precisely how a
 	// signature-bearing turn used to vanish with only a WARN to show for it.
-	//
-	// Deliberately not silent: a content-free assistant turn should be
-	// impossible upstream, so it stays greppable at WARN.
 	if strings.EqualFold(saveInput.Role, "assistant") &&
 		saveInput.Content == "" &&
 		len(saveInput.ToolCalls) == 0 &&
 		saveInput.Thinking.Content == "" &&
 		saveInput.Thinking.Signature == "" &&
 		saveInput.Thinking.Redacted == "" {
-		logger.Warn("[SaveMessage] Skipping an assistant message with no content, tool calls or thinking — "+
-			"there is no row to write. Expected only for the assistant-tail yield in call_llm; "+
-			"anywhere else it means a turn reached save with nothing in it.",
-			"stepID", nid,
-			"thread", saveInput.Thread,
-		)
-		return nil, nil
+		return nil, saveSkipContentFree, nil
 	}
+	return saveInput, saveSkipNone, nil
+}
 
-	logger.Info("[SaveMessage] Executing inline SaveMessage",
-		"stepID", nid,
-		"role", saveInput.Role,
-		"thread", saveInput.Thread,
-		"contentLen", len(saveInput.Content),
-		"thinkingLen", len(saveInput.Thinking.Content),
-		"hasThinkingSig", saveInput.Thinking.Signature != "",
-		"toolCalls", len(saveInput.ToolCalls),
-		"toolResults", len(saveInput.ToolResults),
-		"loopNodeID", loopNodeID,
-		"loopIteration", loopIteration,
-	)
-
-	// Build structured input: RuntimeContext + proto Node.
+// saveMessageRuntimeContext is the RuntimeContext a resolved message is
+// written under — the same shape the SaveMessage activity receives.
+func saveMessageRuntimeContext(saveInput *types.SaveMessageInput) types.RuntimeContext {
 	rtx := types.RuntimeContext{
 		ChatID:             saveInput.ChatID,
 		Thread:             saveInput.Thread,
@@ -734,7 +586,127 @@ func executeSaveMessageInline(
 		rtx.LoopNodeID = saveInput.LoopNodeID
 		rtx.LoopIteration = saveInput.LoopIteration
 	}
-	v3Input := types.ActivityInput{Runtime: rtx, Node: buildSaveMessageNode(saveInput)}
+	return rtx
+}
+
+// ExecuteSaveMessageForNode runs the save_message of a node whose output the
+// WORKFLOW assembled (loop and workflow nodes). The workflow is the executor
+// that produced that output, so it writes the message itself via the
+// SaveMessage activity.
+//
+// Parameters:
+//   - output: The workflow-assembled output (accessible via output.* in CEL)
+//   - inputs: Workflow inputs
+//   - execContext: Execution context (provides the thread)
+//   - loopNodeID, loopIteration: Loop context (empty/0 outside a loop)
+func ExecuteSaveMessageForNode(
+	ctx workflow.Context,
+	node *reliantv1.Node,
+	output map[string]interface{},
+	workflowID string,
+	workflowName string,
+	chatID string,
+	inputs map[string]interface{},
+	execContext *ExecutionContext,
+	loopNodeID string,
+	loopIteration int,
+) (map[string]interface{}, error) {
+	if node.GetSaveMessage() == nil {
+		return nil, nil
+	}
+	thread := ""
+	if execContext != nil {
+		thread = execContext.Thread
+	}
+	// The scope's full iteration context is the `iter` its loop published into
+	// the inputs; the loop node id is the authoritative "in a loop" signal.
+	var iterCtx *model.IterContext
+	if loopNodeID != "" {
+		iterMap, _ := inputs["iter"].(map[string]interface{})
+		iterCtx = iterContextFromMap(iterMap)
+		if iterCtx == nil {
+			iterCtx = &model.IterContext{Iteration: loopIteration, Index: loopIteration}
+		}
+	}
+	return executeSaveMessageInline(ctx, node, output,
+		buildSaveMessageWorkflowContext(workflowID, workflowName, chatID, inputs, thread),
+		chatID, workflowID, loopNodeID, loopIteration, iterCtx, "")
+}
+
+// buildSaveMessageWorkflowContext is the workflow context a save_message sees:
+// buildWorkflowContext with inputs.thread set to the executing thread. The
+// inputs map is copied, never mutated — it is shared with the rest of the run.
+func buildSaveMessageWorkflowContext(workflowID, workflowName, chatID string, inputs map[string]interface{}, thread string) map[string]interface{} {
+	if thread != "" {
+		withThread := copyMap(inputs)
+		withThread["thread"] = thread
+		inputs = withThread
+	}
+	return buildWorkflowContext(workflowID, workflowName, chatID, inputs)
+}
+
+// executeSaveMessageInline performs a save_message from the workflow: resolve
+// it (resolveSaveMessage), then dispatch the SaveMessage activity. Used only
+// for outputs the workflow itself assembled — an activity-backed node's
+// save_message is written by the ActivityWrapper instead.
+//
+// Returns the SaveMessage output (thread_token_count, message_id, ...).
+func executeSaveMessageInline(
+	ctx workflow.Context,
+	node *reliantv1.Node,
+	activityOutput map[string]interface{},
+	workflowContext map[string]interface{},
+	chatID string,
+	workflowID string,
+	loopNodeID string,
+	loopIteration int,
+	iterCtx *model.IterContext,
+	preallocatedMessageID string,
+) (map[string]interface{}, error) {
+	sm := node.GetSaveMessage()
+	if sm == nil {
+		return nil, nil
+	}
+	nid := node.GetId()
+	logger := workflow.GetLogger(ctx)
+
+	// iterCtx is the enclosing loop's full iteration context (iteration,
+	// index, item, key) — the same `iter` the node's config resolved against —
+	// or nil outside a loop, in which case iter defaults to iteration 0.
+	// Deriving it from loopIteration alone dropped item/key, so
+	// "{{iter.item.filename}}" failed and the message was never saved.
+
+	scope := newWorkflowSaveMessageScope(workflowContext, chatID, workflowID, nid+"-save", iterCtx)
+	saveInput, skip, err := resolveSaveMessage(sm, activityOutput, scope)
+	if err != nil {
+		logger.Error("[SaveMessage] Failed to resolve save_message", "stepID", nid, "error", err)
+		return nil, fmt.Errorf("failed to resolve save_message: %w", err)
+	}
+	if saveInput == nil {
+		logSaveMessageSkip(logger, nid, skip)
+		return nil, nil
+	}
+
+	// Delta identity: persist the assistant message under its pre-allocated
+	// streaming id. The activity honors this only when Role is "assistant".
+	saveInput.AssistantMessageID = preallocatedMessageID
+	if loopNodeID != "" {
+		saveInput.LoopNodeID = loopNodeID
+		saveInput.LoopIteration = loopIteration
+	}
+
+	logger.Info("[SaveMessage] Executing inline SaveMessage",
+		"stepID", nid,
+		"role", saveInput.Role,
+		"thread", saveInput.Thread,
+		"contentLen", len(saveInput.Content),
+		"toolCalls", len(saveInput.ToolCalls),
+		"toolResults", len(saveInput.ToolResults),
+		"loopNodeID", loopNodeID,
+		"loopIteration", loopIteration,
+	)
+
+	v3Input := types.ActivityInput{Runtime: saveMessageRuntimeContext(saveInput), Node: buildSaveMessageNode(saveInput)}
 
 	// Execute SaveMessage activity
 	// Let Temporal auto-generate ActivityID for deterministic replay.

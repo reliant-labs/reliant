@@ -99,25 +99,12 @@ var ErrResetAttemptsExhausted = errors.New("reset attempts exhausted")
 // starts a fresh execution under the same workflow ID with empty history,
 // carrying {node_id, loop_iteration} forward as WorkflowInput.Resume.
 //
-// This path therefore remains reachable but should be rare: it now covers runs
-// that predate the ContinueAsNew version gate, and runs whose boundary never
-// went quiescent long enough to hand off (a background spawn in flight for
-// tens of thousands of events).
+// This path therefore remains reachable but should be rare: a run whose
+// handoff could not complete before the cap (see continueAsNewHardThreshold).
+// When it does fire, the coarse restart relaunches any background spawn that
+// was live at the time of death from the durable tool_calls/workflows rows —
+// see runtime.ResumeInput.Spawns.
 var ErrHistoryLimitExceeded = errors.New("temporal history limit exceeded")
-
-// temporalHistoryLimitHeadroom is how close to Temporal's per-execution history
-// cap a run must be before reset-and-replay is considered futile.
-//
-// The cap is 51,200 events. The headroom is deliberately generous relative to
-// the ~2-4 events a reset actually gets: a run this close cannot make
-// meaningful progress before being terminated again, and routing it to the
-// coarse restart one attempt early costs nothing, while routing it to a reset
-// one attempt too late costs the user another dead run and another confusing
-// "I sent a message and nothing happened".
-const (
-	temporalHistoryCountLimit = 51200
-	temporalHistoryHeadroom   = 500
-)
 
 // PauseService bridges gRPC pause/resume requests to Temporal signals.
 // It sends signal.pause / signal.resume to the workflow and updates the
@@ -521,16 +508,26 @@ func (ps *PauseService) resetInterruptedForResume(ctx context.Context, workflowI
 	runID := info.GetExecution().GetRunId()
 	historyLen := info.GetHistoryLength()
 
-	// A run at the history cap cannot be rescued by resetting: the reset point
-	// lives inside the oversized history, so the new run inherits it and dies
-	// within a few events. Send it to the coarse fresh-restart instead, which
-	// starts an execution with empty history. See ErrHistoryLimitExceeded.
-	if historyLen >= temporalHistoryCountLimit-temporalHistoryHeadroom {
-		logging.Warn("[PauseService] Workflow is at Temporal's history limit; reset cannot recover it, falling back to fresh restart",
+	// A run that died at (or near) Temporal's history cap cannot be rescued by
+	// resetting: the reset point lives inside the oversized history, so the new
+	// run inherits it and dies within a few events. Send it to the coarse
+	// fresh-restart instead, which starts an execution with empty history. See
+	// ErrHistoryLimitExceeded.
+	//
+	// Classified by the close event first — Temporal's own terminate reason is
+	// the direct evidence — with the describe numbers (count AND size) as the
+	// backstop for a FAILED run near the cap. The close-event read is only paid
+	// for TERMINATED runs, the one status a history-limit kill produces.
+	historySize := info.GetHistorySizeBytes()
+	limitTerminated := status == enums.WORKFLOW_EXECUTION_STATUS_TERMINATED &&
+		terminatedForHistoryLimit(ctx, ps.temporalClient, workflowID, runID)
+	if limitTerminated || HistoryAtLimit(historyLen, historySize) {
+		logging.Warn("[PauseService] Workflow died at Temporal's history limit; reset cannot recover it, falling back to fresh restart",
 			"workflowID", workflowID,
 			"chatID", chatID,
 			"historyLength", historyLen,
-			"limit", temporalHistoryCountLimit,
+			"historySizeBytes", historySize,
+			"terminatedForHistoryLimit", limitTerminated,
 		)
 		recordResumeOutcome(resumeOutcomeHistoryLimitExceeded, workflowID, chatID, nil)
 		return "", ErrHistoryLimitExceeded

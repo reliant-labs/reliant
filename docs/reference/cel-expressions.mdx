@@ -482,7 +482,7 @@ Use `has()` to safely check for optional fields:
 
 ```yaml
 # Check if node exists before accessing its output
-condition: "{{has(nodes.verify) ? nodes.verify.exit_code == 0 : true}}"
+condition: "has(nodes.verify) ? nodes.verify.exit_code == 0 : true"
 
 # Check nested optional fields
 branch: "{{has(workflow.branch) ? workflow.branch : 'main'}}"
@@ -680,7 +680,7 @@ content: "{{nodes.call_llm.message.text}}"
 ### Using `{{}}` in Conditions
 
 ```yaml
-# Wrong: don't use {{}} in edge conditions
+# Wrong: conditions are raw CEL; {{}} is a validation error
 condition: "{{nodes.run.exit_code == 0}}"
 
 # Correct: raw CEL expression in conditions

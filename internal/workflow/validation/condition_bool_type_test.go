@@ -177,7 +177,7 @@ func TestNodeCondition_BoolType(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			workflowYAML := `
 name: test-node-condition-bool
-entry: [prev, conditional_step]
+entry: [prev]
 inputs:
   should_run:
     type: boolean
@@ -201,6 +201,9 @@ nodes:
     condition: "` + tt.condition + `"
     model:
       tags: [flagship]
+edges:
+  - from: prev
+    to: conditional_step
 `
 
 			wf, err := wfyaml.ParseWorkflow([]byte(workflowYAML))

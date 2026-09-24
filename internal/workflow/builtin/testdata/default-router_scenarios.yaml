@@ -6,6 +6,10 @@
 name: routes_to_agent
 description: Simple question routed to builtin://agent with general preset
 
+# default-router requires user_message (no default); the real runtime
+# rejects a run without it.
+inputs:
+  user_message: "Please help with my request."
 events:
   - node: route
     output:
@@ -33,6 +37,10 @@ expect:
 name: routes_to_one_ring
 description: Complex feature request routed to builtin://one-ring
 
+# default-router requires user_message (no default); the real runtime
+# rejects a run without it.
+inputs:
+  user_message: "Please help with my request."
 events:
   - node: route
     output:
@@ -59,6 +67,10 @@ expect:
 name: routes_to_implement_review
 description: Quality-sensitive task routed to builtin://implement-review
 
+# default-router requires user_message (no default); the real runtime
+# rejects a run without it.
+inputs:
+  user_message: "Please help with my request."
 events:
   - node: route
     output:

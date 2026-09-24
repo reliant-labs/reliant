@@ -498,6 +498,16 @@ nodes:
         - from: create_workflow_draft
           default: [build_workflow_candidate]
 
+  # The workflows lane ends at EXACTLY ONE of no_workflow_candidates or
+  # workflow_builder_loop (analyze_workflows' edge picks one), so the lane gets
+  # its own any-join. Wiring both straight into join_results made that all-join
+  # wait forever on the branch not taken — every migration hung there.
+  # (Validation now rejects that shape: an all-join over mutually exclusive
+  # branches can never be satisfied.)
+  - id: workflows_done
+    type: join
+    condition: any
+
   - id: join_results
     type: join
     condition: all
@@ -528,13 +538,13 @@ nodes:
           {{nodes.discover.response_text}}
 
           Memory migration:
-          {{has(nodes.migrate_memory) ? nodes.migrate_memory.response_text : 'Skipped.'}}
+          {{has(nodes.migrate_memory) && has(nodes.migrate_memory.response_text) ? nodes.migrate_memory.response_text : 'Skipped.'}}
 
           MCP migration:
-          {{has(nodes.migrate_mcp) ? nodes.migrate_mcp.response_text : 'Skipped.'}}
+          {{has(nodes.migrate_mcp) && has(nodes.migrate_mcp.response_text) ? nodes.migrate_mcp.response_text : 'Skipped.'}}
 
           Skills migration:
-          {{has(nodes.migrate_skills) ? nodes.migrate_skills.response_text : 'Skipped.'}}
+          {{has(nodes.migrate_skills) && has(nodes.migrate_skills.response_text) ? nodes.migrate_skills.response_text : 'Skipped.'}}
 
           Workflow analysis:
           {{has(nodes.analyze_workflows.response) && nodes.analyze_workflows.response != null ? nodes.analyze_workflows.response.summary : 'Skipped.'}}
@@ -587,8 +597,10 @@ edges:
   - from: workflow_candidates_context
     default: [workflow_builder_loop]
   - from: no_workflow_candidates
-    default: [join_results]
+    default: [workflows_done]
   - from: workflow_builder_loop
+    default: [workflows_done]
+  - from: workflows_done
     default: [join_results]
   - from: join_results
     default: [final_summary]

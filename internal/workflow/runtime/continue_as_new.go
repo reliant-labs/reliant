@@ -3,18 +3,10 @@ package runtime
 
 import (
 	"errors"
+	"sync"
 
 	"go.temporal.io/sdk/workflow"
 )
-
-// continueAsNewVersionGate is the workflow.GetVersion changeID for
-// ContinueAsNew at the agent-loop iteration boundary. The check adds a new
-// command sequence (and, when it fires, a CONTINUE_AS_NEW close command) at a
-// point where pre-change histories recorded nothing, so replaying one with the
-// check live would wedge it with a non-determinism error (TMPRL1100) — the
-// exact incident class this feature exists to prevent. GetVersion returns
-// DefaultVersion for those histories (check off) and 1 for new executions.
-const continueAsNewVersionGate = "continue-as-new"
 
 // Temporal terminates an execution that exceeds EITHER of two per-execution
 // limits (server defaults, verified against the running 1.26.2 server, whose
@@ -49,6 +41,18 @@ const continueAsNewVersionGate = "continue-as-new"
 const (
 	continueAsNewEventThreshold = 40000
 	continueAsNewSizeThreshold  = 40 * 1024 * 1024
+)
+
+// The hard thresholds bound how long a requested handoff may wait for live
+// spawns to reach their iteration boundaries. Past either one the handoff
+// proceeds with every live spawn, parked or not; an unparked spawn restarts
+// in the successor at its last recorded iteration boundary, from thread
+// history (ExecuteTools terminal idempotency and CallLLM delta identity make
+// re-running that one iteration safe). 48k events / 46 MB leaves ~50 worst-case
+// turns of count headroom and 4 MB of size headroom before the hard caps.
+const (
+	continueAsNewHardEventThreshold = 48000
+	continueAsNewHardSizeThreshold  = 46 * 1024 * 1024
 )
 
 // readyToContinueAsNew reports whether this run both NEEDS to continue as new
@@ -100,24 +104,105 @@ const (
 // is strictly better than the alternative this replaces: a chat wedged at the
 // history cap, where every message the user sends does nothing.
 func readyToContinueAsNew(ctx workflow.Context, childTracker *ChildWorkflowTracker, pauseArmed bool) bool {
-	if !quiescentForContinueAsNew(childTracker, pauseArmed) {
+	if childTracker == nil {
+		return !pauseArmed && currentHistoryPressure(ctx, "") >= historyPressureSoft
+	}
+	childTracker.refreshHandoffRequest(ctx)
+	if !childTracker.handoffRequested {
 		return false
 	}
-	info := workflow.GetInfo(ctx)
-	return historyNeedsContinueAsNew(info.GetCurrentHistoryLength(), info.GetCurrentHistorySize())
+	if childTracker.handoffHard {
+		// Hard backstop: carry every live spawn from its last recorded
+		// boundary rather than wait any longer. Only an armed pause still
+		// blocks, because a dropped resume signal is not recoverable.
+		return !pauseArmed
+	}
+	return quiescentForContinueAsNew(childTracker, pauseArmed)
 }
 
 // quiescentForContinueAsNew reports whether the current boundary is a safe
-// place to end this execution. See readyToContinueAsNew for why each condition
-// disqualifies the boundary.
+// place to end this execution: no pause armed, and every live background
+// spawn parked at its own iteration boundary. A parked spawn is carried into
+// the successor (ResumeInput.Spawns); an unparked one is mid-iteration.
 func quiescentForContinueAsNew(childTracker *ChildWorkflowTracker, pauseArmed bool) bool {
 	if pauseArmed {
 		return false
 	}
-	if childTracker != nil && len(childTracker.listLiveDetachedSpawns()) > 0 {
-		return false
+	return childTracker == nil || childTracker.allLiveSpawnsParked()
+}
+
+// refreshHandoffRequest raises the handoff request once history pressure
+// crosses the soft threshold, and the hard flag past the hard one. Only while
+// a top-level loop that can actually emit the continuation is running: a
+// spawn that parked with nobody able to hand off would wait forever.
+func (t *ChildWorkflowTracker) refreshHandoffRequest(ctx workflow.Context) {
+	if t == nil || t.handoffCapable == 0 || t.handoffHard {
+		return
 	}
-	return true
+	switch currentHistoryPressure(ctx, t.chatID) {
+	case historyPressureHard:
+		t.handoffRequested = true
+		t.handoffHard = true
+	case historyPressureSoft:
+		t.handoffRequested = true
+	}
+}
+
+// handoffReady is readyToContinueAsNew for a top-level loop parked in
+// awaitLiveDetachedSpawns, evaluated inside its Await predicate.
+func (t *ChildWorkflowTracker) handoffReady(ctx workflow.Context) bool {
+	pauseArmed := t.pauseArmed != nil && t.pauseArmed()
+	return readyToContinueAsNew(ctx, t, pauseArmed)
+}
+
+// errSpawnHandoff is returned by a background spawn's agent loop when it
+// parks at an iteration boundary for a continue-as-new handoff. It is not a
+// failure and not a completion: runSpawnInlineChild reports nothing, the spawn
+// stays registered as live (and parked), and the successor relaunches it.
+var errSpawnHandoff = errors.New("spawn parked for continue-as-new handoff")
+
+// historyPressure grades how close this run's history is to Temporal's caps.
+type historyPressure int
+
+const (
+	historyPressureNone historyPressure = iota
+	// historyPressureSoft: past continueAsNewEventThreshold/SizeThreshold. A
+	// handoff is requested and waits for every live spawn to park.
+	historyPressureSoft
+	// historyPressureHard: past continueAsNewHardEventThreshold/SizeThreshold.
+	// The handoff stops waiting for spawns to park.
+	historyPressureHard
+)
+
+// currentHistoryPressure is the one place the runtime reads this run's
+// history size. Production reads GetInfo, whose values are replay-stable (set
+// from each WorkflowTaskStarted as it is replayed), so every read is
+// deterministic.
+//
+// historyPressureOverrides is the test seam: a test history's length and size
+// are properties of the harness, not something a test can set, so a test
+// forces a threshold crossing by registering a func for its chat ID. Keyed by
+// chat so parallel tests cannot see each other's override.
+func currentHistoryPressure(ctx workflow.Context, chatID string) historyPressure {
+	if override, ok := historyPressureOverrides.Load(chatID); ok {
+		return override.(func() historyPressure)()
+	}
+	info := workflow.GetInfo(ctx)
+	return historyPressureFor(info.GetCurrentHistoryLength(), info.GetCurrentHistorySize())
+}
+
+var historyPressureOverrides sync.Map // chatID -> func() historyPressure
+
+// historyPressureFor grades a history length/size pair.
+func historyPressureFor(historyLength, historySizeBytes int) historyPressure {
+	switch {
+	case historyLength >= continueAsNewHardEventThreshold || historySizeBytes >= continueAsNewHardSizeThreshold:
+		return historyPressureHard
+	case historyNeedsContinueAsNew(historyLength, historySizeBytes):
+		return historyPressureSoft
+	default:
+		return historyPressureNone
+	}
 }
 
 // historyNeedsContinueAsNew reports whether the history has grown far enough
@@ -160,15 +245,27 @@ func isContinueAsNew(err error) bool {
 // position. Node outputs from the predecessor are NOT carried — same as any
 // resume — so templated cross-node references must tolerate absence, which the
 // has()-guard execution-order validation already enforces.
-func newContinueAsNewError(ctx workflow.Context, input WorkflowInput, nodeID string, iteration int) error {
+//
+// Live background spawns cross too, as ResumeInput.Spawns: each is parked at
+// its own iteration boundary (or, past the hard threshold, carried from its
+// last one) and the successor relaunches it on the same tool call and thread.
+// awaitingSpawns records that the loop was parked in awaitLiveDetachedSpawns
+// rather than at the top of an iteration, so the successor waits on the
+// relaunched spawns before its first turn instead of spending one.
+func newContinueAsNewError(ctx workflow.Context, input WorkflowInput, nodeID string, iteration int, childTracker *ChildWorkflowTracker, awaitingSpawns bool) error {
+	resume := &ResumeInput{
+		NodeID:           nodeID,
+		LoopIteration:    iteration,
+		AwaitSpawnsFirst: awaitingSpawns,
+	}
+	if childTracker != nil {
+		resume.Spawns = childTracker.spawnHandoffs()
+	}
 	return workflow.NewContinueAsNewError(ctx, DynamicWorkflow, WorkflowInput{
 		ChatID:       input.ChatID,
 		WorkflowName: input.WorkflowName,
 		Inputs:       input.Inputs,
 		ExecContext:  input.ExecContext,
-		Resume: &ResumeInput{
-			NodeID:        nodeID,
-			LoopIteration: iteration,
-		},
+		Resume:       resume,
 	})
 }

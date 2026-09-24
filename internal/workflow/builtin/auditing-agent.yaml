@@ -228,7 +228,7 @@ nodes:
             - to: save_approved_response
               condition: >-
                 has(nodes.execute_audit.response_data) && nodes.execute_audit.response_data != null && 'audit' in nodes.execute_audit.response_data &&
-                nodes.execute_audit.response_data.audit.approved == true
+                nodes.execute_audit.response_data.audit != null && nodes.execute_audit.response_data.audit.approved == true
               label: approved
         - from: save_approved_response
           cases:

@@ -57,6 +57,88 @@ func (q *Queries) GetToolCallResult(ctx context.Context, toolCallID string) (Too
 	return i, err
 }
 
+const listLiveBackgroundSpawnsForWorkflow = `-- name: ListLiveBackgroundSpawnsForWorkflow :many
+WITH RECURSIVE tree AS (
+    SELECT w.id, 0 AS depth FROM workflows w WHERE w.parent_id = $1::text
+    UNION ALL
+    SELECT c.id, t.depth + 1 FROM workflows c JOIN tree t ON c.parent_id = t.id
+)
+SELECT tc.id AS tool_call_id,
+       tc.thread_id AS parent_thread_id,
+       tc.input AS tool_input,
+       w.id AS child_workflow_id,
+       w.thread AS child_thread_id,
+       COALESCE(w.parent_id, '')::text AS issuing_workflow_id,
+       t.depth::int AS depth
+FROM tool_calls tc
+JOIN workflows w ON w.id = tc.child_workflow_id
+JOIN tree t ON t.id = w.id
+WHERE tc.tool_name = 'spawn'
+  AND tc.status = 6
+  AND NOT EXISTS (
+      SELECT 1 FROM agent_messages m
+      WHERE m.tool_call_id = tc.id AND m.kind IN (2, 3, 4)
+  )
+ORDER BY t.depth ASC, tc.id ASC
+`
+
+type ListLiveBackgroundSpawnsForWorkflowRow struct {
+	ToolCallID        string         `json:"tool_call_id"`
+	ParentThreadID    sql.NullString `json:"parent_thread_id"`
+	ToolInput         []byte         `json:"tool_input"`
+	ChildWorkflowID   string         `json:"child_workflow_id"`
+	ChildThreadID     string         `json:"child_thread_id"`
+	IssuingWorkflowID string         `json:"issuing_workflow_id"`
+	Depth             int32          `json:"depth"`
+}
+
+// Every background spawn issued anywhere inside one root execution that is
+// still open: tool_calls.status = 6 (backgrounded) and no terminal report in
+// its parent's mailbox. A background spawn is a goroutine inside the ROOT's
+// Temporal execution — at every depth — so when that execution dies (the
+// history-limit terminate is the case this exists for) these are exactly the
+// spawns the coarse fresh restart must relaunch.
+//
+// Walks the workflow tree from the root: a spawn's child row carries the id
+// of the workflow that ISSUED it as parent_id (the root for a top-level spawn,
+// the spawning child's id for a nested one). Deliberately NOT filtered on the
+// child rows' state: the reconciler's reap may already have marked them
+// terminal, and that is an echo of the root dying, not of the child
+// finishing. A spawn the stranded-spawn repair already closed has left status
+// 6 and has a report, so it is not returned — its parent was told, and
+// relaunching it would report twice. Ordered parents-before-children (depth),
+// then by id, so a relaunch registers an issuing spawn before its own.
+func (q *Queries) ListLiveBackgroundSpawnsForWorkflow(ctx context.Context, rootWorkflowID string) ([]ListLiveBackgroundSpawnsForWorkflowRow, error) {
+	rows, err := q.db.QueryContext(ctx, listLiveBackgroundSpawnsForWorkflow, rootWorkflowID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListLiveBackgroundSpawnsForWorkflowRow{}
+	for rows.Next() {
+		var i ListLiveBackgroundSpawnsForWorkflowRow
+		if err := rows.Scan(
+			&i.ToolCallID,
+			&i.ParentThreadID,
+			&i.ToolInput,
+			&i.ChildWorkflowID,
+			&i.ChildThreadID,
+			&i.IssuingWorkflowID,
+			&i.Depth,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listSpawnChildrenForThread = `-- name: ListSpawnChildrenForThread :many
 SELECT
     tc.id AS tool_call_id,

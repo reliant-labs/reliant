@@ -34,6 +34,12 @@ type RuntimeContext struct {
 	// an assistant or tool message belongs to the run that produced it.
 	MessageIdempotencyKey string `json:"message_idempotency_key,omitempty"`
 
+	// SaveMessage, when set, delegates this node's save_message to the
+	// ActivityWrapper: the worker writes the message right after the activity
+	// returns. Nil means the workflow does not want the activity to save
+	// anything (no save_message, or the workflow saves it itself).
+	SaveMessage *SaveMessageRequest `json:"save_message,omitempty"`
+
 	// Loop context
 	LoopNodeID    string `json:"loop_node_id,omitempty"`
 	LoopIteration int    `json:"loop_iteration,omitempty"`

@@ -76,7 +76,7 @@ nodes:
 edges:
   - from: step2
     cases:
-      - condition: "{{output.needs_extra}}"
+      - condition: "nodes.step2.needs_extra"
         to: extra
 `
 	wf, err := ParseWorkflow([]byte(yaml))
@@ -303,7 +303,7 @@ nodes:
 edges:
   - from: trigger
     cases:
-      - condition: "{{output.ready}}"
+      - condition: "nodes.trigger.ready"
         to: explore
 `
 	wf, err := ParseWorkflow([]byte(yaml))

@@ -601,7 +601,7 @@ function parseRawStep(raw: Record<string, unknown>): Step {
     const toolResults = parseOptionalString(raw.save_message.tool_results)
     if (toolResults !== undefined) saveMessage.toolResults = celString(toolResults)
     const smCondition = parseOptionalString(raw.save_message.condition)
-    if (smCondition !== undefined) saveMessage.condition = celString(smCondition)
+    if (smCondition !== undefined) saveMessage.condition = directCel(smCondition)
     const attachments = parseOptionalString(raw.save_message.attachments)
     if (attachments !== undefined) saveMessage.attachments = celString(attachments)
 

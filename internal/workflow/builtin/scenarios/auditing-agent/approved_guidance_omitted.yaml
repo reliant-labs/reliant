@@ -1,0 +1,79 @@
+# Auditor approves and OMITS the optional `guidance` field
+#
+# The audit response tool requires only `approved`; its own description tells
+# the auditor to "just omit guidance completely" when approving. Every other
+# scenario here passes `guidance: ""`, so none exercised the shape the prompt
+# asks for — the omitted field — which is exactly the F3 production failure in
+# specs/template-validation-gaps.md: execute_audit.save_message read
+# `output.response_data.audit.guidance` and failed with "no such key:
+# guidance".
+#
+# The save_message condition now guards with has(); validation enforces that
+# (a non-required response-tool field read without a guard is an error). The
+# `messages` expectation proves on the REAL save_message resolution (Temporal
+# backend) that no AUDIT FEEDBACK message is saved for an approval, and that
+# the approved agent turn is.
+
+name: approved_guidance_omitted
+description: Auditor approves without a guidance field — no feedback message is saved and the run does not fail
+
+events:
+  - node: audited_loop.main_agent
+    type: llm_response
+    text: "I'll list the files."
+    tool_calls:
+      - name: shell
+        input:
+          command: "ls"
+
+  - node: audited_loop.audit_check
+    type: llm_response
+    text: ""
+    tool_calls:
+      - name: audit
+        input:
+          approved: true
+
+  # guidance is ABSENT, not empty.
+  - node: audited_loop.execute_audit
+    type: tool_result
+    tool: audit
+    output:
+      approved: true
+
+  - node: audited_loop.execute_tools
+    type: tool_result
+    tool: shell
+    output:
+      result: "README.md"
+
+  - node: audited_loop.main_agent
+    type: llm_response
+    text: "There is one file: README.md."
+
+  - node: audited_loop.audit_check
+    type: llm_response
+    text: ""
+    tool_calls:
+      - name: audit
+        input:
+          approved: true
+
+  - node: audited_loop.execute_audit
+    type: tool_result
+    tool: audit
+    output:
+      approved: true
+
+expect:
+  outcome: completed
+  reached:
+    - audited_loop.execute_audit
+    - audited_loop.save_approved_response
+    - audited_loop.execute_tools
+  messages:
+    audited_loop.execute_audit:
+      saved: false
+    audited_loop.save_approved_response:
+      saved: true
+      content_contains: ["I'll list the files."]

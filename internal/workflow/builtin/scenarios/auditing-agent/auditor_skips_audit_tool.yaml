@@ -1,0 +1,59 @@
+# The auditor replies in text and never calls the audit tool
+#
+# execute_audit still runs (audit_check produced a tool call it could not
+# answer with the audit tool — here, a stray non-audit call), and the runtime
+# pre-creates every expected response tool in response_data as NULL when it
+# was not called. The `approved` edge used to check only `'audit' in
+# response_data` — true for a null entry — and then read
+# `response_data.audit.approved`, failing the run with "no such key:
+# approved". Validation now rejects reading beneath a response tool that may
+# not have been called; the edge checks `audit != null` first.
+#
+# Expected behaviour: no approval, so the agent's turn is not saved and its
+# tools do not run; the loop ends because nothing approved further work.
+
+name: auditor_skips_audit_tool
+description: Auditor never calls the audit tool — the approval edge treats that as not approved instead of failing
+
+events:
+  - node: audited_loop.main_agent
+    type: llm_response
+    text: "Deleting the build directory."
+    tool_calls:
+      - name: shell
+        input:
+          command: "rm -rf build/"
+
+  - node: audited_loop.audit_check
+    type: llm_response
+    text: "Looks fine to me."
+    tool_calls:
+      - name: shell
+        input:
+          command: "true"
+
+  # The audit tool was expected but not called: its entry is null.
+  - node: audited_loop.execute_audit
+    output:
+      tool_results: []
+      response_data:
+        audit: null
+
+  - node: audited_loop.main_agent
+    type: llm_response
+    text: "Done."
+
+  - node: audited_loop.audit_check
+    type: llm_response
+    text: ""
+
+expect:
+  outcome: completed
+  reached:
+    - audited_loop.execute_audit
+  not_reached:
+    - audited_loop.save_approved_response
+    - audited_loop.execute_tools
+  messages:
+    audited_loop.execute_audit:
+      saved: false

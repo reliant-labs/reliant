@@ -123,6 +123,28 @@ type WorkflowTypeContext struct {
 	// graph (see computeGuaranteedBefore). Used to flag nodes.<id> references
 	// to nodes that may not have executed yet (router skips, parallel branches).
 	GuaranteedBefore map[string]map[string]bool
+
+	// GuaranteedAtCompletion is the set of nodes guaranteed to have produced
+	// an output when the graph finishes, which is when declared outputs are
+	// evaluated (see computeGuaranteedAtCompletion).
+	GuaranteedAtCompletion map[string]bool
+
+	// IterScope is what `iter` holds where the expression evaluates: only
+	// {iteration, index} outside loops and in counter loops, plus item/key in
+	// items loops.
+	IterScope iterScope
+
+	// InLoopBody is set for a loop body graph, where `outputs` is the loop's
+	// previous-iteration outputs — an EMPTY map on iteration 0.
+	InLoopBody bool
+
+	// LoopOutputsAbsent is set for a PARALLEL loop body: iterations never see
+	// a previous iteration, so every outputs.<name> is absent.
+	LoopOutputsAbsent bool
+
+	// OutputsUndeclared is set when the site's environment does not declare
+	// the `outputs` namespace, so the type provider must not answer it.
+	OutputsUndeclared bool
 }
 
 // =============================================================================
@@ -134,6 +156,11 @@ type ResponseToolSchema struct {
 	ToolName     string
 	Fields       map[string]*FieldInfo // Field name -> type info
 	SourceNodeID string                // Which call_llm defined this
+
+	// Required is the schema's `required` set; HasRequired reports whether
+	// the schema declared a `required` array at all.
+	Required    map[string]bool
+	HasRequired bool
 }
 
 // SourceType identifies the pattern of tool_calls source.

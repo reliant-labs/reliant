@@ -13,7 +13,6 @@ description: Tests slide_pipeline per-slide results structure with 4 slides, mix
 
 inputs:
   mode: auto
-  yield: false
   website_url: "https://example.com"
   deck_purpose: seed
   pitch_deck_dir: "pitch-deck"

@@ -56,6 +56,16 @@ func TestNoRawNodeTypeLiteralsInProductionFiles(t *testing.T) {
 	}
 
 	allowlist := map[string]map[string]struct{}{
+		// The input key a delegated save_message request rides under (the
+		// node's `save_message:` block, not the save_message node type).
+		"runtime/activities/types/save_message_request.go": {
+			"save_message": {},
+		},
+		// The node's `save_message:` FIELD as a path segment in validation
+		// findings (saveMessageFieldKey) — not the save_message node type.
+		"validation/cel_sites.go": {
+			"save_message": {},
+		},
 		// Canonical definitions.
 		"model/constants.go": {
 			"call_llm":        {},

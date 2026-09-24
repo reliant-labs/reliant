@@ -120,21 +120,37 @@ func CelCoalesceFunction() cel.EnvOption {
 	return wfcel.CelCoalesceFunction()
 }
 
-// LoopScope carries the loop namespaces a node condition is evaluated against when
-// the node runs inside a loop iteration: `iter` (which iteration this is) and
-// `outputs` (the PREVIOUS iteration's declared loop outputs). Nil outside a loop.
+// LoopScope carries the loop namespaces a node condition or edge case condition
+// is evaluated against: `iter` and, inside a loop body, `outputs` (the enclosing
+// loop's PREVIOUS iteration outputs). Nil at the top level. The same scope feeds
+// node conditions AND edge conditions (SimplifiedStateMachine.WithLoopScope), and
+// it matches what the scope's node config resolves against, so a node's
+// condition, its outgoing edges and its templates all see one scope.
 //
-// Without it a node's `condition` could see strictly less than the very same node's
-// config templates, which EvaluateNodeConfig already resolves against iter/outputs.
-// That asymmetry failed SILENTLY rather than loudly: EdgeEvalContext.Namespaces()
-// declares `iter` and `outputs` unconditionally, so `outputs.foo` in a condition
-// compiled fine and then evaluated against an empty map — every has() guard false,
-// every branch taken as if the first iteration. A condition is the one place a
-// workflow can say "skip this node THIS time round", so it is exactly the place
-// that needs to know which time round it is.
+// Build it with loopBodyScope or subWorkflowScope, never as a literal: `outputs`
+// is declared exactly when Outputs is non-nil (wfcel.withLoopOutputs), and the
+// constructors are what guarantee a loop body declares it on EVERY iteration,
+// including iteration 0 and parallel iterations, which have no predecessor.
 type LoopScope struct {
 	Iter    *model.IterContext
 	Outputs map[string]interface{}
+}
+
+// loopBodyScope is the scope of a loop body's expressions: this iteration's
+// iter and the previous iteration's outputs (empty when there is none).
+func loopBodyScope(iter *model.IterContext, prevOutputs map[string]interface{}) *LoopScope {
+	return &LoopScope{Iter: iter, Outputs: loopBodyOutputs(prevOutputs)}
+}
+
+// subWorkflowScope is the scope of a sub-workflow body that runs inside a loop:
+// its nodes see the enclosing iteration's iter (as their config does), but a
+// sub-workflow body is not a loop body, so `outputs` is not declared. nil iter
+// (not inside a loop) yields a nil scope.
+func subWorkflowScope(iter *model.IterContext) *LoopScope {
+	if iter == nil {
+		return nil
+	}
+	return &LoopScope{Iter: iter}
 }
 
 func (s *LoopScope) iter() *model.IterContext {
@@ -149,6 +165,55 @@ func (s *LoopScope) outputs() map[string]interface{} {
 		return nil
 	}
 	return s.Outputs
+}
+
+// iterContextFromMap converts a published `iter` map (model.BuildIterContext /
+// BuildParallelIterContext shape) into the typed IterContext, keeping item and
+// key. nil in, nil out: no map means no enclosing loop.
+func iterContextFromMap(iterMap map[string]interface{}) *model.IterContext {
+	if iterMap == nil {
+		return nil
+	}
+	iter := &model.IterContext{}
+	if iterationVal, ok := iterCounter(iterMap["iteration"]); ok {
+		iter.Iteration = iterationVal
+		iter.Index = iterationVal
+	}
+	if indexVal, ok := iterCounter(iterMap["index"]); ok {
+		iter.Index = indexVal
+	}
+	if itemVal, ok := iterMap["item"]; ok {
+		iter.Item = itemVal
+	}
+	if keyVal, ok := iterMap["key"].(string); ok {
+		iter.Key = keyVal
+	}
+	return iter
+}
+
+// iterCounter accepts the integer shapes an iteration counter takes after
+// crossing a JSON or CEL boundary.
+func iterCounter(v interface{}) (int, bool) {
+	switch n := v.(type) {
+	case int:
+		return n, true
+	case int64:
+		return int(n), true
+	case float64:
+		return int(n), true
+	}
+	return 0, false
+}
+
+// loopBodyOutputs is the `outputs` namespace for an expression inside a loop
+// body: the enclosing loop's previous-iteration outputs, or the empty map when
+// there is no previous iteration. Every in-loop site goes through it so the
+// namespace is never undeclared on iteration 0.
+func loopBodyOutputs(prev map[string]interface{}) map[string]interface{} {
+	if prev == nil {
+		return map[string]interface{}{}
+	}
+	return prev
 }
 
 // evaluateNodeCondition evaluates a node's condition field to determine if it should execute.
@@ -270,6 +335,17 @@ func normalizeEdgeFrom(from string) string {
 type SimplifiedStateMachine struct {
 	processor *core.WorkflowProcessor
 	state     core.WorkflowProcessorState
+	// scope returns the loop namespaces for edge conditions at routing time;
+	// nil outside a loop body. A func, not a value, because a sequential
+	// loop's iteration counter and previous outputs move after construction.
+	scope func() *LoopScope
+}
+
+// WithLoopScope makes edge case conditions routed by this machine see the loop
+// body's `iter` and `outputs` — the same LoopScope its node conditions get.
+func (sm *SimplifiedStateMachine) WithLoopScope(scope func() *LoopScope) *SimplifiedStateMachine {
+	sm.scope = scope
+	return sm
 }
 
 // NewSimplifiedStateMachine creates a new state machine for a workflow.
@@ -283,45 +359,22 @@ func NewSimplifiedStateMachine(_ string, workflowDef *reliantv1.Workflow) *Simpl
 
 // FindTriggeredNodes finds all nodes that should be triggered by the given events.
 func (sm *SimplifiedStateMachine) FindTriggeredNodes(events []*core.WorkflowEvent, nodeOutputs map[string]interface{}, workflowInputs map[string]interface{}) ([]*core.TriggeredNode, error) {
+	var scope *LoopScope
+	if sm.scope != nil {
+		scope = sm.scope()
+	}
 	nextState, triggeredNodes, err := sm.processor.Process(sm.state, core.ProcessInput{
 		Events:         events,
 		NodeOutputs:    nodeOutputs,
 		WorkflowInputs: workflowInputs,
+		Iter:           scope.iter(),
+		LoopOutputs:    scope.outputs(),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("process workflow events: %w", err)
 	}
 	sm.state = nextState
 	return triggeredNodes, nil
-}
-
-// evaluateCELValue evaluates a CEL expression against the provided context.
-// Uses NewEnvFromContext to auto-detect which namespaces to include.
-func evaluateCELValue(expr string, context map[string]interface{}) (interface{}, error) {
-	env, err := wfcel.NewEnvFromContext(context, true)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create CEL environment: %w", err)
-	}
-
-	ast, issues := env.Compile(expr)
-	if issues != nil && issues.Err() != nil {
-		return nil, fmt.Errorf("CEL compilation error: %w", issues.Err())
-	}
-
-	prg, err := env.Program(ast)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create CEL program: %w", err)
-	}
-
-	evalCtx := wfcel.EnsureNamespaceDefaults(context, wfcel.AllNamespaces())
-	out, _, err := prg.Eval(evalCtx)
-	if err != nil {
-		return nil, fmt.Errorf("CEL evaluation error: %w", err)
-	}
-
-	// convertCELToNative (wfcel.ConvertToNative) maps CEL null — the
-	// structpb.NullValue enum — to Go nil at every nesting level.
-	return convertCELToNative(out.Value()), nil
 }
 
 // EvaluateWorkflowOutputs evaluates workflow output expressions when workflow completes.
@@ -359,17 +412,19 @@ func EvaluateDeclaredOutputs(
 		inputs = i
 	}
 
-	var iter *model.IterContext
-	if iterMap, ok := workflowContext["iter"].(map[string]interface{}); ok {
-		if iterVal, ok := iterMap["iteration"].(int); ok {
-			iter = &model.IterContext{Iteration: iterVal}
-		}
+	// The enclosing loop's full iteration context (item/key included). Callers
+	// may pass it explicitly; otherwise it is the `iter` the loop executors
+	// publish into the scope's inputs, which is also where every node in the
+	// scope reads it from (StepExecutor.iterContext).
+	iterMap, _ := workflowContext["iter"].(map[string]interface{})
+	if iterMap == nil {
+		iterMap, _ = inputs["iter"].(map[string]interface{})
 	}
 
 	ctx := &wfcel.NodeResolutionContext{
 		Inputs:   inputs,
 		Nodes:    nodeOutputs,
-		Iter:     iter,
+		Iter:     iterContextFromMap(iterMap),
 		Workflow: workflowContextToTyped(workflowContext),
 	}
 

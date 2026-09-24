@@ -48,14 +48,16 @@ func getNodeOutputCELType(registry *wfcel.TypeRegistry, nodeType, nodeID string)
 func newValidationCELEnv(namespaces []wfcel.CELNamespace, typeCtx *WorkflowTypeContext) (*cel.Env, error) {
 	var opts []cel.EnvOption
 
-	opts = append(opts, cel.StdLib())
+	// wfcel.StdLib, not cel.StdLib: the runtime's size() accepts null (== 0),
+	// and the type checker must accept exactly what the runtime evaluates.
+	opts = append(opts, wfcel.StdLib())
 	opts = append(opts, cel.OptionalTypes())
 	opts = append(opts, cel.CrossTypeNumericComparisons(true))
 
 	// Register context types with CEL for native field validation.
 	// When we have typed iter item fields, skip registering IterContext as a native
 	// type so our custom type provider can control field resolution on iter.item.
-	if typeCtx != nil && typeCtx.IterItemFields != nil {
+	if typeCtx != nil {
 		opts = append(opts, ext.NativeTypes(
 			ext.ParseStructTag("json"),
 			reflect.TypeOf(&model.WorkflowContext{}),
@@ -93,7 +95,9 @@ func newValidationCELEnv(namespaces []wfcel.CELNamespace, typeCtx *WorkflowTypeC
 	// Add custom functions
 	opts = append(opts, wfcel.CustomFunctions()...)
 
-	baseEnv, err := cel.NewEnv(opts...)
+	// NewCustomEnv: cel.NewEnv preloads cel-go's stock stdlib, whose size()
+	// would conflict with wfcel.StdLib's.
+	baseEnv, err := cel.NewCustomEnv(opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -110,50 +114,6 @@ func newValidationCELEnv(namespaces []wfcel.CELNamespace, typeCtx *WorkflowTypeC
 	return baseEnv, nil
 }
 
-// newSaveMessageCELEnv creates a CEL environment specifically for save_message validation
-// with typed output namespace based on the current node's type.
-func newSaveMessageCELEnv(nodeType, nodeID string, typeCtx *WorkflowTypeContext) (*cel.Env, error) {
-	var nodeTypeCtx *WorkflowTypeContext
-	if typeCtx != nil {
-		nodeTypeCtx = &WorkflowTypeContext{
-			InputFields:      typeCtx.InputFields,
-			InputGroups:      typeCtx.InputGroups,
-			NodeOutputs:      typeCtx.NodeOutputs,
-			OutputFields:     typeCtx.OutputFields,
-			NodeTypes:        typeCtx.NodeTypes,
-			Registry:         typeCtx.Registry,
-			ConditionalNodes: typeCtx.ConditionalNodes,
-			LenientInputs:    typeCtx.LenientInputs,
-		}
-	} else {
-		nodeTypeCtx = &WorkflowTypeContext{
-			InputFields:  make(map[string]*FieldInfo),
-			InputGroups:  make(map[string]map[string]*FieldInfo),
-			NodeOutputs:  make(map[string]map[string]*FieldInfo),
-			OutputFields: make(map[string]*FieldInfo),
-			NodeTypes:    make(map[string]string),
-			Registry:     sharedRegistry,
-		}
-	}
-
-	nodeTypeCtx.CurrentNodeID = nodeID
-	if nodeType == model.NodeTypeWorkflow || nodeType == model.NodeTypeLoop {
-		nodeTypeCtx.CurrentNodeOutputType = nil
-	} else {
-		nodeTypeCtx.CurrentNodeOutputType = getNodeOutputCELType(nodeTypeCtx.Registry, nodeType, nodeID)
-	}
-
-	namespaces := []wfcel.CELNamespace{
-		wfcel.CELInputs,
-		wfcel.CELWorkflow,
-		wfcel.CELNodes,
-		wfcel.CELIter,
-		wfcel.CELOutput,
-	}
-
-	return newValidationCELEnv(namespaces, nodeTypeCtx)
-}
-
 // =============================================================================
 // NAMESPACE DECLARATIONS
 // =============================================================================
@@ -166,7 +126,7 @@ func getNamespaceDecl(ns wfcel.CELNamespace, typeCtx *WorkflowTypeContext) cel.E
 		// When we have inferred type info for iter.item (from loop items expression),
 		// use ObjectType so the custom type provider can validate field access.
 		// Otherwise fall back to DynType for backward compatibility.
-		if typeCtx != nil && typeCtx.IterItemFields != nil {
+		if typeCtx != nil {
 			return cel.Variable(string(ns), cel.ObjectType("iter"))
 		}
 		return cel.Variable(string(ns), cel.DynType)

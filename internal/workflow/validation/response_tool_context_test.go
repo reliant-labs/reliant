@@ -18,7 +18,7 @@ func TestBuildResponseToolContext_SimpleNode(t *testing.T) {
 	t.Parallel()
 	wf, err := wfyaml.ParseWorkflow([]byte(`
 name: test
-entry: [call_llm, execute]
+entry: [call_llm]
 nodes:
   - id: call_llm
     type: call_llm
@@ -42,7 +42,7 @@ edges:
     to: execute
 outputs:
   # Valid response_data access
-  score: "{{nodes.execute.response_data.review.score}}"
+  score: "{{has(nodes.execute.response_data.review.score) ? nodes.execute.response_data.review.score : 0}}"
 `))
 	require.NoError(t, err)
 
@@ -101,7 +101,7 @@ edges:
   - from: call_llm_2
     to: execute_2
 outputs:
-  review_score: "{{nodes.execute_1.response_data.review.score}}"
+  review_score: "{{has(nodes.execute_1.response_data.review.score) ? nodes.execute_1.response_data.review.score : 0}}"
   analyze_result: "{{nodes.execute_2.response_data.analyze.result}}"
   # Cross-access should fail
   wrong_access: "{{nodes.execute_1.response_data.analyze.result}}"
@@ -125,7 +125,7 @@ func TestBuildResponseToolContext_DynamicSource(t *testing.T) {
 	t.Parallel()
 	wf, err := wfyaml.ParseWorkflow([]byte(`
 name: test
-entry: [call_llm, execute]
+entry: [call_llm]
 nodes:
   - id: call_llm
     type: call_llm
@@ -145,7 +145,7 @@ edges:
   - from: call_llm
     to: execute
 outputs:
-  result: "{{nodes.execute.response_data.review.score}}"
+  result: "{{has(nodes.execute.response_data.review.score) ? nodes.execute.response_data.review.score : 0}}"
 `))
 	require.NoError(t, err)
 
@@ -164,7 +164,7 @@ func TestBuildResponseToolContext_NoResponseTool(t *testing.T) {
 	t.Parallel()
 	wf, err := wfyaml.ParseWorkflow([]byte(`
 name: test
-entry: [call_llm, execute]
+entry: [call_llm]
 nodes:
   - id: call_llm
     type: call_llm
@@ -195,7 +195,7 @@ func TestBuildResponseToolContext_TemplateToolName(t *testing.T) {
 	t.Parallel()
 	wf, err := wfyaml.ParseWorkflow([]byte(`
 name: test
-entry: [call_llm, execute]
+entry: [call_llm]
 nodes:
   - id: call_llm
     type: call_llm
@@ -240,7 +240,7 @@ func TestResolveToolCallsSource_SimplePattern(t *testing.T) {
 	// by checking that validation correctly identifies the source node
 	wf, err := wfyaml.ParseWorkflow([]byte(`
 name: test
-entry: [call_llm, execute]
+entry: [call_llm]
 nodes:
   - id: call_llm
     type: call_llm
@@ -260,7 +260,7 @@ edges:
     to: execute
 outputs:
   # Valid: review is the tool from call_llm
-  score: "{{nodes.execute.response_data.review.score}}"
+  score: "{{has(nodes.execute.response_data.review.score) ? nodes.execute.response_data.review.score : 0}}"
 `))
 	require.NoError(t, err)
 
@@ -275,7 +275,7 @@ func TestResolveToolCallsSource_ComplexExpression(t *testing.T) {
 	// Complex expressions should be treated as dynamic source
 	wf, err := wfyaml.ParseWorkflow([]byte(`
 name: test
-entry: [llm_a, execute]
+entry: [llm_a]
 nodes:
   - id: llm_a
     type: call_llm

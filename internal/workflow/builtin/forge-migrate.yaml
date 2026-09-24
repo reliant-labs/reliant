@@ -76,7 +76,9 @@ inputs:
 
 outputs:
   project_root: "{{has(nodes.inventory.response) && nodes.inventory.response != null ? nodes.inventory.response.target_directory : ''}}"
-  components_ported: "{{has(nodes.port_loop.ported) ? nodes.port_loop.ported : 0}}"
+  # has(nodes.port_loop.ported) alone evaluates nodes.port_loop first, which
+  # is absent on the denied and failed-scaffold paths — guard the node too.
+  components_ported: "{{has(nodes.port_loop) && has(nodes.port_loop.ported) ? nodes.port_loop.ported : 0}}"
 
 nodes:
   # ─── Phase 1: Inventory ─────────────────────────────────────────────

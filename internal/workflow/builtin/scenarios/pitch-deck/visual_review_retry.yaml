@@ -16,7 +16,6 @@ description: Visual reviewer fails first build (AI visual tells), builder fixes,
 
 inputs:
   mode: auto
-  yield: false
   website_url: "https://example.com"
   deck_purpose: seed
   pitch_deck_dir: "pitch-deck"

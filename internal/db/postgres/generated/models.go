@@ -525,6 +525,14 @@ type TaskDependency struct {
 	CreatedAt      time.Time `json:"created_at"`
 }
 
+type TemporalPayloadBlob struct {
+	Key              string    `json:"key"`
+	Data             []byte    `json:"data"`
+	SizeBytes        int32     `json:"size_bytes"`
+	CreatedAt        time.Time `json:"created_at"`
+	LastReferencedAt time.Time `json:"last_referenced_at"`
+}
+
 type Thread struct {
 	ID              string         `json:"id"`
 	ChatID          string         `json:"chat_id"`

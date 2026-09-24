@@ -298,6 +298,7 @@ func referenceFieldToSchema(name, fieldType, description, typePrefix string) *js
 		smProps.Set("content", &jsonschema.Schema{Type: "string", Description: "Message content (CEL)"})
 		smProps.Set("tool_calls", &jsonschema.Schema{Type: "string", Description: "Tool calls (CEL)"})
 		smProps.Set("tool_results", &jsonschema.Schema{Type: "string", Description: "Tool results (CEL)"})
+		smProps.Set("condition", &jsonschema.Schema{Type: "string", Description: "Raw CEL condition returning bool (no {{}}) over output, inputs, workflow, iter; the message is saved only when true"})
 		return &jsonschema.Schema{
 			Type:        "object",
 			Description: "[" + typePrefix + "] Auto-save message config",

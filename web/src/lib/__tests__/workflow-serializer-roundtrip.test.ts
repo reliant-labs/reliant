@@ -447,7 +447,7 @@ describe("Workflow Serializer Round-Trip", () => {
             role: celExpr("{{output.message.role}}"),
             content: celExpr("{{output.message.text}}"),
             toolCalls: celExpr("{{output.tool_calls}}"),
-            condition: celExpr("{{output.message != null}}"),
+            condition: directCel("output.message != null"),
           },
         },
       ],
@@ -464,7 +464,7 @@ describe("Workflow Serializer Round-Trip", () => {
       role: celExpr("{{output.message.role}}"),
       content: celExpr("{{output.message.text}}"),
       toolCalls: celExpr("{{output.tool_calls}}"),
-      condition: celExpr("{{output.message != null}}"),
+      condition: directCel("output.message != null"),
     });
   });
 

@@ -133,10 +133,19 @@ func TestQuiescentForContinueAsNew(t *testing.T) {
 	})
 
 	// Continuing as new ends the execution, and a background spawn is a
-	// goroutine INSIDE it — not a child workflow that would survive. Killing
-	// one mid-flight strands its tool_calls row at "backgrounded" forever.
-	t.Run("live detached spawn blocks", func(t *testing.T) {
+	// goroutine INSIDE it. One that has not parked at its iteration boundary
+	// is mid-iteration, so the handoff waits for it.
+	t.Run("unparked detached spawn blocks", func(t *testing.T) {
 		require.False(t, quiescentForContinueAsNew(trackerWithSpawn(), false))
+	})
+
+	// A spawn parked at its boundary is carried into the successor, so it no
+	// longer holds up the handoff (chat 0e15fdba: six live spawns declined
+	// the handoff nine times and the run died at the size cap).
+	t.Run("parked detached spawn does not block", func(t *testing.T) {
+		tracker := trackerWithSpawn()
+		tracker.liveDetachedSpawns["tool-1"].parked = true
+		require.True(t, quiescentForContinueAsNew(tracker, false))
 	})
 
 	// A spawn that has landed no longer pins the run.
@@ -160,7 +169,7 @@ func TestQuiescentForContinueAsNew(t *testing.T) {
 // continueAsNewCarryWorkflow returns a continuation built the same way the
 // agent loop builds one, so the test can inspect what crosses the boundary.
 func continueAsNewCarryWorkflow(ctx workflow.Context, input WorkflowInput) (*WorkflowResult, error) {
-	return nil, newContinueAsNewError(ctx, input, "agent_loop", 7)
+	return nil, newContinueAsNewError(ctx, input, "agent_loop", 7, nil, false)
 }
 
 type ContinueAsNewInputTestSuite struct {

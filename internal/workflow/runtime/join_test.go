@@ -271,6 +271,54 @@ func (l *testLogger) Info(msg string, keyvals ...interface{}) {
 	l.messages = append(l.messages, msg)
 }
 
+// A join whose source is another join must fire in the same pass: the inner
+// join's synthetic completion event is appended to the event list and has to be
+// fed back through RecordCompletion. A range loop fixes the slice length at
+// entry, so the appended event was never seen and the outer join could never
+// fire (migrate.yaml's workflows_done → join_results hung exactly this way).
+func TestProcessJoinEvents_ChainedJoinFires(t *testing.T) {
+	t.Parallel()
+	workflow := loadTestWorkflow(t, `{
+		"name": "test-chained-join",
+		"entry": ["task_a"],
+		"nodes": [
+			{"id": "task_a", "type": "do_a"},
+			{"id": "task_b", "type": "do_b"},
+			{"id": "inner", "type": "join", "condition": "any"},
+			{"id": "outer", "type": "join", "condition": "all"},
+			{"id": "next", "type": "do_next"}
+		],
+		"edges": [
+			{"from": "task_a", "default": "inner"},
+			{"from": "inner", "default": "outer"},
+			{"from": "task_b", "default": "outer"}
+		]
+	}`)
+
+	js := NewJoinState()
+	js.InitializeJoins(workflow)
+	nodeOutputs := make(map[string]interface{})
+
+	// task_b completes first: outer is still waiting on inner.
+	result := processJoinEvents([]*core.WorkflowEvent{
+		{ID: "e1", StepID: "task_b", Data: map[string]interface{}{"result": "b"}},
+	}, js, workflow, "wf1", "chat1", "test", nodeOutputs, &testLogger{}, nil, nil, time.Now())
+	require.Len(t, result, 1)
+
+	// task_a completes: inner (any) fires, and its completion must satisfy outer.
+	result = processJoinEvents([]*core.WorkflowEvent{
+		{ID: "e2", StepID: "task_a", Data: map[string]interface{}{"result": "a"}},
+	}, js, workflow, "wf1", "chat1", "test", nodeOutputs, &testLogger{}, nil, nil, time.Now())
+
+	stepIDs := make([]string, 0, len(result))
+	for _, e := range result {
+		stepIDs = append(stepIDs, e.StepID)
+	}
+	assert.Equal(t, []string{"task_a", "inner", "outer"}, stepIDs,
+		"the inner join's completion must be processed in the same pass and fire the outer join")
+	assert.Contains(t, nodeOutputs, "outer")
+}
+
 func TestProcessJoinEvents_ConditionAll(t *testing.T) {
 	t.Parallel()
 	workflow := loadTestWorkflow(t, `{

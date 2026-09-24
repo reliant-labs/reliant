@@ -17,7 +17,6 @@ import (
 
 	"github.com/google/cel-go/cel"
 	"github.com/google/cel-go/common/ast"
-	"github.com/google/cel-go/common/operators"
 	"github.com/google/cel-go/common/types"
 	"github.com/google/cel-go/common/types/ref"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -31,128 +30,6 @@ import (
 // Returns the expression if it's a CEL expression, otherwise the literal value.
 func celString(c *reliantv1.CelString) string {
 	return model.CelStringRaw(c)
-}
-
-// validateInlineWorkflowCELWithCompilation validates an inline workflow's CEL expressions
-// using the compilation-based path. It builds its own WorkflowTypeContext with LenientInputs
-// set, since inline workflows receive inputs dynamically via args from the parent.
-func validateInlineWorkflowCELWithCompilation(wf *reliantv1.Workflow, basePath []string, result *Result) {
-	if wf == nil {
-		return
-	}
-
-	// Build type context for the inline workflow with lenient inputs
-	typeCtx := BuildWorkflowTypeContext(wf, nil)
-	if typeCtx == nil {
-		return
-	}
-	typeCtx.LenientInputs = true
-	typeCtx.GuaranteedBefore = computeGuaranteedBefore(wf)
-
-	// Create schema type checker for AST-based type validation
-	schemaTypeChecker := NewSchemaTypeCheckerFromProto(wf)
-
-	// Create CEL environment with typed variables
-	env, err := newValidationCELEnv([]wfcel.CELNamespace{
-		wfcel.CELInputs,
-		wfcel.CELWorkflow,
-		wfcel.CELNodes,
-		wfcel.CELIter,
-		wfcel.CELOutputs,
-		wfcel.CELOutput,
-	}, typeCtx)
-	if err != nil {
-		result.Add(&Error{
-			Severity: SeverityError,
-			Category: CategoryCELSemantic,
-			Path:     basePath,
-			Message:  fmt.Sprintf("failed to create CEL environment for inline workflow: %v", err),
-		})
-		return
-	}
-
-	// Collect node IDs for expression rewriting
-	nodes := wf.GetNodes()
-	nodeIDs := make([]string, 0, len(nodes))
-	for _, node := range nodes {
-		nodeIDs = append(nodeIDs, node.GetId())
-	}
-
-	// Validate all CEL templates in node fields
-	for i, node := range nodes {
-		nodePath := append(basePath, "nodes", fmt.Sprintf("[%d](%s)", i, node.GetId()))
-		validateProtoNodeTemplatesWithCompilation(node, nodePath, env, schemaTypeChecker, nodeIDs, typeCtx, wf, result)
-	}
-
-	// Validate node condition expressions
-	for i, node := range nodes {
-		condExpr := model.ConditionExpr(node)
-		if condExpr == "" {
-			continue
-		}
-		if node.GetType() == model.NodeTypeJoin {
-			continue
-		}
-		origExpr := condExpr
-		expr := origExpr
-		path := append(basePath, "nodes", fmt.Sprintf("[%d](%s)", i, node.GetId()), "condition")
-		validateInputPropertyAccess(expr, path, typeCtx, result)
-		validateResponseDataAccessFromExpr(expr, path, typeCtx, result)
-		expr = rewriteNodesAccess(expr, nodeIDs)
-		validateCELExpressionWithCompilationAndSchema(origExpr, expr, path, env, schemaTypeChecker, typeCtx, result)
-		warnConditionalNodeAccessCompiled(origExpr, path, typeCtx, result)
-		// Node conditions evaluate before the node runs
-		warnNodeOrderingCompiled(origExpr, path, &nodeOrderScope{nodeID: node.GetId()}, typeCtx, result)
-		celAst, issues := env.Compile(expr)
-		if celAst != nil && (issues == nil || issues.Err() == nil) {
-			validateConditionReturnType(celAst, origExpr, path, result)
-		}
-	}
-
-	// Validate edge condition expressions
-	for i, edge := range wf.GetEdges() {
-		for j, c := range edge.GetCases() {
-			if c.GetCondition() == "" {
-				continue
-			}
-			origExpr := c.GetCondition()
-			expr := origExpr
-			path := append(basePath, "edges", fmt.Sprintf("[%d]", i), "cases", fmt.Sprintf("[%d]", j), "condition")
-			validateInputPropertyAccess(expr, path, typeCtx, result)
-			validateResponseDataAccessFromExpr(expr, path, typeCtx, result)
-			expr = rewriteNodesAccess(expr, nodeIDs)
-			validateCELExpressionWithCompilationAndSchema(origExpr, expr, path, env, schemaTypeChecker, typeCtx, result)
-			warnConditionalNodeAccessCompiled(origExpr, path, typeCtx, result)
-			// Edge conditions evaluate after the source node completes
-			warnNodeOrderingCompiled(origExpr, path, &nodeOrderScope{nodeID: edge.GetFrom(), afterNode: true}, typeCtx, result)
-			celAst, issues := env.Compile(expr)
-			if celAst != nil && (issues == nil || issues.Err() == nil) {
-				validateConditionReturnType(celAst, origExpr, path, result)
-			}
-		}
-	}
-
-	// Validate output expressions
-	outputs := wf.GetOutputs()
-	for name, expr := range outputs {
-		origExpr := expr
-		expr = strings.TrimSpace(expr)
-		if strings.HasPrefix(expr, "{{") && strings.HasSuffix(expr, "}}") {
-			expr = strings.TrimPrefix(expr, "{{")
-			expr = strings.TrimSuffix(expr, "}}")
-			expr = strings.TrimSpace(expr)
-		}
-		path := append(basePath, "outputs", name)
-		validateInputPropertyAccess(origExpr, path, typeCtx, result)
-		validateResponseDataAccessFromExpr(origExpr, path, typeCtx, result)
-		expr = rewriteNodesAccess(expr, nodeIDs)
-		validateCELExpressionWithCompilationAndSchema(origExpr, expr, path, env, schemaTypeChecker, typeCtx, result)
-		warnConditionalNodeAccessCompiled(origExpr, path, typeCtx, result)
-		celAst, issues := env.Compile(expr)
-		if celAst != nil && (issues == nil || issues.Err() == nil) {
-			validateOutputNotAlwaysNull(celAst, origExpr, path, result)
-		}
-	}
 }
 
 // =============================================================================
@@ -178,131 +55,6 @@ func getAvailableToolNames(schemas map[string]*ResponseToolSchema) []string {
 // CONDITIONAL NODE ACCESS WARNINGS
 // =============================================================================
 
-// UnsafeNodeAccess represents an unsafe access to a conditional node.
-type UnsafeNodeAccess struct {
-	NodeID string // The node ID being accessed
-	Path   string // The access path (e.g., "nodes.conditional_llm.output")
-}
-
-// detectConditionalNodeAccess walks a CEL AST and detects unsafe access
-// to conditional nodes. Returns list of unsafe accesses.
-//
-// Safe patterns (will NOT warn):
-//  1. Optional chaining: nodes.?conditional_node.output
-//  2. has() check: has(nodes.conditional_node)
-//  3. Null comparison: nodes.conditional_node != null
-//
-// Unsafe patterns (will warn):
-//  1. Direct access: nodes.conditional_node.output
-func detectConditionalNodeAccess(
-	compiledAst *cel.Ast,
-	conditionalNodes map[string]bool,
-) []UnsafeNodeAccess {
-	if compiledAst == nil || len(conditionalNodes) == 0 {
-		return nil
-	}
-
-	var unsafeAccesses []UnsafeNodeAccess
-
-	// Track which node accesses are safe (protected by has(), null checks, or optional chaining)
-	safeAccesses := make(map[string]bool)
-
-	// First pass: identify safe accesses (has() calls, null comparisons)
-	ast.PostOrderVisit(compiledAst.NativeRep().Expr(), ast.NewExprVisitor(func(e ast.Expr) {
-		switch e.Kind() {
-		case ast.CallKind:
-			call := e.AsCall()
-			// Check for has() function
-			if call.FunctionName() == operators.Has {
-				// Mark the argument as safe
-				if len(call.Args()) > 0 {
-					markAccessAsSafe(call.Args()[0], safeAccesses)
-				}
-			}
-			// Check for null comparison operators (==, !=)
-			if call.FunctionName() == operators.Equals || call.FunctionName() == operators.NotEquals {
-				// Check if one of the arguments is null and the other is a node access
-				if len(call.Args()) == 2 {
-					arg1 := call.Args()[0]
-					arg2 := call.Args()[1]
-					// Check if arg1 is null and arg2 is node access, or vice versa
-					if isNullLiteral(arg1) {
-						markAccessAsSafe(arg2, safeAccesses)
-					} else if isNullLiteral(arg2) {
-						markAccessAsSafe(arg1, safeAccesses)
-					}
-				}
-			}
-		}
-	}))
-
-	// Second pass: find all node accesses and check if they're safe
-	// Track which nodes we've already reported to avoid duplicates
-	reportedNodes := make(map[string]bool)
-
-	ast.PostOrderVisit(compiledAst.NativeRep().Expr(), ast.NewExprVisitor(func(e ast.Expr) {
-		switch e.Kind() {
-		case ast.SelectKind:
-			sel := e.AsSelect()
-			// Check for optional chaining (test-only select)
-			if sel.IsTestOnly() {
-				// Optional chaining is safe, mark it
-				markAccessAsSafe(e, safeAccesses)
-				return
-			}
-
-			// Check if this is a node access (nodes.nodeID.field)
-			if nodeID := extractNodeIDFromSelect(sel); nodeID != "" {
-				// Check if this node is conditional
-				if conditionalNodes[nodeID] {
-					// Check if this access is marked as safe
-					accessPath := getAccessPath(e)
-					if !safeAccesses[accessPath] && !reportedNodes[nodeID] {
-						// Only report once per node
-						reportedNodes[nodeID] = true
-						unsafeAccesses = append(unsafeAccesses, UnsafeNodeAccess{
-							NodeID: nodeID,
-							Path:   accessPath,
-						})
-					}
-				}
-			}
-		}
-	}))
-
-	return unsafeAccesses
-}
-
-// markAccessAsSafe marks an expression and all its sub-accesses as safe.
-// This recursively walks the expression tree to mark all nested accesses.
-func markAccessAsSafe(e ast.Expr, safeAccesses map[string]bool) {
-	if e == nil {
-		return
-	}
-
-	// Mark the current expression as safe
-	accessPath := getAccessPath(e)
-	if accessPath != "" {
-		safeAccesses[accessPath] = true
-		// Also mark any parent accesses as safe
-		// e.g., if "nodes.cond.message.content" is safe, then "nodes.cond.message" and "nodes.cond" are also safe
-		for {
-			lastDot := strings.LastIndex(accessPath, ".")
-			if lastDot == -1 {
-				break
-			}
-			accessPath = accessPath[:lastDot]
-			safeAccesses[accessPath] = true
-		}
-	}
-
-	// Recursively mark sub-expressions (for select operands)
-	if e.Kind() == ast.SelectKind {
-		sel := e.AsSelect()
-		markAccessAsSafe(sel.Operand(), safeAccesses)
-	}
-}
-
 // isNullLiteral checks if an expression is a null literal.
 func isNullLiteral(e ast.Expr) bool {
 	if e.Kind() != ast.LiteralKind {
@@ -310,101 +62,6 @@ func isNullLiteral(e ast.Expr) bool {
 	}
 	lit := e.AsLiteral()
 	return lit.Type() == types.NullType
-}
-
-// extractNodeIDFromSelect extracts the node ID from a select expression if it's a node access.
-// Returns "" if not a node access pattern.
-// Handles patterns like: nodes.nodeID.field or nodes.nodeID
-func extractNodeIDFromSelect(sel ast.SelectExpr) string {
-	// Walk up the select chain to find nodes.nodeID pattern
-	operand := sel.Operand()
-
-	// If the operand is an ident and equals "nodes", then field is the node ID
-	if operand.Kind() == ast.IdentKind {
-		ident := operand.AsIdent()
-		if ident == "nodes" {
-			return sel.FieldName()
-		}
-	}
-
-	// If the operand is a select, check if it's nodes.nodeID
-	if operand.Kind() == ast.SelectKind {
-		operandSel := operand.AsSelect()
-		// Check if this is nodes.nodeID
-		if operandSel.Operand().Kind() == ast.IdentKind {
-			ident := operandSel.Operand().AsIdent()
-			if ident == "nodes" {
-				return operandSel.FieldName()
-			}
-		}
-	}
-
-	return ""
-}
-
-// getAccessPath reconstructs the full access path from an expression.
-// e.g., nodes.cond.message.content -> "nodes.cond.message.content"
-func getAccessPath(e ast.Expr) string {
-	switch e.Kind() {
-	case ast.IdentKind:
-		return e.AsIdent()
-	case ast.SelectKind:
-		sel := e.AsSelect()
-		operandPath := getAccessPath(sel.Operand())
-		if operandPath == "" {
-			return ""
-		}
-		return operandPath + "." + sel.FieldName()
-	default:
-		return ""
-	}
-}
-
-// warnConditionalNodeAccessCompiled checks for unsafe access to conditional node outputs.
-// The expression should be the ORIGINAL (non-rewritten) expression so that the AST contains
-// nodes.X.field patterns that detectConditionalNodeAccess can recognize.
-func warnConditionalNodeAccessCompiled(expr string, path []string, typeCtx *WorkflowTypeContext, result *Result) {
-	if typeCtx == nil || len(typeCtx.ConditionalNodes) == 0 {
-		return
-	}
-
-	// Create a minimal CEL environment for parsing the original expression.
-	// We use DynType so that the original nodes.X.field syntax parses without errors.
-	env, err := cel.NewEnv(
-		cel.Variable("nodes", cel.DynType),
-		cel.Variable("inputs", cel.DynType),
-		cel.Variable("workflow", cel.DynType),
-		cel.Variable("output", cel.DynType),
-		cel.Variable("outputs", cel.DynType),
-	)
-	if err != nil {
-		return
-	}
-
-	compiledAst, issues := env.Compile(expr)
-	if issues != nil && issues.Err() != nil {
-		return
-	}
-
-	conditionalNodeSet := make(map[string]bool, len(typeCtx.ConditionalNodes))
-	for nodeID := range typeCtx.ConditionalNodes {
-		conditionalNodeSet[nodeID] = true
-	}
-
-	unsafeAccesses := detectConditionalNodeAccess(compiledAst, conditionalNodeSet)
-
-	for _, access := range unsafeAccesses {
-		condition := typeCtx.ConditionalNodes[access.NodeID]
-		result.Add(&Error{
-			Severity: SeverityWarning,
-			Category: CategoryConditionalAccess,
-			Path:     path,
-			Message: fmt.Sprintf(
-				"node '%s' has a condition and may be skipped (condition: %s); consider using optional chaining (nodes.?%s.field) or checking for null first",
-				access.NodeID, condition, access.NodeID,
-			),
-		})
-	}
 }
 
 var (
@@ -573,6 +230,16 @@ func responseToolSchemaFromProto(toolName, sourceNodeID string, schema *structpb
 	}
 	if schema == nil {
 		return result
+	}
+	// `required` decides which fields the LLM may omit (absent at run time).
+	if requiredRaw, ok := schema.AsMap()["required"].([]interface{}); ok {
+		result.HasRequired = true
+		result.Required = make(map[string]bool, len(requiredRaw))
+		for _, r := range requiredRaw {
+			if name, ok := r.(string); ok {
+				result.Required[name] = true
+			}
+		}
 	}
 	propertiesRaw, ok := schema.AsMap()["properties"]
 	if !ok {
@@ -1589,267 +1256,90 @@ func hasDirectHasPrefix(expr string, pos int) bool {
 	return expr[j-3:j+1] == "has("
 }
 
-// ValidateCELWithCompilation validates CEL expressions by actually compiling them.
-// This provides more accurate error detection than regex-based validation.
-//
-// Benefits:
-// - Catches invalid field access (e.g., "iterations" vs "_iterations")
-// - Type checking for operations
-// - Position-accurate error messages
-func ValidateCELWithCompilation(wf *reliantv1.Workflow, result *Result, loader WorkflowLoader) {
-	// Build type context from proto
-	typeCtx := BuildWorkflowTypeContext(wf, loader)
-
-	// Execution-order analysis: which nodes are guaranteed to have run before
-	// each node. Enables ordering validation of nodes.<id> references.
-	if typeCtx != nil {
-		typeCtx.GuaranteedBefore = computeGuaranteedBefore(wf)
-	}
-
-	// Create schema type checker for AST-based type validation
-	schemaTypeChecker := NewSchemaTypeCheckerFromProto(wf)
-
-	// Create CEL environment with typed variables
-	env, err := newValidationCELEnv([]wfcel.CELNamespace{
-		wfcel.CELInputs,
-		wfcel.CELWorkflow,
-		wfcel.CELNodes,
-		wfcel.CELIter,
-		wfcel.CELOutputs,
-		wfcel.CELOutput,
-	}, typeCtx)
-	if err != nil {
+// rejectSaveMessageNodesRefs reports every save_message field that reads the
+// `nodes` namespace. A node's save_message is written by whoever executes the
+// node — for an activity, the worker — which has no view of other nodes'
+// outputs, so save_message may read only output, inputs, workflow and iter.
+func rejectSaveMessageNodesRefs(fields map[string]string, condition string, basePath []string, result *Result) {
+	check := func(fieldName string, exprs []string) {
+		if len(exprs) == 0 {
+			return
+		}
+		refs, err := wfcel.ReferencesOf(exprs, wfcel.CELNodes)
+		if err != nil || !refs.Referenced {
+			// A parse error is reported by the compile pass.
+			return
+		}
 		result.Add(&Error{
 			Severity: SeverityError,
 			Category: CategoryCELSemantic,
-			Path:     []string{wf.GetName()},
-			Message:  fmt.Sprintf("failed to create CEL environment: %v", err),
+			Path:     append(append([]string{}, basePath...), fieldName),
+			Message: fmt.Sprintf("save_message field '%s' references `nodes`, which is not available in save_message. "+
+				"A node's message is written by whoever executes the node, so save_message can read only "+
+				"`output` (this node's result), `inputs`, `workflow` and `iter`", fieldName),
+			Suggestion: "read the value from `output` (expose it on this node's output if needed) or pass it through `inputs`",
 		})
-		return
 	}
-
-	// Collect node IDs for expression rewriting
-	nodes := wf.GetNodes()
-	nodeIDs := make([]string, 0, len(nodes))
-	for _, node := range nodes {
-		nodeIDs = append(nodeIDs, node.GetId())
+	for fieldName, value := range fields {
+		check(fieldName, wfcel.TemplateExpressions(value, false))
 	}
-
-	// Validate all CEL templates in node fields
-	for i, node := range nodes {
-		nodePath := []string{wf.GetName(), "nodes", fmt.Sprintf("[%d](%s)", i, node.GetId())}
-		validateProtoNodeTemplatesWithCompilation(node, nodePath, env, schemaTypeChecker, nodeIDs, typeCtx, wf, result)
+	if condition != "" && len(extractTemplateExpressions(condition)) == 0 {
+		// A {{ }}-wrapped condition is reported by validateSaveMessageCondition.
+		check("condition", []string{condition})
 	}
+}
 
-	// Validate node condition expressions
-	for i, node := range nodes {
-		condExpr := model.ConditionExpr(node)
-		if condExpr == "" {
-			continue
-		}
-		// Skip join conditions
-		if node.GetType() == model.NodeTypeJoin {
-			continue
-		}
-		origExpr := condExpr
-		expr := origExpr
-		path := []string{wf.GetName(), "nodes", fmt.Sprintf("[%d](%s)", i, node.GetId()), "condition"}
-		validateInputPropertyAccess(expr, path, typeCtx, result)
-		validateResponseDataAccessFromExpr(expr, path, typeCtx, result)
-		expr = rewriteNodesAccess(expr, nodeIDs)
-		validateCELExpressionWithCompilationAndSchema(origExpr, expr, path, env, schemaTypeChecker, typeCtx, result)
-		warnConditionalNodeAccessCompiled(origExpr, path, typeCtx, result)
-		// Node conditions evaluate before the node runs
-		warnNodeOrderingCompiled(origExpr, path, &nodeOrderScope{nodeID: node.GetId()}, typeCtx, result)
-		celAst, issues := env.Compile(expr)
-		if celAst != nil && (issues == nil || issues.Err() == nil) {
-			validateConditionReturnType(celAst, origExpr, path, result)
-		}
+// rejectTemplateDelimitersInRawCEL reports a raw-CEL field (node condition,
+// edge case condition, switch case condition, loop while, save_message
+// condition) whose value contains {{ }} template delimiters, and returns true
+// when it did. These fields are evaluated as CEL directly, never as templates:
+// a wrapped value is not "the same expression" — it either fails to compile
+// or, worse, parses as something else. One behavior everywhere: reject, with
+// the unwrapped expression as the fix. Nothing strips the delimiters.
+func rejectTemplateDelimitersInRawCEL(expr string, path []string, result *Result) bool {
+	matches := extractTemplateExpressions(expr)
+	if len(matches) == 0 {
+		return false
 	}
+	message := "conditions are raw CEL; remove the {{ }}"
+	suggestion := "write the expression without {{ }}"
+	if trimmed := strings.TrimSpace(expr); len(matches) == 1 && matches[0].full == trimmed && matches[0].expr != "" {
+		message += ": " + matches[0].expr
+		suggestion = "use: " + matches[0].expr
+	}
+	result.Add(&Error{
+		Severity:   SeverityError,
+		Category:   CategoryCELSemantic,
+		Path:       append([]string{}, path...),
+		Message:    message,
+		Suggestion: suggestion,
+	})
+	return true
+}
 
-	// Validate edge condition expressions
-	for i, edge := range wf.GetEdges() {
-		for j, c := range edge.GetCases() {
-			if c.GetCondition() == "" {
+// validateSwitchCaseConditions applies the raw-CEL rule to the switch case
+// conditions persisted in the workflow's UI metadata.
+func validateSwitchCaseConditions(wf *reliantv1.Workflow, basePath []string, result *Result) {
+	switches := wf.GetUi().GetSwitches()
+	for _, key := range sortedSwitchKeys(switches) {
+		for j, c := range switches[key].GetCases() {
+			expr := model.DirectCelExpr(c.GetCondition())
+			if expr == "" {
 				continue
 			}
-			origExpr := c.GetCondition()
-			expr := origExpr
-			path := []string{wf.GetName(), "edges", fmt.Sprintf("[%d]", i), "cases", fmt.Sprintf("[%d]", j), "condition"}
-			validateInputPropertyAccess(expr, path, typeCtx, result)
-			validateResponseDataAccessFromExpr(expr, path, typeCtx, result)
-			expr = rewriteNodesAccess(expr, nodeIDs)
-			validateCELExpressionWithCompilationAndSchema(origExpr, expr, path, env, schemaTypeChecker, typeCtx, result)
-			warnConditionalNodeAccessCompiled(origExpr, path, typeCtx, result)
-			// Edge conditions evaluate after the source node completes
-			warnNodeOrderingCompiled(origExpr, path, &nodeOrderScope{nodeID: edge.GetFrom(), afterNode: true}, typeCtx, result)
-			celAst, issues := env.Compile(expr)
-			if celAst != nil && (issues == nil || issues.Err() == nil) {
-				validateConditionReturnType(celAst, origExpr, path, result)
-			}
-		}
-	}
-
-	// Validate output expressions and infer types
-	outputs := wf.GetOutputs()
-	if len(outputs) > 0 {
-		outputExprs := make(map[string]string)
-		origExprs := make(map[string]string)
-		for name, expr := range outputs {
-			origExpr := expr
-			expr = strings.TrimSpace(expr)
-			if strings.HasPrefix(expr, "{{") && strings.HasSuffix(expr, "}}") {
-				expr = strings.TrimPrefix(expr, "{{")
-				expr = strings.TrimSuffix(expr, "}}")
-				expr = strings.TrimSpace(expr)
-			}
-			path := []string{wf.GetName(), "outputs", name}
-			validateInputPropertyAccess(origExpr, path, typeCtx, result)
-			validateResponseDataAccessFromExpr(origExpr, path, typeCtx, result)
-			expr = rewriteNodesAccess(expr, nodeIDs)
-			outputExprs[name] = expr
-			origExprs[name] = origExpr
-		}
-
-		// Build stripped (but non-rewritten) expressions for conditional access warnings.
-		// warnConditionalNodeAccessCompiled needs nodes.X.field syntax (not rewritten),
-		// but can't handle {{ }} delimiters.
-		strippedExprs := make(map[string]string)
-		for name, expr := range outputs {
-			s := strings.TrimSpace(expr)
-			if strings.HasPrefix(s, "{{") && strings.HasSuffix(s, "}}") {
-				s = strings.TrimPrefix(s, "{{")
-				s = strings.TrimSuffix(s, "}}")
-				s = strings.TrimSpace(s)
-			}
-			strippedExprs[name] = s
-		}
-
-		for name, expr := range outputExprs {
-			path := []string{wf.GetName(), "outputs", name}
-			origExpr := origExprs[name]
-			validateCELExpressionWithCompilationAndSchema(origExpr, expr, path, env, schemaTypeChecker, typeCtx, result)
-			warnConditionalNodeAccessCompiled(strippedExprs[name], path, typeCtx, result)
-			celAst, issues := env.Compile(expr)
-			if celAst != nil && (issues == nil || issues.Err() == nil) {
-				validateOutputNotAlwaysNull(celAst, origExpr, path, result)
-			}
-		}
-
-		inferredTypes, inferErrors := inferOutputTypes(outputExprs, env)
-
-		for name, err := range inferErrors {
-			errMsg := err.Error()
-			if strings.Contains(errMsg, "found no matching overload") {
-				result.Add(&Error{
-					Severity: SeverityError,
-					Category: CategoryCELSemantic,
-					Path:     []string{wf.GetName(), "outputs", name},
-					Message:  errMsg,
-				})
-			}
-		}
-
-		for name, fieldInfo := range inferredTypes {
-			if fieldInfo != nil && fieldInfo.IsDynamic {
-				result.Add(&Error{
-					Severity:   SeverityWarning,
-					Category:   CategoryCELSemantic,
-					Path:       []string{wf.GetName(), "outputs", name},
-					Message:    "output expression has dynamic type (dyn) - type cannot be validated at compile time",
-					Suggestion: "ensure the expression references a known field or type to enable type validation",
-				})
-			}
-		}
-
-		if len(inferredTypes) > 0 && typeCtx != nil {
-			typeCtx.OutputFields = inferredTypes
+			path := append(append([]string{}, basePath...), "ui", "switches", key, "cases", fmt.Sprintf("[%d]", j), "condition")
+			rejectTemplateDelimitersInRawCEL(expr, path, result)
 		}
 	}
 }
 
-// validateProtoNodeTemplatesWithCompilation validates all CEL templates in a proto node's fields.
-// This includes message templates, args, save_message, thread inject, etc.
-func validateProtoNodeTemplatesWithCompilation(node *reliantv1.Node, basePath []string, env *cel.Env, schemaTypeChecker *SchemaTypeChecker, nodeIDs []string, typeCtx *WorkflowTypeContext, wf *reliantv1.Workflow, result *Result) {
-	if node == nil {
-		return
+func sortedSwitchKeys(m map[string]*reliantv1.SwitchMetadata) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
 	}
-
-	// Ordering scopes: config/inject evaluate before the node runs;
-	// save_message evaluates after the node completes.
-	startScope := &nodeOrderScope{nodeID: node.GetId()}
-	afterScope := &nodeOrderScope{nodeID: node.GetId(), afterNode: true}
-
-	// Validate save_message expressions with node-specific typed output
-	if sm := node.GetSaveMessage(); sm != nil {
-		nodeType := node.GetType()
-		nodeID := node.GetId()
-		saveMessageEnv, err := newSaveMessageCELEnv(nodeType, nodeID, typeCtx)
-		if err != nil {
-			saveMessageEnv = env
-		}
-		validateProtoSaveMessageTemplatesWithCompilation(sm, append(basePath, "save_message"), saveMessageEnv, schemaTypeChecker, nodeIDs, typeCtx, afterScope, result)
-	}
-
-	// Validate loop while conditions
-	if loopArgs := node.GetLoop(); loopArgs != nil && model.DirectCelIsSet(loopArgs.GetWhile()) {
-		validateLoopWhileCondition(loopArgs, append(basePath, "while"), result)
-		// While conditions can reference parent-scope nodes (evaluated between
-		// iterations, before the loop node completes).
-		warnNodeOrderingCompiled(model.DirectCelExpr(loopArgs.GetWhile()), append(basePath, "while"), startScope, typeCtx, result)
-	}
-
-	// Validate thread inject expressions (thread is on SubWorkflowArgs only)
-	if thread := model.NodeThreadConfig(node); thread != nil {
-		if inject := thread.GetInject(); inject != nil {
-			injectFields := []struct {
-				name  string
-				value *reliantv1.CelString
-			}{
-				{name: "role", value: inject.GetRole()},
-				{name: "content", value: inject.GetContent()},
-				{name: "display_style", value: inject.GetDisplayStyle()},
-			}
-			for _, field := range injectFields {
-				if model.CelStringIsSet(field.value) {
-					validateCELTemplateStringWithCompilation(celString(field.value), append(basePath, "thread", "inject", field.name), env, schemaTypeChecker, nodeIDs, typeCtx, startScope, result)
-				}
-			}
-		}
-	}
-
-	// Validate node-specific templates by walking proto fields explicitly
-	validateProtoNodeFieldTemplatesWithCompilation(node, basePath, env, schemaTypeChecker, nodeIDs, typeCtx, wf, startScope, result)
-}
-
-// validateProtoSaveMessageTemplatesWithCompilation validates save_message templates from proto.
-func validateProtoSaveMessageTemplatesWithCompilation(sm *reliantv1.SaveMessageConfig, basePath []string, env *cel.Env, schemaTypeChecker *SchemaTypeChecker, nodeIDs []string, typeCtx *WorkflowTypeContext, orderScope *nodeOrderScope, result *Result) {
-	fields := map[string]string{
-		"role":         model.CelStringRaw(sm.GetRole()),
-		"content":      model.CelStringRaw(sm.GetContent()),
-		"tool_calls":   model.CelStringRaw(sm.GetToolCalls()),
-		"tool_results": model.CelStringRaw(sm.GetToolResults()),
-		"attachments":  model.CelStringRaw(sm.GetAttachments()),
-	}
-
-	for fieldName, value := range fields {
-		if value == "" {
-			continue
-		}
-		if containsTemplate(value) {
-			validateCELTemplateStringWithCompilation(value, append(basePath, fieldName), env, schemaTypeChecker, nodeIDs, typeCtx, orderScope, result)
-			// Validate return type for save_message fields
-			validateSaveMessageFieldReturnType(fieldName, value, append(basePath, fieldName), env, nodeIDs, result)
-		} else if isSaveMessageListField(fieldName) {
-			// Static text in list fields like tool_calls is invalid
-			result.Add(&Error{
-				Severity: SeverityError,
-				Category: CategoryCELSemantic,
-				Path:     append(basePath, fieldName),
-				Message:  fmt.Sprintf("save_message field '%s' expects a list type and must use a CEL expression (e.g., {{output.%s}}), not static text", fieldName, fieldName),
-			})
-		}
-	}
+	sort.Strings(keys)
+	return keys
 }
 
 // isSaveMessageListField returns true if the field expects a list type.
@@ -2065,163 +1555,6 @@ func getSaveMessageTypeSuggestion(fieldName, actualType string) string {
 		return info.suggestionFunc(actualType)
 	}
 	return "" // No suggestion for unknown fields
-}
-
-// validateProtoNodeFieldTemplatesWithCompilation walks a proto node's fields to find
-// and validate CEL templates with compilation. Replaces the old reflection-based approach.
-func validateProtoNodeFieldTemplatesWithCompilation(node *reliantv1.Node, basePath []string, env *cel.Env, schemaTypeChecker *SchemaTypeChecker, nodeIDs []string, typeCtx *WorkflowTypeContext, wf *reliantv1.Workflow, orderScope *nodeOrderScope, result *Result) {
-	if node == nil {
-		return
-	}
-
-	// Helper to validate a CelString field
-	validateCS := func(c *reliantv1.CelString, fieldPath []string) {
-		raw := model.CelStringRaw(c)
-		if raw != "" && containsTemplate(raw) {
-			validateCELTemplateStringWithCompilation(raw, fieldPath, env, schemaTypeChecker, nodeIDs, typeCtx, orderScope, result)
-		}
-	}
-
-	// Helper to validate a plain string that may contain templates
-	validateStr := func(s string, fieldPath []string) {
-		if s != "" && containsTemplate(s) {
-			validateCELTemplateStringWithCompilation(s, fieldPath, env, schemaTypeChecker, nodeIDs, typeCtx, orderScope, result)
-		}
-	}
-
-	switch {
-	case node.GetCallLlm() != nil:
-		args := node.GetCallLlm()
-		validateCS(args.GetSystemPrompt(), append(basePath, "system_prompt"))
-		validateCS(args.GetThinkingLevel(), append(basePath, "thinking_level"))
-		for i, msg := range args.GetMessages() {
-			msgPath := append(basePath, "messages", fmt.Sprintf("[%d]", i))
-			validateStr(msg.GetContent(), append(msgPath, "content"))
-			validateStr(msg.GetRole(), append(msgPath, "role"))
-		}
-
-	case node.GetExecuteTools() != nil:
-		args := node.GetExecuteTools()
-		validateCS(args.GetToolCalls(), append(basePath, "tool_calls"))
-
-	case node.GetRun() != nil:
-		args := node.GetRun()
-		validateCS(args.GetCommand(), append(basePath, "command"))
-		validateCS(args.GetWorkDir(), append(basePath, "work_dir"))
-
-	case node.GetRouter() != nil:
-		args := node.GetRouter()
-		validateCS(args.GetSystemPrompt(), append(basePath, "system_prompt"))
-
-	case node.GetWorkflow() != nil:
-		args := node.GetWorkflow()
-		validateCS(args.GetRef(), append(basePath, "ref"))
-		for key, val := range args.GetArgs() {
-			if val != nil {
-				if s := val.GetStringValue(); s != "" && containsTemplate(s) {
-					validateCELTemplateStringWithCompilation(s, append(basePath, "args", key), env, schemaTypeChecker, nodeIDs, typeCtx, orderScope, result)
-				}
-			}
-		}
-		if args.GetInline() != nil {
-			validateInlineWorkflowCELWithCompilation(args.GetInline(), append(basePath, "inline"), result)
-		}
-
-	case node.GetLoop() != nil:
-		args := node.GetLoop()
-		validateCS(args.GetRef(), append(basePath, "ref"))
-		validateCS(args.GetItems(), append(basePath, "items"))
-		validateStr(args.GetKey(), append(basePath, "key"))
-
-		// Try to infer iter.item type from the items expression for loop args validation.
-		// This enables compile-time validation of iter.item.<field> access.
-		loopEnv := env
-		loopTypeCtx := typeCtx
-		if itemFields := inferLoopItemFields(args, wf, typeCtx); itemFields != nil {
-			// Create a loop-specific type context with iter.item type info.
-			loopTypeCtx = &WorkflowTypeContext{
-				InputFields:              typeCtx.InputFields,
-				InputGroups:              typeCtx.InputGroups,
-				NodeOutputs:              typeCtx.NodeOutputs,
-				OutputFields:             typeCtx.OutputFields,
-				NodeTypes:                typeCtx.NodeTypes,
-				Registry:                 typeCtx.Registry,
-				ConditionalNodes:         typeCtx.ConditionalNodes,
-				ResponseTools:            typeCtx.ResponseTools,
-				NodesWithExtendedOutputs: typeCtx.NodesWithExtendedOutputs,
-				LenientInputs:            typeCtx.LenientInputs,
-				IterItemFields:           itemFields,
-				GuaranteedBefore:         typeCtx.GuaranteedBefore,
-			}
-			if typedEnv, err := newValidationCELEnv([]wfcel.CELNamespace{
-				wfcel.CELInputs,
-				wfcel.CELWorkflow,
-				wfcel.CELNodes,
-				wfcel.CELIter,
-				wfcel.CELOutputs,
-				wfcel.CELOutput,
-			}, loopTypeCtx); err == nil {
-				loopEnv = typedEnv
-			}
-		}
-
-		for key, val := range args.GetArgs() {
-			if val != nil {
-				if s := val.GetStringValue(); s != "" && containsTemplate(s) {
-					validateCELTemplateStringWithCompilation(s, append(basePath, "args", key), loopEnv, schemaTypeChecker, nodeIDs, loopTypeCtx, orderScope, result)
-				}
-			}
-		}
-		if args.GetInline() != nil {
-			validateInlineWorkflowCELWithCompilation(args.GetInline(), append(basePath, "inline"), result)
-		}
-
-	case node.GetCompact() != nil:
-		// CompactArgs has no user-configurable fields
-
-	case node.GetSaveMessageNode() != nil:
-		args := node.GetSaveMessageNode()
-		validateCS(args.GetRole(), append(basePath, "role"))
-		validateCS(args.GetContent(), append(basePath, "content"))
-		validateCS(args.GetToolCalls(), append(basePath, "tool_calls"))
-		validateCS(args.GetToolResults(), append(basePath, "tool_results"))
-		validateCS(args.GetAttachments(), append(basePath, "attachments"))
-		validateCS(args.GetDisplayStyle(), append(basePath, "display_style"))
-	}
-}
-
-// validateCELTemplateStringWithCompilation validates a string that may contain {{...}} templates.
-// orderScope (optional) enables execution-order validation of nodes.<id> references.
-func validateCELTemplateStringWithCompilation(input string, path []string, env *cel.Env, schemaTypeChecker *SchemaTypeChecker, nodeIDs []string, typeCtx *WorkflowTypeContext, orderScope *nodeOrderScope, result *Result) {
-	if input == "" {
-		return
-	}
-
-	matches := extractTemplateExpressions(input)
-	for _, match := range matches {
-		expr := match.expr
-		if expr == "" {
-			continue
-		}
-
-		// Validate input property access before rewriting
-		validateInputPropertyAccess(expr, path, typeCtx, result)
-
-		// Validate response_data.<tool>.<field> access before rewriting
-		validateResponseDataAccessFromExpr(expr, path, typeCtx, result)
-
-		// Rewrite nodes.X.field to nodes_X.field for typed validation
-		rewrittenExpr := rewriteNodesAccess(expr, nodeIDs)
-
-		// Validate with CEL compilation
-		validateCELExpressionWithCompilationAndSchema(expr, rewrittenExpr, path, env, schemaTypeChecker, typeCtx, result)
-
-		// Warn about unsafe access to conditional node outputs
-		warnConditionalNodeAccessCompiled(expr, path, typeCtx, result)
-
-		// Validate execution ordering of nodes.<id> references
-		warnNodeOrderingCompiled(expr, path, orderScope, typeCtx, result)
-	}
 }
 
 // validateCELExpressionWithCompilationAndSchema validates a CEL expression by compiling it
@@ -2754,15 +2087,8 @@ func resolveArrayItemFieldsFromResponseSchema(nodeID string, fieldPath []string,
 // Issues a warning for conditions that will cause infinite loops.
 // Also validates that inline loops with outputs.* references have an outputs section.
 func validateLoopWhileCondition(loopArgs *reliantv1.LoopArgs, path []string, result *Result) {
-	whileExprStr := model.DirectCelExpr(loopArgs.GetWhile())
-
-	// Strip template delimiters if present
-	expr := strings.TrimSpace(whileExprStr)
-	if strings.HasPrefix(expr, "{{") && strings.HasSuffix(expr, "}}") {
-		expr = strings.TrimPrefix(expr, "{{")
-		expr = strings.TrimSuffix(expr, "}}")
-		expr = strings.TrimSpace(expr)
-	}
+	// Raw CEL; a {{ }}-wrapped value is rejected before this runs.
+	expr := strings.TrimSpace(model.DirectCelExpr(loopArgs.GetWhile()))
 
 	// Check for literal true
 	if expr == "true" {
@@ -3414,4 +2740,17 @@ func (tc *SchemaTypeChecker) exprDescription(e ast.Expr, inferredType schemaType
 // This should be called after standard CEL compilation succeeds.
 func (tc *SchemaTypeChecker) CheckCELExpressionWithSchema(expr string, celAst *cel.Ast, path []string, result *Result) {
 	tc.Check(celAst, expr, path, result)
+}
+
+// ValidateCELWithCompilation validates every CEL expression in the workflow
+// by compiling it in the environment the runtime evaluates it in (see
+// cel_sites.go), then running the guard analysis (guarded_access.go).
+func ValidateCELWithCompilation(wf *reliantv1.Workflow, result *Result, loader WorkflowLoader) {
+	typeCtx := BuildWorkflowTypeContext(wf, loader)
+	if typeCtx == nil {
+		return
+	}
+	scope := newWorkflowScope(wf, []string{wf.GetName()}, typeCtx, nil)
+	scope.root = true
+	validateWorkflowScope(scope, result)
 }

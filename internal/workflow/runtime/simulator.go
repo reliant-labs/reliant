@@ -432,10 +432,11 @@ func evaluateLoopWhileStrict(
 	contextDescription string,
 ) (bool, error) {
 	loopContext := &wfcel.LoopEvalContext{
-		Outputs: outputs,
-		Iter:    &model.IterContext{Iteration: iteration},
-		Inputs:  inputs,
-		Nodes:   nodes,
+		Outputs:  loopBodyOutputs(outputs),
+		Iter:     &model.IterContext{Iteration: iteration, Index: iteration},
+		Inputs:   inputs,
+		Nodes:    nodes,
+		Workflow: &model.WorkflowContext{ID: "sim-workflow"},
 	}
 	shouldContinue, err := wfcel.EvaluateBool(whileExpr, loopContext)
 	if err != nil {
@@ -506,8 +507,9 @@ func (s *WorkflowSimulator) assembleSubWorkflowInputs(nodePath string, node *rel
 // simulator's mock-first philosophy).
 func (s *WorkflowSimulator) resolveTemplateInputs(assembled map[string]interface{}) {
 	evalCtx := &wfcel.EdgeEvalContext{
-		Nodes:  s.nodeOutputs,
-		Inputs: s.workflowInputs,
+		Nodes:    s.nodeOutputs,
+		Inputs:   s.workflowInputs,
+		Workflow: &model.WorkflowContext{ID: "sim-workflow", Name: s.rootWorkflowIdentity()},
 	}
 	for key, value := range assembled {
 		str, ok := value.(string)
@@ -835,10 +837,11 @@ func (s *WorkflowSimulator) executeParallelLoop(nodePath string, protoNode *reli
 		return nil, fmt.Errorf("parallel loop %s: items expression is empty", nodePath)
 	}
 
-	// Evaluate items expression
+	// Evaluate items expression in the scope the loop node lives in.
 	evalCtx := &wfcel.EdgeEvalContext{
-		Nodes:  s.nodeOutputs,
-		Inputs: s.workflowInputs,
+		Nodes:    s.nodeOutputs,
+		Inputs:   s.workflowInputs,
+		Workflow: &model.WorkflowContext{ID: "sim-workflow", Name: s.rootWorkflowIdentity()},
 	}
 	rawItems, err := wfcel.EvaluateTemplate(itemsExpr, evalCtx)
 	if err != nil {
@@ -1004,7 +1007,9 @@ func (s *WorkflowSimulator) parallelLoopKeys(items []interface{}, keyExpr string
 					Item:      iterItem,
 					Key:       s.parallelLoopDefaultKey(i, item),
 				},
-				Inputs: s.workflowInputs,
+				Inputs:   s.workflowInputs,
+				Nodes:    s.nodeOutputs,
+				Workflow: &model.WorkflowContext{ID: "sim-workflow", Name: s.rootWorkflowIdentity()},
 			}
 			result, err := wfcel.EvaluateTemplate(keyExpr, evalCtx)
 			if err != nil {
@@ -1172,7 +1177,7 @@ func iterScopeFromMap(iterCtx map[string]interface{}, iteration int, prevIterOut
 	if keyVal, ok := iterCtx["key"].(string); ok {
 		iter.Key = keyVal
 	}
-	return &LoopScope{Iter: iter, Outputs: prevIterOutputs}
+	return loopBodyScope(iter, prevIterOutputs)
 }
 
 // iterCtx is the authoritative `iter` namespace for this iteration. Only the
@@ -1190,15 +1195,18 @@ func (s *WorkflowSimulator) executeLoopIteration(
 	prevIterOutputs map[string]interface{},
 	iterCtx map[string]interface{},
 ) (map[string]interface{}, error) {
-	// Create state machine for sub-workflow
-	subSM := NewSimplifiedStateMachine("sim-workflow", subWorkflow)
-
 	// Inner node outputs for this iteration (local to sub-workflow for edge evaluation)
 	innerOutputs := make(map[string]interface{})
 
 	if iterCtx == nil {
 		iterCtx = model.BuildIterContext(iteration)
 	}
+	bodyScope := iterScopeFromMap(iterCtx, iteration, prevIterOutputs)
+
+	// Create state machine for sub-workflow; its edge conditions see the same
+	// loop scope as the body's node conditions.
+	subSM := NewSimplifiedStateMachine("sim-workflow", subWorkflow).
+		WithLoopScope(func() *LoopScope { return bodyScope })
 
 	// Sub-workflow inputs include loop iteration context
 	subInputs := s.assembleSubWorkflowInputs(loopID, loopNode)
@@ -1312,7 +1320,7 @@ func (s *WorkflowSimulator) executeLoopIteration(
 					// A node condition inside a loop sees the same `iter` and previous-iteration
 					// `outputs` the real loop executor gives it — otherwise a scenario would take
 					// a different branch than the run it is meant to simulate.
-					iterScopeFromMap(iterCtx, iteration, prevIterOutputs),
+					bodyScope,
 				)
 				if err != nil {
 					s.markError(qualifiedID)
@@ -1381,8 +1389,8 @@ func (s *WorkflowSimulator) executeLoopIteration(
 				workflowIdentity,
 				subInputs,
 				iterCtx,
-				prevIterOutputs, // previous iteration outputs for outputs.* namespace
-				nil,             // no execContext in simulation
+				loopBodyOutputs(prevIterOutputs),
+				nil, // no execContext in simulation
 			)
 
 			if err != nil {
@@ -1571,12 +1579,14 @@ func (s *WorkflowSimulator) executeNestedLoopIteration(
 	prevIterOutputs map[string]interface{},
 	iterCtx map[string]interface{},
 ) (map[string]interface{}, error) {
-	subSM := NewSimplifiedStateMachine("sim-workflow", subWorkflow)
 	innerOutputs := make(map[string]interface{})
 
 	if iterCtx == nil {
 		iterCtx = model.BuildIterContext(iteration)
 	}
+	bodyScope := iterScopeFromMap(iterCtx, iteration, prevIterOutputs)
+	subSM := NewSimplifiedStateMachine("sim-workflow", subWorkflow).
+		WithLoopScope(func() *LoopScope { return bodyScope })
 
 	subInputs := s.assembleSubWorkflowInputs(qualifiedPrefix, loopNode)
 	subInputs["loop"] = map[string]interface{}{"iteration": iteration}
@@ -1675,7 +1685,7 @@ func (s *WorkflowSimulator) executeNestedLoopIteration(
 					// A node condition inside a loop sees the same `iter` and previous-iteration
 					// `outputs` the real loop executor gives it — otherwise a scenario would take
 					// a different branch than the run it is meant to simulate.
-					iterScopeFromMap(iterCtx, iteration, prevIterOutputs),
+					bodyScope,
 				)
 				if err != nil {
 					s.markError(qualifiedID)
@@ -1734,7 +1744,7 @@ func (s *WorkflowSimulator) executeNestedLoopIteration(
 			evalResult, err := EvaluateNodeConfig(
 				triggered.Node, innerOutputs,
 				"sim-workflow", workflowIdentity, subInputs,
-				iterCtx, prevIterOutputs, nil,
+				iterCtx, loopBodyOutputs(prevIterOutputs), nil,
 			)
 			if err != nil {
 				s.markError(qualifiedID)

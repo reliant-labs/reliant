@@ -232,6 +232,7 @@ expect:
 | `error_node` | string | No | ErrorNode specifies which node should produce the error. |
 | `node_outputs` | map[string]object | No | NodeOutputs specifies expected output values for specific nodes. |
 | `outputs` | object | No | Outputs specifies expected values for the workflow's declared outputs. |
+| `messages` | object | No | Messages asserts on the messages the run saved to the thread, keyed by |
 
 ---
 

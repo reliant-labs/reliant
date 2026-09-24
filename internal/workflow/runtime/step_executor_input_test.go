@@ -32,8 +32,8 @@ func TestNormalizeOutput_MergesSnakeCaseDefaults(t *testing.T) {
 	assert.Equal(t, float64(42), normalized["token_count"])
 	require.Contains(t, normalized, "tool_calls")
 	require.Contains(t, normalized, "message")
-	// message gets default nested keys (role, text) from withRequiredActivityOutputFields
-	assert.Equal(t, map[string]interface{}{"role": "", "text": ""}, normalized["message"])
+	// An unset message is filled as its full zero shape from the descriptor.
+	assert.Equal(t, map[string]interface{}{"id": "", "role": "", "text": ""}, normalized["message"])
 }
 
 func TestNormalizeOutput_CallLLMAddsMissingToolCallsField(t *testing.T) {

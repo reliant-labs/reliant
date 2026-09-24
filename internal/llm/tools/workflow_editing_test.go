@@ -440,7 +440,7 @@ nodes:
 		assert.Contains(t, resp.Content, "name is required")
 	})
 
-	t.Run("saves invalid YAML with validation errors", func(t *testing.T) {
+	t.Run("rejects a workflow with validation errors and saves nothing", func(t *testing.T) {
 		draft := createDraft(t)
 		// YAML is valid but workflow structure is invalid (missing entry)
 		invalidWorkflow := `name: invalid-workflow
@@ -461,15 +461,12 @@ nodes:
 		})
 
 		require.NoError(t, err)
-		// Should still save but report validation errors
-		assert.False(t, resp.IsError, "Should not be an error: %s", resp.Content) // Not an error - saved with warnings
+		assert.True(t, resp.IsError, "validation errors must block the write: %s", resp.Content)
 		assert.Contains(t, resp.Content, "validation errors")
 
-		// Verify it was still saved
-		var result WriteWorkflowResult
-		err = json.Unmarshal([]byte(resp.Metadata), &result)
+		stored, err := repo.GetWorkflowDraft(context.Background(), draft.ID)
 		require.NoError(t, err)
-		assert.NotEmpty(t, result.ID)
+		assert.Equal(t, draft.Definition, stored.Definition, "the rejected content must not be persisted")
 	})
 }
 
@@ -632,17 +629,11 @@ func TestCreateWorkflow_WithInvalidContent(t *testing.T) {
 	inputJSON, _ := json.Marshal(CreateWorkflowParams{Content: &invalidYAML})
 	resp, err := tool.Run(ctx, ToolCall{ID: "test-1", Name: "create_workflow", Input: string(inputJSON)})
 	require.NoError(t, err)
-	// Should still succeed (saves with validation errors)
-	assert.False(t, resp.IsError, "Should not be an error: %s", resp.Content)
-	assert.Contains(t, resp.Content, "validation errors")
+	assert.True(t, resp.IsError, "validation errors must block the create: %s", resp.Content)
+	assert.Contains(t, resp.Content, "NOT created")
 
-	var result CreateWorkflowResult
-	err = json.Unmarshal([]byte(resp.Metadata), &result)
+	// Nothing was created.
+	existing, err := repo.GetWorkflowDraftBySlug(context.Background(), "test-user", "broken")
 	require.NoError(t, err)
-	assert.NotEmpty(t, result.ID)
-
-	// Draft should exist but be marked invalid
-	draft, err := repo.GetWorkflowDraft(context.Background(), result.ID)
-	require.NoError(t, err)
-	assert.False(t, draft.IsValid)
+	assert.Nil(t, existing)
 }

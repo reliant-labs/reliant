@@ -46,6 +46,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/simulator"
 	wfyaml "github.com/reliant-labs/reliant/internal/workflow/yaml"
 	"go.temporal.io/sdk/activity"
+	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/testsuite"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
@@ -107,6 +108,10 @@ type recorder struct {
 
 	// unconsumed tracks scenario events that no activity ever asked for.
 	consumed map[string]int
+
+	// saved is every message the run saved, in order, as the runtime resolved
+	// it (see recordSaved).
+	saved []simulator.SavedMessage
 }
 
 func newRecorder() *recorder {
@@ -182,6 +187,13 @@ func (r *recorder) markReachedExact(id string) {
 // snapshotReached copies what has been reached so far. Used on the
 // non-termination path, where the workflow goroutine is still writing — reading
 // r.reached directly there is a data race.
+// recordSaved records one saved message under the node that saved it.
+func (r *recorder) recordSaved(node, role, content string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.saved = append(r.saved, simulator.SavedMessage{Node: node, Role: role, Content: content})
+}
+
 func (r *recorder) snapshotReached() []string {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -488,6 +500,7 @@ func (r *Runner) Run(scenario *simulator.Scenario) *Result {
 			ChatID:       "scenario-chat",
 			WorkflowName: r.workflow.GetName(),
 			Inputs:       inputs,
+			Resume:       resumeInput(scenario),
 			ExecContext: &runtime.ExecutionContext{
 				WorkflowID:   "scenario-wf",
 				ChatID:       "scenario-chat",
@@ -586,6 +599,9 @@ func (r *Runner) Run(scenario *simulator.Scenario) *Result {
 		NodeStates:     rec.states,
 		NodeOutputs:    rec.outputs,
 		DurationMs:     time.Since(start).Milliseconds(),
+		// Non-nil even when empty: this backend observes saves, so "none
+		// saved" is a real answer (see simulator.checkMessageExpectations).
+		SavedMessages: append([]simulator.SavedMessage{}, rec.saved...),
 	}
 
 	if runErr := env.GetWorkflowError(); runErr != nil {
@@ -667,6 +683,14 @@ func nodeActivityNames(wf *reliantv1.Workflow, transparent map[string]bool) map[
 			// exhaustion, and the loop pauses on retry exhaustion.
 			if name := nodeTypeActivityOverrides[n.GetType()]; name != "" {
 				names[name] = true
+			}
+			// A router decides by dispatching a CallLLM (the synthetic
+			// "<router>__node_routing_decision" step; see
+			// nodeRoutingDecisionRouter). A graph whose only LLM work is the
+			// router — bmad-lite — otherwise never registers CallLLM, and the
+			// routing step fails with "unable to find activityType=CallLLM".
+			if n.GetType() == model.NodeTypeRouter {
+				names[activityNameFor(model.NodeTypeCallLLM)] = true
 			}
 			if inline := model.NodeInlineWorkflow(n); inline != nil {
 				walk(inline.GetNodes())
@@ -1421,6 +1445,16 @@ func (r *Runner) registerActivities(
 						id = nodePath
 					}
 					out := normalizeOutput(events.next(id), activityName)
+					var req *types.SaveMessageRequest
+					if raw, ok := in[types.RunStepSaveMessageKey]; ok && raw != nil {
+						req = &types.SaveMessageRequest{}
+						if b, err := json.Marshal(raw); err != nil || json.Unmarshal(b, req) != nil {
+							req = nil
+						}
+					}
+					if err := resolveDelegatedSave(rec, id, activityName, req, out, stepID); err != nil {
+						return nil, err
+					}
 					rec.recordCompleted(id, out)
 					return out, nil
 				},
@@ -1439,6 +1473,10 @@ func (r *Runner) registerActivities(
 				// side effect of the owning node, not a graph node a scenario
 				// can name, so it must not appear in reached/completed.
 				if strings.HasSuffix(in.Runtime.StepID, "-save") {
+					// A workflow-side save (a structural node's save_message):
+					// the runtime already resolved it, so the dispatched node
+					// carries the final role and content.
+					recordResolvedSave(rec, strings.TrimSuffix(id, "-save"), in.Node)
 					return normalizeOutput(map[string]interface{}{}, activityName), nil
 				}
 				// A thread-inject SaveMessage (child_workflow_init.go) carries
@@ -1471,6 +1509,16 @@ func (r *Runner) registerActivities(
 				// the real runtime, which is what carries the explicit
 				// compaction_threshold when the workflow sets one.
 				runtime.ApplyMockedCompactionThreshold(out, in.Node)
+				if activityName == "SaveMessage" {
+					// A save_message NODE: its args are the resolved message.
+					recordResolvedSave(rec, id, in.Node)
+				}
+				// A delegated save_message runs after the activity in
+				// production (ActivityWrapper); run the same resolution on the
+				// mocked result so its condition and templates are exercised.
+				if err := resolveDelegatedSave(rec, id, activityName, in.Runtime.SaveMessage, out, in.Runtime.StepID); err != nil {
+					return nil, err
+				}
 				rec.recordCompleted(id, out)
 				return out, nil
 			},
@@ -1486,6 +1534,7 @@ func normalizeOutput(raw map[string]interface{}, activityName string) map[string
 	if raw == nil {
 		raw = map[string]interface{}{}
 	}
+	raw = encodeToolCallInputs(raw)
 	defaults := schema.GetOutputDefaults(activityName)
 	if defaults == nil {
 		return raw
@@ -1497,5 +1546,117 @@ func normalizeOutput(raw map[string]interface{}, activityName string) map[string
 	for k, v := range raw {
 		out[k] = v
 	}
+	return out
+}
+
+// resolveDelegatedSave runs a node's delegated save_message against its mocked
+// result, through the runtime's own resolution path
+// (runtime.ResolveDelegatedSaveMessage — the function ActivityWrapper calls
+// after a real activity). A resolution error fails the activity, exactly as it
+// fails the step in production: that is the point of running it, since a
+// save_message template that cannot resolve is a run-ending defect the
+// activity mock would otherwise hide.
+func resolveDelegatedSave(rec *recorder, node, activityName string, req *types.SaveMessageRequest, out map[string]interface{}, stepID string) error {
+	if req == nil || req.Config == nil {
+		return nil
+	}
+	// Resolve against a copy: normalization inside the resolver must not
+	// change what the workflow receives from the mock.
+	copied := make(map[string]interface{}, len(out))
+	for k, v := range out {
+		copied[k] = v
+	}
+	saved, err := runtime.ResolveDelegatedSaveMessage(req, activityName, copied, runtime.DelegatedSaveIdentity{
+		ChatID:     "scenario-chat",
+		Thread:     "scenario-thread",
+		WorkflowID: "scenario-wf",
+		StepID:     stepID,
+	})
+	if err != nil {
+		return temporal.NewNonRetryableApplicationError(
+			fmt.Sprintf("save_message for %s: %v", node, err), "SaveMessageResolution", err)
+	}
+	if saved != nil {
+		rec.recordSaved(node, saved.Role, saved.Content)
+	}
+	return nil
+}
+
+// recordResolvedSave records a message the runtime resolved before dispatch
+// (a save_message node, or a structural node's workflow-side save).
+func recordResolvedSave(rec *recorder, node string, dispatched *reliantv1.Node) {
+	args := dispatched.GetSaveMessageNode()
+	if args == nil || node == "" {
+		return
+	}
+	rec.recordSaved(node, args.GetResolvedRole(), args.GetResolvedContent())
+}
+
+// resumeInput maps a scenario's start_at onto the runtime's real
+// position-resume mode (WorkflowInput.Resume → resolveResumeTarget): the run
+// enters directly at that node, with NO earlier node outputs reconstructed —
+// thread history is the only carried state. That is exactly what start_at
+// models, so a scenario's `state:` is deliberately not injected here: a
+// resumed run in production does not have it either, and a downstream read
+// of an earlier node that is not has()-guarded must fail here as it would
+// there.
+func resumeInput(scenario *simulator.Scenario) *runtime.ResumeInput {
+	if scenario.StartAt == "" {
+		return nil
+	}
+	return &runtime.ResumeInput{NodeID: scenario.StartAt}
+}
+
+// encodeToolCallInputs puts a mock's tool calls into their wire shape.
+//
+// A tool call's `input` is a JSON STRING on the wire (proto ToolCallMsg.input
+// is `string`), and everything downstream — save_message's tool_calls field,
+// execute_tools — reads it that way. Scenario YAML naturally writes it as a
+// map (`input: {command: ls}`); the simulator's typed `llm_response` form
+// already JSON-encodes it, but a raw `output:` mock passed the map straight
+// through, so the run saw a shape production never produces and failed in
+// save_message resolution ("tool_calls[0].input: expected string"). Encoding
+// here makes the raw and typed forms mean the same thing. The mock map is
+// not mutated.
+func encodeToolCallInputs(raw map[string]interface{}) map[string]interface{} {
+	calls, ok := raw["tool_calls"].([]interface{})
+	if !ok || len(calls) == 0 {
+		return raw
+	}
+	var encoded []interface{}
+	for i, c := range calls {
+		call, ok := c.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		input, present := call["input"]
+		if !present || input == nil {
+			continue
+		}
+		if _, isString := input.(string); isString {
+			continue
+		}
+		b, err := json.Marshal(input)
+		if err != nil {
+			continue
+		}
+		if encoded == nil {
+			encoded = append([]interface{}{}, calls...)
+		}
+		copied := make(map[string]interface{}, len(call))
+		for k, v := range call {
+			copied[k] = v
+		}
+		copied["input"] = string(b)
+		encoded[i] = copied
+	}
+	if encoded == nil {
+		return raw
+	}
+	out := make(map[string]interface{}, len(raw))
+	for k, v := range raw {
+		out[k] = v
+	}
+	out["tool_calls"] = encoded
 	return out
 }

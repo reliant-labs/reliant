@@ -753,6 +753,9 @@ nodes:
     args:
       role: user
       content: "{{nodes.call_agent.response_text}}"
+edges:
+  - from: call_agent
+    to: use_output
 `
 	parentWf, err := wfyaml.ParseWorkflow([]byte(parentYAML))
 	require.NoError(t, err)

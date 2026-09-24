@@ -45,14 +45,17 @@ nodes:
       model: {tags: [flagship]}
       messages:
         - role: user
-          content: "{{nodes.llm2 != null ? nodes.llm2.response_text : 'default'}}"
+          content: "{{has(nodes.llm2.response_text) ? nodes.llm2.response_text : 'default'}}"
 edges:
   - from: llm1
     to: llm2
   - from: llm2
     to: test
 `,
-			desc: "null check should protect conditional node access",
+			// `nodes.llm2 != null` would NOT be a guard: a condition-skipped
+			// node publishes {skipped: true}, which is non-null, so the true
+			// branch would read .response_text and fail "no such key".
+			desc: "field has() should protect conditional node access",
 		},
 		{
 			name: "optional chaining for conditional node",
@@ -113,14 +116,17 @@ nodes:
       model: {tags: [flagship]}
       messages:
         - role: user
-          content: "{{nodes.llm2 != null ? nodes.llm2.response_text : 'default'}}"
+          content: "{{has(nodes.llm2.response_text) ? nodes.llm2.response_text : 'default'}}"
 edges:
   - from: llm1
     to: llm2
   - from: llm2
     to: test
 `,
-			desc: "null check should protect conditional node access",
+			// `nodes.llm2 != null` would NOT be a guard: a condition-skipped
+			// node publishes {skipped: true}, which is non-null, so the true
+			// branch would read .response_text and fail "no such key".
+			desc: "field has() should protect conditional node access",
 		},
 		{
 			name: "valid nested field access",
@@ -829,9 +835,12 @@ edges:
   - from: llm1
     to: test
 `,
-			shouldError: false,
-			shouldWarn:  true, // Ternary null check guards the access, but AST walker doesn't track ternary control flow
-			desc:        "explicit null check should be safe",
+			// NOT a guard: a skipped llm1 is {skipped: true} (non-null), so the
+			// false branch reads .response_text and fails "no such key". This
+			// was the migrate.yaml final_summary failure shape.
+			shouldError: true,
+			shouldWarn:  false,
+			desc:        "a null check does not guard a skipped node's missing field",
 		},
 		{
 			name: "unsafe conditional node access",
@@ -855,9 +864,9 @@ edges:
   - from: llm1
     to: test
 `,
-			shouldError: false,
-			shouldWarn:  true, // Direct access to conditional node output without null guard
-			desc:        "access to conditional node (warning handled by different code path)",
+			shouldError: true, // A skipped node's output has no response_text (G1)
+			shouldWarn:  false,
+			desc:        "unguarded read of a field a skipped node does not publish is an error",
 		},
 		{
 			name: "optional chaining protects null",

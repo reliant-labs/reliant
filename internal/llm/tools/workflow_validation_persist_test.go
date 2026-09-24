@@ -13,12 +13,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// The `is_valid` column is not cosmetic: ListUsableWorkflowsByUser and
-// GetUsableWorkflowBySlug both filter on `is_valid = 1`, so a draft that is
-// saved as valid while being broken stays loadable by `ref:` at runtime and
-// renders with a ✓ in list_workflows. These tests pin the PERSISTED row rather
-// than the response text, because the response text was always correct — it was
-// only the database that lied.
+// The workflow-editing tools validate exactly as run start will — with a
+// workflow loader, so ref'd children type-check — and validation ERRORS BLOCK
+// THE WRITE. A stored draft is runnable (by chats and by `ref:`), and run start
+// rejects the same errors, so persisting a broken draft only defers the
+// failure to whoever runs it next. These tests pin the persisted row, not just
+// the response text.
 
 // The definition's `name:` must match the draft's own name, or an edit
 // re-derives a different slug and every later lookup misses for that reason
@@ -49,37 +49,29 @@ edges: []
 	return draft
 }
 
-// assertPersistedInvalid reads the row back and checks both halves of the
-// corruption: the flag AND the stored errors.
-func assertPersistedInvalid(t *testing.T, repo db.Repository, id string) {
+// assertUnchanged reads the row back: the rejected write must not have
+// touched it, so it is still the last valid definition and still usable.
+func assertUnchanged(t *testing.T, repo db.Repository, before *db.WorkflowDraft) {
 	t.Helper()
-	stored, err := repo.GetWorkflowDraft(context.Background(), id)
+	stored, err := repo.GetWorkflowDraft(context.Background(), before.ID)
 	require.NoError(t, err)
 	require.NotNil(t, stored)
-
-	assert.False(t, stored.IsValid, "draft was edited into a broken state but persisted is_valid=true")
-	require.NotNil(t, stored.ValidationErrors, "validation_errors should be persisted for an invalid draft")
-
-	var errs []string
-	require.NoError(t, json.Unmarshal([]byte(*stored.ValidationErrors), &errs),
-		"validation_errors should be a JSON array of strings, matching what the gRPC save path writes")
-	require.NotEmpty(t, errs)
-	assert.NotEmpty(t, errs[0])
+	assert.Equal(t, before.Definition, stored.Definition, "a rejected write must not persist the broken definition")
+	assert.True(t, stored.IsValid)
+	usable, err := repo.GetUsableWorkflowBySlug(context.Background(), "test-user", before.Slug)
+	require.NoError(t, err)
+	assert.NotNil(t, usable, "the last valid version must stay loadable by ref:")
 }
 
-func TestEditWorkflow_PersistsInvalidState(t *testing.T) {
+func TestEditWorkflow_RejectsInvalidEdit(t *testing.T) {
 	t.Parallel()
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
-
 	tool := NewEditWorkflowTool(repo)
 	ctx := createTestContext(t, "")
 
-	t.Run("structurally broken workflow marks the row invalid", func(t *testing.T) {
+	t.Run("structurally broken workflow is not saved", func(t *testing.T) {
 		draft := createValidPersistDraft(t, repo)
-
-		// Parses as YAML, but the entry node does not exist — the v2 parser
-		// rejects it, so this exercises the ordinary save path.
 		inputJSON, err := json.Marshal(EditWorkflowParams{
 			ID:        draft.ID,
 			OldString: "entry: [agent]",
@@ -89,18 +81,14 @@ func TestEditWorkflow_PersistsInvalidState(t *testing.T) {
 
 		resp, err := tool.Run(ctx, ToolCall{ID: "edit-invalid", Name: EditWorkflowToolName, Input: string(inputJSON)})
 		require.NoError(t, err)
-		assert.False(t, resp.IsError, "edit still saves: %s", resp.Content)
-		assert.Contains(t, resp.Content, "validation errors")
-
-		assertPersistedInvalid(t, repo, draft.ID)
+		assert.True(t, resp.IsError, "an edit with validation errors must be rejected: %s", resp.Content)
+		assert.Contains(t, resp.Content, "NOT updated")
+		assert.Contains(t, resp.Content, "no-such-node")
+		assertUnchanged(t, repo, draft)
 	})
 
-	t.Run("unparseable YAML marks the row invalid", func(t *testing.T) {
+	t.Run("unparseable YAML is not saved", func(t *testing.T) {
 		draft := createValidPersistDraft(t, repo)
-
-		// An unterminated flow sequence makes yaml.Unmarshal itself fail, which
-		// takes the name-extraction failure branch — a second save site that
-		// also used to hardcode valid.
 		inputJSON, err := json.Marshal(EditWorkflowParams{
 			ID:        draft.ID,
 			OldString: "entry: [agent]",
@@ -110,49 +98,36 @@ func TestEditWorkflow_PersistsInvalidState(t *testing.T) {
 
 		resp, err := tool.Run(ctx, ToolCall{ID: "edit-unparseable", Name: EditWorkflowToolName, Input: string(inputJSON)})
 		require.NoError(t, err)
-		assert.False(t, resp.IsError, "edit still saves: %s", resp.Content)
-
-		assertPersistedInvalid(t, repo, draft.ID)
+		assert.True(t, resp.IsError, "%s", resp.Content)
+		assert.Contains(t, resp.Content, "invalid YAML syntax")
+		assertUnchanged(t, repo, draft)
 	})
 
-	t.Run("repairing a workflow clears the invalid state", func(t *testing.T) {
+	t.Run("a valid edit saves", func(t *testing.T) {
 		draft := createValidPersistDraft(t, repo)
-
-		breakIt, err := json.Marshal(EditWorkflowParams{
+		inputJSON, err := json.Marshal(EditWorkflowParams{
 			ID:        draft.ID,
-			OldString: "entry: [agent]",
-			NewString: "entry: [no-such-node]",
+			OldString: "model: mock",
+			NewString: "model: other-mock",
 		})
 		require.NoError(t, err)
-		_, err = tool.Run(ctx, ToolCall{ID: "edit-break", Name: EditWorkflowToolName, Input: string(breakIt)})
-		require.NoError(t, err)
-		assertPersistedInvalid(t, repo, draft.ID)
-
-		fixIt, err := json.Marshal(EditWorkflowParams{
-			ID:        draft.ID,
-			OldString: "entry: [no-such-node]",
-			NewString: "entry: [agent]",
-		})
-		require.NoError(t, err)
-		resp, err := tool.Run(ctx, ToolCall{ID: "edit-fix", Name: EditWorkflowToolName, Input: string(fixIt)})
+		resp, err := tool.Run(ctx, ToolCall{ID: "edit-ok", Name: EditWorkflowToolName, Input: string(inputJSON)})
 		require.NoError(t, err)
 		assert.False(t, resp.IsError, "%s", resp.Content)
 
 		stored, err := repo.GetWorkflowDraft(context.Background(), draft.ID)
 		require.NoError(t, err)
-		assert.True(t, stored.IsValid, "a repaired workflow must become usable again")
-		assert.Nil(t, stored.ValidationErrors, "stale validation errors must be cleared on repair")
+		assert.Contains(t, stored.Definition, "other-mock")
+		assert.True(t, stored.IsValid)
 	})
 }
 
-func TestWriteWorkflow_PersistsInvalidState(t *testing.T) {
+func TestWriteWorkflow_RejectsInvalidContent(t *testing.T) {
 	t.Parallel()
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
-
 	tool := NewWriteWorkflowTool(repo)
 	ctx := createTestContext(t, "")
-
 	draft := createValidPersistDraft(t, repo)
 
 	invalidWorkflow := "name: " + draft.Name + "\nnodes:\n  - id: agent\n    type: call_llm\n"
@@ -161,39 +136,85 @@ func TestWriteWorkflow_PersistsInvalidState(t *testing.T) {
 
 	resp, err := tool.Run(ctx, ToolCall{ID: "write-invalid", Name: WriteWorkflowToolName, Input: string(inputJSON)})
 	require.NoError(t, err)
-	assert.False(t, resp.IsError, "write still saves: %s", resp.Content)
-	assert.Contains(t, resp.Content, "validation errors")
-
-	assertPersistedInvalid(t, repo, draft.ID)
+	assert.True(t, resp.IsError, "%s", resp.Content)
+	assert.Contains(t, resp.Content, "NOT saved")
+	assertUnchanged(t, repo, draft)
 }
 
-// TestInvalidDraftIsNotRuntimeLoadable is the consequence the flag exists for:
-// a broken workflow must drop out of the usable set that `ref:` resolution and
-// the agent selector read from.
-func TestInvalidDraftIsNotRuntimeLoadable(t *testing.T) {
+// The tools validate WITH a workflow loader: a ref to a builtin types the
+// child's declared outputs, so reading one it does not declare is an error
+// here — not only later, at run start. builtin://structured-agent declares
+// `response` and `completed`, and no `response_text`.
+func TestWriteWorkflow_TypeChecksRefOutputs(t *testing.T) {
 	t.Parallel()
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
-
-	draft := createValidPersistDraft(t, repo)
+	tool := NewWriteWorkflowTool(repo)
 	ctx := createTestContext(t, "")
+	draft := createValidPersistDraft(t, repo)
 
-	usable, err := repo.GetUsableWorkflowBySlug(context.Background(), "test-user", draft.Slug)
+	content := "name: " + draft.Name + `
+entry: [plan]
+nodes:
+  - id: plan
+    type: workflow
+    ref: builtin://structured-agent
+  - id: report
+    type: save_message
+    args:
+      role: assistant
+      content: "{{nodes.plan.response_text}}"
+edges:
+  - {from: plan, default: [report]}
+`
+	inputJSON, err := json.Marshal(WriteWorkflowParams{ID: draft.ID, Content: content})
 	require.NoError(t, err)
-	require.NotNil(t, usable, "a valid draft should be loadable before the edit")
+	resp, err := tool.Run(ctx, ToolCall{ID: "write-ref", Name: WriteWorkflowToolName, Input: string(inputJSON)})
+	require.NoError(t, err)
+	assert.True(t, resp.IsError, "reading an output the ref does not declare must be rejected: %s", resp.Content)
+	assert.Contains(t, resp.Content, "response_text")
+	assertUnchanged(t, repo, draft)
+}
 
-	inputJSON, err := json.Marshal(EditWorkflowParams{
-		ID:        draft.ID,
-		OldString: "entry: [agent]",
-		NewString: "entry: [no-such-node]",
-	})
-	require.NoError(t, err)
-	_, err = NewEditWorkflowTool(repo).Run(ctx, ToolCall{ID: "edit-runtime", Name: EditWorkflowToolName, Input: string(inputJSON)})
-	require.NoError(t, err)
+// Warnings do not block a save but are always returned to the agent.
+func TestWriteWorkflow_ReturnsWarnings(t *testing.T) {
+	t.Parallel()
+	repo, cleanup := setupTestDB(t)
+	defer cleanup()
+	tool := NewWriteWorkflowTool(repo)
+	ctx := createTestContext(t, "")
+	draft := createValidPersistDraft(t, repo)
 
-	// The edit leaves the name (and therefore the slug) alone, so a hit here
-	// can only mean the is_valid filter let a broken workflow through.
-	broken, err := repo.GetUsableWorkflowBySlug(context.Background(), "test-user", draft.Slug)
+	// A conditional run node read unguarded: the field exists either way (the
+	// skip output zero-fills run fields), so it is a warning, not an error.
+	content := "name: " + draft.Name + `
+entry: [start]
+inputs:
+  lint: {type: boolean, default: false}
+nodes:
+  - {id: start, type: save_message, args: {role: user, content: go}}
+  - id: lint
+    type: run
+    condition: "inputs.lint"
+    command: "true"
+  - id: report
+    type: save_message
+    args:
+      role: assistant
+      content: "lint exit: {{nodes.lint.exit_code}}"
+edges:
+  - {from: start, default: [lint]}
+  - {from: lint, default: [report]}
+`
+	inputJSON, err := json.Marshal(WriteWorkflowParams{ID: draft.ID, Content: content})
 	require.NoError(t, err)
-	assert.Nil(t, broken, "a broken workflow must no longer be loadable at runtime")
+	resp, err := tool.Run(ctx, ToolCall{ID: "write-warn", Name: WriteWorkflowToolName, Input: string(inputJSON)})
+	require.NoError(t, err)
+	require.False(t, resp.IsError, "%s", resp.Content)
+	assert.Contains(t, resp.Content, "Warnings")
+	assert.Contains(t, resp.Content, "exit_code")
+
+	stored, err := repo.GetWorkflowDraft(context.Background(), draft.ID)
+	require.NoError(t, err)
+	assert.Contains(t, stored.Definition, "lint exit")
 }

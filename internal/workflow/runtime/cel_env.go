@@ -35,7 +35,6 @@ type CELContextBuilder struct {
 	nodeOutputs  map[string]interface{}
 	execContext  *ExecutionContext
 	iter         *model.IterContext
-	output       map[string]interface{}
 	outputs      map[string]interface{}
 }
 
@@ -89,76 +88,54 @@ func (b *CELContextBuilder) WithIter(iter *model.IterContext) *CELContextBuilder
 	return b
 }
 
-// WithOutput sets the current activity output (for save_message).
-func (b *CELContextBuilder) WithOutput(output map[string]interface{}) *CELContextBuilder {
-	b.output = output
-	return b
-}
-
-// WithOutputs sets the sub-workflow outputs (for loop while).
+// WithOutputs sets the enclosing loop's previous-iteration outputs. Pass a
+// non-nil map (loopBodyOutputs) exactly when resolving inside a loop body; nil
+// leaves `outputs` undeclared, as it is everywhere outside a loop.
 func (b *CELContextBuilder) WithOutputs(outputs map[string]interface{}) *CELContextBuilder {
 	b.outputs = outputs
 	return b
 }
 
-// Build creates the CEL context map.
-// Uses native Go structs for typed namespaces (workflow, iter) to enable
-// compile-time field validation. Dynamic namespaces (inputs, nodes, output, outputs)
-// remain as maps.
-func (b *CELContextBuilder) Build() map[string]interface{} {
-	context := make(map[string]interface{})
-
-	// inputs.* namespace - PRIMARY way to access workflow inputs (dynamic)
-	context["inputs"] = b.inputs
-
-	// workflow.* namespace - typed struct for compile-time validation
-	context["workflow"] = workflowContextToTyped(map[string]interface{}{
-		workflowContextKeyID:     b.workflowID,
-		workflowContextKeyName:   b.workflowName,
-		workflowContextKeyPath:   b.path,
-		workflowContextKeyBranch: b.branch,
-	})
-
-	// nodes.* namespace - completed node outputs (dynamic)
-	context["nodes"] = b.nodeOutputs
-
-	// iter.* namespace - typed struct for compile-time validation
-	if b.iter != nil {
-		context["iter"] = map[string]interface{}{
-			"iteration": b.iter.Iteration,
-			"index":     b.iter.Index,
-			"item":      b.iter.Item,
-			"key":       b.iter.Key,
-		}
-	} else {
-		context["iter"] = map[string]interface{}{"iteration": 0, "index": 0}
+// resolutionContext is the builder's scope as the typed context every node
+// config site evaluates against. The namespace set comes from
+// NodeResolutionContext.Namespaces() — the builder adds no namespace of its own,
+// so what validation declares for node config is exactly what resolves here.
+// Dynamic namespaces are numerically normalized (JSON float64 → int64).
+func (b *CELContextBuilder) resolutionContext() *wfcel.NodeResolutionContext {
+	rc := &wfcel.NodeResolutionContext{
+		Inputs: normalizeNumericTypes(b.inputs),
+		Nodes:  normalizeNumericTypes(b.nodeOutputs),
+		Iter:   b.iter,
+		Workflow: workflowContextToTyped(map[string]interface{}{
+			workflowContextKeyID:     b.workflowID,
+			workflowContextKeyName:   b.workflowName,
+			workflowContextKeyPath:   b.path,
+			workflowContextKeyBranch: b.branch,
+		}),
 	}
-
-	// output.* namespace - current activity output (dynamic, save_message only)
-	if b.output != nil {
-		context["output"] = b.output
-	}
-
-	// outputs.* namespace - sub-workflow outputs (dynamic, loop while only)
 	if b.outputs != nil {
-		context["outputs"] = b.outputs
+		rc.Outputs = normalizeNumericTypes(b.outputs)
 	}
+	return rc
+}
 
-	// Normalize numeric types only for dynamic namespaces
-	if inputs, ok := context["inputs"].(map[string]interface{}); ok {
-		context["inputs"] = normalizeNumericTypes(inputs)
-	}
-	if nodes, ok := context["nodes"].(map[string]interface{}); ok {
-		context["nodes"] = normalizeNumericTypes(nodes)
-	}
-	if output, ok := context["output"].(map[string]interface{}); ok {
-		context["output"] = normalizeNumericTypes(output)
-	}
-	if outputs, ok := context["outputs"].(map[string]interface{}); ok {
-		context["outputs"] = normalizeNumericTypes(outputs)
-	}
+// Build returns the CEL activation for this builder's scope.
+func (b *CELContextBuilder) Build() map[string]interface{} {
+	return b.resolutionContext().Activation()
+}
 
-	return context
+// env builds the CEL environment declaring exactly the scope's namespaces.
+func (b *CELContextBuilder) env() (*cel.Env, map[string]interface{}, error) {
+	rc := b.resolutionContext()
+	env, err := wfcel.NewEnv(wfcel.CELEnvConfig{
+		Namespaces:             rc.Namespaces(),
+		IncludeStdLib:          true,
+		IncludeCustomFunctions: true,
+	})
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to create CEL environment: %w", err)
+	}
+	return env, rc.Activation(), nil
 }
 
 // ============================================================================
@@ -172,12 +149,10 @@ func (b *CELContextBuilder) Build() map[string]interface{} {
 // - Strings without {{}} are returned as-is (literals).
 // Implements wfcel.CELEvaluator.
 func (b *CELContextBuilder) EvalString(expr string) (interface{}, error) {
-	ctx := b.Build()
-	env, err := wfcel.NewEnvFromContext(ctx, true)
+	env, evalCtx, err := b.env()
 	if err != nil {
-		return nil, fmt.Errorf("failed to create CEL environment: %w", err)
+		return nil, err
 	}
-	evalCtx := wfcel.EnsureNamespaceDefaults(ctx, wfcel.AllNamespaces())
 
 	// Find all {{...}} template expressions
 	matches := extractTemplateExpressions(expr)
@@ -246,10 +221,9 @@ func (b *CELContextBuilder) evalSingleCEL(expr string, env *cel.Env, evalCtx map
 // EvalBool evaluates a direct CEL expression (no {{ }}) as a boolean.
 // Implements wfcel.CELEvaluator.
 func (b *CELContextBuilder) EvalBool(expr string) (bool, error) {
-	ctx := b.Build()
-	env, err := wfcel.NewEnvFromContext(ctx, true)
+	env, evalCtx, err := b.env()
 	if err != nil {
-		return false, fmt.Errorf("failed to create CEL environment: %w", err)
+		return false, err
 	}
 
 	ast, issues := env.Compile(expr)
@@ -262,7 +236,6 @@ func (b *CELContextBuilder) EvalBool(expr string) (bool, error) {
 		return false, fmt.Errorf("failed to create CEL program: %w", err)
 	}
 
-	evalCtx := wfcel.EnsureNamespaceDefaults(ctx, wfcel.AllNamespaces())
 	out, _, err := prg.Eval(evalCtx)
 	if err != nil {
 		return false, fmt.Errorf("CEL evaluation error: %w", err)

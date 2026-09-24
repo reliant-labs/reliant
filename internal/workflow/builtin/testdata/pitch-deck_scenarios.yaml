@@ -36,7 +36,6 @@ description: Full pipeline succeeds, all reviews pass on first iteration
 
 inputs:
   mode: auto
-  yield: false
   website_url: "https://example.com"
   deck_purpose: seed
   pitch_deck_dir: "pitch-deck"
@@ -315,7 +314,6 @@ description: Loop outputs (slide_pipeline._completed, slides_loop.verdict) are a
 
 inputs:
   mode: auto
-  yield: false
   website_url: "https://example.com"
   deck_purpose: seed
   pitch_deck_dir: "pitch-deck"
@@ -509,7 +507,6 @@ description: Tests slide_pipeline parallel per-slide write results over 4 slides
 
 inputs:
   mode: auto
-  yield: false
   website_url: "https://example.com"
   deck_purpose: seed
   pitch_deck_dir: "pitch-deck"
@@ -722,7 +719,6 @@ description: Visual reviewer fails first build (AI visual tells), builder fixes,
 
 inputs:
   mode: auto
-  yield: false
   website_url: "https://example.com"
   deck_purpose: seed
   pitch_deck_dir: "pitch-deck"

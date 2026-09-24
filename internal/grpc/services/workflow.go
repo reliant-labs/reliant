@@ -172,17 +172,21 @@ func (s *WorkflowService) ListWorkflows(
 	// 3. Load user's workflows from database (user-owned, available across all projects).
 	// Default listing is chat-safe and only returns runnable drafts. Management UIs such as
 	// the Workflow Hub can opt into the full draft list with include_hidden=true.
-	var dbDrafts []*db.WorkflowDraft
-	if req.Msg.IncludeHidden {
-		dbDrafts, err = s.database.ListWorkflowDraftsByUser(ctx, userID)
-	} else {
-		dbDrafts, err = s.database.ListUsableWorkflowsByUser(ctx, userID)
-	}
+	//
+	// "Runnable" is decided by validating each draft NOW, never by the stored
+	// is_valid flag: that flag was computed at save time and goes stale when
+	// validation gets stricter, which would list a draft CreateChat then
+	// rejects (or hide one it would accept).
+	dbDrafts, err := s.database.ListWorkflowDraftsByUser(ctx, userID)
 	if err != nil {
 		logging.Error("Failed to list workflows from database", "error", err, "user_id", userID, "include_hidden", req.Msg.IncludeHidden)
 		// Continue with builtins and project workflows
 	} else {
 		for _, draft := range dbDrafts {
+			draftValid := s.validateWorkflowDefinition(ctx, userID, []byte(draft.Definition)).valid()
+			if !req.Msg.IncludeHidden && (draft.IsHidden || !draftValid) {
+				continue
+			}
 			// Parse the stored definition to get workflow details
 			protoWf, err := parseWorkflowYAML([]byte(draft.Definition))
 			if err != nil {
@@ -192,16 +196,19 @@ func (s *WorkflowService) ListWorkflows(
 
 			draftID := draft.ID // Copy for pointer
 			item := &reliantv1.WorkflowListItem{
-				Name:            draft.Name,
-				Filename:        draft.Slug,
-				Description:     protoWf.Description,
-				StepCount:       int32(len(protoWf.Nodes)),
-				Source:          "user",
-				Nodes:           protoWf.Nodes,
-				Edges:           protoWf.Edges,
-				Inputs:          protoWf.Inputs,
-				IsHidden:        draft.IsHidden,
-				IsValid:         draft.IsValid,
+				Name:        draft.Name,
+				Filename:    draft.Slug,
+				Description: protoWf.Description,
+				StepCount:   int32(len(protoWf.Nodes)),
+				Source:      "user",
+				Nodes:       protoWf.Nodes,
+				Edges:       protoWf.Edges,
+				Inputs:      protoWf.Inputs,
+				IsHidden:    draft.IsHidden,
+				// Computed now, not read from the stored flag: the flag was
+				// right when the draft was saved and goes stale the moment
+				// validation gets stricter.
+				IsValid:         draftValid,
 				BuilderChatId:   draft.ChatID,
 				HasPresetGroups: rpcWorkflowHasPresetGroups(protoWf),
 				DraftId:         &draftID,
@@ -500,29 +507,26 @@ func (s *WorkflowService) SaveWorkflow(
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to marshal workflow: %w", err))
 	}
 
-	// Validate workflow using YAML-based validation
-	validationResult, valErr := v2.ValidateYAMLResult(definitionYAML, s.createValidationWorkflowLoader(ctx, userID))
-	if valErr != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to validate workflow: %w", valErr))
+	// Validate exactly as run start will. Errors BLOCK the save — for the
+	// draft and for a project-file write-back alike: a stored workflow is
+	// runnable (by chats and by `ref:`), and run start rejects the same
+	// errors, so persisting it would only defer the failure to whoever runs
+	// it next. Warnings are returned alongside a successful save.
+	check := s.validateWorkflowDefinition(ctx, userID, definitionYAML)
+	if !check.valid() {
+		return connect.NewResponse(&reliantv1.SaveWorkflowResponse{
+			Success:          false,
+			Message:          saveRejectedMessage(check),
+			Workflow:         protoWf,
+			IsValid:          false,
+			ValidationErrors: check.protoErrors(true),
+			Slug:             slug,
+			YamlDefinition:   string(definitionYAML),
+		}), nil
 	}
-	validationErr := validationResult.AsError()
-	isValid := validationErr == nil
-
-	var validationErrors []*reliantv1.ValidationError
+	isValid := true
+	validationErrors := check.protoErrors(true)
 	var validationErrorsJSON *string
-	if !isValid {
-		// Convert validation error to proto format
-		validationErrors = []*reliantv1.ValidationError{{
-			Type:    "validation_error",
-			Message: validationErr.Error(),
-		}}
-		errJSON, err := json.Marshal([]string{validationErr.Error()})
-		if err != nil {
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to marshal validation errors: %w", err))
-		}
-		errStr := string(errJSON)
-		validationErrorsJSON = &errStr
-	}
 
 	// Handle project file write-back if source_path is provided
 	if sourcePath := req.Msg.GetSourcePath(); sourcePath != "" {
@@ -568,12 +572,7 @@ func (s *WorkflowService) SaveWorkflow(
 			"is_valid", isValid,
 		)
 
-		var message string
-		if isValid {
-			message = "Workflow saved to project file successfully"
-		} else {
-			message = "Workflow saved to project file with validation errors"
-		}
+		message := "Workflow saved to project file successfully"
 
 		return connect.NewResponse(&reliantv1.SaveWorkflowResponse{
 			Success:          true,
@@ -664,12 +663,7 @@ func (s *WorkflowService) SaveWorkflow(
 		IsValid:      isValid,
 	})
 
-	var message string
-	if isValid {
-		message = "Workflow saved successfully"
-	} else {
-		message = "Workflow saved with validation errors"
-	}
+	message := "Workflow saved successfully"
 
 	logging.Info("SaveWorkflow completed",
 		"name", protoWf.Name,
@@ -739,7 +733,7 @@ func (s *WorkflowService) SetWorkflowVisibility(
 		Edges:           protoWf.Edges,
 		Inputs:          protoWf.Inputs,
 		IsHidden:        updatedDraft.IsHidden,
-		IsValid:         updatedDraft.IsValid,
+		IsValid:         s.validateWorkflowDefinition(ctx, auth.MustGetUserID(ctx), []byte(updatedDraft.Definition)).valid(),
 		HasPresetGroups: rpcWorkflowHasPresetGroups(protoWf),
 	}
 	if !updatedDraft.UpdatedAt.IsZero() {
@@ -1128,28 +1122,22 @@ func (s *WorkflowService) ImportWorkflow(
 		}), nil
 	}
 
-	// Validate using YAML-based validation
-	validationResult, valErr := v2.ValidateYAMLResult(req.Msg.YamlContent, s.createValidationWorkflowLoader(ctx, userID))
-	if valErr != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to validate workflow: %w", valErr))
+	// Same rule as SaveWorkflow: an import with validation errors is not
+	// stored.
+	check := s.validateWorkflowDefinition(ctx, userID, req.Msg.YamlContent)
+	if !check.valid() {
+		return connect.NewResponse(&reliantv1.ImportWorkflowResponse{
+			Success:          false,
+			Message:          "Workflow not imported: fix the validation errors first — " + check.summary(),
+			Workflow:         protoWf,
+			Slug:             slug,
+			IsValid:          false,
+			ValidationErrors: check.protoErrors(true),
+		}), nil
 	}
-	isValid := !validationResult.HasErrors()
-
-	var validationErrors []*reliantv1.ValidationError
+	isValid := true
+	validationErrors := check.protoErrors(true)
 	var validationErrorsJSON *string
-	if !isValid {
-		validationErr := validationResult.AsError()
-		validationErrors = []*reliantv1.ValidationError{{
-			Type:    "validation_error",
-			Message: validationErr.Error(),
-		}}
-		errJSON, err := json.Marshal([]string{validationErr.Error()})
-		if err != nil {
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to marshal validation errors: %w", err))
-		}
-		errStr := string(errJSON)
-		validationErrorsJSON = &errStr
-	}
 
 	// Use the original YAML content directly for storage (it's already valid YAML)
 	definitionYAML := req.Msg.YamlContent
@@ -1373,39 +1361,12 @@ func (s *WorkflowService) ValidateWorkflow(
 		}
 	}
 
-	// Validate using YAML-based validation
-	result, valErr := v2.ValidateYAMLResult(yamlBytes, s.createValidationWorkflowLoader(ctx, userID))
-	if valErr != nil {
-		// Parse/conversion error - return as validation error
-		return connect.NewResponse(&reliantv1.ValidateWorkflowResponse{
-			Valid: false,
-			Errors: []*reliantv1.ValidationError{{
-				Type:    "conversion_error",
-				Message: valErr.Error(),
-			}},
-		}), nil
-	}
-
-	if !result.HasErrors() {
-		return connect.NewResponse(&reliantv1.ValidateWorkflowResponse{
-			Valid:  true,
-			Errors: nil,
-		}), nil
-	}
-
-	// Convert validation errors to proto
-	protoErrors := make([]*reliantv1.ValidationError, 0, len(result.Errors()))
-	for _, e := range result.Errors() {
-		protoErrors = append(protoErrors, &reliantv1.ValidationError{
-			Type:       string(e.Category),
-			Message:    e.Message,
-			Suggestion: e.Suggestion,
-		})
-	}
-
+	// Errors and warnings both: warnings (type "warning:<category>") are the
+	// stand-in-zero and loose-schema findings an author should still see.
+	check := s.validateWorkflowDefinition(ctx, userID, yamlBytes)
 	return connect.NewResponse(&reliantv1.ValidateWorkflowResponse{
-		Valid:  false,
-		Errors: protoErrors,
+		Valid:  check.valid(),
+		Errors: check.protoErrors(true),
 	}), nil
 }
 

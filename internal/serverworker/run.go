@@ -31,6 +31,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/streaming"
 	"github.com/reliant-labs/reliant/internal/telemetry"
 	"github.com/reliant-labs/reliant/internal/temporal"
+	"github.com/reliant-labs/reliant/internal/temporal/claimcheck"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/workersetup"
 )
@@ -142,10 +143,14 @@ func Run(ctx context.Context, opts Options) error {
 	// -----------------------------------------------------------------
 	// 5. Temporal client
 	// -----------------------------------------------------------------
+	// PayloadStore: large payloads are claim-checked into the shared
+	// temporal_payload_blobs table (GC runs in the api-server). Must match
+	// the api-server's wiring or histories become unreadable across them.
 	temporalClient, err := temporal.NewExternalClient(ctx, temporal.ExternalClientConfig{
-		Host:      opts.TemporalHost,
-		Port:      opts.TemporalPort,
-		Namespace: opts.TemporalNamespace,
+		Host:         opts.TemporalHost,
+		Port:         opts.TemporalPort,
+		Namespace:    opts.TemporalNamespace,
+		PayloadStore: claimcheck.NewPostgresStore(repo.DB.SQLDB()),
 	})
 	if err != nil {
 		return fmt.Errorf("failed to connect to Temporal: %w", err)

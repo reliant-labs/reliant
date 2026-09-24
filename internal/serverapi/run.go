@@ -36,6 +36,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/streaming"
 	"github.com/reliant-labs/reliant/internal/telemetry"
 	"github.com/reliant-labs/reliant/internal/temporal"
+	"github.com/reliant-labs/reliant/internal/temporal/claimcheck"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/workersetup"
 	v2workflow "github.com/reliant-labs/reliant/internal/workflow"
@@ -194,11 +195,18 @@ func Run(ctx context.Context, opts Options) error {
 	// API key provider (allows LLM drivers to resolve per-user keys from DB)
 	drivers.InitializeAPIKeyProvider(repo)
 
+	// Claim-check store for large Temporal payloads. The worker shares the
+	// same table; both processes must use it or neither can read the other's
+	// histories. The api-server owns the schema, so it also owns GC.
+	payloadStore := claimcheck.NewPostgresStore(repo.DB.SQLDB())
+	go payloadStore.RunGC(ctx, claimcheck.GCHorizonFromEnv())
+
 	// External Temporal client
 	temporalClient, err := temporal.NewExternalClient(ctx, temporal.ExternalClientConfig{
-		Host:      opts.TemporalHost,
-		Port:      opts.TemporalPort,
-		Namespace: opts.TemporalNamespace,
+		Host:         opts.TemporalHost,
+		Port:         opts.TemporalPort,
+		Namespace:    opts.TemporalNamespace,
+		PayloadStore: payloadStore,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to connect to Temporal: %w", err)

@@ -12,7 +12,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/rctx"
 	"github.com/reliant-labs/reliant/internal/workflow/builtin"
-	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
 	"gopkg.in/yaml.v3"
 )
 
@@ -152,9 +151,16 @@ func (t *listWorkflowsTool) Execute(ctx *rctx.ToolContext, args ListWorkflowsPar
 	if (source == "all" || source == "user") && t.repo != nil {
 		userID, ok := auth.GetUserIDFromContext(ctx)
 		if ok && userID != "" {
-			userWorkflows, err := t.repo.ListUsableWorkflowsByUser(ctx, userID)
+			// Every draft, filtered by validity computed NOW: the stored
+			// is_valid flag was right at save time and goes stale when
+			// validation gets stricter, so the agent would be offered a
+			// workflow that run start then rejects.
+			userWorkflows, err := t.repo.ListWorkflowDraftsByUser(ctx, userID)
 			if err == nil {
 				for _, wf := range userWorkflows {
+					if wf.IsHidden || validateWorkflowForTool(ctx, t.repo, wf.Definition).hasErrors() {
+						continue
+					}
 					desc := "(no description)"
 					if wf.Description != nil && *wf.Description != "" {
 						desc = *wf.Description
@@ -165,7 +171,7 @@ func (t *listWorkflowsTool) Execute(ctx *rctx.ToolContext, args ListWorkflowsPar
 						id:          wf.ID,
 						description: desc,
 						source:      "user",
-						isValid:     wf.IsValid,
+						isValid:     true,
 					})
 				}
 			}
@@ -272,7 +278,7 @@ func (t *getWorkflowTool) Execute(ctx *rctx.ToolContext, args GetWorkflowParams)
 
 	draft, err := resolveWorkflowDraft(ctx, t.repo, args.ID)
 	if err == nil {
-		return formatWorkflowDraftResponse(draft)
+		return formatWorkflowDraftResponse(draft, validateWorkflowForTool(ctx, t.repo, draft.Definition))
 	}
 
 	// list_workflows advertises builtin and project workflows alongside drafts,
@@ -281,7 +287,7 @@ func (t *getWorkflowTool) Execute(ctx *rctx.ToolContext, args GetWorkflowParams)
 	// nothing to edit and no version to pass back.
 	if args.ID != "" {
 		if yamlContent, source, found := t.findReadOnlyWorkflow(ctx, args.ID); found {
-			return formatReadOnlyWorkflowResponse(args.ID, source, yamlContent), nil
+			return formatReadOnlyWorkflowResponse(args.ID, source, yamlContent, validateWorkflowForTool(ctx, t.repo, yamlContent)), nil
 		}
 	}
 
@@ -345,17 +351,12 @@ func (t *getWorkflowTool) findReadOnlyWorkflow(ctx *rctx.ToolContext, idOrName s
 // formatReadOnlyWorkflowResponse renders a builtin or project workflow. It
 // deliberately omits ID and version — there is no draft to edit and nothing to
 // pass to expected_version — and points at the one action that does work.
-func formatReadOnlyWorkflowResponse(name, source, yamlContent string) ToolResponse {
+func formatReadOnlyWorkflowResponse(name, source, yamlContent string, check workflowToolCheck) ToolResponse {
 	var sb strings.Builder
 
 	fmt.Fprintf(&sb, "# Workflow: %s\n\n", name)
 	fmt.Fprintf(&sb, "**Source:** %s (read-only)\n", source)
-
-	if _, validationErr := v2.ParseWorkflowProtoBytes([]byte(yamlContent)); validationErr != nil {
-		fmt.Fprintf(&sb, "\n**⚠ Validation Errors:**\n```\n%s\n```\n", validationErr.Error())
-	} else {
-		sb.WriteString("**Validation:** ✓ Valid\n")
-	}
+	writeValidationSection(&sb, check)
 
 	sb.WriteString("\n```yaml\n")
 	sb.WriteString(yamlContent)
@@ -370,15 +371,17 @@ func formatReadOnlyWorkflowResponse(name, source, yamlContent string) ToolRespon
 	return NewTextResponse(sb.String())
 }
 
-func formatWorkflowDraftResponse(draft *db.WorkflowDraft) (ToolResponse, error) {
+func formatWorkflowDraftResponse(draft *db.WorkflowDraft, check workflowToolCheck) (ToolResponse, error) {
 	var sb strings.Builder
 
 	fmt.Fprintf(&sb, "# Workflow: %s\n\n", draft.Name)
 	fmt.Fprintf(&sb, "**ID:** `%s`\n", draft.ID)
-	if draft.IsValid {
-		sb.WriteString("**Status:** valid\n")
-	} else {
+	// Status is computed now, from the same validation as the section
+	// below — never the stored flag, which can disagree with it.
+	if check.hasErrors() {
 		sb.WriteString("**Status:** has errors\n")
+	} else {
+		sb.WriteString("**Status:** valid\n")
 	}
 	if draft.IsHidden {
 		sb.WriteString("**Visibility:** hidden\n")
@@ -387,13 +390,7 @@ func formatWorkflowDraftResponse(draft *db.WorkflowDraft) (ToolResponse, error) 
 		fmt.Fprintf(&sb, "**Description:** %s\n", *draft.Description)
 	}
 
-	// Validate the workflow
-	_, validationErr := v2.ParseWorkflowProtoBytes([]byte(draft.Definition))
-	if validationErr != nil {
-		fmt.Fprintf(&sb, "\n**⚠ Validation Errors:**\n```\n%s\n```\n", validationErr.Error())
-	} else {
-		sb.WriteString("**Validation:** ✓ Valid\n")
-	}
+	writeValidationSection(&sb, check)
 
 	sb.WriteString("\n```yaml\n")
 	sb.WriteString(draft.Definition)
@@ -619,4 +616,26 @@ The ` + "`while`" + ` condition evaluates the inline workflow's ` + "`outputs`" 
 `
 
 	return NewTextResponse(suggestions), nil
+}
+
+// writeValidationSection renders a workflow's current validation: every error
+// and every warning, from the same run-start-equivalent validation the
+// editing tools apply.
+func writeValidationSection(sb *strings.Builder, check workflowToolCheck) {
+	if check.hasErrors() {
+		sb.WriteString("\n**⚠ Validation Errors:**\n```\n")
+		if check.syntaxErr != nil {
+			sb.WriteString(check.syntaxErr.Error() + "\n")
+		} else {
+			for _, e := range check.result.Errors() {
+				sb.WriteString(e.Error() + "\n")
+			}
+		}
+		sb.WriteString("```\n")
+	} else {
+		sb.WriteString("**Validation:** ✓ Valid\n")
+	}
+	if w := check.warningsText(); w != "" {
+		sb.WriteString("\n" + w)
+	}
 }

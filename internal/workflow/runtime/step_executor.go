@@ -10,6 +10,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/logging"
+	wfcel "github.com/reliant-labs/reliant/internal/workflow/cel"
 	"github.com/reliant-labs/reliant/internal/workflow/core"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
@@ -65,6 +66,16 @@ type StepExecutor struct {
 	threadInterrupt *ThreadInterrupt
 	// makeThreadInterrupt creates per-thread interrupt handles for spawned/nested threads.
 	makeThreadInterrupt func(string) *ThreadInterrupt
+	// saveInputRefs caches, per node id, which workflow inputs the node's
+	// save_message reads (see saveMessageInputRefs).
+	saveInputRefs map[string]wfcel.NamespaceRefs
+	// loopOutputs is the `outputs` namespace for this executor's nodes: the
+	// enclosing loop's previous-iteration outputs when it runs a loop body
+	// (never nil there — see WithLoopBodyOutputs), nil otherwise.
+	loopOutputs map[string]interface{}
+	// enclosingIter is the `iter` of the loop enclosing a sub-workflow body
+	// this executor runs, when that body's own inputs do not carry it.
+	enclosingIter map[string]interface{}
 }
 
 // NewStepExecutor creates a new StepExecutor with all required context.
@@ -97,6 +108,21 @@ func (e *StepExecutor) WithLoopContext(loopID string, iteration int) *StepExecut
 	return e
 }
 
+// WithEnclosingIter sets the enclosing loop's iteration context for a
+// sub-workflow body whose inputs were not inherited from the loop.
+func (e *StepExecutor) WithEnclosingIter(iter map[string]interface{}) *StepExecutor {
+	e.enclosingIter = iter
+	return e
+}
+
+// WithLoopBodyOutputs marks this executor as running a loop body and sets the
+// enclosing loop's previous-iteration outputs (nil = no previous iteration,
+// normalized to the empty map so `outputs` is declared on every iteration).
+func (e *StepExecutor) WithLoopBodyOutputs(prev map[string]interface{}) *StepExecutor {
+	e.loopOutputs = loopBodyOutputs(prev)
+	return e
+}
+
 // WithNodePathPrefix sets the fully-qualified dotted path of the scope whose
 // nodes this executor runs. Callers compose it with joinNodePath so nesting
 // accumulates instead of being overwritten.
@@ -126,6 +152,9 @@ func (e *StepExecutor) iterContext() map[string]interface{} {
 		if _, hasIteration := iter["iteration"]; hasIteration {
 			return iter
 		}
+	}
+	if e.enclosingIter != nil {
+		return e.enclosingIter
 	}
 	return model.BuildIterContext(e.loopIteration)
 }
@@ -232,6 +261,12 @@ type RunningStep struct {
 	// ThreadInterruptEpoch is the same-thread interrupt epoch observed before
 	// dispatch. Cancellation details settle only when this epoch advances.
 	ThreadInterruptEpoch int64
+	// SaveDelegated records the dispatch-time decision that the executing
+	// activity writes this node's save_message (a types.SaveMessageRequest was
+	// attached to its input). When false and the node has a save_message, the
+	// workflow assembled the output itself and writes the message on
+	// completion.
+	SaveDelegated bool
 }
 
 // removeRunningStep removes a step from the slice using pointer comparison.
@@ -307,7 +342,7 @@ func (e *StepExecutor) Start(triggeredStep *core.TriggeredNode) *RunningStep {
 		event.WorkflowName,
 		e.workflowInputs,
 		iterCtx,
-		nil, // loopOutputs - not in a loop
+		e.loopOutputs,
 		e.execContext,
 	)
 	if err != nil {
@@ -324,6 +359,7 @@ func (e *StepExecutor) Start(triggeredStep *core.TriggeredNode) *RunningStep {
 
 	var future workflow.Future
 	var activityName string
+	saveDelegated := false
 
 	// Delta identity: mint the assistant message id BEFORE dispatching a
 	// call_llm activity so retries re-stream under the same id. Gated on
@@ -354,7 +390,7 @@ func (e *StepExecutor) Start(triggeredStep *core.TriggeredNode) *RunningStep {
 		activityName = "InlineWorkflowError"
 
 	case model.NodeTypeRun:
-		future, activityName = e.startRun(node, evalResult)
+		future, activityName, saveDelegated = e.startRun(node, evalResult)
 
 	case model.NodeTypeApproval:
 		// NOTE: approval nodes are now handled inline by InlineWorkflowExecutor.
@@ -372,7 +408,7 @@ func (e *StepExecutor) Start(triggeredStep *core.TriggeredNode) *RunningStep {
 	default:
 		// All other types are activities (e.g., call_llm, save_message, execute_tools)
 		if isActivityType(stepType) {
-			future, activityName = e.startAction(node, evalResult, preallocatedMessageID)
+			future, activityName, saveDelegated = e.startAction(node, evalResult, preallocatedMessageID)
 		} else {
 			e.logger.Error("[StepExecutor] Unknown step type", "stepType", stepType, "stepID", node.GetId())
 			future = e.executeFailActivity("unknown step type: " + stepType)
@@ -391,6 +427,7 @@ func (e *StepExecutor) Start(triggeredStep *core.TriggeredNode) *RunningStep {
 		EvalResult:            evalResult, // Store for save_message thread resolution
 		PreallocatedMessageID: preallocatedMessageID,
 		ThreadInterruptEpoch:  threadInterruptEpoch,
+		SaveDelegated:         saveDelegated,
 	}
 }
 
@@ -504,15 +541,32 @@ func (e *StepExecutor) handleActivityCompletion(running *RunningStep, eventID st
 		e.nodeOutputs[running.StepID] = normalizedOutput
 	}
 
-	// Execute save_message if configured
-	if running.Node != nil && running.Node.GetSaveMessage() != nil {
-		e.executeSaveMessage(running, normalizedOutput)
+	// A node's save_message is written by whoever executed the node. When the
+	// activity executed it, the wrapper already wrote the message before
+	// returning; only an output the workflow assembled itself (ask_question,
+	// an execute_tools batch with spawn/ask_user calls) is saved here.
+	//
+	// A save that fails fails the step, exactly as the wrapper fails the
+	// activity: the step surfaces as retry-exhausted, so the caller pauses the
+	// chat with the error and re-runs the step on resume.
+	if running.Node != nil && running.Node.GetSaveMessage() != nil && !running.SaveDelegated {
+		if _, saveErr := e.executeSaveMessage(running, normalizedOutput); saveErr != nil {
+			emitStreamFinalized(e.ctx, e.chatID, running.PreallocatedMessageID, e.threadForFinalize(), streamReasonAborted, 0)
+			return &StepEvent{
+				ID:             eventID,
+				WorkflowID:     e.workflowID,
+				ChatID:         e.chatID,
+				WorkflowName:   e.workflowName,
+				StepID:         running.StepID,
+				Error:          saveErr,
+				RetryExhausted: true, // Will trigger pause, then retry on resume
+			}
+		}
 	}
 
-	// Delta identity: success-path finalize marker. Fires AFTER the save
-	// attempt but is NOT gated on the save succeeding (executeSaveMessage
-	// swallows errors) — the marker's contract is "no more deltas under this
-	// id". No-op when no id was pre-allocated.
+	// Delta identity: success-path finalize marker. Fires AFTER the save —
+	// the marker's contract is "no more deltas under this id". No-op when no
+	// id was pre-allocated.
 	emitStreamFinalized(e.ctx, e.chatID, running.PreallocatedMessageID, e.threadForFinalize(),
 		streamReasonCompleted, extractLastStreamSeq(normalizedOutput))
 
@@ -554,46 +608,31 @@ func (e *StepExecutor) getRawOutput(running *RunningStep) (map[string]interface{
 	return rawOutput, nil
 }
 
-// executeSaveMessage runs the inline SaveMessage activity if configured.
-// Returns the SaveMessage output so it can be merged into the step output.
-func (e *StepExecutor) executeSaveMessage(running *RunningStep, output map[string]interface{}) map[string]interface{} {
+// executeSaveMessage writes, from the workflow, the save_message of a node
+// whose output the workflow assembled itself (the save was not delegated to an
+// activity). Returns the SaveMessage output, or the error that kept the
+// message from being written.
+func (e *StepExecutor) executeSaveMessage(running *RunningStep, output map[string]interface{}) (map[string]interface{}, error) {
 	node := running.Node
 	if node.GetSaveMessage() == nil {
-		return nil
+		return nil, nil
 	}
 
 	e.logger.Info("[StepExecutor] Executing inline save_message",
 		"stepID", node.GetId(),
 	)
 
-	// Build workflow context for CEL evaluation
-	workflowContext := buildWorkflowContext(
-		e.workflowID,
-		e.workflowName,
-		e.chatID,
-		e.workflowInputs,
-	)
-
-	// Use thread from execution context
-	if e.execContext != nil && e.execContext.Thread != "" {
-		if inputs, ok := workflowContext[workflowContextKeyInputs].(map[string]interface{}); ok {
-			inputs["thread"] = e.execContext.Thread
-		} else {
-			workflowContext[workflowContextKeyInputs] = map[string]interface{}{"thread": e.execContext.Thread}
-		}
-	}
-
+	workflowContext := buildSaveMessageWorkflowContext(e.workflowID, e.workflowName, e.chatID, e.workflowInputs, e.GetThread())
 	saveOutput, err := executeSaveMessageInline(
 		e.ctx,
 		node,
 		output,
 		workflowContext,
-		e.nodeOutputs,
 		e.chatID,
 		e.workflowID,
 		e.loopNodeID,
 		e.loopIteration,
-		e.execContext, // Pass execContext for thread.* namespace access
+		e.saveIter(),
 		running.PreallocatedMessageID,
 	)
 	if err != nil {
@@ -601,76 +640,84 @@ func (e *StepExecutor) executeSaveMessage(running *RunningStep, output map[strin
 			"stepID", node.GetId(),
 			"error", err,
 		)
-		// Don't fail the step - save_message failure is logged but execution continues
+		return nil, fmt.Errorf("save_message for %s: %w", node.GetId(), err)
+	}
+	return saveOutput, nil
+}
+
+// nodeScope is the NodeResolutionContext for this executor's nodes — the same
+// scope EvaluateNodeConfig resolves their config against: the scope's
+// completed nodes, inputs, workflow, and, inside a loop body, iter and the
+// enclosing loop's previous-iteration outputs.
+func (e *StepExecutor) nodeScope() *wfcel.NodeResolutionContext {
+	scope := &wfcel.NodeResolutionContext{
+		Inputs:   e.workflowInputs,
+		Nodes:    e.nodeOutputs,
+		Workflow: workflowContextToTyped(buildWorkflowContext(e.workflowID, e.workflowName, e.chatID, e.workflowInputs)),
+		Outputs:  e.loopOutputs,
+	}
+	if e.loopNodeID != "" {
+		scope.Iter = iterContextFromMap(e.iterContext())
+	}
+	return scope
+}
+
+// saveIter is the `iter` a workflow-side save_message sees: nil outside a
+// loop, otherwise the scope's full iteration context (item/key included).
+func (e *StepExecutor) saveIter() *model.IterContext {
+	if e.loopNodeID == "" {
 		return nil
 	}
-	return saveOutput
+	return iterContextFromMap(e.iterContext())
 }
 
 // normalizeOutput ensures activity output has all schema fields present.
 func (e *StepExecutor) normalizeOutput(rawOutput map[string]interface{}, activityName string) map[string]interface{} {
-	if rawOutput == nil {
-		rawOutput = make(map[string]interface{})
-	}
-
-	rawOutput = withRequiredActivityOutputFields(activityName, rawOutput)
-
-	defaults := schema.GetOutputDefaults(activityName)
-	if defaults == nil {
-		return rawOutput
-	}
-
-	normalized := make(map[string]interface{})
-	for field, defaultValue := range defaults {
-		normalized[field] = defaultValue
-	}
-	for field, value := range rawOutput {
-		normalized[field] = value
-	}
-
-	e.logger.Debug("[StepExecutor] Normalized output",
-		"activityName", activityName,
-		"rawFields", len(rawOutput),
-		"normalizedFields", len(normalized),
-	)
-
-	return normalized
+	return normalizeActivityOutput(rawOutput, activityName)
 }
 
-func withRequiredActivityOutputFields(activityName string, output map[string]interface{}) map[string]interface{} {
-	if len(output) == 0 {
-		output = map[string]interface{}{}
-	}
+// normalizeActivityOutput fills an activity's decoded result out to its full
+// output field set. It is the ONE definition of "the output a node's CEL
+// sees": the workflow applies it to every step result, and the ActivityWrapper
+// applies it to the result before evaluating the node's save_message, so a
+// template reads the same map in both places.
+//
+// The activity result arrives as protojson without unpopulated fields, so every
+// unset field — including unset sub-messages and fields inside present ones —
+// is absent. schema.FillOutputDefaults restores each declared field as its zero
+// value, recursively, from the output message's descriptor. message_only fields
+// are NOT restored: they were cleared on purpose before the result entered
+// history. The input map is not mutated.
+func normalizeActivityOutput(rawOutput map[string]interface{}, activityName string) map[string]interface{} {
+	return schema.FillOutputDefaults(activityName, deepCopyJSONMap(rawOutput))
+}
 
-	setDefault := func(key string, value interface{}) {
-		if _, exists := output[key]; !exists {
-			output[key] = value
+// deepCopyJSONMap copies the maps and slices of a decoded-JSON value so
+// normalization can fill it in without writing through to the caller's map.
+func deepCopyJSONMap(source map[string]interface{}) map[string]interface{} {
+	if source == nil {
+		return nil
+	}
+	copied := make(map[string]interface{}, len(source))
+	for key, value := range source {
+		copied[key] = deepCopyJSONValue(value)
+	}
+	return copied
+}
+
+func deepCopyJSONValue(value interface{}) interface{} {
+	switch typed := value.(type) {
+	case map[string]interface{}:
+		return deepCopyJSONMap(typed)
+	case []interface{}:
+		items := make([]interface{}, len(typed))
+		for index, item := range typed {
+			items[index] = deepCopyJSONValue(item)
 		}
+		return items
+	default:
+		return value
 	}
-
-	normalizedName := strings.ToLower(strings.ReplaceAll(activityName, "_", ""))
-	switch normalizedName {
-	case "callllm", "v2callllm":
-		setDefault("message", map[string]interface{}{})
-		setDefault("thinking", map[string]interface{}{})
-		setDefault("response_text", "")
-		setDefault("tool_calls", []interface{}{})
-		setDefault("token_count", 0)
-
-		// Ensure message map has required nested keys with defaults.
-		// Proto3 serialization omits zero-value fields, so we need to ensure
-		// all keys that CEL expressions reference exist in the map.
-		if msgMap, ok := output["message"].(map[string]interface{}); ok {
-			if _, exists := msgMap["text"]; !exists {
-				msgMap["text"] = ""
-			}
-			if _, exists := msgMap["role"]; !exists {
-				msgMap["role"] = ""
-			}
-		}
-	}
-
-	return output
 }
 
 // ============================================================================
@@ -695,7 +742,7 @@ func (e *StepExecutor) startAction(
 	node *reliantv1.Node,
 	evalResult *reliantv1.Node,
 	preallocatedMessageID string,
-) (workflow.Future, string) {
+) (workflow.Future, string, bool) {
 	activityName := nodeTypeToActivityName(node.GetType())
 
 	// Special handling for ExecuteTools - intercept "spawn" tool calls
@@ -730,11 +777,20 @@ func (e *StepExecutor) startAction(
 		}
 
 		rtx := e.buildRuntimeContext(node)
+		// A batch with spawn/ask_user calls is merged workflow-side, so the
+		// workflow is the executor of that output and saves it itself; any
+		// other batch's result IS the ExecuteTools activity's result.
+		delegated := false
+		if !toolBatchAssembledByWorkflow(evalResult) {
+			rtx.SaveMessage = e.saveMessageRequest(node)
+			delegated = rtx.SaveMessage != nil
+		}
 
 		logging.Info("[StepExecutor] startAction ExecuteTools",
 			"stepID", node.GetId(),
 			"loopNodeID", rtx.LoopNodeID,
 			"loopIteration", rtx.LoopIteration,
+			"saveDelegated", delegated,
 		)
 
 		future := executeToolsWithSpawnSupport(
@@ -747,16 +803,17 @@ func (e *StepExecutor) startAction(
 			e.makeThreadPauseCtrl,
 			e.makeThreadInterrupt,
 		)
-		return future, activityName
+		return future, activityName, delegated
 	}
 
 	// Build structured input: pass the proto Node directly for proper protojson roundtrip
 	rtx := e.buildRuntimeContext(node)
 	rtx.AssistantMessageID = preallocatedMessageID
+	rtx.SaveMessage = e.saveMessageRequest(node)
 	input := types.ActivityInput{Runtime: rtx, Node: evalResult}
 
 	future := workflow.ExecuteActivity(e.activityOptions(node), activityName, input)
-	return future, activityName
+	return future, activityName, rtx.SaveMessage != nil
 }
 
 // startAskQuestion runs the signal-backed ask_question node flow.
@@ -796,7 +853,7 @@ func (e *StepExecutor) startAskQuestion(node *reliantv1.Node, evalResult *relian
 }
 
 // startRun starts a run (shell command) activity.
-func (e *StepExecutor) startRun(node *reliantv1.Node, evalResult *reliantv1.Node) (workflow.Future, string) {
+func (e *StepExecutor) startRun(node *reliantv1.Node, evalResult *reliantv1.Node) (workflow.Future, string, bool) {
 	runArgs, _ := model.NodeArgsAsMap(evalResult)
 	runInputs := copyMap(runArgs)
 	runInputs["command"] = model.NodeCommand(evalResult)
@@ -824,8 +881,7 @@ func (e *StepExecutor) startRun(node *reliantv1.Node, evalResult *reliantv1.Node
 				"labels": lit.GetLabels(),
 			}
 		} else if node.GetDaemon().GetExpr() != "" {
-			celCtx := buildWorkflowCELContext(e.workflowID, e.workflowName, e.workflowInputs, e.nodeOutputs)
-			ds, err := ResolveCelDaemonSelector(node.GetDaemon(), celCtx)
+			ds, err := ResolveCelDaemonSelector(node.GetDaemon(), e.nodeScope())
 			if err != nil {
 				logging.Warn("[StepExecutor] failed to resolve node-level daemon CEL expression", "stepID", node.GetId(), "error", err)
 			} else if ds != nil {
@@ -853,8 +909,15 @@ func (e *StepExecutor) startRun(node *reliantv1.Node, evalResult *reliantv1.Node
 		"loopIteration", e.loopIteration,
 	)
 
+	// The run step's input is a flat map, so the delegated save_message
+	// request rides at its top level rather than on a RuntimeContext.
+	saveReq := e.saveMessageRequest(node)
+	if saveReq != nil {
+		runInputs[types.RunStepSaveMessageKey] = saveReq
+	}
+
 	future := workflow.ExecuteActivity(e.activityOptions(node), "ExecuteRunStep", runInputs)
-	return future, "ExecuteRunStep"
+	return future, "ExecuteRunStep", saveReq != nil
 }
 
 // activityOptions returns standard activity options, with optional node timeout override.
@@ -1040,8 +1103,7 @@ func (e *StepExecutor) buildRuntimeContext(node *reliantv1.Node) types.RuntimeCo
 				Labels: lit.GetLabels(),
 			}
 		} else if node.GetDaemon().GetExpr() != "" {
-			celCtx := buildWorkflowCELContext(e.workflowID, e.workflowName, e.workflowInputs, e.nodeOutputs)
-			ds, err := ResolveCelDaemonSelector(node.GetDaemon(), celCtx)
+			ds, err := ResolveCelDaemonSelector(node.GetDaemon(), e.nodeScope())
 			if err != nil {
 				logging.Warn("[StepExecutor] failed to resolve node-level daemon CEL expression", "stepID", node.GetId(), "error", err)
 			} else if ds != nil {
@@ -1111,4 +1173,106 @@ func (e *StepExecutor) detectResponseToolInfo(node *reliantv1.Node) ([]string, m
 	}
 
 	return detectResponseToolsFromWorkflow(toolCallsArg, e.workflow.GetNodes(), e.workflowInputs)
+}
+
+// ============================================================================
+// Delegated save_message
+// ============================================================================
+
+// saveMessageRequest builds the request that delegates node's save_message to
+// the activity executing it, or nil when the node has none.
+func (e *StepExecutor) saveMessageRequest(node *reliantv1.Node) *types.SaveMessageRequest {
+	config := node.GetSaveMessage()
+	if config == nil {
+		return nil
+	}
+	workflowContext := buildWorkflowContext(e.workflowID, e.workflowName, e.chatID, e.workflowInputs)
+	req := &types.SaveMessageRequest{
+		Config:    config,
+		Inputs:    e.saveMessageInputs(node),
+		Workflow:  *workflowContextToTyped(workflowContext),
+		AgentName: saveMessageAgentName(workflowContext),
+	}
+	// The same full iter (iteration, index, item, key) the node's config and
+	// the workflow-side save see. The item ships only when the save_message
+	// actually reads it: it can be arbitrarily large and would otherwise ride
+	// along on every dispatch.
+	if e.loopNodeID != "" {
+		req.Iter = e.saveMessageIter(node)
+	}
+	return req
+}
+
+// saveMessageIter is the `iter` a delegated save_message sees: this scope's
+// full iteration context, minus `item` when no expression in the save reads
+// iter at all (an unparseable expression keeps it — under-shipping would turn
+// a template that works workflow-side into a "no such key" in the worker).
+func (e *StepExecutor) saveMessageIter(node *reliantv1.Node) *model.IterContext {
+	iter := iterContextFromMap(e.iterContext())
+	refs, err := wfcel.ReferencesOf(saveMessageExpressions(node.GetSaveMessage()), wfcel.CELIter)
+	if err == nil && !refs.Referenced {
+		iter.Item = nil
+	}
+	return iter
+}
+
+// saveMessageInputs is the subset of workflow inputs a save_message reads,
+// plus `thread`, which every save needs.
+func (e *StepExecutor) saveMessageInputs(node *reliantv1.Node) map[string]interface{} {
+	refs := e.saveMessageInputRefs(node)
+	var inputs map[string]interface{}
+	if refs.Whole {
+		inputs = copyMap(e.workflowInputs)
+	} else {
+		inputs = make(map[string]interface{}, len(refs.Fields)+1)
+		for _, field := range refs.Fields {
+			if v, ok := e.workflowInputs[field]; ok {
+				inputs[field] = v
+			}
+		}
+	}
+	if thread := e.GetThread(); thread != "" {
+		inputs["thread"] = thread
+	}
+	return inputs
+}
+
+// saveMessageInputRefs reports which workflow inputs node's save_message reads,
+// computed once per node. An expression that cannot be parsed ships the whole
+// inputs map: under-shipping would turn a template that works workflow-side
+// into a "no such key" in the worker.
+func (e *StepExecutor) saveMessageInputRefs(node *reliantv1.Node) wfcel.NamespaceRefs {
+	if refs, ok := e.saveInputRefs[node.GetId()]; ok {
+		return refs
+	}
+	refs, err := wfcel.ReferencesOf(saveMessageExpressions(node.GetSaveMessage()), wfcel.CELInputs)
+	if err != nil {
+		e.logger.Warn("[StepExecutor] Could not analyze save_message input references; sending all inputs",
+			"stepID", node.GetId(), "error", err)
+		refs = wfcel.NamespaceRefs{Referenced: true, Whole: true}
+	}
+	if e.saveInputRefs == nil {
+		e.saveInputRefs = make(map[string]wfcel.NamespaceRefs)
+	}
+	e.saveInputRefs[node.GetId()] = refs
+	return refs
+}
+
+// saveMessageExpressions lists every CEL expression in a save_message: the
+// {{...}} expressions of its templated fields and its raw-CEL condition.
+func saveMessageExpressions(config *reliantv1.SaveMessageConfig) []string {
+	if config == nil {
+		return nil
+	}
+	var exprs []string
+	for _, field := range []*reliantv1.CelString{
+		config.GetRole(), config.GetContent(), config.GetToolCalls(),
+		config.GetToolResults(), config.GetAttachments(), config.GetDisplayStyle(),
+	} {
+		exprs = append(exprs, wfcel.TemplateExpressions(model.CelStringRaw(field), false)...)
+	}
+	if cond := model.DirectCelExpr(config.GetCondition()); cond != "" {
+		exprs = append(exprs, cond)
+	}
+	return exprs
 }

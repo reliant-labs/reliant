@@ -394,8 +394,13 @@ func processJoinEvents(
 		nodeMap[model.NodeID(n)] = n
 	}
 
-	// Process each event through join state
-	for _, event := range events {
+	// Process each event through join state. Indexed on purpose, not range:
+	// a satisfied join appends its own completion event below, and that event
+	// must flow back through RecordCompletion in this same pass so a join fed
+	// by another join can fire. range fixes the length at entry and would
+	// silently never see it.
+	for i := 0; i < len(events); i++ {
+		event := events[i]
 		if event.StepID == "" {
 			// Skip workflow start events
 			continue

@@ -403,6 +403,7 @@ condition: "nodes.check.exit_code == 0"
 | `compact` | Conversation context to reduce token usage |
 | `create_worktree` | Create a git worktree for isolated development |
 | `execute_tools` | Execute tool calls from an LLM response |
+| `invoke_tool` | Invoke a single tool directly from the graph |
 | `join` | Wait for parallel branches to complete before continuing |
 | `loop` | Execute a sub-workflow in a loop with conditions |
 | `router` | Route to a workflow or node based on LLM classification |

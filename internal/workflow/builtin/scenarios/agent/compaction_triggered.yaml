@@ -21,6 +21,9 @@ description: Token count exceeds the model compaction threshold, compact node ru
 inputs:
   mode: "auto"
   model:
+    # A model selector names the model (tags or id); the runtime rejects a
+    # selector that carries only compaction_threshold.
+    tags: [flagship]
     compaction_threshold: 10000 # Low threshold to trigger compaction
 
 events:

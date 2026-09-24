@@ -13,6 +13,7 @@ import (
 	"go.temporal.io/sdk/testsuite"
 	"google.golang.org/protobuf/encoding/protojson"
 
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	types "github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 	wfyaml "github.com/reliant-labs/reliant/internal/workflow/yaml"
@@ -89,6 +90,11 @@ type rootDrainEnv struct {
 	pendingInboxTurns map[int]bool
 	// turns is how many turns emit tool calls before the run winds down.
 	turns int
+
+	// saveMessageActivityCalls counts workflow-dispatched SaveMessage
+	// activities. call_llm and regular-tools execute_tools write their own
+	// messages in the worker, so an agent loop must dispatch none.
+	saveMessageActivityCalls int32
 }
 
 func newRootDrainEnv(t *testing.T, env *testsuite.TestWorkflowEnvironment, turns int) *rootDrainEnv {
@@ -134,37 +140,43 @@ func newRootDrainEnv(t *testing.T, env *testsuite.TestWorkflowEnvironment, turns
 		activity.RegisterOptions{Name: "CreateWorkflowWithThread"},
 	)
 
-	// SaveMessage is the row-writer whose ordering relative to the drain is
-	// the whole invariant. Classify each save as the assistant row (carries
-	// tool_calls) or the tool_results row.
+	// The message writer is the row-writer whose ordering relative to the
+	// drain is the whole invariant. call_llm and execute_tools write their
+	// own messages inside the (real) ActivityWrapper, so the writer — not a
+	// SaveMessage activity — is where each row is observed. Classify each
+	// row as the assistant row (carries tool_calls) or the tool_results row.
+	record := func(args *reliantv1.SaveMessageNodeArgs, thread string) {
+		kind := "save_other"
+		switch {
+		case len(args.GetResolvedToolResults()) > 0:
+			kind = "save_tool_results"
+		case len(args.GetResolvedToolCalls()) > 0:
+			kind = "save_assistant"
+		}
+		e.record(kind, thread)
+	}
 	env.RegisterActivityWithOptions(
 		func(_ context.Context, input types.ActivityInput) (interface{}, error) {
-			args := input.Node.GetSaveMessageNode()
-			kind := "save_other"
-			switch {
-			case len(args.GetResolvedToolResults()) > 0:
-				kind = "save_tool_results"
-			case len(args.GetResolvedToolCalls()) > 0:
-				kind = "save_assistant"
-			}
-			e.record(kind, input.Runtime.Thread)
+			atomic.AddInt32(&e.saveMessageActivityCalls, 1)
+			record(input.Node.GetSaveMessageNode(), input.Runtime.Thread)
 			return map[string]interface{}{"message_id": "msg-save"}, nil
 		},
 		activity.RegisterOptions{Name: "SaveMessage"},
 	)
 
-	env.RegisterActivityWithOptions(
+	registry := NewActivityRegistry(&wrapperTestRepo{})
+	registry.SetMessageWriter(messageWriterFunc(func(_ context.Context, rtx types.RuntimeContext, args *reliantv1.SaveMessageNodeArgs, _ string, _ int32) (*reliantv1.SaveMessageOutput, error) {
+		record(args, rtx.Thread)
+		return &reliantv1.SaveMessageOutput{MessageId: "msg-save"}, nil
+	}))
+	registerWrapped(env, registry, "CallLLM",
 		func(_ context.Context, input types.ActivityInput) (map[string]interface{}, error) {
 			return e.callLLMStub(input)
-		},
-		activity.RegisterOptions{Name: "CallLLM"},
-	)
-	env.RegisterActivityWithOptions(
+		})
+	registerWrapped(env, registry, "ExecuteTools",
 		func(_ context.Context, input types.ActivityInput) (map[string]interface{}, error) {
 			return e.executeToolsStub(input)
-		},
-		activity.RegisterOptions{Name: "ExecuteTools"},
-	)
+		})
 
 	return e
 }
@@ -365,6 +377,13 @@ func (s *RootThreadMailboxDrainSuite) TestRootThreadRun_DrainLandsAfterToolResul
 		"call_llm", "save_assistant", "save_tool_results",
 		"call_llm", "save_other",
 	}, kinds)
+
+	// Rule 1: every one of those rows was written by the worker executing the
+	// node (the wrapper's message writer), none by a workflow-dispatched
+	// SaveMessage activity — so no activity result is carried through
+	// history a second time as a SaveMessage input.
+	require.Zero(s.T(), atomic.LoadInt32(&e.saveMessageActivityCalls),
+		"an agent loop of call_llm and regular-tools execute_tools must dispatch no SaveMessage activity")
 
 	// The invariant restated as the property, not the shape: every
 	// save_assistant is immediately followed by its save_tool_results, with

@@ -26,7 +26,6 @@ name: full_pipeline_happy_path
 description: All phases reached in order from context_intake to complete
 
 inputs:
-  yield: false
 
 events:
   # Context intake: no missing website/source context for this run
@@ -173,7 +172,6 @@ name: start_from_evaluation
 description: Router routes to evaluation, skipping topic/research/writing phases
 
 inputs:
-  yield: false
 
 events:
   - node: context_intake.agent_loop.call_llm
@@ -283,7 +281,6 @@ name: start_from_de_ai
 description: Router routes to de_ai, skipping all phases through distribution
 
 inputs:
-  yield: false
 
 events:
   - node: context_intake.agent_loop.call_llm

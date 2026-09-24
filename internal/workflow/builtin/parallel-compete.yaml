@@ -219,6 +219,9 @@ nodes:
           - **use_winner**: One implementation is clearly best. Pick it and we'll apply it directly.
           - **synthesize**: The best solution combines parts from multiple implementations. Provide detailed instructions on what to cherry-pick from each.
     save_message:
+      # No decision (the reviewer returned no structured response) means there
+      # is nothing to report; routing handles that case.
+      condition: "has(output.response) && output.response != null"
       role: assistant
       content: |
         ## Review Complete
