@@ -1,4 +1,5 @@
-# forge pin drift check — reports, never blocks.
+# forge pin checks: drift reports and never blocks; ancestry (a pin that is
+# not on forge's main) FAILS.
 #
 # WHY THIS EXISTS
 # ===============
@@ -38,16 +39,37 @@
 # only remedy is to bypass it — and a check people routinely bypass has already
 # stopped being a check.
 #
-# The invariant that genuinely MUST hold is enforced as a hard failure where it
-# belongs: internal/buildmode's guards fail the test job if go.mod carries a
-# forge `replace`, or requires no concrete forge version at all.
+# The invariants that genuinely MUST hold are enforced as hard failures where
+# they belong: internal/buildmode's guards fail the test job if go.mod carries a
+# forge `replace`, or requires no concrete forge version at all, and the
+# `ancestry` job below fails if the pin is not on forge's main.
+#
+# ANCESTRY: THE ONE PIN PROBLEM THAT DOES FAIL
+# ============================================
+#
+# Being BEHIND main is a choice. Pinning a commit that is NOT ON main is never
+# one. It happens whenever a pin follows a sibling PR's head and that PR is
+# squash-merged: main gets a new commit with the same tree, and the pinned one
+# is kept alive only by a PR ref or a branch that is about to be deleted. With
+# GOPRIVATE it already fails to resolve (`unknown revision`); without it, it
+# builds only while proxy.golang.org still has it cached. reliant main pinned
+# exactly such a commit (forge 1b0f7f55) on 2026-09-25.
+#
+# `push` to main catches a PR that was green when it ran but merged after the
+# sibling squashed its pin away. The daily schedule catches the reverse order,
+# where the sibling squashes after this repo merged, so no event lands here at
+# all. The check is a ~2 MB blob-less fetch of public forge. It needs no token,
+# which is why it can afford to run daily.
 name: Pin Drift
 
 on:
   pull_request:
     branches: [main]
+  push:
+    branches: [main]
   schedule:
-    - cron: "0 6 * * 1"
+    - cron: "0 6 * * 1" # weekly: drift + ancestry
+    - cron: "0 7 * * *" # daily: ancestry only
   workflow_dispatch:
 
 permissions:
@@ -60,6 +82,9 @@ concurrency:
 jobs:
   drift:
     name: Report forge pin drift
+    # Weekly cadence is deliberate for a warn-only report (see above). Skip the
+    # daily ancestry-only cron and pushes to main, where no one reads a warning.
+    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' || github.event.schedule == '0 6 * * 1'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -75,3 +100,19 @@ jobs:
           # instead of a false green.
           GH_TOKEN: ${{ secrets.SIBLING_READ_TOKEN || secrets.GITHUB_TOKEN }}
         run: ./scripts/pin-drift.sh --github
+
+  ancestry:
+    name: Forge pin is on forge main
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      # Hermetic, about 1s. A detector that can pass vacuously is worse than
+      # none, so prove it still FAILS on an off-main pin before trusting its
+      # verdict on the real one.
+      - name: Self-test the ancestry check
+        run: ./scripts/test-pin-ancestry.sh
+
+      - name: Check the forge pin is on forge main
+        run: ./scripts/check-pin-ancestry.sh --github
