@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sort"
 	"sync"
 	"time"
 
@@ -21,22 +22,50 @@ import (
 	"github.com/reliant-labs/reliant/internal/osutil"
 )
 
+// defaultMaxSessions caps how many terminal sessions one Manager holds.
+//
+// Every session owns a PTY, and PTYs are a small machine-wide pool shared by
+// every program on the host (macOS: kern.tty.ptmx_max, 511 by default). A
+// caller that creates sessions without closing them therefore breaks far
+// more than terminals: one daemon once held 501 orphaned shells, and no
+// program on the machine could open a terminal ("forkpty: Device not
+// configured"). The cap keeps a leak anywhere above this package inside the
+// daemon's own share of the pool. It is far above any real number of
+// simultaneously open terminal tabs.
+const defaultMaxSessions = 64
+
 // Manager manages terminal sessions
 type Manager struct {
 	sessions map[string]*Session
 	mu       sync.RWMutex
+
+	// createMu serializes CreateSession so that making room for a session
+	// and adding it are one step, and maxSessions is a hard bound.
+	createMu    sync.Mutex
+	maxSessions int
 }
 
 // NewManager creates a new terminal manager
 func NewManager() *Manager {
 	return &Manager{
-		sessions: make(map[string]*Session),
+		sessions:    make(map[string]*Session),
+		maxSessions: defaultMaxSessions,
 	}
 }
 
 // CreateSession creates a new terminal session owned by the given user.
 // If userID is empty the session is unscoped (for backward compatibility).
+//
+// At the session cap, the least-recently-active session is closed to make
+// room. See defaultMaxSessions.
 func (m *Manager) CreateSession(workingDir string, userID string) (*Session, error) {
+	m.createMu.Lock()
+	defer m.createMu.Unlock()
+
+	// Free PTYs before opening one: at the cap, the pool may be what is
+	// exhausted.
+	m.makeRoomForSession()
+
 	sessionID := uuid.New().String()
 
 	// Get default shell for the OS
@@ -111,6 +140,62 @@ func (m *Manager) CreateSession(workingDir string, userID string) (*Session, err
 	go m.monitorProcess(session)
 
 	return session, nil
+}
+
+// makeRoomForSession closes the least-recently-active sessions until one more
+// fits under maxSessions. The caller must hold createMu.
+//
+// Hitting the cap means sessions are being created and not closed: no real
+// user keeps this many terminals open. An orphaned session never sees input
+// or output again, so it sorts oldest and goes first, ahead of any terminal
+// someone is using.
+func (m *Manager) makeRoomForSession() {
+	m.mu.RLock()
+	candidates := make([]*Session, 0, len(m.sessions))
+	for _, session := range m.sessions {
+		candidates = append(candidates, session)
+	}
+	m.mu.RUnlock()
+
+	excess := len(candidates) - m.maxSessions + 1
+	if excess <= 0 {
+		return
+	}
+
+	lastActive := make(map[*Session]time.Time, len(candidates))
+	for _, session := range candidates {
+		lastActive[session] = session.lastActive()
+	}
+	sort.Slice(candidates, func(i, j int) bool {
+		return lastActive[candidates[i]].Before(lastActive[candidates[j]])
+	})
+
+	for _, session := range candidates[:excess] {
+		m.mu.Lock()
+		// A concurrent close or shell exit may have removed it already.
+		current, stillOpen := m.sessions[session.ID]
+		if stillOpen && current == session {
+			delete(m.sessions, session.ID)
+		}
+		m.mu.Unlock()
+		if !stillOpen || current != session {
+			continue
+		}
+
+		logging.Warn("[Terminal] Session cap reached, closing least-recently-active session. "+
+			"Something is creating terminal sessions without closing them",
+			"sessionID", session.ID, "lastActive", lastActive[session], "maxSessions", m.maxSessions)
+		if err := m.cleanupSession(session); err != nil {
+			logging.Warn("[Terminal] Cleanup errors", "sessionID", session.ID, "error", err)
+		}
+	}
+}
+
+// lastActive returns when the session last saw input or output.
+func (s *Session) lastActive() time.Time {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.LastActive
 }
 
 // GetSession retrieves a session by ID
