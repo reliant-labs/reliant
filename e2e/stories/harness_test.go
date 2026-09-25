@@ -30,6 +30,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/configadapter"
 	"github.com/reliant-labs/reliant/internal/daemon"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/grpc/services"
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
@@ -413,6 +414,32 @@ func (h *Harness) eventually(what string, cond func() (bool, string)) {
 		time.Sleep(pollInterval)
 	}
 	h.T.Fatalf("timed out after %s waiting for %s (last state: %s)", waitTimeout, what, last)
+}
+
+// WaitToolExecuting blocks until the scripted tool call scriptID is actually
+// RUNNING — its tool_calls row is EXECUTING, which ExecuteTools writes as the
+// tool starts.
+//
+// This, not "the assistant's tool_use is persisted", is the point at which a
+// kill lands INSIDE execute_tools. CallLLM persists the tool_use before the
+// workflow task that schedules ExecuteTools has completed, so a terminate in
+// that gap resets to BEFORE CallLLM: the replay re-asks the model and the
+// first tool_use is left unanswered (the "interrupted — outcome unknown"
+// repair). Resume stories that mean "kill it mid-tool" must wait for this;
+// waiting only for the tool_use made story 08 fail ~1 run in 15 under load.
+func (h *Harness) WaitToolExecuting(scriptID string) {
+	h.T.Helper()
+	id := h.LLM.CallID(scriptID)
+	h.eventually(fmt.Sprintf("tool call %s to be executing", scriptID), func() (bool, string) {
+		call, err := h.Stack.Repo.GetToolCall(h.Ctx, id)
+		if err != nil || call == nil {
+			return false, fmt.Sprintf("get tool call: %v", err)
+		}
+		if call.Status != core.ToolCallStatusExecuting {
+			return false, fmt.Sprintf("status=%d", call.Status)
+		}
+		return true, ""
+	})
 }
 
 // WaitWorkflowStatus polls the workflows table (written by the production

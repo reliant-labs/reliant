@@ -359,6 +359,32 @@ jobs:
     name: E2E Backend (Go)
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # The stories need a REAL Postgres (the Temporal dev server they start
+    # themselves). Without this service DATABASE_URL was unset, TestMain
+    # skipped every DB-backed story, and this job went green running exactly
+    # one story (09, which needs no DB) out of eleven. That is how
+    # story_{08,10,11} stopped compiling after #292 without anything going
+    # red until the compile error itself, and how stories 01/04/07 overwrote
+    # each other's tool-call rows (shared scripted ids) for as long as they
+    # existed. REQUIRE_TEST_DB below makes a skip a failure, so this gate
+    # cannot go dark that way again.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: reliant
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/reliant?sslmode=disable
+      REQUIRE_TEST_DB: "1"
     steps:
       - uses: actions/checkout@v6
 

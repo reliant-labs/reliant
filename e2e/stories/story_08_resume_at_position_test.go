@@ -143,7 +143,7 @@ func TestStory08_TerminateMidLoopResumesAtPosition(t *testing.T) {
 		Name:       "resume-two-phase",
 		Slug:       "resume-two-phase",
 		Definition: resumeTwoPhaseYAML,
-		IsValid:    true,
+		Status:     db.WorkflowDraftStatusComplete,
 		CreatedAt:  now,
 		UpdatedAt:  now,
 	}), "seed workflow draft")
@@ -152,28 +152,12 @@ func TestStory08_TerminateMidLoopResumesAtPosition(t *testing.T) {
 	chatID := created.Chat.Id
 	workflowID := created.WorkflowId
 
-	// 1. Wait until the run is provably mid phase-two iteration 1:
-	//    - the position checkpoint records {work_loop, 1} (written at
-	//      iteration start), and
-	//    - iteration 1's assistant tool_use (call-sleep) is persisted, meaning
-	//      the LLM turn completed and execute_tools is now sleeping.
-	h.eventually("run to reach work_loop iteration 1 with the slow tool_use persisted", func() (bool, string) {
-		cp, err := h.Stack.Repo.GetWorkflowCheckpoint(h.Ctx, workflowID)
-		if err != nil || cp == nil {
-			return false, "no checkpoint yet"
-		}
-		if cp.NodeID != "work_loop" || cp.LoopIteration < 1 {
-			return false, "checkpoint=" + cp.NodeID
-		}
-		for _, m := range h.Messages(chatID, workflowID) {
-			for _, b := range m.Blocks {
-				if b.ToolCallID != nil && *b.ToolCallID == "call-sleep" {
-					return true, ""
-				}
-			}
-		}
-		return false, "call-sleep tool_use not persisted yet"
-	})
+	// 1. Wait until the run is provably mid phase-two iteration 1: iteration
+	//    1's slow tool (call-sleep) is EXECUTING, so execute_tools is sleeping.
+	//    The position checkpoint records {work_loop, 1} before that (written at
+	//    iteration start) and is asserted just below. See WaitToolExecuting for
+	//    why "the tool_use is persisted" is not a sufficient condition.
+	h.WaitToolExecuting("call-sleep")
 
 	cp, err := h.Stack.Repo.GetWorkflowCheckpoint(h.Ctx, workflowID)
 	require.NoError(t, err)
@@ -242,10 +226,10 @@ func TestStory08_TerminateMidLoopResumesAtPosition(t *testing.T) {
 		//    real (non-error) result — not an "interrupted / outcome unknown"
 		//    stub.
 		for _, tr := range m.ToolResults() {
-			if tr.ToolCallID == "call-sleep" {
+			if tr.ToolCallID == h.LLM.CallID("call-sleep") {
 				sawSleepResult = true
 				assert.False(t, tr.IsError,
-					"reset-and-replay re-runs the interrupted tool fresh, so its result is a real success, not an interruption stub")
+					"reset-and-replay re-runs the interrupted tool fresh, so its result is a real success, not an interruption stub; got %q", tr.Content)
 			}
 		}
 	}
