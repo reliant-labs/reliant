@@ -144,3 +144,43 @@ func ClampThinkingLevel(cap ThinkingCapability, level string) string {
 
 	return ReconcileThinkingLevel(cap, level)
 }
+
+// CapThinkingLevel lowers level to ceiling when it sits above it, and never
+// raises it. The result is always a level the capability declares.
+//
+// It is the ceiling-shaped counterpart to ClampThinkingLevel. A tag's
+// max_thinking_level says "no harder than this", so a model already running
+// below the ceiling keeps its own level — lifting it would spend exactly the
+// effort the tier exists to save. level is reconciled first, so the comparison
+// is made against the level the model would really run at, not a stale value
+// it does not declare.
+//
+// When the model declares nothing at or below the ceiling, its LOWEST level is
+// returned: the closest it can come to honoring the ceiling. Clamp's fallback
+// to the preferred default would be wrong here, because that default can be
+// the most expensive level the model has.
+func CapThinkingLevel(cap ThinkingCapability, level, ceiling string) string {
+	level = ReconcileThinkingLevel(cap, level)
+	limit := thinkingLevelRank(ceiling)
+	if level == "" || limit < 0 || thinkingLevelRank(level) <= limit {
+		return level
+	}
+
+	for i := limit; i >= 0; i-- {
+		if slices.Contains(cap.Levels, KnownThinkingLevels[i]) {
+			return KnownThinkingLevels[i]
+		}
+	}
+	for _, known := range KnownThinkingLevels[limit+1:] {
+		if slices.Contains(cap.Levels, known) {
+			return known
+		}
+	}
+	return level
+}
+
+// thinkingLevelRank orders a level by KnownThinkingLevels, ascending. Unknown
+// levels rank -1.
+func thinkingLevelRank(level string) int {
+	return slices.Index(KnownThinkingLevels, level)
+}

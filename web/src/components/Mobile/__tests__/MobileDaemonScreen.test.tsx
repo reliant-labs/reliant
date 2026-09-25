@@ -9,7 +9,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { DaemonStatus, DaemonSize } from '@/gen/controlplane/v1/public/shared_pb'
+import { DaemonStatus, DaemonSize } from '@/gen/controlplane/controlplane/v1/shared_pb';
 import type { Daemon } from '@/services/controlPlane/daemon'
 
 const resumeMutate = vi.fn()
@@ -42,7 +42,7 @@ function daemon(overrides: Partial<Daemon> = {}): Daemon {
     id: 'd1',
     name: 'work-box',
     status: DaemonStatus.ACTIVE,
-    size: DaemonSize.MEDIUM,
+    size: DaemonSize.DAEMON_SIZE_MEDIUM,
     gitRepo: 'reliant-labs/reliant',
     gitBranch: 'main',
     hostname: '',

@@ -22,6 +22,7 @@ import (
 
 	"github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
+	accesstoken "github.com/reliant-labs/forge/pkg/accesstoken"
 	"github.com/reliant-labs/reliant/internal/chatmarkers"
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/models"
@@ -60,11 +61,8 @@ func apiKeyPrefixForLog(apiKey string) string {
 	if trimmedKey == "" {
 		return "none"
 	}
-	if strings.HasPrefix(trimmedKey, "rlnt_") {
-		return "rlnt_"
-	}
-	if strings.HasPrefix(trimmedKey, "rly_") {
-		return "rly_"
+	if accesstoken.HasFormat(trimmedKey) {
+		return accesstoken.Prefix
 	}
 	if strings.HasPrefix(trimmedKey, "sk-") {
 		return "sk-"
@@ -77,22 +75,13 @@ func apiKeyTypeForLog(apiKey string) string {
 	if trimmedKey == "" {
 		return "empty"
 	}
-	if strings.HasPrefix(trimmedKey, "rlnt_") || strings.HasPrefix(trimmedKey, "rly_") {
-		return "managed_reliant"
+	if accesstoken.HasFormat(trimmedKey) {
+		return "reliant_access_token"
 	}
 	if strings.HasPrefix(trimmedKey, "sk-") {
 		return "openai_compatible"
 	}
 	return "unknown"
-}
-
-func hasExtraHeader(headers map[string]string, targetKey string) bool {
-	for key := range headers {
-		if strings.EqualFold(key, targetKey) {
-			return true
-		}
-	}
-	return false
 }
 
 func extraHeaderKeysForLog(headers map[string]string) []string {
@@ -118,7 +107,6 @@ func NewClient(opts llm.DriverOptions) *ReliantClient {
 		"base_url", opts.BaseURL,
 		"api_key_prefix", apiKeyPrefixForLog(opts.ApiKey),
 		"api_key_type", apiKeyTypeForLog(opts.ApiKey),
-		"has_x_reliant_managed_key", hasExtraHeader(opts.ExtraHeaders, "X-Reliant-Managed-Key"),
 		"extra_header_keys", extraHeaderKeysForLog(opts.ExtraHeaders),
 		"model", opts.Model.ID,
 		"api_model", opts.Model.APIModel,

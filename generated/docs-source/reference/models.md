@@ -54,7 +54,7 @@ Models are tagged to help with selection. You can also [bring your own model](/d
 | `claude-5-opus` | Claude 5 Opus | flagship, reasoning | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} | anthropic, openrouter, reliant |
 | `claude-5-sonnet` | Claude 5 Sonnet | flagship, moderate, reasoning | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} | anthropic, openrouter, reliant, copilot |
 | `claude-5.1-fable` | Claude 5.1 Fable | powerful, flagship, reasoning | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} | anthropic, openrouter, reliant, vertexai |
-| `claude-5.5-opus` | Claude 5.5 Opus | flagship, reasoning | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} | anthropic, openrouter, reliant, vertexai |
+| `claude-5.5-opus` | Claude 5.5 Opus | flagship, moderate, reasoning | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} | anthropic, openrouter, reliant, vertexai |
 
 **Note:** All Claude models support attachments (images, PDFs) and prompt caching.
 
@@ -150,6 +150,7 @@ _Balance of capability and cost_
 
 | Model | Provider | Context | Capabilities |
 |-------|----------|---------|-------------|
+| `claude-5.5-opus` | Anthropic | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
 | `claude-5-sonnet` | Anthropic | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
 | `gpt-5.5` | OpenAI | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
 | `gpt-5.6-terra` | OpenAI | 272K | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |

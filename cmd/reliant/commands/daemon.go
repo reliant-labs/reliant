@@ -17,9 +17,9 @@ import (
 
 	"connectrpc.com/connect"
 
-	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
+	"github.com/reliant-labs/forge/pkg/accesstoken"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/cliauth"
 	"github.com/reliant-labs/reliant/internal/instanceid"
 	"github.com/reliant-labs/reliant/internal/llm/tools/shell"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -82,79 +82,52 @@ the Reliant cloud platform via a bidirectional gRPC stream.`,
 	return cmd
 }
 
-// registerDaemon performs the daemon registration flow:
-// 1. Ensures user is logged in (runs OAuth if not)
-// 2. Calls CreateDaemonToken RPC to get a PAT
-// 3. Writes daemon credentials to local file
+// registerDaemon mints this machine's daemon credential by a browser login:
+// the OAuth code flow with PKCE against the control plane, asking for
+// daemon:connect. The resulting `rlat_` IS the daemon credential, written to
+// the daemon store keyed by conn's server.
 //
-// The daemon PAT is minted by, and scoped to, conn's server — the one the
-// resolved context names — so registering never silently targets a different
-// server than the rest of the CLI.
+// The login is consented in the browser, so no session JWT is kept on disk
+// (the retired reliant-auth.json). The token is named reliant-cli@<instance
+// label>, and the server rotates on that name: re-registering this instance
+// replaces its previous token rather than adding one.
 //
-// nonInteractive, when true, forbids the OAuth login step from opening a
-// browser or starting the local login-page HTTP server: it is passed straight
-// through to auth.Login, which returns auth.ErrNonInteractiveLoginRequired
-// instead of running the interactive flow. Callers that must idle rather than
-// fail outright (see waitForCredentialsNonInteractive) detect that sentinel
-// with errors.Is.
+// nonInteractive, when true, forbids opening a browser: registerDaemon returns
+// an error wrapping cliauth.ErrInteractiveRequired instead. Callers that must
+// idle rather than fail (see waitForCredentialsNonInteractive) detect it with
+// errors.Is.
+//
 // account names which credential this registration writes. It is part of the
-// store key, so registering account A cannot overwrite account B's PAT at the
-// same origin. Empty means the default account.
+// store key, so registering account A cannot overwrite account B's token at
+// the same origin. Empty means the default account.
 func registerDaemon(ctx context.Context, cmd *cobra.Command, conn *connection, account string, nonInteractive bool) error {
 	apiURL, gwURL := conn.ServerURL, conn.GatewayURL
+	if !nonInteractive {
+		fmt.Fprintln(cmd.OutOrStdout(), "Registering this machine as a daemon — approve the login in your browser.")
+	}
+	logging.Info("Registering daemon via control-plane login", "api_url", apiURL, "instance_id", instanceid.ID())
 
-	accessToken, err := auth.ReadAccessTokenFromAuthFile()
+	cred, err := cliauth.Login{
+		Server:         apiURL,
+		Scopes:         []string{cliauth.ScopeDaemon},
+		Name:           "daemon-" + instanceid.Label(),
+		NonInteractive: nonInteractive,
+		Out:            cmd.OutOrStdout(),
+	}.Run(ctx)
 	if err != nil {
-		return fmt.Errorf("reading auth file: %w", err)
+		return fmt.Errorf("daemon login: %w", err)
 	}
-	if accessToken == "" {
-		if !nonInteractive {
-			fmt.Fprintln(cmd.OutOrStdout(), "Not logged in. Starting authentication...")
-		}
-		result, err := auth.Login(ctx, auth.LoginOptions{NonInteractive: nonInteractive})
-		if err != nil {
-			return fmt.Errorf("login failed: %w", err)
-		}
-		if err := auth.WriteAuthSession(result.AccessToken, result.RefreshToken, result.UserID, result.Email); err != nil {
-			return fmt.Errorf("saving credentials: %w", err)
-		}
-		fmt.Fprintf(cmd.OutOrStdout(), "Logged in as %s\n", result.Email)
-		accessToken = result.AccessToken
+	if !scopeGranted(cred.Scopes, cliauth.ScopeDaemon) {
+		return fmt.Errorf("the control plane did not grant %s (granted: %v)", cliauth.ScopeDaemon, cred.Scopes)
 	}
 
-	// Step 2: Call CreateDaemonToken RPC on DaemonTokenService (JWT-authed).
-	// The token's name is a human-facing label in `auth token list`, not a
-	// lookup key (daemon-kind PATs are found by hash, and revoked by name or id
-	// only among api-kind tokens). Stamping the stable instance id into it
-	// keeps two registrations from the same machine recognizable as such even
-	// if the hostname flipped between them.
-	tokenName := instanceid.Label()
-
-	logging.Info("Registering daemon via CreateDaemonToken",
-		"api_url", apiURL, "token_name", tokenName, "instance_id", instanceid.ID())
-
-	// Registration is JWT-only (a PAT cannot mint a daemon PAT), so the bearer
-	// is the login session rather than the connection's resolved token.
-	httpClient := conn.httpClientWithBearer(accessToken)
-	client := reliantv1connect.NewDaemonTokenServiceClient(httpClient, apiURL)
-
-	resp, err := client.CreateDaemonToken(ctx, connect.NewRequest(&reliantv1.CreateDaemonTokenRequest{
-		Name: tokenName,
-	}))
-	if err != nil {
-		logging.Error("CreateDaemonToken failed", "error", err, "code", connect.CodeOf(err), "api_url", apiURL)
-		return conn.annotate(fmt.Errorf("creating daemon token: %w", err))
-	}
-	logging.Info("Daemon token created successfully", "token_id", resp.Msg.GetTokenId())
-
-	// Step 3: Write daemon credentials. The server identifies the user from the
-	// PAT on every call, so the client doesn't store user_id.
 	creds := &auth.DaemonCredentials{
-		PAT:          resp.Msg.GetToken(),
+		PAT:          cred.Token,
 		ServerURL:    apiURL,
 		GatewayURL:   gwURL,
 		RegisteredAt: time.Now().UTC(),
 		Sub:          account,
+		ExpiresAt:    cred.ExpiresAt,
 	}
 	if err := auth.WriteDaemonCredentials(creds); err != nil {
 		return fmt.Errorf("saving daemon credentials: %w", err)
@@ -168,6 +141,15 @@ func registerDaemon(ctx context.Context, cmd *cobra.Command, conn *connection, a
 	return nil
 }
 
+func scopeGranted(granted []string, want string) bool {
+	for _, s := range granted {
+		if s == want {
+			return true
+		}
+	}
+	return false
+}
+
 // daemonPATRenewBefore is how far ahead of a stored PAT's known expiry the
 // daemon proactively re-mints, so it never boots on a credential about to lapse
 // mid-run. Only applies to creds that carry an expiry; daemon-kind PATs are
@@ -176,7 +158,7 @@ const daemonPATRenewBefore = 24 * time.Hour
 
 // daemonCredsExpiringSoon reports whether stored creds carry a known expiry that
 // has already lapsed or falls within daemonPATRenewBefore of now. Non-expiring
-// creds (nil creds or nil ExpiresAt — every CreateDaemonToken / managed mint)
+// creds (nil creds or nil ExpiresAt — every daemon registration / managed mint)
 // never expire and always return false.
 func daemonCredsExpiringSoon(creds *auth.DaemonCredentials, now time.Time) bool {
 	if creds == nil || creds.ExpiresAt == nil {
@@ -190,8 +172,8 @@ func daemonCredsExpiringSoon(creds *auth.DaemonCredentials, now time.Time) bool 
 //
 // If no credentials exist, runs the registration flow: prompts for sign-in
 // (if not already, and unless nonInteractive is set — see registerDaemon),
-// then mints a PAT via CreateDaemonToken. Most users will instead use
-// `--token` to paste a PAT minted from the web UI.
+// then mints a daemon credential via TokenService.CreateToken. Most users will
+// instead use `--token` to paste a daemon token minted from the web UI.
 func ensureDaemonCredentials(ctx context.Context, cmd *cobra.Command, conn *connection, account string, nonInteractive bool) (*auth.DaemonCredentials, error) {
 	apiURL, gwURL := conn.ServerURL, conn.GatewayURL
 
@@ -204,7 +186,7 @@ func ensureDaemonCredentials(ctx context.Context, cmd *cobra.Command, conn *conn
 		// can no longer authenticate the daemon; returning it would fail the
 		// gateway reach-out fatally. Proactively drop it and fall through to
 		// re-mint a fresh — non-expiring — daemon PAT. Non-expiring creds
-		// (ExpiresAt == nil), which is every CreateDaemonToken / managed-daemon
+		// (ExpiresAt == nil), which is every daemon registration / managed-daemon
 		// mint, skip this and are returned as-is.
 		if daemonCredsExpiringSoon(creds, time.Now()) {
 			logging.Warn("stored daemon PAT is expired or near expiry — re-minting",
@@ -317,7 +299,7 @@ func pollDaemonCredentials(cmd *cobra.Command, conn *connection, account string)
 // resolveOrAwaitCredentials calls ensureDaemonCredentials and, when running
 // non-interactively with no usable credentials, falls into
 // waitForCredentialsNonInteractive instead of surfacing
-// auth.ErrNonInteractiveLoginRequired as a fatal error. This is the seam used
+// cliauth.ErrInteractiveRequired as a fatal error. This is the seam used
 // by both the initial credential resolution and the auth-failure retry path
 // in `daemon start`, so neither can regress into popping a browser.
 func resolveOrAwaitCredentials(ctx context.Context, cmd *cobra.Command, conn *connection, account, dataDir string, nonInteractive bool) (*auth.DaemonCredentials, error) {
@@ -325,7 +307,7 @@ func resolveOrAwaitCredentials(ctx context.Context, cmd *cobra.Command, conn *co
 	if err == nil {
 		return creds, nil
 	}
-	if nonInteractive && errors.Is(err, auth.ErrNonInteractiveLoginRequired) {
+	if nonInteractive && errors.Is(err, cliauth.ErrInteractiveRequired) {
 		return waitForCredentialsNonInteractive(ctx, cmd, conn, account, dataDir)
 	}
 	return nil, err
@@ -344,7 +326,7 @@ func registerOrAwaitCredentials(ctx context.Context, cmd *cobra.Command, conn *c
 		}
 		return newCreds, nil
 	}
-	if nonInteractive && errors.Is(regErr, auth.ErrNonInteractiveLoginRequired) {
+	if nonInteractive && errors.Is(regErr, cliauth.ErrInteractiveRequired) {
 		return waitForCredentialsNonInteractive(ctx, cmd, conn, account, dataDir)
 	}
 	return nil, fmt.Errorf("re-registration failed: %w", regErr)
@@ -438,15 +420,15 @@ func credentialsFromToken(ctx context.Context, cmd *cobra.Command, conn *connect
 		return nil, fmt.Errorf("no token provided")
 	}
 
-	if !auth.IsPATFormat(token) {
-		return nil, fmt.Errorf("invalid token format (expected rlnt_pat_...)")
+	if !accesstoken.HasFormat(token) {
+		return nil, fmt.Errorf("invalid token format (expected an rlat_ daemon token)")
 	}
 
 	// We don't pre-validate the token over the network. The stream connect
-	// the daemon makes next does PAT auth on every call, so a bad token
-	// surfaces with a clear CodeUnauthenticated on the very first reach-out.
-	// Skipping a redundant probe keeps the server's PAT auth surface
-	// confined to the daemon listener.
+	// the daemon makes next authenticates it, so a bad token surfaces with a
+	// clear CodeUnauthenticated on the very first reach-out. Skipping a
+	// redundant probe keeps the server's daemon-credential surface confined
+	// to the daemon listener.
 	creds := &auth.DaemonCredentials{
 		PAT:          token,
 		ServerURL:    apiURL,
@@ -476,13 +458,11 @@ Creates a long-lived access token for the daemon and stores it locally.
 
 After registering, run 'reliant daemon start' to connect.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// Registration mints a credential for a specific server.
-			// resolveDaemonServer, not resolveServer: a daemon credential is
-			// per-backend (the store is keyed by origin) and must not be
-			// steered by the api-kind CLI context — see resolveDaemonServer.
-			// Not resolveConnection either, because registering is how you GET
-			// a credential; requiring one first would be circular.
-			conn, err := resolveDaemonServer(cmd)
+			// Registration mints a credential for a specific server — the
+			// daemon store is keyed by it. Not resolveConnection: registering
+			// is how you GET a credential; requiring one first would be
+			// circular.
+			conn, err := resolveServer(cmd)
 			if err != nil {
 				return err
 			}
@@ -595,11 +575,10 @@ Credential resolution order:
 			// runtime record, the stable daemon id — lives inside that
 			// directory.
 			//
-			// resolveDaemonServer: the daemon authenticates with its own
-			// daemon-kind PAT, so it neither needs a CLI credential nor should
-			// inherit the api-kind context's server — daemon credentials are
-			// multi-backend and keyed by origin. See resolveDaemonServer.
-			conn, err := resolveDaemonServer(cmd)
+			// resolveServer, not resolveConnection: the daemon authenticates
+			// with its own daemon:connect token from the daemon store, keyed
+			// by this server, so it needs no CLI credential.
+			conn, err := resolveServer(cmd)
 			if err != nil {
 				return err
 			}
@@ -748,7 +727,7 @@ Credential resolution order:
 				}
 
 				// Register flow: stale creds get cleaned up and we re-run the
-				// Supabase login + CreateDaemonToken handshake.
+				// Supabase login + TokenService.CreateToken(daemon) handshake.
 				if isAuthFail {
 					logging.Warn("Daemon gateway authentication failed — deleting stale credentials and re-registering",
 						"error", err, "code", code.String(), "gateway_url", daemonGRPCURL)
@@ -912,7 +891,7 @@ stream is not established.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			out := cmd.OutOrStdout()
 
-			conn, err := resolveDaemonServer(cmd)
+			conn, err := resolveServer(cmd)
 			if err != nil {
 				return err
 			}
@@ -1110,7 +1089,7 @@ record in place. A daemon reported as stopped while it is still running keeps
 its gateway registration, and the next 'daemon start' then registers a second
 daemon under the same identity — the two evict each other until one is killed.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			conn, err := resolveDaemonServer(cmd)
+			conn, err := resolveServer(cmd)
 			if err != nil {
 				return err
 			}
@@ -1150,7 +1129,7 @@ func newDaemonLogsCmd() *cobra.Command {
 		Short: "Tail daemon logs",
 		Long:  `Streams daemon log output. Defaults to the last 50 lines with live follow.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			conn, err := resolveDaemonServer(cmd)
+			conn, err := resolveServer(cmd)
 			if err != nil {
 				return err
 			}

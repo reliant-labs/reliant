@@ -469,7 +469,7 @@ type Connector struct {
 	Id       string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	DaemonId string                 `protobuf:"bytes,2,opt,name=daemon_id,json=daemonId,proto3" json:"daemon_id,omitempty"`
 	Name     string                 `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
-	// token_prefix is the visible leading fragment (e.g. "rlnt_conn_AbCdEfGh"),
+	// token_prefix is the visible leading fragment (e.g. "rlat_AbCdEfGh"),
 	// enough to identify a credential without exposing it.
 	TokenPrefix   string            `protobuf:"bytes,4,opt,name=token_prefix,json=tokenPrefix,proto3" json:"token_prefix,omitempty"`
 	AllowedTools  []string          `protobuf:"bytes,5,rep,name=allowed_tools,json=allowedTools,proto3" json:"allowed_tools,omitempty"`

@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -944,5 +946,97 @@ func TestForgeDeployHasItsOwnInvocationCeiling(t *testing.T) {
 	// And it is a separate seam, so no change here can shorten the read path.
 	if fmt.Sprintf("%p", runForge) == fmt.Sprintf("%p", runForgeDeploy) {
 		t.Error("the deploy runner must be a distinct seam from the read runner")
+	}
+}
+
+// =============================================================================
+// Hosted: the endpoint IS the declared context
+// =============================================================================
+
+// hostedPlanFixture is forge's REAL `env deploy <hosted> --dry-run --json`
+// output, captured from forge's own hosted CLI flow (TestHostedCLIEndToEnd:
+// real KCL render, hosted ledger and provider, only the control plane's HTTP
+// faked). For a hosted env forge reports the control plane's endpoint as
+// guard.declared_context with reason control_plane_declared, and no kube
+// context anywhere — so the SAME declared-context guard is the staleness
+// identity, with no hosted branch in this file.
+func hostedPlanFixture(t *testing.T, name string) []byte {
+	t.Helper()
+	b, err := os.ReadFile(filepath.Join("testdata", name))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return b
+}
+
+const hostedFixtureEndpoint = "http://127.0.0.1:56171"
+
+// A hosted plan, confirmed against the endpoint the operator saw, is accepted
+// unchanged and detaches the apply.
+func TestForgeDeployStart_AcceptsHostedPlanByEndpoint(t *testing.T) {
+	dir := forgeProject(t)
+	plan := hostedPlanFixture(t, "forge_hosted_deploy_dry_run.json")
+	var facts forgeDeployPlanFacts
+	if err := json.Unmarshal(plan, &facts); err != nil {
+		t.Fatal(err)
+	}
+	if facts.Guard.DeclaredContext != hostedFixtureEndpoint || facts.Guard.Reason != "control_plane_declared" ||
+		facts.Target.KubeContext != "" {
+		t.Fatalf("fixture is not forge's hosted plan shape: %+v", facts)
+	}
+	stubForge(t, forgeCommandResult{Stdout: plan}, nil)
+
+	applied := make(chan []string, 1)
+	prev := runForgeDeploy
+	runForgeDeploy = func(_ context.Context, _ string, args []string) (forgeCommandResult, error) {
+		applied <- args
+		return forgeCommandResult{Stdout: hostedPlanFixture(t, "forge_hosted_deploy_apply.json")}, nil
+	}
+	t.Cleanup(func() { runForgeDeploy = prev })
+
+	raw, err := handleForgeDeployStart(context.Background(), mustDeployPayload(t,
+		startRequest(dir, "hosted", hostedFixtureEndpoint, "v1")))
+	if err != nil {
+		t.Fatalf("deploy_start: %v", err)
+	}
+	got := decodeDeployStart(t, raw)
+	if got.DeployRefused != nil {
+		t.Fatalf("a hosted plan confirmed against its endpoint was refused: %+v", got.DeployRefused)
+	}
+	if got.Handle == "" {
+		t.Fatal("expected a handle")
+	}
+	select {
+	case args := <-applied:
+		if strings.Contains(strings.Join(args, " "), "--dry-run") {
+			t.Errorf("the apply must not be a dry run: %v", args)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the apply never ran")
+	}
+	if finished := waitForDeployJob(t, got.Handle); finished.JobStatus != forgeDeployJobStatusCompleted {
+		t.Errorf("job_status = %q (%s)", finished.JobStatus, finished.JobStatusDetail)
+	}
+}
+
+// The endpoint is re-checked exactly like a kube context: a plan that now
+// names a DIFFERENT control plane than the one the operator confirmed is
+// refused as stale, and nothing is applied.
+func TestForgeDeployStart_RefusesHostedPlanWithChangedEndpoint(t *testing.T) {
+	dir := forgeProject(t)
+	stubForge(t, forgeCommandResult{Stdout: hostedPlanFixture(t, "forge_hosted_deploy_dry_run.json")}, nil)
+	stubNoForgeDeploy(t)
+
+	raw, err := handleForgeDeployStart(context.Background(), mustDeployPayload(t,
+		startRequest(dir, "hosted", "https://api.reliant.dev", "v1")))
+	if err != nil {
+		t.Fatalf("a refusal is structured data, not an error: %v", err)
+	}
+	got := decodeDeployStart(t, raw)
+	if got.DeployRefused == nil || got.DeployRefused.Reason != forgeDeployRefusalReasonStaleDeclaredContext {
+		t.Fatalf("expected a stale_declared_context refusal, got %+v", got.DeployRefused)
+	}
+	if got.DeployRefused.ActualDeclaredContext != hostedFixtureEndpoint {
+		t.Errorf("the refusal must name the endpoint found, got %q", got.DeployRefused.ActualDeclaredContext)
 	}
 }

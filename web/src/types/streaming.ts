@@ -106,6 +106,10 @@ export interface ToolCallUpdate {
   started_at?: string;
   completed_at?: string;
   node_id?: string;
+  // For a spawn call, the workflow (== thread) it started. This event is the
+  // only live carrier: the spawn's assistant message is persisted before the
+  // spawn runs, so its tool-call block never has it.
+  child_workflow_id?: string;
 }
 
 // ErrorUpdate represents workflow/activity error events from the backend

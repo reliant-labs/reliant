@@ -33,6 +33,19 @@ func main() {
 
 	outputFile := os.Args[1]
 
+	// The reference is committed, so it must not depend on who generated it.
+	// Some help text resolves a real path at construction time (the shared
+	// credentials file: $FORGE_HOME, $XDG_CONFIG_HOME, else $HOME/.config/…),
+	// which baked the generating developer's home directory into cli.md.
+	// With all three unset, those resolvers fall back to their portable
+	// "~/.config/forge/credentials.json" spelling.
+	for _, name := range []string{"HOME", "FORGE_HOME", "XDG_CONFIG_HOME"} {
+		if err := os.Unsetenv(name); err != nil {
+			fmt.Fprintf(os.Stderr, "Error clearing %s: %v\n", name, err)
+			os.Exit(1)
+		}
+	}
+
 	root := commands.NewRootCmd()
 	markdown, cmdCount := generateMarkdown(root)
 

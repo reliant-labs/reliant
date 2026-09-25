@@ -7,7 +7,7 @@ import { isSafeReturnTo } from '@/lib/returnTo'
 import { describeAuthError } from '@/lib/authErrors'
 import { LinkIdentityForm } from './LinkIdentityForm'
 import { AuthLayout, AuthHeader, AuthError } from './AuthLayout'
-import { BillingService } from '@/gen/controlplane/v1/public/billing_service_pb'
+import { BillingService } from '@/gen/controlplane/services/billing/v1/billing_pb';
 import { getControlPlaneClient } from '../services/controlPlane/client'
 import { CheckSpamNote } from './CheckSpamNote'
 

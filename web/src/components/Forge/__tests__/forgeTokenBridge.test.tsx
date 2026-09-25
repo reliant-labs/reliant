@@ -141,7 +141,7 @@ describe("forge token bridge", () => {
     // schemes (lighter than --card in dark, darker than --background in
     // light), so a structural token pointed at it recesses in one mode and
     // lifts in the other. See the comment block in index.css.
-    for (const token of ["surface", "surface-muted"]) {
+    for (const token of ["surface", "surface-muted", "surface-sunken"]) {
       const decl = new RegExp(`--color-${token}\\s*:\\s*([^;]+);`).exec(css);
       expect(decl, `--color-${token} should be declared`).not.toBeNull();
       expect(

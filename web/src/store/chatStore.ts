@@ -81,6 +81,9 @@ export interface ToolExecutionStateUpdate {
   // only producer is the stream-abort pass, which cancels tools that had not
   // reported an outcome when their stream ended. See ToolCallState.inferred.
   inferred?: boolean;
+  // For a spawn call, the workflow (== thread) it started, from
+  // ToolCallUpdate.child_workflow_id. See ToolCallState.childWorkflowId.
+  child_workflow_id?: string;
 }
 import { triggerRefetch, type RefetchType } from "../store/refetchStore";
 
@@ -758,6 +761,11 @@ export interface ToolCallState {
   // Unified approval state
   approval?: ToolApprovalRequest;
   needsApproval?: boolean;
+  // For a spawn call, the workflow it started — which is also the thread it
+  // owns. Learned from the status event, because the tool-call block a live
+  // client holds was persisted before the spawn ran and never carries it.
+  // Once known it never changes, so a later event that omits it keeps it.
+  childWorkflowId?: string;
   // Tool call data from messages (for UI rendering)
   toolCall?: {
     name: string;
@@ -2165,6 +2173,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
                 toolCall.started_at ||
                 toolCall.completed_at ||
                 new Date().toISOString(),
+              child_workflow_id: toolCall.child_workflow_id,
             } as ToolExecutionStateUpdate;
 
             return toolUpdate;

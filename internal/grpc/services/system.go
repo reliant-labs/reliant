@@ -147,7 +147,7 @@ func (s *SystemService) StartOAuthSignIn(
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("provider is required"))
 	}
 
-	result, err := auth.LoginWithOAuthProvider(ctx, provider, auth.LoginOptions{})
+	result, err := auth.LoginWithOAuthProvider(ctx, provider)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to complete %s OAuth sign-in: %w", provider, err))
 	}

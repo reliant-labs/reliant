@@ -25,8 +25,8 @@ import { ProjectPanel } from "../Projects/ProjectPanel";
 const BillingSection = lazy(() =>
   import("./cloud/billing").then((m) => ({ default: m.BillingSection }))
 );
-const EnvironmentsSection = lazy(() =>
-  import("./cloud/environments").then((m) => ({ default: m.EnvironmentsSection }))
+const MachinesSection = lazy(() =>
+  import("./cloud/machines").then((m) => ({ default: m.MachinesSection }))
 );
 
 interface SettingsContentProps {
@@ -161,10 +161,10 @@ export function SettingsContent({
   // to breathe. The id → component map is the contract the vertical agents plug
   // into:
   //   billing        → <BillingSection/>      (./cloud/billing)
-  //   environments   → <EnvironmentsSection/> (./cloud/environments)
+  //   environments   → <MachinesSection/> (./cloud/machines)
   if (activeSection === "billing" || activeSection === "environments") {
     const CloudSection =
-      activeSection === "billing" ? BillingSection : EnvironmentsSection;
+      activeSection === "billing" ? BillingSection : MachinesSection;
     return (
       <div className="cloud-settings h-full overflow-auto bg-background px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
         <div className="mx-auto w-full max-w-7xl">

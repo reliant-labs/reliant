@@ -87,6 +87,14 @@ type ToolCallUpdate struct {
 	RequestedAt string         `json:"requested_at,omitempty"`
 	StartedAt   string         `json:"started_at,omitempty"`
 	CompletedAt string         `json:"completed_at,omitempty"`
+	// ChildWorkflowID names the workflow — and therefore the thread — a spawn
+	// call started. It has to ride this event because nothing else live can
+	// carry it: the assistant message holding the spawn's tool-call block is
+	// persisted BEFORE the spawn runs, so that block never has it. Without it
+	// an open client has no thread to preview and shows "Starting…" for the
+	// whole run, while a reload (which joins the durable row) shows the
+	// transcript.
+	ChildWorkflowID string `json:"child_workflow_id,omitempty"`
 }
 
 func (u ToolCallUpdate) Type() UpdateType { return UpdateTypeToolCall }

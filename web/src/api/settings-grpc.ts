@@ -490,7 +490,7 @@ export const settingsGrpc = {
   /**
    * Sync the Reliant provider API key from control-plane.
    *
-   * Mints or fetches the per-user rlnt_ internal API key and persists it
+   * Mints or fetches the per-user rlat_ LLM key (llm:invoke) and persists it
    * locally so chat requests can use the reliant provider without manual
    * configuration. Safe to call once per session post-login; idempotent.
    *

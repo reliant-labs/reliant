@@ -1,30 +1,52 @@
-# buf.gen.controlplane.yaml — TypeScript codegen for the public controlplane.v1
-# proto subtree consumed by the web app (Connect-Web clients).
+# buf.gen.controlplane.yaml — every control-plane client in this repo, Go AND
+# TypeScript, generated from ONE input: proto-vendor/controlplane/.
 #
-# Source: proto/controlplane/v1/public/ — canonical home of the public
-#   controlplane.v1 API. Control-plane consumes these files from this
-#   repo via a sibling-checkout symlink; see
-#   proto/controlplane/v1/public/README.md.
-# Output: web/src/gen/controlplane/v1/   (one *_pb.ts per service file plus
-#   shared_pb.ts; Connect service descriptors are embedded by protoc-gen-es,
-#   so no separate *_connect.ts is generated).
+# That directory is NOT authored here. It is a verbatim `buf export` of the
+# control-plane repo's public proto contract (the `export` lines of
+# control-plane/proto/public-api.txt), written by
+# .github/scripts/sync-controlplane-proto.mjs and drift-gated from
+# control-plane's CI. No *Admin or internal-service API is in it.
 #
-# This is a TS-only emit. Go code that talks to control-plane stays generated
-# from the local proto/controlplane/v1/admin.proto subset via buf.gen.yaml /
-# buf.gen-go-only.yaml. admin.proto and the public protos share package
-# controlplane.v1 but define overlapping symbols (BillingService,
-# ManagedReliantAccess, etc.), so the public subtree is excluded from the
-# default workspace module in buf.yaml and reached only by this template
-# (the npm script passes the workspace as the input and uses --path to
-# scope to the public subtree).
+# Output mirrors the proto paths under a `controlplane/` root, e.g.
+#   services/deploy/v1/deploy.proto -> web/src/gen/controlplane/services/deploy/v1/deploy_pb.ts
+#   services/billing/v1/billing.proto -> gen/controlplane/services/billing/v1/*.go
 #
 # Regenerate with:  npm run proto:generate:controlplane
+# (after `node .github/scripts/sync-controlplane-proto.mjs` when the contract changed)
 version: v2
 managed:
-  enabled: false
+  enabled: true
+  override:
+    # control-plane's go_package options point into control-plane's own module,
+    # which this repo must never import (control-plane depends on reliant, not
+    # the reverse). Rewrite them into this repo's gen/ tree.
+    - file_option: go_package_prefix
+      value: github.com/reliant-labs/reliant/gen/controlplane
+  disable:
+    # forge.proto keeps its own go_package (forge/pkg/forgepb), so imports of it
+    # resolve to forge's package rather than a rewritten path under gen/.
+    - file_option: go_package
+      path: forge/v1/forge.proto
+inputs:
+  - directory: proto-vendor/controlplane
 plugins:
+  # Go: forge/v1/forge.proto is excluded because it already has a Go home,
+  # github.com/reliant-labs/forge/pkg/forgepb, which the generated code imports.
+  # A second copy would register forge/v1/forge.proto twice and panic at init.
+  - remote: buf.build/protocolbuffers/go:v1.36.12
+    out: gen/controlplane
+    exclude_types: [forge.v1]
+    opt:
+      - paths=source_relative
+  - remote: buf.build/connectrpc/go
+    out: gen/controlplane
+    exclude_types: [forge.v1]
+    opt:
+      - paths=source_relative
   - remote: buf.build/bufbuild/es:v2.12.0
-    out: web/src/gen
+    out: web/src/gen/controlplane
+    # forge/v1/forge.proto is imported for method annotations only; it has to be
+    # emitted too or the generated descriptors reference a file that is absent.
     include_imports: true
     opt:
       - target=ts

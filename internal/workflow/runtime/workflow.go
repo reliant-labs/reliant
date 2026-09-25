@@ -145,10 +145,10 @@ type ChildWorkflowTracker struct {
 	// registered child. The root chat's update always carries the root's own
 	// model, so a spawned agent running under a preset that pins a different
 	// model had that pin silently replaced the moment the user sent another
-	// message. Observed on the `implementer` preset (model tags [moderate] ->
-	// claude-5-sonnet): threads began on sonnet and flipped mid-run to
-	// claude-5-opus, the root's tags [flagship], with the opus adaptive
-	// thinking/effort payload that comes with it.
+	// message. Observed on the `implementer` preset (model tags [moderate],
+	// which then resolved to claude-5-sonnet): threads began on sonnet and
+	// flipped mid-run to claude-5-opus, the root's tags [flagship], with the
+	// opus adaptive thinking/effort payload that comes with it.
 	//
 	// A thread-scoped update (the __thread key) still targets these
 	// deliberately; only the blind global fan-out is held back.

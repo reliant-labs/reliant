@@ -487,8 +487,21 @@ function ChatMessageComponent({
             ? getApprovalStatus(execution.call.content_block_id)
             : undefined);
 
+        // A spawn's child workflow id arrives on the status channel, not the
+        // block: the assistant message was persisted before the spawn ran, so
+        // a live client's block never has it (only a reload, which joins the
+        // durable row, does). Without it the card has no thread to preview
+        // and shows "Starting…" over an agent that is actively working.
+        const childWorkflowId =
+          execution.call.childWorkflowId || toolCallState?.childWorkflowId;
+        const call =
+          childWorkflowId === execution.call.childWorkflowId
+            ? execution.call
+            : { ...execution.call, childWorkflowId };
+
         return {
           ...execution,
+          call,
           approval, // Use resolved approval (embedded or from approvals array)
           status: toolCallState?.status,
           onCancel: async (toolCallId: string) => {

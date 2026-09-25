@@ -43,12 +43,16 @@ import { Tooltip } from "@/components/ui/Tooltip";
 import {
   cellFor,
   describeLag,
+  destinationExplanation,
+  destinationOf,
+  usesKubeContext,
   envBindingState,
   isDirtyRelease,
   type ForgeTopologyEnv,
 } from "@/services/forge/topology";
 
 import { DeployDialog } from "./Deploy/DeployDialog";
+import { DestinationBadge, HostedFacts } from "./DestinationBadge";
 import { PromoteDialog } from "./Promote/PromoteDialog";
 import { TopologyCell } from "./TopologyCell";
 
@@ -122,6 +126,8 @@ export function EnvRow({
   const canDeploy = !!projectId;
 
   const cluster = [env.kube_context, env.namespace].filter(Boolean).join(" · ");
+  const destination = destinationOf(env);
+  const hosted = destination === "hosted";
 
   return (
     <tr
@@ -163,6 +169,10 @@ export function EnvRow({
           ) : (
             <span className="font-mono text-sm font-medium text-foreground">{env.env}</span>
           )}
+
+          {/* Where this env deploys. Unknown renders as unknown — never as
+              a cluster the row cannot name. */}
+          <DestinationBadge env={env} />
 
           {binding === "unbound" && (
             // Never promoted. Explicitly not a problem — it has declared
@@ -281,19 +291,39 @@ export function EnvRow({
         )}
       </td>
 
-      {/* Cluster — kube context and namespace are identifiers, so mono. */}
+      {/* Runs on — for a hosted env, the control plane and its workloads' URLs
+          and verdicts (there is no kube context to show, and naming one would
+          send a reader to kubectl for something that is not theirs). For every
+          other env, kube context and namespace, which are identifiers: mono. */}
       <td className={cn(CELL, "max-w-xs")}>
-        {cluster ? (
+        {hosted ? (
+          // Compact: the env's health chip and a one-line workload summary, so
+          // a hosted env stays ONE row. The per-workload list is on the
+          // Environments screen, one click away through the env name.
+          <HostedFacts env={env} compact />
+        ) : cluster ? (
           <span
             className="block truncate font-mono text-xs text-muted-foreground"
             title={cluster}
           >
             {cluster}
           </span>
-        ) : (
+        ) : usesKubeContext(destination) ? (
           <span className="text-xs text-muted-foreground">
             <span aria-hidden="true">—</span>
             <span className="sr-only">no cluster resolved</span>
+          </span>
+        ) : (
+          // compose / host / static / external / unknown: no cluster to name,
+          // so the cell says what the badge means rather than "no cluster".
+          <span className="block truncate text-xs text-muted-foreground" title={destinationExplanation(destination)}>
+            {destination === "unknown"
+              ? "Not reported by forge"
+              : destination === "compose" || destination === "host"
+                ? "This machine"
+                : destination === "static"
+                  ? "Static hosting"
+                  : "External target"}
           </span>
         )}
       </td>
@@ -315,9 +345,13 @@ export function EnvRow({
               loading={isVerifying}
               disabled={isVerifying}
               leftIcon={<RefreshCw className="h-3 w-3" />}
-              aria-label={`Verify ${env.env} against its live cluster`}
+              aria-label={
+                hosted
+                  ? `Verify ${env.env} against its control plane`
+                  : `Verify ${env.env} against its live cluster`
+              }
             >
-              {isVerifying ? "Reading cluster…" : "Verify"}
+              {isVerifying ? (hosted ? "Reading control plane…" : "Reading cluster…") : "Verify"}
             </Button>
           )}
 
@@ -348,7 +382,11 @@ export function EnvRow({
               size="sm"
               onClick={() => setDeployOpen(true)}
               leftIcon={<Rocket className="h-3 w-3" />}
-              aria-label={`Preview deploying ${env.env} to its declared cluster`}
+              aria-label={
+                hosted
+                  ? `Preview deploying ${env.env} through its control plane`
+                  : `Preview deploying ${env.env} to its declared cluster`
+              }
               data-testid={`deploy-open-${env.env}`}
             >
               Deploy…

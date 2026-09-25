@@ -25,14 +25,14 @@ For usage information and examples, see the [Presets Guide](/docs/workflows/pres
 | `forge_implementer` | `tags:moderate` | `tag:coding:default`, `component_library` | Implementation specialist for a single seam of a Forge app — same tier as `... |
 | `general` | `tags:flagship` | `tag:coding:default` (+2 more) | Balanced general-purpose agent with full tool access including file modificat... |
 | `git` | `tags:fast` | `tag:shell`, `view` | Git specialist for commits, branching, and version control operations - loads... |
-| `implementer` | `tags:flagship` | `tag:coding:default` | Implementation specialist for well-specified code changes — follows detaile... |
+| `implementer` | `tags:moderate` | `tag:coding:default` | Implementation specialist for well-specified code changes — follows detaile... |
 | `migrate` | `tags:flagship` | `tag:coding:default` | Guided migration assistant for moving from Claude Code, Cursor, Codex, or Win... |
 | `planner` | `tags:flagship` | `view`, `tag:shell`, `code_context`, `create_plan` | Strategic planner who orchestrates research and synthesizes actionable implem... |
 | `refactor` | `tags:moderate` | `view` (+6 more) | Code refactoring specialist who reorganizes and improves code structure while... |
 | `researcher` | `tags:flagship` | `tag:shell`, `tag:web`, `view`, `code_context` | Research and analysis specialist conducting comprehensive investigations of t... |
 | `tester` | `tags:moderate` | `view` (+4 more) | Testing specialist who creates test harnesses, writes comprehensive tests, an... |
-| `ux` | `tags:flagship` | `fetch` (+19 more) | User experience specialist focused on improving UI/UX design, accessibility, ... |
-| `workflow_builder` | `tags:flagship` | `tag:workflow` (+4 more) | Specialized assistant for building and modifying Reliant workflows |
+| `ux` | `tags:moderate` | `fetch` (+19 more) | User experience specialist focused on improving UI/UX design, accessibility, ... |
+| `workflow_builder` | `tags:moderate` | `tag:workflow` (+4 more) | Specialized assistant for building and modifying Reliant workflows |
 
 ## Preset Details
 
@@ -132,7 +132,7 @@ Implementation specialist for well-specified code changes — follows detailed i
 
 | Parameter | Value |
 |-----------|-------|
-| **Model** | `tags:flagship` |
+| **Model** | `tags:moderate` |
 | **Tag** | `agent` |
 | **Tools** | `tag:coding:default` |
 | **Spawn Presets** | `researcher` |
@@ -209,7 +209,7 @@ User experience specialist focused on improving UI/UX design, accessibility, and
 
 | Parameter | Value |
 |-----------|-------|
-| **Model** | `tags:flagship` |
+| **Model** | `tags:moderate` |
 | **Tag** | `agent` |
 | **Tools** | `fetch`, `view`, `write`, `edit`, `tag:shell`, `get_plan`, `list_tasks`, `update_task`, `component_library`, `mcp__chrome-devtools__take_screenshot`, `mcp__chrome-devtools__take_snapshot`, `mcp__chrome-devtools__new_page`, `mcp__chrome-devtools__navigate_page`, `mcp__chrome-devtools__select_page`, `mcp__chrome-devtools__list_pages`, `mcp__chrome-devtools__list_console_messages`, `mcp__chrome-devtools__click`, `mcp__chrome-devtools__fill`, `mcp__chrome-devtools__press_key`, `mcp__chrome-devtools__evaluate_script` |
 | **Spawn Presets** | `researcher`, `implementer`, `ux`, `general` |
@@ -222,7 +222,7 @@ Specialized assistant for building and modifying Reliant workflows
 
 | Parameter | Value |
 |-----------|-------|
-| **Model** | `tags:flagship` |
+| **Model** | `tags:moderate` |
 | **Tag** | `agent` |
 | **Tools** | `tag:workflow`, `tag:shell`, `tag:web`, `skill`, `view` |
 

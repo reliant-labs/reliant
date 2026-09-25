@@ -2,128 +2,183 @@ package interceptors
 
 import (
 	"context"
-	"fmt"
 	"testing"
 
 	"connectrpc.com/connect"
-	"github.com/reliant-labs/reliant/internal/auth"
+	fat "github.com/reliant-labs/forge/pkg/accesstoken"
 	"github.com/stretchr/testify/require"
+
+	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/tokenauthority"
 )
 
-type mockPATValidator struct {
-	validTokens map[string]mockPATResult // rawToken -> result
+// mintDaemonToken mints an `rlat_` in authority acting as userID with scopes,
+// optionally bound to a resource.
+func mintDaemonToken(t *testing.T, authority *tokenauthority.Memory, userID string, res *fat.Resource, scopes ...fat.Scope) string {
+	t.Helper()
+	m, err := authority.MintForUser(context.Background(), tokenauthority.MintRequest{
+		UserID: userID, Name: "daemon", Scopes: scopes, Resource: res,
+	})
+	require.NoError(t, err)
+	return m.Plaintext
 }
 
-type mockPATResult struct {
-	userID   string
-	daemonID string
-}
-
-func (m *mockPATValidator) ValidatePAT(_ context.Context, rawToken string) (string, string, string, error) {
-	if result, ok := m.validTokens[rawToken]; ok {
-		return result.userID, "pat-id", result.daemonID, nil
+func bearer(token string) func(string) string {
+	return func(key string) string {
+		if key == "Authorization" {
+			return "Bearer " + token
+		}
+		return ""
 	}
-	return "", "", "", fmt.Errorf("invalid token")
 }
 
 func TestNewDaemonAuthInterceptorValidation(t *testing.T) {
 	_, err := NewDaemonAuthInterceptor(nil)
 	require.Error(t, err)
 
-	interceptor, err := NewDaemonAuthInterceptor(&mockPATValidator{validTokens: map[string]mockPATResult{}})
+	interceptor, err := NewDaemonAuthInterceptor(tokenauthority.NewMemory())
 	require.NoError(t, err)
 	require.NotNil(t, interceptor)
 }
 
-func TestDaemonAuthInterceptorAuthenticateSuccess(t *testing.T) {
-	validator := &mockPATValidator{
-		validTokens: map[string]mockPATResult{
-			"rlnt_pat_AbCdEfGhIjKlMnOpQrStUvWxYz123456": {userID: "user-123", daemonID: "daemon-42"},
-		},
-	}
-	interceptor, err := NewDaemonAuthInterceptor(validator)
+func TestDaemonAuthInterceptorBoundToken(t *testing.T) {
+	authority := tokenauthority.NewMemory()
+	token := mintDaemonToken(t, authority, "user-123",
+		&fat.Resource{Kind: fat.ResourceDaemon, ID: "daemon-42"}, fat.ScopeDaemonConnect)
+	interceptor, err := NewDaemonAuthInterceptor(authority)
 	require.NoError(t, err)
 
-	ctx, err := interceptor.authenticate(context.Background(), func(key string) string {
-		if key == "Authorization" {
-			return "Bearer rlnt_pat_AbCdEfGhIjKlMnOpQrStUvWxYz123456"
-		}
-		return ""
-	})
+	ctx, err := interceptor.authenticate(context.Background(), bearer(token))
 	require.NoError(t, err)
-
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	require.True(t, ok)
 	require.Equal(t, "user-123", userID)
-
-	daemonID := auth.GetDaemonIDFromContext(ctx)
-	require.Equal(t, "daemon-42", daemonID)
+	require.Equal(t, "daemon-42", auth.GetDaemonIDFromContext(ctx))
 }
 
-func TestDaemonAuthInterceptorAuthenticateUnboundPAT(t *testing.T) {
-	validator := &mockPATValidator{
-		validTokens: map[string]mockPATResult{
-			"rlnt_pat_AbCdEfGhIjKlMnOpQrStUvWxYz123456": {userID: "user-123", daemonID: ""},
-		},
-	}
-	interceptor, err := NewDaemonAuthInterceptor(validator)
+func TestDaemonAuthInterceptorUnboundToken(t *testing.T) {
+	authority := tokenauthority.NewMemory()
+	token := mintDaemonToken(t, authority, "user-123", nil, fat.ScopeDaemonConnect)
+	interceptor, err := NewDaemonAuthInterceptor(authority)
 	require.NoError(t, err)
 
-	ctx, err := interceptor.authenticate(context.Background(), func(key string) string {
-		if key == "Authorization" {
-			return "Bearer rlnt_pat_AbCdEfGhIjKlMnOpQrStUvWxYz123456"
-		}
-		return ""
-	})
+	ctx, err := interceptor.authenticate(context.Background(), bearer(token))
 	require.NoError(t, err)
-
-	userID, ok := auth.GetUserIDFromContext(ctx)
-	require.True(t, ok)
+	userID, _ := auth.GetUserIDFromContext(ctx)
 	require.Equal(t, "user-123", userID)
-
-	// Unbound PAT should not inject daemon_id into context.
-	daemonID := auth.GetDaemonIDFromContext(ctx)
-	require.Equal(t, "", daemonID)
+	// An unbound token names no daemon.
+	require.Equal(t, "", auth.GetDaemonIDFromContext(ctx))
 }
 
-func TestDaemonAuthInterceptorAuthenticateRejectsMissingHeader(t *testing.T) {
-	interceptor, err := NewDaemonAuthInterceptor(&mockPATValidator{validTokens: map[string]mockPATResult{}})
+func TestDaemonAuthInterceptorRejectsWrongScope(t *testing.T) {
+	authority := tokenauthority.NewMemory()
+	apiToken := mintDaemonToken(t, authority, "user-123", nil, fat.ScopeReliantAPI)
+	interceptor, err := NewDaemonAuthInterceptor(authority)
 	require.NoError(t, err)
 
-	_, err = interceptor.authenticate(context.Background(), func(string) string { return "" })
-	require.Error(t, err)
+	_, err = interceptor.authenticate(context.Background(), bearer(apiToken))
 	require.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
 }
 
-func TestDaemonAuthInterceptorAuthenticateRejectsInvalidHeader(t *testing.T) {
-	interceptor, err := NewDaemonAuthInterceptor(&mockPATValidator{validTokens: map[string]mockPATResult{}})
+// principalIntrospector returns a fixed principal for any token — for shapes
+// the grant rules refuse to mint, which the interceptor must still refuse.
+type principalIntrospector struct{ p *fat.Principal }
+
+func (s principalIntrospector) Introspect(context.Context, string) (*fat.Principal, error) {
+	return s.p, nil
+}
+
+// forge/pkg/accesstoken refuses to mint daemon:connect bound to a non-daemon
+// resource, so this principal cannot come from either store today. The
+// interceptor still refuses it (defense in depth against a future authority).
+func TestDaemonAuthInterceptorRejectsNonDaemonBinding(t *testing.T) {
+	interceptor, err := NewDaemonAuthInterceptor(principalIntrospector{&fat.Principal{
+		TokenID: "t", ActingUserID: "user-123", Scopes: fat.SetOf(fat.ScopeDaemonConnect),
+		Resource: &fat.Resource{Kind: fat.ResourceConnector, ID: "c1"},
+	}})
+	require.NoError(t, err)
+	minted, err := fat.Mint()
 	require.NoError(t, err)
 
+	_, err = interceptor.authenticate(context.Background(), bearer(minted.Plaintext))
+	require.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
+}
+
+func TestDaemonAuthInterceptorRejectsTokenWithoutActingUser(t *testing.T) {
+	interceptor, err := NewDaemonAuthInterceptor(principalIntrospector{&fat.Principal{
+		TokenID: "t", OrgID: "org-1", Scopes: fat.SetOf(fat.ScopeDaemonConnect),
+	}})
+	require.NoError(t, err)
+	minted, err := fat.Mint()
+	require.NoError(t, err)
+
+	_, err = interceptor.authenticate(context.Background(), bearer(minted.Plaintext))
+	require.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
+}
+
+func TestDaemonAuthInterceptorRevokedIsUnauthenticated(t *testing.T) {
+	authority := tokenauthority.NewMemory()
+	m, err := authority.MintForUser(context.Background(), tokenauthority.MintRequest{
+		UserID: "user-123", Name: "daemon", Scopes: []fat.Scope{fat.ScopeDaemonConnect},
+	})
+	require.NoError(t, err)
+	interceptor, err := NewDaemonAuthInterceptor(authority)
+	require.NoError(t, err)
+
+	_, err = interceptor.authenticate(context.Background(), bearer(m.Plaintext))
+	require.NoError(t, err)
+	require.NoError(t, authority.RevokeForUser(context.Background(), "user-123", m.TokenID))
+
+	// Uncached: the very next connect is refused.
+	_, err = interceptor.authenticate(context.Background(), bearer(m.Plaintext))
+	require.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
+}
+
+func TestDaemonAuthInterceptorUnknownTokenIsUnauthenticated(t *testing.T) {
+	interceptor, err := NewDaemonAuthInterceptor(tokenauthority.NewMemory())
+	require.NoError(t, err)
+	minted, err := fat.Mint()
+	require.NoError(t, err)
+
+	_, err = interceptor.authenticate(context.Background(), bearer(minted.Plaintext))
+	require.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
+}
+
+// An unreachable authority is our outage, not a bad credential: the daemon
+// must retry rather than discard its token.
+func TestDaemonAuthInterceptorOutageIsUnavailable(t *testing.T) {
+	authority := tokenauthority.NewMemory()
+	token := mintDaemonToken(t, authority, "user-123", nil, fat.ScopeDaemonConnect)
+	authority.SetUnavailable(true)
+	interceptor, err := NewDaemonAuthInterceptor(authority)
+	require.NoError(t, err)
+
+	_, err = interceptor.authenticate(context.Background(), bearer(token))
+	require.Equal(t, connect.CodeUnavailable, connect.CodeOf(err))
+}
+
+func TestDaemonAuthInterceptorRejectsRetiredPAT(t *testing.T) {
+	interceptor, err := NewDaemonAuthInterceptor(tokenauthority.NewMemory())
+	require.NoError(t, err)
+	_, err = interceptor.authenticate(context.Background(), bearer("rlnt_pat_AbCdEfGhIjKlMnOpQrStUvWxYz123456"))
+	require.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
+}
+
+func TestDaemonAuthInterceptorRejectsMissingHeader(t *testing.T) {
+	interceptor, err := NewDaemonAuthInterceptor(tokenauthority.NewMemory())
+	require.NoError(t, err)
+	_, err = interceptor.authenticate(context.Background(), func(string) string { return "" })
+	require.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
+}
+
+func TestDaemonAuthInterceptorRejectsInvalidHeader(t *testing.T) {
+	interceptor, err := NewDaemonAuthInterceptor(tokenauthority.NewMemory())
+	require.NoError(t, err)
 	_, err = interceptor.authenticate(context.Background(), func(key string) string {
 		if key == "Authorization" {
 			return "some-token-without-bearer"
 		}
 		return ""
 	})
-	require.Error(t, err)
-	require.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
-}
-
-func TestDaemonAuthInterceptorAuthenticateRejectsWrongToken(t *testing.T) {
-	validator := &mockPATValidator{
-		validTokens: map[string]mockPATResult{
-			"rlnt_pat_ValidTokenHere1234567890abcdef": {userID: "user-123"},
-		},
-	}
-	interceptor, err := NewDaemonAuthInterceptor(validator)
-	require.NoError(t, err)
-
-	_, err = interceptor.authenticate(context.Background(), func(key string) string {
-		if key == "Authorization" {
-			return "Bearer rlnt_pat_WrongTokenHere1234567890abcdef"
-		}
-		return ""
-	})
-	require.Error(t, err)
 	require.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
 }

@@ -3,9 +3,11 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -171,6 +173,43 @@ func TestEmitToolCallStatus_StillEmitsChatUpdate(t *testing.T) {
 	require.NoError(t, h.DB().QueryRowContext(ctx,
 		`SELECT count(*) FROM chat_updates WHERE chat_id = $1`, chatID).Scan(&updateCount))
 	assert.Positive(t, updateCount, "the transient event stream must still be emitted")
+}
+
+// A spawn's assistant message is persisted BEFORE the spawn runs, so the
+// tool-call block it carries has no child_workflow_id yet. The status event is
+// the only live channel that can tell an open client which thread the spawn
+// owns. Without it the preview has no thread to read and sits on "Starting…"
+// for the whole run, while a reload (which joins the durable row) shows the
+// transcript.
+func TestEmitToolCallStatus_EventCarriesChildWorkflowID(t *testing.T) {
+	h, chatID := setupEmitStatusFixture(t)
+	defer h.Cleanup()
+	ctx := context.Background()
+
+	activityInstance := NewEmitToolCallStatusActivity(h.Repo())
+	toolCallID := "toolu_" + uuid.New().String()
+	childWorkflowID := uuid.New().String()
+
+	var out EmitToolCallStatusOutput
+	require.NoError(t, h.ExecuteActivity(activityInstance.Execute, EmitToolCallStatusInput{
+		ChatID:          chatID,
+		ToolCallID:      toolCallID,
+		ToolName:        "spawn",
+		Status:          "backgrounded",
+		ChildWorkflowID: childWorkflowID,
+	}, &out))
+	require.True(t, out.Success)
+
+	var raw []byte
+	require.NoError(t, h.DB().QueryRowContext(ctx,
+		`SELECT data FROM chat_updates WHERE chat_id = $1 AND update_type = $2 ORDER BY sequence_number DESC LIMIT 1`,
+		chatID, int32(db.UpdateTypeToolCall)).Scan(&raw))
+
+	var payload map[string]any
+	require.NoError(t, json.Unmarshal(raw, &payload))
+	assert.Equal(t, toolCallID, payload["tool_call_id"])
+	assert.Equal(t, childWorkflowID, payload["child_workflow_id"],
+		"the live status event must name the thread the spawn owns")
 }
 
 func TestToolCallStatusFromString(t *testing.T) {

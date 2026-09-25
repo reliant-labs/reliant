@@ -21,21 +21,18 @@ import (
 // succeeded — which reads like an auth bug and is not one.
 func TestBothTransportsAreServed(t *testing.T) {
 	store := newMemStore()
-	raw, hash, prefix, err := connectorgrant.GenerateCredential()
-	require.NoError(t, err)
+	raw := store.credentialFor(t, "grant-transport", "user-1")
 
 	require.NoError(t, store.CreateGrant(context.Background(), &connectorgrant.Grant{
 		ID:           "grant-transport",
 		UserID:       "user-1",
 		DaemonID:     "daemon-1",
-		TokenHash:    hash,
-		TokenPrefix:  prefix,
 		AllowedTools: ReadOnlyToolNames(),
 		PathRoot:     "/workspace",
 		ExecMode:     connectorgrant.ExecDeny,
 	}))
 
-	handler, err := NewHTTPHandler(HTTPDeps{Store: store, Sender: &fakeSender{}})
+	handler, err := NewHTTPHandler(HTTPDeps{Store: store, Credentials: store.creds, Sender: &fakeSender{}})
 	require.NoError(t, err)
 
 	srv := httptest.NewServer(handler)
@@ -65,21 +62,18 @@ func TestBothTransportsAreServed(t *testing.T) {
 // absorb every unrouted path and turn honest 404s into MCP protocol errors.
 func TestRootMountDoesNotSwallowUnknownPaths(t *testing.T) {
 	store := newMemStore()
-	raw, hash, prefix, err := connectorgrant.GenerateCredential()
-	require.NoError(t, err)
+	raw := store.credentialFor(t, "grant-root-scope", "user-1")
 
 	require.NoError(t, store.CreateGrant(context.Background(), &connectorgrant.Grant{
 		ID:           "grant-root-scope",
 		UserID:       "user-1",
 		DaemonID:     "daemon-1",
-		TokenHash:    hash,
-		TokenPrefix:  prefix,
 		AllowedTools: ReadOnlyToolNames(),
 		PathRoot:     "/workspace",
 		ExecMode:     connectorgrant.ExecDeny,
 	}))
 
-	handler, err := NewHTTPHandler(HTTPDeps{Store: store, Sender: &fakeSender{}})
+	handler, err := NewHTTPHandler(HTTPDeps{Store: store, Credentials: store.creds, Sender: &fakeSender{}})
 	require.NoError(t, err)
 
 	srv := httptest.NewServer(handler)
@@ -111,7 +105,7 @@ func TestRootMountDoesNotSwallowUnknownPaths(t *testing.T) {
 // door tells them nothing.
 func TestUnknownPathsRejectBeforeRouting(t *testing.T) {
 	store := newMemStore()
-	handler, err := NewHTTPHandler(HTTPDeps{Store: store, Sender: &fakeSender{}})
+	handler, err := NewHTTPHandler(HTTPDeps{Store: store, Credentials: store.creds, Sender: &fakeSender{}})
 	require.NoError(t, err)
 
 	srv := httptest.NewServer(handler)
@@ -124,10 +118,9 @@ func TestUnknownPathsRejectBeforeRouting(t *testing.T) {
 
 	// With a valid credential, an unknown path is a genuine 404 — the mux is
 	// not a catch-all that would serve MCP on any URL.
-	raw, hash, prefix, err := connectorgrant.GenerateCredential()
-	require.NoError(t, err)
+	raw := store.credentialFor(t, "g", "u")
 	require.NoError(t, store.CreateGrant(context.Background(), &connectorgrant.Grant{
-		ID: "g", UserID: "u", DaemonID: "d", TokenHash: hash, TokenPrefix: prefix,
+		ID: "g", UserID: "u", DaemonID: "d",
 		AllowedTools: ReadOnlyToolNames(), PathRoot: "/workspace",
 		ExecMode: connectorgrant.ExecDeny,
 	}))

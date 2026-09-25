@@ -63,10 +63,27 @@ func TestResolveLLMCall_AppliesTagThinkingDefault(t *testing.T) {
 			name:      "a tag with no default falls back to the model default",
 			selector:  models.ModelSelector{Tags: []string{models.TagFlagship}},
 			providers: []string{"anthropic"},
-			// flagship declares no tag default, so claude-5-opus's own
-			// default_thinking_level (high) is what survives.
-			wantModelID:  "claude-5-opus@anthropic",
+			// flagship declares no tag default, so claude-5.5-opus's own
+			// default_thinking_level (xhigh) is what survives.
+			wantModelID:  "claude-5.5-opus@anthropic",
+			wantThinking: "xhigh",
+		},
+		{
+			name:      "a tag ceiling lowers the same model below flagship",
+			selector:  models.ModelSelector{Tags: []string{models.TagModerate}},
+			providers: []string{"anthropic"},
+			// moderate resolves to the flagship model but caps its effort, so
+			// the request carries high where flagship's carries xhigh.
+			wantModelID:  "claude-5.5-opus@anthropic",
 			wantThinking: "high",
+		},
+		{
+			name:          "explicit level beats the tag ceiling",
+			selector:      models.ModelSelector{Tags: []string{models.TagModerate}},
+			thinkingLevel: "xhigh",
+			providers:     []string{"anthropic"},
+			wantModelID:   "claude-5.5-opus@anthropic",
+			wantThinking:  "xhigh",
 		},
 	}
 

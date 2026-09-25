@@ -3,7 +3,7 @@
  * `controlplane.v1.UserService` for the current-user / completion calls.
  */
 
-import { UserService } from "@/gen/controlplane/v1/public/user_service_pb";
+import { UserService } from "@/gen/controlplane/services/user/v1/user_pb";
 import { getControlPlaneClient } from "../client";
 import { api } from "@/api/client";
 import type { OnboardingUser } from "./types";

@@ -3,7 +3,6 @@ package commands
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"time"
 
@@ -12,7 +11,6 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
-	"github.com/reliant-labs/reliant/internal/cliconfig"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/execfollow"
 )
@@ -36,26 +34,14 @@ func (f *followFlags) register(cmd *cobra.Command) {
 	cmd.Flags().BoolVar(&f.exitOnGate, "exit-on-gate", false, "Stop and exit 3 as soon as a question/approval gate opens (for scripted supervision)")
 }
 
-// resolveHooks merges hook sources: --hook flags win outright; otherwise the
-// resolved context's hooks: block applies.
-func resolveHooks(flagHooks []string, contextHooks []cliconfig.HookSpec) ([]execfollow.Hook, error) {
-	if len(flagHooks) > 0 {
-		hooks := make([]execfollow.Hook, 0, len(flagHooks))
-		for _, raw := range flagHooks {
-			h, err := execfollow.ParseHookFlag(raw)
-			if err != nil {
-				return nil, err
-			}
-			hooks = append(hooks, h)
-		}
-		return hooks, nil
-	}
-
-	hooks := make([]execfollow.Hook, 0, len(contextHooks))
-	for _, spec := range contextHooks {
-		h := execfollow.Hook{On: spec.On, Cmd: spec.Cmd}
-		if err := execfollow.ValidateHook(h); err != nil {
-			return nil, fmt.Errorf("invalid hook in CLI config: %w", err)
+// resolveHooks parses the --hook flags. They are the only hook source: the
+// per-context hooks block went with `reliant context`.
+func resolveHooks(flagHooks []string) ([]execfollow.Hook, error) {
+	hooks := make([]execfollow.Hook, 0, len(flagHooks))
+	for _, raw := range flagHooks {
+		h, err := execfollow.ParseHookFlag(raw)
+		if err != nil {
+			return nil, err
 		}
 		hooks = append(hooks, h)
 	}
@@ -88,12 +74,7 @@ Exit codes:
 Hooks run matching events through 'sh -c <cmd>' with the event JSON on
 stdin and RELIANT_EVENT_* environment variables (RELIANT_EVENT,
 RELIANT_EVENT_EXECUTION_ID, RELIANT_EVENT_NODE_ID, RELIANT_EVENT_STATE, ...).
-A failing hook is logged and never stops the follow. Hooks may also be
-declared under the context in the CLI config:
-
-  {"contexts": {"prod": {"hooks": [{"on": "workflow_failed", "cmd": "notify.sh"}]}}}
-
-Flags win over config hooks.`,
+A failing hook is logged and never stops the follow.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runWorkflowFollow(cmd, args[0], &flags)
@@ -112,7 +93,7 @@ func runWorkflowFollow(cmd *cobra.Command, executionID string, flags *followFlag
 		return err
 	}
 
-	hooks, err := resolveHooks(flags.hooks, conn.Hooks)
+	hooks, err := resolveHooks(flags.hooks)
 	if err != nil {
 		return err
 	}

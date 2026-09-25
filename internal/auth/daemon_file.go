@@ -37,10 +37,10 @@ type DaemonCredentials struct {
 	// it is passed around detached from the store.
 	Sub string `json:"sub,omitempty"`
 	// ExpiresAt is when the PAT stops being accepted, when that is known.
-	// Daemon-kind PATs minted by CreateDaemonToken / MintManagedDaemonToken are
-	// intentionally non-expiring, so this is nil for them. It is populated only
-	// when the credential originates from a bounded token (e.g. the Electron
-	// preflight persisting a web-UI token's expiry), so `daemon start` can
+	// Daemon credentials minted by TokenService.CreateToken (kind DAEMON) or by
+	// control-plane for managed daemons are intentionally non-expiring, so
+	// this is nil for them. It is populated only when the credential
+	// originates from a bounded token (e.g. the Electron preflight persisting a web-UI token's expiry), so `daemon start` can
 	// proactively re-mint before it lapses instead of booting on — and then
 	// fatally failing with — a dead PAT. nil means "never expires".
 	ExpiresAt *time.Time `json:"expires_at,omitempty"`

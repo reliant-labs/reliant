@@ -154,8 +154,7 @@ type Event struct {
 	Approval *ApprovalInfo `json:"approval,omitempty"`
 }
 
-// Hook binds a shell command to an event type. On/Cmd match the config-file
-// schema (cliconfig.HookSpec) and the --hook flag.
+// Hook binds a shell command to an event type, from the --hook flag.
 type Hook struct {
 	On  string
 	Cmd string

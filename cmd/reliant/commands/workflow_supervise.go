@@ -148,7 +148,7 @@ func runWorkflowWatch(cmd *cobra.Command, executionID string, flags *followFlags
 		return err
 	}
 
-	hooks, err := resolveHooks(flags.hooks, conn.Hooks)
+	hooks, err := resolveHooks(flags.hooks)
 	if err != nil {
 		return err
 	}

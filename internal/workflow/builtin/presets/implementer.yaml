@@ -3,8 +3,7 @@ description: "Implementation specialist for well-specified code changes — foll
 tag: agent
 params:
   model:
-    tags: [flagship]
-    thinking_level: medium
+    tags: [moderate]
   skills:
     - code-search
   tools:

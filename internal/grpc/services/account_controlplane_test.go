@@ -36,8 +36,8 @@ type stubControlPlane struct {
 	lastJWT  string
 }
 
-func (s *stubControlPlane) IssueMyReliantAPIKey(context.Context, string) (string, error) {
-	return "", nil
+func (s *stubControlPlane) MintLLMKey(context.Context, string, string) (controlplane.LLMKey, error) {
+	return controlplane.LLMKey{}, nil
 }
 
 func (s *stubControlPlane) DeleteCurrentUserAccount(_ context.Context, jwt string) ([]controlplane.AccountDeletionBlocker, error) {

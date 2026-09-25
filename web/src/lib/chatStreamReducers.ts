@@ -154,6 +154,10 @@ export function applyToolCallStateUpdates(
       // Carried explicitly rather than spread from `prev`: a status that was
       // once inferred and is now reported must stop being provisional.
       inferred: update.inferred === true,
+      // The opposite rule: a spawn's child workflow is a fact that never
+      // changes once reported, so an update that omits it (an inferred
+      // cancel, an emitter with no spawn context) must not erase it.
+      childWorkflowId: update.child_workflow_id || prev?.childWorkflowId,
     });
   }
   return next;

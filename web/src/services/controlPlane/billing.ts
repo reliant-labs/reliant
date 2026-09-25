@@ -7,11 +7,11 @@
 import {
   BillingService,
   ComputeIneligibleReason,
-} from "@/gen/controlplane/v1/public/billing_service_pb";
+} from "@/gen/controlplane/services/billing/v1/billing_pb";
 import type {
   ReliantEntitlement,
   ManagedReliantAccess,
-} from "@/gen/controlplane/v1/public/shared_pb";
+} from "@/gen/controlplane/controlplane/v1/shared_pb";
 import { getControlPlaneClient } from "./client";
 
 export type { ReliantEntitlement, ManagedReliantAccess };

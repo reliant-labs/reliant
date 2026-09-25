@@ -48,9 +48,10 @@
 import { ConnectError, Code } from "@connectrpc/connect";
 import { timestampDate, type Timestamp } from "@bufbuild/protobuf/wkt";
 
-import { SecretStoreService } from "@/gen/controlplane/v1/public/secret_store_service_pb";
+import { SecretStoreService } from "@/gen/controlplane/services/secret_store/v1/secret_store_pb";
 import { getControlPlaneClient } from "@/services/controlPlane/client";
 import { CONTROL_PLANE_API_URL } from "@/services/controlPlane/config";
+import { destinationOf } from "./topology";
 
 // ── Domain types ────────────────────────────────────────────────────────────
 //
@@ -124,10 +125,125 @@ export type ManagedStoreAvailability =
   | "available"
   | "not-configured"
   | "no-control-plane"
-  | "unreachable";
+  | "unreachable"
+  /**
+   * The environment does not deploy to a control plane at all (a cluster,
+   * compose, host… env). A managed store is keyed by a control-plane
+   * environment id, and this env has none — so there is nothing to look up,
+   * and NO call is made. Not an error; the env simply has no managed store.
+   */
+  | "not-hosted"
+  /**
+   * Hosted, but forge reported no environment id: the control plane has
+   * never been asked to ensure this environment (`forge env deploy` creates
+   * it). There is no id to key a lookup on, and inventing one is the thing
+   * this state exists to refuse.
+   */
+  | "not-ensured"
+  /**
+   * Hosted on a control plane OTHER than the one this console talks to. The
+   * id belongs to that control plane's tenant space; sending it here would
+   * answer NotFound at best, so no call is made.
+   */
+  | "other-control-plane";
 
 export function hasControlPlane(): boolean {
   return !!CONTROL_PLANE_API_URL;
+}
+
+// ── Which store, keyed how ──────────────────────────────────────────────────
+
+/**
+ * What the managed store lookup for ONE environment is keyed on — or why
+ * there is no lookup at all.
+ *
+ * SecretStoreService is keyed by a control-plane `environment_id` (the org is
+ * resolved server-side from that row). The only honest source of that id is
+ * forge's own `env topology --json` / `env status --json`, which reports it
+ * for hosted envs and ONLY once the env has been ensured. So the id is read
+ * off the report, never looked up by name here and never fabricated: a
+ * browser-side name→id lookup would be a second, divergent answer to "which
+ * environment" (forge's hostedEnvResolver is the first).
+ */
+export type ManagedStoreTarget =
+  | { kind: "lookup"; environmentId: string; endpoint: string }
+  | { kind: "none"; availability: Exclude<ManagedStoreAvailability, "available" | "unreachable"> };
+
+/** The env facts the target is derived from. Structural, so topology and status both fit. */
+export interface ManagedStoreEnvFacts {
+  destination?: string;
+  endpoint?: string;
+  environment_id?: string;
+}
+
+/**
+ * normalizeEndpoint reduces a control-plane URL to a comparable origin.
+ *
+ * `localhost` and `127.0.0.1` are the same host for this purpose — forge's
+ * KCL and Vite's env disagree on the spelling in dev, and treating them as
+ * different control planes would hide a store that is right there.
+ */
+export function normalizeEndpoint(url: string | undefined): string {
+  const raw = (url ?? "").trim();
+  if (raw === "") return "";
+  try {
+    const parsed = new URL(raw);
+    const host = parsed.hostname === "localhost" ? "127.0.0.1" : parsed.hostname;
+    const port = parsed.port ? `:${parsed.port}` : "";
+    return `${parsed.protocol}//${host}${port}`.toLowerCase();
+  } catch {
+    return raw.replace(/\/+$/, "").toLowerCase();
+  }
+}
+
+/**
+ * managedStoreTarget decides whether — and against what id — the managed
+ * store may be asked about an environment.
+ *
+ * Pure, and total over every input, including a report too old to carry
+ * `destination` at all: an absent destination is NOT hosted, so it makes no
+ * call. That direction matters: guessing "hosted" would fire a lookup keyed
+ * on nothing.
+ *
+ * `consoleEndpoint` is the control plane this console talks to. An empty
+ * value means this build has none, which outranks everything else.
+ */
+export function managedStoreTarget(
+  env: ManagedStoreEnvFacts | null | undefined,
+  consoleEndpoint: string = CONTROL_PLANE_API_URL
+): ManagedStoreTarget {
+  if (!consoleEndpoint) return { kind: "none", availability: "no-control-plane" };
+  if (!env || destinationOf(env) !== "hosted") return { kind: "none", availability: "not-hosted" };
+
+  const environmentId = (env.environment_id ?? "").trim();
+  if (environmentId === "") return { kind: "none", availability: "not-ensured" };
+
+  const endpoint = normalizeEndpoint(env.endpoint);
+  // An env that names no endpoint cannot be proven to live elsewhere; the id
+  // came from the control plane forge talked to, which is the declared one.
+  if (endpoint !== "" && endpoint !== normalizeEndpoint(consoleEndpoint)) {
+    return { kind: "none", availability: "other-control-plane" };
+  }
+  return { kind: "lookup", environmentId, endpoint };
+}
+
+/**
+ * One sentence for each reason there is no lookup. Each answers "then where
+ * DO these secrets live, and how do I set one" rather than just refusing.
+ */
+export function availabilityExplanation(availability: ManagedStoreAvailability): string | null {
+  switch (availability) {
+    case "not-hosted":
+      return "This environment is not hosted, so it has no managed store. Its values come from the secret provider its forge config declares.";
+    case "not-ensured":
+      return "This hosted environment has not been deployed yet, so its managed store does not exist here yet. The first deploy creates it — you can set values now with `forge secret set`.";
+    case "other-control-plane":
+      return "This environment is hosted on a different control plane from the one you are signed in to, so its store cannot be read from here. Set values with `forge secret set`.";
+    case "unreachable":
+      return "The managed store could not be reached, so what it holds is not known right now. This is a connection problem, not a statement about your secrets.";
+    default:
+      return null;
+  }
 }
 
 /**
@@ -216,12 +332,9 @@ function client() {
   return getControlPlaneClient(SecretStoreService);
 }
 
-/** Metadata for every secret under one (project, env). Sorted by name. */
-export async function listSecrets(
-  projectId: string,
-  env: string
-): Promise<ManagedSecretSummary[]> {
-  const res = await client().listSecrets({ projectId, env });
+/** Metadata for every secret in one hosted environment. Sorted by name. */
+export async function listSecrets(environmentId: string): Promise<ManagedSecretSummary[]> {
+  const res = await client().listSecrets({ environmentId });
   return (res.secrets ?? [])
     .filter((s) => typeof s?.name === "string" && s.name !== "")
     .map(toSummary)
@@ -236,11 +349,10 @@ export async function listSecrets(
  * every consumer wants the same order.
  */
 export async function getSecretVersions(
-  projectId: string,
-  env: string,
+  environmentId: string,
   name: string
 ): Promise<ManagedSecretHistory> {
-  const res = await client().getSecretVersions({ projectId, env, name });
+  const res = await client().getSecretVersions({ environmentId, name });
   return {
     summary: res.summary ? toSummary(res.summary) : null,
     versions: (res.versions ?? []).map(toVersion).sort((a, b) => b.version - a.version),
@@ -260,15 +372,13 @@ export async function getSecretVersions(
  * and deliberately not included in any error this function can raise.
  */
 export async function setSecret(args: {
-  projectId: string;
-  env: string;
+  environmentId: string;
   name: string;
   value: string;
   cas?: number;
 }): Promise<SetSecretResult> {
   const res = await client().setSecret({
-    projectId: args.projectId,
-    env: args.env,
+    environmentId: args.environmentId,
     name: args.name,
     secretValue: args.value,
     ...(args.cas === undefined ? {} : { cas: args.cas }),
@@ -283,14 +393,12 @@ export async function setSecret(args: {
  * default and the one this UI uses for the row-level "Delete" action.
  */
 export async function deleteSecret(args: {
-  projectId: string;
-  env: string;
+  environmentId: string;
   name: string;
   versions?: number[];
 }): Promise<void> {
   await client().deleteSecret({
-    projectId: args.projectId,
-    env: args.env,
+    environmentId: args.environmentId,
     name: args.name,
     versions: args.versions ?? [],
   });
@@ -298,14 +406,12 @@ export async function deleteSecret(args: {
 
 /** Restore soft-deleted versions. Cannot restore a destroyed one — that data is gone. */
 export async function undeleteSecret(args: {
-  projectId: string;
-  env: string;
+  environmentId: string;
   name: string;
   versions: number[];
 }): Promise<void> {
   await client().undeleteSecret({
-    projectId: args.projectId,
-    env: args.env,
+    environmentId: args.environmentId,
     name: args.name,
     versions: args.versions,
   });
@@ -320,14 +426,12 @@ export async function undeleteSecret(args: {
  * visible, before any confirmation dialog gets a chance to be dismissed.
  */
 export async function destroySecret(args: {
-  projectId: string;
-  env: string;
+  environmentId: string;
   name: string;
   versions: number[];
 }): Promise<void> {
   await client().destroySecret({
-    projectId: args.projectId,
-    env: args.env,
+    environmentId: args.environmentId,
     name: args.name,
     versions: args.versions,
   });

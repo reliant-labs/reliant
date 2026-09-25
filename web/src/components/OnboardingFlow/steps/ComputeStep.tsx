@@ -26,7 +26,7 @@ import {
 } from "@/gen/reliant/v1/daemon_registry_pb";
 // Aliased on purpose: this is a DIFFERENT enum from the DaemonStatus above,
 // with different numeric values. See hasUsableControlPlaneDaemonForOnboarding.
-import { DaemonStatus as ControlPlaneDaemonStatus } from "@/gen/controlplane/v1/public/shared_pb";
+import { DaemonStatus as ControlPlaneDaemonStatus } from "@/gen/controlplane/controlplane/v1/shared_pb";
 import { useDaemonStatus } from "@/hooks/useDaemonStatus";
 import { useCloudEligibility } from "@/hooks/useOnboardingQueries";
 import { RedeemCouponForm } from "@/components/RedeemCouponForm";

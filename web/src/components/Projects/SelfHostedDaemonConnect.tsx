@@ -3,7 +3,7 @@ import { create } from "@bufbuild/protobuf";
 import { Check, Copy, Download, Loader2, Terminal } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { grpcClient } from "@/api/grpc-client";
-import { CreateDaemonTokenRequestSchema } from "@/gen/reliant/v1/daemon_token_pb";
+import { CreateTokenRequestSchema, TokenKind } from "@/gen/reliant/v1/token_pb";
 import { useDaemonStatus } from "@/hooks/useDaemonStatus";
 import { useEventBus } from "@/lib/event-context";
 import {
@@ -80,7 +80,8 @@ interface SelfHostedDaemonConnectProps {
 
 /**
  * SelfHostedDaemonConnect — the "I'll connect my own (self-hosted) daemon"
- * instructions. Generates a daemon token via CreateDaemonToken and walks the
+ * instructions. Generates a daemon token via TokenService.CreateToken (kind DAEMON,
+ * an `rlat_` access token) and walks the
  * user through download + install + `reliant daemon start --token`, then
  * waits for the daemon to connect.
  *
@@ -185,9 +186,12 @@ export function SelfHostedDaemonConnect({
           ? `connect-${window.location.hostname}`
           : "connect";
       const res = await grpcClient
-        .daemonToken()
-        .createDaemonToken(
-          create(CreateDaemonTokenRequestSchema, { name: hostname }),
+        .token()
+        .createToken(
+          create(CreateTokenRequestSchema, {
+            name: hostname,
+            kind: TokenKind.DAEMON,
+          }),
         );
       setPat(res.token);
     } catch (err) {
@@ -342,7 +346,7 @@ export function SelfHostedDaemonConnect({
           against the tinted install block above is a surface change rather
           than a hairline. `bg-background` is the inset token that recesses in
           BOTH light and dark; `bg-muted` would lift in dark and sink in light
-          (see the elevation note in web/src/components/Settings/cloud/ui/card.tsx). */}
+          (see the elevation note in web/src/components/forge-ui/card.tsx). */}
       <section className="space-y-4 rounded-xl border border-border/60 bg-background p-4">
         <div className="space-y-2">
           <div className="flex items-center justify-between">

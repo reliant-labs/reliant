@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 
+	fat "github.com/reliant-labs/forge/pkg/accesstoken"
 	"github.com/reliant-labs/reliant/internal/analytics"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/telemetry"
@@ -114,27 +115,26 @@ func NewMiddleware(publicKeyPEM string, jwksURL string) (*Middleware, error) {
 }
 
 // RequireAuth is a middleware that requires authentication via the configured
-// JWT/apikey validator. PAT bearers are rejected here — surfaces that accept
-// api-kind PATs must use RequireAuthOrAPIToken.
+// JWT/apikey validator. Access-token bearers are rejected here — surfaces that
+// accept `rlat_` API tokens must use RequireAuthOrAccessToken.
 func (m *Middleware) RequireAuth(next http.Handler) http.Handler {
 	return m.requireAuth(next, nil)
 }
 
-// RequireAuthOrAPIToken is RequireAuth extended with api-kind PAT bearers:
-// rlnt_pat_ tokens are prefix-dispatched to v (a DB hash lookup that accepts
-// kind='api' tokens only) instead of the JWT/apikey validator, resolving to
-// the same claims/identity object — mirroring the gRPC AuthInterceptor so the
-// same middleware path serves both credentials.
-func (m *Middleware) RequireAuthOrAPIToken(v APITokenValidator) func(http.Handler) http.Handler {
+// RequireAuthOrAccessToken is RequireAuth extended with `rlat_` bearers
+// carrying reliant:api, resolved by the token authority to the same
+// claims/identity object a session produces — mirroring the gRPC
+// AuthInterceptor so the same middleware path serves both credentials.
+func (m *Middleware) RequireAuthOrAccessToken(v AccessTokenIntrospector) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return m.requireAuth(next, v)
 	}
 }
 
 // requireAuth authenticates the request and forwards it with identity on the
-// context. When patValidator is nil, PAT-format bearers are rejected outright
+// context. When tokens is nil, access-token bearers are rejected outright
 // (JWT-only surface) instead of falling through to JWT validation.
-func (m *Middleware) requireAuth(next http.Handler, patValidator APITokenValidator) http.Handler {
+func (m *Middleware) requireAuth(next http.Handler, tokens AccessTokenIntrospector) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Get token from Authorization header first
 		var tokenString string
@@ -155,20 +155,29 @@ func (m *Middleware) requireAuth(next http.Handler, patValidator APITokenValidat
 			return
 		}
 
-		// Prefix dispatch: rlnt_pat_ bearers are PATs (DB hash lookup, api
-		// kind only), anything else goes through the JWT/apikey validator.
-		isPAT := IsPATFormat(tokenString)
+		// Shape dispatch: `rlat_` bearers are access tokens (resolved by the
+		// token authority, reliant:api only); anything else goes through the
+		// JWT/apikey validator.
+		isAccessToken := IsAccessTokenFormat(tokenString)
 		var claims *JWTClaims
+		var principal *fat.Principal
 		var err error
 		switch {
-		case isPAT && patValidator != nil:
-			claims, err = patValidator.ValidateAPIToken(r.Context(), tokenString)
-		case isPAT:
-			err = fmt.Errorf("personal access tokens are not accepted on this endpoint")
+		case isAccessToken && tokens != nil:
+			claims, principal, err = ClaimsForAPIToken(r.Context(), tokens, tokenString)
+		case isAccessToken:
+			err = fmt.Errorf("access tokens are not accepted on this endpoint")
 		default:
 			claims, err = m.validator.ValidateToken(tokenString)
 		}
 		if err != nil {
+			// An authority that could not be reached has rejected nothing:
+			// 503, so the client retries instead of discarding a good token.
+			if isAccessToken && tokens != nil && !IsCredentialRejection(err) {
+				logging.Error("Access token verification unavailable", "error", err, "path", r.URL.Path, "method", r.Method)
+				http.Error(w, `{"error": "unavailable", "message": "Token verification unavailable"}`, http.StatusServiceUnavailable)
+				return
+			}
 			logging.Warn("Invalid token", "error", err, "path", r.URL.Path, "method", r.Method)
 			http.Error(w, `{"error": "unauthorized", "message": "Invalid or expired token"}`, http.StatusUnauthorized)
 			return
@@ -179,6 +188,9 @@ func (m *Middleware) requireAuth(next http.Handler, patValidator APITokenValidat
 		ctx = context.WithValue(ctx, UserIDContextKey, claims.Sub)
 		ctx = context.WithValue(ctx, UserRoleContextKey, claims.Role)
 		ctx = context.WithValue(ctx, UserEmailContextKey, claims.Email)
+		if principal != nil {
+			ctx = WithMachineToken(ctx, principal)
+		}
 
 		// Update analytics client userID and Sentry user context on first authentication
 		if m.firstSeenTracker.isFirstTimeSeen(claims.Sub) {
@@ -186,9 +198,9 @@ func (m *Middleware) requireAuth(next http.Handler, patValidator APITokenValidat
 			telemetry.GetReporter().SetUser(claims.Sub, claims.Email)
 		}
 
-		// Always update the JWT (it refreshes on each request). PATs are never
-		// stored where a JWT is expected.
-		if !isPAT {
+		// Always update the JWT (it refreshes on each request). Access tokens
+		// are never stored where a JWT is expected.
+		if !isAccessToken {
 			analytics.SetUserJWT(tokenString)
 		}
 

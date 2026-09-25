@@ -45,7 +45,6 @@ import { useProjectStore } from "@/store/projectStore";
 import { useForgeEnvStatus, useForgeTopology } from "@/hooks/forge-queries";
 import { environments } from "@/services/forge/topology";
 import PageHeader from "@/components/forge-ui/page_header";
-import StatusDot from "@/components/forge-ui/status_dot";
 
 import {
   ForgeMalformed,
@@ -53,33 +52,8 @@ import {
   ForgeUnsupported,
   NotForgeProject,
 } from "../ForgeStates";
+import { EnvironmentCard } from "./EnvironmentCard";
 import { WorkloadInventory } from "./WorkloadInventory";
-
-/** A label/value pair. Values that are IDENTIFIERS render mono; nothing else does. */
-function Field({
-  label,
-  value,
-  mono,
-}: {
-  label: string;
-  value?: string;
-  mono?: boolean;
-}) {
-  return (
-    <div className="min-w-0">
-      <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-        {label}
-      </dt>
-      <dd
-        className={`mt-1 truncate text-sm ${
-          value ? "text-foreground" : "text-muted-foreground"
-        } ${value && mono ? "font-mono" : ""}`}
-      >
-        {value ?? "—"}
-      </dd>
-    </div>
-  );
-}
 
 export function ForgeEnvironmentsPage() {
   const navigate = useNavigate();
@@ -212,47 +186,15 @@ export function ForgeEnvironmentsPage() {
        * runtime checks) about the same environment.
        */}
       <ul data-testid="environments-list" className="space-y-2">
-        {envs.map((env) => {
-          const active = env.env === selectedEnv;
-          return (
-            <li key={env.env}>
-              <button
-                type="button"
-                data-testid={`environment-card-${env.env}`}
-                data-selected={active}
-                aria-pressed={active}
-                onClick={() => selectEnv(env.env)}
-                className={`w-full rounded-lg border bg-card px-5 py-4 text-left transition-colors ${
-                  active ? "border-primary" : "border-border hover:border-border-strong"
-                }`}
-              >
-                <div className="flex items-center justify-between gap-3">
-                  {/* An env name is an identifier. */}
-                  <span className="font-mono text-sm font-medium text-foreground">
-                    {env.env}
-                  </span>
-                  <StatusDot
-                    variant={env.bound ? "active" : "neutral"}
-                    label={env.bound ? "Promoted" : "Never promoted"}
-                    size="sm"
-                  />
-                </div>
-                {env.note && (
-                  <p className="mt-2 text-sm text-muted-foreground">{env.note}</p>
-                )}
-                <dl className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                  <Field label="Release" value={env.release} mono />
-                  <Field label="Cluster" value={env.kube_context} mono />
-                  <Field label="Namespace" value={env.namespace} mono />
-                  <Field
-                    label="Declared"
-                    value={env.declared ? "In this checkout" : "Not in this checkout"}
-                  />
-                </dl>
-              </button>
-            </li>
-          );
-        })}
+        {envs.map((env) => (
+          <li key={env.env}>
+            <EnvironmentCard
+              env={env}
+              active={env.env === selectedEnv}
+              onSelect={selectEnv}
+            />
+          </li>
+        ))}
       </ul>
 
       {selected && (

@@ -18,14 +18,26 @@
 #
 # A thinking_level here is an aspiration: it is clamped down to the resolved
 # model's declared thinking_levels, so `xhigh` on gemini-3.8-flash (which tops
-# out at high) yields `high`. Every tag named here must be carried by at least
-# one model and name a known level, or the registry fails to parse.
+# out at high) yields `high`. A max_thinking_level is a ceiling: it lowers the
+# level the model would otherwise run at and never raises it. Every tag named
+# here must be carried by at least one model and name a known level, or the
+# registry fails to parse.
 tag_defaults:
   # `powerful` is the frontier tier — selecting it means "spend capability on
   # this", so it also means "think hard" without every caller writing
   # thinking_level by hand.
   powerful:
     thinking_level: xhigh
+
+  # `moderate` resolves to the same model as `flagship` (claude-5.5-opus leads
+  # the file carrying both tags), so effort is the only thing separating the
+  # two tiers: flagship runs Opus 5.5 at its own xhigh, moderate caps it at
+  # high. It is a ceiling rather than a thinking_level on purpose — most other
+  # moderate models default BELOW high (gemini-3.5-flash runs at low and is
+  # what chat titling reaches through its [fast, moderate] ladder), and a
+  # target would drag them up to it.
+  moderate:
+    max_thinking_level: high
 
 models:
   # ============================================================================
@@ -36,6 +48,10 @@ models:
   # priority for tag selectors (ties break on index), so it leads the file: a
   # bare [flagship] selector resolves here rather than to claude-5-opus.
   #
+  # It is the moderate pick too, by the same index rule — ahead of
+  # claude-5-sonnet. Moderate runs it at a lower effort than flagship; that
+  # difference lives in moderate's tag_defaults ceiling above, not here.
+  #
   # It deliberately does NOT carry `powerful`. It sits above claude-5.1-fable,
   # which carries both tags, so tagging it powerful too would ALSO repoint a
   # bare [powerful] selector here — silently, since both tags resolve by the
@@ -45,7 +61,7 @@ models:
   # Its 2.1.280 capture sends max_tokens 128000, twice every other Claude entry.
   - id: claude-5.5-opus
     name: Claude 5.5 Opus
-    tags: [flagship, reasoning]
+    tags: [flagship, moderate, reasoning]
     visibility: user
     capabilities:
       can_reason: true
@@ -1264,13 +1280,13 @@ models:
 
   # Leads the Vertex block for the same reason claude-5.5-opus leads the file:
   # definition order is resolution priority, so [flagship] scoped to vertexai
-  # resolves here. Its tags mirror claude-5.5-opus exactly — flagship, not
-  # powerful. The two entries describing one model must not disagree, or the
-  # tags would resolve to different models depending on which providers a user
-  # has configured.
+  # resolves here. Its tags mirror claude-5.5-opus exactly — flagship and
+  # moderate, not powerful. The two entries describing one model must not
+  # disagree, or the tags would resolve to different models depending on which
+  # providers a user has configured.
   - id: vertex-claude-5.5-opus
     name: Vertex Claude 5.5 Opus
-    tags: [flagship, reasoning]
+    tags: [flagship, moderate, reasoning]
     visibility: user
     capabilities:
       can_reason: true

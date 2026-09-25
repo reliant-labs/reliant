@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 
-import { DaemonStatus as ControlPlaneDaemonStatus } from "@/gen/controlplane/v1/public/shared_pb";
+import { DaemonStatus as ControlPlaneDaemonStatus } from "@/gen/controlplane/controlplane/v1/shared_pb";
 import { hasUsableControlPlaneDaemonForOnboarding } from "./steps/ComputeStep";
 
 /**

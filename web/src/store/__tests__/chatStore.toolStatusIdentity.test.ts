@@ -258,4 +258,27 @@ describe("tool status identity", () => {
     expect(states.get(TOOL_CALL_ID)?.status).toBe("executing");
     expect(states.has(PERSISTED_BLOCK_ID)).toBe(false);
   });
+
+  // A spawn's assistant message is persisted BEFORE the spawn runs, so its
+  // tool-call block carries no child_workflow_id. The status event that
+  // follows is the only live channel naming the thread the spawn owns — if the
+  // store drops it, the preview has no thread to read and shows "Starting…"
+  // over an agent that is actively working, until a reload.
+  it("carries a spawn's child_workflow_id from the status event to the card's key", () => {
+    const childWorkflowId = "b760a4b2-471c-5c90-b30a-89e3effd1560";
+    const store = useChatStore.getState();
+
+    store.processChatStreamUpdates(CHAT, [
+      persistedAssistantWithToolCall("m1", TOOL_CALL_ID, PERSISTED_BLOCK_ID, "spawn"),
+    ]);
+    store.processChatStreamUpdates(CHAT, [
+      {
+        ...toolStatus(TOOL_CALL_ID, "backgrounded", "spawn"),
+        child_workflow_id: childWorkflowId,
+      } as unknown as ChatUpdate,
+    ]);
+
+    const states = useChatStore.getState().toolCallStates[CHAT] || new Map();
+    expect(states.get(TOOL_CALL_ID)?.childWorkflowId).toBe(childWorkflowId);
+  });
 });

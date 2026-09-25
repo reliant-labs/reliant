@@ -37,52 +37,48 @@ func setupStore(t *testing.T) (*connectorgrant.SQLStore, *sql.DB, string) {
 }
 
 func newGrant(daemonID string) *connectorgrant.Grant {
-	raw, hash, prefix, _ := connectorgrant.GenerateCredential()
-	_ = raw
 	return &connectorgrant.Grant{
 		ID:           uuid.New().String(),
 		UserID:       "user-1",
 		DaemonID:     daemonID,
 		Name:         "ChatGPT on my phone",
-		TokenHash:    hash,
-		TokenPrefix:  prefix,
 		AllowedTools: []string{"read_file", "search"},
 		PathRoot:     "/workspace",
 		ExecMode:     connectorgrant.ExecDeny,
 	}
 }
 
-func TestCreateAndResolveGrant(t *testing.T) {
+// The grant row holds no credential: the `rlat_` bound to it lives in the
+// token authority. Only its display prefix is recorded here, after minting.
+func TestCreateGrantThenRecordPrefix(t *testing.T) {
 	store, _, daemonID := setupStore(t)
 	ctx := context.Background()
 
-	raw, hash, prefix, err := connectorgrant.GenerateCredential()
-	require.NoError(t, err)
-	require.True(t, connectorgrant.IsCredentialFormat(raw))
-
 	g := newGrant(daemonID)
-	g.TokenHash = hash
-	g.TokenPrefix = prefix
 	require.NoError(t, store.CreateGrant(ctx, g))
 
-	// The credential resolves by hash — the plaintext is never stored.
-	got, err := store.GetGrantByTokenHash(ctx, connectorgrant.HashCredential(raw))
+	got, err := store.GetGrantByID(ctx, g.ID)
 	require.NoError(t, err)
 	require.Equal(t, g.ID, got.ID)
+	require.Empty(t, got.TokenPrefix, "no credential minted yet")
 	require.Equal(t, []string{"read_file", "search"}, got.AllowedTools)
 	require.Equal(t, "/workspace", got.PathRoot)
 	require.Equal(t, connectorgrant.ExecDeny, got.ExecMode)
+
+	require.NoError(t, store.SetTokenPrefix(ctx, g.ID, "rlat_abcd1234"))
+	got, err = store.GetGrant(ctx, g.UserID, g.ID)
+	require.NoError(t, err)
+	require.Equal(t, "rlat_abcd1234", got.TokenPrefix)
 }
 
-func TestUnknownCredentialRejected(t *testing.T) {
+func TestUnknownGrantNotFound(t *testing.T) {
 	store, _, _ := setupStore(t)
-
-	_, err := store.GetGrantByTokenHash(context.Background(), connectorgrant.HashCredential("rlnt_conn_nope"))
+	_, err := store.GetGrantByID(context.Background(), uuid.New().String())
 	require.ErrorIs(t, err, connectorgrant.ErrNotFound)
 }
 
 // TestRevokedGrantStopsResolving is the property revocation exists for: after
-// revoking, the credential must stop working immediately.
+// revoking, the grant must stop resolving immediately.
 func TestRevokedGrantStopsResolving(t *testing.T) {
 	store, _, daemonID := setupStore(t)
 	ctx := context.Background()
@@ -90,15 +86,15 @@ func TestRevokedGrantStopsResolving(t *testing.T) {
 	g := newGrant(daemonID)
 	require.NoError(t, store.CreateGrant(ctx, g))
 
-	_, err := store.GetGrantByTokenHash(ctx, g.TokenHash)
+	_, err := store.GetGrantByID(ctx, g.ID)
 	require.NoError(t, err, "grant should resolve before revocation")
 
 	revoked, err := store.RevokeGrant(ctx, g.UserID, g.ID)
 	require.NoError(t, err)
 	require.True(t, revoked)
 
-	_, err = store.GetGrantByTokenHash(ctx, g.TokenHash)
-	require.ErrorIs(t, err, connectorgrant.ErrNotFound, "a revoked credential must stop resolving")
+	_, err = store.GetGrantByID(ctx, g.ID)
+	require.ErrorIs(t, err, connectorgrant.ErrNotFound, "a revoked grant must stop resolving")
 
 	// Revoking again reports no change rather than erroring.
 	again, err := store.RevokeGrant(ctx, g.UserID, g.ID)
@@ -118,7 +114,7 @@ func TestRevokeIsScopedToOwner(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, revoked, "a different user must not be able to revoke this grant")
 
-	_, err = store.GetGrantByTokenHash(ctx, g.TokenHash)
+	_, err = store.GetGrantByID(ctx, g.ID)
 	require.NoError(t, err, "grant should be untouched")
 }
 
@@ -131,12 +127,12 @@ func TestExpiredGrantStopsResolving(t *testing.T) {
 	g.ExpiresAt = &past
 	require.NoError(t, store.CreateGrant(ctx, g))
 
-	_, err := store.GetGrantByTokenHash(ctx, g.TokenHash)
-	require.ErrorIs(t, err, connectorgrant.ErrNotFound, "an expired credential must not resolve")
+	_, err := store.GetGrantByID(ctx, g.ID)
+	require.ErrorIs(t, err, connectorgrant.ErrNotFound, "an expired grant must not resolve")
 }
 
 // TestDaemonDeletionRevokesGrants confirms the cascade: a deleted workspace
-// must not leave live credentials pointing at a recycled daemon id.
+// must not leave live grants pointing at a recycled daemon id.
 func TestDaemonDeletionRevokesGrants(t *testing.T) {
 	store, rawDB, daemonID := setupStore(t)
 	ctx := context.Background()
@@ -147,7 +143,7 @@ func TestDaemonDeletionRevokesGrants(t *testing.T) {
 	_, err := rawDB.Exec(`DELETE FROM daemons WHERE id = $1`, daemonID)
 	require.NoError(t, err)
 
-	_, err = store.GetGrantByTokenHash(ctx, g.TokenHash)
+	_, err = store.GetGrantByID(ctx, g.ID)
 	require.ErrorIs(t, err, connectorgrant.ErrNotFound, "deleting a daemon must invalidate its grants")
 }
 
@@ -190,7 +186,7 @@ func TestStoreRejectsUnusableGrants(t *testing.T) {
 		g.ExecMode = ""
 		require.NoError(t, store.CreateGrant(ctx, g), "an unset exec mode should default rather than fail")
 
-		got, err := store.GetGrantByTokenHash(ctx, g.TokenHash)
+		got, err := store.GetGrantByID(ctx, g.ID)
 		require.NoError(t, err)
 		require.Equal(t, connectorgrant.ExecDeny, got.ExecMode, "the safe default must be deny")
 	})

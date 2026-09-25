@@ -108,14 +108,14 @@ export default function ForgeTokenSandbox() {
         />
 
         <div className="flex flex-wrap items-center gap-3">
-          <Badge variant="success">Running</Badge>
-          <Badge variant="warning">Pending</Badge>
-          <Badge variant="danger">Failed</Badge>
-          <Badge variant="info">Queued</Badge>
-          <Badge variant="neutral">Unknown</Badge>
-          <StatusDot variant="success" label="healthy" />
+          <Badge variant="success" label="Running" />
+          <Badge variant="warning" label="Pending" />
+          <Badge variant="danger" label="Failed" />
+          <Badge variant="info" label="Queued" />
+          <Badge variant="neutral" label="Unknown" />
+          <StatusDot variant="active" label="healthy" />
           <StatusDot variant="warning" label="degraded" />
-          <StatusDot variant="danger" label="down" />
+          <StatusDot variant="error" label="down" />
         </div>
 
         <DataTable<Row>

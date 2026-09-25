@@ -36,8 +36,8 @@ vi.mock("@/lib/event-context", () => ({
 
 vi.mock("@/api/grpc-client", () => ({
   grpcClient: {
-    daemonToken: () => ({
-      createDaemonToken: vi.fn().mockResolvedValue({ token: "tok_test" }),
+    token: () => ({
+      createToken: vi.fn().mockResolvedValue({ token: "rlat_test" }),
     }),
   },
 }));

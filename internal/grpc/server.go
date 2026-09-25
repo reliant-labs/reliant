@@ -4,6 +4,7 @@ package grpc
 import (
 	"context"
 	"crypto/tls"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -14,13 +15,16 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/go-chi/cors"
+	"github.com/reliant-labs/forge/pkg/oauth2"
 	"github.com/reliant-labs/forge/pkg/observe"
 	"go.opentelemetry.io/otel"
 	"go.temporal.io/sdk/client"
 	"golang.org/x/net/http2"
 
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
+	"github.com/reliant-labs/reliant/internal/accesstokenclient"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/cliauth"
 	"github.com/reliant-labs/reliant/internal/connectorgrant"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/grpc/interceptors"
@@ -28,8 +32,8 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/mcpserver"
-	"github.com/reliant-labs/reliant/internal/pat"
 	"github.com/reliant-labs/reliant/internal/streaming"
+	"github.com/reliant-labs/reliant/internal/tokenauthority"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/toolexec/transport"
 	"github.com/reliant-labs/reliant/internal/workflow"
@@ -90,8 +94,13 @@ type Config struct {
 	// connector endpoint accepts — typically the deployment's Supabase project
 	// URL. When set together with PublicURL, RFC 9728 discovery is advertised
 	// so consumer MCP clients can run the OAuth flow. When unset, connectors
-	// authenticate with rlnt_conn_ credentials only.
+	// authenticate with `rlat_` connector credentials only.
 	OAuthIssuers []string
+
+	// TokenAuthority mints and validates `rlat_` access tokens. nil builds it
+	// from the environment (tokenauthority.DepsFromEnv): control-plane when
+	// RELIANT_CONTROL_PLANE_URL is set, else reliant's own store — exactly one.
+	TokenAuthority tokenauthority.Authority
 }
 
 // NewServer creates a new Connect/gRPC server.
@@ -102,16 +111,6 @@ func NewServer(cfg *Config) (*Server, error) {
 
 	// Create auth interceptor
 	// Public methods (no auth required)
-	// Managed-daemon-token RPCs are authenticated by the internal-service
-	// interceptor (HS256 token signed with INTERNAL_SERVICE_SECRET), NOT by the
-	// user-JWT auth interceptor. They MUST be listed as public for the user-JWT
-	// interceptor so it does not also demand a Supabase JWT for them; the
-	// InternalServiceInterceptor below enforces the real (operator) auth.
-	managedDaemonTokenProcedures := []string{
-		"/reliant.v1.DaemonTokenService/MintManagedDaemonToken",
-		"/reliant.v1.DaemonTokenService/RevokeManagedDaemonToken",
-	}
-
 	publicMethods := []string{
 		"/reliant.v1.SystemService/Health",
 		"/reliant.v1.SystemService/Ready",
@@ -123,39 +122,25 @@ func NewServer(cfg *Config) (*Server, error) {
 		"/reliant.v1.SystemService/DevAuthSave",
 		"/reliant.v1.SystemService/DevAuthClear",
 	}
-	publicMethods = append(publicMethods, managedDaemonTokenProcedures...)
-
 	authInterceptor, err := interceptors.NewAuthInterceptor(cfg.JWTPublicKey, cfg.JWKSURL, publicMethods)
 	if err != nil {
 		return nil, fmt.Errorf("auth interceptor setup failed: %w", err)
 	}
 
-	// One PAT service backs every rlnt_pat_ token (kind='daemon' for gateway
-	// streams, kind='api' for user API auth). Api-kind bearers are
-	// prefix-dispatched in the same auth interceptor as JWTs (daemon-kind
-	// tokens are rejected there); the service also backs DaemonTokenService
-	// (daemon-kind) and TokenService (api-kind user-token management), both
-	// registered below.
-	patService := pat.NewService(database)
-	authInterceptor.SetAPITokenValidator(patService)
+	// ONE machine credential: `rlat_` access tokens, owned by the deployment's
+	// token authority (control-plane when hosted, reliant's own store when
+	// self-hosted — never both). The API interceptor introspects through a
+	// CacheTTL-bounded cache; TokenService below mints through the same
+	// authority.
+	authority, err := resolveTokenAuthority(cfg)
+	if err != nil {
+		return nil, err
+	}
+	authInterceptor.SetAccessTokenIntrospector(accesstokenclient.NewCachedIntrospector(authority))
 	domainWhitelistInterceptor := interceptors.NewDomainWhitelistInterceptor(cfg.AllowedEmailDomains)
 
-	// Internal-service auth for the managed-daemon-token surface. Verifier reads
-	// INTERNAL_SERVICE_SECRET from env (fail-closed when unset). This interceptor
-	// is a no-op for every procedure not in managedDaemonTokenProcedures.
-	internalServiceInterceptor, err := interceptors.NewInternalServiceInterceptor(
-		auth.NewInternalServiceVerifierFromEnv(),
-		managedDaemonTokenProcedures,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("internal-service interceptor setup failed: %w", err)
-	}
-
-	// Order matters: recovery (outermost) -> error reporter -> timeout -> internal-service -> auth -> domain whitelist (innermost).
-	// internal-service runs before user-JWT auth so that, for the gated
-	// procedures, the operator's identity is established and user-JWT auth then
-	// skips them (they are in publicMethods).
-	opts := newHandlerOptions(interceptors.NewTimeoutInterceptor().Interceptor(), internalServiceInterceptor, authInterceptor, domainWhitelistInterceptor)
+	// Order matters: recovery (outermost) -> error reporter -> timeout -> auth -> domain whitelist (innermost).
+	opts := newHandlerOptions(interceptors.NewTimeoutInterceptor().Interceptor(), authInterceptor, domainWhitelistInterceptor)
 
 	// Build a DaemonRouter for services that need transport-agnostic daemon access.
 	// The api-server itself never accepts daemon bidi streams — daemons connect to
@@ -193,11 +178,9 @@ func NewServer(cfg *Config) (*Server, error) {
 	presetService := services.NewPresetService(database)
 
 	daemonRegistryService := services.NewDaemonRegistryService(database, router)
-	daemonTokenService := services.NewDaemonTokenService(patService)
-	// TokenService manages user API tokens (api-kind PATs) — the Connect
-	// replacement for the former /api/v1/tokens JSON surface. A thin wrapper
-	// over the same pat.Service.
-	tokenService := services.NewTokenService(patService)
+	// TokenService: the ONE token surface (daemon credentials and API
+	// tokens), a facade over the token authority.
+	tokenService := services.NewTokenService(authority)
 	daemonProxyService := services.NewDaemonProxyService(router)
 	toolCallService := services.NewToolCallService(database, cfg.TemporalClient, router)
 
@@ -309,16 +292,11 @@ func NewServer(cfg *Config) (*Server, error) {
 		}
 	}
 
-	// Daemon services on the app gRPC server (both JWT):
-	//   - DaemonRegistryService: browser-driven list/get/resolve/resume
-	//   - DaemonTokenService:    browser- or CLI-driven PAT CRUD
-	// The ToolsDaemonService streaming endpoint (ConnectDaemon /
-	// ConnectGateway) is hosted by the daemon-gateway, not the api-server —
-	// see internal/grpc/daemon_server.go, which only the gateway constructs.
-	// PAT validation for the CLI happens at stream-connect time over there;
-	// no dedicated introspection RPC is needed here.
+	// DaemonRegistryService: browser-driven list/get/resolve/resume. The
+	// ToolsDaemonService streaming endpoint is hosted by the daemon-gateway,
+	// which validates the daemon's `rlat_` at connect time (see
+	// internal/grpc/daemon_server.go).
 	daemonRegistryPath, daemonRegistryHandler := reliantv1connect.NewDaemonRegistryServiceHandler(daemonRegistryService, opts...)
-	daemonTokenPath, daemonTokenHandler := reliantv1connect.NewDaemonTokenServiceHandler(daemonTokenService, opts...)
 	tokenPath, tokenHandler := reliantv1connect.NewTokenServiceHandler(tokenService, opts...)
 
 	// AccountService (account deletion) needs the raw *sql.DB: the purge is an
@@ -342,7 +320,7 @@ func NewServer(cfg *Config) (*Server, error) {
 	var connectorHandler http.Handler
 	if repo, ok := database.(*db.Repo); ok && repo != nil && repo.DB != nil {
 		connectorService := services.NewConnectorService(
-			connectorgrant.NewSQLStore(repo.DB.SQLDB()), cfg.PublicURL)
+			connectorgrant.NewSQLStore(repo.DB.SQLDB()), authority, cfg.PublicURL)
 		connectorPath, connectorHandler = reliantv1connect.NewConnectorServiceHandler(connectorService, opts...)
 	}
 
@@ -377,7 +355,6 @@ func NewServer(cfg *Config) (*Server, error) {
 	mux.Handle(presetPath, presetHandler)
 
 	mux.Handle(daemonRegistryPath, daemonRegistryHandler)
-	mux.Handle(daemonTokenPath, daemonTokenHandler)
 	mux.Handle(tokenPath, tokenHandler)
 	mux.Handle(daemonPath, daemonHandler)
 
@@ -404,12 +381,21 @@ func NewServer(cfg *Config) (*Server, error) {
 	// Connector MCP endpoint: third-party MCP clients (ChatGPT, Claude, and
 	// their mobile apps) driving a cloud daemon under a connector grant.
 	//
-	// Authenticated by a rlnt_conn_ credential rather than the user JWT the
+	// Authenticated by an `rlat_` connector credential rather than the user JWT the
 	// Connect handlers above use, so it is mounted as a plain HTTP route
 	// outside the interceptor chain. Confinement is enforced daemon-side at
 	// command dispatch (internal/daemonpolicy); this route resolves the grant
 	// and terminates the protocol.
-	mountConnectorMCP(mux, database, router, cfg.PublicURL, cfg.OAuthIssuers, connectorTokenValidator(cfg))
+	mountConnectorMCP(mux, database, router, cfg.PublicURL, cfg.OAuthIssuers, connectorTokenValidator(cfg),
+		accesstokenclient.NewCachedIntrospector(authority))
+
+	// CLI login discovery (RFC 8414): names the control plane that issues this
+	// deployment's rlat_ tokens, so `reliant auth login --server <this>` finds
+	// where to send the browser. Absent on a self-hosted server with no
+	// control plane: it offers no browser login.
+	if h := cliauth.MetadataHandler(os.Getenv(cliauth.AuthorizationServerEnv)); h != nil {
+		mux.Handle(oauth2.AuthorizationServerMetadataPath, h)
+	}
 
 	// JSON health endpoint on the gRPC mux so the frontend can discover auth_mode
 	// without needing to reach the dedicated health port.
@@ -640,6 +626,7 @@ func mountConnectorMCP(
 	publicURL string,
 	oauthIssuers []string,
 	tokenValidator mcpserver.OAuthTokenValidator,
+	credentials mcpserver.CredentialIntrospector,
 ) {
 	if router == nil {
 		logging.Info("connector MCP endpoint not mounted: no daemon router (expected in monolith/desktop mode)")
@@ -678,10 +665,11 @@ func mountConnectorMCP(
 	}
 
 	handler, err := mcpserver.NewHTTPHandler(mcpserver.HTTPDeps{
-		Store:  connectorgrant.NewSQLStore(repo.DB.SQLDB()),
-		Sender: router,
-		Waker:  waker,
-		OAuth:  oauthCfg,
+		Store:       connectorgrant.NewSQLStore(repo.DB.SQLDB()),
+		Credentials: credentials,
+		Sender:      router,
+		Waker:       waker,
+		OAuth:       oauthCfg,
 		// Reuses the deployment's existing JWT validator, so an OAuth token is
 		// trusted on exactly the same basis as a session token.
 		TokenValidator: tokenValidator,
@@ -835,4 +823,25 @@ func securityHeaders(next http.Handler) http.Handler {
 		w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
 		next.ServeHTTP(w, r)
 	})
+}
+
+// resolveTokenAuthority returns the deployment's ONE token authority: the
+// configured one, else control-plane or the local store as the environment
+// dictates. A misconfiguration (control-plane URL without its secret, or no
+// database for the self-hosted store) fails server start loudly rather than
+// serving a surface that can mint nothing.
+func resolveTokenAuthority(cfg *Config) (tokenauthority.Authority, error) {
+	if cfg.TokenAuthority != nil {
+		return cfg.TokenAuthority, nil
+	}
+	var sqlDB *sql.DB
+	if repo, ok := cfg.Database.(*db.Repo); ok && repo != nil && repo.DB != nil {
+		sqlDB = repo.DB.SQLDB()
+	}
+	authority, mode, err := tokenauthority.New(tokenauthority.DepsFromEnv(sqlDB))
+	if err != nil {
+		return nil, fmt.Errorf("token authority: %w", err)
+	}
+	logging.Info("access-token authority selected", "mode", mode)
+	return authority, nil
 }

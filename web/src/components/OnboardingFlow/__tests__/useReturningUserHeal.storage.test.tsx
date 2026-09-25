@@ -23,7 +23,7 @@
 import { render } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { DaemonStatus } from "@/gen/controlplane/v1/public/shared_pb";
+import { DaemonStatus } from "@/gen/controlplane/controlplane/v1/shared_pb";
 import { useReturningUserHeal } from "../useReturningUserHeal";
 
 const USER_CREATED_MS = Date.UTC(2026, 0, 10, 0, 0, 0);

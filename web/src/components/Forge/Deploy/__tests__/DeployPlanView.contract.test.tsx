@@ -202,3 +202,30 @@ describe("rollout mode", () => {
     expect(screen.getByTestId("deploy-rollout").textContent).toContain("300s per resource");
   });
 });
+
+describe("a hosted plan", () => {
+  function hostedPlan(environmentId: string) {
+    return prodPlan({
+      env: "prod",
+      guard: { declared_context: "https://cp.example.io", verdict: "allow", reason: "control_plane_declared" },
+      target: { destination: "hosted", endpoint: "https://cp.example.io", environment_id: environmentId },
+      images: { images: [], digest_count: 0, tag_count: 0 },
+      resources: [],
+    });
+  }
+
+  it("does not render the empty k8s-only panels that read as 'ships nothing'", () => {
+    render(<DeployPlanView plan={hostedPlan("env_1")} />);
+    expect(screen.queryByTestId("deploy-images")).toBeNull();
+    expect(screen.queryByTestId("deploy-resources")).toBeNull();
+    expect(screen.getByTestId("deploy-plan").textContent).not.toMatch(/renders no container images|0 resources/);
+  });
+
+  it("says whether it updates a live env or creates one", () => {
+    const { unmount } = render(<DeployPlanView plan={hostedPlan("env_1")} />);
+    expect(screen.getByTestId("deploy-target-heading").textContent).toBe("This updates the live hosted environment prod");
+    unmount();
+    render(<DeployPlanView plan={hostedPlan("")} />);
+    expect(screen.getByTestId("deploy-target-heading").textContent).toBe("This creates the hosted environment prod");
+  });
+});

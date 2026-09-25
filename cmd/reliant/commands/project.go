@@ -49,9 +49,8 @@ idempotent by path: if a project already exists at --path, its existing ID is
 printed instead of erroring, so this doubles as an "ensure project exists"
 one-liner.
 
-Targets the resolved context's server (see 'reliant context') unless --server
-is passed, and authenticates with the context's API token or the login
-session from 'reliant auth login'.`,
+Targets --server (else RELIANT_SERVER_URL, else the default), authenticated by
+RELIANT_TOKEN or the login 'reliant auth login' stored for that server.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			conn, err := resolveConnection(cmd)
@@ -108,9 +107,8 @@ func newProjectListCmd() *cobra.Command {
 		Short: "List your projects",
 		Long: `Lists the projects owned by the authenticated user.
 
-Targets the resolved context's server (see 'reliant context') unless --server
-is passed, and authenticates with the context's API token or the login
-session from 'reliant auth login'.`,
+Targets --server (else RELIANT_SERVER_URL, else the default), authenticated by
+RELIANT_TOKEN or the login 'reliant auth login' stored for that server.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			conn, err := resolveConnection(cmd)

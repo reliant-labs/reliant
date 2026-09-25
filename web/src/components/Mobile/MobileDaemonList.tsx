@@ -15,7 +15,7 @@ import { useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { ChevronRight, Loader2, Plus, Server, X } from "lucide-react";
 import { Virtuoso } from "react-virtuoso";
-import { DaemonSize, DaemonType } from "@/gen/controlplane/v1/public/shared_pb";
+import { DaemonSize, DaemonType } from "@/gen/controlplane/controlplane/v1/shared_pb";
 import {
   isEntitlementDenial,
   useCreateDaemon,
@@ -23,7 +23,7 @@ import {
 } from "@/hooks/useOnboardingQueries";
 import type { Daemon } from "@/services/controlPlane/daemon";
 import { cn } from "../../lib/utils";
-import { heartbeatMs, presentDaemon, sizeLabel } from "./daemonPresentation";
+import { lastSeenMs, presentDaemon, sizeLabel } from "./daemonPresentation";
 import { relativeTimeFromMs } from "./relativeTime";
 import { useVisibilityPolling } from "./useVisibilityPolling";
 import { MobileMenuButton } from "./MobileMenuButton";
@@ -45,10 +45,10 @@ const MOBILE_SECONDARY_ACTION =
   "flex min-h-[44px] items-center justify-center rounded-lg border border-border px-4 text-sm font-medium text-foreground active:bg-foreground/5 disabled:opacity-60";
 
 const SIZE_OPTIONS = [
-  { value: DaemonSize.SMALL, label: "Small", specs: "1 CPU · 2GB RAM" },
-  { value: DaemonSize.MEDIUM, label: "Medium", specs: "2 CPU · 4GB RAM" },
-  { value: DaemonSize.LARGE, label: "Large", specs: "4 CPU · 8GB RAM" },
-  { value: DaemonSize.XL, label: "XL", specs: "8 CPU · 16GB RAM" },
+  { value: DaemonSize.DAEMON_SIZE_SMALL, label: "Small", specs: "1 CPU · 2GB RAM" },
+  { value: DaemonSize.DAEMON_SIZE_MEDIUM, label: "Medium", specs: "2 CPU · 4GB RAM" },
+  { value: DaemonSize.DAEMON_SIZE_LARGE, label: "Large", specs: "4 CPU · 8GB RAM" },
+  { value: DaemonSize.DAEMON_SIZE_XL, label: "XL", specs: "8 CPU · 16GB RAM" },
 ] as const;
 
 const IDLE_TIMEOUT_OPTIONS = [
@@ -75,7 +75,7 @@ export function DaemonStatusPill({ daemon }: { daemon: Daemon }) {
 
 function CreateMachineSheet({ onClose }: { onClose: () => void }) {
   const [name, setName] = useState("mobile-machine");
-  const [size, setSize] = useState<DaemonSize>(DaemonSize.SMALL);
+  const [size, setSize] = useState<DaemonSize>(DaemonSize.DAEMON_SIZE_SMALL);
   const [idleTimeout, setIdleTimeout] = useState("30m");
   const [gitRepo, setGitRepo] = useState("");
   const [gitBranch, setGitBranch] = useState("main");
@@ -297,7 +297,7 @@ function NewMachineButton({ onCreate }: { onCreate: () => void }) {
  * is arguably the truer mapping anyway.
  */
 function DaemonRow({ daemon }: { daemon: Daemon }) {
-  const beat = heartbeatMs(daemon);
+  const lastSeen = lastSeenMs(daemon);
   const size = sizeLabel(daemon);
 
   return (
@@ -322,7 +322,7 @@ function DaemonRow({ daemon }: { daemon: Daemon }) {
 
           <div className="mt-1.5 flex items-center gap-2 text-xs text-muted-foreground">
             <DaemonStatusPill daemon={daemon} />
-            {beat !== null && <span>{relativeTimeFromMs(beat)}</span>}
+            {lastSeen !== null && <span>{relativeTimeFromMs(lastSeen)}</span>}
           </div>
         </div>
 

@@ -1324,13 +1324,6 @@ func nullStringToPtr(ns sql.NullString) *string {
 	return nil
 }
 
-func nullTimeToPtr(nt sql.NullTime) *time.Time {
-	if nt.Valid {
-		return &nt.Time
-	}
-	return nil
-}
-
 // =============================================================================
 // Activity Idempotency Helpers
 // =============================================================================

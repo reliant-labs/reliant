@@ -136,7 +136,7 @@ func TestBuildWorkflowInputs_NonEmptyToolsStillOverridePreset(t *testing.T) {
 	require.Equal(t, []interface{}{"mcp__search"}, tools)
 }
 
-func TestBuildWorkflowInputs_WorkflowBuilderPresetUsesProviderNeutralFlagshipModel(t *testing.T) {
+func TestBuildWorkflowInputs_WorkflowBuilderPresetUsesProviderNeutralModerateModel(t *testing.T) {
 	service := &ChatService{}
 	projectPath := t.TempDir()
 
@@ -155,13 +155,13 @@ func TestBuildWorkflowInputs_WorkflowBuilderPresetUsesProviderNeutralFlagshipMod
 	modelMap, ok := modelRaw.(map[string]interface{})
 	require.True(t, ok)
 	require.NotContains(t, modelMap, "id")
-	require.Equal(t, []interface{}{models.TagFlagship}, modelMap["tags"])
+	require.Equal(t, []interface{}{models.TagModerate}, modelMap["tags"])
 
 	_, err := models.MustGetRegistry().Resolve(
-		models.ModelSelector{Tags: []string{models.TagFlagship}},
+		models.ModelSelector{Tags: []string{models.TagModerate}},
 		[]string{"codex"},
 	)
-	require.NoError(t, err, "workflow_builder flagship selector should resolve for Codex-only users")
+	require.NoError(t, err, "workflow_builder moderate selector should resolve for Codex-only users")
 }
 
 func TestValidateWorkflowInputs_WorkflowBuilderModelThinkingShape(t *testing.T) {

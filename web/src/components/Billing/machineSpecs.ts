@@ -5,7 +5,7 @@
  *
  * A second copy of a control-plane ladder is normally the bug, so the
  * alternative was checked first and it does not exist. `ListPlans` returns
- * `PlanLimits` (controlplane/v1/public/shared.proto), whose only machine facts
+ * `PlanLimits` (control-plane controlplane/v1/shared.proto), whose only machine facts
  * are `allowed_daemon_sizes`, `daemon_compute_included_minutes` and
  * `daemon_overage_per_minute_cents`. The message that DOES carry cpu_request /
  * cpu_limit / memory_request / memory_limit is `ResourceRequirements`, and it

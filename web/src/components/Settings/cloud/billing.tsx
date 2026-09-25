@@ -31,7 +31,7 @@ import {
   Tr,
 } from "./ui";
 import { ComputeOverageControl } from "./ComputeOverageControl";
-import type { Plan } from "@/gen/controlplane/v1/public/shared_pb";
+import type { Plan } from "@/gen/controlplane/controlplane/v1/shared_pb";
 import {
   useBillingEmail,
   useComputeSubscription,
@@ -1285,6 +1285,7 @@ function UsageAndInvoicesTab() {
             onSaveCap={deployUsage.saveCap}
             isSavingCap={deployUsage.isSavingCap}
             deploymentNames={deployUsage.deploymentNames}
+            environmentNames={deployUsage.environmentNames}
           />
         </div>
       )}

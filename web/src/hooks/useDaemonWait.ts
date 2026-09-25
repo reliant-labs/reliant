@@ -19,7 +19,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
-import { DaemonLifecyclePhase } from "@/gen/controlplane/v1/public/shared_pb";
+import { DaemonLifecyclePhase } from "@/gen/controlplane/controlplane/v1/shared_pb";
 import { capabilities } from "@/services/controlPlane/capabilities";
 import { listDaemons, type Daemon } from "@/services/controlPlane/daemon";
 import {

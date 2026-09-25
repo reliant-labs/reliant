@@ -17,43 +17,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/builddefaults"
-	"github.com/reliant-labs/reliant/internal/cliconfig"
 )
-
-// writeContexts installs a CLI config in an isolated HOME and returns the
-// config path it wrote. Every test that resolves a connection must go through
-// this so it can never read (or write) the developer's real config.
-//
-// It also clears the RELIANT_* variables the resolver consults. A developer
-// shell that has sourced .dev-ports.sh exports RELIANT_SERVER_URL and
-// RELIANT_GATEWAY_URL, and those outrank the compiled defaults these tests
-// assert on. An empty value reads as unset everywhere (builddefaults.Value and
-// cliconfig.Resolve both test for ""), and t.Setenv restores the real value
-// when the test ends. A subtest that wants one of these set calls t.Setenv
-// again after this helper.
-func writeContexts(t *testing.T, cfg *cliconfig.Config) string {
-	t.Helper()
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	t.Setenv(envServerURL, "")
-	t.Setenv(envGatewayURL, "")
-	t.Setenv(cliconfig.EnvContext, "")
-
-	path, err := cliconfig.DefaultPath()
-	if err != nil {
-		t.Fatalf("cliconfig.DefaultPath: %v", err)
-	}
-	if !strings.HasPrefix(path, home) {
-		t.Fatalf("config path %q escaped temp HOME %q — aborting to protect the real config", path, home)
-	}
-	if cfg != nil {
-		if err := cliconfig.SaveTo(path, cfg); err != nil {
-			t.Fatalf("writing CLI config: %v", err)
-		}
-	}
-	return path
-}
 
 // resolveWithArgs runs the real root command with the given global flags and
 // returns what a subcommand would resolve. Driving it through cobra (rather
@@ -85,330 +49,77 @@ func resolveWithArgs(t *testing.T, args ...string) (*connection, error) {
 	return got, resErr
 }
 
-// resolveDaemonWithArgs is resolveWithArgs for the DAEMON path — it drives
-// resolveDaemonServer, which is what `daemon start` / `daemon register` use.
-func resolveDaemonWithArgs(t *testing.T, args ...string) (*connection, error) {
-	t.Helper()
-
-	var (
-		got     *connection
-		resErr  error
-		probeIn = &cobra.Command{
-			Use: "resolve-daemon-probe",
-			RunE: func(cmd *cobra.Command, _ []string) error {
-				got, resErr = resolveDaemonServer(cmd)
-				return nil
-			},
-		}
-	)
-
-	root := NewRootCmd()
-	root.AddCommand(probeIn)
-	root.SetOut(&bytes.Buffer{})
-	root.SetErr(&bytes.Buffer{})
-	root.SetArgs(append([]string{"resolve-daemon-probe"}, args...))
-	if err := root.Execute(); err != nil {
-		t.Fatalf("probe command failed: %v", err)
-	}
-	return got, resErr
-}
-
-// A CLI context must NOT choose the daemon's backend.
-//
-// The two are different things that happen to both hold an `rlnt_pat_` string:
-//
-//   - A CLI context pairs a server with an API-KIND token, for user API calls
-//     made by THIS CLI (`project list`, `workflow watch`). One at a time is the
-//     right model — `current_context` names it.
-//   - A daemon credential is a DAEMON-KIND PAT for one backend, and the daemon
-//     credential store is explicitly multi-backend: it is a map keyed by origin
-//     (endpointKey = scheme://host:port, internal/auth/daemon_file.go), so one
-//     machine can run daemons against prod and a dev stack at once.
-//
-// Letting `current_context` pick the daemon's server collapses that: a context
-// auto-created by `auth token create` against a dev stack (which is how they
-// are usually created — see auth_token.go bootstrapping "default") silently
-// repointed a PROD-baked binary at localhost:3091. The daemon then dialed the
-// api-server for ToolsDaemonService, which only the gateway serves, and died on
-// a 404 — with the log cheerfully reporting `from context "default"`.
-func TestDaemonServerIgnoresContext(t *testing.T) {
-	const (
-		contextServer = "http://localhost:3091"
-		bakedServer   = "https://api.reliantapi.com"
-		bakedGateway  = "https://gateway.reliantapi.com"
-	)
-
-	restore := func(server, gateway string) func() {
-		prevServer, prevGateway := builddefaults.ServerURL, builddefaults.GatewayURL
-		builddefaults.ServerURL, builddefaults.GatewayURL = server, gateway
-		return func() {
-			builddefaults.ServerURL, builddefaults.GatewayURL = prevServer, prevGateway
-		}
-	}
-
-	t.Run("a dev context does not override the baked prod default", func(t *testing.T) {
-		defer restore(bakedServer, bakedGateway)()
-		writeContexts(t, &cliconfig.Config{
-			CurrentContext: "default",
-			Contexts: map[string]*cliconfig.Context{
-				"default": {Server: contextServer, Token: "rlnt_pat_apikind"},
-			},
-		})
-
-		conn, err := resolveDaemonWithArgs(t)
-		if err != nil {
-			t.Fatalf("resolveDaemonServer: %v", err)
-		}
-		if conn.ServerURL != bakedServer {
-			t.Errorf("ServerURL = %q, want the compiled-in default %q (a context must not steer the daemon)", conn.ServerURL, bakedServer)
-		}
-		if conn.GatewayURL != bakedGateway {
-			t.Errorf("GatewayURL = %q, want %q", conn.GatewayURL, bakedGateway)
-		}
-		if conn.ServerSource == sourceContext {
-			t.Error("ServerSource = sourceContext; the daemon path must never attribute its server to a context")
-		}
-	})
-
-	t.Run("an explicit flag still wins", func(t *testing.T) {
-		defer restore(bakedServer, bakedGateway)()
-		writeContexts(t, &cliconfig.Config{
-			CurrentContext: "default",
-			Contexts: map[string]*cliconfig.Context{
-				"default": {Server: contextServer},
-			},
-		})
-
-		const want = "http://localhost:9999"
-		conn, err := resolveDaemonWithArgs(t, "--server", want)
-		if err != nil {
-			t.Fatalf("resolveDaemonServer: %v", err)
-		}
-		if conn.ServerURL != want {
-			t.Errorf("ServerURL = %q, want %q — --server is how you point a daemon at another backend", conn.ServerURL, want)
-		}
-	})
-
-	t.Run("RELIANT_SERVER_URL still wins", func(t *testing.T) {
-		defer restore(bakedServer, bakedGateway)()
-		writeContexts(t, &cliconfig.Config{
-			CurrentContext: "default",
-			Contexts: map[string]*cliconfig.Context{
-				"default": {Server: contextServer},
-			},
-		})
-		const want = "http://localhost:8123"
-		t.Setenv(envServerURL, want)
-
-		conn, err := resolveDaemonWithArgs(t)
-		if err != nil {
-			t.Fatalf("resolveDaemonServer: %v", err)
-		}
-		if conn.ServerURL != want {
-			t.Errorf("ServerURL = %q, want %q", conn.ServerURL, want)
-		}
-	})
-
-	t.Run("user API commands still honour the context", func(t *testing.T) {
-		// The other half of the split: this is what a context is FOR. If this
-		// regresses, `project list` stops targeting the environment the user
-		// selected, which is a different and equally real bug.
-		defer restore(bakedServer, bakedGateway)()
-		writeContexts(t, &cliconfig.Config{
-			CurrentContext: "default",
-			Contexts: map[string]*cliconfig.Context{
-				"default": {Server: contextServer, Token: "rlnt_pat_apikind"},
-			},
-		})
-
-		conn, err := resolveWithArgs(t)
-		if err != nil {
-			t.Fatalf("resolveServer: %v", err)
-		}
-		if conn.ServerURL != contextServer {
-			t.Errorf("ServerURL = %q, want the context's %q", conn.ServerURL, contextServer)
-		}
-		if conn.ServerSource != sourceContext {
-			t.Errorf("ServerSource = %v, want sourceContext", conn.ServerSource)
-		}
-	})
-}
-
 func TestResolveServerPrecedence(t *testing.T) {
-	const (
-		ctxServer   = "http://localhost:3091"
-		otherServer = "http://localhost:4000"
-		flagServerV = "http://localhost:9999"
-	)
+	const flagServerV = "http://localhost:9999"
 
-	cfg := func() *cliconfig.Config {
-		return &cliconfig.Config{
-			CurrentContext: "dev",
-			Contexts: map[string]*cliconfig.Context{
-				"dev":     {Server: ctxServer, Token: "rlnt_pat_dev0000000000000000000000000"},
-				"other":   {Server: otherServer},
-				"noserve": {Token: "rlnt_pat_noserver00000000000000000000"},
-			},
-		}
-	}
-
-	t.Run("context server wins over the flag default", func(t *testing.T) {
-		writeContexts(t, cfg())
+	t.Run("no flag, no env: the compiled-in default", func(t *testing.T) {
+		// builddefaults.ServerURL is the HOSTED endpoint: a binary built from
+		// this repo targets the hosted platform so `go install` works with no
+		// flags; loopback is what you opt INTO. See internal/builddefaults.
+		isolateCLI(t)
 		conn, err := resolveWithArgs(t)
 		if err != nil {
 			t.Fatalf("resolveServer: %v", err)
 		}
-		if conn.ServerURL != ctxServer {
-			t.Errorf("ServerURL = %q, want %q", conn.ServerURL, ctxServer)
-		}
-		if conn.ServerSource != sourceContext {
-			t.Errorf("ServerSource = %v, want sourceContext", conn.ServerSource)
+		if conn.ServerURL != builddefaults.ServerURL || conn.ServerSource != sourceDefault {
+			t.Errorf("got %q (%v), want the compiled-in default", conn.ServerURL, conn.ServerSource)
 		}
 	})
 
-	t.Run("explicit --server overrides the context", func(t *testing.T) {
-		writeContexts(t, cfg())
+	t.Run("RELIANT_SERVER_URL beats the default", func(t *testing.T) {
+		isolateCLI(t)
+		t.Setenv(envServerURL, "http://localhost:8123")
+		conn, err := resolveWithArgs(t)
+		if err != nil {
+			t.Fatalf("resolveServer: %v", err)
+		}
+		if conn.ServerURL != "http://localhost:8123" || conn.ServerSource != sourceEnv {
+			t.Errorf("got %q (%v), want the env value", conn.ServerURL, conn.ServerSource)
+		}
+	})
+
+	t.Run("--server beats RELIANT_SERVER_URL", func(t *testing.T) {
+		isolateCLI(t)
+		t.Setenv(envServerURL, "http://localhost:8123")
 		conn, err := resolveWithArgs(t, "--server", flagServerV)
 		if err != nil {
 			t.Fatalf("resolveServer: %v", err)
 		}
-		if conn.ServerURL != flagServerV {
-			t.Errorf("ServerURL = %q, want %q", conn.ServerURL, flagServerV)
-		}
-		if conn.ServerSource != sourceFlag {
-			t.Errorf("ServerSource = %v, want sourceFlag", conn.ServerSource)
+		if conn.ServerURL != flagServerV || conn.ServerSource != sourceFlag {
+			t.Errorf("got %q (%v), want the flag value", conn.ServerURL, conn.ServerSource)
 		}
 	})
 
 	t.Run("an explicitly empty --server is not an unset flag", func(t *testing.T) {
-		writeContexts(t, cfg())
+		isolateCLI(t)
 		conn, err := resolveWithArgs(t, "--server", "")
 		if err != nil {
 			t.Fatalf("resolveServer: %v", err)
 		}
-		if conn.ServerURL != "" {
-			t.Errorf("ServerURL = %q, want the explicitly empty flag value", conn.ServerURL)
-		}
-		if conn.ServerSource != sourceFlag {
-			t.Errorf("ServerSource = %v, want sourceFlag", conn.ServerSource)
+		if conn.ServerURL != "" || conn.ServerSource != sourceFlag {
+			t.Errorf("got %q (%v), want the explicitly empty flag value", conn.ServerURL, conn.ServerSource)
 		}
 	})
 
-	t.Run("--context selects the context whose server is used", func(t *testing.T) {
-		writeContexts(t, cfg())
-		conn, err := resolveWithArgs(t, "--context", "other")
-		if err != nil {
-			t.Fatalf("resolveServer: %v", err)
-		}
-		if conn.ServerURL != otherServer {
-			t.Errorf("ServerURL = %q, want %q", conn.ServerURL, otherServer)
-		}
-		if conn.ContextName != "other" || conn.ContextSelectedBy != "flag" {
-			t.Errorf("context = %q (by %q), want other (by flag)", conn.ContextName, conn.ContextSelectedBy)
-		}
-	})
-
-	t.Run("RELIANT_CONTEXT selects the context, --context outranks it", func(t *testing.T) {
-		writeContexts(t, cfg())
-		t.Setenv(cliconfig.EnvContext, "other")
-
-		conn, err := resolveWithArgs(t)
-		if err != nil {
-			t.Fatalf("resolveServer: %v", err)
-		}
-		if conn.ServerURL != otherServer || conn.ContextSelectedBy != "env" {
-			t.Errorf("env selection: server %q (by %q), want %q (by env)", conn.ServerURL, conn.ContextSelectedBy, otherServer)
-		}
-
-		conn, err = resolveWithArgs(t, "--context", "dev")
-		if err != nil {
-			t.Fatalf("resolveServer: %v", err)
-		}
-		if conn.ServerURL != ctxServer || conn.ContextSelectedBy != "flag" {
-			t.Errorf("flag selection: server %q (by %q), want %q (by flag)", conn.ServerURL, conn.ContextSelectedBy, ctxServer)
-		}
-	})
-
-	// The next two assert builddefaults.ServerURL — the HOSTED endpoint the
-	// source now carries — not NeutralServerURL. A binary built straight from
-	// this repo targets the hosted platform so `go install` works with no
-	// flags; loopback is what you opt INTO with --server or RELIANT_SERVER_URL.
-	// See internal/builddefaults' package doc.
-	t.Run("context without a server falls back to the compiled-in default", func(t *testing.T) {
-		writeContexts(t, cfg())
-		conn, err := resolveWithArgs(t, "--context", "noserve")
-		if err != nil {
-			t.Fatalf("resolveServer: %v", err)
-		}
-		if conn.ServerURL != builddefaults.ServerURL {
-			t.Errorf("ServerURL = %q, want the compiled-in default %q", conn.ServerURL, builddefaults.ServerURL)
-		}
-		if conn.ServerSource != sourceDefault {
-			t.Errorf("ServerSource = %v, want sourceDefault", conn.ServerSource)
-		}
-	})
-
-	t.Run("no contexts at all reduces to the flag default", func(t *testing.T) {
-		writeContexts(t, nil)
+	// The bug `reliant context` caused, pinned so no stored state returns: a
+	// login stored for a dev server must not steer a prod-baked binary.
+	t.Run("a stored login never chooses the server", func(t *testing.T) {
+		isolateCLI(t)
+		loginFor(t, "http://localhost:3091", "rlat_dev")
 		conn, err := resolveWithArgs(t)
 		if err != nil {
 			t.Fatalf("resolveServer: %v", err)
 		}
 		if conn.ServerURL != builddefaults.ServerURL {
-			t.Errorf("ServerURL = %q, want %q", conn.ServerURL, builddefaults.ServerURL)
-		}
-		if conn.ContextName != "" {
-			t.Errorf("ContextName = %q, want empty (legacy mode)", conn.ContextName)
-		}
-	})
-
-	t.Run("a self-hoster opts out with the flag or the env var", func(t *testing.T) {
-		// The other half of reversing the OSS-clean contract: pointing at your
-		// own stack must stay a one-value act, or hosted-by-default becomes
-		// hosted-only.
-		writeContexts(t, nil)
-
-		conn, err := resolveWithArgs(t, "--server", builddefaults.NeutralServerURL)
-		if err != nil {
-			t.Fatalf("resolveServer: %v", err)
-		}
-		if conn.ServerURL != builddefaults.NeutralServerURL {
-			t.Errorf("--server: ServerURL = %q, want %q", conn.ServerURL, builddefaults.NeutralServerURL)
-		}
-
-		writeContexts(t, nil)
-		t.Setenv(envServerURL, builddefaults.NeutralServerURL)
-		conn, err = resolveWithArgs(t)
-		if err != nil {
-			t.Fatalf("resolveServer: %v", err)
-		}
-		if conn.ServerURL != builddefaults.NeutralServerURL {
-			t.Errorf("%s: ServerURL = %q, want %q", envServerURL, conn.ServerURL, builddefaults.NeutralServerURL)
-		}
-	})
-
-	t.Run("a context named but missing is an error, not a silent default", func(t *testing.T) {
-		writeContexts(t, cfg())
-		if _, err := resolveWithArgs(t, "--context", "nope"); err == nil {
-			t.Fatal("expected an error for an unknown context")
+			t.Errorf("ServerURL = %q; a stored login must never select the server", conn.ServerURL)
 		}
 	})
 }
 
 func TestResolveGatewayPrecedence(t *testing.T) {
-	// Context names are user-chosen labels, not deployment environments; "eu"
-	// here just needs to be a host whose leading label is not the `api`
-	// service name, so derivation takes the prefixing branch.
-	cfg := &cliconfig.Config{
-		CurrentContext: "eu",
-		Contexts: map[string]*cliconfig.Context{
-			"eu":    {Server: "https://eu.reliantapi.com"},
-			"local": {Server: "http://localhost:3091"},
-		},
-	}
 
 	t.Run("explicit --gateway wins", func(t *testing.T) {
-		writeContexts(t, cfg)
+		isolateCLI(t)
 		conn, err := resolveWithArgs(t, "--gateway", "https://gw.example.com")
 		if err != nil {
 			t.Fatalf("resolveServer: %v", err)
@@ -419,7 +130,7 @@ func TestResolveGatewayPrecedence(t *testing.T) {
 	})
 
 	t.Run("RELIANT_GATEWAY_URL wins over derivation", func(t *testing.T) {
-		writeContexts(t, cfg)
+		isolateCLI(t)
 		t.Setenv(envGatewayURL, "https://gw-from-env.example.com")
 		conn, err := resolveWithArgs(t)
 		if err != nil {
@@ -430,20 +141,23 @@ func TestResolveGatewayPrecedence(t *testing.T) {
 		}
 	})
 
-	t.Run("gateway follows the context server instead of the default one", func(t *testing.T) {
-		writeContexts(t, cfg)
+	t.Run("gateway follows RELIANT_SERVER_URL instead of the default one", func(t *testing.T) {
+		isolateCLI(t)
+		// "eu" is a host whose leading label is not the `api` service name,
+		// so derivation takes the prefixing branch.
+		t.Setenv(envServerURL, "https://eu.reliantapi.com")
 		conn, err := resolveWithArgs(t)
 		if err != nil {
 			t.Fatalf("resolveServer: %v", err)
 		}
 		const want = "https://gateway-eu.reliantapi.com"
 		if conn.GatewayURL != want || conn.GatewaySource != sourceDerived {
-			t.Errorf("gateway = %q (%v), want %q derived from the context server", conn.GatewayURL, conn.GatewaySource, want)
+			t.Errorf("gateway = %q (%v), want %q derived from the resolved server", conn.GatewayURL, conn.GatewaySource, want)
 		}
 	})
 
 	t.Run("gateway follows an explicit --server", func(t *testing.T) {
-		writeContexts(t, cfg)
+		isolateCLI(t)
 		conn, err := resolveWithArgs(t, "--server", "https://reliantapi.com")
 		if err != nil {
 			t.Fatalf("resolveServer: %v", err)
@@ -454,8 +168,8 @@ func TestResolveGatewayPrecedence(t *testing.T) {
 	})
 
 	t.Run("localhost keeps its own host and port", func(t *testing.T) {
-		writeContexts(t, cfg)
-		conn, err := resolveWithArgs(t, "--context", "local")
+		isolateCLI(t)
+		conn, err := resolveWithArgs(t, "--server", "http://localhost:3091")
 		if err != nil {
 			t.Fatalf("resolveServer: %v", err)
 		}
@@ -471,7 +185,7 @@ func TestResolveGatewayPrecedence(t *testing.T) {
 	// shipped: the packaged app derived gateway-api.<domain> and the daemon
 	// could never reach a gateway.
 	t.Run("an api. server derives the sibling gateway. host", func(t *testing.T) {
-		writeContexts(t, cfg)
+		isolateCLI(t)
 		conn, err := resolveWithArgs(t, "--server", "https://api.reliantapi.com")
 		if err != nil {
 			t.Fatalf("resolveServer: %v", err)
@@ -528,24 +242,14 @@ func TestDescribeServerNamesTheSource(t *testing.T) {
 			want: []string{"http://x:1", "--server flag"},
 		},
 		{
-			name: "context",
-			conn: &connection{ServerURL: "http://localhost:3091", ServerSource: sourceContext, ContextName: "dev"},
-			want: []string{"http://localhost:3091", `context "dev"`},
+			name: "env",
+			conn: &connection{ServerURL: "http://localhost:3091", ServerSource: sourceEnv},
+			want: []string{"http://localhost:3091", "RELIANT_SERVER_URL"},
 		},
 		{
-			name: "context selected by env",
-			conn: &connection{ServerURL: "http://localhost:3091", ServerSource: sourceContext, ContextName: "dev", ContextSelectedBy: "env"},
-			want: []string{`context "dev"`, "RELIANT_CONTEXT"},
-		},
-		{
-			name: "default with no context",
+			name: "default",
 			conn: &connection{ServerURL: "http://localhost:8080", ServerSource: sourceDefault},
-			want: []string{"http://localhost:8080", "default", "no context"},
-		},
-		{
-			name: "default because the context sets no server",
-			conn: &connection{ServerURL: "http://localhost:8080", ServerSource: sourceDefault, ContextName: "dev"},
-			want: []string{"default", `context "dev"`, "sets no server"},
+			want: []string{"http://localhost:8080", "default", "no --server flag"},
 		},
 	}
 	for _, tc := range cases {
@@ -561,50 +265,53 @@ func TestDescribeServerNamesTheSource(t *testing.T) {
 }
 
 func TestResolveConnectionCredential(t *testing.T) {
-	t.Run("uses the context token", func(t *testing.T) {
-		writeContexts(t, &cliconfig.Config{
-			CurrentContext: "dev",
-			Contexts:       map[string]*cliconfig.Context{"dev": {Server: "http://localhost:3091", Token: "rlnt_pat_dev0000000000000000000000000"}},
-		})
-
+	probe := func(t *testing.T, args ...string) (*connection, error) {
+		t.Helper()
 		var conn *connection
-		probe := &cobra.Command{Use: "probe", RunE: func(cmd *cobra.Command, _ []string) error {
-			var err error
-			conn, err = resolveConnection(cmd)
-			return err
+		var resErr error
+		p := &cobra.Command{Use: "probe", RunE: func(cmd *cobra.Command, _ []string) error {
+			conn, resErr = resolveConnection(cmd)
+			return nil
 		}}
 		root := NewRootCmd()
-		root.AddCommand(probe)
+		root.AddCommand(p)
 		root.SetOut(&bytes.Buffer{})
-		root.SetArgs([]string{"probe"})
+		root.SetErr(&bytes.Buffer{})
+		root.SetArgs(append([]string{"probe"}, args...))
 		if err := root.Execute(); err != nil {
-			t.Fatalf("resolveConnection: %v", err)
+			t.Fatal(err)
 		}
-		if conn.Token != "rlnt_pat_dev0000000000000000000000000" || conn.TokenIsJWT {
-			t.Errorf("token = %q (jwt=%v), want the context PAT", conn.Token, conn.TokenIsJWT)
+		return conn, resErr
+	}
+	const server = "http://localhost:3091"
+
+	t.Run("uses the login stored for the resolved server", func(t *testing.T) {
+		isolateCLI(t)
+		loginFor(t, server, "rlat_stored")
+		conn, err := probe(t, "--server", server)
+		if err != nil || conn.Token != "rlat_stored" {
+			t.Fatalf("got %+v %v", conn, err)
 		}
 	})
 
-	t.Run("missing credential names the server it was needed for", func(t *testing.T) {
-		writeContexts(t, &cliconfig.Config{
-			CurrentContext: "dev",
-			Contexts:       map[string]*cliconfig.Context{"dev": {Server: "http://localhost:3091"}},
-		})
-
-		probe := &cobra.Command{Use: "probe", RunE: func(cmd *cobra.Command, _ []string) error {
-			_, err := resolveConnection(cmd)
-			return err
-		}}
-		root := NewRootCmd()
-		root.AddCommand(probe)
-		root.SetOut(&bytes.Buffer{})
-		root.SetErr(&bytes.Buffer{})
-		root.SetArgs([]string{"probe"})
-		err := root.Execute()
-		if err == nil {
-			t.Fatal("expected an error when no credential is available")
+	t.Run("RELIANT_TOKEN beats the stored login", func(t *testing.T) {
+		isolateCLI(t)
+		loginFor(t, server, "rlat_stored")
+		t.Setenv(envToken, "rlat_env")
+		conn, err := probe(t, "--server", server)
+		if err != nil || conn.Token != "rlat_env" || conn.TokenFrom != envToken {
+			t.Fatalf("got %+v %v", conn, err)
 		}
-		for _, want := range []string{"http://localhost:3091", `context "dev"`} {
+	})
+
+	t.Run("a login for another server is never used", func(t *testing.T) {
+		isolateCLI(t)
+		loginFor(t, "http://localhost:4000", "rlat_other")
+		_, err := probe(t, "--server", server)
+		if err == nil {
+			t.Fatal("a login stored for another server must not be presented")
+		}
+		for _, want := range []string{server, "reliant auth login --server " + server, envToken} {
 			if !strings.Contains(err.Error(), want) {
 				t.Errorf("error %q should name %q", err, want)
 			}
@@ -625,27 +332,24 @@ func (f *fakeProjectService) ListProjects(_ context.Context, req *connect.Reques
 	}), nil
 }
 
-// TestProjectListHonorsContextServer is the regression test for the split
-// connection paths: `project list` with no --server must reach the context's
-// server with the context's token, not the default server.
-func TestProjectListHonorsContextServer(t *testing.T) {
+// TestProjectListUsesTheServersLogin: `project list --server X` reaches X with
+// the login stored for X.
+func TestProjectListUsesTheServersLogin(t *testing.T) {
 	fake := &fakeProjectService{}
 	mux := http.NewServeMux()
 	mux.Handle(reliantv1connect.NewProjectServiceHandler(fake))
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
-	const token = "rlnt_pat_ctx000000000000000000000000000"
-	writeContexts(t, &cliconfig.Config{
-		CurrentContext: "dev",
-		Contexts:       map[string]*cliconfig.Context{"dev": {Server: srv.URL, Token: token}},
-	})
+	const token = "rlat_ctx000000000000000000000000000000"
+	isolateCLI(t)
+	loginFor(t, srv.URL, token)
 
 	var stdout, stderr bytes.Buffer
 	root := NewRootCmd()
 	root.SetOut(&stdout)
 	root.SetErr(&stderr)
-	root.SetArgs([]string{"project", "list"})
+	root.SetArgs([]string{"project", "list", "--server", srv.URL})
 	if err := root.Execute(); err != nil {
 		t.Fatalf("project list failed: %v (stderr: %s)", err, stderr.String())
 	}
@@ -654,7 +358,7 @@ func TestProjectListHonorsContextServer(t *testing.T) {
 		t.Errorf("project list output missing the served project:\n%s", stdout.String())
 	}
 	if fake.sawBearer != "Bearer "+token {
-		t.Errorf("server saw Authorization %q, want the context token", fake.sawBearer)
+		t.Errorf("server saw Authorization %q, want the stored token", fake.sawBearer)
 	}
 }
 
@@ -667,10 +371,9 @@ func TestUnreachableServerErrorNamesTargetAndSource(t *testing.T) {
 	deadURL := dead.URL
 	dead.Close()
 
-	writeContexts(t, &cliconfig.Config{
-		CurrentContext: "dev",
-		Contexts:       map[string]*cliconfig.Context{"dev": {Server: deadURL, Token: "rlnt_pat_dev0000000000000000000000000"}},
-	})
+	isolateCLI(t)
+	t.Setenv(envServerURL, deadURL)
+	loginFor(t, deadURL, "rlat_dev00000000000000000000000000000")
 
 	var stdout, stderr bytes.Buffer
 	root := NewRootCmd()
@@ -681,7 +384,7 @@ func TestUnreachableServerErrorNamesTargetAndSource(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected an error against a dead server")
 	}
-	for _, want := range []string{deadURL, `context "dev"`, "cannot reach Reliant server", "reliant context list"} {
+	for _, want := range []string{deadURL, "RELIANT_SERVER_URL", "cannot reach Reliant server"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("error should contain %q:\n%s", want, err)
 		}
@@ -702,8 +405,7 @@ func TestNoCommandReadsTargetFlagsDirectly(t *testing.T) {
 	forbidden := []string{
 		`Lookup("server")`, `GetString("server")`,
 		`Lookup("gateway")`, `GetString("gateway")`,
-		`Lookup("context")`, `GetString("context")`,
-		`Lookup(flagServer)`, `Lookup(flagGateway)`, `Lookup(flagContext)`,
+		`Lookup(flagServer)`, `Lookup(flagGateway)`,
 	}
 
 	for _, e := range entries {

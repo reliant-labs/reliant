@@ -343,7 +343,7 @@ func TestAffectedPresetsResolveForCodex(t *testing.T) {
 		{presetName: "documentation.yaml", wantTag: models.TagModerate},
 		{presetName: "refactor.yaml", wantTag: models.TagModerate},
 		{presetName: "tester.yaml", wantTag: models.TagModerate},
-		{presetName: "workflow_builder.yaml", wantTag: models.TagFlagship},
+		{presetName: "workflow_builder.yaml", wantTag: models.TagModerate},
 	}
 
 	for _, tc := range testCases {
@@ -500,25 +500,70 @@ func TestPresetThinkingLevelsAreSupported(t *testing.T) {
 	}
 }
 
-// TestAgentPresetThinkingLevels pins the thinking level each agent preset runs
-// at. These are deliberate cost/quality choices, not incidental values: the
-// levels are what keep a flagship-model preset from defaulting to the model's
-// own (higher) default_thinking_level.
-func TestAgentPresetThinkingLevels(t *testing.T) {
-	want := map[string]string{
-		"implementer.yaml": "medium",
-		"researcher.yaml":  "low",
+// TestPresetsTakeThinkingLevelFromTag keeps effort a property of the model
+// TIER. A preset names a tag; the tag's tag_defaults in models.yaml decide how
+// hard the resolved model thinks, so retuning a tier is one edit there instead
+// of one per preset. A thinking_level on the preset would silently override
+// that and drift from it.
+//
+// researcher is the one exception: it runs at low, and no tag yet resolves a
+// flagship model at low.
+func TestPresetsTakeThinkingLevelFromTag(t *testing.T) {
+	pinned := map[string]string{
+		"researcher.yaml": "low",
 	}
 
-	presets := loadAllPresets(t)
-	for file, wantLevel := range want {
-		preset, ok := presets[file]
-		require.True(t, ok, "preset %s not found", file)
+	for name, preset := range loadAllPresets(t) {
+		t.Run(name, func(t *testing.T) {
+			modelMap, ok := preset.Params["model"].(map[string]any)
+			if !ok {
+				return
+			}
+			level, hasLevel := modelMap["thinking_level"]
 
-		modelMap, ok := preset.Params["model"].(map[string]any)
-		require.True(t, ok, "%s: model param should be an object", file)
-		assert.Equal(t, wantLevel, modelMap["thinking_level"],
-			"%s declares an unexpected thinking_level", file)
+			if wantLevel, isPinned := pinned[name]; isPinned {
+				assert.Equal(t, wantLevel, level, "%s declares an unexpected thinking_level", name)
+				return
+			}
+			assert.False(t, hasLevel,
+				"%s pins thinking_level %v; select the tag whose tag_defaults carry that level instead", name, level)
+		})
+	}
+}
+
+// TestAgentPresetEffectiveThinking pins what the tag-selected agent presets
+// actually run at: the model and the thinking level their tag resolves to.
+// These are deliberate cost/quality choices, and they now live in models.yaml,
+// so this is what notices when a tier change moves a preset.
+func TestAgentPresetEffectiveThinking(t *testing.T) {
+	type effective struct{ model, level string }
+	want := map[string]effective{
+		"implementer.yaml":      {model: "claude-5.5-opus", level: "high"},
+		"ux.yaml":               {model: "claude-5.5-opus", level: "high"},
+		"workflow_builder.yaml": {model: "claude-5.5-opus", level: "high"},
+	}
+
+	registry := models.MustGetRegistry()
+	presets := loadAllPresets(t)
+	for file, wantEffective := range want {
+		t.Run(file, func(t *testing.T) {
+			preset, ok := presets[file]
+			require.True(t, ok, "preset %s not found", file)
+
+			modelMap, ok := preset.Params["model"].(map[string]any)
+			require.True(t, ok, "%s: model param should be an object", file)
+			rawTags, ok := modelMap["tags"].([]any)
+			require.True(t, ok, "%s: model should select by tags", file)
+			tags := make([]string, 0, len(rawTags))
+			for _, rawTag := range rawTags {
+				tags = append(tags, rawTag.(string))
+			}
+
+			resolved, err := registry.Resolve(models.ModelSelector{Tags: tags}, []string{"anthropic"})
+			require.NoError(t, err)
+			assert.Equal(t, wantEffective.model, resolved.Definition.ID, "%s resolves to an unexpected model", file)
+			assert.Equal(t, wantEffective.level, resolved.ThinkingLevel, "%s runs at an unexpected thinking level", file)
+		})
 	}
 }
 

@@ -6,9 +6,10 @@
  * ----------------------
  * The Go daemon, when launched without credentials for its --server origin,
  * falls into an interactive registration flow (Supabase device login +
- * CreateDaemonToken). That works on a TTY but is broken inside Electron
+ * TokenService.CreateToken). That works on a TTY but is broken inside Electron
  * (no stdin, no browser handoff). In Electron we already have a live
  * Supabase session stored via auth-storage, so we can do the mint ourselves
+ * (TokenService.CreateToken, kind DAEMON — an `rlat_` access token)
  * and drop a valid daemon.json on disk before the daemon ever starts. The
  * daemon then reads the existing entry for `endpointKey(--server)` and skips
  * its own registration flow entirely.
@@ -63,7 +64,16 @@ const crypto = require('crypto');
 
 const DAEMON_DIR_NAME = '.reliant';
 const DAEMON_FILE_NAME = 'daemon.json';
-const MINT_RPC_PATH = '/reliant.v1.DaemonTokenService/CreateDaemonToken';
+// reliant.v1.TokenService is the ONE machine-credential surface; a daemon's
+// credential is an `rlat_` access token of kind DAEMON (daemon:connect).
+const MINT_RPC_PATH = '/reliant.v1.TokenService/CreateToken';
+const MINT_TOKEN_KIND = 'TOKEN_KIND_DAEMON';
+// Exact shape of an `rlat_` access token — mirror of forge/pkg/accesstoken
+// HasFormat (prefix + 32 base62 chars). A mint answering anything else (a
+// stale server still issuing a retired family) is a schema mismatch, and
+// writing it to daemon.json would hand the daemon a credential the gateway
+// refuses on every connect.
+const ACCESS_TOKEN_RE = /^rlat_[0-9A-Za-z]{32}$/;
 
 // ─── ensureDaemonPATForOrigin outcomes ──────────────────────────────────────
 //
@@ -458,8 +468,10 @@ function entryOwnerSub({ apiUrl, sub, filePath, logger }) {
 }
 
 /**
- * POST <apiUrl>/reliant.v1.DaemonTokenService/CreateDaemonToken using the
- * caller's Supabase JWT as bearer credentials. Uses raw HTTP+JSON (no
+ * POST <apiUrl>/reliant.v1.TokenService/CreateToken (kind DAEMON) using the
+ * caller's Supabase JWT as bearer credentials. `apiUrl` here is the host that
+ * SERVES TokenService — reliant's api-server — which is not necessarily the
+ * daemon's --server origin (see `mintApiUrl` on ensureDaemonPATForOrigin). Uses raw HTTP+JSON (no
  * Connect SDK) so this module stays a thin pure-Node dependency.
  *
  * Retry contract
@@ -495,7 +507,7 @@ async function mintDaemonPAT({ apiUrl, accessToken, name, logger, sleep }) {
   if (!accessToken) throw new Error('mintDaemonPAT: missing accessToken');
 
   const url = `${apiUrl.replace(/\/+$/, '')}${MINT_RPC_PATH}`;
-  const body = JSON.stringify({ name: name || os.hostname() });
+  const body = JSON.stringify({ name: name || os.hostname(), kind: MINT_TOKEN_KIND });
   const headers = {
     'Content-Type': 'application/json',
     Authorization: `Bearer ${accessToken}`,
@@ -567,19 +579,32 @@ async function mintDaemonPATOnce({ url, headers, body, apiUrl, logger }) {
   if (!res.ok) {
     const text = await safeReadText(res);
     const e = new Error(
-      `CreateDaemonToken failed: HTTP ${res.status}${text ? ` — ${text}` : ''}`
+      `CreateToken failed: HTTP ${res.status}${text ? ` — ${text}` : ''}`
     );
     e.mintStatus = res.status;
     throw e;
   }
 
-  const data = await res.json();
+  return parseMintResponse(await res.json());
+}
+
+/**
+ * Parse a CreateToken response body into `{ token, tokenId }`, refusing
+ * anything that is not an `rlat_` access token. Failures are terminal: a
+ * wrong-shaped answer will not fix itself on retry.
+ */
+function parseMintResponse(data) {
   if (!data || typeof data.token !== 'string' || !data.token) {
-    const e = new Error('CreateDaemonToken response missing token');
-    e.mintTerminal = true; // schema mismatch — won't fix itself on retry
+    const e = new Error('CreateToken response missing token');
+    e.mintTerminal = true;
     throw e;
   }
-  return { token: data.token, tokenId: data.tokenId || data.token_id };
+  if (!ACCESS_TOKEN_RE.test(data.token)) {
+    const e = new Error('CreateToken returned a token that is not an rlat_ access token');
+    e.mintTerminal = true;
+    throw e;
+  }
+  return { token: data.token, tokenId: data.info?.id || undefined };
 }
 
 /**
@@ -645,31 +670,31 @@ function mintViaHttpsRequest({ url, headers, body, logger }) {
           const text = Buffer.concat(chunks).toString('utf8');
           if (res.statusCode < 200 || res.statusCode >= 300) {
             const httpErr = new Error(
-              `CreateDaemonToken failed: HTTP ${res.statusCode}${text ? ` — ${text}` : ''}`
+              `CreateToken failed: HTTP ${res.statusCode}${text ? ` — ${text}` : ''}`
             );
             httpErr.mintStatus = res.statusCode;
             reject(httpErr);
             return;
           }
           try {
-            const data = JSON.parse(text);
-            if (!data || typeof data.token !== 'string' || !data.token) {
-              const schemaErr = new Error('CreateDaemonToken response missing token');
-              schemaErr.mintTerminal = true;
-              reject(schemaErr);
+            let data;
+            try {
+              data = JSON.parse(text);
+            } catch (e) {
+              const parseErr = new Error(`CreateToken response invalid JSON: ${e.message}`);
+              parseErr.mintTerminal = true;
+              reject(parseErr);
               return;
             }
-            resolve({ token: data.token, tokenId: data.tokenId || data.token_id });
+            resolve(parseMintResponse(data));
           } catch (e) {
-            const parseErr = new Error(`CreateDaemonToken response invalid JSON: ${e.message}`);
-            parseErr.mintTerminal = true;
-            reject(parseErr);
+            reject(e);
           }
         });
       }
     );
     req.on('timeout', () => {
-      const timeoutErr = new Error(`CreateDaemonToken timed out after ${MINT_TIMEOUT_MS}ms`);
+      const timeoutErr = new Error(`CreateToken timed out after ${MINT_TIMEOUT_MS}ms`);
       timeoutErr.name = 'TimeoutError';
       req.destroy(timeoutErr);
     });
@@ -802,11 +827,18 @@ const NOOP_LOGGER = { debug() {}, info() {}, warn() {}, error() {} };
  *     fall into its own headless-broken flow, which is the pre-existing
  *     behavior).
  *   - If an existing entry matches the current session's `sub` → no-op (reuse).
- *   - Otherwise → mint a fresh PAT via CreateDaemonToken and write it,
+ *   - Otherwise → mint a fresh credential via TokenService.CreateToken
+ *     (kind DAEMON) against `mintApiUrl` and write it under `apiUrl`,
  *     refreshing the stored session first when its access token is stale
  *     (see "Token freshness" in the module doc). A 401 from the mint with a
  *     token that LOOKED fresh triggers one refresh + one retry — server-side
  *     clock skew or out-of-band revocation, both fixed by a new token.
+ *
+ * `apiUrl` is the daemon's --server origin: it KEYS daemon.json and must
+ * match what the Go daemon looks up. `mintApiUrl` is where TokenService is
+ * served — reliant's api-server. The two are the same host in a packaged
+ * build, but distinct in cloud-dev, where --server is admin-server and
+ * admin-server does not serve reliant.v1.TokenService. Defaults to `apiUrl`.
  *
  * `authUrl` + `authAnonKey` identify the GoTrue provider for the refresh.
  * When either is missing the refresh is disabled and behavior degrades to
@@ -819,6 +851,7 @@ const NOOP_LOGGER = { debug() {}, info() {}, warn() {}, error() {} };
  *   authStorage: { loadStoredAuth: () => object|null,
  *                  saveAuth?: (session: object) => boolean } | null,
  *   apiUrl: string,
+ *   mintApiUrl?: string,
  *   gatewayUrl?: string,
  *   authUrl?: string,
  *   authAnonKey?: string,
@@ -828,6 +861,7 @@ const NOOP_LOGGER = { debug() {}, info() {}, warn() {}, error() {} };
 async function ensureDaemonPATForOrigin({
   authStorage,
   apiUrl,
+  mintApiUrl,
   gatewayUrl,
   authUrl,
   authAnonKey,
@@ -928,7 +962,7 @@ async function ensureDaemonPATForOrigin({
     let minted;
     try {
       minted = await mintDaemonPAT({
-        apiUrl,
+        apiUrl: mintApiUrl || apiUrl,
         accessToken,
         name: os.hostname(),
         logger: log,
@@ -954,7 +988,7 @@ async function ensureDaemonPATForOrigin({
       }
       try {
         minted = await mintDaemonPAT({
-          apiUrl,
+          apiUrl: mintApiUrl || apiUrl,
           accessToken,
           name: os.hostname(),
           logger: log,
@@ -1203,6 +1237,7 @@ module.exports = {
   ENSURE_UNAVAILABLE,
   ENSURE_FAILED,
   MINT_RPC_PATH,
+  MINT_TOKEN_KIND,
   MINT_TIMEOUT_MS,
   MINT_MAX_ATTEMPTS,
   MINT_RETRY_BACKOFFS_MS,

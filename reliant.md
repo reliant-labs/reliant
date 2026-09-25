@@ -269,7 +269,11 @@ points of luminance, so `border-border/60` is what makes the well read at all.
 
 The long version, including the heading ladder (page heading / panel heading /
 section label / stat caption) these surfaces now follow, is the comment block
-at the top of `web/src/components/Settings/cloud/ui/card.tsx`.
+at the top of `web/src/components/forge-ui/card.tsx` — forge's component-library
+card, installed verbatim (the rule was upstreamed into forge so there is one
+copy). Use its `CardInset` for a well; forge's `surface-sunken` token is bridged
+to `--background` in `web/src/index.css`, whose MUTED-INVERSION TRAP block has
+the per-scheme numbers.
 
 ---
 

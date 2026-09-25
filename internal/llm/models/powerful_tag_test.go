@@ -193,7 +193,9 @@ func TestResolve_ExistingTagTargetsUnchangedByNewModels(t *testing.T) {
 		// claude-5.5-opus leads the file, so it is the flagship pick. This
 		// moved from claude-5-opus deliberately when 5.5 shipped.
 		TagFlagship: "claude-5.5-opus",
-		TagModerate: "claude-5-sonnet",
+		// moderate is the same model at a lower effort ceiling (tag_defaults
+		// in models.yaml); it moved off claude-5-sonnet deliberately.
+		TagModerate: "claude-5.5-opus",
 		TagCheap:    "claude-4.5-haiku",
 		TagFast:     "gemini-3.5-flash",
 	} {

@@ -34,13 +34,13 @@ import {
   deleteSecret,
   destroySecret,
   getSecretVersions,
-  hasControlPlane,
   listSecrets,
   setSecret,
   undeleteSecret,
   type ManagedSecretHistory,
   type ManagedSecretSummary,
   type ManagedStoreAvailability,
+  type ManagedStoreTarget,
   type SetSecretResult,
 } from "../services/forge/secretStore";
 import type { ForgeEnvStatusReport } from "../services/forge/status";
@@ -487,7 +487,14 @@ export function useForgeDeployStatus(
 // screen needs both and how they are joined.
 
 /**
- * useManagedSecrets loads the managed store's metadata for one (project, env).
+ * useManagedSecrets loads the managed store's metadata for one environment.
+ *
+ * `target` decides whether there is a lookup at all (see managedStoreTarget).
+ * A `none` target resolves IMMEDIATELY to its availability with no RPC: a
+ * non-hosted env has no managed store, and asking control-plane about it
+ * would need an id nobody has. `null` means the facts that decide the target
+ * (the topology report) have not arrived yet, so nothing is decided and
+ * nothing is fetched.
  *
  * A FAILURE HERE IS USUALLY NOT AN ERROR. control-plane answers Unavailable
  * when no OpenBao is bound, and Unimplemented when the control plane predates
@@ -506,18 +513,19 @@ export function useForgeDeployStatus(
  */
 export function useManagedSecrets(
   projectId: string | null | undefined,
-  env: string | null | undefined
+  env: string | null | undefined,
+  target: ManagedStoreTarget | null
 ) {
+  const environmentId = target?.kind === "lookup" ? target.environmentId : "";
   return useQuery<{ availability: ManagedStoreAvailability; secrets: ManagedSecretSummary[] }>({
-    queryKey: forgeKeys.managedSecrets(projectId ?? "", env ?? ""),
+    queryKey: [...forgeKeys.managedSecrets(projectId ?? "", env ?? ""), target?.kind ?? "", environmentId],
     queryFn: async () => {
-      if (!hasControlPlane()) {
-        return { availability: "no-control-plane" as const, secrets: [] };
-      }
+      if (!target) return { availability: "unreachable" as const, secrets: [] };
+      if (target.kind === "none") return { availability: target.availability, secrets: [] };
       try {
         return {
           availability: "available" as const,
-          secrets: await listSecrets(projectId as string, env as string),
+          secrets: await listSecrets(target.environmentId),
         };
       } catch (err) {
         // The error object itself is NOT propagated into the cache or into any
@@ -526,7 +534,7 @@ export function useManagedSecrets(
         return { availability: availabilityFromError(err), secrets: [] };
       }
     },
-    enabled: !!projectId && !!env,
+    enabled: !!projectId && !!env && !!target,
     staleTime: 5_000,
     retry: 1,
   });
@@ -535,20 +543,21 @@ export function useManagedSecrets(
 /**
  * useManagedSecretVersions loads ONE secret's version history.
  *
- * Enabled only when a name is selected, so opening the detail panel is what
- * fetches the history rather than the list page pre-fetching every secret's —
- * which on a project with fifty secrets would be fifty round trips to render a
- * table nobody has opened yet.
+ * Enabled only when a name is selected AND the env has a lookup target, so
+ * opening the detail panel is what fetches the history rather than the list
+ * page pre-fetching every secret's — which on a project with fifty secrets
+ * would be fifty round trips to render a table nobody has opened yet.
  */
 export function useManagedSecretVersions(
   projectId: string | null | undefined,
   env: string | null | undefined,
+  environmentId: string | null | undefined,
   name: string | null | undefined
 ) {
   return useQuery<ManagedSecretHistory>({
     queryKey: forgeKeys.managedSecretVersions(projectId ?? "", env ?? "", name ?? ""),
-    queryFn: () => getSecretVersions(projectId as string, env as string, name as string),
-    enabled: !!projectId && !!env && !!name,
+    queryFn: () => getSecretVersions(environmentId as string, name as string),
+    enabled: !!projectId && !!env && !!environmentId && !!name,
     staleTime: 5_000,
     retry: 1,
   });
@@ -586,6 +595,19 @@ function useInvalidateManagedSecrets(
 }
 
 /**
+ * Every write is keyed on the env's control-plane id. A missing id is a
+ * refusal, not a request with an empty field: the server would answer
+ * InvalidArgument, and the UI never offers a write without a lookup target
+ * anyway (modeSupportsWrite is false unless the store answered).
+ */
+function requireEnvironmentId(environmentId: string | null | undefined): string {
+  if (!environmentId) {
+    throw new Error("This environment has no managed store to write to.");
+  }
+  return environmentId;
+}
+
+/**
  * useSetManagedSecret writes a new version.
  *
  * THE VALUE PASSES THROUGH AND IS NOT RETAINED. It is a mutation VARIABLE, so
@@ -596,12 +618,13 @@ function useInvalidateManagedSecrets(
  */
 export function useSetManagedSecret(
   projectId: string | null | undefined,
-  env: string | null | undefined
+  env: string | null | undefined,
+  environmentId: string | null | undefined
 ) {
   const invalidate = useInvalidateManagedSecrets(projectId, env);
   return useMutation<SetSecretResult, Error, { name: string; value: string; cas?: number }>({
     mutationFn: ({ name, value, cas }) =>
-      setSecret({ projectId: projectId as string, env: env as string, name, value, cas }),
+      setSecret({ environmentId: requireEnvironmentId(environmentId), name, value, cas }),
     onSuccess: invalidate,
   });
 }
@@ -609,24 +632,26 @@ export function useSetManagedSecret(
 /** useDeleteManagedSecret soft-deletes. Recoverable — see useUndeleteManagedSecret. */
 export function useDeleteManagedSecret(
   projectId: string | null | undefined,
-  env: string | null | undefined
+  env: string | null | undefined,
+  environmentId: string | null | undefined
 ) {
   const invalidate = useInvalidateManagedSecrets(projectId, env);
   return useMutation<void, Error, { name: string; versions?: number[] }>({
     mutationFn: ({ name, versions }) =>
-      deleteSecret({ projectId: projectId as string, env: env as string, name, versions }),
+      deleteSecret({ environmentId: requireEnvironmentId(environmentId), name, versions }),
     onSuccess: invalidate,
   });
 }
 
 export function useUndeleteManagedSecret(
   projectId: string | null | undefined,
-  env: string | null | undefined
+  env: string | null | undefined,
+  environmentId: string | null | undefined
 ) {
   const invalidate = useInvalidateManagedSecrets(projectId, env);
   return useMutation<void, Error, { name: string; versions: number[] }>({
     mutationFn: ({ name, versions }) =>
-      undeleteSecret({ projectId: projectId as string, env: env as string, name, versions }),
+      undeleteSecret({ environmentId: requireEnvironmentId(environmentId), name, versions }),
     onSuccess: invalidate,
   });
 }
@@ -640,12 +665,13 @@ export function useUndeleteManagedSecret(
  */
 export function useDestroyManagedSecret(
   projectId: string | null | undefined,
-  env: string | null | undefined
+  env: string | null | undefined,
+  environmentId: string | null | undefined
 ) {
   const invalidate = useInvalidateManagedSecrets(projectId, env);
   return useMutation<void, Error, { name: string; versions: number[] }>({
     mutationFn: ({ name, versions }) =>
-      destroySecret({ projectId: projectId as string, env: env as string, name, versions }),
+      destroySecret({ environmentId: requireEnvironmentId(environmentId), name, versions }),
     onSuccess: invalidate,
   });
 }

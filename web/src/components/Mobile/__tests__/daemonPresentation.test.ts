@@ -9,12 +9,12 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { DaemonStatus, DaemonSize } from '@/gen/controlplane/v1/public/shared_pb'
+import { DaemonStatus, DaemonSize } from '@/gen/controlplane/controlplane/v1/shared_pb';
 import type { Daemon } from '@/services/controlPlane/daemon'
 import {
   canResume,
   canSuspend,
-  heartbeatMs,
+  lastSeenMs,
   presentDaemon,
   sizeLabel,
 } from '../daemonPresentation'
@@ -96,24 +96,24 @@ describe('presentDaemon', () => {
 
 describe('sizeLabel', () => {
   it('names each tier', () => {
-    expect(sizeLabel(daemon({ size: DaemonSize.SMALL }))).toBe('Small')
-    expect(sizeLabel(daemon({ size: DaemonSize.XL }))).toBe('XL')
+    expect(sizeLabel(daemon({ size: DaemonSize.DAEMON_SIZE_SMALL }))).toBe('Small')
+    expect(sizeLabel(daemon({ size: DaemonSize.DAEMON_SIZE_XL }))).toBe('XL')
   })
 
   it('returns empty string when the tier is unset, so no badge renders', () => {
-    expect(sizeLabel(daemon({ size: DaemonSize.UNSPECIFIED }))).toBe('')
+    expect(sizeLabel(daemon({ size: DaemonSize.DAEMON_SIZE_UNSPECIFIED }))).toBe('')
   })
 })
 
-describe('heartbeatMs', () => {
-  it('returns null for a daemon that has never checked in', () => {
-    expect(heartbeatMs(daemon())).toBeNull()
+describe('lastSeenMs', () => {
+  it('returns null for a daemon that has not disconnected', () => {
+    expect(lastSeenMs(daemon())).toBeNull()
   })
 
   it('converts a protobuf timestamp to epoch millis', () => {
     const seconds = 1_700_000_000
-    const value = heartbeatMs(
-      daemon({ lastHeartbeat: { seconds: BigInt(seconds), nanos: 0 } as never }),
+    const value = lastSeenMs(
+      daemon({ disconnectedAt: { seconds: BigInt(seconds), nanos: 0 } as never }),
     )
     expect(value).toBe(seconds * 1000)
   })

@@ -228,3 +228,40 @@ describe("elevation rules", () => {
     expect(container.querySelector('[class*="bg-muted"]')).toBeNull();
   });
 });
+
+describe("a store this console cannot read", () => {
+  it("renders declared secrets as Not known — never the red Not set blocker", () => {
+    render(
+      <ManagedSecretsView
+        {...props({
+          mode: "managed-remote",
+          availability: "not-ensured",
+          report: { env: "prod", provider: "hosted", secrets: [{ name: "DATABASE_URL" }] },
+          managed: [],
+        })}
+      />
+    );
+    const row = screen.getByTestId("secret-row-DATABASE_URL");
+    expect(within(row).getByText("Not known")).toBeInTheDocument();
+    expect(within(row).queryByText("Not set")).toBeNull();
+    expect(screen.getByTestId("managed-secrets").textContent).not.toMatch(/not set/);
+    // The command is rendered as code, not as a sentence fragment.
+    expect(screen.getByTestId("managed-secrets").querySelector("code")?.textContent).toBe("forge secret set");
+  });
+
+  it("does not claim 'No versions yet' in the detail when the history cannot be read", () => {
+    render(
+      <ManagedSecretsView
+        {...props({
+          mode: "managed-remote",
+          availability: "unreachable",
+          report: { env: "prod", provider: "hosted", secrets: [{ name: "DATABASE_URL" }] },
+          managed: [],
+          selectedName: "DATABASE_URL",
+        })}
+      />
+    );
+    expect(screen.getByTestId("version-history-unavailable")).toBeInTheDocument();
+    expect(screen.queryByTestId("version-history-empty")).toBeNull();
+  });
+});

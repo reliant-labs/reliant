@@ -12,6 +12,24 @@ import (
 	"github.com/sqlc-dev/pqtype"
 )
 
+type AccessToken struct {
+	ID              string         `json:"id"`
+	OrgID           string         `json:"org_id"`
+	Name            string         `json:"name"`
+	TokenHash       string         `json:"token_hash"`
+	TokenPrefix     string         `json:"token_prefix"`
+	Scopes          []string       `json:"scopes"`
+	CreatedByUserID sql.NullString `json:"created_by_user_id"`
+	ActingUserID    sql.NullString `json:"acting_user_id"`
+	ResourceKind    sql.NullString `json:"resource_kind"`
+	ResourceID      sql.NullString `json:"resource_id"`
+	Ephemeral       bool           `json:"ephemeral"`
+	CreatedAt       time.Time      `json:"created_at"`
+	ExpiresAt       sql.NullTime   `json:"expires_at"`
+	LastUsedAt      sql.NullTime   `json:"last_used_at"`
+	RevokedAt       sql.NullTime   `json:"revoked_at"`
+}
+
 type AgentMessage struct {
 	ID                 string                `json:"id"`
 	ChatID             string                `json:"chat_id"`
@@ -222,7 +240,6 @@ type ConnectorGrant struct {
 	UserID        string          `json:"user_id"`
 	DaemonID      string          `json:"daemon_id"`
 	Name          string          `json:"name"`
-	TokenHash     string          `json:"token_hash"`
 	TokenPrefix   string          `json:"token_prefix"`
 	AllowedTools  json.RawMessage `json:"allowed_tools"`
 	PathRoot      string          `json:"path_root"`
@@ -280,22 +297,6 @@ type DaemonAttachment struct {
 	MemoryLimitBytes   int64          `json:"memory_limit_bytes"`
 	MemoryPressure     bool           `json:"memory_pressure"`
 	DetectedPorts      string         `json:"detected_ports"`
-}
-
-type DaemonPat struct {
-	ID          string         `json:"id"`
-	UserID      string         `json:"user_id"`
-	TokenHash   string         `json:"token_hash"`
-	TokenPrefix string         `json:"token_prefix"`
-	Name        string         `json:"name"`
-	Ephemeral   bool           `json:"ephemeral"`
-	ExpiresAt   sql.NullTime   `json:"expires_at"`
-	LastUsedAt  sql.NullTime   `json:"last_used_at"`
-	RevokedAt   sql.NullTime   `json:"revoked_at"`
-	CreatedAt   time.Time      `json:"created_at"`
-	DaemonID    sql.NullString `json:"daemon_id"`
-	Kind        string         `json:"kind"`
-	UserEmail   string         `json:"user_email"`
 }
 
 type DefaultPresetAssignment struct {

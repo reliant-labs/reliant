@@ -119,14 +119,14 @@ test('the on-disk document has the nested shape Go requires', () => {
   try {
     upsertEntry({
       apiUrl: 'https://reliantapi.com',
-      pat: 'rlnt_pat_shape',
+      pat: 'rlat_shape000000000000000000000000000',
       sub: 'user-abc',
       filePath: file,
     });
 
     const doc = JSON.parse(fs.readFileSync(file, 'utf8'));
     assert.deepEqual(Object.keys(doc).sort(), ['default_accounts', 'origins']);
-    assert.equal(doc.origins['https://reliantapi.com']['user-abc'].pat, 'rlnt_pat_shape');
+    assert.equal(doc.origins['https://reliantapi.com']['user-abc'].pat, 'rlat_shape000000000000000000000000000');
     assert.equal(doc.default_accounts['https://reliantapi.com'], 'user-abc');
 
     // The old flat shape must not linger anywhere at the root.
@@ -146,7 +146,7 @@ test('an account with no sub is stored under _default, matching Go', () => {
   // directory that consumes it agree on what "no account" is called.
   const { dir, file } = makeTmpFile();
   try {
-    upsertEntry({ apiUrl: 'http://localhost:3123', pat: 'rlnt_pat_anon', filePath: file });
+    upsertEntry({ apiUrl: 'http://localhost:3123', pat: 'rlat_anon0000000000000000000000000000', filePath: file });
 
     const doc = JSON.parse(fs.readFileSync(file, 'utf8'));
     assert.deepEqual(Object.keys(doc.origins['http://localhost:3123']), ['_default']);
@@ -232,7 +232,7 @@ test('a document in the OLD flat format reads as empty, exactly as Go treats it'
     fs.writeFileSync(
       file,
       JSON.stringify({
-        'https://reliantapi.com': { pat: 'rlnt_pat_flat', server_url: 'https://reliantapi.com' },
+        'https://reliantapi.com': { pat: 'rlat_flat0000000000000000000000000000', server_url: 'https://reliantapi.com' },
       })
     );
     assert.deepEqual(readDaemonStore({ filePath: file }), { origins: {}, default_accounts: {} });
@@ -250,7 +250,7 @@ test('upsertEntry preserves unrelated entries and adds new one at correct key', 
     const seed = seedStore({
       'https://staging.reliantapi.com': {
         _default: {
-          pat: 'rlnt_pat_existing_staging',
+          pat: 'rlat_existingstaging00000000000000000',
           server_url: 'https://staging.reliantapi.com',
           gateway_url: '',
           registered_at: '2025-01-01T00:00:00.000Z',
@@ -258,7 +258,7 @@ test('upsertEntry preserves unrelated entries and adds new one at correct key', 
       },
       'http://localhost:3123': {
         _default: {
-          pat: 'rlnt_pat_existing_local',
+          pat: 'rlat_existinglocal0000000000000000000',
           server_url: 'http://localhost:3123',
           gateway_url: 'http://localhost:3124',
           registered_at: '2025-01-02T00:00:00.000Z',
@@ -270,7 +270,7 @@ test('upsertEntry preserves unrelated entries and adds new one at correct key', 
     upsertEntry({
       apiUrl: 'https://reliantapi.com',
       gatewayUrl: '',
-      pat: 'rlnt_pat_new_prod',
+      pat: 'rlat_newprod0000000000000000000000000',
       filePath: file,
     });
 
@@ -292,7 +292,7 @@ test('upsertEntry preserves unrelated entries and adds new one at correct key', 
     // New entry lands at the right key with the right field names.
     const fresh = after.origins['https://reliantapi.com']._default;
     assert.ok(fresh, 'new entry must be present');
-    assert.equal(fresh.pat, 'rlnt_pat_new_prod');
+    assert.equal(fresh.pat, 'rlat_newprod0000000000000000000000000');
     assert.equal(fresh.server_url, 'https://reliantapi.com');
     assert.equal(fresh.gateway_url, '');
     assert.ok(
@@ -336,7 +336,7 @@ test('upsertEntry throws on invalid apiUrl (empty endpoint key)', () => {
   const { dir, file } = makeTmpFile();
   try {
     assert.throws(
-      () => upsertEntry({ apiUrl: 'not-a-url', pat: 'rlnt_pat_x', filePath: file }),
+      () => upsertEntry({ apiUrl: 'not-a-url', pat: 'rlat_x0000000000000000000000000000000', filePath: file }),
       /invalid --server URL/
     );
     assert.equal(fs.existsSync(file), false, 'no file should have been written');
@@ -369,7 +369,7 @@ test('upsertEntry never writes a daemon_id — the id is not in this file', () =
         seedStore({
           'http://localhost:3123': {
             'user-abc': {
-              pat: 'rlnt_pat_old',
+              pat: 'rlat_old00000000000000000000000000000',
               server_url: 'http://localhost:3123',
               sub: 'user-abc',
               daemon_id: 'stable-daemon-id-123',
@@ -382,14 +382,14 @@ test('upsertEntry never writes a daemon_id — the id is not in this file', () =
     upsertEntry({
       apiUrl: 'http://localhost:3123',
       gatewayUrl: 'http://localhost:3124',
-      pat: 'rlnt_pat_new',
+      pat: 'rlat_new00000000000000000000000000000',
       sub: 'user-abc',
       filePath: file,
     });
 
     const after = JSON.parse(fs.readFileSync(file, 'utf8'))
       .origins['http://localhost:3123']['user-abc'];
-    assert.equal(after.pat, 'rlnt_pat_new', 'PAT must be updated');
+    assert.equal(after.pat, 'rlat_new00000000000000000000000000000', 'PAT must be updated');
     assert.equal(
       Object.prototype.hasOwnProperty.call(after, 'daemon_id'),
       false,
@@ -403,7 +403,7 @@ test('upsertEntry never writes a daemon_id — the id is not in this file', () =
 test('a fresh entry carries no daemon_id either', () => {
   const { dir, file } = makeTmpFile();
   try {
-    upsertEntry({ apiUrl: 'http://localhost:3123', pat: 'rlnt_pat_new', filePath: file });
+    upsertEntry({ apiUrl: 'http://localhost:3123', pat: 'rlat_new00000000000000000000000000000', filePath: file });
     const after = JSON.parse(fs.readFileSync(file, 'utf8'))
       .origins['http://localhost:3123']._default;
     assert.ok(after, 'entry must exist');
@@ -420,7 +420,7 @@ test('deleteEntry removes one account and leaves other origins alone', () => {
       {
         'http://localhost:3123': {
           'user-abc': {
-            pat: 'rlnt_pat_local',
+            pat: 'rlat_local000000000000000000000000000',
             server_url: 'http://localhost:3123',
             gateway_url: '',
             registered_at: '2025-01-02T00:00:00.000Z',
@@ -429,7 +429,7 @@ test('deleteEntry removes one account and leaves other origins alone', () => {
         },
         'https://staging.reliantapi.com': {
           _default: {
-            pat: 'rlnt_pat_staging',
+            pat: 'rlat_staging0000000000000000000000000',
             server_url: 'https://staging.reliantapi.com',
             gateway_url: '',
             registered_at: '2025-01-01T00:00:00.000Z',
@@ -512,7 +512,7 @@ test('writeDaemonStore creates the parent directory recursively', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'daemon-creds-test-'));
   const nested = path.join(dir, 'nested', 'inner', 'daemon.json');
   try {
-    writeDaemonStore({ 'https://x.example': { pat: 'rlnt_pat_x' } }, { filePath: nested });
+    writeDaemonStore({ 'https://x.example': { pat: 'rlat_x0000000000000000000000000000000' } }, { filePath: nested });
     assert.ok(fs.existsSync(nested));
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
@@ -554,14 +554,14 @@ function jsonResponse(status, body) {
   };
 }
 
-test('mintDaemonPAT: 200 with {token, tokenId} returns parsed', async () => {
+test('mintDaemonPAT: 200 with {token, info.id} returns parsed', async () => {
   let seenUrl;
   let seenInit;
   await withFetchStub(
     async (url, init) => {
       seenUrl = url;
       seenInit = init;
-      return jsonResponse(200, { token: 'rlnt_pat_abc', tokenId: 'tok_1' });
+      return jsonResponse(200, { token: 'rlat_abc00000000000000000000000000000', info: { id: 'tok_1' } });
     },
     async () => {
       const result = await mintDaemonPAT({
@@ -569,7 +569,7 @@ test('mintDaemonPAT: 200 with {token, tokenId} returns parsed', async () => {
         accessToken: 'jwt-xyz',
         name: 'my-laptop',
       });
-      assert.deepEqual(result, { token: 'rlnt_pat_abc', tokenId: 'tok_1' });
+      assert.deepEqual(result, { token: 'rlat_abc00000000000000000000000000000', tokenId: 'tok_1' });
     }
   );
 
@@ -581,8 +581,9 @@ test('mintDaemonPAT: 200 with {token, tokenId} returns parsed', async () => {
   assert.equal(seenInit.headers['Content-Type'], 'application/json');
   assert.equal(seenInit.headers.Authorization, 'Bearer jwt-xyz');
 
-  // Body assertion: { name: <hostname> }.
-  assert.deepEqual(JSON.parse(seenInit.body), { name: 'my-laptop' });
+  // Body assertion: { name, kind: DAEMON }. Without the kind the server
+  // refuses the mint (InvalidArgument).
+  assert.deepEqual(JSON.parse(seenInit.body), { name: 'my-laptop', kind: 'TOKEN_KIND_DAEMON' });
 });
 
 test('mintDaemonPAT: defaults `name` to os.hostname() when not provided', async () => {
@@ -590,7 +591,7 @@ test('mintDaemonPAT: defaults `name` to os.hostname() when not provided', async 
   await withFetchStub(
     async (_url, init) => {
       seenInit = init;
-      return jsonResponse(200, { token: 'rlnt_pat_xyz' });
+      return jsonResponse(200, { token: 'rlat_xyz00000000000000000000000000000' });
     },
     async () => {
       await mintDaemonPAT({
@@ -608,7 +609,7 @@ test('mintDaemonPAT: trims trailing slashes off apiUrl', async () => {
   await withFetchStub(
     async (url) => {
       seenUrl = url;
-      return jsonResponse(200, { token: 'rlnt_pat_xyz' });
+      return jsonResponse(200, { token: 'rlat_xyz00000000000000000000000000000' });
     },
     async () => {
       await mintDaemonPAT({
@@ -622,7 +623,7 @@ test('mintDaemonPAT: trims trailing slashes off apiUrl', async () => {
 
 test('mintDaemonPAT: 200 missing token throws', async () => {
   await withFetchStub(
-    async () => jsonResponse(200, { tokenId: 'tok_1' }), // no `token`
+    async () => jsonResponse(200, { info: { id: 'tok_1' } }), // no `token`
     async () => {
       await assert.rejects(
         () => mintDaemonPAT({ apiUrl: 'https://reliantapi.com', accessToken: 'jwt' }),
@@ -630,6 +631,57 @@ test('mintDaemonPAT: 200 missing token throws', async () => {
       );
     }
   );
+});
+
+test('mintDaemonPAT: refuses a retired-family token and does not retry', async () => {
+  // A server still issuing `rlnt_pat_` would otherwise have that written to
+  // daemon.json, where the gateway refuses it on every connect. Mutation
+  // caught: dropping the rlat_ shape check in parseMintResponse.
+  let calls = 0;
+  await withFetchStub(
+    async () => {
+      calls++;
+      return jsonResponse(200, { token: 'rlnt_pat_legacy', info: { id: 'tok_1' } });
+    },
+    async () => {
+      await assert.rejects(
+        () => mintDaemonPAT({ apiUrl: 'https://reliantapi.com', accessToken: 'jwt', sleep: async () => {} }),
+        /not an rlat_ access token/
+      );
+    }
+  );
+  assert.equal(calls, 1, 'a wrong-shaped token is terminal, not retried');
+});
+
+test('ensureDaemonPATForOrigin: mints at mintApiUrl but keys daemon.json by the --server origin', async () => {
+  // cloud-dev: --server is admin-server (which does not serve
+  // reliant.v1.TokenService); the mint must go to reliant's api-server while
+  // the entry stays where the Go daemon looks it up. Mutation caught: minting
+  // at `apiUrl` (404 against admin-server) or keying by mintApiUrl.
+  await withFakeHome(async () => {
+    const authStorage = {
+      loadStoredAuth: () => ({ access_token: 'jwt-abc', user: { id: 'user-1' } }),
+    };
+    const seen = [];
+    const outcome = await withFetchStub(
+      async (url) => {
+        seen.push(url);
+        return jsonResponse(200, { token: 'rlat_split000000000000000000000000000', info: { id: 'tok_s' } });
+      },
+      async () =>
+        ensureDaemonPATForOrigin({
+          authStorage,
+          apiUrl: 'http://localhost:8090',
+          mintApiUrl: 'http://localhost:9090',
+          gatewayUrl: '',
+        })
+    );
+    assert.equal(outcome, ENSURE_MINTED);
+    assert.deepEqual(seen, [`http://localhost:9090${MINT_RPC_PATH}`]);
+    const entry = readEntry({ apiUrl: 'http://localhost:8090', sub: 'user-1' });
+    assert.equal(entry?.pat, 'rlat_split000000000000000000000000000');
+    assert.equal(readEntry({ apiUrl: 'http://localhost:9090', sub: 'user-1' }), null);
+  });
 });
 
 test('mintDaemonPAT: 401 throws with status', async () => {
@@ -729,7 +781,7 @@ test('mintDaemonPAT: 502 → 502 → 200 returns parsed result and calls fetch 3
   const { stub, calls } = makeSequenceFetch([
     jsonResponse(502, { error: 'bad gateway' }),
     jsonResponse(502, { error: 'bad gateway' }),
-    jsonResponse(200, { token: 'rlnt_pat_after_retry', tokenId: 'tok_2' }),
+    jsonResponse(200, { token: 'rlat_afterretry0000000000000000000000', info: { id: 'tok_2' } }),
   ]);
   await withFetchStub(stub, async () => {
     const result = await mintDaemonPAT({
@@ -737,7 +789,7 @@ test('mintDaemonPAT: 502 → 502 → 200 returns parsed result and calls fetch 3
       accessToken: 'jwt',
       sleep: noopSleep,
     });
-    assert.deepEqual(result, { token: 'rlnt_pat_after_retry', tokenId: 'tok_2' });
+    assert.deepEqual(result, { token: 'rlat_afterretry0000000000000000000000', tokenId: 'tok_2' });
   });
   assert.equal(calls.count, 3, 'fetch should be called 3 times across retries');
 });
@@ -770,7 +822,7 @@ test('mintDaemonPAT: 502 → network error → 200 returns parsed (3 calls)', as
     async () => {
       throw new Error('connect ECONNREFUSED 127.0.0.1:3001');
     },
-    jsonResponse(200, { token: 'rlnt_pat_recovered', tokenId: 'tok_3' }),
+    jsonResponse(200, { token: 'rlat_recovered00000000000000000000000', info: { id: 'tok_3' } }),
   ]);
   await withFetchStub(stub, async () => {
     const result = await mintDaemonPAT({
@@ -778,7 +830,7 @@ test('mintDaemonPAT: 502 → network error → 200 returns parsed (3 calls)', as
       accessToken: 'jwt',
       sleep: noopSleep,
     });
-    assert.deepEqual(result, { token: 'rlnt_pat_recovered', tokenId: 'tok_3' });
+    assert.deepEqual(result, { token: 'rlat_recovered00000000000000000000000', tokenId: 'tok_3' });
   });
   assert.equal(calls.count, 3);
 });
@@ -787,7 +839,7 @@ test('mintDaemonPAT: 401 throws on first attempt WITHOUT retrying', async () => 
   const { stub, calls } = makeSequenceFetch([
     jsonResponse(401, { error: 'unauthenticated' }),
     // Subsequent entries would be used if the retry path fires — fail loudly.
-    jsonResponse(200, { token: 'rlnt_pat_should_not_reach' }),
+    jsonResponse(200, { token: 'rlat_shouldnotreach000000000000000000' }),
   ]);
   await withFetchStub(stub, async () => {
     await assert.rejects(
@@ -805,9 +857,9 @@ test('mintDaemonPAT: 401 throws on first attempt WITHOUT retrying', async () => 
 
 test('mintDaemonPAT: 200 with missing token throws WITHOUT retrying', async () => {
   const { stub, calls } = makeSequenceFetch([
-    jsonResponse(200, { tokenId: 'tok_no_token_field' }), // no `token`
+    jsonResponse(200, { info: { id: 'tok_no_token_field' } }), // no `token`
     // Sentinel — should not be reached.
-    jsonResponse(200, { token: 'rlnt_pat_should_not_reach' }),
+    jsonResponse(200, { token: 'rlat_shouldnotreach000000000000000000' }),
   ]);
   await withFetchStub(stub, async () => {
     await assert.rejects(
@@ -904,7 +956,7 @@ test('ensureDaemonPATForOrigin: mints + writes when no existing entry', async ()
       }),
     };
     await withFetchStub(
-      async () => jsonResponse(200, { token: 'rlnt_pat_fresh', tokenId: 'tok_1' }),
+      async () => jsonResponse(200, { token: 'rlat_fresh000000000000000000000000000', info: { id: 'tok_1' } }),
       async () => {
         await ensureDaemonPATForOrigin({
           authStorage,
@@ -918,7 +970,7 @@ test('ensureDaemonPATForOrigin: mints + writes when no existing entry', async ()
     const store = JSON.parse(fs.readFileSync(file, 'utf8'));
     const entry = store.origins['https://reliantapi.com']['user-1'];
     assert.ok(entry, 'entry must exist under the (origin, account) key');
-    assert.equal(entry.pat, 'rlnt_pat_fresh');
+    assert.equal(entry.pat, 'rlat_fresh000000000000000000000000000');
     assert.equal(entry.server_url, 'https://reliantapi.com');
     assert.equal(entry.gateway_url, 'http://127.0.0.1:19190/reliant-dev');
     assert.equal(entry.sub, 'user-1');
@@ -940,7 +992,7 @@ test('ensureDaemonPATForOrigin: mints for the new user and LEAVES the other acco
     fs.mkdirSync(dir, { recursive: true });
     const file = path.join(dir, 'daemon.json');
     const oldEntry = {
-      pat: 'rlnt_pat_OLD_user',
+      pat: 'rlat_OLDuser0000000000000000000000000',
       server_url: 'https://reliantapi.com',
       gateway_url: '',
       sub: 'user-OLD',
@@ -965,7 +1017,7 @@ test('ensureDaemonPATForOrigin: mints for the new user and LEAVES the other acco
       }),
     };
     await withFetchStub(
-      async () => jsonResponse(200, { token: 'rlnt_pat_NEW_user' }),
+      async () => jsonResponse(200, { token: 'rlat_NEWuser0000000000000000000000000' }),
       async () => {
         await ensureDaemonPATForOrigin({
           authStorage,
@@ -976,7 +1028,7 @@ test('ensureDaemonPATForOrigin: mints for the new user and LEAVES the other acco
     );
     const after = JSON.parse(fs.readFileSync(file, 'utf8'));
     const entry = after.origins['https://reliantapi.com']['user-NEW'];
-    assert.equal(entry.pat, 'rlnt_pat_NEW_user', "must write the new user's PAT");
+    assert.equal(entry.pat, 'rlat_NEWuser0000000000000000000000000', "must write the new user's PAT");
     assert.equal(entry.sub, 'user-NEW');
 
     assert.deepEqual(
@@ -999,7 +1051,7 @@ test('ensureDaemonPATForOrigin: skips mint when existing entry sub matches curre
     fs.mkdirSync(dir, { recursive: true });
     const file = path.join(dir, 'daemon.json');
     const seedEntry = {
-      pat: 'rlnt_pat_CURRENT',
+      pat: 'rlat_CURRENT0000000000000000000000000',
       server_url: 'https://reliantapi.com',
       gateway_url: '',
       sub: 'user-1',
@@ -1249,7 +1301,7 @@ test('ensureDaemonPATForOrigin: expired session → refresh, persist, mint with 
         expires_in: 3600,
         user: { id: 'user-1' },
       }),
-      jsonResponse(200, { token: 'rlnt_pat_after_refresh' }),
+      jsonResponse(200, { token: 'rlat_afterrefresh00000000000000000000' }),
     ]);
     await withFetchStub(stub, () =>
       ensureDaemonPATForOrigin({
@@ -1275,7 +1327,7 @@ test('ensureDaemonPATForOrigin: expired session → refresh, persist, mint with 
     const store = JSON.parse(
       fs.readFileSync(path.join(home, '.reliant', 'daemon.json'), 'utf8')
     );
-    assert.equal(store.origins['https://reliantapi.com']['user-1'].pat, 'rlnt_pat_after_refresh');
+    assert.equal(store.origins['https://reliantapi.com']['user-1'].pat, 'rlat_afterrefresh00000000000000000000');
     assert.equal(store.origins['https://reliantapi.com']['user-1'].sub, 'user-1');
   });
 });
@@ -1289,7 +1341,7 @@ test('ensureDaemonPATForOrigin: fresh session → mints directly, NO refresh cal
       },
     };
     const { stub, calls } = makeSequenceFetch([
-      jsonResponse(200, { token: 'rlnt_pat_no_refresh' }),
+      jsonResponse(200, { token: 'rlat_norefresh00000000000000000000000' }),
     ]);
     await withFetchStub(stub, () =>
       ensureDaemonPATForOrigin({
@@ -1305,7 +1357,7 @@ test('ensureDaemonPATForOrigin: fresh session → mints directly, NO refresh cal
     const store = JSON.parse(
       fs.readFileSync(path.join(home, '.reliant', 'daemon.json'), 'utf8')
     );
-    assert.equal(store.origins['https://reliantapi.com']['user-1'].pat, 'rlnt_pat_no_refresh');
+    assert.equal(store.origins['https://reliantapi.com']['user-1'].pat, 'rlat_norefresh00000000000000000000000');
   });
 });
 
@@ -1327,7 +1379,7 @@ test('ensureDaemonPATForOrigin: fresh-looking token but mint 401s → refresh + 
         expires_in: 3600,
         user: { id: 'user-1' },
       }),
-      jsonResponse(200, { token: 'rlnt_pat_after_401_retry' }),
+      jsonResponse(200, { token: 'rlat_after401retry0000000000000000000' }),
     ]);
     await withFetchStub(stub, () =>
       ensureDaemonPATForOrigin({
@@ -1344,7 +1396,7 @@ test('ensureDaemonPATForOrigin: fresh-looking token but mint 401s → refresh + 
     const store = JSON.parse(
       fs.readFileSync(path.join(home, '.reliant', 'daemon.json'), 'utf8')
     );
-    assert.equal(store.origins['https://reliantapi.com']['user-1'].pat, 'rlnt_pat_after_401_retry');
+    assert.equal(store.origins['https://reliantapi.com']['user-1'].pat, 'rlat_after401retry0000000000000000000');
   });
 });
 
@@ -1354,7 +1406,7 @@ test('ensureDaemonPATForOrigin: 401 with NO refresh config → single attempt, s
     const { stub, calls } = makeSequenceFetch([
       jsonResponse(401, { code: 'unauthenticated' }),
       // Sentinel — a second call means an unwanted refresh/retry fired.
-      jsonResponse(200, { token: 'rlnt_pat_should_not_reach' }),
+      jsonResponse(200, { token: 'rlat_shouldnotreach000000000000000000' }),
     ]);
     await withFetchStub(stub, () =>
       ensureDaemonPATForOrigin({
@@ -1380,7 +1432,7 @@ test('ensureDaemonPATForOrigin: pre-mint refresh fails → falls back to stored 
       jsonResponse(500, { error: 'gotrue down' }), // refresh attempt
       jsonResponse(401, { code: 'unauthenticated' }), // mint with the stale token
       // Sentinel — a third call means the consumed refresh was retried.
-      jsonResponse(200, { token: 'rlnt_pat_should_not_reach' }),
+      jsonResponse(200, { token: 'rlat_shouldnotreach000000000000000000' }),
     ]);
     await withFetchStub(stub, () =>
       ensureDaemonPATForOrigin({
@@ -1416,7 +1468,7 @@ test('ensureDaemonPATForOrigin: saveAuth blowing up does not block the mint (nev
         expires_in: 3600,
         user: { id: 'user-1' },
       }),
-      jsonResponse(200, { token: 'rlnt_pat_despite_persist_failure' }),
+      jsonResponse(200, { token: 'rlat_despitepersistfailure00000000000' }),
     ]);
     await withFetchStub(stub, () =>
       ensureDaemonPATForOrigin({
@@ -1433,7 +1485,7 @@ test('ensureDaemonPATForOrigin: saveAuth blowing up does not block the mint (nev
     );
     assert.equal(
       store.origins['https://reliantapi.com']['user-1'].pat,
-      'rlnt_pat_despite_persist_failure'
+      'rlat_despitepersistfailure00000000000'
     );
   });
 });
@@ -1459,7 +1511,7 @@ test('ensureDaemonPATForOrigin outcome: minted, when it writes a fresh credentia
       loadStoredAuth: () => ({ access_token: 'jwt-abc', user: { id: 'user-1' } }),
     };
     const outcome = await withFetchStub(
-      async () => jsonResponse(200, { token: 'rlnt_pat_fresh', tokenId: 'tok_1' }),
+      async () => jsonResponse(200, { token: 'rlat_fresh000000000000000000000000000', info: { id: 'tok_1' } }),
       async () =>
         ensureDaemonPATForOrigin({
           authStorage,
@@ -1481,7 +1533,7 @@ test('ensureDaemonPATForOrigin outcome: already-current, and NO request is made'
     };
     // Seed a credential that already belongs to the signed-in user.
     await withFetchStub(
-      async () => jsonResponse(200, { token: 'rlnt_pat_seeded', tokenId: 'tok_0' }),
+      async () => jsonResponse(200, { token: 'rlat_seeded00000000000000000000000000', info: { id: 'tok_0' } }),
       async () =>
         ensureDaemonPATForOrigin({
           authStorage,

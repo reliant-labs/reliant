@@ -6,7 +6,7 @@ import {
   getDaemonStatusMessage,
   hasActiveDaemon,
 } from "@/services/controlPlane/daemon";
-import { DaemonStatus } from "@/gen/controlplane/v1/public/shared_pb";
+import { DaemonStatus } from "@/gen/controlplane/controlplane/v1/shared_pb";
 
 // `Daemon` is the proto-generated message type. Tests build partial daemons
 // by casting through `unknown` so we only have to spell out the fields under

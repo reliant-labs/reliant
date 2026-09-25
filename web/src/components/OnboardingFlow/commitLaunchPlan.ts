@@ -21,7 +21,7 @@
  * server-owned commit survives a closed tab. It is deliberately NOT what this
  * module is, for one verifiable reason — reliant's Go server has no
  * control-plane client at all (`internal/` imports nothing from
- * `controlplane/v1/public`). Every daemon RPC in the product is issued by the
+ * `gen/controlplane`). Every daemon RPC in the product is issued by the
  * browser directly against the control plane. A server-side commit therefore
  * means building an outbound control-plane client, a `commits` table, and a
  * `GetCommitStatus` polling RPC before a single line of the actual fix lands.

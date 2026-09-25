@@ -11,11 +11,11 @@
  * value.
  */
 
-import { DaemonService } from "@/gen/controlplane/v1/public/daemon_service_pb";
+import { DaemonService } from "@/gen/controlplane/services/daemon/v1/daemon_pb";
 import {
   type Daemon as ProtoDaemon,
   DaemonStatus,
-} from "@/gen/controlplane/v1/public/shared_pb";
+} from "@/gen/controlplane/controlplane/v1/shared_pb";
 import { getControlPlaneClient } from "./client";
 
 // Re-exports so call sites can `import { DAEMON_STATUS_ACTIVE } from

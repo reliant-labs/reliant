@@ -7,11 +7,13 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	fat "github.com/reliant-labs/forge/pkg/accesstoken"
 	"github.com/stretchr/testify/require"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/connectorgrant"
+	"github.com/reliant-labs/reliant/internal/tokenauthority"
 )
 
 // stubStore is an in-memory grant store. The SQL store has its own Postgres
@@ -41,8 +43,13 @@ func (s *stubStore) CreateGrant(_ context.Context, g *connectorgrant.Grant) erro
 	return nil
 }
 
-func (s *stubStore) GetGrantByTokenHash(context.Context, string) (*connectorgrant.Grant, error) {
-	return nil, connectorgrant.ErrNotFound
+func (s *stubStore) SetTokenPrefix(_ context.Context, id, prefix string) error {
+	for _, g := range s.created {
+		if g.ID == id {
+			g.TokenPrefix = prefix
+		}
+	}
+	return nil
 }
 
 func (s *stubStore) ListGrantsByUser(_ context.Context, userID string) ([]*connectorgrant.Grant, error) {
@@ -130,20 +137,25 @@ func validCreateRequest() *reliantv1.CreateConnectorRequest {
 
 func TestCreateConnectorReturnsCredentialOnce(t *testing.T) {
 	store := newStubStore()
-	svc := NewConnectorService(store, "https://api.example.com")
+	authority := tokenauthority.NewMemory()
+	svc := NewConnectorService(store, authority, "https://api.example.com")
 
 	res, err := svc.CreateConnector(connectorCtx("user-1"), connect.NewRequest(validCreateRequest()))
 	require.NoError(t, err)
 
-	require.True(t, connectorgrant.IsCredentialFormat(res.Msg.GetCredential()))
+	require.True(t, fat.HasFormat(res.Msg.GetCredential()), "connector credential must be an rlat_ access token")
 	require.Equal(t, "https://api.example.com/mcp", res.Msg.GetMcpUrl())
 
-	// Only the hash is persisted; the raw credential must never be stored.
+	// The grant row holds no credential; the credential lives in the token
+	// authority, bound to this grant, with mcp:connector only.
 	require.Len(t, store.created, 1)
 	stored := store.created[0]
-	require.NotEmpty(t, stored.TokenHash)
-	require.NotEqual(t, res.Msg.GetCredential(), stored.TokenHash)
-	require.Equal(t, connectorgrant.HashCredential(res.Msg.GetCredential()), stored.TokenHash)
+	p, err := authority.Introspect(context.Background(), res.Msg.GetCredential())
+	require.NoError(t, err)
+	require.Equal(t, "user-1", p.ActingUserID)
+	require.True(t, p.Scopes.Permits(fat.ScopeMCPConnector))
+	require.False(t, p.Scopes.Permits(fat.ScopeReliantAPI))
+	require.Equal(t, &fat.Resource{Kind: fat.ResourceConnector, ID: stored.ID}, p.Resource)
 
 	// The listed form carries the prefix but no credential material.
 	require.Equal(t, stored.TokenPrefix, res.Msg.GetConnector().GetTokenPrefix())
@@ -151,7 +163,7 @@ func TestCreateConnectorReturnsCredentialOnce(t *testing.T) {
 }
 
 func TestCreateConnectorRequiresAuth(t *testing.T) {
-	svc := NewConnectorService(newStubStore(), "")
+	svc := NewConnectorService(newStubStore(), tokenauthority.NewMemory(), "")
 
 	_, err := svc.CreateConnector(context.Background(), connect.NewRequest(validCreateRequest()))
 	require.Error(t, err)
@@ -232,7 +244,7 @@ func TestCreateConnectorValidation(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			store := newStubStore()
-			svc := NewConnectorService(store, "")
+			svc := NewConnectorService(store, tokenauthority.NewMemory(), "")
 
 			req := validCreateRequest()
 			tc.mutate(req)
@@ -247,7 +259,7 @@ func TestCreateConnectorValidation(t *testing.T) {
 
 func TestCreateConnectorAcceptsShellWithAllowlist(t *testing.T) {
 	store := newStubStore()
-	svc := NewConnectorService(store, "")
+	svc := NewConnectorService(store, tokenauthority.NewMemory(), "")
 
 	req := validCreateRequest()
 	req.AllowedTools = []string{"read_file", "run_command"}
@@ -267,7 +279,7 @@ func TestCreateConnectorAcceptsShellWithAllowlist(t *testing.T) {
 // allowlist that does not apply should not sit in the record implying it does.
 func TestCreateConnectorDropsAllowlistWhenUnused(t *testing.T) {
 	store := newStubStore()
-	svc := NewConnectorService(store, "")
+	svc := NewConnectorService(store, tokenauthority.NewMemory(), "")
 
 	req := validCreateRequest()
 	req.ExecMode = reliantv1.ConnectorExecMode_CONNECTOR_EXEC_MODE_DENY
@@ -280,7 +292,7 @@ func TestCreateConnectorDropsAllowlistWhenUnused(t *testing.T) {
 
 func TestUnspecifiedExecModeDeniesShell(t *testing.T) {
 	store := newStubStore()
-	svc := NewConnectorService(store, "")
+	svc := NewConnectorService(store, tokenauthority.NewMemory(), "")
 
 	req := validCreateRequest()
 	req.ExecMode = reliantv1.ConnectorExecMode_CONNECTOR_EXEC_MODE_UNSPECIFIED
@@ -294,7 +306,7 @@ func TestUnspecifiedExecModeDeniesShell(t *testing.T) {
 func TestRevokeConnectorIsScopedToCaller(t *testing.T) {
 	store := newStubStore()
 	store.revokeOK = true
-	svc := NewConnectorService(store, "")
+	svc := NewConnectorService(store, tokenauthority.NewMemory(), "")
 
 	res, err := svc.RevokeConnector(connectorCtx("user-1"),
 		connect.NewRequest(&reliantv1.RevokeConnectorRequest{Id: "grant-9"}))
@@ -307,8 +319,29 @@ func TestRevokeConnectorIsScopedToCaller(t *testing.T) {
 	require.Equal(t, "grant-9", store.revokedID)
 }
 
+// Revoking a connector kills its credential at the authority, not only the
+// grant row: no live token may outlive the policy it was minted for.
+func TestRevokeConnectorRevokesCredential(t *testing.T) {
+	store := newStubStore()
+	store.revokeOK = true
+	authority := tokenauthority.NewMemory()
+	svc := NewConnectorService(store, authority, "")
+
+	created, err := svc.CreateConnector(connectorCtx("user-1"), connect.NewRequest(validCreateRequest()))
+	require.NoError(t, err)
+	raw := created.Msg.GetCredential()
+	_, err = authority.Introspect(context.Background(), raw)
+	require.NoError(t, err)
+
+	_, err = svc.RevokeConnector(connectorCtx("user-1"),
+		connect.NewRequest(&reliantv1.RevokeConnectorRequest{Id: store.created[0].ID}))
+	require.NoError(t, err)
+	_, err = authority.Introspect(context.Background(), raw)
+	require.ErrorIs(t, err, tokenauthority.ErrInactive)
+}
+
 func TestRevokeConnectorRequiresID(t *testing.T) {
-	svc := NewConnectorService(newStubStore(), "")
+	svc := NewConnectorService(newStubStore(), tokenauthority.NewMemory(), "")
 
 	_, err := svc.RevokeConnector(connectorCtx("user-1"),
 		connect.NewRequest(&reliantv1.RevokeConnectorRequest{}))
@@ -318,7 +351,7 @@ func TestRevokeConnectorRequiresID(t *testing.T) {
 
 func TestListConnectorsExcludesCredentials(t *testing.T) {
 	store := newStubStore()
-	svc := NewConnectorService(store, "")
+	svc := NewConnectorService(store, tokenauthority.NewMemory(), "")
 
 	_, err := svc.CreateConnector(connectorCtx("user-1"), connect.NewRequest(validCreateRequest()))
 	require.NoError(t, err)
@@ -339,7 +372,7 @@ func TestListConnectorsExcludesCredentials(t *testing.T) {
 }
 
 func TestListAvailableToolsDescribesCatalog(t *testing.T) {
-	svc := NewConnectorService(newStubStore(), "")
+	svc := NewConnectorService(newStubStore(), tokenauthority.NewMemory(), "")
 
 	res, err := svc.ListAvailableTools(connectorCtx("user-1"),
 		connect.NewRequest(&reliantv1.ListAvailableToolsRequest{}))
@@ -360,7 +393,7 @@ func TestListAvailableToolsDescribesCatalog(t *testing.T) {
 // TestMCPURLWithoutPublicURL: a guessed hostname pasted into ChatGPT fails in
 // a way that is very hard to diagnose from a phone, so return the path alone.
 func TestMCPURLWithoutPublicURL(t *testing.T) {
-	svc := NewConnectorService(newStubStore(), "")
+	svc := NewConnectorService(newStubStore(), tokenauthority.NewMemory(), "")
 
 	res, err := svc.CreateConnector(connectorCtx("user-1"), connect.NewRequest(validCreateRequest()))
 	require.NoError(t, err)
@@ -368,7 +401,7 @@ func TestMCPURLWithoutPublicURL(t *testing.T) {
 }
 
 func TestMCPURLTrimsTrailingSlash(t *testing.T) {
-	svc := NewConnectorService(newStubStore(), "https://api.example.com/")
+	svc := NewConnectorService(newStubStore(), tokenauthority.NewMemory(), "https://api.example.com/")
 
 	res, err := svc.CreateConnector(connectorCtx("user-1"), connect.NewRequest(validCreateRequest()))
 	require.NoError(t, err)

@@ -23,7 +23,7 @@
  * buys, what it costs and what hardware it reserves — is decided here.
  */
 
-import type { Plan } from "@/gen/controlplane/v1/public/shared_pb";
+import type { Plan } from "@/gen/controlplane/controlplane/v1/shared_pb";
 import {
   derivePlanDisplay,
   formatSizeLabel,

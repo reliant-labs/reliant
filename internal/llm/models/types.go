@@ -726,8 +726,9 @@ type ResolvedModel struct {
 	Definition ModelDefinition
 	Provider   ProviderMapping
 
-	// ThinkingLevel is the thinking default carried by the TAG that selected
-	// this model, already clamped to the model's declared thinking_levels.
+	// ThinkingLevel is the thinking level implied by the TAG that selected
+	// this model — its thinking_level target and/or max_thinking_level
+	// ceiling — already reconciled to the model's declared thinking_levels.
 	// Empty when the selector named a model by ID, when no matching tag
 	// declares a default, or when the model cannot reason.
 	//
@@ -770,6 +771,8 @@ type ModelsConfig struct {
 	//	tag_defaults:
 	//	  powerful:
 	//	    thinking_level: xhigh
+	//	  moderate:
+	//	    max_thinking_level: high
 	//
 	// YAML key: tag_defaults
 	TagDefaults map[string]TagDefaults `yaml:"tag_defaults,omitempty" json:"tag_defaults,omitempty"`
@@ -793,6 +796,27 @@ type TagDefaults struct {
 	//
 	// YAML key: thinking_level
 	ThinkingLevel string `yaml:"thinking_level,omitempty" json:"thinking_level,omitempty" mapstructure:"thinking_level"`
+
+	// MaxThinkingLevel is a CEILING on the thinking effort a model selected
+	// via this tag runs at when the caller supplied none. It only ever
+	// lowers: a model whose own level (or this tag's ThinkingLevel) is already
+	// at or below it keeps that level. When the model declares nothing at or
+	// below the ceiling, its lowest level is used.
+	//
+	// This is what lets two tags resolve to the SAME model and still be
+	// different tiers: `moderate` and `flagship` both reach claude-5.5-opus,
+	// and moderate's ceiling is the only thing that separates them. A
+	// target-shaped ThinkingLevel could not say that without also dragging
+	// every low-effort model in the tier up to it.
+	//
+	// Like ThinkingLevel it is a default, so an explicit per-call
+	// thinking_level still wins over it.
+	//
+	// Must name a level in KnownThinkingLevels, and ThinkingLevel must not sit
+	// above it; parsing fails otherwise.
+	//
+	// YAML key: max_thinking_level
+	MaxThinkingLevel string `yaml:"max_thinking_level,omitempty" json:"max_thinking_level,omitempty" mapstructure:"max_thinking_level"`
 }
 
 // UserModelsConfig is the structure for user-defined model configuration.

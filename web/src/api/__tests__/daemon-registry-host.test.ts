@@ -26,10 +26,12 @@
  * test and no manual dev QA can catch a regression here; this test is the
  * guard.
  *
- * DaemonTokenService is deliberately NOT covered: admin-server FORWARDS those
- * three RPCs to reliant rather than reimplementing them, and both hosts were
- * verified to return byte-identical results. Its control-plane preference is
- * correct and must not be "fixed" alongside this.
+ * TokenService (reliant's ONE machine-credential surface) has the same
+ * constraint, more strictly: admin-server neither serves nor forwards
+ * `reliant.v1.TokenService` (control-plane's
+ * TestDaemonTokenService_IsNotServed pins that side), so routing it at the
+ * control-plane transport would 404 every mint/list/revoke in a packaged
+ * build — and, like the registry, stay invisible in dev.
  */
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
@@ -46,7 +48,7 @@ const source = readFileSync(resolve(process.cwd(), 'src/api/grpc-client.ts'), 'u
 
 const daemonRegistryFactory = (): string => {
   const start = source.indexOf('export const createDaemonRegistryClient')
-  const end = source.indexOf('export const createDaemonTokenClient')
+  const end = source.indexOf('export const createTokenClient')
   expect(start).toBeGreaterThan(-1)
   expect(end).toBeGreaterThan(start)
   return source.slice(start, end)
@@ -64,12 +66,14 @@ describe('DaemonRegistryService transport', () => {
     expect(daemonRegistryFactory()).toContain('getTransport()')
   })
 
-  it('leaves DaemonTokenService on control-plane, which forwards correctly', () => {
-    // admin-server FORWARDS these three RPCs to reliant rather than
-    // reimplementing them; both hosts were verified to return byte-identical
-    // results. Changing them alongside the registry fix would be a regression.
-    const start = source.indexOf('export const createDaemonTokenClient')
-    const tokenFactory = source.slice(start, start + 400)
-    expect(tokenFactory).toContain('getControlPlaneTransport')
+  it('routes TokenService to the reliant api-server, never control-plane', () => {
+    // Mutation this catches: restoring `getControlPlaneTransport() ??
+    // getTransport()` in createTokenClient.
+    const start = source.indexOf('export const createTokenClient')
+    expect(start).toBeGreaterThan(-1)
+    const end = source.indexOf('};', start)
+    const tokenFactory = source.slice(start, end)
+    expect(tokenFactory).not.toContain('getControlPlaneTransport')
+    expect(tokenFactory).toContain('getTransport()')
   })
 })

@@ -229,6 +229,15 @@ func buildRegistry(models []ModelDefinition, tagDefaults map[string]TagDefaults)
 			return nil, fmt.Errorf("tag_defaults[%q]: unknown thinking level %q (must be one of: %s)",
 				tag, defaults.ThinkingLevel, strings.Join(KnownThinkingLevels, ", "))
 		}
+		if defaults.MaxThinkingLevel != "" && !IsKnownThinkingLevel(defaults.MaxThinkingLevel) {
+			return nil, fmt.Errorf("tag_defaults[%q]: unknown max_thinking_level %q (must be one of: %s)",
+				tag, defaults.MaxThinkingLevel, strings.Join(KnownThinkingLevels, ", "))
+		}
+		if defaults.ThinkingLevel != "" && defaults.MaxThinkingLevel != "" &&
+			thinkingLevelRank(defaults.ThinkingLevel) > thinkingLevelRank(defaults.MaxThinkingLevel) {
+			return nil, fmt.Errorf("tag_defaults[%q]: thinking_level %q is above max_thinking_level %q",
+				tag, defaults.ThinkingLevel, defaults.MaxThinkingLevel)
+		}
 		if len(reg.byTag[tag]) == 0 {
 			return nil, fmt.Errorf("tag_defaults[%q]: no model carries this tag", tag)
 		}
@@ -244,8 +253,13 @@ func (r *ModelRegistry) TagDefaultsFor(tag string) (TagDefaults, bool) {
 	return defaults, ok
 }
 
-// tagThinkingDefaultFor picks the thinking default a TAG-based selection
-// contributes, and clamps it to what the resolved model can actually do.
+// tagThinkingDefaultFor picks the thinking level a TAG-based selection
+// implies, reconciled to what the resolved model can actually do.
+//
+// The winning tag's thinking_level is a target, clamped down to the model's
+// levels; without one, the model's own level stands. Its max_thinking_level
+// then caps whichever of those applies. So a ceiling-only tag leaves a model
+// that already runs below it untouched, and only ever lowers the rest.
 //
 // The winner among the selector's tags is the EARLIEST one that both (a) the
 // resolved model actually carries and (b) declares a thinking default. That
@@ -271,10 +285,19 @@ func (r *ModelRegistry) tagThinkingDefaultFor(model *ModelDefinition, selectorTa
 			continue
 		}
 		defaults, ok := r.tagDefaults[tag]
-		if !ok || defaults.ThinkingLevel == "" {
+		if !ok || (defaults.ThinkingLevel == "" && defaults.MaxThinkingLevel == "") {
 			continue
 		}
-		return ClampThinkingLevel(ResolveThinkingCapability(model.Capabilities), defaults.ThinkingLevel)
+
+		capability := ResolveThinkingCapability(model.Capabilities)
+		level := ReconcileThinkingLevel(capability, model.DefaultThinkingLevel)
+		if defaults.ThinkingLevel != "" {
+			level = ClampThinkingLevel(capability, defaults.ThinkingLevel)
+		}
+		if defaults.MaxThinkingLevel != "" {
+			level = CapThinkingLevel(capability, level, defaults.MaxThinkingLevel)
+		}
+		return level
 	}
 
 	return ""

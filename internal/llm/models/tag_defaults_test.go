@@ -2,6 +2,7 @@
 package models
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -212,6 +213,177 @@ models:
 	assert.Empty(t, resolved.ThinkingLevel)
 }
 
+// tagCeilingFixture exercises max_thinking_level, the ceiling-shaped tag
+// default. Each model sits behind its own provider, so one Resolve call reaches
+// exactly one of them.
+const tagCeilingFixture = `
+tag_defaults:
+  capped:
+    max_thinking_level: high
+models:
+  - id: fixture-defaults-above-ceiling
+    name: Fixture Defaults Above Ceiling
+    tags: [capped, reasoning]
+    capabilities:
+      can_reason: true
+      thinking_levels: [low, medium, high, xhigh]
+    default_thinking_level: xhigh
+    providers:
+      - driver: anthropic
+        api_model: fixture-defaults-above-ceiling
+
+  - id: fixture-defaults-below-ceiling
+    name: Fixture Defaults Below Ceiling
+    tags: [capped, reasoning]
+    capabilities:
+      can_reason: true
+      thinking_levels: [low, medium, high, xhigh]
+    default_thinking_level: low
+    providers:
+      - driver: openai
+        api_model: fixture-defaults-below-ceiling
+
+  - id: fixture-nothing-at-or-below-ceiling
+    name: Fixture Nothing At Or Below Ceiling
+    tags: [capped, reasoning]
+    capabilities:
+      can_reason: true
+      thinking_levels: [xhigh, max]
+    default_thinking_level: max
+    providers:
+      - driver: gemini
+        api_model: fixture-nothing-at-or-below-ceiling
+
+  - id: fixture-default-outside-levels
+    name: Fixture Default Outside Levels
+    tags: [capped, reasoning]
+    capabilities:
+      can_reason: true
+      thinking_levels: [low, medium, high]
+    default_thinking_level: xhigh
+    providers:
+      - driver: xai
+        api_model: fixture-default-outside-levels
+
+  - id: fixture-cannot-reason
+    name: Fixture Cannot Reason
+    tags: [capped]
+    capabilities:
+      can_reason: false
+    providers:
+      - driver: ollama
+        api_model: fixture-cannot-reason
+`
+
+// max_thinking_level is a CEILING, not a target. It lowers the effort a
+// tag-selected model would otherwise run at and never raises it: a model that
+// already runs below the ceiling keeps its own level. A target-shaped default
+// would lift every cheap model in the tier up to the ceiling.
+func TestResolve_TagCeilingOnlyEverLowersEffort(t *testing.T) {
+	reg, err := ParseRegistryFromBytes([]byte(tagCeilingFixture))
+	require.NoError(t, err)
+
+	tests := []struct {
+		name     string
+		provider string
+		wantID   string
+		wantLvl  string
+	}{
+		{"lowers a default above the ceiling", "anthropic", "fixture-defaults-above-ceiling", "high"},
+		{"keeps a default below the ceiling", "openai", "fixture-defaults-below-ceiling", "low"},
+		// Nothing this model declares fits under high, so its LOWEST level is
+		// the closest it can come — not its preferred default, which is max.
+		{"lands on the lowest level when none fit under the ceiling", "gemini", "fixture-nothing-at-or-below-ceiling", "xhigh"},
+		// xhigh is not among this model's levels, so it really runs at medium.
+		// The ceiling must compare against THAT, or it would lift medium to high.
+		{"measures the level the model actually runs at", "xai", "fixture-default-outside-levels", "medium"},
+		{"a model that cannot reason gets nothing", "ollama", "fixture-cannot-reason", ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resolved, err := reg.Resolve(ModelSelector{Tags: []string{"capped"}}, []string{tt.provider})
+			require.NoError(t, err)
+			require.Equal(t, tt.wantID, resolved.Definition.ID)
+			assert.Equal(t, tt.wantLvl, resolved.ThinkingLevel)
+		})
+	}
+
+	// Same rule as thinking_level: the ceiling describes how the model was
+	// chosen, so naming it by id leaves the model's own default in charge.
+	byID, err := reg.Resolve(ModelSelector{ID: "fixture-defaults-above-ceiling"}, []string{"anthropic"})
+	require.NoError(t, err)
+	assert.Empty(t, byID.ThinkingLevel)
+}
+
+// `moderate` is Opus 5.5 at a lower effort than `flagship`. On every provider
+// that serves it, both tags resolve to the same model; what separates the two
+// tiers is effort, and the tag is the only thing that carries it.
+func TestResolve_ModerateIsOpus55BelowFlagshipEffort(t *testing.T) {
+	reg := MustGetRegistry()
+
+	for _, provider := range []string{"anthropic", "openrouter", "reliant", "vertexai"} {
+		t.Run(provider, func(t *testing.T) {
+			moderate, err := reg.Resolve(ModelSelector{Tags: []string{TagModerate}}, []string{provider})
+			require.NoError(t, err)
+			flagship, err := reg.Resolve(ModelSelector{Tags: []string{TagFlagship}}, []string{provider})
+			require.NoError(t, err)
+
+			assert.Equal(t, "claude-5.5-opus", moderate.Definition.ID)
+			assert.Equal(t, flagship.Definition.ID, moderate.Definition.ID)
+			assert.Equal(t, provider, moderate.Provider.Driver)
+
+			// flagship declares no tag default, so it runs at the model's own
+			// xhigh; moderate's ceiling brings the same model down to high.
+			assert.Empty(t, flagship.ThinkingLevel)
+			assert.Equal(t, "xhigh", flagship.Definition.DefaultThinkingLevel)
+			assert.Equal(t, "high", moderate.ThinkingLevel)
+		})
+	}
+
+	// The Vertex duplicate must carry the same tags, or [moderate] would name a
+	// different model depending on which providers a user has configured.
+	opus, ok := reg.GetDefinition("claude-5.5-opus")
+	require.True(t, ok)
+	vertexOpus, ok := reg.GetDefinition("vertex-claude-5.5-opus")
+	require.True(t, ok)
+	assert.Equal(t, opus.Tags, vertexOpus.Tags)
+}
+
+// The moderate ceiling must never RAISE effort. For each provider on its own,
+// whatever a moderate selector resolves to has to run at or below both the
+// ceiling and the level that model would have used anyway. Several moderate
+// models default well under high — gemini-3.5-flash runs at low, and chat
+// titling reaches it through a [fast, moderate] ladder with a 256-token cap —
+// so a tag default written as a target instead of a ceiling would quietly make
+// them think harder and cost more.
+func TestResolve_ModerateCeilingNeverRaisesEffort(t *testing.T) {
+	reg := MustGetRegistry()
+	rank := func(level string) int { return slices.Index(KnownThinkingLevels, level) }
+
+	for _, provider := range allTestProviders {
+		for _, tags := range [][]string{{TagModerate}, {TagFast, TagModerate}} {
+			resolved, err := reg.Resolve(ModelSelector{Tags: tags, RequireOutputModality: ModalityText}, []string{provider})
+			if err != nil {
+				continue // this provider serves nothing the selector matches
+			}
+			if !contains(resolved.Definition.Tags, TagModerate) {
+				continue // the ladder settled on a fast model; moderate played no part
+			}
+
+			capability := ResolveThinkingCapability(resolved.Definition.Capabilities)
+			wouldHaveRun := ReconcileThinkingLevel(capability, resolved.Definition.DefaultThinkingLevel)
+
+			assert.LessOrEqualf(t, rank(resolved.ThinkingLevel), rank("high"),
+				"%v on %s resolved %s at %q, above the moderate ceiling",
+				tags, provider, resolved.Definition.ID, resolved.ThinkingLevel)
+			assert.LessOrEqualf(t, rank(resolved.ThinkingLevel), rank(wouldHaveRun),
+				"%v on %s raised %s from %q to %q",
+				tags, provider, resolved.Definition.ID, wouldHaveRun, resolved.ThinkingLevel)
+		}
+	}
+}
+
 // Parse-time validation. A tag default that names a nonexistent level, or a
 // tag nothing carries, does nothing at runtime and is indistinguishable from a
 // working config — so both fail the parse instead of warning.
@@ -248,6 +420,37 @@ models:
     providers: [{driver: anthropic, api_model: fixture-a}]
 `,
 			wantErr: "no model carries this tag",
+		},
+		{
+			name: "unknown max thinking level",
+			yaml: `
+tag_defaults:
+  alpha:
+    max_thinking_level: superhigh
+models:
+  - id: fixture-a
+    tags: [alpha]
+    capabilities: {can_reason: true, thinking_levels: [low, medium, high]}
+    providers: [{driver: anthropic, api_model: fixture-a}]
+`,
+			wantErr: `unknown max_thinking_level "superhigh"`,
+		},
+		{
+			// A target above its own ceiling contradicts itself; whichever one
+			// silently won, the other line would be a lie.
+			name: "thinking level above the max",
+			yaml: `
+tag_defaults:
+  alpha:
+    thinking_level: xhigh
+    max_thinking_level: high
+models:
+  - id: fixture-a
+    tags: [alpha]
+    capabilities: {can_reason: true, thinking_levels: [low, medium, high, xhigh]}
+    providers: [{driver: anthropic, api_model: fixture-a}]
+`,
+			wantErr: `thinking_level "xhigh" is above max_thinking_level "high"`,
 		},
 	}
 

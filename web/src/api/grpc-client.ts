@@ -23,7 +23,7 @@ import { AttachmentService } from "../gen/reliant/v1/attachment_pb";
 import { ToolCallService } from "../gen/reliant/v1/tool_call_pb";
 import { PresetService } from "../gen/reliant/v1/preset_pb";
 import { DaemonRegistryService } from "../gen/reliant/v1/daemon_registry_pb";
-import { DaemonTokenService } from "../gen/reliant/v1/daemon_token_pb";
+import { TokenService } from "../gen/reliant/v1/token_pb";
 import { QuestionService } from "../gen/reliant/v1/question_pb";
 import { ConnectorService } from "../gen/reliant/v1/connector_pb";
 import { AccountService } from "../gen/reliant/v1/account_pb";
@@ -126,17 +126,15 @@ const clearClientCache = () => {
 
 export const getGRPCBaseURLPublic = (): string | null => getGRPCBaseURL();
 
-// Daemon registry/token RPCs are owned by the control-plane admin-server in
-// cloud mode (it hosts the compat adapter that translates reliant.v1 →
-// controlplane.v1). When VITE_CONTROL_PLANE_API_URL is set, daemon-registry
-// clients use this transport so they see cloud-managed daemons; otherwise
-// they fall through to the regular reliant api-server transport (local /
-// self-hosted daemons).
+// The control-plane admin-server transport, for controlplane.v1 clients that
+// opt into it. When VITE_CONTROL_PLANE_API_URL is unset (or the renderer is
+// same-origin) it is null and callers fall through to the regular reliant
+// api-server transport.
 let _controlPlaneTransport: ReturnType<typeof createConnectTransport> | null = null;
 export const getControlPlaneTransport = () => {
   // Same-origin (Vite-proxy) path — see isSameOriginTransport. When the
   // renderer is served over http(s) (web-dev AND electron-dev), return null so
-  // DaemonRegistry/DaemonToken fall through to the same-origin getTransport().
+  // callers fall through to the same-origin getTransport().
   // Their RPCs are `reliant.v1.*` paths, so the Vite `/reliant.v1.*` proxy
   // forwards them to reliant-api (which serves DaemonRegistryService against the
   // shared dev DB) — first-party, ZERO CORS, no absolute admin-server port.
@@ -339,8 +337,14 @@ export const createDaemonRegistryClient = (): Client<typeof DaemonRegistryServic
   return createClient(DaemonRegistryService, getTransport());
 };
 
-export const createDaemonTokenClient = (): Client<typeof DaemonTokenService> => {
-  return createClient(DaemonTokenService, getControlPlaneTransport() ?? getTransport());
+// TokenService is reliant's ONE machine-credential surface (`rlat_` access
+// tokens). It is served ONLY by reliant's api-server, which fronts the
+// deployment's token authority (control-plane when hosted, its own store when
+// self-hosted). admin-server neither serves nor forwards `reliant.v1.*` token
+// RPCs any more, so routing this at the control-plane transport would 404 in
+// a packaged build — the same wrong-host trap as the registry above.
+export const createTokenClient = (): Client<typeof TokenService> => {
+  return createClient(TokenService, getTransport());
 };
 
 export const createQuestionClient = (): Client<typeof QuestionService> => {
@@ -379,7 +383,7 @@ let _toolCallClient: Client<typeof ToolCallService> | null = null;
 let _presetClient: Client<typeof PresetService> | null = null;
 let _scenarioClient: Client<typeof ScenarioService> | null = null;
 let _daemonRegistryClient: Client<typeof DaemonRegistryService> | null = null;
-let _daemonTokenClient: Client<typeof DaemonTokenService> | null = null;
+let _tokenClient: Client<typeof TokenService> | null = null;
 let _questionClient: Client<typeof QuestionService> | null = null;
 let _connectorClient: Client<typeof ConnectorService> | null = null;
 
@@ -553,11 +557,11 @@ export const getDaemonRegistryClient = (): Client<typeof DaemonRegistryService> 
   return _daemonRegistryClient;
 };
 
-export const getDaemonTokenClient = (): Client<typeof DaemonTokenService> => {
-  if (!_daemonTokenClient) {
-    _daemonTokenClient = createDaemonTokenClient();
+export const getTokenClient = (): Client<typeof TokenService> => {
+  if (!_tokenClient) {
+    _tokenClient = createTokenClient();
   }
-  return _daemonTokenClient;
+  return _tokenClient;
 };
 
 export const getConnectorClient = (): Client<typeof ConnectorService> => {
@@ -600,7 +604,7 @@ export const grpcClient = {
   preset: () => getPresetClient(),
   scenario: () => getScenarioClient(),
   daemonRegistry: () => getDaemonRegistryClient(),
-  daemonToken: () => getDaemonTokenClient(),
+  token: () => getTokenClient(),
   question: () => getQuestionClient(),
   connector: () => getConnectorClient(),
 };

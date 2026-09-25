@@ -61,10 +61,11 @@ func (a *EmitToolCallStatusActivity) Category() schema.ActivityCategory {
 
 func (a *EmitToolCallStatusActivity) Execute(ctx context.Context, input EmitToolCallStatusInput) (EmitToolCallStatusOutput, error) {
 	update := db.ToolCallUpdate{
-		ToolCallID: input.ToolCallID,
-		ToolName:   input.ToolName,
-		Status:     db.ToolCallStatus(input.Status),
-		Timestamp:  time.Now().Format(time.RFC3339),
+		ToolCallID:      input.ToolCallID,
+		ToolName:        input.ToolName,
+		Status:          db.ToolCallStatus(input.Status),
+		Timestamp:       time.Now().Format(time.RFC3339),
+		ChildWorkflowID: input.ChildWorkflowID,
 	}
 
 	// Persist before emitting so a durable row exists even if the event fails.

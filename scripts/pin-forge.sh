@@ -38,7 +38,6 @@ set -euo pipefail
 
 FORGE_REMOTE="https://github.com/reliant-labs/forge"
 FORGE_MOD="github.com/reliant-labs/forge"
-PKG_MOD="github.com/reliant-labs/forge/pkg"
 
 # GOPRIVATE is the whole performance story (see header). Set it here rather
 # than relying on the caller's environment so the script is fast on a fresh
@@ -54,7 +53,6 @@ cd "$(git rev-parse --show-toplevel)"
 require_line() { sed -n "s|^[[:space:]]*$1[[:space:]]\{1,\}\(v[^[:space:]]*\).*|\1|p" go.mod | head -1; }
 
 before_forge="$(require_line "$FORGE_MOD")"
-before_pkg="$(require_line "$PKG_MOD")"
 
 # ── Read the REMOTE, never a local checkout ──────────────────────────────
 # A sibling checkout on this machine is routinely on someone else's branch,
@@ -79,16 +77,17 @@ fi
 
 echo "==> pinning forge to ${source_desc} (${sha})"
 
-# ── Both modules, one `go get` ───────────────────────────────────────────
-# forge and forge/pkg are tagged from a SINGLE commit and are expected to be
-# the same source vintage. Pinning them separately compiles today and skews
-# the moment one moves without the other, which is a failure that surfaces as
-# an inscrutable type error in a consumer months later. One command, one sha.
-go get "${FORGE_MOD}@${sha}" "${PKG_MOD}@${sha}"
+# ── ONE module ───────────────────────────────────────────────────────────
+# forge folded pkg/ back into github.com/reliant-labs/forge. Import paths did
+# not change (a module at .../forge with a pkg/authn directory still serves
+# .../forge/pkg/authn), so only this require line moves. Pinning the retired
+# forge/pkg submodule as well made `go mod tidy` drop it and this script fail
+# its own verify with "not required in go.mod" — control-plane's
+# scripts/pin-sibling.sh made the same change for the same reason.
+go get "${FORGE_MOD}@${sha}"
 go mod tidy
 
 after_forge="$(require_line "$FORGE_MOD")"
-after_pkg="$(require_line "$PKG_MOD")"
 
 # ── Verify the pin SURVIVED tidy ─────────────────────────────────────────
 # This is not ceremony. A pseudo-version derives its numeric prefix from the
@@ -98,32 +97,25 @@ after_pkg="$(require_line "$PKG_MOD")"
 # higher tag, MVS silently restores it and the pin you asked for is not the
 # pin you got. Fail loudly instead of shipping the wrong forge.
 short="${sha:0:12}"
-for pair in "${FORGE_MOD}:${after_forge}" "${PKG_MOD}:${after_pkg}"; do
-  mod="${pair%%:*}"; got="${pair#*:}"
-  if [ -z "${got}" ]; then
-    echo "error: ${mod} is not required in go.mod after tidy" >&2
-    exit 1
-  fi
-  # Two acceptable outcomes. A commit pin records a pseudo-version CONTAINING
-  # the sha. An explicit TAG argument records the tag itself — we resolved it
-  # to a sha above only to have something concrete to report, and the tag
-  # never contains that sha, so it must be matched separately or the tag path
-  # (which still has to work after launch) false-fails.
-  if [ "${got}" = "${target}" ]; then continue; fi
-  case "${got}" in
+if [ -z "${after_forge}" ]; then
+  echo "error: ${FORGE_MOD} is not required in go.mod after tidy" >&2
+  exit 1
+fi
+# Two acceptable outcomes. A commit pin records a pseudo-version CONTAINING
+# the sha. An explicit TAG argument records the tag itself — we resolved it
+# to a sha above only to have something concrete to report, and the tag
+# never contains that sha, so it must be matched separately or the tag path
+# (which still has to work after launch) false-fails.
+if [ "${after_forge}" != "${target}" ]; then
+  case "${after_forge}" in
     *"${short}"*) : ;;
     *)
-      echo "error: ${mod} resolved to ${got}, which is neither the requested ref (${source_desc}) nor a pseudo-version containing ${short}." >&2
+      echo "error: ${FORGE_MOD} resolved to ${after_forge}, which is neither the requested ref (${source_desc}) nor a pseudo-version containing ${short}." >&2
       echo "       Minimum version selection kept a higher version from the module graph." >&2
       echo "       A pseudo-version can sort BELOW an existing release tag — see docs/pinning.md." >&2
       exit 1
       ;;
   esac
-done
-
-if [ "${after_forge}" != "${after_pkg}" ]; then
-  echo "error: forge (${after_forge}) and forge/pkg (${after_pkg}) disagree — they are tagged from one commit and must match" >&2
-  exit 1
 fi
 
 # ── Prove it against the CONSUMER's view ─────────────────────────────────
@@ -138,7 +130,6 @@ GOWORK=off go build ./...
 echo
 echo "pinned forge -> ${source_desc} (${sha})"
 printf '  %-40s %s -> %s\n' "${FORGE_MOD}" "${before_forge:-<absent>}" "${after_forge}"
-printf '  %-40s %s -> %s\n' "${PKG_MOD}" "${before_pkg:-<absent>}" "${after_pkg}"
 echo
 echo "Files changed: go.mod, go.sum. Review and commit them yourself —"
 echo "this script deliberately does not commit (see docs/pinning.md)."

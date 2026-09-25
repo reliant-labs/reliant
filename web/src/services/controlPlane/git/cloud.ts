@@ -1,7 +1,7 @@
 /**
  * Cloud implementation of the git service. Uses typed Connect-Web clients
  * against `controlplane.v1.GitCredentialService` (see
- * web/src/gen/controlplane/v1/public/git_credential_service_pb.ts).
+ * web/src/gen/controlplane/services/git_credential/v1/git_credential_pb.ts).
  *
  * Connect's protojson is camelCase-native — request fields use the generated
  * TS message shapes and snake_case duplicates are not sent.
@@ -11,7 +11,7 @@ import { timestampDate, type Timestamp } from "@bufbuild/protobuf/wkt";
 import { ConnectError } from "@connectrpc/connect";
 import { getControlPlaneClient } from "../client";
 import { CONTROL_PLANE_API_URL } from "../config";
-import { GitCredentialService } from "@/gen/controlplane/v1/public/git_credential_service_pb";
+import { GitCredentialService } from "@/gen/controlplane/services/git_credential/v1/git_credential_pb";
 import type {
   CloneRepoArgs,
   GitAccount,

@@ -181,7 +181,7 @@ jobs:
       - name: Install buf
         uses: bufbuild/buf-setup-action@v1
         with:
-          version: '1.50.0'
+          version: '1.57.0'
           github_token: ${{ secrets.GITHUB_TOKEN }}
           buf_api_token: ${{ secrets.BUF_API_KEY }}
 
@@ -244,7 +244,7 @@ jobs:
       - name: Install buf
         uses: bufbuild/buf-setup-action@v1
         with:
-          version: '1.50.0'
+          version: '1.57.0'
           github_token: ${{ secrets.GITHUB_TOKEN }}
           buf_api_token: ${{ secrets.BUF_API_KEY }}
 

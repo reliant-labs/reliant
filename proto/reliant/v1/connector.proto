@@ -139,7 +139,7 @@ message Connector {
   string daemon_id = 2;
   string name = 3;
 
-  // token_prefix is the visible leading fragment (e.g. "rlnt_conn_AbCdEfGh"),
+  // token_prefix is the visible leading fragment (e.g. "rlat_AbCdEfGh"),
   // enough to identify a credential without exposing it.
   string token_prefix = 4;
 

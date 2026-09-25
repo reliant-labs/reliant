@@ -23,11 +23,60 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// CreateTokenRequest is the CreateToken input.
+type TokenKind int32
+
+const (
+	TokenKind_TOKEN_KIND_UNSPECIFIED TokenKind = 0
+	TokenKind_TOKEN_KIND_DAEMON      TokenKind = 1
+	TokenKind_TOKEN_KIND_API         TokenKind = 2
+)
+
+// Enum value maps for TokenKind.
+var (
+	TokenKind_name = map[int32]string{
+		0: "TOKEN_KIND_UNSPECIFIED",
+		1: "TOKEN_KIND_DAEMON",
+		2: "TOKEN_KIND_API",
+	}
+	TokenKind_value = map[string]int32{
+		"TOKEN_KIND_UNSPECIFIED": 0,
+		"TOKEN_KIND_DAEMON":      1,
+		"TOKEN_KIND_API":         2,
+	}
+)
+
+func (x TokenKind) Enum() *TokenKind {
+	p := new(TokenKind)
+	*p = x
+	return p
+}
+
+func (x TokenKind) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (TokenKind) Descriptor() protoreflect.EnumDescriptor {
+	return file_reliant_v1_token_proto_enumTypes[0].Descriptor()
+}
+
+func (TokenKind) Type() protoreflect.EnumType {
+	return &file_reliant_v1_token_proto_enumTypes[0]
+}
+
+func (x TokenKind) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use TokenKind.Descriptor instead.
+func (TokenKind) EnumDescriptor() ([]byte, []int) {
+	return file_reliant_v1_token_proto_rawDescGZIP(), []int{0}
+}
+
 type CreateTokenRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`                                // Human-readable token name (required, must be unique among the caller's active tokens)
-	TtlSeconds    int64                  `protobuf:"varint,2,opt,name=ttl_seconds,json=ttlSeconds,proto3" json:"ttl_seconds,omitempty"` // Lifetime in seconds; 0 (or absent) means the token never expires
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`                                // Human-readable label (required)
+	TtlSeconds    int64                  `protobuf:"varint,2,opt,name=ttl_seconds,json=ttlSeconds,proto3" json:"ttl_seconds,omitempty"` // Lifetime in seconds; 0 means the token never expires
+	Kind          TokenKind              `protobuf:"varint,3,opt,name=kind,proto3,enum=reliant.v1.TokenKind" json:"kind,omitempty"`     // Required
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -76,17 +125,26 @@ func (x *CreateTokenRequest) GetTtlSeconds() int64 {
 	return 0
 }
 
-// TokenInfo is the metadata view of an api-kind token. It never carries the
-// raw secret or the stored hash. Timestamps are RFC 3339; empty means unset.
+func (x *CreateTokenRequest) GetKind() TokenKind {
+	if x != nil {
+		return x.Kind
+	}
+	return TokenKind_TOKEN_KIND_UNSPECIFIED
+}
+
+// TokenInfo is a token's metadata. It never carries the secret or its hash.
+// Timestamps are RFC 3339; empty means unset.
 type TokenInfo struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
-	TokenPrefix   string                 `protobuf:"bytes,3,opt,name=token_prefix,json=tokenPrefix,proto3" json:"token_prefix,omitempty"` // First chars for display (e.g. "rlnt_pat_AbCd...")
+	TokenPrefix   string                 `protobuf:"bytes,3,opt,name=token_prefix,json=tokenPrefix,proto3" json:"token_prefix,omitempty"` // Display identifier, e.g. "rlat_A3f9Kd2p"
 	CreatedAt     string                 `protobuf:"bytes,4,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	LastUsedAt    string                 `protobuf:"bytes,5,opt,name=last_used_at,json=lastUsedAt,proto3" json:"last_used_at,omitempty"` // empty if never used
-	ExpiresAt     string                 `protobuf:"bytes,6,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`      // empty if no expiry
-	RevokedAt     string                 `protobuf:"bytes,7,opt,name=revoked_at,json=revokedAt,proto3" json:"revoked_at,omitempty"`      // empty if active
+	LastUsedAt    string                 `protobuf:"bytes,5,opt,name=last_used_at,json=lastUsedAt,proto3" json:"last_used_at,omitempty"`
+	ExpiresAt     string                 `protobuf:"bytes,6,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
+	Ephemeral     bool                   `protobuf:"varint,8,opt,name=ephemeral,proto3" json:"ephemeral,omitempty"`
+	DaemonId      string                 `protobuf:"bytes,9,opt,name=daemon_id,json=daemonId,proto3" json:"daemon_id,omitempty"` // Set when the token is bound to one daemon
+	Kind          TokenKind              `protobuf:"varint,10,opt,name=kind,proto3,enum=reliant.v1.TokenKind" json:"kind,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -163,19 +221,31 @@ func (x *TokenInfo) GetExpiresAt() string {
 	return ""
 }
 
-func (x *TokenInfo) GetRevokedAt() string {
+func (x *TokenInfo) GetEphemeral() bool {
 	if x != nil {
-		return x.RevokedAt
+		return x.Ephemeral
+	}
+	return false
+}
+
+func (x *TokenInfo) GetDaemonId() string {
+	if x != nil {
+		return x.DaemonId
 	}
 	return ""
 }
 
-// CreateTokenResponse carries the new token's metadata plus the raw secret,
-// which is returned exactly once.
+func (x *TokenInfo) GetKind() TokenKind {
+	if x != nil {
+		return x.Kind
+	}
+	return TokenKind_TOKEN_KIND_UNSPECIFIED
+}
+
 type CreateTokenResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Info          *TokenInfo             `protobuf:"bytes,1,opt,name=info,proto3" json:"info,omitempty"`
-	Token         string                 `protobuf:"bytes,2,opt,name=token,proto3" json:"token,omitempty"` // Raw PAT — display once, cannot be retrieved again
+	Token         string                 `protobuf:"bytes,2,opt,name=token,proto3" json:"token,omitempty"` // Raw rlat_ token — shown once, never retrievable again
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -226,6 +296,7 @@ func (x *CreateTokenResponse) GetToken() string {
 
 type ListTokensRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
+	Kind          TokenKind              `protobuf:"varint,1,opt,name=kind,proto3,enum=reliant.v1.TokenKind" json:"kind,omitempty"` // UNSPECIFIED lists every kind
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -258,6 +329,13 @@ func (x *ListTokensRequest) ProtoReflect() protoreflect.Message {
 // Deprecated: Use ListTokensRequest.ProtoReflect.Descriptor instead.
 func (*ListTokensRequest) Descriptor() ([]byte, []int) {
 	return file_reliant_v1_token_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *ListTokensRequest) GetKind() TokenKind {
+	if x != nil {
+		return x.Kind
+	}
+	return TokenKind_TOKEN_KIND_UNSPECIFIED
 }
 
 type ListTokensResponse struct {
@@ -306,7 +384,7 @@ func (x *ListTokensResponse) GetTokens() []*TokenInfo {
 
 type RevokeTokenRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"` // ID of the token to revoke
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -389,11 +467,12 @@ var File_reliant_v1_token_proto protoreflect.FileDescriptor
 const file_reliant_v1_token_proto_rawDesc = "" +
 	"\n" +
 	"\x16reliant/v1/token.proto\x12\n" +
-	"reliant.v1\"I\n" +
+	"reliant.v1\"t\n" +
 	"\x12CreateTokenRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1f\n" +
 	"\vttl_seconds\x18\x02 \x01(\x03R\n" +
-	"ttlSeconds\"\xd1\x01\n" +
+	"ttlSeconds\x12)\n" +
+	"\x04kind\x18\x03 \x01(\x0e2\x15.reliant.v1.TokenKindR\x04kind\"\xaa\x02\n" +
 	"\tTokenInfo\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12!\n" +
@@ -403,18 +482,26 @@ const file_reliant_v1_token_proto_rawDesc = "" +
 	"\flast_used_at\x18\x05 \x01(\tR\n" +
 	"lastUsedAt\x12\x1d\n" +
 	"\n" +
-	"expires_at\x18\x06 \x01(\tR\texpiresAt\x12\x1d\n" +
-	"\n" +
-	"revoked_at\x18\a \x01(\tR\trevokedAt\"V\n" +
+	"expires_at\x18\x06 \x01(\tR\texpiresAt\x12\x1c\n" +
+	"\tephemeral\x18\b \x01(\bR\tephemeral\x12\x1b\n" +
+	"\tdaemon_id\x18\t \x01(\tR\bdaemonId\x12)\n" +
+	"\x04kind\x18\n" +
+	" \x01(\x0e2\x15.reliant.v1.TokenKindR\x04kindJ\x04\b\a\x10\bR\n" +
+	"revoked_at\"V\n" +
 	"\x13CreateTokenResponse\x12)\n" +
 	"\x04info\x18\x01 \x01(\v2\x15.reliant.v1.TokenInfoR\x04info\x12\x14\n" +
-	"\x05token\x18\x02 \x01(\tR\x05token\"\x13\n" +
-	"\x11ListTokensRequest\"C\n" +
+	"\x05token\x18\x02 \x01(\tR\x05token\">\n" +
+	"\x11ListTokensRequest\x12)\n" +
+	"\x04kind\x18\x01 \x01(\x0e2\x15.reliant.v1.TokenKindR\x04kind\"C\n" +
 	"\x12ListTokensResponse\x12-\n" +
 	"\x06tokens\x18\x01 \x03(\v2\x15.reliant.v1.TokenInfoR\x06tokens\"$\n" +
 	"\x12RevokeTokenRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\"\x15\n" +
-	"\x13RevokeTokenResponse2\x81\x02\n" +
+	"\x13RevokeTokenResponse*R\n" +
+	"\tTokenKind\x12\x1a\n" +
+	"\x16TOKEN_KIND_UNSPECIFIED\x10\x00\x12\x15\n" +
+	"\x11TOKEN_KIND_DAEMON\x10\x01\x12\x12\n" +
+	"\x0eTOKEN_KIND_API\x10\x022\x81\x02\n" +
 	"\fTokenService\x12P\n" +
 	"\vCreateToken\x12\x1e.reliant.v1.CreateTokenRequest\x1a\x1f.reliant.v1.CreateTokenResponse\"\x00\x12M\n" +
 	"\n" +
@@ -433,30 +520,35 @@ func file_reliant_v1_token_proto_rawDescGZIP() []byte {
 	return file_reliant_v1_token_proto_rawDescData
 }
 
+var file_reliant_v1_token_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
 var file_reliant_v1_token_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
 var file_reliant_v1_token_proto_goTypes = []any{
-	(*CreateTokenRequest)(nil),  // 0: reliant.v1.CreateTokenRequest
-	(*TokenInfo)(nil),           // 1: reliant.v1.TokenInfo
-	(*CreateTokenResponse)(nil), // 2: reliant.v1.CreateTokenResponse
-	(*ListTokensRequest)(nil),   // 3: reliant.v1.ListTokensRequest
-	(*ListTokensResponse)(nil),  // 4: reliant.v1.ListTokensResponse
-	(*RevokeTokenRequest)(nil),  // 5: reliant.v1.RevokeTokenRequest
-	(*RevokeTokenResponse)(nil), // 6: reliant.v1.RevokeTokenResponse
+	(TokenKind)(0),              // 0: reliant.v1.TokenKind
+	(*CreateTokenRequest)(nil),  // 1: reliant.v1.CreateTokenRequest
+	(*TokenInfo)(nil),           // 2: reliant.v1.TokenInfo
+	(*CreateTokenResponse)(nil), // 3: reliant.v1.CreateTokenResponse
+	(*ListTokensRequest)(nil),   // 4: reliant.v1.ListTokensRequest
+	(*ListTokensResponse)(nil),  // 5: reliant.v1.ListTokensResponse
+	(*RevokeTokenRequest)(nil),  // 6: reliant.v1.RevokeTokenRequest
+	(*RevokeTokenResponse)(nil), // 7: reliant.v1.RevokeTokenResponse
 }
 var file_reliant_v1_token_proto_depIdxs = []int32{
-	1, // 0: reliant.v1.CreateTokenResponse.info:type_name -> reliant.v1.TokenInfo
-	1, // 1: reliant.v1.ListTokensResponse.tokens:type_name -> reliant.v1.TokenInfo
-	0, // 2: reliant.v1.TokenService.CreateToken:input_type -> reliant.v1.CreateTokenRequest
-	3, // 3: reliant.v1.TokenService.ListTokens:input_type -> reliant.v1.ListTokensRequest
-	5, // 4: reliant.v1.TokenService.RevokeToken:input_type -> reliant.v1.RevokeTokenRequest
-	2, // 5: reliant.v1.TokenService.CreateToken:output_type -> reliant.v1.CreateTokenResponse
-	4, // 6: reliant.v1.TokenService.ListTokens:output_type -> reliant.v1.ListTokensResponse
-	6, // 7: reliant.v1.TokenService.RevokeToken:output_type -> reliant.v1.RevokeTokenResponse
-	5, // [5:8] is the sub-list for method output_type
-	2, // [2:5] is the sub-list for method input_type
-	2, // [2:2] is the sub-list for extension type_name
-	2, // [2:2] is the sub-list for extension extendee
-	0, // [0:2] is the sub-list for field type_name
+	0, // 0: reliant.v1.CreateTokenRequest.kind:type_name -> reliant.v1.TokenKind
+	0, // 1: reliant.v1.TokenInfo.kind:type_name -> reliant.v1.TokenKind
+	2, // 2: reliant.v1.CreateTokenResponse.info:type_name -> reliant.v1.TokenInfo
+	0, // 3: reliant.v1.ListTokensRequest.kind:type_name -> reliant.v1.TokenKind
+	2, // 4: reliant.v1.ListTokensResponse.tokens:type_name -> reliant.v1.TokenInfo
+	1, // 5: reliant.v1.TokenService.CreateToken:input_type -> reliant.v1.CreateTokenRequest
+	4, // 6: reliant.v1.TokenService.ListTokens:input_type -> reliant.v1.ListTokensRequest
+	6, // 7: reliant.v1.TokenService.RevokeToken:input_type -> reliant.v1.RevokeTokenRequest
+	3, // 8: reliant.v1.TokenService.CreateToken:output_type -> reliant.v1.CreateTokenResponse
+	5, // 9: reliant.v1.TokenService.ListTokens:output_type -> reliant.v1.ListTokensResponse
+	7, // 10: reliant.v1.TokenService.RevokeToken:output_type -> reliant.v1.RevokeTokenResponse
+	8, // [8:11] is the sub-list for method output_type
+	5, // [5:8] is the sub-list for method input_type
+	5, // [5:5] is the sub-list for extension type_name
+	5, // [5:5] is the sub-list for extension extendee
+	0, // [0:5] is the sub-list for field type_name
 }
 
 func init() { file_reliant_v1_token_proto_init() }
@@ -469,13 +561,14 @@ func file_reliant_v1_token_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_reliant_v1_token_proto_rawDesc), len(file_reliant_v1_token_proto_rawDesc)),
-			NumEnums:      0,
+			NumEnums:      1,
 			NumMessages:   7,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
 		GoTypes:           file_reliant_v1_token_proto_goTypes,
 		DependencyIndexes: file_reliant_v1_token_proto_depIdxs,
+		EnumInfos:         file_reliant_v1_token_proto_enumTypes,
 		MessageInfos:      file_reliant_v1_token_proto_msgTypes,
 	}.Build()
 	File_reliant_v1_token_proto = out.File

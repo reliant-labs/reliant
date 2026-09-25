@@ -15,7 +15,6 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
-	"github.com/reliant-labs/reliant/internal/cliconfig"
 )
 
 // fakeChatService implements the two ChatService RPCs the follower uses.
@@ -66,13 +65,12 @@ func (f *fakeChatService) GetWorkflowExecutions(_ context.Context, _ *connect.Re
 }
 
 // TestWorkflowFollowEndToEnd drives the real cobra command against a fake
-// ChatService: context resolution from the config file (via HOME), Connect
-// transport with the context's rlnt_pat_ bearer, NDJSON emission, and success
+// ChatService: credential resolution from the shared credentials file, Connect
+// transport with the context's rlat_ bearer, NDJSON emission, and success
 // exit (RunE returns nil, no os.Exit on the success path).
 func TestWorkflowFollowEndToEnd(t *testing.T) {
-	// Isolate the CLI config in a temp HOME.
-	tmpHome := t.TempDir()
-	t.Setenv("HOME", tmpHome)
+	// Isolate HOME and the shared credentials file.
+	isolateCLI(t)
 
 	fake := &fakeChatService{rootState: reliantv1.WorkflowState_WORKFLOW_STATE_STOPPED, rootReason: reliantv1.WorkflowStopReason_WORKFLOW_STOP_REASON_COMPLETED}
 	fake.updates = []*reliantv1.ChatUpdate{
@@ -108,39 +106,24 @@ func TestWorkflowFollowEndToEnd(t *testing.T) {
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
-	// Configure a context pointing at the fake server with an rlnt_pat_ token.
-	cfgPath, err := cliconfig.DefaultPath()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.HasPrefix(cfgPath, tmpHome) {
-		t.Fatalf("config path %q escaped temp HOME %q — aborting to protect the real config", cfgPath, tmpHome)
-	}
-	err = cliconfig.SaveTo(cfgPath, &cliconfig.Config{
-		CurrentContext: "test",
-		Contexts: map[string]*cliconfig.Context{
-			"test": {Server: srv.URL, Token: "rlnt_pat_e2e000000000000000000000000000"},
-		},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	// Log in to the fake server with an rlat_ token.
+	loginFor(t, srv.URL, "rlat_e2e00000000000000000000000000000")
 
 	var stdout, stderr bytes.Buffer
 	root := NewRootCmd()
 	root.SetOut(&stdout)
 	root.SetErr(&stderr)
-	root.SetArgs([]string{"workflow", "follow", "chat-9", "--interval", "10ms"})
+	root.SetArgs([]string{"workflow", "follow", "chat-9", "--interval", "10ms", "--server", srv.URL})
 
 	if err := root.Execute(); err != nil {
 		t.Fatalf("follow failed: %v (stderr: %s)", err, stderr.String())
 	}
 
-	// The context's rlnt_pat_ token must have been sent as the bearer.
+	// The stored rlat_ token must have been sent as the bearer.
 	fake.mu.Lock()
 	bearer := fake.sawBearer
 	fake.mu.Unlock()
-	if bearer != "Bearer rlnt_pat_e2e000000000000000000000000000" {
+	if bearer != "Bearer rlat_e2e00000000000000000000000000000" {
 		t.Errorf("server saw Authorization %q, want the context token", bearer)
 	}
 

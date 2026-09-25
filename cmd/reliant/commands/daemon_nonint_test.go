@@ -13,6 +13,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/cliauth"
 	"github.com/reliant-labs/reliant/internal/toolexec/daemonstate"
 )
 
@@ -29,10 +30,9 @@ func withTempReliantHome(t *testing.T) {
 }
 
 // TestRegisterDaemonNonInteractiveNeverOpensBrowser is the reproduction for
-// the daemon side of the prod bug: with no auth session on disk and
-// nonInteractive=true, registerDaemon must return
-// auth.ErrNonInteractiveLoginRequired instead of falling into auth.Login's
-// interactive flow, which would open a browser and start a local HTTP server.
+// the daemon side of the prod bug: with nonInteractive=true, registerDaemon
+// must return cliauth.ErrInteractiveRequired instead of starting the browser
+// login, which would open a browser and a local HTTP listener.
 func TestRegisterDaemonNonInteractiveNeverOpensBrowser(t *testing.T) {
 	withTempReliantHome(t)
 
@@ -42,10 +42,10 @@ func TestRegisterDaemonNonInteractiveNeverOpensBrowser(t *testing.T) {
 
 	err := registerDaemon(context.Background(), cmd, conn, "", true)
 	if err == nil {
-		t.Fatal("registerDaemon(nonInteractive=true) returned nil error, want ErrNonInteractiveLoginRequired wrapped")
+		t.Fatal("registerDaemon(nonInteractive=true) returned nil error, want ErrInteractiveRequired wrapped")
 	}
-	if !errors.Is(err, auth.ErrNonInteractiveLoginRequired) {
-		t.Fatalf("registerDaemon(nonInteractive=true) error = %v, want it to wrap ErrNonInteractiveLoginRequired", err)
+	if !errors.Is(err, cliauth.ErrInteractiveRequired) {
+		t.Fatalf("registerDaemon(nonInteractive=true) error = %v, want it to wrap ErrInteractiveRequired", err)
 	}
 }
 
@@ -57,7 +57,6 @@ func TestRegisterDaemonNonInteractiveNeverOpensBrowser(t *testing.T) {
 // ~/.reliant/daemon.json), at which point it returns that credential.
 func TestResolveOrAwaitCredentials_IdlesAndPicksUpCredentials(t *testing.T) {
 	withTempReliantHome(t)
-	t.Setenv("RELIANT_AUTH_URL", "") // ensure ReadAccessTokenFromAuthFile sees no session
 
 	oldInterval := daemonCredentialPollInterval
 	daemonCredentialPollInterval = 20 * time.Millisecond

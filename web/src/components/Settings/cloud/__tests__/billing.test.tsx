@@ -116,7 +116,7 @@ vi.mock('@/hooks/useCloudBillingQueries', () => ({
   useUpdateBillingEmail: () => mutation(),
 }))
 
-import { RedeemedCouponKind } from '@/gen/controlplane/v1/public/billing_service_pb'
+import { RedeemedCouponKind } from '@/gen/controlplane/services/billing/v1/billing_pb';
 import { BillingSection } from '@/components/Settings/cloud/billing'
 
 function renderSection() {

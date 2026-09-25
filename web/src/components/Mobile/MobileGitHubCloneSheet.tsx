@@ -23,7 +23,7 @@
 
 import { useState } from "react";
 import { AlertTriangle, Loader2, Server, X } from "lucide-react";
-import { DaemonStatus } from "@/gen/controlplane/v1/public/shared_pb";
+import { DaemonStatus } from "@/gen/controlplane/controlplane/v1/shared_pb";
 import type { Daemon } from "@/services/controlPlane/daemon";
 import type { GitRepo } from "@/services/controlPlane/git/types";
 import { gitService } from "@/services/controlPlane/git";

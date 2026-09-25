@@ -22,7 +22,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { timestampDate } from "@bufbuild/protobuf/wkt";
 import { useDaemonList } from "@/hooks/useOnboardingQueries";
 import { useDaemonStatus } from "@/hooks/useDaemonStatus";
-import { DaemonSize } from "@/gen/controlplane/v1/public/shared_pb";
+import { DaemonSize } from "@/gen/controlplane/controlplane/v1/shared_pb";
 import type { Daemon } from "@/services/controlPlane/daemon";
 
 const DISMISS_KEY = "reliant.oomKillBanner.dismissed";
@@ -37,10 +37,10 @@ const RECENT_WINDOW_MS = 30 * 60 * 1000;
 const POLL_INTERVAL_MS = 60_000;
 
 const SIZE_NAMES: Record<number, string> = {
-  [DaemonSize.SMALL]: "small",
-  [DaemonSize.MEDIUM]: "medium",
-  [DaemonSize.LARGE]: "large",
-  [DaemonSize.XL]: "xl",
+  [DaemonSize.DAEMON_SIZE_SMALL]: "small",
+  [DaemonSize.DAEMON_SIZE_MEDIUM]: "medium",
+  [DaemonSize.DAEMON_SIZE_LARGE]: "large",
+  [DaemonSize.DAEMON_SIZE_XL]: "xl",
 };
 
 function readDismissed(): string {

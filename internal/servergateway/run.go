@@ -9,6 +9,7 @@ package servergateway
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -34,7 +35,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/natsutil"
 	"github.com/reliant-labs/reliant/internal/observability"
-	"github.com/reliant-labs/reliant/internal/patauth"
+	"github.com/reliant-labs/reliant/internal/tokenauthority"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 )
 
@@ -155,9 +156,19 @@ func Run(ctx context.Context, opts Options) error {
 	}()
 	logging.Info("Database initialized", "driver", opts.DatabaseDriver)
 
-	// PAT validator for daemon authentication
-	patValidator := patauth.NewDBPATValidator(repo)
-	logging.Info("PAT-based daemon authentication initialized")
+	// Daemon credentials are `rlat_` access tokens, resolved by the ONE token
+	// authority — control-plane's Introspect when hosted, reliant's own store
+	// when self-hosted. Checked once per connect, UNCACHED: a revoked daemon
+	// credential is refused on its next connect.
+	var sqlDB *sql.DB
+	if repo.DB != nil {
+		sqlDB = repo.DB.SQLDB()
+	}
+	tokenAuthority, authorityMode, err := tokenauthority.New(tokenauthority.DepsFromEnv(sqlDB))
+	if err != nil {
+		return fmt.Errorf("daemon credential authority: %w", err)
+	}
+	logging.Info("daemon credential authentication initialized", "authority", authorityMode)
 
 	// NATS connection
 	nc, err := natsutil.Connect(opts.NATSURL)
@@ -308,7 +319,7 @@ func Run(ctx context.Context, opts Options) error {
 		BindAddress:        opts.BindAddress,
 		ToolsDaemonService: toolsDaemonService,
 		ToolExecutor:       remoteExecutor,
-		PATValidator:       patValidator,
+		DaemonTokens:       tokenAuthority,
 		TLSCertFile:        tlsCertFile,
 		TLSKeyFile:         tlsKeyFile,
 	})

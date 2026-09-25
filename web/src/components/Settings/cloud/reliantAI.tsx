@@ -61,7 +61,7 @@ import {
   useRevokeLLMKey,
   useRotateLLMKey,
 } from "../../../hooks/useReliantAIQueries";
-import { LLMKeyStatus } from "../../../gen/controlplane/v1/public/shared_pb";
+import { LLMKeyStatus } from "../../../gen/controlplane/controlplane/v1/shared_pb";
 
 // ---------------------------------------------------------------------------
 // Formatting helpers (self-contained — reliant-web has no lib/billing).

@@ -40,6 +40,7 @@
  * a verified pass.
  */
 
+import { workloadRows, type ForgeHostedWorkload } from "./topology";
 import type { ForgeClusterInventory } from "./workloads";
 
 // ── Check status and disposition ────────────────────────────────────────────
@@ -187,6 +188,28 @@ export interface ForgeServiceRow {
 
 export interface ForgeEnvStatusReport {
   env?: string;
+  /**
+   * Where this env's workloads run — the same additive fields and vocabulary
+   * as the topology env row (see topology.ts destinationOf). Absent from an
+   * older forge; an absent or unrecognised destination is `unknown`, never
+   * `cluster`.
+   */
+  destination?: string;
+  /** Hosted only: the control plane's normalized base URL. */
+  endpoint?: string;
+  /** Hosted only: the control plane's id for this env. Empty until ensured; never fabricated. */
+  environment_id?: string;
+  /** Hosted only: the env-level control-plane verdict (unknown | converging | converged | diverged | degraded). */
+  verdict?: string;
+  /**
+   * Hosted only: one row per deployed workload, observed through the control
+   * plane. The SAME object topology reports as `workloads[]` — forge had to
+   * name it `hosted_workloads` here because `workloads` below was already the
+   * cluster inventory. Read it through hostedWorkloadsOfStatus.
+   */
+  hosted_workloads?: ForgeHostedWorkload[];
+  /** Hosted only: why the hosted status could not be read, when it could not. */
+  hosted_note?: string;
   database_url?: string;
   head_commit_at?: string;
   /**
@@ -217,6 +240,17 @@ export interface ForgeEnvStatusReport {
 }
 
 // ── Projection (still pure) ─────────────────────────────────────────────────
+
+/**
+ * hostedWorkloadsOfStatus returns the hosted workload rows from an env status
+ * report — `hosted_workloads`, NEVER `workloads`, which in this document is
+ * the cluster inventory (a different shape answering a different question).
+ */
+export function hostedWorkloadsOfStatus(
+  report: ForgeEnvStatusReport | null | undefined
+): ForgeHostedWorkload[] {
+  return workloadRows(report?.hosted_workloads);
+}
 
 /**
  * checksOf returns the check rows in forge's own order, with NOTHING filtered

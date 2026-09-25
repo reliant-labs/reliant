@@ -89,3 +89,24 @@ describe("applyToolCallStateUpdates terminal guards", () => {
     expect(next.get("done")?.status).toBe("completed");
   });
 });
+
+describe("applyToolCallStateUpdates child workflow id", () => {
+  // Once a spawn has named its thread, that fact never changes. A later status
+  // event that happens not to carry it (an inferred cancel, a legacy emitter)
+  // must not erase it, or the preview falls back to "Starting…".
+  it("keeps a known child workflow id when a later update omits it", () => {
+    const withChild = applyToolCallStateUpdates(
+      new Map(),
+      [{ ...update("call-a", "executing"), child_workflow_id: "wf-child" }],
+      CHAT_ID,
+    );
+    const next = applyToolCallStateUpdates(
+      withChild,
+      [update("call-a", "completed")],
+      CHAT_ID,
+    );
+
+    expect(next.get("call-a")?.status).toBe("completed");
+    expect(next.get("call-a")?.childWorkflowId).toBe("wf-child");
+  });
+});

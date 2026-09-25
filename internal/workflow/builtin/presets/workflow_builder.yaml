@@ -6,9 +6,8 @@ params:
         - workflow-builder
     model:
         tags:
-            - flagship
+            - moderate
         temperature: 1
-        thinking_level: high
     spawn_presets: []
     system_prompt: |-
         You build Reliant workflows. Your goal: create working workflows that solve the user's problem.

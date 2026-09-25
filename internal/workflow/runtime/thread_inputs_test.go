@@ -317,7 +317,7 @@ func (s *ThreadInputsSuite) TestSignal_GlobalUpdate_PropagatesToThreadInputs() {
 // A global param update must not overwrite an input the thread set explicitly
 // for itself. Regression test for preset-pinned models being silently replaced
 // by the root chat's model: the `implementer` preset pins model tags
-// [moderate] (claude-5-sonnet), but every user message re-sent the root's own
+// [moderate] (then claude-5-sonnet), but every user message re-sent the root's own
 // model tags [flagship], which the global fan-out copied into every registered
 // child — so spawned agents started on sonnet and flipped mid-run to
 // claude-5-opus, carrying opus's adaptive thinking and effort settings.

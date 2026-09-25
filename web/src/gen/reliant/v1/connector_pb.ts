@@ -213,7 +213,7 @@ export type Connector = Message<"reliant.v1.Connector"> & {
   name: string;
 
   /**
-   * token_prefix is the visible leading fragment (e.g. "rlnt_conn_AbCdEfGh"),
+   * token_prefix is the visible leading fragment (e.g. "rlat_AbCdEfGh"),
    * enough to identify a credential without exposing it.
    *
    * @generated from field: string token_prefix = 4;

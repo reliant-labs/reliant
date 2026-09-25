@@ -28,7 +28,7 @@ import {
   type Daemon,
 } from "@/services/controlPlane/daemon";
 import { cn } from "../../lib/utils";
-import { canResume, canSuspend, heartbeatMs, sizeLabel } from "./daemonPresentation";
+import { canResume, canSuspend, lastSeenMs, sizeLabel } from "./daemonPresentation";
 import { DaemonStatusPill } from "./MobileDaemonList";
 import { relativeTimeFromMs } from "./relativeTime";
 import { useVisibilityPolling } from "./useVisibilityPolling";
@@ -241,7 +241,7 @@ export function MobileDaemonScreen() {
     );
   }
 
-  const beat = heartbeatMs(daemon);
+  const lastSeen = lastSeenMs(daemon);
   const statusMessage = getDaemonStatusMessage(daemon);
 
   return (
@@ -271,8 +271,8 @@ export function MobileDaemonScreen() {
 
         <MobileCardGroup label="Details">
           <DetailRow
-            label="Last heartbeat"
-            value={beat === null ? "Never" : relativeTimeFromMs(beat)}
+            label="Last seen"
+            value={lastSeen === null ? "—" : relativeTimeFromMs(lastSeen)}
           />
           <DetailRow label="Repository" value={daemon.gitRepo} />
           <DetailRow label="Branch" value={daemon.gitBranch} />

@@ -32,5 +32,4 @@ params:
   - mcp__chrome-devtools__press_key
   - mcp__chrome-devtools__evaluate_script
   model:
-    tags: [flagship]
-    thinking_level: high
+    tags: [moderate]
