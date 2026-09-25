@@ -1092,6 +1092,104 @@ test('ensureDaemonPATForOrigin: skips mint when existing entry sub matches curre
     assert.deepEqual(after.origins['https://reliantapi.com']['user-1'], seedEntry);
   });
 });
+
+test('ensureDaemonPATForOrigin: replaces a legacy PAT even when its sub matches', async () => {
+  await withFakeHome(async (home) => {
+    const dir = path.join(home, '.reliant');
+    fs.mkdirSync(dir, { recursive: true });
+    const file = path.join(dir, 'daemon.json');
+    fs.writeFileSync(
+      file,
+      JSON.stringify({
+        origins: {
+          'https://reliantapi.com': {
+            'user-1': {
+              pat: 'legacy-daemon-pat',
+              server_url: 'https://reliantapi.com',
+              gateway_url: '',
+              sub: 'user-1',
+              registered_at: '2025-01-01T00:00:00.000Z',
+            },
+          },
+        },
+        default_accounts: { 'https://reliantapi.com': 'user-1' },
+      })
+    );
+
+    const authStorage = {
+      loadStoredAuth: () => ({
+        access_token: 'jwt-current',
+        user: { id: 'user-1' },
+      }),
+    };
+    const outcome = await withFetchStub(
+      async () =>
+        jsonResponse(200, {
+          token: 'rlat_fresh000000000000000000000000000',
+          info: { id: 'tok_1' },
+        }),
+      async () =>
+        ensureDaemonPATForOrigin({
+          authStorage,
+          apiUrl: 'https://reliantapi.com',
+          gatewayUrl: '',
+        })
+    );
+
+    assert.equal(outcome, ENSURE_MINTED);
+    const entry = readEntry({
+      apiUrl: 'https://reliantapi.com',
+      sub: 'user-1',
+    });
+    assert.equal(entry.pat, 'rlat_fresh000000000000000000000000000');
+  });
+});
+
+test('ensureDaemonPATForOrigin: removes a legacy PAT when re-minting fails', async () => {
+  await withFakeHome(async (home) => {
+    const dir = path.join(home, '.reliant');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(
+      path.join(dir, 'daemon.json'),
+      JSON.stringify({
+        origins: {
+          'http://localhost:8090': {
+            'user-1': {
+              pat: 'legacy-daemon-pat',
+              server_url: 'http://localhost:8090',
+              gateway_url: 'http://localhost:39190',
+              sub: 'user-1',
+              registered_at: '2025-01-01T00:00:00.000Z',
+            },
+          },
+        },
+        default_accounts: { 'http://localhost:8090': 'user-1' },
+      })
+    );
+
+    const outcome = await withFetchStub(
+      async () => jsonResponse(403, { message: 'forbidden' }),
+      async () =>
+        ensureDaemonPATForOrigin({
+          authStorage: {
+            loadStoredAuth: () => ({
+              access_token: 'jwt-current',
+              user: { id: 'user-1' },
+            }),
+          },
+          apiUrl: 'http://localhost:8090',
+          gatewayUrl: 'http://localhost:39190',
+        })
+    );
+
+    assert.equal(outcome, ENSURE_FAILED);
+    assert.equal(
+      readEntry({ apiUrl: 'http://localhost:8090', sub: 'user-1' }),
+      null,
+      'an unusable legacy token must not block the awaiting_credentials repair path'
+    );
+  });
+});
 // ----------------------------------------------------------------------------
 // sessionNeedsRefresh — staleness detection
 // ----------------------------------------------------------------------------
