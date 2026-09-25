@@ -23,6 +23,8 @@
 //   - panics in the workflow or a mock are recovered and reported as a
 //     scenario error;
 //   - each run has a wall-clock budget (Options.Timeout / context deadline).
+//
+//forge:exclude-contract: test-harness runner executing scenarios in an in-memory Temporal TestWorkflowEnvironment; shaped by the Temporal test suite
 package runner
 
 import (

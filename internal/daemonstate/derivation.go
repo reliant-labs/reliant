@@ -1,11 +1,12 @@
 // Copyright (c) 2025 Reliant Labs
 
-// forge:exclude-contract
-//
 // Leaf utility package: the exported surface is concrete helpers over the
 // stdlib or the OS, with no collaborator to fake and no second implementation.
 // An interface here would have exactly one implementor and one caller shape,
 // which is indirection without a seam.
+//
+//forge:lint-disable-next-line forge-exclude-contract-outbound-io: the package IS the NATS liveness publisher; adapter conversion deferred (reliant is not forge-generated); tracked in H-RELIANT-CI-lint follow-ups
+//forge:exclude-contract: wire contract + gateway publisher for the daemon liveness event stream
 package daemonstate
 
 import (

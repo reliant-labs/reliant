@@ -1,6 +1,6 @@
 // Copyright (c) 2025 Reliant Labs
 //
-// forge:exclude-contract
+//forge:exclude-contract: pure naming: projects a daemon instance name onto a stable ~/.reliant directory
 //
 // Leaf utility package: the exported surface is concrete helpers over the
 // stdlib and the OS, with no collaborator to fake and no second

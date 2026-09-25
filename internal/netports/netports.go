@@ -14,12 +14,12 @@
 // On hosts without /proc/net/tcp (macOS, non-Linux) every operation degrades
 // to "nothing detected" — no errors, no goroutine churn.
 //
-// forge:exclude-contract
-//
 // Leaf utility package: the exported surface is concrete helpers over the
 // stdlib or the OS, with no collaborator to fake and no second implementation.
 // An interface here would have exactly one implementor and one caller shape,
 // which is indirection without a seam.
+//
+//forge:exclude-contract: parses /proc/net/tcp to detect listening ports in the daemon's netns; local reads only
 package netports
 
 import (

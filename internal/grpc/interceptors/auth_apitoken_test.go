@@ -136,12 +136,12 @@ func TestAuthInterceptorUnreachableAuthorityIsNotARejection(t *testing.T) {
 	require.NoError(t, err)
 	interceptor.SetAccessTokenIntrospector(authority)
 
-	authority.SetUnavailable(true)
+	tokenauthority.SetMemoryUnavailable(authority, true)
 	_, _, _, err = interceptor.authenticateRequest(context.Background(), "/reliant.v1.ChatService/GetChat", bearerHeader(token.Plaintext))
 	require.Equal(t, connect.CodeUnavailable, connect.CodeOf(err),
 		"an authority that could not be reached has not rejected anything")
 
-	authority.SetUnavailable(false)
+	tokenauthority.SetMemoryUnavailable(authority, false)
 	unknown, err := fat.Mint()
 	require.NoError(t, err)
 	_, _, _, err = interceptor.authenticateRequest(context.Background(), "/reliant.v1.ChatService/GetChat", bearerHeader(unknown.Plaintext))

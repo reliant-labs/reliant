@@ -149,7 +149,7 @@ func TestDaemonAuthInterceptorUnknownTokenIsUnauthenticated(t *testing.T) {
 func TestDaemonAuthInterceptorOutageIsUnavailable(t *testing.T) {
 	authority := tokenauthority.NewMemory()
 	token := mintDaemonToken(t, authority, "user-123", nil, fat.ScopeDaemonConnect)
-	authority.SetUnavailable(true)
+	tokenauthority.SetMemoryUnavailable(authority, true)
 	interceptor, err := NewDaemonAuthInterceptor(authority)
 	require.NoError(t, err)
 

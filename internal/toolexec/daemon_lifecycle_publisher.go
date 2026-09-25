@@ -1,9 +1,11 @@
-// forge:exclude-contract
-//
 // Leaf utility package: the exported surface is concrete helpers over the
 // stdlib or the OS, with no collaborator to fake and no second implementation.
 // An interface here would have exactly one implementor and one caller shape,
 // which is indirection without a seam.
+//
+//forge:lint-disable-next-line forge-exclude-contract-multi-impl: DaemonConnectionListener is an observer seam fanned out to several subscribers (publisher, bridge, responders), not interchangeable services; tracked in H-RELIANT-CI-lint follow-ups
+//forge:lint-disable-next-line forge-exclude-contract-outbound-io: daemon_router_nats.go IS the NATS request/reply transport to daemons; adapter conversion deferred (reliant is not forge-generated); tracked in H-RELIANT-CI-lint follow-ups
+//forge:exclude-contract: tool execution routing between api-server/worker and daemons over NATS
 package toolexec
 
 import (

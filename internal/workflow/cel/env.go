@@ -1,9 +1,10 @@
-// forge:exclude-contract
-//
 // Temporal workflow/activity code. The exported functions are registered with
 // the Temporal SDK by name and invoked by the runtime, not through a Go
 // interface a caller could substitute. Determinism constraints, not an
 // interface, define this boundary.
+//
+//forge:lint-disable-next-line forge-exclude-contract-multi-impl: CELEvalContext is a family of evaluation scopes (edge, loop, node, template) consumed by one evaluator, not interchangeable services; tracked in H-RELIANT-CI-lint follow-ups
+//forge:exclude-contract: CEL environment and evaluation-context types for workflows; pure compile/evaluate
 package wfcel
 
 import (

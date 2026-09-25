@@ -1,11 +1,12 @@
 // Copyright (c) 2025 Reliant Labs
 //
-// forge:exclude-contract
-//
 // Registry/lookup-table package: the exported vars are populated once at init
 // by the packages that register into them, then read. A getter returns the
 // same map or slice header, so it moves the mutation surface without
 // narrowing it.
+//
+//forge:lint-disable-next-line forge-exclude-contract-outbound-io: statsig.go calls Statsig over HTTP; it is one provider registered into the features registry, and an adapter split is deferred (reliant is not forge-generated); tracked in H-RELIANT-CI-lint follow-ups
+//forge:exclude-contract: feature-flag providers (env, settings, static, Statsig) registered into the features registry
 package providers
 
 import (

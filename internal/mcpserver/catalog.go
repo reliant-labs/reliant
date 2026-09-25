@@ -18,12 +18,12 @@
 //     package decides what to OFFER; it is not the security boundary. See
 //     internal/daemonpolicy.
 //
-// forge:exclude-contract
-//
 // Registry/lookup-table package: the exported vars are populated once at init
 // by the packages that register into them, then read. A getter returns the
 // same map or slice header, so it moves the mutation surface without
 // narrowing it.
+//
+//forge:exclude-contract: exposes a daemon as an MCP server; every collaborator is already a consumer-declared interface in Deps
 package mcpserver
 
 import (

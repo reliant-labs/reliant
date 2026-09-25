@@ -1,11 +1,12 @@
 // Copyright (c) 2025 Reliant Labs
 //
-// forge:exclude-contract
-//
 // Leaf utility package: the exported surface is concrete helpers over the
 // stdlib or the OS, with no collaborator to fake and no second implementation.
 // An interface here would have exactly one implementor and one caller shape,
 // which is indirection without a seam.
+//
+//forge:lint-disable-next-line forge-exclude-contract-multi-impl: Adapter is a per-file-format strategy (Makefile/NPM/Taskfile) iterated by discovery; moving it into contract.go is deferred; tracked in H-RELIANT-CI-lint follow-ups
+//forge:exclude-contract: discovers runnable commands from Makefile / package.json / Taskfile via per-format adapters
 package pkgmgr
 
 import (

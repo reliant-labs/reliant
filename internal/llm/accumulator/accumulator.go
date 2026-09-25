@@ -1,4 +1,6 @@
 // Copyright (c) 2025 Reliant Labs
+//
+//forge:exclude-contract: one pure function folding an llm.Driver event stream into a response; the driver it reads is already the llm.Driver seam
 package accumulator
 
 import (

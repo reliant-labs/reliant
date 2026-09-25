@@ -1,11 +1,12 @@
 // Copyright (c) 2025 Reliant Labs
 //
-// forge:exclude-contract
-//
 // Leaf utility package: the exported surface is concrete helpers over the
 // stdlib or the OS, with no collaborator to fake and no second implementation.
 // An interface here would have exactly one implementor and one caller shape,
 // which is indirection without a seam.
+//
+//forge:lint-disable-next-line forge-exclude-contract-multi-impl: mcp.Client is already the seam (direct, lazy, daemon-proxied); moving it to contract.go is deferred with the MCP package split; tracked in H-RELIANT-CI-lint follow-ups
+//forge:exclude-contract: MCP protocol client (stdio/HTTP) and its lazy and daemon-proxied variants
 package mcp
 
 import (

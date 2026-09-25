@@ -1,7 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
 //
-// forge:exclude-contract
-//
 // Wire types for the Antigravity (Google cloudcode) endpoint.
 //
 // The types themselves live in the leaf package agywire, and this file only
@@ -21,6 +19,9 @@
 // body straight into GenerateContentResponse, so every Antigravity body would
 // decode to an EMPTY struct and the call would appear to succeed while
 // producing nothing. See envelope_test.go, which pins that failure.
+//
+//forge:lint-disable-next-line forge-exclude-contract-outbound-io: a provider driver IS an outbound adapter behind llm.Driver (the contract lives in internal/llm); a per-driver contract.go would duplicate it; tracked in H-RELIANT-CI-lint follow-ups
+//forge:exclude-contract: llm.Driver implementation for Antigravity (Google cloudcode); its contract is llm.Driver
 package antigravity
 
 import (

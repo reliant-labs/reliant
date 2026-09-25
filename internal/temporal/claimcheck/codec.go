@@ -2,8 +2,6 @@
 
 // Package claimcheck keeps bulk payload bytes out of Temporal workflow history.
 //
-// forge:exclude-contract
-//
 // A Codec is a converter.PayloadCodec. On Encode, any payload whose serialized
 // size reaches the threshold is proto-marshaled whole (metadata included),
 // zstd-compressed, written to a content-addressed Store, and replaced in
@@ -30,6 +28,9 @@
 // retry it — the correct outcome while the database is down. Falling back to
 // inline would silently reintroduce the history-size problem this exists to
 // solve.
+//
+//forge:lint-disable-next-line forge-exclude-contract-outbound-io: postgres.go is the Postgres Store behind the codec's own Store interface; that interface already is the seam; tracked in H-RELIANT-CI-lint follow-ups
+//forge:exclude-contract: Temporal payload codec that offloads large payloads to a Store
 package claimcheck
 
 import (

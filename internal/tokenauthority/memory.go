@@ -25,9 +25,14 @@ type Memory struct {
 	unavailable bool
 }
 
-// SetUnavailable makes Introspect fail with ErrMemoryUnavailable (a transport
-// failure, NOT a credential rejection) until cleared.
-func (m *Memory) SetUnavailable(v bool) {
+// SetMemoryUnavailable makes m's Introspect fail with ErrMemoryUnavailable (a
+// transport failure, NOT a credential rejection) until cleared.
+//
+// A function rather than a method on purpose: Memory implements Authority, and
+// a test-only control knob in its method set would make it part of the
+// Authority surface every caller sees (forge's contract rule flags exactly
+// that). Tests in other packages still reach it by name.
+func SetMemoryUnavailable(m *Memory, v bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.unavailable = v

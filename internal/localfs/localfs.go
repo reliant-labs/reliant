@@ -2,12 +2,12 @@
 // Local wraps the standard os/filepath calls.
 // In the split architecture, a remote implementation will proxy through the tools daemon.
 //
-// forge:exclude-contract
-//
 // Leaf utility package: the exported surface is concrete helpers over the
 // stdlib or the OS, with no collaborator to fake and no second implementation.
 // An interface here would have exactly one implementor and one caller shape,
 // which is indirection without a seam.
+//
+//forge:exclude-contract: local filesystem implementation of the FS seam; local os calls are not outbound I/O
 package localfs
 
 import (

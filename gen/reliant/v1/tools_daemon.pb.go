@@ -11,7 +11,6 @@ package reliantv1
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
-	_ "google.golang.org/protobuf/types/known/timestamppb"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
@@ -3526,7 +3525,7 @@ var File_reliant_v1_tools_daemon_proto protoreflect.FileDescriptor
 const file_reliant_v1_tools_daemon_proto_rawDesc = "" +
 	"\n" +
 	"\x1dreliant/v1/tools_daemon.proto\x12\n" +
-	"reliant.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xc5\b\n" +
+	"reliant.v1\"\xc5\b\n" +
 	"\rDaemonMessage\x128\n" +
 	"\bregister\x18\x01 \x01(\v2\x1a.reliant.v1.DaemonRegisterH\x00R\bregister\x12?\n" +
 	"\rtool_response\x18\x02 \x01(\v2\x18.reliant.v1.ToolResponseH\x00R\ftoolResponse\x12;\n" +

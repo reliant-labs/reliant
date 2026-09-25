@@ -1,11 +1,13 @@
 // Copyright (c) 2025 Reliant Labs
 //
-// forge:exclude-contract
-//
 // Registry/lookup-table package: the exported vars are populated once at init
 // by the packages that register into them, then read. A getter returns the
 // same map or slice header, so it moves the mutation surface without
 // narrowing it.
+//
+//forge:lint-disable-next-line forge-exclude-contract-multi-impl: ReadOnlyTool is a capability marker over tools.Tool (like io.ReaderAt over io.Reader), not an interchangeable service; tracked in H-RELIANT-CI-lint follow-ups
+//forge:lint-disable-next-line forge-exclude-contract-outbound-io: fetch.go is the web-fetch TOOL, whose job is an outbound HTTP GET; it is a tools.Tool strategy, not a service boundary; tracked in H-RELIANT-CI-lint follow-ups
+//forge:exclude-contract: the agent tool implementations; each tool's contract is the tools.Tool interface they register under
 package tools
 
 import (

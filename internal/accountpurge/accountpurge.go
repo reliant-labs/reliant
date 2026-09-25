@@ -2,8 +2,6 @@
 //
 // Package accountpurge removes every row reliant stores for one user.
 //
-// forge:exclude-contract
-//
 // Leaf package: a concrete Purger over *sql.DB with no collaborator to fake
 // and no second implementation. An interface here would have one implementor
 // and one caller.
@@ -59,6 +57,9 @@
 // workflows end and are deleted by the api-server's GC within the horizon
 // (claimcheck.DefaultGCHorizon, 30 days, env RELIANT_PAYLOAD_BLOB_GC_HORIZON).
 // That horizon is this table's data-retention bound.
+//
+//forge:lint-disable-next-line forge-exclude-contract-outbound-io: its only I/O is the purge transaction it exists to run; a contract.go would buy no mock or decorator because reliant is not forge-generated (no forge.yaml); conversion tracked in H-RELIANT-CI-lint follow-ups
+//forge:exclude-contract: one concrete Purger over *sql.DB with a single caller (account deletion); no second implementation and no seam to fake
 package accountpurge
 
 import (

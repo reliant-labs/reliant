@@ -3,7 +3,6 @@ syntax = "proto3";
 
 package reliant.v1;
 
-import "google/protobuf/struct.proto";
 import "reliant/v1/common.proto";
 import "reliant/v1/workflow_v2.proto";
 

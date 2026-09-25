@@ -1,11 +1,13 @@
 // Copyright (c) 2025 Reliant Labs
 //
-// forge:exclude-contract
-//
 // Leaf utility package: the exported surface is concrete helpers over the
 // stdlib or the OS, with no collaborator to fake and no second implementation.
 // An interface here would have exactly one implementor and one caller shape,
 // which is indirection without a seam.
+//
+//forge:lint-disable-next-line forge-exclude-contract-multi-impl: AnalyticsClient already IS the seam (Client vs NoopClient chosen at startup); moving it into contract.go changes nothing without forge codegen; tracked in H-RELIANT-CI-lint follow-ups
+//forge:lint-disable-next-line forge-exclude-contract-outbound-io: the batch uploader POSTs to the analytics endpoint; converting to an adapter contract is deferred (reliant is not forge-generated, so a contract.go yields no mock/decorator); tracked in H-RELIANT-CI-lint follow-ups
+//forge:exclude-contract: the product analytics client (PostHog-style batcher) plus its no-op twin, selected once at startup
 package analytics
 
 import (
