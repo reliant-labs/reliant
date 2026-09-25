@@ -26,7 +26,7 @@ const maxLiveUserTokens = 50
 
 // LocalStore is the SELF-HOSTED Authority: the same token system as
 // control-plane's — every rule comes from forge/pkg/accesstoken — over
-// reliant's own access_tokens table (migration 20260923000000). A token minted
+// reliant's own access_tokens table (migration 20260925000000). A token minted
 // here behaves identically to one minted by control-plane.
 type LocalStore struct {
 	db  *sql.DB

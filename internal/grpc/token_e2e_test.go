@@ -365,7 +365,7 @@ func TestDaemonCredential_HostedRefusesWhenControlPlaneIsDown(t *testing.T) {
 
 // TestDaemonCredential_SelfHostedEndToEnd is the self-hosted twin: no
 // control-plane configured, so the authority is reliant's own access_tokens
-// table (migration 20260923000000), and the same facade mints, the gateway
+// table (migration 20260925000000), and the same facade mints, the gateway
 // validates, and revocation takes effect.
 func TestDaemonCredential_SelfHostedEndToEnd(t *testing.T) {
 	const userID = "user-e2e-selfhosted"
