@@ -121,4 +121,3 @@ message ListAvailableModelsRequest {
 message ListAvailableModelsResponse {
   repeated string models = 1;
 }
-

@@ -473,11 +473,7 @@ message PlanLimits {
   // Tags AND names are tombstoned: a future field reusing tag 21 would be
   // silently fed a deployed client's CDN egress double.
   reserved 17, 19, 20, 21, 22, 23, 24, 25, 26;
-  reserved "included_storage_gib_months", "included_egress_gib",
-      "egress_overage_rate_cents", "included_cdn_egress_gib",
-      "cdn_egress_overage_rate_cents", "included_cdn_requests_millions",
-      "cdn_requests_overage_rate_cents", "included_build_minutes",
-      "build_minutes_overage_rate_cents";
+  reserved "included_storage_gib_months", "included_egress_gib", "egress_overage_rate_cents", "included_cdn_egress_gib", "cdn_egress_overage_rate_cents", "included_cdn_requests_millions", "cdn_requests_overage_rate_cents", "included_build_minutes", "build_minutes_overage_rate_cents";
 }
 
 message Plan {
