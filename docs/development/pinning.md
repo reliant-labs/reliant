@@ -54,6 +54,27 @@ reports how many commits behind `forge@main` each pin is. It **warns and never
 fails**: a deliberately older pin is legitimate, and a check that failed CI for
 it would be one whose only fix is to bypass it.
 
+## Ancestry: a pin must be a commit on forge's `main`
+
+Being behind `main` is a choice. Pinning a commit that is **not on** `main` never
+is. A pin that follows a forge PR's head dangles as soon as that PR is
+squash-merged: `main` gets a new commit with the same tree, and the pinned
+commit is kept alive only by a PR ref or a branch that is about to be deleted.
+With `GOPRIVATE` it already fails (`unknown revision`). Without it, it builds
+only while proxy.golang.org still has it cached. reliant `main` pinned such a
+commit (forge `1b0f7f55`) on 2026-09-25.
+
+`make pin-ancestry` (`scripts/check-pin-ancestry.sh`) **fails** when the pinned
+commit, or a pinned tag's commit, is not an ancestor of forge's `main`. It runs
+in the `Pin Drift` workflow's `ancestry` job on every PR, on every push to
+`main`, and daily. `scripts/test-pin-ancestry.sh` is its hermetic self-test;
+add `--live` to also check the real forge.
+
+To land a change that needs an unmerged forge commit: pin the PR head so your
+PR's other jobs can build against it, merge forge, then re-pin with
+`make pin-forge` (which pins forge's `main`) before merging here. The
+`ancestry` job stays red until you do. That is the reminder.
+
 ## Switching back to tags at launch
 
 ```sh
