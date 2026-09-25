@@ -15,7 +15,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { CheckoutUiMode } from "@/gen/controlplane/v1/public/billing_service_pb";
+import { CheckoutUiMode } from "@/gen/controlplane/services/billing/v1/billing_pb";
 import { selectCheckoutPresentation } from "../stripeCheckout";
 
 describe("selectCheckoutPresentation", () => {

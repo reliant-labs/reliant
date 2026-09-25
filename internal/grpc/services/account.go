@@ -80,7 +80,7 @@ func (s *AccountService) WithControlPlaneClient(client controlplane.Client) *Acc
 
 // bearerToken strips the "Bearer " prefix from an Authorization header,
 // yielding the raw JWT to forward to the control plane. callerIdentity has
-// already established that this is a session JWT and not a PAT.
+// already established that this is a session JWT and not an access token.
 func bearerToken(authHeader string) string {
 	return strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(authHeader), "Bearer "))
 }
@@ -88,12 +88,13 @@ func bearerToken(authHeader string) string {
 // callerIdentity extracts the caller's user id and email, and enforces the
 // session-only rule.
 //
-// A PAT bearer is rejected: an automation credential must not be able to
-// perform the one irreversible action on its owner's data. This mirrors
-// TokenService.CreateToken's requireInteractiveSession, for the same reason.
+// An access-token bearer is refused: an automation credential must not be
+// able to perform the one irreversible action on its owner's data. This
+// mirrors TokenService.CreateToken, for the same reason.
 func (s *AccountService) callerIdentity(ctx context.Context, authHeader string) (userID, email string, err error) {
-	if rErr := requireInteractiveSession(authHeader); rErr != nil {
-		return "", "", rErr
+	if _, isMachine := auth.MachineTokenFromContext(ctx); isMachine || auth.IsAccessTokenFormat(bearerToken(authHeader)) {
+		return "", "", connect.NewError(connect.CodeUnauthenticated,
+			fmt.Errorf("account deletion requires an interactive session"))
 	}
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok || userID == "" {

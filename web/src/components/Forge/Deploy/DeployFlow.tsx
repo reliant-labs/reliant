@@ -268,6 +268,8 @@ function describeBlocker(blocker: DeployBlocker): string {
       );
     case "no-declared-cluster":
       return "This environment declares no cluster, so there is no target to authorise a deploy against.";
+    case "no-declared-endpoint":
+      return "This hosted environment's plan names no control-plane endpoint, so there is no target to authorise a deploy against.";
     case "not-a-preview":
       return `This document is not a read-only preview (mode: ${blocker.mode}), so it cannot authorise a deploy.`;
   }

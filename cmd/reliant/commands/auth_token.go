@@ -4,7 +4,6 @@ package commands
 import (
 	"encoding/json"
 	"fmt"
-	"strconv"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -14,22 +13,19 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
-	"github.com/reliant-labs/reliant/internal/auth"
-	"github.com/reliant-labs/reliant/internal/cliconfig"
+	"github.com/reliant-labs/reliant/internal/cliauth"
 )
 
 func newAuthTokenCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "token",
-		Short: "Manage API tokens (rlnt_pat_ personal access tokens)",
-		Long: `API tokens authenticate CLI and automation requests against the Reliant
-API without a browser login. Tokens are shown once at creation and stored
-into the resolved CLI context (see 'reliant context').
+		Short: "Manage API tokens (rlat_ access tokens acting as you)",
+		Long: `API tokens authenticate automation against the Reliant API without a browser
+login. 'reliant auth login' already stores one for this CLI; 'create' mints an
+additional, separately named token to hand to a script or CI (RELIANT_TOKEN).
 
-Management runs over the reliant.v1.TokenService Connect RPCs. Creating a
-token always requires an interactive login JWT ('reliant auth login') — a
-PAT cannot mint a PAT. Listing and revoking accept either the context API
-token or a login JWT.`,
+Creating a token is a consented browser login: a token never mints a token.
+Listing and revoking use the resolved credential (RELIANT_TOKEN or your login).`,
 	}
 
 	cmd.AddCommand(newAuthTokenCreateCmd())
@@ -39,147 +35,56 @@ token or a login JWT.`,
 	return cmd
 }
 
-// requireJWTAndServer resolves the target server (context-aware, credentials
-// not required) plus the auth-file JWT that token *creation* requires — a PAT
-// cannot mint a PAT. List/revoke do not use this: they authenticate with the
-// resolved context credential (PAT or JWT).
-func requireJWTAndServer(cmd *cobra.Command) (conn *connection, jwt string, err error) {
-	conn, err = resolveServer(cmd)
-	if err != nil {
-		return nil, "", err
-	}
-
-	jwt, err = auth.ReadAccessTokenFromAuthFile()
-	if err != nil {
-		return nil, "", fmt.Errorf("reading auth file: %w", err)
-	}
-	if jwt == "" {
-		return nil, "", fmt.Errorf("token creation requires an interactive login for %s — run 'reliant auth login' first", conn.describeServer())
-	}
-	return conn, jwt, nil
-}
-
 // tokenServiceClient builds a Connect TokenService client on the resolved
-// server, authenticated with the given bearer (an rlnt_pat_ API token or a
-// login JWT).
+// server, authenticated with the given rlat_ bearer.
 func tokenServiceClient(conn *connection, bearer string) reliantv1connect.TokenServiceClient {
 	return reliantv1connect.NewTokenServiceClient(conn.httpClientWithBearer(bearer), conn.ServerURL)
 }
 
-// parseTTL parses token lifetimes: Go durations ("12h", "45m") plus a day
-// suffix ("90d"). Returns 0 for the empty string (no expiry).
-func parseTTL(raw string) (time.Duration, error) {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return 0, nil
-	}
-	if strings.HasSuffix(raw, "d") {
-		days, err := strconv.Atoi(strings.TrimSuffix(raw, "d"))
-		if err != nil || days <= 0 {
-			return 0, fmt.Errorf("invalid --ttl %q — expected a positive day count like '90d' or a duration like '12h'", raw)
-		}
-		return time.Duration(days) * 24 * time.Hour, nil
-	}
-	d, err := time.ParseDuration(raw)
-	if err != nil || d <= 0 {
-		return 0, fmt.Errorf("invalid --ttl %q — expected a positive day count like '90d' or a duration like '12h'", raw)
-	}
-	return d, nil
-}
-
 func newAuthTokenCreateCmd() *cobra.Command {
-	var (
-		name   string
-		ttl    string
-		noSave bool
-	)
+	var name string
 
 	cmd := &cobra.Command{
 		Use:   "create",
 		Short: "Create a new API token",
-		Long: `Creates a new API token. The raw token is printed exactly once and saved
-into the resolved CLI context (creating a "default" context when none is
-configured) so subsequent commands authenticate with it automatically.
+		Long: `Mints an API token (reliant:api, 90 days) named reliant-cli@<name> through a
+browser login you approve, and prints it once. It is NOT stored: this CLI
+keeps using its own login. Hand the printed token to automation as
+RELIANT_TOKEN.
 
-Requires an interactive login JWT ('reliant auth login') — a PAT cannot mint
-a PAT.`,
+Re-running with the same --name replaces that token.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if name == "" {
+			if strings.TrimSpace(name) == "" {
 				return fmt.Errorf("--name is required")
 			}
-			ttlDur, err := parseTTL(ttl)
+			conn, err := resolveServer(cmd)
 			if err != nil {
 				return err
 			}
-
-			// Token creation is JWT-only: server from the context, bearer from
-			// the login auth file.
-			conn, jwt, err := requireJWTAndServer(cmd)
+			cred, err := cliauth.Login{
+				Server:  conn.ServerURL,
+				Scopes:  []string{cliauth.ScopeAPI},
+				Name:    name,
+				Out:     cmd.ErrOrStderr(),
+				OpenURL: loginOpener,
+			}.Run(cmd.Context())
 			if err != nil {
-				return err
+				return fmt.Errorf("minting token: %w", err)
 			}
-			contextName := conn.ContextName
-
-			req := &reliantv1.CreateTokenRequest{Name: name}
-			if ttlDur > 0 {
-				req.TtlSeconds = int64(ttlDur / time.Second)
-			}
-
-			client := tokenServiceClient(conn, jwt)
-			resp, err := client.CreateToken(cmd.Context(), connect.NewRequest(req))
-			if err != nil {
-				return conn.annotate(err)
-			}
-			info := resp.Msg.GetInfo()
-
 			out := cmd.OutOrStdout()
-			fmt.Fprintf(out, "Token %q created\n", info.GetName())
-			fmt.Fprintf(out, "  ID:      %s\n", info.GetId())
-			if info.GetExpiresAt() != "" {
-				fmt.Fprintf(out, "  Expires: %s\n", info.GetExpiresAt())
+			fmt.Fprintf(out, "Token %q created\n", cliauth.ClientID+"@"+name)
+			if cred.ExpiresAt != nil {
+				fmt.Fprintf(out, "  Expires: %s\n", cred.ExpiresAt.Format(time.RFC3339))
 			}
 			fmt.Fprintln(out)
-			fmt.Fprintf(out, "  %s\n", resp.Msg.GetToken())
+			fmt.Fprintf(out, "  %s\n", cred.Token)
 			fmt.Fprintln(out)
 			fmt.Fprintln(out, "This token is shown only once — it cannot be retrieved again.")
-
-			if noSave {
-				return nil
-			}
-
-			// Save into the resolved context (or bootstrap "default").
-			cfg, err := cliconfig.Load()
-			if err != nil {
-				return fmt.Errorf("saving token to CLI config: %w", err)
-			}
-			if contextName == "" {
-				contextName = "default"
-			}
-			ctx := cfg.Contexts[contextName]
-			if ctx == nil {
-				ctx = &cliconfig.Context{}
-				cfg.Contexts[contextName] = ctx
-			}
-			ctx.Token = resp.Msg.GetToken()
-			if ctx.Server == "" {
-				ctx.Server = conn.ServerURL
-			}
-			if cfg.CurrentContext == "" {
-				cfg.CurrentContext = contextName
-			}
-			if err := cliconfig.Save(cfg); err != nil {
-				return fmt.Errorf("saving token to CLI config: %w", err)
-			}
-			configPath, _ := cliconfig.DefaultPath()
-			fmt.Fprintf(out, "Saved into context %q (%s)\n", contextName, configPath)
 			return nil
 		},
 	}
 
-	cmd.Flags().StringVar(&name, "name", "", "Human-readable token name (required)")
-	cmd.Flags().StringVar(&ttl, "ttl", "", "Token lifetime, e.g. 90d or 12h (default: no expiry)")
-	cmd.Flags().BoolVar(&noSave, "no-save", false, "Print the token without saving it into the CLI context")
-
+	cmd.Flags().StringVar(&name, "name", "", "Label for the token, e.g. ci-deploy (required)")
 	return cmd
 }
 
@@ -192,7 +97,6 @@ type tokenJSON struct {
 	CreatedAt   string `json:"created_at"`
 	LastUsedAt  string `json:"last_used_at,omitempty"`
 	ExpiresAt   string `json:"expires_at,omitempty"`
-	RevokedAt   string `json:"revoked_at,omitempty"`
 }
 
 func tokensToJSON(toks []*reliantv1.TokenInfo) []tokenJSON {
@@ -205,7 +109,6 @@ func tokensToJSON(toks []*reliantv1.TokenInfo) []tokenJSON {
 			CreatedAt:   t.GetCreatedAt(),
 			LastUsedAt:  t.GetLastUsedAt(),
 			ExpiresAt:   t.GetExpiresAt(),
-			RevokedAt:   t.GetRevokedAt(),
 		})
 	}
 	return out
@@ -224,7 +127,7 @@ func newAuthTokenListCmd() *cobra.Command {
 			}
 
 			client := tokenServiceClient(conn, conn.Token)
-			resp, err := client.ListTokens(cmd.Context(), connect.NewRequest(&reliantv1.ListTokensRequest{}))
+			resp, err := client.ListTokens(cmd.Context(), connect.NewRequest(&reliantv1.ListTokensRequest{Kind: reliantv1.TokenKind_TOKEN_KIND_API}))
 			if err != nil {
 				return conn.annotate(err)
 			}
@@ -245,9 +148,7 @@ func newAuthTokenListCmd() *cobra.Command {
 			fmt.Fprintln(w, "NAME\tID\tPREFIX\tCREATED\tLAST USED\tEXPIRES\tSTATUS")
 			for _, t := range toks {
 				status := "active"
-				if t.GetRevokedAt() != "" {
-					status = "revoked"
-				} else if t.GetExpiresAt() != "" {
+				if t.GetExpiresAt() != "" {
 					if exp, err := time.Parse(time.RFC3339, t.GetExpiresAt()); err == nil && time.Now().After(exp) {
 						status = "expired"
 					}
@@ -286,16 +187,13 @@ func newAuthTokenRevokeCmd() *cobra.Command {
 			}
 			client := tokenServiceClient(conn, conn.Token)
 
-			listResp, err := client.ListTokens(cmd.Context(), connect.NewRequest(&reliantv1.ListTokensRequest{}))
+			listResp, err := client.ListTokens(cmd.Context(), connect.NewRequest(&reliantv1.ListTokensRequest{Kind: reliantv1.TokenKind_TOKEN_KIND_API}))
 			if err != nil {
 				return conn.annotate(err)
 			}
 
 			var matches []*reliantv1.TokenInfo
 			for _, t := range listResp.Msg.GetTokens() {
-				if t.GetRevokedAt() != "" {
-					continue
-				}
 				if t.GetId() == target || t.GetName() == target {
 					matches = append(matches, t)
 				}
@@ -315,22 +213,6 @@ func newAuthTokenRevokeCmd() *cobra.Command {
 
 			fmt.Fprintf(cmd.OutOrStdout(), "Revoked token %q (%s)\n", tok.GetName(), tok.GetId())
 
-			// Drop the now-dead token from any context that stored it (match by
-			// display prefix — the config never stores hashes).
-			if cfg, err := cliconfig.Load(); err == nil {
-				changed := false
-				for _, c := range cfg.Contexts {
-					if c.Token != "" && tok.GetTokenPrefix() != "" && strings.HasPrefix(c.Token, tok.GetTokenPrefix()) {
-						c.Token = ""
-						changed = true
-					}
-				}
-				if changed {
-					if err := cliconfig.Save(cfg); err == nil {
-						fmt.Fprintln(cmd.OutOrStdout(), "Removed the revoked token from the CLI config")
-					}
-				}
-			}
 			return nil
 		},
 	}

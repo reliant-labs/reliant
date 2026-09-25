@@ -16,6 +16,7 @@ import type { ManagedSecretSummary } from "@/services/forge/secretStore";
 import {
   joinSecretRows,
   modeSupportsWrite,
+  rowStatusLabel,
   rowStatusVariant,
   surfaceMode,
   tallyRows,
@@ -111,6 +112,58 @@ describe("joinSecretRows", () => {
       summary({ name: "GONE", currentVersion: 0, currentVersionDestroyed: false }),
     ]);
     expect(rows[0].state).toBe("tombstoned");
+  });
+});
+
+describe("joinSecretRows when this console could NOT read the store", () => {
+  // An empty `managed` list from an unreadable store means "could not look",
+  // not "holds nothing". Treating it as the latter painted every declared
+  // secret on a hosted-but-never-deployed env as a red "Not set" blocker.
+  function hosted(entries: Array<{ name: string; present?: boolean }>): ForgeSecretsReport {
+    return {
+      env: "prod",
+      provider: "hosted",
+      secrets: entries.map((e) => ({ ...e, declared_by: [{ workload: "api", kind: "service" }] })),
+    };
+  }
+
+  it("never reports declared-unset when forge did not observe it either way", () => {
+    const [row] = joinSecretRows(hosted([{ name: "DATABASE_URL" }]), [], false);
+    expect(row.origin).toBe("declared-unread");
+    expect(rowStatusLabel(row)).toBe("Not known");
+    expect(rowStatusVariant(row)).not.toBe("error");
+    expect(tallyRows([row])).toMatchObject({ unset: 0, unknown: 1 });
+  });
+
+  it("uses forge's own observation: present is Set, missing is still a real Not set", () => {
+    const rows = joinSecretRows(
+      hosted([
+        { name: "A", present: true },
+        { name: "B", present: false },
+      ]),
+      [],
+      false
+    );
+    const byName = Object.fromEntries(rows.map((r) => [r.name, r]));
+    expect(byName.A.origin).toBe("declared-present");
+    expect(rowStatusLabel(byName.A)).toBe("Set");
+    // forge listed the hosted store and did not find B: that IS a blocker.
+    expect(byName.B.origin).toBe("declared-unset");
+    expect(tallyRows(rows)).toMatchObject({ set: 1, unset: 1, unknown: 0 });
+  });
+
+  it("does not trust `present` under an external provider — forge never looked", () => {
+    const [row] = joinSecretRows(
+      { env: "prod", provider: "external", secrets: [{ name: "X", present: false }] },
+      [],
+      false
+    );
+    expect(row.origin).toBe("declared-unread");
+  });
+
+  it("keeps the strict join when the store WAS read (the default)", () => {
+    const [row] = joinSecretRows(hosted([{ name: "A", present: true }]), []);
+    expect(row.origin).toBe("declared-unset");
   });
 });
 

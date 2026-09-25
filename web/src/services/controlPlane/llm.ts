@@ -3,7 +3,7 @@
  * uses `createLLMKey` to provision a managed key for new cloud users.
  */
 
-import { LLMGatewayService } from "@/gen/controlplane/v1/public/llm_gateway_service_pb";
+import { LLMGatewayService } from "@/gen/controlplane/services/llm_gateway/v1/llm_gateway_pb";
 import { getControlPlaneClient } from "./client";
 
 export interface CreateLLMKeyArgs {

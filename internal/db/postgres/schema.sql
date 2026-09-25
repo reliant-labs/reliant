@@ -33,6 +33,35 @@ SET default_tablespace = '';
 SET default_table_access_method = heap;
 
 --
+-- Name: access_tokens; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.access_tokens (
+    id text NOT NULL,
+    org_id text NOT NULL,
+    name text NOT NULL,
+    token_hash text NOT NULL,
+    token_prefix text NOT NULL,
+    scopes text[] NOT NULL,
+    created_by_user_id text,
+    acting_user_id text,
+    resource_kind text,
+    resource_id text,
+    ephemeral boolean DEFAULT false NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    expires_at timestamp with time zone,
+    last_used_at timestamp with time zone,
+    revoked_at timestamp with time zone,
+    CONSTRAINT access_tokens_ephemeral_bound CHECK (((NOT ephemeral) OR (resource_kind IS NOT NULL))),
+    CONSTRAINT access_tokens_ephemeral_expires CHECK (((NOT ephemeral) OR (expires_at IS NOT NULL))),
+    CONSTRAINT access_tokens_expiry_after_creation CHECK (((expires_at IS NULL) OR (expires_at > created_at))),
+    CONSTRAINT access_tokens_name_present CHECK ((length(TRIM(BOTH FROM name)) > 0)),
+    CONSTRAINT access_tokens_resource_kind CHECK (((resource_kind IS NULL) OR (resource_kind = ANY (ARRAY['daemon'::text, 'port'::text, 'connector'::text])))),
+    CONSTRAINT access_tokens_resource_pair CHECK (((resource_kind IS NULL) = (resource_id IS NULL))),
+    CONSTRAINT access_tokens_scopes CHECK (((cardinality(scopes) > 0) AND (scopes <@ ARRAY['deploy:read'::text, 'deploy:write'::text, 'token:read'::text, 'token:write'::text, 'reliant:api'::text, 'daemon:connect'::text, 'llm:invoke'::text, 'proxy:port'::text, 'mcp:connector'::text, 'secret:read'::text, 'secret:write'::text])))
+);
+
+--
 -- Name: agent_messages; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -415,7 +444,6 @@ CREATE TABLE public.connector_grants (
     user_id text NOT NULL,
     daemon_id text NOT NULL,
     name text NOT NULL,
-    token_hash text NOT NULL,
     token_prefix text NOT NULL,
     allowed_tools jsonb NOT NULL,
     path_root text NOT NULL,
@@ -477,26 +505,6 @@ CREATE TABLE public.daemon_attachment (
     memory_pressure boolean DEFAULT false NOT NULL,
     detected_ports text DEFAULT '[]'::text NOT NULL,
     CONSTRAINT daemon_attachment_source_check CHECK ((source = ANY (ARRAY['inbound'::text, 'outbound'::text])))
-);
-
---
--- Name: daemon_pats; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.daemon_pats (
-    id text NOT NULL,
-    user_id text NOT NULL,
-    token_hash text NOT NULL,
-    token_prefix text NOT NULL,
-    name text NOT NULL,
-    ephemeral boolean DEFAULT false NOT NULL,
-    expires_at timestamp with time zone,
-    last_used_at timestamp with time zone,
-    revoked_at timestamp with time zone,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    daemon_id text,
-    kind text DEFAULT 'daemon'::text NOT NULL,
-    user_email text DEFAULT ''::text NOT NULL
 );
 
 --
@@ -959,6 +967,20 @@ CREATE TABLE public.worktrees (
 ALTER TABLE ONLY public.background_process_output ALTER COLUMN id SET DEFAULT nextval('public.background_process_output_id_seq'::regclass);
 
 --
+-- Name: access_tokens access_tokens_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.access_tokens
+    ADD CONSTRAINT access_tokens_pkey PRIMARY KEY (id);
+
+--
+-- Name: access_tokens access_tokens_token_hash_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.access_tokens
+    ADD CONSTRAINT access_tokens_token_hash_key UNIQUE (token_hash);
+
+--
 -- Name: agent_messages agent_messages_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1120,13 +1142,6 @@ ALTER TABLE ONLY public.connector_grants
     ADD CONSTRAINT connector_grants_pkey PRIMARY KEY (id);
 
 --
--- Name: connector_grants connector_grants_token_hash_key; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.connector_grants
-    ADD CONSTRAINT connector_grants_token_hash_key UNIQUE (token_hash);
-
---
 -- Name: context_windows context_windows_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1153,13 +1168,6 @@ ALTER TABLE ONLY public.copilot_auth_tokens
 
 ALTER TABLE ONLY public.daemon_attachment
     ADD CONSTRAINT daemon_attachment_pkey PRIMARY KEY (daemon_id);
-
---
--- Name: daemon_pats daemon_pats_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.daemon_pats
-    ADD CONSTRAINT daemon_pats_pkey PRIMARY KEY (id);
 
 --
 -- Name: daemons daemons_pkey; Type: CONSTRAINT; Schema: public; Owner: -
@@ -1470,6 +1478,24 @@ ALTER TABLE ONLY public.worktrees
     ADD CONSTRAINT worktrees_project_id_name_key UNIQUE (project_id, name);
 
 --
+-- Name: access_tokens_live_acting_user; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX access_tokens_live_acting_user ON public.access_tokens USING btree (acting_user_id, name) WHERE ((revoked_at IS NULL) AND (acting_user_id IS NOT NULL));
+
+--
+-- Name: access_tokens_live_hash; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX access_tokens_live_hash ON public.access_tokens USING btree (token_hash) WHERE (revoked_at IS NULL);
+
+--
+-- Name: access_tokens_live_resource; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX access_tokens_live_resource ON public.access_tokens USING btree (resource_kind, resource_id) WHERE ((revoked_at IS NULL) AND (resource_kind IS NOT NULL));
+
+--
 -- Name: idx_agent_messages_inbox; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1620,12 +1646,6 @@ CREATE INDEX idx_connector_client_bindings_lookup ON public.connector_client_bin
 CREATE INDEX idx_connector_grants_daemon ON public.connector_grants USING btree (daemon_id);
 
 --
--- Name: idx_connector_grants_token_hash; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_connector_grants_token_hash ON public.connector_grants USING btree (token_hash);
-
---
 -- Name: idx_connector_grants_user; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1678,18 +1698,6 @@ CREATE INDEX idx_daemon_attachment_last_activity ON public.daemon_attachment USI
 --
 
 CREATE INDEX idx_daemon_attachment_user_id ON public.daemon_attachment USING btree (user_id);
-
---
--- Name: idx_daemon_pats_token_hash; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_daemon_pats_token_hash ON public.daemon_pats USING btree (token_hash);
-
---
--- Name: idx_daemon_pats_user_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_daemon_pats_user_id ON public.daemon_pats USING btree (user_id);
 
 --
 -- Name: idx_daemons_user_id; Type: INDEX; Schema: public; Owner: -

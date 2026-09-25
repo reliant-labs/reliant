@@ -25,15 +25,24 @@
  */
 
 import { cn } from "@/lib/utils";
+import type { ForgeTopologyEnv } from "@/services/forge/topology";
+
+import { DestinationBadge } from "./DestinationBadge";
 
 export interface EnvTabsProps {
   envs: string[];
+  /**
+   * The topology rows, when the caller has them, so each tab can carry its
+   * destination badge. Optional: a tab strip without it is still correct,
+   * just less informative.
+   */
+  envRows?: ForgeTopologyEnv[];
   selected: string | null;
   onSelect: (env: string) => void;
   isLoading?: boolean;
 }
 
-export function EnvTabs({ envs, selected, onSelect, isLoading }: EnvTabsProps) {
+export function EnvTabs({ envs, envRows, selected, onSelect, isLoading }: EnvTabsProps) {
   if (isLoading && envs.length === 0) {
     return (
       <p data-testid="env-selector-loading" className="text-xs text-muted-foreground">
@@ -62,13 +71,17 @@ export function EnvTabs({ envs, selected, onSelect, isLoading }: EnvTabsProps) {
             data-testid={`env-tab-${env}`}
             onClick={() => onSelect(env)}
             className={cn(
-              "-mb-px border-b-2 px-3 py-2 font-mono text-sm transition-colors",
+              "-mb-px inline-flex items-center gap-2 border-b-2 px-3 py-2 font-mono text-sm transition-colors",
               active
                 ? "border-primary text-foreground"
                 : "border-transparent text-muted-foreground hover:text-foreground"
             )}
           >
             {env}
+            {(() => {
+              const row = envRows?.find((candidate) => candidate.env === env);
+              return row ? <DestinationBadge env={row} /> : null;
+            })()}
           </button>
         );
       })}

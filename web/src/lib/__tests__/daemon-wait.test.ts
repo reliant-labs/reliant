@@ -12,7 +12,7 @@ import { describe, expect, it } from "vitest";
 import {
   DaemonLifecyclePhase,
   DaemonStatus,
-} from "@/gen/controlplane/v1/public/shared_pb";
+} from "@/gen/controlplane/controlplane/v1/shared_pb";
 import type { Daemon } from "@/services/controlPlane/daemon";
 import {
   classifyDaemonWait,

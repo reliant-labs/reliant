@@ -51,6 +51,18 @@
  *    read both, and `unknown` on either axis means an operator has to go and
  *    look at the environment.
  *
+ * 6. A HOSTED DEPLOY HAS NO KUBE CONTEXT, AND THE TOKEN DISCIPLINE STILL HOLDS.
+ *    An env whose plan says `target.destination: "hosted"` deploys through a
+ *    control plane: bytes land wherever that control plane runs them, so the
+ *    thing that decides "where" is the ENDPOINT, and the thing the deploy
+ *    writes into is the control plane's ENVIRONMENT. Forge reports the endpoint
+ *    as `guard.declared_context` for hosted, so the token keeps its one
+ *    required field and its one producer: the operator confirms the endpoint
+ *    they saw, and the daemon's stale-context check refuses a deploy whose KCL
+ *    now names a different control plane. Nothing here may show kube-context
+ *    language for a hosted plan — there is no cluster the operator could go
+ *    and check, and naming one would send them to the wrong place.
+ *
  * There is deliberately NO representation anywhere in this module of forge's
  * --skip-preflight or --no-digest. Both are overrides for a human at a terminal
  * who has weighed the consequence; a field for either would be set once as a
@@ -58,6 +70,7 @@
  */
 
 import type { Certainty } from "./topology";
+import { destinationOf, endpointHost, type EnvDestination } from "./topology";
 
 // ── Mode ────────────────────────────────────────────────────────────────────
 
@@ -274,6 +287,16 @@ export interface ForgeDeployGuard {
 }
 
 export interface ForgeDeployTarget {
+  /**
+   * Where this deploy lands — the topology vocabulary (hosted | cluster | …).
+   * Absent from a forge that predates hosted deploys, whose plans are
+   * cluster-shaped by evidence (they carry kube contexts).
+   */
+  destination?: string;
+  /** Hosted only: the control plane's normalized base URL. */
+  endpoint?: string;
+  /** Hosted only: the control plane's id for this env; empty until the first deploy ensures it. */
+  environment_id?: string;
   /** The env-wide declared context. For a multi-cluster env this is ONE of several. */
   kube_context?: string;
   namespace?: string;
@@ -365,6 +388,27 @@ export interface ForgeDeployReport {
 
 // ── Where this lands ────────────────────────────────────────────────────────
 
+/** The plan's destination. Unknown/absent is `unknown` — see isHostedPlan for what that implies here. */
+export function planDestination(report: ForgeDeployReport | null | undefined): EnvDestination {
+  return destinationOf(report?.target);
+}
+
+/**
+ * True only when forge SAID this plan is hosted. Never inferred from an
+ * absent kube context: a cluster env with no declared context is a blocker,
+ * not a hosted deploy.
+ */
+export function isHostedPlan(report: ForgeDeployReport | null | undefined): boolean {
+  return planDestination(report) === "hosted";
+}
+
+/** The control plane a hosted plan deploys through: target.endpoint, else the guard's declared endpoint. */
+export function hostedEndpoint(report: ForgeDeployReport | null | undefined): string {
+  const endpoint = (report?.target?.endpoint ?? "").trim();
+  if (endpoint !== "") return endpoint;
+  return (report?.guard?.declared_context ?? "").trim();
+}
+
 /**
  * targetContexts returns EVERY declared cluster this deploy addresses, sorted
  * and de-duplicated.
@@ -380,6 +424,9 @@ export interface ForgeDeployReport {
  * deployTokenFor.
  */
 export function targetContexts(report: ForgeDeployReport | null | undefined): string[] {
+  // A hosted plan addresses no kube context; its guard's declared_context is
+  // an endpoint, and listing it here would render it as a cluster.
+  if (isHostedPlan(report)) return [];
   const seen = new Set<string>();
   const add = (value: string | undefined) => {
     const trimmed = (value ?? "").trim();
@@ -424,6 +471,11 @@ export type DeployBlocker =
    * authorise against — and the token has no "unset" spelling by design.
    */
   | { kind: "no-declared-cluster" }
+  /**
+   * Hosted, but the plan names no control-plane endpoint to authorise
+   * against. The hosted twin of no-declared-cluster.
+   */
+  | { kind: "no-declared-endpoint" }
   /** The document is not a read-only preview, so it cannot authorise anything. */
   | { kind: "not-a-preview"; mode: DeployMode };
 
@@ -458,7 +510,11 @@ export function deployBlockers(report: ForgeDeployReport | null | undefined): De
     });
   }
 
-  if (targetContexts(report).length === 0) blockers.push({ kind: "no-declared-cluster" });
+  if (isHostedPlan(report)) {
+    if ((report.guard?.declared_context ?? "").trim() === "") blockers.push({ kind: "no-declared-endpoint" });
+  } else if (targetContexts(report).length === 0) {
+    blockers.push({ kind: "no-declared-cluster" });
+  }
 
   const findings = blockingFindings(report);
   if (findings.length > 0) blockers.push({ kind: "preflight-blocking", findings });
@@ -483,8 +539,19 @@ export function deployBlockers(report: ForgeDeployReport | null | undefined): De
  * to now.
  */
 export type DeployConfirmationToken = {
-  /** THE CLUSTER THE OPERATOR SAW NAMED. From the plan's guard, never a default. */
+  /**
+   * THE TARGET THE OPERATOR SAW NAMED. From the plan's guard, never a default.
+   * A kube context for a cluster deploy; the control-plane endpoint for a
+   * hosted one (forge reports it in the same field, and the daemon re-checks
+   * it the same way).
+   */
   expectedDeclaredContext: string;
+  /**
+   * Present only for a hosted plan: what the confirmation SAYS, never sent.
+   * The daemon's request has no field for either and needs none — the
+   * endpoint in expectedDeclaredContext is the re-checked half.
+   */
+  hosted?: { environmentId: string };
 } & (
   | { expectedCurrentRelease: string; expectUnbound?: false }
   | { expectUnbound: true; expectedCurrentRelease?: undefined }
@@ -533,13 +600,17 @@ export function deployTokenFor(
   const declaredContext = (report.guard?.declared_context ?? "").trim();
   if (declaredContext === "") return null;
 
+  const hosted = isHostedPlan(report)
+    ? { hosted: { environmentId: (report.target?.environment_id ?? "").trim() } }
+    : {};
+
   // An empty release is forge's own spelling of "this environment has no
   // binding" (the field is omitted when unbound), and it is the case the
   // expect_unbound half of the token exists for.
   const release = (report.release ?? "").trim();
-  if (release === "") return { expectedDeclaredContext: declaredContext, expectUnbound: true };
+  if (release === "") return { expectedDeclaredContext: declaredContext, expectUnbound: true, ...hosted };
 
-  return { expectedDeclaredContext: declaredContext, expectedCurrentRelease: release };
+  return { expectedDeclaredContext: declaredContext, expectedCurrentRelease: release, ...hosted };
 }
 
 /**
@@ -554,7 +625,26 @@ export function describeDeployToken(token: DeployConfirmationToken): string {
   const release = token.expectUnbound
     ? "this environment has no release binding"
     : `this environment is bound to ${token.expectedCurrentRelease}`;
+  if (token.hosted) {
+    // The verb says whether this touches something live: an ensured env is
+    // UPDATED (its id is named, so the claim pins which one), an un-ensured one
+    // is CREATED.
+    const action = token.hosted.environmentId
+      ? `this updates the live environment ${token.hosted.environmentId}`
+      : "this creates a new environment";
+    return `${action} on the control plane at ${token.expectedDeclaredContext}, and ${release}`;
+  }
   return `this deploys to ${token.expectedDeclaredContext}, and ${release}`;
+}
+
+/**
+ * confirmPhrase is what the operator must TYPE to enable the deploy: the
+ * cluster name, or — hosted — the control plane's host. The host rather than
+ * the full URL because it is the part a human reads and recognises; the full
+ * endpoint still travels in the token and is what the daemon re-checks.
+ */
+export function confirmPhrase(token: DeployConfirmationToken): string {
+  return token.hosted ? endpointHost(token.expectedDeclaredContext) : token.expectedDeclaredContext;
 }
 
 // ── Refusal ─────────────────────────────────────────────────────────────────

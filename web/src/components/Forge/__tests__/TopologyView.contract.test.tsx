@@ -352,7 +352,7 @@ describe("environment-level facts", () => {
 describe("the matrix is a real table", () => {
   it("gives every env-level fact its own column header", () => {
     renderView(reportOutcome(baseReport()));
-    for (const name of [/environment/i, /release/i, /status/i, /promoted/i, /cluster/i, /actions/i]) {
+    for (const name of [/environment/i, /release/i, /status/i, /promoted/i, /runs on/i, /actions/i]) {
       expect(screen.getByRole("columnheader", { name })).toBeTruthy();
     }
   });
@@ -364,7 +364,7 @@ describe("the matrix is a real table", () => {
     // Exactly one row header — the env name — and everything else is a <td>.
     expect(row.querySelectorAll("th").length).toBe(1);
 
-    // release + status + promoted + cluster + 4 images + actions = 9 data cells.
+    // release + status + promoted + runs-on + 4 images + actions = 9 data cells.
     expect(row.querySelectorAll("td").length).toBe(4 + 4 + 1);
 
     // The release is NOT inside the row header any more.

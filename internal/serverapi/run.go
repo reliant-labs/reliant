@@ -367,7 +367,7 @@ func Run(ctx context.Context, opts Options) error {
 		// third-party MCP client and to build the OAuth discovery document.
 		// MCP_OAUTH_ISSUERS names the authorization servers whose tokens the
 		// connector endpoint accepts (typically the Supabase project URL);
-		// without it, connectors authenticate with rlnt_conn_ credentials
+		// without it, connectors authenticate with `rlat_` connector credentials
 		// only and OAuth discovery is not advertised.
 		PublicURL:           strings.TrimSpace(os.Getenv("PUBLIC_URL")),
 		OAuthIssuers:        splitAndTrim(os.Getenv("MCP_OAUTH_ISSUERS")),

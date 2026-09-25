@@ -1,0 +1,902 @@
+syntax = "proto3";
+
+// EXPERIMENTAL: controlplane.v1 is unstable. Field numbers, RPC names, and
+// service shapes may change without notice until the package is declared
+// stable. Consumers should pin to a specific control-plane commit.
+//
+// See proto/controlplane/v1/README.md for stability/versioning policy.
+
+package controlplane.v1;
+
+import "controlplane/v1/shared.proto";
+import "forge/v1/forge.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/reliant-labs/control-plane/gen/services/billing/v1;billingv1";
+
+// === BillingService (public) ===
+//
+// User-facing billing RPCs. Admin-only (org-scoped or arbitrary-user) and
+// gateway-internal usage-reservation RPCs live in
+// BillingAdminService / BillingGatewayService.
+
+service BillingService {
+  // Read-only catalog.
+  rpc ListPlans(ListPlansRequest) returns (ListPlansResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+  rpc GetPlan(GetPlanRequest) returns (GetPlanResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+
+  // Current user subscription / billing portal / invoices.
+  rpc GetCurrentUserSubscription(GetCurrentUserSubscriptionRequest) returns (GetCurrentUserSubscriptionResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+  rpc CreateCurrentUserCheckoutSession(CreateCurrentUserCheckoutSessionRequest) returns (CreateCurrentUserCheckoutSessionResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+  rpc CreateCurrentUserBillingPortalSession(CreateCurrentUserBillingPortalSessionRequest) returns (CreateCurrentUserBillingPortalSessionResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+  rpc ListCurrentUserInvoices(ListCurrentUserInvoicesRequest) returns (ListCurrentUserInvoicesResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+
+  // Wallet (per-user).
+  rpc GetCurrentUserWalletOverview(GetCurrentUserWalletOverviewRequest) returns (GetCurrentUserWalletOverviewResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+  // (GrantCurrentUserWelcomeCredit removed: the signup wallet credit is now
+  // auto-granted at first-login provisioning via internal/signupgrant.)
+  rpc CreateCurrentUserWalletTopupSession(CreateCurrentUserWalletTopupSessionRequest) returns (CreateCurrentUserWalletTopupSessionResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+  // CreateCurrentUserWalletTopupPaymentIntent mints a PaymentIntent for a
+  // top-up the user confirms in OUR page with Stripe Elements, rather than in
+  // Stripe's hosted or embedded Checkout.
+  //
+  // The counterpart of CreateCurrentUserWalletPaymentMethodSetup: same "return
+  // a client secret and let Stripe.js collect the card" division of labour, so
+  // no card data reaches us. That one saves a card; this one moves money.
+  //
+  // Confirmation is the browser's, entitlement is still the webhook's. A
+  // succeeded confirmation reported by the client grants nothing on its own.
+  rpc CreateCurrentUserWalletTopupPaymentIntent(CreateCurrentUserWalletTopupPaymentIntentRequest) returns (CreateCurrentUserWalletTopupPaymentIntentResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+
+  // GetCurrentUserWalletTopupQuote prices a top-up WITHOUT minting anything at
+  // Stripe, so the checkout page can disclose the processing fee before asking
+  // for a card.
+  //
+  // THE REASON THIS IS AN RPC AND NOT CLIENT ARITHMETIC: a fee the browser
+  // computes is a number the browser can change, and — more mundanely but more
+  // likely — a second implementation of the same rule, free to disagree with
+  // the one that builds the charge. This returns the breakdown from the same
+  // function the PaymentIntent's amount is derived from, so what the user is
+  // shown and what their card is charged cannot drift apart.
+  //
+  // Creates no Stripe object and no database row: the picker can call it on
+  // every amount the user clicks.
+  rpc GetCurrentUserWalletTopupQuote(GetCurrentUserWalletTopupQuoteRequest) returns (GetCurrentUserWalletTopupQuoteResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+
+  // RedeemCoupon credits the caller's org wallet from a coupon code.
+  //
+  // END-USER facing (any authenticated caller), unlike the coupon MANAGEMENT
+  // RPCs — those
+  // live on the internal-only service and are served by a different
+  // deployment. Redeeming is something a customer does; issuing is not.
+  //
+  // Idempotent per (coupon, org): a second redemption of the same code by the
+  // same org is refused rather than credited twice.
+  rpc RedeemCoupon(RedeemCouponRequest) returns (RedeemCouponResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+
+  // Reliant managed-LLM access (per-user).
+  rpc GetCurrentUserReliantState(GetCurrentUserReliantStateRequest) returns (GetCurrentUserReliantStateResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+  rpc RepairCurrentUserReliantAccess(RepairCurrentUserReliantAccessRequest) returns (RepairCurrentUserReliantAccessResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+  rpc RotateCurrentUserReliantAccess(RotateCurrentUserReliantAccessRequest) returns (RotateCurrentUserReliantAccessResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+  rpc GetCurrentUserReliantOverview(GetCurrentUserReliantOverviewRequest) returns (GetCurrentUserReliantOverviewResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+
+  // SetCurrentUserReliantEnabled turns managed Reliant LLM access on or off
+  // for the caller. This is the ONLY writer of reliant_enabled: the flag is a
+  // user preference, never inferred from wallet balance, org membership, or
+  // provisioning state. A funded user may still prefer their own API key.
+  rpc SetCurrentUserReliantEnabled(SetCurrentUserReliantEnabledRequest) returns (SetCurrentUserReliantEnabledResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+
+  // Workspace compute plan (per-user).
+  rpc GetCurrentUserComputeSubscription(GetCurrentUserComputeSubscriptionRequest) returns (GetCurrentUserComputeSubscriptionResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+  rpc SetCurrentUserComputeOverage(SetCurrentUserComputeOverageRequest) returns (SetCurrentUserComputeOverageResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+
+  // Deploy (infrastructure) overage ceiling — the cpu/memory/storage twin of
+  // the compute pair above. Separate from it because the two cap different
+  // products through different gates; see SetCurrentUserInfraOverageRequest.
+  rpc SetCurrentUserInfraOverage(SetCurrentUserInfraOverageRequest) returns (SetCurrentUserInfraOverageResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+  // Everything the deploy overage surface renders from, in one call:
+  // consumption, allowance, the customer's cap, and the current ladder rung
+  // per dimension.
+  rpc GetCurrentUserInfraOverage(GetCurrentUserInfraOverageRequest) returns (GetCurrentUserInfraOverageResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+
+  // CreateCurrentUserComputeSubscriptionIntent starts a compute subscription
+  // the user pays for in OUR page with Stripe Elements, rather than in
+  // Stripe's hosted Checkout page inside an iframe.
+  //
+  // The subscription counterpart of
+  // CreateCurrentUserWalletTopupPaymentIntent, and the recurring twin of it:
+  // same "we mint, the browser confirms, the card never reaches us" division
+  // of labour. The subscription is created in `incomplete` status and moves no
+  // money until the browser confirms.
+  //
+  // It grants NO entitlement and cancels NO existing subscription. An
+  // abandoned payment leaves the caller exactly as they were, and Stripe
+  // expires the unpaid subscription on its own. Entitlement — and cancelling
+  // the plan this one supersedes — remains the webhook's, on the signal that
+  // confirms the money actually moved.
+  rpc CreateCurrentUserComputeSubscriptionIntent(CreateCurrentUserComputeSubscriptionIntentRequest) returns (CreateCurrentUserComputeSubscriptionIntentResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+
+  // AI credit auto-recharge: refill the wallet from a saved card when the
+  // balance falls below a threshold, bounded by a MANDATORY monthly ceiling.
+  //
+  // Three RPCs, because saving a card and arming the rule are separate
+  // decisions: a user may save a card and never arm auto-recharge, and a
+  // compute subscriber already HAS a saved card and only needs the rule.
+  rpc GetCurrentUserWalletAutoRecharge(GetCurrentUserWalletAutoRechargeRequest) returns (GetCurrentUserWalletAutoRechargeResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+  rpc SetCurrentUserWalletAutoRecharge(SetCurrentUserWalletAutoRechargeRequest) returns (SetCurrentUserWalletAutoRechargeResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+  // Begins saving a card for off-session use. Moves no money.
+  //
+  // Returns EITHER an already-saved payment method (the compute-subscriber
+  // path, where this is a read rather than a collection) OR a SetupIntent
+  // client secret to mount with Stripe.js — never both.
+  rpc CreateCurrentUserWalletPaymentMethodSetup(CreateCurrentUserWalletPaymentMethodSetupRequest) returns (CreateCurrentUserWalletPaymentMethodSetupResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+  // Records a card the user just saved. The server reads the card's details
+  // back from Stripe; the client sends only the payment method ID.
+  rpc ConfirmCurrentUserWalletPaymentMethod(ConfirmCurrentUserWalletPaymentMethodRequest) returns (ConfirmCurrentUserWalletPaymentMethodResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+  rpc GetCurrentUserComputeUsage(GetCurrentUserComputeUsageRequest) returns (GetCurrentUserComputeUsageResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+
+  // GetCurrentUserComputeEligibility answers "can this caller start a managed
+  // daemon right now, and if not, why".
+  //
+  // Exists because the client had no way to see COMPUTE entitlement at all: it
+  // was gating the cloud-daemon button on the LLM entitlement
+  // (ReliantEntitlement.status + reliant_enabled), which describes the wallet
+  // that funds token spend and a managed-LLM preference — neither of which has
+  // anything to do with whether a machine may run. The authoritative gate is
+  // internal/svcdaemon.checkDaemonSizeAllowed; this RPC reports the same
+  // funding facts so the UI can predict it instead of guessing.
+  rpc GetCurrentUserComputeEligibility(GetCurrentUserComputeEligibilityRequest) returns (GetCurrentUserComputeEligibilityResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+
+  // Misc per-org reads that callers expect on the public surface.
+  rpc GetUsageSummary(GetUsageSummaryRequest) returns (GetUsageSummaryResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+  rpc GetComputeUsage(GetComputeUsageRequest) returns (GetComputeUsageResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+  rpc GetInvoicePreview(GetInvoicePreviewRequest) returns (GetInvoicePreviewResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+
+  // Per-user billing email. UpdateBillingEmail persists a user-supplied
+  // billing address (empty clears it); GetCurrentUserBillingEmail returns the
+  // stored value plus the fallback (users.email / JWT) the billing flows use
+  // when no billing email is set. Backs reliant/web's BillingEmailRequiredModal.
+  rpc GetCurrentUserBillingEmail(GetCurrentUserBillingEmailRequest) returns (GetCurrentUserBillingEmailResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+  rpc UpdateBillingEmail(UpdateBillingEmailRequest) returns (UpdateBillingEmailResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+}
+
+message ListPlansRequest {
+  optional string product_id = 1;
+}
+
+message ListPlansResponse {
+  repeated Plan plans = 1;
+}
+
+message GetPlanRequest {
+  string plan_id = 1;
+}
+
+message GetPlanResponse {
+  Plan plan = 1;
+}
+
+message GetCurrentUserSubscriptionRequest {}
+
+message GetCurrentUserSubscriptionResponse {
+  Subscription subscription = 1;
+}
+
+// CheckoutUiMode selects where Stripe renders the payment form.
+//
+// HOSTED mints a checkout.stripe.com page the client navigates to. EMBEDDED
+// mints a client secret the client mounts in-page via @stripe/react-stripe-js's
+// EmbeddedCheckout, so the user never leaves the app — on web, in Electron, and
+// on mobile web.
+//
+// The two modes take DISJOINT redirect parameters and Stripe rejects the wrong
+// pairing: success_url and cancel_url are "not allowed if ui_mode is embedded".
+// So a request must set the pair that matches its mode; the other is ignored.
+enum CheckoutUiMode {
+  // Unspecified means HOSTED, so a client that predates embedded checkout
+  // keeps working unchanged.
+  CHECKOUT_UI_MODE_UNSPECIFIED = 0;
+  CHECKOUT_UI_MODE_HOSTED = 1;
+  CHECKOUT_UI_MODE_EMBEDDED = 2;
+}
+
+message CreateCurrentUserCheckoutSessionRequest {
+  string plan_id = 1;
+  // Hosted mode only. Validated against ALLOWED_REDIRECT_HOSTS. Ignored — and
+  // not validated — when ui_mode is EMBEDDED, because Stripe forbids them there.
+  string success_url = 2;
+  string cancel_url = 3;
+
+  // Where Stripe renders the form. Unset = HOSTED.
+  CheckoutUiMode ui_mode = 4;
+
+  // Embedded mode only, and optional. Stripe requires a return_url only when
+  // redirect-based payment methods (some bank redirects) are enabled on the
+  // session; cards and wallets never leave the iframe. Validated against the
+  // redirect allowlist when present.
+  string return_url = 5;
+}
+
+message CreateCurrentUserCheckoutSessionResponse {
+  // Populated in HOSTED mode; empty in EMBEDDED.
+  string checkout_url = 1;
+  // Populated in EMBEDDED mode; empty in HOSTED. Pass to
+  // EmbeddedCheckoutProvider as options.clientSecret.
+  string client_secret = 2;
+  // Echoed so the client never has to infer the response's shape from which
+  // field happens to be non-empty.
+  CheckoutUiMode ui_mode = 3;
+  // The Stripe Checkout Session id, so the client can ask the SERVER what
+  // happened rather than trusting its own onComplete callback.
+  string session_id = 4;
+}
+
+message GetCurrentUserWalletOverviewRequest {
+  int32 ledger_page = 1;
+  int32 ledger_page_size = 2;
+}
+
+message GetCurrentUserWalletOverviewResponse {
+  WalletOverview overview = 1;
+}
+
+message GetCurrentUserComputeSubscriptionRequest {}
+
+message GetCurrentUserComputeSubscriptionResponse {
+  Subscription subscription = 1;
+}
+
+message CreateCurrentUserComputeSubscriptionIntentRequest {
+  // The compute plan to subscribe to.
+  string plan_id = 1;
+}
+
+message CreateCurrentUserComputeSubscriptionIntentResponse {
+  // The Stripe subscription, created in `incomplete` status. Recorded for
+  // correlation only — it is NOT an entitlement, and the client must not read
+  // it as one.
+  string subscription_id = 1;
+  // Confirm this with Stripe Elements to pay the first invoice. NO redirect
+  // URLs are involved: the card path confirms in place.
+  //
+  // Empty when the subscription needed no payment at all (full-coverage
+  // coupon, or a trial). That is a success, not a failure — the client shows
+  // no card form and waits for entitlement like any other purchase.
+  string payment_client_secret = 2;
+  // The first invoice's total, as Stripe computed it. The pay button shows
+  // this rather than a price the client added up itself.
+  int64 amount_due_cents = 3;
+  string currency = 4;
+}
+
+message CreateCurrentUserWalletTopupSessionRequest {
+  int64 amount_cents = 1;
+  // Hosted mode only; see CreateCurrentUserCheckoutSessionRequest.
+  string success_url = 2;
+  string cancel_url = 3;
+  CheckoutUiMode ui_mode = 4;
+  string return_url = 5;
+}
+
+message CreateCurrentUserWalletTopupSessionResponse {
+  WalletTopup topup = 1;
+  // Populated in HOSTED mode; empty in EMBEDDED.
+  string checkout_url = 2;
+  // Populated in EMBEDDED mode; empty in HOSTED.
+  string client_secret = 3;
+  CheckoutUiMode ui_mode = 4;
+  string session_id = 5;
+}
+
+message CreateCurrentUserWalletTopupPaymentIntentRequest {
+  int64 amount_cents = 1;
+}
+
+message CreateCurrentUserWalletTopupPaymentIntentResponse {
+  // The pending wallet_topups row this intent will settle. Reused across
+  // resubmissions of the same amount, so its id is stable.
+  WalletTopup topup = 1;
+  // Mount this with Stripe Elements and confirm it client-side. NO redirect
+  // URLs are involved: the card path confirms in place.
+  string payment_intent_client_secret = 2;
+  string payment_intent_id = 3;
+}
+
+message GetCurrentUserWalletTopupQuoteRequest {
+  // How much CREDIT the user wants. The minimum applies to this, not to the
+  // charged total: the user picks credit, and $5 is the smallest purchase.
+  int64 credit_cents = 1;
+}
+
+// The itemised breakdown a checkout page must show BEFORE taking a card.
+//
+// All three amounts are sent rather than the client deriving one from the
+// others. "credit + fee = total" is exactly the arithmetic this feature exists
+// to make visible, and a client that recomputes any leg of it can render a
+// total that disagrees with the charge.
+message GetCurrentUserWalletTopupQuoteResponse {
+  // Lands in the wallet. What the user chose.
+  int64 credit_cents = 1;
+  // The processing fee, already rounded to whole cents server-side.
+  int64 fee_cents = 2;
+  // What the card is charged. Always credit_cents + fee_cents.
+  int64 total_cents = 3;
+  // The disclosed rate, so the UI never hardcodes "5%" next to a number this
+  // server computed at some other rate.
+  int64 fee_percent = 4;
+}
+
+message RedeemCouponRequest {
+  // code is case-insensitive and trimmed server-side — users paste these from
+  // emails and read them aloud, so case must never decide the outcome.
+  string code = 1;
+}
+
+// RedeemedCouponKind tells the client WHAT a redemption granted, so it can say
+// "$20 added to your balance" or "600 machine minutes added" rather than
+// guessing from which field happens to be non-zero.
+//
+// Public contract: exported verbatim to reliant (see proto/public-api.txt).
+// Never renumber — reserve removed tags.
+enum RedeemedCouponKind {
+  REDEEMED_COUPON_KIND_UNSPECIFIED = 0;
+  // Wallet credit, which funds LLM spend.
+  REDEEMED_COUPON_KIND_WALLET_CREDIT = 1;
+  // Daemon compute minutes — the Machine product.
+  REDEEMED_COUPON_KIND_COMPUTE_MINUTES = 2;
+}
+
+message RedeemCouponResponse {
+  // amount_cents credited to the org wallet. WALLET_CREDIT only.
+  int64 amount_cents = 1;
+  // code as stored (uppercase), so the UI can echo it back canonically.
+  string code = 2;
+  // new_balance_cents is the wallet balance AFTER the credit, letting the
+  // caller update its balance display without a second round-trip.
+  // WALLET_CREDIT only.
+  int64 new_balance_cents = 3;
+
+  // kind selects which fields above/below are meaningful.
+  RedeemedCouponKind kind = 4;
+  // compute_minutes granted. COMPUTE_MINUTES only.
+  int64 compute_minutes = 5;
+  // new_compute_minutes_remaining is the org's total unspent granted compute
+  // minutes AFTER this redemption (grants stack), so the caller can update its
+  // display without a second round-trip. COMPUTE_MINUTES only.
+  int64 new_compute_minutes_remaining = 6;
+}
+
+message CreateCurrentUserBillingPortalSessionRequest {
+  string return_url = 1;
+}
+
+message CreateCurrentUserBillingPortalSessionResponse {
+  string portal_url = 1;
+}
+
+message ListCurrentUserInvoicesRequest {}
+
+message ListCurrentUserInvoicesResponse {
+  repeated Invoice invoices = 1;
+}
+
+message GetUsageSummaryRequest {
+  string org_id = 1;
+}
+
+message GetUsageSummaryResponse {
+  repeated UsageSummary summaries = 1;
+}
+
+// GetComputeUsage returns daemon compute usage for the current billing period.
+message GetComputeUsageRequest {
+  string org_id = 1;
+}
+
+message ComputeUsageBySizeTier {
+  string size_tier = 1;
+  double total_minutes = 2;
+  double estimated_cost_cents = 3;
+}
+
+message GetComputeUsageResponse {
+  double total_minutes = 1;
+  int32 included_minutes = 2;
+  double overage_minutes = 3;
+  double estimated_overage_cost_cents = 4;
+  repeated ComputeUsageBySizeTier per_size_breakdown = 5;
+  google.protobuf.Timestamp period_start = 6;
+  google.protobuf.Timestamp period_end = 7;
+}
+
+message GetCurrentUserReliantStateRequest {}
+
+message GetCurrentUserReliantStateResponse {
+  ReliantEntitlement entitlement = 1;
+  ManagedReliantAccess managed_access = 2;
+}
+
+message RepairCurrentUserReliantAccessRequest {}
+
+message RepairCurrentUserReliantAccessResponse {
+  ReliantEntitlement entitlement = 1;
+  ManagedReliantAccess managed_access = 2;
+  bool repaired = 3;
+}
+
+message RotateCurrentUserReliantAccessRequest {
+  optional string grace_period = 1;
+}
+
+message RotateCurrentUserReliantAccessResponse {
+  ReliantEntitlement entitlement = 1;
+  ManagedReliantAccess managed_access = 2;
+  bool rotated = 3;
+  bool replaced = 4;
+  // plaintext_key carried the retired managed-access `rlnt_` LLM key. LLM
+  // keys are `rlat_` access tokens with llm:invoke, minted by
+  // AccessTokenService.CreateMyToken.
+  reserved 5;
+  reserved "plaintext_key";
+}
+
+message GetCurrentUserReliantOverviewRequest {}
+
+message GetCurrentUserReliantOverviewResponse {
+  ReliantOverview overview = 1;
+}
+
+message SetCurrentUserReliantEnabledRequest {
+  bool enabled = 1;
+}
+
+message SetCurrentUserReliantEnabledResponse {
+  ReliantEntitlement entitlement = 1;
+}
+
+// === Current-user workspace compute plan ===
+
+// SetCurrentUserComputeOverage states the caller's WHOLE overage decision:
+// whether machines may run past included hours, and the ceiling on what that
+// is allowed to cost. Both travel together so "overage on, no ceiling" is a
+// state the user has to pick rather than one they can land in by accident.
+message SetCurrentUserComputeOverageRequest {
+  bool enabled = 1;
+
+  // Monthly ceiling on overage spend, in cents. Unset or 0 both mean NO CAP,
+  // matching the enforcement gate's `> 0` test.
+  //
+  // The request replaces the stored cap outright — it is not a patch. A caller
+  // that omits this field is asking for uncapped overage, so a UI must send
+  // the user's current choice on every call, not just when it changes.
+  optional int64 budget_cents = 2;
+}
+
+message SetCurrentUserComputeOverageResponse {
+  Subscription subscription = 1;
+}
+
+// === Current-user DEPLOY (infrastructure) overage ceiling ===
+
+// SetCurrentUserInfraOverage states the caller's ceiling on DEPLOY overage
+// spend — the cpu / memory / storage a deployment consumes past its plan's
+// included allowance.
+//
+// A SEPARATE RPC FROM SetCurrentUserComputeOverage, mirroring the separate
+// column, for the reason Subscription.infra_budget_cents states: the compute
+// cap refuses to start a dev machine, this one gates a production website. A
+// user setting one has not stated an opinion about the other, and a single RPC
+// writing both would take that decision for them.
+//
+// THERE IS NO `enabled` FLAG BESIDE THE CAP, which is the one place this
+// deliberately does NOT mirror the compute request. Compute overage is
+// genuinely optional — a machine can simply refuse to start — so "may this run
+// past its included hours" is a real question with a real off position. A
+// deployment that is already running accrues usage whether or not anybody
+// opted in; the only thing a customer can actually choose is where the ceiling
+// sits. A bool here would imply an off switch the platform does not have.
+message SetCurrentUserInfraOverageRequest {
+  // Monthly ceiling on deploy overage spend, in cents. Unset or 0 both mean
+  // NO CAP, matching the enforcement gate's `> 0` test.
+  //
+  // The request replaces the stored cap outright — it is not a patch. A caller
+  // that omits this field is asking for uncapped deploy overage, so a UI must
+  // send the user's current choice on every call, not just when it changes.
+  optional int64 budget_cents = 1;
+}
+
+message SetCurrentUserInfraOverageResponse {
+  Subscription subscription = 1;
+}
+
+// GetCurrentUserInfraOverage is everything a client needs to render the deploy
+// overage surface in ONE call: what each dimension has consumed, what the plan
+// includes, where the customer's ceiling sits, and which rung of the
+// enforcement ladder each dimension is currently on.
+//
+// FOLDED INTO ONE RESPONSE deliberately. The four facts are only meaningful
+// together — a consumption figure without its allowance is a number with no
+// scale, and a ladder rung without the reading behind it cannot be explained
+// to the user who is looking at it — and two round trips to draw one panel is
+// a spinner nobody needs to see. Same reasoning as
+// GetDeployTenantResponse.clusters.
+message GetCurrentUserInfraOverageRequest {}
+
+message GetCurrentUserInfraOverageResponse {
+  // Per-dimension state, one entry per infrastructure dimension the caller's
+  // plan declares. Daemon compute is NOT here — it is a session, it has its
+  // own ladder and its own cap, and GetCurrentUserComputeUsage reports it.
+  repeated InfraDimensionUsage dimensions = 1;
+
+  // The customer's stated ceiling. Unset means they have set none, which is
+  // uncapped; a present 0 is also uncapped but is a value they CHOSE, and a UI
+  // must be able to tell those apart even though enforcement cannot.
+  optional int64 budget_cents = 2;
+
+  // Accrued overage across all infrastructure dimensions this period, in
+  // cents — the number budget_cents is compared against. Reported so a client
+  // can render "you are $4.12 into a $20 ceiling" without re-deriving it from
+  // the rows and the catalog's rates, which is a calculation the server must
+  // own or the two will disagree.
+  double accrued_overage_cents = 3;
+
+  // Whether accrued_overage_cents has met budget_cents. Sent explicitly rather
+  // than left to the client to compare, because the comparison has a
+  // convention in it: unset and 0 both mean no cap, and the test is `>=` not
+  // `>`. A client reimplementing that will eventually get one of them wrong.
+  bool budget_cap_reached = 4;
+
+  // Whether the usage figures could be measured at all. False means the
+  // dimension rows carry no reading and a client must render "unavailable"
+  // rather than a confident zero — the same unknown-rendered-as-known defect
+  // GetCurrentUserComputeUsageResponse.usage_measured exists to prevent.
+  bool usage_measured = 5;
+
+  google.protobuf.Timestamp period_start = 6;
+  google.protobuf.Timestamp period_end = 7;
+}
+
+// InfraDimensionUsage is one metered infrastructure dimension's current
+// standing: the reading, the allowance, and the ladder rung.
+message InfraDimensionUsage {
+  // Stable dimension id — "infra_cpu", "infra_memory", "infra_storage",
+  // "vcluster_floor".
+  string dimension_id = 1;
+  // Human-readable name, ready to display ("CPU", "Memory", "Storage").
+  string display_name = 2;
+  // The unit both consumed and included_allowance are denominated in
+  // ("vcpu_hours", "gib_hours"). Storage is GiB-HOURS because that is what
+  // the meter produces; rendering it as GiB-months is a presentation step the
+  // client performs by dividing by 730, never a different number the server
+  // sends.
+  string unit = 3;
+
+  double consumed = 4;
+  double included_allowance = 5;
+
+  // The current enforcement rung: "none", "notify", "block_scale_up",
+  // "throttle", "suspend". A STRING rather than an enum because it mirrors
+  // planlimits.OverageAction.String(), which is already the stable vocabulary
+  // the logs and metric labels use; a parallel enum would be a second spelling
+  // of the same ladder that could drift from it.
+  string action = 6;
+
+  // When continuous overage began. Unset when not currently over. This is
+  // PERSISTED state (controlplane.infra_overage_state), not a value recomputed
+  // per request — it is what the grace window is measured from, and a client
+  // can show "over since Tuesday" honestly because it survives a restart.
+  google.protobuf.Timestamp over_since = 7;
+
+  // Whether the suspend rung can EVER apply to this dimension. False for
+  // storage, always. Sent so a client renders the ladder honestly rather than
+  // threatening a suspension the server will never carry out.
+  bool suspendable = 8;
+
+  // True when suspension was withheld ONLY because this workload was restored
+  // too recently (see the minimum-uptime floor). Distinct from an ordinary
+  // throttle: it tells a client the reprieve is temporary, which is
+  // information the user needs and cannot infer from the action alone.
+  bool within_restore_floor = 9;
+}
+
+// WalletAutoRecharge is an org's auto-recharge rule as the UI sees it.
+message WalletAutoRecharge {
+  bool enabled = 1;
+  // Recharge when the balance falls below this.
+  int64 threshold_cents = 2;
+  // How much to add each time.
+  int64 amount_cents = 3;
+  // The MANDATORY monthly ceiling. Always > 0 on an enabled rule — there is no
+  // uncapped state for a charger that fires with nobody watching.
+  int64 max_per_month_cents = 4;
+
+  // Where the rule sits on the failure ladder: "ok", "declined",
+  // "requires_action", or "ceiling_reached".
+  //
+  // The rule stays ENABLED on every rung. A client must render a degraded
+  // state from this field rather than inferring failure from enabled=false,
+  // which never happens.
+  string failure_state = 5;
+  // Human-readable reason for the current failure_state, ready to display.
+  string last_error = 6;
+  int64 last_error_at_ms = 7;
+  // Cents already committed by auto-recharge this billing month — the
+  // numerator against max_per_month_cents.
+  int64 spent_this_month_cents = 8;
+}
+
+// SavedPaymentMethod is the card on file, as Stripe reports it.
+//
+// brand comes from Stripe and is displayed as text. Clients must NEVER map it
+// onto a hardcoded row of card logos: what a customer can pay with is Stripe's
+// decision, not a list we ship.
+message SavedPaymentMethod {
+  string brand = 1;
+  string last4 = 2;
+  int64 exp_month = 3;
+  int64 exp_year = 4;
+}
+
+message GetCurrentUserWalletAutoRechargeRequest {}
+message GetCurrentUserWalletAutoRechargeResponse {
+  // Absent when the user has never configured a rule, which is NOT the same as
+  // a disabled rule and should not be rendered as one.
+  optional WalletAutoRecharge auto_recharge = 1;
+  // Absent when no card is saved. Arming requires one.
+  optional SavedPaymentMethod payment_method = 2;
+}
+
+// SetCurrentUserWalletAutoRechargeRequest replaces the stored rule outright —
+// it is not a patch. Enable, threshold, amount and ceiling are one decision and
+// are written in one statement, so a UI must send the user's current choice for
+// every field on every call.
+message SetCurrentUserWalletAutoRechargeRequest {
+  bool enabled = 1;
+  int64 threshold_cents = 2;
+  int64 amount_cents = 3;
+  // REQUIRED when enabled. Unlike the compute overage cap, 0 is not "uncapped"
+  // here — it is rejected. An automatic charger must have a wall.
+  int64 max_per_month_cents = 4;
+}
+message SetCurrentUserWalletAutoRechargeResponse {
+  WalletAutoRecharge auto_recharge = 1;
+}
+
+message CreateCurrentUserWalletPaymentMethodSetupRequest {}
+message CreateCurrentUserWalletPaymentMethodSetupResponse {
+  // Set when a card was ALREADY on file at Stripe and has been adopted. The
+  // user is not asked to re-enter a card they already gave us.
+  optional SavedPaymentMethod payment_method = 1;
+  // Set when a card must be collected: mount this with Stripe.js. Exactly one
+  // of these two fields is populated.
+  string setup_intent_client_secret = 2;
+}
+
+message ConfirmCurrentUserWalletPaymentMethodRequest {
+  string payment_method_id = 1;
+}
+message ConfirmCurrentUserWalletPaymentMethodResponse {
+  SavedPaymentMethod payment_method = 1;
+}
+
+message ComputeUsageByWorkspace {
+  string workspace_id = 1;
+  string workspace_name = 2;
+  string size = 3;
+  double minutes = 4;
+  double overage_minutes = 5;
+}
+
+message ComputeUsageByDay {
+  google.protobuf.Timestamp day = 1;
+  double minutes = 2;
+}
+
+message GetCurrentUserComputeUsageRequest {
+  optional string period = 1; // "current" (default) | "previous"
+}
+
+message GetCurrentUserComputeUsageResponse {
+  int32 included_minutes = 1;
+  double used_minutes = 2;
+  double overage_minutes = 3;
+  double estimated_overage_cost_cents = 4;
+  google.protobuf.Timestamp period_start = 5;
+  google.protobuf.Timestamp period_end = 6;
+  repeated ComputeUsageByWorkspace by_workspace = 7;
+  repeated ComputeUsageByDay by_day = 8;
+
+  // granted_minutes_remaining is unspent compute minutes from redeemed
+  // compute coupons.
+  //
+  // Reported ALONGSIDE included_minutes rather than folded into it because the
+  // two behave differently: included minutes refill every billing period,
+  // whereas a grant is a one-time bucket that depletes and does not renew.
+  // Adding them would misrepresent next month's allowance.
+  //
+  // Grants are spent AFTER included minutes and BEFORE overage.
+  //
+  // usage_measured distinguishes "this org genuinely ran nothing" from "the
+  // server did not measure". Both previously arrived as used_minutes = 0 on a
+  // 200 response, so the client could not tell them apart and rendered the
+  // unmeasured case as a confident "0.0 h used" — the same unknown-as-known
+  // defect the plan-detail guard already exists to prevent, one field over,
+  // and in the direction that costs money: a user was told they had consumed
+  // nothing while the daemon start gate refused them against real metered
+  // usage.
+  //
+  // False means used_minutes, overage_minutes, estimated_overage_cost_cents,
+  // by_workspace and by_day carry NO information and must not be rendered as
+  // values. included_minutes and granted_minutes_remaining are unaffected —
+  // they come from the plan and the grant ledger, not from metering.
+  //
+  // Public contract: exported verbatim to reliant (see proto/public-api.txt).
+  // Never renumber — reserve removed tags.
+  int64 granted_minutes_remaining = 9;
+
+  // Whether the metered fields above carry a measurement. See the note on
+  // granted_minutes_remaining for why this is not inferable from a zero.
+  //
+  // Defaults to FALSE, deliberately: proto3 gives an older or partial server
+  // the safe reading. A server that cannot measure says nothing and the
+  // client withholds, rather than a missing field defaulting to "measured"
+  // and reinstating the exact bug this field exists to close.
+  bool usage_measured = 10;
+}
+
+// === Compute eligibility ===
+
+// ComputeIneligibleReason is why a caller cannot start a managed daemon.
+// Distinct values because each one has a different remedy: an expired trial
+// wants an upgrade, a never-subscribed user wants a plan, and neither wants
+// the other's message.
+//
+// Public contract: exported verbatim to reliant (see proto/public-api.txt).
+// Never renumber — reserve removed tags.
+enum ComputeIneligibleReason {
+  COMPUTE_INELIGIBLE_REASON_UNSPECIFIED = 0;
+  // The caller is eligible; no reason applies.
+  COMPUTE_INELIGIBLE_REASON_NONE = 1;
+  // The signup free trial has lapsed and nothing replaced it.
+  COMPUTE_INELIGIBLE_REASON_TRIAL_EXPIRED = 2;
+  // Never had a compute plan, and holds no granted minutes.
+  COMPUTE_INELIGIBLE_REASON_NO_SUBSCRIPTION = 3;
+  // Signed in, but no organization resolved yet (mid-provisioning).
+  COMPUTE_INELIGIBLE_REASON_NO_ORGANIZATION = 4;
+}
+
+message GetCurrentUserComputeEligibilityRequest {}
+
+message GetCurrentUserComputeEligibilityResponse {
+  // eligible is the single fact a caller needs to enable or disable a
+  // "start a machine" control. True when the org has an active compute
+  // subscription (including the signup trial) OR unspent granted minutes from
+  // a redeemed compute coupon.
+  bool eligible = 1;
+
+  // reason explains an ineligible answer so the UI can offer the right remedy.
+  ComputeIneligibleReason reason = 2;
+
+  // has_active_subscription is true when an active/trialing compute
+  // subscription is what makes the caller eligible.
+  bool has_active_subscription = 3;
+
+  // granted_minutes_remaining is unspent compute minutes from redeemed
+  // compute coupons. Non-zero alone is enough to make a caller eligible, which
+  // is what lets a coupon unblock someone with no subscription at all.
+  int64 granted_minutes_remaining = 4;
+
+  // plan_name of the active compute subscription, for display. Empty when
+  // there is none.
+  string plan_name = 5;
+
+  // allowed_daemon_sizes are the daemon sizes this caller may actually start,
+  // resolved the same way internal/svcdaemon.computeDaemonSizeLimits resolves
+  // them: from the active compute subscription's plan, falling back to
+  // plan_compute_free (["small"]) when there is none.
+  //
+  // Sent because eligibility alone is not enough to render a size picker. A
+  // coupon-funded caller is eligible with NO subscription, so a client that
+  // had only `eligible` would have to re-derive the free plan's size list
+  // locally — and a client that re-derives a server rule is exactly how the
+  // machines page came to lock out coupon holders entirely.
+  //
+  // A coupon buys machine TIME, not a bigger machine, so this stays ["small"]
+  // for a grant-only caller. Empty means no size may be started.
+  repeated string allowed_daemon_sizes = 6;
+}
+
+// === Invoice preview ===
+
+message GetInvoicePreviewRequest {
+  string size = 1;
+  int32 quantity_delta = 2; // +1 to add, -1 to remove
+}
+
+message GetInvoicePreviewResponse {
+  int32 proration_cents = 1; // charge or credit today
+  int32 new_monthly_cents = 2; // new total monthly after change
+}
+
+// === Per-user billing email ===
+
+message GetCurrentUserBillingEmailRequest {}
+
+message GetCurrentUserBillingEmailResponse {
+  // billing_email is the user-supplied billing address, empty when unset.
+  string billing_email = 1;
+  // fallback_email is the address billing flows use when billing_email is
+  // empty (users.email, else the JWT email). May also be empty.
+  string fallback_email = 2;
+}
+
+message UpdateBillingEmailRequest {
+  // email is the billing address to persist. Empty clears any stored value.
+  string email = 1;
+}
+
+message UpdateBillingEmailResponse {}

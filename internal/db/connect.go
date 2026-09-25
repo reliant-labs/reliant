@@ -15,7 +15,6 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"go.opentelemetry.io/otel/attribute"
 
-	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/logging"
 
 	"github.com/pressly/goose/v3"
@@ -326,12 +325,6 @@ func missingMigrationVersions(db *sql.DB, want []int64) ([]int64, error) {
 	}
 
 	return missing, nil
-}
-
-// getUserIDFromAuthFile reads the user ID from the Electron app's auth file.
-// This is the source of truth for the currently logged-in user.
-func getUserIDFromAuthFile() (string, error) {
-	return auth.ReadUserIDFromAuthFile()
 }
 
 // PendingMigrations returns the versions this binary embeds that the database

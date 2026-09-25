@@ -5,35 +5,40 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
-import { fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
+import type { GenEnum, GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
+import { enumDesc, fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
 import type { Message } from "@bufbuild/protobuf";
 
 /**
  * Describes the file reliant/v1/token.proto.
  */
 export const file_reliant_v1_token: GenFile = /*@__PURE__*/
-  fileDesc("ChZyZWxpYW50L3YxL3Rva2VuLnByb3RvEgpyZWxpYW50LnYxIjcKEkNyZWF0ZVRva2VuUmVxdWVzdBIMCgRuYW1lGAEgASgJEhMKC3R0bF9zZWNvbmRzGAIgASgDIo0BCglUb2tlbkluZm8SCgoCaWQYASABKAkSDAoEbmFtZRgCIAEoCRIUCgx0b2tlbl9wcmVmaXgYAyABKAkSEgoKY3JlYXRlZF9hdBgEIAEoCRIUCgxsYXN0X3VzZWRfYXQYBSABKAkSEgoKZXhwaXJlc19hdBgGIAEoCRISCgpyZXZva2VkX2F0GAcgASgJIkkKE0NyZWF0ZVRva2VuUmVzcG9uc2USIwoEaW5mbxgBIAEoCzIVLnJlbGlhbnQudjEuVG9rZW5JbmZvEg0KBXRva2VuGAIgASgJIhMKEUxpc3RUb2tlbnNSZXF1ZXN0IjsKEkxpc3RUb2tlbnNSZXNwb25zZRIlCgZ0b2tlbnMYASADKAsyFS5yZWxpYW50LnYxLlRva2VuSW5mbyIgChJSZXZva2VUb2tlblJlcXVlc3QSCgoCaWQYASABKAkiFQoTUmV2b2tlVG9rZW5SZXNwb25zZTKBAgoMVG9rZW5TZXJ2aWNlElAKC0NyZWF0ZVRva2VuEh4ucmVsaWFudC52MS5DcmVhdGVUb2tlblJlcXVlc3QaHy5yZWxpYW50LnYxLkNyZWF0ZVRva2VuUmVzcG9uc2UiABJNCgpMaXN0VG9rZW5zEh0ucmVsaWFudC52MS5MaXN0VG9rZW5zUmVxdWVzdBoeLnJlbGlhbnQudjEuTGlzdFRva2Vuc1Jlc3BvbnNlIgASUAoLUmV2b2tlVG9rZW4SHi5yZWxpYW50LnYxLlJldm9rZVRva2VuUmVxdWVzdBofLnJlbGlhbnQudjEuUmV2b2tlVG9rZW5SZXNwb25zZSIAQjpaOGdpdGh1Yi5jb20vcmVsaWFudC1sYWJzL3JlbGlhbnQvZ2VuL3JlbGlhbnQvdjE7cmVsaWFudHYxYgZwcm90bzM");
+  fileDesc("ChZyZWxpYW50L3YxL3Rva2VuLnByb3RvEgpyZWxpYW50LnYxIlwKEkNyZWF0ZVRva2VuUmVxdWVzdBIMCgRuYW1lGAEgASgJEhMKC3R0bF9zZWNvbmRzGAIgASgDEiMKBGtpbmQYAyABKA4yFS5yZWxpYW50LnYxLlRva2VuS2luZCLWAQoJVG9rZW5JbmZvEgoKAmlkGAEgASgJEgwKBG5hbWUYAiABKAkSFAoMdG9rZW5fcHJlZml4GAMgASgJEhIKCmNyZWF0ZWRfYXQYBCABKAkSFAoMbGFzdF91c2VkX2F0GAUgASgJEhIKCmV4cGlyZXNfYXQYBiABKAkSEQoJZXBoZW1lcmFsGAggASgIEhEKCWRhZW1vbl9pZBgJIAEoCRIjCgRraW5kGAogASgOMhUucmVsaWFudC52MS5Ub2tlbktpbmRKBAgHEAhSCnJldm9rZWRfYXQiSQoTQ3JlYXRlVG9rZW5SZXNwb25zZRIjCgRpbmZvGAEgASgLMhUucmVsaWFudC52MS5Ub2tlbkluZm8SDQoFdG9rZW4YAiABKAkiOAoRTGlzdFRva2Vuc1JlcXVlc3QSIwoEa2luZBgBIAEoDjIVLnJlbGlhbnQudjEuVG9rZW5LaW5kIjsKEkxpc3RUb2tlbnNSZXNwb25zZRIlCgZ0b2tlbnMYASADKAsyFS5yZWxpYW50LnYxLlRva2VuSW5mbyIgChJSZXZva2VUb2tlblJlcXVlc3QSCgoCaWQYASABKAkiFQoTUmV2b2tlVG9rZW5SZXNwb25zZSpSCglUb2tlbktpbmQSGgoWVE9LRU5fS0lORF9VTlNQRUNJRklFRBAAEhUKEVRPS0VOX0tJTkRfREFFTU9OEAESEgoOVE9LRU5fS0lORF9BUEkQAjKBAgoMVG9rZW5TZXJ2aWNlElAKC0NyZWF0ZVRva2VuEh4ucmVsaWFudC52MS5DcmVhdGVUb2tlblJlcXVlc3QaHy5yZWxpYW50LnYxLkNyZWF0ZVRva2VuUmVzcG9uc2UiABJNCgpMaXN0VG9rZW5zEh0ucmVsaWFudC52MS5MaXN0VG9rZW5zUmVxdWVzdBoeLnJlbGlhbnQudjEuTGlzdFRva2Vuc1Jlc3BvbnNlIgASUAoLUmV2b2tlVG9rZW4SHi5yZWxpYW50LnYxLlJldm9rZVRva2VuUmVxdWVzdBofLnJlbGlhbnQudjEuUmV2b2tlVG9rZW5SZXNwb25zZSIAQjpaOGdpdGh1Yi5jb20vcmVsaWFudC1sYWJzL3JlbGlhbnQvZ2VuL3JlbGlhbnQvdjE7cmVsaWFudHYxYgZwcm90bzM");
 
 /**
- * CreateTokenRequest is the CreateToken input.
- *
  * @generated from message reliant.v1.CreateTokenRequest
  */
 export type CreateTokenRequest = Message<"reliant.v1.CreateTokenRequest"> & {
   /**
-   * Human-readable token name (required, must be unique among the caller's active tokens)
+   * Human-readable label (required)
    *
    * @generated from field: string name = 1;
    */
   name: string;
 
   /**
-   * Lifetime in seconds; 0 (or absent) means the token never expires
+   * Lifetime in seconds; 0 means the token never expires
    *
    * @generated from field: int64 ttl_seconds = 2;
    */
   ttlSeconds: bigint;
+
+  /**
+   * Required
+   *
+   * @generated from field: reliant.v1.TokenKind kind = 3;
+   */
+  kind: TokenKind;
 };
 
 /**
@@ -44,8 +49,8 @@ export const CreateTokenRequestSchema: GenMessage<CreateTokenRequest> = /*@__PUR
   messageDesc(file_reliant_v1_token, 0);
 
 /**
- * TokenInfo is the metadata view of an api-kind token. It never carries the
- * raw secret or the stored hash. Timestamps are RFC 3339; empty means unset.
+ * TokenInfo is a token's metadata. It never carries the secret or its hash.
+ * Timestamps are RFC 3339; empty means unset.
  *
  * @generated from message reliant.v1.TokenInfo
  */
@@ -61,7 +66,7 @@ export type TokenInfo = Message<"reliant.v1.TokenInfo"> & {
   name: string;
 
   /**
-   * First chars for display (e.g. "rlnt_pat_AbCd...")
+   * Display identifier, e.g. "rlat_A3f9Kd2p"
    *
    * @generated from field: string token_prefix = 3;
    */
@@ -73,25 +78,31 @@ export type TokenInfo = Message<"reliant.v1.TokenInfo"> & {
   createdAt: string;
 
   /**
-   * empty if never used
-   *
    * @generated from field: string last_used_at = 5;
    */
   lastUsedAt: string;
 
   /**
-   * empty if no expiry
-   *
    * @generated from field: string expires_at = 6;
    */
   expiresAt: string;
 
   /**
-   * empty if active
-   *
-   * @generated from field: string revoked_at = 7;
+   * @generated from field: bool ephemeral = 8;
    */
-  revokedAt: string;
+  ephemeral: boolean;
+
+  /**
+   * Set when the token is bound to one daemon
+   *
+   * @generated from field: string daemon_id = 9;
+   */
+  daemonId: string;
+
+  /**
+   * @generated from field: reliant.v1.TokenKind kind = 10;
+   */
+  kind: TokenKind;
 };
 
 /**
@@ -102,9 +113,6 @@ export const TokenInfoSchema: GenMessage<TokenInfo> = /*@__PURE__*/
   messageDesc(file_reliant_v1_token, 1);
 
 /**
- * CreateTokenResponse carries the new token's metadata plus the raw secret,
- * which is returned exactly once.
- *
  * @generated from message reliant.v1.CreateTokenResponse
  */
 export type CreateTokenResponse = Message<"reliant.v1.CreateTokenResponse"> & {
@@ -114,7 +122,7 @@ export type CreateTokenResponse = Message<"reliant.v1.CreateTokenResponse"> & {
   info?: TokenInfo | undefined;
 
   /**
-   * Raw PAT — display once, cannot be retrieved again
+   * Raw rlat_ token — shown once, never retrievable again
    *
    * @generated from field: string token = 2;
    */
@@ -132,6 +140,12 @@ export const CreateTokenResponseSchema: GenMessage<CreateTokenResponse> = /*@__P
  * @generated from message reliant.v1.ListTokensRequest
  */
 export type ListTokensRequest = Message<"reliant.v1.ListTokensRequest"> & {
+  /**
+   * UNSPECIFIED lists every kind
+   *
+   * @generated from field: reliant.v1.TokenKind kind = 1;
+   */
+  kind: TokenKind;
 };
 
 /**
@@ -163,8 +177,6 @@ export const ListTokensResponseSchema: GenMessage<ListTokensResponse> = /*@__PUR
  */
 export type RevokeTokenRequest = Message<"reliant.v1.RevokeTokenRequest"> & {
   /**
-   * ID of the token to revoke
-   *
    * @generated from field: string id = 1;
    */
   id: string;
@@ -191,32 +203,57 @@ export const RevokeTokenResponseSchema: GenMessage<RevokeTokenResponse> = /*@__P
   messageDesc(file_reliant_v1_token, 6);
 
 /**
- * TokenService manages user API tokens: rlnt_pat_ personal access tokens of
- * kind='api' that authenticate CLI and automation requests through the same
- * interceptor path as a Supabase JWT. It is the Connect replacement for the
- * former POST/GET/DELETE /api/v1/tokens JSON surface; the single mint/list/
- * revoke/validate implementation lives in internal/pat.Service, and these
- * handlers are thin wrappers over it.
+ * @generated from enum reliant.v1.TokenKind
+ */
+export enum TokenKind {
+  /**
+   * @generated from enum value: TOKEN_KIND_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: TOKEN_KIND_DAEMON = 1;
+   */
+  DAEMON = 1,
+
+  /**
+   * @generated from enum value: TOKEN_KIND_API = 2;
+   */
+  API = 2,
+}
+
+/**
+ * Describes the enum reliant.v1.TokenKind.
+ */
+export const TokenKindSchema: GenEnum<TokenKind> = /*@__PURE__*/
+  enumDesc(file_reliant_v1_token, 0);
+
+/**
+ * TokenService is reliant's ONE surface for machine credentials. Every token
+ * it mints is an `rlat_` access token (forge/pkg/accesstoken) — the same
+ * credential control-plane issues; there is no reliant-specific family.
  *
- * Auth:
- *   - CreateToken requires an interactive session (a Supabase JWT). A PAT
- *     cannot mint a PAT — you bootstrap an API token from a browser login.
- *     The interceptor accepts both JWTs and api-kind PATs, so this rule is
- *     enforced in the handler by rejecting PAT bearers. (Mirrors the
- *     DaemonTokenService rule that token issuance is session-authed.)
- *   - ListTokens and RevokeToken accept either credential (JWT or api-kind
- *     PAT) and are strictly owner- and kind-scoped: a caller only ever sees
- *     or revokes their own api-kind tokens. This lets a headless CI caller
- *     that holds only a PAT inspect and rotate its own tokens without a
- *     browser login, while never being able to escalate by minting new ones.
+ * It is a thin facade over the deployment's token authority
+ * (internal/tokenauthority): control-plane's access_tokens in a hosted
+ * deployment, reliant's own access_tokens table when self-hosted. Clients call
+ * ONE endpoint either way.
+ *
+ * Tokens act AS THE CALLER. The KIND picks the authority:
+ *   - TOKEN_KIND_DAEMON: daemon:connect — connects a daemon to the gateway.
+ *   - TOKEN_KIND_API:    reliant:api    — authenticates CLI/automation calls
+ *                        exactly as the caller's session would.
+ *
+ * Auth: minting requires an interactive session. A machine credential can
+ * never mint a credential — the general no-mint-beyond-your-scopes rule with
+ * token:write never granted. List and revoke accept the caller's API token too
+ * (strictly scoped to the caller), so headless automation can rotate itself.
  *
  * @generated from service reliant.v1.TokenService
  */
 export const TokenService: GenService<{
   /**
-   * CreateToken mints a new api-kind PAT for the authenticated user and
-   * returns the raw token exactly once (it is never retrievable again).
-   * Session-authed (JWT) only.
+   * CreateToken mints a token acting as the caller. The raw secret is
+   * returned exactly once. Session (JWT) only.
    *
    * @generated from rpc reliant.v1.TokenService.CreateToken
    */
@@ -226,8 +263,7 @@ export const TokenService: GenService<{
     output: typeof CreateTokenResponseSchema;
   },
   /**
-   * ListTokens returns metadata for every api-kind token owned by the caller.
-   * Token secrets and hashes are never returned.
+   * ListTokens returns the caller's live tokens of one kind (or all kinds).
    *
    * @generated from rpc reliant.v1.TokenService.ListTokens
    */
@@ -237,8 +273,7 @@ export const TokenService: GenService<{
     output: typeof ListTokensResponseSchema;
   },
   /**
-   * RevokeToken marks one of the caller's api-kind tokens revoked. Subsequent
-   * uses of that token fail auth.
+   * RevokeToken revokes one of the caller's tokens, immediately.
    *
    * @generated from rpc reliant.v1.TokenService.RevokeToken
    */

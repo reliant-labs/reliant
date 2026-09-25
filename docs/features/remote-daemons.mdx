@@ -63,10 +63,10 @@ When `--gateway` is not set, it's derived from the server URL automatically (e.g
 
 ### Token-Based Authentication
 
-For headless or CI environments where a browser flow isn't possible, use the `--token` flag to provide a PAT directly:
+For headless or CI environments where a browser flow isn't possible, pipe an access token (`rlat_…`, with the `daemon:connect` scope) into `--token`:
 
 ```bash
-echo "rlnt_pat_..." | reliant daemon start --token
+echo "rlat_..." | reliant daemon start --token
 ```
 
 ### Managing the Daemon

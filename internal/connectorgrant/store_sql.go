@@ -30,7 +30,7 @@ func NewSQLStore(db DBTX) *SQLStore {
 }
 
 const grantColumns = `
-	id, user_id, daemon_id, name, token_hash, token_prefix,
+	id, user_id, daemon_id, name, token_prefix,
 	allowed_tools, path_root, exec_mode, exec_allowlist,
 	expires_at, last_used_at, revoked_at, created_at, updated_at`
 
@@ -60,13 +60,13 @@ func (s *SQLStore) CreateGrant(ctx context.Context, g *Grant) error {
 
 	const query = `
 		INSERT INTO connector_grants (
-			id, user_id, daemon_id, name, token_hash, token_prefix,
+			id, user_id, daemon_id, name, token_prefix,
 			allowed_tools, path_root, exec_mode, exec_allowlist,
 			expires_at, created_at, updated_at
-		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`
+		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`
 
 	if _, err := s.db.ExecContext(ctx, query,
-		g.ID, g.UserID, g.DaemonID, g.Name, g.TokenHash, g.TokenPrefix,
+		g.ID, g.UserID, g.DaemonID, g.Name, g.TokenPrefix,
 		tools, g.PathRoot, string(g.ExecMode), allowlist,
 		g.ExpiresAt, g.CreatedAt, g.UpdatedAt,
 	); err != nil {
@@ -88,8 +88,6 @@ func validateGrant(g *Grant) error {
 		// A grant must name exactly one daemon. There is no "all daemons"
 		// form, by design.
 		return errors.New("grant must be bound to a daemon")
-	case g.TokenHash == "":
-		return errors.New("grant credential hash is required")
 	case len(g.AllowedTools) == 0:
 		return errors.New("grant must allow at least one tool")
 	case g.PathRoot == "":
@@ -111,34 +109,6 @@ func validateGrant(g *Grant) error {
 	}
 
 	return nil
-}
-
-// GetGrantByTokenHash resolves a credential to a live grant.
-//
-// Liveness is filtered in SQL rather than checked afterward, so a revoked or
-// expired grant cannot be used by a caller that forgot to look.
-func (s *SQLStore) GetGrantByTokenHash(ctx context.Context, tokenHash string) (*Grant, error) {
-	if tokenHash == "" {
-		return nil, ErrNotFound
-	}
-
-	query := `SELECT ` + grantColumns + `
-		FROM connector_grants
-		WHERE token_hash = $1
-		  AND revoked_at IS NULL
-		  AND (expires_at IS NULL OR expires_at > now())`
-
-	g, err := scanGrant(s.db.QueryRowContext(ctx, query, tokenHash))
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			// Deliberately not distinguishing missing from revoked or expired:
-			// all three are authentication failures, and telling them apart
-			// only helps someone probing credentials.
-			return nil, ErrNotFound
-		}
-		return nil, fmt.Errorf("look up connector grant: %w", err)
-	}
-	return g, nil
 }
 
 // GetGrant fetches one of the user's grants, including revoked ones so the UI
@@ -359,7 +329,7 @@ func scanGrantFrom(row rowScanner) (*Grant, error) {
 	)
 
 	if err := row.Scan(
-		&g.ID, &g.UserID, &g.DaemonID, &g.Name, &g.TokenHash, &g.TokenPrefix,
+		&g.ID, &g.UserID, &g.DaemonID, &g.Name, &g.TokenPrefix,
 		&tools, &g.PathRoot, &execMode, &allowlist,
 		&expires, &lastUsed, &revoked, &g.CreatedAt, &g.UpdatedAt,
 	); err != nil {
@@ -418,4 +388,14 @@ func clampLimit(limit int) int {
 		return maxLimit
 	}
 	return limit
+}
+
+// SetTokenPrefix records the display prefix of a grant's credential once it
+// is minted (the grant row must exist first: the credential is bound to it).
+func (s *SQLStore) SetTokenPrefix(ctx context.Context, id, prefix string) error {
+	if _, err := s.db.ExecContext(ctx,
+		`UPDATE connector_grants SET token_prefix = $2, updated_at = now() WHERE id = $1`, id, prefix); err != nil {
+		return fmt.Errorf("record connector credential prefix: %w", err)
+	}
+	return nil
 }

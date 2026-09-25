@@ -181,6 +181,7 @@ func newOAuthTestServer(t *testing.T, validator OAuthTokenValidator) (string, *m
 	store := newMemStore()
 	handler, err := NewHTTPHandler(HTTPDeps{
 		Store:          store,
+		Credentials:    store.creds,
 		Sender:         &fakeSender{},
 		OAuth:          testOAuthConfig(),
 		TokenValidator: validator,
@@ -194,16 +195,12 @@ func newOAuthTestServer(t *testing.T, validator OAuthTokenValidator) (string, *m
 
 func addGrant(t *testing.T, store *memStore, userID, name string) *connectorgrant.Grant {
 	t.Helper()
-	_, hash, prefix, err := connectorgrant.GenerateCredential()
-	require.NoError(t, err)
 
 	g := &connectorgrant.Grant{
 		ID:           name,
 		UserID:       userID,
 		DaemonID:     "daemon-1",
 		Name:         name,
-		TokenHash:    hash,
-		TokenPrefix:  prefix,
 		AllowedTools: ReadOnlyToolNames(),
 		PathRoot:     "/workspace",
 		ExecMode:     connectorgrant.ExecDeny,
@@ -285,6 +282,7 @@ func TestRecordedConsentResolvesTheAmbiguity(t *testing.T) {
 
 	handler, err := NewHTTPHandler(HTTPDeps{
 		Store:          store,
+		Credentials:    store.creds,
 		Sender:         &fakeSender{},
 		OAuth:          testOAuthConfig(),
 		TokenValidator: &stubTokenValidator{userID: "user-1"},
@@ -324,6 +322,7 @@ func TestConsentIsPerClient(t *testing.T) {
 
 	handler, err := NewHTTPHandler(HTTPDeps{
 		Store:          store,
+		Credentials:    store.creds,
 		Sender:         &fakeSender{},
 		OAuth:          testOAuthConfig(),
 		TokenValidator: &stubTokenValidator{userID: "user-1"},
@@ -368,15 +367,12 @@ func TestInvalidOAuthTokenIsRejected(t *testing.T) {
 // break the path that works today from Claude Desktop and the API.
 func TestConnectorCredentialsStillWorkWithOAuthEnabled(t *testing.T) {
 	store := newMemStore()
-	raw, hash, prefix, err := connectorgrant.GenerateCredential()
-	require.NoError(t, err)
+	raw := store.credentialFor(t, "grant-cred", "user-1")
 
 	require.NoError(t, store.CreateGrant(context.Background(), &connectorgrant.Grant{
 		ID:           "grant-cred",
 		UserID:       "user-1",
 		DaemonID:     "daemon-1",
-		TokenHash:    hash,
-		TokenPrefix:  prefix,
 		AllowedTools: ReadOnlyToolNames(),
 		PathRoot:     "/workspace",
 		ExecMode:     connectorgrant.ExecDeny,
@@ -384,6 +380,7 @@ func TestConnectorCredentialsStillWorkWithOAuthEnabled(t *testing.T) {
 
 	handler, err := NewHTTPHandler(HTTPDeps{
 		Store:          store,
+		Credentials:    store.creds,
 		Sender:         &fakeSender{},
 		OAuth:          testOAuthConfig(),
 		TokenValidator: &stubTokenValidator{err: errors.New("not an oauth token")},

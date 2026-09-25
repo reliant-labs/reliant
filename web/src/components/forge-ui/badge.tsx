@@ -1,4 +1,3 @@
-import React from "react";
 
 // Canonical variants. `danger` and `default` are accepted aliases for
 // `error` and `neutral` respectively — many existing codebases (and

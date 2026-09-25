@@ -20,7 +20,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReactNode } from "react";
 
 import type { Daemon } from "@/services/controlPlane/daemon";
-import { DaemonLifecyclePhase } from "@/gen/controlplane/v1/public/shared_pb";
+import { DaemonLifecyclePhase } from "@/gen/controlplane/controlplane/v1/shared_pb";
 import { DAEMON_WAIT_SLOW_MS } from "@/lib/daemon-wait";
 
 // ── Mock the daemon service module ───────────────────────────

@@ -47,15 +47,12 @@ const (
 
 // TokenServiceClient is a client for the reliant.v1.TokenService service.
 type TokenServiceClient interface {
-	// CreateToken mints a new api-kind PAT for the authenticated user and
-	// returns the raw token exactly once (it is never retrievable again).
-	// Session-authed (JWT) only.
+	// CreateToken mints a token acting as the caller. The raw secret is
+	// returned exactly once. Session (JWT) only.
 	CreateToken(context.Context, *connect.Request[v1.CreateTokenRequest]) (*connect.Response[v1.CreateTokenResponse], error)
-	// ListTokens returns metadata for every api-kind token owned by the caller.
-	// Token secrets and hashes are never returned.
+	// ListTokens returns the caller's live tokens of one kind (or all kinds).
 	ListTokens(context.Context, *connect.Request[v1.ListTokensRequest]) (*connect.Response[v1.ListTokensResponse], error)
-	// RevokeToken marks one of the caller's api-kind tokens revoked. Subsequent
-	// uses of that token fail auth.
+	// RevokeToken revokes one of the caller's tokens, immediately.
 	RevokeToken(context.Context, *connect.Request[v1.RevokeTokenRequest]) (*connect.Response[v1.RevokeTokenResponse], error)
 }
 
@@ -115,15 +112,12 @@ func (c *tokenServiceClient) RevokeToken(ctx context.Context, req *connect.Reque
 
 // TokenServiceHandler is an implementation of the reliant.v1.TokenService service.
 type TokenServiceHandler interface {
-	// CreateToken mints a new api-kind PAT for the authenticated user and
-	// returns the raw token exactly once (it is never retrievable again).
-	// Session-authed (JWT) only.
+	// CreateToken mints a token acting as the caller. The raw secret is
+	// returned exactly once. Session (JWT) only.
 	CreateToken(context.Context, *connect.Request[v1.CreateTokenRequest]) (*connect.Response[v1.CreateTokenResponse], error)
-	// ListTokens returns metadata for every api-kind token owned by the caller.
-	// Token secrets and hashes are never returned.
+	// ListTokens returns the caller's live tokens of one kind (or all kinds).
 	ListTokens(context.Context, *connect.Request[v1.ListTokensRequest]) (*connect.Response[v1.ListTokensResponse], error)
-	// RevokeToken marks one of the caller's api-kind tokens revoked. Subsequent
-	// uses of that token fail auth.
+	// RevokeToken revokes one of the caller's tokens, immediately.
 	RevokeToken(context.Context, *connect.Request[v1.RevokeTokenRequest]) (*connect.Response[v1.RevokeTokenResponse], error)
 }
 

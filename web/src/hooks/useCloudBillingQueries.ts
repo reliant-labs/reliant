@@ -14,11 +14,11 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { BillingService } from "@/gen/controlplane/v1/public/billing_service_pb";
+import { BillingService } from "@/gen/controlplane/services/billing/v1/billing_pb";
 import type {
   CheckoutUiMode,
   GetCurrentUserComputeUsageResponse,
-} from "@/gen/controlplane/v1/public/billing_service_pb";
+} from "@/gen/controlplane/services/billing/v1/billing_pb";
 import { getControlPlaneClient } from "@/services/controlPlane/client";
 import { useAuthStore } from "@/store/authStore";
 

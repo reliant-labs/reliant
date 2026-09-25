@@ -1,10 +1,10 @@
 /**
  * Environments service — thin wrappers around the control-plane public
  * `controlplane.v1.DaemonService` + `BillingService`, plus the daemon
- * personal-access-token (`reliant.v1.DaemonTokenService`) surface.
+ * personal-access-token (`reliant.v1.TokenService`, kind DAEMON) surface.
  *
  * This is the data layer for the in-app Settings → Environments section
- * (`components/Settings/cloud/environments.tsx`), which ports admin-web's
+ * (`components/Settings/cloud/machines.tsx`), which ports admin-web's
  * workspaces management into reliant-web using ONLY public RPCs.
  *
  * We intentionally REUSE the existing `./daemon` module (re-exported below)
@@ -16,15 +16,14 @@
  * Two transports are in play, matching the rest of the app:
  *   - Daemon lifecycle + billing → `getControlPlaneClient(...)`
  *     (controlplane.v1 public, dials admin-server).
- *   - Access tokens → `grpcClient.daemonToken()` (reliant.v1, routed to the
- *     control-plane admin-server's compat adapter when cloud is configured;
- *     same client `useDaemonStatus` uses for the registry).
+ *   - Access tokens → `grpcClient.token()` (reliant.v1.TokenService on
+ *     reliant's api-server, which fronts the deployment's token authority).
  */
 import { ConnectError } from "@connectrpc/connect";
 
 import { grpcClient } from "@/api/grpc-client";
-import { DaemonService } from "@/gen/controlplane/v1/public/daemon_service_pb";
-import { BillingService } from "@/gen/controlplane/v1/public/billing_service_pb";
+import { DaemonService } from "@/gen/controlplane/services/daemon/v1/daemon_pb";
+import { BillingService } from "@/gen/controlplane/services/billing/v1/billing_pb";
 import {
   DaemonSize,
   DaemonStatus,
@@ -33,8 +32,9 @@ import {
   type Daemon,
   type PortAccessRule,
   type Subscription,
-} from "@/gen/controlplane/v1/public/shared_pb";
-import type { DaemonTokenInfo } from "@/gen/reliant/v1/daemon_token_pb";
+} from "@/gen/controlplane/controlplane/v1/shared_pb";
+import type { TokenInfo } from "@/gen/reliant/v1/token_pb";
+import { TokenKind } from "@/gen/reliant/v1/token_pb";
 import { getControlPlaneClient } from "./client";
 
 // Re-export the shared daemon surface so the section imports everything from
@@ -53,7 +53,7 @@ export {
 } from "./daemon";
 
 export { DaemonSize, DaemonStatus, DaemonType, PortAccessMode };
-export type { PortAccessRule, Subscription, DaemonTokenInfo };
+export type { PortAccessRule, Subscription };
 
 // ── Error helper ────────────────────────────────────────────────────────────
 // reliant has no shared `mapServerError` (admin-web's lib), so extract a
@@ -102,10 +102,10 @@ export async function createEnvironment(args: CreateEnvironmentArgs): Promise<Da
 // Canonical CPU/memory pairs per size — mirrors admin-web's detail-page map so
 // an Update keeps the daemon's resources consistent with its size tier.
 const SIZE_RESOURCES: Record<number, { cpu: string; memory: string }> = {
-  [DaemonSize.SMALL]: { cpu: "1", memory: "2Gi" },
-  [DaemonSize.MEDIUM]: { cpu: "2", memory: "4Gi" },
-  [DaemonSize.LARGE]: { cpu: "4", memory: "8Gi" },
-  [DaemonSize.XL]: { cpu: "8", memory: "16Gi" },
+  [DaemonSize.DAEMON_SIZE_SMALL]: { cpu: "1", memory: "2Gi" },
+  [DaemonSize.DAEMON_SIZE_MEDIUM]: { cpu: "2", memory: "4Gi" },
+  [DaemonSize.DAEMON_SIZE_LARGE]: { cpu: "4", memory: "8Gi" },
+  [DaemonSize.DAEMON_SIZE_XL]: { cpu: "8", memory: "16Gi" },
 };
 
 export async function updateEnvironment(args: {
@@ -113,7 +113,7 @@ export async function updateEnvironment(args: {
   newName: string;
   size: DaemonSize;
 }): Promise<void> {
-  const res = SIZE_RESOURCES[args.size] ?? SIZE_RESOURCES[DaemonSize.MEDIUM];
+  const res = SIZE_RESOURCES[args.size] ?? SIZE_RESOURCES[DaemonSize.DAEMON_SIZE_MEDIUM];
   await getControlPlaneClient(DaemonService).updateDaemon({
     daemonId: args.daemonId,
     newName: args.newName,
@@ -192,10 +192,10 @@ export async function getComputeSubscription(): Promise<Subscription | null> {
   return res.subscription ?? null;
 }
 
-// ── Access tokens (reliant.v1.DaemonTokenService) ───────────────────────────
+// ── Access tokens (reliant.v1.TokenService, TokenKind.DAEMON) ───────────────
 
-export async function listDaemonTokens(): Promise<DaemonTokenInfo[]> {
-  const res = await grpcClient.daemonToken().listDaemonTokens({});
+export async function listDaemonTokens(): Promise<TokenInfo[]> {
+  const res = await grpcClient.token().listTokens({ kind: TokenKind.DAEMON });
   return res.tokens;
 }
 
@@ -206,10 +206,14 @@ export interface CreateDaemonTokenResult {
 }
 
 export async function createDaemonToken(name: string): Promise<CreateDaemonTokenResult> {
-  const res = await grpcClient.daemonToken().createDaemonToken({ name });
-  return { token: res.token, tokenId: res.tokenId };
+  const res = await grpcClient
+    .token()
+    .createToken({ name, kind: TokenKind.DAEMON });
+  // CreateTokenResponse carries the id on `info`, not at the top level.
+  return { token: res.token, tokenId: res.info?.id ?? "" };
 }
 
 export async function revokeDaemonToken(tokenId: string): Promise<void> {
-  await grpcClient.daemonToken().revokeDaemonToken({ tokenId });
+  // RevokeTokenRequest's field is `id`, not `token_id`.
+  await grpcClient.token().revokeToken({ id: tokenId });
 }

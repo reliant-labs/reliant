@@ -1,12 +1,10 @@
 package drivers
 
 import (
-	"net"
-	"net/url"
 	"os"
 	"strings"
 
-	"github.com/reliant-labs/reliant/internal/logging"
+	accesstoken "github.com/reliant-labs/forge/pkg/accesstoken"
 )
 
 const (
@@ -28,9 +26,7 @@ const (
 	// a process missing the variable failed with "dial tcp: lookup
 	// api.reliant.dev: no such host" rather than anything that named the real
 	// problem. Loopback at least fails against something the operator controls.
-	reliantNeutralBaseURL          = "http://localhost:8090/v1"
-	reliantLocalLiteLLMMasterKey   = "sk-reliant-litellm-dev"
-	reliantManagedKeyForwardHeader = "X-Reliant-Managed-Key"
+	reliantNeutralBaseURL = "http://localhost:8090/v1"
 )
 
 func ResolveReliantBaseURL(_ string) string {
@@ -42,57 +38,23 @@ func ResolveReliantBaseURL(_ string) string {
 	return configuredBaseURL
 }
 
-func ResolveReliantAPIKey(apiKey, baseURL string) (string, map[string]string) {
-	trimmedKey := strings.TrimSpace(apiKey)
-	if trimmedKey == "" {
-		return trimmedKey, nil
-	}
-
-	// Legacy managed keys (rlnt_/rly_): keep existing behavior for backward compat
-	if isManagedReliantKey(trimmedKey) && isLocalLiteLLMBaseURL(baseURL) {
-		masterKey := strings.TrimSpace(os.Getenv("LITELLM_MASTER_KEY"))
-		if masterKey == "" {
-			masterKey = reliantLocalLiteLLMMasterKey
-			logging.Warn("LITELLM_MASTER_KEY not set; using default local LiteLLM master key for managed Reliant token", "base_url", baseURL)
-		}
-		return masterKey, map[string]string{
-			reliantManagedKeyForwardHeader: trimmedKey,
-		}
-	}
-
-	return trimmedKey, nil
+// ResolveReliantAPIKey returns the bearer to send to the Reliant LLM gateway.
+//
+// The Reliant LLM key is an `rlat_` access token (llm:invoke) minted by
+// control-plane, authenticated by control-plane's LLM proxy at
+// RELIANT_API_BASE_URL. It is sent as-is: there is no local re-keying.
+//
+// There is no local re-keying: an earlier loose prefix test re-keyed any
+// reliant-prefixed string (daemon and connector credentials included) as a
+// "managed" LLM key against a loopback LiteLLM. The exact-shape check is
+// IsReliantLLMKey below. The second return value is kept for the callers'
+// extra-header plumbing and is always nil.
+func ResolveReliantAPIKey(apiKey, _ string) (string, map[string]string) {
+	return strings.TrimSpace(apiKey), nil
 }
 
-func isManagedReliantKey(apiKey string) bool {
-	trimmedKey := strings.TrimSpace(apiKey)
-	return strings.HasPrefix(trimmedKey, "rly_") || strings.HasPrefix(trimmedKey, "rlnt_")
-}
-
-func isLocalLiteLLMBaseURL(rawURL string) bool {
-	parsedURL, err := url.Parse(strings.TrimSpace(rawURL))
-	if err != nil {
-		return false
-	}
-
-	hostname := strings.TrimSpace(parsedURL.Hostname())
-	if hostname == "" {
-		return false
-	}
-
-	if hostname == "localhost" {
-		return true
-	}
-
-	parsedIP := net.ParseIP(hostname)
-	if parsedIP != nil {
-		return parsedIP.IsLoopback()
-	}
-
-	normalizedHostname := strings.TrimSuffix(strings.ToLower(hostname), ".")
-	if normalizedHostname == "litellm" {
-		return true
-	}
-
-	labels := strings.Split(normalizedHostname, ".")
-	return len(labels) >= 3 && labels[0] == "litellm" && labels[2] == "svc"
+// IsReliantLLMKey reports whether a key has the exact shape of a Reliant LLM
+// gateway key — an `rlat_` access token — and nothing looser.
+func IsReliantLLMKey(apiKey string) bool {
+	return accesstoken.HasFormat(strings.TrimSpace(apiKey))
 }

@@ -51,7 +51,7 @@ import StatusDot from "@/components/forge-ui/status_dot";
 import { cn } from "@/lib/utils";
 import type { ForgeSecretsReport } from "@/services/forge/secrets";
 import type { ManagedSecretSummary, ManagedStoreAvailability } from "@/services/forge/secretStore";
-import { managedSecretStateExplanation } from "@/services/forge/secretStore";
+import { availabilityExplanation, managedSecretStateExplanation } from "@/services/forge/secretStore";
 import {
   joinSecretRows,
   modeExplanation,
@@ -93,7 +93,14 @@ export interface ManagedSecretsViewProps {
 export function ManagedSecretsView(props: ManagedSecretsViewProps) {
   const { env, mode, availability, report, managed, isLoading, selectedName, onSelect } = props;
 
-  const rows = useMemo(() => joinSecretRows(report, managed), [report, managed]);
+  // Only an `available` store's empty list means "holds nothing". Any other
+  // availability means this console could not look, and the join falls back
+  // to forge's own observation rather than painting every declared secret as
+  // a red "Not set" blocker.
+  const rows = useMemo(
+    () => joinSecretRows(report, managed, availability === "available"),
+    [report, managed, availability]
+  );
   const tally = useMemo(() => tallyRows(rows), [rows]);
   const canWrite = modeSupportsWrite(mode);
 
@@ -164,9 +171,9 @@ function StoreHeader({
           <span className="font-mono text-xs text-muted-foreground">{env}</span>
         </div>
         <p className="max-w-2xl text-xs leading-relaxed text-muted-foreground">
-          {availability === "unreachable"
-            ? "The managed store could not be reached, so what it holds is unknown right now. This is a connection problem, not a statement about your secrets."
-            : modeExplanation(mode)}
+          {/* A reason there is no lookup outranks the mode sentence: it is the
+              more specific answer to "why can I not set this here". */}
+          <WithCode text={availabilityExplanation(availability) ?? modeExplanation(mode)} />
         </p>
 
         {tally.total > 0 && (
@@ -185,6 +192,12 @@ function StoreHeader({
               <>
                 <Divider />
                 <Count label="inactive" value={tally.inactive} />
+              </>
+            )}
+            {tally.unknown > 0 && (
+              <>
+                <Divider />
+                <Count label="not known" value={tally.unknown} />
               </>
             )}
           </div>
@@ -207,6 +220,27 @@ function StoreHeader({
         </button>
       )}
     </div>
+  );
+}
+
+/**
+ * Renders `backticked` spans of a sentence as inline code, so a command the
+ * reader has to type is visibly a command. The sentences live in the service
+ * layer as plain strings; this is the one place they become markup.
+ */
+function WithCode({ text }: { text: string }) {
+  return (
+    <>
+      {text.split(/(`[^`]+`)/g).map((part, i) =>
+        part.startsWith("`") && part.endsWith("`") ? (
+          <code key={i} className="font-mono text-foreground">
+            {part.slice(1, -1)}
+          </code>
+        ) : (
+          <span key={i}>{part}</span>
+        )
+      )}
+    </>
   );
 }
 
@@ -359,6 +393,7 @@ function SecretDetail({
   row,
   env,
   mode,
+  availability,
   versions,
   versionsLoading,
   onBack,
@@ -396,7 +431,11 @@ function SecretDetail({
           <p className="max-w-2xl text-xs leading-relaxed text-muted-foreground">
             {row.origin === "declared-unset"
               ? "A workload in this environment declares this secret and the store has never held a value for it. Deploys that need it will fail until it is set."
-              : row.state
+              : row.origin === "declared-unread"
+                ? "A workload in this environment declares this secret, but its store could not be read from here, so whether it holds a value is not known. This is not a statement that it is missing."
+                : row.origin === "declared-present"
+                  ? "Forge reports the store holds a value for this secret. Its version history lives in the store, which this console cannot read for this environment."
+                  : row.state
                 ? managedSecretStateExplanation(row.state)
                 : ""}
           </p>
@@ -433,6 +472,13 @@ function SecretDetail({
         </section>
       )}
 
+      {availability !== "available" ? (
+        // Only the store knows a secret's versions. When it cannot be read
+        // here, "No versions yet" would be a claim — say where they are.
+        <p className="max-w-2xl text-xs text-muted-foreground" data-testid="version-history-unavailable">
+          Version history is kept in the store, which cannot be read from here for this environment.
+        </p>
+      ) : (
       <section className="space-y-2">
         <h3 className="text-2xs font-medium uppercase tracking-wide text-muted-foreground">
           Version history
@@ -448,6 +494,7 @@ function SecretDetail({
           pendingVersion={pendingVersion}
         />
       </section>
+      )}
     </div>
   );
 }
@@ -480,6 +527,8 @@ function EmptyState({
       <p className="max-w-md text-sm text-muted-foreground">
         {mode === "managed"
           ? "No secrets in this environment yet."
+          : mode === "managed-remote"
+            ? "No secrets are declared here, and this console cannot read the managed store. Set one with forge secret set."
           : mode === "external"
             ? "No secrets are declared here. An external secret manager holds the values for this environment, so they are provisioned outside reliant."
             : mode === "file"

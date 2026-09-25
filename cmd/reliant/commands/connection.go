@@ -14,31 +14,44 @@ import (
 	"connectrpc.com/connect"
 	"github.com/spf13/cobra"
 
-	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/builddefaults"
-	"github.com/reliant-labs/reliant/internal/cliconfig"
+	"github.com/reliant-labs/reliant/internal/cliauth"
 	"github.com/reliant-labs/reliant/internal/toolexec/transport"
 )
 
 // ============================================================================
 // Where the CLI talks to, and with what credential.
 //
-// Every server-facing command resolves its target here. The persistent
-// --server/--gateway/--context flags are deliberately NOT bound to package
-// variables: a global that command code can read is a global that command code
-// will read, and a command reading the raw flag silently ignores the selected
-// context and dials the default server. With no variable to reach for, the only
-// way to get a server URL is resolveServer/resolveConnection, which apply the
-// full precedence.
+// Every server-facing command resolves its target here. There is NO stored
+// "current" server: the server is always explicit or defaulted, never left
+// behind by a previous command. That stateful model (`reliant context`) is
+// deleted. It silently repointed a prod-baked binary at a dev stack because
+// a context once auto-created against localhost stayed "current".
+//
+//	server:  --server > RELIANT_SERVER_URL > compiled-in default > neutral fallback
+//	token:   RELIANT_TOKEN > the shared credentials file entry for that server
+//
+// The credentials file is forge's (forge/pkg/credentials), shared with
+// `forge login` and keyed by (server, client). A login to one server is never
+// presented to another.
+//
+// The persistent --server/--gateway flags are deliberately NOT bound to
+// package variables: a global that command code can read is a global that
+// command code will read. With no variable to reach for, the only way to get a
+// server URL is resolveServer/resolveConnection.
 // ============================================================================
 
 const (
 	flagServer  = "server"
 	flagGateway = "gateway"
-	flagContext = "context"
 
 	envServerURL  = "RELIANT_SERVER_URL"
 	envGatewayURL = "RELIANT_GATEWAY_URL"
+	// envToken supplies a bearer for one invocation (CI, scripts), ahead of the
+	// stored login. There is no --token flag: `daemon start --token` already
+	// means "read a daemon token from stdin", and a second meaning of one flag
+	// name is how a secret ends up on a command line and in shell history.
+	envToken = "RELIANT_TOKEN"
 )
 
 // valueSource records where a resolved URL came from, so an error can tell the
@@ -46,13 +59,11 @@ const (
 type valueSource int
 
 const (
-	// sourceDefault is the flag's default: the RELIANT_*_URL env var, else the
-	// build-time-injected default, else the neutral localhost fallback.
+	// sourceDefault is the flag's default: the compiled-in default, else the
+	// neutral localhost fallback.
 	sourceDefault valueSource = iota
 	// sourceFlag means the user passed the flag explicitly on this invocation.
 	sourceFlag
-	// sourceContext means the value came from the resolved CLI context.
-	sourceContext
 	// sourceEnv means an environment variable supplied the value directly.
 	sourceEnv
 	// sourceDerived means the value was computed from the resolved server URL.
@@ -68,29 +79,20 @@ type connection struct {
 	// rather than the default one.
 	GatewayURL    string
 	GatewaySource valueSource
-	// Token is the bearer for Authorization headers: an rlnt_pat_ API token when
-	// the resolved context has one, otherwise the legacy auth-file JWT. Empty
-	// until resolveConnection fills it in (resolveServer leaves it unset when
-	// the context has no token).
+	// Token is the rlat_ bearer for Authorization headers. Empty until
+	// resolveConnection fills it in.
 	Token string
-	// TokenIsJWT is true when Token came from the legacy auth file.
-	TokenIsJWT bool
-	// ContextName is the resolved context ("" in legacy mode).
-	ContextName string
-	// ContextSelectedBy is cliconfig.Resolved.Source: "flag", "env" or
-	// "current_context" ("" in legacy mode).
-	ContextSelectedBy string
-	// Hooks come from the context's hooks: block (may be nil).
-	Hooks []cliconfig.HookSpec
+	// TokenFrom names where Token came from (RELIANT_TOKEN or the file path),
+	// for diagnostics. Never the token.
+	TokenFrom string
 }
 
 // registerConnectionFlags binds the persistent flags that select the target
 // server on the root command. The values are read back through the command
 // (see persistentFlag) rather than through package variables.
 func registerConnectionFlags(root *cobra.Command) {
-	root.PersistentFlags().String(flagServer, defaultServerURL(), "Cloud API server URL (overrides the resolved context's server)")
+	root.PersistentFlags().String(flagServer, defaultServerURL(), "Reliant API server URL (also RELIANT_SERVER_URL)")
 	root.PersistentFlags().String(flagGateway, defaultGatewayURL(), "Daemon gateway URL (defaults to the gateway subdomain of the resolved server)")
-	root.PersistentFlags().String(flagContext, "", "CLI context to use (overrides RELIANT_CONTEXT and current_context)")
 }
 
 func defaultServerURL() string {
@@ -119,26 +121,16 @@ func persistentFlag(cmd *cobra.Command, name string) (value string, changed bool
 
 // resolveServer resolves WHERE a command talks, without requiring credentials:
 //
-//	context selection:  --context flag > RELIANT_CONTEXT env > current_context > none
-//	server:             explicit --server flag > context server > flag default
-//	gateway:            explicit --gateway flag > RELIANT_GATEWAY_URL >
-//	                    derived from the resolved server > build-time default
+//	server:   --server > RELIANT_SERVER_URL > compiled-in default > neutral fallback
+//	gateway:  --gateway > RELIANT_GATEWAY_URL > derived from the resolved server
+//	          > build-time default
 //
 // Commands that need a bearer call resolveConnection instead. Login is the
-// reason this half stands alone: a context can name a server long before it has
-// a token, and "where do I log in" must not depend on already being logged in.
+// reason this half stands alone: "where do I log in" must not depend on
+// already being logged in. The daemon commands use it too: a daemon credential
+// lives in the daemon store keyed by this same server, so one machine can run
+// daemons against prod and a dev stack, chosen by --server.
 func resolveServer(cmd *cobra.Command) (*connection, error) {
-	cfg, err := cliconfig.Load()
-	if err != nil {
-		return nil, err
-	}
-
-	contextFlagValue, _ := persistentFlag(cmd, flagContext)
-	resolved, err := cliconfig.Resolve(cfg, contextFlagValue, os.Getenv(cliconfig.EnvContext))
-	if err != nil {
-		return nil, err
-	}
-
 	server, serverFlagSet := persistentFlag(cmd, flagServer)
 	conn := &connection{ServerURL: server, ServerSource: sourceDefault}
 	if serverFlagSet {
@@ -146,97 +138,40 @@ func resolveServer(cmd *cobra.Command) (*connection, error) {
 	} else if os.Getenv(envServerURL) != "" {
 		conn.ServerSource = sourceEnv
 	}
-
-	if resolved.Context != nil {
-		conn.ContextName = resolved.Name
-		conn.ContextSelectedBy = resolved.Source
-		conn.Hooks = resolved.Context.Hooks
-		conn.Token = resolved.Context.Token
-		if resolved.Context.Server != "" && !serverFlagSet {
-			conn.ServerURL = resolved.Context.Server
-			conn.ServerSource = sourceContext
-		}
-	}
-
 	conn.GatewayURL, conn.GatewaySource = resolveGateway(cmd, conn)
 	return conn, nil
 }
 
-// resolveDaemonServer resolves the backend for the DAEMON commands
-// (`daemon start`, `daemon register`).
-//
-// It is resolveServer WITHOUT the context's server:
-//
-//	--server flag > RELIANT_SERVER_URL > compiled-in default > neutral fallback
-//
-// WHY THE CONTEXT IS EXCLUDED. A CLI context and a daemon credential are
-// different things that happen to both hold an `rlnt_pat_` string:
-//
-//   - A context pairs a server with an API-KIND token for user API calls made
-//     by this CLI (`project list`, `workflow watch`). Exactly one is active at
-//     a time, which is what `current_context` means.
-//   - A daemon credential is a DAEMON-KIND PAT for one backend, and the daemon
-//     credential store is deliberately MULTI-BACKEND — a map keyed by origin
-//     (endpointKey, internal/auth/daemon_file.go). One machine is expected to
-//     run daemons against prod and a dev stack at the same time.
-//
-// Reading the context here collapsed the second model into the first. Contexts
-// are usually auto-created rather than chosen — `auth token create` bootstraps
-// one named "default" pointing at whatever server it just talked to — so a
-// developer who once minted a token against a dev stack had a `default` context
-// pinning localhost, and a PROD-baked binary silently connected there. The
-// daemon then dialed the api-server for ToolsDaemonService, which only the
-// gateway serves, and failed with a 404 that named a context the user never
-// deliberately set.
-//
-// The daemon's own credential lookup already keys on the RESOLVED server
-// (ReadDaemonCredentials(conn.ServerURL)), so excluding the context here is
-// what lets one machine hold credentials for several backends and pick between
-// them with --server, instead of one global context silently choosing for all
-// of them.
-//
-// The gateway still resolves normally: --gateway > RELIANT_GATEWAY_URL >
-// compiled-in default > derived from the server.
-func resolveDaemonServer(cmd *cobra.Command) (*connection, error) {
-	server, serverFlagSet := persistentFlag(cmd, flagServer)
-	conn := &connection{ServerURL: server, ServerSource: sourceDefault}
-	if serverFlagSet {
-		conn.ServerSource = sourceFlag
-	} else if os.Getenv(envServerURL) != "" {
-		conn.ServerSource = sourceEnv
-	}
-
-	conn.GatewayURL, conn.GatewaySource = resolveGateway(cmd, conn)
-	return conn, nil
-}
-
-// resolveConnection resolves the server (see resolveServer) plus the bearer
-// token: the resolved context's rlnt_pat_ token, else the legacy auth-file JWT.
-// With no contexts configured this reduces exactly to the legacy behavior
-// (the --server flag plus the auth-file JWT).
+// resolveConnection resolves the server (see resolveServer) plus the bearer:
+// RELIANT_TOKEN, else the stored login for THAT server.
 func resolveConnection(cmd *cobra.Command) (*connection, error) {
 	conn, err := resolveServer(cmd)
 	if err != nil {
 		return nil, err
 	}
-	if conn.Token != "" {
+	if t := strings.TrimSpace(os.Getenv(envToken)); t != "" {
+		conn.Token, conn.TokenFrom = t, envToken
 		return conn, nil
 	}
-
-	jwt, err := auth.ReadAccessTokenFromAuthFile()
+	cred, path, err := cliauth.Lookup(conn.ServerURL)
+	if errors.Is(err, cliauth.ErrNotLoggedIn) {
+		return nil, fmt.Errorf("not logged in to %s (%v) — run 'reliant auth login%s', or set %s",
+			conn.describeServer(), err, conn.serverFlagHint(), envToken)
+	}
 	if err != nil {
-		return nil, fmt.Errorf("reading auth file: %w", err)
+		return nil, fmt.Errorf("reading credentials: %w", err)
 	}
-	if jwt == "" {
-		if conn.ContextName != "" {
-			return nil, fmt.Errorf("no credential for %s: context %q has no token and no login was found — run 'reliant auth token create' or 'reliant auth login'",
-				conn.describeServer(), conn.ContextName)
-		}
-		return nil, fmt.Errorf("not authenticated for %s — run 'reliant auth login' first", conn.describeServer())
-	}
-	conn.Token = jwt
-	conn.TokenIsJWT = true
+	conn.Token, conn.TokenFrom = cred.Token, path
 	return conn, nil
+}
+
+// serverFlagHint repeats --server in a suggested command when the user chose
+// the server with it, so the suggestion targets the same server.
+func (c *connection) serverFlagHint() string {
+	if c.ServerSource == sourceFlag {
+		return " --server " + c.ServerURL
+	}
+	return ""
 }
 
 // resolveGateway applies the gateway precedence. The key rule: a server chosen
@@ -332,28 +267,10 @@ func (c *connection) describeSource(src valueSource, flagName, envName string) s
 		return "from the --" + flagName + " flag"
 	case sourceEnv:
 		return "from " + envName
-	case sourceContext:
-		return "from context " + fmt.Sprintf("%q", c.ContextName) + c.describeContextSelection()
 	case sourceDerived:
 		return "derived from server " + c.ServerURL
 	default:
-		if c.ContextName != "" {
-			return "default — context " + fmt.Sprintf("%q", c.ContextName) + " sets no server"
-		}
-		return "default — no --" + flagName + " flag and no context"
-	}
-}
-
-// describeContextSelection names what picked the context when it was not simply
-// the configured current_context.
-func (c *connection) describeContextSelection() string {
-	switch c.ContextSelectedBy {
-	case "flag":
-		return " (selected by --context)"
-	case "env":
-		return " (selected by " + cliconfig.EnvContext + ")"
-	default:
-		return ""
+		return "default — no --" + flagName + " flag and no " + envName
 	}
 }
 
@@ -363,12 +280,10 @@ func (c *connection) describeCredential() string {
 	switch {
 	case c.Token == "":
 		return "no credential"
-	case c.TokenIsJWT:
-		return "the login session from 'reliant auth login'"
-	case c.ContextName != "":
-		return fmt.Sprintf("the API token stored in context %q", c.ContextName)
+	case c.TokenFrom == envToken:
+		return "the token in " + envToken
 	default:
-		return "the resolved API token"
+		return "the login stored in " + c.TokenFrom
 	}
 }
 
@@ -383,8 +298,8 @@ func (c *connection) annotate(err error) error {
 	}
 	switch connect.CodeOf(err) {
 	case connect.CodeUnauthenticated, connect.CodePermissionDenied:
-		return fmt.Errorf("%w\n  server:     %s\n  credential: %s\n  hint: the credential must belong to that server — check 'reliant context list', or re-authenticate with 'reliant auth login' / 'reliant auth token create'",
-			err, c.describeServer(), c.describeCredential())
+		return fmt.Errorf("%w\n  server:     %s\n  credential: %s\n  hint: the credential must belong to that server — re-authenticate with 'reliant auth login%s'",
+			err, c.describeServer(), c.describeCredential(), c.serverFlagHint())
 	default:
 		return err
 	}
@@ -396,9 +311,7 @@ func (c *connection) httpClient() *http.Client {
 	return c.httpClientWithBearer(c.Token)
 }
 
-// httpClientWithBearer is httpClient with an explicit bearer, for the flows
-// that must authenticate with the login JWT specifically (daemon registration
-// and token creation — a PAT cannot mint a PAT).
+// httpClientWithBearer is httpClient with an explicit bearer.
 func (c *connection) httpClientWithBearer(bearer string) *http.Client {
 	tr := &http.Transport{
 		// Resolve *.localhost → 127.0.0.1 for dev multi-worktree setups where
@@ -457,6 +370,6 @@ func (t *bearerAuthTransport) RoundTrip(req *http.Request) (*http.Response, erro
 	if req.Context().Err() != nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return resp, err
 	}
-	return resp, fmt.Errorf("cannot reach Reliant server %s: %w\n  hint: check the server is running, pass --server <url>, or switch context ('reliant context list' then 'reliant context use <name>')",
+	return resp, fmt.Errorf("cannot reach Reliant server %s: %w\n  hint: check the server is running, or pass --server <url> / set RELIANT_SERVER_URL",
 		t.target, err)
 }

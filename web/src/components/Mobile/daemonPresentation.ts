@@ -14,8 +14,8 @@
  * another lifecycle transition.
  */
 
-import { DaemonStatus } from "@/gen/controlplane/v1/public/shared_pb";
-import { DaemonSize } from "@/gen/controlplane/v1/public/shared_pb";
+import { DaemonStatus } from "@/gen/controlplane/controlplane/v1/shared_pb";
+import { DaemonSize } from "@/gen/controlplane/controlplane/v1/shared_pb";
 import type { Daemon } from "@/services/controlPlane/daemon";
 import { timestampDate } from "@bufbuild/protobuf/wkt";
 
@@ -82,10 +82,10 @@ export function canSuspend(daemon: Daemon): boolean {
 }
 
 const SIZE_LABELS: Record<number, string> = {
-  [DaemonSize.SMALL]: "Small",
-  [DaemonSize.MEDIUM]: "Medium",
-  [DaemonSize.LARGE]: "Large",
-  [DaemonSize.XL]: "XL",
+  [DaemonSize.DAEMON_SIZE_SMALL]: "Small",
+  [DaemonSize.DAEMON_SIZE_MEDIUM]: "Medium",
+  [DaemonSize.DAEMON_SIZE_LARGE]: "Large",
+  [DaemonSize.DAEMON_SIZE_XL]: "XL",
 };
 
 /** Size badge text, or "" when the control plane didn't report a tier. */
@@ -93,11 +93,16 @@ export function sizeLabel(daemon: Daemon): string {
   return SIZE_LABELS[daemon.size] ?? "";
 }
 
-/** Last heartbeat as epoch ms, or null when the daemon has never checked in. */
-export function heartbeatMs(daemon: Daemon): number | null {
-  if (!daemon.lastHeartbeat) return null;
+/**
+ * When the daemon was last seen, as epoch ms: the moment it disconnected, or
+ * null while it is connected (or has never connected). The control plane does
+ * not report a heartbeat — Daemon.last_heartbeat is reserved, its column was
+ * dropped — so disconnected_at is the only "last seen" fact on the wire.
+ */
+export function lastSeenMs(daemon: Daemon): number | null {
+  if (!daemon.disconnectedAt) return null;
   try {
-    return timestampDate(daemon.lastHeartbeat).getTime();
+    return timestampDate(daemon.disconnectedAt).getTime();
   } catch {
     // A malformed timestamp should degrade to "no heartbeat", not crash the
     // list — this data crosses a network boundary from the daemon gateway.

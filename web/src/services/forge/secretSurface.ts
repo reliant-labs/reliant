@@ -32,27 +32,34 @@
  *   it has never held. The correct affordance is a sentence explaining where
  *   the value actually comes from.
  *
- * ── WHY MODE IS NOT READ OFF forge's PROVIDER STRING ────────────────────────
+ * ── HOW MODE IS DECIDED ─────────────────────────────────────────────────────
  *
- * It cannot be, today. forge emits exactly three provider kinds — file,
- * external, none (internal/secrets/secrets.go) — and has no `managed` kind at
- * all. The managed store is a control-plane service that forge does not yet
- * know exists, so the only honest signal that it is in play is whether its RPCs
- * answer. Hence `storeAvailable` is an input here rather than something derived
- * from the report.
+ * forge's provider string comes first. It now names four kinds — file,
+ * external, hosted, none (internal/secrets/secrets.go) — and `hosted` is the
+ * managed store: forge built its report by listing that store. Whether THIS
+ * console can also read the store is a separate question, answered by
+ * `storeAvailable` (which is only ever true when the env reported a
+ * control-plane environment_id this console's control plane recognises — see
+ * secretStore.ts managedStoreTarget). So:
  *
- * When forge grows a `managed` provider kind, THIS is the function to change,
- * and the change is to prefer the report's own claim over the reachability
- * probe. Until then, reachability is the signal, and it is deliberately
- * subordinate to `external`: an environment that forge says is external stays
- * external even if a managed store happens to be reachable, because forge's
- * declaration is the thing that determines where the value is actually read
- * from at deploy time. Getting that precedence backwards would offer a write
- * into a store nothing reads.
+ *   hosted + readable      managed: the full versioned surface.
+ *   hosted + not readable  managed-remote: forge says the store exists and
+ *                          which declared names it holds, but this console
+ *                          cannot reach it (never ensured, a different control
+ *                          plane, or the store is down). Read-only, and the
+ *                          header says which of those it is.
+ *   none/unknown + readable  managed: an older forge that cannot name the
+ *                          provider, fronting a store that answered.
+ *
+ * `external` stays subordinate to nothing: an environment that forge says is
+ * external stays external even if a managed store happens to be reachable,
+ * because forge's declaration is the thing that determines where the value is
+ * actually read from at deploy time. Getting that precedence backwards would
+ * offer a write into a store nothing reads.
  */
 
 import type { ForgeSecretsReport } from "./secrets";
-import { declarationsOf, providerKind, secretEntries } from "./secrets";
+import { declarationsOf, presenceOf, providerKind, secretEntries } from "./secrets";
 import type { ForgeSecretDeclaration } from "./secrets";
 import type { ManagedSecretState, ManagedSecretSummary } from "./secretStore";
 import { managedSecretState } from "./secretStore";
@@ -64,6 +71,8 @@ import { managedSecretState } from "./secretStore";
  *
  *   managed   the hosted store. Full versioned surface: create, set, delete,
  *             undelete, destroy, history.
+ *   managed-remote  the hosted store, as forge sees it, but not readable from
+ *             this console. Read-only; `forge secret set` is the write path.
  *   file      forge's gitignored YAML, dev/e2e only. Read-only HERE — the way
  *             you write one is `forge secret set` on your own machine, and
  *             offering a web form that cannot reach that file would be a
@@ -71,7 +80,7 @@ import { managedSecretState } from "./secretStore";
  *   external  declared, provisioned out of band. No create, by design.
  *   none      no store configured at all.
  */
-export type SecretSurfaceMode = "managed" | "file" | "external" | "none";
+export type SecretSurfaceMode = "managed" | "managed-remote" | "file" | "external" | "none";
 
 export function surfaceMode(
   report: ForgeSecretsReport | null | undefined,
@@ -84,10 +93,10 @@ export function surfaceMode(
   // managed store does not make an external environment writable.
   if (kind === "external") return "external";
   if (kind === "file") return "file";
+  if (kind === "hosted") return storeAvailable ? "managed" : "managed-remote";
 
-  // `none` and `unknown` are where a managed store can legitimately be the
-  // answer: forge has no provider of its own for this env, and the hosted
-  // store is not something forge can currently name.
+  // `none` and `unknown`: an older forge that cannot name the hosted
+  // provider, fronting a store that nonetheless answered.
   return storeAvailable ? "managed" : "none";
 }
 
@@ -100,6 +109,8 @@ export function modeLabel(mode: SecretSurfaceMode): string {
   switch (mode) {
     case "managed":
       return "Managed store";
+    case "managed-remote":
+      return "Managed store · read-only";
     case "file":
       return "Local file store";
     case "external":
@@ -118,8 +129,10 @@ export function modeExplanation(mode: SecretSurfaceMode): string {
   switch (mode) {
     case "managed":
       return "Values live in the managed store and are fetched at deploy time over an authenticated channel. You can set them here; you cannot read them back.";
+    case "managed-remote":
+      return "Values live in this environment's managed store on its control plane. This console cannot write to it — set them with `forge secret set`.";
     case "file":
-      return "Values live in a gitignored file on your own machine, for local development only. Set them with forge secret set — reliant cannot reach that file from here.";
+      return "Values live in a gitignored file on your own machine, for local development only. Set them with `forge secret set` — reliant cannot reach that file from here.";
     case "external":
       return "An external secret manager holds these values and they are provisioned out of band. Forge never sees them, so there is nothing for reliant to create or read.";
     default:
@@ -141,8 +154,23 @@ export function modeExplanation(mode: SecretSurfaceMode): string {
  *   orphan          the store holds it; nothing declares it. Nothing injects
  *                   it anywhere, so it is dead weight rather than a failure —
  *                   usually a renamed env var or a removed workload.
+ *   declared-unread a workload asks for it and THIS CONSOLE could not read
+ *                   the store (not hosted, never deployed, another control
+ *                   plane, or unreachable) — and forge did not observe it
+ *                   either way. Whether it is set is NOT KNOWN. It must never
+ *                   render as declared-unset: that turns "we could not look"
+ *                   into the one red state on the screen, beside a sentence
+ *                   saying deploys will fail.
+ *   declared-present  the store could not be read here, but forge's own
+ *                   report observed a value (`present: true`). Set, with no
+ *                   version detail — only the store has that.
  */
-export type SecretRowOrigin = "declared" | "declared-unset" | "orphan";
+export type SecretRowOrigin =
+  | "declared"
+  | "declared-unset"
+  | "declared-unread"
+  | "declared-present"
+  | "orphan";
 
 export interface SecretSurfaceRow {
   name: string;
@@ -166,7 +194,14 @@ export interface SecretSurfaceRow {
  */
 export function joinSecretRows(
   report: ForgeSecretsReport | null | undefined,
-  managed: ManagedSecretSummary[] | null | undefined
+  managed: ManagedSecretSummary[] | null | undefined,
+  /**
+   * Whether the store's answer (`managed`) is a real reading. False means the
+   * empty list is "could not look", not "holds nothing", and a declared row
+   * with no store record falls back to forge's own observation. Defaults to
+   * true so a caller that has a readable store keeps the strict join.
+   */
+  storeReadable = true
 ): SecretSurfaceRow[] {
   const byName = new Map<string, ManagedSecretSummary>();
   for (const summary of managed ?? []) byName.set(summary.name, summary);
@@ -179,9 +214,19 @@ export function joinSecretRows(
   for (const entry of secretEntries(report)) {
     seen.add(entry.name);
     const summary = byName.get(entry.name) ?? null;
+    const presence = presenceOf(report, entry);
+    const origin: SecretRowOrigin = summary
+      ? "declared"
+      : storeReadable
+        ? "declared-unset"
+        : presence === "present"
+          ? "declared-present"
+          : presence === "missing"
+            ? "declared-unset"
+            : "declared-unread";
     rows.push({
       name: entry.name,
-      origin: summary ? "declared" : "declared-unset",
+      origin,
       summary,
       state: summary ? managedSecretState(summary) : null,
       declaredBy: declarationsOf(entry),
@@ -220,14 +265,31 @@ export interface SecretSurfaceTally {
   /** Soft-deleted or destroyed — present in history, not live. */
   inactive: number;
   orphans: number;
+  /** Declared, and neither this console nor forge could say whether it is set. */
+  unknown: number;
 }
 
 export function tallyRows(rows: SecretSurfaceRow[]): SecretSurfaceTally {
-  const tally: SecretSurfaceTally = { total: rows.length, set: 0, unset: 0, inactive: 0, orphans: 0 };
+  const tally: SecretSurfaceTally = {
+    total: rows.length,
+    set: 0,
+    unset: 0,
+    inactive: 0,
+    orphans: 0,
+    unknown: 0,
+  };
   for (const row of rows) {
     if (row.origin === "orphan") tally.orphans += 1;
     if (row.origin === "declared-unset") {
       tally.unset += 1;
+      continue;
+    }
+    if (row.origin === "declared-unread") {
+      tally.unknown += 1;
+      continue;
+    }
+    if (row.origin === "declared-present") {
+      tally.set += 1;
       continue;
     }
     if (row.state === "set") tally.set += 1;
@@ -242,6 +304,8 @@ export function tallyRows(rows: SecretSurfaceRow[]): SecretSurfaceTally {
 
 export function rowStatusLabel(row: SecretSurfaceRow): string {
   if (row.origin === "declared-unset") return "Not set";
+  if (row.origin === "declared-unread") return "Not known";
+  if (row.origin === "declared-present") return "Set";
   switch (row.state) {
     case "set":
       return "Set";
@@ -268,6 +332,10 @@ export function rowStatusVariant(
   row: SecretSurfaceRow
 ): "active" | "warning" | "error" | "neutral" {
   if (row.origin === "declared-unset") return "error";
+  if (row.origin === "declared-present") return "active";
+  // Not known is neutral — never the error dot, which would claim a blocker
+  // nobody observed.
+  if (row.origin === "declared-unread") return "neutral";
   switch (row.state) {
     case "set":
       return "active";

@@ -269,10 +269,9 @@ via the Reliant ChatService.CreateChat Connect RPC — the exact path the web
 app takes. A run IS a chat: sending the first user message kicks the root
 workflow.
 
-Authentication and target server resolve through the CLI context
-(--context flag > RELIANT_CONTEXT env > current_context), falling back to
-the legacy auth file from 'reliant auth login'. The resolved bearer (an
-rlnt_pat_ API token or a session JWT) authenticates the RPC.
+The target server is --server (else RELIANT_SERVER_URL, else the default);
+the bearer is RELIANT_TOKEN, else the login 'reliant auth login' stored for
+that server. Either way it is an rlat_ access token.
 
 A run executes against a project. Supply it by ID (--project-id) or by path
 (--project-path); with --project-path the project is resolved by its path —

@@ -1,0 +1,49 @@
+{
+  "env": "hosted",
+  "mode": "apply",
+  "guard": {
+    "declared_context": "http://127.0.0.1:56171",
+    "current_context": "",
+    "verdict": "allow",
+    "reason": "control_plane_declared"
+  },
+  "target": {
+    "kube_context": "",
+    "namespace": "",
+    "destination": "hosted",
+    "endpoint": "http://127.0.0.1:56171",
+    "environment_id": "env-hosted-id"
+  },
+  "tag_source": "release v1 (promoted; http://127.0.0.1:56171)",
+  "release": "v1",
+  "preflight": {
+    "status": "unknown",
+    "findings": [],
+    "blocking": 0
+  },
+  "images": {
+    "images": [],
+    "digest_count": 0,
+    "tag_count": 0,
+    "no_digest_requested": false
+  },
+  "resources": [],
+  "rollout": {
+    "mode": "wait",
+    "timeout_seconds": 2,
+    "results": [
+      {
+        "kind": "HostedDeployment",
+        "name": "api",
+        "state": "ready"
+      }
+    ],
+    "ready": 1,
+    "failed": 0,
+    "timed_out": 0,
+    "not_waited": 0
+  },
+  "duration_ms": 57,
+  "ok": true,
+  "exit_code": 0
+}

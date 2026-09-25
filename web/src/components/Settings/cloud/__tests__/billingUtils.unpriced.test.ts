@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { Plan, PlanLimits } from "@/gen/controlplane/v1/public/shared_pb";
+import type { Plan, PlanLimits } from "@/gen/controlplane/controlplane/v1/shared_pb";
 import {
   isComputePlan,
   isPurchasableComputePlan,

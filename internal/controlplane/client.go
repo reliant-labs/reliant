@@ -14,8 +14,10 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
-	controlplanev1 "github.com/reliant-labs/reliant/gen/controlplane/v1"
-	"github.com/reliant-labs/reliant/gen/controlplane/v1/controlplanev1connect"
+	accesstokenv1 "github.com/reliant-labs/reliant/gen/controlplane/services/access_token/v1"
+	accesstokenv1connect "github.com/reliant-labs/reliant/gen/controlplane/services/access_token/v1/controlplanev1connect"
+	userv1 "github.com/reliant-labs/reliant/gen/controlplane/services/user/v1"
+	userv1connect "github.com/reliant-labs/reliant/gen/controlplane/services/user/v1/controlplanev1connect"
 )
 
 const defaultBaseURL = "http://localhost:8090"
@@ -28,8 +30,26 @@ type AccountDeletionBlocker struct {
 	Detail string
 }
 
+// ReliantProviderKeyName is the device name of the LLM gateway key reliant
+// holds on a user's behalf (persisted as the "reliant" provider credential).
+// One holder per user, so one name: re-syncing rotates THIS key and leaves the
+// user's other devices' keys alone.
+const ReliantProviderKeyName = "reliant-provider"
+
+// LLMKey is a freshly minted LLM gateway key: an `rlat_` access token with
+// llm:invoke acting as the caller. Returned exactly once.
+type LLMKey struct {
+	Plaintext string
+	// Rotated reports that a previous key for the same device was replaced
+	// (and revoked) by this mint — "rotated" versus "created". Every mint is a
+	// new plaintext, so this cannot be inferred by comparing plaintexts.
+	Rotated bool
+}
+
 type Client interface {
-	IssueMyReliantAPIKey(ctx context.Context, jwt string) (string, error)
+	// MintLLMKey mints the caller's LLM gateway key for deviceName, atomically
+	// revoking that device's previous key.
+	MintLLMKey(ctx context.Context, jwt, deviceName string) (LLMKey, error)
 
 	// DeleteCurrentUserAccount asks the control plane to tombstone the
 	// caller's platform account (billing identity, daemons, PII), forwarding
@@ -80,16 +100,16 @@ func BaseURLFromEnv() string {
 	return ""
 }
 
-func (c *connectClient) billingClient() controlplanev1connect.BillingServiceClient {
-	return controlplanev1connect.NewBillingServiceClient(c.httpClient, c.baseURL)
+func (c *connectClient) accessTokenClient() accesstokenv1connect.AccessTokenServiceClient {
+	return accesstokenv1connect.NewAccessTokenServiceClient(c.httpClient, c.baseURL)
 }
 
-func (c *connectClient) userClient() controlplanev1connect.UserServiceClient {
-	return controlplanev1connect.NewUserServiceClient(c.httpClient, c.baseURL)
+func (c *connectClient) userClient() userv1connect.UserServiceClient {
+	return userv1connect.NewUserServiceClient(c.httpClient, c.baseURL)
 }
 
 func (c *connectClient) DeleteCurrentUserAccount(ctx context.Context, jwt string) ([]AccountDeletionBlocker, error) {
-	req := connect.NewRequest(&controlplanev1.DeleteCurrentUserAccountRequest{})
+	req := connect.NewRequest(&userv1.DeleteCurrentUserAccountRequest{})
 	attachAuthorization(req, "Bearer "+strings.TrimSpace(jwt))
 	resp, err := c.userClient().DeleteCurrentUserAccount(ctx, req)
 	if err != nil {
@@ -105,14 +125,21 @@ func (c *connectClient) DeleteCurrentUserAccount(ctx context.Context, jwt string
 	return blockers, nil
 }
 
-func (c *connectClient) IssueMyReliantAPIKey(ctx context.Context, jwt string) (string, error) {
-	req := connect.NewRequest(&controlplanev1.IssueMyReliantAPIKeyRequest{})
+func (c *connectClient) MintLLMKey(ctx context.Context, jwt, deviceName string) (LLMKey, error) {
+	req := connect.NewRequest(&accesstokenv1.CreateMyTokenRequest{
+		Name:   deviceName,
+		Scopes: []string{"llm:invoke"},
+		Rotate: true,
+	})
 	attachAuthorization(req, "Bearer "+strings.TrimSpace(jwt))
-	resp, err := c.billingClient().IssueMyReliantAPIKey(ctx, req)
+	resp, err := c.accessTokenClient().CreateMyToken(ctx, req)
 	if err != nil {
-		return "", err
+		return LLMKey{}, err
 	}
-	return strings.TrimSpace(resp.Msg.GetPlaintextKey()), nil
+	return LLMKey{
+		Plaintext: strings.TrimSpace(resp.Msg.GetSecret()),
+		Rotated:   resp.Msg.GetRotated(),
+	}, nil
 }
 
 func attachAuthorization[T any](req *connect.Request[T], authHeader string) {

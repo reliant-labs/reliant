@@ -373,29 +373,6 @@ type Repository interface {
 	ListAllDaemonAttachments(ctx context.Context) ([]*DaemonAttachment, error)
 	UpsertProjectConfigRecord(ctx context.Context, record *ProjectConfigRecord) error
 
-	// PATs (Personal Access Tokens; daemon_pats table). One table and one
-	// rlnt_pat_ token format back both kinds — DaemonPATKindDaemon (gateway
-	// stream auth) and DaemonPATKindAPI (user API auth). See internal/pat for
-	// the lifecycle/validation service.
-	CreateDaemonPAT(ctx context.Context, pat *DaemonPAT) error
-	GetDaemonPATByTokenHash(ctx context.Context, tokenHash string) (*DaemonPAT, error)
-	ListDaemonPATsByUserID(ctx context.Context, userID string) ([]*DaemonPAT, error)
-	// ListDaemonPATsByUserIDAndKind returns the user's PATs of one kind,
-	// newest first (used by the kind-scoped management surfaces).
-	ListDaemonPATsByUserIDAndKind(ctx context.Context, userID, kind string) ([]*DaemonPAT, error)
-	RevokeDaemonPAT(ctx context.Context, id string) error
-	// RevokeDaemonPATByUserID is scoped by owner AND kind (a caller can never
-	// revoke another user's token, nor cross the api/daemon management
-	// surfaces). Returns true when a live token transitioned to revoked.
-	RevokeDaemonPATByUserID(ctx context.Context, userID, id, kind string) (bool, error)
-	RevokeDaemonPATsByUserID(ctx context.Context, userID string, ephemeralOnly bool) error
-	// RevokeDaemonPATsByDaemonID marks every live (not-yet-revoked) PAT bound to
-	// daemonID as revoked. Used by the managed-daemon lifecycle to invalidate a
-	// pod's credentials when it is torn down or re-provisioned. Returns the number
-	// of rows transitioned to revoked.
-	RevokeDaemonPATsByDaemonID(ctx context.Context, daemonID string) (int, error)
-	UpdateDaemonPATLastUsed(ctx context.Context, id string) error
-
 	// Sequence-based Synchronization for Polling (per-chat)
 	GetLatestUpdateSequence(ctx context.Context, chatID string) (int64, error)
 	GetUpdatesSince(ctx context.Context, chatID string, sinceSeq int64, limit int) ([]ChatUpdate, error)
