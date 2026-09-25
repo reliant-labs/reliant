@@ -23,7 +23,7 @@ func TestRunCancelsWhenContextDone(t *testing.T) {
 		cancel()
 	}()
 
-	result, err := Run(ctx, "https://auth.openai.com/oauth/authorize?redirect_uri={redirect_uri}")
+	result, err := RunWithConfig(ctx, codexAuthorizeTemplate, codexShapedConfig(t))
 	if err == nil {
 		t.Fatal("expected cancellation error")
 	}
@@ -43,18 +43,13 @@ func TestRunReusesCompatibleExistingListener(t *testing.T) {
 	openBrowser = func(string) error { return nil }
 	defer func() { openBrowser = originalOpenBrowser }()
 
-	cfg := CallbackConfig{
-		ListenHost:   "127.0.0.1",
-		RedirectHost: "localhost",
-		CallbackPath: "/auth/callback",
-		FixedPort:    1455,
-	}
-	server, _, err := newCallbackServer("https://auth.openai.com/oauth/authorize?redirect_uri={redirect_uri}", cfg)
+	cfg := codexShapedConfig(t)
+	server, _, err := newCallbackServer(codexAuthorizeTemplate, cfg)
 	if err != nil {
 		t.Fatalf("newCallbackServer error: %v", err)
 	}
 
-	listener, err := net.Listen("tcp", "127.0.0.1:1455")
+	listener, err := net.Listen("tcp", listenAddr(cfg))
 	if err != nil {
 		t.Fatalf("listen error: %v", err)
 	}
@@ -69,7 +64,7 @@ func TestRunReusesCompatibleExistingListener(t *testing.T) {
 		defer close(callbackDone)
 		deadline := time.Now().Add(2 * time.Second)
 		for {
-			resp, reqErr := http.Get("http://127.0.0.1:1455" + probePath)
+			resp, reqErr := http.Get(baseURL(cfg) + probePath)
 			if reqErr == nil {
 				resp.Body.Close()
 				break
@@ -79,10 +74,10 @@ func TestRunReusesCompatibleExistingListener(t *testing.T) {
 			}
 			time.Sleep(10 * time.Millisecond)
 		}
-		_, _ = http.Get("http://127.0.0.1:1455/auth/callback?code=test-code&state=test-state")
+		_, _ = http.Get(baseURL(cfg) + "/auth/callback?code=test-code&state=test-state")
 	}()
 
-	result, err := Run(context.Background(), "https://auth.openai.com/oauth/authorize?redirect_uri={redirect_uri}")
+	result, err := RunWithConfig(context.Background(), codexAuthorizeTemplate, cfg)
 	if err != nil {
 		t.Fatalf("Run error: %v", err)
 	}
@@ -94,12 +89,13 @@ func TestRunReusesCompatibleExistingListener(t *testing.T) {
 	if result.State != "test-state" {
 		t.Fatalf("State = %q, want %q", result.State, "test-state")
 	}
-	if result.RedirectURI != "http://localhost:1455/auth/callback" {
-		t.Fatalf("RedirectURI = %q", result.RedirectURI)
+	if want := fmt.Sprintf("http://localhost:%d/auth/callback", cfg.FixedPort); result.RedirectURI != want {
+		t.Fatalf("RedirectURI = %q, want %q", result.RedirectURI, want)
 	}
 }
 
 func TestRunFailsForIncompatibleExistingListener(t *testing.T) {
+	cfg := codexShapedConfig(t)
 	originalOpenBrowser := openBrowser
 	openBrowser = func(string) error { return nil }
 	defer func() { openBrowser = originalOpenBrowser }()
@@ -111,12 +107,12 @@ func TestRunFailsForIncompatibleExistingListener(t *testing.T) {
 			"kind":          "someone-else",
 			"version":       1,
 			"callback_path": "/auth/callback",
-			"redirect_uri":  "http://localhost:1455/auth/callback",
+			"redirect_uri":  fmt.Sprintf("http://localhost:%d/auth/callback", cfg.FixedPort),
 			"active":        true,
 		})
 	})
 
-	listener, err := net.Listen("tcp", "127.0.0.1:1455")
+	listener, err := net.Listen("tcp", listenAddr(cfg))
 	if err != nil {
 		t.Fatalf("listen error: %v", err)
 	}
@@ -126,7 +122,7 @@ func TestRunFailsForIncompatibleExistingListener(t *testing.T) {
 	defer httpServer.Close()
 	go func() { _ = httpServer.Serve(listener) }()
 
-	_, err = Run(context.Background(), "https://auth.openai.com/oauth/authorize?redirect_uri={redirect_uri}")
+	_, err = RunWithConfig(context.Background(), codexAuthorizeTemplate, cfg)
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -136,6 +132,8 @@ func TestRunFailsForIncompatibleExistingListener(t *testing.T) {
 }
 
 func TestTryReuseExistingListenerReadsResult(t *testing.T) {
+	cfg := codexShapedConfig(t)
+	redirectURI := fmt.Sprintf("http://localhost:%d/auth/callback", cfg.FixedPort)
 	mux := http.NewServeMux()
 	mux.HandleFunc(probePath, func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -143,7 +141,7 @@ func TestTryReuseExistingListenerReadsResult(t *testing.T) {
 			Kind:         listenerKind,
 			Version:      listenerVersion,
 			CallbackPath: "/auth/callback",
-			RedirectURI:  "http://localhost:1455/auth/callback",
+			RedirectURI:  redirectURI,
 			Active:       true,
 		})
 	})
@@ -152,12 +150,12 @@ func TestTryReuseExistingListenerReadsResult(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(Result{
 			Code:        "shared-code",
 			State:       "shared-state",
-			RedirectURI: "http://localhost:1455/auth/callback",
+			RedirectURI: redirectURI,
 			CallbackURL: "/auth/callback?code=shared-code&state=shared-state",
 		})
 	})
 
-	listener, err := net.Listen("tcp", "127.0.0.1:1455")
+	listener, err := net.Listen("tcp", listenAddr(cfg))
 	if err != nil {
 		t.Fatalf("listen error: %v", err)
 	}
@@ -169,9 +167,9 @@ func TestTryReuseExistingListenerReadsResult(t *testing.T) {
 
 	result, err := tryReuseExistingListener(
 		context.Background(),
-		CallbackConfig{ListenHost: "127.0.0.1", CallbackPath: "/auth/callback", FixedPort: 1455},
-		"http://localhost:1455/auth/callback",
-		fmt.Errorf("listen tcp 127.0.0.1:1455: %w", syscallEADDRINUSE()),
+		cfg,
+		redirectURI,
+		fmt.Errorf("listen tcp %s: %w", listenAddr(cfg), syscallEADDRINUSE()),
 	)
 	if err != nil {
 		t.Fatalf("tryReuseExistingListener error: %v", err)
