@@ -1,16 +1,19 @@
 # buf.gen-go-only.yaml - Code generation for Go only (excludes TypeScript)
+#
+# The Go plugin pins MUST equal buf.gen.yaml's: both templates write gen/, and
+# internal/buildmode/buf_plugin_pins_test.go fails if they diverge.
 version: v2
 managed:
   enabled: false
 plugins:
   # Generate Go protobuf code
-  - remote: buf.build/protocolbuffers/go
+  - remote: buf.build/protocolbuffers/go:v1.36.12
     out: gen
     opt:
       - paths=source_relative
 
   # Generate Connect-Go service code using remote plugin
-  - remote: buf.build/connectrpc/go
+  - remote: buf.build/connectrpc/go:v1.21.0
     out: gen
     opt:
       - paths=source_relative
