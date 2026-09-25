@@ -8,12 +8,14 @@ import (
 	"fmt"
 	"io"
 	"sync"
+	"time"
 
 	"connectrpc.com/connect"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 )
 
@@ -35,6 +37,47 @@ func (s *TerminalProxyService) getUserID(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("user ID not found in context")
 	}
 	return userID, nil
+}
+
+// terminalCloseTimeout bounds the close a terminal connection sends as it
+// tears down, so a daemon that cannot be reached does not hold the handler.
+const terminalCloseTimeout = 10 * time.Second
+
+// closeDaemonTerminalSession closes the daemon terminal session that a
+// terminal connection (TerminalWSHandler, StreamTerminal) created. Each
+// handler defers it as soon as it has a session id.
+//
+// A session is owned by the connection that created it. Every connection
+// sends terminal.create and nothing can reattach to an existing session, so
+// once its connection is gone a session is unreachable — but its login shell
+// and PTY stay alive on the user's machine until the daemon exits. The
+// handlers used to only unsubscribe on the way out, so every dropped
+// connection (reload, sleep, network blip, API restart) leaked a shell, and
+// the browser's reconnect created another. One daemon accumulated 501,
+// exhausting macOS's machine-wide PTY pool (kern.tty.ptmx_max = 511) so that
+// no program on the machine could open a terminal.
+//
+// The request context is already cancelled by the time this runs, so the
+// close is sent on a detached, bounded context that keeps its values. It is
+// best-effort: the session is often already gone (the shell exited, or the
+// client closed it through CloseSession first), and the daemon's session cap
+// is the backstop when the close cannot be delivered at all.
+func closeDaemonTerminalSession(ctx context.Context, router toolexec.DaemonRouter, userID, sessionID string) {
+	if sessionID == "" {
+		return
+	}
+	closeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), terminalCloseTimeout)
+	defer cancel()
+
+	payload, err := json.Marshal(map[string]any{"session_id": sessionID})
+	if err != nil {
+		logging.Error("[Terminal] Failed to marshal session close", "error", err, "session_id", sessionID)
+		return
+	}
+	if _, err := router.SendDaemonCommand(closeCtx, userID, "terminal.close", payload, int32(terminalCloseTimeout/time.Millisecond)); err != nil {
+		logging.Debug("[Terminal] Session close on disconnect did not complete (may already be closed)",
+			"error", err, "session_id", sessionID)
+	}
 }
 
 // ListSessions returns all active terminal sessions.
@@ -187,6 +230,9 @@ func (s *TerminalProxyService) StreamTerminal(
 	}
 
 	sessionID := createResp.SessionID
+	// This stream owns the session, so it closes it however the stream ends:
+	// an explicit CloseSession, a client hangup, or an early return below.
+	defer closeDaemonTerminalSession(ctx, s.router, userID, sessionID)
 
 	// Send the Created response to the client.
 	if err := stream.Send(&reliantv1.TerminalStreamOutput{
@@ -305,14 +351,8 @@ func (s *TerminalProxyService) StreamTerminal(
 					return
 				}
 			case *reliantv1.TerminalStreamInput_CloseSession:
-				// Send close command to daemon and finish.
-				closeReq := map[string]any{
-					"session_id": sessionID,
-				}
-				closePayload, err := json.Marshal(closeReq)
-				if err == nil {
-					_, _ = s.router.SendDaemonCommand(pumpCtx, userID, "terminal.close", closePayload, 30000)
-				}
+				// End the stream. The deferred closeDaemonTerminalSession
+				// closes the daemon session, exactly as it does on hangup.
 				setPumpErr(nil)
 				return
 			}

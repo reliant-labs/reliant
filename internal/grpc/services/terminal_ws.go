@@ -122,6 +122,9 @@ func TerminalWSHandler(router toolexec.DaemonRouter, validator auth.TokenValidat
 		}
 
 		sessionID := createResp.SessionID
+		// This connection owns the session, so it closes it however the
+		// connection ends — including every early return below.
+		defer closeDaemonTerminalSession(ctx, router, userID, sessionID)
 		logging.Info("[TerminalWS] Session created",
 			"session_id", sessionID,
 			"pid", createResp.PID,
