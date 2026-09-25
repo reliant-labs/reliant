@@ -1,0 +1,103 @@
+syntax = "proto3";
+
+// EXPERIMENTAL: controlplane.v1 is unstable. Field numbers, RPC names, and
+// service shapes may change without notice until the package is declared
+// stable. Consumers should pin to a specific control-plane commit.
+//
+// See proto/controlplane/v1/README.md for stability/versioning policy.
+
+package controlplane.v1;
+
+import "controlplane/v1/shared.proto";
+import "forge/v1/forge.proto";
+import "google/protobuf/struct.proto";
+
+option go_package = "github.com/reliant-labs/control-plane/gen/services/user/v1;userv1";
+
+// === UserService ===
+
+service UserService {
+  rpc GetCurrentUser(GetCurrentUserRequest) returns (GetCurrentUserResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+  rpc UpdateProfile(UpdateProfileRequest) returns (UpdateProfileResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+  rpc CompleteOnboarding(CompleteOnboardingRequest) returns (CompleteOnboardingResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+
+  // PreviewAccountDeletion reports whether the caller's control-plane account
+  // can be deleted, and what they must resolve first if not. Changes nothing.
+  rpc PreviewAccountDeletion(PreviewAccountDeletionRequest) returns (PreviewAccountDeletionResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+
+  // DeleteCurrentUserAccount tombstones the caller's control-plane account:
+  // it cancels the free compute plan, tears down active daemons, and scrubs +
+  // tombstones the user row so the auth bridge refuses every subsequent
+  // request from that identity.
+  //
+  // The row is NOT removed. Billing records (usage, wallet ledger, invoices)
+  // reference it and are retained as financial records; the tombstone is also
+  // what makes the lockout work, since the auth bridge recreates a MISSING
+  // user row on the deleted user's very next request.
+  //
+  // Refuses with FAILED_PRECONDITION while the caller has a paid subscription
+  // or prepaid credit — nothing is destroyed in that case, and the response
+  // names the blocker so the client can link to the remedy.
+  rpc DeleteCurrentUserAccount(DeleteCurrentUserAccountRequest) returns (DeleteCurrentUserAccountResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+}
+
+message GetCurrentUserRequest {}
+
+message GetCurrentUserResponse {
+  User user = 1;
+  reserved 2; // was: repeated Organization organizations (removed with OrgService)
+  reserved "organizations";
+}
+
+message UpdateProfileRequest {
+  string name = 1;
+  string avatar_url = 2;
+}
+
+message UpdateProfileResponse {
+  User user = 1;
+}
+
+message CompleteOnboardingRequest {
+  google.protobuf.Struct onboarding_data = 1;
+}
+
+message CompleteOnboardingResponse {}
+
+// AccountDeletionBlocker is one reason deletion cannot proceed yet. The reason
+// is machine-readable so the client can render the specific remedy and link to
+// it, rather than showing a generic error.
+message AccountDeletionBlocker {
+  // Machine-readable reason: "paid_subscription" or "wallet_balance".
+  string reason = 1;
+  // Human-readable sentence the UI may render verbatim.
+  string detail = 2;
+}
+
+message PreviewAccountDeletionRequest {}
+
+message PreviewAccountDeletionResponse {
+  // Empty when the account can be deleted.
+  repeated AccountDeletionBlocker blockers = 1;
+  // How many active daemons deletion would tear down. Not a blocker — a
+  // running daemon is a resource, not a commitment.
+  int32 daemon_count = 2;
+}
+
+message DeleteCurrentUserAccountRequest {}
+
+message DeleteCurrentUserAccountResponse {
+  // Populated when deletion was REFUSED; nothing was destroyed. Empty on
+  // success.
+  repeated AccountDeletionBlocker blockers = 1;
+}

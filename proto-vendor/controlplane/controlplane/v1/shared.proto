@@ -1,0 +1,713 @@
+syntax = "proto3";
+
+// EXPERIMENTAL: controlplane.v1 is unstable. Field numbers, RPC names, and
+// service shapes may change without notice until the package is declared
+// stable. Consumers should pin to a specific control-plane commit.
+//
+// See proto/controlplane/v1/README.md for stability/versioning policy.
+
+package controlplane.v1;
+
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/reliant-labs/control-plane/gen/controlplane/v1;controlplanev1";
+
+// === Enums ===
+
+enum DaemonType {
+  DAEMON_TYPE_UNSPECIFIED = 0;
+  DAEMON_TYPE_MANAGED = 1;
+  DAEMON_TYPE_EXTERNAL = 2;
+}
+
+enum DaemonStatus {
+  DAEMON_STATUS_UNSPECIFIED = 0;
+  DAEMON_STATUS_PENDING = 1;
+  DAEMON_STATUS_ACTIVE = 2;
+  DAEMON_STATUS_SUSPENDED = 3;
+  DAEMON_STATUS_DISCONNECTED = 4;
+  DAEMON_STATUS_FAILED = 5;
+}
+
+// DaemonLifecyclePhase is the finer-grained "what is it doing right now" that
+// sits underneath DaemonStatus. Its whole purpose is to let a waiting user see
+// progress, so the values are chosen for what they let the UI SAY, not to
+// mirror any particular orchestrator's internals.
+//
+// This is deliberately NOT the raw Kubernetes phase string. Managed machines
+// happen to run as pods today, but that is an implementation detail of one
+// deployment, and leaking `"Pending"`/`"Cloning"` onto the public API would
+// make the client's copy a hostage to the operator's internal naming. The
+// control plane maps its orchestrator phases onto these (see
+// lifecyclePhaseFromWorkspacePhase); a different backend maps its own.
+//
+// The raw k8s phase remains available to admin callers on DaemonInternal.
+enum DaemonLifecyclePhase {
+  // No phase information. External/self-hosted machines have no workspace to
+  // report one, and rows predating the field carry none. Means "no extra
+  // detail available" — never an error.
+  DAEMON_LIFECYCLE_PHASE_UNSPECIFIED = 0;
+
+  // Compute is being allocated: scheduling, volume provisioning, pulling the
+  // image. Usually the longest part of a cold start, and the part most likely
+  // to stall on quota or a bad image reference.
+  DAEMON_LIFECYCLE_PHASE_PROVISIONING = 1;
+
+  // The workspace exists and the repository is being cloned. Scales with repo
+  // size, so this one legitimately runs long on a big monorepo — worth saying
+  // out loud so a slow clone doesn't read as a hang.
+  DAEMON_LIFECYCLE_PHASE_CLONING = 2;
+
+  // Running and serving. The machine is usable.
+  DAEMON_LIFECYCLE_PHASE_READY = 3;
+
+  // Being put to sleep after idling. Brief and self-resolving.
+  DAEMON_LIFECYCLE_PHASE_SUSPENDING = 4;
+
+  // Asleep. Nothing is in flight; it must be resumed before it will serve.
+  DAEMON_LIFECYCLE_PHASE_SUSPENDED = 5;
+
+  // Startup failed terminally. `last_status_message` carries the reason when
+  // the orchestrator supplied one.
+  DAEMON_LIFECYCLE_PHASE_FAILED = 6;
+}
+
+enum OwnerType {
+  OWNER_TYPE_UNSPECIFIED = 0;
+  OWNER_TYPE_USER = 1;
+  OWNER_TYPE_ORGANIZATION = 2;
+}
+
+// Compute tier. Comments give CPU request / limit and memory request / limit;
+// limits are 4x requests so spiky builds can burst while bin-packing stays on
+// requests. The data PVC per tier lives in config.DaemonStorageSizes.
+enum DaemonSize {
+  DAEMON_SIZE_UNSPECIFIED = 0;
+  DAEMON_SIZE_SMALL = 1; // 500m/2 CPU, 2Gi/4Gi RAM
+  DAEMON_SIZE_MEDIUM = 2; // 1/4 CPU, 4Gi/8Gi RAM
+  DAEMON_SIZE_LARGE = 3; // 2/8 CPU, 8Gi/16Gi RAM
+  DAEMON_SIZE_XL = 4; // 4/16 CPU, 16Gi/32Gi RAM
+  DAEMON_SIZE_2XL = 5; // 8/32 CPU, 32Gi/64Gi RAM
+}
+
+enum PortAccessMode {
+  PORT_ACCESS_MODE_UNSPECIFIED = 0;
+  PORT_ACCESS_MODE_PUBLIC = 1; // anyone with the URL
+  PORT_ACCESS_MODE_AUTHENTICATED = 2; // requires Reliant login
+  PORT_ACCESS_MODE_TOKEN = 3; // requires specific bearer token
+}
+
+enum SubscriptionStatus {
+  SUBSCRIPTION_STATUS_UNSPECIFIED = 0;
+  SUBSCRIPTION_STATUS_ACTIVE = 1;
+  SUBSCRIPTION_STATUS_PAST_DUE = 2;
+  SUBSCRIPTION_STATUS_CANCELED = 3;
+  SUBSCRIPTION_STATUS_TRIALING = 4;
+}
+
+enum PlanTier {
+  PLAN_TIER_UNSPECIFIED = 0;
+  PLAN_TIER_FREE = 1;
+  PLAN_TIER_STARTER = 2;
+  PLAN_TIER_PRO = 3;
+  PLAN_TIER_ENTERPRISE = 4;
+}
+
+enum LLMKeyStatus {
+  LLM_KEY_STATUS_UNSPECIFIED = 0;
+  LLM_KEY_STATUS_ACTIVE = 1;
+  LLM_KEY_STATUS_REVOKED = 2;
+  LLM_KEY_STATUS_EXPIRED = 3;
+}
+
+// === Entity messages ===
+
+message ResourceRequirements {
+  string cpu_request = 1;
+  string cpu_limit = 2;
+  string memory_request = 3;
+  string memory_limit = 4;
+}
+
+// Daemon is the public view of a managed or external daemon. Implementation
+// internals (workspace pod name, k8s phase, workspace_id) are exposed via
+// DaemonAdminService.GetDaemonInternal -> DaemonInternal in
+// controlplane/v1/shared_internal.proto.
+message Daemon {
+  string id = 1;
+  string name = 2;
+  string owner_id = 3;
+  OwnerType owner_type = 4;
+  DaemonType daemon_type = 5;
+  DaemonStatus status = 6;
+
+  reserved 7; // was workspace_id (moved to DaemonInternal)
+  reserved "workspace_id";
+
+  // Managed daemon fields
+  string image = 8;
+  ResourceRequirements resources = 9;
+  string git_repo = 10;
+  string git_branch = 11;
+  string storage_size = 12;
+
+  // External daemon fields
+  string hostname = 13;
+  string platform = 14;
+
+  // Status/timing
+  google.protobuf.Timestamp connected_at = 15;
+
+  reserved 16; // was last_heartbeat — the backing column was dropped in
+  reserved "last_heartbeat"; // migration 00046 (pull-architecture refactor);
+  // the field was never populated since. Live "last active"
+  // comes from the gateway via NATS pull at GetDaemon time.
+
+  google.protobuf.Timestamp disconnected_at = 17;
+  google.protobuf.Timestamp created_at = 18;
+  google.protobuf.Timestamp updated_at = 19;
+
+  reserved 20, 21; // was workspace_phase, pod_name (moved to DaemonInternal)
+  reserved "workspace_phase", "pod_name";
+
+  reserved 22; // was slug (daemons are addressed by UUID id now)
+  reserved "slug";
+
+  // Daemon enhancements
+  DaemonSize size = 23;
+  string idle_timeout = 25; // duration string e.g. "30m"
+
+  // Human-readable reason for the most recent connect/disconnect transition.
+  // Empty when the daemon is actively connected. Populated from gateway-side
+  // NATS events (disconnected / connect_failed) — e.g. "dial tcp: i/o
+  // timeout", "receiving registration: timed out after 10s".
+  string last_status_message = 26;
+  // When status / last_status_message most recently changed, as observed by
+  // the daemon-gateway.
+  google.protobuf.Timestamp last_status_changed_at = 27;
+
+  // OOM-kill tracking (managed daemons). The workspace operator records
+  // OOMKilled terminations of the workspace pod on the Workspace CR status
+  // (debounced on the termination's finishedAt); the workspace state
+  // reconciler mirrors them onto the daemon row. Unset/zero when no OOM kill
+  // has been observed. The UI keys "recent" off last_oom_killed_at.
+  google.protobuf.Timestamp last_oom_killed_at = 28;
+  int32 oom_kill_count = 29;
+
+  // What the machine is currently DOING, when it isn't ready yet.
+  //
+  // `status` answers "can I use this machine"; it deliberately collapses the
+  // whole startup sequence into PENDING. That is the right granularity for
+  // deciding whether to route work, and the wrong granularity for a user
+  // watching a spinner — "pulling the image" and "cloning your repository"
+  // have very different expected durations, and a wait that explains itself
+  // reads as progress rather than as a hang.
+  //
+  // Mapped from the Workspace CR's phase, NOT the raw string (see the enum's
+  // comment). Admin callers still get the raw k8s phase on DaemonInternal.
+  DaemonLifecyclePhase lifecycle_phase = 31;
+
+  // default_port_access is the workspace-level access policy the preview proxy
+  // applies to a listening port that has NO explicit PortAccessRule. It travels
+  // with the workspace. PORT_ACCESS_MODE_AUTHENTICATED (the safe default) means
+  // only the owner / owning-org member can reach an unruled port;
+  // PORT_ACCESS_MODE_PUBLIC opts the whole workspace into "every port shareable
+  // by URL by default". Explicit per-port rules always override this. Set via
+  // DaemonService.SetDefaultPortAccess.
+  PortAccessMode default_port_access = 30;
+}
+
+// Port access control
+message PortAccessRule {
+  string id = 1;
+  string daemon_id = 2;
+  int32 port = 3;
+  PortAccessMode access_mode = 4;
+  string url = 5; // computed: https://{port}-{daemon_id}.{baseDomain}
+  google.protobuf.Timestamp created_at = 6;
+}
+
+message User {
+  string id = 1;
+  string external_id = 2;
+  string email = 3;
+  string name = 4;
+  string avatar_url = 5;
+  string role = 6;
+  google.protobuf.Timestamp created_at = 7;
+  google.protobuf.Timestamp updated_at = 8;
+  bool onboarding_completed = 9;
+  google.protobuf.Struct onboarding_data = 10;
+}
+
+message Organization {
+  string id = 1;
+  string name = 2;
+  string slug = 3;
+  string owner_id = 4;
+  reserved 5; // was litellm_team_id (internal implementation detail)
+  string stripe_customer_id = 6;
+  string settings = 7;
+  int32 member_count = 8;
+  google.protobuf.Timestamp created_at = 9;
+  google.protobuf.Timestamp updated_at = 10;
+}
+
+message Product {
+  string id = 1;
+  string name = 2;
+  string description = 3;
+}
+
+// MeteredDimension describes one billable, usage-metered resource axis: a
+// unit of consumption, a per-period included allowance, and the rate
+// charged once that allowance is exhausted.
+//
+// M0.6 introduces this shape with exactly one instance per compute plan —
+// daemon compute, carrying the same facts allowed_daemon_sizes /
+// daemon_compute_included_minutes / daemon_overage_per_minute_cents below
+// already conveyed. Those scalar fields are UNCHANGED and remain the
+// authoritative wire values for existing clients; metered_dimensions is an
+// additive projection of the same data, in the collection shape later
+// dimensions (CPU, memory, storage, egress, CDN) will land in without
+// requiring another scalar-field-per-dimension expansion.
+message MeteredDimension {
+  // Stable identifier, e.g. "daemon_compute". Not user-facing.
+  string id = 1;
+  // Unit the allowance and rate are denominated in, e.g. "minutes".
+  string unit = 2;
+  // Per-period allowance in Unit. -1 means unlimited (the catalog's
+  // existing sentinel); enforcement code must clamp this to zero itself
+  // (see planlimits.IncludedComputeMinutes) rather than trusting this raw
+  // value, which display code preserves as -1 on purpose.
+  double included_allowance = 3;
+  // Per-Unit charge once the allowance is exhausted.
+  double overage_rate_cents = 4;
+  // Tiers/sizes this dimension may run as. Only meaningful for
+  // tier-gated dimensions (daemon compute's machine sizes); empty for a
+  // dimension with no such restriction. For daemon_compute specifically,
+  // empty means deny-all — the same contract allowed_daemon_sizes above
+  // already carries.
+  repeated string allowed_tiers = 5;
+  // Presentation label, e.g. "Compute". Not enforcement.
+  string display_name = 6;
+}
+
+// InfraOveragePolicy is the enforcement ladder applied to a plan's
+// INFRASTRUCTURE dimensions (deployments, not daemons) once consumption
+// crosses the included allowance.
+//
+// The ladder has four rungs, in order:
+//
+//	notify        at notify_threshold_percent of the allowance (default 80)
+//	block_scale_up at 100% — the tenant keeps what is running, but may not
+//	              add replicas, deployments or vClusters
+//	throttle      after overage_grace_hours (default 72) of continuous
+//	              overage — the workload is rate-limited, not stopped
+//	suspend       ONLY when suspend_on_overage is explicitly true
+//
+// SUSPEND DEFAULTS TO FALSE, AND THAT INVERSION IS DELIBERATE. Daemon
+// enforcement (internal/enforcement.Config.SuspendOnOverage) defaults to
+// TRUE because a daemon is a session: suspending one costs its owner an
+// interactive context they can rebuild. A deployment is a subscription —
+// somebody's production service, possibly serving their own customers —
+// and stopping it is an outage we chose to cause over a billing dispute.
+// The default therefore flips: a customer must explicitly ask for a hard
+// cap ("never let me be billed past X, even if that means downtime") for
+// this to become true.
+//
+// STORAGE IS NEVER SUSPENDED, whatever this field says. Suspending compute
+// stops a cost; "suspending" storage means releasing a PVC, which destroys
+// the customer's data to save cents. non_suspendable_dimension_ids carries
+// that exemption on the wire so a client renders the ladder honestly rather
+// than implying a rung that will never fire.
+message InfraOveragePolicy {
+  // Percent of the included allowance at which the tenant is notified.
+  // Zero means "unset" and the server applies its default (80).
+  double notify_threshold_percent = 1;
+  // Hours of continuous overage tolerated before throttling. Zero means
+  // "unset" and the server applies its default (72).
+  int32 overage_grace_hours = 2;
+  // Whether the suspend rung may fire at all. FALSE BY DEFAULT — see the
+  // message comment. Only an explicit customer hard cap sets this.
+  bool suspend_on_overage = 3;
+  // Dimension IDs exempt from the suspend rung no matter what
+  // suspend_on_overage says. Always contains "infra_storage".
+  repeated string non_suspendable_dimension_ids = 4;
+}
+
+// PlanLimits contains the typed limits for a billing plan.
+// Fields mirror the JSON stored in the plans table (see PlanLimits in
+// internal/service/llm_gateway_service.go).
+message PlanLimits {
+  int32 max_seats = 1;
+  int32 max_workspaces = 2;
+  double max_llm_spend_monthly = 3;
+  int32 max_llm_keys = 4;
+  int32 requests_per_min = 7;
+
+  // Compute allowances. These come from the same plans.limits blob as the
+  // fields above and are what a compute plan actually sells, so a client
+  // that renders a plan needs them on the wire — before these existed the
+  // deprecated `limits` JSON string was the only way to get them, and when
+  // that stopped being populated every plan silently rendered zero hours
+  // and no sizes.
+
+  // Machine sizes this plan may run. EMPTY MEANS DENY ALL, including
+  // "small" — it is not "no restriction".
+  repeated string allowed_daemon_sizes = 9;
+  // Monthly included compute minutes. -1 means unlimited.
+  int32 daemon_compute_included_minutes = 10;
+  // Per-minute charge once included minutes are exhausted. Fractional
+  // cents are normal (0.2 = a fifth of a cent per minute), hence double.
+  double daemon_overage_per_minute_cents = 11;
+
+  // The same allowances above, reshaped into a collection so a future
+  // dimension (CPU, memory, storage, egress, CDN) is one more entry here
+  // rather than three more scalar fields on this message. See
+  // MeteredDimension's own comment for why both shapes coexist right now.
+  //
+  // As of P1 this carries daemon compute PLUS the infrastructure
+  // dimensions declared below — the "future dimension" this shape was
+  // built for. The scalar fields remain the parsed representation and the
+  // enforcement inputs; metered_dimensions stays a derived view.
+  repeated MeteredDimension metered_dimensions = 12;
+
+  // ---------------------------------------------------------------------
+  // Infrastructure (deploy) allowances.
+  //
+  // These are what a DEPLOYMENT consumes, as opposed to the daemon fields
+  // above which are what a SESSION consumes. Two models is correct: a
+  // daemon is bought as a t-shirt size for a while, a deployment is bought
+  // as reserved capacity indefinitely.
+  //
+  // Every one of these costs real money to serve, so NONE of them may
+  // carry the -1 "unlimited" sentinel — a fixed monthly price behind an
+  // unbounded liability is the exact shape plan_compute_xl shipped with
+  // and that internal/plansconfig/metered_dimensions_test.go now forbids.
+  // ---------------------------------------------------------------------
+
+  // Included vCPU-hours per period. Metered from resources.requests.cpu
+  // times running replicas, so scale-to-zero genuinely stops this meter.
+  double included_cpu_hours = 13;
+  // Per-vCPU-hour charge past the allowance, in cents. 9.0 = $0.09/vCPU-hr.
+  double cpu_overage_rate_cents = 14;
+
+  // Included memory GiB-hours per period, from resources.requests.memory
+  // times replicas. Stops at scale-to-zero alongside CPU.
+  double included_memory_gib_hours = 15;
+  // Per-GiB-hour charge past the allowance, in cents. 1.2 = $0.012/GiB-hr.
+  double memory_overage_rate_cents = 16;
+
+  // Included storage GiB-HOURS per period, from PVC requested size billed
+  // while BOUND.
+  //
+  // GiB-HOURS, NOT GiB-MONTHS, because hours are what the meter produces:
+  // every usage bucket records its own tick_seconds. Tag 17 previously
+  // carried a GiB-months figure against that hourly meter — a
+  // factor-of-730 mismatch between what was sold and what was counted —
+  // so it is reserved below rather than reinterpreted in place. A client
+  // renders months by dividing by 730.
+  //
+  // SCALE-TO-ZERO DOES NOT STOP THIS METER, and that is the honest
+  // behavior rather than an oversight: the disk is still allocated and
+  // still costs us. Saying so plainly is what makes scale-to-zero
+  // trustworthy instead of a billing trap.
+  double included_storage_gib_hours = 33;
+  // Per-GiB-HOUR charge past the allowance, in cents. Shares a unit with
+  // the allowance above; a per-month rate here would be a 730x error.
+  double storage_overage_rate_cents = 18;
+
+  // Maximum provisioned TenantClusters. Each carries a per-hour floor
+  // (~$0.02/hr) whether or not anything runs on it, so this is a metered
+  // cap and not a courtesy limit.
+  int32 max_vclusters = 27;
+  // Per-hour floor charged for each provisioned vCluster, in cents.
+  // 2.0 = $0.02/hr.
+  double vcluster_floor_rate_cents_per_hour = 28;
+
+  // Maximum concurrently deployed workloads (SimpleBackend, StaticSite,
+  // ManagedDatabase) across the tenant.
+  int32 max_deployments = 29;
+
+  // The memory:CPU ratio band a deployment's requests must fall inside,
+  // in GiB per vCPU. A request outside the band is rounded UP on the
+  // deficient axis at render time (ask 500m + 8Gi against a 4 GiB/vCPU
+  // band → billed 2 vCPU).
+  //
+  // This replaces a t-shirt size taxonomy for deployments. Without it a
+  // lopsided shape is cheap to buy and expensive to serve, because a pod
+  // that pins one axis strands the other on the node. Zero on either bound
+  // means "unset" and the server applies the platform default band.
+  double min_memory_gib_per_vcpu = 30;
+  double max_memory_gib_per_vcpu = 31;
+
+  // How infrastructure overage is enforced for this plan. Absent means the
+  // server's defaults apply: notify at 80%, block scale-up at 100%,
+  // throttle after 72h, and NEVER suspend.
+  InfraOveragePolicy infra_overage_policy = 32;
+
+  reserved 5, 6;
+  reserved "ip_restricted", "max_ips_per_key";
+
+  // Retired with the three-tier catalog (SimpleBackend, StaticSite,
+  // ManagedDatabase). Every one of these sold a dimension no emitter
+  // measured:
+  //
+  //   17  included_storage_gib_months — WRONG UNIT against an hourly
+  //       meter. Replaced by included_storage_gib_hours (tag 33) rather
+  //       than reinterpreted, because a client reading tag 17 as months
+  //       would be off by 730 against a server writing hours.
+  //   19/20  internet egress — the only containment is an HTTP_PROXY env
+  //       var tenant code can ignore, so the allowance was unmeasurable.
+  //       The runtime meter survives, zero-rated; only the SALE is gone.
+  //   21-24  CDN egress and CDN requests — no emitter ever existed.
+  //       Static sites bill on storage at launch.
+  //   25/26  build minutes — the ImageBuild tier is structurally gated
+  //       off (setupImageBuildReconciler returns early with no builder
+  //       image, which no cloud env sets), and a MINUTE is not a
+  //       billable unit of compute anyway; migration 00074 retired the
+  //       matching build_minutes bucket kind for that reason.
+  //
+  // Tags AND names are tombstoned: a future field reusing tag 21 would be
+  // silently fed a deployed client's CDN egress double.
+  reserved 17, 19, 20, 21, 22, 23, 24, 25, 26;
+  reserved "included_storage_gib_months", "included_egress_gib",
+      "egress_overage_rate_cents", "included_cdn_egress_gib",
+      "cdn_egress_overage_rate_cents", "included_cdn_requests_millions",
+      "cdn_requests_overage_rate_cents", "included_build_minutes",
+      "build_minutes_overage_rate_cents";
+}
+
+message Plan {
+  string id = 1;
+  string product_id = 2;
+  string name = 3;
+  PlanTier tier = 4;
+  string stripe_price_id = 5;
+  string limits = 6 [deprecated = true]; // Deprecated: use structured_limits instead
+  google.protobuf.Timestamp created_at = 7;
+  PlanLimits structured_limits = 8;
+  // 9 previously reserved for stripe_slot_price_id (removed with compute slots)
+
+  // Monthly price in cents, from the plan catalog. This is THE price a
+  // client may display: the alternative is a client-side price table, which
+  // is a second declaration of what a plan costs that nothing reconciles
+  // against what Stripe charges.
+  //
+  // ZERO MEANS "NO MONTHLY PRICE", NOT "FREE". Wallet-billed code plans and
+  // the compute free trial have no monthly price at all; a client must
+  // render that as unavailable rather than as $0.00, and must not offer a
+  // purchase button for it.
+  int64 price_cents = 10;
+
+  // Sort key for a plan grid, ascending. Replaces client-side allowlists
+  // that both ordered and filtered the grid, which made a newly added plan
+  // invisible until the frontend was edited.
+  int32 display_order = 11;
+}
+
+message Subscription {
+  string id = 1;
+  string org_id = 2;
+  string plan_id = 3;
+  Plan plan = 4;
+  string stripe_subscription_id = 5;
+  SubscriptionStatus status = 6;
+  google.protobuf.Timestamp current_period_start = 7;
+  google.protobuf.Timestamp current_period_end = 8;
+  google.protobuf.Timestamp created_at = 9;
+  google.protobuf.Timestamp updated_at = 10;
+  // Whether workspace compute overage billing is enabled for this subscription.
+  bool overage_enabled = 11;
+
+  // Monthly ceiling, in cents, on compute overage spend for this subscription.
+  //
+  // Unset or 0 both mean NO CAP — the enforcement gate tests `> 0`, so a
+  // subscription whose column is already 0 keeps behaving exactly as it did
+  // before this field existed. `optional` is here so a client can tell "the
+  // server did not send a cap" from "the cap is zero"; both are uncapped, but
+  // only one of them is a value the user chose.
+  //
+  // The cap gates STARTING a machine (CreateDaemon / ResumeDaemon). It does
+  // not stop a machine that is already running.
+  optional int64 budget_cents = 12;
+
+  // Monthly ceiling, in cents, on DEPLOY (infrastructure) overage spend.
+  //
+  // IDENTICAL SEMANTICS TO budget_cents ABOVE, copied deliberately rather than
+  // reinterpreted: unset or 0 both mean NO CAP (every enforcement gate tests
+  // `> 0`), and a write replaces the stored value outright rather than
+  // patching it.
+  //
+  // A SIBLING FIELD, NOT A REPLACEMENT, and the separation is the point. Both
+  // ceilings live on one subscription row, but they cap two different products
+  // through two different gates: budget_cents refuses to START a daemon
+  // session, while this one gates infrastructure the customer is already
+  // running — reaching it is what makes the deploy ladder's suspend rung
+  // reachable for somebody's production website. A single shared field would
+  // mean a user who capped their dev machines at $20 had, without being asked,
+  // armed an outage on their site.
+  //
+  // WHAT IT ACTUALLY DOES. Reaching it (a) refuses new deployments at
+  // admission, and (b) satisfies the customer-chose-it clause of the suspend
+  // rung. It never reaches storage, which is exempt from suspension at every
+  // rung because releasing a PVC destroys data rather than stopping a cost.
+  optional int64 infra_budget_cents = 13;
+}
+
+message ReliantEntitlement {
+  string user_id = 1;
+  string status = 2;
+  string plan_id = 3;
+  string plan_name = 4;
+  bool reliant_enabled = 5;
+  repeated string allowed_models = 6;
+  int64 monthly_spend_cap_cents = 7;
+  int32 requests_per_minute = 8;
+  int32 max_concurrent_requests = 9;
+  bool hard_cap = 10;
+  bool overage_allowed = 11;
+  google.protobuf.Timestamp current_period_start = 12;
+  google.protobuf.Timestamp current_period_end = 13;
+  string source_type = 14;
+  string source_ref_id = 15;
+  google.protobuf.Timestamp updated_at = 16;
+}
+
+message UsageSummary {
+  string metric = 1;
+  double current = 2;
+  double limit = 3;
+  string unit = 4;
+}
+
+message Invoice {
+  string id = 1;
+  int64 amount_due = 2;
+  int64 amount_paid = 3;
+  string currency = 4;
+  string status = 5;
+  google.protobuf.Timestamp period_start = 6;
+  google.protobuf.Timestamp period_end = 7;
+  string hosted_invoice_url = 8;
+  string pdf_url = 9;
+  google.protobuf.Timestamp created_at = 10;
+}
+
+message Wallet {
+  string id = 1;
+  string org_id = 2;
+  string currency = 3;
+  int64 balance_cents = 4;
+  bool welcome_credit_granted = 5;
+  google.protobuf.Timestamp created_at = 6;
+  google.protobuf.Timestamp updated_at = 7;
+  int64 balance_usd_micros = 8;
+  int64 balance_usd_nanos = 9;
+}
+
+message WalletLedgerEntry {
+  string id = 1;
+  string wallet_id = 2;
+  string org_id = 3;
+  string entry_type = 4;
+  int64 amount_cents = 5;
+  int64 balance_after_cents = 6;
+  optional string description = 7;
+  optional string source_type = 8;
+  optional string source_id = 9;
+  string metadata = 10;
+  google.protobuf.Timestamp created_at = 11;
+  int64 amount_usd_micros = 12;
+  int64 balance_after_usd_micros = 13;
+  int64 amount_usd_nanos = 14;
+  int64 balance_after_usd_nanos = 15;
+}
+
+message WalletTopup {
+  string id = 1;
+  string wallet_id = 2;
+  string org_id = 3;
+  int64 amount_cents = 4;
+  string currency = 5;
+  string status = 6;
+  optional string stripe_checkout_session_id = 7;
+  optional string stripe_payment_intent_id = 8;
+  optional string created_by_user_id = 9;
+  string metadata = 10;
+  google.protobuf.Timestamp created_at = 11;
+  google.protobuf.Timestamp updated_at = 12;
+  int64 amount_usd_micros = 13;
+  int64 amount_usd_nanos = 14;
+}
+
+message WalletOverview {
+  Organization organization = 1;
+  Wallet wallet = 2;
+  repeated WalletLedgerEntry ledger_entries = 3;
+  repeated WalletTopup topups = 4;
+  int32 ledger_page = 5;
+  int32 ledger_page_size = 6;
+  int32 total_ledger_entries = 7;
+}
+
+message LLMKey {
+  string id = 1;
+  string org_id = 2;
+  string name = 3;
+  repeated string models = 4;
+  optional double max_budget = 5; // nil means no budget limit; 0 means $0 budget
+  string budget_duration = 6;
+  LLMKeyStatus status = 7;
+  optional double spend = 8; // nil means no spend data available
+  google.protobuf.Timestamp created_at = 9;
+  google.protobuf.Timestamp revoked_at = 10;
+}
+
+message LLMSpendEntry {
+  string key_id = 1;
+  string key_name = 2;
+  string model = 3;
+  double spend = 4;
+  int64 requests = 5;
+  google.protobuf.Timestamp period_start = 6;
+  google.protobuf.Timestamp period_end = 7;
+}
+
+message ManagedReliantAccess {
+  string id = 1;
+  string user_id = 2;
+  string status = 3;
+  string active_llm_key_id = 4;
+  int32 credential_version = 5;
+  optional int32 entitlement_snapshot_version = 6;
+  google.protobuf.Timestamp last_rotated_at = 7;
+  google.protobuf.Timestamp last_provisioned_at = 8;
+  string last_error = 9;
+  string internal_org_id = 10;
+  google.protobuf.Timestamp created_at = 11;
+  google.protobuf.Timestamp updated_at = 12;
+}
+
+message ReliantOverview {
+  ReliantEntitlement entitlement = 1;
+  ManagedReliantAccess managed_access = 2;
+  int64 current_period_spend_cents = 3;
+  int64 remaining_spend_cents = 4;
+  bool spend_cap_reached = 5;
+  bool spend_cap_unlimited = 6;
+  bool request_rate_unlimited = 7;
+  int64 current_period_request_count = 8;
+}
+
+message GitRepo {
+  string full_name = 1;
+  string clone_url = 2;
+  string default_branch = 3;
+  string description = 4;
+  bool private = 5;
+  string language = 6;
+  google.protobuf.Timestamp updated_at = 7;
+}

@@ -1,0 +1,828 @@
+syntax = "proto3";
+
+// EXPERIMENTAL: controlplane.v1 is unstable. Field numbers, RPC names, and
+// service shapes may change without notice until the package is declared
+// stable. Consumers should pin to a specific control-plane commit.
+
+package controlplane.v1;
+
+import "controlplane/v1/deploy.proto";
+import "forge/v1/forge.proto";
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/reliant-labs/control-plane/gen/services/deploy/v1;deployv1";
+
+// === DeployService (public) ===
+//
+// The customer-facing deploy API. `reliant/web` vendors this service's
+// generated client (services/controlPlane/client.ts) and the top-level
+// /deploy route is built on it, so THIS is the surface the product consumes —
+// the admin twin in proto/services/deploy_admin/v1 exists for staff tooling
+// and is not reachable from the product UI.
+//
+// THE SCOPE OF EVERY RPC HERE IS THE CALLER'S OWN ORGANIZATION. No request
+// carries an org_id, and that omission is deliberate rather than an
+// oversight: the tenant IS the organization, the caller's org is already in
+// their claims, and a request field naming an org is a field somebody will
+// eventually populate with a different one. Cross-tenant reads are exactly
+// what DeployAdminService is for, and they are gated there.
+//
+// WHAT A CLIENT MAY WRITE, in one place. Requests carry only declared state:
+// DeployEnvironmentSpec and a deployment's forge tier spec (a Struct holding
+// the JSON of forge's v1alpha1.<Tier>Spec) are the whole writable surface. Observed state, namespaces, host clusters, promotion pointers and
+// timestamps appear on RESPONSES only — there is no request message in this
+// file with a field for any of them, so "read-only" is a property of the
+// schema rather than a rule a handler has to remember.
+service DeployService {
+  // --- Tenant ---------------------------------------------------------
+
+  // GetTenant returns the caller's deploy-product enrollment, or NotFound if
+  // the organization has never deployed. The /deploy empty state reads this.
+  rpc GetTenant(GetDeployTenantRequest) returns (GetDeployTenantResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+
+  // CreateTenant enrolls the caller's organization, allocating its immutable
+  // hostname slug. Idempotent: a second call returns the existing tenant
+  // rather than failing, because the /deploy onboarding path can be entered
+  // twice and a duplicate-enrollment error is not a thing a user can act on.
+  rpc CreateTenant(CreateDeployTenantRequest) returns (CreateDeployTenantResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
+  // --- Environments ---------------------------------------------------
+
+  rpc CreateEnvironment(CreateDeployEnvironmentRequest) returns (CreateDeployEnvironmentResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+  rpc GetEnvironment(GetDeployEnvironmentRequest) returns (GetDeployEnvironmentResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+  rpc ListEnvironments(ListDeployEnvironmentsRequest) returns (ListDeployEnvironmentsResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+  rpc UpdateEnvironment(UpdateDeployEnvironmentRequest) returns (UpdateDeployEnvironmentResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+  // DeleteEnvironment tears down the environment and its namespace. Refuses
+  // with FailedPrecondition while the environment still has deployments,
+  // unless force is set — deleting a namespace out from under running
+  // workloads is the kind of thing a user should have to say twice.
+  rpc DeleteEnvironment(DeleteDeployEnvironmentRequest) returns (DeleteDeployEnvironmentResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+
+  // EnsureEnvironment makes an environment with this NAME exist in the
+  // caller's org and returns it: created when absent, returned unchanged when
+  // present. It is what `forge env deploy` calls for an env that declares
+  // forge.ControlPlane, so a hosted environment is DECLARED in the project's
+  // KCL rather than provisioned by a manual CreateEnvironment step.
+  //
+  // WHY A SEPARATE RPC RATHER THAN AN IDEMPOTENT CreateEnvironment. The two
+  // callers want different answers to "that name is taken". A human creating
+  // an environment who collides with an existing name has made a mistake and
+  // must be told (AlreadyExists); a declarative client re-running an
+  // unchanged project has made no mistake and must converge. Folding both
+  // into Create would make the human's collision silent or the re-run an
+  // error, and a request flag choosing between them is two RPCs sharing one
+  // name. `created` reports which happened so a caller can still tell.
+  //
+  // An existing environment whose IMMUTABLE fields (kind, tenant cluster)
+  // differ from the spec is FailedPrecondition, never silently kept or
+  // rewritten: a declaration that disagrees with a namespace that already
+  // exists has no correct reading.
+  rpc EnsureEnvironment(EnsureDeployEnvironmentRequest) returns (EnsureDeployEnvironmentResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
+  // --- Deployments ----------------------------------------------------
+
+  rpc CreateDeployment(CreateDeploymentRequest) returns (CreateDeploymentResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+  rpc GetDeployment(GetDeploymentRequest) returns (GetDeploymentResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+  rpc ListDeployments(ListDeploymentsRequest) returns (ListDeploymentsResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+  // UpdateDeployment replaces the DECLARED state. Reserved capacity changes
+  // here rather than through Scale, because changing what a replica reserves
+  // changes the bill in a way that adding replicas at a known size does not.
+  rpc UpdateDeployment(UpdateDeploymentRequest) returns (UpdateDeploymentResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+  rpc DeleteDeployment(DeleteDeploymentRequest) returns (DeleteDeploymentResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+
+  // EnsureDeployment makes a deployment with this NAME in this environment
+  // hold exactly this tier spec: created when absent, its spec replaced when
+  // it differs, untouched when identical. The declarative twin of
+  // CreateDeployment + UpdateDeployment, for EnsureEnvironment's reason: a
+  // forge deploy is "make it so", and its next step is
+  // PublishDeploymentConfig on the returned id.
+  //
+  // It runs every gate Create and Update run: entitlement, role, strict spec
+  // decode, forge's Validate, the hosted shape band, and capacity admission.
+  // A different TIER on an existing name is FailedPrecondition (a tier change
+  // is a delete and a create; see UpdateDeploymentRequest).
+  rpc EnsureDeployment(EnsureDeploymentRequest) returns (EnsureDeploymentResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
+  // --- Lifecycle operations -------------------------------------------
+  //
+  // These are UI-NATIVE and never touch the tenant's declared config. The
+  // config↔UI split is deliberate: desired state lives in the tenant's forge
+  // KCL and the UI's only write path into it is a reviewable diff, while
+  // imperative ops — promote, roll back, scale, read logs — act on the
+  // running system directly.
+
+  // Promote re-points an environment at an ALREADY-BUILT release.
+  //
+  // It NEVER builds. See PromoteReleaseRequest: there is no image field, no
+  // build input, and no way to express one, so "the bytes that passed staging
+  // are the bytes that reach prod" holds by construction rather than by
+  // policy. A version that was never cut fails with FailedPrecondition; there
+  // is no path that responds by building it.
+  rpc Promote(PromoteReleaseRequest) returns (PromoteReleaseResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotency_key: true
+    };
+  }
+
+  // Rollback re-points an environment at an OLDER release. Mechanically
+  // identical to Promote — the same digest re-point, reusing images already
+  // in the registry — and separate only so intent is recorded: a rollback
+  // must read as a rollback in the audit trail.
+  //
+  // Having its own RPC rather than a `kind` field on Promote is what keeps
+  // the kind honest. A client cannot mislabel a promotion as a rollback,
+  // because a client never states the kind at all; the server records which
+  // method was called.
+  rpc Rollback(RollbackReleaseRequest) returns (RollbackReleaseResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotency_key: true
+    };
+  }
+
+  // Scale changes the RUN STATE (running / suspended) and nothing else.
+  // Narrow on purpose: this is the button on a detail page, and a request
+  // shape that could also change reserved capacity would let a mis-wired
+  // control change the bill. forge's tiers carry no replica count, so there
+  // is no count to scale; suspending is the one thing left.
+  //
+  // A suspend is the tenant's own. It is NOT the same as the environment's
+  // automatic scale-to-zero, and neither one stops storage.
+  rpc Scale(ScaleDeploymentRequest) returns (ScaleDeploymentResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+
+  // GetStatus returns the deployment with BOTH halves — declared and
+  // observed — plus the derived drift the UI badges. The 15s poll on the
+  // /deploy detail page calls this.
+  rpc GetStatus(GetDeploymentStatusRequest) returns (GetDeploymentStatusResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+
+  // StreamLogs streams build or runtime output for one deployment.
+  //
+  // SNAPSHOT-THEN-TAIL, with a resume cursor. The first response carries the
+  // buffered backlog and the sequence it ends at; subsequent responses carry
+  // new lines. A client that drops the connection reconnects with
+  // after_sequence and receives only what it missed — which is what makes a
+  // transient disconnect a gap of milliseconds instead of a re-read of the
+  // whole buffer.
+  rpc StreamLogs(StreamDeploymentLogsRequest) returns (stream StreamDeploymentLogsResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+
+  // PublishDeploymentConfig packages one deployment as a config artifact and
+  // publishes it to the tenant's config subtree in the platform registry.
+  //
+  // THE ARTIFACT HOLDS EXACTLY ONE forge.dev/v1alpha1 CR (a SimpleBackend,
+  // StaticSite or ManagedDatabase) whose spec IS the stored forge tier spec.
+  // Identity (org, environment, deployment) is carried in the CR's forge.dev/*
+  // LABELS, never in the spec. Flux applies that CR and nothing else; the
+  // tier operator renders the workload from it, so Flux never owns a
+  // rendered Deployment or Service.
+  //
+  // THIS IS THE ONLY PATH TO PRODUCTION, and the request shape is what makes
+  // that true rather than this server's good behaviour. The request carries a
+  // deployment id and NOTHING ELSE — no image, no manifest, no namespace, no
+  // cluster, no registry path. Every one of those is derived server-side from
+  // the deployment's own row and the platform's own configuration, so there is
+  // no field in which a caller could name bytes to publish or a place to
+  // publish them. An RPC that accepted a loose image reference would be a
+  // second path to production and would void the promotion guarantee; this one
+  // cannot become that by accident, because there is nothing to populate.
+  //
+  // IT PUBLISHES, IT DOES NOT APPLY. The artifact reaches the registry and the
+  // response reports the digest it landed at. Reconciliation — the Flux
+  // objects that pull that digest and apply it to the destination cluster — is
+  // a separate step performed by the platform, so a successful response means
+  // "these bytes exist at this address", never "this is running".
+  //
+  // IDEMPOTENT BY CONTENT ADDRESS rather than by a key. The render is
+  // reproducible, so re-publishing an unchanged deployment produces the same
+  // bytes, the same digest and the same reference — a repeat call overwrites
+  // an object with itself. It is marked idempotent for that reason and not
+  // because the server de-duplicates anything.
+  rpc PublishDeploymentConfig(PublishDeploymentConfigRequest) returns (PublishDeploymentConfigResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
+  // --- Releases and history -------------------------------------------
+
+  // CutRelease records a version label over a set of artifacts that were
+  // ALREADY BUILT AND PUSHED. It is the other half of Promote: Promote can
+  // only re-point at a release, and until this RPC existed there was no way
+  // to create one over the wire, so the push-to-deploy path stopped at the
+  // registry.
+  //
+  // IT BUILDS NOTHING EITHER. A caller states digests it has in hand; this
+  // server never produces bytes. The natural place for that caller is CI,
+  // immediately after `docker/build-push-action` reports the digest it just
+  // pushed — which is why the request carries digests and not a Dockerfile.
+  //
+  // IDEMPOTENT ON (caller's org, version), which is not a check this handler
+  // performs but the unique index the ledger already carries. CI retries, and
+  // a re-run on the same commit must not cut a second release. Re-cutting the
+  // SAME version with the SAME artifacts returns the release that already
+  // exists with created=false; re-cutting it with DIFFERENT artifacts is
+  // AlreadyExists, because a version label that meant two different digest
+  // sets would void every guarantee Promote rests on.
+  rpc CutRelease(CutReleaseRequest) returns (CutReleaseResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotency_key: true
+    };
+  }
+
+  // ListReleases feeds the promote picker. Releases are immutable, so there
+  // is deliberately no UpdateRelease anywhere in this service — a correction
+  // is a new release.
+  rpc ListReleases(ListDeployReleasesRequest) returns (ListDeployReleasesResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+  rpc GetRelease(GetDeployReleaseRequest) returns (GetDeployReleaseResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+  // ListPromotions returns an environment's ledger, newest first — the
+  // timeline the UI renders and the rollback picker reads. Append-only, so
+  // this is the COMPLETE record, including what was rolled back FROM, which a
+  // current-pointer read cannot show.
+  rpc ListPromotions(ListDeployPromotionsRequest) returns (ListDeployPromotionsResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+
+  // --- Usage ----------------------------------------------------------
+
+  // ListUsage returns metered infrastructure usage for the caller's org, with
+  // per-resource attribution. Post-hoc: these rows come from a sweeper that
+  // read the live cluster, so a deployment declared and never applied appears
+  // in none of them.
+  rpc ListUsage(ListDeployUsageRequest) returns (ListDeployUsageResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+}
+
+// === Tenant ===
+
+message GetDeployTenantRequest {}
+
+message GetDeployTenantResponse {
+  DeployTenant tenant = 1;
+  // The tenant's provisioned vClusters, if any. Folded into this response
+  // because the /deploy shell needs both to render at all, and two round
+  // trips to draw one page is a spinner nobody needs to see.
+  repeated DeployTenantCluster clusters = 2;
+}
+
+message CreateDeployTenantRequest {
+  // Requested hostname label. IMMUTABLE once allocated — every URL the tenant
+  // publishes contains it. Must be an RFC-1123 label of at most 40 chars;
+  // empty asks the server to derive one from the organization.
+  string slug = 1;
+}
+
+message CreateDeployTenantResponse {
+  DeployTenant tenant = 1;
+}
+
+// === Environments ===
+
+message CreateDeployEnvironmentRequest {
+  // The whole writable surface — see DeployEnvironmentSpec's comment for why
+  // create takes a spec rather than a DeployEnvironment with fields the
+  // server is trusted to ignore.
+  DeployEnvironmentSpec spec = 1;
+}
+
+message CreateDeployEnvironmentResponse {
+  DeployEnvironment environment = 1;
+}
+
+message GetDeployEnvironmentRequest {
+  string environment_id = 1;
+}
+
+message GetDeployEnvironmentResponse {
+  DeployEnvironment environment = 1;
+  // The environment's current release binding, resolved. Empty before its
+  // first deploy.
+  DeployPromotion current_promotion = 2;
+}
+
+message ListDeployEnvironmentsRequest {
+  // FILTERS MUST BE `optional`. Without presence, a generated filter cannot
+  // tell "kind not specified" from "kind == UNSPECIFIED" and silently
+  // no-ops — this project's convention lint enforces the rule.
+  //
+  // Previews are the reason `kind` is the ONLY lifecycle filter here. A busy
+  // repo has one preview per open PR, and a list that drowns prod in preview
+  // rows is a list nobody reads — but that is answered by asking for
+  // PERSISTENT, not by a second boolean that could disagree with it.
+  optional DeployEnvironmentKind kind = 1;
+  // `search` is forge's generated free-text filter — it spans the entity's
+  // text columns rather than naming one, which is why it is spelled `search`
+  // and not `name_contains`: a filter named for a column must BE a column.
+  optional string search = 2;
+}
+
+message ListDeployEnvironmentsResponse {
+  repeated DeployEnvironment environments = 1;
+}
+
+message UpdateDeployEnvironmentRequest {
+  string environment_id = 1;
+  // Replaces the declared spec. `name` and `kind` are immutable after
+  // creation and are ignored here — a rename would strand the namespace that
+  // was derived from the original, and a persistent environment mutating into
+  // a preview would acquire a TTL on a production namespace.
+  DeployEnvironmentSpec spec = 2;
+}
+
+message UpdateDeployEnvironmentResponse {
+  DeployEnvironment environment = 1;
+}
+
+message DeleteDeployEnvironmentRequest {
+  string environment_id = 1;
+  // Delete the environment's deployments along with it. Without this, an
+  // environment that still has deployments is refused.
+  bool force = 2;
+}
+
+message DeleteDeployEnvironmentResponse {}
+
+message EnsureDeployEnvironmentRequest {
+  // The environment is addressed by spec.name within the caller's org.
+  DeployEnvironmentSpec spec = 1;
+}
+
+message EnsureDeployEnvironmentResponse {
+  DeployEnvironment environment = 1;
+  // True when this call created the environment, false when it already
+  // existed. The call succeeds either way.
+  bool created = 2;
+}
+
+// === Deployments ===
+
+// THE TIER SPEC IS FORGE'S, CARRIED AS A Struct.
+//
+// `spec` is the JSON of forge's v1alpha1.<Tier>Spec
+// (github.com/reliant-labs/forge/pkg/deploy/v1alpha1) for `tier`, in forge's
+// own camelCase json tags. The server decodes it STRICTLY (an unknown field is
+// refused, never dropped), runs forge's Validate(), and, because this is the
+// hosted platform, forge's deploy.CheckShapeBand. A refusal is InvalidArgument
+// carrying forge's own reason string. There is no proto mirror of the spec:
+// one Go type defines a tier, and a second schema here could only disagree.
+//
+// A BACKEND's `image` must be a digest reference (`<repo>@sha256:<64 hex>`),
+// never a tag: the promotion guarantee holds only for an image that cannot be
+// re-pointed.
+//
+// Declared state only. There is no observed-state field here, and that is the
+// structural half of "clients cannot write observed state". run_state is
+// absent too: a new deployment runs, and suspending one is Scale's job.
+message CreateDeploymentRequest {
+  string environment_id = 1;
+  string name = 2;
+  DeployTier tier = 3;
+  reserved 4;
+  reserved "desired";
+  google.protobuf.Struct spec = 5;
+}
+
+message CreateDeploymentResponse {
+  Deployment deployment = 1;
+}
+
+message GetDeploymentRequest {
+  string deployment_id = 1;
+}
+
+message GetDeploymentResponse {
+  Deployment deployment = 1;
+}
+
+message ListDeploymentsRequest {
+  // All `optional` — see ListDeployEnvironmentsRequest.
+  //
+  // There is deliberately no include_deleted. A soft-deleted deployment is
+  // retained so usage buckets that name it keep resolving — it is billing
+  // history, not a row a tenant browses — and the public list therefore only
+  // ever returns live deployments. Staff who need the deleted ones use
+  // DeployAdminService.
+  optional string environment_id = 1;
+  optional DeployTier tier = 2;
+  optional DeployObservedState observed_state = 3;
+  // See ListDeployEnvironmentsRequest.search.
+  optional string search = 4;
+}
+
+message ListDeploymentsResponse {
+  repeated Deployment deployments = 1;
+}
+
+message UpdateDeploymentRequest {
+  string deployment_id = 1;
+  reserved 2;
+  reserved "desired";
+  // Replaces the tier spec wholesale, validated exactly as on create (see
+  // CreateDeploymentRequest). `tier` is absent because a deployment cannot
+  // change tier: the tiers differ in which controller reconciles them, so a
+  // tier change is a delete and a create wearing one request's clothing.
+  google.protobuf.Struct spec = 3;
+}
+
+message UpdateDeploymentResponse {
+  Deployment deployment = 1;
+}
+
+message DeleteDeploymentRequest {
+  string deployment_id = 1;
+}
+
+message DeleteDeploymentResponse {}
+
+message EnsureDeploymentRequest {
+  string environment_id = 1;
+  // The deployment is addressed by name within the environment.
+  string name = 2;
+  DeployTier tier = 3;
+  // See CreateDeploymentRequest.spec.
+  google.protobuf.Struct spec = 4;
+}
+
+message EnsureDeploymentResponse {
+  Deployment deployment = 1;
+  // True when this call created the deployment.
+  bool created = 2;
+  // True when this call replaced an existing deployment's spec. False for a
+  // create, and for a re-run of an identical spec.
+  bool updated = 3;
+}
+
+// === Config publish ===
+
+// PublishDeploymentConfigRequest names ONE deployment and nothing else.
+//
+// THE EMPTINESS IS THE CONTRACT. Everything the publish needs — the tier, its
+// forge spec, namespace, host cluster — is already stored
+// against the deployment row and its environment, written through the
+// deployment's own write path where it was validated. Restating any of it here
+// would create a second, unvalidated source for a value the platform already
+// owns, and the two would eventually disagree: a caller-supplied namespace or
+// registry path is precisely the destination error the platform's destination
+// guard exists to prevent.
+//
+// There is no org_id for the reason the service header gives, and no
+// environment_id because the deployment already names its environment — a
+// second field could name a different one.
+message PublishDeploymentConfigRequest {
+  string deployment_id = 1;
+}
+
+// PublishDeploymentConfigResponse reports WHAT was published and WHERE.
+//
+// The digest is the load-bearing field. It was computed from the rendered
+// bytes and then CONFIRMED against what the registry reported, so a caller
+// holding it holds an identifier for content that is verified to be present at
+// that address — which is what lets a later promotion, audit or incident
+// review correlate a deployment to exact bytes.
+message PublishDeploymentConfigResponse {
+  // Canonical `sha256:<64 hex>` content digest of the published artifact.
+  string digest = 1;
+  // The OCI repository the artifact was published to, with no reference.
+  string repository = 2;
+  // The canonical digest reference, `repository@digest`. Composed by the
+  // server from the VERIFIED digest rather than the planned one, so a client
+  // never has to assemble it and cannot assemble it from a digest the
+  // registry did not confirm.
+  string reference = 3;
+  // The namespace the artifact's objects are addressed to, as resolved by the
+  // platform's destination guard. Reported so a caller can see where this
+  // will land without being able to have influenced it.
+  string namespace = 4;
+  // The cluster the destination namespace lives in.
+  string cluster_id = 5;
+}
+
+// === Promotion ===
+
+// PromoteReleaseRequest asks that an environment be re-pointed at an existing
+// release.
+//
+// THERE IS NO IMAGE FIELD AND NO BUILD INPUT HERE, AND THAT ABSENCE IS THE
+// DESIGN. A promotion resolves digests from a release that was already cut,
+// so the bytes that passed staging are — by construction — the bytes that
+// reach prod. A request shape that could name an image would be a request
+// shape that could rebuild, and the guarantee would degrade from an invariant
+// into a promise that holds until someone adds a convenience flag.
+//
+// The version names a release; if it was never cut the call fails, and there
+// is no code path that responds by building one.
+message PromoteReleaseRequest {
+  string environment_id = 1;
+  // An already-built release version. FailedPrecondition if it was never cut.
+  string version = 2;
+  // The environment this is being promoted FROM ("staging" → "prod"), or
+  // empty for a first deploy. Recorded so the promotion PATH is auditable and
+  // "did this actually pass staging?" has an answer.
+  string from_environment_id = 3;
+  // Which gates had passed, as recorded by whoever ran them. EVIDENCE, not
+  // enforcement: a gate that must BLOCK a promotion is checked server-side
+  // before the ledger row is written, because a client-supplied claim can
+  // only ever prove that a claim was made.
+  repeated DeployGate gates = 4;
+  // Automation identity ("ci", "preview-bot") when no human pressed the
+  // button. A human caller leaves this empty and is identified from their
+  // claims.
+  string promoted_by_actor = 5;
+  string note = 6;
+}
+
+message PromoteReleaseResponse {
+  DeployPromotion promotion = 1;
+}
+
+// RollbackReleaseRequest is PromoteReleaseRequest's twin, and carries no image
+// field for the identical reason. Rolling back re-points at a version already
+// in the ledger, reusing digests already in the registry — so the rolled-back
+// bytes cannot differ from the bytes that were running before.
+message RollbackReleaseRequest {
+  string environment_id = 1;
+  // The older release to return to. Must already have been promoted to this
+  // environment: rolling "back" to something that never ran here is a
+  // promotion, and should be called one.
+  string version = 2;
+  // Most valuable field on this message. On a rollback "why" is the whole
+  // story, and it is otherwise lost to chat history.
+  string note = 3;
+  string promoted_by_actor = 4;
+}
+
+message RollbackReleaseResponse {
+  DeployPromotion promotion = 1;
+}
+
+// === Scale and status ===
+
+message ScaleDeploymentRequest {
+  string deployment_id = 1;
+  // The replica count is gone: forge's tiers have none. SimpleBackend is one
+  // container by design, because a replica knob would silently break every
+  // backend that mounts its ReadWriteOnce volume. What remains to scale is
+  // whether the deployment runs at all.
+  reserved 2;
+  reserved "replicas";
+  // RUNNING or SUSPENDED.
+  controlplane.v1.DeployRunState run_state = 3;
+}
+
+message ScaleDeploymentResponse {
+  // Carries the whole deployment rather than an ack so the caller sees the
+  // new DESIRED count next to the still-old OBSERVED one, which is exactly
+  // the transient the UI needs to render ("scaling to 3, 2 running") instead
+  // of optimistically claiming success.
+  Deployment deployment = 1;
+}
+
+// Exactly one of deployment_id / environment_id. environment_id INSTEAD of a
+// deployment asks for the whole environment: every live deployment's status
+// plus the environment-wide verdict.
+message GetDeploymentStatusRequest {
+  string deployment_id = 1;
+  string environment_id = 2;
+}
+
+// DeploymentStatus is one deployment's status inside an environment-wide
+// GetStatus answer.
+message DeploymentStatus {
+  controlplane.v1.Deployment deployment = 1;
+  controlplane.v1.DeployVerdict verdict = 2;
+  // One line explaining the verdict (forge's decision reason).
+  string verdict_reason = 3;
+  // The digest the platform wants running. Empty for tiers with no image.
+  string desired_digest = 4;
+  google.protobuf.Timestamp observed_at = 5;
+  bool drifted = 6;
+}
+
+message GetDeploymentStatusResponse {
+  Deployment deployment = 1;
+
+  // DERIVED, not stored: true when the running image differs from the
+  // declared one, or the observed run state differs from the declared one.
+  // Computed server-side so every client badges drift the same way — two
+  // clients each deriving it from the two halves is two chances to disagree
+  // about what counts as drift.
+  bool drifted = 2;
+
+  // The release currently bound to this deployment's environment. Empty
+  // before its first deploy.
+  DeployPromotion current_promotion = 3;
+
+  // When the observed half was last refreshed from the cluster. Lets the UI
+  // say "as of 12s ago" instead of implying the numbers are live.
+  google.protobuf.Timestamp observed_at = 4;
+
+  // Fields 1-7 describe ONE deployment and are set only for a deployment_id
+  // request.
+  controlplane.v1.DeployVerdict verdict = 5;
+  string verdict_reason = 6;
+  string desired_digest = 7;
+
+  // Every live deployment of the environment (the requested one alone for a
+  // deployment_id request is NOT repeated here; this is set only for an
+  // environment_id request).
+  repeated DeploymentStatus deployments = 8;
+  // Worst of the deployments' verdicts (degraded > diverged > unknown >
+  // converging > converged). An empty environment is UNKNOWN. Set for both
+  // request shapes: for a deployment_id request it is that deployment's
+  // environment.
+  controlplane.v1.DeployVerdict environment_verdict = 9;
+  controlplane.v1.DeployReconcilePolicy reconcile_policy = 10;
+}
+
+// === Logs ===
+
+message StreamDeploymentLogsRequest {
+  string deployment_id = 1;
+  DeployLogStream stream = 2;
+  // Resume cursor: send only lines after this sequence. Zero (or absent)
+  // means "start from the buffered snapshot".
+  int64 after_sequence = 3;
+  // Cap on the backlog delivered in the first response. Zero means the
+  // server's default.
+  int32 snapshot_limit = 4;
+  // Stop after the backlog rather than tailing. What a "download logs" button
+  // calls; a tailing stream that the client immediately closes looks like a
+  // dropped connection to every metric that watches this RPC.
+  bool no_follow = 5;
+}
+
+message StreamDeploymentLogsResponse {
+  repeated DeployLogLine lines = 1;
+  // Set on the first response only: these lines are the buffered backlog
+  // rather than live tail. The UI scrolls to the bottom once, on this.
+  bool is_snapshot = 2;
+  // The highest sequence in this response — what to send as after_sequence on
+  // reconnect.
+  int64 latest_sequence = 3;
+}
+
+// === Releases and history ===
+
+// CutReleaseRequest records a version label over artifacts that already
+// exist in a registry.
+//
+// THE ARTIFACTS ARE DESCRIBED, NOT PRODUCED. Every field below names bytes
+// the caller has already pushed: an OCI digest, an npm version plus its
+// integrity hash. There is no build input here — no Dockerfile, no context,
+// no build args — so this request cannot express "make me an image", and the
+// server has no path that would.
+//
+// No org_id, like every other request on this service: the release belongs to
+// the caller's own organization, resolved from their claims.
+message CutReleaseRequest {
+  // The human-readable label ("v1.4.0"). Unique within the caller's org —
+  // re-cutting it identically is a successful retry, re-cutting it with
+  // different artifacts is AlreadyExists.
+  string version = 1;
+
+  // The artifact set this version names. At least one is required: a release
+  // that names nothing cannot be promoted, and recording one would put a
+  // version in the picker that deploys an empty pin set.
+  //
+  // The digest/kind asymmetry is the DeployArtifact contract and is enforced
+  // by the database: an OCI artifact requires a canonical sha256 digest and
+  // nothing else may carry one; every other kind requires a version or a uri
+  // by which a consumer could actually fetch it.
+  repeated DeployArtifact artifacts = 2;
+
+  // Source provenance, best-effort. What lets a reviewer tie a running digest
+  // back to a commit — the first question asked during an incident. In CI
+  // these come from the workflow's own commit context.
+  string git_commit = 3;
+  string git_tag = 4;
+  bool git_dirty = 5;
+}
+
+message CutReleaseResponse {
+  DeployRelease release = 1;
+
+  // False when this exact release had already been cut and this call changed
+  // nothing. THE CALL STILL SUCCEEDS: a CI retry that re-states a release it
+  // already recorded has achieved what it asked for, and answering it with an
+  // error would make every retried workflow red for having been retried.
+  //
+  // Distinct from an error so a caller can still TELL the two apart — a
+  // pipeline that cut a release it believed to be new, and learns it was not,
+  // may legitimately want to say so in its summary.
+  bool created = 2;
+}
+
+message ListDeployReleasesRequest {
+  // All `optional` — see ListDeployEnvironmentsRequest.
+  optional string version_contains = 1;
+  optional string git_commit = 2;
+  // Only releases that have been promoted to this environment. What the
+  // rollback picker asks for.
+  optional string promoted_to_environment_id = 3;
+  optional int32 limit = 4;
+}
+
+message ListDeployReleasesResponse {
+  repeated DeployRelease releases = 1;
+}
+
+message GetDeployReleaseRequest {
+  // Releases are addressed by version within the caller's org, because that
+  // is what a human has in hand during an incident. The id is on the
+  // response for anything that needs to round-trip it.
+  string version = 1;
+}
+
+message GetDeployReleaseResponse {
+  DeployRelease release = 1;
+  // Everywhere this release currently runs. The question "is this digest
+  // still in prod?" is the one asked before anyone cleans up an image.
+  repeated string current_environment_ids = 2;
+}
+
+message ListDeployPromotionsRequest {
+  string environment_id = 1;
+  // All `optional` — see ListDeployEnvironmentsRequest.
+  optional DeployPromotionKind kind = 2;
+  optional int32 limit = 3;
+}
+
+message ListDeployPromotionsResponse {
+  // Newest first.
+  repeated DeployPromotion promotions = 1;
+}
+
+// === Usage ===
+
+message ListDeployUsageRequest {
+  // Window bounds. Both required — an unbounded usage query over a 90-day
+  // rollup is a table scan a user did not ask for.
+  google.protobuf.Timestamp start_time = 1;
+  google.protobuf.Timestamp end_time = 2;
+
+  // All `optional` — see ListDeployEnvironmentsRequest.
+  optional DeployResourceKind resource_kind = 3;
+  optional string environment_id = 4;
+  optional string deployment_id = 5;
+  // Bucket size in seconds. Zero/absent means the server's rollup
+  // granularity (hourly).
+  optional int32 granularity_seconds = 6;
+}
+
+message ListDeployUsageResponse {
+  repeated DeployUsageRow rows = 1;
+  // Sum of cost_usd_nanos across the returned rows, so a client renders a
+  // total without re-summing integers it may have narrowed to floats on the
+  // way in.
+  int64 total_cost_usd_nanos = 2;
+}

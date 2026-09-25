@@ -1,0 +1,91 @@
+{
+  "env": "hosted",
+  "services": null,
+  "workloads": {
+    "status": "skip",
+    "env": "hosted",
+    "clusters": [],
+    "workloads": []
+  },
+  "checks": [
+    {
+      "name": "Compose Infra",
+      "status": "skip",
+      "message": "no compose file — this project declares no compose infra",
+      "evidence": "looked for compose.yaml, compose.yml, docker-compose.yaml, docker-compose.yml in /tmp/forge-hosted-e2e",
+      "duration_ms": 0
+    },
+    {
+      "name": "App Health",
+      "status": "unknown",
+      "message": "could not resolve an HTTP address for any host service — is the stack up? (`forge env up \u003cenv\u003e`)",
+      "duration_ms": 0
+    },
+    {
+      "name": "Cluster Workloads",
+      "status": "skip",
+      "message": "env \"hosted\" deploys no Kubernetes workloads",
+      "cluster": {
+        "status": "skip",
+        "env": "hosted",
+        "clusters": [],
+        "workloads": []
+      },
+      "duration_ms": 42
+    },
+    {
+      "name": "pprof",
+      "status": "unknown",
+      "message": "could not resolve a pprof address — declare PPROF_ADDR on the host service (serverkit binds pprof on its own listener)",
+      "duration_ms": 0
+    },
+    {
+      "name": "Profiles (Pyro)",
+      "status": "unknown",
+      "message": "Grafana port not published by the compose stack — could not query this signal",
+      "duration_ms": 0
+    },
+    {
+      "name": "Prometheus",
+      "status": "unknown",
+      "message": "Grafana port not published by the compose stack — could not query this signal",
+      "duration_ms": 0
+    },
+    {
+      "name": "Traces (Tempo)",
+      "status": "unknown",
+      "message": "Grafana port not published by the compose stack — could not query this signal",
+      "duration_ms": 0
+    },
+    {
+      "name": "Logs (Loki)",
+      "status": "unknown",
+      "message": "Grafana port not published by the compose stack — could not query this signal",
+      "duration_ms": 0
+    },
+    {
+      "name": "Delve",
+      "status": "fail",
+      "message": "failed to list containers",
+      "evidence": "docker compose ps: exit status 1",
+      "duration_ms": 136
+    }
+  ],
+  "destination": "hosted",
+  "endpoint": "http://127.0.0.1:56171",
+  "environment_id": "env-hosted-id",
+  "verdict": "converging",
+  "hosted_workloads": [
+    {
+      "name": "api",
+      "tier": "backend",
+      "url": "https://api-acme.reliantapps.dev",
+      "hostname": "api-acme.reliantapps.dev",
+      "verdict": "converging",
+      "verdict_reason": "within the stability window",
+      "observed_state": "ready",
+      "observed_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+      "desired_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+    }
+  ]
+}

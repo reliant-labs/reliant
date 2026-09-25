@@ -1,0 +1,151 @@
+syntax = "proto3";
+
+// AccessTokenService is the PUBLIC half of the ONE machine-credential system:
+// every credential Reliant issues is an `rlat_` access token
+// (controlplane.access_tokens), distinguished by scopes and an optional
+// resource binding. It replaces DeployTokenService and every per-family
+// minting RPC the retired credential families had (reliant daemon/API PATs,
+// connector credentials, LLM keys, port tokens).
+//
+// Callers are HUMANS (a Supabase/Zitadel session). They mint, list and revoke
+// tokens for their org (CreateToken / ListTokens / RevokeToken) and for
+// themselves (the *MyToken RPCs). A machine credential calling any of these is
+// refused structurally, and every mint runs forge/pkg/accesstoken's grant rule.
+//
+// The internal-service half (token validation and minting on a user's behalf
+// for trusted services) lives in a separate, non-exported service directory,
+// so the public contract carries no stub for it.
+package controlplane.v1;
+
+import "forge/v1/forge.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/reliant-labs/control-plane/gen/services/access_token/v1;access_tokenv1";
+
+service AccessTokenService {
+  // CreateToken mints an ORG automation token (no acting user) — CI deploy,
+  // secret management. Caller: an org admin's human session.
+  rpc CreateToken(CreateTokenRequest) returns (CreateTokenResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+  // ListTokens lists the caller org's tokens. Never a plaintext.
+  rpc ListTokens(ListTokensRequest) returns (ListTokensResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+  // RevokeToken revokes one of the caller org's tokens, immediately.
+  rpc RevokeToken(RevokeTokenRequest) returns (RevokeTokenResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
+  // CreateMyToken mints a token that ACTS AS THE CALLER — a CLI token
+  // (reliant:api), a daemon credential (daemon:connect), an LLM key
+  // (llm:invoke). Caller: a human session. The org is the caller's primary org.
+  rpc CreateMyToken(CreateMyTokenRequest) returns (CreateMyTokenResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+  // ListMyTokens lists tokens acting as the caller.
+  rpc ListMyTokens(ListMyTokensRequest) returns (ListMyTokensResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+  // RevokeMyToken revokes one of the caller's own tokens.
+  rpc RevokeMyToken(RevokeMyTokenRequest) returns (RevokeMyTokenResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
+}
+
+// ResourceBinding confines a token to one resource. kind is one of
+// "daemon" | "port" | "connector" (forge/pkg/accesstoken.AllResourceKinds).
+message ResourceBinding {
+  string kind = 1;
+  string id = 2;
+}
+
+message AccessToken {
+  string id = 1;
+  string name = 2;
+  // display_prefix ("rlat_A3f9Kd2p") identifies the token without the secret.
+  string display_prefix = 3;
+  repeated string scopes = 4;
+  string created_by_user_id = 5;
+  google.protobuf.Timestamp created_at = 6;
+  google.protobuf.Timestamp expires_at = 7;
+  google.protobuf.Timestamp last_used_at = 8;
+  google.protobuf.Timestamp revoked_at = 9;
+  string org_id = 10;
+  // acting_user_id is empty for an org automation token.
+  string acting_user_id = 11;
+  ResourceBinding resource = 12;
+  bool ephemeral = 13;
+}
+
+message CreateTokenRequest {
+  string name = 1;
+  repeated string scopes = 2;
+  google.protobuf.Timestamp expires_at = 3;
+}
+
+message CreateTokenResponse {
+  AccessToken token = 1;
+  // secret is the plaintext, returned exactly once.
+  string secret = 2;
+}
+
+message ListTokensRequest {
+  optional bool include_revoked = 1;
+}
+
+message ListTokensResponse {
+  repeated AccessToken tokens = 1;
+}
+
+message RevokeTokenRequest {
+  string id = 1;
+}
+
+message RevokeTokenResponse {
+  AccessToken token = 1;
+}
+
+message CreateMyTokenRequest {
+  // name is the token's label. For per-device kinds (llm:invoke) it is the
+  // device name, and minting REPLACES that device's previous token of the same
+  // scope set atomically.
+  string name = 1;
+  repeated string scopes = 2;
+  google.protobuf.Timestamp expires_at = 3;
+  ResourceBinding resource = 4;
+  bool ephemeral = 5;
+  // rotate replaces the caller's live token(s) with this name and scope set.
+  bool rotate = 6;
+}
+
+message CreateMyTokenResponse {
+  AccessToken token = 1;
+  string secret = 2;
+  // rotated is true when rotate was set and a previous live token with this
+  // name and scope set was replaced (revoked) by this mint.
+  bool rotated = 3;
+}
+
+message ListMyTokensRequest {
+  optional bool include_revoked = 1;
+  // scope, when set, restricts to tokens holding it.
+  optional string scope = 2;
+}
+
+message ListMyTokensResponse {
+  repeated AccessToken tokens = 1;
+}
+
+message RevokeMyTokenRequest {
+  string id = 1;
+}
+
+message RevokeMyTokenResponse {}
