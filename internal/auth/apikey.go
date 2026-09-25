@@ -1,11 +1,13 @@
 // Copyright (c) 2025 Reliant Labs
 //
-// forge:exclude-contract
-//
 // Leaf utility package: the exported surface is concrete helpers over the
 // stdlib or the OS, with no collaborator to fake and no second implementation.
 // An interface here would have exactly one implementor and one caller shape,
 // which is indirection without a seam.
+//
+//forge:lint-disable-next-line forge-exclude-contract-multi-impl: TokenValidator (JWT / API key / test) is already the strategy seam; moving it to contract.go is deferred with the rest of the auth split; tracked in H-RELIANT-CI-lint follow-ups
+//forge:lint-disable-next-line forge-exclude-contract-outbound-io: jwt.go fetches the JWKS over HTTP to verify tokens; splitting the fetcher into an adapter is deferred (reliant is not forge-generated); tracked in H-RELIANT-CI-lint follow-ups
+//forge:exclude-contract: JWT/JWKS validation and credential types used by middleware; the validators are selected per auth mode
 package auth
 
 import (

@@ -1,11 +1,11 @@
 // Copyright (c) 2025 Reliant Labs
 //
-// forge:exclude-contract
-//
 // Process-global instrumentation. The exported vars are the collectors and
 // registry the process registers once at init and updates from everywhere; a
 // getter returns the same pointer and hides nothing. Behind an interface these
 // would still be the single global sink they are today.
+//
+//forge:exclude-contract: OpenTelemetry/Prometheus provider setup and label-safety helpers; process-global by design
 package observability
 
 import (

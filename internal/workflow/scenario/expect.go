@@ -1,4 +1,6 @@
 // Copyright (c) 2025 Reliant Labs
+//
+//forge:exclude-contract: workflow scenario file format and expectation checking; pure parse/compare over YAML the caller names
 package scenario
 
 import (

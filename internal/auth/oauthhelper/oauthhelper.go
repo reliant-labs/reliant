@@ -35,6 +35,8 @@
 // UI would then offer an OAuth flow that silently fails. /health therefore
 // names the product, the readiness, and the version, so the caller can tell
 // "reliant is here" from "a port is here".
+//
+//forge:exclude-contract: the localhost OAuth helper HTTP SERVER (inbound: the browser calls it); its one outbound seam, the callback flow, is injected via Options
 package oauthhelper
 
 import (

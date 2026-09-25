@@ -1,4 +1,7 @@
 // Copyright (c) 2025 Reliant Labs
+//
+//forge:lint-disable-next-line forge-exclude-contract-outbound-io: the only dial is preview_forwarder.go's LOOPBACK dial to the user's own dev server (127.0.0.1/::1), which is the preview feature itself, not a third-party boundary
+//forge:exclude-contract: the tools-daemon command handlers; shaped by the daemon command dispatch table, and every collaborator is injected by the daemon runtime
 package daemonruntime
 
 import (

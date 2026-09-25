@@ -1,7 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
 //
-// forge:exclude-contract
-//
 // Package agywire holds the Antigravity (Google cloudcode) wire types.
 //
 // Antigravity double-wraps a standard Gemini exchange in BOTH directions:
@@ -20,6 +18,8 @@
 // imports internal/llm/drivers/imagegen, so imagegen can never import the chat
 // driver. Putting the shared types here is what lets both speak one wire
 // format instead of maintaining two drifting copies of it.
+//
+//forge:exclude-contract: Antigravity wire types (request/response envelopes); pure data
 package agywire
 
 // Wire constants captured from antigravity/cli/1.2.5. These look like

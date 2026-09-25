@@ -1,11 +1,12 @@
 // Copyright (c) 2025 Reliant Labs
 //
-// forge:exclude-contract
-//
 // Leaf utility package: the exported surface is concrete helpers over the
 // stdlib or the OS, with no collaborator to fake and no second implementation.
 // An interface here would have exactly one implementor and one caller shape,
 // which is indirection without a seam.
+//
+//forge:lint-disable-next-line forge-exclude-contract-outbound-io: transport.go is the shared outbound HTTP transport every driver uses; it is the transport, not a boundary to mock; tracked in H-RELIANT-CI-lint follow-ups
+//forge:exclude-contract: the LLM driver interface, options and shared HTTP transport; drivers are the strategies
 package llm
 
 import (

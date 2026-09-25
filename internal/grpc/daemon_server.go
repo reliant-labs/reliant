@@ -1,11 +1,11 @@
 // Copyright (c) 2025 Reliant Labs
 //
-// forge:exclude-contract
-//
 // These are Connect RPC handlers: the exported methods are the proto-defined
 // service methods, and the package embeds the generated
 // reliantv1connect.*ServiceHandler. The contract is the .proto service, so a
 // contract.go here would duplicate the proto boundary.
+//
+//forge:exclude-contract: server bootstrap: builds the Connect/HTTP2 servers and mounts services; composition, not a component
 package grpc
 
 import (

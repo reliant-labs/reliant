@@ -1,7 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
 //
-// forge:exclude-contract
-//
 // Package imagegen is the driver-layer call path for image GENERATION. It is
 // deliberately parallel to the chat path (internal/llm/drivers/*) rather than a
 // mode inside it: image generation is a different endpoint
@@ -22,6 +20,9 @@
 // rather than trusted from output_format, the url-only rejection, the
 // empty-data retry capped separately because it is billed, and the managed
 // quota marker the frontend keys its upgrade modal off.
+//
+//forge:lint-disable-next-line forge-exclude-contract-outbound-io: each client calls its provider's image endpoint; they already sit behind the consumer-declared ImageGenerator interface; tracked in H-RELIANT-CI-lint follow-ups
+//forge:exclude-contract: image-generation clients (OpenAI-shaped, Gemini, Antigravity) behind the ImageGenerator seam declared at its consumer
 package imagegen
 
 import (

@@ -1,6 +1,6 @@
 // Copyright (c) 2025 Reliant Labs
 //
-// forge:exclude-contract
+//forge:exclude-contract: OpenTelemetry/Prometheus provider setup and label-safety helpers; process-global by design
 package observability
 
 import (

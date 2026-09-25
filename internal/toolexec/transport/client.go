@@ -1,9 +1,10 @@
-// forge:exclude-contract
-//
 // Leaf utility package: the exported surface is concrete helpers over the
 // stdlib or the OS, with no collaborator to fake and no second implementation.
 // An interface here would have exactly one implementor and one caller shape,
 // which is indirection without a seam.
+//
+//forge:lint-disable-next-line forge-exclude-contract-outbound-io: client.go builds the dialer the daemon transport uses; it is wiring for the gRPC transport, not a service boundary; tracked in H-RELIANT-CI-lint follow-ups
+//forge:exclude-contract: daemon transport client construction (TLS / h2c dialing); SDK wiring
 package transport
 
 import (

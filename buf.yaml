@@ -17,6 +17,19 @@ lint:
     - PACKAGE_VERSION_SUFFIX # We use v1, not v1beta1
     - RPC_REQUEST_STANDARD_NAME # Allow flexible request naming
     - RPC_RESPONSE_STANDARD_NAME # Allow flexible response naming
+  ignore_only:
+    # ChatActivity's zero value is the real IDLE state, not "unspecified".
+    # Renaming it would make the meaningful default read as "unset"; the
+    # correct fix (UNSPECIFIED = 0, IDLE renumbered) is a wire-number change
+    # to a computed enum that web and Go both switch on — its own change, not
+    # lint cleanup.
+    ENUM_ZERO_VALUE_SUFFIX:
+      - proto/reliant/v1/chat.proto
+    # ConnectDaemon and ConnectGateway are the SAME bidi stream in opposite
+    # dial directions (daemon dials gateway / gateway dials daemon), so they
+    # carry the same DaemonMessage / ServerMessage frames by design.
+    RPC_REQUEST_RESPONSE_UNIQUE:
+      - proto/reliant/v1/tools_daemon.proto
 # Breaking change detection (disabled for now during initial development)
 breaking:
   use:

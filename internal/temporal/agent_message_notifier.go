@@ -1,11 +1,11 @@
 // Copyright (c) 2025 Reliant Labs
 //
-// forge:exclude-contract
-//
 // Temporal workflow/activity code. The exported functions are registered with
 // the Temporal SDK by name and invoked by the runtime, not through a Go
 // interface a caller could substitute. Determinism constraints, not an
 // interface, define this boundary.
+//
+//forge:exclude-contract: Temporal client construction, data converter and the agent-message signal notifier; SDK wiring
 package temporal
 
 import (

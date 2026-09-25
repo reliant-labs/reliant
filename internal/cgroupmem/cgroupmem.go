@@ -18,12 +18,12 @@
 // Linux daemons outside a limited cgroup): readers report not-available and
 // all checks answer false.
 //
-// forge:exclude-contract
-//
 // Leaf utility package: the exported surface is concrete helpers over the
 // stdlib or the OS, with no collaborator to fake and no second implementation.
 // An interface here would have exactly one implementor and one caller shape,
 // which is indirection without a seam.
+//
+//forge:exclude-contract: reads cgroup v2 files for the daemon's own container and classifies OOM kills; local /sys reads only, degrades to not-available
 package cgroupmem
 
 import (

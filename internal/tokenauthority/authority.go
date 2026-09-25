@@ -41,6 +41,12 @@ func DepsFromEnv(db *sql.DB) Deps {
 // returns the Authority contract rather than a concrete store: choosing the
 // store is this constructor's whole job, so no caller may depend on which one
 // it got.
+//
+// Not observed here: New only SELECTS a store. The I/O belongs to the store it
+// returns (accesstokenclient, itself marked forge:constructor, or LocalStore),
+// so wrapping this selector would double-count every call.
+//
+// forge:no-observe
 func New(deps Deps) (Authority, Mode, error) {
 	if deps.ControlPlaneURL != "" {
 		if deps.InternalServiceSecret == "" {

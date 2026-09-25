@@ -1,3 +1,4 @@
+//forge:exclude-contract: pure path scoping for file previews: resolves a base path from db rows the caller passes a repository for, and validates requested paths against it
 package filepreview
 
 import (

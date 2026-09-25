@@ -38,14 +38,14 @@
 // drift-gated electron/release.config.json so the two cannot diverge silently.
 // To change an endpoint: edit the KCL, regenerate that file, then update these.
 //
-// forge:exclude-contract
-//
 // ServerURL/GatewayURL/AuthURL/AuthKey must remain package-level string vars:
 // `-ldflags -X` can only write one of those. Behind a getter or in a struct the
 // linker flag silently does nothing and a release build ships whatever is
 // written here — with no build error to catch it. Value() is the accessor; the
 // vars are the injection site. (A non-empty initializer does NOT block -X;
 // the linker overwrites it, which is how a build retargets these.)
+//
+//forge:exclude-contract: constants: the hosted-by-default runtime endpoints, drift-pinned against electron/release.config.json
 package builddefaults
 
 import "os"

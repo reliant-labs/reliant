@@ -1,7 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
 
-// forge:exclude-contract
-//
 // The four vars below are the release version stamp, written at link time by
 // `-X github.com/reliant-labs/reliant/internal/version.<Name>=...` (see the
 // Makefile's LDFLAGS and .github/workflows/release.yml). `-ldflags -X` can only
@@ -11,6 +9,8 @@
 //
 // Callers should read them through Get() / String(), which is the accessor the
 // exported-vars rule is asking for; the vars themselves are the injection site.
+//
+//forge:exclude-contract: build-info constants stamped at link time
 package version
 
 import (

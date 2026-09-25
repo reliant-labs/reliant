@@ -1,11 +1,11 @@
 // Copyright (c) 2025 Reliant Labs
 //
-// forge:exclude-contract
-//
 // Registry/lookup-table package: the exported vars are populated once at init
 // by the packages that register into them, then read. A getter returns the
 // same map or slice header, so it moves the mutation surface without
 // narrowing it.
+//
+//forge:exclude-contract: feature-flag registry and provider bootstrap; process-global registry by design
 package features
 
 import (

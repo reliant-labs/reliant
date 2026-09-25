@@ -19,6 +19,8 @@
 // know what a tool's default is. That keeps the invariant intact: a tool with
 // zero configuration is fully functional, and nothing here has to succeed for
 // that to be true.
+//
+//forge:exclude-contract: resolves a tool's bound parameters across config scopes over the consumer-declared SettingsReader; pure precedence logic
 package toolbindings
 
 import (
