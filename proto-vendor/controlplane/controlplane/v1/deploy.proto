@@ -193,9 +193,7 @@ enum DeployResourceKind {
   // 3/4 are tombstoned, not reused: a deployed client sending the old
   // balanced kind must never be read as some future kind.
   reserved 3, 4, 9;
-  reserved "DEPLOY_RESOURCE_KIND_STORAGE_GIB_BALANCED",
-      "DEPLOY_RESOURCE_KIND_STORAGE_GIB_SSD",
-      "DEPLOY_RESOURCE_KIND_BUILD_MINUTES";
+  reserved "DEPLOY_RESOURCE_KIND_STORAGE_GIB_BALANCED", "DEPLOY_RESOURCE_KIND_STORAGE_GIB_SSD", "DEPLOY_RESOURCE_KIND_BUILD_MINUTES";
 }
 
 // DeployLogStream selects which of a deployment's log streams to read. Build
