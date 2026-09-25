@@ -128,7 +128,7 @@ func TestStory10_TerminateMidNestedLoopResumesAtInnerIteration(t *testing.T) {
 		Name:       "resume-nested-loop",
 		Slug:       "resume-nested-loop",
 		Definition: nestedLoopYAML,
-		IsValid:    true,
+		Status:     db.WorkflowDraftStatusComplete,
 		CreatedAt:  now,
 		UpdatedAt:  now,
 	}), "seed nested-loop workflow draft")
@@ -138,18 +138,10 @@ func TestStory10_TerminateMidNestedLoopResumesAtInnerIteration(t *testing.T) {
 	workflowID := created.WorkflowId
 
 	// 1. Wait until the run is provably mid INNER-loop iteration 1: inner
-	//    iteration 1's assistant tool_use (call-sleep) is persisted, meaning that
-	//    LLM turn completed and execute_tools is now sleeping.
-	h.eventually("run to reach inner-loop iteration 1 with the slow tool_use persisted", func() (bool, string) {
-		for _, m := range h.Messages(chatID, workflowID) {
-			for _, b := range m.Blocks {
-				if b.ToolCallID != nil && *b.ToolCallID == "call-sleep" {
-					return true, ""
-				}
-			}
-		}
-		return false, "call-sleep tool_use not persisted yet"
-	})
+	//    iteration 1's slow tool (call-sleep) is EXECUTING, so execute_tools is
+	//    sleeping. See WaitToolExecuting for why "the tool_use is persisted" is
+	//    not a sufficient condition.
+	h.WaitToolExecuting("call-sleep")
 
 	// The FLAT checkpoint can only name the TOP-LEVEL loop: it records
 	// {outer, 0} and has no field for the inner iteration. This is exactly why
@@ -212,7 +204,7 @@ func TestStory10_TerminateMidNestedLoopResumesAtInnerIteration(t *testing.T) {
 			}
 		}
 		for _, tr := range m.ToolResults() {
-			if tr.ToolCallID == "call-sleep" {
+			if tr.ToolCallID == h.LLM.CallID("call-sleep") {
 				sawSleepResult = true
 				assert.False(t, tr.IsError,
 					"reset-and-replay re-runs the interrupted tool fresh")

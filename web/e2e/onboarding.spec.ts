@@ -458,11 +458,13 @@ test.describe('Onboarding Flow', () => {
 
     await dialog.getByRole('button', { name: /my-proj/i }).click();
 
-    // Local compute has nothing for the commit to provision, so
-    // ProvisioningGate renders its "nothing to do" Continue button rather
-    // than navigating immediately — see ProvisioningGate.tsx.
-    await dialog.getByRole('button', { name: 'Continue' }).click();
+    // Local compute + own key leaves the commit nothing to provision, so
+    // ProvisioningGate's "nothing to do" branch exits onboarding by itself
+    // (#289) — picking the project is the user's last click. No Continue
+    // button is rendered on this path; clicking one here is what made this
+    // test time out after #289 shipped.
     await expect(page).not.toHaveURL(/\/onboarding/, { timeout: 10_000 });
+    await expect(dialog).toBeHidden();
   });
 
   // ── Back button ─────────────────────────────────────────────

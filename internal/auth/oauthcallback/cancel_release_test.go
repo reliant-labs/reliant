@@ -10,10 +10,11 @@ import (
 // Measure the thing that actually bit the user: how long after CANCEL the
 // fixed port stays unbindable.
 func TestPortFreedPromptlyAfterCancel(t *testing.T) {
+	cfg := codexShapedConfig(t)
 	orig := openBrowser
 	var held net.Conn
 	openBrowser = func(string) error {
-		if c, err := net.Dial("tcp", "127.0.0.1:1455"); err == nil {
+		if c, err := net.Dial("tcp", listenAddr(cfg)); err == nil {
 			held = c
 		}
 		return nil
@@ -26,7 +27,7 @@ func TestPortFreedPromptlyAfterCancel(t *testing.T) {
 	}()
 
 	ctx, cancel := context.WithCancel(context.Background())
-	go func() { _, _ = Run(ctx, "https://auth.openai.com/authorize?redirect_uri={redirect_uri}") }()
+	go func() { _, _ = RunWithConfig(ctx, codexAuthorizeTemplate, cfg) }()
 	time.Sleep(300 * time.Millisecond)
 
 	start := time.Now()
@@ -35,7 +36,7 @@ func TestPortFreedPromptlyAfterCancel(t *testing.T) {
 	// Poll until the port is bindable again.
 	var freed time.Duration
 	for i := 0; i < 200; i++ {
-		ln, err := net.Listen("tcp", "127.0.0.1:1455")
+		ln, err := net.Listen("tcp", listenAddr(cfg))
 		if err == nil {
 			freed = time.Since(start)
 			_ = ln.Close()

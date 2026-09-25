@@ -79,6 +79,9 @@ type ScriptedLLM struct {
 
 	// sendText is returned by SendMessages (title generation).
 	sendText string
+
+	// idPrefix namespaces every tool-call id this driver emits. See CallID.
+	idPrefix string
 }
 
 // NewScriptedLLM builds a driver that will play the given turns in order.
@@ -86,7 +89,42 @@ func NewScriptedLLM(turns ...Turn) *ScriptedLLM {
 	return &ScriptedLLM{
 		turns:    turns,
 		sendText: "scripted summary",
+		idPrefix: "s" + shortID() + "-",
 	}
+}
+
+// CallID is the id a scripted tool call actually carries on the wire, for
+// the scriptID a story wrote in ToolCall(...).
+//
+// TOOL-CALL IDS ARE GLOBALLY UNIQUE, AND THE SCHEMA DEPENDS ON IT. A real
+// provider issues ids like toolu_01... that never repeat, and tool_calls /
+// tool_call_results key on that id alone (UpsertToolCall is ON CONFLICT (id)).
+// Stories run in parallel against ONE database, and several scripted the same
+// literal id ("call-bash-1" in stories 01/04/07, "call-echo"/"call-sleep" in
+// 08/10, "call-set-title-1" in every chat's title turn). They overwrote each
+// other's rows: story 01's persisted bash result held story 04's marker, and
+// story 07's 100-token compaction threshold batch-truncated other stories'
+// results through the shared row. That made 01/04/10 flake — invisibly,
+// because CI ran no DB-backed story at all.
+//
+// So the driver plays the provider's part and makes the id unique per story,
+// while the scripts keep their readable ids.
+func (s *ScriptedLLM) CallID(scriptID string) string {
+	return s.idPrefix + scriptID
+}
+
+// wireTurn returns turn with every tool-call id namespaced (see CallID).
+func (s *ScriptedLLM) wireTurn(turn Turn) Turn {
+	if len(turn.ToolCalls) == 0 {
+		return turn
+	}
+	calls := make([]message.ToolCall, len(turn.ToolCalls))
+	for i, tc := range turn.ToolCalls {
+		tc.ID = s.CallID(tc.ID)
+		calls[i] = tc
+	}
+	turn.ToolCalls = calls
+	return turn
 }
 
 // Append adds more turns to the script (e.g. after a pause/resume).
@@ -221,6 +259,7 @@ func (s *ScriptedLLM) StreamResponse(ctx context.Context, prompts []string, msgs
 
 // streamCanned emits one turn using the standard driver event protocol.
 func (s *ScriptedLLM) streamCanned(turn Turn) <-chan llm.DriverEvent {
+	turn = s.wireTurn(turn)
 	tokenCount := turn.TokenCount
 	if tokenCount == 0 {
 		tokenCount = 50

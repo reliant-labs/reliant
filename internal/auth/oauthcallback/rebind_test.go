@@ -25,7 +25,8 @@ const codexAuthorizeTemplate = "https://auth.openai.com/oauth/authorize?redirect
 // Codex's port is FIXED at 1455 by OpenAI, so "just use another port" is not
 // available: a cancelled flow that lingers blocks every subsequent attempt.
 func TestCancelledFlowReleasesFixedPortImmediately(t *testing.T) {
-	guardFixedPort(t)
+	cfg := codexShapedConfig(t)
+	guardFixedPort(t, cfg)
 
 	originalOpenBrowser := openBrowser
 	openBrowser = func(string) error { return nil }
@@ -35,12 +36,12 @@ func TestCancelledFlowReleasesFixedPortImmediately(t *testing.T) {
 	ctxA, cancelA := context.WithCancel(context.Background())
 	errA := make(chan error, 1)
 	go func() {
-		_, err := Run(ctxA, codexAuthorizeTemplate)
+		_, err := RunWithConfig(ctxA, codexAuthorizeTemplate, cfg)
 		errA <- err
 	}()
 
-	// Let A bind 1455 before cancelling it.
-	if !waitForPortBound(t, 2*time.Second) {
+	// Let A bind the fixed port before cancelling it.
+	if !waitForPortBound(t, cfg, 2*time.Second) {
 		t.Fatal("flow A never bound the fixed port")
 	}
 
@@ -53,7 +54,7 @@ func TestCancelledFlowReleasesFixedPortImmediately(t *testing.T) {
 		Transport: &http.Transport{DisableKeepAlives: false},
 		Timeout:   time.Second,
 	}
-	if resp, err := keepAlive.Get("http://127.0.0.1:1455" + probePath); err == nil {
+	if resp, err := keepAlive.Get(baseURL(cfg) + probePath); err == nil {
 		// Body deliberately NOT closed: that is what keeps the connection
 		// alive in the pool, reproducing the browser's behavior.
 		defer func() { _ = resp.Body.Close() }()
@@ -71,7 +72,7 @@ func TestCancelledFlowReleasesFixedPortImmediately(t *testing.T) {
 
 	started := make(chan error, 1)
 	go func() {
-		_, err := Run(ctxB, codexAuthorizeTemplate)
+		_, err := RunWithConfig(ctxB, codexAuthorizeTemplate, cfg)
 		started <- err
 	}()
 
@@ -93,7 +94,7 @@ func TestCancelledFlowReleasesFixedPortImmediately(t *testing.T) {
 		stillWaiting = true
 	}
 
-	// B is holding 1455 on purpose at this point. Cancel it and wait for Run
+	// B is holding the port on purpose at this point. Cancel it and wait for Run
 	// to actually return, so the port is released before the next test binds
 	// it — a bare `defer cancelB()` returns without waiting for the teardown
 	// goroutine and leaks the listener across the test boundary.
@@ -108,13 +109,13 @@ func TestCancelledFlowReleasesFixedPortImmediately(t *testing.T) {
 }
 
 // waitForPortBound reports whether something is serving the probe endpoint on
-// the fixed Codex port, which is how we know a flow has finished binding.
-func waitForPortBound(t *testing.T, budget time.Duration) bool {
+// cfg's fixed port, which is how we know a flow has finished binding.
+func waitForPortBound(t *testing.T, cfg CallbackConfig, budget time.Duration) bool {
 	t.Helper()
 	client := &http.Client{Timeout: 200 * time.Millisecond}
 	deadline := time.Now().Add(budget)
 	for time.Now().Before(deadline) {
-		resp, err := client.Get("http://127.0.0.1:1455" + probePath)
+		resp, err := client.Get(baseURL(cfg) + probePath)
 		if err == nil {
 			_ = resp.Body.Close()
 			return true
@@ -124,44 +125,40 @@ func waitForPortBound(t *testing.T, budget time.Duration) bool {
 	return false
 }
 
-// guardFixedPort makes a test that binds 1455 independent of its neighbours.
+// guardFixedPort makes a test that binds cfg's fixed port independent of its
+// neighbours.
 //
-// The port is FIXED at 1455 by OpenAI, so these tests cannot take an
-// OS-assigned port and cannot run in parallel — they all contend for one
-// socket. Run() also tears its listener down asynchronously (a goroutine
-// closes the server on ctx.Done), so a test can return while the kernel still
-// holds the port. That leak is what made this package flaky on CI: the
-// previous test's dying listener still owned 1455, the next test's first flow
-// silently QUEUED on it instead of binding, and when the leftover finished
-// dying the second flow found the port neither bindable nor reusable —
-// "bind: address already in use", exactly the error these tests exist to
-// prevent. It reproduces locally under CPU contention, which is why a slow CI
-// runner hit it and a warm laptop did not.
+// Each test now gets its own port (codexShapedConfig), so tests no longer
+// contend with each other or with other packages. This still asserts the
+// invariant these tests exist for: Run() tears its listener down
+// asynchronously (a goroutine closes the server on ctx.Done), and a flow that
+// returns while the kernel still holds the port is exactly the leak that
+// blocks the user's next click on a fixed-port provider.
 //
 // Waiting on the port itself (rather than on goroutine bookkeeping) asserts
 // the invariant that actually matters, both before and after the test.
-func guardFixedPort(t *testing.T) {
+func guardFixedPort(t *testing.T, cfg CallbackConfig) {
 	t.Helper()
-	if !waitForPortFree(t, 10*time.Second) {
-		t.Fatal("fixed port 1455 still held when the test started")
+	if !waitForPortFree(t, cfg, 10*time.Second) {
+		t.Fatalf("fixed port %d still held when the test started", cfg.FixedPort)
 	}
 	// Registered cleanups run after the test's own defers, so the flows have
 	// already been cancelled by the time this waits.
 	t.Cleanup(func() {
-		if !waitForPortFree(t, 10*time.Second) {
-			t.Error("test leaked the fixed port 1455 to the next test")
+		if !waitForPortFree(t, cfg, 10*time.Second) {
+			t.Errorf("test leaked fixed port %d after its flows ended", cfg.FixedPort)
 		}
 	})
 }
 
-// waitForPortFree reports whether nothing holds the fixed Codex port, tested
-// by binding it — the same operation Run() performs, so it cannot disagree
-// with the thing under test the way an HTTP probe can.
-func waitForPortFree(t *testing.T, budget time.Duration) bool {
+// waitForPortFree reports whether nothing holds cfg's fixed port, tested by
+// binding it — the same operation Run() performs, so it cannot disagree with
+// the thing under test the way an HTTP probe can.
+func waitForPortFree(t *testing.T, cfg CallbackConfig, budget time.Duration) bool {
 	t.Helper()
 	deadline := time.Now().Add(budget)
 	for {
-		listener, err := net.Listen("tcp", "127.0.0.1:1455")
+		listener, err := net.Listen("tcp", listenAddr(cfg))
 		if err == nil {
 			_ = listener.Close()
 			return true
@@ -179,7 +176,8 @@ func waitForPortFree(t *testing.T, budget time.Duration) bool {
 // is only one sign-in happening and the user should not be able to tell that
 // two requests were in flight.
 func TestOverlappingFlowQueuesInsteadOfFailing(t *testing.T) {
-	guardFixedPort(t)
+	cfg := codexShapedConfig(t)
+	guardFixedPort(t, cfg)
 
 	originalOpenBrowser := openBrowser
 	openBrowser = func(string) error { return nil }
@@ -189,23 +187,23 @@ func TestOverlappingFlowQueuesInsteadOfFailing(t *testing.T) {
 	defer cancelA()
 	resA := make(chan *Result, 1)
 	go func() {
-		r, err := Run(ctxA, codexAuthorizeTemplate)
+		r, err := RunWithConfig(ctxA, codexAuthorizeTemplate, cfg)
 		if err == nil {
 			resA <- r
 		}
 	}()
-	if !waitForPortBound(t, 2*time.Second) {
+	if !waitForPortBound(t, cfg, 2*time.Second) {
 		t.Fatal("flow A never bound the fixed port")
 	}
 
-	// B starts while A still holds 1455. This used to fail instantly with
+	// B starts while A still holds the fixed port. This used to fail instantly with
 	// "address already in use"; now it should queue.
 	ctxB, cancelB := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancelB()
 	resB := make(chan *Result, 1)
 	errB := make(chan error, 1)
 	go func() {
-		r, err := Run(ctxB, codexAuthorizeTemplate)
+		r, err := RunWithConfig(ctxB, codexAuthorizeTemplate, cfg)
 		if err != nil {
 			errB <- err
 			return
@@ -221,7 +219,7 @@ func TestOverlappingFlowQueuesInsteadOfFailing(t *testing.T) {
 	}
 
 	// The user completes sign-in. One callback, delivered to both waiters.
-	deliverCallback(t)
+	deliverCallback(t, cfg)
 
 	for _, want := range []struct {
 		name string
@@ -241,11 +239,11 @@ func TestOverlappingFlowQueuesInsteadOfFailing(t *testing.T) {
 }
 
 // deliverCallback drives the real redirect against whatever is listening.
-func deliverCallback(t *testing.T) {
+func deliverCallback(t *testing.T, cfg CallbackConfig) {
 	t.Helper()
 	client := &http.Client{Timeout: 2 * time.Second}
 	resp, err := client.Get(
-		"http://127.0.0.1:1455/auth/callback?code=queued-code&state=queued-state")
+		baseURL(cfg) + cfg.CallbackPath + "?code=queued-code&state=queued-state")
 	if err != nil {
 		t.Fatalf("delivering callback: %v", err)
 	}

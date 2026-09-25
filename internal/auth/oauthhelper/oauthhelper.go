@@ -114,7 +114,16 @@ type Options struct {
 	// OnIdle is called when IdleTimeout elapses, after the listener closes.
 	// Lets the owner drop its reference so a later request re-opens cleanly.
 	OnIdle func()
+
+	// runFlow runs one OAuth callback flow; nil means oauthcallback.Run.
+	// Unexported: production always lets the provider decide the callback
+	// port. Tests substitute a flow bound to a free port, so they do not
+	// contend for the real Codex port with every other test binary.
+	runFlow flowRunner
 }
+
+// flowRunner runs one OAuth callback flow to completion or cancellation.
+type flowRunner func(ctx context.Context, authorizeURLTemplate string) (*oauthcallback.Result, error)
 
 // Server is a running helper. Use Start to create one.
 type Server struct {
@@ -142,6 +151,8 @@ type Server struct {
 	idleTimeout time.Duration
 	onIdle      func()
 	stopIdle    chan struct{}
+
+	runFlow flowRunner
 }
 
 // cancelActiveFlow stops a previous OAuth flow and waits for the provider's
@@ -223,6 +234,10 @@ func Start(opts Options) (*Server, error) {
 		idleTimeout: opts.IdleTimeout,
 		onIdle:      opts.OnIdle,
 		stopIdle:    make(chan struct{}),
+		runFlow:     opts.runFlow,
+	}
+	if s.runFlow == nil {
+		s.runFlow = oauthcallback.Run
 	}
 
 	// 127.0.0.1, never 0.0.0.0: this surface starts browsers and hands back
@@ -440,7 +455,7 @@ func (s *Server) handleOAuthStart(w http.ResponseWriter, r *http.Request) {
 		// gone, writeJSON below simply goes nowhere.
 		flowCtx, cancelFlow := context.WithCancel(context.Background())
 		releaseFlow := s.setActiveFlow(cancelFlow)
-		result, err := oauthcallback.Run(flowCtx, req.AuthorizeURLTemplate)
+		result, err := s.runFlow(flowCtx, req.AuthorizeURLTemplate)
 		releaseFlow()
 		cancelFlow()
 		if err != nil {

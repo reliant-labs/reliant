@@ -250,12 +250,26 @@ func listenWithRetry(ctx context.Context, addr string) (net.Listener, error) {
 // Run starts a temporary HTTP server, opens the browser, and waits for the
 // OAuth callback or context cancellation. It returns the authorization code,
 // state and redirect URI.
+//
+// The callback settings come from InferConfig — for Codex that is the port
+// registered with OpenAI (1455), which is not ours to change.
 func Run(ctx context.Context, authorizeURLTemplate string) (*Result, error) {
+	return RunWithConfig(ctx, authorizeURLTemplate, InferConfig(authorizeURLTemplate))
+}
+
+// RunWithConfig is Run with the callback settings supplied rather than
+// inferred.
+//
+// Production callers want Run: the provider decides the callback port. This
+// exists so the fixed-port contention logic (queueing, cancel-release,
+// rebind) can be exercised on a port nothing else is using. Every test that
+// bound the REAL 1455 contended with every other test binary doing the same —
+// `go test ./...` runs packages concurrently — and flaked on CI.
+func RunWithConfig(ctx context.Context, authorizeURLTemplate string, cfg CallbackConfig) (*Result, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
 
-	cfg := InferConfig(authorizeURLTemplate)
 	server, authorizeURL, err := newCallbackServer(authorizeURLTemplate, cfg)
 	if err != nil {
 		return nil, err

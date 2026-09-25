@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/reliant-labs/reliant/internal/auth/oauthcallback"
 )
 
 // A second sign-in attempt must be able to take the provider's callback port
@@ -18,7 +20,8 @@ import (
 // THE PORT IS NOT NEGOTIABLE. Codex redirects to 127.0.0.1:1455, registered on
 // OpenAI's side (oauthcallback.InferConfig), so a retry needs that exact port —
 // there is nowhere else to go. A flow whose tab was closed is still blocked in
-// oauthcallback.Run holding it, and it is never coming back.
+// oauthcallback.Run holding it, and it is never coming back. (These tests use a
+// free port with the same one-port-only shape; see fixedPortFlow.)
 //
 // oauthcallback's own contention handling cannot resolve this, which is why the
 // fix lives here: tryReuseExistingListener joins a LIVE sibling flow and the
@@ -31,12 +34,14 @@ func TestSecondFlowReclaimsAbandonedCallbackPort(t *testing.T) {
 	// A provider that accepts the authorize request and then never redirects —
 	// exactly what the user's closed tab looks like from this side.
 	silent := httpServerThatNeverRedirects(t)
+	callbackPort := freePort(t)
 
 	srv, err := Start(Options{
 		Source:       "test",
 		Port:         freePort(t),
 		ExtraOrigins: []string{"http://localhost:3000"},
 		IdleTimeout:  time.Hour,
+		runFlow:      fixedPortFlow(callbackPort),
 	})
 	if err != nil {
 		t.Fatalf("Start: %v", err)
@@ -56,7 +61,7 @@ func TestSecondFlowReclaimsAbandonedCallbackPort(t *testing.T) {
 		_ = postOAuthStart(firstCtx, srv.Addr(), silent)
 	}()
 
-	if err := waitForCallbackPort(bound, 3*time.Second); err != nil {
+	if err := waitForCallbackPort(callbackPort, bound, 3*time.Second); err != nil {
 		t.Fatalf("first flow never bound the callback port: %v", err)
 	}
 
@@ -74,7 +79,7 @@ func TestSecondFlowReclaimsAbandonedCallbackPort(t *testing.T) {
 
 	// The proof is that the port changes hands: the second flow binds it, which
 	// it can only do once the first has been cancelled.
-	if err := waitForCallbackPortRebind(4 * time.Second); err != nil {
+	if err := waitForCallbackPortRebind(callbackPort, 4*time.Second); err != nil {
 		t.Fatalf("second flow could not reclaim the callback port: %v", err)
 	}
 
@@ -92,12 +97,14 @@ func TestShutdownReleasesCallbackPort(t *testing.T) {
 	t.Parallel()
 
 	silent := httpServerThatNeverRedirects(t)
+	callbackPort := freePort(t)
 
 	srv, err := Start(Options{
 		Source:       "test",
 		Port:         freePort(t),
 		ExtraOrigins: []string{"http://localhost:3000"},
 		IdleTimeout:  time.Hour,
+		runFlow:      fixedPortFlow(callbackPort),
 	})
 	if err != nil {
 		t.Fatalf("Start: %v", err)
@@ -111,7 +118,7 @@ func TestShutdownReleasesCallbackPort(t *testing.T) {
 		_ = postOAuthStart(ctx, srv.Addr(), silent)
 	}()
 
-	if err := waitForCallbackPort(bound, 3*time.Second); err != nil {
+	if err := waitForCallbackPort(callbackPort, bound, 3*time.Second); err != nil {
 		t.Fatalf("flow never bound the callback port: %v", err)
 	}
 
@@ -119,17 +126,48 @@ func TestShutdownReleasesCallbackPort(t *testing.T) {
 	defer shutCancel()
 	_ = srv.Shutdown(shutCtx)
 
-	if err := waitForCallbackPort(free, 3*time.Second); err != nil {
+	if err := waitForCallbackPort(callbackPort, free, 3*time.Second); err != nil {
 		t.Fatalf("callback port still held after Shutdown: %v", err)
 	}
 }
 
 // ── helpers ─────────────────────────────────────────────────────────────────
 
-// codexCallbackPort is the fixed port oauthcallback.InferConfig assigns to an
-// auth.openai.com authorize URL. Hard-coded here on purpose: if that contract
-// ever changes, these tests should fail loudly rather than follow it silently.
-const codexCallbackPort = 1455
+// fixedPortFlow stands in for oauthcallback.Run on a FIXED-port provider
+// (Codex): it takes the one callback port — waiting for a previous holder to
+// let go, as Run's listenWithRetry does — and holds it until its context ends.
+// For a flow whose browser tab was closed, that is never, unless someone
+// cancels it.
+//
+// A stand-in rather than the real Run, for two reasons. The real Run binds the
+// REAL Codex port 1455, which every test binary in `go test ./...` contended
+// for — oauthcallback's own tests flaked on CI because these parallel tests
+// held it. And the real Run opens the user's browser, so on a dev machine these
+// tests launched real auth.openai.com tabs. What these tests pin is
+// oauthhelper's half of the contract — the next attempt and Shutdown CANCEL the
+// previous flow; Run releasing its port on cancel is pinned in oauthcallback.
+// The 1455 contract itself is pinned there too, without binding it
+// (TestInferConfigCodexUsesRegisteredFixedPort).
+func fixedPortFlow(port int) flowRunner {
+	addr := fmt.Sprintf("127.0.0.1:%d", port)
+	return func(ctx context.Context, _ string) (*oauthcallback.Result, error) {
+		var ln net.Listener
+		for {
+			var err error
+			if ln, err = net.Listen("tcp", addr); err == nil {
+				break
+			}
+			select {
+			case <-ctx.Done():
+				return nil, fmt.Errorf("callback port %s never came free: %w", addr, err)
+			case <-time.After(20 * time.Millisecond):
+			}
+		}
+		<-ctx.Done()
+		_ = ln.Close()
+		return nil, fmt.Errorf("OAuth callback cancelled: %w", ctx.Err())
+	}
+}
 
 type portState int
 
@@ -140,8 +178,7 @@ const (
 
 func httpServerThatNeverRedirects(t *testing.T) string {
 	t.Helper()
-	// The authorize URL only has to LOOK like Codex's for InferConfig to pin
-	// port 1455; nothing here is fetched.
+	// Codex-shaped, as the web app sends it; nothing here is fetched.
 	return "https://auth.openai.com/oauth/authorize?redirect_uri={redirect_uri}&state=test"
 }
 
@@ -162,9 +199,9 @@ func postOAuthStart(ctx context.Context, helperAddr, authorizeURL string) error 
 	return nil
 }
 
-func waitForCallbackPort(want portState, budget time.Duration) error {
+func waitForCallbackPort(port int, want portState, budget time.Duration) error {
 	deadline := time.Now().Add(budget)
-	addr := fmt.Sprintf("127.0.0.1:%d", codexCallbackPort)
+	addr := fmt.Sprintf("127.0.0.1:%d", port)
 	for time.Now().Before(deadline) {
 		ln, err := net.Listen("tcp", addr)
 		held := err != nil
@@ -177,17 +214,17 @@ func waitForCallbackPort(want portState, budget time.Duration) error {
 		time.Sleep(25 * time.Millisecond)
 	}
 	if want == bound {
-		return fmt.Errorf("port %d never became bound", codexCallbackPort)
+		return fmt.Errorf("port %d never became bound", port)
 	}
-	return fmt.Errorf("port %d never became free", codexCallbackPort)
+	return fmt.Errorf("port %d never became free", port)
 }
 
 // waitForCallbackPortRebind waits for the port to be held again after the
 // handover — the second flow having taken it.
-func waitForCallbackPortRebind(budget time.Duration) error {
-	if err := waitForCallbackPort(free, budget/2); err != nil {
+func waitForCallbackPortRebind(port int, budget time.Duration) error {
+	if err := waitForCallbackPort(port, free, budget/2); err != nil {
 		// It may never appear free if the handover is fast; that is fine.
 		_ = err
 	}
-	return waitForCallbackPort(bound, budget)
+	return waitForCallbackPort(port, bound, budget)
 }

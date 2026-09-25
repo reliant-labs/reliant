@@ -98,7 +98,7 @@ func TestStory11_TerminateQuestionParkedResumesViaMarkedAnswer(t *testing.T) {
 		Name:       "resume-question-nested",
 		Slug:       "resume-question-nested",
 		Definition: nestedQuestionYAML,
-		IsValid:    true,
+		Status:     db.WorkflowDraftStatusComplete,
 		CreatedAt:  now,
 		UpdatedAt:  now,
 	}), "seed nested-question workflow draft")
