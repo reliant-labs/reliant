@@ -1,22 +1,36 @@
 # buf.gen.yaml - Code generation configuration
+#
+# EVERY remote plugin is pinned to an exact version. An unpinned
+# `remote: buf.build/bufbuild/es` resolves to whatever the BSR calls latest on
+# the day you run it, so `make proto-generate` silently rewrote committed code
+# whenever upstream shipped (protoc-gen-es v2.14.1 -> v2.15.0 on forge_pb.ts).
+# internal/buildmode/buf_plugin_pins_test.go fails on an unpinned remote, and
+# on a Go plugin pinned differently here than in buf.gen-go-only.yaml (both
+# write gen/, so a mismatch makes `make proto-generate` and `make generate-go`
+# fight over the same files).
+#
+# To bump a plugin: change the version in EVERY template that uses it, run
+# `make proto-generate`, and commit the regenerated code in the same change.
+# CI's "Generated code is up to date" job fails on any leftover diff.
 version: v2
 managed:
   enabled: false
 plugins:
   # Generate Go protobuf code
-  - remote: buf.build/protocolbuffers/go
+  - remote: buf.build/protocolbuffers/go:v1.36.12
     out: gen
     opt:
       - paths=source_relative
 
-  # Generate Connect-Go service code using remote plugin
-  - remote: buf.build/connectrpc/go
+  # Generate Connect-Go service code using remote plugin. Matches the
+  # connectrpc.com/connect runtime in go.mod.
+  - remote: buf.build/connectrpc/go:v1.21.0
     out: gen
     opt:
       - paths=source_relative
 
   # Generate TypeScript protobuf code for web using remote plugin
-  - remote: buf.build/bufbuild/es
+  - remote: buf.build/bufbuild/es:v2.15.0
     out: web/src/gen
     include_imports: true
     opt:

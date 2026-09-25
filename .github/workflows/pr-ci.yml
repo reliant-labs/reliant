@@ -47,6 +47,9 @@ jobs:
       # the jobs. A new top-level directory nobody thought about makes this
       # true and everything runs, which is the safe direction to be wrong in.
       non_gomod: ${{ steps.filter.outputs.non_gomod }}
+      # true when the PR touches an input of the TS/shortcuts generators (or
+      # their committed output). Gates only the TS half of `generate-drift`.
+      gen_inputs: ${{ steps.gen_inputs.outputs.gen_inputs }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -90,6 +93,37 @@ jobs:
             echo "go.mod/go.sum ONLY — the pure-Node jobs will skip."
             echo "Every Go job still runs: compiling and testing against the"
             echo "new dependency is the point of a version bump."
+          fi
+
+      # Its own step, not folded into the one above, so it computes its range
+      # independently and can default to "run" on ANY failure: no `-e`, and an
+      # event with no PR base (a push) runs everything.
+      - name: Classify generator inputs
+        id: gen_inputs
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -uo pipefail
+          run_all() { echo "gen_inputs=true" >> "$GITHUB_OUTPUT"; echo "$1 — the TS drift check runs."; exit 0; }
+
+          [ -n "${BASE_REF}" ] && [ -n "${HEAD_SHA}" ] || run_all "no PR base/head"
+          base="$(git merge-base "origin/${BASE_REF}" "${HEAD_SHA}")" || run_all "merge-base failed"
+          changed="$(git diff --name-only "${base}" "${HEAD_SHA}")" || run_all "diff failed"
+          [ -n "${changed}" ] || run_all "empty diff"
+
+          # Everything `make proto-generate generate-shortcuts` reads, plus
+          # what it writes: a hand edit to committed generated code is drift
+          # too. The workflow itself is listed so a change to this gate is
+          # proven on its own PR.
+          inputs='^(proto/|proto-vendor/|buf\.(gen[^/]*\.ya?ml|ya?ml|lock)$|web/src/gen/|config/shortcuts\.yaml$|tools/docgen/shortcuts/|web/src/store/shortcutsData\.generated\.ts$|generated/docs-source/settings/keyboard-shortcuts\.generated\.md$|Makefile$|go\.(mod|sum)$|\.github/workflows/pr-ci\.yml$)'
+          if echo "${changed}" | grep -qE "${inputs}"; then
+            echo "--- generator inputs touched ---"
+            echo "${changed}" | grep -E "${inputs}"
+            echo "gen_inputs=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "gen_inputs=false" >> "$GITHUB_OUTPUT"
+            echo "No proto, buf template, shortcut or generated-TS file changed — the TS drift check skips."
           fi
 
   # Catches what the pre-commit hook would have, for the cases where it did not
@@ -150,15 +184,22 @@ jobs:
   # it costs wall-clock only if it is the slowest job (it is not — measured
   # ~14s of generate locally, against 190s of Go tests).
   #
-  # It is a hard gate: if `make generate-go` produces a diff, the fix is to
-  # commit that diff in the change that caused it.
+  # It is a hard gate: if regenerating produces a diff, the fix is to commit
+  # that diff in the change that caused it.
   generate-drift:
     name: Generated code is up to date
-    # DELIBERATELY NOT GATED on the `changes` job, even though a version bump
-    # "only" touches go.mod. A forge bump CHANGES CODEGEN OUTPUT — that is a
-    # real failure mode this repo hit, not a hypothetical — and this job is
-    # the only thing that catches it. It is the single most important job to
-    # keep on a dependency bump.
+    # The GO half is DELIBERATELY NOT GATED on the `changes` job, even though
+    # a version bump "only" touches go.mod. A forge bump CHANGES CODEGEN OUTPUT
+    # — that is a real failure mode this repo hit, not a hypothetical — and
+    # this job is the only thing that catches it. It is the single most
+    # important job to keep on a dependency bump.
+    #
+    # `needs: changes` is only for the TS step's path filter. `!cancelled()`
+    # keeps the job (and so the Go half) running even if `changes` fails, and
+    # the TS step treats a missing output as "run" — a broken classifier can
+    # only make this job do MORE.
+    needs: changes
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -178,6 +219,17 @@ jobs:
           restore-keys: |
             go-build-drift-${{ runner.os }}-
 
+      # buf-setup-action checks the runner tool cache (tc.find) before it
+      # asks the GitHub releases API where to download from. Restoring that
+      # directory skips the API call and the download — the API call is what
+      # rate-limited control-plane's buf install. The remote plugins run on
+      # the BSR, so the CLI is the only buf artifact there is to cache.
+      - name: Cache buf CLI
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.tool_cache }}/buf/1.57.0
+          key: buf-cli-${{ runner.os }}-${{ runner.arch }}-1.57.0
+
       - name: Install buf
         uses: bufbuild/buf-setup-action@v1
         with:
@@ -188,13 +240,30 @@ jobs:
       - name: Generate Go code
         run: make generate-go
 
+      # The committed TypeScript: web/src/gen/** from buf.gen.yaml's es
+      # plugin, and web/src/store/shortcutsData.generated.ts. `make
+      # generate-go` never touched either, so both drifted unchecked — while
+      # the web and e2e jobs' comments said this job verified them. (It did
+      # cover web/src/gen/controlplane/, which proto-generate-go regenerates.)
+      # `make proto-generate` is the exact command a contributor runs. Every
+      # buf plugin is remote, so this needs no npm install; the whole step is
+      # a few seconds. It skips only when `changes` positively reports that
+      # no generator input changed.
+      - name: Generate TypeScript code
+        if: needs.changes.outputs.gen_inputs != 'false'
+        run: make proto-generate generate-shortcuts
+
+      # `git status`, not `git diff`: a generator that emits a NEW file (a new
+      # proto, a new control-plane service) leaves it untracked, and `git diff`
+      # cannot see untracked files.
       - name: Fail if generated code differs from what is committed
         run: |
           set -euo pipefail
-          if ! git diff --quiet; then
-            echo "::error::Generated code is out of date. Run 'make generate-go' and commit the result."
-            git diff --stat
-            echo "--- full diff ---"
+          drift="$(git status --porcelain --untracked-files=all)"
+          if [ -n "${drift}" ]; then
+            echo "::error::Generated code is out of date. Run 'make generate-go proto-generate generate-shortcuts' and commit the result."
+            echo "${drift}"
+            echo "--- full diff (tracked files) ---"
             git diff
             exit 1
           fi
@@ -429,7 +498,7 @@ jobs:
         working-directory: web
         run: npm ci || npm install
 
-      # The generated TypeScript (web/src/gen/**, 38 files) and
+      # The generated TypeScript (web/src/gen/**, 44 files) and
       # web/src/store/shortcutsData.generated.ts are COMMITTED, so this job
       # lints, typechecks, tests and builds straight from the checkout.
       # Verified locally: `npm run typecheck` and `npm run build:alpha` both
