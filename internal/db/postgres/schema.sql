@@ -1893,6 +1893,12 @@ CREATE INDEX idx_workflow_checkpoints_chat_id ON public.workflow_checkpoints USI
 CREATE INDEX idx_workflows_chat_id ON public.workflows USING btree (chat_id);
 
 --
+-- Name: idx_workflows_owner_user_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_workflows_owner_user_id ON public.workflows USING btree (owner_user_id) WHERE (owner_user_id IS NOT NULL);
+
+--
 -- Name: idx_workflows_parent_id; Type: INDEX; Schema: public; Owner: -
 --
 
