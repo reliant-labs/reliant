@@ -1749,8 +1749,8 @@ type Plan struct {
 	// is a second declaration of what a plan costs that nothing reconciles
 	// against what Stripe charges.
 	//
-	// ZERO MEANS "NO MONTHLY PRICE", NOT "FREE". Wallet-billed code plans and
-	// the compute free trial have no monthly price at all; a client must
+	// ZERO MEANS "NO MONTHLY PRICE", NOT "FREE". Wallet-billed code plans have
+	// no monthly price at all (there is no free compute plan); a client must
 	// render that as unavailable rather than as $0.00, and must not offer a
 	// purchase button for it.
 	PriceCents int64 `protobuf:"varint,10,opt,name=price_cents,json=priceCents,proto3" json:"price_cents,omitempty"`

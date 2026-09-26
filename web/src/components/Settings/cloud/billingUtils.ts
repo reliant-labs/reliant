@@ -167,27 +167,17 @@ export function isComputePlan(plan: { productId: string }): boolean {
  * symptom, and the only thing the "Plan pricing unavailable … restart the
  * control plane" message should ever be counted from.
  *
- * The Stripe price id is what separates the symptom from the healthy case.
- * `plan_compute_free` is deliberately unpriced in every environment — a free
- * trial is never charged through checkout, so it carries `stripe_price_id:
- * null` and no `price_cents`. Counting it meant an environment seeded with
- * only the free plan told the user to restart a control plane whose catalog
- * was entirely correct: the alarming message this count exists to eliminate,
- * fired on the healthy case.
- *
- * A plan that names a Stripe price but arrived with no amount is the real
- * defect — Stripe knows what it costs and our row does not, which is exactly
- * what a plansync that ran before the catalog gained `price_cents` produces.
+ * There is no deliberately unpriced compute plan. The catalog used to carry
+ * one — `plan_compute_free`, a free trial never sold through checkout — and
+ * this predicate carved it out. That plan is retired: control-plane no longer
+ * lists it, and its catalog test forbids a compute plan without a Stripe price.
+ * So every compute plan that arrives with no amount is the real defect, e.g. a
+ * plansync that ran before the catalog gained `price_cents`.
  */
 export function isUnpricedComputePlan(
-  plan: PlanPricing & { productId: string; stripePriceId: string },
+  plan: PlanPricing & { productId: string },
 ): boolean {
-  return (
-    isComputePlan(plan) &&
-    !isPurchasableComputePlan(plan) &&
-    // Intentionally unpriced: nothing to sell it with, so nothing is missing.
-    plan.stripePriceId !== ""
-  );
+  return isComputePlan(plan) && !isPurchasableComputePlan(plan);
 }
 
 /** The catalog's product id for machine compute (control-plane plans.yaml). */

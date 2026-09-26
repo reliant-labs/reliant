@@ -210,8 +210,8 @@ const IDLE_TIMEOUT_OPTIONS = [
  * It used to be derived here from the compute SUBSCRIPTION, which is the bug
  * this replaces: a coupon grants machine minutes and no subscription, so that
  * derivation decided a fully-entitled user could run nothing. The server
- * resolves the set — from the plan, or from plan_compute_free when there is
- * none — and the client no longer holds an opinion about it.
+ * resolves the set — from the plan, or ["small"] when there is none — and the
+ * client no longer holds an opinion about it.
  *
  * It is a membership test, not a ladder: an allowed set of `[small, large]`
  * without `medium` offers exactly that.

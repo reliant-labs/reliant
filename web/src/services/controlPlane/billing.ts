@@ -43,8 +43,8 @@ export interface ComputeEligibility {
   planName: string;
   /**
    * The daemon sizes the server will actually let this caller start, resolved
-   * from their compute plan and falling back to plan_compute_free (["small"])
-   * when there is none. Wire strings, matching `PlanLimits.allowed_daemon_sizes`.
+   * from their compute plan, or ["small"] when they have no subscription (a
+   * coupon buys machine time, not a bigger machine). Wire strings, matching `PlanLimits.allowed_daemon_sizes`.
    *
    * Read this instead of deriving sizes from the subscription: a coupon-funded
    * caller is eligible with NO subscription, so a client that asked the

@@ -1033,12 +1033,8 @@ function PlansTab() {
   // How many compute plans the server sent that we had to drop for having no
   // price. Distinguishes "this env sells nothing" from "the catalog is there
   // but its prices never reached the database" — see the empty state below.
-  //
-  // Deliberately-unpriced plans are excluded: `plan_compute_free` carries no
-  // Stripe price in any environment because it is never sold through checkout
-  // — it exists server-side as the daemon-SIZE allowance for a user funded by
-  // a coupon rather than a subscription. Counting it told users to restart a
-  // control plane whose catalog was already correct.
+  // There is no deliberately unpriced compute plan any more, so every one
+  // counted here is that symptom.
   const unpricedPlanCount = (plansQ.data?.plans ?? []).filter(
     isUnpricedComputePlan,
   ).length;

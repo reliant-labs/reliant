@@ -48,11 +48,6 @@ const REASON_COPY: Record<string, { title: string; body: string }> = {
     title: "Hosted compute isn't set up yet",
     body: "Running a machine in the cloud needs a compute plan. Choose one, or redeem a coupon code if you have one.",
   },
-  // The one-time signup trial lapsed. Still emitted by svcdaemon.
-  trial_expired: {
-    title: "Your compute trial has ended",
-    body: "Choose a compute plan, or redeem a coupon code, to keep running hosted machines.",
-  },
   // The active plan does not permit the requested machine size.
   daemon_size_denied: {
     title: "That machine size isn't on your plan",
