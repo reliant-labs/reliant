@@ -306,7 +306,8 @@ CREATE TABLE public.workflows (
     worker_stopped_at timestamp with time zone,
     outcome text,
     state integer DEFAULT 2 NOT NULL,
-    stop_reason integer DEFAULT 0 NOT NULL
+    stop_reason integer DEFAULT 0 NOT NULL,
+    owner_user_id text
 );
 
 --
@@ -1890,6 +1891,12 @@ CREATE INDEX idx_workflow_checkpoints_chat_id ON public.workflow_checkpoints USI
 --
 
 CREATE INDEX idx_workflows_chat_id ON public.workflows USING btree (chat_id);
+
+--
+-- Name: idx_workflows_owner_user_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_workflows_owner_user_id ON public.workflows USING btree (owner_user_id) WHERE (owner_user_id IS NOT NULL);
 
 --
 -- Name: idx_workflows_parent_id; Type: INDEX; Schema: public; Owner: -

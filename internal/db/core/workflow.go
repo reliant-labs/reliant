@@ -20,6 +20,19 @@ type Workflow struct {
 	CompletedAt     *time.Time     `json:"completed_at,omitempty"`
 	WorkerStartedAt *time.Time     `json:"worker_started_at,omitempty"`
 	WorkerStoppedAt *time.Time     `json:"worker_stopped_at,omitempty"`
+	// OwnerUserID is who this run belongs to.
+	//
+	// A run has to know its own owner: activities need an identity to load API
+	// keys and attribute spend, and today they get one by re-reading the chat
+	// (call_llm.go, compact.go). That only works because every run has a chat,
+	// which is the coupling the engine split removes — a triggered or
+	// API-started run has no conversation to borrow from.
+	//
+	// nil on rows written before this column existed, and on runs whose chat
+	// was deleted. Readers must therefore still fall back to the chat while
+	// both sources exist; see the migration for the ordering.
+	OwnerUserID *string `json:"owner_user_id,omitempty"`
+
 	// Outcome is the run's own verdict — "success" or "failure" — stamped by
 	// the terminal node it reached (Node.outcome in the workflow YAML).
 	// Orthogonal to Status: Status is the Temporal-owned lifecycle and is
