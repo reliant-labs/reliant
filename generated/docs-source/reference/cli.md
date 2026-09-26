@@ -2688,9 +2688,12 @@ when it holds an entry, and is never included in --stacks-only — a generator
 always emits the default's config itself.
 
 Inside KCL, prefer the fp.dev_stacks() builtin over shelling out to this
-command: it returns the same roster during the render, and it deliberately
-returns EMPTY on a read-only render (forge generate / forge ci) so a file
-generated from it stays byte-identical across machines.
+command: it returns the same roster during the render (and EMPTY when forge
+generate / forge ci render without one). Write the generated file with
+fp.write_file(path, content), not KCL's file.write: file.write fires on every
+evaluation, so ci, lint, doctor and env render would rewrite it from whatever
+roster they saw; fp.write_file writes only on forge env up and an applying
+forge env deploy of a local env.
 
 ```
 reliant forge env devstack list [flags]

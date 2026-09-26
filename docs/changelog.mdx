@@ -13,6 +13,19 @@ Regenerate with: make generate-changelog
 
 Track what's new in each Reliant release.
 
+<Update label="v1.7.16" description="September 26, 2026">
+### Claude Opus 5.5 arrives, workflows can be saved as drafts, and long conversations stop running into a wall
+
+- **Claude Opus 5.5 is available, and it is the flagship pick** Claude Opus 5.5 is available through Anthropic, OpenRouter, Vertex AI and Reliant's own provider. Choosing the flagship model now gives you Opus 5.5 on each of them, with double the output length of earlier Claude models. The choice of a merely powerful model is unchanged, so nothing you have already configured quietly becomes more expensive.
+- **Workflows can be saved as drafts** A workflow you are still building no longer has to be valid before you can save it. Drafts always save, carry a Draft badge in the builder, and are never offered anywhere a runnable workflow is needed. When it is ready, mark it complete — at which point it is checked in full, and a complete workflow that fails its checks offers to go back to being a draft instead of throwing your edits away.
+- **Long conversations no longer end without warning** Every run keeps a history of what it has done, and that history had a hard size limit. Large tool results and file contents counted against it, so a long, busy conversation could hit the limit and be stopped outright. Bulky data is now stored alongside the run instead of inside its history, and a run that does need a fresh start carries its background agents across with it rather than abandoning them.
+- **Signing in from the command line happens in your browser** reliant auth login now opens your browser, asks you to approve the sign-in, and stores a single kind of access token that the whole product understands. Personal access tokens from earlier versions no longer work and the reliant context command has been removed — run reliant auth login once to get a new token.
+- **The desktop app replaces an out-of-date saved credential on its own** After the change to access tokens, a machine could hold on to a saved credential in the old format and sit disconnected, since that credential can no longer sign in. The desktop app now recognises an old-format credential, removes it and fetches a new one, including when the server is still starting and the first attempt has to be retried.
+- **The terminal no longer leaks sessions until your machine runs out** Each time the terminal reconnected — after a reload, a laptop sleep or a network blip — the shell it had been using was left running with nothing attached to it. One machine collected more than five hundred of them in two days, which used up the system-wide supply of terminals: after that, every program on the computer failed to open one, Terminal.app included. Closing a connection now closes its shell, and each machine caps how many it will keep open, so a problem of this kind can no longer spill beyond Reliant.
+- **Onboarding no longer stops on an empty screen** Setting up with your own computer and your own API key ended on a card with nothing on it but a Continue button, because there was nothing left to set up. That step now finishes by itself and moves you on. A setup that did have work to do still shows its checklist and still waits for you if anything failed.
+- **The last traces of a free machine trial are gone** Reliant does not offer a free trial machine, but the upgrade prompt could still describe one as having expired, and the billing screen still made an exception for a free plan that no longer exists. Both are gone, so the app no longer mentions a trial you never had.
+</Update>
+
 <Update label="v1.7.15" description="September 18, 2026">
 ### Antigravity joins the provider list, a failed branch no longer breaks the chat it came from, and the app stops telling you things are fine when they are not
 
