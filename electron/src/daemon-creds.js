@@ -826,7 +826,8 @@ const NOOP_LOGGER = { debug() {}, info() {}, warn() {}, error() {} };
  *   - If no stored session → no-op (user hasn't signed in yet; daemon will
  *     fall into its own headless-broken flow, which is the pre-existing
  *     behavior).
- *   - If an existing entry matches the current session's `sub` → no-op (reuse).
+ *   - If an existing `rlat_` entry matches the current session's `sub` →
+ *     no-op (reuse). Legacy PAT formats are re-minted even for the same user.
  *   - Otherwise → mint a fresh credential via TokenService.CreateToken
  *     (kind DAEMON) against `mintApiUrl` and write it under `apiUrl`,
  *     refreshing the stored session first when its access token is stale
@@ -902,9 +903,27 @@ async function ensureDaemonPATForOrigin({
     // belongs to the old internal_user_id). An entry written before we
     // tracked `sub` has existingSub === '' — treat that as unknown and
     // re-mint to be safe.
-    if (existingPat && existingSub && currentSub && existingSub === currentSub) {
+    const existingPatHasCurrentFormat = ACCESS_TOKEN_RE.test(existingPat);
+    if (
+      existingPatHasCurrentFormat &&
+      existingSub &&
+      currentSub &&
+      existingSub === currentSub
+    ) {
       log.debug?.('[daemon-creds] ensureDaemonPATForOrigin: existing PAT for origin matches current user, skipping mint:', key);
       return ENSURE_ALREADY_CURRENT;
+    }
+
+    // A legacy-format credential can never authenticate against the current
+    // gateway. Remove it before minting so a transient mint failure (most
+    // commonly the API still starting during `forge env up`) leaves the Go
+    // daemon in awaiting_credentials. That state is intentionally watched by
+    // BackendManager's long-running repair loop, which can mint once the API
+    // is ready. Keeping the unusable token instead strands the daemon in
+    // disconnected, outside that repair path.
+    if (existingPat && !existingPatHasCurrentFormat) {
+      log.info?.('[daemon-creds] ensureDaemonPATForOrigin: removing cached legacy PAT before re-minting');
+      deleteEntry({ apiUrl, sub: currentSub, logger: log });
     }
 
     // Need to mint. If no session yet, the user hasn't signed in; the
@@ -915,7 +934,7 @@ async function ensureDaemonPATForOrigin({
       return ENSURE_NO_SESSION;
     }
 
-    if (existingPat && existingSub && currentSub && existingSub !== currentSub) {
+    if (existingPat && existingPatHasCurrentFormat && existingSub && currentSub && existingSub !== currentSub) {
       log.info?.('[daemon-creds] ensureDaemonPATForOrigin: cached PAT belongs to a different user — re-minting for current session');
     } else if (existingPat && !existingSub) {
       log.info?.('[daemon-creds] ensureDaemonPATForOrigin: cached PAT has no owner sub recorded — re-minting');
