@@ -158,7 +158,7 @@ describe("plan grid membership and ordering come from the server", () => {
   it("excludes plans with no monthly price from the purchase grid", () => {
     expect(isPurchasableComputePlan(plan("plan_code_free", {}))).toBe(false);
     expect(
-      isPurchasableComputePlan(plan("plan_compute_free", { priceCents: 0n })),
+      isPurchasableComputePlan(plan("plan_compute_small", { priceCents: 0n })),
     ).toBe(false);
   });
 });

@@ -148,9 +148,9 @@ func (RedeemedCouponKind) EnumDescriptor() ([]byte, []int) {
 }
 
 // ComputeIneligibleReason is why a caller cannot start a managed daemon.
-// Distinct values because each one has a different remedy: an expired trial
-// wants an upgrade, a never-subscribed user wants a plan, and neither wants
-// the other's message.
+// Distinct values because each one has a different remedy: a user with no
+// organization yet is still being provisioned, and a user with no subscription
+// and no coupon grant wants a plan or a code.
 //
 // Public contract: exported verbatim to reliant (see proto/public-api.txt).
 // Never renumber — reserve removed tags.
@@ -160,8 +160,6 @@ const (
 	ComputeIneligibleReason_COMPUTE_INELIGIBLE_REASON_UNSPECIFIED ComputeIneligibleReason = 0
 	// The caller is eligible; no reason applies.
 	ComputeIneligibleReason_COMPUTE_INELIGIBLE_REASON_NONE ComputeIneligibleReason = 1
-	// The signup free trial has lapsed and nothing replaced it.
-	ComputeIneligibleReason_COMPUTE_INELIGIBLE_REASON_TRIAL_EXPIRED ComputeIneligibleReason = 2
 	// Never had a compute plan, and holds no granted minutes.
 	ComputeIneligibleReason_COMPUTE_INELIGIBLE_REASON_NO_SUBSCRIPTION ComputeIneligibleReason = 3
 	// Signed in, but no organization resolved yet (mid-provisioning).
@@ -173,14 +171,12 @@ var (
 	ComputeIneligibleReason_name = map[int32]string{
 		0: "COMPUTE_INELIGIBLE_REASON_UNSPECIFIED",
 		1: "COMPUTE_INELIGIBLE_REASON_NONE",
-		2: "COMPUTE_INELIGIBLE_REASON_TRIAL_EXPIRED",
 		3: "COMPUTE_INELIGIBLE_REASON_NO_SUBSCRIPTION",
 		4: "COMPUTE_INELIGIBLE_REASON_NO_ORGANIZATION",
 	}
 	ComputeIneligibleReason_value = map[string]int32{
 		"COMPUTE_INELIGIBLE_REASON_UNSPECIFIED":     0,
 		"COMPUTE_INELIGIBLE_REASON_NONE":            1,
-		"COMPUTE_INELIGIBLE_REASON_TRIAL_EXPIRED":   2,
 		"COMPUTE_INELIGIBLE_REASON_NO_SUBSCRIPTION": 3,
 		"COMPUTE_INELIGIBLE_REASON_NO_ORGANIZATION": 4,
 	}
@@ -858,7 +854,7 @@ type CreateCurrentUserComputeSubscriptionIntentResponse struct {
 	// URLs are involved: the card path confirms in place.
 	//
 	// Empty when the subscription needed no payment at all (full-coverage
-	// coupon, or a trial). That is a success, not a failure — the client shows
+	// coupon). That is a success, not a failure — the client shows
 	// no card form and waits for entitlement like any other purchase.
 	PaymentClientSecret string `protobuf:"bytes,2,opt,name=payment_client_secret,json=paymentClientSecret,proto3" json:"payment_client_secret,omitempty"`
 	// The first invoice's total, as Stripe computed it. The pay button shows
@@ -3818,8 +3814,7 @@ type GetCurrentUserComputeEligibilityResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// eligible is the single fact a caller needs to enable or disable a
 	// "start a machine" control. True when the org has an active compute
-	// subscription (including the signup trial) OR unspent granted minutes from
-	// a redeemed compute coupon.
+	// subscription OR unspent granted minutes from a redeemed compute coupon.
 	Eligible bool `protobuf:"varint,1,opt,name=eligible,proto3" json:"eligible,omitempty"`
 	// reason explains an ineligible answer so the UI can offer the right remedy.
 	Reason ComputeIneligibleReason `protobuf:"varint,2,opt,name=reason,proto3,enum=controlplane.v1.ComputeIneligibleReason" json:"reason,omitempty"`
@@ -3836,11 +3831,11 @@ type GetCurrentUserComputeEligibilityResponse struct {
 	// allowed_daemon_sizes are the daemon sizes this caller may actually start,
 	// resolved the same way internal/svcdaemon.computeDaemonSizeLimits resolves
 	// them: from the active compute subscription's plan, falling back to
-	// plan_compute_free (["small"]) when there is none.
+	// planlimits.UnsubscribedComputeLimits (["small"]) when there is none.
 	//
 	// Sent because eligibility alone is not enough to render a size picker. A
 	// coupon-funded caller is eligible with NO subscription, so a client that
-	// had only `eligible` would have to re-derive the free plan's size list
+	// had only `eligible` would have to re-derive the unsubscribed size list
 	// locally — and a client that re-derives a server rule is exactly how the
 	// machines page came to lock out coupon holders entirely.
 	//
@@ -4465,13 +4460,12 @@ const file_services_billing_v1_billing_proto_rawDesc = "" +
 	"\x12RedeemedCouponKind\x12$\n" +
 	" REDEEMED_COUPON_KIND_UNSPECIFIED\x10\x00\x12&\n" +
 	"\"REDEEMED_COUPON_KIND_WALLET_CREDIT\x10\x01\x12(\n" +
-	"$REDEEMED_COUPON_KIND_COMPUTE_MINUTES\x10\x02*\xf3\x01\n" +
+	"$REDEEMED_COUPON_KIND_COMPUTE_MINUTES\x10\x02*\xf5\x01\n" +
 	"\x17ComputeIneligibleReason\x12)\n" +
 	"%COMPUTE_INELIGIBLE_REASON_UNSPECIFIED\x10\x00\x12\"\n" +
-	"\x1eCOMPUTE_INELIGIBLE_REASON_NONE\x10\x01\x12+\n" +
-	"'COMPUTE_INELIGIBLE_REASON_TRIAL_EXPIRED\x10\x02\x12-\n" +
+	"\x1eCOMPUTE_INELIGIBLE_REASON_NONE\x10\x01\x12-\n" +
 	")COMPUTE_INELIGIBLE_REASON_NO_SUBSCRIPTION\x10\x03\x12-\n" +
-	")COMPUTE_INELIGIBLE_REASON_NO_ORGANIZATION\x10\x042\xf7\"\n" +
+	")COMPUTE_INELIGIBLE_REASON_NO_ORGANIZATION\x10\x04\"\x04\b\x02\x10\x02*'COMPUTE_INELIGIBLE_REASON_TRIAL_EXPIRED2\xf7\"\n" +
 	"\x0eBillingService\x12R\n" +
 	"\tListPlans\x12!.controlplane.v1.ListPlansRequest\x1a\".controlplane.v1.ListPlansResponse\x12L\n" +
 	"\aGetPlan\x12\x1f.controlplane.v1.GetPlanRequest\x1a .controlplane.v1.GetPlanResponse\x12\x85\x01\n" +

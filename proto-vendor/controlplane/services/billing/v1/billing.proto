@@ -47,8 +47,8 @@ service BillingService {
   rpc GetCurrentUserWalletOverview(GetCurrentUserWalletOverviewRequest) returns (GetCurrentUserWalletOverviewResponse) {
     option (forge.v1.method) = {auth_required: true};
   }
-  // (GrantCurrentUserWelcomeCredit removed: the signup wallet credit is now
-  // auto-granted at first-login provisioning via internal/signupgrant.)
+  // (GrantCurrentUserWelcomeCredit removed. There is no signup wallet credit:
+  // LLM credit is redeemed from a coupon, RedeemCoupon.)
   rpc CreateCurrentUserWalletTopupSession(CreateCurrentUserWalletTopupSessionRequest) returns (CreateCurrentUserWalletTopupSessionResponse) {
     option (forge.v1.method) = {auth_required: true};
   }
@@ -324,7 +324,7 @@ message CreateCurrentUserComputeSubscriptionIntentResponse {
   // URLs are involved: the card path confirms in place.
   //
   // Empty when the subscription needed no payment at all (full-coverage
-  // coupon, or a trial). That is a success, not a failure — the client shows
+  // coupon). That is a success, not a failure — the client shows
   // no card form and waits for entitlement like any other purchase.
   string payment_client_secret = 2;
   // The first invoice's total, as Stripe computed it. The pay button shows
@@ -811,18 +811,22 @@ message GetCurrentUserComputeUsageResponse {
 // === Compute eligibility ===
 
 // ComputeIneligibleReason is why a caller cannot start a managed daemon.
-// Distinct values because each one has a different remedy: an expired trial
-// wants an upgrade, a never-subscribed user wants a plan, and neither wants
-// the other's message.
+// Distinct values because each one has a different remedy: a user with no
+// organization yet is still being provisioned, and a user with no subscription
+// and no coupon grant wants a plan or a code.
 //
 // Public contract: exported verbatim to reliant (see proto/public-api.txt).
 // Never renumber — reserve removed tags.
 enum ComputeIneligibleReason {
+  // 2 was COMPUTE_INELIGIBLE_REASON_TRIAL_EXPIRED. There is no signup compute
+  // trial and no free compute, so nothing can have lapsed; the server stopped
+  // emitting it with the trial ladder's deletion. Reserved, never reuse.
+  reserved 2;
+  reserved "COMPUTE_INELIGIBLE_REASON_TRIAL_EXPIRED";
+
   COMPUTE_INELIGIBLE_REASON_UNSPECIFIED = 0;
   // The caller is eligible; no reason applies.
   COMPUTE_INELIGIBLE_REASON_NONE = 1;
-  // The signup free trial has lapsed and nothing replaced it.
-  COMPUTE_INELIGIBLE_REASON_TRIAL_EXPIRED = 2;
   // Never had a compute plan, and holds no granted minutes.
   COMPUTE_INELIGIBLE_REASON_NO_SUBSCRIPTION = 3;
   // Signed in, but no organization resolved yet (mid-provisioning).
@@ -834,8 +838,7 @@ message GetCurrentUserComputeEligibilityRequest {}
 message GetCurrentUserComputeEligibilityResponse {
   // eligible is the single fact a caller needs to enable or disable a
   // "start a machine" control. True when the org has an active compute
-  // subscription (including the signup trial) OR unspent granted minutes from
-  // a redeemed compute coupon.
+  // subscription OR unspent granted minutes from a redeemed compute coupon.
   bool eligible = 1;
 
   // reason explains an ineligible answer so the UI can offer the right remedy.
@@ -857,11 +860,11 @@ message GetCurrentUserComputeEligibilityResponse {
   // allowed_daemon_sizes are the daemon sizes this caller may actually start,
   // resolved the same way internal/svcdaemon.computeDaemonSizeLimits resolves
   // them: from the active compute subscription's plan, falling back to
-  // plan_compute_free (["small"]) when there is none.
+  // planlimits.UnsubscribedComputeLimits (["small"]) when there is none.
   //
   // Sent because eligibility alone is not enough to render a size picker. A
   // coupon-funded caller is eligible with NO subscription, so a client that
-  // had only `eligible` would have to re-derive the free plan's size list
+  // had only `eligible` would have to re-derive the unsubscribed size list
   // locally — and a client that re-derives a server rule is exactly how the
   // machines page came to lock out coupon holders entirely.
   //

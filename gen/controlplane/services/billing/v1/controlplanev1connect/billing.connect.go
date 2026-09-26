@@ -148,8 +148,8 @@ type BillingServiceClient interface {
 	ListCurrentUserInvoices(context.Context, *connect.Request[v1.ListCurrentUserInvoicesRequest]) (*connect.Response[v1.ListCurrentUserInvoicesResponse], error)
 	// Wallet (per-user).
 	GetCurrentUserWalletOverview(context.Context, *connect.Request[v1.GetCurrentUserWalletOverviewRequest]) (*connect.Response[v1.GetCurrentUserWalletOverviewResponse], error)
-	// (GrantCurrentUserWelcomeCredit removed: the signup wallet credit is now
-	// auto-granted at first-login provisioning via internal/signupgrant.)
+	// (GrantCurrentUserWelcomeCredit removed. There is no signup wallet credit:
+	// LLM credit is redeemed from a coupon, RedeemCoupon.)
 	CreateCurrentUserWalletTopupSession(context.Context, *connect.Request[v1.CreateCurrentUserWalletTopupSessionRequest]) (*connect.Response[v1.CreateCurrentUserWalletTopupSessionResponse], error)
 	// CreateCurrentUserWalletTopupPaymentIntent mints a PaymentIntent for a
 	// top-up the user confirms in OUR page with Stripe Elements, rather than in
@@ -692,8 +692,8 @@ type BillingServiceHandler interface {
 	ListCurrentUserInvoices(context.Context, *connect.Request[v1.ListCurrentUserInvoicesRequest]) (*connect.Response[v1.ListCurrentUserInvoicesResponse], error)
 	// Wallet (per-user).
 	GetCurrentUserWalletOverview(context.Context, *connect.Request[v1.GetCurrentUserWalletOverviewRequest]) (*connect.Response[v1.GetCurrentUserWalletOverviewResponse], error)
-	// (GrantCurrentUserWelcomeCredit removed: the signup wallet credit is now
-	// auto-granted at first-login provisioning via internal/signupgrant.)
+	// (GrantCurrentUserWelcomeCredit removed. There is no signup wallet credit:
+	// LLM credit is redeemed from a coupon, RedeemCoupon.)
 	CreateCurrentUserWalletTopupSession(context.Context, *connect.Request[v1.CreateCurrentUserWalletTopupSessionRequest]) (*connect.Response[v1.CreateCurrentUserWalletTopupSessionResponse], error)
 	// CreateCurrentUserWalletTopupPaymentIntent mints a PaymentIntent for a
 	// top-up the user confirms in OUR page with Stripe Elements, rather than in

@@ -211,9 +211,9 @@ export function ComputeStep({
    * WHICH machine the coverage actually pays for.
    *
    * Not all of them, and getting this wrong is worse than showing prices. The
-   * server's `checkDaemonSizeAllowed` resolves a coupon-only user's size
-   * allowance from `plan_compute_free`, which permits SMALL alone — a compute
-   * grant buys machine TIME, deliberately not a bigger machine. So marking
+   * server's `checkDaemonSizeAllowed` gives a coupon-only user (no
+   * subscription) a size allowance of SMALL alone — a compute grant buys
+   * machine TIME, deliberately not a bigger machine. So marking
    * every tile "Covered" tells the user their code bought an XL, and the
    * commit is then refused with "your plan does not include daemon size xl"
    * at the last step of onboarding. Observed doing exactly that in dev.

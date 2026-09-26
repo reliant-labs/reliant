@@ -180,8 +180,8 @@ describe("ComputeStep — a coupon covered the machine", () => {
   });
 
   // Coverage is per SIZE, not blanket, and this is the assertion that keeps
-  // the page honest. The server resolves a coupon-only user's size allowance
-  // from `plan_compute_free` — small alone — so marking Medium "Covered" would
+  // the page honest. The server's size allowance for a coupon-only user (no
+  // subscription) is small alone — so marking Medium "Covered" would
   // promise a machine that `checkDaemonSizeAllowed` refuses at provisioning
   // with "your plan does not include daemon size medium". Observed in dev
   // against a real DEVTESTCOMPUTE redemption.

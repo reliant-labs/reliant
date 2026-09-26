@@ -62,15 +62,15 @@ function renderModal(reason: string, message = "") {
 // Every reason the app can actually deliver, plus an unrecognized one to cover
 // the generic fallback.
 //
-// Two codes used to be here and are now gone from control-plane entirely:
-// `free_tier_global_budget` (a service-wide operator cap) and
-// `free_tier_compute_minutes` (a per-owner free allowance). Nothing can emit
-// either, so the modal no longer carries copy for them.
+// Three codes used to be here and are now gone from control-plane entirely:
+// `free_tier_global_budget` (a service-wide operator cap),
+// `free_tier_compute_minutes` (a per-owner free allowance), and `trial_expired`
+// (a signup compute trial that no longer exists — there is no free compute).
+// Nothing can emit any of them, so the modal no longer carries copy for them.
 const ALL_REASONS = [
   "reliant_credit_exhausted",
   "compute_budget_exhausted",
   "no_compute_subscription",
-  "trial_expired",
   "daemon_size_denied",
   "something_we_have_never_seen",
 ];

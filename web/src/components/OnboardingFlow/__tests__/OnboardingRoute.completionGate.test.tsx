@@ -70,7 +70,7 @@ vi.mock("@/services/controlPlane/daemon", () => ({
 
 vi.mock("@/services/controlPlane/billing", () => ({
   getComputeEligibility: async () => ({ eligible: false }),
-  ComputeIneligibleReason: { TRIAL_EXPIRED: 1, NO_SUBSCRIPTION: 2, NO_ORGANIZATION: 3 },
+  ComputeIneligibleReason: { NO_SUBSCRIPTION: 3, NO_ORGANIZATION: 4 },
 }));
 
 vi.mock("@/services/controlPlane/git", () => ({
