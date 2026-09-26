@@ -70,6 +70,43 @@ function fakeContext(platform) {
 const OUTAGE_MESSAGE =
   'HTTP status code: 403. A required agreement is missing or has expired.';
 
+// Runs one of the afterSign hooks end to end with @electron/notarize replaced
+// by a recorder, and returns the options each notarize() call received.
+//
+// notarize-core.js destructures notarize at require time, so the stub has to be
+// in the module cache BEFORE a fresh copy of core (and the hook, which requires
+// core) is loaded. The cache is restored afterwards so no other test sees the
+// stub.
+async function runHookWithStubbedNotarize(hookFile) {
+  const notarizeModulePath = require.resolve('@electron/notarize');
+  const corePath = require.resolve('../build/notarize-core.js');
+  const hookPath = require.resolve(`../build/${hookFile}`);
+  const saved = {};
+  for (const p of [notarizeModulePath, corePath, hookPath]) {
+    saved[p] = require.cache[p];
+  }
+
+  const calls = [];
+  require.cache[notarizeModulePath] = {
+    id: notarizeModulePath,
+    filename: notarizeModulePath,
+    loaded: true,
+    exports: { notarize: async (opts) => { calls.push(opts); } }
+  };
+  delete require.cache[corePath];
+  delete require.cache[hookPath];
+
+  try {
+    await require(hookPath).default(fakeContext('darwin'));
+  } finally {
+    for (const [p, mod] of Object.entries(saved)) {
+      if (mod) require.cache[p] = mod;
+      else delete require.cache[p];
+    }
+  }
+  return calls;
+}
+
 test('the exact v1.7.14 error is treated as an identity failure, not retried', () => {
   const error = new Error(OUTAGE_MESSAGE);
   assert.equal(core.isIdentityError(error), true);
@@ -215,6 +252,47 @@ test('Apple ID remains a working fallback when no API key is configured', async 
         teamId: 'TEAM123456'
       });
       resolved.cleanup();
+    }
+  );
+});
+
+test('API key secrets that do not exist yet (empty strings in CI) fall back to the Apple ID', async () => {
+  // What release.yml actually produces before the owner creates the three
+  // secrets: `APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}` on a secret that
+  // does not exist exports the variable as an EMPTY STRING, not unset. This is
+  // the state the PR is claimed to be safe in, so it is asserted as such —
+  // through the release hook, not just the resolver — and with no warning
+  // about a partial config, since nothing was configured.
+  await withEnv(
+    {
+      APPLE_API_KEY: '',
+      APPLE_API_KEY_ID: '',
+      APPLE_API_ISSUER: '',
+      APPLE_ID: 'person@example.com',
+      APPLE_APP_SPECIFIC_PASSWORD: 'abcd-efgh-ijkl-mnop',
+      APPLE_TEAM_ID: 'TEAM123456'
+    },
+    async () => {
+      const resolved = core.resolveAppleCredentials();
+      assert.equal(resolved.strategy, 'apple-id');
+      resolved.cleanup();
+
+      const warnings = [];
+      const originalWarn = console.warn;
+      console.warn = (...args) => warnings.push(args.join(' '));
+      let calls;
+      try {
+        calls = await runHookWithStubbedNotarize('notarize-safe.js');
+      } finally {
+        console.warn = originalWarn;
+      }
+      assert.equal(calls.length, 1, 'the strict release hook must notarize, not skip or throw');
+      assert.equal(calls[0].appleId, 'person@example.com');
+      assert.equal(calls[0].appleApiKey, undefined, 'no API-key field may reach notarize()');
+      assert.ok(
+        !warnings.some((w) => w.includes('Partial App Store Connect API key')),
+        'empty secrets are "not configured", not a partial config'
+      );
     }
   );
 });
