@@ -80,8 +80,6 @@ const (
 	DeployServiceEnsureDeploymentProcedure = "/controlplane.v1.DeployService/EnsureDeployment"
 	// DeployServicePromoteProcedure is the fully-qualified name of the DeployService's Promote RPC.
 	DeployServicePromoteProcedure = "/controlplane.v1.DeployService/Promote"
-	// DeployServiceRollbackProcedure is the fully-qualified name of the DeployService's Rollback RPC.
-	DeployServiceRollbackProcedure = "/controlplane.v1.DeployService/Rollback"
 	// DeployServiceScaleProcedure is the fully-qualified name of the DeployService's Scale RPC.
 	DeployServiceScaleProcedure = "/controlplane.v1.DeployService/Scale"
 	// DeployServiceGetStatusProcedure is the fully-qualified name of the DeployService's GetStatus RPC.
@@ -175,16 +173,6 @@ type DeployServiceClient interface {
 	// policy. A version that was never cut fails with FailedPrecondition; there
 	// is no path that responds by building it.
 	Promote(context.Context, *connect.Request[v1.PromoteReleaseRequest]) (*connect.Response[v1.PromoteReleaseResponse], error)
-	// Rollback re-points an environment at an OLDER release. Mechanically
-	// identical to Promote — the same digest re-point, reusing images already
-	// in the registry — and separate only so intent is recorded: a rollback
-	// must read as a rollback in the audit trail.
-	//
-	// Having its own RPC rather than a `kind` field on Promote is what keeps
-	// the kind honest. A client cannot mislabel a promotion as a rollback,
-	// because a client never states the kind at all; the server records which
-	// method was called.
-	Rollback(context.Context, *connect.Request[v1.RollbackReleaseRequest]) (*connect.Response[v1.RollbackReleaseResponse], error)
 	// Scale changes the RUN STATE (running / suspended) and nothing else.
 	// Narrow on purpose: this is the button on a detail page, and a request
 	// shape that could also change reserved capacity would let a mis-wired
@@ -264,9 +252,9 @@ type DeployServiceClient interface {
 	ListReleases(context.Context, *connect.Request[v1.ListDeployReleasesRequest]) (*connect.Response[v1.ListDeployReleasesResponse], error)
 	GetRelease(context.Context, *connect.Request[v1.GetDeployReleaseRequest]) (*connect.Response[v1.GetDeployReleaseResponse], error)
 	// ListPromotions returns an environment's ledger, newest first — the
-	// timeline the UI renders and the rollback picker reads. Append-only, so
-	// this is the COMPLETE record, including what was rolled back FROM, which a
-	// current-pointer read cannot show.
+	// timeline the UI renders. Append-only, so this is the COMPLETE record,
+	// including every release the env moved away from, which a current-pointer
+	// read cannot show.
 	ListPromotions(context.Context, *connect.Request[v1.ListDeployPromotionsRequest]) (*connect.Response[v1.ListDeployPromotionsResponse], error)
 	// ListUsage returns metered infrastructure usage for the caller's org, with
 	// per-resource attribution. Post-hoc: these rows come from a sweeper that
@@ -376,12 +364,6 @@ func NewDeployServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(deployServiceMethods.ByName("Promote")),
 			connect.WithClientOptions(opts...),
 		),
-		rollback: connect.NewClient[v1.RollbackReleaseRequest, v1.RollbackReleaseResponse](
-			httpClient,
-			baseURL+DeployServiceRollbackProcedure,
-			connect.WithSchema(deployServiceMethods.ByName("Rollback")),
-			connect.WithClientOptions(opts...),
-		),
 		scale: connect.NewClient[v1.ScaleDeploymentRequest, v1.ScaleDeploymentResponse](
 			httpClient,
 			baseURL+DeployServiceScaleProcedure,
@@ -456,7 +438,6 @@ type deployServiceClient struct {
 	deleteDeployment        *connect.Client[v1.DeleteDeploymentRequest, v1.DeleteDeploymentResponse]
 	ensureDeployment        *connect.Client[v1.EnsureDeploymentRequest, v1.EnsureDeploymentResponse]
 	promote                 *connect.Client[v1.PromoteReleaseRequest, v1.PromoteReleaseResponse]
-	rollback                *connect.Client[v1.RollbackReleaseRequest, v1.RollbackReleaseResponse]
 	scale                   *connect.Client[v1.ScaleDeploymentRequest, v1.ScaleDeploymentResponse]
 	getStatus               *connect.Client[v1.GetDeploymentStatusRequest, v1.GetDeploymentStatusResponse]
 	streamLogs              *connect.Client[v1.StreamDeploymentLogsRequest, v1.StreamDeploymentLogsResponse]
@@ -541,11 +522,6 @@ func (c *deployServiceClient) EnsureDeployment(ctx context.Context, req *connect
 // Promote calls controlplane.v1.DeployService.Promote.
 func (c *deployServiceClient) Promote(ctx context.Context, req *connect.Request[v1.PromoteReleaseRequest]) (*connect.Response[v1.PromoteReleaseResponse], error) {
 	return c.promote.CallUnary(ctx, req)
-}
-
-// Rollback calls controlplane.v1.DeployService.Rollback.
-func (c *deployServiceClient) Rollback(ctx context.Context, req *connect.Request[v1.RollbackReleaseRequest]) (*connect.Response[v1.RollbackReleaseResponse], error) {
-	return c.rollback.CallUnary(ctx, req)
 }
 
 // Scale calls controlplane.v1.DeployService.Scale.
@@ -660,16 +636,6 @@ type DeployServiceHandler interface {
 	// policy. A version that was never cut fails with FailedPrecondition; there
 	// is no path that responds by building it.
 	Promote(context.Context, *connect.Request[v1.PromoteReleaseRequest]) (*connect.Response[v1.PromoteReleaseResponse], error)
-	// Rollback re-points an environment at an OLDER release. Mechanically
-	// identical to Promote — the same digest re-point, reusing images already
-	// in the registry — and separate only so intent is recorded: a rollback
-	// must read as a rollback in the audit trail.
-	//
-	// Having its own RPC rather than a `kind` field on Promote is what keeps
-	// the kind honest. A client cannot mislabel a promotion as a rollback,
-	// because a client never states the kind at all; the server records which
-	// method was called.
-	Rollback(context.Context, *connect.Request[v1.RollbackReleaseRequest]) (*connect.Response[v1.RollbackReleaseResponse], error)
 	// Scale changes the RUN STATE (running / suspended) and nothing else.
 	// Narrow on purpose: this is the button on a detail page, and a request
 	// shape that could also change reserved capacity would let a mis-wired
@@ -749,9 +715,9 @@ type DeployServiceHandler interface {
 	ListReleases(context.Context, *connect.Request[v1.ListDeployReleasesRequest]) (*connect.Response[v1.ListDeployReleasesResponse], error)
 	GetRelease(context.Context, *connect.Request[v1.GetDeployReleaseRequest]) (*connect.Response[v1.GetDeployReleaseResponse], error)
 	// ListPromotions returns an environment's ledger, newest first — the
-	// timeline the UI renders and the rollback picker reads. Append-only, so
-	// this is the COMPLETE record, including what was rolled back FROM, which a
-	// current-pointer read cannot show.
+	// timeline the UI renders. Append-only, so this is the COMPLETE record,
+	// including every release the env moved away from, which a current-pointer
+	// read cannot show.
 	ListPromotions(context.Context, *connect.Request[v1.ListDeployPromotionsRequest]) (*connect.Response[v1.ListDeployPromotionsResponse], error)
 	// ListUsage returns metered infrastructure usage for the caller's org, with
 	// per-resource attribution. Post-hoc: these rows come from a sweeper that
@@ -857,12 +823,6 @@ func NewDeployServiceHandler(svc DeployServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(deployServiceMethods.ByName("Promote")),
 		connect.WithHandlerOptions(opts...),
 	)
-	deployServiceRollbackHandler := connect.NewUnaryHandler(
-		DeployServiceRollbackProcedure,
-		svc.Rollback,
-		connect.WithSchema(deployServiceMethods.ByName("Rollback")),
-		connect.WithHandlerOptions(opts...),
-	)
 	deployServiceScaleHandler := connect.NewUnaryHandler(
 		DeployServiceScaleProcedure,
 		svc.Scale,
@@ -949,8 +909,6 @@ func NewDeployServiceHandler(svc DeployServiceHandler, opts ...connect.HandlerOp
 			deployServiceEnsureDeploymentHandler.ServeHTTP(w, r)
 		case DeployServicePromoteProcedure:
 			deployServicePromoteHandler.ServeHTTP(w, r)
-		case DeployServiceRollbackProcedure:
-			deployServiceRollbackHandler.ServeHTTP(w, r)
 		case DeployServiceScaleProcedure:
 			deployServiceScaleHandler.ServeHTTP(w, r)
 		case DeployServiceGetStatusProcedure:
@@ -1036,10 +994,6 @@ func (UnimplementedDeployServiceHandler) EnsureDeployment(context.Context, *conn
 
 func (UnimplementedDeployServiceHandler) Promote(context.Context, *connect.Request[v1.PromoteReleaseRequest]) (*connect.Response[v1.PromoteReleaseResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.Promote is not implemented"))
-}
-
-func (UnimplementedDeployServiceHandler) Rollback(context.Context, *connect.Request[v1.RollbackReleaseRequest]) (*connect.Response[v1.RollbackReleaseResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.Rollback is not implemented"))
 }
 
 func (UnimplementedDeployServiceHandler) Scale(context.Context, *connect.Request[v1.ScaleDeploymentRequest]) (*connect.Response[v1.ScaleDeploymentResponse], error) {

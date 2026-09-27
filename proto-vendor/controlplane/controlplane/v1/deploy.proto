@@ -141,16 +141,16 @@ enum DeployReconcilePolicy {
   DEPLOY_RECONCILE_POLICY_PINNED = 3;
 }
 
-// DeployPromotionKind records an operator's INTENT. Both kinds are
-// mechanically identical — a pointer move onto an existing digest — but a
-// rollback must read as a rollback in the audit trail.
+// DeployPromotionKind is what a ledger entry records. There is one kind: a
+// promotion binds an environment to a release. Moving to an OLDER release is
+// still a promotion — recovery is roll forward, there is no rollback.
 //
-// Note that this enum appears only on RESPONSES. A client does not choose a
-// kind; it calls Promote or Rollback, and the server records which.
+// Ledger rows written by the retired Rollback RPC still exist (the ledger is
+// append-only) and are reported as PROMOTE: they bound the env to their
+// release exactly as a promote does. A client never states a kind.
 enum DeployPromotionKind {
   DEPLOY_PROMOTION_KIND_UNSPECIFIED = 0;
   DEPLOY_PROMOTION_KIND_PROMOTE = 1;
-  DEPLOY_PROMOTION_KIND_ROLLBACK = 2;
 }
 
 // DeployClusterProvider is an IRREVERSIBLE day-0 choice per vCluster:
@@ -300,7 +300,7 @@ message DeployEnvironment {
   // the append-only ledger. It is not a stored pointer (migration 00087
   // dropped that column); the server computes it on read, so it cannot
   // disagree with the ledger. Empty before the environment's first deploy.
-  // Moved only by Promote / Rollback — never by UpdateEnvironment, which is
+  // Moved only by Promote — never by UpdateEnvironment, which is
   // why it is not on DeployEnvironmentSpec.
   string current_promotion_id = 6;
 
@@ -608,8 +608,8 @@ message DeployPromotion {
   // could only ever verify that a claim was made, not that a test ran.
   repeated DeployGate gates = 9;
 
-  // Free-form reason. Most valuable on a rollback, where "why" is the whole
-  // story and is otherwise lost to chat history.
+  // Free-form reason. Most valuable on a promote that moves an env BEHIND,
+  // where "why" is the whole story and is otherwise lost to chat history.
   string note = 10;
 
   google.protobuf.Timestamp created_at = 11;
