@@ -4460,12 +4460,12 @@ const file_services_billing_v1_billing_proto_rawDesc = "" +
 	"\x12RedeemedCouponKind\x12$\n" +
 	" REDEEMED_COUPON_KIND_UNSPECIFIED\x10\x00\x12&\n" +
 	"\"REDEEMED_COUPON_KIND_WALLET_CREDIT\x10\x01\x12(\n" +
-	"$REDEEMED_COUPON_KIND_COMPUTE_MINUTES\x10\x02*\xf5\x01\n" +
+	"$REDEEMED_COUPON_KIND_COMPUTE_MINUTES\x10\x02*\xc6\x01\n" +
 	"\x17ComputeIneligibleReason\x12)\n" +
 	"%COMPUTE_INELIGIBLE_REASON_UNSPECIFIED\x10\x00\x12\"\n" +
 	"\x1eCOMPUTE_INELIGIBLE_REASON_NONE\x10\x01\x12-\n" +
 	")COMPUTE_INELIGIBLE_REASON_NO_SUBSCRIPTION\x10\x03\x12-\n" +
-	")COMPUTE_INELIGIBLE_REASON_NO_ORGANIZATION\x10\x04\"\x04\b\x02\x10\x02*'COMPUTE_INELIGIBLE_REASON_TRIAL_EXPIRED2\xf7\"\n" +
+	")COMPUTE_INELIGIBLE_REASON_NO_ORGANIZATION\x10\x042\xf7\"\n" +
 	"\x0eBillingService\x12R\n" +
 	"\tListPlans\x12!.controlplane.v1.ListPlansRequest\x1a\".controlplane.v1.ListPlansResponse\x12L\n" +
 	"\aGetPlan\x12\x1f.controlplane.v1.GetPlanRequest\x1a .controlplane.v1.GetPlanResponse\x12\x85\x01\n" +
