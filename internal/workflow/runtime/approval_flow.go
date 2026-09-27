@@ -163,7 +163,7 @@ func executeApprovalSignalFlow(ctx workflow.Context, input approvalExecution) (m
 	signalName := "signal.approval." + createOutput.ApprovalID
 	signalCh := workflow.GetSignalChannel(ctx, signalName)
 
-	timeoutCtx, cancelTimer := workflow.WithCancel(ctx)
+	timeoutCtx, cancelTimer := withScopedCancel(ctx)
 	timeoutFuture := workflow.NewTimer(timeoutCtx, timeout)
 
 	selector := workflow.NewSelector(ctx)

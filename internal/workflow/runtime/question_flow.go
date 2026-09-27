@@ -100,7 +100,7 @@ func executeAskQuestionSignalFlow(ctx workflow.Context, input askQuestionExecuti
 
 	signalName := "signal.question." + createOutput.QuestionID
 	signalCh := workflow.GetSignalChannel(ctx, signalName)
-	timeoutCtx, cancelTimer := workflow.WithCancel(ctx)
+	timeoutCtx, cancelTimer := withScopedCancel(ctx)
 	timeoutFuture := workflow.NewTimer(timeoutCtx, questionTimeout)
 
 	selector := workflow.NewSelector(ctx)
