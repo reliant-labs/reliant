@@ -3,7 +3,7 @@
 /**
  * The promote flow's container: owns the hooks, PromoteFlow owns the pixels.
  *
- * Splitting them mirrors ForgeTopologyPage/TopologyView, and here it earns its
+ * Splitting them mirrors ForgeOverviewPage/EnvironmentTable, and here it earns its
  * keep twice over — the refusal path and the applied path are both states that
  * are painful to reach against a live daemon, and the whole of PromoteFlow can be
  * driven from fixtures because this is the only part that talks to react-query.

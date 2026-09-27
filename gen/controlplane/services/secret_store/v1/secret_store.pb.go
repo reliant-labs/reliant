@@ -853,40 +853,46 @@ const file_services_secret_store_v1_secret_store_proto_rawDesc = "" +
 	"\aversion\x18\x01 \x01(\rR\aversion\x12=\n" +
 	"\fcreated_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\vcreatedTime\x12?\n" +
 	"\rdeletion_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\fdeletionTime\x12\x1c\n" +
-	"\tdestroyed\x18\x04 \x01(\bR\tdestroyed\";\n" +
+	"\tdestroyed\x18\x04 \x01(\bR\tdestroyed\"R\n" +
 	"\x12ListSecretsRequest\x12%\n" +
-	"\x0eenvironment_id\x18\x01 \x01(\tR\renvironmentId\"O\n" +
+	"\x0eenvironment_id\x18\x01 \x01(\tR\renvironmentIdJ\x04\b\x02\x10\x03R\n" +
+	"project_idR\x03env\"O\n" +
 	"\x13ListSecretsResponse\x128\n" +
-	"\asecrets\x18\x01 \x03(\v2\x1e.controlplane.v1.SecretSummaryR\asecrets\"U\n" +
+	"\asecrets\x18\x01 \x03(\v2\x1e.controlplane.v1.SecretSummaryR\asecrets\"l\n" +
 	"\x18GetSecretVersionsRequest\x12%\n" +
 	"\x0eenvironment_id\x18\x01 \x01(\tR\renvironmentId\x12\x12\n" +
-	"\x04name\x18\x03 \x01(\tR\x04name\"\x91\x01\n" +
+	"\x04name\x18\x03 \x01(\tR\x04nameJ\x04\b\x02\x10\x03R\n" +
+	"project_idR\x03env\"\x91\x01\n" +
 	"\x19GetSecretVersionsResponse\x128\n" +
 	"\asummary\x18\x01 \x01(\v2\x1e.controlplane.v1.SecretSummaryR\asummary\x12:\n" +
-	"\bversions\x18\x02 \x03(\v2\x1e.controlplane.v1.SecretVersionR\bversions\"\x8f\x01\n" +
+	"\bversions\x18\x02 \x03(\v2\x1e.controlplane.v1.SecretVersionR\bversions\"\xa6\x01\n" +
 	"\x10SetSecretRequest\x12%\n" +
 	"\x0eenvironment_id\x18\x01 \x01(\tR\renvironmentId\x12\x12\n" +
 	"\x04name\x18\x03 \x01(\tR\x04name\x12!\n" +
 	"\fsecret_value\x18\x04 \x01(\tR\vsecretValue\x12\x15\n" +
 	"\x03cas\x18\x05 \x01(\rH\x00R\x03cas\x88\x01\x01B\x06\n" +
-	"\x04_cas\"l\n" +
+	"\x04_casJ\x04\b\x02\x10\x03R\n" +
+	"project_idR\x03env\"l\n" +
 	"\x11SetSecretResponse\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\rR\aversion\x12=\n" +
-	"\fcreated_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\vcreatedTime\"l\n" +
+	"\fcreated_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\vcreatedTime\"\x83\x01\n" +
 	"\x13DeleteSecretRequest\x12%\n" +
 	"\x0eenvironment_id\x18\x01 \x01(\tR\renvironmentId\x12\x12\n" +
 	"\x04name\x18\x03 \x01(\tR\x04name\x12\x1a\n" +
-	"\bversions\x18\x04 \x03(\rR\bversions\"\x16\n" +
-	"\x14DeleteSecretResponse\"n\n" +
+	"\bversions\x18\x04 \x03(\rR\bversionsJ\x04\b\x02\x10\x03R\n" +
+	"project_idR\x03env\"\x16\n" +
+	"\x14DeleteSecretResponse\"\x85\x01\n" +
 	"\x15UndeleteSecretRequest\x12%\n" +
 	"\x0eenvironment_id\x18\x01 \x01(\tR\renvironmentId\x12\x12\n" +
 	"\x04name\x18\x03 \x01(\tR\x04name\x12\x1a\n" +
-	"\bversions\x18\x04 \x03(\rR\bversions\"\x18\n" +
-	"\x16UndeleteSecretResponse\"m\n" +
+	"\bversions\x18\x04 \x03(\rR\bversionsJ\x04\b\x02\x10\x03R\n" +
+	"project_idR\x03env\"\x18\n" +
+	"\x16UndeleteSecretResponse\"\x84\x01\n" +
 	"\x14DestroySecretRequest\x12%\n" +
 	"\x0eenvironment_id\x18\x01 \x01(\tR\renvironmentId\x12\x12\n" +
 	"\x04name\x18\x03 \x01(\tR\x04name\x12\x1a\n" +
-	"\bversions\x18\x04 \x03(\rR\bversions\"\x17\n" +
+	"\bversions\x18\x04 \x03(\rR\bversionsJ\x04\b\x02\x10\x03R\n" +
+	"project_idR\x03env\"\x17\n" +
 	"\x15DestroySecretResponse2\xce\x04\n" +
 	"\x12SecretStoreService\x12X\n" +
 	"\vListSecrets\x12#.controlplane.v1.ListSecretsRequest\x1a$.controlplane.v1.ListSecretsResponse\x12j\n" +

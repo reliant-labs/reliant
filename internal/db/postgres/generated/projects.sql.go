@@ -14,23 +14,24 @@ import (
 const createProject = `-- name: CreateProject :exec
 INSERT INTO projects (
     id, user_id, name, path, description, is_git_repo, default_branch, remote_url, is_forge,
-    created_at, updated_at, last_active
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+    forge_project_name, created_at, updated_at, last_active
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 `
 
 type CreateProjectParams struct {
-	ID            string         `json:"id"`
-	UserID        string         `json:"user_id"`
-	Name          string         `json:"name"`
-	Path          string         `json:"path"`
-	Description   sql.NullString `json:"description"`
-	IsGitRepo     bool           `json:"is_git_repo"`
-	DefaultBranch sql.NullString `json:"default_branch"`
-	RemoteUrl     sql.NullString `json:"remote_url"`
-	IsForge       bool           `json:"is_forge"`
-	CreatedAt     time.Time      `json:"created_at"`
-	UpdatedAt     time.Time      `json:"updated_at"`
-	LastActive    time.Time      `json:"last_active"`
+	ID               string         `json:"id"`
+	UserID           string         `json:"user_id"`
+	Name             string         `json:"name"`
+	Path             string         `json:"path"`
+	Description      sql.NullString `json:"description"`
+	IsGitRepo        bool           `json:"is_git_repo"`
+	DefaultBranch    sql.NullString `json:"default_branch"`
+	RemoteUrl        sql.NullString `json:"remote_url"`
+	IsForge          bool           `json:"is_forge"`
+	ForgeProjectName sql.NullString `json:"forge_project_name"`
+	CreatedAt        time.Time      `json:"created_at"`
+	UpdatedAt        time.Time      `json:"updated_at"`
+	LastActive       time.Time      `json:"last_active"`
 }
 
 func (q *Queries) CreateProject(ctx context.Context, arg CreateProjectParams) error {
@@ -44,6 +45,7 @@ func (q *Queries) CreateProject(ctx context.Context, arg CreateProjectParams) er
 		arg.DefaultBranch,
 		arg.RemoteUrl,
 		arg.IsForge,
+		arg.ForgeProjectName,
 		arg.CreatedAt,
 		arg.UpdatedAt,
 		arg.LastActive,
@@ -66,7 +68,7 @@ func (q *Queries) DeleteProject(ctx context.Context, arg DeleteProjectParams) er
 }
 
 const getProject = `-- name: GetProject :one
-SELECT id, name, path, user_id, description, is_git_repo, default_branch, created_at, updated_at, last_active, remote_url, is_forge FROM projects WHERE id = $1
+SELECT id, name, path, user_id, description, is_git_repo, default_branch, created_at, updated_at, last_active, remote_url, is_forge, forge_project_name FROM projects WHERE id = $1
 `
 
 func (q *Queries) GetProject(ctx context.Context, id string) (Project, error) {
@@ -85,12 +87,13 @@ func (q *Queries) GetProject(ctx context.Context, id string) (Project, error) {
 		&i.LastActive,
 		&i.RemoteUrl,
 		&i.IsForge,
+		&i.ForgeProjectName,
 	)
 	return i, err
 }
 
 const getProjectByPath = `-- name: GetProjectByPath :one
-SELECT id, name, path, user_id, description, is_git_repo, default_branch, created_at, updated_at, last_active, remote_url, is_forge FROM projects WHERE path = $1
+SELECT id, name, path, user_id, description, is_git_repo, default_branch, created_at, updated_at, last_active, remote_url, is_forge, forge_project_name FROM projects WHERE path = $1
 `
 
 func (q *Queries) GetProjectByPath(ctx context.Context, path string) (Project, error) {
@@ -109,12 +112,13 @@ func (q *Queries) GetProjectByPath(ctx context.Context, path string) (Project, e
 		&i.LastActive,
 		&i.RemoteUrl,
 		&i.IsForge,
+		&i.ForgeProjectName,
 	)
 	return i, err
 }
 
 const getProjectByPathAndUser = `-- name: GetProjectByPathAndUser :one
-SELECT id, name, path, user_id, description, is_git_repo, default_branch, created_at, updated_at, last_active, remote_url, is_forge FROM projects WHERE path = $1 AND user_id = $2
+SELECT id, name, path, user_id, description, is_git_repo, default_branch, created_at, updated_at, last_active, remote_url, is_forge, forge_project_name FROM projects WHERE path = $1 AND user_id = $2
 `
 
 type GetProjectByPathAndUserParams struct {
@@ -138,12 +142,13 @@ func (q *Queries) GetProjectByPathAndUser(ctx context.Context, arg GetProjectByP
 		&i.LastActive,
 		&i.RemoteUrl,
 		&i.IsForge,
+		&i.ForgeProjectName,
 	)
 	return i, err
 }
 
 const getProjectByRemoteURLAndUser = `-- name: GetProjectByRemoteURLAndUser :one
-SELECT id, name, path, user_id, description, is_git_repo, default_branch, created_at, updated_at, last_active, remote_url, is_forge FROM projects WHERE remote_url = $1 AND user_id = $2
+SELECT id, name, path, user_id, description, is_git_repo, default_branch, created_at, updated_at, last_active, remote_url, is_forge, forge_project_name FROM projects WHERE remote_url = $1 AND user_id = $2
 `
 
 type GetProjectByRemoteURLAndUserParams struct {
@@ -167,12 +172,13 @@ func (q *Queries) GetProjectByRemoteURLAndUser(ctx context.Context, arg GetProje
 		&i.LastActive,
 		&i.RemoteUrl,
 		&i.IsForge,
+		&i.ForgeProjectName,
 	)
 	return i, err
 }
 
 const getProjectWithUserCheck = `-- name: GetProjectWithUserCheck :one
-SELECT id, name, path, user_id, description, is_git_repo, default_branch, created_at, updated_at, last_active, remote_url, is_forge FROM projects WHERE id = $1 AND user_id = $2
+SELECT id, name, path, user_id, description, is_git_repo, default_branch, created_at, updated_at, last_active, remote_url, is_forge, forge_project_name FROM projects WHERE id = $1 AND user_id = $2
 `
 
 type GetProjectWithUserCheckParams struct {
@@ -196,12 +202,13 @@ func (q *Queries) GetProjectWithUserCheck(ctx context.Context, arg GetProjectWit
 		&i.LastActive,
 		&i.RemoteUrl,
 		&i.IsForge,
+		&i.ForgeProjectName,
 	)
 	return i, err
 }
 
 const listProjects = `-- name: ListProjects :many
-SELECT id, name, path, user_id, description, is_git_repo, default_branch, created_at, updated_at, last_active, remote_url, is_forge FROM projects
+SELECT id, name, path, user_id, description, is_git_repo, default_branch, created_at, updated_at, last_active, remote_url, is_forge, forge_project_name FROM projects
 WHERE user_id = $1
 ORDER BY last_active DESC
 LIMIT $3 OFFSET $2
@@ -235,6 +242,7 @@ func (q *Queries) ListProjects(ctx context.Context, arg ListProjectsParams) ([]P
 			&i.LastActive,
 			&i.RemoteUrl,
 			&i.IsForge,
+			&i.ForgeProjectName,
 		); err != nil {
 			return nil, err
 		}
@@ -247,6 +255,32 @@ func (q *Queries) ListProjects(ctx context.Context, arg ListProjectsParams) ([]P
 		return nil, err
 	}
 	return items, nil
+}
+
+const setProjectForgeName = `-- name: SetProjectForgeName :execrows
+UPDATE projects SET
+    is_forge = TRUE,
+    forge_project_name = $1::text,
+    updated_at = NOW()
+WHERE id = $2 AND user_id = $3
+  AND (NOT is_forge OR forge_project_name IS DISTINCT FROM $1::text)
+`
+
+type SetProjectForgeNameParams struct {
+	ForgeProjectName string `json:"forge_project_name"`
+	ID               string `json:"id"`
+	UserID           string `json:"user_id"`
+}
+
+// Records forge's name for a project (forge.yaml `name`) and marks it a forge
+// project. A no-op — zero rows, no updated_at churn — when both already hold,
+// so callers can run it on every successful forge read.
+func (q *Queries) SetProjectForgeName(ctx context.Context, arg SetProjectForgeNameParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, setProjectForgeName, arg.ForgeProjectName, arg.ID, arg.UserID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const touchProject = `-- name: TouchProject :exec
@@ -274,21 +308,23 @@ UPDATE projects SET
     default_branch = $4,
     remote_url = $5,
     is_forge = $6,
-    last_active = $7,
+    forge_project_name = $7,
+    last_active = $8,
     updated_at = NOW()
-WHERE id = $8 AND user_id = $9
+WHERE id = $9 AND user_id = $10
 `
 
 type UpdateProjectParams struct {
-	Name          string         `json:"name"`
-	Description   sql.NullString `json:"description"`
-	IsGitRepo     bool           `json:"is_git_repo"`
-	DefaultBranch sql.NullString `json:"default_branch"`
-	RemoteUrl     sql.NullString `json:"remote_url"`
-	IsForge       bool           `json:"is_forge"`
-	LastActive    time.Time      `json:"last_active"`
-	ID            string         `json:"id"`
-	UserID        string         `json:"user_id"`
+	Name             string         `json:"name"`
+	Description      sql.NullString `json:"description"`
+	IsGitRepo        bool           `json:"is_git_repo"`
+	DefaultBranch    sql.NullString `json:"default_branch"`
+	RemoteUrl        sql.NullString `json:"remote_url"`
+	IsForge          bool           `json:"is_forge"`
+	ForgeProjectName sql.NullString `json:"forge_project_name"`
+	LastActive       time.Time      `json:"last_active"`
+	ID               string         `json:"id"`
+	UserID           string         `json:"user_id"`
 }
 
 func (q *Queries) UpdateProject(ctx context.Context, arg UpdateProjectParams) error {
@@ -299,6 +335,7 @@ func (q *Queries) UpdateProject(ctx context.Context, arg UpdateProjectParams) er
 		arg.DefaultBranch,
 		arg.RemoteUrl,
 		arg.IsForge,
+		arg.ForgeProjectName,
 		arg.LastActive,
 		arg.ID,
 		arg.UserID,

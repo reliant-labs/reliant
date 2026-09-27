@@ -1,10 +1,10 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * The layout route shared by /forge/topology, /forge/status and /forge/secrets.
+ * The layout route shared by /forge (Overview) and /forge/env/$env.
  *
  * It owns the three things none of the individual screens could own, because
- * each of them is a property of the forge SURFACE rather than of one tab:
+ * each of them is a property of the forge SURFACE rather than of one page:
  *
  * 1. CHROME AND AN EXIT. The forge routes sit under the bare `_authenticated`
  *    layout, which renders no app chrome, so before this existed there was no
@@ -13,18 +13,11 @@
  *    the Escape binding here are modelled on SettingsPage, which solves the
  *    identical problem for /settings.
  *
- * 2. NAVIGATION. The screens were siblings with no links between them; status
- *    and secrets were reachable only by typing their URLs. The sidebar carries
- *    the `project` and `env` params across, so switching screens keeps context
- *    instead of resetting it.
- *
- *    This is a LEFT SIDEBAR, not the tab strip it replaces. A tab strip says
- *    "these are views of one page"; a sidebar says "these are the places this
- *    product has", which is what the forge surface actually is — four screens
- *    that answer different questions about a project, not four slices of one.
- *    The strip also had nowhere to grow: every screen added made it longer
- *    horizontally until it ran out of bar, whereas a sidebar has a whole
- *    column and room for section labels that group what a strip cannot.
+ * 2. NAVIGATION. The sidebar lists the Overview and then every environment —
+ *    the same joined list the pages read — and carries the `project` param
+ *    across, so moving between environments keeps context instead of
+ *    resetting it. A sidebar rather than a tab strip because the environment
+ *    list grows with the project, and a column has room for it.
  *
  * 3. PROJECT RESOLUTION — this is the refresh bug. `currentProject` is only ever
  *    set by projectStore.selectProject, and on a page load that call comes from
@@ -56,28 +49,25 @@
  *    param does not push a history entry the user has to press Back through.
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Outlet, useLocation, useNavigate, useSearch } from "@tanstack/react-router";
 
 import { useProjectStore, type Project } from "@/store/projectStore";
+import { useForgeEnvironments } from "@/hooks/forge-queries";
 import { getParentRouteNavigateOptions } from "@/lib/routeParent";
 
 import { ForgeHeader } from "./ForgeHeader";
 import { ForgeProjectPicker } from "./ForgeProjectPicker";
-import { FORGE_NAV, ForgeShell } from "./ForgeShell";
+import { ForgeShell } from "./ForgeShell";
 
 export function ForgeLayout() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
 
-  // `strict: false` because this one component renders under all three child
-  // routes, whose search schemas differ (topology has no `env`).
-  const search = useSearch({ strict: false }) as {
-    project?: string;
-    env?: string;
-  };
+  // `strict: false` because this one component renders under every forge
+  // route, whose search schemas differ.
+  const search = useSearch({ strict: false }) as { project?: string };
   const projectParam = search.project;
-  const envParam = search.env;
 
   const currentProject = useProjectStore((state) => state.currentProject);
   const loadProjects = useProjectStore((state) => state.loadProjects);
@@ -200,19 +190,21 @@ export function ForgeLayout() {
   const showPicker = resolved && !currentProject;
 
   /**
-   * How each nav href carries context across a tab change. Passed to ForgeShell
-   * rather than built there, because only the layout knows the current params —
-   * the shell is deliberately stateless so a preview can render it too.
+   * The nav's environment list — the SAME joined list the pages read (daemon
+   * topology ∪ control plane), from the same cached queries, so the sidebar
+   * can never list an environment the Overview does not, or miss one only the
+   * control plane knows about while the daemon is asleep.
    */
-  const searchFor = useCallback(
-    (item: (typeof FORGE_NAV)[number]) => {
-      const params = new URLSearchParams();
-      if (projectParam) params.set("project", projectParam);
-      if (item.carriesEnv && envParam) params.set("env", envParam);
-      return params.toString();
-    },
-    [projectParam, envParam]
-  );
+  const projectId = projectParam ?? currentProject?.id ?? null;
+  const { envs } = useForgeEnvironments(showPicker ? null : projectId);
+  const navEnvs = useMemo(() => envs.map((env) => ({ name: env.name, where: env.where })), [envs]);
+
+  /**
+   * The project carries across every nav link. Built here rather than in the
+   * shell, because only the layout knows the current params — the shell is
+   * deliberately stateless so a preview can render it too.
+   */
+  const navSearch = projectParam ? new URLSearchParams({ project: projectParam }).toString() : "";
 
   // The chrome lives in ForgeShell so the dev preview harnesses render the
   // SAME sidebar and header the product does. A harness that drew the screen
@@ -221,7 +213,8 @@ export function ForgeLayout() {
   return (
     <ForgeShell
       activePath={pathname}
-      searchFor={searchFor}
+      envs={navEnvs}
+      search={navSearch}
       headerContent={<ForgeHeader onClose={onClose} onProjectSelected={onProjectSelected} />}
     >
       {showPicker ? <ForgeProjectPicker onSelected={onProjectSelected} /> : <Outlet />}

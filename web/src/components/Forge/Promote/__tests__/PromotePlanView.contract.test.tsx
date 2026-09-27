@@ -15,7 +15,7 @@
  * AGAINST EACH OTHER rather than against hardcoded class strings — a test that
  * pinned literal classes would pass while someone gave a rollback the same
  * appearance as a forward promote under a renamed token, which is precisely the
- * regression that matters. This mirrors EnvStatusPanel.contract.test.tsx next
+ * regression that matters. This mirrors DevStackPanel.contract.test.tsx next
  * door.
  */
 

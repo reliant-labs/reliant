@@ -110,13 +110,13 @@ const (
 
 // DeployServiceClient is a client for the controlplane.v1.DeployService service.
 type DeployServiceClient interface {
-	// GetTenant returns the caller's deploy-product enrollment, or NotFound if
-	// the organization has never deployed. The /deploy empty state reads this.
+	// GetTenant returns the caller's organization as a deploy tenant. There is
+	// no enrollment: the deploy product is open to every org, so every live org
+	// is a tenant (slug and namespace prefix = the org id).
 	GetTenant(context.Context, *connect.Request[v1.GetDeployTenantRequest]) (*connect.Response[v1.GetDeployTenantResponse], error)
-	// CreateTenant enrolls the caller's organization, allocating its immutable
-	// hostname slug. Idempotent: a second call returns the existing tenant
-	// rather than failing, because the /deploy onboarding path can be entered
-	// twice and a duplicate-enrollment error is not a thing a user can act on.
+	// CreateTenant returns the caller's tenant, exactly as GetTenant does —
+	// there is nothing to create (see GetTenant). Kept for clients that call it
+	// before first use; requires org admin. Idempotent.
 	CreateTenant(context.Context, *connect.Request[v1.CreateDeployTenantRequest]) (*connect.Response[v1.CreateDeployTenantResponse], error)
 	CreateEnvironment(context.Context, *connect.Request[v1.CreateDeployEnvironmentRequest]) (*connect.Response[v1.CreateDeployEnvironmentResponse], error)
 	GetEnvironment(context.Context, *connect.Request[v1.GetDeployEnvironmentRequest]) (*connect.Response[v1.GetDeployEnvironmentResponse], error)
@@ -162,7 +162,7 @@ type DeployServiceClient interface {
 	// forge deploy is "make it so", and its next step is
 	// PublishDeploymentConfig on the returned id.
 	//
-	// It runs every gate Create and Update run: entitlement, role, strict spec
+	// It runs every gate Create and Update run: role, strict spec
 	// decode, forge's Validate, the hosted shape band, and capacity admission.
 	// A different TIER on an existing name is FailedPrecondition (a tier change
 	// is a delete and a create; see UpdateDeploymentRequest).
@@ -595,13 +595,13 @@ func (c *deployServiceClient) ListUsage(ctx context.Context, req *connect.Reques
 
 // DeployServiceHandler is an implementation of the controlplane.v1.DeployService service.
 type DeployServiceHandler interface {
-	// GetTenant returns the caller's deploy-product enrollment, or NotFound if
-	// the organization has never deployed. The /deploy empty state reads this.
+	// GetTenant returns the caller's organization as a deploy tenant. There is
+	// no enrollment: the deploy product is open to every org, so every live org
+	// is a tenant (slug and namespace prefix = the org id).
 	GetTenant(context.Context, *connect.Request[v1.GetDeployTenantRequest]) (*connect.Response[v1.GetDeployTenantResponse], error)
-	// CreateTenant enrolls the caller's organization, allocating its immutable
-	// hostname slug. Idempotent: a second call returns the existing tenant
-	// rather than failing, because the /deploy onboarding path can be entered
-	// twice and a duplicate-enrollment error is not a thing a user can act on.
+	// CreateTenant returns the caller's tenant, exactly as GetTenant does —
+	// there is nothing to create (see GetTenant). Kept for clients that call it
+	// before first use; requires org admin. Idempotent.
 	CreateTenant(context.Context, *connect.Request[v1.CreateDeployTenantRequest]) (*connect.Response[v1.CreateDeployTenantResponse], error)
 	CreateEnvironment(context.Context, *connect.Request[v1.CreateDeployEnvironmentRequest]) (*connect.Response[v1.CreateDeployEnvironmentResponse], error)
 	GetEnvironment(context.Context, *connect.Request[v1.GetDeployEnvironmentRequest]) (*connect.Response[v1.GetDeployEnvironmentResponse], error)
@@ -647,7 +647,7 @@ type DeployServiceHandler interface {
 	// forge deploy is "make it so", and its next step is
 	// PublishDeploymentConfig on the returned id.
 	//
-	// It runs every gate Create and Update run: entitlement, role, strict spec
+	// It runs every gate Create and Update run: role, strict spec
 	// decode, forge's Validate, the hosted shape band, and capacity admission.
 	// A different TIER on an existing name is FailedPrecondition (a tier change
 	// is a delete and a create; see UpdateDeploymentRequest).

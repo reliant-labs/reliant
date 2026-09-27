@@ -54,6 +54,10 @@ export interface Project {
   // True when the project's repo root contains a forge.yaml. Populated at
   // clone / project-create time by the server.
   is_forge: boolean;
+  // forge's name for the project (forge.yaml `name`) — the key its
+  // control-plane environments are filed under. Absent until a daemon has
+  // read it; see services/forge/environments.ts resolveForgeProjectName.
+  forge_project_name?: string;
 }
 
 export interface GitBranch {
@@ -156,6 +160,7 @@ function protoToFrontend(proto: ProtoProject): Project {
     updated_at: proto.updatedAt,
     remote_url: proto.remoteUrl || undefined,
     is_forge: proto.isForge,
+    forge_project_name: proto.forgeProjectName || undefined,
   };
 }
 

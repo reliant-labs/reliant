@@ -739,6 +739,10 @@ type Querier interface {
 	SetAgentMessagesDeliveredMessageID(ctx context.Context, arg SetAgentMessagesDeliveredMessageIDParams) error
 	SetCompactionSummaryMessage(ctx context.Context, arg SetCompactionSummaryMessageParams) (ContextWindow, error)
 	SetDefaultPresetAssignment(ctx context.Context, arg SetDefaultPresetAssignmentParams) error
+	// Records forge's name for a project (forge.yaml `name`) and marks it a forge
+	// project. A no-op — zero rows, no updated_at churn — when both already hold,
+	// so callers can run it on every successful forge read.
+	SetProjectForgeName(ctx context.Context, arg SetProjectForgeNameParams) (int64, error)
 	SetVisibilityOverride(ctx context.Context, arg SetVisibilityOverrideParams) error
 	SetWorkflowDraftHidden(ctx context.Context, arg SetWorkflowDraftHiddenParams) (WorkflowDraft, error)
 	// Move a draft between 'draft' and 'complete'. The caller validates before

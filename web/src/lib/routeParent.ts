@@ -13,11 +13,11 @@
  *   /forge, /forge/*        → /
  *   anything else           → /
  *
- * Forge is flat for the same reason settings is, but arrived at differently:
- * /forge/topology, /forge/status and /forge/secrets are peer TABS of one
- * surface, not a hub and its children, so there is no intermediate view to step
- * back to. Treating /forge as a parent would make closing a tab land on a bare
- * /forge, which only redirects to topology — a close that visibly does nothing.
+ * Forge's in-UI close is an EXIT from the whole surface, not a step back
+ * within it: the header's close sits on every forge page, and a reader who
+ * presses it on /forge/env/prod means "leave forge", not "go to the
+ * Overview" — the Overview is one click away in the sidebar and in the
+ * page's own "All environments" link. So every forge path exits to /.
  * These cases are written out rather than left to the fallback because the
  * fallback's answer being correct here is a coincidence worth pinning.
  *

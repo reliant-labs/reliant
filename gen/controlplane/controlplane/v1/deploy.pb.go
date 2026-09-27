@@ -104,6 +104,17 @@ const (
 	// Ephemeral, and MUST carry a TTL — an unbounded preview is an unbounded
 	// bill.
 	DeployEnvironmentKind_DEPLOY_ENVIRONMENT_KIND_PREVIEW DeployEnvironmentKind = 2
+	// Workloads run on a developer machine (`forge env up`); the platform is
+	// this environment's SECRET STORE and nothing else. It is never a deploy
+	// target — Publish / EnsureDeployment / Promote / Rollback into one is
+	// FailedPrecondition — it holds no namespace on any cluster, and its
+	// secrets are the only ones readable back (LocalSecretService.PullSecrets).
+	//
+	// Kind is IMMUTABLE, and for this member that is the security property: a
+	// persistent environment can never become LOCAL and so can never become
+	// readable. EnsureEnvironment with a kind differing from the stored row is
+	// FailedPrecondition, never a silent change.
+	DeployEnvironmentKind_DEPLOY_ENVIRONMENT_KIND_LOCAL DeployEnvironmentKind = 3
 )
 
 // Enum value maps for DeployEnvironmentKind.
@@ -112,11 +123,13 @@ var (
 		0: "DEPLOY_ENVIRONMENT_KIND_UNSPECIFIED",
 		1: "DEPLOY_ENVIRONMENT_KIND_PERSISTENT",
 		2: "DEPLOY_ENVIRONMENT_KIND_PREVIEW",
+		3: "DEPLOY_ENVIRONMENT_KIND_LOCAL",
 	}
 	DeployEnvironmentKind_value = map[string]int32{
 		"DEPLOY_ENVIRONMENT_KIND_UNSPECIFIED": 0,
 		"DEPLOY_ENVIRONMENT_KIND_PERSISTENT":  1,
 		"DEPLOY_ENVIRONMENT_KIND_PREVIEW":     2,
+		"DEPLOY_ENVIRONMENT_KIND_LOCAL":       3,
 	}
 )
 
@@ -957,6 +970,10 @@ type DeployEnvironment struct {
 	// registry base configured, and PublishDeploymentConfig refuses every
 	// backend image rather than admitting an unchecked one.
 	ImagePushBase string `protobuf:"bytes,14,opt,name=image_push_base,json=imagePushBase,proto3" json:"image_push_base,omitempty"`
+	// The forge project this environment belongs to (forge.yaml `name`).
+	// Environment identity is (org, project, name): two projects in one org
+	// may each have a `prod`. Empty is a valid project.
+	Project       string `protobuf:"bytes,15,opt,name=project,proto3" json:"project,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1089,6 +1106,13 @@ func (x *DeployEnvironment) GetImagePushBase() string {
 	return ""
 }
 
+func (x *DeployEnvironment) GetProject() string {
+	if x != nil {
+		return x.Project
+	}
+	return ""
+}
+
 // DeployEnvironmentSpec is THE WRITABLE HALF of an environment — the whole of
 // what a client may set, and nothing else.
 //
@@ -1113,8 +1137,12 @@ type DeployEnvironmentSpec struct {
 	// UNSPECIFIED on a request leaves the stored policy unchanged; a new
 	// environment then gets OBSERVE.
 	ReconcilePolicy DeployReconcilePolicy `protobuf:"varint,8,opt,name=reconcile_policy,json=reconcilePolicy,proto3,enum=controlplane.v1.DeployReconcilePolicy" json:"reconcile_policy,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// The forge project (forge.yaml `name`) this environment belongs to.
+	// Part of the environment's identity — EnsureEnvironment addresses by
+	// (project, name) — and immutable after creation like name and kind.
+	Project       string `protobuf:"bytes,9,opt,name=project,proto3" json:"project,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *DeployEnvironmentSpec) Reset() {
@@ -1201,6 +1229,13 @@ func (x *DeployEnvironmentSpec) GetReconcilePolicy() DeployReconcilePolicy {
 		return x.ReconcilePolicy
 	}
 	return DeployReconcilePolicy_DEPLOY_RECONCILE_POLICY_UNSPECIFIED
+}
+
+func (x *DeployEnvironmentSpec) GetProject() string {
+	if x != nil {
+		return x.Project
+	}
+	return ""
 }
 
 // DeployObservedStateDetail is the operator's CONFIRMATION — the readable
@@ -2481,7 +2516,7 @@ const file_controlplane_v1_deploy_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
-	"updated_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"\xa9\x05\n" +
+	"updated_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"\xc3\x05\n" +
 	"\x11DeployEnvironment\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12:\n" +
@@ -2501,7 +2536,8 @@ const file_controlplane_v1_deploy_proto_rawDesc = "" +
 	"\n" +
 	"updated_at\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12Q\n" +
 	"\x10reconcile_policy\x18\r \x01(\x0e2&.controlplane.v1.DeployReconcilePolicyR\x0freconcilePolicy\x12&\n" +
-	"\x0fimage_push_base\x18\x0e \x01(\tR\rimagePushBase\"\xaf\x03\n" +
+	"\x0fimage_push_base\x18\x0e \x01(\tR\rimagePushBase\x12\x18\n" +
+	"\aproject\x18\x0f \x01(\tR\aproject\"\xc9\x03\n" +
 	"\x15DeployEnvironmentSpec\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12:\n" +
 	"\x04kind\x18\x02 \x01(\x0e2&.controlplane.v1.DeployEnvironmentKindR\x04kind\x12*\n" +
@@ -2512,7 +2548,8 @@ const file_controlplane_v1_deploy_proto_rawDesc = "" +
 	"source_ref\x18\x05 \x01(\tR\tsourceRef\x121\n" +
 	"\x15scale_to_zero_enabled\x18\x06 \x01(\bR\x12scaleToZeroEnabled\x12:\n" +
 	"\x1ascale_to_zero_idle_seconds\x18\a \x01(\x05R\x16scaleToZeroIdleSeconds\x12Q\n" +
-	"\x10reconcile_policy\x18\b \x01(\x0e2&.controlplane.v1.DeployReconcilePolicyR\x0freconcilePolicy\"\xc7\x02\n" +
+	"\x10reconcile_policy\x18\b \x01(\x0e2&.controlplane.v1.DeployReconcilePolicyR\x0freconcilePolicy\x12\x18\n" +
+	"\aproject\x18\t \x01(\tR\aproject\"\xc7\x02\n" +
 	"\x19DeployObservedStateDetail\x12:\n" +
 	"\x05state\x18\x01 \x01(\x0e2$.controlplane.v1.DeployObservedStateR\x05state\x12\x1a\n" +
 	"\breplicas\x18\x02 \x01(\x05R\breplicas\x12!\n" +
@@ -2521,7 +2558,7 @@ const file_controlplane_v1_deploy_proto_rawDesc = "" +
 	"\n" +
 	"last_error\x18\x05 \x01(\tR\tlastError\x12\x10\n" +
 	"\x03url\x18\x06 \x01(\tR\x03url\x12=\n" +
-	"\fstable_since\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\vstableSince\"\xc8\x03\n" +
+	"\fstable_since\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\vstableSince\"\xd7\x03\n" +
 	"\n" +
 	"Deployment\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x15\n" +
@@ -2536,7 +2573,7 @@ const file_controlplane_v1_deploy_proto_rawDesc = "" +
 	"updated_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12+\n" +
 	"\x04spec\x18\v \x01(\v2\x17.google.protobuf.StructR\x04spec\x12<\n" +
 	"\trun_state\x18\n" +
-	" \x01(\x0e2\x1f.controlplane.v1.DeployRunStateR\brunState\"\x9d\x02\n" +
+	" \x01(\x0e2\x1f.controlplane.v1.DeployRunStateR\brunStateJ\x04\b\x06\x10\aR\adesired\"\x9d\x02\n" +
 	"\x0eDeployArtifact\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x16\n" +
 	"\x06digest\x18\x02 \x01(\tR\x06digest\x12\x1c\n" +
@@ -2629,11 +2666,12 @@ const file_controlplane_v1_deploy_proto_rawDesc = "" +
 	"\x12DEPLOY_TIER_STATIC\x10\x01\x12\x17\n" +
 	"\x13DEPLOY_TIER_BACKEND\x10\x02\x12\x18\n" +
 	"\x14DEPLOY_TIER_DATABASE\x10\x03\x12\x17\n" +
-	"\x13DEPLOY_TIER_CLUSTER\x10\x04*\x8d\x01\n" +
+	"\x13DEPLOY_TIER_CLUSTER\x10\x04*\xb0\x01\n" +
 	"\x15DeployEnvironmentKind\x12'\n" +
 	"#DEPLOY_ENVIRONMENT_KIND_UNSPECIFIED\x10\x00\x12&\n" +
 	"\"DEPLOY_ENVIRONMENT_KIND_PERSISTENT\x10\x01\x12#\n" +
-	"\x1fDEPLOY_ENVIRONMENT_KIND_PREVIEW\x10\x02*p\n" +
+	"\x1fDEPLOY_ENVIRONMENT_KIND_PREVIEW\x10\x02\x12!\n" +
+	"\x1dDEPLOY_ENVIRONMENT_KIND_LOCAL\x10\x03*p\n" +
 	"\x0eDeployRunState\x12 \n" +
 	"\x1cDEPLOY_RUN_STATE_UNSPECIFIED\x10\x00\x12\x1c\n" +
 	"\x18DEPLOY_RUN_STATE_RUNNING\x10\x01\x12\x1e\n" +
@@ -2670,7 +2708,7 @@ const file_controlplane_v1_deploy_proto_rawDesc = "" +
 	" DEPLOY_CLUSTER_PHASE_UNSPECIFIED\x10\x00\x12%\n" +
 	"!DEPLOY_CLUSTER_PHASE_PROVISIONING\x10\x01\x12\x1e\n" +
 	"\x1aDEPLOY_CLUSTER_PHASE_READY\x10\x02\x12\x1f\n" +
-	"\x1bDEPLOY_CLUSTER_PHASE_FAILED\x10\x03*\xbe\x02\n" +
+	"\x1bDEPLOY_CLUSTER_PHASE_FAILED\x10\x03*\xc5\x03\n" +
 	"\x12DeployResourceKind\x12$\n" +
 	" DEPLOY_RESOURCE_KIND_UNSPECIFIED\x10\x00\x12\"\n" +
 	"\x1eDEPLOY_RESOURCE_KIND_CPU_MILLI\x10\x01\x12 \n" +
@@ -2680,7 +2718,7 @@ const file_controlplane_v1_deploy_proto_rawDesc = "" +
 	"#DEPLOY_RESOURCE_KIND_CDN_EGRESS_GIB\x10\a\x12%\n" +
 	"!DEPLOY_RESOURCE_KIND_CDN_REQUESTS\x10\b\x12$\n" +
 	" DEPLOY_RESOURCE_KIND_STORAGE_GIB\x10\n" +
-	"*p\n" +
+	"\"\x04\b\x03\x10\x03\"\x04\b\x04\x10\x04\"\x04\b\t\x10\t*)DEPLOY_RESOURCE_KIND_STORAGE_GIB_BALANCED*$DEPLOY_RESOURCE_KIND_STORAGE_GIB_SSD*\"DEPLOY_RESOURCE_KIND_BUILD_MINUTES*p\n" +
 	"\x0fDeployLogStream\x12!\n" +
 	"\x1dDEPLOY_LOG_STREAM_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17DEPLOY_LOG_STREAM_BUILD\x10\x01\x12\x1d\n" +

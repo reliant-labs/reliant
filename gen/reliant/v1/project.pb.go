@@ -44,9 +44,16 @@ type Project struct {
 	RemoteUrl *string `protobuf:"bytes,11,opt,name=remote_url,json=remoteUrl,proto3,oneof" json:"remote_url,omitempty"`
 	// is_forge is true when the project's repo root contains a forge.yaml.
 	// Populated at clone / project-create time; not lazily recomputed on read.
-	IsForge       bool `protobuf:"varint,12,opt,name=is_forge,json=isForge,proto3" json:"is_forge,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	IsForge bool `protobuf:"varint,12,opt,name=is_forge,json=isForge,proto3" json:"is_forge,omitempty"`
+	// forge_project_name is forge's name for the project — the `name` key in
+	// its forge.yaml — and the key the control plane files the project's
+	// deploy environments under. The web joins a project to its control-plane
+	// environments on it, so it is persisted here and readable with no daemon.
+	// Unset when never read: not a forge project, a forge.yaml without a name,
+	// or no daemon has reported it since the project was created.
+	ForgeProjectName *string `protobuf:"bytes,13,opt,name=forge_project_name,json=forgeProjectName,proto3,oneof" json:"forge_project_name,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *Project) Reset() {
@@ -161,6 +168,13 @@ func (x *Project) GetIsForge() bool {
 		return x.IsForge
 	}
 	return false
+}
+
+func (x *Project) GetForgeProjectName() string {
+	if x != nil && x.ForgeProjectName != nil {
+		return *x.ForgeProjectName
+	}
+	return ""
 }
 
 // ProjectDaemon records that a daemon has a local clone of a project.
@@ -3106,7 +3120,7 @@ var File_reliant_v1_project_proto protoreflect.FileDescriptor
 const file_reliant_v1_project_proto_rawDesc = "" +
 	"\n" +
 	"\x18reliant/v1/project.proto\x12\n" +
-	"reliant.v1\x1a\x17reliant/v1/common.proto\"\x9d\x03\n" +
+	"reliant.v1\x1a\x17reliant/v1/common.proto\"\xe7\x03\n" +
 	"\aProject\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x17\n" +
 	"\auser_id\x18\x02 \x01(\tR\x06userId\x12\x12\n" +
@@ -3124,10 +3138,12 @@ const file_reliant_v1_project_proto_rawDesc = "" +
 	"lastActive\x12\"\n" +
 	"\n" +
 	"remote_url\x18\v \x01(\tH\x02R\tremoteUrl\x88\x01\x01\x12\x19\n" +
-	"\bis_forge\x18\f \x01(\bR\aisForgeB\x0e\n" +
+	"\bis_forge\x18\f \x01(\bR\aisForge\x121\n" +
+	"\x12forge_project_name\x18\r \x01(\tH\x03R\x10forgeProjectName\x88\x01\x01B\x0e\n" +
 	"\f_descriptionB\x11\n" +
 	"\x0f_default_branchB\r\n" +
-	"\v_remote_url\"\xbb\x01\n" +
+	"\v_remote_urlB\x15\n" +
+	"\x13_forge_project_name\"\xbb\x01\n" +
 	"\rProjectDaemon\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x1b\n" +

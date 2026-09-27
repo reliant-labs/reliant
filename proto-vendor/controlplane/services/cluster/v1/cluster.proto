@@ -1,0 +1,172 @@
+syntax = "proto3";
+
+// EXPERIMENTAL: controlplane.v1 is unstable. Field numbers, RPC names, and
+// service shapes may change without notice until the package is declared
+// stable. Consumers should pin to a specific control-plane commit.
+//
+// See proto/controlplane/v1/README.md for stability/versioning policy.
+
+package controlplane.v1;
+
+import "forge/v1/forge.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/reliant-labs/control-plane/gen/services/cluster/v1;clusterv1";
+
+// === ClusterService ===
+//
+// A CLUSTER is an org-level resource: a row, not a kubectl context. This is
+// the customer-facing surface for connecting one (FORGE_CLUSTERS_DESIGN.md §6,
+// §8 slice 1) — register a name, get a one-time install command, watch the
+// card turn CONNECTED when the in-cluster agent's first heartbeat lands.
+//
+// SLICE 1 IS "A CLUSTER AS A CONNECTED PRIMITIVE". Nothing deploys through a
+// cluster yet; environments cannot be pointed at one from this API. The
+// agent heartbeats cluster facts over ClusterAgentService and that is all.
+//
+// ORG-SCOPED, AND THE ORG IS NEVER A REQUEST FIELD. Every RPC acts on the
+// caller's org, resolved server-side from the authenticated principal. A
+// cluster id belonging to another org is NotFound — never an existence
+// oracle over another tenant's infrastructure.
+//
+// AUTHORITY (a working default pending a product decision — design §9 Q5):
+//   - List / Get: any member of the org, or an org token carrying deploy:read.
+//   - Register / RotateBootstrap / Remove: an org ADMIN. A machine token is
+//     refused until the `cluster:manage` scope exists (it is not yet in
+//     forge's closed scope vocabulary, forge/pkg/accesstoken/scope.go).
+//
+// PROVIDERS. Reliant-provisioned vClusters are listed here too, read-only,
+// under the same provider enum (design §9 Q6 working default): "Clusters" is
+// every cluster the org's workloads can land on. Rotate and Remove refuse a
+// vCluster — its lifecycle belongs to the platform.
+service ClusterService {
+  // RegisterCluster records a new BYO cluster and mints its one-time
+  // bootstrap. The cluster is WAITING until the agent exchanges the token.
+  rpc RegisterCluster(RegisterClusterRequest) returns (RegisterClusterResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+  // ListClusters returns every live cluster of the caller's org, by name.
+  rpc ListClusters(ListClustersRequest) returns (ListClustersResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+  // GetCluster returns one cluster of the caller's org.
+  rpc GetCluster(GetClusterRequest) returns (GetClusterResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+  // RotateBootstrap mints a NEW one-time bootstrap for a BYO cluster and
+  // revokes any outstanding one. Used when the first command expired, and to
+  // re-bootstrap an agent whose credential is lost. The credential the new
+  // token yields REPLACES the cluster's current one on exchange.
+  rpc RotateBootstrap(RotateClusterBootstrapRequest) returns (RotateClusterBootstrapResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+  // RemoveCluster disconnects a BYO cluster: revokes its agent credential and
+  // any outstanding bootstrap, and frees its name. REFUSED (FailedPrecondition)
+  // while any live environment references the cluster.
+  rpc RemoveCluster(RemoveClusterRequest) returns (RemoveClusterResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+}
+
+// ClusterProvider is who runs the cluster. BYO is the customer's own;
+// the VCLUSTER_* values are Reliant-provisioned tenant vClusters (the same
+// discriminator as DeployClusterProvider, one table behind both).
+enum ClusterProvider {
+  CLUSTER_PROVIDER_UNSPECIFIED = 0;
+  CLUSTER_PROVIDER_BYO = 1;
+  CLUSTER_PROVIDER_VCLUSTER_SHARED = 2;
+  CLUSTER_PROVIDER_VCLUSTER_PRIVATE = 3;
+}
+
+// ClusterConnection is whether the platform can currently reach the cluster.
+//
+// For BYO clusters:
+//   WAITING   — registered; no agent has exchanged a bootstrap token yet.
+//   CONNECTED — the agent's last heartbeat is recent.
+//   STALE     — the agent has a credential but has missed
+//               ClusterConnectionPolicy.stale_after_missed heartbeats.
+// A removed cluster is not listed at all, so there is no REVOKED here.
+//
+// For vClusters (read-only): CONNECTED once ready, WAITING while
+// provisioning, FAILED when provisioning failed.
+enum ClusterConnection {
+  CLUSTER_CONNECTION_UNSPECIFIED = 0;
+  CLUSTER_CONNECTION_WAITING = 1;
+  CLUSTER_CONNECTION_CONNECTED = 2;
+  CLUSTER_CONNECTION_STALE = 3;
+  CLUSTER_CONNECTION_FAILED = 4;
+}
+
+message Cluster {
+  string id = 1;
+  // Org-scoped name, a DNS label. The name environments will address the
+  // cluster by (slice 2: forge.RegisteredCluster { name = "..." }).
+  string name = 2;
+  ClusterProvider provider = 3;
+  ClusterConnection connection = 4;
+  // The agent's last heartbeat. Unset until the first one.
+  google.protobuf.Timestamp last_seen_at = 5;
+  // Facts the agent reports. Empty until the first heartbeat.
+  string kubernetes_version = 6;
+  string agent_version = 7;
+  uint32 node_count = 8;
+  // Live environments that target this cluster. Non-empty blocks removal.
+  repeated string environment_ids = 9;
+  google.protobuf.Timestamp created_at = 10;
+  // When the outstanding one-time bootstrap expires. Unset when there is
+  // none (already exchanged, revoked, or a vCluster).
+  google.protobuf.Timestamp bootstrap_expires_at = 11;
+}
+
+// ClusterBootstrap is a one-time install command. The URL embeds a
+// single-use token valid for 15 minutes; this response is the ONLY place the
+// token is ever shown — the platform stores its hash.
+message ClusterBootstrap {
+  // Serves the rendered agent manifest (namespace, service account,
+  // read-only RBAC, Deployment) with the token embedded. Safe to open first
+  // and read: fetching it does not spend the token; the agent's exchange does.
+  string manifest_url = 1;
+  // The one command a customer runs: `kubectl apply -f <manifest_url>`.
+  string command = 2;
+  google.protobuf.Timestamp expires_at = 3;
+}
+
+message RegisterClusterRequest {
+  // A DNS label: lowercase alphanumerics and '-', 1-63 characters, unique
+  // among the org's live clusters.
+  string name = 1;
+}
+
+message RegisterClusterResponse {
+  Cluster cluster = 1;
+  ClusterBootstrap bootstrap = 2;
+}
+
+message ListClustersRequest {}
+
+message ListClustersResponse {
+  // Sorted by name.
+  repeated Cluster clusters = 1;
+}
+
+message GetClusterRequest {
+  string id = 1;
+}
+
+message GetClusterResponse {
+  Cluster cluster = 1;
+}
+
+message RotateClusterBootstrapRequest {
+  string id = 1;
+}
+
+message RotateClusterBootstrapResponse {
+  ClusterBootstrap bootstrap = 1;
+}
+
+message RemoveClusterRequest {
+  string id = 1;
+}
+
+message RemoveClusterResponse {}

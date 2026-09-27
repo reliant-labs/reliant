@@ -37,16 +37,16 @@ option go_package = "github.com/reliant-labs/control-plane/gen/services/deploy/v
 service DeployService {
   // --- Tenant ---------------------------------------------------------
 
-  // GetTenant returns the caller's deploy-product enrollment, or NotFound if
-  // the organization has never deployed. The /deploy empty state reads this.
+  // GetTenant returns the caller's organization as a deploy tenant. There is
+  // no enrollment: the deploy product is open to every org, so every live org
+  // is a tenant (slug and namespace prefix = the org id).
   rpc GetTenant(GetDeployTenantRequest) returns (GetDeployTenantResponse) {
     option (forge.v1.method) = {auth_required: true};
   }
 
-  // CreateTenant enrolls the caller's organization, allocating its immutable
-  // hostname slug. Idempotent: a second call returns the existing tenant
-  // rather than failing, because the /deploy onboarding path can be entered
-  // twice and a duplicate-enrollment error is not a thing a user can act on.
+  // CreateTenant returns the caller's tenant, exactly as GetTenant does —
+  // there is nothing to create (see GetTenant). Kept for clients that call it
+  // before first use; requires org admin. Idempotent.
   rpc CreateTenant(CreateDeployTenantRequest) returns (CreateDeployTenantResponse) {
     option (forge.v1.method) = {
       auth_required: true
@@ -130,7 +130,7 @@ service DeployService {
   // forge deploy is "make it so", and its next step is
   // PublishDeploymentConfig on the returned id.
   //
-  // It runs every gate Create and Update run: entitlement, role, strict spec
+  // It runs every gate Create and Update run: role, strict spec
   // decode, forge's Validate, the hosted shape band, and capacity admission.
   // A different TIER on an existing name is FailedPrecondition (a tier change
   // is a delete and a create; see UpdateDeploymentRequest).
@@ -364,6 +364,9 @@ message ListDeployEnvironmentsRequest {
   // text columns rather than naming one, which is why it is spelled `search`
   // and not `name_contains`: a filter named for a column must BE a column.
   optional string search = 2;
+  // Exact match on the environment's forge project. Unset lists every
+  // project's environments; set to "" lists only the project-less ones.
+  optional string project = 3;
 }
 
 message ListDeployEnvironmentsResponse {
@@ -393,7 +396,8 @@ message DeleteDeployEnvironmentRequest {
 message DeleteDeployEnvironmentResponse {}
 
 message EnsureDeployEnvironmentRequest {
-  // The environment is addressed by spec.name within the caller's org.
+  // The environment is addressed by (spec.project, spec.name) within the
+  // caller's org.
   DeployEnvironmentSpec spec = 1;
 }
 
@@ -427,6 +431,8 @@ message CreateDeploymentRequest {
   string environment_id = 1;
   string name = 2;
   DeployTier tier = 3;
+  reserved 4;
+  reserved "desired";
   google.protobuf.Struct spec = 5;
 }
 
@@ -463,6 +469,8 @@ message ListDeploymentsResponse {
 
 message UpdateDeploymentRequest {
   string deployment_id = 1;
+  reserved 2;
+  reserved "desired";
   // Replaces the tier spec wholesale, validated exactly as on create (see
   // CreateDeploymentRequest). `tier` is absent because a deployment cannot
   // change tier: the tiers differ in which controller reconciles them, so a
@@ -605,6 +613,12 @@ message RollbackReleaseResponse {
 
 message ScaleDeploymentRequest {
   string deployment_id = 1;
+  // The replica count is gone: forge's tiers have none. SimpleBackend is one
+  // container by design, because a replica knob would silently break every
+  // backend that mounts its ReadWriteOnce volume. What remains to scale is
+  // whether the deployment runs at all.
+  reserved 2;
+  reserved "replicas";
   // RUNNING or SUSPENDED.
   controlplane.v1.DeployRunState run_state = 3;
 }

@@ -675,7 +675,8 @@ CREATE TABLE public.projects (
     updated_at timestamp with time zone NOT NULL,
     last_active timestamp with time zone NOT NULL,
     remote_url text,
-    is_forge boolean DEFAULT false NOT NULL
+    is_forge boolean DEFAULT false NOT NULL,
+    forge_project_name text
 );
 
 --

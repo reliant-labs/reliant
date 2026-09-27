@@ -4322,12 +4322,12 @@ const file_services_billing_v1_billing_proto_rawDesc = "" +
 	"\brepaired\x18\x03 \x01(\bR\brepaired\"`\n" +
 	"%RotateCurrentUserReliantAccessRequest\x12&\n" +
 	"\fgrace_period\x18\x01 \x01(\tH\x00R\vgracePeriod\x88\x01\x01B\x0f\n" +
-	"\r_grace_period\"\xf3\x01\n" +
+	"\r_grace_period\"\x88\x02\n" +
 	"&RotateCurrentUserReliantAccessResponse\x12E\n" +
 	"\ventitlement\x18\x01 \x01(\v2#.controlplane.v1.ReliantEntitlementR\ventitlement\x12L\n" +
 	"\x0emanaged_access\x18\x02 \x01(\v2%.controlplane.v1.ManagedReliantAccessR\rmanagedAccess\x12\x18\n" +
 	"\arotated\x18\x03 \x01(\bR\arotated\x12\x1a\n" +
-	"\breplaced\x18\x04 \x01(\bR\breplaced\"&\n" +
+	"\breplaced\x18\x04 \x01(\bR\breplacedJ\x04\b\x05\x10\x06R\rplaintext_key\"&\n" +
 	"$GetCurrentUserReliantOverviewRequest\"e\n" +
 	"%GetCurrentUserReliantOverviewResponse\x12<\n" +
 	"\boverview\x18\x01 \x01(\v2 .controlplane.v1.ReliantOverviewR\boverview\"?\n" +

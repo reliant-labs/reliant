@@ -394,18 +394,19 @@ type Preset struct {
 }
 
 type Project struct {
-	ID            string         `json:"id"`
-	Name          string         `json:"name"`
-	Path          string         `json:"path"`
-	UserID        string         `json:"user_id"`
-	Description   sql.NullString `json:"description"`
-	IsGitRepo     bool           `json:"is_git_repo"`
-	DefaultBranch sql.NullString `json:"default_branch"`
-	CreatedAt     time.Time      `json:"created_at"`
-	UpdatedAt     time.Time      `json:"updated_at"`
-	LastActive    time.Time      `json:"last_active"`
-	RemoteUrl     sql.NullString `json:"remote_url"`
-	IsForge       bool           `json:"is_forge"`
+	ID               string         `json:"id"`
+	Name             string         `json:"name"`
+	Path             string         `json:"path"`
+	UserID           string         `json:"user_id"`
+	Description      sql.NullString `json:"description"`
+	IsGitRepo        bool           `json:"is_git_repo"`
+	DefaultBranch    sql.NullString `json:"default_branch"`
+	CreatedAt        time.Time      `json:"created_at"`
+	UpdatedAt        time.Time      `json:"updated_at"`
+	LastActive       time.Time      `json:"last_active"`
+	RemoteUrl        sql.NullString `json:"remote_url"`
+	IsForge          bool           `json:"is_forge"`
+	ForgeProjectName sql.NullString `json:"forge_project_name"`
 }
 
 type ProjectConfig struct {
