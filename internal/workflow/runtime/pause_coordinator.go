@@ -147,8 +147,10 @@ func newPauseCoordinator(ctx workflow.Context, workflowID string, opts pauseOpti
 
 	// Shared cancellable context for all activity dispatch. One cancelAll()
 	// call cancels every in-flight activity at any nesting depth — including
-	// those in inline workflow executors and loop executors.
-	pc.activityCtx, pc.cancelAll = workflow.WithCancel(ctx)
+	// those in inline workflow executors and loop executors. It is a
+	// cancelScope so those cancels go out in a deterministic order (see
+	// cancel_scope.go).
+	pc.activityCtx, pc.cancelAll = newCancelScope(ctx)
 
 	// Background goroutine to listen for pause signals at any time. This
 	// ensures the flag is set even while the workflow is blocked in
@@ -221,7 +223,7 @@ func newPauseCoordinator(ctx workflow.Context, workflowID string, opts pauseOpti
 func (pc *pauseCoordinator) broadcastResume() {
 	pc.requested = false
 	pc.selfPaused = false
-	pc.activityCtx, pc.cancelAll = workflow.WithCancel(pc.root)
+	pc.activityCtx, pc.cancelAll = newCancelScope(pc.root)
 	pc.epoch++
 }
 

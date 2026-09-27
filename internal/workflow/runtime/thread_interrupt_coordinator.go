@@ -127,7 +127,7 @@ func (c *ThreadInterruptCoordinator) activityContext(thread string, base workflo
 		return base
 	}
 	state := c.state(thread)
-	ctx, cancel := workflow.WithCancel(base)
+	ctx, cancel := withScopedCancel(base)
 	state.waiters = append(state.waiters, threadInterruptActivityContext{
 		epoch:  state.epoch,
 		cancel: cancel,

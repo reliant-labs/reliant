@@ -4066,7 +4066,7 @@ func executeAskUserInline(
 	// STEP 3: Wait for signal or timeout
 	signalName := "signal.question." + createOutput.QuestionID
 	signalCh := workflow.GetSignalChannel(ctx, signalName)
-	timeoutCtx, cancelTimer := workflow.WithCancel(ctx)
+	timeoutCtx, cancelTimer := withScopedCancel(ctx)
 	timeoutFuture := workflow.NewTimer(timeoutCtx, questionTimeout)
 
 	selector := workflow.NewSelector(ctx)
