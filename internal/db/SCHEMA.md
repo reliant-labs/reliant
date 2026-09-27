@@ -24,6 +24,12 @@ snapshot that `sqlc` reads to generate type-safe Go code.
    # Edit the migration file with your schema changes
    ```
 
+   Always let `goose create` pick the version: it stamps the current time
+   to the second. A hand-written `YYYYMMDD000000` collides with another
+   branch doing the same on the same day, and goose then treats one file as
+   the other's (it records only the version). `TestNewMigrationsCarryARealTimestamp`
+   rejects hand-picked times.
+
 2. **Regenerate `postgres/schema.sql`** from the migrations:
 
    ```bash
