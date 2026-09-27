@@ -407,18 +407,18 @@ func (DeployReconcilePolicy) EnumDescriptor() ([]byte, []int) {
 	return file_controlplane_v1_deploy_proto_rawDescGZIP(), []int{5}
 }
 
-// DeployPromotionKind records an operator's INTENT. Both kinds are
-// mechanically identical — a pointer move onto an existing digest — but a
-// rollback must read as a rollback in the audit trail.
+// DeployPromotionKind is what a ledger entry records. There is one kind: a
+// promotion binds an environment to a release. Moving to an OLDER release is
+// still a promotion — recovery is roll forward, there is no rollback.
 //
-// Note that this enum appears only on RESPONSES. A client does not choose a
-// kind; it calls Promote or Rollback, and the server records which.
+// Ledger rows written by the retired Rollback RPC still exist (the ledger is
+// append-only) and are reported as PROMOTE: they bound the env to their
+// release exactly as a promote does. A client never states a kind.
 type DeployPromotionKind int32
 
 const (
 	DeployPromotionKind_DEPLOY_PROMOTION_KIND_UNSPECIFIED DeployPromotionKind = 0
 	DeployPromotionKind_DEPLOY_PROMOTION_KIND_PROMOTE     DeployPromotionKind = 1
-	DeployPromotionKind_DEPLOY_PROMOTION_KIND_ROLLBACK    DeployPromotionKind = 2
 )
 
 // Enum value maps for DeployPromotionKind.
@@ -426,12 +426,10 @@ var (
 	DeployPromotionKind_name = map[int32]string{
 		0: "DEPLOY_PROMOTION_KIND_UNSPECIFIED",
 		1: "DEPLOY_PROMOTION_KIND_PROMOTE",
-		2: "DEPLOY_PROMOTION_KIND_ROLLBACK",
 	}
 	DeployPromotionKind_value = map[string]int32{
 		"DEPLOY_PROMOTION_KIND_UNSPECIFIED": 0,
 		"DEPLOY_PROMOTION_KIND_PROMOTE":     1,
-		"DEPLOY_PROMOTION_KIND_ROLLBACK":    2,
 	}
 )
 
@@ -935,7 +933,7 @@ type DeployEnvironment struct {
 	// the append-only ledger. It is not a stored pointer (migration 00087
 	// dropped that column); the server computes it on read, so it cannot
 	// disagree with the ledger. Empty before the environment's first deploy.
-	// Moved only by Promote / Rollback — never by UpdateEnvironment, which is
+	// Moved only by Promote — never by UpdateEnvironment, which is
 	// why it is not on DeployEnvironmentSpec.
 	CurrentPromotionId string `protobuf:"bytes,6,opt,name=current_promotion_id,json=currentPromotionId,proto3" json:"current_promotion_id,omitempty"`
 	// Set exactly when kind is PREVIEW; the database refuses every other
@@ -1945,8 +1943,8 @@ type DeployPromotion struct {
 	// the promoting service before this row is written, because a record here
 	// could only ever verify that a claim was made, not that a test ran.
 	Gates []*DeployGate `protobuf:"bytes,9,rep,name=gates,proto3" json:"gates,omitempty"`
-	// Free-form reason. Most valuable on a rollback, where "why" is the whole
-	// story and is otherwise lost to chat history.
+	// Free-form reason. Most valuable on a promote that moves an env BEHIND,
+	// where "why" is the whole story and is otherwise lost to chat history.
 	Note      string                 `protobuf:"bytes,10,opt,name=note,proto3" json:"note,omitempty"`
 	CreatedAt *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	// The source pins frozen AT PROMOTE TIME, artifact name → pinned source —
@@ -2695,11 +2693,10 @@ const file_controlplane_v1_deploy_proto_rawDesc = "" +
 	"#DEPLOY_RECONCILE_POLICY_UNSPECIFIED\x10\x00\x12#\n" +
 	"\x1fDEPLOY_RECONCILE_POLICY_OBSERVE\x10\x01\x12$\n" +
 	" DEPLOY_RECONCILE_POLICY_CONVERGE\x10\x02\x12\"\n" +
-	"\x1eDEPLOY_RECONCILE_POLICY_PINNED\x10\x03*\x83\x01\n" +
+	"\x1eDEPLOY_RECONCILE_POLICY_PINNED\x10\x03*_\n" +
 	"\x13DeployPromotionKind\x12%\n" +
 	"!DEPLOY_PROMOTION_KIND_UNSPECIFIED\x10\x00\x12!\n" +
-	"\x1dDEPLOY_PROMOTION_KIND_PROMOTE\x10\x01\x12\"\n" +
-	"\x1eDEPLOY_PROMOTION_KIND_ROLLBACK\x10\x02*\x9b\x01\n" +
+	"\x1dDEPLOY_PROMOTION_KIND_PROMOTE\x10\x01*\x9b\x01\n" +
 	"\x15DeployClusterProvider\x12'\n" +
 	"#DEPLOY_CLUSTER_PROVIDER_UNSPECIFIED\x10\x00\x12+\n" +
 	"'DEPLOY_CLUSTER_PROVIDER_VCLUSTER_SHARED\x10\x01\x12,\n" +

@@ -163,21 +163,13 @@ service DeployService {
     };
   }
 
-  // Rollback re-points an environment at an OLDER release. Mechanically
-  // identical to Promote — the same digest re-point, reusing images already
-  // in the registry — and separate only so intent is recorded: a rollback
-  // must read as a rollback in the audit trail.
-  //
-  // Having its own RPC rather than a `kind` field on Promote is what keeps
-  // the kind honest. A client cannot mislabel a promotion as a rollback,
-  // because a client never states the kind at all; the server records which
-  // method was called.
-  rpc Rollback(RollbackReleaseRequest) returns (RollbackReleaseResponse) {
-    option (forge.v1.method) = {
-      auth_required: true
-      idempotency_key: true
-    };
-  }
+  // There is no Rollback RPC. A rollback claims to undo a release it cannot
+  // undo — the release already ran its migrations and wrote data — so
+  // recovery is ROLL FORWARD: cut a release with the fix and Promote it.
+  // Promoting an OLDER release is still an ordinary Promote; the forge plan
+  // labels it `direction BEHIND`. The RPC, RollbackReleaseRequest and
+  // RollbackReleaseResponse were removed; proto has no `reserved` for a
+  // method or message name, so this comment is the tombstone.
 
   // Scale changes the RUN STATE (running / suspended) and nothing else.
   // Narrow on purpose: this is the button on a detail page, and a request
@@ -285,9 +277,9 @@ service DeployService {
     option (forge.v1.method) = {auth_required: true};
   }
   // ListPromotions returns an environment's ledger, newest first — the
-  // timeline the UI renders and the rollback picker reads. Append-only, so
-  // this is the COMPLETE record, including what was rolled back FROM, which a
-  // current-pointer read cannot show.
+  // timeline the UI renders. Append-only, so this is the COMPLETE record,
+  // including every release the env moved away from, which a current-pointer
+  // read cannot show.
   rpc ListPromotions(ListDeployPromotionsRequest) returns (ListDeployPromotionsResponse) {
     option (forge.v1.method) = {auth_required: true};
   }
@@ -585,26 +577,6 @@ message PromoteReleaseResponse {
   DeployPromotion promotion = 1;
 }
 
-// RollbackReleaseRequest is PromoteReleaseRequest's twin, and carries no image
-// field for the identical reason. Rolling back re-points at a version already
-// in the ledger, reusing digests already in the registry — so the rolled-back
-// bytes cannot differ from the bytes that were running before.
-message RollbackReleaseRequest {
-  string environment_id = 1;
-  // The older release to return to. Must already have been promoted to this
-  // environment: rolling "back" to something that never ran here is a
-  // promotion, and should be called one.
-  string version = 2;
-  // Most valuable field on this message. On a rollback "why" is the whole
-  // story, and it is otherwise lost to chat history.
-  string note = 3;
-  string promoted_by_actor = 4;
-}
-
-message RollbackReleaseResponse {
-  DeployPromotion promotion = 1;
-}
-
 // === Scale and status ===
 
 message ScaleDeploymentRequest {
@@ -760,8 +732,7 @@ message ListDeployReleasesRequest {
   // All `optional` — see ListDeployEnvironmentsRequest.
   optional string version_contains = 1;
   optional string git_commit = 2;
-  // Only releases that have been promoted to this environment. What the
-  // rollback picker asks for.
+  // Only releases that have been promoted to this environment at some point.
   optional string promoted_to_environment_id = 3;
   optional int32 limit = 4;
 }
