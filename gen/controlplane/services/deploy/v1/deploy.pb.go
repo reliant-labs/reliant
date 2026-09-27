@@ -3062,12 +3062,12 @@ const file_services_deploy_v1_deploy_proto_rawDesc = "" +
 	"\x04spec\x18\x01 \x01(\v2&.controlplane.v1.DeployEnvironmentSpecR\x04spec\"\x81\x01\n" +
 	"\x1fEnsureDeployEnvironmentResponse\x12D\n" +
 	"\venvironment\x18\x01 \x01(\v2\".controlplane.v1.DeployEnvironmentR\venvironment\x12\x18\n" +
-	"\acreated\x18\x02 \x01(\bR\acreated\"\xc1\x01\n" +
+	"\acreated\x18\x02 \x01(\bR\acreated\"\xb2\x01\n" +
 	"\x17CreateDeploymentRequest\x12%\n" +
 	"\x0eenvironment_id\x18\x01 \x01(\tR\renvironmentId\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12/\n" +
 	"\x04tier\x18\x03 \x01(\x0e2\x1b.controlplane.v1.DeployTierR\x04tier\x12+\n" +
-	"\x04spec\x18\x05 \x01(\v2\x17.google.protobuf.StructR\x04specJ\x04\b\x04\x10\x05R\adesired\"W\n" +
+	"\x04spec\x18\x05 \x01(\v2\x17.google.protobuf.StructR\x04spec\"W\n" +
 	"\x18CreateDeploymentResponse\x12;\n" +
 	"\n" +
 	"deployment\x18\x01 \x01(\v2\x1b.controlplane.v1.DeploymentR\n" +
@@ -3088,10 +3088,10 @@ const file_services_deploy_v1_deploy_proto_rawDesc = "" +
 	"\x0f_observed_stateB\t\n" +
 	"\a_search\"X\n" +
 	"\x17ListDeploymentsResponse\x12=\n" +
-	"\vdeployments\x18\x01 \x03(\v2\x1b.controlplane.v1.DeploymentR\vdeployments\"z\n" +
+	"\vdeployments\x18\x01 \x03(\v2\x1b.controlplane.v1.DeploymentR\vdeployments\"k\n" +
 	"\x17UpdateDeploymentRequest\x12#\n" +
 	"\rdeployment_id\x18\x01 \x01(\tR\fdeploymentId\x12+\n" +
-	"\x04spec\x18\x03 \x01(\v2\x17.google.protobuf.StructR\x04specJ\x04\b\x02\x10\x03R\adesired\"W\n" +
+	"\x04spec\x18\x03 \x01(\v2\x17.google.protobuf.StructR\x04spec\"W\n" +
 	"\x18UpdateDeploymentResponse\x12;\n" +
 	"\n" +
 	"deployment\x18\x01 \x01(\v2\x1b.controlplane.v1.DeploymentR\n" +
@@ -3136,10 +3136,10 @@ const file_services_deploy_v1_deploy_proto_rawDesc = "" +
 	"\x04note\x18\x03 \x01(\tR\x04note\x12*\n" +
 	"\x11promoted_by_actor\x18\x04 \x01(\tR\x0fpromotedByActor\"Y\n" +
 	"\x17RollbackReleaseResponse\x12>\n" +
-	"\tpromotion\x18\x01 \x01(\v2 .controlplane.v1.DeployPromotionR\tpromotion\"\x8b\x01\n" +
+	"\tpromotion\x18\x01 \x01(\v2 .controlplane.v1.DeployPromotionR\tpromotion\"{\n" +
 	"\x16ScaleDeploymentRequest\x12#\n" +
 	"\rdeployment_id\x18\x01 \x01(\tR\fdeploymentId\x12<\n" +
-	"\trun_state\x18\x03 \x01(\x0e2\x1f.controlplane.v1.DeployRunStateR\brunStateJ\x04\b\x02\x10\x03R\breplicas\"V\n" +
+	"\trun_state\x18\x03 \x01(\x0e2\x1f.controlplane.v1.DeployRunStateR\brunState\"V\n" +
 	"\x17ScaleDeploymentResponse\x12;\n" +
 	"\n" +
 	"deployment\x18\x01 \x01(\v2\x1b.controlplane.v1.DeploymentR\n" +
