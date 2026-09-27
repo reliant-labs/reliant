@@ -13,6 +13,7 @@ import (
 
 	"github.com/anthropics/anthropic-sdk-go"
 	"github.com/anthropics/anthropic-sdk-go/option"
+	"github.com/anthropics/anthropic-sdk-go/packages/ssestream"
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/anthropicwire"
 	toolsPkg "github.com/reliant-labs/reliant/internal/llm/tools"
@@ -549,7 +550,42 @@ func (b *baseClient) streamResponseInternal(ctx context.Context, params anthropi
 	go func() {
 		defer close(eventChan)
 
-		stream := b.client.Messages.NewStreaming(ctx, params)
+		// Open the stream through the retry ladder (stream_retry.go). A request
+		// is retried only while it has produced no event, so nothing is ever
+		// replayed to the consumer; SDK retries are off for this request so
+		// every wait is published as EventRetryWait instead of slept silently.
+		var (
+			stream  *ssestream.Stream[anthropic.MessageStreamEventUnion]
+			hasNext bool
+			openErr error
+		)
+		for attempt := 1; ; attempt++ {
+			stream = b.client.Messages.NewStreaming(ctx, params, option.WithMaxRetries(0))
+			if hasNext = stream.Next(); hasNext {
+				break
+			}
+			wait, retry, err := streamRetryDecision(attempt, stream.Err())
+			if !retry {
+				openErr = err
+				break
+			}
+			_ = stream.Close()
+			logging.Warn("Anthropic stream request failed; retrying",
+				"attempt", wait.Attempt, "delay", wait.Delay, "status", wait.StatusCode,
+				"reason", wait.Reason, "error", stream.Err())
+			select {
+			case eventChan <- llm.DriverEvent{Type: llm.EventRetryWait, Retry: &wait}:
+			case <-ctx.Done():
+				return
+			}
+			select {
+			case <-time.After(wait.Delay):
+			case <-ctx.Done():
+				eventChan <- llm.DriverEvent{Type: llm.EventError, Error: ctx.Err()}
+				return
+			}
+		}
+
 		accumulated := anthropic.Message{}
 		gotMessageStop := false
 		currentToolID := ""
@@ -560,7 +596,7 @@ func (b *baseClient) streamResponseInternal(ctx context.Context, params anthropi
 		var manualThinkingSignature string
 
 		// Process stream events
-		for stream.Next() {
+		for ; hasNext; hasNext = stream.Next() {
 			event := stream.Current()
 
 			// Debug: log all event types
@@ -656,7 +692,13 @@ func (b *baseClient) streamResponseInternal(ctx context.Context, params anthropi
 			"manual_signature_len", len(manualThinkingSignature))
 
 		// Check for stream errors
-		if err := stream.Err(); err != nil && !errors.Is(err, io.EOF) {
+		streamErr := stream.Err()
+		if openErr != nil {
+			// The ladder's verdict, which may wrap the SDK error with why it
+			// stopped retrying (RetryAfterTooLongError).
+			streamErr = openErr
+		}
+		if err := streamErr; err != nil && !errors.Is(err, io.EOF) {
 			logging.Warn("Stream error", "error", err)
 			eventChan <- llm.DriverEvent{Type: llm.EventError, Error: err}
 		}

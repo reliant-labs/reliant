@@ -160,3 +160,17 @@ func TestResilientHTTPClient(t *testing.T) {
 	_, ok := client.Transport.(*otelhttp.Transport)
 	assert.True(t, ok, "transport should be *otelhttp.Transport wrapping resilient transport")
 }
+
+// TestResilientTransportHealthChecksHTTP2Connections pins the ping settings:
+// without them a connection that dies silently (network change, NAT drop)
+// is never noticed, and because every stream to a provider shares it, every
+// chat stalls until the process restarts.
+func TestResilientTransportHealthChecksHTTP2Connections(t *testing.T) {
+	tr := newResilientTransport()
+	if tr.HTTP2 == nil || tr.HTTP2.SendPingTimeout <= 0 || tr.HTTP2.PingTimeout <= 0 {
+		t.Fatalf("HTTP2 health checks not configured: %+v", tr.HTTP2)
+	}
+	if !tr.ForceAttemptHTTP2 {
+		t.Fatal("ForceAttemptHTTP2 is off: a custom DialContext disables HTTP/2 unless forced, and the pings would never run")
+	}
+}

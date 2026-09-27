@@ -12,6 +12,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/chatmarkers"
+
 	"github.com/google/uuid"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/log"
@@ -78,6 +80,16 @@ func classifyError(err error) error {
 	var terminalErr *TerminalError
 	if errors.As(err, &terminalErr) {
 		return temporal.NewNonRetryableApplicationError(terminalErr.Error(), "TerminalError", terminalErr.Cause)
+	}
+
+	// A provider usage window (Anthropic's 5-hour / 7-day subscription limit)
+	// clears in hours, not seconds: retrying only delays the error the user
+	// needs to see. Fail the turn now so the executor shows it and pauses.
+	// Checked before the transient-status rule below, which would otherwise
+	// retry it as an ordinary 429. Matched on the marker, which survives
+	// every wrap; see internal/chatmarkers.
+	if kind, _, ok := chatmarkers.Extract(err.Error()); ok && kind == chatmarkers.KindProviderUsageLimit {
+		return temporal.NewNonRetryableApplicationError(err.Error(), "ProviderUsageLimit", err)
 	}
 
 	// Auto-classify based on error content

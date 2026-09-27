@@ -117,6 +117,24 @@ func newResilientTransport() *http.Transport {
 	// binding constraint.
 	base.ResponseHeaderTimeout = 2 * time.Minute
 
+	// HTTP/2 health checks. Every stream to one provider host is multiplexed
+	// on ONE connection from the shared pool, so a connection that dies
+	// silently takes every chat with it — and Go does not notice on its own.
+	// Observed 2026-09-27: the Mac changed networks, the worker's single
+	// connection to api.anthropic.com stayed bound to a source address the
+	// interface no longer had (328KB stuck in the send queue), and every
+	// CallLLM for 30 minutes opened a stream on it, hit the progress timeout,
+	// and retried onto the same dead connection. The idle-timeout reader
+	// kills a stalled STREAM; only a ping kills a stalled CONNECTION, which
+	// is what makes the next request dial a fresh one.
+	//
+	// SendPingTimeout: ping after this long with no frames received.
+	// PingTimeout: close the connection if the ping is not acknowledged.
+	base.HTTP2 = &http.HTTP2Config{
+		SendPingTimeout: 15 * time.Second,
+		PingTimeout:     10 * time.Second,
+	}
+
 	systemDialer := &net.Dialer{
 		Timeout:   30 * time.Second,
 		KeepAlive: 30 * time.Second,

@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+
+	"github.com/reliant-labs/reliant/internal/chatmarkers"
 )
 
 // llmAPIErrorJSON matches the JSON error payload from Anthropic/LLM streaming errors.
@@ -266,6 +268,12 @@ func extractInfrastructureSummary(errLower string) string {
 //
 // Returns an empty string if no recognizable LLM error is found.
 func extractLLMErrorSummary(errMsg string) string {
+	// A provider usage window names its own reset time; the generic
+	// "Rate limited by the AI provider" below would drop it.
+	if summary := chatmarkers.ProviderUsageLimitSummary(errMsg); summary != "" {
+		return summary
+	}
+
 	errLower := strings.ToLower(errMsg)
 
 	// Infrastructure failures first. They are not provider errors at all, and

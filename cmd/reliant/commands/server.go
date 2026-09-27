@@ -154,6 +154,7 @@ Designed to run as N replicas for horizontal scaling.`,
 
 	// Health
 	cmd.Flags().IntVar(&opts.HealthPort, "health-port", serverEnvOrDefaultInt("HEALTH_PORT", 8081), "Health check endpoint port")
+	cmd.Flags().IntVar(&opts.PprofPort, "pprof-port", serverEnvOrDefaultInt("PPROF_PORT", 6060), "pprof debug server port (binds 127.0.0.1 only)")
 
 	return cmd
 }

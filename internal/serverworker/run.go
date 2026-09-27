@@ -23,6 +23,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/daemon"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/debugserver"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/local"
 	"github.com/reliant-labs/reliant/internal/llm/models"
@@ -56,6 +57,9 @@ type Options struct {
 
 	// Health check
 	HealthPort int
+
+	// PprofPort is the localhost-only diagnostics port (see debugserver).
+	PprofPort int
 }
 
 // Run boots the Temporal worker with the given options. It blocks until a
@@ -338,6 +342,8 @@ func Run(ctx context.Context, opts Options) error {
 			logging.Error("Health endpoint failed", "error", err)
 		}
 	}()
+
+	debugserver.Start(opts.PprofPort)
 
 	logging.Info("temporal-worker started successfully")
 

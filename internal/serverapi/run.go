@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	_ "net/http/pprof" //nolint:gosec // G108: pprof is intentionally exposed for debugging
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -25,6 +24,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/daemon"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/debugserver"
 	grpcserver "github.com/reliant-labs/reliant/internal/grpc"
 	"github.com/reliant-labs/reliant/internal/grpc/services"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
@@ -412,29 +412,7 @@ func Run(ctx context.Context, opts Options) error {
 	// -----------------------------------------------------------------
 	// 4. pprof debug server
 	// -----------------------------------------------------------------
-	go func() {
-		pprofMux := http.NewServeMux()
-		pprofMux.HandleFunc("/debug/pprof/", http.DefaultServeMux.ServeHTTP)
-		pprofMux.HandleFunc("/debug/db", func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Content-Type", "application/json")
-			_, _ = fmt.Fprintf(w, `{"pending_writes": %d, "peak_pending_writes": %d}`,
-				db.GetPendingWrites(), db.GetPeakPendingWrites())
-		})
-		pprofMux.HandleFunc("/debug/db/reset-peak", func(w http.ResponseWriter, r *http.Request) {
-			db.ResetPeakPendingWrites()
-			w.Header().Set("Content-Type", "application/json")
-			_, _ = fmt.Fprintf(w, `{"status": "ok", "message": "peak reset"}`)
-		})
-
-		pprofMux.Handle("/metrics", observability.MetricsHandler())
-
-		pprofAddr := fmt.Sprintf("127.0.0.1:%d", opts.PprofPort)
-		logging.Info("Starting pprof server", "address", pprofAddr)
-		//nolint:gosec // G114: pprof server on localhost, timeouts not needed
-		if err := http.ListenAndServe(pprofAddr, pprofMux); err != nil {
-			logging.Error("pprof server failed", "error", err)
-		}
-	}()
+	debugserver.Start(opts.PprofPort)
 
 	// -----------------------------------------------------------------
 	// 5. Health endpoint
