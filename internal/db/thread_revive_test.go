@@ -5,6 +5,8 @@ import (
 	"context"
 	"testing"
 	"time"
+
+	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
 // TestReviveThread is the inverse of TestReapOrphanedThreads, and pins the
@@ -166,5 +168,133 @@ func TestReviveThread_UnknownThread(t *testing.T) {
 	}
 	if rows != 0 {
 		t.Errorf("ReviveThread moved %d rows for an unknown thread, want 0", rows)
+	}
+}
+
+// TestUpdateWorkflowStatus_ReopenRevivesOwnThread pins the reopening half of
+// the workflow/thread lifecycle at the one writer every reopen goes through.
+//
+// ReviveThread was only called from WorkflowStatusActivity's "started" arm, so
+// a run reopened by any OTHER path left its thread terminal behind a live
+// workflow. The incident: the reconciler terminated a wedged main workflow
+// and marked it failed, ReapOrphanedThreads stamped its thread failed, and
+// the user's resume reset-and-replayed the run. Replay does not re-execute
+// the already-completed "started" activity, and PauseService wrote Active
+// straight onto the workflow row — so the main thread read "failed" while it
+// kept spawning sub-agents. SendAgentMessage then refused to queue into it
+// ("This agent has already finished (status: failed)"), and the stranded-
+// spawn sweep marked two finished sub-agents' reports UNDELIVERED.
+func TestUpdateWorkflowStatus_ReopenRevivesOwnThread(t *testing.T) {
+	repo, cleanup := SetupTestDB(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	chatID := "chat-reopen-revive"
+	createActivityTestChat(t, repo, chatID)
+
+	for _, tc := range []struct {
+		name         string
+		workflowWas  WorkflowStatus
+		threadStatus int32
+	}{
+		{"wedge-terminated then reset-resumed", Failed(), ThreadStatusFailed},
+		{"completed then reopened", Completed(), ThreadStatusCompleted},
+		{"cancelled then reopened", Cancelled(), ThreadStatusCancelled},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			mainID := "wf-reopen-main-" + tc.name
+			insertTestWorkflowWithParent(t, repo, mainID, chatID, nil, tc.workflowWas)
+			insertTestThreadForWorkflow(t, repo, mainID, chatID, mainID, ThreadStatusRunning)
+			completedAt := time.Now().UTC()
+			if _, err := repo.UpdateThreadStatus(ctx, mainID, tc.threadStatus, &completedAt); err != nil {
+				t.Fatalf("UpdateThreadStatus(main): %v", err)
+			}
+
+			// A spawn the reaper closed alongside the main thread. It really
+			// did stop, and reopening its parent must not resurrect it.
+			spawnID := "wf-reopen-spawn-" + tc.name
+			insertTestWorkflowWithParent(t, repo, spawnID, chatID, &mainID, tc.workflowWas)
+			insertTestThreadForWorkflow(t, repo, spawnID, chatID, spawnID, ThreadStatusRunning)
+			if _, err := repo.UpdateThreadStatus(ctx, spawnID, tc.threadStatus, &completedAt); err != nil {
+				t.Fatalf("UpdateThreadStatus(spawn): %v", err)
+			}
+
+			if err := repo.UpdateWorkflowStatus(ctx, mainID, Active()); err != nil {
+				t.Fatalf("UpdateWorkflowStatus(Active): %v", err)
+			}
+
+			mainThread, err := repo.GetThread(ctx, mainID)
+			if err != nil {
+				t.Fatalf("GetThread(main): %v", err)
+			}
+			if mainThread.Status != ThreadStatusRunning {
+				t.Errorf("main thread status = %s, want running: a reopened run's own thread must reopen with it",
+					core.ThreadStatusLabel(mainThread.Status))
+			}
+			if mainThread.CompletedAt != nil {
+				t.Errorf("main thread completed_at = %v, want nil on a reopened thread", mainThread.CompletedAt)
+			}
+
+			spawnThread, err := repo.GetThread(ctx, spawnID)
+			if err != nil {
+				t.Fatalf("GetThread(spawn): %v", err)
+			}
+			if spawnThread.Status != tc.threadStatus {
+				t.Errorf("spawn thread status = %s, want %s untouched",
+					core.ThreadStatusLabel(spawnThread.Status), core.ThreadStatusLabel(tc.threadStatus))
+			}
+		})
+	}
+}
+
+// TestUpdateWorkflowStatus_ActiveOntoLiveRunLeavesThreadAlone guards the
+// reopen revival from the direction that cannot be undone: only a run that
+// had ENDED is reopened. An Active write onto a run that never ended is not
+// a reopen, and reviving a thread there would invite a message into an agent
+// that has stopped.
+//
+//   - Already Active: a spawn thread that has just written its own
+//     "completed" sits behind a still-Active workflow for the moment before
+//     its workflow follows, and a redundant Active write can land in that
+//     window (EnsureWorkflowRunning, a racing resume).
+//   - Paused: a spawn that finished before a chat-wide pause keeps its
+//     finished thread when the run resumes.
+func TestUpdateWorkflowStatus_ActiveOntoLiveRunLeavesThreadAlone(t *testing.T) {
+	repo, cleanup := SetupTestDB(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	chatID := "chat-active-onto-live"
+	createActivityTestChat(t, repo, chatID)
+
+	for _, tc := range []struct {
+		name        string
+		workflowWas WorkflowStatus
+	}{
+		{"already active", Active()},
+		{"paused", Paused()},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			wfID := "wf-active-onto-live-" + tc.name
+			insertTestWorkflowWithParent(t, repo, wfID, chatID, nil, tc.workflowWas)
+			insertTestThreadForWorkflow(t, repo, wfID, chatID, wfID, ThreadStatusRunning)
+			completedAt := time.Now().UTC()
+			if _, err := repo.UpdateThreadStatus(ctx, wfID, ThreadStatusCompleted, &completedAt); err != nil {
+				t.Fatalf("UpdateThreadStatus: %v", err)
+			}
+
+			if err := repo.UpdateWorkflowStatus(ctx, wfID, Active()); err != nil {
+				t.Fatalf("UpdateWorkflowStatus(Active): %v", err)
+			}
+
+			thread, err := repo.GetThread(ctx, wfID)
+			if err != nil {
+				t.Fatalf("GetThread: %v", err)
+			}
+			if thread.Status != ThreadStatusCompleted {
+				t.Errorf("thread status = %s, want completed: an Active write onto a run that never ended is not a reopen",
+					core.ThreadStatusLabel(thread.Status))
+			}
+		})
 	}
 }

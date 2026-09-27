@@ -137,11 +137,61 @@ WHERE m.status = 1
 -- Returns no row (id is the zero value) when a terminal report already
 -- existed -- callers must check RowsAffected via the id, not treat sql.ErrNoRows
 -- as failure.
+--
+-- Every row written here is a stand-in the reconciler fabricated, so it is
+-- stamped synthesized: that is what lets the spawn's own report replace it if
+-- the spawn turns out to be alive after all (EnqueueTerminalAgentReport).
 INSERT INTO agent_messages (
     id, chat_id, from_thread_id, to_thread_id, kind, body, tool_call_id,
-    status, created_at, attachments
+    status, created_at, attachments, synthesized
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, TRUE
 )
 ON CONFLICT (tool_call_id) WHERE kind IN (2, 3, 4) DO NOTHING
+RETURNING id;
+
+-- name: EnqueueTerminalAgentReport :one
+-- A spawn's OWN terminal report (completion / cancelled / failed) to its
+-- parent's mailbox, written by the detached spawn goroutine through the
+-- EnqueueAgentMessage activity.
+--
+-- One report per spawn call is enforced by
+-- idx_agent_messages_one_terminal_report_per_spawn, and a plain INSERT turned
+-- every collision into SQLSTATE 23505 -- which the activity retried three
+-- times and then gave up on, losing the sub-agent's result. Two collisions
+-- are possible, and they want opposite outcomes:
+--
+--   * The slot holds a reconciler STAND-IN (synthesized): the sweep decided
+--     this spawn had ended without reporting, but the spawn was alive -- most
+--     often because a resume reset-and-replayed the run and re-executed it.
+--     The real report must WIN: it replaces the stand-in's body and kind and
+--     goes back to queued, with the stand-in's delivery bookkeeping cleared,
+--     so the parent reads what the sub-agent actually produced. The row keeps
+--     its id, so anything already pointing at it stays valid.
+--   * The slot holds a REAL report: this is a retry of the same activity, or
+--     a replay re-executing a report that already landed. The existing row
+--     stands -- overwriting it could re-queue a report the parent already
+--     read. DO UPDATE ... WHERE false-on-conflict is a no-op that returns no
+--     row, which the caller reports as success.
+--
+-- Returns the id of the row now holding this report, or no row when an
+-- existing real report was kept.
+INSERT INTO agent_messages (
+    id, chat_id, from_thread_id, to_thread_id, kind, body, tool_call_id,
+    status, created_at, attachments, synthesized
+) VALUES (
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, FALSE
+)
+ON CONFLICT (tool_call_id) WHERE kind IN (2, 3, 4) DO UPDATE SET
+    kind = EXCLUDED.kind,
+    body = EXCLUDED.body,
+    from_thread_id = EXCLUDED.from_thread_id,
+    to_thread_id = EXCLUDED.to_thread_id,
+    status = EXCLUDED.status,
+    created_at = EXCLUDED.created_at,
+    attachments = EXCLUDED.attachments,
+    delivered_at = NULL,
+    delivered_message_id = NULL,
+    synthesized = FALSE
+WHERE agent_messages.synthesized
 RETURNING id;

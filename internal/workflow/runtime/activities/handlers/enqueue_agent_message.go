@@ -82,6 +82,23 @@ func (a *EnqueueAgentMessageActivity) Execute(ctx context.Context, input Enqueue
 		msg.ToolCallID = &input.ToolCallID
 	}
 
+	// A spawn's terminal report fills the one slot its spawn call gets
+	// (idx_agent_messages_one_terminal_report_per_spawn), and that slot can
+	// already be taken: by a reconciler stand-in written while this spawn
+	// looked dead, or by this same report on an earlier attempt or replay.
+	// A plain INSERT turned either into SQLSTATE 23505, which exhausted this
+	// activity's retries and dropped the sub-agent's result on the floor.
+	if kind.IsTerminalReport() && msg.ToolCallID != nil {
+		rowID, err := a.repo.EnqueueTerminalAgentReport(ctx, msg)
+		if err != nil {
+			return EnqueueAgentMessageOutput{}, fmt.Errorf("failed to enqueue agent message: %w", err)
+		}
+		// rowID is "" when a real report for this spawn was already in the
+		// parent's mailbox: delivered as far as the caller is concerned, with
+		// no row of its own to name.
+		return EnqueueAgentMessageOutput{ID: rowID}, nil
+	}
+
 	if err := a.repo.EnqueueAgentMessage(ctx, msg); err != nil {
 		return EnqueueAgentMessageOutput{}, fmt.Errorf("failed to enqueue agent message: %w", err)
 	}

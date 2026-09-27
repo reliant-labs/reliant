@@ -205,7 +205,37 @@ type Querier interface {
 	// Returns no row (id is the zero value) when a terminal report already
 	// existed -- callers must check RowsAffected via the id, not treat sql.ErrNoRows
 	// as failure.
+	//
+	// Every row written here is a stand-in the reconciler fabricated, so it is
+	// stamped synthesized: that is what lets the spawn's own report replace it if
+	// the spawn turns out to be alive after all (EnqueueTerminalAgentReport).
 	EnqueueAgentMessageIfAbsent(ctx context.Context, arg EnqueueAgentMessageIfAbsentParams) (string, error)
+	// A spawn's OWN terminal report (completion / cancelled / failed) to its
+	// parent's mailbox, written by the detached spawn goroutine through the
+	// EnqueueAgentMessage activity.
+	//
+	// One report per spawn call is enforced by
+	// idx_agent_messages_one_terminal_report_per_spawn, and a plain INSERT turned
+	// every collision into SQLSTATE 23505 -- which the activity retried three
+	// times and then gave up on, losing the sub-agent's result. Two collisions
+	// are possible, and they want opposite outcomes:
+	//
+	//   * The slot holds a reconciler STAND-IN (synthesized): the sweep decided
+	//     this spawn had ended without reporting, but the spawn was alive -- most
+	//     often because a resume reset-and-replayed the run and re-executed it.
+	//     The real report must WIN: it replaces the stand-in's body and kind and
+	//     goes back to queued, with the stand-in's delivery bookkeeping cleared,
+	//     so the parent reads what the sub-agent actually produced. The row keeps
+	//     its id, so anything already pointing at it stays valid.
+	//   * The slot holds a REAL report: this is a retry of the same activity, or
+	//     a replay re-executing a report that already landed. The existing row
+	//     stands -- overwriting it could re-queue a report the parent already
+	//     read. DO UPDATE ... WHERE false-on-conflict is a no-op that returns no
+	//     row, which the caller reports as success.
+	//
+	// Returns the id of the row now holding this report, or no row when an
+	// existing real report was kept.
+	EnqueueTerminalAgentReport(ctx context.Context, arg EnqueueTerminalAgentReportParams) (string, error)
 	// Get all step executions in a workflow (for full history reconstruction)
 	GetAllStepExecutionsForWorkflow(ctx context.Context, workflowID string) ([]StepExecution, error)
 	// Get a specific approval by ID

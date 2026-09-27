@@ -5,8 +5,6 @@ import (
 	"context"
 	"fmt"
 	"time"
-
-	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
 func (r *Repo) EnqueueAgentMessage(ctx context.Context, msg *AgentMessage) error {
@@ -49,15 +47,50 @@ func (r *Repo) EnqueueAgentMessageIfAbsent(ctx context.Context, msg *AgentMessag
 	if msg.ToThreadID == "" {
 		return false, fmt.Errorf("to thread ID is required")
 	}
-	if msg.ToolCallID == nil || *msg.ToolCallID == "" {
-		return false, fmt.Errorf("tool call ID is required")
-	}
-	switch msg.Kind {
-	case core.AgentMessageKindCompletion, core.AgentMessageKindCancelled, core.AgentMessageKindFailed:
-	default:
-		return false, fmt.Errorf("kind must be a terminal kind (completion, cancelled, or failed), got %d", msg.Kind)
+	if err := validateTerminalReport(msg); err != nil {
+		return false, err
 	}
 	return r.agentMessages.EnqueueAgentMessageIfAbsent(ctx, msg)
+}
+
+// EnqueueTerminalAgentReport writes a spawn's own terminal report to its
+// parent's mailbox, replacing a reconciler stand-in if one holds the spawn's
+// one terminal-report slot. Returns the id of the row now holding the report;
+// "" means a real report for this spawn already exists and was kept — a retry
+// or replay, not a failure.
+func (r *Repo) EnqueueTerminalAgentReport(ctx context.Context, msg *AgentMessage) (string, error) {
+	if msg == nil {
+		return "", fmt.Errorf("agent message cannot be nil")
+	}
+	if msg.ID == "" {
+		return "", fmt.Errorf("agent message ID is required")
+	}
+	if msg.ChatID == "" {
+		return "", fmt.Errorf("chat ID is required")
+	}
+	if msg.FromThreadID == "" {
+		return "", fmt.Errorf("from thread ID is required")
+	}
+	if msg.ToThreadID == "" {
+		return "", fmt.Errorf("to thread ID is required")
+	}
+	if err := validateTerminalReport(msg); err != nil {
+		return "", err
+	}
+	return r.agentMessages.EnqueueTerminalAgentReport(ctx, msg)
+}
+
+// validateTerminalReport checks the two fields that put a row under
+// idx_agent_messages_one_terminal_report_per_spawn: a tool call ID and a
+// terminal kind.
+func validateTerminalReport(msg *AgentMessage) error {
+	if msg.ToolCallID == nil || *msg.ToolCallID == "" {
+		return fmt.Errorf("tool call ID is required")
+	}
+	if !msg.Kind.IsTerminalReport() {
+		return fmt.Errorf("kind must be a terminal kind (completion, cancelled, or failed), got %d", msg.Kind)
+	}
+	return nil
 }
 
 func (r *Repo) ListQueuedAgentMessagesForThread(ctx context.Context, toThreadID string) ([]*AgentMessage, error) {

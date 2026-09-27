@@ -3,6 +3,7 @@ package reconciliation
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/reliant-labs/reliant/internal/db"
@@ -305,6 +306,99 @@ func TestRepairStrandedBackgroundSpawns_UndeliverableIsIdempotent(t *testing.T) 
 	assert.Equal(t, before+1, anomalyCount("stranded_background_spawn_undeliverable"),
 		"exactly one anomaly across both passes")
 	assert.Equal(t, core.ToolCallStatusCancelled, repo.toolCalls["tc-idem"].Status)
+}
+
+// rootRunRepo is mockRepo plus one chat whose root workflow has a given
+// status — just enough for rootAwaitingResume to read. Kept local: the shared
+// mock has no GetWorkflow, and every other test relies on GetChat failing so
+// the guard stays out of the way.
+type rootRunRepo struct {
+	*mockRepo
+	chatID string
+	root   *db.Workflow
+}
+
+func (r *rootRunRepo) GetChat(ctx context.Context, id string) (*db.Chat, error) {
+	if id == r.chatID {
+		rootID := r.root.ID
+		return &db.Chat{ID: id, WorkflowID: &rootID}, nil
+	}
+	return r.mockRepo.GetChat(ctx, id)
+}
+
+func (r *rootRunRepo) GetWorkflow(_ context.Context, id string) (*db.Workflow, error) {
+	if id == r.root.ID {
+		return r.root, nil
+	}
+	return nil, fmt.Errorf("workflow not found: %s", id)
+}
+
+// GetWorkflowCheckpoint follows the real contract for "none": (nil, nil).
+func (r *rootRunRepo) GetWorkflowCheckpoint(_ context.Context, _ string) (*db.WorkflowCheckpoint, error) {
+	return nil, nil
+}
+
+// TestRepairStrandedBackgroundSpawns_SkipsWhileRootRunIsLive is the other half
+// of the chat e6c09159 incident. The root was killed as wedged, the reap
+// stamped its background spawns' workflow rows failed, and the user's resume
+// reset-and-replayed the root back to ACTIVE. Twenty-five seconds later this
+// sweep saw terminal children with no report, fabricated one for each, and
+// took both spawns' single terminal-report slots — while replay was
+// re-executing those very spawns, whose real results then had nowhere to go.
+//
+// A background spawn runs inside the root's own execution, so while the root
+// is live the spawn is running or about to be re-run and will report for
+// itself. The sweep must leave it alone. Paused and pending roots are live
+// for the same reason.
+func TestRepairStrandedBackgroundSpawns_SkipsWhileRootRunIsLive(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		root db.WorkflowStatus
+	}{
+		{"root reset-and-resumed to active", db.Active()},
+		{"root paused", db.Paused()},
+		{"root pending", db.Pending()},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			base := newMockRepo()
+			base.strandedBackgroundSpawns = []*db.StrandedBackgroundSpawn{
+				strandedBackgroundSpawn("tc-live-root", "chat-live-root", "root-thread", "child-thread", db.Failed()),
+			}
+			repo := &rootRunRepo{
+				mockRepo: base,
+				chatID:   "chat-live-root",
+				root:     &db.Workflow{ID: "root-thread", ChatID: "chat-live-root", Status: tc.root},
+			}
+			reconciler := NewReconciler(repo, &mockReconcilerTemporalClient{}, DefaultConfig())
+
+			repaired, err := reconciler.repairStrandedBackgroundSpawns(context.Background(), &passStats{})
+			require.NoError(t, err)
+			assert.Equal(t, 0, repaired)
+			assert.Empty(t, base.enqueuedAgentMessages,
+				"a spawn under a live root will report for itself; a stand-in would take its one report slot")
+		})
+	}
+}
+
+// TestRepairStrandedBackgroundSpawns_RepairsUnderEndedRoot pins that the live-
+// root skip did not swallow the sweep's real job: a root that ENDED and cannot
+// resume (completed here, so there is no checkpoint to relaunch from) left
+// spawns that will never report, and they must still get one.
+func TestRepairStrandedBackgroundSpawns_RepairsUnderEndedRoot(t *testing.T) {
+	base := newMockRepo()
+	base.strandedBackgroundSpawns = []*db.StrandedBackgroundSpawn{
+		strandedBackgroundSpawn("tc-ended-root", "chat-ended-root", "root-thread", "child-thread", db.Completed()),
+	}
+	repo := &rootRunRepo{
+		mockRepo: base,
+		chatID:   "chat-ended-root",
+		root:     &db.Workflow{ID: "root-thread", ChatID: "chat-ended-root", Status: db.Completed()},
+	}
+	reconciler := NewReconciler(repo, &mockReconcilerTemporalClient{}, DefaultConfig())
+
+	_, err := reconciler.repairStrandedBackgroundSpawns(context.Background(), &passStats{})
+	require.NoError(t, err)
+	require.Len(t, base.enqueuedAgentMessages, 1)
 }
 
 // TestReconcileRunningWorkflows_RepairsStrandedBackgroundSpawns confirms the

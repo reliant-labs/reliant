@@ -314,6 +314,11 @@ type Repository interface {
 	// double-deliver a completion (spec §7.1). See AgentMessageStore for the
 	// constraint it relies on.
 	EnqueueAgentMessageIfAbsent(ctx context.Context, msg *AgentMessage) (bool, error)
+	// EnqueueTerminalAgentReport is how a spawn delivers its OWN terminal
+	// report: it replaces a reconciler stand-in and keeps an existing real
+	// report, and never fails on the one-report-per-spawn constraint. See
+	// AgentMessageStore.
+	EnqueueTerminalAgentReport(ctx context.Context, msg *AgentMessage) (string, error)
 	// ListQueuedAgentMessagesForThread returns queued messages in send order
 	// -- delivery order must match send order.
 	ListQueuedAgentMessagesForThread(ctx context.Context, toThreadID string) ([]*AgentMessage, error)

@@ -48,6 +48,18 @@ const (
 	AgentMessageKindHumanMessage AgentMessageKind = 5
 )
 
+// IsTerminalReport reports whether a kind announces how a sub-agent ENDED —
+// the kinds idx_agent_messages_one_terminal_report_per_spawn allows once per
+// spawn call.
+func (k AgentMessageKind) IsTerminalReport() bool {
+	switch k {
+	case AgentMessageKindCompletion, AgentMessageKindCancelled, AgentMessageKindFailed:
+		return true
+	default:
+		return false
+	}
+}
+
 // AgentMessageStatus is the durable lifecycle state of a mailbox row.
 type AgentMessageStatus int32
 
@@ -135,6 +147,14 @@ type AgentMessageStore interface {
 	// (the ordinary outcome the second of two racing callers sees, not an
 	// error).
 	EnqueueAgentMessageIfAbsent(ctx context.Context, msg *AgentMessage) (inserted bool, err error)
+	// EnqueueTerminalAgentReport writes a spawn's OWN terminal report to its
+	// parent's mailbox. Where a terminal report for msg.ToolCallID already
+	// exists it never errors: a reconciler stand-in is replaced in place by
+	// this real report and re-queued, while an existing real report is kept
+	// untouched — the retry/replay case. Returns the id of the row now
+	// holding the report (the stand-in's id when one was replaced), or "" when
+	// an existing real report was kept.
+	EnqueueTerminalAgentReport(ctx context.Context, msg *AgentMessage) (rowID string, err error)
 	// ListQueuedAgentMessagesForThread returns queued messages for a
 	// recipient thread, ordered by created_at ascending -- delivery order
 	// must match send order.

@@ -3,7 +3,11 @@ package runtime
 import (
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
+	"time"
+
+	"github.com/reliant-labs/reliant/internal/chatmarkers"
 )
 
 // llmAPIErrorJSON matches the JSON error payload from Anthropic/LLM streaming errors.
@@ -58,6 +62,27 @@ var networkFailureSignals = []string{
 	"network is unreachable",
 	"no route to host",
 	"tls handshake timeout",
+}
+
+// connectionInterruptedSummary describes a connection that died mid-response
+// because the far end received a TLS record that had been altered in transit
+// ("remote error: tls: bad record MAC").
+//
+// It deliberately names what happened, not where. The damage can happen
+// anywhere on the path, and the obvious guess has already been wrong once: on
+// 2026-09-25 it was attributed to the provider, and on 2026-09-26 it reproduced
+// with curl, uploading to an unrelated server from the user's home network —
+// far more often over IPv4 than IPv6. A summary asserting a location either
+// way would send some users the wrong way.
+//
+// Phrased to be true on both paths that show it: a retrying attempt (the card
+// already says "Retrying") and a paused workflow (which appends its own
+// "send a message to retry").
+const connectionInterruptedSummary = "The connection to the AI provider was interrupted mid-response"
+
+// isConnectionInterrupted reports a TLS integrity failure raised by the peer.
+func isConnectionInterrupted(errLower string) bool {
+	return strings.Contains(errLower, "bad record mac")
 }
 
 // transportLayerSignals name the syscall that failed. They qualify errors that
@@ -259,6 +284,76 @@ func extractInfrastructureSummary(errLower string) string {
 	return ""
 }
 
+// providerRateLimitSummary renders a KindProviderRateLimited marker as the
+// provider's own sentence plus how long until the limit resets, or "" when the
+// message carries no such marker.
+//
+// This exists because the generic rate-limit wording ("wait a few minutes") was
+// shown for a Claude subscription whose usage window resets in hours, while the
+// provider's explanation and its reset time were both discarded. The marker is
+// planted by CallLLM, which is the last place that still holds the SDK's typed
+// error; by the time the error reaches this workflow code it is a string.
+//
+// The wait is rendered relative ("in about 5h") rather than as a clock time:
+// this runs in workflow code, which must not read the clock, and a relative
+// figure needs no timezone.
+func providerRateLimitSummary(errMsg string) string {
+	kind, payload, found := chatmarkers.Extract(errMsg)
+	if !found || kind != chatmarkers.KindProviderRateLimited {
+		return ""
+	}
+	provider, secondsText, _ := strings.Cut(payload, "|")
+
+	// The message the marker is attached to is everything before it, after
+	// Temporal's own frames. Anything after the marker is the SDK's raw 429,
+	// which the marker's prefix already says in the provider's words.
+	loc := strings.Index(errMsg, "["+string(chatmarkers.KindProviderRateLimited)+":")
+	message := cleanTemporalError(strings.TrimSpace(errMsg[:loc]))
+	message = strings.TrimSpace(strings.TrimPrefix(message, "failed to stream LLM response:"))
+
+	// Always lead with the provider: it is what tells the user WHICH
+	// subscription is spent. CallLLM writes "<provider> rate limit: <text>";
+	// anything in front of that is wrapping, so start there when present.
+	label := provider + " rate limit"
+	if provider == "" {
+		label = "Rate limited by the AI provider"
+	}
+	if i := strings.Index(message, label+":"); i >= 0 {
+		message = strings.TrimSpace(message[i+len(label)+1:])
+	}
+	summary := label
+	if message != "" {
+		summary = label + ": " + message
+	}
+
+	seconds, err := strconv.Atoi(strings.TrimSpace(secondsText))
+	if err != nil || seconds <= 0 {
+		return summary
+	}
+	// The provider's sentence is kept byte-for-byte, final period included;
+	// the reset time follows it rather than being spliced into it.
+	return fmt.Sprintf("%s — it resets in about %s", summary, formatResetWait(time.Duration(seconds)*time.Second))
+}
+
+// formatResetWait renders a reset wait at the precision a person plans around:
+// hours and minutes, never seconds.
+func formatResetWait(d time.Duration) string {
+	d = d.Round(time.Minute)
+	if d < time.Minute {
+		return "a minute"
+	}
+	hours := int(d / time.Hour)
+	minutes := int((d % time.Hour) / time.Minute)
+	switch {
+	case hours == 0:
+		return fmt.Sprintf("%dm", minutes)
+	case minutes == 0:
+		return fmt.Sprintf("%dh", hours)
+	default:
+		return fmt.Sprintf("%dh %dm", hours, minutes)
+	}
+}
+
 // extractLLMErrorSummary extracts a clean, user-friendly error summary from a
 // potentially deeply-nested error string. It looks for embedded JSON error payloads
 // from LLM APIs (e.g. Anthropic's {"type":"error","error":{"type":"overloaded_error",...}})
@@ -276,6 +371,13 @@ func extractLLMErrorSummary(errMsg string) string {
 		return summary
 	}
 
+	// A TLS record altered in transit. Checked before the network-failure
+	// branch, whose "check your network connection" asserts a location this
+	// error does not reveal; see connectionInterruptedSummary.
+	if isConnectionInterrupted(errLower) {
+		return connectionInterruptedSummary
+	}
+
 	// Before anything else: if the request never reached the provider, no
 	// provider-specific claim about it can be true.
 	if isNetworkFailure(errLower) {
@@ -284,6 +386,13 @@ func extractLLMErrorSummary(errMsg string) string {
 
 	if reconnectSummary := extractProviderReconnectSummary(errLower); reconnectSummary != "" {
 		return reconnectSummary
+	}
+
+	// Before the JSON/pattern fallbacks: those would match the embedded
+	// rate_limit_error body and report the generic "Rate limited by the AI
+	// provider", dropping the reset time this marker exists to carry.
+	if rateLimit := providerRateLimitSummary(errMsg); rateLimit != "" {
+		return rateLimit
 	}
 
 	// A model the gateway advertises but cannot serve. Placed AFTER the auth

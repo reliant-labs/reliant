@@ -83,6 +83,17 @@ const (
 	// output and no explanation.
 	// Producer: internal/llm/drivers/anthropic (via llm.ErrStreamContentStalled).
 	KindProviderStreamStalled Kind = "RELIANT_PROVIDER_STREAM_STALLED"
+
+	// KindProviderRateLimited signals the provider refused the request with a
+	// rate limit whose reset is too far off to wait out in place — in practice
+	// a subscription that has spent its usage window. Payload is
+	// "<provider>|<seconds until reset>", with the seconds empty when the
+	// provider did not say. The prefix is the provider's own sentence.
+	//
+	// A RELATIVE wait rather than a timestamp, because the summary that renders
+	// it is built inside workflow code, which cannot read the clock.
+	// Producer: internal/workflow/runtime/activities/handlers/call_llm.go.
+	KindProviderRateLimited Kind = "RELIANT_PROVIDER_RATE_LIMITED"
 )
 
 // markerRegex matches any `[<KIND>:<payload>]` tail, allowing an optional

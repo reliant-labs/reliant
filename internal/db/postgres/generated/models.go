@@ -43,6 +43,7 @@ type AgentMessage struct {
 	DeliveredAt        sql.NullTime          `json:"delivered_at"`
 	DeliveredMessageID sql.NullString        `json:"delivered_message_id"`
 	Attachments        pqtype.NullRawMessage `json:"attachments"`
+	Synthesized        bool                  `json:"synthesized"`
 }
 
 type AntigravityAuthToken struct {

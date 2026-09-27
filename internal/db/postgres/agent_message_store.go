@@ -81,6 +81,39 @@ func (s *agentMessageStore) EnqueueAgentMessageIfAbsent(ctx context.Context, msg
 	return true, nil
 }
 
+// EnqueueTerminalAgentReport upserts a spawn's own terminal report over a
+// reconciler stand-in, and leaves an existing real report alone.
+// sql.ErrNoRows is that second outcome (the conflict's WHERE matched nothing,
+// so RETURNING produced no row), not a failure.
+//
+// The returned id is the row that now holds the report. On a replacement that
+// is the stand-in's id, not msg.ID — the upsert rewrites the row in place.
+func (s *agentMessageStore) EnqueueTerminalAgentReport(ctx context.Context, msg *core.AgentMessage) (string, error) {
+	attachments, err := agentMessageAttachmentsToNullRawMessage(msg.Attachments)
+	if err != nil {
+		return "", err
+	}
+	id, err := s.q.EnqueueTerminalAgentReport(ctx, pgdb.EnqueueTerminalAgentReportParams{
+		ID:           msg.ID,
+		ChatID:       msg.ChatID,
+		FromThreadID: msg.FromThreadID,
+		ToThreadID:   msg.ToThreadID,
+		Kind:         int32(msg.Kind),
+		Body:         msg.Body,
+		ToolCallID:   agentMessagePtrToNullString(msg.ToolCallID),
+		Status:       int32(msg.Status),
+		CreatedAt:    msg.CreatedAt,
+		Attachments:  attachments,
+	})
+	if err == sql.ErrNoRows {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	return id, nil
+}
+
 func (s *agentMessageStore) ListQueuedAgentMessagesForThread(ctx context.Context, toThreadID string) ([]*core.AgentMessage, error) {
 	rows, err := s.q.ListQueuedAgentMessagesForThread(ctx, toThreadID)
 	if err != nil {

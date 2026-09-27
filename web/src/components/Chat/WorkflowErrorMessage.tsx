@@ -261,6 +261,14 @@ const NETWORK_FAILURE_SIGNALS = [
   'tls handshake timeout',
 ];
 
+// Mirrors connectionInterruptedSummary in internal/workflow/runtime/error_summary.go.
+// The far end received a TLS record altered in transit ("remote error: tls: bad
+// record MAC"). It names what happened, not where: the damage can happen
+// anywhere on the path, so it asserts neither the user's network nor the
+// provider.
+const CONNECTION_INTERRUPTED_SUMMARY =
+  'The connection to the AI provider was interrupted mid-response. Workflow paused — send a message to retry.';
+
 // These name the syscall that failed. They qualify errors that are ambiguous on
 // their own — "context deadline exceeded" is a plain request timeout elsewhere.
 const TRANSPORT_LAYER_SIGNALS = ['dial tcp', 'dial udp', 'read tcp', 'write tcp'];
@@ -330,6 +338,13 @@ function extractProviderReconnectSummary(lower: string): string | null {
 
 function extractErrorSummaryClientSide(errMsg: string): string | null {
   const lower = errMsg.toLowerCase();
+
+  // A TLS record altered in transit. Checked before the network-failure
+  // branch, whose "check your network" asserts a location this error does not
+  // reveal.
+  if (lower.includes('bad record mac')) {
+    return CONNECTION_INTERRUPTED_SUMMARY;
+  }
 
   // Before anything else: if the request never reached the provider, no
   // provider-specific claim about it can be true.

@@ -45,6 +45,14 @@ export const CHAT_MARKER_KINDS = {
    * pings indefinitely without ever sending content or an error.
    */
   ProviderStreamStalled: "RELIANT_PROVIDER_STREAM_STALLED",
+  /**
+   * The provider refused the request with a rate limit whose reset is too far
+   * off to wait out in place — in practice a subscription that has spent its
+   * usage window. Payload is "<provider>|<seconds until reset>" (seconds empty
+   * when the provider did not say). The prefix is the provider's own sentence,
+   * and the backend's error_summary already states the wait.
+   */
+  ProviderRateLimited: "RELIANT_PROVIDER_RATE_LIMITED",
 } as const;
 
 /**

@@ -145,6 +145,14 @@ func TestExtractLLMErrorSummaryNetworkFailures(t *testing.T) {
 			expected: wantNetworkSummary,
 		},
 		{
+			// Reached a user verbatim as a red card on 2026-09-25. A TLS record
+			// altered somewhere in transit: the summary must say what happened
+			// without asserting where (see connectionInterruptedSummary).
+			name:     "tls bad record MAC mid-stream",
+			errMsg:   `activity error (type: CallLLM, scheduledEventID: 7, startedEventID: 8, identity: 45827.24cadda2@host): failed to stream LLM response: LLM streaming error: remote error: tls: bad record MAC`,
+			expected: "The connection to the AI provider was interrupted mid-response",
+		},
+		{
 			name:     "connection reset mid-stream",
 			errMsg:   `LLM streaming error: read tcp 10.0.0.4:52344->160.79.104.10:443: read: connection reset by peer`,
 			expected: wantNetworkSummary,

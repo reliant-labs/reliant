@@ -78,6 +78,7 @@ CREATE TABLE public.agent_messages (
     delivered_at timestamp with time zone,
     delivered_message_id text,
     attachments jsonb,
+    synthesized boolean DEFAULT false NOT NULL,
     CONSTRAINT agent_messages_delivered_has_time CHECK (((status <> 2) OR (delivered_at IS NOT NULL)))
 );
 
