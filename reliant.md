@@ -67,7 +67,7 @@ We optimize for **distributed** mode:
 
 Postgres is the only supported database driver. SQLite support has been removed.
 
-- Add migrations in `internal/db/migrations/postgres`
+- Add migrations in `internal/db/migrations/postgres` with `goose -dir internal/db/migrations/postgres create <name> sql` — never hand-write the version (a zeroed `HHMMSS` collides across branches)
 - Update `internal/db/postgres/schema.sql` and regenerate `sqlc` code (`make sqlc`) when contracts change
 - Keep generated/query artifacts in sync when contracts change
 
