@@ -12,6 +12,3 @@ ALTER TABLE daemon_pats ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL DEFAULT 'dae
 -- object JWT validation produces. Empty for daemon-kind rows.
 ALTER TABLE daemon_pats ADD COLUMN IF NOT EXISTS user_email TEXT NOT NULL DEFAULT '';
 
--- +goose Down
-ALTER TABLE daemon_pats DROP COLUMN IF EXISTS user_email;
-ALTER TABLE daemon_pats DROP COLUMN IF EXISTS kind;

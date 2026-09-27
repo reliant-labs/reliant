@@ -248,5 +248,3 @@ ALTER TABLE yields ALTER COLUMN status TYPE INTEGER USING
     END;
 ALTER TABLE yields ALTER COLUMN status SET DEFAULT 1;
 
--- +goose Down
--- Pre-launch migration; down migration not supported.

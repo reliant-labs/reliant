@@ -15,9 +15,3 @@ ALTER TABLE threads
     ADD CONSTRAINT threads_chat_id_fkey
     FOREIGN KEY (chat_id) REFERENCES chats(id) ON DELETE CASCADE;
 
--- +goose Down
-ALTER TABLE threads DROP CONSTRAINT threads_chat_id_fkey;
-ALTER TABLE threads RENAME COLUMN chat_id TO conversation_id;
-ALTER TABLE threads
-    ADD CONSTRAINT threads_conversation_id_fkey
-    FOREIGN KEY (conversation_id) REFERENCES chats(id) ON DELETE CASCADE;

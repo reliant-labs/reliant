@@ -14,6 +14,3 @@ CREATE TABLE codex_auth_tokens (
 
 CREATE INDEX idx_codex_auth_tokens_user ON codex_auth_tokens(user_id);
 
--- +goose Down
-
-DROP TABLE IF EXISTS codex_auth_tokens;

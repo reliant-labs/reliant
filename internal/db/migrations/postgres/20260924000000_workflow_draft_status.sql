@@ -18,9 +18,3 @@ UPDATE workflow_drafts SET status = 'complete' WHERE is_valid = 1;
 ALTER TABLE workflow_drafts DROP COLUMN is_valid;
 ALTER TABLE workflow_drafts DROP COLUMN validation_errors;
 
--- +goose Down
-
-ALTER TABLE workflow_drafts ADD COLUMN is_valid BIGINT NOT NULL DEFAULT 0;
-ALTER TABLE workflow_drafts ADD COLUMN validation_errors TEXT;
-UPDATE workflow_drafts SET is_valid = 1 WHERE status = 'complete';
-ALTER TABLE workflow_drafts DROP COLUMN status;

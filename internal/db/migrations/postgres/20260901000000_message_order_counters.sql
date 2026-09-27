@@ -104,5 +104,3 @@ SET last_assigned = GREATEST(
         EXCLUDED.last_assigned
     );
 
--- +goose Down
-DROP TABLE message_order_counters;

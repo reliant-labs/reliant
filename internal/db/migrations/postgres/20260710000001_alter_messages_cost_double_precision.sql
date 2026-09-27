@@ -4,5 +4,3 @@
 -- so widen it to DOUBLE PRECISION to match the application type.
 ALTER TABLE messages ALTER COLUMN cost TYPE DOUBLE PRECISION;
 
--- +goose Down
-ALTER TABLE messages ALTER COLUMN cost TYPE REAL;

@@ -72,8 +72,3 @@ WHERE tc.status = 2
       WHERE w.chat_id = tc.chat_id AND w.status = 2
   );
 
--- +goose Down
-
--- Not reversible: the pre-repair state was "status is wrong", and the original
--- (incorrect) EXECUTING value carries no information worth restoring.
-SELECT 1;

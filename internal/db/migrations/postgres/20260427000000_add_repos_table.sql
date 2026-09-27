@@ -33,6 +33,3 @@ FROM projects p
 WHERE p.is_git_repo = TRUE
   AND NOT EXISTS (SELECT 1 FROM repos r WHERE r.project_id = p.id);
 
--- +goose Down
-DROP INDEX IF EXISTS idx_repos_project;
-DROP TABLE IF EXISTS repos;

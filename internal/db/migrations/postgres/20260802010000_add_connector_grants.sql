@@ -132,6 +132,3 @@ CREATE INDEX idx_connector_audit_user ON connector_audit_log(user_id, created_at
 CREATE INDEX idx_connector_audit_denied ON connector_audit_log(user_id, created_at DESC)
     WHERE denied;
 
--- +goose Down
-DROP TABLE IF EXISTS connector_audit_log;
-DROP TABLE IF EXISTS connector_grants;

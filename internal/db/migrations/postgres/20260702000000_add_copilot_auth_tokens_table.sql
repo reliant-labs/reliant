@@ -13,6 +13,3 @@ CREATE TABLE copilot_auth_tokens (
 
 CREATE INDEX idx_copilot_auth_tokens_user ON copilot_auth_tokens(user_id);
 
--- +goose Down
-
-DROP TABLE IF EXISTS copilot_auth_tokens;

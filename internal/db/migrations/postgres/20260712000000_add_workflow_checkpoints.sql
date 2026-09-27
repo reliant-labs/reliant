@@ -15,5 +15,3 @@ CREATE TABLE IF NOT EXISTS workflow_checkpoints (
 
 CREATE INDEX IF NOT EXISTS idx_workflow_checkpoints_chat_id ON workflow_checkpoints(chat_id);
 
--- +goose Down
-DROP TABLE IF EXISTS workflow_checkpoints;

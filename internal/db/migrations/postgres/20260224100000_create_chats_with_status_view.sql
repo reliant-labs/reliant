@@ -29,5 +29,3 @@ SELECT
     END as workflow_status
 FROM chats c;
 
--- +goose Down
-DROP VIEW IF EXISTS chats_with_status;

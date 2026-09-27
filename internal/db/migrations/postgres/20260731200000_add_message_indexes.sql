@@ -45,14 +45,3 @@ CREATE INDEX IF NOT EXISTS idx_context_windows_parent ON context_windows(parent_
 CREATE INDEX IF NOT EXISTS idx_chat_updates_chat_entity_seq
     ON chat_updates(chat_id, entity_id, sequence_number DESC);
 
--- +goose Down
-
-DROP INDEX IF EXISTS idx_messages_chat_id;
-DROP INDEX IF EXISTS idx_messages_thread_ordinal;
-DROP INDEX IF EXISTS idx_messages_context_window_ordinal;
-DROP INDEX IF EXISTS idx_messages_chat_activity;
-DROP INDEX IF EXISTS idx_content_blocks_message_position;
-DROP INDEX IF EXISTS idx_content_blocks_tool_call_id;
-DROP INDEX IF EXISTS idx_content_blocks_activity;
-DROP INDEX IF EXISTS idx_context_windows_thread_sequence;
-DROP INDEX IF EXISTS idx_context_windows_parent;

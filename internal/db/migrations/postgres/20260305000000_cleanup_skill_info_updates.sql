@@ -8,5 +8,3 @@ WHERE update_type IN (13, 14)
     OR lower(COALESCE(data::jsonb ->> 'message', '')) LIKE 'skill()%'
   );
 
--- +goose Down
--- Pre-launch migration; down migration not supported.

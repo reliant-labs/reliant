@@ -10,7 +10,3 @@ CREATE TABLE IF NOT EXISTS daemon_attachment (
 CREATE INDEX IF NOT EXISTS idx_daemon_attachment_user_id ON daemon_attachment(user_id);
 CREATE INDEX IF NOT EXISTS idx_daemon_attachment_last_activity ON daemon_attachment(last_stream_activity);
 
--- +goose Down
-DROP INDEX IF EXISTS idx_daemon_attachment_last_activity;
-DROP INDEX IF EXISTS idx_daemon_attachment_user_id;
-DROP TABLE IF EXISTS daemon_attachment;

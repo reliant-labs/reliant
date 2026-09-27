@@ -20,6 +20,3 @@ CREATE TABLE temporal_payload_blobs (
 
 CREATE INDEX idx_temporal_payload_blobs_last_ref ON temporal_payload_blobs(last_referenced_at);
 
--- +goose Down
-
-DROP TABLE IF EXISTS temporal_payload_blobs;

@@ -171,14 +171,3 @@ BEGIN
 END $$;
 -- +goose StatementEnd
 
--- +goose Down
--- Irreversible in the strict sense: the deleted lifecycle records cannot be
--- reconstructed (their workflow IDs were derived from Temporal-side state).
--- Dropping the columns restores the old schema shape, which is what a rollback
--- needs; readers fall back to the spawned_by_node_id sentinel, which was never
--- removed from workflows.
-DROP INDEX IF EXISTS idx_threads_origin;
-ALTER TABLE threads DROP COLUMN IF EXISTS completed_at;
-ALTER TABLE threads DROP COLUMN IF EXISTS status;
-ALTER TABLE threads DROP COLUMN IF EXISTS origin_node_id;
-ALTER TABLE threads DROP COLUMN IF EXISTS origin;

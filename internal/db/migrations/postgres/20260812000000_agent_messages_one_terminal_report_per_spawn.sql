@@ -36,6 +36,3 @@ CREATE UNIQUE INDEX idx_agent_messages_one_terminal_report_per_spawn
     ON agent_messages(tool_call_id)
     WHERE kind IN (2, 3, 4);
 
--- +goose Down
-
-DROP INDEX IF EXISTS idx_agent_messages_one_terminal_report_per_spawn;

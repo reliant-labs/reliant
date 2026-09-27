@@ -6,6 +6,3 @@
 ALTER TABLE approvals DROP COLUMN description;
 ALTER TABLE approvals DROP COLUMN actions;
 
--- +goose Down
-ALTER TABLE approvals ADD COLUMN description TEXT NOT NULL DEFAULT '';
-ALTER TABLE approvals ADD COLUMN actions TEXT NOT NULL DEFAULT '[]';

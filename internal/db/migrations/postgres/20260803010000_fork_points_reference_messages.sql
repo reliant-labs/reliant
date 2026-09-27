@@ -116,26 +116,3 @@ ALTER TABLE threads DROP COLUMN fork_at_ordinal;
 ALTER TABLE threads DROP COLUMN fork_at_context_window_id;
 ALTER TABLE context_windows DROP COLUMN fork_at_ordinal;
 
--- +goose Down
--- Rebuilds the offsets from the message references. This is lossy in exactly
--- one way: a fork point that failed to resolve on the way up is NULL here and
--- cannot be recovered, because the ordinal it named is gone with the column.
-ALTER TABLE threads ADD COLUMN fork_at_ordinal bigint;
-ALTER TABLE threads ADD COLUMN fork_at_context_window_id text;
-ALTER TABLE context_windows ADD COLUMN fork_at_ordinal bigint;
-
-UPDATE threads t
-SET fork_at_ordinal = m.ordinal,
-    fork_at_context_window_id = m.context_window_id
-FROM messages m
-WHERE t.fork_at_message_id = m.id;
-
-UPDATE context_windows cw
-SET fork_at_ordinal = m.ordinal
-FROM messages m
-WHERE cw.fork_at_message_id = m.id;
-
-ALTER TABLE threads DROP CONSTRAINT IF EXISTS threads_fork_at_message_id_fkey;
-ALTER TABLE context_windows DROP CONSTRAINT IF EXISTS context_windows_fork_at_message_id_fkey;
-ALTER TABLE threads DROP COLUMN IF EXISTS fork_at_message_id;
-ALTER TABLE context_windows DROP COLUMN IF EXISTS fork_at_message_id;

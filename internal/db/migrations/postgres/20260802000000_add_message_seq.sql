@@ -106,6 +106,3 @@ ALTER TABLE messages ALTER COLUMN seq SET NOT NULL;
 -- a chat at read time.
 ALTER TABLE messages ADD CONSTRAINT messages_chat_seq_key UNIQUE (chat_id, seq);
 
--- +goose Down
-ALTER TABLE messages DROP CONSTRAINT IF EXISTS messages_chat_seq_key;
-ALTER TABLE messages DROP COLUMN IF EXISTS seq;

@@ -4,5 +4,3 @@
 -- +goose Up
 ALTER TABLE workflows DROP COLUMN IF EXISTS paused_at;
 
--- +goose Down
-ALTER TABLE workflows ADD COLUMN paused_at TIMESTAMP;

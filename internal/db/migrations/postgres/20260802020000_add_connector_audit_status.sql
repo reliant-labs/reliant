@@ -34,7 +34,3 @@ ALTER TABLE connector_audit_log
 CREATE INDEX idx_connector_audit_unresolved ON connector_audit_log(created_at DESC)
     WHERE status = 'started';
 
--- +goose Down
-DROP INDEX IF EXISTS idx_connector_audit_unresolved;
-ALTER TABLE connector_audit_log DROP CONSTRAINT IF EXISTS connector_audit_status_valid;
-ALTER TABLE connector_audit_log DROP COLUMN IF EXISTS status;

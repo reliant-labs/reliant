@@ -93,9 +93,3 @@ SET child_workflow_id = u.thread_id,
 FROM unambiguous u
 WHERE tc.id = u.call_id;
 
--- +goose Down
-
--- Deliberately not reversible. The prior state of these rows is NULL -- the
--- absence of a fact, carrying no information -- and this migration only ever
--- fills NULLs, so there is nothing to restore and nothing was overwritten.
-SELECT 1;

@@ -43,5 +43,3 @@ CREATE UNIQUE INDEX IF NOT EXISTS settings_user_key_unique
     ON settings (user_id, key)
     WHERE project_id IS NULL;
 
--- +goose Down
-DROP INDEX IF EXISTS settings_user_key_unique;

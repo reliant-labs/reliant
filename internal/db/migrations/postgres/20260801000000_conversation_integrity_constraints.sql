@@ -220,16 +220,3 @@ CREATE UNIQUE INDEX messages_chat_activity_key
 ALTER TABLE chat_updates
     ADD CONSTRAINT chat_updates_chat_sequence_key UNIQUE (chat_id, sequence_number);
 
--- +goose Down
-
-ALTER TABLE chat_updates DROP CONSTRAINT IF EXISTS chat_updates_chat_sequence_key;
-DROP INDEX IF EXISTS messages_chat_activity_key;
-ALTER TABLE messages DROP CONSTRAINT IF EXISTS messages_thread_ordinal_key;
-ALTER TABLE context_windows DROP CONSTRAINT IF EXISTS context_windows_thread_id_fkey;
-ALTER TABLE threads DROP CONSTRAINT IF EXISTS threads_conversation_id_fkey;
-ALTER TABLE message_content_blocks DROP CONSTRAINT IF EXISTS message_content_blocks_message_id_fkey;
-ALTER TABLE messages DROP CONSTRAINT IF EXISTS messages_thread_id_fkey;
-ALTER TABLE messages DROP CONSTRAINT IF EXISTS messages_chat_id_fkey;
-
--- The cleanup deletions are not reversible; the rows they removed were
--- unreachable by every query path in the application.

@@ -331,7 +331,7 @@ migration:
 		echo "$(YELLOW)⚠️  Timestamp collision detected, bumped to $$TIMESTAMP$(NC)"; \
 	fi; \
 	FILE="internal/db/migrations/postgres/$${TIMESTAMP}_$(NAME).sql"; \
-	printf -- '-- +goose Up\n\n-- +goose Down\n' > "$$FILE"; \
+	printf -- '-- +goose Up\n\n' > "$$FILE"; \
 	echo "$(GREEN)✅ Migration created: $$FILE$(NC)"
 	@echo "$(YELLOW)Next steps:$(NC)"
 	@echo "  1. Edit the migration file"

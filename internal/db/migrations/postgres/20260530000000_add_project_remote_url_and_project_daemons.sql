@@ -32,8 +32,3 @@ CREATE TABLE project_daemons (
 
 CREATE INDEX project_daemons_daemon_idx ON project_daemons(daemon_id);
 
--- +goose Down
-DROP INDEX IF EXISTS project_daemons_daemon_idx;
-DROP TABLE IF EXISTS project_daemons;
-DROP INDEX IF EXISTS projects_user_remote_url_uniq;
-ALTER TABLE projects DROP COLUMN remote_url;

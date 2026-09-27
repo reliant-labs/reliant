@@ -6,5 +6,3 @@
 -- recorded owner and fall back to default daemon resolution.
 ALTER TABLE worktrees ADD COLUMN daemon_id TEXT;
 
--- +goose Down
-ALTER TABLE worktrees DROP COLUMN daemon_id;
