@@ -40,7 +40,7 @@ Each tag represents a distinct characteristic. Models can have multiple tags.
 
 **meta** identifies models used for Reliant's internal operations like generating conversation titles and compacting long conversations. You typically do not need to select meta models directly—Reliant uses them automatically for background tasks.
 
-**local** identifies models that run on your local hardware rather than cloud APIs. Custom models you add with the `local` driver receive this tag automatically.
+**local** identifies models that run on your local hardware rather than cloud APIs. Models Reliant *auto-discovers* from your configured local endpoint (see [Provider Configuration](#provider-configuration)) receive this tag automatically. A custom model you define by hand needs to be listed under `models.tags` yourself—see [Adding Custom Models](#adding-custom-models).
 
 ### Multiple Tags
 
@@ -71,64 +71,77 @@ tags: [local, cheap]   # Strongly prefer local, cheap is nice-to-have
 tags: [cheap, local]   # Strongly prefer cheap, local is nice-to-have
 ```
 
-## Configuring Tag Preferences
+## Customizing Tiers
 
-By default, Reliant selects from matching models based on the order they appear in its internal registry. You can override this by specifying your own preference order for any tag.
+Under the hood, each tag is not just a list of models—it is an ordered list of `{model, thinking_level}` entries. Selecting a tier picks both a model *and* the effort it thinks at in one step: `tags: [flagship]` might resolve to Claude Opus running at `xhigh` effort, while `tags: [moderate]` resolves to the same model running at `high`. Reliant walks the list in order and stops at the first entry whose model you have a configured provider for.
 
-In `~/.reliant/config.yaml`:
+You can override this ordering—and the effort each entry runs at—by specifying your own entries for any tag in `~/.reliant/config.yaml`:
 
 ```yaml
 models:
-  tag_preferences:
+  tags:
     flagship:
-      - gpt-5.3-codex
-      - claude-4.6-opus
-      - gemini-3.1-pro-preview
+      - { model: gpt-5.3-codex, thinking_level: xhigh }
+      - { model: claude-4.6-opus, thinking_level: high }
+      - { model: gemini-3.1-pro-preview, thinking_level: high }
 
     fast:
-      - gemini-2.5-flash
-      - claude-4.5-haiku
-      - gpt-5-mini
+      - { model: gemini-2.5-flash }
+      - { model: claude-4.5-haiku }
+      - { model: gpt-5-mini }
 
     moderate:
-      - claude-4.6-sonnet
-      - claude-4.5-sonnet
-      - gpt-5.2
-      - gemini-2.5-pro
+      - { model: claude-4.6-sonnet, thinking_level: high }
+      - { model: claude-4.5-sonnet, thinking_level: high }
+      - { model: gpt-5.2 }
+      - { model: gemini-2.5-pro }
 ```
 
-When a workflow requests `tags: [flagship]`, Reliant tries the models in your preference order. The first model with an available provider wins.
+Your entries are **prepended** to the built-in list for that tag—they never replace it. The built-in entries stay behind yours as the fallback, so naming one preferred model never strands you without a flagship model at all if that provider isn't configured. When a workflow requests `tags: [flagship]`, Reliant tries your entries first, in order, then falls through to the built-ins for any model you didn't mention.
 
-This lets you express preferences like preferring one provider's models when available or using a certain family for speed-critical work without hard-coding specific models into your workflows.
+If you list a model that already appears in the built-in list for that tag, your entry wins outright: it takes your position in the order and your effort, and the built-in copy of that entry is dropped (a model can only ever be reached through its earliest, highest-priority listing). This is also how you retune a built-in tier's effort without touching anything else—list the same model with a different `thinking_level` and nothing else about the tier changes.
 
-### Partial Preferences
+### Partial Overrides
 
-You do not need to list every model for a tag. Any models not in your preference list maintain their default ordering after your preferred models:
+You do not need to list every model for a tag. Any built-in models you don't mention keep their default position, right after your entries:
 
 ```yaml
 models:
-  tag_preferences:
+  tags:
     flagship:
-      - claude-4.6-opus
-      # Other flagship models follow in default order
+      - { model: claude-4.6-opus, thinking_level: high }
+      # Other flagship models follow in built-in order
 ```
 
-If a model in your preference list does not have the specified tag, Reliant silently skips it. This prevents errors if you list a model that does not apply.
+Every model you name in `tags:` must exist—either as a built-in model or as one of your own `custom` models (see below). An unknown model ID, an unrecognized `thinking_level`, or the same model listed twice under one tag is a **hard error** at config load: Reliant refuses to start rather than silently ignoring the typo.
+
+### Thinking Effort Per Tier
+
+The `thinking_level` on a tag entry is the effort a request runs at when it resolves through that entry and the caller didn't already ask for a specific level. It's an aspiration, not a requirement—Reliant clamps it down to whatever levels the model actually supports, so setting `xhigh` on a model that tops out at `high` quietly runs at `high` instead of erroring or sending an unsupported value to the provider.
+
+You can omit `thinking_level` entirely, as the `fast` tier does above. In that case the model runs at its own capability default (`medium` for models that support extended thinking). This is also what happens when a workflow selects a model directly by `id:` instead of by tag—explicit ID selection has no tier to inherit an effort from, so it always gets the model's capability default.
+
+Because effort lives on the tag entry rather than on the model, the same model can serve more than one tier at different efforts. Reliant's own built-in catalog does exactly this: one Claude Opus model is the `flagship` entry at `xhigh` and the `moderate` entry at `high`—two tiers, one model, two efforts.
 
 ## Adding Custom Models
 
-You can add custom models for local providers like Ollama, LM Studio, or any OpenAI-compatible endpoint. Custom models integrate fully with the tag system—give them appropriate tags and they participate in tag-based selection alongside built-in models.
+You can add custom models for local providers like Ollama, LM Studio, or any OpenAI-compatible endpoint. Custom models carry no tags of their own—a custom model joins a tier by being listed under `models.tags`, exactly like retuning a built-in tier.
 
 ### Local Model Example
 
-To add a local CodeLlama model running through Ollama:
+To add a local CodeLlama model running through Ollama and make it available under the `local` and `fast` tags:
 
 ```yaml
 models:
+  tags:
+    local:
+      - { model: local-codellama }
+    fast:
+      - { model: local-codellama }
+
   custom:
     - id: local-codellama
       name: Local CodeLlama
-      tags: [local, fast]
       visibility: user
       capabilities:
         can_reason: false
@@ -156,7 +169,7 @@ Field notes:
 
 **name** is the human-readable name shown in the UI.
 
-**tags** determine when this model is considered for tag-based selection.
+Custom models have no `tags:` field of their own—list the model's `id` under `models.tags` for every tier it should serve, as shown above.
 
 **visibility** controls where the model appears:
 - `user`: shows in the model selector UI
@@ -184,10 +197,13 @@ A custom model can have multiple providers for redundancy:
 
 ```yaml
 models:
+  tags:
+    moderate:
+      - { model: mixtral-8x22b }
+
   custom:
     - id: mixtral-8x22b
       name: Mixtral 8x22B
-      tags: [moderate]
       visibility: user
       capabilities:
         can_reason: false
@@ -272,24 +288,28 @@ Here is a complete `~/.reliant/config.yaml` demonstrating all model configuratio
 
 ```yaml
 models:
-  # Customize which models are preferred for each tag
-  tag_preferences:
+  # Customize which models (and efforts) win each tag
+  tags:
     flagship:
-      - gpt-5.3-codex
-      - claude-4.6-opus
+      - { model: gpt-5.3-codex, thinking_level: xhigh }
+      - { model: claude-4.6-opus, thinking_level: high }
     moderate:
-      - claude-4.5-sonnet
-      - gpt-5.2
+      - { model: claude-4.5-sonnet, thinking_level: high }
+      - { model: gpt-5.2 }
     fast:
-      - local-qwen
-      - gemini-2.5-flash
-      - claude-4.5-haiku
+      - { model: local-qwen }
+      - { model: gemini-2.5-flash }
+      - { model: claude-4.5-haiku }
+    local:
+      - { model: local-qwen }
+      - { model: local-deepseek }
+    reasoning:
+      - { model: local-deepseek }
 
   # Add custom models
   custom:
     - id: local-qwen
       name: Qwen 2.5 32B
-      tags: [local, fast, moderate]
       visibility: user
       capabilities:
         can_reason: false
@@ -308,7 +328,6 @@ models:
 
     - id: local-deepseek
       name: DeepSeek Coder V2
-      tags: [local, reasoning]
       visibility: user
       capabilities:
         can_reason: true
@@ -331,7 +350,7 @@ models:
 ```
 
 With this configuration:
-- Workflows requesting `[flagship]` prefer GPT Codex
+- Workflows requesting `[flagship]` prefer GPT Codex at `xhigh` effort
 - Workflows requesting `[fast]` prefer your local Qwen model
 - Workflows requesting `[reasoning]` can use your local DeepSeek Coder
 - All models participate in Reliant's cost tracking
@@ -346,9 +365,13 @@ Reliant validates your model configuration when it loads. Common validation erro
 
 **custom model ID conflicts with built-in model**: Your custom model ID must not match any built-in model ID.
 
-**unknown model ID in preference**: A model listed in `tag_preferences` does not exist. Check for typos.
+**tags references unknown model**: A model listed under `models.tags` does not exist as a built-in or custom model. Check for typos, or make sure the custom model is defined in `models.custom`.
 
-Validation warnings appear in logs but do not prevent Reliant from starting. For example, listing a model in tag preferences that does not have that tag generates a warning but continues normally.
+**unknown thinking level**: A `thinking_level` on a tag entry is not one of Reliant's recognized effort levels (e.g. `low`, `medium`, `high`, `xhigh`).
+
+**model listed more than once**: The same model appears twice under one tag. Only the first, higher-priority listing could ever win, so this fails at load rather than silently picking one.
+
+These are hard errors—Reliant refuses to start with an invalid model configuration rather than silently ignoring the mistake.
 
 ## Related Topics
 

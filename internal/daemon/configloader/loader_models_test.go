@@ -4,6 +4,7 @@ package configloader
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/reliant-labs/reliant/internal/config"
@@ -97,8 +98,8 @@ func TestMergeModelsConfig_UserConfigPassthrough(t *testing.T) {
 		Custom: []models.ModelDefinition{
 			{ID: "test-model"},
 		},
-		TagPreferences: map[string][]string{
-			"fast": {"model-a", "model-b"},
+		Tags: map[string][]models.TagEntry{
+			"fast": {{Model: "model-a"}, {Model: "model-b"}},
 		},
 	}
 
@@ -160,10 +161,14 @@ models:
   providers:
     local:
       base_url: http://localhost:11434/v1
+  tags:
+    local:
+      - {model: local-test}
+    fast:
+      - {model: local-test}
   custom:
     - id: local-test
       name: Test Model
-      tags: [local, fast]
       providers:
         - driver: local
           api_model: test:latest
@@ -200,6 +205,14 @@ models:
 	}
 	if cfg.Models.Custom[0].ID != "local-test" {
 		t.Errorf("Custom model ID = %q, want %q", cfg.Models.Custom[0].ID, "local-test")
+	}
+
+	// Check the custom model's tier membership came through the user tags.
+	for _, tag := range []string{"local", "fast"} {
+		entries := cfg.Models.Tags[tag]
+		if len(entries) != 1 || entries[0].Model != "local-test" {
+			t.Errorf("Tags[%q] = %+v, want one entry for local-test", tag, entries)
+		}
 	}
 }
 
@@ -241,10 +254,16 @@ models:
   providers:
     local:
       base_url: http://localhost:11434/v1
+  tags:
+    local:
+      - {model: local-qwen3}
+    fast:
+      - {model: local-qwen3}
+    moderate:
+      - {model: local-qwen3, thinking_level: high}
   custom:
     - id: local-qwen3
       name: Qwen3 (Ollama)
-      tags: [local, fast, moderate]
       visibility: user
       capabilities:
         can_reason: true
@@ -302,8 +321,32 @@ models:
 	if model.Name != "Qwen3 (Ollama)" {
 		t.Errorf("Name = %q, want 'Qwen3 (Ollama)'", model.Name)
 	}
-	if len(model.Tags) != 3 {
-		t.Errorf("Tags count = %d, want 3", len(model.Tags))
+	// A custom model joins tiers through the user `tags:` block, not a field
+	// on the model itself.
+	if len(cfg.Models.Tags) != 3 {
+		t.Errorf("Tags count = %d, want 3", len(cfg.Models.Tags))
+	}
+	for _, tag := range []string{"local", "fast", "moderate"} {
+		entries := cfg.Models.Tags[tag]
+		if len(entries) != 1 || entries[0].Model != "local-qwen3" {
+			t.Errorf("Tags[%q] = %+v, want one entry for local-qwen3", tag, entries)
+		}
+	}
+	if got := cfg.Models.Tags["moderate"]; len(got) == 1 && got[0].ThinkingLevel != "high" {
+		t.Errorf("Tags[moderate][0].ThinkingLevel = %q, want high", got[0].ThinkingLevel)
+	}
+
+	// And the loaded config actually places the model in those tiers once
+	// merged into a registry.
+	reg := models.MustGetRegistry().Clone()
+	if err := reg.MergeUserConfig(cfg.Models); err != nil {
+		t.Fatalf("MergeUserConfig failed: %v", err)
+	}
+	gotTags := reg.TagsOf("local-qwen3")
+	for _, tag := range []string{"local", "fast", "moderate"} {
+		if !slices.Contains(gotTags, tag) {
+			t.Errorf("TagsOf(local-qwen3) = %v, missing %q", gotTags, tag)
+		}
 	}
 	if model.Capabilities.MaxContextWindow != 200000 {
 		t.Errorf("MaxContextWindow = %d, want 200000", model.Capabilities.MaxContextWindow)

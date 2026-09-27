@@ -33,9 +33,16 @@ interface Model {
   metadata?: Record<string, unknown>;
 }
 
+/** What a tag selector resolves to for this user: model + the tier's effort. */
+export interface TierResolution {
+  modelId: string; // "modelId@driverId", same format as Model.id
+  thinkingLevel: string; // "" = the model cannot reason
+}
+
 interface GlobalDataState {
   // Data
   models: Model[];
+  tiers: Record<string, TierResolution>;
   workflows: WorkflowDef[];
   presets: Preset[];
 
@@ -70,6 +77,7 @@ let pendingPresetFetch: { projectId: string; promise: Promise<void> } | null = n
 export const useGlobalDataStore = create<GlobalDataState>((set, get) => ({
   // Initial state
   models: [],
+  tiers: {},
   workflows: [],
   presets: [],
 
@@ -130,6 +138,10 @@ export const useGlobalDataStore = create<GlobalDataState>((set, get) => ({
         modelsResult.status === "fulfilled"
           ? modelsResult.value.models || []
           : [],
+      tiers:
+        modelsResult.status === "fulfilled"
+          ? modelsResult.value.tiers || {}
+          : {},
       workflows:
         workflowsResult.status === "fulfilled"
           ? workflowsResult.value.workflows || []
@@ -169,7 +181,11 @@ export const useGlobalDataStore = create<GlobalDataState>((set, get) => ({
     set({ modelsLoading: true, modelsError: null });
     try {
       const response = await api.models.list();
-      set({ models: response.models || [], modelsLoading: false });
+      set({
+        models: response.models || [],
+        tiers: response.tiers || {},
+        modelsLoading: false,
+      });
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : "Failed to fetch models";
@@ -236,6 +252,7 @@ export const GlobalDataContext = React.createContext<boolean>(false);
 // Selector hooks for convenience - returns data with loading/error states
 export const useModels = () => {
   const models = useGlobalDataStore((state) => state.models);
+  const tiers = useGlobalDataStore((state) => state.tiers);
   const modelsLoading = useGlobalDataStore((state) => state.modelsLoading);
   const modelsError = useGlobalDataStore((state) => state.modelsError);
   const isPrefetching = useGlobalDataStore((state) => state.isPrefetching);
@@ -250,7 +267,7 @@ export const useModels = () => {
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  return { models, loading: modelsLoading || isPrefetching, error: modelsError };
+  return { models, tiers, loading: modelsLoading || isPrefetching, error: modelsError };
 };
 
 export const useWorkflows = () => {

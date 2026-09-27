@@ -16,7 +16,6 @@ func modalityTestRegistry(t *testing.T) *ModelRegistry {
 		{
 			ID:   "text-cheap",
 			Name: "Text Cheap",
-			Tags: []string{"cheap", "fast"},
 			// No output_modalities: exercises the text default.
 			Capabilities: ModelCapabilities{SupportsTools: true},
 			Providers:    []ProviderMapping{{Driver: "openai", APIModel: "text-cheap"}},
@@ -24,13 +23,16 @@ func modalityTestRegistry(t *testing.T) *ModelRegistry {
 		{
 			ID:   "image-model",
 			Name: "Image Model",
-			Tags: []string{"cheap", "image-gen"},
 			Capabilities: ModelCapabilities{
 				OutputModalities: []Modality{ModalityImage},
 			},
 			Providers: []ProviderMapping{{Driver: "openai", APIModel: "image-model"}},
 		},
-	}, nil)
+	}, map[string][]TagEntry{
+		"cheap":     {{Model: "text-cheap"}, {Model: "image-model"}},
+		"fast":      {{Model: "text-cheap"}},
+		"image-gen": {{Model: "image-model"}},
+	})
 	if err != nil {
 		t.Fatalf("buildRegistry: %v", err)
 	}

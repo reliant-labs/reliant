@@ -4,6 +4,7 @@ package models
 import (
 	"fmt"
 	"os"
+	"slices"
 
 	"gopkg.in/yaml.v3"
 )
@@ -39,13 +40,16 @@ func LoadUserModelsConfigFromBytes(data []byte) (*UserModelsConfig, error) {
 // LocalModelDiscoverer is a function that discovers models from a local endpoint.
 // It returns a list of model definitions or an error.
 // The baseURL is the OpenAI-compatible API endpoint (e.g., http://localhost:11434/v1).
+//
+// Every discovered model is listed under the `local` tag, after any entries
+// already there.
 type LocalModelDiscoverer func(baseURL string) ([]ModelDefinition, error)
 
 // MergeUserConfig applies user configuration to the registry.
 // This:
 //  1. Discovers local models if provider is configured
 //  2. Adds custom models to the registry
-//  3. Applies tag preferences (reorders byTag lists)
+//  3. Prepends the user's tag entries to the built-in tag lists
 //
 // Note: This modifies the registry in place. Clone first if you need to preserve
 // the original.
@@ -60,7 +64,7 @@ func (r *ModelRegistry) MergeUserConfig(cfg *UserModelsConfig) error {
 // This:
 //  1. Discovers local models if provider is configured and discoverer is provided
 //  2. Adds custom models to the registry
-//  3. Applies tag preferences (reorders byTag lists)
+//  3. Prepends the user's tag entries to the built-in tag lists
 //
 // Note: This modifies the registry in place. Clone first if you need to preserve
 // the original.
@@ -79,8 +83,9 @@ func (r *ModelRegistry) MergeUserConfigWithDiscovery(cfg *UserModelsConfig, disc
 		return err
 	}
 
-	// Step 3: Apply tag preferences
-	if err := r.applyTagPreferences(cfg.TagPreferences); err != nil {
+	// Step 3: The user's tag entries go first. Models are all known by now,
+	// so an entry naming a custom or discovered model validates.
+	if err := r.applyUserTags(cfg.Tags); err != nil {
 		return err
 	}
 
@@ -106,19 +111,20 @@ func (r *ModelRegistry) discoverLocalModels(cfg *UserModelsConfig, discoverer Lo
 		if _, exists := r.byID[model.ID]; exists {
 			continue
 		}
-
-		// Add to models slice and index
-		r.models = append(r.models, model)
-		modelPtr := &r.models[len(r.models)-1]
-		r.byID[model.ID] = modelPtr
-
-		// Add to tag indices
-		for _, tag := range model.Tags {
-			r.byTag[tag] = append(r.byTag[tag], modelPtr)
-		}
+		r.addModel(model)
+		r.tags[TagLocal] = append(r.tags[TagLocal], TagEntry{Model: model.ID})
 	}
 
 	return nil
+}
+
+// addModel appends a model and re-points the id index. Appending can move
+// the backing array, so every pointer is rebuilt rather than just the new one.
+func (r *ModelRegistry) addModel(model ModelDefinition) {
+	r.models = append(r.models, model)
+	for i := range r.models {
+		r.byID[r.models[i].ID] = &r.models[i]
+	}
 }
 
 // addCustomModels adds user-defined models to the registry.
@@ -144,75 +150,32 @@ func (r *ModelRegistry) addCustomModels(custom []ModelDefinition) error {
 		if _, exists := r.byID[model.ID]; exists {
 			return fmt.Errorf("custom model ID conflicts with existing model: %s", model.ID)
 		}
-
-		// Add to models slice and index
-		r.models = append(r.models, model)
-		modelPtr := &r.models[len(r.models)-1]
-		r.byID[model.ID] = modelPtr
-
-		// Add to tag indices
-		for _, tag := range model.Tags {
-			r.byTag[tag] = append(r.byTag[tag], modelPtr)
-		}
+		r.addModel(model)
 	}
 
 	return nil
 }
 
-// applyTagPreferences reorders the byTag lists according to user preferences.
-// For each tag in preferences, the specified model IDs are moved to the front
-// of that tag's list in the specified order.
-func (r *ModelRegistry) applyTagPreferences(preferences map[string][]string) error {
-	for tag, preferredIDs := range preferences {
-		if err := r.reorderTagModels(tag, preferredIDs); err != nil {
-			return fmt.Errorf("failed to apply tag preference for %q: %w", tag, err)
+// applyUserTags puts the user's entries at the FRONT of each tag's list and
+// keeps the built-in entries behind them as the fallback. A model the user
+// lists takes the user's position and effort; its built-in entry is dropped,
+// since a second, later position for the same model could never win.
+func (r *ModelRegistry) applyUserTags(userTags map[string][]TagEntry) error {
+	for tag, userEntries := range userTags {
+		listed := make(map[string]bool, len(userEntries))
+		for _, entry := range userEntries {
+			listed[entry.Model] = true
 		}
-	}
-	return nil
-}
-
-// reorderTagModels reorders the models for a specific tag.
-// Models in preferredIDs are moved to the front in the specified order.
-// Models not in preferredIDs maintain their relative order after the preferred ones.
-func (r *ModelRegistry) reorderTagModels(tag string, preferredIDs []string) error {
-	current := r.byTag[tag]
-	if len(current) == 0 {
-		// Tag doesn't exist - ignore silently (might be a user-defined tag for custom models)
-		return nil
-	}
-
-	// Build a set of current model IDs for this tag
-	currentSet := make(map[string]*ModelDefinition, len(current))
-	for _, model := range current {
-		currentSet[model.ID] = model
-	}
-
-	// Build the new ordered list
-	var reordered []*ModelDefinition
-
-	// First, add preferred models in order
-	for _, id := range preferredIDs {
-		model, exists := currentSet[id]
-		if !exists {
-			// Model doesn't have this tag - check if it exists at all
-			if _, modelExists := r.byID[id]; !modelExists {
-				return fmt.Errorf("unknown model ID in preference: %s", id)
+		merged := slices.Clone(userEntries)
+		for _, entry := range r.tags[tag] {
+			if !listed[entry.Model] {
+				merged = append(merged, entry)
 			}
-			// Model exists but doesn't have this tag - skip silently
-			continue
 		}
-		reordered = append(reordered, model)
-		delete(currentSet, id) // Remove from set so we don't add it again
-	}
-
-	// Then, add remaining models in their original order
-	for _, model := range current {
-		if _, stillInSet := currentSet[model.ID]; stillInSet {
-			reordered = append(reordered, model)
+		if err := r.setTag(tag, merged); err != nil {
+			return fmt.Errorf("user config: %w", err)
 		}
 	}
-
-	r.byTag[tag] = reordered
 	return nil
 }
 
@@ -297,12 +260,14 @@ func ValidateUserConfig(cfg *UserModelsConfig) (warnings []string, err error) {
 		}
 	}
 
-	// Validate tag preferences
-	for tag, preferredIDs := range cfg.TagPreferences {
-		for _, id := range preferredIDs {
-			// Check if model exists (either built-in or custom)
-			if _, exists := baseReg.byID[id]; !exists && !seenIDs[id] {
-				warnings = append(warnings, fmt.Sprintf("tag preference %q references unknown model: %s", tag, id))
+	// Validate tag entries against built-in and custom models alike.
+	for tag, entries := range cfg.Tags {
+		for _, entry := range entries {
+			if _, exists := baseReg.byID[entry.Model]; !exists && !seenIDs[entry.Model] {
+				return warnings, fmt.Errorf("tags[%q] references unknown model: %s", tag, entry.Model)
+			}
+			if entry.ThinkingLevel != "" && !IsKnownThinkingLevel(entry.ThinkingLevel) {
+				return warnings, fmt.Errorf("tags[%q] (%s): unknown thinking level %q", tag, entry.Model, entry.ThinkingLevel)
 			}
 		}
 	}

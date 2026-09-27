@@ -18,10 +18,10 @@ var allTestProviders = []string{
 	"antigravity",
 }
 
-// `powerful` is the frontier tier that sits above flagship. Definition order is
+// `powerful` is the frontier tier that sits above flagship. List position is
 // resolution priority, so this pins which model a bare [powerful] selector
-// picks — inserting a powerful model earlier in the YAML would otherwise
-// repoint it silently.
+// picks — inserting a model earlier in the tag's list would otherwise repoint
+// it silently.
 func TestResolve_PowerfulTagTargetIsPinned(t *testing.T) {
 	reg := MustGetRegistry()
 
@@ -30,17 +30,18 @@ func TestResolve_PowerfulTagTargetIsPinned(t *testing.T) {
 	assert.Equal(t, "claude-5.1-fable", resolved.Definition.ID)
 }
 
-// Every powerful model carries a top-tier default_thinking_level in its own
-// definition — that is how "powerful models think harder" is expressed, since
-// the tag itself carries no thinking defaults. A powerful model that defaulted
-// to medium would quietly undercut the whole point of the tier.
-func TestPowerfulModelsCarryTopTierThinkingDefaults(t *testing.T) {
+// Every powerful entry runs its model at a top-tier effort — that is what
+// "powerful models think harder" means. An entry that ran at medium would
+// quietly undercut the whole point of the tier.
+func TestPowerfulEntriesRunAtTopTierEffort(t *testing.T) {
 	reg := MustGetRegistry()
 
-	powerful := reg.GetModelsByTag(TagPowerful)
-	require.NotEmpty(t, powerful, "expected at least one powerful-tagged model")
+	entries := reg.TagEntries(TagPowerful)
+	require.NotEmpty(t, entries, "expected at least one powerful entry")
 
-	for _, model := range powerful {
+	for _, entry := range entries {
+		model, ok := reg.GetDefinition(entry.Model)
+		require.True(t, ok)
 		levels := model.Capabilities.ThinkingLevels
 		require.NotEmpty(t, levels, "%s: powerful model must declare thinking levels", model.ID)
 
@@ -50,13 +51,12 @@ func TestPowerfulModelsCarryTopTierThinkingDefaults(t *testing.T) {
 		if !contains(levels, want) {
 			want = levels[len(levels)-1]
 		}
-		assert.Equal(t, want, model.DefaultThinkingLevel,
-			"%s: powerful model should default to its top practical thinking level", model.ID)
+		assert.Equal(t, want, entry.ThinkingLevel,
+			"%s: powerful entry should run at its model's top practical thinking level", model.ID)
 	}
 }
 
-// The tag must be indexed under exactly the models we intended, in definition
-// order.
+// The tag must list exactly the models we intended, in resolution order.
 func TestPowerfulTagMembership(t *testing.T) {
 	reg := MustGetRegistry()
 
@@ -65,10 +65,8 @@ func TestPowerfulTagMembership(t *testing.T) {
 		ids = append(ids, model.ID)
 	}
 
-	// claude-5.5-opus is deliberately ABSENT. It is the flagship pick and sits
-	// above fable-5.1 in definition order, so tagging it powerful would also
-	// repoint a bare [powerful] selector onto it — see the comment on its
-	// catalog entry.
+	// claude-5.5-opus is deliberately ABSENT: it is the flagship pick, and
+	// listing it here would collapse the two tiers onto one model.
 	assert.Equal(t, []string{
 		"claude-5.1-fable",
 		"gpt-6-astra",
@@ -124,7 +122,7 @@ func TestFlagshipResolvesToOpus55OnEveryProvider(t *testing.T) {
 			require.NoError(t, err)
 
 			// claude-5.5-opus carries its OWN vertexai mapping and leads the
-			// file, so it wins on index for every provider — the dedicated
+			// flagship list, so it wins for every provider — the dedicated
 			// vertex-claude-5.5-opus entry is never what a bare [flagship]
 			// selector reaches. That entry exists for explicit id selection and
 			// for parity with the other vertex-* duplicates; the assertion that
@@ -152,10 +150,9 @@ func resolvedAPIModelSuffix(apiModel string) string {
 	return apiModel
 }
 
-// Flagship and powerful must stay DIFFERENT models. Both resolve by definition
-// index, and claude-5.5-opus sits above claude-5.1-fable, so adding `powerful`
-// to 5.5 would collapse the two tiers onto one model without any test failing
-// on the tag list alone.
+// Flagship and powerful must stay DIFFERENT models. Listing 5.5 under
+// `powerful` ahead of fable would collapse the two tiers onto one model
+// without any test failing on the tag list alone.
 func TestFlagshipAndPowerfulResolveToDifferentModels(t *testing.T) {
 	reg := MustGetRegistry()
 
@@ -168,32 +165,31 @@ func TestFlagshipAndPowerfulResolveToDifferentModels(t *testing.T) {
 	assert.Equal(t, "claude-5.1-fable", powerful.Definition.ID)
 
 	for _, id := range []string{"claude-5.5-opus", "vertex-claude-5.5-opus"} {
-		def, ok := reg.GetDefinition(id)
-		require.True(t, ok)
-		assert.Contains(t, def.Tags, TagFlagship, "%s must be flagship", id)
-		assert.NotContains(t, def.Tags, TagPowerful,
+		tags := reg.TagsOf(id)
+		assert.Contains(t, tags, TagFlagship, "%s must be flagship", id)
+		assert.NotContains(t, tags, TagPowerful,
 			"%s must not be powerful — it would steal the powerful tier too", id)
 	}
 }
 
-// Adding models reorders nothing unless we say so: [flagship] and [fast] are
-// resolved by definition order, and several of the new entries carry those
-// tags. Pin the global winners so an insertion has to change them on purpose.
+// Adding models reorders nothing unless we say so. Pin the global winners so
+// an edit to a tag list has to change them on purpose.
 func TestResolve_ExistingTagTargetsUnchangedByNewModels(t *testing.T) {
 	reg := MustGetRegistry()
 
-	// TagFast was gpt-5.3-codex-spark, which sat earliest in definition order.
-	// That model was removed: codex was its only provider and the
-	// ChatGPT-account backend refuses it, so it was unreachable by
-	// construction. The next fast-tagged entry in definition order is
-	// gemini-3.5-flash. This is a per-user resolution in practice — it filters
-	// to the providers a user has configured — so this global pin is a canary
-	// for accidental reordering, not the model most users actually get.
+	// TagFast was gpt-5.3-codex-spark, which sat first in the list. That
+	// model was removed: codex was its only provider and the ChatGPT-account
+	// backend refuses it, so it was unreachable by construction. The next fast
+	// entry is gemini-3.5-flash. This is a per-user resolution in practice —
+	// it filters to the providers a user has configured — so this global pin
+	// is a canary for accidental reordering, not the model most users get.
 	for tag, want := range map[string]string{
-		// claude-5.5-opus leads the file, so it is the flagship pick. This
-		// moved from claude-5-opus deliberately when 5.5 shipped.
+		// claude-5.5-opus leads flagship. This moved from claude-5-opus
+		// deliberately when 5.5 shipped.
 		TagFlagship: "claude-5.5-opus",
-		TagModerate: "claude-5-sonnet",
+		// 5.5 also leads moderate, at a lower effort. This moved from
+		// claude-5-sonnet deliberately.
+		TagModerate: "claude-5.5-opus",
 		TagCheap:    "claude-4.5-haiku",
 		TagFast:     "gemini-3.5-flash",
 	} {
@@ -209,28 +205,31 @@ func TestResolve_ExistingTagTargetsUnchangedByNewModels(t *testing.T) {
 func TestNewModelDefinitionsParseWithExpectedCapabilities(t *testing.T) {
 	reg := MustGetRegistry()
 
+	// tags is the sorted derived set (TagsOf); effort is what the model runs at
+	// under the tier it was added for (firstTag).
 	tests := []struct {
 		id            string
 		tags          []string
 		levels        []string
-		defaultLevel  string
+		firstTag      string
+		effort        string
 		contextWindow int
 		outputTokens  int
 	}{
-		{"claude-5.1-fable", []string{TagPowerful, TagFlagship, TagReasoning},
-			[]string{"low", "medium", "high", "xhigh"}, "xhigh", 1000000, 64000},
-		{"vertex-claude-5.1-fable", []string{TagPowerful, TagFlagship, TagReasoning},
-			[]string{"low", "medium", "high", "xhigh"}, "xhigh", 1000000, 64000},
-		{"gemini-3.8-flash", []string{TagPowerful, TagFlagship, TagReasoning},
-			[]string{"low", "medium", "high"}, "high", 1048576, 65536},
+		{"claude-5.1-fable", []string{TagFlagship, TagPowerful, TagReasoning},
+			[]string{"low", "medium", "high", "xhigh"}, TagPowerful, "xhigh", 1000000, 64000},
+		{"vertex-claude-5.1-fable", []string{TagFlagship, TagPowerful, TagReasoning},
+			[]string{"low", "medium", "high", "xhigh"}, TagPowerful, "xhigh", 1000000, 64000},
+		{"gemini-3.8-flash", []string{TagFlagship, TagPowerful, TagReasoning},
+			[]string{"low", "medium", "high"}, TagPowerful, "high", 1048576, 65536},
 		{"gemini-3.7-flash", []string{TagFlagship, TagModerate, TagReasoning},
-			[]string{"low", "medium", "high"}, "medium", 1048576, 65536},
+			[]string{"low", "medium", "high"}, TagFlagship, "medium", 1048576, 65536},
 		{"gemini-3.6-flash", []string{TagModerate, TagReasoning},
-			[]string{"low", "medium", "high"}, "medium", 1048576, 65536},
-		{"gemini-3.5-flash", []string{TagModerate, TagFast, TagReasoning},
-			[]string{"low", "medium", "high"}, "low", 1048576, 65536},
-		{"gpt-6-astra", []string{TagPowerful, TagFlagship, TagReasoning},
-			[]string{"low", "medium", "high", "xhigh", "max"}, "xhigh", 1050000, 128000},
+			[]string{"low", "medium", "high"}, TagModerate, "medium", 1048576, 65536},
+		{"gemini-3.5-flash", []string{TagFast, TagModerate, TagReasoning},
+			[]string{"low", "medium", "high"}, TagFast, "low", 1048576, 65536},
+		{"gpt-6-astra", []string{TagFlagship, TagPowerful, TagReasoning},
+			[]string{"low", "medium", "high", "xhigh", "max"}, TagPowerful, "xhigh", 1050000, 128000},
 	}
 
 	for _, tt := range tests {
@@ -238,11 +237,11 @@ func TestNewModelDefinitionsParseWithExpectedCapabilities(t *testing.T) {
 			def, ok := reg.GetDefinition(tt.id)
 			require.True(t, ok, "expected %s in the registry", tt.id)
 
-			assert.Equal(t, tt.tags, def.Tags)
+			assert.Equal(t, tt.tags, reg.TagsOf(tt.id))
 			assert.True(t, def.Capabilities.CanReason)
 			assert.True(t, def.Capabilities.SupportsTools)
 			assert.Equal(t, tt.levels, def.Capabilities.ThinkingLevels)
-			assert.Equal(t, tt.defaultLevel, def.DefaultThinkingLevel)
+			assert.Equal(t, tt.effort, entryLevel(t, reg, tt.firstTag, tt.id))
 			assert.Equal(t, tt.contextWindow, def.Capabilities.MaxContextWindow)
 			assert.Equal(t, tt.outputTokens, def.Capabilities.MaxOutputTokens)
 			require.NotEmpty(t, def.Providers)
@@ -330,13 +329,25 @@ func TestGPT56FamilyTagLadder(t *testing.T) {
 		"gpt-5.6-luna":  {TagFlagship, TagReasoning},
 		"gpt-5.6-terra": {TagModerate, TagReasoning},
 	} {
-		def, ok := reg.GetDefinition(id)
+		_, ok := reg.GetDefinition(id)
 		require.True(t, ok, "expected %s in the registry", id)
-		assert.Equal(t, wantTags, def.Tags, "%s tags", id)
+		assert.Equal(t, wantTags, reg.TagsOf(id), "%s tags", id)
 	}
 
-	sol, _ := reg.GetDefinition("gpt-5.6-sol")
-	assert.Equal(t, "xhigh", sol.DefaultThinkingLevel)
+	assert.Equal(t, "xhigh", entryLevel(t, reg, TagPowerful, "gpt-5.6-sol"))
+}
+
+// entryLevel is the thinking_level a tag's entry declares for a model,
+// failing the test when the tag does not list the model.
+func entryLevel(t *testing.T, reg *ModelRegistry, tag, modelID string) string {
+	t.Helper()
+	for _, entry := range reg.TagEntries(tag) {
+		if entry.Model == modelID {
+			return entry.ThinkingLevel
+		}
+	}
+	t.Fatalf("tag %q does not list %s", tag, modelID)
+	return ""
 }
 
 func contains(haystack []string, needle string) bool {

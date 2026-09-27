@@ -157,7 +157,7 @@ Models are tagged to help with selection. You can also [bring your own model](/d
 			fmt.Fprintf(&sb, "| `%s` | %s | %s | %s | %s | %s |\n",
 				def.ID,
 				def.Name,
-				formatTags(def.Tags),
+				formatTags(registry.TagsOf(def.ID)),
 				formatContextWindow(def.Capabilities.MaxContextWindow),
 				formatCapabilities(def.Capabilities),
 				formatProviders(def.Providers),
@@ -171,7 +171,7 @@ Models are tagged to help with selection. You can also [bring your own model](/d
 	}
 
 	// Add "Models by Tag" section
-	sb.WriteString(generateModelsByTag(publicModels))
+	sb.WriteString(generateModelsByTag(registry, publicModels))
 
 	// Add usage section
 	sb.WriteString(`## Using Models
@@ -307,12 +307,14 @@ func formatProviders(providers []models.ProviderMapping) string {
 }
 
 // generateModelsByTag creates the "Models by Tag" section showing reverse mapping.
-func generateModelsByTag(userFacing []*models.ModelDefinition) string {
+func generateModelsByTag(registry *models.ModelRegistry, userFacing []*models.ModelDefinition) string {
 	var sb strings.Builder
 
 	sb.WriteString(`## Models by Tag
 
-Find models by capability. Use these tables to answer "what are my options for X?"
+Find models by capability. Each table lists a tag's models in resolution
+order — selecting the tag picks the first one you have a provider for — with
+the thinking effort it runs at when chosen through that tag.
 
 `)
 
@@ -331,46 +333,49 @@ Find models by capability. Use these tables to answer "what are my options for X
 	}
 
 	for _, ti := range tagInfo {
-		// Filter models that have this tag
-		var tagged []*models.ModelDefinition
+		// The tag's entries in resolution order, limited to public models.
+		public := make(map[string]*models.ModelDefinition, len(userFacing))
 		for _, def := range userFacing {
-			if hasTag(def.Tags, ti.tag) {
-				tagged = append(tagged, def)
+			public[def.ID] = def
+		}
+		var rows []string
+		for _, entry := range registry.TagEntries(ti.tag) {
+			def, ok := public[entry.Model]
+			if !ok {
+				continue
 			}
+			effort := entry.ThinkingLevel
+			if effort == "" {
+				effort = models.ThinkingLevelFor(def)
+			}
+			if effort == "" {
+				effort = "-"
+			}
+			rows = append(rows, fmt.Sprintf("| `%s` | %s | %s | %s | %s |\n",
+				def.ID,
+				getProviderName(def.ID),
+				effort,
+				formatContextWindow(def.Capabilities.MaxContextWindow),
+				formatCapabilities(def.Capabilities),
+			))
 		}
 
-		if len(tagged) == 0 {
+		if len(rows) == 0 {
 			continue
 		}
 
 		fmt.Fprintf(&sb, "### %s\n\n", ti.name)
 		fmt.Fprintf(&sb, "_%s_\n\n", ti.desc)
-		sb.WriteString("| Model | Provider | Context | Capabilities |\n")
-		sb.WriteString("|-------|----------|---------|-------------|\n")
-
-		for _, def := range tagged {
-			fmt.Fprintf(&sb, "| `%s` | %s | %s | %s |\n",
-				def.ID,
-				getProviderName(def.ID),
-				formatContextWindow(def.Capabilities.MaxContextWindow),
-				formatCapabilities(def.Capabilities),
-			)
+		sb.WriteString("| Model | Provider | Effort | Context | Capabilities |\n")
+		sb.WriteString("|-------|----------|--------|---------|-------------|\n")
+		for _, row := range rows {
+			sb.WriteString(row)
 		}
 		sb.WriteString("\n")
 	}
 
 	sb.WriteString("---\n\n")
 	return sb.String()
-}
-
-// hasTag checks if a tag slice contains a specific tag.
-func hasTag(tags []string, tag string) bool {
-	for _, t := range tags {
-		if t == tag {
-			return true
-		}
-	}
-	return false
 }
 
 // getProviderName returns a friendly provider name based on model ID prefix.

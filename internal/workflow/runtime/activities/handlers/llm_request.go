@@ -134,17 +134,11 @@ func resolveLLMCall(ctx context.Context, resolver drivers.DriverResolver, spec l
 		}
 		// Thinking level precedence, highest first:
 		//   1. explicit node/preset/request thinking_level (spec.ThinkingLevel)
-		//   2. the default carried by the TAG that selected this model —
-		//      set only on tag-based resolution, already clamped to the
-		//      model's levels (see ModelRegistry.Resolve)
-		//   3. the model's own default_thinking_level
-		// The registry capability floor sits under all three, applied in
-		// buildRegistry.
+		//   2. the registry's answer: the winning tag entry's level (clamped to
+		//      the model), or the model's capability default when chosen by id
+		//      — see ModelRegistry.Resolve
 		if effectiveThinkingLevel == "" {
 			effectiveThinkingLevel = resolved.ThinkingLevel
-		}
-		if effectiveThinkingLevel == "" {
-			effectiveThinkingLevel = resolvedDef.DefaultThinkingLevel
 		}
 		if effectiveThinkingLevel != "" {
 			tl := ThinkingLevel(effectiveThinkingLevel)

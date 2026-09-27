@@ -13,7 +13,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file reliant/v1/catalog.proto.
  */
 export const file_reliant_v1_catalog: GenFile = /*@__PURE__*/
-  fileDesc("ChhyZWxpYW50L3YxL2NhdGFsb2cucHJvdG8SCnJlbGlhbnQudjEi2gIKCU1vZGVsSW5mbxIKCgJpZBgBIAEoCRIMCgRuYW1lGAIgASgJEhAKCHByb3ZpZGVyGAMgASgJEhQKDGNhcGFiaWxpdGllcxgEIAMoCRIWCg5jb250ZXh0X3dpbmRvdxgFIAEoAxIaChJkZWZhdWx0X21heF90b2tlbnMYBiABKAMSFgoOY29zdF9wZXJfMW1faW4YByABKAESFwoPY29zdF9wZXJfMW1fb3V0GAggASgBEhIKCmNhbl9yZWFzb24YCSABKAgSHAoUc3VwcG9ydHNfYXR0YWNobWVudHMYCiABKAgSEQoJZHJpdmVyX2lkGAsgASgJEgwKBHRhZ3MYDCADKAkSFgoOc3VwcG9ydHNfdG9vbHMYDSABKAgSGAoQc3VwcG9ydHNfY2FjaGluZxgOIAEoCBIhChlzdXBwb3J0ZWRfdGhpbmtpbmdfbGV2ZWxzGA8gAygJIhMKEUxpc3RNb2RlbHNSZXF1ZXN0IkoKEkxpc3RNb2RlbHNSZXNwb25zZRIlCgZtb2RlbHMYASADKAsyFS5yZWxpYW50LnYxLk1vZGVsSW5mbxINCgV0b3RhbBgCIAEoBSIvChtMaXN0TW9kZWxzQnlQcm92aWRlclJlcXVlc3QSEAoIcHJvdmlkZXIYASABKAkiRQocTGlzdE1vZGVsc0J5UHJvdmlkZXJSZXNwb25zZRIlCgZtb2RlbHMYASADKAsyFS5yZWxpYW50LnYxLk1vZGVsSW5mbyLTAgoSQXZhaWxhYmxlTW9kZWxJbmZvEgoKAmlkGAEgASgJEhQKDGRpc3BsYXlfbmFtZRgCIAEoCRIQCghwcm92aWRlchgDIAEoCRIOCgZmYW1pbHkYBCABKAkSEQoJYXBpX21vZGVsGAUgASgJEhYKDmNvbnRleHRfd2luZG93GAYgASgDEhoKEmRlZmF1bHRfbWF4X3Rva2VucxgHIAEoAxIWCg5jb3N0X3Blcl8xbV9pbhgIIAEoARIXCg9jb3N0X3Blcl8xbV9vdXQYCSABKAESEgoKY2FuX3JlYXNvbhgKIAEoCBIcChRzdXBwb3J0c19hdHRhY2htZW50cxgLIAEoCBIWCg5zdXBwb3J0c190b29scxgMIAEoCBIYChBzdXBwb3J0c19jYWNoaW5nGA0gASgIEgwKBHRhZ3MYDiADKAkSDwoHZW5hYmxlZBgPIAEoCCIcChpMaXN0QXZhaWxhYmxlTW9kZWxzUmVxdWVzdCJNChtMaXN0QXZhaWxhYmxlTW9kZWxzUmVzcG9uc2USLgoGbW9kZWxzGAEgAygLMh4ucmVsaWFudC52MS5BdmFpbGFibGVNb2RlbEluZm8iPwoIVG9vbEluZm8SDAoEbmFtZRgBIAEoCRITCgtkZXNjcmlwdGlvbhgCIAEoCRIQCghjYXRlZ29yeRgDIAEoCSISChBMaXN0VG9vbHNSZXF1ZXN0IkcKEUxpc3RUb29sc1Jlc3BvbnNlEiMKBXRvb2xzGAEgAygLMhQucmVsaWFudC52MS5Ub29sSW5mbxINCgV0b3RhbBgCIAEoBSKKAwoOTm9kZUlucHV0RmllbGQSDAoEbmFtZRgBIAEoCRIMCgR0eXBlGAIgASgJEhMKC2Rlc2NyaXB0aW9uGAMgASgJEhAKCHJlcXVpcmVkGAQgASgIEhUKDWRlZmF1bHRfdmFsdWUYBSABKAkSEwoLZW51bV92YWx1ZXMYBiADKAkSDwoHdWlfaGludBgHIAEoCRIWCgltaW5fdmFsdWUYCCABKAFIAIgBARIWCgltYXhfdmFsdWUYCSABKAFIAYgBARINCgVsYWJlbBgKIAEoCRIYCgtwbGFjZWhvbGRlchgLIAEoCUgCiAEBEhsKE3Zpc2liaWxpdHlfY29udGV4dHMYDCADKAkSHgoRY2xlYW51cF9zZW1hbnRpY3MYDSABKAlIA4gBARIOCgZpc19jZWwYDiABKAgSEAoIY2F0ZWdvcnkYDyABKAlCDAoKX21pbl92YWx1ZUIMCgpfbWF4X3ZhbHVlQg4KDF9wbGFjZWhvbGRlckIUChJfY2xlYW51cF9zZW1hbnRpY3MiywEKCE5vZGVJbmZvEgoKAmlkGAEgASgJEhQKDGRpc3BsYXlfbmFtZRgCIAEoCRITCgtkZXNjcmlwdGlvbhgDIAEoCRIQCghjYXRlZ29yeRgEIAEoCRIwCgxpbnB1dF9maWVsZHMYBSADKAsyGi5yZWxpYW50LnYxLk5vZGVJbnB1dEZpZWxkEhEKCWljb25faGludBgGIAEoCRIxCg1vdXRwdXRfZmllbGRzGAcgAygLMhoucmVsaWFudC52MS5Ob2RlSW5wdXRGaWVsZCI/CgxOb2RlQ2F0ZWdvcnkSCgoCaWQYASABKAkSFAoMZGlzcGxheV9uYW1lGAIgASgJEg0KBWNvdW50GAMgASgFIj4KEExpc3ROb2Rlc1JlcXVlc3QSEAoIY2F0ZWdvcnkYASABKAkSGAoQaW5jbHVkZV9pbnRlcm5hbBgCIAEoCCJmChFMaXN0Tm9kZXNSZXNwb25zZRIjCgVub2RlcxgBIAMoCzIULnJlbGlhbnQudjEuTm9kZUluZm8SLAoKY2F0ZWdvcmllcxgCIAMoCzIYLnJlbGlhbnQudjEuTm9kZUNhdGVnb3J5IhoKGEdldENFTENvbXBsZXRpb25zUmVxdWVzdCI/CgxDRUxGaWVsZEluZm8SDAoEbmFtZRgBIAEoCRIMCgR0eXBlGAIgASgJEhMKC2Rlc2NyaXB0aW9uGAMgASgJInMKEENFTE5hbWVzcGFjZUluZm8SDAoEbmFtZRgBIAEoCRITCgtkZXNjcmlwdGlvbhgCIAEoCRISCgppc19keW5hbWljGAMgASgIEigKBmZpZWxkcxgEIAMoCzIYLnJlbGlhbnQudjEuQ0VMRmllbGRJbmZvImsKD0NFTEZ1bmN0aW9uSW5mbxIMCgRuYW1lGAEgASgJEhEKCXNpZ25hdHVyZRgCIAEoCRITCgtkZXNjcmlwdGlvbhgDIAEoCRIPCgdleGFtcGxlGAQgASgJEhEKCWlzX21lbWJlchgFIAEoCCJoChNDRUxOb2RlT3V0cHV0U2NoZW1hEhEKCW5vZGVfdHlwZRgBIAEoCRIUCgxkaXNwbGF5X25hbWUYAiABKAkSKAoGZmllbGRzGAMgAygLMhgucmVsaWFudC52MS5DRUxGaWVsZEluZm8idQoRQ0VMSGVscGVyVHlwZUluZm8SDAoEbmFtZRgBIAEoCRITCgtkZXNjcmlwdGlvbhgCIAEoCRITCgthY2Nlc3NfcGF0aBgDIAEoCRIoCgZmaWVsZHMYBCADKAsyGC5yZWxpYW50LnYxLkNFTEZpZWxkSW5mbyLwAQoZR2V0Q0VMQ29tcGxldGlvbnNSZXNwb25zZRIwCgpuYW1lc3BhY2VzGAEgAygLMhwucmVsaWFudC52MS5DRUxOYW1lc3BhY2VJbmZvEi4KCWZ1bmN0aW9ucxgCIAMoCzIbLnJlbGlhbnQudjEuQ0VMRnVuY3Rpb25JbmZvEjwKE25vZGVfb3V0cHV0X3NjaGVtYXMYAyADKAsyHy5yZWxpYW50LnYxLkNFTE5vZGVPdXRwdXRTY2hlbWESMwoMaGVscGVyX3R5cGVzGAQgAygLMh0ucmVsaWFudC52MS5DRUxIZWxwZXJUeXBlSW5mbzKyBAoOQ2F0YWxvZ1NlcnZpY2USTQoKTGlzdE1vZGVscxIdLnJlbGlhbnQudjEuTGlzdE1vZGVsc1JlcXVlc3QaHi5yZWxpYW50LnYxLkxpc3RNb2RlbHNSZXNwb25zZSIAEmsKFExpc3RNb2RlbHNCeVByb3ZpZGVyEicucmVsaWFudC52MS5MaXN0TW9kZWxzQnlQcm92aWRlclJlcXVlc3QaKC5yZWxpYW50LnYxLkxpc3RNb2RlbHNCeVByb3ZpZGVyUmVzcG9uc2UiABJoChNMaXN0QXZhaWxhYmxlTW9kZWxzEiYucmVsaWFudC52MS5MaXN0QXZhaWxhYmxlTW9kZWxzUmVxdWVzdBonLnJlbGlhbnQudjEuTGlzdEF2YWlsYWJsZU1vZGVsc1Jlc3BvbnNlIgASSgoJTGlzdFRvb2xzEhwucmVsaWFudC52MS5MaXN0VG9vbHNSZXF1ZXN0Gh0ucmVsaWFudC52MS5MaXN0VG9vbHNSZXNwb25zZSIAEkoKCUxpc3ROb2RlcxIcLnJlbGlhbnQudjEuTGlzdE5vZGVzUmVxdWVzdBodLnJlbGlhbnQudjEuTGlzdE5vZGVzUmVzcG9uc2UiABJiChFHZXRDRUxDb21wbGV0aW9ucxIkLnJlbGlhbnQudjEuR2V0Q0VMQ29tcGxldGlvbnNSZXF1ZXN0GiUucmVsaWFudC52MS5HZXRDRUxDb21wbGV0aW9uc1Jlc3BvbnNlIgBCOlo4Z2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vcmVsaWFudC92MTtyZWxpYW50djFiBnByb3RvMw");
+  fileDesc("ChhyZWxpYW50L3YxL2NhdGFsb2cucHJvdG8SCnJlbGlhbnQudjEi2gIKCU1vZGVsSW5mbxIKCgJpZBgBIAEoCRIMCgRuYW1lGAIgASgJEhAKCHByb3ZpZGVyGAMgASgJEhQKDGNhcGFiaWxpdGllcxgEIAMoCRIWCg5jb250ZXh0X3dpbmRvdxgFIAEoAxIaChJkZWZhdWx0X21heF90b2tlbnMYBiABKAMSFgoOY29zdF9wZXJfMW1faW4YByABKAESFwoPY29zdF9wZXJfMW1fb3V0GAggASgBEhIKCmNhbl9yZWFzb24YCSABKAgSHAoUc3VwcG9ydHNfYXR0YWNobWVudHMYCiABKAgSEQoJZHJpdmVyX2lkGAsgASgJEgwKBHRhZ3MYDCADKAkSFgoOc3VwcG9ydHNfdG9vbHMYDSABKAgSGAoQc3VwcG9ydHNfY2FjaGluZxgOIAEoCBIhChlzdXBwb3J0ZWRfdGhpbmtpbmdfbGV2ZWxzGA8gAygJIhMKEUxpc3RNb2RlbHNSZXF1ZXN0InUKEkxpc3RNb2RlbHNSZXNwb25zZRIlCgZtb2RlbHMYASADKAsyFS5yZWxpYW50LnYxLk1vZGVsSW5mbxINCgV0b3RhbBgCIAEoBRIpCgV0aWVycxgDIAMoCzIaLnJlbGlhbnQudjEuVGllclJlc29sdXRpb24iRwoOVGllclJlc29sdXRpb24SCwoDdGFnGAEgASgJEhAKCG1vZGVsX2lkGAIgASgJEhYKDnRoaW5raW5nX2xldmVsGAMgASgJIi8KG0xpc3RNb2RlbHNCeVByb3ZpZGVyUmVxdWVzdBIQCghwcm92aWRlchgBIAEoCSJFChxMaXN0TW9kZWxzQnlQcm92aWRlclJlc3BvbnNlEiUKBm1vZGVscxgBIAMoCzIVLnJlbGlhbnQudjEuTW9kZWxJbmZvItMCChJBdmFpbGFibGVNb2RlbEluZm8SCgoCaWQYASABKAkSFAoMZGlzcGxheV9uYW1lGAIgASgJEhAKCHByb3ZpZGVyGAMgASgJEg4KBmZhbWlseRgEIAEoCRIRCglhcGlfbW9kZWwYBSABKAkSFgoOY29udGV4dF93aW5kb3cYBiABKAMSGgoSZGVmYXVsdF9tYXhfdG9rZW5zGAcgASgDEhYKDmNvc3RfcGVyXzFtX2luGAggASgBEhcKD2Nvc3RfcGVyXzFtX291dBgJIAEoARISCgpjYW5fcmVhc29uGAogASgIEhwKFHN1cHBvcnRzX2F0dGFjaG1lbnRzGAsgASgIEhYKDnN1cHBvcnRzX3Rvb2xzGAwgASgIEhgKEHN1cHBvcnRzX2NhY2hpbmcYDSABKAgSDAoEdGFncxgOIAMoCRIPCgdlbmFibGVkGA8gASgIIhwKGkxpc3RBdmFpbGFibGVNb2RlbHNSZXF1ZXN0Ik0KG0xpc3RBdmFpbGFibGVNb2RlbHNSZXNwb25zZRIuCgZtb2RlbHMYASADKAsyHi5yZWxpYW50LnYxLkF2YWlsYWJsZU1vZGVsSW5mbyI/CghUb29sSW5mbxIMCgRuYW1lGAEgASgJEhMKC2Rlc2NyaXB0aW9uGAIgASgJEhAKCGNhdGVnb3J5GAMgASgJIhIKEExpc3RUb29sc1JlcXVlc3QiRwoRTGlzdFRvb2xzUmVzcG9uc2USIwoFdG9vbHMYASADKAsyFC5yZWxpYW50LnYxLlRvb2xJbmZvEg0KBXRvdGFsGAIgASgFIooDCg5Ob2RlSW5wdXRGaWVsZBIMCgRuYW1lGAEgASgJEgwKBHR5cGUYAiABKAkSEwoLZGVzY3JpcHRpb24YAyABKAkSEAoIcmVxdWlyZWQYBCABKAgSFQoNZGVmYXVsdF92YWx1ZRgFIAEoCRITCgtlbnVtX3ZhbHVlcxgGIAMoCRIPCgd1aV9oaW50GAcgASgJEhYKCW1pbl92YWx1ZRgIIAEoAUgAiAEBEhYKCW1heF92YWx1ZRgJIAEoAUgBiAEBEg0KBWxhYmVsGAogASgJEhgKC3BsYWNlaG9sZGVyGAsgASgJSAKIAQESGwoTdmlzaWJpbGl0eV9jb250ZXh0cxgMIAMoCRIeChFjbGVhbnVwX3NlbWFudGljcxgNIAEoCUgDiAEBEg4KBmlzX2NlbBgOIAEoCBIQCghjYXRlZ29yeRgPIAEoCUIMCgpfbWluX3ZhbHVlQgwKCl9tYXhfdmFsdWVCDgoMX3BsYWNlaG9sZGVyQhQKEl9jbGVhbnVwX3NlbWFudGljcyLLAQoITm9kZUluZm8SCgoCaWQYASABKAkSFAoMZGlzcGxheV9uYW1lGAIgASgJEhMKC2Rlc2NyaXB0aW9uGAMgASgJEhAKCGNhdGVnb3J5GAQgASgJEjAKDGlucHV0X2ZpZWxkcxgFIAMoCzIaLnJlbGlhbnQudjEuTm9kZUlucHV0RmllbGQSEQoJaWNvbl9oaW50GAYgASgJEjEKDW91dHB1dF9maWVsZHMYByADKAsyGi5yZWxpYW50LnYxLk5vZGVJbnB1dEZpZWxkIj8KDE5vZGVDYXRlZ29yeRIKCgJpZBgBIAEoCRIUCgxkaXNwbGF5X25hbWUYAiABKAkSDQoFY291bnQYAyABKAUiPgoQTGlzdE5vZGVzUmVxdWVzdBIQCghjYXRlZ29yeRgBIAEoCRIYChBpbmNsdWRlX2ludGVybmFsGAIgASgIImYKEUxpc3ROb2Rlc1Jlc3BvbnNlEiMKBW5vZGVzGAEgAygLMhQucmVsaWFudC52MS5Ob2RlSW5mbxIsCgpjYXRlZ29yaWVzGAIgAygLMhgucmVsaWFudC52MS5Ob2RlQ2F0ZWdvcnkiGgoYR2V0Q0VMQ29tcGxldGlvbnNSZXF1ZXN0Ij8KDENFTEZpZWxkSW5mbxIMCgRuYW1lGAEgASgJEgwKBHR5cGUYAiABKAkSEwoLZGVzY3JpcHRpb24YAyABKAkicwoQQ0VMTmFtZXNwYWNlSW5mbxIMCgRuYW1lGAEgASgJEhMKC2Rlc2NyaXB0aW9uGAIgASgJEhIKCmlzX2R5bmFtaWMYAyABKAgSKAoGZmllbGRzGAQgAygLMhgucmVsaWFudC52MS5DRUxGaWVsZEluZm8iawoPQ0VMRnVuY3Rpb25JbmZvEgwKBG5hbWUYASABKAkSEQoJc2lnbmF0dXJlGAIgASgJEhMKC2Rlc2NyaXB0aW9uGAMgASgJEg8KB2V4YW1wbGUYBCABKAkSEQoJaXNfbWVtYmVyGAUgASgIImgKE0NFTE5vZGVPdXRwdXRTY2hlbWESEQoJbm9kZV90eXBlGAEgASgJEhQKDGRpc3BsYXlfbmFtZRgCIAEoCRIoCgZmaWVsZHMYAyADKAsyGC5yZWxpYW50LnYxLkNFTEZpZWxkSW5mbyJ1ChFDRUxIZWxwZXJUeXBlSW5mbxIMCgRuYW1lGAEgASgJEhMKC2Rlc2NyaXB0aW9uGAIgASgJEhMKC2FjY2Vzc19wYXRoGAMgASgJEigKBmZpZWxkcxgEIAMoCzIYLnJlbGlhbnQudjEuQ0VMRmllbGRJbmZvIvABChlHZXRDRUxDb21wbGV0aW9uc1Jlc3BvbnNlEjAKCm5hbWVzcGFjZXMYASADKAsyHC5yZWxpYW50LnYxLkNFTE5hbWVzcGFjZUluZm8SLgoJZnVuY3Rpb25zGAIgAygLMhsucmVsaWFudC52MS5DRUxGdW5jdGlvbkluZm8SPAoTbm9kZV9vdXRwdXRfc2NoZW1hcxgDIAMoCzIfLnJlbGlhbnQudjEuQ0VMTm9kZU91dHB1dFNjaGVtYRIzCgxoZWxwZXJfdHlwZXMYBCADKAsyHS5yZWxpYW50LnYxLkNFTEhlbHBlclR5cGVJbmZvMrIECg5DYXRhbG9nU2VydmljZRJNCgpMaXN0TW9kZWxzEh0ucmVsaWFudC52MS5MaXN0TW9kZWxzUmVxdWVzdBoeLnJlbGlhbnQudjEuTGlzdE1vZGVsc1Jlc3BvbnNlIgASawoUTGlzdE1vZGVsc0J5UHJvdmlkZXISJy5yZWxpYW50LnYxLkxpc3RNb2RlbHNCeVByb3ZpZGVyUmVxdWVzdBooLnJlbGlhbnQudjEuTGlzdE1vZGVsc0J5UHJvdmlkZXJSZXNwb25zZSIAEmgKE0xpc3RBdmFpbGFibGVNb2RlbHMSJi5yZWxpYW50LnYxLkxpc3RBdmFpbGFibGVNb2RlbHNSZXF1ZXN0GicucmVsaWFudC52MS5MaXN0QXZhaWxhYmxlTW9kZWxzUmVzcG9uc2UiABJKCglMaXN0VG9vbHMSHC5yZWxpYW50LnYxLkxpc3RUb29sc1JlcXVlc3QaHS5yZWxpYW50LnYxLkxpc3RUb29sc1Jlc3BvbnNlIgASSgoJTGlzdE5vZGVzEhwucmVsaWFudC52MS5MaXN0Tm9kZXNSZXF1ZXN0Gh0ucmVsaWFudC52MS5MaXN0Tm9kZXNSZXNwb25zZSIAEmIKEUdldENFTENvbXBsZXRpb25zEiQucmVsaWFudC52MS5HZXRDRUxDb21wbGV0aW9uc1JlcXVlc3QaJS5yZWxpYW50LnYxLkdldENFTENvbXBsZXRpb25zUmVzcG9uc2UiAEI6WjhnaXRodWIuY29tL3JlbGlhbnQtbGFicy9yZWxpYW50L2dlbi9yZWxpYW50L3YxO3JlbGlhbnR2MWIGcHJvdG8z");
 
 /**
  * ModelInfo represents information about an LLM model
@@ -169,6 +169,15 @@ export type ListModelsResponse = Message<"reliant.v1.ListModelsResponse"> & {
    * @generated from field: int32 total = 2;
    */
   total: number;
+
+  /**
+   * What each declared tag selector resolves to for the calling user's
+   * configured providers, in ListAllTags order. Tags that resolve to nothing
+   * (or only to non-text models, e.g. image-gen) are omitted.
+   *
+   * @generated from field: repeated reliant.v1.TierResolution tiers = 3;
+   */
+  tiers: TierResolution[];
 };
 
 /**
@@ -177,6 +186,39 @@ export type ListModelsResponse = Message<"reliant.v1.ListModelsResponse"> & {
  */
 export const ListModelsResponseSchema: GenMessage<ListModelsResponse> = /*@__PURE__*/
   messageDesc(file_reliant_v1_catalog, 2);
+
+/**
+ * TierResolution is what a tag selector resolves to for this user right now.
+ *
+ * @generated from message reliant.v1.TierResolution
+ */
+export type TierResolution = Message<"reliant.v1.TierResolution"> & {
+  /**
+   * @generated from field: string tag = 1;
+   */
+  tag: string;
+
+  /**
+   * "modelId@driverId", same format as ModelInfo.id
+   *
+   * @generated from field: string model_id = 2;
+   */
+  modelId: string;
+
+  /**
+   * Effort the tier runs at ("" = model cannot reason)
+   *
+   * @generated from field: string thinking_level = 3;
+   */
+  thinkingLevel: string;
+};
+
+/**
+ * Describes the message reliant.v1.TierResolution.
+ * Use `create(TierResolutionSchema)` to create a new message.
+ */
+export const TierResolutionSchema: GenMessage<TierResolution> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_catalog, 3);
 
 /**
  * ListModelsByProviderRequest is the request for ListModelsByProvider
@@ -197,7 +239,7 @@ export type ListModelsByProviderRequest = Message<"reliant.v1.ListModelsByProvid
  * Use `create(ListModelsByProviderRequestSchema)` to create a new message.
  */
 export const ListModelsByProviderRequestSchema: GenMessage<ListModelsByProviderRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_catalog, 3);
+  messageDesc(file_reliant_v1_catalog, 4);
 
 /**
  * ListModelsByProviderResponse is the response for ListModelsByProvider
@@ -218,7 +260,7 @@ export type ListModelsByProviderResponse = Message<"reliant.v1.ListModelsByProvi
  * Use `create(ListModelsByProviderResponseSchema)` to create a new message.
  */
 export const ListModelsByProviderResponseSchema: GenMessage<ListModelsByProviderResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_catalog, 4);
+  messageDesc(file_reliant_v1_catalog, 5);
 
 /**
  * AvailableModelInfo is a picker-oriented, provider-scoped view of a model,
@@ -340,7 +382,7 @@ export type AvailableModelInfo = Message<"reliant.v1.AvailableModelInfo"> & {
  * Use `create(AvailableModelInfoSchema)` to create a new message.
  */
 export const AvailableModelInfoSchema: GenMessage<AvailableModelInfo> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_catalog, 5);
+  messageDesc(file_reliant_v1_catalog, 6);
 
 /**
  * ListAvailableModelsRequest is the request for ListAvailableModels
@@ -355,7 +397,7 @@ export type ListAvailableModelsRequest = Message<"reliant.v1.ListAvailableModels
  * Use `create(ListAvailableModelsRequestSchema)` to create a new message.
  */
 export const ListAvailableModelsRequestSchema: GenMessage<ListAvailableModelsRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_catalog, 6);
+  messageDesc(file_reliant_v1_catalog, 7);
 
 /**
  * ListAvailableModelsResponse is the response for ListAvailableModels
@@ -377,7 +419,7 @@ export type ListAvailableModelsResponse = Message<"reliant.v1.ListAvailableModel
  * Use `create(ListAvailableModelsResponseSchema)` to create a new message.
  */
 export const ListAvailableModelsResponseSchema: GenMessage<ListAvailableModelsResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_catalog, 7);
+  messageDesc(file_reliant_v1_catalog, 8);
 
 /**
  * ToolInfo represents information about a tool
@@ -412,7 +454,7 @@ export type ToolInfo = Message<"reliant.v1.ToolInfo"> & {
  * Use `create(ToolInfoSchema)` to create a new message.
  */
 export const ToolInfoSchema: GenMessage<ToolInfo> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_catalog, 8);
+  messageDesc(file_reliant_v1_catalog, 9);
 
 /**
  * ListToolsRequest is the request for ListTools
@@ -427,7 +469,7 @@ export type ListToolsRequest = Message<"reliant.v1.ListToolsRequest"> & {
  * Use `create(ListToolsRequestSchema)` to create a new message.
  */
 export const ListToolsRequestSchema: GenMessage<ListToolsRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_catalog, 9);
+  messageDesc(file_reliant_v1_catalog, 10);
 
 /**
  * ListToolsResponse is the response for ListTools
@@ -455,7 +497,7 @@ export type ListToolsResponse = Message<"reliant.v1.ListToolsResponse"> & {
  * Use `create(ListToolsResponseSchema)` to create a new message.
  */
 export const ListToolsResponseSchema: GenMessage<ListToolsResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_catalog, 10);
+  messageDesc(file_reliant_v1_catalog, 11);
 
 /**
  * NodeInputField describes an input field for a node
@@ -574,7 +616,7 @@ export type NodeInputField = Message<"reliant.v1.NodeInputField"> & {
  * Use `create(NodeInputFieldSchema)` to create a new message.
  */
 export const NodeInputFieldSchema: GenMessage<NodeInputField> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_catalog, 11);
+  messageDesc(file_reliant_v1_catalog, 12);
 
 /**
  * NodeInfo represents a workflow node available for the builder
@@ -637,7 +679,7 @@ export type NodeInfo = Message<"reliant.v1.NodeInfo"> & {
  * Use `create(NodeInfoSchema)` to create a new message.
  */
 export const NodeInfoSchema: GenMessage<NodeInfo> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_catalog, 12);
+  messageDesc(file_reliant_v1_catalog, 13);
 
 /**
  * NodeCategory describes a category of nodes
@@ -672,7 +714,7 @@ export type NodeCategory = Message<"reliant.v1.NodeCategory"> & {
  * Use `create(NodeCategorySchema)` to create a new message.
  */
 export const NodeCategorySchema: GenMessage<NodeCategory> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_catalog, 13);
+  messageDesc(file_reliant_v1_catalog, 14);
 
 /**
  * ListNodesRequest is the request for ListNodes
@@ -700,7 +742,7 @@ export type ListNodesRequest = Message<"reliant.v1.ListNodesRequest"> & {
  * Use `create(ListNodesRequestSchema)` to create a new message.
  */
 export const ListNodesRequestSchema: GenMessage<ListNodesRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_catalog, 14);
+  messageDesc(file_reliant_v1_catalog, 15);
 
 /**
  * ListNodesResponse is the response for ListNodes
@@ -728,7 +770,7 @@ export type ListNodesResponse = Message<"reliant.v1.ListNodesResponse"> & {
  * Use `create(ListNodesResponseSchema)` to create a new message.
  */
 export const ListNodesResponseSchema: GenMessage<ListNodesResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_catalog, 15);
+  messageDesc(file_reliant_v1_catalog, 16);
 
 /**
  * GetCELCompletionsRequest is the request for GetCELCompletions
@@ -743,7 +785,7 @@ export type GetCELCompletionsRequest = Message<"reliant.v1.GetCELCompletionsRequ
  * Use `create(GetCELCompletionsRequestSchema)` to create a new message.
  */
 export const GetCELCompletionsRequestSchema: GenMessage<GetCELCompletionsRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_catalog, 16);
+  messageDesc(file_reliant_v1_catalog, 17);
 
 /**
  * CELFieldInfo describes a field within a CEL namespace or output schema
@@ -772,7 +814,7 @@ export type CELFieldInfo = Message<"reliant.v1.CELFieldInfo"> & {
  * Use `create(CELFieldInfoSchema)` to create a new message.
  */
 export const CELFieldInfoSchema: GenMessage<CELFieldInfo> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_catalog, 17);
+  messageDesc(file_reliant_v1_catalog, 18);
 
 /**
  * CELNamespaceInfo describes a namespace accessible in CEL expressions
@@ -806,7 +848,7 @@ export type CELNamespaceInfo = Message<"reliant.v1.CELNamespaceInfo"> & {
  * Use `create(CELNamespaceInfoSchema)` to create a new message.
  */
 export const CELNamespaceInfoSchema: GenMessage<CELNamespaceInfo> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_catalog, 18);
+  messageDesc(file_reliant_v1_catalog, 19);
 
 /**
  * CELFunctionInfo describes a custom CEL function
@@ -847,7 +889,7 @@ export type CELFunctionInfo = Message<"reliant.v1.CELFunctionInfo"> & {
  * Use `create(CELFunctionInfoSchema)` to create a new message.
  */
 export const CELFunctionInfoSchema: GenMessage<CELFunctionInfo> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_catalog, 19);
+  messageDesc(file_reliant_v1_catalog, 20);
 
 /**
  * CELNodeOutputSchema describes the output fields for a workflow node type
@@ -876,7 +918,7 @@ export type CELNodeOutputSchema = Message<"reliant.v1.CELNodeOutputSchema"> & {
  * Use `create(CELNodeOutputSchemaSchema)` to create a new message.
  */
 export const CELNodeOutputSchemaSchema: GenMessage<CELNodeOutputSchema> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_catalog, 20);
+  messageDesc(file_reliant_v1_catalog, 21);
 
 /**
  * CELHelperTypeInfo describes a nested/helper type used in node outputs
@@ -910,7 +952,7 @@ export type CELHelperTypeInfo = Message<"reliant.v1.CELHelperTypeInfo"> & {
  * Use `create(CELHelperTypeInfoSchema)` to create a new message.
  */
 export const CELHelperTypeInfoSchema: GenMessage<CELHelperTypeInfo> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_catalog, 21);
+  messageDesc(file_reliant_v1_catalog, 22);
 
 /**
  * GetCELCompletionsResponse is the response for GetCELCompletions
@@ -944,7 +986,7 @@ export type GetCELCompletionsResponse = Message<"reliant.v1.GetCELCompletionsRes
  * Use `create(GetCELCompletionsResponseSchema)` to create a new message.
  */
 export const GetCELCompletionsResponseSchema: GenMessage<GetCELCompletionsResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_catalog, 22);
+  messageDesc(file_reliant_v1_catalog, 23);
 
 /**
  * CatalogService provides discovery endpoints for models, tools, and activities

@@ -15,12 +15,15 @@ import (
 var modelsYAML embed.FS
 
 // ModelRegistry holds the parsed models and provides lookup capabilities.
-// It preserves the order from the YAML file for deterministic tag resolution.
+//
+// Models and tags are independent: models describe capability, cost and
+// providers; tags are ordered {model, thinking_level} lists that decide which
+// model a tier resolves to and how hard it thinks. A model's tags are derived
+// from those lists, never declared on the model.
 type ModelRegistry struct {
-	models      []ModelDefinition             // Preserves order from YAML
-	byID        map[string]*ModelDefinition   // Fast lookup by model ID
-	byTag       map[string][]*ModelDefinition // tag -> models with that tag (in order)
-	tagDefaults map[string]TagDefaults        // tag -> defaults applied on tag selection
+	models []ModelDefinition           // Preserves order from YAML (display priority)
+	byID   map[string]*ModelDefinition // Fast lookup by model ID
+	tags   map[string][]TagEntry       // tag -> ordered entries (resolution order)
 }
 
 // ProviderPriority defines the resolution priority for providers.
@@ -157,12 +160,7 @@ func ParseRegistry() (*ModelRegistry, error) {
 		return nil, fmt.Errorf("failed to read embedded models.yaml: %w", err)
 	}
 
-	var config ModelsConfig
-	if err := yaml.Unmarshal(data, &config); err != nil {
-		return nil, fmt.Errorf("failed to parse models.yaml: %w", err)
-	}
-
-	return buildRegistry(config.Models, config.TagDefaults)
+	return ParseRegistryFromBytes(data)
 }
 
 // ParseRegistryFromBytes parses a YAML byte slice into a ModelRegistry.
@@ -172,112 +170,62 @@ func ParseRegistryFromBytes(data []byte) (*ModelRegistry, error) {
 	if err := yaml.Unmarshal(data, &config); err != nil {
 		return nil, fmt.Errorf("failed to parse models YAML: %w", err)
 	}
-	return buildRegistry(config.Models, config.TagDefaults)
+	return buildRegistry(config.Models, config.Tags)
 }
 
-// buildRegistry creates a ModelRegistry from a slice of model definitions and
-// the per-tag defaults that apply when a model is selected via that tag.
-func buildRegistry(models []ModelDefinition, tagDefaults map[string]TagDefaults) (*ModelRegistry, error) {
+// buildRegistry creates a ModelRegistry from model definitions and the tag
+// lists that map tiers onto them.
+func buildRegistry(models []ModelDefinition, tags map[string][]TagEntry) (*ModelRegistry, error) {
 	reg := &ModelRegistry{
-		models:      models,
-		byID:        make(map[string]*ModelDefinition, len(models)),
-		byTag:       make(map[string][]*ModelDefinition),
-		tagDefaults: make(map[string]TagDefaults, len(tagDefaults)),
+		models: models,
+		byID:   make(map[string]*ModelDefinition, len(models)),
+		tags:   make(map[string][]TagEntry, len(tags)),
 	}
 
 	for i := range models {
 		model := &reg.models[i]
-
-		// Registry-level thinking floor: a reasoning-capable model must always
-		// carry a non-empty DefaultThinkingLevel so that when a call_llm node or
-		// preset leaves thinking_level UNSET, resolution falls back to a real
-		// level (the model's preferred, typically "medium") instead of silently
-		// disabling extended thinking. This is the single choke point every
-		// definition passes through (embedded defaults AND user-configured
-		// models), so the floor applies to ALL workflows.
-		//
-		// Precedence is preserved: an explicit per-model default_thinking_level
-		// wins (only an empty value is filled), and node/preset thinking_level
-		// overrides still win downstream — resolveLLMCall applies the model
-		// default only when no explicit level was supplied. Non-reasoning models
-		// are left untouched, so thinking stays off for them.
-		if model.DefaultThinkingLevel == "" {
-			if cap := ResolveThinkingCapability(model.Capabilities); cap.SupportsThinking {
-				model.DefaultThinkingLevel = cap.DefaultLevel
-			}
-		}
-
-		// Check for duplicate IDs
 		if _, exists := reg.byID[model.ID]; exists {
 			return nil, fmt.Errorf("duplicate model ID: %s", model.ID)
 		}
 		reg.byID[model.ID] = model
-
-		// Index by tags
-		for _, tag := range model.Tags {
-			reg.byTag[tag] = append(reg.byTag[tag], model)
-		}
 	}
 
-	// Validate tag defaults against the vocabulary and the catalog. Both
-	// checks fail the parse rather than warning: a tag default that names a
-	// level nothing understands, or a tag no model carries, does nothing at
-	// runtime and looks exactly like a working config. Failing loudly at
-	// startup is the only way that typo is ever noticed.
-	for tag, defaults := range tagDefaults {
-		if defaults.ThinkingLevel != "" && !IsKnownThinkingLevel(defaults.ThinkingLevel) {
-			return nil, fmt.Errorf("tag_defaults[%q]: unknown thinking level %q (must be one of: %s)",
-				tag, defaults.ThinkingLevel, strings.Join(KnownThinkingLevels, ", "))
+	for tag, entries := range tags {
+		if err := reg.setTag(tag, entries); err != nil {
+			return nil, err
 		}
-		if len(reg.byTag[tag]) == 0 {
-			return nil, fmt.Errorf("tag_defaults[%q]: no model carries this tag", tag)
-		}
-		reg.tagDefaults[tag] = defaults
 	}
 
 	return reg, nil
 }
 
-// TagDefaultsFor returns the declared defaults for a tag.
-func (r *ModelRegistry) TagDefaultsFor(tag string) (TagDefaults, bool) {
-	defaults, ok := r.tagDefaults[tag]
-	return defaults, ok
-}
-
-// tagThinkingDefaultFor picks the thinking default a TAG-based selection
-// contributes, and clamps it to what the resolved model can actually do.
+// setTag validates and installs one tag's entries.
 //
-// The winner among the selector's tags is the EARLIEST one that both (a) the
-// resolved model actually carries and (b) declares a thinking default. That
-// rule matches the weighting already used for candidate scoring — earlier tags
-// are higher priority — so a selector's tag order means one thing throughout,
-// and it is deterministic for a selector like [powerful, reasoning] where more
-// than one tag could otherwise claim the answer. A tag the resolved model does
-// not carry never contributes: the model was not chosen for it.
-//
-// Returns "" when no tag qualifies, or when the model cannot reason.
-func (r *ModelRegistry) tagThinkingDefaultFor(model *ModelDefinition, selectorTags []string) string {
-	if len(r.tagDefaults) == 0 {
-		return ""
+// Every check fails the parse rather than warning. An entry naming a model
+// nothing defines, a level nothing understands, or a model listed twice (the
+// second position can never win) does nothing at runtime and looks exactly
+// like working config — failing loudly at startup is the only way that typo
+// is ever noticed.
+func (r *ModelRegistry) setTag(tag string, entries []TagEntry) error {
+	if tag == "" {
+		return fmt.Errorf("tags: empty tag name")
 	}
-
-	modelTags := make(map[string]bool, len(model.Tags))
-	for _, t := range model.Tags {
-		modelTags[t] = true
-	}
-
-	for _, tag := range selectorTags {
-		if !modelTags[tag] {
-			continue
+	seen := make(map[string]bool, len(entries))
+	for i, entry := range entries {
+		if _, ok := r.byID[entry.Model]; !ok {
+			return fmt.Errorf("tags[%q][%d]: unknown model %q", tag, i, entry.Model)
 		}
-		defaults, ok := r.tagDefaults[tag]
-		if !ok || defaults.ThinkingLevel == "" {
-			continue
+		if entry.ThinkingLevel != "" && !IsKnownThinkingLevel(entry.ThinkingLevel) {
+			return fmt.Errorf("tags[%q][%d] (%s): unknown thinking level %q (must be one of: %s)",
+				tag, i, entry.Model, entry.ThinkingLevel, strings.Join(KnownThinkingLevels, ", "))
 		}
-		return ClampThinkingLevel(ResolveThinkingCapability(model.Capabilities), defaults.ThinkingLevel)
+		if seen[entry.Model] {
+			return fmt.Errorf("tags[%q]: model %q listed more than once", tag, entry.Model)
+		}
+		seen[entry.Model] = true
 	}
-
-	return ""
+	r.tags[tag] = slices.Clone(entries)
+	return nil
 }
 
 // GetDefinition returns the model definition for the given ID.
@@ -286,9 +234,40 @@ func (r *ModelRegistry) GetDefinition(id string) (*ModelDefinition, bool) {
 	return model, ok
 }
 
-// GetModelsByTag returns all models that have the given tag, in definition order.
+// TagEntries returns a tag's ordered entries — the models that serve it and
+// the effort each runs at — in resolution order.
+func (r *ModelRegistry) TagEntries(tag string) []TagEntry {
+	return slices.Clone(r.tags[tag])
+}
+
+// GetModelsByTag returns the models listed under a tag, in resolution order.
 func (r *ModelRegistry) GetModelsByTag(tag string) []*ModelDefinition {
-	return r.byTag[tag]
+	entries := r.tags[tag]
+	out := make([]*ModelDefinition, 0, len(entries))
+	for _, entry := range entries {
+		out = append(out, r.byID[entry.Model])
+	}
+	return out
+}
+
+// TagsOf returns every tag that lists the model, sorted. A model has no tags
+// of its own; this is the derived view surfaces like ListModels report.
+func (r *ModelRegistry) TagsOf(modelID string) []string {
+	var out []string
+	for tag, entries := range r.tags {
+		if slices.ContainsFunc(entries, func(e TagEntry) bool { return e.Model == modelID }) {
+			out = append(out, tag)
+		}
+	}
+	slices.Sort(out)
+	return out
+}
+
+// ThinkingLevelFor is the effort a model runs at when chosen by id — or via a
+// tag entry that declares none: the model's capability default, "" when it
+// cannot reason.
+func ThinkingLevelFor(model *ModelDefinition) string {
+	return ResolveThinkingCapability(model.Capabilities).DefaultLevel
 }
 
 // ListAll returns all model definitions in definition order.
@@ -357,10 +336,10 @@ func (r *ModelRegistry) ListModelsByProvider(provider string) []ModelDefinition 
 	return result
 }
 
-// ListAllTags returns all unique tags across all models.
+// ListAllTags returns every declared tag, sorted.
 func (r *ModelRegistry) ListAllTags() []string {
-	tags := make([]string, 0, len(r.byTag))
-	for tag := range r.byTag {
+	tags := make([]string, 0, len(r.tags))
+	for tag := range r.tags {
 		tags = append(tags, tag)
 	}
 	slices.Sort(tags)
@@ -372,23 +351,21 @@ func (r *ModelRegistry) ListAllTags() []string {
 //  1. If selector.ID is set, find exact match by ID
 //  2. If selector.Tags is set, use best-match scoring (not strict AND):
 //     - Earlier tags in the list have higher weight
-//     - Models are scored by sum of weights for matching tags
-//     - Highest scoring models are tried first
+//     - Models are scored by the weights of the selector tags that list them
+//     - Highest scoring models are tried first; ties go to position in the
+//     earliest matching tag's list
 //     - Falls back gracefully if no perfect match exists
 //  3. For each candidate, find a provider that's in availableProviders
 //  4. If selector.Providers is set, try each in order (first available wins)
 //  5. Return error if no match found
 //
-// Tag-carried thinking defaults: when resolution went through TAGS, the result's
-// ThinkingLevel carries the default declared by the earliest selector tag that
-// the resolved model actually carries (see tagThinkingDefaultFor), clamped to
-// the model's declared levels. Resolution by explicit ID leaves it empty even
-// when the model carries a defaulted tag — the default is a property of how the
-// model was chosen, not of the model.
+// The result's ThinkingLevel is the effort to run at absent an explicit one:
+// for tag selection, the level of the entry that won under the EARLIEST
+// selector tag listing the model (clamped to what the model supports); for id
+// selection, or an entry declaring none, the model's capability default.
 //
 // Provider priority: native drivers (anthropic, openai, gemini, xai, vertexai) have
-// priority 1, openrouter has priority 10. Within candidates, pick the model that
-// appears first in the YAML (definition order).
+// priority 1, openrouter has priority 10.
 func (r *ModelRegistry) Resolve(selector ModelSelector, availableProviders []string) (*ResolvedModel, error) {
 	if selector.ID == "" && len(selector.Tags) == 0 {
 		return nil, fmt.Errorf("ModelSelector must have either ID or Tags set")
@@ -439,13 +416,14 @@ func (r *ModelRegistry) Resolve(selector ModelSelector, availableProviders []str
 			return nil, err
 		}
 		return &ResolvedModel{
-			Definition: *model,
-			Provider:   *provider,
+			Definition:    *model,
+			Provider:      *provider,
+			ThinkingLevel: ThinkingLevelFor(model),
 		}, nil
 	}
 
 	// Case 2: Resolve by tags using best-match scoring
-	candidates := r.findModelsByBestMatch(selector.Tags)
+	candidates := r.findCandidatesByBestMatch(selector.Tags)
 	if len(candidates) == 0 {
 		return nil, fmt.Errorf("no models found matching tags: %v", selector.Tags)
 	}
@@ -455,27 +433,27 @@ func (r *ModelRegistry) Resolve(selector ModelSelector, availableProviders []str
 	// silently settle for whichever text model happened to match a secondary
 	// tag like "cheap".
 	if selector.RequireOutputModality != "" {
-		filtered := make([]*ModelDefinition, 0, len(candidates))
-		for _, model := range candidates {
-			if model.Capabilities.CanOutput(selector.RequireOutputModality) {
-				filtered = append(filtered, model)
-			}
-		}
-		if len(filtered) == 0 {
+		candidates = slices.DeleteFunc(candidates, func(c tagCandidate) bool {
+			return !c.model.Capabilities.CanOutput(selector.RequireOutputModality)
+		})
+		if len(candidates) == 0 {
 			return nil, fmt.Errorf("no models matching tags %v can generate %s",
 				selector.Tags, selector.RequireOutputModality)
 		}
-		candidates = filtered
 	}
 
-	// Find the first candidate (in definition order) with an available provider
-	for _, model := range candidates {
-		provider, err := r.findBestProvider(model, selector.Providers, availableSet, false)
+	// The first candidate with an available provider wins, at its entry's effort.
+	for _, candidate := range candidates {
+		provider, err := r.findBestProvider(candidate.model, selector.Providers, availableSet, false)
 		if err == nil {
+			level := ThinkingLevelFor(candidate.model)
+			if candidate.entry.ThinkingLevel != "" {
+				level = ClampThinkingLevel(ResolveThinkingCapability(candidate.model.Capabilities), candidate.entry.ThinkingLevel)
+			}
 			return &ResolvedModel{
-				Definition:    *model,
+				Definition:    *candidate.model,
 				Provider:      *provider,
-				ThinkingLevel: r.tagThinkingDefaultFor(model, selector.Tags),
+				ThinkingLevel: level,
 			}, nil
 		}
 	}
@@ -483,85 +461,59 @@ func (r *ModelRegistry) Resolve(selector ModelSelector, availableProviders []str
 	return nil, fmt.Errorf("no available provider for models with tags: %v (tried %d candidates)", selector.Tags, len(candidates))
 }
 
-// modelScore holds a model and its match score for sorting.
-type modelScore struct {
+// tagCandidate is a model a tag selector may resolve to, with the entry that
+// put it there — the one under the EARLIEST selector tag listing the model,
+// which is the entry whose effort the request carries.
+type tagCandidate struct {
 	model *ModelDefinition
+	entry TagEntry
 	score int
-	index int // Original index for stable sorting
+	// rank orders ties: (index of the entry's tag in the selector, position of
+	// the entry within that tag's list).
+	tagIndex, position int
 }
 
-// findModelsByBestMatch returns models sorted by how well they match the given tags.
-// Earlier tags in the list have higher weight. Models are sorted by:
+// findCandidatesByBestMatch returns every model listed under any selector tag,
+// best match first. Sort order:
 //  1. Total score (higher is better)
-//  2. Definition order (earlier in YAML wins ties)
+//  2. Earliest selector tag the model is listed under
+//  3. Position within that tag's list
 //
-// This enables graceful degradation: tags: [local, fast] will prefer models
-// that have both tags, but will fall back to models with just "local" or just
-// "fast" if no perfect match exists.
+// This enables graceful degradation: tags: [local, fast] prefers a model
+// listed under both, but falls back to models listed under just one.
 //
 // Scoring: For tags [t1, t2, t3], weights are [4, 2, 1] (powers of 2, descending).
 // This ensures earlier tags always outweigh combinations of later tags.
-func (r *ModelRegistry) findModelsByBestMatch(tags []string) []*ModelDefinition {
-	if len(tags) == 0 {
-		return nil
-	}
-
-	// Calculate weights: powers of 2, with first tag having highest weight
-	// e.g., [local, fast, cheap] -> weights [4, 2, 1]
-	weights := make([]int, len(tags))
-	for i := range tags {
-		weights[i] = 1 << (len(tags) - 1 - i) // 2^(n-1-i)
-	}
-
-	// Score all models
-	var scored []modelScore
-	for i := range r.models {
-		model := &r.models[i]
-		score := r.scoreModelTags(model, tags, weights)
-		if score > 0 {
-			scored = append(scored, modelScore{
-				model: model,
-				score: score,
-				index: i,
-			})
-		}
-	}
-
-	if len(scored) == 0 {
-		return nil
-	}
-
-	// Sort by score descending, then by index ascending (stable sort)
-	slices.SortStableFunc(scored, func(a, b modelScore) int {
-		if a.score != b.score {
-			return b.score - a.score // Higher score first
-		}
-		return a.index - b.index // Earlier definition first
-	})
-
-	// Extract sorted models
-	result := make([]*ModelDefinition, len(scored))
-	for i, s := range scored {
-		result[i] = s.model
-	}
-
-	return result
-}
-
-// scoreModelTags calculates the weighted score for a model based on matching tags.
-func (r *ModelRegistry) scoreModelTags(model *ModelDefinition, tags []string, weights []int) int {
-	tagSet := make(map[string]bool, len(model.Tags))
-	for _, t := range model.Tags {
-		tagSet[t] = true
-	}
-
-	score := 0
+func (r *ModelRegistry) findCandidatesByBestMatch(tags []string) []tagCandidate {
+	byModel := make(map[string]*tagCandidate)
+	var order []string
 	for i, tag := range tags {
-		if tagSet[tag] {
-			score += weights[i]
+		weight := 1 << (len(tags) - 1 - i) // 2^(n-1-i)
+		for position, entry := range r.tags[tag] {
+			candidate, seen := byModel[entry.Model]
+			if !seen {
+				candidate = &tagCandidate{model: r.byID[entry.Model], entry: entry, tagIndex: i, position: position}
+				byModel[entry.Model] = candidate
+				order = append(order, entry.Model)
+			}
+			candidate.score += weight
 		}
 	}
-	return score
+
+	out := make([]tagCandidate, 0, len(order))
+	for _, id := range order {
+		out = append(out, *byModel[id])
+	}
+	slices.SortStableFunc(out, func(a, b tagCandidate) int {
+		if a.score != b.score {
+			return b.score - a.score
+		}
+		if a.tagIndex != b.tagIndex {
+			return a.tagIndex - b.tagIndex
+		}
+		return a.position - b.position
+	})
+	return out
 }
 
 // findBestProvider finds the best available provider for a model.
@@ -646,27 +598,17 @@ func (r *ModelRegistry) ResolveWithFallback(primary, fallback ModelSelector, ava
 // This is useful for applying user configurations without modifying the global registry.
 func (r *ModelRegistry) Clone() *ModelRegistry {
 	cloned := &ModelRegistry{
-		models:      make([]ModelDefinition, len(r.models)),
-		byID:        make(map[string]*ModelDefinition, len(r.byID)),
-		byTag:       make(map[string][]*ModelDefinition),
-		tagDefaults: make(map[string]TagDefaults, len(r.tagDefaults)),
+		models: slices.Clone(r.models),
+		byID:   make(map[string]*ModelDefinition, len(r.byID)),
+		tags:   make(map[string][]TagEntry, len(r.tags)),
 	}
-	for tag, defaults := range r.tagDefaults {
-		cloned.tagDefaults[tag] = defaults
+	for tag, entries := range r.tags {
+		cloned.tags[tag] = slices.Clone(entries)
 	}
-
-	// Deep copy models
-	copy(cloned.models, r.models)
-
-	// Rebuild indices pointing to the new models slice
+	// Rebuild the index pointing into the new models slice.
 	for i := range cloned.models {
-		model := &cloned.models[i]
-		cloned.byID[model.ID] = model
-		for _, tag := range model.Tags {
-			cloned.byTag[tag] = append(cloned.byTag[tag], model)
-		}
+		cloned.byID[cloned.models[i].ID] = &cloned.models[i]
 	}
-
 	return cloned
 }
 
