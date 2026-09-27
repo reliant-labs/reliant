@@ -13,6 +13,7 @@ import (
 
 	"github.com/anthropics/anthropic-sdk-go"
 	"github.com/anthropics/anthropic-sdk-go/option"
+	"github.com/reliant-labs/reliant/internal/chatmarkers"
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/stretchr/testify/assert"
@@ -150,6 +151,9 @@ func TestStreamSurfacesARetryAfterPastTheCap(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		hits.Add(1)
 		w.Header().Set("Retry-After", "7200")
+		w.Header().Set("anthropic-ratelimit-unified-representative-claim", "seven_day")
+		w.Header().Set("anthropic-ratelimit-unified-overage-disabled-reason", "out_of_credits")
+		w.Header().Set("anthropic-ratelimit-unified-reset", "1790712000")
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusTooManyRequests)
 		_, _ = w.Write([]byte(`{"type":"error","error":{"type":"rate_limit_error","message":"limit"}}`))
@@ -167,6 +171,17 @@ func TestStreamSurfacesARetryAfterPastTheCap(t *testing.T) {
 			var tooLong *RetryAfterTooLongError
 			require.ErrorAs(t, ev.Error, &tooLong)
 			assert.Equal(t, 2*time.Hour, tooLong.RetryAfter)
+			assert.Equal(t, time.Unix(1790712000, 0).UTC(), tooLong.ResetAt, "the provider's own reset time wins over now+Retry-After")
+			// What the chat shows: the marker the workflow routes on, and a
+			// sentence that names the window and when it lifts.
+			kind, payload, found := chatmarkers.Extract(ev.Error.Error())
+			require.True(t, found)
+			assert.Equal(t, chatmarkers.KindProviderUsageLimit, kind)
+			assert.Equal(t, "2026-09-29T20:00:00Z", payload)
+			summary := chatmarkers.ProviderUsageLimitSummary(ev.Error.Error())
+			assert.Contains(t, summary, "7-day window")
+			assert.Contains(t, summary, "overage unavailable: out of credits")
+			assert.Contains(t, summary, "resets Tue Sep 29 20:00 UTC")
 			sawErr = true
 		}
 	}

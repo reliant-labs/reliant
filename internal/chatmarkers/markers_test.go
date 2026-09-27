@@ -22,6 +22,7 @@ func TestKindLiterals_DriftGuard(t *testing.T) {
 		{"reliant managed quota exhausted", KindReliantManagedQuotaExhausted, "RELIANT_MANAGED_QUOTA_EXHAUSTED"},
 		{"daemon offline halt", KindDaemonOfflineHalt, "RELIANT_DAEMON_OFFLINE_HALT"},
 		{"provider stream stalled", KindProviderStreamStalled, "RELIANT_PROVIDER_STREAM_STALLED"},
+		{"provider usage limit", KindProviderUsageLimit, "RELIANT_PROVIDER_USAGE_LIMIT"},
 	}
 	for _, tc := range cases {
 		if string(tc.got) != tc.want {
@@ -246,5 +247,17 @@ func TestRoundTrip(t *testing.T) {
 		if strings.Contains(stripped, string(tc.kind)) {
 			t.Errorf("Strip = %q, should not contain kind %q", stripped, tc.kind)
 		}
+	}
+}
+
+func TestProviderUsageLimitSummaryRecoversTheSentenceFromAWrapChain(t *testing.T) {
+	msg := Wrap(KindProviderUsageLimit, "2026-09-29T20:00:00Z",
+		ProviderUsageLimitLead+" (Anthropic, 7-day window) — resets 2026-09-29 20:00 UTC")
+	wrapped := "failed to stream LLM response: LLM streaming error: " + msg + ": POST \"https://api.anthropic.com/v1/messages\": 429 Too Many Requests"
+	if got, want := ProviderUsageLimitSummary(wrapped), ProviderUsageLimitLead+" (Anthropic, 7-day window) — resets 2026-09-29 20:00 UTC"; got != want {
+		t.Fatalf("summary = %q, want %q", got, want)
+	}
+	if got := ProviderUsageLimitSummary("429 Too Many Requests"); got != "" {
+		t.Fatalf("summary of an unmarked error = %q, want empty", got)
 	}
 }

@@ -83,7 +83,38 @@ const (
 	// output and no explanation.
 	// Producer: internal/llm/drivers/anthropic (via llm.ErrStreamContentStalled).
 	KindProviderStreamStalled Kind = "RELIANT_PROVIDER_STREAM_STALLED"
+
+	// KindProviderUsageLimit signals the provider refused the request with a
+	// Retry-After longer than a driver will wait in-request — in practice a
+	// subscription usage window (Anthropic's 5-hour or 7-day limit). Retrying
+	// cannot help until the window resets, so the turn fails at once and the
+	// chat pauses with this error rather than looking active for hours.
+	// Payload is the reset time, RFC 3339 UTC, or empty when unknown.
+	// The human-readable message starts with ProviderUsageLimitLead.
+	// Producer: internal/llm/drivers/anthropic (RetryAfterTooLongError).
+	KindProviderUsageLimit Kind = "RELIANT_PROVIDER_USAGE_LIMIT"
 )
+
+// ProviderUsageLimitLead opens the human-readable message of every
+// KindProviderUsageLimit error, so a consumer can recover that sentence from
+// inside whatever wrap chain the error travelled through: it runs from this
+// lead to the marker.
+const ProviderUsageLimitLead = "AI provider usage limit reached"
+
+// ProviderUsageLimitSummary returns the human-readable sentence of a
+// KindProviderUsageLimit error message, or "" if msg carries none.
+func ProviderUsageLimitSummary(msg string) string {
+	kind, _, found := Extract(msg)
+	if !found || kind != KindProviderUsageLimit {
+		return ""
+	}
+	start := strings.Index(msg, ProviderUsageLimitLead)
+	end := strings.Index(msg, "["+string(KindProviderUsageLimit)+":")
+	if start < 0 || end < start {
+		return ""
+	}
+	return strings.TrimSpace(msg[start:end])
+}
 
 // markerRegex matches any `[<KIND>:<payload>]` tail, allowing an optional
 // run of leading whitespace so Strip removes the separator between the

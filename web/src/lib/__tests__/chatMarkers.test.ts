@@ -35,6 +35,21 @@ describe("chat marker kind literals (cross-process drift guard)", () => {
       "RELIANT_PROVIDER_STREAM_STALLED",
     );
   });
+
+  it("RELIANT_PROVIDER_USAGE_LIMIT string matches Go mirror", () => {
+    expect(CHAT_MARKER_KINDS.ProviderUsageLimit).toBe(
+      "RELIANT_PROVIDER_USAGE_LIMIT",
+    );
+  });
+
+  it("extracts the usage-limit marker with its reset-time payload", () => {
+    const msg =
+      "AI provider usage limit reached (Anthropic, 7-day window) — resets Tue Sep 29 20:00 UTC (in 45h39m). Switch to another provider, or send a message after it resets [RELIANT_PROVIDER_USAGE_LIMIT:2026-09-29T20:00:00Z]: 429 Too Many Requests";
+    expect(extractChatMarker(msg)).toEqual({
+      kind: "RELIANT_PROVIDER_USAGE_LIMIT" satisfies ChatMarkerKind,
+      payload: "2026-09-29T20:00:00Z",
+    });
+  });
 });
 
 describe("extractChatMarker", () => {

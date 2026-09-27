@@ -45,6 +45,14 @@ export const CHAT_MARKER_KINDS = {
    * pings indefinitely without ever sending content or an error.
    */
   ProviderStreamStalled: "RELIANT_PROVIDER_STREAM_STALLED",
+  /**
+   * The provider refused the request with a wait longer than a driver will
+   * take in-request — a subscription usage window (Anthropic's 5-hour or
+   * 7-day limit). The turn failed at once and the chat is paused. Payload is
+   * the reset time (RFC 3339 UTC), or empty when unknown; the message prefix
+   * already states it for display.
+   */
+  ProviderUsageLimit: "RELIANT_PROVIDER_USAGE_LIMIT",
 } as const;
 
 /**
