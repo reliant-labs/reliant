@@ -105,7 +105,7 @@ describe("derivePlanDisplay reads the server, not a table", () => {
    * confident wrong one next to a pay button is not.
    */
   it("reports an unpriced plan as unavailable rather than free", () => {
-    const d = derivePlanDisplay(plan("plan_code_free", { priceCents: 0n }));
+    const d = derivePlanDisplay(plan("plan_code_starter", { priceCents: 0n }));
     expect(d.monthlyPriceCents).toBe(COMPUTE_PLAN_UNPRICED);
     expect(d.monthlyPriceCents).toBeNull();
   });
@@ -156,7 +156,7 @@ describe("plan grid membership and ordering come from the server", () => {
   });
 
   it("excludes plans with no monthly price from the purchase grid", () => {
-    expect(isPurchasableComputePlan(plan("plan_code_free", {}))).toBe(false);
+    expect(isPurchasableComputePlan(plan("plan_code_starter", {}))).toBe(false);
     expect(
       isPurchasableComputePlan(plan("plan_compute_small", { priceCents: 0n })),
     ).toBe(false);

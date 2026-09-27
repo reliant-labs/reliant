@@ -107,8 +107,13 @@ enum SubscriptionStatus {
 }
 
 enum PlanTier {
+  // 1 was PLAN_TIER_FREE, the tier of the "Free" code plan (plan_code_free,
+  // retired by #300). There is no free plan, so nothing can carry the tier.
+  // Reserved, never to be reused.
+  reserved 1;
+  reserved "PLAN_TIER_FREE";
+
   PLAN_TIER_UNSPECIFIED = 0;
-  PLAN_TIER_FREE = 1;
   PLAN_TIER_STARTER = 2;
   PLAN_TIER_PRO = 3;
   PLAN_TIER_ENTERPRISE = 4;
