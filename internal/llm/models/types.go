@@ -65,7 +65,9 @@ type ModelSelector struct {
 	//   - local: Runs on local hardware
 	//   - meta: Internal operations (titling, compaction)
 	//
-	// Tag resolution order can be customized via TagPreferences in user config.
+	// Each tag is an ordered list of {model, thinking_level} in models.yaml's
+	// `tags:` section, so selecting a tag picks BOTH a model and the effort it
+	// runs at. Users can prepend their own entries via `tags:` in user config.
 	//
 	// Examples:
 	//   - [flagship]: Best overall model
@@ -186,11 +188,14 @@ func (m *ModelSelector) UnmarshalYAML(node *yaml.Node) error {
 //   - driver: local
 //     api_model: llama3.2:latest
 //
+// A model carries no tags and no default effort of its own: which tiers it
+// serves, and how hard it thinks in each, is declared by the `tags:` section
+// (TagEntry). ThinkingLevelFor answers "what effort, when chosen by id".
+//
 // Example YAML (full):
 //
 //   - id: my-custom-model
 //     name: My Custom Model
-//     tags: [fast, local]
 //     visibility: user
 //     capabilities:
 //     can_reason: false
@@ -228,28 +233,6 @@ type ModelDefinition struct {
 	// YAML key: name
 	// Required: No (defaults to ID)
 	Name string `yaml:"name" json:"name" mapstructure:"name"`
-
-	// Tags are labels used for tag-based model selection.
-	// When a ModelSelector specifies tags, the resolver uses weighted best-match
-	// scoring to find models that match as many requested tags as possible.
-	//
-	// Built-in tags:
-	//   - powerful: Frontier tier, chosen when capability outweighs cost
-	//   - flagship: Best overall quality for complex tasks
-	//   - moderate: Balanced quality and cost
-	//   - fast: Optimized for quick responses
-	//   - cheap: Lowest cost per token
-	//   - reasoning: Extended thinking capability
-	//   - local: Runs on local hardware
-	//   - meta: Internal operations (titling, compaction)
-	//
-	// You can define custom tags for your own organizational purposes.
-	//
-	// Example: ["fast", "local"]
-	//
-	// YAML key: tags
-	// Required: No (defaults to empty)
-	Tags []string `yaml:"tags" json:"tags" mapstructure:"tags"`
 
 	// Visibility controls where this model appears in the system.
 	// Use this to hide internal or experimental models from user selection.
@@ -304,15 +287,8 @@ type ModelDefinition struct {
 
 	// Model-owned defaults — used when preset/workflow doesn't specify these.
 	// These provide sensible per-model defaults that can be overridden at
-	// the preset or workflow level.
-
-	// DefaultThinkingLevel is the default thinking/reasoning effort level.
-	// Valid values: "low", "medium", "high", "xhigh".
-	// Empty means the system picks a default.
-	//
-	// YAML key: default_thinking_level
-	// Required: No
-	DefaultThinkingLevel string `yaml:"default_thinking_level,omitempty" json:"default_thinking_level,omitempty" mapstructure:"default_thinking_level"`
+	// the preset or workflow level. Thinking effort is deliberately NOT one of
+	// them: it belongs to the tier (see TagEntry), not to the model.
 
 	// DefaultTemperature is the default sampling temperature for the model.
 	// Pointer type so we can distinguish "not set" from zero.
@@ -726,16 +702,16 @@ type ResolvedModel struct {
 	Definition ModelDefinition
 	Provider   ProviderMapping
 
-	// ThinkingLevel is the thinking default carried by the TAG that selected
-	// this model, already clamped to the model's declared thinking_levels.
-	// Empty when the selector named a model by ID, when no matching tag
-	// declares a default, or when the model cannot reason.
+	// ThinkingLevel is the effort the request should run at when the caller
+	// supplied none, already reconciled with the model's capabilities:
 	//
-	// This is a property of HOW the model was chosen, not of the model: the
-	// same model selected by `id:` deliberately gets an empty value here, so
-	// only tag-based selection picks up the tier's effort. Callers layer it
-	// under an explicit per-call thinking_level and over the model's own
-	// DefaultThinkingLevel.
+	//   - selected by TAG: the thinking_level of the tag entry that won,
+	//     clamped down to what the model supports;
+	//   - selected by ID, or via an entry with no thinking_level: the model's
+	//     capability default (medium where supported).
+	//
+	// Empty only for a model that cannot reason. An explicit per-call
+	// thinking_level still overrides it.
 	ThinkingLevel string
 }
 
@@ -743,11 +719,9 @@ type ResolvedModel struct {
 // These are the system-defined tags that presets should use.
 const (
 	// TagPowerful sits above flagship: the frontier tier, chosen when capability
-	// matters more than cost or latency. It also carries a thinking default
-	// (see the tag_defaults section of models.yaml), so selecting a model via
-	// `tags: [powerful]` means "think hard" without every caller spelling out
-	// thinking_level. The per-model default_thinking_level still applies when
-	// the same model is selected by explicit id.
+	// matters more than cost or latency. Its entries in models.yaml carry
+	// xhigh, so selecting `tags: [powerful]` means "think hard" without every
+	// caller spelling out thinking_level.
 	TagPowerful  = "powerful"  // Frontier tier, capability over cost
 	TagFlagship  = "flagship"  // Best overall for complex tasks
 	TagModerate  = "moderate"  // Good balance of quality/cost
@@ -760,34 +734,49 @@ const (
 
 // ModelsConfig is the root structure for the embedded models.yaml file.
 type ModelsConfig struct {
-	Models []ModelDefinition `yaml:"models" json:"models"`
+	// Tags maps each tag to the ordered models that serve it, and the effort
+	// each runs at. See TagEntry.
+	//
+	// YAML key: tags
+	Tags map[string][]TagEntry `yaml:"tags" json:"tags"`
 
-	// TagDefaults declares per-tag defaults that apply when a request selects
-	// a model BY that tag. Keyed by tag name.
-	//
-	// Example YAML:
-	//
-	//	tag_defaults:
-	//	  powerful:
-	//	    thinking_level: xhigh
-	//
-	// YAML key: tag_defaults
-	TagDefaults map[string]TagDefaults `yaml:"tag_defaults,omitempty" json:"tag_defaults,omitempty"`
+	Models []ModelDefinition `yaml:"models" json:"models"`
 }
 
-// TagDefaults are the request defaults a tag contributes when it is the tag
-// that selected the model.
+// TagEntry is one candidate for a tag: a model, and how hard it thinks when
+// it is chosen THROUGH this tag.
 //
-// These are deliberately data in models.yaml rather than a Go map: a tag whose
-// behavior lives in code would require a code change to retune.
-type TagDefaults struct {
-	// ThinkingLevel is the thinking/reasoning effort a model selected via this
-	// tag should use when the caller supplied none.
+// A tag is an ordered list of entries. Resolution walks it in order and the
+// first entry whose model has a provider the user has configured wins. The
+// same model may appear under several tags at different efforts — that is
+// how one model serves several tiers.
+//
+// These are deliberately data rather than code: retuning a tier is an edit to
+// models.yaml (or the user's config), never to a preset or a Go map.
+//
+// Example YAML:
+//
+//	tags:
+//	  flagship:
+//	    - {model: claude-5.5-opus, thinking_level: xhigh}
+//	    - {model: gpt-5.5, thinking_level: xhigh}
+//	  moderate:
+//	    - {model: claude-5.5-opus, thinking_level: high}
+type TagEntry struct {
+	// Model is the ID of a model defined in the catalog (or a custom model).
+	// Parsing fails if it names no model.
+	//
+	// YAML key: model
+	Model string `yaml:"model" json:"model" mapstructure:"model"`
+
+	// ThinkingLevel is the effort a request runs at when this entry wins and
+	// the caller supplied no explicit thinking_level. Omit it to use the
+	// model's capability default.
 	//
 	// It is an ASPIRATION, not a requirement: it is clamped down to the
-	// resolved model's declared thinking_levels, so `xhigh` on a model that
-	// tops out at `high` yields `high` rather than an error or an unsupported
-	// value on the wire.
+	// model's declared thinking_levels, so `xhigh` on a model that tops out
+	// at `high` yields `high` rather than an error or an unsupported value on
+	// the wire.
 	//
 	// Must name a level in KnownThinkingLevels; parsing fails otherwise.
 	//
@@ -805,13 +794,14 @@ type TagDefaults struct {
 // Example YAML:
 //
 //	models:
-//	  tag_preferences:
-//	    flagship: [claude-opus-4-20250514, gpt-4.1]
-//	    fast: [claude-haiku-3-5, gpt-4.1-mini]
+//	  tags:
+//	    flagship:
+//	      - {model: gpt-5.5, thinking_level: high}
+//	    fast:
+//	      - {model: local-codellama}
 //	  custom:
 //	    - id: local-codellama
 //	      name: CodeLlama 34B
-//	      tags: [local, fast]
 //	      providers:
 //	        - driver: local
 //	          api_model: codellama:34b
@@ -819,30 +809,31 @@ type TagDefaults struct {
 //	    local:
 //	      base_url: http://localhost:11434/v1
 type UserModelsConfig struct {
-	// TagPreferences overrides the default tag resolution order.
-	// Keys are tag names (e.g., "flagship", "moderate", "fast"),
-	// values are ordered lists of model IDs to try when resolving that tag.
+	// Tags prepends the user's own entries to built-in tags (or defines new
+	// tags), in the same {model, thinking_level} shape as models.yaml. User
+	// entries are tried first; the built-in list follows as the fallback, so
+	// naming one preferred model never strands a user whose provider for it
+	// is missing. A model the user lists that the built-in list also carries
+	// takes the user's position and effort.
 	//
-	// When a tag is resolved, models are tried in this order:
-	//   1. Models listed in TagPreferences for this tag (in order)
-	//   2. Remaining models with this tag (in default order)
-	//
-	// Models listed in preferences that don't have the specified tag are
-	// silently skipped. Unknown model IDs generate a validation warning.
+	// This is also how a custom model joins a tier — custom models carry no
+	// tags of their own.
 	//
 	// Example YAML:
 	//
-	//	tag_preferences:
-	//	  flagship: [claude-opus-4-20250514, gpt-4.1]    # Prefer Claude, fall back to GPT
-	//	  fast: [gpt-4.1-mini, claude-haiku-3-5]         # Prefer GPT for speed
-	//	  reasoning: [o3, claude-opus-4-20250514]        # Prefer o3 for reasoning
+	//	tags:
+	//	  flagship:
+	//	    - {model: gpt-5.5, thinking_level: high}   # prefer GPT, at high
+	//	  fast:
+	//	    - {model: local-qwen}                      # a custom model
 	//
-	// YAML key: tag_preferences
-	TagPreferences map[string][]string `yaml:"tag_preferences,omitempty" json:"tag_preferences,omitempty" mapstructure:"tag_preferences"`
+	// YAML key: tags
+	Tags map[string][]TagEntry `yaml:"tags,omitempty" json:"tags,omitempty" mapstructure:"tags"`
 
 	// Custom defines user-added models that extend the built-in model registry.
 	// Use this to add local models (Ollama, LM Studio), custom OpenRouter models,
-	// or models from other OpenAI-compatible providers.
+	// or models from other OpenAI-compatible providers. List a custom model
+	// under `tags:` to make it selectable by tag.
 	//
 	// Required fields for each custom model:
 	//   - id: Unique identifier (must not conflict with built-in models)
@@ -850,7 +841,6 @@ type UserModelsConfig struct {
 	//
 	// Optional fields:
 	//   - name: Human-readable display name (defaults to id)
-	//   - tags: List of tags for tag-based selection
 	//   - visibility: "user", "meta", or "dev" (defaults to "user")
 	//   - capabilities: Model capabilities (context window, features)
 	//   - cost: Pricing information for cost tracking
@@ -860,7 +850,6 @@ type UserModelsConfig struct {
 	//	custom:
 	//	  - id: local-qwen
 	//	    name: Qwen 2.5 32B
-	//	    tags: [local, fast]
 	//	    capabilities:
 	//	      max_context_window: 32000
 	//	      supports_tools: true
@@ -869,7 +858,6 @@ type UserModelsConfig struct {
 	//	        api_model: qwen2.5:32b
 	//	  - id: openrouter-mixtral
 	//	    name: Mixtral 8x22B (OpenRouter)
-	//	    tags: [moderate]
 	//	    providers:
 	//	      - driver: openrouter
 	//	        api_model: mistralai/mixtral-8x22b-instruct

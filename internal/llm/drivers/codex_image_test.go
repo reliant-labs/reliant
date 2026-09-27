@@ -2,6 +2,7 @@
 package drivers
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/reliant-labs/reliant/internal/llm/drivers/codex"
@@ -34,15 +35,10 @@ func TestCodexImageModel_IsDeclaredForImageOutput(t *testing.T) {
 			codexImageModelID, definition.Capabilities.EffectiveOutputModalities())
 	}
 
-	sawImageGenTag := false
-	for _, tag := range definition.Tags {
-		if tag == DefaultImageGenTag {
-			sawImageGenTag = true
-		}
-	}
-	if !sawImageGenTag {
+	tags := registry.TagsOf(definition.ID)
+	if !slices.Contains(tags, DefaultImageGenTag) {
 		t.Errorf("model %s has tags %v; it must carry %q to be selectable by a default image request",
-			codexImageModelID, definition.Tags, DefaultImageGenTag)
+			codexImageModelID, tags, DefaultImageGenTag)
 	}
 }
 

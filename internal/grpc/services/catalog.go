@@ -126,7 +126,7 @@ func (s *CatalogService) ListModels(
 				CostPer_1MOut:           model.Cost.OutputPer1M,
 				CanReason:               model.Capabilities.CanReason,
 				SupportsAttachments:     model.Capabilities.SupportsAttachments,
-				Tags:                    model.Tags,
+				Tags:                    registry.TagsOf(model.ID),
 				SupportsTools:           model.Capabilities.SupportsTools,
 				SupportsCaching:         model.Capabilities.SupportsCaching,
 				SupportedThinkingLevels: models.SupportedThinkingLevels(model.Capabilities),
@@ -142,8 +142,46 @@ func (s *CatalogService) ListModels(
 	resp := &reliantv1.ListModelsResponse{
 		Models: modelList,
 		Total:  int32(len(modelList)),
+		Tiers:  tierResolutions(registry, configuredProviderIDs(availableDrivers)),
 	}
 	return connect.NewResponse(resp), nil
+}
+
+// configuredProviderIDs returns the driver IDs the user has properly
+// configured. Mirrors the LLM-call handler's provider set so a tier shown here
+// is the tier a request would actually resolve to.
+func configuredProviderIDs(availableDrivers models.AvailableDrivers) []string {
+	providers := make([]string, 0, len(availableDrivers.Drivers))
+	for driverID, driverConfig := range availableDrivers.Drivers {
+		if driverConfig.IsConfigured() {
+			providers = append(providers, string(driverID))
+		}
+	}
+	return providers
+}
+
+// tierResolutions resolves every declared tag against the given providers,
+// yielding the model and effort a `{tags: [tag]}` selector runs at. Tags that
+// do not resolve to a text model (unconfigured providers, image-gen) are
+// skipped.
+func tierResolutions(registry *models.ModelRegistry, providers []string) []*reliantv1.TierResolution {
+	tags := registry.ListAllTags()
+	tiers := make([]*reliantv1.TierResolution, 0, len(tags))
+	for _, tag := range tags {
+		resolved, err := registry.Resolve(models.ModelSelector{
+			Tags:                  []string{tag},
+			RequireOutputModality: models.ModalityText,
+		}, providers)
+		if err != nil || !resolved.Definition.Capabilities.CanOutput(models.ModalityText) {
+			continue
+		}
+		tiers = append(tiers, &reliantv1.TierResolution{
+			Tag:           tag,
+			ModelId:       resolved.Definition.ID + "@" + resolved.Provider.Driver,
+			ThinkingLevel: resolved.ThinkingLevel,
+		})
+	}
+	return tiers
 }
 
 // capabilitiesToStrings converts model capabilities to a list of strings for display

@@ -177,7 +177,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
     const [showPromptPicker, setShowPromptPicker] = useState(false);
 
     // Models list for resolving tags to display names in the toolbar pill
-    const { models: availableModels } = useModels();
+    const { models: availableModels, tiers } = useModels();
 
     // Forward the internal ref to the parent
     useImperativeHandle(ref, () => textareaRef.current!, []);
@@ -1880,8 +1880,9 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
                           ?? Object.entries(workflowParams).find(([k]) => k.endsWith('.model'))?.[1] as Record<string, unknown> | undefined;
                         const currentModelTag = (modelValue?.tags as string[])?.[0];
                         const currentModelId = modelValue?.id as string | undefined;
+                        const tierModelId = currentModelTag ? tiers?.[currentModelTag]?.modelId : undefined;
                         const resolvedModel = currentModelTag
-                          ? availableModels.find(m => m.tags?.includes(currentModelTag))
+                          ? availableModels.find(m => tierModelId ? m.id === tierModelId : m.tags?.includes(currentModelTag))
                           : currentModelId
                             ? availableModels.find(m => m.id === currentModelId || m.id.split('@')[0] === currentModelId)
                             : null;

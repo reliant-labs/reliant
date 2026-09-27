@@ -2,6 +2,7 @@
 package drivers
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -45,13 +46,7 @@ func TestGeminiImageModels_DeclareImageOutputAndImageGenTag(t *testing.T) {
 				modelID)
 		}
 
-		var hasImageGenTag bool
-		for _, tag := range definition.Tags {
-			if tag == DefaultImageGenTag {
-				hasImageGenTag = true
-			}
-		}
-		if !hasImageGenTag {
+		if !slices.Contains(registry.TagsOf(definition.ID), DefaultImageGenTag) {
 			t.Errorf("model %s does not carry the %q tag, so a default image request cannot select it",
 				modelID, DefaultImageGenTag)
 		}

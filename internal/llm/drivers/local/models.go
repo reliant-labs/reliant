@@ -206,7 +206,6 @@ func convertLocalModelToDefinition(m localModel) models.ModelDefinition {
 	return models.ModelDefinition{
 		ID:         "local-" + sanitizeModelID(m.ID),
 		Name:       friendlyModelName(m.ID),
-		Tags:       []string{"local"},
 		Visibility: models.VisibilityUser,
 		Capabilities: models.ModelCapabilities{
 			MaxContextWindow:    int(contextWindow),

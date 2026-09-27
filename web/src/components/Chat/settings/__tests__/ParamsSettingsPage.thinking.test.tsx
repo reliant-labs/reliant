@@ -4,6 +4,7 @@ import { ParamsSettingsPage } from "../ParamsSettingsPage";
 import type { InputDef } from "../../../../lib/inputHelpers";
 
 const mocks = vi.hoisted(() => ({
+  tiers: {} as Record<string, { modelId: string; thinkingLevel: string }>,
   models: [
     {
       id: "claude-4.5-sonnet@anthropic",
@@ -23,7 +24,7 @@ vi.mock("@tanstack/react-router", () => ({
 }));
 
 vi.mock("../../../../store/globalDataStore", () => ({
-  useModels: () => ({ models: mocks.models, loading: false, error: null }),
+  useModels: () => ({ models: mocks.models, tiers: mocks.tiers, loading: false, error: null }),
   useGlobalDataStore: Object.assign(
     () => ({ models: mocks.models }),
     { getState: () => ({ models: mocks.models }) },
@@ -55,12 +56,16 @@ const thinkingInput: InputDef = {
   },
 } as unknown as InputDef;
 
-function renderParams(values: Record<string, unknown>) {
+function renderParams(
+  values: Record<string, unknown>,
+  onChange: (values: Record<string, unknown>) => void = () => {},
+  thinking: InputDef = thinkingInput,
+) {
   return render(
     <ParamsSettingsPage
-      inputs={{ model: modelInput, thinking_level: thinkingInput }}
+      inputs={{ model: modelInput, thinking_level: thinking }}
       values={values}
-      onChange={() => {}}
+      onChange={onChange}
       onBack={() => {}}
       onClose={() => {}}
       excludeParams={["model"]}
@@ -116,5 +121,52 @@ describe("ParamsSettingsPage thinking_level", () => {
     } finally {
       mocks.models[0].supportedThinkingLevels = ["low", "medium", "high", "xhigh"];
     }
+  });
+
+  describe("tag selector (tier owns the effort)", () => {
+    // The agent workflow's thinking_level has no default: empty means "let the
+    // model selector decide".
+    const unsetThinkingInput = {
+      ...thinkingInput,
+      config: {
+        case: "enumInput",
+        value: {
+          base: { description: "Thinking effort", ui: "config" },
+          enumValues: ["low", "medium", "high", "xhigh"],
+        },
+      },
+    } as unknown as InputDef;
+
+    it("does not pin a concrete level when the tier decides", async () => {
+      mocks.tiers = { flagship: { modelId: "claude-4.5-sonnet@anthropic", thinkingLevel: "xhigh" } };
+      const onChange = vi.fn();
+      try {
+        renderParams({ model: { tags: ["flagship"] } }, onChange, unsetThinkingInput);
+
+        // Empty renders as the tier's effort, and nothing is written back —
+        // an explicit thinking_level would override the tier server-side.
+        expect(await screen.findByRole("button", { name: "Auto (xhigh)" })).toBeTruthy();
+        expect(onChange).not.toHaveBeenCalled();
+      } finally {
+        mocks.tiers = {};
+      }
+    });
+
+    it("clears an unsupported level back to the tier rather than a model default", async () => {
+      mocks.tiers = { flagship: { modelId: "claude-4.5-sonnet@anthropic", thinkingLevel: "high" } };
+      mocks.models[0].supportedThinkingLevels = ["low", "high"];
+      const onChange = vi.fn();
+      try {
+        renderParams({ model: { tags: ["flagship"] }, thinking_level: "xhigh" }, onChange, unsetThinkingInput);
+
+        await screen.findByRole("button", { name: "xhigh" });
+        expect(onChange).toHaveBeenCalledWith(
+          expect.objectContaining({ thinking_level: "" }),
+        );
+      } finally {
+        mocks.tiers = {};
+        mocks.models[0].supportedThinkingLevels = ["low", "medium", "high", "xhigh"];
+      }
+    });
   });
 });

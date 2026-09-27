@@ -7,10 +7,16 @@ import "testing"
 // visibility: a plain chat model with no declared modalities, an image-only
 // generation model, and a multi-modal model that emits both.
 const modalityVisibilityYAML = `
+tags:
+  flagship:
+    - {model: chat-model}
+  image-gen:
+    - {model: image-only-model}
+    - {model: multimodal-model}
+    - {model: dev-image-model}
 models:
   - id: chat-model
     name: Chat Model
-    tags: [flagship]
     visibility: user
     providers:
       - driver: openai
@@ -18,7 +24,6 @@ models:
 
   - id: image-only-model
     name: Image Only Model
-    tags: [image-gen]
     visibility: user
     capabilities:
       output_modalities: [image]
@@ -28,7 +33,6 @@ models:
 
   - id: multimodal-model
     name: Multi-Modal Model
-    tags: [image-gen]
     visibility: user
     capabilities:
       output_modalities: [text, image]
@@ -38,7 +42,6 @@ models:
 
   - id: dev-image-model
     name: Dev Image Model
-    tags: [image-gen]
     visibility: dev
     capabilities:
       output_modalities: [image]

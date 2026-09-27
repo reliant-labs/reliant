@@ -3,8 +3,10 @@ description: "Implementation specialist for well-specified code changes — foll
 tag: agent
 params:
   model:
-    tags: [flagship]
-    thinking_level: medium
+    # A tier, not an effort. The registry decides what [moderate] costs: today
+    # claude-5.5-opus at high (see the tags section of models.yaml). Pinning
+    # thinking_level here would silently override that.
+    tags: [moderate]
   skills:
     - code-search
   tools:

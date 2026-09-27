@@ -72,6 +72,19 @@ message ListModelsResponse {
   repeated ModelInfo models = 1;
   // Total number of models
   int32 total = 2;
+  // What each declared tag selector resolves to for the calling user's
+  // configured providers, in ListAllTags order. Tags that resolve to nothing
+  // (or only to non-text models, e.g. image-gen) are omitted.
+  repeated TierResolution tiers = 3;
+}
+
+// TierResolution is what a tag selector resolves to for this user right now.
+message TierResolution {
+  string tag = 1;
+  // "modelId@driverId", same format as ModelInfo.id
+  string model_id = 2;
+  // Effort the tier runs at ("" = model cannot reason)
+  string thinking_level = 3;
 }
 
 // ListModelsByProviderRequest is the request for ListModelsByProvider
