@@ -69,19 +69,18 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge db check`](#reliant-forge-db-check) | Report schema drift between entity protos and their born migrations |
 | [`reliant forge db introspect`](#reliant-forge-db-introspect) | Inspect the migrated database schema |
 | [`reliant forge db migrate`](#reliant-forge-db-migrate) | Run migration lifecycle commands with golang-migrate |
-| [`reliant forge db migrate down`](#reliant-forge-db-migrate-down) | Rollback the most recent migration |
 | [`reliant forge db migrate force`](#reliant-forge-db-migrate-force) | Clear a dirty migration state by recording a version without running SQL |
 | [`reliant forge db migrate status`](#reliant-forge-db-migrate-status) | Show migration status |
 | [`reliant forge db migrate up`](#reliant-forge-db-migrate-up) | Apply pending migrations |
 | [`reliant forge db migrate version`](#reliant-forge-db-migrate-version) | Show the current migration version |
-| [`reliant forge db migration`](#reliant-forge-db-migration) | Create new SQL migration files |
-| [`reliant forge db migration new`](#reliant-forge-db-migration-new) | Create a new migration pair with schema context |
+| [`reliant forge db migration`](#reliant-forge-db-migration) | Create new SQL migration files (forward only) |
+| [`reliant forge db migration new`](#reliant-forge-db-migration-new) | Create a new forward-only migration with schema context |
 | [`reliant forge db reset`](#reliant-forge-db-reset) | DROP the dev database, recreate it, migrate to head, and seed (dev-only) |
 | [`reliant forge db seed`](#reliant-forge-db-seed) | Materialize deterministic development seed data at runtime |
 | [`reliant forge db seed apply`](#reliant-forge-db-seed-apply) | Materialize seed data into the dev database (dev-only) |
 | [`reliant forge db seed reset`](#reliant-forge-db-seed-reset) | Delete seeded rows (child-first) and re-seed (dev-only) |
 | [`reliant forge db seed status`](#reliant-forge-db-seed-status) | Show per-table seeded-row counts vs the seed model |
-| [`reliant forge db squash`](#reliant-forge-db-squash) | Collapse N migrations into one canonical baseline (.up.sql + .down.sql) |
+| [`reliant forge db squash`](#reliant-forge-db-squash) | Collapse N migrations into one canonical baseline (.up.sql) |
 | [`reliant forge debug`](#reliant-forge-debug) | Debug a running service with Delve |
 | [`reliant forge debug args`](#reliant-forge-debug-args) | Show function arguments in the current scope |
 | [`reliant forge debug break`](#reliant-forge-debug-break) | Set a breakpoint |
@@ -126,8 +125,8 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge env verify`](#reliant-forge-env-verify) | Prove an environment is RUNNING the release its binding claims |
 | [`reliant forge generate`](#reliant-forge-generate) | Generate code from proto files |
 | [`reliant forge lint`](#reliant-forge-lint) | Run linters on the project |
-| [`reliant forge login`](#reliant-forge-login) | Authenticate to a hosted control plane |
-| [`reliant forge logout`](#reliant-forge-logout) | Forget the stored credential for one control plane |
+| [`reliant forge login`](#reliant-forge-login) | Authenticate to the control plane(s) this project declares |
+| [`reliant forge logout`](#reliant-forge-logout) | Forget the stored credential for this project's control plane(s) |
 | [`reliant forge package`](#reliant-forge-package) | Manage internal packages |
 | [`reliant forge package new`](#reliant-forge-package-new) | Create a new internal package with contract interface |
 | [`reliant forge project`](#reliant-forge-project) | Create, evolve, and inspect the project as a whole |
@@ -172,10 +171,10 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge scaffold webhook`](#reliant-forge-scaffold-webhook) | Scaffold a webhook endpoint on an existing service |
 | [`reliant forge scaffold worker`](#reliant-forge-scaffold-worker) | Scaffold a new background worker |
 | [`reliant forge secret`](#reliant-forge-secret) | Manage an environment's secret store (local file or hosted control plane) |
-| [`reliant forge secret ensure`](#reliant-forge-secret-ensure) | Create the secret store and report missing values |
+| [`reliant forge secret ensure`](#reliant-forge-secret-ensure) | Create the FileSecrets store and report missing values |
 | [`reliant forge secret list`](#reliant-forge-secret-list) | List declared secrets and whether each has a value |
 | [`reliant forge secret migrate`](#reliant-forge-secret-migrate) | Convert a legacy .env secrets file into the YAML store |
-| [`reliant forge secret set`](#reliant-forge-secret-set) | Set one secret value (read from stdin) |
+| [`reliant forge secret set`](#reliant-forge-secret-set) | Add or replace one secret value (read from stdin) |
 | [`reliant forge secret unset`](#reliant-forge-secret-unset) | Remove one secret from the store |
 | [`reliant forge skill`](#reliant-forge-skill) | Manage Forge skills — conventions and playbooks for LLM agents |
 | [`reliant forge skill list`](#reliant-forge-skill-list) | List available skills (forge-shipped, project, and user-global) |
@@ -716,8 +715,8 @@ reliant forge
 | [`env`](#reliant-forge-env) | Manage deploy environments: bring stacks up/down, deploy, promote, and inspect |
 | [`generate`](#reliant-forge-generate) | Generate code from proto files |
 | [`lint`](#reliant-forge-lint) | Run linters on the project |
-| [`login`](#reliant-forge-login) | Authenticate to a hosted control plane |
-| [`logout`](#reliant-forge-logout) | Forget the stored credential for one control plane |
+| [`login`](#reliant-forge-login) | Authenticate to the control plane(s) this project declares |
+| [`logout`](#reliant-forge-logout) | Forget the stored credential for this project's control plane(s) |
 | [`package`](#reliant-forge-package) | Manage internal packages |
 | [`project`](#reliant-forge-project) | Create, evolve, and inspect the project as a whole |
 | [`release`](#reliant-forge-release) | Inspect and verify release ledgers |
@@ -845,6 +844,7 @@ reliant forge build [environment] [flags]
 | `--option`, `-D` | `stringArray` | `[]` | Set a render option the env's KCL declares, as name=value (repeatable). Relayed to KCL verbatim — forge does not interpret the value. Requires the environment argument. List an env's options with `forge env options <env>`. |
 | `--output`, `-o` | `string` | `bin` | Output directory for binaries |
 | `--parallel` | `bool` | `true` | Build services in parallel |
+| `--plan` | `bool` | - | Resolve the exact build set this invocation would build (same KCL discovery, same --target narrowing) and PREFLIGHT every step without running it: each go-build package exists and is a main package, each Dockerfile and frontend build script exists, each ShellBuild cwd exists, and with --release the ledger would cover everything the env declares. Builds, pushes, generates and writes nothing; exits non-zero on anything the real build would fail on. Pass it the release cut's exact arguments to gate a PR on the cut. |
 | `--push` | `string` | - | Push docker images to this registry after build (implies --docker) |
 | `--release` | `string` | - | Cut a build-once → promote release with this version label (e.g. v1.4.0). REQUIRES the environment argument: the release's image SET (project images plus per-env external build_cmd images like reliant/workspace-base) is discovered from deploy/kcl/<env>/main.k. The built images stay env-agnostic — pick any env that declares the full set, then promote to every env with 'forge env promote <version> --to <env>'. Captures each image's digest into a release ledger (.forge/releases/<version>.json); 'forge env deploy <env>' then pins the SAME digests. Implies --docker; pair with --push so the digests are registry-addressable. |
 | `--tag` | `string` | - | Override the image tag (default: git describe --tags --always --dirty). Persisted to .forge/state/build-<env>.json when --push succeeds so forge env deploy uses the same value. |
@@ -1054,7 +1054,7 @@ List the releases the hosted control plane holds for your organization.
 
 The endpoint comes from <env>'s forge.ControlPlane declaration; the
 credential from --token, then the declared env var, then the credentials file entry for
-that endpoint (`forge login <env>`).
+that endpoint (`forge login`).
 
 Scope is always the caller's own organization — the request carries no
 organization field, so there is nothing to widen.
@@ -1501,10 +1501,10 @@ reliant forge db
 | [`check`](#reliant-forge-db-check) | Report schema drift between entity protos and their born migrations |
 | [`introspect`](#reliant-forge-db-introspect) | Inspect the migrated database schema |
 | [`migrate`](#reliant-forge-db-migrate) | Run migration lifecycle commands with golang-migrate |
-| [`migration`](#reliant-forge-db-migration) | Create new SQL migration files |
+| [`migration`](#reliant-forge-db-migration) | Create new SQL migration files (forward only) |
 | [`reset`](#reliant-forge-db-reset) | DROP the dev database, recreate it, migrate to head, and seed (dev-only) |
 | [`seed`](#reliant-forge-db-seed) | Materialize deterministic development seed data at runtime |
-| [`squash`](#reliant-forge-db-squash) | Collapse N migrations into one canonical baseline (.up.sql + .down.sql) |
+| [`squash`](#reliant-forge-db-squash) | Collapse N migrations into one canonical baseline (.up.sql) |
 
 ---
 
@@ -1576,6 +1576,9 @@ Run migration lifecycle commands with golang-migrate
 
 Apply, inspect, and repair migration state using golang-migrate.
 
+There is no "down": forge rolls forward only. A bad migration is repaired by a
+new forward migration written against the state the database is actually in.
+
 Migrations are stored in db/migrations/ by default.
 Install golang-migrate from https://github.com/golang-migrate/migrate/tree/master/cmd/migrate.
 
@@ -1586,7 +1589,6 @@ Examples:
   forge db migrate up --dsn=<dsn>
   forge db migrate up                   # picks up $DATABASE_URL
   DATABASE_URL=... forge db migrate status
-  forge db migrate down --dsn=<dsn>
   forge db migrate version
   forge db migrate force 20240102150405
 
@@ -1598,28 +1600,10 @@ reliant forge db migrate
 
 | Command | Description |
 |---------|-------------|
-| [`down`](#reliant-forge-db-migrate-down) | Rollback the most recent migration |
 | [`force`](#reliant-forge-db-migrate-force) | Clear a dirty migration state by recording a version without running SQL |
 | [`status`](#reliant-forge-db-migrate-status) | Show migration status |
 | [`up`](#reliant-forge-db-migrate-up) | Apply pending migrations |
 | [`version`](#reliant-forge-db-migrate-version) | Show the current migration version |
-
----
-
-#### reliant forge db migrate down
-
-Rollback the most recent migration
-
-```
-reliant forge db migrate down [flags]
-```
-
-**Flags:**
-
-| Flag | Type | Default | Description |
-|------|------|---------|-------------|
-| `--dir` | `string` | `db/migrations` | Migrations directory |
-| `--dsn` | `string` | - | Database connection string (falls back to $DATABASE_URL) |
 
 ---
 
@@ -1712,11 +1696,11 @@ reliant forge db migrate version [flags]
 
 #### reliant forge db migration
 
-Create new SQL migration files
+Create new SQL migration files (forward only)
 
-Create a new SQL migration pair in db/migrations/.
+Create a new forward-only SQL migration in db/migrations/.
 
-This scaffolds sequentially-numbered .up.sql and .down.sql files, continuing
+This scaffolds a sequentially-numbered .up.sql file, continuing
 the project's existing numbering (00001_, 00002_, …) so new migrations stay
 consistent with the scaffold births and never collide. The .up.sql file
 includes rich schema context so LLMs can immediately write the migration SQL.
@@ -1739,13 +1723,13 @@ reliant forge db migration
 
 | Command | Description |
 |---------|-------------|
-| [`new`](#reliant-forge-db-migration-new) | Create a new migration pair with schema context |
+| [`new`](#reliant-forge-db-migration-new) | Create a new forward-only migration with schema context |
 
 ---
 
 #### reliant forge db migration new
 
-Create a new migration pair with schema context
+Create a new forward-only migration with schema context
 
 ```
 reliant forge db migration new [name] [flags]
@@ -1932,15 +1916,16 @@ reliant forge db seed status [flags]
 
 #### reliant forge db squash
 
-Collapse N migrations into one canonical baseline (.up.sql + .down.sql)
+Collapse N migrations into one canonical baseline (.up.sql)
 
 Squash applies every migration in --from-dir against an ephemeral Postgres
 container, dumps the resulting schema + seed data with pg_dump, and writes
-a single baseline migration pair.
+a single forward-only baseline migration.
 
 Output:
   <out-dir>/<baseline>.up.sql    (CREATE statements + INSERTs for non-schema_migrations rows)
-  <out-dir>/<baseline>.down.sql  (DROP SCHEMA public CASCADE; CREATE SCHEMA public)
+
+No .down.sql is written: forge rolls forward only.
 
 This is the canonical "N migrations → one baseline" workflow used when
 pulling a long-lived schema into a new project, or when collapsing
@@ -1970,7 +1955,7 @@ reliant forge db squash [flags]
 | `--from-dir` | `string` | `db/migrations` | Source directory holding the migrations to squash |
 | `--image` | `string` | `postgres:16-alpine` | Postgres docker image used for the ephemeral container |
 | `--out-dir` | `string` | - | Output directory for the baseline files (default: same as --from-dir) |
-| `--to` | `string` | `00001_baseline` | Baseline filename stem (writes <stem>.up.sql + <stem>.down.sql) |
+| `--to` | `string` | `00001_baseline` | Baseline filename stem (writes <stem>.up.sql) |
 
 ---
 
@@ -2688,9 +2673,12 @@ when it holds an entry, and is never included in --stacks-only — a generator
 always emits the default's config itself.
 
 Inside KCL, prefer the fp.dev_stacks() builtin over shelling out to this
-command: it returns the same roster during the render, and it deliberately
-returns EMPTY on a read-only render (forge generate / forge ci) so a file
-generated from it stays byte-identical across machines.
+command: it returns the same roster during the render (and EMPTY when forge
+generate / forge ci render without one). Write the generated file with
+fp.write_file(path, content), not KCL's file.write: file.write fires on every
+evaluation, so ci, lint, doctor and env render would rewrite it from whatever
+roster they saw; fp.write_file writes only on forge env up and an applying
+forge env deploy of a local env.
 
 ```
 reliant forge env devstack list [flags]
@@ -2895,6 +2883,10 @@ registry, platform, image_tag, supabase URL / JWT issuer) are replaced
 with REPLACE_ME_* placeholders carrying inline 'check:' guidance, so a
 knob you forget to set is a visible author-time error rather than a value
 silently inherited from the wrong environment.
+
+A hosted env's forge.ControlPlane endpoint is not copied either: the new
+env falls back to the declaration's default, Reliant cloud, with a comment
+naming the template's value. Set it only to target another control plane.
 
 The template env is auto-selected (a cloud-shaped sibling is preferred)
 or chosen explicitly with --from. After filling the placeholders, run
@@ -3706,20 +3698,26 @@ reliant forge lint [paths...] [flags]
 
 ### reliant forge login
 
-Authenticate to a hosted control plane
+Authenticate to the control plane(s) this project declares
 
 Obtain a credential for a hosted control plane and store it in the shared
 credentials file (~/.config/forge/credentials.json, 0600), keyed by the endpoint.
 
-The control plane is named by an ENVIRONMENT, whose KCL declares it:
+Login is about WHO you are, not WHERE you deploy, so it takes no environment.
+With no flag it logs into EVERY distinct control plane this project's envs
+declare in KCL:
 
-    control_plane = forge.ControlPlane {
-        endpoint = "https://admin.example.com"
+    control_plane = forge.ControlPlane {}    # Reliant cloud (https://admin.reliantapi.com)
+    control_plane = forge.ControlPlane {     # any other control plane
+        endpoint = "http://127.0.0.1:8090"
     }
 
-or directly with --endpoint. There is no "current" server: every forge
-command finds its credential by the endpoint its own env declares, so a
-staging login is never presented to prod.
+(two envs declaring the same endpoint share one login). When nothing declares
+one — outside a project, or before any env does — it logs into Reliant cloud.
+--endpoint names one directly. There is no "current" server: every forge
+command finds its credential by the endpoint its own env declares, so which
+env a command acts on is always the env it names — never a login's side
+effect.
 
 INTERACTIVE (a human): the OAuth authorization-code flow with PKCE. forge
 opens your browser at <endpoint>/oauth/authorize, you sign in and approve,
@@ -3727,9 +3725,10 @@ and the browser returns a one-time code to a temporary listener on a
 loopback port (chosen by the OS, so two logins can run at once). forge
 redeems it at <endpoint>/oauth/token for an access token (rlat_…, 90 days).
 
-NON-INTERACTIVE (CI): pass --token, or set the environment variable the
-environment declares (FORGE_CONTROL_PLANE_TOKEN by default) and skip login
-entirely. A pipeline has no browser, which is what org tokens are for.
+NON-INTERACTIVE (CI): pass --token (with --endpoint when the project declares
+more than one control plane), or set the environment variable the environment
+declares (FORGE_CONTROL_PLANE_TOKEN by default) and skip login entirely. A
+pipeline has no browser, which is what org tokens are for.
 
 CREDENTIAL PRECEDENCE, when any forge command talks to the control plane:
 
@@ -3738,14 +3737,14 @@ CREDENTIAL PRECEDENCE, when any forge command talks to the control plane:
     3. the credentials file entry for that env's endpoint — a human's default
 
 ```
-reliant forge login [env] [flags]
+reliant forge login [--endpoint URL] [flags]
 ```
 
 **Flags:**
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
-| `--endpoint` | `string` | - | Control plane URL, instead of reading an env's declaration |
+| `--endpoint` | `string` | - | Log into this control plane URL only, instead of every one the project declares (default when none is declared: Reliant cloud) |
 | `--no-verify` | `bool` | - | With --token: store it without checking it against the endpoint |
 | `--token` | `string` | - | Store this token instead of running the browser flow |
 
@@ -3753,17 +3752,17 @@ reliant forge login [env] [flags]
 
 ### reliant forge logout
 
-Forget the stored credential for one control plane
+Forget the stored credential for this project's control plane(s)
 
 ```
-reliant forge logout [env] [flags]
+reliant forge logout [--endpoint URL] [flags]
 ```
 
 **Flags:**
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
-| `--endpoint` | `string` | - | Control plane URL, instead of reading an env's declaration |
+| `--endpoint` | `string` | - | Forget this control plane URL only, instead of every one the project declares |
 
 ---
 
@@ -4305,21 +4304,23 @@ reliant forge project migrate
 Import migrations from another format (e.g. goose) into golang-migrate shape
 
 Import SQL migrations from another tool's format into forge's
-golang-migrate two-file shape (.up.sql + .down.sql).
+forward-only golang-migrate shape (one .up.sql per migration).
 
 Currently supports:
   --from goose    One-file goose migrations with -- +goose Up / -- +goose Down
 
 For each *.sql file in --src-dir, the importer:
-  1. Splits the file at the -- +goose Down line.
+  1. Keeps the -- +goose Up section and DROPS the -- +goose Down section.
+     Forge rolls forward only and never runs down SQL, so the importer
+     writes no .down.sql; each dropped Down section is listed so you can
+     see what was discarded.
   2. Drops -- +goose StatementBegin / -- +goose StatementEnd markers.
   3. Carries -- +goose NO TRANSACTION over to a golang-migrate x-no-tx-wrap
-     header on both halves.
+     header.
   4. Renumbers starting from the next-available index in --dest-dir, so
      pack-installed migrations (00001-0000N) keep their slots.
 
-Files with no goose markers are skipped. Files with no Down block get an
-empty .down.sql with a TODO comment.
+Files with no goose markers are skipped.
 
 Examples:
   forge project migrate import --from goose --src-dir ../old-project/migrations
@@ -4416,6 +4417,13 @@ name becomes cmd/<name>/, the binary, the image and the deploy manifests, so
 in a worktree or a branch checkout — where the directory is named after the
 branch rather than the product — pass --name.
 
+--in-place never overwrites a file that already exists: forge keeps yours,
+skips its own version, and lists what it kept (--force replaces them). An
+existing .gitignore is merged — forge appends only the entries it lacks,
+in a "# --- forge ---" block. A directory already inside a git repository
+(its root or any subdirectory) is left alone: no git init, no commit. A
+fresh directory outside any repository gets 'git init' + an initial commit.
+
 ```
 reliant forge project new [project-name] --mod [module-path] [flags]
 ```
@@ -4427,7 +4435,7 @@ reliant forge project new [project-name] --mod [module-path] [flags]
 | `--binary` | `string` | `per-service` | Binary packaging: 'per-service' (default — canonical cmd/server.go cobra root, one Application per service) or 'shared' (one Go binary, cobra subcommand per service, KCL MultiServiceApplication for deploy) |
 | `--buf-plugins` | `string` | `local` | Default proto plugin source: 'local' (resolved from PATH; no BSR auth needed) or 'remote' (BSR-hosted, requires login under load) |
 | `--disable` | `stringSlice` | `[]` | Features to disable (comma-separated): orm, codegen, migrations, ci, build, deploy, contracts, docs, frontend, observability, hot_reload |
-| `--force` | `bool` | - | Overwrite existing project configuration |
+| `--force` | `bool` | - | With --in-place: scaffold over an existing forge.yaml, and REPLACE every pre-existing file the scaffold writes (README.md, go.mod, Taskfile.yml, …) with forge's version. Without it, existing files are kept and listed. .gitignore is always merged, never replaced |
 | `--frontend` | `stringSlice` | `[]` | Name(s) of Next.js frontends (can be repeated or comma-separated) |
 | `--frontend-workspaces` | `bool` | - | Opt into pnpm-workspaces layout: emit packages/api + packages/hooks + packages/ui-web shared across all frontends. Off by default; recommended once you have 2+ frontends (web + mobile). |
 | `--go-version` | `string` | - | Go version to use in go.mod (e.g., 1.24); defaults to detected version |
@@ -5069,6 +5077,8 @@ one after it — a purpose-built frontend starts by deleting most of what was
 just written. Naming routes makes the set an allowlist, so entities added
 later do not silently appear in this frontend. The value is persisted as
 frontends[].routes and honored by every subsequent forge generate run.
+--routes none generates no CRUD pages at all (a marketing site, or a
+frontend whose screens are all hand-written).
 
 --base-path mounts the frontend under a URL prefix (e.g. /admin behind a
 reverse proxy that blends several apps on one host). It is persisted as
@@ -5112,7 +5122,7 @@ reliant forge scaffold frontend <name> [flags]
 | `--kind` | `string` | - | frontend kind (web, mobile, or vite-spa) |
 | `--output` | `string` | - | Next.js output shape: standalone (default), static, or server. Only applies to --kind web. |
 | `--port` | `int` | `0` | Pin the frontend dev-server port. Default (unset) allocates a free port at launch — set this only when the port is externally fixed (e.g. an OAuth redirect URI registered with an IdP). |
-| `--routes` | `stringSlice` | `[]` | Only generate CRUD pages for these entity route slugs (e.g. --routes users,usage-events). Default (unset) generates a page set for EVERY entity. Persisted as frontends[].routes and honored by every later generate run. |
+| `--routes` | `stringSlice` | `[]` | Only generate CRUD pages for these entity route slugs (e.g. --routes users,usage-events), or `--routes none` for no generated pages at all. Default (unset) generates a page set for EVERY entity. Persisted as frontends[].routes and honored by every later generate run. |
 
 ---
 
@@ -5456,21 +5466,26 @@ Manage the secret store an environment's secret_provider declares:
 
   forge.FileSecrets    the gitignored YAML store (dev/e2e) — a flat map of
                        env-var NAME to value.
-  forge.HostedSecrets  the env's hosted control plane (control_plane). set /
-                       unset / list go through its write-only API; values are
-                       materialized in-cluster and are never read back or
-                       cached on this machine.
+  forge.HostedSecrets  the env's control plane (control_plane). set / unset /
+                       list go through its API. A hosted env's values are
+                       never read back by these commands; a LOCAL env's
+                       (control_plane with no hosted tier) are pulled into
+                       memory by `forge env up` and nothing else.
+
+Every command names its environment with a REQUIRED --env flag. There is no
+default and no positional form: the env is the one thing a secret command
+must never guess.
 
 A secret is declared ONCE in KCL as a reference (EnvVar.secret_ref); its
 value lives here and never enters git or KCL render output. A value only
 reaches a service that DECLARES it, so putting something here that no
 service references does nothing — config belongs in deploy/kcl/<env>/config.k.
 
-  forge secret ensure dev          # create the file + report missing values
-  forge secret set    dev STRIPE_SECRET_KEY
-  forge secret unset  dev STRIPE_SECRET_KEY
-  forge secret list   dev          # names + presence, never values
-  forge secret migrate dev         # convert a legacy .env file to YAML
+  forge secret set   --env dev STRIPE_SECRET_KEY   # value on stdin; add, or replace (= rotate)
+  forge secret unset --env dev STRIPE_SECRET_KEY
+  forge secret list  --env dev                     # names + presence, never values
+  forge secret ensure --env dev                    # FileSecrets: create the file + report missing
+  forge secret migrate --env dev                   # FileSecrets: convert a legacy .env file
 
 ```
 reliant forge secret
@@ -5480,27 +5495,33 @@ reliant forge secret
 
 | Command | Description |
 |---------|-------------|
-| [`ensure`](#reliant-forge-secret-ensure) | Create the secret store and report missing values |
+| [`ensure`](#reliant-forge-secret-ensure) | Create the FileSecrets store and report missing values |
 | [`list`](#reliant-forge-secret-list) | List declared secrets and whether each has a value |
 | [`migrate`](#reliant-forge-secret-migrate) | Convert a legacy .env secrets file into the YAML store |
-| [`set`](#reliant-forge-secret-set) | Set one secret value (read from stdin) |
+| [`set`](#reliant-forge-secret-set) | Add or replace one secret value (read from stdin) |
 | [`unset`](#reliant-forge-secret-unset) | Remove one secret from the store |
 
 ---
 
 #### reliant forge secret ensure
 
-Create the secret store and report missing values
+Create the FileSecrets store and report missing values
 
-Create the environment's secret store (0600) if absent and list every
+Create the environment's FileSecrets store (0600) if absent and list every
 declared secret that has no value yet.
 
 Exits non-zero when a declared secret is missing a value, so it works as a
 setup gate in a task/Makefile before 'forge env up'.
 
 ```
-reliant forge secret ensure <environment>
+reliant forge secret ensure --env <environment> [flags]
 ```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--env` | `string` | - | Environment whose secret store to act on (required; deploy/kcl/<env>/) |
 
 ---
 
@@ -5511,22 +5532,29 @@ List declared secrets and whether each has a value
 List every secret the environment's KCL declares, and whether the store
 holds a value for it. Values are NEVER printed.
 
-Also reports keys in the store that no service declares — those are inert
-(nothing injects them) and are usually either a typo or config that belongs
-in deploy/kcl/<env>/config.k.
+Works for every secret_provider:
+
+  file      presence read from the YAML store; inert (undeclared) keys listed.
+  hosted    names and current versions from the control plane's store.
+  external  the declarations only — presence is "unknown": forge cannot see
+            a Secret provisioned out of band.
+  rendered  the declared Secrets' keys, and whether each resolves from its
+            declared source.
+  none      the declarations only; nothing can supply a value.
 
 --json emits the same facts as a machine-readable document, and holds the
 same promise: the report has no field capable of carrying a value.
 
 ```
-reliant forge secret list <environment> [flags]
+reliant forge secret list --env <environment> [flags]
 ```
 
 **Flags:**
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
-| `--json` | `bool` | - | Emit machine-readable JSON (names/presence/declaring workloads/inert keys — never values) |
+| `--env` | `string` | - | Environment whose secret store to act on (required; deploy/kcl/<env>/) |
+| `--json` | `bool` | - | Emit machine-readable JSON (names/presence/versions/declaring workloads/inert keys — never values) |
 
 ---
 
@@ -5538,7 +5566,7 @@ Convert a legacy dotenv into the FileSecrets YAML store, then delete the
 original. Run with --dry-run first to see exactly which keys move.
 
 ```
-reliant forge secret migrate <environment> [flags]
+reliant forge secret migrate --env <environment> [flags]
 ```
 
 **Flags:**
@@ -5546,33 +5574,37 @@ reliant forge secret migrate <environment> [flags]
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--dry-run` | `bool` | - | Show what would move without writing anything |
+| `--env` | `string` | - | Environment whose secret store to act on (required; deploy/kcl/<env>/) |
 
 ---
 
 #### reliant forge secret set
 
-Set one secret value (read from stdin)
+Add or replace one secret value (read from stdin)
 
-Set a single secret in the environment's secret store.
+Set a single secret in the environment's secret store. Setting a key that
+already has a value REPLACES it — for a hosted store that is a new version,
+which is how a secret is rotated (there is no separate rotate command).
 
 The VALUE is read from stdin, never from argv — an argv value would land
 in shell history and in the process table. Pipe it, or type it and press
 Ctrl-D:
 
-  printf '%s' "$TOKEN" | forge secret set dev STRIPE_SECRET_KEY
-  forge secret set dev TLS_KEY --from-file ./key.pem
+  printf '%s' "$TOKEN" | forge secret set --env dev STRIPE_SECRET_KEY
+  forge secret set --env dev TLS_KEY --from-file ./key.pem
 
 A trailing newline is trimmed. Multi-line values (a PEM key, a JSON blob)
-are written as a YAML block scalar and round-trip unchanged.
+round-trip unchanged.
 
 ```
-reliant forge secret set <environment> <KEY> [flags]
+reliant forge secret set --env <environment> <KEY> [flags]
 ```
 
 **Flags:**
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--env` | `string` | - | Environment whose secret store to act on (required; deploy/kcl/<env>/) |
 | `--from-file` | `string` | - | Read the value from a file instead of stdin |
 
 ---
@@ -5582,8 +5614,14 @@ reliant forge secret set <environment> <KEY> [flags]
 Remove one secret from the store
 
 ```
-reliant forge secret unset <environment> <KEY>
+reliant forge secret unset --env <environment> <KEY> [flags]
 ```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--env` | `string` | - | Environment whose secret store to act on (required; deploy/kcl/<env>/) |
 
 ---
 

@@ -113,6 +113,15 @@ export const api = {
           metadata: undefined,
         })),
         total: response.total,
+        // What each tag selector ({tags: [tag]}) resolves to for this user:
+        // the model AND the effort the tier runs at. Authoritative — the web
+        // must not guess a tag's model from the (provider-sorted) list.
+        tiers: Object.fromEntries(
+          (response.tiers || []).map((t) => [
+            t.tag,
+            { modelId: t.modelId, thinkingLevel: t.thinkingLevel },
+          ])
+        ) as Record<string, { modelId: string; thinkingLevel: string }>,
       };
     },
 
@@ -140,6 +149,8 @@ export const api = {
 
       const catalogModels =
         catalogResult.status === "fulfilled" ? catalogResult.value.models : [];
+      const tiers =
+        catalogResult.status === "fulfilled" ? catalogResult.value.tiers : {};
       const catalogIds = new Set(catalogModels.map((m) => m.id));
 
       // Dynamic/per-account models surfaced by ListAvailableModels that the
@@ -195,7 +206,7 @@ export const api = {
       }
 
       const models = [...catalogModels, ...extras];
-      return { models, total: models.length };
+      return { models, total: models.length, tiers };
     },
     listByProvider: async (provider: string) => {
       const client = getCatalogClient();

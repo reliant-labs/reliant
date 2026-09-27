@@ -80,6 +80,18 @@ func classifyError(err error) error {
 		return temporal.NewNonRetryableApplicationError(terminalErr.Error(), "TerminalError", terminalErr.Cause)
 	}
 
+	// An activity that already decided its own disposition is authoritative.
+	// The string patterns below exist for errors nobody classified; applied to
+	// one that WAS classified, they overrule a deliberate decision on the
+	// strength of a word in the provider's message. The motivating case: a
+	// ProviderRateLimited error whose provider text says "quota exceeded" was
+	// rewrapped as TerminalError, so a spent subscription paged telemetry as a
+	// defect.
+	var classified *temporal.ApplicationError
+	if errors.As(err, &classified) && classified.NonRetryable() {
+		return err
+	}
+
 	// Auto-classify based on error content
 	errStr := strings.ToLower(err.Error())
 
@@ -412,7 +424,10 @@ func isTerminal(err error) bool {
 		return true
 	}
 
-	// Check for Temporal ApplicationError
+	// Check for Temporal ApplicationError. Only "TerminalError" is terminal:
+	// a non-retryable ProviderRateLimited error stops the retry ladder early
+	// because retrying cannot help, but it is waiting, not a defect, so it
+	// must neither page telemetry nor stop the chat from being resumable.
 	var appErr *temporal.ApplicationError
 	if errors.As(err, &appErr) {
 		return appErr.Type() == "TerminalError"

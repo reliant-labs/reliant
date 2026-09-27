@@ -364,6 +364,9 @@ message ListDeployEnvironmentsRequest {
   // text columns rather than naming one, which is why it is spelled `search`
   // and not `name_contains`: a filter named for a column must BE a column.
   optional string search = 2;
+  // Exact match on the environment's forge project. Unset lists every
+  // project's environments; set to "" lists only the project-less ones.
+  optional string project = 3;
 }
 
 message ListDeployEnvironmentsResponse {
@@ -393,7 +396,8 @@ message DeleteDeployEnvironmentRequest {
 message DeleteDeployEnvironmentResponse {}
 
 message EnsureDeployEnvironmentRequest {
-  // The environment is addressed by spec.name within the caller's org.
+  // The environment is addressed by (spec.project, spec.name) within the
+  // caller's org.
   DeployEnvironmentSpec spec = 1;
 }
 

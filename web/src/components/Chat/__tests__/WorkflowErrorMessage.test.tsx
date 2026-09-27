@@ -116,6 +116,28 @@ describe('WorkflowErrorMessage', () => {
     ).toBeInTheDocument();
   });
 
+  // Reached a user verbatim as a red card on 2026-09-25: a TLS record altered in
+  // transit, which the next attempt cleared. It must be summarized, and the
+  // summary must not assert where the damage happened.
+  it('summarizes a TLS bad record MAC without asserting where it broke', () => {
+    render(
+      <WorkflowErrorMessage
+        error={createErrorUpdate({
+          activity_type: 'CallLLM',
+          error_message:
+            'failed to stream LLM response: LLM streaming error: remote error: tls: bad record MAC',
+        })}
+      />
+    );
+
+    expect(
+      screen.getByText(
+        'The connection to the AI provider was interrupted mid-response. Workflow paused — send a message to retry.'
+      )
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/check your network/i)).not.toBeInTheDocument();
+  });
+
   it('keeps the timestamp and the expand control inside the header button row', () => {
     render(<WorkflowErrorMessage error={createErrorUpdate()} />);
 

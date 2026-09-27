@@ -1881,7 +1881,7 @@ function App() {
                   navigate({ to: '/settings' });
                 }}
                 onOpenForge={() => {
-                  navigate({ to: '/forge/topology' });
+                  navigate({ to: '/forge' });
                 }}
               />
             </div>
@@ -1911,7 +1911,7 @@ function App() {
                     navigate({ to: '/settings' });
                   }}
                   onOpenForge={() => {
-                    navigate({ to: '/forge/topology' });
+                    navigate({ to: '/forge' });
                   }}
                 />
               </div>

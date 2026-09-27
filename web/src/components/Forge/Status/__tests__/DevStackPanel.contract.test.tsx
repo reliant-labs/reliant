@@ -1,7 +1,7 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * THE VISUAL CONTRACT TESTS for the env-monitoring panel.
+ * THE VISUAL CONTRACT TESTS for the dev-stack panel (runtime checks + host services).
  *
  * These pin the property the panel exists to guarantee: `unknown` is visually
  * distinct from BOTH `pass` and `fail`, and `skip` and `unknown` do not render
@@ -29,7 +29,7 @@
 import { describe, expect, it } from "vitest";
 import { render, screen } from "@testing-library/react";
 
-import { EnvStatusPanel } from "../EnvStatusPanel";
+import { DevStackPanel } from "../DevStackPanel";
 import { classifyForgeResponse, type ForgeOutcome } from "@/services/forge/topology";
 import type { ForgeEnvStatusReport } from "@/services/forge/status";
 import { ForgeReachability } from "@/gen/reliant/v1/forge_pb";
@@ -54,7 +54,7 @@ function reportOutcome(report: ForgeEnvStatusReport): ForgeOutcome<ForgeEnvStatu
 
 function renderPanel(outcome: ForgeOutcome<ForgeEnvStatusReport> | undefined, isLoading = false) {
   return render(
-    <EnvStatusPanel
+    <DevStackPanel
       outcome={outcome}
       isLoading={isLoading}
       env="dev"
@@ -373,7 +373,7 @@ describe("the non-report outcomes", () => {
 
   it("shows a real error only for a genuine transport failure", () => {
     render(
-      <EnvStatusPanel
+      <DevStackPanel
         outcome={undefined}
         isLoading={false}
         error={new Error("daemon not connected")}

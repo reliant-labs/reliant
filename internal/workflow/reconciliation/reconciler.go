@@ -1855,11 +1855,23 @@ func (r *Reconciler) repairStrandedBackgroundSpawns(ctx context.Context, stats *
 	return repaired + undeliverable, nil
 }
 
-// rootAwaitingResume reports whether a chat's root run ended FAILED with its
-// position checkpoint still recorded — the state the next user message
-// resumes from, relaunching the run's background spawns (see
-// repairStrandedBackgroundSpawns). Completed and cancelled runs delete their
-// checkpoint, so a checkpoint on a failed root is exactly "resumable".
+// rootAwaitingResume reports whether a chat's root run can still execute its
+// background spawns, so a spawn that looks stranded will in fact report for
+// itself (see repairStrandedBackgroundSpawns). Two states qualify:
+//
+//   - The root is LIVE — pending, active, or paused. A background spawn runs
+//     as a goroutine inside the root's own execution, so a live root is one
+//     whose spawns are still running or about to be re-run. This is the state
+//     immediately after a resume reset-and-replays a failed run: the root row
+//     flips to active while its spawns' workflow rows still read failed from
+//     the reap that followed the original death, and they re-execute and
+//     report on replay. Observed on chat e6c09159: the sweep ran 25s after
+//     such a reset, fabricated "never delivered" reports for both spawns, and
+//     each spawn's real result then died on the one-report-per-spawn index.
+//   - The root ended FAILED with its position checkpoint still recorded — the
+//     state the next user message resumes from, relaunching those spawns.
+//     Completed and cancelled runs delete their checkpoint, so a checkpoint
+//     on a failed root is exactly "resumable".
 //
 // Errs toward "not awaiting resume" when anything cannot be read, preserving
 // the repair's pre-existing behaviour rather than hiding a stranded spawn.
@@ -1873,7 +1885,13 @@ func (r *Reconciler) rootAwaitingResume(ctx context.Context, chatID string) bool
 		return false
 	}
 	root, err := r.repo.GetWorkflow(ctx, rootID)
-	if err != nil || root == nil || root.Status != db.Failed() {
+	if err != nil || root == nil {
+		return false
+	}
+	if root.Status.Live() {
+		return true
+	}
+	if root.Status != db.Failed() {
 		return false
 	}
 	checkpoint, err := r.repo.GetWorkflowCheckpoint(ctx, rootID)

@@ -3,7 +3,7 @@
 /**
  * One env-runtime check, as ONE TABLE ROW.
  *
- * The row is a real `<tr>` under the `<thead>` EnvStatusPanel renders, and each
+ * The row is a real `<tr>` under the `<thead>` DevStackPanel renders, and each
  * fact gets its own `<td>`: the disposition badge, the check's name, the detail,
  * and the duration. It used to be a `<li>` that stacked badge, name, duration,
  * message, explanation and evidence into six vertical blocks, which made every

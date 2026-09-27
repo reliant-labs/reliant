@@ -529,6 +529,10 @@ func (t *idleTimeoutTransport) RoundTrip(req *http.Request) (*http.Response, err
 	if err != nil {
 		return nil, err
 	}
+	// Every SDK-backed LLM client passes through here (StreamingHTTPClient and
+	// WrapWithIdleTimeout both build this transport), which makes it the one
+	// place a long Retry-After can be stopped before the SDK sleeps on it.
+	capRetryAfter(resp)
 	if resp.Body != nil {
 		stall := t.contentStallTimeout
 		if stall <= 0 {

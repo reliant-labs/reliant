@@ -500,25 +500,51 @@ func TestPresetThinkingLevelsAreSupported(t *testing.T) {
 	}
 }
 
-// TestAgentPresetThinkingLevels pins the thinking level each agent preset runs
-// at. These are deliberate cost/quality choices, not incidental values: the
-// levels are what keep a flagship-model preset from defaulting to the model's
-// own (higher) default_thinking_level.
+// TestAgentPresetThinkingLevels pins how hard each agent preset thinks, as
+// the effort that actually reaches the driver: the preset's explicit
+// thinking_level when it pins one, otherwise the effort the model registry
+// attaches to the tier the preset selects.
+//
+// general and implementer deliberately pin NO level. They name a tier
+// ([flagship] / [moderate]) and the registry owns what that tier costs — so a
+// pinned level here would silently override the catalog (as implementer's
+// `medium` once did). These are cost/quality choices; changing one must fail.
 func TestAgentPresetThinkingLevels(t *testing.T) {
-	want := map[string]string{
-		"implementer.yaml": "medium",
-		"researcher.yaml":  "low",
+	want := map[string]struct {
+		pinned    string // explicit preset thinking_level; "" = none
+		effective string // what an Anthropic user's request carries
+	}{
+		"general.yaml":     {pinned: "", effective: "xhigh"},
+		"implementer.yaml": {pinned: "", effective: "high"},
+		"researcher.yaml":  {pinned: "low", effective: "low"},
 	}
 
 	presets := loadAllPresets(t)
-	for file, wantLevel := range want {
-		preset, ok := presets[file]
-		require.True(t, ok, "preset %s not found", file)
+	registry := models.MustGetRegistry()
+	for file, tt := range want {
+		t.Run(file, func(t *testing.T) {
+			preset, ok := presets[file]
+			require.True(t, ok, "preset %s not found", file)
 
-		modelMap, ok := preset.Params["model"].(map[string]any)
-		require.True(t, ok, "%s: model param should be an object", file)
-		assert.Equal(t, wantLevel, modelMap["thinking_level"],
-			"%s declares an unexpected thinking_level", file)
+			modelMap, ok := preset.Params["model"].(map[string]any)
+			require.True(t, ok, "%s: model param should be an object", file)
+			pinned, _ := modelMap["thinking_level"].(string)
+			assert.Equal(t, tt.pinned, pinned, "%s declares an unexpected thinking_level", file)
+
+			var tags []string
+			for _, tag := range modelMap["tags"].([]any) {
+				tags = append(tags, tag.(string))
+			}
+			resolved, err := registry.Resolve(models.ModelSelector{Tags: tags}, []string{"anthropic"})
+			require.NoError(t, err)
+
+			effective := pinned
+			if effective == "" {
+				effective = resolved.ThinkingLevel
+			}
+			assert.Equal(t, tt.effective, effective,
+				"%s runs %s at an unexpected effort", file, resolved.Definition.ID)
+		})
 	}
 }
 

@@ -35,6 +35,12 @@ describe("chat marker kind literals (cross-process drift guard)", () => {
       "RELIANT_PROVIDER_STREAM_STALLED",
     );
   });
+
+  it("RELIANT_PROVIDER_RATE_LIMITED string matches Go mirror", () => {
+    expect(CHAT_MARKER_KINDS.ProviderRateLimited).toBe(
+      "RELIANT_PROVIDER_RATE_LIMITED",
+    );
+  });
 });
 
 describe("extractChatMarker", () => {
@@ -66,6 +72,18 @@ describe("extractChatMarker", () => {
       kind: "RELIANT_PROVIDER_STREAM_STALLED" satisfies ChatMarkerKind,
       payload: "claude-code",
     });
+  });
+
+  it("extracts provider-rate-limit marker with a provider|seconds payload", () => {
+    const message =
+      "claude-code rate limit: You have reached your usage limit. [RELIANT_PROVIDER_RATE_LIMITED:claude-code|18000]";
+    expect(extractChatMarker(message)).toEqual({
+      kind: "RELIANT_PROVIDER_RATE_LIMITED" satisfies ChatMarkerKind,
+      payload: "claude-code|18000",
+    });
+    expect(stripChatMarker(message)).toBe(
+      "claude-code rate limit: You have reached your usage limit.",
+    );
   });
 
   it("extracts marker with a full URL payload", () => {

@@ -78,6 +78,7 @@ CREATE TABLE public.agent_messages (
     delivered_at timestamp with time zone,
     delivered_message_id text,
     attachments jsonb,
+    synthesized boolean DEFAULT false NOT NULL,
     CONSTRAINT agent_messages_delivered_has_time CHECK (((status <> 2) OR (delivered_at IS NOT NULL)))
 );
 
@@ -674,7 +675,8 @@ CREATE TABLE public.projects (
     updated_at timestamp with time zone NOT NULL,
     last_active timestamp with time zone NOT NULL,
     remote_url text,
-    is_forge boolean DEFAULT false NOT NULL
+    is_forge boolean DEFAULT false NOT NULL,
+    forge_project_name text
 );
 
 --

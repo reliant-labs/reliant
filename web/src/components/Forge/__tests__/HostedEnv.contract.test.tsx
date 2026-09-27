@@ -1,7 +1,7 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * Hosted environments in the forge console: the destination badge, the hosted
+ * Hosted environments in the forge console: where an env runs, the hosted
  * row, and the hosted deploy confirmation.
  *
  * Three things are pinned, each against the specific way it could regress:
@@ -9,7 +9,7 @@
  *   1. UNKNOWN IS NOT CLUSTER. A destination this build does not recognise —
  *      or one an older forge never sent — renders "Unknown", never "Cluster".
  *   2. A HOSTED ROW SHOWS ITS CONTROL PLANE, not a kube context: the endpoint
- *      host, each workload's URL, and the verdict per workload.
+ *      host, and the env's health from the control plane's verdict.
  *   3. A HOSTED DEPLOY CONFIRM HAS NO KUBE-CONTEXT LANGUAGE, and it keeps the
  *      token discipline: the operator types the control plane's host, and the
  *      token carries the endpoint the plan named.
@@ -19,29 +19,15 @@ import { describe, expect, it, vi } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-import { TopologyView } from "../TopologyView";
-import { EnvironmentCard } from "../Environments/EnvironmentCard";
-import { DestinationBadge } from "../DestinationBadge";
+import { WhereBadge } from "../EnvBadges";
+import { EnvironmentTable } from "../Overview/EnvironmentTable";
 import { DeployConfirmStep } from "../Deploy/DeployConfirmStep";
 import { TargetPanel } from "../Deploy/DeployPlanView";
 import { prodPlan } from "../Deploy/__tests__/fixtures";
-import type { ForgeTopologyEnv, ForgeTopologyReport } from "@/services/forge/topology";
+import type { ForgeTopologyEnv } from "@/services/forge/topology";
 import type { ForgeDeployReport } from "@/services/forge/deploy";
 import { deployTokenFor } from "@/services/forge/deploy";
-import { ForgeReachability } from "@/gen/reliant/v1/forge_pb";
-import type { ForgeReportMeta } from "@/gen/reliant/v1/forge_pb";
-
-function meta(): ForgeReportMeta {
-  return {
-    isForgeProject: true,
-    supported: true,
-    forgeVersion: "v0.9.1",
-    unsupportedReason: "",
-    exitCode: 0,
-    reachability: ForgeReachability.UNSPECIFIED,
-    unreachableReason: "",
-  } as ForgeReportMeta;
-}
+import { envFacts, joinEnvironments, whereOf } from "@/services/forge/environments";
 
 const HOSTED_ENV: ForgeTopologyEnv = {
   env: "cloud",
@@ -69,123 +55,92 @@ const CLUSTER_ENV: ForgeTopologyEnv = {
   images: [{ image: "api", digest: "sha256:aaaa", state: "not_verified" }],
 };
 
-function report(envs: ForgeTopologyEnv[]): ForgeTopologyReport {
-  return { project: "acme", latest_release: "v2.0.0", images: ["api"], environments: envs };
-}
-
-function renderTopology(envs: ForgeTopologyEnv[]) {
+function renderRows(envs: ForgeTopologyEnv[]) {
+  const rows = joinEnvironments(envs, []).map((summary) => ({ summary, facts: envFacts(summary, undefined) }));
   return render(
-    <TopologyView
-      outcome={{ kind: "report", meta: meta(), report: report(envs) }}
-      isLoading={false}
-      onVerify={vi.fn()}
-      projectName="acme"
+    <EnvironmentTable
+      rows={rows}
+      promoteRelease="v2.0.0"
+      canShip
+      onOpen={vi.fn()}
+      onPromote={vi.fn()}
+      onDeploy={vi.fn()}
     />
   );
 }
 
-describe("DestinationBadge", () => {
+describe("where an environment runs", () => {
   it.each([
-    ["hosted", "Hosted"],
-    ["cluster", "Cluster"],
-    ["compose", "Compose"],
-    ["host", "Host"],
-    ["external", "External"],
-    ["static", "Static"],
-    ["mixed", "Mixed"],
-  ])("labels %s as %s", (destination, label) => {
-    render(<DestinationBadge env={{ env: "x", destination }} />);
-    const badge = screen.getByTestId("destination-x");
-    expect(badge.getAttribute("data-destination")).toBe(destination);
-    expect(badge.textContent).toBe(label);
+    ["hosted", "cloud", "Reliant cloud"],
+    ["cluster", "cluster", "Cluster"],
+    ["compose", "local", "Local"],
+    ["host", "local", "Local"],
+    ["external", "external", "External"],
+    ["static", "static", "Static hosting"],
+    ["mixed", "mixed", "Mixed"],
+  ])("labels destination %s as %s", (destination, where, label) => {
+    const resolved = whereOf({ destination }, null);
+    expect(resolved).toBe(where);
+    render(<WhereBadge env="x" where={resolved} />);
+    expect(screen.getByTestId("where-x").textContent).toBe(label);
   });
 
   it("renders an unrecognised destination as Unknown — never as Cluster", () => {
-    render(<DestinationBadge env={{ env: "x", destination: "moon-base" }} />);
-    const badge = screen.getByTestId("destination-x");
-    expect(badge.getAttribute("data-destination")).toBe("unknown");
+    const where = whereOf({ destination: "moon-base" }, null);
+    render(<WhereBadge env="x" where={where} />);
+    const badge = screen.getByTestId("where-x");
+    expect(badge.getAttribute("data-where")).toBe("unknown");
     expect(badge.textContent).toBe("Unknown");
     expect(badge.textContent).not.toMatch(/cluster/i);
   });
 
   it("renders an ABSENT destination (an older forge) as Unknown too", () => {
-    render(<DestinationBadge env={{ env: "x" }} />);
-    expect(screen.getByTestId("destination-x").getAttribute("data-destination")).toBe("unknown");
+    expect(whereOf({}, null)).toBe("unknown");
   });
 
   it("reads ONLY `destination` — forge's redundant `hosted` flag decides nothing", () => {
-    // Forge still emits `hosted: true`, derived from the same ControlPlane
-    // declaration as destination. It is not a second input: a row with the
-    // flag but no destination is unknown, and destination wins over it.
-    const view = render(
-      <>
-        <DestinationBadge env={{ env: "a", hosted: true } as ForgeTopologyEnv} />
-        <DestinationBadge env={{ env: "c", hosted: true, destination: "cluster" } as ForgeTopologyEnv} />
-      </>
-    );
-    expect(view.getByTestId("destination-a").getAttribute("data-destination")).toBe("unknown");
-    expect(view.getByTestId("destination-c").getAttribute("data-destination")).toBe("cluster");
+    expect(whereOf({ hosted: true } as ForgeTopologyEnv, null)).toBe("unknown");
+    expect(whereOf({ hosted: true, destination: "cluster" } as ForgeTopologyEnv, null)).toBe("cluster");
   });
 
-  it("gives hosted a different treatment from unknown and from cluster", () => {
+  it("gives Reliant cloud a different treatment from unknown and from cluster", () => {
     const view = render(
       <>
-        <DestinationBadge env={{ env: "a", destination: "hosted" }} />
-        <DestinationBadge env={{ env: "b", destination: "cluster" }} />
-        <DestinationBadge env={{ env: "c", destination: "nope" }} />
+        <WhereBadge env="a" where="cloud" />
+        <WhereBadge env="b" where="cluster" />
+        <WhereBadge env="c" where="unknown" />
       </>
     );
     const cls = (id: string) => view.getByTestId(id).querySelector("span > span")?.className ?? "";
-    expect(cls("destination-a")).not.toBe(cls("destination-b"));
-    expect(cls("destination-a")).not.toBe(cls("destination-c"));
-    expect(cls("destination-b")).not.toBe(cls("destination-c"));
+    expect(cls("where-a")).not.toBe(cls("where-b"));
+    expect(cls("where-a")).not.toBe(cls("where-c"));
+    expect(cls("where-b")).not.toBe(cls("where-c"));
   });
 });
 
-describe("a hosted topology row", () => {
-  it("shows the endpoint host, the env's health and a workload URL — and no kube context", () => {
-    renderTopology([HOSTED_ENV, CLUSTER_ENV]);
+describe("a hosted row on the Overview", () => {
+  it("shows the endpoint host and the env's health — and no kube context", () => {
+    renderRows([HOSTED_ENV, CLUSTER_ENV]);
     const row = screen.getByTestId("env-row-cloud");
 
-    expect(within(row).getByTestId("destination-cloud").textContent).toBe("Hosted");
-    expect(within(row).getByTestId("hosted-endpoint-cloud").textContent).toBe("api.reliantlabs.io");
-
-    const link = within(row).getByTestId("hosted-url-cloud-api");
-    expect(link.tagName).toBe("A");
-    expect(link.getAttribute("href")).toBe("https://api-acme.apps.reliantlabs.io");
-
+    expect(within(row).getByTestId("where-cloud").textContent).toBe("Reliant cloud");
+    expect(row.textContent).toContain("api.reliantlabs.io");
     // No env-level verdict: the worst workload (worker, converging) decides —
     // and converging is not converged.
-    expect(within(row).getByTestId("hosted-verdict-cloud").getAttribute("data-verdict")).toBe("converging");
+    expect(within(row).getByTestId("health-cloud").getAttribute("data-verdict")).toBe("converging");
     expect(row.textContent).not.toMatch(/gke_|namespace/i);
   });
 
-  it("lists every workload with its own verdict on the Environments card", () => {
-    render(<EnvironmentCard env={HOSTED_ENV} active onSelect={vi.fn()} />);
-    const card = screen.getByTestId("environment-card-cloud");
-    const api = within(card).getByTestId("hosted-workload-cloud-api");
-    expect(api.querySelector("[data-verdict]")?.getAttribute("data-verdict")).toBe("converged");
-    // The name is shown beside the URL — the URL is never the only label.
-    expect(api.textContent).toContain("api");
-    const worker = within(card).getByTestId("hosted-workload-cloud-worker");
-    expect(worker.querySelector("[data-verdict]")?.getAttribute("data-verdict")).toBe("converging");
-    expect(within(card).getByTestId("hosted-env-id-cloud").textContent).toContain("denv_01HZX");
-    // A real link, not inert text: the card is no longer one big <button>.
-    expect(within(card).getByTestId("hosted-url-cloud-api").tagName).toBe("A");
-    expect(within(card).getByTestId("hosted-url-cloud-api").closest("button")).toBeNull();
-  });
-
-  it("says an un-ensured hosted env has no id rather than showing an empty one", () => {
-    renderTopology([{ ...HOSTED_ENV, environment_id: "" }]);
-    expect(screen.getByTestId("hosted-env-id-cloud").textContent).toMatch(/not created/i);
+  it("says an un-ensured hosted env is not deployed rather than showing a blank health", () => {
+    renderRows([{ ...HOSTED_ENV, environment_id: "" }]);
+    expect(screen.getByTestId("health-cloud").textContent).toMatch(/not deployed/i);
   });
 
   it("keeps a cluster row's kube context and namespace", () => {
-    renderTopology([HOSTED_ENV, CLUSTER_ENV]);
+    renderRows([HOSTED_ENV, CLUSTER_ENV]);
     const row = screen.getByTestId("env-row-prod");
-    expect(within(row).getByTestId("destination-prod").textContent).toBe("Cluster");
+    expect(within(row).getByTestId("where-prod").textContent).toBe("Cluster");
     expect(row.textContent).toContain("gke_prod · app-prod");
-    expect(within(row).queryByTestId("hosted-facts-prod")).toBeNull();
   });
 });
 

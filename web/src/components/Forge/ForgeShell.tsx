@@ -24,68 +24,93 @@
  *
  * ForgeLayout owns everything stateful — auth, the project-resolution ladder,
  * the Escape binding, the router Outlet. This owns only what you can see.
+ *
+ * ── THE NAV IS THE ENVIRONMENT LIST ─────────────────────────────────────────
+ *
+ * It used to name one screen per forge COMMAND (Releases, Environments,
+ * Secrets, Status). A reader does not think in commands; they think "prod".
+ * So the nav is the Overview plus one entry per environment, and everything
+ * about an environment — its workloads, secrets, releases and dev stack — is
+ * on that environment's page. The environment list is passed in rather than
+ * fetched, for the reason above: a preview has to be able to draw it.
  */
 
 import { useMemo, type ReactNode } from "react";
-import { KeyRound, Layers, Rocket, ShieldCheck } from "lucide-react";
+import { Cloud, Cpu, LayoutGrid, Server } from "lucide-react";
 
 import SidebarLayout from "@/components/forge-ui/sidebar_layout";
 import { useTitleBarChrome } from "@/hooks/useTitleBarChrome";
+import type { EnvWhere } from "@/services/forge/environments";
 
-/**
- * The nav, in one place. Exported because ForgeLayout builds hrefs from it and
- * a preview needs the same labels — two copies would drift the moment a screen
- * is added.
- *
- * `carriesEnv` marks the destinations for which an environment is meaningful.
- * Releases is project-scoped, so carrying `env` there would put a param in the
- * URL that its route schema strips anyway.
- */
-export const FORGE_NAV = [
-  { to: "/forge/environments", label: "Environments", icon: Layers, carriesEnv: true },
-  { to: "/forge/topology", label: "Releases", icon: Rocket, carriesEnv: false },
-  { to: "/forge/secrets", label: "Secrets", icon: KeyRound, carriesEnv: true },
-  { to: "/forge/status", label: "Status", icon: ShieldCheck, carriesEnv: true },
-] as const;
+/** The Overview's path. The one fixed destination; everything else is an environment. */
+export const FORGE_OVERVIEW_PATH = "/forge";
+
+/** The path of one environment's page. */
+export function forgeEnvPath(env: string): string {
+  return `/forge/env/${encodeURIComponent(env)}`;
+}
+
+export interface ForgeNavEnv {
+  name: string;
+  where: EnvWhere;
+}
+
+/** The icon says where it runs, so the list is scannable before any page loads. */
+function iconFor(where: EnvWhere) {
+  switch (where) {
+    case "local":
+      return Cpu;
+    case "cloud":
+      return Cloud;
+    default:
+      return Server;
+  }
+}
 
 export interface ForgeShellProps {
-  /** Which nav destination is current, by `to`. */
+  /** The current pathname; the matching nav entry is marked active. */
   activePath: string;
+  /** The environments to list under the Overview. Empty while unknown. */
+  envs?: ForgeNavEnv[];
   /**
-   * Appended to each nav href. The real layout passes project/env so context
-   * survives a tab change; a preview passes nothing.
+   * Appended to each nav href. The real layout passes the project so context
+   * survives navigation; a preview passes nothing.
    */
-  searchFor?: (item: (typeof FORGE_NAV)[number]) => string;
+  search?: string;
   /** The top bar. ForgeLayout passes ForgeHeader; a preview passes its controls. */
   headerContent?: ReactNode;
   children: ReactNode;
 }
 
-export function ForgeShell({
-  activePath,
-  searchFor,
-  headerContent,
-  children,
-}: ForgeShellProps) {
+export function ForgeShell({ activePath, envs = [], search, headerContent, children }: ForgeShellProps) {
   // The sidebar's brand row spans the window's leading edge, so it — not the
   // header bar — is what has to clear the macOS traffic lights.
   const { trafficLightPadding } = useTitleBarChrome({ collapsedPadding: "0px" });
 
-  const navItems = useMemo(
-    () =>
-      FORGE_NAV.map((item) => {
-        const query = searchFor?.(item) ?? "";
-        const Icon = item.icon;
+  const navItems = useMemo(() => {
+    const withSearch = (path: string) => (search ? `${path}?${search}` : path);
+    return [
+      {
+        label: "Overview",
+        href: withSearch(FORGE_OVERVIEW_PATH),
+        active: activePath === FORGE_OVERVIEW_PATH || activePath === `${FORGE_OVERVIEW_PATH}/`,
+        section: "Project",
+        icon: <LayoutGrid className="h-4 w-4" aria-hidden="true" />,
+      },
+      ...envs.map((env) => {
+        const Icon = iconFor(env.where);
+        const path = forgeEnvPath(env.name);
         return {
-          label: item.label,
-          href: query ? `${item.to}?${query}` : item.to,
-          active: activePath === item.to,
-          section: "Project",
+          label: env.name,
+          href: withSearch(path),
+          // decodeURI so an env whose name needed escaping still matches.
+          active: decodeURI(activePath) === decodeURI(path),
+          section: "Environments",
           icon: <Icon className="h-4 w-4" aria-hidden="true" />,
         };
       }),
-    [activePath, searchFor]
-  );
+    ];
+  }, [activePath, envs, search]);
 
   return (
     /*

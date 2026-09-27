@@ -239,7 +239,11 @@ type ListModelsResponse struct {
 	// List of available models
 	Models []*ModelInfo `protobuf:"bytes,1,rep,name=models,proto3" json:"models,omitempty"`
 	// Total number of models
-	Total         int32 `protobuf:"varint,2,opt,name=total,proto3" json:"total,omitempty"`
+	Total int32 `protobuf:"varint,2,opt,name=total,proto3" json:"total,omitempty"`
+	// What each declared tag selector resolves to for the calling user's
+	// configured providers, in ListAllTags order. Tags that resolve to nothing
+	// (or only to non-text models, e.g. image-gen) are omitted.
+	Tiers         []*TierResolution `protobuf:"bytes,3,rep,name=tiers,proto3" json:"tiers,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -288,6 +292,76 @@ func (x *ListModelsResponse) GetTotal() int32 {
 	return 0
 }
 
+func (x *ListModelsResponse) GetTiers() []*TierResolution {
+	if x != nil {
+		return x.Tiers
+	}
+	return nil
+}
+
+// TierResolution is what a tag selector resolves to for this user right now.
+type TierResolution struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Tag   string                 `protobuf:"bytes,1,opt,name=tag,proto3" json:"tag,omitempty"`
+	// "modelId@driverId", same format as ModelInfo.id
+	ModelId string `protobuf:"bytes,2,opt,name=model_id,json=modelId,proto3" json:"model_id,omitempty"`
+	// Effort the tier runs at ("" = model cannot reason)
+	ThinkingLevel string `protobuf:"bytes,3,opt,name=thinking_level,json=thinkingLevel,proto3" json:"thinking_level,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TierResolution) Reset() {
+	*x = TierResolution{}
+	mi := &file_reliant_v1_catalog_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TierResolution) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TierResolution) ProtoMessage() {}
+
+func (x *TierResolution) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_catalog_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TierResolution.ProtoReflect.Descriptor instead.
+func (*TierResolution) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_catalog_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *TierResolution) GetTag() string {
+	if x != nil {
+		return x.Tag
+	}
+	return ""
+}
+
+func (x *TierResolution) GetModelId() string {
+	if x != nil {
+		return x.ModelId
+	}
+	return ""
+}
+
+func (x *TierResolution) GetThinkingLevel() string {
+	if x != nil {
+		return x.ThinkingLevel
+	}
+	return ""
+}
+
 // ListModelsByProviderRequest is the request for ListModelsByProvider
 type ListModelsByProviderRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -299,7 +373,7 @@ type ListModelsByProviderRequest struct {
 
 func (x *ListModelsByProviderRequest) Reset() {
 	*x = ListModelsByProviderRequest{}
-	mi := &file_reliant_v1_catalog_proto_msgTypes[3]
+	mi := &file_reliant_v1_catalog_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -311,7 +385,7 @@ func (x *ListModelsByProviderRequest) String() string {
 func (*ListModelsByProviderRequest) ProtoMessage() {}
 
 func (x *ListModelsByProviderRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_catalog_proto_msgTypes[3]
+	mi := &file_reliant_v1_catalog_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -324,7 +398,7 @@ func (x *ListModelsByProviderRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListModelsByProviderRequest.ProtoReflect.Descriptor instead.
 func (*ListModelsByProviderRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_catalog_proto_rawDescGZIP(), []int{3}
+	return file_reliant_v1_catalog_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *ListModelsByProviderRequest) GetProvider() string {
@@ -345,7 +419,7 @@ type ListModelsByProviderResponse struct {
 
 func (x *ListModelsByProviderResponse) Reset() {
 	*x = ListModelsByProviderResponse{}
-	mi := &file_reliant_v1_catalog_proto_msgTypes[4]
+	mi := &file_reliant_v1_catalog_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -357,7 +431,7 @@ func (x *ListModelsByProviderResponse) String() string {
 func (*ListModelsByProviderResponse) ProtoMessage() {}
 
 func (x *ListModelsByProviderResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_catalog_proto_msgTypes[4]
+	mi := &file_reliant_v1_catalog_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -370,7 +444,7 @@ func (x *ListModelsByProviderResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListModelsByProviderResponse.ProtoReflect.Descriptor instead.
 func (*ListModelsByProviderResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_catalog_proto_rawDescGZIP(), []int{4}
+	return file_reliant_v1_catalog_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *ListModelsByProviderResponse) GetModels() []*ModelInfo {
@@ -422,7 +496,7 @@ type AvailableModelInfo struct {
 
 func (x *AvailableModelInfo) Reset() {
 	*x = AvailableModelInfo{}
-	mi := &file_reliant_v1_catalog_proto_msgTypes[5]
+	mi := &file_reliant_v1_catalog_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -434,7 +508,7 @@ func (x *AvailableModelInfo) String() string {
 func (*AvailableModelInfo) ProtoMessage() {}
 
 func (x *AvailableModelInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_catalog_proto_msgTypes[5]
+	mi := &file_reliant_v1_catalog_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -447,7 +521,7 @@ func (x *AvailableModelInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AvailableModelInfo.ProtoReflect.Descriptor instead.
 func (*AvailableModelInfo) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_catalog_proto_rawDescGZIP(), []int{5}
+	return file_reliant_v1_catalog_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *AvailableModelInfo) GetId() string {
@@ -564,7 +638,7 @@ type ListAvailableModelsRequest struct {
 
 func (x *ListAvailableModelsRequest) Reset() {
 	*x = ListAvailableModelsRequest{}
-	mi := &file_reliant_v1_catalog_proto_msgTypes[6]
+	mi := &file_reliant_v1_catalog_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -576,7 +650,7 @@ func (x *ListAvailableModelsRequest) String() string {
 func (*ListAvailableModelsRequest) ProtoMessage() {}
 
 func (x *ListAvailableModelsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_catalog_proto_msgTypes[6]
+	mi := &file_reliant_v1_catalog_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -589,7 +663,7 @@ func (x *ListAvailableModelsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListAvailableModelsRequest.ProtoReflect.Descriptor instead.
 func (*ListAvailableModelsRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_catalog_proto_rawDescGZIP(), []int{6}
+	return file_reliant_v1_catalog_proto_rawDescGZIP(), []int{7}
 }
 
 // ListAvailableModelsResponse is the response for ListAvailableModels
@@ -604,7 +678,7 @@ type ListAvailableModelsResponse struct {
 
 func (x *ListAvailableModelsResponse) Reset() {
 	*x = ListAvailableModelsResponse{}
-	mi := &file_reliant_v1_catalog_proto_msgTypes[7]
+	mi := &file_reliant_v1_catalog_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -616,7 +690,7 @@ func (x *ListAvailableModelsResponse) String() string {
 func (*ListAvailableModelsResponse) ProtoMessage() {}
 
 func (x *ListAvailableModelsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_catalog_proto_msgTypes[7]
+	mi := &file_reliant_v1_catalog_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -629,7 +703,7 @@ func (x *ListAvailableModelsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListAvailableModelsResponse.ProtoReflect.Descriptor instead.
 func (*ListAvailableModelsResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_catalog_proto_rawDescGZIP(), []int{7}
+	return file_reliant_v1_catalog_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *ListAvailableModelsResponse) GetModels() []*AvailableModelInfo {
@@ -654,7 +728,7 @@ type ToolInfo struct {
 
 func (x *ToolInfo) Reset() {
 	*x = ToolInfo{}
-	mi := &file_reliant_v1_catalog_proto_msgTypes[8]
+	mi := &file_reliant_v1_catalog_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -666,7 +740,7 @@ func (x *ToolInfo) String() string {
 func (*ToolInfo) ProtoMessage() {}
 
 func (x *ToolInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_catalog_proto_msgTypes[8]
+	mi := &file_reliant_v1_catalog_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -679,7 +753,7 @@ func (x *ToolInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ToolInfo.ProtoReflect.Descriptor instead.
 func (*ToolInfo) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_catalog_proto_rawDescGZIP(), []int{8}
+	return file_reliant_v1_catalog_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *ToolInfo) GetName() string {
@@ -712,7 +786,7 @@ type ListToolsRequest struct {
 
 func (x *ListToolsRequest) Reset() {
 	*x = ListToolsRequest{}
-	mi := &file_reliant_v1_catalog_proto_msgTypes[9]
+	mi := &file_reliant_v1_catalog_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -724,7 +798,7 @@ func (x *ListToolsRequest) String() string {
 func (*ListToolsRequest) ProtoMessage() {}
 
 func (x *ListToolsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_catalog_proto_msgTypes[9]
+	mi := &file_reliant_v1_catalog_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -737,7 +811,7 @@ func (x *ListToolsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListToolsRequest.ProtoReflect.Descriptor instead.
 func (*ListToolsRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_catalog_proto_rawDescGZIP(), []int{9}
+	return file_reliant_v1_catalog_proto_rawDescGZIP(), []int{10}
 }
 
 // ListToolsResponse is the response for ListTools
@@ -753,7 +827,7 @@ type ListToolsResponse struct {
 
 func (x *ListToolsResponse) Reset() {
 	*x = ListToolsResponse{}
-	mi := &file_reliant_v1_catalog_proto_msgTypes[10]
+	mi := &file_reliant_v1_catalog_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -765,7 +839,7 @@ func (x *ListToolsResponse) String() string {
 func (*ListToolsResponse) ProtoMessage() {}
 
 func (x *ListToolsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_catalog_proto_msgTypes[10]
+	mi := &file_reliant_v1_catalog_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -778,7 +852,7 @@ func (x *ListToolsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListToolsResponse.ProtoReflect.Descriptor instead.
 func (*ListToolsResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_catalog_proto_rawDescGZIP(), []int{10}
+	return file_reliant_v1_catalog_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *ListToolsResponse) GetTools() []*ToolInfo {
@@ -834,7 +908,7 @@ type NodeInputField struct {
 
 func (x *NodeInputField) Reset() {
 	*x = NodeInputField{}
-	mi := &file_reliant_v1_catalog_proto_msgTypes[11]
+	mi := &file_reliant_v1_catalog_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -846,7 +920,7 @@ func (x *NodeInputField) String() string {
 func (*NodeInputField) ProtoMessage() {}
 
 func (x *NodeInputField) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_catalog_proto_msgTypes[11]
+	mi := &file_reliant_v1_catalog_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -859,7 +933,7 @@ func (x *NodeInputField) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NodeInputField.ProtoReflect.Descriptor instead.
 func (*NodeInputField) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_catalog_proto_rawDescGZIP(), []int{11}
+	return file_reliant_v1_catalog_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *NodeInputField) GetName() string {
@@ -990,7 +1064,7 @@ type NodeInfo struct {
 
 func (x *NodeInfo) Reset() {
 	*x = NodeInfo{}
-	mi := &file_reliant_v1_catalog_proto_msgTypes[12]
+	mi := &file_reliant_v1_catalog_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1002,7 +1076,7 @@ func (x *NodeInfo) String() string {
 func (*NodeInfo) ProtoMessage() {}
 
 func (x *NodeInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_catalog_proto_msgTypes[12]
+	mi := &file_reliant_v1_catalog_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1015,7 +1089,7 @@ func (x *NodeInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NodeInfo.ProtoReflect.Descriptor instead.
 func (*NodeInfo) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_catalog_proto_rawDescGZIP(), []int{12}
+	return file_reliant_v1_catalog_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *NodeInfo) GetId() string {
@@ -1082,7 +1156,7 @@ type NodeCategory struct {
 
 func (x *NodeCategory) Reset() {
 	*x = NodeCategory{}
-	mi := &file_reliant_v1_catalog_proto_msgTypes[13]
+	mi := &file_reliant_v1_catalog_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1094,7 +1168,7 @@ func (x *NodeCategory) String() string {
 func (*NodeCategory) ProtoMessage() {}
 
 func (x *NodeCategory) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_catalog_proto_msgTypes[13]
+	mi := &file_reliant_v1_catalog_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1107,7 +1181,7 @@ func (x *NodeCategory) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NodeCategory.ProtoReflect.Descriptor instead.
 func (*NodeCategory) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_catalog_proto_rawDescGZIP(), []int{13}
+	return file_reliant_v1_catalog_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *NodeCategory) GetId() string {
@@ -1144,7 +1218,7 @@ type ListNodesRequest struct {
 
 func (x *ListNodesRequest) Reset() {
 	*x = ListNodesRequest{}
-	mi := &file_reliant_v1_catalog_proto_msgTypes[14]
+	mi := &file_reliant_v1_catalog_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1156,7 +1230,7 @@ func (x *ListNodesRequest) String() string {
 func (*ListNodesRequest) ProtoMessage() {}
 
 func (x *ListNodesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_catalog_proto_msgTypes[14]
+	mi := &file_reliant_v1_catalog_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1169,7 +1243,7 @@ func (x *ListNodesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListNodesRequest.ProtoReflect.Descriptor instead.
 func (*ListNodesRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_catalog_proto_rawDescGZIP(), []int{14}
+	return file_reliant_v1_catalog_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *ListNodesRequest) GetCategory() string {
@@ -1199,7 +1273,7 @@ type ListNodesResponse struct {
 
 func (x *ListNodesResponse) Reset() {
 	*x = ListNodesResponse{}
-	mi := &file_reliant_v1_catalog_proto_msgTypes[15]
+	mi := &file_reliant_v1_catalog_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1211,7 +1285,7 @@ func (x *ListNodesResponse) String() string {
 func (*ListNodesResponse) ProtoMessage() {}
 
 func (x *ListNodesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_catalog_proto_msgTypes[15]
+	mi := &file_reliant_v1_catalog_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1224,7 +1298,7 @@ func (x *ListNodesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListNodesResponse.ProtoReflect.Descriptor instead.
 func (*ListNodesResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_catalog_proto_rawDescGZIP(), []int{15}
+	return file_reliant_v1_catalog_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *ListNodesResponse) GetNodes() []*NodeInfo {
@@ -1250,7 +1324,7 @@ type GetCELCompletionsRequest struct {
 
 func (x *GetCELCompletionsRequest) Reset() {
 	*x = GetCELCompletionsRequest{}
-	mi := &file_reliant_v1_catalog_proto_msgTypes[16]
+	mi := &file_reliant_v1_catalog_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1262,7 +1336,7 @@ func (x *GetCELCompletionsRequest) String() string {
 func (*GetCELCompletionsRequest) ProtoMessage() {}
 
 func (x *GetCELCompletionsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_catalog_proto_msgTypes[16]
+	mi := &file_reliant_v1_catalog_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1275,7 +1349,7 @@ func (x *GetCELCompletionsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetCELCompletionsRequest.ProtoReflect.Descriptor instead.
 func (*GetCELCompletionsRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_catalog_proto_rawDescGZIP(), []int{16}
+	return file_reliant_v1_catalog_proto_rawDescGZIP(), []int{17}
 }
 
 // CELFieldInfo describes a field within a CEL namespace or output schema
@@ -1290,7 +1364,7 @@ type CELFieldInfo struct {
 
 func (x *CELFieldInfo) Reset() {
 	*x = CELFieldInfo{}
-	mi := &file_reliant_v1_catalog_proto_msgTypes[17]
+	mi := &file_reliant_v1_catalog_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1302,7 +1376,7 @@ func (x *CELFieldInfo) String() string {
 func (*CELFieldInfo) ProtoMessage() {}
 
 func (x *CELFieldInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_catalog_proto_msgTypes[17]
+	mi := &file_reliant_v1_catalog_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1315,7 +1389,7 @@ func (x *CELFieldInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CELFieldInfo.ProtoReflect.Descriptor instead.
 func (*CELFieldInfo) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_catalog_proto_rawDescGZIP(), []int{17}
+	return file_reliant_v1_catalog_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *CELFieldInfo) GetName() string {
@@ -1352,7 +1426,7 @@ type CELNamespaceInfo struct {
 
 func (x *CELNamespaceInfo) Reset() {
 	*x = CELNamespaceInfo{}
-	mi := &file_reliant_v1_catalog_proto_msgTypes[18]
+	mi := &file_reliant_v1_catalog_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1364,7 +1438,7 @@ func (x *CELNamespaceInfo) String() string {
 func (*CELNamespaceInfo) ProtoMessage() {}
 
 func (x *CELNamespaceInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_catalog_proto_msgTypes[18]
+	mi := &file_reliant_v1_catalog_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1377,7 +1451,7 @@ func (x *CELNamespaceInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CELNamespaceInfo.ProtoReflect.Descriptor instead.
 func (*CELNamespaceInfo) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_catalog_proto_rawDescGZIP(), []int{18}
+	return file_reliant_v1_catalog_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *CELNamespaceInfo) GetName() string {
@@ -1423,7 +1497,7 @@ type CELFunctionInfo struct {
 
 func (x *CELFunctionInfo) Reset() {
 	*x = CELFunctionInfo{}
-	mi := &file_reliant_v1_catalog_proto_msgTypes[19]
+	mi := &file_reliant_v1_catalog_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1435,7 +1509,7 @@ func (x *CELFunctionInfo) String() string {
 func (*CELFunctionInfo) ProtoMessage() {}
 
 func (x *CELFunctionInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_catalog_proto_msgTypes[19]
+	mi := &file_reliant_v1_catalog_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1448,7 +1522,7 @@ func (x *CELFunctionInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CELFunctionInfo.ProtoReflect.Descriptor instead.
 func (*CELFunctionInfo) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_catalog_proto_rawDescGZIP(), []int{19}
+	return file_reliant_v1_catalog_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *CELFunctionInfo) GetName() string {
@@ -1498,7 +1572,7 @@ type CELNodeOutputSchema struct {
 
 func (x *CELNodeOutputSchema) Reset() {
 	*x = CELNodeOutputSchema{}
-	mi := &file_reliant_v1_catalog_proto_msgTypes[20]
+	mi := &file_reliant_v1_catalog_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1510,7 +1584,7 @@ func (x *CELNodeOutputSchema) String() string {
 func (*CELNodeOutputSchema) ProtoMessage() {}
 
 func (x *CELNodeOutputSchema) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_catalog_proto_msgTypes[20]
+	mi := &file_reliant_v1_catalog_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1523,7 +1597,7 @@ func (x *CELNodeOutputSchema) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CELNodeOutputSchema.ProtoReflect.Descriptor instead.
 func (*CELNodeOutputSchema) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_catalog_proto_rawDescGZIP(), []int{20}
+	return file_reliant_v1_catalog_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *CELNodeOutputSchema) GetNodeType() string {
@@ -1560,7 +1634,7 @@ type CELHelperTypeInfo struct {
 
 func (x *CELHelperTypeInfo) Reset() {
 	*x = CELHelperTypeInfo{}
-	mi := &file_reliant_v1_catalog_proto_msgTypes[21]
+	mi := &file_reliant_v1_catalog_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1572,7 +1646,7 @@ func (x *CELHelperTypeInfo) String() string {
 func (*CELHelperTypeInfo) ProtoMessage() {}
 
 func (x *CELHelperTypeInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_catalog_proto_msgTypes[21]
+	mi := &file_reliant_v1_catalog_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1585,7 +1659,7 @@ func (x *CELHelperTypeInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CELHelperTypeInfo.ProtoReflect.Descriptor instead.
 func (*CELHelperTypeInfo) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_catalog_proto_rawDescGZIP(), []int{21}
+	return file_reliant_v1_catalog_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *CELHelperTypeInfo) GetName() string {
@@ -1629,7 +1703,7 @@ type GetCELCompletionsResponse struct {
 
 func (x *GetCELCompletionsResponse) Reset() {
 	*x = GetCELCompletionsResponse{}
-	mi := &file_reliant_v1_catalog_proto_msgTypes[22]
+	mi := &file_reliant_v1_catalog_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1641,7 +1715,7 @@ func (x *GetCELCompletionsResponse) String() string {
 func (*GetCELCompletionsResponse) ProtoMessage() {}
 
 func (x *GetCELCompletionsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_catalog_proto_msgTypes[22]
+	mi := &file_reliant_v1_catalog_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1654,7 +1728,7 @@ func (x *GetCELCompletionsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetCELCompletionsResponse.ProtoReflect.Descriptor instead.
 func (*GetCELCompletionsResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_catalog_proto_rawDescGZIP(), []int{22}
+	return file_reliant_v1_catalog_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *GetCELCompletionsResponse) GetNamespaces() []*CELNamespaceInfo {
@@ -1709,10 +1783,15 @@ const file_reliant_v1_catalog_proto_rawDesc = "" +
 	"\x0esupports_tools\x18\r \x01(\bR\rsupportsTools\x12)\n" +
 	"\x10supports_caching\x18\x0e \x01(\bR\x0fsupportsCaching\x12:\n" +
 	"\x19supported_thinking_levels\x18\x0f \x03(\tR\x17supportedThinkingLevels\"\x13\n" +
-	"\x11ListModelsRequest\"Y\n" +
+	"\x11ListModelsRequest\"\x8b\x01\n" +
 	"\x12ListModelsResponse\x12-\n" +
 	"\x06models\x18\x01 \x03(\v2\x15.reliant.v1.ModelInfoR\x06models\x12\x14\n" +
-	"\x05total\x18\x02 \x01(\x05R\x05total\"9\n" +
+	"\x05total\x18\x02 \x01(\x05R\x05total\x120\n" +
+	"\x05tiers\x18\x03 \x03(\v2\x1a.reliant.v1.TierResolutionR\x05tiers\"d\n" +
+	"\x0eTierResolution\x12\x10\n" +
+	"\x03tag\x18\x01 \x01(\tR\x03tag\x12\x19\n" +
+	"\bmodel_id\x18\x02 \x01(\tR\amodelId\x12%\n" +
+	"\x0ethinking_level\x18\x03 \x01(\tR\rthinkingLevel\"9\n" +
 	"\x1bListModelsByProviderRequest\x12\x1a\n" +
 	"\bprovider\x18\x01 \x01(\tR\bprovider\"M\n" +
 	"\x1cListModelsByProviderResponse\x12-\n" +
@@ -1845,65 +1924,67 @@ func file_reliant_v1_catalog_proto_rawDescGZIP() []byte {
 	return file_reliant_v1_catalog_proto_rawDescData
 }
 
-var file_reliant_v1_catalog_proto_msgTypes = make([]protoimpl.MessageInfo, 23)
+var file_reliant_v1_catalog_proto_msgTypes = make([]protoimpl.MessageInfo, 24)
 var file_reliant_v1_catalog_proto_goTypes = []any{
 	(*ModelInfo)(nil),                    // 0: reliant.v1.ModelInfo
 	(*ListModelsRequest)(nil),            // 1: reliant.v1.ListModelsRequest
 	(*ListModelsResponse)(nil),           // 2: reliant.v1.ListModelsResponse
-	(*ListModelsByProviderRequest)(nil),  // 3: reliant.v1.ListModelsByProviderRequest
-	(*ListModelsByProviderResponse)(nil), // 4: reliant.v1.ListModelsByProviderResponse
-	(*AvailableModelInfo)(nil),           // 5: reliant.v1.AvailableModelInfo
-	(*ListAvailableModelsRequest)(nil),   // 6: reliant.v1.ListAvailableModelsRequest
-	(*ListAvailableModelsResponse)(nil),  // 7: reliant.v1.ListAvailableModelsResponse
-	(*ToolInfo)(nil),                     // 8: reliant.v1.ToolInfo
-	(*ListToolsRequest)(nil),             // 9: reliant.v1.ListToolsRequest
-	(*ListToolsResponse)(nil),            // 10: reliant.v1.ListToolsResponse
-	(*NodeInputField)(nil),               // 11: reliant.v1.NodeInputField
-	(*NodeInfo)(nil),                     // 12: reliant.v1.NodeInfo
-	(*NodeCategory)(nil),                 // 13: reliant.v1.NodeCategory
-	(*ListNodesRequest)(nil),             // 14: reliant.v1.ListNodesRequest
-	(*ListNodesResponse)(nil),            // 15: reliant.v1.ListNodesResponse
-	(*GetCELCompletionsRequest)(nil),     // 16: reliant.v1.GetCELCompletionsRequest
-	(*CELFieldInfo)(nil),                 // 17: reliant.v1.CELFieldInfo
-	(*CELNamespaceInfo)(nil),             // 18: reliant.v1.CELNamespaceInfo
-	(*CELFunctionInfo)(nil),              // 19: reliant.v1.CELFunctionInfo
-	(*CELNodeOutputSchema)(nil),          // 20: reliant.v1.CELNodeOutputSchema
-	(*CELHelperTypeInfo)(nil),            // 21: reliant.v1.CELHelperTypeInfo
-	(*GetCELCompletionsResponse)(nil),    // 22: reliant.v1.GetCELCompletionsResponse
+	(*TierResolution)(nil),               // 3: reliant.v1.TierResolution
+	(*ListModelsByProviderRequest)(nil),  // 4: reliant.v1.ListModelsByProviderRequest
+	(*ListModelsByProviderResponse)(nil), // 5: reliant.v1.ListModelsByProviderResponse
+	(*AvailableModelInfo)(nil),           // 6: reliant.v1.AvailableModelInfo
+	(*ListAvailableModelsRequest)(nil),   // 7: reliant.v1.ListAvailableModelsRequest
+	(*ListAvailableModelsResponse)(nil),  // 8: reliant.v1.ListAvailableModelsResponse
+	(*ToolInfo)(nil),                     // 9: reliant.v1.ToolInfo
+	(*ListToolsRequest)(nil),             // 10: reliant.v1.ListToolsRequest
+	(*ListToolsResponse)(nil),            // 11: reliant.v1.ListToolsResponse
+	(*NodeInputField)(nil),               // 12: reliant.v1.NodeInputField
+	(*NodeInfo)(nil),                     // 13: reliant.v1.NodeInfo
+	(*NodeCategory)(nil),                 // 14: reliant.v1.NodeCategory
+	(*ListNodesRequest)(nil),             // 15: reliant.v1.ListNodesRequest
+	(*ListNodesResponse)(nil),            // 16: reliant.v1.ListNodesResponse
+	(*GetCELCompletionsRequest)(nil),     // 17: reliant.v1.GetCELCompletionsRequest
+	(*CELFieldInfo)(nil),                 // 18: reliant.v1.CELFieldInfo
+	(*CELNamespaceInfo)(nil),             // 19: reliant.v1.CELNamespaceInfo
+	(*CELFunctionInfo)(nil),              // 20: reliant.v1.CELFunctionInfo
+	(*CELNodeOutputSchema)(nil),          // 21: reliant.v1.CELNodeOutputSchema
+	(*CELHelperTypeInfo)(nil),            // 22: reliant.v1.CELHelperTypeInfo
+	(*GetCELCompletionsResponse)(nil),    // 23: reliant.v1.GetCELCompletionsResponse
 }
 var file_reliant_v1_catalog_proto_depIdxs = []int32{
 	0,  // 0: reliant.v1.ListModelsResponse.models:type_name -> reliant.v1.ModelInfo
-	0,  // 1: reliant.v1.ListModelsByProviderResponse.models:type_name -> reliant.v1.ModelInfo
-	5,  // 2: reliant.v1.ListAvailableModelsResponse.models:type_name -> reliant.v1.AvailableModelInfo
-	8,  // 3: reliant.v1.ListToolsResponse.tools:type_name -> reliant.v1.ToolInfo
-	11, // 4: reliant.v1.NodeInfo.input_fields:type_name -> reliant.v1.NodeInputField
-	11, // 5: reliant.v1.NodeInfo.output_fields:type_name -> reliant.v1.NodeInputField
-	12, // 6: reliant.v1.ListNodesResponse.nodes:type_name -> reliant.v1.NodeInfo
-	13, // 7: reliant.v1.ListNodesResponse.categories:type_name -> reliant.v1.NodeCategory
-	17, // 8: reliant.v1.CELNamespaceInfo.fields:type_name -> reliant.v1.CELFieldInfo
-	17, // 9: reliant.v1.CELNodeOutputSchema.fields:type_name -> reliant.v1.CELFieldInfo
-	17, // 10: reliant.v1.CELHelperTypeInfo.fields:type_name -> reliant.v1.CELFieldInfo
-	18, // 11: reliant.v1.GetCELCompletionsResponse.namespaces:type_name -> reliant.v1.CELNamespaceInfo
-	19, // 12: reliant.v1.GetCELCompletionsResponse.functions:type_name -> reliant.v1.CELFunctionInfo
-	20, // 13: reliant.v1.GetCELCompletionsResponse.node_output_schemas:type_name -> reliant.v1.CELNodeOutputSchema
-	21, // 14: reliant.v1.GetCELCompletionsResponse.helper_types:type_name -> reliant.v1.CELHelperTypeInfo
-	1,  // 15: reliant.v1.CatalogService.ListModels:input_type -> reliant.v1.ListModelsRequest
-	3,  // 16: reliant.v1.CatalogService.ListModelsByProvider:input_type -> reliant.v1.ListModelsByProviderRequest
-	6,  // 17: reliant.v1.CatalogService.ListAvailableModels:input_type -> reliant.v1.ListAvailableModelsRequest
-	9,  // 18: reliant.v1.CatalogService.ListTools:input_type -> reliant.v1.ListToolsRequest
-	14, // 19: reliant.v1.CatalogService.ListNodes:input_type -> reliant.v1.ListNodesRequest
-	16, // 20: reliant.v1.CatalogService.GetCELCompletions:input_type -> reliant.v1.GetCELCompletionsRequest
-	2,  // 21: reliant.v1.CatalogService.ListModels:output_type -> reliant.v1.ListModelsResponse
-	4,  // 22: reliant.v1.CatalogService.ListModelsByProvider:output_type -> reliant.v1.ListModelsByProviderResponse
-	7,  // 23: reliant.v1.CatalogService.ListAvailableModels:output_type -> reliant.v1.ListAvailableModelsResponse
-	10, // 24: reliant.v1.CatalogService.ListTools:output_type -> reliant.v1.ListToolsResponse
-	15, // 25: reliant.v1.CatalogService.ListNodes:output_type -> reliant.v1.ListNodesResponse
-	22, // 26: reliant.v1.CatalogService.GetCELCompletions:output_type -> reliant.v1.GetCELCompletionsResponse
-	21, // [21:27] is the sub-list for method output_type
-	15, // [15:21] is the sub-list for method input_type
-	15, // [15:15] is the sub-list for extension type_name
-	15, // [15:15] is the sub-list for extension extendee
-	0,  // [0:15] is the sub-list for field type_name
+	3,  // 1: reliant.v1.ListModelsResponse.tiers:type_name -> reliant.v1.TierResolution
+	0,  // 2: reliant.v1.ListModelsByProviderResponse.models:type_name -> reliant.v1.ModelInfo
+	6,  // 3: reliant.v1.ListAvailableModelsResponse.models:type_name -> reliant.v1.AvailableModelInfo
+	9,  // 4: reliant.v1.ListToolsResponse.tools:type_name -> reliant.v1.ToolInfo
+	12, // 5: reliant.v1.NodeInfo.input_fields:type_name -> reliant.v1.NodeInputField
+	12, // 6: reliant.v1.NodeInfo.output_fields:type_name -> reliant.v1.NodeInputField
+	13, // 7: reliant.v1.ListNodesResponse.nodes:type_name -> reliant.v1.NodeInfo
+	14, // 8: reliant.v1.ListNodesResponse.categories:type_name -> reliant.v1.NodeCategory
+	18, // 9: reliant.v1.CELNamespaceInfo.fields:type_name -> reliant.v1.CELFieldInfo
+	18, // 10: reliant.v1.CELNodeOutputSchema.fields:type_name -> reliant.v1.CELFieldInfo
+	18, // 11: reliant.v1.CELHelperTypeInfo.fields:type_name -> reliant.v1.CELFieldInfo
+	19, // 12: reliant.v1.GetCELCompletionsResponse.namespaces:type_name -> reliant.v1.CELNamespaceInfo
+	20, // 13: reliant.v1.GetCELCompletionsResponse.functions:type_name -> reliant.v1.CELFunctionInfo
+	21, // 14: reliant.v1.GetCELCompletionsResponse.node_output_schemas:type_name -> reliant.v1.CELNodeOutputSchema
+	22, // 15: reliant.v1.GetCELCompletionsResponse.helper_types:type_name -> reliant.v1.CELHelperTypeInfo
+	1,  // 16: reliant.v1.CatalogService.ListModels:input_type -> reliant.v1.ListModelsRequest
+	4,  // 17: reliant.v1.CatalogService.ListModelsByProvider:input_type -> reliant.v1.ListModelsByProviderRequest
+	7,  // 18: reliant.v1.CatalogService.ListAvailableModels:input_type -> reliant.v1.ListAvailableModelsRequest
+	10, // 19: reliant.v1.CatalogService.ListTools:input_type -> reliant.v1.ListToolsRequest
+	15, // 20: reliant.v1.CatalogService.ListNodes:input_type -> reliant.v1.ListNodesRequest
+	17, // 21: reliant.v1.CatalogService.GetCELCompletions:input_type -> reliant.v1.GetCELCompletionsRequest
+	2,  // 22: reliant.v1.CatalogService.ListModels:output_type -> reliant.v1.ListModelsResponse
+	5,  // 23: reliant.v1.CatalogService.ListModelsByProvider:output_type -> reliant.v1.ListModelsByProviderResponse
+	8,  // 24: reliant.v1.CatalogService.ListAvailableModels:output_type -> reliant.v1.ListAvailableModelsResponse
+	11, // 25: reliant.v1.CatalogService.ListTools:output_type -> reliant.v1.ListToolsResponse
+	16, // 26: reliant.v1.CatalogService.ListNodes:output_type -> reliant.v1.ListNodesResponse
+	23, // 27: reliant.v1.CatalogService.GetCELCompletions:output_type -> reliant.v1.GetCELCompletionsResponse
+	22, // [22:28] is the sub-list for method output_type
+	16, // [16:22] is the sub-list for method input_type
+	16, // [16:16] is the sub-list for extension type_name
+	16, // [16:16] is the sub-list for extension extendee
+	0,  // [0:16] is the sub-list for field type_name
 }
 
 func init() { file_reliant_v1_catalog_proto_init() }
@@ -1911,14 +1992,14 @@ func file_reliant_v1_catalog_proto_init() {
 	if File_reliant_v1_catalog_proto != nil {
 		return
 	}
-	file_reliant_v1_catalog_proto_msgTypes[11].OneofWrappers = []any{}
+	file_reliant_v1_catalog_proto_msgTypes[12].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_reliant_v1_catalog_proto_rawDesc), len(file_reliant_v1_catalog_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   23,
+			NumMessages:   24,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

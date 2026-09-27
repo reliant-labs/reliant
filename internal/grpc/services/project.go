@@ -341,6 +341,9 @@ func projectToProto(p *db.Project) *reliantv1.Project {
 	if p.RemoteURL != nil {
 		proto.RemoteUrl = p.RemoteURL
 	}
+	if p.ForgeProjectName != nil {
+		proto.ForgeProjectName = p.ForgeProjectName
+	}
 	return proto
 }
 
@@ -434,8 +437,9 @@ func (s *ProjectService) CreateProject(
 		RemoteURL    string `json:"remote_url,omitempty"`
 	}
 	var discoverResp struct {
-		Discovered []discoveredRepo `json:"discovered"`
-		HasForge   bool             `json:"has_forge"`
+		Discovered       []discoveredRepo `json:"discovered"`
+		HasForge         bool             `json:"has_forge"`
+		ForgeProjectName string           `json:"forge_project_name"`
 	}
 	if err := s.sendProjectDaemonCommand(ctx, userID, "repo.discover", map[string]interface{}{"path": req.Msg.Path}, &discoverResp); err != nil {
 		logging.Warn("Failed to discover repos via daemon, project will start with zero repos", "error", err, "path", req.Msg.Path)
@@ -517,20 +521,28 @@ func (s *ProjectService) CreateProject(
 		}
 	}
 
+	// forge's name for the project is the join key to its control-plane
+	// environments; NULL until a daemon reads one (GetTopology backfills).
+	var forgeProjectName *string
+	if name := strings.TrimSpace(discoverResp.ForgeProjectName); discoverResp.HasForge && name != "" {
+		forgeProjectName = &name
+	}
+
 	now := time.Now().UTC()
 	project := &db.Project{
-		ID:            uuid.New().String(),
-		UserID:        userID,
-		Name:          req.Msg.Name,
-		Path:          req.Msg.Path,
-		Description:   req.Msg.Description,
-		IsGitRepo:     isGitRepo,
-		DefaultBranch: &defaultBranch,
-		RemoteURL:     projectRemoteURL,
-		IsForge:       discoverResp.HasForge,
-		CreatedAt:     now,
-		UpdatedAt:     now,
-		LastActive:    now,
+		ID:               uuid.New().String(),
+		UserID:           userID,
+		Name:             req.Msg.Name,
+		Path:             req.Msg.Path,
+		Description:      req.Msg.Description,
+		IsGitRepo:        isGitRepo,
+		DefaultBranch:    &defaultBranch,
+		RemoteURL:        projectRemoteURL,
+		IsForge:          discoverResp.HasForge,
+		ForgeProjectName: forgeProjectName,
+		CreatedAt:        now,
+		UpdatedAt:        now,
+		LastActive:       now,
 	}
 
 	if err := s.database.CreateProject(ctx, project); err != nil {

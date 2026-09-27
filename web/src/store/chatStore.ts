@@ -321,6 +321,13 @@ function routeChatErrorMarker(
       errorUpdate.error_message = stripChatMarker(errorUpdate.error_message);
       return;
     }
+    case CHAT_MARKER_KINDS.ProviderRateLimited: {
+      // The backend's error_summary already names the provider and the wait,
+      // and the prefix is the provider's own sentence, so stripping the tail
+      // leaves nothing to surface separately.
+      errorUpdate.error_message = stripChatMarker(errorUpdate.error_message);
+      return;
+    }
     default: {
       // Exhaustiveness guard: a new kind landed in chatMarkers.ts without
       // being routed here. TypeScript will flag this at compile time.

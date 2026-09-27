@@ -1,18 +1,19 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * The env-monitoring panel's presentation layer.
+ * An environment's DEV STACK — what `forge env up` runs on this machine, and
+ * forge's runtime checks against it. Rendered on a LOCAL environment's page
+ * only: the host services are processes on the reader's own laptop, and the
+ * runtime checks probe the stack those processes form.
  *
- * PURE PROPS, like TopologyView: it takes an outcome and renders it, owning no
- * data fetching. That is what lets the visual contract be tested by handing it a
- * report object instead of standing up a query client and a transport.
+ * WHY LOCAL ONLY. `forge env status <env>` returns the same `services` array
+ * for every env — the host processes forge would launch — and rendering it
+ * on a hosted or cluster env's page is how prod once appeared to have two
+ * services while its cluster ran sixteen. A deployed environment's contents
+ * are its Workloads section; this is the laptop.
  *
- * The four non-report outcomes are delegated to the SHARED ForgeStates
- * components rather than re-implemented here. They are properties of the RPC
- * envelope, not of this screen — "no forge.yaml", "your forge is too old" and
- * "the cluster was unreachable" mean the same thing whichever forge command was
- * asked — and a second copy of them would be a second place for the unreachable
- * case to drift back into a red banner.
+ * PURE PROPS: it takes an outcome and renders it, owning no data fetching, so
+ * the visual contract is tested by handing it a report object.
  *
  * NO CHECK IS EVER HIDDEN. There is no filter control and no "only show
  * problems" affordance, deliberately. Forge puts the cluster-workload probe
@@ -24,27 +25,19 @@
  * Read-only by construction: it never offers to re-run a check or restart a
  * service. It reports.
  *
- * LAYOUT. Two standard surfaces — checks, then services — each a `Card` holding
- * a real `<table>` with a real `<thead>`. Every fact has its own column, so a
- * reader can scan one column down the page instead of re-parsing a differently
- * shaped flex row each time. The env picker is NOT here: the forge layout
- * renders shared EnvTabs above this panel, and the `env` prop is what this
- * component is told to report on.
- *
- * SURFACES. The page is `bg-background`; each Card is `bg-card` + `border-border`;
- * anything inset inside a card (the evidence block in CheckRow) is
- * `bg-background` + `border-border/60`. Cards are never nested, and `bg-muted`
- * is never used for structure — `--muted` inverts direction between light and
- * dark across the seven schemes in themes/professional-themes.css, so a
- * muted-backed panel recesses in one mode and lifts in the other.
+ * SURFACES. Each table is a `Card` (`bg-card` + `border-border`) on the page's
+ * `bg-background`; anything inset inside a card (the evidence block in
+ * CheckRow) is `bg-background` + `border-border/60`. Cards are never nested,
+ * and `bg-muted` is never used for structure — `--muted` inverts direction
+ * between light and dark across the seven schemes in
+ * themes/professional-themes.css.
  */
 
 import { cn } from "@/lib/utils";
 import { Card } from "@/components/ui";
-import { destinationOf, endpointHost, type ForgeOutcome } from "@/services/forge/topology";
+import type { ForgeOutcome } from "@/services/forge/topology";
 import {
   checksOf,
-  hostedWorkloadsOfStatus,
   verdictOf,
   verdictSentence,
   type EnvStatusVerdict,
@@ -57,11 +50,10 @@ import {
   ForgeUnsupported,
   NotForgeProject,
 } from "../ForgeStates";
-import { HostedWorkloadList } from "../DestinationBadge";
 import { CheckRow } from "./CheckRow";
 import { DispositionLegend } from "./DispositionLegend";
 
-export interface EnvStatusPanelProps {
+export interface DevStackPanelProps {
   outcome: ForgeOutcome<ForgeEnvStatusReport> | undefined;
   isLoading: boolean;
   /** A transport/daemon failure — genuinely an error, unlike every outcome above. */
@@ -100,13 +92,13 @@ const VERDICT_LABELS: Record<EnvStatusVerdict, string> = {
 /** Shared column-header treatment, so both tables on the screen read alike. */
 const TH = "px-4 py-2 text-left text-xs font-medium text-muted-foreground";
 
-export function EnvStatusPanel({
+export function DevStackPanel({
   outcome,
   isLoading,
   error,
   env,
   projectName,
-}: EnvStatusPanelProps) {
+}: DevStackPanelProps) {
   if (isLoading && !outcome) {
     return (
       <Card
@@ -150,18 +142,10 @@ export function EnvStatusPanel({
 
   return (
     <div className="space-y-4" data-testid="forge-env-status">
-      {/* For a hosted env the first question is "is it serving?", and the
-          control plane is the only thing that can answer it — so its section
-          comes FIRST, above the runtime checks, which run on this machine and
-          say nothing about the hosted workloads. */}
-      {destinationOf(report) === "hosted" && <HostedStatusSummary report={report} env={reportEnv} />}
-
       <header className="space-y-3">
         <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-          {/* Prose heading, so it is not monospaced. The env name beside it IS
-              an identifier and keeps the mono face. */}
-          <h1 className="text-base font-semibold text-foreground">Runtime checks</h1>
-          <span className="font-mono text-sm text-muted-foreground">{reportEnv}</span>
+          {/* The env is the page's subject, named in its header — not repeated here. */}
+          <h3 className="text-sm font-semibold text-foreground">Runtime checks</h3>
           {report.head_commit_at && (
             <span className="text-xs text-muted-foreground">
               measured against HEAD at {report.head_commit_at}
@@ -248,46 +232,6 @@ export function EnvStatusPanel({
 }
 
 /**
- * A hosted env's workloads as the control plane reports them — from the
- * status document's `hosted_workloads` (NOT `workloads`, which here is the
- * cluster inventory). Same row component as the topology screen, so a
- * workload's URL, verdict, drift and error read identically on both.
- */
-function HostedStatusSummary({ report, env }: { report: ForgeEnvStatusReport; env: string }) {
-  const workloads = hostedWorkloadsOfStatus(report);
-  const host = endpointHost(report.endpoint);
-  const deployed = (report.environment_id ?? "").trim() !== "";
-  return (
-    <section className="space-y-2" data-testid="forge-status-hosted">
-      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-        <h2 className="text-base font-semibold text-foreground">Hosted workloads</h2>
-        <span className="text-xs text-muted-foreground">
-          as reported by the control plane
-          {host && (
-            <>
-              {" "}
-              at <span className="font-mono text-foreground">{host}</span>
-            </>
-          )}
-        </span>
-      </div>
-      <Card variant="default" size="sm" hover={false} className="space-y-2 border-border">
-        {workloads.length > 0 ? (
-          <HostedWorkloadList envName={env} workloads={workloads} />
-        ) : (
-          <p className="text-xs text-muted-foreground" data-testid="forge-status-hosted-empty">
-            {report.hosted_note ||
-              (deployed
-                ? "The control plane reported no workloads for this environment. That is not a statement that they are healthy."
-                : "Nothing has been deployed here yet — the first deploy creates this environment on the control plane.")}
-          </p>
-        )}
-      </Card>
-    </section>
-  );
-}
-
-/**
  * The host-service rows forge resolved, alongside the checks.
  *
  * Two facts here are three-valued and are kept that way. `stale` says a process
@@ -310,7 +254,7 @@ function ServiceSummary({
 }) {
   return (
     <section className="space-y-2" data-testid="forge-status-services">
-      <h2 className="text-sm font-medium text-foreground">Services forge resolved</h2>
+      <h3 className="text-sm font-semibold text-foreground">Host services</h3>
 
       <Card
         variant="default"

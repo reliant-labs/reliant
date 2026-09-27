@@ -22,6 +22,7 @@ func TestKindLiterals_DriftGuard(t *testing.T) {
 		{"reliant managed quota exhausted", KindReliantManagedQuotaExhausted, "RELIANT_MANAGED_QUOTA_EXHAUSTED"},
 		{"daemon offline halt", KindDaemonOfflineHalt, "RELIANT_DAEMON_OFFLINE_HALT"},
 		{"provider stream stalled", KindProviderStreamStalled, "RELIANT_PROVIDER_STREAM_STALLED"},
+		{"provider rate limited", KindProviderRateLimited, "RELIANT_PROVIDER_RATE_LIMITED"},
 	}
 	for _, tc := range cases {
 		if string(tc.got) != tc.want {

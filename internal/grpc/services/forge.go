@@ -4,6 +4,7 @@ package services
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -11,6 +12,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/version"
 )
@@ -167,23 +169,25 @@ const (
 	forgeErrProjectDirNotExistMarker = "forge project dir does not exist"
 
 	// forgeErrCommandFailedMarker mirrors cmd_forge.go's
-	// forgeCommandFailedPrefix: forge ran, exited non-zero, and produced no
-	// report to interpret. A genuine internal failure — distinct from a
-	// non-zero exit that DID produce a report, which the daemon returns as
-	// data because that report is the answer.
+	// forgeCommandFailedPrefix -> FailedPrecondition: forge ran, exited
+	// non-zero, and produced no report to interpret — distinct from a non-zero
+	// exit that DID produce a report, which the daemon returns as data because
+	// that report is the answer. See remapForgeDispatchError for the code.
 	forgeErrCommandFailedMarker = "forge command failed"
 )
 
-// forgeProjectLookup is the only database capability this service needs: resolve
-// a project id to its row, enforcing that the caller owns it.
+// forgeProjectLookup is the only database capability this service needs:
+// resolve a project id to its row, enforcing that the caller owns it, and
+// record forge's name for the project when a topology report carries one.
 //
 // Declared here, at the CONSUMER, rather than depending on the whole
-// db.Repository surface. One method is all this service uses, and a one-method
+// db.Repository surface. Two methods are all this service uses, and a narrow
 // dependency is what makes the handler testable without a database — which is
 // what lets the secret-safety and reachability tests below run as plain unit
 // tests. db.Repository satisfies this implicitly.
 type forgeProjectLookup interface {
 	GetProjectWithUserCheck(ctx context.Context, id string, userID string) (*db.Project, error)
+	SetProjectForgeName(ctx context.Context, id, userID, forgeProjectName string) (bool, error)
 }
 
 // ForgeService serves forge project state to the web tier by forwarding to the
@@ -240,17 +244,63 @@ func (r forgeReportReply) reportJSON() string {
 // forgeProjectPath resolves a project id to its path on the DAEMON's
 // filesystem, enforcing that the caller owns it.
 func (s *ForgeService) forgeProjectPath(ctx context.Context, projectID, userID string) (string, error) {
+	project, err := s.forgeProject(ctx, projectID, userID)
+	if err != nil {
+		return "", err
+	}
+	return project.Path, nil
+}
+
+// forgeProject resolves a project id to its row, enforcing that the caller
+// owns it.
+func (s *ForgeService) forgeProject(ctx context.Context, projectID, userID string) (*db.Project, error) {
 	if strings.TrimSpace(projectID) == "" {
-		return "", connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("project_id is required"))
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("project_id is required"))
 	}
 	project, err := s.projects.GetProjectWithUserCheck(ctx, projectID, userID)
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") || strings.Contains(err.Error(), "access denied") {
-			return "", connect.NewError(connect.CodeNotFound, fmt.Errorf("project not found"))
+			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("project not found"))
 		}
-		return "", connect.NewError(connect.CodeInternal, fmt.Errorf("database error"))
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("database error"))
 	}
-	return project.Path, nil
+	return project, nil
+}
+
+// rememberForgeProjectName persists the name forge's topology report gives the
+// project, when it differs from the row's.
+//
+// projects.forge_project_name is the key the web joins a project to its
+// control-plane environments on, and it must be readable with the daemon
+// offline — so every time forge DOES answer, the row is brought up to date.
+// This is what backfills projects created before the column existed, and what
+// follows a rename in forge.yaml. The comparison against the row already in
+// hand keeps the steady state write-free; the store's own guard keeps a race
+// idempotent. Best effort: a failed write is logged, never the RPC's failure.
+//
+// This is the one field this layer reads out of forge's otherwise opaque
+// report. Only `project` is decoded, so a newer forge's additions still pass
+// through untouched.
+func (s *ForgeService) rememberForgeProjectName(ctx context.Context, project *db.Project, userID string, reply forgeReportReply) {
+	if !reply.IsForgeProject || !reply.Supported || len(reply.Report) == 0 {
+		return
+	}
+	var named struct {
+		Project string `json:"project"`
+	}
+	if err := json.Unmarshal(reply.Report, &named); err != nil {
+		return
+	}
+	name := strings.TrimSpace(named.Project)
+	if name == "" {
+		return
+	}
+	if project.IsForge && project.ForgeProjectName != nil && *project.ForgeProjectName == name {
+		return
+	}
+	if _, err := s.projects.SetProjectForgeName(ctx, project.ID, userID, name); err != nil {
+		logging.Warn("forge: failed to persist forge project name", "error", err, "project_id", project.ID)
+	}
 }
 
 // forgeEnvArg validates an environment name.
@@ -307,19 +357,59 @@ func (s *ForgeService) forgeDispatch(
 			// remote cluster. Report UNKNOWN, not broken.
 			return forgeReportReply{}, forgeTimeoutReason(commandType, timeoutMs), nil
 		}
-		// The shared mapper only recognises the pkg.* NotFound marker
-		// ("working dir does not exist"), so forge's own missing-path prefix
-		// would otherwise arrive as a retryable Unavailable — telling the UI to
-		// keep retrying a directory that is gone. Re-map it here rather than
-		// teaching the shared mapper every command family's prefix.
-		if connect.CodeOf(err) == connect.CodeUnavailable &&
-			strings.Contains(err.Error(), forgeErrProjectDirNotExistMarker) {
-			return forgeReportReply{}, "", connect.NewError(connect.CodeNotFound,
-				fmt.Errorf("forge project path not found on the daemon: %s", commandType))
-		}
-		return forgeReportReply{}, "", err
+		return forgeReportReply{}, "", remapForgeDispatchError(commandType, err)
 	}
 	return reply, "", nil
+}
+
+// remapForgeDispatchError reclassifies the two forge-specific failures the
+// shared mapper cannot recognise, and which it therefore files under a
+// retryable Unavailable:
+//
+//   - forgeErrProjectDirNotExistMarker -> NotFound. The path is gone; retrying
+//     a directory that no longer exists only delays saying so.
+//   - forgeErrCommandFailedMarker -> FailedPrecondition. The daemon ANSWERED,
+//     ran forge, and forge exited non-zero with no report — a KCL render
+//     error, a provider the command refuses, missing credentials. That is a
+//     fact about the project's state, not a transport fault.
+//
+// WHY FailedPrecondition AND NOT Internal for the second. Both stop the retry,
+// but Internal claims Reliant is broken: the web transport reports it to Sentry
+// and a reader files a bug against us for what is almost always a project the
+// user can fix. FailedPrecondition is gRPC's "do not retry until the system's
+// state has been fixed", which is exactly the situation, and it is the same
+// call DaemonOutdatedConnectError makes for version skew. Unavailable, the old
+// answer, was the worst of the three: the UI read it as "your daemon is
+// offline" and retried a failure that retrying cannot change.
+//
+// It is applied in THIS package rather than taught to mapDaemonDispatchError
+// because the markers are forge's wire contract with its own daemon commands
+// (see the constants above); the shared mapper stays ignorant of every command
+// family's prefixes. Every forge dispatch — the shared envelope and the three
+// that dispatch directly — routes through here, so the classification cannot
+// differ between RPCs of the same surface.
+//
+// The message is carried over verbatim from the shared mapper's error. It was
+// built from the daemon's text alone, and on the secret path the daemon has
+// already withheld forge's stderr, so re-classifying adds nothing to it.
+func remapForgeDispatchError(commandType string, err error) error {
+	if connect.CodeOf(err) != connect.CodeUnavailable {
+		return err
+	}
+	text := err.Error()
+	switch {
+	case strings.Contains(text, forgeErrProjectDirNotExistMarker):
+		return connect.NewError(connect.CodeNotFound,
+			fmt.Errorf("forge project path not found on the daemon: %s", commandType))
+	case strings.Contains(text, forgeErrCommandFailedMarker):
+		message := text
+		var connectErr *connect.Error
+		if errors.As(err, &connectErr) {
+			message = connectErr.Message()
+		}
+		return connect.NewError(connect.CodeFailedPrecondition, errors.New(message))
+	}
+	return err
 }
 
 // isForgeClusterReadTimeout reports whether a dispatch failure was a timeout or
@@ -421,10 +511,11 @@ func (s *ForgeService) GetTopology(
 	if err != nil {
 		return nil, err
 	}
-	path, err := s.forgeProjectPath(ctx, req.Msg.ProjectId, userID)
+	project, err := s.forgeProject(ctx, req.Msg.ProjectId, userID)
 	if err != nil {
 		return nil, err
 	}
+	path := project.Path
 
 	// --verify is what turns this from a local file read into a fleet of
 	// cluster round trips, so it selects both the budget and whether a
@@ -445,6 +536,7 @@ func (s *ForgeService) GetTopology(
 	if err != nil {
 		return nil, err
 	}
+	s.rememberForgeProjectName(ctx, project, userID, reply)
 
 	return connect.NewResponse(&reliantv1.GetForgeTopologyResponse{
 		Meta:       forgeMeta(reply, verify, unreachable),
@@ -782,12 +874,7 @@ func (s *ForgeService) ApplyPromote(
 	// written, and calling that a reachability verdict would hide it.
 	var reply forgePromoteReply
 	if err := s.dispatch(ctx, userID, "forge.promote_apply", payload, &reply, forgePromoteApplyTimeoutMs); err != nil {
-		if connect.CodeOf(err) == connect.CodeUnavailable &&
-			strings.Contains(err.Error(), forgeErrProjectDirNotExistMarker) {
-			return nil, connect.NewError(connect.CodeNotFound,
-				fmt.Errorf("forge project path not found on the daemon: forge.promote_apply"))
-		}
-		return nil, err
+		return nil, remapForgeDispatchError("forge.promote_apply", err)
 	}
 
 	// THE GUARD REFUSED: nothing was written. Fail closed.
@@ -1103,12 +1190,7 @@ func (s *ForgeService) StartDeploy(
 	// the network.
 	var reply forgeDeployStartReply
 	if err := s.dispatch(ctx, userID, "forge.deploy_start", payload, &reply, forgeDeployStartTimeoutMs); err != nil {
-		if connect.CodeOf(err) == connect.CodeUnavailable &&
-			strings.Contains(err.Error(), forgeErrProjectDirNotExistMarker) {
-			return nil, connect.NewError(connect.CodeNotFound,
-				fmt.Errorf("forge project path not found on the daemon: forge.deploy_start"))
-		}
-		return nil, err
+		return nil, remapForgeDispatchError("forge.deploy_start", err)
 	}
 
 	// THE GUARD REFUSED: nothing was applied and no job exists. Fail closed.
@@ -1205,12 +1287,7 @@ func (s *ForgeService) GetDeployStatus(
 
 	var reply forgeDeployStatusReply
 	if err := s.dispatch(ctx, userID, "forge.deploy_status", payload, &reply, forgeDeployStatusTimeoutMs); err != nil {
-		if connect.CodeOf(err) == connect.CodeUnavailable &&
-			strings.Contains(err.Error(), forgeErrProjectDirNotExistMarker) {
-			return nil, connect.NewError(connect.CodeNotFound,
-				fmt.Errorf("forge project path not found on the daemon: forge.deploy_status"))
-		}
-		return nil, err
+		return nil, remapForgeDispatchError("forge.deploy_status", err)
 	}
 
 	return connect.NewResponse(&reliantv1.GetForgeDeployStatusResponse{

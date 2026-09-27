@@ -1078,6 +1078,9 @@ function PresetEditModal({ preset, projectId, availablePresets = [], onSave, onC
 
   useEffect(() => {
     const current = typeof params.thinking_level === 'string' ? params.thinking_level : ''
+    // Tag selector with no explicit level: the tier owns the effort; pinning
+    // one here would override it server-side.
+    if (!current && thinkingCapability.tag) return
     const fallback = reconcileThinkingLevel(current, thinkingCapability)
     if (fallback !== current) {
       setParams(prev => ({ ...prev, thinking_level: fallback }))

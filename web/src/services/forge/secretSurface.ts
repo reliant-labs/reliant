@@ -92,7 +92,9 @@ export function surfaceMode(
   // what decides where the value is read at deploy time, so a reachable
   // managed store does not make an external environment writable.
   if (kind === "external") return "external";
-  if (kind === "file") return "file";
+  // rendered resolves from the env's local file store, so it has the file
+  // surface's write path (`forge secret set`), never a browser write.
+  if (kind === "file" || kind === "rendered") return "file";
   if (kind === "hosted") return storeAvailable ? "managed" : "managed-remote";
 
   // `none` and `unknown`: an older forge that cannot name the hosted

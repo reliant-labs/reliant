@@ -54,7 +54,7 @@ type ModelInfo struct {
 }
 
 // modelInfoFromDef builds a ModelInfo for a single {definition, provider} pair.
-func modelInfoFromDef(def *ModelDefinition, provider ProviderMapping, enabled bool) ModelInfo {
+func (r *ModelRegistry) modelInfoFromDef(def *ModelDefinition, provider ProviderMapping, enabled bool) ModelInfo {
 	name := def.Name
 	if name == "" {
 		name = def.ID
@@ -67,7 +67,7 @@ func modelInfoFromDef(def *ModelDefinition, provider ProviderMapping, enabled bo
 		APIModel:     provider.APIModel,
 		Capabilities: def.Capabilities,
 		Cost:         def.Cost,
-		Tags:         def.Tags,
+		Tags:         r.TagsOf(def.ID),
 		Enabled:      enabled,
 	}
 }
@@ -94,7 +94,7 @@ func (r *ModelRegistry) ModelsForDriver(driverID string) []ModelInfo {
 		}
 		for _, p := range def.Providers {
 			if p.Driver == driverID {
-				out = append(out, modelInfoFromDef(def, p, true))
+				out = append(out, r.modelInfoFromDef(def, p, true))
 				break
 			}
 		}

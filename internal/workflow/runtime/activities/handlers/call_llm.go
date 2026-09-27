@@ -1642,6 +1642,35 @@ streamLoop:
 					resolved.ProviderDriver, llm.StreamContentStallTimeout()),
 			), streamErr)
 		}
+		// A rate limit that resets far in the future — a spent subscription
+		// usage window, in practice. Retrying the activity cannot help before
+		// the reset, so stop the ladder now (non-retryable) and let the
+		// workflow pause with the provider's own words and the reset time.
+		// Those exist only on the SDK's typed error, which this is the last
+		// place to see: past this return Temporal reduces it to a string, so
+		// the marker is what carries them across.
+		if limit, ok := llm.AsProviderRateLimit(streamErr); ok {
+			message := limit.Message
+			if message == "" {
+				message = fmt.Sprintf("HTTP %d", limit.StatusCode)
+			}
+			activity.GetLogger(ctx).Warn("[CallLLM] Provider rate limit resets too far off to retry; pausing with the provider's message",
+				"chatID", chat.ID,
+				"thread", thread,
+				"provider", resolved.ProviderDriver,
+				"model", resolvedModelID,
+				"retryAfter", limit.RetryAfter,
+				"providerMessage", limit.Message)
+			return nil, temporal.NewNonRetryableApplicationError(
+				chatmarkers.Wrap(
+					chatmarkers.KindProviderRateLimited,
+					fmt.Sprintf("%s|%d", resolved.ProviderDriver, int64(limit.RetryAfter.Seconds())),
+					fmt.Sprintf("%s rate limit: %s", resolved.ProviderDriver, message),
+				),
+				"ProviderRateLimited",
+				streamErr,
+			)
+		}
 		return nil, streamErr
 	}
 

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"testing"
 
 	"github.com/reliant-labs/reliant/internal/llm/models"
@@ -92,10 +93,8 @@ func TestConvertLocalModelToDefinition(t *testing.T) {
 				t.Error("SupportsAttachments should be true")
 			}
 
-			// Verify tags
-			if len(got.Tags) != 1 || got.Tags[0] != "local" {
-				t.Errorf("Tags = %v, want [local]", got.Tags)
-			}
+			// "local" tag membership is established when the registry merges
+			// discovered models, not on the definition; see TestRegistryIntegration.
 
 			// Verify provider mapping
 			if len(got.Providers) != 1 {
@@ -390,9 +389,25 @@ func TestRegistryIntegration(t *testing.T) {
 		t.Error("Expected to find local-llama3.3-70b in registry")
 	}
 
-	// Verify they have the "local" tag
-	localModels := reg.GetModelsByTag("local")
-	if len(localModels) < 2 {
-		t.Errorf("Expected at least 2 local models, got %d", len(localModels))
+	// Verify every discovered model is selectable via the "local" tag.
+	localModelIDs := make([]string, 0)
+	for _, definition := range reg.GetModelsByTag("local") {
+		localModelIDs = append(localModelIDs, definition.ID)
+	}
+	for _, wantID := range []string{"local-qwen3-latest", "local-llama3.3-70b"} {
+		if !slices.Contains(localModelIDs, wantID) {
+			t.Errorf("local tag lists %v; want it to include discovered model %q", localModelIDs, wantID)
+		}
+		if !slices.Contains(reg.TagsOf(wantID), "local") {
+			t.Errorf("TagsOf(%q) = %v; want it to include \"local\"", wantID, reg.TagsOf(wantID))
+		}
+	}
+
+	resolved, err := reg.Resolve(models.ModelSelector{Tags: []string{"local"}}, []string{"local"})
+	if err != nil {
+		t.Fatalf("Resolve([local]) error = %v", err)
+	}
+	if !slices.Contains(localModelIDs, resolved.Definition.ID) {
+		t.Errorf("Resolve([local]) = %q; want a discovered local model", resolved.Definition.ID)
 	}
 }

@@ -61,16 +61,33 @@ export interface ForgeSecretEntry {
   name: string;
   /** True when the store holds a value under this key. Absent means forge did not say. */
   present?: boolean;
+  /**
+   * forge's three-valued answer: "set" | "missing" | "unknown". Authoritative
+   * over `present` when given, because `present: false` cannot say "unknown".
+   * Absent on reports from a forge that predates it.
+   */
+  presence?: string;
+  /** Hosted only: the store's current version number. A coordinate, not a value. */
+  version?: number;
   declared_by?: ForgeSecretDeclaration[];
 }
 
 export interface ForgeSecretsReport {
   env?: string;
-  /** "file" | "hosted" | "none" | "external". An unrecognised kind is treated as unknown. */
+  /**
+   * "file" | "hosted" | "rendered" | "external" | "none". An unrecognised kind
+   * is treated as unknown.
+   */
   provider?: string;
   store_path?: string;
   /** Whether the store file exists AT ALL. Distinct from "exists and is empty". */
   store_exists?: boolean;
+  /**
+   * False when forge could not read presence at all (external, none). Then
+   * `ok` is false by construction and means "not checked", never "failing".
+   * Absent on reports from a forge that predates it.
+   */
+  verifiable?: boolean;
   secrets?: ForgeSecretEntry[];
   /** Keys present in the store that NO workload declares — nothing injects them. */
   inert?: string[];
@@ -87,7 +104,7 @@ export interface ForgeSecretsReport {
  * topology.ts: an unrecognised provider must not be assumed to be `file`, or a
  * newer forge would have its secrets rendered as a wall of false failures.
  */
-export type SecretProviderKind = "file" | "hosted" | "external" | "none" | "unknown";
+export type SecretProviderKind = "file" | "hosted" | "rendered" | "external" | "none" | "unknown";
 
 export function providerKind(report: ForgeSecretsReport | null | undefined): SecretProviderKind {
   switch (report?.provider) {
@@ -95,6 +112,8 @@ export function providerKind(report: ForgeSecretsReport | null | undefined): Sec
       return "file";
     case "hosted":
       return "hosted";
+    case "rendered":
+      return "rendered";
     case "external":
       return "external";
     case "none":
@@ -111,7 +130,9 @@ export function providerKind(report: ForgeSecretsReport | null | undefined): Sec
 export function providerHoldsValues(kind: SecretProviderKind): boolean {
   // hosted: forge listed the control plane's store to build the report, so
   // present/missing is an observation, exactly as for a file it read.
-  return kind === "file" || kind === "hosted";
+  // rendered: forge resolved each declared key's source (a literal, or the
+  // env's local file store), which is an observation too.
+  return kind === "file" || kind === "hosted" || kind === "rendered";
 }
 
 export function providerLabel(kind: SecretProviderKind): string {
@@ -120,6 +141,8 @@ export function providerLabel(kind: SecretProviderKind): string {
       return "File store";
     case "hosted":
       return "Managed store";
+    case "rendered":
+      return "Rendered Secrets";
     case "external":
       return "External secret manager";
     case "none":
@@ -136,6 +159,8 @@ export function providerExplanation(kind: SecretProviderKind): string {
       return "Forge holds the values for this environment in a store file on disk, so it can say which declared secrets have a value and which do not.";
     case "hosted":
       return "The environment's control plane holds the values. Forge listed that store's names, so it can say which declared secrets have a value — never what the value is.";
+    case "rendered":
+      return "Forge renders these Kubernetes Secrets itself, filling each key from a literal or from your local file store, so it can say which declared keys resolve to a value.";
     case "external":
       return "An external secret manager holds the values. Forge does not have them and did not look, so it cannot say whether any of these are set — that is unknown here, not missing.";
     case "none":
@@ -223,6 +248,15 @@ export function presenceOf(
   const kind = providerKind(report);
   if (kind === "external") return "not-held";
   if (!providerHoldsValues(kind)) return "undetermined";
+  // forge said it could not read presence: nothing below is an observation.
+  if (report?.verifiable === false) return "undetermined";
+  // The explicit three-valued answer beats the boolean, which folds
+  // "unknown" into false. An unrecognised value is not evidence either way.
+  if (entry.presence !== undefined) {
+    if (entry.presence === "set") return "present";
+    if (entry.presence === "missing") return "missing";
+    return "undetermined";
+  }
   if (entry.present === true) return "present";
   if (entry.present === false) return "missing";
   return "undetermined";

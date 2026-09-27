@@ -11,7 +11,7 @@ import { Tooltip } from "../ui/Tooltip";
 import { DynamicInput } from "./DynamicInput";
 import type { ParamSuggestion, NodeSuggestion } from "./DynamicInput";
 import { ObjectSchemaEditor } from "./ObjectSchemaEditor";
-import { useThinkingCapability, reconcileThinkingLevel } from "../../hooks/useThinkingCapability";
+import { useThinkingCapability, reconcileThinkingLevel, autoThinkingLabel } from "../../hooks/useThinkingCapability";
 import { useEvent } from "../../lib/event-context";
 
 import type { InputDef } from "../../lib/inputHelpers";
@@ -130,6 +130,12 @@ export function WorkflowParamInput({
       filtered = filtered.filter((option) => schemaSet.has(option));
     }
 
+    // A tag selector's tier owns the effort: offer "" (Auto — the tier's
+    // level) so a pinned override can be cleared back to the tier.
+    if (thinkingCapability.tag) {
+      filtered = ["", ...filtered];
+    }
+
     return setInputEnumValues(schema, filtered);
   }, [schema, name, thinkingCapability]);
 
@@ -145,6 +151,10 @@ export function WorkflowParamInput({
     previousModelIdRef.current = thinkingCapability.modelId;
 
     if (current && options.includes(current)) return;
+
+    // Tag selector with no explicit level: the tier decides the effort
+    // server-side. Writing a concrete level here would override it.
+    if (!current && thinkingCapability.tag) return;
 
     // If user switched to a reasoning-capable model and current is off,
     // default to medium when available, otherwise highest available.
@@ -232,6 +242,7 @@ export function WorkflowParamInput({
           availableNodes={availableNodes}
           hideCELToggle={hideCELToggle}
           isChatInputContext={isChatInputContext}
+          emptyLabel={autoThinkingLabel(thinkingCapability)}
         />
       );
 
@@ -552,6 +563,8 @@ interface EnumInputProps {
   availableNodes?: NodeSuggestion[];
   hideCELToggle?: boolean;
   isChatInputContext?: boolean;
+  /** Label for the "" option (default "Off"). */
+  emptyLabel?: string;
 }
 
 function EnumInput({ 
@@ -565,6 +578,7 @@ function EnumInput({
   availableNodes = [],
   hideCELToggle = false,
   isChatInputContext = false,
+  emptyLabel,
 }: EnumInputProps) {
   return (
     <ParamWrapper 
@@ -588,6 +602,7 @@ function EnumInput({
             onChange={(v) => nativeOnChange(v)}
             disabled={nativeDisabled}
             isChatInputContext={isChatInputContext}
+            emptyLabel={emptyLabel}
           />
         )}
       />
@@ -602,19 +617,21 @@ function EnumDropdown({
   onChange, 
   disabled,
   isChatInputContext = false,
+  emptyLabel = "Off",
 }: { 
   schema: InputDef; 
   value: string; 
   onChange: (value: string) => void; 
   disabled: boolean;
   isChatInputContext?: boolean;
+  emptyLabel?: string;
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const options = getInputEnumValues(schema) || [];
   const currentValue = value ?? getInputDefault(schema) ?? options[0] ?? "";
 
-  const getDisplayLabel = (option: string) => option === "" ? "Off" : option;
+  const getDisplayLabel = (option: string) => option === "" ? emptyLabel : option;
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {

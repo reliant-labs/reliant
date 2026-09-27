@@ -1012,6 +1012,16 @@ func (r *Repo) UpdateProject(ctx context.Context, project *Project, userID strin
 	return r.projects.UpdateProject(ctx, project, userID)
 }
 
+func (r *Repo) SetProjectForgeName(ctx context.Context, id, userID, forgeProjectName string) (bool, error) {
+	if id == "" {
+		return false, fmt.Errorf("project ID cannot be empty")
+	}
+	if strings.TrimSpace(forgeProjectName) == "" {
+		return false, fmt.Errorf("forge project name cannot be empty")
+	}
+	return r.projects.SetProjectForgeName(ctx, id, userID, forgeProjectName)
+}
+
 func (r *Repo) TouchProject(ctx context.Context, id string, userID string) error {
 	if id == "" {
 		return fmt.Errorf("project ID cannot be empty")
@@ -3290,8 +3300,22 @@ func (r *Repo) CompareAndSwapWorkflowStatus(ctx context.Context, id string, newS
 
 func (r *Repo) UpdateWorkflowStatus(ctx context.Context, id string, status WorkflowStatus) error {
 	return r.RunTx(ctx, func(txCtx context.Context) error {
+		// Read the prior status only when this write could be a reopen; every
+		// other write needs nothing from the row before it lands.
+		var before *Workflow
+		if status.State == WorkflowStateActive {
+			prior, err := r.GetWorkflow(txCtx, id)
+			if err == nil {
+				before = prior
+			}
+		}
 		if err := r.workflows.UpdateWorkflowStatus(txCtx, id, status); err != nil {
 			return err
+		}
+		if before != nil && !before.Status.Live() {
+			if err := r.reviveRunThread(txCtx, before); err != nil {
+				return err
+			}
 		}
 		wf, err := r.GetWorkflow(txCtx, id)
 		if err != nil {
@@ -3302,6 +3326,43 @@ func (r *Repo) UpdateWorkflowStatus(ctx context.Context, id string, status Workf
 		}
 		return r.emitChatActivityIfChanged(txCtx, wf.ChatID)
 	})
+}
+
+// reviveRunThread moves a reopened run's own thread back to running.
+//
+// The reopening half of the invariant ReapOrphanedThreads enforces in the
+// closing direction: a thread whose run is live is not finished. It lives
+// here, in the single writer every reopen goes through, because the reopens
+// are many and scattered — a fresh turn, ghost recovery, a signal-parked
+// resume, PauseService's reset-and-resume of an expired or interrupted run,
+// EnsureWorkflowRunning's self-heal — and only one of them (WorkflowStatus-
+// Activity's "started" arm) ever revived the thread. Every other one left a
+// live run behind a thread reading completed/failed/cancelled, which
+// SendAgentMessage and spawn_send refuse to queue into and the stranded-
+// spawn sweep treats as a parent that exited, discarding its sub-agents'
+// completion reports as undelivered.
+//
+// Scoped to the run's OWN thread (workflows.thread, defaulting to the
+// workflow ID exactly as the "started" arm does), never to every thread
+// carrying this workflow_id: forks and node threads share a workflow and
+// legitimately stay finished when it takes another turn.
+func (r *Repo) reviveRunThread(ctx context.Context, wf *Workflow) error {
+	threadID := wf.Thread
+	if threadID == "" {
+		threadID = wf.ID
+	}
+	revived, err := r.threads.ReviveThread(ctx, threadID)
+	if err != nil {
+		return fmt.Errorf("revive thread %s for reopened workflow %s: %w", threadID, wf.ID, err)
+	}
+	if revived > 0 {
+		logging.Info("[UpdateWorkflowStatus] Revived thread for reopened run — it had been left terminal",
+			"threadID", threadID,
+			"workflowID", wf.ID,
+			"chatID", wf.ChatID,
+			"previousStatus", wf.Status.Label())
+	}
+	return nil
 }
 
 // SetWorkflowOutcome records the run's verdict — the outcome declared by the

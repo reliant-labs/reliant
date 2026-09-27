@@ -3,6 +3,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { ChevronLeft, X, Search, Settings2 } from "lucide-react";
 import { cn } from "../../../lib/utils";
 import { useModels } from "../../../store/globalDataStore";
+import { preferredThinkingLevel, resolveThinkingCapabilityForModel } from "../../../hooks/useThinkingCapability";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -106,7 +107,7 @@ export function ModelSettingsPage({
   const [activeTab, setActiveTab] = useState<ModelTab>(initialTab);
   const [searchQuery, setSearchQuery] = useState("");
 
-  const { models } = useModels();
+  const { models, tiers } = useModels();
 
   // Current overrides extracted from value
   const currentThinking = parsed.thinking_level ?? "";
@@ -119,18 +120,20 @@ export function ModelSettingsPage({
   // Find which explicit model is selected
   const selectedModelId = parsed.id ?? null;
 
-  // Resolve tags to first matching model
+  // Resolve each tag to the model the server says it runs on for this user
+  // (tiers). The first-model-with-tag guess is only a fallback for when tiers
+  // have not loaded — the list is provider-sorted, not resolution-ordered.
   const tagResolvedModels = useMemo(() => {
     const result: Record<string, (typeof models)[number] | null> = {};
     for (const tag of TAGS) {
-      // Find first model whose tags include this tag
+      const tierModelId = tiers?.[tag]?.modelId;
       result[tag] =
-        models.find(
-          (m) => m.tags?.includes(tag),
-        ) ?? null;
+        (tierModelId
+          ? models.find((m) => m.id === tierModelId)
+          : models.find((m) => m.tags?.includes(tag))) ?? null;
     }
     return result;
-  }, [models]);
+  }, [models, tiers]);
 
   // Group models by provider for explicit tab
   const groupedModels = useMemo(() => {
@@ -172,13 +175,18 @@ export function ModelSettingsPage({
     return null;
   }, [selectedModelId, selectedTag, models, tagResolvedModels]);
 
-  // Determine the model's default thinking level from supportedThinkingLevels
+  // A tag's tier owns its effort (server-resolved); "Auto" runs at this level.
+  const tierThinking =
+    !selectedModelId && selectedTag ? tiers?.[selectedTag]?.thinkingLevel || null : null;
+
+  // The level "Auto" actually runs at: the tier's effort for a tag, otherwise
+  // the capability default the server applies to a model chosen by id.
   const modelDefaultThinking = useMemo(() => {
+    if (tierThinking) return tierThinking;
     const levels = selectedModel?.supportedThinkingLevels;
     if (!levels || levels.length === 0) return null;
-    if (levels.includes("high")) return "high";
-    return levels[levels.length - 1];
-  }, [selectedModel]);
+    return preferredThinkingLevel(resolveThinkingCapabilityForModel(selectedModel.id, [selectedModel]).levels);
+  }, [selectedModel, tierThinking]);
 
   // Build the thinking levels available for the current model
   // Always include Auto (""), plus only the levels the model supports
@@ -444,7 +452,9 @@ export function ModelSettingsPage({
           >
             {availableThinkingLevels.map((level) => (
               <option key={level.value} value={level.value}>
-                {level.label}
+                {level.value === "" && tierThinking
+                  ? `${level.label} (${tierThinking})`
+                  : level.label}
               </option>
             ))}
           </select>

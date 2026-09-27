@@ -380,7 +380,7 @@ func TestForgePerCommandArgs(t *testing.T) {
 		want    []string
 	}{
 		{"forge.env_verify", map[string]string{"env": "prod"}, []string{"env", "verify", "prod", "--json"}},
-		{"forge.secret_list", map[string]string{"env": "dev"}, []string{"secret", "list", "dev", "--json"}},
+		{"forge.secret_list", map[string]string{"env": "dev"}, []string{"secret", "list", "--env=dev", "--json"}},
 		{"forge.audit", nil, []string{"project", "audit", "--json"}},
 		{"forge.env_status", map[string]string{"env": "dev"}, []string{"env", "status", "dev", "--json"}},
 	} {

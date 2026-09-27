@@ -25,10 +25,16 @@ type Project struct {
 	// Set by the project lifecycle when a clone / create happens; not lazily
 	// recomputed on read. See [internal/skills/catalog/forge.go] for the
 	// canonical detection check.
-	IsForge    bool      `json:"is_forge"`
-	CreatedAt  time.Time `json:"created_at"`
-	UpdatedAt  time.Time `json:"updated_at"`
-	LastActive time.Time `json:"last_active"`
+	IsForge bool `json:"is_forge"`
+	// ForgeProjectName is forge's name for the project — the `name` key in
+	// its forge.yaml — and the key the control plane files the project's
+	// deploy environments under. Nil when never read (not a forge project, a
+	// forge.yaml without a name, or no daemon has reported it yet). Written at
+	// create from repo.discover and refreshed by ForgeService.GetTopology.
+	ForgeProjectName *string   `json:"forge_project_name,omitempty"`
+	CreatedAt        time.Time `json:"created_at"`
+	UpdatedAt        time.Time `json:"updated_at"`
+	LastActive       time.Time `json:"last_active"`
 }
 
 // ProjectDaemon records that a daemon has a local clone of a project. A
@@ -143,6 +149,10 @@ type ProjectStore interface {
 	GetProjectWithUserCheck(ctx context.Context, id string, userID string) (*Project, error)
 	ListProjects(ctx context.Context, filters ProjectFilters) ([]*Project, error)
 	UpdateProject(ctx context.Context, project *Project, userID string) error
+	// SetProjectForgeName records forge's name for a project and marks it a
+	// forge project. Reports whether the row changed; a repeat with the same
+	// name is a no-op, so it is safe to call on every forge read.
+	SetProjectForgeName(ctx context.Context, id, userID, forgeProjectName string) (bool, error)
 	TouchProject(ctx context.Context, id string, userID string) error
 	DeleteProject(ctx context.Context, id string, userID string) error
 

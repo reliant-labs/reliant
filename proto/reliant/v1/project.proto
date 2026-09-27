@@ -120,6 +120,13 @@ message Project {
   // is_forge is true when the project's repo root contains a forge.yaml.
   // Populated at clone / project-create time; not lazily recomputed on read.
   bool is_forge = 12;
+  // forge_project_name is forge's name for the project — the `name` key in
+  // its forge.yaml — and the key the control plane files the project's
+  // deploy environments under. The web joins a project to its control-plane
+  // environments on it, so it is persisted here and readable with no daemon.
+  // Unset when never read: not a forge project, a forge.yaml without a name,
+  // or no daemon has reported it since the project was created.
+  optional string forge_project_name = 13;
 }
 
 // ProjectDaemon records that a daemon has a local clone of a project.

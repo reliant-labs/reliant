@@ -110,10 +110,21 @@ vi.mock("../../../hooks/useTitleBarChrome", () => ({
   }),
 }));
 
+// The layout lists environments in the sidebar from the shared joined query.
+// Its data layer is covered on its own; here it only has to name two envs.
+vi.mock("@/hooks/forge-queries", () => ({
+  useForgeEnvironments: () => ({
+    envs: [
+      { name: "dev", where: "local", forge: null, cloud: null },
+      { name: "prod", where: "cloud", forge: null, cloud: null },
+    ],
+  }),
+}));
+
 import { ForgeLayout } from "../ForgeLayout";
 
 /**
- * Reproduces the REAL nesting: `_authenticated` → `_forge` → the tab route.
+ * Reproduces the REAL nesting: `_authenticated` → `_forge` → the page route.
  * A flat tree would not exercise the layout's outlet relationship, and route ids
  * shift under layout parents — which is the class of bug that broke mobile.
  */
@@ -132,33 +143,23 @@ function renderAt(initialEntry: string) {
     component: ForgeLayout,
   });
 
-  const topologyRoute = createRoute({
+  const overviewRoute = createRoute({
     getParentRoute: () => forgeLayoutRoute,
-    path: "/forge/topology",
+    path: "/forge",
     validateSearch: z.object({ project: z.string().optional() }),
-    component: function TopologyProbe() {
-      return <div data-testid="topology-screen">topology</div>;
+    component: function OverviewProbe() {
+      return <div data-testid="overview-screen">overview</div>;
     },
   });
 
-  const statusRoute = createRoute({
+  const envRoute = createRoute({
     getParentRoute: () => forgeLayoutRoute,
-    path: "/forge/status",
+    path: "/forge/env/$env",
     validateSearch: z.object({
       project: z.string().optional(),
-      env: z.string().optional(),
+      secret: z.string().optional(),
     }),
-    component: () => <div data-testid="status-screen">status</div>,
-  });
-
-  const secretsRoute = createRoute({
-    getParentRoute: () => forgeLayoutRoute,
-    path: "/forge/secrets",
-    validateSearch: z.object({
-      project: z.string().optional(),
-      env: z.string().optional(),
-    }),
-    component: () => <div data-testid="secrets-screen">secrets</div>,
+    component: () => <div data-testid="env-screen">env</div>,
   });
 
   const homeRoute = createRoute({
@@ -170,7 +171,7 @@ function renderAt(initialEntry: string) {
   const router = createRouter({
     routeTree: rootRoute.addChildren([
       authenticatedLayoutRoute.addChildren([
-        forgeLayoutRoute.addChildren([topologyRoute, statusRoute, secretsRoute]),
+        forgeLayoutRoute.addChildren([overviewRoute, envRoute]),
       ]),
       homeRoute,
     ]),
@@ -194,10 +195,10 @@ describe("project resolution on a cold forge URL", () => {
     // ?project= in the URL, but a lastProjectId that IS still in localStorage.
     state.lastProjectId = "project-b";
 
-    const router = renderAt("/forge/topology");
+    const router = renderAt("/forge");
 
     await waitFor(() => {
-      expect(screen.getByTestId("topology-screen")).toBeTruthy();
+      expect(screen.getByTestId("overview-screen")).toBeTruthy();
     });
 
     // It went through the same call useWorkspaceRestore makes...
@@ -213,7 +214,7 @@ describe("project resolution on a cold forge URL", () => {
   });
 
   it("resolves from a ?project= in the URL (a pasted or bookmarked link)", async () => {
-    renderAt("/forge/topology?project=project-a");
+    renderAt("/forge?project=project-a");
 
     await waitFor(() => {
       expect(selectProject).toHaveBeenCalledWith(
@@ -222,7 +223,7 @@ describe("project resolution on a cold forge URL", () => {
     });
 
     expect(loadProjects).toHaveBeenCalled();
-    expect(screen.getByTestId("topology-screen")).toBeTruthy();
+    expect(screen.getByTestId("overview-screen")).toBeTruthy();
     expect(screen.queryByTestId("forge-project-picker")).toBeNull();
   });
 
@@ -231,7 +232,7 @@ describe("project resolution on a cold forge URL", () => {
     // to render "Select a project to see its forge release topology." with no
     // way to select one.
     const user = userEvent.setup();
-    renderAt("/forge/topology");
+    renderAt("/forge");
 
     const picker = await screen.findByTestId("forge-project-picker");
     expect(picker).toBeTruthy();
@@ -248,7 +249,7 @@ describe("leaving the forge surface", () => {
   it("closes to / via the header button", async () => {
     const user = userEvent.setup();
     state.lastProjectId = "project-a";
-    const router = renderAt("/forge/topology");
+    const router = renderAt("/forge");
 
     await user.click(await screen.findByTestId("forge-close"));
 
@@ -260,9 +261,9 @@ describe("leaving the forge surface", () => {
   it("closes to / on Escape", async () => {
     const user = userEvent.setup();
     state.lastProjectId = "project-a";
-    const router = renderAt("/forge/topology");
+    const router = renderAt("/forge");
 
-    await screen.findByTestId("topology-screen");
+    await screen.findByTestId("overview-screen");
     await user.keyboard("{Escape}");
 
     await waitFor(() => {
@@ -272,19 +273,24 @@ describe("leaving the forge surface", () => {
 });
 
 describe("cross-screen navigation", () => {
-  // The sidebar nav replaced the tab strip, so this reaches for the item by its
-  // accessible name rather than a testid on a strip that no longer exists. The
-  // name is also the stronger assertion: it pins what the user actually clicks.
-  it("links the screens to each other and carries the project across", async () => {
+  // The sidebar lists the Overview and then every environment. Reached by its
+  // accessible name — what the user actually clicks — rather than a testid.
+  it("links each environment and carries the project across", async () => {
     const user = userEvent.setup();
-    const router = renderAt("/forge/topology?project=project-a");
+    const router = renderAt("/forge?project=project-a");
 
-    await screen.findByTestId("topology-screen");
+    await screen.findByTestId("overview-screen");
 
-    await user.click(screen.getByRole("link", { name: "Status" }));
+    await user.click(await screen.findByRole("link", { name: "prod" }));
 
     await waitFor(() => {
-      expect(router.state.location.pathname).toBe("/forge/status");
+      expect(router.state.location.pathname).toBe("/forge/env/prod");
+    });
+    expect(router.state.location.search).toMatchObject({ project: "project-a" });
+
+    await user.click(screen.getByRole("link", { name: "Overview" }));
+    await waitFor(() => {
+      expect(router.state.location.pathname).toBe("/forge");
     });
     expect(router.state.location.search).toMatchObject({ project: "project-a" });
   });

@@ -4780,6 +4780,11 @@ func humanizeRetryError(stepID string, err error) string {
 
 	var hint string
 	switch {
+	// First: a rate limit the provider said will not clear soon. It also
+	// contains "429" and "rate limit", so the generic "wait a few minutes"
+	// branch below would claim it — wrong by hours for a spent usage window.
+	case providerRateLimitSummary(errStr) != "":
+		hint = providerRateLimitSummary(errStr)
 	case strings.Contains(lower, "no such host") || strings.Contains(lower, "dns"):
 		hint = "DNS resolution failed — check your internet connection and DNS settings"
 	case strings.Contains(lower, "429") || strings.Contains(lower, "rate limit") || strings.Contains(lower, "too many requests"):

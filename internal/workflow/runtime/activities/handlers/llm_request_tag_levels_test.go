@@ -13,12 +13,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// The registry knowing about tag-carried thinking defaults proves nothing on
+// The registry knowing about per-entry tag thinking levels proves nothing on
 // its own — resolveLLMCall is what turns a resolution into a request, and it
-// owns the precedence between an explicit level, the tag default, and the
-// model's own default. This exercises the real registry path (no injected
-// resolver, which skips registry resolution entirely).
-func TestResolveLLMCall_AppliesTagThinkingDefault(t *testing.T) {
+// owns the precedence between an explicit level and the resolved level (the
+// winning tag entry's, or the model's capability default for id selection).
+// This exercises the real registry path (no injected resolver, which skips
+// registry resolution entirely).
+func TestResolveLLMCall_AppliesTagThinkingLevel(t *testing.T) {
 	tests := []struct {
 		name string
 		// selector picks the model; thinkingLevel is the explicit per-call
@@ -30,14 +31,14 @@ func TestResolveLLMCall_AppliesTagThinkingDefault(t *testing.T) {
 		wantThinking  string
 	}{
 		{
-			name:         "tag default applies when no explicit level is given",
+			name:         "tag entry level applies when no explicit level is given",
 			selector:     models.ModelSelector{Tags: []string{models.TagPowerful}},
 			providers:    []string{"anthropic"},
 			wantModelID:  "claude-5.1-fable@anthropic",
 			wantThinking: "xhigh",
 		},
 		{
-			name:          "explicit level beats the tag default",
+			name:          "explicit level beats the tag entry level",
 			selector:      models.ModelSelector{Tags: []string{models.TagPowerful}},
 			thinkingLevel: "low",
 			providers:     []string{"anthropic"},
@@ -45,7 +46,7 @@ func TestResolveLLMCall_AppliesTagThinkingDefault(t *testing.T) {
 			wantThinking:  "low",
 		},
 		{
-			name:      "tag default clamps to a model that tops out below it",
+			name:      "tag entry level clamps to a model that tops out below it",
 			selector:  models.ModelSelector{Tags: []string{models.TagPowerful}},
 			providers: []string{"gemini"},
 			// gemini-3.8-flash is powerful but supports only low/medium/high.
@@ -53,20 +54,48 @@ func TestResolveLLMCall_AppliesTagThinkingDefault(t *testing.T) {
 			wantThinking: "high",
 		},
 		{
-			name:         "selection by id ignores the tag default and uses the model default",
-			selector:     models.ModelSelector{ID: "claude-5.1-fable"},
-			providers:    []string{"anthropic"},
-			wantModelID:  "claude-5.1-fable@anthropic",
-			wantThinking: "xhigh", // the model's own default_thinking_level
+			name:        "selection by id ignores tag levels and uses the capability default",
+			selector:    models.ModelSelector{ID: "claude-5.1-fable"},
+			providers:   []string{"anthropic"},
+			wantModelID: "claude-5.1-fable@anthropic",
+			// No tag did the selecting, so no tag entry's level applies. The
+			// model carries no effort of its own any more; its capability
+			// default is medium because it supports medium.
+			wantThinking: "medium",
 		},
 		{
-			name:      "a tag with no default falls back to the model default",
+			name:      "flagship on copilot runs claude-5-sonnet at high",
 			selector:  models.ModelSelector{Tags: []string{models.TagFlagship}},
-			providers: []string{"anthropic"},
-			// flagship declares no tag default, so claude-5-opus's own
-			// default_thinking_level (high) is what survives.
-			wantModelID:  "claude-5-opus@anthropic",
+			providers: []string{"copilot"},
+			// Copilot cannot serve the opus entries, so flagship falls through
+			// to claude-5-sonnet's entry and its level.
+			wantModelID:  "claude-5-sonnet@copilot",
 			wantThinking: "high",
+		},
+		{
+			// The general preset: [flagship] → 5.5 at the flagship entry's xhigh.
+			name:         "flagship tier runs claude-5.5-opus at xhigh",
+			selector:     models.ModelSelector{Tags: []string{models.TagFlagship}},
+			providers:    []string{"anthropic"},
+			wantModelID:  "claude-5.5-opus@anthropic",
+			wantThinking: "xhigh",
+		},
+		{
+			// The implementer preset: [moderate] → the same model, one step
+			// down. Before per-entry tier levels this was claude-5-sonnet.
+			name:         "moderate tier runs claude-5.5-opus at high",
+			selector:     models.ModelSelector{Tags: []string{models.TagModerate}},
+			providers:    []string{"anthropic"},
+			wantModelID:  "claude-5.5-opus@anthropic",
+			wantThinking: "high",
+		},
+		{
+			name:          "an explicit level still beats the tier effort",
+			selector:      models.ModelSelector{Tags: []string{models.TagModerate}},
+			thinkingLevel: "low",
+			providers:     []string{"anthropic"},
+			wantModelID:   "claude-5.5-opus@anthropic",
+			wantThinking:  "low",
 		},
 	}
 
@@ -99,22 +128,22 @@ func TestResolveLLMCall_AppliesTagThinkingDefault(t *testing.T) {
 	}
 }
 
-// tagDefaultOverModelDefaultCatalog is a fixture catalog whose tag default and
-// per-model default DISAGREE.
+// tagEntryLevelOverCapabilityDefaultCatalog is a fixture catalog whose tag
+// entry level and the model's capability default DISAGREE.
 //
-// The shipping catalog cannot prove this precedence: every powerful model's own
-// default_thinking_level already equals the clamped tag default, so a handler
-// that ignored the tag entirely would still produce the right answer. Here the
-// tag says xhigh and the model says low, so only an implementation that
-// consults the tag can pass.
-const tagDefaultOverModelDefaultCatalog = `
-tag_defaults:
+// The shipping catalog cannot cleanly prove this precedence on its own terms,
+// so here the powerful entry says xhigh while the model's capability default
+// (it supports medium) is medium. Only an implementation that consults the
+// winning tag entry can pass.
+const tagEntryLevelOverCapabilityDefaultCatalog = `
+tags:
   powerful:
-    thinking_level: xhigh
+    - {model: fixture-powerful, thinking_level: xhigh}
+  reasoning:
+    - {model: fixture-powerful}
 models:
   - id: fixture-powerful
     name: Fixture Powerful
-    tags: [powerful, reasoning]
     capabilities:
       can_reason: true
       supports_tools: true
@@ -122,15 +151,19 @@ models:
       max_context_window: 200000
       max_output_tokens: 8192
       thinking_levels: [low, medium, high, xhigh]
-    default_thinking_level: low
     providers:
       - driver: anthropic
         api_model: fixture-powerful
 `
 
-func TestResolveLLMCall_TagDefaultBeatsModelDefault(t *testing.T) {
-	fixtureReg, err := models.ParseRegistryFromBytes([]byte(tagDefaultOverModelDefaultCatalog))
+func TestResolveLLMCall_TagEntryLevelBeatsCapabilityDefault(t *testing.T) {
+	fixtureReg, err := models.ParseRegistryFromBytes([]byte(tagEntryLevelOverCapabilityDefaultCatalog))
 	require.NoError(t, err)
+
+	fixtureModel, ok := fixtureReg.GetDefinition("fixture-powerful")
+	require.True(t, ok)
+	require.Equal(t, "medium", models.ThinkingLevelFor(fixtureModel),
+		"fixture precondition: the capability default must differ from the tag entry's level")
 
 	// The global registry is process-wide; no test in this package runs in
 	// parallel, so swap it for the duration and put the default back after.
@@ -156,18 +189,18 @@ func TestResolveLLMCall_TagDefaultBeatsModelDefault(t *testing.T) {
 
 	require.Equal(t, "fixture-powerful@anthropic", resolved.ModelID)
 	assert.Equal(t, "xhigh", resolved.ThinkingLevel,
-		"the tag default must win over the model's own default_thinking_level")
+		"the tag entry's level must win over the model's capability default")
 	assert.Equal(t, "xhigh", captured.ReasoningEffort)
 
-	// And the model default still wins when the model is named by id, since
-	// no tag did the selecting.
+	// And the capability default applies when the model is named by id,
+	// since no tag entry did the selecting.
 	byID, err := resolveLLMCall(ctx, nil, llmCallSpec{
 		UserID:    userID,
 		SessionID: "session-" + uuid.NewString(),
 		Selector:  models.ModelSelector{ID: "fixture-powerful"},
 	})
 	require.NoError(t, err)
-	assert.Equal(t, "low", byID.ThinkingLevel)
+	assert.Equal(t, "medium", byID.ThinkingLevel)
 }
 
 // provisionProviderKeys gives userID a configured API key for each driver, so

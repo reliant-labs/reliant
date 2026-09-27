@@ -11,12 +11,36 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Test YAML fixtures for consistent testing
+// Test YAML fixtures for consistent testing.
+//
+// Each tag's list follows model definition order, so tag resolution in these
+// tests matches what the old per-model-tags fixture produced.
 const testModelsYAML = `
+tags:
+  flagship:
+    - {model: claude-4-opus, thinking_level: high}
+    - {model: claude-4-sonnet}
+    - {model: gpt-4o}
+  reasoning:
+    - {model: claude-4-opus}
+  moderate:
+    - {model: claude-4-sonnet}
+  fast:
+    - {model: claude-4-sonnet}
+    - {model: gpt-4o}
+    - {model: gpt-4o-mini}
+    - {model: ollama-qwen}
+  cheap:
+    - {model: gpt-4o-mini}
+    - {model: ollama-qwen}
+  meta:
+    - {model: gpt-4o-mini}
+  local:
+    - {model: ollama-qwen}
+
 models:
   - id: claude-4-opus
     name: Claude 4 Opus
-    tags: [flagship, reasoning]
     visibility: user
     capabilities:
       can_reason: true
@@ -38,7 +62,6 @@ models:
 
   - id: claude-4-sonnet
     name: Claude 4 Sonnet
-    tags: [flagship, moderate, fast]
     visibility: user
     capabilities:
       can_reason: false
@@ -59,7 +82,6 @@ models:
 
   - id: gpt-4o
     name: GPT-4o
-    tags: [flagship, fast]
     visibility: user
     capabilities:
       can_reason: false
@@ -80,7 +102,6 @@ models:
 
   - id: gpt-4o-mini
     name: GPT-4o Mini
-    tags: [fast, cheap, meta]
     visibility: meta
     capabilities:
       can_reason: false
@@ -99,7 +120,6 @@ models:
 
   - id: ollama-qwen
     name: Ollama Qwen 2.5
-    tags: [local, fast, cheap]
     visibility: dev
     capabilities:
       can_reason: false
@@ -161,14 +181,12 @@ func TestParseRegistryFromBytes(t *testing.T) {
 models:
   - id: test-model
     name: Test Model
-    tags: []
     visibility: user
     providers:
       - driver: openai
         api_model: test
   - id: test-model
     name: Duplicate
-    tags: []
     visibility: user
     providers:
       - driver: openai
@@ -195,6 +213,78 @@ models:
 			}
 		})
 	}
+}
+
+// Every tag entry is validated at parse time: a typo that did nothing at
+// runtime would look exactly like working config.
+func TestParseRegistryFromBytes_TagErrors(t *testing.T) {
+	const models = `
+models:
+  - id: a
+    capabilities: {can_reason: true}
+    providers:
+      - driver: openai
+        api_model: a
+  - id: b
+    providers:
+      - driver: openai
+        api_model: b
+`
+	tests := []struct {
+		name    string
+		tags    string
+		wantErr string
+	}{
+		{
+			name: "unknown model",
+			tags: `
+tags:
+  flagship:
+    - {model: a}
+    - {model: nope}
+`,
+			wantErr: `tags["flagship"][1]: unknown model "nope"`,
+		},
+		{
+			name: "unknown thinking level",
+			tags: `
+tags:
+  flagship:
+    - {model: a, thinking_level: extreme}
+`,
+			wantErr: `unknown thinking level "extreme"`,
+		},
+		{
+			name: "model listed twice under one tag",
+			tags: `
+tags:
+  flagship:
+    - {model: a}
+    - {model: b}
+    - {model: a, thinking_level: high}
+`,
+			wantErr: `tags["flagship"]: model "a" listed more than once`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := ParseRegistryFromBytes([]byte(tt.tags + models))
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tt.wantErr)
+		})
+	}
+
+	// The same model under two different tags is fine.
+	reg, err := ParseRegistryFromBytes([]byte(`
+tags:
+  flagship:
+    - {model: a}
+  fast:
+    - {model: a}
+` + models))
+	require.NoError(t, err)
+	assert.Equal(t, []string{"fast", "flagship"}, reg.TagsOf("a"))
 }
 
 // =============================================================================
@@ -338,7 +428,7 @@ func TestGetUserVisibleModels(t *testing.T) {
 }
 
 // =============================================================================
-// findModelsByBestMatch Tests (weighted scoring)
+// findCandidatesByBestMatch Tests (weighted scoring)
 // =============================================================================
 
 func TestFindModelsByBestMatch(t *testing.T) {
@@ -400,21 +490,21 @@ func TestFindModelsByBestMatch(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			models := reg.findModelsByBestMatch(tt.tags)
+			candidates := reg.findCandidatesByBestMatch(tt.tags)
 
-			if len(models) != len(tt.wantIDs) {
-				gotIDs := make([]string, len(models))
-				for i, m := range models {
-					gotIDs[i] = m.ID
-				}
-				t.Errorf("findModelsByBestMatch(%v) returned %d models %v, want %d %v",
-					tt.tags, len(models), gotIDs, len(tt.wantIDs), tt.wantIDs)
+			gotIDs := make([]string, len(candidates))
+			for i, c := range candidates {
+				gotIDs[i] = c.model.ID
+			}
+			if len(candidates) != len(tt.wantIDs) {
+				t.Errorf("findCandidatesByBestMatch(%v) returned %d models %v, want %d %v",
+					tt.tags, len(candidates), gotIDs, len(tt.wantIDs), tt.wantIDs)
 				return
 			}
 
-			for i, model := range models {
-				if model.ID != tt.wantIDs[i] {
-					t.Errorf("findModelsByBestMatch(%v)[%d].ID = %q, want %q", tt.tags, i, model.ID, tt.wantIDs[i])
+			for i, id := range gotIDs {
+				if id != tt.wantIDs[i] {
+					t.Errorf("findCandidatesByBestMatch(%v)[%d] = %q, want %q", tt.tags, i, id, tt.wantIDs[i])
 				}
 			}
 		})
@@ -576,10 +666,10 @@ func TestResolve_BySingleTag(t *testing.T) {
 func TestResolve_CodexModerateUsesGPT55(t *testing.T) {
 	reg := MustGetRegistry()
 
-	definition, ok := reg.GetDefinition("gpt-5.5")
+	_, ok := reg.GetDefinition("gpt-5.5")
 	require.True(t, ok, "expected gpt-5.5 to exist in registry")
-	assert.Contains(t, definition.Tags, TagFlagship)
-	assert.Contains(t, definition.Tags, TagModerate)
+	assert.Contains(t, reg.TagsOf("gpt-5.5"), TagFlagship)
+	assert.Contains(t, reg.TagsOf("gpt-5.5"), TagModerate)
 
 	moderate, err := reg.Resolve(ModelSelector{Tags: []string{TagModerate}}, []string{"codex"})
 	require.NoError(t, err)
@@ -1021,6 +1111,24 @@ func TestClone(t *testing.T) {
 	if len(originalTags) != len(clonedTags) {
 		t.Errorf("tag indices differ: original has %d, cloned has %d", len(originalTags), len(clonedTags))
 	}
+
+	// Tag lists are independent too: user tags merged into the clone must not
+	// leak into the original's tags or model set.
+	originalFlagship := original.TagEntries("flagship")
+	originalAllTags := original.ListAllTags()
+	err := cloned.MergeUserConfig(&UserModelsConfig{
+		Custom: []ModelDefinition{{ID: "clone-only", Providers: []ProviderMapping{{Driver: "local", APIModel: "x"}}}},
+		Tags: map[string][]TagEntry{
+			"flagship":   {{Model: "gpt-4o", ThinkingLevel: "low"}},
+			"clone-tier": {{Model: "clone-only"}},
+		},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "gpt-4o", cloned.GetModelsByTag("flagship")[0].ID)
+	assert.Equal(t, originalFlagship, original.TagEntries("flagship"), "merging into clone changed original's flagship")
+	assert.Equal(t, originalAllTags, original.ListAllTags(), "merging into clone added a tag to original")
+	_, ok := original.GetDefinition("clone-only")
+	assert.False(t, ok, "custom model merged into clone leaked into original")
 }
 
 // =============================================================================
@@ -1129,14 +1237,15 @@ func TestLoadUserModelsConfig_MissingFile(t *testing.T) {
 
 func TestLoadUserModelsConfigFromBytes(t *testing.T) {
 	yaml := `
-tag_preferences:
+tags:
   flagship:
-    - gpt-4o
-    - claude-4-opus
+    - {model: gpt-4o, thinking_level: high}
+    - {model: claude-4-opus}
+  custom:
+    - {model: my-custom-model}
 custom:
   - id: my-custom-model
     name: My Custom Model
-    tags: [custom]
     visibility: user
     providers:
       - driver: local
@@ -1148,13 +1257,12 @@ custom:
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if len(cfg.TagPreferences) != 1 {
-		t.Errorf("expected 1 tag preference, got %d", len(cfg.TagPreferences))
+	if len(cfg.Tags) != 2 {
+		t.Errorf("expected 2 user tags, got %d", len(cfg.Tags))
 	}
 
-	if len(cfg.TagPreferences["flagship"]) != 2 {
-		t.Errorf("expected 2 flagship preferences, got %d", len(cfg.TagPreferences["flagship"]))
-	}
+	wantFlagship := []TagEntry{{Model: "gpt-4o", ThinkingLevel: "high"}, {Model: "claude-4-opus"}}
+	assert.Equal(t, wantFlagship, cfg.Tags["flagship"])
 
 	if len(cfg.Custom) != 1 {
 		t.Errorf("expected 1 custom model, got %d", len(cfg.Custom))
@@ -1173,12 +1281,16 @@ func TestMergeUserConfig_AddCustomModels(t *testing.T) {
 			{
 				ID:         "my-custom-model",
 				Name:       "My Custom Model",
-				Tags:       []string{"custom", "fast"},
 				Visibility: VisibilityUser,
 				Providers: []ProviderMapping{
 					{Driver: "local", APIModel: "my-model:latest"},
 				},
 			},
+		},
+		// Custom models carry no tags; a user tag entry is how one joins a tier.
+		Tags: map[string][]TagEntry{
+			"custom": {{Model: "my-custom-model"}},
+			"fast":   {{Model: "my-custom-model"}},
 		},
 	}
 
@@ -1208,6 +1320,9 @@ func TestMergeUserConfig_AddCustomModels(t *testing.T) {
 	if !found {
 		t.Error("custom model not found in 'fast' tag index")
 	}
+	// User entries are prepended, so the custom model leads the built-in list.
+	assert.Equal(t, "my-custom-model", fastModels[0].ID)
+	assert.Equal(t, []string{"custom", "fast"}, reg.TagsOf("my-custom-model"))
 
 	// Verify custom tag was created
 	customModels := reg.GetModelsByTag("custom")
@@ -1216,7 +1331,7 @@ func TestMergeUserConfig_AddCustomModels(t *testing.T) {
 	}
 }
 
-func TestMergeUserConfig_ApplyTagPreferences(t *testing.T) {
+func TestMergeUserConfig_ApplyUserTags(t *testing.T) {
 	reg := createTestRegistry(t)
 
 	// Original order: claude-4-opus, claude-4-sonnet, gpt-4o
@@ -1229,8 +1344,8 @@ func TestMergeUserConfig_ApplyTagPreferences(t *testing.T) {
 	}
 
 	cfg := &UserModelsConfig{
-		TagPreferences: map[string][]string{
-			"flagship": {"gpt-4o", "claude-4-sonnet"}, // Reorder: gpt-4o first, then claude-4-sonnet
+		Tags: map[string][]TagEntry{
+			"flagship": {{Model: "gpt-4o"}, {Model: "claude-4-sonnet"}}, // Prepend: gpt-4o first, then claude-4-sonnet
 		},
 	}
 
@@ -1250,6 +1365,33 @@ func TestMergeUserConfig_ApplyTagPreferences(t *testing.T) {
 			t.Errorf("flagship[%d] = %q, want %q", i, m.ID, expectedOrder[i])
 		}
 	}
+
+	// The built-in entry behind the user's keeps its own effort.
+	assert.Equal(t, TagEntry{Model: "claude-4-opus", ThinkingLevel: "high"}, reg.TagEntries("flagship")[2])
+}
+
+// A model the user lists takes the user's position AND effort; its built-in
+// entry is dropped rather than kept as an unreachable second position.
+func TestMergeUserConfig_UserTagOverridesBuiltInEntry(t *testing.T) {
+	reg := createTestRegistry(t)
+
+	err := reg.MergeUserConfig(&UserModelsConfig{
+		Tags: map[string][]TagEntry{
+			"flagship": {{Model: "gpt-4o"}, {Model: "claude-4-opus", ThinkingLevel: "low"}},
+		},
+	})
+	require.NoError(t, err)
+
+	assert.Equal(t, []TagEntry{
+		{Model: "gpt-4o"},
+		{Model: "claude-4-opus", ThinkingLevel: "low"},
+		{Model: "claude-4-sonnet"},
+	}, reg.TagEntries("flagship"))
+
+	resolved, err := reg.Resolve(ModelSelector{Tags: []string{"flagship"}}, []string{"anthropic"})
+	require.NoError(t, err)
+	assert.Equal(t, "claude-4-opus", resolved.Definition.ID)
+	assert.Equal(t, "low", resolved.ThinkingLevel, "user's effort must replace the built-in high")
 }
 
 func TestMergeUserConfig_DuplicateIDError(t *testing.T) {
@@ -1360,10 +1502,11 @@ func TestMergeUserConfig_DefaultsApplied(t *testing.T) {
 
 func TestValidateUserConfig(t *testing.T) {
 	tests := []struct {
-		name         string
-		configYAML   string
-		wantErr      bool
-		wantWarnings int
+		name             string
+		configYAML       string
+		wantErr          bool
+		wantErrSubstring string
+		wantWarnings     int
 	}{
 		{
 			name:       "nil config",
@@ -1409,14 +1552,47 @@ custom:
 			wantErr: true,
 		},
 		{
-			name: "unknown model in tag preference - warning only",
+			name: "user tag entry naming a built-in model",
 			configYAML: `
-tag_preferences:
+tags:
   flagship:
-    - unknown-model
+    - {model: claude-4.6-opus, thinking_level: high}
 `,
-			wantErr:      false,
-			wantWarnings: 1,
+			wantErr: false,
+		},
+		{
+			name: "user tag entry naming a custom model",
+			configYAML: `
+custom:
+  - id: custom-model
+    providers:
+      - driver: local
+        api_model: test
+tags:
+  fast:
+    - {model: custom-model}
+`,
+			wantErr: false,
+		},
+		{
+			name: "unknown model in user tag - error",
+			configYAML: `
+tags:
+  flagship:
+    - {model: unknown-model}
+`,
+			wantErr:          true,
+			wantErrSubstring: "unknown model",
+		},
+		{
+			name: "unknown thinking level in user tag - error",
+			configYAML: `
+tags:
+  flagship:
+    - {model: claude-4.6-opus, thinking_level: extreme}
+`,
+			wantErr:          true,
+			wantErrSubstring: "unknown thinking level",
 		},
 	}
 
@@ -1436,6 +1612,8 @@ tag_preferences:
 			if tt.wantErr {
 				if err == nil {
 					t.Error("expected error, got nil")
+				} else if tt.wantErrSubstring != "" {
+					assert.Contains(t, err.Error(), tt.wantErrSubstring)
 				}
 				return
 			}
@@ -1459,7 +1637,6 @@ func TestDefinitionToModel(t *testing.T) {
 	def := ModelDefinition{
 		ID:   "test-model",
 		Name: "Test Model",
-		Tags: []string{"flagship"},
 		Capabilities: ModelCapabilities{
 			CanReason:           true,
 			SupportsTools:       true,
@@ -1575,13 +1752,14 @@ func TestLoadUserModelsConfig_RealFile(t *testing.T) {
 	configPath := filepath.Join(tmpDir, "models.yaml")
 
 	configYAML := `
-tag_preferences:
+tags:
   flagship:
-    - gpt-4o
+    - {model: gpt-4o}
+  local:
+    - {model: test-local}
 custom:
   - id: test-local
     name: Test Local Model
-    tags: [local]
     visibility: user
     providers:
       - driver: local
@@ -1600,9 +1778,8 @@ custom:
 		t.Fatal("expected non-nil config")
 	}
 
-	if len(cfg.TagPreferences["flagship"]) != 1 {
-		t.Errorf("expected 1 flagship preference, got %d", len(cfg.TagPreferences["flagship"]))
-	}
+	assert.Equal(t, []TagEntry{{Model: "gpt-4o"}}, cfg.Tags["flagship"])
+	assert.Equal(t, []TagEntry{{Model: "test-local"}}, cfg.Tags["local"])
 	if len(cfg.Custom) != 1 {
 		t.Errorf("expected 1 custom model, got %d", len(cfg.Custom))
 	}
@@ -1634,13 +1811,13 @@ func TestCreateRegistryWithUserConfig_WithCustomModels(t *testing.T) {
 			{
 				ID:         "user-custom-model",
 				Name:       "User Custom Model",
-				Tags:       []string{"custom"},
 				Visibility: VisibilityUser,
 				Providers: []ProviderMapping{
 					{Driver: "local", APIModel: "custom:latest"},
 				},
 			},
 		},
+		Tags: map[string][]TagEntry{"custom": {{Model: "user-custom-model"}}},
 	}
 
 	reg, err := CreateRegistryWithUserConfig(cfg)
@@ -1664,7 +1841,7 @@ func TestCreateRegistryWithUserConfig_WithCustomModels(t *testing.T) {
 	}
 }
 
-func TestCreateRegistryWithUserConfig_WithTagPreferences(t *testing.T) {
+func TestCreateRegistryWithUserConfig_WithUserTags(t *testing.T) {
 	// Get baseline order first
 	baseReg, _ := GetRegistry()
 	baseFlagship := baseReg.GetModelsByTag("flagship")
@@ -1674,8 +1851,8 @@ func TestCreateRegistryWithUserConfig_WithTagPreferences(t *testing.T) {
 
 	// Reorder so second model comes first
 	cfg := &UserModelsConfig{
-		TagPreferences: map[string][]string{
-			"flagship": {baseFlagship[1].ID, baseFlagship[0].ID},
+		Tags: map[string][]TagEntry{
+			"flagship": {{Model: baseFlagship[1].ID}, {Model: baseFlagship[0].ID}},
 		},
 	}
 
@@ -1736,8 +1913,23 @@ func TestParseRegistry_EmbeddedYAML(t *testing.T) {
 		if model.Visibility == "" {
 			t.Errorf("model %s has empty visibility", model.ID)
 		}
-		if !model.Capabilities.CanReason && model.DefaultThinkingLevel != "" {
-			t.Errorf("model %s has default_thinking_level %q but does not support thinking", model.ID, model.DefaultThinkingLevel)
+	}
+
+	// A tag entry's thinking_level is only meaningful on a model that can
+	// reason; on one that cannot it would be silently dropped at resolve time.
+	for _, tag := range reg.ListAllTags() {
+		for _, entry := range reg.TagEntries(tag) {
+			if entry.ThinkingLevel == "" {
+				continue
+			}
+			def, ok := reg.GetDefinition(entry.Model)
+			if !ok {
+				t.Errorf("tags[%q] names unknown model %s", tag, entry.Model)
+				continue
+			}
+			if !def.Capabilities.CanReason {
+				t.Errorf("tags[%q] sets thinking_level %q on %s, which does not support thinking", tag, entry.ThinkingLevel, entry.Model)
+			}
 		}
 	}
 }
@@ -1775,7 +1967,6 @@ func TestResolve_UnknownProviderPriority(t *testing.T) {
 models:
   - id: test-model
     name: Test Model
-    tags: [test]
     visibility: user
     providers:
       - driver: unknown_provider
@@ -1795,85 +1986,82 @@ models:
 	}
 }
 
-func TestMergeUserConfig_TagPreferenceUnknownModel(t *testing.T) {
+func TestMergeUserConfig_UserTagsUnknownModel(t *testing.T) {
 	reg := createTestRegistry(t)
 
 	cfg := &UserModelsConfig{
-		TagPreferences: map[string][]string{
-			"flagship": {"nonexistent-model", "claude-4-opus"},
+		Tags: map[string][]TagEntry{
+			"flagship": {{Model: "nonexistent-model"}, {Model: "claude-4-opus"}},
 		},
 	}
 
 	// Should error because nonexistent-model doesn't exist
 	err := reg.MergeUserConfig(cfg)
-	if err == nil {
-		t.Error("expected error for unknown model in tag preference")
-	}
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unknown model")
 }
 
-func TestMergeUserConfig_TagPreferenceModelWithoutTag(t *testing.T) {
+// Listing a model under a tag it was not in ADDS it to that tag — a model has
+// no tags of its own to be checked against.
+func TestMergeUserConfig_UserTagsAddModelToTag(t *testing.T) {
 	reg := createTestRegistry(t)
+	require.NotContains(t, reg.TagsOf("ollama-qwen"), "flagship")
 
-	// ollama-qwen exists but doesn't have 'flagship' tag
 	cfg := &UserModelsConfig{
-		TagPreferences: map[string][]string{
-			"flagship": {"ollama-qwen", "claude-4-opus"},
+		Tags: map[string][]TagEntry{
+			"flagship": {{Model: "ollama-qwen"}, {Model: "claude-4-opus"}},
 		},
 	}
 
-	// Should succeed - model without tag is silently skipped
 	err := reg.MergeUserConfig(cfg)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	require.NoError(t, err)
 
-	// claude-4-opus should still be first since ollama-qwen was skipped
-	flagship := reg.GetModelsByTag("flagship")
-	if flagship[0].ID != "claude-4-opus" {
-		t.Errorf("first flagship = %q, want claude-4-opus", flagship[0].ID)
-	}
+	assert.Equal(t, []string{"ollama-qwen", "claude-4-opus", "claude-4-sonnet", "gpt-4o"},
+		getModelIDs(reg.GetModelsByTag("flagship")))
+	assert.Contains(t, reg.TagsOf("ollama-qwen"), "flagship")
+
+	resolved, err := reg.Resolve(ModelSelector{Tags: []string{"flagship"}}, []string{"local", "anthropic"})
+	require.NoError(t, err)
+	assert.Equal(t, "ollama-qwen", resolved.Definition.ID)
 }
 
-func TestMergeUserConfig_EmptyTagPreference(t *testing.T) {
+func TestMergeUserConfig_EmptyUserTag(t *testing.T) {
 	reg := createTestRegistry(t)
 
-	// Empty preferences for a tag - should be no-op
+	// Empty user entries for a tag - should be no-op
 	cfg := &UserModelsConfig{
-		TagPreferences: map[string][]string{
+		Tags: map[string][]TagEntry{
 			"flagship": {},
 		},
 	}
 
-	originalOrder := getModelIDs(reg.GetModelsByTag("flagship"))
+	originalEntries := reg.TagEntries("flagship")
 
 	err := reg.MergeUserConfig(cfg)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	require.NoError(t, err)
 
-	newOrder := getModelIDs(reg.GetModelsByTag("flagship"))
-	for i := range originalOrder {
-		if originalOrder[i] != newOrder[i] {
-			t.Errorf("order changed unexpectedly at index %d", i)
-		}
-	}
+	assert.Equal(t, originalEntries, reg.TagEntries("flagship"))
 }
 
+// A user tag no built-in declares creates the tag.
 func TestMergeUserConfig_NonexistentTag(t *testing.T) {
 	reg := createTestRegistry(t)
+	require.NotContains(t, reg.ListAllTags(), "my-tier")
 
-	// Preference for a tag that doesn't exist yet
 	cfg := &UserModelsConfig{
-		TagPreferences: map[string][]string{
-			"nonexistent-tag": {"claude-4-opus"},
+		Tags: map[string][]TagEntry{
+			"my-tier": {{Model: "claude-4-opus", ThinkingLevel: "low"}},
 		},
 	}
 
-	// Should succeed silently - tag doesn't exist so nothing to reorder
 	err := reg.MergeUserConfig(cfg)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	require.NoError(t, err)
+
+	assert.Contains(t, reg.ListAllTags(), "my-tier")
+	resolved, err := reg.Resolve(ModelSelector{Tags: []string{"my-tier"}}, []string{"anthropic"})
+	require.NoError(t, err)
+	assert.Equal(t, "claude-4-opus", resolved.Definition.ID)
+	assert.Equal(t, "low", resolved.ThinkingLevel)
 }
 
 // =============================================================================
@@ -1912,7 +2100,6 @@ func TestParseDriverSettings(t *testing.T) {
 models:
   - id: basic-model
     name: Basic Model
-    tags: [test]
     visibility: user
     providers:
       - driver: openai
@@ -1926,7 +2113,6 @@ models:
 models:
   - id: openai-o1
     name: OpenAI o1
-    tags: [reasoning]
     visibility: user
     providers:
       - driver: openai
@@ -1943,7 +2129,6 @@ models:
 models:
   - id: no-temp-model
     name: No Temperature Model
-    tags: [reasoning]
     visibility: user
     providers:
       - driver: openai
@@ -1960,7 +2145,6 @@ models:
 models:
   - id: any-temp-model
     name: Any Temperature Model
-    tags: [test]
     visibility: user
     providers:
       - driver: openai
@@ -1977,7 +2161,6 @@ models:
 models:
   - id: reasoning-model
     name: Reasoning Model
-    tags: [reasoning]
     visibility: user
     providers:
       - driver: openai
@@ -1994,7 +2177,6 @@ models:
 models:
   - id: completion-tokens-model
     name: Max Completion Tokens Model
-    tags: [test]
     visibility: user
     providers:
       - driver: openai
@@ -2011,7 +2193,6 @@ models:
 models:
   - id: full-settings-model
     name: Full Settings Model
-    tags: [reasoning]
     visibility: user
     providers:
       - driver: openai
@@ -2034,7 +2215,6 @@ models:
 models:
   - id: chat-model
     name: Chat Model
-    tags: [test]
     visibility: user
     providers:
       - driver: openai
@@ -2297,13 +2477,16 @@ func TestLoadUserModelsConfig_IntegrationTests(t *testing.T) {
 		{
 			name: "valid config with custom model",
 			configYAML: `
-tag_preferences:
+tags:
   flagship:
-    - gpt-4o
+    - {model: gpt-4o}
+  local:
+    - {model: my-local-model}
+  fast:
+    - {model: my-local-model}
 custom:
   - id: my-local-model
     name: My Local Model
-    tags: [local, fast]
     visibility: user
     capabilities:
       max_context_window: 32000
@@ -2321,9 +2504,10 @@ providers:
 `,
 			wantErr: false,
 			validate: func(t *testing.T, cfg *UserModelsConfig) {
-				if len(cfg.TagPreferences["flagship"]) != 1 {
-					t.Errorf("expected 1 flagship preference, got %d", len(cfg.TagPreferences["flagship"]))
+				if len(cfg.Tags["flagship"]) != 1 {
+					t.Errorf("expected 1 flagship entry, got %d", len(cfg.Tags["flagship"]))
 				}
+				assert.Equal(t, []TagEntry{{Model: "my-local-model"}}, cfg.Tags["local"])
 				if len(cfg.Custom) != 1 {
 					t.Errorf("expected 1 custom model, got %d", len(cfg.Custom))
 				}
@@ -2341,32 +2525,33 @@ providers:
 			},
 		},
 		{
-			name: "valid config with multiple tag preferences",
+			name: "valid config with multiple user tags",
 			configYAML: `
-tag_preferences:
+tags:
   flagship:
-    - claude-4-opus
-    - gpt-4o
+    - {model: claude-4-opus, thinking_level: xhigh}
+    - {model: gpt-4o}
   fast:
-    - gpt-4o-mini
-    - claude-4-sonnet
+    - {model: gpt-4o-mini}
+    - {model: claude-4-sonnet}
   reasoning:
-    - claude-4-opus
+    - {model: claude-4-opus}
 `,
 			wantErr: false,
 			validate: func(t *testing.T, cfg *UserModelsConfig) {
-				if len(cfg.TagPreferences) != 3 {
-					t.Errorf("expected 3 tag preferences, got %d", len(cfg.TagPreferences))
+				if len(cfg.Tags) != 3 {
+					t.Errorf("expected 3 user tags, got %d", len(cfg.Tags))
 				}
-				if len(cfg.TagPreferences["flagship"]) != 2 {
-					t.Errorf("expected 2 flagship preferences, got %d", len(cfg.TagPreferences["flagship"]))
+				if len(cfg.Tags["flagship"]) != 2 {
+					t.Errorf("expected 2 flagship entries, got %d", len(cfg.Tags["flagship"]))
 				}
+				assert.Equal(t, "xhigh", cfg.Tags["flagship"][0].ThinkingLevel)
 			},
 		},
 		{
 			name: "invalid YAML syntax",
 			configYAML: `
-tag_preferences:
+tags:
   flagship: [invalid yaml
 `,
 			wantErr:          true,
@@ -2375,7 +2560,7 @@ tag_preferences:
 		{
 			name: "invalid YAML structure - wrong type",
 			configYAML: `
-tag_preferences: "not a map"
+tags: "not a map"
 `,
 			wantErr:          true,
 			wantErrSubstring: "cannot unmarshal",
@@ -2386,8 +2571,8 @@ tag_preferences: "not a map"
 `,
 			wantErr: false,
 			validate: func(t *testing.T, cfg *UserModelsConfig) {
-				if len(cfg.TagPreferences) != 0 {
-					t.Errorf("expected 0 tag preferences, got %d", len(cfg.TagPreferences))
+				if len(cfg.Tags) != 0 {
+					t.Errorf("expected 0 user tags, got %d", len(cfg.Tags))
 				}
 				if len(cfg.Custom) != 0 {
 					t.Errorf("expected 0 custom models, got %d", len(cfg.Custom))
@@ -2400,7 +2585,6 @@ tag_preferences: "not a map"
 custom:
   - id: custom-o1
     name: Custom O1
-    tags: [reasoning]
     providers:
       - driver: openai
         api_model: o1-custom
@@ -2509,14 +2693,19 @@ func TestLoadUserModelsConfig_EndToEndIntegration(t *testing.T) {
 
 	// Create config that reorders flagship models (put second before first)
 	configYAML := fmt.Sprintf(`
-tag_preferences:
+tags:
   flagship:
-    - %s
-    - %s
+    - {model: %s}
+    - {model: %s}
+  local:
+    - {model: test-local-model}
+  fast:
+    - {model: test-local-model}
+  cheap:
+    - {model: test-local-model}
 custom:
   - id: test-local-model
     name: Test Local Model
-    tags: [local, fast, cheap]
     visibility: user
     capabilities:
       max_context_window: 32000
@@ -2572,7 +2761,7 @@ custom:
 	// Verify tag preferences were applied (second flagship should now be first)
 	newFlagshipModels := reg.GetModelsByTag("flagship")
 	if len(newFlagshipModels) > 0 && newFlagshipModels[0].ID != secondFlagshipID {
-		t.Errorf("first flagship = %q, want %q (from tag preference)", newFlagshipModels[0].ID, secondFlagshipID)
+		t.Errorf("first flagship = %q, want %q (from user tags)", newFlagshipModels[0].ID, secondFlagshipID)
 	}
 
 	// Verify resolution works with custom model
@@ -2677,24 +2866,28 @@ func TestVisibilityDev_StillAccessibleDirectly(t *testing.T) {
 func TestVisibilityFiltering_Comprehensive(t *testing.T) {
 	// Create a registry with models demonstrating visibility-based filtering
 	yaml := `
+tags:
+  test:
+    - {model: user-model}
+    - {model: meta-model}
+    - {model: dev-model}
+  meta:
+    - {model: meta-model}
 models:
   - id: user-model
     name: User Model
-    tags: [test]
     visibility: user
     providers:
       - driver: openai
         api_model: user
   - id: meta-model
     name: Meta Model
-    tags: [test, meta]
     visibility: meta
     providers:
       - driver: openai
         api_model: meta
   - id: dev-model
     name: Dev Model
-    tags: [test]
     visibility: dev
     providers:
       - driver: local
