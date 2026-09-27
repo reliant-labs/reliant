@@ -18,18 +18,19 @@ func NewProjectStore(q pgdb.Querier) core.ProjectStore { return &projectStore{q:
 
 func (s *projectStore) CreateProject(ctx context.Context, project *core.Project) error {
 	return s.q.CreateProject(ctx, pgdb.CreateProjectParams{
-		ID:            project.ID,
-		UserID:        project.UserID,
-		Name:          project.Name,
-		Path:          project.Path,
-		Description:   ptrToNullString(project.Description),
-		IsGitRepo:     project.IsGitRepo,
-		DefaultBranch: ptrToNullString(project.DefaultBranch),
-		RemoteUrl:     ptrToNullString(project.RemoteURL),
-		IsForge:       project.IsForge,
-		CreatedAt:     project.CreatedAt,
-		UpdatedAt:     project.UpdatedAt,
-		LastActive:    project.LastActive,
+		ID:               project.ID,
+		UserID:           project.UserID,
+		Name:             project.Name,
+		Path:             project.Path,
+		Description:      ptrToNullString(project.Description),
+		IsGitRepo:        project.IsGitRepo,
+		DefaultBranch:    ptrToNullString(project.DefaultBranch),
+		RemoteUrl:        ptrToNullString(project.RemoteURL),
+		IsForge:          project.IsForge,
+		ForgeProjectName: ptrToNullString(project.ForgeProjectName),
+		CreatedAt:        project.CreatedAt,
+		UpdatedAt:        project.UpdatedAt,
+		LastActive:       project.LastActive,
 	})
 }
 
@@ -106,16 +107,29 @@ func (s *projectStore) ListProjects(ctx context.Context, filters core.ProjectFil
 
 func (s *projectStore) UpdateProject(ctx context.Context, project *core.Project, userID string) error {
 	return s.q.UpdateProject(ctx, pgdb.UpdateProjectParams{
-		ID:            project.ID,
-		Name:          project.Name,
-		Description:   ptrToNullString(project.Description),
-		IsGitRepo:     project.IsGitRepo,
-		DefaultBranch: ptrToNullString(project.DefaultBranch),
-		RemoteUrl:     ptrToNullString(project.RemoteURL),
-		IsForge:       project.IsForge,
-		LastActive:    project.LastActive,
-		UserID:        userID,
+		ID:               project.ID,
+		Name:             project.Name,
+		Description:      ptrToNullString(project.Description),
+		IsGitRepo:        project.IsGitRepo,
+		DefaultBranch:    ptrToNullString(project.DefaultBranch),
+		RemoteUrl:        ptrToNullString(project.RemoteURL),
+		IsForge:          project.IsForge,
+		ForgeProjectName: ptrToNullString(project.ForgeProjectName),
+		LastActive:       project.LastActive,
+		UserID:           userID,
 	})
+}
+
+func (s *projectStore) SetProjectForgeName(ctx context.Context, id, userID, forgeProjectName string) (bool, error) {
+	rows, err := s.q.SetProjectForgeName(ctx, pgdb.SetProjectForgeNameParams{
+		ID:               id,
+		UserID:           userID,
+		ForgeProjectName: forgeProjectName,
+	})
+	if err != nil {
+		return false, err
+	}
+	return rows > 0, nil
 }
 
 func (s *projectStore) TouchProject(ctx context.Context, id string, userID string) error {
@@ -352,18 +366,19 @@ func (s *worktreeStore) UnarchiveWorktree(ctx context.Context, id string) error 
 
 func projectFromPG(row pgdb.Project) *core.Project {
 	return &core.Project{
-		ID:            row.ID,
-		Name:          row.Name,
-		Path:          row.Path,
-		UserID:        row.UserID,
-		Description:   nullStringToPtr(row.Description),
-		IsGitRepo:     row.IsGitRepo,
-		DefaultBranch: nullStringToPtr(row.DefaultBranch),
-		RemoteURL:     nullStringToPtr(row.RemoteUrl),
-		IsForge:       row.IsForge,
-		CreatedAt:     row.CreatedAt,
-		UpdatedAt:     row.UpdatedAt,
-		LastActive:    row.LastActive,
+		ID:               row.ID,
+		Name:             row.Name,
+		Path:             row.Path,
+		UserID:           row.UserID,
+		Description:      nullStringToPtr(row.Description),
+		IsGitRepo:        row.IsGitRepo,
+		DefaultBranch:    nullStringToPtr(row.DefaultBranch),
+		RemoteURL:        nullStringToPtr(row.RemoteUrl),
+		IsForge:          row.IsForge,
+		ForgeProjectName: nullStringToPtr(row.ForgeProjectName),
+		CreatedAt:        row.CreatedAt,
+		UpdatedAt:        row.UpdatedAt,
+		LastActive:       row.LastActive,
 	}
 }
 

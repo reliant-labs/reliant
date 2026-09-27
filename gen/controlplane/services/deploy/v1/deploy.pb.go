@@ -413,7 +413,10 @@ type ListDeployEnvironmentsRequest struct {
 	// `search` is forge's generated free-text filter — it spans the entity's
 	// text columns rather than naming one, which is why it is spelled `search`
 	// and not `name_contains`: a filter named for a column must BE a column.
-	Search        *string `protobuf:"bytes,2,opt,name=search,proto3,oneof" json:"search,omitempty"`
+	Search *string `protobuf:"bytes,2,opt,name=search,proto3,oneof" json:"search,omitempty"`
+	// Exact match on the environment's forge project. Unset lists every
+	// project's environments; set to "" lists only the project-less ones.
+	Project       *string `protobuf:"bytes,3,opt,name=project,proto3,oneof" json:"project,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -458,6 +461,13 @@ func (x *ListDeployEnvironmentsRequest) GetKind() v1.DeployEnvironmentKind {
 func (x *ListDeployEnvironmentsRequest) GetSearch() string {
 	if x != nil && x.Search != nil {
 		return *x.Search
+	}
+	return ""
+}
+
+func (x *ListDeployEnvironmentsRequest) GetProject() string {
+	if x != nil && x.Project != nil {
+		return *x.Project
 	}
 	return ""
 }
@@ -698,7 +708,8 @@ func (*DeleteDeployEnvironmentResponse) Descriptor() ([]byte, []int) {
 
 type EnsureDeployEnvironmentRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// The environment is addressed by spec.name within the caller's org.
+	// The environment is addressed by (spec.project, spec.name) within the
+	// caller's org.
 	Spec          *v1.DeployEnvironmentSpec `protobuf:"bytes,1,opt,name=spec,proto3" json:"spec,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -3041,12 +3052,15 @@ const file_services_deploy_v1_deploy_proto_rawDesc = "" +
 	"\x0eenvironment_id\x18\x01 \x01(\tR\renvironmentId\"\xb3\x01\n" +
 	"\x1cGetDeployEnvironmentResponse\x12D\n" +
 	"\venvironment\x18\x01 \x01(\v2\".controlplane.v1.DeployEnvironmentR\venvironment\x12M\n" +
-	"\x11current_promotion\x18\x02 \x01(\v2 .controlplane.v1.DeployPromotionR\x10currentPromotion\"\x91\x01\n" +
+	"\x11current_promotion\x18\x02 \x01(\v2 .controlplane.v1.DeployPromotionR\x10currentPromotion\"\xbc\x01\n" +
 	"\x1dListDeployEnvironmentsRequest\x12?\n" +
 	"\x04kind\x18\x01 \x01(\x0e2&.controlplane.v1.DeployEnvironmentKindH\x00R\x04kind\x88\x01\x01\x12\x1b\n" +
-	"\x06search\x18\x02 \x01(\tH\x01R\x06search\x88\x01\x01B\a\n" +
+	"\x06search\x18\x02 \x01(\tH\x01R\x06search\x88\x01\x01\x12\x1d\n" +
+	"\aproject\x18\x03 \x01(\tH\x02R\aproject\x88\x01\x01B\a\n" +
 	"\x05_kindB\t\n" +
-	"\a_search\"h\n" +
+	"\a_searchB\n" +
+	"\n" +
+	"\b_project\"h\n" +
 	"\x1eListDeployEnvironmentsResponse\x12F\n" +
 	"\fenvironments\x18\x01 \x03(\v2\".controlplane.v1.DeployEnvironmentR\fenvironments\"\x83\x01\n" +
 	"\x1eUpdateDeployEnvironmentRequest\x12%\n" +
@@ -3062,12 +3076,12 @@ const file_services_deploy_v1_deploy_proto_rawDesc = "" +
 	"\x04spec\x18\x01 \x01(\v2&.controlplane.v1.DeployEnvironmentSpecR\x04spec\"\x81\x01\n" +
 	"\x1fEnsureDeployEnvironmentResponse\x12D\n" +
 	"\venvironment\x18\x01 \x01(\v2\".controlplane.v1.DeployEnvironmentR\venvironment\x12\x18\n" +
-	"\acreated\x18\x02 \x01(\bR\acreated\"\xb2\x01\n" +
+	"\acreated\x18\x02 \x01(\bR\acreated\"\xc1\x01\n" +
 	"\x17CreateDeploymentRequest\x12%\n" +
 	"\x0eenvironment_id\x18\x01 \x01(\tR\renvironmentId\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12/\n" +
 	"\x04tier\x18\x03 \x01(\x0e2\x1b.controlplane.v1.DeployTierR\x04tier\x12+\n" +
-	"\x04spec\x18\x05 \x01(\v2\x17.google.protobuf.StructR\x04spec\"W\n" +
+	"\x04spec\x18\x05 \x01(\v2\x17.google.protobuf.StructR\x04specJ\x04\b\x04\x10\x05R\adesired\"W\n" +
 	"\x18CreateDeploymentResponse\x12;\n" +
 	"\n" +
 	"deployment\x18\x01 \x01(\v2\x1b.controlplane.v1.DeploymentR\n" +
@@ -3088,10 +3102,10 @@ const file_services_deploy_v1_deploy_proto_rawDesc = "" +
 	"\x0f_observed_stateB\t\n" +
 	"\a_search\"X\n" +
 	"\x17ListDeploymentsResponse\x12=\n" +
-	"\vdeployments\x18\x01 \x03(\v2\x1b.controlplane.v1.DeploymentR\vdeployments\"k\n" +
+	"\vdeployments\x18\x01 \x03(\v2\x1b.controlplane.v1.DeploymentR\vdeployments\"z\n" +
 	"\x17UpdateDeploymentRequest\x12#\n" +
 	"\rdeployment_id\x18\x01 \x01(\tR\fdeploymentId\x12+\n" +
-	"\x04spec\x18\x03 \x01(\v2\x17.google.protobuf.StructR\x04spec\"W\n" +
+	"\x04spec\x18\x03 \x01(\v2\x17.google.protobuf.StructR\x04specJ\x04\b\x02\x10\x03R\adesired\"W\n" +
 	"\x18UpdateDeploymentResponse\x12;\n" +
 	"\n" +
 	"deployment\x18\x01 \x01(\v2\x1b.controlplane.v1.DeploymentR\n" +
@@ -3136,10 +3150,10 @@ const file_services_deploy_v1_deploy_proto_rawDesc = "" +
 	"\x04note\x18\x03 \x01(\tR\x04note\x12*\n" +
 	"\x11promoted_by_actor\x18\x04 \x01(\tR\x0fpromotedByActor\"Y\n" +
 	"\x17RollbackReleaseResponse\x12>\n" +
-	"\tpromotion\x18\x01 \x01(\v2 .controlplane.v1.DeployPromotionR\tpromotion\"{\n" +
+	"\tpromotion\x18\x01 \x01(\v2 .controlplane.v1.DeployPromotionR\tpromotion\"\x8b\x01\n" +
 	"\x16ScaleDeploymentRequest\x12#\n" +
 	"\rdeployment_id\x18\x01 \x01(\tR\fdeploymentId\x12<\n" +
-	"\trun_state\x18\x03 \x01(\x0e2\x1f.controlplane.v1.DeployRunStateR\brunState\"V\n" +
+	"\trun_state\x18\x03 \x01(\x0e2\x1f.controlplane.v1.DeployRunStateR\brunStateJ\x04\b\x02\x10\x03R\breplicas\"V\n" +
 	"\x17ScaleDeploymentResponse\x12;\n" +
 	"\n" +
 	"deployment\x18\x01 \x01(\v2\x1b.controlplane.v1.DeploymentR\n" +

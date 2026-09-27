@@ -258,6 +258,7 @@ func TestForgeService_NonTimeoutFailures_StillFailLoudly(t *testing.T) {
 			connect.NewRequest(&reliantv1.VerifyForgeEnvRequest{ProjectId: "p", Env: "prod"}))
 
 		require.Error(t, err, "a substantive forge failure must not be reported as 'cluster unknown'")
+		assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
 	})
 
 	t.Run("timeout on a non-cluster command is a real error", func(t *testing.T) {
@@ -268,6 +269,71 @@ func TestForgeService_NonTimeoutFailures_StillFailLoudly(t *testing.T) {
 		require.Error(t, err, "audit reads no cluster, so a timeout says nothing about reachability")
 		assert.Equal(t, connect.CodeUnavailable, connect.CodeOf(err))
 	})
+}
+
+// FORGE RAN AND FAILED IS NOT AN OUTAGE.
+//
+// "forge command failed" means the daemon answered, ran forge against the
+// project, and forge exited non-zero without a report (a KCL render error, a
+// provider the command refuses, missing credentials). Retrying cannot change
+// that — the project's state has to — so it must not surface as Unavailable,
+// which the UI reads as "your daemon is offline" and retries. It maps to
+// FailedPrecondition on EVERY forge path: the shared forgeDispatch envelope and
+// the three RPCs that dispatch directly (promote apply, deploy start, deploy
+// status), which previously each re-mapped only the missing-dir marker.
+func TestForgeService_CommandFailed_IsFailedPreconditionNotUnavailable(t *testing.T) {
+	const daemonErr = "daemon command forge.x: forge command failed: exit 1: kcl: undefined attribute"
+
+	calls := map[string]func(*ForgeService) error{
+		"GetTopology": func(s *ForgeService) error {
+			_, err := s.GetTopology(authedCtx(), connect.NewRequest(&reliantv1.GetForgeTopologyRequest{ProjectId: "p"}))
+			return err
+		},
+		"VerifyEnv (cluster read)": func(s *ForgeService) error {
+			_, err := s.VerifyEnv(authedCtx(), connect.NewRequest(&reliantv1.VerifyForgeEnvRequest{ProjectId: "p", Env: "prod"}))
+			return err
+		},
+		"GetEnvStatus (cluster read)": func(s *ForgeService) error {
+			_, err := s.GetEnvStatus(authedCtx(), connect.NewRequest(&reliantv1.GetForgeEnvStatusRequest{ProjectId: "p", Env: "prod"}))
+			return err
+		},
+		"ListSecrets": func(s *ForgeService) error {
+			_, err := s.ListSecrets(authedCtx(), connect.NewRequest(&reliantv1.ListForgeSecretsRequest{ProjectId: "p", Env: "prod"}))
+			return err
+		},
+		"GetAudit": func(s *ForgeService) error {
+			_, err := s.GetAudit(authedCtx(), connect.NewRequest(&reliantv1.GetForgeAuditRequest{ProjectId: "p"}))
+			return err
+		},
+		"ApplyPromote (direct dispatch)": func(s *ForgeService) error {
+			_, err := s.ApplyPromote(authedCtx(), connect.NewRequest(&reliantv1.PromoteForgeEnvRequest{
+				ProjectId: "p", Env: "staging", Release: "v1.5.15", ExpectedCurrentRelease: "v1.3.0",
+			}))
+			return err
+		},
+		"StartDeploy (direct dispatch)": func(s *ForgeService) error {
+			_, err := s.StartDeploy(authedCtx(), connect.NewRequest(authorisedStart("prod", "gke_prod", "v1.5.15")))
+			return err
+		},
+		"GetDeployStatus (direct dispatch)": func(s *ForgeService) error {
+			_, err := s.GetDeployStatus(authedCtx(), connect.NewRequest(&reliantv1.GetForgeDeployStatusRequest{
+				ProjectId: "p", Handle: "deploy-7f3a",
+			}))
+			return err
+		},
+	}
+
+	for name, call := range calls {
+		t.Run(name, func(t *testing.T) {
+			err := call(newForgeTestService(&forgeTestRouter{replyErr: fmt.Errorf("%s", daemonErr)}))
+			require.Error(t, err)
+			assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err),
+				"forge ran and failed: retrying cannot help, and it is not a daemon outage")
+			// Forge's own diagnosis survives — it is the only thing that tells
+			// the user what to fix.
+			assert.Contains(t, err.Error(), "kcl: undefined attribute")
+		})
+	}
 }
 
 // Not a forge project is a NORMAL state — most reliant projects are not forge
@@ -448,6 +514,11 @@ func TestForgeService_ListSecrets_ErrorCarriesNoReportText(t *testing.T) {
 
 	require.Error(t, err)
 	assert.NotContains(t, err.Error(), canary)
+	// The re-mapped error is built from the daemon's (already stderr-withheld)
+	// text alone — re-classifying it must not widen what it carries.
+	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
+	assert.Equal(t, "daemon command forge.secret_list failed: forge command failed: exit 1",
+		err.(*connect.Error).Message())
 }
 
 // THE DAEMON SENDS AN OBJECT, NOT A STRING, and this pins that contract.

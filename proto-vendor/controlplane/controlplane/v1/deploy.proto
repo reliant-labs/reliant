@@ -69,6 +69,17 @@ enum DeployEnvironmentKind {
   // Ephemeral, and MUST carry a TTL — an unbounded preview is an unbounded
   // bill.
   DEPLOY_ENVIRONMENT_KIND_PREVIEW = 2;
+  // Workloads run on a developer machine (`forge env up`); the platform is
+  // this environment's SECRET STORE and nothing else. It is never a deploy
+  // target — Publish / EnsureDeployment / Promote / Rollback into one is
+  // FailedPrecondition — it holds no namespace on any cluster, and its
+  // secrets are the only ones readable back (LocalSecretService.PullSecrets).
+  //
+  // Kind is IMMUTABLE, and for this member that is the security property: a
+  // persistent environment can never become LOCAL and so can never become
+  // readable. EnsureEnvironment with a kind differing from the stored row is
+  // FailedPrecondition, never a silent change.
+  DEPLOY_ENVIRONMENT_KIND_LOCAL = 3;
 }
 
 // DeployRunState is what the TENANT asked for. Distinct from scale-to-zero,
@@ -189,6 +200,11 @@ enum DeployResourceKind {
   // both from one figure funds it twice. If SSD becomes a premium
   // option later it is a PLAN attribute, not a second meter kind.
   DEPLOY_RESOURCE_KIND_STORAGE_GIB = 10;
+
+  // 3/4 are tombstoned, not reused: a deployed client sending the old
+  // balanced kind must never be read as some future kind.
+  reserved 3, 4, 9;
+  reserved "DEPLOY_RESOURCE_KIND_STORAGE_GIB_BALANCED", "DEPLOY_RESOURCE_KIND_STORAGE_GIB_SSD", "DEPLOY_RESOURCE_KIND_BUILD_MINUTES";
 }
 
 // DeployLogStream selects which of a deployment's log streams to read. Build
@@ -330,6 +346,11 @@ message DeployEnvironment {
   // registry base configured, and PublishDeploymentConfig refuses every
   // backend image rather than admitting an unchecked one.
   string image_push_base = 14;
+
+  // The forge project this environment belongs to (forge.yaml `name`).
+  // Environment identity is (org, project, name): two projects in one org
+  // may each have a `prod`. Empty is a valid project.
+  string project = 15;
 }
 
 // DeployEnvironmentSpec is THE WRITABLE HALF of an environment — the whole of
@@ -355,6 +376,10 @@ message DeployEnvironmentSpec {
   // UNSPECIFIED on a request leaves the stored policy unchanged; a new
   // environment then gets OBSERVE.
   DeployReconcilePolicy reconcile_policy = 8;
+  // The forge project (forge.yaml `name`) this environment belongs to.
+  // Part of the environment's identity — EnsureEnvironment addresses by
+  // (project, name) — and immutable after creation like name and kind.
+  string project = 9;
 }
 
 // DeployObservedStateDetail is the operator's CONFIRMATION — the readable
@@ -405,6 +430,12 @@ message Deployment {
   string environment_id = 3;
   string name = 4;
   DeployTier tier = 5;
+
+  // The hand-rolled DeployDesiredState (image_digest, replicas, cpu_milli,
+  // memory_mib, storage_gib, config) is gone. The declared half is now `spec`
+  // plus `run_state`; see below.
+  reserved 6;
+  reserved "desired";
 
   DeployObservedStateDetail observed = 7;
 

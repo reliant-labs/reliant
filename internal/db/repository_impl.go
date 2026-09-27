@@ -1012,6 +1012,15 @@ func (r *Repo) UpdateProject(ctx context.Context, project *Project, userID strin
 	return r.projects.UpdateProject(ctx, project, userID)
 }
 
+func (r *Repo) SetProjectForgeName(ctx context.Context, id, userID, forgeProjectName string) (bool, error) {
+	if id == "" {
+		return false, fmt.Errorf("project ID cannot be empty")
+	}
+	if strings.TrimSpace(forgeProjectName) == "" {
+		return false, fmt.Errorf("forge project name cannot be empty")
+	}
+	return r.projects.SetProjectForgeName(ctx, id, userID, forgeProjectName)
+}
 func (r *Repo) TouchProject(ctx context.Context, id string, userID string) error {
 	if id == "" {
 		return fmt.Errorf("project ID cannot be empty")

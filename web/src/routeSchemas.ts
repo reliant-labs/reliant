@@ -352,23 +352,39 @@ export const mobileNewChatSearchSchema = z.object({
  * view. It moved out of component state so that a topology row can link into a
  * specific environment's status, and so a refresh keeps the selection.
  */
-export const forgeTopologySearchSchema = z.object({
+export const forgeOverviewSearchSchema = z.object({
   project: z.string().optional(),
 });
 
-export const forgeEnvSearchSchema = z.object({
+/**
+ * /forge/env/$env. The environment is a PATH segment — it is the page's
+ * subject, not a filter on it.
+ */
+export const forgeEnvPageSearchSchema = z.object({
   project: z.string().optional(),
-  env: z.string().optional(),
   /**
-   * `secret` selects one secret's detail view on /forge/secrets, for the same
-   * reason `env` is a param rather than state: a version history is a thing
-   * people link each other to ("look at what happened to DATABASE_URL"), and a
-   * refresh while reading one should not throw you back to the list.
+   * `secret` selects one secret's detail view in the Secrets section, for the
+   * same reason the env is in the URL rather than state: a version history is
+   * a thing people link each other to ("look at what happened to
+   * DATABASE_URL"), and a refresh while reading one should not throw you back
+   * to the list.
    *
    * It is a NAME, never a value — the whole surface is incapable of holding a
    * value, so there is nothing here that could leak into a URL, a browser
    * history entry, or a referrer header.
    */
+  secret: z.string().optional(),
+});
+
+/**
+ * The retired per-command routes (/forge/topology, /forge/environments,
+ * /forge/status, /forge/secrets). They only redirect now, and keep their old
+ * params so a bookmark lands on the same project — and, when it named one,
+ * the same environment and secret.
+ */
+export const forgeLegacySearchSchema = z.object({
+  project: z.string().optional(),
+  env: z.string().optional(),
   secret: z.string().optional(),
 });
 

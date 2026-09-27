@@ -4,7 +4,7 @@
  * The deploy PREVIEW: everything a reviewer needs before authorising manifests
  * onto a live cluster.
  *
- * PURE PROPS, like PromotePlanView and TopologyView — it takes a document and
+ * PURE PROPS, like PromotePlanView and WorkloadInventory — it takes a document and
  * renders it, so the visual contract can be tested by handing it a plan rather
  * than by standing up a query client, a transport, and under no circumstances a
  * cluster.

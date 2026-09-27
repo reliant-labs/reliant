@@ -12,7 +12,7 @@
  * services. This renders forge's `workloads` document instead: real
  * deployments, real pods, read from a named cluster.
  *
- * PURE PROPS, like EnvStatusPanel and TopologyView. It takes an outcome and
+ * PURE PROPS, like DevStackPanel and EnvironmentTable. It takes an outcome and
  * renders it and owns no fetching, which is what lets the visual contract be
  * pinned by handing it a report object instead of standing up a transport.
  *

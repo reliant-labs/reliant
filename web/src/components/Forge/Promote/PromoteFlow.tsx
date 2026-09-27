@@ -9,7 +9,7 @@
  * outcome of the plan call (not a forge project, forge too old, unreachable,
  * malformed) renders the shared state components and offers no confirm at all.
  *
- * PURE PROPS, like TopologyView and PromotePlanView: the hooks live in the page
+ * PURE PROPS, like EnvironmentTable and PromotePlanView: the hooks live in the page
  * component next door, so this whole flow — including the refusal path, which is
  * the hardest state to reach against a live daemon — can be driven from fixtures.
  *

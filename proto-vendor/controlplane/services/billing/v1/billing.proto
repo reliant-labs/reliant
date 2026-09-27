@@ -497,6 +497,11 @@ message RotateCurrentUserReliantAccessResponse {
   ManagedReliantAccess managed_access = 2;
   bool rotated = 3;
   bool replaced = 4;
+  // plaintext_key carried the retired managed-access `rlnt_` LLM key. LLM
+  // keys are `rlat_` access tokens with llm:invoke, minted by
+  // AccessTokenService.CreateMyToken.
+  reserved 5;
+  reserved "plaintext_key";
 }
 
 message GetCurrentUserReliantOverviewRequest {}

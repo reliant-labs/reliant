@@ -45,20 +45,16 @@ describe("getParentRouteNavigateOptions", () => {
     });
   });
 
-  // The three forge paths are peer tabs of one surface, not a hub and its
-  // children, so closing any of them leaves forge entirely. Pinned explicitly:
-  // the fallback would give the same answer today, and a future /forge hub route
-  // must not silently turn "close" into a redirect back into forge.
-  it("returns / as parent of every forge tab", () => {
-    expect(getParentRouteNavigateOptions("/forge/topology")).toEqual({
+  // Close on any forge page leaves forge entirely — including an environment's
+  // page, whose close must not turn into a step back to the Overview (that is
+  // what the sidebar and the page's own back link are for). Pinned explicitly:
+  // the fallback gives the same answer today, and must keep giving it.
+  it("returns / as parent of every forge page", () => {
+    expect(getParentRouteNavigateOptions("/forge/env/prod")).toEqual({
       to: "/",
       search: {},
     });
-    expect(getParentRouteNavigateOptions("/forge/status")).toEqual({
-      to: "/",
-      search: {},
-    });
-    expect(getParentRouteNavigateOptions("/forge/secrets")).toEqual({
+    expect(getParentRouteNavigateOptions("/forge/env/dev")).toEqual({
       to: "/",
       search: {},
     });

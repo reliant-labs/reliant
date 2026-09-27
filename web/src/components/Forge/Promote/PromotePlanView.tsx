@@ -4,7 +4,7 @@
  * The promote DIFF PREVIEW: everything a reviewer needs before authorising a
  * write that cannot be undone.
  *
- * PURE PROPS, like TopologyView — it takes a plan and renders it, so the visual
+ * PURE PROPS, like EnvironmentTable — it takes a plan and renders it, so the visual
  * contract can be tested by handing it a document rather than by standing up a
  * query client and a transport.
  *

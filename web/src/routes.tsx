@@ -13,8 +13,9 @@ import {
   oauthCallbackSearchSchema,
   onboardingSearchSchema,
   proxyAuthSearchSchema,
-  forgeEnvSearchSchema,
-  forgeTopologySearchSchema,
+  forgeEnvPageSearchSchema,
+  forgeLegacySearchSchema,
+  forgeOverviewSearchSchema,
   settingsParamsSchema,
   settingsSearchSchema,
   upgradeSearchSchema,
@@ -107,14 +108,10 @@ const MobileChatWorkflowRoute = lazyRouteComponent(
   () => import('./components/Mobile/MobileWorkflowDetailRoute'), 'MobileChatWorkflowRoute')
 const ForgeLayout = lazyRouteComponent(
   () => import('./components/Forge/ForgeLayout'), 'ForgeLayout')
-const ForgeTopologyPage = lazyRouteComponent(
-  () => import('./components/Forge/ForgeTopologyPage'), 'ForgeTopologyPage')
-const ForgeEnvironmentsPage = lazyRouteComponent(
-  () => import('./components/Forge/Environments/ForgeEnvironmentsPage'), 'ForgeEnvironmentsPage')
-const ForgeStatusPage = lazyRouteComponent(
-  () => import('./components/Forge/Status/ForgeStatusPage'), 'ForgeStatusPage')
-const ForgeSecretsPage = lazyRouteComponent(
-  () => import('./components/Forge/Secrets/ForgeSecretsPage'), 'ForgeSecretsPage')
+const ForgeOverviewPage = lazyRouteComponent(
+  () => import('./components/Forge/Overview/ForgeOverviewPage'), 'ForgeOverviewPage')
+const ForgeEnvPage = lazyRouteComponent(
+  () => import('./components/Forge/EnvPage/ForgeEnvPage'), 'ForgeEnvPage')
 const App = lazyRouteComponent(() => import('./App'), 'default')
 
 // Search schemas live in ./routeSchemas (kept dependency-free so tests can
@@ -493,7 +490,7 @@ const workflowBuilderRoute = createRoute({
 
 // ── forge UI (experimental, gated) ───────────────────────────────────────────
 //
-// All three routes go through ForgeGate. Hiding the sidebar entry is NOT enough
+// Every forge route goes through ForgeGate. Hiding the sidebar entry is NOT enough
 // on its own: a route left registered stays reachable by pasting its URL, and
 // two of these screens front write paths (promote, and a deploy that applies to
 // a live cluster). So the GATE IS ON THE ROUTE, and the nav entry is a second,
@@ -512,11 +509,11 @@ function ForgeGate({ children }: { children: React.ReactNode }) {
 
 // Pathless layout route owning the forge surface's chrome, tabs and project
 // resolution. See components/Forge/ForgeLayout.tsx for the full reasoning; the
-// short version is that all three screens sit under `_authenticated`, which
+// short version is that the forge screens sit under `_authenticated`, which
 // renders NO app chrome, so without a layout of their own they had no header,
 // no exit and no way to resolve a project on a cold load. /settings and
 // /workflow each solve the same problem by rendering their own header; forge
-// has three screens rather than one, so the header belongs on a shared parent.
+// has more than one screen, so the header belongs on a shared parent.
 //
 // The gate stays on each CHILD rather than moving here, so that every forge
 // route carries it independently — see the ForgeGate comment above.
@@ -526,58 +523,74 @@ const forgeLayoutRoute = createRoute({
   component: ForgeLayout,
 })
 
-// `/forge` alone is not a screen — it is what a user types or bookmarks when
-// they mean "the forge UI". Send them to the topology, which is the entry point
-// the sidebar already uses.
-const forgeIndexRedirectRoute = createRoute({
+// ── The two forge screens, organised around ENVIRONMENTS ────────────────────
+//
+// There used to be four — Releases (/forge/topology), Environments, Status and
+// Secrets — one per forge COMMAND (topology, env status, verify, secret list).
+// The user's question is per environment ("what is prod running, is it
+// healthy, what are its secrets"), and three of the four read the same env
+// status for different slices of that one answer. So now:
+//
+//   /forge            Overview: the audit strip and one row per environment.
+//   /forge/env/$env   one environment: workloads, secrets, releases, and —
+//                     local envs only — the dev stack forge env up launched.
+//
+// `project` is a search param on both so a refresh or a pasted link resolves
+// the project without ModernApp, which never mounts here (the old dead-end
+// refresh bug). Both sit under authenticatedLayoutRoute because their RPCs are
+// per-user and resolve the project against the caller's ownership.
+const forgeOverviewRoute = createRoute({
   getParentRoute: () => forgeLayoutRoute,
   path: '/forge',
-  component: () => <Navigate to="/forge/topology" search={{}} />,
+  validateSearch: forgeOverviewSearchSchema,
+  component: () => <ForgeGate><ForgeOverviewPage /></ForgeGate>,
 })
 
-// The forge release/environment topology. `project` is in the URL so a refresh
-// or a pasted link can resolve the project without ModernApp, which never mounts
-// on these routes — that was the dead-end refresh bug. Sits under
-// authenticatedLayoutRoute because the RPCs it makes are per-user and resolve
-// the project against the caller's ownership.
-const forgeTopologyRoute = createRoute({
+const forgeEnvRoute = createRoute({
   getParentRoute: () => forgeLayoutRoute,
-  path: '/forge/topology',
-  validateSearch: forgeTopologySearchSchema,
-  component: () => <ForgeGate><ForgeTopologyPage /></ForgeGate>,
+  path: '/forge/env/$env',
+  validateSearch: forgeEnvPageSearchSchema,
+  component: () => <ForgeGate><ForgeEnvPage /></ForgeGate>,
 })
 
-// Per-environment identity: cluster context, namespace, current release. Reads
-// the same topology report the Releases matrix does, through the same cached
-// query, so the two can never disagree about which environments exist. `env` is
-// in the schema so the sidebar can carry a selection here and back without the
-// param being stripped on the way through.
-const forgeEnvironmentsRoute = createRoute({
-  getParentRoute: () => forgeLayoutRoute,
-  path: '/forge/environments',
-  validateSearch: forgeEnvSearchSchema,
-  component: () => <ForgeGate><ForgeEnvironmentsPage /></ForgeGate>,
-})
+// The retired per-command screens. Each REDIRECTS rather than 404ing, because
+// they were bookmarked and linked, and it keeps what the old URL said: the
+// project always, and — where the old URL named an environment — that
+// environment's page (with its secret selection, for /forge/secrets). An old
+// URL with no env lands on the Overview, which is where "all environments"
+// now lives. Still gated: a redirect route that skipped the gate would be a
+// way past it.
+function ForgeLegacyRedirect({ search }: { search: { project?: string; env?: string; secret?: string } }) {
+  if (search.env) {
+    return (
+      <Navigate
+        to="/forge/env/$env"
+        params={{ env: search.env }}
+        search={{ project: search.project, secret: search.secret }}
+        replace
+      />
+    )
+  }
+  return <Navigate to="/forge" search={{ project: search.project }} replace />
+}
 
-// The forge env-runtime checks and project-audit strip, both read-only. `env` is
-// a search param so a topology row can link straight into one environment's
-// checks, and so the selection survives a refresh.
-const forgeStatusRoute = createRoute({
-  getParentRoute: () => forgeLayoutRoute,
-  path: '/forge/status',
-  validateSearch: forgeEnvSearchSchema,
-  component: () => <ForgeGate><ForgeStatusPage /></ForgeGate>,
-})
+function forgeLegacyRoute(path: '/forge/topology' | '/forge/environments' | '/forge/status' | '/forge/secrets') {
+  const route = createRoute({
+    getParentRoute: () => forgeLayoutRoute,
+    path,
+    validateSearch: forgeLegacySearchSchema,
+    component: function ForgeLegacyRoute() {
+      const search = route.useSearch()
+      return <ForgeGate><ForgeLegacyRedirect search={search} /></ForgeGate>
+    },
+  })
+  return route
+}
 
-// Per-environment secret PRESENCE. Read-only, and structurally incapable of
-// showing a value — see Secrets/SecretRow.tsx. Same params as the status route,
-// for the same reasons.
-const forgeSecretsRoute = createRoute({
-  getParentRoute: () => forgeLayoutRoute,
-  path: '/forge/secrets',
-  validateSearch: forgeEnvSearchSchema,
-  component: () => <ForgeGate><ForgeSecretsPage /></ForgeGate>,
-})
+const forgeTopologyRedirectRoute = forgeLegacyRoute('/forge/topology')
+const forgeEnvironmentsRedirectRoute = forgeLegacyRoute('/forge/environments')
+const forgeStatusRedirectRoute = forgeLegacyRoute('/forge/status')
+const forgeSecretsRedirectRoute = forgeLegacyRoute('/forge/secrets')
 
 // Onboarding lives at its own URL now. Previously the OnboardingPage was a
 // branch inside ModernApp's render based on currentUser.onboardingCompleted —
@@ -744,11 +757,12 @@ const routeTree = rootRoute.addChildren([
     ]),
     onboardingRoute,
     forgeLayoutRoute.addChildren([
-      forgeIndexRedirectRoute,
-      forgeEnvironmentsRoute,
-      forgeTopologyRoute,
-      forgeSecretsRoute,
-      forgeStatusRoute,
+      forgeOverviewRoute,
+      forgeEnvRoute,
+      forgeTopologyRedirectRoute,
+      forgeEnvironmentsRedirectRoute,
+      forgeStatusRedirectRoute,
+      forgeSecretsRedirectRoute,
     ]),
     settingsRoute,
     connectorConsentRoute,

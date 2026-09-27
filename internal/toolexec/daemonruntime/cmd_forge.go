@@ -513,9 +513,12 @@ func handleForgeSecretList(ctx context.Context, payload []byte) ([]byte, error) 
 		return nil, fmt.Errorf("env is required")
 	}
 
+	// --env, never positional: forge's secret commands take the env ONLY as a
+	// flag and reject a positional one. The "=" form binds the value to the
+	// flag, so an env that begins with "-" cannot be read as another flag.
 	return invokeForgeReport(ctx, forgeInvocation{
 		ProjectPath:    req.ProjectPath,
-		Args:           []string{"secret", "list", req.Env, "--json"},
+		Args:           []string{"secret", "list", "--env=" + req.Env, "--json"},
 		WithholdStderr: true,
 	})
 }

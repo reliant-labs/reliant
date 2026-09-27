@@ -124,6 +124,9 @@ type Repository interface {
 	GetProjectWithUserCheck(ctx context.Context, id string, userID string) (*Project, error)
 	ListProjects(ctx context.Context, filters ProjectFilters) ([]*Project, error)
 	UpdateProject(ctx context.Context, project *Project, userID string) error
+	// SetProjectForgeName records forge's name for a project (forge.yaml
+	// `name`) and marks it a forge project. Reports whether the row changed.
+	SetProjectForgeName(ctx context.Context, id, userID, forgeProjectName string) (bool, error)
 	TouchProject(ctx context.Context, id string, userID string) error
 	DeleteProject(ctx context.Context, id string, userID string) error
 	GetProjectConfigRecord(ctx context.Context, projectID string) (*ProjectConfigRecord, error)

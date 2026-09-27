@@ -22,11 +22,34 @@
  */
 
 import { useCallback, useMemo } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Code, ConnectError } from "@connectrpc/connect";
 
 import { forgeGrpc, type ApplyPromoteResult, type DeployStatus, type StartDeployResult } from "../api/forge-grpc";
 import type { ForgeAuditReport } from "../services/forge/audit";
+import {
+  cloudAvailabilityFromError,
+  cloudErrorDetail,
+  getEnvironmentStatus,
+  hasCloudControlPlane,
+  listEnvironmentPromotions,
+  listProjectEnvironments,
+  type CloudAvailability,
+  type CloudEnv,
+  type CloudEnvStatus,
+  type CloudPromotion,
+} from "../services/forge/cloudEnvs";
+import {
+  cloudRunIdOf,
+  daemonSideOf,
+  joinEnvironments,
+  resolveForgeProjectName,
+  type DaemonSide,
+  type ForgeEnvSummary,
+  type ForgeProjectName,
+} from "../services/forge/environments";
 import { deployTokenFor, type ForgeDeployReport } from "../services/forge/deploy";
+import { useProjectStore, type Project } from "../store/projectStore";
 import { confirmationTokenFor, type ForgePromotePlan } from "../services/forge/promote";
 import type { ForgeSecretsReport } from "../services/forge/secrets";
 import {
@@ -45,11 +68,42 @@ import {
 } from "../services/forge/secretStore";
 import type { ForgeEnvStatusReport } from "../services/forge/status";
 import {
+  environments,
   mergeVerifyIntoTopology,
   type ForgeOutcome,
   type ForgeTopologyReport,
   type ForgeVerifyReport,
 } from "../services/forge/topology";
+
+// ── Retry policy ────────────────────────────────────────────────────────────
+
+/**
+ * Codes on which asking the daemon again cannot change the answer.
+ *
+ * FailedPrecondition is the one that matters: it is what the api-server now
+ * answers when forge RAN and failed (a KCL render error, a provider the
+ * command refuses) and when the daemon is too old for the command. Both are
+ * facts about state a retry does not touch, and retrying them only delays the
+ * sentence that says what to fix.
+ */
+const NON_RETRYABLE_FORGE_CODES: ReadonlySet<Code> = new Set([
+  Code.FailedPrecondition,
+  Code.NotFound,
+  Code.InvalidArgument,
+  Code.PermissionDenied,
+  Code.Unauthenticated,
+]);
+
+/**
+ * forgeRetry: at most ONE retry, and none for an answer. A thrown error on a
+ * forge query is a transport or daemon problem (every meaningful non-success
+ * arrives as data — see the useForgeTopology comment), and hammering a daemon
+ * that is not answering only delays telling the user.
+ */
+export function forgeRetry(failureCount: number, error: unknown): boolean {
+  if (error instanceof ConnectError && NON_RETRYABLE_FORGE_CODES.has(error.code)) return false;
+  return failureCount < 1;
+}
 
 // ── Key factory ─────────────────────────────────────────────────────────────
 
@@ -71,6 +125,13 @@ export const forgeKeys = {
     [...forgeKeys.all, "managed-secrets", projectId, env] as const,
   managedSecretVersions: (projectId: string, env: string, name: string) =>
     [...forgeKeys.all, "managed-secret-versions", projectId, env, name] as const,
+  // Control-plane reads. Keyed by the FORGE project name and the control
+  // plane's environment id — not the Reliant project id — because that is
+  // what the control plane knows them by.
+  cloudEnvs: (forgeProject: string) => [...forgeKeys.all, "cloud-envs", forgeProject] as const,
+  cloudStatus: (environmentId: string) => [...forgeKeys.all, "cloud-status", environmentId] as const,
+  cloudPromotions: (environmentId: string) =>
+    [...forgeKeys.all, "cloud-promotions", environmentId] as const,
 };
 
 // ── Topology ────────────────────────────────────────────────────────────────
@@ -90,7 +151,7 @@ export function useForgeTopology(projectId: string | null | undefined) {
     queryFn: () => forgeGrpc.getTopology({ projectId: projectId as string }),
     enabled: !!projectId,
     staleTime: 30_000,
-    retry: 1,
+    retry: forgeRetry,
   });
 }
 
@@ -165,22 +226,195 @@ export function useVerifyForgeEnv(projectId: string | null | undefined) {
   };
 }
 
-// ── Secrets ─────────────────────────────────────────────────────────────────
+// ── Environments: the control plane ∪ the daemon ────────────────────────────
 
 /**
- * useForgeSecrets loads one environment's secret PRESENCE report.
+ * useCloudEnvironments lists the control plane's environments for ONE forge
+ * project — no daemon involved.
  *
- * retry is 1 for the same reason as the topology hook — every meaningful
- * non-success arrives as a successful response carrying data — but here there is
- * a second reason that is specific to this surface: a retry path is a place where
- * a response body tends to end up logged or attached to an error for diagnosis.
- * Nothing on this path may do that. The response is passed straight to the cache
- * and never stringified, and the query has no onError side channel.
+ * A failure resolves to an `availability` instead of throwing, for the same
+ * reason useManagedSecrets does: four of the five ways this can "fail" (no
+ * control plane in this build, the deploy product not enabled for the org, a
+ * control plane that does not serve the deploy domain) are states to DESCRIBE,
+ * and a red banner in front of every local-only forge project would be a lie.
  *
- * staleTime is short (5s) rather than the topology's 30s because presence is the
- * thing a developer is actively changing: they read this screen, run
- * `forge secret set`, and come back expecting the row to have moved. A long
- * stale window would show them the answer from before their edit.
+ * `forgeProject` null means the join key is not known yet (the daemon has not
+ * answered and nothing is cached) — nothing is fetched, rather than listing a
+ * guess.
+ */
+export function useCloudEnvironments(forgeProject: string | null | undefined) {
+  const enabled = !!forgeProject && hasCloudControlPlane();
+  return useQuery<{ availability: CloudAvailability; envs: CloudEnv[]; detail: string }>({
+    queryKey: forgeKeys.cloudEnvs(forgeProject ?? ""),
+    queryFn: async () => {
+      try {
+        return {
+          availability: "available" as const,
+          envs: await listProjectEnvironments(forgeProject as string),
+          detail: "",
+        };
+      } catch (err) {
+        return { availability: cloudAvailabilityFromError(err), envs: [], detail: cloudErrorDetail(err) };
+      }
+    },
+    enabled,
+    staleTime: 30_000,
+    retry: false,
+  });
+}
+
+/**
+ * The control plane's status for ONE environment it runs.
+ *
+ * THIS POLLS (30s, foreground only), and that is a deliberate exception to the
+ * no-poll rule the daemon hooks above follow. Those re-probe a live cluster;
+ * this reads columns the control plane's reconcile worker already wrote — a
+ * database read with no cluster hop — so a poll costs a query, and in exchange
+ * a deploy converging in another tab settles on this screen without a reload.
+ */
+const CLOUD_STATUS_POLL_MS = 30_000;
+
+function cloudStatusQuery(environmentId: string) {
+  return {
+    queryKey: forgeKeys.cloudStatus(environmentId),
+    queryFn: () => getEnvironmentStatus(environmentId),
+    enabled: environmentId !== "",
+    staleTime: 10_000,
+    refetchInterval: CLOUD_STATUS_POLL_MS,
+    retry: forgeRetry,
+  };
+}
+
+export function useCloudEnvStatus(environmentId: string | null | undefined) {
+  return useQuery<CloudEnvStatus>(cloudStatusQuery(environmentId ?? ""));
+}
+
+/** The same query per environment, for the overview's rows. One cache entry per env, shared with the env page. */
+export interface CloudStatusEntry {
+  data?: CloudEnvStatus;
+  isLoading: boolean;
+  error: unknown;
+}
+
+export function useCloudEnvStatuses(environmentIds: string[]): Map<string, CloudStatusEntry> {
+  const results = useQueries({ queries: environmentIds.map((id) => cloudStatusQuery(id)) });
+  // Rebuilt per render on purpose: a handful of entries, and memoising on a
+  // freshly-allocated results array would never hit.
+  const byId = new Map<string, CloudStatusEntry>();
+  environmentIds.forEach((id, index) => {
+    const result = results[index];
+    byId.set(id, { data: result?.data, isLoading: !!result?.isLoading, error: result?.error ?? null });
+  });
+  return byId;
+}
+
+/** One environment's promotion ledger, newest first. Append-only, so no poll. */
+export function useCloudPromotions(environmentId: string | null | undefined) {
+  return useQuery<CloudPromotion[]>({
+    queryKey: forgeKeys.cloudPromotions(environmentId ?? ""),
+    queryFn: () => listEnvironmentPromotions(environmentId as string),
+    enabled: !!environmentId,
+    staleTime: 15_000,
+    retry: forgeRetry,
+  });
+}
+
+export interface ForgeEnvironmentsState {
+  /** Every environment either source knows, joined by name. */
+  envs: ForgeEnvSummary[];
+  /** forge's side: the topology query, and what state it is in. */
+  topology: ReturnType<typeof useForgeTopology>;
+  daemon: DaemonSide;
+  /** The control plane's side. `undefined` data while it has not answered. */
+  cloud: ReturnType<typeof useCloudEnvironments>;
+  /** The join key, and where it came from. */
+  projectName: ForgeProjectName;
+  /** Nothing to show yet from EITHER side. */
+  isLoading: boolean;
+}
+
+/** The forge project name persisted on `projectId`'s row, from whichever store slot holds it. */
+function persistedForgeProjectName(
+  state: { projects: Project[]; currentProject: Project | null },
+  projectId: string | null | undefined
+): string | null {
+  if (!projectId) return null;
+  const row =
+    state.currentProject?.id === projectId
+      ? state.currentProject
+      : state.projects.find((project) => project.id === projectId);
+  return row?.forge_project_name ?? null;
+}
+
+/**
+ * useForgeEnvironments is the ONE environment list every forge screen reads —
+ * the sidebar, the overview and the environment page — so none of them can
+ * disagree about which environments exist.
+ *
+ * The two sources are queried in parallel and joined; neither waits for the
+ * other. The only ordering is the join KEY: the forge project name comes from
+ * forge's topology report when the daemon answers, and from the name Reliant
+ * persisted on the project row when it does not (see resolveForgeProjectName
+ * for why nothing is guessed beyond that).
+ */
+export function useForgeEnvironments(projectId: string | null | undefined): ForgeEnvironmentsState {
+  const topology = useForgeTopology(projectId);
+  const persistedName = useProjectStore((state) => persistedForgeProjectName(state, projectId));
+  const projectName = resolveForgeProjectName(persistedName, topology.data);
+
+  const cloud = useCloudEnvironments(projectName.name);
+
+  const envs = useMemo(() => {
+    const forgeEnvs = topology.data?.kind === "report" ? environments(topology.data.report) : [];
+    return joinEnvironments(forgeEnvs, cloud.data?.envs ?? []);
+  }, [topology.data, cloud.data]);
+
+  const daemon = daemonSideOf(topology.data, topology.error);
+  // The cloud side is "still asking" only when it has something to ask with.
+  const cloudPending = cloud.isLoading && !!projectName.name;
+
+  return {
+    envs,
+    topology,
+    daemon,
+    cloud,
+    projectName,
+    isLoading: envs.length === 0 && (daemon === "loading" || cloudPending),
+  };
+}
+
+/** Invalidate everything the control plane reports for a project after a write moved it. */
+export function useInvalidateCloudEnvironments() {
+  const queryClient = useQueryClient();
+  return useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: [...forgeKeys.all, "cloud-envs"] });
+    void queryClient.invalidateQueries({ queryKey: [...forgeKeys.all, "cloud-status"] });
+    void queryClient.invalidateQueries({ queryKey: [...forgeKeys.all, "cloud-promotions"] });
+  }, [queryClient]);
+}
+
+/** The cloud-run environments among `envs`, as the ids their statuses are keyed by. */
+export function cloudRunIds(envs: ForgeEnvSummary[]): string[] {
+  return envs.map(cloudRunIdOf).filter((id): id is string => !!id);
+}
+
+// ── Secret declarations ─────────────────────────────────────────────────────
+
+/**
+ * useForgeSecrets loads one environment's secret DECLARATIONS from forge — which
+ * names its workloads ask for. An ENRICHMENT of the managed store's list, never
+ * a gate on it: the store answers without a daemon, and this only adds the
+ * "declared but never set" rows when the daemon is there to say what is
+ * declared.
+ *
+ * A retry path is a place where a response body tends to end up logged or
+ * attached to an error for diagnosis, and nothing on this path may do that.
+ * The response is passed straight to the cache and never stringified, and the
+ * query has no onError side channel.
+ *
+ * staleTime is short (5s) because declarations and values are what a developer
+ * is actively changing: they set a secret and come back expecting the row to
+ * have moved.
  */
 export function useForgeSecrets(projectId: string | null | undefined, env: string | null | undefined) {
   return useQuery<ForgeOutcome<ForgeSecretsReport>>({
@@ -191,7 +425,7 @@ export function useForgeSecrets(projectId: string | null | undefined, env: strin
       >,
     enabled: !!projectId && !!env,
     staleTime: 5_000,
-    retry: 1,
+    retry: forgeRetry,
   });
 }
 
@@ -230,7 +464,7 @@ export function useForgeEnvStatus(
       >,
     enabled: !!projectId && !!env,
     staleTime: 10_000,
-    retry: 1,
+    retry: forgeRetry,
   });
 }
 
@@ -251,7 +485,7 @@ export function useForgeAudit(projectId: string | null | undefined) {
       forgeGrpc.getAudit(projectId as string) as Promise<ForgeOutcome<ForgeAuditReport>>,
     enabled: !!projectId,
     staleTime: 60_000,
-    retry: 1,
+    retry: forgeRetry,
   });
 }
 
@@ -287,7 +521,7 @@ export function useForgePromotePlan(
     enabled: !!projectId && !!env && !!release,
     staleTime: 0,
     gcTime: 0,
-    retry: 1,
+    retry: forgeRetry,
   });
 }
 
@@ -344,6 +578,10 @@ export function useApplyForgePromote(projectId: string | null | undefined) {
       if (result.kind !== "applied") return;
       void queryClient.invalidateQueries({ queryKey: forgeKeys.topology(projectId ?? "") });
       void queryClient.invalidateQueries({ queryKey: forgeKeys.audit(projectId ?? "") });
+      // A hosted env's binding and workloads live on the control plane too,
+      // and the Overview/Environment screens read them from there.
+      void queryClient.invalidateQueries({ queryKey: [...forgeKeys.all, "cloud-status"] });
+      void queryClient.invalidateQueries({ queryKey: [...forgeKeys.all, "cloud-promotions"] });
     },
   });
 
@@ -377,7 +615,7 @@ export function useForgeDeployPlan(
     enabled: !!projectId && !!env,
     staleTime: 0,
     gcTime: 0,
-    retry: 1,
+    retry: forgeRetry,
   });
 }
 
@@ -435,6 +673,10 @@ export function useStartForgeDeploy(projectId: string | null | undefined) {
       if (result.kind !== "started") return;
       void queryClient.invalidateQueries({ queryKey: forgeKeys.topology(projectId ?? "") });
       void queryClient.invalidateQueries({ queryKey: forgeKeys.audit(projectId ?? "") });
+      // A hosted env's binding and workloads live on the control plane too,
+      // and the Overview/Environment screens read them from there.
+      void queryClient.invalidateQueries({ queryKey: [...forgeKeys.all, "cloud-status"] });
+      void queryClient.invalidateQueries({ queryKey: [...forgeKeys.all, "cloud-promotions"] });
     },
   });
 
@@ -475,7 +717,7 @@ export function useForgeDeployStatus(
     refetchInterval: (query) =>
       query.state.data && query.state.data.jobStatus !== "running" ? false : 2_000,
     staleTime: 0,
-    retry: 1,
+    retry: forgeRetry,
   });
 }
 
@@ -536,7 +778,7 @@ export function useManagedSecrets(
     },
     enabled: !!projectId && !!env && !!target,
     staleTime: 5_000,
-    retry: 1,
+    retry: forgeRetry,
   });
 }
 
@@ -559,7 +801,7 @@ export function useManagedSecretVersions(
     queryFn: () => getSecretVersions(environmentId as string, name as string),
     enabled: !!projectId && !!env && !!environmentId && !!name,
     staleTime: 5_000,
-    retry: 1,
+    retry: forgeRetry,
   });
 }
 
