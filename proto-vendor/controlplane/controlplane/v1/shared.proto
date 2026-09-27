@@ -403,11 +403,8 @@ message PlanLimits {
   // while BOUND.
   //
   // GiB-HOURS, NOT GiB-MONTHS, because hours are what the meter produces:
-  // every usage bucket records its own tick_seconds. Tag 17 previously
-  // carried a GiB-months figure against that hourly meter — a
-  // factor-of-730 mismatch between what was sold and what was counted —
-  // so it is reserved below rather than reinterpreted in place. A client
-  // renders months by dividing by 730.
+  // every usage bucket records its own tick_seconds. A client renders
+  // months by dividing by 730.
   //
   // SCALE-TO-ZERO DOES NOT STOP THIS METER, and that is the honest
   // behavior rather than an oversight: the disk is still allocated and
@@ -449,30 +446,6 @@ message PlanLimits {
 
   reserved 5, 6;
   reserved "ip_restricted", "max_ips_per_key";
-
-  // Retired with the three-tier catalog (SimpleBackend, StaticSite,
-  // ManagedDatabase). Every one of these sold a dimension no emitter
-  // measured:
-  //
-  //   17  included_storage_gib_months — WRONG UNIT against an hourly
-  //       meter. Replaced by included_storage_gib_hours (tag 33) rather
-  //       than reinterpreted, because a client reading tag 17 as months
-  //       would be off by 730 against a server writing hours.
-  //   19/20  internet egress — the only containment is an HTTP_PROXY env
-  //       var tenant code can ignore, so the allowance was unmeasurable.
-  //       The runtime meter survives, zero-rated; only the SALE is gone.
-  //   21-24  CDN egress and CDN requests — no emitter ever existed.
-  //       Static sites bill on storage at launch.
-  //   25/26  build minutes — the ImageBuild tier is structurally gated
-  //       off (setupImageBuildReconciler returns early with no builder
-  //       image, which no cloud env sets), and a MINUTE is not a
-  //       billable unit of compute anyway; migration 00074 retired the
-  //       matching build_minutes bucket kind for that reason.
-  //
-  // Tags AND names are tombstoned: a future field reusing tag 21 would be
-  // silently fed a deployed client's CDN egress double.
-  reserved 17, 19, 20, 21, 22, 23, 24, 25, 26;
-  reserved "included_storage_gib_months", "included_egress_gib", "egress_overage_rate_cents", "included_cdn_egress_gib", "cdn_egress_overage_rate_cents", "included_cdn_requests_millions", "cdn_requests_overage_rate_cents", "included_build_minutes", "build_minutes_overage_rate_cents";
 }
 
 message Plan {

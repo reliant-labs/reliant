@@ -431,8 +431,6 @@ message CreateDeploymentRequest {
   string environment_id = 1;
   string name = 2;
   DeployTier tier = 3;
-  reserved 4;
-  reserved "desired";
   google.protobuf.Struct spec = 5;
 }
 
@@ -469,8 +467,6 @@ message ListDeploymentsResponse {
 
 message UpdateDeploymentRequest {
   string deployment_id = 1;
-  reserved 2;
-  reserved "desired";
   // Replaces the tier spec wholesale, validated exactly as on create (see
   // CreateDeploymentRequest). `tier` is absent because a deployment cannot
   // change tier: the tiers differ in which controller reconciles them, so a
@@ -613,12 +609,6 @@ message RollbackReleaseResponse {
 
 message ScaleDeploymentRequest {
   string deployment_id = 1;
-  // The replica count is gone: forge's tiers have none. SimpleBackend is one
-  // container by design, because a replica knob would silently break every
-  // backend that mounts its ReadWriteOnce volume. What remains to scale is
-  // whether the deployment runs at all.
-  reserved 2;
-  reserved "replicas";
   // RUNNING or SUSPENDED.
   controlplane.v1.DeployRunState run_state = 3;
 }

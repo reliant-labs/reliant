@@ -2558,7 +2558,7 @@ const file_controlplane_v1_deploy_proto_rawDesc = "" +
 	"\n" +
 	"last_error\x18\x05 \x01(\tR\tlastError\x12\x10\n" +
 	"\x03url\x18\x06 \x01(\tR\x03url\x12=\n" +
-	"\fstable_since\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\vstableSince\"\xd7\x03\n" +
+	"\fstable_since\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\vstableSince\"\xc8\x03\n" +
 	"\n" +
 	"Deployment\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x15\n" +
@@ -2573,7 +2573,7 @@ const file_controlplane_v1_deploy_proto_rawDesc = "" +
 	"updated_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12+\n" +
 	"\x04spec\x18\v \x01(\v2\x17.google.protobuf.StructR\x04spec\x12<\n" +
 	"\trun_state\x18\n" +
-	" \x01(\x0e2\x1f.controlplane.v1.DeployRunStateR\brunStateJ\x04\b\x06\x10\aR\adesired\"\x9d\x02\n" +
+	" \x01(\x0e2\x1f.controlplane.v1.DeployRunStateR\brunState\"\x9d\x02\n" +
 	"\x0eDeployArtifact\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x16\n" +
 	"\x06digest\x18\x02 \x01(\tR\x06digest\x12\x1c\n" +
@@ -2708,7 +2708,7 @@ const file_controlplane_v1_deploy_proto_rawDesc = "" +
 	" DEPLOY_CLUSTER_PHASE_UNSPECIFIED\x10\x00\x12%\n" +
 	"!DEPLOY_CLUSTER_PHASE_PROVISIONING\x10\x01\x12\x1e\n" +
 	"\x1aDEPLOY_CLUSTER_PHASE_READY\x10\x02\x12\x1f\n" +
-	"\x1bDEPLOY_CLUSTER_PHASE_FAILED\x10\x03*\xc5\x03\n" +
+	"\x1bDEPLOY_CLUSTER_PHASE_FAILED\x10\x03*\xbe\x02\n" +
 	"\x12DeployResourceKind\x12$\n" +
 	" DEPLOY_RESOURCE_KIND_UNSPECIFIED\x10\x00\x12\"\n" +
 	"\x1eDEPLOY_RESOURCE_KIND_CPU_MILLI\x10\x01\x12 \n" +
@@ -2718,7 +2718,7 @@ const file_controlplane_v1_deploy_proto_rawDesc = "" +
 	"#DEPLOY_RESOURCE_KIND_CDN_EGRESS_GIB\x10\a\x12%\n" +
 	"!DEPLOY_RESOURCE_KIND_CDN_REQUESTS\x10\b\x12$\n" +
 	" DEPLOY_RESOURCE_KIND_STORAGE_GIB\x10\n" +
-	"\"\x04\b\x03\x10\x03\"\x04\b\x04\x10\x04\"\x04\b\t\x10\t*)DEPLOY_RESOURCE_KIND_STORAGE_GIB_BALANCED*$DEPLOY_RESOURCE_KIND_STORAGE_GIB_SSD*\"DEPLOY_RESOURCE_KIND_BUILD_MINUTES*p\n" +
+	"*p\n" +
 	"\x0fDeployLogStream\x12!\n" +
 	"\x1dDEPLOY_LOG_STREAM_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17DEPLOY_LOG_STREAM_BUILD\x10\x01\x12\x1d\n" +
