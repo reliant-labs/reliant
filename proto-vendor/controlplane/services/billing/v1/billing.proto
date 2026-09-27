@@ -818,12 +818,6 @@ message GetCurrentUserComputeUsageResponse {
 // Public contract: exported verbatim to reliant (see proto/public-api.txt).
 // Never renumber — reserve removed tags.
 enum ComputeIneligibleReason {
-  // 2 was COMPUTE_INELIGIBLE_REASON_TRIAL_EXPIRED. There is no signup compute
-  // trial and no free compute, so nothing can have lapsed; the server stopped
-  // emitting it with the trial ladder's deletion. Reserved, never reuse.
-  reserved 2;
-  reserved "COMPUTE_INELIGIBLE_REASON_TRIAL_EXPIRED";
-
   COMPUTE_INELIGIBLE_REASON_UNSPECIFIED = 0;
   // The caller is eligible; no reason applies.
   COMPUTE_INELIGIBLE_REASON_NONE = 1;
