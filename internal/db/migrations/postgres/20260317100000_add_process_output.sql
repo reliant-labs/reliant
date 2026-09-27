@@ -11,6 +11,3 @@ CREATE TABLE IF NOT EXISTS background_process_output (
 CREATE INDEX IF NOT EXISTS idx_bg_proc_output_process_seq 
     ON background_process_output(process_id, seq);
 
--- +goose Down
-DROP INDEX IF EXISTS idx_bg_proc_output_process_seq;
-DROP TABLE IF EXISTS background_process_output;

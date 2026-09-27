@@ -232,38 +232,3 @@ CREATE TABLE IF NOT EXISTS project_configs (
 CREATE INDEX IF NOT EXISTS idx_project_configs_daemon_id ON project_configs(daemon_id);
 CREATE INDEX IF NOT EXISTS idx_project_configs_pushed_at ON project_configs(pushed_at DESC);
 
--- +goose Down
-
-DROP INDEX IF EXISTS idx_project_configs_pushed_at;
-DROP INDEX IF EXISTS idx_project_configs_daemon_id;
-DROP TABLE IF EXISTS project_configs;
-
-DROP INDEX IF EXISTS idx_daemons_status;
-DROP INDEX IF EXISTS idx_daemons_user_id;
-DROP TABLE IF EXISTS daemons;
-
-DROP INDEX IF EXISTS idx_user_updates_entity;
-DROP INDEX IF EXISTS idx_user_updates_chat;
-DROP INDEX IF EXISTS idx_user_updates_project;
-DROP INDEX IF EXISTS idx_user_updates_poll;
-DROP TABLE IF EXISTS user_updates;
-
-DROP INDEX IF EXISTS idx_bg_processes_cleanup;
-DROP INDEX IF EXISTS idx_bg_processes_running;
-DROP INDEX IF EXISTS idx_bg_processes_chat;
-DROP INDEX IF EXISTS idx_bg_processes_user;
-DROP INDEX IF EXISTS idx_bg_processes_worktree;
-DROP TABLE IF EXISTS background_processes;
-
-DROP INDEX IF EXISTS idx_tool_exec_requests_backgrounded;
-DROP INDEX IF EXISTS idx_tool_exec_cleanup;
-DROP INDEX IF EXISTS idx_tool_exec_daemon;
-DROP INDEX IF EXISTS idx_tool_exec_tool_call;
-DROP INDEX IF EXISTS idx_tool_exec_status_created;
-DROP INDEX IF EXISTS idx_tool_exec_chat;
-DROP INDEX IF EXISTS idx_tool_exec_user_status;
-DROP TABLE IF EXISTS tool_execution_requests;
-
-DROP INDEX IF EXISTS idx_api_keys_provider;
-DROP INDEX IF EXISTS idx_api_keys_user;
-DROP TABLE IF EXISTS api_keys;

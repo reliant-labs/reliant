@@ -75,8 +75,3 @@ WHERE m.id = tc.message_id
   AND m.thread_id IS NOT NULL
   AND m.thread_id <> '';
 
--- +goose Down
-
--- Not reversible, and nothing is lost by that: the prior state of these rows
--- is NULL -- the absence of a fact -- and this migration only ever fills NULLs.
-SELECT 1;

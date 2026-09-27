@@ -101,13 +101,3 @@ CREATE INDEX CONCURRENTLY idx_workflows_owner_user_id
     ON workflows (owner_user_id)
     WHERE owner_user_id IS NOT NULL;
 
--- +goose Down
--- Lossy, and deliberately so. Rolling back discards each run's own identity
--- and returns it to borrowing one from its chat — which is correct while
--- chat_id is still NOT NULL, because every row can still find its owner that
--- way. It stops being safe once chatless runs exist, and the migration that
--- makes chat_id nullable is the one that has to say so.
-DROP INDEX CONCURRENTLY IF EXISTS idx_workflows_owner_user_id;
-
-ALTER TABLE workflows
-    DROP COLUMN IF EXISTS owner_user_id;

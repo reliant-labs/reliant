@@ -77,35 +77,3 @@ SELECT
     END as activity
 FROM chats c;
 
--- +goose Down
-CREATE OR REPLACE VIEW chats_with_activity AS
-SELECT
-    c.*,
-    (SELECT MAX(m.created_at) FROM messages m WHERE m.chat_id = c.id) as last_message_at,
-    CASE
-        WHEN EXISTS (
-            SELECT 1 FROM approvals a
-            WHERE a.chat_id = c.id AND a.status = 1
-        ) THEN 2
-        WHEN EXISTS (
-            SELECT 1 FROM questions q
-            WHERE q.chat_id = c.id AND q.status = 1
-        ) THEN 2
-        WHEN EXISTS (
-            SELECT 1 FROM workflows w
-            WHERE w.chat_id = c.id
-              AND w.status = 2
-        ) THEN 1
-        WHEN EXISTS (
-            SELECT 1 FROM workflows w
-            WHERE w.chat_id = c.id
-              AND w.status = 4
-        ) THEN 3
-        WHEN EXISTS (
-            SELECT 1 FROM workflows w
-            WHERE w.chat_id = c.id
-              AND w.status = 6
-        ) THEN 4
-        ELSE 0
-    END as activity
-FROM chats c;

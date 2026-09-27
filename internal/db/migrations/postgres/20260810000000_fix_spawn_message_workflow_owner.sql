@@ -48,8 +48,3 @@ WHERE t.id = m.thread_id
   AND m.workflow_id IS NOT NULL
   AND m.workflow_id <> m.thread_id;
 
--- +goose Down
-
--- Not reversible. The prior value named a workflow that was not running this
--- thread; restoring it would restore the spurious handoff.
-SELECT 1;

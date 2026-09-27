@@ -308,27 +308,3 @@ CREATE TABLE IF NOT EXISTS workflow_scenarios (
     version BIGINT NOT NULL
 );
 
--- +goose Down
-
-DROP TABLE IF EXISTS workflow_scenarios;
-DROP TABLE IF EXISTS workflow_drafts;
-DROP TABLE IF EXISTS step_executions;
-DROP TABLE IF EXISTS presets;
-DROP TABLE IF EXISTS default_preset_assignments;
-DROP TABLE IF EXISTS item_defaults;
-DROP TABLE IF EXISTS visibility_overrides;
-DROP TABLE IF EXISTS command_favorites;
-DROP TABLE IF EXISTS attachments;
-DROP TABLE IF EXISTS approvals;
-DROP TABLE IF EXISTS chat_updates;
-DROP TABLE IF EXISTS message_content_blocks;
-DROP TABLE IF EXISTS messages;
-DROP TABLE IF EXISTS context_windows;
-DROP TABLE IF EXISTS threads;
-DROP TABLE IF EXISTS workflows;
-DROP TABLE IF EXISTS chats;
-DROP TABLE IF EXISTS settings;
-DROP TABLE IF EXISTS tasks;
-DROP TABLE IF EXISTS plans;
-DROP TABLE IF EXISTS worktrees;
-DROP TABLE IF EXISTS projects;

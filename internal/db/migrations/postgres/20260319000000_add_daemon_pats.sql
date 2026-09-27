@@ -15,7 +15,3 @@ CREATE TABLE IF NOT EXISTS daemon_pats (
 CREATE INDEX IF NOT EXISTS idx_daemon_pats_token_hash ON daemon_pats(token_hash);
 CREATE INDEX IF NOT EXISTS idx_daemon_pats_user_id ON daemon_pats(user_id);
 
--- +goose Down
-DROP INDEX IF EXISTS idx_daemon_pats_user_id;
-DROP INDEX IF EXISTS idx_daemon_pats_token_hash;
-DROP TABLE IF EXISTS daemon_pats;

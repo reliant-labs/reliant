@@ -21,6 +21,3 @@ CREATE TABLE antigravity_auth_tokens (
 
 CREATE INDEX idx_antigravity_auth_tokens_user ON antigravity_auth_tokens(user_id);
 
--- +goose Down
-
-DROP TABLE IF EXISTS antigravity_auth_tokens;

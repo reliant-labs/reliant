@@ -44,6 +44,3 @@ CREATE TABLE agent_messages (
 CREATE INDEX idx_agent_messages_inbox
     ON agent_messages(to_thread_id, created_at) WHERE status = 1;
 
--- +goose Down
-
-DROP TABLE IF EXISTS agent_messages;

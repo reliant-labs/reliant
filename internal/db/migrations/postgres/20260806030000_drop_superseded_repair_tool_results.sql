@@ -59,9 +59,3 @@ WHERE stub.block_type = 3
 -- and an empty TOOL-role message renders as nothing. Only the false claim is
 -- removed.
 
--- +goose Down
-
--- Not reversible. The deleted rows asserted an outcome ("interrupted — outcome
--- unknown") that was contradicted by the real result recorded minutes later;
--- restoring them would restore the contradiction.
-SELECT 1;

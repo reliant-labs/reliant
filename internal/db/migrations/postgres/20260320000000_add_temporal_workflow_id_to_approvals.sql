@@ -8,5 +8,3 @@
 
 ALTER TABLE approvals ADD COLUMN temporal_workflow_id TEXT NOT NULL DEFAULT '';
 
--- +goose Down
-ALTER TABLE approvals DROP COLUMN temporal_workflow_id;

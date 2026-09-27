@@ -53,9 +53,3 @@ WHERE w.id = cu.data::jsonb->>'workflow_id'
   -- damage on a database where that does not hold.
   AND w.chat_id = cu.chat_id;
 
--- +goose Down
-
--- Not reversible, and nothing is lost: the prior state is the ABSENCE of a
--- thread — no information — and this only fills that absence with a value
--- read from the error's own workflow.
-SELECT 1;

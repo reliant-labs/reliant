@@ -7,5 +7,3 @@
 
 ALTER TABLE yields ADD COLUMN temporal_workflow_id TEXT NOT NULL DEFAULT '';
 
--- +goose Down
-ALTER TABLE yields DROP COLUMN temporal_workflow_id;

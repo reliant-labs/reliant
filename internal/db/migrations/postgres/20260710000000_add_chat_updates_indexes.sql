@@ -17,7 +17,3 @@
 CREATE INDEX IF NOT EXISTS idx_chat_updates_chat_seq ON chat_updates(chat_id, sequence_number DESC);
 CREATE INDEX IF NOT EXISTS idx_chat_updates_created ON chat_updates(created_at DESC);
 
--- +goose Down
-
-DROP INDEX IF EXISTS idx_chat_updates_chat_seq;
-DROP INDEX IF EXISTS idx_chat_updates_created;

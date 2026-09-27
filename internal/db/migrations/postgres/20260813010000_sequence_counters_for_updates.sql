@@ -65,6 +65,3 @@ SELECT setval(
     true
 );
 
--- +goose Down
-DROP SEQUENCE IF EXISTS user_updates_sequence_number_seq;
-DROP SEQUENCE IF EXISTS chat_updates_sequence_number_seq;

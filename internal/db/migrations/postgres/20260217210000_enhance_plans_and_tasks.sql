@@ -30,11 +30,3 @@ ALTER TABLE plans ADD COLUMN project_id TEXT REFERENCES projects(id) ON DELETE C
 
 CREATE INDEX idx_plans_project ON plans(project_id) WHERE project_id IS NOT NULL;
 
--- +goose Down
-
-DROP INDEX IF EXISTS idx_plans_project;
-DROP TABLE IF EXISTS task_dependencies;
-ALTER TABLE plans DROP COLUMN IF EXISTS project_id;
-ALTER TABLE plans DROP COLUMN IF EXISTS complexity;
-ALTER TABLE tasks DROP COLUMN IF EXISTS assignee;
-ALTER TABLE tasks DROP COLUMN IF EXISTS metadata;

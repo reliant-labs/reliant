@@ -18,6 +18,3 @@ CREATE TABLE claude_auth_tokens (
 
 CREATE INDEX idx_claude_auth_tokens_user ON claude_auth_tokens(user_id);
 
--- +goose Down
-
-DROP TABLE IF EXISTS claude_auth_tokens;

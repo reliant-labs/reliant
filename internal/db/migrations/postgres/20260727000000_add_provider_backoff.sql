@@ -29,5 +29,3 @@ CREATE TABLE IF NOT EXISTS provider_backoff (
 
 CREATE INDEX IF NOT EXISTS idx_provider_backoff_chat_id ON provider_backoff(chat_id);
 
--- +goose Down
-DROP TABLE IF EXISTS provider_backoff;

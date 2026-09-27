@@ -88,11 +88,3 @@ BEGIN
 END $$;
 -- +goose StatementEnd
 
--- +goose Down
--- Restores the column's SHAPE, not its meaning. The original migration
--- backfilled kind from data that no longer exists in that form, so a down/up
--- round trip cannot reconstruct the old values -- and must not pretend to.
--- Every row gets the default, which is what a fresh database would also have
--- had. Down migrations here exist to make the schema reversible, not to
--- resurrect a taxonomy the product has moved off.
-ALTER TABLE threads ADD COLUMN IF NOT EXISTS kind integer NOT NULL DEFAULT 0;

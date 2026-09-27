@@ -12,5 +12,3 @@
 
 ALTER TABLE worktrees ADD COLUMN base_branches TEXT;
 
--- +goose Down
-ALTER TABLE worktrees DROP COLUMN IF EXISTS base_branches;

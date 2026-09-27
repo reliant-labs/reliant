@@ -47,24 +47,3 @@ CREATE TABLE IF NOT EXISTS workflow_checkpoints (
 
 CREATE INDEX IF NOT EXISTS idx_workflow_checkpoints_chat_id ON workflow_checkpoints(chat_id);
 
--- +goose Down
--- Down restores the position stack table so this migration is reversible in
--- isolation, but NOT its NOT NULL workflow_name/workflow_hash columns: those
--- are the defect this migration exists to remove, and recreating them would
--- rebuild a table no writer can insert into.
-DROP TABLE IF EXISTS workflow_checkpoints;
-
-CREATE TABLE IF NOT EXISTS workflow_positions (
-    workflow_id TEXT NOT NULL,
-    depth INTEGER NOT NULL,
-    chat_id TEXT NOT NULL,
-    node_id TEXT NOT NULL,
-    in_loop BOOLEAN NOT NULL DEFAULT FALSE,
-    iteration BIGINT NOT NULL DEFAULT 0,
-    memo BOOLEAN NOT NULL DEFAULT FALSE,
-    kind TEXT NOT NULL,
-    updated_at TIMESTAMPTZ NOT NULL,
-    PRIMARY KEY (workflow_id, depth)
-);
-
-CREATE INDEX IF NOT EXISTS idx_workflow_positions_chat_id ON workflow_positions(chat_id);

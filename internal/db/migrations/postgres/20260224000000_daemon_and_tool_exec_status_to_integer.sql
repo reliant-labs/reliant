@@ -32,5 +32,3 @@ ALTER TABLE tool_execution_requests ALTER COLUMN status SET DEFAULT 1;
 CREATE INDEX IF NOT EXISTS idx_tool_exec_cleanup ON tool_execution_requests(status, completed_at)
     WHERE status IN (3, 4, 5, 6);
 
--- +goose Down
--- Pre-launch migration; down is not supported.

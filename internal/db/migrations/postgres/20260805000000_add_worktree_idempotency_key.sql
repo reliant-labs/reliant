@@ -28,6 +28,3 @@ CREATE UNIQUE INDEX idx_worktrees_idempotency_key
     ON worktrees (project_id, idempotency_key)
     WHERE idempotency_key IS NOT NULL;
 
--- +goose Down
-DROP INDEX IF EXISTS idx_worktrees_idempotency_key;
-ALTER TABLE worktrees DROP COLUMN IF EXISTS idempotency_key;

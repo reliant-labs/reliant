@@ -74,26 +74,3 @@ UPDATE connector_grants SET revoked_at = now() WHERE revoked_at IS NULL;
 DROP INDEX IF EXISTS idx_connector_grants_token_hash;
 ALTER TABLE connector_grants DROP COLUMN IF EXISTS token_hash;
 
--- +goose Down
-ALTER TABLE connector_grants ADD COLUMN IF NOT EXISTS token_hash text;
-UPDATE connector_grants SET token_hash = 'retired:' || id WHERE token_hash IS NULL;
-ALTER TABLE connector_grants ALTER COLUMN token_hash SET NOT NULL;
-ALTER TABLE connector_grants ADD CONSTRAINT connector_grants_token_hash_key UNIQUE (token_hash);
-CREATE INDEX IF NOT EXISTS idx_connector_grants_token_hash ON connector_grants(token_hash);
-
-CREATE TABLE IF NOT EXISTS daemon_pats (
-    id           text PRIMARY KEY,
-    user_id      text NOT NULL,
-    token_hash   text NOT NULL,
-    token_prefix text NOT NULL,
-    name         text NOT NULL,
-    ephemeral    boolean NOT NULL DEFAULT false,
-    expires_at   timestamptz,
-    last_used_at timestamptz,
-    revoked_at   timestamptz,
-    created_at   timestamptz NOT NULL DEFAULT now(),
-    daemon_id    text,
-    kind         text NOT NULL DEFAULT 'daemon'
-);
-
-DROP TABLE IF EXISTS access_tokens;

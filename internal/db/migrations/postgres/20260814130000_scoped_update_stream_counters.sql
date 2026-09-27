@@ -41,5 +41,3 @@ GROUP BY chat_id;
 DROP SEQUENCE IF EXISTS user_updates_sequence_number_seq;
 DROP SEQUENCE IF EXISTS chat_updates_sequence_number_seq;
 
--- +goose Down
-DROP TABLE update_stream_counters;

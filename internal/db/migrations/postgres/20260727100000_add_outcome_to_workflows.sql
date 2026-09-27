@@ -13,5 +13,3 @@
 -- declare nothing; only ones with an explicit pass/fail terminal do.
 ALTER TABLE workflows ADD COLUMN IF NOT EXISTS outcome TEXT;
 
--- +goose Down
-ALTER TABLE workflows DROP COLUMN IF EXISTS outcome;

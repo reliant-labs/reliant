@@ -12,6 +12,3 @@ DROP TRIGGER IF EXISTS user_updates_chat_config_update ON chats;
 DROP FUNCTION IF EXISTS chat_updates_chat_update_fn();
 DROP FUNCTION IF EXISTS user_updates_chat_config_update_fn();
 
--- +goose Down
--- No-op: Postgres never had these triggers in the standard migration path.
--- If needed, recreate them following the SQLite down migration pattern.

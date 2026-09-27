@@ -13,7 +13,3 @@ ALTER TABLE approvals ADD COLUMN thread_id text REFERENCES threads(id) ON DELETE
 
 CREATE INDEX idx_approvals_thread_id ON approvals(thread_id) WHERE thread_id IS NOT NULL;
 
--- +goose Down
-
-DROP INDEX IF EXISTS idx_approvals_thread_id;
-ALTER TABLE approvals DROP COLUMN IF EXISTS thread_id;

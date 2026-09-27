@@ -6,5 +6,3 @@
 -- disconnect, since ports from a dead daemon are meaningless.
 ALTER TABLE daemon_attachment ADD COLUMN detected_ports TEXT NOT NULL DEFAULT '[]';
 
--- +goose Down
-ALTER TABLE daemon_attachment DROP COLUMN detected_ports;

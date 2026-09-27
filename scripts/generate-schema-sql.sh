@@ -63,9 +63,9 @@ echo "▶ Applying migrations from $MIGRATIONS..."
 docker exec -i "$CONTAINER" mkdir -p /migrations
 docker cp "$MIGRATIONS/." "$CONTAINER:/migrations/" >/dev/null
 
-# Apply migrations in filename order with psql. Each goose migration's Up
-# section is delimited by the goose annotations, so strip everything from the
-# "-- +goose Down" marker onward and feed the rest to psql.
+# Apply migrations in filename order with psql. Migrations are up-only (no
+# "-- +goose Down" sections — TestMigrationsHaveNoGooseDownSection enforces it),
+# so strip the goose annotation lines and feed the rest to psql.
 shopt -s nullglob
 migrations=("$MIGRATIONS"/*.sql)
 shopt -u nullglob
@@ -76,10 +76,7 @@ fi
 
 for m in "${migrations[@]}"; do
   name="$(basename "$m")"
-  # Take the Up section only, honouring goose's StatementBegin/End blocks by
-  # simply cutting at the Down marker.
-  if ! sed '/^-- +goose Down/,$d' "$m" \
-    | sed -e '/^-- +goose /d' \
+  if ! sed -e '/^-- +goose /d' "$m" \
     | docker exec -i "$CONTAINER" psql -U postgres -d schema_dump -v ON_ERROR_STOP=1 -q >/dev/null; then
     echo "❌ Migration failed to apply: $name" >&2
     exit 1

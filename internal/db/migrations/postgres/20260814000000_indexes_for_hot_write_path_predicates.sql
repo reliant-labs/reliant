@@ -88,13 +88,3 @@ CREATE INDEX IF NOT EXISTS idx_chats_user_project ON chats (user_id, project_id)
 -- insert into.
 CREATE INDEX IF NOT EXISTS idx_step_executions_workflow_id ON step_executions (workflow_id);
 
--- +goose Down
-DROP INDEX IF EXISTS idx_step_executions_workflow_id;
-DROP INDEX IF EXISTS idx_chats_user_project;
-DROP INDEX IF EXISTS idx_messages_chat_created_at;
-DROP INDEX IF EXISTS idx_tool_call_results_message_id;
-DROP INDEX IF EXISTS idx_tool_calls_child_workflow_id;
-DROP INDEX IF EXISTS idx_tool_calls_thread_id;
-DROP INDEX IF EXISTS idx_workflows_parent_id;
-DROP INDEX IF EXISTS idx_workflows_status;
-DROP INDEX IF EXISTS idx_workflows_chat_id;

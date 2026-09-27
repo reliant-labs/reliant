@@ -10,6 +10,3 @@
 -- (never queried by individual element), so jsonb needs no GIN index either.
 ALTER TABLE agent_messages ADD COLUMN attachments jsonb;
 
--- +goose Down
-
-ALTER TABLE agent_messages DROP COLUMN attachments;

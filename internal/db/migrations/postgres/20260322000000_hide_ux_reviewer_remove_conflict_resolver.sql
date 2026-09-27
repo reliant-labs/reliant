@@ -18,20 +18,3 @@ DELETE FROM item_defaults WHERE id = 'default-preset-conflict-resolver';
 
 -- +goose StatementEnd
 
--- +goose Down
--- +goose StatementBegin
-
-DELETE FROM item_defaults WHERE id = 'default-preset-ux-reviewer';
-
-INSERT INTO item_defaults (id, item_type, slug, is_hidden, reason, created_at, updated_at)
-VALUES (
-    'default-preset-conflict-resolver',
-    2,
-    'conflict-resolver',
-    true,
-    'Specialist preset spawned by git preset',
-    NOW(),
-    NOW()
-) ON CONFLICT (item_type, slug) DO NOTHING;
-
--- +goose StatementEnd

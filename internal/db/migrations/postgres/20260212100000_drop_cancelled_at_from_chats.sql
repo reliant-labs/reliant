@@ -8,8 +8,3 @@ ALTER TABLE chats
 
 DROP INDEX IF EXISTS idx_chats_cancelled_at;
 
--- +goose Down
-ALTER TABLE chats
-    ADD COLUMN cancelled_at TIMESTAMP;
-
-CREATE INDEX IF NOT EXISTS idx_chats_cancelled_at ON chats(id, cancelled_at);

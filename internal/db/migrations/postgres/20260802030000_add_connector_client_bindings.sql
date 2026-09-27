@@ -44,5 +44,3 @@ CREATE INDEX idx_connector_client_bindings_lookup
 CREATE INDEX idx_connector_client_bindings_grant
     ON connector_client_bindings(grant_id);
 
--- +goose Down
-DROP TABLE IF EXISTS connector_client_bindings;

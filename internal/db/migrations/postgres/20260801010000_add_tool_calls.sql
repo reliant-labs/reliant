@@ -200,7 +200,3 @@ SELECT
 FROM result_blocks r
 JOIN tool_calls tc ON tc.id = r.tool_call_id;
 
--- +goose Down
-
-DROP TABLE IF EXISTS tool_call_results;
-DROP TABLE IF EXISTS tool_calls;
