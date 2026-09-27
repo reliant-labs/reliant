@@ -1510,11 +1510,8 @@ type PlanLimits struct {
 	// while BOUND.
 	//
 	// GiB-HOURS, NOT GiB-MONTHS, because hours are what the meter produces:
-	// every usage bucket records its own tick_seconds. Tag 17 previously
-	// carried a GiB-months figure against that hourly meter — a
-	// factor-of-730 mismatch between what was sold and what was counted —
-	// so it is reserved below rather than reinterpreted in place. A client
-	// renders months by dividing by 730.
+	// every usage bucket records its own tick_seconds. A client renders
+	// months by dividing by 730.
 	//
 	// SCALE-TO-ZERO DOES NOT STOP THIS METER, and that is the honest
 	// behavior rather than an oversight: the disk is still allocated and
@@ -3512,7 +3509,7 @@ const file_controlplane_v1_shared_proto_rawDesc = "" +
 	"\x18notify_threshold_percent\x18\x01 \x01(\x01R\x16notifyThresholdPercent\x12.\n" +
 	"\x13overage_grace_hours\x18\x02 \x01(\x05R\x11overageGraceHours\x12,\n" +
 	"\x12suspend_on_overage\x18\x03 \x01(\bR\x10suspendOnOverage\x12A\n" +
-	"\x1dnon_suspendable_dimension_ids\x18\x04 \x03(\tR\x1anonSuspendableDimensionIds\"\xf1\v\n" +
+	"\x1dnon_suspendable_dimension_ids\x18\x04 \x03(\tR\x1anonSuspendableDimensionIds\"\xbb\t\n" +
 	"\n" +
 	"PlanLimits\x12\x1b\n" +
 	"\tmax_seats\x18\x01 \x01(\x05R\bmaxSeats\x12%\n" +
@@ -3537,7 +3534,7 @@ const file_controlplane_v1_shared_proto_rawDesc = "" +
 	"\x0fmax_deployments\x18\x1d \x01(\x05R\x0emaxDeployments\x124\n" +
 	"\x17min_memory_gib_per_vcpu\x18\x1e \x01(\x01R\x13minMemoryGibPerVcpu\x124\n" +
 	"\x17max_memory_gib_per_vcpu\x18\x1f \x01(\x01R\x13maxMemoryGibPerVcpu\x12U\n" +
-	"\x14infra_overage_policy\x18  \x01(\v2#.controlplane.v1.InfraOveragePolicyR\x12infraOveragePolicyJ\x04\b\x05\x10\x06J\x04\b\x06\x10\aJ\x04\b\x11\x10\x12J\x04\b\x13\x10\x14J\x04\b\x14\x10\x15J\x04\b\x15\x10\x16J\x04\b\x16\x10\x17J\x04\b\x17\x10\x18J\x04\b\x18\x10\x19J\x04\b\x19\x10\x1aJ\x04\b\x1a\x10\x1bR\rip_restrictedR\x0fmax_ips_per_keyR\x1bincluded_storage_gib_monthsR\x13included_egress_gibR\x19egress_overage_rate_centsR\x17included_cdn_egress_gibR\x1dcdn_egress_overage_rate_centsR\x1eincluded_cdn_requests_millionsR\x1fcdn_requests_overage_rate_centsR\x16included_build_minutesR build_minutes_overage_rate_cents\"\x87\x03\n" +
+	"\x14infra_overage_policy\x18  \x01(\v2#.controlplane.v1.InfraOveragePolicyR\x12infraOveragePolicyJ\x04\b\x05\x10\x06J\x04\b\x06\x10\aR\rip_restrictedR\x0fmax_ips_per_key\"\x87\x03\n" +
 	"\x04Plan\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1d\n" +
 	"\n" +
