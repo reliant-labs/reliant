@@ -225,12 +225,9 @@ export function toCloudPromotion(msg: DeployPromotion): CloudPromotion {
   return {
     id: msg.id,
     releaseVersion: msg.releaseVersion,
-    kind:
-      msg.kind === DeployPromotionKind.PROMOTE
-        ? "promote"
-        : msg.kind === DeployPromotionKind.ROLLBACK
-          ? "rollback"
-          : "unknown",
+    // There is no rollback kind any more (roll forward only): the control
+    // plane reads historical rollback rows as promotes of that release.
+    kind: msg.kind === DeployPromotionKind.PROMOTE ? "promote" : "unknown",
     fromEnvironmentId: msg.fromEnvironmentId,
     promotedByUserId: msg.promotedByUserId,
     promotedByActor: msg.promotedByActor,
