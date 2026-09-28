@@ -1528,7 +1528,7 @@ type PlanLimits struct {
 	// Per-hour floor charged for each provisioned vCluster, in cents.
 	// 2.0 = $0.02/hr.
 	VclusterFloorRateCentsPerHour float64 `protobuf:"fixed64,28,opt,name=vcluster_floor_rate_cents_per_hour,json=vclusterFloorRateCentsPerHour,proto3" json:"vcluster_floor_rate_cents_per_hour,omitempty"`
-	// Maximum concurrently deployed workloads (SimpleBackend, StaticSite,
+	// Maximum concurrently deployed workloads (Workload, StaticSite,
 	// ManagedDatabase) across the tenant.
 	MaxDeployments int32 `protobuf:"varint,29,opt,name=max_deployments,json=maxDeployments,proto3" json:"max_deployments,omitempty"`
 	// The memory:CPU ratio band a deployment's requests must fall inside,

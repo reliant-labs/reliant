@@ -434,7 +434,7 @@ message Deployment {
   // THE DECLARED HALF: forge's tier spec, verbatim.
   //
   // This is the JSON of forge's `v1alpha1.<Tier>Spec` for this deployment's
-  // tier (github.com/reliant-labs/forge/pkg/deploy/v1alpha1): SimpleBackendSpec
+  // tier (github.com/reliant-labs/forge/pkg/deploy/v1alpha1): WorkloadSpec
   // for BACKEND, StaticSiteSpec for STATIC, ManagedDatabaseSpec for DATABASE,
   // in forge's own camelCase json tags. There is deliberately NO proto mirror
   // of those types. One Go type defines the tier, forge's, and a second

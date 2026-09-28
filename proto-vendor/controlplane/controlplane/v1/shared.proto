@@ -423,7 +423,7 @@ message PlanLimits {
   // 2.0 = $0.02/hr.
   double vcluster_floor_rate_cents_per_hour = 28;
 
-  // Maximum concurrently deployed workloads (SimpleBackend, StaticSite,
+  // Maximum concurrently deployed workloads (Workload, StaticSite,
   // ManagedDatabase) across the tenant.
   int32 max_deployments = 29;
 
