@@ -27,7 +27,16 @@
 --     Existing grants are revoked: their credentials no longer exist, and a
 --     live grant with no credential would be unreachable yet look usable.
 
-CREATE TABLE access_tokens (
+-- IF NOT EXISTS, on every statement here, because this file once ran under a
+-- DIFFERENT version. It shipped as 20260923000000 in #293 — a version
+-- 20260923000000_temporal_payload_blobs.sql already owned — and was renumbered
+-- to 20260925000000 an hour later in #294. A database that ran main in that
+-- window has these objects already, recorded under the wrong version, and
+-- 20260925000000 still pending; a bare CREATE TABLE fails there and api-server
+-- cannot start. Guarding lets such a database roll forward on plain startup.
+-- Databases that recorded 20260925000000 never re-run this, and on a fresh
+-- database the result is byte-identical.
+CREATE TABLE IF NOT EXISTS access_tokens (
     id                  text PRIMARY KEY,
     org_id              text NOT NULL,
     name                text NOT NULL,
@@ -62,10 +71,10 @@ CREATE TABLE access_tokens (
     CONSTRAINT access_tokens_ephemeral_expires CHECK (NOT ephemeral OR expires_at IS NOT NULL)
 );
 
-CREATE INDEX access_tokens_live_hash ON access_tokens (token_hash) WHERE revoked_at IS NULL;
-CREATE INDEX access_tokens_live_resource ON access_tokens (resource_kind, resource_id)
+CREATE INDEX IF NOT EXISTS access_tokens_live_hash ON access_tokens (token_hash) WHERE revoked_at IS NULL;
+CREATE INDEX IF NOT EXISTS access_tokens_live_resource ON access_tokens (resource_kind, resource_id)
     WHERE revoked_at IS NULL AND resource_kind IS NOT NULL;
-CREATE INDEX access_tokens_live_acting_user ON access_tokens (acting_user_id, name)
+CREATE INDEX IF NOT EXISTS access_tokens_live_acting_user ON access_tokens (acting_user_id, name)
     WHERE revoked_at IS NULL AND acting_user_id IS NOT NULL;
 
 DROP TABLE IF EXISTS daemon_pats;
