@@ -14,31 +14,44 @@ import (
 // runtime when wrong: the request still goes out, just at the wrong effort.
 
 // Agent presets name a TIER, never an effort: `general` asks for [flagship],
-// `implementer` asks for [moderate]. claude-5.5-opus answers both, and the tier
-// it was reached through decides how hard it thinks. These are the shipping
-// pins — changing either is a cost/quality decision, so it must fail here.
-func TestResolve_Opus55EffortFollowsTheSelectingTier(t *testing.T) {
+// `implementer` asks for [moderate]. The two tiers are deliberately DIFFERENT
+// models: flagship is claude-5.5-opus @ xhigh for orchestration, moderate is
+// claude-5-opus @ medium for implementation, where 5-opus measured ~3x faster
+// per edit than 5.5 at the same effort. These are the shipping pins —
+// changing either is a cost/speed/quality decision, so it must fail here.
+func TestResolve_AgentTiersPinModelAndEffort(t *testing.T) {
 	reg := MustGetRegistry()
 
 	for _, tt := range []struct {
 		tag       string
+		wantModel string
+		vertex    string // the vertex-only twin, which must mirror the entry
 		wantLevel string
 	}{
-		{TagFlagship, "xhigh"},
-		{TagModerate, "high"},
+		{TagFlagship, "claude-5.5-opus", "vertex-claude-5.5-opus", "xhigh"},
+		{TagModerate, "claude-5-opus", "vertex-claude-5-opus", "medium"},
 	} {
 		t.Run(tt.tag, func(t *testing.T) {
-			for _, id := range []string{"claude-5.5-opus", "vertex-claude-5.5-opus"} {
+			for _, id := range []string{tt.wantModel, tt.vertex} {
 				assert.Equal(t, tt.wantLevel, entryLevel(t, reg, tt.tag, id),
 					"%s must run at %s under %q", id, tt.wantLevel, tt.tag)
 			}
 
-			for _, providers := range [][]string{allTestProviders, {"anthropic"}, {"reliant"}, {"vertexai"}} {
+			for _, providers := range [][]string{allTestProviders, {"anthropic"}, {"reliant"}} {
 				resolved, err := reg.Resolve(ModelSelector{Tags: []string{tt.tag}}, providers)
 				require.NoError(t, err)
-				assert.Equal(t, "claude-5.5-opus", resolved.Definition.ID, "providers %v", providers)
+				assert.Equal(t, tt.wantModel, resolved.Definition.ID, "providers %v", providers)
 				assert.Equal(t, tt.wantLevel, resolved.ThinkingLevel, "providers %v", providers)
 			}
+
+			// A Vertex-only user reaches the same wire model at the same effort —
+			// through the twin when the primary entry has no vertexai mapping
+			// (claude-5-opus), or directly when it does (claude-5.5-opus).
+			vertex, err := reg.Resolve(ModelSelector{Tags: []string{tt.tag}}, []string{"vertexai"})
+			require.NoError(t, err)
+			assert.Contains(t, []string{tt.wantModel, tt.vertex}, vertex.Definition.ID)
+			assert.Equal(t, "vertexai", vertex.Provider.Driver)
+			assert.Equal(t, tt.wantLevel, vertex.ThinkingLevel)
 		})
 	}
 }
@@ -219,15 +232,15 @@ func TestMergeUserConfig_UserTagEntriesLeadAndRetune(t *testing.T) {
 
 	require.NoError(t, reg.MergeUserConfig(&UserModelsConfig{
 		Tags: map[string][]TagEntry{
-			TagModerate: {{Model: "claude-5.5-opus", ThinkingLevel: "medium"}},
+			TagModerate: {{Model: "claude-5-opus", ThinkingLevel: "low"}},
 			TagFlagship: {{Model: "gpt-5.5", ThinkingLevel: "high"}},
 		},
 	}))
 
 	moderate, err := reg.Resolve(ModelSelector{Tags: []string{TagModerate}}, []string{"anthropic"})
 	require.NoError(t, err)
-	assert.Equal(t, "claude-5.5-opus", moderate.Definition.ID)
-	assert.Equal(t, "medium", moderate.ThinkingLevel, "the user's effort replaces the built-in one")
+	assert.Equal(t, "claude-5-opus", moderate.Definition.ID)
+	assert.Equal(t, "low", moderate.ThinkingLevel, "the user's effort replaces the built-in one")
 
 	flagship, err := reg.Resolve(ModelSelector{Tags: []string{TagFlagship}}, []string{"anthropic", "openai"})
 	require.NoError(t, err)
@@ -244,7 +257,7 @@ func TestMergeUserConfig_UserTagEntriesLeadAndRetune(t *testing.T) {
 	// The model appears exactly once in the merged list.
 	count := 0
 	for _, entry := range reg.TagEntries(TagModerate) {
-		if entry.Model == "claude-5.5-opus" {
+		if entry.Model == "claude-5-opus" {
 			count++
 		}
 	}
@@ -253,7 +266,7 @@ func TestMergeUserConfig_UserTagEntriesLeadAndRetune(t *testing.T) {
 	// The shared registry is untouched.
 	original, err := MustGetRegistry().Resolve(ModelSelector{Tags: []string{TagModerate}}, []string{"anthropic"})
 	require.NoError(t, err)
-	assert.Equal(t, "high", original.ThinkingLevel)
+	assert.Equal(t, "medium", original.ThinkingLevel)
 }
 
 // A custom model joins a tier only through a user tag entry — models carry

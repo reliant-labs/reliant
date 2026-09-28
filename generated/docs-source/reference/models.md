@@ -51,10 +51,10 @@ Models are tagged to help with selection. You can also [bring your own model](/d
 | `claude-4.6-sonnet` | Claude 4.6 Sonnet | moderate, reasoning | 200K | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} | anthropic, openrouter, reliant |
 | `claude-4.8-opus` | Claude 4.8 Opus | flagship, reasoning | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} | anthropic, openrouter, reliant |
 | `claude-5-fable` | Claude 5 Fable | flagship, reasoning | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} | anthropic, openrouter, reliant |
-| `claude-5-opus` | Claude 5 Opus | flagship, reasoning | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} | anthropic, openrouter, reliant |
+| `claude-5-opus` | Claude 5 Opus | flagship, moderate, reasoning | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} | anthropic, openrouter, reliant |
 | `claude-5-sonnet` | Claude 5 Sonnet | flagship, moderate, reasoning | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} | anthropic, openrouter, reliant, copilot |
 | `claude-5.1-fable` | Claude 5.1 Fable | flagship, powerful, reasoning | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} | anthropic, openrouter, reliant, vertexai |
-| `claude-5.5-opus` | Claude 5.5 Opus | flagship, moderate, reasoning | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} | anthropic, openrouter, reliant, vertexai |
+| `claude-5.5-opus` | Claude 5.5 Opus | flagship, reasoning | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} | anthropic, openrouter, reliant, vertexai |
 
 **Note:** All Claude models support attachments (images, PDFs) and prompt caching.
 
@@ -152,7 +152,7 @@ _Balance of capability and cost_
 
 | Model | Provider | Effort | Context | Capabilities |
 |-------|----------|--------|---------|-------------|
-| `claude-5.5-opus` | Anthropic | high | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
+| `claude-5-opus` | Anthropic | medium | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
 | `claude-5-sonnet` | Anthropic | high | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
 | `gpt-5.5` | OpenAI | xhigh | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
 | `gpt-5.6-terra` | OpenAI | medium | 272K | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |

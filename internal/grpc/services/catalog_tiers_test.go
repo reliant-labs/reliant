@@ -27,8 +27,8 @@ func TestTierResolutions_ReportModelAndEffortPerTag(t *testing.T) {
 
 	moderate, ok := tiers["moderate"]
 	require.True(t, ok, "moderate must resolve on anthropic")
-	assert.Equal(t, "claude-5.5-opus@anthropic", moderate.ModelId)
-	assert.Equal(t, "high", moderate.ThinkingLevel)
+	assert.Equal(t, "claude-5-opus@anthropic", moderate.ModelId)
+	assert.Equal(t, "medium", moderate.ThinkingLevel)
 }
 
 func TestTierResolutions_SkipsNonTextAndUnresolvableTags(t *testing.T) {

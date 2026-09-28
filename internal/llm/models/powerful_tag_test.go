@@ -187,9 +187,9 @@ func TestResolve_ExistingTagTargetsUnchangedByNewModels(t *testing.T) {
 		// claude-5.5-opus leads flagship. This moved from claude-5-opus
 		// deliberately when 5.5 shipped.
 		TagFlagship: "claude-5.5-opus",
-		// 5.5 also leads moderate, at a lower effort. This moved from
-		// claude-5-sonnet deliberately.
-		TagModerate: "claude-5.5-opus",
+		// claude-5-opus leads moderate: implementation speed over 5.5
+		// (it measured ~3x faster per edit at the same effort).
+		TagModerate: "claude-5-opus",
 		TagCheap:    "claude-4.5-haiku",
 		TagFast:     "gemini-3.5-flash",
 	} {
