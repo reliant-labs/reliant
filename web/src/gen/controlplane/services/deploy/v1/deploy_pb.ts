@@ -1709,7 +1709,7 @@ export const DeployService: GenService<{
    * PublishDeploymentConfig packages one deployment as a config artifact and
    * publishes it to the tenant's config subtree in the platform registry.
    *
-   * THE ARTIFACT HOLDS EXACTLY ONE forge.dev/v1alpha1 CR (a SimpleBackend,
+   * THE ARTIFACT HOLDS EXACTLY ONE forge.dev/v1alpha1 CR (a Workload,
    * StaticSite or ManagedDatabase) whose spec IS the stored forge tier spec.
    * Identity (org, environment, deployment) is carried in the CR's forge.dev/*
    * LABELS, never in the spec. Flux applies that CR and nothing else; the

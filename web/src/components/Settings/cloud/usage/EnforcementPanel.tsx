@@ -19,8 +19,8 @@
 //
 // The per-tier behaviour is spelled out because it genuinely differs, and a
 // single generic "your service may be affected" would be a lie to two of the
-// three tiers: only SimpleBackend is ever scaled to zero. ManagedDatabase and
-// StaticSite keep running and are alerted.
+// three tiers: only a hosted Workload is ever scaled to zero. A ManagedDatabase
+// and a StaticSite keep running and are alerted.
 //
 // Storage never shows a suspend rung, whatever the policy says, because
 // `suspendable` is false for it on the wire — "suspending" a disk means

@@ -722,7 +722,7 @@ export type PlanLimits = Message<"controlplane.v1.PlanLimits"> & {
   vclusterFloorRateCentsPerHour: number;
 
   /**
-   * Maximum concurrently deployed workloads (SimpleBackend, StaticSite,
+   * Maximum concurrently deployed workloads (Workload, StaticSite,
    * ManagedDatabase) across the tenant.
    *
    * @generated from field: int32 max_deployments = 29;
