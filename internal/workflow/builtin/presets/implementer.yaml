@@ -4,7 +4,7 @@ tag: agent
 params:
   model:
     # A tier, not an effort. The registry decides what [moderate] costs: today
-    # claude-5.5-opus at high (see the tags section of models.yaml). Pinning
+    # claude-5-opus at medium (see the tags section of models.yaml). Pinning
     # thinking_level here would silently override that.
     tags: [moderate]
   skills:

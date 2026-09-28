@@ -12,8 +12,9 @@
 # an explicit thinking_level.
 #
 # The same model may appear under several tags at different efforts — that is
-# how one model serves several tiers: claude-5.5-opus is [flagship] at xhigh
-# and [moderate] at high. Retuning a tier is an edit HERE, never in a preset.
+# how one model serves several tiers. Each tier is tuned independently:
+# [flagship] is claude-5.5-opus at xhigh, [moderate] is claude-5-opus at
+# medium. Retuning a tier is an edit HERE, never in a preset.
 #
 # thinking_level is an aspiration: it is clamped down to the model's declared
 # capabilities.thinking_levels. Omit it (or name the model by id instead of by
@@ -67,7 +68,12 @@ tags:
     - {model: gpt-image-2.5-sunburst}
 
   moderate:
-    - {model: claude-5.5-opus, thinking_level: high}
+    # Implementation tier (the implementer preset). claude-5-opus, not 5.5:
+    # measured over 148 vs 53 implementer runs, 5-opus @ medium made an edit
+    # every ~0.9 min vs 2.6 min for 5.5 @ medium, on the same task mix, and
+    # reached its first edit sooner (5.5 explores ~2x more before acting at
+    # every effort). flagship stays on 5.5 @ xhigh for orchestration.
+    - {model: claude-5-opus, thinking_level: medium}
     - {model: claude-5-sonnet, thinking_level: high}
     - {model: gpt-5.5, thinking_level: xhigh}
     - {model: gpt-5.6-terra, thinking_level: medium}
@@ -80,7 +86,7 @@ tags:
     - {model: gemini-3.6-flash, thinking_level: medium}
     - {model: gemini-3.5-flash, thinking_level: low}
     - {model: gemini-2.5-pro, thinking_level: high}
-    - {model: vertex-claude-5.5-opus, thinking_level: high}
+    - {model: vertex-claude-5-opus, thinking_level: medium}
     - {model: vertex-claude-5-sonnet, thinking_level: high}
     - {model: vertex-claude-4.5-sonnet, thinking_level: medium}
     - {model: vertex-gemini-2.5-pro, thinking_level: high}
@@ -171,12 +177,13 @@ models:
   # FLAGSHIP MODELS - Best overall for complex tasks
   # ============================================================================
 
-  # Claude 5.5 Opus leads BOTH [flagship] (at xhigh) and [moderate] (at high)
-  # in the tags section above: the general agent asks for flagship, the
-  # implementer for moderate, and the tier is the effort dial. It is
-  # deliberately NOT listed under `powerful` — that would collapse the
-  # powerful tier onto the flagship model; `powerful` stays on fable-5.1 until
-  # that is an explicit decision.
+  # Claude 5.5 Opus leads [flagship] (at xhigh) in the tags section above: the
+  # general agent and orchestrators ask for flagship. It is deliberately NOT
+  # in [moderate] — implementation runs on claude-5-opus, which measured ~3x
+  # faster per edit (see the note on the moderate tier). Nor is it listed
+  # under `powerful` — that would collapse the powerful tier onto the
+  # flagship model; `powerful` stays on fable-5.1 until that is an explicit
+  # decision.
   #
   # Its 2.1.280 capture sends max_tokens 128000, twice every other Claude entry.
   - id: claude-5.5-opus
@@ -1327,7 +1334,7 @@ models:
 
   # The Vertex-only twin of claude-5.5-opus (which carries its own vertexai
   # mapping and so is what tag selectors actually reach). Its tier entries
-  # mirror claude-5.5-opus exactly — flagship @ xhigh and moderate @ high, not
+  # mirror claude-5.5-opus exactly — flagship @ xhigh, not moderate or
   # powerful — so the two spellings of one model can never disagree on effort.
   - id: vertex-claude-5.5-opus
     name: Vertex Claude 5.5 Opus

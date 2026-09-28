@@ -73,7 +73,7 @@ tags: [cheap, local]   # Strongly prefer cheap, local is nice-to-have
 
 ## Customizing Tiers
 
-Under the hood, each tag is not just a list of models—it is an ordered list of `{model, thinking_level}` entries. Selecting a tier picks both a model *and* the effort it thinks at in one step: `tags: [flagship]` might resolve to Claude Opus running at `xhigh` effort, while `tags: [moderate]` resolves to the same model running at `high`. Reliant walks the list in order and stops at the first entry whose model you have a configured provider for.
+Under the hood, each tag is not just a list of models—it is an ordered list of `{model, thinking_level}` entries. Selecting a tier picks both a model *and* the effort it thinks at in one step: `tags: [flagship]` might resolve to Claude Opus 5.5 running at `xhigh` effort, while `tags: [moderate]` resolves to Claude Opus 5 running at `medium`. Reliant walks the list in order and stops at the first entry whose model you have a configured provider for.
 
 You can override this ordering—and the effort each entry runs at—by specifying your own entries for any tag in `~/.reliant/config.yaml`:
 
@@ -121,7 +121,7 @@ The `thinking_level` on a tag entry is the effort a request runs at when it reso
 
 You can omit `thinking_level` entirely, as the `fast` tier does above. In that case the model runs at its own capability default (`medium` for models that support extended thinking). This is also what happens when a workflow selects a model directly by `id:` instead of by tag—explicit ID selection has no tier to inherit an effort from, so it always gets the model's capability default.
 
-Because effort lives on the tag entry rather than on the model, the same model can serve more than one tier at different efforts. Reliant's own built-in catalog does exactly this: one Claude Opus model is the `flagship` entry at `xhigh` and the `moderate` entry at `high`—two tiers, one model, two efforts.
+Because effort lives on the tag entry rather than on the model, the same model can serve more than one tier at different efforts—list it under each tag with the `thinking_level` that tier should run at. Each tier is tuned independently: Reliant's built-in catalog runs `flagship` on Claude Opus 5.5 at `xhigh` for orchestration, and `moderate` on Claude Opus 5 at `medium` for implementation, where it makes edits faster.
 
 ## Adding Custom Models
 
