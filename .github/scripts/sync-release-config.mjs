@@ -58,7 +58,8 @@
 // where a contributor genuinely cannot supply the private KCL.
 
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -82,16 +83,58 @@ function fail(message) {
   process.exit(1);
 }
 
+/**
+ * Locate the `forge` KCL module, as a `-E name=path` external-package binding.
+ *
+ * control-plane's `deploy/kcl/desktop_release.k` reaches `import forge`, and a
+ * forge project declares no `forge` dependency in kcl.mod: the module is
+ * EMBEDDED IN THE FORGE BINARY and supplied to every evaluation as an external
+ * package (forge ADR 0003 — "the stock `kcl` CLI cannot render a project on its
+ * own"). So `kcl run` alone cannot resolve it: it fails outright on a clean
+ * machine, and on a developer's laptop it may silently resolve a stale global
+ * `~/.kcl/kpm/forge_kcl` left by an older forge — rendering a DIFFERENT module
+ * than control-plane deploys with, while still reporting success.
+ *
+ * Materializing through forge keeps this gate on the same module control-plane
+ * renders with. FORGE_KCL_MODULE_CACHE (forge's documented override) points it
+ * at a scratch dir so the result never depends on what is already cached.
+ */
+function forgeModuleArg() {
+  const cache = mkdtempSync(join(tmpdir(), "forge-kcl-"));
+  try {
+    // Any command that evaluates the project's KCL materializes the module;
+    // `env options` is the cheapest and writes nothing into the checkout.
+    execFileSync("forge", ["env", "options", "dev-k8s"], {
+      cwd: CONTROL_PLANE_DIR,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+      env: { ...process.env, FORGE_KCL_MODULE_CACHE: cache, FORGE_SILENCE_EXPERIMENTAL: "1" },
+    });
+  } catch (err) {
+    if (err.code === "ENOENT") return { unavailable: "forge is not installed" };
+    return { unavailable: `forge could not materialize its KCL module: ${err.stderr || err.message}` };
+  }
+  // The module lands in <cache>/<content-hash>/, with `.complete` written last.
+  for (const entry of readdirSync(cache, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    const dir = join(cache, entry.name);
+    if (existsSync(join(dir, ".complete"))) return { arg: `forge=${dir}` };
+  }
+  return { unavailable: `forge wrote no complete KCL module into ${cache}` };
+}
+
 /** Render the config for `env` out of control-plane's KCL. */
 function renderFromKCL(env) {
   const entry = join(CONTROL_PLANE_DIR, KCL_ENTRYPOINT);
   if (!existsSync(entry)) {
     return { unavailable: `no control-plane checkout at ${CONTROL_PLANE_DIR}` };
   }
+  const { arg, unavailable } = forgeModuleArg();
+  if (unavailable) return { unavailable };
   try {
     const out = execFileSync(
       "kcl",
-      ["run", KCL_ENTRYPOINT, "-D", `env=${env}`, "-S", "release_config", "--format", "json"],
+      ["run", KCL_ENTRYPOINT, "-E", arg, "-D", `env=${env}`, "-S", "release_config", "--format", "json"],
       { cwd: CONTROL_PLANE_DIR, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] },
     );
     return { config: JSON.parse(out) };
@@ -176,8 +219,10 @@ if (checkOnly) {
       fail(
         `--require was passed but the KCL could not be rendered: ${unavailable}.\n` +
           `This invocation is an authoritative drift gate; skipping would mean it\n` +
-          `verified nothing while reporting success. Ensure \`kcl\` is installed and\n` +
-          `CONTROL_PLANE_DIR points at a control-plane checkout (currently ${CONTROL_PLANE_DIR}).`,
+          `verified nothing while reporting success. Ensure \`kcl\` AND \`forge\` are\n` +
+          `installed (forge supplies the \`forge\` KCL module that control-plane's KCL\n` +
+          `imports — kcl alone cannot resolve it) and that CONTROL_PLANE_DIR points at\n` +
+          `a control-plane checkout (currently ${CONTROL_PLANE_DIR}).`,
       );
     }
     // A fork, or a machine without the private sibling repo. Validate what is
