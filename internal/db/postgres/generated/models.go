@@ -491,17 +491,18 @@ type Setting struct {
 }
 
 type StepExecution struct {
-	ID            string         `json:"id"`
-	WorkflowID    string         `json:"workflow_id"`
-	StepID        string         `json:"step_id"`
-	ActivityName  string         `json:"activity_name"`
-	OutputJson    sql.NullString `json:"output_json"`
-	ExitCode      sql.NullInt64  `json:"exit_code"`
-	Success       sql.NullInt64  `json:"success"`
-	DurationMs    sql.NullInt64  `json:"duration_ms"`
-	CreatedAt     time.Time      `json:"created_at"`
-	LoopNodeID    sql.NullString `json:"loop_node_id"`
-	LoopIteration sql.NullInt64  `json:"loop_iteration"`
+	ID             string         `json:"id"`
+	WorkflowID     string         `json:"workflow_id"`
+	StepID         string         `json:"step_id"`
+	ActivityName   string         `json:"activity_name"`
+	OutputJson     sql.NullString `json:"output_json"`
+	ExitCode       sql.NullInt64  `json:"exit_code"`
+	Success        sql.NullInt64  `json:"success"`
+	DurationMs     sql.NullInt64  `json:"duration_ms"`
+	CreatedAt      time.Time      `json:"created_at"`
+	LoopNodeID     sql.NullString `json:"loop_node_id"`
+	LoopIteration  sql.NullInt64  `json:"loop_iteration"`
+	SavedMessageID sql.NullString `json:"saved_message_id"`
 }
 
 type Task struct {

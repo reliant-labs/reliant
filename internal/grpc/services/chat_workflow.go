@@ -593,15 +593,26 @@ func (s *ChatService) GetWorkflowExecutions(
 		return connect.NewResponse(&reliantv1.GetWorkflowExecutionsResponse{}), nil
 	}
 
-	// Get step executions for all workflows
-	stepsByWorkflow := make(map[string][]*db.StepExecution)
-	for _, wf := range workflows {
-		steps, err := s.database.GetStepExecutionsByWorkflow(ctx, wf.ID)
-		if err != nil {
-			logging.Warn("Failed to get step executions", "error", err, "workflowID", wf.ID)
-			continue
-		}
-		stepsByWorkflow[wf.ID] = steps
+	// Every step of every workflow of this chat, in ONE query.
+	//
+	// This was a loop calling GetStepExecutionsByWorkflow per workflow — 83
+	// serial round trips for the worst real chat, each SELECT * including the
+	// TOASTed output_json. Measured: 2.61s of SQL alone against a pool of 8
+	// connections, so one sidebar refetch could starve every other RPC. The
+	// single query is ~42ms and reads no output_json at all.
+	//
+	// A failure is no longer per-workflow recoverable, and should not be: the
+	// old loop's `continue` meant a transient error silently returned a tree
+	// with a workflow's steps missing, which renders as activity that never
+	// happened. One query either answers or it does not.
+	steps, err := s.database.GetStepExecutionsForChat(ctx, req.Msg.ChatId)
+	if err != nil {
+		logging.Error("Failed to get step executions", "error", err, "chatID", req.Msg.ChatId)
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to get step executions"))
+	}
+	stepsByWorkflow := make(map[string][]*db.ChatStepExecution)
+	for _, step := range steps {
+		stepsByWorkflow[step.WorkflowID] = append(stepsByWorkflow[step.WorkflowID], step)
 	}
 
 	// Build workflow map for tree construction
@@ -901,7 +912,7 @@ func threadStatusToWorkflowStatus(status int32) (reliantv1.WorkflowState, relian
 func (s *ChatService) buildWorkflowExecutionTree(
 	wf *db.Workflow,
 	allWorkflows []*db.Workflow,
-	stepsByWorkflow map[string][]*db.StepExecution,
+	stepsByWorkflow map[string][]*db.ChatStepExecution,
 ) *reliantv1.WorkflowExecution {
 	proto := &reliantv1.WorkflowExecution{
 		Id:           wf.ID,
@@ -969,7 +980,18 @@ func (s *ChatService) buildWorkflowExecutionTree(
 		proto.CompletedAt = &completedAt
 	}
 
-	// Add step executions (omit output_json to reduce response size — can be 8-14MB with full outputs)
+	// Add step executions.
+	//
+	// output_json is never sent on this path. The only thing a client read out
+	// of it here was the saved message id of a "-save" step, which now arrives
+	// as its own scalar field — so the response carries one UUID per save step
+	// instead of that step's entire output (37 MB for the worst real chat).
+	//
+	// output_json still arrives for user-facing activities, which ActivityIndicator
+	// and the workflow viewer's Output panel render. The query withholds it only
+	// for internal plumbing (model.InternalActivities) — and that is where all
+	// the weight is: 32,013 of that chat's 32,023 steps, against 23 kB for the
+	// ten that remain.
 	if steps, ok := stepsByWorkflow[wf.ID]; ok {
 		proto.Steps = make([]*reliantv1.StepExecution, len(steps))
 		for i, step := range steps {
@@ -980,11 +1002,10 @@ func (s *ChatService) buildWorkflowExecutionTree(
 				ActivityName: step.ActivityName,
 				CreatedAt:    step.CreatedAt.Format(time.RFC3339),
 			}
-			// Only include a minimal output_json for save steps (need message_id for timeline)
-			// Skip full output_json to avoid sending megabytes of step execution output
-			if step.OutputJSON.Valid && strings.HasSuffix(step.StepID, "-save") {
-				proto.Steps[i].OutputJson = step.OutputJSON.String
+			if step.SavedMessageID.Valid {
+				proto.Steps[i].SavedMessageId = &step.SavedMessageID.String
 			}
+			proto.Steps[i].OutputJson = step.OutputJSON
 			if step.ExitCode.Valid {
 				exitCode := int32(step.ExitCode.Int64)
 				proto.Steps[i].ExitCode = &exitCode

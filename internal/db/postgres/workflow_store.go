@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	pgdb "github.com/reliant-labs/reliant/internal/db/postgres/generated"
+	"github.com/reliant-labs/reliant/internal/workflow/model"
 )
 
 type workflowStore struct{ q pgdb.Querier }
@@ -307,6 +308,43 @@ func (s *workflowStore) GetStepExecutionsByWorkflow(ctx context.Context, workflo
 	return items, nil
 }
 
+// GetStepExecutionsForChat loads every step of every workflow of one chat in a
+// single query. See queries/step_executions.sql for why output_json is not part
+// of it.
+func (s *workflowStore) GetStepExecutionsForChat(ctx context.Context, chatID string) ([]*core.ChatStepExecution, error) {
+	rows, err := s.q.GetStepExecutionsForChat(ctx, pgdb.GetStepExecutionsForChatParams{
+		ChatID: chatID,
+		// The one place this set crosses into SQL. See its doc comment for
+		// why it is a parameter rather than a literal in the query.
+		InternalActivities: model.InternalActivities,
+	})
+	if err != nil {
+		return nil, err
+	}
+	items := make([]*core.ChatStepExecution, len(rows))
+	for i, row := range rows {
+		var success sql.NullBool
+		if row.Success.Valid {
+			success = sql.NullBool{Bool: row.Success.Int64 != 0, Valid: true}
+		}
+		items[i] = &core.ChatStepExecution{
+			ID:             row.ID,
+			WorkflowID:     row.WorkflowID,
+			StepID:         row.StepID,
+			ActivityName:   row.ActivityName,
+			ExitCode:       row.ExitCode,
+			Success:        success,
+			DurationMs:     row.DurationMs,
+			LoopNodeID:     row.LoopNodeID,
+			LoopIteration:  row.LoopIteration,
+			CreatedAt:      row.CreatedAt,
+			SavedMessageID: row.SavedMessageID,
+			OutputJSON:     row.OutputJson,
+		}
+	}
+	return items, nil
+}
+
 func (s *workflowStore) GetStepExecutionsByStep(ctx context.Context, workflowID, stepID string) ([]*core.StepExecution, error) {
 	rows, err := s.q.GetStepExecutions(ctx, pgdb.GetStepExecutionsParams{WorkflowID: workflowID, StepID: stepID})
 	if err != nil {
@@ -377,17 +415,18 @@ func stepExecutionFromPG(row pgdb.StepExecution) *core.StepExecution {
 		success = sql.NullBool{Bool: row.Success.Int64 != 0, Valid: true}
 	}
 	return &core.StepExecution{
-		ID:            row.ID,
-		WorkflowID:    row.WorkflowID,
-		StepID:        row.StepID,
-		ActivityName:  row.ActivityName,
-		OutputJSON:    row.OutputJson,
-		ExitCode:      row.ExitCode,
-		Success:       success,
-		DurationMs:    row.DurationMs,
-		LoopNodeID:    row.LoopNodeID,
-		LoopIteration: row.LoopIteration,
-		CreatedAt:     row.CreatedAt,
+		ID:             row.ID,
+		WorkflowID:     row.WorkflowID,
+		StepID:         row.StepID,
+		ActivityName:   row.ActivityName,
+		OutputJSON:     row.OutputJson,
+		ExitCode:       row.ExitCode,
+		Success:        success,
+		DurationMs:     row.DurationMs,
+		LoopNodeID:     row.LoopNodeID,
+		LoopIteration:  row.LoopIteration,
+		CreatedAt:      row.CreatedAt,
+		SavedMessageID: row.SavedMessageID,
 	}
 }
 

@@ -442,80 +442,26 @@ func (s *SettingsService) UpdateShortcuts(ctx context.Context, req *connect.Requ
 func (s *SettingsService) GetPreferences(ctx context.Context, req *connect.Request[reliantv1.GetPreferencesRequest]) (*connect.Response[reliantv1.GetPreferencesResponse], error) {
 	userID := auth.MustGetUserID(ctx)
 
-	// Get streaming enabled
-	streamingEnabled := true
-	if setting, err := s.database.GetSetting(ctx, userID, nil, "features.streaming_enabled"); err == nil {
-		streamingEnabled = setting.Value == "true"
-	}
-
-	// Worktree archive mode
-	worktreeArchiveMode := "ask_me"
-	if setting, err := s.database.GetSetting(ctx, userID, nil, "worktree.archive_cleanup_mode"); err == nil {
-		worktreeArchiveMode = setting.Value
-	}
-
-	// Worktree delete directory default
-	worktreeDeleteDir := true
-	if setting, err := s.database.GetSetting(ctx, userID, nil, "worktree.default_delete_directory"); err == nil {
-		worktreeDeleteDir = setting.Value == "true"
-	}
-
-	// Worktree delete branch default
-	worktreeDeleteBranch := false
-	if setting, err := s.database.GetSetting(ctx, userID, nil, "worktree.default_delete_branch"); err == nil {
-		worktreeDeleteBranch = setting.Value == "true"
-	}
-
-	// Branch copy uncommitted files default (defaults to false if not set)
-	branchCopyUncommittedFilesDefault := false
-	if setting, err := s.database.GetSetting(ctx, userID, nil, "worktree.branch_copy_uncommitted_files_default"); err == nil {
-		branchCopyUncommittedFilesDefault = setting.Value == "true"
-	}
-
-	// Default MCP scope (defaults to PROJECT if not set)
-	defaultMcpScope := reliantv1.ConfigScope_CONFIG_SCOPE_PROJECT
-	if setting, err := s.database.GetSetting(ctx, userID, nil, "config.default_mcp_scope"); err == nil {
-		if scope, ok := reliantv1.ConfigScope_value[setting.Value]; ok {
-			defaultMcpScope = reliantv1.ConfigScope(scope)
-		}
-	}
-
-	// Default workflow scope (defaults to PROJECT if not set)
-	defaultWorkflowScope := reliantv1.ConfigScope_CONFIG_SCOPE_PROJECT
-	if setting, err := s.database.GetSetting(ctx, userID, nil, "config.default_workflow_scope"); err == nil {
-		if scope, ok := reliantv1.ConfigScope_value[setting.Value]; ok {
-			defaultWorkflowScope = reliantv1.ConfigScope(scope)
-		}
-	}
-
-	// Default workflow (defaults to builtin://agent if not set)
-	defaultWorkflow := workflow.DefaultWorkflow
-	if setting, err := s.database.GetSetting(ctx, userID, nil, "config.default_workflow"); err == nil && setting.Value != "" {
-		defaultWorkflow = setting.Value
-	}
-
-	// Hide builtin workflows (defaults to false)
-	hideBuiltinWorkflows := false
-	if setting, err := s.database.GetSetting(ctx, userID, nil, "ui.hide_builtin_workflows"); err == nil {
-		hideBuiltinWorkflows = setting.Value == "true"
-	}
-
-	// Hide builtin presets (defaults to false)
-	hideBuiltinPresets := false
-	if setting, err := s.database.GetSetting(ctx, userID, nil, "ui.hide_builtin_presets"); err == nil {
-		hideBuiltinPresets = setting.Value == "true"
-	}
-
-	// Collect additional arbitrary preferences
-	// Filter out keys that have dedicated fields to avoid duplicates
-	excludedPrefKeys := map[string]bool{
-		"default_planning_mode": true, // Has dedicated field
-		"default_auto_approve":  true, // Has dedicated field
-	}
+	// Every preference below lives in the same user-global scope
+	// (project_id IS NULL), so one query answers all of them. Reading them
+	// one key at a time meant eleven serial round trips, each queueing for a
+	// connection from the pool — the dominant cost of this RPC.
+	values := make(map[string]string)
 	additional := make(map[string]string)
+
+	// Keys that are surfaced as dedicated proto fields rather than in
+	// Additional, so they are not returned twice.
+	excludedPrefKeys := map[string]bool{
+		"default_planning_mode": true,
+		"default_auto_approve":  true,
+	}
+
 	allSettings, err := s.database.ListSettings(ctx, userID, nil)
 	if err == nil {
 		for _, setting := range allSettings {
+			// ListSettings orders by (key, updated_at), so on the off chance a
+			// duplicate row survives, the newest value overwrites the older.
+			values[setting.Key] = setting.Value
 			if len(setting.Key) > 11 && setting.Key[:11] == "preference." {
 				key := setting.Key[11:] // Remove "preference." prefix
 				if !excludedPrefKeys[key] {
@@ -523,6 +469,44 @@ func (s *SettingsService) GetPreferences(ctx context.Context, req *connect.Reque
 				}
 			}
 		}
+	}
+
+	// boolPref keeps the previous semantics exactly: a missing key falls back
+	// to the default, and any stored value other than "true" is false.
+	boolPref := func(key string, defaultVal bool) bool {
+		if value, ok := values[key]; ok {
+			return value == "true"
+		}
+		return defaultVal
+	}
+	scopePref := func(key string) reliantv1.ConfigScope {
+		if value, ok := values[key]; ok {
+			if scope, ok := reliantv1.ConfigScope_value[value]; ok {
+				return reliantv1.ConfigScope(scope)
+			}
+		}
+		return reliantv1.ConfigScope_CONFIG_SCOPE_PROJECT
+	}
+
+	streamingEnabled := boolPref("features.streaming_enabled", true)
+	worktreeDeleteDir := boolPref("worktree.default_delete_directory", true)
+	worktreeDeleteBranch := boolPref("worktree.default_delete_branch", false)
+	branchCopyUncommittedFilesDefault := boolPref("worktree.branch_copy_uncommitted_files_default", false)
+	hideBuiltinWorkflows := boolPref("ui.hide_builtin_workflows", false)
+	hideBuiltinPresets := boolPref("ui.hide_builtin_presets", false)
+
+	worktreeArchiveMode := "ask_me"
+	if value, ok := values["worktree.archive_cleanup_mode"]; ok {
+		worktreeArchiveMode = value
+	}
+
+	defaultMcpScope := scopePref("config.default_mcp_scope")
+	defaultWorkflowScope := scopePref("config.default_workflow_scope")
+
+	// An empty stored value is ignored rather than blanking the default.
+	defaultWorkflow := workflow.DefaultWorkflow
+	if value := values["config.default_workflow"]; value != "" {
+		defaultWorkflow = value
 	}
 
 	// Compute effective hidden items by combining defaults and user overrides

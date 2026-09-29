@@ -68,6 +68,46 @@ type StepExecution struct {
 	LoopNodeID    sql.NullString `json:"loop_node_id"`
 	LoopIteration sql.NullInt64  `json:"loop_iteration"`
 	CreatedAt     time.Time      `json:"created_at"`
+
+	// SavedMessageID is the message a "-save" step wrote, derived by the
+	// database from OutputJSON (a generated column — see migration
+	// 20260929162546). Read-only: it is ignored on write, because the
+	// database computes it.
+	//
+	// It exists so a reader can answer "did this step save a message, and
+	// which one" without loading OutputJSON, which is TOASTed and can be
+	// megabytes per row.
+	SavedMessageID sql.NullString `json:"saved_message_id"`
+}
+
+// ChatStepExecution is one step of one workflow of a chat, as the chat's
+// execution tree needs it.
+//
+// A separate type from StepExecution on purpose, because OutputJSON means
+// something narrower here: it is populated only for user-facing activities,
+// and is deliberately absent for the internal-plumbing steps that make up
+// virtually all of the rows (see model.InternalActivities). Reusing
+// StepExecution would make "is OutputJSON populated?" depend on which query
+// produced the value, with nothing in the type to say so.
+type ChatStepExecution struct {
+	ID            string
+	WorkflowID    string
+	StepID        string
+	ActivityName  string
+	ExitCode      sql.NullInt64
+	Success       sql.NullBool
+	DurationMs    sql.NullInt64
+	LoopNodeID    sql.NullString
+	LoopIteration sql.NullInt64
+	CreatedAt     time.Time
+
+	// SavedMessageID is the message a "-save" step wrote, if it wrote one.
+	SavedMessageID sql.NullString
+
+	// OutputJSON is the step's raw output, populated ONLY for user-facing
+	// activities. Empty for every internal activity by design — not because
+	// the row had no output. See model.InternalActivities.
+	OutputJSON string
 }
 
 // WorkflowStore is the shared contract for workflow persistence across drivers.
@@ -104,6 +144,10 @@ type WorkflowStore interface {
 	GetStepExecution(ctx context.Context, id string) (*StepExecution, error)
 	GetStepExecutionsByWorkflow(ctx context.Context, workflowID string) ([]*StepExecution, error)
 	GetStepExecutionsByStep(ctx context.Context, workflowID, stepID string) ([]*StepExecution, error)
+	// GetStepExecutionsForChat returns every step of every workflow of one
+	// chat in a single query, without OutputJSON. It replaces a
+	// per-workflow loop over GetStepExecutionsByWorkflow.
+	GetStepExecutionsForChat(ctx context.Context, chatID string) ([]*ChatStepExecution, error)
 	DeleteStepExecutionsByWorkflow(ctx context.Context, workflowID string) error
 
 	ListCommandFavorites(ctx context.Context, userID, projectID string) ([]string, error)

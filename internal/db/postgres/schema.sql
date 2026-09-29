@@ -741,7 +741,13 @@ CREATE TABLE public.step_executions (
     duration_ms bigint,
     created_at timestamp with time zone NOT NULL,
     loop_node_id text,
-    loop_iteration bigint
+    loop_iteration bigint,
+    saved_message_id text GENERATED ALWAYS AS (
+        CASE
+            WHEN step_id LIKE '%-save'::text AND output_json IS JSON OBJECT
+            THEN ((output_json)::jsonb ->> 'message_id'::text)
+        END
+    ) STORED
 );
 
 --
@@ -1792,10 +1798,10 @@ CREATE INDEX idx_questions_workflow_id ON public.questions USING btree (workflow
 CREATE INDEX idx_repos_project ON public.repos USING btree (project_id);
 
 --
--- Name: idx_step_executions_workflow_id; Type: INDEX; Schema: public; Owner: -
+-- Name: idx_step_executions_chat_read; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX idx_step_executions_workflow_id ON public.step_executions USING btree (workflow_id);
+CREATE INDEX idx_step_executions_chat_read ON public.step_executions USING btree (workflow_id, created_at) INCLUDE (id, step_id, activity_name, exit_code, success, duration_ms, loop_node_id, loop_iteration, saved_message_id);
 
 --
 -- Name: idx_task_deps_from; Type: INDEX; Schema: public; Owner: -

@@ -3420,6 +3420,10 @@ func (r *Repo) GetStepExecution(ctx context.Context, id string) (*StepExecution,
 	return r.workflows.GetStepExecution(ctx, id)
 }
 
+func (r *Repo) GetStepExecutionsForChat(ctx context.Context, chatID string) ([]*ChatStepExecution, error) {
+	return r.workflows.GetStepExecutionsForChat(ctx, chatID)
+}
+
 func (r *Repo) GetStepExecutionsByWorkflow(ctx context.Context, workflowID string) ([]*StepExecution, error) {
 	return r.workflows.GetStepExecutionsByWorkflow(ctx, workflowID)
 }

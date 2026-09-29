@@ -9,6 +9,8 @@ import (
 	"context"
 	"database/sql"
 	"time"
+
+	"github.com/lib/pq"
 )
 
 const createStepExecution = `-- name: CreateStepExecution :one
@@ -17,7 +19,7 @@ INSERT INTO step_executions (
     output_json, exit_code, success, duration_ms,
     loop_node_id, loop_iteration, created_at
 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-RETURNING id, workflow_id, step_id, activity_name, output_json, exit_code, success, duration_ms, created_at, loop_node_id, loop_iteration
+RETURNING id, workflow_id, step_id, activity_name, output_json, exit_code, success, duration_ms, created_at, loop_node_id, loop_iteration, saved_message_id
 `
 
 type CreateStepExecutionParams struct {
@@ -61,6 +63,7 @@ func (q *Queries) CreateStepExecution(ctx context.Context, arg CreateStepExecuti
 		&i.CreatedAt,
 		&i.LoopNodeID,
 		&i.LoopIteration,
+		&i.SavedMessageID,
 	)
 	return i, err
 }
@@ -75,7 +78,7 @@ func (q *Queries) DeleteStepExecutionsForWorkflow(ctx context.Context, workflowI
 }
 
 const getAllStepExecutionsForWorkflow = `-- name: GetAllStepExecutionsForWorkflow :many
-SELECT id, workflow_id, step_id, activity_name, output_json, exit_code, success, duration_ms, created_at, loop_node_id, loop_iteration FROM step_executions
+SELECT id, workflow_id, step_id, activity_name, output_json, exit_code, success, duration_ms, created_at, loop_node_id, loop_iteration, saved_message_id FROM step_executions
 WHERE workflow_id = $1
 ORDER BY created_at ASC
 `
@@ -102,6 +105,7 @@ func (q *Queries) GetAllStepExecutionsForWorkflow(ctx context.Context, workflowI
 			&i.CreatedAt,
 			&i.LoopNodeID,
 			&i.LoopIteration,
+			&i.SavedMessageID,
 		); err != nil {
 			return nil, err
 		}
@@ -117,7 +121,7 @@ func (q *Queries) GetAllStepExecutionsForWorkflow(ctx context.Context, workflowI
 }
 
 const getStepExecution = `-- name: GetStepExecution :one
-SELECT id, workflow_id, step_id, activity_name, output_json, exit_code, success, duration_ms, created_at, loop_node_id, loop_iteration FROM step_executions WHERE id = $1
+SELECT id, workflow_id, step_id, activity_name, output_json, exit_code, success, duration_ms, created_at, loop_node_id, loop_iteration, saved_message_id FROM step_executions WHERE id = $1
 `
 
 func (q *Queries) GetStepExecution(ctx context.Context, id string) (StepExecution, error) {
@@ -135,12 +139,13 @@ func (q *Queries) GetStepExecution(ctx context.Context, id string) (StepExecutio
 		&i.CreatedAt,
 		&i.LoopNodeID,
 		&i.LoopIteration,
+		&i.SavedMessageID,
 	)
 	return i, err
 }
 
 const getStepExecutions = `-- name: GetStepExecutions :many
-SELECT id, workflow_id, step_id, activity_name, output_json, exit_code, success, duration_ms, created_at, loop_node_id, loop_iteration FROM step_executions
+SELECT id, workflow_id, step_id, activity_name, output_json, exit_code, success, duration_ms, created_at, loop_node_id, loop_iteration, saved_message_id FROM step_executions
 WHERE workflow_id = $1 AND step_id = $2
 ORDER BY created_at ASC
 `
@@ -172,6 +177,124 @@ func (q *Queries) GetStepExecutions(ctx context.Context, arg GetStepExecutionsPa
 			&i.CreatedAt,
 			&i.LoopNodeID,
 			&i.LoopIteration,
+			&i.SavedMessageID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getStepExecutionsForChat = `-- name: GetStepExecutionsForChat :many
+SELECT se.id, se.workflow_id, se.step_id, se.activity_name,
+       se.exit_code, se.success, se.duration_ms,
+       se.loop_node_id, se.loop_iteration, se.created_at,
+       se.saved_message_id,
+       -- Empty string, not NULL, for the rows whose output is withheld: sqlc
+       -- infers a bare CASE as interface{} and a cast one as a non-nullable
+       -- string, so COALESCE makes the Go type honest instead of fighting the
+       -- inference. Empty and absent are the same thing here — output_json is
+       -- written by json.Marshal, so a real value is never the empty string.
+       --
+       -- Spelling this as a LEFT JOIN to the row itself types cleanly but costs
+       -- a primary-key lookup per row: measured on the dev database, 32,494
+       -- extra index scans, 146k buffers against 16k, ~200ms against ~45ms.
+       COALESCE(
+           CASE WHEN se.activity_name <> ALL($1::text[])
+                THEN se.output_json END,
+           ''
+       )::text AS output_json
+FROM step_executions se
+JOIN workflows w ON w.id = se.workflow_id
+WHERE w.chat_id = $2
+ORDER BY se.workflow_id, se.created_at ASC
+`
+
+type GetStepExecutionsForChatParams struct {
+	InternalActivities []string `json:"internal_activities"`
+	ChatID             string   `json:"chat_id"`
+}
+
+type GetStepExecutionsForChatRow struct {
+	ID             string         `json:"id"`
+	WorkflowID     string         `json:"workflow_id"`
+	StepID         string         `json:"step_id"`
+	ActivityName   string         `json:"activity_name"`
+	ExitCode       sql.NullInt64  `json:"exit_code"`
+	Success        sql.NullInt64  `json:"success"`
+	DurationMs     sql.NullInt64  `json:"duration_ms"`
+	LoopNodeID     sql.NullString `json:"loop_node_id"`
+	LoopIteration  sql.NullInt64  `json:"loop_iteration"`
+	CreatedAt      time.Time      `json:"created_at"`
+	SavedMessageID sql.NullString `json:"saved_message_id"`
+	OutputJson     string         `json:"output_json"`
+}
+
+// Every step of every workflow of one chat, in one round trip, for
+// ChatService/GetWorkflowExecutions.
+//
+// This replaces a loop that ran GetAllStepExecutionsForWorkflow once per
+// workflow: 83 queries for the worst real chat, each a SELECT * that dragged
+// output_json along. Measured on the dev database, chat abe58f03-…: the 83
+// serial round trips took 2.61s of a pool with 8 connections, so a single
+// sidebar refetch could monopolize it and stall every other RPC.
+//
+// output_json is read for almost no row, and that is the whole point. It is why
+// this table is 905 MB against a 361 MB heap — TOASTed out of line, so touching
+// it costs extra reads per row — and the two things clients need from it are
+// obtained without touching it for the rows that dominate:
+//
+//   - the saved message id of a "-save" step arrives as saved_message_id, a
+//     generated column (migration 20260929162546). Extracting it from
+//     output_json here instead measured ~520ms against ~42ms, essentially all
+//     of it detoasting 37 MB of JSON to recover 16k UUIDs.
+//   - the rich context ActivityIndicator and the workflow viewer's Output panel
+//     render is still selected in full, but ONLY for user-facing activities.
+//     That is what makes it affordable: of this chat's 32,023 steps, 32,013 are
+//     internal plumbing (SaveMessage / CallLLM / ExecuteTools), and the ten
+//     that remain total 23 kB. Measured cost of including them: ~45ms vs ~42ms
+//     for selecting no output_json at all.
+//
+// The internal-activity list is a PARAMETER, not a literal, so the set lives in
+// exactly one Go place (workflowmodel.InternalActivities) and cannot drift from
+// the frontend's INTERNAL_ACTIVITIES, which decides the same question for the
+// same reason in activityIndicators.ts. A row whose activity is in the list is
+// one the UI never renders output for; if the two lists disagree, the symptom is
+// an activity indicator with no context rather than an error, which is the kind
+// of divergence nothing would catch.
+//
+// ORDER BY (workflow_id, created_at) matches idx_step_executions_chat_read, so
+// the sort proceeds incrementally over already-ordered groups instead of
+// spilling to disk, and every scalar column below is covered by that index.
+func (q *Queries) GetStepExecutionsForChat(ctx context.Context, arg GetStepExecutionsForChatParams) ([]GetStepExecutionsForChatRow, error) {
+	rows, err := q.db.QueryContext(ctx, getStepExecutionsForChat, pq.Array(arg.InternalActivities), arg.ChatID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetStepExecutionsForChatRow{}
+	for rows.Next() {
+		var i GetStepExecutionsForChatRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkflowID,
+			&i.StepID,
+			&i.ActivityName,
+			&i.ExitCode,
+			&i.Success,
+			&i.DurationMs,
+			&i.LoopNodeID,
+			&i.LoopIteration,
+			&i.CreatedAt,
+			&i.SavedMessageID,
+			&i.OutputJson,
 		); err != nil {
 			return nil, err
 		}
