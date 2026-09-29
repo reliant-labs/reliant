@@ -346,6 +346,21 @@ message DeployEnvironment {
   // Environment identity is (org, project, name): two projects in one org
   // may each have a `prod`. Empty is a valid project.
   string project = 15;
+
+  // Tag 16 (capabilities / "custom_domains") was removed when custom domains
+  // became an org-scoped RESOURCE with its own service
+  // (domain.v1.DomainService) rather than a field on a Workload or
+  // StaticSite spec. It existed so a client could refuse to declare a domain
+  // against a target that would silently drop it; with no spec field to
+  // declare, a hosted spec refuses `domains` outright and there is nothing
+  // to negotiate.
+  //
+  // RESERVED RATHER THAN RECYCLED because a forge release briefly READ this
+  // tag. Reusing 16 for something else would not fail — it would decode as
+  // whatever the new field is and be interpreted as a capability list by any
+  // client still on that release, which is the quietest possible wire bug.
+  reserved 16;
+  reserved "capabilities";
 }
 
 // DeployEnvironmentSpec is THE WRITABLE HALF of an environment — the whole of
@@ -408,6 +423,196 @@ message DeployObservedStateDetail {
   // suspended). Unset whenever it is in any other state. The verdict's
   // stability clock.
   google.protobuf.Timestamp stable_since = 7;
+
+  // Per-domain status for every custom domain this deployment declared.
+  // Empty when it declared none, and ALSO empty in an environment whose
+  // target does not advertise "custom_domains" — in which case nothing is
+  // converging them and reporting a state would be a fiction.
+  repeated DeployCustomDomainStatus domains = 8;
+
+  // Backup state, for a managed-database deployment that has one. Unset for
+  // every other tier, and ALSO unset for a database in an environment that
+  // configured no object store — where reporting "no backups yet" and
+  // "backups are not configured" as the same thing would be the dangerous
+  // conflation.
+  DeployBackupStatus backup = 9;
+}
+
+// DeployBackupStatus is what a hosted user needs to answer one question:
+// "if this database broke right now, what would I get back?"
+//
+// THREE FIELDS, BECAUSE THREE THINGS CAN BE TRUE INDEPENDENTLY. A database
+// can have a recent base backup and broken WAL archiving (it would restore,
+// but only to last night). It can have healthy archiving and no base backup
+// (it would restore to nothing — WAL is replayed ON TOP OF a base backup, so
+// an archive alone is useless). And it can have both while the oldest
+// retained backup is newer than the incident being investigated. A single
+// "backups: ok" boolean hides all three.
+message DeployBackupStatus {
+  // When the last base backup completed. Unset means none has ever
+  // succeeded — which, whatever the WAL archive looks like, means there is
+  // nothing to restore.
+  google.protobuf.Timestamp last_successful_backup = 1;
+
+  // Whether WAL is currently reaching the object store, read from the
+  // CloudNativePG cluster's ContinuousArchiving condition. FALSE IS THE
+  // SILENT FAILURE THIS FIELD EXISTS FOR: a database whose archiving has
+  // stopped keeps serving traffic normally, and every minute it does is a
+  // minute that cannot be recovered to.
+  bool wal_archiving_healthy = 2;
+
+  // The oldest point recovery can reach — the floor on point-in-time
+  // restore, set by the retention policy. Unset until a first backup exists.
+  google.protobuf.Timestamp earliest_restorable_time = 3;
+
+  // The last archiving or backup error, surfaced verbatim. Cleared on
+  // success. A tenant who can see "no bucket permission" fixes it; one who
+  // sees only wal_archiving_healthy=false files a ticket.
+  string last_error = 4;
+}
+
+// DeployCustomDomainStatus is one customer-brought domain's acquisition
+// state, plus the DNS the tenant still has to set for it.
+//
+// required_records IS NOT DIAGNOSTIC DECORATION. A custom domain is the one
+// part of a deploy that the platform cannot complete on its own: it converges
+// only after a human edits a zone we do not control. So the records travel
+// WITH the state, because a bare PENDING_DNS tells a tenant they are blocked
+// without telling them on what, and the answer differs per domain (an apex
+// cannot take a CNAME; a subdomain should not be pinned to an IP).
+// It is the DEPLOY-SIDE VIEW of a Domain plus its binding, reported against
+// the deployment the binding points at. The domain itself is an org-scoped
+// resource owned by DomainService; this message exists so `forge env status`
+// can show "this workload answers on hounders.club, which is waiting on DNS"
+// without a second call to a second service.
+message DeployCustomDomainStatus {
+  // The hostname, lowercased. 'hounders.club', 'api.hounders.club'.
+  string domain = 1;
+  DeployCustomDomainState state = 2;
+  // The A / CNAME / TXT records the tenant must publish. Computed per domain
+  // and stable, so it is safe to show before, during and after verification —
+  // it stays populated once live, since removing the records would break it.
+  repeated DeployDnsRecord required_records = 3;
+  // Why the last attempt failed, in terms a tenant can act on. Cleared on
+  // success.
+  string last_error = 4;
+  // When the domain first reached LIVE. Unset in every other state.
+  google.protobuf.Timestamp live_since = 5;
+}
+
+// DeployDnsRecord is one record a tenant publishes at their registrar.
+message DeployDnsRecord {
+  // 'A', 'CNAME' or 'TXT'.
+  string type = 1;
+  // The name to create, fully qualified: 'hounders.club',
+  // 'www.hounders.club', '_reliant-challenge.hounders.club'.
+  string name = 2;
+  // The value: an IP for A, the platform ingress target for CNAME, the
+  // ownership token for TXT.
+  string value = 3;
+}
+
+// DeployCustomDomainState is where a domain is in acquisition.
+//
+// THE ORDER IS A PIPELINE AND EACH STEP GATES THE NEXT, which is the whole
+// reason this is a state machine rather than a bool. VERIFYING must complete
+// before ISSUING begins: Let's Encrypt pauses an identifier after enough
+// consecutive authorization failures, and a tenant who mis-points a record
+// and walks away is exactly how that pause gets hit. Failing our own DNS
+// check costs nothing; failing ACME repeatedly costs the identifier.
+enum DeployCustomDomainState {
+  DEPLOY_CUSTOM_DOMAIN_STATE_UNSPECIFIED = 0;
+  // Recorded, and the tenant's DNS does not point at us yet. The normal
+  // first state, and the one required_records exists for.
+  DEPLOY_CUSTOM_DOMAIN_STATE_PENDING_DNS = 1;
+  // DNS resolves to us; ownership is being confirmed.
+  DEPLOY_CUSTOM_DOMAIN_STATE_VERIFYING = 2;
+  // Verified. A certificate is being obtained.
+  DEPLOY_CUSTOM_DOMAIN_STATE_ISSUING = 3;
+  // Serving, with a valid certificate.
+  DEPLOY_CUSTOM_DOMAIN_STATE_LIVE = 4;
+  // Reachable from any state above and retryable; last_error says why.
+  DEPLOY_CUSTOM_DOMAIN_STATE_FAILED = 5;
+  // Another org already holds this domain. NOT retryable by waiting, which
+  // is why it is distinct from FAILED: the fix is a human dispute, not a
+  // backoff. First to verify wins.
+  DEPLOY_CUSTOM_DOMAIN_STATE_CONFLICT = 6;
+}
+
+// === Custom domains as a resource ===
+//
+// A Domain is an org-scoped resource: a hostname the org has claimed, plus
+// where it is in acquisition. A DomainBinding is what makes it SERVE
+// something. They are separate because their lifetimes are: a domain outlives
+// any particular deployment — that is the point of owning one — and deleting
+// an environment frees the binding while leaving the domain, and its
+// hard-won verification, intact.
+//
+// These live in controlplane.v1 rather than in the service file because two
+// services describe them: DomainService manages them, and DeployService
+// reports them on a deployment's observed status.
+
+// Domain is one hostname an org has claimed.
+message Domain {
+  string id = 1;
+  // The hostname, lowercased: 'hounders.club', 'api.hounders.club'.
+  // IMMUTABLE — a domain is its name. Renaming would silently move a
+  // verification and a certificate onto an identity nobody proved.
+  string hostname = 2;
+  DeployCustomDomainState state = 3;
+  DomainSource source = 4;
+  // The A / CNAME / TXT records the tenant must publish. Computed and
+  // stable, so it is safe to show before, during and after verification —
+  // it stays populated once live, since removing the records breaks it.
+  repeated DeployDnsRecord required_records = 5;
+  // Why the last attempt failed, in terms a tenant can act on. Cleared on
+  // success.
+  string last_error = 6;
+  // When ownership was last PROVEN. Distinct from live_since: a domain can
+  // be verified and not yet serving, with no binding or a certificate still
+  // being issued.
+  google.protobuf.Timestamp verified_at = 7;
+  // When the domain FIRST served. Never cleared by a later failure.
+  google.protobuf.Timestamp live_since = 8;
+  google.protobuf.Timestamp created_at = 9;
+  google.protobuf.Timestamp updated_at = 10;
+  // The domain's binding, if it has one. At most one, always — a hostname
+  // resolves to exactly one place.
+  DomainBinding binding = 11;
+}
+
+// DomainSource is where a domain came from, which decides how verification
+// is SATISFIED and nothing else — the two are bound, routed, issued and
+// served identically.
+enum DomainSource {
+  DOMAIN_SOURCE_UNSPECIFIED = 0;
+  // The customer owns it and pointed it at us. Must prove ownership by
+  // publishing the TXT token.
+  DOMAIN_SOURCE_EXTERNAL = 1;
+  // Reliant owns it — a vanity or registrar domain the platform provisions.
+  // Created ALREADY VERIFIED: we are the registrant, so asking ourselves to
+  // publish a token into our own zone would prove nothing that owning the
+  // zone does not already prove.
+  DOMAIN_SOURCE_PLATFORM = 2;
+}
+
+// DomainBinding is what a domain serves: an environment and a target inside
+// it, or a redirect to another hostname.
+message DomainBinding {
+  string id = 1;
+  string domain_id = 2;
+  string environment_id = 3;
+  // The workload or static-site NAME within the environment — the thing a
+  // tenant names in their config, NOT a deployment id. A deployment id is
+  // re-minted when a workload is replaced, which is exactly when a binding
+  // must survive; a name also lets a domain be bound before its target has
+  // ever been deployed, which is the natural order for a first launch.
+  string target = 4;
+  // Serve a 308 to this hostname instead of proxying. The apex/www pair is
+  // the case: 'www.hounders.club' redirects to 'hounders.club'.
+  string redirect_to = 5;
+  google.protobuf.Timestamp created_at = 6;
+  google.protobuf.Timestamp updated_at = 7;
 }
 
 // Deployment is one deployable unit inside an environment.

@@ -1,0 +1,193 @@
+syntax = "proto3";
+
+// EXPERIMENTAL: controlplane.v1 is unstable. Field numbers, RPC names, and
+// service shapes may change without notice until the package is declared
+// stable. Consumers should pin to a specific control-plane commit.
+//
+// See proto/controlplane/v1/README.md for stability/versioning policy.
+
+package controlplane.v1;
+
+import "controlplane/v1/deploy.proto";
+import "forge/v1/forge.proto";
+
+option go_package = "github.com/reliant-labs/control-plane/gen/services/domain/v1;domainv1";
+
+// === DomainService ===
+//
+// A DOMAIN is an org-level resource: a hostname the org has claimed, which
+// exists independently of anything that serves it. Add it, publish the DNS
+// this service tells you to, watch it verify, then BIND it to an environment
+// and a target.
+//
+// WHY A RESOURCE AND NOT A FIELD ON A WORKLOAD SPEC. A domain's life does not
+// line up with a deployment's. It is acquired once, slowly, with a human
+// editing a zone we do not control; after that it is moved between
+// environments and targets freely — prod today, a staging cut tomorrow. As a
+// spec field, "point hounders.club at staging for an hour" would be a deploy,
+// and re-creating the workload would drop and re-acquire the domain, which
+// costs a certificate against a rate limit that cannot be raised. As a
+// resource with a binding, it is one write.
+//
+// It also gives the acquisition state somewhere honest to live. A domain
+// waiting on DNS is neither a broken deployment nor a healthy one, and a
+// model that has only the deployment to report against has to lie in one
+// direction or the other.
+//
+// ORG-SCOPED, AND THE ORG IS NEVER A REQUEST FIELD. Every RPC acts on the
+// caller's org, resolved server-side from the authenticated principal. A
+// domain id belonging to another org is NotFound — never an existence oracle
+// over another tenant's estate.
+//
+// AUTHORITY:
+//   - List / Get: any member of the org.
+//   - Create / Delete / Verify / bind / unbind: an org ADMIN. A domain is a
+//     public identity and a certificate is issued in the org's name, so the
+//     write side is not a thing every member should hold.
+//
+// UNIQUENESS IS DECIDED AT VERIFICATION, NOT AT CREATION. Any number of orgs
+// may add the same hostname and sit in PENDING_DNS; the first to prove
+// ownership takes it, and the others move to CONFLICT on their next check.
+// Locking a hostname at creation would let anyone who merely TYPES a domain
+// deny it to its actual owner, who could not then even begin to prove
+// ownership.
+service DomainService {
+  // CreateDomain claims a hostname for the caller's org and mints its
+  // ownership token. The domain starts in PENDING_DNS with required_records
+  // populated — those records are the whole of what the tenant must do next.
+  rpc CreateDomain(CreateDomainRequest) returns (CreateDomainResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+  // GetDomain returns one domain of the caller's org, with its binding.
+  rpc GetDomain(GetDomainRequest) returns (GetDomainResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+  // ListDomains returns every domain of the caller's org, by hostname.
+  rpc ListDomains(ListDomainsRequest) returns (ListDomainsResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+  // DeleteDomain removes a domain and its binding, and stops serving it.
+  //
+  // This FREES THE HOSTNAME for another org to claim, which is the only
+  // self-service escape from a CONFLICT: the org that holds it lets go.
+  rpc DeleteDomain(DeleteDomainRequest) returns (DeleteDomainResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+  // VerifyDomain checks DNS right now rather than waiting for the poller.
+  //
+  // A NUDGE, NOT THE MECHANISM. The reconciler polls regardless, so this
+  // changes only latency — it exists because a tenant who has just saved a
+  // record wants an answer in a second, and the backoff that keeps a
+  // week-old domain cheap would otherwise make them wait an hour.
+  rpc VerifyDomain(VerifyDomainRequest) returns (VerifyDomainResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+
+  // CreateDomainBinding points a domain at an environment and a target,
+  // replacing any binding it already has.
+  //
+  // BINDABLE IN ANY STATE, SERVES ONLY WHEN LIVE. A tenant can wire up the
+  // whole thing before their DNS has propagated and have it start serving by
+  // itself — which is the natural order of work, and the alternative would
+  // be an error telling them to come back later and repeat themselves.
+  rpc CreateDomainBinding(CreateDomainBindingRequest) returns (CreateDomainBindingResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+  // DeleteDomainBinding stops the domain serving, and keeps the domain.
+  // Its verification survives, so re-binding later costs no DNS work and no
+  // new certificate.
+  rpc DeleteDomainBinding(DeleteDomainBindingRequest) returns (DeleteDomainBindingResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+  // ListDomainBindings returns the caller org's bindings, optionally only
+  // those in one environment.
+  rpc ListDomainBindings(ListDomainBindingsRequest) returns (ListDomainBindingsResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+}
+
+message CreateDomainRequest {
+  // The hostname to claim: 'hounders.club', 'www.hounders.club'. Lowercased
+  // and trimmed of a trailing dot server-side, so a value pasted out of a
+  // DNS tool claims the same domain as one typed by hand.
+  string hostname = 1;
+}
+
+message CreateDomainResponse {
+  Domain domain = 1;
+}
+
+message GetDomainRequest {
+  // Exactly one of the two. A hostname lookup exists because a UI that has
+  // just been told "this domain is taken" has the name and not the id.
+  string domain_id = 1;
+  string hostname = 2;
+}
+
+message GetDomainResponse {
+  Domain domain = 1;
+}
+
+// ListDomainsRequest takes no filter, deliberately.
+//
+// AN ENVIRONMENT FILTER WOULD NOT BE A FILTER ON THIS RESOURCE. A domain has
+// no environment; its BINDING does, so "domains in prod" is a question about
+// bindings and is answered by ListDomainBindings(environment_id). Since each
+// Domain already carries its binding inline, a caller that wants the list
+// scoped has both halves in one response already.
+//
+// Orgs hold a handful of domains, not thousands, so this deliberately has no
+// pagination either.
+message ListDomainsRequest {}
+
+message ListDomainsResponse {
+  repeated Domain domains = 1;
+}
+
+message DeleteDomainRequest {
+  string domain_id = 1;
+}
+
+message DeleteDomainResponse {}
+
+message VerifyDomainRequest {
+  string domain_id = 1;
+}
+
+message VerifyDomainResponse {
+  // The domain as the check left it, so a caller sees the new state and any
+  // new last_error without a second read.
+  Domain domain = 1;
+}
+
+message CreateDomainBindingRequest {
+  string domain_id = 1;
+  string environment_id = 2;
+  // The workload or static-site name within the environment. Required
+  // unless redirect_to is set.
+  string target = 3;
+  // Serve a 308 to this hostname instead of proxying to a target. Mutually
+  // exclusive with target.
+  string redirect_to = 4;
+}
+
+message CreateDomainBindingResponse {
+  DomainBinding binding = 1;
+}
+
+message DeleteDomainBindingRequest {
+  // Either the binding's own id, or the domain it belongs to — a caller
+  // holding the domain should not need a second read to unbind it.
+  string binding_id = 1;
+  string domain_id = 2;
+}
+
+message DeleteDomainBindingResponse {}
+
+message ListDomainBindingsRequest {
+  optional string environment_id = 1;
+}
+
+message ListDomainBindingsResponse {
+  repeated DomainBinding bindings = 1;
+}
