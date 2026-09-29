@@ -1126,14 +1126,15 @@ func (s *SettingsService) UpdateProviderAPIKey(ctx context.Context, req *connect
 
 	// Only supported providers
 	validProviders := map[string]bool{
-		"claude":     true,
-		"codex":      true,
-		"copilot":    true,
-		"reliant":    true,
-		"anthropic":  true,
-		"openai":     true,
-		"gemini":     true,
-		"openrouter": true,
+		"claude":             true,
+		"codex":              true,
+		"copilot":            true,
+		antigravity.DriverID: true,
+		"reliant":            true,
+		"anthropic":          true,
+		"openai":             true,
+		"gemini":             true,
+		"openrouter":         true,
 	}
 
 	if !validProviders[provider] {
@@ -1213,6 +1214,31 @@ func (s *SettingsService) UpdateProviderAPIKey(ctx context.Context, req *connect
 		return connect.NewResponse(&reliantv1.UpdateProviderAPIKeyResponse{
 			Success: true,
 			Message: "Disconnected from GitHub Copilot",
+		}), nil
+	}
+
+	if provider == antigravity.DriverID {
+		if strings.TrimSpace(req.Msg.ApiKey) != "" {
+			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("antigravity does not use manual API keys. Use Login with Antigravity in Settings"))
+		}
+
+		if err := s.database.DeleteAntigravityAuthTokens(ctx, userID); err != nil {
+			logging.Error("Failed to delete Antigravity auth tokens", "error", err)
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to disconnect from Antigravity"))
+		}
+		if err := s.database.DeleteProviderAPIKey(ctx, userID, antigravity.DriverID); err != nil {
+			logging.Error("Failed to delete Antigravity provider marker", "error", err)
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to disconnect from Antigravity"))
+		}
+		trackProviderEvent("disconnected", "oauth")
+
+		if err := s.database.EmitUserRefetch(ctx, userID, db.RefetchConfigHealth, db.RefetchOpts{}); err != nil {
+			logging.Warn("Failed to emit config_health refetch after Antigravity disconnect", "error", err)
+		}
+
+		return connect.NewResponse(&reliantv1.UpdateProviderAPIKeyResponse{
+			Success: true,
+			Message: "Disconnected from Antigravity",
 		}), nil
 	}
 
