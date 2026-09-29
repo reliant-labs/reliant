@@ -23,26 +23,33 @@ export interface ActivityStep {
 }
 
 /**
- * Check if a step saved a message by looking for its -save counterpart
+ * Identity of a step within a workflow: its step id plus loop context, so a
+ * step in loop iteration 3 only matches the "-save" step of iteration 3.
  */
-function stepSavedMessage(step: StepExecution, allSteps: StepExecution[]): boolean {
-  // Find the corresponding save step
-  const saveStepId = `${step.stepId}-save`;
-  const saveStep = allSteps.find(s => 
-    s.stepId === saveStepId && 
-    // Match loop context if present
-    s.loopIteration === step.loopIteration &&
-    s.loopNodeId === step.loopNodeId
-  );
-  
-  if (!saveStep) {
-    // No save step exists - no message was saved
-    return false;
+function stepKey(stepId: string, step: StepExecution): string {
+  return `${stepId}\u0000${step.loopNodeId ?? ""}\u0000${step.loopIteration ?? ""}`;
+}
+
+/**
+ * Keys of the steps whose "-save" counterpart recorded a message_id — i.e. the
+ * steps that produced a message, which the timeline renders as the message.
+ *
+ * Built once per workflow so each lookup is O(1). This used to be a linear
+ * find() over every step, per step: O(steps²). A long-running agent workflow
+ * reaches tens of thousands of steps (27,765 measured), and the timeline
+ * recomputes this on every message and streamed delta — that was ~385M
+ * comparisons per recompute and multi-second main-thread stalls.
+ */
+function savedMessageStepKeys(steps: StepExecution[]): Set<string> {
+  const saved = new Set<string>();
+  for (const step of steps) {
+    if (!step.stepId.endsWith("-save")) continue;
+    // Sent by the server as its own field (a generated column); a save step's
+    // output_json is no longer shipped just so this could read one id from it.
+    if (!step.savedMessageId) continue;
+    saved.add(stepKey(step.stepId.slice(0, -"-save".length), step));
   }
-  
-  // Check if save step produced a message_id
-  const messageId = saveStep.outputJson?.message_id;
-  return !!messageId;
+  return saved;
 }
 
 /**
@@ -90,16 +97,19 @@ export function getActivitySteps(workflow: WorkflowExecution): ActivityStep[] {
   const result: ActivityStep[] = [];
   
   function processWorkflow(wf: WorkflowExecution) {
+    const savedMessage = savedMessageStepKeys(wf.steps);
     for (const step of wf.steps) {
       // Skip save steps themselves
       if (step.stepId.endsWith("-save")) continue;
-      
-      // Skip if this step saved a message
-      if (stepSavedMessage(step, wf.steps)) continue;
-      
-      // Only show user-facing activities (skip internal workflow plumbing)
+
+      // Only show user-facing activities (skip internal workflow plumbing).
+      // Checked before the save lookup: nearly every step of an agent
+      // workflow is internal, so this rejects most of them for one Set probe.
       if (!isUserFacingActivity(step)) continue;
-      
+
+      // Skip if this step saved a message
+      if (savedMessage.has(stepKey(step.stepId, step))) continue;
+
       // This step needs an activity indicator
       result.push({
         step,

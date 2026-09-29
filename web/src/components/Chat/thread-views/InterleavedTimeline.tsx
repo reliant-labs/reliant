@@ -617,6 +617,15 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
   const contentMaxWidthClass = timelineVariant === "minimal" ? "max-w-[900px]" : "max-w-[1200px]";
   const timelineHorizontalPaddingClass = timelineVariant === "minimal" ? "px-4 sm:px-8" : "px-4 sm:px-6 lg:px-8";
   const timelineGapClass = timelineVariant === "card" ? "py-1" : timelineVariant === "minimal" ? "py-0.5" : "";
+  // Derived from the execution tree ALONE, so it is memoized on that alone.
+  // Inside timelineItems it re-walked every step of every workflow on each
+  // message and streamed delta, although the tree only changes when the
+  // workflow_executions query refetches — and a long-running chat carries
+  // tens of thousands of steps.
+  const activitySteps = useMemo(
+    () => (workflowExecution ? getActivitySteps(workflowExecution) : []),
+    [workflowExecution],
+  );
   const timelineItems = useMemo(() => {
     // Build workflow lookups from execution tree
     const { byId, displays } = buildWorkflowLookups(workflowExecution, chatId);
@@ -823,8 +832,8 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
     }
 
     // Insert activities at correct positions
-    if (workflowExecution) {
-      const activities = getActivitySteps(workflowExecution);
+    if (activitySteps.length > 0) {
+      const activities = activitySteps;
 
       // Find first user message time to skip setup activities
       const firstUserItem = items.find(
@@ -960,7 +969,7 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
     }
 
     return items;
-  }, [messages, chatId, workflowExecution, selectedThreads, errorEvents, infoEvents, runOutputs, activeThreads]);
+  }, [messages, chatId, workflowExecution, activitySteps, selectedThreads, errorEvents, infoEvents, runOutputs, activeThreads]);
 
   // `timelineItems` IS the list Virtuoso renders. There is deliberately no
   // per-row wrapper carrying `key`/`isLast`: both are derivable from the item
