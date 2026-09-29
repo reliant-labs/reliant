@@ -17,7 +17,7 @@ import type { JsonObject, Message } from "@bufbuild/protobuf";
  * Describes the file controlplane/v1/deploy.proto.
  */
 export const file_controlplane_v1_deploy: GenFile = /*@__PURE__*/
-  fileDesc("Chxjb250cm9scGxhbmUvdjEvZGVwbG95LnByb3RvEg9jb250cm9scGxhbmUudjEipgEKDERlcGxveVRlbmFudBIOCgZvcmdfaWQYASABKAkSDAoEc2x1ZxgCIAEoCRIYChBuYW1lc3BhY2VfcHJlZml4GAMgASgJEi4KCmNyZWF0ZWRfYXQYBCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi4KCnVwZGF0ZWRfYXQYBSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIqsCChNEZXBsb3lUZW5hbnRDbHVzdGVyEgoKAmlkGAEgASgJEgwKBG5hbWUYAiABKAkSOAoIcHJvdmlkZXIYAyABKA4yJi5jb250cm9scGxhbmUudjEuRGVwbG95Q2x1c3RlclByb3ZpZGVyEjIKBXBoYXNlGAQgASgOMiMuY29udHJvbHBsYW5lLnYxLkRlcGxveUNsdXN0ZXJQaGFzZRIsCghyZWFkeV9hdBgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLgoKY3JlYXRlZF9hdBgGIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLgoKdXBkYXRlZF9hdBgHIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiggQKEURlcGxveUVudmlyb25tZW50EgoKAmlkGAEgASgJEgwKBG5hbWUYAiABKAkSNAoEa2luZBgDIAEoDjImLmNvbnRyb2xwbGFuZS52MS5EZXBsb3lFbnZpcm9ubWVudEtpbmQSEQoJbmFtZXNwYWNlGAQgASgJEhkKEXRlbmFudF9jbHVzdGVyX2lkGAUgASgJEhwKFGN1cnJlbnRfcHJvbW90aW9uX2lkGAYgASgJEi4KCmV4cGlyZXNfYXQYByABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhIKCnNvdXJjZV9yZWYYCCABKAkSHQoVc2NhbGVfdG9femVyb19lbmFibGVkGAkgASgIEiIKGnNjYWxlX3RvX3plcm9faWRsZV9zZWNvbmRzGAogASgFEi4KCmNyZWF0ZWRfYXQYCyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi4KCnVwZGF0ZWRfYXQYDCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEkAKEHJlY29uY2lsZV9wb2xpY3kYDSABKA4yJi5jb250cm9scGxhbmUudjEuRGVwbG95UmVjb25jaWxlUG9saWN5EhcKD2ltYWdlX3B1c2hfYmFzZRgOIAEoCRIPCgdwcm9qZWN0GA8gASgJItACChVEZXBsb3lFbnZpcm9ubWVudFNwZWMSDAoEbmFtZRgBIAEoCRI0CgRraW5kGAIgASgOMiYuY29udHJvbHBsYW5lLnYxLkRlcGxveUVudmlyb25tZW50S2luZBIZChF0ZW5hbnRfY2x1c3Rlcl9pZBgDIAEoCRIuCgpleHBpcmVzX2F0GAQgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBISCgpzb3VyY2VfcmVmGAUgASgJEh0KFXNjYWxlX3RvX3plcm9fZW5hYmxlZBgGIAEoCBIiChpzY2FsZV90b196ZXJvX2lkbGVfc2Vjb25kcxgHIAEoBRJAChByZWNvbmNpbGVfcG9saWN5GAggASgOMiYuY29udHJvbHBsYW5lLnYxLkRlcGxveVJlY29uY2lsZVBvbGljeRIPCgdwcm9qZWN0GAkgASgJIv4BChlEZXBsb3lPYnNlcnZlZFN0YXRlRGV0YWlsEjMKBXN0YXRlGAEgASgOMiQuY29udHJvbHBsYW5lLnYxLkRlcGxveU9ic2VydmVkU3RhdGUSEAoIcmVwbGljYXMYAiABKAUSFAoMaW1hZ2VfZGlnZXN0GAMgASgJEjEKDXJlY29uY2lsZWRfYXQYBCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhIKCmxhc3RfZXJyb3IYBSABKAkSCwoDdXJsGAYgASgJEjAKDHN0YWJsZV9zaW5jZRgHIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAi8gIKCkRlcGxveW1lbnQSCgoCaWQYASABKAkSDgoGb3JnX2lkGAIgASgJEhYKDmVudmlyb25tZW50X2lkGAMgASgJEgwKBG5hbWUYBCABKAkSKQoEdGllchgFIAEoDjIbLmNvbnRyb2xwbGFuZS52MS5EZXBsb3lUaWVyEjwKCG9ic2VydmVkGAcgASgLMiouY29udHJvbHBsYW5lLnYxLkRlcGxveU9ic2VydmVkU3RhdGVEZXRhaWwSLgoKY3JlYXRlZF9hdBgIIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLgoKdXBkYXRlZF9hdBgJIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASJQoEc3BlYxgLIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3QSMgoJcnVuX3N0YXRlGAogASgOMh8uY29udHJvbHBsYW5lLnYxLkRlcGxveVJ1blN0YXRlIs4BCg5EZXBsb3lBcnRpZmFjdBIMCgRuYW1lGAEgASgJEg4KBmRpZ2VzdBgCIAEoCRIRCglwbGF0Zm9ybXMYAyADKAkSDAoEa2luZBgEIAEoCRIPCgd2ZXJzaW9uGAUgASgJEhEKCWludGVncml0eRgGIAEoCRILCgN1cmkYByABKAkSDAoEbW9kZRgIIAEoCRIPCgd2YXJpYW50GAkgASgJEi0KBnNvdXJjZRgKIAEoCzIdLmNvbnRyb2xwbGFuZS52MS5EZXBsb3lTb3VyY2UiSQoMRGVwbG95U291cmNlEgwKBHJlcG8YASABKAkSCwoDcmVmGAIgASgJEg4KBnN1YmRpchgDIAEoCRIOCgZjb21taXQYBCABKAki5AEKDURlcGxveVJlbGVhc2USCgoCaWQYASABKAkSDwoHdmVyc2lvbhgCIAEoCRISCgpnaXRfY29tbWl0GAMgASgJEg8KB2dpdF90YWcYBCABKAkSEQoJZ2l0X2RpcnR5GAUgASgIEjIKCWFydGlmYWN0cxgGIAMoCzIfLmNvbnRyb2xwbGFuZS52MS5EZXBsb3lBcnRpZmFjdBIaChJjcmVhdGVkX2J5X3VzZXJfaWQYByABKAkSLgoKY3JlYXRlZF9hdBgIIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiNwoKRGVwbG95R2F0ZRIMCgRuYW1lGAEgASgJEg4KBnN0YXR1cxgCIAEoCRILCgN1cmwYAyABKAkijAUKD0RlcGxveVByb21vdGlvbhIKCgJpZBgBIAEoCRIWCg5lbnZpcm9ubWVudF9pZBgCIAEoCRISCgpyZWxlYXNlX2lkGAMgASgJEjIKBGtpbmQYBCABKA4yJC5jb250cm9scGxhbmUudjEuRGVwbG95UHJvbW90aW9uS2luZBIbChNmcm9tX2Vudmlyb25tZW50X2lkGAUgASgJElMKEnJlc29sdmVkX2FydGlmYWN0cxgGIAMoCzI3LmNvbnRyb2xwbGFuZS52MS5EZXBsb3lQcm9tb3Rpb24uUmVzb2x2ZWRBcnRpZmFjdHNFbnRyeRIbChNwcm9tb3RlZF9ieV91c2VyX2lkGAcgASgJEhkKEXByb21vdGVkX2J5X2FjdG9yGAggASgJEioKBWdhdGVzGAkgAygLMhsuY29udHJvbHBsYW5lLnYxLkRlcGxveUdhdGUSDAoEbm90ZRgKIAEoCRIuCgpjcmVhdGVkX2F0GAsgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBJPChByZXNvbHZlZF9zb3VyY2VzGAwgAygLMjUuY29udHJvbHBsYW5lLnYxLkRlcGxveVByb21vdGlvbi5SZXNvbHZlZFNvdXJjZXNFbnRyeRIXCg9yZWxlYXNlX3ZlcnNpb24YDSABKAkaOAoWUmVzb2x2ZWRBcnRpZmFjdHNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBGlUKFFJlc29sdmVkU291cmNlc0VudHJ5EgsKA2tleRgBIAEoCRIsCgV2YWx1ZRgCIAEoCzIdLmNvbnRyb2xwbGFuZS52MS5EZXBsb3lTb3VyY2U6AjgBIrgCCg5EZXBsb3lVc2FnZVJvdxI6Cg1yZXNvdXJjZV9raW5kGAEgASgOMiMuY29udHJvbHBsYW5lLnYxLkRlcGxveVJlc291cmNlS2luZBIWCg5lbnZpcm9ubWVudF9pZBgCIAEoCRIVCg1kZXBsb3ltZW50X2lkGAMgASgJEhkKEXRlbmFudF9jbHVzdGVyX2lkGAQgASgJEjAKDHdpbmRvd19zdGFydBgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLgoKd2luZG93X2VuZBgGIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEAoIcXVhbnRpdHkYByABKAMSFAoMdW5pdF9kaXNwbGF5GAggASgJEhYKDmNvc3RfdXNkX25hbm9zGAkgASgDInIKDURlcGxveUxvZ0xpbmUSEAoIc2VxdWVuY2UYASABKAMSLQoJdGltZXN0YW1wGAIgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIPCgdtZXNzYWdlGAMgASgJEg8KB2NoYW5uZWwYBCABKAkiaQobRGVwbG95VGVuYW50Q2x1c3RlckludGVybmFsEhkKEXRlbmFudF9jbHVzdGVyX2lkGAEgASgJEhcKD2hvc3RfY2x1c3Rlcl9pZBgCIAEoCRIWCg5ob3N0X25hbWVzcGFjZRgDIAEoCSJMChlEZXBsb3lFbnZpcm9ubWVudEludGVybmFsEhYKDmVudmlyb25tZW50X2lkGAEgASgJEhcKD2hvc3RfY2x1c3Rlcl9pZBgCIAEoCSLRAQoYRGVwbG95RGVwbG95bWVudEludGVybmFsEhUKDWRlcGxveW1lbnRfaWQYASABKAkSFwoPaG9zdF9jbHVzdGVyX2lkGAIgASgJEhEKCW5hbWVzcGFjZRgDIAEoCRIVCg1yZXNvdXJjZV9uYW1lGAQgASgJEj0KGWxhc3RfcmVjb25jaWxlX2F0dGVtcHRfYXQYBSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhwKFGNvbnNlY3V0aXZlX2ZhaWx1cmVzGAYgASgFKo0BCgpEZXBsb3lUaWVyEhsKF0RFUExPWV9USUVSX1VOU1BFQ0lGSUVEEAASFgoSREVQTE9ZX1RJRVJfU1RBVElDEAESFwoTREVQTE9ZX1RJRVJfQkFDS0VORBACEhgKFERFUExPWV9USUVSX0RBVEFCQVNFEAMSFwoTREVQTE9ZX1RJRVJfQ0xVU1RFUhAEKrABChVEZXBsb3lFbnZpcm9ubWVudEtpbmQSJwojREVQTE9ZX0VOVklST05NRU5UX0tJTkRfVU5TUEVDSUZJRUQQABImCiJERVBMT1lfRU5WSVJPTk1FTlRfS0lORF9QRVJTSVNURU5UEAESIwofREVQTE9ZX0VOVklST05NRU5UX0tJTkRfUFJFVklFVxACEiEKHURFUExPWV9FTlZJUk9OTUVOVF9LSU5EX0xPQ0FMEAMqcAoORGVwbG95UnVuU3RhdGUSIAocREVQTE9ZX1JVTl9TVEFURV9VTlNQRUNJRklFRBAAEhwKGERFUExPWV9SVU5fU1RBVEVfUlVOTklORxABEh4KGkRFUExPWV9SVU5fU1RBVEVfU1VTUEVOREVEEAIqkwIKE0RlcGxveU9ic2VydmVkU3RhdGUSJQohREVQTE9ZX09CU0VSVkVEX1NUQVRFX1VOU1BFQ0lGSUVEEAASIQodREVQTE9ZX09CU0VSVkVEX1NUQVRFX1BFTkRJTkcQARIlCiFERVBMT1lfT0JTRVJWRURfU1RBVEVfUFJPR1JFU1NJTkcQAhIfChtERVBMT1lfT0JTRVJWRURfU1RBVEVfUkVBRFkQAxIiCh5ERVBMT1lfT0JTRVJWRURfU1RBVEVfREVHUkFERUQQBBIjCh9ERVBMT1lfT0JTRVJWRURfU1RBVEVfU1VTUEVOREVEEAUSIQodREVQTE9ZX09CU0VSVkVEX1NUQVRFX0RFTEVURUQQBirCAQoNRGVwbG95VmVyZGljdBIeChpERVBMT1lfVkVSRElDVF9VTlNQRUNJRklFRBAAEhoKFkRFUExPWV9WRVJESUNUX1VOS05PV04QARIdChlERVBMT1lfVkVSRElDVF9DT05WRVJHSU5HEAISHAoYREVQTE9ZX1ZFUkRJQ1RfQ09OVkVSR0VEEAMSGwoXREVQTE9ZX1ZFUkRJQ1RfRElWRVJHRUQQBBIbChdERVBMT1lfVkVSRElDVF9ERUdSQURFRBAFKq8BChVEZXBsb3lSZWNvbmNpbGVQb2xpY3kSJwojREVQTE9ZX1JFQ09OQ0lMRV9QT0xJQ1lfVU5TUEVDSUZJRUQQABIjCh9ERVBMT1lfUkVDT05DSUxFX1BPTElDWV9PQlNFUlZFEAESJAogREVQTE9ZX1JFQ09OQ0lMRV9QT0xJQ1lfQ09OVkVSR0UQAhIiCh5ERVBMT1lfUkVDT05DSUxFX1BPTElDWV9QSU5ORUQQAypfChNEZXBsb3lQcm9tb3Rpb25LaW5kEiUKIURFUExPWV9QUk9NT1RJT05fS0lORF9VTlNQRUNJRklFRBAAEiEKHURFUExPWV9QUk9NT1RJT05fS0lORF9QUk9NT1RFEAEqmwEKFURlcGxveUNsdXN0ZXJQcm92aWRlchInCiNERVBMT1lfQ0xVU1RFUl9QUk9WSURFUl9VTlNQRUNJRklFRBAAEisKJ0RFUExPWV9DTFVTVEVSX1BST1ZJREVSX1ZDTFVTVEVSX1NIQVJFRBABEiwKKERFUExPWV9DTFVTVEVSX1BST1ZJREVSX1ZDTFVTVEVSX1BSSVZBVEUQAiqiAQoSRGVwbG95Q2x1c3RlclBoYXNlEiQKIERFUExPWV9DTFVTVEVSX1BIQVNFX1VOU1BFQ0lGSUVEEAASJQohREVQTE9ZX0NMVVNURVJfUEhBU0VfUFJPVklTSU9OSU5HEAESHgoaREVQTE9ZX0NMVVNURVJfUEhBU0VfUkVBRFkQAhIfChtERVBMT1lfQ0xVU1RFUl9QSEFTRV9GQUlMRUQQAyq+AgoSRGVwbG95UmVzb3VyY2VLaW5kEiQKIERFUExPWV9SRVNPVVJDRV9LSU5EX1VOU1BFQ0lGSUVEEAASIgoeREVQTE9ZX1JFU09VUkNFX0tJTkRfQ1BVX01JTExJEAESIAocREVQTE9ZX1JFU09VUkNFX0tJTkRfTUVNX01JQhACEiEKHURFUExPWV9SRVNPVVJDRV9LSU5EX1ZDTFVTVEVSEAUSIwofREVQTE9ZX1JFU09VUkNFX0tJTkRfRUdSRVNTX0dJQhAGEicKI0RFUExPWV9SRVNPVVJDRV9LSU5EX0NETl9FR1JFU1NfR0lCEAcSJQohREVQTE9ZX1JFU09VUkNFX0tJTkRfQ0ROX1JFUVVFU1RTEAgSJAogREVQTE9ZX1JFU09VUkNFX0tJTkRfU1RPUkFHRV9HSUIQCipwCg9EZXBsb3lMb2dTdHJlYW0SIQodREVQTE9ZX0xPR19TVFJFQU1fVU5TUEVDSUZJRUQQABIbChdERVBMT1lfTE9HX1NUUkVBTV9CVUlMRBABEh0KGURFUExPWV9MT0dfU1RSRUFNX1JVTlRJTUUQAkLQAQoTY29tLmNvbnRyb2xwbGFuZS52MUILRGVwbG95UHJvdG9QAVpPZ2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vY29udHJvbHBsYW5lL2NvbnRyb2xwbGFuZS92MTtjb250cm9scGxhbmV2MaICA0NYWKoCD0NvbnRyb2xwbGFuZS5WMcoCD0NvbnRyb2xwbGFuZVxWMeICG0NvbnRyb2xwbGFuZVxWMVxHUEJNZXRhZGF0YeoCEENvbnRyb2xwbGFuZTo6VjFiBnByb3RvMw", [file_google_protobuf_struct, file_google_protobuf_timestamp]);
+  fileDesc("Chxjb250cm9scGxhbmUvdjEvZGVwbG95LnByb3RvEg9jb250cm9scGxhbmUudjEipgEKDERlcGxveVRlbmFudBIOCgZvcmdfaWQYASABKAkSDAoEc2x1ZxgCIAEoCRIYChBuYW1lc3BhY2VfcHJlZml4GAMgASgJEi4KCmNyZWF0ZWRfYXQYBCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi4KCnVwZGF0ZWRfYXQYBSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIqsCChNEZXBsb3lUZW5hbnRDbHVzdGVyEgoKAmlkGAEgASgJEgwKBG5hbWUYAiABKAkSOAoIcHJvdmlkZXIYAyABKA4yJi5jb250cm9scGxhbmUudjEuRGVwbG95Q2x1c3RlclByb3ZpZGVyEjIKBXBoYXNlGAQgASgOMiMuY29udHJvbHBsYW5lLnYxLkRlcGxveUNsdXN0ZXJQaGFzZRIsCghyZWFkeV9hdBgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLgoKY3JlYXRlZF9hdBgGIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLgoKdXBkYXRlZF9hdBgHIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAilgQKEURlcGxveUVudmlyb25tZW50EgoKAmlkGAEgASgJEgwKBG5hbWUYAiABKAkSNAoEa2luZBgDIAEoDjImLmNvbnRyb2xwbGFuZS52MS5EZXBsb3lFbnZpcm9ubWVudEtpbmQSEQoJbmFtZXNwYWNlGAQgASgJEhkKEXRlbmFudF9jbHVzdGVyX2lkGAUgASgJEhwKFGN1cnJlbnRfcHJvbW90aW9uX2lkGAYgASgJEi4KCmV4cGlyZXNfYXQYByABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhIKCnNvdXJjZV9yZWYYCCABKAkSHQoVc2NhbGVfdG9femVyb19lbmFibGVkGAkgASgIEiIKGnNjYWxlX3RvX3plcm9faWRsZV9zZWNvbmRzGAogASgFEi4KCmNyZWF0ZWRfYXQYCyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi4KCnVwZGF0ZWRfYXQYDCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEkAKEHJlY29uY2lsZV9wb2xpY3kYDSABKA4yJi5jb250cm9scGxhbmUudjEuRGVwbG95UmVjb25jaWxlUG9saWN5EhcKD2ltYWdlX3B1c2hfYmFzZRgOIAEoCRIPCgdwcm9qZWN0GA8gASgJSgQIEBARUgxjYXBhYmlsaXRpZXMi0AIKFURlcGxveUVudmlyb25tZW50U3BlYxIMCgRuYW1lGAEgASgJEjQKBGtpbmQYAiABKA4yJi5jb250cm9scGxhbmUudjEuRGVwbG95RW52aXJvbm1lbnRLaW5kEhkKEXRlbmFudF9jbHVzdGVyX2lkGAMgASgJEi4KCmV4cGlyZXNfYXQYBCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhIKCnNvdXJjZV9yZWYYBSABKAkSHQoVc2NhbGVfdG9femVyb19lbmFibGVkGAYgASgIEiIKGnNjYWxlX3RvX3plcm9faWRsZV9zZWNvbmRzGAcgASgFEkAKEHJlY29uY2lsZV9wb2xpY3kYCCABKA4yJi5jb250cm9scGxhbmUudjEuRGVwbG95UmVjb25jaWxlUG9saWN5Eg8KB3Byb2plY3QYCSABKAki7wIKGURlcGxveU9ic2VydmVkU3RhdGVEZXRhaWwSMwoFc3RhdGUYASABKA4yJC5jb250cm9scGxhbmUudjEuRGVwbG95T2JzZXJ2ZWRTdGF0ZRIQCghyZXBsaWNhcxgCIAEoBRIUCgxpbWFnZV9kaWdlc3QYAyABKAkSMQoNcmVjb25jaWxlZF9hdBgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEgoKbGFzdF9lcnJvchgFIAEoCRILCgN1cmwYBiABKAkSMAoMc3RhYmxlX3NpbmNlGAcgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBI6Cgdkb21haW5zGAggAygLMikuY29udHJvbHBsYW5lLnYxLkRlcGxveUN1c3RvbURvbWFpblN0YXR1cxIzCgZiYWNrdXAYCSABKAsyIy5jb250cm9scGxhbmUudjEuRGVwbG95QmFja3VwU3RhdHVzIsEBChJEZXBsb3lCYWNrdXBTdGF0dXMSOgoWbGFzdF9zdWNjZXNzZnVsX2JhY2t1cBgBIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASHQoVd2FsX2FyY2hpdmluZ19oZWFsdGh5GAIgASgIEjwKGGVhcmxpZXN0X3Jlc3RvcmFibGVfdGltZRgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEgoKbGFzdF9lcnJvchgEIAEoCSLjAQoYRGVwbG95Q3VzdG9tRG9tYWluU3RhdHVzEg4KBmRvbWFpbhgBIAEoCRI3CgVzdGF0ZRgCIAEoDjIoLmNvbnRyb2xwbGFuZS52MS5EZXBsb3lDdXN0b21Eb21haW5TdGF0ZRI6ChByZXF1aXJlZF9yZWNvcmRzGAMgAygLMiAuY29udHJvbHBsYW5lLnYxLkRlcGxveURuc1JlY29yZBISCgpsYXN0X2Vycm9yGAQgASgJEi4KCmxpdmVfc2luY2UYBSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIjwKD0RlcGxveURuc1JlY29yZBIMCgR0eXBlGAEgASgJEgwKBG5hbWUYAiABKAkSDQoFdmFsdWUYAyABKAki0AMKBkRvbWFpbhIKCgJpZBgBIAEoCRIQCghob3N0bmFtZRgCIAEoCRI3CgVzdGF0ZRgDIAEoDjIoLmNvbnRyb2xwbGFuZS52MS5EZXBsb3lDdXN0b21Eb21haW5TdGF0ZRItCgZzb3VyY2UYBCABKA4yHS5jb250cm9scGxhbmUudjEuRG9tYWluU291cmNlEjoKEHJlcXVpcmVkX3JlY29yZHMYBSADKAsyIC5jb250cm9scGxhbmUudjEuRGVwbG95RG5zUmVjb3JkEhIKCmxhc3RfZXJyb3IYBiABKAkSLwoLdmVyaWZpZWRfYXQYByABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi4KCmxpdmVfc2luY2UYCCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi4KCmNyZWF0ZWRfYXQYCSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi4KCnVwZGF0ZWRfYXQYCiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi8KB2JpbmRpbmcYCyABKAsyHi5jb250cm9scGxhbmUudjEuRG9tYWluQmluZGluZyLLAQoNRG9tYWluQmluZGluZxIKCgJpZBgBIAEoCRIRCglkb21haW5faWQYAiABKAkSFgoOZW52aXJvbm1lbnRfaWQYAyABKAkSDgoGdGFyZ2V0GAQgASgJEhMKC3JlZGlyZWN0X3RvGAUgASgJEi4KCmNyZWF0ZWRfYXQYBiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi4KCnVwZGF0ZWRfYXQYByABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIvICCgpEZXBsb3ltZW50EgoKAmlkGAEgASgJEg4KBm9yZ19pZBgCIAEoCRIWCg5lbnZpcm9ubWVudF9pZBgDIAEoCRIMCgRuYW1lGAQgASgJEikKBHRpZXIYBSABKA4yGy5jb250cm9scGxhbmUudjEuRGVwbG95VGllchI8CghvYnNlcnZlZBgHIAEoCzIqLmNvbnRyb2xwbGFuZS52MS5EZXBsb3lPYnNlcnZlZFN0YXRlRGV0YWlsEi4KCmNyZWF0ZWRfYXQYCCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi4KCnVwZGF0ZWRfYXQYCSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEiUKBHNwZWMYCyABKAsyFy5nb29nbGUucHJvdG9idWYuU3RydWN0EjIKCXJ1bl9zdGF0ZRgKIAEoDjIfLmNvbnRyb2xwbGFuZS52MS5EZXBsb3lSdW5TdGF0ZSLOAQoORGVwbG95QXJ0aWZhY3QSDAoEbmFtZRgBIAEoCRIOCgZkaWdlc3QYAiABKAkSEQoJcGxhdGZvcm1zGAMgAygJEgwKBGtpbmQYBCABKAkSDwoHdmVyc2lvbhgFIAEoCRIRCglpbnRlZ3JpdHkYBiABKAkSCwoDdXJpGAcgASgJEgwKBG1vZGUYCCABKAkSDwoHdmFyaWFudBgJIAEoCRItCgZzb3VyY2UYCiABKAsyHS5jb250cm9scGxhbmUudjEuRGVwbG95U291cmNlIkkKDERlcGxveVNvdXJjZRIMCgRyZXBvGAEgASgJEgsKA3JlZhgCIAEoCRIOCgZzdWJkaXIYAyABKAkSDgoGY29tbWl0GAQgASgJIuQBCg1EZXBsb3lSZWxlYXNlEgoKAmlkGAEgASgJEg8KB3ZlcnNpb24YAiABKAkSEgoKZ2l0X2NvbW1pdBgDIAEoCRIPCgdnaXRfdGFnGAQgASgJEhEKCWdpdF9kaXJ0eRgFIAEoCBIyCglhcnRpZmFjdHMYBiADKAsyHy5jb250cm9scGxhbmUudjEuRGVwbG95QXJ0aWZhY3QSGgoSY3JlYXRlZF9ieV91c2VyX2lkGAcgASgJEi4KCmNyZWF0ZWRfYXQYCCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIjcKCkRlcGxveUdhdGUSDAoEbmFtZRgBIAEoCRIOCgZzdGF0dXMYAiABKAkSCwoDdXJsGAMgASgJIowFCg9EZXBsb3lQcm9tb3Rpb24SCgoCaWQYASABKAkSFgoOZW52aXJvbm1lbnRfaWQYAiABKAkSEgoKcmVsZWFzZV9pZBgDIAEoCRIyCgRraW5kGAQgASgOMiQuY29udHJvbHBsYW5lLnYxLkRlcGxveVByb21vdGlvbktpbmQSGwoTZnJvbV9lbnZpcm9ubWVudF9pZBgFIAEoCRJTChJyZXNvbHZlZF9hcnRpZmFjdHMYBiADKAsyNy5jb250cm9scGxhbmUudjEuRGVwbG95UHJvbW90aW9uLlJlc29sdmVkQXJ0aWZhY3RzRW50cnkSGwoTcHJvbW90ZWRfYnlfdXNlcl9pZBgHIAEoCRIZChFwcm9tb3RlZF9ieV9hY3RvchgIIAEoCRIqCgVnYXRlcxgJIAMoCzIbLmNvbnRyb2xwbGFuZS52MS5EZXBsb3lHYXRlEgwKBG5vdGUYCiABKAkSLgoKY3JlYXRlZF9hdBgLIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASTwoQcmVzb2x2ZWRfc291cmNlcxgMIAMoCzI1LmNvbnRyb2xwbGFuZS52MS5EZXBsb3lQcm9tb3Rpb24uUmVzb2x2ZWRTb3VyY2VzRW50cnkSFwoPcmVsZWFzZV92ZXJzaW9uGA0gASgJGjgKFlJlc29sdmVkQXJ0aWZhY3RzRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ARpVChRSZXNvbHZlZFNvdXJjZXNFbnRyeRILCgNrZXkYASABKAkSLAoFdmFsdWUYAiABKAsyHS5jb250cm9scGxhbmUudjEuRGVwbG95U291cmNlOgI4ASK4AgoORGVwbG95VXNhZ2VSb3cSOgoNcmVzb3VyY2Vfa2luZBgBIAEoDjIjLmNvbnRyb2xwbGFuZS52MS5EZXBsb3lSZXNvdXJjZUtpbmQSFgoOZW52aXJvbm1lbnRfaWQYAiABKAkSFQoNZGVwbG95bWVudF9pZBgDIAEoCRIZChF0ZW5hbnRfY2x1c3Rlcl9pZBgEIAEoCRIwCgx3aW5kb3dfc3RhcnQYBSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi4KCndpbmRvd19lbmQYBiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhAKCHF1YW50aXR5GAcgASgDEhQKDHVuaXRfZGlzcGxheRgIIAEoCRIWCg5jb3N0X3VzZF9uYW5vcxgJIAEoAyJyCg1EZXBsb3lMb2dMaW5lEhAKCHNlcXVlbmNlGAEgASgDEi0KCXRpbWVzdGFtcBgCIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASDwoHbWVzc2FnZRgDIAEoCRIPCgdjaGFubmVsGAQgASgJImkKG0RlcGxveVRlbmFudENsdXN0ZXJJbnRlcm5hbBIZChF0ZW5hbnRfY2x1c3Rlcl9pZBgBIAEoCRIXCg9ob3N0X2NsdXN0ZXJfaWQYAiABKAkSFgoOaG9zdF9uYW1lc3BhY2UYAyABKAkiTAoZRGVwbG95RW52aXJvbm1lbnRJbnRlcm5hbBIWCg5lbnZpcm9ubWVudF9pZBgBIAEoCRIXCg9ob3N0X2NsdXN0ZXJfaWQYAiABKAki0QEKGERlcGxveURlcGxveW1lbnRJbnRlcm5hbBIVCg1kZXBsb3ltZW50X2lkGAEgASgJEhcKD2hvc3RfY2x1c3Rlcl9pZBgCIAEoCRIRCgluYW1lc3BhY2UYAyABKAkSFQoNcmVzb3VyY2VfbmFtZRgEIAEoCRI9ChlsYXN0X3JlY29uY2lsZV9hdHRlbXB0X2F0GAUgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIcChRjb25zZWN1dGl2ZV9mYWlsdXJlcxgGIAEoBSqNAQoKRGVwbG95VGllchIbChdERVBMT1lfVElFUl9VTlNQRUNJRklFRBAAEhYKEkRFUExPWV9USUVSX1NUQVRJQxABEhcKE0RFUExPWV9USUVSX0JBQ0tFTkQQAhIYChRERVBMT1lfVElFUl9EQVRBQkFTRRADEhcKE0RFUExPWV9USUVSX0NMVVNURVIQBCqwAQoVRGVwbG95RW52aXJvbm1lbnRLaW5kEicKI0RFUExPWV9FTlZJUk9OTUVOVF9LSU5EX1VOU1BFQ0lGSUVEEAASJgoiREVQTE9ZX0VOVklST05NRU5UX0tJTkRfUEVSU0lTVEVOVBABEiMKH0RFUExPWV9FTlZJUk9OTUVOVF9LSU5EX1BSRVZJRVcQAhIhCh1ERVBMT1lfRU5WSVJPTk1FTlRfS0lORF9MT0NBTBADKnAKDkRlcGxveVJ1blN0YXRlEiAKHERFUExPWV9SVU5fU1RBVEVfVU5TUEVDSUZJRUQQABIcChhERVBMT1lfUlVOX1NUQVRFX1JVTk5JTkcQARIeChpERVBMT1lfUlVOX1NUQVRFX1NVU1BFTkRFRBACKpMCChNEZXBsb3lPYnNlcnZlZFN0YXRlEiUKIURFUExPWV9PQlNFUlZFRF9TVEFURV9VTlNQRUNJRklFRBAAEiEKHURFUExPWV9PQlNFUlZFRF9TVEFURV9QRU5ESU5HEAESJQohREVQTE9ZX09CU0VSVkVEX1NUQVRFX1BST0dSRVNTSU5HEAISHwobREVQTE9ZX09CU0VSVkVEX1NUQVRFX1JFQURZEAMSIgoeREVQTE9ZX09CU0VSVkVEX1NUQVRFX0RFR1JBREVEEAQSIwofREVQTE9ZX09CU0VSVkVEX1NUQVRFX1NVU1BFTkRFRBAFEiEKHURFUExPWV9PQlNFUlZFRF9TVEFURV9ERUxFVEVEEAYqwgEKDURlcGxveVZlcmRpY3QSHgoaREVQTE9ZX1ZFUkRJQ1RfVU5TUEVDSUZJRUQQABIaChZERVBMT1lfVkVSRElDVF9VTktOT1dOEAESHQoZREVQTE9ZX1ZFUkRJQ1RfQ09OVkVSR0lORxACEhwKGERFUExPWV9WRVJESUNUX0NPTlZFUkdFRBADEhsKF0RFUExPWV9WRVJESUNUX0RJVkVSR0VEEAQSGwoXREVQTE9ZX1ZFUkRJQ1RfREVHUkFERUQQBSqvAQoVRGVwbG95UmVjb25jaWxlUG9saWN5EicKI0RFUExPWV9SRUNPTkNJTEVfUE9MSUNZX1VOU1BFQ0lGSUVEEAASIwofREVQTE9ZX1JFQ09OQ0lMRV9QT0xJQ1lfT0JTRVJWRRABEiQKIERFUExPWV9SRUNPTkNJTEVfUE9MSUNZX0NPTlZFUkdFEAISIgoeREVQTE9ZX1JFQ09OQ0lMRV9QT0xJQ1lfUElOTkVEEAMqXwoTRGVwbG95UHJvbW90aW9uS2luZBIlCiFERVBMT1lfUFJPTU9USU9OX0tJTkRfVU5TUEVDSUZJRUQQABIhCh1ERVBMT1lfUFJPTU9USU9OX0tJTkRfUFJPTU9URRABKpsBChVEZXBsb3lDbHVzdGVyUHJvdmlkZXISJwojREVQTE9ZX0NMVVNURVJfUFJPVklERVJfVU5TUEVDSUZJRUQQABIrCidERVBMT1lfQ0xVU1RFUl9QUk9WSURFUl9WQ0xVU1RFUl9TSEFSRUQQARIsCihERVBMT1lfQ0xVU1RFUl9QUk9WSURFUl9WQ0xVU1RFUl9QUklWQVRFEAIqogEKEkRlcGxveUNsdXN0ZXJQaGFzZRIkCiBERVBMT1lfQ0xVU1RFUl9QSEFTRV9VTlNQRUNJRklFRBAAEiUKIURFUExPWV9DTFVTVEVSX1BIQVNFX1BST1ZJU0lPTklORxABEh4KGkRFUExPWV9DTFVTVEVSX1BIQVNFX1JFQURZEAISHwobREVQTE9ZX0NMVVNURVJfUEhBU0VfRkFJTEVEEAMqvgIKEkRlcGxveVJlc291cmNlS2luZBIkCiBERVBMT1lfUkVTT1VSQ0VfS0lORF9VTlNQRUNJRklFRBAAEiIKHkRFUExPWV9SRVNPVVJDRV9LSU5EX0NQVV9NSUxMSRABEiAKHERFUExPWV9SRVNPVVJDRV9LSU5EX01FTV9NSUIQAhIhCh1ERVBMT1lfUkVTT1VSQ0VfS0lORF9WQ0xVU1RFUhAFEiMKH0RFUExPWV9SRVNPVVJDRV9LSU5EX0VHUkVTU19HSUIQBhInCiNERVBMT1lfUkVTT1VSQ0VfS0lORF9DRE5fRUdSRVNTX0dJQhAHEiUKIURFUExPWV9SRVNPVVJDRV9LSU5EX0NETl9SRVFVRVNUUxAIEiQKIERFUExPWV9SRVNPVVJDRV9LSU5EX1NUT1JBR0VfR0lCEAoqcAoPRGVwbG95TG9nU3RyZWFtEiEKHURFUExPWV9MT0dfU1RSRUFNX1VOU1BFQ0lGSUVEEAASGwoXREVQTE9ZX0xPR19TVFJFQU1fQlVJTEQQARIdChlERVBMT1lfTE9HX1NUUkVBTV9SVU5USU1FEAIquAIKF0RlcGxveUN1c3RvbURvbWFpblN0YXRlEioKJkRFUExPWV9DVVNUT01fRE9NQUlOX1NUQVRFX1VOU1BFQ0lGSUVEEAASKgomREVQTE9ZX0NVU1RPTV9ET01BSU5fU1RBVEVfUEVORElOR19ETlMQARIoCiRERVBMT1lfQ1VTVE9NX0RPTUFJTl9TVEFURV9WRVJJRllJTkcQAhImCiJERVBMT1lfQ1VTVE9NX0RPTUFJTl9TVEFURV9JU1NVSU5HEAMSIwofREVQTE9ZX0NVU1RPTV9ET01BSU5fU1RBVEVfTElWRRAEEiUKIURFUExPWV9DVVNUT01fRE9NQUlOX1NUQVRFX0ZBSUxFRBAFEicKI0RFUExPWV9DVVNUT01fRE9NQUlOX1NUQVRFX0NPTkZMSUNUEAYqZQoMRG9tYWluU291cmNlEh0KGURPTUFJTl9TT1VSQ0VfVU5TUEVDSUZJRUQQABIaChZET01BSU5fU09VUkNFX0VYVEVSTkFMEAESGgoWRE9NQUlOX1NPVVJDRV9QTEFURk9STRACQtABChNjb20uY29udHJvbHBsYW5lLnYxQgtEZXBsb3lQcm90b1ABWk9naXRodWIuY29tL3JlbGlhbnQtbGFicy9yZWxpYW50L2dlbi9jb250cm9scGxhbmUvY29udHJvbHBsYW5lL3YxO2NvbnRyb2xwbGFuZXYxogIDQ1hYqgIPQ29udHJvbHBsYW5lLlYxygIPQ29udHJvbHBsYW5lXFYx4gIbQ29udHJvbHBsYW5lXFYxXEdQQk1ldGFkYXRh6gIQQ29udHJvbHBsYW5lOjpWMWIGcHJvdG8z", [file_google_protobuf_struct, file_google_protobuf_timestamp]);
 
 /**
  * DeployTenant is an organization's deploy-product extension. THE IDENTITY IS
@@ -439,6 +439,27 @@ export type DeployObservedStateDetail = Message<"controlplane.v1.DeployObservedS
    * @generated from field: google.protobuf.Timestamp stable_since = 7;
    */
   stableSince?: Timestamp | undefined;
+
+  /**
+   * Per-domain status for every custom domain this deployment declared.
+   * Empty when it declared none, and ALSO empty in an environment whose
+   * target does not advertise "custom_domains" — in which case nothing is
+   * converging them and reporting a state would be a fiction.
+   *
+   * @generated from field: repeated controlplane.v1.DeployCustomDomainStatus domains = 8;
+   */
+  domains: DeployCustomDomainStatus[];
+
+  /**
+   * Backup state, for a managed-database deployment that has one. Unset for
+   * every other tier, and ALSO unset for a database in an environment that
+   * configured no object store — where reporting "no backups yet" and
+   * "backups are not configured" as the same thing would be the dangerous
+   * conflation.
+   *
+   * @generated from field: controlplane.v1.DeployBackupStatus backup = 9;
+   */
+  backup?: DeployBackupStatus | undefined;
 };
 
 /**
@@ -447,6 +468,314 @@ export type DeployObservedStateDetail = Message<"controlplane.v1.DeployObservedS
  */
 export const DeployObservedStateDetailSchema: GenMessage<DeployObservedStateDetail> = /*@__PURE__*/
   messageDesc(file_controlplane_v1_deploy, 4);
+
+/**
+ * DeployBackupStatus is what a hosted user needs to answer one question:
+ * "if this database broke right now, what would I get back?"
+ *
+ * THREE FIELDS, BECAUSE THREE THINGS CAN BE TRUE INDEPENDENTLY. A database
+ * can have a recent base backup and broken WAL archiving (it would restore,
+ * but only to last night). It can have healthy archiving and no base backup
+ * (it would restore to nothing — WAL is replayed ON TOP OF a base backup, so
+ * an archive alone is useless). And it can have both while the oldest
+ * retained backup is newer than the incident being investigated. A single
+ * "backups: ok" boolean hides all three.
+ *
+ * @generated from message controlplane.v1.DeployBackupStatus
+ */
+export type DeployBackupStatus = Message<"controlplane.v1.DeployBackupStatus"> & {
+  /**
+   * When the last base backup completed. Unset means none has ever
+   * succeeded — which, whatever the WAL archive looks like, means there is
+   * nothing to restore.
+   *
+   * @generated from field: google.protobuf.Timestamp last_successful_backup = 1;
+   */
+  lastSuccessfulBackup?: Timestamp | undefined;
+
+  /**
+   * Whether WAL is currently reaching the object store, read from the
+   * CloudNativePG cluster's ContinuousArchiving condition. FALSE IS THE
+   * SILENT FAILURE THIS FIELD EXISTS FOR: a database whose archiving has
+   * stopped keeps serving traffic normally, and every minute it does is a
+   * minute that cannot be recovered to.
+   *
+   * @generated from field: bool wal_archiving_healthy = 2;
+   */
+  walArchivingHealthy: boolean;
+
+  /**
+   * The oldest point recovery can reach — the floor on point-in-time
+   * restore, set by the retention policy. Unset until a first backup exists.
+   *
+   * @generated from field: google.protobuf.Timestamp earliest_restorable_time = 3;
+   */
+  earliestRestorableTime?: Timestamp | undefined;
+
+  /**
+   * The last archiving or backup error, surfaced verbatim. Cleared on
+   * success. A tenant who can see "no bucket permission" fixes it; one who
+   * sees only wal_archiving_healthy=false files a ticket.
+   *
+   * @generated from field: string last_error = 4;
+   */
+  lastError: string;
+};
+
+/**
+ * Describes the message controlplane.v1.DeployBackupStatus.
+ * Use `create(DeployBackupStatusSchema)` to create a new message.
+ */
+export const DeployBackupStatusSchema: GenMessage<DeployBackupStatus> = /*@__PURE__*/
+  messageDesc(file_controlplane_v1_deploy, 5);
+
+/**
+ * DeployCustomDomainStatus is one customer-brought domain's acquisition
+ * state, plus the DNS the tenant still has to set for it.
+ *
+ * required_records IS NOT DIAGNOSTIC DECORATION. A custom domain is the one
+ * part of a deploy that the platform cannot complete on its own: it converges
+ * only after a human edits a zone we do not control. So the records travel
+ * WITH the state, because a bare PENDING_DNS tells a tenant they are blocked
+ * without telling them on what, and the answer differs per domain (an apex
+ * cannot take a CNAME; a subdomain should not be pinned to an IP).
+ * It is the DEPLOY-SIDE VIEW of a Domain plus its binding, reported against
+ * the deployment the binding points at. The domain itself is an org-scoped
+ * resource owned by DomainService; this message exists so `forge env status`
+ * can show "this workload answers on hounders.club, which is waiting on DNS"
+ * without a second call to a second service.
+ *
+ * @generated from message controlplane.v1.DeployCustomDomainStatus
+ */
+export type DeployCustomDomainStatus = Message<"controlplane.v1.DeployCustomDomainStatus"> & {
+  /**
+   * The hostname, lowercased. 'hounders.club', 'api.hounders.club'.
+   *
+   * @generated from field: string domain = 1;
+   */
+  domain: string;
+
+  /**
+   * @generated from field: controlplane.v1.DeployCustomDomainState state = 2;
+   */
+  state: DeployCustomDomainState;
+
+  /**
+   * The A / CNAME / TXT records the tenant must publish. Computed per domain
+   * and stable, so it is safe to show before, during and after verification —
+   * it stays populated once live, since removing the records would break it.
+   *
+   * @generated from field: repeated controlplane.v1.DeployDnsRecord required_records = 3;
+   */
+  requiredRecords: DeployDnsRecord[];
+
+  /**
+   * Why the last attempt failed, in terms a tenant can act on. Cleared on
+   * success.
+   *
+   * @generated from field: string last_error = 4;
+   */
+  lastError: string;
+
+  /**
+   * When the domain first reached LIVE. Unset in every other state.
+   *
+   * @generated from field: google.protobuf.Timestamp live_since = 5;
+   */
+  liveSince?: Timestamp | undefined;
+};
+
+/**
+ * Describes the message controlplane.v1.DeployCustomDomainStatus.
+ * Use `create(DeployCustomDomainStatusSchema)` to create a new message.
+ */
+export const DeployCustomDomainStatusSchema: GenMessage<DeployCustomDomainStatus> = /*@__PURE__*/
+  messageDesc(file_controlplane_v1_deploy, 6);
+
+/**
+ * DeployDnsRecord is one record a tenant publishes at their registrar.
+ *
+ * @generated from message controlplane.v1.DeployDnsRecord
+ */
+export type DeployDnsRecord = Message<"controlplane.v1.DeployDnsRecord"> & {
+  /**
+   * 'A', 'CNAME' or 'TXT'.
+   *
+   * @generated from field: string type = 1;
+   */
+  type: string;
+
+  /**
+   * The name to create, fully qualified: 'hounders.club',
+   * 'www.hounders.club', '_reliant-challenge.hounders.club'.
+   *
+   * @generated from field: string name = 2;
+   */
+  name: string;
+
+  /**
+   * The value: an IP for A, the platform ingress target for CNAME, the
+   * ownership token for TXT.
+   *
+   * @generated from field: string value = 3;
+   */
+  value: string;
+};
+
+/**
+ * Describes the message controlplane.v1.DeployDnsRecord.
+ * Use `create(DeployDnsRecordSchema)` to create a new message.
+ */
+export const DeployDnsRecordSchema: GenMessage<DeployDnsRecord> = /*@__PURE__*/
+  messageDesc(file_controlplane_v1_deploy, 7);
+
+/**
+ * Domain is one hostname an org has claimed.
+ *
+ * @generated from message controlplane.v1.Domain
+ */
+export type Domain = Message<"controlplane.v1.Domain"> & {
+  /**
+   * @generated from field: string id = 1;
+   */
+  id: string;
+
+  /**
+   * The hostname, lowercased: 'hounders.club', 'api.hounders.club'.
+   * IMMUTABLE — a domain is its name. Renaming would silently move a
+   * verification and a certificate onto an identity nobody proved.
+   *
+   * @generated from field: string hostname = 2;
+   */
+  hostname: string;
+
+  /**
+   * @generated from field: controlplane.v1.DeployCustomDomainState state = 3;
+   */
+  state: DeployCustomDomainState;
+
+  /**
+   * @generated from field: controlplane.v1.DomainSource source = 4;
+   */
+  source: DomainSource;
+
+  /**
+   * The A / CNAME / TXT records the tenant must publish. Computed and
+   * stable, so it is safe to show before, during and after verification —
+   * it stays populated once live, since removing the records breaks it.
+   *
+   * @generated from field: repeated controlplane.v1.DeployDnsRecord required_records = 5;
+   */
+  requiredRecords: DeployDnsRecord[];
+
+  /**
+   * Why the last attempt failed, in terms a tenant can act on. Cleared on
+   * success.
+   *
+   * @generated from field: string last_error = 6;
+   */
+  lastError: string;
+
+  /**
+   * When ownership was last PROVEN. Distinct from live_since: a domain can
+   * be verified and not yet serving, with no binding or a certificate still
+   * being issued.
+   *
+   * @generated from field: google.protobuf.Timestamp verified_at = 7;
+   */
+  verifiedAt?: Timestamp | undefined;
+
+  /**
+   * When the domain FIRST served. Never cleared by a later failure.
+   *
+   * @generated from field: google.protobuf.Timestamp live_since = 8;
+   */
+  liveSince?: Timestamp | undefined;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp created_at = 9;
+   */
+  createdAt?: Timestamp | undefined;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp updated_at = 10;
+   */
+  updatedAt?: Timestamp | undefined;
+
+  /**
+   * The domain's binding, if it has one. At most one, always — a hostname
+   * resolves to exactly one place.
+   *
+   * @generated from field: controlplane.v1.DomainBinding binding = 11;
+   */
+  binding?: DomainBinding | undefined;
+};
+
+/**
+ * Describes the message controlplane.v1.Domain.
+ * Use `create(DomainSchema)` to create a new message.
+ */
+export const DomainSchema: GenMessage<Domain> = /*@__PURE__*/
+  messageDesc(file_controlplane_v1_deploy, 8);
+
+/**
+ * DomainBinding is what a domain serves: an environment and a target inside
+ * it, or a redirect to another hostname.
+ *
+ * @generated from message controlplane.v1.DomainBinding
+ */
+export type DomainBinding = Message<"controlplane.v1.DomainBinding"> & {
+  /**
+   * @generated from field: string id = 1;
+   */
+  id: string;
+
+  /**
+   * @generated from field: string domain_id = 2;
+   */
+  domainId: string;
+
+  /**
+   * @generated from field: string environment_id = 3;
+   */
+  environmentId: string;
+
+  /**
+   * The workload or static-site NAME within the environment — the thing a
+   * tenant names in their config, NOT a deployment id. A deployment id is
+   * re-minted when a workload is replaced, which is exactly when a binding
+   * must survive; a name also lets a domain be bound before its target has
+   * ever been deployed, which is the natural order for a first launch.
+   *
+   * @generated from field: string target = 4;
+   */
+  target: string;
+
+  /**
+   * Serve a 308 to this hostname instead of proxying. The apex/www pair is
+   * the case: 'www.hounders.club' redirects to 'hounders.club'.
+   *
+   * @generated from field: string redirect_to = 5;
+   */
+  redirectTo: string;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp created_at = 6;
+   */
+  createdAt?: Timestamp | undefined;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp updated_at = 7;
+   */
+  updatedAt?: Timestamp | undefined;
+};
+
+/**
+ * Describes the message controlplane.v1.DomainBinding.
+ * Use `create(DomainBindingSchema)` to create a new message.
+ */
+export const DomainBindingSchema: GenMessage<DomainBinding> = /*@__PURE__*/
+  messageDesc(file_controlplane_v1_deploy, 9);
 
 /**
  * Deployment is one deployable unit inside an environment.
@@ -536,7 +865,7 @@ export type Deployment = Message<"controlplane.v1.Deployment"> & {
  * Use `create(DeploymentSchema)` to create a new message.
  */
 export const DeploymentSchema: GenMessage<Deployment> = /*@__PURE__*/
-  messageDesc(file_controlplane_v1_deploy, 5);
+  messageDesc(file_controlplane_v1_deploy, 10);
 
 /**
  * DeployArtifact is one image's resolved identity within a release.
@@ -667,7 +996,7 @@ export type DeployArtifact = Message<"controlplane.v1.DeployArtifact"> & {
  * Use `create(DeployArtifactSchema)` to create a new message.
  */
 export const DeployArtifactSchema: GenMessage<DeployArtifact> = /*@__PURE__*/
-  messageDesc(file_controlplane_v1_deploy, 6);
+  messageDesc(file_controlplane_v1_deploy, 11);
 
 /**
  * DeploySource pins an artifact to source rather than to built bytes: a
@@ -704,7 +1033,7 @@ export type DeploySource = Message<"controlplane.v1.DeploySource"> & {
  * Use `create(DeploySourceSchema)` to create a new message.
  */
 export const DeploySourceSchema: GenMessage<DeploySource> = /*@__PURE__*/
-  messageDesc(file_controlplane_v1_deploy, 7);
+  messageDesc(file_controlplane_v1_deploy, 12);
 
 /**
  * DeployRelease is a cut set of content-addressed digests under a version
@@ -771,7 +1100,7 @@ export type DeployRelease = Message<"controlplane.v1.DeployRelease"> & {
  * Use `create(DeployReleaseSchema)` to create a new message.
  */
 export const DeployReleaseSchema: GenMessage<DeployRelease> = /*@__PURE__*/
-  messageDesc(file_controlplane_v1_deploy, 8);
+  messageDesc(file_controlplane_v1_deploy, 13);
 
 /**
  * DeployGate is one check that had passed when a promotion was recorded.
@@ -800,7 +1129,7 @@ export type DeployGate = Message<"controlplane.v1.DeployGate"> & {
  * Use `create(DeployGateSchema)` to create a new message.
  */
 export const DeployGateSchema: GenMessage<DeployGate> = /*@__PURE__*/
-  messageDesc(file_controlplane_v1_deploy, 9);
+  messageDesc(file_controlplane_v1_deploy, 14);
 
 /**
  * DeployPromotion is one entry in the append-only ledger: this environment ran
@@ -918,7 +1247,7 @@ export type DeployPromotion = Message<"controlplane.v1.DeployPromotion"> & {
  * Use `create(DeployPromotionSchema)` to create a new message.
  */
 export const DeployPromotionSchema: GenMessage<DeployPromotion> = /*@__PURE__*/
-  messageDesc(file_controlplane_v1_deploy, 10);
+  messageDesc(file_controlplane_v1_deploy, 15);
 
 /**
  * DeployUsageRow is one metered quantity for one resource over one window —
@@ -998,7 +1327,7 @@ export type DeployUsageRow = Message<"controlplane.v1.DeployUsageRow"> & {
  * Use `create(DeployUsageRowSchema)` to create a new message.
  */
 export const DeployUsageRowSchema: GenMessage<DeployUsageRow> = /*@__PURE__*/
-  messageDesc(file_controlplane_v1_deploy, 11);
+  messageDesc(file_controlplane_v1_deploy, 16);
 
 /**
  * DeployLogLine is one line of build or runtime output.
@@ -1039,7 +1368,7 @@ export type DeployLogLine = Message<"controlplane.v1.DeployLogLine"> & {
  * Use `create(DeployLogLineSchema)` to create a new message.
  */
 export const DeployLogLineSchema: GenMessage<DeployLogLine> = /*@__PURE__*/
-  messageDesc(file_controlplane_v1_deploy, 12);
+  messageDesc(file_controlplane_v1_deploy, 17);
 
 /**
  * DeployTenantClusterInternal carries the fleet PLACEMENT of a vCluster —
@@ -1078,7 +1407,7 @@ export type DeployTenantClusterInternal = Message<"controlplane.v1.DeployTenantC
  * Use `create(DeployTenantClusterInternalSchema)` to create a new message.
  */
 export const DeployTenantClusterInternalSchema: GenMessage<DeployTenantClusterInternal> = /*@__PURE__*/
-  messageDesc(file_controlplane_v1_deploy, 13);
+  messageDesc(file_controlplane_v1_deploy, 18);
 
 /**
  * DeployEnvironmentInternal carries an environment's fleet placement.
@@ -1106,7 +1435,7 @@ export type DeployEnvironmentInternal = Message<"controlplane.v1.DeployEnvironme
  * Use `create(DeployEnvironmentInternalSchema)` to create a new message.
  */
 export const DeployEnvironmentInternalSchema: GenMessage<DeployEnvironmentInternal> = /*@__PURE__*/
-  messageDesc(file_controlplane_v1_deploy, 14);
+  messageDesc(file_controlplane_v1_deploy, 19);
 
 /**
  * DeployDeploymentInternal carries reconcile diagnostics that are useful to
@@ -1154,7 +1483,7 @@ export type DeployDeploymentInternal = Message<"controlplane.v1.DeployDeployment
  * Use `create(DeployDeploymentInternalSchema)` to create a new message.
  */
 export const DeployDeploymentInternalSchema: GenMessage<DeployDeploymentInternal> = /*@__PURE__*/
-  messageDesc(file_controlplane_v1_deploy, 15);
+  messageDesc(file_controlplane_v1_deploy, 20);
 
 /**
  * DeployTier discriminates what a deployment IS. The four tiers share one
@@ -1642,4 +1971,112 @@ export enum DeployLogStream {
  */
 export const DeployLogStreamSchema: GenEnum<DeployLogStream> = /*@__PURE__*/
   enumDesc(file_controlplane_v1_deploy, 10);
+
+/**
+ * DeployCustomDomainState is where a domain is in acquisition.
+ *
+ * THE ORDER IS A PIPELINE AND EACH STEP GATES THE NEXT, which is the whole
+ * reason this is a state machine rather than a bool. VERIFYING must complete
+ * before ISSUING begins: Let's Encrypt pauses an identifier after enough
+ * consecutive authorization failures, and a tenant who mis-points a record
+ * and walks away is exactly how that pause gets hit. Failing our own DNS
+ * check costs nothing; failing ACME repeatedly costs the identifier.
+ *
+ * @generated from enum controlplane.v1.DeployCustomDomainState
+ */
+export enum DeployCustomDomainState {
+  /**
+   * @generated from enum value: DEPLOY_CUSTOM_DOMAIN_STATE_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * Recorded, and the tenant's DNS does not point at us yet. The normal
+   * first state, and the one required_records exists for.
+   *
+   * @generated from enum value: DEPLOY_CUSTOM_DOMAIN_STATE_PENDING_DNS = 1;
+   */
+  PENDING_DNS = 1,
+
+  /**
+   * DNS resolves to us; ownership is being confirmed.
+   *
+   * @generated from enum value: DEPLOY_CUSTOM_DOMAIN_STATE_VERIFYING = 2;
+   */
+  VERIFYING = 2,
+
+  /**
+   * Verified. A certificate is being obtained.
+   *
+   * @generated from enum value: DEPLOY_CUSTOM_DOMAIN_STATE_ISSUING = 3;
+   */
+  ISSUING = 3,
+
+  /**
+   * Serving, with a valid certificate.
+   *
+   * @generated from enum value: DEPLOY_CUSTOM_DOMAIN_STATE_LIVE = 4;
+   */
+  LIVE = 4,
+
+  /**
+   * Reachable from any state above and retryable; last_error says why.
+   *
+   * @generated from enum value: DEPLOY_CUSTOM_DOMAIN_STATE_FAILED = 5;
+   */
+  FAILED = 5,
+
+  /**
+   * Another org already holds this domain. NOT retryable by waiting, which
+   * is why it is distinct from FAILED: the fix is a human dispute, not a
+   * backoff. First to verify wins.
+   *
+   * @generated from enum value: DEPLOY_CUSTOM_DOMAIN_STATE_CONFLICT = 6;
+   */
+  CONFLICT = 6,
+}
+
+/**
+ * Describes the enum controlplane.v1.DeployCustomDomainState.
+ */
+export const DeployCustomDomainStateSchema: GenEnum<DeployCustomDomainState> = /*@__PURE__*/
+  enumDesc(file_controlplane_v1_deploy, 11);
+
+/**
+ * DomainSource is where a domain came from, which decides how verification
+ * is SATISFIED and nothing else — the two are bound, routed, issued and
+ * served identically.
+ *
+ * @generated from enum controlplane.v1.DomainSource
+ */
+export enum DomainSource {
+  /**
+   * @generated from enum value: DOMAIN_SOURCE_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * The customer owns it and pointed it at us. Must prove ownership by
+   * publishing the TXT token.
+   *
+   * @generated from enum value: DOMAIN_SOURCE_EXTERNAL = 1;
+   */
+  EXTERNAL = 1,
+
+  /**
+   * Reliant owns it — a vanity or registrar domain the platform provisions.
+   * Created ALREADY VERIFIED: we are the registrant, so asking ourselves to
+   * publish a token into our own zone would prove nothing that owning the
+   * zone does not already prove.
+   *
+   * @generated from enum value: DOMAIN_SOURCE_PLATFORM = 2;
+   */
+  PLATFORM = 2,
+}
+
+/**
+ * Describes the enum controlplane.v1.DomainSource.
+ */
+export const DomainSourceSchema: GenEnum<DomainSource> = /*@__PURE__*/
+  enumDesc(file_controlplane_v1_deploy, 12);
 
