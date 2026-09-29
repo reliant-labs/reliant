@@ -96,10 +96,21 @@ function checkAndClearConsole() {
   }
 }
 
-// Send log to Electron main process if available (only in dev or when needed)
+// Mirror a log line to the Electron main process, which writes it to a file via
+// electron-log. PACKAGED ELECTRON ONLY.
+//
+// In dev this is deliberately a no-op. The forge forwarder is the sink there:
+// every console line already lands in
+// control-plane/.forge/logs/dev/frontend_reliant-web.log via the Vite
+// /__forge/log endpoint, so the IPC mirror bought a duplicate copy at the price
+// of per-line main-thread work — a structuredClone across the IPC boundary plus
+// a main-process stdout write — for every line the app logs. That duplicate was
+// most of reliant-electron.log's 33 MB.
+//
+// In a packaged build there is no Vite dev server, so this IS the only frontend
+// file sink and must stay intact (electron/src/main.js `log-from-renderer`).
 function sendToElectron(level: string, args: unknown[]) {
-  // Skip electron logging in production web builds for performance
-  if (!isDev && !isElectron) return;
+  if (isDev) return;
 
   if (isElectron && window.electronAPI.log) {
     try {

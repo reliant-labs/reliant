@@ -2227,13 +2227,6 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
           rawStreamingDeltas.length > 0 &&
           streamingDeltas.length === 0
         ) {
-          logger.debug(
-            "[Streaming] All deltas buffered, skipping main state update",
-            {
-              chatId: chatId.slice(0, 8),
-              bufferedCount: rawStreamingDeltas.length,
-            },
-          );
           return;
         }
 
@@ -2242,12 +2235,6 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         // NOTE: We don't call set() here - we'll include it in the main state update below
         const processedStreamingMsgs = new Map<string, Message>(); // threadKey -> Message
         if (streamingDeltas.length > 0) {
-          logger.debug("[Streaming] Processing streaming deltas", {
-            chatId: chatId.slice(0, 8),
-            deltaCount: streamingDeltas.length,
-            deltaTypes: streamingDeltas.map((d) => d.delta_type),
-          });
-
           // Group deltas by thread for processing
           const deltasByThread = new Map<
             string | undefined,
@@ -2277,12 +2264,6 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
 
             if (processedMsg) {
               processedStreamingMsgs.set(threadKey, processedMsg);
-              logger.debug("[Streaming] Updated streaming message for thread", {
-                chatId: chatId.slice(0, 8),
-                thread: threadKey.slice(0, 8),
-                messageId: processedMsg.id,
-                blockCount: processedMsg.contentBlocks?.length || 0,
-              });
             }
           }
         }
@@ -2382,11 +2363,6 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         // committed in ONE set(), with the external-store / RQ-cache side
         // effects applied after the commit.
         const state = get();
-
-        // Check if we received a complete assistant message (replaces streaming)
-        const hasCompleteAssistantMessage = messages.some(
-          (m) => m.role === MessageRole.ASSISTANT && isProtoMessageComplete(m),
-        );
 
         // SNAPSHOT vs INCREMENTAL: snapshot replaces the list (cross-chat /
         // stale contamination guard), incremental upserts by id. Current
@@ -2850,17 +2826,6 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         // It is handled by handleChatActivityChanged() in globalUpdatesStore.ts
         // via the global user update stream, which populates activityStore.
         // Activity state is read from activityStore (single source of truth).
-
-        // Log state update details
-        logger.debug("[Streaming] State update", {
-          chatId: chatId.slice(0, 8),
-          messageCount: updatedMessages.length,
-          hasCompleteMessage: hasCompleteAssistantMessage,
-          streamingMsgCount: processedStreamingMsgs.size,
-          streamingThreads: [...processedStreamingMsgs.keys()].map((t) =>
-            t.slice(0, 8),
-          ),
-        });
 
         // Pre-parse message content so the render layer reads from the
         // reference-keyed processMessage memo without reparsing, and drive

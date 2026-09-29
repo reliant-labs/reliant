@@ -19,8 +19,11 @@
  * because imports are evaluated in ORDER: this module's side effect runs
  * during its own evaluation, before the later imports are evaluated at all.
  */
-import { installBrowserLogForwarding } from "./browser-log-forward";
+import { installDevLogging } from "./browser-log-forward";
 
+// The literal `dev: true` inside the `if` is deliberate (forge's convention):
+// the bundler folds the condition and drops the whole call from a production
+// build, whereas `{ dev: import.meta.env.DEV }` would fold only the argument.
 if (import.meta.env.DEV) {
-  installBrowserLogForwarding();
+  installDevLogging({ dev: true });
 }

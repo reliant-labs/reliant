@@ -5,7 +5,6 @@ import {
 } from "@tanstack/react-query";
 import { api, type Message } from "../api/client";
 import { queryClient } from "../lib/query-client";
-import { logger } from "../lib/logger";
 import { chatKeys } from "./chat-queries";
 
 // ── Query key factory ───────────────────────────────────────────────────────
@@ -299,9 +298,6 @@ export function fanOutMessagesToThreadCaches(
   for (const [threadId, threadMessages] of byThread) {
     const key = messageKeys.thread(chatId, threadId);
     const hasCache = queryClient.getQueryData(key) !== undefined;
-    logger.warn(
-      `[fanOut] thread=${threadId.slice(0, 8)} count=${threadMessages.length} openCache=${hasCache}`,
-    );
     if (!hasCache) continue;
     queryClient.setQueryData<Message[]>(key, (prev) => {
       const existing = prev ?? EMPTY_MESSAGES;
@@ -376,18 +372,6 @@ export function useThreadMessages(chatId?: string, threadId?: string) {
     enabled: !!chatId && !!threadId,
     ...messageListQueryOptions,
   });
-
-  if (chatId && threadId) {
-    const msgs = query.data ?? [];
-    const last = msgs[msgs.length - 1];
-    logger.warn(
-      `[useThreadMessages] thread=${threadId.slice(0, 8)} ` +
-        `status=${query.status} fetching=${query.isFetching} ` +
-        `count=${msgs.length} ` +
-        `lastSeq=${last ? String(last.seq ?? "") : "none"} ` +
-        `updatedAt=${query.dataUpdatedAt}`,
-    );
-  }
 
   return query;
 }

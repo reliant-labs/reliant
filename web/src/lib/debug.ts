@@ -12,103 +12,20 @@ import { approvalKeys } from '../hooks/approval-queries';
 import { getMessagesFromCache } from '../hooks/message-queries';
 import { ApprovalStatus, type ToolApprovalRequest } from '../api/approval-grpc';
 
-class DebugLogger {
-  private logs: string[] = [];
-  private maxLogs = 1000;
-
-  constructor() {
-    if (isDev) {
-      // Override console methods in development
-      const originalConsole = { ...console };
-
-      (["log", "info", "warn", "error", "debug"] as const).forEach((method) => {
-        const originalMethod = originalConsole[method];
-        console[method] = (...args: unknown[]) => {
-          const timestamp = new Date().toISOString();
-          const logEntry = `[${timestamp}] ${method.toUpperCase()}: ${args
-            .map((arg) => {
-              if (arg == null) return String(arg);
-              if (typeof arg !== "object") return String(arg);
-              // Skip DOM nodes and other non-plain objects that cause circular refs
-              if (arg instanceof Element || arg instanceof Event) return String(arg);
-              try {
-                return JSON.stringify(arg, null, 2);
-              } catch {
-                return String(arg);
-              }
-            })
-            .join(" ")}`;
-
-          this.logs.push(logEntry);
-          if (this.logs.length > this.maxLogs) {
-            this.logs.shift();
-          }
-
-          // Also call original console method
-          originalMethod(...args);
-
-          // Write to file in development
-          this.writeToFile(logEntry);
-        };
-      });
-
-      logger.info("Debug logging initialized");
-    }
-  }
-
-  private writeToFile(logEntry: string) {
-    // For browser environment, we'll use localStorage as a fallback
-    try {
-      const existingLogs = localStorage.getItem("debug-logs") || "";
-      const updatedLogs = existingLogs + logEntry + "\n";
-
-      // Keep only last 10KB of logs
-      if (updatedLogs.length > 10000) {
-        const truncated = updatedLogs.slice(-10000);
-        localStorage.setItem("debug-logs", truncated);
-      } else {
-        localStorage.setItem("debug-logs", updatedLogs);
-      }
-    } catch {
-      // Silently fail if localStorage is full
-    }
-  }
-
-  public downloadLogs() {
-    if (!isDev) return;
-
-    const logs = localStorage.getItem("debug-logs") || "";
-    const blob = new Blob([logs], { type: "text/plain" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `debug-logs-${Date.now()}.txt`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  }
-
-  public clearLogs() {
-    if (!isDev) return;
-
-    this.logs = [];
-    localStorage.removeItem("debug-logs");
-    logger.info("Debug logs cleared");
-  }
-
-  public getLogs(): string[] {
-    return [...this.logs];
-  }
-}
-
-export const debugLogger = new DebugLogger();
+// This file used to carry a third console override — a DebugLogger that
+// pretty-printed every argument with JSON.stringify(arg, null, 2) and then did a
+// synchronous localStorage read + write of up to 10 KB, per line, on the main
+// thread. It is gone, and so are the window.downloadLogs/clearLogs/getLogs
+// helpers it backed: the dev log is already on disk at
+// control-plane/.forge/logs/dev/frontend_reliant-web.log, complete and
+// greppable, which is strictly better than a 10 KB localStorage ring buffer you
+// have to download out of the browser to read.
+//
+// What remains are the chat-recovery helpers below, which are the reason
+// main.tsx still imports this module for its side effects.
 
 // Add global functions for easy access in dev console
 interface DebugWindow extends Window {
-  downloadLogs: () => void;
-  clearLogs: () => void;
-  getLogs: () => unknown[];
   // Chat recovery functions
   resetStuckChat: (chatId: string) => void;
   inspectChatState: (chatId: string) => void;
@@ -116,10 +33,7 @@ interface DebugWindow extends Window {
 
 if (isDev && typeof window !== "undefined") {
   const debugWindow = window as unknown as DebugWindow;
-  debugWindow.downloadLogs = () => debugLogger.downloadLogs();
-  debugWindow.clearLogs = () => debugLogger.clearLogs();
-  debugWindow.getLogs = () => debugLogger.getLogs();
-  
+
   // Chat recovery functions
   debugWindow.resetStuckChat = (chatId: string) => {
     logger.warn('🔧 [DEBUG] Resetting stuck chat:', chatId);

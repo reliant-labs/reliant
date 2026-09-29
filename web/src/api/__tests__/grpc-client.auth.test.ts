@@ -79,12 +79,12 @@ describe('grpc-client auth interceptor', () => {
 
     expect(req.header.get('Authorization')).toBe('Bearer token-123')
     expect(next).toHaveBeenCalledTimes(1)
-    expect(mocks.logger.info).toHaveBeenCalledWith(
-      '[gRPC Client] Auth token set for request:',
-      expect.objectContaining({
-        method: 'GetProviderStatuses',
-        tokenLength: 9,
-      })
+    // The happy path logs nothing: a per-RPC line here was the single largest
+    // producer of dev log volume. Attach-failure is still logged (below), and
+    // a 401 records whether a token was attached (unauthInterceptor).
+    expect(mocks.logger.info).not.toHaveBeenCalledWith(
+      expect.stringContaining('Auth token set'),
+      expect.anything()
     )
   })
 
