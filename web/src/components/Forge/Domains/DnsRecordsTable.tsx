@@ -28,10 +28,10 @@
  */
 
 import { useCallback, useState } from "react";
-import { Check, Copy } from "lucide-react";
+import { AlertTriangle, Check, CircleDashed, Copy } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import type { DomainDnsRecord } from "@/services/forge/domains";
+import type { DnsRecordCheck, DomainDnsRecord } from "@/services/forge/domains";
 
 function CopyButton({ value, label }: { value: string; label: string }) {
   const [copied, setCopied] = useState(false);
@@ -89,6 +89,48 @@ function purposeOf(type: string): string {
   }
 }
 
+/**
+ * One record's verification status.
+ *
+ * THE THIRD STATE IS THE WHOLE CARE HERE. `unchecked` — the verifier has
+ * not reached this record yet, which is every record on a brand-new domain
+ * — must not read as a failure. It gets the dashed, unfilled treatment the
+ * rest of this console uses for "nothing was measured" (see
+ * stateVocabulary.ts), which is the one axis that survives greyscale and
+ * colour-vision deficiency, so it can never be mistaken for a red cross.
+ *
+ * The text label is not decoration either: an icon alone would leave a
+ * screen-reader user with no status at all, and the three glyphs are
+ * meaningless without it.
+ */
+function RecordStatus({ check }: { check?: DnsRecordCheck }) {
+  const styles: Record<DnsRecordCheck, { icon: typeof Check; className: string; label: string }> = {
+    ok: { icon: Check, className: "text-success", label: "Found" },
+    failed: { icon: AlertTriangle, className: "text-destructive", label: "Not found" },
+    unchecked: { icon: CircleDashed, className: "text-muted-foreground", label: "Not checked yet" },
+  };
+  // ABSENT IS `unchecked`, the same reading the wire conversion gives a
+  // record that carries no verdict. This table is also handed records by
+  // callers that predate the column, and the alternative to a default is
+  // destructuring undefined — a blank screen for the whole domain detail
+  // because one cell had nothing to say.
+  //
+  // Normalized ONCE, here, so the styling and the test id cannot disagree:
+  // reading `check` again below would emit `dns-record-check-undefined`
+  // beside an "unchecked" glyph.
+  const state: DnsRecordCheck = check ?? "unchecked";
+  const { icon: Icon, className, label } = styles[state];
+  return (
+    <span
+      className={cn("inline-flex items-center gap-1 whitespace-nowrap", className)}
+      data-testid={`dns-record-check-${state}`}
+    >
+      <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+      {label}
+    </span>
+  );
+}
+
 export function DnsRecordsTable({ records }: { records: DomainDnsRecord[] }) {
   if (records.length === 0) {
     return (
@@ -113,6 +155,9 @@ export function DnsRecordsTable({ records }: { records: DomainDnsRecord[] }) {
             </th>
             <th scope="col" className="px-3 py-2 font-medium">
               Value
+            </th>
+            <th scope="col" className="px-3 py-2 font-medium">
+              Status
             </th>
           </tr>
         </thead>
@@ -142,6 +187,20 @@ export function DnsRecordsTable({ records }: { records: DomainDnsRecord[] }) {
                     <CopyButton value={record.value} label={`${record.type} record value`} />
                   </div>
                   {purpose && <p className="mt-1 max-w-prose text-2xs text-muted-foreground">{purpose}</p>}
+                </td>
+                <td className="px-3 py-2 align-top">
+                  <RecordStatus check={record.check} />
+                  {/* The checker's own sentence — what it saw versus what
+                      it wanted. Shown only on a failure, where it is the
+                      thing that turns a cross into an action. */}
+                  {record.detail && (
+                    <p
+                      className="mt-1 max-w-prose text-2xs text-destructive"
+                      data-testid={`dns-record-detail-${record.type.toLowerCase()}`}
+                    >
+                      {record.detail}
+                    </p>
+                  )}
                 </td>
               </tr>
             );

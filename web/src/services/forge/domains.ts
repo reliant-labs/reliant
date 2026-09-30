@@ -65,6 +65,23 @@ export type DomainState =
 /** Where the domain came from. Only `external` domains need tenant DNS. */
 export type DomainOrigin = "external" | "platform" | "unknown";
 
+/**
+ * What the last verification pass concluded about one record.
+ *
+ * THREE STATES, NOT TWO, and collapsing them is the mistake to avoid. The
+ * server sends `resolved` and `detail`, and the PAIR is the answer:
+ *
+ *   ok        resolved
+ *   failed    not resolved, WITH a detail saying what was seen
+ *   unchecked not resolved, NO detail — the verifier has not reached it
+ *
+ * `unchecked` is every record on a domain added seconds ago. Rendering it
+ * as a failure would put a red cross on a record that is very likely
+ * correct, which is worse than no mark at all: the tenant goes and "fixes"
+ * something that was never broken.
+ */
+export type DnsRecordCheck = "ok" | "failed" | "unchecked";
+
 /** One DNS record the tenant publishes at their provider. */
 export interface DomainDnsRecord {
   /** 'A', 'CNAME' or 'TXT'. */
@@ -73,6 +90,39 @@ export interface DomainDnsRecord {
   name: string;
   /** An IP for A, the ingress host for CNAME, the ownership token for TXT. */
   value: string;
+  /** What the last pass concluded. See DnsRecordCheck. */
+  check: DnsRecordCheck;
+  /**
+   * Why it is not confirmed, in the server's words: "resolves to
+   * 203.0.113.7, expected 34.63.203.181". Empty unless `check` is
+   * `failed`. Rendered verbatim — the control plane writes these to be
+   * tenant-safe and actionable, and rewriting them here would create a
+   * second copy that drifts from what the checker actually found.
+   */
+  detail: string;
+}
+
+/**
+ * Classify the wire's (resolved, detail) pair.
+ *
+ * A `detail` with `resolved` true would be a server contract violation;
+ * it is read as `ok` and the detail dropped, because the boolean is the
+ * conclusion and the string is only its explanation.
+ *
+ * BOTH ARGUMENTS ARE OPTIONAL ON THE WIRE, and that is not defensive
+ * padding. proto3 omits a false bool and an empty string, and a control
+ * plane predating these fields sends neither — so `undefined` is the
+ * ordinary shape for every record read from an older server, not a
+ * malformed one. It means exactly `unchecked`, which is already the safe
+ * reading, so the fallbacks converge on the right answer rather than
+ * masking a problem.
+ */
+export function dnsRecordCheckOf(
+  resolved: boolean | undefined,
+  detail: string | undefined
+): DnsRecordCheck {
+  if (resolved) return "ok";
+  return (detail ?? "").trim() ? "failed" : "unchecked";
 }
 
 /** What a domain serves: one environment and target, or a redirect. */
@@ -273,7 +323,19 @@ function isoOf(ts: Timestamp | undefined): string | undefined {
 }
 
 function toRecord(msg: DeployDnsRecord): DomainDnsRecord {
-  return { type: msg.type, name: msg.name, value: msg.value };
+  const check = dnsRecordCheckOf(msg.resolved, msg.detail);
+  return {
+    type: msg.type,
+    name: msg.name,
+    value: msg.value,
+    check,
+    // Only carried when it explains a failure, so a component cannot
+    // accidentally render a stray detail beside a confirmed record. The
+    // `?? ""` keeps this field a string for every caller — `failed` is
+    // only reachable with a non-empty detail, so it never actually falls
+    // back, but the type should not depend on that argument.
+    detail: check === "failed" ? msg.detail ?? "" : "",
+  };
 }
 
 function toBinding(msg: DomainBindingMessage | undefined): DomainBinding | null {

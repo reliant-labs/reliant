@@ -114,9 +114,23 @@ describe("conversion", () => {
     } as any);
 
     expect(converted.state).toBe("pending-dns");
+    // No verdicts on the wire, so every record is `unchecked` — never
+    // `failed`, which would put a red cross on an unexamined record.
     expect(converted.requiredRecords).toEqual([
-      { type: "A", name: "hounders.club", value: "34.63.203.181" },
-      { type: "TXT", name: "_reliant-challenge.hounders.club", value: "tok" },
+      {
+        type: "A",
+        name: "hounders.club",
+        value: "34.63.203.181",
+        check: "unchecked",
+        detail: "",
+      },
+      {
+        type: "TXT",
+        name: "_reliant-challenge.hounders.club",
+        value: "tok",
+        check: "unchecked",
+        detail: "",
+      },
     ]);
     expect(converted.binding?.target).toBe("web");
   });
