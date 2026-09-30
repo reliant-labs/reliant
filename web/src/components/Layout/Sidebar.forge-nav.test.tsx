@@ -70,9 +70,33 @@ vi.mock("../../hooks/message-queries", () => ({
 // the forge-project logic they were written for.
 const experimentalGate = vi.hoisted(() => ({ enabled: true }));
 
-vi.mock("../../lib/forgeFeature", () => ({
-  isForgeUIEnabled: () => experimentalGate.enabled,
-}));
+// Pin the build type to a PACKAGED PRODUCTION build. The default-resolution
+// cases below consult the real gate, and under jsdom getIsDev() would otherwise
+// answer true — which is the one setting where the old default already produced
+// the new answer, so the assertions would not discriminate.
+vi.mock("../../lib/constants", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../lib/constants")>();
+  return { ...actual, getIsDev: () => false, isDev: false };
+});
+
+// The mock keeps the real module reachable, so the default-resolution cases at
+// the bottom can drive the gate from the genuine implementation rather than
+// asserting against a value the test itself chose.
+vi.mock("../../lib/forgeFeature", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../lib/forgeFeature")>();
+  return {
+    ...actual,
+    isForgeUIEnabled: () => experimentalGate.enabled,
+  };
+});
+
+const {
+  FORGE_UI_FLAG_KEY,
+  isForgeUIEnabled: realIsForgeUIEnabled,
+  setForgeUIEnabled: realSetForgeUIEnabled,
+} = await vi.importActual<typeof import("../../lib/forgeFeature")>(
+  "../../lib/forgeFeature",
+);
 
 function renderSidebar() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -176,6 +200,38 @@ describe("Sidebar forge nav entry", () => {
     setProject(true);
     renderSidebar();
     expect(screen.queryByTestId("sidebar-forge-button")).not.toBeInTheDocument();
+  });
+
+  /**
+   * THE DEFAULT, end to end. Every other case in this file mocks the gate, so
+   * none of them can see which way it actually resolves — this one drives the
+   * mock from the REAL lib/forgeFeature against a clean localStorage, so the
+   * shipped default is what decides the assertion.
+   *
+   * It fails on the previous default (production OFF, dev ON via getIsDev) and
+   * passes now that the feature is on for everyone.
+   */
+  describe("the shipped default decides the entry", () => {
+    it("shows the entry with no stored preference — production included", async () => {
+      window.localStorage.removeItem(FORGE_UI_FLAG_KEY);
+      experimentalGate.enabled = realIsForgeUIEnabled();
+
+      setProject(true);
+      renderSidebar();
+
+      expect(screen.getByTestId("sidebar-forge-button")).toBeInTheDocument();
+    });
+
+    it("hides it once the user explicitly opts out", async () => {
+      realSetForgeUIEnabled(false);
+      experimentalGate.enabled = realIsForgeUIEnabled();
+
+      setProject(true);
+      renderSidebar();
+
+      expect(screen.queryByTestId("sidebar-forge-button")).not.toBeInTheDocument();
+      window.localStorage.removeItem(FORGE_UI_FLAG_KEY);
+    });
   });
 
   // Forge is promoted, so it sits directly under New chat and ABOVE Projects.

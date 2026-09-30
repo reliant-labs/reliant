@@ -10,21 +10,22 @@
  * So every surface asks THIS function, and turning the feature off turns all of
  * it off.
  *
- * DEFAULT IS OFF IN PRODUCTION. The screens are complete and tested, but "ready
- * to show a user" is the author's call, not the implementer's. Until that call is
- * made, a packaged build must behave exactly as it did before the feature
- * existed.
+ * DEFAULT IS ON, EVERYWHERE. The feature shipped: every user gets the forge UI
+ * unless they have explicitly turned it off. This was the author's call to make
+ * and it has now been made, so the gate no longer distinguishes a packaged
+ * build from a dev one.
  *
- * THE THREE WAYS IT TURNS ON, in precedence order:
+ * The gate itself stays, and that is deliberate — it is still the single point
+ * that turns all five screens and three routes off together, which is what the
+ * explicit off-switch in Settings → Developer needs in order to mean anything.
  *
- *  1. An explicit opt-in stored in localStorage under FORGE_UI_FLAG_KEY. This is
- *     the switch the Developer settings toggle writes, and the one a user flips
- *     to try the feature. It wins over everything, INCLUDING being off in a dev
- *     build — a dev who wants the old behaviour back can turn it off.
- *  2. Otherwise, a dev build (getIsDev()) has it ON, matching the precedent
- *     NavigationBar already set for in-progress surfaces
- *     (`...(isDev ? [workflowsTab] : [])`).
- *  3. Otherwise OFF.
+ * THE TWO WAYS IT RESOLVES, in precedence order:
+ *
+ *  1. An explicit preference stored in localStorage under FORGE_UI_FLAG_KEY.
+ *     This is the switch the Developer settings toggle writes. It wins over
+ *     everything, in BOTH directions — opting out is how a user who hits a
+ *     problem gets the old behaviour back without waiting for a release.
+ *  2. Otherwise ON.
  *
  * WHY localStorage RATHER THAN THE SETTINGS SERVICE. This gate is read during
  * render by the sidebar and by route guards, so it must be synchronous and
@@ -38,8 +39,6 @@
  * turned off by the person holding the packaged app, which is exactly who needs
  * to turn it off if something is wrong.
  */
-import { getIsDev } from "./constants";
-
 /** localStorage key holding the explicit opt-in. Exported so tests and the
  *  settings toggle cannot drift from the reader. */
 export const FORGE_UI_FLAG_KEY = "reliant.experimental.forgeUI";
@@ -50,8 +49,8 @@ export const FORGE_UI_FLAG_KEY = "reliant.experimental.forgeUI";
  *
  * Returns undefined rather than false on a storage failure (Safari private mode
  * throws on access, and a non-browser test environment has no localStorage), so
- * an unreadable store falls through to the build-type default instead of
- * silently pinning the feature off in a dev build where it should be on.
+ * an unreadable store falls through to the default instead of silently pinning
+ * the feature off for a user who never asked for that.
  */
 function readStoredFlag(): boolean | undefined {
   try {
@@ -75,7 +74,7 @@ function readStoredFlag(): boolean | undefined {
 export function isForgeUIEnabled(): boolean {
   const stored = readStoredFlag();
   if (stored !== undefined) return stored;
-  return getIsDev();
+  return true;
 }
 
 /**
@@ -83,8 +82,8 @@ export function isForgeUIEnabled(): boolean {
  * toggle.
  *
  * Writing the CURRENT effective value is still meaningful: it converts an
- * implicit default into an explicit choice, which is what stops a later build-type
- * change from silently flipping the feature underneath the user.
+ * implicit default into an explicit choice, which is what stops a later change
+ * of default from silently flipping the feature underneath the user.
  */
 export function setForgeUIEnabled(enabled: boolean): void {
   try {
@@ -98,8 +97,8 @@ export function setForgeUIEnabled(enabled: boolean): void {
 }
 
 /**
- * clearForgeUIPreference removes the explicit opt-in, returning the gate to its
- * build-type default. Exported for tests and for a "reset to default" affordance.
+ * clearForgeUIPreference removes the explicit preference, returning the gate to
+ * its default (on). Exported for tests and for a "reset to default" affordance.
  */
 export function clearForgeUIPreference(): void {
   try {

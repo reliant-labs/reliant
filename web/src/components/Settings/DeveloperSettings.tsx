@@ -193,8 +193,7 @@ export function DeveloperSettings() {
         <div className="p-4">
           <h3 className="text-sm font-semibold mb-2">Experimental Features</h3>
           <p className="text-xs text-muted-foreground mb-4">
-            Unfinished surfaces, off by default in a packaged build. Turning one on
-            affects only this browser.
+            Optional surfaces. Changing one affects only this browser.
           </p>
 
           <div className="space-y-4">
