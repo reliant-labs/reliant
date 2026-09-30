@@ -36,6 +36,7 @@ import {
   type DeployBlocker,
   type ForgeDeployReport,
 } from "@/services/forge/deploy";
+import { classifyDeployAuthzError } from "@/services/forge/deployAuthz";
 import type { ForgeOutcome } from "@/services/forge/topology";
 
 import {
@@ -99,6 +100,15 @@ export function DeployFlow({
   }
 
   if (planError && !planOutcome) {
+    // AUTHORIZATION IS NOT UNREACHABILITY. A hosted deploy authenticates
+    // before it can plan, so both of these arrive as a failed plan call — but
+    // the daemon answered, and telling the user it did not sends them to
+    // debug connectivity over a credential or a permission.
+    const authz = classifyDeployAuthzError(planError);
+    if (authz?.kind === "not-authorized") return <DeployNotAuthorized />;
+    if (authz?.kind === "permission-denied") {
+      return <DeployPermissionDenied permission={authz.permission} />;
+    }
     return (
       <div
         data-testid="deploy-plan-error"
@@ -243,6 +253,85 @@ function BlockedNotice({
       >
         {isReplanning ? "Re-planning…" : "Re-plan"}
       </Button>
+    </section>
+  );
+}
+
+/**
+ * FORGE ISN'T AUTHORIZED. There is no control-plane credential on this machine.
+ *
+ * THE FIX IS SIGNING IN TO RELIANT, not `forge login`. Signing in deposits the
+ * user's token into forge's own credential store (internal/cliauth's
+ * DepositForForge, over forge/pkg/cloudcred), which is what makes "logged in to
+ * Reliant" mean "forge is logged in". Telling the user to run `forge login`
+ * instead would be a dead end in the case that matters most: a managed daemon
+ * on a remote pod, where the loopback browser flow that command needs cannot
+ * happen at all.
+ *
+ * No re-plan button. Re-planning with the same missing credential produces the
+ * same failure; the action is out here, not in the flow.
+ */
+function DeployNotAuthorized() {
+  return (
+    <section
+      data-testid="deploy-not-authorized"
+      className="space-y-2 rounded-lg border border-solid border-warning/50 bg-warning/10 px-4 py-3"
+    >
+      <h3 className="text-sm font-medium text-warning">
+        Forge isn&apos;t signed in to Reliant cloud
+      </h3>
+      <p className="text-xs text-foreground">
+        This deploy targets hosted infrastructure, and forge has no credential
+        for it on this machine. Sign in to Reliant and forge picks up the same
+        credential automatically — you do not need a second login.
+      </p>
+      <p className="text-2xs text-muted-foreground">
+        If you are already signed in, your session may have expired. Signing in
+        again refreshes it.
+      </p>
+    </section>
+  );
+}
+
+/**
+ * YOUR PERMISSIONS DON'T INCLUDE IT. Signed in, but not allowed.
+ *
+ * NAMES THE PERMISSION AND WHO GRANTS IT. This is the one refusal the user
+ * genuinely cannot resolve alone, so the panel's whole job is to make the ask
+ * precise: which permission, and that an organization admin holding token:write
+ * is who can grant it. "Permission denied" with no route forward is where these
+ * conversations stall.
+ *
+ * No re-plan button, deliberately: authority does not change by re-planning,
+ * and offering it invites a loop that always ends here.
+ */
+function DeployPermissionDenied({ permission }: { permission: string }) {
+  return (
+    <section
+      data-testid="deploy-permission-denied"
+      className="space-y-2 rounded-lg border border-solid border-warning/50 bg-warning/10 px-4 py-3"
+    >
+      <h3 className="text-sm font-medium text-warning">
+        Your permissions don&apos;t include{" "}
+        {permission ? (
+          <span className="font-mono">{permission}</span>
+        ) : (
+          "what this deploy needs"
+        )}
+      </h3>
+      <p className="text-xs text-foreground">
+        You are signed in, but your organization permissions do not cover this
+        deploy. Nothing was changed.
+      </p>
+      <p className="text-xs text-foreground">
+        An organization admin can grant{" "}
+        {permission ? (
+          <span className="font-mono">{permission}</span>
+        ) : (
+          "it"
+        )}{" "}
+        in the organization&apos;s member permissions.
+      </p>
     </section>
   );
 }
