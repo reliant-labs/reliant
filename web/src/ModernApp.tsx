@@ -99,7 +99,7 @@ function App() {
   // onboarding OAuth callers (GitHubSyncStatus, AddRepoModal) return to /
   // or /project/$id and we want a toast + credential cache refresh at the
   // route they came back to. Settings has its own local handler.
-  const { github_connected, github_error, github_error_msg } = useSearch({ from: '/_app' });
+  const { github_connected, github_installed, github_error, github_error_msg } = useSearch({ from: '/_app' });
   const navigate = useNavigate();
   const { data: currentUser, isLoading: isUserLoading } = useCurrentUser();
   const queryClient = useQueryClient();
@@ -1771,11 +1771,22 @@ function App() {
   useEffect(() => {
     if (!isBackendReady) return;
     if (isUserLoading || !currentUser) return;
-    if (!github_connected && !github_error) return;
+    if (!github_connected && !github_installed && !github_error) return;
 
     if (github_connected) {
       toast.success("GitHub connected successfully");
       void queryClient.invalidateQueries({ queryKey: GITHUB_CREDENTIAL_QUERY_KEY });
+    } else if (github_installed) {
+      // Returned from GitHub's App install/setup flow. No credential was
+      // created, so the wording is about access rather than connection — but
+      // the refresh is the same one, because which repositories we can see has
+      // just changed server-side.
+      toast.success("GitHub access updated");
+      void queryClient.invalidateQueries({ queryKey: GITHUB_CREDENTIAL_QUERY_KEY });
+      // The repo list is the whole reason the user went to GitHub — a newly
+      // granted repository only appears if we re-list. The credential query
+      // alone would leave the picker showing the pre-install set.
+      void queryClient.invalidateQueries({ queryKey: ['onboarding', 'gitRepos'] });
     } else if (github_error) {
       toast.error(github_error_msg || github_error || "GitHub connection failed");
     }
@@ -1783,12 +1794,12 @@ function App() {
     navigate({
       to: '/',
       search: (prev: Record<string, unknown>) => {
-        const { github_connected: _c, github_error: _e, github_error_msg: _m, ...rest } = prev;
+        const { github_connected: _c, github_installed: _i, github_error: _e, github_error_msg: _m, ...rest } = prev;
         return rest;
       },
       replace: true,
     });
-  }, [isBackendReady, isUserLoading, currentUser, github_connected, github_error, github_error_msg, navigate, queryClient]);
+  }, [isBackendReady, isUserLoading, currentUser, github_connected, github_installed, github_error, github_error_msg, navigate, queryClient]);
 
   // ─── Branch dispatch ────────────────────────────────────────────────────
   // Compute the per-branch UI as a value rather than returning early. The

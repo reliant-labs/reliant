@@ -76,15 +76,28 @@ function TokenHealthLine({
 function InstallationsPanel({
   installations,
   installUrl,
+  kind,
 }: {
   installations: GitAppInstallation[];
   installUrl?: string;
+  /** Which sort of token this is. Only a GitHub App token (`ghu_`) can
+   *  enumerate installations; for every other kind the control plane returns
+   *  an empty list that means "not applicable", not "none installed". */
+  kind?: GitCredentialKind;
 }) {
+  // Believe an empty list only for the one credential kind that can actually
+  // report installations. Otherwise the panel keeps the neutral wording — the
+  // CTA is identical, so the only thing at stake is whether we assert
+  // something false about the user's account.
+  const installationsKnown = kind === "github_app";
   return (
     <ManageGitHubAccess
       installUrl={installUrl ?? "https://github.com/settings/installations"}
       installations={installations}
-      variant={installations.length === 0 ? "prominent" : "footer"}
+      installationsKnown={installationsKnown}
+      variant={
+        installations.length === 0 && installationsKnown ? "prominent" : "footer"
+      }
     />
   );
 }
@@ -338,6 +351,7 @@ export function GitConnectionsSettings() {
             <InstallationsPanel
               installations={credential?.installations ?? []}
               installUrl={credential?.installUrl}
+              kind={credential?.kind}
             />
           )}
 
