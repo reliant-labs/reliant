@@ -58,7 +58,8 @@
               "features/attachments",
               "features/skills",
               "features/processes",
-              "features/remote-daemons"
+              "features/remote-daemons",
+              "features/secrets"
             ]
           },
           {

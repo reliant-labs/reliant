@@ -235,7 +235,9 @@ describe("a store this console cannot read", () => {
       <ManagedSecretsView
         {...props({
           mode: "managed-remote",
-          availability: "not-ensured",
+          // A store on ANOTHER control plane: it may well hold a value, and
+          // this console cannot see it. Not looking is not evidence.
+          availability: "other-control-plane",
           report: { env: "prod", provider: "hosted", secrets: [{ name: "DATABASE_URL" }] },
           managed: [],
         })}
@@ -247,6 +249,50 @@ describe("a store this console cannot read", () => {
     expect(screen.getByTestId("managed-secrets").textContent).not.toMatch(/not set/);
     // The command is rendered as code, not as a sentence fragment.
     expect(screen.getByTestId("managed-secrets").querySelector("code")?.textContent).toBe("forge secret set");
+  });
+
+  it("links to the tenant-facing secrets documentation", () => {
+    // The surface had NO documentation link at all; every piece of guidance
+    // was inline copy, mostly telling people to go and run a CLI command.
+    render(<ManagedSecretsView {...props()} />);
+    const link = screen.getByTestId("secrets-docs-link");
+    expect(link).toHaveAttribute("href", "https://docs.reliantlabs.io/features/secrets");
+    // Opens out of the app, and rel is set so the new tab cannot reach back
+    // through window.opener.
+    expect(link).toHaveAttribute("target", "_blank");
+    expect(link).toHaveAttribute("rel", "noreferrer");
+  });
+
+  it("tells a never-deployed env that values set now are used by the first deploy", () => {
+    render(
+      <ManagedSecretsView
+        {...props({ mode: "managed", availability: "not-ensured", report: null, managed: [] })}
+      />
+    );
+    expect(screen.getByTestId("secrets-empty").textContent).toMatch(/first deploy/i);
+    // And the write path is offered rather than a CLI instruction.
+    expect(screen.getByTestId("add-secret-empty")).toBeInTheDocument();
+  });
+
+  it("does call a never-ensured env's declared secrets Not set — nothing can be holding them", () => {
+    // The contrast with the test above is the whole point. `not-ensured`
+    // means the environment has no control-plane row AT ALL, so there is no
+    // store that could be holding a value and "Not set" is a fact rather than
+    // a guess. Rendering it as "Not known" would hide the one thing the user
+    // needs to act on before their first deploy.
+    render(
+      <ManagedSecretsView
+        {...props({
+          mode: "managed",
+          availability: "not-ensured",
+          report: { env: "prod", provider: "hosted", secrets: [{ name: "DATABASE_URL" }] },
+          managed: [],
+        })}
+      />
+    );
+    const row = screen.getByTestId("secret-row-DATABASE_URL");
+    expect(within(row).getByText("Not set")).toBeInTheDocument();
+    expect(within(row).queryByText("Not known")).toBeNull();
   });
 
   it("does not claim 'No versions yet' in the detail when the history cannot be read", () => {
