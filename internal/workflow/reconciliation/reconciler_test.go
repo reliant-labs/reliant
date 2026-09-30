@@ -530,11 +530,17 @@ func makeHistoryWithActivity(activityID string) []*historypb.HistoryEvent {
 
 // stuckTestConfig returns a config whose debounce confirms after `passes`
 // consecutive poller-active observations (time window effectively disabled).
+//
+// Interventions is opted IN here because every test built on this config
+// asserts the destructive recovery (reset / terminate / mark failed). The
+// shipped default is off — see ReconcilerConfig.Interventions and the
+// TestReconciler_InterventionsDisabled_* tests.
 func stuckTestConfig(passes int) *ReconcilerConfig {
 	return &ReconcilerConfig{
 		StuckConfirmationPasses: passes,
 		StuckConfirmationWindow: time.Nanosecond,
 		Namespace:               "test-ns",
+		Interventions:           true,
 	}
 }
 
@@ -1480,12 +1486,14 @@ func makeStartedActivityDescribeResp(runID string, historyLength int64) *workflo
 
 // progressTestConfig returns a config whose progress watchdog detects after
 // detectPasses quiescent passes (confirmation at double that) with the
-// wall-clock window effectively disabled.
+// wall-clock window effectively disabled. Interventions opted in for the same
+// reason as stuckTestConfig.
 func progressTestConfig(detectPasses int) *ReconcilerConfig {
 	return &ReconcilerConfig{
 		ProgressStallPasses: detectPasses,
 		ProgressStallWindow: time.Nanosecond,
 		Namespace:           "test-ns",
+		Interventions:       true,
 	}
 }
 

@@ -63,6 +63,19 @@ import (
 // confirmation window must elapse before the workflow is terminated, marked
 // failed (checkpoint preserved), and the user is told how to resume.
 //
+// INTERVENTIONS ARE OPT-IN AND OFF BY DEFAULT. The three destructive paths
+// above — wedge terminate, stuck-task reset/terminate, progress-stall
+// terminate — only run when ReconcilerConfig.Interventions is true. They were
+// written when the workflow system was unstable; today they fire on a
+// sluggish host rather than on a bug, and on 2026-09-29 the wedge detector
+// terminated a healthy chat (and its six in-flight sub-agents) because its
+// workflow tasks were merely TIMING OUT on an overloaded laptop. See
+// docs/incidents/2026-09-29-reconciler-false-wedge.md. Detection still runs
+// and still logs; with interventions disabled each path logs one WARN per
+// streak and takes no action. Everything else — lost-workflow repair, status
+// drift / silent-termination repair, orphan reaps, stranded-spawn repairs,
+// orphaned mailbox resolution — is unconditional.
+//
 // Every anomaly class increments reliant_reconciler_anomalies_total and logs
 // at ERROR (which the logging package forwards to Sentry).
 type Reconciler struct {
@@ -85,6 +98,10 @@ type Reconciler struct {
 	wedgeAttemptThreshold   int
 	progressStallPasses     int
 	progressStallWindow     time.Duration
+
+	// interventions gates the three destructive paths (see the type doc and
+	// ReconcilerConfig.Interventions). False = detect and log only.
+	interventions bool
 
 	// stuckMu guards stuckObservations, the in-memory debounce state for
 	// stuck-task handling. In-memory tracking is acceptable here: a single
@@ -122,6 +139,11 @@ type stuckObservation struct {
 	activityID    string    // only set for taskType == "activity"
 	firstObserved time.Time // when this stuck task was first seen (pollers active)
 	passes        int       // consecutive poller-active passes observing this same stuck task
+
+	// disabledLogged records that the "intervention disabled, would have
+	// acted" WARN already fired for this streak, so a confirmed condition
+	// logs once rather than on every 30s pass until it clears.
+	disabledLogged bool
 }
 
 // progressObservation tracks one RUNNING workflow's static-history streak for
@@ -133,6 +155,9 @@ type progressObservation struct {
 	firstObserved time.Time // when this static-history streak started
 	passes        int       // consecutive quiescent passes at this historyLength
 	detected      bool      // detection-stage anomaly already reported once
+
+	// disabledLogged: same once-per-streak guard as stuckObservation.
+	disabledLogged bool
 }
 
 // Anomaly classes for metrics/alerting. These are the label values of
@@ -293,6 +318,34 @@ type ReconcilerConfig struct {
 	// streak must span before a progress stall is REPORTED. Action requires
 	// double this. Default: DefaultProgressStallWindow.
 	ProgressStallWindow time.Duration
+
+	// Interventions enables the reconciler's three DESTRUCTIVE recovery
+	// paths: terminating a wedged workflow task, resetting (or terminating)
+	// a confirmed stuck task, and terminating a confirmed progress stall.
+	// Each of those also writes a terminal DB status and a chat message.
+	//
+	// DEFAULT FALSE, deliberately. These detectors date from when the
+	// workflow system was unstable; the system is stable now, and their
+	// failure mode is to kill a healthy run. On 2026-09-29 the wedge
+	// detector terminated a healthy chat — and with it six in-flight
+	// sub-agents running inline in the same Temporal execution — because an
+	// overloaded laptop made its workflow tasks TIME OUT. The run had zero
+	// WORKFLOW_TASK_FAILED events; it was slow, not stuck. Full write-up:
+	// docs/incidents/2026-09-29-reconciler-false-wedge.md.
+	//
+	// The code is kept rather than deleted so it can be brought back. Before
+	// re-enabling, the wedge detector must distinguish
+	// WORKFLOW_TASK_TIMED_OUT from WORKFLOW_TASK_FAILED (from history, or
+	// the pending task's last failure) and act only on failures — the
+	// pending task's Attempt counter, which is all it reads today, counts
+	// both alike.
+	//
+	// Disabling changes only those three paths. Detection still runs and
+	// still logs (one WARN per workflow per streak saying what it would have
+	// done), and every non-destructive sweep — lost-workflow repair, status
+	// drift and silent-termination repair, orphan descendant/thread reaps,
+	// stranded-spawn repairs, orphaned mailbox resolution — is unaffected.
+	Interventions bool
 }
 
 // DefaultConfig returns the default reconciler configuration
@@ -307,6 +360,7 @@ func DefaultConfig() *ReconcilerConfig {
 		WedgeAttemptThreshold:   DefaultWedgeAttemptThreshold,
 		ProgressStallPasses:     DefaultProgressStallPasses,
 		ProgressStallWindow:     DefaultProgressStallWindow,
+		// Interventions is intentionally left false — see the field doc.
 	}
 }
 
@@ -357,6 +411,7 @@ func NewReconciler(repo db.Repository, tempClient client.Client, config *Reconci
 		wedgeAttemptThreshold:   cfg.WedgeAttemptThreshold,
 		progressStallPasses:     cfg.ProgressStallPasses,
 		progressStallWindow:     cfg.ProgressStallWindow,
+		interventions:           cfg.Interventions,
 		stuckObservations:       make(map[string]*stuckObservation),
 		progressObservations:    make(map[string]*progressObservation),
 		stopPolling:             make(chan struct{}),
@@ -481,6 +536,58 @@ func (r *Reconciler) recordAnomaly(stats *passStats, class string) {
 	if stats != nil {
 		stats.record(class)
 	}
+}
+
+// reportSuppressedIntervention is the single place the three destructive
+// paths say "this condition is confirmed, and I am doing nothing about it"
+// (see ReconcilerConfig.Interventions for why the default is off). No
+// Temporal call, no status write, no chat message, and no anomaly counter for
+// the action classes — a suppressed action is not an action, and counting it
+// would make the dashboards claim terminations that never happened.
+//
+// latch is the per-streak once-only guard from the path's own observation map
+// (latchStuckDisabledLog / latchProgressDisabledLog). It returns true only the
+// first time a streak reports suppression, so a condition that persists for
+// hours logs once instead of on every 30s pass.
+func (r *Reconciler) reportSuppressedIntervention(wf *db.Workflow, wouldHave string, latch func(string) bool, details ...any) {
+	if !latch(wf.ID) {
+		return
+	}
+	kv := append([]any{"workflowID", wf.ID, "chatID", wf.ChatID}, details...)
+	logging.Warn("[Reconciler] Intervention disabled: "+wouldHave, kv...)
+}
+
+// latchStuckDisabledLog claims the once-per-streak suppression log for a
+// stuck/wedged observation. A missing entry reads as "log it": the streak
+// state is gone, so this is the first report of whatever follows.
+func (r *Reconciler) latchStuckDisabledLog(workflowID string) bool {
+	r.stuckMu.Lock()
+	defer r.stuckMu.Unlock()
+	obs := r.stuckObservations[workflowID]
+	if obs == nil {
+		return true
+	}
+	if obs.disabledLogged {
+		return false
+	}
+	obs.disabledLogged = true
+	return true
+}
+
+// latchProgressDisabledLog is latchStuckDisabledLog for the progress-watchdog
+// streak.
+func (r *Reconciler) latchProgressDisabledLog(workflowID string) bool {
+	r.progressMu.Lock()
+	defer r.progressMu.Unlock()
+	obs := r.progressObservations[workflowID]
+	if obs == nil {
+		return true
+	}
+	if obs.disabledLogged {
+		return false
+	}
+	obs.disabledLogged = true
+	return true
 }
 
 // pollerState lazily caches DescribeTaskQueue results for a single reconcile
@@ -829,51 +936,20 @@ func (r *Reconciler) reconcileWorkflow(ctx context.Context, wf *db.Workflow, pol
 			return result
 		}
 
-		logging.Error("[Reconciler] Workflow task is failing repeatedly (wedged) - terminating and marking as failed",
-			"workflowID", wf.ID,
-			"chatID", wf.ChatID,
-			"attempt", temporalState.WedgedTaskAttempt,
-		)
-		r.recordAnomaly(stats, anomalyWedgeTerminated)
-
-		terminateReason := fmt.Sprintf(
-			"Workflow wedged: workflow task failing repeatedly (attempt %d) - likely non-deterministic replay after a code update; reset would re-diverge",
-			temporalState.WedgedTaskAttempt,
-		)
-		if err := r.tempClient.TerminateWorkflow(ctx, wf.ID, "", terminateReason); err != nil {
-			logging.Warn("[Reconciler] Failed to terminate wedged workflow in Temporal",
-				"error", err,
-				"workflowID", wf.ID,
-			)
-			// Continue anyway - we still want to mark it failed in DB
-		}
-		r.clearStuckObservation(wf.ID)
-
-		// Mark failed (CAS prevents duplicate transitions). Failed + kept
-		// position checkpoint = the next user message resumes at position.
-		swapped, err := r.repo.CompareAndSwapWorkflowStatus(ctx, wf.ID, db.Failed(), wf.Status)
-		if err != nil {
-			result.Error = fmt.Errorf("failed to mark wedged workflow as failed: %w", err)
+		if r.interventions {
+			r.terminateWedgedWorkflow(ctx, wf, temporalState, stats, result)
 			return result
 		}
-		if !swapped {
-			return result // another reconciler already handled this
-		}
 
-		// Tell the user what happened and how to continue. Accurate because
-		// SendMessage starts the next run in resume-at-position mode for
-		// failed/terminated predecessors.
-		if _, err := r.repo.SaveMessageToThread(ctx, wf.ChatID, wf.Thread, int32(reliantv1.MessageRole_MESSAGE_ROLE_SYSTEM), wedgeInterruptedChatMessage, &wf.ID, nil, nil); err != nil {
-			logging.Warn("[Reconciler] Failed to add wedge interruption message to chat",
-				"error", err,
-				"workflowID", wf.ID,
-			)
-		}
-
-		result.WasStale = true
-		result.TemporalStatus = db.Failed()
-
-		return result
+		// Interventions disabled (the default — see
+		// ReconcilerConfig.Interventions). This is the detector the
+		// 2026-09-29 incident indicted: a workflow task that keeps TIMING
+		// OUT on an overloaded host is slow, not wedged, and the attempt
+		// counter cannot tell the two apart. Report once per streak and fall
+		// through, so the status-drift repairs below still run for this
+		// workflow.
+		r.reportSuppressedIntervention(wf, "would have terminated wedged workflow",
+			r.latchStuckDisabledLog, "attempt", temporalState.WedgedTaskAttempt)
 	}
 
 	// Check for stuck task (workflow task or activity). A task sitting in
@@ -885,6 +961,19 @@ func (r *Reconciler) reconcileWorkflow(ctx context.Context, wf *db.Workflow, pol
 	if temporalState.HasStuckTask && wf.Status == db.Active() {
 		if !r.observeTask(ctx, wf, temporalState.StuckTaskType, temporalState.StuckActivityID, pollers) {
 			// Not yet confirmed (pollers absent, or debounce still counting).
+			return result
+		}
+
+		if !r.interventions {
+			// Interventions disabled (the default — see
+			// ReconcilerConfig.Interventions). Report once per streak and
+			// fall through so the status-drift repairs below still run.
+			r.reportSuppressedIntervention(wf, "would have reset or terminated stuck workflow",
+				r.latchStuckDisabledLog,
+				"stuckTaskType", temporalState.StuckTaskType,
+				"stuckActivityID", temporalState.StuckActivityID,
+				"stuckDuration", temporalState.StuckDuration,
+			)
 			return result
 		}
 
@@ -1032,6 +1121,20 @@ func (r *Reconciler) reconcileWorkflow(ctx context.Context, wf *db.Workflow, pol
 				return result
 			}
 
+			if !r.interventions {
+				// Interventions disabled (the default — see
+				// ReconcilerConfig.Interventions). Report once per streak
+				// and fall out of the switch so the status-drift repairs
+				// below still run.
+				r.reportSuppressedIntervention(wf, "would have terminated stalled workflow",
+					r.latchProgressDisabledLog,
+					"historyLength", temporalState.HistoryLength,
+					"passes", passes,
+					"elapsed", elapsed,
+				)
+				break
+			}
+
 			logging.Error("[Reconciler] Progress stall confirmed - terminating and marking as failed for resume",
 				"workflowID", wf.ID,
 				"chatID", wf.ChatID,
@@ -1172,6 +1275,61 @@ func (r *Reconciler) reconcileWorkflow(ctx context.Context, wf *db.Workflow, pol
 	}
 
 	return result
+}
+
+// terminateWedgedWorkflow is the wedge class's destructive recovery, kept in
+// one place so the intervention gate at the call site is a single condition.
+// Reset is deliberately not attempted: for the dominant cause (a
+// non-deterministic replay after a code update) replay re-diverges wherever
+// we fork from. Terminate, mark failed (which routes the next user message
+// into resume-at-position), and tell the user how to continue. Mutates result
+// in place.
+//
+// Only reachable with interventions enabled; see ReconcilerConfig.Interventions.
+func (r *Reconciler) terminateWedgedWorkflow(ctx context.Context, wf *db.Workflow, temporalState *TemporalWorkflowState, stats *passStats, result *ReconciliationResult) {
+	logging.Error("[Reconciler] Workflow task is failing repeatedly (wedged) - terminating and marking as failed",
+		"workflowID", wf.ID,
+		"chatID", wf.ChatID,
+		"attempt", temporalState.WedgedTaskAttempt,
+	)
+	r.recordAnomaly(stats, anomalyWedgeTerminated)
+
+	terminateReason := fmt.Sprintf(
+		"Workflow wedged: workflow task failing repeatedly (attempt %d) - likely non-deterministic replay after a code update; reset would re-diverge",
+		temporalState.WedgedTaskAttempt,
+	)
+	if err := r.tempClient.TerminateWorkflow(ctx, wf.ID, "", terminateReason); err != nil {
+		logging.Warn("[Reconciler] Failed to terminate wedged workflow in Temporal",
+			"error", err,
+			"workflowID", wf.ID,
+		)
+		// Continue anyway - we still want to mark it failed in DB
+	}
+	r.clearStuckObservation(wf.ID)
+
+	// Mark failed (CAS prevents duplicate transitions). Failed + kept
+	// position checkpoint = the next user message resumes at position.
+	swapped, err := r.repo.CompareAndSwapWorkflowStatus(ctx, wf.ID, db.Failed(), wf.Status)
+	if err != nil {
+		result.Error = fmt.Errorf("failed to mark wedged workflow as failed: %w", err)
+		return
+	}
+	if !swapped {
+		return // another reconciler already handled this
+	}
+
+	// Tell the user what happened and how to continue. Accurate because
+	// SendMessage starts the next run in resume-at-position mode for
+	// failed/terminated predecessors.
+	if _, err := r.repo.SaveMessageToThread(ctx, wf.ChatID, wf.Thread, int32(reliantv1.MessageRole_MESSAGE_ROLE_SYSTEM), wedgeInterruptedChatMessage, &wf.ID, nil, nil); err != nil {
+		logging.Warn("[Reconciler] Failed to add wedge interruption message to chat",
+			"error", err,
+			"workflowID", wf.ID,
+		)
+	}
+
+	result.WasStale = true
+	result.TemporalStatus = db.Failed()
 }
 
 // transitionChatOnCompletion switches the chat to the completed ROOT workflow's
