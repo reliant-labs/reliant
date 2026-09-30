@@ -244,6 +244,10 @@ export const SETTINGS_SECTION_IDS = [
   // /settings/billing, /settings/environments. (Managed Reliant AI keys/spend
   // now live as a tab inside the /settings/general "AI" section.)
   "billing",
+  // Per-member org permissions. Cloud-only: a self-hosted deployment has no
+  // organization to grant within, so SettingsNavigation gates the entry on
+  // hasControlPlane. Route: /settings/member-permissions.
+  "member-permissions",
   "environments",
 ] as const;
 export type SettingsSection = (typeof SETTINGS_SECTION_IDS)[number];
