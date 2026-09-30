@@ -35,12 +35,16 @@ vi.mock("@/services/controlPlane/capabilities", () => ({
   capabilities: { cloudDaemons: false, managedCredits: false, gitConnections: false },
 }));
 
-vi.mock("@/services/controlPlane/daemon", () => ({
+// Only the network calls are stubbed; the status constants come from the real
+// module. Re-declaring them here let the mock drift from the enum it was
+// imitating, and adding a constant elsewhere then broke this suite for a
+// reason that had nothing to do with what it tests.
+vi.mock("@/services/controlPlane/daemon", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/services/controlPlane/daemon")>()),
   listDaemons: vi.fn(async () => ({ daemons: [] })),
   resumeDaemon: vi.fn(),
+  deleteDaemon: vi.fn(),
   hasActiveDaemon: () => false,
-  DAEMON_STATUS_ACTIVE: 2,
-  DAEMON_STATUS_SUSPENDED: 3,
 }));
 
 // An active daemon keeps the picker on its normal list branch instead of the
