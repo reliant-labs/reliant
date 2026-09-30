@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -13,6 +14,7 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/stretchr/testify/assert"
@@ -101,6 +103,20 @@ type mockPauseRepo struct {
 	// cascadedThreadStatus is the status the thread cascade received — the
 	// thread-lifecycle half of the same terminal repair.
 	cascadedThreadReason db.WorkflowStopReason
+
+	// reviveCalls records every ReviveSubtreeLiveAt, and callOrder records
+	// the sequence of repo writes. Order is the assertion that matters here:
+	// a reconciler pass that observes the root Active while its children
+	// still read failed writes false "the parent had already exited"
+	// reports, so the revival has to land FIRST.
+	reviveCalls []reviveCall
+	reviveErr   error
+	callOrder   []string
+}
+
+type reviveCall struct {
+	rootWorkflowID string
+	at             time.Time
 }
 
 func newMockPauseRepo() *mockPauseRepo {
@@ -113,7 +129,22 @@ func (m *mockPauseRepo) UpdateWorkflowStatus(_ context.Context, id string, statu
 	if m.updateErr != nil {
 		return m.updateErr
 	}
+	m.callOrder = append(m.callOrder, "UpdateWorkflowStatus:"+id)
 	m.updatedStatuses[id] = status
+	return nil
+}
+
+func (m *mockPauseRepo) ReviveSubtreeLiveAt(_ context.Context, rootWorkflowID string, at time.Time) (int64, int64, error) {
+	m.callOrder = append(m.callOrder, "ReviveSubtreeLiveAt:"+rootWorkflowID)
+	m.reviveCalls = append(m.reviveCalls, reviveCall{rootWorkflowID: rootWorkflowID, at: at})
+	if m.reviveErr != nil {
+		return 0, 0, m.reviveErr
+	}
+	return 2, 3, nil
+}
+
+func (m *mockPauseRepo) EmitChatRefetch(_ context.Context, chatID string, refetchType db.RefetchType) error {
+	m.callOrder = append(m.callOrder, "EmitChatRefetch:"+chatID+":"+string(refetchType))
 	return nil
 }
 
@@ -335,6 +366,84 @@ func TestResumeInterruptedWorkflow_Failed_ResetsResumesAndMarksRunning(t *testin
 
 	assert.Equal(t, db.Active(), repo.updatedStatuses["wf-1"])
 	assert.Equal(t, 1, ps.resetGuard.Attempts("wf-1"), "a reset attempt is recorded")
+}
+
+// TestResumeInterruptedWorkflow_RevivesSubtreeBeforeMarkingRootActive is the
+// 2026-09-29 incident's second half. Reset-and-replay rebuilds the root's
+// in-flight sub-agents from their EXISTING rows, and those rows were stamped
+// failed when the root was killed — but the only write that moves a row back
+// to running is the "started" activity, which a child that was already
+// running at the reset point never re-executes (it is in the replayed
+// history). So the resume has to revive the subtree itself.
+//
+// Order is load-bearing, not tidiness. repairStrandedBackgroundSpawns skips a
+// subtree whose root is awaiting resume; the moment the root reads Active with
+// its children still failed, that guard stops applying and the sweep writes a
+// false "sub-agent finished, but the thread that spawned it had already
+// exited" report per child — into a unique index the real completion will
+// later collide with. Nine seconds was enough, on the live system.
+func TestResumeInterruptedWorkflow_RevivesSubtreeBeforeMarkingRootActive(t *testing.T) {
+	resetPointTime := time.Date(2026, 9, 29, 4, 42, 54, 0, time.UTC)
+	events := failedByActivityHistory()
+	// The reset point this history selects is event 4; give it the instant
+	// the revival predicate must receive.
+	events[0].EventTime = timestamppb.New(resetPointTime)
+
+	tc := &mockPauseTemporalClient{
+		describeResp:  closedDescribe(enumspb.WORKFLOW_EXECUTION_STATUS_FAILED, "old-run", 11),
+		historyEvents: events,
+		resetResp:     &workflowservice.ResetWorkflowExecutionResponse{RunId: "new-run"},
+	}
+	repo := newMockPauseRepo()
+	ps := NewPauseService(tc, repo)
+
+	_, err := ps.ResumeInterruptedWorkflow(context.Background(), "wf-1", "chat-1")
+	require.NoError(t, err)
+
+	require.Len(t, repo.reviveCalls, 1, "the resume must revive the subtree it is resuming")
+	assert.Equal(t, "wf-1", repo.reviveCalls[0].rootWorkflowID)
+	assert.True(t, resetPointTime.Equal(repo.reviveCalls[0].at),
+		"revive at the reset point's event time, got %v want %v", repo.reviveCalls[0].at, resetPointTime)
+
+	reviveAt := indexOfCall(repo.callOrder, "ReviveSubtreeLiveAt:wf-1")
+	activeAt := indexOfCall(repo.callOrder, "UpdateWorkflowStatus:wf-1")
+	require.GreaterOrEqual(t, reviveAt, 0, "revive was never called: %v", repo.callOrder)
+	require.GreaterOrEqual(t, activeAt, 0, "root was never marked active: %v", repo.callOrder)
+	assert.Less(t, reviveAt, activeAt,
+		"the subtree must be revived BEFORE the root reads Active: %v", repo.callOrder)
+
+	// The timeline is a cached query; without a pulse the revived rows sit
+	// behind a view that still says failed until something else refetches.
+	assert.Contains(t, repo.callOrder, "EmitChatRefetch:chat-1:"+string(db.RefetchWorkflowExecutions))
+}
+
+// TestResumeInterruptedWorkflow_ReviveFailure_StillResumes: Temporal has
+// already reset by this point, so refusing to resume over a bookkeeping
+// failure would strand the chat for a reason the user cannot act on.
+func TestResumeInterruptedWorkflow_ReviveFailure_StillResumes(t *testing.T) {
+	tc := &mockPauseTemporalClient{
+		describeResp:  closedDescribe(enumspb.WORKFLOW_EXECUTION_STATUS_FAILED, "old-run", 11),
+		historyEvents: failedByActivityHistory(),
+		resetResp:     &workflowservice.ResetWorkflowExecutionResponse{RunId: "new-run"},
+	}
+	repo := newMockPauseRepo()
+	repo.reviveErr = errors.New("database is down")
+	ps := NewPauseService(tc, repo)
+
+	newRunID, err := ps.ResumeInterruptedWorkflow(context.Background(), "wf-1", "chat-1")
+	require.NoError(t, err)
+	assert.Equal(t, "new-run", newRunID)
+	assert.Equal(t, db.Active(), repo.updatedStatuses["wf-1"], "the root still resumes")
+}
+
+// indexOfCall returns the position of a recorded repo call, or -1.
+func indexOfCall(calls []string, want string) int {
+	for i, c := range calls {
+		if c == want {
+			return i
+		}
+	}
+	return -1
 }
 
 func TestResumeInterruptedWorkflow_NotFound_ReturnsNoReplayableHistory(t *testing.T) {

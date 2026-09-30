@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	enums "go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/client"
@@ -292,10 +293,10 @@ func (ps *PauseService) SignalWithRecovery(ctx context.Context, workflowID, sign
 	// Closed-execution rejection: try reset-and-replay recovery for a replayable
 	// interrupted (Failed / Terminated / TimedOut) run.
 	if isWorkflowAlreadyDoneErr(err) {
-		newRunID, resetErr := ps.resetInterruptedForResume(ctx, workflowID, "")
+		reset, resetErr := ps.resetInterruptedForResume(ctx, workflowID, "")
 		switch {
 		case resetErr == nil:
-			if sigErr := ps.temporalClient.SignalWorkflow(ctx, workflowID, newRunID, signalName, signalData); sigErr != nil {
+			if sigErr := ps.temporalClient.SignalWorkflow(ctx, workflowID, reset.NewRunID, signalName, signalData); sigErr != nil {
 				return fmt.Errorf("failed to send signal %s after reset: %w", signalName, sigErr)
 			}
 			return nil
@@ -314,14 +315,84 @@ func (ps *PauseService) SignalWithRecovery(ctx context.Context, workflowID, sign
 	if !strings.Contains(err.Error(), "not found") && !strings.Contains(err.Error(), "NotFound") {
 		return fmt.Errorf("failed to send signal %s: %w", signalName, err)
 	}
-	newRunID, resetErr := ResetExpiredWorkflow(ctx, ps.temporalClient, workflowID, "")
+	reset, resetErr := ResetExpiredWorkflow(ctx, ps.temporalClient, workflowID, "")
 	if resetErr != nil {
 		return fmt.Errorf("failed to reset expired workflow for signal %s: %w", signalName, resetErr)
 	}
-	if err := ps.temporalClient.SignalWorkflow(ctx, workflowID, newRunID, signalName, signalData); err != nil {
+	ps.reviveResumedSubtree(ctx, workflowID, "", reset.ResetPointTime)
+	if err := ps.temporalClient.SignalWorkflow(ctx, workflowID, reset.NewRunID, signalName, signalData); err != nil {
 		return fmt.Errorf("failed to send signal %s after reset: %w", signalName, err)
 	}
 	return nil
+}
+
+// reviveResumedSubtree puts a reset-and-replayed run's subtree back to running
+// before anything marks the root Active, and pulses the UI so the timeline
+// stops showing live agents as failed.
+//
+// Why this is a separate step from the reset rather than something the
+// resumed run does for itself: every sub-agent executes INLINE in the root's
+// single Temporal execution, and replay REBUILDS the ones that were in flight
+// without re-running the activities that wrote their DB rows. The "started"
+// arm of WorkflowStatusActivity is the only other write that moves a row back
+// to running, and for a child that was already running at the reset point
+// that activity is in the replayed history — so it never fires again, and the
+// row stays at whatever the interruption stamped on it. Children spawned
+// AFTER the reset point do re-run "started" and revive themselves; children
+// that finished before it must stay finished. See
+// docs/incidents/2026-09-29-reconciler-false-wedge.md.
+//
+// Called BEFORE the root is marked Active, deliberately. The reconciler's
+// stranded-spawn repair exempts a subtree whose root is awaiting resume; the
+// instant the root reads Active with its children still failed, that guard
+// lifts and the sweep writes a false "the parent had already exited" report
+// per child — into a unique index that the real completion then collides
+// with. On the live system the window was nine seconds.
+//
+// Best-effort: Temporal has already reset by the time this runs, so failing
+// the resume over bookkeeping would strand the chat for a reason the user
+// cannot act on. A missed revival is repaired by the next "started" write.
+func (ps *PauseService) reviveResumedSubtree(ctx context.Context, workflowID, chatID string, resetPoint time.Time) {
+	if resetPoint.IsZero() {
+		// No reset point means no way to tell redone work from replayed
+		// work, and guessing would resurrect sub-agents that really ended.
+		logging.Warn("[PauseService] Reset returned no reset-point time; skipping subtree revival",
+			"workflowID", workflowID, "chatID", chatID)
+		return
+	}
+
+	workflowsRevived, threadsRevived, err := ps.database.ReviveSubtreeLiveAt(ctx, workflowID, resetPoint)
+	if err != nil {
+		logging.Error("[PauseService] Failed to revive resumed subtree — live sub-agents may read as failed",
+			"workflowID", workflowID,
+			"chatID", chatID,
+			"resetPoint", resetPoint,
+			"error", err,
+		)
+		return
+	}
+	if workflowsRevived == 0 && threadsRevived == 0 {
+		return
+	}
+
+	logging.Info("[PauseService] Revived the subtree a reset-and-replay is bringing back",
+		"workflowID", workflowID,
+		"chatID", chatID,
+		"resetPoint", resetPoint,
+		"workflowsRevived", workflowsRevived,
+		"threadsRevived", threadsRevived,
+	)
+
+	// The timeline reads these rows through a cached query, so without a
+	// pulse the revived agents keep rendering as failed until something
+	// unrelated invalidates it.
+	if chatID == "" {
+		return
+	}
+	if err := ps.database.EmitChatRefetch(ctx, chatID, db.RefetchWorkflowExecutions); err != nil {
+		logging.Warn("[PauseService] Failed to emit refetch after subtree revival",
+			"workflowID", workflowID, "chatID", chatID, "error", err)
+	}
 }
 
 // ResumeWorkflow resumes a paused workflow. For live Temporal executions it sends
@@ -392,10 +463,16 @@ func (ps *PauseService) ResumeExpiredWorkflow(ctx context.Context, workflowID, c
 
 	// Reset the workflow to the last WorkflowTaskCompleted event (the pause point).
 	// Pass empty runID so Temporal uses the latest run.
-	newRunID, err := ResetExpiredWorkflow(ctx, ps.temporalClient, workflowID, "")
+	reset, err := ResetExpiredWorkflow(ctx, ps.temporalClient, workflowID, "")
 	if err != nil {
 		return "", fmt.Errorf("failed to reset expired workflow: %w", err)
 	}
+	newRunID := reset.NewRunID
+
+	// Before anything marks the root Active: the replay rebuilds whatever
+	// sub-agents were in flight at the reset point, and only this brings
+	// their rows back. See reviveResumedSubtree.
+	ps.reviveResumedSubtree(ctx, workflowID, chatID, reset.ResetPointTime)
 
 	// Send resume signal to the new run so it unblocks from its Receive() loop
 	err = ps.temporalClient.SignalWorkflow(ctx, workflowID, newRunID, SignalResume, nil)
@@ -436,10 +513,14 @@ func (ps *PauseService) ResumeExpiredWorkflow(ctx context.Context, workflowID, c
 //   - ErrResetAttemptsExhausted: the bounded guard has given up on resetting
 //     this workflow (it kept re-failing without forward progress).
 func (ps *PauseService) ResumeInterruptedWorkflow(ctx context.Context, workflowID, chatID string) (string, error) {
-	newRunID, err := ps.resetInterruptedForResume(ctx, workflowID, chatID)
+	// resetInterruptedForResume has already revived the subtree the replay is
+	// about to rebuild — before this function marks the root Active, which is
+	// the ordering that matters. See reviveResumedSubtree.
+	reset, err := ps.resetInterruptedForResume(ctx, workflowID, chatID)
 	if err != nil {
 		return "", err
 	}
+	newRunID := reset.NewRunID
 
 	// Send resume to the new run so a parked workflow unblocks from its Await.
 	// The reset re-executes any self-pause during replay, and the replayed
@@ -472,24 +553,26 @@ func (ps *PauseService) ResumeInterruptedWorkflow(ctx context.Context, workflowI
 // resetInterruptedForResume describes the workflow, verifies it is a closed
 // replayable interrupted run (Failed / Terminated / TimedOut), checks the
 // bounded reset guard, and resets it to a replayable point — returning the new
-// run ID. The CALLER sends the appropriate wake signal (signal.resume for a
+// run ID and the reset point's event time (see ResetResult: the caller needs
+// that instant to revive the subtree the replay is about to rebuild). The
+// CALLER sends the appropriate wake signal (signal.resume for a
 // pause-parked run, signal.question.<id> for a question-parked run) on the new
 // run. Returns ErrNoReplayableHistory (ghost / not eligible) or
 // ErrResetAttemptsExhausted (guard gave up) for the caller to fall back on.
-func (ps *PauseService) resetInterruptedForResume(ctx context.Context, workflowID, chatID string) (string, error) {
+func (ps *PauseService) resetInterruptedForResume(ctx context.Context, workflowID, chatID string) (ResetResult, error) {
 	desc, err := ps.temporalClient.DescribeWorkflowExecution(ctx, workflowID, "")
 	if err != nil {
 		if isWorkflowAlreadyDoneErr(err) { // includes not-found
 			recordResumeOutcome(resumeOutcomeNoReplayableHistory, workflowID, chatID, err)
-			return "", ErrNoReplayableHistory
+			return ResetResult{}, ErrNoReplayableHistory
 		}
 		recordResumeOutcome(resumeOutcomeResetError, workflowID, chatID, err)
-		return "", fmt.Errorf("failed to describe interrupted workflow: %w", err)
+		return ResetResult{}, fmt.Errorf("failed to describe interrupted workflow: %w", err)
 	}
 	info := desc.GetWorkflowExecutionInfo()
 	if info == nil || info.GetExecution() == nil {
 		recordResumeOutcome(resumeOutcomeNoReplayableHistory, workflowID, chatID, nil)
-		return "", ErrNoReplayableHistory
+		return ResetResult{}, ErrNoReplayableHistory
 	}
 
 	// Only closed, replayable, non-user-cancel states are eligible. RUNNING is
@@ -502,7 +585,7 @@ func (ps *PauseService) resetInterruptedForResume(ctx context.Context, workflowI
 		// eligible
 	default:
 		recordResumeOutcome(resumeOutcomeNoReplayableHistory, workflowID, chatID, nil)
-		return "", ErrNoReplayableHistory
+		return ResetResult{}, ErrNoReplayableHistory
 	}
 
 	runID := info.GetExecution().GetRunId()
@@ -530,7 +613,7 @@ func (ps *PauseService) resetInterruptedForResume(ctx context.Context, workflowI
 			"terminatedForHistoryLimit", limitTerminated,
 		)
 		recordResumeOutcome(resumeOutcomeHistoryLimitExceeded, workflowID, chatID, nil)
-		return "", ErrHistoryLimitExceeded
+		return ResetResult{}, ErrHistoryLimitExceeded
 	}
 
 	// Bounded guard: stop resetting a workflow that keeps re-failing at the same
@@ -542,15 +625,20 @@ func (ps *PauseService) resetInterruptedForResume(ctx context.Context, workflowI
 			"attempts", ps.resetGuard.Attempts(workflowID),
 		)
 		recordResumeOutcome(resumeOutcomeResetAttemptsExhausted, workflowID, chatID, nil)
-		return "", ErrResetAttemptsExhausted
+		return ResetResult{}, ErrResetAttemptsExhausted
 	}
 
-	newRunID, err := ResetInterruptedWorkflow(ctx, ps.temporalClient, workflowID, runID, status)
+	reset, err := ResetInterruptedWorkflow(ctx, ps.temporalClient, workflowID, runID, status)
 	if err != nil {
 		recordResumeOutcome(resumeOutcomeResetError, workflowID, chatID, err)
-		return "", fmt.Errorf("failed to reset interrupted workflow: %w", err)
+		return ResetResult{}, fmt.Errorf("failed to reset interrupted workflow: %w", err)
 	}
 	ps.resetGuard.Record(workflowID, historyLen)
+
+	// Revive here rather than in each caller, so no reset-for-resume path can
+	// forget it. Every caller's next step is to signal and/or mark the root
+	// Active, and the revival must precede both — see reviveResumedSubtree.
+	ps.reviveResumedSubtree(ctx, workflowID, chatID, reset.ResetPointTime)
 
 	// The good path: replay rebuilt the nested stack, including in-memory node
 	// outputs that no checkpoint could restore.
@@ -559,8 +647,9 @@ func (ps *PauseService) resetInterruptedForResume(ctx context.Context, workflowI
 	logging.Info("[PauseService] Interrupted workflow reset for resume",
 		"workflowID", workflowID,
 		"chatID", chatID,
-		"newRunID", newRunID,
+		"newRunID", reset.NewRunID,
+		"resetPointTime", reset.ResetPointTime,
 		"priorStatus", status.String(),
 	)
-	return newRunID, nil
+	return reset, nil
 }

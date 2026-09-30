@@ -125,6 +125,14 @@ type WorkflowStore interface {
 	UpdateWorkflowName(ctx context.Context, id string, workflowName string) error
 	CascadeTerminalStatusToDescendants(ctx context.Context, parentWorkflowID string, reason WorkflowStopReason) error
 	ReapOrphanedWorkflowDescendants(ctx context.Context) (int64, error)
+	// ReviveSubtreeLiveAt moves every descendant of a root that was live at
+	// a reset point back to active, along with the threads those rows own
+	// and the root's own thread, and reports how many of each it moved. The
+	// inverse of CascadeTerminalStatusToDescendants (and its thread twin)
+	// for a subtree a reset-and-replay is bringing back — see
+	// queries/workflows.sql for why the predicate is a time window and why
+	// both halves are one statement.
+	ReviveSubtreeLiveAt(ctx context.Context, rootWorkflowID string, at time.Time) (workflowsRevived, threadsRevived int64, err error)
 	DeleteWorkflow(ctx context.Context, id string) error
 	DeleteWorkflowsByChat(ctx context.Context, chatID string) error
 	ListWorkflowsByStatus(ctx context.Context, status WorkflowStatus) ([]*Workflow, error)
