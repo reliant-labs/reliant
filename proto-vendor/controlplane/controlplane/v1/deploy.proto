@@ -510,6 +510,38 @@ message DeployDnsRecord {
   // The value: an IP for A, the platform ingress target for CNAME, the
   // ownership token for TXT.
   string value = 3;
+
+  // What the last verification pass concluded about THIS record.
+  //
+  // WHY PER-RECORD AND NOT JUST THE DOMAIN'S STATE. Verification is two
+  // independent checks — every resolved address is ours, and the ownership
+  // token is published — and the domain's single state collapses them.
+  // PENDING_DNS is the answer whether the tenant published nothing at all
+  // or published a perfect A record and forgot the TXT, and those need
+  // opposite next actions. The second is also the more common stall,
+  // because the domain visibly resolves and the tenant reasonably
+  // concludes they are finished. last_error reports only whichever check
+  // failed FIRST, so it cannot describe both either.
+  //
+  // FALSE MEANS "NOT CONFIRMED", NOT "WRONG". A record the verifier has
+  // not reached yet — every record on a domain added seconds ago — is
+  // false with an empty detail. A client must render that as unchecked,
+  // never as a failure: a red cross on a correct record is worse than no
+  // mark at all. The pair to read is (resolved, detail): false with a
+  // detail is a real failure, false without one is silence.
+  bool resolved = 4;
+
+  // Why this record is not confirmed, in words a tenant can act on:
+  // "resolves to 203.0.113.7, expected 34.63.203.181", "no TXT record
+  // found at _reliant-challenge.hounders.club". EMPTY when resolved, and
+  // empty when the record has not been checked.
+  //
+  // TENANT-SAFE BY CONSTRUCTION. Written only by the verifier, from the
+  // domain's own DNS answers and the platform's public ingress
+  // configuration. Never a raw error from a lower layer — those can name
+  // internal resolver addresses, and this string is rendered verbatim in
+  // a browser.
+  string detail = 5;
 }
 
 // DeployCustomDomainState is where a domain is in acquisition.

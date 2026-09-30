@@ -1710,7 +1710,37 @@ type DeployDnsRecord struct {
 	Name string `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
 	// The value: an IP for A, the platform ingress target for CNAME, the
 	// ownership token for TXT.
-	Value         string `protobuf:"bytes,3,opt,name=value,proto3" json:"value,omitempty"`
+	Value string `protobuf:"bytes,3,opt,name=value,proto3" json:"value,omitempty"`
+	// What the last verification pass concluded about THIS record.
+	//
+	// WHY PER-RECORD AND NOT JUST THE DOMAIN'S STATE. Verification is two
+	// independent checks — every resolved address is ours, and the ownership
+	// token is published — and the domain's single state collapses them.
+	// PENDING_DNS is the answer whether the tenant published nothing at all
+	// or published a perfect A record and forgot the TXT, and those need
+	// opposite next actions. The second is also the more common stall,
+	// because the domain visibly resolves and the tenant reasonably
+	// concludes they are finished. last_error reports only whichever check
+	// failed FIRST, so it cannot describe both either.
+	//
+	// FALSE MEANS "NOT CONFIRMED", NOT "WRONG". A record the verifier has
+	// not reached yet — every record on a domain added seconds ago — is
+	// false with an empty detail. A client must render that as unchecked,
+	// never as a failure: a red cross on a correct record is worse than no
+	// mark at all. The pair to read is (resolved, detail): false with a
+	// detail is a real failure, false without one is silence.
+	Resolved bool `protobuf:"varint,4,opt,name=resolved,proto3" json:"resolved,omitempty"`
+	// Why this record is not confirmed, in words a tenant can act on:
+	// "resolves to 203.0.113.7, expected 34.63.203.181", "no TXT record
+	// found at _reliant-challenge.hounders.club". EMPTY when resolved, and
+	// empty when the record has not been checked.
+	//
+	// TENANT-SAFE BY CONSTRUCTION. Written only by the verifier, from the
+	// domain's own DNS answers and the platform's public ingress
+	// configuration. Never a raw error from a lower layer — those can name
+	// internal resolver addresses, and this string is rendered verbatim in
+	// a browser.
+	Detail        string `protobuf:"bytes,5,opt,name=detail,proto3" json:"detail,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1762,6 +1792,20 @@ func (x *DeployDnsRecord) GetName() string {
 func (x *DeployDnsRecord) GetValue() string {
 	if x != nil {
 		return x.Value
+	}
+	return ""
+}
+
+func (x *DeployDnsRecord) GetResolved() bool {
+	if x != nil {
+		return x.Resolved
+	}
+	return false
+}
+
+func (x *DeployDnsRecord) GetDetail() string {
+	if x != nil {
+		return x.Detail
 	}
 	return ""
 }
@@ -3227,11 +3271,13 @@ const file_controlplane_v1_deploy_proto_rawDesc = "" +
 	"\n" +
 	"last_error\x18\x04 \x01(\tR\tlastError\x129\n" +
 	"\n" +
-	"live_since\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\tliveSince\"O\n" +
+	"live_since\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\tliveSince\"\x83\x01\n" +
 	"\x0fDeployDnsRecord\x12\x12\n" +
 	"\x04type\x18\x01 \x01(\tR\x04type\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x14\n" +
-	"\x05value\x18\x03 \x01(\tR\x05value\"\xbf\x04\n" +
+	"\x05value\x18\x03 \x01(\tR\x05value\x12\x1a\n" +
+	"\bresolved\x18\x04 \x01(\bR\bresolved\x12\x16\n" +
+	"\x06detail\x18\x05 \x01(\tR\x06detail\"\xbf\x04\n" +
 	"\x06Domain\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1a\n" +
 	"\bhostname\x18\x02 \x01(\tR\bhostname\x12>\n" +
