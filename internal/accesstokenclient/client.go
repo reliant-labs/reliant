@@ -234,6 +234,53 @@ func (c *Client) RevokeForUser(ctx context.Context, userID, tokenID string) erro
 	return c.call(ctx, "RevokeForUser", map[string]any{"userId": userID, "tokenId": tokenID}, &out)
 }
 
+// UpdateForUser changes one of a user's tokens' name and/or scopes. The secret
+// is NOT reissued, so a live daemon keeps working with its new authority.
+//
+// A nil name or nil scopes leaves that half alone. scopes is sent as a nested
+// object rather than a bare array precisely so that "not set" and "set to
+// empty" stay distinguishable over the wire — otherwise a rename would strip
+// every permission.
+func (c *Client) UpdateForUser(
+	ctx context.Context, userID, tokenID string, name *string, scopes fat.Set,
+) (TokenInfo, error) {
+	var out struct {
+		Token struct {
+			ID            string        `json:"id"`
+			Name          string        `json:"name"`
+			DisplayPrefix string        `json:"displayPrefix"`
+			Scopes        []string      `json:"scopes"`
+			Resource      *resourceJSON `json:"resource"`
+			Ephemeral     bool          `json:"ephemeral"`
+			CreatedAt     time.Time     `json:"createdAt"`
+			ExpiresAt     *time.Time    `json:"expiresAt"`
+			LastUsedAt    *time.Time    `json:"lastUsedAt"`
+		} `json:"token"`
+	}
+	body := map[string]any{"userId": userID, "tokenId": tokenID}
+	if name != nil {
+		body["name"] = *name
+	}
+	if scopes != nil {
+		body["scopes"] = map[string]any{"scopes": scopes.Strings()}
+	}
+	if err := c.call(ctx, "UpdateForUser", body, &out); err != nil {
+		return TokenInfo{}, err
+	}
+	info := TokenInfo{
+		ID: out.Token.ID, Name: out.Token.Name, DisplayPrefix: out.Token.DisplayPrefix,
+		Scopes: out.Token.Scopes, Ephemeral: out.Token.Ephemeral,
+		CreatedAt: out.Token.CreatedAt, ExpiresAt: out.Token.ExpiresAt,
+		LastUsedAt: out.Token.LastUsedAt,
+	}
+	if out.Token.Resource != nil && out.Token.Resource.Kind != "" {
+		info.Resource = &fat.Resource{
+			Kind: fat.ResourceKind(out.Token.Resource.Kind), ID: out.Token.Resource.ID,
+		}
+	}
+	return info, nil
+}
+
 // IsNotFound reports whether err is control-plane's not_found.
 func IsNotFound(err error) bool {
 	var rpc *RPCError

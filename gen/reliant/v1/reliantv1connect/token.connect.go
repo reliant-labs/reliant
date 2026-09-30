@@ -43,6 +43,9 @@ const (
 	// TokenServiceRevokeTokenProcedure is the fully-qualified name of the TokenService's RevokeToken
 	// RPC.
 	TokenServiceRevokeTokenProcedure = "/reliant.v1.TokenService/RevokeToken"
+	// TokenServiceUpdateTokenProcedure is the fully-qualified name of the TokenService's UpdateToken
+	// RPC.
+	TokenServiceUpdateTokenProcedure = "/reliant.v1.TokenService/UpdateToken"
 )
 
 // TokenServiceClient is a client for the reliant.v1.TokenService service.
@@ -53,7 +56,24 @@ type TokenServiceClient interface {
 	// ListTokens returns the caller's live tokens of one kind (or all kinds).
 	ListTokens(context.Context, *connect.Request[v1.ListTokensRequest]) (*connect.Response[v1.ListTokensResponse], error)
 	// RevokeToken revokes one of the caller's tokens, immediately.
+	//
+	// For a token bound to a daemon this also disconnects that daemon: its
+	// credential is permanent, so revocation is the only thing that ends its
+	// authority, and leaving it connected would show a revoked token beside a
+	// daemon that still looks healthy.
 	RevokeToken(context.Context, *connect.Request[v1.RevokeTokenRequest]) (*connect.Response[v1.RevokeTokenResponse], error)
+	// UpdateToken changes one of the caller's tokens' name and/or permissions.
+	//
+	// THE SECRET IS NEVER REISSUED. A live daemon's permissions can be widened
+	// or narrowed without re-registering it — which for a remote daemon would
+	// mean a browser login it cannot perform — and the change is live on the
+	// token's very next request, because authentication reads the row every
+	// time. Rotation is deliberately NOT this operation: it is mint-new plus
+	// revoke-old.
+	//
+	// New permissions are clipped to what the caller holds, exactly as a mint
+	// is, so editing can never widen past the person's own authority.
+	UpdateToken(context.Context, *connect.Request[v1.UpdateTokenRequest]) (*connect.Response[v1.UpdateTokenResponse], error)
 }
 
 // NewTokenServiceClient constructs a client for the reliant.v1.TokenService service. By default, it
@@ -85,6 +105,12 @@ func NewTokenServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(tokenServiceMethods.ByName("RevokeToken")),
 			connect.WithClientOptions(opts...),
 		),
+		updateToken: connect.NewClient[v1.UpdateTokenRequest, v1.UpdateTokenResponse](
+			httpClient,
+			baseURL+TokenServiceUpdateTokenProcedure,
+			connect.WithSchema(tokenServiceMethods.ByName("UpdateToken")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -93,6 +119,7 @@ type tokenServiceClient struct {
 	createToken *connect.Client[v1.CreateTokenRequest, v1.CreateTokenResponse]
 	listTokens  *connect.Client[v1.ListTokensRequest, v1.ListTokensResponse]
 	revokeToken *connect.Client[v1.RevokeTokenRequest, v1.RevokeTokenResponse]
+	updateToken *connect.Client[v1.UpdateTokenRequest, v1.UpdateTokenResponse]
 }
 
 // CreateToken calls reliant.v1.TokenService.CreateToken.
@@ -110,6 +137,11 @@ func (c *tokenServiceClient) RevokeToken(ctx context.Context, req *connect.Reque
 	return c.revokeToken.CallUnary(ctx, req)
 }
 
+// UpdateToken calls reliant.v1.TokenService.UpdateToken.
+func (c *tokenServiceClient) UpdateToken(ctx context.Context, req *connect.Request[v1.UpdateTokenRequest]) (*connect.Response[v1.UpdateTokenResponse], error) {
+	return c.updateToken.CallUnary(ctx, req)
+}
+
 // TokenServiceHandler is an implementation of the reliant.v1.TokenService service.
 type TokenServiceHandler interface {
 	// CreateToken mints a token acting as the caller. The raw secret is
@@ -118,7 +150,24 @@ type TokenServiceHandler interface {
 	// ListTokens returns the caller's live tokens of one kind (or all kinds).
 	ListTokens(context.Context, *connect.Request[v1.ListTokensRequest]) (*connect.Response[v1.ListTokensResponse], error)
 	// RevokeToken revokes one of the caller's tokens, immediately.
+	//
+	// For a token bound to a daemon this also disconnects that daemon: its
+	// credential is permanent, so revocation is the only thing that ends its
+	// authority, and leaving it connected would show a revoked token beside a
+	// daemon that still looks healthy.
 	RevokeToken(context.Context, *connect.Request[v1.RevokeTokenRequest]) (*connect.Response[v1.RevokeTokenResponse], error)
+	// UpdateToken changes one of the caller's tokens' name and/or permissions.
+	//
+	// THE SECRET IS NEVER REISSUED. A live daemon's permissions can be widened
+	// or narrowed without re-registering it — which for a remote daemon would
+	// mean a browser login it cannot perform — and the change is live on the
+	// token's very next request, because authentication reads the row every
+	// time. Rotation is deliberately NOT this operation: it is mint-new plus
+	// revoke-old.
+	//
+	// New permissions are clipped to what the caller holds, exactly as a mint
+	// is, so editing can never widen past the person's own authority.
+	UpdateToken(context.Context, *connect.Request[v1.UpdateTokenRequest]) (*connect.Response[v1.UpdateTokenResponse], error)
 }
 
 // NewTokenServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -146,6 +195,12 @@ func NewTokenServiceHandler(svc TokenServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(tokenServiceMethods.ByName("RevokeToken")),
 		connect.WithHandlerOptions(opts...),
 	)
+	tokenServiceUpdateTokenHandler := connect.NewUnaryHandler(
+		TokenServiceUpdateTokenProcedure,
+		svc.UpdateToken,
+		connect.WithSchema(tokenServiceMethods.ByName("UpdateToken")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/reliant.v1.TokenService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case TokenServiceCreateTokenProcedure:
@@ -154,6 +209,8 @@ func NewTokenServiceHandler(svc TokenServiceHandler, opts ...connect.HandlerOpti
 			tokenServiceListTokensHandler.ServeHTTP(w, r)
 		case TokenServiceRevokeTokenProcedure:
 			tokenServiceRevokeTokenHandler.ServeHTTP(w, r)
+		case TokenServiceUpdateTokenProcedure:
+			tokenServiceUpdateTokenHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -173,4 +230,8 @@ func (UnimplementedTokenServiceHandler) ListTokens(context.Context, *connect.Req
 
 func (UnimplementedTokenServiceHandler) RevokeToken(context.Context, *connect.Request[v1.RevokeTokenRequest]) (*connect.Response[v1.RevokeTokenResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.TokenService.RevokeToken is not implemented"))
+}
+
+func (UnimplementedTokenServiceHandler) UpdateToken(context.Context, *connect.Request[v1.UpdateTokenRequest]) (*connect.Response[v1.UpdateTokenResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.TokenService.UpdateToken is not implemented"))
 }

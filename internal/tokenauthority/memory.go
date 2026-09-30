@@ -133,6 +133,42 @@ func (m *Memory) ListForUser(_ context.Context, userID string, scope fat.Scope) 
 	return out, nil
 }
 
+// UpdateForUser implements Authority. The hash is the map key and is never
+// touched, which is exactly what "the secret is not reissued" means here.
+func (m *Memory) UpdateForUser(
+	_ context.Context, userID, tokenID string, name *string, scopes fat.Set,
+) (TokenInfo, error) {
+	if strings.TrimSpace(tokenID) == "" {
+		return TokenInfo{}, fmt.Errorf("%w: token id is required", fat.ErrInvalidGrant)
+	}
+	if name == nil && scopes == nil {
+		return TokenInfo{}, fmt.Errorf("%w: an update must change the name or the scopes", fat.ErrInvalidGrant)
+	}
+	if scopes != nil && len(scopes) == 0 {
+		return TokenInfo{}, fmt.Errorf("%w: a token must keep at least one scope; revoke it instead", fat.ErrInvalidGrant)
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, t := range m.tokens {
+		if t.info.ID != tokenID || t.actingID != userID || t.revokedAt != nil {
+			continue
+		}
+		if name != nil {
+			if strings.TrimSpace(*name) == "" {
+				return TokenInfo{}, fmt.Errorf("%w: a token's name cannot be blank", fat.ErrInvalidGrant)
+			}
+			t.info.Name = strings.TrimSpace(*name)
+		}
+		if scopes != nil {
+			t.info.Scopes = scopes.Strings()
+		}
+		return t.info, nil
+	}
+	// Collapses no-such-token, not-yours and already-revoked into one answer,
+	// so a caller cannot probe for other people's token ids.
+	return TokenInfo{}, ErrNotFound
+}
+
 // RevokeForUser implements Authority.
 func (m *Memory) RevokeForUser(_ context.Context, userID, tokenID string) error {
 	m.mu.Lock()

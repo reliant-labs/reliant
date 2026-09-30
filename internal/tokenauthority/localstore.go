@@ -204,6 +204,66 @@ func (s *LocalStore) ListForUser(ctx context.Context, userID string, scope fat.S
 // ErrNotFound reports a token that is not the user's (or does not exist).
 var ErrNotFound = errors.New("tokenauthority: token not found")
 
+// UpdateForUser changes one of userID's tokens' name and/or scopes. The user is
+// in the WHERE clause, so one user can never edit another's token.
+//
+// token_hash is deliberately untouched: the credential keeps working with its
+// new authority, which is what makes editing a REMOTE daemon's permissions
+// possible at all.
+func (s *LocalStore) UpdateForUser(
+	ctx context.Context, userID, tokenID string, name *string, scopes fat.Set,
+) (TokenInfo, error) {
+	if strings.TrimSpace(tokenID) == "" {
+		return TokenInfo{}, fmt.Errorf("%w: token id is required", fat.ErrInvalidGrant)
+	}
+	if name == nil && scopes == nil {
+		return TokenInfo{}, fmt.Errorf("%w: an update must change the name or the scopes", fat.ErrInvalidGrant)
+	}
+	if scopes != nil && len(scopes) == 0 {
+		// Mirrors the mint path: a token that authenticates and can do
+		// nothing reads as an outage rather than as a revocation.
+		return TokenInfo{}, fmt.Errorf("%w: a token must keep at least one scope; revoke it instead", fat.ErrInvalidGrant)
+	}
+
+	sets := []string{}
+	args := []any{tokenID, userID}
+	if name != nil {
+		if strings.TrimSpace(*name) == "" {
+			return TokenInfo{}, fmt.Errorf("%w: a token's name cannot be blank", fat.ErrInvalidGrant)
+		}
+		args = append(args, strings.TrimSpace(*name))
+		sets = append(sets, fmt.Sprintf("name = $%d", len(args)))
+	}
+	if scopes != nil {
+		args = append(args, pq.Array(scopes.Strings()))
+		sets = append(sets, fmt.Sprintf("scopes = $%d", len(args)))
+	}
+
+	row := s.db.QueryRowContext(ctx, `UPDATE access_tokens SET `+strings.Join(sets, ", ")+`
+		WHERE id = $1 AND acting_user_id = $2 AND revoked_at IS NULL
+		RETURNING id, name, token_prefix, scopes, resource_kind, resource_id, ephemeral, created_at, expires_at, last_used_at`,
+		args...)
+
+	var (
+		t              TokenInfo
+		resKind, resID sql.NullString
+	)
+	err := row.Scan(&t.ID, &t.Name, &t.DisplayPrefix, pq.Array(&t.Scopes), &resKind, &resID,
+		&t.Ephemeral, &t.CreatedAt, &t.ExpiresAt, &t.LastUsedAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		// No-such-token, not-yours and already-revoked collapse into one
+		// answer, so a caller cannot probe for other people's token ids.
+		return TokenInfo{}, ErrNotFound
+	}
+	if err != nil {
+		return TokenInfo{}, fmt.Errorf("tokenauthority: updating token: %w", err)
+	}
+	if resKind.Valid {
+		t.Resource = &fat.Resource{Kind: fat.ResourceKind(resKind.String), ID: resID.String}
+	}
+	return t, nil
+}
+
 // RevokeForUser revokes one of userID's tokens; the user is in the WHERE
 // clause. Idempotent on an already-revoked token.
 func (s *LocalStore) RevokeForUser(ctx context.Context, userID, tokenID string) error {
