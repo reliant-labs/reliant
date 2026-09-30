@@ -145,6 +145,10 @@ export const indexSearchSchema = z.object({
   // it arrives here as a boolean — not a string. Same for any URL where the
   // value happens to be JSON-parseable.
   github_connected: z.boolean().optional(),
+  // Set after a GitHub App install/setup return. Distinct from
+  // github_connected because no credential was created — the user changed
+  // which repositories an existing installation can reach.
+  github_installed: z.boolean().optional(),
   github_error: z.string().optional(),
   github_error_msg: z.string().optional(),
   // Dev-only toggles. devForceShow is "true" → boolean true after parseSearch;
@@ -197,11 +201,27 @@ export const oauthCallbackSearchSchema = z.object({
 // decoded returnTo. Owning this route in the SPA (rather than proxying to the
 // control-plane GET handler) is what makes the flow work on Firebase, whose
 // SPA-rewrites can't proxy to the GKE backend.
+// GitHub returns to this one URL from two different flows, and they do not
+// carry the same parameters:
+//
+//   OAuth (web application flow):  ?code=…&state=…
+//   App INSTALL (setup redirect):  ?installation_id=…&setup_action=install
+//                                  [&code=… when "Request user authorization
+//                                  during installation" is enabled]
+//
+// The install return has NO state, because we never issued one — GitHub
+// initiated that redirect. Requiring state unconditionally is what made a
+// successful install land on "Invalid GitHub callback".
 export const githubOAuthCallbackSearchSchema = z.object({
   code: z.string().optional(),
   state: z.string().optional(),
   error: z.string().optional(),
   error_description: z.string().optional(),
+  /** Present only on an App install/setup return. GitHub documents this as
+   *  spoofable, so it is treated as a hint to refresh, never as authority. */
+  installation_id: z.coerce.string().optional(),
+  /** "install" or "update" on a setup redirect; absent for plain OAuth. */
+  setup_action: z.string().optional(),
 });
 
 export const proxyAuthSearchSchema = z.object({
@@ -413,6 +433,9 @@ export const onboardingSearchSchema = z.object({
   // to whatever returnTo it was given (see ProjectChoiceStep.tsx), so a
   // GitHub OAuth started from /onboarding lands back here with these set.
   github_connected: z.boolean().optional(),
+  // An App install/setup return can land here too, when the install was
+  // started from onboarding.
+  github_installed: z.boolean().optional(),
   github_error: z.string().optional(),
   github_error_msg: z.string().optional(),
   devForceShow: z.boolean().optional(),

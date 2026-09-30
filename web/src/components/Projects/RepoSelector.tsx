@@ -391,6 +391,10 @@ export function RepoSelector({ onSelect, oauthReturnTo, analyticsPhase }: RepoSe
         <ManageGitHubAccess
           installUrl={installUrl}
           installations={installations}
+          // Repos are on screen, so access demonstrably exists. Whatever the
+          // installations list says, "no GitHub accounts connected" is false
+          // here — this is the exact contradiction users reported seeing.
+          installationsKnown={false}
           variant="footer"
           onNavigate={() =>
             trackEvent("github_manage_access_clicked", {

@@ -21,6 +21,32 @@ import { BrandMark } from './icons/BrandMark'
  * on success hops to the decoded returnTo with `?github_connected=true` so the
  * existing listeners (githubCredentialSync, ModernApp, OnboardingRoute) react
  * exactly as they did to the old backend redirect.
+ *
+ * TWO FLOWS LAND HERE, and only one of them has `state`.
+ *
+ *   OAuth web flow      ?code&state              → exchange the code
+ *   App install/setup   ?installation_id&setup_action[&code]
+ *                                               → installation changed
+ *
+ * The install redirect is initiated by GitHub, not by us, so there is no state
+ * for it to echo back. Treating a missing state as malformed is what showed
+ * "Invalid GitHub callback. Please try connecting again." to a user whose
+ * install had in fact just succeeded.
+ *
+ * WHY WE DO NOT EXCHANGE A STATELESS INSTALL CODE. `state` is not decoration
+ * here: the control plane's signed state is what carries the user id the
+ * credential gets attributed to (oauthState.UserID → GetUserByExternalID →
+ * UpsertGitCredential). A code arriving without it is therefore both
+ * unattributable and unverified — accepting one would mean writing a GitHub
+ * credential on the say-so of whoever loaded the URL, which is precisely the
+ * login-CSRF that state exists to prevent. GitHub says the same of
+ * installation_id ("bad actors can hit this URL with a spoofed
+ * installation_id... you should not rely on [its] validity").
+ *
+ * So an install return is handled as a pure signal: refresh what the server
+ * reports and tell the user their access changed. Nothing is trusted from the
+ * URL. A user who has no credential yet is sent through the ordinary,
+ * state-bearing connect flow, which lands back here in the OAuth shape.
  */
 export function GitHubOAuthCallback() {
   const navigate = useNavigate()
@@ -33,12 +59,38 @@ export function GitHubOAuthCallback() {
     exchanged.current = true
 
     const run = async () => {
-      const { code, state, error: errorParam, error_description: errorDescription } = search
+      const {
+        code,
+        state,
+        error: errorParam,
+        error_description: errorDescription,
+        setup_action: setupAction,
+      } = search
 
       // GitHub denied / errored before we ever get a code.
       if (errorParam) {
         logger.error('[GitHubOAuthCallback] Error from GitHub', { error: errorParam, errorDescription })
         landBackHome('github_error', errorParam, errorDescription)
+        return
+      }
+
+      // An App install/setup return. GitHub initiated this redirect, so there
+      // is no state of ours to validate and nothing in the URL is trustworthy
+      // (GitHub documents installation_id as spoofable). Any `code` here is
+      // deliberately NOT exchanged: without the signed state there is no user
+      // to attribute the credential to, and honoring it would write a
+      // credential on the say-so of whoever opened the link.
+      //
+      // The installation itself already happened server-side, so the right
+      // move is to re-read the truth and say so. `github_connected` is the
+      // existing signal that makes the app invalidate the credential query and
+      // re-list repos, which is exactly the refresh this needs.
+      if (setupAction && !state) {
+        logger.info('[GitHubOAuthCallback] GitHub App installation changed', {
+          setupAction,
+          hadStatelessCode: !!code,
+        })
+        landBackHome('github_installed')
         return
       }
 
@@ -69,7 +121,7 @@ export function GitHubOAuthCallback() {
     // redirect appended. returnTo is honored only when it is a same-origin
     // relative path (open-redirect guard); otherwise we land on '/'.
     const landBackHome = (
-      kind: 'github_connected' | 'github_error',
+      kind: 'github_connected' | 'github_installed' | 'github_error',
       code?: string,
       msg?: string,
       returnTo?: string,
@@ -79,6 +131,12 @@ export function GitHubOAuthCallback() {
       const url = new URL(safeReturnTo, window.location.origin)
       if (kind === 'github_connected') {
         url.searchParams.set('github_connected', 'true')
+      } else if (kind === 'github_installed') {
+        // A distinct param so the toast can say "access updated" rather than
+        // "connected" — the user did not connect anything, they changed which
+        // repositories an existing App installation can see. It rides the same
+        // listener, which invalidates the credential query and re-lists repos.
+        url.searchParams.set('github_installed', 'true')
       } else {
         url.searchParams.set('github_error', code || 'github_error')
         if (msg) url.searchParams.set('github_error_msg', msg)
