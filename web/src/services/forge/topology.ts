@@ -166,6 +166,17 @@ export interface ForgeTopologyEnv {
   /** Hosted only: the control plane's normalized base URL. */
   endpoint?: string;
   /**
+   * Hosted only: "persistent" | "local" — what KIND of control-plane
+   * environment this declaration is, derived by forge from whether anything
+   * in the env is actually hosted.
+   *
+   * Needed to CREATE the environment row (EnsureEnvironment) for an env that
+   * has never been deployed, which is what lets a secret be set before the
+   * first deploy. The kind is immutable once the row exists, so an absent or
+   * unrecognised value is never defaulted — see ensureEnvironmentForSecrets.
+   */
+  control_plane_kind?: string;
+  /**
    * Hosted only: the control plane's id for this env. EMPTY when the env has
    * never been ensured (first `forge env deploy` creates it) — forge never
    * fabricates one, and neither may anything reading this.

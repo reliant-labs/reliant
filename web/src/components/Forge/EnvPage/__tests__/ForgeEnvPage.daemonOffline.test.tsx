@@ -114,6 +114,7 @@ vi.mock("@/hooks/forge-queries", async (importOriginal) => {
     useManagedSecrets: (...args: unknown[]) => useManagedSecrets(...(args as [])),
     useManagedSecretVersions: () => ({ data: undefined, isLoading: false }),
     useSetManagedSecret: mutation,
+    useSetManagedSecretEnsuringEnvironment: mutation,
     useDeleteManagedSecret: mutation,
     useUndeleteManagedSecret: mutation,
     useDestroyManagedSecret: mutation,

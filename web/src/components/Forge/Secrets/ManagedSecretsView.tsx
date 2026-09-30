@@ -45,7 +45,14 @@
  */
 
 import { useMemo } from "react";
-import { ArrowLeft, KeyRound, Plus } from "lucide-react";
+import { ArrowLeft, ExternalLink, KeyRound, Plus } from "lucide-react";
+
+/**
+ * The tenant-facing secrets documentation. Declared here, beside its one use,
+ * rather than in a shared constants module: it is a fact about this surface,
+ * and a shared link table is where dead links go to hide.
+ */
+const SECRETS_DOCS_URL = "https://docs.reliantlabs.io/features/secrets";
 
 import StatusDot from "@/components/forge-ui/status_dot";
 import { cn } from "@/lib/utils";
@@ -93,13 +100,19 @@ export interface ManagedSecretsViewProps {
 export function ManagedSecretsView(props: ManagedSecretsViewProps) {
   const { env, mode, availability, report, managed, isLoading, selectedName, onSelect } = props;
 
-  // Only an `available` store's empty list means "holds nothing". Any other
-  // availability means this console could not look, and the join falls back
-  // to forge's own observation rather than painting every declared secret as
-  // a red "Not set" blocker.
+  // "Holds nothing" is a real reading in exactly two cases, and they are
+  // different in kind. `available` means we looked and the store was empty.
+  // `not-ensured` means the environment has no control-plane row at all —
+  // there is nothing that COULD hold a value, so every declared secret is
+  // genuinely unset rather than unknown, and saying "Not set" is honest.
+  //
+  // Every other availability means this console could not look, and the join
+  // falls back to forge's own observation rather than painting every declared
+  // secret as a red "Not set" blocker on no evidence.
+  const storeReadable = availability === "available" || availability === "not-ensured";
   const rows = useMemo(
-    () => joinSecretRows(report, managed, availability === "available"),
-    [report, managed, availability]
+    () => joinSecretRows(report, managed, storeReadable),
+    [report, managed, storeReadable]
   );
   const tally = useMemo(() => tallyRows(rows), [rows]);
   const canWrite = modeSupportsWrite(mode);
@@ -127,7 +140,7 @@ export function ManagedSecretsView(props: ManagedSecretsViewProps) {
       {isLoading ? (
         <SecretListSkeleton />
       ) : rows.length === 0 ? (
-        <EmptyState mode={mode} canWrite={canWrite} onAdd={props.onAdd} />
+        <EmptyState mode={mode} availability={availability} canWrite={canWrite} onAdd={props.onAdd} />
       ) : (
         <SecretList rows={rows} onSelect={onSelect} />
       )}
@@ -174,6 +187,27 @@ function StoreHeader({
           {/* A reason there is no lookup outranks the mode sentence: it is the
               more specific answer to "why can I not set this here". */}
           <WithCode text={availabilityExplanation(availability) ?? modeExplanation(mode)} />
+        </p>
+
+        {/* The one documentation link on this surface. It sits under the
+            explanation rather than beside the heading because it is the
+            follow-up to that sentence — "and here is the longer answer" —
+            not a second navigation target competing with it. */}
+        <p className="text-xs text-muted-foreground">
+          <a
+            href={SECRETS_DOCS_URL}
+            target="_blank"
+            rel="noreferrer"
+            data-testid="secrets-docs-link"
+            className="inline-flex items-center gap-1 text-foreground underline underline-offset-2 hover:text-primary"
+          >
+            How secrets work
+            <ExternalLink className="h-3 w-3" aria-hidden="true" />
+          </a>
+          <span className="ml-1.5">
+            — setting them before your first deploy, how they reach your workloads, and why a value
+            can never be read back.
+          </span>
         </p>
 
         {tally.total > 0 && (
@@ -472,7 +506,15 @@ function SecretDetail({
         </section>
       )}
 
-      {availability !== "available" ? (
+      {availability === "not-ensured" ? (
+        // Nothing has been stored for this environment yet, so there is no
+        // history to be missing. Saying it "cannot be read" would describe a
+        // failure where there is simply nothing there yet.
+        <p className="max-w-2xl text-xs text-muted-foreground" data-testid="version-history-not-ensured">
+          No versions yet. Setting a value here creates the first one, and it is used by the first
+          deploy.
+        </p>
+      ) : availability !== "available" ? (
         // Only the store knows a secret's versions. When it cannot be read
         // here, "No versions yet" would be a claim — say where they are.
         <p className="max-w-2xl text-xs text-muted-foreground" data-testid="version-history-unavailable">
@@ -511,10 +553,12 @@ function SecretDetail({
  */
 function EmptyState({
   mode,
+  availability,
   canWrite,
   onAdd,
 }: {
   mode: SecretSurfaceMode;
+  availability: ManagedStoreAvailability;
   canWrite: boolean;
   onAdd: () => void;
 }) {
@@ -526,7 +570,9 @@ function EmptyState({
       <KeyRound className="h-5 w-5 text-muted-foreground" aria-hidden="true" />
       <p className="max-w-md text-sm text-muted-foreground">
         {mode === "managed"
-          ? "No secrets in this environment yet."
+          ? availability === "not-ensured"
+            ? "No secrets set for this environment yet. You can add them now — this environment has not been deployed, and values you set are kept and used by the first deploy."
+            : "No secrets in this environment yet."
           : mode === "managed-remote"
             ? "No secrets are declared here, and this console cannot read the managed store. Set one with forge secret set."
           : mode === "external"

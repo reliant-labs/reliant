@@ -331,6 +331,10 @@ export function ForgeEnvPage() {
           projectId={projectId}
           summary={summary}
           daemonAvailable={daemonOk}
+          // forge's OWN name for the project (forge.yaml `name`), not the
+          // Reliant project's display name: the control plane files
+          // environments under forge's name, so it is the join key.
+          forgeProject={(report?.project ?? "").trim() || null}
           selectedSecret={secretParam ?? null}
           onSelectSecret={selectSecret}
         />

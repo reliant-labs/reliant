@@ -49,6 +49,8 @@ import { ConnectError, Code } from "@connectrpc/connect";
 import { timestampDate, type Timestamp } from "@bufbuild/protobuf/wkt";
 
 import { SecretStoreService } from "@/gen/controlplane/services/secret_store/v1/secret_store_pb";
+import { DeployEnvironmentKind } from "@/gen/controlplane/controlplane/v1/deploy_pb";
+import { DeployService } from "@/gen/controlplane/services/deploy/v1/deploy_pb";
 import { getControlPlaneClient } from "@/services/controlPlane/client";
 import { CONTROL_PLANE_API_URL } from "@/services/controlPlane/config";
 import { destinationOf } from "./topology";
@@ -228,6 +230,30 @@ export function managedStoreTarget(
 }
 
 /**
+ * Whether a value can be WRITTEN in this state, which is a different question
+ * from whether the store can be READ.
+ *
+ * `not-ensured` is the interesting one, and it is writable. There is no id to
+ * read WITH yet, but there is nothing missing that a write cannot create: the
+ * only prerequisite for a managed secret is the control-plane
+ * `deploy_environments` row, and creating that row is an ordinary idempotent
+ * RPC (EnsureEnvironment) rather than a deploy. OpenBao needs nothing
+ * provisioned per environment — KV-v2 creates the path on first write — which
+ * control-plane pins in internal/isolation/predeploy_secret_integration_test.go.
+ *
+ * Treating it as unwritable was the whole defect: it produced a chicken-and-egg
+ * where the UI told a user to deploy, and the deploy refused because the
+ * secrets it needed were unset.
+ *
+ * Every other non-available state stays unwritable, and for reasons a write
+ * cannot fix: another control plane owns the row, the environment has no
+ * managed store at all, or we simply could not reach it and must not guess.
+ */
+export function availabilitySupportsWrite(availability: ManagedStoreAvailability): boolean {
+  return availability === "available" || availability === "not-ensured";
+}
+
+/**
  * One sentence for each reason there is no lookup. Each answers "then where
  * DO these secrets live, and how do I set one" rather than just refusing.
  */
@@ -236,7 +262,7 @@ export function availabilityExplanation(availability: ManagedStoreAvailability):
     case "not-hosted":
       return "This environment is not hosted, so it has no managed store. Its values come from the secret provider its forge config declares.";
     case "not-ensured":
-      return "This hosted environment has not been deployed yet, so its managed store does not exist here yet. The first deploy creates it — you can set values now with `forge secret set`.";
+      return "This hosted environment has not been deployed yet, so nothing is stored for it. You can still set values now — they are kept and used by the first deploy.";
     case "other-control-plane":
       return "This environment is hosted on a different control plane from the one you are signed in to, so its store cannot be read from here. Set values with `forge secret set`.";
     case "unreachable":
@@ -384,6 +410,128 @@ export async function setSecret(args: {
     ...(args.cas === undefined ? {} : { cas: args.cas }),
   });
   return { version: res.version, createdAt: toISO(res.createdTime) };
+}
+
+// ── Writing before the first deploy ─────────────────────────────────────────
+
+/**
+ * The env facts an ensure needs: a control-plane environment's identity is
+ * (org, project, name), and its kind. The org comes from the session.
+ *
+ * `controlPlaneKind` is forge's own word for the kind — "persistent" or
+ * "local" — read off the topology report's `control_plane_kind`. It is NOT
+ * defaulted here, for the same reason the server refuses UNSPECIFIED: the
+ * kinds differ in whether the platform deploys there and whether secrets are
+ * readable back, and the kind is IMMUTABLE once the row exists. A guess that
+ * lands wrong produces an environment that cannot be corrected, only
+ * abandoned.
+ */
+export interface EnsureEnvironmentInput {
+  project: string;
+  name: string;
+  controlPlaneKind: string;
+}
+
+/**
+ * Make the control-plane environment row exist, and return its id.
+ *
+ * THE SAME THING FORGE'S CLI ALREADY DOES. forge ensures the environment
+ * before every mutating hosted command — promote, secret set, deploy — because
+ * the environment is DECLARED in the project's KCL and whichever command runs
+ * first on a fresh env creates it. The browser was the one caller that did
+ * not, which is why `forge secret set` worked pre-deploy and the UI did not.
+ *
+ * Idempotent server-side: EnsureEnvironment returns the existing row unchanged
+ * when one is already there, and refuses (rather than rewriting) a declaration
+ * whose immutable fields disagree with it.
+ *
+ * AUTHZ IS UNCHANGED BY THIS PATH. EnsureEnvironment requires org ADMIN, and
+ * so does writing a secret. A caller who may set a secret may already create
+ * the environment, so ensuring here grants nobody anything they did not have.
+ */
+export async function ensureEnvironmentForSecrets(input: EnsureEnvironmentInput): Promise<string> {
+  const project = input.project.trim();
+  const name = input.name.trim();
+  if (project === "" || name === "") {
+    // Refused rather than sent. An environment is addressed by
+    // (org, project, name); a blank half would address a DIFFERENT
+    // environment from the one on screen and then write the user's secret
+    // into it.
+    throw new Error(
+      "Cannot set a value for this environment yet: Reliant does not know which forge project it belongs to. Open it once from a running daemon, then try again."
+    );
+  }
+  const kind = environmentKindFromForge(input.controlPlaneKind);
+  if (kind === undefined) {
+    throw new Error(
+      "Cannot set a value for this environment yet: forge has not reported whether it is a persistent or local environment. An environment's kind cannot be changed later, so Reliant will not guess it."
+    );
+  }
+
+  const res = await getControlPlaneClient(DeployService).ensureEnvironment({
+    spec: { project, name, kind },
+  });
+  const id = (res.environment?.id ?? "").trim();
+  if (id === "") {
+    throw new Error("The control plane created this environment but returned no id for it.");
+  }
+  return id;
+}
+
+/**
+ * Map forge's `control_plane_kind` onto the wire enum.
+ *
+ * `undefined` for anything else — including the empty string an older forge
+ * that does not report the field would leave. Never UNSPECIFIED and never a
+ * default: see EnsureEnvironmentInput.
+ */
+function environmentKindFromForge(kind: string): DeployEnvironmentKind | undefined {
+  switch (kind.trim().toLowerCase()) {
+    case "persistent":
+      return DeployEnvironmentKind.PERSISTENT;
+    case "local":
+      return DeployEnvironmentKind.LOCAL;
+    default:
+      return undefined;
+  }
+}
+
+export interface SetSecretEnsuringResult extends SetSecretResult {
+  /**
+   * The environment id the value was written against — newly created when the
+   * environment had none. The caller needs it so the surface can re-read with
+   * a real id instead of staying in `not-ensured` until something else
+   * refreshes it.
+   */
+  environmentId: string;
+}
+
+/**
+ * Write a secret, creating the environment row first when there is not one.
+ *
+ * ORDER IS THE POINT, AND SO IS STOPPING. If the ensure fails the value is
+ * never sent: a write keyed on a failed ensure has no correct destination, and
+ * "try it anyway" is how a secret lands in the wrong row. The value is
+ * forwarded once and never returned, cached, or included in an error.
+ */
+export async function setSecretEnsuringEnvironment(args: {
+  /** "" when the environment has never been ensured. */
+  environmentId: string;
+  env: EnsureEnvironmentInput;
+  name: string;
+  value: string;
+  cas?: number;
+}): Promise<SetSecretEnsuringResult> {
+  const environmentId =
+    args.environmentId.trim() !== "" ? args.environmentId.trim() : await ensureEnvironmentForSecrets(args.env);
+
+  const result = await setSecret({
+    environmentId,
+    name: args.name,
+    value: args.value,
+    ...(args.cas === undefined ? {} : { cas: args.cas }),
+  });
+  return { ...result, environmentId };
 }
 
 /**

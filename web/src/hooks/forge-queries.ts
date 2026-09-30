@@ -59,11 +59,14 @@ import {
   getSecretVersions,
   listSecrets,
   setSecret,
+  setSecretEnsuringEnvironment,
   undeleteSecret,
+  type EnsureEnvironmentInput,
   type ManagedSecretHistory,
   type ManagedSecretSummary,
   type ManagedStoreAvailability,
   type ManagedStoreTarget,
+  type SetSecretEnsuringResult,
   type SetSecretResult,
 } from "../services/forge/secretStore";
 import type { ForgeEnvStatusReport } from "../services/forge/status";
@@ -867,6 +870,46 @@ export function useSetManagedSecret(
   return useMutation<SetSecretResult, Error, { name: string; value: string; cas?: number }>({
     mutationFn: ({ name, value, cas }) =>
       setSecret({ environmentId: requireEnvironmentId(environmentId), name, value, cas }),
+    onSuccess: invalidate,
+  });
+}
+
+/**
+ * Set a secret on an environment the control plane has NEVER SEEN, creating
+ * its row on the way.
+ *
+ * A separate hook from useSetManagedSecret rather than a flag on it, because
+ * the two have different preconditions: that one requires an environment id
+ * and refuses without one (requireEnvironmentId), and this one exists exactly
+ * for the case where there is no id yet. Collapsing them would mean the
+ * "must have an id" guard could no longer be stated.
+ *
+ * `ensure` null means the facts needed to create the row — the forge project
+ * name and the env's kind — are not known, so there is nothing to call this
+ * with; the caller does not offer the write.
+ */
+export function useSetManagedSecretEnsuringEnvironment(
+  projectId: string | null | undefined,
+  env: string | null | undefined,
+  environmentId: string | null | undefined,
+  ensure: EnsureEnvironmentInput | null
+) {
+  const invalidate = useInvalidateManagedSecrets(projectId, env);
+  return useMutation<SetSecretEnsuringResult, Error, { name: string; value: string; cas?: number }>({
+    mutationFn: ({ name, value, cas }) => {
+      if (!ensure) {
+        throw new Error(
+          "Reliant does not know this environment's forge project and kind, so it cannot create it to hold a value."
+        );
+      }
+      return setSecretEnsuringEnvironment({
+        environmentId: environmentId ?? "",
+        env: ensure,
+        name,
+        value,
+        cas,
+      });
+    },
     onSuccess: invalidate,
   });
 }

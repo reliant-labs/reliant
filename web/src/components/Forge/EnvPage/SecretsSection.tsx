@@ -37,6 +37,7 @@ import {
   useManagedSecretVersions,
   useManagedSecrets,
   useSetManagedSecret,
+  useSetManagedSecretEnsuringEnvironment,
   useUndeleteManagedSecret,
 } from "@/hooks/forge-queries";
 import { isCloudLocal, managedTargetFor, type ForgeEnvSummary } from "@/services/forge/environments";
@@ -50,6 +51,12 @@ export interface SecretsSectionProps {
   summary: ForgeEnvSummary;
   /** Whether the daemon can be asked for forge's declarations. */
   daemonAvailable: boolean;
+  /**
+   * The FORGE project name (forge.yaml `name`) — the project half of a
+   * control-plane environment's (org, project, name) identity. Needed to
+   * create the environment row for an env that has never been deployed.
+   */
+  forgeProject: string | null;
   selectedSecret: string | null;
   onSelectSecret: (name: string | null) => void;
 }
@@ -58,6 +65,7 @@ export function SecretsSection({
   projectId,
   summary,
   daemonAvailable,
+  forgeProject,
   selectedSecret,
   onSelectSecret,
 }: SecretsSectionProps) {
@@ -71,7 +79,25 @@ export function SecretsSection({
   const declarations = useForgeSecrets(daemonAvailable ? projectId : null, env);
   const versions = useManagedSecretVersions(projectId, env, environmentId, selectedSecret);
 
+  // What it would take to CREATE this environment's row: forge's project name
+  // and the kind forge derived for it. Null when either is unknown — the row
+  // is addressed by (org, project, name) and its kind is immutable, so a
+  // guess at either would create a different environment from the one on
+  // screen, or one that can never be corrected.
+  const ensureFacts = useMemo(() => {
+    const project = (forgeProject ?? "").trim();
+    const kind = (summary.forge?.control_plane_kind ?? "").trim();
+    if (project === "" || kind === "") return null;
+    return { project, name: env, controlPlaneKind: kind };
+  }, [forgeProject, summary.forge?.control_plane_kind, env]);
+
   const setMutation = useSetManagedSecret(projectId, env, environmentId);
+  const ensureSetMutation = useSetManagedSecretEnsuringEnvironment(
+    projectId,
+    env,
+    environmentId,
+    ensureFacts
+  );
   const deleteMutation = useDeleteManagedSecret(projectId, env, environmentId);
   const undeleteMutation = useUndeleteManagedSecret(projectId, env, environmentId);
   const destroyMutation = useDestroyManagedSecret(projectId, env, environmentId);
@@ -82,18 +108,40 @@ export function SecretsSection({
 
   const report = declarations.data?.kind === "report" ? declarations.data.report : null;
   const storeAvailable = managed.data?.availability === "available";
+  const availability =
+    managed.data?.availability ?? (target.kind === "none" ? target.availability : "unreachable");
+
+  // A hosted env the control plane has never seen is WRITABLE even though it
+  // is not readable: the only thing missing is its deploy_environments row,
+  // and the write path creates that first (setSecretEnsuringEnvironment).
+  // Writing is what a user comes to this screen to do before their first
+  // deploy, and gating it on having already deployed is the chicken-and-egg
+  // this surface used to hand them.
+  const canEnsure = availability === "not-ensured" && ensureFacts !== null;
+
   // The mode decides whether this surface can write. A control plane env row
   // IS the managed store's provider, whatever an older forge calls it.
-  const mode = summary.cloud ? (storeAvailable ? "managed" : "managed-remote") : surfaceMode(report, storeAvailable);
+  const mode = canEnsure
+    ? "managed"
+    : summary.cloud
+      ? storeAvailable
+        ? "managed"
+        : "managed-remote"
+      : surfaceMode(report, storeAvailable);
+
+  // The write path: ensure-then-set when the environment has no row yet,
+  // the plain set when it does. One `activeSet` from here down, so the modal
+  // renders one pending state and one error whichever path is in play.
+  const activeSet = canEnsure ? ensureSetMutation : setMutation;
 
   const closeModal = useCallback(() => {
     setModal(null);
-    setMutation.reset();
-  }, [setMutation]);
+    activeSet.reset();
+  }, [activeSet]);
 
   const handleSubmit = useCallback(
     async (args: { name: string; value: string; cas?: number }) => {
-      await setMutation.mutateAsync(args).then(
+      await activeSet.mutateAsync(args).then(
         () => closeModal(),
         // Swallow: the modal renders the mutation's error itself, and an
         // unhandled rejection here would surface the value-carrying request in
@@ -101,7 +149,7 @@ export function SecretsSection({
         () => undefined
       );
     },
-    [setMutation, closeModal]
+    [activeSet, closeModal]
   );
 
   const pendingVersion =
@@ -135,7 +183,7 @@ export function SecretsSection({
       <ManagedSecretsView
         env={env}
         mode={mode}
-        availability={managed.data?.availability ?? (target.kind === "none" ? target.availability : "unreachable")}
+        availability={availability}
         report={report}
         managed={managed.data?.secrets ?? []}
         isLoading={managed.isLoading && !managed.data}
@@ -160,8 +208,8 @@ export function SecretsSection({
         existing={modal?.existing ?? null}
         takenNames={(managed.data?.secrets ?? []).map((s) => s.name)}
         onSubmit={handleSubmit}
-        isSubmitting={setMutation.isPending}
-        error={(setMutation.error as Error | null) ?? null}
+        isSubmitting={activeSet.isPending}
+        error={(activeSet.error as Error | null) ?? null}
       />
     </div>
   );
