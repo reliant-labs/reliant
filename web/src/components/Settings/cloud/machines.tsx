@@ -144,10 +144,21 @@ function daemonStatus(d: Daemon): WsStatus {
  * through), so this only decides WHEN to show it: on the states where the
  * machine is not working and the message therefore explains something.
  * Showing it beside a healthy machine would be stale-message noise.
+ *
+ * SUSPENDED counts, and it is the least obvious of the three. A machine the
+ * USER stopped needs no explanation and carries none. But the control plane
+ * also stops machines on its own — the reconciler parks one whose workspace
+ * has gone missing and whose owner has no compute funding — and that is a
+ * state change nobody asked for. Without the reason the owner sees a machine
+ * that stopped itself and a Start button that will fail for the same
+ * unstated cause. The message is only rendered when one exists, so a
+ * user-suspended machine is unaffected.
  */
 function daemonFailureReason(d: Daemon): string | null {
   const status = daemonStatus(d);
-  if (status !== "failed" && status !== "disconnected") return null;
+  if (status !== "failed" && status !== "disconnected" && status !== "suspended") {
+    return null;
+  }
   const message = d.lastStatusMessage?.trim();
   return message ? message : null;
 }
@@ -653,7 +664,19 @@ function ManagedMachinesTable({
               <Td>
                 <StatusDot variant={statusDotVariant[status]} label={badge.label} />
                 {failureReason && (
-                  <p className="mt-1 max-w-xs text-xs text-destructive">{failureReason}</p>
+                  // Destructive red for a machine that BROKE; muted for one
+                  // that is merely stopped. A stopped machine is a normal
+                  // state whose reason is informational, and colouring it as
+                  // an error would make the whole list look on fire whenever
+                  // the reconciler parks something for lack of funding.
+                  <p
+                    className={cn(
+                      "mt-1 max-w-xs text-xs",
+                      status === "suspended" ? "text-muted-foreground" : "text-destructive",
+                    )}
+                  >
+                    {failureReason}
+                  </p>
                 )}
               </Td>
               <Td className="text-muted-foreground">{resources}</Td>
@@ -1044,12 +1067,23 @@ function EnvironmentDetail({ daemonId, onBack }: { daemonId: string; onBack: () 
           {error && <ErrorNote message={error} />}
 
           {/*
-            Why a machine is failed, at the top, not buried in a detail row.
-            This used to render only as "Last status" three cards down, so a
-            user looking at a red "Failed" badge had no reason next to it and
-            no cue that one existed further down the page.
+            Why a machine is failed or stopped, at the top, not buried in a
+            detail row. This used to render only as "Last status" three cards
+            down, so a user looking at a red "Failed" badge had no reason next
+            to it and no cue that one existed further down the page.
+
+            A STOPPED machine gets the same prominence but not the error
+            styling: being stopped is normal, and the reason is there to
+            explain a stop the user did not perform.
           */}
-          <ErrorNote message={daemonFailureReason(daemon) ?? undefined} />
+          {daemonFailureReason(daemon) &&
+            (status === "suspended" ? (
+              <div className="mb-4 rounded-md border border-border bg-background px-3 py-2 text-sm text-muted-foreground">
+                {daemonFailureReason(daemon)}
+              </div>
+            ) : (
+              <ErrorNote message={daemonFailureReason(daemon) ?? undefined} />
+            ))}
 
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             <Card>
