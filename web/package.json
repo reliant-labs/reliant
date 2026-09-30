@@ -20,7 +20,7 @@
     "test:memory:ci": "CI=true playwright test tests/memory-leak.test.ts --project=memory-tests --reporter=json",
     "test:watch": "vitest --watch",
     "test:all": "npm run test",
-    "mcp:playwright": "npx playwright-mcp"
+    "mcp:playwright": "npx @playwright/mcp"
   },
   "dependencies": {
     "@bufbuild/protobuf": "^2.10.0",
@@ -29,13 +29,13 @@
     "@hookform/resolvers": "^5.2.1",
     "@monaco-editor/react": "^4.7.0",
     "@opentelemetry/api": "^1.9.1",
-    "@opentelemetry/auto-instrumentations-web": "^0.62.0",
-    "@opentelemetry/context-zone": "^2.6.1",
-    "@opentelemetry/core": "^2.6.1",
-    "@opentelemetry/exporter-trace-otlp-http": "^0.214.0",
-    "@opentelemetry/instrumentation": "^0.217.0",
-    "@opentelemetry/resources": "^2.6.1",
-    "@opentelemetry/sdk-trace-web": "^2.6.1",
+    "@opentelemetry/auto-instrumentations-web": "^0.67.0",
+    "@opentelemetry/context-zone": "^2.8.0",
+    "@opentelemetry/core": "^2.8.0",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.222.0",
+    "@opentelemetry/instrumentation": "^0.222.0",
+    "@opentelemetry/resources": "^2.8.0",
+    "@opentelemetry/sdk-trace-web": "^2.8.0",
     "@opentelemetry/semantic-conventions": "^1.40.0",
     "@sentry/react": "^10.47.0",
     "@statsig/js-client": "^3.33.0",
@@ -78,6 +78,7 @@
   "devDependencies": {
     "@bufbuild/protoc-gen-es": "^2.10.0",
     "@eslint/js": "^9.33.0",
+    "@playwright/mcp": "^0.0.83",
     "@playwright/test": "^1.58.0",
     "@tailwindcss/postcss": "^4.1.12",
     "@testing-library/dom": "^10.4.1",
@@ -97,9 +98,8 @@
     "eslint-plugin-react-refresh": "^0.4.20",
     "globals": "^16.3.0",
     "jsdom": "^26.1.0",
-    "monaco-editor": "^0.55.1",
+    "monaco-editor": "^0.57.0",
     "playwright": "^1.55.0",
-    "playwright-mcp": "^0.0.12",
     "rollup-plugin-visualizer": "^7.1.1",
     "stylelint": "^17.9.1",
     "stylelint-config-standard": "^40.0.0",
@@ -107,6 +107,6 @@
     "typescript": "~5.8.3",
     "typescript-eslint": "^8.39.1",
     "vite": "^7.1.2",
-    "vitest": "^3.2.4"
+    "vitest": "^4.1.11"
   }
 }
