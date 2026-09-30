@@ -25,13 +25,24 @@ import { ConnectError, Code } from "@connectrpc/connect";
 
 import { gitService } from "@/services/controlPlane/git";
 import { hasControlPlane } from "@/services/controlPlane/config";
-import type { GitCredentialStatus } from "@/services/controlPlane/git";
+import type {
+  GitAppInstallation,
+  GitCredentialStatus,
+} from "@/services/controlPlane/git";
 
 export const GITHUB_CREDENTIAL_QUERY_KEY = ["gitCredential", "github"] as const;
 
 export function useGitHubCredential(): {
   hasToken: boolean;
   scopes: string;
+  /** GitHub's installation flow — where a user adds an account or widens a
+   *  "selected repositories" installation. Undefined when the control plane
+   *  has no App slug configured; callers omit the affordance rather than
+   *  render a dead link. */
+  installUrl?: string;
+  /** Installations the credential can reach. Empty is the actionable case:
+   *  it is why no private repo shows up in the picker. */
+  installations: GitAppInstallation[];
   isLoading: boolean;
   isError: boolean;
   refresh: () => Promise<void>;
@@ -78,6 +89,8 @@ export function useGitHubCredential(): {
   return {
     hasToken: data?.hasToken ?? false,
     scopes: data?.scopes ?? "",
+    installUrl: data?.installUrl,
+    installations: data?.installations ?? [],
     isLoading,
     isError,
     refresh,

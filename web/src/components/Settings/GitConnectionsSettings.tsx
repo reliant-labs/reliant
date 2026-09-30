@@ -10,6 +10,7 @@ import type {
 } from "../../services/controlPlane/git/types";
 import { capabilities } from "../../services/controlPlane/capabilities";
 import { supabase } from "../../lib/supabase";
+import { ManageGitHubAccess } from "../Projects/ManageGitHubAccess";
 
 /** Plain-English name for the credential kind. The kind is what determines
  *  whether the token expires and whether its scopes mean anything, so it is
@@ -63,56 +64,28 @@ function TokenHealthLine({
 }
 
 /** The GitHub App installations this credential can reach, each linking to
- *  where repository access is managed. An empty list is the actionable case:
- *  it is why a private repo is invisible. */
-function InstallationsPanel({ installations }: { installations: GitAppInstallation[] }) {
-  if (installations.length === 0) {
-    return (
-      <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-900 dark:text-amber-200">
-        The Reliant GitHub App isn&apos;t installed on any account, so Reliant can&apos;t
-        see your private repositories.{" "}
-        <a
-          href="https://github.com/settings/installations"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="underline hover:text-foreground"
-        >
-          Install it
-        </a>{" "}
-        on the org or user that owns the repos you want to clone.
-      </div>
-    );
-  }
+ *  where repository access is managed, plus the install flow itself.
+ *
+ *  Both facts matter and neither is the token: an empty list is why a private
+ *  repo is invisible, and "selected repositories" is why a repo on an account
+ *  that IS connected can still be missing. Reconnecting fixes neither.
+ *
+ *  The install link comes from the control plane (it knows the App slug);
+ *  where it is absent we fall back to the user's own installations page,
+ *  which at least gets them to the right settings screen. */
+function InstallationsPanel({
+  installations,
+  installUrl,
+}: {
+  installations: GitAppInstallation[];
+  installUrl?: string;
+}) {
   return (
-    <div className="space-y-2 rounded-lg border border-border p-3">
-      <h4 className="text-xs font-medium">Installed on</h4>
-      <ul className="space-y-1.5">
-        {installations.map((installation) => (
-          <li
-            key={`${installation.accountType}:${installation.accountLogin}`}
-            className="flex items-center justify-between gap-3 text-xs"
-          >
-            <span className="min-w-0 truncate">
-              <span className="font-medium">{installation.accountLogin}</span>
-              <span className="text-muted-foreground">
-                {" "}
-                · {installation.repositorySelection === "all"
-                  ? "all repositories"
-                  : "selected repositories"}
-              </span>
-            </span>
-            <a
-              href={installation.configureUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex-shrink-0 underline text-muted-foreground hover:text-foreground"
-            >
-              Configure
-            </a>
-          </li>
-        ))}
-      </ul>
-    </div>
+    <ManageGitHubAccess
+      installUrl={installUrl ?? "https://github.com/settings/installations"}
+      installations={installations}
+      variant={installations.length === 0 ? "prominent" : "footer"}
+    />
   );
 }
 
@@ -161,6 +134,23 @@ export function GitConnectionsSettings() {
       return;
     }
     refresh();
+  }, [refresh]);
+
+  // Installing the App or changing its repo selection happens on github.com.
+  // Returning to a page that still shows the old installation list reads as
+  // "it didn't take", so re-read the status on the way back in.
+  useEffect(() => {
+    if (!capabilities.gitConnections) return;
+    const refreshOnReturn = () => {
+      if (document.visibilityState === "hidden") return;
+      void refresh();
+    };
+    window.addEventListener("focus", refreshOnReturn);
+    document.addEventListener("visibilitychange", refreshOnReturn);
+    return () => {
+      window.removeEventListener("focus", refreshOnReturn);
+      document.removeEventListener("visibilitychange", refreshOnReturn);
+    };
   }, [refresh]);
 
   useEffect(() => {
@@ -300,6 +290,14 @@ export function GitConnectionsSettings() {
                 <p className="mt-1 text-xs text-muted-foreground">
                   Private org repos can still require org OAuth approval or SSO authorization.
                 </p>
+                {/* Said here because the Reconnect button is right there, and
+                    it is the button people reach for when a repo is missing —
+                    which it cannot fix. */}
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Reconnect signs you in to GitHub again. To change which
+                  accounts or repositories Reliant can see, use the repository
+                  access controls below.
+                </p>
               </div>
             </div>
             <div className="flex flex-shrink-0 items-center gap-1">
@@ -337,7 +335,10 @@ export function GitConnectionsSettings() {
               determines whether a given private repo can be cloned at all —
               far more useful than the scope string it replaces. */}
           {kind === "github_app" && (
-            <InstallationsPanel installations={credential?.installations ?? []} />
+            <InstallationsPanel
+              installations={credential?.installations ?? []}
+              installUrl={credential?.installUrl}
+            />
           )}
 
           {scopesAreMeaningful && !hasRepoScope && (

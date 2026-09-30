@@ -17,9 +17,11 @@ import { Github, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase";
 import { useGitRepos } from "@/hooks/useOnboardingQueries";
+import { useGitHubCredential } from "@/hooks/useGitHubCredential";
 import { trackEvent } from "@/lib/analytics";
 import { gitService } from "@/services/controlPlane/git";
 import type { GitRepo } from "@/services/controlPlane/git";
+import { ManageGitHubAccess } from "./ManageGitHubAccess";
 
 export function isMissingGitCredentialError(error: unknown): boolean {
   if (error instanceof ConnectError && error.code === Code.FailedPrecondition) {
@@ -84,6 +86,12 @@ export function RepoSelector({ onSelect, oauthReturnTo, analyticsPhase }: RepoSe
   const reposError = reposQueryError instanceof Error ? reposQueryError.message : "";
   const reposCredentialMissing = isMissingGitCredentialError(reposQueryError);
 
+  const {
+    installUrl,
+    installations,
+    refresh: refreshCredential,
+  } = useGitHubCredential();
+
   const [search, setSearch] = useState("");
   const [manualUrl, setManualUrl] = useState("");
   const [manualBranch, setManualBranch] = useState("main");
@@ -103,6 +111,25 @@ export function RepoSelector({ onSelect, oauthReturnTo, analyticsPhase }: RepoSe
       trackEvent("github_credential_missing_shown", { phase: analyticsPhase ?? "repo_selector" });
     }
   }, [reposCredentialMissing, analyticsPhase]);
+
+  // Granting access happens on github.com, in another tab. Coming back to a
+  // list that still omits the repo they just granted reads as "it didn't
+  // work" — so re-fetch on return rather than making them reload the page.
+  // Both events fire: visibilitychange covers a tab switch, focus covers
+  // returning to the window without one.
+  useEffect(() => {
+    const refetchOnReturn = () => {
+      if (document.visibilityState === "hidden") return;
+      void fetchRepos();
+      void refreshCredential();
+    };
+    window.addEventListener("focus", refetchOnReturn);
+    document.addEventListener("visibilitychange", refetchOnReturn);
+    return () => {
+      window.removeEventListener("focus", refetchOnReturn);
+      document.removeEventListener("visibilitychange", refetchOnReturn);
+    };
+  }, [fetchRepos, refreshCredential]);
 
   const filteredRepos = useMemo(() => {
     if (!search.trim()) return repos;
@@ -170,6 +197,8 @@ export function RepoSelector({ onSelect, oauthReturnTo, analyticsPhase }: RepoSe
             </p>
             <p className="text-xs text-muted-foreground">
               Reliant needs to connect to GitHub before it can list your repositories.
+              This signs you in again; it doesn&apos;t change which repositories
+              Reliant can see.
             </p>
           </div>
           <button
@@ -190,6 +219,24 @@ export function RepoSelector({ onSelect, oauthReturnTo, analyticsPhase }: RepoSe
       )}
 
       {error && <p className="text-xs text-destructive">{error}</p>}
+
+      {/* Leads when there is nothing to pick from. An empty list caused by a
+          narrow installation is indistinguishable from "you have no repos"
+          unless we say so here, at the top, before the user concludes the
+          picker is broken. */}
+      {!reposCredentialMissing && !reposLoading && repos.length === 0 && (
+        <ManageGitHubAccess
+          installUrl={installUrl}
+          installations={installations}
+          variant="prominent"
+          onNavigate={() =>
+            trackEvent("github_manage_access_clicked", {
+              phase: analyticsPhase ?? "repo_selector",
+              placement: "empty_state",
+            })
+          }
+        />
+      )}
 
       <form
         onSubmit={handleManualSubmit}
@@ -336,6 +383,23 @@ export function RepoSelector({ onSelect, oauthReturnTo, analyticsPhase }: RepoSe
           </div>
         )}
       </div>
+
+      {/* Always present under a populated list. The user who is missing ONE
+          repo out of twenty sees a normal-looking picker and has no reason to
+          suspect a setting exists — this is the only thing that tells them. */}
+      {repos.length > 0 && (
+        <ManageGitHubAccess
+          installUrl={installUrl}
+          installations={installations}
+          variant="footer"
+          onNavigate={() =>
+            trackEvent("github_manage_access_clicked", {
+              phase: analyticsPhase ?? "repo_selector",
+              placement: "list_footer",
+            })
+          }
+        />
+      )}
     </div>
   );
 }

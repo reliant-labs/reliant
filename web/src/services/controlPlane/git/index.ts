@@ -19,6 +19,7 @@ void _localMatchesCloud;
 
 export const gitService = hasControlPlane ? cloud : local;
 export type {
+  GitAppInstallation,
   GitCredentialStatus,
   GitAccount,
   GitService,

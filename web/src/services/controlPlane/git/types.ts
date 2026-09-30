@@ -35,6 +35,17 @@ export interface GitCredentialStatus {
   /** ISO timestamp; absent for credential kinds that never expire. */
   expiresAt?: string;
   installations?: GitAppInstallation[];
+
+  /** GitHub's installation flow — where the user ADDS an account or widens a
+   *  "selected repositories" installation. This is a different action from
+   *  reconnecting: re-running OAuth re-authorizes the user and changes
+   *  nothing about which accounts or repos the App can see.
+   *
+   *  Absent when the control plane has no App slug configured; callers must
+   *  omit the affordance rather than render a dead link. */
+  installUrl?: string;
+  /** The App's URL slug, for callers building their own GitHub links. */
+  appSlug?: string;
 }
 
 export interface GitAccount {
