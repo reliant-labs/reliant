@@ -130,6 +130,28 @@ function daemonStatus(d: Daemon): WsStatus {
   return statusFromEnum[d.status] ?? "pending";
 }
 
+/**
+ * The reason a machine is in a bad state, when there is one worth showing.
+ *
+ * "Failed" on its own is not an answer to the only question the user has,
+ * which is what to do about it. A machine whose storage request exceeded the
+ * plan's limit needs a smaller size or a bigger plan; one that lost its
+ * connection needs nothing. Both rendered as a bare red dot, so the user
+ * could not tell them apart and support had to read a cluster log to answer.
+ *
+ * The backend already writes a user-safe sentence here (the control-plane
+ * translates the underlying error and never passes raw Kubernetes text
+ * through), so this only decides WHEN to show it: on the states where the
+ * machine is not working and the message therefore explains something.
+ * Showing it beside a healthy machine would be stale-message noise.
+ */
+function daemonFailureReason(d: Daemon): string | null {
+  const status = daemonStatus(d);
+  if (status !== "failed" && status !== "disconnected") return null;
+  const message = d.lastStatusMessage?.trim();
+  return message ? message : null;
+}
+
 function isExternalDaemon(d: Pick<Daemon, "daemonType">): boolean {
   return d.daemonType === DaemonType.EXTERNAL;
 }
@@ -611,6 +633,7 @@ function ManagedMachinesTable({
         {daemons.map((d) => {
           const status = daemonStatus(d);
           const badge = statusBadge[status];
+          const failureReason = daemonFailureReason(d);
           const isSuspended = d.status === DaemonStatus.SUSPENDED;
           const resources =
             [d.resources?.cpuRequest, d.resources?.memoryRequest, d.storageSize]
@@ -629,6 +652,9 @@ function ManagedMachinesTable({
               </Td>
               <Td>
                 <StatusDot variant={statusDotVariant[status]} label={badge.label} />
+                {failureReason && (
+                  <p className="mt-1 max-w-xs text-xs text-destructive">{failureReason}</p>
+                )}
               </Td>
               <Td className="text-muted-foreground">{resources}</Td>
               <Td className="text-muted-foreground">{fmtTimestamp(d.createdAt)}</Td>
@@ -1016,6 +1042,14 @@ function EnvironmentDetail({ daemonId, onBack }: { daemonId: string; onBack: () 
           </div>
 
           {error && <ErrorNote message={error} />}
+
+          {/*
+            Why a machine is failed, at the top, not buried in a detail row.
+            This used to render only as "Last status" three cards down, so a
+            user looking at a red "Failed" badge had no reason next to it and
+            no cue that one existed further down the page.
+          */}
+          <ErrorNote message={daemonFailureReason(daemon) ?? undefined} />
 
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             <Card>
