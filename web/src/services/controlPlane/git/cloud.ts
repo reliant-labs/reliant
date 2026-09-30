@@ -110,16 +110,26 @@ export async function exchangeGithubOAuthCode(
   return { ok: res.ok, returnTo: res.returnTo, error: res.error };
 }
 
+// The response reports that the clone was QUEUED, not that it finished:
+// the control plane enqueues the command durably and returns immediately,
+// so the repo is not on disk yet and may not be for as long as the target
+// machine is offline. Callers must say "queued" and take the real outcome
+// from the asynchronous daemon notification.
 export async function cloneRepo(
   args: CloneRepoArgs,
-): Promise<{ clonedPath: string }> {
+): Promise<{ clonedPath: string; queued: boolean; daemonId: string; daemonName: string }> {
   const res = await getControlPlaneClient(GitCredentialService).cloneRepo({
     daemonId: args.daemonId,
     gitRepo: args.gitRepo,
     gitBranch: args.gitBranch,
     path: args.path,
   });
-  return { clonedPath: res.clonedPath };
+  return {
+    clonedPath: res.clonedPath,
+    queued: res.queued,
+    daemonId: res.daemonId,
+    daemonName: res.daemonName,
+  };
 }
 
 export async function listRepos(

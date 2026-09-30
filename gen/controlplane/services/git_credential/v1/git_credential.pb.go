@@ -394,8 +394,25 @@ func (x *CloneRepoRequest) GetPath() string {
 }
 
 type CloneRepoResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ClonedPath    string                 `protobuf:"bytes,1,opt,name=cloned_path,json=clonedPath,proto3" json:"cloned_path,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Where the repo WILL live once the clone runs. Echoed from the request
+	// (or defaulted); it is not confirmation that the directory exists.
+	ClonedPath string `protobuf:"bytes,1,opt,name=cloned_path,json=clonedPath,proto3" json:"cloned_path,omitempty"`
+	// True always, today: CloneRepo durably enqueues the command onto
+	// DAEMON_PENDING_COMMANDS and returns without waiting, whether or not the
+	// target daemon is online. The field exists because the old response was
+	// indistinguishable from "cloned", so the UI announced success for a clone
+	// that had not started — and, with an expired token, would never succeed.
+	//
+	// Clients must render this as "queued", and take the real outcome from the
+	// asynchronous signal the daemon emits when it runs the command
+	// (FileSystemChanged on success, DaemonCommandFailed on failure), which
+	// reaches the client as a user_updates row that replays on reconnect.
+	Queued bool `protobuf:"varint,2,opt,name=queued,proto3" json:"queued,omitempty"`
+	// The daemon the clone was queued for, so the UI can say which machine it
+	// is waiting on without a second lookup.
+	DaemonId      string `protobuf:"bytes,3,opt,name=daemon_id,json=daemonId,proto3" json:"daemon_id,omitempty"`
+	DaemonName    string `protobuf:"bytes,4,opt,name=daemon_name,json=daemonName,proto3" json:"daemon_name,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -433,6 +450,27 @@ func (*CloneRepoResponse) Descriptor() ([]byte, []int) {
 func (x *CloneRepoResponse) GetClonedPath() string {
 	if x != nil {
 		return x.ClonedPath
+	}
+	return ""
+}
+
+func (x *CloneRepoResponse) GetQueued() bool {
+	if x != nil {
+		return x.Queued
+	}
+	return false
+}
+
+func (x *CloneRepoResponse) GetDaemonId() string {
+	if x != nil {
+		return x.DaemonId
+	}
+	return ""
+}
+
+func (x *CloneRepoResponse) GetDaemonName() string {
+	if x != nil {
+		return x.DaemonName
 	}
 	return ""
 }
@@ -697,10 +735,14 @@ const file_services_git_credential_v1_git_credential_proto_rawDesc = "" +
 	"\bgit_repo\x18\x02 \x01(\tR\agitRepo\x12\x1d\n" +
 	"\n" +
 	"git_branch\x18\x03 \x01(\tR\tgitBranch\x12\x12\n" +
-	"\x04path\x18\x04 \x01(\tR\x04path\"4\n" +
+	"\x04path\x18\x04 \x01(\tR\x04path\"\x8a\x01\n" +
 	"\x11CloneRepoResponse\x12\x1f\n" +
 	"\vcloned_path\x18\x01 \x01(\tR\n" +
-	"clonedPath\"t\n" +
+	"clonedPath\x12\x16\n" +
+	"\x06queued\x18\x02 \x01(\bR\x06queued\x12\x1b\n" +
+	"\tdaemon_id\x18\x03 \x01(\tR\bdaemonId\x12\x1f\n" +
+	"\vdaemon_name\x18\x04 \x01(\tR\n" +
+	"daemonName\"t\n" +
 	"\x13ListGitReposRequest\x12\x1a\n" +
 	"\bprovider\x18\x01 \x01(\tR\bprovider\x12\x12\n" +
 	"\x04page\x18\x02 \x01(\x05R\x04page\x12\x19\n" +

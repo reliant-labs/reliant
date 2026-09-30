@@ -15,7 +15,7 @@ import {
   ChevronsUpDown,
 } from "lucide-react";
 import { ConnectError, Code } from "@connectrpc/connect";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useProjectStore } from "../../store/projectStore";
 import type { Project as StoreProject } from "../../store/projectStore";
 import { useApiKeySetupStore } from "../../store/apiKeySetupStore";
@@ -45,10 +45,17 @@ import { useGitHubCredential } from "../../hooks/useGitHubCredential";
 import { capabilities } from "../../services/controlPlane/capabilities";
 import {
   listDaemons as listCloudDaemons,
+  deleteDaemon,
   DAEMON_STATUS_ACTIVE,
   DAEMON_STATUS_SUSPENDED,
   type Daemon as CloudDaemon,
 } from "../../services/controlPlane/daemon";
+import {
+  cloneAvailability,
+  cloneDescription,
+  failureReason,
+  isFailedDaemon,
+} from "./cloneTargets";
 import { cloudDaemonStatusLabel } from "./cloudDaemonStatusLabel";
 import { gitService } from "../../services/controlPlane/git";
 import type { GitRepo } from "../../services/controlPlane/git";
@@ -275,6 +282,41 @@ function NoActiveDaemonState() {
     resumeDaemonMutation.mutate(daemon.id);
   };
 
+  // A FAILED machine cannot be resumed — provisioning never completed, so
+  // there is nothing to wake. The only recovery the product offers is to
+  // delete it and create a new one, which is exactly what Settings → Machines
+  // does; without this branch a failed machine rendered with no action at
+  // all, which is the dead end this fixes.
+  const deleteDaemonMutation = useMutation({
+    mutationFn: (daemonId: string) => deleteDaemon(daemonId),
+    onSuccess: async () => {
+      setError(null);
+      await refetch();
+    },
+    onError: (err) => {
+      const msg = err instanceof Error ? err.message : "Failed to delete machine";
+      setError(msg);
+      toast.error(msg);
+    },
+  });
+  const deletingId =
+    deleteDaemonMutation.isPending && typeof deleteDaemonMutation.variables === "string"
+      ? deleteDaemonMutation.variables
+      : null;
+
+  const handleDeleteFailed = (daemon: CloudDaemon) => {
+    if (!isFailedDaemon(daemon)) return;
+    if (
+      !window.confirm(
+        `Delete ${daemon.name || "this machine"}? It failed to start and can't be recovered. You can create a new one afterwards.`,
+      )
+    ) {
+      return;
+    }
+    setError(null);
+    deleteDaemonMutation.mutate(daemon.id);
+  };
+
   if (!hasCloud) {
     // Local-only deployment: nothing to resume; surface the self-hosted
     // connect instructions in-place instead of bouncing into onboarding.
@@ -303,16 +345,25 @@ function NoActiveDaemonState() {
 
   const daemons = cloudDaemons ?? [];
   const hasAnyCloudDaemon = daemons.length > 0;
+  // "Resume a daemon" is a lie when every machine failed — there is nothing
+  // resumable, and the user's next step is to replace one.
+  const allFailed = hasAnyCloudDaemon && daemons.every(isFailedDaemon);
 
   return (
     <div className="relative backdrop-blur-2xl bg-card/90 border border-border/50 rounded-2xl mb-6 overflow-hidden p-6">
       <h3 className="text-lg font-semibold text-foreground mb-1">
-        {hasAnyCloudDaemon ? "Resume a daemon" : "Start a daemon"}
+        {allFailed
+          ? "Your machine needs attention"
+          : hasAnyCloudDaemon
+            ? "Resume a daemon"
+            : "Start a daemon"}
       </h3>
       <p className="text-sm text-muted-foreground mb-4">
-        {hasAnyCloudDaemon
-          ? "Pick a daemon to wake up. The picker will refresh once it's connected."
-          : "You don't have a daemon yet. Onboarding will create one in the cloud."}
+        {allFailed
+          ? "Every machine on your account failed to start. Delete the failed one and connect a new one to carry on."
+          : hasAnyCloudDaemon
+            ? "Pick a daemon to wake up. The picker will refresh once it's connected."
+            : "You don't have a daemon yet. Onboarding will create one in the cloud."}
       </p>
 
       {isLoading && (
@@ -327,7 +378,49 @@ function NoActiveDaemonState() {
           {daemons.map((daemon) => {
             const isResuming = resumingId === daemon.id;
             const isSuspended = daemon.status === DAEMON_STATUS_SUSPENDED;
+            const failed = isFailedDaemon(daemon);
+            const isDeleting = deletingId === daemon.id;
             const statusLabel = cloudDaemonStatusLabel(daemon, isResuming);
+
+            // A failed machine is not a resume button with the label
+            // changed: the action is different (delete), and the reason it
+            // failed is the most useful thing on the row.
+            if (failed) {
+              const reason = failureReason(daemon);
+              return (
+                <div
+                  key={daemon.id}
+                  className="w-full flex items-center justify-between gap-3 px-4 py-3 rounded-lg bg-background/80 border border-destructive/40"
+                  data-testid={`failed-daemon-${daemon.id}`}
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <Cloud className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium text-foreground truncate">
+                        {daemon.name || "daemon"}
+                      </div>
+                      <div className="text-xs text-destructive">
+                        {reason
+                          ? `Failed to start: ${reason}`
+                          : "Failed to start. No reason was reported."}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <DaemonStatusBadge label={statusLabel} />
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteFailed(daemon)}
+                      disabled={isDeleting}
+                      className="px-2.5 py-1 rounded-md border border-border text-xs text-muted-foreground transition-colors hover:border-destructive/50 hover:text-destructive disabled:opacity-60"
+                    >
+                      {isDeleting ? "Deleting…" : "Delete"}
+                    </button>
+                  </div>
+                </div>
+              );
+            }
+
             return (
               <button
                 key={daemon.id}
@@ -595,12 +688,20 @@ function ProjectPickerComponent({ onProjectSelected }: ProjectPickerProps) {
     };
   }, [activeControlPlaneDaemons, cloudDaemons, hostnameFor]);
 
-  // canCloneToSelected drives the picker's top "Clone repo" button. Visible
-  // whenever a clone-capable cloud daemon is available. RepoSelector owns the
-  // GitHub credential-missing state and shows the reconnect UI; hiding the
-  // entry point here leaves users stranded.
-  const canCloneToSelected =
-    capabilities.cloudDaemons && !!selectedCloneDaemon;
+  // The picker's top "Clone repo" affordance. It is VISIBLE whenever the
+  // account has cloud daemons at all, and merely DISABLED (carrying the
+  // reason) when no machine can take a clone right now.
+  //
+  // Hiding it is what produced the reported dead end: with every machine
+  // FAILED there was no add-project entry point anywhere in the app. A
+  // disabled control that explains itself is recoverable; an absent one is
+  // not. RepoSelector owns the GitHub-credential-missing state separately.
+  const cloneState = useMemo(
+    () => cloneAvailability(controlPlaneDaemons ?? []),
+    [controlPlaneDaemons],
+  );
+  const showCloneAction = capabilities.cloudDaemons;
+  const canCloneToSelected = showCloneAction && !!selectedCloneDaemon;
 
   // Run a clone for a known repo onto an explicit target daemon, then
   // create the Project (or open an existing one) and mark it installed.
@@ -621,7 +722,7 @@ function ProjectPickerComponent({ onProjectSelected }: ProjectPickerProps) {
       }
       const branch = repo.defaultBranch || "main";
       const targetHost = hostnameFor(targetDaemonId);
-      setCloneStatus(`Cloning ${projectName} to ${targetHost}...`);
+      setCloneStatus(`Queueing ${projectName} for ${targetHost}...`);
       const cloneResult = await gitService.cloneRepo({
         daemonId: targetDaemonId,
         gitRepo: repo.cloneUrl,
@@ -629,6 +730,18 @@ function ProjectPickerComponent({ onProjectSelected }: ProjectPickerProps) {
         path: destinationPath,
       });
       const clonedPath = cloneResult.clonedPath;
+
+      // CloneRepo returns once the command is durably ENQUEUED, not once the
+      // repo is on disk — the daemon may not even be running yet. Saying
+      // "cloned" here is the false success this replaces. The real outcome
+      // arrives asynchronously: the daemon announces FileSystemChanged on
+      // success or DaemonCommandFailed on failure, which reaches us as a
+      // user_updates row (see globalUpdatesStore's daemon_command_failed
+      // handler) and surfaces as a toast.
+      if (cloneResult.queued) {
+        const machine = cloneResult.daemonName || targetHost;
+        toast.info(`Queued — ${projectName} will clone when ${machine} is ready`);
+      }
 
       setCloneStatus(`Opening ${projectName}...`);
       let openedProject: Project | undefined;
@@ -687,16 +800,23 @@ function ProjectPickerComponent({ onProjectSelected }: ProjectPickerProps) {
   // control-plane daemon list.
   const handleRepoSelectedFromModal = async (repo: GitRepo) => {
     setIsCloneModalOpen(false);
-    if (!selectedCloneDaemon) {
-      toast.error("No daemon selected");
+    // Prefer the ACTIVE-daemon target when there is one, but fall back to
+    // any machine that will eventually drain the queue — a clone onto a
+    // still-starting machine is valid, it just lands later.
+    const targetDaemonId =
+      selectedCloneDaemon?.daemonId ??
+      (cloneState.kind === "ready" ? cloneState.target.id : null);
+    if (!targetDaemonId) {
+      toast.error(
+        cloneState.kind === "blocked" ? cloneState.reason : "No machine available to clone onto",
+      );
       return;
     }
     const projectName = repoNameFromUrl(repo.cloneUrl) || repo.fullName;
     const destinationPath = cloudPathForRepo(repo);
-    const loadingToast = toast.loading(`Cloning "${projectName}"...`);
+    const loadingToast = toast.loading(`Queueing "${projectName}"...`);
     try {
-      await cloneAndOpen(repo, destinationPath, projectName, selectedCloneDaemon.daemonId);
-      toast.success(`Cloned "${projectName}"`);
+      await cloneAndOpen(repo, destinationPath, projectName, targetDaemonId);
     } catch (err) {
       console.error("Clone-from-modal failed:", err);
       toast.error(err instanceof Error ? err.message : "Failed to clone repository");
@@ -933,11 +1053,15 @@ function ProjectPickerComponent({ onProjectSelected }: ProjectPickerProps) {
                   <h1 className="text-4xl font-bold text-foreground">Reliant</h1>
                 </div>
               </div>
-              {showConnectionInstructions ? (
-                <NoActiveDaemonState />
-              ) : (
+              {/* The daemon state and the add-project actions coexist. They
+                  used to be mutually exclusive, so a web user with no ACTIVE
+                  daemon lost BOTH "Open Project" and "Clone repo" — with a
+                  failed machine that left no way to add a project at all. */}
+              {showConnectionInstructions && <NoActiveDaemonState />}
+              {(!showConnectionInstructions || showCloneAction) && (
                 <>
                   <div className="relative backdrop-blur-2xl bg-card/90 border border-border/50 rounded-2xl mb-6 overflow-hidden">
+                    {!showConnectionInstructions && (
                     <button
                       onClick={handleOpenExistingProject}
                       onMouseEnter={() => setIsOpenButtonHovered(true)}
@@ -965,16 +1089,20 @@ function ProjectPickerComponent({ onProjectSelected }: ProjectPickerProps) {
                         </div>
                       </div>
                     </button>
-                    {canCloneToSelected && (
+                    )}
+                    {showCloneAction && (
                       <button
                         onClick={() => setIsCloneModalOpen(true)}
+                        disabled={cloneState.kind === "blocked"}
+                        data-testid="project-picker-clone-repo"
                         onMouseEnter={() => setIsCloneButtonHovered(true)}
                         onMouseLeave={() => setIsCloneButtonHovered(false)}
-                        className="group w-full p-6 border-t border-border/50 transition-all duration-150 text-left active:scale-[0.99]"
+                        className="group w-full p-6 border-t border-border/50 transition-all duration-150 text-left active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60 disabled:active:scale-100"
                         style={{
-                          backgroundColor: isCloneButtonHovered
-                            ? "hsl(var(--primary) / 0.08)"
-                            : "transparent",
+                          backgroundColor:
+                            isCloneButtonHovered && cloneState.kind === "ready"
+                              ? "hsl(var(--primary) / 0.08)"
+                              : "transparent",
                         }}
                       >
                         <div className="flex items-center gap-4">
@@ -986,9 +1114,11 @@ function ProjectPickerComponent({ onProjectSelected }: ProjectPickerProps) {
                               Clone repo
                             </h3>
                             <p className="text-sm text-muted-foreground">
-                              {hasGitHubCredential
-                                ? `Pull a GitHub repo onto ${selectedCloneDaemon?.hostname || "this daemon"}`
-                                : "Connect GitHub to clone a repository"}
+                              {cloneDescription({
+                                cloneState,
+                                hasGitHubCredential,
+                                fallbackHost: selectedCloneDaemon?.hostname,
+                              })}
                             </p>
                           </div>
                         </div>

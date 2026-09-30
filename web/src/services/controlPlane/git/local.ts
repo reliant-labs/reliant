@@ -55,7 +55,7 @@ export async function exchangeGithubOAuthCode(
 
 export async function cloneRepo(
   _args: CloneRepoArgs,
-): Promise<{ clonedPath: string }> {
+): Promise<{ clonedPath: string; queued: boolean; daemonId: string; daemonName: string }> {
   throw new Error("Git clone via control plane requires a Reliant Cloud account");
 }
 
