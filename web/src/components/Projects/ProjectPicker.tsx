@@ -343,7 +343,18 @@ function NoActiveDaemonState() {
                       Resume {daemon.name || "daemon"}
                     </div>
                     {daemon.lastStatusMessage && (
-                      <div className="text-xs text-muted-foreground truncate">
+                      // A failed machine's message is the REASON it failed
+                      // ("Storage request 20Gi exceeds your plan's limit of
+                      // 5Gi"), so it is rendered in the destructive colour
+                      // and allowed to wrap. Muted-and-truncated hid exactly
+                      // the half of the sentence carrying the remedy.
+                      <div
+                        className={
+                          statusLabel === "failed"
+                            ? "text-xs text-destructive"
+                            : "text-xs text-muted-foreground truncate"
+                        }
+                      >
                         {daemon.lastStatusMessage}
                       </div>
                     )}
