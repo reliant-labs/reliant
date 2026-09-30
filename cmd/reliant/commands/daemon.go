@@ -92,6 +92,32 @@ the Reliant cloud platform via a bidirectional gRPC stream.`,
 // label>, and the server rotates on that name: re-registering this instance
 // replaces its previous token rather than adding one.
 //
+// daemonNonInteractiveDefault is the default for --non-interactive when the
+// flag is absent from the command line.
+//
+// A MANAGED daemon is always non-interactive, and this is not an overridable
+// preference. Such a daemon is a pod created by the workspace operator: there
+// is no browser, no display, and nobody at a keyboard, so an interactive login
+// cannot succeed — it can only print an authorize URL into a container log and
+// block until it times out. On 2026-09-30 that is exactly what happened: a
+// malformed credentials file sent a managed pod down the interactive path, and
+// it crash-looped for 30 minutes on a 5-minute OAuth timeout per restart while
+// the owner's UI said "your compute is taking a while to come up". The
+// credentials bug is fixed separately; this makes the fallback survivable
+// instead of fatal, because the non-interactive path stays resident and picks
+// up a credential as soon as one is mounted.
+//
+// RELIANT_DAEMON_NON_INTERACTIVE is still honoured for everything else (it is
+// how Electron opts its child daemon out of browser login), but it cannot turn
+// interactivity ON for a managed pod — there is nothing there to be
+// interactive with, so permitting that would only restore the crash loop.
+func daemonNonInteractiveDefault() bool {
+	if daemonruntime.IsManagedEnvironment() {
+		return true
+	}
+	return envOrDefaultBool("RELIANT_DAEMON_NON_INTERACTIVE", false)
+}
+
 // nonInteractive, when true, forbids opening a browser: registerDaemon returns
 // an error wrapping cliauth.ErrInteractiveRequired instead. Callers that must
 // idle rather than fail (see waitForCredentialsNonInteractive) detect it with
@@ -787,11 +813,11 @@ Credential resolution order:
 	cmd.Flags().IntVar(&listenPort, "listen-port", envOrDefaultInt("DAEMON_LISTEN_PORT", 9190), "Port to listen on in server mode")
 	// Precedence: explicit --non-interactive on the command line always wins
 	// (cobra only applies this default when the flag is absent); otherwise
-	// RELIANT_DAEMON_NON_INTERACTIVE; otherwise false (interactive, the
-	// existing CLI behavior). Electron spawns the daemon with this flag set
-	// so it never opens a browser — Electron's own login page owns
-	// interactive sign-in. See registerDaemon / waitForCredentialsNonInteractive.
-	cmd.Flags().BoolVar(&nonInteractive, "non-interactive", envOrDefaultBool("RELIANT_DAEMON_NON_INTERACTIVE", false),
+	// see daemonNonInteractiveDefault. Electron spawns the daemon with this
+	// flag set so it never opens a browser — Electron's own login page owns
+	// interactive sign-in. See registerDaemon /
+	// waitForCredentialsNonInteractive.
+	cmd.Flags().BoolVar(&nonInteractive, "non-interactive", daemonNonInteractiveDefault(),
 		"Never open a browser or run interactive login; idle and wait for credentials to appear on disk instead")
 
 	return cmd

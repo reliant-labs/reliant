@@ -56,3 +56,18 @@ func resolveDaemonType(fallback string) string {
 		return fallback
 	}
 }
+
+// IsManagedEnvironment reports whether the PLATFORM has declared this process
+// a managed daemon — a workspace pod the operator created, not a machine
+// someone is sitting at.
+//
+// Unlike resolveDaemonType there is no fallback: a daemon that says nothing is
+// not managed. The absence of the variable is the normal case for a laptop,
+// and guessing "managed" from a transport is the mistake this file's history
+// documents.
+//
+// It exists so the CLI can refuse to start an interactive browser login where
+// no browser can exist. See commands.daemonNonInteractiveDefault.
+func IsManagedEnvironment() bool {
+	return resolveDaemonType(daemonTypeSelfHosted) == daemonTypeManaged
+}
