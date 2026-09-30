@@ -98,13 +98,16 @@ test('the resolved app-builder-lib carries the keychain-password fix', () => {
 // the tag). The forge v0.1.11 -> v0.1.13 bump between v1.7.11 and v1.7.12
 // pulled in v1.27.1, and the windows-arm64 leg started failing.
 //
-// Every path that cross-compiles the backend needs the tag, and there are two:
-// the release workflow and scripts/build-electron.sh. Missing it in either one
-// reproduces the outage on that path only, which is how it would come back.
+// Every path that cross-compiles the backend needs the tag. There used to be
+// two — .github/workflows/release.yml and scripts/build-electron.sh — and
+// missing it in either reproduced the outage on that path only, which is how
+// it would come back. The workflow is deleted (releases are local-only), so
+// build-electron.sh is now the single site, and scripts/release-artifacts.sh
+// calls into it rather than compiling anything itself. Keep it that way: a
+// second cross-compile site is what this test exists to police.
 const WINARM64_TAG = 'exp.winarm64';
 
 const CROSS_COMPILE_SITES = [
-  ['.github/workflows/release.yml', /GOOS="\$TARGET_OS"\s+GOARCH="\$TARGET_ARCH"\s+go build[^\n]*/],
   ['scripts/build-electron.sh', /GOOS=\$goos GOARCH=\$goarch go build(?:[^\n]*\\\n)*[^\n]*/],
 ];
 
@@ -134,13 +137,17 @@ test('the windows-arm64 release target still exists', () => {
   // The delve failure is also "fixable" by dropping the target, which would
   // silently strip Windows-on-ARM support from the product. Dropping it is a
   // product decision; it should not be reachable as a green build fix.
-  const workflow = fs.readFileSync(path.join(REPO_ROOT, '.github/workflows/release.yml'), 'utf8');
+  //
+  // This used to read release.yml's build matrix. That workflow is deleted —
+  // releases are local-only — so the target is declared in build-electron.sh,
+  // which is what scripts/release-artifacts.sh invokes.
+  const script = fs.readFileSync(path.join(REPO_ROOT, 'scripts/build-electron.sh'), 'utf8');
 
   assert.match(
-    workflow,
-    /target_os:\s*windows\s*\n\s*target_arch:\s*arm64/,
-    'the windows/arm64 backend matrix leg is gone from release.yml. Removing a shipped ' +
-      'platform is a product decision, not a build fix — restore the leg, or remove this ' +
-      'test deliberately alongside the Windows ARM64 download links in the release summary.'
+    script,
+    /build_binary windows arm64/,
+    'the windows/arm64 backend build is gone from scripts/build-electron.sh. Removing a ' +
+      'shipped platform is a product decision, not a build fix — restore it, or remove this ' +
+      'test deliberately alongside the Windows ARM64 download links in the release docs.'
   );
 });

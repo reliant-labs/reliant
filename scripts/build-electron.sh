@@ -59,8 +59,9 @@ build_binary() {
     # links Delve via `reliant forge`, and delve >= 1.27 fails that GOARCH
     # unless this tag selects its experimental winarm64 backend over the
     # deliberately-unbuildable sentinel package. No-op on every other target.
-    # Kept in step with the same flag in .github/workflows/release.yml, which
-    # has the full explanation.
+    # (This used to say "see .github/workflows/release.yml for the full
+    # explanation". That workflow is deleted — releases are local-only — so
+    # the explanation lives here now, which is where the flag is.)
     GOOS=$goos GOARCH=$goarch go build \
         -tags exp.winarm64 \
         -ldflags="$LDFLAGS_BASE -X github.com/reliant-labs/reliant/internal/version.Version=$version" \

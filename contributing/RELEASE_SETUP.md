@@ -1,15 +1,17 @@
 # Release Setup
 
-## Releases
+## ⛔ Releases are LOCAL-ONLY. CI never builds, publishes or deploys.
 
-Electron app releases are built and published by the [control-plane](https://github.com/reliant-labs/control-plane) CI pipeline. When a new version tag is detected on GHCR, the control plane:
+Every build, signing, upload, tag and deploy of a release artifact happens on a
+maintainer's machine, through this repo's scripts. **CI runs checks only** —
+tests, lint, migration checks, vuln scans, the tag-ancestry guard.
 
-1. Builds the Electron app for macOS, Windows, and Linux
-2. Creates a GitHub Release on this repo with the artifacts
-3. Updates the Homebrew tap
-4. Uploads to downloads.reliantlabs.io
+`.github/workflows/release.yml` (Electron → Cloudflare R2, the GitHub Release,
+the Homebrew dispatch) and `.github/workflows/build-images.yml` (the service
+image → GAR) are **deleted** — not disabled, and deliberately without a
+`workflow_dispatch` escape hatch. Pushing a tag builds nothing.
 
-To trigger a release manually, use the `release-electron` workflow dispatch in the control-plane repo.
+Publishing is `./scripts/release-artifacts.sh`; see "step 3" below.
 
 ## Quick Release Commands
 
@@ -29,15 +31,34 @@ make release-minor        # 0.2.4 → 0.3.0
 make release-major        # 0.3.0 → 1.0.0
 ```
 
-### A release is two steps
+### A release is three steps
 
-Those commands are **step 1 of 2**. They open a version-bump PR and create *no
+Those commands are **step 1 of 3**. They open a version-bump PR and create *no
 tag*. Once that PR has merged:
 
 ```bash
-make release-tag              # tags the merged commit on main, starts the builds
+make release-tag              # step 2: tags the merged commit on main
 make release-tag-dry-run      # preview which commit would be tagged; creates nothing
 ```
+
+The tag starts nothing. Step 3 publishes, and each target is separate because
+the credentials are:
+
+```bash
+make release-artifacts-desktop   # signed+notarized app -> R2. RUN ON EACH PLATFORM.
+make release-artifacts-image     # multi-arch service image -> prod GAR
+make release-artifacts-github    # the GitHub Release page
+make release-artifacts-homebrew  # nudge the Homebrew tap
+```
+
+`desktop` does not cross-compile and must be run once on each platform you are
+shipping: macOS needs a Mac holding the Developer ID certificate plus an App
+Store Connect key to notarize, Windows needs the Azure Trusted Signing service
+principal. Shipping a subset is legitimate — the R2 channel feeds encode
+per-platform availability — but say so in the release notes.
+
+`DRY_RUN=1` builds everything and publishes nothing. See the header of
+`scripts/release-artifacts.sh` for the full credential list.
 
 Step 1 (`./scripts/release.sh`):
 1. Validates `docs/data/releases/vX.Y.Z.yaml` and regenerates `docs/changelog.mdx`
@@ -48,8 +69,7 @@ Step 2 (`./scripts/release-tag.sh`):
 1. Finds the commit **on `origin/main`** that introduced this version — the bump
    itself, not main's tip, so work merged after the bump is not swept in
 2. Verifies that commit is an ancestor of `origin/main`, and refuses otherwise
-3. Creates and pushes the tag, which triggers `Release Electron App` and
-   `Build & Push Image`
+3. Creates and pushes the tag. It triggers nothing — see step 3 above.
 
 #### Why it is split
 
@@ -112,11 +132,11 @@ separate consumers:
 1. `make generate-changelog` renders them into `docs/changelog.mdx`, which
    Mintlify publishes at <https://docs.reliantlabs.io/changelog>.
 2. The **release-notes email**, which is sent from the control-plane repo —
-   `.github/workflows/release-notes.yml` there fetches the version's YAML from
-   this repo at send time. It is a manual `workflow_dispatch`, it defaults to a
-   dry run, and it additionally requires the repo variable
-   `RELEASE_NOTES_EMAIL_ENABLED=true` in control-plane before it will send
-   anything. That variable is currently unset, so no release mail goes out.
+   `task release:notes VERSION=vX.Y.Z` there fetches the version's YAML from
+   this repo at send time. It defaults to a dry run, and it additionally
+   requires `RELEASE_NOTES_EMAIL_ENABLED=true` in the operator's environment
+   before it will send anything. It is currently unset, so no release mail
+   goes out.
 
 Nothing about authoring changes: write the YAML here as before.
 
@@ -130,19 +150,46 @@ Nothing about authoring changes: write the YAML here as before.
 | `changelog:breaking` | Breaking changes |
 | `changelog:skip` | Internal changes, don't include |
 
-## Secrets
+## Credentials
 
-All release secrets (Apple code signing, Azure Trusted Signing, Cloudflare R2, Homebrew, Customer.io, etc.) are managed in the control-plane repo's GitHub Actions secrets. See the control-plane repo for details.
+Release credentials are **not** in GitHub Actions secrets any more — nothing in
+CI publishes, so nothing in CI needs them. They live in the environment of the
+person running step 3:
+
+| Phase | Needs |
+|---|---|
+| `desktop` (all platforms) | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `R2_ENDPOINT` |
+| `desktop` (macOS) | `CSC_LINK`, `CSC_KEY_PASSWORD`, `APPLE_TEAM_ID`, and to notarize either `APPLE_API_KEY`/`_KEY_ID`/`_ISSUER` (preferred) or `APPLE_ID` + `APPLE_APP_SPECIFIC_PASSWORD` |
+| `desktop` (Windows) | `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `AZURE_TRUSTED_SIGNING_*` |
+| `image` | a `gcloud` session with push access to prod GAR |
+| `github` | `gh`, authenticated |
+| `homebrew` | `HOMEBREW_TAP_TOKEN` |
+
+Prefer the App Store Connect API key over the Apple ID for notarization: a key
+belongs to the **team**, an Apple ID to a **person**. v1.7.14 shipped Windows
+and Linux but not macOS when the account holder changed — signing kept working
+(certificate) while notarization began returning "a required agreement is
+missing or has expired" (account identity).
+
+Optional: `SENTRY_DSN`, `STATSIG_CLIENT_KEY`. Absent is fine and leaves
+telemetry inert in the build.
 
 ## Troubleshooting
 
-### Release Not Triggered
-- Check the control-plane's `watch-reliant-image` workflow — it polls GHCR every 5 minutes
-- Verify the tag was pushed and the GHCR image was built
-- Manually dispatch `release-electron` in the control-plane repo with the desired `reliant_ref`
+### Nothing built after I pushed the tag
+That is correct. Releases are local-only and a tag triggers nothing — run step
+3 (`make release-artifacts-*`).
 
-### Download URLs / Auto-Updater / Code Signing Issues
-- See the control-plane repo's release workflow for configuration details
+### A platform is missing from the release
+`desktop` builds for the host platform only. Run it on each platform you ship.
+If one cannot be signed, shipping the rest is fine; the R2 channel feeds encode
+per-platform availability, so the auto-updater degrades rather than breaks.
+
+### The published app talks to the wrong endpoints
+Endpoints come from `electron/release.config.json`, generated from
+control-plane's KCL, expanded by `electron/scripts/with-release-config.mjs`.
+Never hardcode a URL in a build script — a second declaration drifts silently,
+which is exactly how v1.7.5 shipped with no control-plane URL.
 - Check CloudFlare Worker is deployed for latest-URL redirects
 - Verify `latest-mac.yml` / `latest-linux.yml` exist in R2
 

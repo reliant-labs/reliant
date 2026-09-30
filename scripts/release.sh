@@ -12,8 +12,10 @@
 #
 #   ./scripts/release-tag.sh        # phase 2 — tags the merged commit on main
 #
-# Phase 2 is what creates the tag and triggers `Release Electron App` and
-# `Build & Push Image`.
+# Phase 2 creates the tag. It triggers NOTHING: releases are local-only, and
+# `Release Electron App` / `Build & Push Image` are deleted. Publishing is
+# phase 3, `./scripts/release-artifacts.sh`, run by hand on a machine holding
+# the signing credentials.
 #
 # ── WHY THE TAG MOVED OUT OF THIS SCRIPT ────────────────────────────────────
 #
@@ -221,8 +223,18 @@ PR_BODY="Version bump for v$NEW_VERSION.
 ./scripts/release-tag.sh
 \`\`\`
 
-That tags the *merged* commit on \`main\` and triggers \`Release Electron App\`
-and \`Build & Push Image\`. Tagging this branch instead would strand the tag off
+That tags the *merged* commit on \`main\`. The tag triggers NOTHING: releases
+are local-only, so publishing is a third, deliberate step run on a machine
+holding the signing credentials:
+
+\`\`\`
+./scripts/release-artifacts.sh desktop    # per platform: signed app -> R2
+./scripts/release-artifacts.sh image      # multi-arch service image -> prod GAR
+./scripts/release-artifacts.sh github     # the GitHub Release page
+./scripts/release-artifacts.sh homebrew   # nudge the tap
+\`\`\`
+
+Tagging this branch instead would strand the tag off
 the trunk once the PR is squash-merged — which is how v1.7.8 through v1.7.12
 ended up unreachable from \`main\`."
 

@@ -46,7 +46,7 @@ NC := \033[0m # No Color
 MINTLIFY_DOCS_DIR := docs
 MINTLIFY_PORT ?= 3000
 
-.PHONY: all build build-all clean test test-race test-coverage test-ci test-e2e replay-fixtures deps fmt vet lint security help generate generate-cli generate-tools-ref generate-shortcuts generate-nodes generate-types generate-presets generate-workflow-builder-skill generate-changelog generate-mintlify-reference docs docs-build mint changelog changelog-draft postgres-up postgres-down db-driver-audit generate-yaml-bindings build-api-server build-temporal-worker build-tools-daemon build-services docker-build pin-forge pin-drift pin-ancestry release-rc release-patch release-minor release-major release-tag release-tag-dry-run check-release-tags
+.PHONY: all build build-all clean test test-race test-coverage test-ci test-e2e replay-fixtures deps fmt vet lint security help generate generate-cli generate-tools-ref generate-shortcuts generate-nodes generate-types generate-presets generate-workflow-builder-skill generate-changelog generate-mintlify-reference docs docs-build mint changelog changelog-draft postgres-up postgres-down db-driver-audit generate-yaml-bindings build-api-server build-temporal-worker build-tools-daemon build-services docker-build pin-forge pin-drift pin-ancestry release-rc release-patch release-minor release-major release-tag release-tag-dry-run check-release-tags release-artifacts-desktop release-artifacts-image release-artifacts-github release-artifacts-homebrew
 
 # Default target
 all: deps fmt vet test build
@@ -505,14 +505,21 @@ version:
 	@echo "Date:    $(DATE)"
 	@echo "Branch:  $(BRANCH)"
 
-# A release is TWO steps. `release-*` opens the version-bump PR; `release-tag`
-# tags the commit once that PR has MERGED.
+# A release is THREE steps. `release-*` opens the version-bump PR;
+# `release-tag` tags the commit once that PR has MERGED; `release-artifacts-*`
+# builds and publishes.
 #
-# They are separate because main squash-merges — the commit on the release
-# branch is not the commit that lands, so tagging before the merge strands the
-# tag off the trunk. That is what happened to v1.7.8..v1.7.12, and to fifteen
-# older tags; `git describe --tags --abbrev=0 origin/main` still answers
-# v1.7.7. See the header of scripts/release.sh.
+# The first two are separate because main squash-merges — the commit on the
+# release branch is not the commit that lands, so tagging before the merge
+# strands the tag off the trunk. That is what happened to v1.7.8..v1.7.12, and
+# to fifteen older tags; `git describe --tags --abbrev=0 origin/main` still
+# answers v1.7.7. See the header of scripts/release.sh.
+#
+# The third is separate because RELEASES ARE LOCAL-ONLY. A tag used to trigger
+# .github/workflows/release.yml (Electron → R2, GitHub Release, Homebrew) and
+# build-images.yml (the service image → GAR); both are DELETED. A tag now
+# records what a release IS, and publishing is a deliberate act on a machine
+# holding the signing credentials. See scripts/release-artifacts.sh.
 
 ## release-rc: Open the version-bump PR for a release candidate (0.0.1-rc38 → 0.0.1-rc39)
 release-rc:
@@ -545,6 +552,28 @@ release-tag-dry-run:
 ## check-release-tags: Verify every release tag is an ancestor of main
 check-release-tags:
 	@./scripts/check-release-tags.sh
+
+# STEP 3 — publish. Run AFTER release-tag. Each target is separate because the
+# credentials are: desktop needs this host's signing identity (and does not
+# cross-compile, so run it once per platform you ship), image needs a gcloud
+# session with prod GAR push, github needs gh, homebrew needs the tap token.
+# DRY_RUN=1 builds everything and publishes nothing.
+
+## release-artifacts-desktop: STEP 3 — build + sign + publish THIS platform's app to R2
+release-artifacts-desktop:
+	@./scripts/release-artifacts.sh desktop $(VERSION_ARG)
+
+## release-artifacts-image: STEP 3 — build + push the multi-arch service image to prod GAR
+release-artifacts-image:
+	@./scripts/release-artifacts.sh image $(VERSION_ARG)
+
+## release-artifacts-github: STEP 3 — publish the GitHub Release page
+release-artifacts-github:
+	@./scripts/release-artifacts.sh github $(VERSION_ARG)
+
+## release-artifacts-homebrew: STEP 3 — nudge the Homebrew tap to update the cask
+release-artifacts-homebrew:
+	@./scripts/release-artifacts.sh homebrew $(VERSION_ARG)
 
 ## info: Show build information
 info:

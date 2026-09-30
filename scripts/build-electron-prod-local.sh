@@ -8,8 +8,9 @@
 # machine that does not hold the release certificate.
 #
 # WHAT IT IS NOT. Not a distributable artifact: unsigned and un-notarized, so
-# Gatekeeper will reject it anywhere but the machine that built it. Releases
-# still go through .github/workflows/release.yml.
+# Gatekeeper will reject it anywhere but the machine that built it. A real
+# release goes through scripts/release-artifacts.sh, which signs and notarizes
+# with the credentials this script deliberately does not need.
 #
 # ── Invoke it through npm, not directly ────────────────────────────────
 #
@@ -17,8 +18,7 @@
 #
 # That target wraps this script in electron/scripts/with-release-config.mjs,
 # which expands electron/release.config.json into the environment — the same
-# expansion release.yml does with jq, and the same one every other packaging
-# target now goes through. This script deliberately does NOT read that file
+# one every other packaging target, including the real release, goes through. This script deliberately does NOT read that file
 # itself: a second expansion is a second place the config can drift, which is
 # the defect this whole path exists to prevent.
 #

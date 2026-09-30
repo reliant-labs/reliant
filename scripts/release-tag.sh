@@ -30,14 +30,19 @@
 #
 # ── WHY IT IS NOT A WORKFLOW ON MERGE ───────────────────────────────────────
 #
-# Because it would not work, and it would fail silently, which is worse than
-# not existing. A tag pushed with the automatic GITHUB_TOKEN does NOT trigger
-# `on: push: tags` workflows — GitHub suppresses that to prevent recursion. So
-# an auto-tagging job would create the tag and neither `Release Electron App`
-# nor `Build & Push Image` would ever run: a release with no artifacts, and no
-# error anywhere. This repo has no PAT (its secrets are Apple/Azure/R2/GCP
-# signing and publishing credentials plus a Homebrew-tap-scoped token), so the
-# push has to carry a human credential. That is this script.
+# Most simply: releases are LOCAL-ONLY. `Release Electron App` and `Build &
+# Push Image` are deleted, and CI runs checks only, so there is no workflow for
+# this to be a step of.
+#
+# It would also not have worked. A tag pushed with the automatic GITHUB_TOKEN
+# does NOT trigger `on: push: tags` workflows — GitHub suppresses that to
+# prevent recursion — so an auto-tagging job would have created the tag while
+# neither publish workflow ran: a release with no artifacts, and no error
+# anywhere.
+#
+# Either way the push carries a human credential, which is this script. What
+# changed is that the tag is now the END of the automated part: publishing is
+# phase 3, scripts/release-artifacts.sh, run deliberately.
 
 set -euo pipefail
 
@@ -208,9 +213,16 @@ git push origin "$RELEASE_TAG"
 
 echo ""
 echo -e "${GREEN}🎉 ${RELEASE_TAG} published on main at ${RELEASE_COMMIT:0:9}${NC}"
-echo -e "${BLUE}📦 GitHub Actions is now building: Release Electron App + Build & Push Image${NC}"
-echo -e "${BLUE}Monitor: https://github.com/reliant-labs/reliant/actions${NC}"
 echo ""
-echo -e "${BLUE}📥 Download URLs (available after the build completes):${NC}"
+echo -e "${YELLOW}⚠️  Nothing is building. Releases are LOCAL-ONLY — the tag records what${NC}"
+echo -e "${YELLOW}    this release IS; publishing is a separate, deliberate step.${NC}"
+echo ""
+echo -e "${BLUE}📦 Phase 3 — run on a machine holding the signing credentials:${NC}"
+echo -e "${BLUE}  ./scripts/release-artifacts.sh desktop    # ON EACH PLATFORM you ship${NC}"
+echo -e "${BLUE}  ./scripts/release-artifacts.sh image      # multi-arch image -> prod GAR${NC}"
+echo -e "${BLUE}  ./scripts/release-artifacts.sh github     # the GitHub Release page${NC}"
+echo -e "${BLUE}  ./scripts/release-artifacts.sh homebrew   # nudge the tap${NC}"
+echo ""
+echo -e "${BLUE}📥 Download URLs (available after you publish):${NC}"
 echo -e "${BLUE}  Latest:    https://downloads.reliantlabs.io/Reliant-latest-mac-arm64.dmg${NC}"
 echo -e "${BLUE}  Versioned: https://downloads.reliantlabs.io/Reliant-${NEW_VERSION}-mac-arm64.dmg${NC}"
