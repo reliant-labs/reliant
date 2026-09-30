@@ -51,6 +51,14 @@ type Service interface {
 	Lookup(server string) (credentials.Credential, string, error)
 	// Remove forgets the stored credential for server.
 	Remove(server string) (bool, string, error)
+	// DepositForForge writes cred into forge's own credential store for the
+	// control plane that issued it, so being logged in to Reliant means
+	// forge is logged in to Reliant cloud. Keyed by cred.Issuer, under
+	// forge's host-application client id — see forgecred.go.
+	DepositForForge(cred credentials.Credential) error
+	// WithdrawFromForge removes that deposit on logout and reports whether
+	// one existed. A `forge login` for the same origin is left alone.
+	WithdrawFromForge(issuer string) (bool, error)
 }
 
 // Deps are the adapter's collaborators.

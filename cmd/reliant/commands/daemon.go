@@ -133,6 +133,21 @@ func registerDaemon(ctx context.Context, cmd *cobra.Command, conn *connection, a
 		return fmt.Errorf("saving daemon credentials: %w", err)
 	}
 
+	// ONE LOGIN, and on a daemon it is the load-bearing case. The Deploy
+	// button re-execs this daemon as `reliant forge deploy`, and that
+	// subprocess inherits the daemon's environment and nothing else — so
+	// without this deposit forge on a daemon cannot authenticate at all, and
+	// the only other way in is `forge login`, which needs a browser loopback
+	// a remote pod does not have. The daemon credential carries the deploy,
+	// secret and domain scopes for exactly this (control-plane 00110).
+	//
+	// Best-effort: the daemon is registered and functional either way, and
+	// failing registration over a deploy convenience would be the worse
+	// outcome.
+	if err := cliauth.DepositForForge(cred); err != nil {
+		logging.Warn("could not log forge in to Reliant cloud for this daemon", "error", err)
+	}
+
 	credsPath, _ := auth.DaemonCredentialsFilePath()
 	fmt.Fprintln(cmd.OutOrStdout(), "Daemon registered successfully")
 	fmt.Fprintf(cmd.OutOrStdout(), "  Credentials: %s\n", credsPath)
