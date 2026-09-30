@@ -340,6 +340,38 @@ export function GitConnectionsSettings() {
             <InstallationsPanel installations={credential?.installations ?? []} />
           )}
 
+          {/* A credential whose kind we cannot determine gets no installations
+              panel, because we cannot tell that it is an App — control-plane
+              derives the kind from the token's prefix, so a token it cannot
+              decrypt, or one written before the GitHub App existed, arrives
+              as "unknown". Withholding the panel is right, but withholding it
+              SILENTLY leaves this page with nothing to say about why
+              repository access cannot be managed. Name the remedy instead. */}
+          {kind === "unknown" && health !== "valid" && (
+            <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-900 dark:text-amber-200">
+              Reconnect GitHub to enable repository access management. This
+              connection was stored in a form Reliant can no longer read, so it
+              can&apos;t tell which repositories it is allowed to see.
+              <div className="mt-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleConnectOAuth}
+                  disabled={connectingOAuth}
+                  leftIcon={
+                    connectingOAuth ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Github className="h-4 w-4" />
+                    )
+                  }
+                >
+                  {connectingOAuth ? "Connecting..." : "Reconnect GitHub"}
+                </Button>
+              </div>
+            </div>
+          )}
+
           {scopesAreMeaningful && !hasRepoScope && (
             <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-900 dark:text-amber-200">
               This GitHub token has no <code>repo</code> scope, so Reliant can only see public repositories.
