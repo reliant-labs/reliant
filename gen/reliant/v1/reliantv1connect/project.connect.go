@@ -92,6 +92,9 @@ const (
 	// ProjectServiceMarkProjectInstalledProcedure is the fully-qualified name of the ProjectService's
 	// MarkProjectInstalled RPC.
 	ProjectServiceMarkProjectInstalledProcedure = "/reliant.v1.ProjectService/MarkProjectInstalled"
+	// ProjectServiceCreateProjectFromRepoProcedure is the fully-qualified name of the ProjectService's
+	// CreateProjectFromRepo RPC.
+	ProjectServiceCreateProjectFromRepoProcedure = "/reliant.v1.ProjectService/CreateProjectFromRepo"
 	// ProjectServiceListRepositoriesForDaemonProcedure is the fully-qualified name of the
 	// ProjectService's ListRepositoriesForDaemon RPC.
 	ProjectServiceListRepositoriesForDaemonProcedure = "/reliant.v1.ProjectService/ListRepositoriesForDaemon"
@@ -151,10 +154,29 @@ type ProjectServiceClient interface {
 	// projects owned by the calling user.
 	ListProjectDaemons(context.Context, *connect.Request[v1.ListProjectDaemonsRequest]) (*connect.Response[v1.ListProjectDaemonsResponse], error)
 	// MarkProjectInstalled records that a project has a clone on a daemon.
-	// Called after gitService.cloneRepo() succeeds so the picker can see the
-	// project on that daemon. Idempotent — re-running with the same
-	// (project, daemon) updates the path/branch.
+	// Idempotent — re-running with the same (project, daemon) updates the
+	// path/branch.
+	//
+	// Prefer CreateProjectFromRepo for the add-a-project-from-GitHub flow; this
+	// remains for callers that cloned by some other route and only need to
+	// record the result.
 	MarkProjectInstalled(context.Context, *connect.Request[v1.MarkProjectInstalledRequest]) (*connect.Response[v1.MarkProjectInstalledResponse], error)
+	// CreateProjectFromRepo adds a GitHub repository as a project on a daemon:
+	// it starts the clone, creates the project row, and records where the
+	// checkout will live — in one call, in one place.
+	//
+	// It replaces a four-call client chain (ListGitRepos -> CloneRepo ->
+	// CreateProject -> MarkProjectInstalled) whose steps could each fail
+	// independently, leaving a project with no clone or a clone with no
+	// project, with no server-side record that the sequence was ever started.
+	//
+	// It is honest about what has happened. The clone is dispatched to the
+	// daemon through the control plane, which QUEUES it durably rather than
+	// waiting — so a machine that is asleep or still booting is a perfectly
+	// good target, and the response says `queued` with the project in its
+	// `installing` state. The real outcome arrives later, when the daemon runs
+	// the command, and moves the project to `installed` or `failed`.
+	CreateProjectFromRepo(context.Context, *connect.Request[v1.CreateProjectFromRepoRequest]) (*connect.Response[v1.CreateProjectFromRepoResponse], error)
 	// ListRepositoriesForDaemon returns the projects cloned on the given daemon,
 	// denormalized with project metadata (name, remote_url) so admin callers
 	// can render a "Repositories" table without a follow-up GetProject for each
@@ -301,6 +323,12 @@ func NewProjectServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithSchema(projectServiceMethods.ByName("MarkProjectInstalled")),
 			connect.WithClientOptions(opts...),
 		),
+		createProjectFromRepo: connect.NewClient[v1.CreateProjectFromRepoRequest, v1.CreateProjectFromRepoResponse](
+			httpClient,
+			baseURL+ProjectServiceCreateProjectFromRepoProcedure,
+			connect.WithSchema(projectServiceMethods.ByName("CreateProjectFromRepo")),
+			connect.WithClientOptions(opts...),
+		),
 		listRepositoriesForDaemon: connect.NewClient[v1.ListRepositoriesForDaemonRequest, v1.ListRepositoriesForDaemonResponse](
 			httpClient,
 			baseURL+ProjectServiceListRepositoriesForDaemonProcedure,
@@ -349,6 +377,7 @@ type projectServiceClient struct {
 	listProjectDaemonsForDaemon *connect.Client[v1.ListProjectDaemonsForDaemonRequest, v1.ListProjectDaemonsForDaemonResponse]
 	listProjectDaemons          *connect.Client[v1.ListProjectDaemonsRequest, v1.ListProjectDaemonsResponse]
 	markProjectInstalled        *connect.Client[v1.MarkProjectInstalledRequest, v1.MarkProjectInstalledResponse]
+	createProjectFromRepo       *connect.Client[v1.CreateProjectFromRepoRequest, v1.CreateProjectFromRepoResponse]
 	listRepositoriesForDaemon   *connect.Client[v1.ListRepositoriesForDaemonRequest, v1.ListRepositoriesForDaemonResponse]
 	pullProjectOnDaemon         *connect.Client[v1.PullProjectOnDaemonRequest, v1.PullProjectOnDaemonResponse]
 	removeProjectFromDaemon     *connect.Client[v1.RemoveProjectFromDaemonRequest, v1.RemoveProjectFromDaemonResponse]
@@ -450,6 +479,11 @@ func (c *projectServiceClient) MarkProjectInstalled(ctx context.Context, req *co
 	return c.markProjectInstalled.CallUnary(ctx, req)
 }
 
+// CreateProjectFromRepo calls reliant.v1.ProjectService.CreateProjectFromRepo.
+func (c *projectServiceClient) CreateProjectFromRepo(ctx context.Context, req *connect.Request[v1.CreateProjectFromRepoRequest]) (*connect.Response[v1.CreateProjectFromRepoResponse], error) {
+	return c.createProjectFromRepo.CallUnary(ctx, req)
+}
+
 // ListRepositoriesForDaemon calls reliant.v1.ProjectService.ListRepositoriesForDaemon.
 func (c *projectServiceClient) ListRepositoriesForDaemon(ctx context.Context, req *connect.Request[v1.ListRepositoriesForDaemonRequest]) (*connect.Response[v1.ListRepositoriesForDaemonResponse], error) {
 	return c.listRepositoriesForDaemon.CallUnary(ctx, req)
@@ -515,10 +549,29 @@ type ProjectServiceHandler interface {
 	// projects owned by the calling user.
 	ListProjectDaemons(context.Context, *connect.Request[v1.ListProjectDaemonsRequest]) (*connect.Response[v1.ListProjectDaemonsResponse], error)
 	// MarkProjectInstalled records that a project has a clone on a daemon.
-	// Called after gitService.cloneRepo() succeeds so the picker can see the
-	// project on that daemon. Idempotent — re-running with the same
-	// (project, daemon) updates the path/branch.
+	// Idempotent — re-running with the same (project, daemon) updates the
+	// path/branch.
+	//
+	// Prefer CreateProjectFromRepo for the add-a-project-from-GitHub flow; this
+	// remains for callers that cloned by some other route and only need to
+	// record the result.
 	MarkProjectInstalled(context.Context, *connect.Request[v1.MarkProjectInstalledRequest]) (*connect.Response[v1.MarkProjectInstalledResponse], error)
+	// CreateProjectFromRepo adds a GitHub repository as a project on a daemon:
+	// it starts the clone, creates the project row, and records where the
+	// checkout will live — in one call, in one place.
+	//
+	// It replaces a four-call client chain (ListGitRepos -> CloneRepo ->
+	// CreateProject -> MarkProjectInstalled) whose steps could each fail
+	// independently, leaving a project with no clone or a clone with no
+	// project, with no server-side record that the sequence was ever started.
+	//
+	// It is honest about what has happened. The clone is dispatched to the
+	// daemon through the control plane, which QUEUES it durably rather than
+	// waiting — so a machine that is asleep or still booting is a perfectly
+	// good target, and the response says `queued` with the project in its
+	// `installing` state. The real outcome arrives later, when the daemon runs
+	// the command, and moves the project to `installed` or `failed`.
+	CreateProjectFromRepo(context.Context, *connect.Request[v1.CreateProjectFromRepoRequest]) (*connect.Response[v1.CreateProjectFromRepoResponse], error)
 	// ListRepositoriesForDaemon returns the projects cloned on the given daemon,
 	// denormalized with project metadata (name, remote_url) so admin callers
 	// can render a "Repositories" table without a follow-up GetProject for each
@@ -661,6 +714,12 @@ func NewProjectServiceHandler(svc ProjectServiceHandler, opts ...connect.Handler
 		connect.WithSchema(projectServiceMethods.ByName("MarkProjectInstalled")),
 		connect.WithHandlerOptions(opts...),
 	)
+	projectServiceCreateProjectFromRepoHandler := connect.NewUnaryHandler(
+		ProjectServiceCreateProjectFromRepoProcedure,
+		svc.CreateProjectFromRepo,
+		connect.WithSchema(projectServiceMethods.ByName("CreateProjectFromRepo")),
+		connect.WithHandlerOptions(opts...),
+	)
 	projectServiceListRepositoriesForDaemonHandler := connect.NewUnaryHandler(
 		ProjectServiceListRepositoriesForDaemonProcedure,
 		svc.ListRepositoriesForDaemon,
@@ -725,6 +784,8 @@ func NewProjectServiceHandler(svc ProjectServiceHandler, opts ...connect.Handler
 			projectServiceListProjectDaemonsHandler.ServeHTTP(w, r)
 		case ProjectServiceMarkProjectInstalledProcedure:
 			projectServiceMarkProjectInstalledHandler.ServeHTTP(w, r)
+		case ProjectServiceCreateProjectFromRepoProcedure:
+			projectServiceCreateProjectFromRepoHandler.ServeHTTP(w, r)
 		case ProjectServiceListRepositoriesForDaemonProcedure:
 			projectServiceListRepositoriesForDaemonHandler.ServeHTTP(w, r)
 		case ProjectServicePullProjectOnDaemonProcedure:
@@ -816,6 +877,10 @@ func (UnimplementedProjectServiceHandler) ListProjectDaemons(context.Context, *c
 
 func (UnimplementedProjectServiceHandler) MarkProjectInstalled(context.Context, *connect.Request[v1.MarkProjectInstalledRequest]) (*connect.Response[v1.MarkProjectInstalledResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ProjectService.MarkProjectInstalled is not implemented"))
+}
+
+func (UnimplementedProjectServiceHandler) CreateProjectFromRepo(context.Context, *connect.Request[v1.CreateProjectFromRepoRequest]) (*connect.Response[v1.CreateProjectFromRepoResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ProjectService.CreateProjectFromRepo is not implemented"))
 }
 
 func (UnimplementedProjectServiceHandler) ListRepositoriesForDaemon(context.Context, *connect.Request[v1.ListRepositoriesForDaemonRequest]) (*connect.Response[v1.ListRepositoriesForDaemonResponse], error) {

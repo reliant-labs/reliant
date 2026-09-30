@@ -46,6 +46,10 @@ func (s *stubControlPlane) DeleteCurrentUserAccount(_ context.Context, jwt strin
 	return s.blockers, s.err
 }
 
+func (s *stubControlPlane) CloneRepoOntoDaemon(context.Context, string, controlplane.CloneRepoRequest) (controlplane.CloneRepoResult, error) {
+	return controlplane.CloneRepoResult{}, nil
+}
+
 // TestDeleteAccount_ControlPlaneBlockStopsBeforeLocalPurge is the ordering
 // guarantee that makes this feature safe.
 //

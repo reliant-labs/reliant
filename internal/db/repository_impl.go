@@ -1052,6 +1052,42 @@ func (r *Repo) UpsertProjectDaemon(ctx context.Context, projectID, daemonID, pat
 	return r.projects.UpsertProjectDaemon(ctx, projectID, daemonID, path, defaultBranch)
 }
 
+// UpsertQueuedProjectDaemon records a clone that is queued but has not run.
+func (r *Repo) UpsertQueuedProjectDaemon(ctx context.Context, projectID, daemonID, path string, defaultBranch *string, requestID string) error {
+	if projectID == "" {
+		return fmt.Errorf("project ID cannot be empty")
+	}
+	if daemonID == "" {
+		return fmt.Errorf("daemon ID cannot be empty")
+	}
+	if path == "" {
+		return fmt.Errorf("path cannot be empty")
+	}
+	if requestID == "" {
+		// Without it the outcome notification can never find this row, and
+		// the project would sit in "installing" forever.
+		return fmt.Errorf("request ID cannot be empty for a queued clone")
+	}
+	return r.projects.UpsertQueuedProjectDaemon(ctx, projectID, daemonID, path, defaultBranch, requestID)
+}
+
+// ResolveQueuedProjectDaemon applies the outcome the daemon reported.
+func (r *Repo) ResolveQueuedProjectDaemon(ctx context.Context, requestID, installErr string) error {
+	if requestID == "" {
+		return fmt.Errorf("request ID cannot be empty")
+	}
+	return r.projects.ResolveQueuedProjectDaemon(ctx, requestID, installErr)
+}
+
+// MarkProjectDaemonInstalled settles a queued clone from a filesystem
+// announcement, which names the path but carries no request id.
+func (r *Repo) MarkProjectDaemonInstalled(ctx context.Context, projectID, daemonID string) error {
+	if projectID == "" || daemonID == "" {
+		return fmt.Errorf("project ID and daemon ID cannot be empty")
+	}
+	return r.projects.MarkProjectDaemonInstalled(ctx, projectID, daemonID)
+}
+
 func (r *Repo) ListProjectDaemonsForProject(ctx context.Context, projectID string) ([]*core.ProjectDaemon, error) {
 	if projectID == "" {
 		return nil, fmt.Errorf("project ID cannot be empty")

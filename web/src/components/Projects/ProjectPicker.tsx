@@ -57,7 +57,6 @@ import {
   isFailedDaemon,
 } from "./cloneTargets";
 import { cloudDaemonStatusLabel } from "./cloudDaemonStatusLabel";
-import { gitService } from "../../services/controlPlane/git";
 import type { GitRepo } from "../../services/controlPlane/git";
 import { projectGrpc } from "../../api/project-grpc";
 import { cloudPathForRepo, repoNameFromUrl } from "../../lib/cloudProjectPath";
@@ -702,13 +701,18 @@ function ProjectPickerComponent({ onProjectSelected }: ProjectPickerProps) {
   );
   const showCloneAction = capabilities.cloudDaemons;
 
-  // Run a clone for a known repo onto an explicit target daemon, then
-  // create the Project (or open an existing one) and mark it installed.
-  // The caller passes targetDaemonId so the picker can support cloning to
-  // *any* of the user's cloud daemons (the per-row menu or the top-level
-  // "Clone repo" affordance into the currently-selected daemon). The caller
-  // is responsible for having vetted the target (status ACTIVE, cloud type,
-  // GH credential present); cloneAndOpen does not re-check.
+  // Add a repo as a project on a target daemon, in ONE server call.
+  //
+  // This used to be four calls from here — cloneRepo, createProject,
+  // markProjectInstalled, plus an already-exists recovery — each able to fail
+  // on its own and leave a project with no checkout or a checkout with no
+  // project. CreateProjectFromRepo owns that sequence server-side now, so
+  // this function's whole job is to ask, report, and open.
+  //
+  // It returns as soon as the clone is QUEUED: the machine may still be
+  // asleep, so the checkout does not exist yet and the copy must not pretend
+  // it does. The real outcome arrives over the updates stream (the daemon's
+  // FileSystemChanged / DaemonCommandFailed, replayed via user_updates).
   const cloneAndOpen = useCallback(
     async (
       repo: { cloneUrl: string; defaultBranch: string; fullName?: string },
@@ -722,76 +726,36 @@ function ProjectPickerComponent({ onProjectSelected }: ProjectPickerProps) {
       const branch = repo.defaultBranch || "main";
       const targetHost = hostnameFor(targetDaemonId);
       setCloneStatus(`Queueing ${projectName} for ${targetHost}...`);
-      const cloneResult = await gitService.cloneRepo({
+
+      const result = await projectGrpc.createProjectFromRepo({
+        cloneUrl: repo.cloneUrl,
         daemonId: targetDaemonId,
-        gitRepo: repo.cloneUrl,
-        gitBranch: branch,
+        name: projectName,
+        branch,
         path: destinationPath,
       });
-      const clonedPath = cloneResult.clonedPath;
 
-      // CloneRepo returns once the command is durably ENQUEUED, not once the
-      // repo is on disk — the daemon may not even be running yet. Saying
-      // "cloned" here is the false success this replaces. The real outcome
-      // arrives asynchronously: the daemon announces FileSystemChanged on
-      // success or DaemonCommandFailed on failure, which reaches us as a
-      // user_updates row (see globalUpdatesStore's daemon_command_failed
-      // handler) and surfaces as a toast.
-      if (cloneResult.queued) {
-        const machine = cloneResult.daemonName || targetHost;
+      if (result.queued) {
+        const machine = result.daemonName || targetHost;
         toast.info(`Queued — ${projectName} will clone when ${machine} is ready`);
       }
 
       setCloneStatus(`Opening ${projectName}...`);
-      let openedProject: Project | undefined;
-      try {
-        const createdProject = await createProject({
-          name: projectName,
-          path: clonedPath,
-          description: "",
-          is_git_repo: true,
-          default_branch: branch,
-        });
-        openedProject = createdProject;
-      } catch (err) {
-        // Already-exists is a legitimate "you've cloned this somewhere
-        // before" case. Look the project up and reuse it.
-        const isAlreadyExists =
-          (err instanceof ConnectError && err.code === Code.AlreadyExists) ||
-          (err instanceof Error &&
-            (err.message.includes("already exists") || err.message.includes("409")));
-        if (!isAlreadyExists) throw err;
-        await loadProjects();
-        const refreshed = useProjectStore.getState().projects;
-        openedProject =
-          refreshed.find((p) => p.path === clonedPath) ||
-          refreshed.find((p) => p.remote_url === repo.cloneUrl);
-      }
-
-      if (openedProject) {
-        try {
-          await projectGrpc.markProjectInstalled(
-            openedProject.id,
-            targetDaemonId,
-            clonedPath,
-            branch,
-          );
-        } catch (markErr) {
-          console.warn("markProjectInstalled failed (non-fatal):", markErr);
+      await loadProjects();
+      if (result.project) {
+        // Re-read from the store so the opened project is the full
+        // StoreProject shape (last_active, remote_url), not the narrower
+        // one the RPC returns.
+        const opened =
+          useProjectStore.getState().projects.find((p) => p.id === result.project!.id);
+        if (opened) {
+          await selectProject(opened);
+          onProjectSelected(opened);
         }
-        await loadProjects();
-        await selectProject(openedProject);
-        onProjectSelected(openedProject);
       }
       setCloneStatus(null);
     },
-    [
-      createProject,
-      hostnameFor,
-      loadProjects,
-      onProjectSelected,
-      selectProject,
-    ],
+    [hostnameFor, loadProjects, onProjectSelected, selectProject],
   );
 
   // Modal "Clone repo" → user picks a fresh repo to install on the active

@@ -133,6 +133,9 @@ type Repository interface {
 
 	// Project ↔ Daemon installations (which daemons have a clone of a project).
 	UpsertProjectDaemon(ctx context.Context, projectID, daemonID, path string, defaultBranch *string) error
+	UpsertQueuedProjectDaemon(ctx context.Context, projectID, daemonID, path string, defaultBranch *string, requestID string) error
+	ResolveQueuedProjectDaemon(ctx context.Context, requestID, installErr string) error
+	MarkProjectDaemonInstalled(ctx context.Context, projectID, daemonID string) error
 	ListProjectDaemonsForProject(ctx context.Context, projectID string) ([]*core.ProjectDaemon, error)
 	ListProjectDaemonsForDaemon(ctx context.Context, daemonID string) ([]*core.ProjectDaemon, error)
 	DeleteProjectDaemon(ctx context.Context, projectID, daemonID string) error

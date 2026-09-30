@@ -70,10 +70,30 @@ service ProjectService {
   rpc ListProjectDaemons(ListProjectDaemonsRequest) returns (ListProjectDaemonsResponse) {}
 
   // MarkProjectInstalled records that a project has a clone on a daemon.
-  // Called after gitService.cloneRepo() succeeds so the picker can see the
-  // project on that daemon. Idempotent — re-running with the same
-  // (project, daemon) updates the path/branch.
+  // Idempotent — re-running with the same (project, daemon) updates the
+  // path/branch.
+  //
+  // Prefer CreateProjectFromRepo for the add-a-project-from-GitHub flow; this
+  // remains for callers that cloned by some other route and only need to
+  // record the result.
   rpc MarkProjectInstalled(MarkProjectInstalledRequest) returns (MarkProjectInstalledResponse) {}
+
+  // CreateProjectFromRepo adds a GitHub repository as a project on a daemon:
+  // it starts the clone, creates the project row, and records where the
+  // checkout will live — in one call, in one place.
+  //
+  // It replaces a four-call client chain (ListGitRepos -> CloneRepo ->
+  // CreateProject -> MarkProjectInstalled) whose steps could each fail
+  // independently, leaving a project with no clone or a clone with no
+  // project, with no server-side record that the sequence was ever started.
+  //
+  // It is honest about what has happened. The clone is dispatched to the
+  // daemon through the control plane, which QUEUES it durably rather than
+  // waiting — so a machine that is asleep or still booting is a perfectly
+  // good target, and the response says `queued` with the project in its
+  // `installing` state. The real outcome arrives later, when the daemon runs
+  // the command, and moves the project to `installed` or `failed`.
+  rpc CreateProjectFromRepo(CreateProjectFromRepoRequest) returns (CreateProjectFromRepoResponse) {}
 
   // ListRepositoriesForDaemon returns the projects cloned on the given daemon,
   // denormalized with project metadata (name, remote_url) so admin callers
@@ -136,10 +156,18 @@ message Project {
 message ProjectDaemon {
   string project_id = 1;
   string daemon_id = 2;
-  // Absolute path on that daemon where the clone lives.
+  // Absolute path on that daemon where the clone lives — or WILL live, when
+  // install_state is INSTALLING. A path here is not proof of a checkout.
   string path = 3;
   optional string default_branch = 4;
   string cloned_at = 5;
+
+  // How far the checkout has got. Rows written before this field existed
+  // read as INSTALLED, which is accurate: the old flow only ever wrote a row
+  // after a clone had completed.
+  ProjectInstallState install_state = 6;
+  // Why the clone failed. Empty unless install_state is FAILED.
+  string install_error = 7;
 }
 
 // CreateProjectRequest creates a new project
@@ -422,6 +450,48 @@ message MarkProjectInstalledRequest {
 // MarkProjectInstalledResponse returns the upserted row.
 message MarkProjectInstalledResponse {
   ProjectDaemon project_daemon = 1;
+}
+
+// Where a project's checkout has got to on one daemon.
+enum ProjectInstallState {
+  PROJECT_INSTALL_STATE_UNSPECIFIED = 0;
+  // The clone is queued or running. The path is where the checkout WILL be.
+  PROJECT_INSTALL_STATE_INSTALLING = 1;
+  // The checkout exists on that daemon.
+  PROJECT_INSTALL_STATE_INSTALLED = 2;
+  // The clone ran and failed. `install_error` says why.
+  PROJECT_INSTALL_STATE_FAILED = 3;
+}
+
+// CreateProjectFromRepoRequest adds a GitHub repo as a project on a daemon.
+message CreateProjectFromRepoRequest {
+  // The repo to clone, as its https clone URL.
+  string clone_url = 1;
+  // Which machine to clone onto. Required: with several machines the choice
+  // is the user's, and guessing it silently puts the checkout somewhere they
+  // did not ask for.
+  string daemon_id = 2;
+  // Defaults to the repo name when empty.
+  optional string name = 3;
+  // Defaults to the repo's default branch when empty.
+  optional string branch = 4;
+  // Absolute path on the daemon. Defaults to the conventional projects
+  // directory for the repo name.
+  optional string path = 5;
+}
+
+message CreateProjectFromRepoResponse {
+  // The project row, created immediately so the user has something to look
+  // at while the clone runs.
+  Project project = 1;
+  // Where the checkout lives or will live, carrying the install state.
+  ProjectDaemon project_daemon = 2;
+  // FALSE only if the clone had already completed by the time we replied.
+  // True means the command is queued and the checkout does not exist yet —
+  // clients must not tell the user the repo is ready.
+  bool queued = 3;
+  // The machine the clone is waiting on, named so the UI can say which.
+  string daemon_name = 4;
 }
 
 // DaemonRepository is one cloned project on a daemon, denormalized with

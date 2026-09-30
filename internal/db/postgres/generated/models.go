@@ -431,11 +431,14 @@ type ProjectConfig struct {
 }
 
 type ProjectDaemon struct {
-	ProjectID     string         `json:"project_id"`
-	DaemonID      string         `json:"daemon_id"`
-	Path          string         `json:"path"`
-	DefaultBranch sql.NullString `json:"default_branch"`
-	ClonedAt      time.Time      `json:"cloned_at"`
+	ProjectID        string         `json:"project_id"`
+	DaemonID         string         `json:"daemon_id"`
+	Path             string         `json:"path"`
+	DefaultBranch    sql.NullString `json:"default_branch"`
+	ClonedAt         time.Time      `json:"cloned_at"`
+	InstallState     string         `json:"install_state"`
+	InstallError     string         `json:"install_error"`
+	InstallRequestID string         `json:"install_request_id"`
 }
 
 type ProviderBackoff struct {

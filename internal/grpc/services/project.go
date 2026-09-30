@@ -22,6 +22,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/configadapter"
+	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/daemonevents"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -57,6 +58,11 @@ type ProjectService struct {
 	reliantv1connect.UnimplementedProjectServiceHandler
 	database     db.Repository
 	daemonRouter toolexec.DaemonRouter
+	// controlPlane dispatches clones onto managed daemons. Nil in
+	// self-hosted deployments, where CreateProjectFromRepo reports that
+	// cloning needs a cloud account rather than failing obscurely — the
+	// user's GitHub token lives in the control plane and nowhere else.
+	controlPlane controlplane.Client
 }
 
 func (s *ProjectService) buildProjectConfigResolver() func(ctx context.Context, projectPath string) (*config.Config, error) {
@@ -73,9 +79,25 @@ func (s *ProjectService) buildProjectConfigResolver() func(ctx context.Context, 
 	}
 }
 
-// NewProjectService creates a new ProjectService
+// NewProjectService creates a new ProjectService.
+//
+// The control-plane client is wired only when this deployment HAS a control
+// plane (RELIANT_CONTROL_PLANE_URL and friends). Self-hosted reliant cannot
+// clone from GitHub on the user's behalf — their token lives in the control
+// plane — and defaulting to localhost would make CreateProjectFromRepo fail
+// against a control plane that is not there, instead of saying so.
 func NewProjectService(database db.Repository, daemonRouter toolexec.DaemonRouter) *ProjectService {
-	return &ProjectService{database: database, daemonRouter: daemonRouter}
+	svc := &ProjectService{database: database, daemonRouter: daemonRouter}
+	if baseURL := controlplane.BaseURLFromEnv(); baseURL != "" {
+		svc.controlPlane = controlplane.NewClient(baseURL)
+	}
+	return svc
+}
+
+// WithControlPlaneClient overrides the control-plane client, for tests.
+func (s *ProjectService) WithControlPlaneClient(client controlplane.Client) *ProjectService {
+	s.controlPlane = client
+	return s
 }
 
 // projectDirHealConsumerName is the durable JetStream consumer name used by
@@ -1520,15 +1542,31 @@ func (s *ProjectService) InitializeGitRepo(
 // projectDaemonToProto converts a db.ProjectDaemon to its proto form.
 func projectDaemonToProto(pd *db.ProjectDaemon) *reliantv1.ProjectDaemon {
 	out := &reliantv1.ProjectDaemon{
-		ProjectId: pd.ProjectID,
-		DaemonId:  pd.DaemonID,
-		Path:      pd.Path,
-		ClonedAt:  pd.ClonedAt.Format(time.RFC3339),
+		ProjectId:    pd.ProjectID,
+		DaemonId:     pd.DaemonID,
+		Path:         pd.Path,
+		ClonedAt:     pd.ClonedAt.Format(time.RFC3339),
+		InstallState: installStateToProto(pd.InstallState),
+		InstallError: pd.InstallError,
 	}
 	if pd.DefaultBranch != nil {
 		out.DefaultBranch = pd.DefaultBranch
 	}
 	return out
+}
+
+// installStateToProto maps the stored state onto the wire enum. An empty
+// value means the row predates the column, and those rows are installed by
+// definition: the old flow only ever wrote one after a completed clone.
+func installStateToProto(state core.ProjectInstallState) reliantv1.ProjectInstallState {
+	switch state {
+	case core.ProjectInstallInstalling:
+		return reliantv1.ProjectInstallState_PROJECT_INSTALL_STATE_INSTALLING
+	case core.ProjectInstallFailed:
+		return reliantv1.ProjectInstallState_PROJECT_INSTALL_STATE_FAILED
+	default:
+		return reliantv1.ProjectInstallState_PROJECT_INSTALL_STATE_INSTALLED
+	}
 }
 
 // ListProjectDaemonsForDaemon returns the project_daemons rows installed on

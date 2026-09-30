@@ -5,8 +5,8 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
-import { fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
+import type { GenEnum, GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
+import { enumDesc, fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
 import type { FileChangeStatus } from "./common_pb";
 import { file_reliant_v1_common } from "./common_pb";
 import type { Message } from "@bufbuild/protobuf";
@@ -15,7 +15,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file reliant/v1/project.proto.
  */
 export const file_reliant_v1_project: GenFile = /*@__PURE__*/
-  fileDesc("ChhyZWxpYW50L3YxL3Byb2plY3QucHJvdG8SCnJlbGlhbnQudjEi4AIKB1Byb2plY3QSCgoCaWQYASABKAkSDwoHdXNlcl9pZBgCIAEoCRIMCgRuYW1lGAMgASgJEgwKBHBhdGgYBCABKAkSGAoLZGVzY3JpcHRpb24YBSABKAlIAIgBARITCgtpc19naXRfcmVwbxgGIAEoCBIbCg5kZWZhdWx0X2JyYW5jaBgHIAEoCUgBiAEBEhIKCmNyZWF0ZWRfYXQYCCABKAkSEgoKdXBkYXRlZF9hdBgJIAEoCRITCgtsYXN0X2FjdGl2ZRgKIAEoCRIXCgpyZW1vdGVfdXJsGAsgASgJSAKIAQESEAoIaXNfZm9yZ2UYDCABKAgSHwoSZm9yZ2VfcHJvamVjdF9uYW1lGA0gASgJSAOIAQFCDgoMX2Rlc2NyaXB0aW9uQhEKD19kZWZhdWx0X2JyYW5jaEINCgtfcmVtb3RlX3VybEIVChNfZm9yZ2VfcHJvamVjdF9uYW1lIocBCg1Qcm9qZWN0RGFlbW9uEhIKCnByb2plY3RfaWQYASABKAkSEQoJZGFlbW9uX2lkGAIgASgJEgwKBHBhdGgYAyABKAkSGwoOZGVmYXVsdF9icmFuY2gYBCABKAlIAIgBARIRCgljbG9uZWRfYXQYBSABKAlCEQoPX2RlZmF1bHRfYnJhbmNoIowBChRDcmVhdGVQcm9qZWN0UmVxdWVzdBIMCgRuYW1lGAEgASgJEgwKBHBhdGgYAiABKAkSGAoLZGVzY3JpcHRpb24YAyABKAlIAIgBARIbCg5kZWZhdWx0X2JyYW5jaBgEIAEoCUgBiAEBQg4KDF9kZXNjcmlwdGlvbkIRCg9fZGVmYXVsdF9icmFuY2giPQoVQ3JlYXRlUHJvamVjdFJlc3BvbnNlEiQKB3Byb2plY3QYASABKAsyEy5yZWxpYW50LnYxLlByb2plY3QiNAoTTGlzdFByb2plY3RzUmVxdWVzdBINCgVsaW1pdBgBIAEoBRIOCgZvZmZzZXQYAiABKAUiTAoUTGlzdFByb2plY3RzUmVzcG9uc2USJQoIcHJvamVjdHMYASADKAsyEy5yZWxpYW50LnYxLlByb2plY3QSDQoFdG90YWwYAiABKAUiJwoRR2V0UHJvamVjdFJlcXVlc3QSEgoKcHJvamVjdF9pZBgBIAEoCSI6ChJHZXRQcm9qZWN0UmVzcG9uc2USJAoHcHJvamVjdBgBIAEoCzITLnJlbGlhbnQudjEuUHJvamVjdCKgAQoUVXBkYXRlUHJvamVjdFJlcXVlc3QSEgoKcHJvamVjdF9pZBgBIAEoCRIRCgRuYW1lGAIgASgJSACIAQESGAoLZGVzY3JpcHRpb24YAyABKAlIAYgBARIbCg5kZWZhdWx0X2JyYW5jaBgEIAEoCUgCiAEBQgcKBV9uYW1lQg4KDF9kZXNjcmlwdGlvbkIRCg9fZGVmYXVsdF9icmFuY2giPQoVVXBkYXRlUHJvamVjdFJlc3BvbnNlEiQKB3Byb2plY3QYASABKAsyEy5yZWxpYW50LnYxLlByb2plY3QiKgoURGVsZXRlUHJvamVjdFJlcXVlc3QSEgoKcHJvamVjdF9pZBgBIAEoCSI5ChVEZWxldGVQcm9qZWN0UmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCBIPCgdtZXNzYWdlGAIgASgJIikKE1RvdWNoUHJvamVjdFJlcXVlc3QSEgoKcHJvamVjdF9pZBgBIAEoCSI4ChRUb3VjaFByb2plY3RSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIEg8KB21lc3NhZ2UYAiABKAkiLwoZR2V0UHJvamVjdE1ldGFkYXRhUmVxdWVzdBISCgpwcm9qZWN0X2lkGAEgASgJIvgBChpHZXRQcm9qZWN0TWV0YWRhdGFSZXNwb25zZRISCgpwcm9qZWN0X2lkGAEgASgJEgwKBG5hbWUYAiABKAkSDAoEcGF0aBgDIAEoCRIYCgtkZXNjcmlwdGlvbhgEIAEoCUgAiAEBEhMKC2lzX2dpdF9yZXBvGAUgASgIEhsKDmRlZmF1bHRfYnJhbmNoGAYgASgJSAGIAQESEgoKY3JlYXRlZF9hdBgHIAEoCRISCgp1cGRhdGVkX2F0GAggASgJEhMKC2xhc3RfYWN0aXZlGAkgASgJQg4KDF9kZXNjcmlwdGlvbkIRCg9fZGVmYXVsdF9icmFuY2giXAocVXBkYXRlUHJvamVjdE1ldGFkYXRhUmVxdWVzdBISCgpwcm9qZWN0X2lkGAEgASgJEhgKC2Rlc2NyaXB0aW9uGAIgASgJSACIAQFCDgoMX2Rlc2NyaXB0aW9uIkUKHVVwZGF0ZVByb2plY3RNZXRhZGF0YVJlc3BvbnNlEiQKB3Byb2plY3QYASABKAsyEy5yZWxpYW50LnYxLlByb2plY3QiPwoYR2V0UHJvamVjdEdpdEluZm9SZXF1ZXN0EhIKCnByb2plY3RfaWQYASABKAkSDwoHcmVwb19pZBgCIAEoCSKMAgoZR2V0UHJvamVjdEdpdEluZm9SZXNwb25zZRISCgpwcm9qZWN0X2lkGAEgASgJEhMKC2lzX2dpdF9yZXBvGAIgASgIEhYKDmN1cnJlbnRfYnJhbmNoGAMgASgJEhMKC2hhc19jaGFuZ2VzGAQgASgIEg4KBnN0YXR1cxgFIAEoCRIUCgxzdGFnZWRfZmlsZXMYBiADKAkSFgoOdW5zdGFnZWRfZmlsZXMYByADKAkSFwoPdW50cmFja2VkX2ZpbGVzGAggAygJEg0KBWFoZWFkGAkgASgFEg4KBmJlaGluZBgKIAEoBRISCgpyZW1vdGVfdXJsGAsgASgJEg8KB21lc3NhZ2UYDCABKAkilAEKCUdpdEJyYW5jaBIMCgRuYW1lGAEgASgJEhIKCmlzX2N1cnJlbnQYAiABKAgSEQoJaXNfcmVtb3RlGAMgASgIEhAKCHVwc3RyZWFtGAQgASgJEhcKD2xhc3RfY29tbWl0X2FnZRgFIAEoAxITCgtpc19kZXRhY2hlZBgGIAEoCBISCgpjb21taXRfc2hhGAcgASgJIkMKHEdldFByb2plY3RHaXRCcmFuY2hlc1JlcXVlc3QSEgoKcHJvamVjdF9pZBgBIAEoCRIPCgdyZXBvX2lkGAIgASgJIkgKHUdldFByb2plY3RHaXRCcmFuY2hlc1Jlc3BvbnNlEicKCGJyYW5jaGVzGAEgAygLMhUucmVsaWFudC52MS5HaXRCcmFuY2giMQobR2V0UHJvamVjdEluaXRTdGF0dXNSZXF1ZXN0EhIKCnByb2plY3RfaWQYASABKAkiWAocR2V0UHJvamVjdEluaXRTdGF0dXNSZXNwb25zZRITCgtpbml0aWFsaXplZBgBIAEoCBISCgpwcm9qZWN0X2lkGAIgASgJEg8KB21lc3NhZ2UYAyABKAkiLgoYSW5pdGlhbGl6ZVByb2plY3RSZXF1ZXN0EhIKCnByb2plY3RfaWQYASABKAkiZQoZSW5pdGlhbGl6ZVByb2plY3RSZXNwb25zZRISCgpwcm9qZWN0X2lkGAEgASgJEg4KBnN0YXR1cxgCIAEoCRIPCgdtZXNzYWdlGAMgASgJEhMKC2luaXRpYWxpemVkGAQgASgIIpEBCgpGaWxlQ2hhbmdlEgwKBHBhdGgYASABKAkSLAoGc3RhdHVzGAIgASgOMhwucmVsaWFudC52MS5GaWxlQ2hhbmdlU3RhdHVzEgwKBGRpZmYYAyABKAkSDwoHY29udGVudBgEIAEoCRIYChBvcmlnaW5hbF9jb250ZW50GAUgASgJEg4KBmlzX25ldxgGIAEoCCI/ChhHZXRQcm9qZWN0Q2hhbmdlc1JlcXVlc3QSEgoKcHJvamVjdF9pZBgBIAEoCRIPCgdyZXBvX2lkGAIgASgJImcKGUdldFByb2plY3RDaGFuZ2VzUmVzcG9uc2USDgoGYnJhbmNoGAEgASgJEiUKBWZpbGVzGAIgAygLMhYucmVsaWFudC52MS5GaWxlQ2hhbmdlEhMKC3RvdGFsX2ZpbGVzGAMgASgFInAKBlByb21wdBIKCgJpZBgBIAEoCRIMCgRuYW1lGAIgASgJEg8KB2NvbnRlbnQYAyABKAkSEwoLZGVzY3JpcHRpb24YBCABKAkSEgoKY3JlYXRlZF9hdBgFIAEoCRISCgp1cGRhdGVkX2F0GAYgASgJIi4KGEdldFByb2plY3RQcm9tcHRzUmVxdWVzdBISCgpwcm9qZWN0X2lkGAEgASgJIkAKGUdldFByb2plY3RQcm9tcHRzUmVzcG9uc2USIwoHcHJvbXB0cxgBIAMoCzISLnJlbGlhbnQudjEuUHJvbXB0IlQKGVNhdmVQcm9qZWN0UHJvbXB0c1JlcXVlc3QSEgoKcHJvamVjdF9pZBgBIAEoCRIjCgdwcm9tcHRzGAIgAygLMhIucmVsaWFudC52MS5Qcm9tcHQiUgoaU2F2ZVByb2plY3RQcm9tcHRzUmVzcG9uc2USDwoHbWVzc2FnZRgBIAEoCRIjCgdwcm9tcHRzGAIgAygLMhIucmVsaWFudC52MS5Qcm9tcHQiegoYSW5pdGlhbGl6ZUdpdFJlcG9SZXF1ZXN0EhIKCnByb2plY3RfaWQYASABKAkSFgoOaW5pdGlhbF9icmFuY2gYAiABKAkSGgoSZ2l0aWdub3JlX3BhdHRlcm5zGAMgAygJEhYKDmluaXRpYWxfY29tbWl0GAQgASgIIm0KGUluaXRpYWxpemVHaXRSZXBvUmVzcG9uc2USDwoHbWVzc2FnZRgBIAEoCRISCgpwcm9qZWN0X2lkGAIgASgJEhMKC2lzX2dpdF9yZXBvGAMgASgIEhYKDmRlZmF1bHRfYnJhbmNoGAQgASgJIjcKIkxpc3RQcm9qZWN0RGFlbW9uc0ZvckRhZW1vblJlcXVlc3QSEQoJZGFlbW9uX2lkGAEgASgJIlkKI0xpc3RQcm9qZWN0RGFlbW9uc0ZvckRhZW1vblJlc3BvbnNlEjIKD3Byb2plY3RfZGFlbW9ucxgBIAMoCzIZLnJlbGlhbnQudjEuUHJvamVjdERhZW1vbiIbChlMaXN0UHJvamVjdERhZW1vbnNSZXF1ZXN0IlAKGkxpc3RQcm9qZWN0RGFlbW9uc1Jlc3BvbnNlEjIKD3Byb2plY3RfZGFlbW9ucxgBIAMoCzIZLnJlbGlhbnQudjEuUHJvamVjdERhZW1vbiKCAQobTWFya1Byb2plY3RJbnN0YWxsZWRSZXF1ZXN0EhIKCnByb2plY3RfaWQYASABKAkSEQoJZGFlbW9uX2lkGAIgASgJEgwKBHBhdGgYAyABKAkSGwoOZGVmYXVsdF9icmFuY2gYBCABKAlIAIgBAUIRCg9fZGVmYXVsdF9icmFuY2giUQocTWFya1Byb2plY3RJbnN0YWxsZWRSZXNwb25zZRIxCg5wcm9qZWN0X2RhZW1vbhgBIAEoCzIZLnJlbGlhbnQudjEuUHJvamVjdERhZW1vbiJ5ChBEYWVtb25SZXBvc2l0b3J5EhIKCnByb2plY3RfaWQYASABKAkSDAoEbmFtZRgCIAEoCRISCgpyZW1vdGVfdXJsGAMgASgJEg4KBmJyYW5jaBgEIAEoCRIMCgRwYXRoGAUgASgJEhEKCWNsb25lZF9hdBgGIAEoCSI1CiBMaXN0UmVwb3NpdG9yaWVzRm9yRGFlbW9uUmVxdWVzdBIRCglkYWVtb25faWQYASABKAkiVwohTGlzdFJlcG9zaXRvcmllc0ZvckRhZW1vblJlc3BvbnNlEjIKDHJlcG9zaXRvcmllcxgBIAMoCzIcLnJlbGlhbnQudjEuRGFlbW9uUmVwb3NpdG9yeSJDChpQdWxsUHJvamVjdE9uRGFlbW9uUmVxdWVzdBISCgpwcm9qZWN0X2lkGAEgASgJEhEKCWRhZW1vbl9pZBgCIAEoCSItChtQdWxsUHJvamVjdE9uRGFlbW9uUmVzcG9uc2USDgoGb3V0cHV0GAEgASgJIkcKHlJlbW92ZVByb2plY3RGcm9tRGFlbW9uUmVxdWVzdBISCgpwcm9qZWN0X2lkGAEgASgJEhEKCWRhZW1vbl9pZBgCIAEoCSIhCh9SZW1vdmVQcm9qZWN0RnJvbURhZW1vblJlc3BvbnNlIkYKHVJlY2xvbmVQcm9qZWN0T25EYWVtb25SZXF1ZXN0EhIKCnByb2plY3RfaWQYASABKAkSEQoJZGFlbW9uX2lkGAIgASgJIi4KHlJlY2xvbmVQcm9qZWN0T25EYWVtb25SZXNwb25zZRIMCgRwYXRoGAEgASgJMsYSCg5Qcm9qZWN0U2VydmljZRJWCg1DcmVhdGVQcm9qZWN0EiAucmVsaWFudC52MS5DcmVhdGVQcm9qZWN0UmVxdWVzdBohLnJlbGlhbnQudjEuQ3JlYXRlUHJvamVjdFJlc3BvbnNlIgASUwoMTGlzdFByb2plY3RzEh8ucmVsaWFudC52MS5MaXN0UHJvamVjdHNSZXF1ZXN0GiAucmVsaWFudC52MS5MaXN0UHJvamVjdHNSZXNwb25zZSIAEk0KCkdldFByb2plY3QSHS5yZWxpYW50LnYxLkdldFByb2plY3RSZXF1ZXN0Gh4ucmVsaWFudC52MS5HZXRQcm9qZWN0UmVzcG9uc2UiABJWCg1VcGRhdGVQcm9qZWN0EiAucmVsaWFudC52MS5VcGRhdGVQcm9qZWN0UmVxdWVzdBohLnJlbGlhbnQudjEuVXBkYXRlUHJvamVjdFJlc3BvbnNlIgASVgoNRGVsZXRlUHJvamVjdBIgLnJlbGlhbnQudjEuRGVsZXRlUHJvamVjdFJlcXVlc3QaIS5yZWxpYW50LnYxLkRlbGV0ZVByb2plY3RSZXNwb25zZSIAElMKDFRvdWNoUHJvamVjdBIfLnJlbGlhbnQudjEuVG91Y2hQcm9qZWN0UmVxdWVzdBogLnJlbGlhbnQudjEuVG91Y2hQcm9qZWN0UmVzcG9uc2UiABJlChJHZXRQcm9qZWN0TWV0YWRhdGESJS5yZWxpYW50LnYxLkdldFByb2plY3RNZXRhZGF0YVJlcXVlc3QaJi5yZWxpYW50LnYxLkdldFByb2plY3RNZXRhZGF0YVJlc3BvbnNlIgASbgoVVXBkYXRlUHJvamVjdE1ldGFkYXRhEigucmVsaWFudC52MS5VcGRhdGVQcm9qZWN0TWV0YWRhdGFSZXF1ZXN0GikucmVsaWFudC52MS5VcGRhdGVQcm9qZWN0TWV0YWRhdGFSZXNwb25zZSIAEmIKEUdldFByb2plY3RHaXRJbmZvEiQucmVsaWFudC52MS5HZXRQcm9qZWN0R2l0SW5mb1JlcXVlc3QaJS5yZWxpYW50LnYxLkdldFByb2plY3RHaXRJbmZvUmVzcG9uc2UiABJuChVHZXRQcm9qZWN0R2l0QnJhbmNoZXMSKC5yZWxpYW50LnYxLkdldFByb2plY3RHaXRCcmFuY2hlc1JlcXVlc3QaKS5yZWxpYW50LnYxLkdldFByb2plY3RHaXRCcmFuY2hlc1Jlc3BvbnNlIgASawoUR2V0UHJvamVjdEluaXRTdGF0dXMSJy5yZWxpYW50LnYxLkdldFByb2plY3RJbml0U3RhdHVzUmVxdWVzdBooLnJlbGlhbnQudjEuR2V0UHJvamVjdEluaXRTdGF0dXNSZXNwb25zZSIAEmIKEUluaXRpYWxpemVQcm9qZWN0EiQucmVsaWFudC52MS5Jbml0aWFsaXplUHJvamVjdFJlcXVlc3QaJS5yZWxpYW50LnYxLkluaXRpYWxpemVQcm9qZWN0UmVzcG9uc2UiABJiChFHZXRQcm9qZWN0Q2hhbmdlcxIkLnJlbGlhbnQudjEuR2V0UHJvamVjdENoYW5nZXNSZXF1ZXN0GiUucmVsaWFudC52MS5HZXRQcm9qZWN0Q2hhbmdlc1Jlc3BvbnNlIgASYgoRR2V0UHJvamVjdFByb21wdHMSJC5yZWxpYW50LnYxLkdldFByb2plY3RQcm9tcHRzUmVxdWVzdBolLnJlbGlhbnQudjEuR2V0UHJvamVjdFByb21wdHNSZXNwb25zZSIAEmUKElNhdmVQcm9qZWN0UHJvbXB0cxIlLnJlbGlhbnQudjEuU2F2ZVByb2plY3RQcm9tcHRzUmVxdWVzdBomLnJlbGlhbnQudjEuU2F2ZVByb2plY3RQcm9tcHRzUmVzcG9uc2UiABJiChFJbml0aWFsaXplR2l0UmVwbxIkLnJlbGlhbnQudjEuSW5pdGlhbGl6ZUdpdFJlcG9SZXF1ZXN0GiUucmVsaWFudC52MS5Jbml0aWFsaXplR2l0UmVwb1Jlc3BvbnNlIgASgAEKG0xpc3RQcm9qZWN0RGFlbW9uc0ZvckRhZW1vbhIuLnJlbGlhbnQudjEuTGlzdFByb2plY3REYWVtb25zRm9yRGFlbW9uUmVxdWVzdBovLnJlbGlhbnQudjEuTGlzdFByb2plY3REYWVtb25zRm9yRGFlbW9uUmVzcG9uc2UiABJlChJMaXN0UHJvamVjdERhZW1vbnMSJS5yZWxpYW50LnYxLkxpc3RQcm9qZWN0RGFlbW9uc1JlcXVlc3QaJi5yZWxpYW50LnYxLkxpc3RQcm9qZWN0RGFlbW9uc1Jlc3BvbnNlIgASawoUTWFya1Byb2plY3RJbnN0YWxsZWQSJy5yZWxpYW50LnYxLk1hcmtQcm9qZWN0SW5zdGFsbGVkUmVxdWVzdBooLnJlbGlhbnQudjEuTWFya1Byb2plY3RJbnN0YWxsZWRSZXNwb25zZSIAEnoKGUxpc3RSZXBvc2l0b3JpZXNGb3JEYWVtb24SLC5yZWxpYW50LnYxLkxpc3RSZXBvc2l0b3JpZXNGb3JEYWVtb25SZXF1ZXN0Gi0ucmVsaWFudC52MS5MaXN0UmVwb3NpdG9yaWVzRm9yRGFlbW9uUmVzcG9uc2UiABJoChNQdWxsUHJvamVjdE9uRGFlbW9uEiYucmVsaWFudC52MS5QdWxsUHJvamVjdE9uRGFlbW9uUmVxdWVzdBonLnJlbGlhbnQudjEuUHVsbFByb2plY3RPbkRhZW1vblJlc3BvbnNlIgASdAoXUmVtb3ZlUHJvamVjdEZyb21EYWVtb24SKi5yZWxpYW50LnYxLlJlbW92ZVByb2plY3RGcm9tRGFlbW9uUmVxdWVzdBorLnJlbGlhbnQudjEuUmVtb3ZlUHJvamVjdEZyb21EYWVtb25SZXNwb25zZSIAEnEKFlJlY2xvbmVQcm9qZWN0T25EYWVtb24SKS5yZWxpYW50LnYxLlJlY2xvbmVQcm9qZWN0T25EYWVtb25SZXF1ZXN0GioucmVsaWFudC52MS5SZWNsb25lUHJvamVjdE9uRGFlbW9uUmVzcG9uc2UiAEI6WjhnaXRodWIuY29tL3JlbGlhbnQtbGFicy9yZWxpYW50L2dlbi9yZWxpYW50L3YxO3JlbGlhbnR2MWIGcHJvdG8z", [file_reliant_v1_common]);
+  fileDesc("ChhyZWxpYW50L3YxL3Byb2plY3QucHJvdG8SCnJlbGlhbnQudjEi4AIKB1Byb2plY3QSCgoCaWQYASABKAkSDwoHdXNlcl9pZBgCIAEoCRIMCgRuYW1lGAMgASgJEgwKBHBhdGgYBCABKAkSGAoLZGVzY3JpcHRpb24YBSABKAlIAIgBARITCgtpc19naXRfcmVwbxgGIAEoCBIbCg5kZWZhdWx0X2JyYW5jaBgHIAEoCUgBiAEBEhIKCmNyZWF0ZWRfYXQYCCABKAkSEgoKdXBkYXRlZF9hdBgJIAEoCRITCgtsYXN0X2FjdGl2ZRgKIAEoCRIXCgpyZW1vdGVfdXJsGAsgASgJSAKIAQESEAoIaXNfZm9yZ2UYDCABKAgSHwoSZm9yZ2VfcHJvamVjdF9uYW1lGA0gASgJSAOIAQFCDgoMX2Rlc2NyaXB0aW9uQhEKD19kZWZhdWx0X2JyYW5jaEINCgtfcmVtb3RlX3VybEIVChNfZm9yZ2VfcHJvamVjdF9uYW1lItYBCg1Qcm9qZWN0RGFlbW9uEhIKCnByb2plY3RfaWQYASABKAkSEQoJZGFlbW9uX2lkGAIgASgJEgwKBHBhdGgYAyABKAkSGwoOZGVmYXVsdF9icmFuY2gYBCABKAlIAIgBARIRCgljbG9uZWRfYXQYBSABKAkSNgoNaW5zdGFsbF9zdGF0ZRgGIAEoDjIfLnJlbGlhbnQudjEuUHJvamVjdEluc3RhbGxTdGF0ZRIVCg1pbnN0YWxsX2Vycm9yGAcgASgJQhEKD19kZWZhdWx0X2JyYW5jaCKMAQoUQ3JlYXRlUHJvamVjdFJlcXVlc3QSDAoEbmFtZRgBIAEoCRIMCgRwYXRoGAIgASgJEhgKC2Rlc2NyaXB0aW9uGAMgASgJSACIAQESGwoOZGVmYXVsdF9icmFuY2gYBCABKAlIAYgBAUIOCgxfZGVzY3JpcHRpb25CEQoPX2RlZmF1bHRfYnJhbmNoIj0KFUNyZWF0ZVByb2plY3RSZXNwb25zZRIkCgdwcm9qZWN0GAEgASgLMhMucmVsaWFudC52MS5Qcm9qZWN0IjQKE0xpc3RQcm9qZWN0c1JlcXVlc3QSDQoFbGltaXQYASABKAUSDgoGb2Zmc2V0GAIgASgFIkwKFExpc3RQcm9qZWN0c1Jlc3BvbnNlEiUKCHByb2plY3RzGAEgAygLMhMucmVsaWFudC52MS5Qcm9qZWN0Eg0KBXRvdGFsGAIgASgFIicKEUdldFByb2plY3RSZXF1ZXN0EhIKCnByb2plY3RfaWQYASABKAkiOgoSR2V0UHJvamVjdFJlc3BvbnNlEiQKB3Byb2plY3QYASABKAsyEy5yZWxpYW50LnYxLlByb2plY3QioAEKFFVwZGF0ZVByb2plY3RSZXF1ZXN0EhIKCnByb2plY3RfaWQYASABKAkSEQoEbmFtZRgCIAEoCUgAiAEBEhgKC2Rlc2NyaXB0aW9uGAMgASgJSAGIAQESGwoOZGVmYXVsdF9icmFuY2gYBCABKAlIAogBAUIHCgVfbmFtZUIOCgxfZGVzY3JpcHRpb25CEQoPX2RlZmF1bHRfYnJhbmNoIj0KFVVwZGF0ZVByb2plY3RSZXNwb25zZRIkCgdwcm9qZWN0GAEgASgLMhMucmVsaWFudC52MS5Qcm9qZWN0IioKFERlbGV0ZVByb2plY3RSZXF1ZXN0EhIKCnByb2plY3RfaWQYASABKAkiOQoVRGVsZXRlUHJvamVjdFJlc3BvbnNlEg8KB3N1Y2Nlc3MYASABKAgSDwoHbWVzc2FnZRgCIAEoCSIpChNUb3VjaFByb2plY3RSZXF1ZXN0EhIKCnByb2plY3RfaWQYASABKAkiOAoUVG91Y2hQcm9qZWN0UmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCBIPCgdtZXNzYWdlGAIgASgJIi8KGUdldFByb2plY3RNZXRhZGF0YVJlcXVlc3QSEgoKcHJvamVjdF9pZBgBIAEoCSL4AQoaR2V0UHJvamVjdE1ldGFkYXRhUmVzcG9uc2USEgoKcHJvamVjdF9pZBgBIAEoCRIMCgRuYW1lGAIgASgJEgwKBHBhdGgYAyABKAkSGAoLZGVzY3JpcHRpb24YBCABKAlIAIgBARITCgtpc19naXRfcmVwbxgFIAEoCBIbCg5kZWZhdWx0X2JyYW5jaBgGIAEoCUgBiAEBEhIKCmNyZWF0ZWRfYXQYByABKAkSEgoKdXBkYXRlZF9hdBgIIAEoCRITCgtsYXN0X2FjdGl2ZRgJIAEoCUIOCgxfZGVzY3JpcHRpb25CEQoPX2RlZmF1bHRfYnJhbmNoIlwKHFVwZGF0ZVByb2plY3RNZXRhZGF0YVJlcXVlc3QSEgoKcHJvamVjdF9pZBgBIAEoCRIYCgtkZXNjcmlwdGlvbhgCIAEoCUgAiAEBQg4KDF9kZXNjcmlwdGlvbiJFCh1VcGRhdGVQcm9qZWN0TWV0YWRhdGFSZXNwb25zZRIkCgdwcm9qZWN0GAEgASgLMhMucmVsaWFudC52MS5Qcm9qZWN0Ij8KGEdldFByb2plY3RHaXRJbmZvUmVxdWVzdBISCgpwcm9qZWN0X2lkGAEgASgJEg8KB3JlcG9faWQYAiABKAkijAIKGUdldFByb2plY3RHaXRJbmZvUmVzcG9uc2USEgoKcHJvamVjdF9pZBgBIAEoCRITCgtpc19naXRfcmVwbxgCIAEoCBIWCg5jdXJyZW50X2JyYW5jaBgDIAEoCRITCgtoYXNfY2hhbmdlcxgEIAEoCBIOCgZzdGF0dXMYBSABKAkSFAoMc3RhZ2VkX2ZpbGVzGAYgAygJEhYKDnVuc3RhZ2VkX2ZpbGVzGAcgAygJEhcKD3VudHJhY2tlZF9maWxlcxgIIAMoCRINCgVhaGVhZBgJIAEoBRIOCgZiZWhpbmQYCiABKAUSEgoKcmVtb3RlX3VybBgLIAEoCRIPCgdtZXNzYWdlGAwgASgJIpQBCglHaXRCcmFuY2gSDAoEbmFtZRgBIAEoCRISCgppc19jdXJyZW50GAIgASgIEhEKCWlzX3JlbW90ZRgDIAEoCBIQCgh1cHN0cmVhbRgEIAEoCRIXCg9sYXN0X2NvbW1pdF9hZ2UYBSABKAMSEwoLaXNfZGV0YWNoZWQYBiABKAgSEgoKY29tbWl0X3NoYRgHIAEoCSJDChxHZXRQcm9qZWN0R2l0QnJhbmNoZXNSZXF1ZXN0EhIKCnByb2plY3RfaWQYASABKAkSDwoHcmVwb19pZBgCIAEoCSJICh1HZXRQcm9qZWN0R2l0QnJhbmNoZXNSZXNwb25zZRInCghicmFuY2hlcxgBIAMoCzIVLnJlbGlhbnQudjEuR2l0QnJhbmNoIjEKG0dldFByb2plY3RJbml0U3RhdHVzUmVxdWVzdBISCgpwcm9qZWN0X2lkGAEgASgJIlgKHEdldFByb2plY3RJbml0U3RhdHVzUmVzcG9uc2USEwoLaW5pdGlhbGl6ZWQYASABKAgSEgoKcHJvamVjdF9pZBgCIAEoCRIPCgdtZXNzYWdlGAMgASgJIi4KGEluaXRpYWxpemVQcm9qZWN0UmVxdWVzdBISCgpwcm9qZWN0X2lkGAEgASgJImUKGUluaXRpYWxpemVQcm9qZWN0UmVzcG9uc2USEgoKcHJvamVjdF9pZBgBIAEoCRIOCgZzdGF0dXMYAiABKAkSDwoHbWVzc2FnZRgDIAEoCRITCgtpbml0aWFsaXplZBgEIAEoCCKRAQoKRmlsZUNoYW5nZRIMCgRwYXRoGAEgASgJEiwKBnN0YXR1cxgCIAEoDjIcLnJlbGlhbnQudjEuRmlsZUNoYW5nZVN0YXR1cxIMCgRkaWZmGAMgASgJEg8KB2NvbnRlbnQYBCABKAkSGAoQb3JpZ2luYWxfY29udGVudBgFIAEoCRIOCgZpc19uZXcYBiABKAgiPwoYR2V0UHJvamVjdENoYW5nZXNSZXF1ZXN0EhIKCnByb2plY3RfaWQYASABKAkSDwoHcmVwb19pZBgCIAEoCSJnChlHZXRQcm9qZWN0Q2hhbmdlc1Jlc3BvbnNlEg4KBmJyYW5jaBgBIAEoCRIlCgVmaWxlcxgCIAMoCzIWLnJlbGlhbnQudjEuRmlsZUNoYW5nZRITCgt0b3RhbF9maWxlcxgDIAEoBSJwCgZQcm9tcHQSCgoCaWQYASABKAkSDAoEbmFtZRgCIAEoCRIPCgdjb250ZW50GAMgASgJEhMKC2Rlc2NyaXB0aW9uGAQgASgJEhIKCmNyZWF0ZWRfYXQYBSABKAkSEgoKdXBkYXRlZF9hdBgGIAEoCSIuChhHZXRQcm9qZWN0UHJvbXB0c1JlcXVlc3QSEgoKcHJvamVjdF9pZBgBIAEoCSJAChlHZXRQcm9qZWN0UHJvbXB0c1Jlc3BvbnNlEiMKB3Byb21wdHMYASADKAsyEi5yZWxpYW50LnYxLlByb21wdCJUChlTYXZlUHJvamVjdFByb21wdHNSZXF1ZXN0EhIKCnByb2plY3RfaWQYASABKAkSIwoHcHJvbXB0cxgCIAMoCzISLnJlbGlhbnQudjEuUHJvbXB0IlIKGlNhdmVQcm9qZWN0UHJvbXB0c1Jlc3BvbnNlEg8KB21lc3NhZ2UYASABKAkSIwoHcHJvbXB0cxgCIAMoCzISLnJlbGlhbnQudjEuUHJvbXB0InoKGEluaXRpYWxpemVHaXRSZXBvUmVxdWVzdBISCgpwcm9qZWN0X2lkGAEgASgJEhYKDmluaXRpYWxfYnJhbmNoGAIgASgJEhoKEmdpdGlnbm9yZV9wYXR0ZXJucxgDIAMoCRIWCg5pbml0aWFsX2NvbW1pdBgEIAEoCCJtChlJbml0aWFsaXplR2l0UmVwb1Jlc3BvbnNlEg8KB21lc3NhZ2UYASABKAkSEgoKcHJvamVjdF9pZBgCIAEoCRITCgtpc19naXRfcmVwbxgDIAEoCBIWCg5kZWZhdWx0X2JyYW5jaBgEIAEoCSI3CiJMaXN0UHJvamVjdERhZW1vbnNGb3JEYWVtb25SZXF1ZXN0EhEKCWRhZW1vbl9pZBgBIAEoCSJZCiNMaXN0UHJvamVjdERhZW1vbnNGb3JEYWVtb25SZXNwb25zZRIyCg9wcm9qZWN0X2RhZW1vbnMYASADKAsyGS5yZWxpYW50LnYxLlByb2plY3REYWVtb24iGwoZTGlzdFByb2plY3REYWVtb25zUmVxdWVzdCJQChpMaXN0UHJvamVjdERhZW1vbnNSZXNwb25zZRIyCg9wcm9qZWN0X2RhZW1vbnMYASADKAsyGS5yZWxpYW50LnYxLlByb2plY3REYWVtb24iggEKG01hcmtQcm9qZWN0SW5zdGFsbGVkUmVxdWVzdBISCgpwcm9qZWN0X2lkGAEgASgJEhEKCWRhZW1vbl9pZBgCIAEoCRIMCgRwYXRoGAMgASgJEhsKDmRlZmF1bHRfYnJhbmNoGAQgASgJSACIAQFCEQoPX2RlZmF1bHRfYnJhbmNoIlEKHE1hcmtQcm9qZWN0SW5zdGFsbGVkUmVzcG9uc2USMQoOcHJvamVjdF9kYWVtb24YASABKAsyGS5yZWxpYW50LnYxLlByb2plY3REYWVtb24inAEKHENyZWF0ZVByb2plY3RGcm9tUmVwb1JlcXVlc3QSEQoJY2xvbmVfdXJsGAEgASgJEhEKCWRhZW1vbl9pZBgCIAEoCRIRCgRuYW1lGAMgASgJSACIAQESEwoGYnJhbmNoGAQgASgJSAGIAQESEQoEcGF0aBgFIAEoCUgCiAEBQgcKBV9uYW1lQgkKB19icmFuY2hCBwoFX3BhdGginQEKHUNyZWF0ZVByb2plY3RGcm9tUmVwb1Jlc3BvbnNlEiQKB3Byb2plY3QYASABKAsyEy5yZWxpYW50LnYxLlByb2plY3QSMQoOcHJvamVjdF9kYWVtb24YAiABKAsyGS5yZWxpYW50LnYxLlByb2plY3REYWVtb24SDgoGcXVldWVkGAMgASgIEhMKC2RhZW1vbl9uYW1lGAQgASgJInkKEERhZW1vblJlcG9zaXRvcnkSEgoKcHJvamVjdF9pZBgBIAEoCRIMCgRuYW1lGAIgASgJEhIKCnJlbW90ZV91cmwYAyABKAkSDgoGYnJhbmNoGAQgASgJEgwKBHBhdGgYBSABKAkSEQoJY2xvbmVkX2F0GAYgASgJIjUKIExpc3RSZXBvc2l0b3JpZXNGb3JEYWVtb25SZXF1ZXN0EhEKCWRhZW1vbl9pZBgBIAEoCSJXCiFMaXN0UmVwb3NpdG9yaWVzRm9yRGFlbW9uUmVzcG9uc2USMgoMcmVwb3NpdG9yaWVzGAEgAygLMhwucmVsaWFudC52MS5EYWVtb25SZXBvc2l0b3J5IkMKGlB1bGxQcm9qZWN0T25EYWVtb25SZXF1ZXN0EhIKCnByb2plY3RfaWQYASABKAkSEQoJZGFlbW9uX2lkGAIgASgJIi0KG1B1bGxQcm9qZWN0T25EYWVtb25SZXNwb25zZRIOCgZvdXRwdXQYASABKAkiRwoeUmVtb3ZlUHJvamVjdEZyb21EYWVtb25SZXF1ZXN0EhIKCnByb2plY3RfaWQYASABKAkSEQoJZGFlbW9uX2lkGAIgASgJIiEKH1JlbW92ZVByb2plY3RGcm9tRGFlbW9uUmVzcG9uc2UiRgodUmVjbG9uZVByb2plY3RPbkRhZW1vblJlcXVlc3QSEgoKcHJvamVjdF9pZBgBIAEoCRIRCglkYWVtb25faWQYAiABKAkiLgoeUmVjbG9uZVByb2plY3RPbkRhZW1vblJlc3BvbnNlEgwKBHBhdGgYASABKAkqqQEKE1Byb2plY3RJbnN0YWxsU3RhdGUSJQohUFJPSkVDVF9JTlNUQUxMX1NUQVRFX1VOU1BFQ0lGSUVEEAASJAogUFJPSkVDVF9JTlNUQUxMX1NUQVRFX0lOU1RBTExJTkcQARIjCh9QUk9KRUNUX0lOU1RBTExfU1RBVEVfSU5TVEFMTEVEEAISIAocUFJPSkVDVF9JTlNUQUxMX1NUQVRFX0ZBSUxFRBADMrYTCg5Qcm9qZWN0U2VydmljZRJWCg1DcmVhdGVQcm9qZWN0EiAucmVsaWFudC52MS5DcmVhdGVQcm9qZWN0UmVxdWVzdBohLnJlbGlhbnQudjEuQ3JlYXRlUHJvamVjdFJlc3BvbnNlIgASUwoMTGlzdFByb2plY3RzEh8ucmVsaWFudC52MS5MaXN0UHJvamVjdHNSZXF1ZXN0GiAucmVsaWFudC52MS5MaXN0UHJvamVjdHNSZXNwb25zZSIAEk0KCkdldFByb2plY3QSHS5yZWxpYW50LnYxLkdldFByb2plY3RSZXF1ZXN0Gh4ucmVsaWFudC52MS5HZXRQcm9qZWN0UmVzcG9uc2UiABJWCg1VcGRhdGVQcm9qZWN0EiAucmVsaWFudC52MS5VcGRhdGVQcm9qZWN0UmVxdWVzdBohLnJlbGlhbnQudjEuVXBkYXRlUHJvamVjdFJlc3BvbnNlIgASVgoNRGVsZXRlUHJvamVjdBIgLnJlbGlhbnQudjEuRGVsZXRlUHJvamVjdFJlcXVlc3QaIS5yZWxpYW50LnYxLkRlbGV0ZVByb2plY3RSZXNwb25zZSIAElMKDFRvdWNoUHJvamVjdBIfLnJlbGlhbnQudjEuVG91Y2hQcm9qZWN0UmVxdWVzdBogLnJlbGlhbnQudjEuVG91Y2hQcm9qZWN0UmVzcG9uc2UiABJlChJHZXRQcm9qZWN0TWV0YWRhdGESJS5yZWxpYW50LnYxLkdldFByb2plY3RNZXRhZGF0YVJlcXVlc3QaJi5yZWxpYW50LnYxLkdldFByb2plY3RNZXRhZGF0YVJlc3BvbnNlIgASbgoVVXBkYXRlUHJvamVjdE1ldGFkYXRhEigucmVsaWFudC52MS5VcGRhdGVQcm9qZWN0TWV0YWRhdGFSZXF1ZXN0GikucmVsaWFudC52MS5VcGRhdGVQcm9qZWN0TWV0YWRhdGFSZXNwb25zZSIAEmIKEUdldFByb2plY3RHaXRJbmZvEiQucmVsaWFudC52MS5HZXRQcm9qZWN0R2l0SW5mb1JlcXVlc3QaJS5yZWxpYW50LnYxLkdldFByb2plY3RHaXRJbmZvUmVzcG9uc2UiABJuChVHZXRQcm9qZWN0R2l0QnJhbmNoZXMSKC5yZWxpYW50LnYxLkdldFByb2plY3RHaXRCcmFuY2hlc1JlcXVlc3QaKS5yZWxpYW50LnYxLkdldFByb2plY3RHaXRCcmFuY2hlc1Jlc3BvbnNlIgASawoUR2V0UHJvamVjdEluaXRTdGF0dXMSJy5yZWxpYW50LnYxLkdldFByb2plY3RJbml0U3RhdHVzUmVxdWVzdBooLnJlbGlhbnQudjEuR2V0UHJvamVjdEluaXRTdGF0dXNSZXNwb25zZSIAEmIKEUluaXRpYWxpemVQcm9qZWN0EiQucmVsaWFudC52MS5Jbml0aWFsaXplUHJvamVjdFJlcXVlc3QaJS5yZWxpYW50LnYxLkluaXRpYWxpemVQcm9qZWN0UmVzcG9uc2UiABJiChFHZXRQcm9qZWN0Q2hhbmdlcxIkLnJlbGlhbnQudjEuR2V0UHJvamVjdENoYW5nZXNSZXF1ZXN0GiUucmVsaWFudC52MS5HZXRQcm9qZWN0Q2hhbmdlc1Jlc3BvbnNlIgASYgoRR2V0UHJvamVjdFByb21wdHMSJC5yZWxpYW50LnYxLkdldFByb2plY3RQcm9tcHRzUmVxdWVzdBolLnJlbGlhbnQudjEuR2V0UHJvamVjdFByb21wdHNSZXNwb25zZSIAEmUKElNhdmVQcm9qZWN0UHJvbXB0cxIlLnJlbGlhbnQudjEuU2F2ZVByb2plY3RQcm9tcHRzUmVxdWVzdBomLnJlbGlhbnQudjEuU2F2ZVByb2plY3RQcm9tcHRzUmVzcG9uc2UiABJiChFJbml0aWFsaXplR2l0UmVwbxIkLnJlbGlhbnQudjEuSW5pdGlhbGl6ZUdpdFJlcG9SZXF1ZXN0GiUucmVsaWFudC52MS5Jbml0aWFsaXplR2l0UmVwb1Jlc3BvbnNlIgASgAEKG0xpc3RQcm9qZWN0RGFlbW9uc0ZvckRhZW1vbhIuLnJlbGlhbnQudjEuTGlzdFByb2plY3REYWVtb25zRm9yRGFlbW9uUmVxdWVzdBovLnJlbGlhbnQudjEuTGlzdFByb2plY3REYWVtb25zRm9yRGFlbW9uUmVzcG9uc2UiABJlChJMaXN0UHJvamVjdERhZW1vbnMSJS5yZWxpYW50LnYxLkxpc3RQcm9qZWN0RGFlbW9uc1JlcXVlc3QaJi5yZWxpYW50LnYxLkxpc3RQcm9qZWN0RGFlbW9uc1Jlc3BvbnNlIgASawoUTWFya1Byb2plY3RJbnN0YWxsZWQSJy5yZWxpYW50LnYxLk1hcmtQcm9qZWN0SW5zdGFsbGVkUmVxdWVzdBooLnJlbGlhbnQudjEuTWFya1Byb2plY3RJbnN0YWxsZWRSZXNwb25zZSIAEm4KFUNyZWF0ZVByb2plY3RGcm9tUmVwbxIoLnJlbGlhbnQudjEuQ3JlYXRlUHJvamVjdEZyb21SZXBvUmVxdWVzdBopLnJlbGlhbnQudjEuQ3JlYXRlUHJvamVjdEZyb21SZXBvUmVzcG9uc2UiABJ6ChlMaXN0UmVwb3NpdG9yaWVzRm9yRGFlbW9uEiwucmVsaWFudC52MS5MaXN0UmVwb3NpdG9yaWVzRm9yRGFlbW9uUmVxdWVzdBotLnJlbGlhbnQudjEuTGlzdFJlcG9zaXRvcmllc0ZvckRhZW1vblJlc3BvbnNlIgASaAoTUHVsbFByb2plY3RPbkRhZW1vbhImLnJlbGlhbnQudjEuUHVsbFByb2plY3RPbkRhZW1vblJlcXVlc3QaJy5yZWxpYW50LnYxLlB1bGxQcm9qZWN0T25EYWVtb25SZXNwb25zZSIAEnQKF1JlbW92ZVByb2plY3RGcm9tRGFlbW9uEioucmVsaWFudC52MS5SZW1vdmVQcm9qZWN0RnJvbURhZW1vblJlcXVlc3QaKy5yZWxpYW50LnYxLlJlbW92ZVByb2plY3RGcm9tRGFlbW9uUmVzcG9uc2UiABJxChZSZWNsb25lUHJvamVjdE9uRGFlbW9uEikucmVsaWFudC52MS5SZWNsb25lUHJvamVjdE9uRGFlbW9uUmVxdWVzdBoqLnJlbGlhbnQudjEuUmVjbG9uZVByb2plY3RPbkRhZW1vblJlc3BvbnNlIgBCOlo4Z2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vcmVsaWFudC92MTtyZWxpYW50djFiBnByb3RvMw", [file_reliant_v1_common]);
 
 /**
  * Project represents a project in the system
@@ -132,7 +132,8 @@ export type ProjectDaemon = Message<"reliant.v1.ProjectDaemon"> & {
   daemonId: string;
 
   /**
-   * Absolute path on that daemon where the clone lives.
+   * Absolute path on that daemon where the clone lives — or WILL live, when
+   * install_state is INSTALLING. A path here is not proof of a checkout.
    *
    * @generated from field: string path = 3;
    */
@@ -147,6 +148,22 @@ export type ProjectDaemon = Message<"reliant.v1.ProjectDaemon"> & {
    * @generated from field: string cloned_at = 5;
    */
   clonedAt: string;
+
+  /**
+   * How far the checkout has got. Rows written before this field existed
+   * read as INSTALLED, which is accurate: the old flow only ever wrote a row
+   * after a clone had completed.
+   *
+   * @generated from field: reliant.v1.ProjectInstallState install_state = 6;
+   */
+  installState: ProjectInstallState;
+
+  /**
+   * Why the clone failed. Empty unless install_state is FAILED.
+   *
+   * @generated from field: string install_error = 7;
+   */
+  installError: string;
 };
 
 /**
@@ -1285,6 +1302,101 @@ export const MarkProjectInstalledResponseSchema: GenMessage<MarkProjectInstalled
   messageDesc(file_reliant_v1_project, 42);
 
 /**
+ * CreateProjectFromRepoRequest adds a GitHub repo as a project on a daemon.
+ *
+ * @generated from message reliant.v1.CreateProjectFromRepoRequest
+ */
+export type CreateProjectFromRepoRequest = Message<"reliant.v1.CreateProjectFromRepoRequest"> & {
+  /**
+   * The repo to clone, as its https clone URL.
+   *
+   * @generated from field: string clone_url = 1;
+   */
+  cloneUrl: string;
+
+  /**
+   * Which machine to clone onto. Required: with several machines the choice
+   * is the user's, and guessing it silently puts the checkout somewhere they
+   * did not ask for.
+   *
+   * @generated from field: string daemon_id = 2;
+   */
+  daemonId: string;
+
+  /**
+   * Defaults to the repo name when empty.
+   *
+   * @generated from field: optional string name = 3;
+   */
+  name?: string | undefined;
+
+  /**
+   * Defaults to the repo's default branch when empty.
+   *
+   * @generated from field: optional string branch = 4;
+   */
+  branch?: string | undefined;
+
+  /**
+   * Absolute path on the daemon. Defaults to the conventional projects
+   * directory for the repo name.
+   *
+   * @generated from field: optional string path = 5;
+   */
+  path?: string | undefined;
+};
+
+/**
+ * Describes the message reliant.v1.CreateProjectFromRepoRequest.
+ * Use `create(CreateProjectFromRepoRequestSchema)` to create a new message.
+ */
+export const CreateProjectFromRepoRequestSchema: GenMessage<CreateProjectFromRepoRequest> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_project, 43);
+
+/**
+ * @generated from message reliant.v1.CreateProjectFromRepoResponse
+ */
+export type CreateProjectFromRepoResponse = Message<"reliant.v1.CreateProjectFromRepoResponse"> & {
+  /**
+   * The project row, created immediately so the user has something to look
+   * at while the clone runs.
+   *
+   * @generated from field: reliant.v1.Project project = 1;
+   */
+  project?: Project | undefined;
+
+  /**
+   * Where the checkout lives or will live, carrying the install state.
+   *
+   * @generated from field: reliant.v1.ProjectDaemon project_daemon = 2;
+   */
+  projectDaemon?: ProjectDaemon | undefined;
+
+  /**
+   * FALSE only if the clone had already completed by the time we replied.
+   * True means the command is queued and the checkout does not exist yet —
+   * clients must not tell the user the repo is ready.
+   *
+   * @generated from field: bool queued = 3;
+   */
+  queued: boolean;
+
+  /**
+   * The machine the clone is waiting on, named so the UI can say which.
+   *
+   * @generated from field: string daemon_name = 4;
+   */
+  daemonName: string;
+};
+
+/**
+ * Describes the message reliant.v1.CreateProjectFromRepoResponse.
+ * Use `create(CreateProjectFromRepoResponseSchema)` to create a new message.
+ */
+export const CreateProjectFromRepoResponseSchema: GenMessage<CreateProjectFromRepoResponse> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_project, 44);
+
+/**
  * DaemonRepository is one cloned project on a daemon, denormalized with
  * project metadata. Used by admin "Repositories" tabs in the dashboard /
  * admin-web; the ProjectPicker keeps using the leaner ProjectDaemon shape.
@@ -1338,7 +1450,7 @@ export type DaemonRepository = Message<"reliant.v1.DaemonRepository"> & {
  * Use `create(DaemonRepositorySchema)` to create a new message.
  */
 export const DaemonRepositorySchema: GenMessage<DaemonRepository> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_project, 43);
+  messageDesc(file_reliant_v1_project, 45);
 
 /**
  * ListRepositoriesForDaemonRequest filters by daemon.
@@ -1357,7 +1469,7 @@ export type ListRepositoriesForDaemonRequest = Message<"reliant.v1.ListRepositor
  * Use `create(ListRepositoriesForDaemonRequestSchema)` to create a new message.
  */
 export const ListRepositoriesForDaemonRequestSchema: GenMessage<ListRepositoriesForDaemonRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_project, 44);
+  messageDesc(file_reliant_v1_project, 46);
 
 /**
  * ListRepositoriesForDaemonResponse returns matching rows joined with project
@@ -1377,7 +1489,7 @@ export type ListRepositoriesForDaemonResponse = Message<"reliant.v1.ListReposito
  * Use `create(ListRepositoriesForDaemonResponseSchema)` to create a new message.
  */
 export const ListRepositoriesForDaemonResponseSchema: GenMessage<ListRepositoriesForDaemonResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_project, 45);
+  messageDesc(file_reliant_v1_project, 47);
 
 /**
  * PullProjectOnDaemonRequest runs `git pull` on a specific clone.
@@ -1401,7 +1513,7 @@ export type PullProjectOnDaemonRequest = Message<"reliant.v1.PullProjectOnDaemon
  * Use `create(PullProjectOnDaemonRequestSchema)` to create a new message.
  */
 export const PullProjectOnDaemonRequestSchema: GenMessage<PullProjectOnDaemonRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_project, 46);
+  messageDesc(file_reliant_v1_project, 48);
 
 /**
  * PullProjectOnDaemonResponse returns the trimmed git pull output.
@@ -1420,7 +1532,7 @@ export type PullProjectOnDaemonResponse = Message<"reliant.v1.PullProjectOnDaemo
  * Use `create(PullProjectOnDaemonResponseSchema)` to create a new message.
  */
 export const PullProjectOnDaemonResponseSchema: GenMessage<PullProjectOnDaemonResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_project, 47);
+  messageDesc(file_reliant_v1_project, 49);
 
 /**
  * RemoveProjectFromDaemonRequest removes an on-disk clone + its
@@ -1445,7 +1557,7 @@ export type RemoveProjectFromDaemonRequest = Message<"reliant.v1.RemoveProjectFr
  * Use `create(RemoveProjectFromDaemonRequestSchema)` to create a new message.
  */
 export const RemoveProjectFromDaemonRequestSchema: GenMessage<RemoveProjectFromDaemonRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_project, 48);
+  messageDesc(file_reliant_v1_project, 50);
 
 /**
  * RemoveProjectFromDaemonResponse is empty on success.
@@ -1460,7 +1572,7 @@ export type RemoveProjectFromDaemonResponse = Message<"reliant.v1.RemoveProjectF
  * Use `create(RemoveProjectFromDaemonResponseSchema)` to create a new message.
  */
 export const RemoveProjectFromDaemonResponseSchema: GenMessage<RemoveProjectFromDaemonResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_project, 49);
+  messageDesc(file_reliant_v1_project, 51);
 
 /**
  * RecloneProjectOnDaemonRequest blows away the on-disk clone and re-clones
@@ -1485,7 +1597,7 @@ export type RecloneProjectOnDaemonRequest = Message<"reliant.v1.RecloneProjectOn
  * Use `create(RecloneProjectOnDaemonRequestSchema)` to create a new message.
  */
 export const RecloneProjectOnDaemonRequestSchema: GenMessage<RecloneProjectOnDaemonRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_project, 50);
+  messageDesc(file_reliant_v1_project, 52);
 
 /**
  * RecloneProjectOnDaemonResponse returns the (potentially-changed) clone path.
@@ -1504,7 +1616,46 @@ export type RecloneProjectOnDaemonResponse = Message<"reliant.v1.RecloneProjectO
  * Use `create(RecloneProjectOnDaemonResponseSchema)` to create a new message.
  */
 export const RecloneProjectOnDaemonResponseSchema: GenMessage<RecloneProjectOnDaemonResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_project, 51);
+  messageDesc(file_reliant_v1_project, 53);
+
+/**
+ * Where a project's checkout has got to on one daemon.
+ *
+ * @generated from enum reliant.v1.ProjectInstallState
+ */
+export enum ProjectInstallState {
+  /**
+   * @generated from enum value: PROJECT_INSTALL_STATE_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * The clone is queued or running. The path is where the checkout WILL be.
+   *
+   * @generated from enum value: PROJECT_INSTALL_STATE_INSTALLING = 1;
+   */
+  INSTALLING = 1,
+
+  /**
+   * The checkout exists on that daemon.
+   *
+   * @generated from enum value: PROJECT_INSTALL_STATE_INSTALLED = 2;
+   */
+  INSTALLED = 2,
+
+  /**
+   * The clone ran and failed. `install_error` says why.
+   *
+   * @generated from enum value: PROJECT_INSTALL_STATE_FAILED = 3;
+   */
+  FAILED = 3,
+}
+
+/**
+ * Describes the enum reliant.v1.ProjectInstallState.
+ */
+export const ProjectInstallStateSchema: GenEnum<ProjectInstallState> = /*@__PURE__*/
+  enumDesc(file_reliant_v1_project, 0);
 
 /**
  * ProjectService handles project-related operations
@@ -1700,9 +1851,12 @@ export const ProjectService: GenService<{
   },
   /**
    * MarkProjectInstalled records that a project has a clone on a daemon.
-   * Called after gitService.cloneRepo() succeeds so the picker can see the
-   * project on that daemon. Idempotent — re-running with the same
-   * (project, daemon) updates the path/branch.
+   * Idempotent — re-running with the same (project, daemon) updates the
+   * path/branch.
+   *
+   * Prefer CreateProjectFromRepo for the add-a-project-from-GitHub flow; this
+   * remains for callers that cloned by some other route and only need to
+   * record the result.
    *
    * @generated from rpc reliant.v1.ProjectService.MarkProjectInstalled
    */
@@ -1710,6 +1864,30 @@ export const ProjectService: GenService<{
     methodKind: "unary";
     input: typeof MarkProjectInstalledRequestSchema;
     output: typeof MarkProjectInstalledResponseSchema;
+  },
+  /**
+   * CreateProjectFromRepo adds a GitHub repository as a project on a daemon:
+   * it starts the clone, creates the project row, and records where the
+   * checkout will live — in one call, in one place.
+   *
+   * It replaces a four-call client chain (ListGitRepos -> CloneRepo ->
+   * CreateProject -> MarkProjectInstalled) whose steps could each fail
+   * independently, leaving a project with no clone or a clone with no
+   * project, with no server-side record that the sequence was ever started.
+   *
+   * It is honest about what has happened. The clone is dispatched to the
+   * daemon through the control plane, which QUEUES it durably rather than
+   * waiting — so a machine that is asleep or still booting is a perfectly
+   * good target, and the response says `queued` with the project in its
+   * `installing` state. The real outcome arrives later, when the daemon runs
+   * the command, and moves the project to `installed` or `failed`.
+   *
+   * @generated from rpc reliant.v1.ProjectService.CreateProjectFromRepo
+   */
+  createProjectFromRepo: {
+    methodKind: "unary";
+    input: typeof CreateProjectFromRepoRequestSchema;
+    output: typeof CreateProjectFromRepoResponseSchema;
   },
   /**
    * ListRepositoriesForDaemon returns the projects cloned on the given daemon,

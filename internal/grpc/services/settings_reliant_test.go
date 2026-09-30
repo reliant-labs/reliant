@@ -39,6 +39,10 @@ func (f *fakeControlPlaneClient) DeleteCurrentUserAccount(context.Context, strin
 	return nil, nil
 }
 
+func (f *fakeControlPlaneClient) CloneRepoOntoDaemon(context.Context, string, controlplane.CloneRepoRequest) (controlplane.CloneRepoResult, error) {
+	return controlplane.CloneRepoResult{}, nil
+}
+
 func TestSettingsService_SyncReliantProvider_PersistsKeyAndEmitsRefetch(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()

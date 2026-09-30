@@ -324,13 +324,16 @@ migration:
 		exit 1; \
 	fi
 	@echo "$(YELLOW)Creating migration: $(NAME)$(NC)"
-	@TIMESTAMP=$$(( $$(date +%s) * 1000000 )); \
-	LATEST=$$(ls -1 internal/db/migrations/postgres/*.sql 2>/dev/null | xargs -I{} basename {} | grep -oE '^[0-9]+' | sort -rn | head -1 || echo "0"); \
-	if [ "$$TIMESTAMP" -le "$$LATEST" ]; then \
-		TIMESTAMP=$$((LATEST + 1)); \
-		echo "$(YELLOW)⚠️  Timestamp collision detected, bumped to $$TIMESTAMP$(NC)"; \
-	fi; \
-	FILE="internal/db/migrations/postgres/$${TIMESTAMP}_$(NAME).sql"; \
+	@# A UNIX-epoch-times-a-million version produced a filename that
+	@# TestNewMigrationsCarryARealTimestamp rejects: it wants the
+	@# YYYYMMDDHHMMSS form goose itself generates, because that is what
+	@# sorts and reads as a date. So delegate to goose rather than
+	@# re-deriving a version here and disagreeing with the test.
+	@#
+	@# goose scaffolds a `-- +goose Down` section; this project never writes
+	@# down migrations (we roll forward), so it is stripped immediately.
+	@goose -dir internal/db/migrations/postgres create $(NAME) sql > /dev/null
+	@FILE=$$(ls -t internal/db/migrations/postgres/*_$(NAME).sql | head -1); \
 	printf -- '-- +goose Up\n\n' > "$$FILE"; \
 	echo "$(GREEN)✅ Migration created: $$FILE$(NC)"
 	@echo "$(YELLOW)Next steps:$(NC)"

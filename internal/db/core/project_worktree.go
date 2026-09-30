@@ -41,12 +41,36 @@ type Project struct {
 // single Project may have rows for multiple daemons (desktop + cloud), each
 // with its own checkout path. Backs the project/daemon picker.
 type ProjectDaemon struct {
-	ProjectID     string    `json:"project_id"`
-	DaemonID      string    `json:"daemon_id"`
+	ProjectID string `json:"project_id"`
+	DaemonID  string `json:"daemon_id"`
+	// Where the checkout lives — or WILL live, while InstallState is
+	// ProjectInstallInstalling. A path here is not proof of a checkout.
 	Path          string    `json:"path"`
 	DefaultBranch *string   `json:"default_branch,omitempty"`
 	ClonedAt      time.Time `json:"cloned_at"`
+	// InstallState is how far the clone has got. Rows written before this
+	// existed read as installed, which is accurate: the old flow only wrote
+	// a row once a clone had completed.
+	InstallState ProjectInstallState `json:"install_state"`
+	// InstallError is why the clone failed; empty unless it did.
+	InstallError string `json:"install_error,omitempty"`
+	// InstallRequestID ties the row to a queued daemon command, so the
+	// outcome notification — which carries no project id — can find it.
+	InstallRequestID string `json:"install_request_id,omitempty"`
 }
+
+// ProjectInstallState is how far a project's checkout has got on one daemon.
+type ProjectInstallState string
+
+const (
+	// ProjectInstallInstalling means the clone is queued or running. A
+	// daemon that is asleep or booting can hold one of these for a while.
+	ProjectInstallInstalling ProjectInstallState = "installing"
+	// ProjectInstallInstalled means the checkout exists.
+	ProjectInstallInstalled ProjectInstallState = "installed"
+	// ProjectInstallFailed means the clone ran and failed.
+	ProjectInstallFailed ProjectInstallState = "failed"
+)
 
 // CleanupMetadata tracks what was cleaned up when archiving a worktree.
 type CleanupMetadata struct {
@@ -159,6 +183,15 @@ type ProjectStore interface {
 	// Project ↔ Daemon installations. A row exists for each daemon that has
 	// a local clone of the project.
 	UpsertProjectDaemon(ctx context.Context, projectID, daemonID, path string, defaultBranch *string) error
+	// UpsertQueuedProjectDaemon records a clone that is queued but has not
+	// run; path is where the checkout WILL be.
+	UpsertQueuedProjectDaemon(ctx context.Context, projectID, daemonID, path string, defaultBranch *string, requestID string) error
+	// ResolveQueuedProjectDaemon applies the outcome the daemon reported,
+	// keyed by request id. A non-empty installErr marks the row failed.
+	ResolveQueuedProjectDaemon(ctx context.Context, requestID, installErr string) error
+	// MarkProjectDaemonInstalled settles a queued clone from a filesystem
+	// announcement, which names the path but carries no request id.
+	MarkProjectDaemonInstalled(ctx context.Context, projectID, daemonID string) error
 	ListProjectDaemonsForProject(ctx context.Context, projectID string) ([]*ProjectDaemon, error)
 	ListProjectDaemonsForDaemon(ctx context.Context, daemonID string) ([]*ProjectDaemon, error)
 	DeleteProjectDaemon(ctx context.Context, projectID, daemonID string) error
