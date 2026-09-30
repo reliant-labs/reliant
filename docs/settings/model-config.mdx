@@ -151,9 +151,6 @@ models:
         supports_caching: false
         max_context_window: 32000
         max_output_tokens: 4096
-      cost:
-        input_per_1m: 0
-        output_per_1m: 0
       providers:
         - driver: local
           api_model: codellama:latest
@@ -185,8 +182,6 @@ Custom models have no `tags:` field of their own—list the model's `id` under `
 - `max_context_window`
 - `max_output_tokens`
 
-**cost** specifies pricing per million tokens. Set both to `0` for local models with no API cost.
-
 **providers** maps the model to API endpoints. Each entry specifies:
 - `driver`: which provider driver to use
 - `api_model`: the model identifier sent to that provider API
@@ -213,9 +208,6 @@ models:
         supports_caching: false
         max_context_window: 65536
         max_output_tokens: 8192
-      cost:
-        input_per_1m: 0.9
-        output_per_1m: 0.9
       providers:
         - driver: openrouter
           api_model: mistralai/mixtral-8x22b-instruct
@@ -319,9 +311,6 @@ models:
         supports_caching: false
         max_context_window: 32768
         max_output_tokens: 8192
-      cost:
-        input_per_1m: 0
-        output_per_1m: 0
       providers:
         - driver: local
           api_model: qwen2.5:32b
@@ -337,9 +326,6 @@ models:
         supports_caching: false
         max_context_window: 128000
         max_output_tokens: 8192
-      cost:
-        input_per_1m: 0
-        output_per_1m: 0
       providers:
         - driver: local
           api_model: deepseek-coder-v2:latest
@@ -353,7 +339,6 @@ With this configuration:
 - Workflows requesting `[flagship]` prefer GPT Codex at `xhigh` effort
 - Workflows requesting `[fast]` prefer your local Qwen model
 - Workflows requesting `[reasoning]` can use your local DeepSeek Coder
-- All models participate in Reliant's cost tracking
 
 ## Validation
 

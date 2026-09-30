@@ -2,17 +2,18 @@
 // Reliant LLM gateway, as a public, cross-module surface.
 //
 // It exists so that the deployment artifacts describing the gateway — the
-// LiteLLM proxy's model_list, the gateway key allowlist, and the billing
-// pricing seeds — can be GENERATED from the same catalog the app resolves
-// against, instead of being hand-maintained alongside it. Those lists having
-// drifted apart is what produced "Invalid model name passed in
-// model=claude-opus-5" in production.
+// LiteLLM proxy's model_list and the gateway key allowlist — can be GENERATED
+// from the same catalog the app resolves against, instead of being
+// hand-maintained alongside it. Those lists having drifted apart is what
+// produced "Invalid model name passed in model=claude-opus-5" in production.
 //
 // The surface here is deliberately narrow. It projects models.yaml down to the
-// four facts a downstream generator needs — catalog id, gateway api_model,
-// billing aliases, and per-1M costs — and nothing else. Capabilities, driver
-// settings and thinking policy are Reliant's own business: exposing them would
-// turn every internal refactor into a downstream break.
+// three facts a downstream generator needs — catalog id, gateway api_model, and
+// billing aliases — and nothing else. Prices are absent by design: an LLM's
+// cost is whatever the upstream reports for that request, so a price table here
+// would be a second, drifting answer to a question the gateway already answers.
+// Capabilities, driver settings and thinking policy are Reliant's own business:
+// exposing them would turn every internal refactor into a downstream break.
 //
 // The types below are local struct copies rather than aliases of the internal
 // ones, for the same reason. Callers depend on this projection, not on the
@@ -21,7 +22,6 @@ package llmcatalog
 
 import (
 	"fmt"
-	"math"
 
 	"github.com/reliant-labs/reliant/internal/llm/models"
 )
@@ -52,33 +52,6 @@ type Model struct {
 	// used, so a pricing table keyed by a partial alias set silently bills
 	// the missing spellings at zero.
 	Aliases []string
-
-	// Cost is the model's list price.
-	Cost Cost
-}
-
-// Cost is a model's price, in US dollars per one million tokens.
-type Cost struct {
-	InputPer1MUSD       float64
-	OutputPer1MUSD      float64
-	CachedInputPer1MUSD float64
-}
-
-// InputPer1MUSDNanos returns the input price in integer USD nanos.
-//
-// Billing stores prices as nanos to keep arithmetic exact, and converting by
-// hand is a 1e9-sized mistake waiting to happen — so the conversion lives here
-// once rather than in each consumer.
-func (c Cost) InputPer1MUSDNanos() int64 { return usdNanos(c.InputPer1MUSD) }
-
-// OutputPer1MUSDNanos returns the output price in integer USD nanos.
-func (c Cost) OutputPer1MUSDNanos() int64 { return usdNanos(c.OutputPer1MUSD) }
-
-// CachedInputPer1MUSDNanos returns the cached-input price in integer USD nanos.
-func (c Cost) CachedInputPer1MUSDNanos() int64 { return usdNanos(c.CachedInputPer1MUSD) }
-
-func usdNanos(usd float64) int64 {
-	return int64(math.Round(usd * 1e9))
 }
 
 // gatewayRoster is the curated set of catalog IDs the managed gateway serves,
@@ -201,10 +174,5 @@ func project(definition models.ModelDefinition) (Model, error) {
 		Name:     definition.Name,
 		APIModel: apiModel,
 		Aliases:  aliases,
-		Cost: Cost{
-			InputPer1MUSD:       definition.Cost.InputPer1M,
-			OutputPer1MUSD:      definition.Cost.OutputPer1M,
-			CachedInputPer1MUSD: definition.Cost.CachedInputPer1M,
-		},
 	}, nil
 }

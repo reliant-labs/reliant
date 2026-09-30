@@ -11,9 +11,9 @@ import (
 
 // TestGatewayModelsMatchCatalogRoster is the table test: every model the
 // package exposes must correspond to a real models.yaml entry that carries a
-// `reliant` provider mapping, and the projected api_model and costs must be
-// exactly what that entry declares. This is what stops the exposed surface
-// from drifting into a fifth hand-maintained copy.
+// `reliant` provider mapping, and the projected api_model must be exactly what
+// that entry declares. This is what stops the exposed surface from drifting
+// into a fifth hand-maintained copy.
 func TestGatewayModelsMatchCatalogRoster(t *testing.T) {
 	registry, err := models.ParseRegistry()
 	require.NoError(t, err)
@@ -38,9 +38,6 @@ func TestGatewayModelsMatchCatalogRoster(t *testing.T) {
 				"exposed model %q has no reliant provider mapping in models.yaml", model.ID)
 
 			assert.Equal(t, reliantAPIModel, model.APIModel)
-			assert.Equal(t, definition.Cost.InputPer1M, model.Cost.InputPer1MUSD)
-			assert.Equal(t, definition.Cost.OutputPer1M, model.Cost.OutputPer1MUSD)
-			assert.Equal(t, definition.Cost.CachedInputPer1M, model.Cost.CachedInputPer1MUSD)
 
 			// The catalog id and the gateway api_model are both billable
 			// spellings, so both must be aliases — the billing seeds key off
@@ -115,26 +112,6 @@ func TestGatewayAliasesCoverEveryProviderSpelling(t *testing.T) {
 		return
 	}
 	t.Fatal("claude-5-opus is not on the gateway roster")
-}
-
-// TestCostNanosConversion pins the USD-to-nanos conversion. Billing seeds are
-// integer nanos while the catalog is float dollars, so an error here is an
-// error by a factor of a billion.
-func TestCostNanosConversion(t *testing.T) {
-	cost := llmcatalog.Cost{
-		InputPer1MUSD:       5.0,
-		OutputPer1MUSD:      25.0,
-		CachedInputPer1MUSD: 0.5,
-	}
-	assert.Equal(t, int64(5_000_000_000), cost.InputPer1MUSDNanos())
-	assert.Equal(t, int64(25_000_000_000), cost.OutputPer1MUSDNanos())
-	assert.Equal(t, int64(500_000_000), cost.CachedInputPer1MUSDNanos())
-
-	// 0.15 and 0.08 are not exactly representable in binary floating point;
-	// they must still round to whole nanos rather than truncating downward.
-	assert.Equal(t, int64(150_000_000), llmcatalog.Cost{InputPer1MUSD: 0.15}.InputPer1MUSDNanos())
-	assert.Equal(t, int64(80_000_000), llmcatalog.Cost{InputPer1MUSD: 0.08}.InputPer1MUSDNanos())
-	assert.Equal(t, int64(0), llmcatalog.Cost{}.CachedInputPer1MUSDNanos())
 }
 
 // TestGatewayModelIDsAreUnique guards the roster itself. It is the one

@@ -27,13 +27,6 @@ func TestImageGenModelsAreDeclaredWithImageModality(t *testing.T) {
 			t.Errorf("model %s is tagged %q but declares output modalities %v",
 				model.ID, DefaultImageGenTag, model.Capabilities.EffectiveOutputModalities())
 		}
-		// Image pricing is per image, not per token, and spend is metered by
-		// the control-plane proxy from LiteLLM's cost header. A per-token cost
-		// here would be read by the model picker and shown to a user as fact.
-		if model.Cost.InputPer1M != 0 || model.Cost.OutputPer1M != 0 {
-			t.Errorf("model %s declares per-token cost (%v in / %v out); image models are billed per image",
-				model.ID, model.Cost.InputPer1M, model.Cost.OutputPer1M)
-		}
 		for _, provider := range model.Providers {
 			if provider.APIModel == "" {
 				t.Errorf("model %s provider %s has no api_model", model.ID, provider.Driver)

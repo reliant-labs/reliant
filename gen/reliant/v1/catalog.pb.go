@@ -38,10 +38,6 @@ type ModelInfo struct {
 	ContextWindow int64 `protobuf:"varint,5,opt,name=context_window,json=contextWindow,proto3" json:"context_window,omitempty"`
 	// Default max output tokens
 	DefaultMaxTokens int64 `protobuf:"varint,6,opt,name=default_max_tokens,json=defaultMaxTokens,proto3" json:"default_max_tokens,omitempty"`
-	// Cost per 1M input tokens
-	CostPer_1MIn float64 `protobuf:"fixed64,7,opt,name=cost_per_1m_in,json=costPer1mIn,proto3" json:"cost_per_1m_in,omitempty"`
-	// Cost per 1M output tokens
-	CostPer_1MOut float64 `protobuf:"fixed64,8,opt,name=cost_per_1m_out,json=costPer1mOut,proto3" json:"cost_per_1m_out,omitempty"`
 	// Whether the model supports reasoning/thinking
 	CanReason bool `protobuf:"varint,9,opt,name=can_reason,json=canReason,proto3" json:"can_reason,omitempty"`
 	// Whether the model supports file attachments
@@ -129,20 +125,6 @@ func (x *ModelInfo) GetContextWindow() int64 {
 func (x *ModelInfo) GetDefaultMaxTokens() int64 {
 	if x != nil {
 		return x.DefaultMaxTokens
-	}
-	return 0
-}
-
-func (x *ModelInfo) GetCostPer_1MIn() float64 {
-	if x != nil {
-		return x.CostPer_1MIn
-	}
-	return 0
-}
-
-func (x *ModelInfo) GetCostPer_1MOut() float64 {
-	if x != nil {
-		return x.CostPer_1MOut
 	}
 	return 0
 }
@@ -472,10 +454,6 @@ type AvailableModelInfo struct {
 	ContextWindow int64 `protobuf:"varint,6,opt,name=context_window,json=contextWindow,proto3" json:"context_window,omitempty"`
 	// Default max output tokens.
 	DefaultMaxTokens int64 `protobuf:"varint,7,opt,name=default_max_tokens,json=defaultMaxTokens,proto3" json:"default_max_tokens,omitempty"`
-	// Cost per 1M input tokens.
-	CostPer_1MIn float64 `protobuf:"fixed64,8,opt,name=cost_per_1m_in,json=costPer1mIn,proto3" json:"cost_per_1m_in,omitempty"`
-	// Cost per 1M output tokens.
-	CostPer_1MOut float64 `protobuf:"fixed64,9,opt,name=cost_per_1m_out,json=costPer1mOut,proto3" json:"cost_per_1m_out,omitempty"`
 	// Whether the model supports reasoning/thinking.
 	CanReason bool `protobuf:"varint,10,opt,name=can_reason,json=canReason,proto3" json:"can_reason,omitempty"`
 	// Whether the model supports file attachments.
@@ -569,20 +547,6 @@ func (x *AvailableModelInfo) GetContextWindow() int64 {
 func (x *AvailableModelInfo) GetDefaultMaxTokens() int64 {
 	if x != nil {
 		return x.DefaultMaxTokens
-	}
-	return 0
-}
-
-func (x *AvailableModelInfo) GetCostPer_1MIn() float64 {
-	if x != nil {
-		return x.CostPer_1MIn
-	}
-	return 0
-}
-
-func (x *AvailableModelInfo) GetCostPer_1MOut() float64 {
-	if x != nil {
-		return x.CostPer_1MOut
 	}
 	return 0
 }
@@ -1764,16 +1728,14 @@ var File_reliant_v1_catalog_proto protoreflect.FileDescriptor
 const file_reliant_v1_catalog_proto_rawDesc = "" +
 	"\n" +
 	"\x18reliant/v1/catalog.proto\x12\n" +
-	"reliant.v1\"\xa1\x04\n" +
+	"reliant.v1\"\x82\x04\n" +
 	"\tModelInfo\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x1a\n" +
 	"\bprovider\x18\x03 \x01(\tR\bprovider\x12\"\n" +
 	"\fcapabilities\x18\x04 \x03(\tR\fcapabilities\x12%\n" +
 	"\x0econtext_window\x18\x05 \x01(\x03R\rcontextWindow\x12,\n" +
-	"\x12default_max_tokens\x18\x06 \x01(\x03R\x10defaultMaxTokens\x12#\n" +
-	"\x0ecost_per_1m_in\x18\a \x01(\x01R\vcostPer1mIn\x12%\n" +
-	"\x0fcost_per_1m_out\x18\b \x01(\x01R\fcostPer1mOut\x12\x1d\n" +
+	"\x12default_max_tokens\x18\x06 \x01(\x03R\x10defaultMaxTokens\x12\x1d\n" +
 	"\n" +
 	"can_reason\x18\t \x01(\bR\tcanReason\x121\n" +
 	"\x14supports_attachments\x18\n" +
@@ -1782,7 +1744,7 @@ const file_reliant_v1_catalog_proto_rawDesc = "" +
 	"\x04tags\x18\f \x03(\tR\x04tags\x12%\n" +
 	"\x0esupports_tools\x18\r \x01(\bR\rsupportsTools\x12)\n" +
 	"\x10supports_caching\x18\x0e \x01(\bR\x0fsupportsCaching\x12:\n" +
-	"\x19supported_thinking_levels\x18\x0f \x03(\tR\x17supportedThinkingLevels\"\x13\n" +
+	"\x19supported_thinking_levels\x18\x0f \x03(\tR\x17supportedThinkingLevelsJ\x04\b\a\x10\bJ\x04\b\b\x10\tR\x0ecost_per_1m_inR\x0fcost_per_1m_out\"\x13\n" +
 	"\x11ListModelsRequest\"\x8b\x01\n" +
 	"\x12ListModelsResponse\x12-\n" +
 	"\x06models\x18\x01 \x03(\v2\x15.reliant.v1.ModelInfoR\x06models\x12\x14\n" +
@@ -1795,7 +1757,7 @@ const file_reliant_v1_catalog_proto_rawDesc = "" +
 	"\x1bListModelsByProviderRequest\x12\x1a\n" +
 	"\bprovider\x18\x01 \x01(\tR\bprovider\"M\n" +
 	"\x1cListModelsByProviderResponse\x12-\n" +
-	"\x06models\x18\x01 \x03(\v2\x15.reliant.v1.ModelInfoR\x06models\"\x8b\x04\n" +
+	"\x06models\x18\x01 \x03(\v2\x15.reliant.v1.ModelInfoR\x06models\"\xec\x03\n" +
 	"\x12AvailableModelInfo\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12!\n" +
 	"\fdisplay_name\x18\x02 \x01(\tR\vdisplayName\x12\x1a\n" +
@@ -1803,9 +1765,7 @@ const file_reliant_v1_catalog_proto_rawDesc = "" +
 	"\x06family\x18\x04 \x01(\tR\x06family\x12\x1b\n" +
 	"\tapi_model\x18\x05 \x01(\tR\bapiModel\x12%\n" +
 	"\x0econtext_window\x18\x06 \x01(\x03R\rcontextWindow\x12,\n" +
-	"\x12default_max_tokens\x18\a \x01(\x03R\x10defaultMaxTokens\x12#\n" +
-	"\x0ecost_per_1m_in\x18\b \x01(\x01R\vcostPer1mIn\x12%\n" +
-	"\x0fcost_per_1m_out\x18\t \x01(\x01R\fcostPer1mOut\x12\x1d\n" +
+	"\x12default_max_tokens\x18\a \x01(\x03R\x10defaultMaxTokens\x12\x1d\n" +
 	"\n" +
 	"can_reason\x18\n" +
 	" \x01(\bR\tcanReason\x121\n" +
@@ -1813,7 +1773,8 @@ const file_reliant_v1_catalog_proto_rawDesc = "" +
 	"\x0esupports_tools\x18\f \x01(\bR\rsupportsTools\x12)\n" +
 	"\x10supports_caching\x18\r \x01(\bR\x0fsupportsCaching\x12\x12\n" +
 	"\x04tags\x18\x0e \x03(\tR\x04tags\x12\x18\n" +
-	"\aenabled\x18\x0f \x01(\bR\aenabled\"\x1c\n" +
+	"\aenabled\x18\x0f \x01(\bR\aenabledJ\x04\b\b\x10\tJ\x04\b\t\x10\n" +
+	"R\x0ecost_per_1m_inR\x0fcost_per_1m_out\"\x1c\n" +
 	"\x1aListAvailableModelsRequest\"U\n" +
 	"\x1bListAvailableModelsResponse\x126\n" +
 	"\x06models\x18\x01 \x03(\v2\x1e.reliant.v1.AvailableModelInfoR\x06models\"\\\n" +

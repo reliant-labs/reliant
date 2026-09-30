@@ -273,9 +273,6 @@ models:
         supports_caching: false
         max_context_window: 200000
         max_output_tokens: 32768
-      cost:
-        input_per_1m: 0
-        output_per_1m: 0
       providers:
         - driver: local
           api_model: qwen3:latest

@@ -33,6 +33,7 @@ tags:
   powerful:
     - {model: claude-5.1-fable, thinking_level: xhigh}
     - {model: gpt-6-astra, thinking_level: xhigh}
+    - {model: gpt-6.1-sol, thinking_level: xhigh}
     - {model: gpt-5.6-sol, thinking_level: xhigh}
     - {model: gemini-3.8-flash, thinking_level: high}
     - {model: vertex-claude-5.1-fable, thinking_level: xhigh}
@@ -42,12 +43,14 @@ tags:
     - {model: claude-5-opus, thinking_level: high}
     - {model: claude-5.1-fable, thinking_level: xhigh}
     - {model: claude-4.8-opus, thinking_level: high}
+    - {model: claude-5.5-sonnet, thinking_level: high}
     - {model: claude-5-sonnet, thinking_level: high}
     - {model: claude-5-fable, thinking_level: high}
     - {model: claude-4.6-opus, thinking_level: high}
     - {model: claude-4.5-opus, thinking_level: high}
     - {model: gpt-5.5, thinking_level: xhigh}
     - {model: gpt-6-astra, thinking_level: xhigh}
+    - {model: gpt-6.1-sol, thinking_level: xhigh}
     - {model: gpt-5.6-luna, thinking_level: medium}
     - {model: gpt-5.4, thinking_level: xhigh}
     - {model: gpt-5.4-pro, thinking_level: xhigh}
@@ -61,6 +64,7 @@ tags:
     - {model: vertex-claude-5.5-opus, thinking_level: xhigh}
     - {model: vertex-claude-5-opus, thinking_level: high}
     - {model: vertex-claude-4.8-opus, thinking_level: high}
+    - {model: vertex-claude-5.5-sonnet, thinking_level: high}
     - {model: vertex-claude-5-sonnet, thinking_level: high}
     - {model: vertex-claude-5.1-fable, thinking_level: xhigh}
     - {model: vertex-claude-5-fable, thinking_level: high}
@@ -74,8 +78,10 @@ tags:
     # reached its first edit sooner (5.5 explores ~2x more before acting at
     # every effort). flagship stays on 5.5 @ xhigh for orchestration.
     - {model: claude-5-opus, thinking_level: medium}
+    - {model: claude-5.5-sonnet, thinking_level: high}
     - {model: claude-5-sonnet, thinking_level: high}
     - {model: gpt-5.5, thinking_level: xhigh}
+    - {model: gpt-6.1-sol, thinking_level: medium}
     - {model: gpt-5.6-terra, thinking_level: medium}
     - {model: gpt-5.4, thinking_level: xhigh}
     - {model: gemini-3.7-flash, thinking_level: medium}
@@ -87,6 +93,7 @@ tags:
     - {model: gemini-3.5-flash, thinking_level: low}
     - {model: gemini-2.5-pro, thinking_level: high}
     - {model: vertex-claude-5-opus, thinking_level: medium}
+    - {model: vertex-claude-5.5-sonnet, thinking_level: high}
     - {model: vertex-claude-5-sonnet, thinking_level: high}
     - {model: vertex-claude-4.5-sonnet, thinking_level: medium}
     - {model: vertex-gemini-2.5-pro, thinking_level: high}
@@ -96,6 +103,7 @@ tags:
     - {model: claude-4.5-haiku}
     - {model: gpt-5.4-mini, thinking_level: high}
     - {model: gpt-5-mini, thinking_level: medium}
+    - {model: gpt-6-luna, thinking_level: low}
     - {model: gemini-3-flash-preview}
     - {model: gemini-3.1-flash-lite-preview}
     - {model: gemini-2.5-flash}
@@ -109,6 +117,7 @@ tags:
     - {model: claude-4.5-haiku}
     - {model: gpt-5.4-mini, thinking_level: high}
     - {model: gpt-5-mini, thinking_level: medium}
+    - {model: gpt-6-luna, thinking_level: low}
     - {model: gemini-3.1-flash-lite-preview}
     - {model: gemini-2.5-flash}
     - {model: gemini-2.5-flash-lite}
@@ -128,6 +137,7 @@ tags:
   meta:
     - {model: claude-4.5-haiku}
     - {model: gpt-5.4-mini, thinking_level: high}
+    - {model: gpt-6-luna, thinking_level: low}
     - {model: grok-3-mini-beta}
     - {model: vertex-claude-4.5-haiku}
 
@@ -136,12 +146,14 @@ tags:
     - {model: claude-5-opus, thinking_level: high}
     - {model: claude-5.1-fable, thinking_level: xhigh}
     - {model: claude-4.8-opus, thinking_level: high}
+    - {model: claude-5.5-sonnet, thinking_level: high}
     - {model: claude-5-sonnet, thinking_level: high}
     - {model: claude-5-fable, thinking_level: high}
     - {model: claude-4.6-opus, thinking_level: high}
     - {model: claude-4.5-opus, thinking_level: high}
     - {model: gpt-5.5, thinking_level: xhigh}
     - {model: gpt-6-astra, thinking_level: xhigh}
+    - {model: gpt-6.1-sol, thinking_level: xhigh}
     - {model: gpt-5.6-sol, thinking_level: xhigh}
     - {model: gpt-5.6-terra, thinking_level: medium}
     - {model: gpt-5.6-luna, thinking_level: medium}
@@ -165,6 +177,7 @@ tags:
     - {model: vertex-claude-5.5-opus, thinking_level: xhigh}
     - {model: vertex-claude-5-opus, thinking_level: high}
     - {model: vertex-claude-4.8-opus, thinking_level: high}
+    - {model: vertex-claude-5.5-sonnet, thinking_level: high}
     - {model: vertex-claude-5-sonnet, thinking_level: high}
     - {model: vertex-claude-5.1-fable, thinking_level: xhigh}
     - {model: vertex-claude-5-fable, thinking_level: high}
@@ -199,10 +212,6 @@ models:
       max_output_tokens: 128000
       thinking_levels: [low, medium, high, xhigh]
       supported_file_types: [image, pdf, text]
-    cost:
-      input_per_1m: 5.0
-      output_per_1m: 25.0
-      cached_input_per_1m: 0.5
     providers:
       - driver: anthropic
         api_model: claude-opus-5-5
@@ -230,10 +239,6 @@ models:
       max_output_tokens: 64000
       thinking_levels: [low, medium, high, xhigh]
       supported_file_types: [image, pdf, text]
-    cost:
-      input_per_1m: 5.0
-      output_per_1m: 25.0
-      cached_input_per_1m: 0.5
     providers:
       - driver: anthropic
         api_model: claude-opus-5
@@ -263,10 +268,6 @@ models:
       max_output_tokens: 64000
       thinking_levels: [low, medium, high, xhigh]
       supported_file_types: [image, pdf, text]
-    cost:
-      input_per_1m: 10.0
-      output_per_1m: 50.0
-      cached_input_per_1m: 1.0
     providers:
       - driver: anthropic
         api_model: claude-fable-5-1
@@ -292,10 +293,6 @@ models:
       max_output_tokens: 64000
       thinking_levels: [low, medium, high, xhigh]
       supported_file_types: [image, pdf, text]
-    cost:
-      input_per_1m: 5.0
-      output_per_1m: 25.0
-      cached_input_per_1m: 0.5
     providers:
       - driver: anthropic
         api_model: claude-opus-4-8
@@ -308,6 +305,50 @@ models:
       # policy=disabled, restricted_to=[pro_plus,business,enterprise,max]), and the
       # enterprise Copilot tier has been removed. Mapping it here would offer a
       # broken picker option that 400s (model_not_supported) upstream.
+    driver_settings:
+      thinking_mode: adaptive
+
+  # Claude Sonnet 5.5 (2026-09-28). Figures are from Anthropic's model page
+  # (platform.claude.com/docs/en/models/sonnet-5-5), not copied from
+  # claude-5-sonnet below, which differs in one that is easy to miss:
+  # max_tokens is 128000, double sonnet-5's 64000.
+  #
+  # It sits directly above claude-5-sonnet in every tier sonnet-5 is in, at the
+  # same effort, so it takes over exactly the slots sonnet-5 held and none of
+  # the ones above it: no tier winner moves.
+  #
+  # Two API differences from sonnet-5 that the drivers already satisfy:
+  # adaptive thinking is the only accepted mode (thinking:{type:"disabled"} and
+  # budget_tokens both 400), and forced tool_choice ("any" / "tool") 400s. The
+  # only forced-tool caller is chat titling, whose [fast, moderate] ladder
+  # always reaches a haiku first on every provider this model is mapped to.
+  #
+  # No vertexai mapping: Vertex users get vertex-claude-5.5-sonnet. A vertexai
+  # mapping here would put this entry above vertex-claude-5-opus in [moderate]
+  # for a Vertex-only user and repoint that tier. No copilot mapping either —
+  # no Copilot account we have probed lists it, and an unserved mapping 400s.
+  - id: claude-5.5-sonnet
+    name: Claude 5.5 Sonnet
+    visibility: user
+    capabilities:
+      can_reason: true
+      supports_tools: true
+      supports_attachments: true
+      supports_streaming: true
+      supports_caching: true
+      max_context_window: 1000000
+      max_output_tokens: 128000
+      thinking_levels: [low, medium, high, xhigh]
+      supported_file_types: [image, pdf, text]
+    providers:
+      - driver: anthropic
+        api_model: claude-sonnet-5-5
+      - driver: openrouter
+        api_model: anthropic/claude-sonnet-5-5
+      # A mapping records that the gateway COULD route it; it is not sold
+      # until it is added to pkg/llmcatalog's gatewayRoster.
+      - driver: reliant
+        api_model: claude-sonnet-5-5
     driver_settings:
       thinking_mode: adaptive
 
@@ -324,10 +365,6 @@ models:
       max_output_tokens: 64000
       thinking_levels: [low, medium, high, xhigh]
       supported_file_types: [image, pdf, text]
-    cost:
-      input_per_1m: 3.0
-      output_per_1m: 15.0
-      cached_input_per_1m: 0.3
     providers:
       - driver: anthropic
         api_model: claude-sonnet-5
@@ -356,10 +393,6 @@ models:
       max_output_tokens: 64000
       thinking_levels: [low, medium, high, xhigh]
       supported_file_types: [image, pdf, text]
-    cost:
-      input_per_1m: 10.0
-      output_per_1m: 50.0
-      cached_input_per_1m: 1.0
     providers:
       - driver: anthropic
         api_model: claude-fable-5
@@ -383,10 +416,6 @@ models:
       max_output_tokens: 20000
       thinking_levels: [low, medium, high]
       supported_file_types: [image, pdf, text]
-    cost:
-      input_per_1m: 5.0
-      output_per_1m: 25.0
-      cached_input_per_1m: 0.5
     providers:
       - driver: anthropic
         api_model: claude-opus-4-6
@@ -409,10 +438,6 @@ models:
       max_output_tokens: 20000
       thinking_levels: [low, medium, high]
       supported_file_types: [image, pdf, text]
-    cost:
-      input_per_1m: 5.0
-      output_per_1m: 25.0
-      cached_input_per_1m: 0.5
     providers:
       - driver: anthropic
         api_model: claude-opus-4-5-20251101
@@ -461,10 +486,6 @@ models:
       max_output_tokens: 128000
       thinking_levels: [low, medium, high, xhigh]
       supported_file_types: [image, text]
-    cost:
-      input_per_1m: 2.5
-      output_per_1m: 15.0
-      cached_input_per_1m: 0.25
     providers:
       - driver: codex
         api_model: gpt-5.5
@@ -513,13 +534,6 @@ models:
       max_output_tokens: 128000
       thinking_levels: [low, medium, high, xhigh, max]
       supported_file_types: [image, text]
-    cost:
-      # List price. OpenAI bills prompts over 272k at 2x input / 1.5x output for
-      # the whole request; we do not model tiered pricing, so these are the base
-      # rates and a very long request is under-costed rather than mis-costed.
-      input_per_1m: 10.0
-      output_per_1m: 50.0
-      cached_input_per_1m: 1.0
     providers:
       - driver: codex
         api_model: gpt-6-astra
@@ -542,6 +556,81 @@ models:
     # Powerful tier: astra gets its top practical effort. `max` is supported but
     # reserved for explicit opt-in, matching how sol treats max/ultra.
 
+  # GPT-6.1 Sol (2026-09-29) — "near-Astra performance at a lower cost".
+  # Figures from developers.openai.com/api/docs/models/gpt-6.1-sol.
+  #
+  # Listed after astra (and after gpt-5.5 in flagship/moderate/reasoning), so it
+  # is a fallback in every tier rather than a new winner: the codex and openai
+  # tier pins are unchanged. It supersedes gpt-6-sol (2026-09-22), which is
+  # therefore not catalogued.
+  #
+  # Tools require the Responses API — Chat Completions refuses tool calling for
+  # this model — so preferred_endpoint is load-bearing. Efforts are exactly
+  # low..max: unlike the rest of the GPT-6 family it rejects `none`/`minimal`.
+  #
+  # No codex mapping. The ChatGPT-account backend serves a per-model subset
+  # that must be probed (see the note above gpt-5.5), and the GPT-6 request
+  # envelope is capture-specific (usesAdditionalToolsEnvelope in the codex
+  # driver). Neither has been done for 6.1 Sol, and an unprobed codex mapping
+  # 400s every request. No reliant/vertexai mapping, for astra's reason: Vertex
+  # serves no OpenAI frontier models, and the gateway routes through it.
+  - id: gpt-6.1-sol
+    name: GPT-6.1 Sol
+    visibility: user
+    capabilities:
+      can_reason: true
+      supports_tools: true
+      supports_attachments: true
+      supports_streaming: true
+      supports_caching: true
+      max_context_window: 1050000
+      max_output_tokens: 128000
+      thinking_levels: [low, medium, high, xhigh, max]
+      supported_file_types: [image, text]
+    providers:
+      - driver: openai
+        api_model: gpt-6.1-sol
+      - driver: openrouter
+        api_model: openai/gpt-6.1-sol
+    driver_settings:
+      preferred_endpoint: responses
+      temperature_mode: omit
+      use_max_completion_tokens: true
+
+  # GPT-6 Luna (2026-09-22) — OpenAI's "most efficient model for focused,
+  # high-volume tasks". Figures from developers.openai.com/api/docs/models/gpt-6-luna.
+  #
+  # It is OpenAI's efficiency-tier model, but it is listed
+  # AFTER gpt-5.4-mini and gpt-5-mini under fast/cheap/meta, and at `low`
+  # effort. Those tiers run chat titling, compaction and other internal calls
+  # for every OpenAI user; promoting a model nobody has run through them yet
+  # should be a measured decision, not a side effect of adding it.
+  #
+  # Not the same model as gpt-5.6-luna (the codex-only ChatGPT-family
+  # flagship). Same provider reasoning as gpt-6.1-sol above.
+  - id: gpt-6-luna
+    name: GPT-6 Luna
+    visibility: user
+    capabilities:
+      can_reason: true
+      supports_tools: true
+      supports_attachments: true
+      supports_streaming: true
+      supports_caching: true
+      max_context_window: 1050000
+      max_output_tokens: 128000
+      thinking_levels: [low, medium, high, xhigh, max]
+      supported_file_types: [image, text]
+    providers:
+      - driver: openai
+        api_model: gpt-6-luna
+      - driver: openrouter
+        api_model: openai/gpt-6-luna
+    driver_settings:
+      preferred_endpoint: responses
+      temperature_mode: omit
+      use_max_completion_tokens: true
+
   # GPT-5.6 family. These are Codex-subscription-only and use a different request
   # envelope than GPT-5.5 and earlier (system prompt and tools ride inside `input`
   # rather than as top-level `instructions`/`tools`). See the codex driver's
@@ -563,10 +652,6 @@ models:
       max_output_tokens: 128000
       thinking_levels: [low, medium, high, xhigh, max, ultra]
       supported_file_types: [image, text]
-    cost:
-      input_per_1m: 2.5
-      output_per_1m: 15.0
-      cached_input_per_1m: 0.25
     providers:
       - driver: codex
         api_model: gpt-5.6-sol
@@ -578,10 +663,9 @@ models:
     # supported but reserved for explicit opt-in rather than the default.
 
   # Terra is the faster/cheaper member of the 5.6 family, but it is deliberately
-  # NOT tagged `fast`. Two reasons, and the second is the one that bites:
-  # listing terra early under `fast` would repoint @fast away from
-  # gemini-3.5-flash for every codex user; and terra bills at
-  # $2.5/$15 per 1M, the same as gpt-5.5, which is not a fast-tier price.
+  # NOT tagged `fast`: listing terra early under `fast` would repoint @fast away
+  # from gemini-3.5-flash for every codex user, and terra is a peer of gpt-5.5
+  # rather than a fast-tier model.
   #
   # The codex driver therefore has no `fast` model at all, by design. Callers
   # that need one (chat titling, compaction) pass a PREFERENCE ladder of tags
@@ -601,10 +685,6 @@ models:
       max_output_tokens: 128000
       thinking_levels: [low, medium, high, xhigh, max, ultra]
       supported_file_types: [image, text]
-    cost:
-      input_per_1m: 2.5
-      output_per_1m: 15.0
-      cached_input_per_1m: 0.25
     providers:
       - driver: codex
         api_model: gpt-5.6-terra
@@ -633,10 +713,6 @@ models:
       # it is only documented for sol and terra, and was never exercised here.
       thinking_levels: [low, medium, high, xhigh, max]
       supported_file_types: [image, text]
-    cost:
-      input_per_1m: 1.75
-      output_per_1m: 14.0
-      cached_input_per_1m: 0.175
     providers:
       - driver: codex
         api_model: gpt-5.6-luna
@@ -658,10 +734,6 @@ models:
       max_output_tokens: 128000
       thinking_levels: [low, medium, high, xhigh]
       supported_file_types: [image, text]
-    cost:
-      input_per_1m: 2.5
-      output_per_1m: 15.0
-      cached_input_per_1m: 0.25
     providers:
       # No codex provider: the ChatGPT-account Codex backend refuses this model
       # with `not supported when using Codex with a ChatGPT account`. See the
@@ -688,9 +760,6 @@ models:
       max_output_tokens: 128000
       thinking_levels: [medium, high, xhigh]
       supported_file_types: [image, text]
-    cost:
-      input_per_1m: 30.0
-      output_per_1m: 180.0
     providers:
       - driver: openai
         api_model: gpt-5.4-pro
@@ -712,10 +781,6 @@ models:
       max_output_tokens: 128000
       thinking_levels: [low, medium, high, xhigh]
       supported_file_types: [image, text]
-    cost:
-      input_per_1m: 1.75
-      output_per_1m: 14.0
-      cached_input_per_1m: 0.175
     providers:
       # No codex provider: the ChatGPT-account Codex backend refuses this model
       # with `not supported when using Codex with a ChatGPT account`. See the
@@ -759,10 +824,6 @@ models:
       max_output_tokens: 128000
       thinking_levels: [low, medium, high, xhigh]
       supported_file_types: [image, text]
-    cost:
-      input_per_1m: 1.75
-      output_per_1m: 14.0
-      cached_input_per_1m: 0.175
     providers:
       # No codex provider: the ChatGPT-account Codex backend refuses this model
       # with `not supported when using Codex with a ChatGPT account`. See the
@@ -777,10 +838,7 @@ models:
       use_max_completion_tokens: true
       reasoning_summary_mode: detailed_only
 
-  # Gemini 3.5–3.8 Flash. Pricing for all four is not public to us; the figures
-  # below are PROVISIONAL — they reuse gemini-3-flash-preview's published rates
-  # (0.15 in / 0.60 out) rather than invent per-model numbers. Revisit when
-  # Google publishes real pricing.
+  # Gemini 3.5–3.8 Flash.
   #
   # 3.8 Flash is the Gemini flagship and is `powerful`; it is listed after
   # fable/astra/sol under [powerful] so that tier still resolves to fable, and
@@ -799,10 +857,6 @@ models:
       max_output_tokens: 65536
       thinking_levels: [low, medium, high]
       supported_file_types: [image, pdf, text, audio, video]
-    cost:
-      # Provisional — see note above.
-      input_per_1m: 0.15
-      output_per_1m: 0.60
     providers:
       - driver: gemini
         api_model: gemini-3.8-flash
@@ -831,10 +885,6 @@ models:
       max_output_tokens: 65536
       thinking_levels: [low, medium, high]
       supported_file_types: [image, pdf, text, audio, video]
-    cost:
-      # Provisional — see note above.
-      input_per_1m: 0.15
-      output_per_1m: 0.60
     providers:
       - driver: gemini
         api_model: gemini-3.7-flash
@@ -857,9 +907,6 @@ models:
       max_output_tokens: 65536
       thinking_levels: [low, high]
       supported_file_types: [image, pdf, text, audio, video]
-    cost:
-      input_per_1m: 1.25
-      output_per_1m: 10.0
     providers:
       - driver: gemini
         api_model: gemini-3.1-pro-preview
@@ -882,9 +929,6 @@ models:
       max_output_tokens: 65536
       thinking_levels: [low, high]
       supported_file_types: [image, pdf, text, audio, video]
-    cost:
-      input_per_1m: 1.25
-      output_per_1m: 10.0
     providers:
       - driver: gemini
         api_model: gemini-3-pro-preview
@@ -905,9 +949,6 @@ models:
       max_output_tokens: 65536
       thinking_levels: [low, high]
       supported_file_types: [image, pdf, text, audio, video]
-    cost:
-      input_per_1m: 1.25
-      output_per_1m: 10.0
     providers:
       - driver: gemini
         api_model: gemini-3.1-pro-preview-customtools
@@ -925,10 +966,6 @@ models:
       max_context_window: 256000
       max_output_tokens: 20000
       thinking_levels: [low, medium, high]
-    cost:
-      input_per_1m: 3.0
-      output_per_1m: 15.0
-      cached_input_per_1m: 0.75
     providers:
       - driver: xai
         api_model: grok-4
@@ -951,10 +988,6 @@ models:
       max_output_tokens: 20000
       thinking_levels: [low, medium, high]
       supported_file_types: [image, pdf, text]
-    cost:
-      input_per_1m: 3.0
-      output_per_1m: 15.0
-      cached_input_per_1m: 0.3
     providers:
       - driver: anthropic
         api_model: claude-sonnet-4-6
@@ -977,10 +1010,6 @@ models:
       max_output_tokens: 20000
       thinking_levels: [low, medium, high]
       supported_file_types: [image, pdf, text]
-    cost:
-      input_per_1m: 3.0
-      output_per_1m: 15.0
-      cached_input_per_1m: 0.3
     providers:
       - driver: anthropic
         api_model: claude-sonnet-4-5-20250929
@@ -1003,10 +1032,6 @@ models:
       max_output_tokens: 128000
       thinking_levels: [low, medium, high]
       supported_file_types: [image, text]
-    cost:
-      input_per_1m: 5.0
-      output_per_1m: 40.0
-      cached_input_per_1m: 0.5
     providers:
       - driver: openai
         api_model: gpt-5.2-pro
@@ -1030,10 +1055,6 @@ models:
       max_output_tokens: 128000
       thinking_levels: [low, medium, high]
       supported_file_types: [image, text]
-    cost:
-      input_per_1m: 1.75
-      output_per_1m: 14.0
-      cached_input_per_1m: 0.175
     providers:
       - driver: openai
         api_model: gpt-5.2
@@ -1044,8 +1065,7 @@ models:
       temperature_mode: omit
       use_max_completion_tokens: true
 
-  # 3.6 and 3.5 Flash. Costs are provisional — see the note on gemini-3.8-flash.
-  # gemini-3.5-flash leads the `fast` list (at low effort).
+  # 3.6 and 3.5 Flash. gemini-3.5-flash leads the `fast` list (at low effort).
   - id: gemini-3.6-flash
     name: Gemini 3.6 Flash
     visibility: user
@@ -1059,10 +1079,6 @@ models:
       max_output_tokens: 65536
       thinking_levels: [low, medium, high]
       supported_file_types: [image, pdf, text, audio, video]
-    cost:
-      # Provisional — see gemini-3.8-flash.
-      input_per_1m: 0.15
-      output_per_1m: 0.60
     providers:
       - driver: gemini
         api_model: gemini-3.6-flash
@@ -1083,10 +1099,6 @@ models:
       max_output_tokens: 65536
       thinking_levels: [low, medium, high]
       supported_file_types: [image, pdf, text, audio, video]
-    cost:
-      # Provisional — see gemini-3.8-flash.
-      input_per_1m: 0.15
-      output_per_1m: 0.60
     providers:
       - driver: gemini
         api_model: gemini-3.5-flash
@@ -1107,9 +1119,6 @@ models:
       max_output_tokens: 65536
       thinking_levels: [low, medium, high]
       supported_file_types: [image, pdf, text, audio, video]
-    cost:
-      input_per_1m: 1.25
-      output_per_1m: 10.0
     providers:
       - driver: gemini
         api_model: gemini-2.5-pro
@@ -1135,10 +1144,6 @@ models:
       max_context_window: 200000
       max_output_tokens: 32000
       supported_file_types: [image, pdf, text]
-    cost:
-      input_per_1m: 0.8
-      output_per_1m: 4.0
-      cached_input_per_1m: 0.08
     providers:
       - driver: anthropic
         api_model: claude-haiku-4-5-20251001
@@ -1166,10 +1171,6 @@ models:
       max_output_tokens: 128000
       thinking_levels: [low, medium, high, xhigh]
       supported_file_types: [image, text]
-    cost:
-      input_per_1m: 0.25
-      output_per_1m: 2.0
-      cached_input_per_1m: 0.025
     providers:
       # No codex mapping: the ChatGPT-account backend refuses this model with
       # the same 400 as its non-mini parent. It was mapped here on the family
@@ -1199,9 +1200,6 @@ models:
       max_output_tokens: 128000
       thinking_levels: [low, medium, high]
       supported_file_types: [text]
-    cost:
-      input_per_1m: 0.25
-      output_per_1m: 2.0
     providers:
       # GitHub Copilot serves gpt-5-mini on the OpenAI Chat dialect
       # (/chat/completions); /models reports it policy=enabled. Verified 200 with
@@ -1226,9 +1224,6 @@ models:
       max_context_window: 1048576
       max_output_tokens: 65536
       supported_file_types: [image, pdf, text, audio, video]
-    cost:
-      input_per_1m: 0.15
-      output_per_1m: 0.60
     providers:
       - driver: gemini
         api_model: gemini-3-flash-preview
@@ -1249,9 +1244,6 @@ models:
       supports_caching: false
       max_context_window: 1048576
       max_output_tokens: 65536
-    cost:
-      input_per_1m: 0.25
-      output_per_1m: 1.5
     providers:
       - driver: gemini
         api_model: gemini-3.1-flash-lite-preview
@@ -1268,9 +1260,6 @@ models:
       max_context_window: 1048576
       max_output_tokens: 65536
       supported_file_types: [image, pdf, text, audio, video]
-    cost:
-      input_per_1m: 0.15
-      output_per_1m: 0.60
     providers:
       - driver: gemini
         api_model: gemini-2.5-flash
@@ -1297,9 +1286,6 @@ models:
       max_context_window: 1048576
       max_output_tokens: 65536
       supported_file_types: [image, pdf, text, audio, video]
-    cost:
-      input_per_1m: 0.075
-      output_per_1m: 0.30
     providers:
       - driver: gemini
         api_model: gemini-2.5-flash-lite
@@ -1320,9 +1306,6 @@ models:
       supports_caching: false
       max_context_window: 131072
       max_output_tokens: 20000
-    cost:
-      input_per_1m: 0.3
-      output_per_1m: 0.5
     providers:
       - driver: xai
         api_model: grok-3-mini-beta
@@ -1349,10 +1332,6 @@ models:
       max_output_tokens: 128000
       thinking_levels: [low, medium, high, xhigh]
       supported_file_types: [image, pdf, text]
-    cost:
-      input_per_1m: 5.0
-      output_per_1m: 25.0
-      cached_input_per_1m: 0.5
     providers:
       - driver: vertexai
         api_model: claude-opus-5-5
@@ -1372,10 +1351,6 @@ models:
       max_output_tokens: 64000
       thinking_levels: [low, medium, high, xhigh]
       supported_file_types: [image, pdf, text]
-    cost:
-      input_per_1m: 5.0
-      output_per_1m: 25.0
-      cached_input_per_1m: 0.5
     providers:
       - driver: vertexai
         api_model: claude-opus-5
@@ -1395,13 +1370,31 @@ models:
       max_output_tokens: 64000
       thinking_levels: [low, medium, high, xhigh]
       supported_file_types: [image, pdf, text]
-    cost:
-      input_per_1m: 5.0
-      output_per_1m: 25.0
-      cached_input_per_1m: 0.5
     providers:
       - driver: vertexai
         api_model: claude-opus-4-8
+    driver_settings:
+      thinking_mode: adaptive
+
+  # The Vertex-only twin of claude-5.5-sonnet, which carries no vertexai
+  # mapping of its own (see the note there). Its tier entries mirror it —
+  # directly above vertex-claude-5-sonnet, at the same effort.
+  - id: vertex-claude-5.5-sonnet
+    name: Vertex Claude 5.5 Sonnet
+    visibility: user
+    capabilities:
+      can_reason: true
+      supports_tools: true
+      supports_attachments: true
+      supports_streaming: true
+      supports_caching: true
+      max_context_window: 1000000
+      max_output_tokens: 128000
+      thinking_levels: [low, medium, high, xhigh]
+      supported_file_types: [image, pdf, text]
+    providers:
+      - driver: vertexai
+        api_model: claude-sonnet-5-5
     driver_settings:
       thinking_mode: adaptive
 
@@ -1418,10 +1411,6 @@ models:
       max_output_tokens: 64000
       thinking_levels: [low, medium, high, xhigh]
       supported_file_types: [image, pdf, text]
-    cost:
-      input_per_1m: 3.0
-      output_per_1m: 15.0
-      cached_input_per_1m: 0.3
     providers:
       - driver: vertexai
         api_model: claude-sonnet-5
@@ -1441,10 +1430,6 @@ models:
       max_output_tokens: 64000
       thinking_levels: [low, medium, high, xhigh]
       supported_file_types: [image, pdf, text]
-    cost:
-      input_per_1m: 10.0
-      output_per_1m: 50.0
-      cached_input_per_1m: 1.0
     providers:
       - driver: vertexai
         api_model: claude-fable-5-1
@@ -1464,10 +1449,6 @@ models:
       max_output_tokens: 64000
       thinking_levels: [low, medium, high, xhigh]
       supported_file_types: [image, pdf, text]
-    cost:
-      input_per_1m: 10.0
-      output_per_1m: 50.0
-      cached_input_per_1m: 1.0
     providers:
       - driver: vertexai
         api_model: claude-fable-5
@@ -1487,10 +1468,6 @@ models:
       max_output_tokens: 20000
       thinking_levels: [low, medium, high]
       supported_file_types: [image, pdf, text]
-    cost:
-      input_per_1m: 5.0
-      output_per_1m: 25.0
-      cached_input_per_1m: 0.5
     providers:
       - driver: vertexai
         api_model: claude-opus-4-6
@@ -1509,10 +1486,6 @@ models:
       max_output_tokens: 20000
       thinking_levels: [low, medium, high]
       supported_file_types: [image, pdf, text]
-    cost:
-      input_per_1m: 3.0
-      output_per_1m: 15.0
-      cached_input_per_1m: 0.3
     providers:
       - driver: vertexai
         api_model: claude-sonnet-4-5@20250929
@@ -1530,10 +1503,6 @@ models:
       max_context_window: 200000
       max_output_tokens: 8192
       supported_file_types: [image, pdf, text]
-    cost:
-      input_per_1m: 0.8
-      output_per_1m: 4.0
-      cached_input_per_1m: 0.08
     providers:
       - driver: vertexai
         api_model: claude-haiku-4-5@20250512
@@ -1552,9 +1521,6 @@ models:
       max_output_tokens: 50000
       thinking_levels: [low, medium, high]
       supported_file_types: [image, pdf, text, audio, video]
-    cost:
-      input_per_1m: 1.25
-      output_per_1m: 10.0
     providers:
       - driver: vertexai
         api_model: gemini-2.5-pro
@@ -1572,9 +1538,6 @@ models:
       max_context_window: 1000000
       max_output_tokens: 50000
       supported_file_types: [image, pdf, text, audio, video]
-    cost:
-      input_per_1m: 0.15
-      output_per_1m: 0.60
     providers:
       - driver: vertexai
         api_model: gemini-2.5-flash
@@ -1589,11 +1552,9 @@ models:
   # RequireOutputModality=image — a hard filter, so a tag list like
   # [image-gen, cheap] can never degrade onto a text model.
   #
-  # No `cost:` block. Image pricing is per image, not per token, so the
-  # per-1M-token fields cannot express it and any number here would be
-  # misleading. Nothing is lost: spend is metered by the control-plane proxy
-  # from LiteLLM's X-Litellm-Response-Cost header, and ModelCost is read only
-  # by the model-picker UI.
+  # Image spend is metered like every other call: the control-plane proxy debits
+  # the cost LiteLLM reports for the request (X-Litellm-Response-Cost). The
+  # catalog holds no rates of its own to reconcile against.
   # ============================================================================
 
   # OpenAI's current image family. These REPLACED gpt-image-1 and
@@ -1609,11 +1570,9 @@ models:
   # first because OpenAI states it is the default choice for most applications:
   # higher quality than gpt-image-2 at roughly half the latency.
   #
-  # No cost block on any of them. These are billed per image TOKEN
-  # ($30/1M output image tokens), not per 1M text tokens, so the per-1M fields
-  # cannot express it and any number here would be read by the model picker and
-  # shown to a user as fact. Nothing is lost: managed spend is metered by the
-  # control-plane proxy from LiteLLM's X-Litellm-Response-Cost header.
+  # These bill per image token rather than per text token, which is exactly why
+  # no catalog rate would have been right. Managed spend is metered by the
+  # control-plane proxy from LiteLLM's reported cost for the request.
   - id: gpt-image-2.5-flare
     name: GPT Image 2.5 Flare
     visibility: user
@@ -1755,8 +1714,8 @@ models:
   # against AI Studio's ListModels output rather than against LiteLLM's config.
   # All three appear there.
   #
-  # No cost block: these are billed per image ($0.0336/$0.0672/$0.134 for
-  # flash-lite/flash/pro), which the per-1M-token cost fields cannot express.
+  # These bill per image rather than per token; spend comes from the cost
+  # LiteLLM reports for the request.
   - id: gemini-3.1-flash-lite-image
     name: Gemini 3.1 Flash Lite Image
     visibility: user
@@ -1826,9 +1785,6 @@ models:
       max_context_window: 128000
       max_output_tokens: 8192
       supported_file_types: [image, text]
-    cost:
-      input_per_1m: 0.11
-      output_per_1m: 0.34
     providers:
       - driver: mock
         api_model: mock-model
@@ -1845,9 +1801,6 @@ models:
       supports_caching: false
       max_context_window: 1000
       max_output_tokens: 500
-    cost:
-      input_per_1m: 0.01
-      output_per_1m: 0.01
     providers:
       - driver: mock
         api_model: tiny-context
@@ -1864,9 +1817,6 @@ models:
       supports_caching: false
       max_context_window: 4000
       max_output_tokens: 1000
-    cost:
-      input_per_1m: 0.01
-      output_per_1m: 0.01
     providers:
       - driver: mock
         api_model: small-context
