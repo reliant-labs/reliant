@@ -30,6 +30,7 @@ import { RemoveProjectsModal } from "./RemoveProjectsModal";
 import { DirectoryPicker } from "./DirectoryPicker";
 import { Modal } from "../ui/Modal";
 import { RepoSelector } from "./RepoSelector";
+import { CloneTargetPicker } from "./CloneTargetPicker";
 
 import { toast } from "../../lib/toast-manager";
 import { useDaemonStatus } from "../../hooks/useDaemonStatus";
@@ -46,12 +47,12 @@ import { capabilities } from "../../services/controlPlane/capabilities";
 import {
   listDaemons as listCloudDaemons,
   deleteDaemon,
-  DAEMON_STATUS_ACTIVE,
   DAEMON_STATUS_SUSPENDED,
   type Daemon as CloudDaemon,
 } from "../../services/controlPlane/daemon";
 import {
   cloneAvailability,
+  pickCloneTarget,
   cloneDescription,
   failureReason,
   isFailedDaemon,
@@ -647,11 +648,6 @@ function ProjectPickerComponent({ onProjectSelected }: ProjectPickerProps) {
     () => daemons.filter((d) => isCloudDaemon(d.daemonType)),
     [daemons],
   );
-  const activeControlPlaneDaemons = useMemo(
-    () => (controlPlaneDaemons ?? []).filter((d) => d.status === DAEMON_STATUS_ACTIVE),
-    [controlPlaneDaemons],
-  );
-
   // Hostname lookup for naming daemons in the clone status toast. Falls back
   // to a short id slice when the daemon row hasn't loaded yet.
   const hostnameFor = useCallback(
@@ -663,12 +659,18 @@ function ProjectPickerComponent({ onProjectSelected }: ProjectPickerProps) {
   );
 
   // selectedCloneDaemon — the cloud daemon the top-level "Clone repo" flow
-  // installs onto. We pick the first ACTIVE cloud daemon (registry first,
-  // then control-plane). Suspended cloud daemons are excluded because the
-  // gateway can't forward the clone command until the daemon resumes.
+  // installs onto by default.
+  //
+  // This used to be "the first ACTIVE cloud daemon the server listed", which
+  // is indistinguishable from correct with one machine and wrong with
+  // several: the checkout lands on whichever row sorted first, and nothing
+  // told the user which that was. The default is now the most recently used
+  // machine (pickCloneTarget), and CloneTargetPicker lets them change it.
+  //
+  // Registry rows first (useDaemonStatus, so the registry enum applies —
+  // see the aliased import above), then control-plane rows, because the
+  // registry is the one that knows a daemon has actually attached.
   const selectedCloneDaemon = useMemo<CloneTarget | null>(() => {
-    // Registry rows here (from useDaemonStatus), so the registry enum is the
-    // right one — see the aliased import above.
     const activeCloud = cloudDaemons.find(
       (d) => d.status === RegistryDaemonStatus.ACTIVE,
     );
@@ -678,14 +680,19 @@ function ProjectPickerComponent({ onProjectSelected }: ProjectPickerProps) {
         hostname: activeCloud.hostname || hostnameFor(activeCloud.daemonId),
       };
     }
-    const cpDaemon = activeControlPlaneDaemons[0];
-    if (!cpDaemon) return null;
+    const preferred = pickCloneTarget(controlPlaneDaemons ?? []);
+    if (!preferred) return null;
     return {
-      daemonId: cpDaemon.id,
+      daemonId: preferred.id,
       hostname:
-        cpDaemon.hostname || cpDaemon.name || `daemon ${cpDaemon.id.slice(0, 8)}`,
+        preferred.hostname || preferred.name || `daemon ${preferred.id.slice(0, 8)}`,
     };
-  }, [activeControlPlaneDaemons, cloudDaemons, hostnameFor]);
+  }, [cloudDaemons, controlPlaneDaemons, hostnameFor]);
+
+  // The machine the NEXT clone will use. Null means "whatever the default
+  // resolves to"; a string means the user chose explicitly in the modal, and
+  // that choice must win over the default for as long as the modal is open.
+  const [chosenCloneDaemonId, setChosenCloneDaemonId] = useState<string | null>(null);
 
   // The picker's top "Clone repo" affordance. It is VISIBLE whenever the
   // account has cloud daemons at all, and merely DISABLED (carrying the
@@ -700,6 +707,14 @@ function ProjectPickerComponent({ onProjectSelected }: ProjectPickerProps) {
     [controlPlaneDaemons],
   );
   const showCloneAction = capabilities.cloudDaemons;
+
+  // Which machine the next clone actually lands on: the user's explicit
+  // choice when they made one, else the recency default, else any machine
+  // that will eventually drain the queue.
+  const effectiveCloneDaemonId =
+    chosenCloneDaemonId ??
+    selectedCloneDaemon?.daemonId ??
+    (cloneState.kind === "ready" ? cloneState.target.id : null);
 
   // Add a repo as a project on a target daemon, in ONE server call.
   //
@@ -763,12 +778,9 @@ function ProjectPickerComponent({ onProjectSelected }: ProjectPickerProps) {
   // control-plane daemon list.
   const handleRepoSelectedFromModal = async (repo: GitRepo) => {
     setIsCloneModalOpen(false);
-    // Prefer the ACTIVE-daemon target when there is one, but fall back to
-    // any machine that will eventually drain the queue — a clone onto a
-    // still-starting machine is valid, it just lands later.
-    const targetDaemonId =
-      selectedCloneDaemon?.daemonId ??
-      (cloneState.kind === "ready" ? cloneState.target.id : null);
+    // The machine the user chose in the modal, or the recency default. A
+    // clone onto a still-starting machine is valid — it just lands later.
+    const targetDaemonId = effectiveCloneDaemonId;
     if (!targetDaemonId) {
       toast.error(
         cloneState.kind === "blocked" ? cloneState.reason : "No machine available to clone onto",
@@ -1407,6 +1419,15 @@ function ProjectPickerComponent({ onProjectSelected }: ProjectPickerProps) {
         title="Clone a repository"
         size="lg"
       >
+        {/* The target comes FIRST: which machine the checkout lands on is a
+            decision about the clone, and discovering it after picking a repo
+            is the wrong order. Renders nothing when there is only one
+            candidate. */}
+        <CloneTargetPicker
+          daemons={controlPlaneDaemons ?? []}
+          selectedDaemonId={effectiveCloneDaemonId}
+          onSelect={setChosenCloneDaemonId}
+        />
         <RepoSelector
           onSelect={(repo) => {
             void handleRepoSelectedFromModal(repo);
