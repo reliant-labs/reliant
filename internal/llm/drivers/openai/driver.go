@@ -566,24 +566,14 @@ func (o *OpenaiClient) toolCalls(completion openai.ChatCompletion) []message.Too
 	return toolCalls
 }
 
+// usage carries token counts only. Cost stays zero: the OpenAI API reports no
+// cost for a request, and reliant holds no price table to derive one from.
 func (o *OpenaiClient) usage(completion openai.ChatCompletion) llm.TokenUsage {
-	usage := llm.TokenUsage{
+	return llm.TokenUsage{
 		TokenCount:   completion.Usage.PromptTokens,
 		InputTokens:  completion.Usage.PromptTokens,
 		OutputTokens: completion.Usage.CompletionTokens,
 	}
-	usage.Cost = o.calculateCost(usage)
-	return usage
-}
-
-func (o *OpenaiClient) calculateCost(usage llm.TokenUsage) float64 {
-	model := o.Options.Model
-	if model.CostPer1MIn <= 0 && model.CostPer1MOut <= 0 {
-		return 0
-	}
-	inputCost := float64(usage.InputTokens) * model.CostPer1MIn / 1_000_000
-	outputCost := float64(usage.OutputTokens) * model.CostPer1MOut / 1_000_000
-	return inputCost + outputCost
 }
 
 func (o *OpenaiClient) Model() models.Model {
@@ -870,7 +860,6 @@ func (o *OpenaiClient) sendResponses(ctx context.Context, prompts []string, mess
 		usage.TokenCount = resp.Usage.TotalTokens
 		usage.InputTokens = resp.Usage.InputTokens
 		usage.OutputTokens = resp.Usage.OutputTokens
-		usage.Cost = o.calculateCost(usage)
 	}
 
 	upstreamRequestID, upstreamProxymanID := extractUpstreamCorrelationHeaders(rawResp)
@@ -1046,7 +1035,6 @@ func (o *OpenaiClient) streamResponses(ctx context.Context, prompts []string, me
 			usage.TokenCount = finalResp.Usage.TotalTokens
 			usage.InputTokens = finalResp.Usage.InputTokens
 			usage.OutputTokens = finalResp.Usage.OutputTokens
-			usage.Cost = o.calculateCost(usage)
 		}
 
 		upstreamRequestID, upstreamProxymanID := extractUpstreamCorrelationHeaders(streamResp)

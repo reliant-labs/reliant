@@ -52,10 +52,6 @@ type Model struct {
 	// Some models (e.g., certain OpenAI GPT-5.x endpoints) reject any non-default temperature.
 	TemperatureMode TemperatureMode `json:"temperature_mode"`
 
-	CostPer1MIn            float64              `json:"cost_per_1m_in"`
-	CostPer1MOut           float64              `json:"cost_per_1m_out"`
-	CostPer1MInCached      float64              `json:"cost_per_1m_in_cached"`
-	CostPer1MOutCached     float64              `json:"cost_per_1m_out_cached"`
 	ContextWindow          int64                `json:"context_window"`
 	DefaultMaxTokens       int64                `json:"default_max_tokens"`
 	CanReason              bool                 `json:"can_reason"`

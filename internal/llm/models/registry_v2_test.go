@@ -50,10 +50,6 @@ models:
       supports_caching: true
       max_context_window: 200000
       max_output_tokens: 32000
-    cost:
-      input_per_1m: 15.0
-      output_per_1m: 75.0
-      cached_input_per_1m: 1.5
     providers:
       - driver: anthropic
         api_model: claude-opus-4-20250514
@@ -71,9 +67,6 @@ models:
       supports_caching: true
       max_context_window: 200000
       max_output_tokens: 16000
-    cost:
-      input_per_1m: 3.0
-      output_per_1m: 15.0
     providers:
       - driver: anthropic
         api_model: claude-sonnet-4-20250514
@@ -91,9 +84,6 @@ models:
       supports_caching: false
       max_context_window: 128000
       max_output_tokens: 16384
-    cost:
-      input_per_1m: 2.5
-      output_per_1m: 10.0
     providers:
       - driver: openai
         api_model: gpt-4o
@@ -111,9 +101,6 @@ models:
       supports_caching: false
       max_context_window: 128000
       max_output_tokens: 16384
-    cost:
-      input_per_1m: 0.15
-      output_per_1m: 0.60
     providers:
       - driver: openai
         api_model: gpt-4o-mini
@@ -129,9 +116,6 @@ models:
       supports_caching: false
       max_context_window: 32000
       max_output_tokens: 8000
-    cost:
-      input_per_1m: 0.0
-      output_per_1m: 0.0
     providers:
       - driver: local
         api_model: qwen2.5:32b
@@ -1646,11 +1630,6 @@ func TestDefinitionToModel(t *testing.T) {
 			MaxContextWindow:    200000,
 			MaxOutputTokens:     32000,
 		},
-		Cost: ModelCost{
-			InputPer1M:       15.0,
-			OutputPer1M:      75.0,
-			CachedInputPer1M: 1.5,
-		},
 		Providers: []ProviderMapping{
 			{Driver: "anthropic", APIModel: "claude-test"},
 		},
@@ -1670,15 +1649,6 @@ func TestDefinitionToModel(t *testing.T) {
 	}
 	if model.DefaultMaxTokens != 32000 {
 		t.Errorf("DefaultMaxTokens = %d, want 32000", model.DefaultMaxTokens)
-	}
-	if model.CostPer1MIn != 15.0 {
-		t.Errorf("CostPer1MIn = %f, want 15.0", model.CostPer1MIn)
-	}
-	if model.CostPer1MOut != 75.0 {
-		t.Errorf("CostPer1MOut = %f, want 75.0", model.CostPer1MOut)
-	}
-	if model.CostPer1MInCached != 1.5 {
-		t.Errorf("CostPer1MInCached = %f, want 1.5", model.CostPer1MInCached)
 	}
 	if !model.CanReason {
 		t.Error("CanReason = false, want true")
@@ -2492,9 +2462,6 @@ custom:
       max_context_window: 32000
       max_output_tokens: 4096
       supports_tools: true
-    cost:
-      input_per_1m: 0.0
-      output_per_1m: 0.0
     providers:
       - driver: local
         api_model: my-model:latest
@@ -2712,9 +2679,6 @@ custom:
       max_output_tokens: 4096
       supports_tools: false
       supports_streaming: true
-    cost:
-      input_per_1m: 0.0
-      output_per_1m: 0.0
     providers:
       - driver: local
         api_model: test:latest

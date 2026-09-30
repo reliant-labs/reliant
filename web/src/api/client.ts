@@ -84,8 +84,6 @@ export const api = {
         apiModel: m.apiModel,
         contextWindow: Number(m.contextWindow),
         defaultMaxTokens: Number(m.defaultMaxTokens),
-        costPer1MIn: m.costPer1mIn,
-        costPer1MOut: m.costPer1mOut,
         canReason: m.canReason,
         supportsAttachments: m.supportsAttachments,
         supportsTools: m.supportsTools,
@@ -217,8 +215,6 @@ export const api = {
         provider: m.provider,
         contextWindow: Number(m.contextWindow),
         defaultMaxTokens: Number(m.defaultMaxTokens),
-        costPer1MIn: m.costPer1mIn,
-        costPer1MOut: m.costPer1mOut,
       }));
     },
   },

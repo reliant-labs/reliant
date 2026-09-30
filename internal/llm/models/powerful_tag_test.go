@@ -67,9 +67,12 @@ func TestPowerfulTagMembership(t *testing.T) {
 
 	// claude-5.5-opus is deliberately ABSENT: it is the flagship pick, and
 	// listing it here would collapse the two tiers onto one model.
+	// gpt-6.1-sol follows astra, so an openai-only user's [powerful] stays
+	// on astra; it is reached only when astra is not servable.
 	assert.Equal(t, []string{
 		"claude-5.1-fable",
 		"gpt-6-astra",
+		"gpt-6.1-sol",
 		"gpt-5.6-sol",
 		"gemini-3.8-flash",
 		"vertex-claude-5.1-fable",

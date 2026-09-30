@@ -42,10 +42,10 @@ message ModelInfo {
   int64 context_window = 5;
   // Default max output tokens
   int64 default_max_tokens = 6;
-  // Cost per 1M input tokens
-  double cost_per_1m_in = 7;
-  // Cost per 1M output tokens
-  double cost_per_1m_out = 8;
+  // Per-token prices are gone: cost is whatever the provider reports for a
+  // request, so the catalog carries no price table to publish.
+  reserved 7, 8;
+  reserved "cost_per_1m_in", "cost_per_1m_out";
   // Whether the model supports reasoning/thinking
   bool can_reason = 9;
   // Whether the model supports file attachments
@@ -116,10 +116,10 @@ message AvailableModelInfo {
   int64 context_window = 6;
   // Default max output tokens.
   int64 default_max_tokens = 7;
-  // Cost per 1M input tokens.
-  double cost_per_1m_in = 8;
-  // Cost per 1M output tokens.
-  double cost_per_1m_out = 9;
+  // Per-token prices are gone: cost is whatever the provider reports for a
+  // request, so the catalog carries no price table to publish.
+  reserved 8, 9;
+  reserved "cost_per_1m_in", "cost_per_1m_out";
   // Whether the model supports reasoning/thinking.
   bool can_reason = 10;
   // Whether the model supports file attachments.

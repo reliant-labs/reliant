@@ -17,6 +17,7 @@ import (
 	"io"
 	"net/http"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -384,7 +385,7 @@ func (c *ReliantClient) SendMessages(ctx context.Context, prompts []string, mess
 		return &llm.DriverResponse{
 			Content:            content,
 			ToolCalls:          toolCalls,
-			Usage:              c.usage(*openaiResponse),
+			Usage:              c.usage(*openaiResponse, gatewayReportedCost(rawResp, openaiResponse.Usage)),
 			FinishReason:       finishReason,
 			UpstreamRequestID:  upstreamRequestID,
 			UpstreamProxymanID: upstreamProxymanID,
@@ -419,10 +420,18 @@ func (c *ReliantClient) StreamResponse(ctx context.Context, prompts []string, me
 			acc := openai.ChatCompletionAccumulator{}
 			currentContent := ""
 			toolCallResults := make([]message.ToolCall, 0)
+			// The accumulator sums the usage fields it knows about, which drops
+			// LiteLLM's `cost` — it lives in the chunk's extra fields, so it has
+			// to be taken from the usage chunk itself as it goes past.
+			reportedCost := 0.0
 
 			for openaiStream.Next() {
 				chunk := openaiStream.Current()
 				acc.AddChunk(chunk)
+
+				if cost := usageCost(chunk.Usage); cost > 0 {
+					reportedCost = cost
+				}
 
 				for _, choice := range chunk.Choices {
 					if choice.Delta.Content != "" {
@@ -473,7 +482,7 @@ func (c *ReliantClient) StreamResponse(ctx context.Context, prompts []string, me
 					Response: &llm.DriverResponse{
 						Content:            currentContent,
 						ToolCalls:          toolCallResults,
-						Usage:              c.usage(acc.ChatCompletion),
+						Usage:              c.usage(acc.ChatCompletion, reportedCost),
 						FinishReason:       finishReason,
 						UpstreamRequestID:  upstreamRequestID,
 						UpstreamProxymanID: upstreamProxymanID,
@@ -847,16 +856,17 @@ func (c *ReliantClient) toolCalls(completion openai.ChatCompletion) []message.To
 	return toolCalls
 }
 
-func (c *ReliantClient) usage(completion openai.ChatCompletion) llm.TokenUsage {
+// usage converts the completion's token counts, pairing them with the cost the
+// gateway reported for this request. Cost is passthrough: reliant keeps no
+// per-token price table, so a request the gateway did not price costs 0 rather
+// than an estimate.
+func (c *ReliantClient) usage(completion openai.ChatCompletion, cost float64) llm.TokenUsage {
 	cachedInputTokens := completion.Usage.PromptTokensDetails.CachedTokens
 	inputTokens := completion.Usage.PromptTokens - cachedInputTokens
 	if inputTokens < 0 {
 		inputTokens = completion.Usage.PromptTokens
 		cachedInputTokens = 0
 	}
-	cost := (float64(inputTokens) * c.Options.Model.CostPer1MIn / 1_000_000) +
-		(float64(completion.Usage.CompletionTokens) * c.Options.Model.CostPer1MOut / 1_000_000) +
-		(float64(cachedInputTokens) * c.Options.Model.CostPer1MInCached / 1_000_000)
 	if cost < 0 {
 		cost = 0
 	}
@@ -866,6 +876,45 @@ func (c *ReliantClient) usage(completion openai.ChatCompletion) llm.TokenUsage {
 		OutputTokens: completion.Usage.CompletionTokens,
 		Cost:         cost,
 	}
+}
+
+// gatewayReportedCost resolves LiteLLM's cost for one request, in the order it
+// is actually available: the response header, then the `-original` header, then
+// the usage object in the body.
+//
+// LiteLLM only sends `x-litellm-response-cost` on the /v1/chat/completions
+// route; /v1/messages carries `-original` alone. `-original` is trusted only
+// when positive, because LiteLLM writes a zero there for requests it did not
+// price, and taking that as a known-zero would mask a real number in the body.
+func gatewayReportedCost(resp *http.Response, usage openai.CompletionUsage) float64 {
+	if resp != nil {
+		for _, header := range []string{"x-litellm-response-cost", "x-litellm-response-cost-original"} {
+			if cost := parseReportedCost(resp.Header.Get(header)); cost > 0 {
+				return cost
+			}
+		}
+	}
+	return usageCost(usage)
+}
+
+// usageCost reads the `cost` field LiteLLM adds to the usage object. It is not
+// part of the OpenAI schema, so the SDK has no field for it and it survives
+// only in the decoded extra fields. Streams report cost nowhere else — there is
+// no header on an SSE response — so this is the only path for them.
+func usageCost(usage openai.CompletionUsage) float64 {
+	field, ok := usage.JSON.ExtraFields["cost"]
+	if !ok {
+		return 0
+	}
+	return parseReportedCost(field.Raw())
+}
+
+func parseReportedCost(raw string) float64 {
+	cost, err := strconv.ParseFloat(strings.TrimSpace(raw), 64)
+	if err != nil || cost < 0 {
+		return 0
+	}
+	return cost
 }
 
 func (c *ReliantClient) Model() models.Model {

@@ -38,11 +38,9 @@ type ModelInfo struct {
 	// dynamic provider can intersect against its own catalog.
 	APIModel string
 
-	// Capabilities and Cost are copied from the registry definition so the picker
-	// can render context window, tool/vision support, pricing, etc. without a
-	// second lookup.
+	// Capabilities is copied from the registry definition so the picker can
+	// render context window, tool/vision support, etc. without a second lookup.
 	Capabilities ModelCapabilities
-	Cost         ModelCost
 
 	// Tags are the registry tags for the model (flagship, fast, cheap, ...).
 	Tags []string
@@ -66,7 +64,6 @@ func (r *ModelRegistry) modelInfoFromDef(def *ModelDefinition, provider Provider
 		DriverID:     provider.Driver,
 		APIModel:     provider.APIModel,
 		Capabilities: def.Capabilities,
-		Cost:         def.Cost,
 		Tags:         r.TagsOf(def.ID),
 		Enabled:      enabled,
 	}

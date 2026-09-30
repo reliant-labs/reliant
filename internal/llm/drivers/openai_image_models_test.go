@@ -61,14 +61,6 @@ func TestOpenAIImageModels_DeclareImageOutputAndImageGenTag(t *testing.T) {
 			t.Errorf("model %s does not carry the %q tag, so a default image request cannot select it",
 				modelID, DefaultImageGenTag)
 		}
-
-		// Billed per image token, not per 1M text tokens. A value in the
-		// per-token fields is read by the model picker and shown to a user as
-		// fact.
-		if definition.Cost.InputPer1M != 0 || definition.Cost.OutputPer1M != 0 {
-			t.Errorf("model %s declares per-token cost (%v in / %v out); image models are billed per image",
-				modelID, definition.Cost.InputPer1M, definition.Cost.OutputPer1M)
-		}
 	}
 }
 

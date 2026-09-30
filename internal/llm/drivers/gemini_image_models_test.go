@@ -50,15 +50,6 @@ func TestGeminiImageModels_DeclareImageOutputAndImageGenTag(t *testing.T) {
 			t.Errorf("model %s does not carry the %q tag, so a default image request cannot select it",
 				modelID, DefaultImageGenTag)
 		}
-
-		// Gemini image models are billed per image (0.0336 / 0.0672 / 0.134
-		// for flash-lite / flash / pro). The per-1M-token fields cannot
-		// express that, and a value there would be read by the picker and
-		// shown to a user as fact.
-		if definition.Cost.InputPer1M != 0 || definition.Cost.OutputPer1M != 0 {
-			t.Errorf("model %s declares per-token cost (%v in / %v out); image models are billed per image",
-				modelID, definition.Cost.InputPer1M, definition.Cost.OutputPer1M)
-		}
 	}
 }
 
