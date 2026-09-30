@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"strings"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
 	pgdb "github.com/reliant-labs/reliant/internal/db/postgres/generated"
@@ -49,46 +48,14 @@ func (s *attachmentStore) GetAttachmentsByIDs(ctx context.Context, ids []string)
 	if len(ids) == 0 {
 		return []*core.Attachment{}, nil
 	}
-
-	// Build the IN clause with Postgres positional parameters ($1, $2, $3, ...)
-	// The sqlc-generated code doesn't properly handle sqlc.slice() for Postgres
-	// with database/sql - it generates IN ($1) which only matches the first ID.
-	placeholders := make([]string, len(ids))
-	args := make([]interface{}, len(ids))
-	for i, id := range ids {
-		placeholders[i] = fmt.Sprintf("$%d", i+1)
-		args[i] = id
-	}
-
-	query := fmt.Sprintf(
-		`SELECT id, user_id, filename, size, mime_type, file_hash, file_path, created_at, updated_at, attachment_type, content
-		FROM attachments
-		WHERE id IN (%s)`,
-		strings.Join(placeholders, ", "),
-	)
-
-	rows, err := s.db.QueryContext(ctx, query, args...)
+	rows, err := s.q.GetAttachmentsByIDs(ctx, ids)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get attachments by IDs: %w", err)
 	}
-	defer rows.Close()
-
-	var attachments []*core.Attachment
-	for rows.Next() {
-		var a pgdb.Attachment
-		if err := rows.Scan(
-			&a.ID, &a.UserID, &a.Filename, &a.Size, &a.MimeType,
-			&a.FileHash, &a.FilePath, &a.CreatedAt, &a.UpdatedAt,
-			&a.AttachmentType, &a.Content,
-		); err != nil {
-			return nil, fmt.Errorf("failed to scan attachment: %w", err)
-		}
-		attachments = append(attachments, attachmentFromPG(a))
+	attachments := make([]*core.Attachment, len(rows))
+	for i, row := range rows {
+		attachments[i] = attachmentFromPG(row)
 	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("failed to iterate attachments: %w", err)
-	}
-
 	return attachments, nil
 }
 

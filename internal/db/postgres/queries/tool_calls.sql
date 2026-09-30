@@ -76,14 +76,22 @@ WHERE tc.chat_id = $1
   AND tc.child_workflow_id IS NOT NULL
 ORDER BY tc.requested_at ASC;
 
+-- name: ListToolCallsByIDs :many
+-- Reads calls by primary key. The lookup that cannot miss: a tool-call block
+-- always carries its tool_call_id, whereas tool_calls.message_id is a link a
+-- writer has to remember to set.
+SELECT * FROM tool_calls
+WHERE id = ANY(sqlc.arg('ids')::text[])
+ORDER BY requested_at ASC;
+
 -- name: ListToolCallsByMessageIDs :many
 SELECT * FROM tool_calls
-WHERE message_id IN (sqlc.slice('message_ids'))
+WHERE message_id = ANY(sqlc.arg('message_ids')::text[])
 ORDER BY message_id, requested_at ASC;
 
 -- name: ListToolCallResultsByMessageIDs :many
 SELECT * FROM tool_call_results
-WHERE message_id IN (sqlc.slice('message_ids'))
+WHERE message_id = ANY(sqlc.arg('message_ids')::text[])
 ORDER BY message_id, created_at ASC;
 
 -- name: ListStrandedSpawnToolCalls :many

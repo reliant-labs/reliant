@@ -622,9 +622,13 @@ type Querier interface {
 	// Terminal thread statuses mirror CHAT_WORKFLOW_STATUS: 3=completed,
 	// 4=failed, 5=cancelled, 7=expired (see core.ThreadStatusIsTerminal).
 	ListThreadsWithOrphanedAgentMessages(ctx context.Context) ([]string, error)
-	ListToolCallResultsByMessageIDs(ctx context.Context, messageIds []sql.NullString) ([]ToolCallResult, error)
+	ListToolCallResultsByMessageIDs(ctx context.Context, messageIds []string) ([]ToolCallResult, error)
 	ListToolCallsByChat(ctx context.Context, chatID string) ([]ToolCall, error)
-	ListToolCallsByMessageIDs(ctx context.Context, messageIds []sql.NullString) ([]ToolCall, error)
+	// Reads calls by primary key. The lookup that cannot miss: a tool-call block
+	// always carries its tool_call_id, whereas tool_calls.message_id is a link a
+	// writer has to remember to set.
+	ListToolCallsByIDs(ctx context.Context, ids []string) ([]ToolCall, error)
+	ListToolCallsByMessageIDs(ctx context.Context, messageIds []string) ([]ToolCall, error)
 	// List all presets for a user (both global and project-specific)
 	ListUserPresets(ctx context.Context, userID string) ([]Preset, error)
 	// List presets for a specific project (includes both global and project-specific)

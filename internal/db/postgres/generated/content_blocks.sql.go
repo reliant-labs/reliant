@@ -8,8 +8,9 @@ package pgdb
 import (
 	"context"
 	"database/sql"
-	"strings"
 	"time"
+
+	"github.com/lib/pq"
 )
 
 const appendToContentBlock = `-- name: AppendToContentBlock :exec
@@ -211,22 +212,12 @@ func (q *Queries) ListContentBlocks(ctx context.Context, messageID string) ([]Me
 
 const listContentBlocksForMessages = `-- name: ListContentBlocksForMessages :many
 SELECT id, message_id, position, block_type, content, tool_name, tool_input, tool_call_id, is_error, version, node_id, node_path, activity_id, workflow_run_id, attempt_number, thought_signature, created_at, updated_at FROM message_content_blocks
-WHERE message_id IN ($1)
+WHERE message_id = ANY($1::text[])
 ORDER BY message_id, position ASC
 `
 
 func (q *Queries) ListContentBlocksForMessages(ctx context.Context, messageIds []string) ([]MessageContentBlock, error) {
-	query := listContentBlocksForMessages
-	var queryParams []interface{}
-	if len(messageIds) > 0 {
-		for _, v := range messageIds {
-			queryParams = append(queryParams, v)
-		}
-		query = strings.Replace(query, "/*SLICE:message_ids*/?", strings.Repeat(",?", len(messageIds))[1:], 1)
-	} else {
-		query = strings.Replace(query, "/*SLICE:message_ids*/?", "NULL", 1)
-	}
-	rows, err := q.db.QueryContext(ctx, query, queryParams...)
+	rows, err := q.db.QueryContext(ctx, listContentBlocksForMessages, pq.Array(messageIds))
 	if err != nil {
 		return nil, err
 	}

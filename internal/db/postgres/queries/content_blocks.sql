@@ -33,7 +33,7 @@ WHERE id = $4;
 
 -- name: ListContentBlocksForMessages :many
 SELECT * FROM message_content_blocks
-WHERE message_id IN (sqlc.slice('message_ids'))
+WHERE message_id = ANY(sqlc.arg('message_ids')::text[])
 ORDER BY message_id, position ASC;
 
 -- name: AppendToContentBlock :exec

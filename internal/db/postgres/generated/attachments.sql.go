@@ -8,7 +8,8 @@ package pgdb
 import (
 	"context"
 	"database/sql"
-	"strings"
+
+	"github.com/lib/pq"
 )
 
 const createAttachment = `-- name: CreateAttachment :exec
@@ -92,21 +93,11 @@ func (q *Queries) GetAttachment(ctx context.Context, id string) (Attachment, err
 
 const getAttachmentsByIDs = `-- name: GetAttachmentsByIDs :many
 SELECT id, user_id, filename, size, mime_type, file_hash, file_path, created_at, updated_at, attachment_type, content FROM attachments
-WHERE id IN ($1)
+WHERE id = ANY($1::text[])
 `
 
 func (q *Queries) GetAttachmentsByIDs(ctx context.Context, ids []string) ([]Attachment, error) {
-	query := getAttachmentsByIDs
-	var queryParams []interface{}
-	if len(ids) > 0 {
-		for _, v := range ids {
-			queryParams = append(queryParams, v)
-		}
-		query = strings.Replace(query, "/*SLICE:ids*/?", strings.Repeat(",?", len(ids))[1:], 1)
-	} else {
-		query = strings.Replace(query, "/*SLICE:ids*/?", "NULL", 1)
-	}
-	rows, err := q.db.QueryContext(ctx, query, queryParams...)
+	rows, err := q.db.QueryContext(ctx, getAttachmentsByIDs, pq.Array(ids))
 	if err != nil {
 		return nil, err
 	}
