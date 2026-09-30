@@ -3,7 +3,6 @@ package serverworker
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
@@ -24,6 +23,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/daemon"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/debugserver"
+	"github.com/reliant-labs/reliant/internal/drain"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/local"
 	"github.com/reliant-labs/reliant/internal/llm/models"
@@ -75,6 +75,13 @@ func Run(ctx context.Context, opts Options) error {
 	if opts.NATSURL == "" {
 		return fmt.Errorf("NATS_URL is required (tool routing and streaming go through NATS)")
 	}
+
+	// Rollout drain budget from PRE_STOP_DELAY / SHUTDOWN_TIMEOUT. The
+	// worker serves no inbound traffic, so its readiness flip matters less
+	// than the api-server's — but the same budget is what bounds
+	// Worker.Stop, and that is the part that has to fit inside the pod's
+	// grace period.
+	drainer := drain.New()
 
 	// -----------------------------------------------------------------
 	// 2. Logging
@@ -302,34 +309,25 @@ func Run(ctx context.Context, opts Options) error {
 		_, _ = w.Write([]byte(`{"status":"ok","service":"temporal-worker"}`))
 	})
 	healthMux.Handle("/metrics", observability.MetricsHandler())
-	healthMux.HandleFunc("/ready", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		var failures []string
-
-		if err := repo.Ping(r.Context()); err != nil {
-			failures = append(failures, "db: "+err.Error())
-		}
-		if _, err := temporalClient.CheckHealth(r.Context(), &client.CheckHealthRequest{}); err != nil {
-			failures = append(failures, "temporal: "+err.Error())
-		}
-		if natsChecker != nil && !natsChecker() {
-			failures = append(failures, "nats: disconnected")
-		}
-		if !streamingHub.IsConnected() {
-			failures = append(failures, "nats-streaming: disconnected")
-		}
-
-		if len(failures) > 0 {
-			w.WriteHeader(http.StatusServiceUnavailable)
-			_ = json.NewEncoder(w).Encode(map[string]any{
-				"status": "not_ready",
-				"reason": fmt.Sprintf("%v", failures),
-			})
-			return
-		}
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"status":"ready"}`))
-	})
+	healthMux.HandleFunc("/ready", drainer.ReadinessHandler("temporal-worker",
+		drain.ReadinessCheck{Name: "db", Check: repo.Ping},
+		drain.ReadinessCheck{Name: "temporal", Check: func(ctx context.Context) error {
+			_, err := temporalClient.CheckHealth(ctx, &client.CheckHealthRequest{})
+			return err
+		}},
+		drain.ReadinessCheck{Name: "nats", Check: func(context.Context) error {
+			if natsChecker != nil && !natsChecker() {
+				return fmt.Errorf("disconnected")
+			}
+			return nil
+		}},
+		drain.ReadinessCheck{Name: "nats-streaming", Check: func(context.Context) error {
+			if !streamingHub.IsConnected() {
+				return fmt.Errorf("disconnected")
+			}
+			return nil
+		}},
+	))
 
 	healthServer := &http.Server{
 		Addr:              fmt.Sprintf(":%d", opts.HealthPort),
@@ -369,20 +367,34 @@ func Run(ctx context.Context, opts Options) error {
 	// -----------------------------------------------------------------
 	// 14. Graceful shutdown
 	// -----------------------------------------------------------------
-	logging.Info("Shutting down temporal-worker")
+	// Same sequence as the other two mains, for consistency: flip readiness,
+	// pause, then stop, bounded by the budget. The pause buys the worker
+	// nothing directly (nothing routes to it), but keeping one drain shape
+	// across the three mains is what makes the grace-period arithmetic
+	// checkable from the deployment alone.
+	logging.Info("Draining temporal-worker",
+		"pre_stop_delay", drainer.PreStopDelay(),
+		"shutdown_timeout", drainer.ShutdownTimeout())
+	drainer.Begin()
+
+	shutdownCtx, cancel := drainer.ShutdownContext()
+	defer cancel()
+
 	handle.Worker.Stop()
 
+	// Bounded by the shutdown budget rather than a hardcoded 15s: the wait
+	// has to fit inside the grace period the platform derived from
+	// SHUTDOWN_TIMEOUT, and a constant cannot track a value it never reads.
 	select {
 	case <-handle.Done:
 		logging.Info("Worker stopped successfully")
-	case <-time.After(15 * time.Second):
-		logging.Warn("Worker stop timed out")
+	case <-shutdownCtx.Done():
+		logging.Warn("Worker did not stop within the shutdown budget",
+			"shutdown_timeout", drainer.ShutdownTimeout())
 	}
 
-	// Shut down health server
-	healthCtx, healthCancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer healthCancel()
-	if err := healthServer.Shutdown(healthCtx); err != nil {
+	// Health server LAST.
+	if err := drain.ShutdownHealthServer(healthServer); err != nil {
 		logging.Error("Health server shutdown error", "error", err)
 	}
 

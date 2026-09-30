@@ -25,6 +25,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/daemon"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/debugserver"
+	"github.com/reliant-labs/reliant/internal/drain"
 	grpcserver "github.com/reliant-labs/reliant/internal/grpc"
 	"github.com/reliant-labs/reliant/internal/grpc/services"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
@@ -130,6 +131,11 @@ func Run(ctx context.Context, opts Options) error {
 	// 2. Initialize subsystems
 	// -----------------------------------------------------------------
 	startTime := time.Now()
+
+	// Rollout drain budget, read from the PRE_STOP_DELAY / SHUTDOWN_TIMEOUT
+	// env vars the deployment already sets. Built before anything else so
+	// the readiness handler below can close over it.
+	drainer := drain.New()
 
 	logLevel := logging.GetLogLevel()
 	logging.SetupWithRotation(logLevel, false, &logging.RotationConfig{
@@ -427,31 +433,21 @@ func Run(ctx context.Context, opts Options) error {
 			"auth_mode": auth.GetAuthMode(),
 		})
 	})
-	healthMux.HandleFunc("/ready", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		var failures []string
-
-		if err := repo.Ping(r.Context()); err != nil {
-			failures = append(failures, "db: "+err.Error())
-		}
-		if natsChecker != nil && !natsChecker() {
-			failures = append(failures, "nats: disconnected")
-		}
-		if !streamingHub.IsConnected() {
-			failures = append(failures, "nats-streaming: disconnected")
-		}
-
-		if len(failures) > 0 {
-			w.WriteHeader(http.StatusServiceUnavailable)
-			_ = json.NewEncoder(w).Encode(map[string]any{
-				"status": "not_ready",
-				"reason": fmt.Sprintf("%v", failures),
-			})
-			return
-		}
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"status":"ready"}`))
-	})
+	healthMux.HandleFunc("/ready", drainer.ReadinessHandler("api-server",
+		drain.ReadinessCheck{Name: "db", Check: repo.Ping},
+		drain.ReadinessCheck{Name: "nats", Check: func(context.Context) error {
+			if natsChecker != nil && !natsChecker() {
+				return fmt.Errorf("disconnected")
+			}
+			return nil
+		}},
+		drain.ReadinessCheck{Name: "nats-streaming", Check: func(context.Context) error {
+			if !streamingHub.IsConnected() {
+				return fmt.Errorf("disconnected")
+			}
+			return nil
+		}},
+	))
 
 	healthAddr := fmt.Sprintf("%s:%d", opts.BindAddress, opts.HealthPort)
 	healthServer := &http.Server{
@@ -491,16 +487,20 @@ func Run(ctx context.Context, opts Options) error {
 		logging.Info("Context cancelled, beginning graceful shutdown")
 	}
 
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-	defer cancel()
+	// Flip /ready to 503 and hold the listener open for PRE_STOP_DELAY so
+	// EndpointSlices and the GKE NEG drop this pod BEFORE it stops serving.
+	// Without the pause the listener closes while the pod is still a routing
+	// target, which is connection-refused on every rollout. The health
+	// server deliberately stays up through all of this — it is shut down
+	// last, below, so the probe gets a real 503 rather than a refused
+	// connection kubelet only notices at its next period.
+	logging.Info("Draining: readiness flipped to not-ready",
+		"pre_stop_delay", drainer.PreStopDelay(),
+		"shutdown_timeout", drainer.ShutdownTimeout())
+	drainer.Begin()
 
-	// Stop health endpoint
-	logging.Info("Stopping health endpoint")
-	healthShutdownCtx, healthCancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer healthCancel()
-	if err := healthServer.Shutdown(healthShutdownCtx); err != nil {
-		logging.Error("Error stopping health endpoint", "error", err)
-	}
+	shutdownCtx, cancel := drainer.ShutdownContext()
+	defer cancel()
 
 	// Stop gRPC server
 	logging.Info("Stopping gRPC server")
@@ -531,6 +531,15 @@ func Run(ctx context.Context, opts Options) error {
 	logging.Info("Closing database")
 	if err := repo.Close(); err != nil {
 		logging.Error("Error closing database", "error", err)
+	}
+
+	// Health endpoint LAST: it served the 503 "draining" answer for the
+	// whole window above, which is the only thing that tells kubelet and the
+	// LB to stop routing here. Shutting it down first would have replaced
+	// that answer with connection-refused.
+	logging.Info("Stopping health endpoint")
+	if err := drain.ShutdownHealthServer(healthServer); err != nil {
+		logging.Error("Error stopping health endpoint", "error", err)
 	}
 
 	// Flush analytics
