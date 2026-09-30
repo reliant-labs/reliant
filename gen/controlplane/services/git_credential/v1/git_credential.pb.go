@@ -29,6 +29,122 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// Health of a stored credential, as the settings UI needs to present it.
+type GitCredentialHealth int32
+
+const (
+	GitCredentialHealth_GIT_CREDENTIAL_HEALTH_UNSPECIFIED GitCredentialHealth = 0
+	// Usable now, or renewable without user action.
+	GitCredentialHealth_GIT_CREDENTIAL_HEALTH_VALID GitCredentialHealth = 1
+	// Past its expiry with no way to renew. The user must reconnect.
+	GitCredentialHealth_GIT_CREDENTIAL_HEALTH_EXPIRED GitCredentialHealth = 2
+	// The provider rejected the refresh token (revoked, or past its own
+	// life). Terminal until the user re-authorizes.
+	GitCredentialHealth_GIT_CREDENTIAL_HEALTH_NEEDS_RECONNECT GitCredentialHealth = 3
+)
+
+// Enum value maps for GitCredentialHealth.
+var (
+	GitCredentialHealth_name = map[int32]string{
+		0: "GIT_CREDENTIAL_HEALTH_UNSPECIFIED",
+		1: "GIT_CREDENTIAL_HEALTH_VALID",
+		2: "GIT_CREDENTIAL_HEALTH_EXPIRED",
+		3: "GIT_CREDENTIAL_HEALTH_NEEDS_RECONNECT",
+	}
+	GitCredentialHealth_value = map[string]int32{
+		"GIT_CREDENTIAL_HEALTH_UNSPECIFIED":     0,
+		"GIT_CREDENTIAL_HEALTH_VALID":           1,
+		"GIT_CREDENTIAL_HEALTH_EXPIRED":         2,
+		"GIT_CREDENTIAL_HEALTH_NEEDS_RECONNECT": 3,
+	}
+)
+
+func (x GitCredentialHealth) Enum() *GitCredentialHealth {
+	p := new(GitCredentialHealth)
+	*p = x
+	return p
+}
+
+func (x GitCredentialHealth) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (GitCredentialHealth) Descriptor() protoreflect.EnumDescriptor {
+	return file_services_git_credential_v1_git_credential_proto_enumTypes[0].Descriptor()
+}
+
+func (GitCredentialHealth) Type() protoreflect.EnumType {
+	return &file_services_git_credential_v1_git_credential_proto_enumTypes[0]
+}
+
+func (x GitCredentialHealth) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use GitCredentialHealth.Descriptor instead.
+func (GitCredentialHealth) EnumDescriptor() ([]byte, []int) {
+	return file_services_git_credential_v1_git_credential_proto_rawDescGZIP(), []int{0}
+}
+
+// How the credential was obtained, which determines whether it expires and
+// what "scopes" actually means.
+type GitCredentialKind int32
+
+const (
+	GitCredentialKind_GIT_CREDENTIAL_KIND_UNSPECIFIED GitCredentialKind = 0
+	// GitHub App user token (ghu_). Expires after eight hours and is renewed
+	// with a refresh token; access is governed by the App's installations,
+	// NOT by the OAuth scope string.
+	GitCredentialKind_GIT_CREDENTIAL_KIND_GITHUB_APP GitCredentialKind = 1
+	// Classic OAuth App token (gho_). Does not expire; scopes are meaningful.
+	GitCredentialKind_GIT_CREDENTIAL_KIND_OAUTH_APP GitCredentialKind = 2
+	// A personal access token the user pasted in by hand.
+	GitCredentialKind_GIT_CREDENTIAL_KIND_PERSONAL_ACCESS_TOKEN GitCredentialKind = 3
+)
+
+// Enum value maps for GitCredentialKind.
+var (
+	GitCredentialKind_name = map[int32]string{
+		0: "GIT_CREDENTIAL_KIND_UNSPECIFIED",
+		1: "GIT_CREDENTIAL_KIND_GITHUB_APP",
+		2: "GIT_CREDENTIAL_KIND_OAUTH_APP",
+		3: "GIT_CREDENTIAL_KIND_PERSONAL_ACCESS_TOKEN",
+	}
+	GitCredentialKind_value = map[string]int32{
+		"GIT_CREDENTIAL_KIND_UNSPECIFIED":           0,
+		"GIT_CREDENTIAL_KIND_GITHUB_APP":            1,
+		"GIT_CREDENTIAL_KIND_OAUTH_APP":             2,
+		"GIT_CREDENTIAL_KIND_PERSONAL_ACCESS_TOKEN": 3,
+	}
+)
+
+func (x GitCredentialKind) Enum() *GitCredentialKind {
+	p := new(GitCredentialKind)
+	*p = x
+	return p
+}
+
+func (x GitCredentialKind) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (GitCredentialKind) Descriptor() protoreflect.EnumDescriptor {
+	return file_services_git_credential_v1_git_credential_proto_enumTypes[1].Descriptor()
+}
+
+func (GitCredentialKind) Type() protoreflect.EnumType {
+	return &file_services_git_credential_v1_git_credential_proto_enumTypes[1]
+}
+
+func (x GitCredentialKind) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use GitCredentialKind.Descriptor instead.
+func (GitCredentialKind) EnumDescriptor() ([]byte, []int) {
+	return file_services_git_credential_v1_git_credential_proto_rawDescGZIP(), []int{1}
+}
+
 type SaveGitCredentialRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Provider      string                 `protobuf:"bytes,1,opt,name=provider,proto3" json:"provider,omitempty"` // e.g. "github"
@@ -169,20 +285,113 @@ func (x *GetGitCredentialRequest) GetProvider() string {
 	return ""
 }
 
+// A GitHub App installation the connected account can reach. Read-only.
+type GitAppInstallation struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The org or user the App is installed on, e.g. "reliant-labs".
+	AccountLogin string `protobuf:"bytes,1,opt,name=account_login,json=accountLogin,proto3" json:"account_login,omitempty"`
+	AccountType  string `protobuf:"bytes,2,opt,name=account_type,json=accountType,proto3" json:"account_type,omitempty"` // "Organization" or "User"
+	AvatarUrl    string `protobuf:"bytes,3,opt,name=avatar_url,json=avatarUrl,proto3" json:"avatar_url,omitempty"`
+	// Where the user manages which repositories this installation can see.
+	ConfigureUrl string `protobuf:"bytes,4,opt,name=configure_url,json=configureUrl,proto3" json:"configure_url,omitempty"`
+	// "all" when the installation covers every repository, otherwise
+	// "selected".
+	RepositorySelection string `protobuf:"bytes,5,opt,name=repository_selection,json=repositorySelection,proto3" json:"repository_selection,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
+}
+
+func (x *GitAppInstallation) Reset() {
+	*x = GitAppInstallation{}
+	mi := &file_services_git_credential_v1_git_credential_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GitAppInstallation) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GitAppInstallation) ProtoMessage() {}
+
+func (x *GitAppInstallation) ProtoReflect() protoreflect.Message {
+	mi := &file_services_git_credential_v1_git_credential_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GitAppInstallation.ProtoReflect.Descriptor instead.
+func (*GitAppInstallation) Descriptor() ([]byte, []int) {
+	return file_services_git_credential_v1_git_credential_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *GitAppInstallation) GetAccountLogin() string {
+	if x != nil {
+		return x.AccountLogin
+	}
+	return ""
+}
+
+func (x *GitAppInstallation) GetAccountType() string {
+	if x != nil {
+		return x.AccountType
+	}
+	return ""
+}
+
+func (x *GitAppInstallation) GetAvatarUrl() string {
+	if x != nil {
+		return x.AvatarUrl
+	}
+	return ""
+}
+
+func (x *GitAppInstallation) GetConfigureUrl() string {
+	if x != nil {
+		return x.ConfigureUrl
+	}
+	return ""
+}
+
+func (x *GitAppInstallation) GetRepositorySelection() string {
+	if x != nil {
+		return x.RepositorySelection
+	}
+	return ""
+}
+
 type GetGitCredentialResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Provider      string                 `protobuf:"bytes,1,opt,name=provider,proto3" json:"provider,omitempty"`
-	Scopes        string                 `protobuf:"bytes,2,opt,name=scopes,proto3" json:"scopes,omitempty"`
-	HasToken      bool                   `protobuf:"varint,3,opt,name=has_token,json=hasToken,proto3" json:"has_token,omitempty"`
-	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	UpdatedAt     *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Provider  string                 `protobuf:"bytes,1,opt,name=provider,proto3" json:"provider,omitempty"`
+	Scopes    string                 `protobuf:"bytes,2,opt,name=scopes,proto3" json:"scopes,omitempty"`
+	HasToken  bool                   `protobuf:"varint,3,opt,name=has_token,json=hasToken,proto3" json:"has_token,omitempty"`
+	CreatedAt *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	UpdatedAt *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	// Which GitHub account the credential belongs to. Empty when the provider
+	// could not be reached or the token is dead — the settings page then shows
+	// the health state rather than a name it cannot verify.
+	AccountLogin     string              `protobuf:"bytes,6,opt,name=account_login,json=accountLogin,proto3" json:"account_login,omitempty"`
+	AccountAvatarUrl string              `protobuf:"bytes,7,opt,name=account_avatar_url,json=accountAvatarUrl,proto3" json:"account_avatar_url,omitempty"`
+	Kind             GitCredentialKind   `protobuf:"varint,8,opt,name=kind,proto3,enum=controlplane.v1.GitCredentialKind" json:"kind,omitempty"`
+	Health           GitCredentialHealth `protobuf:"varint,9,opt,name=health,proto3,enum=controlplane.v1.GitCredentialHealth" json:"health,omitempty"`
+	// When the access token expires. Unset for credential kinds that never do.
+	ExpiresAt *timestamppb.Timestamp `protobuf:"bytes,10,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
+	// GitHub App installations reachable by this credential. Always empty for
+	// kinds where the concept does not apply.
+	Installations []*GitAppInstallation `protobuf:"bytes,11,rep,name=installations,proto3" json:"installations,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *GetGitCredentialResponse) Reset() {
 	*x = GetGitCredentialResponse{}
-	mi := &file_services_git_credential_v1_git_credential_proto_msgTypes[3]
+	mi := &file_services_git_credential_v1_git_credential_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -194,7 +403,7 @@ func (x *GetGitCredentialResponse) String() string {
 func (*GetGitCredentialResponse) ProtoMessage() {}
 
 func (x *GetGitCredentialResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_git_credential_v1_git_credential_proto_msgTypes[3]
+	mi := &file_services_git_credential_v1_git_credential_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -207,7 +416,7 @@ func (x *GetGitCredentialResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetGitCredentialResponse.ProtoReflect.Descriptor instead.
 func (*GetGitCredentialResponse) Descriptor() ([]byte, []int) {
-	return file_services_git_credential_v1_git_credential_proto_rawDescGZIP(), []int{3}
+	return file_services_git_credential_v1_git_credential_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *GetGitCredentialResponse) GetProvider() string {
@@ -245,6 +454,48 @@ func (x *GetGitCredentialResponse) GetUpdatedAt() *timestamppb.Timestamp {
 	return nil
 }
 
+func (x *GetGitCredentialResponse) GetAccountLogin() string {
+	if x != nil {
+		return x.AccountLogin
+	}
+	return ""
+}
+
+func (x *GetGitCredentialResponse) GetAccountAvatarUrl() string {
+	if x != nil {
+		return x.AccountAvatarUrl
+	}
+	return ""
+}
+
+func (x *GetGitCredentialResponse) GetKind() GitCredentialKind {
+	if x != nil {
+		return x.Kind
+	}
+	return GitCredentialKind_GIT_CREDENTIAL_KIND_UNSPECIFIED
+}
+
+func (x *GetGitCredentialResponse) GetHealth() GitCredentialHealth {
+	if x != nil {
+		return x.Health
+	}
+	return GitCredentialHealth_GIT_CREDENTIAL_HEALTH_UNSPECIFIED
+}
+
+func (x *GetGitCredentialResponse) GetExpiresAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ExpiresAt
+	}
+	return nil
+}
+
+func (x *GetGitCredentialResponse) GetInstallations() []*GitAppInstallation {
+	if x != nil {
+		return x.Installations
+	}
+	return nil
+}
+
 type DeleteGitCredentialRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Provider      string                 `protobuf:"bytes,1,opt,name=provider,proto3" json:"provider,omitempty"`
@@ -254,7 +505,7 @@ type DeleteGitCredentialRequest struct {
 
 func (x *DeleteGitCredentialRequest) Reset() {
 	*x = DeleteGitCredentialRequest{}
-	mi := &file_services_git_credential_v1_git_credential_proto_msgTypes[4]
+	mi := &file_services_git_credential_v1_git_credential_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -266,7 +517,7 @@ func (x *DeleteGitCredentialRequest) String() string {
 func (*DeleteGitCredentialRequest) ProtoMessage() {}
 
 func (x *DeleteGitCredentialRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_git_credential_v1_git_credential_proto_msgTypes[4]
+	mi := &file_services_git_credential_v1_git_credential_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -279,7 +530,7 @@ func (x *DeleteGitCredentialRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteGitCredentialRequest.ProtoReflect.Descriptor instead.
 func (*DeleteGitCredentialRequest) Descriptor() ([]byte, []int) {
-	return file_services_git_credential_v1_git_credential_proto_rawDescGZIP(), []int{4}
+	return file_services_git_credential_v1_git_credential_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *DeleteGitCredentialRequest) GetProvider() string {
@@ -297,7 +548,7 @@ type DeleteGitCredentialResponse struct {
 
 func (x *DeleteGitCredentialResponse) Reset() {
 	*x = DeleteGitCredentialResponse{}
-	mi := &file_services_git_credential_v1_git_credential_proto_msgTypes[5]
+	mi := &file_services_git_credential_v1_git_credential_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -309,7 +560,7 @@ func (x *DeleteGitCredentialResponse) String() string {
 func (*DeleteGitCredentialResponse) ProtoMessage() {}
 
 func (x *DeleteGitCredentialResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_git_credential_v1_git_credential_proto_msgTypes[5]
+	mi := &file_services_git_credential_v1_git_credential_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -322,7 +573,7 @@ func (x *DeleteGitCredentialResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteGitCredentialResponse.ProtoReflect.Descriptor instead.
 func (*DeleteGitCredentialResponse) Descriptor() ([]byte, []int) {
-	return file_services_git_credential_v1_git_credential_proto_rawDescGZIP(), []int{5}
+	return file_services_git_credential_v1_git_credential_proto_rawDescGZIP(), []int{6}
 }
 
 type CloneRepoRequest struct {
@@ -337,7 +588,7 @@ type CloneRepoRequest struct {
 
 func (x *CloneRepoRequest) Reset() {
 	*x = CloneRepoRequest{}
-	mi := &file_services_git_credential_v1_git_credential_proto_msgTypes[6]
+	mi := &file_services_git_credential_v1_git_credential_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -349,7 +600,7 @@ func (x *CloneRepoRequest) String() string {
 func (*CloneRepoRequest) ProtoMessage() {}
 
 func (x *CloneRepoRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_git_credential_v1_git_credential_proto_msgTypes[6]
+	mi := &file_services_git_credential_v1_git_credential_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -362,7 +613,7 @@ func (x *CloneRepoRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CloneRepoRequest.ProtoReflect.Descriptor instead.
 func (*CloneRepoRequest) Descriptor() ([]byte, []int) {
-	return file_services_git_credential_v1_git_credential_proto_rawDescGZIP(), []int{6}
+	return file_services_git_credential_v1_git_credential_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *CloneRepoRequest) GetDaemonId() string {
@@ -419,7 +670,7 @@ type CloneRepoResponse struct {
 
 func (x *CloneRepoResponse) Reset() {
 	*x = CloneRepoResponse{}
-	mi := &file_services_git_credential_v1_git_credential_proto_msgTypes[7]
+	mi := &file_services_git_credential_v1_git_credential_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -431,7 +682,7 @@ func (x *CloneRepoResponse) String() string {
 func (*CloneRepoResponse) ProtoMessage() {}
 
 func (x *CloneRepoResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_git_credential_v1_git_credential_proto_msgTypes[7]
+	mi := &file_services_git_credential_v1_git_credential_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -444,7 +695,7 @@ func (x *CloneRepoResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CloneRepoResponse.ProtoReflect.Descriptor instead.
 func (*CloneRepoResponse) Descriptor() ([]byte, []int) {
-	return file_services_git_credential_v1_git_credential_proto_rawDescGZIP(), []int{7}
+	return file_services_git_credential_v1_git_credential_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *CloneRepoResponse) GetClonedPath() string {
@@ -487,7 +738,7 @@ type ListGitReposRequest struct {
 
 func (x *ListGitReposRequest) Reset() {
 	*x = ListGitReposRequest{}
-	mi := &file_services_git_credential_v1_git_credential_proto_msgTypes[8]
+	mi := &file_services_git_credential_v1_git_credential_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -499,7 +750,7 @@ func (x *ListGitReposRequest) String() string {
 func (*ListGitReposRequest) ProtoMessage() {}
 
 func (x *ListGitReposRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_git_credential_v1_git_credential_proto_msgTypes[8]
+	mi := &file_services_git_credential_v1_git_credential_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -512,7 +763,7 @@ func (x *ListGitReposRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListGitReposRequest.ProtoReflect.Descriptor instead.
 func (*ListGitReposRequest) Descriptor() ([]byte, []int) {
-	return file_services_git_credential_v1_git_credential_proto_rawDescGZIP(), []int{8}
+	return file_services_git_credential_v1_git_credential_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *ListGitReposRequest) GetProvider() string {
@@ -553,7 +804,7 @@ type ListGitReposResponse struct {
 
 func (x *ListGitReposResponse) Reset() {
 	*x = ListGitReposResponse{}
-	mi := &file_services_git_credential_v1_git_credential_proto_msgTypes[9]
+	mi := &file_services_git_credential_v1_git_credential_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -565,7 +816,7 @@ func (x *ListGitReposResponse) String() string {
 func (*ListGitReposResponse) ProtoMessage() {}
 
 func (x *ListGitReposResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_git_credential_v1_git_credential_proto_msgTypes[9]
+	mi := &file_services_git_credential_v1_git_credential_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -578,7 +829,7 @@ func (x *ListGitReposResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListGitReposResponse.ProtoReflect.Descriptor instead.
 func (*ListGitReposResponse) Descriptor() ([]byte, []int) {
-	return file_services_git_credential_v1_git_credential_proto_rawDescGZIP(), []int{9}
+	return file_services_git_credential_v1_git_credential_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *ListGitReposResponse) GetRepos() []*v1.GitRepo {
@@ -605,7 +856,7 @@ type ExchangeGithubOAuthCodeRequest struct {
 
 func (x *ExchangeGithubOAuthCodeRequest) Reset() {
 	*x = ExchangeGithubOAuthCodeRequest{}
-	mi := &file_services_git_credential_v1_git_credential_proto_msgTypes[10]
+	mi := &file_services_git_credential_v1_git_credential_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -617,7 +868,7 @@ func (x *ExchangeGithubOAuthCodeRequest) String() string {
 func (*ExchangeGithubOAuthCodeRequest) ProtoMessage() {}
 
 func (x *ExchangeGithubOAuthCodeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_git_credential_v1_git_credential_proto_msgTypes[10]
+	mi := &file_services_git_credential_v1_git_credential_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -630,7 +881,7 @@ func (x *ExchangeGithubOAuthCodeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExchangeGithubOAuthCodeRequest.ProtoReflect.Descriptor instead.
 func (*ExchangeGithubOAuthCodeRequest) Descriptor() ([]byte, []int) {
-	return file_services_git_credential_v1_git_credential_proto_rawDescGZIP(), []int{10}
+	return file_services_git_credential_v1_git_credential_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *ExchangeGithubOAuthCodeRequest) GetCode() string {
@@ -658,7 +909,7 @@ type ExchangeGithubOAuthCodeResponse struct {
 
 func (x *ExchangeGithubOAuthCodeResponse) Reset() {
 	*x = ExchangeGithubOAuthCodeResponse{}
-	mi := &file_services_git_credential_v1_git_credential_proto_msgTypes[11]
+	mi := &file_services_git_credential_v1_git_credential_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -670,7 +921,7 @@ func (x *ExchangeGithubOAuthCodeResponse) String() string {
 func (*ExchangeGithubOAuthCodeResponse) ProtoMessage() {}
 
 func (x *ExchangeGithubOAuthCodeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_git_credential_v1_git_credential_proto_msgTypes[11]
+	mi := &file_services_git_credential_v1_git_credential_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -683,7 +934,7 @@ func (x *ExchangeGithubOAuthCodeResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExchangeGithubOAuthCodeResponse.ProtoReflect.Descriptor instead.
 func (*ExchangeGithubOAuthCodeResponse) Descriptor() ([]byte, []int) {
-	return file_services_git_credential_v1_git_credential_proto_rawDescGZIP(), []int{11}
+	return file_services_git_credential_v1_git_credential_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *ExchangeGithubOAuthCodeResponse) GetOk() bool {
@@ -718,7 +969,14 @@ const file_services_git_credential_v1_git_credential_proto_rawDesc = "" +
 	"\x06scopes\x18\x03 \x01(\tR\x06scopes\"\x1b\n" +
 	"\x19SaveGitCredentialResponse\"5\n" +
 	"\x17GetGitCredentialRequest\x12\x1a\n" +
-	"\bprovider\x18\x01 \x01(\tR\bprovider\"\xe1\x01\n" +
+	"\bprovider\x18\x01 \x01(\tR\bprovider\"\xd3\x01\n" +
+	"\x12GitAppInstallation\x12#\n" +
+	"\raccount_login\x18\x01 \x01(\tR\faccountLogin\x12!\n" +
+	"\faccount_type\x18\x02 \x01(\tR\vaccountType\x12\x1d\n" +
+	"\n" +
+	"avatar_url\x18\x03 \x01(\tR\tavatarUrl\x12#\n" +
+	"\rconfigure_url\x18\x04 \x01(\tR\fconfigureUrl\x121\n" +
+	"\x14repository_selection\x18\x05 \x01(\tR\x13repositorySelection\"\xb0\x04\n" +
 	"\x18GetGitCredentialResponse\x12\x1a\n" +
 	"\bprovider\x18\x01 \x01(\tR\bprovider\x12\x16\n" +
 	"\x06scopes\x18\x02 \x01(\tR\x06scopes\x12\x1b\n" +
@@ -726,7 +984,15 @@ const file_services_git_credential_v1_git_credential_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
-	"updated_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"8\n" +
+	"updated_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12#\n" +
+	"\raccount_login\x18\x06 \x01(\tR\faccountLogin\x12,\n" +
+	"\x12account_avatar_url\x18\a \x01(\tR\x10accountAvatarUrl\x126\n" +
+	"\x04kind\x18\b \x01(\x0e2\".controlplane.v1.GitCredentialKindR\x04kind\x12<\n" +
+	"\x06health\x18\t \x01(\x0e2$.controlplane.v1.GitCredentialHealthR\x06health\x129\n" +
+	"\n" +
+	"expires_at\x18\n" +
+	" \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt\x12I\n" +
+	"\rinstallations\x18\v \x03(\v2#.controlplane.v1.GitAppInstallationR\rinstallations\"8\n" +
 	"\x1aDeleteGitCredentialRequest\x12\x1a\n" +
 	"\bprovider\x18\x01 \x01(\tR\bprovider\"\x1d\n" +
 	"\x1bDeleteGitCredentialResponse\"}\n" +
@@ -757,7 +1023,17 @@ const file_services_git_credential_v1_git_credential_proto_rawDesc = "" +
 	"\x1fExchangeGithubOAuthCodeResponse\x12\x0e\n" +
 	"\x02ok\x18\x01 \x01(\bR\x02ok\x12\x1b\n" +
 	"\treturn_to\x18\x02 \x01(\tR\breturnTo\x12\x14\n" +
-	"\x05error\x18\x03 \x01(\tR\x05error2\x8c\x05\n" +
+	"\x05error\x18\x03 \x01(\tR\x05error*\xab\x01\n" +
+	"\x13GitCredentialHealth\x12%\n" +
+	"!GIT_CREDENTIAL_HEALTH_UNSPECIFIED\x10\x00\x12\x1f\n" +
+	"\x1bGIT_CREDENTIAL_HEALTH_VALID\x10\x01\x12!\n" +
+	"\x1dGIT_CREDENTIAL_HEALTH_EXPIRED\x10\x02\x12)\n" +
+	"%GIT_CREDENTIAL_HEALTH_NEEDS_RECONNECT\x10\x03*\xae\x01\n" +
+	"\x11GitCredentialKind\x12#\n" +
+	"\x1fGIT_CREDENTIAL_KIND_UNSPECIFIED\x10\x00\x12\"\n" +
+	"\x1eGIT_CREDENTIAL_KIND_GITHUB_APP\x10\x01\x12!\n" +
+	"\x1dGIT_CREDENTIAL_KIND_OAUTH_APP\x10\x02\x12-\n" +
+	")GIT_CREDENTIAL_KIND_PERSONAL_ACCESS_TOKEN\x10\x032\x8c\x05\n" +
 	"\x14GitCredentialService\x12j\n" +
 	"\x11SaveGitCredential\x12).controlplane.v1.SaveGitCredentialRequest\x1a*.controlplane.v1.SaveGitCredentialResponse\x12g\n" +
 	"\x10GetGitCredential\x12(.controlplane.v1.GetGitCredentialRequest\x1a).controlplane.v1.GetGitCredentialResponse\x12p\n" +
@@ -779,44 +1055,52 @@ func file_services_git_credential_v1_git_credential_proto_rawDescGZIP() []byte {
 	return file_services_git_credential_v1_git_credential_proto_rawDescData
 }
 
-var file_services_git_credential_v1_git_credential_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
+var file_services_git_credential_v1_git_credential_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
+var file_services_git_credential_v1_git_credential_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
 var file_services_git_credential_v1_git_credential_proto_goTypes = []any{
-	(*SaveGitCredentialRequest)(nil),        // 0: controlplane.v1.SaveGitCredentialRequest
-	(*SaveGitCredentialResponse)(nil),       // 1: controlplane.v1.SaveGitCredentialResponse
-	(*GetGitCredentialRequest)(nil),         // 2: controlplane.v1.GetGitCredentialRequest
-	(*GetGitCredentialResponse)(nil),        // 3: controlplane.v1.GetGitCredentialResponse
-	(*DeleteGitCredentialRequest)(nil),      // 4: controlplane.v1.DeleteGitCredentialRequest
-	(*DeleteGitCredentialResponse)(nil),     // 5: controlplane.v1.DeleteGitCredentialResponse
-	(*CloneRepoRequest)(nil),                // 6: controlplane.v1.CloneRepoRequest
-	(*CloneRepoResponse)(nil),               // 7: controlplane.v1.CloneRepoResponse
-	(*ListGitReposRequest)(nil),             // 8: controlplane.v1.ListGitReposRequest
-	(*ListGitReposResponse)(nil),            // 9: controlplane.v1.ListGitReposResponse
-	(*ExchangeGithubOAuthCodeRequest)(nil),  // 10: controlplane.v1.ExchangeGithubOAuthCodeRequest
-	(*ExchangeGithubOAuthCodeResponse)(nil), // 11: controlplane.v1.ExchangeGithubOAuthCodeResponse
-	(*timestamppb.Timestamp)(nil),           // 12: google.protobuf.Timestamp
-	(*v1.GitRepo)(nil),                      // 13: controlplane.v1.GitRepo
+	(GitCredentialHealth)(0),                // 0: controlplane.v1.GitCredentialHealth
+	(GitCredentialKind)(0),                  // 1: controlplane.v1.GitCredentialKind
+	(*SaveGitCredentialRequest)(nil),        // 2: controlplane.v1.SaveGitCredentialRequest
+	(*SaveGitCredentialResponse)(nil),       // 3: controlplane.v1.SaveGitCredentialResponse
+	(*GetGitCredentialRequest)(nil),         // 4: controlplane.v1.GetGitCredentialRequest
+	(*GitAppInstallation)(nil),              // 5: controlplane.v1.GitAppInstallation
+	(*GetGitCredentialResponse)(nil),        // 6: controlplane.v1.GetGitCredentialResponse
+	(*DeleteGitCredentialRequest)(nil),      // 7: controlplane.v1.DeleteGitCredentialRequest
+	(*DeleteGitCredentialResponse)(nil),     // 8: controlplane.v1.DeleteGitCredentialResponse
+	(*CloneRepoRequest)(nil),                // 9: controlplane.v1.CloneRepoRequest
+	(*CloneRepoResponse)(nil),               // 10: controlplane.v1.CloneRepoResponse
+	(*ListGitReposRequest)(nil),             // 11: controlplane.v1.ListGitReposRequest
+	(*ListGitReposResponse)(nil),            // 12: controlplane.v1.ListGitReposResponse
+	(*ExchangeGithubOAuthCodeRequest)(nil),  // 13: controlplane.v1.ExchangeGithubOAuthCodeRequest
+	(*ExchangeGithubOAuthCodeResponse)(nil), // 14: controlplane.v1.ExchangeGithubOAuthCodeResponse
+	(*timestamppb.Timestamp)(nil),           // 15: google.protobuf.Timestamp
+	(*v1.GitRepo)(nil),                      // 16: controlplane.v1.GitRepo
 }
 var file_services_git_credential_v1_git_credential_proto_depIdxs = []int32{
-	12, // 0: controlplane.v1.GetGitCredentialResponse.created_at:type_name -> google.protobuf.Timestamp
-	12, // 1: controlplane.v1.GetGitCredentialResponse.updated_at:type_name -> google.protobuf.Timestamp
-	13, // 2: controlplane.v1.ListGitReposResponse.repos:type_name -> controlplane.v1.GitRepo
-	0,  // 3: controlplane.v1.GitCredentialService.SaveGitCredential:input_type -> controlplane.v1.SaveGitCredentialRequest
-	2,  // 4: controlplane.v1.GitCredentialService.GetGitCredential:input_type -> controlplane.v1.GetGitCredentialRequest
-	4,  // 5: controlplane.v1.GitCredentialService.DeleteGitCredential:input_type -> controlplane.v1.DeleteGitCredentialRequest
-	6,  // 6: controlplane.v1.GitCredentialService.CloneRepo:input_type -> controlplane.v1.CloneRepoRequest
-	8,  // 7: controlplane.v1.GitCredentialService.ListGitRepos:input_type -> controlplane.v1.ListGitReposRequest
-	10, // 8: controlplane.v1.GitCredentialService.ExchangeGithubOAuthCode:input_type -> controlplane.v1.ExchangeGithubOAuthCodeRequest
-	1,  // 9: controlplane.v1.GitCredentialService.SaveGitCredential:output_type -> controlplane.v1.SaveGitCredentialResponse
-	3,  // 10: controlplane.v1.GitCredentialService.GetGitCredential:output_type -> controlplane.v1.GetGitCredentialResponse
-	5,  // 11: controlplane.v1.GitCredentialService.DeleteGitCredential:output_type -> controlplane.v1.DeleteGitCredentialResponse
-	7,  // 12: controlplane.v1.GitCredentialService.CloneRepo:output_type -> controlplane.v1.CloneRepoResponse
-	9,  // 13: controlplane.v1.GitCredentialService.ListGitRepos:output_type -> controlplane.v1.ListGitReposResponse
-	11, // 14: controlplane.v1.GitCredentialService.ExchangeGithubOAuthCode:output_type -> controlplane.v1.ExchangeGithubOAuthCodeResponse
-	9,  // [9:15] is the sub-list for method output_type
-	3,  // [3:9] is the sub-list for method input_type
-	3,  // [3:3] is the sub-list for extension type_name
-	3,  // [3:3] is the sub-list for extension extendee
-	0,  // [0:3] is the sub-list for field type_name
+	15, // 0: controlplane.v1.GetGitCredentialResponse.created_at:type_name -> google.protobuf.Timestamp
+	15, // 1: controlplane.v1.GetGitCredentialResponse.updated_at:type_name -> google.protobuf.Timestamp
+	1,  // 2: controlplane.v1.GetGitCredentialResponse.kind:type_name -> controlplane.v1.GitCredentialKind
+	0,  // 3: controlplane.v1.GetGitCredentialResponse.health:type_name -> controlplane.v1.GitCredentialHealth
+	15, // 4: controlplane.v1.GetGitCredentialResponse.expires_at:type_name -> google.protobuf.Timestamp
+	5,  // 5: controlplane.v1.GetGitCredentialResponse.installations:type_name -> controlplane.v1.GitAppInstallation
+	16, // 6: controlplane.v1.ListGitReposResponse.repos:type_name -> controlplane.v1.GitRepo
+	2,  // 7: controlplane.v1.GitCredentialService.SaveGitCredential:input_type -> controlplane.v1.SaveGitCredentialRequest
+	4,  // 8: controlplane.v1.GitCredentialService.GetGitCredential:input_type -> controlplane.v1.GetGitCredentialRequest
+	7,  // 9: controlplane.v1.GitCredentialService.DeleteGitCredential:input_type -> controlplane.v1.DeleteGitCredentialRequest
+	9,  // 10: controlplane.v1.GitCredentialService.CloneRepo:input_type -> controlplane.v1.CloneRepoRequest
+	11, // 11: controlplane.v1.GitCredentialService.ListGitRepos:input_type -> controlplane.v1.ListGitReposRequest
+	13, // 12: controlplane.v1.GitCredentialService.ExchangeGithubOAuthCode:input_type -> controlplane.v1.ExchangeGithubOAuthCodeRequest
+	3,  // 13: controlplane.v1.GitCredentialService.SaveGitCredential:output_type -> controlplane.v1.SaveGitCredentialResponse
+	6,  // 14: controlplane.v1.GitCredentialService.GetGitCredential:output_type -> controlplane.v1.GetGitCredentialResponse
+	8,  // 15: controlplane.v1.GitCredentialService.DeleteGitCredential:output_type -> controlplane.v1.DeleteGitCredentialResponse
+	10, // 16: controlplane.v1.GitCredentialService.CloneRepo:output_type -> controlplane.v1.CloneRepoResponse
+	12, // 17: controlplane.v1.GitCredentialService.ListGitRepos:output_type -> controlplane.v1.ListGitReposResponse
+	14, // 18: controlplane.v1.GitCredentialService.ExchangeGithubOAuthCode:output_type -> controlplane.v1.ExchangeGithubOAuthCodeResponse
+	13, // [13:19] is the sub-list for method output_type
+	7,  // [7:13] is the sub-list for method input_type
+	7,  // [7:7] is the sub-list for extension type_name
+	7,  // [7:7] is the sub-list for extension extendee
+	0,  // [0:7] is the sub-list for field type_name
 }
 
 func init() { file_services_git_credential_v1_git_credential_proto_init() }
@@ -829,13 +1113,14 @@ func file_services_git_credential_v1_git_credential_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_services_git_credential_v1_git_credential_proto_rawDesc), len(file_services_git_credential_v1_git_credential_proto_rawDesc)),
-			NumEnums:      0,
-			NumMessages:   12,
+			NumEnums:      2,
+			NumMessages:   13,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
 		GoTypes:           file_services_git_credential_v1_git_credential_proto_goTypes,
 		DependencyIndexes: file_services_git_credential_v1_git_credential_proto_depIdxs,
+		EnumInfos:         file_services_git_credential_v1_git_credential_proto_enumTypes,
 		MessageInfos:      file_services_git_credential_v1_git_credential_proto_msgTypes,
 	}.Build()
 	File_services_git_credential_v1_git_credential_proto = out.File

@@ -11,14 +11,48 @@ import { timestampDate, type Timestamp } from "@bufbuild/protobuf/wkt";
 import { ConnectError } from "@connectrpc/connect";
 import { getControlPlaneClient } from "../client";
 import { CONTROL_PLANE_API_URL } from "../config";
-import { GitCredentialService } from "@/gen/controlplane/services/git_credential/v1/git_credential_pb";
+import {
+  GitCredentialService,
+  GitCredentialHealth as PbHealth,
+  GitCredentialKind as PbKind,
+} from "@/gen/controlplane/services/git_credential/v1/git_credential_pb";
 import type {
   CloneRepoArgs,
   GitAccount,
+  GitCredentialHealth,
+  GitCredentialKind,
   GitCredentialStatus,
   GitRepo,
   ListGitReposPage,
 } from "./types";
+
+// The wire enums are numeric; the app-side unions are strings so call sites
+// read as the question they are asking rather than as an enum comparison.
+function credentialKindFromProto(kind: PbKind): GitCredentialKind {
+  switch (kind) {
+    case PbKind.GITHUB_APP:
+      return "github_app";
+    case PbKind.OAUTH_APP:
+      return "oauth_app";
+    case PbKind.PERSONAL_ACCESS_TOKEN:
+      return "pat";
+    default:
+      return "unknown";
+  }
+}
+
+function credentialHealthFromProto(health: PbHealth): GitCredentialHealth {
+  switch (health) {
+    case PbHealth.VALID:
+      return "valid";
+    case PbHealth.EXPIRED:
+      return "expired";
+    case PbHealth.NEEDS_RECONNECT:
+      return "needsReconnect";
+    default:
+      return "unknown";
+  }
+}
 
 function timestampToISO(ts: Timestamp | undefined): string | undefined {
   if (!ts) return undefined;
@@ -43,6 +77,18 @@ export async function getCredential(
       scopes: res.scopes ?? "",
       createdAt: timestampToISO(res.createdAt),
       updatedAt: timestampToISO(res.updatedAt),
+      accountLogin: res.accountLogin || undefined,
+      accountAvatarUrl: res.accountAvatarUrl || undefined,
+      kind: credentialKindFromProto(res.kind),
+      health: credentialHealthFromProto(res.health),
+      expiresAt: timestampToISO(res.expiresAt),
+      installations: res.installations.map((i) => ({
+        accountLogin: i.accountLogin,
+        accountType: i.accountType,
+        avatarUrl: i.avatarUrl,
+        configureUrl: i.configureUrl,
+        repositorySelection: i.repositorySelection,
+      })),
     };
   } catch (err) {
     // NotFound bubbles up as a credential-missing signal; rethrow so callers

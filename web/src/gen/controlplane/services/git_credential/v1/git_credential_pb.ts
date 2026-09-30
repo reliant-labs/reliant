@@ -9,8 +9,8 @@
 //
 // See proto/controlplane/v1/README.md for stability/versioning policy.
 
-import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
-import { fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
+import type { GenEnum, GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
+import { enumDesc, fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
 import type { GitRepo } from "../../../controlplane/v1/shared_pb";
 import { file_controlplane_v1_shared } from "../../../controlplane/v1/shared_pb";
 import { file_forge_v1_forge } from "../../../forge/v1/forge_pb";
@@ -22,7 +22,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file services/git_credential/v1/git_credential.proto.
  */
 export const file_services_git_credential_v1_git_credential: GenFile = /*@__PURE__*/
-  fileDesc("Ci9zZXJ2aWNlcy9naXRfY3JlZGVudGlhbC92MS9naXRfY3JlZGVudGlhbC5wcm90bxIPY29udHJvbHBsYW5lLnYxIlIKGFNhdmVHaXRDcmVkZW50aWFsUmVxdWVzdBIQCghwcm92aWRlchgBIAEoCRIUCgxhY2Nlc3NfdG9rZW4YAiABKAkSDgoGc2NvcGVzGAMgASgJIhsKGVNhdmVHaXRDcmVkZW50aWFsUmVzcG9uc2UiKwoXR2V0R2l0Q3JlZGVudGlhbFJlcXVlc3QSEAoIcHJvdmlkZXIYASABKAkirwEKGEdldEdpdENyZWRlbnRpYWxSZXNwb25zZRIQCghwcm92aWRlchgBIAEoCRIOCgZzY29wZXMYAiABKAkSEQoJaGFzX3Rva2VuGAMgASgIEi4KCmNyZWF0ZWRfYXQYBCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi4KCnVwZGF0ZWRfYXQYBSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIi4KGkRlbGV0ZUdpdENyZWRlbnRpYWxSZXF1ZXN0EhAKCHByb3ZpZGVyGAEgASgJIh0KG0RlbGV0ZUdpdENyZWRlbnRpYWxSZXNwb25zZSJZChBDbG9uZVJlcG9SZXF1ZXN0EhEKCWRhZW1vbl9pZBgBIAEoCRIQCghnaXRfcmVwbxgCIAEoCRISCgpnaXRfYnJhbmNoGAMgASgJEgwKBHBhdGgYBCABKAkiYAoRQ2xvbmVSZXBvUmVzcG9uc2USEwoLY2xvbmVkX3BhdGgYASABKAkSDgoGcXVldWVkGAIgASgIEhEKCWRhZW1vbl9pZBgDIAEoCRITCgtkYWVtb25fbmFtZRgEIAEoCSJVChNMaXN0R2l0UmVwb3NSZXF1ZXN0EhAKCHByb3ZpZGVyGAEgASgJEgwKBHBhZ2UYAiABKAUSEAoIcGVyX3BhZ2UYAyABKAUSDAoEc29ydBgEIAEoCSJRChRMaXN0R2l0UmVwb3NSZXNwb25zZRInCgVyZXBvcxgBIAMoCzIYLmNvbnRyb2xwbGFuZS52MS5HaXRSZXBvEhAKCGhhc19tb3JlGAIgASgIIj0KHkV4Y2hhbmdlR2l0aHViT0F1dGhDb2RlUmVxdWVzdBIMCgRjb2RlGAEgASgJEg0KBXN0YXRlGAIgASgJIk8KH0V4Y2hhbmdlR2l0aHViT0F1dGhDb2RlUmVzcG9uc2USCgoCb2sYASABKAgSEQoJcmV0dXJuX3RvGAIgASgJEg0KBWVycm9yGAMgASgJMr0FChRHaXRDcmVkZW50aWFsU2VydmljZRJyChFTYXZlR2l0Q3JlZGVudGlhbBIpLmNvbnRyb2xwbGFuZS52MS5TYXZlR2l0Q3JlZGVudGlhbFJlcXVlc3QaKi5jb250cm9scGxhbmUudjEuU2F2ZUdpdENyZWRlbnRpYWxSZXNwb25zZSIGorsYAggBEm8KEEdldEdpdENyZWRlbnRpYWwSKC5jb250cm9scGxhbmUudjEuR2V0R2l0Q3JlZGVudGlhbFJlcXVlc3QaKS5jb250cm9scGxhbmUudjEuR2V0R2l0Q3JlZGVudGlhbFJlc3BvbnNlIgaiuxgCCAESeAoTRGVsZXRlR2l0Q3JlZGVudGlhbBIrLmNvbnRyb2xwbGFuZS52MS5EZWxldGVHaXRDcmVkZW50aWFsUmVxdWVzdBosLmNvbnRyb2xwbGFuZS52MS5EZWxldGVHaXRDcmVkZW50aWFsUmVzcG9uc2UiBqK7GAIIARJaCglDbG9uZVJlcG8SIS5jb250cm9scGxhbmUudjEuQ2xvbmVSZXBvUmVxdWVzdBoiLmNvbnRyb2xwbGFuZS52MS5DbG9uZVJlcG9SZXNwb25zZSIGorsYAggBEmMKDExpc3RHaXRSZXBvcxIkLmNvbnRyb2xwbGFuZS52MS5MaXN0R2l0UmVwb3NSZXF1ZXN0GiUuY29udHJvbHBsYW5lLnYxLkxpc3RHaXRSZXBvc1Jlc3BvbnNlIgaiuxgCCAEShAEKF0V4Y2hhbmdlR2l0aHViT0F1dGhDb2RlEi8uY29udHJvbHBsYW5lLnYxLkV4Y2hhbmdlR2l0aHViT0F1dGhDb2RlUmVxdWVzdBowLmNvbnRyb2xwbGFuZS52MS5FeGNoYW5nZUdpdGh1Yk9BdXRoQ29kZVJlc3BvbnNlIgaiuxgCCABC4gEKE2NvbS5jb250cm9scGxhbmUudjFCEkdpdENyZWRlbnRpYWxQcm90b1ABWlpnaXRodWIuY29tL3JlbGlhbnQtbGFicy9yZWxpYW50L2dlbi9jb250cm9scGxhbmUvc2VydmljZXMvZ2l0X2NyZWRlbnRpYWwvdjE7Y29udHJvbHBsYW5ldjGiAgNDWFiqAg9Db250cm9scGxhbmUuVjHKAg9Db250cm9scGxhbmVcVjHiAhtDb250cm9scGxhbmVcVjFcR1BCTWV0YWRhdGHqAhBDb250cm9scGxhbmU6OlYxYgZwcm90bzM", [file_controlplane_v1_shared, file_forge_v1_forge, file_google_protobuf_timestamp]);
+  fileDesc("Ci9zZXJ2aWNlcy9naXRfY3JlZGVudGlhbC92MS9naXRfY3JlZGVudGlhbC5wcm90bxIPY29udHJvbHBsYW5lLnYxIlIKGFNhdmVHaXRDcmVkZW50aWFsUmVxdWVzdBIQCghwcm92aWRlchgBIAEoCRIUCgxhY2Nlc3NfdG9rZW4YAiABKAkSDgoGc2NvcGVzGAMgASgJIhsKGVNhdmVHaXRDcmVkZW50aWFsUmVzcG9uc2UiKwoXR2V0R2l0Q3JlZGVudGlhbFJlcXVlc3QSEAoIcHJvdmlkZXIYASABKAkiigEKEkdpdEFwcEluc3RhbGxhdGlvbhIVCg1hY2NvdW50X2xvZ2luGAEgASgJEhQKDGFjY291bnRfdHlwZRgCIAEoCRISCgphdmF0YXJfdXJsGAMgASgJEhUKDWNvbmZpZ3VyZV91cmwYBCABKAkSHAoUcmVwb3NpdG9yeV9zZWxlY3Rpb24YBSABKAkitgMKGEdldEdpdENyZWRlbnRpYWxSZXNwb25zZRIQCghwcm92aWRlchgBIAEoCRIOCgZzY29wZXMYAiABKAkSEQoJaGFzX3Rva2VuGAMgASgIEi4KCmNyZWF0ZWRfYXQYBCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi4KCnVwZGF0ZWRfYXQYBSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhUKDWFjY291bnRfbG9naW4YBiABKAkSGgoSYWNjb3VudF9hdmF0YXJfdXJsGAcgASgJEjAKBGtpbmQYCCABKA4yIi5jb250cm9scGxhbmUudjEuR2l0Q3JlZGVudGlhbEtpbmQSNAoGaGVhbHRoGAkgASgOMiQuY29udHJvbHBsYW5lLnYxLkdpdENyZWRlbnRpYWxIZWFsdGgSLgoKZXhwaXJlc19hdBgKIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASOgoNaW5zdGFsbGF0aW9ucxgLIAMoCzIjLmNvbnRyb2xwbGFuZS52MS5HaXRBcHBJbnN0YWxsYXRpb24iLgoaRGVsZXRlR2l0Q3JlZGVudGlhbFJlcXVlc3QSEAoIcHJvdmlkZXIYASABKAkiHQobRGVsZXRlR2l0Q3JlZGVudGlhbFJlc3BvbnNlIlkKEENsb25lUmVwb1JlcXVlc3QSEQoJZGFlbW9uX2lkGAEgASgJEhAKCGdpdF9yZXBvGAIgASgJEhIKCmdpdF9icmFuY2gYAyABKAkSDAoEcGF0aBgEIAEoCSJgChFDbG9uZVJlcG9SZXNwb25zZRITCgtjbG9uZWRfcGF0aBgBIAEoCRIOCgZxdWV1ZWQYAiABKAgSEQoJZGFlbW9uX2lkGAMgASgJEhMKC2RhZW1vbl9uYW1lGAQgASgJIlUKE0xpc3RHaXRSZXBvc1JlcXVlc3QSEAoIcHJvdmlkZXIYASABKAkSDAoEcGFnZRgCIAEoBRIQCghwZXJfcGFnZRgDIAEoBRIMCgRzb3J0GAQgASgJIlEKFExpc3RHaXRSZXBvc1Jlc3BvbnNlEicKBXJlcG9zGAEgAygLMhguY29udHJvbHBsYW5lLnYxLkdpdFJlcG8SEAoIaGFzX21vcmUYAiABKAgiPQoeRXhjaGFuZ2VHaXRodWJPQXV0aENvZGVSZXF1ZXN0EgwKBGNvZGUYASABKAkSDQoFc3RhdGUYAiABKAkiTwofRXhjaGFuZ2VHaXRodWJPQXV0aENvZGVSZXNwb25zZRIKCgJvaxgBIAEoCBIRCglyZXR1cm5fdG8YAiABKAkSDQoFZXJyb3IYAyABKAkqqwEKE0dpdENyZWRlbnRpYWxIZWFsdGgSJQohR0lUX0NSRURFTlRJQUxfSEVBTFRIX1VOU1BFQ0lGSUVEEAASHwobR0lUX0NSRURFTlRJQUxfSEVBTFRIX1ZBTElEEAESIQodR0lUX0NSRURFTlRJQUxfSEVBTFRIX0VYUElSRUQQAhIpCiVHSVRfQ1JFREVOVElBTF9IRUFMVEhfTkVFRFNfUkVDT05ORUNUEAMqrgEKEUdpdENyZWRlbnRpYWxLaW5kEiMKH0dJVF9DUkVERU5USUFMX0tJTkRfVU5TUEVDSUZJRUQQABIiCh5HSVRfQ1JFREVOVElBTF9LSU5EX0dJVEhVQl9BUFAQARIhCh1HSVRfQ1JFREVOVElBTF9LSU5EX09BVVRIX0FQUBACEi0KKUdJVF9DUkVERU5USUFMX0tJTkRfUEVSU09OQUxfQUNDRVNTX1RPS0VOEAMyvQUKFEdpdENyZWRlbnRpYWxTZXJ2aWNlEnIKEVNhdmVHaXRDcmVkZW50aWFsEikuY29udHJvbHBsYW5lLnYxLlNhdmVHaXRDcmVkZW50aWFsUmVxdWVzdBoqLmNvbnRyb2xwbGFuZS52MS5TYXZlR2l0Q3JlZGVudGlhbFJlc3BvbnNlIgaiuxgCCAESbwoQR2V0R2l0Q3JlZGVudGlhbBIoLmNvbnRyb2xwbGFuZS52MS5HZXRHaXRDcmVkZW50aWFsUmVxdWVzdBopLmNvbnRyb2xwbGFuZS52MS5HZXRHaXRDcmVkZW50aWFsUmVzcG9uc2UiBqK7GAIIARJ4ChNEZWxldGVHaXRDcmVkZW50aWFsEisuY29udHJvbHBsYW5lLnYxLkRlbGV0ZUdpdENyZWRlbnRpYWxSZXF1ZXN0GiwuY29udHJvbHBsYW5lLnYxLkRlbGV0ZUdpdENyZWRlbnRpYWxSZXNwb25zZSIGorsYAggBEloKCUNsb25lUmVwbxIhLmNvbnRyb2xwbGFuZS52MS5DbG9uZVJlcG9SZXF1ZXN0GiIuY29udHJvbHBsYW5lLnYxLkNsb25lUmVwb1Jlc3BvbnNlIgaiuxgCCAESYwoMTGlzdEdpdFJlcG9zEiQuY29udHJvbHBsYW5lLnYxLkxpc3RHaXRSZXBvc1JlcXVlc3QaJS5jb250cm9scGxhbmUudjEuTGlzdEdpdFJlcG9zUmVzcG9uc2UiBqK7GAIIARKEAQoXRXhjaGFuZ2VHaXRodWJPQXV0aENvZGUSLy5jb250cm9scGxhbmUudjEuRXhjaGFuZ2VHaXRodWJPQXV0aENvZGVSZXF1ZXN0GjAuY29udHJvbHBsYW5lLnYxLkV4Y2hhbmdlR2l0aHViT0F1dGhDb2RlUmVzcG9uc2UiBqK7GAIIAELiAQoTY29tLmNvbnRyb2xwbGFuZS52MUISR2l0Q3JlZGVudGlhbFByb3RvUAFaWmdpdGh1Yi5jb20vcmVsaWFudC1sYWJzL3JlbGlhbnQvZ2VuL2NvbnRyb2xwbGFuZS9zZXJ2aWNlcy9naXRfY3JlZGVudGlhbC92MTtjb250cm9scGxhbmV2MaICA0NYWKoCD0NvbnRyb2xwbGFuZS5WMcoCD0NvbnRyb2xwbGFuZVxWMeICG0NvbnRyb2xwbGFuZVxWMVxHUEJNZXRhZGF0YeoCEENvbnRyb2xwbGFuZTo6VjFiBnByb3RvMw", [file_controlplane_v1_shared, file_forge_v1_forge, file_google_protobuf_timestamp]);
 
 /**
  * @generated from message controlplane.v1.SaveGitCredentialRequest
@@ -84,6 +84,54 @@ export const GetGitCredentialRequestSchema: GenMessage<GetGitCredentialRequest> 
   messageDesc(file_services_git_credential_v1_git_credential, 2);
 
 /**
+ * A GitHub App installation the connected account can reach. Read-only.
+ *
+ * @generated from message controlplane.v1.GitAppInstallation
+ */
+export type GitAppInstallation = Message<"controlplane.v1.GitAppInstallation"> & {
+  /**
+   * The org or user the App is installed on, e.g. "reliant-labs".
+   *
+   * @generated from field: string account_login = 1;
+   */
+  accountLogin: string;
+
+  /**
+   * "Organization" or "User"
+   *
+   * @generated from field: string account_type = 2;
+   */
+  accountType: string;
+
+  /**
+   * @generated from field: string avatar_url = 3;
+   */
+  avatarUrl: string;
+
+  /**
+   * Where the user manages which repositories this installation can see.
+   *
+   * @generated from field: string configure_url = 4;
+   */
+  configureUrl: string;
+
+  /**
+   * "all" when the installation covers every repository, otherwise
+   * "selected".
+   *
+   * @generated from field: string repository_selection = 5;
+   */
+  repositorySelection: string;
+};
+
+/**
+ * Describes the message controlplane.v1.GitAppInstallation.
+ * Use `create(GitAppInstallationSchema)` to create a new message.
+ */
+export const GitAppInstallationSchema: GenMessage<GitAppInstallation> = /*@__PURE__*/
+  messageDesc(file_services_git_credential_v1_git_credential, 3);
+
+/**
  * @generated from message controlplane.v1.GetGitCredentialResponse
  */
 export type GetGitCredentialResponse = Message<"controlplane.v1.GetGitCredentialResponse"> & {
@@ -111,6 +159,45 @@ export type GetGitCredentialResponse = Message<"controlplane.v1.GetGitCredential
    * @generated from field: google.protobuf.Timestamp updated_at = 5;
    */
   updatedAt?: Timestamp | undefined;
+
+  /**
+   * Which GitHub account the credential belongs to. Empty when the provider
+   * could not be reached or the token is dead — the settings page then shows
+   * the health state rather than a name it cannot verify.
+   *
+   * @generated from field: string account_login = 6;
+   */
+  accountLogin: string;
+
+  /**
+   * @generated from field: string account_avatar_url = 7;
+   */
+  accountAvatarUrl: string;
+
+  /**
+   * @generated from field: controlplane.v1.GitCredentialKind kind = 8;
+   */
+  kind: GitCredentialKind;
+
+  /**
+   * @generated from field: controlplane.v1.GitCredentialHealth health = 9;
+   */
+  health: GitCredentialHealth;
+
+  /**
+   * When the access token expires. Unset for credential kinds that never do.
+   *
+   * @generated from field: google.protobuf.Timestamp expires_at = 10;
+   */
+  expiresAt?: Timestamp | undefined;
+
+  /**
+   * GitHub App installations reachable by this credential. Always empty for
+   * kinds where the concept does not apply.
+   *
+   * @generated from field: repeated controlplane.v1.GitAppInstallation installations = 11;
+   */
+  installations: GitAppInstallation[];
 };
 
 /**
@@ -118,7 +205,7 @@ export type GetGitCredentialResponse = Message<"controlplane.v1.GetGitCredential
  * Use `create(GetGitCredentialResponseSchema)` to create a new message.
  */
 export const GetGitCredentialResponseSchema: GenMessage<GetGitCredentialResponse> = /*@__PURE__*/
-  messageDesc(file_services_git_credential_v1_git_credential, 3);
+  messageDesc(file_services_git_credential_v1_git_credential, 4);
 
 /**
  * @generated from message controlplane.v1.DeleteGitCredentialRequest
@@ -135,7 +222,7 @@ export type DeleteGitCredentialRequest = Message<"controlplane.v1.DeleteGitCrede
  * Use `create(DeleteGitCredentialRequestSchema)` to create a new message.
  */
 export const DeleteGitCredentialRequestSchema: GenMessage<DeleteGitCredentialRequest> = /*@__PURE__*/
-  messageDesc(file_services_git_credential_v1_git_credential, 4);
+  messageDesc(file_services_git_credential_v1_git_credential, 5);
 
 /**
  * @generated from message controlplane.v1.DeleteGitCredentialResponse
@@ -148,7 +235,7 @@ export type DeleteGitCredentialResponse = Message<"controlplane.v1.DeleteGitCred
  * Use `create(DeleteGitCredentialResponseSchema)` to create a new message.
  */
 export const DeleteGitCredentialResponseSchema: GenMessage<DeleteGitCredentialResponse> = /*@__PURE__*/
-  messageDesc(file_services_git_credential_v1_git_credential, 5);
+  messageDesc(file_services_git_credential_v1_git_credential, 6);
 
 /**
  * @generated from message controlplane.v1.CloneRepoRequest
@@ -182,7 +269,7 @@ export type CloneRepoRequest = Message<"controlplane.v1.CloneRepoRequest"> & {
  * Use `create(CloneRepoRequestSchema)` to create a new message.
  */
 export const CloneRepoRequestSchema: GenMessage<CloneRepoRequest> = /*@__PURE__*/
-  messageDesc(file_services_git_credential_v1_git_credential, 6);
+  messageDesc(file_services_git_credential_v1_git_credential, 7);
 
 /**
  * @generated from message controlplane.v1.CloneRepoResponse
@@ -231,7 +318,7 @@ export type CloneRepoResponse = Message<"controlplane.v1.CloneRepoResponse"> & {
  * Use `create(CloneRepoResponseSchema)` to create a new message.
  */
 export const CloneRepoResponseSchema: GenMessage<CloneRepoResponse> = /*@__PURE__*/
-  messageDesc(file_services_git_credential_v1_git_credential, 7);
+  messageDesc(file_services_git_credential_v1_git_credential, 8);
 
 /**
  * @generated from message controlplane.v1.ListGitReposRequest
@@ -263,7 +350,7 @@ export type ListGitReposRequest = Message<"controlplane.v1.ListGitReposRequest">
  * Use `create(ListGitReposRequestSchema)` to create a new message.
  */
 export const ListGitReposRequestSchema: GenMessage<ListGitReposRequest> = /*@__PURE__*/
-  messageDesc(file_services_git_credential_v1_git_credential, 8);
+  messageDesc(file_services_git_credential_v1_git_credential, 9);
 
 /**
  * @generated from message controlplane.v1.ListGitReposResponse
@@ -285,7 +372,7 @@ export type ListGitReposResponse = Message<"controlplane.v1.ListGitReposResponse
  * Use `create(ListGitReposResponseSchema)` to create a new message.
  */
 export const ListGitReposResponseSchema: GenMessage<ListGitReposResponse> = /*@__PURE__*/
-  messageDesc(file_services_git_credential_v1_git_credential, 9);
+  messageDesc(file_services_git_credential_v1_git_credential, 10);
 
 /**
  * @generated from message controlplane.v1.ExchangeGithubOAuthCodeRequest
@@ -311,7 +398,7 @@ export type ExchangeGithubOAuthCodeRequest = Message<"controlplane.v1.ExchangeGi
  * Use `create(ExchangeGithubOAuthCodeRequestSchema)` to create a new message.
  */
 export const ExchangeGithubOAuthCodeRequestSchema: GenMessage<ExchangeGithubOAuthCodeRequest> = /*@__PURE__*/
-  messageDesc(file_services_git_credential_v1_git_credential, 10);
+  messageDesc(file_services_git_credential_v1_git_credential, 11);
 
 /**
  * @generated from message controlplane.v1.ExchangeGithubOAuthCodeResponse
@@ -344,7 +431,89 @@ export type ExchangeGithubOAuthCodeResponse = Message<"controlplane.v1.ExchangeG
  * Use `create(ExchangeGithubOAuthCodeResponseSchema)` to create a new message.
  */
 export const ExchangeGithubOAuthCodeResponseSchema: GenMessage<ExchangeGithubOAuthCodeResponse> = /*@__PURE__*/
-  messageDesc(file_services_git_credential_v1_git_credential, 11);
+  messageDesc(file_services_git_credential_v1_git_credential, 12);
+
+/**
+ * Health of a stored credential, as the settings UI needs to present it.
+ *
+ * @generated from enum controlplane.v1.GitCredentialHealth
+ */
+export enum GitCredentialHealth {
+  /**
+   * @generated from enum value: GIT_CREDENTIAL_HEALTH_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * Usable now, or renewable without user action.
+   *
+   * @generated from enum value: GIT_CREDENTIAL_HEALTH_VALID = 1;
+   */
+  VALID = 1,
+
+  /**
+   * Past its expiry with no way to renew. The user must reconnect.
+   *
+   * @generated from enum value: GIT_CREDENTIAL_HEALTH_EXPIRED = 2;
+   */
+  EXPIRED = 2,
+
+  /**
+   * The provider rejected the refresh token (revoked, or past its own
+   * life). Terminal until the user re-authorizes.
+   *
+   * @generated from enum value: GIT_CREDENTIAL_HEALTH_NEEDS_RECONNECT = 3;
+   */
+  NEEDS_RECONNECT = 3,
+}
+
+/**
+ * Describes the enum controlplane.v1.GitCredentialHealth.
+ */
+export const GitCredentialHealthSchema: GenEnum<GitCredentialHealth> = /*@__PURE__*/
+  enumDesc(file_services_git_credential_v1_git_credential, 0);
+
+/**
+ * How the credential was obtained, which determines whether it expires and
+ * what "scopes" actually means.
+ *
+ * @generated from enum controlplane.v1.GitCredentialKind
+ */
+export enum GitCredentialKind {
+  /**
+   * @generated from enum value: GIT_CREDENTIAL_KIND_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * GitHub App user token (ghu_). Expires after eight hours and is renewed
+   * with a refresh token; access is governed by the App's installations,
+   * NOT by the OAuth scope string.
+   *
+   * @generated from enum value: GIT_CREDENTIAL_KIND_GITHUB_APP = 1;
+   */
+  GITHUB_APP = 1,
+
+  /**
+   * Classic OAuth App token (gho_). Does not expire; scopes are meaningful.
+   *
+   * @generated from enum value: GIT_CREDENTIAL_KIND_OAUTH_APP = 2;
+   */
+  OAUTH_APP = 2,
+
+  /**
+   * A personal access token the user pasted in by hand.
+   *
+   * @generated from enum value: GIT_CREDENTIAL_KIND_PERSONAL_ACCESS_TOKEN = 3;
+   */
+  PERSONAL_ACCESS_TOKEN = 3,
+}
+
+/**
+ * Describes the enum controlplane.v1.GitCredentialKind.
+ */
+export const GitCredentialKindSchema: GenEnum<GitCredentialKind> = /*@__PURE__*/
+  enumDesc(file_services_git_credential_v1_git_credential, 1);
 
 /**
  * @generated from service controlplane.v1.GitCredentialService

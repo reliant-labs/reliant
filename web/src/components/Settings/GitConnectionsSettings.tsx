@@ -1,13 +1,123 @@
 import { useCallback, useEffect, useState } from "react";
-import { Github, Loader2, Plus, Trash2, X, Cloud } from "lucide-react";
+import { Github, Loader2, Plus, RefreshCw, Trash2, X, Cloud } from "lucide-react";
 import { Button } from "../ui/Button";
 import { gitService } from "../../services/controlPlane/git";
+import type {
+  GitAppInstallation,
+  GitCredentialHealth,
+  GitCredentialKind,
+  GitCredentialStatus,
+} from "../../services/controlPlane/git/types";
 import { capabilities } from "../../services/controlPlane/capabilities";
 import { supabase } from "../../lib/supabase";
 
+/** Plain-English name for the credential kind. The kind is what determines
+ *  whether the token expires and whether its scopes mean anything, so it is
+ *  worth saying out loud rather than leaving the user to infer it. */
+function describeCredentialKind(kind: GitCredentialKind): string {
+  switch (kind) {
+    case "github_app":
+      return "GitHub App";
+    case "oauth_app":
+      return "OAuth app";
+    case "pat":
+      return "Personal access token";
+    default:
+      return "GitHub";
+  }
+}
+
+/** Whether the connection currently works — the one fact the old page never
+ *  showed, and the first thing anyone debugging a failed clone wants. */
+function TokenHealthLine({
+  health,
+  expiresAt,
+}: {
+  health: GitCredentialHealth;
+  expiresAt?: string;
+}) {
+  if (health === "needsReconnect") {
+    return (
+      <p className="mt-1 text-xs font-medium text-destructive">
+        Access expired — reconnect GitHub to keep cloning private repos.
+      </p>
+    );
+  }
+  if (health === "expired") {
+    return (
+      <p className="mt-1 text-xs font-medium text-destructive">
+        Token expired and can&apos;t be renewed automatically. Reconnect GitHub.
+      </p>
+    );
+  }
+  if (health !== "valid") return null;
+  return (
+    <p className="mt-1 text-xs text-muted-foreground">
+      Access is valid
+      {/* An App token is renewed automatically, so its eight-hour expiry is
+          not something the user must act on — say so, or the date reads as a
+          deadline. */}
+      {expiresAt ? " and renews automatically." : "."}
+    </p>
+  );
+}
+
+/** The GitHub App installations this credential can reach, each linking to
+ *  where repository access is managed. An empty list is the actionable case:
+ *  it is why a private repo is invisible. */
+function InstallationsPanel({ installations }: { installations: GitAppInstallation[] }) {
+  if (installations.length === 0) {
+    return (
+      <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-900 dark:text-amber-200">
+        The Reliant GitHub App isn&apos;t installed on any account, so Reliant can&apos;t
+        see your private repositories.{" "}
+        <a
+          href="https://github.com/settings/installations"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="underline hover:text-foreground"
+        >
+          Install it
+        </a>{" "}
+        on the org or user that owns the repos you want to clone.
+      </div>
+    );
+  }
+  return (
+    <div className="space-y-2 rounded-lg border border-border p-3">
+      <h4 className="text-xs font-medium">Installed on</h4>
+      <ul className="space-y-1.5">
+        {installations.map((installation) => (
+          <li
+            key={`${installation.accountType}:${installation.accountLogin}`}
+            className="flex items-center justify-between gap-3 text-xs"
+          >
+            <span className="min-w-0 truncate">
+              <span className="font-medium">{installation.accountLogin}</span>
+              <span className="text-muted-foreground">
+                {" "}
+                · {installation.repositorySelection === "all"
+                  ? "all repositories"
+                  : "selected repositories"}
+              </span>
+            </span>
+            <a
+              href={installation.configureUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex-shrink-0 underline text-muted-foreground hover:text-foreground"
+            >
+              Configure
+            </a>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 export function GitConnectionsSettings() {
-  const [hasToken, setHasToken] = useState(false);
-  const [scopes, setScopes] = useState("");
+  const [credential, setCredential] = useState<GitCredentialStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [disconnecting, setDisconnecting] = useState(false);
@@ -17,18 +127,27 @@ export function GitConnectionsSettings() {
   const [pat, setPat] = useState("");
   const [submittingPat, setSubmittingPat] = useState(false);
 
-  const scopeParts = scopes
+  const hasToken = credential?.hasToken ?? false;
+  const scopes = credential?.scopes ?? "";
+  const kind = credential?.kind ?? "unknown";
+  const health = credential?.health ?? "unknown";
+
+  // A GitHub App's access comes from its per-repository INSTALLATIONS, not
+  // from OAuth scopes — GitHub ignores the scope parameter for Apps entirely.
+  // So the "no repo scope" warning is meaningful for an OAuth App token or a
+  // PAT and actively misleading for an App, where the real question is which
+  // orgs the App is installed on.
+  const scopesAreMeaningful = kind === "oauth_app" || kind === "pat";
+  const hasRepoScope = scopes
     .split(/[,\s]+/)
     .map((scope) => scope.trim())
-    .filter(Boolean);
-  const hasRepoScope = scopeParts.includes("repo");
+    .filter(Boolean)
+    .includes("repo");
 
   const refresh = useCallback(async () => {
     setError(null);
     try {
-      const res = await gitService.getCredential("github");
-      setHasToken(res.hasToken);
-      setScopes(res.scopes || "");
+      setCredential(await gitService.getCredential("github"));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load credential");
     } finally {
@@ -156,30 +275,49 @@ export function GitConnectionsSettings() {
           </div>
         ) : hasToken ? (
           <div className="space-y-3">
-          <div className="flex items-center justify-between rounded-lg border border-border px-3 py-2">
-            <div className="flex items-center gap-3">
-              <Github className="h-4 w-4 text-muted-foreground" />
-              <div>
-                <p className="text-sm font-medium">GitHub connected</p>
-                <p className="text-xs text-muted-foreground">
-                  Scopes: {scopes || "(none)"}
+          <div className="flex items-start justify-between gap-3 rounded-lg border border-border px-3 py-2">
+            <div className="flex items-start gap-3 min-w-0">
+              {credential?.accountAvatarUrl ? (
+                <img
+                  src={credential.accountAvatarUrl}
+                  alt=""
+                  className="mt-0.5 h-8 w-8 rounded-full border border-border"
+                />
+              ) : (
+                <Github className="mt-1 h-4 w-4 text-muted-foreground" />
+              )}
+              <div className="min-w-0">
+                <p className="text-sm font-medium">
+                  {credential?.accountLogin
+                    ? `Connected as ${credential.accountLogin}`
+                    : "GitHub connected"}
                 </p>
+                <p className="text-xs text-muted-foreground">
+                  {describeCredentialKind(kind)}
+                  {scopesAreMeaningful && ` · Scopes: ${scopes || "(none)"}`}
+                </p>
+                <TokenHealthLine health={health} expiresAt={credential?.expiresAt} />
                 <p className="mt-1 text-xs text-muted-foreground">
                   Private org repos can still require org OAuth approval or SSO authorization.
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-1">
-              {!adding && (
-                <Button
-                  variant="ghost"
-                  size="xs"
-                  onClick={() => setAdding(true)}
-                  leftIcon={<Plus className="h-4 w-4" />}
-                >
-                  Recovery token
-                </Button>
-              )}
+            <div className="flex flex-shrink-0 items-center gap-1">
+              <Button
+                variant="ghost"
+                size="xs"
+                onClick={handleConnectOAuth}
+                disabled={connectingOAuth}
+                leftIcon={
+                  connectingOAuth ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <RefreshCw className="h-4 w-4" />
+                  )
+                }
+              >
+                Reconnect
+              </Button>
               <Button
                 variant="ghost"
                 size="xs"
@@ -194,7 +332,15 @@ export function GitConnectionsSettings() {
               </Button>
             </div>
           </div>
-          {!hasRepoScope && (
+
+          {/* For a GitHub App, WHICH orgs it is installed on is the fact that
+              determines whether a given private repo can be cloned at all —
+              far more useful than the scope string it replaces. */}
+          {kind === "github_app" && (
+            <InstallationsPanel installations={credential?.installations ?? []} />
+          )}
+
+          {scopesAreMeaningful && !hasRepoScope && (
             <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-900 dark:text-amber-200">
               This GitHub token has no <code>repo</code> scope, so Reliant can only see public repositories.
               Reauthorize GitHub to grant the required repository access.
@@ -215,7 +361,7 @@ export function GitConnectionsSettings() {
                     onClick={() => setAdding(true)}
                     leftIcon={<Plus className="h-4 w-4" />}
                   >
-                    Use recovery token
+                    Use a personal access token
                   </Button>
                 )}
               </div>
@@ -229,11 +375,13 @@ export function GitConnectionsSettings() {
 
       {!loading && (!hasToken || adding) && (
         <div className="space-y-3 rounded-lg border border-border p-4">
-          <h3 className="font-medium">{hasToken ? "Recovery token" : "Connect GitHub"}</h3>
+          <h3 className="font-medium">
+            {hasToken ? "Personal access token" : "Connect GitHub"}
+          </h3>
           <p className="text-xs text-muted-foreground">
             {hasToken
-              ? "Use this only while debugging an OAuth or org SSO authorization issue."
-              : "Sign in with GitHub via OAuth. The fallback token path is only for debugging authorization issues."}
+              ? "Paste a GitHub token to use instead of the OAuth connection above. This is a manual fallback for debugging an OAuth or org SSO authorization problem — it replaces the stored credential and, unlike the OAuth connection, is never renewed automatically."
+              : "Sign in with GitHub via OAuth. Pasting a token by hand is a fallback for debugging authorization problems."}
           </p>
 
           {!hasToken && (
@@ -254,7 +402,7 @@ export function GitConnectionsSettings() {
                   onClick={() => setAdding(true)}
                   leftIcon={<Plus className="h-4 w-4" />}
                 >
-                  Use recovery token
+                  Use a personal access token
                 </Button>
               )}
             </div>

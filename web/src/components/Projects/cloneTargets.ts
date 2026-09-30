@@ -113,6 +113,13 @@ export function cloneDescription({
  * one. `lastStatusMessage` is populated from gateway-side events (a storage
  * quota rejection, an image pull failure); it is frequently empty, and a
  * missing reason must not render as a blank line pretending to be one.
+ *
+ * The control-plane guarantees this string is user-safe — it translates the
+ * underlying error and never passes raw Kubernetes text through — so callers
+ * render it verbatim. Settings → Machines has its own `daemonFailureReason`
+ * which additionally decides WHEN to show it (it is handed daemons of every
+ * status); this one is only ever called on a row already known to be FAILED,
+ * so it just answers whether there is a message worth printing.
  */
 export function failureReason(daemon: CloudDaemon): string | null {
   const message = daemon.lastStatusMessage?.trim();
