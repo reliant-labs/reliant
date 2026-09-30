@@ -178,11 +178,60 @@ func (s *ToolsDaemonService) SetStatePublisher(p *daemonstate.Publisher) {
 	s.statePublisher = p
 }
 
-// Close stops background workers owned by the daemon service.
-// Kept for API stability. The stale-connection sweeper goroutine started by
-// Start() is bound to the context passed to Start, not to Close — cancel
-// that context to stop it.
-func (s *ToolsDaemonService) Close() {}
+// errGatewayDraining ends a daemon stream because THIS gateway is shutting
+// down. It is not a daemon-side fault and it is not permanent, so the daemon
+// must redial — at which point the Service routes it to a surge pod that is
+// already serving.
+//
+// CodeUnavailable is chosen deliberately. isFatalError
+// (internal/toolexec/daemonruntime/runtime.go:543) treats PermissionDenied,
+// Unimplemented and Aborted as terminal and everything else as recoverable, so
+// Unavailable puts the daemon on the reconnect path with a 1s first delay
+// (transport.ReconnectMinDelay; the backoff resets to it after any session
+// that lasted 30s, which every real daemon session does).
+//
+// The alternative — letting http.Server.Shutdown handle it — does not work at
+// all: Shutdown waits for active requests to finish and a bidi stream never
+// finishes on its own, so the gateway burned its entire shutdown budget and
+// then exited, cutting every daemon's TCP connection with no status at all.
+var errGatewayDraining = connect.NewError(connect.CodeUnavailable, fmt.Errorf(
+	"gateway draining: this daemon-gateway replica is shutting down; reconnect to reach a live replica"))
+
+// Close ends every daemon stream this service is holding, with a status the
+// daemon can act on.
+//
+// This runs at gateway shutdown, AFTER the readiness flip and pre-stop pause,
+// so by the time streams are cut the replica is already out of rotation and a
+// redial lands somewhere else. Each connection's done channel is closed with
+// errGatewayDraining, which unparks handleIncoming (it selects on conn.done)
+// and makes the Connect handler return that error to the daemon — instead of
+// leaving the handler blocked in Receive until the process is killed.
+//
+// Idempotent: closeWith is guarded by sync.Once per connection, so calling
+// Close twice, or calling it alongside a stream that is ending on its own, is
+// safe. The connections map is left intact — teardownConnection still runs
+// from each stream handler's defer and owns the attachment-row cleanup.
+//
+// The stale-connection sweeper goroutine started by Start() is bound to the
+// context passed to Start, not to Close — cancel that context to stop it.
+func (s *ToolsDaemonService) Close() {
+	s.mu.RLock()
+	conns := make([]*daemonConnection, 0, len(s.connections))
+	for _, conn := range s.connections {
+		conns = append(conns, conn)
+	}
+	s.mu.RUnlock()
+
+	if len(conns) == 0 {
+		return
+	}
+
+	logging.Info(LOG_PREFIX_TOOLS_DAEMON+" Draining daemon streams for shutdown",
+		"connections", len(conns))
+	for _, conn := range conns {
+		conn.closeWith(errGatewayDraining)
+	}
+}
 
 // Start launches background goroutines owned by the service. Currently this
 // is just the stale-connection sweeper, which periodically scans the
@@ -455,7 +504,13 @@ func (c *daemonConnection) closeWith(reason error) {
 	}
 	c.doneOnce.Do(func() {
 		c.closeReason.Store(&reason)
-		close(c.done)
+		// A connection built without a done channel has no handler parked on
+		// it and nothing to unblock. Guard rather than panic: this runs on
+		// the shutdown path, where a panic takes out the drain for every
+		// OTHER daemon still holding a stream.
+		if c.done != nil {
+			close(c.done)
+		}
 	})
 }
 

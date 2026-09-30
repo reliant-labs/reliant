@@ -10,7 +10,6 @@ package servergateway
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -30,6 +29,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/daemonquery"
 	"github.com/reliant-labs/reliant/internal/daemonstate"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/drain"
 	grpcserver "github.com/reliant-labs/reliant/internal/grpc"
 	"github.com/reliant-labs/reliant/internal/grpc/services"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -84,6 +84,9 @@ func Run(ctx context.Context, opts Options) error {
 	// 2. Initialize subsystems
 	// -------------------------------------------------------------------------
 	startTime := time.Now()
+
+	// Rollout drain budget from PRE_STOP_DELAY / SHUTDOWN_TIMEOUT.
+	drainer := drain.New()
 
 	logLevel := logging.GetLogLevel()
 	logging.SetupWithRotation(logLevel, false, &logging.RotationConfig{
@@ -352,28 +355,15 @@ func Run(ctx context.Context, opts Options) error {
 		_, _ = w.Write([]byte(`{"status":"ok","service":"daemon-gateway"}`))
 	})
 	healthMux.Handle("/metrics", observability.MetricsHandler())
-	healthMux.HandleFunc("/ready", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		var failures []string
-
-		if err := repo.Ping(r.Context()); err != nil {
-			failures = append(failures, "db: "+err.Error())
-		}
-		if !nc.IsConnected() {
-			failures = append(failures, "nats: disconnected")
-		}
-
-		if len(failures) > 0 {
-			w.WriteHeader(http.StatusServiceUnavailable)
-			_ = json.NewEncoder(w).Encode(map[string]any{
-				"status": "not_ready",
-				"reason": fmt.Sprintf("%v", failures),
-			})
-			return
-		}
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"status":"ready"}`))
-	})
+	healthMux.HandleFunc("/ready", drainer.ReadinessHandler("daemon-gateway",
+		drain.ReadinessCheck{Name: "db", Check: repo.Ping},
+		drain.ReadinessCheck{Name: "nats", Check: func(context.Context) error {
+			if !nc.IsConnected() {
+				return fmt.Errorf("disconnected")
+			}
+			return nil
+		}},
+	))
 	// /flow-health: the APP-FLOW assertion (daemon-connected invariant). The
 	// gateway OWNS the attachment registry, so it asserts internally and
 	// exposes a STATUS-ONLY 200/503 — no per-daemon detail — that `forge
@@ -418,21 +408,38 @@ func Run(ctx context.Context, opts Options) error {
 		logging.Info("Context cancelled, beginning graceful shutdown")
 	}
 
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	// Flip /ready to 503 and keep serving for PRE_STOP_DELAY so this replica
+	// leaves EndpointSlices before anything stops accepting. The health
+	// server stays up through the whole drain and is stopped last.
+	logging.Info("Draining: readiness flipped to not-ready",
+		"pre_stop_delay", drainer.PreStopDelay(),
+		"shutdown_timeout", drainer.ShutdownTimeout())
+	drainer.Begin()
+
+	shutdownCtx, cancel := drainer.ShutdownContext()
 	defer cancel()
 
-	// Stop health endpoint first
-	logging.Info("Stopping health endpoint")
-	healthShutdownCtx, healthCancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer healthCancel()
-	if err := healthServer.Shutdown(healthShutdownCtx); err != nil {
-		logging.Error("Error stopping health endpoint", "error", err)
-	}
+	// Cancel outbound gateway→daemon dials before ending inbound streams, so
+	// the connector does not redial a daemon this process is about to drop.
+	connector.CloseAll()
 
-	// Stop daemon server (drains connections)
+	// Stop the daemon server. Its Stop ends every held daemon stream with
+	// Unavailable("gateway draining") FIRST and only then runs
+	// http.Server.Shutdown — necessary because Shutdown alone waits for
+	// active requests to finish and a bidi stream never finishes on its own,
+	// so it used to burn the entire budget and then cut the connections
+	// anyway. Ending them explicitly, after the pre-stop pause, means each
+	// daemon redials at once and lands on a replica that is already serving.
 	logging.Info("Stopping daemon gRPC server")
 	if err := daemonSrv.Stop(shutdownCtx); err != nil {
 		logging.Error("Error stopping daemon gRPC server", "error", err)
+	}
+
+	// Health endpoint LAST — it is what answered 503 "draining" for the
+	// whole window above.
+	logging.Info("Stopping health endpoint")
+	if err := drain.ShutdownHealthServer(healthServer); err != nil {
+		logging.Error("Error stopping health endpoint", "error", err)
 	}
 
 	// Note: database is closed via defer above

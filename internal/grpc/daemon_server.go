@@ -174,7 +174,24 @@ func (s *DaemonServer) IsTLS() bool {
 	return s.tlsCertFile != "" && s.tlsKeyFile != ""
 }
 
-// Stop gracefully stops daemon server and daemon service workers.
+// Stop gracefully stops the daemon server.
+//
+// ORDER IS LOAD-BEARING. ToolsDaemonService.Close runs FIRST because it ends
+// every held daemon stream with Unavailable("gateway draining"), which is what
+// lets http.Server.Shutdown then return promptly.
+//
+// Shutdown alone cannot do this: it stops accepting new connections and waits
+// for active requests to complete, and a daemon bidi stream is an active
+// request that never completes on its own. So Shutdown blocked for the entire
+// ctx deadline, returned DeadlineExceeded, and the process exited — cutting
+// every daemon's TCP connection with no status at all. That was dead time for
+// the full budget on every gateway rollout, plus a hard disconnect that the
+// daemons only recovered from via client-side reconnect and the stale
+// connection sweeper.
+//
+// Callers must have completed the readiness flip and pre-stop pause before
+// this runs, so that the daemons redialing on Unavailable reach a replica that
+// is already serving rather than this one.
 func (s *DaemonServer) Stop(ctx context.Context) error {
 	logging.Info("Stopping dedicated daemon Connect/gRPC server")
 	if s.toolsDaemonService != nil {
