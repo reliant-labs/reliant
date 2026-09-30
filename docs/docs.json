@@ -58,13 +58,13 @@
               "features/attachments",
               "features/skills",
               "features/processes",
-              "features/remote-daemons",
-              "features/secrets"
+              "features/remote-daemons"
             ]
           },
           {
             "group": "Deployment",
             "pages": [
+              "features/secrets",
               "features/custom-domains"
             ]
           },
