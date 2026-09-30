@@ -153,6 +153,42 @@ describe("GitConnectionsSettings", () => {
     expect(await screen.findByRole("button", { name: /reconnect/i })).toBeInTheDocument();
   });
 
+  // A credential whose kind cannot be determined is a real state, not a
+  // hypothetical: control-plane derives the kind from the token's PREFIX, so a
+  // stored token it cannot decrypt (or one written by a path that predates the
+  // GitHub App) arrives as kind "unknown". Prod had rows in exactly that
+  // state. Such a credential is not an App as far as the UI can tell, so the
+  // installations panel is correctly withheld — but withholding it silently
+  // leaves the page with NOTHING to say about why repository access is
+  // unmanageable. The user must be told to reconnect.
+  it("tells the user to reconnect when the credential kind cannot be determined", async () => {
+    mockGetCredential.mockResolvedValue(
+      credential({ accountLogin: "octocat", kind: "unknown", health: "needsReconnect" }),
+    );
+    render(<GitConnectionsSettings />);
+
+    await screen.findByText(/Connected as octocat/);
+    expect(
+      await screen.findByText(/Reconnect GitHub to enable repository access management/i),
+    ).toBeInTheDocument();
+  });
+
+  // The same prompt must NOT appear for a healthy App credential, whose
+  // repository access IS manageable through the installations panel.
+  it("does not ask a healthy GitHub App credential to reconnect for access management", async () => {
+    mockGetCredential.mockResolvedValue(
+      credential({ accountLogin: "octocat", kind: "github_app", health: "valid" }),
+    );
+    render(<GitConnectionsSettings />);
+
+    await screen.findByText(/Connected as octocat/);
+    await waitFor(() => {
+      expect(
+        screen.queryByText(/Reconnect GitHub to enable repository access management/i),
+      ).not.toBeInTheDocument();
+    });
+  });
+
   it("calls the manual fallback a personal access token, not a 'recovery token'", async () => {
     // "Recovery token" named nothing: it is a GitHub PAT you paste in to
     // replace the OAuth connection while debugging an authorization problem.
