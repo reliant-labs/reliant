@@ -68,45 +68,67 @@ func createShellCommand(ctx context.Context, command string) *exec.Cmd {
 	return exec.CommandContext(ctx, "bash", "-c", command)
 }
 
-// getProcessTree returns all PIDs in the process tree (parent + all descendants).
-// On Unix, uses pgrep to find child processes recursively.
-func getProcessTree(pid int) []int {
-	pids := []int{pid}
-
-	// Use pgrep to find child processes
-	// -P: match parent PID
-	cmd := exec.Command("pgrep", "-P", strconv.Itoa(pid))
+// childPIDSnapshot reads the whole process table once and returns a
+// parent PID -> child PIDs map.
+//
+// One `ps` replaces the recursive `pgrep -P` descent, which forked once per node
+// of every tree it walked. A single snapshot also gives a consistent view: the
+// recursive version could see a child that had already exited by the time it
+// asked about that child's own children.
+func childPIDSnapshot() map[int][]int {
+	cmd := exec.Command("ps", "-Ao", "pid=,ppid=")
 	output, err := cmd.Output()
 	if err != nil {
-		return pids
+		logging.Debug("ps process-table snapshot failed", "error", err)
+		return nil
 	}
 
+	children := make(map[int][]int)
 	scanner := bufio.NewScanner(strings.NewReader(string(output)))
 	for scanner.Scan() {
-		childPid, err := strconv.Atoi(strings.TrimSpace(scanner.Text()))
-		if err == nil {
-			// Recursively get children of this child
-			pids = append(pids, getProcessTree(childPid)...)
+		fields := strings.Fields(scanner.Text())
+		if len(fields) < 2 {
+			continue
 		}
+		pid, err := strconv.Atoi(fields[0])
+		if err != nil {
+			continue
+		}
+		ppid, err := strconv.Atoi(fields[1])
+		if err != nil {
+			continue
+		}
+		children[ppid] = append(children[ppid], pid)
 	}
-
-	return pids
+	return children
 }
 
-// getPortsForPid gets ports for a single PID using lsof.
-// On Unix, uses lsof to get open network connections.
-func getPortsForPid(pid int) ([]PortInfo, error) {
-	var ports []PortInfo
+// getPortsForPids gets listening ports for many PIDs in ONE lsof invocation,
+// returning them keyed by the PID that owns them.
+//
+// lsof accepts a comma-separated PID list for -p, so the number of subprocesses
+// is independent of how many processes are being listed. Measured on macOS, one
+// lsof costs ~65ms whether it is asked about one PID or several, so this turns a
+// per-PID cost into a fixed one.
+func getPortsForPids(pids []int) (map[int][]PortInfo, error) {
+	ports := make(map[int][]PortInfo, len(pids))
+	if len(pids) == 0 {
+		return ports, nil
+	}
 
-	// Use lsof to get open network connections for the process
+	pidArgs := make([]string, len(pids))
+	for i, pid := range pids {
+		pidArgs[i] = strconv.Itoa(pid)
+	}
+
 	// -P: don't convert port numbers to names
 	// -n: don't convert IP addresses to names
 	// -i: show network connections
 	// -a: AND the conditions
-	cmd := exec.Command("lsof", "-P", "-n", "-i", "-a", "-p", strconv.Itoa(pid))
+	cmd := exec.Command("lsof", "-P", "-n", "-i", "-a", "-p", strings.Join(pidArgs, ","))
 	output, err := cmd.Output()
 	if err != nil {
-		// lsof returns error if no files found, which is ok
+		// lsof exits 1 when it found nothing matching, which is not an error.
 		if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() == 1 {
 			return ports, nil
 		}
@@ -116,12 +138,21 @@ func getPortsForPid(pid int) ([]PortInfo, error) {
 	scanner := bufio.NewScanner(strings.NewReader(string(output)))
 	// Skip the header line
 	if scanner.Scan() {
-		// Process each line
 		for scanner.Scan() {
 			line := scanner.Text()
+			// The PID must come from the line itself now that one invocation
+			// covers many processes.
+			fields := strings.Fields(line)
+			if len(fields) < 2 {
+				continue
+			}
+			pid, err := strconv.Atoi(fields[1])
+			if err != nil {
+				continue
+			}
 			portInfo := parsePortInfo(line)
 			if portInfo != nil {
-				ports = append(ports, *portInfo)
+				ports[pid] = append(ports[pid], *portInfo)
 			}
 		}
 	}

@@ -87,19 +87,11 @@ type EventHandler<T> = (payload: T) => void;
 
 export class EventBus {
   private listeners = new Map<string, Set<EventHandler<unknown>>>();
-  private devMode: boolean;
-
-  constructor(devMode = false) {
-    this.devMode = devMode;
-  }
 
   emit<K extends keyof EventMap>(
     event: K,
     ...args: EventMap[K] extends undefined ? [] : [EventMap[K]]
   ): void {
-    if (this.devMode) {
-      console.debug(`[event] ${String(event)}`, args[0] ?? "");
-    }
     const handlers = this.listeners.get(event as string);
     if (handlers) {
       for (const handler of handlers) {
@@ -136,9 +128,9 @@ export class EventBus {
 // Singleton
 let _bus: EventBus | null = null;
 
-export function initEventBus(devMode = false): EventBus {
+export function initEventBus(): EventBus {
   if (!_bus) {
-    _bus = new EventBus(devMode);
+    _bus = new EventBus();
   }
   return _bus;
 }

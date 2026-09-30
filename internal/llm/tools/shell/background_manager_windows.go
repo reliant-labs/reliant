@@ -57,52 +57,64 @@ func createShellCommand(ctx context.Context, command string) *exec.Cmd {
 	return exec.CommandContext(ctx, "powershell.exe", "-NoProfile", "-Command", command)
 }
 
-// getProcessTree returns all PIDs in the process tree (parent + all descendants).
-// On Windows, uses wmic to enumerate child processes recursively.
-func getProcessTree(pid int) []int {
-	pids := []int{pid}
-	children := getChildPids(pid)
-	for _, child := range children {
-		pids = append(pids, getProcessTree(child)...)
-	}
-	return pids
-}
-
-// getChildPids returns immediate child PIDs for a given parent PID.
-func getChildPids(parentPid int) []int {
-	// Use wmic to query child processes
-	cmd := exec.Command("wmic", "process", "where", "ParentProcessId="+strconv.Itoa(parentPid), "get", "ProcessId")
+// childPIDSnapshot reads the whole process table once and returns a
+// parent PID -> child PIDs map.
+//
+// One CIM query replaces the recursive per-node wmic descent, which forked a
+// process for every node of every tree it walked. wmic is also deprecated on
+// current Windows, so Get-CimInstance is the supported way to ask.
+func childPIDSnapshot() map[int][]int {
+	cmd := exec.Command("powershell.exe", "-NoProfile", "-Command",
+		"Get-CimInstance Win32_Process | ForEach-Object { \"$($_.ProcessId) $($_.ParentProcessId)\" }")
 	output, err := cmd.Output()
 	if err != nil {
+		logging.Debug("process-table snapshot failed", "error", err)
 		return nil
 	}
 
-	var children []int
+	children := make(map[int][]int)
 	scanner := bufio.NewScanner(strings.NewReader(string(output)))
 	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" || line == "ProcessId" {
+		fields := strings.Fields(scanner.Text())
+		if len(fields) < 2 {
 			continue
 		}
-		if childPid, err := strconv.Atoi(line); err == nil {
-			children = append(children, childPid)
+		pid, err := strconv.Atoi(fields[0])
+		if err != nil {
+			continue
 		}
+		ppid, err := strconv.Atoi(fields[1])
+		if err != nil {
+			continue
+		}
+		children[ppid] = append(children[ppid], pid)
 	}
 	return children
 }
 
-// getPortsForPid gets ports for a single PID using netstat.
-// Parses output of "netstat -ano" to find listening ports for the given PID.
-func getPortsForPid(pid int) ([]PortInfo, error) {
+// getPortsForPids gets listening ports for many PIDs from ONE netstat run,
+// returning them keyed by the PID that owns them.
+//
+// netstat -ano always dumps the whole connection table, so the previous
+// per-PID version paid for that full dump once per process and threw away every
+// row but one PID's. Scanning it once and bucketing by PID makes the cost fixed.
+func getPortsForPids(pids []int) (map[int][]PortInfo, error) {
+	ports := make(map[int][]PortInfo, len(pids))
+	if len(pids) == 0 {
+		return ports, nil
+	}
+
+	wanted := make(map[int]bool, len(pids))
+	for _, pid := range pids {
+		wanted[pid] = true
+	}
+
 	cmd := exec.Command("netstat", "-ano")
 	output, err := cmd.Output()
 	if err != nil {
-		logging.Debug("netstat failed", "pid", pid, "error", err)
+		logging.Debug("netstat failed", "error", err)
 		return nil, err
 	}
-
-	pidStr := strconv.Itoa(pid)
-	var ports []PortInfo
 
 	scanner := bufio.NewScanner(strings.NewReader(string(output)))
 	for scanner.Scan() {
@@ -113,8 +125,8 @@ func getPortsForPid(pid int) ([]PortInfo, error) {
 			continue
 		}
 
-		// Check if this line is for our PID and is LISTENING
-		if fields[len(fields)-1] != pidStr {
+		pid, err := strconv.Atoi(fields[len(fields)-1])
+		if err != nil || !wanted[pid] {
 			continue
 		}
 		if len(fields) >= 4 && fields[3] != "LISTENING" {
@@ -141,7 +153,7 @@ func getPortsForPid(pid int) ([]PortInfo, error) {
 			host = "localhost"
 		}
 
-		ports = append(ports, PortInfo{
+		ports[pid] = append(ports[pid], PortInfo{
 			Port:     port,
 			Address:  host,
 			Protocol: strings.ToLower(fields[0]),

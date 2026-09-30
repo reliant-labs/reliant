@@ -9,14 +9,8 @@ import { EventBus, initEventBus, type EventMap } from "./events";
 
 const EventBusContext = createContext<EventBus | null>(null);
 
-export function EventBusProvider({
-  devMode,
-  children,
-}: {
-  devMode?: boolean;
-  children: ReactNode;
-}) {
-  const bus = initEventBus(devMode);
+export function EventBusProvider({ children }: { children: ReactNode }) {
+  const bus = initEventBus();
   return (
     <EventBusContext.Provider value={bus}>{children}</EventBusContext.Provider>
   );

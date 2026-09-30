@@ -108,6 +108,17 @@ func (pm *ProcessMonitor) checkProcesses() {
 	// Track which processes are still running to clean up stale port tracking
 	runningProcessIDs := make(map[string]bool)
 
+	// One batched OS scan for the whole tick. GetAllProcesses has already
+	// refreshed each process's Ports from this same snapshot, so the per-process
+	// comparison below reads it instead of scanning again — this loop used to
+	// run getProcessPorts once per process every two seconds.
+	livePorts := make(map[string][]PortInfo, len(processes))
+	for _, process := range processes {
+		process.outputMu.RLock()
+		livePorts[process.ID] = process.Ports
+		process.outputMu.RUnlock()
+	}
+
 	for _, process := range processes {
 		// Status and cmd are guarded by the process's own outputMu, not by the
 		// manager's map lock that GetAllProcesses released.
@@ -131,25 +142,16 @@ func (pm *ProcessMonitor) checkProcesses() {
 		}
 
 		// Check for port changes
-		pm.checkPortChanges(process, pid)
+		pm.checkPortChanges(process, livePorts[process.ID])
 	}
 
 	// Clean up port tracking for processes that are no longer running
 	pm.cleanupStalePorts(runningProcessIDs)
 }
 
-// checkPortChanges checks if a process's ports have changed and emits events
-func (pm *ProcessMonitor) checkPortChanges(process *BackgroundProcess, pid int) {
-	// Get current ports for the process
-	currentPorts, err := getProcessPorts(pid)
-	if err != nil {
-		logging.Debug("Failed to get process ports",
-			"pid", pid,
-			"processID", process.ID,
-			"error", err)
-		return
-	}
-
+// checkPortChanges emits an event when a process's ports differ from the last
+// tick. currentPorts comes from the caller's batched scan.
+func (pm *ProcessMonitor) checkPortChanges(process *BackgroundProcess, currentPorts []PortInfo) {
 	// Get previous ports
 	pm.previousPortsMu.RLock()
 	previousPorts := pm.previousPorts[process.ID]

@@ -407,11 +407,6 @@ export const useWorkspaceStateStore = create<WorkspaceStateStore>()(
 
       setWorktreeState: (projectId, worktreeId, newState) => {
         const worktreeKey = getWorktreeKey(worktreeId);
-        logger.debug("[WorkspaceState] setWorktreeState", {
-          projectId,
-          worktreeKey,
-          keys: Object.keys(newState),
-        });
 
         set((state) => {
           const projectState =
@@ -432,11 +427,6 @@ export const useWorkspaceStateStore = create<WorkspaceStateStore>()(
               },
             },
           };
-          
-          logger.debug("[WorkspaceState] setWorktreeState result", {
-            projectsKeys: Object.keys(newProjects),
-            worktreesKeys: Object.keys(newProjects[projectId]?.worktrees || {}),
-          });
 
           return { projects: newProjects };
         });

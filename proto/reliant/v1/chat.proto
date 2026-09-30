@@ -851,6 +851,18 @@ message StepExecution {
   string created_at = 9;
   optional string loop_node_id = 10;     // Node ID of the loop that spawned this step
   optional int32 loop_iteration = 11;    // Iteration index within the loop (0-indexed)
+  // The message a "-save" step wrote, when it wrote one.
+  //
+  // This is the ONE thing clients ever needed from output_json on the
+  // GetWorkflowExecutions path — the timeline uses it to tell a step that
+  // produced a message (rendered as the message) from one that needs an
+  // activity indicator. It used to arrive by shipping the whole output_json of
+  // every save step, 37 MB for the worst real chat, so that the client could
+  // read one id out of each. Now the database derives it (step_executions
+  // .saved_message_id, a generated column) and output_json stays home.
+  //
+  // Absent means "this step saved no message", which is every non-save step.
+  optional string saved_message_id = 12;
 }
 
 // WorkflowExecution represents a workflow and its children

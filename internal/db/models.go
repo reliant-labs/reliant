@@ -558,6 +558,10 @@ type WorkflowScenario = core.WorkflowScenario
 // StepExecution is an alias to the shared core step-execution model.
 type StepExecution = core.StepExecution
 
+// ChatStepExecution is an alias to the shared core chat-scoped step-execution
+// model — every scalar column of a step, without OutputJSON.
+type ChatStepExecution = core.ChatStepExecution
+
 // WorkflowCheckpoint is an alias to the shared core workflow-checkpoint model
 // (position truth for resume-at-position).
 type WorkflowCheckpoint = core.WorkflowCheckpoint

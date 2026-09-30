@@ -633,6 +633,10 @@ type Repository interface {
 	GetStepExecution(ctx context.Context, id string) (*StepExecution, error)
 	GetStepExecutionsByWorkflow(ctx context.Context, workflowID string) ([]*StepExecution, error)
 	GetStepExecutionsByStep(ctx context.Context, workflowID, stepID string) ([]*StepExecution, error)
+	// GetStepExecutionsForChat returns every step of every workflow of one
+	// chat in a single query, without OutputJSON. It replaces a
+	// per-workflow loop over GetStepExecutionsByWorkflow.
+	GetStepExecutionsForChat(ctx context.Context, chatID string) ([]*ChatStepExecution, error)
 	DeleteStepExecutionsByWorkflow(ctx context.Context, workflowID string) error
 
 	// Node Execution Events (for real-time UI streaming)

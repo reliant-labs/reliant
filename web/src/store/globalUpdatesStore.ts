@@ -303,10 +303,6 @@ export const useGlobalUpdatesStore = create<GlobalUpdatesState>((set, get) => ({
   },
 
   handleUpdate: (updates) => {
-    logger.info(`${LOG_PREFIX} Processing ${updates.length} updates`, {
-      types: updates.map(u => u.update_type),
-    });
-
     for (const update of updates) {
       // Track the highest sequence number
       if (update.sequence_number > get().lastSequence) {

@@ -8,6 +8,11 @@ import { describe, expect, it, beforeEach, afterEach, vi } from "vitest";
 // millisecond timestamp, doubling both the IPC traffic and the log volume.
 //
 // This locks in one-send-per-call while keeping console output intact.
+//
+// The mirror is PACKAGED-ONLY now, so these tests present themselves as a
+// packaged renderer (RELIANT_CONFIG.isDev === false, which getIsDev prefers over
+// import.meta.env.DEV). In dev the forge /__forge/log forwarder is the sink and
+// the mirror is off entirely — pinned by the last test here.
 
 describe("logger does not double-send to Electron", () => {
   let sent: Array<[string, unknown[]]>;
@@ -33,11 +38,18 @@ describe("logger does not double-send to Electron", () => {
         sent.push([level, args]);
       },
     };
+    // Packaged renderer: this is the only frontend file sink, so the mirror runs.
+    (globalThis as unknown as { RELIANT_CONFIG: unknown }).RELIANT_CONFIG = {
+      isElectron: true,
+      isDev: false,
+    };
   });
 
   afterEach(() => {
     Object.assign(console, pristineConsole);
     delete (globalThis as unknown as { electronAPI?: unknown }).electronAPI;
+    delete (globalThis as unknown as { RELIANT_CONFIG?: unknown })
+      .RELIANT_CONFIG;
     vi.restoreAllMocks();
   });
 
@@ -67,5 +79,23 @@ describe("logger does not double-send to Electron", () => {
     console.warn("[Test] direct console call");
 
     expect(sent.filter(([level]) => level === "warn")).toHaveLength(1);
+  });
+
+  it("sends nothing to Electron in dev, where the forge forwarder is the sink", async () => {
+    // Dev Electron: RELIANT_CONFIG.isDev true. The IPC mirror would only produce
+    // a duplicate of what /__forge/log already writes to
+    // frontend_reliant-web.log, at the cost of an IPC hop per line.
+    (globalThis as unknown as { RELIANT_CONFIG: unknown }).RELIANT_CONFIG = {
+      isElectron: true,
+      isDev: true,
+    };
+
+    const { logger } = await import("../logger");
+
+    logger.warn("[Test] dev warning");
+    logger.error("[Test] dev error");
+    console.warn("[Test] dev direct console call");
+
+    expect(sent).toEqual([]);
   });
 });

@@ -28,12 +28,6 @@ export function ChatInterface({
   // which runs immediately during branchChat
   const activeChat = useActiveChat();
 
-  logger.debug("[ChatInterface] Render decision", {
-    activeChatId: activeChatId?.slice(0, 8) ?? null,
-    activeChatExists: !!activeChat,
-    showingNewChatView: !activeChatId || !activeChat,
-  });
-
   // If no active chat, show new chat view
   if (!activeChatId || !activeChat) {
     logger.info("[ChatInterface] Showing NewChatView", {

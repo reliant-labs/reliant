@@ -20,7 +20,7 @@ export function App() {
   useSettingsHydration();
 
   return (
-    <EventBusProvider devMode={import.meta.env.DEV}>
+    <EventBusProvider>
       <QueryClientProvider client={queryClient}>
         <SentryErrorBoundary>
           <AuthContextProvider provider={authProvider}>

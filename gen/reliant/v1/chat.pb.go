@@ -4806,8 +4806,20 @@ type StepExecution struct {
 	CreatedAt     string                 `protobuf:"bytes,9,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	LoopNodeId    *string                `protobuf:"bytes,10,opt,name=loop_node_id,json=loopNodeId,proto3,oneof" json:"loop_node_id,omitempty"`         // Node ID of the loop that spawned this step
 	LoopIteration *int32                 `protobuf:"varint,11,opt,name=loop_iteration,json=loopIteration,proto3,oneof" json:"loop_iteration,omitempty"` // Iteration index within the loop (0-indexed)
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	// The message a "-save" step wrote, when it wrote one.
+	//
+	// This is the ONE thing clients ever needed from output_json on the
+	// GetWorkflowExecutions path — the timeline uses it to tell a step that
+	// produced a message (rendered as the message) from one that needs an
+	// activity indicator. It used to arrive by shipping the whole output_json of
+	// every save step, 37 MB for the worst real chat, so that the client could
+	// read one id out of each. Now the database derives it (step_executions
+	// .saved_message_id, a generated column) and output_json stays home.
+	//
+	// Absent means "this step saved no message", which is every non-save step.
+	SavedMessageId *string `protobuf:"bytes,12,opt,name=saved_message_id,json=savedMessageId,proto3,oneof" json:"saved_message_id,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *StepExecution) Reset() {
@@ -4915,6 +4927,13 @@ func (x *StepExecution) GetLoopIteration() int32 {
 		return *x.LoopIteration
 	}
 	return 0
+}
+
+func (x *StepExecution) GetSavedMessageId() string {
+	if x != nil && x.SavedMessageId != nil {
+		return *x.SavedMessageId
+	}
+	return ""
 }
 
 // WorkflowExecution represents a workflow and its children
@@ -5854,7 +5873,7 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\achat_id\x18\x01 \x01(\tR\x06chatId\"Y\n" +
 	"\x15ListChatPlansResponse\x12*\n" +
 	"\x05plans\x18\x01 \x03(\v2\x14.reliant.v1.ChatPlanR\x05plans\x12\x14\n" +
-	"\x05total\x18\x02 \x01(\x05R\x05total\"\xc6\x03\n" +
+	"\x05total\x18\x02 \x01(\x05R\x05total\"\x8a\x04\n" +
 	"\rStepExecution\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1f\n" +
 	"\vworkflow_id\x18\x02 \x01(\tR\n" +
@@ -5872,14 +5891,16 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\floop_node_id\x18\n" +
 	" \x01(\tH\x03R\n" +
 	"loopNodeId\x88\x01\x01\x12*\n" +
-	"\x0eloop_iteration\x18\v \x01(\x05H\x04R\rloopIteration\x88\x01\x01B\f\n" +
+	"\x0eloop_iteration\x18\v \x01(\x05H\x04R\rloopIteration\x88\x01\x01\x12-\n" +
+	"\x10saved_message_id\x18\f \x01(\tH\x05R\x0esavedMessageId\x88\x01\x01B\f\n" +
 	"\n" +
 	"_exit_codeB\n" +
 	"\n" +
 	"\b_successB\x0e\n" +
 	"\f_duration_msB\x0f\n" +
 	"\r_loop_node_idB\x11\n" +
-	"\x0f_loop_iteration\"\xb1\a\n" +
+	"\x0f_loop_iterationB\x13\n" +
+	"\x11_saved_message_id\"\xb1\a\n" +
 	"\x11WorkflowExecution\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12#\n" +
 	"\rworkflow_name\x18\x02 \x01(\tR\fworkflowName\x12\x16\n" +

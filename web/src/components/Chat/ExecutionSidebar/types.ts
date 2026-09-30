@@ -29,6 +29,14 @@ export interface StepExecution {
   success?: boolean;
   createdAt: number;
 
+  // The message this step saved, for a "-save" step that saved one.
+  //
+  // Derived by the database and sent as its own field. It used to be read as
+  // outputJson.message_id, which meant the server had to ship every save
+  // step's entire output — 37 MB on the worst real chat — so the client could
+  // pick one id out of each.
+  savedMessageId?: string;
+
   // Raw output from activity (from output_json column)
   // Structure depends on activity type:
   // - V2_SaveMessage: { message, message_id, thread, thread_token_count, message_count }

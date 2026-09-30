@@ -712,6 +712,54 @@ func (p *BackgroundProcess) refreshPorts() {
 	p.outputMu.Unlock()
 }
 
+// refreshPortsBatch refreshes the port list of many processes using a fixed
+// number of subprocesses, rather than one OS scan per process.
+//
+// Locking follows refreshPorts exactly: each process's pid is read under its own
+// outputMu, the OS work happens holding no lock at all, and each result is
+// written back under that process's write lock.
+func refreshPortsBatch(processes []*BackgroundProcess) {
+	byPid := make(map[int][]*BackgroundProcess, len(processes))
+	roots := make([]int, 0, len(processes))
+	for _, p := range processes {
+		p.outputMu.RLock()
+		pid := 0
+		if p.Status == "running" && p.cmd != nil && p.cmd.Process != nil {
+			pid = p.cmd.Process.Pid
+		}
+		p.outputMu.RUnlock()
+
+		if pid == 0 {
+			continue
+		}
+		if _, seen := byPid[pid]; !seen {
+			roots = append(roots, pid)
+		}
+		byPid[pid] = append(byPid[pid], p)
+	}
+
+	if len(roots) == 0 {
+		return
+	}
+
+	portsByRoot, err := getProcessPortsForRoots(roots)
+	if err != nil {
+		return
+	}
+
+	for pid, procs := range byPid {
+		ports, ok := portsByRoot[pid]
+		if !ok {
+			continue
+		}
+		for _, p := range procs {
+			p.outputMu.Lock()
+			p.Ports = ports
+			p.outputMu.Unlock()
+		}
+	}
+}
+
 func (m *BackgroundManager) GetProcess(processID string) (*BackgroundProcess, error) {
 	m.mu.RLock()
 	process, exists := m.processes[processID]
@@ -738,11 +786,10 @@ func (m *BackgroundManager) GetProcessesBySession(sessionID string) []*Backgroun
 	m.mu.RUnlock()
 
 	// Update port information for running processes. Done outside the map
-	// lock: refreshPorts takes each process's own outputMu, which is what
-	// actually guards Status/Ports/cmd.
-	for _, process := range processes {
-		process.refreshPorts()
-	}
+	// lock: refreshPortsBatch takes each process's own outputMu, which is what
+	// actually guards Status/Ports/cmd. Batched because the OS scan is the
+	// expensive part and it does not need to be repeated per process.
+	refreshPortsBatch(processes)
 
 	return processes
 }
@@ -759,11 +806,10 @@ func (m *BackgroundManager) GetProcessesByChat(chatID string) []*BackgroundProce
 	m.mu.RUnlock()
 
 	// Update port information for running processes. Done outside the map
-	// lock: refreshPorts takes each process's own outputMu, which is what
-	// actually guards Status/Ports/cmd.
-	for _, process := range processes {
-		process.refreshPorts()
-	}
+	// lock: refreshPortsBatch takes each process's own outputMu, which is what
+	// actually guards Status/Ports/cmd. Batched because the OS scan is the
+	// expensive part and it does not need to be repeated per process.
+	refreshPortsBatch(processes)
 
 	return processes
 }
@@ -780,11 +826,10 @@ func (m *BackgroundManager) GetProcessesByWorktree(worktreeID string) []*Backgro
 	m.mu.RUnlock()
 
 	// Update port information for running processes. Done outside the map
-	// lock: refreshPorts takes each process's own outputMu, which is what
-	// actually guards Status/Ports/cmd.
-	for _, process := range processes {
-		process.refreshPorts()
-	}
+	// lock: refreshPortsBatch takes each process's own outputMu, which is what
+	// actually guards Status/Ports/cmd. Batched because the OS scan is the
+	// expensive part and it does not need to be repeated per process.
+	refreshPortsBatch(processes)
 
 	return processes
 }
@@ -799,11 +844,10 @@ func (m *BackgroundManager) GetAllProcesses() []*BackgroundProcess {
 	m.mu.RUnlock()
 
 	// Update port information for running processes. Done outside the map
-	// lock: refreshPorts takes each process's own outputMu, which is what
-	// actually guards Status/Ports/cmd.
-	for _, process := range processes {
-		process.refreshPorts()
-	}
+	// lock: refreshPortsBatch takes each process's own outputMu, which is what
+	// actually guards Status/Ports/cmd. Batched because the OS scan is the
+	// expensive part and it does not need to be repeated per process.
+	refreshPortsBatch(processes)
 
 	return processes
 }
@@ -1320,28 +1364,101 @@ func (m *BackgroundManager) KillAllRunning() {
 	wg.Wait()
 }
 
-// getProcessPorts gets the ports used by a process and its children
-func getProcessPorts(pid int) ([]PortInfo, error) {
-	// Get all child PIDs recursively
-	allPids := getProcessTree(pid)
-
-	var ports []PortInfo
-	seenPorts := make(map[int]bool) // Deduplicate by port number
-
-	for _, p := range allPids {
-		pidPorts, err := getPortsForPid(p)
-		if err != nil {
-			continue // Ignore errors for individual PIDs
+// processTreeFromSnapshot walks a parent->children map to collect root and all
+// its descendants. The snapshot is taken once by the caller, so this costs no
+// subprocesses no matter how deep the tree is.
+func processTreeFromSnapshot(root int, children map[int][]int) []int {
+	pids := []int{root}
+	// Guard against a cycle in a snapshot that was taken while the process
+	// table was changing under us.
+	seen := map[int]bool{root: true}
+	for queue := []int{root}; len(queue) > 0; {
+		parent := queue[0]
+		queue = queue[1:]
+		for _, child := range children[parent] {
+			if seen[child] {
+				continue
+			}
+			seen[child] = true
+			pids = append(pids, child)
+			queue = append(queue, child)
 		}
-		for _, portInfo := range pidPorts {
-			if !seenPorts[portInfo.Port] {
-				seenPorts[portInfo.Port] = true
-				ports = append(ports, portInfo)
+	}
+	return pids
+}
+
+// dedupePortsByNumber keeps the first PortInfo seen for each port number,
+// matching the previous per-PID scan's behaviour where a port bound by both a
+// parent and a child was reported once.
+func dedupePortsByNumber(ports []PortInfo) []PortInfo {
+	if len(ports) == 0 {
+		return nil
+	}
+	var out []PortInfo
+	seen := make(map[int]bool, len(ports))
+	for _, portInfo := range ports {
+		if seen[portInfo.Port] {
+			continue
+		}
+		seen[portInfo.Port] = true
+		out = append(out, portInfo)
+	}
+	return out
+}
+
+// getProcessPorts gets the ports used by a process and its children.
+func getProcessPorts(pid int) ([]PortInfo, error) {
+	byRoot, err := getProcessPortsForRoots([]int{pid})
+	if err != nil {
+		return nil, err
+	}
+	return byRoot[pid], nil
+}
+
+// getProcessPortsForRoots resolves the listening ports of several process trees
+// in a fixed number of subprocesses: ONE process-table snapshot to expand every
+// tree, and ONE port query covering every PID in all of them.
+//
+// This is the shape the cost lives in, not the parsing. The previous code forked
+// `pgrep -P` once per node while descending each tree and then `lsof -p` once per
+// resulting PID, so listing N background processes cost O(sum of tree sizes)
+// subprocesses — a handful of dev servers with deep node trees is easily a
+// hundred forks, which is what made exec.bg_list take seconds and, once, 15.7s.
+func getProcessPortsForRoots(roots []int) (map[int][]PortInfo, error) {
+	result := make(map[int][]PortInfo, len(roots))
+	if len(roots) == 0 {
+		return result, nil
+	}
+
+	children := childPIDSnapshot()
+
+	treePids := make(map[int][]int, len(roots))
+	allPids := make([]int, 0, len(roots))
+	seenPid := make(map[int]bool)
+	for _, root := range roots {
+		pids := processTreeFromSnapshot(root, children)
+		treePids[root] = pids
+		for _, pid := range pids {
+			if !seenPid[pid] {
+				seenPid[pid] = true
+				allPids = append(allPids, pid)
 			}
 		}
 	}
 
-	return ports, nil
+	portsByPid, err := getPortsForPids(allPids)
+	if err != nil {
+		return nil, err
+	}
+
+	for root, pids := range treePids {
+		var ports []PortInfo
+		for _, pid := range pids {
+			ports = append(ports, portsByPid[pid]...)
+		}
+		result[root] = dedupePortsByNumber(ports)
+	}
+	return result, nil
 }
 
 // SubscribeToOutput subscribes to real-time output from a process.

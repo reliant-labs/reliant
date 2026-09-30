@@ -35,12 +35,6 @@ async function fetchDaemonList(): Promise<DaemonInfo[]> {
   const resp = await grpcClient
     .daemonRegistry()
     .listDaemons(create(ListDaemonsRequestSchema));
-  logger.warn("[DaemonStatus] ListDaemons returned", {
-    atMs: Date.now(),
-    count: resp.daemons.length,
-    statuses: resp.daemons.map((d) => d.status),
-    ids: resp.daemons.map((d) => d.daemonId),
-  });
   return resp.daemons;
 }
 
@@ -80,9 +74,6 @@ export function useDaemonStatus() {
       try {
         if (!api?.isDaemonConnected) return;
         if (await api.isDaemonConnected()) {
-          logger.warn("[DaemonStatus] daemon already connected on mount", {
-            atMs: Date.now(),
-          });
           void queryClient.invalidateQueries({ queryKey: DAEMON_LIST_QUERY_KEY });
         }
       } catch {

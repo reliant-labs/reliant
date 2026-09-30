@@ -17,6 +17,15 @@ import (
 	"github.com/reliant-labs/reliant/internal/toolexec"
 )
 
+// bgListTimeoutMs bounds the daemon round trip for a process LIST.
+//
+// Listing reads the daemon's in-memory process table plus one batched port
+// scan; its duration does not depend on the user's commands, so it does not
+// need start/kill's 30s budget. A list that can pin an API request — and a
+// database-free but pool-bound handler — for 30 seconds is a liveness problem,
+// and the caller is a UI list that will simply ask again.
+const bgListTimeoutMs int32 = 5_000
+
 // BackgroundProxyService implements BackgroundServiceHandler by forwarding
 // requests to the user's daemon via DaemonCommand (request/response).
 type BackgroundProxyService struct {
@@ -68,7 +77,7 @@ func (s *BackgroundProxyService) ListProcesses(
 	}
 
 	var cmdResp []daemonProcessInfo
-	if err := s.sendCommand(ctx, userID, "exec.bg_list", struct{}{}, &cmdResp, 30000); err != nil {
+	if err := s.sendCommand(ctx, userID, "exec.bg_list", struct{}{}, &cmdResp, bgListTimeoutMs); err != nil {
 		return nil, err
 	}
 

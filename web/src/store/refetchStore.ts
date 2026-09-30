@@ -64,8 +64,6 @@ export function triggerRefetch(
   type: RefetchType,
   entityId?: string,
 ): void {
-  logger.debug(`${LOG_PREFIX} Triggering refetch: ${type}`, { entityId });
-
   // Clear any pending debounce for this type — we always use the latest entityId
   const existing = debounceTimers.get(type);
   if (existing) {

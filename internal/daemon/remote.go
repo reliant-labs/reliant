@@ -13,8 +13,15 @@ const (
 	timeoutFSDefault int32 = 30_000  // 30s for most FS ops
 	timeoutFSSearch  int32 = 60_000  // 60s for search/glob/find_replace
 	timeoutExecRun   int32 = 600_000 // 10min for synchronous command execution
-	timeoutExecBG    int32 = 30_000  // 30s for bg start/kill/list
+	timeoutExecBG    int32 = 30_000  // 30s for bg start/kill
 	timeoutExecOut   int32 = 30_000  // 30s for getting output
+	// bg_list reads the daemon's in-memory process table plus one batched port
+	// scan. It performs no work whose duration depends on the user's command,
+	// so it gets a much tighter budget than start/kill: a list must never be
+	// able to pin an API request for 30 seconds. If the daemon cannot answer in
+	// 5s it is wedged or unreachable, and failing fast is the useful outcome —
+	// the caller is a UI list that will ask again.
+	timeoutExecBGList int32 = 5_000 // 5s for bg list
 )
 
 // CommandSender is the subset of DaemonRouter needed by RemoteClient.
@@ -313,7 +320,7 @@ func (r *RemoteClient) KillProcess(ctx context.Context, processID string) error 
 
 func (r *RemoteClient) ListProcesses(ctx context.Context) ([]*ProcessInfo, error) {
 	var resp []*ProcessInfo
-	if err := r.send(ctx, "exec.bg_list", struct{}{}, &resp, timeoutExecBG); err != nil {
+	if err := r.send(ctx, "exec.bg_list", struct{}{}, &resp, timeoutExecBGList); err != nil {
 		return nil, err
 	}
 	return resp, nil

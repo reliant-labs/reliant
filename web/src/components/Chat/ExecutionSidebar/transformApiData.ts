@@ -82,6 +82,7 @@ function transformStepExecution(
     success: step.success,
     createdAt: new Date(step.createdAt).getTime(),
     outputJson,
+    savedMessageId: step.savedMessageId,
     loopNodeId: step.loopNodeId,
     loopIteration: step.loopIteration,
   };
