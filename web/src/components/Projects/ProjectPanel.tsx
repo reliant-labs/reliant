@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { FolderOpen, GitBranch, Terminal, Folder, ArrowLeft, Clock, MessageSquare, AlertCircle, RefreshCw, ExternalLink, Inbox, Trash2 } from "lucide-react";
+import { FolderOpen, GitBranch, Terminal, Folder, Plus, Clock, MessageSquare, AlertCircle, RefreshCw, ExternalLink, Inbox, Trash2 } from "lucide-react";
 import { useProjectStore } from "../../store/projectStore";
 import { useWorktreeStore } from "../../store/worktreeStore";
 import { useChatStore } from "../../store/chatStore";
@@ -218,13 +218,20 @@ export function ProjectPanel({ onNavigateToProjectPicker, onNavigateToChats }: P
               <p className="text-sm text-muted-foreground font-mono">{currentProject.path}</p>
             </div>
           </div>
+          {/* "Add project" rather than "Change Project": the picker does both,
+              but adding is the thing users could not previously reach from
+              anywhere except the picker itself, and naming the destination
+              after the rarer, more valuable action is what makes it
+              discoverable here. Switching is still one click away on the same
+              screen. */}
           {onNavigateToProjectPicker && (
             <button
               onClick={onNavigateToProjectPicker}
-              className="px-4 py-2 bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg text-sm font-mono font-semibold transition-all hover:scale-105 active:scale-95 flex items-center gap-2 shadow-md border-2 border-primary-foreground/20"
+              data-testid="project-panel-add-project"
+              className="flex items-center gap-2 rounded-lg border-2 border-primary-foreground/20 bg-primary px-4 py-2 text-sm font-mono font-semibold text-primary-foreground shadow-md transition-all hover:scale-105 hover:bg-primary/90 active:scale-95"
             >
-              <ArrowLeft className="w-4 h-4" />
-              Change Project
+              <Plus className="w-4 h-4" />
+              Add project
             </button>
           )}
         </div>

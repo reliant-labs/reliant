@@ -656,7 +656,11 @@ CREATE TABLE public.project_daemons (
     daemon_id text NOT NULL,
     path text NOT NULL,
     default_branch text,
-    cloned_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL
+    cloned_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    install_state text DEFAULT 'installed'::text NOT NULL,
+    install_error text DEFAULT ''::text NOT NULL,
+    install_request_id text DEFAULT ''::text NOT NULL,
+    CONSTRAINT project_daemons_install_state_check CHECK ((install_state = ANY (ARRAY['installing'::text, 'installed'::text, 'failed'::text])))
 );
 
 --
@@ -1766,6 +1770,12 @@ CREATE INDEX idx_project_configs_daemon_id ON public.project_configs USING btree
 --
 
 CREATE INDEX idx_project_configs_pushed_at ON public.project_configs USING btree (pushed_at DESC);
+
+--
+-- Name: idx_project_daemons_install_request; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_project_daemons_install_request ON public.project_daemons USING btree (install_request_id) WHERE (install_request_id <> ''::text);
 
 --
 -- Name: idx_provider_backoff_chat_id; Type: INDEX; Schema: public; Owner: -

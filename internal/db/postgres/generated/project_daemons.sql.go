@@ -26,7 +26,8 @@ func (q *Queries) DeleteProjectDaemon(ctx context.Context, arg DeleteProjectDaem
 }
 
 const listProjectDaemonsForDaemon = `-- name: ListProjectDaemonsForDaemon :many
-SELECT project_id, daemon_id, path, default_branch, cloned_at
+SELECT project_id, daemon_id, path, default_branch, cloned_at,
+       install_state, install_error, install_request_id
 FROM project_daemons
 WHERE daemon_id = $1
 ORDER BY cloned_at ASC
@@ -47,6 +48,9 @@ func (q *Queries) ListProjectDaemonsForDaemon(ctx context.Context, daemonID stri
 			&i.Path,
 			&i.DefaultBranch,
 			&i.ClonedAt,
+			&i.InstallState,
+			&i.InstallError,
+			&i.InstallRequestID,
 		); err != nil {
 			return nil, err
 		}
@@ -62,7 +66,8 @@ func (q *Queries) ListProjectDaemonsForDaemon(ctx context.Context, daemonID stri
 }
 
 const listProjectDaemonsForProject = `-- name: ListProjectDaemonsForProject :many
-SELECT project_id, daemon_id, path, default_branch, cloned_at
+SELECT project_id, daemon_id, path, default_branch, cloned_at,
+       install_state, install_error, install_request_id
 FROM project_daemons
 WHERE project_id = $1
 ORDER BY cloned_at ASC
@@ -83,6 +88,9 @@ func (q *Queries) ListProjectDaemonsForProject(ctx context.Context, projectID st
 			&i.Path,
 			&i.DefaultBranch,
 			&i.ClonedAt,
+			&i.InstallState,
+			&i.InstallError,
+			&i.InstallRequestID,
 		); err != nil {
 			return nil, err
 		}
@@ -97,13 +105,69 @@ func (q *Queries) ListProjectDaemonsForProject(ctx context.Context, projectID st
 	return items, nil
 }
 
+const markProjectDaemonInstallFailed = `-- name: MarkProjectDaemonInstallFailed :exec
+UPDATE project_daemons
+SET install_state = 'failed',
+    install_error = $2
+WHERE install_request_id = $1 AND install_request_id <> ''
+`
+
+type MarkProjectDaemonInstallFailedParams struct {
+	InstallRequestID string `json:"install_request_id"`
+	InstallError     string `json:"install_error"`
+}
+
+// The daemon reported the queued clone failed. Matched on request id because
+// the failure notification carries no project id.
+func (q *Queries) MarkProjectDaemonInstallFailed(ctx context.Context, arg MarkProjectDaemonInstallFailedParams) error {
+	_, err := q.db.ExecContext(ctx, markProjectDaemonInstallFailed, arg.InstallRequestID, arg.InstallError)
+	return err
+}
+
+const markProjectDaemonInstalled = `-- name: MarkProjectDaemonInstalled :exec
+UPDATE project_daemons
+SET install_state = 'installed',
+    install_error = '',
+    cloned_at = NOW()
+WHERE project_id = $1 AND daemon_id = $2 AND install_state <> 'installed'
+`
+
+type MarkProjectDaemonInstalledParams struct {
+	ProjectID string `json:"project_id"`
+	DaemonID  string `json:"daemon_id"`
+}
+
+// Settles a queued clone from the daemon's filesystem announcement, which
+// carries the path but no request id. A no-op for rows already installed.
+func (q *Queries) MarkProjectDaemonInstalled(ctx context.Context, arg MarkProjectDaemonInstalledParams) error {
+	_, err := q.db.ExecContext(ctx, markProjectDaemonInstalled, arg.ProjectID, arg.DaemonID)
+	return err
+}
+
+const markProjectDaemonInstalledByRequest = `-- name: MarkProjectDaemonInstalledByRequest :exec
+UPDATE project_daemons
+SET install_state = 'installed',
+    install_error = '',
+    cloned_at = NOW()
+WHERE install_request_id = $1 AND install_request_id <> ''
+`
+
+// The daemon reported the queued clone succeeded.
+func (q *Queries) MarkProjectDaemonInstalledByRequest(ctx context.Context, installRequestID string) error {
+	_, err := q.db.ExecContext(ctx, markProjectDaemonInstalledByRequest, installRequestID)
+	return err
+}
+
 const upsertProjectDaemon = `-- name: UpsertProjectDaemon :exec
 INSERT INTO project_daemons (
-    project_id, daemon_id, path, default_branch, cloned_at
-) VALUES ($1, $2, $3, $4, NOW())
+    project_id, daemon_id, path, default_branch, cloned_at, install_state
+) VALUES ($1, $2, $3, $4, NOW(), 'installed')
 ON CONFLICT (project_id, daemon_id) DO UPDATE SET
     path = EXCLUDED.path,
-    default_branch = EXCLUDED.default_branch
+    default_branch = EXCLUDED.default_branch,
+    install_state = 'installed',
+    install_error = '',
+    install_request_id = ''
 `
 
 type UpsertProjectDaemonParams struct {
@@ -113,12 +177,50 @@ type UpsertProjectDaemonParams struct {
 	DefaultBranch sql.NullString `json:"default_branch"`
 }
 
+// Records a COMPLETED clone. install_state is forced to 'installed' rather
+// than left to the column default, so a row that was previously 'installing'
+// or 'failed' is corrected when the clone finally lands.
 func (q *Queries) UpsertProjectDaemon(ctx context.Context, arg UpsertProjectDaemonParams) error {
 	_, err := q.db.ExecContext(ctx, upsertProjectDaemon,
 		arg.ProjectID,
 		arg.DaemonID,
 		arg.Path,
 		arg.DefaultBranch,
+	)
+	return err
+}
+
+const upsertQueuedProjectDaemon = `-- name: UpsertQueuedProjectDaemon :exec
+INSERT INTO project_daemons (
+    project_id, daemon_id, path, default_branch, cloned_at,
+    install_state, install_error, install_request_id
+) VALUES ($1, $2, $3, $4, NOW(), 'installing', '', $5)
+ON CONFLICT (project_id, daemon_id) DO UPDATE SET
+    path = EXCLUDED.path,
+    default_branch = EXCLUDED.default_branch,
+    install_state = 'installing',
+    install_error = '',
+    install_request_id = EXCLUDED.install_request_id
+`
+
+type UpsertQueuedProjectDaemonParams struct {
+	ProjectID        string         `json:"project_id"`
+	DaemonID         string         `json:"daemon_id"`
+	Path             string         `json:"path"`
+	DefaultBranch    sql.NullString `json:"default_branch"`
+	InstallRequestID string         `json:"install_request_id"`
+}
+
+// Records a clone that has been QUEUED for a daemon but has not run. The path
+// is where the checkout WILL be, not where it is. install_request_id ties the
+// row to the queued command so the outcome can find it.
+func (q *Queries) UpsertQueuedProjectDaemon(ctx context.Context, arg UpsertQueuedProjectDaemonParams) error {
+	_, err := q.db.ExecContext(ctx, upsertQueuedProjectDaemon,
+		arg.ProjectID,
+		arg.DaemonID,
+		arg.Path,
+		arg.DefaultBranch,
+		arg.InstallRequestID,
 	)
 	return err
 }

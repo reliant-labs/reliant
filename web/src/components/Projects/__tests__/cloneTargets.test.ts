@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   cloneAvailability,
+  cloneTargetOptions,
   failureReason,
   isCloneableDaemon,
   pickCloneTarget,
@@ -26,6 +27,17 @@ function daemon(overrides: Partial<CloudDaemon> & { status: number }): CloudDaem
     lastStatusMessage: "",
     ...overrides,
   } as CloudDaemon;
+}
+
+/** A daemon whose most recent connection is `secondsAgo` old. */
+function daemonSeenAt(
+  overrides: Partial<CloudDaemon> & { status: number },
+  secondsAgo: number,
+): CloudDaemon {
+  return daemon({
+    ...overrides,
+    connectedAt: { seconds: BigInt(1790000000 - secondsAgo), nanos: 0 },
+  } as Partial<CloudDaemon> & { status: number });
 }
 
 describe("cloneAvailability", () => {
@@ -115,6 +127,62 @@ describe("isCloneableDaemon", () => {
 describe("pickCloneTarget", () => {
   it("returns null when every machine has failed", () => {
     expect(pickCloneTarget([daemon({ status: DAEMON_STATUS_FAILED })])).toBeNull();
+  });
+
+  it("defaults to the most recently used active machine", () => {
+    // With several machines the default must be the one the user was last
+    // working on, not whichever the server happened to list first — a clone
+    // that silently lands on a stale machine is the mistake this prevents.
+    const target = pickCloneTarget([
+      daemonSeenAt({ id: "d-stale", status: DAEMON_STATUS_ACTIVE }, 86400),
+      daemonSeenAt({ id: "d-recent", status: DAEMON_STATUS_ACTIVE }, 60),
+      daemonSeenAt({ id: "d-middling", status: DAEMON_STATUS_ACTIVE }, 3600),
+    ]);
+
+    expect(target?.id).toBe("d-recent");
+  });
+
+  it("still prefers any active machine over a more recently used inactive one", () => {
+    // Recency orders machines WITHIN a status tier; it does not promote a
+    // suspended machine over a running one, because the running one clones
+    // now and the suspended one clones whenever it wakes.
+    const target = pickCloneTarget([
+      daemonSeenAt({ id: "d-susp-recent", status: DAEMON_STATUS_SUSPENDED }, 10),
+      daemonSeenAt({ id: "d-active-old", status: DAEMON_STATUS_ACTIVE }, 99999),
+    ]);
+
+    expect(target?.id).toBe("d-active-old");
+  });
+});
+
+describe("cloneTargetOptions", () => {
+  it("offers every machine that can take a clone, most recent first", () => {
+    const options = cloneTargetOptions([
+      daemonSeenAt({ id: "d-old", status: DAEMON_STATUS_ACTIVE }, 900),
+      daemonSeenAt({ id: "d-new", status: DAEMON_STATUS_ACTIVE }, 30),
+      daemonSeenAt({ id: "d-pending", status: DAEMON_STATUS_PENDING }, 5),
+    ]);
+
+    expect(options.map((o) => o.daemon.id)).toEqual(["d-new", "d-old", "d-pending"]);
+  });
+
+  it("omits failed machines — the user cannot usefully choose one", () => {
+    const options = cloneTargetOptions([
+      daemon({ id: "d-failed", status: DAEMON_STATUS_FAILED }),
+      daemon({ id: "d-ok", status: DAEMON_STATUS_ACTIVE }),
+    ]);
+
+    expect(options.map((o) => o.daemon.id)).toEqual(["d-ok"]);
+  });
+
+  it("says whether each machine clones now or only once it is ready", () => {
+    const options = cloneTargetOptions([
+      daemon({ id: "d-active", status: DAEMON_STATUS_ACTIVE }),
+      daemon({ id: "d-pending", status: DAEMON_STATUS_PENDING }),
+    ]);
+
+    expect(options.find((o) => o.daemon.id === "d-active")?.immediate).toBe(true);
+    expect(options.find((o) => o.daemon.id === "d-pending")?.immediate).toBe(false);
   });
 });
 

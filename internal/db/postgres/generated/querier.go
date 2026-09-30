@@ -657,6 +657,14 @@ type Querier interface {
 	// Without this the drain was idempotent only by luck of timing. See
 	// specs/interrupt-pause-spec.md.
 	MarkAgentMessagesDelivered(ctx context.Context, arg MarkAgentMessagesDeliveredParams) ([]string, error)
+	// The daemon reported the queued clone failed. Matched on request id because
+	// the failure notification carries no project id.
+	MarkProjectDaemonInstallFailed(ctx context.Context, arg MarkProjectDaemonInstallFailedParams) error
+	// Settles a queued clone from the daemon's filesystem announcement, which
+	// carries the path but no request id. A no-op for rows already installed.
+	MarkProjectDaemonInstalled(ctx context.Context, arg MarkProjectDaemonInstalledParams) error
+	// The daemon reported the queued clone succeeded.
+	MarkProjectDaemonInstalledByRequest(ctx context.Context, installRequestID string) error
 	// Resolve a dead thread's mailbox: every row still queued for a thread whose
 	// loop has exited becomes status 3 (undelivered), because no future loop
 	// boundary will ever drain it.
@@ -842,7 +850,14 @@ type Querier interface {
 	UpdateWorktreeCleanupMetadata(ctx context.Context, arg UpdateWorktreeCleanupMetadataParams) error
 	// Insert or update a preset
 	UpsertPreset(ctx context.Context, arg UpsertPresetParams) (Preset, error)
+	// Records a COMPLETED clone. install_state is forced to 'installed' rather
+	// than left to the column default, so a row that was previously 'installing'
+	// or 'failed' is corrected when the clone finally lands.
 	UpsertProjectDaemon(ctx context.Context, arg UpsertProjectDaemonParams) error
+	// Records a clone that has been QUEUED for a daemon but has not run. The path
+	// is where the checkout WILL be, not where it is. install_request_id ties the
+	// row to the queued command so the outcome can find it.
+	UpsertQueuedProjectDaemon(ctx context.Context, arg UpsertQueuedProjectDaemonParams) error
 	// Activities that create/update a tool call retry on failure, so the write
 	// must be idempotent: a retry re-sending the same id updates the row in
 	// place instead of erroring on the primary key.

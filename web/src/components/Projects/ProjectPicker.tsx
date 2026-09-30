@@ -30,6 +30,8 @@ import { RemoveProjectsModal } from "./RemoveProjectsModal";
 import { DirectoryPicker } from "./DirectoryPicker";
 import { Modal } from "../ui/Modal";
 import { RepoSelector } from "./RepoSelector";
+import { CloneTargetPicker } from "./CloneTargetPicker";
+import { addProjectLead } from "./addProjectActions";
 
 import { toast } from "../../lib/toast-manager";
 import { useDaemonStatus } from "../../hooks/useDaemonStatus";
@@ -46,18 +48,17 @@ import { capabilities } from "../../services/controlPlane/capabilities";
 import {
   listDaemons as listCloudDaemons,
   deleteDaemon,
-  DAEMON_STATUS_ACTIVE,
   DAEMON_STATUS_SUSPENDED,
   type Daemon as CloudDaemon,
 } from "../../services/controlPlane/daemon";
 import {
   cloneAvailability,
+  pickCloneTarget,
   cloneDescription,
   failureReason,
   isFailedDaemon,
 } from "./cloneTargets";
 import { cloudDaemonStatusLabel } from "./cloudDaemonStatusLabel";
-import { gitService } from "../../services/controlPlane/git";
 import type { GitRepo } from "../../services/controlPlane/git";
 import { projectGrpc } from "../../api/project-grpc";
 import { cloudPathForRepo, repoNameFromUrl } from "../../lib/cloudProjectPath";
@@ -648,11 +649,6 @@ function ProjectPickerComponent({ onProjectSelected }: ProjectPickerProps) {
     () => daemons.filter((d) => isCloudDaemon(d.daemonType)),
     [daemons],
   );
-  const activeControlPlaneDaemons = useMemo(
-    () => (controlPlaneDaemons ?? []).filter((d) => d.status === DAEMON_STATUS_ACTIVE),
-    [controlPlaneDaemons],
-  );
-
   // Hostname lookup for naming daemons in the clone status toast. Falls back
   // to a short id slice when the daemon row hasn't loaded yet.
   const hostnameFor = useCallback(
@@ -664,12 +660,18 @@ function ProjectPickerComponent({ onProjectSelected }: ProjectPickerProps) {
   );
 
   // selectedCloneDaemon — the cloud daemon the top-level "Clone repo" flow
-  // installs onto. We pick the first ACTIVE cloud daemon (registry first,
-  // then control-plane). Suspended cloud daemons are excluded because the
-  // gateway can't forward the clone command until the daemon resumes.
+  // installs onto by default.
+  //
+  // This used to be "the first ACTIVE cloud daemon the server listed", which
+  // is indistinguishable from correct with one machine and wrong with
+  // several: the checkout lands on whichever row sorted first, and nothing
+  // told the user which that was. The default is now the most recently used
+  // machine (pickCloneTarget), and CloneTargetPicker lets them change it.
+  //
+  // Registry rows first (useDaemonStatus, so the registry enum applies —
+  // see the aliased import above), then control-plane rows, because the
+  // registry is the one that knows a daemon has actually attached.
   const selectedCloneDaemon = useMemo<CloneTarget | null>(() => {
-    // Registry rows here (from useDaemonStatus), so the registry enum is the
-    // right one — see the aliased import above.
     const activeCloud = cloudDaemons.find(
       (d) => d.status === RegistryDaemonStatus.ACTIVE,
     );
@@ -679,14 +681,19 @@ function ProjectPickerComponent({ onProjectSelected }: ProjectPickerProps) {
         hostname: activeCloud.hostname || hostnameFor(activeCloud.daemonId),
       };
     }
-    const cpDaemon = activeControlPlaneDaemons[0];
-    if (!cpDaemon) return null;
+    const preferred = pickCloneTarget(controlPlaneDaemons ?? []);
+    if (!preferred) return null;
     return {
-      daemonId: cpDaemon.id,
+      daemonId: preferred.id,
       hostname:
-        cpDaemon.hostname || cpDaemon.name || `daemon ${cpDaemon.id.slice(0, 8)}`,
+        preferred.hostname || preferred.name || `daemon ${preferred.id.slice(0, 8)}`,
     };
-  }, [activeControlPlaneDaemons, cloudDaemons, hostnameFor]);
+  }, [cloudDaemons, controlPlaneDaemons, hostnameFor]);
+
+  // The machine the NEXT clone will use. Null means "whatever the default
+  // resolves to"; a string means the user chose explicitly in the modal, and
+  // that choice must win over the default for as long as the modal is open.
+  const [chosenCloneDaemonId, setChosenCloneDaemonId] = useState<string | null>(null);
 
   // The picker's top "Clone repo" affordance. It is VISIBLE whenever the
   // account has cloud daemons at all, and merely DISABLED (carrying the
@@ -702,13 +709,48 @@ function ProjectPickerComponent({ onProjectSelected }: ProjectPickerProps) {
   );
   const showCloneAction = capabilities.cloudDaemons;
 
-  // Run a clone for a known repo onto an explicit target daemon, then
-  // create the Project (or open an existing one) and mark it installed.
-  // The caller passes targetDaemonId so the picker can support cloning to
-  // *any* of the user's cloud daemons (the per-row menu or the top-level
-  // "Clone repo" affordance into the currently-selected daemon). The caller
-  // is responsible for having vetted the target (status ACTIVE, cloud type,
-  // GH credential present); cloneAndOpen does not re-check.
+  // Which add-project action leads. A cloud user's code is never on the
+  // browser host's filesystem, so leading them at the directory picker sends
+  // them somewhere that cannot work; a local-daemon user's filesystem IS
+  // theirs, so browsing is the faster route. See addProjectActions.ts.
+  const cloneLeads =
+    showCloneAction &&
+    addProjectLead({
+      hasCloudDaemons: (controlPlaneDaemons ?? []).length > 0 || cloudDaemons.length > 0,
+      activeDaemonType: activeDaemon?.daemonType,
+    }) === "clone";
+
+  // The actions actually rendered, in order. "Open folder" is dropped only
+  // when there is no local filesystem to browse at all (web mode with no
+  // attached daemon) — the case that used to blank the entire card.
+  const orderedAddProjectActions = useMemo<Array<"clone" | "open">>(() => {
+    const actions: Array<"clone" | "open"> = [];
+    if (cloneLeads && showCloneAction) actions.push("clone");
+    if (!showConnectionInstructions) actions.push("open");
+    if (!cloneLeads && showCloneAction) actions.push("clone");
+    return actions;
+  }, [cloneLeads, showCloneAction, showConnectionInstructions]);
+
+  // Which machine the next clone actually lands on: the user's explicit
+  // choice when they made one, else the recency default, else any machine
+  // that will eventually drain the queue.
+  const effectiveCloneDaemonId =
+    chosenCloneDaemonId ??
+    selectedCloneDaemon?.daemonId ??
+    (cloneState.kind === "ready" ? cloneState.target.id : null);
+
+  // Add a repo as a project on a target daemon, in ONE server call.
+  //
+  // This used to be four calls from here — cloneRepo, createProject,
+  // markProjectInstalled, plus an already-exists recovery — each able to fail
+  // on its own and leave a project with no checkout or a checkout with no
+  // project. CreateProjectFromRepo owns that sequence server-side now, so
+  // this function's whole job is to ask, report, and open.
+  //
+  // It returns as soon as the clone is QUEUED: the machine may still be
+  // asleep, so the checkout does not exist yet and the copy must not pretend
+  // it does. The real outcome arrives over the updates stream (the daemon's
+  // FileSystemChanged / DaemonCommandFailed, replayed via user_updates).
   const cloneAndOpen = useCallback(
     async (
       repo: { cloneUrl: string; defaultBranch: string; fullName?: string },
@@ -722,76 +764,36 @@ function ProjectPickerComponent({ onProjectSelected }: ProjectPickerProps) {
       const branch = repo.defaultBranch || "main";
       const targetHost = hostnameFor(targetDaemonId);
       setCloneStatus(`Queueing ${projectName} for ${targetHost}...`);
-      const cloneResult = await gitService.cloneRepo({
+
+      const result = await projectGrpc.createProjectFromRepo({
+        cloneUrl: repo.cloneUrl,
         daemonId: targetDaemonId,
-        gitRepo: repo.cloneUrl,
-        gitBranch: branch,
+        name: projectName,
+        branch,
         path: destinationPath,
       });
-      const clonedPath = cloneResult.clonedPath;
 
-      // CloneRepo returns once the command is durably ENQUEUED, not once the
-      // repo is on disk — the daemon may not even be running yet. Saying
-      // "cloned" here is the false success this replaces. The real outcome
-      // arrives asynchronously: the daemon announces FileSystemChanged on
-      // success or DaemonCommandFailed on failure, which reaches us as a
-      // user_updates row (see globalUpdatesStore's daemon_command_failed
-      // handler) and surfaces as a toast.
-      if (cloneResult.queued) {
-        const machine = cloneResult.daemonName || targetHost;
+      if (result.queued) {
+        const machine = result.daemonName || targetHost;
         toast.info(`Queued — ${projectName} will clone when ${machine} is ready`);
       }
 
       setCloneStatus(`Opening ${projectName}...`);
-      let openedProject: Project | undefined;
-      try {
-        const createdProject = await createProject({
-          name: projectName,
-          path: clonedPath,
-          description: "",
-          is_git_repo: true,
-          default_branch: branch,
-        });
-        openedProject = createdProject;
-      } catch (err) {
-        // Already-exists is a legitimate "you've cloned this somewhere
-        // before" case. Look the project up and reuse it.
-        const isAlreadyExists =
-          (err instanceof ConnectError && err.code === Code.AlreadyExists) ||
-          (err instanceof Error &&
-            (err.message.includes("already exists") || err.message.includes("409")));
-        if (!isAlreadyExists) throw err;
-        await loadProjects();
-        const refreshed = useProjectStore.getState().projects;
-        openedProject =
-          refreshed.find((p) => p.path === clonedPath) ||
-          refreshed.find((p) => p.remote_url === repo.cloneUrl);
-      }
-
-      if (openedProject) {
-        try {
-          await projectGrpc.markProjectInstalled(
-            openedProject.id,
-            targetDaemonId,
-            clonedPath,
-            branch,
-          );
-        } catch (markErr) {
-          console.warn("markProjectInstalled failed (non-fatal):", markErr);
+      await loadProjects();
+      if (result.project) {
+        // Re-read from the store so the opened project is the full
+        // StoreProject shape (last_active, remote_url), not the narrower
+        // one the RPC returns.
+        const opened =
+          useProjectStore.getState().projects.find((p) => p.id === result.project!.id);
+        if (opened) {
+          await selectProject(opened);
+          onProjectSelected(opened);
         }
-        await loadProjects();
-        await selectProject(openedProject);
-        onProjectSelected(openedProject);
       }
       setCloneStatus(null);
     },
-    [
-      createProject,
-      hostnameFor,
-      loadProjects,
-      onProjectSelected,
-      selectProject,
-    ],
+    [hostnameFor, loadProjects, onProjectSelected, selectProject],
   );
 
   // Modal "Clone repo" → user picks a fresh repo to install on the active
@@ -799,12 +801,9 @@ function ProjectPickerComponent({ onProjectSelected }: ProjectPickerProps) {
   // control-plane daemon list.
   const handleRepoSelectedFromModal = async (repo: GitRepo) => {
     setIsCloneModalOpen(false);
-    // Prefer the ACTIVE-daemon target when there is one, but fall back to
-    // any machine that will eventually drain the queue — a clone onto a
-    // still-starting machine is valid, it just lands later.
-    const targetDaemonId =
-      selectedCloneDaemon?.daemonId ??
-      (cloneState.kind === "ready" ? cloneState.target.id : null);
+    // The machine the user chose in the modal, or the recency default. A
+    // clone onto a still-starting machine is valid — it just lands later.
+    const targetDaemonId = effectiveCloneDaemonId;
     if (!targetDaemonId) {
       toast.error(
         cloneState.kind === "blocked" ? cloneState.reason : "No machine available to clone onto",
@@ -1059,69 +1058,124 @@ function ProjectPickerComponent({ onProjectSelected }: ProjectPickerProps) {
               {showConnectionInstructions && <NoActiveDaemonState />}
               {(!showConnectionInstructions || showCloneAction) && (
                 <>
+                  {/* The two add-project actions. WHICH ONE LEADS depends on
+                      where the user's code lives (addProjectLead): a cloud
+                      user is led to "Clone from GitHub", because the
+                      directory picker reads the browser host's filesystem and
+                      cannot see a cloud machine's disk at all. A local daemon
+                      user is led to "Open folder", whose filesystem is
+                      genuinely theirs. The non-leading action stays present
+                      and reachable underneath — demoted, never hidden. */}
                   <div className="relative backdrop-blur-2xl bg-card/90 border border-border/50 rounded-2xl mb-6 overflow-hidden">
-                    {!showConnectionInstructions && (
-                    <button
-                      onClick={handleOpenExistingProject}
-                      onMouseEnter={() => setIsOpenButtonHovered(true)}
-                      onMouseLeave={() => setIsOpenButtonHovered(false)}
-                      className="group w-full p-6 transition-all duration-150 text-left active:scale-[0.99]"
-                      style={{
-                        backgroundColor: isOpenButtonHovered
-                          ? "hsl(var(--primary) / 0.15)"
-                          : "hsl(var(--primary) / 0.1)",
-                      }}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-4">
-                          <div className="w-12 h-12 rounded-xl bg-primary/20 flex items-center justify-center">
-                            <FolderOpen className="w-6 h-6 text-primary" />
+                    {orderedAddProjectActions.map((action, index) =>
+                      action === "clone" ? (
+                        <button
+                          key="clone"
+                          onClick={() => setIsCloneModalOpen(true)}
+                          disabled={cloneState.kind === "blocked"}
+                          data-testid="project-picker-clone-repo"
+                          onMouseEnter={() => setIsCloneButtonHovered(true)}
+                          onMouseLeave={() => setIsCloneButtonHovered(false)}
+                          className={cn(
+                            "group w-full p-6 text-left transition-all duration-150 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60 disabled:active:scale-100",
+                            index > 0 && "border-t border-border/50",
+                          )}
+                          style={{
+                            backgroundColor: cloneLeads
+                              ? isCloneButtonHovered && cloneState.kind === "ready"
+                                ? "hsl(var(--primary) / 0.15)"
+                                : "hsl(var(--primary) / 0.1)"
+                              : isCloneButtonHovered && cloneState.kind === "ready"
+                                ? "hsl(var(--primary) / 0.08)"
+                                : "transparent",
+                          }}
+                        >
+                          <div className="flex items-center gap-4">
+                            <div
+                              className={cn(
+                                "flex h-12 w-12 items-center justify-center rounded-xl",
+                                cloneLeads ? "bg-primary/20" : "bg-muted",
+                              )}
+                            >
+                              <GitFork
+                                className={cn(
+                                  "h-6 w-6",
+                                  cloneLeads ? "text-primary" : "text-foreground",
+                                )}
+                              />
+                            </div>
+                            <div className="text-left">
+                              <h3
+                                className={cn(
+                                  "text-xl font-bold",
+                                  cloneLeads ? "text-primary" : "text-foreground",
+                                )}
+                              >
+                                {cloneLeads ? "Clone from GitHub" : "Clone repo"}
+                              </h3>
+                              <p className="text-sm text-muted-foreground">
+                                {cloneDescription({
+                                  cloneState,
+                                  hasGitHubCredential,
+                                  fallbackHost: selectedCloneDaemon?.hostname,
+                                })}
+                              </p>
+                            </div>
                           </div>
-                          <div className="text-left">
-                            <h3 className="text-xl font-bold text-primary">
-                              Open Project
-                            </h3>
-                            <p className="text-sm text-muted-foreground">
-                              Browse and select your project directory
-                            </p>
+                        </button>
+                      ) : (
+                        <button
+                          key="open"
+                          onClick={handleOpenExistingProject}
+                          data-testid="project-picker-open-folder"
+                          onMouseEnter={() => setIsOpenButtonHovered(true)}
+                          onMouseLeave={() => setIsOpenButtonHovered(false)}
+                          className={cn(
+                            "group w-full p-6 text-left transition-all duration-150 active:scale-[0.99]",
+                            index > 0 && "border-t border-border/50",
+                          )}
+                          style={{
+                            backgroundColor: cloneLeads
+                              ? isOpenButtonHovered
+                                ? "hsl(var(--primary) / 0.08)"
+                                : "transparent"
+                              : isOpenButtonHovered
+                                ? "hsl(var(--primary) / 0.15)"
+                                : "hsl(var(--primary) / 0.1)",
+                          }}
+                        >
+                          <div className="flex items-center gap-4">
+                            <div
+                              className={cn(
+                                "flex h-12 w-12 items-center justify-center rounded-xl",
+                                cloneLeads ? "bg-muted" : "bg-primary/20",
+                              )}
+                            >
+                              <FolderOpen
+                                className={cn(
+                                  "h-6 w-6",
+                                  cloneLeads ? "text-foreground" : "text-primary",
+                                )}
+                              />
+                            </div>
+                            <div className="text-left">
+                              <h3
+                                className={cn(
+                                  "text-xl font-bold",
+                                  cloneLeads ? "text-foreground" : "text-primary",
+                                )}
+                              >
+                                {cloneLeads ? "Open folder" : "Open Project"}
+                              </h3>
+                              <p className="text-sm text-muted-foreground">
+                                {cloneLeads
+                                  ? "Browse a folder on this machine"
+                                  : "Browse and select your project directory"}
+                              </p>
+                            </div>
                           </div>
-                        </div>
-                      </div>
-                    </button>
-                    )}
-                    {showCloneAction && (
-                      <button
-                        onClick={() => setIsCloneModalOpen(true)}
-                        disabled={cloneState.kind === "blocked"}
-                        data-testid="project-picker-clone-repo"
-                        onMouseEnter={() => setIsCloneButtonHovered(true)}
-                        onMouseLeave={() => setIsCloneButtonHovered(false)}
-                        className="group w-full p-6 border-t border-border/50 transition-all duration-150 text-left active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60 disabled:active:scale-100"
-                        style={{
-                          backgroundColor:
-                            isCloneButtonHovered && cloneState.kind === "ready"
-                              ? "hsl(var(--primary) / 0.08)"
-                              : "transparent",
-                        }}
-                      >
-                        <div className="flex items-center gap-4">
-                          <div className="w-12 h-12 rounded-xl bg-muted flex items-center justify-center">
-                            <GitFork className="w-6 h-6 text-foreground" />
-                          </div>
-                          <div className="text-left">
-                            <h3 className="text-xl font-bold text-foreground">
-                              Clone repo
-                            </h3>
-                            <p className="text-sm text-muted-foreground">
-                              {cloneDescription({
-                                cloneState,
-                                hasGitHubCredential,
-                                fallbackHost: selectedCloneDaemon?.hostname,
-                              })}
-                            </p>
-                          </div>
-                        </div>
-                      </button>
+                        </button>
+                      ),
                     )}
                   </div>
                 </>
@@ -1443,6 +1497,15 @@ function ProjectPickerComponent({ onProjectSelected }: ProjectPickerProps) {
         title="Clone a repository"
         size="lg"
       >
+        {/* The target comes FIRST: which machine the checkout lands on is a
+            decision about the clone, and discovering it after picking a repo
+            is the wrong order. Renders nothing when there is only one
+            candidate. */}
+        <CloneTargetPicker
+          daemons={controlPlaneDaemons ?? []}
+          selectedDaemonId={effectiveCloneDaemonId}
+          onSelect={setChosenCloneDaemonId}
+        />
         <RepoSelector
           onSelect={(repo) => {
             void handleRepoSelectedFromModal(repo);

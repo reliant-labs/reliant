@@ -7,7 +7,7 @@ import { useProjectStore } from "@/store/projectStore";
 import type { Project } from "@/store/projectStore";
 import { supabase } from "@/lib/supabase";
 import { useEventBus } from "@/lib/event-context";
-import { useCloneRepo, useCompleteOnboarding, useCreateDaemon } from "@/hooks/useOnboardingQueries";
+import { useCompleteOnboarding } from "@/hooks/useOnboardingQueries";
 import { trackEvent } from "@/lib/analytics";
 import { gitService } from "@/services/controlPlane/git";
 import { finalizeOnboardingSideEffects } from "../useOnboardingComplete";
@@ -16,21 +16,10 @@ import { markOnboardingFinalized } from "../analytics";
 import { ProvisioningGate } from "../ProvisioningGate";
 import { useCommitLaunchPlan } from "../useCommitLaunchPlan";
 import type { StepProps } from "../types";
-import {
-  DAEMON_STATUS_ACTIVE,
-  listDaemons,
-} from "@/services/controlPlane/daemon";
 import type { GitRepo } from "@/services/controlPlane/git";
 import { RepoSelector } from "@/components/Projects/RepoSelector";
 import { cloudPathForRepo, repoNameFromUrl } from "@/lib/cloudProjectPath";
-import { projectGrpc } from "@/api/project-grpc";
-
-// Must match the name + type + size used by ComputeStep's createDaemon call so
-// that the control-plane's CreateDaemon idempotency path (refreshManagedDaemon)
-// updates the existing daemon's git_repo column instead of erroring out.
-const ONBOARDING_DAEMON_NAME = "onboarding-daemon";
-const DAEMON_TYPE_MANAGED = 1;
-const DAEMON_SIZE_SMALL = 1;
+import { addRepoProject } from "../addRepoProject";
 
 // Entry to this step is gated by an existing GitHub credential (the
 // ProjectChoiceStep "Connect GitHub" button performs the OAuth handshake
@@ -38,14 +27,6 @@ const DAEMON_SIZE_SMALL = 1;
 // deletes), the picker phase surfaces a Reconnect button — no separate
 // "connect" landing page is needed.
 type Phase = "picker" | "confirm";
-
-function isAlreadyExistsError(error: unknown): boolean {
-  return (
-    (error instanceof ConnectError && error.code === Code.AlreadyExists) ||
-    (error instanceof Error &&
-      (error.message.includes("already exists") || error.message.includes("409")))
-  );
-}
 
 function isMissingGitCredentialError(error: unknown): boolean {
   if (error instanceof ConnectError && error.code === Code.FailedPrecondition) {
@@ -66,9 +47,7 @@ function findProjectByPath(projects: Project[], path: string): Project | undefin
 
 export function GitHubConnectStep({ plan, updatePlan, onBack }: StepProps) {
   const navigate = useNavigate();
-  const createProject = useProjectStore((state) => state.createProject);
   const loadProjects = useProjectStore((state) => state.loadProjects);
-  const projects = useProjectStore((state) => state.projects);
 
   const eventBus = useEventBus();
   const completeOnboardingMutation = useCompleteOnboarding();
@@ -86,13 +65,6 @@ export function GitHubConnectStep({ plan, updatePlan, onBack }: StepProps) {
 
   // Confirmation state
   const [branch, setBranch] = useState("");
-
-  // Clone mutation (via React Query)
-  const cloneRepoMutation = useCloneRepo();
-  // Daemon refresh mutation — re-running CreateDaemon with the picked repo
-  // hits the server-side refresh path so the daemon row stores git_repo and
-  // the workspace command carries it to the controller.
-  const createDaemonMutation = useCreateDaemon();
 
   const [confirmCredentialMissing, setConfirmCredentialMissing] = useState(false);
 
@@ -139,98 +111,41 @@ export function GitHubConnectStep({ plan, updatePlan, onBack }: StepProps) {
     const projectPath = cloudPathForRepo(selectedRepo);
     const projectName = repoNameFromUrl(selectedRepo.cloneUrl) || selectedRepo.fullName;
     setError("");
+    setCloning(true);
 
     try {
-      const { daemons } = await listDaemons();
-      // Prefer an active daemon; fall back to the first daemon if it's still
-      // provisioning (CloneRepo queues via JetStream when offline). The UUID
-      // is what the server actually keys lookups by — names are display-only.
-      const daemon =
-        daemons.find((d) => d.status === DAEMON_STATUS_ACTIVE) ?? daemons[0];
-      if (!daemon) {
-        throw new Error("Your machine is still starting. Try again in a moment.");
-      }
-
-      // Persist the picked repo on the daemon row before cloning. ComputeStep
-      // created the daemon with an empty git_repo (the user hadn't picked one
-      // yet); re-running CreateDaemon with the same name hits the server-side
-      // refresh path, which updates daemons.git_repo and republishes the
-      // workspace command with GitRepo populated so the controller / init
-      // container see it. Failures here are non-fatal — the clone below still
-      // populates the working tree via the daemon command path.
-      try {
-        await createDaemonMutation.mutateAsync({
-          name: ONBOARDING_DAEMON_NAME,
-          daemonType: DAEMON_TYPE_MANAGED,
-          size: DAEMON_SIZE_SMALL,
-          gitRepo: selectedRepo.cloneUrl,
-          gitBranch: selectedBranch,
-        });
-      } catch (refreshErr) {
-        console.warn("CreateDaemon refresh with git_repo failed (continuing with clone):", refreshErr);
-      }
-
-      // CloneRepo queues via JetStream when the daemon is offline, so a
-      // success here is genuine — the message was either delivered or queued
-      // for replay. A failure means the request didn't reach the gateway at
-      // all (auth, network, server-side validation). That's user-visible,
-      // not a silent retry, so we let it propagate to the outer catch which
-      // surfaces it via the `error` state below.
-      const cloneResult = await cloneRepoMutation.mutateAsync({
-        daemonId: daemon.id,
-        gitRepo: selectedRepo.cloneUrl,
-        gitBranch: selectedBranch,
+      // ONE server call adds the project: it starts the clone, creates the
+      // project row, and records where the checkout will live. This used to
+      // be four calls from here — CloneRepo, CreateProject,
+      // MarkProjectInstalled and an already-exists recovery — each able to
+      // fail on its own and leave a project with no checkout or a checkout
+      // with no project. See addRepoProject.ts.
+      const added = await addRepoProject({
+        cloneUrl: selectedRepo.cloneUrl,
+        branch: selectedBranch,
         path: projectPath,
+        name: projectName,
       });
-      const clonedPath = cloneResult.clonedPath;
+      const clonedPath = added.clonedPath;
 
+      // Say what actually happened. A queued clone means the checkout does
+      // NOT exist yet, and "Opening project" there is the false success this
+      // flow exists to avoid.
       eventBus.emit("toast:show", {
-        message: `Opening project "${projectName}"...`,
+        message: added.queued
+          ? `Queued — ${projectName} will clone when ${added.machineName || "your machine"} is ready`
+          : `Opening project "${projectName}"...`,
         variant: "info",
       });
 
-      let installedProjectId: string | undefined;
-      try {
-        const createdProject = await createProject({
-          name: projectName,
-          path: clonedPath,
-          description: "",
-          is_git_repo: true,
-          default_branch: selectedBranch,
-        });
-        installedProjectId = createdProject.id;
-        await loadProjects();
-        await useProjectStore.getState().selectProject(createdProject);
-      } catch (projectError) {
-        if (!isAlreadyExistsError(projectError)) {
-          throw projectError;
-        }
-
-        await loadProjects();
-        const existingProject =
-          findProjectByPath(projects, clonedPath) ||
-          findProjectByPath(useProjectStore.getState().projects, clonedPath);
-        if (existingProject) {
-          installedProjectId = existingProject.id;
-          await useProjectStore.getState().selectProject(existingProject);
-        }
-      }
-
-      // Record the (project, daemon) install so the picker on later visits
-      // can show this project as "available on this daemon". Failures are
-      // non-fatal — the project is still usable; we just lose the indicator
-      // until a future markProjectInstalled call (e.g. from the picker).
-      if (installedProjectId) {
-        try {
-          await projectGrpc.markProjectInstalled(
-            installedProjectId,
-            daemon.id,
-            clonedPath,
-            selectedBranch,
-          );
-        } catch (markErr) {
-          console.warn("markProjectInstalled failed (non-fatal):", markErr);
-        }
+      // Select the new project so the app opens on it. The store is the
+      // source of the full Project shape; the RPC returns a narrower one.
+      await loadProjects();
+      const opened = added.projectId
+        ? useProjectStore.getState().projects.find((p) => p.id === added.projectId)
+        : findProjectByPath(useProjectStore.getState().projects, clonedPath);
+      if (opened) {
+        await useProjectStore.getState().selectProject(opened);
       }
 
       updatePlan({
@@ -260,10 +175,14 @@ export function GitHubConnectStep({ plan, updatePlan, onBack }: StepProps) {
         setConfirmCredentialMissing(false);
         setError(err instanceof Error ? err.message : "Failed to clone repository");
       }
+    } finally {
+      setCloning(false);
     }
   };
 
-  const cloning = cloneRepoMutation.isPending;
+  // Local pending state: the clone now runs inside addRepoProject rather than
+  // a React Query mutation, so there is no mutation.isPending to read.
+  const [cloning, setCloning] = useState(false);
 
   useEffect(() => {
     if (phase === "confirm" && confirmCredentialMissing) {

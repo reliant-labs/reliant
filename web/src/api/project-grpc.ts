@@ -32,6 +32,7 @@ import {
   ListProjectDaemonsForDaemonRequestSchema,
   ListProjectDaemonsRequestSchema,
   MarkProjectInstalledRequestSchema,
+  CreateProjectFromRepoRequestSchema,
 } from "../gen/reliant/v1/project_pb";
 
 // Type definitions matching frontend expectations (snake_case to match store interface)
@@ -431,8 +432,47 @@ export const projectGrpc = {
     return response.projectDaemons.map(protoProjectDaemonToFrontend);
   },
 
-  // Record that a project has been cloned onto a daemon. Called after
-  // gitService.cloneRepo() succeeds.
+  // Add a GitHub repo as a project on a daemon: start the clone, create the
+  // project, and record where the checkout will live — in ONE call.
+  //
+  // This replaces the four-call chain this client used to drive (listRepos →
+  // cloneRepo → createProject → markProjectInstalled), where a failure in the
+  // middle left a project with no checkout or a checkout with no project and
+  // nothing server-side knew the sequence had started.
+  //
+  // `queued: true` means the clone has NOT run yet — the command is durably
+  // enqueued and the machine may still be asleep. Render that as queued; the
+  // real outcome arrives later over the updates stream.
+  async createProjectFromRepo(args: {
+    cloneUrl: string;
+    daemonId: string;
+    name?: string;
+    branch?: string;
+    path?: string;
+  }): Promise<{
+    project: Project | undefined;
+    projectDaemon: ProjectDaemonInfo | undefined;
+    queued: boolean;
+    daemonName: string;
+  }> {
+    const client = grpcClient.project();
+    const response = await client.createProjectFromRepo(
+      create(CreateProjectFromRepoRequestSchema, args),
+    );
+    return {
+      project: response.project ? protoToFrontend(response.project) : undefined,
+      projectDaemon: response.projectDaemon
+        ? protoProjectDaemonToFrontend(response.projectDaemon)
+        : undefined,
+      queued: response.queued,
+      daemonName: response.daemonName,
+    };
+  },
+
+  // Record that a project has been cloned onto a daemon.
+  //
+  // Prefer createProjectFromRepo for the add-from-GitHub flow; this remains
+  // for callers that cloned by some other route and only need to record it.
   async markProjectInstalled(
     projectId: string,
     daemonId: string,

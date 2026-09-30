@@ -1183,9 +1183,36 @@ func (s *ToolsDaemonService) handleFileSystemChanged(ctx context.Context, conn *
 		return nil
 	}
 
+	// A clone dispatched by CreateProjectFromRepo left a project_daemons row
+	// in "installing". This announcement is the daemon saying the directory
+	// now exists, so the row is settled here.
+	//
+	// Matched by (project, daemon) rather than by request id: unlike the
+	// failure path, FileSystemChanged carries no request id — only the path
+	// — and the path is exactly what the queued row recorded.
+	if err := s.database.MarkProjectDaemonInstalled(ctx, project.ID, conn.daemonID); err != nil {
+		logging.Warn("could not settle queued clone after filesystem change",
+			"error", err, "project_id", project.ID, "daemon_id", conn.daemonID)
+	}
+
 	return s.database.EmitUserRefetch(ctx, conn.userID, db.RefetchFileTree, db.RefetchOpts{
 		ProjectID: &project.ID,
 	})
+}
+
+// cloneFailureReason keeps the stored reason bounded and non-empty. The
+// daemon's message is user-safe by contract, but a clone that failed with no
+// message at all must still read as failed rather than as a blank.
+func cloneFailureReason(message string) string {
+	trimmed := strings.TrimSpace(message)
+	if trimmed == "" {
+		return "the clone failed, but the machine reported no reason"
+	}
+	const maxReason = 500
+	if len(trimmed) > maxReason {
+		return trimmed[:maxReason]
+	}
+	return trimmed
 }
 
 // handleDaemonCommandFailed persists a DaemonCommandFailed announcement as a
@@ -1200,6 +1227,18 @@ func (s *ToolsDaemonService) handleFileSystemChanged(ctx context.Context, conn *
 func (s *ToolsDaemonService) handleDaemonCommandFailed(ctx context.Context, conn *daemonConnection, msg *reliantv1.DaemonCommandFailed) error {
 	if msg == nil {
 		return nil
+	}
+
+	// A clone dispatched by CreateProjectFromRepo has a project_daemons row
+	// sitting in "installing". Resolve it here, or the project stays in that
+	// state forever and the user is left watching a spinner for a clone that
+	// already failed. Best-effort: the notification below is what the client
+	// actually reacts to, and must be written either way.
+	if msg.CommandType == "git.clone" && msg.RequestId != "" {
+		if err := s.database.ResolveQueuedProjectDaemon(ctx, msg.RequestId, cloneFailureReason(msg.ErrorMessage)); err != nil {
+			logging.Warn("could not mark queued clone failed",
+				"error", err, "request_id", msg.RequestId)
+		}
 	}
 
 	data, err := json.Marshal(map[string]string{

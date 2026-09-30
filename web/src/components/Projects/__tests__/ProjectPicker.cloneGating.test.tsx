@@ -205,4 +205,22 @@ describe("ProjectPicker clone gating — an active daemon", () => {
     expect(clone).toHaveTextContent(/Pull a GitHub repo/i);
     expect(clone).not.toHaveTextContent(/queue/i);
   });
+
+  // For a cloud user the directory picker reads the BROWSER HOST's filesystem
+  // and cannot see the cloud machine's disk at all, so leading with "Open
+  // Project" pointed them at an action that could not work. Clone leads
+  // instead — and "Open folder" is demoted, never removed.
+  it("leads with Clone from GitHub, ahead of Open folder", async () => {
+    renderPicker();
+    const clone = await findSettledCloneButton();
+    expect(clone).toHaveTextContent(/Clone from GitHub/i);
+
+    const openFolder = screen.queryByTestId("project-picker-open-folder");
+    if (openFolder) {
+      // DOCUMENT_POSITION_FOLLOWING: clone comes first in the DOM.
+      expect(
+        clone.compareDocumentPosition(openFolder) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+    }
+  });
 });

@@ -188,12 +188,49 @@ func (s *projectStore) DeleteProjectDaemon(ctx context.Context, projectID, daemo
 
 func projectDaemonFromPG(row pgdb.ProjectDaemon) *core.ProjectDaemon {
 	return &core.ProjectDaemon{
-		ProjectID:     row.ProjectID,
-		DaemonID:      row.DaemonID,
-		Path:          row.Path,
-		DefaultBranch: nullStringToPtr(row.DefaultBranch),
-		ClonedAt:      row.ClonedAt,
+		ProjectID:        row.ProjectID,
+		DaemonID:         row.DaemonID,
+		Path:             row.Path,
+		DefaultBranch:    nullStringToPtr(row.DefaultBranch),
+		ClonedAt:         row.ClonedAt,
+		InstallState:     core.ProjectInstallState(row.InstallState),
+		InstallError:     row.InstallError,
+		InstallRequestID: row.InstallRequestID,
 	}
+}
+
+// UpsertQueuedProjectDaemon records a clone that has been queued for a daemon
+// but has not run. Path is where the checkout WILL be.
+func (s *projectStore) UpsertQueuedProjectDaemon(ctx context.Context, projectID, daemonID, path string, defaultBranch *string, requestID string) error {
+	return s.q.UpsertQueuedProjectDaemon(ctx, pgdb.UpsertQueuedProjectDaemonParams{
+		ProjectID:        projectID,
+		DaemonID:         daemonID,
+		Path:             path,
+		DefaultBranch:    ptrToNullString(defaultBranch),
+		InstallRequestID: requestID,
+	})
+}
+
+// MarkProjectDaemonInstalled settles a queued clone from the daemon's
+// filesystem announcement, which names the path but carries no request id.
+func (s *projectStore) MarkProjectDaemonInstalled(ctx context.Context, projectID, daemonID string) error {
+	return s.q.MarkProjectDaemonInstalled(ctx, pgdb.MarkProjectDaemonInstalledParams{
+		ProjectID: projectID,
+		DaemonID:  daemonID,
+	})
+}
+
+// ResolveQueuedProjectDaemon records the outcome the daemon reported for a
+// queued clone. Matched on request id, because the notification carries no
+// project id. A non-empty installErr marks the row failed.
+func (s *projectStore) ResolveQueuedProjectDaemon(ctx context.Context, requestID, installErr string) error {
+	if installErr != "" {
+		return s.q.MarkProjectDaemonInstallFailed(ctx, pgdb.MarkProjectDaemonInstallFailedParams{
+			InstallRequestID: requestID,
+			InstallError:     installErr,
+		})
+	}
+	return s.q.MarkProjectDaemonInstalledByRequest(ctx, requestID)
 }
 
 type worktreeStore struct{ q pgdb.Querier }

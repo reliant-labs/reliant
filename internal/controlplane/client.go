@@ -16,6 +16,8 @@ import (
 	"connectrpc.com/connect"
 	accesstokenv1 "github.com/reliant-labs/reliant/gen/controlplane/services/access_token/v1"
 	accesstokenv1connect "github.com/reliant-labs/reliant/gen/controlplane/services/access_token/v1/controlplanev1connect"
+	gitcredentialv1 "github.com/reliant-labs/reliant/gen/controlplane/services/git_credential/v1"
+	gitcredentialv1connect "github.com/reliant-labs/reliant/gen/controlplane/services/git_credential/v1/controlplanev1connect"
 	userv1 "github.com/reliant-labs/reliant/gen/controlplane/services/user/v1"
 	userv1connect "github.com/reliant-labs/reliant/gen/controlplane/services/user/v1/controlplanev1connect"
 )
@@ -59,6 +61,36 @@ type Client interface {
 	// nothing — the caller must surface the blockers and stop. An error means
 	// the call itself failed.
 	DeleteCurrentUserAccount(ctx context.Context, jwt string) ([]AccountDeletionBlocker, error)
+
+	// CloneRepoOntoDaemon asks the control plane to clone a repo onto one of
+	// the caller's daemons, using the git credential IT holds — reliant has
+	// no access to the user's GitHub token, which is why this is a call and
+	// not something reliant does itself.
+	//
+	// It returns once the clone is QUEUED, not once it has run: the control
+	// plane enqueues durably so a daemon that is asleep or booting is still
+	// a valid target. Queued=true means the checkout does not exist yet.
+	CloneRepoOntoDaemon(ctx context.Context, jwt string, req CloneRepoRequest) (CloneRepoResult, error)
+}
+
+// CloneRepoRequest asks the control plane to clone a repo onto a daemon.
+type CloneRepoRequest struct {
+	DaemonID string
+	CloneURL string
+	Branch   string
+	Path     string
+}
+
+// CloneRepoResult is what the control plane reports back about the clone.
+type CloneRepoResult struct {
+	// ClonedPath is where the checkout will live. Echoed from the request;
+	// not confirmation that the directory exists.
+	ClonedPath string
+	// Queued is true when the command was enqueued and has not run yet.
+	Queued bool
+	// DaemonName names the machine the clone is waiting on, so the caller
+	// can say which without a second lookup.
+	DaemonName string
 }
 
 type connectClient struct {
@@ -106,6 +138,29 @@ func (c *connectClient) accessTokenClient() accesstokenv1connect.AccessTokenServ
 
 func (c *connectClient) userClient() userv1connect.UserServiceClient {
 	return userv1connect.NewUserServiceClient(c.httpClient, c.baseURL)
+}
+
+func (c *connectClient) gitCredentialClient() gitcredentialv1connect.GitCredentialServiceClient {
+	return gitcredentialv1connect.NewGitCredentialServiceClient(c.httpClient, c.baseURL)
+}
+
+func (c *connectClient) CloneRepoOntoDaemon(ctx context.Context, jwt string, in CloneRepoRequest) (CloneRepoResult, error) {
+	req := connect.NewRequest(&gitcredentialv1.CloneRepoRequest{
+		DaemonId:  in.DaemonID,
+		GitRepo:   in.CloneURL,
+		GitBranch: in.Branch,
+		Path:      in.Path,
+	})
+	attachAuthorization(req, "Bearer "+strings.TrimSpace(jwt))
+	resp, err := c.gitCredentialClient().CloneRepo(ctx, req)
+	if err != nil {
+		return CloneRepoResult{}, err
+	}
+	return CloneRepoResult{
+		ClonedPath: resp.Msg.GetClonedPath(),
+		Queued:     resp.Msg.GetQueued(),
+		DaemonName: resp.Msg.GetDaemonName(),
+	}, nil
 }
 
 func (c *connectClient) DeleteCurrentUserAccount(ctx context.Context, jwt string) ([]AccountDeletionBlocker, error) {
