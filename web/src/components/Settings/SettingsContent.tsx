@@ -18,6 +18,7 @@ import { PromptsSettings } from "./PromptsSettings";
 import { useProjectStore } from "../../store/projectStore";
 import { api } from "../../api/client";
 import { ProjectPanel } from "../Projects/ProjectPanel";
+import { useNavigateToProjectPicker } from "@/hooks/useNavigateToProjectPicker";
 
 // Cloud settings sections are lazy-loaded so they code-split out of the main
 // SettingsContent chunk — they're only fetched when the user opens a cloud
@@ -48,6 +49,7 @@ export function SettingsContent({
 }: SettingsContentProps) {
   const [providers, setProviders] = useState<ProviderStatus[]>([]);
   const currentProject = useProjectStore((state) => state.currentProject);
+  const navigateToProjectPicker = useNavigateToProjectPicker();
 
   useEffect(() => {
     fetchProviderStatuses();
@@ -125,7 +127,12 @@ export function SettingsContent({
   if (activeSection === "projects") {
     return (
       <div className="h-full overflow-auto bg-background">
-        <ProjectPanel />
+        {/* Settings → Projects is the SECOND place a project can be added
+            (the picker is the primary one). Wiring the picker navigation in
+            is what makes ProjectPanel's own "Add project" / "Select Project"
+            affordances appear — rendered without it they were dead, which is
+            how Settings ended up with no add-project entry point at all. */}
+        <ProjectPanel onNavigateToProjectPicker={navigateToProjectPicker} />
       </div>
     );
   }

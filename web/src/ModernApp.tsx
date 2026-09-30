@@ -48,6 +48,7 @@ import { useActivityStore, ChatActivity } from "./store/activityStore";
 import { useChatNavigationStore } from "./store/chatNavigationStore";
 import { useWindowContext } from "./hooks/useWindowContext";
 import { useOpenProjectListener } from "./hooks/useOpenProjectListener";
+import { useNavigateToProjectPicker } from "./hooks/useNavigateToProjectPicker";
 import {
   useKeyboardShortcuts,
   useAppKeyboardShortcuts,
@@ -400,17 +401,10 @@ function App() {
     handleCloseGitInitModal();
   }, [handleCloseGitInitModal]);
 
-  // Handler for navigating to project picker
-  const handleNavigateToProjectPicker = useCallback(() => {
-    useChatStore.getState().clearCurrentChat(null);
-    // Save and clear viewer state before deselecting the project — the old
-    // sync effect used to do this via viewerStore.setCurrentProject(null).
-    useViewerStore.getState().clearViewersForProjectSwitch();
-    // Clear current project selection to show project picker. The selectProject
-    // path drives the URL; for deselect we set state and navigate manually.
-    useProjectStore.setState({ currentProject: null });
-    navigate({ to: '/', search: {} });
-  }, [navigate]);
+  // Navigating to the project picker. Shared with Settings → Projects, which
+  // offers the same "Add project" entry point — the store-clearing order this
+  // depends on is easy to get subtly wrong in a second copy.
+  const handleNavigateToProjectPicker = useNavigateToProjectPicker();
 
   // Get current worktreeId from the global worktree store (single source of truth)
   const getCurrentWorktreeId = useCallback(() => {
