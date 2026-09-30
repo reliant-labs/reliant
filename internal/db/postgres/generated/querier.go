@@ -748,6 +748,64 @@ type Querier interface {
 	// Resume all paused workflows for a chat.
 	// Used when resuming a chat to ensure child workflows are also resumed.
 	ResumeWorkflowsByChat(ctx context.Context, chatID string) error
+	// Move every DESCENDANT workflow row that was LIVE at a reset point back to
+	// active, AND the threads those rows own, AND the root's own thread — in one
+	// statement — reporting how many of each it moved. The inverse of
+	// CascadeTerminalStatusToDescendants + CascadeTerminalStatusToThreadSubtree
+	// for a subtree that is coming BACK, and the write that was missing entirely
+	// from reset-and-replay.
+	//
+	// Why a subtree needs reviving at all: every sub-agent runs INLINE in the
+	// root's single Temporal execution, but each owns its own workflows row
+	// (parent_id = the root) and its own threads row. Killing the root therefore
+	// killed the sub-agents, and the reaps stamped their rows failed. Resetting
+	// the root REBUILDS those same sub-agents by replay -- no new rows are
+	// created -- but the only write that moves a row back to running is
+	// WorkflowStatusActivity's "started" arm, and a child that was already
+	// running at the reset point never re-executes that activity: it is in the
+	// replayed history. So the children stayed "failed" while actively working,
+	// and the UI showed live agents as failed. Measured: six of them, chat
+	// abe58f03, docs/incidents/2026-09-29-reconciler-false-wedge.md.
+	//
+	// The predicate is a time window, because the reset point is the only thing
+	// that distinguishes work the new run will redo from work it will merely
+	// replay:
+	//
+	//   created_at <= T            the row existed at the reset point. A row
+	//                              created AFTER it re-runs its own "started"
+	//                              activity on the new run and self-revives --
+	//                              reviving it here would be a guess about a run
+	//                              that has not happened yet.
+	//   completed_at IS NULL
+	//     OR completed_at > T      it had not finished by the reset point. A
+	//                              descendant that genuinely ended BEFORE T --
+	//                              for any reason, success or failure -- has its
+	//                              completion in the replayed history and must
+	//                              stay ended. One that ended after T was killed
+	//                              by the interruption (or will re-execute its
+	//                              tail), and is live again in the new run.
+	//
+	// Only rows STOPPED for a reason other than paused are touched. Paused rows
+	// (3/3) are ResumeWorkflowsByChat's business and un-pausing them here would
+	// resume a run the user deliberately parked; active and pending rows are
+	// already correct, and clearing a live row's bookkeeping is not recoverable.
+	//
+	// Recursive over parent_id, same shape as
+	// CascadeTerminalStatusToDescendants: a sub-agent's own sub-agents were
+	// killed by the same terminate and are rebuilt by the same replay.
+	//
+	// The thread half is a data-modifying CTE reading the workflow half's
+	// RETURNING rather than a second statement, for two reasons. It cannot
+	// re-derive the set afterwards -- once those rows are active they no longer
+	// match the terminal predicate -- and one statement is one atomic write, so
+	// no reconciler pass can observe the workflows revived with their threads
+	// still failed. The root's OWN thread (id = the root's workflow id) is
+	// unioned in: it was stamped terminal by the same kill, and the root does
+	// not re-run its "started" activity either, so nothing else brings it back.
+	//
+	// Guarded to terminal thread statuses (3,4,5) exactly as ReviveThread is: a
+	// thread already running or paused keeps its live bookkeeping.
+	ReviveSubtreeLiveAt(ctx context.Context, arg ReviveSubtreeLiveAtParams) (ReviveSubtreeLiveAtRow, error)
 	// Move a thread back to running because a new run has started on it.
 	//
 	// The exact inverse of CascadeTerminalStatusToThreadSubtree below, and the

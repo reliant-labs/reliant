@@ -3412,6 +3412,18 @@ func (r *Repo) ReapOrphanedWorkflowDescendants(ctx context.Context) (int64, erro
 	return r.workflows.ReapOrphanedWorkflowDescendants(ctx)
 }
 
+// ReviveSubtreeLiveAt brings a reset-and-replayed run's subtree back to life:
+// every descendant workflow row that was live at the reset point, the threads
+// those rows own, and the root's own thread. See the Repository interface for
+// why a resume has to do this, and queries/workflows.sql for the predicate and
+// for why both halves are a single atomic statement.
+func (r *Repo) ReviveSubtreeLiveAt(ctx context.Context, rootWorkflowID string, at time.Time) (workflowsRevived, threadsRevived int64, err error) {
+	if rootWorkflowID == "" {
+		return 0, 0, fmt.Errorf("root workflow ID cannot be empty")
+	}
+	return r.workflows.ReviveSubtreeLiveAt(ctx, rootWorkflowID, at)
+}
+
 func (r *Repo) PauseRunningWorkflowsByChat(ctx context.Context, chatID string) error {
 	return r.RunTx(ctx, func(txCtx context.Context) error {
 		if err := r.workflows.PauseRunningWorkflowsByChat(txCtx, chatID); err != nil {

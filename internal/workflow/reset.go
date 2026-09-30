@@ -4,6 +4,7 @@ package workflow
 import (
 	"context"
 	"fmt"
+	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -13,6 +14,33 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/logging"
 )
+
+// ResetResult is what a successful reset-and-replay hands back: the run that
+// now carries the work, and WHEN in wall-clock time the replay picks up from.
+//
+// ResetPointTime is the EventTime of the WorkflowTaskCompleted event the reset
+// targeted, and it is not bookkeeping — it is the only way to tell which of
+// the subtree's DB rows describe work the new run is about to redo. Every
+// sub-agent executes INLINE in the root's single Temporal execution but owns
+// its own workflows/threads rows, and replay rebuilds those sub-agents without
+// re-running the activities that wrote their rows. So a descendant that was
+// live at this instant is live again after the reset, while one that had
+// already finished by this instant stays finished (its completion is in the
+// replayed history). Nothing in Temporal's response carries that distinction;
+// only the reset point's timestamp does. See
+// docs/incidents/2026-09-29-reconciler-false-wedge.md, "Collateral:
+// sub-agents".
+type ResetResult struct {
+	NewRunID       string
+	ResetPointTime time.Time
+}
+
+// wftPoint is a WorkflowTaskCompleted event's identity: the id a reset targets
+// and the wall-clock instant the replay therefore resumes from.
+type wftPoint struct {
+	eventID int64
+	at      time.Time
+}
 
 // ResetExpiredWorkflow resets an expired (timed-out) workflow execution back to the
 // last WorkflowTaskCompleted event. This restores the workflow to its pause point
@@ -25,11 +53,12 @@ import (
 //
 // After reset, the caller must send a SignalResume to the new run to unblock
 // the workflow from its Receive() loop.
-func ResetExpiredWorkflow(ctx context.Context, tempClient client.Client, workflowID, runID string) (newRunID string, err error) {
-	resetEventID, err := findLastWorkflowTaskCompleted(ctx, tempClient, workflowID, runID)
+func ResetExpiredWorkflow(ctx context.Context, tempClient client.Client, workflowID, runID string) (ResetResult, error) {
+	point, err := findLastWorkflowTaskCompleted(ctx, tempClient, workflowID, runID)
 	if err != nil {
-		return "", fmt.Errorf("failed to find reset point in workflow history: %w", err)
+		return ResetResult{}, fmt.Errorf("failed to find reset point in workflow history: %w", err)
 	}
+	resetEventID := point.eventID
 
 	logging.Info("[ResetExpiredWorkflow] Resetting workflow",
 		"workflowID", workflowID,
@@ -50,7 +79,7 @@ func ResetExpiredWorkflow(ctx context.Context, tempClient client.Client, workflo
 		},
 	})
 	if err != nil {
-		return "", fmt.Errorf("failed to reset workflow execution: %w", err)
+		return ResetResult{}, fmt.Errorf("failed to reset workflow execution: %w", err)
 	}
 
 	logging.Info("[ResetExpiredWorkflow] Workflow reset successfully",
@@ -58,9 +87,10 @@ func ResetExpiredWorkflow(ctx context.Context, tempClient client.Client, workflo
 		"oldRunID", runID,
 		"newRunID", resp.RunId,
 		"resetEventID", resetEventID,
+		"resetPointTime", point.at,
 	)
 
-	return resp.RunId, nil
+	return ResetResult{NewRunID: resp.RunId, ResetPointTime: point.at}, nil
 }
 
 // ResetInterruptedWorkflow resets a CLOSED-but-replayable execution (Failed,
@@ -88,11 +118,12 @@ func ResetExpiredWorkflow(ctx context.Context, tempClient client.Client, workflo
 //
 // Old pause/resume signals are excluded from reapply so they don't re-pause the
 // new run; the caller sends a fresh resume signal afterward.
-func ResetInterruptedWorkflow(ctx context.Context, tempClient client.Client, workflowID, runID string, status enumspb.WorkflowExecutionStatus) (newRunID string, err error) {
-	resetEventID, err := findResumeResetPoint(ctx, tempClient, workflowID, runID, status)
+func ResetInterruptedWorkflow(ctx context.Context, tempClient client.Client, workflowID, runID string, status enumspb.WorkflowExecutionStatus) (ResetResult, error) {
+	point, err := findResumeResetPoint(ctx, tempClient, workflowID, runID, status)
 	if err != nil {
-		return "", fmt.Errorf("failed to find reset point in workflow history: %w", err)
+		return ResetResult{}, fmt.Errorf("failed to find reset point in workflow history: %w", err)
 	}
+	resetEventID := point.eventID
 
 	logging.Info("[ResetInterruptedWorkflow] Resetting interrupted workflow",
 		"workflowID", workflowID,
@@ -114,7 +145,7 @@ func ResetInterruptedWorkflow(ctx context.Context, tempClient client.Client, wor
 		},
 	})
 	if err != nil {
-		return "", fmt.Errorf("failed to reset workflow execution: %w", err)
+		return ResetResult{}, fmt.Errorf("failed to reset workflow execution: %w", err)
 	}
 
 	logging.Info("[ResetInterruptedWorkflow] Workflow reset successfully",
@@ -122,16 +153,19 @@ func ResetInterruptedWorkflow(ctx context.Context, tempClient client.Client, wor
 		"oldRunID", runID,
 		"newRunID", resp.RunId,
 		"resetEventID", resetEventID,
+		"resetPointTime", point.at,
 	)
 
-	return resp.RunId, nil
+	return ResetResult{NewRunID: resp.RunId, ResetPointTime: point.at}, nil
 }
 
 // findResumeResetPoint walks history once and returns the WorkflowTaskCompleted
-// EventId to reset to for ResetInterruptedWorkflow. See that function's doc for
-// the strategy. Returns an error only when there is no WorkflowTaskCompleted at
-// all (the workflow closed before completing its first workflow task — nothing
-// replayable to resume into).
+// event to reset to for ResetInterruptedWorkflow — its EventId AND its
+// EventTime, because the caller needs the instant to classify which of the
+// subtree's rows the new run is about to redo (see ResetResult). See
+// ResetInterruptedWorkflow's doc for the strategy. Returns an error only when
+// there is no WorkflowTaskCompleted at all (the workflow closed before
+// completing its first workflow task — nothing replayable to resume into).
 //
 // For a FAILED run the close event is the authority on WHICH activity to
 // re-run: the Go SDK records the error chain the workflow returned on
@@ -160,11 +194,15 @@ func ResetInterruptedWorkflow(ctx context.Context, tempClient client.Client, wor
 // forward progress — resetting before that stale failure would silently
 // discard the progress, so terminated runs always use the safe
 // last-WorkflowTaskCompleted point.
-func findResumeResetPoint(ctx context.Context, tempClient client.Client, workflowID, runID string, status enumspb.WorkflowExecutionStatus) (int64, error) {
+func findResumeResetPoint(ctx context.Context, tempClient client.Client, workflowID, runID string, status enumspb.WorkflowExecutionStatus) (wftPoint, error) {
 	iter := tempClient.GetWorkflowHistory(ctx, workflowID, runID, false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
 
 	var (
-		lastWFTCompleted int64
+		lastWFTCompleted wftPoint
+		// wftTimes maps a WorkflowTaskCompleted EventId to its EventTime, so
+		// the activity-blamed branch below can report the instant of the
+		// point it chose without a second pass.
+		wftTimes = map[int64]time.Time{}
 		// scheduledToWFT maps an ActivityTaskScheduled event's ID to the last
 		// WorkflowTaskCompleted before it (the decision that scheduled it).
 		scheduledToWFT = map[int64]int64{}
@@ -181,14 +219,15 @@ func findResumeResetPoint(ctx context.Context, tempClient client.Client, workflo
 	for iter.HasNext() {
 		event, err := iter.Next()
 		if err != nil {
-			return 0, fmt.Errorf("failed to iterate workflow history: %w", err)
+			return wftPoint{}, fmt.Errorf("failed to iterate workflow history: %w", err)
 		}
 
 		switch event.GetEventType() {
 		case enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED:
-			lastWFTCompleted = event.GetEventId()
+			lastWFTCompleted = wftPoint{eventID: event.GetEventId(), at: event.GetEventTime().AsTime()}
+			wftTimes[lastWFTCompleted.eventID] = lastWFTCompleted.at
 		case enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED:
-			scheduledToWFT[event.GetEventId()] = lastWFTCompleted
+			scheduledToWFT[event.GetEventId()] = lastWFTCompleted.eventID
 		case enumspb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED:
 			if event.GetEventId() > lastActivityCompletedAt {
 				lastActivityCompletedAt = event.GetEventId()
@@ -204,8 +243,8 @@ func findResumeResetPoint(ctx context.Context, tempClient client.Client, workflo
 		}
 	}
 
-	if lastWFTCompleted == 0 {
-		return 0, fmt.Errorf("no WorkflowTaskCompleted event found in history for workflow %s (run %s)", workflowID, runID)
+	if lastWFTCompleted.eventID == 0 {
+		return wftPoint{}, fmt.Errorf("no WorkflowTaskCompleted event found in history for workflow %s (run %s)", workflowID, runID)
 	}
 
 	if status == enumspb.WORKFLOW_EXECUTION_STATUS_FAILED {
@@ -214,13 +253,13 @@ func findResumeResetPoint(ctx context.Context, tempClient client.Client, workflo
 		// before its point, and the chain only ever names an earlier one.
 		if scheduled := failedActivityScheduledEventID(closeFailure); scheduled > 0 {
 			if resetTo := scheduledToWFT[scheduled]; resetTo > 0 {
-				return resetTo, nil
+				return wftPoint{eventID: resetTo, at: wftTimes[resetTo]}, nil
 			}
 		}
 		// Fallback: the failure is the last activity outcome and produced a
 		// valid pre-schedule reset point.
 		if lastActivityFailedAt > lastActivityCompletedAt && failingActivityResetTo > 0 {
-			return failingActivityResetTo, nil
+			return wftPoint{eventID: failingActivityResetTo, at: wftTimes[failingActivityResetTo]}, nil
 		}
 	}
 
@@ -240,28 +279,28 @@ func failedActivityScheduledEventID(f *failurepb.Failure) int64 {
 }
 
 // findLastWorkflowTaskCompleted walks the full workflow history and returns the
-// EventId of the last WorkflowTaskCompleted event. This is the point where the
-// workflow entered its Receive() block waiting for a resume signal — the ideal
-// reset target for expired paused workflows.
-func findLastWorkflowTaskCompleted(ctx context.Context, tempClient client.Client, workflowID, runID string) (int64, error) {
+// last WorkflowTaskCompleted event — its EventId and its EventTime. This is the
+// point where the workflow entered its Receive() block waiting for a resume
+// signal — the ideal reset target for expired paused workflows.
+func findLastWorkflowTaskCompleted(ctx context.Context, tempClient client.Client, workflowID, runID string) (wftPoint, error) {
 	iter := tempClient.GetWorkflowHistory(ctx, workflowID, runID, false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
 
-	var lastWorkflowTaskCompletedID int64
+	var last wftPoint
 
 	for iter.HasNext() {
 		event, err := iter.Next()
 		if err != nil {
-			return 0, fmt.Errorf("failed to iterate workflow history: %w", err)
+			return wftPoint{}, fmt.Errorf("failed to iterate workflow history: %w", err)
 		}
 
 		if event.EventType == enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED {
-			lastWorkflowTaskCompletedID = event.EventId
+			last = wftPoint{eventID: event.EventId, at: event.GetEventTime().AsTime()}
 		}
 	}
 
-	if lastWorkflowTaskCompletedID == 0 {
-		return 0, fmt.Errorf("no WorkflowTaskCompleted event found in history for workflow %s (run %s)", workflowID, runID)
+	if last.eventID == 0 {
+		return wftPoint{}, fmt.Errorf("no WorkflowTaskCompleted event found in history for workflow %s (run %s)", workflowID, runID)
 	}
 
-	return lastWorkflowTaskCompletedID, nil
+	return last, nil
 }

@@ -503,6 +503,27 @@ type Repository interface {
 	// revisits those rows — the reconciler skips workflows with a parent_id — so
 	// without this they are reported as running forever.
 	ReapOrphanedWorkflowDescendants(ctx context.Context) (int64, error)
+	// ReviveSubtreeLiveAt is the inverse of the two cascades above for a
+	// subtree that is coming BACK: after a reset-and-replay, every
+	// descendant workflow row that was live at the reset point returns to
+	// active, along with the threads those rows own and the root's own
+	// thread. Returns how many of each it moved.
+	//
+	// A resume must revive what it resumes. Sub-agents run INLINE in the
+	// root's single Temporal execution but own their own rows, so killing
+	// the root stamped them failed — and replay rebuilds those same
+	// sub-agents WITHOUT re-running the "started" activity that is the only
+	// other write which moves a row back to running (it is in the replayed
+	// history). Without this call the chat resumes with live agents whose
+	// rows read failed, and the reconciler's stranded-spawn sweep then
+	// writes false "the parent had already exited" reports against them.
+	// Measured: six of each, docs/incidents/2026-09-29-reconciler-false-wedge.md.
+	//
+	// `at` is the reset point's event time; it is what separates work the
+	// new run will redo from work it will only replay. Paused rows are out
+	// of scope (ResumeWorkflowsByChat owns those). See
+	// queries/workflows.sql for the full predicate.
+	ReviveSubtreeLiveAt(ctx context.Context, rootWorkflowID string, at time.Time) (workflowsRevived, threadsRevived int64, err error)
 	PauseRunningWorkflowsByChat(ctx context.Context, chatID string) error // Pause all running workflows for a chat
 	ResumeWorkflowsByChat(ctx context.Context, chatID string) error       // Resume all paused workflows for a chat
 	DeleteWorkflow(ctx context.Context, id string) error

@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -12,6 +13,7 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -164,9 +166,9 @@ func TestFindLastWorkflowTaskCompleted_Normal(t *testing.T) {
 		historyIter: &mockHistoryIterator{events: events},
 	}
 
-	eventID, err := findLastWorkflowTaskCompleted(context.Background(), mc, "wf-1", "run-1")
+	point, err := findLastWorkflowTaskCompleted(context.Background(), mc, "wf-1", "run-1")
 	require.NoError(t, err)
-	assert.Equal(t, int64(10), eventID, "should return the last WorkflowTaskCompleted event ID")
+	assert.Equal(t, int64(10), point.eventID, "should return the last WorkflowTaskCompleted event ID")
 }
 
 func TestFindLastWorkflowTaskCompleted_SingleEvent(t *testing.T) {
@@ -181,9 +183,9 @@ func TestFindLastWorkflowTaskCompleted_SingleEvent(t *testing.T) {
 		historyIter: &mockHistoryIterator{events: events},
 	}
 
-	eventID, err := findLastWorkflowTaskCompleted(context.Background(), mc, "wf-1", "run-1")
+	point, err := findLastWorkflowTaskCompleted(context.Background(), mc, "wf-1", "run-1")
 	require.NoError(t, err)
-	assert.Equal(t, int64(4), eventID)
+	assert.Equal(t, int64(4), point.eventID)
 }
 
 func TestFindLastWorkflowTaskCompleted_NoEvents(t *testing.T) {
@@ -237,9 +239,9 @@ func TestFindLastWorkflowTaskCompleted_MixedEvents(t *testing.T) {
 		historyIter: &mockHistoryIterator{events: events},
 	}
 
-	eventID, err := findLastWorkflowTaskCompleted(context.Background(), mc, "wf-1", "run-1")
+	point, err := findLastWorkflowTaskCompleted(context.Background(), mc, "wf-1", "run-1")
 	require.NoError(t, err)
-	assert.Equal(t, int64(14), eventID, "should return event 14, the last WorkflowTaskCompleted")
+	assert.Equal(t, int64(14), point.eventID, "should return event 14, the last WorkflowTaskCompleted")
 }
 
 func TestFindLastWorkflowTaskCompleted_IteratorError(t *testing.T) {
@@ -303,9 +305,9 @@ func TestResetExpiredWorkflow_Success(t *testing.T) {
 		},
 	}
 
-	newRunID, err := ResetExpiredWorkflow(context.Background(), mc, "wf-1", "old-run-id")
+	reset, err := ResetExpiredWorkflow(context.Background(), mc, "wf-1", "old-run-id")
 	require.NoError(t, err)
-	assert.Equal(t, "new-run-id", newRunID)
+	assert.Equal(t, "new-run-id", reset.NewRunID)
 
 	// Verify the reset request was correct
 	require.True(t, mc.resetCalled)
@@ -361,9 +363,9 @@ func TestResetExpiredWorkflow_UsesCorrectResetPoint(t *testing.T) {
 		},
 	}
 
-	newRunID, err := ResetExpiredWorkflow(context.Background(), mc, "wf-1", "run-1")
+	reset, err := ResetExpiredWorkflow(context.Background(), mc, "wf-1", "run-1")
 	require.NoError(t, err)
-	assert.Equal(t, "new-run", newRunID)
+	assert.Equal(t, "new-run", reset.NewRunID)
 	assert.Equal(t, int64(6), mc.resetRequest.WorkflowTaskFinishEventId,
 		"should reset to event 6, the last WorkflowTaskCompleted")
 }
@@ -420,9 +422,9 @@ func TestFindResumeResetPoint_FailedActivityFollowedByTeardown_ResetsBeforeActiv
 	}
 	mc := &mockTemporalClient{historyIter: &mockHistoryIterator{events: events}}
 
-	eventID, err := findResumeResetPoint(context.Background(), mc, "wf-1", "run-1", enumspb.WORKFLOW_EXECUTION_STATUS_FAILED)
+	point, err := findResumeResetPoint(context.Background(), mc, "wf-1", "run-1", enumspb.WORKFLOW_EXECUTION_STATUS_FAILED)
 	require.NoError(t, err)
-	assert.Equal(t, int64(10), eventID, "must reset to the decision that scheduled the activity the close event blames, not the post-teardown WFT")
+	assert.Equal(t, int64(10), point.eventID, "must reset to the decision that scheduled the activity the close event blames, not the post-teardown WFT")
 }
 
 func TestFindResumeResetPoint_FailedAfterPriorReplayedReset_StillResetsBeforeActivity(t *testing.T) {
@@ -450,9 +452,9 @@ func TestFindResumeResetPoint_FailedAfterPriorReplayedReset_StillResetsBeforeAct
 	}
 	mc := &mockTemporalClient{historyIter: &mockHistoryIterator{events: events}}
 
-	eventID, err := findResumeResetPoint(context.Background(), mc, "wf-1", "run-2", enumspb.WORKFLOW_EXECUTION_STATUS_FAILED)
+	point, err := findResumeResetPoint(context.Background(), mc, "wf-1", "run-2", enumspb.WORKFLOW_EXECUTION_STATUS_FAILED)
 	require.NoError(t, err)
-	assert.Equal(t, int64(10), eventID)
+	assert.Equal(t, int64(10), point.eventID)
 }
 
 func TestFindResumeResetPoint_FailedChainNamesNoActivity_UsesTailHeuristic(t *testing.T) {
@@ -477,9 +479,9 @@ func TestFindResumeResetPoint_FailedChainNamesNoActivity_UsesTailHeuristic(t *te
 	}
 	mc := &mockTemporalClient{historyIter: &mockHistoryIterator{events: events}}
 
-	eventID, err := findResumeResetPoint(context.Background(), mc, "wf-1", "run-1", enumspb.WORKFLOW_EXECUTION_STATUS_FAILED)
+	point, err := findResumeResetPoint(context.Background(), mc, "wf-1", "run-1", enumspb.WORKFLOW_EXECUTION_STATUS_FAILED)
 	require.NoError(t, err)
-	assert.Equal(t, int64(16), eventID)
+	assert.Equal(t, int64(16), point.eventID)
 }
 
 func TestFindResumeResetPoint_Terminated_IgnoresChain(t *testing.T) {
@@ -496,9 +498,9 @@ func TestFindResumeResetPoint_Terminated_IgnoresChain(t *testing.T) {
 	}
 	mc := &mockTemporalClient{historyIter: &mockHistoryIterator{events: events}}
 
-	eventID, err := findResumeResetPoint(context.Background(), mc, "wf-1", "run-1", enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED)
+	point, err := findResumeResetPoint(context.Background(), mc, "wf-1", "run-1", enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED)
 	require.NoError(t, err)
-	assert.Equal(t, int64(10), eventID)
+	assert.Equal(t, int64(10), point.eventID)
 }
 
 func TestFailedActivityScheduledEventID(t *testing.T) {
@@ -525,9 +527,9 @@ func TestFindResumeResetPoint_FailedTailActivity_ResetsBeforeActivity(t *testing
 	}
 	mc := &mockTemporalClient{historyIter: &mockHistoryIterator{events: events}}
 
-	eventID, err := findResumeResetPoint(context.Background(), mc, "wf-1", "run-1", enumspb.WORKFLOW_EXECUTION_STATUS_FAILED)
+	point, err := findResumeResetPoint(context.Background(), mc, "wf-1", "run-1", enumspb.WORKFLOW_EXECUTION_STATUS_FAILED)
 	require.NoError(t, err)
-	assert.Equal(t, int64(4), eventID, "should reset to the WFT-completed BEFORE the failing activity so it re-runs fresh")
+	assert.Equal(t, int64(4), point.eventID, "should reset to the WFT-completed BEFORE the failing activity so it re-runs fresh")
 }
 
 func TestFindResumeResetPoint_FailedTailActivityTimedOut_ResetsBeforeActivity(t *testing.T) {
@@ -544,9 +546,9 @@ func TestFindResumeResetPoint_FailedTailActivityTimedOut_ResetsBeforeActivity(t 
 	}
 	mc := &mockTemporalClient{historyIter: &mockHistoryIterator{events: events}}
 
-	eventID, err := findResumeResetPoint(context.Background(), mc, "wf-1", "run-1", enumspb.WORKFLOW_EXECUTION_STATUS_FAILED)
+	point, err := findResumeResetPoint(context.Background(), mc, "wf-1", "run-1", enumspb.WORKFLOW_EXECUTION_STATUS_FAILED)
 	require.NoError(t, err)
-	assert.Equal(t, int64(2), eventID, "timed-out tail activity should reset before its schedule")
+	assert.Equal(t, int64(2), point.eventID, "timed-out tail activity should reset before its schedule")
 }
 
 func TestFindResumeResetPoint_FailedButActivityRecoveredLater_UsesLastWFT(t *testing.T) {
@@ -566,9 +568,9 @@ func TestFindResumeResetPoint_FailedButActivityRecoveredLater_UsesLastWFT(t *tes
 	}
 	mc := &mockTemporalClient{historyIter: &mockHistoryIterator{events: events}}
 
-	eventID, err := findResumeResetPoint(context.Background(), mc, "wf-1", "run-1", enumspb.WORKFLOW_EXECUTION_STATUS_FAILED)
+	point, err := findResumeResetPoint(context.Background(), mc, "wf-1", "run-1", enumspb.WORKFLOW_EXECUTION_STATUS_FAILED)
 	require.NoError(t, err)
-	assert.Equal(t, int64(16), eventID, "progress after the failure ⇒ safe last-WFT point, not before the old failure")
+	assert.Equal(t, int64(16), point.eventID, "progress after the failure ⇒ safe last-WFT point, not before the old failure")
 }
 
 func TestFindResumeResetPoint_Terminated_AlwaysUsesLastWFT(t *testing.T) {
@@ -584,9 +586,9 @@ func TestFindResumeResetPoint_Terminated_AlwaysUsesLastWFT(t *testing.T) {
 	}
 	mc := &mockTemporalClient{historyIter: &mockHistoryIterator{events: events}}
 
-	eventID, err := findResumeResetPoint(context.Background(), mc, "wf-1", "run-1", enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED)
+	point, err := findResumeResetPoint(context.Background(), mc, "wf-1", "run-1", enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED)
 	require.NoError(t, err)
-	assert.Equal(t, int64(10), eventID, "terminated runs use the last WorkflowTaskCompleted, never before an activity")
+	assert.Equal(t, int64(10), point.eventID, "terminated runs use the last WorkflowTaskCompleted, never before an activity")
 }
 
 func TestFindResumeResetPoint_FailedNoActivity_UsesLastWFT(t *testing.T) {
@@ -599,9 +601,9 @@ func TestFindResumeResetPoint_FailedNoActivity_UsesLastWFT(t *testing.T) {
 	}
 	mc := &mockTemporalClient{historyIter: &mockHistoryIterator{events: events}}
 
-	eventID, err := findResumeResetPoint(context.Background(), mc, "wf-1", "run-1", enumspb.WORKFLOW_EXECUTION_STATUS_FAILED)
+	point, err := findResumeResetPoint(context.Background(), mc, "wf-1", "run-1", enumspb.WORKFLOW_EXECUTION_STATUS_FAILED)
 	require.NoError(t, err)
-	assert.Equal(t, int64(3), eventID)
+	assert.Equal(t, int64(3), point.eventID)
 }
 
 func TestFindResumeResetPoint_NoWorkflowTaskCompleted_Errors(t *testing.T) {
@@ -631,9 +633,9 @@ func TestResetInterruptedWorkflow_FailedActivity_ResetsBeforeActivityAndExcludes
 		resetResp:   &workflowservice.ResetWorkflowExecutionResponse{RunId: "new-run"},
 	}
 
-	newRunID, err := ResetInterruptedWorkflow(context.Background(), mc, "wf-1", "old-run", enumspb.WORKFLOW_EXECUTION_STATUS_FAILED)
+	reset, err := ResetInterruptedWorkflow(context.Background(), mc, "wf-1", "old-run", enumspb.WORKFLOW_EXECUTION_STATUS_FAILED)
 	require.NoError(t, err)
-	assert.Equal(t, "new-run", newRunID)
+	assert.Equal(t, "new-run", reset.NewRunID)
 	require.True(t, mc.resetCalled)
 	assert.Equal(t, int64(4), mc.resetRequest.WorkflowTaskFinishEventId)
 	assert.Equal(t, "wf-1", mc.resetRequest.WorkflowExecution.WorkflowId)
@@ -657,6 +659,88 @@ func TestResetInterruptedWorkflow_Terminated_UsesLastWFT(t *testing.T) {
 	_, err := ResetInterruptedWorkflow(context.Background(), mc, "wf-1", "old-run", enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED)
 	require.NoError(t, err)
 	assert.Equal(t, int64(10), mc.resetRequest.WorkflowTaskFinishEventId)
+}
+
+// --- reset-point EVENT TIME ---
+//
+// The reset point's instant is not diagnostics: it is the only thing that
+// separates a descendant the replay is about to redo from one whose
+// completion is already in the replayed history. Without it a resume cannot
+// revive its own sub-agents and they read as failed while working. See
+// ResetResult and docs/incidents/2026-09-29-reconciler-false-wedge.md.
+
+// wftCompletedAt is a WorkflowTaskCompleted event that carries a real
+// EventTime, which is what a live Temporal history always has.
+func wftCompletedAt(eventID int64, at time.Time) *historypb.HistoryEvent {
+	return &historypb.HistoryEvent{
+		EventId:   eventID,
+		EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED,
+		EventTime: timestamppb.New(at),
+	}
+}
+
+func TestFindLastWorkflowTaskCompleted_ReturnsEventTime(t *testing.T) {
+	early := time.Date(2026, 9, 29, 4, 30, 0, 0, time.UTC)
+	late := time.Date(2026, 9, 29, 4, 42, 54, 0, time.UTC)
+	mc := &mockTemporalClient{historyIter: &mockHistoryIterator{events: []*historypb.HistoryEvent{
+		wftCompletedAt(4, early),
+		makeEvent(5, enumspb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED),
+		wftCompletedAt(10, late),
+	}}}
+
+	point, err := findLastWorkflowTaskCompleted(context.Background(), mc, "wf-1", "run-1")
+	require.NoError(t, err)
+	assert.Equal(t, int64(10), point.eventID)
+	assert.True(t, late.Equal(point.at), "got %v, want the last WFT's event time %v", point.at, late)
+}
+
+func TestFindResumeResetPoint_ReturnsEventTimeOfChosenPoint(t *testing.T) {
+	// A FAILED run whose close event blames the activity scheduled by WFT 4:
+	// the chosen point is 4, so the instant must be 4's, NOT the later WFT's.
+	scheduledAt := time.Date(2026, 9, 29, 4, 42, 54, 0, time.UTC)
+	teardownAt := time.Date(2026, 9, 29, 4, 51, 31, 0, time.UTC)
+	mc := &mockTemporalClient{historyIter: &mockHistoryIterator{events: []*historypb.HistoryEvent{
+		wftCompletedAt(4, scheduledAt),
+		makeActivityScheduled(5),
+		makeActivityFailed(7, 5),
+		wftCompletedAt(10, teardownAt),
+		makeWorkflowFailed(11, activityErrorChain(5, "PreflightDaemonCheck", "gateway down")),
+	}}}
+
+	point, err := findResumeResetPoint(context.Background(), mc, "wf-1", "run-1", enumspb.WORKFLOW_EXECUTION_STATUS_FAILED)
+	require.NoError(t, err)
+	assert.Equal(t, int64(4), point.eventID)
+	assert.True(t, scheduledAt.Equal(point.at),
+		"the instant must belong to the point actually chosen: got %v, want %v", point.at, scheduledAt)
+}
+
+func TestResetInterruptedWorkflow_ReturnsResetPointTime(t *testing.T) {
+	at := time.Date(2026, 9, 29, 4, 42, 54, 990000000, time.UTC)
+	mc := &mockTemporalClient{
+		historyIter: &mockHistoryIterator{events: []*historypb.HistoryEvent{
+			wftCompletedAt(28070, at),
+			makeEvent(28097, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED),
+		}},
+		resetResp: &workflowservice.ResetWorkflowExecutionResponse{RunId: "new-run"},
+	}
+
+	reset, err := ResetInterruptedWorkflow(context.Background(), mc, "wf-1", "old-run", enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED)
+	require.NoError(t, err)
+	assert.Equal(t, "new-run", reset.NewRunID)
+	assert.True(t, at.Equal(reset.ResetPointTime), "got %v, want %v", reset.ResetPointTime, at)
+}
+
+func TestResetExpiredWorkflow_ReturnsResetPointTime(t *testing.T) {
+	at := time.Date(2026, 9, 29, 4, 42, 54, 0, time.UTC)
+	mc := &mockTemporalClient{
+		historyIter: &mockHistoryIterator{events: []*historypb.HistoryEvent{wftCompletedAt(4, at)}},
+		resetResp:   &workflowservice.ResetWorkflowExecutionResponse{RunId: "new-run"},
+	}
+
+	reset, err := ResetExpiredWorkflow(context.Background(), mc, "wf-1", "run-1")
+	require.NoError(t, err)
+	assert.Equal(t, "new-run", reset.NewRunID)
+	assert.True(t, at.Equal(reset.ResetPointTime), "got %v, want %v", reset.ResetPointTime, at)
 }
 
 // Verify the request includes the WorkflowExecution with both workflow ID and run ID.

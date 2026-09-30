@@ -190,6 +190,20 @@ func (s *workflowStore) ReapOrphanedWorkflowDescendants(ctx context.Context) (in
 	return s.q.ReapOrphanedWorkflowDescendants(ctx)
 }
 
+// ReviveSubtreeLiveAt brings back the descendants a reset-and-replay is about
+// to re-execute, and their threads, in one statement. Reported as two counts
+// because the caller logs what it repaired.
+func (s *workflowStore) ReviveSubtreeLiveAt(ctx context.Context, rootWorkflowID string, at time.Time) (workflowsRevived, threadsRevived int64, err error) {
+	row, err := s.q.ReviveSubtreeLiveAt(ctx, pgdb.ReviveSubtreeLiveAtParams{
+		RootWorkflowID: rootWorkflowID,
+		ResetPoint:     at,
+	})
+	if err != nil {
+		return 0, 0, err
+	}
+	return row.WorkflowsRevived, row.ThreadsRevived, nil
+}
+
 func (s *workflowStore) PauseRunningWorkflowsByChat(ctx context.Context, chatID string) error {
 	return s.q.PauseRunningWorkflowsByChat(ctx, chatID)
 }

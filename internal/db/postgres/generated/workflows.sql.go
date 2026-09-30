@@ -617,6 +617,110 @@ func (q *Queries) ResumeWorkflowsByChat(ctx context.Context, chatID string) erro
 	return err
 }
 
+const reviveSubtreeLiveAt = `-- name: ReviveSubtreeLiveAt :one
+WITH RECURSIVE descendants AS (
+    SELECT c.id FROM workflows c WHERE c.parent_id = $1::text
+    UNION ALL
+    SELECT g.id FROM workflows g
+    JOIN descendants d ON g.parent_id = d.id
+),
+revived_workflows AS (
+    UPDATE workflows AS t
+    SET state = 2, stop_reason = 0, completed_at = NULL
+    FROM descendants
+    WHERE t.id = descendants.id
+      AND t.state = 3 AND t.stop_reason <> 3
+      AND t.created_at <= $2::timestamptz
+      AND (t.completed_at IS NULL OR t.completed_at > $2::timestamptz)
+    RETURNING t.id
+),
+revived_threads AS (
+    UPDATE threads AS th
+    SET status = 2, completed_at = NULL
+    WHERE th.status IN (3, 4, 5)
+      AND (th.workflow_id IN (SELECT id FROM revived_workflows)
+           OR th.id = $1::text)
+    RETURNING th.id
+)
+SELECT
+    (SELECT count(*) FROM revived_workflows) AS workflows_revived,
+    (SELECT count(*) FROM revived_threads) AS threads_revived
+`
+
+type ReviveSubtreeLiveAtParams struct {
+	RootWorkflowID string    `json:"root_workflow_id"`
+	ResetPoint     time.Time `json:"reset_point"`
+}
+
+type ReviveSubtreeLiveAtRow struct {
+	WorkflowsRevived int64 `json:"workflows_revived"`
+	ThreadsRevived   int64 `json:"threads_revived"`
+}
+
+// Move every DESCENDANT workflow row that was LIVE at a reset point back to
+// active, AND the threads those rows own, AND the root's own thread — in one
+// statement — reporting how many of each it moved. The inverse of
+// CascadeTerminalStatusToDescendants + CascadeTerminalStatusToThreadSubtree
+// for a subtree that is coming BACK, and the write that was missing entirely
+// from reset-and-replay.
+//
+// Why a subtree needs reviving at all: every sub-agent runs INLINE in the
+// root's single Temporal execution, but each owns its own workflows row
+// (parent_id = the root) and its own threads row. Killing the root therefore
+// killed the sub-agents, and the reaps stamped their rows failed. Resetting
+// the root REBUILDS those same sub-agents by replay -- no new rows are
+// created -- but the only write that moves a row back to running is
+// WorkflowStatusActivity's "started" arm, and a child that was already
+// running at the reset point never re-executes that activity: it is in the
+// replayed history. So the children stayed "failed" while actively working,
+// and the UI showed live agents as failed. Measured: six of them, chat
+// abe58f03, docs/incidents/2026-09-29-reconciler-false-wedge.md.
+//
+// The predicate is a time window, because the reset point is the only thing
+// that distinguishes work the new run will redo from work it will merely
+// replay:
+//
+//	created_at <= T            the row existed at the reset point. A row
+//	                           created AFTER it re-runs its own "started"
+//	                           activity on the new run and self-revives --
+//	                           reviving it here would be a guess about a run
+//	                           that has not happened yet.
+//	completed_at IS NULL
+//	  OR completed_at > T      it had not finished by the reset point. A
+//	                           descendant that genuinely ended BEFORE T --
+//	                           for any reason, success or failure -- has its
+//	                           completion in the replayed history and must
+//	                           stay ended. One that ended after T was killed
+//	                           by the interruption (or will re-execute its
+//	                           tail), and is live again in the new run.
+//
+// Only rows STOPPED for a reason other than paused are touched. Paused rows
+// (3/3) are ResumeWorkflowsByChat's business and un-pausing them here would
+// resume a run the user deliberately parked; active and pending rows are
+// already correct, and clearing a live row's bookkeeping is not recoverable.
+//
+// Recursive over parent_id, same shape as
+// CascadeTerminalStatusToDescendants: a sub-agent's own sub-agents were
+// killed by the same terminate and are rebuilt by the same replay.
+//
+// The thread half is a data-modifying CTE reading the workflow half's
+// RETURNING rather than a second statement, for two reasons. It cannot
+// re-derive the set afterwards -- once those rows are active they no longer
+// match the terminal predicate -- and one statement is one atomic write, so
+// no reconciler pass can observe the workflows revived with their threads
+// still failed. The root's OWN thread (id = the root's workflow id) is
+// unioned in: it was stamped terminal by the same kill, and the root does
+// not re-run its "started" activity either, so nothing else brings it back.
+//
+// Guarded to terminal thread statuses (3,4,5) exactly as ReviveThread is: a
+// thread already running or paused keeps its live bookkeeping.
+func (q *Queries) ReviveSubtreeLiveAt(ctx context.Context, arg ReviveSubtreeLiveAtParams) (ReviveSubtreeLiveAtRow, error) {
+	row := q.db.QueryRowContext(ctx, reviveSubtreeLiveAt, arg.RootWorkflowID, arg.ResetPoint)
+	var i ReviveSubtreeLiveAtRow
+	err := row.Scan(&i.WorkflowsRevived, &i.ThreadsRevived)
+	return i, err
+}
+
 const setWorkflowOutcome = `-- name: SetWorkflowOutcome :one
 UPDATE workflows SET
     outcome = $1
