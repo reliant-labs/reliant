@@ -701,7 +701,6 @@ function ProjectPickerComponent({ onProjectSelected }: ProjectPickerProps) {
     [controlPlaneDaemons],
   );
   const showCloneAction = capabilities.cloudDaemons;
-  const canCloneToSelected = showCloneAction && !!selectedCloneDaemon;
 
   // Run a clone for a known repo onto an explicit target daemon, then
   // create the Project (or open an existing one) and mark it installed.
