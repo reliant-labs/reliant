@@ -1,0 +1,181 @@
+---
+title: "Custom Domains"
+description: "Serve your project on a hostname you own — the DNS records to publish, why the TXT record exists, and how long each step takes"
+---
+
+By default a deployed project answers on a generated hostname like
+`wild-mongoose.reliantlabs.dev`. A **custom domain** is a hostname you own —
+`hounders.club`, `api.hounders.club` — pointed at the same deployment, served
+over HTTPS with a certificate Reliant obtains for you.
+
+You manage them in the Reliant app under **Forge → Domains**.
+
+## The two halves: a domain and a binding
+
+These are separate on purpose, and understanding the split explains most of
+what the screen does.
+
+A **domain** is a hostname your organization has claimed. Claiming it is the
+slow part: you publish DNS at your provider, that propagates, Reliant confirms
+you own it and obtains a certificate. It belongs to your organization, not to
+any one environment.
+
+A **binding** is what makes a claimed domain actually serve something: one
+environment, and one workload or static site inside it. It is a single write,
+and it can be changed freely — point `hounders.club` at staging for an hour and
+back at production afterwards, with no DNS work and no new certificate.
+
+The split exists because the lifetimes differ. Acquiring a domain costs a human
+an afternoon at a registrar; moving it between environments should cost a
+click. Deleting an environment releases the binding and keeps the domain,
+including the verification you already paid for.
+
+## Adding a domain
+
+In **Forge → Domains**, choose **Add domain**. You give the hostname and, in the
+same step, what it should serve:
+
+- **A workload or site** — pick an environment and a target. The target does
+  not have to be deployed yet; the domain waits for it.
+- **Redirect to another domain** — answers a `308` to another hostname, keeping
+  the path and query. This is how you handle `www`.
+- **Nothing yet** — claim the name now and decide later.
+
+Reliant then shows you the DNS records to publish. That is the next step, and
+nothing happens until you do it.
+
+<Note>
+Claiming a hostname does **not** reserve it. Any number of organizations can add
+the same name; the first to *prove* ownership takes it. Locking a name at the
+moment someone types it would let anyone deny a domain to its actual owner.
+</Note>
+
+## The DNS records
+
+The domain's detail view shows the exact records, with a copy button on each.
+Always use the values shown there — they are generated per domain and the
+addresses behind them can change. The shapes are:
+
+| Your domain | Record | Points at |
+|---|---|---|
+| An apex, like `hounders.club` | `A` | Reliant's load balancer address |
+| A subdomain, like `www.hounders.club` or `api.hounders.club` | `CNAME` | Reliant's ingress hostname |
+| Every domain, in addition | `TXT` at `_reliant-challenge.<your domain>` | A one-time ownership token |
+
+### Why an apex gets an address and a subdomain gets a name
+
+A zone apex cannot hold a `CNAME`. The DNS specification forbids a `CNAME`
+coexisting with the `SOA` and `NS` records every zone apex must have, so an apex
+has to point at an address directly.
+
+If your DNS provider offers **ALIAS** or **CNAME flattening** for the apex, those
+work too. Verification checks the addresses your domain resolves to, not which
+record type produced them, so all three shapes pass the same check.
+
+A subdomain gets a `CNAME` to a stable ingress hostname instead of an address,
+so that when Reliant's infrastructure moves you do not have to edit anything.
+
+### Why the TXT record is not optional
+
+Verification is two checks, and it needs both:
+
+1. Your domain resolves to Reliant's addresses, and
+2. the ownership token is published at `_reliant-challenge.<your domain>`.
+
+The first check alone proves **routing**, never **ownership**. A domain someone
+else once pointed at Reliant keeps resolving here long after they have stopped
+using it — so without the token, anyone who could name an abandoned domain would
+be handed a valid certificate for it.
+
+The token is re-checked on every pass, not just the first. Deleting it after
+going live fails the next check rather than serving forever on a proof that is
+no longer true. Leave all the records in place permanently.
+
+### `www` and the apex are two domains
+
+`hounders.club` and `www.hounders.club` are separate names and need separate
+records. The usual setup is to add both: bind the apex to your workload, and
+bind the `www` one as a redirect to the apex. A redirect binding never dials a
+backend, so it keeps redirecting even while the app behind the apex is
+restarting.
+
+## What the states mean
+
+The domain's state tells you whose turn it is.
+
+| State | What is happening | What you do |
+|---|---|---|
+| **Waiting for DNS** | Your DNS does not point at Reliant yet. | Publish the records. Reliant re-checks automatically. |
+| **Checking ownership** | DNS resolves to us; we are reading the TXT token. | Nothing. Keep the records published. |
+| **Issuing certificate** | Ownership confirmed; a TLS certificate is being obtained. | Nothing. |
+| **Live** | Serving over HTTPS. | Nothing — but leave the records in place. |
+| **Failed** | The last attempt did not succeed; the reason is shown. | Fix what the error describes, then **Check DNS now**. |
+| **Claimed by another organization** | Someone else proved ownership first. | See [Conflicts](#conflicts) below. |
+
+The page refreshes itself while a domain is still converging, so you can leave it
+open.
+
+## How long it takes
+
+- **DNS propagation** — usually a few minutes, up to an hour. This is entirely
+  your provider's TTL and caching; Reliant cannot speed it up.
+- **Ownership check** — Reliant polls automatically. **Check DNS now** runs the
+  check immediately instead of waiting for the next poll; it changes only the
+  latency, never the outcome.
+- **Certificate issuance** — usually under a minute once ownership is confirmed.
+
+A domain that has been **Waiting for DNS** for more than an hour almost always
+means a record is missing or has a typo. Compare what your provider shows
+against the table in the app character for character — the token in particular
+is long and easy to truncate.
+
+<Warning>
+Some providers append your domain to a record name automatically. If you enter
+`_reliant-challenge.hounders.club` into a form that already adds `.hounders.club`,
+you will create `_reliant-challenge.hounders.club.hounders.club`, which will not
+verify. Check what your provider shows after saving.
+</Warning>
+
+## Changing what a domain serves
+
+From the domain's detail view:
+
+- **Change target** — rebind to a different environment, workload, or a
+  redirect. Takes effect immediately; no DNS work, no new certificate.
+- **Stop serving** — removes the binding and keeps the domain. Its verification
+  survives, so binding it again later costs nothing.
+- **Remove domain** — deletes it entirely and releases the hostname. The
+  verification and certificate are lost; re-adding it means publishing DNS and
+  waiting again.
+
+## Conflicts
+
+Ownership is decided at **verification**, not at creation. If another
+organization published the token for a hostname before you did, it is theirs and
+yours moves to **Claimed by another organization**.
+
+Waiting does not fix this — that is why it is a distinct state rather than a
+failure. The name is freed the moment the organization holding it removes the
+domain, and then you can check again. If the hostname is genuinely yours and you
+cannot reach whoever claimed it, contact support.
+
+## Certificates
+
+Reliant obtains certificates from Let's Encrypt and renews them automatically.
+You do not upload anything, and there is nothing to renew by hand.
+
+One consequence worth knowing: Let's Encrypt limits how many certificates can be
+issued for a name in a week, and that limit cannot be raised on request. This is
+why Reliant always confirms your DNS before requesting a certificate — a failed
+DNS check costs nothing and can be retried freely, whereas repeatedly failing
+certificate requests can lock a name out for the rest of the week.
+
+The practical advice: if a domain is failing, fix the DNS and use **Check DNS
+now**. Do not remove and re-add the domain repeatedly.
+
+## IPv6
+
+There is no `AAAA` record today. If you publish one, verification will fail —
+the check requires that *every* address your domain resolves to is one of
+Reliant's, and an IPv6 address is not yet in that set. Publish only the records
+the app shows you.

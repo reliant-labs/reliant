@@ -36,14 +36,22 @@
  */
 
 import { useMemo, type ReactNode } from "react";
-import { Cloud, Cpu, LayoutGrid, Server } from "lucide-react";
+import { Cloud, Cpu, Globe, LayoutGrid, Server } from "lucide-react";
 
 import SidebarLayout from "@/components/forge-ui/sidebar_layout";
 import { useTitleBarChrome } from "@/hooks/useTitleBarChrome";
 import type { EnvWhere } from "@/services/forge/environments";
 
-/** The Overview's path. The one fixed destination; everything else is an environment. */
+/** The Overview's path. */
 export const FORGE_OVERVIEW_PATH = "/forge";
+
+/**
+ * Custom domains. The second fixed destination, and the only screen here that
+ * is not about one environment: a domain is org-scoped and its binding is
+ * meant to move between environments, so it sits beside the Overview under
+ * Project rather than under any one env.
+ */
+export const FORGE_DOMAINS_PATH = "/forge/domains";
 
 /** The path of one environment's page. */
 export function forgeEnvPath(env: string): string {
@@ -96,6 +104,13 @@ export function ForgeShell({ activePath, envs = [], search, headerContent, child
         active: activePath === FORGE_OVERVIEW_PATH || activePath === `${FORGE_OVERVIEW_PATH}/`,
         section: "Project",
         icon: <LayoutGrid className="h-4 w-4" aria-hidden="true" />,
+      },
+      {
+        label: "Domains",
+        href: withSearch(FORGE_DOMAINS_PATH),
+        active: activePath === FORGE_DOMAINS_PATH,
+        section: "Project",
+        icon: <Globe className="h-4 w-4" aria-hidden="true" />,
       },
       ...envs.map((env) => {
         const Icon = iconFor(env.where);
