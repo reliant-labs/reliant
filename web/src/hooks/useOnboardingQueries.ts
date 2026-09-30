@@ -13,7 +13,6 @@ import {
   ComputeIneligibleReason,
 } from '@/services/controlPlane/billing';
 import { gitService } from '@/services/controlPlane/git';
-import type { CloneRepoArgs } from '@/services/controlPlane/git/types';
 import { onboardingService } from '@/services/controlPlane/onboarding';
 import type { OnboardingUser } from '@/services/controlPlane/onboarding';
 
@@ -275,12 +274,6 @@ export function useGitRepos() {
     queryKey: ['onboarding', 'gitRepos'],
     queryFn: () => gitService.listRepos(1, 100, 'updated'),
     enabled: false, // manually triggered
-  });
-}
-
-export function useCloneRepo() {
-  return useMutation({
-    mutationFn: (args: CloneRepoArgs) => gitService.cloneRepo(args),
   });
 }
 
