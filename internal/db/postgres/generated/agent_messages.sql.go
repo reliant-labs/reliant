@@ -8,9 +8,9 @@ package pgdb
 import (
 	"context"
 	"database/sql"
-	"strings"
 	"time"
 
+	"github.com/lib/pq"
 	"github.com/sqlc-dev/pqtype"
 )
 
@@ -300,7 +300,7 @@ UPDATE agent_messages SET
     status = 2,
     delivered_at = $1,
     delivered_message_id = $2
-WHERE id IN ($3) AND status = 1
+WHERE id = ANY($3::text[]) AND status = 1
 RETURNING id
 `
 
@@ -324,19 +324,7 @@ type MarkAgentMessagesDeliveredParams struct {
 // Without this the drain was idempotent only by luck of timing. See
 // specs/interrupt-pause-spec.md.
 func (q *Queries) MarkAgentMessagesDelivered(ctx context.Context, arg MarkAgentMessagesDeliveredParams) ([]string, error) {
-	query := markAgentMessagesDelivered
-	var queryParams []interface{}
-	queryParams = append(queryParams, arg.DeliveredAt)
-	queryParams = append(queryParams, arg.DeliveredMessageID)
-	if len(arg.Ids) > 0 {
-		for _, v := range arg.Ids {
-			queryParams = append(queryParams, v)
-		}
-		query = strings.Replace(query, "/*SLICE:ids*/?", strings.Repeat(",?", len(arg.Ids))[1:], 1)
-	} else {
-		query = strings.Replace(query, "/*SLICE:ids*/?", "NULL", 1)
-	}
-	rows, err := q.db.QueryContext(ctx, query, queryParams...)
+	rows, err := q.db.QueryContext(ctx, markAgentMessagesDelivered, arg.DeliveredAt, arg.DeliveredMessageID, pq.Array(arg.Ids))
 	if err != nil {
 		return nil, err
 	}
@@ -392,7 +380,7 @@ func (q *Queries) MarkQueuedAgentMessagesUndeliveredForThread(ctx context.Contex
 const setAgentMessagesDeliveredMessageID = `-- name: SetAgentMessagesDeliveredMessageID :exec
 UPDATE agent_messages SET
     delivered_message_id = $1
-WHERE id IN ($2)
+WHERE id = ANY($2::text[])
 `
 
 type SetAgentMessagesDeliveredMessageIDParams struct {
@@ -408,17 +396,6 @@ type SetAgentMessagesDeliveredMessageIDParams struct {
 // status = 2 from our own claim, and re-applying the status = 1 guard here
 // would match nothing.
 func (q *Queries) SetAgentMessagesDeliveredMessageID(ctx context.Context, arg SetAgentMessagesDeliveredMessageIDParams) error {
-	query := setAgentMessagesDeliveredMessageID
-	var queryParams []interface{}
-	queryParams = append(queryParams, arg.DeliveredMessageID)
-	if len(arg.Ids) > 0 {
-		for _, v := range arg.Ids {
-			queryParams = append(queryParams, v)
-		}
-		query = strings.Replace(query, "/*SLICE:ids*/?", strings.Repeat(",?", len(arg.Ids))[1:], 1)
-	} else {
-		query = strings.Replace(query, "/*SLICE:ids*/?", "NULL", 1)
-	}
-	_, err := q.db.ExecContext(ctx, query, queryParams...)
+	_, err := q.db.ExecContext(ctx, setAgentMessagesDeliveredMessageID, arg.DeliveredMessageID, pq.Array(arg.Ids))
 	return err
 }

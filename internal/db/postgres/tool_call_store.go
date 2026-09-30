@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -20,12 +19,6 @@ type toolCallStore struct {
 func NewToolCallStore(q pgdb.Querier, db pgdb.DBTX) core.ToolCallStore {
 	return &toolCallStore{q: q, db: db}
 }
-
-const toolCallColumns = `id, chat_id, thread_id, message_id, tool_name, input, status, ` +
-	`error_message, child_workflow_id, background_process_id, ` +
-	`requested_at, started_at, completed_at, created_at, updated_at`
-
-const toolCallResultColumns = `tool_call_id, message_id, content, is_error, created_at, updated_at`
 
 func (s *toolCallStore) UpsertToolCall(ctx context.Context, call *core.ToolCall) error {
 	if call == nil {
@@ -98,8 +91,7 @@ func (s *toolCallStore) ListToolCallsByChat(ctx context.Context, chatID string) 
 	return calls, nil
 }
 
-// ListToolCallsByIDs reads calls by primary key. Hand-built IN clause for the
-// same sqlc reason as ListToolCallsByMessageIDs below.
+// ListToolCallsByIDs reads calls by primary key.
 //
 // This is the lookup that cannot miss: a tool-call block always carries its
 // tool_call_id, whereas tool_calls.message_id is a link a writer has to
@@ -108,37 +100,11 @@ func (s *toolCallStore) ListToolCallsByIDs(ctx context.Context, toolCallIDs []st
 	if len(toolCallIDs) == 0 {
 		return []*core.ToolCall{}, nil
 	}
-
-	query := fmt.Sprintf(
-		`SELECT %s FROM tool_calls WHERE id IN (%s) ORDER BY requested_at ASC`,
-		toolCallColumns, placeholderList(len(toolCallIDs)),
-	)
-
-	rows, err := s.db.QueryContext(ctx, query, toArgs(toolCallIDs)...)
+	rows, err := s.q.ListToolCallsByIDs(ctx, toolCallIDs)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list tool calls by id: %w", err)
 	}
-	defer rows.Close()
-
-	calls := []*core.ToolCall{}
-	for rows.Next() {
-		var row pgdb.ToolCall
-		if err := rows.Scan(
-			&row.ID, &row.ChatID, &row.ThreadID, &row.MessageID,
-			&row.ToolName, &row.Input, &row.Status, &row.ErrorMessage,
-			&row.ChildWorkflowID, &row.BackgroundProcessID,
-			&row.RequestedAt, &row.StartedAt, &row.CompletedAt,
-			&row.CreatedAt, &row.UpdatedAt,
-		); err != nil {
-			return nil, fmt.Errorf("failed to scan tool call: %w", err)
-		}
-		calls = append(calls, toolCallFromPG(row))
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("failed to iterate tool calls: %w", err)
-	}
-
-	return calls, nil
+	return toolCallsFromPG(rows), nil
 }
 
 // ListStrandedSpawnToolCalls returns spawn calls whose child workflow is
@@ -181,86 +147,45 @@ func (s *toolCallStore) ListStrandedBackgroundSpawnToolCalls(ctx context.Context
 	return calls, nil
 }
 
-// ListToolCallsByMessageIDs builds its own IN clause rather than calling the
-// sqlc-generated ListToolCallsByMessageIDs. The generated code for
-// sqlc.slice() under database/sql emits `IN ($1)` and then rewrites a
-// `/*SLICE:...*/?` marker that is not present in the Postgres query, so it
-// silently matches only the first id. ListContentBlocksForMessages in
-// message_store.go works around the same defect the same way.
+// ListToolCallsByMessageIDs returns every call whose message_id is in
+// messageIDs, ordered by message then request time.
 func (s *toolCallStore) ListToolCallsByMessageIDs(ctx context.Context, messageIDs []string) ([]*core.ToolCall, error) {
 	if len(messageIDs) == 0 {
 		return []*core.ToolCall{}, nil
 	}
-
-	query := fmt.Sprintf(
-		`SELECT %s FROM tool_calls WHERE message_id IN (%s) ORDER BY message_id, requested_at ASC`,
-		toolCallColumns, placeholderList(len(messageIDs)),
-	)
-
-	rows, err := s.db.QueryContext(ctx, query, toArgs(messageIDs)...)
+	rows, err := s.q.ListToolCallsByMessageIDs(ctx, messageIDs)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list tool calls for messages: %w", err)
 	}
-	defer rows.Close()
-
-	calls := []*core.ToolCall{}
-	for rows.Next() {
-		var row pgdb.ToolCall
-		if err := rows.Scan(
-			&row.ID, &row.ChatID, &row.ThreadID, &row.MessageID,
-			&row.ToolName, &row.Input, &row.Status, &row.ErrorMessage,
-			&row.ChildWorkflowID, &row.BackgroundProcessID,
-			&row.RequestedAt, &row.StartedAt, &row.CompletedAt,
-			&row.CreatedAt, &row.UpdatedAt,
-		); err != nil {
-			return nil, fmt.Errorf("failed to scan tool call: %w", err)
-		}
-		calls = append(calls, toolCallFromPG(row))
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("failed to iterate tool calls: %w", err)
-	}
-
-	return calls, nil
+	return toolCallsFromPG(rows), nil
 }
 
-// ListToolCallResultsByMessageIDs hand-builds its IN clause for the same
-// reason as ListToolCallsByMessageIDs above.
+// ListToolCallResultsByMessageIDs returns every result whose message_id is in
+// messageIDs, ordered by message then creation time.
 func (s *toolCallStore) ListToolCallResultsByMessageIDs(ctx context.Context, messageIDs []string) ([]*core.ToolCallResult, error) {
 	if len(messageIDs) == 0 {
 		return []*core.ToolCallResult{}, nil
 	}
-
-	query := fmt.Sprintf(
-		`SELECT %s FROM tool_call_results WHERE message_id IN (%s) ORDER BY message_id, created_at ASC`,
-		toolCallResultColumns, placeholderList(len(messageIDs)),
-	)
-
-	rows, err := s.db.QueryContext(ctx, query, toArgs(messageIDs)...)
+	rows, err := s.q.ListToolCallResultsByMessageIDs(ctx, messageIDs)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list tool call results for messages: %w", err)
 	}
-	defer rows.Close()
-
-	results := []*core.ToolCallResult{}
-	for rows.Next() {
-		var row pgdb.ToolCallResult
-		if err := rows.Scan(
-			&row.ToolCallID, &row.MessageID, &row.Content,
-			&row.IsError, &row.CreatedAt, &row.UpdatedAt,
-		); err != nil {
-			return nil, fmt.Errorf("failed to scan tool call result: %w", err)
-		}
-		results = append(results, toolCallResultFromPG(row))
+	results := make([]*core.ToolCallResult, len(rows))
+	for i, row := range rows {
+		results[i] = toolCallResultFromPG(row)
 	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("failed to iterate tool call results: %w", err)
-	}
-
 	return results, nil
 }
 
 // Mappers
+
+func toolCallsFromPG(rows []pgdb.ToolCall) []*core.ToolCall {
+	calls := make([]*core.ToolCall, len(rows))
+	for i, row := range rows {
+		calls[i] = toolCallFromPG(row)
+	}
+	return calls
+}
 
 func toolCallFromPG(row pgdb.ToolCall) *core.ToolCall {
 	return &core.ToolCall{
@@ -291,22 +216,6 @@ func toolCallResultFromPG(row pgdb.ToolCallResult) *core.ToolCallResult {
 		CreatedAt:  row.CreatedAt,
 		UpdatedAt:  row.UpdatedAt,
 	}
-}
-
-func placeholderList(n int) string {
-	placeholders := make([]string, n)
-	for i := range placeholders {
-		placeholders[i] = fmt.Sprintf("$%d", i+1)
-	}
-	return strings.Join(placeholders, ", ")
-}
-
-func toArgs(values []string) []interface{} {
-	args := make([]interface{}, len(values))
-	for i, v := range values {
-		args[i] = v
-	}
-	return args
 }
 
 func toolCallPtrToNullString(s *string) sql.NullString {

@@ -31,7 +31,7 @@ UPDATE agent_messages SET
     status = 2,
     delivered_at = $1,
     delivered_message_id = $2
-WHERE id IN (sqlc.slice('ids')) AND status = 1
+WHERE id = ANY(sqlc.arg('ids')::text[]) AND status = 1
 RETURNING id;
 
 -- name: SetAgentMessagesDeliveredMessageID :exec
@@ -44,7 +44,7 @@ RETURNING id;
 -- would match nothing.
 UPDATE agent_messages SET
     delivered_message_id = $1
-WHERE id IN (sqlc.slice('ids'));
+WHERE id = ANY(sqlc.arg('ids')::text[]);
 
 -- name: CountQueuedAgentMessagesForThread :one
 SELECT count(*) FROM agent_messages

@@ -8,8 +8,9 @@ package pgdb
 import (
 	"context"
 	"database/sql"
-	"strings"
 	"time"
+
+	"github.com/lib/pq"
 )
 
 const getToolCall = `-- name: GetToolCall :one
@@ -440,22 +441,12 @@ func (q *Queries) ListStrandedSpawnToolCalls(ctx context.Context) ([]ToolCall, e
 
 const listToolCallResultsByMessageIDs = `-- name: ListToolCallResultsByMessageIDs :many
 SELECT tool_call_id, message_id, content, is_error, created_at, updated_at FROM tool_call_results
-WHERE message_id IN ($1)
+WHERE message_id = ANY($1::text[])
 ORDER BY message_id, created_at ASC
 `
 
-func (q *Queries) ListToolCallResultsByMessageIDs(ctx context.Context, messageIds []sql.NullString) ([]ToolCallResult, error) {
-	query := listToolCallResultsByMessageIDs
-	var queryParams []interface{}
-	if len(messageIds) > 0 {
-		for _, v := range messageIds {
-			queryParams = append(queryParams, v)
-		}
-		query = strings.Replace(query, "/*SLICE:message_ids*/?", strings.Repeat(",?", len(messageIds))[1:], 1)
-	} else {
-		query = strings.Replace(query, "/*SLICE:message_ids*/?", "NULL", 1)
-	}
-	rows, err := q.db.QueryContext(ctx, query, queryParams...)
+func (q *Queries) ListToolCallResultsByMessageIDs(ctx context.Context, messageIds []string) ([]ToolCallResult, error) {
+	rows, err := q.db.QueryContext(ctx, listToolCallResultsByMessageIDs, pq.Array(messageIds))
 	if err != nil {
 		return nil, err
 	}
@@ -529,24 +520,62 @@ func (q *Queries) ListToolCallsByChat(ctx context.Context, chatID string) ([]Too
 	return items, nil
 }
 
+const listToolCallsByIDs = `-- name: ListToolCallsByIDs :many
+SELECT id, chat_id, thread_id, message_id, tool_name, input, status, error_message, child_workflow_id, background_process_id, requested_at, started_at, completed_at, created_at, updated_at FROM tool_calls
+WHERE id = ANY($1::text[])
+ORDER BY requested_at ASC
+`
+
+// Reads calls by primary key. The lookup that cannot miss: a tool-call block
+// always carries its tool_call_id, whereas tool_calls.message_id is a link a
+// writer has to remember to set.
+func (q *Queries) ListToolCallsByIDs(ctx context.Context, ids []string) ([]ToolCall, error) {
+	rows, err := q.db.QueryContext(ctx, listToolCallsByIDs, pq.Array(ids))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ToolCall{}
+	for rows.Next() {
+		var i ToolCall
+		if err := rows.Scan(
+			&i.ID,
+			&i.ChatID,
+			&i.ThreadID,
+			&i.MessageID,
+			&i.ToolName,
+			&i.Input,
+			&i.Status,
+			&i.ErrorMessage,
+			&i.ChildWorkflowID,
+			&i.BackgroundProcessID,
+			&i.RequestedAt,
+			&i.StartedAt,
+			&i.CompletedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listToolCallsByMessageIDs = `-- name: ListToolCallsByMessageIDs :many
 SELECT id, chat_id, thread_id, message_id, tool_name, input, status, error_message, child_workflow_id, background_process_id, requested_at, started_at, completed_at, created_at, updated_at FROM tool_calls
-WHERE message_id IN ($1)
+WHERE message_id = ANY($1::text[])
 ORDER BY message_id, requested_at ASC
 `
 
-func (q *Queries) ListToolCallsByMessageIDs(ctx context.Context, messageIds []sql.NullString) ([]ToolCall, error) {
-	query := listToolCallsByMessageIDs
-	var queryParams []interface{}
-	if len(messageIds) > 0 {
-		for _, v := range messageIds {
-			queryParams = append(queryParams, v)
-		}
-		query = strings.Replace(query, "/*SLICE:message_ids*/?", strings.Repeat(",?", len(messageIds))[1:], 1)
-	} else {
-		query = strings.Replace(query, "/*SLICE:message_ids*/?", "NULL", 1)
-	}
-	rows, err := q.db.QueryContext(ctx, query, queryParams...)
+func (q *Queries) ListToolCallsByMessageIDs(ctx context.Context, messageIds []string) ([]ToolCall, error) {
+	rows, err := q.db.QueryContext(ctx, listToolCallsByMessageIDs, pq.Array(messageIds))
 	if err != nil {
 		return nil, err
 	}

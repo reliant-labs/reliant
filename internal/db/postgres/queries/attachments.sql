@@ -21,7 +21,7 @@ WHERE id = $1 LIMIT 1;
 
 -- name: GetAttachmentsByIDs :many
 SELECT * FROM attachments
-WHERE id IN (sqlc.slice('ids'));
+WHERE id = ANY(sqlc.arg('ids')::text[]);
 
 -- name: ListAttachmentsByUser :many
 SELECT * FROM attachments
