@@ -62,6 +62,12 @@
             ]
           },
           {
+            "group": "Deployment",
+            "pages": [
+              "features/custom-domains"
+            ]
+          },
+          {
             "group": "Settings",
             "pages": [
               "settings/memories",

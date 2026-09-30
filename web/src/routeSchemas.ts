@@ -357,6 +357,20 @@ export const forgeOverviewSearchSchema = z.object({
 });
 
 /**
+ * /forge/domains. Carries `project` for the same reason every other forge
+ * route does — a refresh must resolve the project without ModernApp.
+ *
+ * It carries NOTHING ELSE, and in particular no domain selection. The domain
+ * list is ORG-scoped, so a link to one domain is not a link to a place in
+ * this project; the expanded row is component state deliberately, because a
+ * shared URL naming a domain id would open a blank row for a teammate in a
+ * different organization.
+ */
+export const forgeDomainsSearchSchema = z.object({
+  project: z.string().optional(),
+});
+
+/**
  * /forge/env/$env. The environment is a PATH segment — it is the page's
  * subject, not a filter on it.
  */

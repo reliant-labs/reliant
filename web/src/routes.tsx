@@ -13,6 +13,7 @@ import {
   oauthCallbackSearchSchema,
   onboardingSearchSchema,
   proxyAuthSearchSchema,
+  forgeDomainsSearchSchema,
   forgeEnvPageSearchSchema,
   forgeLegacySearchSchema,
   forgeOverviewSearchSchema,
@@ -112,6 +113,8 @@ const ForgeOverviewPage = lazyRouteComponent(
   () => import('./components/Forge/Overview/ForgeOverviewPage'), 'ForgeOverviewPage')
 const ForgeEnvPage = lazyRouteComponent(
   () => import('./components/Forge/EnvPage/ForgeEnvPage'), 'ForgeEnvPage')
+const ForgeDomainsPage = lazyRouteComponent(
+  () => import('./components/Forge/Domains/ForgeDomainsPage'), 'ForgeDomainsPage')
 const App = lazyRouteComponent(() => import('./App'), 'default')
 
 // Search schemas live in ./routeSchemas (kept dependency-free so tests can
@@ -553,6 +556,19 @@ const forgeEnvRoute = createRoute({
   component: () => <ForgeGate><ForgeEnvPage /></ForgeGate>,
 })
 
+// Domains is the one forge screen that is NOT about an environment, which is
+// why it sits beside the Overview rather than inside an env page. A domain is
+// an ORG resource with no environment of its own — its BINDING has one, and
+// that binding is meant to move. Filing the screen under prod would hide
+// every claimed-but-unbound domain, which is the exact state a tenant is
+// stuck in when they need it. See components/Forge/Domains/ForgeDomainsPage.
+const forgeDomainsRoute = createRoute({
+  getParentRoute: () => forgeLayoutRoute,
+  path: '/forge/domains',
+  validateSearch: forgeDomainsSearchSchema,
+  component: () => <ForgeGate><ForgeDomainsPage /></ForgeGate>,
+})
+
 // The retired per-command screens. Each REDIRECTS rather than 404ing, because
 // they were bookmarked and linked, and it keeps what the old URL said: the
 // project always, and — where the old URL named an environment — that
@@ -759,6 +775,7 @@ const routeTree = rootRoute.addChildren([
     forgeLayoutRoute.addChildren([
       forgeOverviewRoute,
       forgeEnvRoute,
+      forgeDomainsRoute,
       forgeTopologyRedirectRoute,
       forgeEnvironmentsRedirectRoute,
       forgeStatusRedirectRoute,
