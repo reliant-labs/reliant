@@ -1,13 +1,20 @@
 name: Build & Push Image
 
+# TRIGGERS: release tags, and manual dispatch. Deliberately NOT push-to-main.
+#
+# A merge is not a release. Publishing on every push to main made an unreviewed
+# main commit the newest `latest` in the registry prod pulls from, and while we
+# are still iterating the per-merge multi-arch build buys nothing anyone asked
+# for. To publish from an arbitrary commit, dispatch this workflow with an
+# image_tag.
+#
+# Tags are also what make docker/metadata-action's `type=semver` produce a real
+# version. When this ran on branch pushes, `type=ref,event=branch` won the
+# `steps.meta.outputs.version` slot and the binary was stamped with the literal
+# string "main" — which the UI rendered as "vmain". Verified against the
+# running prod pod.
 on:
   push:
-    branches: [main]
-    # Tags are what make docker/metadata-action's `type=semver` produce a real
-    # version. Without this trigger the workflow only ever ran on a branch
-    # push, so `type=ref,event=branch` won the `steps.meta.outputs.version`
-    # slot and the binary was stamped with the literal string "main" — which
-    # the UI rendered as "vmain". Verified against the running prod pod.
     tags: ["v*.*.*"]
   workflow_dispatch:
     inputs:
