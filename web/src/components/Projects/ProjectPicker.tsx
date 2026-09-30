@@ -31,6 +31,7 @@ import { DirectoryPicker } from "./DirectoryPicker";
 import { Modal } from "../ui/Modal";
 import { RepoSelector } from "./RepoSelector";
 import { CloneTargetPicker } from "./CloneTargetPicker";
+import { addProjectLead } from "./addProjectActions";
 
 import { toast } from "../../lib/toast-manager";
 import { useDaemonStatus } from "../../hooks/useDaemonStatus";
@@ -708,6 +709,28 @@ function ProjectPickerComponent({ onProjectSelected }: ProjectPickerProps) {
   );
   const showCloneAction = capabilities.cloudDaemons;
 
+  // Which add-project action leads. A cloud user's code is never on the
+  // browser host's filesystem, so leading them at the directory picker sends
+  // them somewhere that cannot work; a local-daemon user's filesystem IS
+  // theirs, so browsing is the faster route. See addProjectActions.ts.
+  const cloneLeads =
+    showCloneAction &&
+    addProjectLead({
+      hasCloudDaemons: (controlPlaneDaemons ?? []).length > 0 || cloudDaemons.length > 0,
+      activeDaemonType: activeDaemon?.daemonType,
+    }) === "clone";
+
+  // The actions actually rendered, in order. "Open folder" is dropped only
+  // when there is no local filesystem to browse at all (web mode with no
+  // attached daemon) — the case that used to blank the entire card.
+  const orderedAddProjectActions = useMemo<Array<"clone" | "open">>(() => {
+    const actions: Array<"clone" | "open"> = [];
+    if (cloneLeads && showCloneAction) actions.push("clone");
+    if (!showConnectionInstructions) actions.push("open");
+    if (!cloneLeads && showCloneAction) actions.push("clone");
+    return actions;
+  }, [cloneLeads, showCloneAction, showConnectionInstructions]);
+
   // Which machine the next clone actually lands on: the user's explicit
   // choice when they made one, else the recency default, else any machine
   // that will eventually drain the queue.
@@ -1035,69 +1058,124 @@ function ProjectPickerComponent({ onProjectSelected }: ProjectPickerProps) {
               {showConnectionInstructions && <NoActiveDaemonState />}
               {(!showConnectionInstructions || showCloneAction) && (
                 <>
+                  {/* The two add-project actions. WHICH ONE LEADS depends on
+                      where the user's code lives (addProjectLead): a cloud
+                      user is led to "Clone from GitHub", because the
+                      directory picker reads the browser host's filesystem and
+                      cannot see a cloud machine's disk at all. A local daemon
+                      user is led to "Open folder", whose filesystem is
+                      genuinely theirs. The non-leading action stays present
+                      and reachable underneath — demoted, never hidden. */}
                   <div className="relative backdrop-blur-2xl bg-card/90 border border-border/50 rounded-2xl mb-6 overflow-hidden">
-                    {!showConnectionInstructions && (
-                    <button
-                      onClick={handleOpenExistingProject}
-                      onMouseEnter={() => setIsOpenButtonHovered(true)}
-                      onMouseLeave={() => setIsOpenButtonHovered(false)}
-                      className="group w-full p-6 transition-all duration-150 text-left active:scale-[0.99]"
-                      style={{
-                        backgroundColor: isOpenButtonHovered
-                          ? "hsl(var(--primary) / 0.15)"
-                          : "hsl(var(--primary) / 0.1)",
-                      }}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-4">
-                          <div className="w-12 h-12 rounded-xl bg-primary/20 flex items-center justify-center">
-                            <FolderOpen className="w-6 h-6 text-primary" />
+                    {orderedAddProjectActions.map((action, index) =>
+                      action === "clone" ? (
+                        <button
+                          key="clone"
+                          onClick={() => setIsCloneModalOpen(true)}
+                          disabled={cloneState.kind === "blocked"}
+                          data-testid="project-picker-clone-repo"
+                          onMouseEnter={() => setIsCloneButtonHovered(true)}
+                          onMouseLeave={() => setIsCloneButtonHovered(false)}
+                          className={cn(
+                            "group w-full p-6 text-left transition-all duration-150 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60 disabled:active:scale-100",
+                            index > 0 && "border-t border-border/50",
+                          )}
+                          style={{
+                            backgroundColor: cloneLeads
+                              ? isCloneButtonHovered && cloneState.kind === "ready"
+                                ? "hsl(var(--primary) / 0.15)"
+                                : "hsl(var(--primary) / 0.1)"
+                              : isCloneButtonHovered && cloneState.kind === "ready"
+                                ? "hsl(var(--primary) / 0.08)"
+                                : "transparent",
+                          }}
+                        >
+                          <div className="flex items-center gap-4">
+                            <div
+                              className={cn(
+                                "flex h-12 w-12 items-center justify-center rounded-xl",
+                                cloneLeads ? "bg-primary/20" : "bg-muted",
+                              )}
+                            >
+                              <GitFork
+                                className={cn(
+                                  "h-6 w-6",
+                                  cloneLeads ? "text-primary" : "text-foreground",
+                                )}
+                              />
+                            </div>
+                            <div className="text-left">
+                              <h3
+                                className={cn(
+                                  "text-xl font-bold",
+                                  cloneLeads ? "text-primary" : "text-foreground",
+                                )}
+                              >
+                                {cloneLeads ? "Clone from GitHub" : "Clone repo"}
+                              </h3>
+                              <p className="text-sm text-muted-foreground">
+                                {cloneDescription({
+                                  cloneState,
+                                  hasGitHubCredential,
+                                  fallbackHost: selectedCloneDaemon?.hostname,
+                                })}
+                              </p>
+                            </div>
                           </div>
-                          <div className="text-left">
-                            <h3 className="text-xl font-bold text-primary">
-                              Open Project
-                            </h3>
-                            <p className="text-sm text-muted-foreground">
-                              Browse and select your project directory
-                            </p>
+                        </button>
+                      ) : (
+                        <button
+                          key="open"
+                          onClick={handleOpenExistingProject}
+                          data-testid="project-picker-open-folder"
+                          onMouseEnter={() => setIsOpenButtonHovered(true)}
+                          onMouseLeave={() => setIsOpenButtonHovered(false)}
+                          className={cn(
+                            "group w-full p-6 text-left transition-all duration-150 active:scale-[0.99]",
+                            index > 0 && "border-t border-border/50",
+                          )}
+                          style={{
+                            backgroundColor: cloneLeads
+                              ? isOpenButtonHovered
+                                ? "hsl(var(--primary) / 0.08)"
+                                : "transparent"
+                              : isOpenButtonHovered
+                                ? "hsl(var(--primary) / 0.15)"
+                                : "hsl(var(--primary) / 0.1)",
+                          }}
+                        >
+                          <div className="flex items-center gap-4">
+                            <div
+                              className={cn(
+                                "flex h-12 w-12 items-center justify-center rounded-xl",
+                                cloneLeads ? "bg-muted" : "bg-primary/20",
+                              )}
+                            >
+                              <FolderOpen
+                                className={cn(
+                                  "h-6 w-6",
+                                  cloneLeads ? "text-foreground" : "text-primary",
+                                )}
+                              />
+                            </div>
+                            <div className="text-left">
+                              <h3
+                                className={cn(
+                                  "text-xl font-bold",
+                                  cloneLeads ? "text-foreground" : "text-primary",
+                                )}
+                              >
+                                {cloneLeads ? "Open folder" : "Open Project"}
+                              </h3>
+                              <p className="text-sm text-muted-foreground">
+                                {cloneLeads
+                                  ? "Browse a folder on this machine"
+                                  : "Browse and select your project directory"}
+                              </p>
+                            </div>
                           </div>
-                        </div>
-                      </div>
-                    </button>
-                    )}
-                    {showCloneAction && (
-                      <button
-                        onClick={() => setIsCloneModalOpen(true)}
-                        disabled={cloneState.kind === "blocked"}
-                        data-testid="project-picker-clone-repo"
-                        onMouseEnter={() => setIsCloneButtonHovered(true)}
-                        onMouseLeave={() => setIsCloneButtonHovered(false)}
-                        className="group w-full p-6 border-t border-border/50 transition-all duration-150 text-left active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60 disabled:active:scale-100"
-                        style={{
-                          backgroundColor:
-                            isCloneButtonHovered && cloneState.kind === "ready"
-                              ? "hsl(var(--primary) / 0.08)"
-                              : "transparent",
-                        }}
-                      >
-                        <div className="flex items-center gap-4">
-                          <div className="w-12 h-12 rounded-xl bg-muted flex items-center justify-center">
-                            <GitFork className="w-6 h-6 text-foreground" />
-                          </div>
-                          <div className="text-left">
-                            <h3 className="text-xl font-bold text-foreground">
-                              Clone repo
-                            </h3>
-                            <p className="text-sm text-muted-foreground">
-                              {cloneDescription({
-                                cloneState,
-                                hasGitHubCredential,
-                                fallbackHost: selectedCloneDaemon?.hostname,
-                              })}
-                            </p>
-                          </div>
-                        </div>
-                      </button>
+                        </button>
+                      ),
                     )}
                   </div>
                 </>
