@@ -57,6 +57,76 @@ service AccessTokenService {
       idempotent: true
     };
   }
+  // UpdateMyToken changes one of the caller's own tokens' name and scopes.
+  //
+  // The SECRET IS NEVER REISSUED: editing a live daemon's permissions must
+  // not require re-registering it, which is the whole point. New scopes are
+  // checked against the caller's org permissions exactly as a mint is, so
+  // editing is never a way to widen past what the user holds. Rotation is
+  // deliberately not an operation here — it is mint-new plus revoke-old.
+  rpc UpdateMyToken(UpdateMyTokenRequest) returns (UpdateMyTokenResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+
+  // ── MEMBER PERMISSIONS ──────────────────────────────────────────────
+  //
+  // What a PERSON may do in the org, and therefore the most a token acting
+  // as them may carry. These replaced the single admin check: "admin" is now
+  // a PRESET (the full set), not a level that implies authority.
+  //
+  // Both are gated on holding token:write — the permission to administer
+  // permissions. That is deliberately the same grant that lets you mint org
+  // credentials, because the two are equivalent in power: anyone who can
+  // grant themselves deploy:write can already mint a token carrying it.
+
+  // ListOrgMemberGrants lists every member of the caller's org with the
+  // permissions they hold. Caller: a human session holding token:read.
+  rpc ListOrgMemberGrants(ListOrgMemberGrantsRequest) returns (ListOrgMemberGrantsResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+
+  // UpdateOrgMemberGrants replaces one member's permission set.
+  //
+  // CLIPPED TO THE CALLER: you cannot grant a permission you do not hold
+  // yourself, which is what stops permission administration from being a
+  // path to every other permission.
+  rpc UpdateOrgMemberGrants(UpdateOrgMemberGrantsRequest) returns (UpdateOrgMemberGrantsResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+}
+
+// OrgMemberGrants is one member and the org permissions they hold.
+message OrgMemberGrants {
+  string user_id = 1;
+  string email = 2;
+  // role is the membership role, for display only. Authority comes from
+  // scopes; a role is no longer consulted by any permission check.
+  string role = 3;
+  // scopes are the permissions held, from the same vocabulary as a token's
+  // (forge/pkg/accesstoken).
+  repeated string scopes = 4;
+}
+
+message ListOrgMemberGrantsRequest {}
+
+message ListOrgMemberGrantsResponse {
+  repeated OrgMemberGrants members = 1;
+  // grantable is what the CALLER may hand out — their own permission set. The
+  // UI renders anything outside it as disabled rather than letting a member
+  // attempt an edit the server will refuse.
+  repeated string grantable = 2;
+}
+
+message UpdateOrgMemberGrantsRequest {
+  string user_id = 1;
+  // scopes is the member's COMPLETE new set, not a delta: a permission absent
+  // here is revoked. Replacing the whole set makes the request idempotent and
+  // means a concurrent edit cannot merge into a combination nobody chose.
+  repeated string scopes = 2;
+}
+
+message UpdateOrgMemberGrantsResponse {
+  OrgMemberGrants member = 1;
 }
 
 // ResourceBinding confines a token to one resource. kind is one of
@@ -148,3 +218,25 @@ message RevokeMyTokenRequest {
 }
 
 message RevokeMyTokenResponse {}
+
+message UpdateMyTokenRequest {
+  string id = 1;
+  // name replaces the token's label when set. Absent leaves it unchanged —
+  // distinct from present-and-empty, which an operator never wants and the
+  // handler rejects.
+  optional string name = 2;
+  // scopes REPLACES the token's authority when set. The whole set is
+  // submitted, not a delta: the UI edits a checkbox list, and expressing
+  // that as a diff makes two concurrent edits resolve to a union neither
+  // operator chose.
+  repeated string scopes = 3;
+  // update_scopes distinguishes "leave the scopes alone" from "set them to
+  // the empty list". Without it a request omitting scopes is indistinguishable
+  // from one clearing them, and a token with no scopes cannot be minted at
+  // all (accesstoken.NewSet refuses it).
+  bool update_scopes = 4;
+}
+
+message UpdateMyTokenResponse {
+  AccessToken token = 1;
+}

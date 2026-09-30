@@ -85,6 +85,10 @@ func tokenInfoProto(t tokenauthority.TokenInfo) *reliantv1.TokenInfo {
 		ExpiresAt:   formatTime(t.ExpiresAt),
 		Kind:        kindForScopes(t.Scopes),
 		Ephemeral:   t.Ephemeral,
+		// A permanent credential has no expiry to bound it, so its
+		// PERMISSIONS are the only thing left to audit. Surfacing them is
+		// what lets the Settings list answer "what can this token do".
+		Scopes: t.Scopes,
 	}
 	if t.Resource != nil && t.Resource.Kind == fat.ResourceDaemon {
 		info.DaemonId = t.Resource.ID
@@ -149,6 +153,11 @@ func (s *TokenService) CreateToken(
 			CreatedAt:   time.Now().UTC().Format(time.RFC3339),
 			ExpiresAt:   formatTime(minted.ExpiresAt),
 			Kind:        req.Msg.GetKind(),
+			// The scope this kind maps to. Built by hand rather than through
+			// tokenInfoProto because a mint returns Minted, not TokenInfo —
+			// which is exactly why this field was missing while the list
+			// reported it.
+			Scopes: []string{string(scope)},
 		},
 		Token: minted.Plaintext,
 	}), nil
@@ -201,4 +210,65 @@ func (s *TokenService) RevokeToken(
 	}
 	logging.Info("access token revoked", "user_id", userID, "token_id", id)
 	return connect.NewResponse(&reliantv1.RevokeTokenResponse{}), nil
+}
+
+// UpdateToken changes one of the caller's tokens' name and/or permissions.
+//
+// THE SECRET IS NEVER REISSUED. A live daemon's permissions can be widened or
+// narrowed without re-registering it — which for a remote daemon would mean a
+// browser login it cannot perform — and the change takes effect on the token's
+// very next request, because authentication reads the row every time.
+//
+// SESSION ONLY, like minting. A machine credential editing scopes would be a
+// token granting itself authority, which is the one thing the
+// no-mint-beyond-your-scopes rule exists to prevent. Renaming is refused on the
+// same path rather than carved out: one rule is easier to reason about than a
+// field-by-field exception, and headless automation has no reason to rename.
+func (s *TokenService) UpdateToken(
+	ctx context.Context, req *connect.Request[reliantv1.UpdateTokenRequest],
+) (*connect.Response[reliantv1.UpdateTokenResponse], error) {
+	userID, isMachine, err := callerUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if isMachine {
+		return nil, connect.NewError(connect.CodePermissionDenied, fmt.Errorf(
+			"a machine credential cannot edit a credential; sign in to change a token's permissions"))
+	}
+	id := strings.TrimSpace(req.Msg.GetId())
+	if id == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("token id is required"))
+	}
+
+	var name *string
+	if req.Msg.Name != nil {
+		trimmed := strings.TrimSpace(req.Msg.GetName())
+		if trimmed == "" {
+			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("name cannot be blank"))
+		}
+		name = &trimmed
+	}
+
+	// A nil scope list leaves authority alone; an empty one is refused
+	// downstream. The wrapper in the request is what keeps those apart — a
+	// bare repeated field would make a rename strip every permission.
+	var scopes fat.Set
+	if req.Msg.Scopes != nil {
+		scopes, err = fat.NewSet(req.Msg.GetScopes().GetScopes())
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		}
+	}
+	if name == nil && scopes == nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf(
+			"nothing to update: set name, or set scopes with the permissions to grant"))
+	}
+
+	info, err := s.authority.UpdateForUser(ctx, userID, id, name, scopes)
+	if err != nil {
+		return nil, authorityError("update", err)
+	}
+	logging.Info("access token updated", "user_id", userID, "token_id", id,
+		"renamed", name != nil, "rescoped", scopes != nil)
+	return connect.NewResponse(&reliantv1.UpdateTokenResponse{Info: tokenInfoProto(info)}), nil
 }

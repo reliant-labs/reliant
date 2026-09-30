@@ -66,6 +66,15 @@ const (
 	// AccessTokenServiceRevokeMyTokenProcedure is the fully-qualified name of the AccessTokenService's
 	// RevokeMyToken RPC.
 	AccessTokenServiceRevokeMyTokenProcedure = "/controlplane.v1.AccessTokenService/RevokeMyToken"
+	// AccessTokenServiceUpdateMyTokenProcedure is the fully-qualified name of the AccessTokenService's
+	// UpdateMyToken RPC.
+	AccessTokenServiceUpdateMyTokenProcedure = "/controlplane.v1.AccessTokenService/UpdateMyToken"
+	// AccessTokenServiceListOrgMemberGrantsProcedure is the fully-qualified name of the
+	// AccessTokenService's ListOrgMemberGrants RPC.
+	AccessTokenServiceListOrgMemberGrantsProcedure = "/controlplane.v1.AccessTokenService/ListOrgMemberGrants"
+	// AccessTokenServiceUpdateOrgMemberGrantsProcedure is the fully-qualified name of the
+	// AccessTokenService's UpdateOrgMemberGrants RPC.
+	AccessTokenServiceUpdateOrgMemberGrantsProcedure = "/controlplane.v1.AccessTokenService/UpdateOrgMemberGrants"
 )
 
 // AccessTokenServiceClient is a client for the controlplane.v1.AccessTokenService service.
@@ -85,6 +94,23 @@ type AccessTokenServiceClient interface {
 	ListMyTokens(context.Context, *connect.Request[v1.ListMyTokensRequest]) (*connect.Response[v1.ListMyTokensResponse], error)
 	// RevokeMyToken revokes one of the caller's own tokens.
 	RevokeMyToken(context.Context, *connect.Request[v1.RevokeMyTokenRequest]) (*connect.Response[v1.RevokeMyTokenResponse], error)
+	// UpdateMyToken changes one of the caller's own tokens' name and scopes.
+	//
+	// The SECRET IS NEVER REISSUED: editing a live daemon's permissions must
+	// not require re-registering it, which is the whole point. New scopes are
+	// checked against the caller's org permissions exactly as a mint is, so
+	// editing is never a way to widen past what the user holds. Rotation is
+	// deliberately not an operation here — it is mint-new plus revoke-old.
+	UpdateMyToken(context.Context, *connect.Request[v1.UpdateMyTokenRequest]) (*connect.Response[v1.UpdateMyTokenResponse], error)
+	// ListOrgMemberGrants lists every member of the caller's org with the
+	// permissions they hold. Caller: a human session holding token:read.
+	ListOrgMemberGrants(context.Context, *connect.Request[v1.ListOrgMemberGrantsRequest]) (*connect.Response[v1.ListOrgMemberGrantsResponse], error)
+	// UpdateOrgMemberGrants replaces one member's permission set.
+	//
+	// CLIPPED TO THE CALLER: you cannot grant a permission you do not hold
+	// yourself, which is what stops permission administration from being a
+	// path to every other permission.
+	UpdateOrgMemberGrants(context.Context, *connect.Request[v1.UpdateOrgMemberGrantsRequest]) (*connect.Response[v1.UpdateOrgMemberGrantsResponse], error)
 }
 
 // NewAccessTokenServiceClient constructs a client for the controlplane.v1.AccessTokenService
@@ -134,17 +160,38 @@ func NewAccessTokenServiceClient(httpClient connect.HTTPClient, baseURL string, 
 			connect.WithSchema(accessTokenServiceMethods.ByName("RevokeMyToken")),
 			connect.WithClientOptions(opts...),
 		),
+		updateMyToken: connect.NewClient[v1.UpdateMyTokenRequest, v1.UpdateMyTokenResponse](
+			httpClient,
+			baseURL+AccessTokenServiceUpdateMyTokenProcedure,
+			connect.WithSchema(accessTokenServiceMethods.ByName("UpdateMyToken")),
+			connect.WithClientOptions(opts...),
+		),
+		listOrgMemberGrants: connect.NewClient[v1.ListOrgMemberGrantsRequest, v1.ListOrgMemberGrantsResponse](
+			httpClient,
+			baseURL+AccessTokenServiceListOrgMemberGrantsProcedure,
+			connect.WithSchema(accessTokenServiceMethods.ByName("ListOrgMemberGrants")),
+			connect.WithClientOptions(opts...),
+		),
+		updateOrgMemberGrants: connect.NewClient[v1.UpdateOrgMemberGrantsRequest, v1.UpdateOrgMemberGrantsResponse](
+			httpClient,
+			baseURL+AccessTokenServiceUpdateOrgMemberGrantsProcedure,
+			connect.WithSchema(accessTokenServiceMethods.ByName("UpdateOrgMemberGrants")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // accessTokenServiceClient implements AccessTokenServiceClient.
 type accessTokenServiceClient struct {
-	createToken   *connect.Client[v1.CreateTokenRequest, v1.CreateTokenResponse]
-	listTokens    *connect.Client[v1.ListTokensRequest, v1.ListTokensResponse]
-	revokeToken   *connect.Client[v1.RevokeTokenRequest, v1.RevokeTokenResponse]
-	createMyToken *connect.Client[v1.CreateMyTokenRequest, v1.CreateMyTokenResponse]
-	listMyTokens  *connect.Client[v1.ListMyTokensRequest, v1.ListMyTokensResponse]
-	revokeMyToken *connect.Client[v1.RevokeMyTokenRequest, v1.RevokeMyTokenResponse]
+	createToken           *connect.Client[v1.CreateTokenRequest, v1.CreateTokenResponse]
+	listTokens            *connect.Client[v1.ListTokensRequest, v1.ListTokensResponse]
+	revokeToken           *connect.Client[v1.RevokeTokenRequest, v1.RevokeTokenResponse]
+	createMyToken         *connect.Client[v1.CreateMyTokenRequest, v1.CreateMyTokenResponse]
+	listMyTokens          *connect.Client[v1.ListMyTokensRequest, v1.ListMyTokensResponse]
+	revokeMyToken         *connect.Client[v1.RevokeMyTokenRequest, v1.RevokeMyTokenResponse]
+	updateMyToken         *connect.Client[v1.UpdateMyTokenRequest, v1.UpdateMyTokenResponse]
+	listOrgMemberGrants   *connect.Client[v1.ListOrgMemberGrantsRequest, v1.ListOrgMemberGrantsResponse]
+	updateOrgMemberGrants *connect.Client[v1.UpdateOrgMemberGrantsRequest, v1.UpdateOrgMemberGrantsResponse]
 }
 
 // CreateToken calls controlplane.v1.AccessTokenService.CreateToken.
@@ -177,6 +224,21 @@ func (c *accessTokenServiceClient) RevokeMyToken(ctx context.Context, req *conne
 	return c.revokeMyToken.CallUnary(ctx, req)
 }
 
+// UpdateMyToken calls controlplane.v1.AccessTokenService.UpdateMyToken.
+func (c *accessTokenServiceClient) UpdateMyToken(ctx context.Context, req *connect.Request[v1.UpdateMyTokenRequest]) (*connect.Response[v1.UpdateMyTokenResponse], error) {
+	return c.updateMyToken.CallUnary(ctx, req)
+}
+
+// ListOrgMemberGrants calls controlplane.v1.AccessTokenService.ListOrgMemberGrants.
+func (c *accessTokenServiceClient) ListOrgMemberGrants(ctx context.Context, req *connect.Request[v1.ListOrgMemberGrantsRequest]) (*connect.Response[v1.ListOrgMemberGrantsResponse], error) {
+	return c.listOrgMemberGrants.CallUnary(ctx, req)
+}
+
+// UpdateOrgMemberGrants calls controlplane.v1.AccessTokenService.UpdateOrgMemberGrants.
+func (c *accessTokenServiceClient) UpdateOrgMemberGrants(ctx context.Context, req *connect.Request[v1.UpdateOrgMemberGrantsRequest]) (*connect.Response[v1.UpdateOrgMemberGrantsResponse], error) {
+	return c.updateOrgMemberGrants.CallUnary(ctx, req)
+}
+
 // AccessTokenServiceHandler is an implementation of the controlplane.v1.AccessTokenService service.
 type AccessTokenServiceHandler interface {
 	// CreateToken mints an ORG automation token (no acting user) — CI deploy,
@@ -194,6 +256,23 @@ type AccessTokenServiceHandler interface {
 	ListMyTokens(context.Context, *connect.Request[v1.ListMyTokensRequest]) (*connect.Response[v1.ListMyTokensResponse], error)
 	// RevokeMyToken revokes one of the caller's own tokens.
 	RevokeMyToken(context.Context, *connect.Request[v1.RevokeMyTokenRequest]) (*connect.Response[v1.RevokeMyTokenResponse], error)
+	// UpdateMyToken changes one of the caller's own tokens' name and scopes.
+	//
+	// The SECRET IS NEVER REISSUED: editing a live daemon's permissions must
+	// not require re-registering it, which is the whole point. New scopes are
+	// checked against the caller's org permissions exactly as a mint is, so
+	// editing is never a way to widen past what the user holds. Rotation is
+	// deliberately not an operation here — it is mint-new plus revoke-old.
+	UpdateMyToken(context.Context, *connect.Request[v1.UpdateMyTokenRequest]) (*connect.Response[v1.UpdateMyTokenResponse], error)
+	// ListOrgMemberGrants lists every member of the caller's org with the
+	// permissions they hold. Caller: a human session holding token:read.
+	ListOrgMemberGrants(context.Context, *connect.Request[v1.ListOrgMemberGrantsRequest]) (*connect.Response[v1.ListOrgMemberGrantsResponse], error)
+	// UpdateOrgMemberGrants replaces one member's permission set.
+	//
+	// CLIPPED TO THE CALLER: you cannot grant a permission you do not hold
+	// yourself, which is what stops permission administration from being a
+	// path to every other permission.
+	UpdateOrgMemberGrants(context.Context, *connect.Request[v1.UpdateOrgMemberGrantsRequest]) (*connect.Response[v1.UpdateOrgMemberGrantsResponse], error)
 }
 
 // NewAccessTokenServiceHandler builds an HTTP handler from the service implementation. It returns
@@ -239,6 +318,24 @@ func NewAccessTokenServiceHandler(svc AccessTokenServiceHandler, opts ...connect
 		connect.WithSchema(accessTokenServiceMethods.ByName("RevokeMyToken")),
 		connect.WithHandlerOptions(opts...),
 	)
+	accessTokenServiceUpdateMyTokenHandler := connect.NewUnaryHandler(
+		AccessTokenServiceUpdateMyTokenProcedure,
+		svc.UpdateMyToken,
+		connect.WithSchema(accessTokenServiceMethods.ByName("UpdateMyToken")),
+		connect.WithHandlerOptions(opts...),
+	)
+	accessTokenServiceListOrgMemberGrantsHandler := connect.NewUnaryHandler(
+		AccessTokenServiceListOrgMemberGrantsProcedure,
+		svc.ListOrgMemberGrants,
+		connect.WithSchema(accessTokenServiceMethods.ByName("ListOrgMemberGrants")),
+		connect.WithHandlerOptions(opts...),
+	)
+	accessTokenServiceUpdateOrgMemberGrantsHandler := connect.NewUnaryHandler(
+		AccessTokenServiceUpdateOrgMemberGrantsProcedure,
+		svc.UpdateOrgMemberGrants,
+		connect.WithSchema(accessTokenServiceMethods.ByName("UpdateOrgMemberGrants")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/controlplane.v1.AccessTokenService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case AccessTokenServiceCreateTokenProcedure:
@@ -253,6 +350,12 @@ func NewAccessTokenServiceHandler(svc AccessTokenServiceHandler, opts ...connect
 			accessTokenServiceListMyTokensHandler.ServeHTTP(w, r)
 		case AccessTokenServiceRevokeMyTokenProcedure:
 			accessTokenServiceRevokeMyTokenHandler.ServeHTTP(w, r)
+		case AccessTokenServiceUpdateMyTokenProcedure:
+			accessTokenServiceUpdateMyTokenHandler.ServeHTTP(w, r)
+		case AccessTokenServiceListOrgMemberGrantsProcedure:
+			accessTokenServiceListOrgMemberGrantsHandler.ServeHTTP(w, r)
+		case AccessTokenServiceUpdateOrgMemberGrantsProcedure:
+			accessTokenServiceUpdateOrgMemberGrantsHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -284,4 +387,16 @@ func (UnimplementedAccessTokenServiceHandler) ListMyTokens(context.Context, *con
 
 func (UnimplementedAccessTokenServiceHandler) RevokeMyToken(context.Context, *connect.Request[v1.RevokeMyTokenRequest]) (*connect.Response[v1.RevokeMyTokenResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.AccessTokenService.RevokeMyToken is not implemented"))
+}
+
+func (UnimplementedAccessTokenServiceHandler) UpdateMyToken(context.Context, *connect.Request[v1.UpdateMyTokenRequest]) (*connect.Response[v1.UpdateMyTokenResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.AccessTokenService.UpdateMyToken is not implemented"))
+}
+
+func (UnimplementedAccessTokenServiceHandler) ListOrgMemberGrants(context.Context, *connect.Request[v1.ListOrgMemberGrantsRequest]) (*connect.Response[v1.ListOrgMemberGrantsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.AccessTokenService.ListOrgMemberGrants is not implemented"))
+}
+
+func (UnimplementedAccessTokenServiceHandler) UpdateOrgMemberGrants(context.Context, *connect.Request[v1.UpdateOrgMemberGrantsRequest]) (*connect.Response[v1.UpdateOrgMemberGrantsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.AccessTokenService.UpdateOrgMemberGrants is not implemented"))
 }

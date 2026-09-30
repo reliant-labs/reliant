@@ -13,6 +13,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/cliauth"
 	"github.com/reliant-labs/reliant/internal/instanceid"
+	"github.com/reliant-labs/reliant/internal/logging"
 )
 
 func newAuthCmd() *cobra.Command {
@@ -78,6 +79,15 @@ For CI, skip login and set RELIANT_TOKEN.`,
 			path, err := cliauth.Store(target.ServerURL, cred)
 			if err != nil {
 				return fmt.Errorf("saving credentials: %w", err)
+			}
+			// ONE LOGIN: deposit the same token into forge's own store, so
+			// `forge deploy` authenticates as this user with no second
+			// browser login. Keyed by the issuer (the control plane), which
+			// is a different origin from the API server in prod. Best-effort
+			// on purpose — the Reliant login SUCCEEDED, and failing it here
+			// would turn a forge convenience into an auth outage.
+			if err := cliauth.DepositForForge(cred); err != nil {
+				logging.Warn("could not log forge in to Reliant cloud", "error", err)
 			}
 			out := cmd.OutOrStdout()
 			fmt.Fprintf(out, "Logged in to %s\n", target.describeServer())
@@ -174,9 +184,24 @@ valid server-side until it expires or you revoke it in the web app.`,
 			if err != nil {
 				return err
 			}
+			// Read the credential BEFORE removing it: its Issuer is the key
+			// forge's deposit was written under, and after Remove there is
+			// nothing left to learn it from.
+			issuer := ""
+			if cred, _, lookupErr := cliauth.Lookup(target.ServerURL); lookupErr == nil {
+				issuer = cred.Issuer
+			}
 			existed, path, err := cliauth.Remove(target.ServerURL)
 			if err != nil {
 				return err
+			}
+			// Logging out of Reliant logs forge out of Reliant cloud. A
+			// credential the user created with `forge login` is a separate
+			// entry and is left alone.
+			if issuer != "" {
+				if _, err := cliauth.WithdrawFromForge(issuer); err != nil {
+					logging.Warn("could not log forge out of Reliant cloud", "error", err)
+				}
 			}
 			if !existed {
 				fmt.Fprintf(cmd.OutOrStdout(), "Not logged in to %s (nothing in %s)\n", target.ServerURL, path)

@@ -13,7 +13,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file reliant/v1/token.proto.
  */
 export const file_reliant_v1_token: GenFile = /*@__PURE__*/
-  fileDesc("ChZyZWxpYW50L3YxL3Rva2VuLnByb3RvEgpyZWxpYW50LnYxIlwKEkNyZWF0ZVRva2VuUmVxdWVzdBIMCgRuYW1lGAEgASgJEhMKC3R0bF9zZWNvbmRzGAIgASgDEiMKBGtpbmQYAyABKA4yFS5yZWxpYW50LnYxLlRva2VuS2luZCLWAQoJVG9rZW5JbmZvEgoKAmlkGAEgASgJEgwKBG5hbWUYAiABKAkSFAoMdG9rZW5fcHJlZml4GAMgASgJEhIKCmNyZWF0ZWRfYXQYBCABKAkSFAoMbGFzdF91c2VkX2F0GAUgASgJEhIKCmV4cGlyZXNfYXQYBiABKAkSEQoJZXBoZW1lcmFsGAggASgIEhEKCWRhZW1vbl9pZBgJIAEoCRIjCgRraW5kGAogASgOMhUucmVsaWFudC52MS5Ub2tlbktpbmRKBAgHEAhSCnJldm9rZWRfYXQiSQoTQ3JlYXRlVG9rZW5SZXNwb25zZRIjCgRpbmZvGAEgASgLMhUucmVsaWFudC52MS5Ub2tlbkluZm8SDQoFdG9rZW4YAiABKAkiOAoRTGlzdFRva2Vuc1JlcXVlc3QSIwoEa2luZBgBIAEoDjIVLnJlbGlhbnQudjEuVG9rZW5LaW5kIjsKEkxpc3RUb2tlbnNSZXNwb25zZRIlCgZ0b2tlbnMYASADKAsyFS5yZWxpYW50LnYxLlRva2VuSW5mbyIgChJSZXZva2VUb2tlblJlcXVlc3QSCgoCaWQYASABKAkiFQoTUmV2b2tlVG9rZW5SZXNwb25zZSpSCglUb2tlbktpbmQSGgoWVE9LRU5fS0lORF9VTlNQRUNJRklFRBAAEhUKEVRPS0VOX0tJTkRfREFFTU9OEAESEgoOVE9LRU5fS0lORF9BUEkQAjKBAgoMVG9rZW5TZXJ2aWNlElAKC0NyZWF0ZVRva2VuEh4ucmVsaWFudC52MS5DcmVhdGVUb2tlblJlcXVlc3QaHy5yZWxpYW50LnYxLkNyZWF0ZVRva2VuUmVzcG9uc2UiABJNCgpMaXN0VG9rZW5zEh0ucmVsaWFudC52MS5MaXN0VG9rZW5zUmVxdWVzdBoeLnJlbGlhbnQudjEuTGlzdFRva2Vuc1Jlc3BvbnNlIgASUAoLUmV2b2tlVG9rZW4SHi5yZWxpYW50LnYxLlJldm9rZVRva2VuUmVxdWVzdBofLnJlbGlhbnQudjEuUmV2b2tlVG9rZW5SZXNwb25zZSIAQjpaOGdpdGh1Yi5jb20vcmVsaWFudC1sYWJzL3JlbGlhbnQvZ2VuL3JlbGlhbnQvdjE7cmVsaWFudHYxYgZwcm90bzM");
+  fileDesc("ChZyZWxpYW50L3YxL3Rva2VuLnByb3RvEgpyZWxpYW50LnYxIlwKEkNyZWF0ZVRva2VuUmVxdWVzdBIMCgRuYW1lGAEgASgJEhMKC3R0bF9zZWNvbmRzGAIgASgDEiMKBGtpbmQYAyABKA4yFS5yZWxpYW50LnYxLlRva2VuS2luZCLmAQoJVG9rZW5JbmZvEgoKAmlkGAEgASgJEgwKBG5hbWUYAiABKAkSFAoMdG9rZW5fcHJlZml4GAMgASgJEhIKCmNyZWF0ZWRfYXQYBCABKAkSFAoMbGFzdF91c2VkX2F0GAUgASgJEhIKCmV4cGlyZXNfYXQYBiABKAkSEQoJZXBoZW1lcmFsGAggASgIEhEKCWRhZW1vbl9pZBgJIAEoCRIjCgRraW5kGAogASgOMhUucmVsaWFudC52MS5Ub2tlbktpbmQSDgoGc2NvcGVzGAsgAygJSgQIBxAIUgpyZXZva2VkX2F0IkkKE0NyZWF0ZVRva2VuUmVzcG9uc2USIwoEaW5mbxgBIAEoCzIVLnJlbGlhbnQudjEuVG9rZW5JbmZvEg0KBXRva2VuGAIgASgJIjgKEUxpc3RUb2tlbnNSZXF1ZXN0EiMKBGtpbmQYASABKA4yFS5yZWxpYW50LnYxLlRva2VuS2luZCI7ChJMaXN0VG9rZW5zUmVzcG9uc2USJQoGdG9rZW5zGAEgAygLMhUucmVsaWFudC52MS5Ub2tlbkluZm8iIAoSUmV2b2tlVG9rZW5SZXF1ZXN0EgoKAmlkGAEgASgJIhUKE1Jldm9rZVRva2VuUmVzcG9uc2UicwoSVXBkYXRlVG9rZW5SZXF1ZXN0EgoKAmlkGAEgASgJEhEKBG5hbWUYAiABKAlIAIgBARIqCgZzY29wZXMYAyABKAsyFS5yZWxpYW50LnYxLlNjb3BlTGlzdEgBiAEBQgcKBV9uYW1lQgkKB19zY29wZXMiGwoJU2NvcGVMaXN0Eg4KBnNjb3BlcxgBIAMoCSI6ChNVcGRhdGVUb2tlblJlc3BvbnNlEiMKBGluZm8YASABKAsyFS5yZWxpYW50LnYxLlRva2VuSW5mbypSCglUb2tlbktpbmQSGgoWVE9LRU5fS0lORF9VTlNQRUNJRklFRBAAEhUKEVRPS0VOX0tJTkRfREFFTU9OEAESEgoOVE9LRU5fS0lORF9BUEkQAjLTAgoMVG9rZW5TZXJ2aWNlElAKC0NyZWF0ZVRva2VuEh4ucmVsaWFudC52MS5DcmVhdGVUb2tlblJlcXVlc3QaHy5yZWxpYW50LnYxLkNyZWF0ZVRva2VuUmVzcG9uc2UiABJNCgpMaXN0VG9rZW5zEh0ucmVsaWFudC52MS5MaXN0VG9rZW5zUmVxdWVzdBoeLnJlbGlhbnQudjEuTGlzdFRva2Vuc1Jlc3BvbnNlIgASUAoLUmV2b2tlVG9rZW4SHi5yZWxpYW50LnYxLlJldm9rZVRva2VuUmVxdWVzdBofLnJlbGlhbnQudjEuUmV2b2tlVG9rZW5SZXNwb25zZSIAElAKC1VwZGF0ZVRva2VuEh4ucmVsaWFudC52MS5VcGRhdGVUb2tlblJlcXVlc3QaHy5yZWxpYW50LnYxLlVwZGF0ZVRva2VuUmVzcG9uc2UiAEI6WjhnaXRodWIuY29tL3JlbGlhbnQtbGFicy9yZWxpYW50L2dlbi9yZWxpYW50L3YxO3JlbGlhbnR2MWIGcHJvdG8z");
 
 /**
  * @generated from message reliant.v1.CreateTokenRequest
@@ -103,6 +103,21 @@ export type TokenInfo = Message<"reliant.v1.TokenInfo"> & {
    * @generated from field: reliant.v1.TokenKind kind = 10;
    */
   kind: TokenKind;
+
+  /**
+   * scopes are the permissions this credential carries
+   * (forge/pkg/accesstoken), e.g. "daemon:connect", "deploy:write". A daemon
+   * credential carries deploy, secret and domain authority so forge running
+   * inside that daemon can act as the user (control-plane migration 00112).
+   *
+   * Surfaced because a permanent credential's PERMISSIONS are the thing a
+   * user needs to audit: with no expiry to bound it, "what can this token
+   * do" is the only remaining question, and a list that hides it cannot
+   * answer it.
+   *
+   * @generated from field: repeated string scopes = 11;
+   */
+  scopes: string[];
 };
 
 /**
@@ -203,6 +218,76 @@ export const RevokeTokenResponseSchema: GenMessage<RevokeTokenResponse> = /*@__P
   messageDesc(file_reliant_v1_token, 6);
 
 /**
+ * @generated from message reliant.v1.UpdateTokenRequest
+ */
+export type UpdateTokenRequest = Message<"reliant.v1.UpdateTokenRequest"> & {
+  /**
+   * @generated from field: string id = 1;
+   */
+  id: string;
+
+  /**
+   * name renames the token; absent leaves it alone.
+   *
+   * @generated from field: optional string name = 2;
+   */
+  name?: string | undefined;
+
+  /**
+   * scopes replaces the token's permissions with this COMPLETE set. Absent
+   * leaves them alone — which is why it is a wrapper and not a bare repeated
+   * field: an empty repeated field is indistinguishable from an omitted one,
+   * so a rename would silently strip every permission.
+   *
+   * @generated from field: optional reliant.v1.ScopeList scopes = 3;
+   */
+  scopes?: ScopeList | undefined;
+};
+
+/**
+ * Describes the message reliant.v1.UpdateTokenRequest.
+ * Use `create(UpdateTokenRequestSchema)` to create a new message.
+ */
+export const UpdateTokenRequestSchema: GenMessage<UpdateTokenRequest> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_token, 7);
+
+/**
+ * ScopeList wraps a permission list so "not set" and "set to empty" differ.
+ *
+ * @generated from message reliant.v1.ScopeList
+ */
+export type ScopeList = Message<"reliant.v1.ScopeList"> & {
+  /**
+   * @generated from field: repeated string scopes = 1;
+   */
+  scopes: string[];
+};
+
+/**
+ * Describes the message reliant.v1.ScopeList.
+ * Use `create(ScopeListSchema)` to create a new message.
+ */
+export const ScopeListSchema: GenMessage<ScopeList> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_token, 8);
+
+/**
+ * @generated from message reliant.v1.UpdateTokenResponse
+ */
+export type UpdateTokenResponse = Message<"reliant.v1.UpdateTokenResponse"> & {
+  /**
+   * @generated from field: reliant.v1.TokenInfo info = 1;
+   */
+  info?: TokenInfo | undefined;
+};
+
+/**
+ * Describes the message reliant.v1.UpdateTokenResponse.
+ * Use `create(UpdateTokenResponseSchema)` to create a new message.
+ */
+export const UpdateTokenResponseSchema: GenMessage<UpdateTokenResponse> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_token, 9);
+
+/**
  * @generated from enum reliant.v1.TokenKind
  */
 export enum TokenKind {
@@ -275,12 +360,37 @@ export const TokenService: GenService<{
   /**
    * RevokeToken revokes one of the caller's tokens, immediately.
    *
+   * For a token bound to a daemon this also disconnects that daemon: its
+   * credential is permanent, so revocation is the only thing that ends its
+   * authority, and leaving it connected would show a revoked token beside a
+   * daemon that still looks healthy.
+   *
    * @generated from rpc reliant.v1.TokenService.RevokeToken
    */
   revokeToken: {
     methodKind: "unary";
     input: typeof RevokeTokenRequestSchema;
     output: typeof RevokeTokenResponseSchema;
+  },
+  /**
+   * UpdateToken changes one of the caller's tokens' name and/or permissions.
+   *
+   * THE SECRET IS NEVER REISSUED. A live daemon's permissions can be widened
+   * or narrowed without re-registering it — which for a remote daemon would
+   * mean a browser login it cannot perform — and the change is live on the
+   * token's very next request, because authentication reads the row every
+   * time. Rotation is deliberately NOT this operation: it is mint-new plus
+   * revoke-old.
+   *
+   * New permissions are clipped to what the caller holds, exactly as a mint
+   * is, so editing can never widen past the person's own authority.
+   *
+   * @generated from rpc reliant.v1.TokenService.UpdateToken
+   */
+  updateToken: {
+    methodKind: "unary";
+    input: typeof UpdateTokenRequestSchema;
+    output: typeof UpdateTokenResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_reliant_v1_token, 0);

@@ -38,6 +38,269 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// OrgMemberGrants is one member and the org permissions they hold.
+type OrgMemberGrants struct {
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	UserId string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	Email  string                 `protobuf:"bytes,2,opt,name=email,proto3" json:"email,omitempty"`
+	// role is the membership role, for display only. Authority comes from
+	// scopes; a role is no longer consulted by any permission check.
+	Role string `protobuf:"bytes,3,opt,name=role,proto3" json:"role,omitempty"`
+	// scopes are the permissions held, from the same vocabulary as a token's
+	// (forge/pkg/accesstoken).
+	Scopes        []string `protobuf:"bytes,4,rep,name=scopes,proto3" json:"scopes,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *OrgMemberGrants) Reset() {
+	*x = OrgMemberGrants{}
+	mi := &file_services_access_token_v1_access_token_proto_msgTypes[0]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *OrgMemberGrants) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*OrgMemberGrants) ProtoMessage() {}
+
+func (x *OrgMemberGrants) ProtoReflect() protoreflect.Message {
+	mi := &file_services_access_token_v1_access_token_proto_msgTypes[0]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use OrgMemberGrants.ProtoReflect.Descriptor instead.
+func (*OrgMemberGrants) Descriptor() ([]byte, []int) {
+	return file_services_access_token_v1_access_token_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *OrgMemberGrants) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+func (x *OrgMemberGrants) GetEmail() string {
+	if x != nil {
+		return x.Email
+	}
+	return ""
+}
+
+func (x *OrgMemberGrants) GetRole() string {
+	if x != nil {
+		return x.Role
+	}
+	return ""
+}
+
+func (x *OrgMemberGrants) GetScopes() []string {
+	if x != nil {
+		return x.Scopes
+	}
+	return nil
+}
+
+type ListOrgMemberGrantsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListOrgMemberGrantsRequest) Reset() {
+	*x = ListOrgMemberGrantsRequest{}
+	mi := &file_services_access_token_v1_access_token_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListOrgMemberGrantsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListOrgMemberGrantsRequest) ProtoMessage() {}
+
+func (x *ListOrgMemberGrantsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_services_access_token_v1_access_token_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListOrgMemberGrantsRequest.ProtoReflect.Descriptor instead.
+func (*ListOrgMemberGrantsRequest) Descriptor() ([]byte, []int) {
+	return file_services_access_token_v1_access_token_proto_rawDescGZIP(), []int{1}
+}
+
+type ListOrgMemberGrantsResponse struct {
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Members []*OrgMemberGrants     `protobuf:"bytes,1,rep,name=members,proto3" json:"members,omitempty"`
+	// grantable is what the CALLER may hand out — their own permission set. The
+	// UI renders anything outside it as disabled rather than letting a member
+	// attempt an edit the server will refuse.
+	Grantable     []string `protobuf:"bytes,2,rep,name=grantable,proto3" json:"grantable,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListOrgMemberGrantsResponse) Reset() {
+	*x = ListOrgMemberGrantsResponse{}
+	mi := &file_services_access_token_v1_access_token_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListOrgMemberGrantsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListOrgMemberGrantsResponse) ProtoMessage() {}
+
+func (x *ListOrgMemberGrantsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_services_access_token_v1_access_token_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListOrgMemberGrantsResponse.ProtoReflect.Descriptor instead.
+func (*ListOrgMemberGrantsResponse) Descriptor() ([]byte, []int) {
+	return file_services_access_token_v1_access_token_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *ListOrgMemberGrantsResponse) GetMembers() []*OrgMemberGrants {
+	if x != nil {
+		return x.Members
+	}
+	return nil
+}
+
+func (x *ListOrgMemberGrantsResponse) GetGrantable() []string {
+	if x != nil {
+		return x.Grantable
+	}
+	return nil
+}
+
+type UpdateOrgMemberGrantsRequest struct {
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	UserId string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	// scopes is the member's COMPLETE new set, not a delta: a permission absent
+	// here is revoked. Replacing the whole set makes the request idempotent and
+	// means a concurrent edit cannot merge into a combination nobody chose.
+	Scopes        []string `protobuf:"bytes,2,rep,name=scopes,proto3" json:"scopes,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdateOrgMemberGrantsRequest) Reset() {
+	*x = UpdateOrgMemberGrantsRequest{}
+	mi := &file_services_access_token_v1_access_token_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateOrgMemberGrantsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateOrgMemberGrantsRequest) ProtoMessage() {}
+
+func (x *UpdateOrgMemberGrantsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_services_access_token_v1_access_token_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateOrgMemberGrantsRequest.ProtoReflect.Descriptor instead.
+func (*UpdateOrgMemberGrantsRequest) Descriptor() ([]byte, []int) {
+	return file_services_access_token_v1_access_token_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *UpdateOrgMemberGrantsRequest) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+func (x *UpdateOrgMemberGrantsRequest) GetScopes() []string {
+	if x != nil {
+		return x.Scopes
+	}
+	return nil
+}
+
+type UpdateOrgMemberGrantsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Member        *OrgMemberGrants       `protobuf:"bytes,1,opt,name=member,proto3" json:"member,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdateOrgMemberGrantsResponse) Reset() {
+	*x = UpdateOrgMemberGrantsResponse{}
+	mi := &file_services_access_token_v1_access_token_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateOrgMemberGrantsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateOrgMemberGrantsResponse) ProtoMessage() {}
+
+func (x *UpdateOrgMemberGrantsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_services_access_token_v1_access_token_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateOrgMemberGrantsResponse.ProtoReflect.Descriptor instead.
+func (*UpdateOrgMemberGrantsResponse) Descriptor() ([]byte, []int) {
+	return file_services_access_token_v1_access_token_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *UpdateOrgMemberGrantsResponse) GetMember() *OrgMemberGrants {
+	if x != nil {
+		return x.Member
+	}
+	return nil
+}
+
 // ResourceBinding confines a token to one resource. kind is one of
 // "daemon" | "port" | "connector" (forge/pkg/accesstoken.AllResourceKinds).
 type ResourceBinding struct {
@@ -50,7 +313,7 @@ type ResourceBinding struct {
 
 func (x *ResourceBinding) Reset() {
 	*x = ResourceBinding{}
-	mi := &file_services_access_token_v1_access_token_proto_msgTypes[0]
+	mi := &file_services_access_token_v1_access_token_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -62,7 +325,7 @@ func (x *ResourceBinding) String() string {
 func (*ResourceBinding) ProtoMessage() {}
 
 func (x *ResourceBinding) ProtoReflect() protoreflect.Message {
-	mi := &file_services_access_token_v1_access_token_proto_msgTypes[0]
+	mi := &file_services_access_token_v1_access_token_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -75,7 +338,7 @@ func (x *ResourceBinding) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResourceBinding.ProtoReflect.Descriptor instead.
 func (*ResourceBinding) Descriptor() ([]byte, []int) {
-	return file_services_access_token_v1_access_token_proto_rawDescGZIP(), []int{0}
+	return file_services_access_token_v1_access_token_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *ResourceBinding) GetKind() string {
@@ -115,7 +378,7 @@ type AccessToken struct {
 
 func (x *AccessToken) Reset() {
 	*x = AccessToken{}
-	mi := &file_services_access_token_v1_access_token_proto_msgTypes[1]
+	mi := &file_services_access_token_v1_access_token_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -127,7 +390,7 @@ func (x *AccessToken) String() string {
 func (*AccessToken) ProtoMessage() {}
 
 func (x *AccessToken) ProtoReflect() protoreflect.Message {
-	mi := &file_services_access_token_v1_access_token_proto_msgTypes[1]
+	mi := &file_services_access_token_v1_access_token_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -140,7 +403,7 @@ func (x *AccessToken) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AccessToken.ProtoReflect.Descriptor instead.
 func (*AccessToken) Descriptor() ([]byte, []int) {
-	return file_services_access_token_v1_access_token_proto_rawDescGZIP(), []int{1}
+	return file_services_access_token_v1_access_token_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *AccessToken) GetId() string {
@@ -245,7 +508,7 @@ type CreateTokenRequest struct {
 
 func (x *CreateTokenRequest) Reset() {
 	*x = CreateTokenRequest{}
-	mi := &file_services_access_token_v1_access_token_proto_msgTypes[2]
+	mi := &file_services_access_token_v1_access_token_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -257,7 +520,7 @@ func (x *CreateTokenRequest) String() string {
 func (*CreateTokenRequest) ProtoMessage() {}
 
 func (x *CreateTokenRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_access_token_v1_access_token_proto_msgTypes[2]
+	mi := &file_services_access_token_v1_access_token_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -270,7 +533,7 @@ func (x *CreateTokenRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateTokenRequest.ProtoReflect.Descriptor instead.
 func (*CreateTokenRequest) Descriptor() ([]byte, []int) {
-	return file_services_access_token_v1_access_token_proto_rawDescGZIP(), []int{2}
+	return file_services_access_token_v1_access_token_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *CreateTokenRequest) GetName() string {
@@ -305,7 +568,7 @@ type CreateTokenResponse struct {
 
 func (x *CreateTokenResponse) Reset() {
 	*x = CreateTokenResponse{}
-	mi := &file_services_access_token_v1_access_token_proto_msgTypes[3]
+	mi := &file_services_access_token_v1_access_token_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -317,7 +580,7 @@ func (x *CreateTokenResponse) String() string {
 func (*CreateTokenResponse) ProtoMessage() {}
 
 func (x *CreateTokenResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_access_token_v1_access_token_proto_msgTypes[3]
+	mi := &file_services_access_token_v1_access_token_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -330,7 +593,7 @@ func (x *CreateTokenResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateTokenResponse.ProtoReflect.Descriptor instead.
 func (*CreateTokenResponse) Descriptor() ([]byte, []int) {
-	return file_services_access_token_v1_access_token_proto_rawDescGZIP(), []int{3}
+	return file_services_access_token_v1_access_token_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *CreateTokenResponse) GetToken() *AccessToken {
@@ -356,7 +619,7 @@ type ListTokensRequest struct {
 
 func (x *ListTokensRequest) Reset() {
 	*x = ListTokensRequest{}
-	mi := &file_services_access_token_v1_access_token_proto_msgTypes[4]
+	mi := &file_services_access_token_v1_access_token_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -368,7 +631,7 @@ func (x *ListTokensRequest) String() string {
 func (*ListTokensRequest) ProtoMessage() {}
 
 func (x *ListTokensRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_access_token_v1_access_token_proto_msgTypes[4]
+	mi := &file_services_access_token_v1_access_token_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -381,7 +644,7 @@ func (x *ListTokensRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListTokensRequest.ProtoReflect.Descriptor instead.
 func (*ListTokensRequest) Descriptor() ([]byte, []int) {
-	return file_services_access_token_v1_access_token_proto_rawDescGZIP(), []int{4}
+	return file_services_access_token_v1_access_token_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *ListTokensRequest) GetIncludeRevoked() bool {
@@ -400,7 +663,7 @@ type ListTokensResponse struct {
 
 func (x *ListTokensResponse) Reset() {
 	*x = ListTokensResponse{}
-	mi := &file_services_access_token_v1_access_token_proto_msgTypes[5]
+	mi := &file_services_access_token_v1_access_token_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -412,7 +675,7 @@ func (x *ListTokensResponse) String() string {
 func (*ListTokensResponse) ProtoMessage() {}
 
 func (x *ListTokensResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_access_token_v1_access_token_proto_msgTypes[5]
+	mi := &file_services_access_token_v1_access_token_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -425,7 +688,7 @@ func (x *ListTokensResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListTokensResponse.ProtoReflect.Descriptor instead.
 func (*ListTokensResponse) Descriptor() ([]byte, []int) {
-	return file_services_access_token_v1_access_token_proto_rawDescGZIP(), []int{5}
+	return file_services_access_token_v1_access_token_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *ListTokensResponse) GetTokens() []*AccessToken {
@@ -444,7 +707,7 @@ type RevokeTokenRequest struct {
 
 func (x *RevokeTokenRequest) Reset() {
 	*x = RevokeTokenRequest{}
-	mi := &file_services_access_token_v1_access_token_proto_msgTypes[6]
+	mi := &file_services_access_token_v1_access_token_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -456,7 +719,7 @@ func (x *RevokeTokenRequest) String() string {
 func (*RevokeTokenRequest) ProtoMessage() {}
 
 func (x *RevokeTokenRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_access_token_v1_access_token_proto_msgTypes[6]
+	mi := &file_services_access_token_v1_access_token_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -469,7 +732,7 @@ func (x *RevokeTokenRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RevokeTokenRequest.ProtoReflect.Descriptor instead.
 func (*RevokeTokenRequest) Descriptor() ([]byte, []int) {
-	return file_services_access_token_v1_access_token_proto_rawDescGZIP(), []int{6}
+	return file_services_access_token_v1_access_token_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *RevokeTokenRequest) GetId() string {
@@ -488,7 +751,7 @@ type RevokeTokenResponse struct {
 
 func (x *RevokeTokenResponse) Reset() {
 	*x = RevokeTokenResponse{}
-	mi := &file_services_access_token_v1_access_token_proto_msgTypes[7]
+	mi := &file_services_access_token_v1_access_token_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -500,7 +763,7 @@ func (x *RevokeTokenResponse) String() string {
 func (*RevokeTokenResponse) ProtoMessage() {}
 
 func (x *RevokeTokenResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_access_token_v1_access_token_proto_msgTypes[7]
+	mi := &file_services_access_token_v1_access_token_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -513,7 +776,7 @@ func (x *RevokeTokenResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RevokeTokenResponse.ProtoReflect.Descriptor instead.
 func (*RevokeTokenResponse) Descriptor() ([]byte, []int) {
-	return file_services_access_token_v1_access_token_proto_rawDescGZIP(), []int{7}
+	return file_services_access_token_v1_access_token_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *RevokeTokenResponse) GetToken() *AccessToken {
@@ -541,7 +804,7 @@ type CreateMyTokenRequest struct {
 
 func (x *CreateMyTokenRequest) Reset() {
 	*x = CreateMyTokenRequest{}
-	mi := &file_services_access_token_v1_access_token_proto_msgTypes[8]
+	mi := &file_services_access_token_v1_access_token_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -553,7 +816,7 @@ func (x *CreateMyTokenRequest) String() string {
 func (*CreateMyTokenRequest) ProtoMessage() {}
 
 func (x *CreateMyTokenRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_access_token_v1_access_token_proto_msgTypes[8]
+	mi := &file_services_access_token_v1_access_token_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -566,7 +829,7 @@ func (x *CreateMyTokenRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateMyTokenRequest.ProtoReflect.Descriptor instead.
 func (*CreateMyTokenRequest) Descriptor() ([]byte, []int) {
-	return file_services_access_token_v1_access_token_proto_rawDescGZIP(), []int{8}
+	return file_services_access_token_v1_access_token_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *CreateMyTokenRequest) GetName() string {
@@ -624,7 +887,7 @@ type CreateMyTokenResponse struct {
 
 func (x *CreateMyTokenResponse) Reset() {
 	*x = CreateMyTokenResponse{}
-	mi := &file_services_access_token_v1_access_token_proto_msgTypes[9]
+	mi := &file_services_access_token_v1_access_token_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -636,7 +899,7 @@ func (x *CreateMyTokenResponse) String() string {
 func (*CreateMyTokenResponse) ProtoMessage() {}
 
 func (x *CreateMyTokenResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_access_token_v1_access_token_proto_msgTypes[9]
+	mi := &file_services_access_token_v1_access_token_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -649,7 +912,7 @@ func (x *CreateMyTokenResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateMyTokenResponse.ProtoReflect.Descriptor instead.
 func (*CreateMyTokenResponse) Descriptor() ([]byte, []int) {
-	return file_services_access_token_v1_access_token_proto_rawDescGZIP(), []int{9}
+	return file_services_access_token_v1_access_token_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *CreateMyTokenResponse) GetToken() *AccessToken {
@@ -684,7 +947,7 @@ type ListMyTokensRequest struct {
 
 func (x *ListMyTokensRequest) Reset() {
 	*x = ListMyTokensRequest{}
-	mi := &file_services_access_token_v1_access_token_proto_msgTypes[10]
+	mi := &file_services_access_token_v1_access_token_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -696,7 +959,7 @@ func (x *ListMyTokensRequest) String() string {
 func (*ListMyTokensRequest) ProtoMessage() {}
 
 func (x *ListMyTokensRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_access_token_v1_access_token_proto_msgTypes[10]
+	mi := &file_services_access_token_v1_access_token_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -709,7 +972,7 @@ func (x *ListMyTokensRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListMyTokensRequest.ProtoReflect.Descriptor instead.
 func (*ListMyTokensRequest) Descriptor() ([]byte, []int) {
-	return file_services_access_token_v1_access_token_proto_rawDescGZIP(), []int{10}
+	return file_services_access_token_v1_access_token_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *ListMyTokensRequest) GetIncludeRevoked() bool {
@@ -735,7 +998,7 @@ type ListMyTokensResponse struct {
 
 func (x *ListMyTokensResponse) Reset() {
 	*x = ListMyTokensResponse{}
-	mi := &file_services_access_token_v1_access_token_proto_msgTypes[11]
+	mi := &file_services_access_token_v1_access_token_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -747,7 +1010,7 @@ func (x *ListMyTokensResponse) String() string {
 func (*ListMyTokensResponse) ProtoMessage() {}
 
 func (x *ListMyTokensResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_access_token_v1_access_token_proto_msgTypes[11]
+	mi := &file_services_access_token_v1_access_token_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -760,7 +1023,7 @@ func (x *ListMyTokensResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListMyTokensResponse.ProtoReflect.Descriptor instead.
 func (*ListMyTokensResponse) Descriptor() ([]byte, []int) {
-	return file_services_access_token_v1_access_token_proto_rawDescGZIP(), []int{11}
+	return file_services_access_token_v1_access_token_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *ListMyTokensResponse) GetTokens() []*AccessToken {
@@ -779,7 +1042,7 @@ type RevokeMyTokenRequest struct {
 
 func (x *RevokeMyTokenRequest) Reset() {
 	*x = RevokeMyTokenRequest{}
-	mi := &file_services_access_token_v1_access_token_proto_msgTypes[12]
+	mi := &file_services_access_token_v1_access_token_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -791,7 +1054,7 @@ func (x *RevokeMyTokenRequest) String() string {
 func (*RevokeMyTokenRequest) ProtoMessage() {}
 
 func (x *RevokeMyTokenRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_access_token_v1_access_token_proto_msgTypes[12]
+	mi := &file_services_access_token_v1_access_token_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -804,7 +1067,7 @@ func (x *RevokeMyTokenRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RevokeMyTokenRequest.ProtoReflect.Descriptor instead.
 func (*RevokeMyTokenRequest) Descriptor() ([]byte, []int) {
-	return file_services_access_token_v1_access_token_proto_rawDescGZIP(), []int{12}
+	return file_services_access_token_v1_access_token_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *RevokeMyTokenRequest) GetId() string {
@@ -822,7 +1085,7 @@ type RevokeMyTokenResponse struct {
 
 func (x *RevokeMyTokenResponse) Reset() {
 	*x = RevokeMyTokenResponse{}
-	mi := &file_services_access_token_v1_access_token_proto_msgTypes[13]
+	mi := &file_services_access_token_v1_access_token_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -834,7 +1097,7 @@ func (x *RevokeMyTokenResponse) String() string {
 func (*RevokeMyTokenResponse) ProtoMessage() {}
 
 func (x *RevokeMyTokenResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_access_token_v1_access_token_proto_msgTypes[13]
+	mi := &file_services_access_token_v1_access_token_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -847,14 +1110,151 @@ func (x *RevokeMyTokenResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RevokeMyTokenResponse.ProtoReflect.Descriptor instead.
 func (*RevokeMyTokenResponse) Descriptor() ([]byte, []int) {
-	return file_services_access_token_v1_access_token_proto_rawDescGZIP(), []int{13}
+	return file_services_access_token_v1_access_token_proto_rawDescGZIP(), []int{18}
+}
+
+type UpdateMyTokenRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Id    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// name replaces the token's label when set. Absent leaves it unchanged —
+	// distinct from present-and-empty, which an operator never wants and the
+	// handler rejects.
+	Name *string `protobuf:"bytes,2,opt,name=name,proto3,oneof" json:"name,omitempty"`
+	// scopes REPLACES the token's authority when set. The whole set is
+	// submitted, not a delta: the UI edits a checkbox list, and expressing
+	// that as a diff makes two concurrent edits resolve to a union neither
+	// operator chose.
+	Scopes []string `protobuf:"bytes,3,rep,name=scopes,proto3" json:"scopes,omitempty"`
+	// update_scopes distinguishes "leave the scopes alone" from "set them to
+	// the empty list". Without it a request omitting scopes is indistinguishable
+	// from one clearing them, and a token with no scopes cannot be minted at
+	// all (accesstoken.NewSet refuses it).
+	UpdateScopes  bool `protobuf:"varint,4,opt,name=update_scopes,json=updateScopes,proto3" json:"update_scopes,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdateMyTokenRequest) Reset() {
+	*x = UpdateMyTokenRequest{}
+	mi := &file_services_access_token_v1_access_token_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateMyTokenRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateMyTokenRequest) ProtoMessage() {}
+
+func (x *UpdateMyTokenRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_services_access_token_v1_access_token_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateMyTokenRequest.ProtoReflect.Descriptor instead.
+func (*UpdateMyTokenRequest) Descriptor() ([]byte, []int) {
+	return file_services_access_token_v1_access_token_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *UpdateMyTokenRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *UpdateMyTokenRequest) GetName() string {
+	if x != nil && x.Name != nil {
+		return *x.Name
+	}
+	return ""
+}
+
+func (x *UpdateMyTokenRequest) GetScopes() []string {
+	if x != nil {
+		return x.Scopes
+	}
+	return nil
+}
+
+func (x *UpdateMyTokenRequest) GetUpdateScopes() bool {
+	if x != nil {
+		return x.UpdateScopes
+	}
+	return false
+}
+
+type UpdateMyTokenResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Token         *AccessToken           `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdateMyTokenResponse) Reset() {
+	*x = UpdateMyTokenResponse{}
+	mi := &file_services_access_token_v1_access_token_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateMyTokenResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateMyTokenResponse) ProtoMessage() {}
+
+func (x *UpdateMyTokenResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_services_access_token_v1_access_token_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateMyTokenResponse.ProtoReflect.Descriptor instead.
+func (*UpdateMyTokenResponse) Descriptor() ([]byte, []int) {
+	return file_services_access_token_v1_access_token_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *UpdateMyTokenResponse) GetToken() *AccessToken {
+	if x != nil {
+		return x.Token
+	}
+	return nil
 }
 
 var File_services_access_token_v1_access_token_proto protoreflect.FileDescriptor
 
 const file_services_access_token_v1_access_token_proto_rawDesc = "" +
 	"\n" +
-	"+services/access_token/v1/access_token.proto\x12\x0fcontrolplane.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"5\n" +
+	"+services/access_token/v1/access_token.proto\x12\x0fcontrolplane.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"l\n" +
+	"\x0fOrgMemberGrants\x12\x17\n" +
+	"\auser_id\x18\x01 \x01(\tR\x06userId\x12\x14\n" +
+	"\x05email\x18\x02 \x01(\tR\x05email\x12\x12\n" +
+	"\x04role\x18\x03 \x01(\tR\x04role\x12\x16\n" +
+	"\x06scopes\x18\x04 \x03(\tR\x06scopes\"\x1c\n" +
+	"\x1aListOrgMemberGrantsRequest\"w\n" +
+	"\x1bListOrgMemberGrantsResponse\x12:\n" +
+	"\amembers\x18\x01 \x03(\v2 .controlplane.v1.OrgMemberGrantsR\amembers\x12\x1c\n" +
+	"\tgrantable\x18\x02 \x03(\tR\tgrantable\"O\n" +
+	"\x1cUpdateOrgMemberGrantsRequest\x12\x17\n" +
+	"\auser_id\x18\x01 \x01(\tR\x06userId\x12\x16\n" +
+	"\x06scopes\x18\x02 \x03(\tR\x06scopes\"Y\n" +
+	"\x1dUpdateOrgMemberGrantsResponse\x128\n" +
+	"\x06member\x18\x01 \x01(\v2 .controlplane.v1.OrgMemberGrantsR\x06member\"5\n" +
 	"\x0fResourceBinding\x12\x12\n" +
 	"\x04kind\x18\x01 \x01(\tR\x04kind\x12\x0e\n" +
 	"\x02id\x18\x02 \x01(\tR\x02id\"\xa5\x04\n" +
@@ -915,7 +1315,15 @@ const file_services_access_token_v1_access_token_proto_rawDesc = "" +
 	"\x06tokens\x18\x01 \x03(\v2\x1c.controlplane.v1.AccessTokenR\x06tokens\"&\n" +
 	"\x14RevokeMyTokenRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\"\x17\n" +
-	"\x15RevokeMyTokenResponse2\xbc\x04\n" +
+	"\x15RevokeMyTokenResponse\"\x85\x01\n" +
+	"\x14UpdateMyTokenRequest\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x17\n" +
+	"\x04name\x18\x02 \x01(\tH\x00R\x04name\x88\x01\x01\x12\x16\n" +
+	"\x06scopes\x18\x03 \x03(\tR\x06scopes\x12#\n" +
+	"\rupdate_scopes\x18\x04 \x01(\bR\fupdateScopesB\a\n" +
+	"\x05_name\"K\n" +
+	"\x15UpdateMyTokenResponse\x122\n" +
+	"\x05token\x18\x01 \x01(\v2\x1c.controlplane.v1.AccessTokenR\x05token2\x86\a\n" +
 	"\x12AccessTokenService\x12X\n" +
 	"\vCreateToken\x12#.controlplane.v1.CreateTokenRequest\x1a$.controlplane.v1.CreateTokenResponse\x12U\n" +
 	"\n" +
@@ -923,7 +1331,10 @@ const file_services_access_token_v1_access_token_proto_rawDesc = "" +
 	"\vRevokeToken\x12#.controlplane.v1.RevokeTokenRequest\x1a$.controlplane.v1.RevokeTokenResponse\x12^\n" +
 	"\rCreateMyToken\x12%.controlplane.v1.CreateMyTokenRequest\x1a&.controlplane.v1.CreateMyTokenResponse\x12[\n" +
 	"\fListMyTokens\x12$.controlplane.v1.ListMyTokensRequest\x1a%.controlplane.v1.ListMyTokensResponse\x12^\n" +
-	"\rRevokeMyToken\x12%.controlplane.v1.RevokeMyTokenRequest\x1a&.controlplane.v1.RevokeMyTokenResponseB\xde\x01\n" +
+	"\rRevokeMyToken\x12%.controlplane.v1.RevokeMyTokenRequest\x1a&.controlplane.v1.RevokeMyTokenResponse\x12^\n" +
+	"\rUpdateMyToken\x12%.controlplane.v1.UpdateMyTokenRequest\x1a&.controlplane.v1.UpdateMyTokenResponse\x12p\n" +
+	"\x13ListOrgMemberGrants\x12+.controlplane.v1.ListOrgMemberGrantsRequest\x1a,.controlplane.v1.ListOrgMemberGrantsResponse\x12v\n" +
+	"\x15UpdateOrgMemberGrants\x12-.controlplane.v1.UpdateOrgMemberGrantsRequest\x1a..controlplane.v1.UpdateOrgMemberGrantsResponseB\xde\x01\n" +
 	"\x13com.controlplane.v1B\x10AccessTokenProtoP\x01ZXgithub.com/reliant-labs/reliant/gen/controlplane/services/access_token/v1;controlplanev1\xa2\x02\x03CXX\xaa\x02\x0fControlplane.V1\xca\x02\x0fControlplane\\V1\xe2\x02\x1bControlplane\\V1\\GPBMetadata\xea\x02\x10Controlplane::V1b\x06proto3"
 
 var (
@@ -938,55 +1349,71 @@ func file_services_access_token_v1_access_token_proto_rawDescGZIP() []byte {
 	return file_services_access_token_v1_access_token_proto_rawDescData
 }
 
-var file_services_access_token_v1_access_token_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
+var file_services_access_token_v1_access_token_proto_msgTypes = make([]protoimpl.MessageInfo, 21)
 var file_services_access_token_v1_access_token_proto_goTypes = []any{
-	(*ResourceBinding)(nil),       // 0: controlplane.v1.ResourceBinding
-	(*AccessToken)(nil),           // 1: controlplane.v1.AccessToken
-	(*CreateTokenRequest)(nil),    // 2: controlplane.v1.CreateTokenRequest
-	(*CreateTokenResponse)(nil),   // 3: controlplane.v1.CreateTokenResponse
-	(*ListTokensRequest)(nil),     // 4: controlplane.v1.ListTokensRequest
-	(*ListTokensResponse)(nil),    // 5: controlplane.v1.ListTokensResponse
-	(*RevokeTokenRequest)(nil),    // 6: controlplane.v1.RevokeTokenRequest
-	(*RevokeTokenResponse)(nil),   // 7: controlplane.v1.RevokeTokenResponse
-	(*CreateMyTokenRequest)(nil),  // 8: controlplane.v1.CreateMyTokenRequest
-	(*CreateMyTokenResponse)(nil), // 9: controlplane.v1.CreateMyTokenResponse
-	(*ListMyTokensRequest)(nil),   // 10: controlplane.v1.ListMyTokensRequest
-	(*ListMyTokensResponse)(nil),  // 11: controlplane.v1.ListMyTokensResponse
-	(*RevokeMyTokenRequest)(nil),  // 12: controlplane.v1.RevokeMyTokenRequest
-	(*RevokeMyTokenResponse)(nil), // 13: controlplane.v1.RevokeMyTokenResponse
-	(*timestamppb.Timestamp)(nil), // 14: google.protobuf.Timestamp
+	(*OrgMemberGrants)(nil),               // 0: controlplane.v1.OrgMemberGrants
+	(*ListOrgMemberGrantsRequest)(nil),    // 1: controlplane.v1.ListOrgMemberGrantsRequest
+	(*ListOrgMemberGrantsResponse)(nil),   // 2: controlplane.v1.ListOrgMemberGrantsResponse
+	(*UpdateOrgMemberGrantsRequest)(nil),  // 3: controlplane.v1.UpdateOrgMemberGrantsRequest
+	(*UpdateOrgMemberGrantsResponse)(nil), // 4: controlplane.v1.UpdateOrgMemberGrantsResponse
+	(*ResourceBinding)(nil),               // 5: controlplane.v1.ResourceBinding
+	(*AccessToken)(nil),                   // 6: controlplane.v1.AccessToken
+	(*CreateTokenRequest)(nil),            // 7: controlplane.v1.CreateTokenRequest
+	(*CreateTokenResponse)(nil),           // 8: controlplane.v1.CreateTokenResponse
+	(*ListTokensRequest)(nil),             // 9: controlplane.v1.ListTokensRequest
+	(*ListTokensResponse)(nil),            // 10: controlplane.v1.ListTokensResponse
+	(*RevokeTokenRequest)(nil),            // 11: controlplane.v1.RevokeTokenRequest
+	(*RevokeTokenResponse)(nil),           // 12: controlplane.v1.RevokeTokenResponse
+	(*CreateMyTokenRequest)(nil),          // 13: controlplane.v1.CreateMyTokenRequest
+	(*CreateMyTokenResponse)(nil),         // 14: controlplane.v1.CreateMyTokenResponse
+	(*ListMyTokensRequest)(nil),           // 15: controlplane.v1.ListMyTokensRequest
+	(*ListMyTokensResponse)(nil),          // 16: controlplane.v1.ListMyTokensResponse
+	(*RevokeMyTokenRequest)(nil),          // 17: controlplane.v1.RevokeMyTokenRequest
+	(*RevokeMyTokenResponse)(nil),         // 18: controlplane.v1.RevokeMyTokenResponse
+	(*UpdateMyTokenRequest)(nil),          // 19: controlplane.v1.UpdateMyTokenRequest
+	(*UpdateMyTokenResponse)(nil),         // 20: controlplane.v1.UpdateMyTokenResponse
+	(*timestamppb.Timestamp)(nil),         // 21: google.protobuf.Timestamp
 }
 var file_services_access_token_v1_access_token_proto_depIdxs = []int32{
-	14, // 0: controlplane.v1.AccessToken.created_at:type_name -> google.protobuf.Timestamp
-	14, // 1: controlplane.v1.AccessToken.expires_at:type_name -> google.protobuf.Timestamp
-	14, // 2: controlplane.v1.AccessToken.last_used_at:type_name -> google.protobuf.Timestamp
-	14, // 3: controlplane.v1.AccessToken.revoked_at:type_name -> google.protobuf.Timestamp
-	0,  // 4: controlplane.v1.AccessToken.resource:type_name -> controlplane.v1.ResourceBinding
-	14, // 5: controlplane.v1.CreateTokenRequest.expires_at:type_name -> google.protobuf.Timestamp
-	1,  // 6: controlplane.v1.CreateTokenResponse.token:type_name -> controlplane.v1.AccessToken
-	1,  // 7: controlplane.v1.ListTokensResponse.tokens:type_name -> controlplane.v1.AccessToken
-	1,  // 8: controlplane.v1.RevokeTokenResponse.token:type_name -> controlplane.v1.AccessToken
-	14, // 9: controlplane.v1.CreateMyTokenRequest.expires_at:type_name -> google.protobuf.Timestamp
-	0,  // 10: controlplane.v1.CreateMyTokenRequest.resource:type_name -> controlplane.v1.ResourceBinding
-	1,  // 11: controlplane.v1.CreateMyTokenResponse.token:type_name -> controlplane.v1.AccessToken
-	1,  // 12: controlplane.v1.ListMyTokensResponse.tokens:type_name -> controlplane.v1.AccessToken
-	2,  // 13: controlplane.v1.AccessTokenService.CreateToken:input_type -> controlplane.v1.CreateTokenRequest
-	4,  // 14: controlplane.v1.AccessTokenService.ListTokens:input_type -> controlplane.v1.ListTokensRequest
-	6,  // 15: controlplane.v1.AccessTokenService.RevokeToken:input_type -> controlplane.v1.RevokeTokenRequest
-	8,  // 16: controlplane.v1.AccessTokenService.CreateMyToken:input_type -> controlplane.v1.CreateMyTokenRequest
-	10, // 17: controlplane.v1.AccessTokenService.ListMyTokens:input_type -> controlplane.v1.ListMyTokensRequest
-	12, // 18: controlplane.v1.AccessTokenService.RevokeMyToken:input_type -> controlplane.v1.RevokeMyTokenRequest
-	3,  // 19: controlplane.v1.AccessTokenService.CreateToken:output_type -> controlplane.v1.CreateTokenResponse
-	5,  // 20: controlplane.v1.AccessTokenService.ListTokens:output_type -> controlplane.v1.ListTokensResponse
-	7,  // 21: controlplane.v1.AccessTokenService.RevokeToken:output_type -> controlplane.v1.RevokeTokenResponse
-	9,  // 22: controlplane.v1.AccessTokenService.CreateMyToken:output_type -> controlplane.v1.CreateMyTokenResponse
-	11, // 23: controlplane.v1.AccessTokenService.ListMyTokens:output_type -> controlplane.v1.ListMyTokensResponse
-	13, // 24: controlplane.v1.AccessTokenService.RevokeMyToken:output_type -> controlplane.v1.RevokeMyTokenResponse
-	19, // [19:25] is the sub-list for method output_type
-	13, // [13:19] is the sub-list for method input_type
-	13, // [13:13] is the sub-list for extension type_name
-	13, // [13:13] is the sub-list for extension extendee
-	0,  // [0:13] is the sub-list for field type_name
+	0,  // 0: controlplane.v1.ListOrgMemberGrantsResponse.members:type_name -> controlplane.v1.OrgMemberGrants
+	0,  // 1: controlplane.v1.UpdateOrgMemberGrantsResponse.member:type_name -> controlplane.v1.OrgMemberGrants
+	21, // 2: controlplane.v1.AccessToken.created_at:type_name -> google.protobuf.Timestamp
+	21, // 3: controlplane.v1.AccessToken.expires_at:type_name -> google.protobuf.Timestamp
+	21, // 4: controlplane.v1.AccessToken.last_used_at:type_name -> google.protobuf.Timestamp
+	21, // 5: controlplane.v1.AccessToken.revoked_at:type_name -> google.protobuf.Timestamp
+	5,  // 6: controlplane.v1.AccessToken.resource:type_name -> controlplane.v1.ResourceBinding
+	21, // 7: controlplane.v1.CreateTokenRequest.expires_at:type_name -> google.protobuf.Timestamp
+	6,  // 8: controlplane.v1.CreateTokenResponse.token:type_name -> controlplane.v1.AccessToken
+	6,  // 9: controlplane.v1.ListTokensResponse.tokens:type_name -> controlplane.v1.AccessToken
+	6,  // 10: controlplane.v1.RevokeTokenResponse.token:type_name -> controlplane.v1.AccessToken
+	21, // 11: controlplane.v1.CreateMyTokenRequest.expires_at:type_name -> google.protobuf.Timestamp
+	5,  // 12: controlplane.v1.CreateMyTokenRequest.resource:type_name -> controlplane.v1.ResourceBinding
+	6,  // 13: controlplane.v1.CreateMyTokenResponse.token:type_name -> controlplane.v1.AccessToken
+	6,  // 14: controlplane.v1.ListMyTokensResponse.tokens:type_name -> controlplane.v1.AccessToken
+	6,  // 15: controlplane.v1.UpdateMyTokenResponse.token:type_name -> controlplane.v1.AccessToken
+	7,  // 16: controlplane.v1.AccessTokenService.CreateToken:input_type -> controlplane.v1.CreateTokenRequest
+	9,  // 17: controlplane.v1.AccessTokenService.ListTokens:input_type -> controlplane.v1.ListTokensRequest
+	11, // 18: controlplane.v1.AccessTokenService.RevokeToken:input_type -> controlplane.v1.RevokeTokenRequest
+	13, // 19: controlplane.v1.AccessTokenService.CreateMyToken:input_type -> controlplane.v1.CreateMyTokenRequest
+	15, // 20: controlplane.v1.AccessTokenService.ListMyTokens:input_type -> controlplane.v1.ListMyTokensRequest
+	17, // 21: controlplane.v1.AccessTokenService.RevokeMyToken:input_type -> controlplane.v1.RevokeMyTokenRequest
+	19, // 22: controlplane.v1.AccessTokenService.UpdateMyToken:input_type -> controlplane.v1.UpdateMyTokenRequest
+	1,  // 23: controlplane.v1.AccessTokenService.ListOrgMemberGrants:input_type -> controlplane.v1.ListOrgMemberGrantsRequest
+	3,  // 24: controlplane.v1.AccessTokenService.UpdateOrgMemberGrants:input_type -> controlplane.v1.UpdateOrgMemberGrantsRequest
+	8,  // 25: controlplane.v1.AccessTokenService.CreateToken:output_type -> controlplane.v1.CreateTokenResponse
+	10, // 26: controlplane.v1.AccessTokenService.ListTokens:output_type -> controlplane.v1.ListTokensResponse
+	12, // 27: controlplane.v1.AccessTokenService.RevokeToken:output_type -> controlplane.v1.RevokeTokenResponse
+	14, // 28: controlplane.v1.AccessTokenService.CreateMyToken:output_type -> controlplane.v1.CreateMyTokenResponse
+	16, // 29: controlplane.v1.AccessTokenService.ListMyTokens:output_type -> controlplane.v1.ListMyTokensResponse
+	18, // 30: controlplane.v1.AccessTokenService.RevokeMyToken:output_type -> controlplane.v1.RevokeMyTokenResponse
+	20, // 31: controlplane.v1.AccessTokenService.UpdateMyToken:output_type -> controlplane.v1.UpdateMyTokenResponse
+	2,  // 32: controlplane.v1.AccessTokenService.ListOrgMemberGrants:output_type -> controlplane.v1.ListOrgMemberGrantsResponse
+	4,  // 33: controlplane.v1.AccessTokenService.UpdateOrgMemberGrants:output_type -> controlplane.v1.UpdateOrgMemberGrantsResponse
+	25, // [25:34] is the sub-list for method output_type
+	16, // [16:25] is the sub-list for method input_type
+	16, // [16:16] is the sub-list for extension type_name
+	16, // [16:16] is the sub-list for extension extendee
+	0,  // [0:16] is the sub-list for field type_name
 }
 
 func init() { file_services_access_token_v1_access_token_proto_init() }
@@ -994,15 +1421,16 @@ func file_services_access_token_v1_access_token_proto_init() {
 	if File_services_access_token_v1_access_token_proto != nil {
 		return
 	}
-	file_services_access_token_v1_access_token_proto_msgTypes[4].OneofWrappers = []any{}
-	file_services_access_token_v1_access_token_proto_msgTypes[10].OneofWrappers = []any{}
+	file_services_access_token_v1_access_token_proto_msgTypes[9].OneofWrappers = []any{}
+	file_services_access_token_v1_access_token_proto_msgTypes[15].OneofWrappers = []any{}
+	file_services_access_token_v1_access_token_proto_msgTypes[19].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_services_access_token_v1_access_token_proto_rawDesc), len(file_services_access_token_v1_access_token_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   14,
+			NumMessages:   21,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

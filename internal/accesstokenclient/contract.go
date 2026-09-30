@@ -53,6 +53,10 @@ type Service interface {
 	ListForUser(ctx context.Context, userID string, scope fat.Scope) ([]TokenInfo, error)
 	// RevokeForUser revokes one of a user's tokens.
 	RevokeForUser(ctx context.Context, userID, tokenID string) error
+	// UpdateForUser changes one of a user's tokens' name and/or scopes
+	// WITHOUT reissuing the secret. A nil name or nil scopes leaves that half
+	// alone.
+	UpdateForUser(ctx context.Context, userID, tokenID string, name *string, scopes fat.Set) (TokenInfo, error)
 	// RevokeResource revokes every live token bound to resource.
 	RevokeResource(ctx context.Context, resource fat.Resource) (int64, error)
 	// RevokeEphemeral revokes a user's ephemeral tokens (session end).

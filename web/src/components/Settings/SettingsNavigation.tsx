@@ -49,7 +49,12 @@ const sectionGroups: SectionGroup[] = [
       // controlplane.v1 public RPCs. Gated on hasControlPlane because they're
       // meaningless without a control-plane backend.
       ...(hasControlPlane
-        ? [{ id: "billing", label: "Billing", icon: CreditCard }]
+        ? [
+            { id: "billing", label: "Billing", icon: CreditCard },
+            // What each member of the org may do. Cloud-only: a self-hosted
+            // deployment has no organization to grant permissions within.
+            { id: "member-permissions", label: "Member Permissions", icon: Shield },
+          ]
         : []),
       { id: "git-connections", label: "GitHub", icon: Github },
     ],

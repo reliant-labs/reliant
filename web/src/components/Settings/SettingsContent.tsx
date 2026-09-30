@@ -10,6 +10,7 @@ import { MCPSettings } from "./MCPSettings";
 import { WorkspacesSection } from "./WorkspacesSection";
 import { BrowserSettings } from "./BrowserSettings";
 import { TokenSettings } from "./TokenSettings";
+import { MemberPermissions } from "./cloud/MemberPermissions";
 import { ConnectorSettings } from "./ConnectorSettings";
 import { GitConnectionsSettings } from "./GitConnectionsSettings";
 import type { SettingsSection } from "./SettingsNavigation";
@@ -100,6 +101,9 @@ export function SettingsContent({
     }
     if (activeSection === "tokens") {
       return <TokenSettings />;
+    }
+    if (activeSection === "member-permissions") {
+      return <MemberPermissions />;
     }
     if (activeSection === "connectors") {
       return <ConnectorSettings />;

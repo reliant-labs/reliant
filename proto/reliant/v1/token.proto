@@ -30,7 +30,25 @@ service TokenService {
   // ListTokens returns the caller's live tokens of one kind (or all kinds).
   rpc ListTokens(ListTokensRequest) returns (ListTokensResponse) {}
   // RevokeToken revokes one of the caller's tokens, immediately.
+  //
+  // For a token bound to a daemon this also disconnects that daemon: its
+  // credential is permanent, so revocation is the only thing that ends its
+  // authority, and leaving it connected would show a revoked token beside a
+  // daemon that still looks healthy.
   rpc RevokeToken(RevokeTokenRequest) returns (RevokeTokenResponse) {}
+
+  // UpdateToken changes one of the caller's tokens' name and/or permissions.
+  //
+  // THE SECRET IS NEVER REISSUED. A live daemon's permissions can be widened
+  // or narrowed without re-registering it — which for a remote daemon would
+  // mean a browser login it cannot perform — and the change is live on the
+  // token's very next request, because authentication reads the row every
+  // time. Rotation is deliberately NOT this operation: it is mint-new plus
+  // revoke-old.
+  //
+  // New permissions are clipped to what the caller holds, exactly as a mint
+  // is, so editing can never widen past the person's own authority.
+  rpc UpdateToken(UpdateTokenRequest) returns (UpdateTokenResponse) {}
 }
 
 enum TokenKind {
@@ -63,6 +81,16 @@ message TokenInfo {
   bool ephemeral = 8;
   string daemon_id = 9;     // Set when the token is bound to one daemon
   TokenKind kind = 10;
+  // scopes are the permissions this credential carries
+  // (forge/pkg/accesstoken), e.g. "daemon:connect", "deploy:write". A daemon
+  // credential carries deploy, secret and domain authority so forge running
+  // inside that daemon can act as the user (control-plane migration 00112).
+  //
+  // Surfaced because a permanent credential's PERMISSIONS are the thing a
+  // user needs to audit: with no expiry to bound it, "what can this token
+  // do" is the only remaining question, and a list that hides it cannot
+  // answer it.
+  repeated string scopes = 11;
 }
 
 message CreateTokenResponse {
@@ -83,3 +111,23 @@ message RevokeTokenRequest {
 }
 
 message RevokeTokenResponse {}
+
+message UpdateTokenRequest {
+  string id = 1;
+  // name renames the token; absent leaves it alone.
+  optional string name = 2;
+  // scopes replaces the token's permissions with this COMPLETE set. Absent
+  // leaves them alone — which is why it is a wrapper and not a bare repeated
+  // field: an empty repeated field is indistinguishable from an omitted one,
+  // so a rename would silently strip every permission.
+  optional ScopeList scopes = 3;
+}
+
+// ScopeList wraps a permission list so "not set" and "set to empty" differ.
+message ScopeList {
+  repeated string scopes = 1;
+}
+
+message UpdateTokenResponse {
+  TokenInfo info = 1;
+}

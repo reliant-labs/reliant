@@ -70,7 +70,9 @@ describe("TokenSettings", () => {
     // Mutation caught: sending the retired `tokenId` field instead of `id`.
     render(<TokenSettings />);
     await screen.findByText("build-box");
-    fireEvent.click(screen.getByRole("button", { name: "" }));
+    // The revoke control is a labelled button now, not a bare trash icon —
+    // the row also carries Edit, so an icon with no name was ambiguous.
+    fireEvent.click(screen.getByRole("button", { name: /revoke/i }));
     fireEvent.click(await screen.findByText("Confirm"));
     await waitFor(() => expect(revokeToken).toHaveBeenCalledTimes(1));
     expect(revokeToken.mock.calls[0][0]).toMatchObject({ id: "tok-1" });
