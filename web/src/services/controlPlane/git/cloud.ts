@@ -82,6 +82,8 @@ export async function getCredential(
       kind: credentialKindFromProto(res.kind),
       health: credentialHealthFromProto(res.health),
       expiresAt: timestampToISO(res.expiresAt),
+      installUrl: res.installUrl || undefined,
+      appSlug: res.appSlug || undefined,
       installations: res.installations.map((i) => ({
         accountLogin: i.accountLogin,
         accountType: i.accountType,

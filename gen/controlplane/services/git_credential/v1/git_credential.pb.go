@@ -385,6 +385,18 @@ type GetGitCredentialResponse struct {
 	// GitHub App installations reachable by this credential. Always empty for
 	// kinds where the concept does not apply.
 	Installations []*GitAppInstallation `protobuf:"bytes,11,rep,name=installations,proto3" json:"installations,omitempty"`
+	// Where to send the user to ADD an account or change which repositories the
+	// App can see — GitHub's installation flow. This is a different action from
+	// re-running OAuth: OAuth re-authorizes the user, and changes nothing about
+	// which accounts or repos the App is installed on.
+	//
+	// Empty when the App slug is not configured and no installation reported
+	// one; clients must treat it as optional rather than rendering a dead link.
+	InstallUrl string `protobuf:"bytes,12,opt,name=install_url,json=installUrl,proto3" json:"install_url,omitempty"`
+	// The App's URL slug (the <slug> in github.com/apps/<slug>), for clients
+	// that want to build their own links. Empty under the same conditions as
+	// install_url.
+	AppSlug       string `protobuf:"bytes,13,opt,name=app_slug,json=appSlug,proto3" json:"app_slug,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -494,6 +506,20 @@ func (x *GetGitCredentialResponse) GetInstallations() []*GitAppInstallation {
 		return x.Installations
 	}
 	return nil
+}
+
+func (x *GetGitCredentialResponse) GetInstallUrl() string {
+	if x != nil {
+		return x.InstallUrl
+	}
+	return ""
+}
+
+func (x *GetGitCredentialResponse) GetAppSlug() string {
+	if x != nil {
+		return x.AppSlug
+	}
+	return ""
 }
 
 type DeleteGitCredentialRequest struct {
@@ -976,7 +1002,7 @@ const file_services_git_credential_v1_git_credential_proto_rawDesc = "" +
 	"\n" +
 	"avatar_url\x18\x03 \x01(\tR\tavatarUrl\x12#\n" +
 	"\rconfigure_url\x18\x04 \x01(\tR\fconfigureUrl\x121\n" +
-	"\x14repository_selection\x18\x05 \x01(\tR\x13repositorySelection\"\xb0\x04\n" +
+	"\x14repository_selection\x18\x05 \x01(\tR\x13repositorySelection\"\xec\x04\n" +
 	"\x18GetGitCredentialResponse\x12\x1a\n" +
 	"\bprovider\x18\x01 \x01(\tR\bprovider\x12\x16\n" +
 	"\x06scopes\x18\x02 \x01(\tR\x06scopes\x12\x1b\n" +
@@ -992,7 +1018,10 @@ const file_services_git_credential_v1_git_credential_proto_rawDesc = "" +
 	"\n" +
 	"expires_at\x18\n" +
 	" \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt\x12I\n" +
-	"\rinstallations\x18\v \x03(\v2#.controlplane.v1.GitAppInstallationR\rinstallations\"8\n" +
+	"\rinstallations\x18\v \x03(\v2#.controlplane.v1.GitAppInstallationR\rinstallations\x12\x1f\n" +
+	"\vinstall_url\x18\f \x01(\tR\n" +
+	"installUrl\x12\x19\n" +
+	"\bapp_slug\x18\r \x01(\tR\aappSlug\"8\n" +
 	"\x1aDeleteGitCredentialRequest\x12\x1a\n" +
 	"\bprovider\x18\x01 \x01(\tR\bprovider\"\x1d\n" +
 	"\x1bDeleteGitCredentialResponse\"}\n" +
