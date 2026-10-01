@@ -17,7 +17,7 @@ import type { JsonObject, Message } from "@bufbuild/protobuf";
  * Describes the file controlplane/v1/deploy.proto.
  */
 export const file_controlplane_v1_deploy: GenFile = /*@__PURE__*/
-  fileDesc("Chxjb250cm9scGxhbmUvdjEvZGVwbG95LnByb3RvEg9jb250cm9scGxhbmUudjEipgEKDERlcGxveVRlbmFudBIOCgZvcmdfaWQYASABKAkSDAoEc2x1ZxgCIAEoCRIYChBuYW1lc3BhY2VfcHJlZml4GAMgASgJEi4KCmNyZWF0ZWRfYXQYBCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi4KCnVwZGF0ZWRfYXQYBSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIqsCChNEZXBsb3lUZW5hbnRDbHVzdGVyEgoKAmlkGAEgASgJEgwKBG5hbWUYAiABKAkSOAoIcHJvdmlkZXIYAyABKA4yJi5jb250cm9scGxhbmUudjEuRGVwbG95Q2x1c3RlclByb3ZpZGVyEjIKBXBoYXNlGAQgASgOMiMuY29udHJvbHBsYW5lLnYxLkRlcGxveUNsdXN0ZXJQaGFzZRIsCghyZWFkeV9hdBgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLgoKY3JlYXRlZF9hdBgGIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLgoKdXBkYXRlZF9hdBgHIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAilgQKEURlcGxveUVudmlyb25tZW50EgoKAmlkGAEgASgJEgwKBG5hbWUYAiABKAkSNAoEa2luZBgDIAEoDjImLmNvbnRyb2xwbGFuZS52MS5EZXBsb3lFbnZpcm9ubWVudEtpbmQSEQoJbmFtZXNwYWNlGAQgASgJEhkKEXRlbmFudF9jbHVzdGVyX2lkGAUgASgJEhwKFGN1cnJlbnRfcHJvbW90aW9uX2lkGAYgASgJEi4KCmV4cGlyZXNfYXQYByABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhIKCnNvdXJjZV9yZWYYCCABKAkSHQoVc2NhbGVfdG9femVyb19lbmFibGVkGAkgASgIEiIKGnNjYWxlX3RvX3plcm9faWRsZV9zZWNvbmRzGAogASgFEi4KCmNyZWF0ZWRfYXQYCyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi4KCnVwZGF0ZWRfYXQYDCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEkAKEHJlY29uY2lsZV9wb2xpY3kYDSABKA4yJi5jb250cm9scGxhbmUudjEuRGVwbG95UmVjb25jaWxlUG9saWN5EhcKD2ltYWdlX3B1c2hfYmFzZRgOIAEoCRIPCgdwcm9qZWN0GA8gASgJSgQIEBARUgxjYXBhYmlsaXRpZXMi0AIKFURlcGxveUVudmlyb25tZW50U3BlYxIMCgRuYW1lGAEgASgJEjQKBGtpbmQYAiABKA4yJi5jb250cm9scGxhbmUudjEuRGVwbG95RW52aXJvbm1lbnRLaW5kEhkKEXRlbmFudF9jbHVzdGVyX2lkGAMgASgJEi4KCmV4cGlyZXNfYXQYBCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhIKCnNvdXJjZV9yZWYYBSABKAkSHQoVc2NhbGVfdG9femVyb19lbmFibGVkGAYgASgIEiIKGnNjYWxlX3RvX3plcm9faWRsZV9zZWNvbmRzGAcgASgFEkAKEHJlY29uY2lsZV9wb2xpY3kYCCABKA4yJi5jb250cm9scGxhbmUudjEuRGVwbG95UmVjb25jaWxlUG9saWN5Eg8KB3Byb2plY3QYCSABKAki7wIKGURlcGxveU9ic2VydmVkU3RhdGVEZXRhaWwSMwoFc3RhdGUYASABKA4yJC5jb250cm9scGxhbmUudjEuRGVwbG95T2JzZXJ2ZWRTdGF0ZRIQCghyZXBsaWNhcxgCIAEoBRIUCgxpbWFnZV9kaWdlc3QYAyABKAkSMQoNcmVjb25jaWxlZF9hdBgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEgoKbGFzdF9lcnJvchgFIAEoCRILCgN1cmwYBiABKAkSMAoMc3RhYmxlX3NpbmNlGAcgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBI6Cgdkb21haW5zGAggAygLMikuY29udHJvbHBsYW5lLnYxLkRlcGxveUN1c3RvbURvbWFpblN0YXR1cxIzCgZiYWNrdXAYCSABKAsyIy5jb250cm9scGxhbmUudjEuRGVwbG95QmFja3VwU3RhdHVzIsEBChJEZXBsb3lCYWNrdXBTdGF0dXMSOgoWbGFzdF9zdWNjZXNzZnVsX2JhY2t1cBgBIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASHQoVd2FsX2FyY2hpdmluZ19oZWFsdGh5GAIgASgIEjwKGGVhcmxpZXN0X3Jlc3RvcmFibGVfdGltZRgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEgoKbGFzdF9lcnJvchgEIAEoCSLjAQoYRGVwbG95Q3VzdG9tRG9tYWluU3RhdHVzEg4KBmRvbWFpbhgBIAEoCRI3CgVzdGF0ZRgCIAEoDjIoLmNvbnRyb2xwbGFuZS52MS5EZXBsb3lDdXN0b21Eb21haW5TdGF0ZRI6ChByZXF1aXJlZF9yZWNvcmRzGAMgAygLMiAuY29udHJvbHBsYW5lLnYxLkRlcGxveURuc1JlY29yZBISCgpsYXN0X2Vycm9yGAQgASgJEi4KCmxpdmVfc2luY2UYBSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIl4KD0RlcGxveURuc1JlY29yZBIMCgR0eXBlGAEgASgJEgwKBG5hbWUYAiABKAkSDQoFdmFsdWUYAyABKAkSEAoIcmVzb2x2ZWQYBCABKAgSDgoGZGV0YWlsGAUgASgJItADCgZEb21haW4SCgoCaWQYASABKAkSEAoIaG9zdG5hbWUYAiABKAkSNwoFc3RhdGUYAyABKA4yKC5jb250cm9scGxhbmUudjEuRGVwbG95Q3VzdG9tRG9tYWluU3RhdGUSLQoGc291cmNlGAQgASgOMh0uY29udHJvbHBsYW5lLnYxLkRvbWFpblNvdXJjZRI6ChByZXF1aXJlZF9yZWNvcmRzGAUgAygLMiAuY29udHJvbHBsYW5lLnYxLkRlcGxveURuc1JlY29yZBISCgpsYXN0X2Vycm9yGAYgASgJEi8KC3ZlcmlmaWVkX2F0GAcgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIuCgpsaXZlX3NpbmNlGAggASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIuCgpjcmVhdGVkX2F0GAkgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIuCgp1cGRhdGVkX2F0GAogASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIvCgdiaW5kaW5nGAsgASgLMh4uY29udHJvbHBsYW5lLnYxLkRvbWFpbkJpbmRpbmciywEKDURvbWFpbkJpbmRpbmcSCgoCaWQYASABKAkSEQoJZG9tYWluX2lkGAIgASgJEhYKDmVudmlyb25tZW50X2lkGAMgASgJEg4KBnRhcmdldBgEIAEoCRITCgtyZWRpcmVjdF90bxgFIAEoCRIuCgpjcmVhdGVkX2F0GAYgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIuCgp1cGRhdGVkX2F0GAcgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCLyAgoKRGVwbG95bWVudBIKCgJpZBgBIAEoCRIOCgZvcmdfaWQYAiABKAkSFgoOZW52aXJvbm1lbnRfaWQYAyABKAkSDAoEbmFtZRgEIAEoCRIpCgR0aWVyGAUgASgOMhsuY29udHJvbHBsYW5lLnYxLkRlcGxveVRpZXISPAoIb2JzZXJ2ZWQYByABKAsyKi5jb250cm9scGxhbmUudjEuRGVwbG95T2JzZXJ2ZWRTdGF0ZURldGFpbBIuCgpjcmVhdGVkX2F0GAggASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIuCgp1cGRhdGVkX2F0GAkgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIlCgRzcGVjGAsgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdBIyCglydW5fc3RhdGUYCiABKA4yHy5jb250cm9scGxhbmUudjEuRGVwbG95UnVuU3RhdGUizgEKDkRlcGxveUFydGlmYWN0EgwKBG5hbWUYASABKAkSDgoGZGlnZXN0GAIgASgJEhEKCXBsYXRmb3JtcxgDIAMoCRIMCgRraW5kGAQgASgJEg8KB3ZlcnNpb24YBSABKAkSEQoJaW50ZWdyaXR5GAYgASgJEgsKA3VyaRgHIAEoCRIMCgRtb2RlGAggASgJEg8KB3ZhcmlhbnQYCSABKAkSLQoGc291cmNlGAogASgLMh0uY29udHJvbHBsYW5lLnYxLkRlcGxveVNvdXJjZSJJCgxEZXBsb3lTb3VyY2USDAoEcmVwbxgBIAEoCRILCgNyZWYYAiABKAkSDgoGc3ViZGlyGAMgASgJEg4KBmNvbW1pdBgEIAEoCSLkAQoNRGVwbG95UmVsZWFzZRIKCgJpZBgBIAEoCRIPCgd2ZXJzaW9uGAIgASgJEhIKCmdpdF9jb21taXQYAyABKAkSDwoHZ2l0X3RhZxgEIAEoCRIRCglnaXRfZGlydHkYBSABKAgSMgoJYXJ0aWZhY3RzGAYgAygLMh8uY29udHJvbHBsYW5lLnYxLkRlcGxveUFydGlmYWN0EhoKEmNyZWF0ZWRfYnlfdXNlcl9pZBgHIAEoCRIuCgpjcmVhdGVkX2F0GAggASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCI3CgpEZXBsb3lHYXRlEgwKBG5hbWUYASABKAkSDgoGc3RhdHVzGAIgASgJEgsKA3VybBgDIAEoCSKMBQoPRGVwbG95UHJvbW90aW9uEgoKAmlkGAEgASgJEhYKDmVudmlyb25tZW50X2lkGAIgASgJEhIKCnJlbGVhc2VfaWQYAyABKAkSMgoEa2luZBgEIAEoDjIkLmNvbnRyb2xwbGFuZS52MS5EZXBsb3lQcm9tb3Rpb25LaW5kEhsKE2Zyb21fZW52aXJvbm1lbnRfaWQYBSABKAkSUwoScmVzb2x2ZWRfYXJ0aWZhY3RzGAYgAygLMjcuY29udHJvbHBsYW5lLnYxLkRlcGxveVByb21vdGlvbi5SZXNvbHZlZEFydGlmYWN0c0VudHJ5EhsKE3Byb21vdGVkX2J5X3VzZXJfaWQYByABKAkSGQoRcHJvbW90ZWRfYnlfYWN0b3IYCCABKAkSKgoFZ2F0ZXMYCSADKAsyGy5jb250cm9scGxhbmUudjEuRGVwbG95R2F0ZRIMCgRub3RlGAogASgJEi4KCmNyZWF0ZWRfYXQYCyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEk8KEHJlc29sdmVkX3NvdXJjZXMYDCADKAsyNS5jb250cm9scGxhbmUudjEuRGVwbG95UHJvbW90aW9uLlJlc29sdmVkU291cmNlc0VudHJ5EhcKD3JlbGVhc2VfdmVyc2lvbhgNIAEoCRo4ChZSZXNvbHZlZEFydGlmYWN0c0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEaVQoUUmVzb2x2ZWRTb3VyY2VzRW50cnkSCwoDa2V5GAEgASgJEiwKBXZhbHVlGAIgASgLMh0uY29udHJvbHBsYW5lLnYxLkRlcGxveVNvdXJjZToCOAEiuAIKDkRlcGxveVVzYWdlUm93EjoKDXJlc291cmNlX2tpbmQYASABKA4yIy5jb250cm9scGxhbmUudjEuRGVwbG95UmVzb3VyY2VLaW5kEhYKDmVudmlyb25tZW50X2lkGAIgASgJEhUKDWRlcGxveW1lbnRfaWQYAyABKAkSGQoRdGVuYW50X2NsdXN0ZXJfaWQYBCABKAkSMAoMd2luZG93X3N0YXJ0GAUgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIuCgp3aW5kb3dfZW5kGAYgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIQCghxdWFudGl0eRgHIAEoAxIUCgx1bml0X2Rpc3BsYXkYCCABKAkSFgoOY29zdF91c2RfbmFub3MYCSABKAMicgoNRGVwbG95TG9nTGluZRIQCghzZXF1ZW5jZRgBIAEoAxItCgl0aW1lc3RhbXAYAiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEg8KB21lc3NhZ2UYAyABKAkSDwoHY2hhbm5lbBgEIAEoCSJpChtEZXBsb3lUZW5hbnRDbHVzdGVySW50ZXJuYWwSGQoRdGVuYW50X2NsdXN0ZXJfaWQYASABKAkSFwoPaG9zdF9jbHVzdGVyX2lkGAIgASgJEhYKDmhvc3RfbmFtZXNwYWNlGAMgASgJIkwKGURlcGxveUVudmlyb25tZW50SW50ZXJuYWwSFgoOZW52aXJvbm1lbnRfaWQYASABKAkSFwoPaG9zdF9jbHVzdGVyX2lkGAIgASgJItEBChhEZXBsb3lEZXBsb3ltZW50SW50ZXJuYWwSFQoNZGVwbG95bWVudF9pZBgBIAEoCRIXCg9ob3N0X2NsdXN0ZXJfaWQYAiABKAkSEQoJbmFtZXNwYWNlGAMgASgJEhUKDXJlc291cmNlX25hbWUYBCABKAkSPQoZbGFzdF9yZWNvbmNpbGVfYXR0ZW1wdF9hdBgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASHAoUY29uc2VjdXRpdmVfZmFpbHVyZXMYBiABKAUqjQEKCkRlcGxveVRpZXISGwoXREVQTE9ZX1RJRVJfVU5TUEVDSUZJRUQQABIWChJERVBMT1lfVElFUl9TVEFUSUMQARIXChNERVBMT1lfVElFUl9CQUNLRU5EEAISGAoUREVQTE9ZX1RJRVJfREFUQUJBU0UQAxIXChNERVBMT1lfVElFUl9DTFVTVEVSEAQqsAEKFURlcGxveUVudmlyb25tZW50S2luZBInCiNERVBMT1lfRU5WSVJPTk1FTlRfS0lORF9VTlNQRUNJRklFRBAAEiYKIkRFUExPWV9FTlZJUk9OTUVOVF9LSU5EX1BFUlNJU1RFTlQQARIjCh9ERVBMT1lfRU5WSVJPTk1FTlRfS0lORF9QUkVWSUVXEAISIQodREVQTE9ZX0VOVklST05NRU5UX0tJTkRfTE9DQUwQAypwCg5EZXBsb3lSdW5TdGF0ZRIgChxERVBMT1lfUlVOX1NUQVRFX1VOU1BFQ0lGSUVEEAASHAoYREVQTE9ZX1JVTl9TVEFURV9SVU5OSU5HEAESHgoaREVQTE9ZX1JVTl9TVEFURV9TVVNQRU5ERUQQAiqTAgoTRGVwbG95T2JzZXJ2ZWRTdGF0ZRIlCiFERVBMT1lfT0JTRVJWRURfU1RBVEVfVU5TUEVDSUZJRUQQABIhCh1ERVBMT1lfT0JTRVJWRURfU1RBVEVfUEVORElORxABEiUKIURFUExPWV9PQlNFUlZFRF9TVEFURV9QUk9HUkVTU0lORxACEh8KG0RFUExPWV9PQlNFUlZFRF9TVEFURV9SRUFEWRADEiIKHkRFUExPWV9PQlNFUlZFRF9TVEFURV9ERUdSQURFRBAEEiMKH0RFUExPWV9PQlNFUlZFRF9TVEFURV9TVVNQRU5ERUQQBRIhCh1ERVBMT1lfT0JTRVJWRURfU1RBVEVfREVMRVRFRBAGKsIBCg1EZXBsb3lWZXJkaWN0Eh4KGkRFUExPWV9WRVJESUNUX1VOU1BFQ0lGSUVEEAASGgoWREVQTE9ZX1ZFUkRJQ1RfVU5LTk9XThABEh0KGURFUExPWV9WRVJESUNUX0NPTlZFUkdJTkcQAhIcChhERVBMT1lfVkVSRElDVF9DT05WRVJHRUQQAxIbChdERVBMT1lfVkVSRElDVF9ESVZFUkdFRBAEEhsKF0RFUExPWV9WRVJESUNUX0RFR1JBREVEEAUqrwEKFURlcGxveVJlY29uY2lsZVBvbGljeRInCiNERVBMT1lfUkVDT05DSUxFX1BPTElDWV9VTlNQRUNJRklFRBAAEiMKH0RFUExPWV9SRUNPTkNJTEVfUE9MSUNZX09CU0VSVkUQARIkCiBERVBMT1lfUkVDT05DSUxFX1BPTElDWV9DT05WRVJHRRACEiIKHkRFUExPWV9SRUNPTkNJTEVfUE9MSUNZX1BJTk5FRBADKl8KE0RlcGxveVByb21vdGlvbktpbmQSJQohREVQTE9ZX1BST01PVElPTl9LSU5EX1VOU1BFQ0lGSUVEEAASIQodREVQTE9ZX1BST01PVElPTl9LSU5EX1BST01PVEUQASqbAQoVRGVwbG95Q2x1c3RlclByb3ZpZGVyEicKI0RFUExPWV9DTFVTVEVSX1BST1ZJREVSX1VOU1BFQ0lGSUVEEAASKwonREVQTE9ZX0NMVVNURVJfUFJPVklERVJfVkNMVVNURVJfU0hBUkVEEAESLAooREVQTE9ZX0NMVVNURVJfUFJPVklERVJfVkNMVVNURVJfUFJJVkFURRACKqIBChJEZXBsb3lDbHVzdGVyUGhhc2USJAogREVQTE9ZX0NMVVNURVJfUEhBU0VfVU5TUEVDSUZJRUQQABIlCiFERVBMT1lfQ0xVU1RFUl9QSEFTRV9QUk9WSVNJT05JTkcQARIeChpERVBMT1lfQ0xVU1RFUl9QSEFTRV9SRUFEWRACEh8KG0RFUExPWV9DTFVTVEVSX1BIQVNFX0ZBSUxFRBADKr4CChJEZXBsb3lSZXNvdXJjZUtpbmQSJAogREVQTE9ZX1JFU09VUkNFX0tJTkRfVU5TUEVDSUZJRUQQABIiCh5ERVBMT1lfUkVTT1VSQ0VfS0lORF9DUFVfTUlMTEkQARIgChxERVBMT1lfUkVTT1VSQ0VfS0lORF9NRU1fTUlCEAISIQodREVQTE9ZX1JFU09VUkNFX0tJTkRfVkNMVVNURVIQBRIjCh9ERVBMT1lfUkVTT1VSQ0VfS0lORF9FR1JFU1NfR0lCEAYSJwojREVQTE9ZX1JFU09VUkNFX0tJTkRfQ0ROX0VHUkVTU19HSUIQBxIlCiFERVBMT1lfUkVTT1VSQ0VfS0lORF9DRE5fUkVRVUVTVFMQCBIkCiBERVBMT1lfUkVTT1VSQ0VfS0lORF9TVE9SQUdFX0dJQhAKKnAKD0RlcGxveUxvZ1N0cmVhbRIhCh1ERVBMT1lfTE9HX1NUUkVBTV9VTlNQRUNJRklFRBAAEhsKF0RFUExPWV9MT0dfU1RSRUFNX0JVSUxEEAESHQoZREVQTE9ZX0xPR19TVFJFQU1fUlVOVElNRRACKrgCChdEZXBsb3lDdXN0b21Eb21haW5TdGF0ZRIqCiZERVBMT1lfQ1VTVE9NX0RPTUFJTl9TVEFURV9VTlNQRUNJRklFRBAAEioKJkRFUExPWV9DVVNUT01fRE9NQUlOX1NUQVRFX1BFTkRJTkdfRE5TEAESKAokREVQTE9ZX0NVU1RPTV9ET01BSU5fU1RBVEVfVkVSSUZZSU5HEAISJgoiREVQTE9ZX0NVU1RPTV9ET01BSU5fU1RBVEVfSVNTVUlORxADEiMKH0RFUExPWV9DVVNUT01fRE9NQUlOX1NUQVRFX0xJVkUQBBIlCiFERVBMT1lfQ1VTVE9NX0RPTUFJTl9TVEFURV9GQUlMRUQQBRInCiNERVBMT1lfQ1VTVE9NX0RPTUFJTl9TVEFURV9DT05GTElDVBAGKmUKDERvbWFpblNvdXJjZRIdChlET01BSU5fU09VUkNFX1VOU1BFQ0lGSUVEEAASGgoWRE9NQUlOX1NPVVJDRV9FWFRFUk5BTBABEhoKFkRPTUFJTl9TT1VSQ0VfUExBVEZPUk0QAkLQAQoTY29tLmNvbnRyb2xwbGFuZS52MUILRGVwbG95UHJvdG9QAVpPZ2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vY29udHJvbHBsYW5lL2NvbnRyb2xwbGFuZS92MTtjb250cm9scGxhbmV2MaICA0NYWKoCD0NvbnRyb2xwbGFuZS5WMcoCD0NvbnRyb2xwbGFuZVxWMeICG0NvbnRyb2xwbGFuZVxWMVxHUEJNZXRhZGF0YeoCEENvbnRyb2xwbGFuZTo6VjFiBnByb3RvMw", [file_google_protobuf_struct, file_google_protobuf_timestamp]);
+  fileDesc("Chxjb250cm9scGxhbmUvdjEvZGVwbG95LnByb3RvEg9jb250cm9scGxhbmUudjEipgEKDERlcGxveVRlbmFudBIOCgZvcmdfaWQYASABKAkSDAoEc2x1ZxgCIAEoCRIYChBuYW1lc3BhY2VfcHJlZml4GAMgASgJEi4KCmNyZWF0ZWRfYXQYBCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi4KCnVwZGF0ZWRfYXQYBSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIqsCChNEZXBsb3lUZW5hbnRDbHVzdGVyEgoKAmlkGAEgASgJEgwKBG5hbWUYAiABKAkSOAoIcHJvdmlkZXIYAyABKA4yJi5jb250cm9scGxhbmUudjEuRGVwbG95Q2x1c3RlclByb3ZpZGVyEjIKBXBoYXNlGAQgASgOMiMuY29udHJvbHBsYW5lLnYxLkRlcGxveUNsdXN0ZXJQaGFzZRIsCghyZWFkeV9hdBgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLgoKY3JlYXRlZF9hdBgGIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLgoKdXBkYXRlZF9hdBgHIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAitAQKEURlcGxveUVudmlyb25tZW50EgoKAmlkGAEgASgJEgwKBG5hbWUYAiABKAkSNAoEa2luZBgDIAEoDjImLmNvbnRyb2xwbGFuZS52MS5EZXBsb3lFbnZpcm9ubWVudEtpbmQSEQoJbmFtZXNwYWNlGAQgASgJEhkKEXRlbmFudF9jbHVzdGVyX2lkGAUgASgJEhwKFGN1cnJlbnRfcHJvbW90aW9uX2lkGAYgASgJEi4KCmV4cGlyZXNfYXQYByABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhIKCnNvdXJjZV9yZWYYCCABKAkSHQoVc2NhbGVfdG9femVyb19lbmFibGVkGAkgASgIEiIKGnNjYWxlX3RvX3plcm9faWRsZV9zZWNvbmRzGAogASgFEi4KCmNyZWF0ZWRfYXQYCyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi4KCnVwZGF0ZWRfYXQYDCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEkAKEHJlY29uY2lsZV9wb2xpY3kYDSABKA4yJi5jb250cm9scGxhbmUudjEuRGVwbG95UmVjb25jaWxlUG9saWN5EhcKD2ltYWdlX3B1c2hfYmFzZRgOIAEoCRIPCgdwcm9qZWN0GA8gASgJEhwKFGNvbnZlcmdlc19wcm9tb3Rpb25zGBEgASgISgQIEBARUgxjYXBhYmlsaXRpZXMi0AIKFURlcGxveUVudmlyb25tZW50U3BlYxIMCgRuYW1lGAEgASgJEjQKBGtpbmQYAiABKA4yJi5jb250cm9scGxhbmUudjEuRGVwbG95RW52aXJvbm1lbnRLaW5kEhkKEXRlbmFudF9jbHVzdGVyX2lkGAMgASgJEi4KCmV4cGlyZXNfYXQYBCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhIKCnNvdXJjZV9yZWYYBSABKAkSHQoVc2NhbGVfdG9femVyb19lbmFibGVkGAYgASgIEiIKGnNjYWxlX3RvX3plcm9faWRsZV9zZWNvbmRzGAcgASgFEkAKEHJlY29uY2lsZV9wb2xpY3kYCCABKA4yJi5jb250cm9scGxhbmUudjEuRGVwbG95UmVjb25jaWxlUG9saWN5Eg8KB3Byb2plY3QYCSABKAki7wIKGURlcGxveU9ic2VydmVkU3RhdGVEZXRhaWwSMwoFc3RhdGUYASABKA4yJC5jb250cm9scGxhbmUudjEuRGVwbG95T2JzZXJ2ZWRTdGF0ZRIQCghyZXBsaWNhcxgCIAEoBRIUCgxpbWFnZV9kaWdlc3QYAyABKAkSMQoNcmVjb25jaWxlZF9hdBgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEgoKbGFzdF9lcnJvchgFIAEoCRILCgN1cmwYBiABKAkSMAoMc3RhYmxlX3NpbmNlGAcgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBI6Cgdkb21haW5zGAggAygLMikuY29udHJvbHBsYW5lLnYxLkRlcGxveUN1c3RvbURvbWFpblN0YXR1cxIzCgZiYWNrdXAYCSABKAsyIy5jb250cm9scGxhbmUudjEuRGVwbG95QmFja3VwU3RhdHVzIsEBChJEZXBsb3lCYWNrdXBTdGF0dXMSOgoWbGFzdF9zdWNjZXNzZnVsX2JhY2t1cBgBIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASHQoVd2FsX2FyY2hpdmluZ19oZWFsdGh5GAIgASgIEjwKGGVhcmxpZXN0X3Jlc3RvcmFibGVfdGltZRgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEgoKbGFzdF9lcnJvchgEIAEoCSLjAQoYRGVwbG95Q3VzdG9tRG9tYWluU3RhdHVzEg4KBmRvbWFpbhgBIAEoCRI3CgVzdGF0ZRgCIAEoDjIoLmNvbnRyb2xwbGFuZS52MS5EZXBsb3lDdXN0b21Eb21haW5TdGF0ZRI6ChByZXF1aXJlZF9yZWNvcmRzGAMgAygLMiAuY29udHJvbHBsYW5lLnYxLkRlcGxveURuc1JlY29yZBISCgpsYXN0X2Vycm9yGAQgASgJEi4KCmxpdmVfc2luY2UYBSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIl4KD0RlcGxveURuc1JlY29yZBIMCgR0eXBlGAEgASgJEgwKBG5hbWUYAiABKAkSDQoFdmFsdWUYAyABKAkSEAoIcmVzb2x2ZWQYBCABKAgSDgoGZGV0YWlsGAUgASgJItADCgZEb21haW4SCgoCaWQYASABKAkSEAoIaG9zdG5hbWUYAiABKAkSNwoFc3RhdGUYAyABKA4yKC5jb250cm9scGxhbmUudjEuRGVwbG95Q3VzdG9tRG9tYWluU3RhdGUSLQoGc291cmNlGAQgASgOMh0uY29udHJvbHBsYW5lLnYxLkRvbWFpblNvdXJjZRI6ChByZXF1aXJlZF9yZWNvcmRzGAUgAygLMiAuY29udHJvbHBsYW5lLnYxLkRlcGxveURuc1JlY29yZBISCgpsYXN0X2Vycm9yGAYgASgJEi8KC3ZlcmlmaWVkX2F0GAcgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIuCgpsaXZlX3NpbmNlGAggASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIuCgpjcmVhdGVkX2F0GAkgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIuCgp1cGRhdGVkX2F0GAogASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIvCgdiaW5kaW5nGAsgASgLMh4uY29udHJvbHBsYW5lLnYxLkRvbWFpbkJpbmRpbmciywEKDURvbWFpbkJpbmRpbmcSCgoCaWQYASABKAkSEQoJZG9tYWluX2lkGAIgASgJEhYKDmVudmlyb25tZW50X2lkGAMgASgJEg4KBnRhcmdldBgEIAEoCRITCgtyZWRpcmVjdF90bxgFIAEoCRIuCgpjcmVhdGVkX2F0GAYgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIuCgp1cGRhdGVkX2F0GAcgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCKoAwoKRGVwbG95bWVudBIKCgJpZBgBIAEoCRIOCgZvcmdfaWQYAiABKAkSFgoOZW52aXJvbm1lbnRfaWQYAyABKAkSDAoEbmFtZRgEIAEoCRIpCgR0aWVyGAUgASgOMhsuY29udHJvbHBsYW5lLnYxLkRlcGxveVRpZXISPAoIb2JzZXJ2ZWQYByABKAsyKi5jb250cm9scGxhbmUudjEuRGVwbG95T2JzZXJ2ZWRTdGF0ZURldGFpbBIuCgpjcmVhdGVkX2F0GAggASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIuCgp1cGRhdGVkX2F0GAkgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIlCgRzcGVjGAsgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdBIyCglydW5fc3RhdGUYCiABKA4yHy5jb250cm9scGxhbmUudjEuRGVwbG95UnVuU3RhdGUSEAoIYXJ0aWZhY3QYDCABKAkSHAoUYXBwbGllZF9wcm9tb3Rpb25faWQYDSABKAlKBAgGEAcizgEKDkRlcGxveUFydGlmYWN0EgwKBG5hbWUYASABKAkSDgoGZGlnZXN0GAIgASgJEhEKCXBsYXRmb3JtcxgDIAMoCRIMCgRraW5kGAQgASgJEg8KB3ZlcnNpb24YBSABKAkSEQoJaW50ZWdyaXR5GAYgASgJEgsKA3VyaRgHIAEoCRIMCgRtb2RlGAggASgJEg8KB3ZhcmlhbnQYCSABKAkSLQoGc291cmNlGAogASgLMh0uY29udHJvbHBsYW5lLnYxLkRlcGxveVNvdXJjZSJJCgxEZXBsb3lTb3VyY2USDAoEcmVwbxgBIAEoCRILCgNyZWYYAiABKAkSDgoGc3ViZGlyGAMgASgJEg4KBmNvbW1pdBgEIAEoCSKNAgoNRGVwbG95UmVsZWFzZRIKCgJpZBgBIAEoCRIPCgd2ZXJzaW9uGAIgASgJEhIKCmdpdF9jb21taXQYAyABKAkSDwoHZ2l0X3RhZxgEIAEoCRIRCglnaXRfZGlydHkYBSABKAgSMgoJYXJ0aWZhY3RzGAYgAygLMh8uY29udHJvbHBsYW5lLnYxLkRlcGxveUFydGlmYWN0EhoKEmNyZWF0ZWRfYnlfdXNlcl9pZBgHIAEoCRIuCgpjcmVhdGVkX2F0GAggASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBInCgNydW4YCSABKAsyGi5jb250cm9scGxhbmUudjEuRGVwbG95UnVuIqkCCgpEZXBsb3lHYXRlEgwKBG5hbWUYASABKAkSDgoGc3RhdHVzGAIgASgJEgsKA3VybBgDIAEoCRIPCgdzdW1tYXJ5GAQgASgJEi4KCnN0YXJ0ZWRfYXQYBSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi8KC2ZpbmlzaGVkX2F0GAYgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIOCgZydW5faWQYByABKAkSKAoHZGV0YWlscxgIIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3QSEwoLcmVjb3JkZWRfYnkYCSABKAkSLwoLcmVjb3JkZWRfYXQYCiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIjYKCURlcGxveVJ1bhIKCgJpZBgBIAEoCRILCgN1cmwYAiABKAkSEAoIcHJvdmlkZXIYAyABKAki5QMKFURlcGxveVdvcmtsb2FkUm9sbG91dBIVCg1kZXBsb3ltZW50X2lkGAEgASgJEgwKBG5hbWUYAiABKAkSEAoIYXJ0aWZhY3QYAyABKAkSFQoNcGlubmVkX2RpZ2VzdBgEIAEoCRIWCg5kZXNpcmVkX2RpZ2VzdBgFIAEoCRIXCg9vYnNlcnZlZF9kaWdlc3QYBiABKAkSPAoOb2JzZXJ2ZWRfc3RhdGUYByABKA4yJC5jb250cm9scGxhbmUudjEuRGVwbG95T2JzZXJ2ZWRTdGF0ZRIvCgd2ZXJkaWN0GAggASgOMh4uY29udHJvbHBsYW5lLnYxLkRlcGxveVZlcmRpY3QSMgoFcGhhc2UYCSABKA4yIy5jb250cm9scGxhbmUudjEuRGVwbG95Um9sbG91dFBoYXNlEjAKDHN0YWJsZV9zaW5jZRgKIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASMAoMY29udmVyZ2VkX2F0GAsgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBISCgpsYXN0X2Vycm9yGAwgASgJEhgKEHVwZGF0ZWRfcmVwbGljYXMYDSABKAUSGAoQZGVzaXJlZF9yZXBsaWNhcxgOIAEoBSKZAwoNRGVwbG95Um9sbG91dBIzCglwcm9tb3Rpb24YASABKAsyIC5jb250cm9scGxhbmUudjEuRGVwbG95UHJvbW90aW9uEjIKBXBoYXNlGAIgASgOMiMuY29udHJvbHBsYW5lLnYxLkRlcGxveVJvbGxvdXRQaGFzZRI5Cgl3b3JrbG9hZHMYAyADKAsyJi5jb250cm9scGxhbmUudjEuRGVwbG95V29ya2xvYWRSb2xsb3V0EjgKCHVucGlubmVkGAQgAygLMiYuY29udHJvbHBsYW5lLnYxLkRlcGxveVdvcmtsb2FkUm9sbG91dBIuCgpzdGFydGVkX2F0GAUgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIvCgtmaW5pc2hlZF9hdBgGIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASGwoTc3RhYmlsaXR5X3dpbmRvd19tcxgHIAEoAxIcChRjb252ZXJnZXNfcHJvbW90aW9ucxgIIAEoCBIOCgZyZWFzb24YCSABKAki6QEKDkRlcGxveVJ1blN0YWdlEgwKBGtpbmQYASABKAkSDAoEbmFtZRgCIAEoCRIWCg5lbnZpcm9ubWVudF9pZBgDIAEoCRIUCgxwcm9tb3Rpb25faWQYBCABKAkSDgoGc3RhdHVzGAUgASgJEi4KCnN0YXJ0ZWRfYXQYBiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi8KC2ZpbmlzaGVkX2F0GAcgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBILCgN1cmwYCCABKAkSDwoHc3VtbWFyeRgJIAEoCSLsAQoURGVwbG95UHJvbW90ZVJlZnVzYWwSDgoGcmVhc29uGAEgASgJEiUKHWV4cGVjdGVkX2N1cnJlbnRfcHJvbW90aW9uX2lkGAIgASgJEhgKEGV4cGVjdGVkX3VuYm91bmQYAyABKAgSOAoOYWN0dWFsX2N1cnJlbnQYBCABKAsyIC5jb250cm9scGxhbmUudjEuRGVwbG95UHJvbW90aW9uEjkKDGFjdHVhbF9waGFzZRgFIAEoDjIjLmNvbnRyb2xwbGFuZS52MS5EZXBsb3lSb2xsb3V0UGhhc2USDgoGZGV0YWlsGAYgASgJIsIGCg9EZXBsb3lQcm9tb3Rpb24SCgoCaWQYASABKAkSFgoOZW52aXJvbm1lbnRfaWQYAiABKAkSEgoKcmVsZWFzZV9pZBgDIAEoCRIyCgRraW5kGAQgASgOMiQuY29udHJvbHBsYW5lLnYxLkRlcGxveVByb21vdGlvbktpbmQSGwoTZnJvbV9lbnZpcm9ubWVudF9pZBgFIAEoCRJTChJyZXNvbHZlZF9hcnRpZmFjdHMYBiADKAsyNy5jb250cm9scGxhbmUudjEuRGVwbG95UHJvbW90aW9uLlJlc29sdmVkQXJ0aWZhY3RzRW50cnkSGwoTcHJvbW90ZWRfYnlfdXNlcl9pZBgHIAEoCRIZChFwcm9tb3RlZF9ieV9hY3RvchgIIAEoCRIqCgVnYXRlcxgJIAMoCzIbLmNvbnRyb2xwbGFuZS52MS5EZXBsb3lHYXRlEgwKBG5vdGUYCiABKAkSLgoKY3JlYXRlZF9hdBgLIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASTwoQcmVzb2x2ZWRfc291cmNlcxgMIAMoCzI1LmNvbnRyb2xwbGFuZS52MS5EZXBsb3lQcm9tb3Rpb24uUmVzb2x2ZWRTb3VyY2VzRW50cnkSFwoPcmVsZWFzZV92ZXJzaW9uGA0gASgJEjMKDnJlY29yZGVkX2dhdGVzGA4gAygLMhsuY29udHJvbHBsYW5lLnYxLkRlcGxveUdhdGUSHAoUc3VwZXJzZWRlZF9pbl9mbGlnaHQYDyABKAgSHQoVZnJvbV9lbnZpcm9ubWVudF9uYW1lGBAgASgJEhkKEWZyb21fcHJvbW90aW9uX2lkGBEgASgJEicKA3J1bhgSIAEoCzIaLmNvbnRyb2xwbGFuZS52MS5EZXBsb3lSdW4aOAoWUmVzb2x2ZWRBcnRpZmFjdHNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBGlUKFFJlc29sdmVkU291cmNlc0VudHJ5EgsKA2tleRgBIAEoCRIsCgV2YWx1ZRgCIAEoCzIdLmNvbnRyb2xwbGFuZS52MS5EZXBsb3lTb3VyY2U6AjgBIrgCCg5EZXBsb3lVc2FnZVJvdxI6Cg1yZXNvdXJjZV9raW5kGAEgASgOMiMuY29udHJvbHBsYW5lLnYxLkRlcGxveVJlc291cmNlS2luZBIWCg5lbnZpcm9ubWVudF9pZBgCIAEoCRIVCg1kZXBsb3ltZW50X2lkGAMgASgJEhkKEXRlbmFudF9jbHVzdGVyX2lkGAQgASgJEjAKDHdpbmRvd19zdGFydBgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLgoKd2luZG93X2VuZBgGIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEAoIcXVhbnRpdHkYByABKAMSFAoMdW5pdF9kaXNwbGF5GAggASgJEhYKDmNvc3RfdXNkX25hbm9zGAkgASgDInIKDURlcGxveUxvZ0xpbmUSEAoIc2VxdWVuY2UYASABKAMSLQoJdGltZXN0YW1wGAIgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIPCgdtZXNzYWdlGAMgASgJEg8KB2NoYW5uZWwYBCABKAkiaQobRGVwbG95VGVuYW50Q2x1c3RlckludGVybmFsEhkKEXRlbmFudF9jbHVzdGVyX2lkGAEgASgJEhcKD2hvc3RfY2x1c3Rlcl9pZBgCIAEoCRIWCg5ob3N0X25hbWVzcGFjZRgDIAEoCSJMChlEZXBsb3lFbnZpcm9ubWVudEludGVybmFsEhYKDmVudmlyb25tZW50X2lkGAEgASgJEhcKD2hvc3RfY2x1c3Rlcl9pZBgCIAEoCSLRAQoYRGVwbG95RGVwbG95bWVudEludGVybmFsEhUKDWRlcGxveW1lbnRfaWQYASABKAkSFwoPaG9zdF9jbHVzdGVyX2lkGAIgASgJEhEKCW5hbWVzcGFjZRgDIAEoCRIVCg1yZXNvdXJjZV9uYW1lGAQgASgJEj0KGWxhc3RfcmVjb25jaWxlX2F0dGVtcHRfYXQYBSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhwKFGNvbnNlY3V0aXZlX2ZhaWx1cmVzGAYgASgFKo0BCgpEZXBsb3lUaWVyEhsKF0RFUExPWV9USUVSX1VOU1BFQ0lGSUVEEAASFgoSREVQTE9ZX1RJRVJfU1RBVElDEAESFwoTREVQTE9ZX1RJRVJfQkFDS0VORBACEhgKFERFUExPWV9USUVSX0RBVEFCQVNFEAMSFwoTREVQTE9ZX1RJRVJfQ0xVU1RFUhAEKrABChVEZXBsb3lFbnZpcm9ubWVudEtpbmQSJwojREVQTE9ZX0VOVklST05NRU5UX0tJTkRfVU5TUEVDSUZJRUQQABImCiJERVBMT1lfRU5WSVJPTk1FTlRfS0lORF9QRVJTSVNURU5UEAESIwofREVQTE9ZX0VOVklST05NRU5UX0tJTkRfUFJFVklFVxACEiEKHURFUExPWV9FTlZJUk9OTUVOVF9LSU5EX0xPQ0FMEAMqcAoORGVwbG95UnVuU3RhdGUSIAocREVQTE9ZX1JVTl9TVEFURV9VTlNQRUNJRklFRBAAEhwKGERFUExPWV9SVU5fU1RBVEVfUlVOTklORxABEh4KGkRFUExPWV9SVU5fU1RBVEVfU1VTUEVOREVEEAIqkwIKE0RlcGxveU9ic2VydmVkU3RhdGUSJQohREVQTE9ZX09CU0VSVkVEX1NUQVRFX1VOU1BFQ0lGSUVEEAASIQodREVQTE9ZX09CU0VSVkVEX1NUQVRFX1BFTkRJTkcQARIlCiFERVBMT1lfT0JTRVJWRURfU1RBVEVfUFJPR1JFU1NJTkcQAhIfChtERVBMT1lfT0JTRVJWRURfU1RBVEVfUkVBRFkQAxIiCh5ERVBMT1lfT0JTRVJWRURfU1RBVEVfREVHUkFERUQQBBIjCh9ERVBMT1lfT0JTRVJWRURfU1RBVEVfU1VTUEVOREVEEAUSIQodREVQTE9ZX09CU0VSVkVEX1NUQVRFX0RFTEVURUQQBirCAQoNRGVwbG95VmVyZGljdBIeChpERVBMT1lfVkVSRElDVF9VTlNQRUNJRklFRBAAEhoKFkRFUExPWV9WRVJESUNUX1VOS05PV04QARIdChlERVBMT1lfVkVSRElDVF9DT05WRVJHSU5HEAISHAoYREVQTE9ZX1ZFUkRJQ1RfQ09OVkVSR0VEEAMSGwoXREVQTE9ZX1ZFUkRJQ1RfRElWRVJHRUQQBBIbChdERVBMT1lfVkVSRElDVF9ERUdSQURFRBAFKq8BChVEZXBsb3lSZWNvbmNpbGVQb2xpY3kSJwojREVQTE9ZX1JFQ09OQ0lMRV9QT0xJQ1lfVU5TUEVDSUZJRUQQABIjCh9ERVBMT1lfUkVDT05DSUxFX1BPTElDWV9PQlNFUlZFEAESJAogREVQTE9ZX1JFQ09OQ0lMRV9QT0xJQ1lfQ09OVkVSR0UQAhIiCh5ERVBMT1lfUkVDT05DSUxFX1BPTElDWV9QSU5ORUQQAypfChNEZXBsb3lQcm9tb3Rpb25LaW5kEiUKIURFUExPWV9QUk9NT1RJT05fS0lORF9VTlNQRUNJRklFRBAAEiEKHURFUExPWV9QUk9NT1RJT05fS0lORF9QUk9NT1RFEAEqmwEKFURlcGxveUNsdXN0ZXJQcm92aWRlchInCiNERVBMT1lfQ0xVU1RFUl9QUk9WSURFUl9VTlNQRUNJRklFRBAAEisKJ0RFUExPWV9DTFVTVEVSX1BST1ZJREVSX1ZDTFVTVEVSX1NIQVJFRBABEiwKKERFUExPWV9DTFVTVEVSX1BST1ZJREVSX1ZDTFVTVEVSX1BSSVZBVEUQAiqiAQoSRGVwbG95Q2x1c3RlclBoYXNlEiQKIERFUExPWV9DTFVTVEVSX1BIQVNFX1VOU1BFQ0lGSUVEEAASJQohREVQTE9ZX0NMVVNURVJfUEhBU0VfUFJPVklTSU9OSU5HEAESHgoaREVQTE9ZX0NMVVNURVJfUEhBU0VfUkVBRFkQAhIfChtERVBMT1lfQ0xVU1RFUl9QSEFTRV9GQUlMRUQQAyq+AgoSRGVwbG95UmVzb3VyY2VLaW5kEiQKIERFUExPWV9SRVNPVVJDRV9LSU5EX1VOU1BFQ0lGSUVEEAASIgoeREVQTE9ZX1JFU09VUkNFX0tJTkRfQ1BVX01JTExJEAESIAocREVQTE9ZX1JFU09VUkNFX0tJTkRfTUVNX01JQhACEiEKHURFUExPWV9SRVNPVVJDRV9LSU5EX1ZDTFVTVEVSEAUSIwofREVQTE9ZX1JFU09VUkNFX0tJTkRfRUdSRVNTX0dJQhAGEicKI0RFUExPWV9SRVNPVVJDRV9LSU5EX0NETl9FR1JFU1NfR0lCEAcSJQohREVQTE9ZX1JFU09VUkNFX0tJTkRfQ0ROX1JFUVVFU1RTEAgSJAogREVQTE9ZX1JFU09VUkNFX0tJTkRfU1RPUkFHRV9HSUIQCipwCg9EZXBsb3lMb2dTdHJlYW0SIQodREVQTE9ZX0xPR19TVFJFQU1fVU5TUEVDSUZJRUQQABIbChdERVBMT1lfTE9HX1NUUkVBTV9CVUlMRBABEh0KGURFUExPWV9MT0dfU1RSRUFNX1JVTlRJTUUQAiq4AgoXRGVwbG95Q3VzdG9tRG9tYWluU3RhdGUSKgomREVQTE9ZX0NVU1RPTV9ET01BSU5fU1RBVEVfVU5TUEVDSUZJRUQQABIqCiZERVBMT1lfQ1VTVE9NX0RPTUFJTl9TVEFURV9QRU5ESU5HX0ROUxABEigKJERFUExPWV9DVVNUT01fRE9NQUlOX1NUQVRFX1ZFUklGWUlORxACEiYKIkRFUExPWV9DVVNUT01fRE9NQUlOX1NUQVRFX0lTU1VJTkcQAxIjCh9ERVBMT1lfQ1VTVE9NX0RPTUFJTl9TVEFURV9MSVZFEAQSJQohREVQTE9ZX0NVU1RPTV9ET01BSU5fU1RBVEVfRkFJTEVEEAUSJwojREVQTE9ZX0NVU1RPTV9ET01BSU5fU1RBVEVfQ09ORkxJQ1QQBiplCgxEb21haW5Tb3VyY2USHQoZRE9NQUlOX1NPVVJDRV9VTlNQRUNJRklFRBAAEhoKFkRPTUFJTl9TT1VSQ0VfRVhURVJOQUwQARIaChZET01BSU5fU09VUkNFX1BMQVRGT1JNEAIqtgIKEkRlcGxveVJvbGxvdXRQaGFzZRIkCiBERVBMT1lfUk9MTE9VVF9QSEFTRV9VTlNQRUNJRklFRBAAEiAKHERFUExPWV9ST0xMT1VUX1BIQVNFX1BFTkRJTkcQARIkCiBERVBMT1lfUk9MTE9VVF9QSEFTRV9QUk9HUkVTU0lORxACEiQKIERFUExPWV9ST0xMT1VUX1BIQVNFX1NUQUJJTElaSU5HEAMSIgoeREVQTE9ZX1JPTExPVVRfUEhBU0VfU1VDQ0VFREVEEAQSIQodREVQTE9ZX1JPTExPVVRfUEhBU0VfREVHUkFERUQQBRIjCh9ERVBMT1lfUk9MTE9VVF9QSEFTRV9TVVBFUlNFREVEEAYSIAocREVQTE9ZX1JPTExPVVRfUEhBU0VfVU5LTk9XThAHQtABChNjb20uY29udHJvbHBsYW5lLnYxQgtEZXBsb3lQcm90b1ABWk9naXRodWIuY29tL3JlbGlhbnQtbGFicy9yZWxpYW50L2dlbi9jb250cm9scGxhbmUvY29udHJvbHBsYW5lL3YxO2NvbnRyb2xwbGFuZXYxogIDQ1hYqgIPQ29udHJvbHBsYW5lLlYxygIPQ29udHJvbHBsYW5lXFYx4gIbQ29udHJvbHBsYW5lXFYxXEdQQk1ldGFkYXRh6gIQQ29udHJvbHBsYW5lOjpWMWIGcHJvdG8z", [file_google_protobuf_struct, file_google_protobuf_timestamp]);
 
 /**
  * DeployTenant is an organization's deploy-product extension. THE IDENTITY IS
@@ -284,6 +284,26 @@ export type DeployEnvironment = Message<"controlplane.v1.DeployEnvironment"> & {
    * @generated from field: string project = 15;
    */
   project: string;
+
+  /**
+   * READ-ONLY and DERIVED: true when a promotion to this environment will
+   * actually move bytes without a client-side deploy — this control plane runs
+   * a converger AND this environment's reconcile_policy is not PINNED.
+   *
+   * It exists so a client can refuse FAST instead of waiting out a timeout. A
+   * `forge env promote --wait` against an environment that converges nothing
+   * would poll for fifteen minutes and then report a failure whose cause is
+   * "nobody was ever going to apply this" — which looks exactly like a broken
+   * release. Reading this field turns that into an immediate, accurate
+   * "this env does not converge promotions; add --deploy".
+   *
+   * DERIVED, not stored, for the same reason the verdict is derived: it is a
+   * fact about the server's own configuration and the env's policy, and a
+   * stored copy could disagree with either.
+   *
+   * @generated from field: bool converges_promotions = 17;
+   */
+  convergesPromotions: boolean;
 };
 
 /**
@@ -898,6 +918,39 @@ export type Deployment = Message<"controlplane.v1.Deployment"> & {
    * @generated from field: controlplane.v1.DeployRunState run_state = 10;
    */
   runState: DeployRunState;
+
+  /**
+   * The release ARTIFACT KEY whose digest this deployment runs, matching
+   * forge's Artifacts map key (the same key forge computes for its plan, so
+   * the client and the server cannot pair a workload with a digest
+   * differently).
+   *
+   * EMPTY MEANS NOT RELEASE-BOUND: a ManagedDatabase, or a third-party image
+   * pinned directly in the spec. The converger SKIPS an empty one rather than
+   * guessing a pairing from the deployment's name. Names coinciding with
+   * artifact keys is a convention, not a guarantee, and a converger that
+   * guessed would silently repoint the wrong workload the first time they
+   * differed.
+   *
+   * @generated from field: string artifact = 12;
+   */
+  artifact: string;
+
+  /**
+   * The promotion whose pins this row's spec currently carries.
+   *
+   * This is the discriminator between "a promotion is waiting to be applied"
+   * and "this row has drifted", and those two need opposite answers under the
+   * OBSERVE policy: a promotion is a declared change and ships, while drift is
+   * corrected only under CONVERGE. Comparing digests cannot tell them apart —
+   * both read as "the row does not match the pin" — which is why this is a
+   * promotion id and not a digest comparison.
+   *
+   * Empty on a row that has never been pinned from a promotion.
+   *
+   * @generated from field: string applied_promotion_id = 13;
+   */
+  appliedPromotionId: string;
 };
 
 /**
@@ -1133,6 +1186,14 @@ export type DeployRelease = Message<"controlplane.v1.DeployRelease"> & {
    * @generated from field: google.protobuf.Timestamp created_at = 8;
    */
   createdAt?: Timestamp | undefined;
+
+  /**
+   * The CI run that cut this release, when one was supplied. The join key
+   * that ties a release to the promotions and gates from the same run.
+   *
+   * @generated from field: controlplane.v1.DeployRun run = 9;
+   */
+  run?: DeployRun | undefined;
 };
 
 /**
@@ -1143,25 +1204,98 @@ export const DeployReleaseSchema: GenMessage<DeployRelease> = /*@__PURE__*/
   messageDesc(file_controlplane_v1_deploy, 13);
 
 /**
- * DeployGate is one check that had passed when a promotion was recorded.
+ * DeployGate is one check's result, recorded against a promotion.
+ *
+ * EVIDENCE, NOT ENFORCEMENT, and the distinction is load-bearing rather than
+ * decorative. RecordGate is authorized at `deploy:write` — deliberately BELOW
+ * promote's admin, so a CI test job's token needs no promote authority — which
+ * means a `deploy:write` token can record a `passed` gate for a check it never
+ * ran. That is acceptable precisely because nothing enforces on this record.
+ * When gates-as-policy arrives, enforcement MUST re-run or re-verify the
+ * check; it must not trust a row here.
  *
  * @generated from message controlplane.v1.DeployGate
  */
 export type DeployGate = Message<"controlplane.v1.DeployGate"> & {
   /**
+   * "lint", "test", "smoke", "rollout", "qa-signoff".
+   *
    * @generated from field: string name = 1;
    */
   name: string;
 
   /**
+   * A CLOSED set, validated server-side: passed | failed | skipped | error.
+   *
+   * It was free text, and rows already in the ledger carry whatever the old
+   * scaffold wrote. So the READ path maps an unrecognised value to `error`
+   * for display and keeps the raw string, while the WRITE path refuses
+   * anything outside the set as InvalidArgument. Mapping rather than
+   * rejecting on read is what keeps a historical ledger readable: the ledger
+   * is append-only, so there is no migration that could clean those rows up.
+   *
    * @generated from field: string status = 2;
    */
   status: string;
 
   /**
+   * Where the full report lives — a CI run, a build artifact.
+   *
    * @generated from field: string url = 3;
    */
   url: string;
+
+  /**
+   * One line, for a human scanning a timeline: "412 passed, 0 failed, 3
+   * skipped". Not a log, and not a place to put one.
+   *
+   * @generated from field: string summary = 4;
+   */
+  summary: string;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp started_at = 5;
+   */
+  startedAt?: Timestamp | undefined;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp finished_at = 6;
+   */
+  finishedAt?: Timestamp | undefined;
+
+  /**
+   * The CI run this check belongs to (DeployRun.id). OPTIONAL: a manual QA
+   * sign-off has no run, and still attaches to the promotion and appears in
+   * the environment's history. It simply belongs to no run.
+   *
+   * @generated from field: string run_id = 7;
+   */
+  runId: string;
+
+  /**
+   * Small, structured, optional: counts and verdicts. Capped server-side at
+   * 8 KiB, because the full report is behind `url` and a details blob that
+   * could hold a log would eventually hold one.
+   *
+   * @generated from field: google.protobuf.Struct details = 8;
+   */
+  details?: JsonObject | undefined;
+
+  /**
+   * SET BY THE SERVER on read; never accepted from a request. Who recorded
+   * this gate — a user id, or "token:<token_id>" — and when. A client-supplied
+   * attribution would be a client claiming who vouched for a check, which is
+   * the one part of a piece of evidence that must not come from the party
+   * being vouched for.
+   *
+   * @generated from field: string recorded_by = 9;
+   */
+  recordedBy: string;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp recorded_at = 10;
+   */
+  recordedAt?: Timestamp | undefined;
 };
 
 /**
@@ -1170,6 +1304,377 @@ export type DeployGate = Message<"controlplane.v1.DeployGate"> & {
  */
 export const DeployGateSchema: GenMessage<DeployGate> = /*@__PURE__*/
   messageDesc(file_controlplane_v1_deploy, 14);
+
+/**
+ * DeployRun identifies the CI run (or human session) that drove a sequence of
+ * deploy writes, so a release, its promotions and its gates can be read back
+ * as one story rather than as unrelated rows that happen to share a timestamp.
+ *
+ * It is CALLER-CHOSEN and opaque. The control plane never parses it, and it is
+ * not an identity: `provider` is for display, not for trust. Authorization is
+ * the caller's token, as everywhere else.
+ *
+ * @generated from message controlplane.v1.DeployRun
+ */
+export type DeployRun = Message<"controlplane.v1.DeployRun"> & {
+  /**
+   * Opaque and stable across retries of one attempt, e.g.
+   * "github:acme/app/12345/1". Stability across retries is what makes the
+   * gate idempotency key (promotion_id, name, run_id) do its job.
+   *
+   * @generated from field: string id = 1;
+   */
+  id: string;
+
+  /**
+   * Link to the CI run, for a human.
+   *
+   * @generated from field: string url = 2;
+   */
+  url: string;
+
+  /**
+   * "github" | "gitlab" | "manual". DISPLAY ONLY — see above.
+   *
+   * @generated from field: string provider = 3;
+   */
+  provider: string;
+};
+
+/**
+ * Describes the message controlplane.v1.DeployRun.
+ * Use `create(DeployRunSchema)` to create a new message.
+ */
+export const DeployRunSchema: GenMessage<DeployRun> = /*@__PURE__*/
+  messageDesc(file_controlplane_v1_deploy, 15);
+
+/**
+ * DeployWorkloadRollout is one workload's progress toward one promotion's pin.
+ *
+ * @generated from message controlplane.v1.DeployWorkloadRollout
+ */
+export type DeployWorkloadRollout = Message<"controlplane.v1.DeployWorkloadRollout"> & {
+  /**
+   * @generated from field: string deployment_id = 1;
+   */
+  deploymentId: string;
+
+  /**
+   * @generated from field: string name = 2;
+   */
+  name: string;
+
+  /**
+   * The release artifact this workload runs (Deployment.artifact).
+   *
+   * @generated from field: string artifact = 3;
+   */
+  artifact: string;
+
+  /**
+   * From THIS promotion's resolved_artifacts — the frozen pin, not whatever
+   * the deployment row declares now. That is the whole point of scoping a
+   * rollout to a promotion: a wait must not succeed on bytes it was never
+   * asked about because somebody promoted again underneath it.
+   *
+   * @generated from field: string pinned_digest = 4;
+   */
+  pinnedDigest: string;
+
+  /**
+   * What the row currently declares, which differs from pinned_digest while a
+   * promotion is unapplied, or after a hand-made EnsureDeployment.
+   *
+   * @generated from field: string desired_digest = 5;
+   */
+  desiredDigest: string;
+
+  /**
+   * @generated from field: string observed_digest = 6;
+   */
+  observedDigest: string;
+
+  /**
+   * @generated from field: controlplane.v1.DeployObservedState observed_state = 7;
+   */
+  observedState: DeployObservedState;
+
+  /**
+   * @generated from field: controlplane.v1.DeployVerdict verdict = 8;
+   */
+  verdict: DeployVerdict;
+
+  /**
+   * This workload's phase toward pinned_digest.
+   *
+   * @generated from field: controlplane.v1.DeployRolloutPhase phase = 9;
+   */
+  phase: DeployRolloutPhase;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp stable_since = 10;
+   */
+  stableSince?: Timestamp | undefined;
+
+  /**
+   * stable_since + the stability window, once reached.
+   *
+   * @generated from field: google.protobuf.Timestamp converged_at = 11;
+   */
+  convergedAt?: Timestamp | undefined;
+
+  /**
+   * @generated from field: string last_error = 12;
+   */
+  lastError: string;
+
+  /**
+   * How many pods run the pinned digest AND are ready, and how many are
+   * wanted.
+   *
+   * These are what stop a rollout being reported healthy before it is. Under
+   * RollingUpdate, old ready pods keep readyReplicas up while the new
+   * ReplicaSet crash-loops, so "ready replicas ≥ wanted" is true of a release
+   * that has never served a request. Comparing UPDATED against DESIRED is the
+   * completion test `kubectl rollout status` applies.
+   *
+   * @generated from field: int32 updated_replicas = 13;
+   */
+  updatedReplicas: number;
+
+  /**
+   * @generated from field: int32 desired_replicas = 14;
+   */
+  desiredReplicas: number;
+};
+
+/**
+ * Describes the message controlplane.v1.DeployWorkloadRollout.
+ * Use `create(DeployWorkloadRolloutSchema)` to create a new message.
+ */
+export const DeployWorkloadRolloutSchema: GenMessage<DeployWorkloadRollout> = /*@__PURE__*/
+  messageDesc(file_controlplane_v1_deploy, 16);
+
+/**
+ * DeployRollout is how far ONE promotion has rolled out — the single
+ * server-computed answer to "is v6 done".
+ *
+ * Computed in one place on purpose. `forge env wait`, the in-flight promote
+ * refusal, the UI and a run timeline all read this, so four consumers cannot
+ * hold four different opinions about whether a release landed.
+ *
+ * @generated from message controlplane.v1.DeployRollout
+ */
+export type DeployRollout = Message<"controlplane.v1.DeployRollout"> & {
+  /**
+   * @generated from field: controlplane.v1.DeployPromotion promotion = 1;
+   */
+  promotion?: DeployPromotion | undefined;
+
+  /**
+   * Worst-wins over the pinned workloads, in the order
+   * DEGRADED > UNKNOWN > PROGRESSING > PENDING > STABILIZING > SUCCEEDED.
+   *
+   * @generated from field: controlplane.v1.DeployRolloutPhase phase = 2;
+   */
+  phase: DeployRolloutPhase;
+
+  /**
+   * @generated from field: repeated controlplane.v1.DeployWorkloadRollout workloads = 3;
+   */
+  workloads: DeployWorkloadRollout[];
+
+  /**
+   * Workloads in the environment that this promotion does not pin: databases,
+   * third-party images. REPORTED, never gating — a healthy release over a
+   * degraded database is reported as exactly that rather than hidden, and a
+   * database that cannot be release-bound must not be able to fail a release.
+   *
+   * @generated from field: repeated controlplane.v1.DeployWorkloadRollout unpinned = 4;
+   */
+  unpinned: DeployWorkloadRollout[];
+
+  /**
+   * = promotion.created_at.
+   *
+   * @generated from field: google.protobuf.Timestamp started_at = 5;
+   */
+  startedAt?: Timestamp | undefined;
+
+  /**
+   * The SUCCEEDED / DEGRADED / SUPERSEDED moment, when known. For SUCCEEDED
+   * it is the latest converged_at across the pinned workloads.
+   *
+   * @generated from field: google.protobuf.Timestamp finished_at = 6;
+   */
+  finishedAt?: Timestamp | undefined;
+
+  /**
+   * Milliseconds. An int64 rather than a Duration so this file gains no new
+   * import — it is shared by two services and exported to a public repo.
+   *
+   * @generated from field: int64 stability_window_ms = 7;
+   */
+  stabilityWindowMs: bigint;
+
+  /**
+   * Mirrors DeployEnvironment.converges_promotions: false means nothing will
+   * move without a client-side deploy, so a caller should refuse rather than
+   * wait.
+   *
+   * @generated from field: bool converges_promotions = 8;
+   */
+  convergesPromotions: boolean;
+
+  /**
+   * One human line explaining the phase.
+   *
+   * @generated from field: string reason = 9;
+   */
+  reason: string;
+};
+
+/**
+ * Describes the message controlplane.v1.DeployRollout.
+ * Use `create(DeployRolloutSchema)` to create a new message.
+ */
+export const DeployRolloutSchema: GenMessage<DeployRollout> = /*@__PURE__*/
+  messageDesc(file_controlplane_v1_deploy, 17);
+
+/**
+ * DeployRunStage is one step in a run's timeline, as assembled from the
+ * ledger.
+ *
+ * NOTHING HERE IS A STORED EVENT. A stage is a release cut, a promotion, a
+ * recorded gate carrying the run id, or a promotion's derived rollout. There
+ * is no event table, no event bus and no webhook, because an append-only
+ * ledger plus a derived rollout already contains the timeline — and a second,
+ * stored copy of it could only ever disagree.
+ *
+ * @generated from message controlplane.v1.DeployRunStage
+ */
+export type DeployRunStage = Message<"controlplane.v1.DeployRunStage"> & {
+  /**
+   * build | cut | check | promote | rollout.
+   *
+   * @generated from field: string kind = 1;
+   */
+  kind: string;
+
+  /**
+   * "lint", "staging", "prod", an artifact name.
+   *
+   * @generated from field: string name = 2;
+   */
+  name: string;
+
+  /**
+   * @generated from field: string environment_id = 3;
+   */
+  environmentId: string;
+
+  /**
+   * @generated from field: string promotion_id = 4;
+   */
+  promotionId: string;
+
+  /**
+   * passed | failed | running | skipped | error. A rollout phase maps in:
+   * SUCCEEDED→passed, DEGRADED→failed, SUPERSEDED→skipped, anything else
+   * →running.
+   *
+   * @generated from field: string status = 5;
+   */
+  status: string;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp started_at = 6;
+   */
+  startedAt?: Timestamp | undefined;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp finished_at = 7;
+   */
+  finishedAt?: Timestamp | undefined;
+
+  /**
+   * @generated from field: string url = 8;
+   */
+  url: string;
+
+  /**
+   * @generated from field: string summary = 9;
+   */
+  summary: string;
+};
+
+/**
+ * Describes the message controlplane.v1.DeployRunStage.
+ * Use `create(DeployRunStageSchema)` to create a new message.
+ */
+export const DeployRunStageSchema: GenMessage<DeployRunStage> = /*@__PURE__*/
+  messageDesc(file_controlplane_v1_deploy, 18);
+
+/**
+ * DeployPromoteRefusal is why a promote was refused, carried as an error
+ * detail on the FailedPrecondition.
+ *
+ * It names WHAT IS THERE, not just that something was. A refusal reading
+ * "someone else promoted" sends a human to a dashboard; one carrying the
+ * actual current promotion lets the pipeline print "prod is on v1.9.1,
+ * promoted by alice 4 minutes ago" and lets a script decide without a second
+ * round trip.
+ *
+ * @generated from message controlplane.v1.DeployPromoteRefusal
+ */
+export type DeployPromoteRefusal = Message<"controlplane.v1.DeployPromoteRefusal"> & {
+  /**
+   * promotion_conflict | rollout_in_flight | environment_pinned.
+   *
+   * @generated from field: string reason = 1;
+   */
+  reason: string;
+
+  /**
+   * Echoed back from the request, so a log line is self-contained.
+   *
+   * @generated from field: string expected_current_promotion_id = 2;
+   */
+  expectedCurrentPromotionId: string;
+
+  /**
+   * @generated from field: bool expected_unbound = 3;
+   */
+  expectedUnbound: boolean;
+
+  /**
+   * What IS bound — the promotion that landed instead.
+   *
+   * @generated from field: controlplane.v1.DeployPromotion actual_current = 4;
+   */
+  actualCurrent?: DeployPromotion | undefined;
+
+  /**
+   * Set for rollout_in_flight: the phase that made it in flight.
+   *
+   * @generated from field: controlplane.v1.DeployRolloutPhase actual_phase = 5;
+   */
+  actualPhase: DeployRolloutPhase;
+
+  /**
+   * One human sentence.
+   *
+   * @generated from field: string detail = 6;
+   */
+  detail: string;
+};
+
+/**
+ * Describes the message controlplane.v1.DeployPromoteRefusal.
+ * Use `create(DeployPromoteRefusalSchema)` to create a new message.
+ */
+export const DeployPromoteRefusalSchema: GenMessage<DeployPromoteRefusal> = /*@__PURE__*/
+  messageDesc(file_controlplane_v1_deploy, 19);
 
 /**
  * DeployPromotion is one entry in the append-only ledger: this environment ran
@@ -1280,6 +1785,58 @@ export type DeployPromotion = Message<"controlplane.v1.DeployPromotion"> & {
    * @generated from field: string release_version = 13;
    */
   releaseVersion: string;
+
+  /**
+   * Evidence recorded AFTER this row was written, through RecordGate — the
+   * post-promote half of the trail whose pre-promote half is `gates` above.
+   *
+   * Two fields rather than one because they answer different questions and
+   * have different trust: `gates` is what the promoter claimed at the moment
+   * they promoted, and these are results that arrived later (a smoke test, a
+   * rollout outcome, a human sign-off). Merging them would lose "was this
+   * known before the button was pressed?", which is the first question asked
+   * about a bad release.
+   *
+   * @generated from field: repeated controlplane.v1.DeployGate recorded_gates = 14;
+   */
+  recordedGates: DeployGate[];
+
+  /**
+   * This promote overrode an in-flight rollout (`--supersede`).
+   *
+   * Recorded because an override that leaves no trace is indistinguishable
+   * from the refusal never having fired. A reader looking at two promotions
+   * ninety seconds apart needs to know the second one was deliberate.
+   *
+   * @generated from field: bool superseded_in_flight = 15;
+   */
+  supersededInFlight: boolean;
+
+  /**
+   * The name of the environment in from_environment_id, so a ledger reader
+   * renders "staging → prod" without a second lookup per row.
+   *
+   * @generated from field: string from_environment_name = 16;
+   */
+  fromEnvironmentName: string;
+
+  /**
+   * The specific PROMOTION this release was taken from, when the promote named
+   * a source environment's state rather than just a version
+   * (`promote --from staging`). from_environment_id says where it came from;
+   * this says exactly WHAT was there, which is what makes "promote whatever
+   * staging is running" auditable after staging has moved on.
+   *
+   * @generated from field: string from_promotion_id = 17;
+   */
+  fromPromotionId: string;
+
+  /**
+   * The CI run that performed this promotion.
+   *
+   * @generated from field: controlplane.v1.DeployRun run = 18;
+   */
+  run?: DeployRun | undefined;
 };
 
 /**
@@ -1287,7 +1844,7 @@ export type DeployPromotion = Message<"controlplane.v1.DeployPromotion"> & {
  * Use `create(DeployPromotionSchema)` to create a new message.
  */
 export const DeployPromotionSchema: GenMessage<DeployPromotion> = /*@__PURE__*/
-  messageDesc(file_controlplane_v1_deploy, 15);
+  messageDesc(file_controlplane_v1_deploy, 20);
 
 /**
  * DeployUsageRow is one metered quantity for one resource over one window —
@@ -1367,7 +1924,7 @@ export type DeployUsageRow = Message<"controlplane.v1.DeployUsageRow"> & {
  * Use `create(DeployUsageRowSchema)` to create a new message.
  */
 export const DeployUsageRowSchema: GenMessage<DeployUsageRow> = /*@__PURE__*/
-  messageDesc(file_controlplane_v1_deploy, 16);
+  messageDesc(file_controlplane_v1_deploy, 21);
 
 /**
  * DeployLogLine is one line of build or runtime output.
@@ -1408,7 +1965,7 @@ export type DeployLogLine = Message<"controlplane.v1.DeployLogLine"> & {
  * Use `create(DeployLogLineSchema)` to create a new message.
  */
 export const DeployLogLineSchema: GenMessage<DeployLogLine> = /*@__PURE__*/
-  messageDesc(file_controlplane_v1_deploy, 17);
+  messageDesc(file_controlplane_v1_deploy, 22);
 
 /**
  * DeployTenantClusterInternal carries the fleet PLACEMENT of a vCluster —
@@ -1447,7 +2004,7 @@ export type DeployTenantClusterInternal = Message<"controlplane.v1.DeployTenantC
  * Use `create(DeployTenantClusterInternalSchema)` to create a new message.
  */
 export const DeployTenantClusterInternalSchema: GenMessage<DeployTenantClusterInternal> = /*@__PURE__*/
-  messageDesc(file_controlplane_v1_deploy, 18);
+  messageDesc(file_controlplane_v1_deploy, 23);
 
 /**
  * DeployEnvironmentInternal carries an environment's fleet placement.
@@ -1475,7 +2032,7 @@ export type DeployEnvironmentInternal = Message<"controlplane.v1.DeployEnvironme
  * Use `create(DeployEnvironmentInternalSchema)` to create a new message.
  */
 export const DeployEnvironmentInternalSchema: GenMessage<DeployEnvironmentInternal> = /*@__PURE__*/
-  messageDesc(file_controlplane_v1_deploy, 19);
+  messageDesc(file_controlplane_v1_deploy, 24);
 
 /**
  * DeployDeploymentInternal carries reconcile diagnostics that are useful to
@@ -1523,7 +2080,7 @@ export type DeployDeploymentInternal = Message<"controlplane.v1.DeployDeployment
  * Use `create(DeployDeploymentInternalSchema)` to create a new message.
  */
 export const DeployDeploymentInternalSchema: GenMessage<DeployDeploymentInternal> = /*@__PURE__*/
-  messageDesc(file_controlplane_v1_deploy, 20);
+  messageDesc(file_controlplane_v1_deploy, 25);
 
 /**
  * DeployTier discriminates what a deployment IS. The four tiers share one
@@ -2119,4 +2676,83 @@ export enum DomainSource {
  */
 export const DomainSourceSchema: GenEnum<DomainSource> = /*@__PURE__*/
   enumDesc(file_controlplane_v1_deploy, 12);
+
+/**
+ * DeployRolloutPhase is how far one promotion has got toward actually running,
+ * judged against THAT promotion's frozen pins.
+ *
+ * It is DERIVED on read, never stored, for the reason DeployVerdict is:
+ * a stored phase is a cache of an observation, and a stale cache here reads as
+ * a healthy release.
+ *
+ * @generated from enum controlplane.v1.DeployRolloutPhase
+ */
+export enum DeployRolloutPhase {
+  /**
+   * @generated from enum value: DEPLOY_ROLLOUT_PHASE_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * Promoted, but no workload has started moving: nothing has picked the
+   * promotion up yet.
+   *
+   * @generated from enum value: DEPLOY_ROLLOUT_PHASE_PENDING = 1;
+   */
+  PENDING = 1,
+
+  /**
+   * Some workload is not yet serving the pinned digest. A mid-rollout
+   * DIVERGED verdict folds in HERE: divergence inside a rollout window is
+   * normal, and becomes a failure only through the caller's timeout.
+   *
+   * @generated from enum value: DEPLOY_ROLLOUT_PHASE_PROGRESSING = 2;
+   */
+  PROGRESSING = 2,
+
+  /**
+   * Every workload serves the pinned digest, but is still inside the
+   * stability window.
+   *
+   * @generated from enum value: DEPLOY_ROLLOUT_PHASE_STABILIZING = 3;
+   */
+  STABILIZING = 3,
+
+  /**
+   * Every workload converged on the pinned digest and stayed there past the
+   * window.
+   *
+   * @generated from enum value: DEPLOY_ROLLOUT_PHASE_SUCCEEDED = 4;
+   */
+  SUCCEEDED = 4,
+
+  /**
+   * A workload is not serving — on the NEW digest or the old one. A crash on
+   * the old digest during a rollout is still a failed rollout.
+   *
+   * @generated from enum value: DEPLOY_ROLLOUT_PHASE_DEGRADED = 5;
+   */
+  DEGRADED = 5,
+
+  /**
+   * A newer promotion replaced this one before it finished.
+   *
+   * @generated from enum value: DEPLOY_ROLLOUT_PHASE_SUPERSEDED = 6;
+   */
+  SUPERSEDED = 6,
+
+  /**
+   * A workload cannot be observed. Its own outcome, never folded into success
+   * or failure: "we cannot see it" is not permission.
+   *
+   * @generated from enum value: DEPLOY_ROLLOUT_PHASE_UNKNOWN = 7;
+   */
+  UNKNOWN = 7,
+}
+
+/**
+ * Describes the enum controlplane.v1.DeployRolloutPhase.
+ */
+export const DeployRolloutPhaseSchema: GenEnum<DeployRolloutPhase> = /*@__PURE__*/
+  enumDesc(file_controlplane_v1_deploy, 13);
 

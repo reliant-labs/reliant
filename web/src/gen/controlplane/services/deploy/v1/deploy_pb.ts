@@ -9,7 +9,7 @@
 
 import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
-import type { DeployArtifact, DeployEnvironment, DeployEnvironmentKind, DeployEnvironmentSpec, DeployGate, DeployLogLine, DeployLogStream, Deployment, DeployObservedState, DeployPromotion, DeployPromotionKind, DeployReconcilePolicy, DeployRelease, DeployResourceKind, DeployRunState, DeployTenant, DeployTenantCluster, DeployTier, DeployUsageRow, DeployVerdict } from "../../../controlplane/v1/deploy_pb";
+import type { DeployArtifact, DeployEnvironment, DeployEnvironmentKind, DeployEnvironmentSpec, DeployGate, DeployLogLine, DeployLogStream, Deployment, DeployObservedState, DeployPromotion, DeployPromotionKind, DeployReconcilePolicy, DeployRelease, DeployResourceKind, DeployRollout, DeployRun, DeployRunStage, DeployRunState, DeployTenant, DeployTenantCluster, DeployTier, DeployUsageRow, DeployVerdict } from "../../../controlplane/v1/deploy_pb";
 import { file_controlplane_v1_deploy } from "../../../controlplane/v1/deploy_pb";
 import { file_forge_v1_forge } from "../../../forge/v1/forge_pb";
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
@@ -20,7 +20,7 @@ import type { JsonObject, Message } from "@bufbuild/protobuf";
  * Describes the file services/deploy/v1/deploy.proto.
  */
 export const file_services_deploy_v1_deploy: GenFile = /*@__PURE__*/
-  fileDesc("Ch9zZXJ2aWNlcy9kZXBsb3kvdjEvZGVwbG95LnByb3RvEg9jb250cm9scGxhbmUudjEiGAoWR2V0RGVwbG95VGVuYW50UmVxdWVzdCKAAQoXR2V0RGVwbG95VGVuYW50UmVzcG9uc2USLQoGdGVuYW50GAEgASgLMh0uY29udHJvbHBsYW5lLnYxLkRlcGxveVRlbmFudBI2CghjbHVzdGVycxgCIAMoCzIkLmNvbnRyb2xwbGFuZS52MS5EZXBsb3lUZW5hbnRDbHVzdGVyIikKGUNyZWF0ZURlcGxveVRlbmFudFJlcXVlc3QSDAoEc2x1ZxgBIAEoCSJLChpDcmVhdGVEZXBsb3lUZW5hbnRSZXNwb25zZRItCgZ0ZW5hbnQYASABKAsyHS5jb250cm9scGxhbmUudjEuRGVwbG95VGVuYW50IlYKHkNyZWF0ZURlcGxveUVudmlyb25tZW50UmVxdWVzdBI0CgRzcGVjGAEgASgLMiYuY29udHJvbHBsYW5lLnYxLkRlcGxveUVudmlyb25tZW50U3BlYyJaCh9DcmVhdGVEZXBsb3lFbnZpcm9ubWVudFJlc3BvbnNlEjcKC2Vudmlyb25tZW50GAEgASgLMiIuY29udHJvbHBsYW5lLnYxLkRlcGxveUVudmlyb25tZW50IjUKG0dldERlcGxveUVudmlyb25tZW50UmVxdWVzdBIWCg5lbnZpcm9ubWVudF9pZBgBIAEoCSKUAQocR2V0RGVwbG95RW52aXJvbm1lbnRSZXNwb25zZRI3CgtlbnZpcm9ubWVudBgBIAEoCzIiLmNvbnRyb2xwbGFuZS52MS5EZXBsb3lFbnZpcm9ubWVudBI7ChFjdXJyZW50X3Byb21vdGlvbhgCIAEoCzIgLmNvbnRyb2xwbGFuZS52MS5EZXBsb3lQcm9tb3Rpb24ipQEKHUxpc3REZXBsb3lFbnZpcm9ubWVudHNSZXF1ZXN0EjkKBGtpbmQYASABKA4yJi5jb250cm9scGxhbmUudjEuRGVwbG95RW52aXJvbm1lbnRLaW5kSACIAQESEwoGc2VhcmNoGAIgASgJSAGIAQESFAoHcHJvamVjdBgDIAEoCUgCiAEBQgcKBV9raW5kQgkKB19zZWFyY2hCCgoIX3Byb2plY3QiWgoeTGlzdERlcGxveUVudmlyb25tZW50c1Jlc3BvbnNlEjgKDGVudmlyb25tZW50cxgBIAMoCzIiLmNvbnRyb2xwbGFuZS52MS5EZXBsb3lFbnZpcm9ubWVudCJuCh5VcGRhdGVEZXBsb3lFbnZpcm9ubWVudFJlcXVlc3QSFgoOZW52aXJvbm1lbnRfaWQYASABKAkSNAoEc3BlYxgCIAEoCzImLmNvbnRyb2xwbGFuZS52MS5EZXBsb3lFbnZpcm9ubWVudFNwZWMiWgofVXBkYXRlRGVwbG95RW52aXJvbm1lbnRSZXNwb25zZRI3CgtlbnZpcm9ubWVudBgBIAEoCzIiLmNvbnRyb2xwbGFuZS52MS5EZXBsb3lFbnZpcm9ubWVudCJHCh5EZWxldGVEZXBsb3lFbnZpcm9ubWVudFJlcXVlc3QSFgoOZW52aXJvbm1lbnRfaWQYASABKAkSDQoFZm9yY2UYAiABKAgiIQofRGVsZXRlRGVwbG95RW52aXJvbm1lbnRSZXNwb25zZSJWCh5FbnN1cmVEZXBsb3lFbnZpcm9ubWVudFJlcXVlc3QSNAoEc3BlYxgBIAEoCzImLmNvbnRyb2xwbGFuZS52MS5EZXBsb3lFbnZpcm9ubWVudFNwZWMiawofRW5zdXJlRGVwbG95RW52aXJvbm1lbnRSZXNwb25zZRI3CgtlbnZpcm9ubWVudBgBIAEoCzIiLmNvbnRyb2xwbGFuZS52MS5EZXBsb3lFbnZpcm9ubWVudBIPCgdjcmVhdGVkGAIgASgIIpEBChdDcmVhdGVEZXBsb3ltZW50UmVxdWVzdBIWCg5lbnZpcm9ubWVudF9pZBgBIAEoCRIMCgRuYW1lGAIgASgJEikKBHRpZXIYAyABKA4yGy5jb250cm9scGxhbmUudjEuRGVwbG95VGllchIlCgRzcGVjGAUgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdCJLChhDcmVhdGVEZXBsb3ltZW50UmVzcG9uc2USLwoKZGVwbG95bWVudBgBIAEoCzIbLmNvbnRyb2xwbGFuZS52MS5EZXBsb3ltZW50Ii0KFEdldERlcGxveW1lbnRSZXF1ZXN0EhUKDWRlcGxveW1lbnRfaWQYASABKAkiSAoVR2V0RGVwbG95bWVudFJlc3BvbnNlEi8KCmRlcGxveW1lbnQYASABKAsyGy5jb250cm9scGxhbmUudjEuRGVwbG95bWVudCL3AQoWTGlzdERlcGxveW1lbnRzUmVxdWVzdBIbCg5lbnZpcm9ubWVudF9pZBgBIAEoCUgAiAEBEi4KBHRpZXIYAiABKA4yGy5jb250cm9scGxhbmUudjEuRGVwbG95VGllckgBiAEBEkEKDm9ic2VydmVkX3N0YXRlGAMgASgOMiQuY29udHJvbHBsYW5lLnYxLkRlcGxveU9ic2VydmVkU3RhdGVIAogBARITCgZzZWFyY2gYBCABKAlIA4gBAUIRCg9fZW52aXJvbm1lbnRfaWRCBwoFX3RpZXJCEQoPX29ic2VydmVkX3N0YXRlQgkKB19zZWFyY2giSwoXTGlzdERlcGxveW1lbnRzUmVzcG9uc2USMAoLZGVwbG95bWVudHMYASADKAsyGy5jb250cm9scGxhbmUudjEuRGVwbG95bWVudCJXChdVcGRhdGVEZXBsb3ltZW50UmVxdWVzdBIVCg1kZXBsb3ltZW50X2lkGAEgASgJEiUKBHNwZWMYAyABKAsyFy5nb29nbGUucHJvdG9idWYuU3RydWN0IksKGFVwZGF0ZURlcGxveW1lbnRSZXNwb25zZRIvCgpkZXBsb3ltZW50GAEgASgLMhsuY29udHJvbHBsYW5lLnYxLkRlcGxveW1lbnQiMAoXRGVsZXRlRGVwbG95bWVudFJlcXVlc3QSFQoNZGVwbG95bWVudF9pZBgBIAEoCSIaChhEZWxldGVEZXBsb3ltZW50UmVzcG9uc2UikQEKF0Vuc3VyZURlcGxveW1lbnRSZXF1ZXN0EhYKDmVudmlyb25tZW50X2lkGAEgASgJEgwKBG5hbWUYAiABKAkSKQoEdGllchgDIAEoDjIbLmNvbnRyb2xwbGFuZS52MS5EZXBsb3lUaWVyEiUKBHNwZWMYBCABKAsyFy5nb29nbGUucHJvdG9idWYuU3RydWN0Im0KGEVuc3VyZURlcGxveW1lbnRSZXNwb25zZRIvCgpkZXBsb3ltZW50GAEgASgLMhsuY29udHJvbHBsYW5lLnYxLkRlcGxveW1lbnQSDwoHY3JlYXRlZBgCIAEoCBIPCgd1cGRhdGVkGAMgASgIIjcKHlB1Ymxpc2hEZXBsb3ltZW50Q29uZmlnUmVxdWVzdBIVCg1kZXBsb3ltZW50X2lkGAEgASgJIn8KH1B1Ymxpc2hEZXBsb3ltZW50Q29uZmlnUmVzcG9uc2USDgoGZGlnZXN0GAEgASgJEhIKCnJlcG9zaXRvcnkYAiABKAkSEQoJcmVmZXJlbmNlGAMgASgJEhEKCW5hbWVzcGFjZRgEIAEoCRISCgpjbHVzdGVyX2lkGAUgASgJIrIBChVQcm9tb3RlUmVsZWFzZVJlcXVlc3QSFgoOZW52aXJvbm1lbnRfaWQYASABKAkSDwoHdmVyc2lvbhgCIAEoCRIbChNmcm9tX2Vudmlyb25tZW50X2lkGAMgASgJEioKBWdhdGVzGAQgAygLMhsuY29udHJvbHBsYW5lLnYxLkRlcGxveUdhdGUSGQoRcHJvbW90ZWRfYnlfYWN0b3IYBSABKAkSDAoEbm90ZRgGIAEoCSJNChZQcm9tb3RlUmVsZWFzZVJlc3BvbnNlEjMKCXByb21vdGlvbhgBIAEoCzIgLmNvbnRyb2xwbGFuZS52MS5EZXBsb3lQcm9tb3Rpb24iYwoWU2NhbGVEZXBsb3ltZW50UmVxdWVzdBIVCg1kZXBsb3ltZW50X2lkGAEgASgJEjIKCXJ1bl9zdGF0ZRgDIAEoDjIfLmNvbnRyb2xwbGFuZS52MS5EZXBsb3lSdW5TdGF0ZSJKChdTY2FsZURlcGxveW1lbnRSZXNwb25zZRIvCgpkZXBsb3ltZW50GAEgASgLMhsuY29udHJvbHBsYW5lLnYxLkRlcGxveW1lbnQiSwoaR2V0RGVwbG95bWVudFN0YXR1c1JlcXVlc3QSFQoNZGVwbG95bWVudF9pZBgBIAEoCRIWCg5lbnZpcm9ubWVudF9pZBgCIAEoCSLmAQoQRGVwbG95bWVudFN0YXR1cxIvCgpkZXBsb3ltZW50GAEgASgLMhsuY29udHJvbHBsYW5lLnYxLkRlcGxveW1lbnQSLwoHdmVyZGljdBgCIAEoDjIeLmNvbnRyb2xwbGFuZS52MS5EZXBsb3lWZXJkaWN0EhYKDnZlcmRpY3RfcmVhc29uGAMgASgJEhYKDmRlc2lyZWRfZGlnZXN0GAQgASgJEi8KC29ic2VydmVkX2F0GAUgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIPCgdkcmlmdGVkGAYgASgIIuUDChtHZXREZXBsb3ltZW50U3RhdHVzUmVzcG9uc2USLwoKZGVwbG95bWVudBgBIAEoCzIbLmNvbnRyb2xwbGFuZS52MS5EZXBsb3ltZW50Eg8KB2RyaWZ0ZWQYAiABKAgSOwoRY3VycmVudF9wcm9tb3Rpb24YAyABKAsyIC5jb250cm9scGxhbmUudjEuRGVwbG95UHJvbW90aW9uEi8KC29ic2VydmVkX2F0GAQgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIvCgd2ZXJkaWN0GAUgASgOMh4uY29udHJvbHBsYW5lLnYxLkRlcGxveVZlcmRpY3QSFgoOdmVyZGljdF9yZWFzb24YBiABKAkSFgoOZGVzaXJlZF9kaWdlc3QYByABKAkSNgoLZGVwbG95bWVudHMYCCADKAsyIS5jb250cm9scGxhbmUudjEuRGVwbG95bWVudFN0YXR1cxI7ChNlbnZpcm9ubWVudF92ZXJkaWN0GAkgASgOMh4uY29udHJvbHBsYW5lLnYxLkRlcGxveVZlcmRpY3QSQAoQcmVjb25jaWxlX3BvbGljeRgKIAEoDjImLmNvbnRyb2xwbGFuZS52MS5EZXBsb3lSZWNvbmNpbGVQb2xpY3kiqQEKG1N0cmVhbURlcGxveW1lbnRMb2dzUmVxdWVzdBIVCg1kZXBsb3ltZW50X2lkGAEgASgJEjAKBnN0cmVhbRgCIAEoDjIgLmNvbnRyb2xwbGFuZS52MS5EZXBsb3lMb2dTdHJlYW0SFgoOYWZ0ZXJfc2VxdWVuY2UYAyABKAMSFgoOc25hcHNob3RfbGltaXQYBCABKAUSEQoJbm9fZm9sbG93GAUgASgIInsKHFN0cmVhbURlcGxveW1lbnRMb2dzUmVzcG9uc2USLQoFbGluZXMYASADKAsyHi5jb250cm9scGxhbmUudjEuRGVwbG95TG9nTGluZRITCgtpc19zbmFwc2hvdBgCIAEoCBIXCg9sYXRlc3Rfc2VxdWVuY2UYAyABKAMikAEKEUN1dFJlbGVhc2VSZXF1ZXN0Eg8KB3ZlcnNpb24YASABKAkSMgoJYXJ0aWZhY3RzGAIgAygLMh8uY29udHJvbHBsYW5lLnYxLkRlcGxveUFydGlmYWN0EhIKCmdpdF9jb21taXQYAyABKAkSDwoHZ2l0X3RhZxgEIAEoCRIRCglnaXRfZGlydHkYBSABKAgiVgoSQ3V0UmVsZWFzZVJlc3BvbnNlEi8KB3JlbGVhc2UYASABKAsyHi5jb250cm9scGxhbmUudjEuRGVwbG95UmVsZWFzZRIPCgdjcmVhdGVkGAIgASgIIt0BChlMaXN0RGVwbG95UmVsZWFzZXNSZXF1ZXN0Eh0KEHZlcnNpb25fY29udGFpbnMYASABKAlIAIgBARIXCgpnaXRfY29tbWl0GAIgASgJSAGIAQESJwoacHJvbW90ZWRfdG9fZW52aXJvbm1lbnRfaWQYAyABKAlIAogBARISCgVsaW1pdBgEIAEoBUgDiAEBQhMKEV92ZXJzaW9uX2NvbnRhaW5zQg0KC19naXRfY29tbWl0Qh0KG19wcm9tb3RlZF90b19lbnZpcm9ubWVudF9pZEIICgZfbGltaXQiTgoaTGlzdERlcGxveVJlbGVhc2VzUmVzcG9uc2USMAoIcmVsZWFzZXMYASADKAsyHi5jb250cm9scGxhbmUudjEuRGVwbG95UmVsZWFzZSIqChdHZXREZXBsb3lSZWxlYXNlUmVxdWVzdBIPCgd2ZXJzaW9uGAEgASgJImwKGEdldERlcGxveVJlbGVhc2VSZXNwb25zZRIvCgdyZWxlYXNlGAEgASgLMh4uY29udHJvbHBsYW5lLnYxLkRlcGxveVJlbGVhc2USHwoXY3VycmVudF9lbnZpcm9ubWVudF9pZHMYAiADKAkilQEKG0xpc3REZXBsb3lQcm9tb3Rpb25zUmVxdWVzdBIWCg5lbnZpcm9ubWVudF9pZBgBIAEoCRI3CgRraW5kGAIgASgOMiQuY29udHJvbHBsYW5lLnYxLkRlcGxveVByb21vdGlvbktpbmRIAIgBARISCgVsaW1pdBgDIAEoBUgBiAEBQgcKBV9raW5kQggKBl9saW1pdCJUChxMaXN0RGVwbG95UHJvbW90aW9uc1Jlc3BvbnNlEjQKCnByb21vdGlvbnMYASADKAsyIC5jb250cm9scGxhbmUudjEuRGVwbG95UHJvbW90aW9uIuECChZMaXN0RGVwbG95VXNhZ2VSZXF1ZXN0Ei4KCnN0YXJ0X3RpbWUYASABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEiwKCGVuZF90aW1lGAIgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBI/Cg1yZXNvdXJjZV9raW5kGAMgASgOMiMuY29udHJvbHBsYW5lLnYxLkRlcGxveVJlc291cmNlS2luZEgAiAEBEhsKDmVudmlyb25tZW50X2lkGAQgASgJSAGIAQESGgoNZGVwbG95bWVudF9pZBgFIAEoCUgCiAEBEiAKE2dyYW51bGFyaXR5X3NlY29uZHMYBiABKAVIA4gBAUIQCg5fcmVzb3VyY2Vfa2luZEIRCg9fZW52aXJvbm1lbnRfaWRCEAoOX2RlcGxveW1lbnRfaWRCFgoUX2dyYW51bGFyaXR5X3NlY29uZHMiZgoXTGlzdERlcGxveVVzYWdlUmVzcG9uc2USLQoEcm93cxgBIAMoCzIfLmNvbnRyb2xwbGFuZS52MS5EZXBsb3lVc2FnZVJvdxIcChR0b3RhbF9jb3N0X3VzZF9uYW5vcxgCIAEoAzLRFQoNRGVwbG95U2VydmljZRJmCglHZXRUZW5hbnQSJy5jb250cm9scGxhbmUudjEuR2V0RGVwbG95VGVuYW50UmVxdWVzdBooLmNvbnRyb2xwbGFuZS52MS5HZXREZXBsb3lUZW5hbnRSZXNwb25zZSIGorsYAggBEnEKDENyZWF0ZVRlbmFudBIqLmNvbnRyb2xwbGFuZS52MS5DcmVhdGVEZXBsb3lUZW5hbnRSZXF1ZXN0GisuY29udHJvbHBsYW5lLnYxLkNyZWF0ZURlcGxveVRlbmFudFJlc3BvbnNlIgiiuxgECAEYARJ+ChFDcmVhdGVFbnZpcm9ubWVudBIvLmNvbnRyb2xwbGFuZS52MS5DcmVhdGVEZXBsb3lFbnZpcm9ubWVudFJlcXVlc3QaMC5jb250cm9scGxhbmUudjEuQ3JlYXRlRGVwbG95RW52aXJvbm1lbnRSZXNwb25zZSIGorsYAggBEnUKDkdldEVudmlyb25tZW50EiwuY29udHJvbHBsYW5lLnYxLkdldERlcGxveUVudmlyb25tZW50UmVxdWVzdBotLmNvbnRyb2xwbGFuZS52MS5HZXREZXBsb3lFbnZpcm9ubWVudFJlc3BvbnNlIgaiuxgCCAESewoQTGlzdEVudmlyb25tZW50cxIuLmNvbnRyb2xwbGFuZS52MS5MaXN0RGVwbG95RW52aXJvbm1lbnRzUmVxdWVzdBovLmNvbnRyb2xwbGFuZS52MS5MaXN0RGVwbG95RW52aXJvbm1lbnRzUmVzcG9uc2UiBqK7GAIIARJ+ChFVcGRhdGVFbnZpcm9ubWVudBIvLmNvbnRyb2xwbGFuZS52MS5VcGRhdGVEZXBsb3lFbnZpcm9ubWVudFJlcXVlc3QaMC5jb250cm9scGxhbmUudjEuVXBkYXRlRGVwbG95RW52aXJvbm1lbnRSZXNwb25zZSIGorsYAggBEn4KEURlbGV0ZUVudmlyb25tZW50Ei8uY29udHJvbHBsYW5lLnYxLkRlbGV0ZURlcGxveUVudmlyb25tZW50UmVxdWVzdBowLmNvbnRyb2xwbGFuZS52MS5EZWxldGVEZXBsb3lFbnZpcm9ubWVudFJlc3BvbnNlIgaiuxgCCAESgAEKEUVuc3VyZUVudmlyb25tZW50Ei8uY29udHJvbHBsYW5lLnYxLkVuc3VyZURlcGxveUVudmlyb25tZW50UmVxdWVzdBowLmNvbnRyb2xwbGFuZS52MS5FbnN1cmVEZXBsb3lFbnZpcm9ubWVudFJlc3BvbnNlIgiiuxgECAEYARJvChBDcmVhdGVEZXBsb3ltZW50EiguY29udHJvbHBsYW5lLnYxLkNyZWF0ZURlcGxveW1lbnRSZXF1ZXN0GikuY29udHJvbHBsYW5lLnYxLkNyZWF0ZURlcGxveW1lbnRSZXNwb25zZSIGorsYAggBEmYKDUdldERlcGxveW1lbnQSJS5jb250cm9scGxhbmUudjEuR2V0RGVwbG95bWVudFJlcXVlc3QaJi5jb250cm9scGxhbmUudjEuR2V0RGVwbG95bWVudFJlc3BvbnNlIgaiuxgCCAESbAoPTGlzdERlcGxveW1lbnRzEicuY29udHJvbHBsYW5lLnYxLkxpc3REZXBsb3ltZW50c1JlcXVlc3QaKC5jb250cm9scGxhbmUudjEuTGlzdERlcGxveW1lbnRzUmVzcG9uc2UiBqK7GAIIARJvChBVcGRhdGVEZXBsb3ltZW50EiguY29udHJvbHBsYW5lLnYxLlVwZGF0ZURlcGxveW1lbnRSZXF1ZXN0GikuY29udHJvbHBsYW5lLnYxLlVwZGF0ZURlcGxveW1lbnRSZXNwb25zZSIGorsYAggBEm8KEERlbGV0ZURlcGxveW1lbnQSKC5jb250cm9scGxhbmUudjEuRGVsZXRlRGVwbG95bWVudFJlcXVlc3QaKS5jb250cm9scGxhbmUudjEuRGVsZXRlRGVwbG95bWVudFJlc3BvbnNlIgaiuxgCCAEScQoQRW5zdXJlRGVwbG95bWVudBIoLmNvbnRyb2xwbGFuZS52MS5FbnN1cmVEZXBsb3ltZW50UmVxdWVzdBopLmNvbnRyb2xwbGFuZS52MS5FbnN1cmVEZXBsb3ltZW50UmVzcG9uc2UiCKK7GAQIARgBEmQKB1Byb21vdGUSJi5jb250cm9scGxhbmUudjEuUHJvbW90ZVJlbGVhc2VSZXF1ZXN0GicuY29udHJvbHBsYW5lLnYxLlByb21vdGVSZWxlYXNlUmVzcG9uc2UiCKK7GAQIASgBEmIKBVNjYWxlEicuY29udHJvbHBsYW5lLnYxLlNjYWxlRGVwbG95bWVudFJlcXVlc3QaKC5jb250cm9scGxhbmUudjEuU2NhbGVEZXBsb3ltZW50UmVzcG9uc2UiBqK7GAIIARJuCglHZXRTdGF0dXMSKy5jb250cm9scGxhbmUudjEuR2V0RGVwbG95bWVudFN0YXR1c1JlcXVlc3QaLC5jb250cm9scGxhbmUudjEuR2V0RGVwbG95bWVudFN0YXR1c1Jlc3BvbnNlIgaiuxgCCAEScwoKU3RyZWFtTG9ncxIsLmNvbnRyb2xwbGFuZS52MS5TdHJlYW1EZXBsb3ltZW50TG9nc1JlcXVlc3QaLS5jb250cm9scGxhbmUudjEuU3RyZWFtRGVwbG95bWVudExvZ3NSZXNwb25zZSIGorsYAggBMAEShgEKF1B1Ymxpc2hEZXBsb3ltZW50Q29uZmlnEi8uY29udHJvbHBsYW5lLnYxLlB1Ymxpc2hEZXBsb3ltZW50Q29uZmlnUmVxdWVzdBowLmNvbnRyb2xwbGFuZS52MS5QdWJsaXNoRGVwbG95bWVudENvbmZpZ1Jlc3BvbnNlIgiiuxgECAEYARJfCgpDdXRSZWxlYXNlEiIuY29udHJvbHBsYW5lLnYxLkN1dFJlbGVhc2VSZXF1ZXN0GiMuY29udHJvbHBsYW5lLnYxLkN1dFJlbGVhc2VSZXNwb25zZSIIorsYBAgBKAESbwoMTGlzdFJlbGVhc2VzEiouY29udHJvbHBsYW5lLnYxLkxpc3REZXBsb3lSZWxlYXNlc1JlcXVlc3QaKy5jb250cm9scGxhbmUudjEuTGlzdERlcGxveVJlbGVhc2VzUmVzcG9uc2UiBqK7GAIIARJpCgpHZXRSZWxlYXNlEiguY29udHJvbHBsYW5lLnYxLkdldERlcGxveVJlbGVhc2VSZXF1ZXN0GikuY29udHJvbHBsYW5lLnYxLkdldERlcGxveVJlbGVhc2VSZXNwb25zZSIGorsYAggBEnUKDkxpc3RQcm9tb3Rpb25zEiwuY29udHJvbHBsYW5lLnYxLkxpc3REZXBsb3lQcm9tb3Rpb25zUmVxdWVzdBotLmNvbnRyb2xwbGFuZS52MS5MaXN0RGVwbG95UHJvbW90aW9uc1Jlc3BvbnNlIgaiuxgCCAESZgoJTGlzdFVzYWdlEicuY29udHJvbHBsYW5lLnYxLkxpc3REZXBsb3lVc2FnZVJlcXVlc3QaKC5jb250cm9scGxhbmUudjEuTGlzdERlcGxveVVzYWdlUmVzcG9uc2UiBqK7GAIIAULTAQoTY29tLmNvbnRyb2xwbGFuZS52MUILRGVwbG95UHJvdG9QAVpSZ2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vY29udHJvbHBsYW5lL3NlcnZpY2VzL2RlcGxveS92MTtjb250cm9scGxhbmV2MaICA0NYWKoCD0NvbnRyb2xwbGFuZS5WMcoCD0NvbnRyb2xwbGFuZVxWMeICG0NvbnRyb2xwbGFuZVxWMVxHUEJNZXRhZGF0YeoCEENvbnRyb2xwbGFuZTo6VjFiBnByb3RvMw", [file_controlplane_v1_deploy, file_forge_v1_forge, file_google_protobuf_struct, file_google_protobuf_timestamp]);
+  fileDesc("Ch9zZXJ2aWNlcy9kZXBsb3kvdjEvZGVwbG95LnByb3RvEg9jb250cm9scGxhbmUudjEiGAoWR2V0RGVwbG95VGVuYW50UmVxdWVzdCKAAQoXR2V0RGVwbG95VGVuYW50UmVzcG9uc2USLQoGdGVuYW50GAEgASgLMh0uY29udHJvbHBsYW5lLnYxLkRlcGxveVRlbmFudBI2CghjbHVzdGVycxgCIAMoCzIkLmNvbnRyb2xwbGFuZS52MS5EZXBsb3lUZW5hbnRDbHVzdGVyIikKGUNyZWF0ZURlcGxveVRlbmFudFJlcXVlc3QSDAoEc2x1ZxgBIAEoCSJLChpDcmVhdGVEZXBsb3lUZW5hbnRSZXNwb25zZRItCgZ0ZW5hbnQYASABKAsyHS5jb250cm9scGxhbmUudjEuRGVwbG95VGVuYW50IlYKHkNyZWF0ZURlcGxveUVudmlyb25tZW50UmVxdWVzdBI0CgRzcGVjGAEgASgLMiYuY29udHJvbHBsYW5lLnYxLkRlcGxveUVudmlyb25tZW50U3BlYyJaCh9DcmVhdGVEZXBsb3lFbnZpcm9ubWVudFJlc3BvbnNlEjcKC2Vudmlyb25tZW50GAEgASgLMiIuY29udHJvbHBsYW5lLnYxLkRlcGxveUVudmlyb25tZW50IjUKG0dldERlcGxveUVudmlyb25tZW50UmVxdWVzdBIWCg5lbnZpcm9ubWVudF9pZBgBIAEoCSKUAQocR2V0RGVwbG95RW52aXJvbm1lbnRSZXNwb25zZRI3CgtlbnZpcm9ubWVudBgBIAEoCzIiLmNvbnRyb2xwbGFuZS52MS5EZXBsb3lFbnZpcm9ubWVudBI7ChFjdXJyZW50X3Byb21vdGlvbhgCIAEoCzIgLmNvbnRyb2xwbGFuZS52MS5EZXBsb3lQcm9tb3Rpb24ipQEKHUxpc3REZXBsb3lFbnZpcm9ubWVudHNSZXF1ZXN0EjkKBGtpbmQYASABKA4yJi5jb250cm9scGxhbmUudjEuRGVwbG95RW52aXJvbm1lbnRLaW5kSACIAQESEwoGc2VhcmNoGAIgASgJSAGIAQESFAoHcHJvamVjdBgDIAEoCUgCiAEBQgcKBV9raW5kQgkKB19zZWFyY2hCCgoIX3Byb2plY3QiWgoeTGlzdERlcGxveUVudmlyb25tZW50c1Jlc3BvbnNlEjgKDGVudmlyb25tZW50cxgBIAMoCzIiLmNvbnRyb2xwbGFuZS52MS5EZXBsb3lFbnZpcm9ubWVudCJuCh5VcGRhdGVEZXBsb3lFbnZpcm9ubWVudFJlcXVlc3QSFgoOZW52aXJvbm1lbnRfaWQYASABKAkSNAoEc3BlYxgCIAEoCzImLmNvbnRyb2xwbGFuZS52MS5EZXBsb3lFbnZpcm9ubWVudFNwZWMiWgofVXBkYXRlRGVwbG95RW52aXJvbm1lbnRSZXNwb25zZRI3CgtlbnZpcm9ubWVudBgBIAEoCzIiLmNvbnRyb2xwbGFuZS52MS5EZXBsb3lFbnZpcm9ubWVudCJHCh5EZWxldGVEZXBsb3lFbnZpcm9ubWVudFJlcXVlc3QSFgoOZW52aXJvbm1lbnRfaWQYASABKAkSDQoFZm9yY2UYAiABKAgiIQofRGVsZXRlRGVwbG95RW52aXJvbm1lbnRSZXNwb25zZSJWCh5FbnN1cmVEZXBsb3lFbnZpcm9ubWVudFJlcXVlc3QSNAoEc3BlYxgBIAEoCzImLmNvbnRyb2xwbGFuZS52MS5EZXBsb3lFbnZpcm9ubWVudFNwZWMiawofRW5zdXJlRGVwbG95RW52aXJvbm1lbnRSZXNwb25zZRI3CgtlbnZpcm9ubWVudBgBIAEoCzIiLmNvbnRyb2xwbGFuZS52MS5EZXBsb3lFbnZpcm9ubWVudBIPCgdjcmVhdGVkGAIgASgIIpEBChdDcmVhdGVEZXBsb3ltZW50UmVxdWVzdBIWCg5lbnZpcm9ubWVudF9pZBgBIAEoCRIMCgRuYW1lGAIgASgJEikKBHRpZXIYAyABKA4yGy5jb250cm9scGxhbmUudjEuRGVwbG95VGllchIlCgRzcGVjGAUgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdCJLChhDcmVhdGVEZXBsb3ltZW50UmVzcG9uc2USLwoKZGVwbG95bWVudBgBIAEoCzIbLmNvbnRyb2xwbGFuZS52MS5EZXBsb3ltZW50Ii0KFEdldERlcGxveW1lbnRSZXF1ZXN0EhUKDWRlcGxveW1lbnRfaWQYASABKAkiSAoVR2V0RGVwbG95bWVudFJlc3BvbnNlEi8KCmRlcGxveW1lbnQYASABKAsyGy5jb250cm9scGxhbmUudjEuRGVwbG95bWVudCL3AQoWTGlzdERlcGxveW1lbnRzUmVxdWVzdBIbCg5lbnZpcm9ubWVudF9pZBgBIAEoCUgAiAEBEi4KBHRpZXIYAiABKA4yGy5jb250cm9scGxhbmUudjEuRGVwbG95VGllckgBiAEBEkEKDm9ic2VydmVkX3N0YXRlGAMgASgOMiQuY29udHJvbHBsYW5lLnYxLkRlcGxveU9ic2VydmVkU3RhdGVIAogBARITCgZzZWFyY2gYBCABKAlIA4gBAUIRCg9fZW52aXJvbm1lbnRfaWRCBwoFX3RpZXJCEQoPX29ic2VydmVkX3N0YXRlQgkKB19zZWFyY2giSwoXTGlzdERlcGxveW1lbnRzUmVzcG9uc2USMAoLZGVwbG95bWVudHMYASADKAsyGy5jb250cm9scGxhbmUudjEuRGVwbG95bWVudCJXChdVcGRhdGVEZXBsb3ltZW50UmVxdWVzdBIVCg1kZXBsb3ltZW50X2lkGAEgASgJEiUKBHNwZWMYAyABKAsyFy5nb29nbGUucHJvdG9idWYuU3RydWN0IksKGFVwZGF0ZURlcGxveW1lbnRSZXNwb25zZRIvCgpkZXBsb3ltZW50GAEgASgLMhsuY29udHJvbHBsYW5lLnYxLkRlcGxveW1lbnQiMAoXRGVsZXRlRGVwbG95bWVudFJlcXVlc3QSFQoNZGVwbG95bWVudF9pZBgBIAEoCSIaChhEZWxldGVEZXBsb3ltZW50UmVzcG9uc2UiuQEKF0Vuc3VyZURlcGxveW1lbnRSZXF1ZXN0EhYKDmVudmlyb25tZW50X2lkGAEgASgJEgwKBG5hbWUYAiABKAkSKQoEdGllchgDIAEoDjIbLmNvbnRyb2xwbGFuZS52MS5EZXBsb3lUaWVyEiUKBHNwZWMYBCABKAsyFy5nb29nbGUucHJvdG9idWYuU3RydWN0EhAKCGFydGlmYWN0GAUgASgJEhQKDHByb21vdGlvbl9pZBgGIAEoCSJtChhFbnN1cmVEZXBsb3ltZW50UmVzcG9uc2USLwoKZGVwbG95bWVudBgBIAEoCzIbLmNvbnRyb2xwbGFuZS52MS5EZXBsb3ltZW50Eg8KB2NyZWF0ZWQYAiABKAgSDwoHdXBkYXRlZBgDIAEoCCI3Ch5QdWJsaXNoRGVwbG95bWVudENvbmZpZ1JlcXVlc3QSFQoNZGVwbG95bWVudF9pZBgBIAEoCSJ/Ch9QdWJsaXNoRGVwbG95bWVudENvbmZpZ1Jlc3BvbnNlEg4KBmRpZ2VzdBgBIAEoCRISCgpyZXBvc2l0b3J5GAIgASgJEhEKCXJlZmVyZW5jZRgDIAEoCRIRCgluYW1lc3BhY2UYBCABKAkSEgoKY2x1c3Rlcl9pZBgFIAEoCSLqAgoVUHJvbW90ZVJlbGVhc2VSZXF1ZXN0EhYKDmVudmlyb25tZW50X2lkGAEgASgJEg8KB3ZlcnNpb24YAiABKAkSGwoTZnJvbV9lbnZpcm9ubWVudF9pZBgDIAEoCRIqCgVnYXRlcxgEIAMoCzIbLmNvbnRyb2xwbGFuZS52MS5EZXBsb3lHYXRlEhkKEXByb21vdGVkX2J5X2FjdG9yGAUgASgJEgwKBG5vdGUYBiABKAkSJwodZXhwZWN0ZWRfY3VycmVudF9wcm9tb3Rpb25faWQYByABKAlIABIYCg5leHBlY3RfdW5ib3VuZBgIIAEoCEgAEhsKE3N1cGVyc2VkZV9pbl9mbGlnaHQYCSABKAgSGQoRZnJvbV9wcm9tb3Rpb25faWQYCiABKAkSJwoDcnVuGAsgASgLMhouY29udHJvbHBsYW5lLnYxLkRlcGxveVJ1bkISChBleHBlY3RlZF9jdXJyZW50Ik0KFlByb21vdGVSZWxlYXNlUmVzcG9uc2USMwoJcHJvbW90aW9uGAEgASgLMiAuY29udHJvbHBsYW5lLnYxLkRlcGxveVByb21vdGlvbiJjChZTY2FsZURlcGxveW1lbnRSZXF1ZXN0EhUKDWRlcGxveW1lbnRfaWQYASABKAkSMgoJcnVuX3N0YXRlGAMgASgOMh8uY29udHJvbHBsYW5lLnYxLkRlcGxveVJ1blN0YXRlIkoKF1NjYWxlRGVwbG95bWVudFJlc3BvbnNlEi8KCmRlcGxveW1lbnQYASABKAsyGy5jb250cm9scGxhbmUudjEuRGVwbG95bWVudCJLChpHZXREZXBsb3ltZW50U3RhdHVzUmVxdWVzdBIVCg1kZXBsb3ltZW50X2lkGAEgASgJEhYKDmVudmlyb25tZW50X2lkGAIgASgJIuYBChBEZXBsb3ltZW50U3RhdHVzEi8KCmRlcGxveW1lbnQYASABKAsyGy5jb250cm9scGxhbmUudjEuRGVwbG95bWVudBIvCgd2ZXJkaWN0GAIgASgOMh4uY29udHJvbHBsYW5lLnYxLkRlcGxveVZlcmRpY3QSFgoOdmVyZGljdF9yZWFzb24YAyABKAkSFgoOZGVzaXJlZF9kaWdlc3QYBCABKAkSLwoLb2JzZXJ2ZWRfYXQYBSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEg8KB2RyaWZ0ZWQYBiABKAgi5QMKG0dldERlcGxveW1lbnRTdGF0dXNSZXNwb25zZRIvCgpkZXBsb3ltZW50GAEgASgLMhsuY29udHJvbHBsYW5lLnYxLkRlcGxveW1lbnQSDwoHZHJpZnRlZBgCIAEoCBI7ChFjdXJyZW50X3Byb21vdGlvbhgDIAEoCzIgLmNvbnRyb2xwbGFuZS52MS5EZXBsb3lQcm9tb3Rpb24SLwoLb2JzZXJ2ZWRfYXQYBCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi8KB3ZlcmRpY3QYBSABKA4yHi5jb250cm9scGxhbmUudjEuRGVwbG95VmVyZGljdBIWCg52ZXJkaWN0X3JlYXNvbhgGIAEoCRIWCg5kZXNpcmVkX2RpZ2VzdBgHIAEoCRI2CgtkZXBsb3ltZW50cxgIIAMoCzIhLmNvbnRyb2xwbGFuZS52MS5EZXBsb3ltZW50U3RhdHVzEjsKE2Vudmlyb25tZW50X3ZlcmRpY3QYCSABKA4yHi5jb250cm9scGxhbmUudjEuRGVwbG95VmVyZGljdBJAChByZWNvbmNpbGVfcG9saWN5GAogASgOMiYuY29udHJvbHBsYW5lLnYxLkRlcGxveVJlY29uY2lsZVBvbGljeSKpAQobU3RyZWFtRGVwbG95bWVudExvZ3NSZXF1ZXN0EhUKDWRlcGxveW1lbnRfaWQYASABKAkSMAoGc3RyZWFtGAIgASgOMiAuY29udHJvbHBsYW5lLnYxLkRlcGxveUxvZ1N0cmVhbRIWCg5hZnRlcl9zZXF1ZW5jZRgDIAEoAxIWCg5zbmFwc2hvdF9saW1pdBgEIAEoBRIRCglub19mb2xsb3cYBSABKAgiewocU3RyZWFtRGVwbG95bWVudExvZ3NSZXNwb25zZRItCgVsaW5lcxgBIAMoCzIeLmNvbnRyb2xwbGFuZS52MS5EZXBsb3lMb2dMaW5lEhMKC2lzX3NuYXBzaG90GAIgASgIEhcKD2xhdGVzdF9zZXF1ZW5jZRgDIAEoAyK5AQoRQ3V0UmVsZWFzZVJlcXVlc3QSDwoHdmVyc2lvbhgBIAEoCRIyCglhcnRpZmFjdHMYAiADKAsyHy5jb250cm9scGxhbmUudjEuRGVwbG95QXJ0aWZhY3QSEgoKZ2l0X2NvbW1pdBgDIAEoCRIPCgdnaXRfdGFnGAQgASgJEhEKCWdpdF9kaXJ0eRgFIAEoCBInCgNydW4YBiABKAsyGi5jb250cm9scGxhbmUudjEuRGVwbG95UnVuIlYKEkN1dFJlbGVhc2VSZXNwb25zZRIvCgdyZWxlYXNlGAEgASgLMh4uY29udHJvbHBsYW5lLnYxLkRlcGxveVJlbGVhc2USDwoHY3JlYXRlZBgCIAEoCCLdAQoZTGlzdERlcGxveVJlbGVhc2VzUmVxdWVzdBIdChB2ZXJzaW9uX2NvbnRhaW5zGAEgASgJSACIAQESFwoKZ2l0X2NvbW1pdBgCIAEoCUgBiAEBEicKGnByb21vdGVkX3RvX2Vudmlyb25tZW50X2lkGAMgASgJSAKIAQESEgoFbGltaXQYBCABKAVIA4gBAUITChFfdmVyc2lvbl9jb250YWluc0INCgtfZ2l0X2NvbW1pdEIdChtfcHJvbW90ZWRfdG9fZW52aXJvbm1lbnRfaWRCCAoGX2xpbWl0Ik4KGkxpc3REZXBsb3lSZWxlYXNlc1Jlc3BvbnNlEjAKCHJlbGVhc2VzGAEgAygLMh4uY29udHJvbHBsYW5lLnYxLkRlcGxveVJlbGVhc2UiKgoXR2V0RGVwbG95UmVsZWFzZVJlcXVlc3QSDwoHdmVyc2lvbhgBIAEoCSJsChhHZXREZXBsb3lSZWxlYXNlUmVzcG9uc2USLwoHcmVsZWFzZRgBIAEoCzIeLmNvbnRyb2xwbGFuZS52MS5EZXBsb3lSZWxlYXNlEh8KF2N1cnJlbnRfZW52aXJvbm1lbnRfaWRzGAIgAygJIoECChtMaXN0RGVwbG95UHJvbW90aW9uc1JlcXVlc3QSFgoOZW52aXJvbm1lbnRfaWQYASABKAkSNwoEa2luZBgCIAEoDjIkLmNvbnRyb2xwbGFuZS52MS5EZXBsb3lQcm9tb3Rpb25LaW5kSACIAQESEgoFbGltaXQYAyABKAVIAYgBARIgChNiZWZvcmVfcHJvbW90aW9uX2lkGAQgASgJSAKIAQESHAoPcmVsZWFzZV92ZXJzaW9uGAUgASgJSAOIAQFCBwoFX2tpbmRCCAoGX2xpbWl0QhYKFF9iZWZvcmVfcHJvbW90aW9uX2lkQhIKEF9yZWxlYXNlX3ZlcnNpb24idgocTGlzdERlcGxveVByb21vdGlvbnNSZXNwb25zZRI0Cgpwcm9tb3Rpb25zGAEgAygLMiAuY29udHJvbHBsYW5lLnYxLkRlcGxveVByb21vdGlvbhIgChhuZXh0X2JlZm9yZV9wcm9tb3Rpb25faWQYAiABKAkiRwoXR2V0RGVwbG95Um9sbG91dFJlcXVlc3QSFgoOZW52aXJvbm1lbnRfaWQYASABKAkSFAoMcHJvbW90aW9uX2lkGAIgASgJIksKGEdldERlcGxveVJvbGxvdXRSZXNwb25zZRIvCgdyb2xsb3V0GAEgASgLMh4uY29udHJvbHBsYW5lLnYxLkRlcGxveVJvbGxvdXQiWgoXUmVjb3JkRGVwbG95R2F0ZVJlcXVlc3QSFAoMcHJvbW90aW9uX2lkGAEgASgJEikKBGdhdGUYAiABKAsyGy5jb250cm9scGxhbmUudjEuRGVwbG95R2F0ZSJWChhSZWNvcmREZXBsb3lHYXRlUmVzcG9uc2USKQoEZ2F0ZRgBIAEoCzIbLmNvbnRyb2xwbGFuZS52MS5EZXBsb3lHYXRlEg8KB2NyZWF0ZWQYAiABKAgiLgoWTGlzdERlcGxveUdhdGVzUmVxdWVzdBIUCgxwcm9tb3Rpb25faWQYASABKAkiRQoXTGlzdERlcGxveUdhdGVzUmVzcG9uc2USKgoFZ2F0ZXMYASADKAsyGy5jb250cm9scGxhbmUudjEuRGVwbG95R2F0ZSIlChNHZXREZXBsb3lSdW5SZXF1ZXN0Eg4KBnJ1bl9pZBgBIAEoCSKhAQoUR2V0RGVwbG95UnVuUmVzcG9uc2USJwoDcnVuGAEgASgLMhouY29udHJvbHBsYW5lLnYxLkRlcGxveVJ1bhIvCgdyZWxlYXNlGAIgASgLMh4uY29udHJvbHBsYW5lLnYxLkRlcGxveVJlbGVhc2USLwoGc3RhZ2VzGAMgAygLMh8uY29udHJvbHBsYW5lLnYxLkRlcGxveVJ1blN0YWdlIuECChZMaXN0RGVwbG95VXNhZ2VSZXF1ZXN0Ei4KCnN0YXJ0X3RpbWUYASABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEiwKCGVuZF90aW1lGAIgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBI/Cg1yZXNvdXJjZV9raW5kGAMgASgOMiMuY29udHJvbHBsYW5lLnYxLkRlcGxveVJlc291cmNlS2luZEgAiAEBEhsKDmVudmlyb25tZW50X2lkGAQgASgJSAGIAQESGgoNZGVwbG95bWVudF9pZBgFIAEoCUgCiAEBEiAKE2dyYW51bGFyaXR5X3NlY29uZHMYBiABKAVIA4gBAUIQCg5fcmVzb3VyY2Vfa2luZEIRCg9fZW52aXJvbm1lbnRfaWRCEAoOX2RlcGxveW1lbnRfaWRCFgoUX2dyYW51bGFyaXR5X3NlY29uZHMiZgoXTGlzdERlcGxveVVzYWdlUmVzcG9uc2USLQoEcm93cxgBIAMoCzIfLmNvbnRyb2xwbGFuZS52MS5EZXBsb3lVc2FnZVJvdxIcChR0b3RhbF9jb3N0X3VzZF9uYW5vcxgCIAEoAzLwGAoNRGVwbG95U2VydmljZRJmCglHZXRUZW5hbnQSJy5jb250cm9scGxhbmUudjEuR2V0RGVwbG95VGVuYW50UmVxdWVzdBooLmNvbnRyb2xwbGFuZS52MS5HZXREZXBsb3lUZW5hbnRSZXNwb25zZSIGorsYAggBEnEKDENyZWF0ZVRlbmFudBIqLmNvbnRyb2xwbGFuZS52MS5DcmVhdGVEZXBsb3lUZW5hbnRSZXF1ZXN0GisuY29udHJvbHBsYW5lLnYxLkNyZWF0ZURlcGxveVRlbmFudFJlc3BvbnNlIgiiuxgECAEYARJ+ChFDcmVhdGVFbnZpcm9ubWVudBIvLmNvbnRyb2xwbGFuZS52MS5DcmVhdGVEZXBsb3lFbnZpcm9ubWVudFJlcXVlc3QaMC5jb250cm9scGxhbmUudjEuQ3JlYXRlRGVwbG95RW52aXJvbm1lbnRSZXNwb25zZSIGorsYAggBEnUKDkdldEVudmlyb25tZW50EiwuY29udHJvbHBsYW5lLnYxLkdldERlcGxveUVudmlyb25tZW50UmVxdWVzdBotLmNvbnRyb2xwbGFuZS52MS5HZXREZXBsb3lFbnZpcm9ubWVudFJlc3BvbnNlIgaiuxgCCAESewoQTGlzdEVudmlyb25tZW50cxIuLmNvbnRyb2xwbGFuZS52MS5MaXN0RGVwbG95RW52aXJvbm1lbnRzUmVxdWVzdBovLmNvbnRyb2xwbGFuZS52MS5MaXN0RGVwbG95RW52aXJvbm1lbnRzUmVzcG9uc2UiBqK7GAIIARJ+ChFVcGRhdGVFbnZpcm9ubWVudBIvLmNvbnRyb2xwbGFuZS52MS5VcGRhdGVEZXBsb3lFbnZpcm9ubWVudFJlcXVlc3QaMC5jb250cm9scGxhbmUudjEuVXBkYXRlRGVwbG95RW52aXJvbm1lbnRSZXNwb25zZSIGorsYAggBEn4KEURlbGV0ZUVudmlyb25tZW50Ei8uY29udHJvbHBsYW5lLnYxLkRlbGV0ZURlcGxveUVudmlyb25tZW50UmVxdWVzdBowLmNvbnRyb2xwbGFuZS52MS5EZWxldGVEZXBsb3lFbnZpcm9ubWVudFJlc3BvbnNlIgaiuxgCCAESgAEKEUVuc3VyZUVudmlyb25tZW50Ei8uY29udHJvbHBsYW5lLnYxLkVuc3VyZURlcGxveUVudmlyb25tZW50UmVxdWVzdBowLmNvbnRyb2xwbGFuZS52MS5FbnN1cmVEZXBsb3lFbnZpcm9ubWVudFJlc3BvbnNlIgiiuxgECAEYARJvChBDcmVhdGVEZXBsb3ltZW50EiguY29udHJvbHBsYW5lLnYxLkNyZWF0ZURlcGxveW1lbnRSZXF1ZXN0GikuY29udHJvbHBsYW5lLnYxLkNyZWF0ZURlcGxveW1lbnRSZXNwb25zZSIGorsYAggBEmYKDUdldERlcGxveW1lbnQSJS5jb250cm9scGxhbmUudjEuR2V0RGVwbG95bWVudFJlcXVlc3QaJi5jb250cm9scGxhbmUudjEuR2V0RGVwbG95bWVudFJlc3BvbnNlIgaiuxgCCAESbAoPTGlzdERlcGxveW1lbnRzEicuY29udHJvbHBsYW5lLnYxLkxpc3REZXBsb3ltZW50c1JlcXVlc3QaKC5jb250cm9scGxhbmUudjEuTGlzdERlcGxveW1lbnRzUmVzcG9uc2UiBqK7GAIIARJvChBVcGRhdGVEZXBsb3ltZW50EiguY29udHJvbHBsYW5lLnYxLlVwZGF0ZURlcGxveW1lbnRSZXF1ZXN0GikuY29udHJvbHBsYW5lLnYxLlVwZGF0ZURlcGxveW1lbnRSZXNwb25zZSIGorsYAggBEm8KEERlbGV0ZURlcGxveW1lbnQSKC5jb250cm9scGxhbmUudjEuRGVsZXRlRGVwbG95bWVudFJlcXVlc3QaKS5jb250cm9scGxhbmUudjEuRGVsZXRlRGVwbG95bWVudFJlc3BvbnNlIgaiuxgCCAEScQoQRW5zdXJlRGVwbG95bWVudBIoLmNvbnRyb2xwbGFuZS52MS5FbnN1cmVEZXBsb3ltZW50UmVxdWVzdBopLmNvbnRyb2xwbGFuZS52MS5FbnN1cmVEZXBsb3ltZW50UmVzcG9uc2UiCKK7GAQIARgBEmQKB1Byb21vdGUSJi5jb250cm9scGxhbmUudjEuUHJvbW90ZVJlbGVhc2VSZXF1ZXN0GicuY29udHJvbHBsYW5lLnYxLlByb21vdGVSZWxlYXNlUmVzcG9uc2UiCKK7GAQIASgBEmIKBVNjYWxlEicuY29udHJvbHBsYW5lLnYxLlNjYWxlRGVwbG95bWVudFJlcXVlc3QaKC5jb250cm9scGxhbmUudjEuU2NhbGVEZXBsb3ltZW50UmVzcG9uc2UiBqK7GAIIARJuCglHZXRTdGF0dXMSKy5jb250cm9scGxhbmUudjEuR2V0RGVwbG95bWVudFN0YXR1c1JlcXVlc3QaLC5jb250cm9scGxhbmUudjEuR2V0RGVwbG95bWVudFN0YXR1c1Jlc3BvbnNlIgaiuxgCCAEScwoKU3RyZWFtTG9ncxIsLmNvbnRyb2xwbGFuZS52MS5TdHJlYW1EZXBsb3ltZW50TG9nc1JlcXVlc3QaLS5jb250cm9scGxhbmUudjEuU3RyZWFtRGVwbG95bWVudExvZ3NSZXNwb25zZSIGorsYAggBMAEShgEKF1B1Ymxpc2hEZXBsb3ltZW50Q29uZmlnEi8uY29udHJvbHBsYW5lLnYxLlB1Ymxpc2hEZXBsb3ltZW50Q29uZmlnUmVxdWVzdBowLmNvbnRyb2xwbGFuZS52MS5QdWJsaXNoRGVwbG95bWVudENvbmZpZ1Jlc3BvbnNlIgiiuxgECAEYARJfCgpDdXRSZWxlYXNlEiIuY29udHJvbHBsYW5lLnYxLkN1dFJlbGVhc2VSZXF1ZXN0GiMuY29udHJvbHBsYW5lLnYxLkN1dFJlbGVhc2VSZXNwb25zZSIIorsYBAgBKAESbwoMTGlzdFJlbGVhc2VzEiouY29udHJvbHBsYW5lLnYxLkxpc3REZXBsb3lSZWxlYXNlc1JlcXVlc3QaKy5jb250cm9scGxhbmUudjEuTGlzdERlcGxveVJlbGVhc2VzUmVzcG9uc2UiBqK7GAIIARJpCgpHZXRSZWxlYXNlEiguY29udHJvbHBsYW5lLnYxLkdldERlcGxveVJlbGVhc2VSZXF1ZXN0GikuY29udHJvbHBsYW5lLnYxLkdldERlcGxveVJlbGVhc2VSZXNwb25zZSIGorsYAggBEnUKDkxpc3RQcm9tb3Rpb25zEiwuY29udHJvbHBsYW5lLnYxLkxpc3REZXBsb3lQcm9tb3Rpb25zUmVxdWVzdBotLmNvbnRyb2xwbGFuZS52MS5MaXN0RGVwbG95UHJvbW90aW9uc1Jlc3BvbnNlIgaiuxgCCAESaQoKR2V0Um9sbG91dBIoLmNvbnRyb2xwbGFuZS52MS5HZXREZXBsb3lSb2xsb3V0UmVxdWVzdBopLmNvbnRyb2xwbGFuZS52MS5HZXREZXBsb3lSb2xsb3V0UmVzcG9uc2UiBqK7GAIIARJrCgpSZWNvcmRHYXRlEiguY29udHJvbHBsYW5lLnYxLlJlY29yZERlcGxveUdhdGVSZXF1ZXN0GikuY29udHJvbHBsYW5lLnYxLlJlY29yZERlcGxveUdhdGVSZXNwb25zZSIIorsYBAgBGAESZgoJTGlzdEdhdGVzEicuY29udHJvbHBsYW5lLnYxLkxpc3REZXBsb3lHYXRlc1JlcXVlc3QaKC5jb250cm9scGxhbmUudjEuTGlzdERlcGxveUdhdGVzUmVzcG9uc2UiBqK7GAIIARJdCgZHZXRSdW4SJC5jb250cm9scGxhbmUudjEuR2V0RGVwbG95UnVuUmVxdWVzdBolLmNvbnRyb2xwbGFuZS52MS5HZXREZXBsb3lSdW5SZXNwb25zZSIGorsYAggBEmYKCUxpc3RVc2FnZRInLmNvbnRyb2xwbGFuZS52MS5MaXN0RGVwbG95VXNhZ2VSZXF1ZXN0GiguY29udHJvbHBsYW5lLnYxLkxpc3REZXBsb3lVc2FnZVJlc3BvbnNlIgaiuxgCCAFC0wEKE2NvbS5jb250cm9scGxhbmUudjFCC0RlcGxveVByb3RvUAFaUmdpdGh1Yi5jb20vcmVsaWFudC1sYWJzL3JlbGlhbnQvZ2VuL2NvbnRyb2xwbGFuZS9zZXJ2aWNlcy9kZXBsb3kvdjE7Y29udHJvbHBsYW5ldjGiAgNDWFiqAg9Db250cm9scGxhbmUuVjHKAg9Db250cm9scGxhbmVcVjHiAhtDb250cm9scGxhbmVcVjFcR1BCTWV0YWRhdGHqAhBDb250cm9scGxhbmU6OlYxYgZwcm90bzM", [file_controlplane_v1_deploy, file_forge_v1_forge, file_google_protobuf_struct, file_google_protobuf_timestamp]);
 
 /**
  * @generated from message controlplane.v1.GetDeployTenantRequest
@@ -627,6 +627,28 @@ export type EnsureDeploymentRequest = Message<"controlplane.v1.EnsureDeploymentR
    * @generated from field: google.protobuf.Struct spec = 4;
    */
   spec?: JsonObject | undefined;
+
+  /**
+   * The release ARTIFACT KEY whose digest this deployment runs — the same key
+   * the client already computed for its own plan.
+   *
+   * The client sends it rather than the server inferring it, so the two cannot
+   * pair a workload with a digest differently. Empty means not release-bound
+   * (a database, a pinned third-party image), and the server's converger skips
+   * such a row rather than guessing from the deployment's name.
+   *
+   * @generated from field: string artifact = 5;
+   */
+  artifact: string;
+
+  /**
+   * The promotion whose pins this spec was rendered from, recorded as
+   * Deployment.applied_promotion_id. Empty when the client pinned from
+   * nothing. A promotion belonging to another environment is refused.
+   *
+   * @generated from field: string promotion_id = 6;
+   */
+  promotionId: string;
 };
 
 /**
@@ -821,6 +843,66 @@ export type PromoteReleaseRequest = Message<"controlplane.v1.PromoteReleaseReque
    * @generated from field: string note = 6;
    */
   note: string;
+
+  /**
+   * The caller's view of the environment's CURRENT promotion — a
+   * compare-and-set, so a promote acts on the state the caller actually read.
+   *
+   * Setting NEITHER means no CAS, which is what the UI and a curl do, and is
+   * the back-compatible default: a request that omits both behaves exactly as
+   * it did before this field existed.
+   *
+   * A PROMOTION ID rather than a version, because v1 → v2 → v1 makes "current
+   * is v1" ambiguous and an id never is.
+   *
+   * Serialization is not sufficient on its own. Promote already takes FOR
+   * UPDATE, which ORDERS two writers but does not stop one acting on a stale
+   * read: CI plans "prod is on v5, moving to v6", a human hotfixes to v5.1,
+   * and CI then writes v6 over the hotfix. Both promotes were correctly
+   * serialized, and the hotfix is still gone.
+   *
+   * @generated from oneof controlplane.v1.PromoteReleaseRequest.expected_current
+   */
+  expectedCurrent: {
+    /**
+     * @generated from field: string expected_current_promotion_id = 7;
+     */
+    value: string;
+    case: "expectedCurrentPromotionId";
+  } | {
+    /**
+     * "I saw NO promotion" — the first-deploy expectation, which an empty id
+     * cannot express distinctly from "no expectation".
+     *
+     * @generated from field: bool expect_unbound = 8;
+     */
+    value: boolean;
+    case: "expectUnbound";
+  } | { case: undefined; value?: undefined };
+
+  /**
+   * Promote even though the current promotion has not finished rolling out.
+   * Recorded on the ledger row as DeployPromotion.superseded_in_flight.
+   *
+   * @generated from field: bool supersede_in_flight = 9;
+   */
+  supersedeInFlight: boolean;
+
+  /**
+   * Promote exactly the promotion another environment is running
+   * (`promote --from staging`), resolved server-side. Recorded as
+   * DeployPromotion.from_promotion_id.
+   *
+   * @generated from field: string from_promotion_id = 10;
+   */
+  fromPromotionId: string;
+
+  /**
+   * The CI run driving this promote.
+   *
+   * @generated from field: controlplane.v1.DeployRun run = 11;
+   */
+  run?: DeployRun | undefined;
 };
 
 /**
@@ -1191,6 +1273,13 @@ export type CutReleaseRequest = Message<"controlplane.v1.CutReleaseRequest"> & {
    * @generated from field: bool git_dirty = 5;
    */
   gitDirty: boolean;
+
+  /**
+   * The CI run that cut this release.
+   *
+   * @generated from field: controlplane.v1.DeployRun run = 6;
+   */
+  run?: DeployRun | undefined;
 };
 
 /**
@@ -1350,6 +1439,27 @@ export type ListDeployPromotionsRequest = Message<"controlplane.v1.ListDeployPro
    * @generated from field: optional int32 limit = 3;
    */
   limit?: number | undefined;
+
+  /**
+   * A KEYSET cursor: return the page of promotions strictly older than this
+   * one. Take it from the previous response's next_before_promotion_id.
+   *
+   * Keyset rather than an offset because the ledger is append-only and read
+   * newest-first, so a promote during paging shifts every offset by one and an
+   * offset-paged reader would silently see a row twice or skip one. Scoped to
+   * the caller's org, so a foreign cursor id yields an empty page rather than
+   * an error that would confirm the row exists.
+   *
+   * @generated from field: optional string before_promotion_id = 4;
+   */
+  beforePromotionId?: string | undefined;
+
+  /**
+   * Only promotions of this release version.
+   *
+   * @generated from field: optional string release_version = 5;
+   */
+  releaseVersion?: string | undefined;
 };
 
 /**
@@ -1369,6 +1479,15 @@ export type ListDeployPromotionsResponse = Message<"controlplane.v1.ListDeployPr
    * @generated from field: repeated controlplane.v1.DeployPromotion promotions = 1;
    */
   promotions: DeployPromotion[];
+
+  /**
+   * Pass as the next request's before_promotion_id. EMPTY MEANS THE LAST
+   * PAGE — a reader stops on the empty string, not on a short page, because
+   * a page can legitimately come back short.
+   *
+   * @generated from field: string next_before_promotion_id = 2;
+   */
+  nextBeforePromotionId: string;
 };
 
 /**
@@ -1377,6 +1496,180 @@ export type ListDeployPromotionsResponse = Message<"controlplane.v1.ListDeployPr
  */
 export const ListDeployPromotionsResponseSchema: GenMessage<ListDeployPromotionsResponse> = /*@__PURE__*/
   messageDesc(file_services_deploy_v1_deploy, 46);
+
+/**
+ * @generated from message controlplane.v1.GetDeployRolloutRequest
+ */
+export type GetDeployRolloutRequest = Message<"controlplane.v1.GetDeployRolloutRequest"> & {
+  /**
+   * @generated from field: string environment_id = 1;
+   */
+  environmentId: string;
+
+  /**
+   * Empty = the environment's current promotion.
+   *
+   * @generated from field: string promotion_id = 2;
+   */
+  promotionId: string;
+};
+
+/**
+ * Describes the message controlplane.v1.GetDeployRolloutRequest.
+ * Use `create(GetDeployRolloutRequestSchema)` to create a new message.
+ */
+export const GetDeployRolloutRequestSchema: GenMessage<GetDeployRolloutRequest> = /*@__PURE__*/
+  messageDesc(file_services_deploy_v1_deploy, 47);
+
+/**
+ * @generated from message controlplane.v1.GetDeployRolloutResponse
+ */
+export type GetDeployRolloutResponse = Message<"controlplane.v1.GetDeployRolloutResponse"> & {
+  /**
+   * @generated from field: controlplane.v1.DeployRollout rollout = 1;
+   */
+  rollout?: DeployRollout | undefined;
+};
+
+/**
+ * Describes the message controlplane.v1.GetDeployRolloutResponse.
+ * Use `create(GetDeployRolloutResponseSchema)` to create a new message.
+ */
+export const GetDeployRolloutResponseSchema: GenMessage<GetDeployRolloutResponse> = /*@__PURE__*/
+  messageDesc(file_services_deploy_v1_deploy, 48);
+
+/**
+ * @generated from message controlplane.v1.RecordDeployGateRequest
+ */
+export type RecordDeployGateRequest = Message<"controlplane.v1.RecordDeployGateRequest"> & {
+  /**
+   * @generated from field: string promotion_id = 1;
+   */
+  promotionId: string;
+
+  /**
+   * `recorded_by` and `recorded_at` on this gate are IGNORED: the server sets
+   * them from the caller's identity. See DeployGate.
+   *
+   * @generated from field: controlplane.v1.DeployGate gate = 2;
+   */
+  gate?: DeployGate | undefined;
+};
+
+/**
+ * Describes the message controlplane.v1.RecordDeployGateRequest.
+ * Use `create(RecordDeployGateRequestSchema)` to create a new message.
+ */
+export const RecordDeployGateRequestSchema: GenMessage<RecordDeployGateRequest> = /*@__PURE__*/
+  messageDesc(file_services_deploy_v1_deploy, 49);
+
+/**
+ * @generated from message controlplane.v1.RecordDeployGateResponse
+ */
+export type RecordDeployGateResponse = Message<"controlplane.v1.RecordDeployGateResponse"> & {
+  /**
+   * @generated from field: controlplane.v1.DeployGate gate = 1;
+   */
+  gate?: DeployGate | undefined;
+
+  /**
+   * False when the idempotency key (promotion_id, name, run_id) already held
+   * this gate and the existing row is being returned. The call still succeeds:
+   * a retried CI step has achieved what it asked for.
+   *
+   * @generated from field: bool created = 2;
+   */
+  created: boolean;
+};
+
+/**
+ * Describes the message controlplane.v1.RecordDeployGateResponse.
+ * Use `create(RecordDeployGateResponseSchema)` to create a new message.
+ */
+export const RecordDeployGateResponseSchema: GenMessage<RecordDeployGateResponse> = /*@__PURE__*/
+  messageDesc(file_services_deploy_v1_deploy, 50);
+
+/**
+ * @generated from message controlplane.v1.ListDeployGatesRequest
+ */
+export type ListDeployGatesRequest = Message<"controlplane.v1.ListDeployGatesRequest"> & {
+  /**
+   * @generated from field: string promotion_id = 1;
+   */
+  promotionId: string;
+};
+
+/**
+ * Describes the message controlplane.v1.ListDeployGatesRequest.
+ * Use `create(ListDeployGatesRequestSchema)` to create a new message.
+ */
+export const ListDeployGatesRequestSchema: GenMessage<ListDeployGatesRequest> = /*@__PURE__*/
+  messageDesc(file_services_deploy_v1_deploy, 51);
+
+/**
+ * @generated from message controlplane.v1.ListDeployGatesResponse
+ */
+export type ListDeployGatesResponse = Message<"controlplane.v1.ListDeployGatesResponse"> & {
+  /**
+   * Promote-time gates first, then the recorded ones oldest-first.
+   *
+   * @generated from field: repeated controlplane.v1.DeployGate gates = 1;
+   */
+  gates: DeployGate[];
+};
+
+/**
+ * Describes the message controlplane.v1.ListDeployGatesResponse.
+ * Use `create(ListDeployGatesResponseSchema)` to create a new message.
+ */
+export const ListDeployGatesResponseSchema: GenMessage<ListDeployGatesResponse> = /*@__PURE__*/
+  messageDesc(file_services_deploy_v1_deploy, 52);
+
+/**
+ * @generated from message controlplane.v1.GetDeployRunRequest
+ */
+export type GetDeployRunRequest = Message<"controlplane.v1.GetDeployRunRequest"> & {
+  /**
+   * @generated from field: string run_id = 1;
+   */
+  runId: string;
+};
+
+/**
+ * Describes the message controlplane.v1.GetDeployRunRequest.
+ * Use `create(GetDeployRunRequestSchema)` to create a new message.
+ */
+export const GetDeployRunRequestSchema: GenMessage<GetDeployRunRequest> = /*@__PURE__*/
+  messageDesc(file_services_deploy_v1_deploy, 53);
+
+/**
+ * @generated from message controlplane.v1.GetDeployRunResponse
+ */
+export type GetDeployRunResponse = Message<"controlplane.v1.GetDeployRunResponse"> & {
+  /**
+   * @generated from field: controlplane.v1.DeployRun run = 1;
+   */
+  run?: DeployRun | undefined;
+
+  /**
+   * @generated from field: controlplane.v1.DeployRelease release = 2;
+   */
+  release?: DeployRelease | undefined;
+
+  /**
+   * Ordered by started_at.
+   *
+   * @generated from field: repeated controlplane.v1.DeployRunStage stages = 3;
+   */
+  stages: DeployRunStage[];
+};
+
+/**
+ * Describes the message controlplane.v1.GetDeployRunResponse.
+ * Use `create(GetDeployRunResponseSchema)` to create a new message.
+ */
+export const GetDeployRunResponseSchema: GenMessage<GetDeployRunResponse> = /*@__PURE__*/
+  messageDesc(file_services_deploy_v1_deploy, 54);
 
 /**
  * @generated from message controlplane.v1.ListDeployUsageRequest
@@ -1426,7 +1719,7 @@ export type ListDeployUsageRequest = Message<"controlplane.v1.ListDeployUsageReq
  * Use `create(ListDeployUsageRequestSchema)` to create a new message.
  */
 export const ListDeployUsageRequestSchema: GenMessage<ListDeployUsageRequest> = /*@__PURE__*/
-  messageDesc(file_services_deploy_v1_deploy, 47);
+  messageDesc(file_services_deploy_v1_deploy, 55);
 
 /**
  * @generated from message controlplane.v1.ListDeployUsageResponse
@@ -1452,7 +1745,7 @@ export type ListDeployUsageResponse = Message<"controlplane.v1.ListDeployUsageRe
  * Use `create(ListDeployUsageResponseSchema)` to create a new message.
  */
 export const ListDeployUsageResponseSchema: GenMessage<ListDeployUsageResponse> = /*@__PURE__*/
-  messageDesc(file_services_deploy_v1_deploy, 48);
+  messageDesc(file_services_deploy_v1_deploy, 56);
 
 /**
  * === DeployService (public) ===
@@ -1804,6 +2097,75 @@ export const DeployService: GenService<{
     methodKind: "unary";
     input: typeof ListDeployPromotionsRequestSchema;
     output: typeof ListDeployPromotionsResponseSchema;
+  },
+  /**
+   * GetRollout reports how far ONE promotion has rolled out, judged against
+   * THAT promotion's frozen pins — never against whatever the deployment rows
+   * declare now. An empty promotion_id means the environment's current
+   * promotion.
+   *
+   * Why this is not "poll GetStatus until CONVERGED". GetStatus compares
+   * observed against each ROW's desired digest, so a promote that lands while
+   * a caller is waiting moves the rows and the wait "succeeds" on bytes it was
+   * never asked about. It also reads DIVERGED for the whole of a normal
+   * rollout, which makes DIVERGED useless as a failure signal: fail on it and
+   * every deploy fails, ignore it and real drift is hidden. Scoping to a
+   * promotion fixes the first; a server-computed phase (which folds
+   * mid-rollout divergence into PROGRESSING) fixes the second.
+   *
+   * @generated from rpc controlplane.v1.DeployService.GetRollout
+   */
+  getRollout: {
+    methodKind: "unary";
+    input: typeof GetDeployRolloutRequestSchema;
+    output: typeof GetDeployRolloutResponseSchema;
+  },
+  /**
+   * RecordGate appends one check result to a promotion.
+   *
+   * APPEND-ONLY: a re-run appends a NEW row and every row is kept, because the
+   * history of a flaky check is itself evidence. Idempotent on
+   * (promotion_id, name, run_id), so a CI retry of the same step returns the
+   * existing row rather than duplicating it.
+   *
+   * Authorized at deploy:write — below promote's admin, so a test job's token
+   * needs no promote authority. See DeployGate: that is safe only because
+   * these rows are evidence and nothing enforces on them.
+   *
+   * @generated from rpc controlplane.v1.DeployService.RecordGate
+   */
+  recordGate: {
+    methodKind: "unary";
+    input: typeof RecordDeployGateRequestSchema;
+    output: typeof RecordDeployGateResponseSchema;
+  },
+  /**
+   * ListGates returns a promotion's whole evidence trail: the gates claimed at
+   * promote time first, then the recorded ones oldest-first.
+   *
+   * @generated from rpc controlplane.v1.DeployService.ListGates
+   */
+  listGates: {
+    methodKind: "unary";
+    input: typeof ListDeployGatesRequestSchema;
+    output: typeof ListDeployGatesResponseSchema;
+  },
+  /**
+   * GetRun assembles one CI run's timeline from the ledger: the release it
+   * cut, the promotions it made, the gates carrying its run id, and each
+   * promotion's derived rollout.
+   *
+   * NOTHING IS A STORED EVENT, and there is no stream. The ledger plus a
+   * derived rollout already holds the timeline, so an event table would be a
+   * second copy of it that could disagree. A client polls this exactly as the
+   * deploy detail page already polls GetStatus.
+   *
+   * @generated from rpc controlplane.v1.DeployService.GetRun
+   */
+  getRun: {
+    methodKind: "unary";
+    input: typeof GetDeployRunRequestSchema;
+    output: typeof GetDeployRunResponseSchema;
   },
   /**
    * ListUsage returns metered infrastructure usage for the caller's org, with

@@ -1330,7 +1330,19 @@ type EnsureDeploymentRequest struct {
 	Name string        `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
 	Tier v1.DeployTier `protobuf:"varint,3,opt,name=tier,proto3,enum=controlplane.v1.DeployTier" json:"tier,omitempty"`
 	// See CreateDeploymentRequest.spec.
-	Spec          *structpb.Struct `protobuf:"bytes,4,opt,name=spec,proto3" json:"spec,omitempty"`
+	Spec *structpb.Struct `protobuf:"bytes,4,opt,name=spec,proto3" json:"spec,omitempty"`
+	// The release ARTIFACT KEY whose digest this deployment runs — the same key
+	// the client already computed for its own plan.
+	//
+	// The client sends it rather than the server inferring it, so the two cannot
+	// pair a workload with a digest differently. Empty means not release-bound
+	// (a database, a pinned third-party image), and the server's converger skips
+	// such a row rather than guessing from the deployment's name.
+	Artifact string `protobuf:"bytes,5,opt,name=artifact,proto3" json:"artifact,omitempty"`
+	// The promotion whose pins this spec was rendered from, recorded as
+	// Deployment.applied_promotion_id. Empty when the client pinned from
+	// nothing. A promotion belonging to another environment is refused.
+	PromotionId   string `protobuf:"bytes,6,opt,name=promotion_id,json=promotionId,proto3" json:"promotion_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1391,6 +1403,20 @@ func (x *EnsureDeploymentRequest) GetSpec() *structpb.Struct {
 		return x.Spec
 	}
 	return nil
+}
+
+func (x *EnsureDeploymentRequest) GetArtifact() string {
+	if x != nil {
+		return x.Artifact
+	}
+	return ""
+}
+
+func (x *EnsureDeploymentRequest) GetPromotionId() string {
+	if x != nil {
+		return x.PromotionId
+	}
+	return ""
 }
 
 type EnsureDeploymentResponse struct {
@@ -1638,8 +1664,38 @@ type PromoteReleaseRequest struct {
 	// claims.
 	PromotedByActor string `protobuf:"bytes,5,opt,name=promoted_by_actor,json=promotedByActor,proto3" json:"promoted_by_actor,omitempty"`
 	Note            string `protobuf:"bytes,6,opt,name=note,proto3" json:"note,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// The caller's view of the environment's CURRENT promotion — a
+	// compare-and-set, so a promote acts on the state the caller actually read.
+	//
+	// Setting NEITHER means no CAS, which is what the UI and a curl do, and is
+	// the back-compatible default: a request that omits both behaves exactly as
+	// it did before this field existed.
+	//
+	// A PROMOTION ID rather than a version, because v1 → v2 → v1 makes "current
+	// is v1" ambiguous and an id never is.
+	//
+	// Serialization is not sufficient on its own. Promote already takes FOR
+	// UPDATE, which ORDERS two writers but does not stop one acting on a stale
+	// read: CI plans "prod is on v5, moving to v6", a human hotfixes to v5.1,
+	// and CI then writes v6 over the hotfix. Both promotes were correctly
+	// serialized, and the hotfix is still gone.
+	//
+	// Types that are valid to be assigned to ExpectedCurrent:
+	//
+	//	*PromoteReleaseRequest_ExpectedCurrentPromotionId
+	//	*PromoteReleaseRequest_ExpectUnbound
+	ExpectedCurrent isPromoteReleaseRequest_ExpectedCurrent `protobuf_oneof:"expected_current"`
+	// Promote even though the current promotion has not finished rolling out.
+	// Recorded on the ledger row as DeployPromotion.superseded_in_flight.
+	SupersedeInFlight bool `protobuf:"varint,9,opt,name=supersede_in_flight,json=supersedeInFlight,proto3" json:"supersede_in_flight,omitempty"`
+	// Promote exactly the promotion another environment is running
+	// (`promote --from staging`), resolved server-side. Recorded as
+	// DeployPromotion.from_promotion_id.
+	FromPromotionId string `protobuf:"bytes,10,opt,name=from_promotion_id,json=fromPromotionId,proto3" json:"from_promotion_id,omitempty"`
+	// The CI run driving this promote.
+	Run           *v1.DeployRun `protobuf:"bytes,11,opt,name=run,proto3" json:"run,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *PromoteReleaseRequest) Reset() {
@@ -1713,6 +1769,70 @@ func (x *PromoteReleaseRequest) GetNote() string {
 	}
 	return ""
 }
+
+func (x *PromoteReleaseRequest) GetExpectedCurrent() isPromoteReleaseRequest_ExpectedCurrent {
+	if x != nil {
+		return x.ExpectedCurrent
+	}
+	return nil
+}
+
+func (x *PromoteReleaseRequest) GetExpectedCurrentPromotionId() string {
+	if x != nil {
+		if x, ok := x.ExpectedCurrent.(*PromoteReleaseRequest_ExpectedCurrentPromotionId); ok {
+			return x.ExpectedCurrentPromotionId
+		}
+	}
+	return ""
+}
+
+func (x *PromoteReleaseRequest) GetExpectUnbound() bool {
+	if x != nil {
+		if x, ok := x.ExpectedCurrent.(*PromoteReleaseRequest_ExpectUnbound); ok {
+			return x.ExpectUnbound
+		}
+	}
+	return false
+}
+
+func (x *PromoteReleaseRequest) GetSupersedeInFlight() bool {
+	if x != nil {
+		return x.SupersedeInFlight
+	}
+	return false
+}
+
+func (x *PromoteReleaseRequest) GetFromPromotionId() string {
+	if x != nil {
+		return x.FromPromotionId
+	}
+	return ""
+}
+
+func (x *PromoteReleaseRequest) GetRun() *v1.DeployRun {
+	if x != nil {
+		return x.Run
+	}
+	return nil
+}
+
+type isPromoteReleaseRequest_ExpectedCurrent interface {
+	isPromoteReleaseRequest_ExpectedCurrent()
+}
+
+type PromoteReleaseRequest_ExpectedCurrentPromotionId struct {
+	ExpectedCurrentPromotionId string `protobuf:"bytes,7,opt,name=expected_current_promotion_id,json=expectedCurrentPromotionId,proto3,oneof"`
+}
+
+type PromoteReleaseRequest_ExpectUnbound struct {
+	// "I saw NO promotion" — the first-deploy expectation, which an empty id
+	// cannot express distinctly from "no expectation".
+	ExpectUnbound bool `protobuf:"varint,8,opt,name=expect_unbound,json=expectUnbound,proto3,oneof"`
+}
+
+func (*PromoteReleaseRequest_ExpectedCurrentPromotionId) isPromoteReleaseRequest_ExpectedCurrent() {}
+
+func (*PromoteReleaseRequest_ExpectUnbound) isPromoteReleaseRequest_ExpectedCurrent() {}
 
 type PromoteReleaseResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -2312,9 +2432,11 @@ type CutReleaseRequest struct {
 	// Source provenance, best-effort. What lets a reviewer tie a running digest
 	// back to a commit — the first question asked during an incident. In CI
 	// these come from the workflow's own commit context.
-	GitCommit     string `protobuf:"bytes,3,opt,name=git_commit,json=gitCommit,proto3" json:"git_commit,omitempty"`
-	GitTag        string `protobuf:"bytes,4,opt,name=git_tag,json=gitTag,proto3" json:"git_tag,omitempty"`
-	GitDirty      bool   `protobuf:"varint,5,opt,name=git_dirty,json=gitDirty,proto3" json:"git_dirty,omitempty"`
+	GitCommit string `protobuf:"bytes,3,opt,name=git_commit,json=gitCommit,proto3" json:"git_commit,omitempty"`
+	GitTag    string `protobuf:"bytes,4,opt,name=git_tag,json=gitTag,proto3" json:"git_tag,omitempty"`
+	GitDirty  bool   `protobuf:"varint,5,opt,name=git_dirty,json=gitDirty,proto3" json:"git_dirty,omitempty"`
+	// The CI run that cut this release.
+	Run           *v1.DeployRun `protobuf:"bytes,6,opt,name=run,proto3" json:"run,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2382,6 +2504,13 @@ func (x *CutReleaseRequest) GetGitDirty() bool {
 		return x.GitDirty
 	}
 	return false
+}
+
+func (x *CutReleaseRequest) GetRun() *v1.DeployRun {
+	if x != nil {
+		return x.Run
+	}
+	return nil
 }
 
 type CutReleaseResponse struct {
@@ -2663,10 +2792,21 @@ type ListDeployPromotionsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	EnvironmentId string                 `protobuf:"bytes,1,opt,name=environment_id,json=environmentId,proto3" json:"environment_id,omitempty"`
 	// All `optional` — see ListDeployEnvironmentsRequest.
-	Kind          *v1.DeployPromotionKind `protobuf:"varint,2,opt,name=kind,proto3,enum=controlplane.v1.DeployPromotionKind,oneof" json:"kind,omitempty"`
-	Limit         *int32                  `protobuf:"varint,3,opt,name=limit,proto3,oneof" json:"limit,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Kind  *v1.DeployPromotionKind `protobuf:"varint,2,opt,name=kind,proto3,enum=controlplane.v1.DeployPromotionKind,oneof" json:"kind,omitempty"`
+	Limit *int32                  `protobuf:"varint,3,opt,name=limit,proto3,oneof" json:"limit,omitempty"`
+	// A KEYSET cursor: return the page of promotions strictly older than this
+	// one. Take it from the previous response's next_before_promotion_id.
+	//
+	// Keyset rather than an offset because the ledger is append-only and read
+	// newest-first, so a promote during paging shifts every offset by one and an
+	// offset-paged reader would silently see a row twice or skip one. Scoped to
+	// the caller's org, so a foreign cursor id yields an empty page rather than
+	// an error that would confirm the row exists.
+	BeforePromotionId *string `protobuf:"bytes,4,opt,name=before_promotion_id,json=beforePromotionId,proto3,oneof" json:"before_promotion_id,omitempty"`
+	// Only promotions of this release version.
+	ReleaseVersion *string `protobuf:"bytes,5,opt,name=release_version,json=releaseVersion,proto3,oneof" json:"release_version,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *ListDeployPromotionsRequest) Reset() {
@@ -2720,12 +2860,30 @@ func (x *ListDeployPromotionsRequest) GetLimit() int32 {
 	return 0
 }
 
+func (x *ListDeployPromotionsRequest) GetBeforePromotionId() string {
+	if x != nil && x.BeforePromotionId != nil {
+		return *x.BeforePromotionId
+	}
+	return ""
+}
+
+func (x *ListDeployPromotionsRequest) GetReleaseVersion() string {
+	if x != nil && x.ReleaseVersion != nil {
+		return *x.ReleaseVersion
+	}
+	return ""
+}
+
 type ListDeployPromotionsResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Newest first.
-	Promotions    []*v1.DeployPromotion `protobuf:"bytes,1,rep,name=promotions,proto3" json:"promotions,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Promotions []*v1.DeployPromotion `protobuf:"bytes,1,rep,name=promotions,proto3" json:"promotions,omitempty"`
+	// Pass as the next request's before_promotion_id. EMPTY MEANS THE LAST
+	// PAGE — a reader stops on the empty string, not on a short page, because
+	// a page can legitimately come back short.
+	NextBeforePromotionId string `protobuf:"bytes,2,opt,name=next_before_promotion_id,json=nextBeforePromotionId,proto3" json:"next_before_promotion_id,omitempty"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
 }
 
 func (x *ListDeployPromotionsResponse) Reset() {
@@ -2765,6 +2923,413 @@ func (x *ListDeployPromotionsResponse) GetPromotions() []*v1.DeployPromotion {
 	return nil
 }
 
+func (x *ListDeployPromotionsResponse) GetNextBeforePromotionId() string {
+	if x != nil {
+		return x.NextBeforePromotionId
+	}
+	return ""
+}
+
+type GetDeployRolloutRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	EnvironmentId string                 `protobuf:"bytes,1,opt,name=environment_id,json=environmentId,proto3" json:"environment_id,omitempty"`
+	// Empty = the environment's current promotion.
+	PromotionId   string `protobuf:"bytes,2,opt,name=promotion_id,json=promotionId,proto3" json:"promotion_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetDeployRolloutRequest) Reset() {
+	*x = GetDeployRolloutRequest{}
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[47]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetDeployRolloutRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetDeployRolloutRequest) ProtoMessage() {}
+
+func (x *GetDeployRolloutRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[47]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetDeployRolloutRequest.ProtoReflect.Descriptor instead.
+func (*GetDeployRolloutRequest) Descriptor() ([]byte, []int) {
+	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{47}
+}
+
+func (x *GetDeployRolloutRequest) GetEnvironmentId() string {
+	if x != nil {
+		return x.EnvironmentId
+	}
+	return ""
+}
+
+func (x *GetDeployRolloutRequest) GetPromotionId() string {
+	if x != nil {
+		return x.PromotionId
+	}
+	return ""
+}
+
+type GetDeployRolloutResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Rollout       *v1.DeployRollout      `protobuf:"bytes,1,opt,name=rollout,proto3" json:"rollout,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetDeployRolloutResponse) Reset() {
+	*x = GetDeployRolloutResponse{}
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[48]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetDeployRolloutResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetDeployRolloutResponse) ProtoMessage() {}
+
+func (x *GetDeployRolloutResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[48]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetDeployRolloutResponse.ProtoReflect.Descriptor instead.
+func (*GetDeployRolloutResponse) Descriptor() ([]byte, []int) {
+	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{48}
+}
+
+func (x *GetDeployRolloutResponse) GetRollout() *v1.DeployRollout {
+	if x != nil {
+		return x.Rollout
+	}
+	return nil
+}
+
+type RecordDeployGateRequest struct {
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	PromotionId string                 `protobuf:"bytes,1,opt,name=promotion_id,json=promotionId,proto3" json:"promotion_id,omitempty"`
+	// `recorded_by` and `recorded_at` on this gate are IGNORED: the server sets
+	// them from the caller's identity. See DeployGate.
+	Gate          *v1.DeployGate `protobuf:"bytes,2,opt,name=gate,proto3" json:"gate,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RecordDeployGateRequest) Reset() {
+	*x = RecordDeployGateRequest{}
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[49]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RecordDeployGateRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RecordDeployGateRequest) ProtoMessage() {}
+
+func (x *RecordDeployGateRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[49]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RecordDeployGateRequest.ProtoReflect.Descriptor instead.
+func (*RecordDeployGateRequest) Descriptor() ([]byte, []int) {
+	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{49}
+}
+
+func (x *RecordDeployGateRequest) GetPromotionId() string {
+	if x != nil {
+		return x.PromotionId
+	}
+	return ""
+}
+
+func (x *RecordDeployGateRequest) GetGate() *v1.DeployGate {
+	if x != nil {
+		return x.Gate
+	}
+	return nil
+}
+
+type RecordDeployGateResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Gate  *v1.DeployGate         `protobuf:"bytes,1,opt,name=gate,proto3" json:"gate,omitempty"`
+	// False when the idempotency key (promotion_id, name, run_id) already held
+	// this gate and the existing row is being returned. The call still succeeds:
+	// a retried CI step has achieved what it asked for.
+	Created       bool `protobuf:"varint,2,opt,name=created,proto3" json:"created,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RecordDeployGateResponse) Reset() {
+	*x = RecordDeployGateResponse{}
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[50]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RecordDeployGateResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RecordDeployGateResponse) ProtoMessage() {}
+
+func (x *RecordDeployGateResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[50]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RecordDeployGateResponse.ProtoReflect.Descriptor instead.
+func (*RecordDeployGateResponse) Descriptor() ([]byte, []int) {
+	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{50}
+}
+
+func (x *RecordDeployGateResponse) GetGate() *v1.DeployGate {
+	if x != nil {
+		return x.Gate
+	}
+	return nil
+}
+
+func (x *RecordDeployGateResponse) GetCreated() bool {
+	if x != nil {
+		return x.Created
+	}
+	return false
+}
+
+type ListDeployGatesRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	PromotionId   string                 `protobuf:"bytes,1,opt,name=promotion_id,json=promotionId,proto3" json:"promotion_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListDeployGatesRequest) Reset() {
+	*x = ListDeployGatesRequest{}
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[51]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListDeployGatesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListDeployGatesRequest) ProtoMessage() {}
+
+func (x *ListDeployGatesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[51]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListDeployGatesRequest.ProtoReflect.Descriptor instead.
+func (*ListDeployGatesRequest) Descriptor() ([]byte, []int) {
+	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{51}
+}
+
+func (x *ListDeployGatesRequest) GetPromotionId() string {
+	if x != nil {
+		return x.PromotionId
+	}
+	return ""
+}
+
+type ListDeployGatesResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Promote-time gates first, then the recorded ones oldest-first.
+	Gates         []*v1.DeployGate `protobuf:"bytes,1,rep,name=gates,proto3" json:"gates,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListDeployGatesResponse) Reset() {
+	*x = ListDeployGatesResponse{}
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[52]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListDeployGatesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListDeployGatesResponse) ProtoMessage() {}
+
+func (x *ListDeployGatesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[52]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListDeployGatesResponse.ProtoReflect.Descriptor instead.
+func (*ListDeployGatesResponse) Descriptor() ([]byte, []int) {
+	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{52}
+}
+
+func (x *ListDeployGatesResponse) GetGates() []*v1.DeployGate {
+	if x != nil {
+		return x.Gates
+	}
+	return nil
+}
+
+type GetDeployRunRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RunId         string                 `protobuf:"bytes,1,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetDeployRunRequest) Reset() {
+	*x = GetDeployRunRequest{}
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[53]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetDeployRunRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetDeployRunRequest) ProtoMessage() {}
+
+func (x *GetDeployRunRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[53]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetDeployRunRequest.ProtoReflect.Descriptor instead.
+func (*GetDeployRunRequest) Descriptor() ([]byte, []int) {
+	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{53}
+}
+
+func (x *GetDeployRunRequest) GetRunId() string {
+	if x != nil {
+		return x.RunId
+	}
+	return ""
+}
+
+type GetDeployRunResponse struct {
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Run     *v1.DeployRun          `protobuf:"bytes,1,opt,name=run,proto3" json:"run,omitempty"`
+	Release *v1.DeployRelease      `protobuf:"bytes,2,opt,name=release,proto3" json:"release,omitempty"`
+	// Ordered by started_at.
+	Stages        []*v1.DeployRunStage `protobuf:"bytes,3,rep,name=stages,proto3" json:"stages,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetDeployRunResponse) Reset() {
+	*x = GetDeployRunResponse{}
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[54]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetDeployRunResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetDeployRunResponse) ProtoMessage() {}
+
+func (x *GetDeployRunResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[54]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetDeployRunResponse.ProtoReflect.Descriptor instead.
+func (*GetDeployRunResponse) Descriptor() ([]byte, []int) {
+	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{54}
+}
+
+func (x *GetDeployRunResponse) GetRun() *v1.DeployRun {
+	if x != nil {
+		return x.Run
+	}
+	return nil
+}
+
+func (x *GetDeployRunResponse) GetRelease() *v1.DeployRelease {
+	if x != nil {
+		return x.Release
+	}
+	return nil
+}
+
+func (x *GetDeployRunResponse) GetStages() []*v1.DeployRunStage {
+	if x != nil {
+		return x.Stages
+	}
+	return nil
+}
+
 type ListDeployUsageRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Window bounds. Both required — an unbounded usage query over a 90-day
@@ -2784,7 +3349,7 @@ type ListDeployUsageRequest struct {
 
 func (x *ListDeployUsageRequest) Reset() {
 	*x = ListDeployUsageRequest{}
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[47]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[55]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2796,7 +3361,7 @@ func (x *ListDeployUsageRequest) String() string {
 func (*ListDeployUsageRequest) ProtoMessage() {}
 
 func (x *ListDeployUsageRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[47]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[55]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2809,7 +3374,7 @@ func (x *ListDeployUsageRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListDeployUsageRequest.ProtoReflect.Descriptor instead.
 func (*ListDeployUsageRequest) Descriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{47}
+	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{55}
 }
 
 func (x *ListDeployUsageRequest) GetStartTime() *timestamppb.Timestamp {
@@ -2867,7 +3432,7 @@ type ListDeployUsageResponse struct {
 
 func (x *ListDeployUsageResponse) Reset() {
 	*x = ListDeployUsageResponse{}
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[48]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[56]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2879,7 +3444,7 @@ func (x *ListDeployUsageResponse) String() string {
 func (*ListDeployUsageResponse) ProtoMessage() {}
 
 func (x *ListDeployUsageResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[48]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[56]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2892,7 +3457,7 @@ func (x *ListDeployUsageResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListDeployUsageResponse.ProtoReflect.Descriptor instead.
 func (*ListDeployUsageResponse) Descriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{48}
+	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{56}
 }
 
 func (x *ListDeployUsageResponse) GetRows() []*v1.DeployUsageRow {
@@ -2990,12 +3555,14 @@ const file_services_deploy_v1_deploy_proto_rawDesc = "" +
 	"deployment\">\n" +
 	"\x17DeleteDeploymentRequest\x12#\n" +
 	"\rdeployment_id\x18\x01 \x01(\tR\fdeploymentId\"\x1a\n" +
-	"\x18DeleteDeploymentResponse\"\xb2\x01\n" +
+	"\x18DeleteDeploymentResponse\"\xf1\x01\n" +
 	"\x17EnsureDeploymentRequest\x12%\n" +
 	"\x0eenvironment_id\x18\x01 \x01(\tR\renvironmentId\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12/\n" +
 	"\x04tier\x18\x03 \x01(\x0e2\x1b.controlplane.v1.DeployTierR\x04tier\x12+\n" +
-	"\x04spec\x18\x04 \x01(\v2\x17.google.protobuf.StructR\x04spec\"\x8b\x01\n" +
+	"\x04spec\x18\x04 \x01(\v2\x17.google.protobuf.StructR\x04spec\x12\x1a\n" +
+	"\bartifact\x18\x05 \x01(\tR\bartifact\x12!\n" +
+	"\fpromotion_id\x18\x06 \x01(\tR\vpromotionId\"\x8b\x01\n" +
 	"\x18EnsureDeploymentResponse\x12;\n" +
 	"\n" +
 	"deployment\x18\x01 \x01(\v2\x1b.controlplane.v1.DeploymentR\n" +
@@ -3012,14 +3579,21 @@ const file_services_deploy_v1_deploy_proto_rawDesc = "" +
 	"\treference\x18\x03 \x01(\tR\treference\x12\x1c\n" +
 	"\tnamespace\x18\x04 \x01(\tR\tnamespace\x12\x1d\n" +
 	"\n" +
-	"cluster_id\x18\x05 \x01(\tR\tclusterId\"\xfb\x01\n" +
+	"cluster_id\x18\x05 \x01(\tR\tclusterId\"\x87\x04\n" +
 	"\x15PromoteReleaseRequest\x12%\n" +
 	"\x0eenvironment_id\x18\x01 \x01(\tR\renvironmentId\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\tR\aversion\x12.\n" +
 	"\x13from_environment_id\x18\x03 \x01(\tR\x11fromEnvironmentId\x121\n" +
 	"\x05gates\x18\x04 \x03(\v2\x1b.controlplane.v1.DeployGateR\x05gates\x12*\n" +
 	"\x11promoted_by_actor\x18\x05 \x01(\tR\x0fpromotedByActor\x12\x12\n" +
-	"\x04note\x18\x06 \x01(\tR\x04note\"X\n" +
+	"\x04note\x18\x06 \x01(\tR\x04note\x12C\n" +
+	"\x1dexpected_current_promotion_id\x18\a \x01(\tH\x00R\x1aexpectedCurrentPromotionId\x12'\n" +
+	"\x0eexpect_unbound\x18\b \x01(\bH\x00R\rexpectUnbound\x12.\n" +
+	"\x13supersede_in_flight\x18\t \x01(\bR\x11supersedeInFlight\x12*\n" +
+	"\x11from_promotion_id\x18\n" +
+	" \x01(\tR\x0ffromPromotionId\x12,\n" +
+	"\x03run\x18\v \x01(\v2\x1a.controlplane.v1.DeployRunR\x03runB\x12\n" +
+	"\x10expected_current\"X\n" +
 	"\x16PromoteReleaseResponse\x12>\n" +
 	"\tpromotion\x18\x01 \x01(\v2 .controlplane.v1.DeployPromotionR\tpromotion\"{\n" +
 	"\x16ScaleDeploymentRequest\x12#\n" +
@@ -3067,14 +3641,15 @@ const file_services_deploy_v1_deploy_proto_rawDesc = "" +
 	"\x05lines\x18\x01 \x03(\v2\x1e.controlplane.v1.DeployLogLineR\x05lines\x12\x1f\n" +
 	"\vis_snapshot\x18\x02 \x01(\bR\n" +
 	"isSnapshot\x12'\n" +
-	"\x0flatest_sequence\x18\x03 \x01(\x03R\x0elatestSequence\"\xc1\x01\n" +
+	"\x0flatest_sequence\x18\x03 \x01(\x03R\x0elatestSequence\"\xef\x01\n" +
 	"\x11CutReleaseRequest\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\tR\aversion\x12=\n" +
 	"\tartifacts\x18\x02 \x03(\v2\x1f.controlplane.v1.DeployArtifactR\tartifacts\x12\x1d\n" +
 	"\n" +
 	"git_commit\x18\x03 \x01(\tR\tgitCommit\x12\x17\n" +
 	"\agit_tag\x18\x04 \x01(\tR\x06gitTag\x12\x1b\n" +
-	"\tgit_dirty\x18\x05 \x01(\bR\bgitDirty\"h\n" +
+	"\tgit_dirty\x18\x05 \x01(\bR\bgitDirty\x12,\n" +
+	"\x03run\x18\x06 \x01(\v2\x1a.controlplane.v1.DeployRunR\x03run\"h\n" +
 	"\x12CutReleaseResponse\x128\n" +
 	"\arelease\x18\x01 \x01(\v2\x1e.controlplane.v1.DeployReleaseR\arelease\x12\x18\n" +
 	"\acreated\x18\x02 \x01(\bR\acreated\"\x99\x02\n" +
@@ -3094,17 +3669,43 @@ const file_services_deploy_v1_deploy_proto_rawDesc = "" +
 	"\aversion\x18\x01 \x01(\tR\aversion\"\x8c\x01\n" +
 	"\x18GetDeployReleaseResponse\x128\n" +
 	"\arelease\x18\x01 \x01(\v2\x1e.controlplane.v1.DeployReleaseR\arelease\x126\n" +
-	"\x17current_environment_ids\x18\x02 \x03(\tR\x15currentEnvironmentIds\"\xb1\x01\n" +
+	"\x17current_environment_ids\x18\x02 \x03(\tR\x15currentEnvironmentIds\"\xc0\x02\n" +
 	"\x1bListDeployPromotionsRequest\x12%\n" +
 	"\x0eenvironment_id\x18\x01 \x01(\tR\renvironmentId\x12=\n" +
 	"\x04kind\x18\x02 \x01(\x0e2$.controlplane.v1.DeployPromotionKindH\x00R\x04kind\x88\x01\x01\x12\x19\n" +
-	"\x05limit\x18\x03 \x01(\x05H\x01R\x05limit\x88\x01\x01B\a\n" +
+	"\x05limit\x18\x03 \x01(\x05H\x01R\x05limit\x88\x01\x01\x123\n" +
+	"\x13before_promotion_id\x18\x04 \x01(\tH\x02R\x11beforePromotionId\x88\x01\x01\x12,\n" +
+	"\x0frelease_version\x18\x05 \x01(\tH\x03R\x0ereleaseVersion\x88\x01\x01B\a\n" +
 	"\x05_kindB\b\n" +
-	"\x06_limit\"`\n" +
+	"\x06_limitB\x16\n" +
+	"\x14_before_promotion_idB\x12\n" +
+	"\x10_release_version\"\x99\x01\n" +
 	"\x1cListDeployPromotionsResponse\x12@\n" +
 	"\n" +
 	"promotions\x18\x01 \x03(\v2 .controlplane.v1.DeployPromotionR\n" +
-	"promotions\"\xb4\x03\n" +
+	"promotions\x127\n" +
+	"\x18next_before_promotion_id\x18\x02 \x01(\tR\x15nextBeforePromotionId\"c\n" +
+	"\x17GetDeployRolloutRequest\x12%\n" +
+	"\x0eenvironment_id\x18\x01 \x01(\tR\renvironmentId\x12!\n" +
+	"\fpromotion_id\x18\x02 \x01(\tR\vpromotionId\"T\n" +
+	"\x18GetDeployRolloutResponse\x128\n" +
+	"\arollout\x18\x01 \x01(\v2\x1e.controlplane.v1.DeployRolloutR\arollout\"m\n" +
+	"\x17RecordDeployGateRequest\x12!\n" +
+	"\fpromotion_id\x18\x01 \x01(\tR\vpromotionId\x12/\n" +
+	"\x04gate\x18\x02 \x01(\v2\x1b.controlplane.v1.DeployGateR\x04gate\"e\n" +
+	"\x18RecordDeployGateResponse\x12/\n" +
+	"\x04gate\x18\x01 \x01(\v2\x1b.controlplane.v1.DeployGateR\x04gate\x12\x18\n" +
+	"\acreated\x18\x02 \x01(\bR\acreated\";\n" +
+	"\x16ListDeployGatesRequest\x12!\n" +
+	"\fpromotion_id\x18\x01 \x01(\tR\vpromotionId\"L\n" +
+	"\x17ListDeployGatesResponse\x121\n" +
+	"\x05gates\x18\x01 \x03(\v2\x1b.controlplane.v1.DeployGateR\x05gates\",\n" +
+	"\x13GetDeployRunRequest\x12\x15\n" +
+	"\x06run_id\x18\x01 \x01(\tR\x05runId\"\xb7\x01\n" +
+	"\x14GetDeployRunResponse\x12,\n" +
+	"\x03run\x18\x01 \x01(\v2\x1a.controlplane.v1.DeployRunR\x03run\x128\n" +
+	"\arelease\x18\x02 \x01(\v2\x1e.controlplane.v1.DeployReleaseR\arelease\x127\n" +
+	"\x06stages\x18\x03 \x03(\v2\x1f.controlplane.v1.DeployRunStageR\x06stages\"\xb4\x03\n" +
 	"\x16ListDeployUsageRequest\x129\n" +
 	"\n" +
 	"start_time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\tstartTime\x125\n" +
@@ -3119,7 +3720,7 @@ const file_services_deploy_v1_deploy_proto_rawDesc = "" +
 	"\x14_granularity_seconds\"\x7f\n" +
 	"\x17ListDeployUsageResponse\x123\n" +
 	"\x04rows\x18\x01 \x03(\v2\x1f.controlplane.v1.DeployUsageRowR\x04rows\x12/\n" +
-	"\x14total_cost_usd_nanos\x18\x02 \x01(\x03R\x11totalCostUsdNanos2\x83\x14\n" +
+	"\x14total_cost_usd_nanos\x18\x02 \x01(\x03R\x11totalCostUsdNanos2\x80\x17\n" +
 	"\rDeployService\x12^\n" +
 	"\tGetTenant\x12'.controlplane.v1.GetDeployTenantRequest\x1a(.controlplane.v1.GetDeployTenantResponse\x12g\n" +
 	"\fCreateTenant\x12*.controlplane.v1.CreateDeployTenantRequest\x1a+.controlplane.v1.CreateDeployTenantResponse\x12v\n" +
@@ -3146,7 +3747,13 @@ const file_services_deploy_v1_deploy_proto_rawDesc = "" +
 	"\fListReleases\x12*.controlplane.v1.ListDeployReleasesRequest\x1a+.controlplane.v1.ListDeployReleasesResponse\x12a\n" +
 	"\n" +
 	"GetRelease\x12(.controlplane.v1.GetDeployReleaseRequest\x1a).controlplane.v1.GetDeployReleaseResponse\x12m\n" +
-	"\x0eListPromotions\x12,.controlplane.v1.ListDeployPromotionsRequest\x1a-.controlplane.v1.ListDeployPromotionsResponse\x12^\n" +
+	"\x0eListPromotions\x12,.controlplane.v1.ListDeployPromotionsRequest\x1a-.controlplane.v1.ListDeployPromotionsResponse\x12a\n" +
+	"\n" +
+	"GetRollout\x12(.controlplane.v1.GetDeployRolloutRequest\x1a).controlplane.v1.GetDeployRolloutResponse\x12a\n" +
+	"\n" +
+	"RecordGate\x12(.controlplane.v1.RecordDeployGateRequest\x1a).controlplane.v1.RecordDeployGateResponse\x12^\n" +
+	"\tListGates\x12'.controlplane.v1.ListDeployGatesRequest\x1a(.controlplane.v1.ListDeployGatesResponse\x12U\n" +
+	"\x06GetRun\x12$.controlplane.v1.GetDeployRunRequest\x1a%.controlplane.v1.GetDeployRunResponse\x12^\n" +
 	"\tListUsage\x12'.controlplane.v1.ListDeployUsageRequest\x1a(.controlplane.v1.ListDeployUsageResponseB\xd3\x01\n" +
 	"\x13com.controlplane.v1B\vDeployProtoP\x01ZRgithub.com/reliant-labs/reliant/gen/controlplane/services/deploy/v1;controlplanev1\xa2\x02\x03CXX\xaa\x02\x0fControlplane.V1\xca\x02\x0fControlplane\\V1\xe2\x02\x1bControlplane\\V1\\GPBMetadata\xea\x02\x10Controlplane::V1b\x06proto3"
 
@@ -3162,7 +3769,7 @@ func file_services_deploy_v1_deploy_proto_rawDescGZIP() []byte {
 	return file_services_deploy_v1_deploy_proto_rawDescData
 }
 
-var file_services_deploy_v1_deploy_proto_msgTypes = make([]protoimpl.MessageInfo, 49)
+var file_services_deploy_v1_deploy_proto_msgTypes = make([]protoimpl.MessageInfo, 57)
 var file_services_deploy_v1_deploy_proto_goTypes = []any{
 	(*GetDeployTenantRequest)(nil),          // 0: controlplane.v1.GetDeployTenantRequest
 	(*GetDeployTenantResponse)(nil),         // 1: controlplane.v1.GetDeployTenantResponse
@@ -3211,136 +3818,164 @@ var file_services_deploy_v1_deploy_proto_goTypes = []any{
 	(*GetDeployReleaseResponse)(nil),        // 44: controlplane.v1.GetDeployReleaseResponse
 	(*ListDeployPromotionsRequest)(nil),     // 45: controlplane.v1.ListDeployPromotionsRequest
 	(*ListDeployPromotionsResponse)(nil),    // 46: controlplane.v1.ListDeployPromotionsResponse
-	(*ListDeployUsageRequest)(nil),          // 47: controlplane.v1.ListDeployUsageRequest
-	(*ListDeployUsageResponse)(nil),         // 48: controlplane.v1.ListDeployUsageResponse
-	(*v1.DeployTenant)(nil),                 // 49: controlplane.v1.DeployTenant
-	(*v1.DeployTenantCluster)(nil),          // 50: controlplane.v1.DeployTenantCluster
-	(*v1.DeployEnvironmentSpec)(nil),        // 51: controlplane.v1.DeployEnvironmentSpec
-	(*v1.DeployEnvironment)(nil),            // 52: controlplane.v1.DeployEnvironment
-	(*v1.DeployPromotion)(nil),              // 53: controlplane.v1.DeployPromotion
-	(v1.DeployEnvironmentKind)(0),           // 54: controlplane.v1.DeployEnvironmentKind
-	(v1.DeployTier)(0),                      // 55: controlplane.v1.DeployTier
-	(*structpb.Struct)(nil),                 // 56: google.protobuf.Struct
-	(*v1.Deployment)(nil),                   // 57: controlplane.v1.Deployment
-	(v1.DeployObservedState)(0),             // 58: controlplane.v1.DeployObservedState
-	(*v1.DeployGate)(nil),                   // 59: controlplane.v1.DeployGate
-	(v1.DeployRunState)(0),                  // 60: controlplane.v1.DeployRunState
-	(v1.DeployVerdict)(0),                   // 61: controlplane.v1.DeployVerdict
-	(*timestamppb.Timestamp)(nil),           // 62: google.protobuf.Timestamp
-	(v1.DeployReconcilePolicy)(0),           // 63: controlplane.v1.DeployReconcilePolicy
-	(v1.DeployLogStream)(0),                 // 64: controlplane.v1.DeployLogStream
-	(*v1.DeployLogLine)(nil),                // 65: controlplane.v1.DeployLogLine
-	(*v1.DeployArtifact)(nil),               // 66: controlplane.v1.DeployArtifact
-	(*v1.DeployRelease)(nil),                // 67: controlplane.v1.DeployRelease
-	(v1.DeployPromotionKind)(0),             // 68: controlplane.v1.DeployPromotionKind
-	(v1.DeployResourceKind)(0),              // 69: controlplane.v1.DeployResourceKind
-	(*v1.DeployUsageRow)(nil),               // 70: controlplane.v1.DeployUsageRow
+	(*GetDeployRolloutRequest)(nil),         // 47: controlplane.v1.GetDeployRolloutRequest
+	(*GetDeployRolloutResponse)(nil),        // 48: controlplane.v1.GetDeployRolloutResponse
+	(*RecordDeployGateRequest)(nil),         // 49: controlplane.v1.RecordDeployGateRequest
+	(*RecordDeployGateResponse)(nil),        // 50: controlplane.v1.RecordDeployGateResponse
+	(*ListDeployGatesRequest)(nil),          // 51: controlplane.v1.ListDeployGatesRequest
+	(*ListDeployGatesResponse)(nil),         // 52: controlplane.v1.ListDeployGatesResponse
+	(*GetDeployRunRequest)(nil),             // 53: controlplane.v1.GetDeployRunRequest
+	(*GetDeployRunResponse)(nil),            // 54: controlplane.v1.GetDeployRunResponse
+	(*ListDeployUsageRequest)(nil),          // 55: controlplane.v1.ListDeployUsageRequest
+	(*ListDeployUsageResponse)(nil),         // 56: controlplane.v1.ListDeployUsageResponse
+	(*v1.DeployTenant)(nil),                 // 57: controlplane.v1.DeployTenant
+	(*v1.DeployTenantCluster)(nil),          // 58: controlplane.v1.DeployTenantCluster
+	(*v1.DeployEnvironmentSpec)(nil),        // 59: controlplane.v1.DeployEnvironmentSpec
+	(*v1.DeployEnvironment)(nil),            // 60: controlplane.v1.DeployEnvironment
+	(*v1.DeployPromotion)(nil),              // 61: controlplane.v1.DeployPromotion
+	(v1.DeployEnvironmentKind)(0),           // 62: controlplane.v1.DeployEnvironmentKind
+	(v1.DeployTier)(0),                      // 63: controlplane.v1.DeployTier
+	(*structpb.Struct)(nil),                 // 64: google.protobuf.Struct
+	(*v1.Deployment)(nil),                   // 65: controlplane.v1.Deployment
+	(v1.DeployObservedState)(0),             // 66: controlplane.v1.DeployObservedState
+	(*v1.DeployGate)(nil),                   // 67: controlplane.v1.DeployGate
+	(*v1.DeployRun)(nil),                    // 68: controlplane.v1.DeployRun
+	(v1.DeployRunState)(0),                  // 69: controlplane.v1.DeployRunState
+	(v1.DeployVerdict)(0),                   // 70: controlplane.v1.DeployVerdict
+	(*timestamppb.Timestamp)(nil),           // 71: google.protobuf.Timestamp
+	(v1.DeployReconcilePolicy)(0),           // 72: controlplane.v1.DeployReconcilePolicy
+	(v1.DeployLogStream)(0),                 // 73: controlplane.v1.DeployLogStream
+	(*v1.DeployLogLine)(nil),                // 74: controlplane.v1.DeployLogLine
+	(*v1.DeployArtifact)(nil),               // 75: controlplane.v1.DeployArtifact
+	(*v1.DeployRelease)(nil),                // 76: controlplane.v1.DeployRelease
+	(v1.DeployPromotionKind)(0),             // 77: controlplane.v1.DeployPromotionKind
+	(*v1.DeployRollout)(nil),                // 78: controlplane.v1.DeployRollout
+	(*v1.DeployRunStage)(nil),               // 79: controlplane.v1.DeployRunStage
+	(v1.DeployResourceKind)(0),              // 80: controlplane.v1.DeployResourceKind
+	(*v1.DeployUsageRow)(nil),               // 81: controlplane.v1.DeployUsageRow
 }
 var file_services_deploy_v1_deploy_proto_depIdxs = []int32{
-	49, // 0: controlplane.v1.GetDeployTenantResponse.tenant:type_name -> controlplane.v1.DeployTenant
-	50, // 1: controlplane.v1.GetDeployTenantResponse.clusters:type_name -> controlplane.v1.DeployTenantCluster
-	49, // 2: controlplane.v1.CreateDeployTenantResponse.tenant:type_name -> controlplane.v1.DeployTenant
-	51, // 3: controlplane.v1.CreateDeployEnvironmentRequest.spec:type_name -> controlplane.v1.DeployEnvironmentSpec
-	52, // 4: controlplane.v1.CreateDeployEnvironmentResponse.environment:type_name -> controlplane.v1.DeployEnvironment
-	52, // 5: controlplane.v1.GetDeployEnvironmentResponse.environment:type_name -> controlplane.v1.DeployEnvironment
-	53, // 6: controlplane.v1.GetDeployEnvironmentResponse.current_promotion:type_name -> controlplane.v1.DeployPromotion
-	54, // 7: controlplane.v1.ListDeployEnvironmentsRequest.kind:type_name -> controlplane.v1.DeployEnvironmentKind
-	52, // 8: controlplane.v1.ListDeployEnvironmentsResponse.environments:type_name -> controlplane.v1.DeployEnvironment
-	51, // 9: controlplane.v1.UpdateDeployEnvironmentRequest.spec:type_name -> controlplane.v1.DeployEnvironmentSpec
-	52, // 10: controlplane.v1.UpdateDeployEnvironmentResponse.environment:type_name -> controlplane.v1.DeployEnvironment
-	51, // 11: controlplane.v1.EnsureDeployEnvironmentRequest.spec:type_name -> controlplane.v1.DeployEnvironmentSpec
-	52, // 12: controlplane.v1.EnsureDeployEnvironmentResponse.environment:type_name -> controlplane.v1.DeployEnvironment
-	55, // 13: controlplane.v1.CreateDeploymentRequest.tier:type_name -> controlplane.v1.DeployTier
-	56, // 14: controlplane.v1.CreateDeploymentRequest.spec:type_name -> google.protobuf.Struct
-	57, // 15: controlplane.v1.CreateDeploymentResponse.deployment:type_name -> controlplane.v1.Deployment
-	57, // 16: controlplane.v1.GetDeploymentResponse.deployment:type_name -> controlplane.v1.Deployment
-	55, // 17: controlplane.v1.ListDeploymentsRequest.tier:type_name -> controlplane.v1.DeployTier
-	58, // 18: controlplane.v1.ListDeploymentsRequest.observed_state:type_name -> controlplane.v1.DeployObservedState
-	57, // 19: controlplane.v1.ListDeploymentsResponse.deployments:type_name -> controlplane.v1.Deployment
-	56, // 20: controlplane.v1.UpdateDeploymentRequest.spec:type_name -> google.protobuf.Struct
-	57, // 21: controlplane.v1.UpdateDeploymentResponse.deployment:type_name -> controlplane.v1.Deployment
-	55, // 22: controlplane.v1.EnsureDeploymentRequest.tier:type_name -> controlplane.v1.DeployTier
-	56, // 23: controlplane.v1.EnsureDeploymentRequest.spec:type_name -> google.protobuf.Struct
-	57, // 24: controlplane.v1.EnsureDeploymentResponse.deployment:type_name -> controlplane.v1.Deployment
-	59, // 25: controlplane.v1.PromoteReleaseRequest.gates:type_name -> controlplane.v1.DeployGate
-	53, // 26: controlplane.v1.PromoteReleaseResponse.promotion:type_name -> controlplane.v1.DeployPromotion
-	60, // 27: controlplane.v1.ScaleDeploymentRequest.run_state:type_name -> controlplane.v1.DeployRunState
-	57, // 28: controlplane.v1.ScaleDeploymentResponse.deployment:type_name -> controlplane.v1.Deployment
-	57, // 29: controlplane.v1.DeploymentStatus.deployment:type_name -> controlplane.v1.Deployment
-	61, // 30: controlplane.v1.DeploymentStatus.verdict:type_name -> controlplane.v1.DeployVerdict
-	62, // 31: controlplane.v1.DeploymentStatus.observed_at:type_name -> google.protobuf.Timestamp
-	57, // 32: controlplane.v1.GetDeploymentStatusResponse.deployment:type_name -> controlplane.v1.Deployment
-	53, // 33: controlplane.v1.GetDeploymentStatusResponse.current_promotion:type_name -> controlplane.v1.DeployPromotion
-	62, // 34: controlplane.v1.GetDeploymentStatusResponse.observed_at:type_name -> google.protobuf.Timestamp
-	61, // 35: controlplane.v1.GetDeploymentStatusResponse.verdict:type_name -> controlplane.v1.DeployVerdict
-	35, // 36: controlplane.v1.GetDeploymentStatusResponse.deployments:type_name -> controlplane.v1.DeploymentStatus
-	61, // 37: controlplane.v1.GetDeploymentStatusResponse.environment_verdict:type_name -> controlplane.v1.DeployVerdict
-	63, // 38: controlplane.v1.GetDeploymentStatusResponse.reconcile_policy:type_name -> controlplane.v1.DeployReconcilePolicy
-	64, // 39: controlplane.v1.StreamDeploymentLogsRequest.stream:type_name -> controlplane.v1.DeployLogStream
-	65, // 40: controlplane.v1.StreamDeploymentLogsResponse.lines:type_name -> controlplane.v1.DeployLogLine
-	66, // 41: controlplane.v1.CutReleaseRequest.artifacts:type_name -> controlplane.v1.DeployArtifact
-	67, // 42: controlplane.v1.CutReleaseResponse.release:type_name -> controlplane.v1.DeployRelease
-	67, // 43: controlplane.v1.ListDeployReleasesResponse.releases:type_name -> controlplane.v1.DeployRelease
-	67, // 44: controlplane.v1.GetDeployReleaseResponse.release:type_name -> controlplane.v1.DeployRelease
-	68, // 45: controlplane.v1.ListDeployPromotionsRequest.kind:type_name -> controlplane.v1.DeployPromotionKind
-	53, // 46: controlplane.v1.ListDeployPromotionsResponse.promotions:type_name -> controlplane.v1.DeployPromotion
-	62, // 47: controlplane.v1.ListDeployUsageRequest.start_time:type_name -> google.protobuf.Timestamp
-	62, // 48: controlplane.v1.ListDeployUsageRequest.end_time:type_name -> google.protobuf.Timestamp
-	69, // 49: controlplane.v1.ListDeployUsageRequest.resource_kind:type_name -> controlplane.v1.DeployResourceKind
-	70, // 50: controlplane.v1.ListDeployUsageResponse.rows:type_name -> controlplane.v1.DeployUsageRow
-	0,  // 51: controlplane.v1.DeployService.GetTenant:input_type -> controlplane.v1.GetDeployTenantRequest
-	2,  // 52: controlplane.v1.DeployService.CreateTenant:input_type -> controlplane.v1.CreateDeployTenantRequest
-	4,  // 53: controlplane.v1.DeployService.CreateEnvironment:input_type -> controlplane.v1.CreateDeployEnvironmentRequest
-	6,  // 54: controlplane.v1.DeployService.GetEnvironment:input_type -> controlplane.v1.GetDeployEnvironmentRequest
-	8,  // 55: controlplane.v1.DeployService.ListEnvironments:input_type -> controlplane.v1.ListDeployEnvironmentsRequest
-	10, // 56: controlplane.v1.DeployService.UpdateEnvironment:input_type -> controlplane.v1.UpdateDeployEnvironmentRequest
-	12, // 57: controlplane.v1.DeployService.DeleteEnvironment:input_type -> controlplane.v1.DeleteDeployEnvironmentRequest
-	14, // 58: controlplane.v1.DeployService.EnsureEnvironment:input_type -> controlplane.v1.EnsureDeployEnvironmentRequest
-	16, // 59: controlplane.v1.DeployService.CreateDeployment:input_type -> controlplane.v1.CreateDeploymentRequest
-	18, // 60: controlplane.v1.DeployService.GetDeployment:input_type -> controlplane.v1.GetDeploymentRequest
-	20, // 61: controlplane.v1.DeployService.ListDeployments:input_type -> controlplane.v1.ListDeploymentsRequest
-	22, // 62: controlplane.v1.DeployService.UpdateDeployment:input_type -> controlplane.v1.UpdateDeploymentRequest
-	24, // 63: controlplane.v1.DeployService.DeleteDeployment:input_type -> controlplane.v1.DeleteDeploymentRequest
-	26, // 64: controlplane.v1.DeployService.EnsureDeployment:input_type -> controlplane.v1.EnsureDeploymentRequest
-	30, // 65: controlplane.v1.DeployService.Promote:input_type -> controlplane.v1.PromoteReleaseRequest
-	32, // 66: controlplane.v1.DeployService.Scale:input_type -> controlplane.v1.ScaleDeploymentRequest
-	34, // 67: controlplane.v1.DeployService.GetStatus:input_type -> controlplane.v1.GetDeploymentStatusRequest
-	37, // 68: controlplane.v1.DeployService.StreamLogs:input_type -> controlplane.v1.StreamDeploymentLogsRequest
-	28, // 69: controlplane.v1.DeployService.PublishDeploymentConfig:input_type -> controlplane.v1.PublishDeploymentConfigRequest
-	39, // 70: controlplane.v1.DeployService.CutRelease:input_type -> controlplane.v1.CutReleaseRequest
-	41, // 71: controlplane.v1.DeployService.ListReleases:input_type -> controlplane.v1.ListDeployReleasesRequest
-	43, // 72: controlplane.v1.DeployService.GetRelease:input_type -> controlplane.v1.GetDeployReleaseRequest
-	45, // 73: controlplane.v1.DeployService.ListPromotions:input_type -> controlplane.v1.ListDeployPromotionsRequest
-	47, // 74: controlplane.v1.DeployService.ListUsage:input_type -> controlplane.v1.ListDeployUsageRequest
-	1,  // 75: controlplane.v1.DeployService.GetTenant:output_type -> controlplane.v1.GetDeployTenantResponse
-	3,  // 76: controlplane.v1.DeployService.CreateTenant:output_type -> controlplane.v1.CreateDeployTenantResponse
-	5,  // 77: controlplane.v1.DeployService.CreateEnvironment:output_type -> controlplane.v1.CreateDeployEnvironmentResponse
-	7,  // 78: controlplane.v1.DeployService.GetEnvironment:output_type -> controlplane.v1.GetDeployEnvironmentResponse
-	9,  // 79: controlplane.v1.DeployService.ListEnvironments:output_type -> controlplane.v1.ListDeployEnvironmentsResponse
-	11, // 80: controlplane.v1.DeployService.UpdateEnvironment:output_type -> controlplane.v1.UpdateDeployEnvironmentResponse
-	13, // 81: controlplane.v1.DeployService.DeleteEnvironment:output_type -> controlplane.v1.DeleteDeployEnvironmentResponse
-	15, // 82: controlplane.v1.DeployService.EnsureEnvironment:output_type -> controlplane.v1.EnsureDeployEnvironmentResponse
-	17, // 83: controlplane.v1.DeployService.CreateDeployment:output_type -> controlplane.v1.CreateDeploymentResponse
-	19, // 84: controlplane.v1.DeployService.GetDeployment:output_type -> controlplane.v1.GetDeploymentResponse
-	21, // 85: controlplane.v1.DeployService.ListDeployments:output_type -> controlplane.v1.ListDeploymentsResponse
-	23, // 86: controlplane.v1.DeployService.UpdateDeployment:output_type -> controlplane.v1.UpdateDeploymentResponse
-	25, // 87: controlplane.v1.DeployService.DeleteDeployment:output_type -> controlplane.v1.DeleteDeploymentResponse
-	27, // 88: controlplane.v1.DeployService.EnsureDeployment:output_type -> controlplane.v1.EnsureDeploymentResponse
-	31, // 89: controlplane.v1.DeployService.Promote:output_type -> controlplane.v1.PromoteReleaseResponse
-	33, // 90: controlplane.v1.DeployService.Scale:output_type -> controlplane.v1.ScaleDeploymentResponse
-	36, // 91: controlplane.v1.DeployService.GetStatus:output_type -> controlplane.v1.GetDeploymentStatusResponse
-	38, // 92: controlplane.v1.DeployService.StreamLogs:output_type -> controlplane.v1.StreamDeploymentLogsResponse
-	29, // 93: controlplane.v1.DeployService.PublishDeploymentConfig:output_type -> controlplane.v1.PublishDeploymentConfigResponse
-	40, // 94: controlplane.v1.DeployService.CutRelease:output_type -> controlplane.v1.CutReleaseResponse
-	42, // 95: controlplane.v1.DeployService.ListReleases:output_type -> controlplane.v1.ListDeployReleasesResponse
-	44, // 96: controlplane.v1.DeployService.GetRelease:output_type -> controlplane.v1.GetDeployReleaseResponse
-	46, // 97: controlplane.v1.DeployService.ListPromotions:output_type -> controlplane.v1.ListDeployPromotionsResponse
-	48, // 98: controlplane.v1.DeployService.ListUsage:output_type -> controlplane.v1.ListDeployUsageResponse
-	75, // [75:99] is the sub-list for method output_type
-	51, // [51:75] is the sub-list for method input_type
-	51, // [51:51] is the sub-list for extension type_name
-	51, // [51:51] is the sub-list for extension extendee
-	0,  // [0:51] is the sub-list for field type_name
+	57, // 0: controlplane.v1.GetDeployTenantResponse.tenant:type_name -> controlplane.v1.DeployTenant
+	58, // 1: controlplane.v1.GetDeployTenantResponse.clusters:type_name -> controlplane.v1.DeployTenantCluster
+	57, // 2: controlplane.v1.CreateDeployTenantResponse.tenant:type_name -> controlplane.v1.DeployTenant
+	59, // 3: controlplane.v1.CreateDeployEnvironmentRequest.spec:type_name -> controlplane.v1.DeployEnvironmentSpec
+	60, // 4: controlplane.v1.CreateDeployEnvironmentResponse.environment:type_name -> controlplane.v1.DeployEnvironment
+	60, // 5: controlplane.v1.GetDeployEnvironmentResponse.environment:type_name -> controlplane.v1.DeployEnvironment
+	61, // 6: controlplane.v1.GetDeployEnvironmentResponse.current_promotion:type_name -> controlplane.v1.DeployPromotion
+	62, // 7: controlplane.v1.ListDeployEnvironmentsRequest.kind:type_name -> controlplane.v1.DeployEnvironmentKind
+	60, // 8: controlplane.v1.ListDeployEnvironmentsResponse.environments:type_name -> controlplane.v1.DeployEnvironment
+	59, // 9: controlplane.v1.UpdateDeployEnvironmentRequest.spec:type_name -> controlplane.v1.DeployEnvironmentSpec
+	60, // 10: controlplane.v1.UpdateDeployEnvironmentResponse.environment:type_name -> controlplane.v1.DeployEnvironment
+	59, // 11: controlplane.v1.EnsureDeployEnvironmentRequest.spec:type_name -> controlplane.v1.DeployEnvironmentSpec
+	60, // 12: controlplane.v1.EnsureDeployEnvironmentResponse.environment:type_name -> controlplane.v1.DeployEnvironment
+	63, // 13: controlplane.v1.CreateDeploymentRequest.tier:type_name -> controlplane.v1.DeployTier
+	64, // 14: controlplane.v1.CreateDeploymentRequest.spec:type_name -> google.protobuf.Struct
+	65, // 15: controlplane.v1.CreateDeploymentResponse.deployment:type_name -> controlplane.v1.Deployment
+	65, // 16: controlplane.v1.GetDeploymentResponse.deployment:type_name -> controlplane.v1.Deployment
+	63, // 17: controlplane.v1.ListDeploymentsRequest.tier:type_name -> controlplane.v1.DeployTier
+	66, // 18: controlplane.v1.ListDeploymentsRequest.observed_state:type_name -> controlplane.v1.DeployObservedState
+	65, // 19: controlplane.v1.ListDeploymentsResponse.deployments:type_name -> controlplane.v1.Deployment
+	64, // 20: controlplane.v1.UpdateDeploymentRequest.spec:type_name -> google.protobuf.Struct
+	65, // 21: controlplane.v1.UpdateDeploymentResponse.deployment:type_name -> controlplane.v1.Deployment
+	63, // 22: controlplane.v1.EnsureDeploymentRequest.tier:type_name -> controlplane.v1.DeployTier
+	64, // 23: controlplane.v1.EnsureDeploymentRequest.spec:type_name -> google.protobuf.Struct
+	65, // 24: controlplane.v1.EnsureDeploymentResponse.deployment:type_name -> controlplane.v1.Deployment
+	67, // 25: controlplane.v1.PromoteReleaseRequest.gates:type_name -> controlplane.v1.DeployGate
+	68, // 26: controlplane.v1.PromoteReleaseRequest.run:type_name -> controlplane.v1.DeployRun
+	61, // 27: controlplane.v1.PromoteReleaseResponse.promotion:type_name -> controlplane.v1.DeployPromotion
+	69, // 28: controlplane.v1.ScaleDeploymentRequest.run_state:type_name -> controlplane.v1.DeployRunState
+	65, // 29: controlplane.v1.ScaleDeploymentResponse.deployment:type_name -> controlplane.v1.Deployment
+	65, // 30: controlplane.v1.DeploymentStatus.deployment:type_name -> controlplane.v1.Deployment
+	70, // 31: controlplane.v1.DeploymentStatus.verdict:type_name -> controlplane.v1.DeployVerdict
+	71, // 32: controlplane.v1.DeploymentStatus.observed_at:type_name -> google.protobuf.Timestamp
+	65, // 33: controlplane.v1.GetDeploymentStatusResponse.deployment:type_name -> controlplane.v1.Deployment
+	61, // 34: controlplane.v1.GetDeploymentStatusResponse.current_promotion:type_name -> controlplane.v1.DeployPromotion
+	71, // 35: controlplane.v1.GetDeploymentStatusResponse.observed_at:type_name -> google.protobuf.Timestamp
+	70, // 36: controlplane.v1.GetDeploymentStatusResponse.verdict:type_name -> controlplane.v1.DeployVerdict
+	35, // 37: controlplane.v1.GetDeploymentStatusResponse.deployments:type_name -> controlplane.v1.DeploymentStatus
+	70, // 38: controlplane.v1.GetDeploymentStatusResponse.environment_verdict:type_name -> controlplane.v1.DeployVerdict
+	72, // 39: controlplane.v1.GetDeploymentStatusResponse.reconcile_policy:type_name -> controlplane.v1.DeployReconcilePolicy
+	73, // 40: controlplane.v1.StreamDeploymentLogsRequest.stream:type_name -> controlplane.v1.DeployLogStream
+	74, // 41: controlplane.v1.StreamDeploymentLogsResponse.lines:type_name -> controlplane.v1.DeployLogLine
+	75, // 42: controlplane.v1.CutReleaseRequest.artifacts:type_name -> controlplane.v1.DeployArtifact
+	68, // 43: controlplane.v1.CutReleaseRequest.run:type_name -> controlplane.v1.DeployRun
+	76, // 44: controlplane.v1.CutReleaseResponse.release:type_name -> controlplane.v1.DeployRelease
+	76, // 45: controlplane.v1.ListDeployReleasesResponse.releases:type_name -> controlplane.v1.DeployRelease
+	76, // 46: controlplane.v1.GetDeployReleaseResponse.release:type_name -> controlplane.v1.DeployRelease
+	77, // 47: controlplane.v1.ListDeployPromotionsRequest.kind:type_name -> controlplane.v1.DeployPromotionKind
+	61, // 48: controlplane.v1.ListDeployPromotionsResponse.promotions:type_name -> controlplane.v1.DeployPromotion
+	78, // 49: controlplane.v1.GetDeployRolloutResponse.rollout:type_name -> controlplane.v1.DeployRollout
+	67, // 50: controlplane.v1.RecordDeployGateRequest.gate:type_name -> controlplane.v1.DeployGate
+	67, // 51: controlplane.v1.RecordDeployGateResponse.gate:type_name -> controlplane.v1.DeployGate
+	67, // 52: controlplane.v1.ListDeployGatesResponse.gates:type_name -> controlplane.v1.DeployGate
+	68, // 53: controlplane.v1.GetDeployRunResponse.run:type_name -> controlplane.v1.DeployRun
+	76, // 54: controlplane.v1.GetDeployRunResponse.release:type_name -> controlplane.v1.DeployRelease
+	79, // 55: controlplane.v1.GetDeployRunResponse.stages:type_name -> controlplane.v1.DeployRunStage
+	71, // 56: controlplane.v1.ListDeployUsageRequest.start_time:type_name -> google.protobuf.Timestamp
+	71, // 57: controlplane.v1.ListDeployUsageRequest.end_time:type_name -> google.protobuf.Timestamp
+	80, // 58: controlplane.v1.ListDeployUsageRequest.resource_kind:type_name -> controlplane.v1.DeployResourceKind
+	81, // 59: controlplane.v1.ListDeployUsageResponse.rows:type_name -> controlplane.v1.DeployUsageRow
+	0,  // 60: controlplane.v1.DeployService.GetTenant:input_type -> controlplane.v1.GetDeployTenantRequest
+	2,  // 61: controlplane.v1.DeployService.CreateTenant:input_type -> controlplane.v1.CreateDeployTenantRequest
+	4,  // 62: controlplane.v1.DeployService.CreateEnvironment:input_type -> controlplane.v1.CreateDeployEnvironmentRequest
+	6,  // 63: controlplane.v1.DeployService.GetEnvironment:input_type -> controlplane.v1.GetDeployEnvironmentRequest
+	8,  // 64: controlplane.v1.DeployService.ListEnvironments:input_type -> controlplane.v1.ListDeployEnvironmentsRequest
+	10, // 65: controlplane.v1.DeployService.UpdateEnvironment:input_type -> controlplane.v1.UpdateDeployEnvironmentRequest
+	12, // 66: controlplane.v1.DeployService.DeleteEnvironment:input_type -> controlplane.v1.DeleteDeployEnvironmentRequest
+	14, // 67: controlplane.v1.DeployService.EnsureEnvironment:input_type -> controlplane.v1.EnsureDeployEnvironmentRequest
+	16, // 68: controlplane.v1.DeployService.CreateDeployment:input_type -> controlplane.v1.CreateDeploymentRequest
+	18, // 69: controlplane.v1.DeployService.GetDeployment:input_type -> controlplane.v1.GetDeploymentRequest
+	20, // 70: controlplane.v1.DeployService.ListDeployments:input_type -> controlplane.v1.ListDeploymentsRequest
+	22, // 71: controlplane.v1.DeployService.UpdateDeployment:input_type -> controlplane.v1.UpdateDeploymentRequest
+	24, // 72: controlplane.v1.DeployService.DeleteDeployment:input_type -> controlplane.v1.DeleteDeploymentRequest
+	26, // 73: controlplane.v1.DeployService.EnsureDeployment:input_type -> controlplane.v1.EnsureDeploymentRequest
+	30, // 74: controlplane.v1.DeployService.Promote:input_type -> controlplane.v1.PromoteReleaseRequest
+	32, // 75: controlplane.v1.DeployService.Scale:input_type -> controlplane.v1.ScaleDeploymentRequest
+	34, // 76: controlplane.v1.DeployService.GetStatus:input_type -> controlplane.v1.GetDeploymentStatusRequest
+	37, // 77: controlplane.v1.DeployService.StreamLogs:input_type -> controlplane.v1.StreamDeploymentLogsRequest
+	28, // 78: controlplane.v1.DeployService.PublishDeploymentConfig:input_type -> controlplane.v1.PublishDeploymentConfigRequest
+	39, // 79: controlplane.v1.DeployService.CutRelease:input_type -> controlplane.v1.CutReleaseRequest
+	41, // 80: controlplane.v1.DeployService.ListReleases:input_type -> controlplane.v1.ListDeployReleasesRequest
+	43, // 81: controlplane.v1.DeployService.GetRelease:input_type -> controlplane.v1.GetDeployReleaseRequest
+	45, // 82: controlplane.v1.DeployService.ListPromotions:input_type -> controlplane.v1.ListDeployPromotionsRequest
+	47, // 83: controlplane.v1.DeployService.GetRollout:input_type -> controlplane.v1.GetDeployRolloutRequest
+	49, // 84: controlplane.v1.DeployService.RecordGate:input_type -> controlplane.v1.RecordDeployGateRequest
+	51, // 85: controlplane.v1.DeployService.ListGates:input_type -> controlplane.v1.ListDeployGatesRequest
+	53, // 86: controlplane.v1.DeployService.GetRun:input_type -> controlplane.v1.GetDeployRunRequest
+	55, // 87: controlplane.v1.DeployService.ListUsage:input_type -> controlplane.v1.ListDeployUsageRequest
+	1,  // 88: controlplane.v1.DeployService.GetTenant:output_type -> controlplane.v1.GetDeployTenantResponse
+	3,  // 89: controlplane.v1.DeployService.CreateTenant:output_type -> controlplane.v1.CreateDeployTenantResponse
+	5,  // 90: controlplane.v1.DeployService.CreateEnvironment:output_type -> controlplane.v1.CreateDeployEnvironmentResponse
+	7,  // 91: controlplane.v1.DeployService.GetEnvironment:output_type -> controlplane.v1.GetDeployEnvironmentResponse
+	9,  // 92: controlplane.v1.DeployService.ListEnvironments:output_type -> controlplane.v1.ListDeployEnvironmentsResponse
+	11, // 93: controlplane.v1.DeployService.UpdateEnvironment:output_type -> controlplane.v1.UpdateDeployEnvironmentResponse
+	13, // 94: controlplane.v1.DeployService.DeleteEnvironment:output_type -> controlplane.v1.DeleteDeployEnvironmentResponse
+	15, // 95: controlplane.v1.DeployService.EnsureEnvironment:output_type -> controlplane.v1.EnsureDeployEnvironmentResponse
+	17, // 96: controlplane.v1.DeployService.CreateDeployment:output_type -> controlplane.v1.CreateDeploymentResponse
+	19, // 97: controlplane.v1.DeployService.GetDeployment:output_type -> controlplane.v1.GetDeploymentResponse
+	21, // 98: controlplane.v1.DeployService.ListDeployments:output_type -> controlplane.v1.ListDeploymentsResponse
+	23, // 99: controlplane.v1.DeployService.UpdateDeployment:output_type -> controlplane.v1.UpdateDeploymentResponse
+	25, // 100: controlplane.v1.DeployService.DeleteDeployment:output_type -> controlplane.v1.DeleteDeploymentResponse
+	27, // 101: controlplane.v1.DeployService.EnsureDeployment:output_type -> controlplane.v1.EnsureDeploymentResponse
+	31, // 102: controlplane.v1.DeployService.Promote:output_type -> controlplane.v1.PromoteReleaseResponse
+	33, // 103: controlplane.v1.DeployService.Scale:output_type -> controlplane.v1.ScaleDeploymentResponse
+	36, // 104: controlplane.v1.DeployService.GetStatus:output_type -> controlplane.v1.GetDeploymentStatusResponse
+	38, // 105: controlplane.v1.DeployService.StreamLogs:output_type -> controlplane.v1.StreamDeploymentLogsResponse
+	29, // 106: controlplane.v1.DeployService.PublishDeploymentConfig:output_type -> controlplane.v1.PublishDeploymentConfigResponse
+	40, // 107: controlplane.v1.DeployService.CutRelease:output_type -> controlplane.v1.CutReleaseResponse
+	42, // 108: controlplane.v1.DeployService.ListReleases:output_type -> controlplane.v1.ListDeployReleasesResponse
+	44, // 109: controlplane.v1.DeployService.GetRelease:output_type -> controlplane.v1.GetDeployReleaseResponse
+	46, // 110: controlplane.v1.DeployService.ListPromotions:output_type -> controlplane.v1.ListDeployPromotionsResponse
+	48, // 111: controlplane.v1.DeployService.GetRollout:output_type -> controlplane.v1.GetDeployRolloutResponse
+	50, // 112: controlplane.v1.DeployService.RecordGate:output_type -> controlplane.v1.RecordDeployGateResponse
+	52, // 113: controlplane.v1.DeployService.ListGates:output_type -> controlplane.v1.ListDeployGatesResponse
+	54, // 114: controlplane.v1.DeployService.GetRun:output_type -> controlplane.v1.GetDeployRunResponse
+	56, // 115: controlplane.v1.DeployService.ListUsage:output_type -> controlplane.v1.ListDeployUsageResponse
+	88, // [88:116] is the sub-list for method output_type
+	60, // [60:88] is the sub-list for method input_type
+	60, // [60:60] is the sub-list for extension type_name
+	60, // [60:60] is the sub-list for extension extendee
+	0,  // [0:60] is the sub-list for field type_name
 }
 
 func init() { file_services_deploy_v1_deploy_proto_init() }
@@ -3350,16 +3985,20 @@ func file_services_deploy_v1_deploy_proto_init() {
 	}
 	file_services_deploy_v1_deploy_proto_msgTypes[8].OneofWrappers = []any{}
 	file_services_deploy_v1_deploy_proto_msgTypes[20].OneofWrappers = []any{}
+	file_services_deploy_v1_deploy_proto_msgTypes[30].OneofWrappers = []any{
+		(*PromoteReleaseRequest_ExpectedCurrentPromotionId)(nil),
+		(*PromoteReleaseRequest_ExpectUnbound)(nil),
+	}
 	file_services_deploy_v1_deploy_proto_msgTypes[41].OneofWrappers = []any{}
 	file_services_deploy_v1_deploy_proto_msgTypes[45].OneofWrappers = []any{}
-	file_services_deploy_v1_deploy_proto_msgTypes[47].OneofWrappers = []any{}
+	file_services_deploy_v1_deploy_proto_msgTypes[55].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_services_deploy_v1_deploy_proto_rawDesc), len(file_services_deploy_v1_deploy_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   49,
+			NumMessages:   57,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
