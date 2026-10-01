@@ -1,3 +1,5 @@
+import { Fragment } from "react";
+
 import { Cpu } from "lucide-react";
 
 import { Button } from "../ui";
@@ -47,6 +49,18 @@ export interface ComputeBandDimension {
   usedHoursLabel: string | null;
   capacity: ComputeCapacity | null;
   estimatedOverageCostLabel: string | null;
+  /**
+   * The small-daemon-hours reading (per-daemon billing, design §6.2), when the
+   * server sent the §6.1 fields. Each label is null when it has nothing true
+   * to say — no burn line with nothing running, no "runs out" without an
+   * exhausts_at — and the whole object is absent from an older server.
+   */
+  smallDaemon?: {
+    headline: string | null;
+    burn: string | null;
+    runsOut: string | null;
+    asOf: string | null;
+  };
 }
 
 export interface ComputeBandProps {
@@ -195,13 +209,31 @@ export function ComputeBand({
               dimensions.map(
                 (d) =>
                   d.capacity && (
-                    <CapacityBar
-                      key={d.id}
-                      capacity={d.capacity}
-                      usedHoursLabel={d.usedHoursLabel}
-                      includedHoursLabel={d.includedHoursLabel}
-                      estimatedOverageCostLabel={d.estimatedOverageCostLabel}
-                    />
+                    <Fragment key={d.id}>
+                      {d.smallDaemon?.headline && (
+                        <div data-testid="compute-sdh-headline">
+                          <p className="text-lg font-semibold text-foreground">
+                            {d.smallDaemon.headline}
+                            {d.smallDaemon.asOf && (
+                              <span className="ml-2 text-xs font-normal text-muted-foreground">
+                                {d.smallDaemon.asOf}
+                              </span>
+                            )}
+                          </p>
+                          {(d.smallDaemon.burn || d.smallDaemon.runsOut) && (
+                            <p className="text-sm text-muted-foreground" data-testid="compute-sdh-burn">
+                              {[d.smallDaemon.burn, d.smallDaemon.runsOut].filter(Boolean).join(" · ")}
+                            </p>
+                          )}
+                        </div>
+                      )}
+                      <CapacityBar
+                        capacity={d.capacity}
+                        usedHoursLabel={d.usedHoursLabel}
+                        includedHoursLabel={d.includedHoursLabel}
+                        estimatedOverageCostLabel={d.estimatedOverageCostLabel}
+                      />
+                    </Fragment>
                   ),
               )
             )}

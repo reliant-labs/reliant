@@ -73,6 +73,12 @@ import {
 // The machine list, its derivation, and the uniform facts beneath it — shared
 // with the onboarding compute step so one choice has one presentation.
 import { PlanFinePrint, PlanTiles, describeIncludedHours } from "@/components/Billing/PlanTiles";
+import {
+  asOfLabel,
+  burnLabel,
+  remainingHeadline,
+  runsOutLabel,
+} from "@/components/Billing/daemonUsage";
 import { deriveMachineOptions } from "@/components/Billing/machineOptions";
 import { MACHINE_BURST } from "@/components/Billing/machineSpecs";
 import { LinkIdentityModal } from "@/components/Billing/LinkIdentityModal";
@@ -567,6 +573,22 @@ function OverviewTab({
     // gated on it, so no unmeasured zero reaches a label.
     const usedMinutes = usage?.usedMinutes ?? 0;
 
+    // Per-daemon billing (design §6.2): when the server sent the §6.1
+    // fields, the card speaks SMALL-DAEMON-HOURS and the bar fills in them.
+    // measured_through is the discriminator — a server that fills §6.1 always
+    // sets it, and an older one never does — so an old server keeps the
+    // minute model below unchanged. Old fields are never mixed into the new
+    // reading.
+    const sdh = usage?.measuredThrough ? usage : undefined;
+    const sdhIncluded = sdh ? Number(sdh.includedSmallDaemonSeconds) : 0;
+    const sdhUsed = sdh ? Number(sdh.usedSmallDaemonSeconds) : 0;
+    const sdhOverage = sdh
+      ? sdh.bySize.reduce(
+          (sum, row) => sum + Number(row.overageSeconds) * Number(row.multiplier),
+          0,
+        )
+      : 0;
+
     return {
       planName: plan?.name ?? null,
       pricePerMonthLabel:
@@ -581,28 +603,50 @@ function OverviewTab({
       includedHoursLabel:
         degraded || includedMinutes < 0
           ? null
-          : `${Math.round(includedMinutes / 60)} h included`,
+          : sdh
+            ? `${(sdhIncluded / 3600).toFixed(1)} small-daemon-hours included`
+            : `${Math.round(includedMinutes / 60)} h included`,
       // null when unmeasured, NOT "0.0 h". Every consumer already treats null
       // as "render nothing", which is the same discipline `includedHoursLabel`
       // above uses for a plan whose detail did not load.
       usedHoursLabel:
-        degraded || usageFailed ? null : `${(usedMinutes / 60).toFixed(1)} h`,
+        degraded || usageFailed
+          ? null
+          : sdh
+            ? `${(sdhUsed / 3600).toFixed(1)} small-daemon-hours`
+            : `${(usedMinutes / 60).toFixed(1)} h`,
       allowedSizesLabel: degraded ? null : formatAllowedSizes(d.allowedSizes),
       overageRateLabel: formatOverageRate(d.overageCentsPerMinute),
       capacity:
         degraded || usageFailed
           ? null
-          : deriveComputeCapacity({
-              usedMinutes,
-              includedMinutes,
-              overageMinutes: usage?.overageMinutes ?? 0,
-            }),
+          : sdh
+            ? // The same band, filled in SDS: used against included, overage
+              // as its own segment (Σ overage seconds × multiplier).
+              deriveComputeCapacity({
+                usedMinutes: sdhUsed,
+                includedMinutes: sdhIncluded,
+                overageMinutes: sdhOverage,
+              })
+            : deriveComputeCapacity({
+                usedMinutes,
+                includedMinutes,
+                overageMinutes: usage?.overageMinutes ?? 0,
+              }),
+      smallDaemon: sdh
+        ? {
+            headline: usageFailed ? null : remainingHeadline(sdh),
+            burn: usageFailed ? null : burnLabel(sdh),
+            runsOut: usageFailed ? null : runsOutLabel(sdh),
+            asOf: usageFailed ? null : asOfLabel(sdh),
+          }
+        : undefined,
       // Overage is metered too, so an unmeasured response must not produce a
       // dollar figure. Gated on `usageFailed` as well as on the value: "$0.00
       // so far" from a server that measured nothing is the same lie as
       // "0.0 h used", in the currency the user actually cares about.
       estimatedOverageCostLabel:
-        !usageFailed && usage && usage.overageMinutes > 0
+        !usageFailed && usage && (sdh ? sdhOverage > 0 : usage.overageMinutes > 0)
           ? formatCentsAsDollars(usage.estimatedOverageCostCents ?? 0)
           : null,
       grantedMinutesRemaining: usage?.grantedMinutesRemaining ?? 0,
@@ -827,6 +871,7 @@ function OverviewTab({
                 usedHoursLabel: computeUi.usedHoursLabel,
                 capacity: computeUi.capacity,
                 estimatedOverageCostLabel: computeUi.estimatedOverageCostLabel,
+                smallDaemon: computeUi.smallDaemon,
               },
             ]}
             grantedMinutesRemaining={computeUi.grantedMinutesRemaining}
@@ -1051,8 +1096,8 @@ function PlansTab() {
    * plan, so a row can be `current`.
    */
   const planOptions: ComputePlanOption[] = useMemo(
-    () => deriveMachineOptions(computePlans),
-    [computePlans],
+    () => deriveMachineOptions(computePlans, plansQ.data?.daemonPricing),
+    [computePlans, plansQ.data?.daemonPricing],
   );
 
   const handleCheckoutDone = useCallback(() => {
@@ -1203,7 +1248,7 @@ function PlansTab() {
                 className="text-xs leading-relaxed text-muted-foreground"
                 data-testid="plans-hours-note"
               >
-                {describeIncludedHours(planOptions[0])}
+                {describeIncludedHours(planOptions[0], plansQ.data?.daemonPricing)}
               </p>
               {/* The burst ceiling. Rows print the RESERVED figures, which
                   undersell a machine that compiles on four times the cores it
