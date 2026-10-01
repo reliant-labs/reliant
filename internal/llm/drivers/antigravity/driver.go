@@ -212,7 +212,55 @@ func convertMessages(messages []message.Message) []*content {
 		}
 	}
 
+	if stamped := stampUnsignedCallSteps(history); stamped > 0 {
+		logging.Info("[ANTIGRAVITY] Replaying unsigned function calls with the documented stand-in signature",
+			"steps", stamped)
+	}
+
 	return history
+}
+
+// stampUnsignedCallSteps sets geminiwire.SkipThoughtSignatureValidator on the
+// first functionCall of every model step that has no real signature on ANY of
+// its calls, and returns how many steps it stamped.
+//
+// History reaches here with unsigned calls for reasons the user cannot undo: a
+// tool call made by another model before a mid-chat switch to Gemini, or a row
+// persisted before signature capture was fixed. Gemini 3.x 400s every request
+// that replays such a step, so without this one row wedges the chat for good.
+//
+// Every model step is stamped, not just the current turn's. Google validates
+// only the current turn, but where that turn starts is the server's
+// computation (the latest user text that is not a functionResponse), and
+// gemini-cli records getting that boundary wrong once role-merging moved it.
+// Missing a validated step is a certain 400; stamping one the server does not
+// validate replaces an absence it was already ignoring.
+//
+// Only functionCall parts are inspected. The reasoning part's signature stays
+// where it is: it does not count as the call's signature (the server checks
+// the functionCall part) and is never moved onto a call, because a signature
+// must go back "inside its original Part".
+func stampUnsignedCallSteps(history []*content) int {
+	stamped := 0
+	for _, c := range history {
+		if c == nil || c.Role != "model" {
+			continue
+		}
+		var calls []*part
+		var callSigned []bool
+		for _, p := range c.Parts {
+			if p == nil || p.FunctionCall == nil {
+				continue
+			}
+			calls = append(calls, p)
+			callSigned = append(callSigned, p.ThoughtSignature != "")
+		}
+		if geminiwire.StepNeedsSignatureStandIn(callSigned) {
+			calls[0].ThoughtSignature = geminiwire.SkipThoughtSignatureValidator
+			stamped++
+		}
+	}
+	return stamped
 }
 
 // resolveToolCall finds the tool name and thought signature for a tool result,

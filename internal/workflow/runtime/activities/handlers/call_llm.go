@@ -1698,12 +1698,23 @@ streamLoop:
 	// none is replayed next turn, which breaks the provider's cached prefix.
 	// Log what actually reached the output boundary so a future regression is
 	// one grep rather than another packet capture.
+	// toolCallSignatures counts the same way for tool-call thought signatures,
+	// which Gemini 3.x requires echoed back on the next request and which went
+	// missing silently for exactly the same reason.
+	toolCallSignatures := 0
+	for _, tc := range streamState.toolCalls {
+		if tc.ThoughtSignature != "" {
+			toolCallSignatures++
+		}
+	}
 	activity.GetLogger(ctx).Info("[CallLLM] Thinking captured",
 		"chatID", chat.ID,
 		"thread", thread,
 		"thinkingLen", len(thinkingText),
 		"signatureLen", len(streamState.thinkingSignature),
 		"thinkingParts", len(streamState.thinkingParts),
+		"toolCalls", len(streamState.toolCalls),
+		"toolCallSignatures", toolCallSignatures,
 	)
 
 	toolCalls := streamState.toolCalls

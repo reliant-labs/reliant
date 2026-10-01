@@ -69,6 +69,12 @@ func TestPowerfulTagMembership(t *testing.T) {
 	// listing it here would collapse the two tiers onto one model.
 	// gpt-6.1-sol follows astra, so an openai-only user's [powerful] stays
 	// on astra; it is reached only when astra is not servable.
+	//
+	// The last two are per-provider coverage, not frontier picks: copilot and
+	// xai serve nothing above them, and a provider that cannot answer
+	// [powerful] fails outright for a user who has only that provider. They sit
+	// at the END, so they are reached only when every real frontier model is
+	// unservable — see TestEveryProviderImplementsEveryCoreTag.
 	assert.Equal(t, []string{
 		"claude-5.1-fable",
 		"gpt-6-astra",
@@ -76,6 +82,8 @@ func TestPowerfulTagMembership(t *testing.T) {
 		"gpt-5.6-sol",
 		"gemini-3.8-flash",
 		"vertex-claude-5.1-fable",
+		"claude-5-sonnet",
+		"grok-4",
 	}, ids)
 }
 
@@ -223,7 +231,11 @@ func TestNewModelDefinitionsParseWithExpectedCapabilities(t *testing.T) {
 			[]string{"low", "medium", "high", "xhigh"}, TagPowerful, "xhigh", 1000000, 64000},
 		{"vertex-claude-5.1-fable", []string{TagFlagship, TagPowerful, TagReasoning},
 			[]string{"low", "medium", "high", "xhigh"}, TagPowerful, "xhigh", 1000000, 64000},
-		{"gemini-3.8-flash", []string{TagFlagship, TagPowerful, TagReasoning},
+		// gemini-3.8-flash carries every tier: it is antigravity's ONLY text
+		// model, so each tag it is missing is a tag an antigravity-only user
+		// cannot resolve at all. The lower tiers are trailing entries running at
+		// lower effort, reached only by that user.
+		{"gemini-3.8-flash", []string{TagCheap, TagFast, TagFlagship, TagMeta, TagModerate, TagPowerful, TagReasoning},
 			[]string{"low", "medium", "high"}, TagPowerful, "high", 1048576, 65536},
 		{"gemini-3.7-flash", []string{TagFlagship, TagModerate, TagReasoning},
 			[]string{"low", "medium", "high"}, TagFlagship, "medium", 1048576, 65536},
@@ -319,18 +331,21 @@ func TestClaude51FableProviderMappings(t *testing.T) {
 // family flagship, terra the faster/cheaper one. Pin it — these three are
 // distinguished only by tags, so a mistaken edit is invisible at runtime.
 //
-// Terra carries `moderate`, NOT `fast`. `fast` resolves globally by definition
-// order, so tagging terra would repoint @fast away from gemini-3.5-flash for
-// every user, and terra bills at gpt-5.5's rate, which is not a fast-tier
-// price. The codex driver has no fast model by design; titling and compaction
-// pass a [fast, moderate] preference ladder and degrade to gpt-5.5 instead.
+// Terra leads `moderate` for codex and also closes out `fast`, `cheap` and
+// `meta` — it is the codex driver's only entry in those tiers, and a codex-only
+// user who cannot resolve [fast] gets no chat title at all rather than a slower
+// one. Terra's earlier exclusion from `fast` rested on two things that are no
+// longer true: resolution order is per-tag LIST POSITION, not global definition
+// order, so a trailing entry cannot repoint @fast for anyone who has a real fast
+// model; and the per-token rate does not apply, because codex is reached through
+// a ChatGPT subscription rather than metered billing.
 func TestGPT56FamilyTagLadder(t *testing.T) {
 	reg := MustGetRegistry()
 
 	for id, wantTags := range map[string][]string{
 		"gpt-5.6-sol":   {TagPowerful, TagReasoning},
 		"gpt-5.6-luna":  {TagFlagship, TagReasoning},
-		"gpt-5.6-terra": {TagModerate, TagReasoning},
+		"gpt-5.6-terra": {TagCheap, TagFast, TagMeta, TagModerate, TagReasoning},
 	} {
 		_, ok := reg.GetDefinition(id)
 		require.True(t, ok, "expected %s in the registry", id)

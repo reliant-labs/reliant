@@ -30,6 +30,15 @@ type llmCallSpec struct {
 	// resolver (tests) supplies its own driver/model, mirroring CallLLM.
 	Selector models.ModelSelector
 
+	// FallbackSelector, when set, is tried only if Selector cannot resolve at
+	// all against the user's providers. This is a STRICT ladder, unlike a
+	// multi-tag Selector: tag scoring SUMS the weights of every selector tag a
+	// model is listed under, so [fast, moderate] prefers a model carrying both
+	// over one carrying only fast — which is the opposite of "fast, or moderate
+	// if there is no fast model". Use this when the second tier is a genuine
+	// fallback rather than a secondary preference.
+	FallbackSelector models.ModelSelector
+
 	// Explicit per-call overrides. Zero values mean "use the resolved model's
 	// default" — exactly like an unset workflow arg on a normal request.
 	Temperature   *float64
@@ -120,7 +129,13 @@ func resolveLLMCall(ctx context.Context, resolver drivers.DriverResolver, spec l
 		availableProviders := configuredProviderIDs(drivers.GetAvailableDrivers(ctx, spec.UserID))
 
 		registry := models.MustGetRegistry()
-		resolved, err := registry.Resolve(spec.Selector, availableProviders)
+		resolve := registry.Resolve
+		if len(spec.FallbackSelector.Tags) > 0 || spec.FallbackSelector.ID != "" {
+			resolve = func(selector models.ModelSelector, providers []string) (*models.ResolvedModel, error) {
+				return registry.ResolveWithFallback(selector, spec.FallbackSelector, providers)
+			}
+		}
+		resolved, err := resolve(spec.Selector, availableProviders)
 		if err != nil {
 			return nil, fmt.Errorf("failed to resolve model: %w. Please check your API key configuration in Settings", err)
 		}

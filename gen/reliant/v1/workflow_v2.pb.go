@@ -2096,12 +2096,24 @@ func (x *CallLLMMessageInput) GetToolCalls() []*ToolCallMsg {
 
 // ToolCallMsg represents a tool call requested by an LLM.
 type ToolCallMsg struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
-	Input         string                 `protobuf:"bytes,3,opt,name=input,proto3" json:"input,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Id    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Name  string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	Input string                 `protobuf:"bytes,3,opt,name=input,proto3" json:"input,omitempty"`
+	// Gemini 3.x (and Antigravity, which fronts it) rejects a request whose
+	// functionCall parts do not echo back the thought_signature the model
+	// emitted with the call: "Function call is missing a thought_signature in
+	// functionCall parts". So the signature has to survive from the driver to
+	// the database and back out on replay.
+	//
+	// message_only because it must NOT enter Temporal history: signatures are
+	// kilobytes each and every tool call carries one. The ActivityWrapper
+	// evaluates the node's save_message against the full result (so the
+	// signature reaches the message row) and then clears this field before the
+	// result is returned to the workflow.
+	ThoughtSignature string `protobuf:"bytes,4,opt,name=thought_signature,json=thoughtSignature,proto3" json:"thought_signature,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *ToolCallMsg) Reset() {
@@ -2151,6 +2163,13 @@ func (x *ToolCallMsg) GetName() string {
 func (x *ToolCallMsg) GetInput() string {
 	if x != nil {
 		return x.Input
+	}
+	return ""
+}
+
+func (x *ToolCallMsg) GetThoughtSignature() string {
+	if x != nil {
+		return x.ThoughtSignature
 	}
 	return ""
 }
@@ -6993,11 +7012,12 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\vtool_result\x18\x03 \x01(\v2\x19.reliant.v1.ToolResultMsgR\n" +
 	"toolResult\x126\n" +
 	"\n" +
-	"tool_calls\x18\x04 \x03(\v2\x17.reliant.v1.ToolCallMsgR\ttoolCalls\"G\n" +
+	"tool_calls\x18\x04 \x03(\v2\x17.reliant.v1.ToolCallMsgR\ttoolCalls\"|\n" +
 	"\vToolCallMsg\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x14\n" +
-	"\x05input\x18\x03 \x01(\tR\x05input\"\xa1\x01\n" +
+	"\x05input\x18\x03 \x01(\tR\x05input\x123\n" +
+	"\x11thought_signature\x18\x04 \x01(\tB\x06\x82\xb5\x18\x02x\x01R\x10thoughtSignature\"\xa1\x01\n" +
 	"\rToolResultMsg\x12 \n" +
 	"\ftool_call_id\x18\x01 \x01(\tR\n" +
 	"toolCallId\x12\x12\n" +

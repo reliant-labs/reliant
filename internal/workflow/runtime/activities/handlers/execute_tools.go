@@ -1269,9 +1269,10 @@ func protoToolCallsToMessage(protoTCs []*reliantv1.ToolCallMsg) []message.ToolCa
 	for i, tc := range protoTCs {
 		decodedInput, metadata := decodeToolCallInputFromProto(tc.GetInput())
 		result[i] = message.ToolCall{
-			ID:    tc.GetId(),
-			Name:  tc.GetName(),
-			Input: decodedInput,
+			ID:               tc.GetId(),
+			Name:             tc.GetName(),
+			Input:            decodedInput,
+			ThoughtSignature: tc.GetThoughtSignature(),
 		}
 		if metadata != nil {
 			result[i].AvailablePresets = metadata.AvailablePresets
@@ -1307,9 +1308,10 @@ func messageToolCallsToProto(toolCalls []message.ToolCall) []*reliantv1.ToolCall
 	result := make([]*reliantv1.ToolCallMsg, len(toolCalls))
 	for i, tc := range toolCalls {
 		result[i] = &reliantv1.ToolCallMsg{
-			Id:    tc.ID,
-			Name:  tc.Name,
-			Input: encodeToolCallInputForProto(tc),
+			Id:               tc.ID,
+			Name:             tc.Name,
+			Input:            encodeToolCallInputForProto(tc),
+			ThoughtSignature: tc.ThoughtSignature,
 		}
 	}
 	return result

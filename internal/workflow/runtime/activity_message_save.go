@@ -17,6 +17,7 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
 // ============================================================================
@@ -337,11 +338,16 @@ func writeMessageWithRetry(
 // Rule 2 — message-only fields never go back to the workflow.
 // ============================================================================
 
-// clearMessageOnlyFields clears every top-level field annotated
-// [(reliant) = {message_only: true}] on an activity's proto result. Such a
-// field exists to be persisted with the message (it is in the map the save
-// evaluates) and must not enter workflow history. Non-proto results carry no
-// annotations and are left alone.
+// clearMessageOnlyFields clears every field annotated
+// [(reliant) = {message_only: true}] on an activity's proto result, at any
+// depth. Such a field exists to be persisted with the message (it is in the
+// map the save evaluates) and must not enter workflow history. Non-proto
+// results carry no annotations and are left alone.
+//
+// Depth matters: ToolCallMsg.thought_signature is message_only but reaches the
+// workflow inside the repeated tool_calls field, which is not. A top-level-only
+// sweep left every signature in history — kilobytes per tool call, on every
+// turn.
 func clearMessageOnlyFields[O any](result *O) {
 	var pm proto.Message
 	if m, ok := any(*result).(proto.Message); ok {
@@ -356,11 +362,41 @@ func clearMessageOnlyFields[O any](result *O) {
 	if !msg.IsValid() {
 		return
 	}
-	fields := msg.Descriptor().Fields()
-	for i := 0; i < fields.Len(); i++ {
-		fd := fields.Get(i)
-		if wfcel.IsMessageOnly(fd) && msg.Has(fd) {
-			msg.Clear(fd)
+	clearMessageOnlyIn(msg)
+}
+
+// clearMessageOnlyIn clears msg's message_only fields and recurses into every
+// message it still holds: singular sub-messages, repeated-message elements and
+// message-typed map values.
+func clearMessageOnlyIn(msg protoreflect.Message) {
+	var messageOnly []protoreflect.FieldDescriptor
+	msg.Range(func(fd protoreflect.FieldDescriptor, value protoreflect.Value) bool {
+		if wfcel.IsMessageOnly(fd) {
+			// Collect rather than clear: mutating during Range is not defined.
+			messageOnly = append(messageOnly, fd)
+			return true
 		}
+		switch {
+		case fd.IsMap():
+			if fd.MapValue().Kind() == protoreflect.MessageKind || fd.MapValue().Kind() == protoreflect.GroupKind {
+				value.Map().Range(func(_ protoreflect.MapKey, item protoreflect.Value) bool {
+					clearMessageOnlyIn(item.Message())
+					return true
+				})
+			}
+		case fd.IsList():
+			if fd.Kind() == protoreflect.MessageKind || fd.Kind() == protoreflect.GroupKind {
+				list := value.List()
+				for i := 0; i < list.Len(); i++ {
+					clearMessageOnlyIn(list.Get(i).Message())
+				}
+			}
+		case fd.Kind() == protoreflect.MessageKind, fd.Kind() == protoreflect.GroupKind:
+			clearMessageOnlyIn(value.Message())
+		}
+		return true
+	})
+	for _, fd := range messageOnly {
+		msg.Clear(fd)
 	}
 }
