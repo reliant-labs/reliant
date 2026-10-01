@@ -18,6 +18,13 @@ coverage.html
 # Go workspace file
 go.work
 
+# Go build cache — a project-local GOCACHE.
+# Agents working in parallel worktrees point GOCACHE at $WORKTREE/.gocache so
+# concurrent builds don't contend on one shared cache. It is machine-local
+# build output (tens of thousands of files), and `git add -A` would otherwise
+# sweep it into a commit.
+.gocache/
+
 # IDE specific files
 .idea/
 .vscode/
