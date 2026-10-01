@@ -444,8 +444,46 @@ message PlanLimits {
   // throttle after 72h, and NEVER suspend.
   InfraOveragePolicy infra_overage_policy = 32;
 
+  // Small-daemon-hours this plan includes per billing period (per-daemon
+  // billing, design §6.1). A large daemon burns them at its multiplier — four
+  // hours of a 4× size is sixteen small-daemon-hours. Projected from the
+  // daemon-pricing catalog (internal/plansconfig/daemon_pricing.yaml), never
+  // from plans.limits, so the UI and the meter read one number. Zero for a
+  // plan the catalog does not declare: no allowance, never "unlimited".
+  int64 included_small_daemon_hours = 34;
+
   reserved 5, 6;
   reserved "ip_restricted", "max_ips_per_key";
+}
+
+// DaemonPricing is the per-daemon price list, projected from the one catalog
+// file the owner edits (internal/plansconfig/daemon_pricing.yaml), so a client
+// never restates a multiplier, a price or a disk size (design §6.1).
+//
+// ⚠️ PRICES ARE PLACEHOLDERS while `placeholder` is true (per-daemon billing
+// §13 Q1 open). A client should say so rather than present them as final.
+message DaemonPricing {
+  // One row per size the product sells, cheapest first.
+  repeated DaemonSizePrice sizes = 1;
+  // The suspended-disk fee, in cents per GiB-month, as an exact decimal
+  // string (never a float: it is money).
+  string suspended_disk_cents_per_gib_month = 2;
+  // True while the catalog's numbers are placeholders.
+  bool placeholder = 3;
+}
+
+// DaemonSizePrice is one size's row of DaemonPricing.
+message DaemonSizePrice {
+  string size = 1;
+  // Small-daemon-hours this size burns per wall-clock hour.
+  int64 multiplier = 2;
+  // Overage price per wall-clock hour at this size, in cents, as an exact
+  // decimal string: multiplier × the small hourly price.
+  string hourly_price_cents = 3;
+  // The disk a daemon of this size is given, in GiB
+  // (config.DaemonTierStorageGiB) — the number the suspended-disk fee is
+  // charged on.
+  int64 storage_gib = 4;
 }
 
 message Plan {

@@ -230,6 +230,9 @@ message ListPlansRequest {
 
 message ListPlansResponse {
   repeated Plan plans = 1;
+  // The per-daemon price list (design §6.1), so the plan tiles and the machine
+  // picker read multipliers, prices and disk sizes from the server.
+  controlplane.v1.DaemonPricing daemon_pricing = 2;
 }
 
 message GetPlanRequest {
@@ -801,6 +804,63 @@ message GetCurrentUserComputeUsageResponse {
   // client withholds, rather than a missing field defaulting to "measured"
   // and reinstating the exact bug this field exists to close.
   bool usage_measured = 10;
+
+  // ── Per-daemon billing (design §6.1), ALONGSIDE the fields above ────────
+  //
+  // These describe the model IN FORCE for this period: the small-daemon-
+  // second (SDS) model after the cutover, and the old minute model (×60)
+  // before it, read from the one Balance every gate reads — so the page and
+  // the start gate cannot disagree. The fields above keep their meaning until
+  // task M retires them. As with them, usage_measured = false means the
+  // metered values carry no information.
+
+  // The plan allowance for this period, in small-daemon-seconds.
+  int64 included_small_daemon_seconds = 11;
+  // Consumed this period: drained counter + undrained segments.
+  int64 used_small_daemon_seconds = 12;
+  // max(0, included − used). Never negative.
+  int64 remaining_small_daemon_seconds = 13;
+  // One-time coupon grant still unspent, in small-daemon-seconds.
+  int64 granted_small_daemon_seconds_remaining = 14;
+  // Sum of the multipliers of the daemons running right now (the burn rate
+  // in SDS per second). Zero when nothing runs.
+  int64 running_multiplier = 15;
+  // When the allowance runs out at the current burn rate. UNSET when nothing
+  // is running or nothing remains — never a fabricated far-future instant.
+  google.protobuf.Timestamp exhausts_at = 16;
+  // Running usage per size this period, cheapest first.
+  repeated SizeUsage by_size = 17;
+  // Suspended-disk usage this period. Billed outside the overage cap (Q4).
+  SuspendedDiskUsage suspended_disk = 18;
+  // The last meter tick this answer includes ("as of HH:MM").
+  google.protobuf.Timestamp measured_through = 19;
+}
+
+// SizeUsage is one size's running usage within a period (design §6.1).
+message SizeUsage {
+  string size = 1;
+  int64 multiplier = 2;
+  // Native wall-clock seconds at this size.
+  int64 running_seconds = 3;
+  // Small-daemon-seconds of this size's running time covered by the plan
+  // allowance or a grant.
+  int64 included_small_daemon_seconds = 4;
+  // Native seconds at this size past allowance and grant — the priced part.
+  int64 overage_seconds = 5;
+  // overage_seconds × this size's hourly price / 3600, in cents, as an exact
+  // decimal string rounded half-up to 4 places.
+  string overage_cost_cents = 6;
+}
+
+// SuspendedDiskUsage is the disk-fee half of a period (design §6.1).
+message SuspendedDiskUsage {
+  // storage GiB × seconds held suspended this period.
+  int64 gib_seconds = 1;
+  // gib_seconds priced at the catalog's GiB-month fee (a month = 30 days),
+  // in cents, as an exact decimal string rounded half-up to 4 places.
+  string cost_cents = 2;
+  // GiB held by daemons suspended right now.
+  int64 current_gib = 3;
 }
 
 // === Compute eligibility ===
