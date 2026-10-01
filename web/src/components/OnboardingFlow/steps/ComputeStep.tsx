@@ -176,8 +176,8 @@ export function ComputeStep({
   // divergence that produced two unlike surfaces for one choice. One
   // declaration, two callers that differ only in what a row DOES.
   const planOptions = useMemo<ComputePlanOption[]>(
-    () => deriveMachineOptions(computePlans),
-    [computePlans],
+    () => deriveMachineOptions(computePlans, plansQ.data?.daemonPricing),
+    [computePlans, plansQ.data?.daemonPricing],
   );
 
   // The machine sizes are shown to EVERYONE who can choose a hosted machine.
@@ -688,7 +688,7 @@ export function ComputeStep({
                   className="text-xs leading-relaxed text-muted-foreground"
                   data-testid="compute-step-hours-note"
                 >
-                  {describeIncludedHours(planOptions[0])}
+                  {describeIncludedHours(planOptions[0], plansQ.data?.daemonPricing)}
                 </p>
               )}
               {/* The burst ceiling, said once for the same reason the hours

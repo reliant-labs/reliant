@@ -27,6 +27,7 @@
 
 import { useCallback, useMemo, useState } from "react";
 import { Cpu, Wallet } from "lucide-react";
+import { remainingHeadline } from "@/components/Billing/daemonUsage";
 import {
   useComputeSubscription,
   useComputeUsage,
@@ -180,6 +181,10 @@ export function MobileBillingScreen({ onBack }: { onBack: () => void }) {
     const measured = !!usage && usage.usageMeasured;
     return {
       measured,
+      // Per-daemon billing (design §6.2): the same headline as desktop, from
+      // the same server fields — and only when the server sent them
+      // (measured_through set). Null when unmeasured, never "0.0 … left".
+      headline: usage?.measuredThrough ? remainingHeadline(usage) : null,
       includedHours: includedMinutes / 60,
       usedHours: usedMinutes / 60,
       capacity: deriveComputeCapacity({
@@ -358,6 +363,14 @@ export function MobileBillingScreen({ onBack }: { onBack: () => void }) {
                 </div>
               ) : (
                 <div className="mt-3">
+                  {usageUi.headline && (
+                    <p
+                      className="mb-1.5 text-sm font-semibold text-foreground"
+                      data-testid="mobile-sdh-headline"
+                    >
+                      {usageUi.headline}
+                    </p>
+                  )}
                   <div className="flex items-center justify-between text-xs">
                     <span className="text-muted-foreground">
                       {usageUi.usedHours.toFixed(1)} h used

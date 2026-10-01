@@ -84,6 +84,8 @@ import {
 import { SelfHostedDaemonConnect } from "@/components/Projects/SelfHostedDaemonConnect";
 import { getComputeEligibility } from "@/services/controlPlane/billing";
 import { useGoToBilling } from "@/hooks/useGoToBilling";
+import { usePlans } from "@/hooks/useCloudBillingQueries";
+import { suspendedFeeLabel, type DaemonPricingLike } from "@/components/Billing/daemonUsage";
 // The overage formatter, shared with the billing purchase grid so the two
 // surfaces cannot disagree about how a rate is written.
 import { formatOverageRate } from "./billingUtils";
@@ -262,6 +264,17 @@ const accessModeLabel: Record<number, string> = {
   [PortAccessMode.UNSPECIFIED]: "Unspecified",
 };
 
+/**
+ * A suspended machine's monthly disk fee: its size's disk (the one storage
+ * number, from the server's price list) × the per-GiB-month fee. Null when
+ * the server sent no price list or the size is unknown to it.
+ */
+function suspendedFeeOf(d: Daemon, pricing?: DaemonPricingLike): string | null {
+  const name = SIZE_TIERS.find((t) => t.value === d.size)?.name;
+  const row = name ? pricing?.sizes.find((s) => s.size === name) : undefined;
+  return row ? suspendedFeeLabel(pricing, Number(row.storageGib)) : null;
+}
+
 // ── Date helpers ────────────────────────────────────────────────────────────
 function fmtTimestamp(ts?: Timestamp): string {
   if (!ts) return "—";
@@ -421,6 +434,9 @@ function EnvironmentsList({ onOpenDetail }: { onOpenDetail: (id: string) => void
   const [createOpen, setCreateOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Daemon | null>(null);
   const [actionError, setActionError] = useState("");
+  // The per-daemon price list (design §6.2), for the suspended-disk fee shown
+  // beside Delete. Absent from an older server, in which case no fee renders.
+  const daemonPricing = usePlans().data?.daemonPricing;
   // Routes to /settings/billing?tab=plans — the place a coupon is redeemed and
   // a plan is bought. Shared with every other "go buy compute" call site so
   // the destination cannot drift; see the hook's own header.
@@ -576,6 +592,7 @@ function EnvironmentsList({ onOpenDetail }: { onOpenDetail: (id: string) => void
                 onSuspend={(id) => suspendMut.mutate(id)}
                 onResume={(id) => resumeMut.mutate(id)}
                 busy={suspendMut.isPending || resumeMut.isPending}
+                pricing={daemonPricing}
               />
             </div>
           )}
@@ -621,6 +638,7 @@ function ManagedMachinesTable({
   onSuspend,
   onResume,
   busy,
+  pricing,
 }: {
   daemons: Daemon[];
   onOpenDetail: (id: string) => void;
@@ -628,6 +646,7 @@ function ManagedMachinesTable({
   onSuspend: (id: string) => void;
   onResume: (id: string) => void;
   busy: boolean;
+  pricing?: DaemonPricingLike;
 }) {
   return (
     <Table>
@@ -692,6 +711,14 @@ function ManagedMachinesTable({
                     {isSuspended ? <Play className="h-4 w-4" /> : <Pause className="h-4 w-4" />}
                     {isSuspended ? "Resume" : "Suspend"}
                   </Button>
+                  {/* A suspended machine still holds its disk, and the disk is
+                      billed (design §5.1). Shown beside Delete because Delete
+                      is the only thing that stops it. */}
+                  {isSuspended && suspendedFeeOf(d, pricing) && (
+                    <span className="text-xs text-muted-foreground" data-testid="machine-suspended-fee">
+                      {suspendedFeeOf(d, pricing)} while suspended
+                    </span>
+                  )}
                   <Button variant="ghost" size="sm" onClick={() => onDelete(d)}>
                     <Trash2 className="h-4 w-4 text-destructive" />
                   </Button>

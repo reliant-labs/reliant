@@ -355,14 +355,17 @@ describe("the machine list", () => {
    * It is still SAID — once, beneath the list, and still read from the
    * catalog so it tracks 9600 if control-plane changes it.
    */
-  it("states the included hours once, as a property of every size", async () => {
+  // Per-daemon billing (design §6.2): the allowance is SMALL-DAEMON-HOURS,
+  // which a bigger machine burns faster — so the note no longer claims the
+  // same hours on every size. Still said once, still from the catalog.
+  it("states the included small-daemon-hours once, not 'on every size'", async () => {
     const user = userEvent.setup();
     await openPlans(user);
 
     const note = screen.getByTestId("plans-hours-note");
     // 1200 min = 20 h, from the fixture's own catalog — not a constant.
-    expect(note).toHaveTextContent(/20 machine hours/i);
-    expect(note).toHaveTextContent(/every size/i);
+    expect(note).toHaveTextContent(/20 small-daemon-hours each month/i);
+    expect(note).not.toHaveTextContent(/every size/i);
     expect(screen.getAllByTestId("plans-hours-note")).toHaveLength(1);
   });
 

@@ -340,13 +340,15 @@ describe("ComputeStep — every size says what it gives you", () => {
    * still read from the catalog rather than hardcoded so it tracks 9600 if
    * control-plane changes it.
    */
-  it("states the included hours once, for every size", () => {
+  // Per-daemon billing (design §6.2): small-daemon-hours, burned faster by
+  // bigger machines — the note no longer says "on every size".
+  it("states the included small-daemon-hours once, not 'on every size'", () => {
     renderStep();
 
     const note = screen.getByTestId("compute-step-hours-note");
     // 1020 min = 17 h, from the fixture's own catalog — not a constant.
-    expect(note).toHaveTextContent(/17 machine hours/i);
-    expect(note).toHaveTextContent(/every size/i);
+    expect(note).toHaveTextContent(/17 small-daemon-hours each month/i);
+    expect(note).not.toHaveTextContent(/every size/i);
     expect(screen.getAllByTestId("compute-step-hours-note")).toHaveLength(1);
   });
 

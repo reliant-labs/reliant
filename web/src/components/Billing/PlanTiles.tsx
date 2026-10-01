@@ -23,6 +23,12 @@ import {
 } from "@/components/Settings/cloud/billingUtils";
 import { cn } from "@/lib/utils";
 
+import {
+  includedHoursSentence,
+  type DaemonPricingLike,
+  type SizeFacts,
+} from "./daemonUsage";
+
 /**
  * One purchasable plan, reduced to what these tiles render.
  *
@@ -52,6 +58,17 @@ export interface ComputePlanOption {
   includedMinutes: number;
   /** Per-minute overage rate, in cents. 0 when the plan defines none. */
   overageCentsPerMinute: number;
+  /**
+   * Small-daemon-hours the plan includes per period — the server's
+   * projection from the daemon-pricing catalog (PlanLimits field 34). Absent
+   * from an older server.
+   */
+  includedSmallDaemonHours?: number;
+  /**
+   * This size's price, burn rate, disk and suspended fee, from ListPlans'
+   * daemon_pricing (design §6.2). Absent when the server sent no price list.
+   */
+  facts?: SizeFacts;
 }
 
 export function PlanTiles({
@@ -202,6 +219,17 @@ export function PlanTileRow({
             {plan.detail}
           </span>
         )}
+        {/* What this size COSTS to run and to keep (design §6.2): the
+            per-hour price past included hours, how fast it burns them, its
+            disk, and the fee while suspended — so keeping a machine's cost is
+            visible before it is created. All from the server's price list;
+            absent when the server sent none. */}
+        {plan.facts && (
+          <span className="block text-xs text-muted-foreground" data-testid="plan-row-size-facts">
+            {plan.facts.burnRateLabel} · {plan.facts.hourlyPriceLabel} · {plan.facts.diskLabel}
+            {plan.facts.suspendedFeeLabel && <> · {plan.facts.suspendedFeeLabel} while suspended</>}
+          </span>
+        )}
       </span>
       <span className="flex-shrink-0 text-sm font-semibold text-foreground">
         {current ? (
@@ -234,9 +262,18 @@ export function PlanTileRow({
  * allowance — the uniformity is the caller's fact to know, not this
  * function's.
  */
-export function describeIncludedHours(plan: ComputePlanOption): string {
+export function describeIncludedHours(
+  plan: ComputePlanOption,
+  pricing?: DaemonPricingLike,
+): string {
   if (plan.includedMinutes < 0) return "Unlimited machine hours are included.";
-  return `${Math.round(plan.includedMinutes / 60)} machine hours are included each month, on every size.`;
+  // Per-daemon billing (design §6.2): the allowance is SMALL-DAEMON-HOURS,
+  // which a bigger machine burns faster — "on every size" stopped being true.
+  // Every number in the sentence is the server's.
+  return includedHoursSentence(
+    plan.includedSmallDaemonHours ?? Math.round(plan.includedMinutes / 60),
+    pricing,
+  );
 }
 
 /**

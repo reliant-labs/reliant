@@ -32,6 +32,7 @@ import {
   type DaemonSizeName,
 } from "@/components/Settings/cloud/billingUtils";
 
+import { sizeFacts, type DaemonPricingLike } from "./daemonUsage";
 import { formatMachineSpec } from "./machineSpecs";
 import type { ComputePlanOption } from "./PlanTiles";
 
@@ -60,6 +61,8 @@ export type MachineCatalogPlan = Pick<
  */
 export function deriveMachineOptions<T extends MachineCatalogPlan>(
   plans: T[],
+  /** ListPlans' daemon_pricing: each size's price, burn rate, disk and suspended fee. */
+  pricing?: DaemonPricingLike,
 ): ComputePlanOption[] {
   const options: ComputePlanOption[] = [];
   for (const size of offeredDaemonSizes(plans)) {
@@ -82,6 +85,11 @@ export function deriveMachineOptions<T extends MachineCatalogPlan>(
       monthlyPriceCents: display.monthlyPriceCents,
       includedMinutes: display.includedMinutes,
       overageCentsPerMinute: display.overageCentsPerMinute,
+      includedSmallDaemonHours:
+        plan.structuredLimits?.includedSmallDaemonHours !== undefined
+          ? Number(plan.structuredLimits.includedSmallDaemonHours)
+          : undefined,
+      facts: sizeFacts(pricing, size) ?? undefined,
     });
   }
   return options;
