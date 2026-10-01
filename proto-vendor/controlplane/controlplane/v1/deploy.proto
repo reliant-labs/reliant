@@ -361,6 +361,22 @@ message DeployEnvironment {
   // client still on that release, which is the quietest possible wire bug.
   reserved 16;
   reserved "capabilities";
+
+  // READ-ONLY and DERIVED: true when a promotion to this environment will
+  // actually move bytes without a client-side deploy — this control plane runs
+  // a converger AND this environment's reconcile_policy is not PINNED.
+  //
+  // It exists so a client can refuse FAST instead of waiting out a timeout. A
+  // `forge env promote --wait` against an environment that converges nothing
+  // would poll for fifteen minutes and then report a failure whose cause is
+  // "nobody was ever going to apply this" — which looks exactly like a broken
+  // release. Reading this field turns that into an immediate, accurate
+  // "this env does not converge promotions; add --deploy".
+  //
+  // DERIVED, not stored, for the same reason the verdict is derived: it is a
+  // fact about the server's own configuration and the env's policy, and a
+  // stored copy could disagree with either.
+  bool converges_promotions = 17;
 }
 
 // DeployEnvironmentSpec is THE WRITABLE HALF of an environment — the whole of
@@ -686,6 +702,37 @@ message Deployment {
   // declaration a forge project checks in, so a redeploy of an unchanged
   // project must not resume a workload somebody suspended.
   DeployRunState run_state = 10;
+
+  // Tag 6 is unused and its history is unknown — it predates the records we
+  // have, so nothing here can say what a client on an old release might
+  // decode it as. RESERVED rather than recycled: an unknown tag is exactly
+  // the case where reuse is unsafe, because the failure is silent.
+  reserved 6;
+
+  // The release ARTIFACT KEY whose digest this deployment runs, matching
+  // forge's Artifacts map key (the same key forge computes for its plan, so
+  // the client and the server cannot pair a workload with a digest
+  // differently).
+  //
+  // EMPTY MEANS NOT RELEASE-BOUND: a ManagedDatabase, or a third-party image
+  // pinned directly in the spec. The converger SKIPS an empty one rather than
+  // guessing a pairing from the deployment's name. Names coinciding with
+  // artifact keys is a convention, not a guarantee, and a converger that
+  // guessed would silently repoint the wrong workload the first time they
+  // differed.
+  string artifact = 12;
+
+  // The promotion whose pins this row's spec currently carries.
+  //
+  // This is the discriminator between "a promotion is waiting to be applied"
+  // and "this row has drifted", and those two need opposite answers under the
+  // OBSERVE policy: a promotion is a declared change and ships, while drift is
+  // corrected only under CONVERGE. Comparing digests cannot tell them apart —
+  // both read as "the row does not match the pin" — which is why this is a
+  // promotion id and not a digest comparison.
+  //
+  // Empty on a row that has never been pinned from a promotion.
+  string applied_promotion_id = 13;
 }
 
 // DeployArtifact is one image's resolved identity within a release.
@@ -796,13 +843,227 @@ message DeployRelease {
   google.protobuf.Timestamp created_at = 8;
   // No updated_at, and that absence is the point: a release is immutable, so
   // there is no update to stamp. A field implying otherwise would invite one.
+
+  // The CI run that cut this release, when one was supplied. The join key
+  // that ties a release to the promotions and gates from the same run.
+  DeployRun run = 9;
 }
 
-// DeployGate is one check that had passed when a promotion was recorded.
+// DeployGate is one check's result, recorded against a promotion.
+//
+// EVIDENCE, NOT ENFORCEMENT, and the distinction is load-bearing rather than
+// decorative. RecordGate is authorized at `deploy:write` — deliberately BELOW
+// promote's admin, so a CI test job's token needs no promote authority — which
+// means a `deploy:write` token can record a `passed` gate for a check it never
+// ran. That is acceptable precisely because nothing enforces on this record.
+// When gates-as-policy arrives, enforcement MUST re-run or re-verify the
+// check; it must not trust a row here.
 message DeployGate {
+  // "lint", "test", "smoke", "rollout", "qa-signoff".
   string name = 1;
+
+  // A CLOSED set, validated server-side: passed | failed | skipped | error.
+  //
+  // It was free text, and rows already in the ledger carry whatever the old
+  // scaffold wrote. So the READ path maps an unrecognised value to `error`
+  // for display and keeps the raw string, while the WRITE path refuses
+  // anything outside the set as InvalidArgument. Mapping rather than
+  // rejecting on read is what keeps a historical ledger readable: the ledger
+  // is append-only, so there is no migration that could clean those rows up.
   string status = 2;
+
+  // Where the full report lives — a CI run, a build artifact.
   string url = 3;
+
+  // One line, for a human scanning a timeline: "412 passed, 0 failed, 3
+  // skipped". Not a log, and not a place to put one.
+  string summary = 4;
+
+  google.protobuf.Timestamp started_at = 5;
+  google.protobuf.Timestamp finished_at = 6;
+
+  // The CI run this check belongs to (DeployRun.id). OPTIONAL: a manual QA
+  // sign-off has no run, and still attaches to the promotion and appears in
+  // the environment's history. It simply belongs to no run.
+  string run_id = 7;
+
+  // Small, structured, optional: counts and verdicts. Capped server-side at
+  // 8 KiB, because the full report is behind `url` and a details blob that
+  // could hold a log would eventually hold one.
+  google.protobuf.Struct details = 8;
+
+  // SET BY THE SERVER on read; never accepted from a request. Who recorded
+  // this gate — a user id, or "token:<token_id>" — and when. A client-supplied
+  // attribution would be a client claiming who vouched for a check, which is
+  // the one part of a piece of evidence that must not come from the party
+  // being vouched for.
+  string recorded_by = 9;
+  google.protobuf.Timestamp recorded_at = 10;
+}
+
+// DeployRun identifies the CI run (or human session) that drove a sequence of
+// deploy writes, so a release, its promotions and its gates can be read back
+// as one story rather than as unrelated rows that happen to share a timestamp.
+//
+// It is CALLER-CHOSEN and opaque. The control plane never parses it, and it is
+// not an identity: `provider` is for display, not for trust. Authorization is
+// the caller's token, as everywhere else.
+message DeployRun {
+  // Opaque and stable across retries of one attempt, e.g.
+  // "github:acme/app/12345/1". Stability across retries is what makes the
+  // gate idempotency key (promotion_id, name, run_id) do its job.
+  string id = 1;
+  // Link to the CI run, for a human.
+  string url = 2;
+  // "github" | "gitlab" | "manual". DISPLAY ONLY — see above.
+  string provider = 3;
+}
+
+// DeployRolloutPhase is how far one promotion has got toward actually running,
+// judged against THAT promotion's frozen pins.
+//
+// It is DERIVED on read, never stored, for the reason DeployVerdict is:
+// a stored phase is a cache of an observation, and a stale cache here reads as
+// a healthy release.
+enum DeployRolloutPhase {
+  DEPLOY_ROLLOUT_PHASE_UNSPECIFIED = 0;
+  // Promoted, but no workload has started moving: nothing has picked the
+  // promotion up yet.
+  DEPLOY_ROLLOUT_PHASE_PENDING = 1;
+  // Some workload is not yet serving the pinned digest. A mid-rollout
+  // DIVERGED verdict folds in HERE: divergence inside a rollout window is
+  // normal, and becomes a failure only through the caller's timeout.
+  DEPLOY_ROLLOUT_PHASE_PROGRESSING = 2;
+  // Every workload serves the pinned digest, but is still inside the
+  // stability window.
+  DEPLOY_ROLLOUT_PHASE_STABILIZING = 3;
+  // Every workload converged on the pinned digest and stayed there past the
+  // window.
+  DEPLOY_ROLLOUT_PHASE_SUCCEEDED = 4;
+  // A workload is not serving — on the NEW digest or the old one. A crash on
+  // the old digest during a rollout is still a failed rollout.
+  DEPLOY_ROLLOUT_PHASE_DEGRADED = 5;
+  // A newer promotion replaced this one before it finished.
+  DEPLOY_ROLLOUT_PHASE_SUPERSEDED = 6;
+  // A workload cannot be observed. Its own outcome, never folded into success
+  // or failure: "we cannot see it" is not permission.
+  DEPLOY_ROLLOUT_PHASE_UNKNOWN = 7;
+}
+
+// DeployWorkloadRollout is one workload's progress toward one promotion's pin.
+message DeployWorkloadRollout {
+  string deployment_id = 1;
+  string name = 2;
+  // The release artifact this workload runs (Deployment.artifact).
+  string artifact = 3;
+  // From THIS promotion's resolved_artifacts — the frozen pin, not whatever
+  // the deployment row declares now. That is the whole point of scoping a
+  // rollout to a promotion: a wait must not succeed on bytes it was never
+  // asked about because somebody promoted again underneath it.
+  string pinned_digest = 4;
+  // What the row currently declares, which differs from pinned_digest while a
+  // promotion is unapplied, or after a hand-made EnsureDeployment.
+  string desired_digest = 5;
+  string observed_digest = 6;
+  DeployObservedState observed_state = 7;
+  DeployVerdict verdict = 8;
+  // This workload's phase toward pinned_digest.
+  DeployRolloutPhase phase = 9;
+  google.protobuf.Timestamp stable_since = 10;
+  // stable_since + the stability window, once reached.
+  google.protobuf.Timestamp converged_at = 11;
+  string last_error = 12;
+
+  // How many pods run the pinned digest AND are ready, and how many are
+  // wanted.
+  //
+  // These are what stop a rollout being reported healthy before it is. Under
+  // RollingUpdate, old ready pods keep readyReplicas up while the new
+  // ReplicaSet crash-loops, so "ready replicas ≥ wanted" is true of a release
+  // that has never served a request. Comparing UPDATED against DESIRED is the
+  // completion test `kubectl rollout status` applies.
+  int32 updated_replicas = 13;
+  int32 desired_replicas = 14;
+}
+
+// DeployRollout is how far ONE promotion has rolled out — the single
+// server-computed answer to "is v6 done".
+//
+// Computed in one place on purpose. `forge env wait`, the in-flight promote
+// refusal, the UI and a run timeline all read this, so four consumers cannot
+// hold four different opinions about whether a release landed.
+message DeployRollout {
+  DeployPromotion promotion = 1;
+  // Worst-wins over the pinned workloads, in the order
+  // DEGRADED > UNKNOWN > PROGRESSING > PENDING > STABILIZING > SUCCEEDED.
+  DeployRolloutPhase phase = 2;
+  repeated DeployWorkloadRollout workloads = 3;
+  // Workloads in the environment that this promotion does not pin: databases,
+  // third-party images. REPORTED, never gating — a healthy release over a
+  // degraded database is reported as exactly that rather than hidden, and a
+  // database that cannot be release-bound must not be able to fail a release.
+  repeated DeployWorkloadRollout unpinned = 4;
+  // = promotion.created_at.
+  google.protobuf.Timestamp started_at = 5;
+  // The SUCCEEDED / DEGRADED / SUPERSEDED moment, when known. For SUCCEEDED
+  // it is the latest converged_at across the pinned workloads.
+  google.protobuf.Timestamp finished_at = 6;
+  // Milliseconds. An int64 rather than a Duration so this file gains no new
+  // import — it is shared by two services and exported to a public repo.
+  int64 stability_window_ms = 7;
+  // Mirrors DeployEnvironment.converges_promotions: false means nothing will
+  // move without a client-side deploy, so a caller should refuse rather than
+  // wait.
+  bool converges_promotions = 8;
+  // One human line explaining the phase.
+  string reason = 9;
+}
+
+// DeployRunStage is one step in a run's timeline, as assembled from the
+// ledger.
+//
+// NOTHING HERE IS A STORED EVENT. A stage is a release cut, a promotion, a
+// recorded gate carrying the run id, or a promotion's derived rollout. There
+// is no event table, no event bus and no webhook, because an append-only
+// ledger plus a derived rollout already contains the timeline — and a second,
+// stored copy of it could only ever disagree.
+message DeployRunStage {
+  // build | cut | check | promote | rollout.
+  string kind = 1;
+  // "lint", "staging", "prod", an artifact name.
+  string name = 2;
+  string environment_id = 3;
+  string promotion_id = 4;
+  // passed | failed | running | skipped | error. A rollout phase maps in:
+  // SUCCEEDED→passed, DEGRADED→failed, SUPERSEDED→skipped, anything else
+  // →running.
+  string status = 5;
+  google.protobuf.Timestamp started_at = 6;
+  google.protobuf.Timestamp finished_at = 7;
+  string url = 8;
+  string summary = 9;
+}
+
+// DeployPromoteRefusal is why a promote was refused, carried as an error
+// detail on the FailedPrecondition.
+//
+// It names WHAT IS THERE, not just that something was. A refusal reading
+// "someone else promoted" sends a human to a dashboard; one carrying the
+// actual current promotion lets the pipeline print "prod is on v1.9.1,
+// promoted by alice 4 minutes ago" and lets a script decide without a second
+// round trip.
+message DeployPromoteRefusal {
+  // promotion_conflict | rollout_in_flight | environment_pinned.
+  string reason = 1;
+  // Echoed back from the request, so a log line is self-contained.
+  string expected_current_promotion_id = 2;
+  bool expected_unbound = 3;
+  // What IS bound — the promotion that landed instead.
+  DeployPromotion actual_current = 4;
+  // Set for rollout_in_flight: the phase that made it in flight.
+  DeployRolloutPhase actual_phase = 5;
+  // One human sentence.
+  string detail = 6;
 }
 
 // DeployPromotion is one entry in the append-only ledger: this environment ran
@@ -858,6 +1119,38 @@ message DeployPromotion {
   // The promoted release's version label ("v1.4.0"), so a ledger reader need
   // not resolve release_id to say what was promoted.
   string release_version = 13;
+
+  // Evidence recorded AFTER this row was written, through RecordGate — the
+  // post-promote half of the trail whose pre-promote half is `gates` above.
+  //
+  // Two fields rather than one because they answer different questions and
+  // have different trust: `gates` is what the promoter claimed at the moment
+  // they promoted, and these are results that arrived later (a smoke test, a
+  // rollout outcome, a human sign-off). Merging them would lose "was this
+  // known before the button was pressed?", which is the first question asked
+  // about a bad release.
+  repeated DeployGate recorded_gates = 14;
+
+  // This promote overrode an in-flight rollout (`--supersede`).
+  //
+  // Recorded because an override that leaves no trace is indistinguishable
+  // from the refusal never having fired. A reader looking at two promotions
+  // ninety seconds apart needs to know the second one was deliberate.
+  bool superseded_in_flight = 15;
+
+  // The name of the environment in from_environment_id, so a ledger reader
+  // renders "staging → prod" without a second lookup per row.
+  string from_environment_name = 16;
+
+  // The specific PROMOTION this release was taken from, when the promote named
+  // a source environment's state rather than just a version
+  // (`promote --from staging`). from_environment_id says where it came from;
+  // this says exactly WHAT was there, which is what makes "promote whatever
+  // staging is running" auditable after staging has moved on.
+  string from_promotion_id = 17;
+
+  // The CI run that performed this promotion.
+  DeployRun run = 18;
 }
 
 // DeployUsageRow is one metered quantity for one resource over one window —

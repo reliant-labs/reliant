@@ -284,6 +284,60 @@ service DeployService {
     option (forge.v1.method) = {auth_required: true};
   }
 
+  // --- Rollout, evidence and runs -------------------------------------
+
+  // GetRollout reports how far ONE promotion has rolled out, judged against
+  // THAT promotion's frozen pins — never against whatever the deployment rows
+  // declare now. An empty promotion_id means the environment's current
+  // promotion.
+  //
+  // Why this is not "poll GetStatus until CONVERGED". GetStatus compares
+  // observed against each ROW's desired digest, so a promote that lands while
+  // a caller is waiting moves the rows and the wait "succeeds" on bytes it was
+  // never asked about. It also reads DIVERGED for the whole of a normal
+  // rollout, which makes DIVERGED useless as a failure signal: fail on it and
+  // every deploy fails, ignore it and real drift is hidden. Scoping to a
+  // promotion fixes the first; a server-computed phase (which folds
+  // mid-rollout divergence into PROGRESSING) fixes the second.
+  rpc GetRollout(GetDeployRolloutRequest) returns (GetDeployRolloutResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+
+  // RecordGate appends one check result to a promotion.
+  //
+  // APPEND-ONLY: a re-run appends a NEW row and every row is kept, because the
+  // history of a flaky check is itself evidence. Idempotent on
+  // (promotion_id, name, run_id), so a CI retry of the same step returns the
+  // existing row rather than duplicating it.
+  //
+  // Authorized at deploy:write — below promote's admin, so a test job's token
+  // needs no promote authority. See DeployGate: that is safe only because
+  // these rows are evidence and nothing enforces on them.
+  rpc RecordGate(RecordDeployGateRequest) returns (RecordDeployGateResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
+  // ListGates returns a promotion's whole evidence trail: the gates claimed at
+  // promote time first, then the recorded ones oldest-first.
+  rpc ListGates(ListDeployGatesRequest) returns (ListDeployGatesResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+
+  // GetRun assembles one CI run's timeline from the ledger: the release it
+  // cut, the promotions it made, the gates carrying its run id, and each
+  // promotion's derived rollout.
+  //
+  // NOTHING IS A STORED EVENT, and there is no stream. The ledger plus a
+  // derived rollout already holds the timeline, so an event table would be a
+  // second copy of it that could disagree. A client polls this exactly as the
+  // deploy detail page already polls GetStatus.
+  rpc GetRun(GetDeployRunRequest) returns (GetDeployRunResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+
   // --- Usage ----------------------------------------------------------
 
   // ListUsage returns metered infrastructure usage for the caller's org, with
@@ -483,6 +537,20 @@ message EnsureDeploymentRequest {
   DeployTier tier = 3;
   // See CreateDeploymentRequest.spec.
   google.protobuf.Struct spec = 4;
+
+  // The release ARTIFACT KEY whose digest this deployment runs — the same key
+  // the client already computed for its own plan.
+  //
+  // The client sends it rather than the server inferring it, so the two cannot
+  // pair a workload with a digest differently. Empty means not release-bound
+  // (a database, a pinned third-party image), and the server's converger skips
+  // such a row rather than guessing from the deployment's name.
+  string artifact = 5;
+
+  // The promotion whose pins this spec was rendered from, recorded as
+  // Deployment.applied_promotion_id. Empty when the client pinned from
+  // nothing. A promotion belonging to another environment is refused.
+  string promotion_id = 6;
 }
 
 message EnsureDeploymentResponse {
@@ -571,6 +639,40 @@ message PromoteReleaseRequest {
   // claims.
   string promoted_by_actor = 5;
   string note = 6;
+
+  // The caller's view of the environment's CURRENT promotion — a
+  // compare-and-set, so a promote acts on the state the caller actually read.
+  //
+  // Setting NEITHER means no CAS, which is what the UI and a curl do, and is
+  // the back-compatible default: a request that omits both behaves exactly as
+  // it did before this field existed.
+  //
+  // A PROMOTION ID rather than a version, because v1 → v2 → v1 makes "current
+  // is v1" ambiguous and an id never is.
+  //
+  // Serialization is not sufficient on its own. Promote already takes FOR
+  // UPDATE, which ORDERS two writers but does not stop one acting on a stale
+  // read: CI plans "prod is on v5, moving to v6", a human hotfixes to v5.1,
+  // and CI then writes v6 over the hotfix. Both promotes were correctly
+  // serialized, and the hotfix is still gone.
+  oneof expected_current {
+    string expected_current_promotion_id = 7;
+    // "I saw NO promotion" — the first-deploy expectation, which an empty id
+    // cannot express distinctly from "no expectation".
+    bool expect_unbound = 8;
+  }
+
+  // Promote even though the current promotion has not finished rolling out.
+  // Recorded on the ledger row as DeployPromotion.superseded_in_flight.
+  bool supersede_in_flight = 9;
+
+  // Promote exactly the promotion another environment is running
+  // (`promote --from staging`), resolved server-side. Recorded as
+  // DeployPromotion.from_promotion_id.
+  string from_promotion_id = 10;
+
+  // The CI run driving this promote.
+  DeployRun run = 11;
 }
 
 message PromoteReleaseResponse {
@@ -712,6 +814,9 @@ message CutReleaseRequest {
   string git_commit = 3;
   string git_tag = 4;
   bool git_dirty = 5;
+
+  // The CI run that cut this release.
+  DeployRun run = 6;
 }
 
 message CutReleaseResponse {
@@ -760,11 +865,76 @@ message ListDeployPromotionsRequest {
   // All `optional` — see ListDeployEnvironmentsRequest.
   optional DeployPromotionKind kind = 2;
   optional int32 limit = 3;
+
+  // A KEYSET cursor: return the page of promotions strictly older than this
+  // one. Take it from the previous response's next_before_promotion_id.
+  //
+  // Keyset rather than an offset because the ledger is append-only and read
+  // newest-first, so a promote during paging shifts every offset by one and an
+  // offset-paged reader would silently see a row twice or skip one. Scoped to
+  // the caller's org, so a foreign cursor id yields an empty page rather than
+  // an error that would confirm the row exists.
+  optional string before_promotion_id = 4;
+
+  // Only promotions of this release version.
+  optional string release_version = 5;
 }
 
 message ListDeployPromotionsResponse {
   // Newest first.
   repeated DeployPromotion promotions = 1;
+
+  // Pass as the next request's before_promotion_id. EMPTY MEANS THE LAST
+  // PAGE — a reader stops on the empty string, not on a short page, because
+  // a page can legitimately come back short.
+  string next_before_promotion_id = 2;
+}
+
+// === Rollout, evidence and runs ===
+
+message GetDeployRolloutRequest {
+  string environment_id = 1;
+  // Empty = the environment's current promotion.
+  string promotion_id = 2;
+}
+
+message GetDeployRolloutResponse {
+  DeployRollout rollout = 1;
+}
+
+message RecordDeployGateRequest {
+  string promotion_id = 1;
+  // `recorded_by` and `recorded_at` on this gate are IGNORED: the server sets
+  // them from the caller's identity. See DeployGate.
+  DeployGate gate = 2;
+}
+
+message RecordDeployGateResponse {
+  DeployGate gate = 1;
+  // False when the idempotency key (promotion_id, name, run_id) already held
+  // this gate and the existing row is being returned. The call still succeeds:
+  // a retried CI step has achieved what it asked for.
+  bool created = 2;
+}
+
+message ListDeployGatesRequest {
+  string promotion_id = 1;
+}
+
+message ListDeployGatesResponse {
+  // Promote-time gates first, then the recorded ones oldest-first.
+  repeated DeployGate gates = 1;
+}
+
+message GetDeployRunRequest {
+  string run_id = 1;
+}
+
+message GetDeployRunResponse {
+  DeployRun run = 1;
+  DeployRelease release = 2;
+  // Ordered by started_at.
+  repeated DeployRunStage stages = 3;
 }
 
 // === Usage ===

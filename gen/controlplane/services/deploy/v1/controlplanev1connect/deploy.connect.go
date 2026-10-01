@@ -102,6 +102,16 @@ const (
 	// DeployServiceListPromotionsProcedure is the fully-qualified name of the DeployService's
 	// ListPromotions RPC.
 	DeployServiceListPromotionsProcedure = "/controlplane.v1.DeployService/ListPromotions"
+	// DeployServiceGetRolloutProcedure is the fully-qualified name of the DeployService's GetRollout
+	// RPC.
+	DeployServiceGetRolloutProcedure = "/controlplane.v1.DeployService/GetRollout"
+	// DeployServiceRecordGateProcedure is the fully-qualified name of the DeployService's RecordGate
+	// RPC.
+	DeployServiceRecordGateProcedure = "/controlplane.v1.DeployService/RecordGate"
+	// DeployServiceListGatesProcedure is the fully-qualified name of the DeployService's ListGates RPC.
+	DeployServiceListGatesProcedure = "/controlplane.v1.DeployService/ListGates"
+	// DeployServiceGetRunProcedure is the fully-qualified name of the DeployService's GetRun RPC.
+	DeployServiceGetRunProcedure = "/controlplane.v1.DeployService/GetRun"
 	// DeployServiceListUsageProcedure is the fully-qualified name of the DeployService's ListUsage RPC.
 	DeployServiceListUsageProcedure = "/controlplane.v1.DeployService/ListUsage"
 )
@@ -256,6 +266,43 @@ type DeployServiceClient interface {
 	// including every release the env moved away from, which a current-pointer
 	// read cannot show.
 	ListPromotions(context.Context, *connect.Request[v1.ListDeployPromotionsRequest]) (*connect.Response[v1.ListDeployPromotionsResponse], error)
+	// GetRollout reports how far ONE promotion has rolled out, judged against
+	// THAT promotion's frozen pins — never against whatever the deployment rows
+	// declare now. An empty promotion_id means the environment's current
+	// promotion.
+	//
+	// Why this is not "poll GetStatus until CONVERGED". GetStatus compares
+	// observed against each ROW's desired digest, so a promote that lands while
+	// a caller is waiting moves the rows and the wait "succeeds" on bytes it was
+	// never asked about. It also reads DIVERGED for the whole of a normal
+	// rollout, which makes DIVERGED useless as a failure signal: fail on it and
+	// every deploy fails, ignore it and real drift is hidden. Scoping to a
+	// promotion fixes the first; a server-computed phase (which folds
+	// mid-rollout divergence into PROGRESSING) fixes the second.
+	GetRollout(context.Context, *connect.Request[v1.GetDeployRolloutRequest]) (*connect.Response[v1.GetDeployRolloutResponse], error)
+	// RecordGate appends one check result to a promotion.
+	//
+	// APPEND-ONLY: a re-run appends a NEW row and every row is kept, because the
+	// history of a flaky check is itself evidence. Idempotent on
+	// (promotion_id, name, run_id), so a CI retry of the same step returns the
+	// existing row rather than duplicating it.
+	//
+	// Authorized at deploy:write — below promote's admin, so a test job's token
+	// needs no promote authority. See DeployGate: that is safe only because
+	// these rows are evidence and nothing enforces on them.
+	RecordGate(context.Context, *connect.Request[v1.RecordDeployGateRequest]) (*connect.Response[v1.RecordDeployGateResponse], error)
+	// ListGates returns a promotion's whole evidence trail: the gates claimed at
+	// promote time first, then the recorded ones oldest-first.
+	ListGates(context.Context, *connect.Request[v1.ListDeployGatesRequest]) (*connect.Response[v1.ListDeployGatesResponse], error)
+	// GetRun assembles one CI run's timeline from the ledger: the release it
+	// cut, the promotions it made, the gates carrying its run id, and each
+	// promotion's derived rollout.
+	//
+	// NOTHING IS A STORED EVENT, and there is no stream. The ledger plus a
+	// derived rollout already holds the timeline, so an event table would be a
+	// second copy of it that could disagree. A client polls this exactly as the
+	// deploy detail page already polls GetStatus.
+	GetRun(context.Context, *connect.Request[v1.GetDeployRunRequest]) (*connect.Response[v1.GetDeployRunResponse], error)
 	// ListUsage returns metered infrastructure usage for the caller's org, with
 	// per-resource attribution. Post-hoc: these rows come from a sweeper that
 	// read the live cluster, so a deployment declared and never applied appears
@@ -412,6 +459,30 @@ func NewDeployServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(deployServiceMethods.ByName("ListPromotions")),
 			connect.WithClientOptions(opts...),
 		),
+		getRollout: connect.NewClient[v1.GetDeployRolloutRequest, v1.GetDeployRolloutResponse](
+			httpClient,
+			baseURL+DeployServiceGetRolloutProcedure,
+			connect.WithSchema(deployServiceMethods.ByName("GetRollout")),
+			connect.WithClientOptions(opts...),
+		),
+		recordGate: connect.NewClient[v1.RecordDeployGateRequest, v1.RecordDeployGateResponse](
+			httpClient,
+			baseURL+DeployServiceRecordGateProcedure,
+			connect.WithSchema(deployServiceMethods.ByName("RecordGate")),
+			connect.WithClientOptions(opts...),
+		),
+		listGates: connect.NewClient[v1.ListDeployGatesRequest, v1.ListDeployGatesResponse](
+			httpClient,
+			baseURL+DeployServiceListGatesProcedure,
+			connect.WithSchema(deployServiceMethods.ByName("ListGates")),
+			connect.WithClientOptions(opts...),
+		),
+		getRun: connect.NewClient[v1.GetDeployRunRequest, v1.GetDeployRunResponse](
+			httpClient,
+			baseURL+DeployServiceGetRunProcedure,
+			connect.WithSchema(deployServiceMethods.ByName("GetRun")),
+			connect.WithClientOptions(opts...),
+		),
 		listUsage: connect.NewClient[v1.ListDeployUsageRequest, v1.ListDeployUsageResponse](
 			httpClient,
 			baseURL+DeployServiceListUsageProcedure,
@@ -446,6 +517,10 @@ type deployServiceClient struct {
 	listReleases            *connect.Client[v1.ListDeployReleasesRequest, v1.ListDeployReleasesResponse]
 	getRelease              *connect.Client[v1.GetDeployReleaseRequest, v1.GetDeployReleaseResponse]
 	listPromotions          *connect.Client[v1.ListDeployPromotionsRequest, v1.ListDeployPromotionsResponse]
+	getRollout              *connect.Client[v1.GetDeployRolloutRequest, v1.GetDeployRolloutResponse]
+	recordGate              *connect.Client[v1.RecordDeployGateRequest, v1.RecordDeployGateResponse]
+	listGates               *connect.Client[v1.ListDeployGatesRequest, v1.ListDeployGatesResponse]
+	getRun                  *connect.Client[v1.GetDeployRunRequest, v1.GetDeployRunResponse]
 	listUsage               *connect.Client[v1.ListDeployUsageRequest, v1.ListDeployUsageResponse]
 }
 
@@ -562,6 +637,26 @@ func (c *deployServiceClient) GetRelease(ctx context.Context, req *connect.Reque
 // ListPromotions calls controlplane.v1.DeployService.ListPromotions.
 func (c *deployServiceClient) ListPromotions(ctx context.Context, req *connect.Request[v1.ListDeployPromotionsRequest]) (*connect.Response[v1.ListDeployPromotionsResponse], error) {
 	return c.listPromotions.CallUnary(ctx, req)
+}
+
+// GetRollout calls controlplane.v1.DeployService.GetRollout.
+func (c *deployServiceClient) GetRollout(ctx context.Context, req *connect.Request[v1.GetDeployRolloutRequest]) (*connect.Response[v1.GetDeployRolloutResponse], error) {
+	return c.getRollout.CallUnary(ctx, req)
+}
+
+// RecordGate calls controlplane.v1.DeployService.RecordGate.
+func (c *deployServiceClient) RecordGate(ctx context.Context, req *connect.Request[v1.RecordDeployGateRequest]) (*connect.Response[v1.RecordDeployGateResponse], error) {
+	return c.recordGate.CallUnary(ctx, req)
+}
+
+// ListGates calls controlplane.v1.DeployService.ListGates.
+func (c *deployServiceClient) ListGates(ctx context.Context, req *connect.Request[v1.ListDeployGatesRequest]) (*connect.Response[v1.ListDeployGatesResponse], error) {
+	return c.listGates.CallUnary(ctx, req)
+}
+
+// GetRun calls controlplane.v1.DeployService.GetRun.
+func (c *deployServiceClient) GetRun(ctx context.Context, req *connect.Request[v1.GetDeployRunRequest]) (*connect.Response[v1.GetDeployRunResponse], error) {
+	return c.getRun.CallUnary(ctx, req)
 }
 
 // ListUsage calls controlplane.v1.DeployService.ListUsage.
@@ -719,6 +814,43 @@ type DeployServiceHandler interface {
 	// including every release the env moved away from, which a current-pointer
 	// read cannot show.
 	ListPromotions(context.Context, *connect.Request[v1.ListDeployPromotionsRequest]) (*connect.Response[v1.ListDeployPromotionsResponse], error)
+	// GetRollout reports how far ONE promotion has rolled out, judged against
+	// THAT promotion's frozen pins — never against whatever the deployment rows
+	// declare now. An empty promotion_id means the environment's current
+	// promotion.
+	//
+	// Why this is not "poll GetStatus until CONVERGED". GetStatus compares
+	// observed against each ROW's desired digest, so a promote that lands while
+	// a caller is waiting moves the rows and the wait "succeeds" on bytes it was
+	// never asked about. It also reads DIVERGED for the whole of a normal
+	// rollout, which makes DIVERGED useless as a failure signal: fail on it and
+	// every deploy fails, ignore it and real drift is hidden. Scoping to a
+	// promotion fixes the first; a server-computed phase (which folds
+	// mid-rollout divergence into PROGRESSING) fixes the second.
+	GetRollout(context.Context, *connect.Request[v1.GetDeployRolloutRequest]) (*connect.Response[v1.GetDeployRolloutResponse], error)
+	// RecordGate appends one check result to a promotion.
+	//
+	// APPEND-ONLY: a re-run appends a NEW row and every row is kept, because the
+	// history of a flaky check is itself evidence. Idempotent on
+	// (promotion_id, name, run_id), so a CI retry of the same step returns the
+	// existing row rather than duplicating it.
+	//
+	// Authorized at deploy:write — below promote's admin, so a test job's token
+	// needs no promote authority. See DeployGate: that is safe only because
+	// these rows are evidence and nothing enforces on them.
+	RecordGate(context.Context, *connect.Request[v1.RecordDeployGateRequest]) (*connect.Response[v1.RecordDeployGateResponse], error)
+	// ListGates returns a promotion's whole evidence trail: the gates claimed at
+	// promote time first, then the recorded ones oldest-first.
+	ListGates(context.Context, *connect.Request[v1.ListDeployGatesRequest]) (*connect.Response[v1.ListDeployGatesResponse], error)
+	// GetRun assembles one CI run's timeline from the ledger: the release it
+	// cut, the promotions it made, the gates carrying its run id, and each
+	// promotion's derived rollout.
+	//
+	// NOTHING IS A STORED EVENT, and there is no stream. The ledger plus a
+	// derived rollout already holds the timeline, so an event table would be a
+	// second copy of it that could disagree. A client polls this exactly as the
+	// deploy detail page already polls GetStatus.
+	GetRun(context.Context, *connect.Request[v1.GetDeployRunRequest]) (*connect.Response[v1.GetDeployRunResponse], error)
 	// ListUsage returns metered infrastructure usage for the caller's org, with
 	// per-resource attribution. Post-hoc: these rows come from a sweeper that
 	// read the live cluster, so a deployment declared and never applied appears
@@ -871,6 +1003,30 @@ func NewDeployServiceHandler(svc DeployServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(deployServiceMethods.ByName("ListPromotions")),
 		connect.WithHandlerOptions(opts...),
 	)
+	deployServiceGetRolloutHandler := connect.NewUnaryHandler(
+		DeployServiceGetRolloutProcedure,
+		svc.GetRollout,
+		connect.WithSchema(deployServiceMethods.ByName("GetRollout")),
+		connect.WithHandlerOptions(opts...),
+	)
+	deployServiceRecordGateHandler := connect.NewUnaryHandler(
+		DeployServiceRecordGateProcedure,
+		svc.RecordGate,
+		connect.WithSchema(deployServiceMethods.ByName("RecordGate")),
+		connect.WithHandlerOptions(opts...),
+	)
+	deployServiceListGatesHandler := connect.NewUnaryHandler(
+		DeployServiceListGatesProcedure,
+		svc.ListGates,
+		connect.WithSchema(deployServiceMethods.ByName("ListGates")),
+		connect.WithHandlerOptions(opts...),
+	)
+	deployServiceGetRunHandler := connect.NewUnaryHandler(
+		DeployServiceGetRunProcedure,
+		svc.GetRun,
+		connect.WithSchema(deployServiceMethods.ByName("GetRun")),
+		connect.WithHandlerOptions(opts...),
+	)
 	deployServiceListUsageHandler := connect.NewUnaryHandler(
 		DeployServiceListUsageProcedure,
 		svc.ListUsage,
@@ -925,6 +1081,14 @@ func NewDeployServiceHandler(svc DeployServiceHandler, opts ...connect.HandlerOp
 			deployServiceGetReleaseHandler.ServeHTTP(w, r)
 		case DeployServiceListPromotionsProcedure:
 			deployServiceListPromotionsHandler.ServeHTTP(w, r)
+		case DeployServiceGetRolloutProcedure:
+			deployServiceGetRolloutHandler.ServeHTTP(w, r)
+		case DeployServiceRecordGateProcedure:
+			deployServiceRecordGateHandler.ServeHTTP(w, r)
+		case DeployServiceListGatesProcedure:
+			deployServiceListGatesHandler.ServeHTTP(w, r)
+		case DeployServiceGetRunProcedure:
+			deployServiceGetRunHandler.ServeHTTP(w, r)
 		case DeployServiceListUsageProcedure:
 			deployServiceListUsageHandler.ServeHTTP(w, r)
 		default:
@@ -1026,6 +1190,22 @@ func (UnimplementedDeployServiceHandler) GetRelease(context.Context, *connect.Re
 
 func (UnimplementedDeployServiceHandler) ListPromotions(context.Context, *connect.Request[v1.ListDeployPromotionsRequest]) (*connect.Response[v1.ListDeployPromotionsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.ListPromotions is not implemented"))
+}
+
+func (UnimplementedDeployServiceHandler) GetRollout(context.Context, *connect.Request[v1.GetDeployRolloutRequest]) (*connect.Response[v1.GetDeployRolloutResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.GetRollout is not implemented"))
+}
+
+func (UnimplementedDeployServiceHandler) RecordGate(context.Context, *connect.Request[v1.RecordDeployGateRequest]) (*connect.Response[v1.RecordDeployGateResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.RecordGate is not implemented"))
+}
+
+func (UnimplementedDeployServiceHandler) ListGates(context.Context, *connect.Request[v1.ListDeployGatesRequest]) (*connect.Response[v1.ListDeployGatesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.ListGates is not implemented"))
+}
+
+func (UnimplementedDeployServiceHandler) GetRun(context.Context, *connect.Request[v1.GetDeployRunRequest]) (*connect.Response[v1.GetDeployRunResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.GetRun is not implemented"))
 }
 
 func (UnimplementedDeployServiceHandler) ListUsage(context.Context, *connect.Request[v1.ListDeployUsageRequest]) (*connect.Response[v1.ListDeployUsageResponse], error) {
