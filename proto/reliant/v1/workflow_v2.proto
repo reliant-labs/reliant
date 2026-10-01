@@ -517,6 +517,18 @@ message ToolCallMsg {
   string id = 1;
   string name = 2;
   string input = 3;
+  // Gemini 3.x (and Antigravity, which fronts it) rejects a request whose
+  // functionCall parts do not echo back the thought_signature the model
+  // emitted with the call: "Function call is missing a thought_signature in
+  // functionCall parts". So the signature has to survive from the driver to
+  // the database and back out on replay.
+  //
+  // message_only because it must NOT enter Temporal history: signatures are
+  // kilobytes each and every tool call carries one. The ActivityWrapper
+  // evaluates the node's save_message against the full result (so the
+  // signature reaches the message row) and then clears this field before the
+  // result is returned to the workflow.
+  string thought_signature = 4 [(reliant) = {message_only: true}];
 }
 
 // ToolResultMsg represents the result of executing a tool.

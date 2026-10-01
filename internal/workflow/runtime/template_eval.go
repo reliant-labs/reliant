@@ -386,9 +386,10 @@ func populateSaveMessageResolved(args *reliantv1.SaveMessageNodeArgs) {
 			if err := json.Unmarshal([]byte(toolCallsJSON), &rawToolCalls); err == nil {
 				for _, raw := range rawToolCalls {
 					var tc struct {
-						ID    string `json:"id"`
-						Name  string `json:"name"`
-						Input string `json:"input"`
+						ID               string `json:"id"`
+						Name             string `json:"name"`
+						Input            string `json:"input"`
+						ThoughtSignature string `json:"thought_signature"`
 					}
 					if err := json.Unmarshal(raw, &tc); err != nil {
 						continue
@@ -397,9 +398,10 @@ func populateSaveMessageResolved(args *reliantv1.SaveMessageNodeArgs) {
 						continue
 					}
 					args.ResolvedToolCalls = append(args.ResolvedToolCalls, &reliantv1.ToolCallMsg{
-						Id:    tc.ID,
-						Name:  tc.Name,
-						Input: tc.Input,
+						Id:               tc.ID,
+						Name:             tc.Name,
+						Input:            tc.Input,
+						ThoughtSignature: tc.ThoughtSignature,
 					})
 				}
 			}
@@ -472,6 +474,7 @@ func populateExecuteToolsResolved(args *reliantv1.ExecuteToolsArgs) {
 			Name             string   `json:"name"`
 			Input            string   `json:"input"`
 			AvailablePresets []string `json:"available_presets"`
+			ThoughtSignature string   `json:"thought_signature"`
 		}
 		if err := json.Unmarshal(raw, &tc); err != nil {
 			continue
@@ -480,9 +483,10 @@ func populateExecuteToolsResolved(args *reliantv1.ExecuteToolsArgs) {
 			continue
 		}
 		msg := &reliantv1.ToolCallMsg{
-			Id:    tc.ID,
-			Name:  tc.Name,
-			Input: tc.Input,
+			Id:               tc.ID,
+			Name:             tc.Name,
+			Input:            tc.Input,
+			ThoughtSignature: tc.ThoughtSignature,
 		}
 		args.ResolvedToolCalls = append(args.ResolvedToolCalls, msg)
 	}

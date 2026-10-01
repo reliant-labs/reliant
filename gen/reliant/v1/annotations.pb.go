@@ -59,6 +59,11 @@ type FieldMeta struct {
 	// save_message against the full result, then clears every message_only
 	// field before the result is returned to the workflow — so it never enters
 	// Temporal history, and CEL (nodes.<id>.<field>) cannot reference it.
+	//
+	// The annotation applies at ANY depth: a message_only field on a nested
+	// message, on an element of a repeated message, or on a map value is
+	// cleared too. Reaching the workflow through a parent that is itself not
+	// message_only is not an exemption.
 	MessageOnly   bool `protobuf:"varint,15,opt,name=message_only,json=messageOnly,proto3" json:"message_only,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

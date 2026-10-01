@@ -469,12 +469,16 @@ func resolveCompactionModel(ctx context.Context, userID string, preferred *relia
 // an Anthropic user still gets Haiku and everyone else gets their provider's
 // equivalent.
 //
-// The tag list is a PREFERENCE ladder, weighted by position: "fast" outscores
-// "moderate", so a user with a fast model still gets it, and a user whose only
-// provider has none (the codex driver ships no fast-tagged model — see the
-// note on gpt-5.6-terra in models.yaml) degrades to moderate instead of
-// failing to resolve. Titling that cannot resolve is invisible: it falls back
-// to a truncated first message that looks like a real title.
+// This is a STRICT ladder — [fast], and [moderate] only when [fast] cannot
+// resolve at all — not the single [fast, moderate] selector it used to be. A
+// multi-tag selector SUMS the weights of every selector tag that lists a model,
+// so a model carrying both fast and moderate outranks a model carrying only
+// fast. That is a sensible rule for "prefer a model good at both", and the
+// wrong rule here: it would title with a moderate-tier model (gpt-5.6-terra for
+// an OpenAI user, gemini-3.8-flash for an Anthropic user who also has
+// antigravity) in preference to the provider's actual fast model. Titling wants
+// the cheapest capable model, so the fallback must be unreachable while any
+// fast model exists. See titleModelFallbackSelector.
 //
 // RequireOutputModality is the HARD half and is what makes the ladder safe.
 // Tag scoring degrades gracefully, and `fast` is carried by image-generation
@@ -483,7 +487,21 @@ func resolveCompactionModel(ctx context.Context, userID string, preferred *relia
 // model. Capability is a requirement; speed is a preference.
 func titleModelSelector() models.ModelSelector {
 	return models.ModelSelector{
-		Tags:                  []string{models.TagFast, models.TagModerate},
+		Tags:                  []string{models.TagFast},
+		RequireOutputModality: models.ModalityText,
+	}
+}
+
+// titleModelFallbackSelector is reached only when a user's providers serve no
+// fast text model at all. Every provider in the catalog now carries `fast`
+// (pinned by TestEveryProviderImplementsEveryCoreTag in internal/llm/models),
+// so in practice nothing reaches this — it exists so that a provider added
+// without full tag coverage degrades to a working title rather than to none.
+// Titling that cannot resolve is invisible: the chat silently keeps the
+// truncated first message, which looks exactly like a real title.
+func titleModelFallbackSelector() models.ModelSelector {
+	return models.ModelSelector{
+		Tags:                  []string{models.TagModerate},
 		RequireOutputModality: models.ModalityText,
 	}
 }
@@ -514,6 +532,7 @@ func (a *GenerateTitleActivity) generateTitle(ctx context.Context, userID, first
 	// resolver supplies its own driver/model, mirroring CallLLM.
 	if a.driverResolver == nil {
 		spec.Selector = titleModelSelector()
+		spec.FallbackSelector = titleModelFallbackSelector()
 	}
 
 	titleTool := tools.NewSetTitleTool()

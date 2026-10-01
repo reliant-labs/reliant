@@ -52,7 +52,7 @@ Models are tagged to help with selection. You can also [bring your own model](/d
 | `claude-4.8-opus` | Claude 4.8 Opus | flagship, reasoning | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} | anthropic, openrouter, reliant |
 | `claude-5-fable` | Claude 5 Fable | flagship, reasoning | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} | anthropic, openrouter, reliant |
 | `claude-5-opus` | Claude 5 Opus | flagship, moderate, reasoning | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} | anthropic, openrouter, reliant |
-| `claude-5-sonnet` | Claude 5 Sonnet | flagship, moderate, reasoning | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} | anthropic, openrouter, reliant, copilot |
+| `claude-5-sonnet` | Claude 5 Sonnet | flagship, moderate, powerful, reasoning | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} | anthropic, openrouter, reliant, copilot |
 | `claude-5.1-fable` | Claude 5.1 Fable | flagship, powerful, reasoning | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} | anthropic, openrouter, reliant, vertexai |
 | `claude-5.5-opus` | Claude 5.5 Opus | flagship, reasoning | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} | anthropic, openrouter, reliant, vertexai |
 | `claude-5.5-sonnet` | Claude 5.5 Sonnet | flagship, moderate, reasoning | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} | anthropic, openrouter, reliant |
@@ -76,7 +76,7 @@ Models are tagged to help with selection. You can also [bring your own model](/d
 | `gpt-5.5` | GPT-5.5 | flagship, moderate, reasoning | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} | codex, openai, openrouter |
 | `gpt-5.6-luna` | GPT-5.6 Luna | flagship, reasoning | 272K | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} | codex |
 | `gpt-5.6-sol` | GPT-5.6 Sol | powerful, reasoning | 272K | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} | codex |
-| `gpt-5.6-terra` | GPT-5.6 Terra | moderate, reasoning | 272K | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} | codex |
+| `gpt-5.6-terra` | GPT-5.6 Terra | cheap, fast, moderate, reasoning | 272K | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} | codex |
 | `gpt-6-astra` | GPT-6 Astra | flagship, powerful, reasoning | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} | codex, openai, openrouter |
 | `gpt-6-luna` | GPT-6 Luna | cheap, fast | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} | openai, openrouter |
 | `gpt-6.1-sol` | GPT-6.1 Sol | flagship, moderate, powerful, reasoning | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} | openai, openrouter |
@@ -100,7 +100,7 @@ Models are tagged to help with selection. You can also [bring your own model](/d
 | `gemini-3.5-flash` | Gemini 3.5 Flash | fast, moderate, reasoning | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} | gemini, openrouter |
 | `gemini-3.6-flash` | Gemini 3.6 Flash | moderate, reasoning | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} | gemini, openrouter |
 | `gemini-3.7-flash` | Gemini 3.7 Flash | flagship, moderate, reasoning | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} | gemini, openrouter, reliant |
-| `gemini-3.8-flash` | Gemini 3.8 Flash | flagship, powerful, reasoning | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} | gemini, openrouter, reliant, antigravity |
+| `gemini-3.8-flash` | Gemini 3.8 Flash | cheap, fast, flagship, moderate, powerful, reasoning | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} | gemini, openrouter, reliant, antigravity |
 
 **Note:** Google's Gemini models with large context windows.
 
@@ -123,6 +123,7 @@ _Maximum capability for the hardest, longest-horizon work_
 | `gpt-6.1-sol` | OpenAI | xhigh | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
 | `gpt-5.6-sol` | OpenAI | xhigh | 272K | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
 | `gemini-3.8-flash` | Google | high | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
+| `claude-5-sonnet` | Anthropic | xhigh | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
 
 ### Flagship
 
@@ -173,6 +174,7 @@ _Balance of capability and cost_
 | `gemini-3.6-flash` | Google | medium | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
 | `gemini-3.5-flash` | Google | low | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
 | `gemini-2.5-pro` | Google | high | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
+| `gemini-3.8-flash` | Google | medium | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
 
 ### Fast
 
@@ -189,6 +191,8 @@ _Optimized for quick responses_
 | `gemini-3.1-flash-lite-preview` | Google | - | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "lightning-bolt" >}} |
 | `gemini-2.5-flash` | Google | - | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "lightning-bolt" >}} |
 | `gemini-2.5-flash-lite` | Google | - | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "lightning-bolt" >}} |
+| `gpt-5.6-terra` | OpenAI | low | 272K | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
+| `gemini-3.8-flash` | Google | low | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
 
 ### Cheap
 
@@ -203,6 +207,8 @@ _Low cost per token_
 | `gemini-3.1-flash-lite-preview` | Google | - | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "lightning-bolt" >}} |
 | `gemini-2.5-flash` | Google | - | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "lightning-bolt" >}} |
 | `gemini-2.5-flash-lite` | Google | - | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "lightning-bolt" >}} |
+| `gpt-5.6-terra` | OpenAI | low | 272K | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
+| `gemini-3.8-flash` | Google | low | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
 
 ### Reasoning
 

@@ -26,9 +26,25 @@
 # A multi-tag selector ([fast, moderate]) prefers models listed under more of
 # its tags, earlier tags weighted higher; ties go to position in the earliest
 # matching tag's list. The effort comes from that same earliest matching tag.
+# Note that this SUMS weights, so it means "prefer a model good at both", NOT
+# "fast, or moderate if there is no fast model" — for a strict fallback, resolve
+# the tags one at a time (see titleModelSelector).
 #
 # Every entry must name a model defined below and a known level, and a model
 # may appear at most once per tag, or the registry fails to parse.
+#
+# EVERY PROVIDER MUST IMPLEMENT EVERY CORE TAG — powerful, flagship, moderate,
+# fast, cheap, reasoning, meta. Resolution filters to the providers a user has
+# configured, so a tier that looks well-populated here can be EMPTY for a
+# single-provider user, who then gets a hard "no available provider for models
+# with tags" failure from any feature asking for it. That is how an
+# antigravity-only user ended up unable to title a chat at all. Several tags
+# therefore end in trailing per-provider entries, marked as such: a model at the
+# END of a list is reached only when nothing above it is servable, so adding one
+# cannot change any existing user's resolution. TestEveryProviderImplements-
+# EveryCoreTag (internal/llm/models/tag_coverage_test.go) enforces this, and
+# derives the provider list from the catalog so a new provider is covered the
+# moment its first text model lands.
 tags:
   powerful:
     - {model: claude-5.1-fable, thinking_level: xhigh}
@@ -37,6 +53,12 @@ tags:
     - {model: gpt-5.6-sol, thinking_level: xhigh}
     - {model: gemini-3.8-flash, thinking_level: high}
     - {model: vertex-claude-5.1-fable, thinking_level: xhigh}
+    # Trailing per-provider coverage. Every provider must answer every tier, or
+    # a user whose only provider is that one gets a hard resolution failure
+    # instead of a degraded model. These sit LAST, so they are reached only
+    # when nothing above them is servable — a copilot-only or xai-only user.
+    - {model: claude-5-sonnet, thinking_level: xhigh}   # copilot
+    - {model: grok-4, thinking_level: high}             # xai (high is its top level)
 
   flagship:
     - {model: claude-5.5-opus, thinking_level: xhigh}
@@ -97,6 +119,10 @@ tags:
     - {model: vertex-claude-5-sonnet, thinking_level: high}
     - {model: vertex-claude-4.5-sonnet, thinking_level: medium}
     - {model: vertex-gemini-2.5-pro, thinking_level: high}
+    # Trailing per-provider coverage — reached only by a user whose only
+    # provider is antigravity or xai. See the note under `powerful`.
+    - {model: gemini-3.8-flash, thinking_level: medium} # antigravity
+    - {model: grok-4, thinking_level: medium}           # xai
 
   fast:
     - {model: gemini-3.5-flash, thinking_level: low}
@@ -112,6 +138,21 @@ tags:
     - {model: vertex-gemini-2.5-flash}
     - {model: gpt-image-2.5-flare}
     - {model: gemini-3.1-flash-lite-image}
+    # Trailing per-provider coverage. A provider that ships no genuinely cheap
+    # model still has to answer [fast], because titling and other meta work ask
+    # for that tier and a failure to resolve is not a slower title — it is no
+    # title. Each entry runs at its model's LOWEST effort, which is the closest
+    # these providers get to a fast tier.
+    #
+    # grok-3-mini-beta leads the three because it is the only one that is
+    # genuinely a small model. It already carried `cheap`, so a [fast, cheap]
+    # selector scores it level with terra and gemini-3.8-flash (both also carry
+    # cheap) and the tie breaks on position here — leading keeps an xai user's
+    # [fast, cheap] on grok rather than moving it to a frontier model at low
+    # effort.
+    - {model: grok-3-mini-beta}                         # xai
+    - {model: gpt-5.6-terra, thinking_level: low}       # codex
+    - {model: gemini-3.8-flash, thinking_level: low}    # antigravity
 
   cheap:
     - {model: claude-4.5-haiku}
@@ -125,6 +166,11 @@ tags:
     - {model: vertex-claude-4.5-haiku}
     - {model: vertex-gemini-2.5-flash}
     - {model: gemini-3.1-flash-lite-image}
+    # Trailing per-provider coverage — reached only by a codex-only or
+    # antigravity-only user. Both are subscription-billed, so "cheap" means the
+    # cheapest effort available rather than a cheaper per-token rate.
+    - {model: gpt-5.6-terra, thinking_level: low}       # codex
+    - {model: gemini-3.8-flash, thinking_level: low}    # antigravity
 
   image-gen:
     - {model: gpt-image-2.5-flare}
@@ -140,6 +186,12 @@ tags:
     - {model: gpt-6-luna, thinking_level: low}
     - {model: grok-3-mini-beta}
     - {model: vertex-claude-4.5-haiku}
+    # Trailing per-provider coverage. Internal meta work (titling, routing,
+    # summarizing) must be possible on every provider; these are reached only
+    # when the user has none of the models above.
+    - {model: gemini-3.1-flash-lite-preview}            # gemini
+    - {model: gpt-5.6-terra, thinking_level: low}        # codex
+    - {model: gemini-3.8-flash, thinking_level: low}     # antigravity
 
   reasoning:
     - {model: claude-5.5-opus, thinking_level: xhigh}

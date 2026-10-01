@@ -762,9 +762,10 @@ func buildSaveMessageNode(input *types.SaveMessageInput) *reliantv1.Node {
 	// Convert tool calls
 	for _, tc := range input.ToolCalls {
 		args.ResolvedToolCalls = append(args.ResolvedToolCalls, &reliantv1.ToolCallMsg{
-			Id:    tc.ID,
-			Name:  tc.Name,
-			Input: tc.Input,
+			Id:               tc.ID,
+			Name:             tc.Name,
+			Input:            tc.Input,
+			ThoughtSignature: tc.ThoughtSignature,
 		})
 	}
 

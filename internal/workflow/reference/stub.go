@@ -337,6 +337,12 @@ func protoFieldsToCELFields(md protoreflect.MessageDescriptor) []CELField {
 	result := make([]CELField, 0, fields.Len())
 	for i := 0; i < fields.Len(); i++ {
 		fd := fields.Get(i)
+		// A message_only field is cleared from the activity result before the
+		// workflow sees it, so documenting it as CEL-readable would promise a
+		// value every template reading it would find absent.
+		if wfcel.IsMessageOnly(fd) {
+			continue
+		}
 		result = append(result, CELField{
 			Name:        string(fd.Name()),
 			Type:        protoKindToSimpleType(fd),
