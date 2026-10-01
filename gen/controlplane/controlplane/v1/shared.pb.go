@@ -1546,8 +1546,15 @@ type PlanLimits struct {
 	// server's defaults apply: notify at 80%, block scale-up at 100%,
 	// throttle after 72h, and NEVER suspend.
 	InfraOveragePolicy *InfraOveragePolicy `protobuf:"bytes,32,opt,name=infra_overage_policy,json=infraOveragePolicy,proto3" json:"infra_overage_policy,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	// Small-daemon-hours this plan includes per billing period (per-daemon
+	// billing, design §6.1). A large daemon burns them at its multiplier — four
+	// hours of a 4× size is sixteen small-daemon-hours. Projected from the
+	// daemon-pricing catalog (internal/plansconfig/daemon_pricing.yaml), never
+	// from plans.limits, so the UI and the meter read one number. Zero for a
+	// plan the catalog does not declare: no allowance, never "unlimited".
+	IncludedSmallDaemonHours int64 `protobuf:"varint,34,opt,name=included_small_daemon_hours,json=includedSmallDaemonHours,proto3" json:"included_small_daemon_hours,omitempty"`
+	unknownFields            protoimpl.UnknownFields
+	sizeCache                protoimpl.SizeCache
 }
 
 func (x *PlanLimits) Reset() {
@@ -1727,6 +1734,158 @@ func (x *PlanLimits) GetInfraOveragePolicy() *InfraOveragePolicy {
 	return nil
 }
 
+func (x *PlanLimits) GetIncludedSmallDaemonHours() int64 {
+	if x != nil {
+		return x.IncludedSmallDaemonHours
+	}
+	return 0
+}
+
+// DaemonPricing is the per-daemon price list, projected from the one catalog
+// file the owner edits (internal/plansconfig/daemon_pricing.yaml), so a client
+// never restates a multiplier, a price or a disk size (design §6.1).
+//
+// ⚠️ PRICES ARE PLACEHOLDERS while `placeholder` is true (per-daemon billing
+// §13 Q1 open). A client should say so rather than present them as final.
+type DaemonPricing struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// One row per size the product sells, cheapest first.
+	Sizes []*DaemonSizePrice `protobuf:"bytes,1,rep,name=sizes,proto3" json:"sizes,omitempty"`
+	// The suspended-disk fee, in cents per GiB-month, as an exact decimal
+	// string (never a float: it is money).
+	SuspendedDiskCentsPerGibMonth string `protobuf:"bytes,2,opt,name=suspended_disk_cents_per_gib_month,json=suspendedDiskCentsPerGibMonth,proto3" json:"suspended_disk_cents_per_gib_month,omitempty"`
+	// True while the catalog's numbers are placeholders.
+	Placeholder   bool `protobuf:"varint,3,opt,name=placeholder,proto3" json:"placeholder,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DaemonPricing) Reset() {
+	*x = DaemonPricing{}
+	mi := &file_controlplane_v1_shared_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DaemonPricing) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DaemonPricing) ProtoMessage() {}
+
+func (x *DaemonPricing) ProtoReflect() protoreflect.Message {
+	mi := &file_controlplane_v1_shared_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DaemonPricing.ProtoReflect.Descriptor instead.
+func (*DaemonPricing) Descriptor() ([]byte, []int) {
+	return file_controlplane_v1_shared_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *DaemonPricing) GetSizes() []*DaemonSizePrice {
+	if x != nil {
+		return x.Sizes
+	}
+	return nil
+}
+
+func (x *DaemonPricing) GetSuspendedDiskCentsPerGibMonth() string {
+	if x != nil {
+		return x.SuspendedDiskCentsPerGibMonth
+	}
+	return ""
+}
+
+func (x *DaemonPricing) GetPlaceholder() bool {
+	if x != nil {
+		return x.Placeholder
+	}
+	return false
+}
+
+// DaemonSizePrice is one size's row of DaemonPricing.
+type DaemonSizePrice struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Size  string                 `protobuf:"bytes,1,opt,name=size,proto3" json:"size,omitempty"`
+	// Small-daemon-hours this size burns per wall-clock hour.
+	Multiplier int64 `protobuf:"varint,2,opt,name=multiplier,proto3" json:"multiplier,omitempty"`
+	// Overage price per wall-clock hour at this size, in cents, as an exact
+	// decimal string: multiplier × the small hourly price.
+	HourlyPriceCents string `protobuf:"bytes,3,opt,name=hourly_price_cents,json=hourlyPriceCents,proto3" json:"hourly_price_cents,omitempty"`
+	// The disk a daemon of this size is given, in GiB
+	// (config.DaemonTierStorageGiB) — the number the suspended-disk fee is
+	// charged on.
+	StorageGib    int64 `protobuf:"varint,4,opt,name=storage_gib,json=storageGib,proto3" json:"storage_gib,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DaemonSizePrice) Reset() {
+	*x = DaemonSizePrice{}
+	mi := &file_controlplane_v1_shared_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DaemonSizePrice) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DaemonSizePrice) ProtoMessage() {}
+
+func (x *DaemonSizePrice) ProtoReflect() protoreflect.Message {
+	mi := &file_controlplane_v1_shared_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DaemonSizePrice.ProtoReflect.Descriptor instead.
+func (*DaemonSizePrice) Descriptor() ([]byte, []int) {
+	return file_controlplane_v1_shared_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *DaemonSizePrice) GetSize() string {
+	if x != nil {
+		return x.Size
+	}
+	return ""
+}
+
+func (x *DaemonSizePrice) GetMultiplier() int64 {
+	if x != nil {
+		return x.Multiplier
+	}
+	return 0
+}
+
+func (x *DaemonSizePrice) GetHourlyPriceCents() string {
+	if x != nil {
+		return x.HourlyPriceCents
+	}
+	return ""
+}
+
+func (x *DaemonSizePrice) GetStorageGib() int64 {
+	if x != nil {
+		return x.StorageGib
+	}
+	return 0
+}
+
 type Plan struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -1758,7 +1917,7 @@ type Plan struct {
 
 func (x *Plan) Reset() {
 	*x = Plan{}
-	mi := &file_controlplane_v1_shared_proto_msgTypes[9]
+	mi := &file_controlplane_v1_shared_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1770,7 +1929,7 @@ func (x *Plan) String() string {
 func (*Plan) ProtoMessage() {}
 
 func (x *Plan) ProtoReflect() protoreflect.Message {
-	mi := &file_controlplane_v1_shared_proto_msgTypes[9]
+	mi := &file_controlplane_v1_shared_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1783,7 +1942,7 @@ func (x *Plan) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Plan.ProtoReflect.Descriptor instead.
 func (*Plan) Descriptor() ([]byte, []int) {
-	return file_controlplane_v1_shared_proto_rawDescGZIP(), []int{9}
+	return file_controlplane_v1_shared_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *Plan) GetId() string {
@@ -1909,7 +2068,7 @@ type Subscription struct {
 
 func (x *Subscription) Reset() {
 	*x = Subscription{}
-	mi := &file_controlplane_v1_shared_proto_msgTypes[10]
+	mi := &file_controlplane_v1_shared_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1921,7 +2080,7 @@ func (x *Subscription) String() string {
 func (*Subscription) ProtoMessage() {}
 
 func (x *Subscription) ProtoReflect() protoreflect.Message {
-	mi := &file_controlplane_v1_shared_proto_msgTypes[10]
+	mi := &file_controlplane_v1_shared_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1934,7 +2093,7 @@ func (x *Subscription) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Subscription.ProtoReflect.Descriptor instead.
 func (*Subscription) Descriptor() ([]byte, []int) {
-	return file_controlplane_v1_shared_proto_rawDescGZIP(), []int{10}
+	return file_controlplane_v1_shared_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *Subscription) GetId() string {
@@ -2052,7 +2211,7 @@ type ReliantEntitlement struct {
 
 func (x *ReliantEntitlement) Reset() {
 	*x = ReliantEntitlement{}
-	mi := &file_controlplane_v1_shared_proto_msgTypes[11]
+	mi := &file_controlplane_v1_shared_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2064,7 +2223,7 @@ func (x *ReliantEntitlement) String() string {
 func (*ReliantEntitlement) ProtoMessage() {}
 
 func (x *ReliantEntitlement) ProtoReflect() protoreflect.Message {
-	mi := &file_controlplane_v1_shared_proto_msgTypes[11]
+	mi := &file_controlplane_v1_shared_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2077,7 +2236,7 @@ func (x *ReliantEntitlement) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReliantEntitlement.ProtoReflect.Descriptor instead.
 func (*ReliantEntitlement) Descriptor() ([]byte, []int) {
-	return file_controlplane_v1_shared_proto_rawDescGZIP(), []int{11}
+	return file_controlplane_v1_shared_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *ReliantEntitlement) GetUserId() string {
@@ -2204,7 +2363,7 @@ type UsageSummary struct {
 
 func (x *UsageSummary) Reset() {
 	*x = UsageSummary{}
-	mi := &file_controlplane_v1_shared_proto_msgTypes[12]
+	mi := &file_controlplane_v1_shared_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2216,7 +2375,7 @@ func (x *UsageSummary) String() string {
 func (*UsageSummary) ProtoMessage() {}
 
 func (x *UsageSummary) ProtoReflect() protoreflect.Message {
-	mi := &file_controlplane_v1_shared_proto_msgTypes[12]
+	mi := &file_controlplane_v1_shared_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2229,7 +2388,7 @@ func (x *UsageSummary) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UsageSummary.ProtoReflect.Descriptor instead.
 func (*UsageSummary) Descriptor() ([]byte, []int) {
-	return file_controlplane_v1_shared_proto_rawDescGZIP(), []int{12}
+	return file_controlplane_v1_shared_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *UsageSummary) GetMetric() string {
@@ -2278,7 +2437,7 @@ type Invoice struct {
 
 func (x *Invoice) Reset() {
 	*x = Invoice{}
-	mi := &file_controlplane_v1_shared_proto_msgTypes[13]
+	mi := &file_controlplane_v1_shared_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2290,7 +2449,7 @@ func (x *Invoice) String() string {
 func (*Invoice) ProtoMessage() {}
 
 func (x *Invoice) ProtoReflect() protoreflect.Message {
-	mi := &file_controlplane_v1_shared_proto_msgTypes[13]
+	mi := &file_controlplane_v1_shared_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2303,7 +2462,7 @@ func (x *Invoice) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Invoice.ProtoReflect.Descriptor instead.
 func (*Invoice) Descriptor() ([]byte, []int) {
-	return file_controlplane_v1_shared_proto_rawDescGZIP(), []int{13}
+	return file_controlplane_v1_shared_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *Invoice) GetId() string {
@@ -2393,7 +2552,7 @@ type Wallet struct {
 
 func (x *Wallet) Reset() {
 	*x = Wallet{}
-	mi := &file_controlplane_v1_shared_proto_msgTypes[14]
+	mi := &file_controlplane_v1_shared_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2405,7 +2564,7 @@ func (x *Wallet) String() string {
 func (*Wallet) ProtoMessage() {}
 
 func (x *Wallet) ProtoReflect() protoreflect.Message {
-	mi := &file_controlplane_v1_shared_proto_msgTypes[14]
+	mi := &file_controlplane_v1_shared_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2418,7 +2577,7 @@ func (x *Wallet) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Wallet.ProtoReflect.Descriptor instead.
 func (*Wallet) Descriptor() ([]byte, []int) {
-	return file_controlplane_v1_shared_proto_rawDescGZIP(), []int{14}
+	return file_controlplane_v1_shared_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *Wallet) GetId() string {
@@ -2507,7 +2666,7 @@ type WalletLedgerEntry struct {
 
 func (x *WalletLedgerEntry) Reset() {
 	*x = WalletLedgerEntry{}
-	mi := &file_controlplane_v1_shared_proto_msgTypes[15]
+	mi := &file_controlplane_v1_shared_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2519,7 +2678,7 @@ func (x *WalletLedgerEntry) String() string {
 func (*WalletLedgerEntry) ProtoMessage() {}
 
 func (x *WalletLedgerEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_controlplane_v1_shared_proto_msgTypes[15]
+	mi := &file_controlplane_v1_shared_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2532,7 +2691,7 @@ func (x *WalletLedgerEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WalletLedgerEntry.ProtoReflect.Descriptor instead.
 func (*WalletLedgerEntry) Descriptor() ([]byte, []int) {
-	return file_controlplane_v1_shared_proto_rawDescGZIP(), []int{15}
+	return file_controlplane_v1_shared_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *WalletLedgerEntry) GetId() string {
@@ -2662,7 +2821,7 @@ type WalletTopup struct {
 
 func (x *WalletTopup) Reset() {
 	*x = WalletTopup{}
-	mi := &file_controlplane_v1_shared_proto_msgTypes[16]
+	mi := &file_controlplane_v1_shared_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2674,7 +2833,7 @@ func (x *WalletTopup) String() string {
 func (*WalletTopup) ProtoMessage() {}
 
 func (x *WalletTopup) ProtoReflect() protoreflect.Message {
-	mi := &file_controlplane_v1_shared_proto_msgTypes[16]
+	mi := &file_controlplane_v1_shared_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2687,7 +2846,7 @@ func (x *WalletTopup) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WalletTopup.ProtoReflect.Descriptor instead.
 func (*WalletTopup) Descriptor() ([]byte, []int) {
-	return file_controlplane_v1_shared_proto_rawDescGZIP(), []int{16}
+	return file_controlplane_v1_shared_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *WalletTopup) GetId() string {
@@ -2803,7 +2962,7 @@ type WalletOverview struct {
 
 func (x *WalletOverview) Reset() {
 	*x = WalletOverview{}
-	mi := &file_controlplane_v1_shared_proto_msgTypes[17]
+	mi := &file_controlplane_v1_shared_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2815,7 +2974,7 @@ func (x *WalletOverview) String() string {
 func (*WalletOverview) ProtoMessage() {}
 
 func (x *WalletOverview) ProtoReflect() protoreflect.Message {
-	mi := &file_controlplane_v1_shared_proto_msgTypes[17]
+	mi := &file_controlplane_v1_shared_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2828,7 +2987,7 @@ func (x *WalletOverview) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WalletOverview.ProtoReflect.Descriptor instead.
 func (*WalletOverview) Descriptor() ([]byte, []int) {
-	return file_controlplane_v1_shared_proto_rawDescGZIP(), []int{17}
+	return file_controlplane_v1_shared_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *WalletOverview) GetOrganization() *Organization {
@@ -2898,7 +3057,7 @@ type LLMKey struct {
 
 func (x *LLMKey) Reset() {
 	*x = LLMKey{}
-	mi := &file_controlplane_v1_shared_proto_msgTypes[18]
+	mi := &file_controlplane_v1_shared_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2910,7 +3069,7 @@ func (x *LLMKey) String() string {
 func (*LLMKey) ProtoMessage() {}
 
 func (x *LLMKey) ProtoReflect() protoreflect.Message {
-	mi := &file_controlplane_v1_shared_proto_msgTypes[18]
+	mi := &file_controlplane_v1_shared_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2923,7 +3082,7 @@ func (x *LLMKey) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LLMKey.ProtoReflect.Descriptor instead.
 func (*LLMKey) Descriptor() ([]byte, []int) {
-	return file_controlplane_v1_shared_proto_rawDescGZIP(), []int{18}
+	return file_controlplane_v1_shared_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *LLMKey) GetId() string {
@@ -3011,7 +3170,7 @@ type LLMSpendEntry struct {
 
 func (x *LLMSpendEntry) Reset() {
 	*x = LLMSpendEntry{}
-	mi := &file_controlplane_v1_shared_proto_msgTypes[19]
+	mi := &file_controlplane_v1_shared_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3023,7 +3182,7 @@ func (x *LLMSpendEntry) String() string {
 func (*LLMSpendEntry) ProtoMessage() {}
 
 func (x *LLMSpendEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_controlplane_v1_shared_proto_msgTypes[19]
+	mi := &file_controlplane_v1_shared_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3036,7 +3195,7 @@ func (x *LLMSpendEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LLMSpendEntry.ProtoReflect.Descriptor instead.
 func (*LLMSpendEntry) Descriptor() ([]byte, []int) {
-	return file_controlplane_v1_shared_proto_rawDescGZIP(), []int{19}
+	return file_controlplane_v1_shared_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *LLMSpendEntry) GetKeyId() string {
@@ -3108,7 +3267,7 @@ type ManagedReliantAccess struct {
 
 func (x *ManagedReliantAccess) Reset() {
 	*x = ManagedReliantAccess{}
-	mi := &file_controlplane_v1_shared_proto_msgTypes[20]
+	mi := &file_controlplane_v1_shared_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3120,7 +3279,7 @@ func (x *ManagedReliantAccess) String() string {
 func (*ManagedReliantAccess) ProtoMessage() {}
 
 func (x *ManagedReliantAccess) ProtoReflect() protoreflect.Message {
-	mi := &file_controlplane_v1_shared_proto_msgTypes[20]
+	mi := &file_controlplane_v1_shared_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3133,7 +3292,7 @@ func (x *ManagedReliantAccess) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ManagedReliantAccess.ProtoReflect.Descriptor instead.
 func (*ManagedReliantAccess) Descriptor() ([]byte, []int) {
-	return file_controlplane_v1_shared_proto_rawDescGZIP(), []int{20}
+	return file_controlplane_v1_shared_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *ManagedReliantAccess) GetId() string {
@@ -3236,7 +3395,7 @@ type ReliantOverview struct {
 
 func (x *ReliantOverview) Reset() {
 	*x = ReliantOverview{}
-	mi := &file_controlplane_v1_shared_proto_msgTypes[21]
+	mi := &file_controlplane_v1_shared_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3248,7 +3407,7 @@ func (x *ReliantOverview) String() string {
 func (*ReliantOverview) ProtoMessage() {}
 
 func (x *ReliantOverview) ProtoReflect() protoreflect.Message {
-	mi := &file_controlplane_v1_shared_proto_msgTypes[21]
+	mi := &file_controlplane_v1_shared_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3261,7 +3420,7 @@ func (x *ReliantOverview) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReliantOverview.ProtoReflect.Descriptor instead.
 func (*ReliantOverview) Descriptor() ([]byte, []int) {
-	return file_controlplane_v1_shared_proto_rawDescGZIP(), []int{21}
+	return file_controlplane_v1_shared_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *ReliantOverview) GetEntitlement() *ReliantEntitlement {
@@ -3335,7 +3494,7 @@ type GitRepo struct {
 
 func (x *GitRepo) Reset() {
 	*x = GitRepo{}
-	mi := &file_controlplane_v1_shared_proto_msgTypes[22]
+	mi := &file_controlplane_v1_shared_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3347,7 +3506,7 @@ func (x *GitRepo) String() string {
 func (*GitRepo) ProtoMessage() {}
 
 func (x *GitRepo) ProtoReflect() protoreflect.Message {
-	mi := &file_controlplane_v1_shared_proto_msgTypes[22]
+	mi := &file_controlplane_v1_shared_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3360,7 +3519,7 @@ func (x *GitRepo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GitRepo.ProtoReflect.Descriptor instead.
 func (*GitRepo) Descriptor() ([]byte, []int) {
-	return file_controlplane_v1_shared_proto_rawDescGZIP(), []int{22}
+	return file_controlplane_v1_shared_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *GitRepo) GetFullName() string {
@@ -3509,7 +3668,7 @@ const file_controlplane_v1_shared_proto_rawDesc = "" +
 	"\x18notify_threshold_percent\x18\x01 \x01(\x01R\x16notifyThresholdPercent\x12.\n" +
 	"\x13overage_grace_hours\x18\x02 \x01(\x05R\x11overageGraceHours\x12,\n" +
 	"\x12suspend_on_overage\x18\x03 \x01(\bR\x10suspendOnOverage\x12A\n" +
-	"\x1dnon_suspendable_dimension_ids\x18\x04 \x03(\tR\x1anonSuspendableDimensionIds\"\xbb\t\n" +
+	"\x1dnon_suspendable_dimension_ids\x18\x04 \x03(\tR\x1anonSuspendableDimensionIds\"\xfa\t\n" +
 	"\n" +
 	"PlanLimits\x12\x1b\n" +
 	"\tmax_seats\x18\x01 \x01(\x05R\bmaxSeats\x12%\n" +
@@ -3534,7 +3693,20 @@ const file_controlplane_v1_shared_proto_rawDesc = "" +
 	"\x0fmax_deployments\x18\x1d \x01(\x05R\x0emaxDeployments\x124\n" +
 	"\x17min_memory_gib_per_vcpu\x18\x1e \x01(\x01R\x13minMemoryGibPerVcpu\x124\n" +
 	"\x17max_memory_gib_per_vcpu\x18\x1f \x01(\x01R\x13maxMemoryGibPerVcpu\x12U\n" +
-	"\x14infra_overage_policy\x18  \x01(\v2#.controlplane.v1.InfraOveragePolicyR\x12infraOveragePolicyJ\x04\b\x05\x10\x06J\x04\b\x06\x10\aR\rip_restrictedR\x0fmax_ips_per_key\"\x87\x03\n" +
+	"\x14infra_overage_policy\x18  \x01(\v2#.controlplane.v1.InfraOveragePolicyR\x12infraOveragePolicy\x12=\n" +
+	"\x1bincluded_small_daemon_hours\x18\" \x01(\x03R\x18includedSmallDaemonHoursJ\x04\b\x05\x10\x06J\x04\b\x06\x10\aR\rip_restrictedR\x0fmax_ips_per_key\"\xb4\x01\n" +
+	"\rDaemonPricing\x126\n" +
+	"\x05sizes\x18\x01 \x03(\v2 .controlplane.v1.DaemonSizePriceR\x05sizes\x12I\n" +
+	"\"suspended_disk_cents_per_gib_month\x18\x02 \x01(\tR\x1dsuspendedDiskCentsPerGibMonth\x12 \n" +
+	"\vplaceholder\x18\x03 \x01(\bR\vplaceholder\"\x94\x01\n" +
+	"\x0fDaemonSizePrice\x12\x12\n" +
+	"\x04size\x18\x01 \x01(\tR\x04size\x12\x1e\n" +
+	"\n" +
+	"multiplier\x18\x02 \x01(\x03R\n" +
+	"multiplier\x12,\n" +
+	"\x12hourly_price_cents\x18\x03 \x01(\tR\x10hourlyPriceCents\x12\x1f\n" +
+	"\vstorage_gib\x18\x04 \x01(\x03R\n" +
+	"storageGib\"\x87\x03\n" +
 	"\x04Plan\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1d\n" +
 	"\n" +
@@ -3806,7 +3978,7 @@ func file_controlplane_v1_shared_proto_rawDescGZIP() []byte {
 }
 
 var file_controlplane_v1_shared_proto_enumTypes = make([]protoimpl.EnumInfo, 9)
-var file_controlplane_v1_shared_proto_msgTypes = make([]protoimpl.MessageInfo, 23)
+var file_controlplane_v1_shared_proto_msgTypes = make([]protoimpl.MessageInfo, 25)
 var file_controlplane_v1_shared_proto_goTypes = []any{
 	(DaemonType)(0),               // 0: controlplane.v1.DaemonType
 	(DaemonStatus)(0),             // 1: controlplane.v1.DaemonStatus
@@ -3826,87 +3998,90 @@ var file_controlplane_v1_shared_proto_goTypes = []any{
 	(*MeteredDimension)(nil),      // 15: controlplane.v1.MeteredDimension
 	(*InfraOveragePolicy)(nil),    // 16: controlplane.v1.InfraOveragePolicy
 	(*PlanLimits)(nil),            // 17: controlplane.v1.PlanLimits
-	(*Plan)(nil),                  // 18: controlplane.v1.Plan
-	(*Subscription)(nil),          // 19: controlplane.v1.Subscription
-	(*ReliantEntitlement)(nil),    // 20: controlplane.v1.ReliantEntitlement
-	(*UsageSummary)(nil),          // 21: controlplane.v1.UsageSummary
-	(*Invoice)(nil),               // 22: controlplane.v1.Invoice
-	(*Wallet)(nil),                // 23: controlplane.v1.Wallet
-	(*WalletLedgerEntry)(nil),     // 24: controlplane.v1.WalletLedgerEntry
-	(*WalletTopup)(nil),           // 25: controlplane.v1.WalletTopup
-	(*WalletOverview)(nil),        // 26: controlplane.v1.WalletOverview
-	(*LLMKey)(nil),                // 27: controlplane.v1.LLMKey
-	(*LLMSpendEntry)(nil),         // 28: controlplane.v1.LLMSpendEntry
-	(*ManagedReliantAccess)(nil),  // 29: controlplane.v1.ManagedReliantAccess
-	(*ReliantOverview)(nil),       // 30: controlplane.v1.ReliantOverview
-	(*GitRepo)(nil),               // 31: controlplane.v1.GitRepo
-	(*timestamppb.Timestamp)(nil), // 32: google.protobuf.Timestamp
-	(*structpb.Struct)(nil),       // 33: google.protobuf.Struct
+	(*DaemonPricing)(nil),         // 18: controlplane.v1.DaemonPricing
+	(*DaemonSizePrice)(nil),       // 19: controlplane.v1.DaemonSizePrice
+	(*Plan)(nil),                  // 20: controlplane.v1.Plan
+	(*Subscription)(nil),          // 21: controlplane.v1.Subscription
+	(*ReliantEntitlement)(nil),    // 22: controlplane.v1.ReliantEntitlement
+	(*UsageSummary)(nil),          // 23: controlplane.v1.UsageSummary
+	(*Invoice)(nil),               // 24: controlplane.v1.Invoice
+	(*Wallet)(nil),                // 25: controlplane.v1.Wallet
+	(*WalletLedgerEntry)(nil),     // 26: controlplane.v1.WalletLedgerEntry
+	(*WalletTopup)(nil),           // 27: controlplane.v1.WalletTopup
+	(*WalletOverview)(nil),        // 28: controlplane.v1.WalletOverview
+	(*LLMKey)(nil),                // 29: controlplane.v1.LLMKey
+	(*LLMSpendEntry)(nil),         // 30: controlplane.v1.LLMSpendEntry
+	(*ManagedReliantAccess)(nil),  // 31: controlplane.v1.ManagedReliantAccess
+	(*ReliantOverview)(nil),       // 32: controlplane.v1.ReliantOverview
+	(*GitRepo)(nil),               // 33: controlplane.v1.GitRepo
+	(*timestamppb.Timestamp)(nil), // 34: google.protobuf.Timestamp
+	(*structpb.Struct)(nil),       // 35: google.protobuf.Struct
 }
 var file_controlplane_v1_shared_proto_depIdxs = []int32{
 	3,  // 0: controlplane.v1.Daemon.owner_type:type_name -> controlplane.v1.OwnerType
 	0,  // 1: controlplane.v1.Daemon.daemon_type:type_name -> controlplane.v1.DaemonType
 	1,  // 2: controlplane.v1.Daemon.status:type_name -> controlplane.v1.DaemonStatus
 	9,  // 3: controlplane.v1.Daemon.resources:type_name -> controlplane.v1.ResourceRequirements
-	32, // 4: controlplane.v1.Daemon.connected_at:type_name -> google.protobuf.Timestamp
-	32, // 5: controlplane.v1.Daemon.disconnected_at:type_name -> google.protobuf.Timestamp
-	32, // 6: controlplane.v1.Daemon.created_at:type_name -> google.protobuf.Timestamp
-	32, // 7: controlplane.v1.Daemon.updated_at:type_name -> google.protobuf.Timestamp
+	34, // 4: controlplane.v1.Daemon.connected_at:type_name -> google.protobuf.Timestamp
+	34, // 5: controlplane.v1.Daemon.disconnected_at:type_name -> google.protobuf.Timestamp
+	34, // 6: controlplane.v1.Daemon.created_at:type_name -> google.protobuf.Timestamp
+	34, // 7: controlplane.v1.Daemon.updated_at:type_name -> google.protobuf.Timestamp
 	4,  // 8: controlplane.v1.Daemon.size:type_name -> controlplane.v1.DaemonSize
-	32, // 9: controlplane.v1.Daemon.last_status_changed_at:type_name -> google.protobuf.Timestamp
-	32, // 10: controlplane.v1.Daemon.last_oom_killed_at:type_name -> google.protobuf.Timestamp
+	34, // 9: controlplane.v1.Daemon.last_status_changed_at:type_name -> google.protobuf.Timestamp
+	34, // 10: controlplane.v1.Daemon.last_oom_killed_at:type_name -> google.protobuf.Timestamp
 	2,  // 11: controlplane.v1.Daemon.lifecycle_phase:type_name -> controlplane.v1.DaemonLifecyclePhase
 	5,  // 12: controlplane.v1.Daemon.default_port_access:type_name -> controlplane.v1.PortAccessMode
 	5,  // 13: controlplane.v1.PortAccessRule.access_mode:type_name -> controlplane.v1.PortAccessMode
-	32, // 14: controlplane.v1.PortAccessRule.created_at:type_name -> google.protobuf.Timestamp
-	32, // 15: controlplane.v1.User.created_at:type_name -> google.protobuf.Timestamp
-	32, // 16: controlplane.v1.User.updated_at:type_name -> google.protobuf.Timestamp
-	33, // 17: controlplane.v1.User.onboarding_data:type_name -> google.protobuf.Struct
-	32, // 18: controlplane.v1.Organization.created_at:type_name -> google.protobuf.Timestamp
-	32, // 19: controlplane.v1.Organization.updated_at:type_name -> google.protobuf.Timestamp
+	34, // 14: controlplane.v1.PortAccessRule.created_at:type_name -> google.protobuf.Timestamp
+	34, // 15: controlplane.v1.User.created_at:type_name -> google.protobuf.Timestamp
+	34, // 16: controlplane.v1.User.updated_at:type_name -> google.protobuf.Timestamp
+	35, // 17: controlplane.v1.User.onboarding_data:type_name -> google.protobuf.Struct
+	34, // 18: controlplane.v1.Organization.created_at:type_name -> google.protobuf.Timestamp
+	34, // 19: controlplane.v1.Organization.updated_at:type_name -> google.protobuf.Timestamp
 	15, // 20: controlplane.v1.PlanLimits.metered_dimensions:type_name -> controlplane.v1.MeteredDimension
 	16, // 21: controlplane.v1.PlanLimits.infra_overage_policy:type_name -> controlplane.v1.InfraOveragePolicy
-	7,  // 22: controlplane.v1.Plan.tier:type_name -> controlplane.v1.PlanTier
-	32, // 23: controlplane.v1.Plan.created_at:type_name -> google.protobuf.Timestamp
-	17, // 24: controlplane.v1.Plan.structured_limits:type_name -> controlplane.v1.PlanLimits
-	18, // 25: controlplane.v1.Subscription.plan:type_name -> controlplane.v1.Plan
-	6,  // 26: controlplane.v1.Subscription.status:type_name -> controlplane.v1.SubscriptionStatus
-	32, // 27: controlplane.v1.Subscription.current_period_start:type_name -> google.protobuf.Timestamp
-	32, // 28: controlplane.v1.Subscription.current_period_end:type_name -> google.protobuf.Timestamp
-	32, // 29: controlplane.v1.Subscription.created_at:type_name -> google.protobuf.Timestamp
-	32, // 30: controlplane.v1.Subscription.updated_at:type_name -> google.protobuf.Timestamp
-	32, // 31: controlplane.v1.ReliantEntitlement.current_period_start:type_name -> google.protobuf.Timestamp
-	32, // 32: controlplane.v1.ReliantEntitlement.current_period_end:type_name -> google.protobuf.Timestamp
-	32, // 33: controlplane.v1.ReliantEntitlement.updated_at:type_name -> google.protobuf.Timestamp
-	32, // 34: controlplane.v1.Invoice.period_start:type_name -> google.protobuf.Timestamp
-	32, // 35: controlplane.v1.Invoice.period_end:type_name -> google.protobuf.Timestamp
-	32, // 36: controlplane.v1.Invoice.created_at:type_name -> google.protobuf.Timestamp
-	32, // 37: controlplane.v1.Wallet.created_at:type_name -> google.protobuf.Timestamp
-	32, // 38: controlplane.v1.Wallet.updated_at:type_name -> google.protobuf.Timestamp
-	32, // 39: controlplane.v1.WalletLedgerEntry.created_at:type_name -> google.protobuf.Timestamp
-	32, // 40: controlplane.v1.WalletTopup.created_at:type_name -> google.protobuf.Timestamp
-	32, // 41: controlplane.v1.WalletTopup.updated_at:type_name -> google.protobuf.Timestamp
-	13, // 42: controlplane.v1.WalletOverview.organization:type_name -> controlplane.v1.Organization
-	23, // 43: controlplane.v1.WalletOverview.wallet:type_name -> controlplane.v1.Wallet
-	24, // 44: controlplane.v1.WalletOverview.ledger_entries:type_name -> controlplane.v1.WalletLedgerEntry
-	25, // 45: controlplane.v1.WalletOverview.topups:type_name -> controlplane.v1.WalletTopup
-	8,  // 46: controlplane.v1.LLMKey.status:type_name -> controlplane.v1.LLMKeyStatus
-	32, // 47: controlplane.v1.LLMKey.created_at:type_name -> google.protobuf.Timestamp
-	32, // 48: controlplane.v1.LLMKey.revoked_at:type_name -> google.protobuf.Timestamp
-	32, // 49: controlplane.v1.LLMSpendEntry.period_start:type_name -> google.protobuf.Timestamp
-	32, // 50: controlplane.v1.LLMSpendEntry.period_end:type_name -> google.protobuf.Timestamp
-	32, // 51: controlplane.v1.ManagedReliantAccess.last_rotated_at:type_name -> google.protobuf.Timestamp
-	32, // 52: controlplane.v1.ManagedReliantAccess.last_provisioned_at:type_name -> google.protobuf.Timestamp
-	32, // 53: controlplane.v1.ManagedReliantAccess.created_at:type_name -> google.protobuf.Timestamp
-	32, // 54: controlplane.v1.ManagedReliantAccess.updated_at:type_name -> google.protobuf.Timestamp
-	20, // 55: controlplane.v1.ReliantOverview.entitlement:type_name -> controlplane.v1.ReliantEntitlement
-	29, // 56: controlplane.v1.ReliantOverview.managed_access:type_name -> controlplane.v1.ManagedReliantAccess
-	32, // 57: controlplane.v1.GitRepo.updated_at:type_name -> google.protobuf.Timestamp
-	58, // [58:58] is the sub-list for method output_type
-	58, // [58:58] is the sub-list for method input_type
-	58, // [58:58] is the sub-list for extension type_name
-	58, // [58:58] is the sub-list for extension extendee
-	0,  // [0:58] is the sub-list for field type_name
+	19, // 22: controlplane.v1.DaemonPricing.sizes:type_name -> controlplane.v1.DaemonSizePrice
+	7,  // 23: controlplane.v1.Plan.tier:type_name -> controlplane.v1.PlanTier
+	34, // 24: controlplane.v1.Plan.created_at:type_name -> google.protobuf.Timestamp
+	17, // 25: controlplane.v1.Plan.structured_limits:type_name -> controlplane.v1.PlanLimits
+	20, // 26: controlplane.v1.Subscription.plan:type_name -> controlplane.v1.Plan
+	6,  // 27: controlplane.v1.Subscription.status:type_name -> controlplane.v1.SubscriptionStatus
+	34, // 28: controlplane.v1.Subscription.current_period_start:type_name -> google.protobuf.Timestamp
+	34, // 29: controlplane.v1.Subscription.current_period_end:type_name -> google.protobuf.Timestamp
+	34, // 30: controlplane.v1.Subscription.created_at:type_name -> google.protobuf.Timestamp
+	34, // 31: controlplane.v1.Subscription.updated_at:type_name -> google.protobuf.Timestamp
+	34, // 32: controlplane.v1.ReliantEntitlement.current_period_start:type_name -> google.protobuf.Timestamp
+	34, // 33: controlplane.v1.ReliantEntitlement.current_period_end:type_name -> google.protobuf.Timestamp
+	34, // 34: controlplane.v1.ReliantEntitlement.updated_at:type_name -> google.protobuf.Timestamp
+	34, // 35: controlplane.v1.Invoice.period_start:type_name -> google.protobuf.Timestamp
+	34, // 36: controlplane.v1.Invoice.period_end:type_name -> google.protobuf.Timestamp
+	34, // 37: controlplane.v1.Invoice.created_at:type_name -> google.protobuf.Timestamp
+	34, // 38: controlplane.v1.Wallet.created_at:type_name -> google.protobuf.Timestamp
+	34, // 39: controlplane.v1.Wallet.updated_at:type_name -> google.protobuf.Timestamp
+	34, // 40: controlplane.v1.WalletLedgerEntry.created_at:type_name -> google.protobuf.Timestamp
+	34, // 41: controlplane.v1.WalletTopup.created_at:type_name -> google.protobuf.Timestamp
+	34, // 42: controlplane.v1.WalletTopup.updated_at:type_name -> google.protobuf.Timestamp
+	13, // 43: controlplane.v1.WalletOverview.organization:type_name -> controlplane.v1.Organization
+	25, // 44: controlplane.v1.WalletOverview.wallet:type_name -> controlplane.v1.Wallet
+	26, // 45: controlplane.v1.WalletOverview.ledger_entries:type_name -> controlplane.v1.WalletLedgerEntry
+	27, // 46: controlplane.v1.WalletOverview.topups:type_name -> controlplane.v1.WalletTopup
+	8,  // 47: controlplane.v1.LLMKey.status:type_name -> controlplane.v1.LLMKeyStatus
+	34, // 48: controlplane.v1.LLMKey.created_at:type_name -> google.protobuf.Timestamp
+	34, // 49: controlplane.v1.LLMKey.revoked_at:type_name -> google.protobuf.Timestamp
+	34, // 50: controlplane.v1.LLMSpendEntry.period_start:type_name -> google.protobuf.Timestamp
+	34, // 51: controlplane.v1.LLMSpendEntry.period_end:type_name -> google.protobuf.Timestamp
+	34, // 52: controlplane.v1.ManagedReliantAccess.last_rotated_at:type_name -> google.protobuf.Timestamp
+	34, // 53: controlplane.v1.ManagedReliantAccess.last_provisioned_at:type_name -> google.protobuf.Timestamp
+	34, // 54: controlplane.v1.ManagedReliantAccess.created_at:type_name -> google.protobuf.Timestamp
+	34, // 55: controlplane.v1.ManagedReliantAccess.updated_at:type_name -> google.protobuf.Timestamp
+	22, // 56: controlplane.v1.ReliantOverview.entitlement:type_name -> controlplane.v1.ReliantEntitlement
+	31, // 57: controlplane.v1.ReliantOverview.managed_access:type_name -> controlplane.v1.ManagedReliantAccess
+	34, // 58: controlplane.v1.GitRepo.updated_at:type_name -> google.protobuf.Timestamp
+	59, // [59:59] is the sub-list for method output_type
+	59, // [59:59] is the sub-list for method input_type
+	59, // [59:59] is the sub-list for extension type_name
+	59, // [59:59] is the sub-list for extension extendee
+	0,  // [0:59] is the sub-list for field type_name
 }
 
 func init() { file_controlplane_v1_shared_proto_init() }
@@ -3914,18 +4089,18 @@ func file_controlplane_v1_shared_proto_init() {
 	if File_controlplane_v1_shared_proto != nil {
 		return
 	}
-	file_controlplane_v1_shared_proto_msgTypes[10].OneofWrappers = []any{}
-	file_controlplane_v1_shared_proto_msgTypes[15].OneofWrappers = []any{}
-	file_controlplane_v1_shared_proto_msgTypes[16].OneofWrappers = []any{}
+	file_controlplane_v1_shared_proto_msgTypes[12].OneofWrappers = []any{}
+	file_controlplane_v1_shared_proto_msgTypes[17].OneofWrappers = []any{}
 	file_controlplane_v1_shared_proto_msgTypes[18].OneofWrappers = []any{}
 	file_controlplane_v1_shared_proto_msgTypes[20].OneofWrappers = []any{}
+	file_controlplane_v1_shared_proto_msgTypes[22].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_controlplane_v1_shared_proto_rawDesc), len(file_controlplane_v1_shared_proto_rawDesc)),
 			NumEnums:      9,
-			NumMessages:   23,
+			NumMessages:   25,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
