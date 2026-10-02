@@ -244,6 +244,14 @@ describe("Sidebar forge nav entry", () => {
       .getByRole("navigation", { name: /chat sidebar navigation/i })
       .querySelectorAll("button");
     const text = Array.from(labels).map((b) => b.textContent?.trim());
-    expect(text.slice(0, 3)).toEqual(["New chat", "Forge", "Projects"]);
+    expect(text.slice(0, 3)).toEqual(["New chat", "Deployments", "Projects"]);
+  });
+
+  // The entry is LABELLED Deployments but is still the forge entry underneath:
+  // the test id (and the route it opens) keep the forge name.
+  it("is labelled Deployments under the forge test id", () => {
+    setProject(true);
+    renderSidebar();
+    expect(screen.getByTestId("sidebar-forge-button")).toHaveTextContent("Deployments");
   });
 });

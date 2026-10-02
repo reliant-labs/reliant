@@ -314,7 +314,7 @@ describe("the non-report outcomes", () => {
     renderPanel(outcome);
     const panel = screen.getByTestId("forge-not-project");
     expect(panel.textContent).toContain("forge.yaml");
-    expect(panel.textContent).toContain("expected");
+    expect(panel.textContent).toContain("Ship this project with forge");
     expect(panel.className).not.toMatch(/destructive/);
     expect(screen.queryByTestId("forge-env-status")).toBeNull();
   });
