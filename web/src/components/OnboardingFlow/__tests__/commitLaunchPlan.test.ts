@@ -20,13 +20,15 @@ import {
   type CommitTask,
 } from "../commitLaunchPlan";
 import type { LaunchPlan } from "../types";
+import { DaemonStatus } from "@/gen/reliant/v1/daemon_registry_pb";
 
-/** controlplane.v1.DaemonStatus */
-const PENDING = 1;
-const ACTIVE = 2;
-const SUSPENDED = 3;
-const DISCONNECTED = 4;
-const FAILED = 5;
+// From the generated registry enum. These were hand-written control-plane
+// numbers, correct only while the commit point read that list.
+const PENDING = DaemonStatus.PENDING;
+const ACTIVE = DaemonStatus.ACTIVE;
+const SUSPENDED = DaemonStatus.SUSPENDED;
+const DISCONNECTED = DaemonStatus.DISCONNECTED;
+const FAILED = DaemonStatus.FAILED;
 
 function makeDeps(overrides: Partial<CommitDeps> = {}) {
   const deps = {
@@ -352,7 +354,7 @@ describe("commitLaunchPlan — what each plan actually commits", () => {
   it("resumes an existing machine rather than creating a second one", async () => {
     const deps = makeDeps({
       listDaemons: vi.fn(async () => ({
-        daemons: [{ id: "d-old", status: SUSPENDED }],
+        daemons: [{ daemonId: "d-old", status: SUSPENDED }],
       })),
     });
 
@@ -374,7 +376,7 @@ describe("commitLaunchPlan — what each plan actually commits", () => {
   it("waits on a machine that is still booting instead of resuming it", async () => {
     const deps = makeDeps({
       listDaemons: vi.fn(async () => ({
-        daemons: [{ id: "d-booting", status: PENDING }],
+        daemons: [{ daemonId: "d-booting", status: PENDING }],
       })),
       resumeDaemon: vi.fn(async () => {
         throw new Error("[failed_precondition] daemon is not suspended");
@@ -400,7 +402,7 @@ describe("commitLaunchPlan — what each plan actually commits", () => {
   ])("creates rather than resuming a %s machine", async (_label, status) => {
     const deps = makeDeps({
       listDaemons: vi.fn(async () => ({
-        daemons: [{ id: "d-dead", status }],
+        daemons: [{ daemonId: "d-dead", status }],
       })),
       createDaemon: vi.fn(async () => "d-remade"),
     });
@@ -418,8 +420,8 @@ describe("commitLaunchPlan — what each plan actually commits", () => {
     const deps = makeDeps({
       listDaemons: vi.fn(async () => ({
         daemons: [
-          { id: "d-suspended", status: SUSPENDED },
-          { id: "d-booting", status: PENDING },
+          { daemonId: "d-suspended", status: SUSPENDED },
+          { daemonId: "d-booting", status: PENDING },
         ],
       })),
     });
@@ -433,7 +435,7 @@ describe("commitLaunchPlan — what each plan actually commits", () => {
   it("does nothing when a machine is already running", async () => {
     const deps = makeDeps({
       listDaemons: vi.fn(async () => ({
-        daemons: [{ id: "d-live", status: ACTIVE }],
+        daemons: [{ daemonId: "d-live", status: ACTIVE }],
       })),
     });
 

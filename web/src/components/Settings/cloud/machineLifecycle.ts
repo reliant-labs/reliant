@@ -63,17 +63,19 @@
 import {
   DaemonLifecyclePhase,
   DaemonStatus,
-  DaemonType,
-} from '@/gen/controlplane/controlplane/v1/shared_pb'
+} from '@/gen/reliant/v1/daemon_registry_pb'
 
-// Named re-exports of the CONTROL-PLANE enums, taken from the generated
-// source rather than retyped. This is not ceremony: there are two
-// DaemonStatus enums in this app and their numeric values COLLIDE (3 is
-// SUSPENDED in control-plane and DISCONNECTED in the reliant registry), which
-// is the bug Projects/cloudDaemonStatusLabel.ts documents at length. Deriving
-// from the generated enum means a renumbered proto cannot leave a stale
-// literal behind here, and the explicit MACHINE_ prefix means no call site
-// has to remember which of the two it is holding.
+// Named re-exports of the REGISTRY enums, taken from the generated source
+// rather than retyped, so a renumbered proto cannot leave a stale literal
+// behind here.
+//
+// These pointed at control-plane's enums until the daemon list was
+// consolidated (docs/design/one-daemon-list.md). There were two DaemonStatus
+// enums whose numeric values COLLIDED — 3 was SUSPENDED in control-plane and
+// DISCONNECTED in the registry — and the MACHINE_ prefix existed so no call
+// site had to remember which one it was holding. There is now one list and one
+// enum; the prefix stays because it still reads better at the call sites, not
+// because there is an ambiguity left to guard.
 export const MACHINE_STATUS_PENDING = DaemonStatus.PENDING
 export const MACHINE_STATUS_ACTIVE = DaemonStatus.ACTIVE
 export const MACHINE_STATUS_SUSPENDED = DaemonStatus.SUSPENDED
@@ -86,7 +88,12 @@ export const LIFECYCLE_PHASE_SUSPENDING = DaemonLifecyclePhase.SUSPENDING
 export const LIFECYCLE_PHASE_SUSPENDED = DaemonLifecyclePhase.SUSPENDED
 export const LIFECYCLE_PHASE_FAILED = DaemonLifecyclePhase.FAILED
 
-const DAEMON_TYPE_EXTERNAL = DaemonType.EXTERNAL
+// The registry carries daemon_type as the string the daemon registered with,
+// not an enum, so the comparison is by name. "self_hosted" is what
+// tools_daemon.go records; "external" is control-plane's word for the same
+// thing and is accepted so a row back-filled from its vocabulary still reads
+// as unmanaged rather than silently being offered suspend/resume it cannot do.
+const EXTERNAL_DAEMON_TYPES = ['self_hosted', 'external']
 
 /** The stages a Restart passes through, for progress display. */
 export type RestartStage = 'stopping' | 'starting'
@@ -108,7 +115,7 @@ export interface LifecyclePlan {
 
 /** The subset of a Daemon this policy reads. */
 interface MachineLike {
-  daemonType: number
+  daemonType: string
   status: number
   lifecyclePhase?: number
 }
@@ -124,7 +131,7 @@ export function lifecyclePlan(
   machine: MachineLike,
   restartStage: RestartStage | null,
 ): LifecyclePlan {
-  if (machine.daemonType === DAEMON_TYPE_EXTERNAL) {
+  if (EXTERNAL_DAEMON_TYPES.includes(machine.daemonType)) {
     return { managed: false, offer: [], disabledReason: null }
   }
 

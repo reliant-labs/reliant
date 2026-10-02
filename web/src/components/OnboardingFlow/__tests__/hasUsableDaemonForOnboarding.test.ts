@@ -6,8 +6,8 @@
  * the prompt as answered and advance. The cloud-dev `make dev-electron`
  * flow pairs a local tools-daemon with the Electron app: between the
  * local-daemon-registers-with-the-control-plane moment and the lifecycle
- * status flipping to ACTIVE, the row briefly sits at IDLE. We must skip in
- * BOTH states so the user doesn't see the prompt flash and pre-empt the
+ * status flipping to ACTIVE, the row sits at PENDING. We must skip in every
+ * such state so the user doesn't see the prompt flash and pre-empt the
  * auto-advance by clicking through.
  *
  * Stale rows that are DISCONNECTED (or UNSPECIFIED, defensively) are NOT
@@ -58,17 +58,18 @@ describe("hasUsableDaemonForOnboarding", () => {
     ).toBe(true);
   });
 
-  it("returns true for an IDLE daemon — the gap between register and ACTIVE", () => {
-    // The control-plane shim maps controlplane.v1 PENDING/SUSPENDED →
-    // reliant.v1 IDLE. A managed daemon mid-provision or a local daemon
-    // whose NATS event hasn't been consumed yet sits here.
+  // This case used to assert IDLE, because the control-plane compatibility
+  // adapter collapsed PENDING and SUSPENDED into that one value — a
+  // provisioning machine and a parked one arrived indistinguishable. The
+  // adapter is gone and the registry reports the real status
+  // (docs/design/one-daemon-list.md), so the states are named directly.
+  it.each([
+    ["PENDING — a managed machine mid-provision", DaemonStatus.PENDING],
+    ["SUSPENDED — parked, and resumes on use", DaemonStatus.SUSPENDED],
+  ])("returns true for %s", (_label, status) => {
     expect(
       hasUsableDaemonForOnboarding([
-        makeDaemon({
-          daemonId: "idle-1",
-          daemonType: "self_hosted",
-          status: DaemonStatus.IDLE,
-        }),
+        makeDaemon({ daemonId: "d-1", daemonType: "managed", status }),
       ]),
     ).toBe(true);
   });

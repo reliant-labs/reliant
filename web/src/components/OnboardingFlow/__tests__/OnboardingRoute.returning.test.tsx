@@ -74,7 +74,7 @@ const USER_CREATED_MS = Date.UTC(2026, 0, 10, 0, 0, 0);
  */
 function daemon(status: DaemonStatus, createdAtMs = USER_CREATED_MS + 60_000): DaemonInfo {
   return {
-    id: "d1",
+    daemonId: "d1",
     status,
     createdAt: { seconds: BigInt(Math.floor(createdAtMs / 1000)) },
   } as unknown as DaemonInfo;
@@ -170,8 +170,12 @@ describe("OnboardingRoute — returning user", () => {
   });
 
   it("records the completion so the flag is repaired for good", async () => {
+    // PENDING rather than IDLE: IDLE is declared in the enum but the list
+    // handler never emits it, so the fixture was pinning a state that cannot
+    // occur. A machine still provisioning is the real version of the case this
+    // covers — the user set one up, so onboarding is genuinely done.
     mockUseDaemonList.mockReturnValue({
-      data: [daemon(DaemonStatus.IDLE)],
+      data: [daemon(DaemonStatus.PENDING)],
       isLoading: false,
     });
 
@@ -424,7 +428,7 @@ describe("OnboardingRoute — returning user", () => {
   // be shown to postdate the account.
   it("does NOT heal on a daemon with no creation time", async () => {
     mockUseDaemonList.mockReturnValue({
-      data: [{ id: "d1", status: DaemonStatus.ACTIVE } as unknown as DaemonInfo],
+      data: [{ daemonId: "d1", status: DaemonStatus.ACTIVE } as unknown as DaemonInfo],
       isLoading: false,
     });
 

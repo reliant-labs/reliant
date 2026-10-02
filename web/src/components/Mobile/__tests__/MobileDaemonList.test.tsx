@@ -7,8 +7,11 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { VirtuosoMockContext } from "react-virtuoso";
-import { DaemonSize, DaemonStatus, DaemonType } from "@/gen/controlplane/controlplane/v1/shared_pb";
-import type { Daemon } from "@/services/controlPlane/daemon";
+import { DaemonStatus } from "@/gen/reliant/v1/daemon_registry_pb";
+// Creating a machine is still a control-plane COMMAND, so the create payload
+// carries control-plane's DaemonType/DaemonSize. Only the LIST moved.
+import { DaemonSize, DaemonType } from "@/gen/controlplane/controlplane/v1/shared_pb";
+import type { DaemonInfo as Daemon } from "@/gen/reliant/v1/daemon_registry_pb";
 
 const mocks = vi.hoisted(() => ({
   daemons: [] as Daemon[],
@@ -37,10 +40,10 @@ const { MobileDaemonList } = await import("../MobileDaemonList");
 
 function daemon(overrides: Partial<Daemon> = {}): Daemon {
   return {
-    id: "d1",
-    name: "work-box",
+    daemonId: "d1",
+    hostname: "work-box",
     status: DaemonStatus.ACTIVE,
-    size: DaemonSize.DAEMON_SIZE_SMALL,
+    size: "small",
     ...overrides,
   } as Daemon;
 }
@@ -89,7 +92,7 @@ describe("MobileDaemonList", () => {
   });
 
   it("keeps the new machine action available when machines already exist", async () => {
-    mocks.daemons = [daemon({ id: "d1", name: "work-box" })];
+    mocks.daemons = [daemon({ daemonId: "d1", hostname: "work-box" })];
     const { default: userEvent } = await import("@testing-library/user-event");
     const user = userEvent.setup();
     renderList();

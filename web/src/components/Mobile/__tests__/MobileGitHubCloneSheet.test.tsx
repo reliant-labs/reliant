@@ -7,7 +7,7 @@
 
 import { render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { DaemonStatus } from "../../../gen/controlplane/controlplane/v1/shared_pb";
+import { DaemonStatus } from "../../../gen/reliant/v1/daemon_registry_pb";
 import type { Daemon } from "../../../services/controlPlane/daemon";
 import type { GitRepo } from "../../../services/controlPlane/git/types";
 
@@ -48,10 +48,10 @@ beforeEach(() => {
 describe("MobileGitHubCloneSheet", () => {
   it("only lists ACTIVE daemons as clone targets", () => {
     mocks.daemons = [
-      daemon({ id: "d-active", status: DaemonStatus.ACTIVE, name: "Active Box" }),
-      daemon({ id: "d-pending", status: DaemonStatus.PENDING, name: "Pending Box" }),
-      daemon({ id: "d-suspended", status: DaemonStatus.SUSPENDED, name: "Suspended Box" }),
-      daemon({ id: "d-failed", status: DaemonStatus.FAILED, name: "Failed Box" }),
+      daemon({ daemonId: "d-active", status: DaemonStatus.ACTIVE, hostname: "Active Box" }),
+      daemon({ daemonId: "d-pending", status: DaemonStatus.PENDING, hostname: "Pending Box" }),
+      daemon({ daemonId: "d-suspended", status: DaemonStatus.SUSPENDED, hostname: "Suspended Box" }),
+      daemon({ daemonId: "d-failed", status: DaemonStatus.FAILED, hostname: "Failed Box" }),
     ];
     render(<MobileGitHubCloneSheet repo={repo} onClose={vi.fn()} />);
 
@@ -62,13 +62,13 @@ describe("MobileGitHubCloneSheet", () => {
   });
 
   it("shows an empty-machines message when no daemon is ACTIVE", () => {
-    mocks.daemons = [daemon({ id: "d-pending", status: DaemonStatus.PENDING })];
+    mocks.daemons = [daemon({ daemonId: "d-pending", status: DaemonStatus.PENDING })];
     render(<MobileGitHubCloneSheet repo={repo} onClose={vi.fn()} />);
     expect(screen.getByText(/no active machines available/i)).toBeInTheDocument();
   });
 
   it("clones through gitService.cloneRepo with the selected daemon id and branch", async () => {
-    mocks.daemons = [daemon({ id: "d-active", status: DaemonStatus.ACTIVE, name: "Active Box" })];
+    mocks.daemons = [daemon({ daemonId: "d-active", status: DaemonStatus.ACTIVE, hostname: "Active Box" })];
     mocks.cloneRepo.mockResolvedValue({ clonedPath: "/home/workspace/projects/widgets" });
     const { default: userEvent } = await import("@testing-library/user-event");
     const user = userEvent.setup();
@@ -95,13 +95,13 @@ describe("MobileGitHubCloneSheet", () => {
   });
 
   it("disables clone until a daemon is picked", () => {
-    mocks.daemons = [daemon({ id: "d-active", status: DaemonStatus.ACTIVE, name: "Active Box" })];
+    mocks.daemons = [daemon({ daemonId: "d-active", status: DaemonStatus.ACTIVE, hostname: "Active Box" })];
     render(<MobileGitHubCloneSheet repo={repo} onClose={vi.fn()} />);
     expect(screen.getByRole("button", { name: /clone repository/i })).toBeDisabled();
   });
 
   it("shows an honest in-progress warning while cloning, and a retry on failure", async () => {
-    mocks.daemons = [daemon({ id: "d-active", status: DaemonStatus.ACTIVE, name: "Active Box" })];
+    mocks.daemons = [daemon({ daemonId: "d-active", status: DaemonStatus.ACTIVE, hostname: "Active Box" })];
     let resolveClone: (v: { clonedPath: string }) => void;
     mocks.cloneRepo.mockReturnValue(
       new Promise((resolve) => {
@@ -121,7 +121,7 @@ describe("MobileGitHubCloneSheet", () => {
   });
 
   it("prevents dismissing the sheet while a clone is in flight", async () => {
-    mocks.daemons = [daemon({ id: "d-active", status: DaemonStatus.ACTIVE, name: "Active Box" })];
+    mocks.daemons = [daemon({ daemonId: "d-active", status: DaemonStatus.ACTIVE, hostname: "Active Box" })];
     mocks.cloneRepo.mockReturnValue(new Promise(() => {}));
     const { default: userEvent } = await import("@testing-library/user-event");
     const user = userEvent.setup();

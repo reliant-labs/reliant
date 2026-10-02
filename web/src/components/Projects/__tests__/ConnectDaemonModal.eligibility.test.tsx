@@ -51,12 +51,18 @@ vi.mock("../../RedeemCouponForm", () => ({
 
 vi.mock("@/hooks/useGoToBilling", () => ({ useGoToBilling: () => vi.fn() }));
 
-// The modal dynamically imports these inside startCloudDaemon. An empty list
-// is the brand-new-user case, which is the one that reaches CreateDaemon.
+// startCloudDaemon reads the daemon REGISTRY to decide whether there is
+// already a machine to use (docs/design/one-daemon-list.md) and then issues
+// control-plane COMMANDS, so the two are stubbed separately. An empty list is
+// the brand-new-user case, which is the one that reaches CreateDaemon.
 const mockListDaemons = vi.fn();
+vi.mock("@/api/grpc-client", () => ({
+  grpcClient: {
+    daemonRegistry: () => ({ listDaemons: () => mockListDaemons() }),
+  },
+}));
+
 vi.mock("../../../services/controlPlane/daemon", () => ({
-  listDaemons: () => mockListDaemons(),
-  hasActiveDaemon: (daemons: unknown[]) => daemons.length > 0,
   resumeDaemon: vi.fn(),
 }));
 

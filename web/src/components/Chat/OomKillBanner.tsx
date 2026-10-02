@@ -22,8 +22,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { timestampDate } from "@bufbuild/protobuf/wkt";
 import { useDaemonList } from "@/hooks/useOnboardingQueries";
 import { useDaemonStatus } from "@/hooks/useDaemonStatus";
-import { DaemonSize } from "@/gen/controlplane/controlplane/v1/shared_pb";
-import type { Daemon } from "@/services/controlPlane/daemon";
+import type { DaemonInfo as Daemon } from "@/gen/reliant/v1/daemon_registry_pb";
 
 const DISMISS_KEY = "reliant.oomKillBanner.dismissed";
 
@@ -35,13 +34,6 @@ const RECENT_WINDOW_MS = 30 * 60 * 1000;
 /** Poll faster than useDaemonList's default (mount/focus only) while the
  *  banner is mounted so a fresh kill surfaces without a tab refocus. */
 const POLL_INTERVAL_MS = 60_000;
-
-const SIZE_NAMES: Record<number, string> = {
-  [DaemonSize.DAEMON_SIZE_SMALL]: "small",
-  [DaemonSize.DAEMON_SIZE_MEDIUM]: "medium",
-  [DaemonSize.DAEMON_SIZE_LARGE]: "large",
-  [DaemonSize.DAEMON_SIZE_XL]: "xl",
-};
 
 function readDismissed(): string {
   if (typeof window === "undefined") return "";
@@ -65,9 +57,19 @@ function lastOomKillMs(d: Daemon): number {
 }
 
 /** "small · 4Gi", falling back gracefully when either half is unknown. */
+/**
+ * The parenthetical after the machine name, e.g. "(medium)".
+ *
+ * Size comes through the registry as the lifecycle mirror's own string
+ * ("medium"), so it is rendered directly rather than mapped from the
+ * control-plane size enum. The memory LIMIT that used to appear alongside it is
+ * part of the provisioning spec, which lives only in control-plane and is
+ * deliberately not on the one list — fetching a second per-machine RPC to
+ * decorate a dismissible banner is not worth a round-trip, and the size already
+ * carries the information a user acts on.
+ */
 function machineDescriptor(d: Daemon): string {
-  const parts = [SIZE_NAMES[d.size], d.resources?.memoryLimit].filter(Boolean);
-  return parts.join(" · ");
+  return d.size;
 }
 
 export function OomKillBanner() {
@@ -87,12 +89,12 @@ export function OomKillBanner() {
     // Prefer the daemon the app is currently attached to; otherwise surface
     // the most recently killed one.
     return (
-      recent.find((d) => d.id === activeDaemon?.daemonId) ??
+      recent.find((d) => d.daemonId === activeDaemon?.daemonId) ??
       recent.reduce((a, b) => (lastOomKillMs(a) >= lastOomKillMs(b) ? a : b))
     );
   }, [daemons, activeDaemon?.daemonId]);
 
-  const sig = oomDaemon ? `${oomDaemon.id}:${lastOomKillMs(oomDaemon)}` : "";
+  const sig = oomDaemon ? `${oomDaemon.daemonId}:${lastOomKillMs(oomDaemon)}` : "";
 
   const dismiss = useCallback(() => {
     setDismissedSig(sig);

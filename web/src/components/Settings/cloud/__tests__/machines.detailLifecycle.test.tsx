@@ -93,29 +93,39 @@ vi.mock('@/services/controlPlane/environments', () => ({
   revokeDaemonToken: vi.fn(),
 }))
 
+// The machine LIST comes from reliant's daemon registry
+// (docs/design/one-daemon-list.md). It is fed from the same mocks.listDaemons
+// the tests already drive, so their setup calls keep working unchanged.
+vi.mock('@/api/grpc-client', () => ({
+  grpcClient: {
+    daemonRegistry: () => ({
+      listDaemons: async () => mocks.listDaemons(),
+    }),
+  },
+}))
+
 import { MachinesSection } from '@/components/Settings/cloud/machines'
+import { DaemonLifecyclePhase, DaemonStatus } from '@/gen/reliant/v1/daemon_registry_pb'
 
-const ACTIVE = 2
-const SUSPENDED = 3
-const DISCONNECTED = 4
-const FAILED = 5
+const ACTIVE = DaemonStatus.ACTIVE
+const SUSPENDED = DaemonStatus.SUSPENDED
+const DISCONNECTED = DaemonStatus.DISCONNECTED
+const FAILED = DaemonStatus.FAILED
 
-const PHASE_READY = 3
-const PHASE_SUSPENDED = 5
+const PHASE_READY = DaemonLifecyclePhase.READY
+const PHASE_SUSPENDED = DaemonLifecyclePhase.SUSPENDED
 
+// A registry row: identity, status and lifecycle. This is what the detail
+// view's lifecycle buttons read (docs/design/one-daemon-list.md).
 function cloudDaemon(over: Record<string, unknown> = {}) {
   return {
-    id: 'd-1',
-    name: 'owner-machine',
-    daemonType: 1, // MANAGED
+    daemonId: 'd-1',
+    hostname: 'owner-machine',
+    daemonType: 'managed',
     status: ACTIVE,
     lifecyclePhase: PHASE_READY,
-    resources: { cpuRequest: '2', memoryRequest: '4Gi' },
-    storageSize: '20Gi',
-    hostname: '',
     platform: '',
-    size: 2,
-    idleTimeout: '30m',
+    size: 'medium',
     lastStatusMessage: '',
     ...over,
   }
@@ -123,20 +133,40 @@ function cloudDaemon(over: Record<string, unknown> = {}) {
 
 function selfHostedDaemon(over: Record<string, unknown> = {}) {
   return {
-    id: 'd-1',
-    name: 'seans-macbook',
-    daemonType: 2, // EXTERNAL
-    status: ACTIVE,
-    lifecyclePhase: 0,
-    resources: undefined,
-    storageSize: '',
+    daemonId: 'd-1',
     hostname: 'seans-macbook',
+    daemonType: 'self_hosted',
+    status: ACTIVE,
+    lifecyclePhase: DaemonLifecyclePhase.UNSPECIFIED,
     platform: 'darwin',
-    size: 0,
-    idleTimeout: '',
+    size: '',
     lastStatusMessage: '',
     ...over,
   }
+}
+
+// The control-plane half: the provisioning spec the registry deliberately does
+// not carry. Constant across these tests, which are about lifecycle gating.
+const CP_SPEC = {
+  resources: { cpuRequest: '2', memoryRequest: '4Gi' },
+  storageSize: '20Gi',
+  idleTimeout: '30m',
+  updatedAt: undefined,
+}
+
+/**
+ * Point BOTH halves at one machine.
+ *
+ * The detail view reads status and lifecycle from the registry list and the
+ * spec from control-plane's GetDaemon, so a fixture that set only one would
+ * leave the other empty and the test would fail for the wrong reason.
+ */
+function showMachine(row: Record<string, unknown>) {
+  mocks.listDaemons.mockResolvedValue({ daemons: [row] })
+  mocks.getDaemon.mockResolvedValue({
+    daemon: { ...CP_SPEC, id: row.daemonId },
+    workspaceBaseDomain: '',
+  })
 }
 
 function renderDetail() {
@@ -158,10 +188,7 @@ describe('machine detail — lifecycle actions', () => {
   })
 
   it('offers Suspend and Restart on a running cloud machine', async () => {
-    mocks.getDaemon.mockResolvedValue({
-      daemon: cloudDaemon(),
-      workspaceBaseDomain: '',
-    })
+    showMachine(cloudDaemon())
     renderDetail()
 
     expect(await screen.findByRole('button', { name: /^suspend$/i })).toBeEnabled()
@@ -170,10 +197,7 @@ describe('machine detail — lifecycle actions', () => {
   })
 
   it('offers Resume — and neither Suspend nor Restart — on a suspended cloud machine', async () => {
-    mocks.getDaemon.mockResolvedValue({
-      daemon: cloudDaemon({ status: SUSPENDED, lifecyclePhase: PHASE_SUSPENDED }),
-      workspaceBaseDomain: '',
-    })
+    showMachine(cloudDaemon({ status: SUSPENDED, lifecyclePhase: PHASE_SUSPENDED }))
     renderDetail()
 
     expect(await screen.findByRole('button', { name: /^resume$/i })).toBeEnabled()
@@ -184,10 +208,7 @@ describe('machine detail — lifecycle actions', () => {
   // ResumeDaemon refuses anything that is not SUSPENDED, so this button can
   // only ever produce an error. It is disabled and says why instead.
   it('disables Resume on a FAILED machine and explains why', async () => {
-    mocks.getDaemon.mockResolvedValue({
-      daemon: cloudDaemon({ status: FAILED, lifecyclePhase: 6 }),
-      workspaceBaseDomain: '',
-    })
+    showMachine(cloudDaemon({ status: FAILED, lifecyclePhase: 6 }))
     renderDetail()
 
     const resume = await screen.findByRole('button', { name: /^resume$/i })
@@ -196,10 +217,7 @@ describe('machine detail — lifecycle actions', () => {
   })
 
   it('shows no lifecycle buttons for a self-hosted machine, and says why', async () => {
-    mocks.getDaemon.mockResolvedValue({
-      daemon: selfHostedDaemon(),
-      workspaceBaseDomain: '',
-    })
+    showMachine(selfHostedDaemon())
     renderDetail()
 
     await screen.findByRole('heading', { name: /seans-macbook/i })
@@ -211,16 +229,12 @@ describe('machine detail — lifecycle actions', () => {
 
   it('confirms first, then restarts by suspending and resuming in order', async () => {
     const user = userEvent.setup()
-    // Poll: the pod is gone on the first read after suspend.
-    mocks.getDaemon.mockResolvedValue({
-      daemon: cloudDaemon({ status: SUSPENDED, lifecyclePhase: PHASE_SUSPENDED }),
-      workspaceBaseDomain: '',
-    })
-    // First render must be the RUNNING machine so Restart is offered.
-    mocks.getDaemon.mockResolvedValueOnce({
-      daemon: cloudDaemon(),
-      workspaceBaseDomain: '',
-    })
+    // The machine starts RUNNING (the only state that offers Restart) and
+    // reaches SUSPENDED once suspend lands — which is the transition
+    // restartMachine polls for before it resumes. Both the first render and
+    // that poll now read the registry list, so the sequence lives there.
+    showMachine(cloudDaemon({ status: SUSPENDED, lifecyclePhase: PHASE_SUSPENDED }))
+    mocks.listDaemons.mockResolvedValueOnce({ daemons: [cloudDaemon()] })
     renderDetail()
 
     await user.click(await screen.findByRole('button', { name: /^restart$/i }))
@@ -254,10 +268,7 @@ describe('machine detail — status presentation', () => {
   // twice in the header — once as the status badge (red) and once as a
   // separate connection badge (grey). One state, one badge.
   it('renders exactly one status badge in the header when disconnected', async () => {
-    mocks.getDaemon.mockResolvedValue({
-      daemon: cloudDaemon({ status: DISCONNECTED, lifecyclePhase: PHASE_READY }),
-      workspaceBaseDomain: '',
-    })
+    showMachine(cloudDaemon({ status: DISCONNECTED, lifecyclePhase: PHASE_READY }))
     renderDetail()
 
     const header = await screen.findByTestId('machine-detail-header')
@@ -267,10 +278,7 @@ describe('machine detail — status presentation', () => {
   })
 
   it('renders one badge for a running machine too', async () => {
-    mocks.getDaemon.mockResolvedValue({
-      daemon: cloudDaemon(),
-      workspaceBaseDomain: '',
-    })
+    showMachine(cloudDaemon())
     renderDetail()
 
     const header = await screen.findByTestId('machine-detail-header')
@@ -282,13 +290,12 @@ describe('machine detail — status presentation', () => {
   // "Connected at: <timestamp>" beside a disconnected machine reads as a
   // live connection. The timestamp is the LAST one.
   it('labels the connection timestamp "Last connected" while disconnected', async () => {
-    mocks.getDaemon.mockResolvedValue({
-      daemon: cloudDaemon({
+    showMachine(
+      cloudDaemon({
         status: DISCONNECTED,
         connectedAt: { seconds: 1750000000n, nanos: 0 },
       }),
-      workspaceBaseDomain: '',
-    })
+    )
     renderDetail()
 
     expect(await screen.findByText(/last connected/i)).toBeInTheDocument()
@@ -296,10 +303,7 @@ describe('machine detail — status presentation', () => {
   })
 
   it('still says "Connected at" while the machine is actually connected', async () => {
-    mocks.getDaemon.mockResolvedValue({
-      daemon: cloudDaemon({ connectedAt: { seconds: 1750000000n, nanos: 0 } }),
-      workspaceBaseDomain: '',
-    })
+    showMachine(cloudDaemon({ connectedAt: { seconds: 1750000000n, nanos: 0 } }))
     renderDetail()
 
     expect(await screen.findByText(/^connected at$/i)).toBeInTheDocument()

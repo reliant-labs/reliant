@@ -14,9 +14,10 @@
  * another lifecycle transition.
  */
 
-import { DaemonStatus } from "@/gen/controlplane/controlplane/v1/shared_pb";
-import { DaemonSize } from "@/gen/controlplane/controlplane/v1/shared_pb";
-import type { Daemon } from "@/services/controlPlane/daemon";
+import {
+  DaemonStatus,
+  type DaemonInfo as Daemon,
+} from "@/gen/reliant/v1/daemon_registry_pb";
 import { timestampDate } from "@bufbuild/protobuf/wkt";
 
 /** How a status renders, and whether Resume applies to it. */
@@ -81,28 +82,44 @@ export function canSuspend(daemon: Daemon): boolean {
   return daemon.status === DaemonStatus.ACTIVE;
 }
 
-const SIZE_LABELS: Record<number, string> = {
-  [DaemonSize.DAEMON_SIZE_SMALL]: "Small",
-  [DaemonSize.DAEMON_SIZE_MEDIUM]: "Medium",
-  [DaemonSize.DAEMON_SIZE_LARGE]: "Large",
-  [DaemonSize.DAEMON_SIZE_XL]: "XL",
+const SIZE_LABELS: Record<string, string> = {
+  small: "Small",
+  medium: "Medium",
+  large: "Large",
+  xl: "XL",
 };
 
-/** Size badge text, or "" when the control plane didn't report a tier. */
+/**
+ * Size badge text, or "" when no tier was reported.
+ *
+ * The registry carries size as the lifecycle mirror's string ("medium"), not
+ * the control-plane enum, so this maps names rather than numbers. Self-hosted
+ * machines have no size at all and correctly render nothing.
+ */
 export function sizeLabel(daemon: Daemon): string {
   return SIZE_LABELS[daemon.size] ?? "";
 }
 
 /**
- * When the daemon was last seen, as epoch ms: the moment it disconnected, or
- * null while it is connected (or has never connected). The control plane does
- * not report a heartbeat — Daemon.last_heartbeat is reserved, its column was
- * dropped — so disconnected_at is the only "last seen" fact on the wire.
+ * When the daemon was last seen, as epoch ms, or null while it is attached (or
+ * has never attached).
+ *
+ * This reads `lastHeartbeat` — the attachment lease's last stream activity —
+ * where it previously read control-plane's `disconnected_at`. The two answer
+ * the same user-facing question from opposite directions, and the registry's is
+ * the more honest one: it is observed by whoever terminates the daemon's
+ * stream, rather than inferred from a lifecycle column.
+ *
+ * It is null for an ATTACHED daemon by the same rule as before — "last seen" is
+ * only meaningful once a machine is no longer here — and null for a detached
+ * one too, because the lease row is deleted on disconnect and this service
+ * keeps no history of it. Callers render "—", which is the truthful answer: the
+ * registry genuinely does not know.
  */
 export function lastSeenMs(daemon: Daemon): number | null {
-  if (!daemon.disconnectedAt) return null;
+  if (!daemon.lastHeartbeat) return null;
   try {
-    return timestampDate(daemon.disconnectedAt).getTime();
+    return timestampDate(daemon.lastHeartbeat).getTime();
   } catch {
     // A malformed timestamp should degrade to "no heartbeat", not crash the
     // list — this data crosses a network boundary from the daemon gateway.

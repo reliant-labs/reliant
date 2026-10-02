@@ -63,24 +63,27 @@ import {
 } from "./ui";
 import {
   DaemonSize,
-  DaemonStatus,
-  DaemonType,
   PortAccessMode,
   createEnvironment,
   deleteDaemon,
   describeError,
   getComputeSubscription,
   getDaemon,
-  listDaemons,
   listPortAccessRules,
   portAccessRulesQueryKey,
   removePortAccess,
   resumeEnvironment,
   setPortAccess,
   suspendDaemon,
-  type Daemon,
   type PortAccessRule,
 } from "@/services/controlPlane/environments";
+import { create } from "@bufbuild/protobuf";
+import { grpcClient } from "@/api/grpc-client";
+import {
+  DaemonStatus,
+  ListDaemonsRequestSchema,
+  type DaemonInfo as Daemon,
+} from "@/gen/reliant/v1/daemon_registry_pb";
 import {
   LIFECYCLE_PHASE_UNSPECIFIED,
   lifecyclePlan,
@@ -100,6 +103,12 @@ import { formatOverageRate } from "./billingUtils";
 // ── Query keys ──────────────────────────────────────────────────────────────
 const QK = {
   daemons: ["cp", "environments", "list"] as const,
+  // The detail view reads the same registry list but on its own cadence (2s
+  // during a restart). A separate key rather than sharing QK.daemons: two
+  // observers of one key negotiate a single interval, so sharing would either
+  // slow the restart progress copy to the list's 15s or speed the whole list
+  // up to 2s for every mounted consumer.
+  detailList: ["cp", "environments", "detailList"] as const,
   daemon: (id: string) => ["cp", "environments", "detail", id] as const,
   // Shared with the header DetectedPortsChip's one-click-public toggle so a
   // "Make public" there invalidates this panel's rules query and vice-versa.
@@ -172,8 +181,14 @@ function daemonFailureReason(d: Daemon): string | null {
   return message ? message : null;
 }
 
+// The registry carries daemon_type as the string the daemon registered with.
+// "self_hosted" is what tools_daemon.go records; "external" is control-plane's
+// word for the same thing, accepted so a row back-filled from its vocabulary
+// is still treated as unmanaged.
+const EXTERNAL_DAEMON_TYPES = ["self_hosted", "external"];
+
 function isExternalDaemon(d: Pick<Daemon, "daemonType">): boolean {
-  return d.daemonType === DaemonType.EXTERNAL;
+  return EXTERNAL_DAEMON_TYPES.includes(d.daemonType);
 }
 
 // A UUID (v4-shaped, 36 chars with dashes at the standard offsets) is not a
@@ -187,12 +202,11 @@ function looksLikeBareUuid(name: string): boolean {
   return UUID_RE.test(name.trim());
 }
 
-export function daemonDisplayName(d: Pick<Daemon, "id" | "name" | "hostname">): string {
-  const name = d.name?.trim() ?? "";
-  const isPlaceholder = !name || name === d.id || looksLikeBareUuid(name);
+export function daemonDisplayName(d: Pick<Daemon, "daemonId" | "hostname">): string {
+  const name = d.hostname?.trim() ?? "";
+  const isPlaceholder = !name || name === d.daemonId || looksLikeBareUuid(name);
   if (!isPlaceholder) return name;
-  if (d.hostname?.trim()) return d.hostname.trim();
-  const shortId = (d.id || "").slice(0, 8);
+  const shortId = (d.daemonId || "").slice(0, 8);
   return shortId ? `Self-hosted machine (${shortId})` : "Self-hosted machine";
 }
 
@@ -210,13 +224,6 @@ const SIZE_TIERS = [
   { value: DaemonSize.DAEMON_SIZE_LARGE, name: "large", label: "Large", specs: "4 CPU · 8GB RAM" },
   { value: DaemonSize.DAEMON_SIZE_XL, name: "xl", label: "XL", specs: "8 CPU · 16GB RAM" },
 ] as const;
-
-const sizeLabel: Record<number, string> = {
-  [DaemonSize.DAEMON_SIZE_SMALL]: "Small",
-  [DaemonSize.DAEMON_SIZE_MEDIUM]: "Medium",
-  [DaemonSize.DAEMON_SIZE_LARGE]: "Large",
-  [DaemonSize.DAEMON_SIZE_XL]: "XL",
-};
 
 // ── Copy for the un-funded state ────────────────────────────────────────────
 //
@@ -277,7 +284,7 @@ const accessModeLabel: Record<number, string> = {
  * the server sent no price list or the size is unknown to it.
  */
 function suspendedFeeOf(d: Daemon, pricing?: DaemonPricingLike): string | null {
-  const name = SIZE_TIERS.find((t) => t.value === d.size)?.name;
+  const name = SIZE_TIERS.find((t) => t.name === d.size)?.name;
   const row = name ? pricing?.sizes.find((s) => s.size === name) : undefined;
   return row ? suspendedFeeLabel(pricing, Number(row.storageGib)) : null;
 }
@@ -449,9 +456,19 @@ function EnvironmentsList({ onOpenDetail }: { onOpenDetail: (id: string) => void
   // the destination cannot drift; see the hook's own header.
   const goToBilling = useGoToBilling();
 
+  // The LIST comes from reliant's registry — the one daemon list
+  // (docs/design/one-daemon-list.md). The per-machine DETAIL view below still
+  // calls control-plane's GetDaemon, which is kept deliberately: port-access
+  // rules, the workspace base domain and the provisioning spec are
+  // control-plane concerns with no reliant equivalent.
   const daemonsQ = useQuery({
     queryKey: QK.daemons,
-    queryFn: async () => (await listDaemons()).daemons,
+    queryFn: async () => {
+      const resp = await grpcClient
+        .daemonRegistry()
+        .listDaemons(create(ListDaemonsRequestSchema));
+      return resp.daemons;
+    },
     staleTime: 10_000,
     refetchInterval: 15_000,
   });
@@ -632,7 +649,7 @@ function EnvironmentsList({ onOpenDetail }: { onOpenDetail: (id: string) => void
         target={deleteTarget}
         isPending={deleteMut.isPending}
         onClose={() => setDeleteTarget(null)}
-        onConfirm={() => deleteTarget && deleteMut.mutate(deleteTarget.id)}
+        onConfirm={() => deleteTarget && deleteMut.mutate(deleteTarget.daemonId)}
       />
     </div>
   );
@@ -672,16 +689,20 @@ function ManagedMachinesTable({
           const badge = statusBadge[status];
           const failureReason = daemonFailureReason(d);
           const isSuspended = d.status === DaemonStatus.SUSPENDED;
+          // Specs come from the size tier rather than from per-machine
+          // resource requests. Those requests are part of the provisioning
+          // SPEC, which lives only in control-plane and is deliberately absent
+          // from the one list; the size determines them, and SIZE_TIERS already
+          // states the mapping this page renders everywhere else. A machine
+          // with no reported size (every self-hosted one) shows "—".
           const resources =
-            [d.resources?.cpuRequest, d.resources?.memoryRequest, d.storageSize]
-              .filter(Boolean)
-              .join(" · ") || "—";
+            SIZE_TIERS.find((t) => t.name === d.size)?.specs || "—";
           return (
-            <Tr key={d.id}>
+            <Tr key={d.daemonId}>
               <Td>
                 <button
                   type="button"
-                  onClick={() => onOpenDetail(d.id)}
+                  onClick={() => onOpenDetail(d.daemonId)}
                   className="font-medium text-foreground hover:text-primary hover:underline"
                 >
                   {daemonDisplayName(d)}
@@ -713,7 +734,7 @@ function ManagedMachinesTable({
                     variant="ghost"
                     size="sm"
                     disabled={busy}
-                    onClick={() => (isSuspended ? onResume(d.id) : onSuspend(d.id))}
+                    onClick={() => (isSuspended ? onResume(d.daemonId) : onSuspend(d.daemonId))}
                   >
                     {isSuspended ? <Play className="h-4 w-4" /> : <Pause className="h-4 w-4" />}
                     {isSuspended ? "Resume" : "Suspend"}
@@ -766,13 +787,13 @@ function SelfHostedMachinesTable({
           const connected = d.status === DaemonStatus.ACTIVE;
           const lastSeen = connected
             ? "Connected now"
-            : fmtTimestamp(d.disconnectedAt);
+            : fmtTimestamp(d.connectedAt);
           return (
-            <Tr key={d.id}>
+            <Tr key={d.daemonId}>
               <Td>
                 <button
                   type="button"
-                  onClick={() => onOpenDetail(d.id)}
+                  onClick={() => onOpenDetail(d.daemonId)}
                   className="font-medium text-foreground hover:text-primary hover:underline"
                 >
                   {daemonDisplayName(d)}
@@ -829,7 +850,7 @@ function RemoveMachineModal({
         ) : (
           <>
             Are you sure you want to delete{" "}
-            <span className="font-semibold text-foreground">{target?.name}</span>? This action cannot be undone.
+            <span className="font-semibold text-foreground">{target ? daemonDisplayName(target) : ""}</span>? This action cannot be undone.
           </>
         )}
       </p>
@@ -1155,6 +1176,27 @@ function EnvironmentDetail({ daemonId, onBack }: { daemonId: string; onBack: () 
   // status is not sufficient to tell you one is in flight.
   const [restartStage, setRestartStage] = useState<RestartStage | null>(null);
 
+  // The detail view reads BOTH halves, from the service that owns each.
+  //
+  // Status, lifecycle phase and liveness come from the one daemon list — the
+  // registry is the only thing that knows whether a machine has actually
+  // attached, and the lifecycle buttons below act on that. The provisioning
+  // SPEC and the preview-proxy facts (port-access rules, the workspace base
+  // domain, idle timeout, storage) come from control-plane's GetDaemon, which
+  // is kept deliberately for exactly this: they have no reliant equivalent.
+  // See docs/design/one-daemon-list.md.
+  const listQ = useQuery({
+    queryKey: QK.detailList,
+    queryFn: async () => {
+      const resp = await grpcClient
+        .daemonRegistry()
+        .listDaemons(create(ListDaemonsRequestSchema));
+      return resp.daemons;
+    },
+    refetchInterval: restartStage ? 2_000 : 15_000,
+  });
+  const daemon = listQ.data?.find((d) => d.daemonId === daemonId);
+
   const daemonQ = useQuery({
     queryKey: QK.daemon(daemonId),
     queryFn: () => getDaemon(daemonId),
@@ -1164,11 +1206,12 @@ function EnvironmentDetail({ daemonId, onBack }: { daemonId: string; onBack: () 
     // to look alive.
     refetchInterval: restartStage ? 2_000 : 15_000,
   });
-  const daemon = daemonQ.data?.daemon;
+  const spec = daemonQ.data?.daemon;
   const workspaceBaseDomain = daemonQ.data?.workspaceBaseDomain ?? "";
 
   const refetchAll = () => {
     qc.invalidateQueries({ queryKey: QK.daemon(daemonId) });
+    qc.invalidateQueries({ queryKey: QK.detailList });
     qc.invalidateQueries({ queryKey: QK.daemons });
   };
 
@@ -1208,11 +1251,19 @@ function EnvironmentDetail({ daemonId, onBack }: { daemonId: string; onBack: () 
       await restartMachine({
         suspend: () => suspendDaemon(daemonId),
         resume: () => resumeEnvironment(daemonId),
+        // Polls the REGISTRY, which owns status and lifecycle phase. This
+        // read used to be control-plane's GetDaemon; pointing it at the one
+        // list keeps the signal restartMachine waits on (phase SUSPENDED) and
+        // the status the UI shows from coming out of two different services,
+        // which is the disagreement docs/design/one-daemon-list.md removes.
         poll: async () => {
-          const res = await getDaemon(daemonId);
+          const resp = await grpcClient
+            .daemonRegistry()
+            .listDaemons(create(ListDaemonsRequestSchema));
+          const row = resp.daemons.find((d) => d.daemonId === daemonId);
           return {
-            phase: res.daemon?.lifecyclePhase ?? LIFECYCLE_PHASE_UNSPECIFIED,
-            status: res.daemon?.status ?? 0,
+            phase: row?.lifecyclePhase ?? LIFECYCLE_PHASE_UNSPECIFIED,
+            status: row?.status ?? 0,
           };
         },
         sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
@@ -1331,12 +1382,12 @@ function EnvironmentDetail({ daemonId, onBack }: { daemonId: string; onBack: () 
                     </>
                   ) : (
                     <>
-                      <InfoRow label="Size" value={sizeLabel[daemon.size] ?? "Custom"} />
-                      <InfoRow label="Storage" value={daemon.storageSize} />
+                      <InfoRow label="Size" value={SIZE_TIERS.find((t) => t.name === daemon.size)?.label ?? "Custom"} />
+                      <InfoRow label="Storage" value={spec?.storageSize} />
                     </>
                   )}
                   <InfoRow label="Created" value={fmtTimestamp(daemon.createdAt)} />
-                  <InfoRow label="Updated" value={fmtTimestamp(daemon.updatedAt)} />
+                  <InfoRow label="Updated" value={fmtTimestamp(spec?.updatedAt)} />
                 </dl>
               </CardContent>
             </Card>
@@ -1356,14 +1407,14 @@ function EnvironmentDetail({ daemonId, onBack }: { daemonId: string; onBack: () 
                     label={connected ? "Connected at" : "Last connected"}
                     value={fmtTimestamp(daemon.connectedAt)}
                   />
-                  {!external && <InfoRow label="Idle timeout" value={daemon.idleTimeout || "Not set"} />}
+                  {!external && <InfoRow label="Idle timeout" value={spec?.idleTimeout || "Not set"} />}
                   <InfoRow label="Last status" value={daemon.lastStatusMessage} />
                 </dl>
               </CardContent>
             </Card>
           </div>
 
-          <PortAccessPanel daemonId={daemon.id} workspaceBaseDomain={workspaceBaseDomain} />
+          <PortAccessPanel daemonId={daemonId} workspaceBaseDomain={workspaceBaseDomain} />
 
           <RemoveMachineModal
             target={deleteOpen ? daemon : null}

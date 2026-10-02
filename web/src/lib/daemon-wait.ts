@@ -37,8 +37,8 @@
 import {
   DaemonLifecyclePhase,
   DaemonStatus,
-} from "@/gen/controlplane/controlplane/v1/shared_pb";
-import type { Daemon } from "@/services/controlPlane/daemon";
+  type DaemonInfo as Daemon,
+} from "@/gen/reliant/v1/daemon_registry_pb";
 
 /** The user-facing noun for a daemon. Settings → Machines already uses it. */
 export const MACHINE_NOUN = "machine";

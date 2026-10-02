@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 
-import { DaemonStatus as ControlPlaneDaemonStatus } from "@/gen/controlplane/controlplane/v1/shared_pb";
-import { hasUsableControlPlaneDaemonForOnboarding } from "./steps/ComputeStep";
+import type { DaemonStatus } from "@/gen/reliant/v1/daemon_registry_pb";
+import { hasUsableDaemonForOnboarding } from "./steps/ComputeStep";
 
 /**
  * Repairs the onboarding flag for a user who already finished setting up but
@@ -43,16 +43,17 @@ import { hasUsableControlPlaneDaemonForOnboarding } from "./steps/ComputeStep";
  */
 
 /**
- * Minimal shape this hook reads off a daemon; matches the control-plane Daemon.
+ * Minimal shape this hook reads off a daemon, from the one daemon list
+ * (reliant.v1.DaemonInfo).
  *
  * Both fields are load-bearing: `createdAt` dates the daemon against the
- * account, and `status` is what `hasUsableControlPlaneDaemonForOnboarding`
- * inspects. `status` is the control-plane enum specifically — the reliant
- * enum of the same name has different numeric values.
+ * account, and `status` is what `hasUsableDaemonForOnboarding` inspects. There
+ * used to be a second enum of the same name with different numeric values, so
+ * which one this was mattered; there is now one list and one enum.
  */
 type DatedDaemon = {
   createdAt?: { seconds: bigint };
-  status: ControlPlaneDaemonStatus;
+  status: DaemonStatus;
 };
 
 const IN_PROGRESS_KEY_PREFIX = "reliant:onboarding:in-progress:";
@@ -149,7 +150,7 @@ export function useReturningUserHeal<T extends DatedDaemon>({
         ? Number(daemon.createdAt.seconds) * 1000 >= userCreatedAtMs
         : false,
     );
-    const hasDaemon = hasUsableControlPlaneDaemonForOnboarding(ownDaemons);
+    const hasDaemon = hasUsableDaemonForOnboarding(ownDaemons);
 
     if (hasDaemon) {
       // Proof of a PRIOR completion only if we have not already watched this

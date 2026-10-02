@@ -1,7 +1,7 @@
 /**
  * Post-onboarding "Starting your machine..." gate.
  *
- * Polls the control-plane's listDaemons every 2s for up to 60s after the user
+ * Polls the daemon registry's ListDaemons every 2s for up to 60s after the user
  * finishes onboarding, and surfaces one of four states:
  *
  *   1. Connecting — status is PENDING or DISCONNECTED inside the 60s window.
@@ -31,14 +31,13 @@ import {
 import { cn } from "@/lib/utils";
 import { classifyDaemonWait } from "@/lib/daemon-wait";
 import { DaemonWaitState } from "../DaemonWaitState";
+import { create } from "@bufbuild/protobuf";
+import { grpcClient } from "@/api/grpc-client";
 import {
-  DAEMON_STATUS_ACTIVE,
-  DAEMON_STATUS_FAILED,
-  DAEMON_STATUS_PENDING,
-  getDaemonStatusMessage,
-  listDaemons,
-  type Daemon,
-} from "@/services/controlPlane/daemon";
+  DaemonStatus,
+  ListDaemonsRequestSchema,
+  type DaemonInfo as Daemon,
+} from "@/gen/reliant/v1/daemon_registry_pb";
 
 /**
  * How long to keep waiting before offering the failure CTAs.
@@ -94,14 +93,14 @@ interface DaemonListEnvelope {
 function pickDaemon(daemons: Daemon[], ref?: string): Daemon | undefined {
   if (!daemons.length) return undefined;
   if (ref) {
-    const exact = daemons.find((d) => d.id === ref);
+    const exact = daemons.find((d) => d.daemonId === ref);
     if (exact) return exact;
   }
   // Prefer ACTIVE / PENDING when present so a stale FAILED row from a prior
   // attempt doesn't poison the gate.
   return (
-    daemons.find((d) => d.status === DAEMON_STATUS_ACTIVE) ||
-    daemons.find((d) => d.status === DAEMON_STATUS_PENDING) ||
+    daemons.find((d) => d.status === DaemonStatus.ACTIVE) ||
+    daemons.find((d) => d.status === DaemonStatus.PENDING) ||
     daemons[0]
   );
 }
@@ -114,8 +113,8 @@ export function derivePhase(
   daemon: Daemon | undefined,
   elapsedMs: number,
 ): DaemonConnectingPhase {
-  if (daemon?.status === DAEMON_STATUS_ACTIVE) return "connected";
-  if (daemon?.status === DAEMON_STATUS_FAILED) return "failed";
+  if (daemon?.status === DaemonStatus.ACTIVE) return "connected";
+  if (daemon?.status === DaemonStatus.FAILED) return "failed";
   if (elapsedMs >= POLL_TIMEOUT_MS) return "failed";
   return "connecting";
 }
@@ -147,15 +146,16 @@ export function DaemonConnectingGate({
 
   const { data, refetch } = useQuery<DaemonListEnvelope>({
     queryKey,
-    queryFn: () => listDaemons(),
+    queryFn: () =>
+      grpcClient.daemonRegistry().listDaemons(create(ListDaemonsRequestSchema)),
     refetchInterval: (query) => {
       const daemons = query.state.data?.daemons ?? [];
       const target = pickDaemon(daemons, daemonRef);
       // Stop polling once we've reached a terminal state — ACTIVE / FAILED —
       // or the user has timed out. TanStack passes the latest result via
       // `query.state.data`, so we don't rely on the closure.
-      if (target?.status === DAEMON_STATUS_ACTIVE) return false;
-      if (target?.status === DAEMON_STATUS_FAILED) return false;
+      if (target?.status === DaemonStatus.ACTIVE) return false;
+      if (target?.status === DaemonStatus.FAILED) return false;
       if (Date.now() - attemptStartedAt >= POLL_TIMEOUT_MS) return false;
       return POLL_INTERVAL_MS;
     },
@@ -188,7 +188,7 @@ export function DaemonConnectingGate({
 
   const daemon = pickDaemon(data?.daemons ?? [], daemonRef);
   const phase = derivePhase(daemon, elapsedMs);
-  const reason = getDaemonStatusMessage(daemon);
+  const reason = daemon?.lastStatusMessage ?? "";
 
   const handleRetry = useCallback(() => {
     setAttemptStartedAt(Date.now());
@@ -237,7 +237,7 @@ export function DaemonConnectingGate({
       navigate({
         to: "/settings/$section",
         params: { section: "environments" },
-        search: daemon?.id ? { daemon: daemon.id } : {},
+        search: daemon?.daemonId ? { daemon: daemon.daemonId } : {},
       });
 
     return (

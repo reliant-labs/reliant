@@ -559,13 +559,25 @@ func (x *ResumeDaemonResponse) GetErrorMessage() string {
 }
 
 type DaemonInfo struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	DaemonId      string                 `protobuf:"bytes,1,opt,name=daemon_id,json=daemonId,proto3" json:"daemon_id,omitempty"`
-	UserId        string                 `protobuf:"bytes,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
-	Hostname      string                 `protobuf:"bytes,3,opt,name=hostname,proto3" json:"hostname,omitempty"`
-	Platform      string                 `protobuf:"bytes,4,opt,name=platform,proto3" json:"platform,omitempty"`
-	Status        DaemonStatus           `protobuf:"varint,5,opt,name=status,proto3,enum=reliant.v1.DaemonStatus" json:"status,omitempty"`
-	Projects      []*DiscoveredProject   `protobuf:"bytes,6,rep,name=projects,proto3" json:"projects,omitempty"`
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	DaemonId string                 `protobuf:"bytes,1,opt,name=daemon_id,json=daemonId,proto3" json:"daemon_id,omitempty"`
+	UserId   string                 `protobuf:"bytes,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	Hostname string                 `protobuf:"bytes,3,opt,name=hostname,proto3" json:"hostname,omitempty"`
+	Platform string                 `protobuf:"bytes,4,opt,name=platform,proto3" json:"platform,omitempty"`
+	Status   DaemonStatus           `protobuf:"varint,5,opt,name=status,proto3,enum=reliant.v1.DaemonStatus" json:"status,omitempty"`
+	Projects []*DiscoveredProject   `protobuf:"bytes,6,rep,name=projects,proto3" json:"projects,omitempty"`
+	// When the daemon's current stream attached, and when it last showed
+	// activity on it. Both come from the attachment lease, so both are unset
+	// while nothing is attached — "last connected" is deliberately NOT retained
+	// after a disconnect, because the lease row is deleted and this service
+	// keeps no history of it.
+	//
+	// These were previously declared and never populated: the columns that once
+	// backed them were dropped by the demote migration, and the attachment row
+	// that replaced them was not read for this purpose. They are now sourced
+	// from the attachment, because recency ordering in the UI needs them —
+	// picking a clone target by "whichever the server listed first" is
+	// indistinguishable from correct with one machine and wrong with several.
 	ConnectedAt   *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=connected_at,json=connectedAt,proto3" json:"connected_at,omitempty"`
 	LastHeartbeat *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=last_heartbeat,json=lastHeartbeat,proto3" json:"last_heartbeat,omitempty"`
 	// Type of daemon: "managed" (cloud-hosted) or "self_hosted" (user-run local daemon).
@@ -606,8 +618,15 @@ type DaemonInfo struct {
 	// last_oom_killed_at.
 	LastOomKilledAt *timestamppb.Timestamp `protobuf:"bytes,18,opt,name=last_oom_killed_at,json=lastOomKilledAt,proto3" json:"last_oom_killed_at,omitempty"`
 	OomKillCount    int32                  `protobuf:"varint,19,opt,name=oom_kill_count,json=oomKillCount,proto3" json:"oom_kill_count,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// When the registry first saw this daemon. Always set.
+	//
+	// Needed because it is the recency fallback for a machine that has never
+	// attached — a provisioning one, where connected_at is necessarily unset. An
+	// unknown recency sorts a brand-new machine last, which is the opposite of
+	// what the user means.
+	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,20,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *DaemonInfo) Reset() {
@@ -773,6 +792,13 @@ func (x *DaemonInfo) GetOomKillCount() int32 {
 	return 0
 }
 
+func (x *DaemonInfo) GetCreatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return nil
+}
+
 var File_reliant_v1_daemon_registry_proto protoreflect.FileDescriptor
 
 const file_reliant_v1_daemon_registry_proto_rawDesc = "" +
@@ -803,7 +829,7 @@ const file_reliant_v1_daemon_registry_proto_rawDesc = "" +
 	"\tdaemon_id\x18\x01 \x01(\tR\bdaemonId\"U\n" +
 	"\x14ResumeDaemonResponse\x12\x18\n" +
 	"\aresumed\x18\x01 \x01(\bR\aresumed\x12#\n" +
-	"\rerror_message\x18\x02 \x01(\tR\ferrorMessage\"\x83\a\n" +
+	"\rerror_message\x18\x02 \x01(\tR\ferrorMessage\"\xbe\a\n" +
 	"\n" +
 	"DaemonInfo\x12\x1b\n" +
 	"\tdaemon_id\x18\x01 \x01(\tR\bdaemonId\x12\x17\n" +
@@ -826,7 +852,9 @@ const file_reliant_v1_daemon_registry_proto_rawDesc = "" +
 	"\x13last_status_message\x18\x10 \x01(\tR\x11lastStatusMessage\x12O\n" +
 	"\x16last_status_changed_at\x18\x11 \x01(\v2\x1a.google.protobuf.TimestampR\x13lastStatusChangedAt\x12G\n" +
 	"\x12last_oom_killed_at\x18\x12 \x01(\v2\x1a.google.protobuf.TimestampR\x0flastOomKilledAt\x12$\n" +
-	"\x0eoom_kill_count\x18\x13 \x01(\x05R\foomKillCount*\xd1\x01\n" +
+	"\x0eoom_kill_count\x18\x13 \x01(\x05R\foomKillCount\x129\n" +
+	"\n" +
+	"created_at\x18\x14 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt*\xd1\x01\n" +
 	"\fDaemonStatus\x12\x1d\n" +
 	"\x19DAEMON_STATUS_UNSPECIFIED\x10\x00\x12\x18\n" +
 	"\x14DAEMON_STATUS_ACTIVE\x10\x01\x12\x16\n" +
@@ -891,19 +919,20 @@ var file_reliant_v1_daemon_registry_proto_depIdxs = []int32{
 	1,  // 8: reliant.v1.DaemonInfo.lifecycle_phase:type_name -> reliant.v1.DaemonLifecyclePhase
 	13, // 9: reliant.v1.DaemonInfo.last_status_changed_at:type_name -> google.protobuf.Timestamp
 	13, // 10: reliant.v1.DaemonInfo.last_oom_killed_at:type_name -> google.protobuf.Timestamp
-	2,  // 11: reliant.v1.DaemonRegistryService.ListDaemons:input_type -> reliant.v1.ListDaemonsRequest
-	4,  // 12: reliant.v1.DaemonRegistryService.GetDaemon:input_type -> reliant.v1.GetDaemonRequest
-	6,  // 13: reliant.v1.DaemonRegistryService.ResolveDaemon:input_type -> reliant.v1.ResolveDaemonRequest
-	8,  // 14: reliant.v1.DaemonRegistryService.ResumeDaemon:input_type -> reliant.v1.ResumeDaemonRequest
-	3,  // 15: reliant.v1.DaemonRegistryService.ListDaemons:output_type -> reliant.v1.ListDaemonsResponse
-	5,  // 16: reliant.v1.DaemonRegistryService.GetDaemon:output_type -> reliant.v1.GetDaemonResponse
-	7,  // 17: reliant.v1.DaemonRegistryService.ResolveDaemon:output_type -> reliant.v1.ResolveDaemonResponse
-	9,  // 18: reliant.v1.DaemonRegistryService.ResumeDaemon:output_type -> reliant.v1.ResumeDaemonResponse
-	15, // [15:19] is the sub-list for method output_type
-	11, // [11:15] is the sub-list for method input_type
-	11, // [11:11] is the sub-list for extension type_name
-	11, // [11:11] is the sub-list for extension extendee
-	0,  // [0:11] is the sub-list for field type_name
+	13, // 11: reliant.v1.DaemonInfo.created_at:type_name -> google.protobuf.Timestamp
+	2,  // 12: reliant.v1.DaemonRegistryService.ListDaemons:input_type -> reliant.v1.ListDaemonsRequest
+	4,  // 13: reliant.v1.DaemonRegistryService.GetDaemon:input_type -> reliant.v1.GetDaemonRequest
+	6,  // 14: reliant.v1.DaemonRegistryService.ResolveDaemon:input_type -> reliant.v1.ResolveDaemonRequest
+	8,  // 15: reliant.v1.DaemonRegistryService.ResumeDaemon:input_type -> reliant.v1.ResumeDaemonRequest
+	3,  // 16: reliant.v1.DaemonRegistryService.ListDaemons:output_type -> reliant.v1.ListDaemonsResponse
+	5,  // 17: reliant.v1.DaemonRegistryService.GetDaemon:output_type -> reliant.v1.GetDaemonResponse
+	7,  // 18: reliant.v1.DaemonRegistryService.ResolveDaemon:output_type -> reliant.v1.ResolveDaemonResponse
+	9,  // 19: reliant.v1.DaemonRegistryService.ResumeDaemon:output_type -> reliant.v1.ResumeDaemonResponse
+	16, // [16:20] is the sub-list for method output_type
+	12, // [12:16] is the sub-list for method input_type
+	12, // [12:12] is the sub-list for extension type_name
+	12, // [12:12] is the sub-list for extension extendee
+	0,  // [0:12] is the sub-list for field type_name
 }
 
 func init() { file_reliant_v1_daemon_registry_proto_init() }

@@ -92,6 +92,17 @@ vi.mock("@/services/controlPlane/environments", () => ({
   revokeDaemonToken: vi.fn(),
 }));
 
+// The machine LIST comes from reliant's daemon registry
+// (docs/design/one-daemon-list.md). It is fed from the same mocks.listDaemons
+// the tests already drive, so their setup calls keep working unchanged.
+vi.mock('@/api/grpc-client', () => ({
+  grpcClient: {
+    daemonRegistry: () => ({
+      listDaemons: async () => mocks.listDaemons(),
+    }),
+  },
+}))
+
 import { MachinesSection } from "@/components/Settings/cloud/machines";
 
 /**

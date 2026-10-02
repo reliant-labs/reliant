@@ -37,20 +37,16 @@ import { toast } from "../../lib/toast-manager";
 import { useDaemonStatus } from "../../hooks/useDaemonStatus";
 import { useResumeDaemon } from "../../hooks/useOnboardingQueries";
 import { ConnectDaemonModal } from "./ConnectDaemonModal";
-// Aliased deliberately. There are TWO unrelated `DaemonStatus` enums in this
-// app and their numeric values COLLIDE: registry ACTIVE=1 is control-plane
-// PENDING=1, registry IDLE=2 is control-plane ACTIVE=2. This file reads both
-// kinds of daemon, so importing either under the bare name `DaemonStatus` is
-// how a control-plane row silently gets labelled with a registry name.
-import { DaemonStatus as RegistryDaemonStatus } from "../../gen/reliant/v1/daemon_registry_pb";
+import { create } from "@bufbuild/protobuf";
+import { grpcClient } from "../../api/grpc-client";
+import {
+  DaemonStatus,
+  ListDaemonsRequestSchema,
+} from "../../gen/reliant/v1/daemon_registry_pb";
 import { useGitHubCredential } from "../../hooks/useGitHubCredential";
 import { capabilities } from "../../services/controlPlane/capabilities";
-import {
-  listDaemons as listCloudDaemons,
-  deleteDaemon,
-  DAEMON_STATUS_SUSPENDED,
-  type Daemon as CloudDaemon,
-} from "../../services/controlPlane/daemon";
+import { deleteDaemon } from "../../services/controlPlane/daemon";
+import type { DaemonInfo as CloudDaemon } from "../../gen/reliant/v1/daemon_registry_pb";
 import {
   cloneAvailability,
   pickCloneTarget,
@@ -240,6 +236,10 @@ function NoActiveDaemonState() {
   const [connectOpen, setConnectOpen] = useState(false);
   const hasCloud = capabilities.cloudDaemons;
 
+  // One list, from the registry — the service that knows both whether a
+  // machine has actually attached AND what it is doing (see
+  // docs/design/one-daemon-list.md). This used to read control-plane's
+  // ListDaemons, which could answer the second question and not the first.
   const {
     data: cloudDaemons,
     isLoading,
@@ -247,8 +247,10 @@ function NoActiveDaemonState() {
   } = useQuery<CloudDaemon[]>({
     queryKey: ["projectPicker", "cloudDaemons"],
     queryFn: async () => {
-      const { daemons } = await listCloudDaemons();
-      return daemons;
+      const resp = await grpcClient
+        .daemonRegistry()
+        .listDaemons(create(ListDaemonsRequestSchema));
+      return resp.daemons.filter((d) => isCloudDaemon(d.daemonType));
     },
     enabled: hasCloud,
     refetchInterval: 8_000,
@@ -278,9 +280,9 @@ function NoActiveDaemonState() {
       : null;
 
   const handleResume = (daemon: CloudDaemon) => {
-    if (daemon.status !== DAEMON_STATUS_SUSPENDED) return;
+    if (daemon.status !== DaemonStatus.SUSPENDED) return;
     setError(null);
-    resumeDaemonMutation.mutate(daemon.id);
+    resumeDaemonMutation.mutate(daemon.daemonId);
   };
 
   // A FAILED machine cannot be resumed — provisioning never completed, so
@@ -309,13 +311,13 @@ function NoActiveDaemonState() {
     if (!isFailedDaemon(daemon)) return;
     if (
       !window.confirm(
-        `Delete ${daemon.name || "this machine"}? It failed to start and can't be recovered. You can create a new one afterwards.`,
+        `Delete ${daemon.hostname || "this machine"}? It failed to start and can't be recovered. You can create a new one afterwards.`,
       )
     ) {
       return;
     }
     setError(null);
-    deleteDaemonMutation.mutate(daemon.id);
+    deleteDaemonMutation.mutate(daemon.daemonId);
   };
 
   if (!hasCloud) {
@@ -377,10 +379,10 @@ function NoActiveDaemonState() {
       {hasAnyCloudDaemon && (
         <div className="space-y-2">
           {daemons.map((daemon) => {
-            const isResuming = resumingId === daemon.id;
-            const isSuspended = daemon.status === DAEMON_STATUS_SUSPENDED;
+            const isResuming = resumingId === daemon.daemonId;
+            const isSuspended = daemon.status === DaemonStatus.SUSPENDED;
             const failed = isFailedDaemon(daemon);
-            const isDeleting = deletingId === daemon.id;
+            const isDeleting = deletingId === daemon.daemonId;
             const statusLabel = cloudDaemonStatusLabel(daemon, isResuming);
 
             // A failed machine is not a resume button with the label
@@ -390,15 +392,15 @@ function NoActiveDaemonState() {
               const reason = failureReason(daemon);
               return (
                 <div
-                  key={daemon.id}
+                  key={daemon.daemonId}
                   className="w-full flex items-center justify-between gap-3 px-4 py-3 rounded-lg bg-background/80 border border-destructive/40"
-                  data-testid={`failed-daemon-${daemon.id}`}
+                  data-testid={`failed-daemon-${daemon.daemonId}`}
                 >
                   <div className="flex items-center gap-3 min-w-0">
                     <Cloud className="w-4 h-4 text-muted-foreground flex-shrink-0" />
                     <div className="min-w-0">
                       <div className="text-sm font-medium text-foreground truncate">
-                        {daemon.name || "daemon"}
+                        {daemon.hostname || "daemon"}
                       </div>
                       <div className="text-xs text-destructive">
                         {reason
@@ -424,7 +426,7 @@ function NoActiveDaemonState() {
 
             return (
               <button
-                key={daemon.id}
+                key={daemon.daemonId}
                 type="button"
                 onClick={() => handleResume(daemon)}
                 disabled={isResuming || !isSuspended}
@@ -434,7 +436,7 @@ function NoActiveDaemonState() {
                   <Cloud className="w-4 h-4 text-muted-foreground flex-shrink-0" />
                   <div className="min-w-0">
                     <div className="text-sm font-medium text-foreground truncate">
-                      Resume {daemon.name || "daemon"}
+                      Resume {daemon.hostname || "daemon"}
                     </div>
                     {daemon.lastStatusMessage && (
                       // A failed machine's message is the REASON it failed
@@ -629,18 +631,6 @@ function ProjectPickerComponent({ onProjectSelected }: ProjectPickerProps) {
   const showConnectionInstructions = isWebMode && !activeDaemon && !daemonLoading;
 
   const { hasToken: hasGitHubCredential } = useGitHubCredential();
-  const { data: controlPlaneDaemons } = useQuery<CloudDaemon[]>({
-    queryKey: ["projectPicker", "controlPlaneDaemons"],
-    queryFn: async () => {
-      if (!capabilities.cloudDaemons) return [];
-      const res = await listCloudDaemons();
-      return res.daemons;
-    },
-    enabled: capabilities.cloudDaemons,
-    refetchInterval: 5_000,
-    staleTime: 0,
-  });
-
   // Cloud daemons are the only valid clone targets. Self-hosted daemons can
   // still be "viewed" via the switcher (you see which projects live on
   // them), but the clone affordances stay disabled — cloning requires a
@@ -668,27 +658,18 @@ function ProjectPickerComponent({ onProjectSelected }: ProjectPickerProps) {
   // told the user which that was. The default is now the most recently used
   // machine (pickCloneTarget), and CloneTargetPicker lets them change it.
   //
-  // Registry rows first (useDaemonStatus, so the registry enum applies —
-  // see the aliased import above), then control-plane rows, because the
-  // registry is the one that knows a daemon has actually attached.
+  // It used to take attachment from the registry list and clone-eligibility
+  // from a second control-plane list, because neither could answer both. One
+  // list now answers both, so there is nothing left to reconcile and
+  // pickCloneTarget decides alone.
   const selectedCloneDaemon = useMemo<CloneTarget | null>(() => {
-    const activeCloud = cloudDaemons.find(
-      (d) => d.status === RegistryDaemonStatus.ACTIVE,
-    );
-    if (activeCloud) {
-      return {
-        daemonId: activeCloud.daemonId,
-        hostname: activeCloud.hostname || hostnameFor(activeCloud.daemonId),
-      };
-    }
-    const preferred = pickCloneTarget(controlPlaneDaemons ?? []);
+    const preferred = pickCloneTarget(cloudDaemons);
     if (!preferred) return null;
     return {
-      daemonId: preferred.id,
-      hostname:
-        preferred.hostname || preferred.name || `daemon ${preferred.id.slice(0, 8)}`,
+      daemonId: preferred.daemonId,
+      hostname: preferred.hostname || hostnameFor(preferred.daemonId),
     };
-  }, [cloudDaemons, controlPlaneDaemons, hostnameFor]);
+  }, [cloudDaemons, hostnameFor]);
 
   // The machine the NEXT clone will use. Null means "whatever the default
   // resolves to"; a string means the user chose explicitly in the modal, and
@@ -703,10 +684,7 @@ function ProjectPickerComponent({ onProjectSelected }: ProjectPickerProps) {
   // FAILED there was no add-project entry point anywhere in the app. A
   // disabled control that explains itself is recoverable; an absent one is
   // not. RepoSelector owns the GitHub-credential-missing state separately.
-  const cloneState = useMemo(
-    () => cloneAvailability(controlPlaneDaemons ?? []),
-    [controlPlaneDaemons],
-  );
+  const cloneState = useMemo(() => cloneAvailability(cloudDaemons), [cloudDaemons]);
   const showCloneAction = capabilities.cloudDaemons;
 
   // Which add-project action leads. A cloud user's code is never on the
@@ -716,7 +694,7 @@ function ProjectPickerComponent({ onProjectSelected }: ProjectPickerProps) {
   const cloneLeads =
     showCloneAction &&
     addProjectLead({
-      hasCloudDaemons: (controlPlaneDaemons ?? []).length > 0 || cloudDaemons.length > 0,
+      hasCloudDaemons: cloudDaemons.length > 0,
       activeDaemonType: activeDaemon?.daemonType,
     }) === "clone";
 
@@ -737,7 +715,7 @@ function ProjectPickerComponent({ onProjectSelected }: ProjectPickerProps) {
   const effectiveCloneDaemonId =
     chosenCloneDaemonId ??
     selectedCloneDaemon?.daemonId ??
-    (cloneState.kind === "ready" ? cloneState.target.id : null);
+    (cloneState.kind === "ready" ? cloneState.target.daemonId : null);
 
   // Add a repo as a project on a target daemon, in ONE server call.
   //
@@ -1502,7 +1480,7 @@ function ProjectPickerComponent({ onProjectSelected }: ProjectPickerProps) {
             is the wrong order. Renders nothing when there is only one
             candidate. */}
         <CloneTargetPicker
-          daemons={controlPlaneDaemons ?? []}
+          daemons={cloudDaemons}
           selectedDaemonId={effectiveCloneDaemonId}
           onSelect={setChosenCloneDaemonId}
         />

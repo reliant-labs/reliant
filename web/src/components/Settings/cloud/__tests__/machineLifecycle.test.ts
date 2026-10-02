@@ -34,14 +34,16 @@ import {
   restartMachine,
 } from '@/components/Settings/cloud/machineLifecycle'
 
+// daemon_type arrives from the one daemon list as the string the daemon
+// registered with, not a control-plane enum number (the fixtures were 1 and 2).
 const managed = (status: number, lifecyclePhase = LIFECYCLE_PHASE_UNSPECIFIED) => ({
-  daemonType: 1, // MANAGED
+  daemonType: 'managed',
   status,
   lifecyclePhase,
 })
 
 const selfHosted = (status: number) => ({
-  daemonType: 2, // EXTERNAL
+  daemonType: 'self_hosted',
   status,
   lifecyclePhase: LIFECYCLE_PHASE_UNSPECIFIED,
 })

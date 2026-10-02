@@ -19,23 +19,26 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReactNode } from "react";
 
-import type { Daemon } from "@/services/controlPlane/daemon";
-import { DaemonLifecyclePhase } from "@/gen/controlplane/controlplane/v1/shared_pb";
+import type { DaemonInfo as Daemon } from "@/gen/reliant/v1/daemon_registry_pb";
+import { DaemonLifecyclePhase, DaemonStatus } from "@/gen/reliant/v1/daemon_registry_pb";
 import { DAEMON_WAIT_SLOW_MS } from "@/lib/daemon-wait";
 
-// ── Mock the daemon service module ───────────────────────────
+// ── Mock the daemon registry client ──────────────────────────
+//
+// The gate polls reliant.v1.DaemonRegistryService/ListDaemons — the one daemon
+// list (docs/design/one-daemon-list.md) — so the grpc client is what gets
+// stubbed, rather than the control-plane service wrapper it used to call.
 
 const mockListDaemons = vi.fn<() => Promise<{ daemons: Daemon[] }>>();
 
-vi.mock("@/services/controlPlane/daemon", async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import("@/services/controlPlane/daemon")>();
-  return {
-    ...actual,
-    listDaemons: (...args: Parameters<typeof mockListDaemons>) =>
-      mockListDaemons(...args),
-  };
-});
+vi.mock("@/api/grpc-client", () => ({
+  grpcClient: {
+    daemonRegistry: () => ({
+      listDaemons: (...args: Parameters<typeof mockListDaemons>) =>
+        mockListDaemons(...args),
+    }),
+  },
+}));
 
 function makeDaemon(partial: Partial<Daemon>): Daemon {
   return partial as unknown as Daemon;
@@ -77,15 +80,17 @@ async function flush(ms = 0) {
   });
 }
 
-// Status constants (matching control-plane DaemonStatus enum).
-const PENDING = 1;
-const ACTIVE = 2;
-const DISCONNECTED = 4;
-const FAILED = 5;
+// Status constants, from the generated registry enum. These were hand-written
+// control-plane numbers (1/2/4/5), which only happened to be right while the
+// gate read that list; deriving them means a renumbered proto cannot leave a
+// stale literal here.
+const PENDING = DaemonStatus.PENDING;
+const ACTIVE = DaemonStatus.ACTIVE;
+const DISCONNECTED = DaemonStatus.DISCONNECTED;
+const FAILED = DaemonStatus.FAILED;
 
-// Lifecycle phase constants (control-plane DaemonLifecyclePhase). Kept
-// numeric to match the status constants above; the gate reads them straight
-// off the wire record.
+// Lifecycle phase constants. The gate reads these straight off the wire
+// record.
 const UNSPECIFIED = DaemonLifecyclePhase.UNSPECIFIED;
 const PROVISIONING = DaemonLifecyclePhase.PROVISIONING;
 const CLONING = DaemonLifecyclePhase.CLONING;
@@ -191,7 +196,7 @@ describe("DaemonConnectingGate", () => {
     mockListDaemons.mockResolvedValue({
       daemons: [
         makeDaemon({
-          id: "daemon-abc-123",
+          daemonId: "daemon-abc-123",
           status: FAILED,
           name: "onboarding-daemon",
           lastStatusMessage: "Image pull failed: ECR rate limit",

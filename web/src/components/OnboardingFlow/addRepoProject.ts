@@ -1,9 +1,11 @@
 import { projectGrpc } from "@/api/project-grpc";
+import { create } from "@bufbuild/protobuf";
+import { grpcClient } from "@/api/grpc-client";
 import {
-  createDaemon,
-  listDaemons,
-  type Daemon as CloudDaemon,
-} from "@/services/controlPlane/daemon";
+  ListDaemonsRequestSchema,
+  type DaemonInfo as CloudDaemon,
+} from "@/gen/reliant/v1/daemon_registry_pb";
+import { createDaemon } from "@/services/controlPlane/daemon";
 import { pickCloneTarget } from "@/components/Projects/cloneTargets";
 
 /**
@@ -74,8 +76,14 @@ export async function addRepoProject({
   path: string;
   name: string;
 }): Promise<AddRepoProjectResult> {
-  const { daemons } = await listDaemons();
-  const daemon = pickOnboardingDaemon(daemons);
+  // The registry, not control-plane: it is the one list that knows whether a
+  // machine has actually attached (docs/design/one-daemon-list.md). CreateDaemon
+  // below stays on the control-plane transport — that is a genuine
+  // control-plane COMMAND about the machine, not a read of the list.
+  const resp = await grpcClient
+    .daemonRegistry()
+    .listDaemons(create(ListDaemonsRequestSchema));
+  const daemon = pickOnboardingDaemon(resp.daemons);
   if (!daemon) {
     throw new Error("Your machine is still starting. Try again in a moment.");
   }
@@ -101,7 +109,7 @@ export async function addRepoProject({
   // did not exist.
   const result = await projectGrpc.createProjectFromRepo({
     cloneUrl,
-    daemonId: daemon.id,
+    daemonId: daemon.daemonId,
     name,
     branch,
     path,
@@ -110,8 +118,8 @@ export async function addRepoProject({
   return {
     projectId: result.project?.id,
     clonedPath: result.projectDaemon?.path || path,
-    daemonId: daemon.id,
+    daemonId: daemon.daemonId,
     queued: result.queued,
-    machineName: result.daemonName || daemon.name || daemon.hostname || "",
+    machineName: result.daemonName || daemon.hostname || "",
   };
 }
