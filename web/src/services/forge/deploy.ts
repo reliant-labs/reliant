@@ -490,6 +490,43 @@ export function blockingFindings(report: ForgeDeployReport | null | undefined): 
 }
 
 /**
+ * The checks whose findings describe something being DESTROYED rather than
+ * something being wrong.
+ *
+ * A blocking finding stops the deploy, so it needs no acknowledgement — there
+ * is no button to guard. These are the opposite case: the deploy will succeed,
+ * and succeeding is the problem. Storage that gets deleted and an address that
+ * gets reissued are not recoverable by re-deploying, so they are the one thing
+ * a hosted confirm asks the user to tick.
+ *
+ * Forge emits none of these today; its preflight only checks that referenced
+ * Secrets and images EXIST. This set is the seam the plan-before-promote work
+ * fills, and it is matched by check name rather than inferred, so an unknown
+ * check is treated as advisory instead of silently gating the button on
+ * something nobody classified.
+ */
+const DESTRUCTIVE_CHECKS: ReadonlySet<string> = new Set([
+  "stateful_resource_deletion",
+  "persistent_volume_deletion",
+  "load_balancer_replacement",
+]);
+
+/**
+ * destructiveFindings returns the advisory findings that describe irreversible
+ * loss, which a confirm must surface and have acknowledged.
+ *
+ * Blocking findings are excluded deliberately: they are handled as blockers,
+ * and a plan carrying one offers no confirm at all.
+ */
+export function destructiveFindings(
+  report: ForgeDeployReport | null | undefined
+): ForgeDeployFinding[] {
+  return (report?.preflight?.findings ?? []).filter(
+    (finding) => finding.blocking !== true && DESTRUCTIVE_CHECKS.has(finding.check ?? "")
+  );
+}
+
+/**
  * deployBlockers lists every reason this plan cannot be confirmed.
  *
  * All of them, not the first: an operator fixing one wants to know about the

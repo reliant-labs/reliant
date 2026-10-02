@@ -33,6 +33,7 @@ import type { StartDeployResult } from "@/api/forge-grpc";
 import {
   deployBlockers,
   deployTokenFor,
+  isHostedPlan,
   type DeployBlocker,
   type ForgeDeployReport,
 } from "@/services/forge/deploy";
@@ -147,6 +148,7 @@ export function DeployFlow({
         // rejected. No confirm until a fresh plan replaces it.
         <DeployRefusalNotice
           refusal={refused}
+          hosted={isHostedPlan(plan)}
           onReplan={onReplan}
           isReplanning={isPlanning}
           onWatchRunning={onWatchRunning}
@@ -358,7 +360,10 @@ function describeBlocker(blocker: DeployBlocker): string {
     case "no-declared-cluster":
       return "This environment declares no cluster, so there is no target to authorise a deploy against.";
     case "no-declared-endpoint":
-      return "This hosted environment's plan names no control-plane endpoint, so there is no target to authorise a deploy against.";
+      // The hosted twin of no-declared-cluster, and the one blocker whose cause
+      // is entirely on our side of the line — so it says what is true without
+      // naming the endpoint the customer never configured.
+      return "This environment isn't set up to be deployed to yet, so there is nothing to deploy against.";
     case "not-a-preview":
       return `This document is not a read-only preview (mode: ${blocker.mode}), so it cannot authorise a deploy.`;
   }

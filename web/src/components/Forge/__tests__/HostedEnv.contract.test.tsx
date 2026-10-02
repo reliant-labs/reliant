@@ -159,38 +159,44 @@ function hostedPlan(overrides: Partial<ForgeDeployReport> = {}): ForgeDeployRepo
 }
 
 describe("the hosted deploy confirmation", () => {
-  it("names the endpoint and environment id, and has no kube-context language", () => {
+  it("names the environment and the release — and none of our own infrastructure", () => {
     render(<DeployConfirmStep plan={hostedPlan()} onConfirm={vi.fn()} onCancel={vi.fn()} />);
     const confirm = screen.getByTestId("deploy-confirm");
-    expect(confirm.textContent).toContain("https://api.reliantlabs.io");
-    expect(confirm.textContent).toContain("denv_01HZX");
-    expect(confirm.textContent).not.toMatch(/cluster|kube|context|manifests/i);
+    // The customer chose neither the control plane's host nor the id we file
+    // their environment under, and can act on neither.
+    expect(confirm.textContent).not.toContain("api.reliantlabs.io");
+    expect(confirm.textContent).not.toContain("denv_01HZX");
+    expect(confirm.textContent).not.toMatch(
+      /control plane|cluster|kube|context|manifests|environment id/i
+    );
+    expect(screen.getByTestId("deploy-start").textContent).toBe("Deploy to cloud");
   });
 
-  it("keeps the token discipline: acknowledge AND type the control plane host", async () => {
+  it("makes the button the approval: no typed phrase, no checkbox, one click", async () => {
     const onConfirm = vi.fn();
-    render(<DeployConfirmStep plan={hostedPlan()} onConfirm={onConfirm} onCancel={vi.fn()} />);
+    const { container } = render(
+      <DeployConfirmStep plan={hostedPlan()} onConfirm={onConfirm} onCancel={vi.fn()} />
+    );
+
+    // The friction that was here asked the user to transcribe OUR hostname,
+    // which proved only that they could copy a string. The plan is the review.
+    expect(container.querySelectorAll("input")).toHaveLength(0);
     const start = screen.getByTestId("deploy-start");
-    expect(start).toBeDisabled();
-
-    await userEvent.click(screen.getByTestId("deploy-acknowledge"));
-    expect(start).toBeDisabled();
-
-    // The full URL is not the phrase; the host is.
-    await userEvent.type(screen.getByTestId("deploy-typed-context"), "https://api.reliantlabs.io");
-    expect(start).toBeDisabled();
-    await userEvent.clear(screen.getByTestId("deploy-typed-context"));
-    await userEvent.type(screen.getByTestId("deploy-typed-context"), "api.reliantlabs.io");
     expect(start).toBeEnabled();
+
+    await userEvent.click(start);
+    expect(onConfirm).toHaveBeenCalledTimes(1);
   });
 
   it("derives a token carrying the endpoint the plan named — what the daemon re-checks", () => {
+    // UNCHANGED BY THE COPY PASS, and this is the test that says so: the user
+    // no longer types the endpoint, and it still binds.
     const token = deployTokenFor(hostedPlan());
     expect(token?.expectedDeclaredContext).toBe("https://api.reliantlabs.io");
     expect(token?.hosted?.environmentId).toBe("denv_01HZX");
   });
 
-  it("offers no confirm when a hosted plan names no endpoint", () => {
+  it("cannot start when a hosted plan names no environment to deploy to", () => {
     render(
       <DeployConfirmStep
         plan={hostedPlan({ guard: { verdict: "allow" } })}
@@ -198,17 +204,23 @@ describe("the hosted deploy confirmation", () => {
         onCancel={vi.fn()}
       />
     );
-    expect(screen.getByTestId("deploy-no-token").textContent).toMatch(/control plane/);
-    expect(screen.getByTestId("deploy-no-token").textContent).not.toMatch(/cluster/);
+    expect(screen.getByTestId("deploy-start")).toBeDisabled();
+    const notice = screen.getByTestId("deploy-no-token").textContent ?? "";
+    expect(notice).toMatch(/cannot be deployed/i);
+    expect(notice).not.toMatch(/control plane|cluster/i);
   });
 
-  it("shows a hosted target panel with the endpoint and no kube context", () => {
+  it("shows a hosted target panel that is one plain sentence", () => {
     render(<TargetPanel plan={hostedPlan({ target: { destination: "hosted", endpoint: "https://api.reliantlabs.io" } })} />);
     const panel = screen.getByTestId("deploy-target");
     expect(panel.getAttribute("data-destination")).toBe("hosted");
-    expect(screen.getByTestId("deploy-target-endpoint").textContent).toBe("https://api.reliantlabs.io");
-    // Never ensured: says so, rather than rendering a blank id.
-    expect(screen.getByTestId("deploy-target-environment-id").textContent).toMatch(/creates it/);
-    expect(panel.textContent).not.toMatch(/cluster|kube|context/i);
+    // Never ensured: the sentence says it is created, with no blank id field
+    // for the reader to mistake for a fault.
+    expect(screen.getByTestId("deploy-target-heading").textContent).toBe(
+      "Creates cloud and deploys release v2.0.0."
+    );
+    expect(screen.queryByTestId("deploy-target-endpoint")).toBeNull();
+    expect(screen.queryByTestId("deploy-target-environment-id")).toBeNull();
+    expect(panel.textContent).not.toMatch(/cluster|kube|context|control plane|api\.reliantlabs\.io/i);
   });
 });

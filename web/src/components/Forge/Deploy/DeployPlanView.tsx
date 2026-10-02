@@ -34,6 +34,13 @@
  *   absent answer MEANS. Under `skip` every resource is legitimately not_waited,
  *   and a reader who does not know that will read a screen of dashes as a
  *   problem — while a reader who assumes `wait` will read them as fine.
+ *
+ * ALL FOUR DESCRIBE THE CLUSTER CASE, where the reader owns the cluster and
+ * every one of those nouns is something they can go and check. A HOSTED plan
+ * inverts that: the infrastructure is ours, the reader owns only the
+ * environment and the release, and detail about our side of the line is at best
+ * unactionable and at worst reads as a fault they must fix. HostedTargetPanel
+ * therefore renders a sentence rather than a field list — see its own comment.
  */
 
 import { AlertTriangle, Boxes, Layers, Package, ShieldCheck, Target } from "lucide-react";
@@ -43,7 +50,6 @@ import { Tooltip } from "@/components/ui/Tooltip";
 import {
   blockingFindings,
   guardVerdictOf,
-  hostedEndpoint,
   isHostedPlan,
   isMultiCluster,
   pinningOf,
@@ -217,20 +223,46 @@ export function TargetPanel({ plan }: { plan: ForgeDeployReport }) {
 }
 
 /**
- * WHERE A HOSTED DEPLOY LANDS: a control plane and one of its environments.
+ * WHAT A HOSTED DEPLOY DOES, in one sentence, naming nothing the customer does
+ * not own.
  *
- * NO KUBE-CONTEXT LANGUAGE, deliberately and entirely. A hosted env has no
- * cluster the operator can name or check — the control plane runs the
- * workloads — so "cluster", "context" and "kubeconfig" here would send a
- * reader to kubectl looking for something that is not theirs to look at. The
- * two facts that matter are the endpoint (which control plane) and the
- * environment id (which of its environments), and an empty id is stated as
- * "created on this deploy", never left blank or guessed.
+ * NO INFRASTRUCTURE NOUNS AT ALL — not "cluster" or "context", and no longer
+ * the control-plane host or the environment id either. An earlier version led
+ * with both, which was wrong in the same way for two different reasons. The
+ * host is ours, not theirs: they did not choose it, cannot visit it, and a
+ * second environment on the same control plane looks identical, so it
+ * distinguishes nothing while occupying the most-read line on the screen. The
+ * id is an internal primary key; "none yet — this deploy creates it" made a
+ * customer read a blank field as a fault they had to fix.
+ *
+ * The two facts that are actually theirs are WHICH ENVIRONMENT and WHICH
+ * RELEASE, and both are in the heading. "Creates" versus "Deploys" is still
+ * driven by whether the environment exists, because first-time-versus-update is
+ * a real difference in what happens — it is just stated as an outcome rather
+ * than as the presence of an id.
+ *
+ * The panel keeps its warning frame and its refusal block. A hosted deploy is
+ * still a write to something live; nothing here is trying to make it feel
+ * routine.
  */
 function HostedTargetPanel({ plan }: { plan: ForgeDeployReport }) {
-  const endpoint = hostedEndpoint(plan);
-  const environmentId = (plan.target?.environment_id ?? "").trim();
+  const env = (plan.env ?? "").trim();
+  const environmentName = env || "this environment";
+  const exists = (plan.target?.environment_id ?? "").trim() !== "";
+  const release = (plan.release ?? "").trim();
   const verdict = guardVerdictOf(plan.guard?.verdict);
+
+  // The heading is the whole panel's content when nothing is wrong, so it
+  // carries both facts and ends in a full stop like the sentence it is. With no
+  // release there is nothing to deploy, and saying "deploys release" with a gap
+  // where the version goes would read as a rendering fault.
+  const heading = !release
+    ? exists
+      ? `Deploys to ${environmentName}.`
+      : `Creates ${environmentName}.`
+    : exists
+      ? `Deploys release ${release} to ${environmentName}.`
+      : `Creates ${environmentName} and deploys release ${release}.`;
 
   return (
     <section
@@ -246,37 +278,23 @@ function HostedTargetPanel({ plan }: { plan: ForgeDeployReport }) {
       <div className="flex items-center gap-2 text-foreground">
         <Target className="h-4 w-4 shrink-0" aria-hidden="true" />
         <h3 className="text-sm font-medium" data-testid="deploy-target-heading">
-          {!endpoint
-            ? "This hosted environment names no control plane"
-            : environmentId
-              ? `This updates the live hosted environment ${plan.env ?? ""}`.trim()
-              : `This creates the hosted environment ${plan.env ?? ""}`.trim()}
+          {heading}
         </h3>
       </div>
 
-      <dl className="grid gap-x-4 gap-y-1 text-xs sm:grid-cols-[auto_1fr]">
-        <dt className="text-muted-foreground">Control plane</dt>
-        <dd className="font-mono text-sm font-medium text-foreground" data-testid="deploy-target-endpoint">
-          {endpoint || "—"}
-        </dd>
-        <dt className="text-muted-foreground">Environment ID</dt>
-        <dd className="font-mono text-foreground" data-testid="deploy-target-environment-id">
-          {environmentId || (
-            <span className="font-sans text-muted-foreground">
-              none yet — this deploy creates it
-            </span>
-          )}
-        </dd>
-      </dl>
-
+      {/* The refusal survives the copy pass intact: it is the one place a
+          reader needs detail, and forge's reason and fix are the only text on
+          this screen that can tell them what to actually do. */}
       {verdict === "refuse" && (
         <div
           data-testid="deploy-guard-refused"
           className="space-y-1 rounded-md border border-solid border-destructive/50 bg-destructive/10 px-3 py-2"
         >
-          <p className="text-xs font-medium text-destructive">Forge will not deploy this environment.</p>
+          <p className="text-xs font-medium text-destructive">
+            This environment can&apos;t be deployed right now.
+          </p>
           {plan.guard?.reason && (
-            <p className="text-2xs text-muted-foreground">Reason: {plan.guard.reason}</p>
+            <p className="text-2xs text-muted-foreground">{plan.guard.reason}</p>
           )}
           {plan.guard?.fix && (
             <p className="text-2xs text-foreground" data-testid="deploy-guard-fix">
@@ -286,11 +304,11 @@ function HostedTargetPanel({ plan }: { plan: ForgeDeployReport }) {
         </div>
       )}
 
-      <p className="text-2xs text-muted-foreground" data-testid="deploy-release">
-        {plan.release
-          ? `Shipping release ${plan.release}'s pinned digests.`
-          : "This environment has no release binding. A hosted deploy ships only promoted digests, so forge will refuse it until you promote a release."}
-      </p>
+      {!release && (
+        <p className="text-2xs text-muted-foreground" data-testid="deploy-release">
+          There&apos;s no release to deploy yet. Choose a release for {environmentName} first.
+        </p>
+      )}
     </section>
   );
 }
