@@ -48,6 +48,9 @@ const (
 	// ForgeServiceGetEnvStatusProcedure is the fully-qualified name of the ForgeService's GetEnvStatus
 	// RPC.
 	ForgeServiceGetEnvStatusProcedure = "/reliant.v1.ForgeService/GetEnvStatus"
+	// ForgeServiceGetEnvShapeProcedure is the fully-qualified name of the ForgeService's GetEnvShape
+	// RPC.
+	ForgeServiceGetEnvShapeProcedure = "/reliant.v1.ForgeService/GetEnvShape"
 	// ForgeServicePlanPromoteProcedure is the fully-qualified name of the ForgeService's PlanPromote
 	// RPC.
 	ForgeServicePlanPromoteProcedure = "/reliant.v1.ForgeService/PlanPromote"
@@ -78,6 +81,22 @@ type ForgeServiceClient interface {
 	GetAudit(context.Context, *connect.Request[v1.GetForgeAuditRequest]) (*connect.Response[v1.GetForgeAuditResponse], error)
 	// GetEnvStatus returns runtime checks for an environment.
 	GetEnvStatus(context.Context, *connect.Request[v1.GetForgeEnvStatusRequest]) (*connect.Response[v1.GetForgeEnvStatusResponse], error)
+	// GetEnvShape projects ONE environment's render into the declaration the
+	// control plane records for it — `forge env shape <env> --json`.
+	//
+	// READ-ONLY, and the one daemon call the BOOTSTRAP path needs. An
+	// environment that exists only in the user's KCL has no control-plane row,
+	// so the Live screen cannot show it and its secrets cannot be set before
+	// its first deploy. Preview calls this to learn the env's kind and shape,
+	// and the BROWSER then calls control-plane EnsureEnvironment itself, with
+	// the user's session. From that point the environment is in Live and needs
+	// no daemon again — not for its secrets, not for its provenance.
+	//
+	// The projection is forge's own, identical to the one `forge env build`
+	// records. That identity is what stops a Register from writing a
+	// declaration that disagrees with the next build's, on an env whose kind is
+	// immutable.
+	GetEnvShape(context.Context, *connect.Request[v1.GetForgeEnvShapeRequest]) (*connect.Response[v1.GetForgeEnvShapeResponse], error)
 	// PlanPromote previews binding an environment to a release. READ-ONLY: it
 	// runs `forge env promote <release> --to <env> --plan`, which computes the
 	// entire change set and stops before forge's only write. Safe, idempotent,
@@ -173,6 +192,12 @@ func NewForgeServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(forgeServiceMethods.ByName("GetEnvStatus")),
 			connect.WithClientOptions(opts...),
 		),
+		getEnvShape: connect.NewClient[v1.GetForgeEnvShapeRequest, v1.GetForgeEnvShapeResponse](
+			httpClient,
+			baseURL+ForgeServiceGetEnvShapeProcedure,
+			connect.WithSchema(forgeServiceMethods.ByName("GetEnvShape")),
+			connect.WithClientOptions(opts...),
+		),
 		planPromote: connect.NewClient[v1.PlanForgePromoteRequest, v1.PlanForgePromoteResponse](
 			httpClient,
 			baseURL+ForgeServicePlanPromoteProcedure,
@@ -213,6 +238,7 @@ type forgeServiceClient struct {
 	listSecrets     *connect.Client[v1.ListForgeSecretsRequest, v1.ListForgeSecretsResponse]
 	getAudit        *connect.Client[v1.GetForgeAuditRequest, v1.GetForgeAuditResponse]
 	getEnvStatus    *connect.Client[v1.GetForgeEnvStatusRequest, v1.GetForgeEnvStatusResponse]
+	getEnvShape     *connect.Client[v1.GetForgeEnvShapeRequest, v1.GetForgeEnvShapeResponse]
 	planPromote     *connect.Client[v1.PlanForgePromoteRequest, v1.PlanForgePromoteResponse]
 	applyPromote    *connect.Client[v1.PromoteForgeEnvRequest, v1.PromoteForgeEnvResponse]
 	planDeploy      *connect.Client[v1.PlanForgeDeployRequest, v1.PlanForgeDeployResponse]
@@ -243,6 +269,11 @@ func (c *forgeServiceClient) GetAudit(ctx context.Context, req *connect.Request[
 // GetEnvStatus calls reliant.v1.ForgeService.GetEnvStatus.
 func (c *forgeServiceClient) GetEnvStatus(ctx context.Context, req *connect.Request[v1.GetForgeEnvStatusRequest]) (*connect.Response[v1.GetForgeEnvStatusResponse], error) {
 	return c.getEnvStatus.CallUnary(ctx, req)
+}
+
+// GetEnvShape calls reliant.v1.ForgeService.GetEnvShape.
+func (c *forgeServiceClient) GetEnvShape(ctx context.Context, req *connect.Request[v1.GetForgeEnvShapeRequest]) (*connect.Response[v1.GetForgeEnvShapeResponse], error) {
+	return c.getEnvShape.CallUnary(ctx, req)
 }
 
 // PlanPromote calls reliant.v1.ForgeService.PlanPromote.
@@ -284,6 +315,22 @@ type ForgeServiceHandler interface {
 	GetAudit(context.Context, *connect.Request[v1.GetForgeAuditRequest]) (*connect.Response[v1.GetForgeAuditResponse], error)
 	// GetEnvStatus returns runtime checks for an environment.
 	GetEnvStatus(context.Context, *connect.Request[v1.GetForgeEnvStatusRequest]) (*connect.Response[v1.GetForgeEnvStatusResponse], error)
+	// GetEnvShape projects ONE environment's render into the declaration the
+	// control plane records for it — `forge env shape <env> --json`.
+	//
+	// READ-ONLY, and the one daemon call the BOOTSTRAP path needs. An
+	// environment that exists only in the user's KCL has no control-plane row,
+	// so the Live screen cannot show it and its secrets cannot be set before
+	// its first deploy. Preview calls this to learn the env's kind and shape,
+	// and the BROWSER then calls control-plane EnsureEnvironment itself, with
+	// the user's session. From that point the environment is in Live and needs
+	// no daemon again — not for its secrets, not for its provenance.
+	//
+	// The projection is forge's own, identical to the one `forge env build`
+	// records. That identity is what stops a Register from writing a
+	// declaration that disagrees with the next build's, on an env whose kind is
+	// immutable.
+	GetEnvShape(context.Context, *connect.Request[v1.GetForgeEnvShapeRequest]) (*connect.Response[v1.GetForgeEnvShapeResponse], error)
 	// PlanPromote previews binding an environment to a release. READ-ONLY: it
 	// runs `forge env promote <release> --to <env> --plan`, which computes the
 	// entire change set and stops before forge's only write. Safe, idempotent,
@@ -375,6 +422,12 @@ func NewForgeServiceHandler(svc ForgeServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(forgeServiceMethods.ByName("GetEnvStatus")),
 		connect.WithHandlerOptions(opts...),
 	)
+	forgeServiceGetEnvShapeHandler := connect.NewUnaryHandler(
+		ForgeServiceGetEnvShapeProcedure,
+		svc.GetEnvShape,
+		connect.WithSchema(forgeServiceMethods.ByName("GetEnvShape")),
+		connect.WithHandlerOptions(opts...),
+	)
 	forgeServicePlanPromoteHandler := connect.NewUnaryHandler(
 		ForgeServicePlanPromoteProcedure,
 		svc.PlanPromote,
@@ -417,6 +470,8 @@ func NewForgeServiceHandler(svc ForgeServiceHandler, opts ...connect.HandlerOpti
 			forgeServiceGetAuditHandler.ServeHTTP(w, r)
 		case ForgeServiceGetEnvStatusProcedure:
 			forgeServiceGetEnvStatusHandler.ServeHTTP(w, r)
+		case ForgeServiceGetEnvShapeProcedure:
+			forgeServiceGetEnvShapeHandler.ServeHTTP(w, r)
 		case ForgeServicePlanPromoteProcedure:
 			forgeServicePlanPromoteHandler.ServeHTTP(w, r)
 		case ForgeServiceApplyPromoteProcedure:
@@ -454,6 +509,10 @@ func (UnimplementedForgeServiceHandler) GetAudit(context.Context, *connect.Reque
 
 func (UnimplementedForgeServiceHandler) GetEnvStatus(context.Context, *connect.Request[v1.GetForgeEnvStatusRequest]) (*connect.Response[v1.GetForgeEnvStatusResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ForgeService.GetEnvStatus is not implemented"))
+}
+
+func (UnimplementedForgeServiceHandler) GetEnvShape(context.Context, *connect.Request[v1.GetForgeEnvShapeRequest]) (*connect.Response[v1.GetForgeEnvShapeResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ForgeService.GetEnvShape is not implemented"))
 }
 
 func (UnimplementedForgeServiceHandler) PlanPromote(context.Context, *connect.Request[v1.PlanForgePromoteRequest]) (*connect.Response[v1.PlanForgePromoteResponse], error) {

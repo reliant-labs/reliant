@@ -29,6 +29,7 @@ import {
   ForgePromoteRefusalSchema,
   GetForgeAuditRequestSchema,
   GetForgeDeployStatusRequestSchema,
+  GetForgeEnvShapeRequestSchema,
   GetForgeEnvStatusRequestSchema,
   GetForgeTopologyRequestSchema,
   ListForgeSecretsRequestSchema,
@@ -46,6 +47,7 @@ import type {
   ForgeDeployReport,
 } from "../services/forge/deploy";
 import type { ForgePromotePlan, PromoteConfirmationToken, PromoteRefusal } from "../services/forge/promote";
+import type { ForgeEnvShapeReport } from "../services/forge/register";
 import {
   classifyForgeResponse,
   type ForgeOutcome,
@@ -121,6 +123,31 @@ export async function getEnvStatus(
     create(GetForgeEnvStatusRequestSchema, { projectId, env })
   );
   return classifyForgeResponse<Record<string, unknown>>(res.meta, res.reportJson);
+}
+
+/**
+ * getEnvShape returns forge's own projection of ONE environment's render —
+ * `{project, env, kind, shape, provenance}`, the same projection
+ * `forge env build` records.
+ *
+ * THE ONLY DAEMON CALL ON THE REGISTER PATH, and it is here because only the
+ * daemon can read the user's checkout. What happens with the answer does NOT
+ * go through the daemon: Preview hands the shape to the browser, which calls
+ * control-plane EnsureEnvironment itself with the user's session (see
+ * services/forge/register.ts). After that the environment is in Live and
+ * needs no daemon again.
+ *
+ * `shape.secrets[]` carries names and providers only (F-13); there is no field
+ * on this path that could hold a value.
+ */
+export async function getEnvShape(
+  projectId: string,
+  env: string
+): Promise<ForgeOutcome<ForgeEnvShapeReport>> {
+  const res = await createForgeClient().getEnvShape(
+    create(GetForgeEnvShapeRequestSchema, { projectId, env })
+  );
+  return classifyForgeResponse<ForgeEnvShapeReport>(res.meta, res.reportJson);
 }
 
 // ── Promote: two methods, and the naming is the guard ────────────────────────
@@ -494,6 +521,7 @@ export const forgeGrpc = {
   listSecrets,
   getAudit,
   getEnvStatus,
+  getEnvShape,
   planPromote,
   applyPromote,
   planDeploy,

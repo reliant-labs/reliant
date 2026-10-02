@@ -114,6 +114,34 @@ const (
 	DeployServiceGetRunProcedure = "/controlplane.v1.DeployService/GetRun"
 	// DeployServiceListUsageProcedure is the fully-qualified name of the DeployService's ListUsage RPC.
 	DeployServiceListUsageProcedure = "/controlplane.v1.DeployService/ListUsage"
+	// DeployServiceRecordBundleProcedure is the fully-qualified name of the DeployService's
+	// RecordBundle RPC.
+	DeployServiceRecordBundleProcedure = "/controlplane.v1.DeployService/RecordBundle"
+	// DeployServiceGetBundleProcedure is the fully-qualified name of the DeployService's GetBundle RPC.
+	DeployServiceGetBundleProcedure = "/controlplane.v1.DeployService/GetBundle"
+	// DeployServiceBeginApplyProcedure is the fully-qualified name of the DeployService's BeginApply
+	// RPC.
+	DeployServiceBeginApplyProcedure = "/controlplane.v1.DeployService/BeginApply"
+	// DeployServiceFinishApplyProcedure is the fully-qualified name of the DeployService's FinishApply
+	// RPC.
+	DeployServiceFinishApplyProcedure = "/controlplane.v1.DeployService/FinishApply"
+	// DeployServiceListAppliesProcedure is the fully-qualified name of the DeployService's ListApplies
+	// RPC.
+	DeployServiceListAppliesProcedure = "/controlplane.v1.DeployService/ListApplies"
+	// DeployServiceGetLiveViewProcedure is the fully-qualified name of the DeployService's GetLiveView
+	// RPC.
+	DeployServiceGetLiveViewProcedure = "/controlplane.v1.DeployService/GetLiveView"
+	// DeployServicePlanDeployProcedure is the fully-qualified name of the DeployService's PlanDeploy
+	// RPC.
+	DeployServicePlanDeployProcedure = "/controlplane.v1.DeployService/PlanDeploy"
+	// DeployServiceReportLocalSessionProcedure is the fully-qualified name of the DeployService's
+	// ReportLocalSession RPC.
+	DeployServiceReportLocalSessionProcedure = "/controlplane.v1.DeployService/ReportLocalSession"
+	// DeployServiceImportLedgerProcedure is the fully-qualified name of the DeployService's
+	// ImportLedger RPC.
+	DeployServiceImportLedgerProcedure = "/controlplane.v1.DeployService/ImportLedger"
+	// DeployServiceGetDriftProcedure is the fully-qualified name of the DeployService's GetDrift RPC.
+	DeployServiceGetDriftProcedure = "/controlplane.v1.DeployService/GetDrift"
 )
 
 // DeployServiceClient is a client for the controlplane.v1.DeployService service.
@@ -308,6 +336,120 @@ type DeployServiceClient interface {
 	// read the live cluster, so a deployment declared and never applied appears
 	// in none of them.
 	ListUsage(context.Context, *connect.Request[v1.ListDeployUsageRequest]) (*connect.Response[v1.ListDeployUsageResponse], error)
+	// RecordBundle records one rendered deploy artifact against an environment.
+	//
+	// THE REQUEST CARRIES THE BUNDLE'S OWN BYTES, NEVER A DESCRIPTION OF THEM.
+	// The server re-derives the digest from the manifest, checks the manifest's
+	// config digest against the config blob, and decodes that blob strictly as
+	// forge's bundle document — then takes the shape, the provenance, the config
+	// digest and the release FROM THE VERIFIED DOCUMENT. So a client cannot
+	// record a shape that disagrees with the artifact it points at, which is the
+	// same reasoning PublishDeploymentConfig's emptiness follows: a field a
+	// caller could populate independently is a field that will eventually
+	// disagree with the thing it describes.
+	//
+	// IT RECORDS. IT AUTHORIZES NOTHING. A bundle that policy would refuse is
+	// still recorded here and refused at apply. Separating the two means the
+	// ledger holds what was built even when it was never allowed to ship, which
+	// is exactly the history an incident review wants.
+	//
+	// Idempotent on (environment, digest): the render is reproducible, so a
+	// re-run of an unchanged project records the same bundle and reports
+	// created=false.
+	RecordBundle(context.Context, *connect.Request[v1.RecordDeployBundleRequest]) (*connect.Response[v1.RecordDeployBundleResponse], error)
+	GetBundle(context.Context, *connect.Request[v1.GetDeployBundleRequest]) (*connect.Response[v1.GetDeployBundleResponse], error)
+	// BeginApply opens the record of an attempt to make an environment match a
+	// bundle, and is where every pre-deploy check happens.
+	//
+	// Under the environment's row lock, in order: the compare-and-set (as
+	// Promote), then the plan digest and stop-class acknowledgement, then the
+	// apply-in-flight refusal. The order is the point — a stale CAS should not
+	// be reported as an unacknowledged finding, and an in-flight apply should
+	// not be reported as a stale plan.
+	//
+	// Refused on a LOCAL environment and allowed on every other kind. On a
+	// hosted environment this is how a DECLARATION deploy gets recorded: a spec
+	// change moves no release, so without this row nothing would say who
+	// initiated it. The EnsureDeployment calls that follow carry the id.
+	BeginApply(context.Context, *connect.Request[v1.BeginDeployApplyRequest]) (*connect.Response[v1.BeginDeployApplyResponse], error)
+	// FinishApply closes an apply with the outcome its client observed.
+	//
+	// ONE OF THE TWO REPORTED-STATE EXCEPTIONS — see the service header. The
+	// outcome is written exactly once: the same outcome again returns
+	// created=false, so a client that retries after a dropped response
+	// converges, while a DIFFERENT outcome for the same apply is AlreadyExists
+	// rather than an overwrite. An apply that can be re-decided is an apply
+	// whose record proves nothing.
+	FinishApply(context.Context, *connect.Request[v1.FinishDeployApplyRequest]) (*connect.Response[v1.FinishDeployApplyResponse], error)
+	// ListApplies returns an environment's applies, newest first, keyset-paged
+	// for ListPromotions' reason: rows arrive while a reader pages, so an offset
+	// would skip or repeat one.
+	ListApplies(context.Context, *connect.Request[v1.ListDeployAppliesRequest]) (*connect.Response[v1.ListDeployAppliesResponse], error)
+	// GetLiveView returns every environment of one forge project with its
+	// declaration, promotion, release, bundle, latest apply and sessions — the
+	// whole Live screen in ONE round trip.
+	//
+	// Folded for GetTenant's reason: the page cannot render until it has all of
+	// it, and N environments × six reads is both a slow page and a page assembled
+	// from six different instants. An environment list that comes back empty is
+	// an empty list, never an error: a project nobody has deployed yet is a
+	// normal state, not a failure.
+	GetLiveView(context.Context, *connect.Request[v1.GetDeployLiveViewRequest]) (*connect.Response[v1.GetDeployLiveViewResponse], error)
+	// PlanDeploy computes what deploying a bundle WOULD do, and writes nothing.
+	//
+	// IT IS A SEPARATE READ-ONLY RPC RATHER THAN A dry_run FLAG ON Promote, and
+	// that is the whole design decision. A boolean that makes a mutating call
+	// not mutate is the shape where one wrong default deploys production; a read
+	// RPC cannot have that failure mode, because there is no code path in it
+	// that writes. It is safe to call repeatedly, from a UI, from a pre-commit
+	// hook, from anywhere.
+	//
+	// The plan it returns carries a digest, and Promote and BeginApply RECOMPUTE
+	// the plan rather than trusting the one the caller approved. That is what
+	// makes the digest a guarantee instead of a claim.
+	PlanDeploy(context.Context, *connect.Request[v1.PlanDeployRequest]) (*connect.Response[v1.PlanDeployResponse], error)
+	// ReportLocalSession upserts one `forge env up` worktree's presence.
+	//
+	// THE SECOND REPORTED-STATE EXCEPTION — see the service header. LOCAL
+	// environments only, enforced by the database rather than by this handler.
+	//
+	// It must NEVER block `forge env up`. A developer whose network is down, or
+	// whose token has expired, keeps working — the session record is a courtesy
+	// to their team's Live view, and a local dev loop that depends on a control
+	// plane being reachable is a worse product than one with a gap in a
+	// dashboard.
+	ReportLocalSession(context.Context, *connect.Request[v1.ReportLocalSessionRequest]) (*connect.Response[v1.ReportLocalSessionResponse], error)
+	// ImportLedger loads a project's existing file-based deploy history into the
+	// hosted ledger, in one transaction.
+	//
+	// HISTORY IS IMPORTED AS-IS AND NEVER RE-JUDGED. Provenance comes across
+	// verbatim, including the uncomfortable parts — a release cut dirty from a
+	// laptop is imported saying so. Re-evaluating old records against today's
+	// policy would produce a ledger that disagrees with what actually happened,
+	// which is the one thing a ledger may not do.
+	//
+	// Identity still comes from the token: every imported promotion is
+	// attributed to the importing caller, and the historical actor name from the
+	// file is kept beside it as provenance only. There is deliberately no
+	// user-mapping option — mapping a username onto a control-plane identity is
+	// a guess, and it would put an unverifiable attribution into the audit trail
+	// permanently.
+	//
+	// Idempotent on each item's imported_from, so a failed import is re-run
+	// rather than repaired. It refuses a PERSISTENT or PREVIEW environment,
+	// whose history was always hosted, and any environment that already holds a
+	// non-imported promotion, because the two orderings cannot be reconciled —
+	// the remedy there is to import first.
+	ImportLedger(context.Context, *connect.Request[v1.ImportLedgerRequest]) (*connect.Response[v1.ImportLedgerResponse], error)
+	// GetDrift reports whether an environment's live objects still match the
+	// bundle that was applied to it.
+	//
+	// Distinct from GetStatus's drift, which compares a deployment's observed
+	// image against its declared one. This compares whole objects against the
+	// applied render, so it catches the case that one cannot: an object a human
+	// edited. The next apply reverts such an edit silently, which is why it has
+	// to be visible BEFORE the deploy rather than discovered after.
+	GetDrift(context.Context, *connect.Request[v1.GetDeployDriftRequest]) (*connect.Response[v1.GetDeployDriftResponse], error)
 }
 
 // NewDeployServiceClient constructs a client for the controlplane.v1.DeployService service. By
@@ -489,6 +631,66 @@ func NewDeployServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(deployServiceMethods.ByName("ListUsage")),
 			connect.WithClientOptions(opts...),
 		),
+		recordBundle: connect.NewClient[v1.RecordDeployBundleRequest, v1.RecordDeployBundleResponse](
+			httpClient,
+			baseURL+DeployServiceRecordBundleProcedure,
+			connect.WithSchema(deployServiceMethods.ByName("RecordBundle")),
+			connect.WithClientOptions(opts...),
+		),
+		getBundle: connect.NewClient[v1.GetDeployBundleRequest, v1.GetDeployBundleResponse](
+			httpClient,
+			baseURL+DeployServiceGetBundleProcedure,
+			connect.WithSchema(deployServiceMethods.ByName("GetBundle")),
+			connect.WithClientOptions(opts...),
+		),
+		beginApply: connect.NewClient[v1.BeginDeployApplyRequest, v1.BeginDeployApplyResponse](
+			httpClient,
+			baseURL+DeployServiceBeginApplyProcedure,
+			connect.WithSchema(deployServiceMethods.ByName("BeginApply")),
+			connect.WithClientOptions(opts...),
+		),
+		finishApply: connect.NewClient[v1.FinishDeployApplyRequest, v1.FinishDeployApplyResponse](
+			httpClient,
+			baseURL+DeployServiceFinishApplyProcedure,
+			connect.WithSchema(deployServiceMethods.ByName("FinishApply")),
+			connect.WithClientOptions(opts...),
+		),
+		listApplies: connect.NewClient[v1.ListDeployAppliesRequest, v1.ListDeployAppliesResponse](
+			httpClient,
+			baseURL+DeployServiceListAppliesProcedure,
+			connect.WithSchema(deployServiceMethods.ByName("ListApplies")),
+			connect.WithClientOptions(opts...),
+		),
+		getLiveView: connect.NewClient[v1.GetDeployLiveViewRequest, v1.GetDeployLiveViewResponse](
+			httpClient,
+			baseURL+DeployServiceGetLiveViewProcedure,
+			connect.WithSchema(deployServiceMethods.ByName("GetLiveView")),
+			connect.WithClientOptions(opts...),
+		),
+		planDeploy: connect.NewClient[v1.PlanDeployRequest, v1.PlanDeployResponse](
+			httpClient,
+			baseURL+DeployServicePlanDeployProcedure,
+			connect.WithSchema(deployServiceMethods.ByName("PlanDeploy")),
+			connect.WithClientOptions(opts...),
+		),
+		reportLocalSession: connect.NewClient[v1.ReportLocalSessionRequest, v1.ReportLocalSessionResponse](
+			httpClient,
+			baseURL+DeployServiceReportLocalSessionProcedure,
+			connect.WithSchema(deployServiceMethods.ByName("ReportLocalSession")),
+			connect.WithClientOptions(opts...),
+		),
+		importLedger: connect.NewClient[v1.ImportLedgerRequest, v1.ImportLedgerResponse](
+			httpClient,
+			baseURL+DeployServiceImportLedgerProcedure,
+			connect.WithSchema(deployServiceMethods.ByName("ImportLedger")),
+			connect.WithClientOptions(opts...),
+		),
+		getDrift: connect.NewClient[v1.GetDeployDriftRequest, v1.GetDeployDriftResponse](
+			httpClient,
+			baseURL+DeployServiceGetDriftProcedure,
+			connect.WithSchema(deployServiceMethods.ByName("GetDrift")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -522,6 +724,16 @@ type deployServiceClient struct {
 	listGates               *connect.Client[v1.ListDeployGatesRequest, v1.ListDeployGatesResponse]
 	getRun                  *connect.Client[v1.GetDeployRunRequest, v1.GetDeployRunResponse]
 	listUsage               *connect.Client[v1.ListDeployUsageRequest, v1.ListDeployUsageResponse]
+	recordBundle            *connect.Client[v1.RecordDeployBundleRequest, v1.RecordDeployBundleResponse]
+	getBundle               *connect.Client[v1.GetDeployBundleRequest, v1.GetDeployBundleResponse]
+	beginApply              *connect.Client[v1.BeginDeployApplyRequest, v1.BeginDeployApplyResponse]
+	finishApply             *connect.Client[v1.FinishDeployApplyRequest, v1.FinishDeployApplyResponse]
+	listApplies             *connect.Client[v1.ListDeployAppliesRequest, v1.ListDeployAppliesResponse]
+	getLiveView             *connect.Client[v1.GetDeployLiveViewRequest, v1.GetDeployLiveViewResponse]
+	planDeploy              *connect.Client[v1.PlanDeployRequest, v1.PlanDeployResponse]
+	reportLocalSession      *connect.Client[v1.ReportLocalSessionRequest, v1.ReportLocalSessionResponse]
+	importLedger            *connect.Client[v1.ImportLedgerRequest, v1.ImportLedgerResponse]
+	getDrift                *connect.Client[v1.GetDeployDriftRequest, v1.GetDeployDriftResponse]
 }
 
 // GetTenant calls controlplane.v1.DeployService.GetTenant.
@@ -662,6 +874,56 @@ func (c *deployServiceClient) GetRun(ctx context.Context, req *connect.Request[v
 // ListUsage calls controlplane.v1.DeployService.ListUsage.
 func (c *deployServiceClient) ListUsage(ctx context.Context, req *connect.Request[v1.ListDeployUsageRequest]) (*connect.Response[v1.ListDeployUsageResponse], error) {
 	return c.listUsage.CallUnary(ctx, req)
+}
+
+// RecordBundle calls controlplane.v1.DeployService.RecordBundle.
+func (c *deployServiceClient) RecordBundle(ctx context.Context, req *connect.Request[v1.RecordDeployBundleRequest]) (*connect.Response[v1.RecordDeployBundleResponse], error) {
+	return c.recordBundle.CallUnary(ctx, req)
+}
+
+// GetBundle calls controlplane.v1.DeployService.GetBundle.
+func (c *deployServiceClient) GetBundle(ctx context.Context, req *connect.Request[v1.GetDeployBundleRequest]) (*connect.Response[v1.GetDeployBundleResponse], error) {
+	return c.getBundle.CallUnary(ctx, req)
+}
+
+// BeginApply calls controlplane.v1.DeployService.BeginApply.
+func (c *deployServiceClient) BeginApply(ctx context.Context, req *connect.Request[v1.BeginDeployApplyRequest]) (*connect.Response[v1.BeginDeployApplyResponse], error) {
+	return c.beginApply.CallUnary(ctx, req)
+}
+
+// FinishApply calls controlplane.v1.DeployService.FinishApply.
+func (c *deployServiceClient) FinishApply(ctx context.Context, req *connect.Request[v1.FinishDeployApplyRequest]) (*connect.Response[v1.FinishDeployApplyResponse], error) {
+	return c.finishApply.CallUnary(ctx, req)
+}
+
+// ListApplies calls controlplane.v1.DeployService.ListApplies.
+func (c *deployServiceClient) ListApplies(ctx context.Context, req *connect.Request[v1.ListDeployAppliesRequest]) (*connect.Response[v1.ListDeployAppliesResponse], error) {
+	return c.listApplies.CallUnary(ctx, req)
+}
+
+// GetLiveView calls controlplane.v1.DeployService.GetLiveView.
+func (c *deployServiceClient) GetLiveView(ctx context.Context, req *connect.Request[v1.GetDeployLiveViewRequest]) (*connect.Response[v1.GetDeployLiveViewResponse], error) {
+	return c.getLiveView.CallUnary(ctx, req)
+}
+
+// PlanDeploy calls controlplane.v1.DeployService.PlanDeploy.
+func (c *deployServiceClient) PlanDeploy(ctx context.Context, req *connect.Request[v1.PlanDeployRequest]) (*connect.Response[v1.PlanDeployResponse], error) {
+	return c.planDeploy.CallUnary(ctx, req)
+}
+
+// ReportLocalSession calls controlplane.v1.DeployService.ReportLocalSession.
+func (c *deployServiceClient) ReportLocalSession(ctx context.Context, req *connect.Request[v1.ReportLocalSessionRequest]) (*connect.Response[v1.ReportLocalSessionResponse], error) {
+	return c.reportLocalSession.CallUnary(ctx, req)
+}
+
+// ImportLedger calls controlplane.v1.DeployService.ImportLedger.
+func (c *deployServiceClient) ImportLedger(ctx context.Context, req *connect.Request[v1.ImportLedgerRequest]) (*connect.Response[v1.ImportLedgerResponse], error) {
+	return c.importLedger.CallUnary(ctx, req)
+}
+
+// GetDrift calls controlplane.v1.DeployService.GetDrift.
+func (c *deployServiceClient) GetDrift(ctx context.Context, req *connect.Request[v1.GetDeployDriftRequest]) (*connect.Response[v1.GetDeployDriftResponse], error) {
+	return c.getDrift.CallUnary(ctx, req)
 }
 
 // DeployServiceHandler is an implementation of the controlplane.v1.DeployService service.
@@ -856,6 +1118,120 @@ type DeployServiceHandler interface {
 	// read the live cluster, so a deployment declared and never applied appears
 	// in none of them.
 	ListUsage(context.Context, *connect.Request[v1.ListDeployUsageRequest]) (*connect.Response[v1.ListDeployUsageResponse], error)
+	// RecordBundle records one rendered deploy artifact against an environment.
+	//
+	// THE REQUEST CARRIES THE BUNDLE'S OWN BYTES, NEVER A DESCRIPTION OF THEM.
+	// The server re-derives the digest from the manifest, checks the manifest's
+	// config digest against the config blob, and decodes that blob strictly as
+	// forge's bundle document — then takes the shape, the provenance, the config
+	// digest and the release FROM THE VERIFIED DOCUMENT. So a client cannot
+	// record a shape that disagrees with the artifact it points at, which is the
+	// same reasoning PublishDeploymentConfig's emptiness follows: a field a
+	// caller could populate independently is a field that will eventually
+	// disagree with the thing it describes.
+	//
+	// IT RECORDS. IT AUTHORIZES NOTHING. A bundle that policy would refuse is
+	// still recorded here and refused at apply. Separating the two means the
+	// ledger holds what was built even when it was never allowed to ship, which
+	// is exactly the history an incident review wants.
+	//
+	// Idempotent on (environment, digest): the render is reproducible, so a
+	// re-run of an unchanged project records the same bundle and reports
+	// created=false.
+	RecordBundle(context.Context, *connect.Request[v1.RecordDeployBundleRequest]) (*connect.Response[v1.RecordDeployBundleResponse], error)
+	GetBundle(context.Context, *connect.Request[v1.GetDeployBundleRequest]) (*connect.Response[v1.GetDeployBundleResponse], error)
+	// BeginApply opens the record of an attempt to make an environment match a
+	// bundle, and is where every pre-deploy check happens.
+	//
+	// Under the environment's row lock, in order: the compare-and-set (as
+	// Promote), then the plan digest and stop-class acknowledgement, then the
+	// apply-in-flight refusal. The order is the point — a stale CAS should not
+	// be reported as an unacknowledged finding, and an in-flight apply should
+	// not be reported as a stale plan.
+	//
+	// Refused on a LOCAL environment and allowed on every other kind. On a
+	// hosted environment this is how a DECLARATION deploy gets recorded: a spec
+	// change moves no release, so without this row nothing would say who
+	// initiated it. The EnsureDeployment calls that follow carry the id.
+	BeginApply(context.Context, *connect.Request[v1.BeginDeployApplyRequest]) (*connect.Response[v1.BeginDeployApplyResponse], error)
+	// FinishApply closes an apply with the outcome its client observed.
+	//
+	// ONE OF THE TWO REPORTED-STATE EXCEPTIONS — see the service header. The
+	// outcome is written exactly once: the same outcome again returns
+	// created=false, so a client that retries after a dropped response
+	// converges, while a DIFFERENT outcome for the same apply is AlreadyExists
+	// rather than an overwrite. An apply that can be re-decided is an apply
+	// whose record proves nothing.
+	FinishApply(context.Context, *connect.Request[v1.FinishDeployApplyRequest]) (*connect.Response[v1.FinishDeployApplyResponse], error)
+	// ListApplies returns an environment's applies, newest first, keyset-paged
+	// for ListPromotions' reason: rows arrive while a reader pages, so an offset
+	// would skip or repeat one.
+	ListApplies(context.Context, *connect.Request[v1.ListDeployAppliesRequest]) (*connect.Response[v1.ListDeployAppliesResponse], error)
+	// GetLiveView returns every environment of one forge project with its
+	// declaration, promotion, release, bundle, latest apply and sessions — the
+	// whole Live screen in ONE round trip.
+	//
+	// Folded for GetTenant's reason: the page cannot render until it has all of
+	// it, and N environments × six reads is both a slow page and a page assembled
+	// from six different instants. An environment list that comes back empty is
+	// an empty list, never an error: a project nobody has deployed yet is a
+	// normal state, not a failure.
+	GetLiveView(context.Context, *connect.Request[v1.GetDeployLiveViewRequest]) (*connect.Response[v1.GetDeployLiveViewResponse], error)
+	// PlanDeploy computes what deploying a bundle WOULD do, and writes nothing.
+	//
+	// IT IS A SEPARATE READ-ONLY RPC RATHER THAN A dry_run FLAG ON Promote, and
+	// that is the whole design decision. A boolean that makes a mutating call
+	// not mutate is the shape where one wrong default deploys production; a read
+	// RPC cannot have that failure mode, because there is no code path in it
+	// that writes. It is safe to call repeatedly, from a UI, from a pre-commit
+	// hook, from anywhere.
+	//
+	// The plan it returns carries a digest, and Promote and BeginApply RECOMPUTE
+	// the plan rather than trusting the one the caller approved. That is what
+	// makes the digest a guarantee instead of a claim.
+	PlanDeploy(context.Context, *connect.Request[v1.PlanDeployRequest]) (*connect.Response[v1.PlanDeployResponse], error)
+	// ReportLocalSession upserts one `forge env up` worktree's presence.
+	//
+	// THE SECOND REPORTED-STATE EXCEPTION — see the service header. LOCAL
+	// environments only, enforced by the database rather than by this handler.
+	//
+	// It must NEVER block `forge env up`. A developer whose network is down, or
+	// whose token has expired, keeps working — the session record is a courtesy
+	// to their team's Live view, and a local dev loop that depends on a control
+	// plane being reachable is a worse product than one with a gap in a
+	// dashboard.
+	ReportLocalSession(context.Context, *connect.Request[v1.ReportLocalSessionRequest]) (*connect.Response[v1.ReportLocalSessionResponse], error)
+	// ImportLedger loads a project's existing file-based deploy history into the
+	// hosted ledger, in one transaction.
+	//
+	// HISTORY IS IMPORTED AS-IS AND NEVER RE-JUDGED. Provenance comes across
+	// verbatim, including the uncomfortable parts — a release cut dirty from a
+	// laptop is imported saying so. Re-evaluating old records against today's
+	// policy would produce a ledger that disagrees with what actually happened,
+	// which is the one thing a ledger may not do.
+	//
+	// Identity still comes from the token: every imported promotion is
+	// attributed to the importing caller, and the historical actor name from the
+	// file is kept beside it as provenance only. There is deliberately no
+	// user-mapping option — mapping a username onto a control-plane identity is
+	// a guess, and it would put an unverifiable attribution into the audit trail
+	// permanently.
+	//
+	// Idempotent on each item's imported_from, so a failed import is re-run
+	// rather than repaired. It refuses a PERSISTENT or PREVIEW environment,
+	// whose history was always hosted, and any environment that already holds a
+	// non-imported promotion, because the two orderings cannot be reconciled —
+	// the remedy there is to import first.
+	ImportLedger(context.Context, *connect.Request[v1.ImportLedgerRequest]) (*connect.Response[v1.ImportLedgerResponse], error)
+	// GetDrift reports whether an environment's live objects still match the
+	// bundle that was applied to it.
+	//
+	// Distinct from GetStatus's drift, which compares a deployment's observed
+	// image against its declared one. This compares whole objects against the
+	// applied render, so it catches the case that one cannot: an object a human
+	// edited. The next apply reverts such an edit silently, which is why it has
+	// to be visible BEFORE the deploy rather than discovered after.
+	GetDrift(context.Context, *connect.Request[v1.GetDeployDriftRequest]) (*connect.Response[v1.GetDeployDriftResponse], error)
 }
 
 // NewDeployServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -1033,6 +1409,66 @@ func NewDeployServiceHandler(svc DeployServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(deployServiceMethods.ByName("ListUsage")),
 		connect.WithHandlerOptions(opts...),
 	)
+	deployServiceRecordBundleHandler := connect.NewUnaryHandler(
+		DeployServiceRecordBundleProcedure,
+		svc.RecordBundle,
+		connect.WithSchema(deployServiceMethods.ByName("RecordBundle")),
+		connect.WithHandlerOptions(opts...),
+	)
+	deployServiceGetBundleHandler := connect.NewUnaryHandler(
+		DeployServiceGetBundleProcedure,
+		svc.GetBundle,
+		connect.WithSchema(deployServiceMethods.ByName("GetBundle")),
+		connect.WithHandlerOptions(opts...),
+	)
+	deployServiceBeginApplyHandler := connect.NewUnaryHandler(
+		DeployServiceBeginApplyProcedure,
+		svc.BeginApply,
+		connect.WithSchema(deployServiceMethods.ByName("BeginApply")),
+		connect.WithHandlerOptions(opts...),
+	)
+	deployServiceFinishApplyHandler := connect.NewUnaryHandler(
+		DeployServiceFinishApplyProcedure,
+		svc.FinishApply,
+		connect.WithSchema(deployServiceMethods.ByName("FinishApply")),
+		connect.WithHandlerOptions(opts...),
+	)
+	deployServiceListAppliesHandler := connect.NewUnaryHandler(
+		DeployServiceListAppliesProcedure,
+		svc.ListApplies,
+		connect.WithSchema(deployServiceMethods.ByName("ListApplies")),
+		connect.WithHandlerOptions(opts...),
+	)
+	deployServiceGetLiveViewHandler := connect.NewUnaryHandler(
+		DeployServiceGetLiveViewProcedure,
+		svc.GetLiveView,
+		connect.WithSchema(deployServiceMethods.ByName("GetLiveView")),
+		connect.WithHandlerOptions(opts...),
+	)
+	deployServicePlanDeployHandler := connect.NewUnaryHandler(
+		DeployServicePlanDeployProcedure,
+		svc.PlanDeploy,
+		connect.WithSchema(deployServiceMethods.ByName("PlanDeploy")),
+		connect.WithHandlerOptions(opts...),
+	)
+	deployServiceReportLocalSessionHandler := connect.NewUnaryHandler(
+		DeployServiceReportLocalSessionProcedure,
+		svc.ReportLocalSession,
+		connect.WithSchema(deployServiceMethods.ByName("ReportLocalSession")),
+		connect.WithHandlerOptions(opts...),
+	)
+	deployServiceImportLedgerHandler := connect.NewUnaryHandler(
+		DeployServiceImportLedgerProcedure,
+		svc.ImportLedger,
+		connect.WithSchema(deployServiceMethods.ByName("ImportLedger")),
+		connect.WithHandlerOptions(opts...),
+	)
+	deployServiceGetDriftHandler := connect.NewUnaryHandler(
+		DeployServiceGetDriftProcedure,
+		svc.GetDrift,
+		connect.WithSchema(deployServiceMethods.ByName("GetDrift")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/controlplane.v1.DeployService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case DeployServiceGetTenantProcedure:
@@ -1091,6 +1527,26 @@ func NewDeployServiceHandler(svc DeployServiceHandler, opts ...connect.HandlerOp
 			deployServiceGetRunHandler.ServeHTTP(w, r)
 		case DeployServiceListUsageProcedure:
 			deployServiceListUsageHandler.ServeHTTP(w, r)
+		case DeployServiceRecordBundleProcedure:
+			deployServiceRecordBundleHandler.ServeHTTP(w, r)
+		case DeployServiceGetBundleProcedure:
+			deployServiceGetBundleHandler.ServeHTTP(w, r)
+		case DeployServiceBeginApplyProcedure:
+			deployServiceBeginApplyHandler.ServeHTTP(w, r)
+		case DeployServiceFinishApplyProcedure:
+			deployServiceFinishApplyHandler.ServeHTTP(w, r)
+		case DeployServiceListAppliesProcedure:
+			deployServiceListAppliesHandler.ServeHTTP(w, r)
+		case DeployServiceGetLiveViewProcedure:
+			deployServiceGetLiveViewHandler.ServeHTTP(w, r)
+		case DeployServicePlanDeployProcedure:
+			deployServicePlanDeployHandler.ServeHTTP(w, r)
+		case DeployServiceReportLocalSessionProcedure:
+			deployServiceReportLocalSessionHandler.ServeHTTP(w, r)
+		case DeployServiceImportLedgerProcedure:
+			deployServiceImportLedgerHandler.ServeHTTP(w, r)
+		case DeployServiceGetDriftProcedure:
+			deployServiceGetDriftHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -1210,4 +1666,44 @@ func (UnimplementedDeployServiceHandler) GetRun(context.Context, *connect.Reques
 
 func (UnimplementedDeployServiceHandler) ListUsage(context.Context, *connect.Request[v1.ListDeployUsageRequest]) (*connect.Response[v1.ListDeployUsageResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.ListUsage is not implemented"))
+}
+
+func (UnimplementedDeployServiceHandler) RecordBundle(context.Context, *connect.Request[v1.RecordDeployBundleRequest]) (*connect.Response[v1.RecordDeployBundleResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.RecordBundle is not implemented"))
+}
+
+func (UnimplementedDeployServiceHandler) GetBundle(context.Context, *connect.Request[v1.GetDeployBundleRequest]) (*connect.Response[v1.GetDeployBundleResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.GetBundle is not implemented"))
+}
+
+func (UnimplementedDeployServiceHandler) BeginApply(context.Context, *connect.Request[v1.BeginDeployApplyRequest]) (*connect.Response[v1.BeginDeployApplyResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.BeginApply is not implemented"))
+}
+
+func (UnimplementedDeployServiceHandler) FinishApply(context.Context, *connect.Request[v1.FinishDeployApplyRequest]) (*connect.Response[v1.FinishDeployApplyResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.FinishApply is not implemented"))
+}
+
+func (UnimplementedDeployServiceHandler) ListApplies(context.Context, *connect.Request[v1.ListDeployAppliesRequest]) (*connect.Response[v1.ListDeployAppliesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.ListApplies is not implemented"))
+}
+
+func (UnimplementedDeployServiceHandler) GetLiveView(context.Context, *connect.Request[v1.GetDeployLiveViewRequest]) (*connect.Response[v1.GetDeployLiveViewResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.GetLiveView is not implemented"))
+}
+
+func (UnimplementedDeployServiceHandler) PlanDeploy(context.Context, *connect.Request[v1.PlanDeployRequest]) (*connect.Response[v1.PlanDeployResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.PlanDeploy is not implemented"))
+}
+
+func (UnimplementedDeployServiceHandler) ReportLocalSession(context.Context, *connect.Request[v1.ReportLocalSessionRequest]) (*connect.Response[v1.ReportLocalSessionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.ReportLocalSession is not implemented"))
+}
+
+func (UnimplementedDeployServiceHandler) ImportLedger(context.Context, *connect.Request[v1.ImportLedgerRequest]) (*connect.Response[v1.ImportLedgerResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.ImportLedger is not implemented"))
+}
+
+func (UnimplementedDeployServiceHandler) GetDrift(context.Context, *connect.Request[v1.GetDeployDriftRequest]) (*connect.Response[v1.GetDeployDriftResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.GetDrift is not implemented"))
 }
