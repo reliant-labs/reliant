@@ -273,16 +273,22 @@ type CopilotAuthToken struct {
 }
 
 type Daemon struct {
-	ID           string         `json:"id"`
-	UserID       string         `json:"user_id"`
-	Hostname     sql.NullString `json:"hostname"`
-	Platform     sql.NullString `json:"platform"`
-	Capabilities sql.NullString `json:"capabilities"`
-	ProjectPaths sql.NullString `json:"project_paths"`
-	ProjectsJson sql.NullString `json:"projects_json"`
-	CreatedAt    time.Time      `json:"created_at"`
-	UpdatedAt    time.Time      `json:"updated_at"`
-	DaemonType   sql.NullString `json:"daemon_type"`
+	ID                  string         `json:"id"`
+	UserID              string         `json:"user_id"`
+	Hostname            sql.NullString `json:"hostname"`
+	Platform            sql.NullString `json:"platform"`
+	Capabilities        sql.NullString `json:"capabilities"`
+	ProjectPaths        sql.NullString `json:"project_paths"`
+	ProjectsJson        sql.NullString `json:"projects_json"`
+	CreatedAt           time.Time      `json:"created_at"`
+	UpdatedAt           time.Time      `json:"updated_at"`
+	DaemonType          sql.NullString `json:"daemon_type"`
+	LifecyclePhase      sql.NullString `json:"lifecycle_phase"`
+	Size                sql.NullString `json:"size"`
+	LastStatusMessage   string         `json:"last_status_message"`
+	LastStatusChangedAt sql.NullTime   `json:"last_status_changed_at"`
+	LastOomKilledAt     sql.NullTime   `json:"last_oom_killed_at"`
+	OomKillCount        int32          `json:"oom_kill_count"`
 }
 
 type DaemonAttachment struct {

@@ -29,6 +29,7 @@ type DerivationRepository interface {
 	TouchDaemonAttachmentIfNewer(ctx context.Context, daemonID string, activityAt time.Time) error
 	DeleteDaemonAttachment(ctx context.Context, daemonID string) error
 	DeleteStaleDaemonAttachments(ctx context.Context, olderThan time.Duration) (int64, error)
+	ApplyDaemonLifecycle(ctx context.Context, lc db.DaemonLifecycleUpdate) (bool, error)
 }
 
 const (
@@ -177,9 +178,54 @@ func (d *Derivation) dispatch(ctx context.Context, evt Event) error {
 		return d.onActivity(ctx, evt)
 	case EventDisconnected:
 		return d.onDisconnected(ctx, evt)
+	case EventLifecycle:
+		return d.onLifecycle(ctx, evt)
 	default:
 		return fmt.Errorf("unknown event type %q", evt.Type)
 	}
+}
+
+// onLifecycle mirrors a control-plane lifecycle observation onto the daemons
+// row. Unlike the three liveness handlers, this one writes state this service
+// does not own: the Workspace CR is authoritative and only the control-plane
+// operator watches it.
+//
+// Two things are deliberately NOT errors, because treating them as failures
+// would turn normal operation into log noise:
+//
+//   - An unrecognized phase is dropped. The registry then falls back to
+//     attachment-derived status, which is always correct if less specific —
+//     better than storing a phase no reader can interpret.
+//   - No row updated. Either the event is stale (superseded by a newer
+//     transition, which the SQL guard exists to drop) or the daemon has never
+//     registered here. The latter is the expected steady state for a managed
+//     machine mid-provision: control-plane creates its row and publishes
+//     PROVISIONING before the pod has run, let alone attached. The event is
+//     re-supplied on the next transition.
+func (d *Derivation) onLifecycle(ctx context.Context, evt Event) error {
+	if !ValidLifecyclePhase(evt.Phase) {
+		logging.Warn(logPrefix+" lifecycle event with unknown phase, dropping",
+			"daemonID", evt.DaemonID, "phase", string(evt.Phase))
+		return nil
+	}
+
+	updated, err := d.repo.ApplyDaemonLifecycle(ctx, db.DaemonLifecycleUpdate{
+		DaemonID:        evt.DaemonID,
+		Phase:           string(evt.Phase),
+		Size:            evt.Size,
+		StatusMessage:   evt.StatusMessage,
+		ChangedAt:       evt.At,
+		LastOOMKilledAt: evt.LastOOMKilledAt,
+		OOMKillCount:    evt.OOMKillCount,
+	})
+	if err != nil {
+		return fmt.Errorf("apply lifecycle %s: %w", evt.DaemonID, err)
+	}
+	if !updated {
+		logging.Debug(logPrefix+" lifecycle event did not apply (stale or daemon not registered)",
+			"daemonID", evt.DaemonID, "phase", string(evt.Phase), "at", evt.At)
+	}
+	return nil
 }
 
 func (d *Derivation) onConnected(ctx context.Context, evt Event) error {
