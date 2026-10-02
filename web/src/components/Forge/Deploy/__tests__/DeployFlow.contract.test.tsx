@@ -17,6 +17,7 @@ import userEvent from "@testing-library/user-event";
 
 import { DeployFlow } from "../DeployFlow";
 import { DeployConfirmStep } from "../DeployConfirmStep";
+import { deployTokenFor } from "@/services/forge/deploy";
 import {
   devPlan,
   guardRefusedPlan,
@@ -118,7 +119,10 @@ describe("the confirm guard", () => {
     expect(screen.getByTestId("deploy-blocker-not-a-preview").textContent).toContain("apply");
   });
 
-  it("requires acknowledging the claim AND typing the declared cluster", async () => {
+  it("confirms with the button alone, named for the environment", async () => {
+    // NO TYPED CONTEXT AND NO CHECKBOX. The cluster is declared in KCL, so the
+    // user never chose it and there is no wrong one to catch — see
+    // DeployConfirmStep's header. The plan is the review; this is the approval.
     const user = userEvent.setup();
     const onConfirm = vi.fn();
     render(
@@ -126,39 +130,24 @@ describe("the confirm guard", () => {
     );
 
     const start = screen.getByTestId("deploy-start");
-    expect(start).toBeDisabled();
-    await user.click(start);
-    expect(onConfirm).not.toHaveBeenCalled();
-
-    await user.click(screen.getByTestId("deploy-acknowledge"));
-    // Acknowledged, cluster still untyped — every deploy types it, not just a
-    // subset. There is no "dev is safe" exemption.
-    expect(start).toBeDisabled();
-
-    await user.type(
-      screen.getByTestId("deploy-typed-context"),
-      "gke_reliant-labs-475814_us-central1_prod"
-    );
     expect(start).toBeEnabled();
+    expect(start.textContent).toBe("Deploy to prod");
+    expect(screen.queryByTestId("deploy-typed-context")).toBeNull();
+    expect(screen.queryByTestId("deploy-acknowledge")).toBeNull();
+
+    await user.click(start);
+    expect(onConfirm).toHaveBeenCalledTimes(1);
   });
 
-  it("rejects the WRONG cluster name typed into the confirm", async () => {
-    const user = userEvent.setup();
-    render(<DeployFlow {...baseProps()} planOutcome={planOutcome(prodPlan())} />);
-    await user.click(screen.getByTestId("deploy-acknowledge"));
-    // The ambient context is NOT the target, and typing it must not unlock this.
-    await user.type(screen.getByTestId("deploy-typed-context"), "k3d-control-plane");
-    expect(screen.getByTestId("deploy-start")).toBeDisabled();
+  it("still binds the declared cluster in the token the request carries", () => {
+    // The guard the typing used to advertise, asserted directly. The server
+    // re-checks this, so a KCL that moved still refuses after the click.
+    const token = deployTokenFor(prodPlan());
+    expect(token?.expectedDeclaredContext).toBe("gke_reliant-labs-475814_us-central1_prod");
+    expect(token?.expectedCurrentRelease).toBe("v1.5.15");
   });
 
-  it("states the claim, cluster first, in the words the server re-checks", () => {
-    render(<DeployFlow {...baseProps()} planOutcome={planOutcome(prodPlan())} />);
-    const claim = screen.getByTestId("deploy-claim").textContent ?? "";
-    expect(claim).toContain("gke_reliant-labs-475814_us-central1_prod");
-    expect(claim).toContain("v1.5.15");
-  });
-
-  it("names every cluster again at the point of the click, for a multi-cluster env", () => {
+  it("uses the one rule for a multi-cluster env too", () => {
     // devPlan blocks on preflight, so use a clean two-cluster plan to isolate this.
     const twoClusters = devPlan({
       preflight: { status: "ran", findings: [], blocking: 0 },
@@ -166,10 +155,10 @@ describe("the confirm guard", () => {
       exit_code: 0,
     });
     render(<DeployConfirmStep plan={twoClusters} onConfirm={noop} onCancel={noop} />);
-    const note = screen.getByTestId("deploy-confirm-all-contexts").textContent ?? "";
-    expect(note).toContain("k3d-control-plane");
-    expect(note).toContain("k3d-cp-daemon");
-    expect(note).toMatch(/2 clusters/);
+    expect(screen.getByTestId("deploy-start").textContent).toBe("Deploy to dev");
+    expect(screen.queryByTestId("deploy-typed-context")).toBeNull();
+    // The cluster list is information on the PLAN, not a hurdle at the click.
+    expect(screen.queryByTestId("deploy-confirm-all-contexts")).toBeNull();
   });
 
   it("passes the RENDERED plan object to onConfirm", async () => {
@@ -180,11 +169,6 @@ describe("the confirm guard", () => {
     const plan = prodPlan();
     render(<DeployFlow {...baseProps()} onConfirm={onConfirm} planOutcome={planOutcome(plan)} />);
 
-    await user.click(screen.getByTestId("deploy-acknowledge"));
-    await user.type(
-      screen.getByTestId("deploy-typed-context"),
-      "gke_reliant-labs-475814_us-central1_prod"
-    );
     await user.click(screen.getByTestId("deploy-start"));
 
     expect(onConfirm).toHaveBeenCalledTimes(1);
@@ -207,16 +191,11 @@ describe("no escape hatches", () => {
       expect(text).not.toContain(phrase);
     }
 
-    // And no interactive control beyond the two the confirm step defines: the
-    // acknowledge checkbox and the typed cluster name.
-    const inputs = [...container.querySelectorAll("input")];
-    expect(inputs).toHaveLength(2);
-    expect(inputs.map((input) => input.getAttribute("data-testid")).sort()).toEqual([
-      "deploy-acknowledge",
-      "deploy-typed-context",
-    ]);
-    // No toggles, switches or checkboxes other than the acknowledgement.
-    expect(inputs.filter((input) => input.type === "checkbox")).toHaveLength(1);
+    // And NO interactive control at all on a clean plan. The confirm step
+    // defines none: the button is the whole confirmation. The only input this
+    // flow can ever render is the destructive-findings tick, which requires a
+    // finding reporting irreversible loss to exist.
+    expect(container.querySelectorAll("input")).toHaveLength(0);
   });
 });
 

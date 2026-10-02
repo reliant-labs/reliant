@@ -20,11 +20,28 @@
  * assertion the server will check, and a refusal is only intelligible to someone
  * who was shown the claim it refers to.
  *
- * A rollback additionally requires typing the environment name. The extra
- * friction is scoped to the one case where the default reading of the screen is
- * wrong: a forward promote does roughly what a reviewer skimming it expects,
- * while a rollback moves the environment backwards. Gating every promote behind
- * typing would train the reflex out and make the rollback case indistinguishable.
+ * THE DIFF IS THE REVIEW, AND THE BUTTON NAMING THE ENV IS THE APPROVAL — the
+ * same single rule the deploy dialog runs on.
+ *
+ * A ROLLBACK USED TO ADDITIONALLY REQUIRE TYPING THE ENVIRONMENT NAME, and the
+ * instinct behind that was right while the remedy was not. A backwards move is
+ * genuinely not what a reviewer skimming the screen expects, so it needs to be
+ * unmissable — but the env name is already in the dialog's heading, which makes
+ * transcribing it evidence of nothing, and it sat directly beneath a checkbox
+ * asserting the very same thing. Two reflexes stacked is not twice the
+ * deliberation; it is one decision with extra keystrokes.
+ *
+ * What marks a rollback now is what actually differs: destructive styling, a
+ * sentence saying it moves the environment backwards, and a button that names
+ * the environment AND the version it lands on ("Roll back prod to v1.4.0").
+ * Reading that button is reading the decision, which is the property the typed
+ * field was reaching for.
+ *
+ * The acknowledgement checkbox stays, on both directions. Unlike the typed
+ * name, it carries a FACT ABOUT STATE the diff cannot otherwise force into
+ * view — "prod is currently bound to v1.5.0" — and that claim is what the
+ * server re-checks, so a refusal is only intelligible to someone who was shown
+ * it.
  */
 
 import { useId, useState } from "react";
@@ -32,7 +49,6 @@ import { AlertTriangle } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
-import { Input } from "@/components/ui/Input";
 import {
   confirmationTokenFor,
   describeToken,
@@ -57,9 +73,7 @@ export function PromoteConfirmStep({
   isApplying,
 }: PromoteConfirmStepProps) {
   const [acknowledged, setAcknowledged] = useState(false);
-  const [typedEnv, setTypedEnv] = useState("");
   const checkboxId = useId();
-  const typedEnvId = useId();
 
   const direction = promoteDirectionOf(plan.direction);
   const rollback = isDestructiveDirection(direction);
@@ -70,8 +84,7 @@ export function PromoteConfirmStep({
   // authorise a write — see confirmationTokenFor for why no default is safe.
   const token = confirmationTokenFor(plan);
 
-  const envMatches = !rollback || typedEnv.trim() === env;
-  const canApply = !!token && acknowledged && envMatches && !isApplying;
+  const canApply = !!token && acknowledged && !isApplying;
 
   return (
     <section className="space-y-3" data-testid="promote-confirm">
@@ -104,26 +117,18 @@ export function PromoteConfirmStep({
         </p>
       )}
 
+      {/* THE ROLLBACK, as a statement rather than a transcription exercise.
+          What distinguishes a backwards move is the direction itself, so that
+          is what is said — and the button below names both the environment and
+          the version it lands on, which is the decision. */}
       {rollback && token && (
-        <div className="space-y-1.5 rounded-lg border border-solid border-destructive/50 bg-destructive/10 px-3 py-2">
-          <p className="flex items-center gap-1.5 text-xs font-medium text-destructive">
-            <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-            This is a rollback. It moves {env} backwards.
-          </p>
-          <label htmlFor={typedEnvId} className="block text-2xs text-muted-foreground">
-            Type <span className="font-mono text-foreground">{env}</span> to confirm.
-          </label>
-          <Input
-            id={typedEnvId}
-            value={typedEnv}
-            onChange={(event) => setTypedEnv(event.target.value)}
-            placeholder={env}
-            autoComplete="off"
-            spellCheck={false}
-            className="font-mono text-xs"
-            data-testid="promote-typed-env"
-          />
-        </div>
+        <p
+          data-testid="promote-rollback-warning"
+          className="flex items-center gap-1.5 rounded-lg border border-solid border-destructive/50 bg-destructive/10 px-3 py-2 text-xs font-medium text-destructive"
+        >
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+          This is a rollback. It moves {env} backwards.
+        </p>
       )}
 
       {/* The irreversibility, stated where the button is. A forge EnvBinding
@@ -149,7 +154,7 @@ export function PromoteConfirmStep({
           {isApplying
             ? "Writing binding…"
             : rollback
-              ? `Roll ${env} back to ${release}`
+              ? `Roll back ${env} to ${release}`
               : `Promote ${env} to ${release}`}
         </Button>
       </div>

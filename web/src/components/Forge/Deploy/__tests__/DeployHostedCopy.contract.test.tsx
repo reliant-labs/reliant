@@ -270,25 +270,24 @@ describe("a hosted refusal does not relabel our endpoint as their cluster", () =
   });
 });
 
-describe("the cluster path is untouched", () => {
-  it("still requires the checkbox AND the typed context", async () => {
+describe("the cluster path now follows the SAME rule", () => {
+  // This block previously asserted the cluster ceremony as deliberately
+  // divergent. The owner's follow-up collapsed the two: KCL declares the
+  // target, so there was never a wrong cluster for the typing to catch. The
+  // hosted-specific assertions above are what remain destination-specific, and
+  // they are about COPY (which nouns a customer can act on), not ceremony.
+  it("confirms with the button alone, named for the env, exactly like hosted", async () => {
     const onConfirm = vi.fn();
     render(<DeployConfirmStep plan={prodPlan()} onConfirm={onConfirm} onCancel={vi.fn()} />);
 
     const start = screen.getByTestId("deploy-start");
-    expect(start).toBeDisabled();
-
-    await userEvent.click(screen.getByTestId("deploy-acknowledge"));
-    expect(start).toBeDisabled();
-
-    await userEvent.type(
-      screen.getByTestId("deploy-typed-context"),
-      "gke_reliant-labs-475814_us-central1_prod"
-    );
     expect(start).toBeEnabled();
-    expect(start.textContent).toBe("Deploy prod to gke_reliant-labs-475814_us-central1_prod");
+    expect(start.textContent).toBe("Deploy to prod");
 
-    // And it keeps the warning a cluster apply genuinely needs.
-    expect(screen.getByTestId("deploy-confirm").textContent).toMatch(/cannot be undone from git/i);
+    expect(screen.queryByTestId("deploy-typed-context")).toBeNull();
+    expect(screen.queryByTestId("deploy-acknowledge")).toBeNull();
+
+    await userEvent.click(start);
+    expect(onConfirm).toHaveBeenCalledTimes(1);
   });
 });

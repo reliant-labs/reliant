@@ -70,7 +70,7 @@
  */
 
 import type { Certainty } from "./topology";
-import { destinationOf, endpointHost, type EnvDestination } from "./topology";
+import { destinationOf, type EnvDestination } from "./topology";
 
 // ── Mode ────────────────────────────────────────────────────────────────────
 
@@ -650,39 +650,19 @@ export function deployTokenFor(
   return { expectedDeclaredContext: declaredContext, expectedCurrentRelease: release, ...hosted };
 }
 
-/**
- * describeDeployToken renders the claim in the words the confirm step shows.
- *
- * The user is told what they are asserting, not just what they are doing — that
- * assertion is what the server re-checks, and a refusal only makes sense to
- * someone who was shown the claim it refers to. The cluster comes first because
- * it is the consequential half.
- */
-export function describeDeployToken(token: DeployConfirmationToken): string {
-  const release = token.expectUnbound
-    ? "this environment has no release binding"
-    : `this environment is bound to ${token.expectedCurrentRelease}`;
-  if (token.hosted) {
-    // The verb says whether this touches something live: an ensured env is
-    // UPDATED (its id is named, so the claim pins which one), an un-ensured one
-    // is CREATED.
-    const action = token.hosted.environmentId
-      ? `this updates the live environment ${token.hosted.environmentId}`
-      : "this creates a new environment";
-    return `${action} on the control plane at ${token.expectedDeclaredContext}, and ${release}`;
-  }
-  return `this deploys to ${token.expectedDeclaredContext}, and ${release}`;
-}
-
-/**
- * confirmPhrase is what the operator must TYPE to enable the deploy: the
- * cluster name, or — hosted — the control plane's host. The host rather than
- * the full URL because it is the part a human reads and recognises; the full
- * endpoint still travels in the token and is what the daemon re-checks.
- */
-export function confirmPhrase(token: DeployConfirmationToken): string {
-  return token.hosted ? endpointHost(token.expectedDeclaredContext) : token.expectedDeclaredContext;
-}
+// NOTE: describeDeployToken and confirmPhrase are deliberately GONE.
+//
+// They rendered the two pieces of ceremony the confirm step no longer has: the
+// "I have read the plan, and <claim>" sentence, and the phrase the operator had
+// to type. Both were removed from the UI because neither carried information —
+// the deploy target is DECLARED in KCL, so there is no choice for a reader to
+// get wrong and nothing for friction to catch (see DeployConfirmStep's header).
+//
+// They are deleted rather than left for a future caller because a helper that
+// formats a confirmation phrase is an invitation to reintroduce the phrase. The
+// token itself is unchanged and still carries expectedDeclaredContext, which is
+// the half the server re-checks; what is gone is only the rendering of it as
+// something to transcribe.
 
 // ── Refusal ─────────────────────────────────────────────────────────────────
 

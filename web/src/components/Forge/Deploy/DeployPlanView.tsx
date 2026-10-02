@@ -129,10 +129,13 @@ export function TargetPanel({ plan }: { plan: ForgeDeployReport }) {
       <div className="flex items-center gap-2 text-foreground">
         <Target className="h-4 w-4 shrink-0" aria-hidden="true" />
         <h3 className="text-sm font-medium" data-testid="deploy-target-heading">
+          {/* The ENVIRONMENT and the write, never a context — the contexts are
+              below as information. A reader does not choose them (KCL does), so
+              making one the headline advertised a decision nobody makes. */}
           {multi
-            ? `This deploys to ${contexts.length} clusters`
+            ? `Writes to ${contexts.length} clusters`
             : contexts.length === 1
-              ? "This deploys to a live cluster"
+              ? "Writes to a live cluster"
               : "This environment declares no cluster"}
         </h3>
       </div>
