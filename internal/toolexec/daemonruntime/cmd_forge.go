@@ -22,6 +22,7 @@ func init() {
 	RegisterCommand("forge.secret_list", handleForgeSecretList)
 	RegisterCommand("forge.audit", handleForgeAudit)
 	RegisterCommand("forge.env_status", handleForgeEnvStatus)
+	RegisterCommand("forge.render_capability", handleForgeRenderCapability)
 }
 
 // =============================================================================
@@ -435,13 +436,22 @@ type forgeTopologyRequest struct {
 	Envs []string `json:"envs,omitempty"`
 }
 
+// handleForgeTopology reports every declared environment and how far behind
+// each one is.
+//
+// The argv is `env status --json` with no environment positional. forge v0.1.42
+// deleted `env topology` and folded it into `env status`'s all-environments
+// view (ADR V4): status with no positional IS what topology was, reaching the
+// same run function, so this is a rename and not a behaviour change. `--verify`
+// survives unchanged — it is defined only for the all-envs view, which is the
+// one this command asks for.
 func handleForgeTopology(ctx context.Context, payload []byte) ([]byte, error) {
 	var req forgeTopologyRequest
 	if err := json.Unmarshal(payload, &req); err != nil {
 		return nil, fmt.Errorf("invalid payload: %w", err)
 	}
 
-	args := []string{"env", "topology", "--json"}
+	args := []string{"env", "status", "--json"}
 	if req.Verify {
 		args = append(args, "--verify")
 	}
@@ -461,6 +471,13 @@ type forgeEnvVerifyRequest struct {
 	Env         string `json:"env"`
 }
 
+// handleForgeEnvVerify reconciles ONE environment's running digests against
+// the digests its release binding froze.
+//
+// The argv is `env status <env> --json`. forge v0.1.42 deleted `env verify`
+// into `env status <env>` (ADR V4), whose release half IS the verify half —
+// same run function, same exit codes, so match/drift/missing/untagged/
+// unreachable and the exit-code contract below are unchanged.
 func handleForgeEnvVerify(ctx context.Context, payload []byte) ([]byte, error) {
 	var req forgeEnvVerifyRequest
 	if err := json.Unmarshal(payload, &req); err != nil {
@@ -476,7 +493,7 @@ func handleForgeEnvVerify(ctx context.Context, payload []byte) ([]byte, error) {
 	// bound:false, which needs no special handling here.
 	return invokeForgeReport(ctx, forgeInvocation{
 		ProjectPath: req.ProjectPath,
-		Args:        []string{"env", "verify", req.Env, "--json"},
+		Args:        []string{"env", "status", req.Env, "--json"},
 	})
 }
 

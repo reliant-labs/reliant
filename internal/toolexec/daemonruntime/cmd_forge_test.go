@@ -331,7 +331,7 @@ func TestForgeTopologyArgs(t *testing.T) {
 	}{
 		{
 			name: "default is ledger-only",
-			want: []string{"env", "topology", "--json"},
+			want: []string{"env", "status", "--json"},
 		},
 		{
 			// --verify is opt-in for a load-bearing reason: without it
@@ -339,17 +339,17 @@ func TestForgeTopologyArgs(t *testing.T) {
 			// handler must not quietly add it.
 			name: "verify opts in to reading clusters",
 			req:  forgeTopologyRequest{Verify: true},
-			want: []string{"env", "topology", "--json", "--verify"},
+			want: []string{"env", "status", "--json", "--verify"},
 		},
 		{
 			name: "envs narrow the report",
 			req:  forgeTopologyRequest{Envs: []string{"prod", "staging"}},
-			want: []string{"env", "topology", "--json", "prod", "staging"},
+			want: []string{"env", "status", "--json", "prod", "staging"},
 		},
 		{
 			name: "blank env names are dropped",
 			req:  forgeTopologyRequest{Envs: []string{"prod", "  ", ""}},
-			want: []string{"env", "topology", "--json", "prod"},
+			want: []string{"env", "status", "--json", "prod"},
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -379,7 +379,7 @@ func TestForgePerCommandArgs(t *testing.T) {
 		payload map[string]string
 		want    []string
 	}{
-		{"forge.env_verify", map[string]string{"env": "prod"}, []string{"env", "verify", "prod", "--json"}},
+		{"forge.env_verify", map[string]string{"env": "prod"}, []string{"env", "status", "prod", "--json"}},
 		{"forge.secret_list", map[string]string{"env": "dev"}, []string{"secret", "list", "--env=dev", "--json"}},
 		{"forge.audit", nil, []string{"project", "audit", "--json"}},
 		{"forge.env_status", map[string]string{"env": "dev"}, []string{"env", "status", "dev", "--json"}},

@@ -102,12 +102,20 @@ type forgeCallLog struct {
 	Args        [][]string
 }
 
-// wrote reports whether any recorded invocation was a real promote — a
-// `env promote` argv without --plan. This is the assertion that matters most in
+// wrote reports whether any recorded invocation was a real promote — an
+// `env deploy` argv without --plan. This is the assertion that matters most in
 // this file: several tests exist only to prove no write was attempted.
+//
+// The verb here is load-bearing and must track forge. When forge v0.1.42
+// replaced `env promote` with `env deploy`, a predicate still looking for
+// "promote" would match NOTHING and return false for every call — so every
+// test that proves "no write was attempted" would have passed vacuously, which
+// is strictly worse than failing. TestForgePromoteWroteDetectsTheApplyArgv
+// below pins the predicate against the real applyArgs() so it cannot silently
+// go blind again.
 func (l *forgeCallLog) wrote() bool {
 	for _, args := range l.Args {
-		if len(args) >= 2 && args[0] == "env" && args[1] == "promote" {
+		if len(args) >= 2 && args[0] == "env" && args[1] == "deploy" {
 			plan := false
 			for _, a := range args {
 				if a == "--plan" {
@@ -120,6 +128,30 @@ func (l *forgeCallLog) wrote() bool {
 		}
 	}
 	return false
+}
+
+// TestForgePromoteWroteDetectsTheApplyArgv proves the write detector is not
+// blind, by deriving both argv from the SAME builders production uses rather
+// than restating them.
+//
+// Without this, `wrote()` is a literal that forge can invalidate from the
+// outside: it matched `env promote` until v0.1.42 deleted that verb, at which
+// point it would have returned false for a real write and every
+// "nothing was applied" assertion in this file would have passed over an argv
+// that applies. A guard over a predicate that cannot fire is not a guard.
+func TestForgePromoteWroteDetectsTheApplyArgv(t *testing.T) {
+	args := forgePromoteArgs{ProjectPath: "/p", Env: "staging", Release: "v1.5.15"}
+
+	applied := &forgeCallLog{Args: [][]string{args.applyArgs()}}
+	if !applied.wrote() {
+		t.Fatalf("wrote() did not recognise the real apply argv %v as a write — "+
+			"every no-write assertion in this file is passing vacuously", args.applyArgs())
+	}
+
+	planned := &forgeCallLog{Args: [][]string{args.planArgs()}}
+	if planned.wrote() {
+		t.Fatalf("wrote() counted the --plan dry run %v as a write", args.planArgs())
+	}
 }
 
 // --- registration ---
@@ -189,7 +221,7 @@ func TestForgePromoteArgs(t *testing.T) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 
-		want := []string{"env", "promote", "v1.5.15", "--to", "staging", "--plan", "--json"}
+		want := []string{"env", "deploy", "staging", "v1.5.15", "--plan", "--json"}
 		if !reflect.DeepEqual(call.Args, want) {
 			t.Errorf("args:\n got %v\nwant %v", call.Args, want)
 		}
@@ -216,8 +248,8 @@ func TestForgePromoteArgs(t *testing.T) {
 			t.Fatalf("apply must run the read-only guard plan and then the write, got %d call(s): %v",
 				len(log.Args), log.Args)
 		}
-		wantPlan := []string{"env", "promote", "v1.5.15", "--to", "staging", "--plan", "--json"}
-		wantApply := []string{"env", "promote", "v1.5.15", "--to", "staging", "--json"}
+		wantPlan := []string{"env", "deploy", "staging", "v1.5.15", "--plan", "--json"}
+		wantApply := []string{"env", "deploy", "staging", "v1.5.15", "--json"}
 		if !reflect.DeepEqual(log.Args[0], wantPlan) {
 			t.Errorf("guard call must be the dry run:\n got %v\nwant %v", log.Args[0], wantPlan)
 		}
@@ -734,7 +766,7 @@ func TestForgePromoteRequiredFieldsAreValidated(t *testing.T) {
 		// a FLAG, which on the apply path means an argument deciding whether
 		// a write happens.
 		{"flag-shaped release", "forge.promote_apply",
-			map[string]any{"project_path": dir, "env": "staging", "release": "--to",
+			map[string]any{"project_path": dir, "env": "staging", "release": "--plan",
 				"expected_current_release": "v1.3.0"}},
 		{"flag-shaped env", "forge.promote_apply",
 			map[string]any{"project_path": dir, "env": "--plan", "release": "v1.5.15",

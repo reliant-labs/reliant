@@ -133,7 +133,7 @@ nodes:
       # ephemeral port every `run`, so a second start without a stop leaves two
       # stacks up and the browser can land on the older one. `;` rather than `&&`
       # because "nothing was running" is the expected answer on iteration 1.
-      start_app_command: "cd {{inputs.working_directory}} && reliant forge env down dev; reliant forge run"
+      start_app_command: "cd {{inputs.working_directory}} && reliant forge env down dev; reliant forge env up dev"
       # ── Review TEETH ──────────────────────────────────────────────────
       # Browser tools to snapshot the LIVE app + a shell. Without these the
       # reviewer can only trust the implementer's self-report. Deliberately no
@@ -234,7 +234,7 @@ nodes:
 
         1. **Start the app YOURSELF, then get its LIVE URL — the port is EPHEMERAL, so
            never assume 3000.** The start command is above; run it with the shell tool,
-           FOREGROUND. **`forge run` does NOT stay alive**: with no TTY (every agent
+           FOREGROUND. **`forge env up dev` does NOT stay alive**: with no TTY (every agent
            shell) it starts every host service and frontend, detaches them onto their own
            log files, prints their ports, and RETURNS 0. Backgrounding it hands you an
            already-exited pid and buries the port line. So the ports are in the output
@@ -424,7 +424,7 @@ nodes:
           re-polling after the signal (re-polling burned ~1/3 of one run's tool calls).
           SUB-AGENTS must NOT background at all: a leaf that backgrounds and yields silently
           ENDS its turn and strands the phase. FOREGROUND is the default for you too, and
-          there is nothing here to background — `reliant forge run` included. **`forge run`
+          there is nothing here to background — `reliant forge env up dev` included. **`forge env up dev`
           does NOT stay alive:** your shell has no TTY, so it starts every host service and
           frontend, hands each its own log file, prints the ephemeral ports, and EXITS 0 while
           the servers keep running. Background it and you get an already-exited pid and a port
@@ -504,7 +504,7 @@ nodes:
           pools of 5-10 real terms each is enough; forge validates every value against the
           column's constraints and handles emails, people, addresses and referential
           integrity itself. This is vocabulary, not seed data. Seed ROWS are never your job:
-          `reliant forge run` migrates AND, on first boot against an empty dev database,
+          `reliant forge env up dev` migrates AND, on first boot against an empty dev database,
           auto-seeds deterministic rows from this file.
 
           **Step 4: READ the schema forge drafted, and correct it HERE — the only cheap
@@ -614,12 +614,12 @@ nodes:
 
           The seeder needs a live, MIGRATED database and nothing above leaves one: the born
           tests boot a throwaway postgres inside the test process, and `forge generate`
-          introspects a scratch shadow database it then drops. `forge run` creates the dev
+          introspects a scratch shadow database it then drops. `forge env up dev` creates the dev
           database, applies the migrations on boot and seeds it — and it detaches its servers
           and returns rather than staying alive, so it needs stopping.
 
           ```bash
-          cd {{inputs.working_directory}} && reliant forge run && reliant forge db seed apply; reliant forge env down dev
+          cd {{inputs.working_directory}} && reliant forge env up dev && reliant forge db seed apply; reliant forge env down dev
           ```
           Two outcomes belong to THIS step, both schema edits in the window still open:
           - **A refusal naming a reference diamond.** A table reaching one parent by TWO
@@ -885,7 +885,7 @@ nodes:
              pattern; these two commands answer "what is this symbol's exact signature", and
              nothing else does — bare `go doc <pkg>` prints a struct as `struct{ ... }` with
              no methods.
-          2. **Confirm the dev database has rows — do not blind-seed.** `reliant forge run`
+          2. **Confirm the dev database has rows — do not blind-seed.** `reliant forge env up dev`
              migrates AND auto-seeds on FIRST boot against an empty dev database, printing
              `[up] auto-seeded <N> rows across <M> tables`. Read that line; only when it is
              absent do you run `reliant forge db seed apply` yourself (it needs `DATABASE_URL`
@@ -1139,7 +1139,7 @@ nodes:
           serial proto edit plus one generate pass.
 
           Then verify with your own eyes, before the gate:
-          - Start the app and **read the port off its output** — `forge run` prints
+          - Start the app and **read the port off its output** — `forge env up dev` prints
             `[up] frontend <name>: ephemeral dev port <N>`. Never assume 3000; every 3000-based
             check inspects the WRONG APP. Confirm the URL serves the app YOU built
             (title/nav/routes) — a 200 from a stranger's server is a FALSE GREEN, worse than a
@@ -1236,7 +1236,7 @@ nodes:
   # ─── Launch Preview — the run's last step ────────────────────────────
   #
   # Start the finished app and post its running preview URL as a markdown link, so the
-  # link serves the build that actually shipped. `forge run` detaches its servers and
+  # link serves the build that actually shipped. `forge env up dev` detaches its servers and
   # returns, so they outlive the turn on their own — this node runs it FOREGROUND and
   # reads the ephemeral port off its output. Forced to auto mode so the handoff stays
   # seamless regardless of pipeline mode.
@@ -1266,9 +1266,9 @@ nodes:
           ```
 
           **Step 2: Stop the build's servers FIRST.** The build started its own
-          `reliant forge run` for the visual review and nothing stopped it. Those servers are
+          `reliant forge env up dev` for the visual review and nothing stopped it. Those servers are
           bound localhost-only — invisible to the proxy — and they serve the pre-final tree, so
-          leaving them up means the user gets either no preview URL or a stale one. `forge run`
+          leaving them up means the user gets either no preview URL or a stale one. `forge env up dev`
           already exited; what is still running are the servers it DETACHED, whose pids forge
           tracks in a per-env ledger. Use the command that reads that ledger — idempotent, and
           it stops exactly those processes and nothing else, a promise no command-line pattern
@@ -1278,7 +1278,7 @@ nodes:
           ```
 
           **Step 3: Start the dev server in the FOREGROUND, bound to 0.0.0.0.** Do NOT use
-          `run_in_background`: `forge run` starts every host service and frontend, detaches
+          `run_in_background`: `forge env up dev` starts every host service and frontend, detaches
           them onto their own log files, prints their ports and RETURNS, so backgrounding it
           hands you an already-exited pid and puts the port line in a buffer you must poll. The
           bind MUST be `0.0.0.0`, not `127.0.0.1` — a localhost-only bind gets NO preview URL.
@@ -1286,7 +1286,7 @@ nodes:
           `frontends/*/package.json`'s `dev` script says `next dev` or `vite`:
           ```bash
           # next dev  → -H 0.0.0.0      |      vite → --host 0.0.0.0
-          cd {{inputs.working_directory}} && reliant forge run -- -H 0.0.0.0
+          cd {{inputs.working_directory}} && reliant forge env up dev -- -H 0.0.0.0
           ```
           Everything after `--` is forwarded verbatim to that dev server, so passing Vite's
           `--host` to `next dev` (or the reverse) fails the flag parse and you get no server.
@@ -1299,7 +1299,7 @@ nodes:
           use `<N>` for the rest of this phase — a hardcoded 3000 points the user at whatever
           unrelated server holds 3000.
 
-          **Step 5: Make sure the preview has data.** `reliant forge run` auto-seeds on first
+          **Step 5: Make sure the preview has data.** `reliant forge env up dev` auto-seeds on first
           boot against an EMPTY dev database (watch for `[up] auto-seeded …`). If the database
           was already non-empty, or came up empty anyway, seed it and confirm rows landed:
           ```bash
@@ -1324,7 +1324,7 @@ nodes:
           No command transcript, no step-by-step narration, no next-steps pitch — the chat
           stays open and the user can just ask. If the app cannot be started because a forge
           command is missing, crashes, or misbehaves (not your protos/code), say so in one line
-          and give the manual run command (`reliant forge run -- -H 0.0.0.0`) instead of a
+          and give the manual run command (`reliant forge env up dev -- -H 0.0.0.0`) instead of a
           link. Never patch the forge source or rebuild the `forge` / `reliant` binaries.
 
           Work in `{{inputs.working_directory}}`.
@@ -1363,7 +1363,7 @@ nodes:
         The finished build is running behind the preview link above. To run it yourself
         later:
         ```bash
-        cd {{inputs.working_directory}} && reliant forge run
+        cd {{inputs.working_directory}} && reliant forge env up dev
         ```
         It prints the frontend and API URLs on startup — the dev ports are assigned free at
         launch, so read them off that output rather than assuming 3000/8080.

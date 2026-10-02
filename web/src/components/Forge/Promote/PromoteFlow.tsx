@@ -33,7 +33,7 @@ import {
   NotForgeProject,
 } from "../ForgeStates";
 import { PromoteConfirmStep } from "./PromoteConfirmStep";
-import { PromotePlanView, ShipsNothingNotice } from "./PromotePlanView";
+import { PromotePlanView, PlanWritesNothingNotice } from "./PromotePlanView";
 import { PromoteRefusalNotice } from "./PromoteRefusalNotice";
 
 export interface PromoteFlowProps {
@@ -146,14 +146,21 @@ export function PromoteFlow({
 }
 
 /**
- * The binding was written. THE WORD "DEPLOYED" APPEARS NOWHERE.
+ * The release was recorded AND applied.
  *
- * The heading says the binding was updated, and the ships-nothing notice —
- * rendered from the APPLIED document, which forge populates with
- * `ships_nothing` and `next_step` exactly as it does a preview — states that
- * nothing reached a cluster and names the command that would. A panel that said
- * "promoted successfully" and stopped would leave the user believing they had
- * shipped, which is worse than showing them nothing at all.
+ * This panel used to insist the word "deployed" appear nowhere, and to render a
+ * "nothing reached a cluster" notice on the applied document. That was correct
+ * for `forge env promote`, which moved a pointer and shipped nothing.
+ *
+ * It is now the opposite of correct. forge v0.1.42 deleted that verb and folded
+ * it into `forge env deploy`, which records the binding, applies it, and waits
+ * for health (ADR V3) — so by the time this panel renders, bytes HAVE moved.
+ * Telling the user otherwise is the same class of error the old rule guarded
+ * against, pointed the other way: it would leave them believing a deploy had
+ * not happened when it had, which is the more dangerous of the two directions.
+ *
+ * The preview panel still says nothing has been written, because `--plan`
+ * really does write nothing; see PlanWritesNothingNotice.
  */
 function AppliedPanel({
   outcome,
@@ -173,7 +180,7 @@ function AppliedPanel({
           cannot be shown here.
         </p>
         <p className="text-xs text-muted-foreground">
-          Promoting moves a pointer — nothing has been deployed.
+          The release was recorded and applied, and forge waited for it to become healthy.
         </p>
         <div className="flex justify-end">
           <Button variant="secondary" size="sm" onClick={onClose}>
@@ -198,7 +205,7 @@ function AppliedPanel({
       {/* The same notice as the preview, from the applied document, hoisted
           above the diff because it is the most important element on this panel.
           The plan view is told not to repeat it. */}
-      <ShipsNothingNotice plan={plan} />
+      <PlanWritesNothingNotice plan={plan} />
 
       <PromotePlanView plan={plan} showShipsNothing={false} />
 

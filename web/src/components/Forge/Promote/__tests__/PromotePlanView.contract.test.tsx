@@ -215,12 +215,21 @@ describe("commit range", () => {
   });
 });
 
-describe("ships nothing", () => {
-  it("states that nothing is deployed and names the next step", () => {
+describe("the preview writes nothing", () => {
+  // forge v0.1.42 folded `env promote` into `env deploy`, which records AND
+  // applies AND waits (ADR V3). So the only honest "nothing has happened yet"
+  // claim is about the PLAN, which `--plan` still guarantees.
+  it("tells the user the preview has written nothing yet", () => {
     render(<PromotePlanView plan={forwardPlan()} />);
-    const notice = screen.getByTestId("promote-ships-nothing");
-    expect(notice.textContent).toMatch(/nothing is deployed|Nothing is deployed/);
-    expect(screen.getByTestId("promote-next-step").textContent).toBe("forge env deploy staging");
+    const notice = screen.getByTestId("promote-plan-writes-nothing");
+    expect(notice.textContent).toMatch(/preview|nothing has been written/i);
+  });
+
+  it("does NOT claim nothing was deployed once the plan is applied", () => {
+    // The old copy rendered on the applied document too, which after V3 would
+    // tell the user no deploy had happened at the moment one had.
+    render(<PromotePlanView plan={forwardPlan({ applied: true })} />);
+    expect(screen.queryByTestId("promote-plan-writes-nothing")).toBeNull();
   });
 });
 
