@@ -348,6 +348,17 @@ type Repository interface {
 	UpsertDaemon(ctx context.Context, daemon *Daemon) error
 	GetDaemon(ctx context.Context, id string) (*Daemon, error)
 	ListDaemonsByUserID(ctx context.Context, userID string) ([]*Daemon, error)
+	// ApplyDaemonLifecycle mirrors one control-plane lifecycle event onto the
+	// daemons row. It is a conditional write: the update is skipped when the
+	// row already carries a change at or after changedAt, which is what makes
+	// out-of-order delivery safe on a newest-wins stream with no redelivery.
+	// Returns whether the row was updated (false means stale or absent).
+	//
+	// Does NOT create the row. A lifecycle event for a daemon that has never
+	// registered has nothing to attach to, and inventing an identity row from
+	// a lifecycle event would make the registry's own table a projection of a
+	// stream it does not own.
+	ApplyDaemonLifecycle(ctx context.Context, lc DaemonLifecycleUpdate) (bool, error)
 	UpsertDaemonAttachment(ctx context.Context, att *DaemonAttachment) error
 	TouchDaemonAttachmentIfNewer(ctx context.Context, daemonID string, activityAt time.Time) error
 	// UpdateDaemonAttachmentMemory records heartbeat-reported workspace memory

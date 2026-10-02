@@ -24,6 +24,21 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// DaemonStatus is the SINGLE status vocabulary for a daemon in this registry.
+//
+// It previously had only two reachable values, because the registry could see
+// nothing but attachment freshness: ACTIVE or DISCONNECTED. A provisioning
+// machine and a crashed one both read DISCONNECTED, so the UI fetched a second
+// list from control-plane carrying a second DaemonStatus enum whose numeric
+// values disagreed with this one (ACTIVE was 1 here and 2 there), and
+// reconciled them by hand. This enum now covers the whole vocabulary so there
+// is one answer and one set of numbers.
+//
+// Composition rule, implemented in daemonToProto: an attached daemon is ACTIVE
+// whatever its lifecycle phase says, because a stream is attached and work can
+// be routed — that is observed, not inferred. An unattached daemon takes its
+// status from the lifecycle phase, and falls back to DISCONNECTED when there
+// is no phase (every self-hosted daemon, permanently).
 type DaemonStatus int32
 
 const (
@@ -31,6 +46,13 @@ const (
 	DaemonStatus_DAEMON_STATUS_ACTIVE       DaemonStatus = 1
 	DaemonStatus_DAEMON_STATUS_IDLE         DaemonStatus = 2
 	DaemonStatus_DAEMON_STATUS_DISCONNECTED DaemonStatus = 3
+	// Provisioning / cloning — the machine is coming up and is not routable yet.
+	DaemonStatus_DAEMON_STATUS_PENDING DaemonStatus = 4
+	// Suspended by the user or by idle timeout. Persistent intent: an
+	// unreachable suspended machine is not evidence it was un-suspended.
+	DaemonStatus_DAEMON_STATUS_SUSPENDED DaemonStatus = 5
+	// The machine failed to come up or crashed terminally.
+	DaemonStatus_DAEMON_STATUS_FAILED DaemonStatus = 6
 )
 
 // Enum value maps for DaemonStatus.
@@ -40,12 +62,18 @@ var (
 		1: "DAEMON_STATUS_ACTIVE",
 		2: "DAEMON_STATUS_IDLE",
 		3: "DAEMON_STATUS_DISCONNECTED",
+		4: "DAEMON_STATUS_PENDING",
+		5: "DAEMON_STATUS_SUSPENDED",
+		6: "DAEMON_STATUS_FAILED",
 	}
 	DaemonStatus_value = map[string]int32{
 		"DAEMON_STATUS_UNSPECIFIED":  0,
 		"DAEMON_STATUS_ACTIVE":       1,
 		"DAEMON_STATUS_IDLE":         2,
 		"DAEMON_STATUS_DISCONNECTED": 3,
+		"DAEMON_STATUS_PENDING":      4,
+		"DAEMON_STATUS_SUSPENDED":    5,
+		"DAEMON_STATUS_FAILED":       6,
 	}
 )
 
@@ -74,6 +102,76 @@ func (x DaemonStatus) Number() protoreflect.EnumNumber {
 // Deprecated: Use DaemonStatus.Descriptor instead.
 func (DaemonStatus) EnumDescriptor() ([]byte, []int) {
 	return file_reliant_v1_daemon_registry_proto_rawDescGZIP(), []int{0}
+}
+
+// DaemonLifecyclePhase is the public lifecycle vocabulary for a managed
+// machine. It mirrors control-plane's DaemonLifecyclePhase rather than the
+// Workspace CR's raw Kubernetes phase strings, so renaming a k8s phase
+// upstream is not a wire break here.
+//
+// UNSPECIFIED means "no lifecycle detail available" — the permanent state for
+// self-hosted daemons, and the transient state for a managed machine whose
+// first lifecycle event has not landed yet. Clients must treat it as "fall
+// back to status", which is always correct if less specific.
+type DaemonLifecyclePhase int32
+
+const (
+	DaemonLifecyclePhase_DAEMON_LIFECYCLE_PHASE_UNSPECIFIED  DaemonLifecyclePhase = 0
+	DaemonLifecyclePhase_DAEMON_LIFECYCLE_PHASE_PROVISIONING DaemonLifecyclePhase = 1
+	DaemonLifecyclePhase_DAEMON_LIFECYCLE_PHASE_CLONING      DaemonLifecyclePhase = 2
+	DaemonLifecyclePhase_DAEMON_LIFECYCLE_PHASE_READY        DaemonLifecyclePhase = 3
+	DaemonLifecyclePhase_DAEMON_LIFECYCLE_PHASE_SUSPENDING   DaemonLifecyclePhase = 4
+	DaemonLifecyclePhase_DAEMON_LIFECYCLE_PHASE_SUSPENDED    DaemonLifecyclePhase = 5
+	DaemonLifecyclePhase_DAEMON_LIFECYCLE_PHASE_FAILED       DaemonLifecyclePhase = 6
+)
+
+// Enum value maps for DaemonLifecyclePhase.
+var (
+	DaemonLifecyclePhase_name = map[int32]string{
+		0: "DAEMON_LIFECYCLE_PHASE_UNSPECIFIED",
+		1: "DAEMON_LIFECYCLE_PHASE_PROVISIONING",
+		2: "DAEMON_LIFECYCLE_PHASE_CLONING",
+		3: "DAEMON_LIFECYCLE_PHASE_READY",
+		4: "DAEMON_LIFECYCLE_PHASE_SUSPENDING",
+		5: "DAEMON_LIFECYCLE_PHASE_SUSPENDED",
+		6: "DAEMON_LIFECYCLE_PHASE_FAILED",
+	}
+	DaemonLifecyclePhase_value = map[string]int32{
+		"DAEMON_LIFECYCLE_PHASE_UNSPECIFIED":  0,
+		"DAEMON_LIFECYCLE_PHASE_PROVISIONING": 1,
+		"DAEMON_LIFECYCLE_PHASE_CLONING":      2,
+		"DAEMON_LIFECYCLE_PHASE_READY":        3,
+		"DAEMON_LIFECYCLE_PHASE_SUSPENDING":   4,
+		"DAEMON_LIFECYCLE_PHASE_SUSPENDED":    5,
+		"DAEMON_LIFECYCLE_PHASE_FAILED":       6,
+	}
+)
+
+func (x DaemonLifecyclePhase) Enum() *DaemonLifecyclePhase {
+	p := new(DaemonLifecyclePhase)
+	*p = x
+	return p
+}
+
+func (x DaemonLifecyclePhase) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (DaemonLifecyclePhase) Descriptor() protoreflect.EnumDescriptor {
+	return file_reliant_v1_daemon_registry_proto_enumTypes[1].Descriptor()
+}
+
+func (DaemonLifecyclePhase) Type() protoreflect.EnumType {
+	return &file_reliant_v1_daemon_registry_proto_enumTypes[1]
+}
+
+func (x DaemonLifecyclePhase) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use DaemonLifecyclePhase.Descriptor instead.
+func (DaemonLifecyclePhase) EnumDescriptor() ([]byte, []int) {
+	return file_reliant_v1_daemon_registry_proto_rawDescGZIP(), []int{1}
 }
 
 type ListDaemonsRequest struct {
@@ -487,8 +585,29 @@ type DaemonInfo struct {
 	// memory telemetry above). The UI renders these as preview affordances.
 	// Empty for local daemons and while nothing is listening.
 	DetectedPorts []uint32 `protobuf:"varint,13,rep,packed,name=detected_ports,json=detectedPorts,proto3" json:"detected_ports,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	// What the machine is currently DOING, when it isn't ready yet.
+	//
+	// `status` answers "can I route work to this machine" and deliberately
+	// collapses the whole startup sequence into PENDING. That is the right
+	// granularity for routing and the wrong one for a user watching a spinner:
+	// "pulling the image" and "cloning your repository" have very different
+	// expected durations, and a wait that explains itself reads as progress
+	// rather than as a hang.
+	LifecyclePhase DaemonLifecyclePhase `protobuf:"varint,14,opt,name=lifecycle_phase,json=lifecyclePhase,proto3,enum=reliant.v1.DaemonLifecyclePhase" json:"lifecycle_phase,omitempty"`
+	// Provisioned machine size ("small", "medium", …). Empty for self-hosted.
+	Size string `protobuf:"bytes,15,opt,name=size,proto3" json:"size,omitempty"`
+	// Human-readable reason for the most recent lifecycle transition, e.g.
+	// "image pull failed". Empty when there is nothing to explain.
+	LastStatusMessage string `protobuf:"bytes,16,opt,name=last_status_message,json=lastStatusMessage,proto3" json:"last_status_message,omitempty"`
+	// When lifecycle_phase / last_status_message last changed.
+	LastStatusChangedAt *timestamppb.Timestamp `protobuf:"bytes,17,opt,name=last_status_changed_at,json=lastStatusChangedAt,proto3" json:"last_status_changed_at,omitempty"`
+	// OOM-kill tracking for managed machines, mirrored from the Workspace CR.
+	// Unset/zero when no OOM kill has been observed; the UI keys "recent" off
+	// last_oom_killed_at.
+	LastOomKilledAt *timestamppb.Timestamp `protobuf:"bytes,18,opt,name=last_oom_killed_at,json=lastOomKilledAt,proto3" json:"last_oom_killed_at,omitempty"`
+	OomKillCount    int32                  `protobuf:"varint,19,opt,name=oom_kill_count,json=oomKillCount,proto3" json:"oom_kill_count,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *DaemonInfo) Reset() {
@@ -612,6 +731,48 @@ func (x *DaemonInfo) GetDetectedPorts() []uint32 {
 	return nil
 }
 
+func (x *DaemonInfo) GetLifecyclePhase() DaemonLifecyclePhase {
+	if x != nil {
+		return x.LifecyclePhase
+	}
+	return DaemonLifecyclePhase_DAEMON_LIFECYCLE_PHASE_UNSPECIFIED
+}
+
+func (x *DaemonInfo) GetSize() string {
+	if x != nil {
+		return x.Size
+	}
+	return ""
+}
+
+func (x *DaemonInfo) GetLastStatusMessage() string {
+	if x != nil {
+		return x.LastStatusMessage
+	}
+	return ""
+}
+
+func (x *DaemonInfo) GetLastStatusChangedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.LastStatusChangedAt
+	}
+	return nil
+}
+
+func (x *DaemonInfo) GetLastOomKilledAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.LastOomKilledAt
+	}
+	return nil
+}
+
+func (x *DaemonInfo) GetOomKillCount() int32 {
+	if x != nil {
+		return x.OomKillCount
+	}
+	return 0
+}
+
 var File_reliant_v1_daemon_registry_proto protoreflect.FileDescriptor
 
 const file_reliant_v1_daemon_registry_proto_rawDesc = "" +
@@ -642,7 +803,7 @@ const file_reliant_v1_daemon_registry_proto_rawDesc = "" +
 	"\tdaemon_id\x18\x01 \x01(\tR\bdaemonId\"U\n" +
 	"\x14ResumeDaemonResponse\x12\x18\n" +
 	"\aresumed\x18\x01 \x01(\bR\aresumed\x12#\n" +
-	"\rerror_message\x18\x02 \x01(\tR\ferrorMessage\"\xb4\x04\n" +
+	"\rerror_message\x18\x02 \x01(\tR\ferrorMessage\"\x83\a\n" +
 	"\n" +
 	"DaemonInfo\x12\x1b\n" +
 	"\tdaemon_id\x18\x01 \x01(\tR\bdaemonId\x12\x17\n" +
@@ -659,12 +820,29 @@ const file_reliant_v1_daemon_registry_proto_rawDesc = "" +
 	" \x01(\x04R\x0fmemoryUsedBytes\x12,\n" +
 	"\x12memory_limit_bytes\x18\v \x01(\x04R\x10memoryLimitBytes\x12'\n" +
 	"\x0fmemory_pressure\x18\f \x01(\bR\x0ememoryPressure\x12%\n" +
-	"\x0edetected_ports\x18\r \x03(\rR\rdetectedPorts*\x7f\n" +
+	"\x0edetected_ports\x18\r \x03(\rR\rdetectedPorts\x12I\n" +
+	"\x0flifecycle_phase\x18\x0e \x01(\x0e2 .reliant.v1.DaemonLifecyclePhaseR\x0elifecyclePhase\x12\x12\n" +
+	"\x04size\x18\x0f \x01(\tR\x04size\x12.\n" +
+	"\x13last_status_message\x18\x10 \x01(\tR\x11lastStatusMessage\x12O\n" +
+	"\x16last_status_changed_at\x18\x11 \x01(\v2\x1a.google.protobuf.TimestampR\x13lastStatusChangedAt\x12G\n" +
+	"\x12last_oom_killed_at\x18\x12 \x01(\v2\x1a.google.protobuf.TimestampR\x0flastOomKilledAt\x12$\n" +
+	"\x0eoom_kill_count\x18\x13 \x01(\x05R\foomKillCount*\xd1\x01\n" +
 	"\fDaemonStatus\x12\x1d\n" +
 	"\x19DAEMON_STATUS_UNSPECIFIED\x10\x00\x12\x18\n" +
 	"\x14DAEMON_STATUS_ACTIVE\x10\x01\x12\x16\n" +
 	"\x12DAEMON_STATUS_IDLE\x10\x02\x12\x1e\n" +
-	"\x1aDAEMON_STATUS_DISCONNECTED\x10\x032\xe2\x02\n" +
+	"\x1aDAEMON_STATUS_DISCONNECTED\x10\x03\x12\x19\n" +
+	"\x15DAEMON_STATUS_PENDING\x10\x04\x12\x1b\n" +
+	"\x17DAEMON_STATUS_SUSPENDED\x10\x05\x12\x18\n" +
+	"\x14DAEMON_STATUS_FAILED\x10\x06*\x9d\x02\n" +
+	"\x14DaemonLifecyclePhase\x12&\n" +
+	"\"DAEMON_LIFECYCLE_PHASE_UNSPECIFIED\x10\x00\x12'\n" +
+	"#DAEMON_LIFECYCLE_PHASE_PROVISIONING\x10\x01\x12\"\n" +
+	"\x1eDAEMON_LIFECYCLE_PHASE_CLONING\x10\x02\x12 \n" +
+	"\x1cDAEMON_LIFECYCLE_PHASE_READY\x10\x03\x12%\n" +
+	"!DAEMON_LIFECYCLE_PHASE_SUSPENDING\x10\x04\x12$\n" +
+	" DAEMON_LIFECYCLE_PHASE_SUSPENDED\x10\x05\x12!\n" +
+	"\x1dDAEMON_LIFECYCLE_PHASE_FAILED\x10\x062\xe2\x02\n" +
 	"\x15DaemonRegistryService\x12P\n" +
 	"\vListDaemons\x12\x1e.reliant.v1.ListDaemonsRequest\x1a\x1f.reliant.v1.ListDaemonsResponse\"\x00\x12J\n" +
 	"\tGetDaemon\x12\x1c.reliant.v1.GetDaemonRequest\x1a\x1d.reliant.v1.GetDaemonResponse\"\x00\x12V\n" +
@@ -683,45 +861,49 @@ func file_reliant_v1_daemon_registry_proto_rawDescGZIP() []byte {
 	return file_reliant_v1_daemon_registry_proto_rawDescData
 }
 
-var file_reliant_v1_daemon_registry_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_reliant_v1_daemon_registry_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
 var file_reliant_v1_daemon_registry_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
 var file_reliant_v1_daemon_registry_proto_goTypes = []any{
 	(DaemonStatus)(0),             // 0: reliant.v1.DaemonStatus
-	(*ListDaemonsRequest)(nil),    // 1: reliant.v1.ListDaemonsRequest
-	(*ListDaemonsResponse)(nil),   // 2: reliant.v1.ListDaemonsResponse
-	(*GetDaemonRequest)(nil),      // 3: reliant.v1.GetDaemonRequest
-	(*GetDaemonResponse)(nil),     // 4: reliant.v1.GetDaemonResponse
-	(*ResolveDaemonRequest)(nil),  // 5: reliant.v1.ResolveDaemonRequest
-	(*ResolveDaemonResponse)(nil), // 6: reliant.v1.ResolveDaemonResponse
-	(*ResumeDaemonRequest)(nil),   // 7: reliant.v1.ResumeDaemonRequest
-	(*ResumeDaemonResponse)(nil),  // 8: reliant.v1.ResumeDaemonResponse
-	(*DaemonInfo)(nil),            // 9: reliant.v1.DaemonInfo
-	nil,                           // 10: reliant.v1.ResolveDaemonRequest.LabelsEntry
-	(*DiscoveredProject)(nil),     // 11: reliant.v1.DiscoveredProject
-	(*timestamppb.Timestamp)(nil), // 12: google.protobuf.Timestamp
+	(DaemonLifecyclePhase)(0),     // 1: reliant.v1.DaemonLifecyclePhase
+	(*ListDaemonsRequest)(nil),    // 2: reliant.v1.ListDaemonsRequest
+	(*ListDaemonsResponse)(nil),   // 3: reliant.v1.ListDaemonsResponse
+	(*GetDaemonRequest)(nil),      // 4: reliant.v1.GetDaemonRequest
+	(*GetDaemonResponse)(nil),     // 5: reliant.v1.GetDaemonResponse
+	(*ResolveDaemonRequest)(nil),  // 6: reliant.v1.ResolveDaemonRequest
+	(*ResolveDaemonResponse)(nil), // 7: reliant.v1.ResolveDaemonResponse
+	(*ResumeDaemonRequest)(nil),   // 8: reliant.v1.ResumeDaemonRequest
+	(*ResumeDaemonResponse)(nil),  // 9: reliant.v1.ResumeDaemonResponse
+	(*DaemonInfo)(nil),            // 10: reliant.v1.DaemonInfo
+	nil,                           // 11: reliant.v1.ResolveDaemonRequest.LabelsEntry
+	(*DiscoveredProject)(nil),     // 12: reliant.v1.DiscoveredProject
+	(*timestamppb.Timestamp)(nil), // 13: google.protobuf.Timestamp
 }
 var file_reliant_v1_daemon_registry_proto_depIdxs = []int32{
-	9,  // 0: reliant.v1.ListDaemonsResponse.daemons:type_name -> reliant.v1.DaemonInfo
-	9,  // 1: reliant.v1.GetDaemonResponse.daemon:type_name -> reliant.v1.DaemonInfo
-	10, // 2: reliant.v1.ResolveDaemonRequest.labels:type_name -> reliant.v1.ResolveDaemonRequest.LabelsEntry
-	9,  // 3: reliant.v1.ResolveDaemonResponse.daemon:type_name -> reliant.v1.DaemonInfo
+	10, // 0: reliant.v1.ListDaemonsResponse.daemons:type_name -> reliant.v1.DaemonInfo
+	10, // 1: reliant.v1.GetDaemonResponse.daemon:type_name -> reliant.v1.DaemonInfo
+	11, // 2: reliant.v1.ResolveDaemonRequest.labels:type_name -> reliant.v1.ResolveDaemonRequest.LabelsEntry
+	10, // 3: reliant.v1.ResolveDaemonResponse.daemon:type_name -> reliant.v1.DaemonInfo
 	0,  // 4: reliant.v1.DaemonInfo.status:type_name -> reliant.v1.DaemonStatus
-	11, // 5: reliant.v1.DaemonInfo.projects:type_name -> reliant.v1.DiscoveredProject
-	12, // 6: reliant.v1.DaemonInfo.connected_at:type_name -> google.protobuf.Timestamp
-	12, // 7: reliant.v1.DaemonInfo.last_heartbeat:type_name -> google.protobuf.Timestamp
-	1,  // 8: reliant.v1.DaemonRegistryService.ListDaemons:input_type -> reliant.v1.ListDaemonsRequest
-	3,  // 9: reliant.v1.DaemonRegistryService.GetDaemon:input_type -> reliant.v1.GetDaemonRequest
-	5,  // 10: reliant.v1.DaemonRegistryService.ResolveDaemon:input_type -> reliant.v1.ResolveDaemonRequest
-	7,  // 11: reliant.v1.DaemonRegistryService.ResumeDaemon:input_type -> reliant.v1.ResumeDaemonRequest
-	2,  // 12: reliant.v1.DaemonRegistryService.ListDaemons:output_type -> reliant.v1.ListDaemonsResponse
-	4,  // 13: reliant.v1.DaemonRegistryService.GetDaemon:output_type -> reliant.v1.GetDaemonResponse
-	6,  // 14: reliant.v1.DaemonRegistryService.ResolveDaemon:output_type -> reliant.v1.ResolveDaemonResponse
-	8,  // 15: reliant.v1.DaemonRegistryService.ResumeDaemon:output_type -> reliant.v1.ResumeDaemonResponse
-	12, // [12:16] is the sub-list for method output_type
-	8,  // [8:12] is the sub-list for method input_type
-	8,  // [8:8] is the sub-list for extension type_name
-	8,  // [8:8] is the sub-list for extension extendee
-	0,  // [0:8] is the sub-list for field type_name
+	12, // 5: reliant.v1.DaemonInfo.projects:type_name -> reliant.v1.DiscoveredProject
+	13, // 6: reliant.v1.DaemonInfo.connected_at:type_name -> google.protobuf.Timestamp
+	13, // 7: reliant.v1.DaemonInfo.last_heartbeat:type_name -> google.protobuf.Timestamp
+	1,  // 8: reliant.v1.DaemonInfo.lifecycle_phase:type_name -> reliant.v1.DaemonLifecyclePhase
+	13, // 9: reliant.v1.DaemonInfo.last_status_changed_at:type_name -> google.protobuf.Timestamp
+	13, // 10: reliant.v1.DaemonInfo.last_oom_killed_at:type_name -> google.protobuf.Timestamp
+	2,  // 11: reliant.v1.DaemonRegistryService.ListDaemons:input_type -> reliant.v1.ListDaemonsRequest
+	4,  // 12: reliant.v1.DaemonRegistryService.GetDaemon:input_type -> reliant.v1.GetDaemonRequest
+	6,  // 13: reliant.v1.DaemonRegistryService.ResolveDaemon:input_type -> reliant.v1.ResolveDaemonRequest
+	8,  // 14: reliant.v1.DaemonRegistryService.ResumeDaemon:input_type -> reliant.v1.ResumeDaemonRequest
+	3,  // 15: reliant.v1.DaemonRegistryService.ListDaemons:output_type -> reliant.v1.ListDaemonsResponse
+	5,  // 16: reliant.v1.DaemonRegistryService.GetDaemon:output_type -> reliant.v1.GetDaemonResponse
+	7,  // 17: reliant.v1.DaemonRegistryService.ResolveDaemon:output_type -> reliant.v1.ResolveDaemonResponse
+	9,  // 18: reliant.v1.DaemonRegistryService.ResumeDaemon:output_type -> reliant.v1.ResumeDaemonResponse
+	15, // [15:19] is the sub-list for method output_type
+	11, // [11:15] is the sub-list for method input_type
+	11, // [11:11] is the sub-list for extension type_name
+	11, // [11:11] is the sub-list for extension extendee
+	0,  // [0:11] is the sub-list for field type_name
 }
 
 func init() { file_reliant_v1_daemon_registry_proto_init() }
@@ -735,7 +917,7 @@ func file_reliant_v1_daemon_registry_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_reliant_v1_daemon_registry_proto_rawDesc), len(file_reliant_v1_daemon_registry_proto_rawDesc)),
-			NumEnums:      1,
+			NumEnums:      2,
 			NumMessages:   10,
 			NumExtensions: 0,
 			NumServices:   1,

@@ -8,10 +8,12 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/daemonstate"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/toolexec"
@@ -196,26 +198,102 @@ func (s *DaemonRegistryService) ResumeDaemon(
 	}), nil
 }
 
-// daemonToProto converts a db.Daemon into the proto DaemonInfo. The proto
-// Status field is derived from daemon_attachment freshness (a non-nil att)
-// rather than any column on the daemons row, which is now identity-only.
-// The attachment also carries heartbeat-reported workspace memory telemetry,
-// exposed so the UI can surface memory pressure for live daemons.
+// lifecyclePhaseToProto maps the stored public lifecycle vocabulary onto the
+// proto enum. An unrecognized value yields UNSPECIFIED rather than a guess:
+// the client treats UNSPECIFIED as "no extra detail" and falls back to status,
+// which is always correct if less specific.
+func lifecyclePhaseToProto(phase *string) reliantv1.DaemonLifecyclePhase {
+	if phase == nil {
+		return reliantv1.DaemonLifecyclePhase_DAEMON_LIFECYCLE_PHASE_UNSPECIFIED
+	}
+	switch daemonstate.LifecyclePhase(*phase) {
+	case daemonstate.LifecyclePhaseProvisioning:
+		return reliantv1.DaemonLifecyclePhase_DAEMON_LIFECYCLE_PHASE_PROVISIONING
+	case daemonstate.LifecyclePhaseCloning:
+		return reliantv1.DaemonLifecyclePhase_DAEMON_LIFECYCLE_PHASE_CLONING
+	case daemonstate.LifecyclePhaseReady:
+		return reliantv1.DaemonLifecyclePhase_DAEMON_LIFECYCLE_PHASE_READY
+	case daemonstate.LifecyclePhaseSuspending:
+		return reliantv1.DaemonLifecyclePhase_DAEMON_LIFECYCLE_PHASE_SUSPENDING
+	case daemonstate.LifecyclePhaseSuspended:
+		return reliantv1.DaemonLifecyclePhase_DAEMON_LIFECYCLE_PHASE_SUSPENDED
+	case daemonstate.LifecyclePhaseFailed:
+		return reliantv1.DaemonLifecyclePhase_DAEMON_LIFECYCLE_PHASE_FAILED
+	default:
+		return reliantv1.DaemonLifecyclePhase_DAEMON_LIFECYCLE_PHASE_UNSPECIFIED
+	}
+}
+
+// composeDaemonStatus produces THE status for a daemon from the two things
+// that know anything about it: the attachment lease this service owns, and the
+// lifecycle phase the control plane mirrors in.
+//
+// Attachment wins. A daemon with a fresh attachment is ACTIVE whatever the
+// phase says, because a stream is attached right now and work can be routed to
+// it — that is observed, and the phase is at best a slightly older mirror of a
+// Workspace CR. Getting this backwards is what produced the original
+// complaint: a connected, serving daemon reading DISCONNECTED because a stored
+// column had not caught up.
+//
+// With no attachment the phase is the only information available, and it is
+// what separates the three cases the old two-value enum collapsed into one:
+// still coming up (PENDING), deliberately parked (SUSPENDED), and broken
+// (FAILED). No phase means no lifecycle was ever reported — the permanent
+// state of every self-hosted daemon — so DISCONNECTED, exactly as before.
+func composeDaemonStatus(phase reliantv1.DaemonLifecyclePhase, attached bool) reliantv1.DaemonStatus {
+	if attached {
+		return reliantv1.DaemonStatus_DAEMON_STATUS_ACTIVE
+	}
+	switch phase {
+	case reliantv1.DaemonLifecyclePhase_DAEMON_LIFECYCLE_PHASE_PROVISIONING,
+		reliantv1.DaemonLifecyclePhase_DAEMON_LIFECYCLE_PHASE_CLONING:
+		return reliantv1.DaemonStatus_DAEMON_STATUS_PENDING
+	case reliantv1.DaemonLifecyclePhase_DAEMON_LIFECYCLE_PHASE_SUSPENDING,
+		reliantv1.DaemonLifecyclePhase_DAEMON_LIFECYCLE_PHASE_SUSPENDED:
+		return reliantv1.DaemonStatus_DAEMON_STATUS_SUSPENDED
+	case reliantv1.DaemonLifecyclePhase_DAEMON_LIFECYCLE_PHASE_FAILED:
+		return reliantv1.DaemonStatus_DAEMON_STATUS_FAILED
+	default:
+		// READY-but-unattached is DISCONNECTED, not ACTIVE: the operator says
+		// the pod is up, but nothing is attached to route work to. That is
+		// precisely the window the attachment lease exists to report.
+		return reliantv1.DaemonStatus_DAEMON_STATUS_DISCONNECTED
+	}
+}
+
+// daemonToProto converts a db.Daemon into the proto DaemonInfo.
+//
+// This is the one place the registry's two halves are joined: liveness, which
+// this service owns (daemon_attachment freshness, plus the heartbeat-reported
+// memory and port telemetry riding on the same row), and managed-machine
+// lifecycle, which the control plane mirrors in over
+// daemon.v1.state.<id>.lifecycle. The UI used to perform this join itself
+// against two different services with two different status enums; see
+// docs/design/one-daemon-list.md.
 func daemonToProto(d *db.Daemon, att *db.DaemonAttachment) *reliantv1.DaemonInfo {
 	if d == nil {
 		return &reliantv1.DaemonInfo{}
 	}
 
-	status := reliantv1.DaemonStatus_DAEMON_STATUS_DISCONNECTED
-	if att != nil {
-		status = reliantv1.DaemonStatus_DAEMON_STATUS_ACTIVE
-	}
+	phase := lifecyclePhaseToProto(d.LifecyclePhase)
 
 	info := &reliantv1.DaemonInfo{
-		DaemonId: d.ID,
-		UserId:   d.UserID,
-		Status:   status,
-		Projects: projectPathsToDiscoveredProjects(d.ProjectPaths),
+		DaemonId:          d.ID,
+		UserId:            d.UserID,
+		Status:            composeDaemonStatus(phase, att != nil),
+		Projects:          projectPathsToDiscoveredProjects(d.ProjectPaths),
+		LifecyclePhase:    phase,
+		LastStatusMessage: d.LastStatusMessage,
+		OomKillCount:      d.OOMKillCount,
+	}
+	if d.Size != nil {
+		info.Size = *d.Size
+	}
+	if d.LastStatusChangedAt != nil {
+		info.LastStatusChangedAt = timestamppb.New(*d.LastStatusChangedAt)
+	}
+	if d.LastOOMKilledAt != nil {
+		info.LastOomKilledAt = timestamppb.New(*d.LastOOMKilledAt)
 	}
 	if d.Hostname != nil {
 		info.Hostname = *d.Hostname
