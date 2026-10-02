@@ -136,6 +136,10 @@ func (m *payloadTestMgr) SendDaemonCommand(ctx context.Context, userID string, r
 	return m.recordingDaemonMgr.SendDaemonCommand(ctx, userID, req)
 }
 
+func (m *payloadTestMgr) SendDaemonCommandToDaemon(ctx context.Context, userID, _ string, req *reliantv1.DaemonCommandRequest) (*reliantv1.DaemonCommandResponse, error) {
+	return m.SendDaemonCommand(ctx, userID, req)
+}
+
 func (m *payloadTestMgr) SendToolRequestSync(context.Context, string, *ToolExecutionRequest) (*ToolExecutionResponse, error) {
 	return m.toolResp, nil
 }

@@ -225,6 +225,9 @@ func (s *ProjectService) ensureProjectDirsOnDaemon(userID, daemonID string) {
 		if p == nil {
 			continue
 		}
+		if !projectDirIsHealable(p) {
+			continue
+		}
 		if p.Path == "" || !ospath.IsAbs(p.Path) {
 			logging.Warn("project-dir-heal: skipping project with a non-absolute path",
 				"userID", userID, "daemonID", daemonID, "projectID", p.ID, "path", p.Path)
@@ -234,6 +237,27 @@ func (s *ProjectService) ensureProjectDirsOnDaemon(userID, daemonID string) {
 			logging.Warn("project-dir-heal: failed to mkdir project path", "error", err, "userID", userID, "daemonID", daemonID, "path", p.Path)
 		}
 	}
+}
+
+// projectDirIsHealable reports whether project-dir-heal may create a
+// project's directory on a daemon that does not have it.
+//
+// The heal exists for an EMPTY project created while its daemon was still
+// booting, whose mkdir missed the machine. It must never create the directory
+// of a project whose checkout comes from a repository. That directory is the
+// clone's to create — atomically, and only once the clone succeeded — and an
+// empty directory at the project path is read by every other surface as "the
+// checkout is here". The heal running on daemon connect is exactly how a
+// queued clone that never ran became an empty project the product called
+// installed: the connect-time mkdir made the directory, and the connect-time
+// reconcile then saw it and marked the install done.
+//
+// A remote URL is what marks a repository-backed project: CreateProjectFromRepo
+// records it, and CreateProject records it when the directory it opened was
+// already a checkout. A project with no remote is a plain directory, which an
+// empty mkdir faithfully recreates.
+func projectDirIsHealable(p *db.Project) bool {
+	return p.RemoteURL == nil || strings.TrimSpace(*p.RemoteURL) == ""
 }
 
 // sendProjectDaemonCommand sends a command to the user's daemon and unmarshals the response.

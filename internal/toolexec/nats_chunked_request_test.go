@@ -48,6 +48,10 @@ func (m *echoingDaemonMgr) SendDaemonCommand(_ context.Context, _ string, req *r
 	return m.resp, nil
 }
 
+func (m *echoingDaemonMgr) SendDaemonCommandToDaemon(ctx context.Context, userID, _ string, req *reliantv1.DaemonCommandRequest) (*reliantv1.DaemonCommandResponse, error) {
+	return m.SendDaemonCommand(ctx, userID, req)
+}
+
 // The production failure: a 2.5MB PNG base64-encodes to ~3.4MB inside the
 // fs.write_binary_file envelope and the write was REJECTED outright. An
 // oversize request must transit intact, byte-for-byte, exactly as an oversize

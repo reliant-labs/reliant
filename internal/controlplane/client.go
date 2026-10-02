@@ -79,6 +79,10 @@ type CloneRepoRequest struct {
 	CloneURL string
 	Branch   string
 	Path     string
+	// RequestID is stamped on the queued command and echoed by the daemon's
+	// failure announcement, so the outcome can be matched to what the caller
+	// recorded for this clone.
+	RequestID string
 }
 
 // CloneRepoResult is what the control plane reports back about the clone.
@@ -150,6 +154,7 @@ func (c *connectClient) CloneRepoOntoDaemon(ctx context.Context, jwt string, in 
 		GitRepo:   in.CloneURL,
 		GitBranch: in.Branch,
 		Path:      in.Path,
+		RequestId: in.RequestID,
 	})
 	attachAuthorization(req, "Bearer "+strings.TrimSpace(jwt))
 	resp, err := c.gitCredentialClient().CloneRepo(ctx, req)

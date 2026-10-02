@@ -73,6 +73,10 @@ func (m *blockingDaemonMgr) SendDaemonCommand(_ context.Context, _ string, req *
 	return &reliantv1.DaemonCommandResponse{Success: true}, nil
 }
 
+func (m *blockingDaemonMgr) SendDaemonCommandToDaemon(ctx context.Context, userID, _ string, req *reliantv1.DaemonCommandRequest) (*reliantv1.DaemonCommandResponse, error) {
+	return m.SendDaemonCommand(ctx, userID, req)
+}
+
 // TestToolRequestSync_SlowCallDoesNotBlockFastCall is the regression test for
 // the head-of-line stall on tools.request.sync.
 //

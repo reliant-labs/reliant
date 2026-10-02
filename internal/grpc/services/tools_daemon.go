@@ -2166,6 +2166,26 @@ func (s *ToolsDaemonService) SendDaemonCommand(ctx context.Context, userID strin
 	return s.sendCommandToConn(ctx, conn, req)
 }
 
+// SendDaemonCommandToDaemon sends a generic command to ONE named daemon and
+// waits for its response. It never falls back to another of the user's
+// daemons: a command addressed to a daemon (everything drained from that
+// daemon's own pending queue) must run there or not at all. With a local
+// daemon and a cloud daemon both connected, the default pick is the LOCAL one,
+// so a git.clone queued for the cloud machine used to land on the user's
+// laptop instead.
+//
+// The daemon must also belong to userID, so a caller cannot reach another
+// user's machine by naming its id.
+func (s *ToolsDaemonService) SendDaemonCommandToDaemon(ctx context.Context, userID, daemonID string, req *reliantv1.DaemonCommandRequest) (*reliantv1.DaemonCommandResponse, error) {
+	s.mu.RLock()
+	conn := s.connections[daemonID]
+	s.mu.RUnlock()
+	if conn == nil || conn.userID != userID {
+		return nil, fmt.Errorf("daemon %s is not connected for user %s", daemonID, userID)
+	}
+	return s.sendCommandToConn(ctx, conn, req)
+}
+
 // sendCommandToConn sends a generic command to a specific daemon connection and
 // waits for the correlated DaemonCommandResponse. It mirrors SendDaemonCommand's
 // correlation logic but targets the passed conn directly rather than resolving
