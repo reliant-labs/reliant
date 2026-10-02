@@ -109,6 +109,10 @@ export function ManagedSecretsView(props: ManagedSecretsViewProps) {
   // Every other availability means this console could not look, and the join
   // falls back to forge's own observation rather than painting every declared
   // secret as a red "Not set" blocker on no evidence.
+  // `provider-unknown` is NOT in this set: with no control-plane row the
+  // store cannot be holding anything for the env, but forge could not say
+  // which secrets the env declares or where they live, so there are no
+  // declared rows to call "Not set" in the first place.
   const storeReadable = availability === "available" || availability === "not-ensured";
   const rows = useMemo(
     () => joinSecretRows(report, managed, storeReadable),
@@ -506,7 +510,7 @@ function SecretDetail({
         </section>
       )}
 
-      {availability === "not-ensured" ? (
+      {availability === "not-ensured" || availability === "provider-unknown" ? (
         // Nothing has been stored for this environment yet, so there is no
         // history to be missing. Saying it "cannot be read" would describe a
         // failure where there is simply nothing there yet.
@@ -572,7 +576,9 @@ function EmptyState({
         {mode === "managed"
           ? availability === "not-ensured"
             ? "No secrets set for this environment yet. You can add them now — this environment has not been deployed, and values you set are kept and used by the first deploy."
-            : "No secrets in this environment yet."
+            : availability === "provider-unknown"
+              ? "No secrets set for this environment in Reliant's managed store. You can add them now — they are kept and used by the first deploy if this environment's config declares HostedSecrets."
+              : "No secrets in this environment yet."
           : mode === "managed-remote"
             ? "No secrets are declared here, and this console cannot read the managed store. Set one with forge secret set."
           : mode === "external"

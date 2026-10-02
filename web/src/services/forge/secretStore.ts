@@ -133,8 +133,23 @@ export type ManagedStoreAvailability =
    * compose, host… env). A managed store is keyed by a control-plane
    * environment id, and this env has none — so there is nothing to look up,
    * and NO call is made. Not an error; the env simply has no managed store.
+   *
+   * Only ever the answer when forge NAMED a non-hosted destination. "forge
+   * said nothing" is `provider-unknown`, never this.
    */
   | "not-hosted"
+  /**
+   * Nobody has said where this environment's secrets live: forge's report is
+   * missing (the daemon is offline, or forge failed) or carries no
+   * destination it could resolve (a KCL render that failed), AND the control
+   * plane holds no row for the env. So there is no id to look up — but this
+   * is "unknown", not a statement that the env uses a different provider.
+   *
+   * Writable, through the same ensure-then-set path as `not-ensured`: a value
+   * set now is stored in the managed store ahead of the first deploy, and an
+   * env whose KCL declares forge.HostedSecrets reads it from there.
+   */
+  | "provider-unknown"
   /**
    * Hosted, but forge reported no environment id: the control plane has
    * never been asked to ensure this environment (`forge env deploy` creates
@@ -203,9 +218,11 @@ export function normalizeEndpoint(url: string | undefined): string {
  * store may be asked about an environment.
  *
  * Pure, and total over every input, including a report too old to carry
- * `destination` at all: an absent destination is NOT hosted, so it makes no
- * call. That direction matters: guessing "hosted" would fire a lookup keyed
- * on nothing.
+ * `destination` at all. An absent or unrecognised destination makes no call —
+ * guessing "hosted" would fire a lookup keyed on nothing — but it is also NOT
+ * reported as `not-hosted`: forge named no provider, so the honest answer is
+ * `provider-unknown`. `not-hosted` is reserved for a destination forge
+ * actually named (cluster, compose, host…).
  *
  * `consoleEndpoint` is the control plane this console talks to. An empty
  * value means this build has none, which outranks everything else.
@@ -215,7 +232,9 @@ export function managedStoreTarget(
   consoleEndpoint: string = CONTROL_PLANE_API_URL
 ): ManagedStoreTarget {
   if (!consoleEndpoint) return { kind: "none", availability: "no-control-plane" };
-  if (!env || destinationOf(env) !== "hosted") return { kind: "none", availability: "not-hosted" };
+  const destination = destinationOf(env);
+  if (!env || destination === "unknown") return { kind: "none", availability: "provider-unknown" };
+  if (destination !== "hosted") return { kind: "none", availability: "not-hosted" };
 
   const environmentId = (env.environment_id ?? "").trim();
   if (environmentId === "") return { kind: "none", availability: "not-ensured" };
@@ -245,12 +264,17 @@ export function managedStoreTarget(
  * where the UI told a user to deploy, and the deploy refused because the
  * secrets it needed were unset.
  *
+ * `provider-unknown` is writable for the same reason: what is missing is the
+ * row, and the ensure path creates it. What forge would have added — the
+ * env's control-plane kind — is asked of the user instead of guessed (see
+ * SecretsSection), because the kind cannot change once the row exists.
+ *
  * Every other non-available state stays unwritable, and for reasons a write
  * cannot fix: another control plane owns the row, the environment has no
  * managed store at all, or we simply could not reach it and must not guess.
  */
 export function availabilitySupportsWrite(availability: ManagedStoreAvailability): boolean {
-  return availability === "available" || availability === "not-ensured";
+  return availability === "available" || availability === "not-ensured" || availability === "provider-unknown";
 }
 
 /**
@@ -261,14 +285,26 @@ export function availabilityExplanation(availability: ManagedStoreAvailability):
   switch (availability) {
     case "not-hosted":
       return "This environment is not hosted, so it has no managed store. Its values come from the secret provider its forge config declares.";
+    case "provider-unknown":
+      return "forge could not confirm this environment's secret provider, and it has not been deployed yet. Values you set here go to Reliant's managed store, which is where the environment reads them if its forge config declares `HostedSecrets` — they are kept and used by the first deploy.";
     case "not-ensured":
       return "This hosted environment has not been deployed yet, so nothing is stored for it. You can still set values now — they are kept and used by the first deploy.";
     case "other-control-plane":
       return "This environment is hosted on a different control plane from the one you are signed in to, so its store cannot be read from here. Set values with `forge secret set`.";
     case "unreachable":
       return "The managed store could not be reached, so what it holds is not known right now. This is a connection problem, not a statement about your secrets.";
-    default:
+    // No sentence of their own: `available` has nothing to explain, and the
+    // other two are described by the surface's mode sentence. Listed rather
+    // than defaulted so a NEW availability fails the build here instead of
+    // silently rendering whatever the mode says.
+    case "available":
+    case "not-configured":
+    case "no-control-plane":
       return null;
+    default: {
+      const unhandled: never = availability;
+      return unhandled;
+    }
   }
 }
 

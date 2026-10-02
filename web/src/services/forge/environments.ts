@@ -392,12 +392,18 @@ export function daemonSideOf(
  * plane has no row does forge's report get a say, through the existing
  * managedStoreTarget — which refuses a non-hosted env, a never-ensured one,
  * and one on a different control plane rather than guessing an id.
+ *
+ * With NEITHER — no control-plane row and no forge report (or one whose
+ * destination forge could not resolve) — the answer is `provider-unknown`.
+ * Not `not-hosted`: that would claim forge named a different secret provider
+ * when forge said nothing at all.
  */
 export function managedTargetFor(summary: Pick<ForgeEnvSummary, "forge" | "cloud">): ManagedStoreTarget {
   if (!CONTROL_PLANE_API_URL) return { kind: "none", availability: "no-control-plane" };
   if (summary.cloud) {
     return { kind: "lookup", environmentId: summary.cloud.id, endpoint: normalizeEndpoint(CONTROL_PLANE_API_URL) };
   }
+  if (!summary.forge) return { kind: "none", availability: "provider-unknown" };
   return managedStoreTarget(summary.forge);
 }
 
