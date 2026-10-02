@@ -270,16 +270,20 @@ func (j *forgeDeployJob) running() bool {
 type forgeDeployRegistry struct {
 	mu   sync.Mutex
 	jobs map[string]*forgeDeployJob
+	// claims are the envs a start has reserved but not yet started a job
+	// for — it is still running its guard plan. See claim.
+	claims map[forgeDeployTarget]*forgeDeployClaim
 }
 
-var deployRegistry = &forgeDeployRegistry{jobs: map[string]*forgeDeployJob{}}
+// forgeDeployTarget is the unit of mutual exclusion: one env of one project.
+type forgeDeployTarget struct {
+	projectPath string
+	env         string
+}
 
-// add registers a job and prunes expired finished ones.
-func (r *forgeDeployRegistry) add(job *forgeDeployJob) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.pruneLocked()
-	r.jobs[job.handle] = job
+var deployRegistry = &forgeDeployRegistry{
+	jobs:   map[string]*forgeDeployJob{},
+	claims: map[forgeDeployTarget]*forgeDeployClaim{},
 }
 
 // get returns a job by handle, or nil.
@@ -289,23 +293,75 @@ func (r *forgeDeployRegistry) get(handle string) *forgeDeployJob {
 	return r.jobs[handle]
 }
 
-// runningFor returns the handle of a job already deploying this env of this
-// project, or "".
+// claim reserves an env of a project for ONE start, or reports why it cannot.
 //
 // Two concurrent applies to one environment race each other's rollouts and
 // leave a cluster converging toward two different manifest streams. The
 // second one is refused rather than queued: a caller that wanted the first
 // one's outcome can poll its handle, and a caller that did not know about it
 // needs to be told.
-func (r *forgeDeployRegistry) runningFor(projectPath, env string) string {
+//
+// WHY A CLAIM AND NOT A LOOKUP. A start does not register its job until after
+// the guard plan — a forge subprocess that takes seconds — and the daemon
+// dispatches every command on its own goroutine. "Is anything running?" asked
+// before the plan and a job registered after it are two decisions with a gap
+// between them, and two starts landing in that gap both see nothing running
+// and both apply. The claim makes them one decision: it is taken here, under
+// the same lock that guards the jobs, held through the plan, and either becomes
+// the job (start) or is given up (release).
+//
+// A nil claim means refused. runningHandle names the in-flight job when there
+// is one, and is empty when the holder is another start still in its guard
+// plan — that start has no handle yet, and inventing one would point a caller
+// at a deploy that may never begin.
+func (r *forgeDeployRegistry) claim(projectPath, env string) (claim *forgeDeployClaim, runningHandle string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	target := forgeDeployTarget{projectPath: projectPath, env: env}
 	for _, job := range r.jobs {
 		if job.projectPath == projectPath && job.env == env && job.running() {
-			return job.handle
+			return nil, job.handle
 		}
 	}
-	return ""
+	if r.claims[target] != nil {
+		return nil, ""
+	}
+	claim = &forgeDeployClaim{registry: r, target: target}
+	r.claims[target] = claim
+	return claim, ""
+}
+
+// forgeDeployClaim is one start's reservation of its env, from the in-flight
+// check until a job exists or the start gives up.
+type forgeDeployClaim struct {
+	registry *forgeDeployRegistry
+	target   forgeDeployTarget
+}
+
+// start registers the job and gives up the claim in ONE critical section, so
+// there is no instant at which the env is neither claimed nor running. Expired
+// finished jobs are pruned on the way.
+func (c *forgeDeployClaim) start(job *forgeDeployJob) {
+	r := c.registry
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.pruneLocked()
+	r.jobs[job.handle] = job
+	if r.claims[c.target] == c {
+		delete(r.claims, c.target)
+	}
+}
+
+// release gives up the claim without starting a job — a refusal, or an error
+// before the apply. Safe to defer: it is a no-op after start, and it removes
+// only THIS claim, never one a later start has since taken on the same env.
+func (c *forgeDeployClaim) release() {
+	r := c.registry
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.claims[c.target] == c {
+		delete(r.claims, c.target)
+	}
 }
 
 // pruneLocked drops finished jobs past their retention. A RUNNING job is never
@@ -681,7 +737,9 @@ func (r forgeDeployStartRequest) validateConfirmation() error {
 //
 //  1. validate the request and the confirmation — no forge process at all for a
 //     request that cannot be authorised;
-//  2. refuse if a deploy of this env is already in flight;
+//  2. claim the env, refusing if a deploy of it is already in flight or
+//     another start holds the claim. The claim spans steps 3–5, so the
+//     in-flight check and the job's registration are one decision;
 //  3. run the READ-ONLY plan. This doubles as the gate for every non-deployable
 //     state: a missing project dir, a non-forge project and a forge too old all
 //     resolve here, before anything is started;
@@ -709,19 +767,29 @@ func handleForgeDeployStart(ctx context.Context, payload []byte) ([]byte, error)
 
 	env := strings.TrimSpace(req.Env)
 
-	// STEP 2 — one deploy per env at a time.
-	if handle := deployRegistry.runningFor(req.ProjectPath, env); handle != "" {
+	// STEP 2 — one deploy per env at a time. The claim is held through the
+	// guard plan and becomes the job in step 5; every earlier return gives it
+	// up.
+	claim, runningHandle := deployRegistry.claim(req.ProjectPath, env)
+	if claim == nil {
+		detail := fmt.Sprintf("a deploy of %q is already in flight (handle %s); "+
+			"two concurrent applies would race each other's rollout — poll that handle instead",
+			env, runningHandle)
+		if runningHandle == "" {
+			detail = fmt.Sprintf("another deploy of %q is being started and is still checking its plan, "+
+				"so it has no handle to poll yet; two concurrent applies would race each other's "+
+				"rollout — re-plan once it has started or been refused", env)
+		}
 		return json.Marshal(forgeDeployStartResponse{
 			forgeResponseMeta: forgeResponseMeta{IsForgeProject: true, Supported: true, ForgeVersion: version.Forge()},
 			DeployRefused: &forgeDeployRefusal{
 				Reason:        forgeDeployRefusalReasonAlreadyRunning,
-				RunningHandle: handle,
-				Detail: fmt.Sprintf("a deploy of %q is already in flight (handle %s); "+
-					"two concurrent applies would race each other's rollout — poll that handle instead",
-					env, handle),
+				RunningHandle: runningHandle,
+				Detail:        detail,
 			},
 		})
 	}
+	defer claim.release()
 
 	// STEP 3 — the guard plan. Read-only.
 	planRaw, err := invokeForgeReport(ctx, forgeInvocation{
@@ -790,7 +858,7 @@ func handleForgeDeployStart(ctx context.Context, payload []byte) ([]byte, error)
 		status:      forgeDeployJobStatusRunning,
 		supported:   true,
 	}
-	deployRegistry.add(job)
+	claim.start(job)
 	startForgeDeployJob(job, req.applyArgs())
 
 	logging.Info("forge deploy started",
