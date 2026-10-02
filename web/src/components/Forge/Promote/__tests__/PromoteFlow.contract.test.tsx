@@ -107,7 +107,11 @@ describe("the confirm guard", () => {
     expect(apply).toBeEnabled();
   });
 
-  it("additionally requires typing the env name for a rollback", async () => {
+  it("marks a rollback by saying so and by the button, not by a typed env name", async () => {
+    // The typed name was evidence of nothing — the env is already in the
+    // heading — and it sat under a checkbox asserting the same thing. What
+    // distinguishes a rollback is the direction, stated, plus a button naming
+    // the env AND the version it lands on.
     const user = userEvent.setup();
     const onConfirm = vi.fn();
     render(
@@ -118,11 +122,13 @@ describe("the confirm guard", () => {
       />
     );
 
-    await user.click(screen.getByTestId("promote-acknowledge"));
-    // Acknowledged, but the env name is still untyped.
-    expect(screen.getByTestId("promote-apply")).toBeDisabled();
+    expect(screen.queryByTestId("promote-typed-env")).toBeNull();
+    expect(screen.getByTestId("promote-rollback-warning").textContent).toMatch(
+      /moves prod backwards/i
+    );
+    expect(screen.getByTestId("promote-apply").textContent).toMatch(/^Roll back prod to v/);
 
-    await user.type(screen.getByTestId("promote-typed-env"), "prod");
+    await user.click(screen.getByTestId("promote-acknowledge"));
     expect(screen.getByTestId("promote-apply")).toBeEnabled();
   });
 
