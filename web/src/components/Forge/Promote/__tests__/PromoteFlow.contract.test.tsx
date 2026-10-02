@@ -271,6 +271,10 @@ describe("after a successful apply", () => {
     const panel = screen.getByTestId("promote-applied");
     // The binding IS written; this must not read as a failure.
     expect(panel.textContent).toMatch(/binding was written/i);
-    expect(panel.textContent).toMatch(/nothing has been deployed/i);
+    // And it must not claim nothing was deployed. `forge env deploy` records
+    // AND applies AND waits (forge v0.1.42, ADR V3), so an unreadable REPORT
+    // does not mean an unshipped release — the bytes moved either way.
+    expect(panel.textContent).not.toMatch(/nothing has been deployed/i);
+    expect(panel.textContent).toMatch(/recorded and applied/i);
   });
 });
