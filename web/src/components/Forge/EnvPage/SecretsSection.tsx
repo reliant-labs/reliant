@@ -79,17 +79,27 @@ export function SecretsSection({
   const declarations = useForgeSecrets(daemonAvailable ? projectId : null, env);
   const versions = useManagedSecretVersions(projectId, env, environmentId, selectedSecret);
 
+  // forge could not say where this env's secrets live (no report, or no
+  // destination it could resolve) and the control plane holds no row.
+  const providerUnknown = target.kind === "none" && target.availability === "provider-unknown";
+
   // What it would take to CREATE this environment's row: forge's project name
-  // and the kind forge derived for it. Null when either is unknown — the row
-  // is addressed by (org, project, name) and its kind is immutable, so a
-  // guess at either would create a different environment from the one on
-  // screen, or one that can never be corrected.
+  // and the kind forge derived for it. The row is addressed by (org, project,
+  // name) and its kind is immutable, so neither is ever guessed.
+  //
+  // When forge could not report at all, the kind is left empty and the SET
+  // FORM asks the user for it (SetSecretModal askEnvironmentKind) — that is
+  // what keeps a value settable before the first deploy without a daemon.
+  // The project name has no such fallback: without it the write would land
+  // in a different environment, so the write is not offered.
   const ensureFacts = useMemo(() => {
     const project = (forgeProject ?? "").trim();
     const kind = (summary.forge?.control_plane_kind ?? "").trim();
-    if (project === "" || kind === "") return null;
+    if (project === "") return null;
+    if (kind === "" && !providerUnknown) return null;
     return { project, name: env, controlPlaneKind: kind };
-  }, [forgeProject, summary.forge?.control_plane_kind, env]);
+  }, [forgeProject, summary.forge?.control_plane_kind, env, providerUnknown]);
+  const askEnvironmentKind = providerUnknown && ensureFacts?.controlPlaneKind === "";
 
   const setMutation = useSetManagedSecret(projectId, env, environmentId);
   const ensureSetMutation = useSetManagedSecretEnsuringEnvironment(
@@ -117,7 +127,11 @@ export function SecretsSection({
   // Writing is what a user comes to this screen to do before their first
   // deploy, and gating it on having already deployed is the chicken-and-egg
   // this surface used to hand them.
-  const canEnsure = availability === "not-ensured" && ensureFacts !== null;
+  //
+  // The same holds when forge could not report the env at all: the values go
+  // to the managed store ahead of the first deploy, which reads them from
+  // there when the env's config declares HostedSecrets.
+  const canEnsure = (availability === "not-ensured" || providerUnknown) && ensureFacts !== null;
 
   // The mode decides whether this surface can write. A control plane env row
   // IS the managed store's provider, whatever an older forge calls it.
@@ -140,7 +154,7 @@ export function SecretsSection({
   }, [activeSet]);
 
   const handleSubmit = useCallback(
-    async (args: { name: string; value: string; cas?: number }) => {
+    async (args: { name: string; value: string; cas?: number; controlPlaneKind?: string }) => {
       await activeSet.mutateAsync(args).then(
         () => closeModal(),
         // Swallow: the modal renders the mutation's error itself, and an
@@ -159,6 +173,8 @@ export function SecretsSection({
     null;
 
   // Not in the managed store at all: say so in one line, with no file-store UI.
+  // ONLY when forge actually named a non-hosted destination — "forge could
+  // not say" is provider-unknown, rendered below, and never this sentence.
   if (target.kind === "none" && target.availability === "not-hosted") {
     return (
       <p
@@ -173,6 +189,16 @@ export function SecretsSection({
 
   return (
     <div className="space-y-3">
+      {providerUnknown && ensureFacts === null && (
+        // The one fact the write cannot do without: which forge project the
+        // env belongs to. Said plainly instead of offering a button that
+        // would fail on submit.
+        <p data-testid="secrets-provider-unknown-no-project" className="text-xs text-muted-foreground">
+          Reliant does not yet know this project&apos;s forge name, so it cannot create this
+          environment to hold values. Open the project once with your daemon running and it will be
+          recorded.
+        </p>
+      )}
       {isCloudLocal(summary) && (
         <p data-testid="secrets-local-pull" className="text-xs text-muted-foreground">
           <code className="font-mono text-foreground">forge env up</code> pulls these into the
@@ -210,6 +236,7 @@ export function SecretsSection({
         onSubmit={handleSubmit}
         isSubmitting={activeSet.isPending}
         error={(activeSet.error as Error | null) ?? null}
+        askEnvironmentKind={canEnsure && askEnvironmentKind}
       />
     </div>
   );

@@ -333,8 +333,10 @@ export function ForgeEnvPage() {
           daemonAvailable={daemonOk}
           // forge's OWN name for the project (forge.yaml `name`), not the
           // Reliant project's display name: the control plane files
-          // environments under forge's name, so it is the join key.
-          forgeProject={(report?.project ?? "").trim() || null}
+          // environments under forge's name, so it is the join key. The
+          // live report's when the daemon answered, else the one persisted on
+          // the project row — so a secret can still be set with forge down.
+          forgeProject={state.projectName.name}
           selectedSecret={secretParam ?? null}
           onSelectSecret={selectSecret}
         />

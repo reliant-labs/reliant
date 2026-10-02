@@ -63,6 +63,19 @@ describe("a hosted env that was never ensured is still writable", () => {
     expect(availabilitySupportsWrite("not-ensured")).toBe(true);
   });
 
+  it("treats provider-unknown as writable too — the ensure path creates the row", () => {
+    expect(availabilitySupportsWrite("provider-unknown")).toBe(true);
+  });
+
+  it("never tells a provider-unknown env that forge named a different provider", () => {
+    const text = availabilityExplanation("provider-unknown") ?? "";
+    expect(text).toMatch(/could not confirm/i);
+    expect(text).toContain("HostedSecrets");
+    expect(text.toLowerCase()).toContain("managed store");
+    expect(text.toLowerCase()).not.toContain("different");
+    expect(text.toLowerCase()).not.toContain("not hosted");
+  });
+
   it.each(["not-hosted", "other-control-plane", "unreachable", "no-control-plane", "not-configured"] as const)(
     "still refuses to write a %s env",
     (availability) => {

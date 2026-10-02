@@ -887,6 +887,14 @@ export function useSetManagedSecret(
  * `ensure` null means the facts needed to create the row — the forge project
  * name and the env's kind — are not known, so there is nothing to call this
  * with; the caller does not offer the write.
+ *
+ * `ensure.controlPlaneKind` may be "" when forge could not report the kind;
+ * the caller then asks the user, and the answer arrives per submit as
+ * `controlPlaneKind`. A per-submit kind never overrides one forge reported.
+ *
+ * On success the cloud environment list is invalidated too: the write may
+ * have CREATED the env's row, and once it is listed the screen keys the store
+ * on that row instead of offering to create it again.
  */
 export function useSetManagedSecretEnsuringEnvironment(
   projectId: string | null | undefined,
@@ -895,22 +903,31 @@ export function useSetManagedSecretEnsuringEnvironment(
   ensure: EnsureEnvironmentInput | null
 ) {
   const invalidate = useInvalidateManagedSecrets(projectId, env);
-  return useMutation<SetSecretEnsuringResult, Error, { name: string; value: string; cas?: number }>({
-    mutationFn: ({ name, value, cas }) => {
+  const invalidateCloud = useInvalidateCloudEnvironments();
+  return useMutation<
+    SetSecretEnsuringResult,
+    Error,
+    { name: string; value: string; cas?: number; controlPlaneKind?: string }
+  >({
+    mutationFn: ({ name, value, cas, controlPlaneKind }) => {
       if (!ensure) {
         throw new Error(
           "Reliant does not know this environment's forge project and kind, so it cannot create it to hold a value."
         );
       }
+      const reportedKind = ensure.controlPlaneKind.trim();
       return setSecretEnsuringEnvironment({
         environmentId: environmentId ?? "",
-        env: ensure,
+        env: { ...ensure, controlPlaneKind: reportedKind !== "" ? reportedKind : (controlPlaneKind ?? "") },
         name,
         value,
         cas,
       });
     },
-    onSuccess: invalidate,
+    onSuccess: () => {
+      invalidate();
+      invalidateCloud();
+    },
   });
 }
 

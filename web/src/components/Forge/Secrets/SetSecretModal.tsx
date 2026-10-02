@@ -62,11 +62,25 @@ export interface SetSecretModalProps {
   existing: { name: string; currentVersion: number } | null;
   /** Names already in the store, so a create can refuse a collision before the round trip. */
   takenNames: string[];
-  onSubmit: (args: { name: string; value: string; cas?: number }) => Promise<unknown>;
+  onSubmit: (args: { name: string; value: string; cas?: number; controlPlaneKind?: EnvironmentKindChoice }) => Promise<unknown>;
   isSubmitting: boolean;
   /** The mutation's error, if the last attempt failed. */
   error: Error | null;
+  /**
+   * Set when this write will CREATE the environment's control-plane row and
+   * forge was not there to say what kind of environment it is. The user then
+   * chooses — see EnvironmentKindField — and the choice is passed to onSubmit.
+   * Absent everywhere forge (or an existing row) already answered.
+   */
+  askEnvironmentKind?: boolean;
 }
+
+/**
+ * The two kinds a declared environment can be, in forge's words: an env with
+ * anything hosted is `persistent`, an env whose control plane only holds its
+ * secrets (it runs under `forge env up`) is `local`.
+ */
+export type EnvironmentKindChoice = "persistent" | "local";
 
 /** forge's env-var naming shape. Matching it early beats a server rejection. */
 const NAME_PATTERN = /^[A-Z][A-Z0-9_]*$/;
@@ -80,12 +94,16 @@ export function SetSecretModal({
   onSubmit,
   isSubmitting,
   error,
+  askEnvironmentKind = false,
 }: SetSecretModalProps) {
   const nameId = useId();
   const valueId = useId();
   const [name, setName] = useState("");
   const [value, setValue] = useState("");
   const [touched, setTouched] = useState(false);
+  // No default, on purpose: the kind is immutable once the row exists, so a
+  // pre-selected answer would be a guess the user merely failed to correct.
+  const [kind, setKind] = useState<EnvironmentKindChoice | null>(null);
   const valueRef = useRef<HTMLInputElement>(null);
 
   const isUpdate = existing !== null;
@@ -98,6 +116,7 @@ export function SetSecretModal({
     setName(existing?.name ?? "");
     setValue("");
     setTouched(false);
+    setKind(null);
     // On an update the name is fixed, so the value is the only thing to type.
     if (isUpdate) valueRef.current?.focus();
   }, [open, existing, isUpdate]);
@@ -120,7 +139,7 @@ export function SetSecretModal({
       : null;
 
   const canSubmit =
-    trimmedName !== "" && value !== "" && !nameError && !isSubmitting;
+    trimmedName !== "" && value !== "" && !nameError && !isSubmitting && (!askEnvironmentKind || kind !== null);
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -132,6 +151,7 @@ export function SetSecretModal({
       // See the header: 0 asserts "must not exist", a version asserts "nobody
       // has written since I loaded this".
       cas: isUpdate ? existing.currentVersion : 0,
+      ...(askEnvironmentKind && kind ? { controlPlaneKind: kind } : {}),
     });
     // The value is cleared by the close effect. Nothing echoes it back.
   };
@@ -250,6 +270,8 @@ export function SetSecretModal({
           </div>
         </div>
 
+        {askEnvironmentKind && <EnvironmentKindField env={env} value={kind} onChange={setKind} />}
+
         {error && <SubmitError error={error} isUpdate={isUpdate} />}
 
         <div className="flex justify-end gap-2 border-t border-border pt-4">
@@ -275,6 +297,80 @@ export function SetSecretModal({
         </div>
       </form>
     </Modal>
+  );
+}
+
+/**
+ * What kind of environment the write is about to CREATE.
+ *
+ * Asked only when forge could not report it. Forge derives the kind from the
+ * env's KCL (anything hosted ⇒ persistent, a control plane that only holds
+ * secrets ⇒ local), and no other component can: the KCL is on the daemon's
+ * disk. The control plane refuses to default it and refuses to change it
+ * later, so the honest options are to ask, or to block the write. Asking is
+ * what lets a value be stored before the first deploy.
+ *
+ * A wrong answer is not silent: the first `forge env deploy` ensures the same
+ * row with forge's own kind, and the control plane rejects the mismatch
+ * (FailedPrecondition) rather than deploying into it.
+ */
+function EnvironmentKindField({
+  env,
+  value,
+  onChange,
+}: {
+  env: string;
+  value: EnvironmentKindChoice | null;
+  onChange: (kind: EnvironmentKindChoice) => void;
+}) {
+  const groupId = useId();
+  const options: { kind: EnvironmentKindChoice; label: string; detail: string }[] = [
+    {
+      kind: "persistent",
+      label: "Deployed to Reliant cloud",
+      detail: "Something in this environment runs on Reliant cloud (forge.OnHosted).",
+    },
+    {
+      kind: "local",
+      label: "Runs locally with forge env up",
+      detail: "Nothing is deployed; the control plane only holds this environment's secrets.",
+    },
+  ];
+  return (
+    <fieldset className="space-y-2" data-testid="environment-kind-field" aria-describedby={`${groupId}-why`}>
+      <legend className="text-sm font-medium text-foreground">
+        How does <span className="font-mono">{env}</span> run?
+      </legend>
+      <p id={`${groupId}-why`} className="text-xs text-muted-foreground">
+        forge could not report this, and it cannot be changed once the environment exists — choose
+        what its forge config declares.
+      </p>
+      <div className="space-y-1.5">
+        {options.map((option) => (
+          <label
+            key={option.kind}
+            className={cn(
+              "flex cursor-pointer gap-2.5 rounded-md border bg-background px-3 py-2",
+              value === option.kind ? "border-primary/60" : "border-border/60"
+            )}
+          >
+            <input
+              type="radio"
+              name={groupId}
+              value={option.kind}
+              checked={value === option.kind}
+              onChange={() => onChange(option.kind)}
+              data-testid={`environment-kind-${option.kind}`}
+              className="mt-0.5"
+            />
+            <span className="space-y-0.5">
+              <span className="block text-sm text-foreground">{option.label}</span>
+              <span className="block text-xs text-muted-foreground">{option.detail}</span>
+            </span>
+          </label>
+        ))}
+      </div>
+    </fieldset>
   );
 }
 
