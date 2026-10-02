@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -697,8 +698,17 @@ func TestForgeDeployStart_RefusesConcurrentDeployOfSameEnv(t *testing.T) {
 		<-release
 		return forgeCommandResult{Stdout: []byte(deployAppliedJSON("prod", nil, true))}, nil
 	}
+	var firstHandle string
 	t.Cleanup(func() {
+		// Let the first job finish and WAIT for it before restoring the
+		// seam. Its goroutine reads runForgeDeploy, and closing release
+		// does not order that read before this write — only the job's
+		// own terminal state does. Restoring early is a data race, and
+		// leaves a running deploy in the shared registry besides.
 		close(release)
+		if firstHandle != "" {
+			waitForDeployJob(t, firstHandle)
+		}
 		runForgeDeploy = prev
 	})
 
@@ -707,7 +717,12 @@ func TestForgeDeployStart_RefusesConcurrentDeployOfSameEnv(t *testing.T) {
 	if err != nil {
 		t.Fatalf("first start: %v", err)
 	}
-	firstHandle := decodeDeployStart(t, first).Handle
+	firstHandle = decodeDeployStart(t, first).Handle
+	// Without a handle here the RunningHandle comparison below would pass
+	// against "" without proving anything.
+	if firstHandle == "" {
+		t.Fatal("the first start must start a job and return its handle")
+	}
 
 	second, err := handleForgeDeployStart(context.Background(), mustDeployPayload(t,
 		startRequest(dir, "prod", "gke_prod", "v1.5.15")))
@@ -722,6 +737,149 @@ func TestForgeDeployStart_RefusesConcurrentDeployOfSameEnv(t *testing.T) {
 	if got.DeployRefused.RunningHandle != firstHandle {
 		t.Errorf("the refusal must name the in-flight handle: got %q want %q",
 			got.DeployRefused.RunningHandle, firstHandle)
+	}
+}
+
+// The in-flight check and the job's registration are separated by the guard
+// plan — a forge subprocess that takes seconds — and the daemon dispatches every
+// command on its own goroutine. A second start arriving inside that window must
+// be refused too, or both see "nothing running" and both apply.
+func TestForgeDeployStart_RefusesSecondStartDuringGuardPlan(t *testing.T) {
+	dir := forgeProject(t)
+	plan := deployPlanJSON("prod", "dry_run", "gke_prod", "k3d", "allow", "v1.5.15")
+	req := startRequest(dir, "prod", "gke_prod", "v1.5.15")
+
+	var applies atomic.Int32
+	prevApply := runForgeDeploy
+	runForgeDeploy = func(_ context.Context, _ string, _ []string) (forgeCommandResult, error) {
+		applies.Add(1)
+		return forgeCommandResult{Stdout: []byte(deployAppliedJSON("prod", nil, true))}, nil
+	}
+
+	// The second start is issued from INSIDE the first start's guard plan.
+	// On the daemon these are two commands on two goroutines; nesting them
+	// makes that interleaving deterministic.
+	var second forgeDeployStartResponse
+	planCalls := 0
+	prevPlan := runForge
+	runForge = func(_ context.Context, _ string, _ []string) (forgeCommandResult, error) {
+		planCalls++
+		if planCalls == 1 {
+			raw, err := handleForgeDeployStart(context.Background(), mustDeployPayload(t, req))
+			if err != nil {
+				t.Errorf("second start: %v", err)
+			} else {
+				second = decodeDeployStart(t, raw)
+			}
+		}
+		return forgeCommandResult{Stdout: []byte(plan)}, nil
+	}
+
+	var started []string
+	t.Cleanup(func() {
+		// Every job this test started must settle before the seams it
+		// reads are restored.
+		for _, handle := range started {
+			waitForDeployJob(t, handle)
+		}
+		runForge = prevPlan
+		runForgeDeploy = prevApply
+	})
+
+	raw, err := handleForgeDeployStart(context.Background(), mustDeployPayload(t, req))
+	if err != nil {
+		t.Fatalf("first start: %v", err)
+	}
+	first := decodeDeployStart(t, raw)
+	for _, handle := range []string{first.Handle, second.Handle} {
+		if handle != "" {
+			started = append(started, handle)
+		}
+	}
+
+	if second.DeployRefused == nil || second.DeployRefused.Reason != forgeDeployRefusalReasonAlreadyRunning {
+		t.Fatalf("a start arriving during another start's guard plan must be refused as already_running; "+
+			"got handle %q, refusal %+v", second.Handle, second.DeployRefused)
+	}
+	if second.Handle != "" {
+		t.Errorf("a refused start must return no handle, got %q", second.Handle)
+	}
+	// The first start has no job yet, so there is no handle to name — and
+	// the refusal must not invent one.
+	if second.DeployRefused.RunningHandle != "" {
+		t.Errorf("no job exists yet, so no running handle can be named, got %q",
+			second.DeployRefused.RunningHandle)
+	}
+	if planCalls != 1 {
+		t.Errorf("the refused start must not run a guard plan: %d plans ran", planCalls)
+	}
+
+	// The first start is unaffected and is the one deploy that runs.
+	if first.DeployRefused != nil || first.Handle == "" {
+		t.Fatalf("the first start must proceed: handle %q, refusal %+v", first.Handle, first.DeployRefused)
+	}
+	waitForDeployJob(t, first.Handle)
+	if n := applies.Load(); n != 1 {
+		t.Errorf("exactly one apply may run for one env, got %d", n)
+	}
+}
+
+// A start that ends WITHOUT starting a job — refused, or failed before the
+// apply — must give its claim back. A leaked claim would refuse every later
+// deploy of that env as already_running until the daemon restarted.
+func TestForgeDeployStart_EarlyExitReleasesTheClaim(t *testing.T) {
+	cases := map[string]struct {
+		plan    forgeCommandResult
+		planErr error
+		claimed string // the declared context the failing start asserts
+	}{
+		"stale declared context": {
+			plan:    forgeCommandResult{Stdout: []byte(deployPlanJSON("prod", "dry_run", "gke_prod", "k3d", "allow", "v1.5.15"))},
+			claimed: "k3d-control-plane",
+		},
+		"forge guard refusal": {
+			plan:    forgeCommandResult{Stdout: []byte(deployPlanJSON("prod", "dry_run", "gke_prod", "", "refuse", "v1.5.15")), ExitCode: 1},
+			claimed: "gke_prod",
+		},
+		"preview that applied": {
+			plan:    forgeCommandResult{Stdout: []byte(deployPlanJSON("prod", "apply", "gke_prod", "k3d", "allow", "v1.5.15"))},
+			claimed: "gke_prod",
+		},
+		"forge could not run": {
+			planErr: errors.New("exec: forge: not found"),
+			claimed: "gke_prod",
+		},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			dir := forgeProject(t)
+			stubForge(t, tc.plan, tc.planErr)
+			stubNoForgeDeploy(t)
+
+			raw, err := handleForgeDeployStart(context.Background(), mustDeployPayload(t,
+				startRequest(dir, "prod", tc.claimed, "v1.5.15")))
+			if err == nil && decodeDeployStart(t, raw).Handle != "" {
+				t.Fatal("the setup must not start a job")
+			}
+
+			// Same env, a plan that would be accepted: it must start.
+			stubForge(t, forgeCommandResult{
+				Stdout: []byte(deployPlanJSON("prod", "dry_run", "gke_prod", "k3d", "allow", "v1.5.15")),
+			}, nil)
+			stubForgeDeploy(t, forgeCommandResult{Stdout: []byte(deployAppliedJSON("prod", nil, true))}, nil)
+
+			raw, err = handleForgeDeployStart(context.Background(), mustDeployPayload(t,
+				startRequest(dir, "prod", "gke_prod", "v1.5.15")))
+			if err != nil {
+				t.Fatalf("follow-up start: %v", err)
+			}
+			got := decodeDeployStart(t, raw)
+			if got.DeployRefused != nil {
+				t.Fatalf("the earlier start leaked its claim — the env is refused with nothing running: %+v",
+					got.DeployRefused)
+			}
+			waitForDeployJob(t, got.Handle)
+		})
 	}
 }
 
