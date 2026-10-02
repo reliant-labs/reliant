@@ -285,6 +285,16 @@ func daemonToProto(d *db.Daemon, att *db.DaemonAttachment) *reliantv1.DaemonInfo
 		LifecyclePhase:    phase,
 		LastStatusMessage: d.LastStatusMessage,
 		OomKillCount:      d.OOMKillCount,
+		CreatedAt:         timestamppb.New(d.CreatedAt),
+	}
+	// Sourced from the attachment lease, so both are absent while nothing is
+	// attached. That is deliberate: the lease row is deleted on disconnect and
+	// this service keeps no history, so there is no honest "last connected" to
+	// report for a detached daemon. Callers needing recency for one of those
+	// fall back to CreatedAt.
+	if att != nil {
+		info.ConnectedAt = timestamppb.New(att.AttachedAt)
+		info.LastHeartbeat = timestamppb.New(att.LastStreamActivity)
 	}
 	if d.Size != nil {
 		info.Size = *d.Size
@@ -312,9 +322,6 @@ func daemonToProto(d *db.Daemon, att *db.DaemonAttachment) *reliantv1.DaemonInfo
 	if att != nil {
 		info.DetectedPorts = att.DetectedPorts
 	}
-	// ConnectedAt and LastHeartbeat now intentionally left unset — those fields
-	// have been removed from the daemons row. Callers needing freshness should
-	// consult daemon_attachment.
 	return info
 }
 

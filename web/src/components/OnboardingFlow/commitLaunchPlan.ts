@@ -54,6 +54,12 @@
  *    Re-invoking with the same key returns the cached failure. Only
  *    {@link retryCommit}, wired to an explicit Retry button, clears it.
  */
+import { create } from "@bufbuild/protobuf";
+import { grpcClient } from "@/api/grpc-client";
+import {
+  DaemonStatus,
+  ListDaemonsRequestSchema,
+} from "@/gen/reliant/v1/daemon_registry_pb";
 import { isCloudCompute } from "./types";
 import type { LaunchPlan } from "./types";
 
@@ -113,15 +119,17 @@ export function daemonSizeForPlan(computePlanId: string | undefined): number {
 }
 
 /**
- * controlplane.v1.DaemonStatus, in full.
+ * reliant.v1.DaemonStatus, from the generated enum.
  *
- * The whole enum is spelled out rather than the two values the old code
- * happened to name, because the decision below is a per-status one and a
- * partial enum is what let it treat four different machine states as one.
+ * These were hand-written literals (1/2/3) for control-plane's enum, which is
+ * precisely the drift hazard consolidating the daemon list removes: the two
+ * enums disagreed numerically, so a literal was only correct for whichever
+ * list the caller happened to hold. Deriving from the generated source means a
+ * renumbered proto cannot leave a stale number behind here.
  */
-const DAEMON_STATUS_PENDING = 1;
-const DAEMON_STATUS_ACTIVE = 2;
-const DAEMON_STATUS_SUSPENDED = 3;
+const DAEMON_STATUS_PENDING = DaemonStatus.PENDING;
+const DAEMON_STATUS_ACTIVE = DaemonStatus.ACTIVE;
+const DAEMON_STATUS_SUSPENDED = DaemonStatus.SUSPENDED;
 
 export type CommitTaskName = "grant_ai_access" | "provision_daemon";
 
@@ -166,7 +174,7 @@ export interface CommitDeps {
     reason?: string | null;
   }>;
   listDaemons: () => Promise<
-    { daemons: Array<{ id: string; status: number }> }
+    { daemons: Array<{ daemonId: string; status: number }> }
   >;
   createDaemon: (args: {
     name: string;
@@ -215,10 +223,11 @@ function defaultDeps(): CommitDeps {
         reason: result.eligible ? null : computeIneligibleCopy(result.reason),
       };
     },
-    listDaemons: async () => {
-      const { listDaemons } = await import("@/services/controlPlane/daemon");
-      return listDaemons();
-    },
+    // The registry list: the one service that knows whether a machine has
+    // actually attached, which is the question every branch below asks.
+    // See docs/design/one-daemon-list.md.
+    listDaemons: async () =>
+      grpcClient.daemonRegistry().listDaemons(create(ListDaemonsRequestSchema)),
     createDaemon: async (args) => {
       const { createDaemon } = await import("@/services/controlPlane/daemon");
       return createDaemon(args);
@@ -368,7 +377,7 @@ async function provisionDaemon(
         name: "provision_daemon",
         status: "complete",
         detail: "Your machine is already running.",
-        daemonId: active.id,
+        daemonId: active.daemonId,
       };
     }
 
@@ -381,7 +390,7 @@ async function provisionDaemon(
         name: "provision_daemon",
         status: "complete",
         detail: "Starting your machine…",
-        daemonId: booting.id,
+        daemonId: booting.daemonId,
       };
     }
 
@@ -390,12 +399,12 @@ async function provisionDaemon(
     // suspended and the user without a machine.
     const suspended = daemons.find((d) => d.status === DAEMON_STATUS_SUSPENDED);
     if (suspended) {
-      await deps.resumeDaemon(suspended.id);
+      await deps.resumeDaemon(suspended.daemonId);
       return {
         name: "provision_daemon",
         status: "complete",
         detail: "Starting your machine…",
-        daemonId: suspended.id,
+        daemonId: suspended.daemonId,
       };
     }
 

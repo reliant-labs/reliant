@@ -21,7 +21,7 @@ import {
   useCreateDaemon,
   useDaemonList,
 } from "@/hooks/useOnboardingQueries";
-import type { Daemon } from "@/services/controlPlane/daemon";
+import type { DaemonInfo as Daemon } from "@/gen/reliant/v1/daemon_registry_pb";
 import { cn } from "../../lib/utils";
 import { lastSeenMs, presentDaemon, sizeLabel } from "./daemonPresentation";
 import { relativeTimeFromMs } from "./relativeTime";
@@ -304,14 +304,14 @@ function DaemonRow({ daemon }: { daemon: Daemon }) {
     <div className="px-4 pb-2">
       <Link
         to="/m/daemons/$daemonId"
-        params={{ daemonId: daemon.id }}
+        params={{ daemonId: daemon.daemonId }}
         className={cn(MOBILE_ROW, "rounded-lg border-b-0 elevation-1")}
       >
         <MobileRowIcon icon={Server} />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <span className="truncate text-sm font-medium text-foreground">
-              {daemon.name || "Unnamed machine"}
+              {daemon.hostname || "Unnamed machine"}
             </span>
             {size && (
               <span className="shrink-0 rounded-md bg-primary/10 px-1.5 py-0.5 text-xs font-medium text-primary">
@@ -397,7 +397,7 @@ export function MobileDaemonList() {
         data={daemons}
         // Stable identity across the 5s refetch: without it a daemon changing
         // status can recycle into a neighbour's DOM node mid-scroll.
-        computeItemKey={(_, daemon) => daemon.id}
+        computeItemKey={(_, daemon) => daemon.daemonId}
         itemContent={(_, daemon) => <DaemonRow daemon={daemon} />}
         components={{
           Header: () => <div className="h-4" />,

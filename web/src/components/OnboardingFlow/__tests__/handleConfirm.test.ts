@@ -13,8 +13,8 @@
  * reported as queued rather than as a finished checkout.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Daemon } from "@/services/controlPlane/daemon";
-import { DaemonStatus } from "@/gen/controlplane/controlplane/v1/shared_pb";
+import type { DaemonInfo as Daemon } from "@/gen/reliant/v1/daemon_registry_pb";
+import { DaemonStatus } from "@/gen/reliant/v1/daemon_registry_pb";
 
 const mockListDaemons = vi.fn<() => Promise<{ daemons: Daemon[] }>>();
 const mockCreateDaemon = vi.fn();
@@ -22,11 +22,21 @@ const mockCreateProjectFromRepo = vi.fn();
 const mockCloneRepo = vi.fn();
 const mockMarkProjectInstalled = vi.fn();
 
+// The LIST comes from the daemon registry — the one daemon list
+// (docs/design/one-daemon-list.md) — while CreateDaemon stays a control-plane
+// command, so the two are stubbed separately.
+vi.mock("@/api/grpc-client", () => ({
+  grpcClient: {
+    daemonRegistry: () => ({
+      listDaemons: (...args: unknown[]) => mockListDaemons(...(args as [])),
+    }),
+  },
+}));
+
 vi.mock("@/services/controlPlane/daemon", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/services/controlPlane/daemon")>();
   return {
     ...actual,
-    listDaemons: (...args: unknown[]) => mockListDaemons(...(args as [])),
     createDaemon: (...args: unknown[]) => mockCreateDaemon(...args),
   };
 });
@@ -83,7 +93,7 @@ afterEach(() => {
 describe("addRepoProject", () => {
   beforeEach(() => {
     mockListDaemons.mockResolvedValue({
-      daemons: [makeDaemon({ id: "daemon-active-uuid", hostname: "ws-active", status: DaemonStatus.ACTIVE })],
+      daemons: [makeDaemon({ daemonId: "daemon-active-uuid", hostname: "ws-active", status: DaemonStatus.ACTIVE })],
     });
   });
 
@@ -173,7 +183,7 @@ describe("addRepoProject — daemon selection", () => {
     // Onboarding's machine is frequently still booting, and the clone is
     // durably queued. Refusing here would strand the user at the last step.
     mockListDaemons.mockResolvedValue({
-      daemons: [makeDaemon({ id: "pending-uuid", status: DaemonStatus.PENDING })],
+      daemons: [makeDaemon({ daemonId: "pending-uuid", status: DaemonStatus.PENDING })],
     });
 
     const result = await addRepoProject(cloneArgs({ branch: "develop" }));
@@ -196,18 +206,18 @@ describe("addRepoProject — daemon selection", () => {
 describe("pickOnboardingDaemon", () => {
   it("prefers a running machine over one that is still booting", () => {
     const picked = pickOnboardingDaemon([
-      makeDaemon({ id: "pending", status: DaemonStatus.PENDING }),
-      makeDaemon({ id: "active", status: DaemonStatus.ACTIVE }),
+      makeDaemon({ daemonId: "pending", status: DaemonStatus.PENDING }),
+      makeDaemon({ daemonId: "active", status: DaemonStatus.ACTIVE }),
     ]);
 
-    expect(picked?.id).toBe("active");
+    expect(picked?.daemonId).toBe("active");
   });
 
   it("falls back to a failed machine only when it is the only one", () => {
     // Onboarding has to attempt SOMETHING: a hard refusal at the final step
     // is worse than a clone that reports its own failure.
-    const picked = pickOnboardingDaemon([makeDaemon({ id: "failed", status: DaemonStatus.FAILED })]);
+    const picked = pickOnboardingDaemon([makeDaemon({ daemonId: "failed", status: DaemonStatus.FAILED })]);
 
-    expect(picked?.id).toBe("failed");
+    expect(picked?.daemonId).toBe("failed");
   });
 });

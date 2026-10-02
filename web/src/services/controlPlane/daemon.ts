@@ -1,10 +1,15 @@
 /**
  * Cloud-only thin wrappers around `controlplane.v1.DaemonService`.
  *
- * Cloud onboarding (ComputeStep, GitHubConnectStep, DaemonConnectingGate) and
- * the React-Query hooks in `useOnboardingQueries.ts` consume these. Each
- * function delegates to a typed Connect-Web client; request shapes match the
- * generated TS types and DO NOT send snake_case duplicates.
+ * These are the machine COMMANDS — create, resume, suspend, delete. They are
+ * genuinely control-plane operations and stay here.
+ *
+ * `listDaemons`, `hasActiveDaemon` and `getDaemonStatusMessage` are gone: the
+ * daemon list the UI reads is `reliant.v1.DaemonRegistryService/ListDaemons`,
+ * the one service that knows both whether a machine has attached AND what it
+ * is doing. See docs/design/one-daemon-list.md. Per-machine control-plane
+ * DETAIL (port access, workspace base domain, provisioning spec) is still
+ * `getDaemon` in ./environments.
  *
  * Status constants are re-exported from the generated `DaemonStatus` enum so
  * callers don't have to import the enum AND a numeric constant for the same
@@ -27,11 +32,6 @@ export const DAEMON_STATUS_DISCONNECTED = DaemonStatus.DISCONNECTED;
 export const DAEMON_STATUS_FAILED = DaemonStatus.FAILED;
 
 export type Daemon = ProtoDaemon;
-
-export async function listDaemons(): Promise<{ daemons: Daemon[] }> {
-  const res = await getControlPlaneClient(DaemonService).listDaemons({});
-  return { daemons: res.daemons };
-}
 
 export interface CreateDaemonArgs {
   name: string;
@@ -82,17 +82,3 @@ export async function deleteDaemon(daemonId: string): Promise<void> {
   await getControlPlaneClient(DaemonService).deleteDaemon({ daemonId });
 }
 
-// ── Helpers used by ComputeStep / GitHubConnectStep ─────────────
-
-/** Active in cloud-land = control-plane DaemonStatus.ACTIVE (=2). */
-export function hasActiveDaemon(daemons: Daemon[]): boolean {
-  return daemons.some((d) => d.status === DaemonStatus.ACTIVE);
-}
-
-/** Optional human-readable status detail surfaced by the gateway/controller
- *  on a connect failure (e.g. "image pull failed"). Empty when the daemon is
- *  actively connected. */
-export function getDaemonStatusMessage(daemon: Daemon | undefined): string {
-  if (!daemon) return "";
-  return daemon.lastStatusMessage || "";
-}

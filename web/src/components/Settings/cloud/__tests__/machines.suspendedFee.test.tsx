@@ -118,7 +118,19 @@ vi.mock('@/services/controlPlane/environments', () => ({
   revokeDaemonToken: vi.fn(),
 }))
 
+// The machine LIST comes from reliant's daemon registry
+// (docs/design/one-daemon-list.md). It is fed from the same mocks.listDaemons
+// the tests already drive, so their setup calls keep working unchanged.
+vi.mock('@/api/grpc-client', () => ({
+  grpcClient: {
+    daemonRegistry: () => ({
+      listDaemons: async () => mocks.listDaemons(),
+    }),
+  },
+}))
+
 import { MachinesSection } from '@/components/Settings/cloud/machines'
+import { DaemonStatus } from '@/gen/reliant/v1/daemon_registry_pb'
 
 function renderSection() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
@@ -130,17 +142,15 @@ function renderSection() {
 }
 
 
-const managed = (name: string, status: number, size: number) => ({
-  id: `00000000-0000-4000-8000-${name.length.toString().padStart(12, '0')}${status}`.slice(0, 36),
-  name,
-  daemonType: 1, // MANAGED
+// A registry row. `size` is the lifecycle mirror's tier NAME, which is also
+// what the fee lookup keys on (SIZE_TIERS → the server's per-size disk).
+const managed = (name: string, status: number, size: string) => ({
+  daemonId: `00000000-0000-4000-8000-${name.length.toString().padStart(12, '0')}${status}`.slice(0, 36),
+  hostname: name,
+  daemonType: 'managed',
   status,
-  resources: { cpuRequest: '1', cpuLimit: '1', memoryRequest: '2Gi', memoryLimit: '2Gi' },
-  storageSize: '25Gi',
-  hostname: '',
   platform: '',
   size,
-  idleTimeout: '30m',
 })
 
 describe('MachinesSection — suspended disk fee (J)', () => {
@@ -161,7 +171,10 @@ describe('MachinesSection — suspended disk fee (J)', () => {
 
   it('shows the monthly disk fee beside Delete for a suspended machine, and not for a running one', async () => {
     mocks.listDaemons.mockResolvedValue({
-      daemons: [managed('parked-large', 3 /* SUSPENDED */, 3 /* LARGE */), managed('busy-small', 2 /* ACTIVE */, 1)],
+      daemons: [
+        managed('parked-large', DaemonStatus.SUSPENDED, 'large'),
+        managed('busy-small', DaemonStatus.ACTIVE, 'small'),
+      ],
     })
     renderSection()
 

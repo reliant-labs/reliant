@@ -12,8 +12,8 @@ import { describe, expect, it } from "vitest";
 import {
   DaemonLifecyclePhase,
   DaemonStatus,
-} from "@/gen/controlplane/controlplane/v1/shared_pb";
-import type { Daemon } from "@/services/controlPlane/daemon";
+} from "@/gen/reliant/v1/daemon_registry_pb";
+import type { DaemonInfo as Daemon } from "@/gen/reliant/v1/daemon_registry_pb";
 import {
   classifyDaemonWait,
   daemonWaitSummary,

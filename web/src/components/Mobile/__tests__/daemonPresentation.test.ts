@@ -9,8 +9,10 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { DaemonStatus, DaemonSize } from '@/gen/controlplane/controlplane/v1/shared_pb';
-import type { Daemon } from '@/services/controlPlane/daemon'
+import {
+  DaemonStatus,
+  type DaemonInfo as Daemon,
+} from '@/gen/reliant/v1/daemon_registry_pb'
 import {
   canResume,
   canSuspend,
@@ -20,7 +22,7 @@ import {
 } from '../daemonPresentation'
 
 function daemon(overrides: Partial<Daemon> = {}): Daemon {
-  return { id: 'd1', name: 'box', status: DaemonStatus.ACTIVE, ...overrides } as Daemon
+  return { daemonId: 'd1', hostname: 'box', status: DaemonStatus.ACTIVE, ...overrides } as Daemon
 }
 
 describe('canResume', () => {
@@ -95,25 +97,32 @@ describe('presentDaemon', () => {
 })
 
 describe('sizeLabel', () => {
+  // Size arrives as the lifecycle mirror's own string ("medium"), not the
+  // control-plane size enum, so the tiers are named rather than numbered.
   it('names each tier', () => {
-    expect(sizeLabel(daemon({ size: DaemonSize.DAEMON_SIZE_SMALL }))).toBe('Small')
-    expect(sizeLabel(daemon({ size: DaemonSize.DAEMON_SIZE_XL }))).toBe('XL')
+    expect(sizeLabel(daemon({ size: 'small' }))).toBe('Small')
+    expect(sizeLabel(daemon({ size: 'xl' }))).toBe('XL')
   })
 
   it('returns empty string when the tier is unset, so no badge renders', () => {
-    expect(sizeLabel(daemon({ size: DaemonSize.DAEMON_SIZE_UNSPECIFIED }))).toBe('')
+    // Every self-hosted machine is in this state permanently: it has no size.
+    expect(sizeLabel(daemon({ size: '' }))).toBe('')
   })
 })
 
 describe('lastSeenMs', () => {
-  it('returns null for a daemon that has not disconnected', () => {
+  // "Last seen" now reads the attachment lease's last stream activity, which is
+  // observed by whoever terminates the daemon's stream, rather than
+  // control-plane's disconnected_at, which was inferred from a lifecycle
+  // column.
+  it('returns null for a daemon with no reported heartbeat', () => {
     expect(lastSeenMs(daemon())).toBeNull()
   })
 
   it('converts a protobuf timestamp to epoch millis', () => {
     const seconds = 1_700_000_000
     const value = lastSeenMs(
-      daemon({ disconnectedAt: { seconds: BigInt(seconds), nanos: 0 } as never }),
+      daemon({ lastHeartbeat: { seconds: BigInt(seconds), nanos: 0 } as never }),
     )
     expect(value).toBe(seconds * 1000)
   })

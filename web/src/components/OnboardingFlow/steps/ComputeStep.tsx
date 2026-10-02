@@ -24,9 +24,6 @@ import {
   DaemonStatus,
   type DaemonInfo,
 } from "@/gen/reliant/v1/daemon_registry_pb";
-// Aliased on purpose: this is a DIFFERENT enum from the DaemonStatus above,
-// with different numeric values. See hasUsableControlPlaneDaemonForOnboarding.
-import { DaemonStatus as ControlPlaneDaemonStatus } from "@/gen/controlplane/controlplane/v1/shared_pb";
 import { useDaemonStatus } from "@/hooks/useDaemonStatus";
 import { useCloudEligibility } from "@/hooks/useOnboardingQueries";
 import { RedeemCouponForm } from "@/components/RedeemCouponForm";
@@ -51,42 +48,32 @@ const HAS_CLOUD_DAEMONS = capabilities.cloudDaemons;
 // account, that bootstrap question is moot. The post-onboarding workspace
 // picker handles selection when multiple daemons exist.
 //
-// We treat ACTIVE and IDLE as "usable":
-//   - ACTIVE: actively connected (the obvious case).
-//   - IDLE:   registered but currently transitioning (cloud daemon
-//             provisioning, local daemon just-came-up between gateway
-//             reconnect attempts). The user has clearly already picked a
-//             daemon location, so the where-question shouldn't re-appear.
-// DISCONNECTED / UNSPECIFIED are skipped: those signal a stale row or an
-// unhealthy registration where the user genuinely needs to (re)decide.
-export function hasUsableDaemonForOnboarding(daemons: DaemonInfo[]): boolean {
-  return daemons.some(
-    (d) => d.status === DaemonStatus.ACTIVE || d.status === DaemonStatus.IDLE,
-  );
-}
-
-// The control-plane's Daemon carries a DIFFERENT DaemonStatus enum than
-// reliant's DaemonInfo, and the two are NOT interchangeable — the numbers
-// disagree:
+// "Usable" means the user has clearly already picked a daemon location, so
+// the where-question must not re-appear:
+//   - ACTIVE:    actively attached (the obvious case).
+//   - PENDING:   a managed machine that is provisioning or cloning. The user
+//                asked for it; it is coming.
+//   - SUSPENDED: a real machine, deliberately parked, which resumes on use.
+// DISCONNECTED / FAILED / UNSPECIFIED are skipped: a stale row, a machine
+// that will never come up, or an unhealthy registration — the cases where the
+// user genuinely needs to (re)decide.
 //
-//   controlplane: UNSPECIFIED=0 PENDING=1 ACTIVE=2  SUSPENDED=3
-//   reliant:      UNSPECIFIED=0 ACTIVE=1  IDLE=2    DISCONNECTED=3
-//
-// reliant's IDLE(2) collides with control-plane's ACTIVE(2), and reliant's
-// ACTIVE(1) collides with control-plane's PENDING(1). Casting one array to
-// the other — the obvious way to silence the type error — would make a
-// PENDING daemon read as ACTIVE and let onboarding declare itself complete
-// against a daemon that has not started.
-//
-// So the control-plane shape gets its OWN predicate, written against its own
-// enum. Same question, different vocabulary.
-export function hasUsableControlPlaneDaemonForOnboarding(
-  daemons: ReadonlyArray<{ status: ControlPlaneDaemonStatus }>,
+// There used to be TWO of these predicates, one per DaemonStatus enum, because
+// the UI read two different daemon lists whose numeric values collided
+// (reliant ACTIVE=1 was control-plane PENDING=1; reliant IDLE=2 was
+// control-plane ACTIVE=2). There is now one list and one enum, so there is one
+// predicate — and PENDING and SUSPENDED are nameable here for the first time,
+// which is why this reads richer than the registry half it replaces rather
+// than narrower than the control-plane half. See
+// docs/design/one-daemon-list.md.
+export function hasUsableDaemonForOnboarding(
+  daemons: ReadonlyArray<Pick<DaemonInfo, "status">>,
 ): boolean {
   return daemons.some(
     (d) =>
-      d.status === ControlPlaneDaemonStatus.ACTIVE ||
-      d.status === ControlPlaneDaemonStatus.PENDING,
+      d.status === DaemonStatus.ACTIVE ||
+      d.status === DaemonStatus.PENDING ||
+      d.status === DaemonStatus.SUSPENDED,
   );
 }
 

@@ -8,15 +8,32 @@
 
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import userEvent from '@testing-library/user-event'
-import { DaemonStatus, DaemonSize } from '@/gen/controlplane/controlplane/v1/shared_pb';
-import type { Daemon } from '@/services/controlPlane/daemon'
+import { DaemonStatus } from '@/gen/reliant/v1/daemon_registry_pb'
+import type { DaemonInfo as Daemon } from '@/gen/reliant/v1/daemon_registry_pb'
 
 const resumeMutate = vi.fn()
 const suspendMutate = vi.fn()
 const deleteMutate = vi.fn()
 const navigate = vi.fn()
 let daemons: Daemon[] = []
+
+// The screen reads status from the registry list and the provisioning SPEC
+// (repo, branch, idle timeout) from control-plane's GetDaemon — the two-owner
+// split in docs/design/one-daemon-list.md. Both are stubbed so the test can
+// assert the screen renders each half from its own source.
+vi.mock('@/services/controlPlane/environments', () => ({
+  getDaemon: async () => ({
+    daemon: {
+      gitRepo: 'reliant-labs/reliant',
+      gitBranch: 'main',
+      idleTimeout: '30m',
+      storageSize: '20Gi',
+    },
+    workspaceBaseDomain: '',
+  }),
+}))
 
 vi.mock('@/hooks/useOnboardingQueries', () => ({
   useDaemonList: () => ({ data: daemons, isLoading: false }),
@@ -37,17 +54,24 @@ vi.mock('@tanstack/react-router', () => ({
 
 const { MobileDaemonScreen } = await import('../MobileDaemonScreen')
 
+// The screen fetches its control-plane detail half with useQuery, so it needs a
+// client. The registry half is stubbed through useDaemonList above.
+function renderScreen() {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  return render(
+    <QueryClientProvider client={client}>
+      <MobileDaemonScreen />
+    </QueryClientProvider>,
+  )
+}
+
 function daemon(overrides: Partial<Daemon> = {}): Daemon {
   return {
-    id: 'd1',
-    name: 'work-box',
+    daemonId: 'd1',
+    hostname: 'work-box',
     status: DaemonStatus.ACTIVE,
-    size: DaemonSize.DAEMON_SIZE_MEDIUM,
-    gitRepo: 'reliant-labs/reliant',
-    gitBranch: 'main',
-    hostname: '',
+    size: 'medium',
     platform: '',
-    idleTimeout: '30m',
     lastStatusMessage: '',
     ...overrides,
   } as Daemon
@@ -63,21 +87,26 @@ beforeEach(() => {
 describe('MobileDaemonScreen', () => {
   it('shows the machine name, status and size', () => {
     daemons = [daemon()]
-    render(<MobileDaemonScreen />)
-    expect(screen.getByText('work-box')).toBeInTheDocument()
+    renderScreen()
+    // Scoped to the heading: the hostname IS the machine's name in the
+    // registry, so it legitimately appears twice — as the title and in the
+    // Host detail row — where it previously came from two distinct fields.
+    expect(
+      screen.getByRole('heading', { name: 'work-box' }),
+    ).toBeInTheDocument()
     expect(screen.getByText('Active')).toBeInTheDocument()
     expect(screen.getByText('Medium')).toBeInTheDocument()
   })
 
   it('does NOT offer Resume for a running daemon', () => {
     daemons = [daemon({ status: DaemonStatus.ACTIVE })]
-    render(<MobileDaemonScreen />)
+    renderScreen()
     expect(screen.queryByRole('button', { name: /resume/i })).not.toBeInTheDocument()
   })
 
   it('offers Resume for a suspended daemon and calls the shared mutation', async () => {
     daemons = [daemon({ status: DaemonStatus.SUSPENDED })]
-    render(<MobileDaemonScreen />)
+    renderScreen()
 
     const button = screen.getByRole('button', { name: /resume/i })
     await userEvent.click(button)
@@ -86,13 +115,13 @@ describe('MobileDaemonScreen', () => {
 
   it('offers Resume for a disconnected daemon', () => {
     daemons = [daemon({ status: DaemonStatus.DISCONNECTED })]
-    render(<MobileDaemonScreen />)
+    renderScreen()
     expect(screen.getByRole('button', { name: /resume/i })).toBeInTheDocument()
   })
 
   it('offers Suspend for a running daemon and calls the shared mutation', async () => {
     daemons = [daemon({ status: DaemonStatus.ACTIVE })]
-    render(<MobileDaemonScreen />)
+    renderScreen()
 
     await userEvent.click(screen.getByRole('button', { name: /suspend/i }))
     expect(suspendMutate).toHaveBeenCalledWith('d1')
@@ -100,7 +129,7 @@ describe('MobileDaemonScreen', () => {
 
   it('confirms before deleting and calls the shared delete mutation', async () => {
     daemons = [daemon({ status: DaemonStatus.ACTIVE })]
-    render(<MobileDaemonScreen />)
+    renderScreen()
 
     await userEvent.click(screen.getByRole('button', { name: /^delete$/i }))
     expect(deleteMutate).not.toHaveBeenCalled()
@@ -112,7 +141,7 @@ describe('MobileDaemonScreen', () => {
 
   it('does not offer Suspend for a daemon that is already starting', () => {
     daemons = [daemon({ status: DaemonStatus.PENDING })]
-    render(<MobileDaemonScreen />)
+    renderScreen()
     expect(screen.queryByRole('button', { name: /suspend/i })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: /^delete$/i })).toBeInTheDocument()
   })
@@ -124,14 +153,14 @@ describe('MobileDaemonScreen', () => {
         lastStatusMessage: 'dial tcp: i/o timeout',
       }),
     ]
-    render(<MobileDaemonScreen />)
+    renderScreen()
     expect(screen.getByText('dial tcp: i/o timeout')).toBeInTheDocument()
   })
 
   it('reports a missing machine instead of rendering an empty shell', () => {
     // Deep link to a deleted machine, or one owned by another account.
     daemons = []
-    render(<MobileDaemonScreen />)
+    renderScreen()
     expect(screen.getByText('Machine not found')).toBeInTheDocument()
   })
 })

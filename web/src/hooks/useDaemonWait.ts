@@ -19,9 +19,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
-import { DaemonLifecyclePhase } from "@/gen/controlplane/controlplane/v1/shared_pb";
+import { create } from "@bufbuild/protobuf";
+import { grpcClient } from "@/api/grpc-client";
+import {
+  DaemonLifecyclePhase,
+  ListDaemonsRequestSchema,
+  type DaemonInfo as Daemon,
+} from "@/gen/reliant/v1/daemon_registry_pb";
 import { capabilities } from "@/services/controlPlane/capabilities";
-import { listDaemons, type Daemon } from "@/services/controlPlane/daemon";
 import {
   classifyDaemonWait,
   DAEMON_WAIT_POLL_MS,
@@ -112,7 +117,12 @@ export function useDaemonWait({
   // self-hosted branch which needs no status.
   const { data: daemons, refetch } = useQuery<Daemon[]>({
     queryKey: ["daemonWait", "daemons"],
-    queryFn: async () => (await listDaemons()).daemons,
+    queryFn: async () =>
+      (
+        await grpcClient
+          .daemonRegistry()
+          .listDaemons(create(ListDaemonsRequestSchema))
+      ).daemons,
     enabled: waiting && capabilities.cloudDaemons,
     refetchInterval: waiting ? DAEMON_WAIT_POLL_MS : false,
     refetchIntervalInBackground: false,

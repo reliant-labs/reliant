@@ -1,7 +1,9 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ConnectError, Code } from '@connectrpc/connect';
+import { create } from '@bufbuild/protobuf';
+import { grpcClient } from '@/api/grpc-client';
+import { ListDaemonsRequestSchema } from '@/gen/reliant/v1/daemon_registry_pb';
 import {
-  listDaemons,
   createDaemon,
   resumeDaemon,
   suspendDaemon,
@@ -153,9 +155,16 @@ export function useCloudEligibility() {
 export function useDaemonList(options?: { refetchInterval?: number | false }) {
   return useQuery({
     queryKey: ['onboarding', 'daemons'],
+    // The registry, not control-plane: one list that knows both whether a
+    // machine has attached and what it is doing. See
+    // docs/design/one-daemon-list.md. The MUTATIONS below stay on the
+    // control-plane transport — create/resume/suspend/delete are genuine
+    // control-plane commands, and only the list moved.
     queryFn: async () => {
-      const { daemons } = await listDaemons();
-      return daemons;
+      const resp = await grpcClient
+        .daemonRegistry()
+        .listDaemons(create(ListDaemonsRequestSchema));
+      return resp.daemons;
     },
     staleTime: 10_000,
     // Observers share one cache entry; TanStack polls at the smallest

@@ -23,8 +23,10 @@
 
 import { useState } from "react";
 import { AlertTriangle, Loader2, Server, X } from "lucide-react";
-import { DaemonStatus } from "@/gen/controlplane/controlplane/v1/shared_pb";
-import type { Daemon } from "@/services/controlPlane/daemon";
+import {
+  DaemonStatus,
+  type DaemonInfo as Daemon,
+} from "@/gen/reliant/v1/daemon_registry_pb";
 import type { GitRepo } from "@/services/controlPlane/git/types";
 import { gitService } from "@/services/controlPlane/git";
 import { useDaemonList } from "@/hooks/useOnboardingQueries";
@@ -63,7 +65,7 @@ export function MobileGitHubCloneSheet({
   const [error, setError] = useState("");
   const [clonedPath, setClonedPath] = useState("");
 
-  const selectedDaemon = activeDaemons.find((d) => d.id === selectedDaemonId);
+  const selectedDaemon = activeDaemons.find((d) => d.daemonId === selectedDaemonId);
 
   const path = `/home/workspace/projects/${repo.fullName.split("/").pop() || "repo"}`;
 
@@ -122,7 +124,7 @@ export function MobileGitHubCloneSheet({
               <p className="text-sm font-medium text-foreground">Cloned successfully</p>
               <p className="break-all text-xs text-muted-foreground">{clonedPath}</p>
               <p className="text-xs text-muted-foreground">
-                on {selectedDaemon?.name || selectedDaemon?.hostname || "the machine"}
+                on {selectedDaemon?.hostname || "the machine"}
               </p>
             </div>
           ) : state === "cloning" ? (
@@ -163,12 +165,12 @@ export function MobileGitHubCloneSheet({
                 ) : (
                   <div className="divide-y divide-border overflow-hidden rounded-lg border border-border">
                     {activeDaemons.map((daemon) => {
-                      const selected = daemon.id === selectedDaemonId;
+                      const selected = daemon.daemonId === selectedDaemonId;
                       return (
                         <button
-                          key={daemon.id}
+                          key={daemon.daemonId}
                           type="button"
-                          onClick={() => setSelectedDaemonId(daemon.id)}
+                          onClick={() => setSelectedDaemonId(daemon.daemonId)}
                           className={cn(
                             "flex min-h-[44px] w-full items-center gap-3 px-3 py-3 text-left active:bg-foreground/5",
                             selected && "bg-primary/10",
@@ -176,7 +178,7 @@ export function MobileGitHubCloneSheet({
                         >
                           <Server className="h-4 w-4 shrink-0 text-muted-foreground" />
                           <span className="min-w-0 flex-1 truncate text-sm text-foreground">
-                            {daemon.name || daemon.hostname || `daemon ${daemon.id.slice(0, 8)}`}
+                            {daemon.hostname || `daemon ${daemon.daemonId.slice(0, 8)}`}
                           </span>
                           <span
                             className={cn(

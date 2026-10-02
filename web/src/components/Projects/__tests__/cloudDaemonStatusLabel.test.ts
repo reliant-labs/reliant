@@ -1,42 +1,51 @@
 /**
- * Regression tests for the two-enum collision.
+ * Status-label coverage for a machine row.
  *
- * These assert against the CONTROL-PLANE numeric values deliberately, rather
- * than importing whichever enum happens to be in scope — the bug was that the
- * wrong enum was in scope, so a test written the same way would have passed
- * while the UI lied.
+ * These were written as regression tests for a two-enum collision: the UI read
+ * two daemon lists whose DaemonStatus values disagreed numerically, a
+ * fallthrough indexed the wrong one, and a PENDING machine rendered as a green
+ * "active" dot. They asserted raw control-plane numbers deliberately, because
+ * importing "whichever enum is in scope" was the bug itself.
+ *
+ * There is now one list and one enum (docs/design/one-daemon-list.md), so the
+ * collision cannot occur and the numbers no longer have to be hand-written to
+ * prove which vocabulary is in play. What is still worth pinning is that every
+ * reachable status maps to a label, and that each label has a colour — the
+ * in-sync property the last test covers.
  */
 
 import { describe, expect, it } from "vitest";
 
-import type { Daemon as CloudDaemon } from "../../../services/controlPlane/daemon";
+import {
+  DaemonStatus,
+  type DaemonInfo as CloudDaemon,
+} from "../../../gen/reliant/v1/daemon_registry_pb";
 import { cloudDaemonStatusLabel } from "../cloudDaemonStatusLabel";
 
-/** Control-plane DaemonStatus, spelled out. See the module doc comment. */
-const CP_UNSPECIFIED = 0;
-const CP_PENDING = 1;
-const CP_ACTIVE = 2;
-const CP_SUSPENDED = 3;
-const CP_DISCONNECTED = 4;
-const CP_FAILED = 5;
+const CP_UNSPECIFIED = DaemonStatus.UNSPECIFIED;
+const CP_PENDING = DaemonStatus.PENDING;
+const CP_ACTIVE = DaemonStatus.ACTIVE;
+const CP_SUSPENDED = DaemonStatus.SUSPENDED;
+const CP_DISCONNECTED = DaemonStatus.DISCONNECTED;
+const CP_FAILED = DaemonStatus.FAILED;
 
 const row = (status: number): CloudDaemon => ({ status }) as CloudDaemon;
 
 describe("cloudDaemonStatusLabel", () => {
   it("labels a starting machine as starting, not active", () => {
-    // The headline regression. PENDING is 1, which is ACTIVE in the registry
-    // enum — the old fallthrough read it that way and painted a green
-    // "active" dot on a machine that was still booting.
+    // The headline regression this file was written for: PENDING once shared
+    // a numeric value with another enum's ACTIVE, and a machine that was
+    // still booting rendered with a green "active" dot.
     expect(cloudDaemonStatusLabel(row(CP_PENDING), false)).toBe("starting");
   });
 
   it("labels a disconnected machine rather than dropping to unknown", () => {
-    // DISCONNECTED is 4, which has no registry counterpart, so the old code
-    // indexed past the end of the enum and rendered "unknown".
+    // DISCONNECTED had no counterpart in the other enum, so the old code
+    // indexed past its end and rendered "unknown".
     expect(cloudDaemonStatusLabel(row(CP_DISCONNECTED), false)).toBe("disconnected");
   });
 
-  it("maps the remaining control-plane statuses", () => {
+  it("maps the remaining statuses", () => {
     expect(cloudDaemonStatusLabel(row(CP_ACTIVE), false)).toBe("active");
     expect(cloudDaemonStatusLabel(row(CP_SUSPENDED), false)).toBe("suspended");
     expect(cloudDaemonStatusLabel(row(CP_FAILED), false)).toBe("failed");
