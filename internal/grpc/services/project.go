@@ -1671,6 +1671,14 @@ func (s *ProjectService) MarkProjectInstalled(
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to record project installation"))
 	}
 
+	// The caller just cloned onto this daemon, so forge.yaml is on its disk
+	// now. Learn the project's forge name here rather than leaving the row
+	// saying "not read yet" until someone opens the Forge tab with a daemon
+	// online — see forge_name_learn.go. Non-forge repos are left unmarked,
+	// and a failed read is never the RPC's failure: the install is recorded.
+	learnForgeProjectName(ctx, s.daemonRouter, s.database,
+		userID, req.Msg.DaemonId, req.Msg.ProjectId, req.Msg.Path)
+
 	// Return the resolved row so the client can populate UI state without
 	// a follow-up list call.
 	pd := &db.ProjectDaemon{
