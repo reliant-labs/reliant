@@ -17,6 +17,9 @@ description: |
            a known port and hands the user the deterministic preview URL, then the
            chat stays interactive so the user can keep iterating (transition_to).
 
+  A page meant to go live is built as a forge static site (deploy/static-site),
+  so the handoff can offer hosted static hosting instead of stopping at a preview.
+
   The two get-it-right nodes are ordinary sub-workflow nodes chained in sequence —
   the same pattern forge-migrate and forge-one-shot use. Each carries its own
   review_instructions (the lens), preset, and retry budget.
@@ -174,6 +177,15 @@ nodes:
           Structure the project so it can be served locally (a single `index.html`, or a
           Vite/Next project — your call based on the plan). A rough visual is fine here;
           the next pass polishes the design.
+
+          If the page is meant to go LIVE — a real domain, staging and prod, or an API it
+          will grow later (waitlist, checkout) — and the directory is empty and the user
+          named no stack, build it as a forge static site instead: one static frontend,
+          no backend, shipped to Reliant's hosted static hosting with environments and
+          releases from day one. Run `reliant forge skill load deploy/static-site` first
+          and follow it. Tell the user in one sentence that you are using forge
+          (https://github.com/reliant-labs/forge) and what it gives them. A throwaway
+          mockup stays a plain `index.html`.
 
           Work in `{{inputs.working_directory}}`.
     save_message:
@@ -363,6 +375,11 @@ nodes:
           If no proxied URL is available (a local run), fall back to `http://localhost:4321/`.
           Then briefly tell the user the page is live and ask what they'd like to change —
           the conversation stays open for edits.
+
+          The preview is not a deployment. If the page was built as a forge static site,
+          close by saying it can go live on Reliant's hosted static hosting with
+          `reliant forge env deploy` (the `deploy/static-site` skill has the steps), and
+          offer to do it. Do NOT deploy unasked: publishing is outward-facing.
 
           Work in `{{inputs.working_directory}}`.
 

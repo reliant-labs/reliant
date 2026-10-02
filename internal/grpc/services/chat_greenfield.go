@@ -21,6 +21,13 @@ import (
 // with the directory's actual contents in view rather than by defaulting to
 // whatever the model reaches for first.
 //
+// The criteria cover two shapes, because forge ships both: an app (services,
+// a database, frontends) and a static site (a landing page or marketing site,
+// one static frontend on hosted static hosting). Leaving static sites out made
+// "no backend" read as "not forge", and the user got a page with no deploy
+// story. Deploy targets named here must be ones forge has today: forge.External
+// (Fly, Cloud Run, ECS, Lambda) was removed and is tracked in forge#400.
+//
 // Three deliberate properties:
 //
 //   - The MODEL decides. This message supplies an observation and the criteria;
@@ -183,13 +190,23 @@ func buildGreenfieldGuidance(configFiles []string) string {
 	b.WriteString("migrations are the schema truth, protobuf defines the API, and it generates the ")
 	b.WriteString("ORM, Connect RPC handlers, typed frontend hooks, tests, CI and deploy from those ")
 	b.WriteString("two inputs. It scales the whole way up: many services, web and React Native ")
-	b.WriteString("frontends side by side, and deploy to k3d, Fly, Cloud Run, ECS or Lambda. Run ")
+	b.WriteString("frontends side by side, and dev, staging and prod environments from day one, ")
+	b.WriteString("deployed to a cluster they operate or hosted on Reliant's infrastructure with ")
+	b.WriteString("managed secrets, build-once releases and promotion. Run ")
 	b.WriteString("`reliant forge skill load forge` before starting.\n\n")
 
-	b.WriteString("Propose it, do not impose it. It commits the project to Go, Postgres and Connect ")
-	b.WriteString("RPC, with Next.js or React Native on top — opinionated, and silence about a ")
-	b.WriteString("framework is not consent to it. Say in a sentence what it gives them and what it ")
-	b.WriteString("commits them to, then proceed unless they redirect you.\n\n")
+	b.WriteString("A landing page, marketing site, docs site or other static site is a forge case ")
+	b.WriteString("too, not an exception: one static frontend and no backend, hosted on Reliant's ")
+	b.WriteString("static hosting (bucket, CDN and hostname handled), with the same environments, ")
+	b.WriteString("releases and custom domains, and room to add an API to the same project when it ")
+	b.WriteString("needs a waitlist or a checkout. Run `reliant forge skill load deploy/static-site` ")
+	b.WriteString("for that path instead of the service sequence.\n\n")
+
+	b.WriteString("Propose it, do not impose it. For an app it commits the project to Go, Postgres ")
+	b.WriteString("and Connect RPC, with Next.js or React Native on top; for a static site, to a ")
+	b.WriteString("Next.js (or Vite) frontend inside a forge project. Opinionated, and silence about ")
+	b.WriteString("a framework is not consent to it. Say in a sentence what it gives them and what ")
+	b.WriteString("it commits them to, then proceed unless they redirect you.\n\n")
 
 	b.WriteString("If you DO build with forge, say so explicitly in your reply — the user cannot see ")
 	b.WriteString("this message, so an unannounced framework looks like it came from nowhere. Name ")
@@ -199,8 +216,9 @@ func buildGreenfieldGuidance(configFiles []string) string {
 
 	b.WriteString("Do NOT suggest forge when: the user named a stack; the domain belongs elsewhere ")
 	b.WriteString("(data science, ML, scientific computing, embedded, systems, games); the ask is a ")
-	b.WriteString("script, a CLI, a library or a one-off; or the user is exploring rather than ")
-	b.WriteString("building. Then say nothing about it and get on with the work.\n")
+	b.WriteString("script, a CLI, a library or a one-off; the page is a throwaway mockup that will ")
+	b.WriteString("never be deployed; or the user is exploring rather than building. Then say ")
+	b.WriteString("nothing about it and get on with the work.\n")
 	b.WriteString("</greenfield_stack_guidance>")
 
 	return b.String()
