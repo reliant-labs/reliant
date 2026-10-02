@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
@@ -208,6 +209,81 @@ func TestCreateProjectFromRepo_DerivesNameAndPathFromTheCloneURL(t *testing.T) {
 	assert.Equal(t, name, resp.Msg.GetProject().GetName(),
 		"the repo name is the obvious default; making the user retype it is friction")
 	assert.Equal(t, "/home/workspace/projects/"+name, cp.lastReq.Path)
+}
+
+// TestCreateProjectFromRepo_FailedQueuedCloneIsMarkedFailed is the whole round
+// trip of a queued clone that fails. The daemon's DaemonCommandFailed echoes
+// the request id the queued command carried, and that is the ONLY key the
+// failure path has to find the project's install row. The control plane used
+// to mint its own timestamp id while reliant recorded "clone:<project>:<daemon>",
+// so the two never matched: a failed clone left the project "installing"
+// forever. Now the id reliant records is the id it hands the control plane.
+func TestCreateProjectFromRepo_FailedQueuedCloneIsMarkedFailed(t *testing.T) {
+	cp := &cloneStubControlPlane{result: controlplane.CloneRepoResult{Queued: true}}
+	svc, repo, cleanup := newFromRepoService(t, cp)
+	defer cleanup()
+
+	userID := "user-from-repo-" + uuid.NewString()
+	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, userID)
+	resp, err := svc.CreateProjectFromRepo(ctx, connect.NewRequest(&reliantv1.CreateProjectFromRepoRequest{
+		CloneUrl: "https://github.com/acme/widgets-" + uuid.NewString() + ".git",
+		DaemonId: "daemon-abc",
+	}))
+	require.NoError(t, err)
+	projectID := resp.Msg.GetProject().GetId()
+
+	require.NotEmpty(t, cp.lastReq.RequestID, "the clone must carry a request id the failure can be matched by")
+	rows, err := repo.ListProjectDaemonsForProject(ctx, projectID)
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, cp.lastReq.RequestID, rows[0].InstallRequestID,
+		"the id handed to the control plane must be the id the install row is keyed by")
+
+	// The daemon runs the queued command and it fails. Its announcement
+	// carries the command's request id — the one the control plane stamped.
+	tools := NewToolsDaemonService(repo)
+	defer tools.Close()
+	conn := &daemonConnection{userID: userID, daemonID: "daemon-abc", done: make(chan struct{})}
+	require.NoError(t, tools.handleDaemonCommandFailed(context.Background(), conn, &reliantv1.DaemonCommandFailed{
+		RequestId:    cp.lastReq.RequestID,
+		CommandType:  "git.clone",
+		ErrorMessage: "remote: Repository not found.",
+	}))
+
+	rows, err = repo.ListProjectDaemonsForProject(ctx, projectID)
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	assert.Equal(t, "failed", string(rows[0].InstallState))
+	assert.Contains(t, rows[0].InstallError, "Repository not found")
+}
+
+// TestCreateProjectFromRepo_StampsCreationTime pins the timestamps. The
+// projects store writes created_at / updated_at / last_active verbatim and the
+// columns have no default, so a project added from a repo was dated
+// 0001-01-01 — the owner's project in prod carries exactly that.
+func TestCreateProjectFromRepo_StampsCreationTime(t *testing.T) {
+	cp := &cloneStubControlPlane{result: controlplane.CloneRepoResult{Queued: true}}
+	svc, repo, cleanup := newFromRepoService(t, cp)
+	defer cleanup()
+
+	userID := "user-from-repo-" + uuid.NewString()
+	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, userID)
+	before := time.Now().Add(-time.Minute)
+	resp, err := svc.CreateProjectFromRepo(ctx, connect.NewRequest(&reliantv1.CreateProjectFromRepoRequest{
+		CloneUrl: "https://github.com/acme/widgets-" + uuid.NewString() + ".git",
+		DaemonId: "daemon-abc",
+	}))
+	require.NoError(t, err)
+
+	stored, err := repo.GetProject(ctx, resp.Msg.GetProject().GetId())
+	require.NoError(t, err)
+	for field, ts := range map[string]time.Time{
+		"created_at":  stored.CreatedAt,
+		"updated_at":  stored.UpdatedAt,
+		"last_active": stored.LastActive,
+	} {
+		assert.True(t, ts.After(before), "%s = %s, want the time the project was added", field, ts)
+	}
 }
 
 func TestRepoNameFromCloneURL(t *testing.T) {

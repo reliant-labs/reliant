@@ -68,6 +68,63 @@ func TestSendDaemonCommandCancelsInFlightCommandWhenCallerContextEnds(t *testing
 	require.ErrorIs(t, err, context.Canceled)
 }
 
+// A command addressed to one daemon must reach that daemon even when the user
+// has another one connected that the default pick prefers. The default pick
+// favors a LOCAL daemon over a cloud one, so before this a git.clone queued
+// for a user's cloud machine ran on their laptop the moment both were up.
+// Against the real connection registry, not a fake, because the defect was
+// precisely which connection got picked.
+func TestSendDaemonCommandToDaemon_ReachesTheNamedDaemonNotTheDefault(t *testing.T) {
+	repo, cleanup := db.SetupTestDB(t)
+	defer cleanup()
+	svc := NewToolsDaemonService(repo)
+	defer svc.Close()
+
+	newConn := func(daemonType string) *daemonConnection {
+		return &daemonConnection{
+			userID:          "test-user",
+			daemonID:        uuid.New().String(),
+			daemonType:      daemonType,
+			sendCh:          make(chan *reliantv1.ServerMessage, 4),
+			done:            make(chan struct{}),
+			pendingCommands: make(map[string]chan *reliantv1.DaemonCommandResponse),
+		}
+	}
+	laptop := newConn("local")
+	cloud := newConn("cloud")
+	svc.mu.Lock()
+	registerTestConn(svc, cloud)
+	registerTestConn(svc, laptop)
+	svc.mu.Unlock()
+
+	svc.mu.RLock()
+	require.Equal(t, laptop.daemonID, svc.defaultDaemonForUser("test-user").daemonID,
+		"precondition: the default pick is the laptop")
+	svc.mu.RUnlock()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() {
+		_, _ = svc.SendDaemonCommandToDaemon(ctx, "test-user", cloud.daemonID, &reliantv1.DaemonCommandRequest{
+			RequestId: "clone:p:cloud", CommandType: "git.clone", TimeoutMs: 60000,
+		})
+	}()
+
+	select {
+	case msg := <-cloud.sendCh:
+		require.Equal(t, "clone:p:cloud", msg.GetDaemonCommand().GetRequestId())
+	case msg := <-laptop.sendCh:
+		t.Fatalf("command for the cloud daemon was delivered to the laptop: %v", msg)
+	case <-time.After(5 * time.Second):
+		t.Fatal("command was never delivered")
+	}
+
+	// Naming a daemon the user does not own is refused, not routed.
+	_, err := svc.SendDaemonCommandToDaemon(context.Background(), "another-user", cloud.daemonID,
+		&reliantv1.DaemonCommandRequest{RequestId: "x", CommandType: "git.clone"})
+	require.Error(t, err)
+}
+
 // DaemonRegister.user_id is now `reserved` — the daemon can't assert identity,
 // the server derives it from the PAT in context. The function only needs to
 // confirm a userID is present in context; spoofing is impossible by construction.

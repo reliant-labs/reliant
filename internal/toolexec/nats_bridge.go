@@ -472,7 +472,7 @@ func (b *NATSToolBridge) OnDaemonConnected(userID, daemonID string) {
 			_ = msg.Respond([]byte(`{"success":false,"error_message":"daemon gateway overloaded: in-flight request budget exhausted"}`))
 		}, func() {
 			defer span.End()
-			b.respondDaemonCommand(ctx, msg, userID, &req)
+			b.respondDaemonCommand(ctx, msg, userID, daemonID, &req)
 		})
 	})))
 
@@ -535,7 +535,12 @@ type daemonCommandWire struct {
 
 // respondDaemonCommand performs the daemon round-trip for a daemon.command
 // message and publishes the reply. Runs off the NATS callback goroutine.
-func (b *NATSToolBridge) respondDaemonCommand(ctx context.Context, msg *nats.Msg, userID string, req *daemonCommandWire) {
+//
+// The subject names the daemon (daemon.command.{userID}.{daemonID}), and the
+// command runs on THAT daemon. The caller chose it deliberately — the
+// router's SendDaemonCommandToDaemon exists so an operation and its recorded
+// owner agree — and the user's default daemon may be a different machine.
+func (b *NATSToolBridge) respondDaemonCommand(ctx context.Context, msg *nats.Msg, userID, daemonID string, req *daemonCommandWire) {
 	protoReq := &reliantv1.DaemonCommandRequest{
 		RequestId:   req.RequestID,
 		CommandType: req.CommandType,
@@ -546,7 +551,7 @@ func (b *NATSToolBridge) respondDaemonCommand(ctx context.Context, msg *nats.Msg
 		Policy: daemonpolicy.WireToProto(req.Policy),
 	}
 
-	resp, err := b.mgr.SendDaemonCommand(ctx, userID, protoReq)
+	resp, err := b.mgr.SendDaemonCommandToDaemon(ctx, userID, daemonID, protoReq)
 	if err != nil {
 		errResp, _ := json.Marshal(map[string]interface{}{
 			"success":       false,
@@ -1022,7 +1027,11 @@ func (b *NATSToolBridge) drainPendingCommands(ctx context.Context, userID, daemo
 				}
 			}
 			dispatchCtx, dispatchCancel := context.WithTimeout(ctx, dispatchTimeout)
-			_, err = b.mgr.SendDaemonCommand(dispatchCtx, userID, protoReq)
+			// Pinned to the daemon whose queue this is. Dispatching by user
+			// would run it on the user's DEFAULT daemon, which prefers a
+			// local machine over a cloud one — so a clone queued for the
+			// cloud machine landed on the user's laptop.
+			_, err = b.mgr.SendDaemonCommandToDaemon(dispatchCtx, userID, daemonID, protoReq)
 			dispatchCancel()
 			if err != nil {
 				// Dispatch failed. This is often transient — the daemon may be
