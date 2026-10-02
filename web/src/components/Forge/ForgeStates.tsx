@@ -9,7 +9,8 @@
  *
  *   not-forge-project  informational. Most reliant projects are not forge
  *                      projects, so this is the expected answer and must not
- *                      look like an error.
+ *                      look like an error. It states the fact, then makes a
+ *                      short case for forge and names how to start.
  *   unsupported        names the forge VERSION and forge's own complaint. An
  *                      empty screen here would read as "you have no
  *                      environments", which is the failure mode this exists to
@@ -21,7 +22,7 @@
  *                      Says so plainly instead of crashing the view.
  */
 
-import { CloudOff, FileQuestion, PackageOpen, Wrench } from "lucide-react";
+import { CloudOff, Code2, FileQuestion, PackageOpen, Rocket, ShieldCheck, Wrench } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -52,16 +53,109 @@ function StateShell({ icon: Icon, title, children, testId, unknown }: ShellProps
   );
 }
 
+/**
+ * Why a project would want forge. Each point is backed by something forge
+ * actually does — a command, a generator or a check — and none of them
+ * carries a number. A claim here that the product does not keep is worse
+ * than no pitch at all.
+ */
+const FORGE_PITCH_POINTS: { icon: LucideIcon; title: string; body: React.ReactNode }[] = [
+  {
+    icon: Rocket,
+    title: "Deploy without the yak-shaving",
+    body: (
+      <>
+        Every environment is declared in the repo.{" "}
+        <code className="font-mono text-foreground">forge env deploy</code> records the release,
+        applies it and waits until it is healthy. Domains, secrets and promotions are managed here.
+      </>
+    ),
+  },
+  {
+    icon: Code2,
+    title: "Fewer tokens, less guesswork",
+    body: (
+      <>
+        Generated API stubs, ORM, frontend hooks and wiring mean your agent writes the business
+        logic, not the boilerplate. Skills and{" "}
+        <code className="font-mono text-foreground">forge project</code> introspection hand it the
+        project&apos;s shape instead of making it rediscover it file by file.
+      </>
+    ),
+  },
+  {
+    icon: ShieldCheck,
+    title: "Best practices, enforced",
+    body: (
+      <>
+        Built-in skills teach your agent forge&apos;s conventions, and{" "}
+        <code className="font-mono text-foreground">forge lint</code> checks them, so drift fails a
+        check instead of slipping through to review.
+      </>
+    ),
+  },
+];
+
+/**
+ * Not a StateShell: this one carries a pitch, and a centered max-w-lg column
+ * turns a list into a ragged wall of text. The panel is a surface (bg-card)
+ * so the call to action can sit in an inset (bg-background) beneath it —
+ * see the elevation rule in components/forge-ui/card.tsx.
+ */
 export function NotForgeProject({ projectName }: { projectName?: string }) {
   return (
-    <StateShell icon={PackageOpen} title="Not a forge project" testId="forge-not-project">
-      <p>
-        {projectName ? <span className="font-mono">{projectName}</span> : "This project"} has no{" "}
-        <span className="font-mono">forge.yaml</span> at its root, so there is no release ledger or
-        environment topology to show.
-      </p>
-      <p>This is expected — most projects are not forge projects.</p>
-    </StateShell>
+    <section
+      data-testid="forge-not-project"
+      aria-labelledby="forge-not-project-heading"
+      className="mx-auto max-w-2xl space-y-6 rounded-lg border border-border bg-card px-6 py-8"
+    >
+      <div className="flex items-start gap-3">
+        <PackageOpen className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+        <p data-testid="forge-not-project-fact" className="text-sm text-muted-foreground">
+          {projectName ? <span className="font-mono text-foreground">{projectName}</span> : "This project"}{" "}
+          has no <span className="font-mono text-foreground">forge.yaml</span> at its root, so there is
+          no release ledger or environment topology to show.
+        </p>
+      </div>
+
+      <div className="space-y-2">
+        <h2 id="forge-not-project-heading" className="text-lg font-semibold text-foreground">
+          Ship this project with forge
+        </h2>
+        <p className="text-sm text-muted-foreground">
+          forge is the framework built into Reliant. It scaffolds a production-ready app and gives
+          your agent the conventions to keep it that way.
+        </p>
+      </div>
+
+      <ul className="space-y-4">
+        {FORGE_PITCH_POINTS.map(({ icon: Icon, title, body }) => (
+          <li key={title} className="flex items-start gap-3">
+            <Icon className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+            <div className="space-y-1">
+              <h3 className="text-sm font-medium text-foreground">{title}</h3>
+              <p className="text-sm text-muted-foreground">{body}</p>
+            </div>
+          </li>
+        ))}
+      </ul>
+
+      <div
+        data-testid="forge-not-project-cta"
+        className="space-y-1 rounded-md border border-border/60 bg-background px-4 py-3 text-sm text-muted-foreground"
+      >
+        <p>
+          <span className="font-medium text-foreground">To start,</span> run the{" "}
+          <span className="font-medium text-foreground">Forge Migrate</span> workflow in a chat on this
+          project. It reads the code, writes a migration plan and waits for your approval before it
+          scaffolds anything.
+        </p>
+        <p>
+          Starting from scratch? <code className="font-mono text-foreground">forge project new</code>{" "}
+          creates a forge project.
+        </p>
+      </div>
+    </section>
   );
 }
 

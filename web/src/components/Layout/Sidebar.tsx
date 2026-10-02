@@ -1424,7 +1424,7 @@ function SidebarComponent({
           {showForgeEntry && (
             <SidebarNavButton
               icon={<Boxes className="h-4 w-4" />}
-              label="Forge"
+              label="Deployments"
               onClick={onOpenForge}
               testId="sidebar-forge-button"
             />
