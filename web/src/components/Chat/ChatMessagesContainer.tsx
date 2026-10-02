@@ -12,7 +12,7 @@ interface ChatMessagesContainerProps {
 }
 
 /**
- * Clipping frame for the chat timeline. Virtuoso owns scrolling entirely, so
+ * Clipping frame for the chat timeline. The timeline owns scrolling entirely, so
  * this contributes the background, the overflow boundary, and the flex sizing
  * the timeline is measured against — nothing more.
  */

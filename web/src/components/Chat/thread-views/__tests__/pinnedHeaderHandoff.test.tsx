@@ -2,9 +2,9 @@
  * The pinned user-message header, driven through the real component.
  *
  * Both reported defects are reproduced here, and both are the same root cause
- * seen twice: the pin used to be a pure function of Virtuoso's
- * `rangeChanged.startIndex`, which is a ROW index, and a row is not the unit
- * the handoff happens in.
+ * seen twice: the pin used to be a pure function of the virtualized list's
+ * first rendered row index (react-virtuoso's `rangeChanged.startIndex`), and a
+ * row is not the unit the handoff happens in.
  *
  * (a) WRONG HANDOFF LEVEL. The old rule was
  *       layerUserIdx < firstVisible ? layerUserIdx : null
@@ -15,7 +15,7 @@
  *
  * (b) JITTER. `startIndex` is neither monotonic nor a measure of the visual
  *     top: it is the first RENDERED row, inflated by overscan/increaseViewportBy,
- *     and the recorded scrollDebug dumps from a real session show it stepping
+ *     and scroll recordings from a real session showed it stepping
  *     115 -> 111 -> 112 -> 105 -> 115 -> 104 between consecutive animation
  *     frames with no user input. Feeding that straight into a visible overlay
  *     toggles the header on and off across frames — the flicker.
@@ -24,16 +24,15 @@
  * drive geometry rather than indices.
  */
 
-import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+import { fireEvent, render } from "@testing-library/react";
 import { act } from "react";
 import { ContentBlockType, MessageRole, StreamingState } from "../../../../types/chat";
 import type { Message } from "../../../../types/chat";
-import type { ListRange } from "react-virtuoso";
 import { InterleavedTimeline } from "../InterleavedTimeline";
 
-// jsdom has no ResizeObserver, and scrollDebug's row instrumentation (armed by
-// default in dev builds, which includes the test env) constructs one.
+// jsdom has no ResizeObserver, and the timeline constructs one to measure the
+// pinned header.
 class ResizeObserverStub {
   observe() {}
   unobserve() {}
@@ -55,32 +54,28 @@ vi.mock("../../ChatMessage", () => ({
   ),
 }));
 
-let capturedRangeChanged: ((range: ListRange) => void) | null = null;
-let capturedFirstItemIndex = 0;
-
-vi.mock("react-virtuoso", async () => {
-  const React = await import("react");
-  return {
-    VirtuosoMockContext: React.createContext(undefined),
-    Virtuoso: (props: Record<string, unknown>) => {
-      capturedRangeChanged = props.rangeChanged as (range: ListRange) => void;
-      capturedFirstItemIndex = props.firstItemIndex as number;
-      const itemContent = props.itemContent as (i: number, item: unknown) => React.ReactNode;
-      const data = props.data as unknown[];
-      const scrollerRef = props.scrollerRef as ((el: HTMLElement | null) => void) | undefined;
-      // Virtuoso renders into a child that owns the scrolling and hands that
-      // element to scrollerRef. The pin measures against it, so the mock has
-      // to supply a real one.
-      return (
-        <div data-testid="virtuoso-scroller" ref={(el) => scrollerRef?.(el)}>
-          {data.map((item, i) => (
-            <div key={i}>{itemContent(capturedFirstItemIndex + i, item)}</div>
-          ))}
-        </div>
-      );
-    },
-  };
-});
+// jsdom has no layout, so the real virtualizer would measure every row as
+// 0px and render none of them. Render every row instead: these tests drive
+// the pin from stubbed row GEOMETRY, which is what the pin actually reads, so
+// which rows the virtualizer would have chosen is beside the point.
+vi.mock("@tanstack/react-virtual", () => ({
+  useVirtualizer: (options: { count: number }) => ({
+    getVirtualItems: () =>
+      Array.from({ length: options.count }, (_, index) => ({
+        index,
+        key: index,
+        start: 0,
+        end: 0,
+        size: 0,
+        lane: 0,
+      })),
+    getTotalSize: () => 0,
+    measureElement: () => {},
+    containerRef: () => {},
+    scrollToIndex: () => {},
+    scrollToEnd: () => {},
+  }),
+}));
 
 function message(index: number, role: MessageRole): Message {
   return {
@@ -147,12 +142,17 @@ function pinnedMessageId(container: HTMLElement): string | null {
   return el.getAttribute("data-testid")?.replace(/^msg-/, "") ?? null;
 }
 
-function reportRange(startIndex: number, endIndex: number): void {
-  act(() => {
-    capturedRangeChanged?.({
-      startIndex: capturedFirstItemIndex + startIndex,
-      endIndex: capturedFirstItemIndex + endIndex,
-    });
+/**
+ * What the real list does when the user scrolls: a `scroll` event on the
+ * transcript's scroller. The timeline re-resolves the pin on the next
+ * animation frame, so flush that frame before asserting.
+ */
+async function scroll(container: HTMLElement): Promise<void> {
+  const scroller = container.querySelector<HTMLElement>('[data-context="transcript"]');
+  expect(scroller).not.toBeNull();
+  await act(async () => {
+    fireEvent.scroll(scroller as HTMLElement);
+    await new Promise((resolve) => requestAnimationFrame(() => resolve(undefined)));
   });
 }
 
@@ -163,15 +163,11 @@ function renderTimeline() {
 }
 
 describe("pinned header handoff", () => {
-  beforeEach(() => {
-    capturedRangeChanged = null;
-  });
-
   // Defect (a). The heading user message is the row at the top of the viewport
   // and is 95% scrolled past it — its own section fills the screen, so it is
   // precisely what the header should be showing. The old index rule computed
   // `layerUserIdx < firstVisible` as `2 < 2` and pinned nothing.
-  it("pins the heading user message while it is scrolled off the top", () => {
+  it("pins the heading user message while it is scrolled off the top", async () => {
     const { container } = renderTimeline();
 
     // u2 is 95% above the viewport top; its section (a3) fills the screen.
@@ -181,7 +177,7 @@ describe("pinned header handoff", () => {
       2: { top: -420, height: 440 },
       3: { top: 20, height: 3000 },
     });
-    reportRange(2, 3);
+    await scroll(container);
 
     expect(pinnedMessageId(container)).toBe("m2");
   });
@@ -190,7 +186,7 @@ describe("pinned header handoff", () => {
   // flow below the viewport top, the section ABOVE it is what the reader is
   // looking at, so the previous heading stays pinned. Handoff happens when the
   // incoming heading's top edge crosses the top, not when its row index does.
-  it("keeps the previous heading pinned until the next one crosses the top", () => {
+  it("keeps the previous heading pinned until the next one crosses the top", async () => {
     const { container } = renderTimeline();
 
     // u2's top edge is still 60px BELOW the viewport top — not yet its turn.
@@ -200,10 +196,10 @@ describe("pinned header handoff", () => {
       2: { top: 60, height: 440 },
       3: { top: 500, height: 3000 },
     });
-    reportRange(1, 3);
+    await scroll(container);
     expect(pinnedMessageId(container)).toBe("m0");
 
-    // Now it has crossed. The header hands off — same row indices, different
+    // Now it has crossed. The header hands off — same rows, different
     // geometry, which is the whole point.
     applyGeometry(container, {
       0: { top: -3120, height: 100 },
@@ -211,15 +207,14 @@ describe("pinned header handoff", () => {
       2: { top: -60, height: 440 },
       3: { top: 380, height: 3000 },
     });
-    reportRange(1, 3);
+    await scroll(container);
     expect(pinnedMessageId(container)).toBe("m2");
   });
 
-  // Defect (b). Real startIndex values recorded by scrollDebug jump around
-  // between consecutive frames because they track the first RENDERED row
-  // (overscan-inflated), not the visual top. With the geometry unchanged, the
-  // header must not move at all.
-  it("does not flicker when startIndex jumps but geometry is unchanged", () => {
+  // Defect (b). The pin used to follow the first RENDERED row, which jumps
+  // around between frames as overscan shifts. With the geometry unchanged,
+  // repeated scroll events must not move the header at all.
+  it("does not flicker across repeated scrolls when geometry is unchanged", async () => {
     const { container } = renderTimeline();
 
     const stable: Geometry = {
@@ -230,9 +225,9 @@ describe("pinned header handoff", () => {
     };
 
     const seen: (string | null)[] = [];
-    for (const startIndex of [2, 3, 2, 1, 2, 3, 2]) {
+    for (let i = 0; i < 7; i++) {
       applyGeometry(container, stable);
-      reportRange(startIndex, 3);
+      await scroll(container);
       seen.push(pinnedMessageId(container));
     }
 
@@ -241,7 +236,7 @@ describe("pinned header handoff", () => {
 
   // The pin is a breadcrumb for content that has scrolled away. At the top of
   // the transcript nothing has, so there is no header.
-  it("shows no header at the top of the transcript", () => {
+  it("shows no header at the top of the transcript", async () => {
     const { container } = renderTimeline();
 
     applyGeometry(container, {
@@ -250,7 +245,7 @@ describe("pinned header handoff", () => {
       2: { top: 510, height: 100 },
       3: { top: 610, height: 400 },
     });
-    reportRange(0, 3);
+    await scroll(container);
 
     expect(pinnedMessageId(container)).toBeNull();
   });

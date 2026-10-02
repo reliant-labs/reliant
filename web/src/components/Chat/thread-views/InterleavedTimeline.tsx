@@ -14,9 +14,8 @@
 
 import React, { useMemo, useCallback, useRef, useState, useEffect, memo } from "react";
 import { ContentBlockType, MessageRole, DisplayStyle } from "../../../gen/reliant/v1/chat_pb";
-import { Virtuoso, type VirtuosoHandle, type ListRange } from "react-virtuoso";
 import { acknowledgeScrollToMessage } from "../../../lib/scrollToMessage";
-import { createFollowState, type FollowState } from "./followState";
+import { useTimelineVirtualizer } from "./useTimelineVirtualizer";
 import { GitBranch, ArrowRightLeft, Plus, ArrowUp, Route, Loader2 } from "lucide-react";
 import { Tooltip } from "../../ui/Tooltip";
 import { ChatMessage, type ChatTimelineVariant } from "../ChatMessage";
@@ -42,13 +41,11 @@ import { useActiveThreads } from "../../../store/threadActivityStore";
 import { logger } from "../../../lib/logger";
 import { settingsSync, SETTINGS_KEYS } from "../../../services/settingsSync";
 import { getSpawnDisplayMode } from "../../Settings/SpawnDisplaySettings";
-import { RubberBandScroller } from "./RubberBandScroller";
 import {
   measureRows,
   resolvePinnedUserMessage,
   TIMELINE_ROW_INDEX_ATTR,
 } from "./pinnedHeader";
-import * as scrollDebug from "../../../lib/scrollDebug";
 
 interface InterleavedTimelineProps {
   messages: Message[];
@@ -62,13 +59,9 @@ interface InterleavedTimelineProps {
   selectedThreads?: Set<string> | null;
   /** Whether the chat is currently streaming (used to hide branch icon on latest message) */
   isStreaming?: boolean;
-  /** Ref to Virtuoso handle for external scroll control */
-  virtuosoRef?: React.RefObject<VirtuosoHandle | null>;
-  /** Callback when Virtuoso's at-bottom state changes */
+  /** Callback when the transcript arrives at, or leaves, the bottom */
   onAtBottomStateChange?: (atBottom: boolean) => void;
-  /** Callback when Virtuoso detects scrolling state changes */
-  onIsScrolling?: (isScrolling: boolean) => void;
-  /** Footer element rendered at the bottom of the virtualized list (e.g. thinking indicator) */
+  /** Footer element rendered at the bottom of the transcript (e.g. thinking indicator) */
   footer?: React.ReactNode;
   /** Callback to select/navigate to a thread (e.g. from spawn preview "Open Thread" button) */
   onSelectThread?: (threadId: string | null) => void;
@@ -123,7 +116,7 @@ type TimelineItem =
   | { type: "run_output"; runOutput: RunOutputUpdate };
 
 /**
- * Virtuoso row key for a timeline item at a given DATA-space index.
+ * Row key for a timeline item at a given index into timelineItems.
  *
  * Derived on demand rather than baked into the item, because a `key` field
  * would force a fresh wrapper object per row on every rebuild — and the
@@ -344,6 +337,12 @@ const TIMELINE_VARIANTS: ChatTimelineVariant[] = ["compact", "card", "minimal"];
  * handoff still reads as happening at the boundary.
  */
 const PINNED_HEADER_RELEASE_HYSTERESIS_PX = 24;
+
+/**
+ * Height reserved above the first row for the scroll-back loading indicator.
+ * Fixed in both states, so the indicator toggling never moves the rows.
+ */
+const TIMELINE_HEADER_PX = 32;
 
 function getStoredTimelineVariant(): ChatTimelineVariant {
   const stored = settingsSync.getSetting(SETTINGS_KEYS.CHAT_TIMELINE_VARIANT, "compact");
@@ -587,9 +586,7 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
   workflowExecution,
   selectedThreads,
   isStreaming = false,
-  virtuosoRef,
   onAtBottomStateChange,
-  onIsScrolling,
   footer,
   onSelectThread,
   onResumeFollow,
@@ -802,7 +799,7 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
       if (msg.displayStyle === DisplayStyle.HIDDEN) continue;
 
       // Skip assistant messages with no visible content — they render as zero-height
-      // elements and cause Virtuoso's "Zero-sized element" warning + layout thrashing.
+      // rows, which the virtualizer measures and positions for nothing.
       // Compaction and display_style messages have their own renderers and are always visible.
       if (
         msg.role === MessageRole.ASSISTANT &&
@@ -971,20 +968,16 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
     return items;
   }, [messages, chatId, workflowExecution, activitySteps, selectedThreads, errorEvents, infoEvents, runOutputs, activeThreads]);
 
-  // `timelineItems` IS the list Virtuoso renders. There is deliberately no
-  // per-row wrapper carrying `key`/`isLast`: both are derivable from the item
-  // itself, and materializing them meant spreading a fresh object for EVERY row
-  // in the conversation — not just the visible ones — on every rebuild. The
-  // timeline rebuilds on every streamed delta, so that was the whole transcript
-  // re-allocated 10-50 times a second, and it handed every row a new `item`
-  // prop identity even when nothing about that row had changed.
+  // `timelineItems` IS the list the virtualizer renders. There is deliberately
+  // no per-row wrapper carrying `key`/`isLast`: both are derivable from the
+  // item itself, and materializing them meant spreading a fresh object for
+  // EVERY row in the conversation — not just the visible ones — on every
+  // rebuild. The timeline rebuilds on every streamed delta, so that was the
+  // whole transcript re-allocated 10-50 times a second, and it handed every
+  // row a new `item` prop identity even when nothing about that row changed.
   //
   // `isLast` is decided at render time by comparing the row's index against
-  // this one. BOTH SIDES MUST BE DATA SPACE: the index Virtuoso passes to
-  // itemContent is SHIFTED, so wrappedRenderItem converts it before renderItem
-  // sees it (see the firstItemIndex note below). Comparing a shifted index
-  // against this length would mark no row — or the wrong row — as latest,
-  // silently breaking the streaming indicator and the inline actions.
+  // this one.
   const lastItemIndex = timelineItems.length - 1;
 
   // Build user-message layer index: for each item index, which user message index is its "layer header"
@@ -1004,7 +997,6 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
 
   // Track visible range for pinned user message
   const [pinnedUserMessageIdx, setPinnedUserMessageIdx] = useState<number | null>(null);
-  const [isHoveringPinned, setIsHoveringPinned] = useState(false);
 
   // --- Per-thread scroll position memory ---
   // Derive a stable key for the current thread filter
@@ -1013,328 +1005,148 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
     return Array.from(selectedThreads).sort().join(",");
   }, [selectedThreads]);
 
-  // --- Virtuoso prepend protocol (firstItemIndex) ---
+  // --- Scrolling ---
   //
-  // Virtuoso's "inverse infinite scroll" contract: when you PREPEND N items to
-  // `data`, you must simultaneously DECREASE `firstItemIndex` by N. That delta
-  // is how Virtuoso knows the items shifted down rather than the content having
-  // changed, and it is what lets it hold the user's scroll anchored to the
-  // message they were reading. Prepending without it makes the viewport jump on
-  // every page load, so this is mandatory, not an optimization.
-  //
-  // It starts at a large constant because it must never go negative (Virtuoso
-  // logs an error and misbehaves): 100_000 allows ~1000 pages of scroll-back.
-  //
-  // ⚠️ INDEX SPACES. Setting firstItemIndex splits Virtuoso's callbacks into two
-  // different index spaces, and mixing them up silently corrupts scrolling:
-  //   - SHIFTED (data index + firstItemIndex): `rangeChanged`, `startReached`,
-  //     and the index passed to `itemContent` / `computeItemKey`.
-  //   - DATA (a plain index into `timelineItems`): `scrollToIndex` and
-  //     `initialTopMostItemIndex`.
-  // Everything below this component's boundary works in DATA space. Every
-  // SHIFTED value is converted through toDataIndex the moment it arrives, at
-  // the three Virtuoso callbacks that receive one — handleRangeChanged,
-  // computeItemKey, and wrappedRenderItem — so nothing downstream has to know
-  // the distinction exists.
-  //
-  // The conversion is correct even if Virtuoso's internal state lags the props
-  // by a frame: a prepend of N grows every data index by N and shrinks
-  // firstItemIndex by N, so a given row's SHIFTED index is invariant, and
-  // subtracting the CURRENT firstItemIndex always lands on that row's index in
-  // the CURRENT array.
-  const FIRST_ITEM_INDEX_BASE = 100_000;
-  const [firstItemIndex, setFirstItemIndex] = useState(FIRST_ITEM_INDEX_BASE);
-  // Mirrored in a ref so the shifted→data conversion can read the current value
-  // without making every scroll callback depend on it.
-  const firstItemIndexRef = useRef(FIRST_ITEM_INDEX_BASE);
-  firstItemIndexRef.current = firstItemIndex;
-
-  // Detect prepends by watching the identity of the FIRST rendered item. Derived
-  // during render (React's supported "adjust state when props change" pattern)
-  // rather than in an effect: firstItemIndex must land in the same commit as the
-  // grown `data`, otherwise Virtuoso sees the prepend for one frame without the
-  // delta and jumps before the effect can correct it.
-  const [prependAnchor, setPrependAnchor] = useState<{
-    firstKey: string | null;
-    threadKey: string;
-    chatId: string;
-  }>({
-    firstKey: timelineItems.length > 0 ? timelineItemKey(timelineItems[0], 0) : null,
-    threadKey,
-    chatId,
+  // A native scroller, virtualized by @tanstack/react-virtual and anchored to
+  // the end. The virtualizer is the ONLY writer of scrollTop while rows
+  // change, and it corrects before paint — see useTimelineVirtualizer.ts for
+  // why that replaced react-virtuoso.
+  const getTimelineItemKey = useCallback(
+    (index: number) => timelineItemKey(timelineItems[index], index),
+    [timelineItems],
+  );
+  const timeline = useTimelineVirtualizer({
+    count: timelineItems.length,
+    getItemKey: getTimelineItemKey,
+    paddingStart: TIMELINE_HEADER_PX,
   });
-
-  const currentFirstKey =
-    timelineItems.length > 0 ? timelineItemKey(timelineItems[0], 0) : null;
-  if (prependAnchor.chatId !== chatId || prependAnchor.threadKey !== threadKey) {
-    // Different chat or thread filter — a different list entirely, not a
-    // prepend. Reset the protocol rather than trying to diff across it.
-    setFirstItemIndex(FIRST_ITEM_INDEX_BASE);
-    setPrependAnchor({ firstKey: currentFirstKey, threadKey, chatId });
-  } else if (currentFirstKey !== prependAnchor.firstKey) {
-    // The head of the list changed. If the previous head is still present, the
-    // items ahead of it are exactly what was prepended. If it is gone (a
-    // replacing snapshot, a filter change), there is no meaningful delta — just
-    // re-anchor, leaving firstItemIndex where it is.
-    const prependedCount =
-      prependAnchor.firstKey === null
-        ? 0
-        : timelineItems.findIndex(
-            (item, idx) => timelineItemKey(item, idx) === prependAnchor.firstKey,
-          );
-    if (prependedCount > 0) {
-      setFirstItemIndex((prev) => prev - prependedCount);
-    }
-    setPrependAnchor({ firstKey: currentFirstKey, threadKey, chatId });
-  }
-
-  // Store scroll positions per thread: { startIndex, atBottom }
-  // startIndex is DATA space (see the index-space note above) — it is fed back
-  // to scrollToIndex on thread switch.
-  const scrollPositions = useRef<Map<string, { startIndex: number; atBottom: boolean }>>(new Map());
-  const prevThreadKey = useRef<string>(threadKey);
-  const lastRangeRef = useRef<ListRange | null>(null);
-
-  // --- Scroll-follow state ---
-  // Whether new content pulls the viewport down, and how a user scroll is told
-  // apart from one of our own. See followState.ts.
-  const followRef = useRef<FollowState | null>(null);
-  if (followRef.current === null) {
-    followRef.current = createFollowState();
-  }
-  const follow = followRef.current;
-
-  // Save current scroll position for the active thread whenever range changes.
-  // Use a ref to track the computed pinned index and only call setState when
-  // the value actually changes to avoid unnecessary re-renders during scroll
-  // that can trigger Virtuoso layout recalculations and cause jitter.
-  const pinnedUserMessageIdxRef = useRef<number | null>(null);
-
-  // The element Virtuoso actually scrolls, handed over by scrollerRef. The pin
-  // is measured against it, so it is load-bearing rather than debug-only.
+  const { virtualizer, scrollToBottom, atBottom, scroller: scrollerEl } = timeline;
   const scrollerElRef = useRef<HTMLElement | null>(null);
-
-  // Measured height of the pinned header, mirrored in a ref because it is the
-  // crossing line the resolver reads on a path that must not re-subscribe
-  // every time the header resizes.
+  scrollerElRef.current = scrollerEl;
+  // Pinned-header state the scroll handlers below read. Mirrored in refs so
+  // the per-scroll resolver does not re-subscribe on every change.
+  const pinnedUserMessageIdxRef = useRef<number | null>(null);
   const pinnedHeaderHeightRef = useRef(0);
+  const setScrollerEl = timeline.scrollerRef;
 
-  // Resolve the pinned header from measured row geometry.
+  // Report at-bottom upward for the scroll-to-bottom button.
+  useEffect(() => {
+    onAtBottomStateChange?.(atBottom);
+  }, [atBottom, onAtBottomStateChange]);
+
+  // Expose "scroll to bottom and resume following" to the parent's button and
+  // to the composer's send.
+  useEffect(() => {
+    onResumeFollow?.(scrollToBottom);
+  }, [onResumeFollow, scrollToBottom]);
+
+  // A thread switch rebuilds the list from different rows: start it at the
+  // bottom, following, and drop the pin (its index named a row in the old
+  // list, which is a different row — or no row — in this one).
+  const previousThreadKeyRef = useRef(threadKey);
+  useEffect(() => {
+    if (previousThreadKeyRef.current === threadKey) return;
+    previousThreadKeyRef.current = threadKey;
+    pinnedUserMessageIdxRef.current = null;
+    setPinnedUserMessageIdx(null);
+    scrollToBottom();
+  }, [threadKey, scrollToBottom]);
+
+  // --- Pinned user-message header ---
   //
-  // NOT from rangeChanged.startIndex, which is what this used to do and what
-  // caused both reported defects: it is the first RENDERED row (overscan
-  // inflated), so it is neither the visual top nor monotonic, and a single row
-  // can be taller than the viewport. See pinnedHeader.ts for the full
-  // reasoning and the recorded frame data.
-  //
-  // userMessageForItem stays POSITIONAL: it maps a timelineItems index to the
-  // index of the user message heading its section. Every insertion above the
-  // viewport shifts those indices, which is why the pin is re-resolved from
-  // live geometry rather than remembered.
+  // Resolved from measured row geometry, re-run on every scroll and whenever
+  // the row-to-section mapping changes (rows inserted above shift indices).
   const applyPinnedUserMessage = useCallback(() => {
     const scroller = scrollerElRef.current;
     if (!scroller) return;
-
     const nextPinned = resolvePinnedUserMessage({
       rows: measureRows(scroller),
       userMessageForItem,
-      // The header occludes the top of the transcript, so the line a heading
-      // has to cross to be "taken over" is the header's own bottom edge. Before
-      // one is showing there is nothing to clear and the line is the viewport
-      // top, which is what makes the first engage happen at the right moment.
       line: pinnedHeaderHeightRef.current,
       previousPinned: pinnedUserMessageIdxRef.current,
       releaseHysteresisPx: PINNED_HEADER_RELEASE_HYSTERESIS_PX,
     });
-
-    // Only re-render when the pinned index actually changes; Virtuoso fires
-    // rangeChanged continuously during a scroll and extra setState calls there
-    // cause layout recalculation and visible jitter.
     if (nextPinned !== pinnedUserMessageIdxRef.current) {
       pinnedUserMessageIdxRef.current = nextPinned;
       setPinnedUserMessageIdx(nextPinned);
     }
   }, [userMessageForItem]);
 
-  // Recompute the pin whenever the mapping changes, not only when the user
-  // scrolls. Virtuoso fires rangeChanged on scroll, so without this the pinned
-  // header keeps whatever index it had when the last scroll ended — and after
-  // rows are inserted above the viewport that index now names the wrong
-  // message. That is the "wrong chat pinned at the header" report, and it needs
-  // no branching or thread switching to reproduce: a reply arriving while you
-  // sit still is enough.
+  // Scroll-back paging: load the next page when the user nears the top.
+  // Prepending needs no compensation here — the virtualizer is anchored to
+  // the end, so rows prepended above hold the row being read in place.
+  const LOAD_OLDER_WITHIN_PX = 400;
+  const loadOlderStateRef = useRef({ hasOlderMessages, isLoadingOlderMessages, onLoadOlderMessages });
+  loadOlderStateRef.current = { hasOlderMessages, isLoadingOlderMessages, onLoadOlderMessages };
+
   useEffect(() => {
-    if (lastRangeRef.current === null) return;
+    const scroller = scrollerEl;
+    if (!scroller) return;
+    let frame: number | null = null;
+    const onScroll = () => {
+      if (frame !== null) return;
+      // One measurement per frame however many scroll events arrive.
+      frame = requestAnimationFrame(() => {
+        frame = null;
+        applyPinnedUserMessage();
+        const older = loadOlderStateRef.current;
+        if (
+          scroller.scrollTop < LOAD_OLDER_WITHIN_PX &&
+          older.onLoadOlderMessages &&
+          older.hasOlderMessages &&
+          !older.isLoadingOlderMessages
+        ) {
+          older.onLoadOlderMessages();
+        }
+      });
+    };
+    scroller.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      scroller.removeEventListener("scroll", onScroll);
+      if (frame !== null) cancelAnimationFrame(frame);
+    };
+  }, [applyPinnedUserMessage, scrollerEl]);
+
+  // Re-resolve the pin when the mapping changes, not only on scroll: a reply
+  // arriving while you sit still inserts rows and shifts every index.
+  useEffect(() => {
     applyPinnedUserMessage();
   }, [applyPinnedUserMessage]);
 
-  // SHIFTED → DATA. Reads the ref rather than the state value so every callback
-  // built on it keeps a stable identity across prepends; the ref is assigned
-  // during render, so it always holds the current commit's firstItemIndex.
-  const toDataIndex = useCallback(
-    (shiftedIndex: number) => shiftedIndex - firstItemIndexRef.current,
-    [],
-  );
-
-  const handleRangeChanged = useCallback((range: ListRange) => {
-    // `range` arrives in SHIFTED space; everything downstream (userMessageForItem
-    // lookups, pinnedUserMessageIdx → timelineItems[...], the saved scroll
-    // position → scrollToIndex) indexes timelineItems directly. Convert here.
-    const dataRange: ListRange = {
-      startIndex: toDataIndex(range.startIndex),
-      endIndex: toDataIndex(range.endIndex),
-    };
-    lastRangeRef.current = dataRange;
-    applyPinnedUserMessage();
-    scrollDebug.mark("rangeChanged", dataRange);
-  }, [applyPinnedUserMessage, toDataIndex]);
-
-  // Persist scroll position for current thread on every range/atBottom change
-  useEffect(() => {
-    const startIndex = lastRangeRef.current?.startIndex ?? 0;
-    scrollPositions.current.set(threadKey, {
-      startIndex,
-      atBottom: follow.atBottom,
-    });
-  });
-
-  // On thread switch: restore saved position or scroll to bottom (instant)
-  useEffect(() => {
-    if (prevThreadKey.current === threadKey) return;
-    prevThreadKey.current = threadKey;
-
-    // Drop the previous thread's viewport and pin.
-    //
-    // Both are POSITIONAL indices into timelineItems, which is rebuilt
-    // wholesale when the thread changes — so index N in the old thread names a
-    // completely unrelated row in the new one. Carrying them across meant the
-    // pinned header rendered a message from the thread you just left (and, when
-    // the old index was past the end of a shorter thread, nothing at all).
-    //
-    // Clearing rather than recomputing: there is no correct pin until Virtuoso
-    // reports a real range for the new content. Showing no header briefly is
-    // honest; showing another thread's message is not.
-    lastRangeRef.current = null;
-    pinnedUserMessageIdxRef.current = null;
-    setPinnedUserMessageIdx(null);
-
-    // Reset follow state for the new thread
-    follow.resumeFollow();
-
-    // Use requestAnimationFrame to let Virtuoso re-render with new data first
-    const rafId = requestAnimationFrame(() => {
-      const saved = scrollPositions.current.get(threadKey);
-      if (saved && !saved.atBottom) {
-        // Restore their previous position in this thread
-        follow.releaseFollow();
-        scrollDebug.mark("scrollToIndex", { reason: "threadSwitch-restore", index: saved.startIndex });
-        virtuosoRef?.current?.scrollToIndex({
-          index: saved.startIndex,
-          behavior: "auto",
-          align: "start",
-        });
-      } else {
-        // Default: scroll to bottom instantly (new thread or was at bottom)
-        scrollDebug.mark("scrollToIndex", { reason: "threadSwitch-bottom", index: "LAST" });
-        virtuosoRef?.current?.scrollToIndex({
-          index: "LAST",
-          behavior: "auto",
-        });
-      }
-    });
-    return () => cancelAnimationFrame(rafId);
-  }, [follow, threadKey, virtuosoRef]);
-
+  // Jumps go through the virtualizer, not the DOM: the target row is usually
+  // not rendered. Moving off the end is itself what stops following.
   const handleJumpToPinned = useCallback(() => {
-    if (pinnedUserMessageIdx !== null && virtuosoRef?.current) {
-      scrollDebug.mark("scrollToIndex", { reason: "jumpToPinned", index: pinnedUserMessageIdx });
-      virtuosoRef.current.scrollToIndex({
-        index: pinnedUserMessageIdx,
-        behavior: "auto",
-        align: "start",
-      });
-    }
-  }, [pinnedUserMessageIdx, virtuosoRef]);
-
-
+    if (pinnedUserMessageIdx === null) return;
+    virtualizer.scrollToIndex(pinnedUserMessageIdx, { align: "start", behavior: "auto" });
+  }, [pinnedUserMessageIdx, virtualizer]);
 
   // Get the pinned user message data
   const pinnedMessage = pinnedUserMessageIdx !== null ? timelineItems[pinnedUserMessageIdx] : null;
   const pinnedUserMsg = pinnedMessage?.type === "message" ? pinnedMessage.message : null;
 
-  const handleAtBottomChange = useCallback((atBottom: boolean) => {
-    follow.setAtBottom(atBottom);
-    scrollDebug.mark("atBottomStateChange", atBottom);
-    onAtBottomStateChange?.(atBottom);
-  }, [follow, onAtBottomStateChange]);
-
-  const handleIsScrolling = useCallback((scrolling: boolean) => {
-    follow.noteScrolling(scrolling);
-    scrollDebug.mark("isScrolling", scrolling);
-    onIsScrolling?.(scrolling);
-  }, [follow, onIsScrolling]);
-
-  // Expose a "resume follow" callback so external scroll-to-bottom buttons
-  // can re-enable following and trigger a programmatic scroll.
-  const resumeFollow = useCallback(() => {
-    follow.resumeFollow();
-    scrollDebug.mark("scrollToIndex", { reason: "resumeFollow", index: "LAST" });
-    virtuosoRef?.current?.scrollToIndex({
-      index: "LAST",
-      align: "end",
-      behavior: "auto",
-    });
-  }, [follow, virtuosoRef]);
-
-  // Register the resumeFollow callback with the parent
-  useEffect(() => {
-    onResumeFollow?.(resumeFollow);
-  }, [onResumeFollow, resumeFollow]);
-
-  // Jump to a specific message, e.g. from a chat-search hit.
-  //
-  // The list is virtualized, so the target usually has no DOM node yet and we
-  // cannot scroll to an element — we resolve the message id to its index in
-  // `timelineItems` and let Virtuoso render it. `scrollToIndex` takes DATA
-  // space, which is what timelineItems is indexed in, so no firstItemIndex
-  // shift applies here (see the index-space note above).
-  const [highlightedMessageId, setHighlightedMessageId] = useState<
-    string | null
-  >(null);
+  // Jump to a specific message, e.g. from a chat-search hit. The target is
+  // usually not rendered, so the jump is by index through the virtualizer.
+  const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
 
   useEffect(() => {
     const handleScrollToMessage = (event: Event) => {
-      const messageId = (event as CustomEvent<{ messageId?: string }>).detail
-        ?.messageId;
-      if (!messageId || !virtuosoRef?.current) return;
-
+      const messageId = (event as CustomEvent<{ messageId?: string }>).detail?.messageId;
+      if (!messageId) return;
       const index = timelineItems.findIndex(
         (item) => item.type === "message" && item.message.id === messageId,
       );
       // Not in the loaded window — the message lives in a page we have not
       // fetched yet, so there is nothing to scroll to.
       if (index === -1) return;
-
-      // Mark as programmatic so follow-mode does not read this as the user
-      // scrolling away from the bottom — but do hold position at the target
-      // rather than snapping back down on the next streamed chunk.
-      follow.beginProgrammaticScroll();
-      follow.releaseFollow();
-      scrollDebug.mark("scrollToIndex", { reason: "searchJump", index });
-      virtuosoRef.current.scrollToIndex({
-        index,
-        align: "center",
-        behavior: "auto",
-      });
+      virtualizer.scrollToIndex(index, { align: "center", behavior: "auto" });
       setHighlightedMessageId(messageId);
       // Tell the requester to stop retrying; it cannot observe this otherwise.
       acknowledgeScrollToMessage(messageId);
     };
 
     window.addEventListener("scroll-to-message", handleScrollToMessage);
-    return () =>
-      window.removeEventListener("scroll-to-message", handleScrollToMessage);
-  }, [follow, timelineItems, virtuosoRef]);
+    return () => window.removeEventListener("scroll-to-message", handleScrollToMessage);
+  }, [timelineItems, virtualizer]);
 
   // Clear the highlight once it has had time to register visually.
   useEffect(() => {
@@ -1343,62 +1155,22 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
     return () => clearTimeout(timer);
   }, [highlightedMessageId]);
 
-  // "Focus the conversation" — hands the transcript keyboard focus so it can be
-  // scrolled and read without the mouse. Virtuoso renders into a scrollable
-  // child, so focus goes to that rather than the outer shell.
+  // "Focus the conversation" — hands the transcript keyboard focus so it can
+  // be scrolled and read without the mouse.
   useEffect(() => {
     const handleFocusTranscript = () => {
-      const shell = timelineContainerRef.current;
-      if (!shell) return;
-
-      // Virtuoso owns the scroll container and does not expose a stable hook
-      // for it, so find the element that actually scrolls rather than matching
-      // on a class name that could change with a library upgrade.
-      const scroller =
-        Array.from(shell.querySelectorAll<HTMLElement>("*")).find(
-          (el) =>
-            el.scrollHeight > el.clientHeight &&
-            /auto|scroll/.test(getComputedStyle(el).overflowY),
-        ) ?? shell;
-
-      // Focusable only as a keyboard target; it is not in the tab order.
-      if (!scroller.hasAttribute("tabindex")) {
-        scroller.setAttribute("tabindex", "-1");
-      }
+      const scroller = scrollerElRef.current;
+      if (!scroller) return;
       scroller.focus({ preventScroll: true });
     };
-
     window.addEventListener("focus-transcript", handleFocusTranscript);
-    return () =>
-      window.removeEventListener("focus-transcript", handleFocusTranscript);
+    return () => window.removeEventListener("focus-transcript", handleFocusTranscript);
   }, []);
 
-  const isStreamingRef = useRef(isStreaming);
-  isStreamingRef.current = isStreaming;
-  follow.setStreaming(isStreaming);
   const timelineContainerRef = useRef<HTMLDivElement>(null);
 
-  // Debug-only seam: hands scrollDebug a READ-ONLY view of the state that has
-  // no DOM signal of its own, so an auto-dump can say whether the timeline was
-  // streaming and where follow mode stood when the jitter fired. Read only at
-  // dump time, never per frame. `follow`'s atBottom/userScrolledUp are
-  // getters — this observes them and must never write to followState.
-  useEffect(() => {
-    scrollDebug.registerContext(() => ({
-      itemCount: timelineItems.length,
-      isStreaming: isStreamingRef.current,
-      followState: {
-        atBottom: follow.atBottom,
-        userScrolledUp: follow.userScrolledUp,
-      },
-    }));
-    return () => scrollDebug.registerContext(null);
-  }, [follow, timelineItems.length]);
-
-  // Publish the pinned header's height so per-message hover toolbars can stick
-  // below it instead of underneath it. Measured rather than hard-coded: the
-  // header wraps a real message bubble whose height moves with the font size
-  // and the timeline variant.
+  // Publish the pinned header's height: per-message hover toolbars stick below
+  // it, and it is the crossing line the pin resolver measures against.
   const pinnedHeaderRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const shell = timelineContainerRef.current;
@@ -1407,19 +1179,10 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
     const header = pinnedHeaderRef.current;
     if (!header) {
       shell.style.removeProperty("--chat-pinned-header-h");
-      // No header means nothing occludes the transcript, so the crossing line
-      // returns to the viewport top. Leaving a stale height here would make
-      // the next engage happen a header's worth of pixels too late.
       pinnedHeaderHeightRef.current = 0;
       return;
     }
 
-    // The height is BOTH published to CSS and fed back into the pin decision
-    // as its crossing line, which is a genuine loop: pin on → line moves →
-    // re-resolve. It cannot oscillate because engaging and releasing use
-    // different thresholds (see PinnedHeaderInput.releaseHysteresisPx), and it
-    // is deliberately not re-resolved from here — the ref is read by the next
-    // rangeChanged, which a resize is always followed by.
     const publish = () => {
       const height = header.offsetHeight;
       pinnedHeaderHeightRef.current = height;
@@ -1432,121 +1195,8 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
     observer.observe(header);
     return () => observer.disconnect();
   }, [pinnedUserMsg]);
-  // Detect user-initiated scroll-up during streaming.
-  //
-  // While streaming, followState treats an unexplained scroll as one of ours
-  // (Virtuoso's SIZE_INCREASED correction cannot be announced), so intent has
-  // to come from the input device instead. Every device that can scroll this
-  // list therefore needs a listener here — a gap means that device silently
-  // cannot escape follow mode, which reads as the timeline yanking you back.
-  useEffect(() => {
-    const el = timelineContainerRef.current;
-    if (!el) return;
 
-    const onWheel = (e: WheelEvent) => {
-      // Marked regardless of streaming state — this is the raw input signal
-      // the recorder attributes movement to, independent of whether
-      // followState currently cares about it.
-      scrollDebug.mark("input:wheel", { deltaY: e.deltaY });
-      if (!isStreamingRef.current) return;
-      follow.noteWheel(e.deltaY, e.timeStamp);
-    };
-
-    // Touch reports absolute positions, not deltas, and its sign is inverted
-    // relative to the wheel: dragging a finger DOWN reveals EARLIER content,
-    // which is the wheel's negative direction.
-    let lastTouchY: number | null = null;
-    const onTouchStart = (e: TouchEvent) => {
-      lastTouchY = e.touches[0]?.clientY ?? null;
-    };
-    const onTouchMove = (e: TouchEvent) => {
-      const y = e.touches[0]?.clientY;
-      if (y === undefined) return;
-      if (lastTouchY !== null) {
-        scrollDebug.mark("input:touchmove", { deltaY: lastTouchY - y });
-        if (isStreamingRef.current) {
-          follow.noteTouchMove(lastTouchY - y, e.timeStamp);
-        }
-      }
-      lastTouchY = y;
-    };
-    const onTouchEnd = () => {
-      lastTouchY = null;
-    };
-
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "ArrowUp" || e.key === "PageUp" || e.key === "Home") {
-        scrollDebug.mark("input:keydown", { key: e.key });
-      }
-      if (!isStreamingRef.current) return;
-      if (e.key === "ArrowUp" || e.key === "PageUp" || e.key === "Home") {
-        follow.noteKeyScrollUp();
-      }
-    };
-
-    el.addEventListener('wheel', onWheel, { passive: true });
-    el.addEventListener('touchstart', onTouchStart, { passive: true });
-    el.addEventListener('touchmove', onTouchMove, { passive: true });
-    el.addEventListener('touchend', onTouchEnd, { passive: true });
-    el.addEventListener('touchcancel', onTouchEnd, { passive: true });
-    el.addEventListener('keydown', onKeyDown);
-    return () => {
-      el.removeEventListener('wheel', onWheel);
-      el.removeEventListener('touchstart', onTouchStart);
-      el.removeEventListener('touchmove', onTouchMove);
-      el.removeEventListener('touchend', onTouchEnd);
-      el.removeEventListener('touchcancel', onTouchEnd);
-      el.removeEventListener('keydown', onKeyDown);
-    };
-  }, [follow]);
-
-  // On mount we start at the bottom, and followOutput would return "smooth"
-  // — causing Virtuoso to slowly smooth-scroll through the entire conversation.
-  // Use "auto" (instant jump) until the first frame settles.
-  const initialScrollDoneRef = useRef(false);
-  useEffect(() => {
-    const raf = requestAnimationFrame(() => { initialScrollDoneRef.current = true; });
-    return () => cancelAnimationFrame(raf);
-  }, []);
-
-  const handleFollowOutput = useCallback(() => {
-    if (!follow.shouldFollow()) {
-      scrollDebug.mark("followOutput", { behavior: false });
-      return false;
-    }
-    // Returning a behavior means Virtuoso is about to scroll on its own.
-    // Claim it, so the resulting isScrolling(true) is not read as the user
-    // scrolling away — see the note in followState.noteScrolling.
-    follow.beginProgrammaticScroll();
-    // During streaming, always use "auto" (instant jump). "smooth" causes
-    // visible jitter because each new content update fires a new
-    // scrollTo({behavior:"smooth"}) that competes with Virtuoso's internal
-    // SIZE_INCREASED auto-scroll (which uses "auto"), creating
-    // discontinuities as smooth animations are interrupted mid-flight.
-    const behavior = initialScrollDoneRef.current && !isStreaming ? "smooth" : "auto";
-    scrollDebug.mark("followOutput", { behavior });
-    return behavior;
-  }, [follow, isStreaming]);
-
-  // Scroll-back trigger. Virtuoso fires startReached whenever the first item is
-  // rendered — including on initial mount for a short chat, and repeatedly while
-  // the user sits at the top. The store's own in-flight guard makes duplicate
-  // calls harmless; these checks just avoid the pointless round-trips.
-  const handleStartReached = useCallback(() => {
-    if (!onLoadOlderMessages) return;
-    if (!hasOlderMessages || isLoadingOlderMessages) return;
-    onLoadOlderMessages();
-  }, [hasOlderMessages, isLoadingOlderMessages, onLoadOlderMessages]);
-
-  // `index` arrives in SHIFTED space. timelineItemKey uses it only for handoff
-  // rows, which have no id of their own — but a handoff key must stay stable
-  // across a prepend, and a shifted index does not, so convert first.
-  const computeItemKey = useCallback(
-    (index: number, item: TimelineItem) => timelineItemKey(item, toDataIndex(index)),
-    [toDataIndex],
-  );
-
-  // `index` is DATA space here — wrappedRenderItem converts before calling in.
+  // `index` is a plain index into timelineItems.
   const renderItem = useCallback((index: number, item: TimelineItem, compactToolSpacing = false) => {
     if (item.type === "thread-start") {
       const isFork = item.workflow.origin === "fork";
@@ -1577,8 +1227,8 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
       return (
         <div
           className={cn(
-            // Colors only — never transition-all. Virtuoso measures row heights
-            // with a ResizeObserver, so an animated height reports a new value
+            // Colors only — never transition-all. The virtualizer measures row
+            // heights with a ResizeObserver, so an animated height reports a new value
             // every frame of the animation and each one triggers a re-measure
             // and a follow-scroll correction.
             "transition-colors",
@@ -1679,9 +1329,12 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
     );
   }, [approvals, chatId, isStreaming, lastItemIndex, onSelectThread, timelineVariant]);
 
-  // Wrap each Virtuoso item in the padding/max-width container
-  const wrappedRenderItem = useCallback((index: number, item: TimelineItem) => {
-    const dataIndex = toDataIndex(index);
+  // Wrap each row in the padding/max-width container.
+  // One virtual row: absolutely positioned at its measured offset, and handed
+  // to the virtualizer to measure. The ref is called for every rendered row;
+  // the virtualizer watches it with a ResizeObserver from then on.
+  const measureRow = virtualizer.measureElement;
+  const renderRow = useCallback((index: number, item: TimelineItem) => {
     // After a search jump, briefly ring the target so the eye can find it —
     // landing mid-conversation with no cue makes the jump feel like it failed.
     const isHighlighted =
@@ -1689,27 +1342,30 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
       item.type === "message" &&
       item.message.id === highlightedMessageId;
 
-    // Debug-only: watches this row's rendered height so scrollDebug can
-    // attribute scrollTop movement to a specific row growing. undefined (no
-    // ref, no ResizeObserver) when the recorder is disabled.
-    const rowKey = timelineItemKey(item, dataIndex);
-
-    const toolRowSpacing = getToolRowSpacing(timelineItems, dataIndex);
+    const rowKey = timelineItemKey(item, index);
+    const toolRowSpacing = getToolRowSpacing(timelineItems, index);
 
     return (
       <div
+        key={rowKey}
         className={cn(
+          "absolute inset-x-0 top-0",
           timelineHorizontalPaddingClass,
           timelineGapClass,
           toolRowSpacing.compactBefore && "pt-0.5",
           toolRowSpacing.compactAfter && "pb-0.5",
         )}
+        // No `transform` in JSX: with directDomUpdates the virtualizer writes
+        // each row's position in a layout effect after every render (before
+        // paint), and caches what it wrote. A JSX transform would be re-applied
+        // by React on re-render while that cache believes the DOM is current,
+        // leaving the row at a stale offset until the next range change.
+        // The virtualizer reads this to map a measured element to its index.
+        data-index={index}
         // The pinned header resolves from measured row geometry and needs each
-        // row's DATA-space index. Virtuoso stamps its own `data-item-index` on
-        // the wrapper above this one, but that is SHIFTED by firstItemIndex —
-        // reading it would offset every lookup into userMessageForItem.
-        {...{ [TIMELINE_ROW_INDEX_ATTR]: dataIndex }}
-        ref={scrollDebug.rowRef(rowKey)}
+        // row's index into timelineItems.
+        {...{ [TIMELINE_ROW_INDEX_ATTR]: index }}
+        ref={measureRow}
       >
         <div
           className={cn(
@@ -1719,75 +1375,11 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
               "rounded-lg ring-2 ring-primary/60 transition-shadow duration-500",
           )}
         >
-          {renderItem(dataIndex, item, toolRowSpacing.compact)}
+          {renderItem(index, item, toolRowSpacing.compact)}
         </div>
       </div>
     );
-  }, [contentMaxWidthClass, highlightedMessageId, renderItem, timelineGapClass, timelineHorizontalPaddingClass, timelineItems, toDataIndex]);
-
-  // Use Virtuoso's context prop to pass footer content to the Footer component.
-  // This keeps the Footer component identity stable (preventing Virtuoso re-mounts
-  // that cause layout recalculations) while still re-rendering when footer changes.
-  const footerContext = useMemo(
-    () => ({
-      footer,
-      isStreaming,
-      contentMaxWidthClass,
-      timelineHorizontalPaddingClass,
-      isLoadingOlderMessages,
-    }),
-    [
-      contentMaxWidthClass,
-      footer,
-      isLoadingOlderMessages,
-      isStreaming,
-      timelineHorizontalPaddingClass,
-    ]
-  );
-
-  const virtuosoComponents = useMemo(() => ({
-    Scroller: RubberBandScroller,
-    // The header doubles as the scroll-back loading indicator. It must keep a
-    // non-zero height in both states so the prepend does not also change the
-    // header's size while firstItemIndex is compensating for the new items.
-    Header: function VirtuosoHeader({
-      context,
-    }: {
-      context?: { isLoadingOlderMessages?: boolean };
-    }) {
-      if (!context?.isLoadingOlderMessages) {
-        return <div className="pt-2" />;
-      }
-      return (
-        <div className="flex items-center justify-center gap-2 py-2 text-xs text-muted-foreground">
-          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          <span>Loading earlier messages…</span>
-        </div>
-      );
-    },
-    Footer: function VirtuosoFooter({
-      context,
-    }: {
-      context?: {
-        footer?: React.ReactNode;
-        contentMaxWidthClass?: string;
-        timelineHorizontalPaddingClass?: string;
-      };
-    }) {
-      // Always render bottom padding that stays within atBottomThreshold (80px)
-      // so overscroll bounces don't cause atBottom to flap.
-      if (!context?.footer) {
-        return <div className="pb-10" />;
-      }
-      return (
-        <div className={cn(context.timelineHorizontalPaddingClass || "px-4 sm:px-6 lg:px-8", "pb-3")}>
-          <div className={cn(context.contentMaxWidthClass || "max-w-[1200px]", "mx-auto")}>
-            {context.footer}
-          </div>
-        </div>
-      );
-    },
-  }), []);
+  }, [contentMaxWidthClass, highlightedMessageId, measureRow, renderItem, timelineGapClass, timelineHorizontalPaddingClass, timelineItems]);
 
   if (timelineItems.length === 0) {
     return (
@@ -1800,22 +1392,24 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
       ref={timelineContainerRef}
       className={timelineShellClass}
       style={{ position: "relative" }}
-      // Focus target for "focus the conversation" — makes the transcript
-      // keyboard-scrollable (arrows, PageUp/Down, Home/End) without stealing
-      // those keys from anywhere else, since they only apply while focused.
-      data-context="transcript"
-      tabIndex={-1}
     >
-      {/* Pinned user message overlay */}
+      {/* Pinned user message overlay.
+
+          pointer-events-none on the overlay is what keeps text selection
+          sane. It is absolutely positioned over the transcript and comes
+          EARLIER in the DOM than every row, so a drag-select that crossed it
+          used to resolve its focus to a point before row 0 — selecting the
+          entire conversation above the anchor, including rows scrolled out of
+          view. With hit-testing passing through, a drag over it extends the
+          selection to the text underneath instead. The Jump-to button opts
+          back in, so it stays clickable. */}
       {pinnedUserMsg && (
         <div
           ref={pinnedHeaderRef}
           // Fully opaque and elevated: the timeline scrolls underneath, so any
           // translucency here would let message text show through the gaps
           // around the floating bubble.
-          className="pointer-events-auto absolute inset-x-0 top-0 z-50 border-b border-border/60 bg-background pt-1 pb-1.5 shadow-md"
-          onMouseEnter={() => setIsHoveringPinned(true)}
-          onMouseLeave={() => setIsHoveringPinned(false)}
+          className="group/pinned pointer-events-none absolute inset-x-0 top-0 z-50 border-b border-border/60 bg-background pt-1 pb-1.5 shadow-md"
         >
           <div className={timelineHorizontalPaddingClass}>
             <div className={cn(contentMaxWidthClass, "mx-auto flex items-center gap-2")}>
@@ -1835,8 +1429,11 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
                 <button
                   onClick={handleJumpToPinned}
                   className={cn(
-                    "flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-primary-foreground/20 bg-primary/90 text-primary-foreground shadow-sm transition-[color,background-color,opacity] duration-200 hover:bg-primary",
-                    isHoveringPinned ? "opacity-100" : "opacity-0"
+                    "pointer-events-auto flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-primary-foreground/20 bg-primary/90 text-primary-foreground shadow-sm transition-[color,background-color,opacity] duration-200 hover:bg-primary",
+                    // The overlay no longer receives hover, so the button
+                    // reveals on its own hover and on keyboard focus rather
+                    // than on hovering the header.
+                    "opacity-40 hover:opacity-100 focus-visible:opacity-100"
                   )}
                   aria-label="Jump to message"
                 >
@@ -1847,37 +1444,56 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
           </div>
         </div>
       )}
-      <Virtuoso
-        ref={virtuosoRef}
-        data={timelineItems}
-        context={footerContext}
-        computeItemKey={computeItemKey}
-        initialTopMostItemIndex={lastItemIndex}
-        // Prepend protocol — see the FIRST_ITEM_INDEX_BASE block above. Must be
-        // decremented by exactly the number of items prepended, in the same
-        // commit as the grown `data`, or the scroll position jumps.
-        firstItemIndex={firstItemIndex}
-        startReached={handleStartReached}
-        followOutput={handleFollowOutput}
-        atBottomThreshold={80}
-        overscan={200}
-        increaseViewportBy={200}
-        itemContent={wrappedRenderItem}
-        components={virtuosoComponents}
-        atBottomStateChange={handleAtBottomChange}
-        isScrolling={handleIsScrolling}
-        rangeChanged={handleRangeChanged}
-        // Debug-only seam: registers the actual scrolled element with
-        // scrollDebug so it can sample scrollTop per frame. A no-op call when
-        // the recorder is disabled.
-        scrollerRef={(el) => {
-          // Load-bearing as well as debug: the pinned header measures row
-          // geometry against this element.
-          scrollerElRef.current = el as HTMLElement | null;
-          scrollDebug.registerScroller(el as HTMLElement | null);
-        }}
-        style={{ height: "100%" }}
-      />
+      <div
+        ref={setScrollerEl}
+        className="h-full overflow-y-auto"
+        // "contain": the end-of-list bounce stays (it is macOS's native
+        // rubber-band; its length is set by the OS, not here), but a scroll
+        // past either end never chains to the page behind the transcript.
+        style={{ overscrollBehavior: "contain" }}
+        // Focus target for "focus the conversation" — makes the transcript
+        // keyboard-scrollable (arrows, PageUp/Down, Home/End) without stealing
+        // those keys from anywhere else, since they only apply while focused.
+        data-context="transcript"
+        tabIndex={-1}
+      >
+        {/* The virtual space: as tall as every row measured or estimated,
+            with only the rows near the viewport actually rendered. */}
+        {/* Height is written by the virtualizer (directDomUpdates), not JSX. */}
+        <div ref={virtualizer.containerRef} className="relative w-full">
+          {/* Top of the transcript doubles as the scroll-back loading
+              indicator, in the space paddingStart reserves above row 0.
+              Fixed height in both states, so the indicator toggling never
+              moves the rows below it. */}
+          <div
+            className="absolute inset-x-0 top-0 flex items-center justify-center gap-2 text-xs text-muted-foreground"
+            style={{ height: TIMELINE_HEADER_PX }}
+          >
+            {isLoadingOlderMessages && (
+              <>
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                <span>Loading earlier messages…</span>
+              </>
+            )}
+          </div>
+          {virtualizer
+            .getVirtualItems()
+            .map((virtualRow) => renderRow(virtualRow.index, timelineItems[virtualRow.index]))}
+          {/* The footer sits in the paddingEnd the virtualizer reserves for
+              it, so "the end" it pins to includes the footer. Anchored to the
+              container's bottom edge, which the virtualizer sizes directly,
+              so it moves with the total without a re-render. */}
+          <div ref={timeline.footerRef} className="absolute inset-x-0 bottom-0">
+            {footer ? (
+              <div className={cn(timelineHorizontalPaddingClass, "pb-3")}>
+                <div className={cn(contentMaxWidthClass, "mx-auto")}>{footer}</div>
+              </div>
+            ) : (
+              <div className="pb-10" />
+            )}
+          </div>
+        </div>
+      </div>
     </div>
   );
 });

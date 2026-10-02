@@ -6,7 +6,6 @@
  */
 
 import { useRef, useState, memo, useMemo, useEffect, useCallback } from "react";
-import type { VirtuosoHandle } from "react-virtuoso";
 import { GripHorizontal, GripVertical } from "lucide-react";
 import { ChatInputWrapper } from "./ChatInputWrapper";
 import { ChatThinkingIndicator } from "./ChatThinkingIndicator";
@@ -373,45 +372,25 @@ export const ChatPresenter = memo(function ChatPresenter({
     [onSendMessage, selectedThreadId]
   );
 
-  // Virtuoso scroll state bridge
-  const virtuosoRef = useRef<VirtuosoHandle>(null);
-  const [virtuosoAtBottom, setVirtuosoAtBottom] = useState(true);
-  // Keep a ref in sync for use in effects that need the latest value without re-triggering
-  const virtuosoAtBottomRef = useRef(true);
-  // Resume-follow callback registered by InterleavedTimeline — resets userScrolledUpRef
+  // Scroll state bridge: whether the transcript is at the bottom (drives the
+  // scroll-to-bottom button), and the timeline's "jump to bottom and resume
+  // following" callback (the button, and the composer after a send).
+  const [timelineAtBottom, setTimelineAtBottom] = useState(true);
   const resumeFollowRef = useRef<(() => void) | null>(null);
-
-  const handleAtBottomStateChange = useCallback((atBottom: boolean) => {
-    virtuosoAtBottomRef.current = atBottom;
-    setVirtuosoAtBottom(atBottom);
-  }, []);
 
   const handleResumeFollow = useCallback((cb: () => void) => {
     resumeFollowRef.current = cb;
   }, []);
 
-  // Jump the timeline to the newest message. Prefers the callback
-  // InterleavedTimeline registers, because that also resets its
-  // userScrolledUpRef so followOutput resumes; a bare scrollToIndex would move
-  // the viewport while leaving follow mode off.
   const scrollToBottom = useCallback(() => {
-    if (resumeFollowRef.current) {
-      resumeFollowRef.current();
-    } else {
-      virtuosoRef.current?.scrollToIndex({
-        index: "LAST",
-        align: "end",
-        behavior: "auto",
-      });
-    }
+    resumeFollowRef.current?.();
   }, []);
 
-  // Thinking indicator element, passed as Virtuoso footer
+  // Thinking indicator element, rendered as the timeline's footer
   const hasThinkingFooter = isChatBusy && pendingApprovals.length === 0 && !hasPendingQuestion;
-  // Memoized because this element's identity flows into Virtuoso's `context`
-  // prop (via footerContext below). A fresh element on every render defeats
-  // that memo and re-renders the header, footer, and every visible row on each
-  // pass — which, during streaming, is many times per second.
+  // Memoized because it is a prop of the memo()'d timeline: a fresh element
+  // on every render would re-render the whole transcript on each pass —
+  // which, during streaming, is many times per second.
   const thinkingFooter = useMemo(
     () =>
       hasThinkingFooter ? (
@@ -422,17 +401,6 @@ export const ChatPresenter = memo(function ChatPresenter({
       ) : undefined,
     [hasThinkingFooter, chatId, selectedThreadId]
   );
-
-  // When thinking indicator appears, scroll to bottom so it's visible
-  const prevHasThinkingFooterRef = useRef(false);
-  useEffect(() => {
-    if (hasThinkingFooter && !prevHasThinkingFooterRef.current && virtuosoAtBottomRef.current) {
-      // Footer just appeared and user was at the bottom — scrollToBottom
-      // routes through resumeFollow so this isn't mistaken for user scroll-up
-      requestAnimationFrame(scrollToBottom);
-    }
-    prevHasThinkingFooterRef.current = hasThinkingFooter;
-  }, [hasThinkingFooter, scrollToBottom]);
 
   // With a thread selected, render THAT THREAD's own messages rather than the
   // chat-wide list narrowed down to it. Filtering only showed whatever part of
@@ -465,8 +433,7 @@ export const ChatPresenter = memo(function ChatPresenter({
       workflowExecution={workflowExecution}
       selectedThreads={selectedThreads}
       isStreaming={isChatBusy}
-      virtuosoRef={virtuosoRef}
-      onAtBottomStateChange={handleAtBottomStateChange}
+      onAtBottomStateChange={setTimelineAtBottom}
       onResumeFollow={handleResumeFollow}
       footer={thinkingFooter}
       onSelectThread={setSelectedThreadId}
@@ -637,7 +604,7 @@ export const ChatPresenter = memo(function ChatPresenter({
 
         {/* Floating scroll-to-bottom button */}
         <ScrollToBottomButton
-          visible={!virtuosoAtBottom}
+          visible={!timelineAtBottom}
           onClick={scrollToBottom}
         />
 
