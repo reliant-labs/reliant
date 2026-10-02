@@ -1163,14 +1163,17 @@ func TestForgeOneShotSchemaReviewProvesARowAgainstARealDatabase(t *testing.T) {
 	for _, inv := range forgeInvocations(block) {
 		ran = append(ran, forgeLongestValidPath(paths, inv.args))
 	}
-	require.Contains(t, ran, "run",
-		"the seeding block never brings the app up. `forge run` is what creates the dev "+
+	// `env up` — forge v0.1.42 folded the former `forge run` into it (ADR
+	// V1), carrying over the `--` passthrough; the alias is deleted, so the
+	// spelling this block must use is the env verb.
+	require.Contains(t, ran, "env up",
+		"the seeding block never brings the app up. `forge env up dev` is what creates the dev "+
 			"database, applies the migrations on boot and seeds it; nothing earlier in the "+
 			"phase leaves a migrated database behind, so without it the seed exits on a "+
 			"connection string it cannot resolve or a database that was never created "+
 			"(the block runs: %v)", ran)
 	require.Contains(t, ran, "env down",
-		"the seeding block never stops what it started. `forge run` detaches its servers and "+
+		"the seeding block never stops what it started. `forge env up dev` detaches its servers and "+
 			"returns rather than staying alive, so a block without the stop leaves a dev stack "+
 			"up for every later phase to collide with (the block runs: %v)", ran)
 }

@@ -14,6 +14,13 @@
  *                      empty screen here would read as "you have no
  *                      environments", which is the failure mode this exists to
  *                      prevent.
+ *   cannot-render      the daemon is REACHABLE and its forge cannot render any
+ *                      environment (a CGO-free build has no kcl_plugin.forge).
+ *                      Kept apart from `unsupported` because that is fixed by
+ *                      upgrading and this is not, and kept apart from a
+ *                      transport error because this condition used to surface
+ *                      as "Could not reach your daemon" — which blamed the
+ *                      network for a build flag and sent people nowhere useful.
  *   unreachable        UNKNOWN, in the unknown vocabulary — dashed border, muted
  *                      text. Not a red banner: a check that reports a VPN blip
  *                      as a release failure gets switched off in its first week.
@@ -61,6 +68,60 @@ export function NotForgeProject({ projectName }: { projectName?: string }) {
         environment topology to show.
       </p>
       <p>This is expected — most projects are not forge projects.</p>
+    </StateShell>
+  );
+}
+
+/**
+ * The daemon is REACHABLE and its forge simply cannot render any environment.
+ *
+ * This state exists because the condition was previously displayed as "Could
+ * not reach your daemon", which blames the network for a build flag. On every
+ * managed cloud workspace the daemon was connected and healthy; its embedded
+ * forge had been compiled without CGO, so forge's kcl_plugin.forge namespace
+ * was never registered and every render was refused. A user following the old
+ * message would check their connection, and nothing they found there could
+ * explain it.
+ *
+ * Distinct from `unsupported` on purpose. That one means "this forge is too
+ * OLD for the command this screen needs" and is fixed by upgrading; this one
+ * means "this forge cannot render AT ALL, at any version" and is fixed by
+ * rebuilding/reinstalling it. Collapsing them would send people to a version
+ * bump that cannot help.
+ *
+ * `reason` and `detail` are forge's OWN words, forwarded from its doctor
+ * report, so this panel and `forge doctor` never tell different stories.
+ */
+export function ForgeCannotRender({
+  forgeVersion,
+  reason,
+  detail,
+}: {
+  forgeVersion?: string;
+  reason?: string;
+  detail?: string;
+}) {
+  return (
+    <StateShell
+      icon={Wrench}
+      title="This machine's forge can't render environments"
+      testId="forge-cannot-render"
+    >
+      <p>
+        Your daemon is reachable, but the forge on it —{" "}
+        <span className="font-mono text-foreground">{forgeVersion || "an unknown version"}</span> —
+        cannot render, deploy or bring up any environment.
+      </p>
+      {reason && <p className="font-mono text-xs">{reason}</p>}
+      {detail && (
+        <pre className="whitespace-pre-wrap break-words text-left font-mono text-xs text-muted-foreground">
+          {detail}
+        </pre>
+      )}
+      <p>
+        Nothing is wrong with this project or your connection — the forge binary itself is missing
+        the KCL plugin it renders through, which usually means it was built without CGO.
+      </p>
     </StateShell>
   );
 }

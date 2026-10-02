@@ -241,16 +241,15 @@ describe("after a successful apply", () => {
 
     const panel = screen.getByTestId("promote-applied");
 
-    // The next step is named explicitly, from the APPLIED document.
-    expect(screen.getByTestId("promote-next-step").textContent).toBe("forge env deploy staging");
-    expect(screen.getByTestId("promote-ships-nothing").textContent).toMatch(/nothing is deployed/i);
-
-    // And nothing anywhere on this panel claims a deploy or a ship.
+    // `forge env deploy` RECORDED AND APPLIED this release (forge v0.1.42,
+    // ADR V3 — `env promote` is deleted). So the applied panel must NOT carry
+    // the old "nothing is deployed" notice: after V3 that would tell the user
+    // no deploy had happened at the exact moment one had, which is the more
+    // dangerous direction of the error the old assertion guarded against.
     const text = panel.textContent ?? "";
-    expect(text).not.toMatch(/\bdeployed to\b/i);
-    expect(text).not.toMatch(/\bshipped\b/i);
-    expect(text).not.toMatch(/\bis now live\b/i);
-    expect(text).not.toMatch(/\bdeploy succeeded\b/i);
+    expect(screen.queryByTestId("promote-plan-writes-nothing")).toBeNull();
+    expect(text).not.toMatch(/nothing is deployed/i);
+    expect(text).not.toMatch(/moves a pointer/i);
     // It says what actually happened: a binding was updated.
     expect(screen.getByTestId("promote-applied-heading").textContent).toMatch(/binding updated/i);
 

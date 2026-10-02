@@ -197,17 +197,43 @@ func (a forgePromoteArgs) validate() error {
 	return nil
 }
 
-// planArgs is the READ-ONLY invocation. --plan is a true dry run in forge: the
-// single write (applyPromotePlan) is guarded downstream of the plan, so the
-// same function produces this document and the applied one.
+// THE VERB, AND WHY THE ENV MOVED FROM A FLAG TO A POSITIONAL
+//
+// forge v0.1.42 deleted `env promote <release> --to <env>` and absorbed it into
+// `env deploy <env> [version]` (ADR V3, forge #381). The env is now the FIRST
+// positional and the release the second; `--to` no longer exists. The release
+// half's flags came across unchanged — --plan, --note, --actor,
+// --expect-current, --expect-unbound, --supersede, --gate, --from — which is
+// what lets the CAS guard below keep working verbatim.
+//
+// The leading-dash rejection in validate() is therefore MORE load-bearing than
+// before, not less: both values are now bare positionals with no flag name
+// binding them, so a value beginning with "-" is read as a flag by cobra
+// directly.
+//
+// ONE SEMANTIC CHANGE, DELIBERATELY CONFINED TO THE APPLY PATH. `env promote`
+// recorded a binding and shipped nothing; `env deploy` records AND applies AND
+// waits for health (--no-wait opts out of the wait only). forge's reasoning: a
+// step that only recorded a binding reported success before any byte moved, so
+// every pipeline spelled it `promote --deploy --wait` and the spellings that
+// omitted a half were latent incidents. There is no record-only verb left.
+//
+// The plan path is UNAFFECTED by that: --plan still computes the whole change
+// set and writes nothing, so the preview this daemon exposes is as read-only as
+// it ever was. The apply path now genuinely deploys, which is why the UI copy
+// that promised "moves a pointer — nothing has been deployed" is corrected in
+// the same change rather than left to describe a verb that no longer exists.
+
+// planArgs is the READ-ONLY invocation: --plan computes the full change set
+// without writing the binding or applying anything.
 func (a forgePromoteArgs) planArgs() []string {
-	return []string{"env", "promote", strings.TrimSpace(a.Release), "--to", strings.TrimSpace(a.Env), "--plan", "--json"}
+	return []string{"env", "deploy", strings.TrimSpace(a.Env), strings.TrimSpace(a.Release), "--plan", "--json"}
 }
 
-// applyArgs is the same command WITHOUT --plan. The only difference between
-// the two argv is the flag that suppresses the write.
+// applyArgs is the same command WITHOUT --plan. Unlike the retired
+// `env promote`, this records the binding AND applies it AND waits for health.
 func (a forgePromoteArgs) applyArgs() []string {
-	return []string{"env", "promote", strings.TrimSpace(a.Release), "--to", strings.TrimSpace(a.Env), "--json"}
+	return []string{"env", "deploy", strings.TrimSpace(a.Env), strings.TrimSpace(a.Release), "--json"}
 }
 
 // --- forge.promote_plan ------------------------------------------------------

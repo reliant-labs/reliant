@@ -80,9 +80,7 @@ export function forwardPlan(overrides: Partial<ForgePromotePlan> = {}): ForgePro
       commits: [],
     },
     changed: true,
-    ships_nothing: true,
-    next_step: "forge env deploy staging",
-    note: "Promoting writes a pointer. Nothing is deployed until `forge env deploy staging` runs.",
+    note: "This is a preview. Confirming records v1.5.15, applies it, and waits for health.",
     ok: true,
     ...overrides,
   };
@@ -135,8 +133,6 @@ export function rollbackPlan(overrides: Partial<ForgePromotePlan> = {}): ForgePr
       commits: ["85853150 billing: guide identity-less users", "5dc5095a daemon: fix drain"],
     },
     changed: true,
-    ships_nothing: true,
-    next_step: "forge env deploy prod",
     ok: true,
     ...overrides,
   };
@@ -163,8 +159,6 @@ export function firstPromotePlan(overrides: Partial<ForgePromotePlan> = {}): For
       commits: [],
     },
     changed: true,
-    ships_nothing: true,
-    next_step: "forge env deploy preprod",
     ok: true,
     ...overrides,
   };
