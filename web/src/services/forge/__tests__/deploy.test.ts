@@ -19,6 +19,7 @@ import {
   deployModeWrites,
   deployTokenFor,
   describeDeployToken,
+  destructiveFindings,
   guardVerdictOf,
   isMultiCluster,
   pinningOf,
@@ -363,5 +364,60 @@ describe("the deploy's verdict", () => {
         rollout: { mode: "wait", results: [], ready: 2, failed: 1, timed_out: 0, not_waited: 3 },
       })
     ).toEqual({ ready: 2, failed: 1, timedOut: 0, notWaited: 3, unknown: 0, total: 6 });
+  });
+});
+
+/**
+ * The findings that gate the hosted confirm's one remaining checkbox.
+ *
+ * Classified by NAME rather than inferred, so the fallback direction is the
+ * thing to pin: an unrecognised check must be advisory, not a gate. Gating on
+ * an unclassified finding would block deploys nobody meant to block, which is
+ * how a safety mechanism gets switched off wholesale.
+ */
+describe("destructive findings", () => {
+  function withFindings(findings: ForgeDeployReport["preflight"]): ForgeDeployReport {
+    return { env: "prod", mode: "dry_run", preflight: findings };
+  }
+
+  it("selects the checks that describe irreversible loss", () => {
+    const report = withFindings({
+      status: "ran",
+      blocking: 0,
+      findings: [
+        { check: "stateful_resource_deletion", subject: "StatefulSet/pg", blocking: false },
+        { check: "persistent_volume_deletion", subject: "PVC/data", blocking: false },
+        { check: "load_balancer_replacement", subject: "Service/web", blocking: false },
+      ],
+    });
+    expect(destructiveFindings(report).map((finding) => finding.subject)).toEqual([
+      "StatefulSet/pg",
+      "PVC/data",
+      "Service/web",
+    ]);
+  });
+
+  it("treats an UNRECOGNISED check as advisory, never as a gate", () => {
+    const report = withFindings({
+      status: "ran",
+      blocking: 0,
+      findings: [{ check: "some_future_check", subject: "Thing/x", blocking: false }],
+    });
+    expect(destructiveFindings(report)).toEqual([]);
+  });
+
+  it("excludes a BLOCKING finding — that plan offers no confirm to guard", () => {
+    const report = withFindings({
+      status: "ran",
+      blocking: 1,
+      findings: [{ check: "stateful_resource_deletion", subject: "StatefulSet/pg", blocking: true }],
+    });
+    expect(destructiveFindings(report)).toEqual([]);
+  });
+
+  it("is empty for a clean plan and for an absent preflight", () => {
+    expect(destructiveFindings(withFindings({ status: "ran", findings: [], blocking: 0 }))).toEqual([]);
+    expect(destructiveFindings({ env: "prod" })).toEqual([]);
+    expect(destructiveFindings(null)).toEqual([]);
   });
 });

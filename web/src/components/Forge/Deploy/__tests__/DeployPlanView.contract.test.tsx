@@ -221,11 +221,20 @@ describe("a hosted plan", () => {
     expect(screen.getByTestId("deploy-plan").textContent).not.toMatch(/renders no container images|0 resources/);
   });
 
-  it("says whether it updates a live env or creates one", () => {
+  it("says what it does to which environment, with no infrastructure nouns", () => {
     const { unmount } = render(<DeployPlanView plan={hostedPlan("env_1")} />);
-    expect(screen.getByTestId("deploy-target-heading").textContent).toBe("This updates the live hosted environment prod");
+    expect(screen.getByTestId("deploy-target-heading").textContent).toBe(
+      "Deploys release v1.5.15 to prod."
+    );
     unmount();
+
+    // First deploy: stated as an outcome, not as an id that is still empty.
     render(<DeployPlanView plan={hostedPlan("")} />);
-    expect(screen.getByTestId("deploy-target-heading").textContent).toBe("This creates the hosted environment prod");
+    expect(screen.getByTestId("deploy-target-heading").textContent).toBe(
+      "Creates prod and deploys release v1.5.15."
+    );
+    expect(screen.getByTestId("deploy-plan").textContent).not.toMatch(
+      /control plane|environment id|cp\.example\.io/i
+    );
   });
 });
