@@ -40,6 +40,19 @@ import {
   type CloudPromotion,
 } from "../services/forge/cloudEnvs";
 import {
+  getLiveView,
+  hasLiveControlPlane,
+  liveAvailabilityFromError,
+  liveErrorDetail,
+  type LiveAvailability,
+  type LiveEnv,
+} from "../services/forge/live";
+import {
+  registerEnvironment,
+  type ForgeEnvShapeReport,
+  type RegisterCandidate,
+} from "../services/forge/register";
+import {
   cloudRunIdOf,
   daemonSideOf,
   joinEnvironments,
@@ -51,7 +64,6 @@ import {
 import { deployTokenFor, type ForgeDeployReport } from "../services/forge/deploy";
 import { useProjectStore, type Project } from "../store/projectStore";
 import { confirmationTokenFor, type ForgePromotePlan } from "../services/forge/promote";
-import type { ForgeSecretsReport } from "../services/forge/secrets";
 import {
   availabilityFromError,
   deleteSecret,
@@ -114,8 +126,6 @@ export const forgeKeys = {
   all: ["forge"] as const,
   topology: (projectId: string) => [...forgeKeys.all, "topology", projectId] as const,
   audit: (projectId: string) => [...forgeKeys.all, "audit", projectId] as const,
-  secrets: (projectId: string, env: string) =>
-    [...forgeKeys.all, "secrets", projectId, env] as const,
   envStatus: (projectId: string, env: string) =>
     [...forgeKeys.all, "env-status", projectId, env] as const,
   promotePlan: (projectId: string, env: string, release: string) =>
@@ -132,6 +142,12 @@ export const forgeKeys = {
   // plane's environment id — not the Reliant project id — because that is
   // what the control plane knows them by.
   cloudEnvs: (forgeProject: string) => [...forgeKeys.all, "cloud-envs", forgeProject] as const,
+  // LIVE. Keyed by the forge project name, like cloudEnvs — one entry holds
+  // every environment's whole Live answer, because GetLiveView returns them
+  // together (see services/forge/live.ts on why it is one round trip).
+  liveView: (forgeProject: string) => [...forgeKeys.all, "live-view", forgeProject] as const,
+  envShape: (projectId: string, env: string) =>
+    [...forgeKeys.all, "env-shape", projectId, env] as const,
   cloudStatus: (environmentId: string) => [...forgeKeys.all, "cloud-status", environmentId] as const,
   cloudPromotions: (environmentId: string) =>
     [...forgeKeys.all, "cloud-promotions", environmentId] as const,
@@ -264,6 +280,72 @@ export function useCloudEnvironments(forgeProject: string | null | undefined) {
     staleTime: 30_000,
     retry: false,
   });
+}
+
+// ── LIVE: the control plane, and nothing else ───────────────────────────────
+
+/**
+ * useLiveView is THE Live query. One round trip to the control plane, with the
+ * user's session, for every environment in one forge project.
+ *
+ * NO DAEMON HOOK IS COMPOSED INTO THIS, and that is the property under test
+ * (ForgeEnvPage.liveNoDaemon.test.tsx renders the Live surfaces with the
+ * daemon transport mocked to THROW and asserts zero calls). The old env page
+ * joined a daemon topology report with a control-plane list, so an asleep
+ * laptop degraded a page describing a production environment the control plane
+ * was observing the whole time — and because forge called ListEnvironments
+ * with the DAEMON's token, it produced a 403 on a page the user was entitled
+ * to see.
+ *
+ * A failure resolves to an `availability` rather than throwing, for
+ * useCloudEnvironments' reason: four of the five ways this can "fail" are
+ * states to DESCRIBE, and a red banner in front of every local-only forge
+ * project would be a lie.
+ *
+ * `forgeProject` null means the join key is not known yet — Reliant has no
+ * forge.yaml name on the project row and no daemon has ever reported one. The
+ * query is not enabled, and the screen says so rather than listing a guess
+ * (see resolveForgeProjectName).
+ *
+ * staleTime 15s with no poll: the ledger moves when somebody deploys, and
+ * every write path in this module invalidates it. A background poll would buy
+ * a few seconds of freshness for a request per environment per interval.
+ */
+export function useLiveView(forgeProject: string | null | undefined) {
+  const enabled = !!forgeProject && hasLiveControlPlane();
+  return useQuery<{ availability: LiveAvailability; envs: LiveEnv[]; detail: string }>({
+    queryKey: forgeKeys.liveView(forgeProject ?? ""),
+    queryFn: async () => {
+      try {
+        return {
+          availability: "available" as const,
+          envs: await getLiveView(forgeProject as string),
+          detail: "",
+        };
+      } catch (err) {
+        return { availability: liveAvailabilityFromError(err), envs: [], detail: liveErrorDetail(err) };
+      }
+    },
+    enabled,
+    staleTime: 15_000,
+    retry: false,
+  });
+}
+
+/**
+ * Invalidate Live after a write moved it — a Register, a promote, a deploy.
+ *
+ * Invalidated rather than patched: the only honest source for "what does the
+ * control plane hold for this env now" is the control plane. A fabricated row
+ * would paper over a server-side refusal (EnsureEnvironment refuses a
+ * declaration whose immutable fields disagree) and show the user a
+ * registration that did not happen.
+ */
+export function useInvalidateLiveView() {
+  const queryClient = useQueryClient();
+  return useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: [...forgeKeys.all, "live-view"] });
+  }, [queryClient]);
 }
 
 /**
@@ -401,34 +483,67 @@ export function cloudRunIds(envs: ForgeEnvSummary[]): string[] {
   return envs.map(cloudRunIdOf).filter((id): id is string => !!id);
 }
 
-// ── Secret declarations ─────────────────────────────────────────────────────
+// ── Register: the bootstrap, and the one daemon read Live depends on ────────
 
 /**
- * useForgeSecrets loads one environment's secret DECLARATIONS from forge — which
- * names its workloads ask for. An ENRICHMENT of the managed store's list, never
- * a gate on it: the store answers without a daemon, and this only adds the
- * "declared but never set" rows when the daemon is there to say what is
- * declared.
+ * useForgeEnvShape reads forge's projection of one environment's render.
  *
- * A retry path is a place where a response body tends to end up logged or
- * attached to an error for diagnosis, and nothing on this path may do that.
- * The response is passed straight to the cache and never stringified, and the
- * query has no onError side channel.
+ * A PREVIEW query, not a Live one. It is the only daemon call on the Register
+ * path, and it is here because only the daemon can read the user's files. The
+ * WRITE that follows does not touch the daemon: useRegisterEnvironment calls
+ * control-plane EnsureEnvironment straight from the browser.
  *
- * staleTime is short (5s) because declarations and values are what a developer
- * is actively changing: they set a secret and come back expecting the row to
- * have moved.
+ * staleTime 0 and gcTime 0, following the plan queries and for the same
+ * reason: this document becomes an immutable declaration — an environment's
+ * kind cannot be changed once recorded — so the shape a user registers is
+ * always the one forge just rendered, never one cached from a checkout that
+ * has since moved.
  */
-export function useForgeSecrets(projectId: string | null | undefined, env: string | null | undefined) {
-  return useQuery<ForgeOutcome<ForgeSecretsReport>>({
-    queryKey: forgeKeys.secrets(projectId ?? "", env ?? ""),
-    queryFn: () =>
-      forgeGrpc.listSecrets(projectId as string, env as string) as Promise<
-        ForgeOutcome<ForgeSecretsReport>
-      >,
-    enabled: !!projectId && !!env,
-    staleTime: 5_000,
+export function useForgeEnvShape(
+  projectId: string | null | undefined,
+  env: string | null | undefined,
+  enabled = true
+) {
+  return useQuery<ForgeOutcome<ForgeEnvShapeReport>>({
+    queryKey: forgeKeys.envShape(projectId ?? "", env ?? ""),
+    queryFn: () => forgeGrpc.getEnvShape(projectId as string, env as string),
+    enabled: enabled && !!projectId && !!env,
+    staleTime: 0,
+    gcTime: 0,
     retry: forgeRetry,
+  });
+}
+
+/**
+ * useRegisterEnvironment creates the environment's control-plane row from a
+ * Preview render — FROM THE BROWSER, with the user's session.
+ *
+ * THE MUTATION TAKES A CANDIDATE, NOT AN ENV NAME AND A KIND. That signature
+ * is the safety property: a candidate can only come from registerCandidate,
+ * which refuses a document whose kind forge did not state, whose shape
+ * disagrees with its own kind, whose project does not match the one on screen,
+ * or which carries a value-like key. So no call site can assemble a
+ * declaration from component state, and "the shape recorded is the shape forge
+ * rendered" holds by construction — which matters because the kind is
+ * immutable and a wrong one produces an environment that can only be
+ * abandoned.
+ *
+ * retry is DISABLED. EnsureEnvironment is idempotent, so a retry would be
+ * harmless rather than dangerous, but it would also be pointless: the
+ * failures worth seeing here are a refusal (the row exists with different
+ * immutable fields) and an authz error, and neither changes on a second
+ * attempt.
+ *
+ * On success LIVE is invalidated, which is the whole point — the env appears
+ * in Live as "Declared, not built yet" and its secrets become settable with
+ * the daemon offline.
+ */
+export function useRegisterEnvironment() {
+  const invalidateLive = useInvalidateLiveView();
+  return useMutation<string, Error, RegisterCandidate>({
+    mutationFn: (candidate: RegisterCandidate) => registerEnvironment(candidate),
+    retry: false,
+    onSuccess: invalidateLive,
   });
 }
 
@@ -727,9 +842,16 @@ export function useForgeDeployStatus(
 // ── Managed secret store ────────────────────────────────────────────────────
 //
 // These hooks talk to control-plane's SecretStoreService (Connect), not to the
-// daemon. They are a separate axis from useForgeSecrets, which reads forge's
-// own declaration report — see services/forge/secretSurface.ts for why the
-// screen needs both and how they are joined.
+// daemon — so the whole secrets surface works with no daemon at all.
+//
+// The DECLARED names (which secrets a workload asks for) used to come from a
+// second, daemon-sourced axis: `useForgeSecrets`, over `forge.secret_list`.
+// That made the screen's most valuable row — "declared, and nobody has ever
+// set it", the one that breaks a deploy — vanish whenever a laptop slept. The
+// names now ride on the environment's own record as `declared_shape.secrets`
+// (services/forge/live.ts), which is the same control plane this store is, so
+// both halves of the join arrive together. The join itself is unchanged and
+// still lives in services/forge/secretSurface.ts.
 
 /**
  * useManagedSecrets loads the managed store's metadata for one environment.
@@ -737,9 +859,9 @@ export function useForgeDeployStatus(
  * `target` decides whether there is a lookup at all (see managedStoreTarget).
  * A `none` target resolves IMMEDIATELY to its availability with no RPC: a
  * non-hosted env has no managed store, and asking control-plane about it
- * would need an id nobody has. `null` means the facts that decide the target
- * (the topology report) have not arrived yet, so nothing is decided and
- * nothing is fetched.
+ * would need an id nobody has. `null` means the environment record that
+ * decides the target has not arrived yet, so nothing is decided and nothing
+ * is fetched.
  *
  * A FAILURE HERE IS USUALLY NOT AN ERROR. control-plane answers Unavailable
  * when no OpenBao is bound, and Unimplemented when the control plane predates
@@ -752,9 +874,8 @@ export function useForgeDeployStatus(
  * rejection as an error would put a red banner in front of a user whose only
  * crime is running reliant without a control plane.
  *
- * staleTime is short (5s) for the same reason useForgeSecrets uses 5s — this is
- * the thing the user is actively changing. They set a secret and come straight
- * back expecting the row to have moved.
+ * staleTime is short (5s): this is the thing the user is actively changing.
+ * They set a secret and come straight back expecting the row to have moved.
  */
 export function useManagedSecrets(
   projectId: string | null | undefined,
@@ -831,11 +952,9 @@ function useInvalidateManagedSecrets(
     void queryClient.invalidateQueries({
       queryKey: [...forgeKeys.all, "managed-secret-versions", projectId ?? "", env ?? ""],
     });
-    // forge's own declaration report can also move: setting a secret that was
-    // declared-unset changes the row's origin on the next read.
-    void queryClient.invalidateQueries({
-      queryKey: forgeKeys.secrets(projectId ?? "", env ?? ""),
-    });
+    // The declared names ride on the environment record, and setting a secret
+    // that was declared-unset changes that row's origin on the next read.
+    void queryClient.invalidateQueries({ queryKey: [...forgeKeys.all, "live-view"] });
   }, [queryClient, projectId, env]);
 }
 

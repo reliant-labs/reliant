@@ -66,9 +66,22 @@ export function DaemonOfflineNotice({
 }
 
 /**
- * Why the control plane's environments are not on screen. Returns null for
+ * Why this project's environments are not on screen. Returns null for
  * `available` and for `no-control-plane` — the latter is a local/OSS build,
  * where "no cloud environments" is simply true and needs no sentence.
+ *
+ * ── THE COPY RULE (#366) ────────────────────────────────────────────────────
+ *
+ * NO INTERNAL NOUNS. These sentences used to name "the control plane", which
+ * is OUR infrastructure: the customer did not choose it, cannot visit it, and
+ * cannot act on its state. Telling them it is unreachable spends the only line
+ * on the screen explaining our architecture to someone who wanted to know why
+ * their environments are missing.
+ *
+ * So each case says what is true FOR THEM, in their own nouns: what they
+ * cannot see, and what (if anything) they can do about it. The server's own
+ * message is still shown as `detail` for a support conversation — it is the
+ * one place a technical string is worth more than a plain one.
  */
 export function CloudNotice({
   availability,
@@ -82,8 +95,8 @@ export function CloudNotice({
       return (
         <Strip testId="forge-cloud-no-access">
           <p>
-            Your role in this organization can't read its Reliant cloud environments, so only what
-            your daemon reports is shown. Ask an organization admin for access.
+            Your role in this organization can&apos;t see its environments. Ask an organization
+            admin for access.
           </p>
           {detail && <p className="font-mono text-2xs">{detail}</p>}
         </Strip>
@@ -91,16 +104,17 @@ export function CloudNotice({
     case "not-configured":
       return (
         <Strip testId="forge-cloud-not-configured">
-          <p>This control plane does not serve Reliant cloud environments.</p>
+          <p>Deploying isn&apos;t available on this installation.</p>
         </Strip>
       );
     case "unreachable":
       return (
         <Strip testId="forge-cloud-unreachable" tone="problem">
           <p>
-            <span className="font-medium text-foreground">The control plane could not be reached.</span>{" "}
-            Reliant cloud environments are not shown until it answers — this is a connection
-            problem, not a statement that they are gone.
+            <span className="font-medium text-foreground">
+              Couldn&apos;t load this project&apos;s environments.
+            </span>{" "}
+            They haven&apos;t gone anywhere — try again in a moment.
           </p>
           {detail && <p className="font-mono text-2xs">{detail}</p>}
         </Strip>

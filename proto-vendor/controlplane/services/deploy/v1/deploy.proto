@@ -34,6 +34,25 @@ option go_package = "github.com/reliant-labs/control-plane/gen/services/deploy/v
 // timestamps appear on RESPONSES only — there is no request message in this
 // file with a field for any of them, so "read-only" is a property of the
 // schema rather than a rule a handler has to remember.
+//
+// TWO MESSAGES ARE EXCEPTIONS TO THAT RULE, AND ONLY TWO:
+// FinishDeployApplyRequest and ReportLocalSessionRequest. Both carry OBSERVED
+// state, deliberately.
+//
+// They are exceptions because for a self-managed or local environment the
+// client is the only observer there is. The platform places nothing on the
+// tenant's own cluster and nothing on a developer's laptop, so there is no
+// server-side observation to prefer — the alternative to accepting a report is
+// having no record of the deploy at all. What keeps the rule meaningful is the
+// boundary around those two: everything they carry is labelled as a REPORT in
+// the schema (DeployApplyOutcome.reported_by), rendered as one in the UI
+// ("reported by forge · alice"), and never feeds billing, which reads the live
+// cluster or nothing. A report is evidence about a deploy; it is never
+// permission and it is never money.
+//
+// Identity is still never reported. `reported_by`, `created_by`, `applied_by`
+// and `approved_by` are set by the server from the caller's credential on
+// every one of these paths, including the two exceptions.
 service DeployService {
   // --- Tenant ---------------------------------------------------------
 
@@ -347,6 +366,167 @@ service DeployService {
   rpc ListUsage(ListDeployUsageRequest) returns (ListDeployUsageResponse) {
     option (forge.v1.method) = {auth_required: true};
   }
+
+  // --- Bundles, applies and the Live view -----------------------------
+  //
+  // The source-of-truth half: what an environment should contain, what was
+  // actually applied to it, and what is there now. These exist because the
+  // platform does not observe a self-managed cluster or a developer's laptop,
+  // so for those environments the only record is the one written at the
+  // moments that matter.
+
+  // RecordBundle records one rendered deploy artifact against an environment.
+  //
+  // THE REQUEST CARRIES THE BUNDLE'S OWN BYTES, NEVER A DESCRIPTION OF THEM.
+  // The server re-derives the digest from the manifest, checks the manifest's
+  // config digest against the config blob, and decodes that blob strictly as
+  // forge's bundle document — then takes the shape, the provenance, the config
+  // digest and the release FROM THE VERIFIED DOCUMENT. So a client cannot
+  // record a shape that disagrees with the artifact it points at, which is the
+  // same reasoning PublishDeploymentConfig's emptiness follows: a field a
+  // caller could populate independently is a field that will eventually
+  // disagree with the thing it describes.
+  //
+  // IT RECORDS. IT AUTHORIZES NOTHING. A bundle that policy would refuse is
+  // still recorded here and refused at apply. Separating the two means the
+  // ledger holds what was built even when it was never allowed to ship, which
+  // is exactly the history an incident review wants.
+  //
+  // Idempotent on (environment, digest): the render is reproducible, so a
+  // re-run of an unchanged project records the same bundle and reports
+  // created=false.
+  rpc RecordBundle(RecordDeployBundleRequest) returns (RecordDeployBundleResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotency_key: true
+    };
+  }
+
+  rpc GetBundle(GetDeployBundleRequest) returns (GetDeployBundleResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+
+  // BeginApply opens the record of an attempt to make an environment match a
+  // bundle, and is where every pre-deploy check happens.
+  //
+  // Under the environment's row lock, in order: the compare-and-set (as
+  // Promote), then the plan digest and stop-class acknowledgement, then the
+  // apply-in-flight refusal. The order is the point — a stale CAS should not
+  // be reported as an unacknowledged finding, and an in-flight apply should
+  // not be reported as a stale plan.
+  //
+  // Refused on a LOCAL environment and allowed on every other kind. On a
+  // hosted environment this is how a DECLARATION deploy gets recorded: a spec
+  // change moves no release, so without this row nothing would say who
+  // initiated it. The EnsureDeployment calls that follow carry the id.
+  rpc BeginApply(BeginDeployApplyRequest) returns (BeginDeployApplyResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+
+  // FinishApply closes an apply with the outcome its client observed.
+  //
+  // ONE OF THE TWO REPORTED-STATE EXCEPTIONS — see the service header. The
+  // outcome is written exactly once: the same outcome again returns
+  // created=false, so a client that retries after a dropped response
+  // converges, while a DIFFERENT outcome for the same apply is AlreadyExists
+  // rather than an overwrite. An apply that can be re-decided is an apply
+  // whose record proves nothing.
+  rpc FinishApply(FinishDeployApplyRequest) returns (FinishDeployApplyResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotency_key: true
+    };
+  }
+
+  // ListApplies returns an environment's applies, newest first, keyset-paged
+  // for ListPromotions' reason: rows arrive while a reader pages, so an offset
+  // would skip or repeat one.
+  rpc ListApplies(ListDeployAppliesRequest) returns (ListDeployAppliesResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+
+  // GetLiveView returns every environment of one forge project with its
+  // declaration, promotion, release, bundle, latest apply and sessions — the
+  // whole Live screen in ONE round trip.
+  //
+  // Folded for GetTenant's reason: the page cannot render until it has all of
+  // it, and N environments × six reads is both a slow page and a page assembled
+  // from six different instants. An environment list that comes back empty is
+  // an empty list, never an error: a project nobody has deployed yet is a
+  // normal state, not a failure.
+  rpc GetLiveView(GetDeployLiveViewRequest) returns (GetDeployLiveViewResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+
+  // PlanDeploy computes what deploying a bundle WOULD do, and writes nothing.
+  //
+  // IT IS A SEPARATE READ-ONLY RPC RATHER THAN A dry_run FLAG ON Promote, and
+  // that is the whole design decision. A boolean that makes a mutating call
+  // not mutate is the shape where one wrong default deploys production; a read
+  // RPC cannot have that failure mode, because there is no code path in it
+  // that writes. It is safe to call repeatedly, from a UI, from a pre-commit
+  // hook, from anywhere.
+  //
+  // The plan it returns carries a digest, and Promote and BeginApply RECOMPUTE
+  // the plan rather than trusting the one the caller approved. That is what
+  // makes the digest a guarantee instead of a claim.
+  rpc PlanDeploy(PlanDeployRequest) returns (PlanDeployResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+
+  // ReportLocalSession upserts one `forge env up` worktree's presence.
+  //
+  // THE SECOND REPORTED-STATE EXCEPTION — see the service header. LOCAL
+  // environments only, enforced by the database rather than by this handler.
+  //
+  // It must NEVER block `forge env up`. A developer whose network is down, or
+  // whose token has expired, keeps working — the session record is a courtesy
+  // to their team's Live view, and a local dev loop that depends on a control
+  // plane being reachable is a worse product than one with a gap in a
+  // dashboard.
+  rpc ReportLocalSession(ReportLocalSessionRequest) returns (ReportLocalSessionResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+
+  // ImportLedger loads a project's existing file-based deploy history into the
+  // hosted ledger, in one transaction.
+  //
+  // HISTORY IS IMPORTED AS-IS AND NEVER RE-JUDGED. Provenance comes across
+  // verbatim, including the uncomfortable parts — a release cut dirty from a
+  // laptop is imported saying so. Re-evaluating old records against today's
+  // policy would produce a ledger that disagrees with what actually happened,
+  // which is the one thing a ledger may not do.
+  //
+  // Identity still comes from the token: every imported promotion is
+  // attributed to the importing caller, and the historical actor name from the
+  // file is kept beside it as provenance only. There is deliberately no
+  // user-mapping option — mapping a username onto a control-plane identity is
+  // a guess, and it would put an unverifiable attribution into the audit trail
+  // permanently.
+  //
+  // Idempotent on each item's imported_from, so a failed import is re-run
+  // rather than repaired. It refuses a PERSISTENT or PREVIEW environment,
+  // whose history was always hosted, and any environment that already holds a
+  // non-imported promotion, because the two orderings cannot be reconciled —
+  // the remedy there is to import first.
+  rpc ImportLedger(ImportLedgerRequest) returns (ImportLedgerResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotency_key: true
+    };
+  }
+
+  // GetDrift reports whether an environment's live objects still match the
+  // bundle that was applied to it.
+  //
+  // Distinct from GetStatus's drift, which compares a deployment's observed
+  // image against its declared one. This compares whole objects against the
+  // applied render, so it catches the case that one cannot: an object a human
+  // edited. The next apply reverts such an edit silently, which is why it has
+  // to be visible BEFORE the deploy rather than discovered after.
+  rpc GetDrift(GetDeployDriftRequest) returns (GetDeployDriftResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
 }
 
 // === Tenant ===
@@ -452,6 +632,11 @@ message EnsureDeployEnvironmentResponse {
   // True when this call created the environment, false when it already
   // existed. The call succeeds either way.
   bool created = 2;
+
+  // Tag 3 is `protection_held`: the server kept the stored protection because
+  // the declaration did not qualify to loosen it, so forge can print why.
+  // Deferred to #516 with protection itself.
+  reserved 3; // protection_held — #516
 }
 
 // === Deployments ===
@@ -551,6 +736,15 @@ message EnsureDeploymentRequest {
   // Deployment.applied_promotion_id. Empty when the client pinned from
   // nothing. A promotion belonging to another environment is refused.
   string promotion_id = 6;
+
+  // The apply this call is part of. The server reads the apply's bundle and
+  // records it as Deployment.applied_bundle_id, which is how a converged row
+  // keeps saying where its CONFIG came from after the converger has moved its
+  // images — see Deployment.applied_bundle_id.
+  //
+  // Empty is admitted: there are no protected environments yet, and refusing
+  // it before there are would break every existing caller to enforce nothing.
+  string apply_id = 7;
 }
 
 message EnsureDeploymentResponse {
@@ -673,6 +867,37 @@ message PromoteReleaseRequest {
 
   // The CI run driving this promote.
   DeployRun run = 11;
+
+  // Tag 12 is `acknowledge_regression`, which belongs to the source policy
+  // deferred to #516. Reserved so the two O-13 fields below keep their
+  // numbers when it lands.
+  reserved 12; // acknowledge_regression — #516
+
+  // The plan digest the caller approved.
+  //
+  // THE CAS, EXTENDED FROM THE POINTER TO THE PLAN. expected_current already
+  // catches "someone else promoted while I was deciding"; this catches "Live
+  // changed in a way that makes my plan wrong" — a new bundle applied, or
+  // drift observed. The server recomputes the plan under the row lock and
+  // refuses a mismatch with reason `plan_stale`, carrying the fresh plan so
+  // the caller can show what moved.
+  //
+  // REQUIRED on an environment whose promotions the converger applies,
+  // because for those the promotion row IS the deploy and there is no later
+  // apply at which to check. Optional elsewhere, and recorded when present.
+  //
+  // The version is resolved inside the TARGET environment's project, so there
+  // is no project field here — a promote names an environment, and the
+  // environment names its project.
+  string plan_digest = 13;
+
+  // The stop-class finding codes being accepted, by code.
+  //
+  // Deliberately not a boolean. A blanket "yes" is the flag that ends up
+  // hard-coded in a CI workflow, and the moment it is, it pre-approves every
+  // future destructive change to that environment. A finding code cannot be
+  // pre-approved, because it is not known until the plan is computed.
+  repeated string acknowledged_findings = 14;
 }
 
 message PromoteReleaseResponse {
@@ -817,6 +1042,20 @@ message CutReleaseRequest {
 
   // The CI run that cut this release.
   DeployRun run = 6;
+
+  // Full source provenance, superseding the three git_* fields above. The
+  // server fills those from this when they are unset, so a caller sends one
+  // and both old and new readers are satisfied.
+  DeploySourceProvenance provenance = 7;
+
+  // The forge project this version belongs to.
+  //
+  // Required for a release to be addressable alongside another project's
+  // release of the same version in the same org — see DeployRelease.project.
+  // EMPTY IS LEGACY: a caller that does not send it cuts into the
+  // pre-project namespace, which is where every release cut before this field
+  // existed lives.
+  string project = 8;
 }
 
 message CutReleaseResponse {
@@ -840,6 +1079,9 @@ message ListDeployReleasesRequest {
   // Only releases that have been promoted to this environment at some point.
   optional string promoted_to_environment_id = 3;
   optional int32 limit = 4;
+  // Exact match on the release's forge project. Unset lists every project's
+  // releases; set to "" lists only the pre-project ones.
+  optional string project = 5;
 }
 
 message ListDeployReleasesResponse {
@@ -851,6 +1093,12 @@ message GetDeployReleaseRequest {
   // is what a human has in hand during an incident. The id is on the
   // response for anything that needs to round-trip it.
   string version = 1;
+
+  // Which project's release, since a version is unique only within one — see
+  // DeployRelease.project. A version not found in this project falls back to
+  // the pre-project namespace ("") rather than 404ing, so a project that has
+  // not re-cut anything since the field existed still resolves its history.
+  string project = 2;
 }
 
 message GetDeployReleaseResponse {
@@ -960,4 +1208,349 @@ message ListDeployUsageResponse {
   // total without re-summing integers it may have narrowed to floats on the
   // way in.
   int64 total_cost_usd_nanos = 2;
+}
+
+// === Bundles ===
+
+// RecordDeployBundleRequest carries the ARTIFACT, not a description of it.
+//
+// `manifest` and `config` are the bundle's actual bytes. The server derives
+// the digest from the manifest, checks the manifest's config digest against
+// the config blob, and reads the shape, provenance, config digest and release
+// out of the decoded document — so there is no field here in which a caller
+// could state a shape that differs from the bytes. See RecordBundle.
+message RecordDeployBundleRequest {
+  string environment_id = 1;
+
+  // The OCI repository the artifact was pushed to.
+  //
+  // Checked, not trusted: it must be inside the tenant's own registry subtree
+  // or the environment's declared BYO registry, and when it is the platform's
+  // own registry the server HEADs the digest to confirm the bytes are really
+  // there. A recorded bundle pointing at an absent or foreign artifact is a
+  // ledger row that cannot be verified later, which is worse than a refusal
+  // now.
+  string repository = 2;
+
+  // The OCI manifest bytes. Its sha256 IS the bundle's digest, derived here
+  // rather than accepted from the caller.
+  bytes manifest = 3;
+  // The config blob the manifest points at — forge's bundle document, decoded
+  // STRICTLY. Both blobs are capped at 1 MiB: a bundle is a render of a
+  // project's config, and anything larger is a mistake or an attack rather
+  // than a legitimate deploy.
+  bytes config = 4;
+  // The CI run that produced this render.
+  DeployRun run = 5;
+}
+
+message RecordDeployBundleResponse {
+  DeployBundle bundle = 1;
+  // False when (environment, digest) already held this bundle. The call still
+  // succeeds — the render is reproducible, so a re-run of an unchanged project
+  // has achieved what it asked for.
+  bool created = 2;
+}
+
+// Address a bundle by id, or by (environment_id, digest) — which is the pair a
+// client holds after a render, before it has ever seen the row.
+message GetDeployBundleRequest {
+  string bundle_id = 1;
+  string environment_id = 2;
+  string digest = 3;
+}
+
+message GetDeployBundleResponse {
+  DeployBundle bundle = 1;
+}
+
+// === Applies ===
+
+message BeginDeployApplyRequest {
+  string environment_id = 1;
+  string bundle_id = 2;
+  // The promotion this apply realizes. Empty for a declaration deploy, which
+  // changes config without moving a release.
+  string promotion_id = 3;
+
+  // The caller's view of the environment's current promotion — the same
+  // compare-and-set PromoteReleaseRequest documents, for the same reason.
+  // Setting neither means no CAS.
+  string expected_current_promotion_id = 4;
+  // "I saw NO promotion", which an empty id cannot express distinctly from
+  // "no expectation".
+  bool expected_unbound = 5;
+
+  // Proceed even though another apply to this environment has not finished.
+  // Recorded as DeployApply.superseded_in_flight.
+  bool supersede_in_flight = 6;
+
+  DeployRun run = 7;
+
+  // The approved plan, and the stop-class codes being accepted. Identical in
+  // meaning to PromoteReleaseRequest.plan_digest / acknowledged_findings, and
+  // checked by the same recompute under the same row lock — so a deploy
+  // cannot escape the check by taking the apply path instead of the promote
+  // path.
+  string plan_digest = 8;
+  repeated string acknowledged_findings = 9;
+
+  // How long this apply stays in flight before it is considered abandoned.
+  // Zero means the server's default.
+  //
+  // It exists because a client that crashes mid-apply reports nothing, ever.
+  // Without a deadline that apply's row would block every later apply to the
+  // environment indefinitely, and the only remedy would be a staff write.
+  int32 deadline_seconds = 10;
+}
+
+message BeginDeployApplyResponse {
+  DeployApply apply = 1;
+}
+
+// FinishDeployApplyRequest reports how an apply ended.
+//
+// ONE OF THE TWO MESSAGES IN THIS FILE THAT CARRIES OBSERVED STATE — see the
+// service header for why, and for the boundary that keeps it from mattering
+// anywhere beyond this record. `reported_by` is NOT here: the server sets it
+// from the credential.
+message FinishDeployApplyRequest {
+  string apply_id = 1;
+  // succeeded | failed | timed_out.
+  string status = 2;
+  string summary = 3;
+  // Per-workload detail as the client observed it. A Struct because this is
+  // forge's own apply-report shape; see DeployApplyOutcome.workloads.
+  google.protobuf.Struct workloads = 4;
+  // When the apply actually ended, which is not when this call arrives — a
+  // client that lost its network reports minutes later, and the outcome's
+  // timestamp has to be the deploy's, not the report's.
+  google.protobuf.Timestamp finished_at = 5;
+
+  // The hash of every object as it ACTUALLY LANDED on the cluster.
+  //
+  // This is the baseline drift is later measured from, and it has to come
+  // from after the apply rather than from the bundle: an admission webhook or
+  // a defaulting controller mutates objects on the way in, so measuring drift
+  // against what forge intended would report every such object as drifted
+  // from the first second. See DeployObjectHash.
+  repeated DeployObjectHash observed_objects = 6;
+}
+
+message FinishDeployApplyResponse {
+  DeployApply apply = 1;
+  // False when this exact outcome was already recorded. A DIFFERENT outcome
+  // for the same apply is AlreadyExists, not an overwrite — see FinishApply.
+  bool created = 2;
+}
+
+message ListDeployAppliesRequest {
+  string environment_id = 1;
+  int32 limit = 2;
+  // Keyset cursor: applies strictly older than this one. Keyset rather than
+  // offset for ListDeployPromotionsRequest.before_promotion_id's reason.
+  string before_apply_id = 3;
+}
+
+message ListDeployAppliesResponse {
+  // Newest first.
+  repeated DeployApply applies = 1;
+}
+
+// === The Live view ===
+
+message GetDeployLiveViewRequest {
+  // The forge project (forge.yaml `name`). Live is per project, because that
+  // is the unit a human thinks in: "my project's environments", not "every
+  // environment my org has".
+  string project = 1;
+  // Include soft-deleted environments. Off by default — a retired environment
+  // has history worth keeping and queryable, and no place on a Live screen.
+  bool include_deleted = 2;
+}
+
+message GetDeployLiveViewResponse {
+  // Empty when the project has no environments. NOT an error: a project
+  // nobody has deployed yet is a normal state.
+  repeated DeployLiveEnvironment environments = 1;
+}
+
+// === Plans ===
+
+message PlanDeployRequest {
+  string environment_id = 1;
+  // The candidate bundle — what would be applied.
+  string bundle_id = 2;
+  // The release whose pins this deploy would carry, when the plan covers a
+  // promotion as well as a config change. Empty plans the config alone.
+  string release_version = 3;
+}
+
+message PlanDeployResponse {
+  DeployPlan plan = 1;
+}
+
+// === Local sessions ===
+
+// ReportLocalSessionRequest reports one `forge env up` worktree's presence.
+//
+// THE SECOND OBSERVED-STATE EXCEPTION — see the service header.
+message ReportLocalSessionRequest {
+  // Client-chosen and stable for the life of the session, so a re-report
+  // updates rather than duplicating.
+  string session_id = 1;
+  // The environment is addressed by (project, environment) rather than by id,
+  // because a developer running `forge env up` has their project's config in
+  // hand and no reason to have resolved an id.
+  string project = 2;
+  string environment = 3;
+  // Which checkout on which machine. The real upsert key — see
+  // DeployWorktree for why presence is per worktree and not per user.
+  DeployWorktree worktree = 4;
+  DeploySourceProvenance provenance = 5;
+  // The locally rendered bundle, by digest: a local render is never recorded
+  // as a bundle row, so there is no id to name.
+  string bundle_digest = 6;
+  // running | stopped. `stopped` stamps stopped_at, which is what separates a
+  // clean exit from a session that merely went quiet.
+  string state = 7;
+}
+
+message ReportLocalSessionResponse {
+  DeployLocalSession session = 1;
+}
+
+// === Ledger import ===
+
+// ImportLedgerRequest carries a project's file-based deploy history.
+//
+// Every item is a TYPED message rather than a blob. A loose JSON import would
+// make the file format the contract and the server a parser for whatever shape
+// a given forge version happened to write; typed items mean a mismatch is an
+// InvalidArgument at the boundary instead of a half-imported ledger.
+message ImportLedgerRequest {
+  string project = 1;
+  repeated LedgerImportRelease releases = 2;
+  repeated LedgerImportEnvironment environments = 3;
+  repeated LedgerImportPromotion promotions = 4;
+  repeated LedgerImportBundle bundles = 5;
+  repeated LedgerImportApply applies = 6;
+
+  // Where this history was read from, e.g. "git:origin/main". Recorded once
+  // per import so the operation itself is auditable, not just its rows.
+  string source = 7;
+
+  // Return the plan and write nothing. The import is one transaction and is
+  // idempotent, so a dry run is a convenience rather than a safety net — but
+  // it is the convenience that lets an operator see "39 releases, 16
+  // promotions, 3 environments" before committing to any of it.
+  bool dry_run = 8;
+}
+
+// LedgerImportRelease is one historical release, preserved verbatim.
+message LedgerImportRelease {
+  string version = 1;
+  repeated DeployArtifact artifacts = 2;
+  // From the file's git block. The extended provenance fields are absent on
+  // historical records and stay unset, which reads as "not recorded" rather
+  // than as "clean".
+  DeploySourceProvenance provenance = 3;
+  // The release's original timestamp, set explicitly — an import must not
+  // restamp history with the import's own clock.
+  google.protobuf.Timestamp created_at = 4;
+  // The idempotency key, e.g. "git:.forge/releases/v1.7.12.json@<blob sha>".
+  // Keyed by CONTENTS rather than by filename, so a file whose name disagrees
+  // with the version inside it imports as what it actually is.
+  string imported_from = 5;
+}
+
+// LedgerImportEnvironment is one historical environment.
+message LedgerImportEnvironment {
+  string name = 1;
+  // Historical environments import as SELF_MANAGED: their deploys were driven
+  // by a client against a cluster the platform never observed, which is
+  // exactly what that kind means. A PERSISTENT or PREVIEW environment is
+  // refused — its history was always hosted, so there is nothing to import.
+  DeployEnvironmentKind kind = 2;
+  // Set for a retired environment, whose history is kept and queryable while
+  // it is absent from Live and its name is not reserved.
+  google.protobuf.Timestamp deleted_at = 3;
+  string imported_from = 4;
+}
+
+// LedgerImportPromotion is one historical ledger entry.
+message LedgerImportPromotion {
+  // The environment NAME within the project, since an imported environment's
+  // id is minted by this same transaction.
+  string environment = 1;
+  string release_version = 2;
+  map<string, string> resolved_artifacts = 3;
+  map<string, DeploySource> resolved_sources = 4;
+  // The environment promoted FROM, by name. Empty for a first deploy.
+  string from_environment = 5;
+  repeated DeployGate gates = 6;
+  string note = 7;
+
+  // The actor string the FILE recorded, kept as provenance only.
+  //
+  // It is a label describing what the old record said, never an identity this
+  // system treats as a principal — nothing authenticated it, and it may name
+  // a person who was never a control-plane user. The promotion's actual
+  // approver is the importing caller, set server-side. The UI renders both:
+  // "imported: seanteeling, by <importing identity>".
+  string promoted_by_actor = 8;
+
+  // The original promotion time, set EXPLICITLY. Load-bearing rather than
+  // cosmetic: promotions import in this order, and it is what makes the
+  // reconstructed timeline match the one the files describe.
+  google.protobuf.Timestamp promoted_at = 9;
+
+  string imported_from = 10;
+}
+
+// LedgerImportBundle is one historical bundle. Empty for every project whose
+// history predates bundles, which today is all of them — the field exists so
+// an import from a newer forge is not lossy.
+message LedgerImportBundle {
+  string environment = 1;
+  string release_version = 2;
+  string digest = 3;
+  string reference = 4;
+  string config_digest = 5;
+  google.protobuf.Struct shape = 6;
+  DeploySourceProvenance provenance = 7;
+  google.protobuf.Timestamp created_at = 8;
+  string imported_from = 9;
+}
+
+// LedgerImportApply is one historical apply, with its outcome already known —
+// an imported apply is never in flight.
+message LedgerImportApply {
+  string environment = 1;
+  string bundle_digest = 2;
+  DeployApplyOutcome outcome = 3;
+  google.protobuf.Timestamp created_at = 4;
+  string imported_from = 5;
+}
+
+message ImportLedgerResponse {
+  // Per-kind counts of what was (or would be) written. A Struct because this
+  // is a human-facing summary that grows with the import's own item kinds, and
+  // a typed mirror of those kinds would need editing every time one is added.
+  google.protobuf.Struct counts = 1;
+  // What this import refuses to touch and why, one line each. A conflict is
+  // reported rather than resolved: an environment that already holds a
+  // non-imported promotion has two possible orderings and no way to choose
+  // between them, so the operator decides.
+  repeated string conflicts = 2;
+}
+
+// === Drift ===
+
+message GetDeployDriftRequest {
+  string environment_id = 1;
+}
+
+message GetDeployDriftResponse {
+  DeployDrift drift = 1;
 }

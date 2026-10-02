@@ -39,6 +39,23 @@ service ForgeService {
   // GetEnvStatus returns runtime checks for an environment.
   rpc GetEnvStatus(GetForgeEnvStatusRequest) returns (GetForgeEnvStatusResponse) {}
 
+  // GetEnvShape projects ONE environment's render into the declaration the
+  // control plane records for it — `forge env shape <env> --json`.
+  //
+  // READ-ONLY, and the one daemon call the BOOTSTRAP path needs. An
+  // environment that exists only in the user's KCL has no control-plane row,
+  // so the Live screen cannot show it and its secrets cannot be set before
+  // its first deploy. Preview calls this to learn the env's kind and shape,
+  // and the BROWSER then calls control-plane EnsureEnvironment itself, with
+  // the user's session. From that point the environment is in Live and needs
+  // no daemon again — not for its secrets, not for its provenance.
+  //
+  // The projection is forge's own, identical to the one `forge env build`
+  // records. That identity is what stops a Register from writing a
+  // declaration that disagrees with the next build's, on an env whose kind is
+  // immutable.
+  rpc GetEnvShape(GetForgeEnvShapeRequest) returns (GetForgeEnvShapeResponse) {}
+
   // PlanPromote previews binding an environment to a release. READ-ONLY: it
   // runs `forge env promote <release> --to <env> --plan`, which computes the
   // entire change set and stops before forge's only write. Safe, idempotent,
@@ -256,6 +273,24 @@ message GetForgeEnvStatusResponse {
   // pass/fail/warn/skip/unknown; UNKNOWN means the check could not be
   // measured and is neither a pass nor a fail. Nothing on this path collapses
   // it into either.
+  string report_json = 2;
+}
+
+message GetForgeEnvShapeRequest {
+  string project_id = 1;
+  string env = 2;
+}
+
+message GetForgeEnvShapeResponse {
+  ForgeReportMeta meta = 1;
+
+  // Forge's `env shape --json` document, verbatim:
+  // {project, env, kind, shape, provenance}. The browser reads `kind` and
+  // `shape` out of it and sends them to control-plane EnsureEnvironment, so
+  // nothing on this path re-derives, filters or re-keys any of it.
+  //
+  // `shape.secrets[]` carries NAMES AND PROVIDERS ONLY (F-13). There is no
+  // field here that could hold a secret value.
   string report_json = 2;
 }
 
