@@ -58,6 +58,23 @@ func forgeArgvUnderTest(t *testing.T) map[string][]string {
 
 	deploy := forgeDeployArgs{ProjectPath: "/p", Env: "prod"}
 	argv["deploy plan"] = deploy.planArgs()
+	argv["deploy plan-only"] = deploy.planOnlyArgs()
+	argv["checkouts"] = forgeCheckoutsRequest{ProjectPath: "/p"}.args()
+	argv["checkouts with tree"] = forgeCheckoutsRequest{ProjectPath: "/p", WithTree: true}.args()
+	argv["env diff all"] = forgeEnvDiffRequest{ProjectPath: "/p", All: true}.args()
+	argv["env diff one env"] = forgeEnvDiffRequest{ProjectPath: "/p", Env: "prod"}.args()
+
+	// The acknowledged-codes form of the apply argv parses too. Checked
+	// separately because --acknowledge-destructive is a StringSlice flag,
+	// and a comma-joined value is exactly the shape that would break if
+	// forge ever made it repeatable-only.
+	ackApproval := testApproval()
+	ackApproval.acknowledgedFindings = []string{"stateful_deletion", "lb_identity_change"}
+	ackArgs, err := deploy.applyArgs(ackApproval)
+	if err != nil {
+		t.Fatalf("deploy applyArgs with acknowledged findings: %v", err)
+	}
+	argv["deploy apply with acknowledgements"] = ackArgs
 	// The apply argv exists only behind a validated confirmation, so the
 	// parse check builds it the only way production can: through an approval.
 	// testApproval is the test-only minter — see its comment for why a test

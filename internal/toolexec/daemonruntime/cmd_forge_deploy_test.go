@@ -199,12 +199,25 @@ func mustDeployPayload(t *testing.T, v any) []byte {
 	return b
 }
 
-// startRequest is a fully-authorised start request against the canned plan.
+// testApprovedDigest is the plan digest the canned start requests approve. A
+// fixed value so a test can assert the argv carries THIS digest rather than
+// merely some digest.
+const testApprovedDigest = "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+
+// testApprovedVersion is the auto version a plan-only stage would have cut —
+// `<YYYYMMDD>.<HHMMSS>-<tree12>`, forge's O-15 shape.
+const testApprovedVersion = "20261003.114500-abcdef123456"
+
+// startRequest is a fully-authorised start request against the canned plan:
+// both halves of the target token, plus the content approval (the digest of the
+// plan the operator read, and the release that plan was computed for).
 func startRequest(dir, env, declaredContext, release string) forgeDeployStartRequest {
 	return forgeDeployStartRequest{
 		forgeDeployArgs:         forgeDeployArgs{ProjectPath: dir, Env: env},
 		ExpectedDeclaredContext: declaredContext,
 		ExpectedCurrentRelease:  release,
+		ApproveDigest:           testApprovedDigest,
+		ReleaseVersion:          testApprovedVersion,
 	}
 }
 
@@ -292,7 +305,12 @@ func TestForgeDeployRequestsCarryNoEscapeHatches(t *testing.T) {
 // argv, not the authorisation — and the mutation test below proves the
 // production path cannot.
 func testApproval() forgeDeployApproval {
-	return forgeDeployApproval{declaredContext: "gke_prod", release: "v1.5.15"}
+	return forgeDeployApproval{
+		declaredContext: "gke_prod",
+		release:         "v1.5.15",
+		digest:          "sha256:" + strings.Repeat("ab", 32),
+		releaseVersion:  "20261003.120000-abcdef123456",
+	}
 }
 
 func mustApplyArgs(t *testing.T, args forgeDeployArgs) []string {
@@ -325,22 +343,123 @@ func TestForgeDeployArgvNeverCarriesEscapeHatches(t *testing.T) {
 }
 
 // =============================================================================
-// --yes is reachable ONLY behind a validated confirmation
+// THE DAEMON NEVER PASSES --yes. Approval is by plan digest.
 // =============================================================================
 
-// The apply argv must carry --yes: without it forge's O-13 gate refuses a
-// daemon-driven deploy as plan_unconfirmed (exit 5) after building and pushing.
-// The preview must NOT carry it — a read-only plan has nothing to approve.
-func TestForgeDeployApplyArgvCarriesYes(t *testing.T) {
+// NO ARGV THIS DAEMON BUILDS MAY CARRY --yes, on any path.
+//
+// --yes means "I read the plan" and approves whatever forge computes at the
+// moment that command runs. Under O-15 a versionless deploy builds new images
+// and cuts a NEW auto-version from the checkout, so --yes on a UI's behalf
+// approves a change set nobody has seen. That was the interim this replaced.
+//
+// The guarantee is structural — no code path produces the flag — and this test
+// is the proof, swept over every builder rather than asserted on one, because
+// the failure mode is a NEW path acquiring it quietly.
+func TestForgeDaemonArgvNeverCarriesYes(t *testing.T) {
+	deploy := forgeDeployArgs{ProjectPath: "/p", Env: "prod"}
+	promote := forgePromoteArgs{ProjectPath: "/p", Env: "prod", Release: "v1.2.3"}
+
+	argv := map[string][]string{
+		"deploy preview":   deploy.planArgs(),
+		"deploy plan-only": deploy.planOnlyArgs(),
+		"deploy apply":     mustApplyArgs(t, deploy),
+		"promote plan":     promote.planArgs(),
+		"promote apply":    mustPromoteApplyArgs(t, promote),
+		"checkouts":        forgeCheckoutsRequest{ProjectPath: "/p"}.args(),
+		"env diff":         forgeEnvDiffRequest{ProjectPath: "/p", All: true}.args(),
+	}
+
+	for name, args := range argv {
+		if slices.Contains(args, "--yes") {
+			t.Errorf("%s argv %q carries --yes: the daemon must never tell forge a human "+
+				"approved a plan it has not seen. Approval travels as --approve <digest>", name, args)
+		}
+	}
+}
+
+// The apply argv carries the APPROVAL instead: the digest, the release version
+// stage one cut, and the acknowledged codes when there are any.
+func TestForgeDeployApplyArgvApprovesByDigest(t *testing.T) {
 	args := forgeDeployArgs{ProjectPath: "/p", Env: "prod"}
 
 	apply := mustApplyArgs(t, args)
-	if !slices.Contains(apply, "--yes") {
-		t.Errorf("the apply argv %q must carry --yes: forge's confirmation gate would otherwise "+
-			"refuse it as plan_unconfirmed (exit 5) having already built and pushed", apply)
+	joined := strings.Join(apply, " ")
+
+	if !slices.Contains(apply, "--approve") {
+		t.Errorf("the apply argv %q must carry --approve: it binds the deploy to the plan a "+
+			"human read, and forge refuses a mismatch (exit 3, plan_stale)", apply)
 	}
-	if plan := args.planArgs(); slices.Contains(plan, "--yes") {
-		t.Errorf("the plan argv %q must NOT carry --yes: it is read-only and approves nothing", plan)
+	if !strings.Contains(joined, testApproval().digest) {
+		t.Errorf("the apply argv %q must carry the approved digest verbatim", apply)
+	}
+
+	// THE VERSION IS POSITIONAL AND LOAD-BEARING. Without it the deploy is
+	// versionless, which under O-15 builds and cuts a SECOND release whose
+	// plan the approved digest could never match.
+	version := testApproval().releaseVersion
+	if !slices.Contains(apply, version) {
+		t.Errorf("the apply argv %q must name the release version the plan was computed for (%s), "+
+			"or it would build and cut a second release", apply, version)
+	}
+	if got, want := apply[:4], []string{"env", "deploy", "prod", version}; !slices.Equal(got, want) {
+		t.Errorf("the release version must be forge's SECOND positional; got %q, want %q", got, want)
+	}
+
+	// The read-only preview approves nothing and must carry no approval.
+	if plan := args.planArgs(); slices.Contains(plan, "--approve") {
+		t.Errorf("the preview argv %q must NOT carry --approve: it is read-only", plan)
+	}
+	if planOnly := args.planOnlyArgs(); slices.Contains(planOnly, "--approve") {
+		t.Errorf("the plan-only argv %q must NOT carry --approve: it PRODUCES the plan to "+
+			"approve, it does not consume one", planOnly)
+	}
+}
+
+// Stop-class findings travel as --acknowledge-destructive, comma-joined, and
+// ONLY when the approval named some.
+func TestForgeDeployApplyArgvCarriesAcknowledgedFindings(t *testing.T) {
+	args := forgeDeployArgs{ProjectPath: "/p", Env: "prod"}
+
+	approval := testApproval()
+	approval.acknowledgedFindings = []string{"stateful_deletion", "lb_identity_change"}
+	apply, err := args.applyArgs(approval)
+	if err != nil {
+		t.Fatalf("applyArgs: %v", err)
+	}
+	if got := strings.Join(apply, " "); !strings.Contains(got,
+		"--acknowledge-destructive stateful_deletion,lb_identity_change") {
+		t.Errorf("the apply argv must name every acknowledged code, comma-joined; got %q", got)
+	}
+
+	// Absent when there is nothing to acknowledge: an empty flag value
+	// would read to forge as a code named "".
+	if plain := mustApplyArgs(t, args); slices.Contains(plain, "--acknowledge-destructive") {
+		t.Errorf("the apply argv %q must omit --acknowledge-destructive when no finding was "+
+			"acknowledged", plain)
+	}
+}
+
+// The approval is unreachable without BOTH halves of the content claim. A
+// target token alone is what the interim had, and it is what this replaced.
+func TestForgeDeployApplyArgvRefusesIncompleteApproval(t *testing.T) {
+	args := forgeDeployArgs{ProjectPath: "/p", Env: "prod"}
+
+	for name, approval := range map[string]forgeDeployApproval{
+		"no digest": {
+			declaredContext: "gke_prod", release: "v1", releaseVersion: "20261003.120000-abc",
+		},
+		"no release version": {
+			declaredContext: "gke_prod", release: "v1", digest: "sha256:abc",
+		},
+		"target token only": {
+			declaredContext: "gke_prod", release: "v1",
+		},
+	} {
+		if argv, err := args.applyArgs(approval); err == nil {
+			t.Errorf("%s: applyArgs minted %q from an incomplete approval; a deploy must name "+
+				"both the plan it approves and the release that plan was computed for", name, argv)
+		}
 	}
 }
 
@@ -506,7 +625,12 @@ func TestForgeDeployStatus_WaitBudgetExpiredIsUnknown(t *testing.T) {
 // The real deploy invocation carries --yes end to end. Pinned at the seam the
 // daemon actually hands forge, not at the argv builder, so a call site that
 // bypassed the builder could not satisfy it.
-func TestForgeDeployStart_InvokesForgeWithYes(t *testing.T) {
+// END TO END THROUGH THE HANDLER: the deploy forge is actually invoked with
+// approves the plan by digest and never says --yes.
+//
+// Distinct from the argv-builder tests above: those prove the builder cannot
+// produce --yes, this proves the HANDLER does not route around the builder.
+func TestForgeDeployStart_InvokesForgeWithTheApprovedDigest(t *testing.T) {
 	dir := forgeProject(t)
 	plan := deployPlanJSON("prod", "dry_run", "gke_prod", "gke_prod", "allow", "v1.5.15")
 	stubForge(t, forgeCommandResult{Stdout: []byte(plan)}, nil)
@@ -521,12 +645,56 @@ func TestForgeDeployStart_InvokesForgeWithYes(t *testing.T) {
 	}
 	waitForDeployJob(t, decodeDeployStart(t, raw).Handle)
 
-	if !slices.Contains(apply.Args, "--yes") {
-		t.Errorf("the apply invocation %q must carry --yes, or forge refuses it as "+
-			"plan_unconfirmed after building and pushing", apply.Args)
+	if slices.Contains(apply.Args, "--yes") {
+		t.Errorf("the apply invocation %q must NOT carry --yes: the daemon never tells forge a "+
+			"human approved a plan it has not seen", apply.Args)
+	}
+	if !slices.Contains(apply.Args, "--approve") ||
+		!slices.Contains(apply.Args, testApprovedDigest) {
+		t.Errorf("the apply invocation %q must approve the plan by digest (%s)",
+			apply.Args, testApprovedDigest)
+	}
+	// The version stage one cut, positionally — without it forge would
+	// build and cut a second release whose plan the digest cannot match.
+	if !slices.Contains(apply.Args, testApprovedVersion) {
+		t.Errorf("the apply invocation %q must name the approved release version %s",
+			apply.Args, testApprovedVersion)
 	}
 	if slices.Contains(apply.Args, "--dry-run") {
 		t.Errorf("the apply invocation %q must not carry --dry-run", apply.Args)
+	}
+}
+
+// A start with no approved digest is refused BEFORE any forge process runs.
+// The target token alone is what the interim accepted, and it is not enough.
+func TestForgeDeployStart_RefusesAStartWithNoApprovedPlan(t *testing.T) {
+	dir := forgeProject(t)
+	call := stubForge(t, forgeCommandResult{
+		Stdout: []byte(deployPlanJSON("prod", "dry_run", "gke_prod", "gke_prod", "allow", "v1.5.15")),
+	}, nil)
+
+	for name, req := range map[string]forgeDeployStartRequest{
+		"no digest": {
+			forgeDeployArgs:         forgeDeployArgs{ProjectPath: dir, Env: "prod"},
+			ExpectedDeclaredContext: "gke_prod",
+			ExpectedCurrentRelease:  "v1.5.15",
+			ReleaseVersion:          testApprovedVersion,
+		},
+		"no release version": {
+			forgeDeployArgs:         forgeDeployArgs{ProjectPath: dir, Env: "prod"},
+			ExpectedDeclaredContext: "gke_prod",
+			ExpectedCurrentRelease:  "v1.5.15",
+			ApproveDigest:           testApprovedDigest,
+		},
+	} {
+		if _, err := handleForgeDeployStart(context.Background(), mustDeployPayload(t, req)); err == nil {
+			t.Errorf("%s: deploy_start accepted a request with no complete content approval", name)
+		}
+	}
+
+	if call.Count != 0 {
+		t.Errorf("an unauthorised start ran %d forge processes; it must be refused before forge "+
+			"is invoked at all, since a plan-only run builds and pushes", call.Count)
 	}
 }
 
