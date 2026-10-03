@@ -33,16 +33,28 @@
  * row. That write is not a daemon call, which is why registering works the
  * moment Preview can render once and then never needs the daemon again.
  *
- * R3 grows this tab into the full what-if surface: a checkout picker and a
- * diff against Live. Until then it holds the daemon surfaces that already
- * exist, including the Deploy and Promote dialogs unchanged.
+ * ── THE WHAT-IF SURFACE ─────────────────────────────────────────────────────
+ *
+ * The checkout picker at the top is the question this tab is built around:
+ * WHICH code. The selection drives the deploy below it, so a preview and the
+ * deploy it authorises are always about the same tree.
+ *
+ * The checkout also travels to the daemon, which honours it only if its own
+ * enumeration of this project's checkouts contains it. The picker is therefore
+ * a convenience, not the guard — a request naming something else is refused
+ * server-side regardless of what this component believes.
  */
 
 import { useState } from "react";
 import { RefreshCw, Rocket, Upload } from "lucide-react";
 
 import { Button } from "@/components/ui/Button";
-import { useForgeAudit, useForgeEnvStatus, useVerifyForgeEnv } from "@/hooks/forge-queries";
+import {
+  useForgeAudit,
+  useForgeCheckouts,
+  useForgeEnvStatus,
+  useVerifyForgeEnv,
+} from "@/hooks/forge-queries";
 import {
   devStackRunsHere,
   type DaemonSide,
@@ -57,6 +69,7 @@ import { ForgeMalformed, ForgeUnsupported, NotForgeProject } from "../ForgeState
 import { PromoteDialog } from "../Promote/PromoteDialog";
 import { DevStackPanel } from "../Status/DevStackPanel";
 import { WorkloadInventory } from "../Environments/WorkloadInventory";
+import { CheckoutPicker } from "./CheckoutPicker";
 import { RegisterEnvPanel } from "./RegisterEnvPanel";
 
 /** The one line Preview shows when the daemon is not answering. */
@@ -88,12 +101,18 @@ export function PreviewSection(props: PreviewSectionProps) {
 
   const [promoteOpen, setPromoteOpen] = useState(false);
   const [deployOpen, setDeployOpen] = useState(false);
+  /**
+   * The checkout every Preview call is about. Empty means the project's main
+   * checkout, which is what the daemon uses when nothing is chosen.
+   */
+  const [checkoutPath, setCheckoutPath] = useState("");
   // Sticky for this mount: see the Register panel's conditional below.
   const [registered, setRegistered] = useState(false);
 
   const daemonOk = daemonState === "ok";
   const envStatus = useForgeEnvStatus(daemonOk ? projectId : null, envName);
   const audit = useForgeAudit(daemonOk ? projectId : null);
+  const checkouts = useForgeCheckouts(daemonOk ? projectId : null);
   const { verify, pendingEnv, lastOutcome } = useVerifyForgeEnv(projectId);
 
   // ── The daemon is not answering: one line, nothing else. ──
@@ -149,6 +168,19 @@ export function PreviewSection(props: PreviewSectionProps) {
 
   return (
     <div className="space-y-8" data-testid="preview-section">
+      {/* ── WHICH CODE this tab is about. Preview answers "what would this do
+          to that environment", so the branch is the first thing it asks, and
+          the selection drives the deploy below it.
+
+          Absent when there is nothing to choose between — a picker with one
+          option is a question with one answer. ── */}
+      <CheckoutPicker
+        report={checkouts.data?.kind === "report" ? checkouts.data.report : null}
+        selected={checkoutPath}
+        onSelect={setCheckoutPath}
+        isLoading={checkouts.isLoading}
+      />
+
       {/* ── Register: the environment is in the code and Reliant has no
           record of it, so Live cannot show it. This is the bootstrap. ──
 
@@ -273,6 +305,7 @@ export function PreviewSection(props: PreviewSectionProps) {
           projectId={projectId}
           env={envName}
           projectName={props.projectName}
+          checkoutPath={checkoutPath}
         />
       )}
     </div>

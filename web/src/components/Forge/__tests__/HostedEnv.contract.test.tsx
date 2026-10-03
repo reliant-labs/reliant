@@ -23,12 +23,13 @@ import userEvent from "@testing-library/user-event";
 
 import { WhereBadge } from "../EnvBadges";
 import { EnvironmentTable } from "../Overview/EnvironmentTable";
-import { DeployConfirmStep } from "../Deploy/DeployConfirmStep";
+import { DeployApproveStep } from "../Deploy/DeployApproveStep";
 import { TargetPanel } from "../Deploy/DeployPlanView";
 import { prodPlan } from "../Deploy/__tests__/fixtures";
 import type { ForgeTopologyEnv } from "@/services/forge/topology";
 import type { ForgeDeployReport } from "@/services/forge/deploy";
 import { deployTokenFor } from "@/services/forge/deploy";
+import type { DeployPlanReport } from "@/services/forge/deployPlan";
 import { whereOf } from "@/services/forge/environments";
 import type { CloudEnvStatus } from "@/services/forge/cloudEnvs";
 import type { LiveEnv } from "@/services/forge/live";
@@ -179,56 +180,88 @@ function hostedPlan(overrides: Partial<ForgeDeployReport> = {}): ForgeDeployRepo
   });
 }
 
-describe("the hosted deploy confirmation", () => {
-  it("names the environment and the release — and none of our own infrastructure", () => {
-    render(<DeployConfirmStep plan={hostedPlan()} onConfirm={vi.fn()} onCancel={vi.fn()} />);
-    const confirm = screen.getByTestId("deploy-confirm");
+/** The hosted twin of the approvable plan a deploy is bound to. */
+function hostedApprovablePlan(): DeployPlanReport {
+  return {
+    env: "cloud",
+    ok: true,
+    exit_code: 0,
+    target: { release: "20261003.114500-abcdef123456" },
+    deploy_plan: {
+      digest: "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+      environment_id: "denv_01HZX",
+      bundle_id: "bundle-9",
+      release_version: "20261003.114500-abcdef123456",
+      findings: [{ code: "image_changed", class: "info", section: "images", subject: "api" }],
+    },
+  };
+}
+
+describe("the hosted deploy approval", () => {
+  it("names the environment — and none of our own infrastructure", () => {
+    render(
+      <DeployApproveStep
+        report={hostedApprovablePlan()}
+        acknowledged={new Set()}
+        onApprove={vi.fn()}
+        onCancel={vi.fn()}
+        env="cloud"
+      />
+    );
+    const approve = screen.getByTestId("deploy-approve");
     // The customer chose neither the control plane's host nor the id we file
     // their environment under, and can act on neither.
-    expect(confirm.textContent).not.toContain("api.reliantlabs.io");
-    expect(confirm.textContent).not.toContain("denv_01HZX");
-    expect(confirm.textContent).not.toMatch(
-      /control plane|cluster|kube|context|manifests|environment id/i
+    expect(approve.textContent).not.toContain("api.reliantlabs.io");
+    expect(approve.textContent).not.toContain("denv_01HZX");
+    expect(approve.textContent).not.toMatch(
+      /control plane|cluster|kube|context|manifests|environment id|digest/i
     );
-    expect(screen.getByTestId("deploy-start").textContent).toBe("Deploy to cloud");
+    expect(screen.getByTestId("deploy-approve-start").textContent).toContain("cloud");
   });
 
   it("makes the button the approval: no typed phrase, no checkbox, one click", async () => {
-    const onConfirm = vi.fn();
+    const onApprove = vi.fn();
     const { container } = render(
-      <DeployConfirmStep plan={hostedPlan()} onConfirm={onConfirm} onCancel={vi.fn()} />
+      <DeployApproveStep
+        report={hostedApprovablePlan()}
+        acknowledged={new Set()}
+        onApprove={onApprove}
+        onCancel={vi.fn()}
+      />
     );
 
     // The friction that was here asked the user to transcribe OUR hostname,
     // which proved only that they could copy a string. The plan is the review.
     expect(container.querySelectorAll("input")).toHaveLength(0);
-    const start = screen.getByTestId("deploy-start");
+    const start = screen.getByTestId("deploy-approve-start");
     expect(start).toBeEnabled();
 
     await userEvent.click(start);
-    expect(onConfirm).toHaveBeenCalledTimes(1);
+    expect(onApprove).toHaveBeenCalledTimes(1);
   });
 
   it("derives a token carrying the endpoint the plan named — what the daemon re-checks", () => {
-    // UNCHANGED BY THE COPY PASS, and this is the test that says so: the user
-    // no longer types the endpoint, and it still binds.
+    // UNCHANGED, and this is the test that says so: the user never types the
+    // endpoint, and it still binds. It authorises the TARGET; the plan digest
+    // authorises what ships.
     const token = deployTokenFor(hostedPlan());
     expect(token?.expectedDeclaredContext).toBe("https://api.reliantlabs.io");
     expect(token?.hosted?.environmentId).toBe("denv_01HZX");
   });
 
-  it("cannot start when a hosted plan names no environment to deploy to", () => {
+  it("offers no deploy when there is no plan to approve, and says so without jargon", () => {
     render(
-      <DeployConfirmStep
-        plan={hostedPlan({ guard: { verdict: "allow" } })}
-        onConfirm={vi.fn()}
+      <DeployApproveStep
+        report={{ env: "cloud" }}
+        acknowledged={new Set()}
+        onApprove={vi.fn()}
         onCancel={vi.fn()}
       />
     );
-    expect(screen.getByTestId("deploy-start")).toBeDisabled();
-    const notice = screen.getByTestId("deploy-no-token").textContent ?? "";
+    expect(screen.queryByTestId("deploy-approve-start")).not.toBeInTheDocument();
+    const notice = screen.getByTestId("deploy-not-approvable").textContent ?? "";
     expect(notice).toMatch(/cannot be deployed/i);
-    expect(notice).not.toMatch(/control plane|cluster/i);
+    expect(notice).not.toMatch(/control plane|cluster|digest/i);
   });
 
   it("shows a hosted target panel that is one plain sentence", () => {

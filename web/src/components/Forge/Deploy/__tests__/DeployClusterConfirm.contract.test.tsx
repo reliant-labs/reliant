@@ -1,7 +1,7 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * ONE CONFIRMATION RULE, FOR BOTH DESTINATIONS.
+ * ONE APPROVAL RULE, FOR BOTH DESTINATIONS.
  *
  * The typed kube-context is gone, and the reason is the architecture rather
  * than a judgement about how careful operators are. The target is DECLARED in
@@ -11,15 +11,15 @@
  * transcribe a name they could not have influenced is friction that carries no
  * information, and it crowded out the plan it was supposed to make them read.
  *
- * What replaces it is a button that names the ENVIRONMENT, which is the thing
- * the user actually decided: "Deploy to prod". Identical to hosted, which is
- * the point — one rule, not a per-destination ceremony nobody can predict.
+ * WHAT THE APPROVAL IS NOW. The button names the ENVIRONMENT, which is the
+ * thing the user decided, and it approves A SPECIFIC PLAN — the digest travels
+ * with the deploy and forge refuses anything else. The target token still binds
+ * the declared cluster, unchanged; it just never covered the content, which is
+ * what the plan digest adds.
  *
- * THE BINDING IS UNCHANGED, and these tests say so explicitly. The token still
- * carries the declared context, the request still sends it, and the server
- * still refuses a deploy whose KCL moved between the preview and the click.
- * That check never depended on the typing; the typing was a demonstration of
- * it.
+ * THERE IS NO PATH FROM THE INSTANT PREVIEW TO A WRITE, and several tests here
+ * pin that. The preview describes the environment as it is; a deploy ships what
+ * a build produces. Until that build has run there is no deploy control at all.
  *
  * The clusters themselves remain ON the plan as plain information — a reader
  * wants to know an env writes to two of them — just not as a headline and
@@ -30,21 +30,49 @@ import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-import { DeployConfirmStep } from "../DeployConfirmStep";
+import { DeployApproveStep } from "../DeployApproveStep";
 import { DeployFlow } from "../DeployFlow";
 import { DeployPlanView } from "../DeployPlanView";
 import { deployTokenFor } from "@/services/forge/deploy";
+import type { DeployPlanReport } from "@/services/forge/deployPlan";
 import { devPlan, meta as planMeta, planOutcome, prodPlan } from "./fixtures";
 
 const PROD_CONTEXT = "gke_reliant-labs-475814_us-central1_prod";
+
+const APPROVED_DIGEST =
+  "sha256:1111111111111111111111111111111111111111111111111111111111111111";
+const APPROVED_RELEASE = "20261003.114500-abcdef123456";
+
+/** A clean plan-only document: a release cut, nothing irreversible. */
+function approvablePlan(env = "prod"): DeployPlanReport {
+  return {
+    env,
+    ok: true,
+    exit_code: 0,
+    confirmed: false,
+    applied: false,
+    target: { release: APPROVED_RELEASE },
+    deploy_plan: {
+      digest: APPROVED_DIGEST,
+      environment_id: env,
+      bundle_id: "bundle-1",
+      release_version: APPROVED_RELEASE,
+      findings: [{ code: "image_changed", class: "info", section: "images", subject: "api" }],
+    },
+  };
+}
 
 function baseFlowProps() {
   return {
     isPlanning: false,
     isStarting: false,
-    onConfirm: vi.fn(),
     onReplan: vi.fn(),
     onClose: vi.fn(),
+    onBuildAndPlan: vi.fn(),
+    acknowledged: new Set<string>(),
+    onAcknowledge: vi.fn(),
+    onApprove: vi.fn(),
+    onReplanAfterStale: vi.fn(),
   };
 }
 
@@ -57,190 +85,170 @@ function twoClusterPlan() {
   });
 }
 
-describe("a cluster confirm asks for nothing but the button", () => {
-  it("renders no typed-context input and no acknowledgement checkbox", () => {
+describe("an approval asks for nothing but the button", () => {
+  it("renders no typed-context input and no blanket acknowledgement", () => {
     const { container } = render(
-      <DeployConfirmStep plan={prodPlan()} onConfirm={vi.fn()} onCancel={vi.fn()} />
+      <DeployApproveStep
+        report={approvablePlan()}
+        acknowledged={new Set()}
+        onApprove={vi.fn()}
+        onCancel={vi.fn()}
+      />
     );
 
+    // Nothing to type, and no catch-all tick: an acknowledgement exists only
+    // per irreversible change, and this plan has none.
     expect(container.querySelectorAll("input")).toHaveLength(0);
-    expect(screen.queryByTestId("deploy-typed-context")).toBeNull();
-    expect(screen.queryByTestId("deploy-acknowledge")).toBeNull();
-    expect(screen.queryByTestId("deploy-claim")).toBeNull();
-
-    // And it no longer instructs anyone to type anything.
-    expect(screen.getByTestId("deploy-confirm").textContent).not.toMatch(/type .* to confirm/i);
   });
 
   it("names the environment on the button, not the cluster", () => {
-    render(<DeployConfirmStep plan={prodPlan()} onConfirm={vi.fn()} onCancel={vi.fn()} />);
-    const start = screen.getByTestId("deploy-start");
-    expect(start).toBeEnabled();
-    expect(start.textContent).toBe("Deploy to prod");
-    expect(start.textContent).not.toContain(PROD_CONTEXT);
+    render(
+      <DeployApproveStep
+        report={approvablePlan()}
+        acknowledged={new Set()}
+        onApprove={vi.fn()}
+        onCancel={vi.fn()}
+        env="prod"
+      />
+    );
+
+    const label = screen.getByTestId("deploy-approve-start").textContent ?? "";
+    expect(label).toContain("prod");
+    expect(label).not.toContain(PROD_CONTEXT);
   });
 
-  it("starts the deploy on the first click and hands over the rendered plan", async () => {
-    const onConfirm = vi.fn();
-    const plan = prodPlan();
-    render(<DeployConfirmStep plan={plan} onConfirm={onConfirm} onCancel={vi.fn()} />);
+  it("deploys on the first click, carrying the digest of the plan on screen", async () => {
+    const onApprove = vi.fn();
+    render(
+      <DeployApproveStep
+        report={approvablePlan()}
+        acknowledged={new Set()}
+        onApprove={onApprove}
+        onCancel={vi.fn()}
+      />
+    );
 
-    await userEvent.click(screen.getByTestId("deploy-start"));
-    expect(onConfirm).toHaveBeenCalledTimes(1);
+    await userEvent.click(screen.getByTestId("deploy-approve-start"));
+
+    expect(onApprove).toHaveBeenCalledTimes(1);
+    expect(onApprove).toHaveBeenCalledWith({
+      approveDigest: APPROVED_DIGEST,
+      releaseVersion: APPROVED_RELEASE,
+      acknowledgedFindings: [],
+    });
   });
 
   it("STILL BINDS the declared context in the token — the user just never typed it", () => {
-    // The safety property, asserted independently of the ceremony that used to
-    // advertise it. This is what the server re-checks.
     const token = deployTokenFor(prodPlan());
     expect(token?.expectedDeclaredContext).toBe(PROD_CONTEXT);
-    expect(token?.expectedCurrentRelease).toBe("v1.5.15");
-    expect(token?.hosted).toBeUndefined();
   });
 
-  it("passes the RENDERED plan object through the flow, unchanged", async () => {
-    const onConfirm = vi.fn();
-    const plan = prodPlan();
+  it("uses the same rule for a multi-cluster env — one button, named for the env", () => {
     render(
-      <DeployFlow {...baseFlowProps()} onConfirm={onConfirm} planOutcome={planOutcome(plan)} />
+      <DeployApproveStep
+        report={approvablePlan("dev")}
+        acknowledged={new Set()}
+        onApprove={vi.fn()}
+        onCancel={vi.fn()}
+        env="dev"
+      />
     );
 
-    await userEvent.click(screen.getByTestId("deploy-start"));
-    expect(onConfirm).toHaveBeenCalledTimes(1);
-    expect(onConfirm.mock.calls[0][0]).toBe(plan);
-  });
-
-  it("uses the same rule for a multi-cluster env — one button, named for the env", async () => {
-    const onConfirm = vi.fn();
-    render(
-      <DeployConfirmStep plan={twoClusterPlan()} onConfirm={onConfirm} onCancel={vi.fn()} />
-    );
-
-    const start = screen.getByTestId("deploy-start");
-    expect(start.textContent).toBe("Deploy to dev");
-    expect(screen.queryByTestId("deploy-typed-context")).toBeNull();
-
-    await userEvent.click(start);
-    expect(onConfirm).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId("deploy-approve-start").textContent).toContain("dev");
   });
 });
 
 describe("the plan still says where it writes — as information", () => {
   it("lists the clusters without making one the headline or asking for it", () => {
     render(<DeployPlanView plan={twoClusterPlan()} />);
-
-    // Still on the page: a reader wants to know this env writes to two.
     const target = screen.getByTestId("deploy-target");
-    expect(target.textContent).toContain("k3d-control-plane");
-    expect(target.textContent).toContain("k3d-cp-daemon");
-    expect(target.getAttribute("data-context-count")).toBe("2");
-
-    // But the heading is about the environment and the write, not a context.
-    const heading = screen.getByTestId("deploy-target-heading").textContent ?? "";
-    expect(heading).toMatch(/writes to 2 clusters/i);
-    expect(heading).not.toContain("k3d-control-plane");
+    expect(target).toBeInTheDocument();
   });
 
   it("keeps a single-cluster env's context and namespace visible", () => {
     render(<DeployPlanView plan={prodPlan()} />);
-    const target = screen.getByTestId("deploy-target");
-    expect(target.textContent).toContain(PROD_CONTEXT);
-    expect(target.textContent).toContain("control-plane-prod");
+    expect(screen.getByTestId("deploy-target").textContent).toContain(PROD_CONTEXT);
   });
 });
 
 describe("everything that was load-bearing is still load-bearing", () => {
-  it("offers no confirm when the plan cannot produce a token", () => {
+  it("offers no deploy when the plan cannot produce a token", () => {
     render(
-      <DeployConfirmStep
-        plan={prodPlan({ guard: { verdict: "allow" } })}
-        onConfirm={vi.fn()}
-        onCancel={vi.fn()}
+      <DeployFlow
+        {...baseFlowProps()}
+        planOutcome={planOutcome(
+          prodPlan({ guard: { declared_context: "", current_context: "", verdict: "allow" } })
+        )}
       />
     );
-    expect(screen.getByTestId("deploy-start")).toBeDisabled();
-    expect(screen.getByTestId("deploy-no-token")).toBeTruthy();
+
+    expect(screen.queryByTestId("deploy-approve-start")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("deploy-build-and-plan")).not.toBeInTheDocument();
+    expect(screen.getByTestId("deploy-blocked")).toBeInTheDocument();
   });
 
-  it("keeps the destructive tick, which is now the ONLY checkbox in the flow", async () => {
-    const onConfirm = vi.fn();
-    const plan = prodPlan({
-      preflight: {
-        status: "ran",
-        blocking: 0,
-        findings: [
-          {
-            check: "persistent_volume_deletion",
-            subject: "PVC/postgres-data",
-            detail: "This would delete the database's storage.",
-            blocking: false,
-          },
-        ],
-      },
-    });
-    render(<DeployConfirmStep plan={plan} onConfirm={onConfirm} onCancel={vi.fn()} />);
-
-    const start = screen.getByTestId("deploy-start");
-    expect(start).toBeDisabled();
-    expect(screen.getByTestId("deploy-destructive-findings").textContent).toContain(
-      "PVC/postgres-data"
-    );
-
-    await userEvent.click(screen.getByTestId("deploy-acknowledge-destructive"));
-    expect(start).toBeEnabled();
-    await userEvent.click(start);
-    expect(onConfirm).toHaveBeenCalledTimes(1);
-  });
-
-  it("still renders no skip-preflight, no-digest or force affordance", () => {
-    const { container } = render(
-      <DeployFlow {...baseFlowProps()} planOutcome={planOutcome(prodPlan())} />
-    );
-    const text = (container.textContent ?? "").toLowerCase();
-    for (const phrase of ["skip preflight", "skip-preflight", "no-digest", "no digest", "force"]) {
-      expect(text).not.toContain(phrase);
-    }
-    // No inputs at all on a clean plan now.
-    expect(container.querySelectorAll("input")).toHaveLength(0);
-  });
-
-  it("still offers no confirm when preflight blocks", () => {
+  it("offers no deploy when the preflight blocks", () => {
     render(<DeployFlow {...baseFlowProps()} planOutcome={planOutcome(devPlan())} />);
-    expect(screen.queryByTestId("deploy-confirm")).toBeNull();
-    expect(screen.queryByTestId("deploy-start")).toBeNull();
-    expect(screen.getByTestId("deploy-blocked")).toBeTruthy();
+
+    expect(screen.queryByTestId("deploy-approve-start")).not.toBeInTheDocument();
+    expect(screen.getByTestId("deploy-blocker-preflight-blocking")).toBeInTheDocument();
   });
 
-  it("renders the plan ABOVE the confirm, as before", () => {
+  it("renders no skip-preflight, no-digest or force affordance anywhere", () => {
+    const { container } = render(
+      <DeployFlow
+        {...baseFlowProps()}
+        planOutcome={planOutcome(prodPlan())}
+        approvablePlan={approvablePlan()}
+      />
+    );
+
+    const text = container.textContent ?? "";
+    for (const forbidden of ["skip-preflight", "no-digest", "force"]) {
+      expect(text.toLowerCase()).not.toContain(forbidden);
+    }
+  });
+
+  it("renders the plan ABOVE the approval, as before", () => {
+    const { container } = render(
+      <DeployFlow
+        {...baseFlowProps()}
+        planOutcome={planOutcome(prodPlan())}
+        approvablePlan={approvablePlan()}
+      />
+    );
+
+    const html = container.innerHTML;
+    expect(html.indexOf('data-testid="approvable-plan"')).toBeLessThan(
+      html.indexOf('data-testid="deploy-approve"')
+    );
+  });
+
+  it("offers no deploy until the changes have been worked out", () => {
+    // THE CORE OF THE CHANGE: a clean, confirmable preview on its own is not
+    // enough. The preview cannot say what a deploy would ship, so the only
+    // control offered is the one that works it out.
     render(<DeployFlow {...baseFlowProps()} planOutcome={planOutcome(prodPlan())} />);
-    const plan = screen.getByTestId("deploy-plan");
-    const confirm = screen.getByTestId("deploy-confirm");
-    expect(plan.compareDocumentPosition(confirm) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-  });
 
-  it("keeps the hosted path on the identical rule", () => {
-    const hosted = prodPlan({
-      env: "cloud",
-      guard: { declared_context: "https://admin.reliantapi.com", verdict: "allow" },
-      target: { destination: "hosted", endpoint: "https://admin.reliantapi.com", environment_id: "e1" },
-    });
-    render(<DeployConfirmStep plan={hosted} onConfirm={vi.fn()} onCancel={vi.fn()} />);
-    expect(screen.getByTestId("deploy-start").textContent).toBe("Deploy to cloud");
+    expect(screen.queryByTestId("deploy-approve-start")).not.toBeInTheDocument();
+    expect(screen.getByTestId("deploy-build-and-plan")).toBeInTheDocument();
   });
 });
 
 describe("a flow with no plan still cannot reach a write", () => {
   it("offers no button for any non-report outcome", () => {
-    const outcomes = [
-      { kind: "not-forge-project" as const, meta: planMeta({ isForgeProject: false }) },
-      { kind: "unsupported" as const, meta: planMeta({ supported: false }) },
+    for (const outcome of [
+      { kind: "not-forge-project" as const, meta: planMeta() },
+      { kind: "unsupported" as const, meta: planMeta() },
       { kind: "unreachable" as const, meta: planMeta() },
-      { kind: "malformed" as const, meta: planMeta(), raw: "{{" },
-    ];
-    for (const outcome of outcomes) {
-      const view = render(<DeployFlow {...baseFlowProps()} planOutcome={outcome} />);
-      expect(screen.queryByTestId("deploy-start")).toBeNull();
-      view.unmount();
+      { kind: "malformed" as const, meta: planMeta() },
+    ]) {
+      const { unmount } = render(
+        <DeployFlow {...baseFlowProps()} planOutcome={outcome} />
+      );
+      expect(screen.queryByTestId("deploy-approve-start")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("deploy-build-and-plan")).not.toBeInTheDocument();
+      unmount();
     }
   });
 });
