@@ -390,9 +390,9 @@ func TestGenerateImage_ParamSchemaOffersNoModelChoice(t *testing.T) {
 }
 
 // TestGenerateImage_DefaultModelBindingIsAStrategy pins that the unconfigured
-// model default is a TAG, never a concrete model id. A pinned id keeps being
-// requested after the model is retired; a tag re-resolves against the registry
-// on every call. We have shipped retired image models by pinning.
+// model default is a TAG STRATEGY, never a concrete model id. A pinned id keeps
+// being requested after the model is retired; a tag strategy re-resolves against
+// the registry on every call. We have shipped retired image models by pinning.
 func TestGenerateImage_DefaultModelBindingIsAStrategy(t *testing.T) {
 	t.Parallel()
 
@@ -405,15 +405,15 @@ func TestGenerateImage_DefaultModelBindingIsAStrategy(t *testing.T) {
 
 	selector, ok := bound.Literal.(models.ModelSelector)
 	require.True(t, ok, "the model binding must be a ModelSelector, got %T", bound.Literal)
-	assert.Equal(t, []string{ImageGenTag}, selector.Tags)
+	assert.Equal(t, []string{ImageGenTag, models.TagFlagship}, selector.Tags)
 	assert.Empty(t, selector.ID, "the default must be a tag strategy, never a pinned model id")
 	assert.Empty(t, selector.Providers)
 }
 
 // TestGenerateImage_UnboundModelResolvesByTag is the zero-configuration
 // invariant: with nothing bound by a human, the selector that reaches the
-// driver layer is exactly the tags:[image-gen] request the hardcoded
-// implementation used to make.
+// driver layer is exactly the tags:[image-gen, flagship] request that defaults
+// the image tool to Sunburst without pinning a concrete model id.
 func TestGenerateImage_UnboundModelResolvesByTag(t *testing.T) {
 	repo := newFakeAttachmentRepo()
 	recorder := &recordingResolver{generator: okGenerator()}
@@ -424,7 +424,7 @@ func TestGenerateImage_UnboundModelResolvesByTag(t *testing.T) {
 	require.False(t, resp.IsError, "unexpected error response: %s", resp.Content)
 
 	require.Equal(t, 1, recorder.calls)
-	assert.Equal(t, models.ModelSelector{Tags: []string{ImageGenTag}}, recorder.selector)
+	assert.Equal(t, models.ModelSelector{Tags: []string{ImageGenTag, models.TagFlagship}}, recorder.selector)
 }
 
 // TestGenerateImage_ModelBindingReachesTheDriver is the point of the whole

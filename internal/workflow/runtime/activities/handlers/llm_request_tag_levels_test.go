@@ -81,12 +81,11 @@ func TestResolveLLMCall_AppliesTagThinkingLevel(t *testing.T) {
 			wantThinking: "xhigh",
 		},
 		{
-			// The implementer preset: [moderate] → claude-5-opus at medium,
-			// chosen for implementation speed over 5.5.
-			name:         "moderate tier runs claude-5-opus at medium",
+			// The implementer preset: [moderate] → claude-5.5-sonnet at medium.
+			name:         "moderate tier runs claude-5.5-sonnet at medium",
 			selector:     models.ModelSelector{Tags: []string{models.TagModerate}},
 			providers:    []string{"anthropic"},
-			wantModelID:  "claude-5-opus@anthropic",
+			wantModelID:  "claude-5.5-sonnet@anthropic",
 			wantThinking: "medium",
 		},
 		{
@@ -94,7 +93,7 @@ func TestResolveLLMCall_AppliesTagThinkingLevel(t *testing.T) {
 			selector:      models.ModelSelector{Tags: []string{models.TagModerate}},
 			thinkingLevel: "low",
 			providers:     []string{"anthropic"},
-			wantModelID:   "claude-5-opus@anthropic",
+			wantModelID:   "claude-5.5-sonnet@anthropic",
 			wantThinking:  "low",
 		},
 	}

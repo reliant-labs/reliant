@@ -9,12 +9,10 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/models"
 )
 
-// codexImageModelID is the model the Codex backend actually serves on
-// /images/generations, verified by a live HTTP 200. The platform API
-// (api.openai.com) serves it too, but as a different surface with a different
-// credential — and it additionally serves the gpt-image-2.5 tier, which the
-// Codex backend is not known to. Assuming a surface serves a model produces a
-// config that resolves cleanly and then 404s at call time.
+// codexImageModelID is the base GPT Image 2 model the Codex backend serves on
+// /images/generations, verified by a live HTTP 200. The 2.5 Flare and Sunburst
+// entries have their own assertions in openai_image_models_test.go; this one
+// stays because gpt-image-2 is still a supported fallback/explicit choice.
 const codexImageModelID = "gpt-image-2"
 
 // TestCodexImageModel_IsDeclaredForImageOutput pins the registry contribution:

@@ -71,6 +71,7 @@ var gatewayRoster = []string{
 	"claude-5.5-opus",
 	"claude-5.1-fable",
 	"claude-5-opus",
+	"claude-5.5-sonnet",
 	"claude-4.6-opus",
 	"claude-4.5-opus",
 	"claude-4.6-sonnet",
