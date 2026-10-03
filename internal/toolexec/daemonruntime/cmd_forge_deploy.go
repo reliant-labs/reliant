@@ -295,6 +295,7 @@ func (j *forgeDeployJob) snapshot() forgeDeployStatusResponse {
 		StartedAt:       j.startedAt.UTC().Format(time.RFC3339),
 		Report:          j.report,
 		PlanOnly:        j.planOnly,
+		DeployRefused:   forgeRefusalFromReport(j.report),
 	}
 	if !j.finishedAt.IsZero() {
 		resp.FinishedAt = j.finishedAt.UTC().Format(time.RFC3339)
@@ -882,6 +883,78 @@ type forgeDeployStatusResponse struct {
 	// similar and the consequence of confusing them is approving one while
 	// reading the other.
 	PlanOnly bool `json:"plan_only,omitempty"`
+
+	// DeployRefused is forge's OWN refusal, lifted out of the report when
+	// forge declined the write — plan_stale above all.
+	//
+	// WHY LIFT IT AT ALL, when the report is right there. A refusal is the
+	// one outcome a caller must not miss, and "did forge refuse" is
+	// otherwise a question about a nested field inside a document whose
+	// absence looks identical to a success. Lifting the reason makes the
+	// refusal a thing the caller branches on rather than something it has
+	// to go looking for.
+	//
+	// The REPORT IS STILL CARRIED VERBATIM alongside, and this adds no
+	// verdict of its own: the reason is forge's string, and the recomputed
+	// plan is forge's document. Nothing here decides what a refusal means.
+	DeployRefused *forgeDeployForgeRefusal `json:"deploy_refused,omitempty"`
+}
+
+// forgeDeployForgeRefusal is forge's refusal, as the caller needs it.
+//
+// Distinct from forgeDeployRefusal, which is the DAEMON's pre-flight refusal
+// (the target token did not hold, a deploy was already running). This one is
+// forge declining the write after recomputing the plan, and the two are
+// genuinely different events: the daemon's happens before anything runs, and
+// forge's happens after it has built, pushed and cut.
+type forgeDeployForgeRefusal struct {
+	// Reason is forge's own token: "plan_stale", "plan_unacknowledged",
+	// "promotion_conflict", … Passed through, never translated.
+	Reason string `json:"reason"`
+
+	// CurrentPlan is the plan forge RECOMPUTED and refused against, on a
+	// plan_stale refusal. The whole remedy: render it against the plan that
+	// was approved and show the operator what changed.
+	CurrentPlan json.RawMessage `json:"current_plan,omitempty"`
+
+	// Unacknowledged are the stop-class codes still needing a human
+	// decision, on a plan_unacknowledged refusal.
+	Unacknowledged []string `json:"unacknowledged,omitempty"`
+
+	// Detail is forge's own sentence, when it supplied one.
+	Detail string `json:"detail,omitempty"`
+}
+
+// forgeRefusalFromReport lifts forge's refusal out of its document.
+//
+// Returns nil when there is no refusal, which is the common case. A document
+// that cannot be parsed yields nil too: the report still reaches the caller
+// verbatim, and inventing a refusal from bytes this code could not read would
+// be worse than letting the caller read the report itself.
+func forgeRefusalFromReport(report json.RawMessage) *forgeDeployForgeRefusal {
+	if len(report) == 0 {
+		return nil
+	}
+	var doc struct {
+		Refusal *struct {
+			Reason         string          `json:"reason"`
+			Detail         string          `json:"detail"`
+			CurrentPlan    json.RawMessage `json:"current_plan"`
+			Unacknowledged []string        `json:"unacknowledged"`
+		} `json:"refusal"`
+	}
+	if err := json.Unmarshal(report, &doc); err != nil || doc.Refusal == nil {
+		return nil
+	}
+	if strings.TrimSpace(doc.Refusal.Reason) == "" {
+		return nil
+	}
+	return &forgeDeployForgeRefusal{
+		Reason:         doc.Refusal.Reason,
+		CurrentPlan:    doc.Refusal.CurrentPlan,
+		Unacknowledged: doc.Refusal.Unacknowledged,
+		Detail:         doc.Refusal.Detail,
+	}
 }
 
 // --- forge.deploy_plan -------------------------------------------------------

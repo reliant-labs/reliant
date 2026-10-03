@@ -85,6 +85,42 @@ service ForgeService {
   // which images and which resources before asking them to approve it.
   rpc PlanDeploy(PlanForgeDeployRequest) returns (PlanForgeDeployResponse) {}
 
+  // StartDeployPlan begins the APPROVABLE plan as a background job, and returns
+  // a handle immediately. Poll it with GetDeployStatus, exactly as for a deploy.
+  //
+  // THIS IS NOT PlanDeploy, AND THE DIFFERENCE MATTERS MORE THAN THE NAMES
+  // SUGGEST. PlanDeploy renders the environment and checks the guard; it builds
+  // nothing, answers in seconds, and describes the binding the environment is
+  // running RIGHT NOW. This one builds every image from the chosen checkout,
+  // pushes them, cuts a release and computes the change set — so it is the only
+  // call that can say what a deploy would actually ship, and it takes minutes.
+  //
+  // IT WRITES NO PROMOTION AND APPLIES NOTHING. No cluster is touched and the
+  // environment's binding is unchanged, which is why it needs no approval:
+  // producing the thing to approve is the whole job.
+  //
+  // What comes back is the plan plus its digest. Show the plan, let a human
+  // approve THAT, and send the digest to StartDeploy.
+  rpc StartDeployPlan(StartForgeDeployPlanRequest) returns (StartForgeDeployResponse) {}
+
+  // ListCheckouts lists the checkouts a preview may render: the project's main
+  // checkout plus every git worktree, each with its branch, current commit,
+  // whether it has uncommitted changes, and how far it is from main.
+  //
+  // It is also the ALLOWLIST. Every other call here that accepts a checkout
+  // honours only a value this one returned, re-derived and checked server-side.
+  // So a request cannot point a build at an arbitrary directory, whatever it
+  // sends.
+  rpc ListCheckouts(ListForgeCheckoutsRequest) returns (ListForgeCheckoutsResponse) {}
+
+  // DiffEnv renders a checkout and compares each environment against what is
+  // deployed. READ-ONLY: no cluster is contacted, nothing is built or pushed.
+  //
+  // This is what the per-environment cards show. The document is forge's and is
+  // passed through verbatim — the comparison belongs to forge, and a second
+  // implementation here would be a copy that eventually disagrees with it.
+  rpc DiffEnv(DiffForgeEnvRequest) returns (DiffForgeEnvResponse) {}
+
   // StartDeploy begins a REAL deploy to a LIVE CLUSTER, as a background job,
   // and returns a handle immediately. Poll it with GetDeployStatus.
   //
@@ -507,6 +543,10 @@ message PlanForgeDeployRequest {
 
   // The environment to preview deploying. forge's positional argument.
   string env = 2;
+
+  // The checkout to render — the project's main checkout when empty. Honoured
+  // only if ListCheckouts returned it for this project.
+  string checkout_path = 3;
 }
 
 message PlanForgeDeployResponse {
@@ -526,6 +566,93 @@ message PlanForgeDeployResponse {
   // bytes that were built; `preflight.status`, where any "skipped_*" value means
   // NOTHING WAS CHECKED rather than nothing was wrong; and `rollout.mode` plus
   // `rollout.timeout_seconds`, which is the budget PER RESOURCE, not for the set.
+  string report_json = 2;
+}
+
+// ============================================
+// StartDeployPlan — the approvable plan, asynchronous
+// ============================================
+
+// StartForgeDeployPlanRequest asks for the plan a human will approve.
+//
+// It carries NO approval of any kind, and that is correct rather than an
+// oversight: this call writes no promotion and applies nothing, so there is
+// nothing yet to approve. It does build and push, which is why it is refused
+// while a deploy of the same environment is in flight.
+message StartForgeDeployPlanRequest {
+  string project_id = 1;
+
+  // The environment to plan a deploy of. forge's positional argument.
+  string env = 2;
+
+  // The checkout to build and render from — the project's main checkout when
+  // empty. Honoured only if ListCheckouts returned it for this project.
+  string checkout_path = 3;
+}
+
+// ============================================
+// ListCheckouts — the picker, and the allowlist
+// ============================================
+
+message ListForgeCheckoutsRequest {
+  string project_id = 1;
+
+  // Also compute each checkout's content hash. It costs about half a second per
+  // checkout, so it is opt-in: the picker does not need it, a diff cache does.
+  bool with_tree = 2;
+}
+
+message ListForgeCheckoutsResponse {
+  ForgeReportMeta meta = 1;
+
+  // Forge's checkout document, verbatim. Each entry carries the label to show,
+  // whether it is the remote main or a worktree, its path, branch and current
+  // commit, whether it has uncommitted changes, and how far ahead or behind
+  // main it is.
+  //
+  // Two fields read wrong if skimmed. "main" means the REMOTE main, not a local
+  // branch of that name — a local main that has not been fetched is a different
+  // tree. And the ahead/behind counts are OMITTED rather than zero when the
+  // comparison cannot be made at all: "in step with main" and "could not tell"
+  // are different answers, and showing the second as the first would be a
+  // confident lie about how stale a checkout is.
+  string report_json = 2;
+}
+
+// ============================================
+// DiffEnv — per-environment diff against what is deployed
+// ============================================
+
+message DiffForgeEnvRequest {
+  string project_id = 1;
+
+  // The ONE environment to diff. Exactly one of this and all — forge's own
+  // rule, mirrored here so a malformed request is refused before any work
+  // starts.
+  string env = 2;
+
+  // Diff every environment declared in the checkout, in one document. This is
+  // the form the cards use: one render serves them all, so asking once is
+  // cheaper than asking per environment.
+  bool all = 3;
+
+  // The checkout to render — the project's main checkout when empty. Honoured
+  // only if ListCheckouts returned it for this project.
+  string checkout_path = 4;
+}
+
+message DiffForgeEnvResponse {
+  ForgeReportMeta meta = 1;
+
+  // Forge's diff document, verbatim: per environment, what was added, removed
+  // and changed, with image changes separated from configuration changes, plus
+  // secrets newly needed and any runtime or cluster move.
+  //
+  // READ THE PER-ENVIRONMENT STATUS FIRST, because a failure must never be
+  // mistaken for "nothing changed". An environment whose render failed, or
+  // which has no recorded configuration to compare against, reports that
+  // instead of an empty diff — and an empty diff and an unanswerable one mean
+  // opposite things.
   string report_json = 2;
 }
 
@@ -576,6 +703,45 @@ message StartForgeDeployRequest {
   // environment happens to be bound to now. A request with neither field set is
   // rejected.
   bool expect_unbound = 5;
+
+  // THE PLAN THE HUMAN READ AND APPROVED — its digest, from the plan-only
+  // stage's document (`deploy_plan.digest`). REQUIRED.
+  //
+  // The fields above authorise the TARGET: which cluster, which binding. That
+  // was never enough on its own. A versionless deploy builds new images from
+  // the checkout and cuts a new release, so a request carrying only the target
+  // claim approved "whatever forge computes next" — a change set nobody had
+  // seen. This names the change set instead.
+  //
+  // Forge recomputes the plan under the environment's row lock and refuses a
+  // mismatch rather than deploying it, so a client cannot approve a plan it
+  // fabricated and cannot ship one that changed after it was read.
+  string approve_digest = 6;
+
+  // The stop-class finding CODES the human accepted, one per code.
+  //
+  // By code rather than a blanket "yes, do destructive things", because a code
+  // is not knowable until the plan is computed — so it cannot be pre-approved
+  // in advance. A blanket flag set once would silently cover every future
+  // destructive change to this environment; these cover exactly the findings in
+  // the plan that was read. A stop-class finding with no matching code here is
+  // refused, and nothing is deployed.
+  repeated string acknowledged_findings = 7;
+
+  // The release the plan-only stage cut (`target.release` from its document).
+  // REQUIRED.
+  //
+  // It is deployed by name, which is what makes this deploy ship exactly the
+  // artifacts the approved plan describes. Omitted, the deploy would build and
+  // cut a SECOND release, whose plan the approved digest could never match.
+  string release_version = 8;
+
+  // The checkout to deploy from — the project's main checkout when empty.
+  //
+  // Honoured only if it is one of the checkouts ListCheckouts returned for this
+  // project; the daemon re-derives that list and checks against it. A value
+  // this server cannot authorise is refused rather than used.
+  string checkout_path = 9;
 }
 
 // ForgeDeployRefusalReason is why a deploy was not STARTED. In every case
@@ -605,6 +771,26 @@ enum ForgeDeployRefusalReason {
   // cluster converging toward two different manifest streams. The response
   // carries the running handle so the caller can poll it instead.
   FORGE_DEPLOY_REFUSAL_REASON_ALREADY_RUNNING = 4;
+
+  // THE PLAN CHANGED between the plan-only stage and this approval. Live moved
+  // — another deploy landed, a new bundle was applied, drift appeared — so the
+  // plan forge recomputed is not the one the approval named.
+  //
+  // NOTHING WAS DEPLOYED. The response carries the RECOMPUTED plan in
+  // current_plan_json, because the only correct next step is to show the
+  // operator what changed and ask again. A client must never re-send the same
+  // digest, and must never retry blind: that is precisely the accident
+  // approving by digest exists to prevent.
+  FORGE_DEPLOY_REFUSAL_REASON_PLAN_STALE = 5;
+
+  // The recomputed plan holds a destructive change the request did not accept
+  // by code — storage being deleted, an address being reissued.
+  //
+  // NOTHING WAS DEPLOYED, and nothing moved either: the deploy was declined
+  // pending a decision. unacknowledged names the codes still needing one, and
+  // re-approving with those codes accepted is the legitimate next step. A
+  // general approval does not cover these, by design.
+  FORGE_DEPLOY_REFUSAL_REASON_PLAN_UNACKNOWLEDGED = 6;
 }
 
 // ForgeDeployRefusal is the state the guard found, when it refused.
@@ -645,6 +831,20 @@ message ForgeDeployRefusal {
   // The in-flight deploy's handle, on an already-running refusal. Poll it with
   // GetDeployStatus rather than starting another.
   string running_handle = 12;
+
+  // THE RECOMPUTED PLAN, on a plan-stale refusal: forge's plan document as
+  // JSON, computed against the state that actually exists now.
+  //
+  // Carried because "the plan changed" is only actionable if the operator can
+  // see what it changed TO. Without it the only recovery is to re-plan from
+  // scratch or to retry blind, and the second is the accident this refusal
+  // exists to prevent. Render it beside the plan that was approved and show the
+  // difference.
+  string current_plan_json = 13;
+
+  // The destructive finding codes still needing acceptance, on a
+  // plan-unacknowledged refusal. Each one is a decision only a human can make.
+  repeated string unacknowledged = 14;
 }
 
 message StartForgeDeployResponse {
@@ -724,4 +924,29 @@ message GetForgeDeployStatusResponse {
   // green-deploy-over-a-broken-environment failure that made forge's
   // RolloutPolicy exist.
   string report_json = 8;
+
+  // This job was a PLAN, not a deploy: report_json holds the change set to
+  // approve, and nothing was applied.
+  //
+  // Stated rather than left for a client to infer from the document, because a
+  // plan and a deploy report look similar and the consequence of confusing them
+  // is approving one while reading the other.
+  bool plan_only = 9;
+
+  // FORGE REFUSED THE WRITE, after building and computing the plan. Nothing was
+  // deployed.
+  //
+  // WHY THIS IS A FIELD HERE WHEN StartDeploy MAKES A REFUSAL AN ERROR. The
+  // two are different events. StartDeploy's refusal happens BEFORE anything
+  // runs, so there is no job and no outcome — an error is the honest answer.
+  // This one happens inside a job that really ran, so the poll itself
+  // succeeded and there is a terminal state to report. Failing the poll would
+  // mean a client could not read the outcome of a job it is holding a handle
+  // to.
+  //
+  // It is still a non-success: job_status is FAILED alongside it. On
+  // PLAN_STALE, reason's current_plan_json carries the RECOMPUTED plan, which
+  // is the whole remedy — show what changed and ask again rather than
+  // re-sending the same approval.
+  ForgeDeployRefusal refusal = 10;
 }

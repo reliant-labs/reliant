@@ -1024,24 +1024,31 @@ type forgeDeployStartReply struct {
 	JobStatus string `json:"job_status"`
 	StartedAt string `json:"started_at"`
 
-	Refused *struct {
-		Reason string `json:"reason"`
-		Detail string `json:"detail"`
+	Refused *forgeDeployRefusalReply `json:"deploy_refused"`
+}
 
-		ExpectedDeclaredContext string `json:"expected_declared_context"`
-		ActualDeclaredContext   string `json:"actual_declared_context"`
+// forgeDeployRefusalReply is the daemon's refusal, as it crosses the wire.
+//
+// Named rather than inline so both start paths can hand it to one mapper. An
+// inline struct would force a second copy of the mapping at the second call
+// site, and the second copy is the one that drifts.
+type forgeDeployRefusalReply struct {
+	Reason string `json:"reason"`
+	Detail string `json:"detail"`
 
-		ExpectedCurrentRelease string `json:"expected_current_release"`
-		ExpectedUnbound        bool   `json:"expected_unbound"`
-		ActualCurrentRelease   string `json:"actual_current_release"`
-		ActualBound            bool   `json:"actual_bound"`
+	ExpectedDeclaredContext string `json:"expected_declared_context"`
+	ActualDeclaredContext   string `json:"actual_declared_context"`
 
-		GuardVerdict string `json:"guard_verdict"`
-		GuardReason  string `json:"guard_reason"`
-		GuardFix     string `json:"guard_fix"`
+	ExpectedCurrentRelease string `json:"expected_current_release"`
+	ExpectedUnbound        bool   `json:"expected_unbound"`
+	ActualCurrentRelease   string `json:"actual_current_release"`
+	ActualBound            bool   `json:"actual_bound"`
 
-		RunningHandle string `json:"running_handle"`
-	} `json:"deploy_refused"`
+	GuardVerdict string `json:"guard_verdict"`
+	GuardReason  string `json:"guard_reason"`
+	GuardFix     string `json:"guard_fix"`
+
+	RunningHandle string `json:"running_handle"`
 }
 
 // forgeDeployStatusReply is forge.deploy_status's daemon reply.
@@ -1054,6 +1061,19 @@ type forgeDeployStatusReply struct {
 	JobStatusDetail string `json:"job_status_detail"`
 	StartedAt       string `json:"started_at"`
 	FinishedAt      string `json:"finished_at"`
+
+	// PlanOnly marks a job whose report is a PLAN, not a deploy.
+	PlanOnly bool `json:"plan_only"`
+
+	// Refused is forge's own refusal, lifted out of the report by the
+	// daemon: plan_stale carries the recomputed plan, plan_unacknowledged
+	// the codes still needing a decision.
+	Refused *struct {
+		Reason         string          `json:"reason"`
+		Detail         string          `json:"detail"`
+		CurrentPlan    json.RawMessage `json:"current_plan"`
+		Unacknowledged []string        `json:"unacknowledged"`
+	} `json:"deploy_refused"`
 }
 
 // forgeDeployJobStatus maps the daemon's token onto the enum.
@@ -1099,9 +1119,53 @@ func forgeDeployRefusalReason(token string) reliantv1.ForgeDeployRefusalReason {
 		return reliantv1.ForgeDeployRefusalReason_FORGE_DEPLOY_REFUSAL_REASON_GUARD_REFUSED
 	case "already_running":
 		return reliantv1.ForgeDeployRefusalReason_FORGE_DEPLOY_REFUSAL_REASON_ALREADY_RUNNING
+	// forge's own tokens, for a refusal it raised after recomputing the plan.
+	case "plan_stale":
+		return reliantv1.ForgeDeployRefusalReason_FORGE_DEPLOY_REFUSAL_REASON_PLAN_STALE
+	case "plan_unacknowledged":
+		return reliantv1.ForgeDeployRefusalReason_FORGE_DEPLOY_REFUSAL_REASON_PLAN_UNACKNOWLEDGED
 	default:
 		return reliantv1.ForgeDeployRefusalReason_FORGE_DEPLOY_REFUSAL_REASON_UNSPECIFIED
 	}
+}
+
+// forgeDeployRefusedError turns a daemon refusal into the FailedPrecondition
+// error every client fails closed on, carrying the structured facts as a detail.
+//
+// A REFUSAL IS AN ERROR AND NOT A FIELD. The daemon reports it as data on a
+// successful response; this is where that becomes an error, because a refusal
+// returned as a 200 with a nullable field is safe only if every client
+// remembers to check it — and a client that forgets shows a progress spinner
+// for a deploy that was never started.
+//
+// Shared by StartDeploy and StartDeployPlan: the two refuse for the same
+// reasons (the target token did not hold, a job is already in flight) and a
+// second copy would be the one that fell behind.
+func forgeDeployRefusedError(refused *forgeDeployRefusalReply) *connect.Error {
+	detail := &reliantv1.ForgeDeployRefusal{
+		Reason:                  forgeDeployRefusalReason(refused.Reason),
+		Detail:                  refused.Detail,
+		ExpectedDeclaredContext: refused.ExpectedDeclaredContext,
+		ActualDeclaredContext:   refused.ActualDeclaredContext,
+		ExpectedCurrentRelease:  refused.ExpectedCurrentRelease,
+		ExpectedUnbound:         refused.ExpectedUnbound,
+		ActualCurrentRelease:    refused.ActualCurrentRelease,
+		ActualBound:             refused.ActualBound,
+		GuardVerdict:            refused.GuardVerdict,
+		GuardReason:             refused.GuardReason,
+		GuardFix:                refused.GuardFix,
+		RunningHandle:           refused.RunningHandle,
+	}
+
+	connectErr := connect.NewError(connect.CodeFailedPrecondition,
+		fmt.Errorf("deploy refused, nothing was applied: %s", refused.Detail))
+	// The structured detail is what makes this recoverable without a blind
+	// retry against a cluster. If it cannot be attached the error still
+	// stands — failing closed must not depend on the detail encoding.
+	if errDetail, detailErr := connect.NewErrorDetail(detail); detailErr == nil {
+		connectErr.AddDetail(errDetail)
+	}
+	return connectErr
 }
 
 // PlanDeploy previews a deploy. APPLIES NOTHING.
@@ -1134,9 +1198,10 @@ func (s *ForgeService) PlanDeploy(
 	}
 
 	payload := struct {
-		ProjectPath string `json:"project_path"`
-		Env         string `json:"env"`
-	}{ProjectPath: path, Env: env}
+		ProjectPath  string `json:"project_path"`
+		Env          string `json:"env"`
+		CheckoutPath string `json:"checkout_path,omitempty"`
+	}{ProjectPath: path, Env: env, CheckoutPath: strings.TrimSpace(req.Msg.CheckoutPath)}
 
 	reply, unreachable, err := s.forgeDispatch(
 		ctx, userID, "forge.deploy_plan", payload, forgeDeployPlanTimeoutMs, true)
@@ -1146,6 +1211,172 @@ func (s *ForgeService) PlanDeploy(
 
 	return connect.NewResponse(&reliantv1.PlanForgeDeployResponse{
 		Meta:       forgeMeta(reply, true, unreachable),
+		ReportJson: reply.reportJSON(),
+	}), nil
+}
+
+// StartDeployPlan begins the APPROVABLE plan as a background job.
+//
+// NO APPROVAL TOKEN, deliberately: this writes no promotion and applies
+// nothing, so there is nothing to approve yet — computing the thing to approve
+// IS the job. It does build and push, so the daemon refuses it while a deploy
+// of the same environment is in flight, and that refusal arrives here exactly
+// as StartDeploy's does.
+//
+// It is asynchronous for the same reason StartDeploy is, and more acutely: a
+// cold multi-image build is minutes, far past any synchronous budget.
+func (s *ForgeService) StartDeployPlan(
+	ctx context.Context,
+	req *connect.Request[reliantv1.StartForgeDeployPlanRequest],
+) (*connect.Response[reliantv1.StartForgeDeployResponse], error) {
+	userID, err := s.userID(ctx)
+	if err != nil {
+		return nil, err
+	}
+	env, err := forgeEnvArg(req.Msg.Env)
+	if err != nil {
+		return nil, err
+	}
+	path, err := s.forgeProjectPath(ctx, req.Msg.ProjectId, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	payload := struct {
+		ProjectPath  string `json:"project_path"`
+		Env          string `json:"env"`
+		CheckoutPath string `json:"checkout_path,omitempty"`
+	}{ProjectPath: path, Env: env, CheckoutPath: strings.TrimSpace(req.Msg.CheckoutPath)}
+
+	// Dispatched directly, and WITHOUT the reachability escape hatch, for the
+	// same reason StartDeploy is: a start that timed out may or may not have
+	// got a build underway, and reporting that as "cluster unknown" would file
+	// a possibly-running job under a diagnosis of the network.
+	var reply forgeDeployStartReply
+	if err := s.dispatch(ctx, userID, "forge.deploy_plan_start", payload, &reply,
+		forgeDeployStartTimeoutMs); err != nil {
+		return nil, remapForgeDispatchError("forge.deploy_plan_start", err)
+	}
+
+	if reply.Refused != nil {
+		return nil, forgeDeployRefusedError(reply.Refused)
+	}
+
+	// Neither a refusal nor a handle: most plausibly a forge too old for the
+	// command. Reported as the structured not-supported answer rather than an
+	// empty handle a client would poll forever.
+	if strings.TrimSpace(reply.Handle) == "" {
+		return connect.NewResponse(&reliantv1.StartForgeDeployResponse{
+			Meta:      forgeMeta(reply.forgeReportReply, false, ""),
+			Env:       env,
+			JobStatus: reliantv1.ForgeDeployJobStatus_FORGE_DEPLOY_JOB_STATUS_UNSPECIFIED,
+		}), nil
+	}
+
+	// NO report on this response: the plan does not exist yet. A plan here
+	// would invite a client to render and approve something before the build
+	// that produces it has run.
+	return connect.NewResponse(&reliantv1.StartForgeDeployResponse{
+		Meta:      forgeMeta(reply.forgeReportReply, false, ""),
+		Handle:    reply.Handle,
+		Env:       env,
+		JobStatus: forgeDeployJobStatus(reply.JobStatus),
+		StartedAt: reply.StartedAt,
+	}), nil
+}
+
+// ListCheckouts lists the checkouts a preview may render — and defines the set
+// any checkout-bearing request may name. Read-only.
+func (s *ForgeService) ListCheckouts(
+	ctx context.Context,
+	req *connect.Request[reliantv1.ListForgeCheckoutsRequest],
+) (*connect.Response[reliantv1.ListForgeCheckoutsResponse], error) {
+	userID, err := s.userID(ctx)
+	if err != nil {
+		return nil, err
+	}
+	path, err := s.forgeProjectPath(ctx, req.Msg.ProjectId, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	payload := struct {
+		ProjectPath string `json:"project_path"`
+		WithTree    bool   `json:"with_tree,omitempty"`
+	}{ProjectPath: path, WithTree: req.Msg.WithTree}
+
+	// readsCluster=false: this is git on the daemon's disk, and nothing else.
+	reply, unreachable, err := s.forgeDispatch(
+		ctx, userID, "forge.checkouts", payload, forgeDeployPlanTimeoutMs, false)
+	if err != nil {
+		return nil, err
+	}
+
+	return connect.NewResponse(&reliantv1.ListForgeCheckoutsResponse{
+		Meta:       forgeMeta(reply, false, unreachable),
+		ReportJson: reply.reportJSON(),
+	}), nil
+}
+
+// DiffEnv renders a checkout and diffs it against what is deployed. Read-only:
+// no cluster is contacted, nothing is built or pushed.
+func (s *ForgeService) DiffEnv(
+	ctx context.Context,
+	req *connect.Request[reliantv1.DiffForgeEnvRequest],
+) (*connect.Response[reliantv1.DiffForgeEnvResponse], error) {
+	userID, err := s.userID(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	// Forge's rule: one environment or all, not both and not neither. Checked
+	// here so a malformed request costs no daemon round trip, and restated on
+	// the daemon so its command has no unguarded spelling.
+	env := strings.TrimSpace(req.Msg.Env)
+	switch {
+	case req.Msg.All && env != "":
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("env %q and all are contradictory: diff one environment or every one, "+
+				"not both", req.Msg.Env))
+	case !req.Msg.All && env == "":
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("env is required, or set all to diff every environment in this checkout"))
+	}
+	if env != "" {
+		if _, err := forgeEnvArg(req.Msg.Env); err != nil {
+			return nil, err
+		}
+	}
+
+	path, err := s.forgeProjectPath(ctx, req.Msg.ProjectId, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	payload := struct {
+		ProjectPath  string `json:"project_path"`
+		Env          string `json:"env,omitempty"`
+		All          bool   `json:"all,omitempty"`
+		CheckoutPath string `json:"checkout_path,omitempty"`
+	}{
+		ProjectPath:  path,
+		Env:          env,
+		All:          req.Msg.All,
+		CheckoutPath: strings.TrimSpace(req.Msg.CheckoutPath),
+	}
+
+	// readsCluster=false: the live side is the last RECORDED bundle's shape,
+	// read from the control plane, not from a cluster. Claiming "cluster
+	// unreachable" over a slow diff would diagnose something that was never
+	// contacted.
+	reply, unreachable, err := s.forgeDispatch(
+		ctx, userID, "forge.env_diff", payload, forgeDeployPlanTimeoutMs, false)
+	if err != nil {
+		return nil, err
+	}
+
+	return connect.NewResponse(&reliantv1.DiffForgeEnvResponse{
+		Meta:       forgeMeta(reply, false, unreachable),
 		ReportJson: reply.reportJSON(),
 	}), nil
 }
@@ -1205,8 +1436,35 @@ func (s *ForgeService) StartDeploy(
 	case !req.Msg.ExpectUnbound && expectedRelease == "":
 		return nil, connect.NewError(connect.CodeInvalidArgument,
 			fmt.Errorf("expected_current_release is required (or set expect_unbound for an "+
-				"environment with no binding): a deploy of %q ships the bound release's pinned "+
-				"digests, so the request must state the release it expects to ship", env))
+				"environment with no binding): the token states the binding the operator "+
+				"reviewed for %q, so the request must name it", env))
+	}
+
+	// THE CONTENT CLAIM, which is what the target token above could never
+	// cover. A deploy builds from the checkout and cuts a new release, so
+	// without a digest the request approves whatever forge computes when it
+	// runs rather than the change set a human read.
+	approveDigest := strings.TrimSpace(req.Msg.ApproveDigest)
+	if approveDigest == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("approve_digest is required: deploying %q ships a change set, and the "+
+				"request must name the one a human reviewed. Compute it with StartDeployPlan "+
+				"and send that plan's digest", env))
+	}
+	releaseVersion := strings.TrimSpace(req.Msg.ReleaseVersion)
+	if releaseVersion == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("release_version is required: it is the release the plan was computed "+
+				"for, and deploying it by name is what ships those artifacts. Without it the "+
+				"deploy would build and cut a second release, whose plan the approved digest "+
+				"could not match"))
+	}
+	for _, code := range req.Msg.AcknowledgedFindings {
+		if strings.TrimSpace(code) == "" {
+			return nil, connect.NewError(connect.CodeInvalidArgument,
+				fmt.Errorf("acknowledged_findings must not contain an empty value: each entry "+
+					"names one destructive change from the approved plan"))
+		}
 	}
 
 	path, err := s.forgeProjectPath(ctx, req.Msg.ProjectId, userID)
@@ -1215,17 +1473,25 @@ func (s *ForgeService) StartDeploy(
 	}
 
 	payload := struct {
-		ProjectPath             string `json:"project_path"`
-		Env                     string `json:"env"`
-		ExpectedDeclaredContext string `json:"expected_declared_context"`
-		ExpectedCurrentRelease  string `json:"expected_current_release,omitempty"`
-		ExpectUnbound           bool   `json:"expect_unbound,omitempty"`
+		ProjectPath             string   `json:"project_path"`
+		Env                     string   `json:"env"`
+		ExpectedDeclaredContext string   `json:"expected_declared_context"`
+		ExpectedCurrentRelease  string   `json:"expected_current_release,omitempty"`
+		ExpectUnbound           bool     `json:"expect_unbound,omitempty"`
+		ApproveDigest           string   `json:"approve_digest"`
+		AcknowledgedFindings    []string `json:"acknowledged_findings,omitempty"`
+		ReleaseVersion          string   `json:"release_version"`
+		CheckoutPath            string   `json:"checkout_path,omitempty"`
 	}{
 		ProjectPath:             path,
 		Env:                     env,
 		ExpectedDeclaredContext: expectedContext,
 		ExpectedCurrentRelease:  expectedRelease,
 		ExpectUnbound:           req.Msg.ExpectUnbound,
+		ApproveDigest:           approveDigest,
+		AcknowledgedFindings:    req.Msg.AcknowledgedFindings,
+		ReleaseVersion:          releaseVersion,
+		CheckoutPath:            strings.TrimSpace(req.Msg.CheckoutPath),
 	}
 
 	// Dispatched directly rather than through forgeDispatch: the reply carries
@@ -1241,30 +1507,7 @@ func (s *ForgeService) StartDeploy(
 
 	// THE GUARD REFUSED: nothing was applied and no job exists. Fail closed.
 	if reply.Refused != nil {
-		detail := &reliantv1.ForgeDeployRefusal{
-			Reason:                  forgeDeployRefusalReason(reply.Refused.Reason),
-			Detail:                  reply.Refused.Detail,
-			ExpectedDeclaredContext: reply.Refused.ExpectedDeclaredContext,
-			ActualDeclaredContext:   reply.Refused.ActualDeclaredContext,
-			ExpectedCurrentRelease:  reply.Refused.ExpectedCurrentRelease,
-			ExpectedUnbound:         reply.Refused.ExpectedUnbound,
-			ActualCurrentRelease:    reply.Refused.ActualCurrentRelease,
-			ActualBound:             reply.Refused.ActualBound,
-			GuardVerdict:            reply.Refused.GuardVerdict,
-			GuardReason:             reply.Refused.GuardReason,
-			GuardFix:                reply.Refused.GuardFix,
-			RunningHandle:           reply.Refused.RunningHandle,
-		}
-
-		connectErr := connect.NewError(connect.CodeFailedPrecondition,
-			fmt.Errorf("deploy refused, nothing was applied: %s", reply.Refused.Detail))
-		// The structured detail is what makes this recoverable without a blind
-		// retry against a cluster. If it cannot be attached the error still
-		// stands — failing closed must not depend on the detail encoding.
-		if errDetail, detailErr := connect.NewErrorDetail(detail); detailErr == nil {
-			connectErr.AddDetail(errDetail)
-		}
-		return nil, connectErr
+		return nil, forgeDeployRefusedError(reply.Refused)
 	}
 
 	// A reply with neither a refusal nor a handle means the daemon answered
@@ -1336,6 +1579,19 @@ func (s *ForgeService) GetDeployStatus(
 		return nil, remapForgeDispatchError("forge.deploy_status", err)
 	}
 
+	// Forge's refusal, when it raised one. Carried as a FIELD rather than as
+	// an error because the poll succeeded and the job has a terminal state to
+	// report — see the proto comment. job_status is FAILED alongside it.
+	var refusal *reliantv1.ForgeDeployRefusal
+	if reply.Refused != nil {
+		refusal = &reliantv1.ForgeDeployRefusal{
+			Reason:          forgeDeployRefusalReason(reply.Refused.Reason),
+			Detail:          reply.Refused.Detail,
+			CurrentPlanJson: string(reply.Refused.CurrentPlan),
+			Unacknowledged:  reply.Refused.Unacknowledged,
+		}
+	}
+
 	return connect.NewResponse(&reliantv1.GetForgeDeployStatusResponse{
 		Meta:            forgeMeta(reply.forgeReportReply, false, ""),
 		Handle:          reply.Handle,
@@ -1345,5 +1601,7 @@ func (s *ForgeService) GetDeployStatus(
 		StartedAt:       reply.StartedAt,
 		FinishedAt:      reply.FinishedAt,
 		ReportJson:      reply.reportJSON(),
+		PlanOnly:        reply.PlanOnly,
+		Refusal:         refusal,
 	}), nil
 }
