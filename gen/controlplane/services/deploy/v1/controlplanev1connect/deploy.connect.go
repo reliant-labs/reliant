@@ -119,15 +119,9 @@ const (
 	DeployServiceRecordBundleProcedure = "/controlplane.v1.DeployService/RecordBundle"
 	// DeployServiceGetBundleProcedure is the fully-qualified name of the DeployService's GetBundle RPC.
 	DeployServiceGetBundleProcedure = "/controlplane.v1.DeployService/GetBundle"
-	// DeployServiceBeginApplyProcedure is the fully-qualified name of the DeployService's BeginApply
-	// RPC.
-	DeployServiceBeginApplyProcedure = "/controlplane.v1.DeployService/BeginApply"
-	// DeployServiceFinishApplyProcedure is the fully-qualified name of the DeployService's FinishApply
-	// RPC.
-	DeployServiceFinishApplyProcedure = "/controlplane.v1.DeployService/FinishApply"
-	// DeployServiceListAppliesProcedure is the fully-qualified name of the DeployService's ListApplies
-	// RPC.
-	DeployServiceListAppliesProcedure = "/controlplane.v1.DeployService/ListApplies"
+	// DeployServiceListConvergencesProcedure is the fully-qualified name of the DeployService's
+	// ListConvergences RPC.
+	DeployServiceListConvergencesProcedure = "/controlplane.v1.DeployService/ListConvergences"
 	// DeployServiceGetLiveViewProcedure is the fully-qualified name of the DeployService's GetLiveView
 	// RPC.
 	DeployServiceGetLiveViewProcedure = "/controlplane.v1.DeployService/GetLiveView"
@@ -358,33 +352,27 @@ type DeployServiceClient interface {
 	// created=false.
 	RecordBundle(context.Context, *connect.Request[v1.RecordDeployBundleRequest]) (*connect.Response[v1.RecordDeployBundleResponse], error)
 	GetBundle(context.Context, *connect.Request[v1.GetDeployBundleRequest]) (*connect.Response[v1.GetDeployBundleResponse], error)
-	// BeginApply opens the record of an attempt to make an environment match a
-	// bundle, and is where every pre-deploy check happens.
+	// ListConvergences returns an environment's OBSERVATION TIMELINE, newest
+	// first, keyset-paged for ListPromotions' reason: rows arrive while a reader
+	// pages, so an offset would skip or repeat one.
 	//
-	// Under the environment's row lock, in order: the compare-and-set (as
-	// Promote), then the plan digest and stop-class acknowledgement, then the
-	// apply-in-flight refusal. The order is the point — a stale CAS should not
-	// be reported as an unacknowledged finding, and an in-flight apply should
-	// not be reported as a stale plan.
+	// IT REPLACES ListApplies, AND THE REPLACEMENT IS THE MODEL CHANGE. An apply
+	// was a client's claim that it was applying something — "I am applying now"
+	// — and forge does not apply at all any more: a promotion declares intent,
+	// the reconciler converges reality to it, and the control plane OBSERVES the
+	// result. So the thing worth listing is not a sequence of attempts but a
+	// sequence of readings: "converged to B at 14:02", "failed at 14:40:
+	// HealthCheckFailed".
 	//
-	// Refused on a LOCAL environment and allowed on every other kind. On a
-	// hosted environment this is how a DECLARATION deploy gets recorded: a spec
-	// change moves no release, so without this row nothing would say who
-	// initiated it. The EnsureDeployment calls that follow carry the id.
-	BeginApply(context.Context, *connect.Request[v1.BeginDeployApplyRequest]) (*connect.Response[v1.BeginDeployApplyResponse], error)
-	// FinishApply closes an apply with the outcome its client observed.
+	// ROWS ARE TRANSITIONS, NOT POLLS. The observer looks every couple of
+	// minutes and appends only when the answer CHANGED, so this list is short
+	// and every entry means something. Nothing here is required for
+	// correctness — the records are derived from the reconciler's current status
+	// and are safe to lose and rebuild — which is why they are reported through
+	// their own RPC rather than folded into Live.
 	//
-	// ONE OF THE TWO REPORTED-STATE EXCEPTIONS — see the service header. The
-	// outcome is written exactly once: the same outcome again returns
-	// created=false, so a client that retries after a dropped response
-	// converges, while a DIFFERENT outcome for the same apply is AlreadyExists
-	// rather than an overwrite. An apply that can be re-decided is an apply
-	// whose record proves nothing.
-	FinishApply(context.Context, *connect.Request[v1.FinishDeployApplyRequest]) (*connect.Response[v1.FinishDeployApplyResponse], error)
-	// ListApplies returns an environment's applies, newest first, keyset-paged
-	// for ListPromotions' reason: rows arrive while a reader pages, so an offset
-	// would skip or repeat one.
-	ListApplies(context.Context, *connect.Request[v1.ListDeployAppliesRequest]) (*connect.Response[v1.ListDeployAppliesResponse], error)
+	// MEMBER. This is the deploy history of a team's own environment.
+	ListConvergences(context.Context, *connect.Request[v1.ListDeployConvergencesRequest]) (*connect.Response[v1.ListDeployConvergencesResponse], error)
 	// GetLiveView returns every environment of one forge project with its
 	// declaration, promotion, release, bundle, latest apply and sessions — the
 	// whole Live screen in ONE round trip.
@@ -643,22 +631,10 @@ func NewDeployServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(deployServiceMethods.ByName("GetBundle")),
 			connect.WithClientOptions(opts...),
 		),
-		beginApply: connect.NewClient[v1.BeginDeployApplyRequest, v1.BeginDeployApplyResponse](
+		listConvergences: connect.NewClient[v1.ListDeployConvergencesRequest, v1.ListDeployConvergencesResponse](
 			httpClient,
-			baseURL+DeployServiceBeginApplyProcedure,
-			connect.WithSchema(deployServiceMethods.ByName("BeginApply")),
-			connect.WithClientOptions(opts...),
-		),
-		finishApply: connect.NewClient[v1.FinishDeployApplyRequest, v1.FinishDeployApplyResponse](
-			httpClient,
-			baseURL+DeployServiceFinishApplyProcedure,
-			connect.WithSchema(deployServiceMethods.ByName("FinishApply")),
-			connect.WithClientOptions(opts...),
-		),
-		listApplies: connect.NewClient[v1.ListDeployAppliesRequest, v1.ListDeployAppliesResponse](
-			httpClient,
-			baseURL+DeployServiceListAppliesProcedure,
-			connect.WithSchema(deployServiceMethods.ByName("ListApplies")),
+			baseURL+DeployServiceListConvergencesProcedure,
+			connect.WithSchema(deployServiceMethods.ByName("ListConvergences")),
 			connect.WithClientOptions(opts...),
 		),
 		getLiveView: connect.NewClient[v1.GetDeployLiveViewRequest, v1.GetDeployLiveViewResponse](
@@ -726,9 +702,7 @@ type deployServiceClient struct {
 	listUsage               *connect.Client[v1.ListDeployUsageRequest, v1.ListDeployUsageResponse]
 	recordBundle            *connect.Client[v1.RecordDeployBundleRequest, v1.RecordDeployBundleResponse]
 	getBundle               *connect.Client[v1.GetDeployBundleRequest, v1.GetDeployBundleResponse]
-	beginApply              *connect.Client[v1.BeginDeployApplyRequest, v1.BeginDeployApplyResponse]
-	finishApply             *connect.Client[v1.FinishDeployApplyRequest, v1.FinishDeployApplyResponse]
-	listApplies             *connect.Client[v1.ListDeployAppliesRequest, v1.ListDeployAppliesResponse]
+	listConvergences        *connect.Client[v1.ListDeployConvergencesRequest, v1.ListDeployConvergencesResponse]
 	getLiveView             *connect.Client[v1.GetDeployLiveViewRequest, v1.GetDeployLiveViewResponse]
 	planDeploy              *connect.Client[v1.PlanDeployRequest, v1.PlanDeployResponse]
 	reportLocalSession      *connect.Client[v1.ReportLocalSessionRequest, v1.ReportLocalSessionResponse]
@@ -886,19 +860,9 @@ func (c *deployServiceClient) GetBundle(ctx context.Context, req *connect.Reques
 	return c.getBundle.CallUnary(ctx, req)
 }
 
-// BeginApply calls controlplane.v1.DeployService.BeginApply.
-func (c *deployServiceClient) BeginApply(ctx context.Context, req *connect.Request[v1.BeginDeployApplyRequest]) (*connect.Response[v1.BeginDeployApplyResponse], error) {
-	return c.beginApply.CallUnary(ctx, req)
-}
-
-// FinishApply calls controlplane.v1.DeployService.FinishApply.
-func (c *deployServiceClient) FinishApply(ctx context.Context, req *connect.Request[v1.FinishDeployApplyRequest]) (*connect.Response[v1.FinishDeployApplyResponse], error) {
-	return c.finishApply.CallUnary(ctx, req)
-}
-
-// ListApplies calls controlplane.v1.DeployService.ListApplies.
-func (c *deployServiceClient) ListApplies(ctx context.Context, req *connect.Request[v1.ListDeployAppliesRequest]) (*connect.Response[v1.ListDeployAppliesResponse], error) {
-	return c.listApplies.CallUnary(ctx, req)
+// ListConvergences calls controlplane.v1.DeployService.ListConvergences.
+func (c *deployServiceClient) ListConvergences(ctx context.Context, req *connect.Request[v1.ListDeployConvergencesRequest]) (*connect.Response[v1.ListDeployConvergencesResponse], error) {
+	return c.listConvergences.CallUnary(ctx, req)
 }
 
 // GetLiveView calls controlplane.v1.DeployService.GetLiveView.
@@ -1140,33 +1104,27 @@ type DeployServiceHandler interface {
 	// created=false.
 	RecordBundle(context.Context, *connect.Request[v1.RecordDeployBundleRequest]) (*connect.Response[v1.RecordDeployBundleResponse], error)
 	GetBundle(context.Context, *connect.Request[v1.GetDeployBundleRequest]) (*connect.Response[v1.GetDeployBundleResponse], error)
-	// BeginApply opens the record of an attempt to make an environment match a
-	// bundle, and is where every pre-deploy check happens.
+	// ListConvergences returns an environment's OBSERVATION TIMELINE, newest
+	// first, keyset-paged for ListPromotions' reason: rows arrive while a reader
+	// pages, so an offset would skip or repeat one.
 	//
-	// Under the environment's row lock, in order: the compare-and-set (as
-	// Promote), then the plan digest and stop-class acknowledgement, then the
-	// apply-in-flight refusal. The order is the point — a stale CAS should not
-	// be reported as an unacknowledged finding, and an in-flight apply should
-	// not be reported as a stale plan.
+	// IT REPLACES ListApplies, AND THE REPLACEMENT IS THE MODEL CHANGE. An apply
+	// was a client's claim that it was applying something — "I am applying now"
+	// — and forge does not apply at all any more: a promotion declares intent,
+	// the reconciler converges reality to it, and the control plane OBSERVES the
+	// result. So the thing worth listing is not a sequence of attempts but a
+	// sequence of readings: "converged to B at 14:02", "failed at 14:40:
+	// HealthCheckFailed".
 	//
-	// Refused on a LOCAL environment and allowed on every other kind. On a
-	// hosted environment this is how a DECLARATION deploy gets recorded: a spec
-	// change moves no release, so without this row nothing would say who
-	// initiated it. The EnsureDeployment calls that follow carry the id.
-	BeginApply(context.Context, *connect.Request[v1.BeginDeployApplyRequest]) (*connect.Response[v1.BeginDeployApplyResponse], error)
-	// FinishApply closes an apply with the outcome its client observed.
+	// ROWS ARE TRANSITIONS, NOT POLLS. The observer looks every couple of
+	// minutes and appends only when the answer CHANGED, so this list is short
+	// and every entry means something. Nothing here is required for
+	// correctness — the records are derived from the reconciler's current status
+	// and are safe to lose and rebuild — which is why they are reported through
+	// their own RPC rather than folded into Live.
 	//
-	// ONE OF THE TWO REPORTED-STATE EXCEPTIONS — see the service header. The
-	// outcome is written exactly once: the same outcome again returns
-	// created=false, so a client that retries after a dropped response
-	// converges, while a DIFFERENT outcome for the same apply is AlreadyExists
-	// rather than an overwrite. An apply that can be re-decided is an apply
-	// whose record proves nothing.
-	FinishApply(context.Context, *connect.Request[v1.FinishDeployApplyRequest]) (*connect.Response[v1.FinishDeployApplyResponse], error)
-	// ListApplies returns an environment's applies, newest first, keyset-paged
-	// for ListPromotions' reason: rows arrive while a reader pages, so an offset
-	// would skip or repeat one.
-	ListApplies(context.Context, *connect.Request[v1.ListDeployAppliesRequest]) (*connect.Response[v1.ListDeployAppliesResponse], error)
+	// MEMBER. This is the deploy history of a team's own environment.
+	ListConvergences(context.Context, *connect.Request[v1.ListDeployConvergencesRequest]) (*connect.Response[v1.ListDeployConvergencesResponse], error)
 	// GetLiveView returns every environment of one forge project with its
 	// declaration, promotion, release, bundle, latest apply and sessions — the
 	// whole Live screen in ONE round trip.
@@ -1421,22 +1379,10 @@ func NewDeployServiceHandler(svc DeployServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(deployServiceMethods.ByName("GetBundle")),
 		connect.WithHandlerOptions(opts...),
 	)
-	deployServiceBeginApplyHandler := connect.NewUnaryHandler(
-		DeployServiceBeginApplyProcedure,
-		svc.BeginApply,
-		connect.WithSchema(deployServiceMethods.ByName("BeginApply")),
-		connect.WithHandlerOptions(opts...),
-	)
-	deployServiceFinishApplyHandler := connect.NewUnaryHandler(
-		DeployServiceFinishApplyProcedure,
-		svc.FinishApply,
-		connect.WithSchema(deployServiceMethods.ByName("FinishApply")),
-		connect.WithHandlerOptions(opts...),
-	)
-	deployServiceListAppliesHandler := connect.NewUnaryHandler(
-		DeployServiceListAppliesProcedure,
-		svc.ListApplies,
-		connect.WithSchema(deployServiceMethods.ByName("ListApplies")),
+	deployServiceListConvergencesHandler := connect.NewUnaryHandler(
+		DeployServiceListConvergencesProcedure,
+		svc.ListConvergences,
+		connect.WithSchema(deployServiceMethods.ByName("ListConvergences")),
 		connect.WithHandlerOptions(opts...),
 	)
 	deployServiceGetLiveViewHandler := connect.NewUnaryHandler(
@@ -1531,12 +1477,8 @@ func NewDeployServiceHandler(svc DeployServiceHandler, opts ...connect.HandlerOp
 			deployServiceRecordBundleHandler.ServeHTTP(w, r)
 		case DeployServiceGetBundleProcedure:
 			deployServiceGetBundleHandler.ServeHTTP(w, r)
-		case DeployServiceBeginApplyProcedure:
-			deployServiceBeginApplyHandler.ServeHTTP(w, r)
-		case DeployServiceFinishApplyProcedure:
-			deployServiceFinishApplyHandler.ServeHTTP(w, r)
-		case DeployServiceListAppliesProcedure:
-			deployServiceListAppliesHandler.ServeHTTP(w, r)
+		case DeployServiceListConvergencesProcedure:
+			deployServiceListConvergencesHandler.ServeHTTP(w, r)
 		case DeployServiceGetLiveViewProcedure:
 			deployServiceGetLiveViewHandler.ServeHTTP(w, r)
 		case DeployServicePlanDeployProcedure:
@@ -1676,16 +1618,8 @@ func (UnimplementedDeployServiceHandler) GetBundle(context.Context, *connect.Req
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.GetBundle is not implemented"))
 }
 
-func (UnimplementedDeployServiceHandler) BeginApply(context.Context, *connect.Request[v1.BeginDeployApplyRequest]) (*connect.Response[v1.BeginDeployApplyResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.BeginApply is not implemented"))
-}
-
-func (UnimplementedDeployServiceHandler) FinishApply(context.Context, *connect.Request[v1.FinishDeployApplyRequest]) (*connect.Response[v1.FinishDeployApplyResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.FinishApply is not implemented"))
-}
-
-func (UnimplementedDeployServiceHandler) ListApplies(context.Context, *connect.Request[v1.ListDeployAppliesRequest]) (*connect.Response[v1.ListDeployAppliesResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.ListApplies is not implemented"))
+func (UnimplementedDeployServiceHandler) ListConvergences(context.Context, *connect.Request[v1.ListDeployConvergencesRequest]) (*connect.Response[v1.ListDeployConvergencesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.ListConvergences is not implemented"))
 }
 
 func (UnimplementedDeployServiceHandler) GetLiveView(context.Context, *connect.Request[v1.GetDeployLiveViewRequest]) (*connect.Response[v1.GetDeployLiveViewResponse], error) {
