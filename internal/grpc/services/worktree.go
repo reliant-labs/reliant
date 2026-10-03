@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"connectrpc.com/connect"
@@ -523,7 +524,13 @@ func (s *WorktreeService) finishWorktreeCreate(
 		s.emitWorktreeChanged(ctx, userID, project.ID, worktree.ID)
 	}
 
-	for _, repo := range repos {
+	// createRepo checks out ONE repo of the workspace. It runs concurrently
+	// with its siblings, so it touches nothing shared: everything it learns
+	// goes back through its return values, and the caller merges them.
+	//
+	// The returned error is the user-facing reason; it is non-nil exactly when
+	// the repo produced no checkout.
+	createRepo := func(repo *core.Repo) (repoCreateResult, error) {
 		repoPath := filepath.Join(project.Path, repo.RelativePath)
 
 		// Per-repo override > global > daemon auto-detect (empty).
@@ -579,35 +586,97 @@ func (s *WorktreeService) finishWorktreeCreate(
 		}, &createResp)
 		if err != nil {
 			logging.Error("Failed to create git worktree via daemon", "error", err, "repo", repo.ID)
-			fail(fmt.Errorf("failed to create worktree for repo %s: %w", repo.Name, err))
-			return
+			return repoCreateResult{}, fmt.Errorf("failed to create worktree for repo %s: %w", repo.Name, err)
 		}
 		if !createResp.Success {
 			logging.Error("Failed to create git worktree", "error", createResp.Error, "repo", repo.ID)
-			fail(s.parseGitWorktreeError(createResp.Error, createResp.WorktreePath, req.Msg.Branch, repoBase))
-			return
+			return repoCreateResult{}, s.parseGitWorktreeError(createResp.Error, createResp.WorktreePath, req.Msg.Branch, repoBase)
 		}
-
-		// First successful create gives us the absolute workspace root.
-		// daemon returned <HOME>/.reliant/worktrees/<workspace_id>[/<repo.rel>];
-		// strip the trailing repo.RelativePath to get the workspace root.
-		if workspaceRoot == "" {
-			if repo.RelativePath == "" {
-				workspaceRoot = createResp.WorktreePath
-			} else {
-				workspaceRoot = strings.TrimSuffix(createResp.WorktreePath,
-					string(filepath.Separator)+repo.RelativePath)
-				if workspaceRoot == createResp.WorktreePath {
-					workspaceRoot = filepath.Dir(createResp.WorktreePath)
-				}
-			}
-		}
-
-		successes = append(successes, repoCreateResult{
+		return repoCreateResult{
 			repo:         repo,
 			worktreePath: createResp.WorktreePath,
 			baseBranch:   firstNonEmpty(createResp.BaseBranch, repoBase),
-		})
+		}, nil
+	}
+
+	// Repos are checked out CONCURRENTLY, not one after another.
+	//
+	// Each repo is an independent `git worktree add` into its own
+	// subdirectory, so serializing them made the wait the SUM of every
+	// checkout: a three-repo workspace sat in CREATING for ~29s, ~8s of it in
+	// the last repo alone. Run together, the wait is the slowest repo —
+	// measured on control-plane/forge/reliant, median 6.6s -> 2.8s.
+	//
+	// Do not ALSO turn on git's parallel checkout (checkout.workers) for
+	// these. It was measured on top of this and made creation slower (2.8s ->
+	// 3.9s; 3.6s even capped at 4 workers): the repos already overlap their
+	// I/O, and N repos each forking a worker per CPU oversubscribes the
+	// machine.
+	//
+	// Two rules keep that safe:
+	//
+	//   - A repo nested inside another registered repo waits for its parent
+	//     (checkoutWaves). Its checkout lands inside the parent's, and git
+	//     refuses to populate a parent into a directory that already exists.
+	//     Unrelated repos — the normal layout — form a single wave.
+	//
+	//   - A failure does NOT cancel its siblings. Cancelling would only stop
+	//     the server waiting; the daemon's git keeps running, finishes the
+	//     checkout, and the server never learns its path — the orphaned
+	//     directory the all-or-nothing rollback exists to prevent. Every
+	//     sibling is allowed to finish so each success is known and torn down.
+	results := make([]repoCreateResult, len(repos))
+	errs := make([]error, len(repos))
+	ran := make([]bool, len(repos))
+	var firstErr error
+	for _, wave := range checkoutWaves(repos) {
+		var wg sync.WaitGroup
+		for _, i := range wave {
+			ran[i] = true
+			wg.Go(func() {
+				results[i], errs[i] = createRepo(repos[i])
+			})
+		}
+		wg.Wait()
+
+		for _, i := range wave {
+			if errs[i] != nil {
+				firstErr = errs[i]
+				break
+			}
+		}
+		if firstErr != nil {
+			break
+		}
+	}
+	// Collected in the order the repos were listed, not the order they
+	// finished, so the workspace root and display base come from the same
+	// repo on every run — exactly as when the loop was sequential.
+	for i := range repos {
+		if ran[i] && errs[i] == nil {
+			successes = append(successes, results[i])
+		}
+	}
+
+	// The workspace root comes from the first success: the daemon returned
+	// <HOME>/.reliant/worktrees/<workspace_id>[/<repo.rel>], so strip the
+	// trailing repo.RelativePath to get the root. Resolved BEFORE fail() so
+	// the rollback can remove the root of a partially created workspace.
+	if len(successes) > 0 {
+		first := successes[0]
+		if first.repo.RelativePath == "" {
+			workspaceRoot = first.worktreePath
+		} else {
+			workspaceRoot = strings.TrimSuffix(first.worktreePath,
+				string(filepath.Separator)+first.repo.RelativePath)
+			if workspaceRoot == first.worktreePath {
+				workspaceRoot = filepath.Dir(first.worktreePath)
+			}
+		}
+	}
+	if firstErr != nil {
+		fail(firstErr)
+		return
 	}
 
 	// Persist one Worktree row representing the workspace. BaseBranch is
@@ -664,6 +733,61 @@ func (s *WorktreeService) emitWorktreeChanged(ctx context.Context, userID, proje
 	}); err != nil {
 		logging.Error("Failed to emit worktree refetch", "error", err, "worktreeID", worktreeID)
 	}
+}
+
+// checkoutWaves groups repos (by index) into the order their checkouts must
+// run in. Every repo in a wave may run concurrently; a wave starts only after
+// the one before it finishes.
+//
+// A repo goes in the wave after the deepest registered repo that contains it.
+// That only matters for a root repo ("") registered beside nested ones, or a
+// repo registered under another: its checkout lands INSIDE the container's,
+// and `git worktree add` will not populate the container into a directory a
+// nested checkout already created. Sibling repos — control-plane/, forge/,
+// reliant/ — contain none of each other and all land in wave 0.
+func checkoutWaves(repos []*core.Repo) [][]int {
+	depth := make([]int, len(repos))
+	var depthOf func(i int, seen int) int
+	depthOf = func(i int, seen int) int {
+		// Containment is a strict order on distinct paths, so a chain is at
+		// most len(repos) long. The bound guards duplicate rows, which the
+		// unique (project_id, relative_path) constraint should already make
+		// impossible.
+		if seen > len(repos) {
+			return 0
+		}
+		best := -1
+		for j := range repos {
+			if j != i && repoPathContains(repos[j].RelativePath, repos[i].RelativePath) {
+				best = max(best, depthOf(j, seen+1))
+			}
+		}
+		return best + 1
+	}
+	maxDepth := 0
+	for i := range repos {
+		depth[i] = depthOf(i, 0)
+		maxDepth = max(maxDepth, depth[i])
+	}
+	waves := make([][]int, maxDepth+1)
+	for i, d := range depth {
+		waves[d] = append(waves[d], i)
+	}
+	return waves
+}
+
+// repoPathContains reports whether the repo at relative path inner sits
+// strictly inside the repo at relative path outer. "" and "." both mean the
+// project root, which contains every other repo.
+func repoPathContains(outer, inner string) bool {
+	outer, inner = filepath.Clean(outer), filepath.Clean(inner)
+	if outer == inner {
+		return false
+	}
+	if outer == "." {
+		return true
+	}
+	return strings.HasPrefix(inner, outer+string(filepath.Separator))
 }
 
 func firstNonEmpty(values ...string) string {

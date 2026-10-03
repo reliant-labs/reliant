@@ -277,7 +277,7 @@ func (e *RemoteExecutor) executeOnDaemon(ctx context.Context, req *ToolRequest, 
 	}
 
 	execReq := &ToolExecutionRequest{
-		RequestID:  fmt.Sprintf("%d", time.Now().UnixNano()),
+		RequestID:  newRequestID(),
 		ToolName:   req.ToolName,
 		ToolInput:  req.ToolInput,
 		ToolCallID: req.ToolCallID,
