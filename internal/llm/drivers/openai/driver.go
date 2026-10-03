@@ -28,6 +28,7 @@ import (
 	"github.com/openai/openai-go/v3/responses"
 	"github.com/openai/openai-go/v3/shared"
 	"github.com/reliant-labs/reliant/internal/llm"
+	"github.com/reliant-labs/reliant/internal/llm/drivers/responseswire"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -667,7 +668,12 @@ func (o *OpenaiClient) convertMessagesToResponsesInput(prompts []string, message
 			//   - ID: call_id
 			//   - Name: tool name
 			//   - Input: JSON arguments
-			items = append(items, responses.ResponseInputItemParamOfMessage(msg.Content().String(), responses.EasyInputMessageRoleUser))
+			// Assistant text replays with role assistant and its captured
+			// phase — see responseswire.AssistantHistoryItem. This used to
+			// send role "user" for the model's own history.
+			if item, ok := responseswire.AssistantHistoryItem(&msg); ok {
+				items = append(items, item)
+			}
 			for _, tc := range msg.ToolCalls() {
 				// openai-go signature is (arguments, callID, name)
 				items = append(items, responses.ResponseInputItemParamOfFunctionCall(tc.Input, tc.ID, truncate64(tc.Name)))
@@ -850,10 +856,7 @@ func (o *OpenaiClient) sendResponses(ctx context.Context, prompts []string, mess
 		}
 	}
 
-	finishReason := message.FinishReasonEndTurn
-	if len(toolCalls) > 0 {
-		finishReason = message.FinishReasonToolUse
-	}
+	finishReason := responseswire.FinishReason(resp, len(toolCalls))
 
 	usage := llm.TokenUsage{}
 	if resp.Usage.TotalTokens > 0 {
@@ -869,6 +872,7 @@ func (o *OpenaiClient) sendResponses(ctx context.Context, prompts []string, mess
 		ToolCalls:          toolCalls,
 		Usage:              usage,
 		FinishReason:       finishReason,
+		Phase:              responseswire.AssistantPhase(resp),
 		UpstreamRequestID:  upstreamRequestID,
 		UpstreamProxymanID: upstreamProxymanID,
 	}, nil
@@ -979,6 +983,13 @@ func (o *OpenaiClient) streamResponses(ctx context.Context, prompts []string, me
 				tc.Input = v.Arguments
 			case responses.ResponseCompletedEvent:
 				finalResp = &v.Response
+			case responses.ResponseIncompleteEvent:
+				// Terminal, like response.completed. Previously it fell to
+				// default, leaving finalResp nil so a truncated or interrupted
+				// turn was reported as a clean end.
+				finalResp = &v.Response
+			case responses.ResponseFailedEvent:
+				finalResp = &v.Response
 			default:
 				// Unhandled event type - ignore
 			}
@@ -1025,10 +1036,7 @@ func (o *OpenaiClient) streamResponses(ctx context.Context, prompts []string, me
 			eventChan <- llm.DriverEvent{Type: llm.EventToolUseStop, ToolCall: tc}
 		}
 
-		finishReason := message.FinishReasonEndTurn
-		if len(finalToolCalls) > 0 {
-			finishReason = message.FinishReasonToolUse
-		}
+		finishReason := responseswire.FinishReason(finalResp, len(finalToolCalls))
 
 		usage := llm.TokenUsage{}
 		if finalResp != nil && finalResp.Usage.TotalTokens > 0 {
@@ -1046,6 +1054,7 @@ func (o *OpenaiClient) streamResponses(ctx context.Context, prompts []string, me
 				ToolCalls:          finalToolCalls,
 				Usage:              usage,
 				FinishReason:       finishReason,
+				Phase:              responseswire.AssistantPhase(finalResp),
 				UpstreamRequestID:  upstreamRequestID,
 				UpstreamProxymanID: upstreamProxymanID,
 			},

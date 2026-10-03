@@ -15,6 +15,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/models"
+	"github.com/reliant-labs/reliant/internal/workflow/stopreason"
 )
 
 // heartbeatKilledStream decides whether a cancelled stream was killed by
@@ -177,6 +178,6 @@ func TestCallLLM_RealInterruptStillSucceeds(t *testing.T) {
 
 	var output CallLLMOutput
 	require.NoError(t, val.Get(&output))
-	assert.True(t, output.Aborted,
-		"a real interrupt still reports aborted so the loop takes its draining turn")
+	assert.Equal(t, stopreason.Interrupted, output.StopReason,
+		"a real interrupt still reports interrupted so the loop takes its draining turn")
 }

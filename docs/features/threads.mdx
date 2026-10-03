@@ -185,7 +185,7 @@ Quick examples:
 
 ```yaml
 # Access outputs from a completed node
-condition: nodes.call_llm.stop_reason == 'end_turn'
+condition: nodes.call_llm.stop_reason == 'done'
 content: "Result: {{nodes.run_tests.stdout}}"
 
 # Node inside a loop

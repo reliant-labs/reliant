@@ -363,6 +363,7 @@ type MessageContentBlock struct {
 	WorkflowRunID    sql.NullString `json:"workflow_run_id"`
 	AttemptNumber    sql.NullInt64  `json:"attempt_number"`
 	ThoughtSignature sql.NullString `json:"thought_signature"`
+	Phase            sql.NullString `json:"phase"`
 	CreatedAt        time.Time      `json:"created_at"`
 	UpdatedAt        time.Time      `json:"updated_at"`
 }

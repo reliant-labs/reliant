@@ -22,6 +22,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/drivererrors"
 	openaidriver "github.com/reliant-labs/reliant/internal/llm/drivers/openai"
+	"github.com/reliant-labs/reliant/internal/llm/drivers/responseswire"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -315,13 +316,12 @@ func (c *CodexClient) convertMessages(messages []message.Message) responses.Resp
 			items = append(items, responses.ResponseInputItemParamOfMessage(content, responses.EasyInputMessageRoleUser))
 
 		case message.Assistant:
-			// Assistant text as a message input item
-			assistantText := strings.TrimSpace(msg.Content().String())
-			if assistantText != "" {
-				items = append(items, responses.ResponseInputItemParamOfMessage(
-					assistantText,
-					responses.EasyInputMessageRoleUser, // SDK uses "user" role for assistant history
-				))
+			// Assistant text replays with role assistant and its captured
+			// phase. See responseswire.AssistantHistoryItem for why both
+			// matter — this used to send role "user", so a continued turn fed
+			// the model its own words as if the user had written them.
+			if item, ok := responseswire.AssistantHistoryItem(&msg); ok {
+				items = append(items, item)
 			}
 
 			// Tool calls as separate function_call items
@@ -866,6 +866,19 @@ func (c *CodexClient) StreamResponse(ctx context.Context, prompts []string, mess
 			case responses.ResponseCompletedEvent:
 				finalResp = &v.Response
 
+			case responses.ResponseIncompleteEvent:
+				// A terminal event just as much as response.completed. Letting
+				// it fall through to default left finalResp nil, so the turn
+				// below reported FinishReasonEndTurn — a truncation or an
+				// interruption arrived indistinguishable from the model
+				// finishing its answer.
+				finalResp = &v.Response
+
+			case responses.ResponseFailedEvent:
+				// Likewise terminal. Ignoring it reported a failed response as
+				// a clean end of turn.
+				finalResp = &v.Response
+
 			default:
 				// Unhandled event type — ignore
 			}
@@ -911,13 +924,9 @@ func (c *CodexClient) StreamResponse(ctx context.Context, prompts []string, mess
 			eventChan <- llm.DriverEvent{Type: llm.EventToolUseStop, ToolCall: tc}
 		}
 
-		// Determine finish reason
-		finishReason := message.FinishReasonEndTurn
-		if finalResp != nil {
-			finishReason = c.resolveFinishReason(finalResp, len(finalToolCalls))
-		} else if len(finalToolCalls) > 0 {
-			finishReason = message.FinishReasonToolUse
-		}
+		// Determine finish reason. A nil finalResp (no terminal event at all)
+		// keeps the historical fallback; see responseswire.FinishReason.
+		finishReason := c.resolveFinishReason(finalResp, len(finalToolCalls))
 
 		// Token usage
 		usage := llm.TokenUsage{}
@@ -935,6 +944,7 @@ func (c *CodexClient) StreamResponse(ctx context.Context, prompts []string, mess
 				ToolCalls:          finalToolCalls,
 				Usage:              usage,
 				FinishReason:       finishReason,
+				Phase:              responseswire.AssistantPhase(finalResp),
 				UpstreamRequestID:  upstreamRequestID,
 				UpstreamProxymanID: upstreamProxymanID,
 			},
@@ -953,11 +963,13 @@ func extractUpstreamCorrelationHeaders(resp *http.Response) (requestID string, p
 }
 
 func (c *CodexClient) resolveFinishReason(resp *responses.Response, toolCallCount int) message.FinishReason {
-	finishReason := message.FinishReasonEndTurn
+	finishReason := responseswire.FinishReason(resp, toolCallCount)
+	if resp == nil {
+		return finishReason
+	}
 
 	switch resp.Status {
 	case responses.ResponseStatusIncomplete:
-		finishReason = message.FinishReasonMaxTokens
 		reason := resp.IncompleteDetails.Reason
 		if reason == "" {
 			reason = "unknown"
@@ -965,10 +977,10 @@ func (c *CodexClient) resolveFinishReason(resp *responses.Response, toolCallCoun
 		logging.Warn("[Codex] Response incomplete",
 			"status", resp.Status,
 			"reason", reason,
+			"finishReason", string(finishReason),
 			"responseID", resp.ID)
 
 	case responses.ResponseStatusFailed:
-		finishReason = message.FinishReasonError
 		logging.Error("[Codex] Response failed",
 			"status", resp.Status,
 			"error", resp.Error.Message,
@@ -976,14 +988,8 @@ func (c *CodexClient) resolveFinishReason(resp *responses.Response, toolCallCoun
 			"responseID", resp.ID)
 
 	case responses.ResponseStatusCancelled:
-		finishReason = message.FinishReasonCancelled
 		logging.Warn("[Codex] Response cancelled",
 			"responseID", resp.ID)
-	}
-
-	// Tool use takes precedence (unless response was incomplete/failed/cancelled)
-	if toolCallCount > 0 && finishReason == message.FinishReasonEndTurn {
-		finishReason = message.FinishReasonToolUse
 	}
 
 	return finishReason

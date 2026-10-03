@@ -1,0 +1,21 @@
+-- +goose Up
+-- +goose StatementBegin
+-- OpenAI Responses `phase` of a TEXT block from an assistant message:
+-- "commentary" (interim narration) or "final_answer". Persisted so the NEXT
+-- turn can resend it — openai-go asks that phase be preserved and resent on
+-- all assistant messages for gpt-5.3-codex and beyond, and assistant history
+-- is rebuilt from these blocks.
+--
+-- Nullable with no default and no backfill: NULL means "this provider reported
+-- no phase", which is the truth for every row written before now and for every
+-- non-Responses provider. A default would assert a label the model never sent,
+-- and that label would then be resent to the provider as if it had.
+--
+-- IF NOT EXISTS because migrations are replayed against databases whose schema
+-- was built from schema.sql, and against the #293/#294 renumber window that
+-- rewinds goose's version and re-runs from there (see
+-- access_tokens_renumber_repair_test.go). A plain ADD COLUMN fails those with
+-- SQLSTATE 42701 and wedges startup; 20 other migrations here are idempotent
+-- for the same reason.
+ALTER TABLE message_content_blocks ADD COLUMN IF NOT EXISTS phase TEXT;
+-- +goose StatementEnd

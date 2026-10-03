@@ -159,21 +159,27 @@ blocks AS (
         id, message_id, position, block_type, content,
         tool_name, tool_input, tool_call_id, thought_signature, is_error,
         version, activity_id, workflow_run_id, attempt_number,
+        phase,
         created_at, updated_at
     )
     SELECT
         b.id, $3, b.position, b.block_type, b.content,
         b.tool_name, b.tool_input, b.tool_call_id, b.thought_signature, b.is_error,
         b.version, b.activity_id, b.workflow_run_id, b.attempt_number,
+        -- NULLIF: the column-major arrays carry "" for an absent value (see
+        -- derefString), but phase is an enum where "absent" and "empty" are
+        -- different answers — a stored "" would be resent to the provider as
+        -- an invalid phase. Only this column needs it; the rest are free text.
+        NULLIF(b.phase, ''),
         $16, $16
     FROM unnest(
         $17::text[], $18::bigint[], $19::int[], $20::text[],
         $21::text[], $22::text[], $23::text[], $24::text[], $25::boolean[],
-        $26::bigint[], $27::text[], $28::text[], $29::bigint[]
+        $26::bigint[], $27::text[], $28::text[], $29::bigint[], $30::text[]
     ) AS b(
         id, position, block_type, content,
         tool_name, tool_input, tool_call_id, thought_signature, is_error,
-        version, activity_id, workflow_run_id, attempt_number
+        version, activity_id, workflow_run_id, attempt_number, phase
     )
 )
 SELECT ord.last_assigned, sq.last_assigned, upd.last_assigned_seq
@@ -235,6 +241,7 @@ func (r *Repo) SaveMessageAtomic(ctx context.Context, w AtomicMessageWrite) (*At
 			cols.ids, cols.positions, cols.blockTypes, cols.contents,
 			cols.toolNames, cols.toolInputs, cols.toolCallIDs, cols.thoughtSignatures, cols.isErrors,
 			cols.versions, cols.activityIDs, cols.workflowRunIDs, cols.attemptNumbers,
+			cols.phases,
 		)
 
 		if err := row.Scan(&result.Ordinal, &result.Seq, &result.UpdateSeq); err != nil {
@@ -308,6 +315,7 @@ type blockColumns struct {
 	activityIDs       pq.StringArray
 	workflowRunIDs    pq.StringArray
 	attemptNumbers    pq.Int64Array
+	phases            pq.StringArray
 }
 
 func newBlockColumns(blocks []MessageContentBlock) blockColumns {
@@ -326,6 +334,7 @@ func newBlockColumns(blocks []MessageContentBlock) blockColumns {
 		activityIDs:       make(pq.StringArray, n),
 		workflowRunIDs:    make(pq.StringArray, n),
 		attemptNumbers:    make(pq.Int64Array, n),
+		phases:            make(pq.StringArray, n),
 	}
 	for i, b := range blocks {
 		c.ids[i] = b.ID
@@ -341,6 +350,7 @@ func newBlockColumns(blocks []MessageContentBlock) blockColumns {
 		c.activityIDs[i] = derefString(b.ActivityID)
 		c.workflowRunIDs[i] = derefString(b.WorkflowRunID)
 		c.attemptNumbers[i] = int64(b.AttemptNumber)
+		c.phases[i] = derefString(b.Phase)
 	}
 	return c
 }

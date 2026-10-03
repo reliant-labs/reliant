@@ -15,6 +15,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
+	"github.com/reliant-labs/reliant/internal/workflow/stopreason"
 	"go.temporal.io/sdk/log"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
@@ -680,9 +681,20 @@ func (e *StepExecutor) normalizeOutput(rawOutput map[string]interface{}, activit
 // value, recursively, from the output message's descriptor. message_only fields
 // are NOT restored: they were cleared on purpose before the result entered
 // history. The input map is not mutated.
+//
+// A CallLLM result additionally gets a stop_reason when it has none (see
+// stopreason.FillDefault), so a loop condition never reads it empty — a
+// result recorded before the field existed keeps its meaning.
 func normalizeActivityOutput(rawOutput map[string]interface{}, activityName string) map[string]interface{} {
-	return schema.FillOutputDefaults(activityName, deepCopyJSONMap(rawOutput))
+	output := schema.FillOutputDefaults(activityName, deepCopyJSONMap(rawOutput))
+	if activityName == callLLMActivityName {
+		stopreason.FillDefault(output)
+	}
+	return output
 }
+
+// callLLMActivityName is the registered name of the call_llm node's activity.
+const callLLMActivityName = "CallLLM"
 
 // deepCopyJSONMap copies the maps and slices of a decoded-JSON value so
 // normalization can fill it in without writing through to the caller's map.

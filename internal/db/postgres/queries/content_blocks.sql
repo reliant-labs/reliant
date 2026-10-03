@@ -1,18 +1,18 @@
 -- name: CreateContentBlock :exec
 INSERT INTO message_content_blocks (
     id, message_id, position, block_type, content,
-    tool_name, tool_input, tool_call_id, thought_signature, is_error,
+    tool_name, tool_input, tool_call_id, thought_signature, phase, is_error,
     version, activity_id, workflow_run_id, attempt_number,
     created_at, updated_at
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16);
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17);
 
 -- name: CreateContentBlockIfNotExists :exec
 INSERT INTO message_content_blocks (
     id, message_id, position, block_type, content,
-    tool_name, tool_input, tool_call_id, thought_signature, is_error,
+    tool_name, tool_input, tool_call_id, thought_signature, phase, is_error,
     version, activity_id, workflow_run_id, attempt_number,
     created_at, updated_at
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
 ON CONFLICT(id) DO NOTHING;
 
 -- name: GetContentBlock :one

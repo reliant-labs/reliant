@@ -90,6 +90,14 @@ func newBaseDataConverter() converter.DataConverter {
 				// instead of the default camelCase (e.g. "toolResults"). This ensures proto
 				// JSON output matches the field names used in YAML workflow CEL expressions.
 				UseProtoNames: true,
+				// A payload recorded before a proto field was retired still
+				// carries that field, and workflow code that decodes an
+				// activity result into a typed message re-decodes the RECORDED
+				// payload on every replay. Rejecting the unknown field fails the
+				// workflow task non-deterministically (TMPRL1100) and wedges the
+				// in-flight run on deploy, so reserving a field number — the
+				// documented way to retire one — would be unsafe. Ignore it.
+				AllowUnknownFields: true,
 			},
 		)},
 		converter.NewProtoPayloadConverter(),

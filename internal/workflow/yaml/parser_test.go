@@ -242,7 +242,7 @@ name: test
 nodes:
   - id: n1
     type: loop
-    while: outputs.stop_reason != 'end_turn'
+    while: outputs.stop_reason == 'tool_use'
     inline:
       name: inner
       entry: [llm]
@@ -258,7 +258,7 @@ nodes:
 		t.Fatalf("parse: %v", err)
 	}
 	args := wf.Nodes[0].GetLoop()
-	if args.While.GetExpr() != "outputs.stop_reason != 'end_turn'" {
+	if args.While.GetExpr() != "outputs.stop_reason == 'tool_use'" {
 		t.Errorf("while: got %q", args.While.GetExpr())
 	}
 }
@@ -601,7 +601,7 @@ name: test
 nodes:
   - id: agent
     type: loop
-    while: outputs.stop_reason != 'end_turn'
+    while: outputs.stop_reason == 'tool_use'
     ref: builtin://agent
 `
 	wf, err := ParseWorkflow([]byte(yaml))
@@ -612,7 +612,7 @@ nodes:
 	if args == nil {
 		t.Fatal("expected LoopArgs")
 	}
-	if args.While.GetExpr() != "outputs.stop_reason != 'end_turn'" {
+	if args.While.GetExpr() != "outputs.stop_reason == 'tool_use'" {
 		t.Errorf("while: got %q", args.While.GetExpr())
 	}
 	if args.Ref.GetLiteral() != "builtin://agent" {

@@ -580,6 +580,7 @@ CREATE TABLE public.message_content_blocks (
     workflow_run_id text,
     attempt_number bigint,
     thought_signature text,
+    phase text,
     created_at timestamp with time zone NOT NULL,
     updated_at timestamp with time zone NOT NULL
 );

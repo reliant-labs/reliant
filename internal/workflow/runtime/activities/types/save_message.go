@@ -45,6 +45,13 @@ type SaveMessageInput struct {
 	// Extended thinking support - contains both content and signature
 	Thinking ThinkingOutput `json:"thinking,omitempty" reliant:"desc=Extended thinking content and signature (for multi-turn thinking preservation)"`
 
+	// Phase is the OpenAI Responses `phase` of the assistant message
+	// ("commentary" / "final_answer"), auto-extracted from the call_llm
+	// output's message.phase in the same way Thinking is. Persisted onto the
+	// text content block so the next turn can resend it; empty on every
+	// provider that reports no phase.
+	Phase string `json:"phase,omitempty" reliant:"-"`
+
 	// AssistantMessageID is the pre-allocated message id to persist an
 	// assistant message under (delta identity protocol). Only honored when
 	// Role resolves to "assistant"; empty keeps uuid generation.

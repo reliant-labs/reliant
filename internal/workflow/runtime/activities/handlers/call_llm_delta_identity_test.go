@@ -18,6 +18,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/models/message"
 	"github.com/reliant-labs/reliant/internal/streaming"
+	"github.com/reliant-labs/reliant/internal/workflow/stopreason"
 )
 
 // captureHub records every published delta so tests can assert on the full
@@ -287,9 +288,10 @@ func TestCallLLM_CancelledStreamPersistsPartialTurn(t *testing.T) {
 // response" (chat 7da3935c-97ec-4843-af78-c3807fe336cb, thread 5e3fe370 —
 // cancelled 1.75s in with two edits already applied).
 //
-// Aborted is that bit. agent.yaml reads it as `outputs.aborted` and takes
-// another turn instead of declaring the agent done.
-func TestCallLLM_CancelledStreamReportsAborted(t *testing.T) {
+// stop_reason "interrupted" is that bit. agent.yaml reads it as
+// `outputs.stop_reason` and takes another turn instead of declaring the agent
+// done.
+func TestCallLLM_CancelledStreamReportsInterrupted(t *testing.T) {
 	driver := &cancellingMockLLMDriver{ready: make(chan struct{})}
 	resolver := drivers.DriverResolver(func(context.Context, string, models.Preferences, ...llm.DriverOption) (llm.Driver, error) {
 		return driver, nil
@@ -323,17 +325,17 @@ func TestCallLLM_CancelledStreamReportsAborted(t *testing.T) {
 	var output CallLLMOutput
 	require.NoError(t, val.Get(&output))
 
-	assert.True(t, output.Aborted,
-		"a turn whose stream was cancelled must report aborted, or the agent loop reads "+
+	assert.Equal(t, stopreason.Interrupted, output.StopReason,
+		"a turn whose stream was cancelled must report interrupted, or the agent loop reads "+
 			"its zero tool calls as a clean finish and abandons the work mid-task")
 	assert.Empty(t, output.ToolCalls,
 		"precondition: this is exactly the shape that is ambiguous without the flag")
 }
 
-// The healthy path must NOT set aborted, or the loop would never exit — this
-// is the property that keeps the new term from becoming a wedge the way
+// The healthy path must NOT report interrupted, or the loop would never exit —
+// this is the property that keeps the term from becoming a wedge the way
 // pending_inbox once did.
-func TestCallLLM_CompletedStreamDoesNotReportAborted(t *testing.T) {
+func TestCallLLM_CompletedStreamDoesNotReportInterrupted(t *testing.T) {
 	resolver := mockLLMDriverResolver()
 
 	h := NewIdempotencyTestHelper(t)
@@ -350,8 +352,8 @@ func TestCallLLM_CompletedStreamDoesNotReportAborted(t *testing.T) {
 	require.NoError(t, h.ExecuteActivity(activityInstance.Execute,
 		callLLMInput(chat.ID, chat.ID, "mock-model"), &output))
 
-	assert.False(t, output.Aborted,
-		"a turn that streamed to completion is finished; reporting it aborted would keep "+
+	assert.Equal(t, stopreason.Done, output.StopReason,
+		"a turn that streamed to completion is finished; reporting it interrupted would keep "+
 			"the loop running forever")
 }
 
