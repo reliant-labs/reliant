@@ -8,6 +8,13 @@
  * pieces like `.env`, local config, or `node_modules`.
  */
 
+/**
+ * What the create dialog pre-fills. Exact paths, so these are the `.env` and
+ * `.env.local` at the workspace root — copied when present, skipped when not.
+ * Nested ones (`api/.env`) must be added by path.
+ */
+export const DEFAULT_COPY_PATHS: readonly string[] = [".env", ".env.local"];
+
 /** Parse the comma-separated input field into trimmed, non-empty entries. */
 export function parseCopyPathsInput(input: string): string[] {
   return input

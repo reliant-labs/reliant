@@ -84,10 +84,28 @@ describe("CreateWorktreeModal in a multi-repo project", () => {
     await waitFor(() => expect(onWorktreeCreated).toHaveBeenCalledWith("wt-new"));
   });
 
-  // copy_files are exact workspace-root paths. Nothing is pre-filled — the
-  // old ".env, .env.local" default was a recursive search — and what the user
-  // types is sent as-is.
-  it("sends exactly the typed copy paths, and nothing by default", async () => {
+  // copy_files are exact workspace-root paths. The field is pre-filled with
+  // the root .env and .env.local, sent as-is — no longer a recursive search.
+  it("pre-fills .env and .env.local and sends them as exact paths", async () => {
+    const user = userEvent.setup();
+    render(
+      <CreateWorktreeModal isOpen onClose={vi.fn()} onWorktreeCreated={vi.fn()} projectId="project-1" />
+    );
+    await waitFor(() => expect(listReposMock).toHaveBeenCalled());
+    await user.type(await screen.findByPlaceholderText(/feature|name/i), "feature-x");
+    await user.click(screen.getByRole("button", { name: /advanced/i }));
+
+    expect(await screen.findByPlaceholderText(/node_modules/)).toHaveValue(".env, .env.local");
+
+    await user.click(screen.getByRole("button", { name: /create workspace/i }));
+    await waitFor(() =>
+      expect(createWorktreeMock).toHaveBeenCalledWith(
+        expect.objectContaining({ copy_files: [".env", ".env.local"] })
+      )
+    );
+  });
+
+  it("sends exactly the typed copy paths", async () => {
     const user = userEvent.setup();
     render(
       <CreateWorktreeModal isOpen onClose={vi.fn()} onWorktreeCreated={vi.fn()} projectId="project-1" />
@@ -97,7 +115,7 @@ describe("CreateWorktreeModal in a multi-repo project", () => {
     await user.click(screen.getByRole("button", { name: /advanced/i }));
 
     const copyInput = await screen.findByPlaceholderText(/node_modules/);
-    expect(copyInput).toHaveValue("");
+    await user.clear(copyInput);
     await user.type(copyInput, ".env, api/.env, web/node_modules/");
     await user.click(screen.getByRole("button", { name: /create workspace/i }));
 
@@ -117,7 +135,9 @@ describe("CreateWorktreeModal in a multi-repo project", () => {
 
     await user.type(await screen.findByPlaceholderText(/feature|name/i), "feature-x");
     await user.click(screen.getByRole("button", { name: /advanced/i }));
-    await user.type(await screen.findByPlaceholderText(/node_modules/), "../secrets");
+    const copyInput = await screen.findByPlaceholderText(/node_modules/);
+    await user.clear(copyInput);
+    await user.type(copyInput, "../secrets");
     await user.click(screen.getByRole("button", { name: /create workspace/i }));
 
     expect(await screen.findByText(/leaves the workspace/)).toBeInTheDocument();

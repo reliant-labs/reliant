@@ -11,7 +11,7 @@ import { cn } from "../../lib/utils";
 import { WorktreeStatus } from "../../gen/reliant/v1/worktree_pb";
 import { repoGrpc, type Repo } from "../../api/repo-grpc";
 import { logger } from "../../lib/logger";
-import { copyPathError, parseCopyPathsInput } from "../../lib/worktreeCopyPaths";
+import { copyPathError, DEFAULT_COPY_PATHS, parseCopyPathsInput } from "../../lib/worktreeCopyPaths";
 
 interface CreateWorktreeModalProps {
   isOpen: boolean;
@@ -92,7 +92,7 @@ export function CreateWorktreeModal({
     branch: "",                                  // override; empty → derived from name
     base_branch: defaultBaseBranch,              // single-repo case
     base_branches: {} as Record<string, string>, // multi-repo per-repo overrides; empty value → daemon auto-detect
-    copy_files: [] as string[], // exact workspace-root paths; see lib/worktreeCopyPaths
+    copy_files: [...DEFAULT_COPY_PATHS], // exact workspace-root paths; see lib/worktreeCopyPaths
     force: false,
   });
   const [advancedOpen, setAdvancedOpen] = useState(false);
@@ -115,7 +115,7 @@ export function CreateWorktreeModal({
       setFormData(prev => ({ ...prev, base_branch: defaultBaseBranch }));
     }
   }, [branches, defaultBaseBranch, sourceWorktreeBranch]);
-  const [customFilesInput, setCustomFilesInput] = useState("");
+  const [customFilesInput, setCustomFilesInput] = useState(DEFAULT_COPY_PATHS.join(", "));
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [normalizedName, setNormalizedName] = useState<string | null>(null);
@@ -206,12 +206,12 @@ export function CreateWorktreeModal({
       branch: "",
       base_branch: defaultBaseBranch,
       base_branches: {},
-      copy_files: [],
+      copy_files: [...DEFAULT_COPY_PATHS],
       force: false,
     });
     setNormalizedName(null);
     setNormalizedBranch(null);
-    setCustomFilesInput("");
+    setCustomFilesInput(DEFAULT_COPY_PATHS.join(", "));
     setAdvancedOpen(false);
   };
 
