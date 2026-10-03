@@ -62,7 +62,20 @@ const endTurnField = "end_turn"
 // codex-rs normalizes that status/reason pair to `end_turn: Some(false)`
 // (codex-api/src/sse/responses.rs:418), so it maps to PauseTurn too.
 //
-// An `incomplete` reason we do not recognise becomes Unknown rather than
+// Two documented reasons map to Unknown ON PURPOSE, not by omission:
+//
+//   - "max_messages" is a limit on the CONVERSATION, not on this turn's
+//     output. Mapping it to MaxTokens would make it stop_reason "truncated",
+//     which an agent loop continues on — but the next request carries the
+//     same history plus more, so it hits the same limit and the loop spins.
+//     Unknown surfaces as stop_reason "error": the run stops and says why.
+//   - "steered" is only produced by a WebSocket `response.steer` event, after
+//     which the SERVER creates the successor response itself. We speak HTTP
+//     SSE and never send response.steer, so it is unreachable here; if it ever
+//     appears, re-issuing the request ourselves would race the server's own
+//     successor, so stopping is the safe reading.
+//
+// Any other `incomplete` reason we do not recognise becomes Unknown rather than
 // MaxTokens. The previous codex mapping assumed every incomplete response was
 // a token-budget truncation, which turned a content filter and an interruption
 // into a claim about token limits that the runtime then reported to the user.

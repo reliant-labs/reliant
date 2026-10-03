@@ -136,8 +136,18 @@ func TestFinishReason(t *testing.T) {
 			want: message.FinishReasonPauseTurn,
 		},
 		{
-			name: "incomplete max_messages is not a vocabulary we map",
+			// NOT MaxTokens: that becomes stop_reason "truncated", which an
+			// agent loop continues on, and a conversation-length limit is hit
+			// again by the very next request — the loop would spin.
+			name: "incomplete max_messages stops rather than continuing into the same limit",
 			raw:  `{"id":"r","status":"incomplete","incomplete_details":{"reason":"max_messages"}}`,
+			want: message.FinishReasonUnknown,
+		},
+		{
+			// Only a WebSocket response.steer produces this, after which the
+			// server creates the successor itself; re-issuing would race it.
+			name: "incomplete steered stops rather than racing the server's successor",
+			raw:  `{"id":"r","status":"incomplete","incomplete_details":{"reason":"steered"}}`,
 			want: message.FinishReasonUnknown,
 		},
 		{

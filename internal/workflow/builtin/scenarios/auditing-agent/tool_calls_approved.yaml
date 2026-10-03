@@ -6,10 +6,10 @@
 # 3. execute_audit confirms approval
 # 4. save_approved_response saves agent message to thread
 # 5. execute_tools runs the agent's tool call
-# 6. Loop continues (tool_calls was non-empty)
+# 6. Loop continues (main_agent stop_reason was tool_use)
 # 7. main_agent responds with text only on second iteration
 # 8. audit_check approves again
-# 9. Loop exits because tool_calls is now empty
+# 9. Loop exits because main_agent's stop_reason is now done
 #
 # This verifies the full audit-approve-execute cycle works end-to-end.
 

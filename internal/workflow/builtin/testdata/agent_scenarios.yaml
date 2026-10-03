@@ -2,7 +2,8 @@
 #
 # Agent workflow structure:
 # - agent_loop (main loop) contains: call_llm -> approval -> execute_tools -> compact -> ask_question
-# - Loop continues while: tool_calls not empty OR ask_question returned feedback
+# - Loop continues while: stop_reason is tool_use / incomplete / truncated /
+#   interrupted, OR ask_question returned feedback, OR a message is queued
 # - ask input (default false): when true and the LLM returns no tool calls,
 #   ask_question runs; feedback continues the loop, no feedback exits it
 #

@@ -121,13 +121,14 @@ nodes:
     # becomes the agent's next input. truncated / interrupted resume a turn that
     # was cut off before it could be audited meaningfully.
     #
-    # incomplete is deliberately NOT here. Continuing a paused turn means
-    # calling the provider with the assistant's own message as the tail
-    # (continue_turn), and in this loop that message is only saved when the
-    # audit approves it — so whether a paused, unapproved turn should continue
-    # is an audit-policy question, not a mechanical one. Until that is decided
-    # a paused turn ends the loop exactly as it did before stop_reason existed.
-    while: outputs.stop_reason in ['tool_use', 'truncated', 'interrupted']
+    # incomplete is a turn the provider paused mid-work ("I'll check the
+    # config next." with no tool call yet). Both audit outcomes continue it
+    # correctly: APPROVED saves the paused text, so the next turn resumes it
+    # (continue_turn lets call_llm send an assistant-tailed history); REJECTED
+    # saves the audit feedback as a user message, so the next turn answers the
+    # feedback instead — continue_turn is inert there because the tail is not
+    # the assistant.
+    while: outputs.stop_reason in ['tool_use', 'incomplete', 'truncated', 'interrupted']
     ask: "{{inputs.ask || (inputs.max_turns > 0 && iter.iteration >= inputs.max_turns)}}"
     inline:
       name: audited_loop (Loop Body)
@@ -150,6 +151,9 @@ nodes:
             thinking_level: "{{inputs.thinking_level}}"
             compaction_threshold: "{{inputs.compaction_threshold}}"
             skills: "{{inputs.skills}}"
+            # The previous turn was paused by the provider and its text was
+            # approved and saved, so history ends with the assistant on purpose.
+            continue_turn: "{{has(outputs.stop_reason) && outputs.stop_reason == 'incomplete'}}"
             tools_config:
               preloaded_tools: "{{inputs.tools}}"
               # An assistant: starts with a focused bundle, reaches for the rest

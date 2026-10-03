@@ -52,10 +52,15 @@ type MessageContentBlock struct {
 	ToolInput        *string
 	ToolCallID       *string
 	ThoughtSignature *string // Gemini 3.x thought signature for maintaining reasoning context
-	IsError          *bool
-	Version          *int
-	NodeID           string // Workflow node/step identifier
-	NodePath         string // Full path to node in workflow hierarchy
+	// Phase is the OpenAI Responses `phase` of a TEXT block from an assistant
+	// message — "commentary" or "final_answer". Nil on every other provider
+	// and on blocks saved before it was captured. Carried so the next turn can
+	// resend it (responseswire.AssistantHistoryItem).
+	Phase    *string
+	IsError  *bool
+	Version  *int
+	NodeID   string // Workflow node/step identifier
+	NodePath string // Full path to node in workflow hierarchy
 	// Activity idempotency tracking (for Temporal activity retries)
 	ActivityID    *string // Temporal activity ID that created this block
 	WorkflowRunID *string // Temporal workflow run ID

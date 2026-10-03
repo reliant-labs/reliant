@@ -319,6 +319,7 @@ Save a message to the conversation thread
 | `message.id` | string |  |
 | `message.role` | string |  |
 | `message.text` | string |  |
+| `message.phase` | string |  |
 | `message_id` | string | - |
 | `thread` | string | - |
 | `tool_calls` | array | - |

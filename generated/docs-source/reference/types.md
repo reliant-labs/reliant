@@ -110,6 +110,7 @@ Standardized output for activities that produce messages
 | `id` | string | No | - |
 | `role` | string | No | - |
 | `text` | string | No | - |
+| `phase` | string | No | - |
 
 ---
 

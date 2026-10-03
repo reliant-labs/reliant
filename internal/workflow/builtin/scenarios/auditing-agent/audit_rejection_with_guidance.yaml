@@ -9,10 +9,10 @@
 # 5. save_approved_response is SKIPPED (edge from execute_audit only
 #    goes to save_approved_response when approved=true)
 # 6. execute_tools is SKIPPED (agent message was not saved, tools not run)
-# 7. Loop continues because main_agent's tool_calls was non-empty
+# 7. Loop continues because main_agent's stop_reason was tool_use
 # 8. main_agent sees the feedback, adjusts its approach
 # 9. audit_check approves the adjusted response
-# 10. Loop exits because tool_calls is now empty
+# 10. Loop exits because main_agent's stop_reason is now done
 #
 # This verifies the denial flow gates tool execution and injects guidance.
 
@@ -73,7 +73,7 @@ events:
       approved: true
       guidance: ""
 
-  # Loop exits because tool_calls is empty
+  # Loop exits because main_agent's stop_reason is done
 
 expect:
   outcome: completed

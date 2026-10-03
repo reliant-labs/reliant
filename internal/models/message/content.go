@@ -99,6 +99,24 @@ func (RedactedReasoningContent) isPart()        {}
 
 type TextContent struct {
 	Text string `json:"text"`
+
+	// Phase labels an assistant message as intermediate commentary
+	// ("commentary") or the turn's terminal answer ("final_answer"). It is set
+	// only by the OpenAI Responses drivers (openai, codex); every other
+	// provider leaves it empty.
+	//
+	// It is carried so it can be RESENT. openai-go documents on
+	// EasyInputMessageParam: "For models like gpt-5.3-codex and beyond, when
+	// sending follow-up requests, preserve and resend phase on all assistant
+	// messages — dropping it can degrade performance." That only started
+	// mattering with CallLLMArgs.continue_turn, which calls the provider again
+	// with history ending in the model's own text — exactly the assistant
+	// messages the phase belongs to.
+	//
+	// Empty means "this provider reports no phase", not "commentary". Since
+	// the wire field is an enum, an empty value must be omitted rather than
+	// sent as "".
+	Phase string `json:"phase,omitempty"`
 }
 
 func (tc TextContent) String() string {

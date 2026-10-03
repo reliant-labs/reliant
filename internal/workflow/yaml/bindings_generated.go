@@ -177,6 +177,7 @@ var generatedNodeBindingsByType = map[string]generatedNodeBinding{
 			"resolved_display_style": {},
 			"resolved_inject_files":  {},
 			"resolved_model":         {},
+			"resolved_phase":         {},
 			"resolved_role":          {},
 			"resolved_thinking":      {},
 			"resolved_tool_calls":    {},

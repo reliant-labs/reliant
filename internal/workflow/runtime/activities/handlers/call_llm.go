@@ -74,6 +74,12 @@ type streamProcessingState struct {
 	// it only has to be right for the reasons that can produce no content.
 	finishReason message.FinishReason
 
+	// phase is the OpenAI Responses `phase` of this turn's final assistant
+	// message ("commentary" / "final_answer"), empty on every other provider.
+	// Recorded only so save_message can persist it and the next turn can
+	// resend it; nothing in the runtime makes a decision from it.
+	phase string
+
 	// Delta identity: pre-allocated assistant message id (from
 	// RuntimeContext.AssistantMessageID) and the per-message monotonically
 	// increasing sequence stamped onto every published delta. Both zero when
@@ -1764,6 +1770,9 @@ streamLoop:
 		Message: &reliantv1.MessageOutput{
 			Role: "assistant",
 			Text: responseText,
+			// Carried so save_message can persist it onto the text block and
+			// the next turn can resend it — see llm.DriverResponse.Phase.
+			Phase: streamState.phase,
 		},
 		// Deliberately NOT set from streamInterrupted.
 		//
@@ -2686,6 +2695,7 @@ func (a *CallLLMActivity) handleComplete(ctx context.Context, event llm.DriverEv
 	state.upstreamProxymanID = strings.TrimSpace(event.Response.UpstreamProxymanID)
 
 	state.finishReason = event.Response.FinishReason
+	state.phase = event.Response.Phase
 
 	// CRITICAL: Extract complete tool calls with full inputs from the final response
 	// This is done here instead of EventToolUseStart because Input is empty at that point

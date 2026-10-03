@@ -2648,6 +2648,10 @@ type SaveMessageNodeArgs struct {
 	// ResolvedAgent is the agent/workflow identity that produced the message,
 	// persisted onto messages.agent.
 	ResolvedAgent string `protobuf:"bytes,31,opt,name=resolved_agent,json=resolvedAgent,proto3" json:"resolved_agent,omitempty"`
+	// ResolvedPhase is the OpenAI Responses `phase` of the assistant message,
+	// forwarded from CallLLMOutput.message.phase and persisted onto the text
+	// content block so the next turn can resend it.
+	ResolvedPhase string `protobuf:"bytes,32,opt,name=resolved_phase,json=resolvedPhase,proto3" json:"resolved_phase,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2804,6 +2808,13 @@ func (x *SaveMessageNodeArgs) GetResolvedModel() string {
 func (x *SaveMessageNodeArgs) GetResolvedAgent() string {
 	if x != nil {
 		return x.ResolvedAgent
+	}
+	return ""
+}
+
+func (x *SaveMessageNodeArgs) GetResolvedPhase() string {
+	if x != nil {
+		return x.ResolvedPhase
 	}
 	return ""
 }
@@ -5119,10 +5130,18 @@ func (x *PresetInputConfig) GetMulti() bool {
 
 // MessageOutput is the standardized output for activities that produce messages.
 type MessageOutput struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`     // Unique message ID
-	Role          string                 `protobuf:"bytes,2,opt,name=role,proto3" json:"role,omitempty"` // "user", "assistant", or "system"
-	Text          string                 `protobuf:"bytes,3,opt,name=text,proto3" json:"text,omitempty"` // Message content
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Id    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`     // Unique message ID
+	Role  string                 `protobuf:"bytes,2,opt,name=role,proto3" json:"role,omitempty"` // "user", "assistant", or "system"
+	Text  string                 `protobuf:"bytes,3,opt,name=text,proto3" json:"text,omitempty"` // Message content
+	// OpenAI Responses `phase` of the assistant message — "commentary" (interim
+	// narration) or "final_answer". Empty on every other provider.
+	//
+	// Carried so save_message can persist it onto the text content block, which
+	// is what lets the next turn resend it: openai-go asks that phase be
+	// preserved and resent on all assistant messages for gpt-5.3-codex and
+	// beyond. Empty means "not reported", never "commentary".
+	Phase         string `protobuf:"bytes,4,opt,name=phase,proto3" json:"phase,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -5174,6 +5193,13 @@ func (x *MessageOutput) GetRole() string {
 func (x *MessageOutput) GetText() string {
 	if x != nil {
 		return x.Text
+	}
+	return ""
+}
+
+func (x *MessageOutput) GetPhase() string {
+	if x != nil {
+		return x.Phase
 	}
 	return ""
 }
@@ -7049,7 +7075,7 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\x0fAskQuestionArgs\x12e\n" +
 	"\bmetadata\x18\x01 \x01(\v2\x15.reliant.v1.CelStringB2\x82\xb5\x18.\n" +
 	",JSON metadata with question text and optionsR\bmetadata:u\x8a\xb5\x18q\n" +
-	"\fask_question\x12\fAsk Question\x1a3Pause workflow execution to ask the user a question*\autility2\x15MessageCircleQuestion\"\x94\v\n" +
+	"\fask_question\x12\fAsk Question\x1a3Pause workflow execution to ask the user a question*\autility2\x15MessageCircleQuestion\"\xc3\v\n" +
 	"\x13SaveMessageNodeArgs\x12Y\n" +
 	"\x04role\x18\x01 \x01(\v2\x15.reliant.v1.CelStringB.\x82\xb5\x18*\n" +
 	"\fMessage role\x12\x1auser|assistant|system|toolR\x04role\x12P\n" +
@@ -7076,7 +7102,8 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\x15resolved_inject_files\x18\x1c \x03(\v2\x19.reliant.v1.InjectFileMsgB\x06\x82\xb5\x18\x02 \x01R\x13resolvedInjectFiles\x12\x1a\n" +
 	"\x04cost\x18\x1d \x01(\x01B\x06\x82\xb5\x18\x02 \x01R\x04cost\x12-\n" +
 	"\x0eresolved_model\x18\x1e \x01(\tB\x06\x82\xb5\x18\x02 \x01R\rresolvedModel\x12-\n" +
-	"\x0eresolved_agent\x18\x1f \x01(\tB\x06\x82\xb5\x18\x02 \x01R\rresolvedAgent:c\x8a\xb5\x18_\n" +
+	"\x0eresolved_agent\x18\x1f \x01(\tB\x06\x82\xb5\x18\x02 \x01R\rresolvedAgent\x12-\n" +
+	"\x0eresolved_phase\x18  \x01(\tB\x06\x82\xb5\x18\x02 \x01R\rresolvedPhase:c\x8a\xb5\x18_\n" +
 	"\fsave_message\x12\fSave Message\x1a)Save a message to the conversation thread*\aagentic2\rMessageSquare\"\\\n" +
 	"\rInjectFileMsg\x12\x1a\n" +
 	"\bfilename\x18\x01 \x01(\tR\bfilename\x12\x1b\n" +
@@ -7352,11 +7379,12 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\x04base\x18\x01 \x01(\v2\x15.reliant.v1.InputBaseR\x04base\x120\n" +
 	"\adefault\x18\x02 \x01(\v2\x16.google.protobuf.ValueR\adefault\x12\x12\n" +
 	"\x04tags\x18\x03 \x03(\tR\x04tags\x12\x14\n" +
-	"\x05multi\x18\x04 \x01(\bR\x05multi\"G\n" +
+	"\x05multi\x18\x04 \x01(\bR\x05multi\"]\n" +
 	"\rMessageOutput\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04role\x18\x02 \x01(\tR\x04role\x12\x12\n" +
-	"\x04text\x18\x03 \x01(\tR\x04text\"d\n" +
+	"\x04text\x18\x03 \x01(\tR\x04text\x12\x14\n" +
+	"\x05phase\x18\x04 \x01(\tR\x05phase\"d\n" +
 	"\x0eThinkingOutput\x12\x18\n" +
 	"\acontent\x18\x01 \x01(\tR\acontent\x12\x1c\n" +
 	"\tsignature\x18\x02 \x01(\tR\tsignature\x12\x1a\n" +

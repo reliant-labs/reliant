@@ -135,7 +135,14 @@ func ContentBlockToPart(ctx context.Context, chatID string, block *db.MessageCon
 	switch block.BlockType {
 	case reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_TEXT:
 		if block.Content != nil {
-			return message.TextContent{Text: *block.Content}
+			// Phase rides along so the Responses drivers can resend it when
+			// this block is replayed as assistant history. Nil column stays
+			// empty — see responseswire.AssistantHistoryItem.
+			phase := ""
+			if block.Phase != nil {
+				phase = *block.Phase
+			}
+			return message.TextContent{Text: *block.Content, Phase: phase}
 		}
 
 	case reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_IMAGE:

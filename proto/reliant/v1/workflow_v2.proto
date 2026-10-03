@@ -780,6 +780,10 @@ message SaveMessageNodeArgs {
   // ResolvedAgent is the agent/workflow identity that produced the message,
   // persisted onto messages.agent.
   string resolved_agent = 31 [(reliant) = {hidden: true}];
+  // ResolvedPhase is the OpenAI Responses `phase` of the assistant message,
+  // forwarded from CallLLMOutput.message.phase and persisted onto the text
+  // content block so the next turn can resend it.
+  string resolved_phase = 32 [(reliant) = {hidden: true}];
 }
 
 // InjectFileMsg carries binary file data for inject file attachments.
@@ -1289,6 +1293,14 @@ message MessageOutput {
   string id = 1; // Unique message ID
   string role = 2; // "user", "assistant", or "system"
   string text = 3; // Message content
+  // OpenAI Responses `phase` of the assistant message — "commentary" (interim
+  // narration) or "final_answer". Empty on every other provider.
+  //
+  // Carried so save_message can persist it onto the text content block, which
+  // is what lets the next turn resend it: openai-go asks that phase be
+  // preserved and resent on all assistant messages for gpt-5.3-codex and
+  // beyond. Empty means "not reported", never "commentary".
+  string phase = 4;
 }
 
 // ThinkingOutput contains extended thinking content from the LLM.

@@ -668,7 +668,12 @@ func (o *OpenaiClient) convertMessagesToResponsesInput(prompts []string, message
 			//   - ID: call_id
 			//   - Name: tool name
 			//   - Input: JSON arguments
-			items = append(items, responses.ResponseInputItemParamOfMessage(msg.Content().String(), responses.EasyInputMessageRoleUser))
+			// Assistant text replays with role assistant and its captured
+			// phase — see responseswire.AssistantHistoryItem. This used to
+			// send role "user" for the model's own history.
+			if item, ok := responseswire.AssistantHistoryItem(&msg); ok {
+				items = append(items, item)
+			}
 			for _, tc := range msg.ToolCalls() {
 				// openai-go signature is (arguments, callID, name)
 				items = append(items, responses.ResponseInputItemParamOfFunctionCall(tc.Input, tc.ID, truncate64(tc.Name)))
@@ -867,6 +872,7 @@ func (o *OpenaiClient) sendResponses(ctx context.Context, prompts []string, mess
 		ToolCalls:          toolCalls,
 		Usage:              usage,
 		FinishReason:       finishReason,
+		Phase:              responseswire.AssistantPhase(resp),
 		UpstreamRequestID:  upstreamRequestID,
 		UpstreamProxymanID: upstreamProxymanID,
 	}, nil
@@ -1048,6 +1054,7 @@ func (o *OpenaiClient) streamResponses(ctx context.Context, prompts []string, me
 				ToolCalls:          finalToolCalls,
 				Usage:              usage,
 				FinishReason:       finishReason,
+				Phase:              responseswire.AssistantPhase(finalResp),
 				UpstreamRequestID:  upstreamRequestID,
 				UpstreamProxymanID: upstreamProxymanID,
 			},

@@ -316,13 +316,12 @@ func (c *CodexClient) convertMessages(messages []message.Message) responses.Resp
 			items = append(items, responses.ResponseInputItemParamOfMessage(content, responses.EasyInputMessageRoleUser))
 
 		case message.Assistant:
-			// Assistant text as a message input item
-			assistantText := strings.TrimSpace(msg.Content().String())
-			if assistantText != "" {
-				items = append(items, responses.ResponseInputItemParamOfMessage(
-					assistantText,
-					responses.EasyInputMessageRoleUser, // SDK uses "user" role for assistant history
-				))
+			// Assistant text replays with role assistant and its captured
+			// phase. See responseswire.AssistantHistoryItem for why both
+			// matter — this used to send role "user", so a continued turn fed
+			// the model its own words as if the user had written them.
+			if item, ok := responseswire.AssistantHistoryItem(&msg); ok {
+				items = append(items, item)
 			}
 
 			// Tool calls as separate function_call items
@@ -945,6 +944,7 @@ func (c *CodexClient) StreamResponse(ctx context.Context, prompts []string, mess
 				ToolCalls:          finalToolCalls,
 				Usage:              usage,
 				FinishReason:       finishReason,
+				Phase:              responseswire.AssistantPhase(finalResp),
 				UpstreamRequestID:  upstreamRequestID,
 				UpstreamProxymanID: upstreamProxymanID,
 			},

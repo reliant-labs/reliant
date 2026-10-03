@@ -91,6 +91,11 @@ Responses status mapping (shared helper used by codex + openai drivers):
 - `incomplete` + `max_output_tokens` → MaxTokens
 - `incomplete` + `content_filter` → Refusal
 - `incomplete` + `interrupted` → PauseTurn
+- `incomplete` + `max_messages` → Unknown, on purpose: a conversation-length
+  limit is hit again by the next request, so continuing (truncated) would spin
+- `incomplete` + `steered` → Unknown, on purpose: only a WebSocket
+  `response.steer` produces it (we use HTTP SSE), and the server then creates
+  the successor itself — re-issuing would race it
 - `incomplete` + anything else → Unknown (logged)
 - `failed` → Error; `cancelled` → Cancelled
 
@@ -160,12 +165,28 @@ model's own text to history, so the next request always differs; the one
 non-progressing shape (a pause with no text) maps to `error` and stops. This
 matches Codex CLI, which continues on every `end_turn:false` uncapped.
 
+## Also in this change
+
+- **Assistant history role + phase.** The codex and openai Responses drivers
+  replayed assistant text as `role: user` and dropped `phase`. continue_turn
+  makes that load-bearing — a continued turn's tail is the model's own paused
+  text — so it is fixed here: `phase` is captured from the Responses output
+  message (`DriverResponse.Phase` → `MessageOutput.phase`), auto-saved onto the
+  assistant TEXT block (`message_content_blocks.phase`, nullable, no backfill),
+  loaded back into `message.TextContent.Phase`, and replayed through one shared
+  helper (`responseswire.AssistantHistoryItem`) as an `EasyInputMessage` with
+  role assistant + phase.
+- **auditing-agent continues `incomplete` turns.** Approved → the paused text
+  is saved and `continue_turn` resumes it; rejected → the audit feedback is the
+  tail and the model answers it.
+- **`examples/scenarios` is executed.** It was a stale fork of
+  `internal/workflow/builtin/scenarios` (24 of 47 broken). Each directory is now
+  a symlink to the builtin copy, the orphaned `context-reducing-agent`
+  scenarios are removed, and `TestExampleScenarios` runs them all and fails on a
+  copy instead of a symlink.
+
 ## Out of scope (follow-ups)
 
-- Codex/OpenAI drivers replay assistant history as `role: user` and drop
-  `phase` (`commentary` / `final_answer`). The SDK says to preserve and resend
-  phase for gpt-5.3-codex+. Persisting phase needs storage (content block
-  column + migration). Tracked separately.
 - In-flight workflows started before deploy keep their recorded (old) YAML;
   they lose truncated/aborted continuation for their remaining iterations
   because `aborted`/`stop_kind` are no longer emitted. Tool-call continuation is
