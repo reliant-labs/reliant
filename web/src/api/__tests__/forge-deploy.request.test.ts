@@ -29,6 +29,17 @@ import {
   ForgeDeployRefusalSchema,
 } from "@/gen/reliant/v1/forge_pb";
 
+/**
+ * The content approval every start now carries: the digest of the plan the
+ * operator read, and the release it was computed for. The target token
+ * authorises WHERE; this authorises WHAT.
+ */
+const APPROVAL = {
+  approveDigest: "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+  releaseVersion: "20261003.114500-abcdef123456",
+  acknowledgedFindings: [] as string[],
+};
+
 const planDeploy = vi.fn();
 const startDeploy = vi.fn();
 const getDeployStatus = vi.fn();
@@ -101,7 +112,7 @@ describe("the confirmation token", () => {
     const token = deployTokenFor(planDoc());
     expect(token).not.toBeNull();
 
-    await start({ projectId: "p1", env: "prod", token: token! });
+    await start({ projectId: "p1", env: "prod", token: token!, approval: APPROVAL });
 
     const sent = startDeploy.mock.calls[0][0];
     // THE CLUSTER CLAIM — the most consequential field in the message, and it is
@@ -123,7 +134,7 @@ describe("the confirmation token", () => {
       expectUnbound: true,
     });
 
-    await start({ projectId: "p1", env: "prod", token: token! });
+    await start({ projectId: "p1", env: "prod", token: token!, approval: APPROVAL });
 
     const sent = startDeploy.mock.calls[0][0];
     // Empty, not a guessed release — a non-empty value alongside expectUnbound is
@@ -141,7 +152,7 @@ describe("the confirmation token", () => {
     for (const doc of [planDoc(), planDoc({ release: "" })]) {
       startDeploy.mockClear();
       const token = deployTokenFor(doc)!;
-      await start({ projectId: "p1", env: "prod", token });
+      await start({ projectId: "p1", env: "prod", token, approval: APPROVAL });
       const sent = startDeploy.mock.calls[0][0];
       const claims = [sent.expectedCurrentRelease !== "", sent.expectUnbound === true];
       expect(claims.filter(Boolean)).toHaveLength(1);
@@ -188,6 +199,7 @@ describe("no escape hatches in anything sent", () => {
       projectId: "p1",
       env: "prod",
       token: deployTokenFor(planDoc())!,
+      approval: APPROVAL,
     });
     await forgeGrpcModule.getDeployStatus({ projectId: "p1", handle: "dep-abc123" });
 
@@ -206,11 +218,21 @@ describe("no escape hatches in anything sent", () => {
       for (const field of forbidden) {
         expect(sent[field]).toBeUndefined();
       }
-      // And a shape assertion, so a field added under a name nobody predicted is
-      // still caught.
+      // And a shape assertion, so a field added under a name nobody predicted
+      // is still caught.
+      //
+      // `digest` ALONE IS NOT FORBIDDEN, and the distinction is the point of
+      // this change. The hazard was ever only the SUPPRESSION of digest
+      // pinning — a `noDigest` that let a re-tagged layer ship in place of the
+      // bytes that were built. `approveDigest` is the opposite: it names the
+      // plan a human approved, and it is what makes the deploy refusable. So
+      // the pattern matches a negated digest field rather than the word, which
+      // keeps the guard sharp instead of forcing it to be deleted the first
+      // time a legitimate digest field appears.
       const keys = Object.keys(sent).filter((key) => !key.startsWith("$"));
       for (const key of keys) {
-        expect(key.toLowerCase()).not.toMatch(/preflight|digest|force/);
+        expect(key.toLowerCase()).not.toMatch(/preflight|force/);
+        expect(key.toLowerCase()).not.toMatch(/^(no|skip|without|disable).*digest/);
       }
     }
   });
@@ -275,7 +297,7 @@ describe("refusals", () => {
         ])
       );
 
-      const result = await start({ projectId: "p1", env: "prod", token });
+      const result = await start({ projectId: "p1", env: "prod", token, approval: APPROVAL });
 
       // A refusal is DATA, not a thrown error, so no call site can render it as a
       // generic failure by forgetting to catch.
@@ -306,6 +328,7 @@ describe("refusals", () => {
       projectId: "p1",
       env: "prod",
       token: deployTokenFor(planDoc())!,
+      approval: APPROVAL,
     });
     // Still a refusal. A refusal this build cannot classify is a refusal, not a
     // started deploy.
@@ -324,7 +347,7 @@ describe("refusals", () => {
       new ConnectError("deploy refused, nothing was applied: unexplained", Code.FailedPrecondition)
     );
     await expect(
-      start({ projectId: "p1", env: "prod", token: deployTokenFor(planDoc())! })
+      start({ projectId: "p1", env: "prod", token: deployTokenFor(planDoc())!, approval: APPROVAL })
     ).rejects.toThrow(/deploy refused/);
   });
 
@@ -333,7 +356,7 @@ describe("refusals", () => {
     const { deployTokenFor } = await import("@/services/forge/deploy");
     startDeploy.mockRejectedValue(new ConnectError("no", Code.PermissionDenied));
     await expect(
-      start({ projectId: "p1", env: "prod", token: deployTokenFor(planDoc())! })
+      start({ projectId: "p1", env: "prod", token: deployTokenFor(planDoc())!, approval: APPROVAL })
     ).rejects.toThrow();
   });
 });
@@ -347,6 +370,7 @@ describe("the job lifecycle", () => {
       projectId: "p1",
       env: "prod",
       token: deployTokenFor(planDoc())!,
+      approval: APPROVAL,
     });
     expect(result.kind).toBe("started");
     if (result.kind !== "started") throw new Error("expected a start");
@@ -375,6 +399,7 @@ describe("the job lifecycle", () => {
       projectId: "p1",
       env: "prod",
       token: deployTokenFor(planDoc())!,
+      approval: APPROVAL,
     });
     // Not a started deploy with an empty handle a client would poll forever.
     expect(result.kind).toBe("not-started");

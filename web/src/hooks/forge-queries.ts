@@ -62,6 +62,9 @@ import {
   type ForgeProjectName,
 } from "../services/forge/environments";
 import { deployTokenFor, type ForgeDeployReport } from "../services/forge/deploy";
+import type { PlanApproval } from "../services/forge/deployPlan";
+import type { ForgeCheckoutsReport } from "../services/forge/checkouts";
+import type { ForgeEnvDiffReport } from "../services/forge/envDiff";
 import { useProjectStore, type Project } from "../store/projectStore";
 import { confirmationTokenFor, type ForgePromotePlan } from "../services/forge/promote";
 import {
@@ -131,6 +134,13 @@ export const forgeKeys = {
     [...forgeKeys.all, "deploy-plan", projectId, env] as const,
   deployStatus: (projectId: string, handle: string) =>
     [...forgeKeys.all, "deploy-status", projectId, handle] as const,
+  checkouts: (projectId: string, withTree: boolean) =>
+    [...forgeKeys.all, "checkouts", projectId, withTree] as const,
+  // Keyed by the CHECKOUT as well as the environment: the same environment
+  // diffed from two branches is two different answers, and sharing a key would
+  // show one branch's diff under the other's name.
+  envDiff: (projectId: string, env: string, all: boolean, checkoutPath: string) =>
+    [...forgeKeys.all, "env-diff", projectId, env, all, checkoutPath] as const,
   managedSecrets: (projectId: string, env: string) =>
     [...forgeKeys.all, "managed-secrets", projectId, env] as const,
   managedSecretVersions: (projectId: string, env: string, name: string) =>
@@ -759,12 +769,32 @@ export function useForgeDeployPlan(
  * `not_verified` is the honest position — and note that it is honest precisely
  * because a started deploy has not yet established anything.
  */
+/**
+ * What a deploy needs: the TARGET claim and the CONTENT claim, from two
+ * different documents.
+ *
+ * guardPlan is the instant preview, which names the declared cluster and the
+ * current binding — the target. approval is derived from the plan-only
+ * document, which names the change set. BOTH are required and neither
+ * substitutes for the other: the target says where bytes land, the approval
+ * says what ships, and the interim that carried only the first is what this
+ * replaced.
+ */
+export interface StartDeployArgs {
+  /** The preview the target token is derived from. */
+  guardPlan: ForgeDeployReport;
+  /** The approval derived from the plan the operator read. */
+  approval: PlanApproval;
+  /** The checkout this deploy builds from. */
+  checkoutPath?: string;
+}
+
 export function useStartForgeDeploy(projectId: string | null | undefined) {
   const queryClient = useQueryClient();
 
-  const mutation = useMutation<StartDeployResult, Error, ForgeDeployReport>({
-    mutationFn: async (plan: ForgeDeployReport) => {
-      const token = deployTokenFor(plan);
+  const mutation = useMutation<StartDeployResult, Error, StartDeployArgs>({
+    mutationFn: async ({ guardPlan, approval, checkoutPath }: StartDeployArgs) => {
+      const token = deployTokenFor(guardPlan);
       // Unreachable through the UI, which does not render a confirm without a
       // token. It throws rather than defaulting because every available default
       // is a claim the user never made — and the most dangerous of them would be
@@ -776,8 +806,10 @@ export function useStartForgeDeploy(projectId: string | null | undefined) {
       }
       return forgeGrpc.startDeploy({
         projectId: projectId as string,
-        env: plan.env as string,
+        env: guardPlan.env as string,
         token,
+        approval,
+        checkoutPath,
       });
     },
     retry: false,
@@ -796,6 +828,78 @@ export function useStartForgeDeploy(projectId: string | null | undefined) {
   });
 
   return mutation;
+}
+
+/**
+ * useStartForgeDeployPlan works out WHAT A DEPLOY WOULD SHIP, as a job.
+ *
+ * It takes no approval, because there is nothing to approve yet — this is the
+ * call that produces the thing to approve. It writes no promotion and applies
+ * nothing, so no cache describing a live environment becomes stale and nothing
+ * is invalidated here. It DOES build, push and cut a release, which is why it
+ * is a mutation rather than a query: running it twice is not free, and a query
+ * would be free to refetch it on a window focus.
+ *
+ * retry is disabled. A plan whose response was lost may have a build underway,
+ * and a second one would contend for the same environment's claim.
+ */
+export function useStartForgeDeployPlan(projectId: string | null | undefined) {
+  return useMutation<StartDeployResult, Error, { env: string; checkoutPath?: string }>({
+    mutationFn: ({ env, checkoutPath }) =>
+      forgeGrpc.startDeployPlan({ projectId: projectId as string, env, checkoutPath }),
+    retry: false,
+  });
+}
+
+/**
+ * useForgeCheckouts lists the branches a preview may render.
+ *
+ * Cheap and git-only — no cluster is touched — so unlike the rest of this
+ * surface it is allowed a short staleTime rather than refetching on every
+ * mount: the set of worktrees changes on a human timescale, and the picker
+ * re-rendering its options underneath a click is worse than a few seconds of
+ * staleness.
+ */
+export function useForgeCheckouts(
+  projectId: string | null | undefined,
+  options?: { withTree?: boolean }
+) {
+  return useQuery<ForgeOutcome<ForgeCheckoutsReport>>({
+    queryKey: forgeKeys.checkouts(projectId ?? "", options?.withTree === true),
+    queryFn: () =>
+      forgeGrpc.listCheckouts({
+        projectId: projectId as string,
+        withTree: options?.withTree,
+      }),
+    enabled: !!projectId,
+    staleTime: 30_000,
+    retry: forgeRetry,
+  });
+}
+
+/**
+ * useForgeEnvDiff compares a checkout against what is deployed, per
+ * environment.
+ *
+ * `enabled` is the caller's, and it is deliberately not defaulted to true: a
+ * diff is a REAL render of every environment, which costs seconds, so it runs
+ * when someone is looking at the cards rather than on mount of a page that
+ * might only ever show the Live tab.
+ */
+export function useForgeEnvDiff(
+  projectId: string | null | undefined,
+  args: { env?: string; all?: boolean; checkoutPath?: string; enabled?: boolean }
+) {
+  const { env, all, checkoutPath, enabled } = args;
+  return useQuery<ForgeOutcome<ForgeEnvDiffReport>>({
+    queryKey: forgeKeys.envDiff(projectId ?? "", env ?? "", all === true, checkoutPath ?? ""),
+    queryFn: () =>
+      forgeGrpc.diffEnv({ projectId: projectId as string, env, all, checkoutPath }),
+    enabled: !!projectId && (!!env || all === true) && enabled !== false,
+    staleTime: 0,
+    gcTime: 0,
+    retry: forgeRetry,
+  });
 }
 
 /**

@@ -16,7 +16,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { DeployFlow } from "../DeployFlow";
-import { DeployConfirmStep } from "../DeployConfirmStep";
+import type { DeployPlanReport } from "@/services/forge/deployPlan";
 import { deployTokenFor } from "@/services/forge/deploy";
 import {
   devPlan,
@@ -34,9 +34,34 @@ function baseProps() {
   return {
     isPlanning: false,
     isStarting: false,
-    onConfirm: noop,
     onReplan: noop,
     onClose: noop,
+    onBuildAndPlan: noop,
+    acknowledged: new Set<string>(),
+    onAcknowledge: noop,
+    onApprove: noop,
+    onReplanAfterStale: noop,
+  };
+}
+
+const APPROVED_DIGEST =
+  "sha256:1111111111111111111111111111111111111111111111111111111111111111";
+const APPROVED_RELEASE = "20261003.114500-abcdef123456";
+
+/** A clean plan-only document — the only thing a deploy may be approved from. */
+function approvablePlan(env = "prod"): DeployPlanReport {
+  return {
+    env,
+    ok: true,
+    exit_code: 0,
+    target: { release: APPROVED_RELEASE },
+    deploy_plan: {
+      digest: APPROVED_DIGEST,
+      environment_id: env,
+      bundle_id: "bundle-1",
+      release_version: APPROVED_RELEASE,
+      findings: [{ code: "image_changed", class: "info", section: "images", subject: "api" }],
+    },
   };
 }
 
@@ -53,14 +78,14 @@ describe("the confirm guard", () => {
 
     for (const outcome of outcomes) {
       const view = render(<DeployFlow {...baseProps()} planOutcome={outcome} />);
-      expect(screen.queryByTestId("deploy-confirm")).toBeNull();
-      expect(screen.queryByTestId("deploy-start")).toBeNull();
+      expect(screen.queryByTestId("deploy-approve")).toBeNull();
+      expect(screen.queryByTestId("deploy-approve-start")).toBeNull();
       view.unmount();
     }
 
     const loading = render(<DeployFlow {...baseProps()} isPlanning planOutcome={undefined} />);
     expect(screen.getByTestId("deploy-planning")).toBeTruthy();
-    expect(screen.queryByTestId("deploy-start")).toBeNull();
+    expect(screen.queryByTestId("deploy-approve-start")).toBeNull();
     loading.unmount();
 
     render(
@@ -71,14 +96,22 @@ describe("the confirm guard", () => {
       />
     );
     expect(screen.getByTestId("deploy-plan-error")).toBeTruthy();
-    expect(screen.queryByTestId("deploy-start")).toBeNull();
+    expect(screen.queryByTestId("deploy-approve-start")).toBeNull();
   });
 
-  it("renders the plan ABOVE the confirm when one exists", () => {
-    render(<DeployFlow {...baseProps()} planOutcome={planOutcome(prodPlan())} />);
-    const plan = screen.getByTestId("deploy-plan");
-    const confirm = screen.getByTestId("deploy-confirm");
-    expect(plan.compareDocumentPosition(confirm) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  it("renders the plan ABOVE the approval when one exists", () => {
+    // The approval exists only once there is an approvable plan, so this needs
+    // both documents: the preview, and the plan the deploy is bound to.
+    render(
+      <DeployFlow
+        {...baseProps()}
+        planOutcome={planOutcome(prodPlan())}
+        approvablePlan={approvablePlan()}
+      />
+    );
+    const plan = screen.getByTestId("approvable-plan");
+    const approve = screen.getByTestId("deploy-approve");
+    expect(plan.compareDocumentPosition(approve) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it("offers NO confirm at all — not a disabled one — when preflight blocks", () => {
@@ -86,8 +119,8 @@ describe("the confirm guard", () => {
     // to it: the confirm step is absent, and the reason is rendered in its place.
     render(<DeployFlow {...baseProps()} planOutcome={planOutcome(devPlan())} />);
 
-    expect(screen.queryByTestId("deploy-confirm")).toBeNull();
-    expect(screen.queryByTestId("deploy-start")).toBeNull();
+    expect(screen.queryByTestId("deploy-approve")).toBeNull();
+    expect(screen.queryByTestId("deploy-approve-start")).toBeNull();
     expect(screen.queryByTestId("deploy-acknowledge")).toBeNull();
 
     const blocked = screen.getByTestId("deploy-blocked");
@@ -99,7 +132,7 @@ describe("the confirm guard", () => {
 
   it("offers no confirm when forge's own guard refused, and names every blocker", () => {
     render(<DeployFlow {...baseProps()} planOutcome={planOutcome(guardRefusedPlan())} />);
-    expect(screen.queryByTestId("deploy-start")).toBeNull();
+    expect(screen.queryByTestId("deploy-approve-start")).toBeNull();
     expect(screen.getByTestId("deploy-blocker-guard-refused").textContent).toMatch(
       /will not deploy/i
     );
@@ -107,7 +140,7 @@ describe("the confirm guard", () => {
 
   it("offers no confirm for an env that declares no cluster", () => {
     render(<DeployFlow {...baseProps()} planOutcome={planOutcome(noClusterPlan())} />);
-    expect(screen.queryByTestId("deploy-start")).toBeNull();
+    expect(screen.queryByTestId("deploy-approve-start")).toBeNull();
     expect(screen.getByTestId("deploy-blocker-no-declared-cluster")).toBeTruthy();
   });
 
@@ -115,28 +148,42 @@ describe("the confirm guard", () => {
     // An apply report describes a deploy that already happened; it cannot
     // authorise another.
     render(<DeployFlow {...baseProps()} planOutcome={planOutcome(prodPlan({ mode: "apply" }))} />);
-    expect(screen.queryByTestId("deploy-start")).toBeNull();
+    expect(screen.queryByTestId("deploy-approve-start")).toBeNull();
     expect(screen.getByTestId("deploy-blocker-not-a-preview").textContent).toContain("apply");
   });
 
-  it("confirms with the button alone, named for the environment", async () => {
-    // NO TYPED CONTEXT AND NO CHECKBOX. The cluster is declared in KCL, so the
-    // user never chose it and there is no wrong one to catch — see
-    // DeployConfirmStep's header. The plan is the review; this is the approval.
+  it("approves with the button alone, named for the environment", async () => {
+    // NO TYPED CONTEXT AND NO BLANKET CHECKBOX. The cluster is declared in
+    // KCL, so the user never chose it and there is no wrong one to catch — see
+    // DeployApproveStep's header. The plan is the review; this is the approval.
     const user = userEvent.setup();
-    const onConfirm = vi.fn();
+    const onApprove = vi.fn();
     render(
-      <DeployFlow {...baseProps()} onConfirm={onConfirm} planOutcome={planOutcome(prodPlan())} />
+      <DeployFlow
+        {...baseProps()}
+        onApprove={onApprove}
+        planOutcome={planOutcome(prodPlan())}
+        approvablePlan={approvablePlan()}
+      />
     );
 
-    const start = screen.getByTestId("deploy-start");
+    const start = screen.getByTestId("deploy-approve-start");
     expect(start).toBeEnabled();
-    expect(start.textContent).toBe("Deploy to prod");
+    expect(start.textContent).toContain("prod");
     expect(screen.queryByTestId("deploy-typed-context")).toBeNull();
     expect(screen.queryByTestId("deploy-acknowledge")).toBeNull();
 
     await user.click(start);
-    expect(onConfirm).toHaveBeenCalledTimes(1);
+    expect(onApprove).toHaveBeenCalledTimes(1);
+  });
+
+  it("offers NO approval until the changes have been worked out", () => {
+    // The instant preview cannot say what a deploy would ship, so on its own
+    // it offers only the control that works that out.
+    render(<DeployFlow {...baseProps()} planOutcome={planOutcome(prodPlan())} />);
+
+    expect(screen.queryByTestId("deploy-approve-start")).toBeNull();
+    expect(screen.getByTestId("deploy-build-and-plan")).toBeInTheDocument();
   });
 
   it("still binds the declared cluster in the token the request carries", () => {
@@ -154,25 +201,41 @@ describe("the confirm guard", () => {
       ok: true,
       exit_code: 0,
     });
-    render(<DeployConfirmStep plan={twoClusters} onConfirm={noop} onCancel={noop} />);
-    expect(screen.getByTestId("deploy-start").textContent).toBe("Deploy to dev");
+    render(
+      <DeployFlow
+        {...baseProps()}
+        planOutcome={planOutcome(twoClusters)}
+        approvablePlan={approvablePlan("dev")}
+      />
+    );
+    expect(screen.getByTestId("deploy-approve-start").textContent).toContain("dev");
     expect(screen.queryByTestId("deploy-typed-context")).toBeNull();
     // The cluster list is information on the PLAN, not a hurdle at the click.
     expect(screen.queryByTestId("deploy-confirm-all-contexts")).toBeNull();
   });
 
-  it("passes the RENDERED plan object to onConfirm", async () => {
-    // The token — including the declared context — is derived from this object
-    // downstream, so its identity is the guarantee the claim matches the screen.
+  it("passes an approval derived from the RENDERED plan to onApprove", async () => {
+    // The digest comes off the plan document on screen, so what is approved and
+    // what is deployed are the same change set by construction.
     const user = userEvent.setup();
-    const onConfirm = vi.fn();
-    const plan = prodPlan();
-    render(<DeployFlow {...baseProps()} onConfirm={onConfirm} planOutcome={planOutcome(plan)} />);
+    const onApprove = vi.fn();
+    render(
+      <DeployFlow
+        {...baseProps()}
+        onApprove={onApprove}
+        planOutcome={planOutcome(prodPlan())}
+        approvablePlan={approvablePlan()}
+      />
+    );
 
-    await user.click(screen.getByTestId("deploy-start"));
+    await user.click(screen.getByTestId("deploy-approve-start"));
 
-    expect(onConfirm).toHaveBeenCalledTimes(1);
-    expect(onConfirm.mock.calls[0][0]).toBe(plan);
+    expect(onApprove).toHaveBeenCalledTimes(1);
+    expect(onApprove.mock.calls[0][0]).toEqual({
+      approveDigest: APPROVED_DIGEST,
+      releaseVersion: APPROVED_RELEASE,
+      acknowledgedFindings: [],
+    });
   });
 });
 
@@ -260,7 +323,7 @@ describe("the four refusal reasons", () => {
 
       // The stale confirm is gone — the claim is known bad and must not be
       // re-sendable.
-      expect(screen.queryByTestId("deploy-start")).toBeNull();
+      expect(screen.queryByTestId("deploy-approve-start")).toBeNull();
 
       // The copy is genuinely distinct per reason, not one message with a label.
       expect(seen.has(heading)).toBe(false);

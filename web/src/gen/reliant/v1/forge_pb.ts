@@ -13,7 +13,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file reliant/v1/forge.proto.
  */
 export const file_reliant_v1_forge: GenFile = /*@__PURE__*/
-  fileDesc("ChZyZWxpYW50L3YxL2ZvcmdlLnByb3RvEgpyZWxpYW50LnYxItUBCg9Gb3JnZVJlcG9ydE1ldGESGAoQaXNfZm9yZ2VfcHJvamVjdBgBIAEoCBIRCglzdXBwb3J0ZWQYAiABKAgSFQoNZm9yZ2VfdmVyc2lvbhgDIAEoCRIaChJ1bnN1cHBvcnRlZF9yZWFzb24YBCABKAkSEQoJZXhpdF9jb2RlGAUgASgFEjMKDHJlYWNoYWJpbGl0eRgGIAEoDjIdLnJlbGlhbnQudjEuRm9yZ2VSZWFjaGFiaWxpdHkSGgoSdW5yZWFjaGFibGVfcmVhc29uGAcgASgJIksKF0dldEZvcmdlVG9wb2xvZ3lSZXF1ZXN0EhIKCnByb2plY3RfaWQYASABKAkSDgoGdmVyaWZ5GAIgASgIEgwKBGVudnMYAyADKAkiWgoYR2V0Rm9yZ2VUb3BvbG9neVJlc3BvbnNlEikKBG1ldGEYASABKAsyGy5yZWxpYW50LnYxLkZvcmdlUmVwb3J0TWV0YRITCgtyZXBvcnRfanNvbhgCIAEoCSI4ChVWZXJpZnlGb3JnZUVudlJlcXVlc3QSEgoKcHJvamVjdF9pZBgBIAEoCRILCgNlbnYYAiABKAkiWAoWVmVyaWZ5Rm9yZ2VFbnZSZXNwb25zZRIpCgRtZXRhGAEgASgLMhsucmVsaWFudC52MS5Gb3JnZVJlcG9ydE1ldGESEwoLcmVwb3J0X2pzb24YAiABKAkiOgoXTGlzdEZvcmdlU2VjcmV0c1JlcXVlc3QSEgoKcHJvamVjdF9pZBgBIAEoCRILCgNlbnYYAiABKAkiWgoYTGlzdEZvcmdlU2VjcmV0c1Jlc3BvbnNlEikKBG1ldGEYASABKAsyGy5yZWxpYW50LnYxLkZvcmdlUmVwb3J0TWV0YRITCgtyZXBvcnRfanNvbhgCIAEoCSIqChRHZXRGb3JnZUF1ZGl0UmVxdWVzdBISCgpwcm9qZWN0X2lkGAEgASgJIlcKFUdldEZvcmdlQXVkaXRSZXNwb25zZRIpCgRtZXRhGAEgASgLMhsucmVsaWFudC52MS5Gb3JnZVJlcG9ydE1ldGESEwoLcmVwb3J0X2pzb24YAiABKAkiOwoYR2V0Rm9yZ2VFbnZTdGF0dXNSZXF1ZXN0EhIKCnByb2plY3RfaWQYASABKAkSCwoDZW52GAIgASgJIlsKGUdldEZvcmdlRW52U3RhdHVzUmVzcG9uc2USKQoEbWV0YRgBIAEoCzIbLnJlbGlhbnQudjEuRm9yZ2VSZXBvcnRNZXRhEhMKC3JlcG9ydF9qc29uGAIgASgJIjoKF0dldEZvcmdlRW52U2hhcGVSZXF1ZXN0EhIKCnByb2plY3RfaWQYASABKAkSCwoDZW52GAIgASgJIloKGEdldEZvcmdlRW52U2hhcGVSZXNwb25zZRIpCgRtZXRhGAEgASgLMhsucmVsaWFudC52MS5Gb3JnZVJlcG9ydE1ldGESEwoLcmVwb3J0X2pzb24YAiABKAkiSwoXUGxhbkZvcmdlUHJvbW90ZVJlcXVlc3QSEgoKcHJvamVjdF9pZBgBIAEoCRILCgNlbnYYAiABKAkSDwoHcmVsZWFzZRgDIAEoCSJaChhQbGFuRm9yZ2VQcm9tb3RlUmVzcG9uc2USKQoEbWV0YRgBIAEoCzIbLnJlbGlhbnQudjEuRm9yZ2VSZXBvcnRNZXRhEhMKC3JlcG9ydF9qc29uGAIgASgJIoQBChZQcm9tb3RlRm9yZ2VFbnZSZXF1ZXN0EhIKCnByb2plY3RfaWQYASABKAkSCwoDZW52GAIgASgJEg8KB3JlbGVhc2UYAyABKAkSIAoYZXhwZWN0ZWRfY3VycmVudF9yZWxlYXNlGAQgASgJEhYKDmV4cGVjdF91bmJvdW5kGAUgASgIIuoBChNGb3JnZVByb21vdGVSZWZ1c2FsEjUKBnJlYXNvbhgBIAEoDjIlLnJlbGlhbnQudjEuRm9yZ2VQcm9tb3RlUmVmdXNhbFJlYXNvbhIgChhleHBlY3RlZF9jdXJyZW50X3JlbGVhc2UYAiABKAkSGAoQZXhwZWN0ZWRfdW5ib3VuZBgDIAEoCBIUCgxhY3R1YWxfYm91bmQYBCABKAgSHgoWYWN0dWFsX2N1cnJlbnRfcmVsZWFzZRgFIAEoCRIaChJhY3R1YWxfcHJvbW90ZWRfYXQYBiABKAkSDgoGZGV0YWlsGAcgASgJIlkKF1Byb21vdGVGb3JnZUVudlJlc3BvbnNlEikKBG1ldGEYASABKAsyGy5yZWxpYW50LnYxLkZvcmdlUmVwb3J0TWV0YRITCgtyZXBvcnRfanNvbhgCIAEoCSI5ChZQbGFuRm9yZ2VEZXBsb3lSZXF1ZXN0EhIKCnByb2plY3RfaWQYASABKAkSCwoDZW52GAIgASgJIlkKF1BsYW5Gb3JnZURlcGxveVJlc3BvbnNlEikKBG1ldGEYASABKAsyGy5yZWxpYW50LnYxLkZvcmdlUmVwb3J0TWV0YRITCgtyZXBvcnRfanNvbhgCIAEoCSKXAQoXU3RhcnRGb3JnZURlcGxveVJlcXVlc3QSEgoKcHJvamVjdF9pZBgBIAEoCRILCgNlbnYYAiABKAkSIQoZZXhwZWN0ZWRfZGVjbGFyZWRfY29udGV4dBgDIAEoCRIgChhleHBlY3RlZF9jdXJyZW50X3JlbGVhc2UYBCABKAkSFgoOZXhwZWN0X3VuYm91bmQYBSABKAgi6AIKEkZvcmdlRGVwbG95UmVmdXNhbBI0CgZyZWFzb24YASABKA4yJC5yZWxpYW50LnYxLkZvcmdlRGVwbG95UmVmdXNhbFJlYXNvbhIOCgZkZXRhaWwYAiABKAkSIQoZZXhwZWN0ZWRfZGVjbGFyZWRfY29udGV4dBgDIAEoCRIfChdhY3R1YWxfZGVjbGFyZWRfY29udGV4dBgEIAEoCRIgChhleHBlY3RlZF9jdXJyZW50X3JlbGVhc2UYBSABKAkSGAoQZXhwZWN0ZWRfdW5ib3VuZBgGIAEoCBIeChZhY3R1YWxfY3VycmVudF9yZWxlYXNlGAcgASgJEhQKDGFjdHVhbF9ib3VuZBgIIAEoCBIVCg1ndWFyZF92ZXJkaWN0GAkgASgJEhQKDGd1YXJkX3JlYXNvbhgKIAEoCRIRCglndWFyZF9maXgYCyABKAkSFgoOcnVubmluZ19oYW5kbGUYDCABKAkiwQEKGFN0YXJ0Rm9yZ2VEZXBsb3lSZXNwb25zZRIpCgRtZXRhGAEgASgLMhsucmVsaWFudC52MS5Gb3JnZVJlcG9ydE1ldGESDgoGaGFuZGxlGAIgASgJEgsKA2VudhgDIAEoCRI0Cgpqb2Jfc3RhdHVzGAQgASgOMiAucmVsaWFudC52MS5Gb3JnZURlcGxveUpvYlN0YXR1cxISCgpzdGFydGVkX2F0GAUgASgJEhMKC3JlcG9ydF9qc29uGAYgASgJIkEKG0dldEZvcmdlRGVwbG95U3RhdHVzUmVxdWVzdBISCgpwcm9qZWN0X2lkGAEgASgJEg4KBmhhbmRsZRgCIAEoCSL1AQocR2V0Rm9yZ2VEZXBsb3lTdGF0dXNSZXNwb25zZRIpCgRtZXRhGAEgASgLMhsucmVsaWFudC52MS5Gb3JnZVJlcG9ydE1ldGESDgoGaGFuZGxlGAIgASgJEgsKA2VudhgDIAEoCRI0Cgpqb2Jfc3RhdHVzGAQgASgOMiAucmVsaWFudC52MS5Gb3JnZURlcGxveUpvYlN0YXR1cxIZChFqb2Jfc3RhdHVzX2RldGFpbBgFIAEoCRISCgpzdGFydGVkX2F0GAYgASgJEhMKC2ZpbmlzaGVkX2F0GAcgASgJEhMKC3JlcG9ydF9qc29uGAggASgJKnYKEUZvcmdlUmVhY2hhYmlsaXR5EiIKHkZPUkdFX1JFQUNIQUJJTElUWV9VTlNQRUNJRklFRBAAEhkKFUZPUkdFX1JFQUNIQUJJTElUWV9PSxABEiIKHkZPUkdFX1JFQUNIQUJJTElUWV9VTlJFQUNIQUJMRRACKoEBChlGb3JnZVByb21vdGVSZWZ1c2FsUmVhc29uEiwKKEZPUkdFX1BST01PVEVfUkVGVVNBTF9SRUFTT05fVU5TUEVDSUZJRUQQABI2CjJGT1JHRV9QUk9NT1RFX1JFRlVTQUxfUkVBU09OX1NUQUxFX0NVUlJFTlRfUkVMRUFTRRABKtQBChRGb3JnZURlcGxveUpvYlN0YXR1cxInCiNGT1JHRV9ERVBMT1lfSk9CX1NUQVRVU19VTlNQRUNJRklFRBAAEiMKH0ZPUkdFX0RFUExPWV9KT0JfU1RBVFVTX1JVTk5JTkcQARIlCiFGT1JHRV9ERVBMT1lfSk9CX1NUQVRVU19DT01QTEVURUQQAhIiCh5GT1JHRV9ERVBMT1lfSk9CX1NUQVRVU19GQUlMRUQQAxIjCh9GT1JHRV9ERVBMT1lfSk9CX1NUQVRVU19VTktOT1dOEAQqlgIKGEZvcmdlRGVwbG95UmVmdXNhbFJlYXNvbhIrCidGT1JHRV9ERVBMT1lfUkVGVVNBTF9SRUFTT05fVU5TUEVDSUZJRUQQABI2CjJGT1JHRV9ERVBMT1lfUkVGVVNBTF9SRUFTT05fU1RBTEVfREVDTEFSRURfQ09OVEVYVBABEjUKMUZPUkdFX0RFUExPWV9SRUZVU0FMX1JFQVNPTl9TVEFMRV9DVVJSRU5UX1JFTEVBU0UQAhItCilGT1JHRV9ERVBMT1lfUkVGVVNBTF9SRUFTT05fR1VBUkRfUkVGVVNFRBADEi8KK0ZPUkdFX0RFUExPWV9SRUZVU0FMX1JFQVNPTl9BTFJFQURZX1JVTk5JTkcQBDL+BwoMRm9yZ2VTZXJ2aWNlEloKC0dldFRvcG9sb2d5EiMucmVsaWFudC52MS5HZXRGb3JnZVRvcG9sb2d5UmVxdWVzdBokLnJlbGlhbnQudjEuR2V0Rm9yZ2VUb3BvbG9neVJlc3BvbnNlIgASVAoJVmVyaWZ5RW52EiEucmVsaWFudC52MS5WZXJpZnlGb3JnZUVudlJlcXVlc3QaIi5yZWxpYW50LnYxLlZlcmlmeUZvcmdlRW52UmVzcG9uc2UiABJaCgtMaXN0U2VjcmV0cxIjLnJlbGlhbnQudjEuTGlzdEZvcmdlU2VjcmV0c1JlcXVlc3QaJC5yZWxpYW50LnYxLkxpc3RGb3JnZVNlY3JldHNSZXNwb25zZSIAElEKCEdldEF1ZGl0EiAucmVsaWFudC52MS5HZXRGb3JnZUF1ZGl0UmVxdWVzdBohLnJlbGlhbnQudjEuR2V0Rm9yZ2VBdWRpdFJlc3BvbnNlIgASXQoMR2V0RW52U3RhdHVzEiQucmVsaWFudC52MS5HZXRGb3JnZUVudlN0YXR1c1JlcXVlc3QaJS5yZWxpYW50LnYxLkdldEZvcmdlRW52U3RhdHVzUmVzcG9uc2UiABJaCgtHZXRFbnZTaGFwZRIjLnJlbGlhbnQudjEuR2V0Rm9yZ2VFbnZTaGFwZVJlcXVlc3QaJC5yZWxpYW50LnYxLkdldEZvcmdlRW52U2hhcGVSZXNwb25zZSIAEloKC1BsYW5Qcm9tb3RlEiMucmVsaWFudC52MS5QbGFuRm9yZ2VQcm9tb3RlUmVxdWVzdBokLnJlbGlhbnQudjEuUGxhbkZvcmdlUHJvbW90ZVJlc3BvbnNlIgASWQoMQXBwbHlQcm9tb3RlEiIucmVsaWFudC52MS5Qcm9tb3RlRm9yZ2VFbnZSZXF1ZXN0GiMucmVsaWFudC52MS5Qcm9tb3RlRm9yZ2VFbnZSZXNwb25zZSIAElcKClBsYW5EZXBsb3kSIi5yZWxpYW50LnYxLlBsYW5Gb3JnZURlcGxveVJlcXVlc3QaIy5yZWxpYW50LnYxLlBsYW5Gb3JnZURlcGxveVJlc3BvbnNlIgASWgoLU3RhcnREZXBsb3kSIy5yZWxpYW50LnYxLlN0YXJ0Rm9yZ2VEZXBsb3lSZXF1ZXN0GiQucmVsaWFudC52MS5TdGFydEZvcmdlRGVwbG95UmVzcG9uc2UiABJmCg9HZXREZXBsb3lTdGF0dXMSJy5yZWxpYW50LnYxLkdldEZvcmdlRGVwbG95U3RhdHVzUmVxdWVzdBooLnJlbGlhbnQudjEuR2V0Rm9yZ2VEZXBsb3lTdGF0dXNSZXNwb25zZSIAQjpaOGdpdGh1Yi5jb20vcmVsaWFudC1sYWJzL3JlbGlhbnQvZ2VuL3JlbGlhbnQvdjE7cmVsaWFudHYxYgZwcm90bzM");
+  fileDesc("ChZyZWxpYW50L3YxL2ZvcmdlLnByb3RvEgpyZWxpYW50LnYxItUBCg9Gb3JnZVJlcG9ydE1ldGESGAoQaXNfZm9yZ2VfcHJvamVjdBgBIAEoCBIRCglzdXBwb3J0ZWQYAiABKAgSFQoNZm9yZ2VfdmVyc2lvbhgDIAEoCRIaChJ1bnN1cHBvcnRlZF9yZWFzb24YBCABKAkSEQoJZXhpdF9jb2RlGAUgASgFEjMKDHJlYWNoYWJpbGl0eRgGIAEoDjIdLnJlbGlhbnQudjEuRm9yZ2VSZWFjaGFiaWxpdHkSGgoSdW5yZWFjaGFibGVfcmVhc29uGAcgASgJIksKF0dldEZvcmdlVG9wb2xvZ3lSZXF1ZXN0EhIKCnByb2plY3RfaWQYASABKAkSDgoGdmVyaWZ5GAIgASgIEgwKBGVudnMYAyADKAkiWgoYR2V0Rm9yZ2VUb3BvbG9neVJlc3BvbnNlEikKBG1ldGEYASABKAsyGy5yZWxpYW50LnYxLkZvcmdlUmVwb3J0TWV0YRITCgtyZXBvcnRfanNvbhgCIAEoCSI4ChVWZXJpZnlGb3JnZUVudlJlcXVlc3QSEgoKcHJvamVjdF9pZBgBIAEoCRILCgNlbnYYAiABKAkiWAoWVmVyaWZ5Rm9yZ2VFbnZSZXNwb25zZRIpCgRtZXRhGAEgASgLMhsucmVsaWFudC52MS5Gb3JnZVJlcG9ydE1ldGESEwoLcmVwb3J0X2pzb24YAiABKAkiOgoXTGlzdEZvcmdlU2VjcmV0c1JlcXVlc3QSEgoKcHJvamVjdF9pZBgBIAEoCRILCgNlbnYYAiABKAkiWgoYTGlzdEZvcmdlU2VjcmV0c1Jlc3BvbnNlEikKBG1ldGEYASABKAsyGy5yZWxpYW50LnYxLkZvcmdlUmVwb3J0TWV0YRITCgtyZXBvcnRfanNvbhgCIAEoCSIqChRHZXRGb3JnZUF1ZGl0UmVxdWVzdBISCgpwcm9qZWN0X2lkGAEgASgJIlcKFUdldEZvcmdlQXVkaXRSZXNwb25zZRIpCgRtZXRhGAEgASgLMhsucmVsaWFudC52MS5Gb3JnZVJlcG9ydE1ldGESEwoLcmVwb3J0X2pzb24YAiABKAkiOwoYR2V0Rm9yZ2VFbnZTdGF0dXNSZXF1ZXN0EhIKCnByb2plY3RfaWQYASABKAkSCwoDZW52GAIgASgJIlsKGUdldEZvcmdlRW52U3RhdHVzUmVzcG9uc2USKQoEbWV0YRgBIAEoCzIbLnJlbGlhbnQudjEuRm9yZ2VSZXBvcnRNZXRhEhMKC3JlcG9ydF9qc29uGAIgASgJIjoKF0dldEZvcmdlRW52U2hhcGVSZXF1ZXN0EhIKCnByb2plY3RfaWQYASABKAkSCwoDZW52GAIgASgJIloKGEdldEZvcmdlRW52U2hhcGVSZXNwb25zZRIpCgRtZXRhGAEgASgLMhsucmVsaWFudC52MS5Gb3JnZVJlcG9ydE1ldGESEwoLcmVwb3J0X2pzb24YAiABKAkiSwoXUGxhbkZvcmdlUHJvbW90ZVJlcXVlc3QSEgoKcHJvamVjdF9pZBgBIAEoCRILCgNlbnYYAiABKAkSDwoHcmVsZWFzZRgDIAEoCSJaChhQbGFuRm9yZ2VQcm9tb3RlUmVzcG9uc2USKQoEbWV0YRgBIAEoCzIbLnJlbGlhbnQudjEuRm9yZ2VSZXBvcnRNZXRhEhMKC3JlcG9ydF9qc29uGAIgASgJIoQBChZQcm9tb3RlRm9yZ2VFbnZSZXF1ZXN0EhIKCnByb2plY3RfaWQYASABKAkSCwoDZW52GAIgASgJEg8KB3JlbGVhc2UYAyABKAkSIAoYZXhwZWN0ZWRfY3VycmVudF9yZWxlYXNlGAQgASgJEhYKDmV4cGVjdF91bmJvdW5kGAUgASgIIuoBChNGb3JnZVByb21vdGVSZWZ1c2FsEjUKBnJlYXNvbhgBIAEoDjIlLnJlbGlhbnQudjEuRm9yZ2VQcm9tb3RlUmVmdXNhbFJlYXNvbhIgChhleHBlY3RlZF9jdXJyZW50X3JlbGVhc2UYAiABKAkSGAoQZXhwZWN0ZWRfdW5ib3VuZBgDIAEoCBIUCgxhY3R1YWxfYm91bmQYBCABKAgSHgoWYWN0dWFsX2N1cnJlbnRfcmVsZWFzZRgFIAEoCRIaChJhY3R1YWxfcHJvbW90ZWRfYXQYBiABKAkSDgoGZGV0YWlsGAcgASgJIlkKF1Byb21vdGVGb3JnZUVudlJlc3BvbnNlEikKBG1ldGEYASABKAsyGy5yZWxpYW50LnYxLkZvcmdlUmVwb3J0TWV0YRITCgtyZXBvcnRfanNvbhgCIAEoCSJQChZQbGFuRm9yZ2VEZXBsb3lSZXF1ZXN0EhIKCnByb2plY3RfaWQYASABKAkSCwoDZW52GAIgASgJEhUKDWNoZWNrb3V0X3BhdGgYAyABKAkiWQoXUGxhbkZvcmdlRGVwbG95UmVzcG9uc2USKQoEbWV0YRgBIAEoCzIbLnJlbGlhbnQudjEuRm9yZ2VSZXBvcnRNZXRhEhMKC3JlcG9ydF9qc29uGAIgASgJIlUKG1N0YXJ0Rm9yZ2VEZXBsb3lQbGFuUmVxdWVzdBISCgpwcm9qZWN0X2lkGAEgASgJEgsKA2VudhgCIAEoCRIVCg1jaGVja291dF9wYXRoGAMgASgJIkIKGUxpc3RGb3JnZUNoZWNrb3V0c1JlcXVlc3QSEgoKcHJvamVjdF9pZBgBIAEoCRIRCgl3aXRoX3RyZWUYAiABKAgiXAoaTGlzdEZvcmdlQ2hlY2tvdXRzUmVzcG9uc2USKQoEbWV0YRgBIAEoCzIbLnJlbGlhbnQudjEuRm9yZ2VSZXBvcnRNZXRhEhMKC3JlcG9ydF9qc29uGAIgASgJIloKE0RpZmZGb3JnZUVudlJlcXVlc3QSEgoKcHJvamVjdF9pZBgBIAEoCRILCgNlbnYYAiABKAkSCwoDYWxsGAMgASgIEhUKDWNoZWNrb3V0X3BhdGgYBCABKAkiVgoURGlmZkZvcmdlRW52UmVzcG9uc2USKQoEbWV0YRgBIAEoCzIbLnJlbGlhbnQudjEuRm9yZ2VSZXBvcnRNZXRhEhMKC3JlcG9ydF9qc29uGAIgASgJIv4BChdTdGFydEZvcmdlRGVwbG95UmVxdWVzdBISCgpwcm9qZWN0X2lkGAEgASgJEgsKA2VudhgCIAEoCRIhChlleHBlY3RlZF9kZWNsYXJlZF9jb250ZXh0GAMgASgJEiAKGGV4cGVjdGVkX2N1cnJlbnRfcmVsZWFzZRgEIAEoCRIWCg5leHBlY3RfdW5ib3VuZBgFIAEoCBIWCg5hcHByb3ZlX2RpZ2VzdBgGIAEoCRIdChVhY2tub3dsZWRnZWRfZmluZGluZ3MYByADKAkSFwoPcmVsZWFzZV92ZXJzaW9uGAggASgJEhUKDWNoZWNrb3V0X3BhdGgYCSABKAkimwMKEkZvcmdlRGVwbG95UmVmdXNhbBI0CgZyZWFzb24YASABKA4yJC5yZWxpYW50LnYxLkZvcmdlRGVwbG95UmVmdXNhbFJlYXNvbhIOCgZkZXRhaWwYAiABKAkSIQoZZXhwZWN0ZWRfZGVjbGFyZWRfY29udGV4dBgDIAEoCRIfChdhY3R1YWxfZGVjbGFyZWRfY29udGV4dBgEIAEoCRIgChhleHBlY3RlZF9jdXJyZW50X3JlbGVhc2UYBSABKAkSGAoQZXhwZWN0ZWRfdW5ib3VuZBgGIAEoCBIeChZhY3R1YWxfY3VycmVudF9yZWxlYXNlGAcgASgJEhQKDGFjdHVhbF9ib3VuZBgIIAEoCBIVCg1ndWFyZF92ZXJkaWN0GAkgASgJEhQKDGd1YXJkX3JlYXNvbhgKIAEoCRIRCglndWFyZF9maXgYCyABKAkSFgoOcnVubmluZ19oYW5kbGUYDCABKAkSGQoRY3VycmVudF9wbGFuX2pzb24YDSABKAkSFgoOdW5hY2tub3dsZWRnZWQYDiADKAkiwQEKGFN0YXJ0Rm9yZ2VEZXBsb3lSZXNwb25zZRIpCgRtZXRhGAEgASgLMhsucmVsaWFudC52MS5Gb3JnZVJlcG9ydE1ldGESDgoGaGFuZGxlGAIgASgJEgsKA2VudhgDIAEoCRI0Cgpqb2Jfc3RhdHVzGAQgASgOMiAucmVsaWFudC52MS5Gb3JnZURlcGxveUpvYlN0YXR1cxISCgpzdGFydGVkX2F0GAUgASgJEhMKC3JlcG9ydF9qc29uGAYgASgJIkEKG0dldEZvcmdlRGVwbG95U3RhdHVzUmVxdWVzdBISCgpwcm9qZWN0X2lkGAEgASgJEg4KBmhhbmRsZRgCIAEoCSK5AgocR2V0Rm9yZ2VEZXBsb3lTdGF0dXNSZXNwb25zZRIpCgRtZXRhGAEgASgLMhsucmVsaWFudC52MS5Gb3JnZVJlcG9ydE1ldGESDgoGaGFuZGxlGAIgASgJEgsKA2VudhgDIAEoCRI0Cgpqb2Jfc3RhdHVzGAQgASgOMiAucmVsaWFudC52MS5Gb3JnZURlcGxveUpvYlN0YXR1cxIZChFqb2Jfc3RhdHVzX2RldGFpbBgFIAEoCRISCgpzdGFydGVkX2F0GAYgASgJEhMKC2ZpbmlzaGVkX2F0GAcgASgJEhMKC3JlcG9ydF9qc29uGAggASgJEhEKCXBsYW5fb25seRgJIAEoCBIvCgdyZWZ1c2FsGAogASgLMh4ucmVsaWFudC52MS5Gb3JnZURlcGxveVJlZnVzYWwqdgoRRm9yZ2VSZWFjaGFiaWxpdHkSIgoeRk9SR0VfUkVBQ0hBQklMSVRZX1VOU1BFQ0lGSUVEEAASGQoVRk9SR0VfUkVBQ0hBQklMSVRZX09LEAESIgoeRk9SR0VfUkVBQ0hBQklMSVRZX1VOUkVBQ0hBQkxFEAIqgQEKGUZvcmdlUHJvbW90ZVJlZnVzYWxSZWFzb24SLAooRk9SR0VfUFJPTU9URV9SRUZVU0FMX1JFQVNPTl9VTlNQRUNJRklFRBAAEjYKMkZPUkdFX1BST01PVEVfUkVGVVNBTF9SRUFTT05fU1RBTEVfQ1VSUkVOVF9SRUxFQVNFEAEq1AEKFEZvcmdlRGVwbG95Sm9iU3RhdHVzEicKI0ZPUkdFX0RFUExPWV9KT0JfU1RBVFVTX1VOU1BFQ0lGSUVEEAASIwofRk9SR0VfREVQTE9ZX0pPQl9TVEFUVVNfUlVOTklORxABEiUKIUZPUkdFX0RFUExPWV9KT0JfU1RBVFVTX0NPTVBMRVRFRBACEiIKHkZPUkdFX0RFUExPWV9KT0JfU1RBVFVTX0ZBSUxFRBADEiMKH0ZPUkdFX0RFUExPWV9KT0JfU1RBVFVTX1VOS05PV04QBCr3AgoYRm9yZ2VEZXBsb3lSZWZ1c2FsUmVhc29uEisKJ0ZPUkdFX0RFUExPWV9SRUZVU0FMX1JFQVNPTl9VTlNQRUNJRklFRBAAEjYKMkZPUkdFX0RFUExPWV9SRUZVU0FMX1JFQVNPTl9TVEFMRV9ERUNMQVJFRF9DT05URVhUEAESNQoxRk9SR0VfREVQTE9ZX1JFRlVTQUxfUkVBU09OX1NUQUxFX0NVUlJFTlRfUkVMRUFTRRACEi0KKUZPUkdFX0RFUExPWV9SRUZVU0FMX1JFQVNPTl9HVUFSRF9SRUZVU0VEEAMSLworRk9SR0VfREVQTE9ZX1JFRlVTQUxfUkVBU09OX0FMUkVBRFlfUlVOTklORxAEEioKJkZPUkdFX0RFUExPWV9SRUZVU0FMX1JFQVNPTl9QTEFOX1NUQUxFEAUSMwovRk9SR0VfREVQTE9ZX1JFRlVTQUxfUkVBU09OX1BMQU5fVU5BQ0tOT1dMRURHRUQQBjKUCgoMRm9yZ2VTZXJ2aWNlEloKC0dldFRvcG9sb2d5EiMucmVsaWFudC52MS5HZXRGb3JnZVRvcG9sb2d5UmVxdWVzdBokLnJlbGlhbnQudjEuR2V0Rm9yZ2VUb3BvbG9neVJlc3BvbnNlIgASVAoJVmVyaWZ5RW52EiEucmVsaWFudC52MS5WZXJpZnlGb3JnZUVudlJlcXVlc3QaIi5yZWxpYW50LnYxLlZlcmlmeUZvcmdlRW52UmVzcG9uc2UiABJaCgtMaXN0U2VjcmV0cxIjLnJlbGlhbnQudjEuTGlzdEZvcmdlU2VjcmV0c1JlcXVlc3QaJC5yZWxpYW50LnYxLkxpc3RGb3JnZVNlY3JldHNSZXNwb25zZSIAElEKCEdldEF1ZGl0EiAucmVsaWFudC52MS5HZXRGb3JnZUF1ZGl0UmVxdWVzdBohLnJlbGlhbnQudjEuR2V0Rm9yZ2VBdWRpdFJlc3BvbnNlIgASXQoMR2V0RW52U3RhdHVzEiQucmVsaWFudC52MS5HZXRGb3JnZUVudlN0YXR1c1JlcXVlc3QaJS5yZWxpYW50LnYxLkdldEZvcmdlRW52U3RhdHVzUmVzcG9uc2UiABJaCgtHZXRFbnZTaGFwZRIjLnJlbGlhbnQudjEuR2V0Rm9yZ2VFbnZTaGFwZVJlcXVlc3QaJC5yZWxpYW50LnYxLkdldEZvcmdlRW52U2hhcGVSZXNwb25zZSIAEloKC1BsYW5Qcm9tb3RlEiMucmVsaWFudC52MS5QbGFuRm9yZ2VQcm9tb3RlUmVxdWVzdBokLnJlbGlhbnQudjEuUGxhbkZvcmdlUHJvbW90ZVJlc3BvbnNlIgASWQoMQXBwbHlQcm9tb3RlEiIucmVsaWFudC52MS5Qcm9tb3RlRm9yZ2VFbnZSZXF1ZXN0GiMucmVsaWFudC52MS5Qcm9tb3RlRm9yZ2VFbnZSZXNwb25zZSIAElcKClBsYW5EZXBsb3kSIi5yZWxpYW50LnYxLlBsYW5Gb3JnZURlcGxveVJlcXVlc3QaIy5yZWxpYW50LnYxLlBsYW5Gb3JnZURlcGxveVJlc3BvbnNlIgASYgoPU3RhcnREZXBsb3lQbGFuEicucmVsaWFudC52MS5TdGFydEZvcmdlRGVwbG95UGxhblJlcXVlc3QaJC5yZWxpYW50LnYxLlN0YXJ0Rm9yZ2VEZXBsb3lSZXNwb25zZSIAEmAKDUxpc3RDaGVja291dHMSJS5yZWxpYW50LnYxLkxpc3RGb3JnZUNoZWNrb3V0c1JlcXVlc3QaJi5yZWxpYW50LnYxLkxpc3RGb3JnZUNoZWNrb3V0c1Jlc3BvbnNlIgASTgoHRGlmZkVudhIfLnJlbGlhbnQudjEuRGlmZkZvcmdlRW52UmVxdWVzdBogLnJlbGlhbnQudjEuRGlmZkZvcmdlRW52UmVzcG9uc2UiABJaCgtTdGFydERlcGxveRIjLnJlbGlhbnQudjEuU3RhcnRGb3JnZURlcGxveVJlcXVlc3QaJC5yZWxpYW50LnYxLlN0YXJ0Rm9yZ2VEZXBsb3lSZXNwb25zZSIAEmYKD0dldERlcGxveVN0YXR1cxInLnJlbGlhbnQudjEuR2V0Rm9yZ2VEZXBsb3lTdGF0dXNSZXF1ZXN0GigucmVsaWFudC52MS5HZXRGb3JnZURlcGxveVN0YXR1c1Jlc3BvbnNlIgBCOlo4Z2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vcmVsaWFudC92MTtyZWxpYW50djFiBnByb3RvMw");
 
 /**
  * ForgeReportMeta is stamped on every response so a client can tell the five
@@ -655,6 +655,14 @@ export type PlanForgeDeployRequest = Message<"reliant.v1.PlanForgeDeployRequest"
    * @generated from field: string env = 2;
    */
   env: string;
+
+  /**
+   * The checkout to render — the project's main checkout when empty. Honoured
+   * only if ListCheckouts returned it for this project.
+   *
+   * @generated from field: string checkout_path = 3;
+   */
+  checkoutPath: string;
 };
 
 /**
@@ -700,6 +708,179 @@ export type PlanForgeDeployResponse = Message<"reliant.v1.PlanForgeDeployRespons
  */
 export const PlanForgeDeployResponseSchema: GenMessage<PlanForgeDeployResponse> = /*@__PURE__*/
   messageDesc(file_reliant_v1_forge, 19);
+
+/**
+ * StartForgeDeployPlanRequest asks for the plan a human will approve.
+ *
+ * It carries NO approval of any kind, and that is correct rather than an
+ * oversight: this call writes no promotion and applies nothing, so there is
+ * nothing yet to approve. It does build and push, which is why it is refused
+ * while a deploy of the same environment is in flight.
+ *
+ * @generated from message reliant.v1.StartForgeDeployPlanRequest
+ */
+export type StartForgeDeployPlanRequest = Message<"reliant.v1.StartForgeDeployPlanRequest"> & {
+  /**
+   * @generated from field: string project_id = 1;
+   */
+  projectId: string;
+
+  /**
+   * The environment to plan a deploy of. forge's positional argument.
+   *
+   * @generated from field: string env = 2;
+   */
+  env: string;
+
+  /**
+   * The checkout to build and render from — the project's main checkout when
+   * empty. Honoured only if ListCheckouts returned it for this project.
+   *
+   * @generated from field: string checkout_path = 3;
+   */
+  checkoutPath: string;
+};
+
+/**
+ * Describes the message reliant.v1.StartForgeDeployPlanRequest.
+ * Use `create(StartForgeDeployPlanRequestSchema)` to create a new message.
+ */
+export const StartForgeDeployPlanRequestSchema: GenMessage<StartForgeDeployPlanRequest> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_forge, 20);
+
+/**
+ * @generated from message reliant.v1.ListForgeCheckoutsRequest
+ */
+export type ListForgeCheckoutsRequest = Message<"reliant.v1.ListForgeCheckoutsRequest"> & {
+  /**
+   * @generated from field: string project_id = 1;
+   */
+  projectId: string;
+
+  /**
+   * Also compute each checkout's content hash. It costs about half a second per
+   * checkout, so it is opt-in: the picker does not need it, a diff cache does.
+   *
+   * @generated from field: bool with_tree = 2;
+   */
+  withTree: boolean;
+};
+
+/**
+ * Describes the message reliant.v1.ListForgeCheckoutsRequest.
+ * Use `create(ListForgeCheckoutsRequestSchema)` to create a new message.
+ */
+export const ListForgeCheckoutsRequestSchema: GenMessage<ListForgeCheckoutsRequest> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_forge, 21);
+
+/**
+ * @generated from message reliant.v1.ListForgeCheckoutsResponse
+ */
+export type ListForgeCheckoutsResponse = Message<"reliant.v1.ListForgeCheckoutsResponse"> & {
+  /**
+   * @generated from field: reliant.v1.ForgeReportMeta meta = 1;
+   */
+  meta?: ForgeReportMeta | undefined;
+
+  /**
+   * Forge's checkout document, verbatim. Each entry carries the label to show,
+   * whether it is the remote main or a worktree, its path, branch and current
+   * commit, whether it has uncommitted changes, and how far ahead or behind
+   * main it is.
+   *
+   * Two fields read wrong if skimmed. "main" means the REMOTE main, not a local
+   * branch of that name — a local main that has not been fetched is a different
+   * tree. And the ahead/behind counts are OMITTED rather than zero when the
+   * comparison cannot be made at all: "in step with main" and "could not tell"
+   * are different answers, and showing the second as the first would be a
+   * confident lie about how stale a checkout is.
+   *
+   * @generated from field: string report_json = 2;
+   */
+  reportJson: string;
+};
+
+/**
+ * Describes the message reliant.v1.ListForgeCheckoutsResponse.
+ * Use `create(ListForgeCheckoutsResponseSchema)` to create a new message.
+ */
+export const ListForgeCheckoutsResponseSchema: GenMessage<ListForgeCheckoutsResponse> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_forge, 22);
+
+/**
+ * @generated from message reliant.v1.DiffForgeEnvRequest
+ */
+export type DiffForgeEnvRequest = Message<"reliant.v1.DiffForgeEnvRequest"> & {
+  /**
+   * @generated from field: string project_id = 1;
+   */
+  projectId: string;
+
+  /**
+   * The ONE environment to diff. Exactly one of this and all — forge's own
+   * rule, mirrored here so a malformed request is refused before any work
+   * starts.
+   *
+   * @generated from field: string env = 2;
+   */
+  env: string;
+
+  /**
+   * Diff every environment declared in the checkout, in one document. This is
+   * the form the cards use: one render serves them all, so asking once is
+   * cheaper than asking per environment.
+   *
+   * @generated from field: bool all = 3;
+   */
+  all: boolean;
+
+  /**
+   * The checkout to render — the project's main checkout when empty. Honoured
+   * only if ListCheckouts returned it for this project.
+   *
+   * @generated from field: string checkout_path = 4;
+   */
+  checkoutPath: string;
+};
+
+/**
+ * Describes the message reliant.v1.DiffForgeEnvRequest.
+ * Use `create(DiffForgeEnvRequestSchema)` to create a new message.
+ */
+export const DiffForgeEnvRequestSchema: GenMessage<DiffForgeEnvRequest> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_forge, 23);
+
+/**
+ * @generated from message reliant.v1.DiffForgeEnvResponse
+ */
+export type DiffForgeEnvResponse = Message<"reliant.v1.DiffForgeEnvResponse"> & {
+  /**
+   * @generated from field: reliant.v1.ForgeReportMeta meta = 1;
+   */
+  meta?: ForgeReportMeta | undefined;
+
+  /**
+   * Forge's diff document, verbatim: per environment, what was added, removed
+   * and changed, with image changes separated from configuration changes, plus
+   * secrets newly needed and any runtime or cluster move.
+   *
+   * READ THE PER-ENVIRONMENT STATUS FIRST, because a failure must never be
+   * mistaken for "nothing changed". An environment whose render failed, or
+   * which has no recorded configuration to compare against, reports that
+   * instead of an empty diff — and an empty diff and an unanswerable one mean
+   * opposite things.
+   *
+   * @generated from field: string report_json = 2;
+   */
+  reportJson: string;
+};
+
+/**
+ * Describes the message reliant.v1.DiffForgeEnvResponse.
+ * Use `create(DiffForgeEnvResponseSchema)` to create a new message.
+ */
+export const DiffForgeEnvResponseSchema: GenMessage<DiffForgeEnvResponse> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_forge, 24);
 
 /**
  * StartForgeDeployRequest carries the CONFIRMATION TOKEN that authorises writing
@@ -767,6 +948,61 @@ export type StartForgeDeployRequest = Message<"reliant.v1.StartForgeDeployReques
    * @generated from field: bool expect_unbound = 5;
    */
   expectUnbound: boolean;
+
+  /**
+   * THE PLAN THE HUMAN READ AND APPROVED — its digest, from the plan-only
+   * stage's document (`deploy_plan.digest`). REQUIRED.
+   *
+   * The fields above authorise the TARGET: which cluster, which binding. That
+   * was never enough on its own. A versionless deploy builds new images from
+   * the checkout and cuts a new release, so a request carrying only the target
+   * claim approved "whatever forge computes next" — a change set nobody had
+   * seen. This names the change set instead.
+   *
+   * Forge recomputes the plan under the environment's row lock and refuses a
+   * mismatch rather than deploying it, so a client cannot approve a plan it
+   * fabricated and cannot ship one that changed after it was read.
+   *
+   * @generated from field: string approve_digest = 6;
+   */
+  approveDigest: string;
+
+  /**
+   * The stop-class finding CODES the human accepted, one per code.
+   *
+   * By code rather than a blanket "yes, do destructive things", because a code
+   * is not knowable until the plan is computed — so it cannot be pre-approved
+   * in advance. A blanket flag set once would silently cover every future
+   * destructive change to this environment; these cover exactly the findings in
+   * the plan that was read. A stop-class finding with no matching code here is
+   * refused, and nothing is deployed.
+   *
+   * @generated from field: repeated string acknowledged_findings = 7;
+   */
+  acknowledgedFindings: string[];
+
+  /**
+   * The release the plan-only stage cut (`target.release` from its document).
+   * REQUIRED.
+   *
+   * It is deployed by name, which is what makes this deploy ship exactly the
+   * artifacts the approved plan describes. Omitted, the deploy would build and
+   * cut a SECOND release, whose plan the approved digest could never match.
+   *
+   * @generated from field: string release_version = 8;
+   */
+  releaseVersion: string;
+
+  /**
+   * The checkout to deploy from — the project's main checkout when empty.
+   *
+   * Honoured only if it is one of the checkouts ListCheckouts returned for this
+   * project; the daemon re-derives that list and checks against it. A value
+   * this server cannot authorise is refused rather than used.
+   *
+   * @generated from field: string checkout_path = 9;
+   */
+  checkoutPath: string;
 };
 
 /**
@@ -774,7 +1010,7 @@ export type StartForgeDeployRequest = Message<"reliant.v1.StartForgeDeployReques
  * Use `create(StartForgeDeployRequestSchema)` to create a new message.
  */
 export const StartForgeDeployRequestSchema: GenMessage<StartForgeDeployRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_forge, 20);
+  messageDesc(file_reliant_v1_forge, 25);
 
 /**
  * ForgeDeployRefusal is the state the guard found, when it refused.
@@ -865,6 +1101,28 @@ export type ForgeDeployRefusal = Message<"reliant.v1.ForgeDeployRefusal"> & {
    * @generated from field: string running_handle = 12;
    */
   runningHandle: string;
+
+  /**
+   * THE RECOMPUTED PLAN, on a plan-stale refusal: forge's plan document as
+   * JSON, computed against the state that actually exists now.
+   *
+   * Carried because "the plan changed" is only actionable if the operator can
+   * see what it changed TO. Without it the only recovery is to re-plan from
+   * scratch or to retry blind, and the second is the accident this refusal
+   * exists to prevent. Render it beside the plan that was approved and show the
+   * difference.
+   *
+   * @generated from field: string current_plan_json = 13;
+   */
+  currentPlanJson: string;
+
+  /**
+   * The destructive finding codes still needing acceptance, on a
+   * plan-unacknowledged refusal. Each one is a decision only a human can make.
+   *
+   * @generated from field: repeated string unacknowledged = 14;
+   */
+  unacknowledged: string[];
 };
 
 /**
@@ -872,7 +1130,7 @@ export type ForgeDeployRefusal = Message<"reliant.v1.ForgeDeployRefusal"> & {
  * Use `create(ForgeDeployRefusalSchema)` to create a new message.
  */
 export const ForgeDeployRefusalSchema: GenMessage<ForgeDeployRefusal> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_forge, 21);
+  messageDesc(file_reliant_v1_forge, 26);
 
 /**
  * @generated from message reliant.v1.StartForgeDeployResponse
@@ -938,7 +1196,7 @@ export type StartForgeDeployResponse = Message<"reliant.v1.StartForgeDeployRespo
  * Use `create(StartForgeDeployResponseSchema)` to create a new message.
  */
 export const StartForgeDeployResponseSchema: GenMessage<StartForgeDeployResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_forge, 22);
+  messageDesc(file_reliant_v1_forge, 27);
 
 /**
  * @generated from message reliant.v1.GetForgeDeployStatusRequest
@@ -962,7 +1220,7 @@ export type GetForgeDeployStatusRequest = Message<"reliant.v1.GetForgeDeployStat
  * Use `create(GetForgeDeployStatusRequestSchema)` to create a new message.
  */
 export const GetForgeDeployStatusRequestSchema: GenMessage<GetForgeDeployStatusRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_forge, 23);
+  messageDesc(file_reliant_v1_forge, 28);
 
 /**
  * @generated from message reliant.v1.GetForgeDeployStatusResponse
@@ -1030,6 +1288,39 @@ export type GetForgeDeployStatusResponse = Message<"reliant.v1.GetForgeDeploySta
    * @generated from field: string report_json = 8;
    */
   reportJson: string;
+
+  /**
+   * This job was a PLAN, not a deploy: report_json holds the change set to
+   * approve, and nothing was applied.
+   *
+   * Stated rather than left for a client to infer from the document, because a
+   * plan and a deploy report look similar and the consequence of confusing them
+   * is approving one while reading the other.
+   *
+   * @generated from field: bool plan_only = 9;
+   */
+  planOnly: boolean;
+
+  /**
+   * FORGE REFUSED THE WRITE, after building and computing the plan. Nothing was
+   * deployed.
+   *
+   * WHY THIS IS A FIELD HERE WHEN StartDeploy MAKES A REFUSAL AN ERROR. The
+   * two are different events. StartDeploy's refusal happens BEFORE anything
+   * runs, so there is no job and no outcome — an error is the honest answer.
+   * This one happens inside a job that really ran, so the poll itself
+   * succeeded and there is a terminal state to report. Failing the poll would
+   * mean a client could not read the outcome of a job it is holding a handle
+   * to.
+   *
+   * It is still a non-success: job_status is FAILED alongside it. On
+   * PLAN_STALE, reason's current_plan_json carries the RECOMPUTED plan, which
+   * is the whole remedy — show what changed and ask again rather than
+   * re-sending the same approval.
+   *
+   * @generated from field: reliant.v1.ForgeDeployRefusal refusal = 10;
+   */
+  refusal?: ForgeDeployRefusal | undefined;
 };
 
 /**
@@ -1037,7 +1328,7 @@ export type GetForgeDeployStatusResponse = Message<"reliant.v1.GetForgeDeploySta
  * Use `create(GetForgeDeployStatusResponseSchema)` to create a new message.
  */
 export const GetForgeDeployStatusResponseSchema: GenMessage<GetForgeDeployStatusResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_forge, 24);
+  messageDesc(file_reliant_v1_forge, 29);
 
 /**
  * ForgeReachability says whether the state described by a report was actually
@@ -1232,6 +1523,34 @@ export enum ForgeDeployRefusalReason {
    * @generated from enum value: FORGE_DEPLOY_REFUSAL_REASON_ALREADY_RUNNING = 4;
    */
   ALREADY_RUNNING = 4,
+
+  /**
+   * THE PLAN CHANGED between the plan-only stage and this approval. Live moved
+   * — another deploy landed, a new bundle was applied, drift appeared — so the
+   * plan forge recomputed is not the one the approval named.
+   *
+   * NOTHING WAS DEPLOYED. The response carries the RECOMPUTED plan in
+   * current_plan_json, because the only correct next step is to show the
+   * operator what changed and ask again. A client must never re-send the same
+   * digest, and must never retry blind: that is precisely the accident
+   * approving by digest exists to prevent.
+   *
+   * @generated from enum value: FORGE_DEPLOY_REFUSAL_REASON_PLAN_STALE = 5;
+   */
+  PLAN_STALE = 5,
+
+  /**
+   * The recomputed plan holds a destructive change the request did not accept
+   * by code — storage being deleted, an address being reissued.
+   *
+   * NOTHING WAS DEPLOYED, and nothing moved either: the deploy was declined
+   * pending a decision. unacknowledged names the codes still needing one, and
+   * re-approving with those codes accepted is the legitimate next step. A
+   * general approval does not cover these, by design.
+   *
+   * @generated from enum value: FORGE_DEPLOY_REFUSAL_REASON_PLAN_UNACKNOWLEDGED = 6;
+   */
+  PLAN_UNACKNOWLEDGED = 6,
 }
 
 /**
@@ -1386,6 +1705,63 @@ export const ForgeService: GenService<{
     methodKind: "unary";
     input: typeof PlanForgeDeployRequestSchema;
     output: typeof PlanForgeDeployResponseSchema;
+  },
+  /**
+   * StartDeployPlan begins the APPROVABLE plan as a background job, and returns
+   * a handle immediately. Poll it with GetDeployStatus, exactly as for a deploy.
+   *
+   * THIS IS NOT PlanDeploy, AND THE DIFFERENCE MATTERS MORE THAN THE NAMES
+   * SUGGEST. PlanDeploy renders the environment and checks the guard; it builds
+   * nothing, answers in seconds, and describes the binding the environment is
+   * running RIGHT NOW. This one builds every image from the chosen checkout,
+   * pushes them, cuts a release and computes the change set — so it is the only
+   * call that can say what a deploy would actually ship, and it takes minutes.
+   *
+   * IT WRITES NO PROMOTION AND APPLIES NOTHING. No cluster is touched and the
+   * environment's binding is unchanged, which is why it needs no approval:
+   * producing the thing to approve is the whole job.
+   *
+   * What comes back is the plan plus its digest. Show the plan, let a human
+   * approve THAT, and send the digest to StartDeploy.
+   *
+   * @generated from rpc reliant.v1.ForgeService.StartDeployPlan
+   */
+  startDeployPlan: {
+    methodKind: "unary";
+    input: typeof StartForgeDeployPlanRequestSchema;
+    output: typeof StartForgeDeployResponseSchema;
+  },
+  /**
+   * ListCheckouts lists the checkouts a preview may render: the project's main
+   * checkout plus every git worktree, each with its branch, current commit,
+   * whether it has uncommitted changes, and how far it is from main.
+   *
+   * It is also the ALLOWLIST. Every other call here that accepts a checkout
+   * honours only a value this one returned, re-derived and checked server-side.
+   * So a request cannot point a build at an arbitrary directory, whatever it
+   * sends.
+   *
+   * @generated from rpc reliant.v1.ForgeService.ListCheckouts
+   */
+  listCheckouts: {
+    methodKind: "unary";
+    input: typeof ListForgeCheckoutsRequestSchema;
+    output: typeof ListForgeCheckoutsResponseSchema;
+  },
+  /**
+   * DiffEnv renders a checkout and compares each environment against what is
+   * deployed. READ-ONLY: no cluster is contacted, nothing is built or pushed.
+   *
+   * This is what the per-environment cards show. The document is forge's and is
+   * passed through verbatim — the comparison belongs to forge, and a second
+   * implementation here would be a copy that eventually disagrees with it.
+   *
+   * @generated from rpc reliant.v1.ForgeService.DiffEnv
+   */
+  diffEnv: {
+    methodKind: "unary";
+    input: typeof DiffForgeEnvRequestSchema;
+    output: typeof DiffForgeEnvResponseSchema;
   },
   /**
    * StartDeploy begins a REAL deploy to a LIVE CLUSTER, as a background job,

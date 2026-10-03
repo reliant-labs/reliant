@@ -27,15 +27,18 @@ import {
   ForgeDeployRefusalSchema,
   ForgePromoteRefusalReason,
   ForgePromoteRefusalSchema,
+  DiffForgeEnvRequestSchema,
   GetForgeAuditRequestSchema,
   GetForgeDeployStatusRequestSchema,
   GetForgeEnvShapeRequestSchema,
   GetForgeEnvStatusRequestSchema,
   GetForgeTopologyRequestSchema,
+  ListForgeCheckoutsRequestSchema,
   ListForgeSecretsRequestSchema,
   PlanForgeDeployRequestSchema,
   PlanForgePromoteRequestSchema,
   PromoteForgeEnvRequestSchema,
+  StartForgeDeployPlanRequestSchema,
   StartForgeDeployRequestSchema,
   VerifyForgeEnvRequestSchema,
 } from "../gen/reliant/v1/forge_pb";
@@ -46,6 +49,9 @@ import type {
   DeployRefusalReason,
   ForgeDeployReport,
 } from "../services/forge/deploy";
+import type { DeployPlanReport, PlanApproval } from "../services/forge/deployPlan";
+import type { ForgeCheckoutsReport } from "../services/forge/checkouts";
+import type { ForgeEnvDiffReport } from "../services/forge/envDiff";
 import type { ForgePromotePlan, PromoteConfirmationToken, PromoteRefusal } from "../services/forge/promote";
 import type { ForgeEnvShapeReport } from "../services/forge/register";
 import {
@@ -295,11 +301,110 @@ function promoteRefusalOf(error: unknown): PromoteRefusal | null {
 export async function planDeploy(args: {
   projectId: string;
   env: string;
+  /** The checkout to render. Empty means the project's main checkout. */
+  checkoutPath?: string;
 }): Promise<ForgeOutcome<ForgeDeployReport>> {
   const res = await createForgeClient().planDeploy(
-    create(PlanForgeDeployRequestSchema, { projectId: args.projectId, env: args.env })
+    create(PlanForgeDeployRequestSchema, {
+      projectId: args.projectId,
+      env: args.env,
+      checkoutPath: args.checkoutPath ?? "",
+    })
   );
   return classifyForgeResponse<ForgeDeployReport>(res.meta, res.reportJson);
+}
+
+/**
+ * startDeployPlan begins working out WHAT A DEPLOY WOULD SHIP, as a background
+ * job, and returns a handle. Poll it with getDeployStatus.
+ *
+ * It builds from the chosen checkout, pushes, and cuts a release — so it takes
+ * minutes, which is why it cannot be awaited inline. It writes no promotion and
+ * applies nothing, so no environment changes and no approval is needed: this is
+ * the call that PRODUCES the thing to approve.
+ *
+ * Its result is NOT a deploy report, and the status it is polled through marks
+ * that explicitly (planOnly). Approving a deploy means taking that plan's digest
+ * to startDeploy.
+ */
+export async function startDeployPlan(args: {
+  projectId: string;
+  env: string;
+  checkoutPath?: string;
+}): Promise<StartDeployResult> {
+  try {
+    const res = await createForgeClient().startDeployPlan(
+      create(StartForgeDeployPlanRequestSchema, {
+        projectId: args.projectId,
+        env: args.env,
+        checkoutPath: args.checkoutPath ?? "",
+      })
+    );
+
+    if ((res.handle ?? "").trim() === "") {
+      return {
+        kind: "not-started",
+        outcome: classifyForgeResponse<ForgeDeployReport>(res.meta, res.reportJson),
+      };
+    }
+    return {
+      kind: "started",
+      handle: res.handle,
+      env: res.env,
+      startedAt: res.startedAt,
+      jobStatus: deployJobDispositionOf(res.jobStatus),
+      // No plan exists yet — that is what this job is computing. A guard plan
+      // here would be a document the caller could mistake for the answer.
+      guardPlan: null,
+    };
+  } catch (error) {
+    const refusal = deployRefusalOf(error);
+    if (refusal) return { kind: "refused", refusal };
+    throw error;
+  }
+}
+
+/**
+ * listCheckouts lists the checkouts a preview may render.
+ *
+ * Read-only, and git-only — it reads the daemon's working copies, never a
+ * cluster. The server treats this same list as the allowlist for any checkout a
+ * later call names, so a UI cannot widen it by sending something else.
+ */
+export async function listCheckouts(args: {
+  projectId: string;
+  withTree?: boolean;
+}): Promise<ForgeOutcome<ForgeCheckoutsReport>> {
+  const res = await createForgeClient().listCheckouts(
+    create(ListForgeCheckoutsRequestSchema, {
+      projectId: args.projectId,
+      withTree: args.withTree === true,
+    })
+  );
+  return classifyForgeResponse<ForgeCheckoutsReport>(res.meta, res.reportJson);
+}
+
+/**
+ * diffEnv renders a checkout and compares each environment against what is
+ * deployed. Read-only: nothing is built, pushed or applied.
+ *
+ * Exactly one of env and all, mirroring the server.
+ */
+export async function diffEnv(args: {
+  projectId: string;
+  env?: string;
+  all?: boolean;
+  checkoutPath?: string;
+}): Promise<ForgeOutcome<ForgeEnvDiffReport>> {
+  const res = await createForgeClient().diffEnv(
+    create(DiffForgeEnvRequestSchema, {
+      projectId: args.projectId,
+      env: args.env ?? "",
+      all: args.all === true,
+      checkoutPath: args.checkoutPath ?? "",
+    })
+  );
+  return classifyForgeResponse<ForgeEnvDiffReport>(res.meta, res.reportJson);
 }
 
 /**
@@ -318,8 +423,13 @@ export type StartDeployResult =
       env: string;
       startedAt: string;
       jobStatus: DeployJobDisposition;
-      /** The GUARD PLAN this deploy was authorised against. mode "dry_run". */
-      guardPlan: ForgeOutcome<ForgeDeployReport>;
+      /**
+       * The GUARD PLAN this deploy was authorised against (mode "dry_run"), or
+       * null when the job is one that COMPUTES a plan rather than consuming one
+       * — there is nothing to show yet, and a document here would be mistaken
+       * for the answer.
+       */
+      guardPlan: ForgeOutcome<ForgeDeployReport> | null;
     }
   /** The guard refused. NOTHING WAS APPLIED and no job exists. */
   | { kind: "refused"; refusal: DeployRefusal }
@@ -348,6 +458,16 @@ export async function startDeploy(args: {
   projectId: string;
   env: string;
   token: DeployConfirmationToken;
+  /**
+   * THE APPROVED PLAN. Required, and derived from the plan document the
+   * operator read — see DeployApproveStep, which is its only producer.
+   *
+   * The token above authorises the TARGET; this authorises the CHANGE SET.
+   * Without it the deploy would approve whatever forge computes when it runs,
+   * which is what approving by digest exists to stop.
+   */
+  approval: PlanApproval;
+  checkoutPath?: string;
 }): Promise<StartDeployResult> {
   try {
     const res = await createForgeClient().startDeploy(
@@ -363,6 +483,11 @@ export async function startDeploy(args: {
           ? ""
           : args.token.expectedCurrentRelease,
         expectUnbound: args.token.expectUnbound === true,
+        // THE CONTENT CLAIM.
+        approveDigest: args.approval.approveDigest,
+        releaseVersion: args.approval.releaseVersion,
+        acknowledgedFindings: args.approval.acknowledgedFindings,
+        checkoutPath: args.checkoutPath ?? "",
       })
     );
 
@@ -401,6 +526,94 @@ export interface DeployStatus {
    * alongside it rather than inferred from its presence.
    */
   report: ForgeOutcome<ForgeDeployReport> | null;
+
+  /**
+   * This job computed a PLAN, not a deploy: `report` holds the change set to
+   * approve and nothing was applied.
+   *
+   * Read from the server rather than sniffed from the document, because a plan
+   * and a deploy report look alike and approving one while reading the other is
+   * the mistake worth making structurally impossible.
+   */
+  planOnly: boolean;
+
+  /**
+   * FORGE REFUSED THE WRITE after computing the plan. Nothing was deployed.
+   *
+   * The job itself ran, so this arrives on a successful poll with jobStatus
+   * `failed` — not as a thrown error, which would stop a caller reading the
+   * outcome of a handle it holds.
+   *
+   * On a stale plan, `currentPlan` is the plan forge RECOMPUTED. That document
+   * is the remedy: show what changed and ask again, never re-send the refused
+   * approval.
+   */
+  refusal: DeployJobRefusal | null;
+}
+
+/** Why forge declined the write, from inside a job that really ran. */
+export interface DeployJobRefusal {
+  /**
+   * `plan-stale` — the plan moved between reading and approving.
+   * `plan-unacknowledged` — an irreversible change was not accepted by name.
+   * `other` — forge refused for a reason this client does not model; the
+   * detail carries it. Never collapsed into a success.
+   */
+  kind: "plan-stale" | "plan-unacknowledged" | "other";
+  detail: string;
+  /** The recomputed plan, on a stale plan. */
+  currentPlan: DeployPlanReport | null;
+  /** The codes still needing acceptance, on an unacknowledged one. */
+  unacknowledged: string[];
+}
+
+/**
+ * deployJobRefusalOf decodes the refusal on a status response.
+ *
+ * An UNRECOGNISED reason becomes `other` and stays a refusal. It is never
+ * dropped: a refusal this client cannot name is still a deploy that did not
+ * happen, and treating it as absent would render a failed job as a successful
+ * one.
+ */
+function deployJobRefusalOf(
+  refusal:
+    | {
+        reason?: ForgeDeployRefusalReason;
+        detail?: string;
+        currentPlanJson?: string;
+        unacknowledged?: string[];
+      }
+    | undefined
+): DeployJobRefusal | null {
+  if (!refusal) return null;
+
+  let kind: DeployJobRefusal["kind"] = "other";
+  if (refusal.reason === ForgeDeployRefusalReason.PLAN_STALE) kind = "plan-stale";
+  else if (refusal.reason === ForgeDeployRefusalReason.PLAN_UNACKNOWLEDGED) {
+    kind = "plan-unacknowledged";
+  }
+
+  let currentPlan: DeployPlanReport | null = null;
+  const raw = (refusal.currentPlanJson ?? "").trim();
+  if (raw !== "") {
+    try {
+      // The plan arrives as forge's plan object, so it is wrapped in the
+      // document shape the rest of the UI reads plans through.
+      currentPlan = { deploy_plan: JSON.parse(raw) as DeployPlanReport["deploy_plan"] };
+    } catch {
+      // A plan we cannot parse is not a plan. Left null, and the refusal still
+      // stands — the notice says it could not show what changed, which is
+      // honest, rather than claiming nothing did.
+      currentPlan = null;
+    }
+  }
+
+  return {
+    kind,
+    detail: refusal.detail ?? "",
+    currentPlan,
+    unacknowledged: refusal.unacknowledged ?? [],
+  };
 }
 
 /**
@@ -435,6 +648,8 @@ export async function getDeployStatus(args: {
       (res.reportJson ?? "").trim() === ""
         ? null
         : classifyForgeResponse<ForgeDeployReport>(res.meta, res.reportJson),
+    planOnly: res.planOnly === true,
+    refusal: deployJobRefusalOf(res.refusal),
   };
 }
 
@@ -525,6 +740,9 @@ export const forgeGrpc = {
   planPromote,
   applyPromote,
   planDeploy,
+  startDeployPlan,
+  listCheckouts,
+  diffEnv,
   startDeploy,
   getDeployStatus,
 };
