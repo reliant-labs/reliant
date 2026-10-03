@@ -35,20 +35,28 @@ option go_package = "github.com/reliant-labs/control-plane/gen/services/deploy/v
 // file with a field for any of them, so "read-only" is a property of the
 // schema rather than a rule a handler has to remember.
 //
-// TWO MESSAGES ARE EXCEPTIONS TO THAT RULE, AND ONLY TWO:
-// FinishDeployApplyRequest and ReportLocalSessionRequest. Both carry OBSERVED
-// state, deliberately.
+// ONE MESSAGE IS AN EXCEPTION TO THAT RULE, AND ONLY ONE:
+// ReportLocalSessionRequest. It carries OBSERVED state, deliberately.
 //
-// They are exceptions because for a self-managed or local environment the
-// client is the only observer there is. The platform places nothing on the
-// tenant's own cluster and nothing on a developer's laptop, so there is no
-// server-side observation to prefer — the alternative to accepting a report is
-// having no record of the deploy at all. What keeps the rule meaningful is the
-// boundary around those two: everything they carry is labelled as a REPORT in
-// the schema (DeployApplyOutcome.reported_by), rendered as one in the UI
-// ("reported by forge · alice"), and never feeds billing, which reads the live
-// cluster or nothing. A report is evidence about a deploy; it is never
-// permission and it is never money.
+// There used to be two. FinishDeployApplyRequest was the other, and its
+// deletion is the point of the spec-driven model: a client reporting that it
+// had applied something was a second source of truth about what is running,
+// and the one most likely to be believed because it arrived first. Now a
+// promotion declares intent, the reconciler converges the cluster to it, and
+// the control plane OBSERVES the result itself — so for a self-managed
+// environment there is a server-side observation to prefer, and no report to
+// accept. See the ListConvergences RPC.
+//
+// A local session stays an exception because nothing converges a developer's
+// laptop: the platform places nothing there and no reconciler watches it, so
+// presence really is only knowable from the client. What keeps the rule
+// meaningful is the boundary around that one message: what it carries is
+// presence, it is rendered as a report, and it never feeds billing, which
+// reads the live cluster or nothing.
+//
+// (LedgerImportApply also carries a historical outcome. That is an import of a
+// ledger written by an older forge which really did apply — history rather
+// than a current claim; see its own comment.)
 //
 // Identity is still never reported. `reported_by`, `created_by`, `applied_by`
 // and `approved_by` are set by the server from the caller's credential on
@@ -406,42 +414,48 @@ service DeployService {
     option (forge.v1.method) = {auth_required: true};
   }
 
-  // BeginApply opens the record of an attempt to make an environment match a
-  // bundle, and is where every pre-deploy check happens.
+  // BeginApply AND FinishApply ARE DELETED, and the deletion is the point of
+  // the unified model rather than a cleanup.
   //
-  // Under the environment's row lock, in order: the compare-and-set (as
-  // Promote), then the plan digest and stop-class acknowledgement, then the
-  // apply-in-flight refusal. The order is the point — a stale CAS should not
-  // be reported as an unacknowledged finding, and an in-flight apply should
-  // not be reported as a stale plan.
+  // Their meaning was "I am applying now" — a client opening a record of an
+  // attempt, then reporting how it went. Nothing can honestly say that any
+  // more: `forge env deploy` writes a PROMOTION (declarative intent, approved
+  // against a plan), the reconciler converges the cluster to it, and the
+  // control plane observes the result itself. An RPC through which a client
+  // could still claim to have applied something would be a second, competing
+  // source of truth about what is running — and the one most likely to be
+  // believed, because it arrives first.
   //
-  // Refused on a LOCAL environment and allowed on every other kind. On a
-  // hosted environment this is how a DECLARATION deploy gets recorded: a spec
-  // change moves no release, so without this row nothing would say who
-  // initiated it. The EnsureDeployment calls that follow carry the id.
-  rpc BeginApply(BeginDeployApplyRequest) returns (BeginDeployApplyResponse) {
-    option (forge.v1.method) = {auth_required: true};
-  }
+  // Everything they recorded that is still true has a better home: the plan
+  // approval (plan_digest, approved_by, acknowledged findings) belongs to the
+  // promotion, which is the authorized act, and is already stored there; and
+  // "did it land" is now an observation, reported by ListConvergences below.
+  //
+  // Pre-1.0, so they are deleted outright rather than deprecated through a
+  // window. Field tags inside SURVIVING messages are still reserved where one
+  // was removed; a whole message or RPC needs no tombstone.
 
-  // FinishApply closes an apply with the outcome its client observed.
+  // ListConvergences returns an environment's OBSERVATION TIMELINE, newest
+  // first, keyset-paged for ListPromotions' reason: rows arrive while a reader
+  // pages, so an offset would skip or repeat one.
   //
-  // ONE OF THE TWO REPORTED-STATE EXCEPTIONS — see the service header. The
-  // outcome is written exactly once: the same outcome again returns
-  // created=false, so a client that retries after a dropped response
-  // converges, while a DIFFERENT outcome for the same apply is AlreadyExists
-  // rather than an overwrite. An apply that can be re-decided is an apply
-  // whose record proves nothing.
-  rpc FinishApply(FinishDeployApplyRequest) returns (FinishDeployApplyResponse) {
-    option (forge.v1.method) = {
-      auth_required: true
-      idempotency_key: true
-    };
-  }
-
-  // ListApplies returns an environment's applies, newest first, keyset-paged
-  // for ListPromotions' reason: rows arrive while a reader pages, so an offset
-  // would skip or repeat one.
-  rpc ListApplies(ListDeployAppliesRequest) returns (ListDeployAppliesResponse) {
+  // IT REPLACES ListApplies, AND THE REPLACEMENT IS THE MODEL CHANGE. An apply
+  // was a client's claim that it was applying something — "I am applying now"
+  // — and forge does not apply at all any more: a promotion declares intent,
+  // the reconciler converges reality to it, and the control plane OBSERVES the
+  // result. So the thing worth listing is not a sequence of attempts but a
+  // sequence of readings: "converged to B at 14:02", "failed at 14:40:
+  // HealthCheckFailed".
+  //
+  // ROWS ARE TRANSITIONS, NOT POLLS. The observer looks every couple of
+  // minutes and appends only when the answer CHANGED, so this list is short
+  // and every entry means something. Nothing here is required for
+  // correctness — the records are derived from the reconciler's current status
+  // and are safe to lose and rebuild — which is why they are reported through
+  // their own RPC rather than folded into Live.
+  //
+  // MEMBER. This is the deploy history of a team's own environment.
+  rpc ListConvergences(ListDeployConvergencesRequest) returns (ListDeployConvergencesResponse) {
     option (forge.v1.method) = {auth_required: true};
   }
 
@@ -1264,97 +1278,24 @@ message GetDeployBundleResponse {
   DeployBundle bundle = 1;
 }
 
-// === Applies ===
-
-message BeginDeployApplyRequest {
-  string environment_id = 1;
-  string bundle_id = 2;
-  // The promotion this apply realizes. Empty for a declaration deploy, which
-  // changes config without moving a release.
-  string promotion_id = 3;
-
-  // The caller's view of the environment's current promotion — the same
-  // compare-and-set PromoteReleaseRequest documents, for the same reason.
-  // Setting neither means no CAS.
-  string expected_current_promotion_id = 4;
-  // "I saw NO promotion", which an empty id cannot express distinctly from
-  // "no expectation".
-  bool expected_unbound = 5;
-
-  // Proceed even though another apply to this environment has not finished.
-  // Recorded as DeployApply.superseded_in_flight.
-  bool supersede_in_flight = 6;
-
-  DeployRun run = 7;
-
-  // The approved plan, and the stop-class codes being accepted. Identical in
-  // meaning to PromoteReleaseRequest.plan_digest / acknowledged_findings, and
-  // checked by the same recompute under the same row lock — so a deploy
-  // cannot escape the check by taking the apply path instead of the promote
-  // path.
-  string plan_digest = 8;
-  repeated string acknowledged_findings = 9;
-
-  // How long this apply stays in flight before it is considered abandoned.
-  // Zero means the server's default.
-  //
-  // It exists because a client that crashes mid-apply reports nothing, ever.
-  // Without a deadline that apply's row would block every later apply to the
-  // environment indefinitely, and the only remedy would be a staff write.
-  int32 deadline_seconds = 10;
-}
-
-message BeginDeployApplyResponse {
-  DeployApply apply = 1;
-}
-
-// FinishDeployApplyRequest reports how an apply ended.
+// === Convergences ===
 //
-// ONE OF THE TWO MESSAGES IN THIS FILE THAT CARRIES OBSERVED STATE — see the
-// service header for why, and for the boundary that keeps it from mattering
-// anywhere beyond this record. `reported_by` is NOT here: the server sets it
-// from the credential.
-message FinishDeployApplyRequest {
-  string apply_id = 1;
-  // succeeded | failed | timed_out.
-  string status = 2;
-  string summary = 3;
-  // Per-workload detail as the client observed it. A Struct because this is
-  // forge's own apply-report shape; see DeployApplyOutcome.workloads.
-  google.protobuf.Struct workloads = 4;
-  // When the apply actually ended, which is not when this call arrives — a
-  // client that lost its network reports minutes later, and the outcome's
-  // timestamp has to be the deploy's, not the report's.
-  google.protobuf.Timestamp finished_at = 5;
+// BeginDeployApply*, FinishDeployApply* and ListDeployApplies* are DELETED —
+// see the ListConvergences RPC above for why "I am applying now" has no
+// honest sender under the spec-driven model. What replaces them is one read
+// over the observation timeline.
 
-  // The hash of every object as it ACTUALLY LANDED on the cluster.
-  //
-  // This is the baseline drift is later measured from, and it has to come
-  // from after the apply rather than from the bundle: an admission webhook or
-  // a defaulting controller mutates objects on the way in, so measuring drift
-  // against what forge intended would report every such object as drifted
-  // from the first second. See DeployObjectHash.
-  repeated DeployObjectHash observed_objects = 6;
-}
-
-message FinishDeployApplyResponse {
-  DeployApply apply = 1;
-  // False when this exact outcome was already recorded. A DIFFERENT outcome
-  // for the same apply is AlreadyExists, not an overwrite — see FinishApply.
-  bool created = 2;
-}
-
-message ListDeployAppliesRequest {
+message ListDeployConvergencesRequest {
   string environment_id = 1;
   int32 limit = 2;
-  // Keyset cursor: applies strictly older than this one. Keyset rather than
-  // offset for ListDeployPromotionsRequest.before_promotion_id's reason.
-  string before_apply_id = 3;
+  // Keyset cursor: observations strictly older than this one. Keyset rather
+  // than offset for ListDeployPromotionsRequest.before_promotion_id's reason.
+  string before_id = 3;
 }
 
-message ListDeployAppliesResponse {
+message ListDeployConvergencesResponse {
   // Newest first.
-  repeated DeployApply applies = 1;
+  repeated DeployConvergence convergences = 1;
 }
 
 // === The Live view ===
@@ -1523,14 +1464,48 @@ message LedgerImportBundle {
   string imported_from = 9;
 }
 
-// LedgerImportApply is one historical apply, with its outcome already known —
+// LedgerImportApply is one HISTORICAL apply, with its outcome already known —
 // an imported apply is never in flight.
+//
+// IT SURVIVES THE DELETION OF THE APPLY MODEL, deliberately, because it means
+// something different from everything else that was deleted. The live apply
+// RPCs were a client claiming "I am applying now", which has no honest sender
+// any more. This is an import of a ledger that ALREADY HAPPENED, under an older
+// forge that really did apply — history, not a current claim. Refusing to
+// import it would not make the past declarative; it would just lose it.
+//
+// Its outcome is therefore carried by a LOCAL message rather than the deleted
+// DeployApplyOutcome. That keeps the import's shape stable while removing the
+// live model's type, and it puts the "this is historical" statement on the
+// type itself.
 message LedgerImportApply {
   string environment = 1;
   string bundle_digest = 2;
-  DeployApplyOutcome outcome = 3;
+  LedgerImportApplyOutcome outcome = 3;
   google.protobuf.Timestamp created_at = 4;
   string imported_from = 5;
+}
+
+// LedgerImportApplyOutcome is how a historical apply ended, as the ledger being
+// imported recorded it.
+//
+// A REPORT, AND HISTORICAL ONE AT THAT — it describes what some older forge
+// said about a deploy that has already finished. It never feeds billing or
+// policy, and nothing derives current state from it; it exists so an import is
+// not lossy.
+message LedgerImportApplyOutcome {
+  // succeeded | failed | timed_out.
+  string status = 1;
+  // One human line.
+  string summary = 2;
+  // Per-workload detail as the exporting forge recorded it. A Struct because
+  // it is that forge's own shape, and a proto mirror could only disagree.
+  google.protobuf.Struct workloads = 3;
+  google.protobuf.Timestamp finished_at = 4;
+  // Who the imported ledger says reported it. Carried as data rather than
+  // being set from the caller's credential, because the caller is importing
+  // somebody else's history and is not the reporter.
+  string reported_by = 5;
 }
 
 message ImportLedgerResponse {

@@ -46,7 +46,7 @@ import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import type { CloudEnvStatus, CloudPromotion } from "@/services/forge/cloudEnvs";
-import type { LiveEnv } from "@/services/forge/live";
+import type { LiveConvergence, LiveEnv } from "@/services/forge/live";
 
 // ── The daemon is not merely offline: TOUCHING IT IS A TEST FAILURE. ────────
 
@@ -135,6 +135,12 @@ function liveEnv(overrides: Partial<LiveEnv>): LiveEnv {
     promotedByActor: "",
     promotedByUserId: "",
     phase: "unspecified",
+    // NOTHING OBSERVED is the default because it is the common case: the
+    // platform's convergence observer is dark by default, so an environment
+    // with no reading is the state most screens render today.
+    observed: { state: "not-reported" },
+    drift: { state: "not-reported" },
+    driftDetail: "",
     provenance: "",
     ...overrides,
   };
@@ -148,6 +154,9 @@ const PROD: LiveEnv = liveEnv({
   promotedAt: "2026-10-01T10:00:00.000Z",
   promotedByActor: "ci",
   phase: "succeeded",
+  observed: { state: "converged", observedAt: "2026-10-01T10:04:00.000Z" },
+  drift: { state: "in_sync", observedAt: "2026-10-01T10:04:00.000Z" },
+  driftDetail: "",
   provenance: "v12 · images main@abc1234 · config feat-x@def5678, unmerged, dirty",
   declaredShape: {
     kind: "persistent",
@@ -175,10 +184,30 @@ const STAGING: LiveEnv = liveEnv({
   },
 });
 
+/**
+ * The observation timeline, which is ALSO a control-plane read. It is listed
+ * for every environment kind, so a daemon call could not hide behind the
+ * self-managed case.
+ */
+const CONVERGENCES: LiveConvergence[] = [
+  {
+    id: "conv-1",
+    state: "converged",
+    reason: "ReconciliationSucceeded",
+    message: "",
+    cluster: "hosted-us-central1",
+    observedAt: "2026-10-01T10:04:00.000Z",
+  },
+];
+
 const getLiveView = vi.fn(() => Promise.resolve([PROD, STAGING]));
+const listEnvironmentConvergences = vi.fn((environmentId: string) =>
+  Promise.resolve(environmentId === "cp-prod" ? CONVERGENCES : [])
+);
 vi.mock("@/services/forge/live", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/services/forge/live")>()),
   getLiveView: (project: string) => getLiveView(project),
+  listEnvironmentConvergences: (id: string) => listEnvironmentConvergences(id),
 }));
 
 const STATUS: CloudEnvStatus = {
@@ -248,6 +277,9 @@ beforeEach(() => {
   routeState.tab = undefined;
   vi.clearAllMocks();
   getLiveView.mockResolvedValue([PROD, STAGING]);
+  listEnvironmentConvergences.mockImplementation((id: string) =>
+    Promise.resolve(id === "cp-prod" ? CONVERGENCES : [])
+  );
   getEnvironmentStatus.mockResolvedValue(STATUS);
   listEnvironmentPromotions.mockImplementation((id: string) =>
     Promise.resolve(id === "cp-prod" ? PROMOTIONS : [])
@@ -284,9 +316,17 @@ describe("the Live tab makes zero daemon calls", () => {
     const workloads = await screen.findByTestId("live-workloads-observed");
     expect(within(workloads).getByText("api")).toBeInTheDocument();
 
-    // The promotion ledger.
+    // Intent and the observed reading, both from the control plane.
+    const state = screen.getByTestId("live-state");
+    expect(within(state).getByTestId("live-state-intent")).toHaveTextContent(
+      /should be running v12, promoted by ci/i
+    );
+    expect(within(state).getByTestId("live-state-observed")).toHaveTextContent(/confirmed running/i);
+
+    // The timeline, with the decision and the observation of it interleaved.
     const releases = await screen.findByTestId("live-releases");
     expect(within(releases).getByTestId("promotion-promo-1")).toBeInTheDocument();
+    expect(within(releases).getByTestId("convergence-conv-1")).toBeInTheDocument();
 
     // Secrets, from the managed store joined with the DECLARED shape.
     await screen.findByText("STRIPE_WEBHOOK_SECRET");

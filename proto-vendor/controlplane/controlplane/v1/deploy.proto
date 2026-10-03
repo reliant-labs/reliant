@@ -344,20 +344,34 @@ message DeployEnvironment {
   // What the platform may do about drift here. Defaults to OBSERVE.
   DeployReconcilePolicy reconcile_policy = 13;
 
-  // READ-ONLY and DERIVED: the registry path this org's images must live
-  // under to be admitted by the platform registry boundary —
-  // `<registry_base>/<org_id>`. It is computed by the same function the
-  // publish-time check uses (ociregistry.TenantSubtree, which
-  // ociregistry.Contains is expressed in), so the two cannot disagree.
+  // Tag 14 ("image_push_base") was removed when the push base became the
+  // CLIENT's to compose rather than the server's to advertise (ADR-0003 F1).
   //
-  // A client uses it to refuse, BEFORE writing anything, an image the
-  // platform will not publish: push to `<image_push_base>/<name>`, re-cut
-  // the release, re-promote.
+  // It carried `<registry_base>/<org_id>`, derived from
+  // ociregistry.TenantSubtree so the advertised value and the enforced one
+  // could not disagree. forge read it off every environment, cached it per
+  // env under .forge/state, and resolved a bare hosted image against the
+  // cached copy. Three costs, all structural: the base was unknowable before
+  // the first successful AUTHENTICATED call, so a fresh checkout could not
+  // render; a stale record silently weakened forge's own off-base check
+  // rather than failing it; and "the server said" plus "the client wrote it
+  // down" are two sources of one fact. forge now composes
+  // `<registry_host>/<organization>/<project>` from its own declaration, with
+  // the host a forge default.
   //
-  // EMPTY MEANS THE PLATFORM ADMITS NO REGISTRY: this deployment has no
-  // registry base configured, and PublishDeploymentConfig refuses every
-  // backend image rather than admitting an unchecked one.
-  string image_push_base = 14;
+  // ENFORCEMENT DID NOT MOVE, and that is the distinction to keep: only the
+  // DERIVATION did. ociregistry.Admit still gates publish, and the registry
+  // realm still mints a token scoped to the authenticated row's org and
+  // refuses any repository outside that subtree — so a client that composes
+  // the wrong base is refused at its first push, by the party that actually
+  // knows. Deps.RegistryBase remains, because that is what both enforce with.
+  //
+  // RESERVED RATHER THAN RECYCLED, for the reason tag 16 below records:
+  // reusing 14 would not fail, it would decode as whatever the new field is
+  // and be read as a registry subtree by any client still on a forge release
+  // that consumed it — the quietest possible wire bug.
+  reserved 14;
+  reserved "image_push_base";
 
   // The forge project this environment belongs to (forge.yaml `name`).
   // Environment identity is (org, project, name): two projects in one org
@@ -1500,85 +1514,71 @@ message DeployBundle {
   google.protobuf.Timestamp created_at = 12;
 }
 
-// DeployApply is one attempt to make an environment match a bundle, recorded
-// because it cannot be derived.
+// DeployConvergence is the control plane's own OBSERVATION that an environment
+// did, or did not, reach the bundle its intent names.
 //
-// APPLIES EXIST FOR WHAT THE PLATFORM CANNOT SEE. A hosted rollout is derived
-// on read from frozen pins and the operator's own observations, and is
-// deliberately never also stored. Two things fall outside that: a deploy forge
-// drives into a cluster we do not observe, and a DECLARATION deploy, whose
-// initiator is recorded nowhere else. Those are what this row is for — and a
-// promotion the converger applies writes none, precisely so the derived
-// timeline stays the only answer where it is available.
-message DeployApply {
+// IT REPLACES DeployApply AND DeployApplyOutcome, and the replacement is the
+// whole model change rather than a rename. Those messages described a CLIENT
+// claiming it was applying something and then reporting how it went, which is
+// why DeployApplyOutcome had to carry `reported_by` and be labelled "reported
+// by forge · alice" wherever it was shown. Under the spec-driven model forge
+// does not apply at all: a promotion declares intent, the reconciler converges
+// reality to it, and the control plane reads the reconciler's status itself. So
+// nothing here is a report, and nothing needs labelling as one.
+//
+// THESE ROWS ARE SECONDARY AND REBUILDABLE. The primary record is the
+// promotion. Every field below is derived from the reconciler's current status,
+// so the whole timeline can be dropped and re-observed; no correctness depends
+// on it. That is what makes it safe for this to be append-only and lossy at the
+// edges where an apply record could not be.
+//
+// ONE ROW PER TRANSITION, NOT PER POLL. The observer looks every couple of
+// minutes and appends only when the answer CHANGED, so a timeline is short and
+// every entry means something.
+message DeployConvergence {
   string id = 1;
   string environment_id = 2;
+  // The bundle the observed revision resolves to. EMPTY IS A REAL ANSWER: the
+  // observation is of a REVISION, and the reconciler can legitimately report
+  // one that maps to no recorded bundle.
   string bundle_id = 3;
-  // The promotion this apply realizes, when it realizes one. Empty for a
-  // declaration deploy, which changes config without moving a release.
+  // The intent this reading was judged against — the environment's current
+  // promotion at the moment of the pass.
   string promotion_id = 4;
-  // Set by the SERVER from the caller's credential.
-  string applied_by = 5;
-  DeployRun run = 6;
 
-  // Tag 7 is `admitted_findings` (repeated DeployPolicyFinding) — what the
-  // source policy let through at apply time. Deferred to #516.
-  reserved 7; // admitted_findings — #516
+  // What the reconciler reported as APPLIED (a Kustomization's
+  // lastAppliedRevision), verbatim, so it is comparable byte-for-byte to what
+  // the reconciler says.
+  string revision = 5;
 
-  // This apply overrode another that had not finished (`--supersede`).
-  // Recorded for DeployPromotion.superseded_in_flight's reason: an override
-  // that leaves no trace is indistinguishable from the refusal never firing.
-  bool superseded_in_flight = 8;
-
-  google.protobuf.Timestamp created_at = 9;
-  // When this apply stops being in flight whether or not anyone reports on
-  // it. A client that crashes mid-apply reports nothing ever, and without a
-  // deadline its row would block every later apply to that environment
-  // forever.
-  google.protobuf.Timestamp deadline_at = 10;
-
-  // Unset while the apply is still running. Read `state`, not this field's
-  // presence, to decide what happened — see below.
-  DeployApplyOutcome outcome = 11;
-
-  // DERIVED on read: running | succeeded | failed | timed_out | abandoned.
+  // converged | failed.
   //
-  // It exists because an absent outcome means two very different things, and
-  // the difference is the deadline: before it, the apply is RUNNING; after
-  // it, nobody is ever going to report, and the row is ABANDONED. Deriving
-  // this server-side means every client draws that line in the same place —
-  // and a stored state would go stale exactly at the moment it mattered,
-  // since the transition happens by the clock rather than by a write.
-  string state = 12;
+  // ONLY THE TWO TERMINAL READINGS ARE RECORDED, and the two that are missing
+  // are the point. `progressing` is a moment in flight rather than an outcome,
+  // and is already derivable from (intent, newest record) with no history.
+  // `unknown` is an ABSENCE of information, and an absence is not an event —
+  // recording one would make "we could not look" indistinguishable from a
+  // reading. A reader sees that case as "the newest record predates the
+  // current promotion".
+  string state = 6;
 
-  // The plan this apply was approved against, and who approved it. Both as on
-  // DeployPromotion, and for the same reason: the digest proves which plan,
-  // and the approver comes from the credential, never from the client.
-  string plan_digest = 13;
-  string approved_by = 14;
-}
+  // The reconciler's OWN reason and message, passed through untranslated (for
+  // Flux: ReconciliationSucceeded, ReconciliationFailed, HealthCheckFailed,
+  // ArtifactFailed). A human chasing a failure needs the reconciler's words,
+  // not a paraphrase. A failed record always carries a reason.
+  string reason = 7;
+  string message = 8;
 
-// DeployApplyOutcome is how an apply ended, AS REPORTED BY THE CLIENT.
-//
-// It is a REPORT, and it is labelled as one everywhere it travels —
-// `reported_by` here, "reported by forge · alice" in the UI. For a
-// self-managed environment the client is the only observer there is, so the
-// alternative to trusting a report is having no record at all. What makes
-// that acceptable is the boundary: a report describes a deploy and never
-// feeds billing, which reads the live cluster or nothing.
-message DeployApplyOutcome {
-  // succeeded | failed | timed_out.
-  string status = 1;
-  // One human line.
-  string summary = 2;
-  // Per-workload detail as forge observed it at the apply's end. A Struct
-  // rather than a typed message because forge's apply reporting is its own
-  // shape, and a proto mirror of it here could only ever disagree with it.
-  google.protobuf.Struct workloads = 3;
-  google.protobuf.Timestamp finished_at = 4;
-  // Set by the SERVER from the credential that reported. The label that keeps
-  // the report honest: a reader can see whose claim this is.
-  string reported_by = 5;
+  // Which target cluster this reading is about. Convergence is per
+  // (environment, cluster) because one bundle is applied by one Kustomization
+  // PER target cluster — a single row could not describe an environment half
+  // of whose clusters failed.
+  string cluster = 9;
+
+  // When the OBSERVATION was made, which is not when the row was written: a
+  // pass reads several objects and then records what it found.
+  google.protobuf.Timestamp observed_at = 10;
+  google.protobuf.Timestamp created_at = 11;
 }
 
 // DeployLocalSession is one `forge env up` worktree, present in Live.
@@ -1712,10 +1712,18 @@ message DeployLiveEnvironment {
   // on a hosted environment the row's applied_bundle_id. See
   // Deployment.applied_bundle_id for why these are two pointers.
   DeployBundle current_bundle = 4;
-  // May be NEWER than current_bundle and still running or failed — which is
-  // exactly the state worth seeing, since it is the deploy somebody is
-  // currently watching.
-  DeployApply latest_apply = 5;
+  // Tag 5 was `latest_apply` (DeployApply): the newest attempt a CLIENT
+  // reported it was making. Nothing applies any more, so there is no such
+  // attempt to show — the reconciler converges the intent above and the
+  // control plane observes the result. `drift` below carries that
+  // observation, and the timeline is ListConvergences.
+  //
+  // RESERVED rather than removed outright, because this message SURVIVES: a
+  // deployed client that still sends or reads tag 5 as a DeployApply must
+  // never find a different type there. The messages that were deleted whole
+  // need no tombstone; a tag inside a living message does.
+  reserved 5; // latest_apply — deleted with the imperative apply model
+
   DeployRolloutPhase phase = 6;
   repeated DeployLocalSession sessions = 7;
 
@@ -1737,22 +1745,42 @@ message DeployLiveEnvironment {
 message DeployDrift {
   // in_sync | drifted | unknown.
   //
-  // UNKNOWN IS NOT in_sync, and keeping them apart is the point. A
-  // self-managed cluster has no server-side observer, so "we cannot see it"
-  // is the normal answer there and must never be reported as agreement.
+  // UNKNOWN IS NOT in_sync, and keeping them apart is the point. An
+  // environment nobody has observed yet, one whose observations have gone
+  // stale, and one promoted seconds ago all answer "we cannot say yet" — and
+  // reporting any of them as agreement is the confidently-wrong badge people
+  // stop reading.
   string state = 1;
-  // The bundle and apply the comparison was made against.
+  // The bundle the comparison was made against: the one this environment's
+  // current promotion names.
   string bundle_id = 2;
-  string apply_id = 3;
+
+  // Tag 3 was `apply_id`. There are no applies to compare against any more —
+  // the comparison is intent (the promoted bundle above) versus the
+  // reconciler's observed revision. Reserved because this message survives.
+  reserved 3; // apply_id — deleted with the imperative apply model
+
   google.protobuf.Timestamp observed_at = 4;
-  // Only the objects that have something to say; an in-sync environment
-  // reports an empty list rather than every object it owns.
+
+  // Per-object drift is NOT COMPUTED in this cut (owner ruling D3), so this
+  // list is always empty — which the proto's own rule reads as "not
+  // recorded", never as "we looked and every object matches".
+  //
+  // The reason is that the baseline disappeared with the apply model. Drift
+  // per object was measured against the hash of every object AS IT LANDED,
+  // which only the applying client could report. Measuring against the
+  // bundle's own hashes instead would flag every object an admission webhook
+  // or a defaulting controller touched as drifted from the first second,
+  // which is a badge that is wrong on day one.
   repeated DeployDriftObject objects = 5;
   // One human line.
   string detail = 6;
 }
 
 // DeployDriftObject is one object's drift state.
+//
+// UNPOPULATED IN THIS CUT — see DeployDrift.objects. Kept because the shape is
+// right for when a reconciler-side baseline exists.
 message DeployDriftObject {
   string cluster = 1;
   string kind = 2;
@@ -1770,22 +1798,17 @@ message DeployDriftObject {
   string state = 7;
 }
 
-// DeployObjectHash is one applied object's identity, as forge reports it after
-// an apply.
+// DeployObjectHash is DELETED.
 //
-// This is the BASELINE drift is measured from. The bundle says what forge
-// intended to apply; this says what it actually got on the cluster, which can
-// differ the moment an admission webhook or a defaulting controller touches an
-// object. Without it, every mutated-on-admission object would read as drift
-// from the first second.
-message DeployObjectHash {
-  string cluster = 1;
-  string api_version = 2;
-  string kind = 3;
-  string namespace = 4;
-  string name = 5;
-  string hash = 6;
-}
+// It was the baseline per-object drift was measured from: the hash of every
+// object AS IT LANDED, which only the client performing the apply could report
+// (FinishDeployApplyRequest.observed_objects). forge does not apply, so there
+// is no sender, and a message no one can populate is worse than none — it
+// reads as a capability the system has.
+//
+// What would replace it is a reconciler-side baseline, which Flux's
+// Kustomization inventory could supply. That is not this cut (owner ruling
+// D3), and DeployDrift.objects stays empty until it is.
 
 // DeployUsageRow is one metered quantity for one resource over one window —
 // the shape the usage table and any per-dimension chart read.

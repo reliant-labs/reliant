@@ -42,6 +42,7 @@ import {
   isPlacedKind,
   liveKindLabel,
   neverBuilt,
+  type LiveConvergence,
   type LiveEnv,
 } from "@/services/forge/live";
 import type { CloudEnvStatus, CloudPromotion } from "@/services/forge/cloudEnvs";
@@ -49,6 +50,7 @@ import type { CloudEnvStatus, CloudPromotion } from "@/services/forge/cloudEnvs"
 import { formatTimestamp } from "../Overview/EnvironmentTable";
 import { LiveReleases } from "./LiveReleases";
 import { LiveSecretsSection } from "./LiveSecretsSection";
+import { LiveState } from "./LiveState";
 import { LiveWorkloads } from "./LiveWorkloads";
 
 export interface LiveSectionProps {
@@ -69,6 +71,13 @@ export interface LiveSectionProps {
   promotions: CloudPromotion[] | undefined;
   promotionsLoading: boolean;
   promotionsError: Error | null;
+
+  /**
+   * The observation timeline. Asked for EVERY kind — the reading is made by
+   * the platform watching the cluster converge, which is per environment, not
+   * per placed deployment. An empty list is the normal answer today.
+   */
+  convergences: LiveConvergence[] | undefined;
 
   selectedSecret: string | null;
   onSelectSecret: (name: string | null) => void;
@@ -140,6 +149,12 @@ export function LiveSection(props: LiveSectionProps) {
           </p>
         )}
 
+        {/* INTENT VERSUS OBSERVED, for every kind through one component. See
+            LiveState on why there is no branch on kind here. Shown only once
+            there is an intent to compare against — before the first promotion
+            the sentences below say something more useful. */}
+        {!notBuilt && !blank && <LiveState env={env} />}
+
         {notBuilt && (
           <p data-testid="live-declared-not-built" className="text-xs text-muted-foreground">
             Declared, not built yet. Its secrets can be set below; a build records the first
@@ -184,23 +199,31 @@ export function LiveSection(props: LiveSectionProps) {
         <LiveReleases
           env={env}
           promotions={props.promotions}
+          convergences={props.convergences}
           isLoading={props.promotionsLoading}
           error={props.promotionsError}
         />
       </Section>
 
-      {/* A self-managed env is promoted but NOT converged: forge applies it,
-          and nothing on our side places or observes it. Said once, here,
-          rather than leaving the Workloads section to imply something is
-          watching a cluster it has never connected to.
+      {/* WHAT IS STILL DIFFERENT ABOUT THE CUSTOMER'S OWN CLUSTER, now that
+          the convergence state is not.
 
-          In the customer's nouns (#366): the fact that matters to them is
-          that these are THEIR clusters and the readings come from their own
-          deploys, not that our platform has no observer there. */}
+          This note used to say we did not watch the cluster at all, which was
+          true when the only record of such a deploy was a forge process's own
+          report. It is no longer true: the state line and the timeline above
+          are readings the platform makes, and they come from the same place
+          for every kind.
+
+          What remains kind-specific is the WORKLOAD table. The platform has no
+          per-workload rows for a cluster it did not place onto, so that section
+          falls back to the declaration — and the distinction is worth one
+          sentence rather than letting the table imply an inventory nobody
+          took. */}
       {!isPlacedKind(env.kind) && env.kind !== "local" && (
         <p data-testid="live-not-placed" className="text-xs text-muted-foreground">
-          forge deploys this environment to your own cluster. Reliant records what each deploy sends
-          there; it doesn&apos;t watch the cluster itself.
+          This environment runs on your own cluster. Reliant confirms whether each release reached
+          it, but the workload list above is what your configuration declares rather than an
+          inventory of what&apos;s there.
         </p>
       )}
     </div>
