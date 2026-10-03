@@ -69,7 +69,7 @@ const STARTER_OPTIONS: StarterOption[] = [
     icon: Palette,
     label: "Create a landing page",
     description:
-      "Scopes the page, then chains a copy pass and a visual-design pass before handing you a live preview.",
+      "Scopes the page, runs a copy pass and a design pass, then hands you a live preview — ready to ship on Reliant's static hosting.",
     workflowId: "builtin://landing-page",
     workflowParams: { mode: "auto", ask: true },
     accent: "fuchsia",

@@ -247,10 +247,49 @@ func TestGreenfieldGuidanceStatesTheCeiling(t *testing.T) {
 	assert.Contains(t, content, "scales the whole way up",
 		"the guidance must say forge is not just a scaffold you outgrow")
 
-	// Deploy is not k3d-only; forge.External covers the common managed targets.
-	assert.True(t,
-		strings.Contains(content, "Fly") || strings.Contains(content, "Cloud Run"),
+	// Deploy is not k3d-only: the hosted runtime runs the app on Reliant's
+	// infrastructure, with envs and secrets, and nothing to operate.
+	assert.Contains(t, content, "hosted",
 		"the guidance must show deploy reaches past the local cluster")
+	assert.Contains(t, content, "secrets",
+		"the hosted path's managed secrets are part of what forge gives a user")
+}
+
+// forge.External was removed from forge (#284), and with it any way to hand a
+// workload to Fly, Cloud Run, ECS or Lambda. Naming them made the model promise
+// a deploy target forge cannot reach (tracked in reliant-labs/forge#400).
+func TestGreenfieldGuidanceDoesNotPromiseRemovedDeployTargets(t *testing.T) {
+	content := buildGreenfieldGuidance(nil)
+
+	for _, removed := range []string{"Fly", "Cloud Run", "ECS", "Lambda"} {
+		assert.NotContains(t, content, removed,
+			"forge has no runtime for %s today; the guidance must not offer it", removed)
+	}
+}
+
+// Static sites are a forge case, not an exclusion. A landing page or marketing
+// site gets hosted static hosting, envs and promotion from the same project that
+// later grows its API. Without saying so, the model treats "no backend" as "not
+// forge" and hands the user a page with no deploy story.
+func TestGreenfieldGuidanceOffersForgeForStaticSites(t *testing.T) {
+	content := buildGreenfieldGuidance(nil)
+
+	positive, negative, found := strings.Cut(content, "Do NOT suggest forge when")
+	require.True(t, found)
+
+	for _, want := range []string{"landing page", "marketing", "static"} {
+		assert.Contains(t, positive, want,
+			"the guidance must name %q as a case forge serves", want)
+	}
+	assert.Contains(t, positive, "deploy/static-site",
+		"the model needs the skill to load for the static path, not the service sequence")
+
+	for _, excluded := range []string{"landing", "static", "marketing"} {
+		assert.NotContains(t, negative, excluded,
+			"%q must not be listed as a reason to steer away from forge", excluded)
+	}
+	assert.Contains(t, negative, "never be deployed",
+		"a throwaway page with no deploy is still the case where forge is overhead")
 }
 
 // The guidance is hidden from the user, which is what makes disclosure
