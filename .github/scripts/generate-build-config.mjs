@@ -103,8 +103,8 @@ if (!config.RELIANT_GATEWAY_URL) {
   console.error(
     "build-config.js has no RELIANT_GATEWAY_URL. The daemon gateway host cannot be safely derived from " +
       "RELIANT_SERVER_URL for every environment (prod's `api.` host derives `gateway-api.<domain>`, which " +
-      "does not exist — see cmd/reliant/commands/connection.go deriveGatewayURL and " +
-      "ELECTRON_PROD_CONFIG_BRIEFING.md). Fix it in control-plane deploy/kcl/lib/env.k.",
+      "does not exist — see cmd/reliant/commands/connection.go deriveGatewayURL). " +
+      "Fix it in control-plane deploy/kcl/lib/env.k.",
   );
   process.exit(1);
 }
