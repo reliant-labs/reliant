@@ -130,6 +130,25 @@ func init() {
 // budget should always expire first. Sized well above the worst realistic case
 // (fourteen deployments at a five-minute per-resource budget, converging
 // concurrently) so that hitting it means something is genuinely stuck.
+//
+// WHAT THIS INVOCATION NOW DOES, AND WHY 90 MINUTES STILL HOLDS. Under forge's
+// O-15 change a versionless `env deploy` is no longer apply-only: it builds
+// every image at the daemon's checkout, pushes them, cuts a release, records
+// the promotion, and only then applies and waits. So the budget now has to
+// cover a cold multi-image build and push as well as the rollout, which is a
+// materially bigger envelope than when this constant was chosen.
+//
+// It is left at 90 minutes deliberately. The rollout half is unchanged
+// (fourteen deployments against a five-minute per-resource budget, converging
+// concurrently), and a cold build-and-push of control-plane's images is tens of
+// minutes at worst, so the sum still sits inside this ceiling with room. More
+// importantly the ceiling is a BACKSTOP, not a deadline anyone should meet:
+// forge's own rollout budget is what is supposed to expire first (reported as
+// exit 8), and raising this number would only widen the window in which a truly
+// wedged job holds a goroutine. If the build half ever does grow past it, the
+// right fix is a forge-side budget that reports a determinate outcome, not a
+// larger number here — hitting this ceiling yields UNKNOWN, which is the least
+// useful answer this path can give.
 const forgeDeployInvocationTimeout = 90 * time.Minute
 
 // forgeDeployJobRetention is how long a FINISHED job's report stays readable.
@@ -484,10 +503,63 @@ func (a forgeDeployArgs) planArgs() []string {
 	return []string{"env", "deploy", strings.TrimSpace(a.Env), "--dry-run", "--json"}
 }
 
-// applyArgs is the REAL deploy. The only difference from planArgs is the
-// absence of --dry-run.
-func (a forgeDeployArgs) applyArgs() []string {
-	return []string{"env", "deploy", strings.TrimSpace(a.Env), "--json"}
+// forgeDeployApproval is PROOF that a confirmation token was validated and
+// re-checked against a fresh plan. It is the only thing that can produce the
+// apply argv, and therefore the only thing that can produce --yes.
+//
+// WHY A TYPE AND NOT A BOOLEAN, OR NOTHING AT ALL.
+//
+// Under forge's O-13 gate, `forge env deploy` computes the plan and then
+// REFUSES to write without consent: with no TTY and no --yes it exits 5
+// (plan_unconfirmed) having built, pushed and cut, but having written no
+// promotion. The daemon has no terminal, so the apply must carry --yes or it
+// can never deploy. --yes is literally "a human read this plan and approved
+// it" — so the daemon may only say it when a human actually did, and this
+// package's evidence of that is the confirmation token in the start request.
+//
+// Today the single caller happens to be the one path that validated the token.
+// That is incidental, and incidental safety on a path that writes to a
+// production cluster is the thing worth removing: a future handler that built
+// the argv directly would acquire --yes silently, and the forge-side gate that
+// exists to stop an unapproved deploy would be answered "yes" by a daemon that
+// was never told so.
+//
+// So the argv is unreachable without this value, and the value is unreachable
+// without passing both gates (see forgeDeployStaleState, its only producer).
+// The fields are not decoration: they are the validated claims, and applyArgs
+// re-asserts the declared context is non-empty. That makes a fabricated
+// zero-value approval fail CLOSED rather than mint --yes, which is what keeps
+// the guarantee structural instead of merely conventional.
+type forgeDeployApproval struct {
+	// declaredContext is the cluster the operator saw named, as validated.
+	// Non-empty in every approval validateConfirmation would accept.
+	declaredContext string
+	// release is the binding the operator reviewed, empty when unbound.
+	release string
+	// unbound records that the approved state was "no binding at all".
+	unbound bool
+}
+
+// applyArgs is the REAL deploy: planArgs without --dry-run, plus --yes.
+//
+// --yes answers forge's O-13 confirmation gate. It is NOT an escape hatch in
+// the sense `--skip-preflight` and `--no-digest` are — those suppress checks,
+// this one supplies the consent the gate is asking for, and without it a
+// daemon-driven deploy exits 5 having built and pushed but written nothing.
+// The preflight and digest pinning still run exactly as before.
+//
+// It takes the approval rather than reading a flag, so --yes cannot be produced
+// without the validated token. An error here is a PROGRAMMING error — the
+// confirmation did not come from validation — and it must fail the deploy
+// rather than fall back to an unconfirmed invocation, because the fallback
+// would build and push for nothing and report a refusal nobody asked for.
+func (a forgeDeployArgs) applyArgs(approval forgeDeployApproval) ([]string, error) {
+	if strings.TrimSpace(approval.declaredContext) == "" {
+		return nil, fmt.Errorf("refusing to build a deploy argv without a validated confirmation: " +
+			"--yes tells forge a human approved this plan, so it may only be passed on the path " +
+			"that checked the caller's confirmation token against a fresh plan")
+	}
+	return []string{"env", "deploy", strings.TrimSpace(a.Env), "--json", "--yes"}, nil
 }
 
 // forgeDeployPlanFacts is the MINIMUM the guard needs from forge's document.
@@ -526,6 +598,37 @@ type forgeDeployPlanFacts struct {
 const (
 	forgeDeployModeDryRun        = "dry_run"
 	forgeDeployGuardVerdictAllow = "allow"
+)
+
+// forge's deploy exit codes, named for the two this package has to branch on.
+//
+// The numbering is forge's and it was RENUMBERED: 5 used to mean "the wait's
+// budget expired" and now means plan_unconfirmed, with the timeout moved to 8.
+// Pre-1.0, so there is no alias and no compatibility window — a build that
+// still read 5 as a timeout would be reading the one code that must never be
+// mistaken for a deploy in progress.
+//
+// Only these two are named because only these two change behaviour here.
+// Everything else (1 failed, 2 undetermined, 3 conflict, 4 declined,
+// 6 superseded) arrives inside forge's report, where the transport rule applies
+// and this package deliberately re-derives nothing.
+const (
+	// forgeDeployExitPlanUnconfirmed: forge computed the plan and REFUSED to
+	// write it, because nothing approved it — no TTY to prompt on and no
+	// --yes. It built, pushed and cut a release, but wrote NO promotion and
+	// applied NOTHING to any cluster.
+	//
+	// With --yes on the apply argv this is unreachable, which is exactly why
+	// it is handled rather than ignored: if it happens anyway, the daemon has
+	// lost the consent it believed it was carrying, and the one unacceptable
+	// outcome is for that to read as success or as a rollout still underway.
+	forgeDeployExitPlanUnconfirmed = 5
+
+	// forgeDeployExitWaitBudgetExpired: the rollout was still progressing
+	// when the wait's budget ran out. This IS the timeout case — the one 5
+	// used to mean. Manifests were applied, so the outcome is genuinely
+	// indeterminate and the honest answer is "go and look".
+	forgeDeployExitWaitBudgetExpired = 8
 )
 
 // Refusal reason tokens. Stable machine strings because the RPC layer branches
@@ -837,8 +940,10 @@ func handleForgeDeployStart(ctx context.Context, payload []byte) ([]byte, error)
 			forgeCommandFailedPrefix, got, env)
 	}
 
-	// STEP 4 — the guards.
-	if refusal := forgeDeployStaleState(req, facts); refusal != nil {
+	// STEP 4 — the guards. The approval is the proof they passed, and it is
+	// what makes the apply argv (and therefore --yes) reachable at all.
+	refusal, approval := forgeDeployStaleState(req, facts)
+	if refusal != nil {
 		return json.Marshal(forgeDeployStartResponse{
 			forgeResponseMeta: plan.forgeResponseMeta,
 			// The FRESH plan, so the caller can re-render against the
@@ -846,6 +951,13 @@ func handleForgeDeployStart(ctx context.Context, payload []byte) ([]byte, error)
 			Report:        plan.Report,
 			DeployRefused: refusal,
 		})
+	}
+
+	// Built BEFORE the job is registered: an argv that cannot be built must
+	// not leave a running job behind that no forge will ever fill in.
+	applyArgs, err := req.applyArgs(approval)
+	if err != nil {
+		return nil, err
 	}
 
 	// STEP 5 — detach.
@@ -859,7 +971,7 @@ func handleForgeDeployStart(ctx context.Context, payload []byte) ([]byte, error)
 		supported:   true,
 	}
 	claim.start(job)
-	startForgeDeployJob(job, req.applyArgs())
+	startForgeDeployJob(job, applyArgs)
 
 	logging.Info("forge deploy started",
 		"handle", job.handle,
@@ -881,13 +993,19 @@ func handleForgeDeployStart(ctx context.Context, payload []byte) ([]byte, error)
 // forgeDeployStaleState compares the caller's claims against what the plan
 // found, and surfaces forge's own guard refusal.
 //
-// Nil means every claim held and forge is willing to deploy.
+// A nil refusal means every claim held and forge is willing to deploy, and the
+// approval returned alongside is the PROOF of that — it is the only value in
+// this package that can produce the apply argv, and hence the only thing that
+// can produce --yes. Returning it from here rather than constructing it at the
+// call site is what makes the guarantee structural: the token's validation and
+// the permission to say "approved" are the same step, so there is no way to
+// reach the second without the first.
 //
 // ORDER MATTERS. The declared context is checked FIRST because it decides WHERE
 // bytes land, and a wrong-cluster deploy is worse than a wrong-release one: a
 // wrong release ships reviewed code to the right place, a wrong cluster ships
 // anything at all to production.
-func forgeDeployStaleState(req forgeDeployStartRequest, facts forgeDeployPlanFacts) *forgeDeployRefusal {
+func forgeDeployStaleState(req forgeDeployStartRequest, facts forgeDeployPlanFacts) (*forgeDeployRefusal, forgeDeployApproval) {
 	expectedContext := strings.TrimSpace(req.ExpectedDeclaredContext)
 	actualContext := strings.TrimSpace(facts.Guard.DeclaredContext)
 
@@ -902,7 +1020,7 @@ func forgeDeployStaleState(req forgeDeployStartRequest, facts forgeDeployPlanFac
 				"authorised against; the env's KCL changed since the plan was read, and a deploy must "+
 				"never land on a cluster the operator did not see named",
 				strings.TrimSpace(req.Env), actualContext, expectedContext),
-		}
+		}, forgeDeployApproval{}
 	}
 
 	// forge's OWN verdict. Reported as a structured refusal rather than left
@@ -920,7 +1038,7 @@ func forgeDeployStaleState(req forgeDeployStartRequest, facts forgeDeployPlanFac
 				strings.TrimSpace(req.Env),
 				strings.TrimSpace(facts.Guard.Verdict),
 				strings.TrimSpace(facts.Guard.Reason)),
-		}
+		}, forgeDeployApproval{}
 	}
 
 	expectedRelease := strings.TrimSpace(req.ExpectedCurrentRelease)
@@ -942,7 +1060,15 @@ func forgeDeployStaleState(req forgeDeployStartRequest, facts forgeDeployPlanFac
 			"this plan was read, and deploying would ship a release nobody reviewed",
 			strings.TrimSpace(req.Env), actualRelease, expectedRelease)
 	default:
-		return nil
+		// Every claim held and forge's own guard says allow. This is the
+		// ONLY place an approval is minted, and the values are the ones
+		// that were just checked against the fresh plan — not the ones the
+		// caller asserted, which at this point are known to be equal.
+		return nil, forgeDeployApproval{
+			declaredContext: actualContext,
+			release:         actualRelease,
+			unbound:         !actualBound,
+		}
 	}
 
 	return &forgeDeployRefusal{
@@ -954,7 +1080,7 @@ func forgeDeployStaleState(req forgeDeployStartRequest, facts forgeDeployPlanFac
 		ActualCurrentRelease:    actualRelease,
 		ActualBound:             actualBound,
 		Detail:                  detail,
-	}
+	}, forgeDeployApproval{}
 }
 
 // startForgeDeployJob runs the apply in a goroutine and records the terminal
@@ -977,6 +1103,15 @@ func forgeDeployStaleState(req forgeDeployStartRequest, facts forgeDeployPlanFac
 // document. That is the transport rule: a deploy that ran and failed its rollout
 // is the ANSWER, and forge's report states it far better than a status token
 // could.
+// reportOrNil carries forge's document when there is one and nil when there is
+// not, so a terminal state can be recorded without asserting a report exists.
+func reportOrNil(report json.RawMessage, hasReport bool) json.RawMessage {
+	if !hasReport {
+		return nil
+	}
+	return report
+}
+
 func startForgeDeployJob(job *forgeDeployJob, args []string) {
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), forgeDeployInvocationTimeout)
@@ -988,6 +1123,32 @@ func startForgeDeployJob(job *forgeDeployJob, args []string) {
 		hasReport := len(report) > 0 && json.Valid(report)
 
 		switch {
+		case res.ExitCode == forgeDeployExitPlanUnconfirmed:
+			// UNREACHABLE BY CONSTRUCTION, AND HANDLED ANYWAY.
+			//
+			// The apply argv carries --yes, so forge's confirmation gate
+			// cannot refuse this invocation for want of consent. Reaching
+			// here means that stopped being true — a forge whose gate
+			// changed, or an argv that lost the flag — and the failure mode
+			// is nasty in a specific way: forge BUILT and PUSHED images and
+			// cut a release, then wrote no promotion and applied nothing.
+			//
+			// So it is called out as its own loud, non-success terminal
+			// state instead of landing in the default arm below. FAILED is
+			// the correct status and the one thing the generic arms would
+			// get wrong: nothing was applied, which is knowable here and is
+			// the opposite of the "manifests may have landed" hedge that
+			// unknown exists to express. It must never read as success and
+			// never as a rollout still in flight.
+			job.finish(forgeDeployJobStatusFailed,
+				"forge refused this deploy as plan_unconfirmed (exit 5): it computed the plan and "+
+					"wrote NO promotion, so nothing was applied to any cluster — though a release "+
+					"may have been built and its images pushed. The daemon passes --yes precisely "+
+					"so this cannot happen, so this is a bug in the daemon's deploy path or a "+
+					"change in forge's confirmation gate, NOT an unapproved operator action. "+
+					"Do not retry blindly; the environment is unchanged"+stderrExcerpt(res.Stderr),
+				res.ExitCode, reportOrNil(report, hasReport), true, "")
+
 		case err != nil && hasReport:
 			// forge emitted its document and then the invocation was
 			// disturbed. The document is the better evidence, but the
@@ -1022,6 +1183,20 @@ func startForgeDeployJob(job *forgeDeployJob, args []string) {
 				job.finish(forgeDeployJobStatusFailed,
 					"this forge does not support `env deploy --json`; nothing was applied",
 					res.ExitCode, nil, false, reason)
+				break
+			}
+			// Exit 8 is forge's wait-budget expiry — the case 5 used to
+			// mean. It is named in the detail because "exited 8" alone
+			// sends a reader to the wrong half of the exit table, and
+			// because the operator's next move is specific: the rollout
+			// was still progressing, so look at it rather than redeploy.
+			if res.ExitCode == forgeDeployExitWaitBudgetExpired {
+				job.finish(forgeDeployJobStatusUnknown,
+					"forge's rollout wait budget expired while the rollout was still progressing "+
+						"(exit 8) and it produced no parseable report. The manifests WERE applied, "+
+						"so resources may still be converging or may be stuck — verify the "+
+						"environment rather than retrying"+stderrExcerpt(res.Stderr),
+					res.ExitCode, nil, false, "")
 				break
 			}
 			job.finish(forgeDeployJobStatusUnknown,
