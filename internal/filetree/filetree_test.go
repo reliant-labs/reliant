@@ -519,9 +519,10 @@ func TestWalk_Gitignore(t *testing.T) {
 func TestWalk_ShowHiddenDoesNotDisableBounds(t *testing.T) {
 	root := t.TempDir()
 	gitInit(t, root)
-	write(t, filepath.Join(root, ".gitignore"), "out/\n")
+	write(t, filepath.Join(root, ".gitignore"), "out/\n.reliant.local/\n")
 	write(t, filepath.Join(root, "out", "bundle.js"), "js")
 	write(t, filepath.Join(root, "node_modules", "pkg", "index.js"), "js")
+	write(t, filepath.Join(root, ".reliant.local", "mcp.json"), "{}")
 	write(t, filepath.Join(root, ".env"), "SECRET=1")
 
 	res, err := Walk(Options{Root: root, Depth: MaxDepth, ShowHidden: true})
@@ -533,6 +534,9 @@ func TestWalk_ShowHiddenDoesNotDisableBounds(t *testing.T) {
 	}
 	if find(res.Nodes, "node_modules") != nil {
 		t.Error("show_hidden must not disable the skip set")
+	}
+	if find(res.Nodes, ".reliant.local") == nil {
+		t.Error("show_hidden must reveal ignored hidden directories")
 	}
 	if find(res.Nodes, ".env") == nil {
 		t.Error("show_hidden must still reveal dotfiles")
