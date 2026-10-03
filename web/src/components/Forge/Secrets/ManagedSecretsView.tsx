@@ -97,6 +97,27 @@ export interface ManagedSecretsViewProps {
   pendingVersion: number | null;
 }
 
+/**
+ * Whether a value can be written from HERE — mode AND availability, not mode
+ * alone (#353, design §10).
+ *
+ * `modeSupportsWrite` answers the provider question: a file store or an
+ * external manager has no browser write path, whatever the store says. But
+ * `managed` mode is also reached with NO control-plane row behind it
+ * (`not-ensured`, `provider-unknown`), and a write needs that row: it is what
+ * the managed store is keyed on, and creating it means stating the
+ * environment's IMMUTABLE kind, which only forge's render can do.
+ *
+ * Deciding on mode alone put an "Add secret" button beside the sentence
+ * saying the environment had not been built — an affordance whose only
+ * possible implementation was to guess the kind. Both halves are required, so
+ * the button and the sentence can no longer contradict each other.
+ */
+function canWriteHere(mode: SecretSurfaceMode, availability: ManagedStoreAvailability): boolean {
+  if (!modeSupportsWrite(mode)) return false;
+  return availability !== "not-ensured" && availability !== "provider-unknown";
+}
+
 export function ManagedSecretsView(props: ManagedSecretsViewProps) {
   const { env, mode, availability, report, managed, isLoading, selectedName, onSelect } = props;
 
@@ -119,7 +140,7 @@ export function ManagedSecretsView(props: ManagedSecretsViewProps) {
     [report, managed, storeReadable]
   );
   const tally = useMemo(() => tallyRows(rows), [rows]);
-  const canWrite = modeSupportsWrite(mode);
+  const canWrite = canWriteHere(mode, availability);
 
   const selected = selectedName ? rows.find((r) => r.name === selectedName) ?? null : null;
 
@@ -441,7 +462,7 @@ function SecretDetail({
   onDestroy,
   pendingVersion,
 }: ManagedSecretsViewProps & { row: SecretSurfaceRow; onBack: () => void }) {
-  const canWrite = modeSupportsWrite(mode);
+  const canWrite = canWriteHere(mode, availability);
 
   return (
     <div className="space-y-5" data-testid="secret-detail">
@@ -514,9 +535,13 @@ function SecretDetail({
         // Nothing has been stored for this environment yet, so there is no
         // history to be missing. Saying it "cannot be read" would describe a
         // failure where there is simply nothing there yet.
+        //
+        // It no longer says "setting a value here creates the first one":
+        // with no row there is nowhere to set one (§10 state 3), so that was
+        // an offer of a write this console cannot perform.
         <p className="max-w-2xl text-xs text-muted-foreground" data-testid="version-history-not-ensured">
-          No versions yet. Setting a value here creates the first one, and it is used by the first
-          deploy.
+          No versions yet — this environment hasn&apos;t been built, so nothing has ever held a
+          value for it.
         </p>
       ) : availability !== "available" ? (
         // Only the store knows a secret's versions. When it cannot be read
@@ -573,12 +598,16 @@ function EmptyState({
     >
       <KeyRound className="h-5 w-5 text-muted-foreground" aria-hidden="true" />
       <p className="max-w-md text-sm text-muted-foreground">
+        {/* The two no-row availabilities say what to RUN, not "add one now"
+            (#353, §10 state 3). They used to promise that a value added here
+            was kept for the first deploy — which this console could only
+            honour by guessing the environment's immutable kind. The write is
+            gone, so the invitation is too, and what replaces it is the step
+            that makes the environment writable for good. */}
         {mode === "managed"
-          ? availability === "not-ensured"
-            ? "No secrets set for this environment yet. You can add them now — this environment has not been deployed, and values you set are kept and used by the first deploy."
-            : availability === "provider-unknown"
-              ? "No secrets set for this environment in Reliant's managed store. You can add them now — they are kept and used by the first deploy if this environment's config declares HostedSecrets."
-              : "No secrets in this environment yet."
+          ? availability === "not-ensured" || availability === "provider-unknown"
+            ? "This environment hasn't been built yet, so nothing holds a value for it. Run forge env build for it, or open Preview with your daemon online — after that its secrets can be set here, with your daemon offline."
+            : "No secrets in this environment yet."
           : mode === "managed-remote"
             ? "No secrets are declared here, and this console cannot read the managed store. Set one with forge secret set."
           : mode === "external"

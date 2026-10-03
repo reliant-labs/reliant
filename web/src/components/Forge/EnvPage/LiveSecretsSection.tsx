@@ -37,6 +37,15 @@
  *                        once never returns to state 3, however often the
  *                        daemon comes and goes.
  *
+ * ── THE USER IS NEVER ASKED HOW THE ENVIRONMENT RUNS (#353) ─────────────────
+ *
+ * In NO state does this surface ask. State 1 reads the kind off the row,
+ * state 2 is Register's job, and state 3 says what to RUN instead of offering
+ * a radio group — because an environment's kind is immutable once recorded, so
+ * a human answering it under a secret form writes a guess that can never be
+ * corrected. That is the question #353 then had to catch server-side with a
+ * FailedPrecondition, and it is deleted rather than kept as a fallback.
+ *
  * Nothing here holds a value. The value lives inside SetSecretModal's form
  * state for one submit and is cleared on close; there is no reveal, because no
  * RPC this app calls could serve one.
@@ -60,6 +69,22 @@ import type { SecretSurfaceRow } from "@/services/forge/secretSurface";
 
 import { ManagedSecretsView } from "../Secrets/ManagedSecretsView";
 import { SetSecretModal } from "../Secrets/SetSecretModal";
+
+/**
+ * §10 STATE 3's remedy, in the exact words the design settles on.
+ *
+ * One function, used by the panel AND by the disabled form inside it, because
+ * two copies of a sentence this specific drift the first time one is edited —
+ * and the two would then disagree on the same screen about what to run.
+ *
+ * It names a command and a tab, not a cause. "The daemon is offline" is not
+ * the reason the form is inert: an environment that has been built once stays
+ * writable with the daemon down forever. The reason is that nothing has yet
+ * stated how this environment runs.
+ */
+export function notBuiltRemedy(env: string): string {
+  return `${env} hasn't been built yet. Run \`forge env build ${env}\`, or open Preview with your daemon online.`;
+}
 
 export interface LiveSecretsSectionProps {
   projectId: string | null;
@@ -174,23 +199,48 @@ export function LiveSecretsSection({
     (destroyMutation.isPending && destroyMutation.variables?.versions?.[0]) ||
     null;
 
-  // ── STATE 3: no row. Disabled, with the remedy, and no guess. ──
+  // ── STATE 3: no row. The form is offered and DISABLED, with the remedy. ──
   //
-  // The form does not ask the user for the kind and does not offer to create
-  // the environment from a value the user typed. An immutable field chosen by
-  // a human under a form is exactly what #353 had to guard against afterwards
-  // with a FailedPrecondition; removing the question is safer than keeping it
-  // as a fallback.
+  // Offered rather than withheld, because the remedy is the thing the user
+  // came here for: someone looking for "where do I put my secret" learns more
+  // from a form that says what to run than from a screen with no form on it.
+  // Disabled rather than asking, because the DESTINATION is unknown — an
+  // environment's kind is immutable once recorded, and a human answering that
+  // under a secret form is exactly the guess #353 had to catch afterwards
+  // with a FailedPrecondition.
+  //
+  // The remedy also sits outside the modal, so it is readable without
+  // clicking anything. One constant, so the two cannot drift.
   if (!env) {
     return (
-      <p
-        data-testid="live-secrets-not-built"
-        className="rounded-lg border border-dashed border-border px-4 py-3 text-sm text-muted-foreground"
-      >
-        <span className="font-mono text-foreground">{name}</span> hasn&apos;t been built yet. Run{" "}
-        <code className="font-mono text-foreground">forge env build {name}</code>, or open Preview
-        with your daemon online.
-      </p>
+      <div className="space-y-3" data-testid="live-secrets-not-built">
+        <p className="rounded-lg border border-dashed border-border px-4 py-3 text-sm text-muted-foreground">
+          <span className="font-mono text-foreground">{name}</span> hasn&apos;t been built yet. Run{" "}
+          <code className="font-mono text-foreground">forge env build {name}</code>, or open Preview
+          with your daemon online.
+        </p>
+
+        <button
+          type="button"
+          onClick={() => setModal({ existing: null })}
+          data-testid="add-secret"
+          className="rounded-md border border-border px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+        >
+          Add secret
+        </button>
+
+        <SetSecretModal
+          open={modal !== null}
+          onClose={closeModal}
+          env={name}
+          existing={null}
+          takenNames={[]}
+          onSubmit={handleSubmit}
+          isSubmitting={false}
+          error={null}
+          disabledReason={notBuiltRemedy(name)}
+        />
+      </div>
     );
   }
 
@@ -236,10 +286,8 @@ export function LiveSecretsSection({
         onSubmit={handleSubmit}
         isSubmitting={setMutation.isPending}
         error={(setMutation.error as Error | null) ?? null}
-        // The kind question is never asked from Live: a row exists, so the
-        // kind is already recorded and immutable (§10 state 1). R4 removes the
-        // prop and its fieldset outright (#353).
-        askEnvironmentKind={false}
+        // No disabledReason: a row exists, so its kind is already recorded
+        // and the write has a destination. §10 state 1, the common case.
       />
     </div>
   );

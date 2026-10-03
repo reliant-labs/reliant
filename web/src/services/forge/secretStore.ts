@@ -49,8 +49,6 @@ import { ConnectError, Code } from "@connectrpc/connect";
 import { timestampDate, type Timestamp } from "@bufbuild/protobuf/wkt";
 
 import { SecretStoreService } from "@/gen/controlplane/services/secret_store/v1/secret_store_pb";
-import { DeployEnvironmentKind } from "@/gen/controlplane/controlplane/v1/deploy_pb";
-import { DeployService } from "@/gen/controlplane/services/deploy/v1/deploy_pb";
 import { getControlPlaneClient } from "@/services/controlPlane/client";
 import { CONTROL_PLANE_API_URL } from "@/services/controlPlane/config";
 import { destinationOf } from "./topology";
@@ -145,16 +143,19 @@ export type ManagedStoreAvailability =
    * plane holds no row for the env. So there is no id to look up — but this
    * is "unknown", not a statement that the env uses a different provider.
    *
-   * Writable, through the same ensure-then-set path as `not-ensured`: a value
-   * set now is stored in the managed store ahead of the first deploy, and an
-   * env whose KCL declares forge.HostedSecrets reads it from there.
+   * §10 STATE 3, and NOT writable. The missing thing is the environment's
+   * kind, which is immutable once recorded — so the remedy is a build or a
+   * Preview render that states it, never a write that guesses it.
    */
   | "provider-unknown"
   /**
    * Hosted, but forge reported no environment id: the control plane has
-   * never been asked to ensure this environment (`forge env deploy` creates
-   * it). There is no id to key a lookup on, and inventing one is the thing
-   * this state exists to refuse.
+   * never been asked to ensure this environment (`forge env build` or a
+   * Preview Register creates it). There is no id to key a lookup on, and
+   * inventing one is the thing this state exists to refuse.
+   *
+   * Also §10 state 3: no row means no recorded kind, so there is nowhere to
+   * write a value until something states it.
    */
   | "not-ensured"
   /**
@@ -249,33 +250,19 @@ export function managedStoreTarget(
 }
 
 /**
- * Whether a value can be WRITTEN in this state, which is a different question
- * from whether the store can be READ.
+ * WHICH STATES CAN BE WRITTEN IS NOT A FUNCTION HERE ANY MORE.
  *
- * `not-ensured` is the interesting one, and it is writable. There is no id to
- * read WITH yet, but there is nothing missing that a write cannot create: the
- * only prerequisite for a managed secret is the control-plane
- * `deploy_environments` row, and creating that row is an ordinary idempotent
- * RPC (EnsureEnvironment) rather than a deploy. OpenBao needs nothing
- * provisioned per environment — KV-v2 creates the path on first write — which
- * control-plane pins in internal/isolation/predeploy_secret_integration_test.go.
+ * `availabilitySupportsWrite` used to answer it, and it said yes to
+ * `not-ensured` and `provider-unknown` — on the strength of an ensure path
+ * this module no longer has (see the note above). Keeping the predicate would
+ * mean a function promising a write that nothing can perform.
  *
- * Treating it as unwritable was the whole defect: it produced a chicken-and-egg
- * where the UI told a user to deploy, and the deploy refused because the
- * secrets it needed were unset.
- *
- * `provider-unknown` is writable for the same reason: what is missing is the
- * row, and the ensure path creates it. What forge would have added — the
- * env's control-plane kind — is asked of the user instead of guessed (see
- * SecretsSection), because the kind cannot change once the row exists.
- *
- * Every other non-available state stays unwritable, and for reasons a write
- * cannot fix: another control plane owns the row, the environment has no
- * managed store at all, or we simply could not reach it and must not guess.
+ * A write needs a lookup target, which is `ManagedStoreTarget.kind ===
+ * "lookup"` — the environment's control-plane id. That is §10 state 1, and it
+ * is the one fact a caller needs, available without a second vocabulary to
+ * keep in step with the first. A row with no id is a row that has not been
+ * built; the remedy is a build or a Preview render, not a write.
  */
-export function availabilitySupportsWrite(availability: ManagedStoreAvailability): boolean {
-  return availability === "available" || availability === "not-ensured" || availability === "provider-unknown";
-}
 
 /**
  * One sentence for each reason there is no lookup. Each answers "then where
@@ -285,10 +272,19 @@ export function availabilityExplanation(availability: ManagedStoreAvailability):
   switch (availability) {
     case "not-hosted":
       return "This environment is not hosted, so it has no managed store. Its values come from the secret provider its forge config declares.";
+    // §10 STATE 3, in two spellings. Both mean "nothing has stated how this
+    // environment runs", so there is nowhere to put a value yet — and the
+    // remedy is to state it, which is what a build or a Preview render does.
+    //
+    // Both of these used to promise that values set here were "kept and used
+    // by the first deploy". That was a write this console could only honour
+    // by guessing the environment's IMMUTABLE kind, which is the guess #353
+    // had to catch server-side afterwards. The write is gone, so the promise
+    // is gone with it.
     case "provider-unknown":
-      return "forge could not confirm this environment's secret provider, and it has not been deployed yet. Values you set here go to Reliant's managed store, which is where the environment reads them if its forge config declares `HostedSecrets` — they are kept and used by the first deploy.";
+      return "This environment hasn't been built yet, so Reliant doesn't know where its secrets live. Run `forge env build` for it, or open Preview with your daemon online — after that its secrets can be set here, with your daemon offline.";
     case "not-ensured":
-      return "This hosted environment has not been deployed yet, so nothing is stored for it. You can still set values now — they are kept and used by the first deploy.";
+      return "This hosted environment hasn't been built yet, so nothing is stored for it. Run `forge env build` for it, or open Preview with your daemon online — after that its secrets can be set here, with your daemon offline.";
     case "other-control-plane":
       return "This environment is hosted on a different control plane from the one you are signed in to, so its store cannot be read from here. Set values with `forge secret set`.";
     case "unreachable":
@@ -448,127 +444,30 @@ export async function setSecret(args: {
   return { version: res.version, createdAt: toISO(res.createdTime) };
 }
 
-// ── Writing before the first deploy ─────────────────────────────────────────
-
 /**
- * The env facts an ensure needs: a control-plane environment's identity is
- * (org, project, name), and its kind. The org comes from the session.
+ * THERE IS NO ENSURE PATH HERE, AND THAT IS THE POINT (#353, design §10).
  *
- * `controlPlaneKind` is forge's own word for the kind — "persistent" or
- * "local" — read off the topology report's `control_plane_kind`. It is NOT
- * defaulted here, for the same reason the server refuses UNSPECIFIED: the
- * kinds differ in whether the platform deploys there and whether secrets are
- * readable back, and the kind is IMMUTABLE once the row exists. A guess that
- * lands wrong produces an environment that cannot be corrected, only
- * abandoned.
+ * This module used to own a second EnsureEnvironment — `ensureEnvironmentForSecrets`
+ * / `setSecretEnsuringEnvironment` — which created the environment's row from
+ * a kind the SET-SECRET FORM had collected, accepting `controlPlaneKind: ""`
+ * and relying on a caller to have filled it from a radio group. Both are
+ * deleted.
+ *
+ * A single writer for an immutable field is the safety property. The kind
+ * cannot be changed once the row exists, so two ensures mean two different
+ * answers to "how does this environment run", and whichever ran first won.
+ * The one that survives is Preview's Register (services/forge/register.ts),
+ * which sends forge's OWN kind and the shape from the same render and refuses
+ * a document that does not state one — so an absent kind is not merely
+ * rejected, it is unrepresentable: no browser path can assemble an ensure from
+ * component state.
+ *
+ * So writing a value before the first deploy still works, and by the better
+ * route: Register the environment once from Preview (one daemon render, the
+ * browser does the write with the user's session), after which the row exists
+ * and every secret write is §10 state 1 — control plane only, daemon offline,
+ * forever.
  */
-export interface EnsureEnvironmentInput {
-  project: string;
-  name: string;
-  controlPlaneKind: string;
-}
-
-/**
- * Make the control-plane environment row exist, and return its id.
- *
- * THE SAME THING FORGE'S CLI ALREADY DOES. forge ensures the environment
- * before every mutating hosted command — promote, secret set, deploy — because
- * the environment is DECLARED in the project's KCL and whichever command runs
- * first on a fresh env creates it. The browser was the one caller that did
- * not, which is why `forge secret set` worked pre-deploy and the UI did not.
- *
- * Idempotent server-side: EnsureEnvironment returns the existing row unchanged
- * when one is already there, and refuses (rather than rewriting) a declaration
- * whose immutable fields disagree with it.
- *
- * AUTHZ IS UNCHANGED BY THIS PATH. EnsureEnvironment requires org ADMIN, and
- * so does writing a secret. A caller who may set a secret may already create
- * the environment, so ensuring here grants nobody anything they did not have.
- */
-export async function ensureEnvironmentForSecrets(input: EnsureEnvironmentInput): Promise<string> {
-  const project = input.project.trim();
-  const name = input.name.trim();
-  if (project === "" || name === "") {
-    // Refused rather than sent. An environment is addressed by
-    // (org, project, name); a blank half would address a DIFFERENT
-    // environment from the one on screen and then write the user's secret
-    // into it.
-    throw new Error(
-      "Cannot set a value for this environment yet: Reliant does not know which forge project it belongs to. Open it once from a running daemon, then try again."
-    );
-  }
-  const kind = environmentKindFromForge(input.controlPlaneKind);
-  if (kind === undefined) {
-    throw new Error(
-      "Cannot set a value for this environment yet: forge has not reported whether it is a persistent or local environment. An environment's kind cannot be changed later, so Reliant will not guess it."
-    );
-  }
-
-  const res = await getControlPlaneClient(DeployService).ensureEnvironment({
-    spec: { project, name, kind },
-  });
-  const id = (res.environment?.id ?? "").trim();
-  if (id === "") {
-    throw new Error("The control plane created this environment but returned no id for it.");
-  }
-  return id;
-}
-
-/**
- * Map forge's `control_plane_kind` onto the wire enum.
- *
- * `undefined` for anything else — including the empty string an older forge
- * that does not report the field would leave. Never UNSPECIFIED and never a
- * default: see EnsureEnvironmentInput.
- */
-function environmentKindFromForge(kind: string): DeployEnvironmentKind | undefined {
-  switch (kind.trim().toLowerCase()) {
-    case "persistent":
-      return DeployEnvironmentKind.PERSISTENT;
-    case "local":
-      return DeployEnvironmentKind.LOCAL;
-    default:
-      return undefined;
-  }
-}
-
-export interface SetSecretEnsuringResult extends SetSecretResult {
-  /**
-   * The environment id the value was written against — newly created when the
-   * environment had none. The caller needs it so the surface can re-read with
-   * a real id instead of staying in `not-ensured` until something else
-   * refreshes it.
-   */
-  environmentId: string;
-}
-
-/**
- * Write a secret, creating the environment row first when there is not one.
- *
- * ORDER IS THE POINT, AND SO IS STOPPING. If the ensure fails the value is
- * never sent: a write keyed on a failed ensure has no correct destination, and
- * "try it anyway" is how a secret lands in the wrong row. The value is
- * forwarded once and never returned, cached, or included in an error.
- */
-export async function setSecretEnsuringEnvironment(args: {
-  /** "" when the environment has never been ensured. */
-  environmentId: string;
-  env: EnsureEnvironmentInput;
-  name: string;
-  value: string;
-  cas?: number;
-}): Promise<SetSecretEnsuringResult> {
-  const environmentId =
-    args.environmentId.trim() !== "" ? args.environmentId.trim() : await ensureEnvironmentForSecrets(args.env);
-
-  const result = await setSecret({
-    environmentId,
-    name: args.name,
-    value: args.value,
-    ...(args.cas === undefined ? {} : { cas: args.cas }),
-  });
-  return { ...result, environmentId };
-}
 
 /**
  * Soft-delete versions. Reversible via {@link undeleteSecret}.
