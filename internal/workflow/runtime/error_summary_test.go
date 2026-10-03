@@ -120,6 +120,65 @@ func TestExtractLLMErrorSummary(t *testing.T) {
 	}
 }
 
+func TestExtractLLMErrorSummaryProviderCreditExhaustion(t *testing.T) {
+	t.Parallel()
+	const genericCreditSummary = "AI provider quota or credits are exhausted — check provider billing or switch providers"
+	const longContextCreditSummary = "AI provider credits are required for long context requests — add provider credits or choose a shorter-context model"
+
+	tests := []struct {
+		name     string
+		errMsg   string
+		expected string
+	}{
+		{
+			name:     "long context usage credits",
+			errMsg:   `failed to stream LLM response: LLM streaming error: POST "https://api.anthropic.com/v1/messages": 429 Too Many Requests {"type":"error","error":{"type":"rate_limit_error","message":"Usage credits are required for long context requests"}}`,
+			expected: longContextCreditSummary,
+		},
+		{
+			name:     "insufficient quota openai body",
+			errMsg:   `failed to stream LLM response: LLM streaming error: POST "https://api.openai.com/v1/responses": 429 Too Many Requests {"error":{"message":"You exceeded your current quota, please check your plan and billing details.","type":"insufficient_quota","code":"insufficient_quota"}}`,
+			expected: genericCreditSummary,
+		},
+		{
+			name:     "quota exceeded code",
+			errMsg:   `provider returned 429: {"error":{"code":"quota_exceeded","message":"quota is gone"}}`,
+			expected: genericCreditSummary,
+		},
+		{
+			name:     "out of credits",
+			errMsg:   `anthropic error: overage unavailable: out of credits`,
+			expected: genericCreditSummary,
+		},
+		{
+			name:     "billing hard limit",
+			errMsg:   `openai request failed: billing hard limit has been reached`,
+			expected: genericCreditSummary,
+		},
+		{
+			name:     "payment required",
+			errMsg:   `402 Payment Required`,
+			expected: genericCreditSummary,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if result := extractLLMErrorSummary(tt.errMsg); result != tt.expected {
+				t.Errorf("extractLLMErrorSummary() = %q, want %q", result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestExtractLLMErrorSummaryDoesNotTreatRemainingCreditHintAsExhaustion(t *testing.T) {
+	t.Parallel()
+	errMsg := "the claude-code provider accepted the request but sent no content for 5m0s; retrying. If this repeats, check that the subscription has remaining credit"
+	if result := extractLLMErrorSummary(errMsg); result != "" {
+		t.Errorf("remaining-credit stall hint summary = %q, want no credit-exhaustion summary", result)
+	}
+}
+
 // wantNetworkSummary is the message a transport-level failure must produce. It
 // is spelled out here rather than referencing the production constant so this
 // test pins the user-visible wording, not just internal consistency.

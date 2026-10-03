@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/reliant-labs/reliant/internal/chatmarkers"
+	"github.com/reliant-labs/reliant/internal/llm/drivererrors"
 )
 
 // llmAPIErrorJSON matches the JSON error payload from Anthropic/LLM streaming errors.
@@ -302,6 +303,14 @@ func extractLLMErrorSummary(errMsg string) string {
 	// neither names the model nor says what to do about it.
 	if modelSummary := extractModelUnavailableSummary(errMsg, errLower); modelSummary != "" {
 		return modelSummary
+	}
+
+	// Provider credit/quota exhaustion often arrives as a 429, but retrying the
+	// same request cannot succeed until the billing/quota state changes. Match it
+	// before the JSON and generic rate-limit fallbacks so the user sees the
+	// billing action instead of a misleading "try again later" message.
+	if summary := drivererrors.SummarizeProviderCreditExhaustion(errMsg); summary != "" {
+		return summary
 	}
 
 	// First, try to extract from embedded JSON error payload
