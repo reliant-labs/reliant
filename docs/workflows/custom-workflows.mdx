@@ -1298,7 +1298,7 @@ edges:
       - to: execute_tools
         condition: size(nodes.call_llm.tool_calls) > 0
       - to: complete
-        condition: nodes.call_llm.stop_reason == 'end_turn'
+        condition: nodes.call_llm.stop_reason == 'done'
     default: loop_back  # Fallback if no case matches
 ```
 

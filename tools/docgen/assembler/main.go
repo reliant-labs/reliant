@@ -170,7 +170,7 @@ Two syntax modes:
 - **` + "`condition`" + ` / ` + "`while`" + ` fields**: Pure CEL — no ` + "`{{}}`" + ` wrapping
   ` + "```yaml" + `
   condition: "nodes.llm.stop_reason == 'tool_use'"
-  while: "outputs.stop_reason != 'end_turn' && iter.iteration < 50"
+  while: "outputs.stop_reason in ['tool_use', 'incomplete', 'truncated', 'interrupted'] && iter.iteration < 50"
   ` + "```" + `
 - **All other fields**: Template interpolation with ` + "`{{}}`" + `
   ` + "```yaml" + `
@@ -427,8 +427,9 @@ func generateCELQuickReference() string {
 # Check if LLM wants to use tools
 condition: "nodes.llm.stop_reason == 'tool_use'"
 
-# Agentic loop — keep going until LLM stops calling tools
-while: "outputs.stop_reason != 'end_turn' && iter.iteration < 50"
+# Agentic loop — keep going while the model has more to do. stop_reason is a
+# closed set: tool_use | incomplete | truncated | interrupted | refused | error | done
+while: "outputs.stop_reason in ['tool_use', 'incomplete', 'truncated', 'interrupted'] && iter.iteration < 50"
 
 # Dynamic model from input
 model: "{{inputs.model}}"

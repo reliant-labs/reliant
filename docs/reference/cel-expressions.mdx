@@ -173,16 +173,25 @@ condition: has(nodes.conditional_node)
 | `tool_calls` | array | Tool calls requested by model |
 | `input_tokens` | int | Input tokens consumed |
 | `output_tokens` | int | Output tokens generated |
-| `stop_reason` | string | Why the LLM stopped generating |
+| `stop_reason` | string | Why the turn ended — the field loop conditions should read |
+| `finish_reason` | string | The raw provider stop reason behind `stop_reason` (escape hatch) |
 
-**stop_reason values:**
+**stop_reason values** (a closed set — a new provider stop reason maps into one of these, never adds an eighth):
 
-| Value | Description |
-|-------|-------------|
-| `end_turn` | LLM finished its response naturally |
-| `tool_use` | LLM wants to use tools |
-| `max_tokens` | Hit the token limit |
-| `stop_sequence` | Hit a stop sequence |
+| Value | Description | Typical agent-loop response |
+|-------|-------------|-----------------------------|
+| `tool_use` | The model requested tools | Continue — run them |
+| `incomplete` | The provider paused the turn and expects it handed back (OpenAI `end_turn: false`, Anthropic `pause_turn`), and the turn produced text | Continue |
+| `truncated` | Hit the output-token limit mid-turn | Continue (tool-presence loop) / stop (sentinel loop) |
+| `interrupted` | The stream was cut short before the provider finished | Continue |
+| `refused` | The safety system declined | Stop |
+| `error` | Provider or transport failure, or an unrecognized reason | Stop |
+| `done` | The model finished on its own terms | Stop |
+
+```yaml
+# An agent loop: continue while the model has more to do
+while: "outputs.stop_reason in ['tool_use', 'incomplete', 'truncated', 'interrupted'] || outputs.pending_inbox == true"
+```
 
 **Common Run outputs (shell commands):**
 

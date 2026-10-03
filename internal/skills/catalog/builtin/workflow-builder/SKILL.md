@@ -62,7 +62,7 @@ Two syntax modes:
 - **`condition` / `while` fields**: Pure CEL — no `{{}}` wrapping
   ```yaml
   condition: "nodes.llm.stop_reason == 'tool_use'"
-  while: "outputs.stop_reason != 'end_turn' && iter.iteration < 50"
+  while: "outputs.stop_reason in ['tool_use', 'incomplete', 'truncated', 'interrupted'] && iter.iteration < 50"
   ```
 - **All other fields**: Template interpolation with `{{}}`
   ```yaml
@@ -313,8 +313,9 @@ is always available (it's in `tag:coding:default`) and loads the full set on dem
 # Check if LLM wants to use tools
 condition: "nodes.llm.stop_reason == 'tool_use'"
 
-# Agentic loop — keep going until LLM stops calling tools
-while: "outputs.stop_reason != 'end_turn' && iter.iteration < 50"
+# Agentic loop — keep going while the model has more to do. stop_reason is a
+# closed set: tool_use | incomplete | truncated | interrupted | refused | error | done
+while: "outputs.stop_reason in ['tool_use', 'incomplete', 'truncated', 'interrupted'] && iter.iteration < 50"
 
 # Dynamic model from input
 model: "{{inputs.model}}"
@@ -375,7 +376,7 @@ condition: "nodes.check.exit_code == 0"
 | `pitch-deck` | Generate an investor pitch deck from a company website with competitive research and founder interview. Includes parallel per-slide write+review pipeline and visual review via puppeteer screenshots + image attachments. |
 | `ralph-wiggum` | Ralph Wiggum — brute-force iteration for complex tasks. |
 | `scope-conversation` | Reusable scoping conversation sub-workflow. |
-| `structured-agent` | Agent that requires structured output via response tool. Unlike builtin://agent which returns on end_turn, this loops until the response tool is called. If LLM responds without tools, a reminder is injected. Access output via output.response (structured data) and output.completed (boolean). |
+| `structured-agent` | Agent that requires structured output via response tool. Unlike builtin://agent which returns once the model is done (stop_reason), this loops until the response tool is called. If LLM responds without tools, a reminder is injected. Access output via output.response (structured data) and output.completed (boolean). |
 
 
 ## Node Types

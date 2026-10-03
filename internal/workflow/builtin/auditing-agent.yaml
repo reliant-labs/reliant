@@ -113,7 +113,21 @@ entry: [audited_loop]
 nodes:
   - id: audited_loop
     type: loop
-    while: size(outputs.tool_calls) > 0
+    # Continue while the agent's last turn left work unfinished — the same
+    # stop_reason vocabulary agent.yaml reads (see internal/workflow/stopreason).
+    #
+    # tool_use is the audit's turn: an approved turn runs its tools, and a
+    # REJECTED one continues too, so the audit feedback saved by execute_audit
+    # becomes the agent's next input. truncated / interrupted resume a turn that
+    # was cut off before it could be audited meaningfully.
+    #
+    # incomplete is deliberately NOT here. Continuing a paused turn means
+    # calling the provider with the assistant's own message as the tail
+    # (continue_turn), and in this loop that message is only saved when the
+    # audit approves it — so whether a paused, unapproved turn should continue
+    # is an audit-policy question, not a mechanical one. Until that is decided
+    # a paused turn ends the loop exactly as it did before stop_reason existed.
+    while: outputs.stop_reason in ['tool_use', 'truncated', 'interrupted']
     ask: "{{inputs.ask || (inputs.max_turns > 0 && iter.iteration >= inputs.max_turns)}}"
     inline:
       name: audited_loop (Loop Body)
@@ -122,6 +136,10 @@ nodes:
         tool_calls: "{{nodes.main_agent.tool_calls}}"
         message: "{{nodes.main_agent.message}}"
         response_text: "{{nodes.main_agent.response_text}}"
+        # Why the agent's last turn ended. Defaults to 'done' when main_agent
+        # has not run, so an iteration that never reached it cannot hold the
+        # loop open.
+        stop_reason: "{{has(nodes.main_agent) && has(nodes.main_agent.stop_reason) ? nodes.main_agent.stop_reason : 'done'}}"
       nodes:
         - id: main_agent
           type: call_llm

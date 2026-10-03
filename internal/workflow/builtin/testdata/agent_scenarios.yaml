@@ -508,13 +508,14 @@ expect:
 # text response" as the sub-agent's result — while two edits had just been
 # applied and the work was unfinished.
 #
-# aborted=true is what distinguishes them: the loop must take another turn.
-name: aborted_turn_continues_loop
+# stop_reason=interrupted is what distinguishes them: the loop must take
+# another turn.
+name: interrupted_turn_continues_loop
 description: A turn cut short mid-stream must re-enter the loop, not report the agent as finished
 inputs:
   mode: auto
 events:
-  # Iteration 0: stream cancelled mid-flight — no tool calls, no text, aborted.
+  # Iteration 0: stream cancelled mid-flight — no tool calls, no text, interrupted.
   - node: agent_loop.call_llm
     output:
       message:
@@ -522,7 +523,7 @@ events:
         text: ""
       response_text: ""
       tool_calls: []
-      aborted: true
+      stop_reason: interrupted
   # Iteration 1: the retry streams to completion and finishes the work.
   - node: agent_loop.call_llm
     output:
@@ -531,7 +532,7 @@ events:
         text: "Picking up where that left off - the flag is removed and tests pass."
       response_text: "Picking up where that left off - the flag is removed and tests pass."
       tool_calls: []
-      aborted: false
+      stop_reason: done
 expect:
   outcome: completed
   reached:
@@ -546,14 +547,16 @@ expect:
       _iterations: 2
 
 ---
-# The other half of the guarantee: aborted must not become a new wedge.
+# The other half of the guarantee: interrupted must not become a new wedge.
 #
 # pending_inbox once bricked chats by staying true when nothing was queued, so
-# the loop re-entered forever. aborted cannot do that - it is recomputed from
-# each turn's own stream - and this pins it: an aborted turn followed by a
-# healthy one exits after exactly two iterations rather than looping on.
-name: aborted_clears_on_next_healthy_turn
-description: aborted is per-turn, so a completed turn after an abort exits the loop
+# the loop re-entered forever. stop_reason cannot do that - it is recomputed
+# from each turn's own stream - and this pins it: an interrupted turn followed
+# by a healthy one exits after exactly two iterations rather than looping on.
+# The second turn sets no stop_reason at all, so this also pins that the
+# runtime's fill-from-tool_calls default reads as done.
+name: interrupted_clears_on_next_healthy_turn
+description: stop_reason is per-turn, so a completed turn after an interrupt exits the loop
 inputs:
   mode: auto
 events:
@@ -564,7 +567,7 @@ events:
         text: "partial output before the cut"
       response_text: "partial output before the cut"
       tool_calls: []
-      aborted: true
+      stop_reason: interrupted
   - node: agent_loop.call_llm
     output:
       message:
@@ -584,8 +587,8 @@ expect:
 ---
 # Truncation: the turn hit the model's output ceiling before producing anything.
 #
-# This is the third instance of the same class as `aborted`, and the one that
-# was NOT covered. A truncated turn returns zero tool calls and no text, which
+# This is the third instance of the same class as `interrupted`, and the one
+# that was NOT covered. A truncated turn returns zero tool calls and no text, which
 # the while-condition cannot tell apart from "the model is done" — so the loop
 # exited and reported a half-finished task as complete.
 #
@@ -593,7 +596,7 @@ expect:
 # model's cap for claude-5.1-fable), producing no text and no tool calls, only a
 # 226KB thinking signature. The loop read that as a clean finish.
 #
-# stop_kind=truncated is what distinguishes them: the work is unfinished, so
+# stop_reason=truncated is what distinguishes them: the work is unfinished, so
 # agent.yaml must take another turn. Note structured-agent.yaml gates on the
 # INVERSE of this — there, re-entering would re-issue the identical request that
 # just truncated, forever.
@@ -610,7 +613,7 @@ events:
         text: ""
       response_text: ""
       tool_calls: []
-      stop_kind: truncated
+      stop_reason: truncated
   # Iteration 1: the retry completes the work.
   - node: agent_loop.call_llm
     output:
@@ -619,7 +622,7 @@ events:
         text: "Resuming - the refactor is applied and the suite is green."
       response_text: "Resuming - the refactor is applied and the suite is green."
       tool_calls: []
-      stop_kind: complete
+      stop_reason: done
 expect:
   outcome: completed
   reached:
@@ -646,7 +649,7 @@ events:
         text: "All done."
       response_text: "All done."
       tool_calls: []
-      stop_kind: complete
+      stop_reason: done
 expect:
   outcome: completed
   reached:
@@ -655,3 +658,122 @@ expect:
   node_outputs:
     agent_loop:
       _iterations: 1
+
+---
+# THE REGRESSION (chat b43b41fe-8963-489d-a28e-55b5336b97be).
+#
+# gpt-5.6-terra ended a turn with "I'll inspect the local dev auth setup before
+# attempting the workflow again." and no tool call. The provider had signalled
+# the turn was not over (OpenAI Responses end_turn:false), but nothing read
+# that, so the turn looked finished and the loop exited — the agent announced
+# its next step and then stopped.
+#
+# stop_reason=incomplete carries the provider's "keep going": the loop takes
+# another turn, and that turn (continue_turn) calls the provider even though
+# history ends with the assistant.
+name: incomplete_turn_continues_loop
+description: A turn the provider paused mid-work must re-enter the loop, not yield to the user
+inputs:
+  mode: auto
+events:
+  # Iteration 0: text announcing the next step, no tool call, provider paused.
+  - node: agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: "I'll inspect the local dev auth setup before attempting the workflow again."
+      response_text: "I'll inspect the local dev auth setup before attempting the workflow again."
+      tool_calls: []
+      stop_reason: incomplete
+  # Iteration 1: the continuation does the work it announced.
+  - node: agent_loop.call_llm
+    type: llm_response
+    text: "Checking the dev auth config."
+    tool_calls:
+      - name: bash
+        input:
+          command: "cat deploy/kcl/dev/main.k"
+  - node: agent_loop.execute_tools
+    type: tool_result
+    tool: bash
+    output:
+      result: "RELIANT_AUTH_URL = ..."
+  # Iteration 2: finished.
+  - node: agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: "The dev stack issues reliant:api tokens from the local IdP; no production login needed."
+      response_text: "The dev stack issues reliant:api tokens from the local IdP; no production login needed."
+      tool_calls: []
+      stop_reason: done
+expect:
+  outcome: completed
+  reached:
+    - agent_loop
+    - agent_loop.call_llm
+    - agent_loop.execute_tools
+  not_reached:
+    - agent_loop.ask_question
+  node_outputs:
+    agent_loop:
+      _iterations: 3
+
+---
+# An incomplete turn must not open the ask-user prompt: the model is not done,
+# so there is nothing to ask the user about yet. With ask=true the loop must
+# still continue straight into the next call_llm.
+name: incomplete_turn_skips_ask_question
+description: ask=true does not interrupt a paused turn with the continue/feedback prompt
+inputs:
+  mode: auto
+  ask: true
+events:
+  - node: agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: "Next I'll run the migration."
+      response_text: "Next I'll run the migration."
+      tool_calls: []
+      stop_reason: incomplete
+  - node: agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: "Migration applied."
+      response_text: "Migration applied."
+      tool_calls: []
+      stop_reason: done
+  - node: agent_loop.ask_question
+    output:
+      has_feedback: false
+expect:
+  outcome: completed
+  node_outputs:
+    agent_loop:
+      _iterations: 2
+
+---
+# refused and error end the loop and yield to the user. Retrying a refusal
+# unchanged is refused again, and a provider error is surfaced to the user
+# rather than retried in a loop.
+name: refused_turn_exits_loop
+description: A refused turn with no tool calls exits after one iteration
+inputs:
+  mode: auto
+events:
+  - node: agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: ""
+      response_text: ""
+      tool_calls: []
+      stop_reason: refused
+expect:
+  outcome: completed
+  node_outputs:
+    agent_loop:
+      _iterations: 1
+

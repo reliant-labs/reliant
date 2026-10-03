@@ -29,7 +29,7 @@ When Reliant calls an LLM, it sends a structured request:
 The LLM returns:
 - **Text response** (assistant message)
 - **Tool calls** (requests to use tools)
-- **Stop reason** (why it stopped: `end_turn`, `tool_use`, `max_tokens`)
+- **Stop reason** (why the turn ended: `tool_use`, `incomplete`, `truncated`, `interrupted`, `refused`, `error`, `done` — see [CEL Expressions](/reference/cel-expressions))
 
 ## Tool Call Requirements
 
@@ -216,19 +216,21 @@ condition: size(nodes.llm.tool_calls) > 0
 condition: nodes.llm.tool_calls != null && size(nodes.llm.tool_calls) > 0
 ```
 
-### 5. Stop Reason Misunderstanding
+### 5. Deciding Whether the Model Is Done
 
 ```yaml
-# Problem: Thinking end_turn means "done with tools"
-# Reality: end_turn just means LLM stopped responding
+# Problem: zero tool calls does NOT mean the model is done.
+# A turn with no tool calls can also be:
+# - truncated     (hit max_tokens mid-thought)
+# - interrupted   (the stream was cut short)
+# - incomplete    (the provider paused the turn and expects it back —
+#                  e.g. "I'll check the config next." with no tool call yet)
 
-# The LLM might stop because:
-# - It's truly done (no more tool calls)
-# - It hit max_tokens (output truncated)
-# - It wants to explain before continuing
+# Solution: loop on stop_reason, which call_llm derives from all of these.
+while: "outputs.stop_reason in ['tool_use', 'incomplete', 'truncated', 'interrupted']"
 
-# Solution: Check tool_calls presence, not just stop_reason
-condition: nodes.llm.tool_calls != null && size(nodes.llm.tool_calls) > 0
+# Routing to execute_tools still keys on the calls themselves:
+condition: size(nodes.llm.tool_calls) > 0
 ```
 
 ## Response Tools

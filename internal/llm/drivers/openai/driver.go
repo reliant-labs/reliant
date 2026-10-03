@@ -28,6 +28,7 @@ import (
 	"github.com/openai/openai-go/v3/responses"
 	"github.com/openai/openai-go/v3/shared"
 	"github.com/reliant-labs/reliant/internal/llm"
+	"github.com/reliant-labs/reliant/internal/llm/drivers/responseswire"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -850,10 +851,7 @@ func (o *OpenaiClient) sendResponses(ctx context.Context, prompts []string, mess
 		}
 	}
 
-	finishReason := message.FinishReasonEndTurn
-	if len(toolCalls) > 0 {
-		finishReason = message.FinishReasonToolUse
-	}
+	finishReason := responseswire.FinishReason(resp, len(toolCalls))
 
 	usage := llm.TokenUsage{}
 	if resp.Usage.TotalTokens > 0 {
@@ -979,6 +977,13 @@ func (o *OpenaiClient) streamResponses(ctx context.Context, prompts []string, me
 				tc.Input = v.Arguments
 			case responses.ResponseCompletedEvent:
 				finalResp = &v.Response
+			case responses.ResponseIncompleteEvent:
+				// Terminal, like response.completed. Previously it fell to
+				// default, leaving finalResp nil so a truncated or interrupted
+				// turn was reported as a clean end.
+				finalResp = &v.Response
+			case responses.ResponseFailedEvent:
+				finalResp = &v.Response
 			default:
 				// Unhandled event type - ignore
 			}
@@ -1025,10 +1030,7 @@ func (o *OpenaiClient) streamResponses(ctx context.Context, prompts []string, me
 			eventChan <- llm.DriverEvent{Type: llm.EventToolUseStop, ToolCall: tc}
 		}
 
-		finishReason := message.FinishReasonEndTurn
-		if len(finalToolCalls) > 0 {
-			finishReason = message.FinishReasonToolUse
-		}
+		finishReason := responseswire.FinishReason(finalResp, len(finalToolCalls))
 
 		usage := llm.TokenUsage{}
 		if finalResp != nil && finalResp.Usage.TotalTokens > 0 {

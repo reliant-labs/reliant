@@ -67,6 +67,7 @@ var generatedNodeBindingsByType = map[string]generatedNodeBinding{
 		isStructural:   false,
 		argFieldKeys: map[string]struct{}{
 			"compaction_threshold": {},
+			"continue_turn":        {},
 			"max_tokens":           {},
 			"messages":             {},
 			"model":                {},

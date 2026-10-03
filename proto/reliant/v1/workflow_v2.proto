@@ -485,6 +485,22 @@ message CallLLMArgs {
     visibility_contexts: "advanced"
     category: "Prompt"
   }];
+  // ContinueTurn says the previous turn ended with stop_reason "incomplete":
+  // the provider paused it and expects the conversation handed back, so the
+  // history is EXPECTED to end with the assistant's own message.
+  //
+  // Without it, call_llm treats an assistant-tailed history as "nothing new to
+  // respond to" and yields without calling the provider — the guard that keeps
+  // a wedged thread recoverable. That guard stays the default; a loop that saw
+  // "incomplete" opts out of it for exactly the next turn by setting this from
+  // its own previous-iteration outputs.
+  CelBool continue_turn = 15 [(reliant) = {
+    description: "Call the provider even though history ends with the assistant (continue a paused turn)"
+    label: "Continue turn"
+    visibility_contexts: "advanced"
+    hidden: true
+    category: "Prompt"
+  }];
 }
 
 // ResponseTool defines a custom tool for structured LLM output.
@@ -1328,30 +1344,9 @@ message CallLLMOutput {
   // where a user watching a long answer actually types.
   bool pending_inbox = 14;
 
-  // Aborted reports that this turn was cut short by something OTHER than the
-  // model deciding it was done — the stream was cancelled mid-flight, so the
-  // turn's tool calls (and text) are whatever had arrived by then rather than
-  // what the model intended to emit.
-  //
-  // This exists because an agent loop cannot otherwise tell the two apart. Its
-  // while-condition tests tool_calls, and a cancelled turn yields zero of them,
-  // which is byte-for-byte identical to "the model finished and had nothing
-  // left to do". So the loop exited, the thread was marked completed, and a
-  // spawned agent killed mid-edit reported to its parent as a clean finish
-  // whose result was the placeholder "Agent completed but produced no text
-  // response" (observed on chat 7da3935c-97ec-4843-af78-c3807fe336cb, thread
-  // 5e3fe370: stream cancelled 1.75s in, two edits already applied, loop exited
-  // on the very next evaluation).
-  //
-  // Deliberately NOT set for a user/thread interrupt. An interrupt is a turn
-  // the user chose to stop, and the interrupt path already does the right
-  // thing: persist the partial and take one more mailbox-draining turn. Only
-  // an involuntary abort sets this.
-  //
-  // Agent loops read it as `nodes.call_llm.aborted` and keep looping, which
-  // sends the turn back through CallLLM to finish the work rather than
-  // reporting a truncated run as complete.
-  bool aborted = 15;
+  // Fields 15 (aborted) and 16 (stop_kind) were folded into stop_reason.
+  reserved 15, 16;
+  reserved "aborted", "stop_kind";
 
   // MessageID is the pre-allocated assistant message id this call streamed
   // under (delta identity protocol). Echoed back from
@@ -1363,39 +1358,40 @@ message CallLLMOutput {
   // much of the stream they should have seen.
   int64 last_stream_seq = 13;
 
-  // StopKind is WHY this turn ended, in the four categories a loop can act on.
+  // StopReason is WHY this turn ended — the one field a loop's while-condition
+  // reads to decide whether the model has more to do. Closed vocabulary,
+  // derived once in Go (internal/workflow/stopreason), first match wins:
   //
-  //   complete   the model finished on its own (end_turn, tool_use)
-  //   truncated  it ran out of room mid-thought (max_tokens)
-  //   refused    the safety system stopped it (refusal)
-  //   cancelled  something cut the stream (cancelled, error, pause_turn)
+  //   interrupted  our stream was cut short mid-flight; the work is unfinished
+  //   tool_use     the model requested tools; their results are new input
+  //   refused      the safety system declined (refusal / content_filter)
+  //   truncated    it ran out of output room mid-turn (max_tokens)
+  //   incomplete   the provider paused the turn and expects it handed back —
+  //                Anthropic pause_turn, OpenAI Responses end_turn:false or
+  //                incomplete:interrupted — and the turn produced text
+  //   error        a provider/transport failure, a pause that produced
+  //                nothing, or any reason this vocabulary does not recognize
+  //   done         the model finished on its own terms
   //
-  // This exists because a loop cannot otherwise tell "the model is done" from
-  // "the model was cut off", and BOTH produce zero tool calls. Every
-  // while-condition in this repo tests tool_calls, so a truncated turn reads
-  // as a clean finish.
+  // A provider adding a stop reason maps into one of these rather than
+  // becoming an eighth value, so a condition written against them cannot
+  // silently miss a new case.
   //
-  // The two loop families need OPPOSITE policies from this one field, which is
-  // why it is exposed rather than acted on in the runtime:
+  // Each loop family states which values earn another turn — they need
+  // OPPOSITE answers for the same value, which is why this is exposed rather
+  // than acted on in the runtime. agent.yaml (a tool-presence loop) continues
+  // on tool_use / incomplete / truncated / interrupted, because the work is
+  // unfinished. structured-agent.yaml (a sentinel loop) STOPS on truncated /
+  // refused, because re-entering would re-issue the identical request that
+  // just failed, and its max_turns defaults to unbounded.
   //
-  //   tool-presence loops (agent.yaml) UNDER-RUN on truncation — the work is
-  //   unfinished and the loop should take another turn.
-  //
-  //   sentinel loops (structured-agent, implement-review, get-it-right) SPIN
-  //   on truncation — no sentinel tool call appears, the condition stays true,
-  //   and the loop re-runs an identical full-context call that truncates the
-  //   same way. structured-agent defaults max_turns to 0, so that is unbounded.
-  //
-  // Observed: chat 2308c394 burned 868s and exactly 64000 output tokens (the
-  // model's cap) producing no text and no tool calls, only a 226KB thinking
-  // signature. The loop read zero tool calls and exited as if complete.
-  //
-  // Prefer this over finish_reason in workflow conditions: it is a closed
-  // vocabulary that does not grow when a provider adds a stop reason, so a
-  // condition written against it cannot silently miss a new case.
-  string stop_kind = 16;
+  // Never empty to a workflow: the runtime fills an absent value from
+  // tool_calls (tool_use, else done) before any CEL sees the output, so a
+  // replayed shape or a scenario fixture that predates this field cannot
+  // invert a condition.
+  string stop_reason = 18;
 
-  // FinishReason is the raw provider stop reason behind stop_kind — one of
+  // FinishReason is the raw provider stop reason behind stop_reason — one of
   // end_turn, max_tokens, tool_use, tool_use_error, cancelled, error,
   // permission_denied, refusal, pause_turn, unknown.
   //

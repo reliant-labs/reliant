@@ -1,9 +1,9 @@
 name: structured-agent
 apiVersion: "0.0.5"
 description: |
-  Agent that requires structured output via response tool. Unlike builtin://agent which returns on
-  end_turn, this loops until the response tool is called. If LLM responds without tools, a reminder
-  is injected. Access output via output.response (structured data) and output.completed (boolean).
+  Agent that requires structured output via response tool. Unlike builtin://agent which returns
+  once the model is done (stop_reason), this loops until the response tool is called. If LLM
+  responds without tools, a reminder is injected. Access output via output.response (structured data) and output.completed (boolean).
 presets:
   tag: agent
   default: general
@@ -122,7 +122,7 @@ nodes:
     # purpose — a queued message earns another turn, but it must not buy an
     # unbounded number of them.
     #
-    # The stop_kind term is what stops this loop SPINNING on a broken turn.
+    # The stop_reason term is what stops this loop SPINNING on a broken turn.
     #
     # This is a sentinel loop: it continues until the response tool is called.
     # A turn that ends without producing one therefore looks exactly like a
@@ -140,14 +140,15 @@ nodes:
     # Note this is the OPPOSITE polarity from agent.yaml, which continues on a
     # truncated turn because for a tool-presence loop the work is genuinely
     # unfinished and re-entering resumes it. Same signal, opposite correct
-    # response — which is why the runtime exposes stop_kind rather than acting
-    # on it.
-    # The stop_kind term is written as a NEGATIVE match on the two values that
-    # cannot make progress, not as `== 'complete'`. Positive-matching would
-    # also stop the loop whenever stop_kind is absent — every replayed shape
-    # and every scenario fixture — which silently turns a working sentinel loop
-    # into one that exits after a single turn.
-    while: (outputs.completed != true || outputs.has_feedback == true || outputs.pending_inbox == true) && outputs.stop_kind != 'truncated' && outputs.stop_kind != 'refused' && (inputs.max_turns == 0 || iter.iteration < inputs.max_turns)
+    # response — which is why the runtime exposes stop_reason rather than
+    # acting on it.
+    #
+    # Every other stop_reason keeps working toward the sentinel, exactly as
+    # before: an "incomplete" or "done" turn without the response tool routes
+    # to remind_response, whose user message makes the next request differ.
+    # stop_reason is never empty here (the runtime fills it from tool_calls),
+    # so the exclusion list cannot misfire on a replayed shape.
+    while: (outputs.completed != true || outputs.has_feedback == true || outputs.pending_inbox == true) && !(outputs.stop_reason in ['truncated', 'refused']) && (inputs.max_turns == 0 || iter.iteration < inputs.max_turns)
     inline:
       entry: [call_llm]
 
@@ -164,11 +165,11 @@ nodes:
         # (or a replayed shape where the node output is absent) must evaluate
         # to false, not blow up the whole output evaluation.
         pending_inbox: "{{has(nodes.call_llm) && has(nodes.call_llm.pending_inbox) ? nodes.call_llm.pending_inbox : false}}"
-        # Why the last turn ended: complete | truncated | refused | cancelled.
-        # Defaults to 'complete' when call_llm has not run (or on a replayed
-        # shape with the node output absent), so a missing value cannot by
-        # itself stop the loop — the other terms decide, exactly as before.
-        stop_kind: "{{has(nodes.call_llm) && has(nodes.call_llm.stop_kind) ? nodes.call_llm.stop_kind : 'complete'}}"
+        # Why the last turn ended (see stopreason). Defaults to 'done' when
+        # call_llm has not run (or on a replayed shape with the node output
+        # absent), so a missing value cannot by itself stop the loop — the
+        # other terms decide, exactly as before.
+        stop_reason: "{{has(nodes.call_llm) && has(nodes.call_llm.stop_reason) ? nodes.call_llm.stop_reason : 'done'}}"
 
       nodes:
         - id: call_llm
