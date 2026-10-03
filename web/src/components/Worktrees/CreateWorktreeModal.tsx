@@ -11,6 +11,7 @@ import { cn } from "../../lib/utils";
 import { WorktreeStatus } from "../../gen/reliant/v1/worktree_pb";
 import { repoGrpc, type Repo } from "../../api/repo-grpc";
 import { logger } from "../../lib/logger";
+import { copyPathError, parseCopyPathsInput } from "../../lib/worktreeCopyPaths";
 
 interface CreateWorktreeModalProps {
   isOpen: boolean;
@@ -91,7 +92,7 @@ export function CreateWorktreeModal({
     branch: "",                                  // override; empty → derived from name
     base_branch: defaultBaseBranch,              // single-repo case
     base_branches: {} as Record<string, string>, // multi-repo per-repo overrides; empty value → daemon auto-detect
-    copy_files: [".env", ".env.local"] as string[],
+    copy_files: [] as string[], // exact workspace-root paths; see lib/worktreeCopyPaths
     force: false,
   });
   const [advancedOpen, setAdvancedOpen] = useState(false);
@@ -114,7 +115,7 @@ export function CreateWorktreeModal({
       setFormData(prev => ({ ...prev, base_branch: defaultBaseBranch }));
     }
   }, [branches, defaultBaseBranch, sourceWorktreeBranch]);
-  const [customFilesInput, setCustomFilesInput] = useState(".env, .env.local");
+  const [customFilesInput, setCustomFilesInput] = useState("");
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [normalizedName, setNormalizedName] = useState<string | null>(null);
@@ -205,12 +206,12 @@ export function CreateWorktreeModal({
       branch: "",
       base_branch: defaultBaseBranch,
       base_branches: {},
-      copy_files: [".env", ".env.local"],
+      copy_files: [],
       force: false,
     });
     setNormalizedName(null);
     setNormalizedBranch(null);
-    setCustomFilesInput(".env, .env.local");
+    setCustomFilesInput("");
     setAdvancedOpen(false);
   };
 
@@ -220,6 +221,13 @@ export function CreateWorktreeModal({
     if (!formData.name.trim()) {
       setError("Name is required");
       return;
+    }
+    for (const entry of formData.copy_files) {
+      const copyError = copyPathError(entry);
+      if (copyError) {
+        setError(copyError);
+        return;
+      }
     }
 
     setIsCreating(true);
@@ -232,7 +240,8 @@ export function CreateWorktreeModal({
       : finalName;
 
     try {
-      // Merge default copy_files with any additional files (e.g., modified/untracked files from source worktree)
+      // The typed paths plus any the caller supplied (e.g. the source
+      // workspace's uncommitted files) — all exact workspace-root paths.
       const allCopyFiles = [...new Set([...formData.copy_files, ...additionalCopyFiles])];
 
       // A worktree always spans every nested repo, so single- and multi-repo
@@ -525,18 +534,15 @@ export function CreateWorktreeModal({
                       value={customFilesInput}
                       onChange={(e) => {
                         setCustomFilesInput(e.target.value);
-                        const files = e.target.value
-                          .split(",")
-                          .map((f) => f.trim())
-                          .filter((f) => f.length > 0);
+                        const files = parseCopyPathsInput(e.target.value);
                         setFormData((prev) => ({ ...prev, copy_files: files }));
                       }}
                       className="w-full pl-10 pr-4 py-3 elevation-0 border border-border/60 rounded-lg text-sm font-mono placeholder:text-muted-foreground/60 placeholder:font-normal placeholder:italic focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
-                      placeholder=".env, frontend/, backend/config"
+                      placeholder={isMultiRepo ? `.env, ${repos[0]?.relative_path || "repo"}/.env, ${repos[0]?.relative_path || "repo"}/node_modules` : ".env, .env.local, node_modules"}
                     />
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    Comma-separated list of files or directories to copy. Directories are copied recursively. File patterns (e.g., ".env") search recursively.
+                    Comma-separated paths from the workspace root, for gitignored files a fresh checkout won't have. Each path is copied exactly; directories are copied whole.
                   </p>
                 </div>
 

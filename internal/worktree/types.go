@@ -45,7 +45,7 @@ type CreateOptions struct {
 	Branch     string
 	BaseBranch string
 	SessionID  string
-	CopyFiles  []string // Files to copy from source repo (e.g., .env, .env.local) - searches recursively
+	CopyFiles  []string // Exact paths relative to the repo root (e.g. ".env", "web/node_modules") - never searched for
 	Force      bool     // Force creation by deleting existing worktree/branch
 }
 

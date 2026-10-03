@@ -2893,7 +2893,8 @@ type CreateWorktreeArgs struct {
 	Branch *CelString `protobuf:"bytes,2,opt,name=branch,proto3" json:"branch,omitempty"`
 	// BaseBranch is the branch to branch from. Defaults to repo's default branch.
 	BaseBranch *CelString `protobuf:"bytes,3,opt,name=base_branch,json=baseBranch,proto3" json:"base_branch,omitempty"`
-	// CopyFiles lists files to copy from the source repo (searches recursively).
+	// CopyFiles lists exact paths, relative to the project root, to copy into
+	// the new workspace. Never searched for: ".env" is only the root .env.
 	CopyFiles []string `protobuf:"bytes,4,rep,name=copy_files,json=copyFiles,proto3" json:"copy_files,omitempty"`
 	// Force deletes existing worktree/branch if they exist.
 	Force         *CelBool `protobuf:"bytes,5,opt,name=force,proto3" json:"force,omitempty"`
@@ -7108,7 +7109,7 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\rInjectFileMsg\x12\x1a\n" +
 	"\bfilename\x18\x01 \x01(\tR\bfilename\x12\x1b\n" +
 	"\tmime_type\x18\x02 \x01(\tR\bmimeType\x12\x12\n" +
-	"\x04data\x18\x03 \x01(\fR\x04data\"\xa2\x04\n" +
+	"\x04data\x18\x03 \x01(\fR\x04data\"\xd2\x04\n" +
 	"\x12CreateWorktreeArgs\x12L\n" +
 	"\x04name\x18\x01 \x01(\v2\x15.reliant.v1.CelStringB!\x82\xb5\x18\x1d\n" +
 	"\x1bWorktree name, used in pathR\x04name\x12L\n" +
@@ -7116,10 +7117,10 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\x15Branch name to create \x01R\x06branch\x12X\n" +
 	"\vbase_branch\x18\x03 \x01(\v2\x15.reliant.v1.CelStringB \x82\xb5\x18\x1c\n" +
 	"\x1aBase branch to branch fromR\n" +
-	"baseBranch\x12O\n" +
+	"baseBranch\x12\x7f\n" +
 	"\n" +
-	"copy_files\x18\x04 \x03(\tB0\x82\xb5\x18,\n" +
-	"*Files to copy from source repo (e.g. .env)R\tcopyFiles\x12]\n" +
+	"copy_files\x18\x04 \x03(\tB`\x82\xb5\x18\\\n" +
+	"ZExact paths from the project root to copy into the workspace (e.g. .env, web/node_modules)R\tcopyFiles\x12]\n" +
 	"\x05force\x18\x05 \x01(\v2\x13.reliant.v1.CelBoolB2\x82\xb5\x18.\n" +
 	",Force creation by deleting existing worktreeR\x05force:f\x8a\xb5\x18b\n" +
 	"\x0fcreate_worktree\x12\x0fCreate Worktree\x1a.Create a git worktree for isolated development*\x03git2\tGitBranch\"\xeb\x03\n" +

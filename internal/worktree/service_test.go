@@ -384,309 +384,63 @@ func BenchmarkListWorktrees(b *testing.B) {
 	}
 }
 
-// Tests for recursive file copy functionality
-
-func TestFindMatchingFiles(t *testing.T) {
-	t.Parallel()
-	// Create temporary directory structure
-	tmpDir := t.TempDir()
-
-	// Create directory structure:
-	// tmpDir/
-	//   .env
-	//   .env.local
-	//   frontend/
-	//     .env
-	//     .env.local
-	//   backend/
-	//     .env
-	//     config.yaml
-	//   .git/
-	//     config  (should be ignored)
-
-	dirs := []string{
-		"frontend",
-		"backend",
-		".git",
-	}
-	for _, d := range dirs {
-		require.NoError(t, os.MkdirAll(filepath.Join(tmpDir, d), 0755))
-	}
-
-	files := map[string]string{
-		".env":                "ROOT_VAR=1",
-		".env.local":          "ROOT_LOCAL=1",
-		"frontend/.env":       "FRONTEND_VAR=1",
-		"frontend/.env.local": "FRONTEND_LOCAL=1",
-		"backend/.env":        "BACKEND_VAR=1",
-		"backend/config.yaml": "key: value",
-		".git/config":         "git config",
-	}
-	for f, content := range files {
-		require.NoError(t, os.WriteFile(filepath.Join(tmpDir, f), []byte(content), 0644))
-	}
-
-	s := testService()
-
-	tests := []struct {
-		name     string
-		patterns []string
-		want     []string
-	}{
-		{
-			name:     "find all .env files recursively",
-			patterns: []string{".env"},
-			want:     []string{".env", "backend/.env", "frontend/.env"},
-		},
-		{
-			name:     "find all .env.local files recursively",
-			patterns: []string{".env.local"},
-			want:     []string{".env.local", "frontend/.env.local"},
-		},
-		{
-			name:     "explicit path",
-			patterns: []string{"frontend/.env"},
-			want:     []string{"frontend/.env"},
-		},
-		{
-			name:     "mixed patterns and paths",
-			patterns: []string{".env", "backend/config.yaml"},
-			want:     []string{".env", "backend/.env", "backend/config.yaml", "frontend/.env"},
-		},
-		{
-			name:     "non-existent file",
-			patterns: []string{"nonexistent.txt"},
-			want:     []string{},
-		},
-		{
-			name:     "git directory is skipped",
-			patterns: []string{"config"},
-			want:     []string{}, // .git/config should not be found
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := s.findMatchingFiles(tmpDir, tt.patterns)
-
-			// Convert to map for easier comparison (order doesn't matter)
-			gotMap := make(map[string]bool)
-			for _, f := range got {
-				gotMap[f] = true
-			}
-			wantMap := make(map[string]bool)
-			for _, f := range tt.want {
-				wantMap[f] = true
-			}
-
-			assert.Equal(t, wantMap, gotMap, "findMatchingFiles() mismatch")
-		})
-	}
-}
-
-func TestCopyFilePaths(t *testing.T) {
-	t.Parallel()
-	// Create source directory
-	srcDir := t.TempDir()
-
-	// Create destination directory
-	dstDir := t.TempDir()
-
-	// Create source structure
-	require.NoError(t, os.MkdirAll(filepath.Join(srcDir, "frontend"), 0755))
-	require.NoError(t, os.MkdirAll(filepath.Join(srcDir, "backend/config"), 0755))
-
-	files := map[string]string{
-		".env":                "ROOT=1",
-		"frontend/.env":       "FRONTEND=1",
-		"backend/config/.env": "BACKEND_CONFIG=1",
-	}
-	for f, content := range files {
-		require.NoError(t, os.WriteFile(filepath.Join(srcDir, f), []byte(content), 0644))
-	}
-
-	s := testService()
-
-	// Copy files
-	relativePaths := []string{".env", "frontend/.env", "backend/config/.env"}
-	s.copyFilePaths(srcDir, dstDir, relativePaths)
-
-	// Verify files were copied with correct content and structure
-	for _, relPath := range relativePaths {
-		dstPath := filepath.Join(dstDir, relPath)
-		content, err := os.ReadFile(dstPath)
-		require.NoError(t, err, "file %s was not copied", relPath)
-
-		srcContent, _ := os.ReadFile(filepath.Join(srcDir, relPath))
-		assert.Equal(t, string(srcContent), string(content), "file %s content mismatch", relPath)
-	}
-
-	// Verify directory structure was created
-	_, err := os.Stat(filepath.Join(dstDir, "frontend"))
-	assert.NoError(t, err, "frontend directory was not created")
-
-	_, err = os.Stat(filepath.Join(dstDir, "backend/config"))
-	assert.NoError(t, err, "backend/config directory was not created")
-}
-
-func TestCopyFilesIntegration(t *testing.T) {
-	t.Parallel()
-	// Create source directory with nested .env files
-	srcDir := t.TempDir()
-
-	// Create destination directory
-	dstDir := t.TempDir()
-
-	// Create source structure
-	dirs := []string{"frontend", "backend", "services/auth", "services/api"}
-	for _, d := range dirs {
-		require.NoError(t, os.MkdirAll(filepath.Join(srcDir, d), 0755))
-	}
-
-	files := map[string]string{
-		".env":               "ROOT=1",
-		"frontend/.env":      "FRONTEND=1",
-		"backend/.env":       "BACKEND=1",
-		"services/auth/.env": "AUTH=1",
-		"services/api/.env":  "API=1",
-	}
-	for f, content := range files {
-		require.NoError(t, os.WriteFile(filepath.Join(srcDir, f), []byte(content), 0644))
-	}
-
-	s := testService()
-	ctx := context.Background()
-
-	// Copy just ".env" - should find all of them
-	s.copyFiles(ctx, srcDir, dstDir, []string{".env"})
-
-	// Verify all .env files were copied
-	for relPath := range files {
-		dstPath := filepath.Join(dstDir, relPath)
-		_, err := os.Stat(dstPath)
-		assert.NoError(t, err, "file %s was not copied", relPath)
-	}
-}
-
-func TestCreateWorktreeWithCopyFiles(t *testing.T) {
+// copy_files names exact paths. A bare name copies only the file at the repo
+// root — it is never searched for — and a nested file is reached by its path.
+func TestCreateWorktreeCopiesExactPathsOnly(t *testing.T) {
 	service, repoDir, _, cleanup := setupTestService(t)
 	defer cleanup()
 
-	ctx := context.Background()
-
-	// Create files in the repo to copy
 	require.NoError(t, os.MkdirAll(filepath.Join(repoDir, "frontend"), 0755))
 	require.NoError(t, os.WriteFile(filepath.Join(repoDir, ".env"), []byte("ROOT=1"), 0644))
 	require.NoError(t, os.WriteFile(filepath.Join(repoDir, "frontend/.env"), []byte("FRONTEND=1"), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(repoDir, "backend.env"), []byte("NOT_ASKED=1"), 0644))
 
-	opts := CreateOptions{
+	wt, err := service.Create(context.Background(), "test-worktree", CreateOptions{
 		Branch:    "feature/test",
-		CopyFiles: []string{".env"}, // Should copy both .env files
-	}
+		CopyFiles: []string{".env", "frontend/.env", "absent/.env"},
+	})
+	require.NoError(t, err, "a missing path is skipped, not an error")
 
-	wt, err := service.Create(ctx, "test-worktree", opts)
-	require.NoError(t, err)
-
-	// Verify root .env was copied
 	content, err := os.ReadFile(filepath.Join(wt.Path, ".env"))
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, "ROOT=1", string(content))
 
-	// Verify frontend/.env was copied
 	content, err = os.ReadFile(filepath.Join(wt.Path, "frontend/.env"))
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, "FRONTEND=1", string(content))
+
+	_, err = os.Stat(filepath.Join(wt.Path, "backend.env"))
+	assert.True(t, os.IsNotExist(err), "only the named paths are copied")
 }
 
-func TestCopyDirectory(t *testing.T) {
-	t.Parallel()
-	// Create source directory
-	srcDir := t.TempDir()
+// A bare name is NOT a search: ".env" must not reach frontend/.env.
+func TestCreateWorktreeBareNameDoesNotSearch(t *testing.T) {
+	service, repoDir, _, cleanup := setupTestService(t)
+	defer cleanup()
 
-	// Create destination directory
-	dstDir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(repoDir, "frontend"), 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(repoDir, "frontend/.env"), []byte("FRONTEND=1"), 0644))
 
-	// Create source structure with a directory containing multiple files
-	require.NoError(t, os.MkdirAll(filepath.Join(srcDir, "frontend/src"), 0755))
-	require.NoError(t, os.MkdirAll(filepath.Join(srcDir, "frontend/config"), 0755))
-	require.NoError(t, os.MkdirAll(filepath.Join(srcDir, "backend"), 0755))
+	wt, err := service.Create(context.Background(), "test-worktree", CreateOptions{
+		Branch:    "feature/test",
+		CopyFiles: []string{".env"},
+	})
+	require.NoError(t, err)
 
-	files := map[string]string{
-		"frontend/src/index.ts": "export const index = 1;",
-		"frontend/src/utils.ts": "export const utils = 2;",
-		"frontend/config/.env":  "FRONTEND_ENV=1",
-		"frontend/package.json": `{"name": "frontend"}`,
-		"backend/server.go":     "package main",
-		"backend/config.yaml":   "port: 8080",
-		"root.txt":              "root file",
-	}
-	for f, content := range files {
-		require.NoError(t, os.WriteFile(filepath.Join(srcDir, f), []byte(content), 0644))
-	}
-
-	s := testService()
-
-	// Test copying a directory - should copy all files within it
-	s.copyFilePaths(srcDir, dstDir, []string{"frontend"})
-
-	// Verify all files in frontend directory were copied
-	frontendFiles := []string{
-		"frontend/src/index.ts",
-		"frontend/src/utils.ts",
-		"frontend/config/.env",
-		"frontend/package.json",
-	}
-	for _, relPath := range frontendFiles {
-		dstPath := filepath.Join(dstDir, relPath)
-		content, err := os.ReadFile(dstPath)
-		require.NoError(t, err, "file %s was not copied", relPath)
-
-		srcContent, _ := os.ReadFile(filepath.Join(srcDir, relPath))
-		assert.Equal(t, string(srcContent), string(content), "file %s content mismatch", relPath)
-	}
-
-	// Verify files outside the directory were NOT copied
-	_, err := os.Stat(filepath.Join(dstDir, "backend/server.go"))
-	assert.Error(t, err, "backend/server.go should not have been copied")
-
-	_, err = os.Stat(filepath.Join(dstDir, "root.txt"))
-	assert.Error(t, err, "root.txt should not have been copied")
+	_, err = os.Stat(filepath.Join(wt.Path, "frontend/.env"))
+	assert.True(t, os.IsNotExist(err), "\".env\" names the root file only; frontend/.env needs its own path")
 }
 
-func TestFindMatchingFilesWithDirectory(t *testing.T) {
-	t.Parallel()
-	tmpDir := t.TempDir()
+// An entry that escapes the repo is rejected before any git work.
+func TestCreateWorktreeRejectsEscapingCopyPath(t *testing.T) {
+	service, _, _, cleanup := setupTestService(t)
+	defer cleanup()
 
-	// Create directory structure
-	require.NoError(t, os.MkdirAll(filepath.Join(tmpDir, "frontend/src"), 0755))
-	require.NoError(t, os.MkdirAll(filepath.Join(tmpDir, "backend"), 0755))
-	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "frontend/src/index.ts"), []byte("content"), 0644))
-	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "frontend/src/utils.ts"), []byte("content"), 0644))
-	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "frontend/package.json"), []byte("content"), 0644))
-	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "backend/server.go"), []byte("content"), 0644))
-
-	s := testService()
-
-	// Test finding files in a directory
-	matches := s.findMatchingFiles(tmpDir, []string{"frontend"})
-
-	// Should find all files within frontend directory
-	expectedFiles := map[string]bool{
-		"frontend/src/index.ts": true,
-		"frontend/src/utils.ts": true,
-		"frontend/package.json": true,
+	for _, bad := range []string{"../secrets", "/etc/passwd", ""} {
+		_, err := service.Create(context.Background(), "test-worktree", CreateOptions{
+			Branch:    "feature/test",
+			CopyFiles: []string{bad},
+		})
+		assert.Error(t, err, "copy path %q must be rejected", bad)
 	}
-
-	gotMap := make(map[string]bool)
-	for _, f := range matches {
-		gotMap[f] = true
-	}
-
-	for expectedFile := range expectedFiles {
-		assert.True(t, gotMap[expectedFile], "expected file %s to be found", expectedFile)
-	}
-
-	// Should not find files outside the directory
-	_, found := gotMap["backend/server.go"]
-	assert.False(t, found, "backend/server.go should not be found")
 }

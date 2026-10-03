@@ -1279,7 +1279,7 @@ _Tools for managing and inspecting workflows, presets, and scenarios._
 
 | Tool | Tags | Description |
 |------|------|-------------|
-| [`create_workflow`](#create_workflow) | workflow | Create a new workflow draft. |
+| [`create_workflow`](#create_workflow) | workflow | Create a new workflow. |
 | [`delete_scenario`](#delete_scenario) | workflow | Delete a test scenario. |
 | [`edit_scenario`](#edit_scenario) | workflow | Make precise text replacements in a scenario's YAML definition. |
 | [`edit_workflow`](#edit_workflow) | workflow | Make precise text replacements in the workflow YAML. |
@@ -1300,16 +1300,23 @@ _Tools for managing and inspecting workflows, presets, and scenarios._
 
 **Tags:** `workflow`
 
-Create a new workflow draft.
+Create a new workflow.
 
-Returns the draft UUID which you can then use with get_workflow, edit_workflow, and write_workflow.
+Returns the workflow UUID which you can then use with get_workflow, edit_workflow, and write_workflow.
+
+Workflows start as DRAFTS: stored even with validation errors, so you can
+iterate, but never runnable. Pass complete: true (here, or on a later
+edit_workflow/write_workflow) once it validates to make it runnable — that is
+rejected while it has errors. YAML that does not parse is rejected either way.
 
 **Parameters:**
 - name: (optional) Workflow name. A random name is generated if omitted.
 - content: (optional) Complete workflow YAML. The default agent template is used if omitted.
+- complete: (optional) true to mark it complete (runnable). Default: draft.
 
 **Response:**
-Returns JSON with id, name, and slug.
+The resulting status and every current validation error and warning, plus
+JSON with id, name, slug, and status.
 
 **Example — create with defaults:**
 {}
@@ -1374,11 +1381,19 @@ Include enough context to ensure a unique match.
 If you provide expected_version (from get_workflow), the edit will fail if the 
 workflow was modified since you last viewed it.
 
+**Draft vs complete:**
+A draft stores the edit even with validation errors. A complete (runnable)
+workflow must stay valid: an edit that introduces errors is rejected unless you
+pass complete: false, which saves it as a draft. Pass complete: true to mark it
+complete once it validates. The response always shows the resulting status and
+every current error and warning.
+
 **Parameters:**
 - id: (optional) Workflow UUID, slug, or name. Omit it to edit the workflow this chat is editing.
 - old_string: (required) Exact text to replace.
 - new_string: (required) Replacement text.
 - expected_version: (optional) Version number for conflict detection.
+- complete: (optional) true = mark complete, false = save as draft, omitted = keep current status.
 
 **Example:**
 {
@@ -1667,14 +1682,22 @@ The content must be valid workflow YAML with at minimum:
 - nodes: Array of node definitions
 - edges: Array of edge definitions (optional for single-node workflows)
 
+**Draft vs complete:**
+A draft stores the content even with validation errors. A complete (runnable)
+workflow must stay valid: content with errors is rejected unless you pass
+complete: false, which saves it as a draft. Pass complete: true to mark it
+complete once it validates.
+
 **Parameters:**
 - id: (optional) Workflow UUID, slug, or name. Omit it to write the workflow this chat is editing.
 - name: (optional) Overrides the name in YAML. Used for display name.
 - content: (required) Complete workflow YAML content.
 - expected_version: (optional) Version number for conflict detection.
+- complete: (optional) true = mark complete, false = save as draft, omitted = keep current status.
 
 **Response:**
-Returns JSON with id, name, slug, and created (false for updates).
+The resulting status and every current validation error and warning, plus
+JSON with id, name, slug, status, and created (false for updates).
 The slug can be used in ref: fields to reference this workflow.
 
 ---
@@ -2116,17 +2139,18 @@ WORKTREE DATA STORAGE:
 - Use in subsequent steps: worktree_data.path, worktree_data.branch, etc.
 
 FILE COPYING:
-- copy_files: Searches recursively for matching files (e.g., ".env" finds all .env files in any directory)
-- Directory structure is preserved (frontend/.env -> worktree/frontend/.env)
+- copy_files: exact paths relative to the repository root, for gitignored files a fresh checkout lacks
+- Nothing is searched for: ".env" copies only the root .env; name "frontend/.env" to copy that one
+- A directory is copied whole (e.g. "web/node_modules"); a missing path is skipped
 
 EXAMPLES:
 
-Create a worktree with recursive file copy:
+Create a worktree that carries over local env files:
 {
   "action": "create",
   "name": "feature-auth",
   "base_branch": "main",
-  "copy_files": [".env", ".env.local"]
+  "copy_files": [".env", "frontend/.env.local"]
 }
 
 List all worktrees:
