@@ -24,7 +24,9 @@ import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-import { DeployConfirmStep } from "../DeployConfirmStep";
+import { ApprovablePlanView } from "../ApprovablePlanView";
+import { DeployApproveStep } from "../DeployApproveStep";
+import type { DeployPlanReport } from "@/services/forge/deployPlan";
 import { DeployFlow } from "../DeployFlow";
 import { DeployPlanView } from "../DeployPlanView";
 import { deployTokenFor, type ForgeDeployReport } from "@/services/forge/deploy";
@@ -110,10 +112,57 @@ describe("a hosted plan names no infrastructure the customer does not own", () =
   });
 });
 
-describe("the hosted confirmation is the button", () => {
+const APPROVED_DIGEST =
+  "sha256:5555555555555555555555555555555555555555555555555555555555555555";
+const APPROVED_RELEASE = "20261003.114500-abcdef123456";
+
+/** The plan a hosted deploy is approved from. */
+function hostedApprovable(overrides: Partial<DeployPlanReport> = {}): DeployPlanReport {
+  return {
+    env: "prod",
+    ok: true,
+    exit_code: 0,
+    target: { release: APPROVED_RELEASE },
+    deploy_plan: {
+      digest: APPROVED_DIGEST,
+      environment_id: ENVIRONMENT_ID,
+      bundle_id: "bundle-7",
+      release_version: APPROVED_RELEASE,
+      findings: [{ code: "image_changed", class: "info", section: "images", subject: "api" }],
+    },
+    ...overrides,
+  };
+}
+
+/** The same plan, carrying an irreversible change that must be accepted by name. */
+function hostedDestructive(): DeployPlanReport {
+  const base = hostedApprovable();
+  return {
+    ...base,
+    deploy_plan: {
+      ...base.deploy_plan,
+      findings: [
+        {
+          code: "stateful_deletion",
+          class: "stop",
+          section: "stateful_deletions",
+          subject: "StatefulSet/postgres",
+          detail: "This would delete the database's storage.",
+        },
+      ],
+    },
+  };
+}
+
+describe("the hosted approval is the button", () => {
   it("asks for no typed phrase and no checkbox", () => {
     const { container } = render(
-      <DeployConfirmStep plan={hostedPlan()} onConfirm={vi.fn()} onCancel={vi.fn()} />
+      <DeployApproveStep
+        report={hostedApprovable()}
+        acknowledged={new Set()}
+        onApprove={vi.fn()}
+        onCancel={vi.fn()}
+      />
     );
 
     expect(container.querySelectorAll("input")).toHaveLength(0);
@@ -123,19 +172,35 @@ describe("the hosted confirmation is the button", () => {
   });
 
   it("labels the button with the environment and enables it immediately", () => {
-    render(<DeployConfirmStep plan={hostedPlan()} onConfirm={vi.fn()} onCancel={vi.fn()} />);
-    const start = screen.getByTestId("deploy-start");
+    render(
+      <DeployApproveStep
+        report={hostedApprovable()}
+        acknowledged={new Set()}
+        onApprove={vi.fn()}
+        onCancel={vi.fn()}
+        env="prod"
+      />
+    );
+    const start = screen.getByTestId("deploy-approve-start");
     expect(start).toBeEnabled();
-    expect(start.textContent).toBe("Deploy to prod");
+    expect(start.textContent).toContain("prod");
   });
 
-  it("starts the deploy on the first click, with the plan the token is derived from", async () => {
-    const onConfirm = vi.fn();
+  it("starts the deploy on the first click, bound to the plan on screen", async () => {
+    const onApprove = vi.fn();
     const plan = hostedPlan();
-    render(<DeployConfirmStep plan={plan} onConfirm={onConfirm} onCancel={vi.fn()} />);
+    render(
+      <DeployApproveStep
+        report={hostedApprovable()}
+        acknowledged={new Set()}
+        onApprove={onApprove}
+        onCancel={vi.fn()}
+      />
+    );
 
-    await userEvent.click(screen.getByTestId("deploy-start"));
-    expect(onConfirm).toHaveBeenCalledTimes(1);
+    await userEvent.click(screen.getByTestId("deploy-approve-start"));
+    expect(onApprove).toHaveBeenCalledTimes(1);
+    expect(onApprove.mock.calls[0][0].approveDigest).toBe(APPROVED_DIGEST);
 
     // THE BINDING IS STILL THERE — the user did not type it, so this is the
     // assertion that it is still carried. The endpoint the plan named is what
@@ -147,8 +212,15 @@ describe("the hosted confirmation is the button", () => {
   });
 
   it("names no endpoint, id or kube vocabulary at the point of the click", () => {
-    render(<DeployConfirmStep plan={hostedPlan()} onConfirm={vi.fn()} onCancel={vi.fn()} />);
-    const text = screen.getByTestId("deploy-confirm").textContent ?? "";
+    render(
+      <DeployApproveStep
+        report={hostedApprovable()}
+        acknowledged={new Set()}
+        onApprove={vi.fn()}
+        onCancel={vi.fn()}
+      />
+    );
+    const text = screen.getByTestId("deploy-approve").textContent ?? "";
     expect(text).not.toContain(ENDPOINT);
     expect(text).not.toContain(ENVIRONMENT_ID);
     expect(text).not.toMatch(/control plane|cluster|kube|context|manifests|undone from git/i);
@@ -159,63 +231,84 @@ describe("the hosted confirmation is the button", () => {
     // directly, the step still refuses — the button is inert and the reason
     // avoids the internal nouns the old copy reached for.
     render(
-      <DeployConfirmStep
-        plan={hostedPlan({ guard: { verdict: "allow" } })}
-        onConfirm={vi.fn()}
+      <DeployApproveStep
+        report={{ env: "prod" }}
+        acknowledged={new Set()}
+        onApprove={vi.fn()}
         onCancel={vi.fn()}
       />
     );
-    expect(screen.getByTestId("deploy-start")).toBeDisabled();
-    const notice = screen.getByTestId("deploy-no-token").textContent ?? "";
+    expect(screen.queryByTestId("deploy-approve-start")).toBeNull();
+    const notice = screen.getByTestId("deploy-not-approvable").textContent ?? "";
     expect(notice).toMatch(/cannot be deployed/i);
     expect(notice).not.toMatch(/control plane|cluster/i);
   });
 });
 
-describe("a destructive finding re-introduces an explicit acknowledgement", () => {
-  // The ONLY thing that brings a checkbox back. Forge emits no such check yet;
-  // this is the seam the plan-before-promote work (O-13) fills, and it is tested
-  // now so that work cannot land a destructive change behind a bare button.
-  function destructivePlan() {
-    return hostedPlan({
-      preflight: {
-        status: "ran",
-        blocking: 0,
-        findings: [
-          {
-            check: "stateful_resource_deletion",
-            subject: "StatefulSet/postgres",
-            detail: "This would delete the database's storage.",
-            blocking: false,
-          },
-        ],
-      },
-    });
-  }
+describe("a destructive change requires an explicit, per-code acceptance", () => {
+  // The ONLY thing that brings a tick back, and it now comes from the PLAN's
+  // stop-class findings rather than from a guess at which preflight check names
+  // mean destruction. Forge classifies them, so an unknown one is treated as
+  // needing acceptance instead of being quietly waved through.
 
-  it("requires the checkbox before the button works, and says what is destroyed", async () => {
-    const onConfirm = vi.fn();
-    render(<DeployConfirmStep plan={destructivePlan()} onConfirm={onConfirm} onCancel={vi.fn()} />);
+  it("withholds the button until accepted, and says what is destroyed", async () => {
+    // ABSENT, NOT DISABLED. A disabled button invites hunting for the way to
+    // enable it; an absent one makes the acceptance the thing to do.
+    const onApprove = vi.fn();
+    const { rerender } = render(
+      <>
+        <ApprovablePlanView
+          report={hostedDestructive()}
+          acknowledged={new Set()}
+          onAcknowledge={vi.fn()}
+        />
+        <DeployApproveStep
+          report={hostedDestructive()}
+          acknowledged={new Set()}
+          onApprove={onApprove}
+          onCancel={vi.fn()}
+        />
+      </>
+    );
 
-    const start = screen.getByTestId("deploy-start");
-    expect(start).toBeDisabled();
-    await userEvent.click(start);
-    expect(onConfirm).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("deploy-approve-start")).toBeNull();
 
-    const notice = screen.getByTestId("deploy-destructive-findings").textContent ?? "";
+    const notice = screen.getByTestId("approvable-plan-stop").textContent ?? "";
     expect(notice).toContain("StatefulSet/postgres");
     expect(notice).toContain("This would delete the database's storage.");
 
-    await userEvent.click(screen.getByTestId("deploy-acknowledge-destructive"));
-    expect(start).toBeEnabled();
-    await userEvent.click(start);
-    expect(onConfirm).toHaveBeenCalledTimes(1);
+    // Accepted BY CODE, and only then does the control exist.
+    rerender(
+      <>
+        <ApprovablePlanView
+          report={hostedDestructive()}
+          acknowledged={new Set(["stateful_deletion"])}
+          onAcknowledge={vi.fn()}
+        />
+        <DeployApproveStep
+          report={hostedDestructive()}
+          acknowledged={new Set(["stateful_deletion"])}
+          onApprove={onApprove}
+          onCancel={vi.fn()}
+        />
+      </>
+    );
+
+    await userEvent.click(screen.getByTestId("deploy-approve-start"));
+    expect(onApprove).toHaveBeenCalledTimes(1);
+    expect(onApprove.mock.calls[0][0].acknowledgedFindings).toEqual(["stateful_deletion"]);
   });
 
-  it("is absent — checkbox and all — for an ordinary hosted plan", () => {
-    render(<DeployConfirmStep plan={hostedPlan()} onConfirm={vi.fn()} onCancel={vi.fn()} />);
-    expect(screen.queryByTestId("deploy-destructive-findings")).toBeNull();
-    expect(screen.queryByTestId("deploy-acknowledge-destructive")).toBeNull();
+  it("is absent — acceptance and all — for an ordinary hosted plan", () => {
+    render(
+      <ApprovablePlanView
+        report={hostedApprovable()}
+        acknowledged={new Set()}
+        onAcknowledge={vi.fn()}
+      />
+    );
+    expect(screen.queryByTestId("approvable-plan-stop")).toBeNull();
+    expect(screen.queryByTestId("acknowledge-stateful_deletion")).toBeNull();
   });
 });
 
@@ -225,9 +318,13 @@ describe("a hosted refusal does not relabel our endpoint as their cluster", () =
       <DeployFlow
         isPlanning={false}
         isStarting={false}
-        onConfirm={vi.fn()}
         onReplan={vi.fn()}
         onClose={vi.fn()}
+        onBuildAndPlan={vi.fn()}
+        acknowledged={new Set()}
+        onAcknowledge={vi.fn()}
+        onApprove={vi.fn()}
+        onReplanAfterStale={vi.fn()}
         planOutcome={{ kind: "report", meta: planMeta(), report: hostedPlan() }}
         startResult={{
           kind: "refused",
@@ -255,9 +352,13 @@ describe("a hosted refusal does not relabel our endpoint as their cluster", () =
       <DeployFlow
         isPlanning={false}
         isStarting={false}
-        onConfirm={vi.fn()}
         onReplan={vi.fn()}
         onClose={vi.fn()}
+        onBuildAndPlan={vi.fn()}
+        acknowledged={new Set()}
+        onAcknowledge={vi.fn()}
+        onApprove={vi.fn()}
+        onReplanAfterStale={vi.fn()}
         planOutcome={{ kind: "report", meta: planMeta(), report: prodPlan() }}
         startResult={{
           kind: "refused",
@@ -276,18 +377,26 @@ describe("the cluster path now follows the SAME rule", () => {
   // target, so there was never a wrong cluster for the typing to catch. The
   // hosted-specific assertions above are what remain destination-specific, and
   // they are about COPY (which nouns a customer can act on), not ceremony.
-  it("confirms with the button alone, named for the env, exactly like hosted", async () => {
-    const onConfirm = vi.fn();
-    render(<DeployConfirmStep plan={prodPlan()} onConfirm={onConfirm} onCancel={vi.fn()} />);
+  it("approves with the button alone, named for the env, exactly like hosted", async () => {
+    const onApprove = vi.fn();
+    render(
+      <DeployApproveStep
+        report={hostedApprovable()}
+        acknowledged={new Set()}
+        onApprove={onApprove}
+        onCancel={vi.fn()}
+        env="prod"
+      />
+    );
 
-    const start = screen.getByTestId("deploy-start");
+    const start = screen.getByTestId("deploy-approve-start");
     expect(start).toBeEnabled();
-    expect(start.textContent).toBe("Deploy to prod");
+    expect(start.textContent).toContain("prod");
 
     expect(screen.queryByTestId("deploy-typed-context")).toBeNull();
     expect(screen.queryByTestId("deploy-acknowledge")).toBeNull();
 
     await userEvent.click(start);
-    expect(onConfirm).toHaveBeenCalledTimes(1);
+    expect(onApprove).toHaveBeenCalledTimes(1);
   });
 });

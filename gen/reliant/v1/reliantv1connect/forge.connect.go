@@ -48,6 +48,9 @@ const (
 	// ForgeServiceGetEnvStatusProcedure is the fully-qualified name of the ForgeService's GetEnvStatus
 	// RPC.
 	ForgeServiceGetEnvStatusProcedure = "/reliant.v1.ForgeService/GetEnvStatus"
+	// ForgeServiceGetEnvShapeProcedure is the fully-qualified name of the ForgeService's GetEnvShape
+	// RPC.
+	ForgeServiceGetEnvShapeProcedure = "/reliant.v1.ForgeService/GetEnvShape"
 	// ForgeServicePlanPromoteProcedure is the fully-qualified name of the ForgeService's PlanPromote
 	// RPC.
 	ForgeServicePlanPromoteProcedure = "/reliant.v1.ForgeService/PlanPromote"
@@ -56,6 +59,14 @@ const (
 	ForgeServiceApplyPromoteProcedure = "/reliant.v1.ForgeService/ApplyPromote"
 	// ForgeServicePlanDeployProcedure is the fully-qualified name of the ForgeService's PlanDeploy RPC.
 	ForgeServicePlanDeployProcedure = "/reliant.v1.ForgeService/PlanDeploy"
+	// ForgeServiceStartDeployPlanProcedure is the fully-qualified name of the ForgeService's
+	// StartDeployPlan RPC.
+	ForgeServiceStartDeployPlanProcedure = "/reliant.v1.ForgeService/StartDeployPlan"
+	// ForgeServiceListCheckoutsProcedure is the fully-qualified name of the ForgeService's
+	// ListCheckouts RPC.
+	ForgeServiceListCheckoutsProcedure = "/reliant.v1.ForgeService/ListCheckouts"
+	// ForgeServiceDiffEnvProcedure is the fully-qualified name of the ForgeService's DiffEnv RPC.
+	ForgeServiceDiffEnvProcedure = "/reliant.v1.ForgeService/DiffEnv"
 	// ForgeServiceStartDeployProcedure is the fully-qualified name of the ForgeService's StartDeploy
 	// RPC.
 	ForgeServiceStartDeployProcedure = "/reliant.v1.ForgeService/StartDeploy"
@@ -78,6 +89,22 @@ type ForgeServiceClient interface {
 	GetAudit(context.Context, *connect.Request[v1.GetForgeAuditRequest]) (*connect.Response[v1.GetForgeAuditResponse], error)
 	// GetEnvStatus returns runtime checks for an environment.
 	GetEnvStatus(context.Context, *connect.Request[v1.GetForgeEnvStatusRequest]) (*connect.Response[v1.GetForgeEnvStatusResponse], error)
+	// GetEnvShape projects ONE environment's render into the declaration the
+	// control plane records for it — `forge env shape <env> --json`.
+	//
+	// READ-ONLY, and the one daemon call the BOOTSTRAP path needs. An
+	// environment that exists only in the user's KCL has no control-plane row,
+	// so the Live screen cannot show it and its secrets cannot be set before
+	// its first deploy. Preview calls this to learn the env's kind and shape,
+	// and the BROWSER then calls control-plane EnsureEnvironment itself, with
+	// the user's session. From that point the environment is in Live and needs
+	// no daemon again — not for its secrets, not for its provenance.
+	//
+	// The projection is forge's own, identical to the one `forge env build`
+	// records. That identity is what stops a Register from writing a
+	// declaration that disagrees with the next build's, on an env whose kind is
+	// immutable.
+	GetEnvShape(context.Context, *connect.Request[v1.GetForgeEnvShapeRequest]) (*connect.Response[v1.GetForgeEnvShapeResponse], error)
 	// PlanPromote previews binding an environment to a release. READ-ONLY: it
 	// runs `forge env promote <release> --to <env> --plan`, which computes the
 	// entire change set and stops before forge's only write. Safe, idempotent,
@@ -104,6 +131,39 @@ type ForgeServiceClient interface {
 	// This is what a UI calls to show a human which cluster, which namespace,
 	// which images and which resources before asking them to approve it.
 	PlanDeploy(context.Context, *connect.Request[v1.PlanForgeDeployRequest]) (*connect.Response[v1.PlanForgeDeployResponse], error)
+	// StartDeployPlan begins the APPROVABLE plan as a background job, and returns
+	// a handle immediately. Poll it with GetDeployStatus, exactly as for a deploy.
+	//
+	// THIS IS NOT PlanDeploy, AND THE DIFFERENCE MATTERS MORE THAN THE NAMES
+	// SUGGEST. PlanDeploy renders the environment and checks the guard; it builds
+	// nothing, answers in seconds, and describes the binding the environment is
+	// running RIGHT NOW. This one builds every image from the chosen checkout,
+	// pushes them, cuts a release and computes the change set — so it is the only
+	// call that can say what a deploy would actually ship, and it takes minutes.
+	//
+	// IT WRITES NO PROMOTION AND APPLIES NOTHING. No cluster is touched and the
+	// environment's binding is unchanged, which is why it needs no approval:
+	// producing the thing to approve is the whole job.
+	//
+	// What comes back is the plan plus its digest. Show the plan, let a human
+	// approve THAT, and send the digest to StartDeploy.
+	StartDeployPlan(context.Context, *connect.Request[v1.StartForgeDeployPlanRequest]) (*connect.Response[v1.StartForgeDeployResponse], error)
+	// ListCheckouts lists the checkouts a preview may render: the project's main
+	// checkout plus every git worktree, each with its branch, current commit,
+	// whether it has uncommitted changes, and how far it is from main.
+	//
+	// It is also the ALLOWLIST. Every other call here that accepts a checkout
+	// honours only a value this one returned, re-derived and checked server-side.
+	// So a request cannot point a build at an arbitrary directory, whatever it
+	// sends.
+	ListCheckouts(context.Context, *connect.Request[v1.ListForgeCheckoutsRequest]) (*connect.Response[v1.ListForgeCheckoutsResponse], error)
+	// DiffEnv renders a checkout and compares each environment against what is
+	// deployed. READ-ONLY: no cluster is contacted, nothing is built or pushed.
+	//
+	// This is what the per-environment cards show. The document is forge's and is
+	// passed through verbatim — the comparison belongs to forge, and a second
+	// implementation here would be a copy that eventually disagrees with it.
+	DiffEnv(context.Context, *connect.Request[v1.DiffForgeEnvRequest]) (*connect.Response[v1.DiffForgeEnvResponse], error)
 	// StartDeploy begins a REAL deploy to a LIVE CLUSTER, as a background job,
 	// and returns a handle immediately. Poll it with GetDeployStatus.
 	//
@@ -173,6 +233,12 @@ func NewForgeServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(forgeServiceMethods.ByName("GetEnvStatus")),
 			connect.WithClientOptions(opts...),
 		),
+		getEnvShape: connect.NewClient[v1.GetForgeEnvShapeRequest, v1.GetForgeEnvShapeResponse](
+			httpClient,
+			baseURL+ForgeServiceGetEnvShapeProcedure,
+			connect.WithSchema(forgeServiceMethods.ByName("GetEnvShape")),
+			connect.WithClientOptions(opts...),
+		),
 		planPromote: connect.NewClient[v1.PlanForgePromoteRequest, v1.PlanForgePromoteResponse](
 			httpClient,
 			baseURL+ForgeServicePlanPromoteProcedure,
@@ -189,6 +255,24 @@ func NewForgeServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			httpClient,
 			baseURL+ForgeServicePlanDeployProcedure,
 			connect.WithSchema(forgeServiceMethods.ByName("PlanDeploy")),
+			connect.WithClientOptions(opts...),
+		),
+		startDeployPlan: connect.NewClient[v1.StartForgeDeployPlanRequest, v1.StartForgeDeployResponse](
+			httpClient,
+			baseURL+ForgeServiceStartDeployPlanProcedure,
+			connect.WithSchema(forgeServiceMethods.ByName("StartDeployPlan")),
+			connect.WithClientOptions(opts...),
+		),
+		listCheckouts: connect.NewClient[v1.ListForgeCheckoutsRequest, v1.ListForgeCheckoutsResponse](
+			httpClient,
+			baseURL+ForgeServiceListCheckoutsProcedure,
+			connect.WithSchema(forgeServiceMethods.ByName("ListCheckouts")),
+			connect.WithClientOptions(opts...),
+		),
+		diffEnv: connect.NewClient[v1.DiffForgeEnvRequest, v1.DiffForgeEnvResponse](
+			httpClient,
+			baseURL+ForgeServiceDiffEnvProcedure,
+			connect.WithSchema(forgeServiceMethods.ByName("DiffEnv")),
 			connect.WithClientOptions(opts...),
 		),
 		startDeploy: connect.NewClient[v1.StartForgeDeployRequest, v1.StartForgeDeployResponse](
@@ -213,9 +297,13 @@ type forgeServiceClient struct {
 	listSecrets     *connect.Client[v1.ListForgeSecretsRequest, v1.ListForgeSecretsResponse]
 	getAudit        *connect.Client[v1.GetForgeAuditRequest, v1.GetForgeAuditResponse]
 	getEnvStatus    *connect.Client[v1.GetForgeEnvStatusRequest, v1.GetForgeEnvStatusResponse]
+	getEnvShape     *connect.Client[v1.GetForgeEnvShapeRequest, v1.GetForgeEnvShapeResponse]
 	planPromote     *connect.Client[v1.PlanForgePromoteRequest, v1.PlanForgePromoteResponse]
 	applyPromote    *connect.Client[v1.PromoteForgeEnvRequest, v1.PromoteForgeEnvResponse]
 	planDeploy      *connect.Client[v1.PlanForgeDeployRequest, v1.PlanForgeDeployResponse]
+	startDeployPlan *connect.Client[v1.StartForgeDeployPlanRequest, v1.StartForgeDeployResponse]
+	listCheckouts   *connect.Client[v1.ListForgeCheckoutsRequest, v1.ListForgeCheckoutsResponse]
+	diffEnv         *connect.Client[v1.DiffForgeEnvRequest, v1.DiffForgeEnvResponse]
 	startDeploy     *connect.Client[v1.StartForgeDeployRequest, v1.StartForgeDeployResponse]
 	getDeployStatus *connect.Client[v1.GetForgeDeployStatusRequest, v1.GetForgeDeployStatusResponse]
 }
@@ -245,6 +333,11 @@ func (c *forgeServiceClient) GetEnvStatus(ctx context.Context, req *connect.Requ
 	return c.getEnvStatus.CallUnary(ctx, req)
 }
 
+// GetEnvShape calls reliant.v1.ForgeService.GetEnvShape.
+func (c *forgeServiceClient) GetEnvShape(ctx context.Context, req *connect.Request[v1.GetForgeEnvShapeRequest]) (*connect.Response[v1.GetForgeEnvShapeResponse], error) {
+	return c.getEnvShape.CallUnary(ctx, req)
+}
+
 // PlanPromote calls reliant.v1.ForgeService.PlanPromote.
 func (c *forgeServiceClient) PlanPromote(ctx context.Context, req *connect.Request[v1.PlanForgePromoteRequest]) (*connect.Response[v1.PlanForgePromoteResponse], error) {
 	return c.planPromote.CallUnary(ctx, req)
@@ -258,6 +351,21 @@ func (c *forgeServiceClient) ApplyPromote(ctx context.Context, req *connect.Requ
 // PlanDeploy calls reliant.v1.ForgeService.PlanDeploy.
 func (c *forgeServiceClient) PlanDeploy(ctx context.Context, req *connect.Request[v1.PlanForgeDeployRequest]) (*connect.Response[v1.PlanForgeDeployResponse], error) {
 	return c.planDeploy.CallUnary(ctx, req)
+}
+
+// StartDeployPlan calls reliant.v1.ForgeService.StartDeployPlan.
+func (c *forgeServiceClient) StartDeployPlan(ctx context.Context, req *connect.Request[v1.StartForgeDeployPlanRequest]) (*connect.Response[v1.StartForgeDeployResponse], error) {
+	return c.startDeployPlan.CallUnary(ctx, req)
+}
+
+// ListCheckouts calls reliant.v1.ForgeService.ListCheckouts.
+func (c *forgeServiceClient) ListCheckouts(ctx context.Context, req *connect.Request[v1.ListForgeCheckoutsRequest]) (*connect.Response[v1.ListForgeCheckoutsResponse], error) {
+	return c.listCheckouts.CallUnary(ctx, req)
+}
+
+// DiffEnv calls reliant.v1.ForgeService.DiffEnv.
+func (c *forgeServiceClient) DiffEnv(ctx context.Context, req *connect.Request[v1.DiffForgeEnvRequest]) (*connect.Response[v1.DiffForgeEnvResponse], error) {
+	return c.diffEnv.CallUnary(ctx, req)
 }
 
 // StartDeploy calls reliant.v1.ForgeService.StartDeploy.
@@ -284,6 +392,22 @@ type ForgeServiceHandler interface {
 	GetAudit(context.Context, *connect.Request[v1.GetForgeAuditRequest]) (*connect.Response[v1.GetForgeAuditResponse], error)
 	// GetEnvStatus returns runtime checks for an environment.
 	GetEnvStatus(context.Context, *connect.Request[v1.GetForgeEnvStatusRequest]) (*connect.Response[v1.GetForgeEnvStatusResponse], error)
+	// GetEnvShape projects ONE environment's render into the declaration the
+	// control plane records for it — `forge env shape <env> --json`.
+	//
+	// READ-ONLY, and the one daemon call the BOOTSTRAP path needs. An
+	// environment that exists only in the user's KCL has no control-plane row,
+	// so the Live screen cannot show it and its secrets cannot be set before
+	// its first deploy. Preview calls this to learn the env's kind and shape,
+	// and the BROWSER then calls control-plane EnsureEnvironment itself, with
+	// the user's session. From that point the environment is in Live and needs
+	// no daemon again — not for its secrets, not for its provenance.
+	//
+	// The projection is forge's own, identical to the one `forge env build`
+	// records. That identity is what stops a Register from writing a
+	// declaration that disagrees with the next build's, on an env whose kind is
+	// immutable.
+	GetEnvShape(context.Context, *connect.Request[v1.GetForgeEnvShapeRequest]) (*connect.Response[v1.GetForgeEnvShapeResponse], error)
 	// PlanPromote previews binding an environment to a release. READ-ONLY: it
 	// runs `forge env promote <release> --to <env> --plan`, which computes the
 	// entire change set and stops before forge's only write. Safe, idempotent,
@@ -310,6 +434,39 @@ type ForgeServiceHandler interface {
 	// This is what a UI calls to show a human which cluster, which namespace,
 	// which images and which resources before asking them to approve it.
 	PlanDeploy(context.Context, *connect.Request[v1.PlanForgeDeployRequest]) (*connect.Response[v1.PlanForgeDeployResponse], error)
+	// StartDeployPlan begins the APPROVABLE plan as a background job, and returns
+	// a handle immediately. Poll it with GetDeployStatus, exactly as for a deploy.
+	//
+	// THIS IS NOT PlanDeploy, AND THE DIFFERENCE MATTERS MORE THAN THE NAMES
+	// SUGGEST. PlanDeploy renders the environment and checks the guard; it builds
+	// nothing, answers in seconds, and describes the binding the environment is
+	// running RIGHT NOW. This one builds every image from the chosen checkout,
+	// pushes them, cuts a release and computes the change set — so it is the only
+	// call that can say what a deploy would actually ship, and it takes minutes.
+	//
+	// IT WRITES NO PROMOTION AND APPLIES NOTHING. No cluster is touched and the
+	// environment's binding is unchanged, which is why it needs no approval:
+	// producing the thing to approve is the whole job.
+	//
+	// What comes back is the plan plus its digest. Show the plan, let a human
+	// approve THAT, and send the digest to StartDeploy.
+	StartDeployPlan(context.Context, *connect.Request[v1.StartForgeDeployPlanRequest]) (*connect.Response[v1.StartForgeDeployResponse], error)
+	// ListCheckouts lists the checkouts a preview may render: the project's main
+	// checkout plus every git worktree, each with its branch, current commit,
+	// whether it has uncommitted changes, and how far it is from main.
+	//
+	// It is also the ALLOWLIST. Every other call here that accepts a checkout
+	// honours only a value this one returned, re-derived and checked server-side.
+	// So a request cannot point a build at an arbitrary directory, whatever it
+	// sends.
+	ListCheckouts(context.Context, *connect.Request[v1.ListForgeCheckoutsRequest]) (*connect.Response[v1.ListForgeCheckoutsResponse], error)
+	// DiffEnv renders a checkout and compares each environment against what is
+	// deployed. READ-ONLY: no cluster is contacted, nothing is built or pushed.
+	//
+	// This is what the per-environment cards show. The document is forge's and is
+	// passed through verbatim — the comparison belongs to forge, and a second
+	// implementation here would be a copy that eventually disagrees with it.
+	DiffEnv(context.Context, *connect.Request[v1.DiffForgeEnvRequest]) (*connect.Response[v1.DiffForgeEnvResponse], error)
 	// StartDeploy begins a REAL deploy to a LIVE CLUSTER, as a background job,
 	// and returns a handle immediately. Poll it with GetDeployStatus.
 	//
@@ -375,6 +532,12 @@ func NewForgeServiceHandler(svc ForgeServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(forgeServiceMethods.ByName("GetEnvStatus")),
 		connect.WithHandlerOptions(opts...),
 	)
+	forgeServiceGetEnvShapeHandler := connect.NewUnaryHandler(
+		ForgeServiceGetEnvShapeProcedure,
+		svc.GetEnvShape,
+		connect.WithSchema(forgeServiceMethods.ByName("GetEnvShape")),
+		connect.WithHandlerOptions(opts...),
+	)
 	forgeServicePlanPromoteHandler := connect.NewUnaryHandler(
 		ForgeServicePlanPromoteProcedure,
 		svc.PlanPromote,
@@ -391,6 +554,24 @@ func NewForgeServiceHandler(svc ForgeServiceHandler, opts ...connect.HandlerOpti
 		ForgeServicePlanDeployProcedure,
 		svc.PlanDeploy,
 		connect.WithSchema(forgeServiceMethods.ByName("PlanDeploy")),
+		connect.WithHandlerOptions(opts...),
+	)
+	forgeServiceStartDeployPlanHandler := connect.NewUnaryHandler(
+		ForgeServiceStartDeployPlanProcedure,
+		svc.StartDeployPlan,
+		connect.WithSchema(forgeServiceMethods.ByName("StartDeployPlan")),
+		connect.WithHandlerOptions(opts...),
+	)
+	forgeServiceListCheckoutsHandler := connect.NewUnaryHandler(
+		ForgeServiceListCheckoutsProcedure,
+		svc.ListCheckouts,
+		connect.WithSchema(forgeServiceMethods.ByName("ListCheckouts")),
+		connect.WithHandlerOptions(opts...),
+	)
+	forgeServiceDiffEnvHandler := connect.NewUnaryHandler(
+		ForgeServiceDiffEnvProcedure,
+		svc.DiffEnv,
+		connect.WithSchema(forgeServiceMethods.ByName("DiffEnv")),
 		connect.WithHandlerOptions(opts...),
 	)
 	forgeServiceStartDeployHandler := connect.NewUnaryHandler(
@@ -417,12 +598,20 @@ func NewForgeServiceHandler(svc ForgeServiceHandler, opts ...connect.HandlerOpti
 			forgeServiceGetAuditHandler.ServeHTTP(w, r)
 		case ForgeServiceGetEnvStatusProcedure:
 			forgeServiceGetEnvStatusHandler.ServeHTTP(w, r)
+		case ForgeServiceGetEnvShapeProcedure:
+			forgeServiceGetEnvShapeHandler.ServeHTTP(w, r)
 		case ForgeServicePlanPromoteProcedure:
 			forgeServicePlanPromoteHandler.ServeHTTP(w, r)
 		case ForgeServiceApplyPromoteProcedure:
 			forgeServiceApplyPromoteHandler.ServeHTTP(w, r)
 		case ForgeServicePlanDeployProcedure:
 			forgeServicePlanDeployHandler.ServeHTTP(w, r)
+		case ForgeServiceStartDeployPlanProcedure:
+			forgeServiceStartDeployPlanHandler.ServeHTTP(w, r)
+		case ForgeServiceListCheckoutsProcedure:
+			forgeServiceListCheckoutsHandler.ServeHTTP(w, r)
+		case ForgeServiceDiffEnvProcedure:
+			forgeServiceDiffEnvHandler.ServeHTTP(w, r)
 		case ForgeServiceStartDeployProcedure:
 			forgeServiceStartDeployHandler.ServeHTTP(w, r)
 		case ForgeServiceGetDeployStatusProcedure:
@@ -456,6 +645,10 @@ func (UnimplementedForgeServiceHandler) GetEnvStatus(context.Context, *connect.R
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ForgeService.GetEnvStatus is not implemented"))
 }
 
+func (UnimplementedForgeServiceHandler) GetEnvShape(context.Context, *connect.Request[v1.GetForgeEnvShapeRequest]) (*connect.Response[v1.GetForgeEnvShapeResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ForgeService.GetEnvShape is not implemented"))
+}
+
 func (UnimplementedForgeServiceHandler) PlanPromote(context.Context, *connect.Request[v1.PlanForgePromoteRequest]) (*connect.Response[v1.PlanForgePromoteResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ForgeService.PlanPromote is not implemented"))
 }
@@ -466,6 +659,18 @@ func (UnimplementedForgeServiceHandler) ApplyPromote(context.Context, *connect.R
 
 func (UnimplementedForgeServiceHandler) PlanDeploy(context.Context, *connect.Request[v1.PlanForgeDeployRequest]) (*connect.Response[v1.PlanForgeDeployResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ForgeService.PlanDeploy is not implemented"))
+}
+
+func (UnimplementedForgeServiceHandler) StartDeployPlan(context.Context, *connect.Request[v1.StartForgeDeployPlanRequest]) (*connect.Response[v1.StartForgeDeployResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ForgeService.StartDeployPlan is not implemented"))
+}
+
+func (UnimplementedForgeServiceHandler) ListCheckouts(context.Context, *connect.Request[v1.ListForgeCheckoutsRequest]) (*connect.Response[v1.ListForgeCheckoutsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ForgeService.ListCheckouts is not implemented"))
+}
+
+func (UnimplementedForgeServiceHandler) DiffEnv(context.Context, *connect.Request[v1.DiffForgeEnvRequest]) (*connect.Response[v1.DiffForgeEnvResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ForgeService.DiffEnv is not implemented"))
 }
 
 func (UnimplementedForgeServiceHandler) StartDeploy(context.Context, *connect.Request[v1.StartForgeDeployRequest]) (*connect.Response[v1.StartForgeDeployResponse], error) {

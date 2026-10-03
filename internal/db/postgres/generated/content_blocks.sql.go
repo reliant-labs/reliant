@@ -34,10 +34,10 @@ func (q *Queries) AppendToContentBlock(ctx context.Context, arg AppendToContentB
 const createContentBlock = `-- name: CreateContentBlock :exec
 INSERT INTO message_content_blocks (
     id, message_id, position, block_type, content,
-    tool_name, tool_input, tool_call_id, thought_signature, is_error,
+    tool_name, tool_input, tool_call_id, thought_signature, phase, is_error,
     version, activity_id, workflow_run_id, attempt_number,
     created_at, updated_at
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
 `
 
 type CreateContentBlockParams struct {
@@ -50,6 +50,7 @@ type CreateContentBlockParams struct {
 	ToolInput        sql.NullString `json:"tool_input"`
 	ToolCallID       sql.NullString `json:"tool_call_id"`
 	ThoughtSignature sql.NullString `json:"thought_signature"`
+	Phase            sql.NullString `json:"phase"`
 	IsError          sql.NullBool   `json:"is_error"`
 	Version          sql.NullInt64  `json:"version"`
 	ActivityID       sql.NullString `json:"activity_id"`
@@ -70,6 +71,7 @@ func (q *Queries) CreateContentBlock(ctx context.Context, arg CreateContentBlock
 		arg.ToolInput,
 		arg.ToolCallID,
 		arg.ThoughtSignature,
+		arg.Phase,
 		arg.IsError,
 		arg.Version,
 		arg.ActivityID,
@@ -84,10 +86,10 @@ func (q *Queries) CreateContentBlock(ctx context.Context, arg CreateContentBlock
 const createContentBlockIfNotExists = `-- name: CreateContentBlockIfNotExists :exec
 INSERT INTO message_content_blocks (
     id, message_id, position, block_type, content,
-    tool_name, tool_input, tool_call_id, thought_signature, is_error,
+    tool_name, tool_input, tool_call_id, thought_signature, phase, is_error,
     version, activity_id, workflow_run_id, attempt_number,
     created_at, updated_at
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
 ON CONFLICT(id) DO NOTHING
 `
 
@@ -101,6 +103,7 @@ type CreateContentBlockIfNotExistsParams struct {
 	ToolInput        sql.NullString `json:"tool_input"`
 	ToolCallID       sql.NullString `json:"tool_call_id"`
 	ThoughtSignature sql.NullString `json:"thought_signature"`
+	Phase            sql.NullString `json:"phase"`
 	IsError          sql.NullBool   `json:"is_error"`
 	Version          sql.NullInt64  `json:"version"`
 	ActivityID       sql.NullString `json:"activity_id"`
@@ -121,6 +124,7 @@ func (q *Queries) CreateContentBlockIfNotExists(ctx context.Context, arg CreateC
 		arg.ToolInput,
 		arg.ToolCallID,
 		arg.ThoughtSignature,
+		arg.Phase,
 		arg.IsError,
 		arg.Version,
 		arg.ActivityID,
@@ -133,7 +137,7 @@ func (q *Queries) CreateContentBlockIfNotExists(ctx context.Context, arg CreateC
 }
 
 const getContentBlock = `-- name: GetContentBlock :one
-SELECT id, message_id, position, block_type, content, tool_name, tool_input, tool_call_id, is_error, version, node_id, node_path, activity_id, workflow_run_id, attempt_number, thought_signature, created_at, updated_at FROM message_content_blocks WHERE id = $1
+SELECT id, message_id, position, block_type, content, tool_name, tool_input, tool_call_id, is_error, version, node_id, node_path, activity_id, workflow_run_id, attempt_number, thought_signature, phase, created_at, updated_at FROM message_content_blocks WHERE id = $1
 `
 
 func (q *Queries) GetContentBlock(ctx context.Context, id string) (MessageContentBlock, error) {
@@ -156,6 +160,7 @@ func (q *Queries) GetContentBlock(ctx context.Context, id string) (MessageConten
 		&i.WorkflowRunID,
 		&i.AttemptNumber,
 		&i.ThoughtSignature,
+		&i.Phase,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -163,7 +168,7 @@ func (q *Queries) GetContentBlock(ctx context.Context, id string) (MessageConten
 }
 
 const listContentBlocks = `-- name: ListContentBlocks :many
-SELECT id, message_id, position, block_type, content, tool_name, tool_input, tool_call_id, is_error, version, node_id, node_path, activity_id, workflow_run_id, attempt_number, thought_signature, created_at, updated_at FROM message_content_blocks
+SELECT id, message_id, position, block_type, content, tool_name, tool_input, tool_call_id, is_error, version, node_id, node_path, activity_id, workflow_run_id, attempt_number, thought_signature, phase, created_at, updated_at FROM message_content_blocks
 WHERE message_id = $1
 ORDER BY position ASC
 `
@@ -194,6 +199,7 @@ func (q *Queries) ListContentBlocks(ctx context.Context, messageID string) ([]Me
 			&i.WorkflowRunID,
 			&i.AttemptNumber,
 			&i.ThoughtSignature,
+			&i.Phase,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -211,7 +217,7 @@ func (q *Queries) ListContentBlocks(ctx context.Context, messageID string) ([]Me
 }
 
 const listContentBlocksForMessages = `-- name: ListContentBlocksForMessages :many
-SELECT id, message_id, position, block_type, content, tool_name, tool_input, tool_call_id, is_error, version, node_id, node_path, activity_id, workflow_run_id, attempt_number, thought_signature, created_at, updated_at FROM message_content_blocks
+SELECT id, message_id, position, block_type, content, tool_name, tool_input, tool_call_id, is_error, version, node_id, node_path, activity_id, workflow_run_id, attempt_number, thought_signature, phase, created_at, updated_at FROM message_content_blocks
 WHERE message_id = ANY($1::text[])
 ORDER BY message_id, position ASC
 `
@@ -242,6 +248,7 @@ func (q *Queries) ListContentBlocksForMessages(ctx context.Context, messageIds [
 			&i.WorkflowRunID,
 			&i.AttemptNumber,
 			&i.ThoughtSignature,
+			&i.Phase,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {

@@ -143,7 +143,7 @@ nodes:
     args:
       model: mock
 outputs:
-  stopped: "{{nodes.llm.stop_reason == 'end_turn'}}"
+  stopped: "{{nodes.llm.stop_reason == 'done'}}"
 `,
 			expectWarning: false,
 		},
@@ -271,7 +271,7 @@ nodes:
     args:
       model: mock
 outputs:
-  is_done: "{{nodes.llm.stop_reason == 'end_turn'}}"
+  is_done: "{{nodes.llm.stop_reason == 'done'}}"
 `,
 			outputName:    "is_done",
 			expectDynamic: false,

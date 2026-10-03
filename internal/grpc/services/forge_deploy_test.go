@@ -77,12 +77,22 @@ func deployPlanDoc(env, mode, declaredContext, currentContext, verdict, release 
 }
 
 // authorisedStart is a start request whose token matches deployPlanDoc's state.
+// testStartDigest and testStartVersion are the content approval the canned
+// requests carry: the digest of the plan the operator read, and the release that
+// plan was computed for.
+const (
+	testStartDigest  = "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+	testStartVersion = "20261003.114500-abcdef123456"
+)
+
 func authorisedStart(env, declaredContext, release string) *reliantv1.StartForgeDeployRequest {
 	return &reliantv1.StartForgeDeployRequest{
 		ProjectId:               "p",
 		Env:                     env,
 		ExpectedDeclaredContext: declaredContext,
 		ExpectedCurrentRelease:  release,
+		ApproveDigest:           testStartDigest,
+		ReleaseVersion:          testStartVersion,
 	}
 }
 
@@ -409,19 +419,39 @@ func TestForgeService_StartDeploy_RefusalReasonsAreDistinguishable(t *testing.T)
 	}
 }
 
-// The confirmation token is mandatory on BOTH halves, and rejected before the
-// daemon is called at all.
+// The approval is mandatory on EVERY half — the target claims AND the content
+// claims — and rejected before the daemon is called at all.
+//
+// The last two cases are the ones that distinguish this from the interim: a
+// request carrying a perfect target token but no approved plan is refused,
+// because the target says WHERE bytes land and says nothing about WHAT ships.
 func TestForgeService_StartDeploy_RequiresConfirmationToken(t *testing.T) {
 	cases := map[string]*reliantv1.StartForgeDeployRequest{
 		"no declared context": {
 			ProjectId: "p", Env: "prod", ExpectedCurrentRelease: "v1.5.15",
+			ApproveDigest: testStartDigest, ReleaseVersion: testStartVersion,
 		},
 		"no release claim": {
 			ProjectId: "p", Env: "prod", ExpectedDeclaredContext: "gke_prod",
+			ApproveDigest: testStartDigest, ReleaseVersion: testStartVersion,
 		},
 		"contradictory release claim": {
 			ProjectId: "p", Env: "prod", ExpectedDeclaredContext: "gke_prod",
 			ExpectedCurrentRelease: "v1.5.15", ExpectUnbound: true,
+			ApproveDigest: testStartDigest, ReleaseVersion: testStartVersion,
+		},
+		"a full target token but no approved plan": {
+			ProjectId: "p", Env: "prod", ExpectedDeclaredContext: "gke_prod",
+			ExpectedCurrentRelease: "v1.5.15", ReleaseVersion: testStartVersion,
+		},
+		"an approved plan but no release to ship it as": {
+			ProjectId: "p", Env: "prod", ExpectedDeclaredContext: "gke_prod",
+			ExpectedCurrentRelease: "v1.5.15", ApproveDigest: testStartDigest,
+		},
+		"a destructive acknowledgement naming nothing": {
+			ProjectId: "p", Env: "prod", ExpectedDeclaredContext: "gke_prod",
+			ExpectedCurrentRelease: "v1.5.15", ApproveDigest: testStartDigest,
+			ReleaseVersion: testStartVersion, AcknowledgedFindings: []string{" "},
 		},
 	}
 	for name, req := range cases {
@@ -454,6 +484,8 @@ func TestForgeService_StartDeploy_ExpectUnboundIsAnExplicitClaim(t *testing.T) {
 			Env:                     "dev",
 			ExpectedDeclaredContext: "k3d-control-plane",
 			ExpectUnbound:           true,
+			ApproveDigest:           testStartDigest,
+			ReleaseVersion:          testStartVersion,
 		}))
 	require.NoError(t, err)
 	assert.Equal(t, "h1", resp.Msg.Handle)

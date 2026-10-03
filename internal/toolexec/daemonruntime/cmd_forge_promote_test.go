@@ -4,7 +4,10 @@ package daemonruntime
 import (
 	"context"
 	"encoding/json"
+	"os"
 	"reflect"
+	"regexp"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -130,6 +133,139 @@ func (l *forgeCallLog) wrote() bool {
 	return false
 }
 
+// testPromoteApproval mints an approval for tests that need the apply argv.
+// Not a hole in the guarantee: that is about PRODUCTION reachability, pinned by
+// TestForgePromoteApprovalHasExactlyOneProducer below.
+// testPromoteDigest is the plan digest the canned promote payloads approve.
+const testPromoteDigest = "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+
+func testPromoteApproval() forgePromoteApproval {
+	return forgePromoteApproval{
+		release: "v1.5.15",
+		digest:  "sha256:" + strings.Repeat("cd", 32),
+	}
+}
+
+func mustPromoteApplyArgs(t *testing.T, args forgePromoteArgs) []string {
+	t.Helper()
+	argv, err := args.applyArgs(testPromoteApproval())
+	if err != nil {
+		t.Fatalf("applyArgs with a validated approval: %v", err)
+	}
+	return argv
+}
+
+// The promote apply is approved BY DIGEST, never by --yes.
+//
+// `env deploy <env> <release>` is a RELEASE deploy, so forge's O-13 gate
+// applies to it exactly as it does to the versionless form. A promote cannot
+// cut a new release underneath the operator, but its plan is still computed
+// against LIVE and Live moves: the same release promoted an hour later can
+// delete storage it would not have deleted before. --yes would re-approve that
+// blindly; --approve <digest> refuses it.
+func TestForgePromoteApplyArgvApprovesByDigest(t *testing.T) {
+	args := forgePromoteArgs{ProjectPath: "/p", Env: "staging", Release: "v1.5.15"}
+
+	apply := mustPromoteApplyArgs(t, args)
+	if slices.Contains(apply, "--yes") {
+		t.Errorf("the promote apply argv %q must NOT carry --yes: a promote approves the plan "+
+			"that was read, not whatever forge recomputes against Live", apply)
+	}
+	if !slices.Contains(apply, "--approve") {
+		t.Errorf("the promote apply argv %q must carry --approve", apply)
+	}
+	if !strings.Contains(strings.Join(apply, " "), testPromoteApproval().digest) {
+		t.Errorf("the promote apply argv %q must carry the approved digest verbatim", apply)
+	}
+	if plan := args.planArgs(); slices.Contains(plan, "--approve") {
+		t.Errorf("the plan argv %q must NOT carry --approve: it is read-only", plan)
+	}
+}
+
+// A promote approval with no digest mints no argv. The binding claim alone is
+// not enough: it says WHICH release, not what shipping it does to Live.
+func TestForgePromoteApplyArgvRefusesApprovalWithoutDigest(t *testing.T) {
+	args := forgePromoteArgs{ProjectPath: "/p", Env: "staging", Release: "v1.5.15"}
+
+	if argv, err := args.applyArgs(forgePromoteApproval{release: "v1.5.14"}); err == nil {
+		t.Errorf("applyArgs minted %q from an approval with no plan digest; the binding claim "+
+			"authorises which release, not the change set shipping it produces", argv)
+	}
+}
+
+// --yes is unreachable without a validated token. Deleting
+// validateConfirmation's required-claim check turns this red: an unpopulated
+// request then reaches forgePromoteStaleBinding, which refuses on the mismatch
+// and returns a ZERO approval, and applyArgs will not mint --yes from one.
+func TestForgePromoteYesIsUnreachableWithoutAValidatedToken(t *testing.T) {
+	args := forgePromoteArgs{ProjectPath: "/p", Env: "staging", Release: "v1.5.15"}
+
+	if argv, err := args.applyArgs(forgePromoteApproval{}); err == nil {
+		t.Errorf("applyArgs minted %q from a zero approval; --yes must require a validated "+
+			"confirmation token", argv)
+	}
+
+	facts := forgePromotePlanFacts{Env: "staging"}
+	facts.Current.Bound = true
+	facts.Current.Release = "v1.5.15"
+
+	for _, tc := range []struct {
+		name string
+		req  forgePromoteApplyRequest
+	}{
+		{"no claim at all", forgePromoteApplyRequest{forgePromoteArgs: args}},
+		{"a release the ledger disagrees with", forgePromoteApplyRequest{
+			forgePromoteArgs:       args,
+			ExpectedCurrentRelease: "v1.0.0",
+		}},
+		{"unbound claimed against a bound env", forgePromoteApplyRequest{
+			forgePromoteArgs: args,
+			ExpectUnbound:    true,
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			refusal, approval := forgePromoteStaleBinding(tc.req, facts)
+			if refusal == nil {
+				t.Fatal("expected a refusal; this request must not authorise a write")
+			}
+			if argv, err := args.applyArgs(approval); err == nil {
+				t.Errorf("a refused request still produced the apply argv %q, carrying --yes", argv)
+			}
+		})
+	}
+}
+
+// Exactly ONE non-test producer, which is what makes the guarantee structural.
+func TestForgePromoteApprovalHasExactlyOneProducer(t *testing.T) {
+	entries, err := os.ReadDir(".")
+	if err != nil {
+		t.Fatalf("read package dir: %v", err)
+	}
+	literal := regexp.MustCompile(`forgePromoteApproval\{`)
+	for _, entry := range entries {
+		name := entry.Name()
+		if entry.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		src, err := os.ReadFile(name)
+		if err != nil {
+			t.Fatalf("read %s: %v", name, err)
+		}
+		if len(literal.FindAll(src, -1)) > 0 && name != "cmd_forge_promote.go" {
+			t.Errorf("%s constructs a forgePromoteApproval; only forgePromoteStaleBinding may "+
+				"mint one, because an approval is what produces --yes", name)
+		}
+	}
+	src, err := os.ReadFile("cmd_forge_promote.go")
+	if err != nil {
+		t.Fatalf("read cmd_forge_promote.go: %v", err)
+	}
+	if len(literal.FindAll(src, -1)) == 0 {
+		t.Error("no forgePromoteApproval literal in cmd_forge_promote.go; this test is passing " +
+			"vacuously and no longer guards --yes")
+	}
+}
+
 // TestForgePromoteWroteDetectsTheApplyArgv proves the write detector is not
 // blind, by deriving both argv from the SAME builders production uses rather
 // than restating them.
@@ -142,10 +278,11 @@ func (l *forgeCallLog) wrote() bool {
 func TestForgePromoteWroteDetectsTheApplyArgv(t *testing.T) {
 	args := forgePromoteArgs{ProjectPath: "/p", Env: "staging", Release: "v1.5.15"}
 
-	applied := &forgeCallLog{Args: [][]string{args.applyArgs()}}
+	applyArgs := mustPromoteApplyArgs(t, args)
+	applied := &forgeCallLog{Args: [][]string{applyArgs}}
 	if !applied.wrote() {
 		t.Fatalf("wrote() did not recognise the real apply argv %v as a write — "+
-			"every no-write assertion in this file is passing vacuously", args.applyArgs())
+			"every no-write assertion in this file is passing vacuously", applyArgs)
 	}
 
 	planned := &forgeCallLog{Args: [][]string{args.planArgs()}}
@@ -167,7 +304,7 @@ func TestForgePromoteCommandsAreRegistered(t *testing.T) {
 			// could write.
 			if _, err := handle(t, name, map[string]any{
 				"project_path": t.TempDir(), "env": "staging", "release": "v1.5.15",
-				"expected_current_release": "v1.3.0",
+				"expected_current_release": "v1.3.0", "approve_digest": testPromoteDigest,
 			}); err != nil {
 				t.Fatalf("%s not dispatchable: %v", name, err)
 			}
@@ -239,7 +376,7 @@ func TestForgePromoteArgs(t *testing.T) {
 
 		if _, err := handle(t, "forge.promote_apply", map[string]any{
 			"project_path": dir, "env": "staging", "release": "v1.5.15",
-			"expected_current_release": "v1.3.0",
+			"expected_current_release": "v1.3.0", "approve_digest": testPromoteDigest,
 		}); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -249,7 +386,11 @@ func TestForgePromoteArgs(t *testing.T) {
 				len(log.Args), log.Args)
 		}
 		wantPlan := []string{"env", "deploy", "staging", "v1.5.15", "--plan", "--json"}
-		wantApply := []string{"env", "deploy", "staging", "v1.5.15", "--json"}
+		// --approve <digest> answers forge's O-13 confirmation gate, and it
+		// answers it for the plan the operator actually READ: a release
+		// deploy with nothing approving it exits 5 and writes nothing,
+		// while --yes would re-approve whatever forge recomputes.
+		wantApply := []string{"env", "deploy", "staging", "v1.5.15", "--json", "--approve", testPromoteDigest}
 		if !reflect.DeepEqual(log.Args[0], wantPlan) {
 			t.Errorf("guard call must be the dry run:\n got %v\nwant %v", log.Args[0], wantPlan)
 		}
@@ -343,7 +484,7 @@ func TestForgePromoteApplyRefusesStaleExpectedRelease(t *testing.T) {
 
 	raw, err := handle(t, "forge.promote_apply", map[string]any{
 		"project_path": dir, "env": "staging", "release": "v1.5.15",
-		"expected_current_release": "v1.3.0",
+		"expected_current_release": "v1.3.0", "approve_digest": testPromoteDigest,
 	})
 	if err != nil {
 		t.Fatalf("a refusal is structured data, not a transport error: %v", err)
@@ -397,7 +538,7 @@ func TestForgePromoteApplySucceedsWhenExpectedReleaseMatches(t *testing.T) {
 
 	raw, err := handle(t, "forge.promote_apply", map[string]any{
 		"project_path": dir, "env": "staging", "release": "v1.5.15",
-		"expected_current_release": "v1.3.0",
+		"expected_current_release": "v1.3.0", "approve_digest": testPromoteDigest,
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -435,6 +576,7 @@ func TestForgePromoteApplyGuardHandlesUnboundEnvs(t *testing.T) {
 		)
 		raw, err := handle(t, "forge.promote_apply", map[string]any{
 			"project_path": dir, "env": "dev", "release": "v1.5.15", "expect_unbound": true,
+			"approve_digest": testPromoteDigest,
 		})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -456,6 +598,7 @@ func TestForgePromoteApplyGuardHandlesUnboundEnvs(t *testing.T) {
 		)
 		raw, err := handle(t, "forge.promote_apply", map[string]any{
 			"project_path": dir, "env": "prod", "release": "v1.5.15", "expect_unbound": true,
+			"approve_digest": testPromoteDigest,
 		})
 		if err != nil {
 			t.Fatalf("a refusal is data: %v", err)
@@ -478,7 +621,7 @@ func TestForgePromoteApplyGuardHandlesUnboundEnvs(t *testing.T) {
 		)
 		raw, err := handle(t, "forge.promote_apply", map[string]any{
 			"project_path": dir, "env": "dev", "release": "v1.5.15",
-			"expected_current_release": "v1.3.0",
+			"expected_current_release": "v1.3.0", "approve_digest": testPromoteDigest,
 		})
 		if err != nil {
 			t.Fatalf("a refusal is data: %v", err)
@@ -511,7 +654,7 @@ func TestForgePromoteApplyRequiresAConfirmationToken(t *testing.T) {
 			name: "contradictory expectations",
 			payload: map[string]any{
 				"project_path": dir, "env": "staging", "release": "v1.5.15",
-				"expected_current_release": "v1.3.0", "expect_unbound": true,
+				"expected_current_release": "v1.3.0", "approve_digest": testPromoteDigest, "expect_unbound": true,
 			},
 		},
 	} {
@@ -603,6 +746,7 @@ func TestForgePromoteRollbackIsReportedNotSuppressed(t *testing.T) {
 		raw, err := handle(t, "forge.promote_apply", map[string]any{
 			"project_path": dir, "env": "prod", "release": "v1.3.0",
 			"expected_current_release": "v1.5.15",
+			"approve_digest":           testPromoteDigest,
 		})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -667,7 +811,7 @@ func TestForgePromoteUnsupportedForgeOnBothCommands(t *testing.T) {
 
 		raw, err := handle(t, "forge.promote_apply", map[string]any{
 			"project_path": dir, "env": "staging", "release": "v1.5.15",
-			"expected_current_release": "v1.3.0",
+			"expected_current_release": "v1.3.0", "approve_digest": testPromoteDigest,
 		})
 		if err != nil {
 			t.Fatalf("an old forge must not be an error: %v", err)
@@ -704,7 +848,7 @@ func TestForgePromoteNotAForgeProjectOnBothCommands(t *testing.T) {
 	}{
 		{"forge.promote_plan", map[string]any{"env": "staging", "release": "v1.5.15"}},
 		{"forge.promote_apply", map[string]any{"env": "staging", "release": "v1.5.15",
-			"expected_current_release": "v1.3.0"}},
+			"expected_current_release": "v1.3.0", "approve_digest": testPromoteDigest}},
 	} {
 		t.Run(tc.command, func(t *testing.T) {
 			dir := t.TempDir() // exists, no forge.yaml
@@ -759,18 +903,18 @@ func TestForgePromoteRequiredFieldsAreValidated(t *testing.T) {
 		{"plan without release", "forge.promote_plan",
 			map[string]any{"project_path": dir, "env": "staging"}},
 		{"apply without env", "forge.promote_apply",
-			map[string]any{"project_path": dir, "release": "v1.5.15", "expected_current_release": "v1.3.0"}},
+			map[string]any{"project_path": dir, "release": "v1.5.15", "expected_current_release": "v1.3.0", "approve_digest": testPromoteDigest}},
 		{"apply without release", "forge.promote_apply",
-			map[string]any{"project_path": dir, "env": "staging", "expected_current_release": "v1.3.0"}},
+			map[string]any{"project_path": dir, "env": "staging", "expected_current_release": "v1.3.0", "approve_digest": testPromoteDigest}},
 		// An env or release beginning with '-' would be consumed by forge as
 		// a FLAG, which on the apply path means an argument deciding whether
 		// a write happens.
 		{"flag-shaped release", "forge.promote_apply",
 			map[string]any{"project_path": dir, "env": "staging", "release": "--plan",
-				"expected_current_release": "v1.3.0"}},
+				"expected_current_release": "v1.3.0", "approve_digest": testPromoteDigest}},
 		{"flag-shaped env", "forge.promote_apply",
 			map[string]any{"project_path": dir, "env": "--plan", "release": "v1.5.15",
-				"expected_current_release": "v1.3.0"}},
+				"expected_current_release": "v1.3.0", "approve_digest": testPromoteDigest}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			log := stubForgeSequence(t)
@@ -802,7 +946,7 @@ func TestForgePromoteMissingPathUsesStableErrorPrefix(t *testing.T) {
 			_, err := handle(t, command, map[string]any{
 				"project_path": t.TempDir() + "/definitely-absent",
 				"env":          "staging", "release": "v1.5.15",
-				"expected_current_release": "v1.3.0",
+				"expected_current_release": "v1.3.0", "approve_digest": testPromoteDigest,
 			})
 			if err == nil {
 				t.Fatal("expected an error for a missing project path")
@@ -832,7 +976,7 @@ func TestForgePromoteApplyRefusesWhenThePreviewClaimsItWrote(t *testing.T) {
 			log := stubForgeSequence(t, forgeCommandResult{Stdout: []byte(tc.doc)})
 			_, err := handle(t, "forge.promote_apply", map[string]any{
 				"project_path": dir, "env": "staging", "release": "v1.5.15",
-				"expected_current_release": "v1.3.0",
+				"expected_current_release": "v1.3.0", "approve_digest": testPromoteDigest,
 			})
 			if err == nil {
 				t.Fatal("a preview that claims it wrote must halt the promote")
@@ -857,7 +1001,7 @@ func TestForgePromoteApplyRefusesAPlanForADifferentEnv(t *testing.T) {
 
 	_, err := handle(t, "forge.promote_apply", map[string]any{
 		"project_path": dir, "env": "staging", "release": "v1.5.15",
-		"expected_current_release": "v1.3.0",
+		"expected_current_release": "v1.3.0", "approve_digest": testPromoteDigest,
 	})
 	if err == nil {
 		t.Fatal("a plan for the wrong env must not authorise a write")
@@ -878,7 +1022,7 @@ func TestForgePromoteApplyNonZeroWithNoReportIsAnError(t *testing.T) {
 
 	_, err := handle(t, "forge.promote_apply", map[string]any{
 		"project_path": dir, "env": "staging", "release": "v9.9.9",
-		"expected_current_release": "v1.3.0",
+		"expected_current_release": "v1.3.0", "approve_digest": testPromoteDigest,
 	})
 	if err == nil {
 		t.Fatal("expected an error for a non-zero exit with no report")

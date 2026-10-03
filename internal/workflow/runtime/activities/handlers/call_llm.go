@@ -37,6 +37,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/workflow/builtin"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
+	"github.com/reliant-labs/reliant/internal/workflow/stopreason"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/temporal"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -72,6 +73,12 @@ type streamProcessingState struct {
 	// decision — what to say when the turn came back with nothing in it — so
 	// it only has to be right for the reasons that can produce no content.
 	finishReason message.FinishReason
+
+	// phase is the OpenAI Responses `phase` of this turn's final assistant
+	// message ("commentary" / "final_answer"), empty on every other provider.
+	// Recorded only so save_message can persist it and the next turn can
+	// resend it; nothing in the runtime makes a decision from it.
+	phase string
 
 	// Delta identity: pre-allocated assistant message id (from
 	// RuntimeContext.AssistantMessageID) and the per-message monotonically
@@ -643,63 +650,6 @@ func (a *CallLLMActivity) reportContentFreeTurn(
 // contentFreeTurnReportTimeout bounds the detached write of the error that
 // explains a content-free turn. Short: one insert, with the turn already over.
 const contentFreeTurnReportTimeout = 5 * time.Second
-
-// Stop-kind vocabulary. Closed by construction: a provider adding a new stop
-// reason maps into one of these four rather than becoming a fifth, so a
-// workflow condition written against them cannot silently miss a new case.
-const (
-	// StopKindComplete: the model finished on its own terms. Nothing was lost.
-	StopKindComplete = "complete"
-	// StopKindTruncated: it ran out of output room mid-turn. The work is a
-	// fragment, and re-running the SAME request truncates identically.
-	StopKindTruncated = "truncated"
-	// StopKindRefused: the safety system declined. Retrying unchanged will be
-	// refused the same way; the request itself has to change.
-	StopKindRefused = "refused"
-	// StopKindCancelled: something cut the stream short — cancellation, a
-	// transport error, or a provider-side pause. Unlike truncation, a retry
-	// may well succeed.
-	StopKindCancelled = "cancelled"
-)
-
-// deriveStopKind collapses a provider stop reason into the four categories a
-// workflow loop can act on.
-//
-// Why a derived vocabulary rather than passing the raw reason through: the
-// alternative is every while-condition carrying a hand-maintained negative
-// list ("!= 'max_tokens' && != 'refusal' && ..."), which has to be updated in
-// ten builtin workflows each time the enum grows, and which silently keeps
-// looping on whichever value someone forgot. A closed set inverts that into a
-// positive test — `stop_kind == 'complete'` — that stays correct as the
-// provider vocabulary changes. The raw value is still exposed alongside for
-// the cases that genuinely need it.
-func deriveStopKind(reason message.FinishReason) string {
-	switch reason {
-	case message.FinishReasonEndTurn, message.FinishReasonToolUse:
-		return StopKindComplete
-	case message.FinishReasonMaxTokens:
-		return StopKindTruncated
-	case message.FinishReasonRefusal:
-		return StopKindRefused
-	case message.FinishReasonCancelled,
-		message.FinishReasonError,
-		message.FinishReasonToolUseError,
-		message.FinishReasonPermissionDenied,
-		// pause_turn is the model suspended mid-turn expecting to be handed
-		// the conversation back. Nothing resumes it here yet, so from the
-		// loop's point of view the turn was cut short — which is `cancelled`,
-		// not `complete`. Calling it complete would tell a loop the answer is
-		// finished when it is a fragment.
-		message.FinishReasonPauseTurn:
-		return StopKindCancelled
-	default:
-		// Includes FinishReasonUnknown and anything a provider adds later.
-		// Deliberately NOT "complete": treating an unrecognized stop as a
-		// clean finish is what makes a new provider behavior look like
-		// success, and that is the exact failure this field exists to end.
-		return StopKindCancelled
-	}
-}
 
 // contentFreeTurnSummary is the one-line headline WorkflowErrorMessage shows
 // collapsed; contentFreeTurnText is the detail behind it.
@@ -1386,7 +1336,21 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 	// Logged at ERROR because reaching here is still a bug upstream (see
 	// below for the real causes); it must stay greppable rather than being
 	// silently absorbed. What changes is that the chat survives it.
-	if len(history) > 0 {
+	//
+	// The one exception is a turn the provider PAUSED (stop_reason
+	// "incomplete"): it ended with the assistant on purpose and expects the
+	// conversation handed back so the model can carry on. The loop that saw
+	// that says so with continue_turn, and only then is an assistant tail the
+	// expected shape rather than a bug.
+	continueTurn := model.CelBoolValue(args.GetContinueTurn())
+	if len(history) > 0 && continueTurn && history[len(history)-1].Role == message.Assistant {
+		activity.GetLogger(ctx).Info("[CallLLM] Continuing a paused turn — history ends with the assistant by design",
+			"chatID", chat.ID,
+			"thread", thread,
+			"lastMsgID", history[len(history)-1].ID,
+		)
+	}
+	if len(history) > 0 && !continueTurn {
 		lastMsg := history[len(history)-1]
 		if lastMsg.Role == message.Assistant {
 			activity.GetLogger(ctx).Error(
@@ -1409,12 +1373,12 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 				CompactionThreshold: effectiveCompactionThreshold,
 				Model:               resolvedModelID,
 				MessageId:           streamState.messageID,
-				// Yielding without calling the provider IS a complete turn —
-				// the previous turn already had the last word. Saying
-				// "complete" here keeps a stop_kind-gated loop exiting rather
-				// than treating the yield as trouble worth retrying, which
-				// would spin against an unchanged history.
-				StopKind:     StopKindComplete,
+				// Yielding without calling the provider IS a finished turn —
+				// the previous turn already had the last word. Saying "done"
+				// keeps every loop exiting rather than treating the yield as
+				// trouble worth retrying, which would spin against an
+				// unchanged history.
+				StopReason:   stopreason.Done,
 				FinishReason: string(message.FinishReasonEndTurn),
 			}, nil
 		}
@@ -1777,10 +1741,26 @@ streamLoop:
 		Cost:               streamState.cost,
 		UpstreamRequestId:  streamState.upstreamRequestID,
 		UpstreamProxymanId: streamState.upstreamProxymanID,
-		// Why this turn ended, for the loop to act on. Zero tool calls is
-		// ambiguous on its own — a finished turn and a truncated one look
-		// identical — so the reason is carried explicitly.
-		StopKind:     deriveStopKind(streamState.finishReason),
+		// Why this turn ended — the one field a loop's while-condition reads.
+		// Zero tool calls is ambiguous on its own: a finished turn, a
+		// truncated one, a cut stream and a paused one all look identical, so
+		// the reason is carried explicitly.
+		//
+		// streamInterrupted makes it "interrupted", which keeps an agent loop
+		// going after an involuntary abort. A spawned agent killed mid-edit
+		// used to read as finished (chat 7da3935c, thread 5e3fe370: cancelled
+		// 1.75s in with two edits applied, reported to its parent as a clean
+		// completion). It cannot wedge: it is recomputed from each turn's own
+		// stream, so the first turn that streams to completion clears it. It
+		// is set for a user/thread interrupt too, deliberately — an interrupt
+		// is specified to persist the partial and take one more
+		// mailbox-draining turn, and re-entering is what that turn IS.
+		StopReason: stopreason.Derive(stopreason.Turn{
+			FinishReason: streamState.finishReason,
+			ToolCalls:    len(toolCalls),
+			Interrupted:  streamInterrupted,
+			ProducedText: strings.TrimSpace(responseText) != "",
+		}),
 		FinishReason: string(streamState.finishReason),
 		Thinking: &reliantv1.ThinkingOutput{
 			Content:   thinkingText,
@@ -1790,29 +1770,10 @@ streamLoop:
 		Message: &reliantv1.MessageOutput{
 			Role: "assistant",
 			Text: responseText,
+			// Carried so save_message can persist it onto the text block and
+			// the next turn can resend it — see llm.DriverResponse.Phase.
+			Phase: streamState.phase,
 		},
-		// Aborted says this turn was cut short rather than finished.
-		//
-		// A cancelled stream yields zero tool calls, which the agent loop's
-		// while-condition cannot distinguish from "the model is done" — so the
-		// loop exited and a spawn killed mid-edit reported to its parent as a
-		// clean completion (chat 7da3935c, thread 5e3fe370). This is the bit
-		// that tells them apart.
-		//
-		// Unlike the pending_inbox bug described below, this CANNOT wedge the
-		// loop: it is recomputed from each turn's own streamInterrupted, so the
-		// first turn that streams to completion sets it false and the loop
-		// exits normally. It is not an OR against a sticky value, and no
-		// caller can set it — there is exactly one writer, right here.
-		//
-		// Set for a user/thread interrupt too, and that is deliberate rather
-		// than incidental: an interrupt is already specified to "persist that
-		// partial assistant message and run one more mailbox-draining turn"
-		// (see the streamErr handling above). Re-entering is what that turn IS.
-		// pending_inbox happened to deliver it before, but only when something
-		// was actually queued; making it follow from the abort itself is what
-		// makes the guarantee hold when the mailbox is empty.
-		Aborted: streamInterrupted,
 		// Deliberately NOT set from streamInterrupted.
 		//
 		// It used to be, and that is the bug that wedged chats. An interrupt
@@ -2734,6 +2695,7 @@ func (a *CallLLMActivity) handleComplete(ctx context.Context, event llm.DriverEv
 	state.upstreamProxymanID = strings.TrimSpace(event.Response.UpstreamProxymanID)
 
 	state.finishReason = event.Response.FinishReason
+	state.phase = event.Response.Phase
 
 	// CRITICAL: Extract complete tool calls with full inputs from the final response
 	// This is done here instead of EventToolUseStart because Input is empty at that point

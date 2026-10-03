@@ -3,46 +3,39 @@
 /**
  * Route component for /forge — THE OVERVIEW.
  *
- * It replaces three screens that were each built around one forge command —
- * Releases (topology), Environments (env status) and Status (verify + audit)
- * — and overlapped almost entirely, because the question a reader brings is
- * per ENVIRONMENT: what environments does this project have, where does each
- * run, what is it on, is it healthy. So: the project audit strip, then one
- * row per environment. Everything deeper is on that environment's page.
+ * One row per environment: where it runs, what it is on, where that came
+ * from, and when it last moved. Everything deeper is on the environment's
+ * page.
  *
- * TWO SOURCES, NEITHER WAITED ON (see services/forge/environments.ts):
+ * ── THE LIST COMES FROM THE CONTROL PLANE, SO IT RENDERS DAEMON-OFFLINE ─────
  *
- *   the daemon         forge's topology — every env the checkout declares,
- *                      its binding and image digests. The audit, too.
- *   the control plane  the envs it holds for this forge project, and — for
- *                      the ones it RUNS — their health and bound release,
- *                      straight from DeployService. No daemon.
+ * `GetLiveView` is the only source here (design §8.0, O-14). The page used to
+ * join a daemon topology report with a control-plane list, which meant an
+ * asleep laptop blanked rows describing production environments the control
+ * plane was observing the whole time — and told the user to "start your daemon
+ * once to see them", which was the tool asking for a favour to show facts it
+ * already had.
  *
- * A daemon that is asleep leaves the control plane's rows fully rendered, and
- * says so in one line naming what is missing. Only when NEITHER source has an
- * environment does the page fall back to forge's own full-panel answers ("not
- * a forge project", "your forge is too old") — those are facts about the
- * project, and a project with cloud environments visibly IS a forge project.
+ * So there is no daemon hook on this page at all. The one thing the checkout
+ * knows and the control plane does not — an environment declared only in the
+ * KCL — belongs to PREVIEW, which labels it "would be created" and offers to
+ * register it. Nothing on this list pretends to know about an environment
+ * nothing has ever recorded.
+ *
+ * The project AUDIT moved to Preview for the same reason: it is forge's static
+ * analysis over files on the user's disk, so it was never something this page
+ * could show without a daemon.
  */
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 
 import PageHeader from "@/components/forge-ui/page_header";
-import {
-  cloudRunIds,
-  useCloudEnvStatuses,
-  useForgeAudit,
-  useForgeEnvironments,
-} from "@/hooks/forge-queries";
-import { cloudRunIdOf, envFacts } from "@/services/forge/environments";
-import { useProjectStore } from "@/store/projectStore";
+import { useCloudEnvStatuses, useLiveView } from "@/hooks/forge-queries";
+import { isPlacedKind } from "@/services/forge/live";
+import { useProjectStore, type Project } from "@/store/projectStore";
 
-import { AuditStrip } from "../Audit/AuditStrip";
-import { DeployDialog } from "../Deploy/DeployDialog";
-import { ForgeMalformed, ForgeUnreachable, ForgeUnsupported, NotForgeProject } from "../ForgeStates";
-import { PromoteDialog } from "../Promote/PromoteDialog";
-import { CloudNotice, DaemonOfflineNotice } from "../SourceNotices";
+import { CloudNotice } from "../SourceNotices";
 import { EnvironmentTable, type EnvironmentRow } from "./EnvironmentTable";
 
 export function ForgeOverviewPage() {
@@ -50,29 +43,30 @@ export function ForgeOverviewPage() {
   const { project: projectParam } = useSearch({ from: "/_authenticated/_forge/forge" });
   const currentProject = useProjectStore((state) => state.currentProject);
   const projectId = projectParam ?? currentProject?.id ?? null;
+  const forgeProject = useProjectStore((state) => persistedForgeProjectName(state, projectId));
 
-  const state = useForgeEnvironments(projectId);
-  const { envs, topology, daemon, cloud, projectName } = state;
-  const audit = useForgeAudit(projectId);
+  const live = useLiveView(forgeProject);
+  // Memoised so the `?? []` fallback does not allocate a fresh array on every
+  // render and re-run both useMemos below it.
+  const envs = useMemo(() => live.data?.envs ?? [], [live.data]);
 
-  const statuses = useCloudEnvStatuses(useMemo(() => cloudRunIds(envs), [envs]));
+  // GetStatus per PLACED environment. A self-managed env has no server-side
+  // observer, so asking would answer for a cluster the platform has never
+  // connected to; its row shows what the last render declared instead.
+  const placedIds = useMemo(
+    () => envs.filter((env) => isPlacedKind(env.kind)).map((env) => env.id),
+    [envs]
+  );
+  const statuses = useCloudEnvStatuses(placedIds);
 
   const rows: EnvironmentRow[] = useMemo(
     () =>
-      envs.map((summary) => {
-        const id = cloudRunIdOf(summary);
-        const status = id ? statuses.get(id) : undefined;
-        return { summary, facts: envFacts(summary, status?.data, status?.isLoading) };
+      envs.map((env) => {
+        const status = isPlacedKind(env.kind) ? statuses.get(env.id) : undefined;
+        return { env, status: status?.data, statusLoading: !!status?.isLoading };
       }),
     [envs, statuses]
   );
-
-  const report = topology.data?.kind === "report" ? topology.data.report : null;
-
-  // Promote / deploy are dialogs keyed by env, mounted only while open so a
-  // closed dialog holds no plan and therefore no confirmation token.
-  const [promoteEnv, setPromoteEnv] = useState<string | null>(null);
-  const [deployEnv, setDeployEnv] = useState<string | null>(null);
 
   const openEnv = useCallback(
     (env: string) => {
@@ -85,24 +79,34 @@ export function ForgeOverviewPage() {
     [navigate, projectId]
   );
 
+  const openPreview = useCallback(
+    (env: string) => {
+      void navigate({
+        to: "/forge/env/$env",
+        params: { env },
+        search: { project: projectId ?? undefined, tab: "preview" },
+      });
+    },
+    [navigate, projectId]
+  );
+
   const header = (
     <PageHeader
       title="Overview"
       subtitle={
-        projectName.name ? (
+        forgeProject ? (
           <>
-            Every environment in <span className="font-mono">{projectName.name}</span>: where it runs,
-            what it is on, and whether it is healthy.
+            Every environment in <span className="font-mono">{forgeProject}</span>: where it runs,
+            what it is on, and where that came from.
           </>
         ) : (
-          "Every environment in this project: where it runs, what it is on, and whether it is healthy."
+          "Every environment in this project: where it runs, what it is on, and where that came from."
         )
       }
     />
   );
 
-  // Nothing from either side yet.
-  if (state.isLoading) {
+  if (live.isLoading && !live.data) {
     return (
       <div className="space-y-6">
         {header}
@@ -113,107 +117,47 @@ export function ForgeOverviewPage() {
     );
   }
 
-  // forge's own answers about the PROJECT, and only when the control plane has
-  // nothing to show either — otherwise they would hide environments that exist.
-  if (envs.length === 0 && topology.data && topology.data.kind !== "report") {
-    const outcome = topology.data;
-    return (
-      <div className="space-y-6">
-        {header}
-        {outcome.kind === "not-forge-project" ? (
-          <NotForgeProject projectName={currentProject?.name} />
-        ) : outcome.kind === "unsupported" ? (
-          <ForgeUnsupported meta={outcome.meta} />
-        ) : outcome.kind === "unreachable" ? (
-          <ForgeUnreachable meta={outcome.meta} />
-        ) : (
-          <ForgeMalformed meta={outcome.meta} />
-        )}
-      </div>
-    );
-  }
-
-  const daemonError = topology.error as Error | null;
-
   return (
     <div className="space-y-6" data-testid="forge-overview">
       {header}
 
-      {daemon === "offline" ? (
-        <DaemonOfflineNotice
-          scope={
-            projectName.name
-              ? "Reliant cloud environments are read from the control plane and shown below; local and cluster environments, the project audit, and promote/deploy need the daemon."
-              : "This project's forge name has not been read from its forge.yaml by a daemon yet, so its Reliant cloud environments cannot be looked up either. Start your daemon once to see them."
-          }
-          detail={daemonError?.message}
-        />
-      ) : (
-        <AuditStrip
-          outcome={audit.data}
-          isLoading={audit.isLoading}
-          error={audit.error as Error | null}
-          projectName={currentProject?.name}
-        />
-      )}
-
-      <CloudNotice availability={cloud.data?.availability} detail={cloud.data?.detail} />
+      <CloudNotice availability={live.data?.availability} detail={live.data?.detail} />
 
       {rows.length === 0 ? (
         <div
           data-testid="forge-overview-empty"
-          className="rounded-lg border border-dashed border-border px-6 py-12 text-center text-sm text-muted-foreground"
+          className="space-y-2 rounded-lg border border-dashed border-border px-6 py-12 text-center text-sm text-muted-foreground"
         >
-          {daemon === "offline"
-            ? "No environments to show until your daemon answers."
-            : "This forge project declares no environments yet."}
+          {/* Not an error, and not a request to go and start something. A
+              project with no recorded environment is a project nobody has
+              built yet, and the remedy is a command. */}
+          <p>No environments have been built yet.</p>
+          <p className="text-xs">
+            <code className="font-mono text-foreground">forge env build &lt;env&gt;</code> records
+            the first one, or open an environment&apos;s Preview to register it.
+          </p>
         </div>
       ) : (
-        <EnvironmentTable
-          rows={rows}
-          promoteRelease={report?.latest_release ?? null}
-          // Both flows plan on the daemon (forge computes the plan and holds
-          // the guard), so with no daemon neither is offered.
-          canShip={daemon === "ok" && !!projectId}
-          onOpen={openEnv}
-          onPromote={setPromoteEnv}
-          onDeploy={setDeployEnv}
-        />
+        <EnvironmentTable rows={rows} onOpen={openEnv} onPreview={openPreview} />
       )}
 
-      {report && (
-        <p className="text-xs text-muted-foreground">
-          {report.latest_release ? (
-            <>
-              Latest release in this checkout:{" "}
-              <span className="font-mono text-foreground">{report.latest_release}</span>
-              {typeof report.releases?.length === "number" && ` · ${report.releases.length} cut`}.{" "}
-            </>
-          ) : null}
-          Timestamps are <span className="text-foreground">promote</span> times, not deploy times —
-          promotion writes a pointer, deployment moves bytes.
-        </p>
-      )}
-
-      {promoteEnv && report?.latest_release && (
-        <PromoteDialog
-          isOpen
-          onClose={() => setPromoteEnv(null)}
-          projectId={projectId}
-          env={promoteEnv}
-          release={report.latest_release}
-          projectName={currentProject?.name}
-        />
-      )}
-      {deployEnv && (
-        <DeployDialog
-          isOpen
-          onClose={() => setDeployEnv(null)}
-          projectId={projectId}
-          env={deployEnv}
-          projectName={currentProject?.name}
-        />
-      )}
+      <p className="text-xs text-muted-foreground">
+        Timestamps are <span className="text-foreground">promote</span> times, not deploy times —
+        promotion writes a pointer, deployment moves bytes.
+      </p>
     </div>
   );
+}
+
+/** The forge project name persisted on `projectId`'s row, from whichever store slot holds it. */
+function persistedForgeProjectName(
+  state: { projects: Project[]; currentProject: Project | null },
+  projectId: string | null | undefined
+): string | null {
+  if (!projectId) return null;
+  const row =
+    state.currentProject?.id === projectId
+      ? state.currentProject
+      : state.projects.find((project) => project.id === projectId);
+  return row?.forge_project_name ?? null;
 }

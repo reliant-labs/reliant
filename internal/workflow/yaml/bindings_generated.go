@@ -67,6 +67,7 @@ var generatedNodeBindingsByType = map[string]generatedNodeBinding{
 		isStructural:   false,
 		argFieldKeys: map[string]struct{}{
 			"compaction_threshold": {},
+			"continue_turn":        {},
 			"max_tokens":           {},
 			"messages":             {},
 			"model":                {},
@@ -176,6 +177,7 @@ var generatedNodeBindingsByType = map[string]generatedNodeBinding{
 			"resolved_display_style": {},
 			"resolved_inject_files":  {},
 			"resolved_model":         {},
+			"resolved_phase":         {},
 			"resolved_role":          {},
 			"resolved_thinking":      {},
 			"resolved_tool_calls":    {},

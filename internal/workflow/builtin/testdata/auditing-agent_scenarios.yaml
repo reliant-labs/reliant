@@ -8,7 +8,8 @@
 # - execute_audit has inline save_message that saves guidance when provided (regardless of approval)
 # - When denied, workflow stops after execute_audit (no save_approved_response or execute_tools)
 # - execute_tools only runs when main_agent has tool_calls and audit is approved
-# - Loop continues while tool_calls is not empty
+# - Loop continues while main_agent's stop_reason is tool_use, incomplete,
+#   truncated or interrupted (see internal/workflow/stopreason)
 # - Loop asks when max_turns > 0 and iter.iteration >= max_turns
 
 ---
@@ -229,7 +230,7 @@ events:
           approved: true
           guidance: ""
       thread_token_count: 600
-  # Loop exits because tool_calls is now empty
+  # Loop exits because main_agent's stop_reason is now done
 expect:
   outcome: completed
   reached:
@@ -833,3 +834,84 @@ expect:
     - audited_loop.execute_tools
   not_reached:
     - audited_loop.compact
+
+---
+# A turn the provider PAUSED (stop_reason=incomplete): the agent announced its
+# next step and emitted no tool call yet. The audit approves it, the text is
+# saved, and the loop takes another turn so the agent actually does the work —
+# rather than exiting right after announcing it (chat b43b41fe).
+name: incomplete_turn_continues_after_approval
+description: An approved paused turn re-enters the loop and the agent finishes the work
+events:
+  # Iteration 0: paused mid-work.
+  - node: audited_loop.main_agent
+    output:
+      message:
+        role: assistant
+        text: "I'll inspect the test config next."
+      response_text: "I'll inspect the test config next."
+      tool_calls: []
+      stop_reason: incomplete
+  - node: audited_loop.audit_check
+    output:
+      message:
+        role: assistant
+        text: ""
+      response_text: ""
+      tool_calls:
+        - id: call_a0
+          name: audit
+          input: '{"approved":true,"guidance":""}'
+  - node: audited_loop.execute_audit
+    output:
+      message:
+        role: tool
+        text: ""
+      tool_results:
+        - tool_call_id: call_a0
+          content: '{"approved": true}'
+      response_data:
+        audit:
+          approved: true
+          guidance: ""
+      thread_token_count: 500
+  # Iteration 1: the continuation finishes.
+  - node: audited_loop.main_agent
+    output:
+      message:
+        role: assistant
+        text: "The test config enables the race detector; nothing to change."
+      response_text: "The test config enables the race detector; nothing to change."
+      tool_calls: []
+      stop_reason: done
+  - node: audited_loop.audit_check
+    output:
+      message:
+        role: assistant
+        text: ""
+      response_text: ""
+      tool_calls:
+        - id: call_a1
+          name: audit
+          input: '{"approved":true,"guidance":""}'
+  - node: audited_loop.execute_audit
+    output:
+      message:
+        role: tool
+        text: ""
+      tool_results:
+        - tool_call_id: call_a1
+          content: '{"approved": true}'
+      response_data:
+        audit:
+          approved: true
+          guidance: ""
+      thread_token_count: 600
+expect:
+  outcome: completed
+  not_reached:
+    - audited_loop.execute_tools
+  node_outputs:
+    audited_loop:
+      _iterations: 2
+

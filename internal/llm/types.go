@@ -94,6 +94,18 @@ type DriverResponse struct {
 	Usage            TokenUsage
 	FinishReason     message.FinishReason
 
+	// Phase is the OpenAI Responses `phase` of this turn's final assistant
+	// message — "commentary" (interim narration) or "final_answer". Empty on
+	// every driver that does not speak the Responses API, and on Responses
+	// turns from models that do not emit it.
+	//
+	// It is captured so it can be RESENT: openai-go asks that phase be
+	// preserved and resent on all assistant messages for gpt-5.3-codex and
+	// beyond, and dropping it can degrade performance. The replay path is
+	// responseswire.AssistantHistoryItem. Empty means "not reported", never
+	// "commentary".
+	Phase string
+
 	// Upstream correlation identifiers copied from provider response headers when available.
 	// Used for log correlation between Reliant app logs and HTTP capture tooling (e.g. Proxyman).
 	UpstreamRequestID  string // e.g. x-oai-request-id

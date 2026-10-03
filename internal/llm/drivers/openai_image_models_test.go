@@ -185,12 +185,10 @@ func TestGPTImage2_ServedByAllThreeSurfaces(t *testing.T) {
 	}
 }
 
-// TestDefaultImageRequest_ManagedUserGetsFlare pins the DEFAULT, which is
-// decided by YAML order: tag scores tie across every image-gen model, so the
-// earliest definition with an available provider wins. Flare is OpenAI's stated
-// default for most applications — higher quality than gpt-image-2 at roughly
-// half the latency — so it must be the first image entry in models.yaml.
-func TestDefaultImageRequest_ManagedUserGetsFlare(t *testing.T) {
+// TestImageGenTagOnlyRequest_GetsFlare pins the bare image-gen tag behavior.
+// Flare remains OpenAI's everyday/default recommendation, so workflows that bind
+// only image-gen keep reaching it without needing to name a concrete model.
+func TestImageGenTagOnlyRequest_GetsFlare(t *testing.T) {
 	registry := models.MustGetRegistry()
 
 	selector := models.ModelSelector{
@@ -202,32 +200,36 @@ func TestDefaultImageRequest_ManagedUserGetsFlare(t *testing.T) {
 		t.Fatalf("resolve with only managed credit configured: %v", err)
 	}
 	if resolved.Definition.ID != "gpt-image-2.5-flare" {
-		t.Errorf("default managed image model = %q, want gpt-image-2.5-flare", resolved.Definition.ID)
+		t.Errorf("bare image-gen model = %q, want gpt-image-2.5-flare", resolved.Definition.ID)
 	}
 	if resolved.Provider.Driver != "reliant" {
 		t.Errorf("provider = %q, want reliant", resolved.Provider.Driver)
 	}
 }
 
-// TestDefaultImageRequest_OpenAIKeyUserGetsFlare is the BYO half of the same
-// default. A user with only a platform sk- key must reach the 2.5 tier
-// directly, not fall through to gpt-image-2.
-func TestDefaultImageRequest_OpenAIKeyUserGetsFlare(t *testing.T) {
+// TestDefaultImageToolStrategy_GetsSunburst pins the strategy the generate_image
+// tool now ships as its default binding: [image-gen, flagship]. Users with only
+// Codex subscription or only a platform sk- key must reach the precision 2.5
+// tier directly, not fall through to gpt-image-2 or to the bare image-gen default.
+func TestDefaultImageToolStrategy_GetsSunburst(t *testing.T) {
 	registry := models.MustGetRegistry()
 
 	selector := models.ModelSelector{
-		Tags:                  []string{DefaultImageGenTag},
+		Tags:                  []string{DefaultImageGenTag, models.TagFlagship},
 		RequireOutputModality: models.ModalityImage,
 	}
-	resolved, err := registry.Resolve(selector, []string{"openai"})
-	if err != nil {
-		t.Fatalf("resolve with only an OpenAI platform key: %v", err)
-	}
-	if resolved.Definition.ID != "gpt-image-2.5-flare" {
-		t.Errorf("default OpenAI image model = %q, want gpt-image-2.5-flare", resolved.Definition.ID)
-	}
-	if resolved.Provider.Driver != "openai" {
-		t.Errorf("provider = %q, want openai", resolved.Provider.Driver)
+
+	for _, provider := range []string{"codex", "openai"} {
+		resolved, err := registry.Resolve(selector, []string{provider})
+		if err != nil {
+			t.Fatalf("resolve with only %s configured: %v", provider, err)
+		}
+		if resolved.Definition.ID != "gpt-image-2.5-sunburst" {
+			t.Errorf("default image tool model for %s = %q, want gpt-image-2.5-sunburst", provider, resolved.Definition.ID)
+		}
+		if resolved.Provider.Driver != provider {
+			t.Errorf("provider = %q, want %s", resolved.Provider.Driver, provider)
+		}
 	}
 }
 

@@ -173,7 +173,8 @@ export interface ForgeTopologyEnv {
    * Needed to CREATE the environment row (EnsureEnvironment) for an env that
    * has never been deployed, which is what lets a secret be set before the
    * first deploy. The kind is immutable once the row exists, so an absent or
-   * unrecognised value is never defaulted — see ensureEnvironmentForSecrets.
+   * unrecognised value is never defaulted — see registerCandidate, which is
+   * the only thing that turns a kind into an EnsureEnvironment call.
    */
   control_plane_kind?: string;
   /**

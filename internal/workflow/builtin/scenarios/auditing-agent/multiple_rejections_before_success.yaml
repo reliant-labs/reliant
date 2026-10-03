@@ -125,7 +125,7 @@ events:
       approved: true
       guidance: ""
 
-  # Loop exits because tool_calls is empty
+  # Loop exits because main_agent's stop_reason is done
 
 expect:
   outcome: completed

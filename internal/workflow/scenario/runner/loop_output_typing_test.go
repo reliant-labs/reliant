@@ -53,7 +53,7 @@ func TestCallLLMSchemaDefaults(t *testing.T) {
 	assert.Equal(t, []interface{}{}, defaults["tool_calls"], "slices zero to empty, not nil, so size() is safe")
 	assert.Equal(t, "", defaults["response_text"])
 	assert.Equal(t, false, defaults["pending_inbox"])
-	assert.Equal(t, false, defaults["aborted"])
+	assert.Equal(t, "", defaults["stop_reason"], "the schema zero; normalizeOutput fills it from tool_calls")
 	assert.Equal(t, 0, defaults["token_count"])
 
 	// Pointer/interface fields stay nil: "no structured response" is not the
@@ -268,7 +268,7 @@ func TestGuardedLegacyForm_StillEvaluatesIdentically(t *testing.T) {
 	outputs := map[string]string{
 		"has_feedback":  "{{has(nodes.ask_question) && has(nodes.ask_question.has_feedback) ? nodes.ask_question.has_feedback : false}}",
 		"pending_inbox": "{{has(nodes.call_llm) && has(nodes.call_llm.pending_inbox) ? nodes.call_llm.pending_inbox : false}}",
-		"aborted":       "{{has(nodes.call_llm) && has(nodes.call_llm.aborted) ? nodes.call_llm.aborted : false}}",
+		"stop_reason":   "{{has(nodes.call_llm) && has(nodes.call_llm.stop_reason) ? nodes.call_llm.stop_reason : 'done'}}",
 		"feedback":      "{{has(nodes.ask_question) && has(nodes.ask_question.feedback) ? nodes.ask_question.feedback : null}}",
 	}
 	wf := &reliantv1.Workflow{
@@ -286,10 +286,10 @@ func TestGuardedLegacyForm_StillEvaluatesIdentically(t *testing.T) {
 	}{
 		{"nothing ran", map[string]interface{}{}},
 		{"call_llm ran", map[string]interface{}{
-			"call_llm": map[string]interface{}{"pending_inbox": true, "aborted": false},
+			"call_llm": map[string]interface{}{"pending_inbox": true, "stop_reason": "done"},
 		}},
 		{"both ran", map[string]interface{}{
-			"call_llm":     map[string]interface{}{"pending_inbox": false, "aborted": true},
+			"call_llm":     map[string]interface{}{"pending_inbox": false, "stop_reason": "interrupted"},
 			"ask_question": map[string]interface{}{"has_feedback": true, "feedback": "do better"},
 		}},
 	}

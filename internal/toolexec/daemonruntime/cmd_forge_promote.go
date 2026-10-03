@@ -230,10 +230,86 @@ func (a forgePromoteArgs) planArgs() []string {
 	return []string{"env", "deploy", strings.TrimSpace(a.Env), strings.TrimSpace(a.Release), "--plan", "--json"}
 }
 
-// applyArgs is the same command WITHOUT --plan. Unlike the retired
-// `env promote`, this records the binding AND applies it AND waits for health.
-func (a forgePromoteArgs) applyArgs() []string {
-	return []string{"env", "deploy", strings.TrimSpace(a.Env), strings.TrimSpace(a.Release), "--json"}
+// forgePromoteApproval is PROOF that a confirmation token and a plan digest
+// were validated against a fresh plan. It is the only thing that can produce
+// the apply argv.
+//
+// The same shape, and the same reasoning, as forgeDeployApproval — see its
+// comment for why this is a type rather than a boolean. It is a SEPARATE type
+// rather than a shared one because the two commands authorise different
+// claims: a deploy's token covers the declared cluster plus the binding, a
+// promote's covers the binding alone. One type spanning both would have a
+// field that is load-bearing on one path and ignorable on the other, and the
+// ignorable spelling is the one a future caller would reach for.
+//
+// WHY PROMOTE NEEDS THIS AT ALL, which is not obvious: `forge env deploy <env>
+// <release>` is a RELEASE deploy, and forge's O-13 confirmation gate covers
+// both deploy forms. So this invocation is gated exactly as the versionless one
+// is — with nothing approving it, it exits 5 having written nothing.
+//
+// IT IS APPROVED BY DIGEST, NOT BY --yes, AND THAT IS THE SAME RULE THE DEPLOY
+// PATH FOLLOWS. The reasoning transfers even though a promote ships an EXISTING
+// release and so cannot cut a new one underneath the operator: the plan is
+// still computed against LIVE, and Live moves. A promote approved against a
+// plan that said "two objects change" must not proceed once the real answer is
+// "two objects change and a database is deleted" — which is what another
+// deploy, a new bundle, or fresh drift can make true between the plan and the
+// click. --yes would re-approve that blindly; --approve <digest> refuses it
+// (exit 3, plan_stale) and hands back the recomputed plan.
+type forgePromoteApproval struct {
+	// release is the binding the operator reviewed, empty when unbound.
+	release string
+	// unbound records that the approved state was "no binding at all".
+	// Together with release it is what makes a zero value distinguishable
+	// from a validated "I saw no binding" — see applyArgs.
+	unbound bool
+
+	// digest is the §8.6 plan the human approved, from the plan the
+	// promote preview rendered.
+	digest string
+	// acknowledgedFindings are the stop-class codes the human accepted.
+	acknowledgedFindings []string
+}
+
+// validated reports whether this approval came from forgePromoteStaleBinding.
+//
+// A validated approval either names the release it replaces or explicitly
+// asserts the env was unbound. The zero value does NEITHER, which is precisely
+// what makes a fabricated one detectable: the two legitimate claims are both
+// non-zero, so "I did not populate this" cannot masquerade as either.
+func (a forgePromoteApproval) validated() bool {
+	return a.unbound || strings.TrimSpace(a.release) != ""
+}
+
+// applyArgs is the same command WITHOUT --plan, plus the approval. Unlike the
+// retired `env promote`, this records the binding AND applies it AND waits for
+// health.
+//
+// `env deploy <env> <release> --json --approve <digest>
+// [--acknowledge-destructive a,b]`
+//
+// No --yes, here or anywhere in this daemon: see forgePromoteApproval for why a
+// promote is approved by digest too. The release is already positional, so
+// unlike the deploy path there is no version to carry — the thing being shipped
+// is named in the request.
+func (a forgePromoteArgs) applyArgs(approval forgePromoteApproval) ([]string, error) {
+	if !approval.validated() {
+		return nil, fmt.Errorf("refusing to build a promote argv without a validated confirmation: " +
+			"the binding claim may only be carried by the path that checked it against a fresh plan")
+	}
+	digest := strings.TrimSpace(approval.digest)
+	if digest == "" {
+		return nil, fmt.Errorf("refusing to build a promote argv without an approved plan digest: " +
+			"--approve binds this promote to the plan a human read, and without it the promote " +
+			"would approve whatever forge recomputes against Live instead")
+	}
+
+	args := []string{"env", "deploy", strings.TrimSpace(a.Env), strings.TrimSpace(a.Release),
+		"--json", "--approve", digest}
+	if len(approval.acknowledgedFindings) > 0 {
+		args = append(args, "--acknowledge-destructive", strings.Join(approval.acknowledgedFindings, ","))
+	}
+	return args, nil
 }
 
 // --- forge.promote_plan ------------------------------------------------------
@@ -279,9 +355,25 @@ type forgePromoteApplyRequest struct {
 	// unset payload authorise a blind overwrite of an env that IS bound,
 	// which is the exact accident the guard exists to stop.
 	ExpectUnbound bool `json:"expect_unbound,omitempty"`
+
+	// ApproveDigest is the §8.6 plan the human read and approved, from the
+	// promote preview's document. REQUIRED.
+	//
+	// The binding claim above authorises WHICH RELEASE replaces which; this
+	// authorises the CHANGE SET that shipping it produces against Live. The
+	// two differ because the plan is computed against Live and Live moves:
+	// the same release promoted an hour later can delete storage it would
+	// not have deleted before.
+	ApproveDigest string `json:"approve_digest"`
+
+	// AcknowledgedFindings are the stop-class finding CODES the human
+	// accepted, one per code. See the deploy path's field for why these are
+	// named individually rather than covered by a blanket flag.
+	AcknowledgedFindings []string `json:"acknowledged_findings,omitempty"`
 }
 
-// validateConfirmation checks the caller stated a position on current state.
+// validateConfirmation checks the caller stated a position on current state and
+// named the plan it approved.
 func (r forgePromoteApplyRequest) validateConfirmation() error {
 	stated := strings.TrimSpace(r.ExpectedCurrentRelease)
 	switch {
@@ -291,6 +383,25 @@ func (r forgePromoteApplyRequest) validateConfirmation() error {
 	case !r.ExpectUnbound && stated == "":
 		return fmt.Errorf("expected_current_release is required (or set expect_unbound for a first promote): " +
 			"a promote overwrites the binding irrecoverably, so it must state the release it expects to replace")
+	}
+	if strings.TrimSpace(r.ApproveDigest) == "" {
+		return fmt.Errorf("approve_digest is required: it names the plan a human read, and without it " +
+			"the promote would approve whatever forge recomputes against Live at the moment it " +
+			"runs rather than the change set that was reviewed")
+	}
+	for _, code := range r.AcknowledgedFindings {
+		if strings.TrimSpace(code) == "" {
+			return fmt.Errorf("acknowledged_findings must not contain an empty code: each entry names " +
+				"one stop-class finding from the approved plan")
+		}
+		if strings.HasPrefix(strings.TrimSpace(code), "-") {
+			return fmt.Errorf("acknowledged finding code must not begin with '-' "+
+				"(it would be read as a flag): %q", code)
+		}
+		if strings.Contains(code, ",") {
+			return fmt.Errorf("acknowledged finding code must not contain a comma "+
+				"(codes are joined with one): %q", code)
+		}
 	}
 	return nil
 }
@@ -373,8 +484,10 @@ func handleForgePromoteApply(ctx context.Context, payload []byte) ([]byte, error
 			forgeCommandFailedPrefix, got, want)
 	}
 
-	// STEP 3 — the guard itself.
-	if refusal := forgePromoteStaleBinding(req, facts); refusal != nil {
+	// STEP 3 — the guard itself. The approval is the proof it passed, and
+	// what makes the apply argv (and therefore --yes) reachable.
+	refusal, approval := forgePromoteStaleBinding(req, facts)
+	if refusal != nil {
 		return json.Marshal(forgePromoteApplyResponse{
 			forgeResponseMeta: plan.forgeResponseMeta,
 			// The FRESH plan, so the caller can re-render the real diff
@@ -384,10 +497,15 @@ func handleForgePromoteApply(ctx context.Context, payload []byte) ([]byte, error
 		})
 	}
 
-	// STEP 4 — the write. Same command, minus --plan.
+	applyArgs, err := req.applyArgs(approval)
+	if err != nil {
+		return nil, err
+	}
+
+	// STEP 4 — the write. Same command, minus --plan, plus --yes.
 	appliedRaw, err := invokeForgeReport(ctx, forgeInvocation{
 		ProjectPath: req.ProjectPath,
-		Args:        req.applyArgs(),
+		Args:        applyArgs,
 	})
 	if err != nil {
 		return nil, err
@@ -406,8 +524,12 @@ func handleForgePromoteApply(ctx context.Context, payload []byte) ([]byte, error
 // forgePromoteStaleBinding compares the caller's claim about current state
 // against what the ledger holds, and returns the refusal when they disagree.
 //
-// Nil means the claim held and the write may proceed.
-func forgePromoteStaleBinding(req forgePromoteApplyRequest, facts forgePromotePlanFacts) *forgePromoteRefusal {
+// A nil refusal means the claim held and the write may proceed, and the
+// approval returned alongside is the PROOF of that — the only value that can
+// produce the apply argv, and hence --yes. Minting it here rather than at the
+// call site makes the guarantee structural: validating the token and earning
+// the right to say "approved" are one step.
+func forgePromoteStaleBinding(req forgePromoteApplyRequest, facts forgePromotePlanFacts) (*forgePromoteRefusal, forgePromoteApproval) {
 	expected := strings.TrimSpace(req.ExpectedCurrentRelease)
 	actual := strings.TrimSpace(facts.Current.Release)
 
@@ -425,7 +547,17 @@ func forgePromoteStaleBinding(req forgePromoteApplyRequest, facts forgePromotePl
 			"someone promoted it since this plan was read",
 			req.Env, actual, expected, facts.Current.PromotedAt)
 	default:
-		return nil
+		// The claim held. The ONLY place a promote approval is minted,
+		// carrying the binding just verified against the fresh plan, plus
+		// the digest and codes the caller approved. The digest is not
+		// re-derived here: forge recomputes the plan under the env's row
+		// lock and refuses a mismatch itself, which is the real guarantee.
+		return nil, forgePromoteApproval{
+			release:              actual,
+			unbound:              !facts.Current.Bound,
+			digest:               strings.TrimSpace(req.ApproveDigest),
+			acknowledgedFindings: req.AcknowledgedFindings,
+		}
 	}
 
 	return &forgePromoteRefusal{
@@ -436,5 +568,5 @@ func forgePromoteStaleBinding(req forgePromoteApplyRequest, facts forgePromotePl
 		ActualCurrentRelease:   actual,
 		ActualPromotedAt:       strings.TrimSpace(facts.Current.PromotedAt),
 		Detail:                 detail,
-	}
+	}, forgePromoteApproval{}
 }

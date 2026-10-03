@@ -186,7 +186,7 @@ func TestWrapperSave_CancelledActivityDoesNotSave(t *testing.T) {
 	registerWrapped(env, registry, "CallLLM", func(context.Context, types.ActivityInput) (*reliantv1.CallLLMOutput, error) {
 		cancel() // the interrupt lands mid-stream
 		out := thinkingCallLLMOutput()
-		out.Aborted = true
+		out.StopReason = "interrupted"
 		return out, nil
 	})
 

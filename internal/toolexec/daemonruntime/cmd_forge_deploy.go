@@ -22,6 +22,7 @@ import (
 
 func init() {
 	RegisterCommand("forge.deploy_plan", handleForgeDeployPlan)
+	RegisterCommand("forge.deploy_plan_start", handleForgeDeployPlanStart)
 	RegisterCommand("forge.deploy_start", handleForgeDeployStart)
 	RegisterCommand("forge.deploy_status", handleForgeDeployStatus)
 }
@@ -55,6 +56,37 @@ func init() {
 // So the apply DETACHES: deploy_start returns a handle immediately and
 // deploy_status polls it. See the background-job note below for which mechanism
 // and why.
+//
+// 1b. APPROVAL IS BY PLAN DIGEST, AND THE DAEMON NEVER SAYS --yes.
+//
+// forge's O-13 gate takes consent in two forms that look interchangeable and
+// are not. `--yes` means "I read the plan" and approves whatever forge computes
+// AT THE MOMENT THAT COMMAND RUNS. Under O-15 a versionless deploy builds every
+// image from this checkout and cuts a NEW auto-version, so a click that carried
+// --yes approved a change set that did not exist when the human looked. That
+// was this file's interim, and it is gone: no code path here can produce --yes,
+// and a test greps the argv builders to keep it that way.
+//
+// What replaces it is a TWO-STAGE flow whose second stage is bound to the first
+// by digest:
+//
+//	stage 1  deploy_plan_start  ->  env deploy <env> --plan-only --json
+//	         builds, pushes, cuts, computes the §8.6 plan, writes NO promotion
+//	stage 2  deploy_start       ->  env deploy <env> <version> --json
+//	                                  --approve <digest>
+//	                                  [--acknowledge-destructive <codes>]
+//
+// The human approves the plan they READ. forge recomputes it under the env's
+// row lock and refuses a mismatch (exit 3, plan_stale) carrying the recomputed
+// plan, so a caller cannot approve a plan it fabricated and cannot ship one
+// nobody saw. Stop-class findings need acknowledgement BY CODE — a code is not
+// knowable until the plan is computed, which is precisely why it cannot be
+// pre-approved by a hard-coded flag.
+//
+// The target token (declared context + bound release) survives as a PRE-FLIGHT
+// check: it answers "is this still the cluster the operator saw", which the
+// digest does not. Target and content are two different questions and both are
+// asked.
 //
 // 2. THE PREVIEW AND THE APPLY ARE SEPARATE COMMANDS, NEVER ONE WITH A FLAG.
 //
@@ -130,6 +162,25 @@ func init() {
 // budget should always expire first. Sized well above the worst realistic case
 // (fourteen deployments at a five-minute per-resource budget, converging
 // concurrently) so that hitting it means something is genuinely stuck.
+//
+// WHAT THIS INVOCATION NOW DOES, AND WHY 90 MINUTES STILL HOLDS. Under forge's
+// O-15 change a versionless `env deploy` is no longer apply-only: it builds
+// every image at the daemon's checkout, pushes them, cuts a release, records
+// the promotion, and only then applies and waits. So the budget now has to
+// cover a cold multi-image build and push as well as the rollout, which is a
+// materially bigger envelope than when this constant was chosen.
+//
+// It is left at 90 minutes deliberately. The rollout half is unchanged
+// (fourteen deployments against a five-minute per-resource budget, converging
+// concurrently), and a cold build-and-push of control-plane's images is tens of
+// minutes at worst, so the sum still sits inside this ceiling with room. More
+// importantly the ceiling is a BACKSTOP, not a deadline anyone should meet:
+// forge's own rollout budget is what is supposed to expire first (reported as
+// exit 8), and raising this number would only widen the window in which a truly
+// wedged job holds a goroutine. If the build half ever does grow past it, the
+// right fix is a forge-side budget that reports a determinate outcome, not a
+// larger number here — hitting this ceiling yields UNKNOWN, which is the least
+// useful answer this path can give.
 const forgeDeployInvocationTimeout = 90 * time.Minute
 
 // forgeDeployJobRetention is how long a FINISHED job's report stays readable.
@@ -188,6 +239,12 @@ type forgeDeployJob struct {
 	handle      string
 	env         string
 	projectPath string
+	// checkoutPath is the directory forge actually runs in — the project
+	// root, or an authorised worktree of it. Separate from projectPath
+	// because the env is claimed by PROJECT (so one env cannot be deployed
+	// twice at once from two checkouts) while the work happens in the
+	// checkout.
+	checkoutPath string
 	// grantID is the connector grant that started this job, empty for a
 	// first-party caller. Handles are uuids rather than guessable ids, but
 	// ownership is still checked on every poll — the same stance
@@ -208,6 +265,14 @@ type forgeDeployJob struct {
 
 	supported         bool
 	unsupportedReason string
+
+	// planOnly marks a STAGE ONE job: it built, pushed and cut, and wrote
+	// no promotion. Carried because the two stages' terminal states read
+	// differently — for a plan-only job an exit 0 with a plan IS the
+	// success, and nothing it does can have reached a cluster, so the
+	// "manifests may have landed" hedge that protects the apply path would
+	// be a false alarm here.
+	planOnly bool
 }
 
 // snapshot copies the mutable state for a reply.
@@ -229,6 +294,8 @@ func (j *forgeDeployJob) snapshot() forgeDeployStatusResponse {
 		JobStatusDetail: j.statusDetail,
 		StartedAt:       j.startedAt.UTC().Format(time.RFC3339),
 		Report:          j.report,
+		PlanOnly:        j.planOnly,
+		DeployRefused:   forgeRefusalFromReport(j.report),
 	}
 	if !j.finishedAt.IsZero() {
 		resp.FinishedAt = j.finishedAt.UTC().Format(time.RFC3339)
@@ -448,6 +515,15 @@ type forgeDeployArgs struct {
 	ProjectPath string `json:"project_path"`
 	// Env is forge's positional argument.
 	Env string `json:"env"`
+
+	// CheckoutPath is the checkout to render and build from. Empty means
+	// the project's main checkout.
+	//
+	// AUTHORISED, NOT TRUSTED. A non-empty value is checked against
+	// `forge project checkouts` for this project before forge is pointed at
+	// it — in the daemon, never in the browser. See resolveCheckoutPath for
+	// why the check cannot live client-side.
+	CheckoutPath string `json:"checkout_path,omitempty"`
 }
 
 // validate rejects a request before any forge process starts.
@@ -470,24 +546,133 @@ func (a forgeDeployArgs) validate() error {
 	return nil
 }
 
-// planArgs is the READ-ONLY preview. --dry-run renders the env, runs the
-// declared-context guard and the preflight, and returns BEFORE any kubectl
-// apply.
+// planArgs is the INSTANT, READ-ONLY preview. --dry-run renders the env, runs
+// the declared-context guard and the preflight, and returns BEFORE any kubectl
+// apply. It builds NOTHING, so it answers in seconds and fits the synchronous
+// cap.
 //
 // --dry-run rather than --explain: explain prints the guard verdict and exits
 // without rendering, so it reports no release, no images and no resources. The
-// confirmation token below has to be checked against the bound release, and a
-// UI previewing a production deploy wants the resource and pinning picture, so
-// the preview that answers both questions is the one used. Both are read-only;
-// this is strictly the more informative of the two.
+// pre-flight token below has to be checked against the bound release, and a UI
+// previewing a production deploy wants the resource picture, so the preview
+// that answers both questions is the one used. Both are read-only; this is
+// strictly the more informative of the two.
+//
+// WHAT THIS PREVIEW IS NOT. It describes the env's CURRENT binding, not what a
+// deploy would ship. Under O-15 a versionless deploy builds new images and cuts
+// a new release, so nothing here names the artifacts of the next deploy. Only
+// planOnlyArgs does. A UI must never put this document's digests beside a
+// deploy button — see the UI's confirm step, which is contract-tested against
+// exactly that mistake.
 func (a forgeDeployArgs) planArgs() []string {
 	return []string{"env", "deploy", strings.TrimSpace(a.Env), "--dry-run", "--json"}
 }
 
-// applyArgs is the REAL deploy. The only difference from planArgs is the
-// absence of --dry-run.
-func (a forgeDeployArgs) applyArgs() []string {
-	return []string{"env", "deploy", strings.TrimSpace(a.Env), "--json"}
+// planOnlyArgs is STAGE ONE of the two-stage deploy, and the only invocation
+// that produces an APPROVABLE plan.
+//
+// --plan-only builds every image at this checkout, pushes them, cuts a release
+// and computes the §8.6 plan with its digest — then STOPS, writing no
+// promotion and applying nothing (exit 0). So it is read-only with respect to
+// any cluster and to the env's binding, while being very much not read-only
+// with respect to the registry.
+//
+// IT IS SLOW — minutes, a cold multi-image build — which is why it runs
+// DETACHED through the same job machinery as the apply rather than inside the
+// synchronous cap. A caller polls it and receives the plan document when it
+// lands.
+//
+// The plan's digest is what the human approves, and `target.release` carries
+// the auto version this stage cut. Both travel back to the caller inside
+// forge's document, untouched.
+func (a forgeDeployArgs) planOnlyArgs() []string {
+	return []string{"env", "deploy", strings.TrimSpace(a.Env), "--plan-only", "--json"}
+}
+
+// forgeDeployApproval is PROOF that a plan digest and a target token were
+// validated against a fresh plan. It is the only thing that can produce the
+// apply argv.
+//
+// WHY A TYPE AND NOT A BOOLEAN, OR NOTHING AT ALL.
+//
+// Under forge's O-13 gate, `forge env deploy` computes the plan and then
+// REFUSES to write without consent. There are two ways to supply it, and they
+// are NOT equivalent:
+//
+//   - `--yes` means "I read the plan" and approves whatever forge computes at
+//     the moment that command runs. Under O-15 a versionless deploy cuts a NEW
+//     release from the checkout, so --yes approves a change set nobody has
+//     seen. THE DAEMON NEVER PASSES IT — there is no code path here that can
+//     produce it, and a test greps these argv builders to keep it that way.
+//   - `--approve <digest>` approves the plan the operator actually READ. If
+//     Live moved in between, the digest no longer matches and forge refuses
+//     (exit 3, plan_stale) instead of shipping something unreviewed.
+//
+// So this type carries the digest, and the argv is unreachable without it. The
+// target token (declared context, release) remains as a PRE-FLIGHT check —
+// the declared cluster still has to be the one the operator saw — but it is
+// the digest that authorises the CONTENT. A fabricated zero-value approval
+// fails closed rather than minting an unconditional deploy, which is what
+// keeps the guarantee structural rather than conventional.
+type forgeDeployApproval struct {
+	// declaredContext is the cluster the operator saw named, as validated.
+	// Non-empty in every approval validateConfirmation would accept.
+	declaredContext string
+	// release is the binding the operator reviewed, empty when unbound.
+	release string
+	// unbound records that the approved state was "no binding at all".
+	unbound bool
+
+	// digest is the §8.6 plan the human approved, from stage one's
+	// document. Non-empty in every validated approval: without it there is
+	// nothing to bind the deploy's content to.
+	digest string
+	// acknowledgedFindings are the stop-class codes the human accepted, by
+	// code. Empty is the normal case — most plans carry no stop finding.
+	acknowledgedFindings []string
+	// releaseVersion is the auto version stage one cut, deployed as a
+	// VERSIONED deploy so stage two ships exactly those artifacts rather
+	// than rebuilding and cutting a second release.
+	releaseVersion string
+}
+
+// applyArgs is STAGE TWO: the versioned deploy of stage one's release, gated
+// on stage one's plan digest.
+//
+// `env deploy <env> <release_version> --json --approve <digest>
+// [--acknowledge-destructive a,b]`
+//
+// THE VERSION IS POSITIONAL AND LOAD-BEARING. Without it this would be a
+// versionless deploy, which under O-15 builds and cuts AGAIN — a second
+// release, with a second plan, which the approved digest would not match. The
+// version is what makes stage two ship stage one's artifacts.
+//
+// There is no --yes here and there must never be. An error is a PROGRAMMING
+// error — the approval did not come from validation — and it must fail the
+// deploy rather than fall back to an unapproved invocation.
+func (a forgeDeployArgs) applyArgs(approval forgeDeployApproval) ([]string, error) {
+	if strings.TrimSpace(approval.declaredContext) == "" {
+		return nil, fmt.Errorf("refusing to build a deploy argv without a validated confirmation: " +
+			"the target token may only be carried by the path that checked it against a fresh plan")
+	}
+	digest := strings.TrimSpace(approval.digest)
+	if digest == "" {
+		return nil, fmt.Errorf("refusing to build a deploy argv without an approved plan digest: " +
+			"--approve binds this deploy to the plan a human read, and a deploy with no digest " +
+			"would approve whatever forge recomputes instead")
+	}
+	version := strings.TrimSpace(approval.releaseVersion)
+	if version == "" {
+		return nil, fmt.Errorf("refusing to build a deploy argv without the release version the plan " +
+			"was computed for: a versionless deploy would build and cut a SECOND release, whose " +
+			"plan the approved digest could not match")
+	}
+
+	args := []string{"env", "deploy", strings.TrimSpace(a.Env), version, "--json", "--approve", digest}
+	if len(approval.acknowledgedFindings) > 0 {
+		args = append(args, "--acknowledge-destructive", strings.Join(approval.acknowledgedFindings, ","))
+	}
+	return args, nil
 }
 
 // forgeDeployPlanFacts is the MINIMUM the guard needs from forge's document.
@@ -526,6 +711,54 @@ type forgeDeployPlanFacts struct {
 const (
 	forgeDeployModeDryRun        = "dry_run"
 	forgeDeployGuardVerdictAllow = "allow"
+)
+
+// forge's deploy exit codes, named for the two this package has to branch on.
+//
+// The numbering is forge's and it was RENUMBERED: 5 used to mean "the wait's
+// budget expired" and now means plan_unconfirmed, with the timeout moved to 8.
+// Pre-1.0, so there is no alias and no compatibility window — a build that
+// still read 5 as a timeout would be reading the one code that must never be
+// mistaken for a deploy in progress.
+//
+// Only these two are named because only these two change behaviour here.
+// Everything else (1 failed, 2 undetermined, 3 conflict, 4 declined,
+// 6 superseded) arrives inside forge's report, where the transport rule applies
+// and this package deliberately re-derives nothing.
+const (
+	// forgeDeployExitConflict: the world moved between the plan and the
+	// approval. Carries `refusal.reason` — plan_stale when the recomputed
+	// plan no longer matches the approved digest, promotion_conflict when
+	// the binding moved — and, for plan_stale, `refusal.current_plan`: the
+	// FRESHLY RECOMPUTED plan.
+	//
+	// NOTHING WAS WRITTEN. The caller's only correct move is to render the
+	// recomputed plan, show what changed, and ask again. A blind retry is
+	// precisely the accident the digest exists to prevent.
+	forgeDeployExitConflict = 3
+
+	// forgeDeployExitPlanUnconfirmed: forge computed the plan and REFUSED to
+	// write it. It built, pushed and cut a release, but wrote NO promotion
+	// and applied NOTHING to any cluster.
+	//
+	// Two distinct causes now land here, and the distinction is in
+	// `refusal.reason`:
+	//
+	//   - plan_unacknowledged: the plan carries a stop-class finding the
+	//     request did not name in acknowledged_findings. The remedy is a
+	//     human decision per code, and `refusal.unacknowledged` lists them.
+	//   - nothing approved it at all: unreachable from here, because the
+	//     apply argv always carries --approve. Reaching it means the daemon
+	//     lost the approval it believed it was carrying.
+	//
+	// Either way this must never read as success or as a rollout underway.
+	forgeDeployExitPlanUnconfirmed = 5
+
+	// forgeDeployExitWaitBudgetExpired: the rollout was still progressing
+	// when the wait's budget ran out. This IS the timeout case — the one 5
+	// used to mean. Manifests were applied, so the outcome is genuinely
+	// indeterminate and the honest answer is "go and look".
+	forgeDeployExitWaitBudgetExpired = 8
 )
 
 // Refusal reason tokens. Stable machine strings because the RPC layer branches
@@ -640,6 +873,88 @@ type forgeDeployStatusResponse struct {
 	// has produced one. Its rollout results carry ready / failed /
 	// timed_out / not_waited and nothing on this path reinterprets them.
 	Report json.RawMessage `json:"report,omitempty"`
+
+	// PlanOnly marks this as a STAGE ONE job: the report is an approvable
+	// plan (its `deploy_plan.digest` is what a human approves, its
+	// `target.release` the version to deploy), and NOTHING was applied.
+	//
+	// Stated rather than inferred from the document, so a caller never has
+	// to guess whether a report describes a plan or a deploy — the two look
+	// similar and the consequence of confusing them is approving one while
+	// reading the other.
+	PlanOnly bool `json:"plan_only,omitempty"`
+
+	// DeployRefused is forge's OWN refusal, lifted out of the report when
+	// forge declined the write — plan_stale above all.
+	//
+	// WHY LIFT IT AT ALL, when the report is right there. A refusal is the
+	// one outcome a caller must not miss, and "did forge refuse" is
+	// otherwise a question about a nested field inside a document whose
+	// absence looks identical to a success. Lifting the reason makes the
+	// refusal a thing the caller branches on rather than something it has
+	// to go looking for.
+	//
+	// The REPORT IS STILL CARRIED VERBATIM alongside, and this adds no
+	// verdict of its own: the reason is forge's string, and the recomputed
+	// plan is forge's document. Nothing here decides what a refusal means.
+	DeployRefused *forgeDeployForgeRefusal `json:"deploy_refused,omitempty"`
+}
+
+// forgeDeployForgeRefusal is forge's refusal, as the caller needs it.
+//
+// Distinct from forgeDeployRefusal, which is the DAEMON's pre-flight refusal
+// (the target token did not hold, a deploy was already running). This one is
+// forge declining the write after recomputing the plan, and the two are
+// genuinely different events: the daemon's happens before anything runs, and
+// forge's happens after it has built, pushed and cut.
+type forgeDeployForgeRefusal struct {
+	// Reason is forge's own token: "plan_stale", "plan_unacknowledged",
+	// "promotion_conflict", … Passed through, never translated.
+	Reason string `json:"reason"`
+
+	// CurrentPlan is the plan forge RECOMPUTED and refused against, on a
+	// plan_stale refusal. The whole remedy: render it against the plan that
+	// was approved and show the operator what changed.
+	CurrentPlan json.RawMessage `json:"current_plan,omitempty"`
+
+	// Unacknowledged are the stop-class codes still needing a human
+	// decision, on a plan_unacknowledged refusal.
+	Unacknowledged []string `json:"unacknowledged,omitempty"`
+
+	// Detail is forge's own sentence, when it supplied one.
+	Detail string `json:"detail,omitempty"`
+}
+
+// forgeRefusalFromReport lifts forge's refusal out of its document.
+//
+// Returns nil when there is no refusal, which is the common case. A document
+// that cannot be parsed yields nil too: the report still reaches the caller
+// verbatim, and inventing a refusal from bytes this code could not read would
+// be worse than letting the caller read the report itself.
+func forgeRefusalFromReport(report json.RawMessage) *forgeDeployForgeRefusal {
+	if len(report) == 0 {
+		return nil
+	}
+	var doc struct {
+		Refusal *struct {
+			Reason         string          `json:"reason"`
+			Detail         string          `json:"detail"`
+			CurrentPlan    json.RawMessage `json:"current_plan"`
+			Unacknowledged []string        `json:"unacknowledged"`
+		} `json:"refusal"`
+	}
+	if err := json.Unmarshal(report, &doc); err != nil || doc.Refusal == nil {
+		return nil
+	}
+	if strings.TrimSpace(doc.Refusal.Reason) == "" {
+		return nil
+	}
+	return &forgeDeployForgeRefusal{
+		Reason:         doc.Refusal.Reason,
+		CurrentPlan:    doc.Refusal.CurrentPlan,
+		Unacknowledged: doc.Refusal.Unacknowledged,
+		Detail:         doc.Refusal.Detail,
+	}
 }
 
 // --- forge.deploy_plan -------------------------------------------------------
@@ -668,9 +983,110 @@ func handleForgeDeployPlan(ctx context.Context, payload []byte) ([]byte, error) 
 		return nil, err
 	}
 
+	checkout, err := resolveCheckoutPath(ctx, req.ProjectPath, req.CheckoutPath)
+	if err != nil {
+		return nil, err
+	}
+
 	return invokeForgeReport(ctx, forgeInvocation{
-		ProjectPath: req.ProjectPath,
+		ProjectPath: checkout,
 		Args:        req.planArgs(),
+	})
+}
+
+// --- forge.deploy_plan_start -------------------------------------------------
+
+type forgeDeployPlanStartRequest struct {
+	forgeDeployArgs
+}
+
+// handleForgeDeployPlanStart starts STAGE ONE — the approvable plan — and
+// returns a handle.
+//
+// WHY THIS IS DETACHED WHEN deploy_plan IS NOT. They answer different
+// questions at different costs:
+//
+//   - deploy_plan (`--dry-run`) renders the env and runs the guard. It builds
+//     nothing, answers in seconds, and describes the env's CURRENT binding.
+//     That is the instant "preview manifests" view.
+//   - this (`--plan-only`) builds every image at this checkout, pushes them,
+//     cuts a release and computes the §8.6 plan. It takes MINUTES, and it is
+//     the only thing that can say what a deploy would actually ship.
+//
+// A caller cannot wait minutes inside the synchronous cap — it would be killed
+// mid-build and report a timeout for work that in fact completed — so this
+// reuses the apply's job machinery verbatim: a handle now, the plan document
+// from deploy_status when it lands.
+//
+// NOTHING IS APPLIED AND NO PROMOTION IS WRITTEN, so unlike deploy_start this
+// needs no approval token. There is nothing yet to approve; producing the thing
+// to approve is the entire job. It still takes the env claim, because a
+// plan-only run pushes images and cuts a release, and a caller should not be
+// able to trigger that for an env another deploy is mid-flight on.
+func handleForgeDeployPlanStart(ctx context.Context, payload []byte) ([]byte, error) {
+	var req forgeDeployPlanStartRequest
+	if err := json.Unmarshal(payload, &req); err != nil {
+		return nil, fmt.Errorf("invalid payload: %w", err)
+	}
+	if err := req.validate(); err != nil {
+		return nil, err
+	}
+
+	env := strings.TrimSpace(req.Env)
+
+	// The checkout is authorised BEFORE anything is claimed or started: a
+	// plan-only run builds and pushes from it, so an unauthorised path must
+	// not even reserve the env.
+	checkout, err := resolveCheckoutPath(ctx, req.ProjectPath, req.CheckoutPath)
+	if err != nil {
+		return nil, err
+	}
+
+	claim, runningHandle := deployRegistry.claim(req.ProjectPath, env)
+	if claim == nil {
+		detail := fmt.Sprintf("a deploy of %q is already in flight (handle %s); "+
+			"planning it again would build and cut a release underneath a running deploy — "+
+			"poll that handle instead", env, runningHandle)
+		if runningHandle == "" {
+			detail = fmt.Sprintf("another deploy of %q is being started and is still checking its plan, "+
+				"so it has no handle to poll yet; re-plan once it has started or been refused", env)
+		}
+		return json.Marshal(forgeDeployStartResponse{
+			forgeResponseMeta: forgeResponseMeta{IsForgeProject: true, Supported: true, ForgeVersion: version.Forge()},
+			DeployRefused: &forgeDeployRefusal{
+				Reason:        forgeDeployRefusalReasonAlreadyRunning,
+				RunningHandle: runningHandle,
+				Detail:        detail,
+			},
+		})
+	}
+	defer claim.release()
+
+	job := &forgeDeployJob{
+		handle: uuid.New().String(),
+		env:    env,
+		// The env is claimed by its PROJECT, so a plan and a deploy of
+		// one env contend however many checkouts exist; the job runs in
+		// the authorised checkout.
+		projectPath:  req.ProjectPath,
+		checkoutPath: checkout,
+		grantID:      daemonpolicy.GrantIDFromContext(ctx),
+		startedAt:    time.Now(),
+		status:       forgeDeployJobStatusRunning,
+		supported:    true,
+		planOnly:     true,
+	}
+	claim.start(job)
+	startForgeDeployJob(job, req.planOnlyArgs())
+
+	logging.Info("forge deploy plan-only started", "handle", job.handle, "env", env)
+
+	return json.Marshal(forgeDeployStartResponse{
+		forgeResponseMeta: forgeResponseMeta{IsForgeProject: true, Supported: true, ForgeVersion: version.Forge()},
+		Handle:            job.handle,
+		Env:               env,
+		JobStatus:         forgeDeployJobStatusRunning,
+		StartedAt:         job.startedAt.UTC().Format(time.RFC3339),
 	})
 }
 
@@ -707,10 +1123,44 @@ type forgeDeployStartRequest struct {
 	// unpopulated payload authorise shipping whatever the env happens to be
 	// bound to now.
 	ExpectUnbound bool `json:"expect_unbound,omitempty"`
+
+	// ApproveDigest is the §8.6 PLAN the human read and approved, from
+	// stage one's `--plan-only` document. REQUIRED, and it is what
+	// authorises the deploy's CONTENT.
+	//
+	// The fields above authorise the TARGET — which cluster, which binding
+	// — and that was never enough. Under O-15 a versionless deploy builds
+	// new images and cuts a new release from the checkout, so a token that
+	// covered only the target approved "whatever forge computes next". This
+	// names the change set instead, and forge recomputes the plan under the
+	// env's row lock and refuses a mismatch (exit 3, plan_stale) rather
+	// than shipping something nobody saw.
+	ApproveDigest string `json:"approve_digest"`
+
+	// AcknowledgedFindings are the stop-class finding CODES the human
+	// accepted, one per code (e.g. "stateful_deletion").
+	//
+	// By code rather than a blanket boolean, because a code is not knowable
+	// until the plan is computed — which means it cannot be pre-approved in
+	// advance by a caller that hard-codes a flag. A blanket "yes, do
+	// destructive things" would silently cover every future destructive
+	// change to this env; this covers exactly the ones in the plan that was
+	// read.
+	AcknowledgedFindings []string `json:"acknowledged_findings,omitempty"`
+
+	// ReleaseVersion is the auto version stage one cut
+	// (`target.release` from the plan-only document). REQUIRED.
+	//
+	// Stage two deploys it POSITIONALLY, which is what makes it ship stage
+	// one's artifacts. Omitted, the deploy would be versionless and would
+	// build and cut a SECOND release, whose plan the approved digest could
+	// never match.
+	ReleaseVersion string `json:"release_version"`
 }
 
-// validateConfirmation checks the caller stated an unambiguous position on both
-// halves of the token.
+// validateConfirmation checks the caller stated an unambiguous position on the
+// target token, named the plan it approved, and named the release that plan was
+// computed for.
 func (r forgeDeployStartRequest) validateConfirmation() error {
 	if strings.TrimSpace(r.ExpectedDeclaredContext) == "" {
 		return fmt.Errorf("expected_declared_context is required: a deploy must state the cluster the " +
@@ -724,8 +1174,35 @@ func (r forgeDeployStartRequest) validateConfirmation() error {
 			"assert either that the env had no binding or which release it was bound to", stated)
 	case !r.ExpectUnbound && stated == "":
 		return fmt.Errorf("expected_current_release is required (or set expect_unbound for an env with " +
-			"no binding): a deploy ships the bound release's pinned digests, so it must state the " +
-			"release it expects to ship")
+			"no binding): the target token states the binding the operator reviewed")
+	}
+
+	// The content half. Both are required, and neither has an "I did not
+	// populate it" spelling: a deploy whose change set nobody approved is
+	// exactly what this replaced.
+	if strings.TrimSpace(r.ApproveDigest) == "" {
+		return fmt.Errorf("approve_digest is required: it names the plan a human read, and a deploy " +
+			"without one would approve whatever forge recomputes at the moment it runs rather than " +
+			"the change set that was reviewed. Run the plan-only stage first and approve its digest")
+	}
+	if strings.TrimSpace(r.ReleaseVersion) == "" {
+		return fmt.Errorf("release_version is required: it is the release the plan-only stage cut, and " +
+			"deploying it positionally is what ships those artifacts. Without it the deploy would " +
+			"build and cut a second release whose plan the approved digest could not match")
+	}
+	for _, code := range r.AcknowledgedFindings {
+		if strings.TrimSpace(code) == "" {
+			return fmt.Errorf("acknowledged_findings must not contain an empty code: each entry names " +
+				"one stop-class finding from the approved plan")
+		}
+		if strings.HasPrefix(strings.TrimSpace(code), "-") {
+			return fmt.Errorf("acknowledged finding code must not begin with '-' "+
+				"(it would be read as a flag): %q", code)
+		}
+		if strings.Contains(code, ",") {
+			return fmt.Errorf("acknowledged finding code must not contain a comma "+
+				"(codes are joined with one): %q", code)
+		}
 	}
 	return nil
 }
@@ -791,9 +1268,13 @@ func handleForgeDeployStart(ctx context.Context, payload []byte) ([]byte, error)
 	}
 	defer claim.release()
 
-	// STEP 3 — the guard plan. Read-only.
+	// STEP 3 — the guard plan. Read-only, in the authorised checkout.
+	checkout, err := resolveCheckoutPath(ctx, req.ProjectPath, req.CheckoutPath)
+	if err != nil {
+		return nil, err
+	}
 	planRaw, err := invokeForgeReport(ctx, forgeInvocation{
-		ProjectPath: req.ProjectPath,
+		ProjectPath: checkout,
 		Args:        req.planArgs(),
 	})
 	if err != nil {
@@ -837,8 +1318,10 @@ func handleForgeDeployStart(ctx context.Context, payload []byte) ([]byte, error)
 			forgeCommandFailedPrefix, got, env)
 	}
 
-	// STEP 4 — the guards.
-	if refusal := forgeDeployStaleState(req, facts); refusal != nil {
+	// STEP 4 — the guards. The approval is the proof they passed, and it is
+	// what makes the apply argv (and therefore --yes) reachable at all.
+	refusal, approval := forgeDeployStaleState(req, facts)
+	if refusal != nil {
 		return json.Marshal(forgeDeployStartResponse{
 			forgeResponseMeta: plan.forgeResponseMeta,
 			// The FRESH plan, so the caller can re-render against the
@@ -848,18 +1331,26 @@ func handleForgeDeployStart(ctx context.Context, payload []byte) ([]byte, error)
 		})
 	}
 
+	// Built BEFORE the job is registered: an argv that cannot be built must
+	// not leave a running job behind that no forge will ever fill in.
+	applyArgs, err := req.applyArgs(approval)
+	if err != nil {
+		return nil, err
+	}
+
 	// STEP 5 — detach.
 	job := &forgeDeployJob{
-		handle:      uuid.New().String(),
-		env:         env,
-		projectPath: req.ProjectPath,
-		grantID:     daemonpolicy.GrantIDFromContext(ctx),
-		startedAt:   time.Now(),
-		status:      forgeDeployJobStatusRunning,
-		supported:   true,
+		handle:       uuid.New().String(),
+		env:          env,
+		projectPath:  req.ProjectPath,
+		checkoutPath: checkout,
+		grantID:      daemonpolicy.GrantIDFromContext(ctx),
+		startedAt:    time.Now(),
+		status:       forgeDeployJobStatusRunning,
+		supported:    true,
 	}
 	claim.start(job)
-	startForgeDeployJob(job, req.applyArgs())
+	startForgeDeployJob(job, applyArgs)
 
 	logging.Info("forge deploy started",
 		"handle", job.handle,
@@ -881,13 +1372,19 @@ func handleForgeDeployStart(ctx context.Context, payload []byte) ([]byte, error)
 // forgeDeployStaleState compares the caller's claims against what the plan
 // found, and surfaces forge's own guard refusal.
 //
-// Nil means every claim held and forge is willing to deploy.
+// A nil refusal means every claim held and forge is willing to deploy, and the
+// approval returned alongside is the PROOF of that — it is the only value in
+// this package that can produce the apply argv, and hence the only thing that
+// can produce --yes. Returning it from here rather than constructing it at the
+// call site is what makes the guarantee structural: the token's validation and
+// the permission to say "approved" are the same step, so there is no way to
+// reach the second without the first.
 //
 // ORDER MATTERS. The declared context is checked FIRST because it decides WHERE
 // bytes land, and a wrong-cluster deploy is worse than a wrong-release one: a
 // wrong release ships reviewed code to the right place, a wrong cluster ships
 // anything at all to production.
-func forgeDeployStaleState(req forgeDeployStartRequest, facts forgeDeployPlanFacts) *forgeDeployRefusal {
+func forgeDeployStaleState(req forgeDeployStartRequest, facts forgeDeployPlanFacts) (*forgeDeployRefusal, forgeDeployApproval) {
 	expectedContext := strings.TrimSpace(req.ExpectedDeclaredContext)
 	actualContext := strings.TrimSpace(facts.Guard.DeclaredContext)
 
@@ -902,7 +1399,7 @@ func forgeDeployStaleState(req forgeDeployStartRequest, facts forgeDeployPlanFac
 				"authorised against; the env's KCL changed since the plan was read, and a deploy must "+
 				"never land on a cluster the operator did not see named",
 				strings.TrimSpace(req.Env), actualContext, expectedContext),
-		}
+		}, forgeDeployApproval{}
 	}
 
 	// forge's OWN verdict. Reported as a structured refusal rather than left
@@ -920,7 +1417,7 @@ func forgeDeployStaleState(req forgeDeployStartRequest, facts forgeDeployPlanFac
 				strings.TrimSpace(req.Env),
 				strings.TrimSpace(facts.Guard.Verdict),
 				strings.TrimSpace(facts.Guard.Reason)),
-		}
+		}, forgeDeployApproval{}
 	}
 
 	expectedRelease := strings.TrimSpace(req.ExpectedCurrentRelease)
@@ -942,7 +1439,28 @@ func forgeDeployStaleState(req forgeDeployStartRequest, facts forgeDeployPlanFac
 			"this plan was read, and deploying would ship a release nobody reviewed",
 			strings.TrimSpace(req.Env), actualRelease, expectedRelease)
 	default:
-		return nil
+		// Every claim held and forge's own guard says allow. This is the
+		// ONLY place an approval is minted, and the target values are the
+		// ones just checked against the fresh plan — not the ones the
+		// caller asserted, which at this point are known to be equal.
+		//
+		// The digest, the acknowledged codes and the release version come
+		// from the REQUEST rather than from this plan, and that is
+		// deliberate: they describe the plan the HUMAN read in stage one,
+		// which is a different document from this pre-flight --dry-run.
+		// The daemon deliberately does not re-derive or second-guess them
+		// — forge recomputes the plan under the env's row lock and refuses
+		// a mismatch itself (exit 3, plan_stale), and that server-side
+		// check is the real guarantee. A daemon-side comparison here would
+		// be a weaker copy of it against the wrong document.
+		return nil, forgeDeployApproval{
+			declaredContext:      actualContext,
+			release:              actualRelease,
+			unbound:              !actualBound,
+			digest:               strings.TrimSpace(req.ApproveDigest),
+			acknowledgedFindings: req.AcknowledgedFindings,
+			releaseVersion:       strings.TrimSpace(req.ReleaseVersion),
+		}
 	}
 
 	return &forgeDeployRefusal{
@@ -954,7 +1472,7 @@ func forgeDeployStaleState(req forgeDeployStartRequest, facts forgeDeployPlanFac
 		ActualCurrentRelease:    actualRelease,
 		ActualBound:             actualBound,
 		Detail:                  detail,
-	}
+	}, forgeDeployApproval{}
 }
 
 // startForgeDeployJob runs the apply in a goroutine and records the terminal
@@ -977,17 +1495,81 @@ func forgeDeployStaleState(req forgeDeployStartRequest, facts forgeDeployPlanFac
 // document. That is the transport rule: a deploy that ran and failed its rollout
 // is the ANSWER, and forge's report states it far better than a status token
 // could.
+// reportOrNil carries forge's document when there is one and nil when there is
+// not, so a terminal state can be recorded without asserting a report exists.
+func reportOrNil(report json.RawMessage, hasReport bool) json.RawMessage {
+	if !hasReport {
+		return nil
+	}
+	return report
+}
+
 func startForgeDeployJob(job *forgeDeployJob, args []string) {
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), forgeDeployInvocationTimeout)
 		defer cancel()
 
-		res, err := runForgeDeploy(ctx, job.projectPath, args)
+		dir := job.checkoutPath
+		if dir == "" {
+			dir = job.projectPath
+		}
+		res, err := runForgeDeploy(ctx, dir, args)
 
 		report := bytes.TrimSpace(res.Stdout)
 		hasReport := len(report) > 0 && json.Valid(report)
 
 		switch {
+		case res.ExitCode == forgeDeployExitConflict:
+			// THE WORLD MOVED BETWEEN THE PLAN AND THE APPROVAL.
+			//
+			// forge recomputed the plan under the env's row lock and it no
+			// longer matches the approved digest (plan_stale), or the
+			// binding moved (promotion_conflict). NOTHING WAS WRITTEN and
+			// nothing was applied, which is knowable here — so this is
+			// FAILED, not the "manifests may have landed" hedge.
+			//
+			// The report is carried because for plan_stale it holds
+			// `refusal.current_plan`: the freshly recomputed plan. That
+			// document is the whole remedy — the caller re-renders it,
+			// shows what changed, and asks again. A status token alone
+			// would invite the blind retry the digest exists to prevent.
+			job.finish(forgeDeployJobStatusFailed,
+				"forge refused this deploy as a conflict (exit 3): the plan it recomputed is not the "+
+					"one that was approved, or the environment's binding moved. NO promotion was "+
+					"written and nothing was applied. The refusal carries the recomputed plan — "+
+					"review what changed and approve again rather than retrying"+stderrExcerpt(res.Stderr),
+				res.ExitCode, reportOrNil(report, hasReport), true, "")
+
+		case res.ExitCode == forgeDeployExitPlanUnconfirmed:
+			// THE PLAN WAS COMPUTED AND DELIBERATELY NOT WRITTEN.
+			//
+			// For a STAGE ONE job this is not reachable as a refusal —
+			// --plan-only stops at the plan and exits 0 — so arriving here
+			// means the invocation was gated for a reason the caller must
+			// read, and the apply path's wording below would be wrong.
+			//
+			// On the apply path the live cause is plan_unacknowledged: the
+			// recomputed plan holds a stop-class finding the request did
+			// not name. A blanket approval does not satisfy it, which is
+			// the point. Either way forge BUILT and PUSHED and cut a
+			// release, then wrote no promotion and applied nothing.
+			//
+			// FAILED rather than unknown: nothing reached a cluster, which
+			// is knowable, and the opposite of what unknown expresses. It
+			// must never read as success or as a rollout in flight.
+			detail := "forge refused this deploy as plan_unconfirmed (exit 5): it computed the plan and " +
+				"wrote NO promotion, so nothing was applied to any cluster — though a release may " +
+				"have been built and its images pushed. The usual cause is a stop-class finding in " +
+				"the plan that was not acknowledged by code; the refusal names which. Acknowledge " +
+				"it explicitly rather than retrying" + stderrExcerpt(res.Stderr)
+			if job.planOnly {
+				detail = "forge stopped this plan-only run at exit 5 rather than printing a plan: it " +
+					"wrote no promotion and applied nothing, but it also produced nothing to " +
+					"approve. Re-run the plan" + stderrExcerpt(res.Stderr)
+			}
+			job.finish(forgeDeployJobStatusFailed, detail,
+				res.ExitCode, reportOrNil(report, hasReport), true, "")
+
 		case err != nil && hasReport:
 			// forge emitted its document and then the invocation was
 			// disturbed. The document is the better evidence, but the
@@ -1003,8 +1585,25 @@ func startForgeDeployJob(job *forgeDeployJob, args []string) {
 			// the first may have shipped bytes, the second cannot
 			// have — and the daemon cannot reliably tell them apart
 			// from an os/exec error. UNKNOWN is the only honest
-			// answer, and it is the safe one: it tells the operator to
-			// go and look rather than to assume either way.
+			// answer on the apply path, and it is the safe one: it
+			// tells the operator to go and look rather than to assume
+			// either way.
+			//
+			// A PLAN-ONLY job is the one case where the hedge would be a
+			// false alarm. --plan-only writes no promotion and applies
+			// nothing, so however it died the cluster is untouched and
+			// the env's binding is unchanged; the only cost is a build
+			// that has to be redone. Saying "manifests may have reached
+			// the cluster" there would send an operator to inspect
+			// production over a failed build.
+			if job.planOnly {
+				job.finish(forgeDeployJobStatusFailed,
+					fmt.Sprintf("the plan could not be computed: forge did not run to completion. "+
+						"Nothing was applied and no promotion was written, so the environment "+
+						"is unchanged — re-run the plan: %v%s", err, stderrExcerpt(res.Stderr)),
+					res.ExitCode, nil, false, "")
+				break
+			}
 			job.finish(forgeDeployJobStatusUnknown,
 				fmt.Sprintf("forge could not be run to completion; manifests may or may not have "+
 					"reached the cluster: %v%s", err, stderrExcerpt(res.Stderr)),
@@ -1022,6 +1621,31 @@ func startForgeDeployJob(job *forgeDeployJob, args []string) {
 				job.finish(forgeDeployJobStatusFailed,
 					"this forge does not support `env deploy --json`; nothing was applied",
 					res.ExitCode, nil, false, reason)
+				break
+			}
+			// Exit 8 is forge's wait-budget expiry — the case 5 used to
+			// mean. It is named in the detail because "exited 8" alone
+			// sends a reader to the wrong half of the exit table, and
+			// because the operator's next move is specific: the rollout
+			// was still progressing, so look at it rather than redeploy.
+			if res.ExitCode == forgeDeployExitWaitBudgetExpired {
+				job.finish(forgeDeployJobStatusUnknown,
+					"forge's rollout wait budget expired while the rollout was still progressing "+
+						"(exit 8) and it produced no parseable report. The manifests WERE applied, "+
+						"so resources may still be converging or may be stuck — verify the "+
+						"environment rather than retrying"+stderrExcerpt(res.Stderr),
+					res.ExitCode, nil, false, "")
+				break
+			}
+			// Same plan-only exception as above: a stage-one run that
+			// died applied nothing, so the honest answer is a failed
+			// plan rather than an indeterminate cluster.
+			if job.planOnly {
+				job.finish(forgeDeployJobStatusFailed,
+					fmt.Sprintf("the plan could not be computed: forge exited %d without producing "+
+						"one. Nothing was applied and no promotion was written, so the "+
+						"environment is unchanged%s", res.ExitCode, stderrExcerpt(res.Stderr)),
+					res.ExitCode, nil, false, "")
 				break
 			}
 			job.finish(forgeDeployJobStatusUnknown,

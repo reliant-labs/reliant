@@ -263,16 +263,37 @@ describe("a store this console cannot read", () => {
     expect(link).toHaveAttribute("rel", "noreferrer");
   });
 
-  it("tells a never-deployed env that values set now are used by the first deploy", () => {
-    render(
-      <ManagedSecretsView
-        {...props({ mode: "managed", availability: "not-ensured", report: null, managed: [] })}
-      />
-    );
-    expect(screen.getByTestId("secrets-empty").textContent).toMatch(/first deploy/i);
-    // And the write path is offered rather than a CLI instruction.
-    expect(screen.getByTestId("add-secret-empty")).toBeInTheDocument();
-  });
+  /**
+   * §10 STATE 3 (#353). This used to assert the opposite — that a
+   * never-built env was told "values you set now are kept and used by the
+   * first deploy", with an Add button to do it.
+   *
+   * That write could only be performed by creating the environment's row,
+   * which means stating its IMMUTABLE kind, which nothing on this screen
+   * knows: the old implementation asked the USER, under the secret form, and
+   * the control plane then had to catch a wrong answer with a
+   * FailedPrecondition. So the offer is withdrawn and replaced by the step
+   * that makes the environment genuinely writable.
+   */
+  it.each(["not-ensured", "provider-unknown"] as const)(
+    "tells a never-built env (%s) what to run, and offers no write it cannot perform",
+    (availability) => {
+      render(
+        <ManagedSecretsView {...props({ mode: "managed", availability, report: null, managed: [] })} />
+      );
+
+      const empty = screen.getByTestId("secrets-empty").textContent ?? "";
+      expect(empty).toMatch(/hasn't been built yet/i);
+      expect(empty).toMatch(/forge env build/);
+      // The retired promise, which rested on guessing the env's kind.
+      expect(empty).not.toMatch(/first deploy/i);
+
+      // No write affordance anywhere: a button beside "hasn't been built"
+      // could only have guessed the kind.
+      expect(screen.queryByTestId("add-secret-empty")).toBeNull();
+      expect(screen.queryByTestId("add-secret")).toBeNull();
+    }
+  );
 
   it("does call a never-ensured env's declared secrets Not set — nothing can be holding them", () => {
     // The contrast with the test above is the whole point. `not-ensured`

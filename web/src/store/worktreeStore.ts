@@ -15,6 +15,7 @@ import { useBrowserStore } from './browserStore';
 import { ConnectError } from "@connectrpc/connect";
 import { logger } from '../lib/logger';
 import { singleflight } from '../lib/singleflight';
+import { subscribeToRefetch, type RefetchEvent } from './refetchStore';
 
 // Re-export CleanupMetadata from gRPC types
 export type { CleanupMetadata };
@@ -137,6 +138,59 @@ function getCurrentLoadOptions(): { includeArchived: boolean } {
   return { includeArchived: useWorktreeStore.getState().lastLoadIncludedArchived };
 }
 
+/**
+ * Carry the selected worktree over to the freshly loaded row with the same id.
+ *
+ * `currentWorktree` is a snapshot object, so replacing the list alone leaves it
+ * frozen at whatever the server said when it was selected. For a worktree
+ * selected straight out of CreateWorktree that is CREATING with an empty path,
+ * forever — every reader of `currentWorktree.path` then saw "" long after the
+ * directory existed. Identity is kept when nothing changed, so a routine
+ * reload does not re-run effects keyed on the object.
+ *
+ * A selection absent from the loaded list (e.g. an archived worktree after an
+ * active-only load) is left alone; archive/delete own that transition.
+ */
+function refreshSelection(current: Worktree | null, loaded: Worktree[]): Worktree | null {
+  if (!current) return current;
+  const fresh = loaded.find((w) => w.id === current.id);
+  if (!fresh) return current;
+  const changed =
+    fresh.path !== current.path ||
+    fresh.status !== current.status ||
+    fresh.branch !== current.branch ||
+    fresh.base_branch !== current.base_branch ||
+    fresh.name !== current.name ||
+    fresh.deleted_at !== current.deleted_at;
+  return changed ? fresh : current;
+}
+
+/**
+ * Reload worktrees when the server settles one that is still CREATING.
+ *
+ * CreateWorktree returns before the workspace exists on disk — the row comes
+ * back CREATING with an empty path, and the server flips it to ACTIVE (with
+ * the path) or FAILED later, announcing that with a `worktree_changes` refetch
+ * scoped to the worktree id. Without this, the store never learned the path.
+ *
+ * worktree_changes also fires on every agent tool call, so the reload is gated
+ * on the event naming a worktree we know to be pending; anything else is file
+ * churn that the changes/file-tree subscribers already handle.
+ */
+function handleWorktreeRefetch(event: RefetchEvent): void {
+  if (!event.entityId) return;
+  const { worktrees } = useWorktreeStore.getState();
+  const pending = worktrees.find(
+    (w) => w.id === event.entityId && w.status === WorktreeStatus.CREATING
+  );
+  if (!pending?.project_id) return;
+  logger.info('[WorktreeStore] Pending worktree changed, refreshing', {
+    worktreeId: pending.id,
+    name: pending.name,
+  });
+  void useWorktreeStore.getState().refreshWorktrees(pending.project_id);
+}
+
 // Monotonic ticket per fetch, so a slow response cannot overwrite a newer one.
 // Responses can land out of order — a refresh issued after a mutation often
 // resolves before the pre-mutation load it raced — and applying them by
@@ -189,12 +243,13 @@ async function fetchWorktreesInto(
     }
     lastAppliedTicket = ticket;
 
-    set({
+    set((state) => ({
       worktrees: loadedWorktrees,
+      currentWorktree: refreshSelection(state.currentWorktree, loadedWorktrees),
       isLoading: false,
       hasLoaded: true,
       lastLoadIncludedArchived: includeArchived,
-    });
+    }));
 
     // Auto-select main worktree if no worktree is currently selected
     const currentWorktree = useWorktreeStore.getState().currentWorktree;
@@ -767,6 +822,11 @@ export const useWorktreeStore = create<WorktreeStore>((set) => ({
     });
   },
 }));
+
+const unsubscribeWorktreeRefetch = subscribeToRefetch('worktree_changes', handleWorktreeRefetch);
+// A hot reload re-evaluates this module; drop the old listener so settles are
+// not handled twice.
+import.meta.hot?.dispose(unsubscribeWorktreeRefetch);
 
 /**
  * Get the active worktree ID for global workspace context (terminal, file browser, search, etc).

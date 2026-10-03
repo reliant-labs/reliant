@@ -11,11 +11,11 @@ import { useTerminalStore } from "../../store/terminalStore";
 import { useProjectStore } from "../../store/projectStore";
 import { useSidebarStore } from "../../store/sidebarStore";
 import { useWorktreeStore, useActiveWorktreeId } from "../../store/worktreeStore";
+import { resolveTerminalWorkingDir } from "../../lib/terminalWorkingDir";
 import { Tooltip } from "../ui/Tooltip";
 import { logger } from "../../lib/logger";
 
 interface TerminalPanelProps {
-  getWorkingDirectory?: () => string | undefined;
   hasViewer?: boolean; // Renamed from hasDiffViewer to hasViewer (includes both file viewer and diff viewer)
 }
 
@@ -24,7 +24,7 @@ interface TerminalPanelProps {
  * Shares width with viewer panel and manages height via resize handle
  * Terminals are scoped to the current chat's workspace/worktree
  */
-export function TerminalPanel({ getWorkingDirectory }: TerminalPanelProps) {
+export function TerminalPanel(_props: TerminalPanelProps) {
   const [isResizingWidth, setIsResizingWidth] = useState(false);
   const setIsResizingGlobal = useSidebarStore((state) => state.setIsResizing);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -52,15 +52,21 @@ export function TerminalPanel({ getWorkingDirectory }: TerminalPanelProps) {
   const currentWorktreeId = useActiveWorktreeId();
   
   const worktrees = useWorktreeStore((state) => state.worktrees);
+  const selectedWorktree = useWorktreeStore((state) => state.currentWorktree);
 
-  // Get the worktree path for terminal working directory
-  const worktreePath = useMemo(() => {
-    if (currentWorktreeId) {
-      const worktree = worktrees.find((w) => w.id === currentWorktreeId);
-      return worktree?.path;
-    }
-    return undefined;
-  }, [currentWorktreeId, worktrees]);
+  // Where a terminal for the active workspace starts. A workspace still being
+  // created has no directory yet; it resolves to "pending" (never the project
+  // root) and the effect below creates the session once the path settles.
+  const workingDir = useMemo(() => {
+    if (!currentWorktreeId) return resolveTerminalWorkingDir(null, currentProject);
+    const worktree =
+      worktrees.find((w) => w.id === currentWorktreeId) ??
+      (selectedWorktree?.id === currentWorktreeId ? selectedWorktree : undefined);
+    // An id we know nothing about yet is a workspace whose row has not reached
+    // the store — pending, not "no workspace".
+    if (!worktree) return { kind: "pending" } as const;
+    return resolveTerminalWorkingDir(worktree, currentProject);
+  }, [currentWorktreeId, worktrees, selectedWorktree, currentProject]);
 
   // Get sessions scoped to current worktree (for UI display)
   const sessions = getWorktreeSessions(currentWorktreeId);
@@ -94,36 +100,27 @@ export function TerminalPanel({ getWorkingDirectory }: TerminalPanelProps) {
         // Last active session no longer exists, use first available
         setActiveSession(worktreeSessions[0].id);
       }
-    } else {
-      // No sessions for this worktree - create one
-      // Use worktree path if available, otherwise use context-aware or project path
-      const workingDir = worktreePath
-        || (getWorkingDirectory ? getWorkingDirectory() : undefined)
-        || currentProject.path;
-
-      const sessionId = createSession(workingDir, currentProject.id, currentWorktreeId);
+    } else if (workingDir.kind === "ready") {
+      // No sessions for this worktree - create one. A pending workspace
+      // re-runs this effect when its path lands.
+      const sessionId = createSession(workingDir.path, currentProject.id, currentWorktreeId);
       logger.info("[TerminalPanel] Created session for worktree", {
         worktreeId: currentWorktreeId,
         sessionId,
-        workingDir,
+        workingDir: workingDir.path,
       });
     }
-  }, [currentWorktreeId, currentProject, worktreePath, getWorkingDirectory, getWorktreeSessions, getActiveSessionForWorktree, setActiveSession, createSession, isTerminalOpen]);
+  }, [currentWorktreeId, currentProject, workingDir, getWorktreeSessions, getActiveSessionForWorktree, setActiveSession, createSession, isTerminalOpen]);
 
   const handleNewTerminal = useCallback(() => {
-    if (!currentProject) return;
-    // Use worktree path if available, otherwise use context-aware or project path
-    const workingDir = worktreePath
-      || (getWorkingDirectory ? getWorkingDirectory() : undefined)
-      || currentProject.path;
-
-    const sessionId = createSession(workingDir, currentProject.id, currentWorktreeId);
+    if (!currentProject || workingDir.kind !== "ready") return;
+    const sessionId = createSession(workingDir.path, currentProject.id, currentWorktreeId);
     logger.info("[TerminalPanel] Created new terminal", {
       worktreeId: currentWorktreeId,
       sessionId,
-      workingDir,
+      workingDir: workingDir.path,
     });
-  }, [currentProject, worktreePath, createSession, getWorkingDirectory, currentWorktreeId]);
+  }, [currentProject, workingDir, createSession, currentWorktreeId]);
 
   const handleKillTerminal = useCallback(
     (sessionId: string, e: React.MouseEvent) => {
@@ -251,7 +248,8 @@ export function TerminalPanel({ getWorkingDirectory }: TerminalPanelProps) {
           <Tooltip content="New Terminal (Cmd+Shift+J)" placement="bottom">
             <button
               onClick={handleNewTerminal}
-              className="p-1 hover:bg-accent/20 rounded transition-colors"
+              disabled={workingDir.kind !== "ready"}
+              className="p-1 hover:bg-accent/20 rounded transition-colors disabled:opacity-50 disabled:pointer-events-none"
             >
               <Plus className="w-4 h-4" />
             </button>
@@ -279,11 +277,19 @@ export function TerminalPanel({ getWorkingDirectory }: TerminalPanelProps) {
             <div className="flex items-center justify-center h-full text-muted-foreground">
               <div className="text-center">
                 <TerminalIcon size={48} className="mx-auto mb-4 opacity-50" />
-                <p className="text-sm">No terminal sessions</p>
-                <p className="text-xs mt-2">
-                  Click <Plus size={12} className="inline" /> to create a new
-                  terminal
-                </p>
+                {workingDir.kind === "pending" ? (
+                  <p className="text-sm">Waiting for the workspace to finish setting up…</p>
+                ) : workingDir.kind === "failed" ? (
+                  <p className="text-sm">This workspace failed to set up, so there is no directory to open a terminal in.</p>
+                ) : (
+                  <>
+                    <p className="text-sm">No terminal sessions</p>
+                    <p className="text-xs mt-2">
+                      Click <Plus size={12} className="inline" /> to create a new
+                      terminal
+                    </p>
+                  </>
+                )}
               </div>
             </div>
           )}

@@ -67,6 +67,49 @@ func TestErrorClassification_RateLimit(t *testing.T) {
 	}
 }
 
+func TestErrorClassification_ProviderCreditExhaustion(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+	}{
+		{
+			name: "long context usage credits in streaming 429",
+			err:  errors.New(`failed to stream LLM response: LLM streaming error: POST "https://api.anthropic.com/v1/messages": 429 Too Many Requests {"type":"error","error":{"type":"rate_limit_error","message":"Usage credits are required for long context requests"}}`),
+		},
+		{
+			name: "insufficient quota in streaming 429",
+			err:  errors.New(`failed to stream LLM response: LLM streaming error: POST "https://api.openai.com/v1/responses": 429 Too Many Requests {"error":{"message":"You exceeded your current quota, please check your plan and billing details.","type":"insufficient_quota","code":"insufficient_quota"}}`),
+		},
+		{
+			name: "quota exceeded code",
+			err:  errors.New(`provider returned 429: {"error":{"code":"quota_exceeded","message":"quota is gone"}}`),
+		},
+		{
+			name: "out of credits",
+			err:  errors.New(`anthropic error: overage unavailable: out of credits`),
+		},
+		{
+			name: "billing hard limit",
+			err:  errors.New(`openai request failed: billing hard limit has been reached`),
+		},
+		{
+			name: "payment required",
+			err:  errors.New(`402 Payment Required`),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			classified := ClassifyError(tt.err)
+			require.NotNil(t, classified)
+			assert.True(t, IsTerminal(classified),
+				"provider credit/quota exhaustion must be terminal for: %s", tt.err)
+			assert.Equal(t, ErrorCategoryTerminal, CategorizeError(tt.err),
+				"expected terminal category for: %s", tt.err)
+		})
+	}
+}
+
 func TestErrorClassification_DNS(t *testing.T) {
 	tests := []struct {
 		name       string

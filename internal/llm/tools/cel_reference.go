@@ -120,7 +120,7 @@ func (t *getCELReferenceTool) Execute(rctx *rctx.ToolContext, args GetCELReferen
 			case "output":
 				sb.WriteString("Example: `output.message.content`\n\n")
 			case "outputs":
-				sb.WriteString("Example: `outputs.stop_reason != 'end_turn'`\n\n")
+				sb.WriteString("Example: `outputs.stop_reason in ['tool_use', 'incomplete']`\n\n")
 			}
 		}
 	}
@@ -151,8 +151,9 @@ func (t *getCELReferenceTool) Execute(rctx *rctx.ToolContext, args GetCELReferen
 	sb.WriteString("```yaml\n")
 	sb.WriteString("# Edge condition - check LLM wants to use tools\n")
 	sb.WriteString("condition: \"nodes.llm.stop_reason == 'tool_use'\"\n\n")
-	sb.WriteString("# Loop until done or max iterations\n")
-	sb.WriteString("while: \"outputs.stop_reason != 'end_turn' && iter.iteration < 50\"\n\n")
+	sb.WriteString("# Loop while the model has more to do, or until max iterations.\n")
+	sb.WriteString("# stop_reason: tool_use | incomplete | truncated | interrupted | refused | error | done\n")
+	sb.WriteString("while: \"outputs.stop_reason in ['tool_use', 'incomplete', 'truncated', 'interrupted'] && iter.iteration < 50\"\n\n")
 	sb.WriteString("# Dynamic model selection\n")
 	sb.WriteString("model: \"{{inputs.model}}\"\n\n")
 	sb.WriteString("# Conditional with fallback\n")

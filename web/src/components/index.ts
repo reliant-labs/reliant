@@ -35,7 +35,6 @@ export { WorktreeDetailView } from "./Worktrees/WorktreeDetailView";
 
 // Terminal components
 export { Terminal } from "./Terminal/Terminal";
-export { ResizableTerminalPanel } from "./Terminal/ResizableTerminalPanel";
 // FileBrowser components
 // Note: FileBrowser component removed - use RightSidebar instead
 

@@ -45,10 +45,11 @@ type ImageGenerator interface {
 // at all, and every other tool must keep working there.
 type ImageGeneratorResolver func(ctx context.Context, userID string, selector models.ModelSelector) (ImageGenerator, error)
 
-// ImageGenTag is the tag an unconfigured image generation selects by.
+// ImageGenTag is the base tag for image-generation models.
 //
-// A strategy, not a model id. The tag re-resolves against the registry on
-// every call, so a retired model drops out on its own; a pinned id keeps
+// A strategy, not a model id. The default selector combines this with
+// models.TagFlagship so the tool defaults to the current top image model while
+// still re-resolving against the registry on every call; a pinned id keeps
 // being requested until someone notices. Duplicated rather than imported from
 // internal/llm/drivers, which already imports this package.
 const ImageGenTag = "image-gen"
@@ -63,7 +64,7 @@ const ImageGenTag = "image-gen"
 // with the configurability added and nothing given away.
 type GenerateImageParams struct {
 	// Model selects which image model backs this call. Bound by default to
-	// tags:[image-gen]; a human can rebind it to e.g.
+	// tags:[image-gen, flagship]; a human can rebind it to e.g.
 	// {tags: [image-gen], providers: [codex]}.
 	Model      models.ModelSelector `json:"model,omitempty" jsonschema:"description=Which image model to use. Bound by configuration; not settable per call."`
 	Prompt     string               `json:"prompt" jsonschema:"required,description=What to generate. Describe the subject\\, style\\, composition and any text that must appear in the image. Longer and more specific prompts produce markedly better results than short ones."`
@@ -143,13 +144,13 @@ func (t *generateImageTool) Description() string {
 // DefaultBindings binds the model parameter so the agent never sees it, while
 // leaving it configurable for a human.
 //
-// The default is a TAG, not a model id. Tags re-resolve against the registry
-// on every call, so a retired model stops being selected the moment it leaves
-// the registry; a pinned id keeps being requested until a human notices. We
-// have shipped retired image models by pinning before.
+// The default is a TAG STRATEGY, not a model id. Tags re-resolve against the
+// registry on every call, so a retired model stops being selected the moment it
+// leaves the registry; a pinned id keeps being requested until a human notices.
+// We have shipped retired image models by pinning before.
 func (t *generateImageTool) DefaultBindings() Bindings {
 	return Bindings{
-		"model": LiteralBinding(models.ModelSelector{Tags: []string{ImageGenTag}}),
+		"model": LiteralBinding(models.ModelSelector{Tags: []string{ImageGenTag, models.TagFlagship}}),
 	}
 }
 

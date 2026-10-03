@@ -39,20 +39,25 @@ const (
 	// substitution on it.
 	FinishReasonRefusal FinishReason = "refusal"
 
-	// FinishReasonPauseTurn is the provider pausing mid-turn: Anthropic's
-	// stop_reason "pause_turn", emitted when a server-side sampling loop hits
-	// its iteration limit and the model expects the same conversation handed
-	// back so it can carry on.
+	// FinishReasonPauseTurn is the provider pausing mid-turn and expecting the
+	// same conversation handed back so it can carry on. Three wire signals
+	// reach it: Anthropic's stop_reason "pause_turn" (a server-side sampling
+	// loop hit its iteration limit), and on the OpenAI Responses API either
+	// `end_turn: false` on a completed response or an incomplete response with
+	// reason "interrupted" — both of which are the provider asking to continue
+	// with no tool call to justify it (see
+	// internal/llm/drivers/responseswire).
 	//
 	// It is NOT an end of turn. The model did not finish and did not choose to
 	// stop; it was suspended. Calling it EndTurn would tell the runtime the
 	// answer is complete when it is a fragment.
 	//
-	// Recognition only, today: nothing acts on this beyond saying so when the
-	// paused turn came back empty. Continuing a paused turn means re-sending
-	// the assistant turn verbatim — trailing server-tool blocks included, which
-	// this package does not model — so it is a deliberate gap, not an
-	// oversight. See contentFreeTurnText in the call_llm handler.
+	// An agent loop CONTINUES a paused turn that produced text: the text is new
+	// history, so the next request differs from the one that paused. A paused
+	// turn with no text stops instead — re-calling would send an identical
+	// request and spin. Design: specs/stop-reason-normalization.md. See also
+	// contentFreeTurnText in the call_llm handler, which supplies the message a
+	// content-free paused turn would otherwise lack.
 	FinishReasonPauseTurn FinishReason = "pause_turn"
 
 	// Should never happen
@@ -94,6 +99,24 @@ func (RedactedReasoningContent) isPart()        {}
 
 type TextContent struct {
 	Text string `json:"text"`
+
+	// Phase labels an assistant message as intermediate commentary
+	// ("commentary") or the turn's terminal answer ("final_answer"). It is set
+	// only by the OpenAI Responses drivers (openai, codex); every other
+	// provider leaves it empty.
+	//
+	// It is carried so it can be RESENT. openai-go documents on
+	// EasyInputMessageParam: "For models like gpt-5.3-codex and beyond, when
+	// sending follow-up requests, preserve and resend phase on all assistant
+	// messages — dropping it can degrade performance." That only started
+	// mattering with CallLLMArgs.continue_turn, which calls the provider again
+	// with history ending in the model's own text — exactly the assistant
+	// messages the phase belongs to.
+	//
+	// Empty means "this provider reports no phase", not "commentary". Since
+	// the wire field is an enum, an empty value must be omitted rather than
+	// sent as "".
+	Phase string `json:"phase,omitempty"`
 }
 
 func (tc TextContent) String() string {

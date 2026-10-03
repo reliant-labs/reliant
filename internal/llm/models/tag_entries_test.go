@@ -16,8 +16,7 @@ import (
 // Agent presets name a TIER, never an effort: `general` asks for [flagship],
 // `implementer` asks for [moderate]. The two tiers are deliberately DIFFERENT
 // models: flagship is claude-5.5-opus @ xhigh for orchestration, moderate is
-// claude-5-opus @ medium for implementation, where 5-opus measured ~3x faster
-// per edit than 5.5 at the same effort. These are the shipping pins —
+// claude-5.5-sonnet @ medium for implementation. These are the shipping pins —
 // changing either is a cost/speed/quality decision, so it must fail here.
 func TestResolve_AgentTiersPinModelAndEffort(t *testing.T) {
 	reg := MustGetRegistry()
@@ -29,7 +28,7 @@ func TestResolve_AgentTiersPinModelAndEffort(t *testing.T) {
 		wantLevel string
 	}{
 		{TagFlagship, "claude-5.5-opus", "vertex-claude-5.5-opus", "xhigh"},
-		{TagModerate, "claude-5-opus", "vertex-claude-5-opus", "medium"},
+		{TagModerate, "claude-5.5-sonnet", "vertex-claude-5.5-sonnet", "medium"},
 	} {
 		t.Run(tt.tag, func(t *testing.T) {
 			for _, id := range []string{tt.wantModel, tt.vertex} {
@@ -46,7 +45,7 @@ func TestResolve_AgentTiersPinModelAndEffort(t *testing.T) {
 
 			// A Vertex-only user reaches the same wire model at the same effort —
 			// through the twin when the primary entry has no vertexai mapping
-			// (claude-5-opus), or directly when it does (claude-5.5-opus).
+			// (claude-5.5-sonnet), or directly when it does (claude-5.5-opus).
 			vertex, err := reg.Resolve(ModelSelector{Tags: []string{tt.tag}}, []string{"vertexai"})
 			require.NoError(t, err)
 			assert.Contains(t, []string{tt.wantModel, tt.vertex}, vertex.Definition.ID)
@@ -232,14 +231,14 @@ func TestMergeUserConfig_UserTagEntriesLeadAndRetune(t *testing.T) {
 
 	require.NoError(t, reg.MergeUserConfig(&UserModelsConfig{
 		Tags: map[string][]TagEntry{
-			TagModerate: {{Model: "claude-5-opus", ThinkingLevel: "low"}},
+			TagModerate: {{Model: "claude-5.5-sonnet", ThinkingLevel: "low"}},
 			TagFlagship: {{Model: "gpt-5.5", ThinkingLevel: "high"}},
 		},
 	}))
 
 	moderate, err := reg.Resolve(ModelSelector{Tags: []string{TagModerate}}, []string{"anthropic"})
 	require.NoError(t, err)
-	assert.Equal(t, "claude-5-opus", moderate.Definition.ID)
+	assert.Equal(t, "claude-5.5-sonnet", moderate.Definition.ID)
 	assert.Equal(t, "low", moderate.ThinkingLevel, "the user's effort replaces the built-in one")
 
 	flagship, err := reg.Resolve(ModelSelector{Tags: []string{TagFlagship}}, []string{"anthropic", "openai"})
@@ -257,7 +256,7 @@ func TestMergeUserConfig_UserTagEntriesLeadAndRetune(t *testing.T) {
 	// The model appears exactly once in the merged list.
 	count := 0
 	for _, entry := range reg.TagEntries(TagModerate) {
-		if entry.Model == "claude-5-opus" {
+		if entry.Model == "claude-5.5-sonnet" {
 			count++
 		}
 	}

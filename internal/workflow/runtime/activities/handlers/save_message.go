@@ -195,6 +195,7 @@ func (a *SaveMessageActivity) WriteMessage(
 		Cost:          protoArgs.GetCost(),
 		Model:         protoArgs.GetResolvedModel(),
 		Agent:         protoArgs.GetResolvedAgent(),
+		Phase:         protoArgs.GetResolvedPhase(),
 		DisplayStyle:  parseDisplayStyle(protoArgs.GetResolvedDisplayStyle()),
 		WorkflowID:    workflowID,
 		StepID:        rtx.StepID,
