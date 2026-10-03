@@ -456,7 +456,7 @@ func (c *ClaudeCodeClient) callerSystemBlocks(prompts []string) []anthropic.Text
 		blocks = append(blocks, anthropic.TextBlockParam{Text: prompt})
 	}
 	if !c.options.DisableCache && len(blocks) > 0 {
-		blocks[len(blocks)-1].CacheControl = anthropic.CacheControlEphemeralParam{Type: "ephemeral"}
+		blocks[len(blocks)-1].CacheControl = c.cacheControl()
 	}
 	return blocks
 }

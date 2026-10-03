@@ -58,6 +58,12 @@ func NewAnthropicClient(opts llm.DriverOptions) *AnthropicClient {
 // driver speaks the Anthropic Messages dialect against api.individual.githubcopilot.com,
 // where auth is `authorization: Bearer <gho_>` (supplied via a WithHeader option)
 // rather than x-api-key.
+//
+// A client built here sends bare {type:"ephemeral"} breakpoints rather than
+// cache.ExtendedTTL. A foreign host re-implementing the Messages API is not
+// known to accept ttl — Copilot's own client (vscode-copilot-chat
+// messagesApi.ts) never sends one — and an unaccepted field 400s every request,
+// which costs far more than a cache that expires early.
 func NewAnthropicClientWithOptions(opts llm.DriverOptions, extra ...option.RequestOption) *AnthropicClient {
 	clientOptions := []option.RequestOption{}
 	if opts.ApiKey != "" {
@@ -65,9 +71,9 @@ func NewAnthropicClientWithOptions(opts llm.DriverOptions, extra ...option.Reque
 	}
 	clientOptions = append(clientOptions, extra...)
 
-	return &AnthropicClient{
-		baseClient: newBase(opts, clientOptions),
-	}
+	base := newBase(opts, clientOptions)
+	base.cacheTTL = ""
+	return &AnthropicClient{baseClient: base}
 }
 
 func (c *AnthropicClient) preparedMessages(prompts []string, messages []anthropic.MessageParam, tools []anthropic.ToolUnionParam) anthropic.MessageNewParams {

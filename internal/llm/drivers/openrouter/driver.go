@@ -177,6 +177,18 @@ func NewClient(opts llm.DriverOptions) *Client {
 	}
 }
 
+// extendedCacheControl is the cache_control object for every breakpoint this
+// driver emits. It is a single helper because the TTL has to be uniform within
+// a request: Anthropic requires longer-TTL breakpoints to precede shorter ones
+// (tools -> system -> messages), so one bare 5m breakpoint among 1h ones 400s
+// the request. The rationale for 1h itself is on cache.ExtendedTTL.
+func extendedCacheControl() map[string]string {
+	return map[string]string{
+		"type": "ephemeral",
+		"ttl":  cache.ExtendedTTL,
+	}
+}
+
 // isAnthropicModel checks if the current model is an Anthropic model.
 // Uses the API model prefix (e.g. "anthropic/claude-...") for reliable detection.
 func (c *Client) isAnthropicModel() bool {
@@ -375,11 +387,9 @@ func (c *Client) convertMessagesWithCacheControl(prompts []string, messages []me
 			if shouldCache {
 				sysMsg["content"] = []map[string]interface{}{
 					{
-						"type": "text",
-						"text": prompt,
-						"cache_control": map[string]string{
-							"type": "ephemeral",
-						},
+						"type":          "text",
+						"text":          prompt,
+						"cache_control": extendedCacheControl(),
 					},
 				}
 			} else {
@@ -514,19 +524,15 @@ func (c *Client) convertMessagesWithCacheControl(prompts []string, messages []me
 			// Simple string content - convert to array format with cache control
 			lastMsg["content"] = []map[string]interface{}{
 				{
-					"type": "text",
-					"text": content,
-					"cache_control": map[string]string{
-						"type": "ephemeral",
-					},
+					"type":          "text",
+					"text":          content,
+					"cache_control": extendedCacheControl(),
 				},
 			}
 		} else if contentArray, ok := lastMsg["content"].([]map[string]interface{}); ok {
 			// Already array format - add cache control to last content block
 			if len(contentArray) > 0 {
-				contentArray[len(contentArray)-1]["cache_control"] = map[string]string{
-					"type": "ephemeral",
-				}
+				contentArray[len(contentArray)-1]["cache_control"] = extendedCacheControl()
 			}
 		}
 	}

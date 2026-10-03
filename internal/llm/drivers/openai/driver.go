@@ -28,6 +28,7 @@ import (
 	"github.com/openai/openai-go/v3/responses"
 	"github.com/openai/openai-go/v3/shared"
 	"github.com/reliant-labs/reliant/internal/llm"
+	"github.com/reliant-labs/reliant/internal/llm/cache"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/responseswire"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
@@ -281,10 +282,30 @@ func (o *OpenaiClient) finishReason(reason string) message.FinishReason {
 	}
 }
 
+// wantsExtendedPromptCacheRetention reports whether this request should carry
+// prompt_cache_retention:"24h".
+//
+// A non-empty BaseURL means this client was pointed at a host that is not the
+// OpenAI platform. OpenaiClient is reused by other drivers for their
+// OpenAI-compatible endpoints — Copilot (api.individual.githubcopilot.com) and
+// OpenRouter both set BaseURL — and retention is undocumented for those hosts,
+// so the field is withheld rather than guessed at. Plain OpenAI (and Azure,
+// which documents the same models) leaves BaseURL empty.
+func (o *OpenaiClient) wantsExtendedPromptCacheRetention() bool {
+	if o.Options.DisableCache || o.Options.BaseURL != "" {
+		return false
+	}
+	return cache.SupportsOpenAIExtendedRetention(o.Options.Model.APIModel)
+}
+
 func (o *OpenaiClient) preparedParams(messages []openai.ChatCompletionMessageParamUnion, tools []openai.ChatCompletionToolUnionParam) openai.ChatCompletionNewParams {
 	params := openai.ChatCompletionNewParams{
 		Model:    openai.ChatModel(o.Options.Model.APIModel),
 		Messages: messages,
+	}
+
+	if o.wantsExtendedPromptCacheRetention() {
+		params.PromptCacheRetention = openai.ChatCompletionNewParamsPromptCacheRetention24h
 	}
 
 	// Only set tools if there are any
@@ -803,12 +824,30 @@ func (o *OpenaiClient) convertToolsToResponsesTools(toolList []tools.Tool) []res
 	return result
 }
 
-func (o *OpenaiClient) sendResponses(ctx context.Context, prompts []string, messages []message.Message, toolList []tools.Tool) (*llm.DriverResponse, error) {
+// responsesParams builds the parts of a Responses request that the blocking and
+// streaming paths share. Tools and reasoning stay at the call sites, which
+// configure them differently.
+func (o *OpenaiClient) responsesParams(prompts []string, messages []message.Message) responses.ResponseNewParams {
 	params := responses.ResponseNewParams{
 		Model:             shared.ResponsesModel(o.Options.Model.APIModel),
 		Input:             responses.ResponseNewParamsInputUnion{OfInputItemList: o.convertMessagesToResponsesInput(prompts, messages)},
 		ParallelToolCalls: openai.Bool(true),
+		MaxOutputTokens:   openai.Int(o.Options.MaxTokens),
 	}
+
+	if o.wantsExtendedPromptCacheRetention() {
+		params.PromptCacheRetention = responses.ResponseNewParamsPromptCacheRetention24h
+	}
+
+	if o.Options.Temperature != nil {
+		params.Temperature = openai.Float(*o.Options.Temperature)
+	}
+
+	return params
+}
+
+func (o *OpenaiClient) sendResponses(ctx context.Context, prompts []string, messages []message.Message, toolList []tools.Tool) (*llm.DriverResponse, error) {
+	params := o.responsesParams(prompts, messages)
 
 	// NOTE: Function-call name truncation is handled in convertMessagesToResponsesInput.
 
@@ -824,11 +863,6 @@ func (o *OpenaiClient) sendResponses(ctx context.Context, prompts []string, mess
 		}
 	}
 
-	if o.Options.Temperature != nil {
-		params.Temperature = openai.Float(*o.Options.Temperature)
-	}
-
-	params.MaxOutputTokens = openai.Int(o.Options.MaxTokens)
 	if o.Options.Model.CanReason && o.Options.ReasoningEffort != "disabled" && o.Options.ReasoningEffort != "none" {
 		params.Reasoning = shared.ReasoningParam{Effort: reasoningEffort(o.Options.ReasoningEffort)}
 	}
@@ -891,18 +925,10 @@ func (o *OpenaiClient) streamResponses(ctx context.Context, prompts []string, me
 	go func() {
 		defer close(eventChan)
 
-		params := responses.ResponseNewParams{
-			Model:             shared.ResponsesModel(o.Options.Model.APIModel),
-			Input:             responses.ResponseNewParamsInputUnion{OfInputItemList: o.convertMessagesToResponsesInput(prompts, messages)},
-			ParallelToolCalls: openai.Bool(true),
-		}
+		params := o.responsesParams(prompts, messages)
 		if len(toolList) > 0 {
 			params.Tools = o.convertToolsToResponsesTools(toolList)
 		}
-		if o.Options.Temperature != nil {
-			params.Temperature = openai.Float(*o.Options.Temperature)
-		}
-		params.MaxOutputTokens = openai.Int(o.Options.MaxTokens)
 		if o.Options.Model.CanReason && o.Options.ReasoningEffort != "disabled" && o.Options.ReasoningEffort != "none" {
 			// Enable reasoning summary streaming so we get events during thinking
 			// Some models (e.g., gpt-5.2-codex) only support 'detailed' summary mode
