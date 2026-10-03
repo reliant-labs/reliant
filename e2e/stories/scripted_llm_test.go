@@ -210,7 +210,7 @@ func (s *ScriptedLLM) SendMessages(ctx context.Context, prompts []string, msgs [
 // Titling used to call SendMessages, which kept it off this path for free.
 // #229 switched it to accumulator.StreamAndAccumulate (the Codex backend
 // requires stream: true and rejects a non-streaming request with a bare 400),
-// so it lands here now — and GenerateTitleWorkflow is dispatched by CreateChat,
+// so it lands here now — and GenerateTitleWorkflow is dispatched by StartChat,
 // racing the agent loop. Unrecognized, it silently ate turn 1 and shifted every
 // story one turn off. It is recognized by the tool the request is pinned to
 // (set_title), which is what the request actually IS, rather than prompt

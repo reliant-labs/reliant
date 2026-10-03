@@ -17,9 +17,8 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/tools/shell"
 	"github.com/reliant-labs/reliant/internal/logging"
+	rtemporal "github.com/reliant-labs/reliant/internal/temporal"
 	"github.com/reliant-labs/reliant/internal/toolexec"
-
-	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
 )
 
 type ToolCallService struct {
@@ -154,11 +153,11 @@ func (s *ToolCallService) CancelToolCall(
 // narrowed to the daemon signal in the first place; the narrowing simply left
 // spawns with no path at all.
 //
-// Terminate rather than Cancel: CancelWorkflow is cooperative, and a run parked
-// on a signal Await never observes it and stays RUNNING forever. This is the
-// same forceful stop CancelChat and the reconciler use.
-//
-// Best-effort throughout — a cancel must not fail because bookkeeping did.
+// The stop itself is NOT best-effort: an undelivered signal means the spawn is
+// still running, so that error propagates and CancelToolCall reports
+// Unavailable rather than marking the call cancelled. Only the bookkeeping
+// behind it is best-effort — see temporal.SpawnStopper, which this delegates
+// to and which the spawn_stop tool shares.
 func (s *ToolCallService) cancelChildWorkflowForToolCall(ctx context.Context, toolCallID string) error {
 	calls, err := s.database.ListToolCallsByIDs(ctx, []string{toolCallID})
 	if err != nil {
@@ -175,44 +174,54 @@ func (s *ToolCallService) cancelChildWorkflowForToolCall(ctx context.Context, to
 	}
 	childWorkflowID := *call.ChildWorkflowID
 
-	// Signal the PARENT workflow. A spawn is not a Temporal execution of its
-	// own — executeSpawnInline runs it as a goroutine inside the parent — so
-	// there is nothing here to terminate. Terminating child_workflow_id was the
-	// previous implementation and always failed with "workflow not found for
-	// ID": that id names a thread and a DB row, not a Temporal execution. The
-	// failure was best-effort, so the row was still marked cancelled and the UI
-	// reported success while the spawn ran on for another seventeen minutes.
+	// Signal the ROOT workflow, then reconcile the spawn's row — both of which
+	// temporal.SpawnStopper does, and does identically for the spawn_stop tool.
+	// The two callers shared these steps verbatim before this was extracted,
+	// and a second copy of "which signal, to which workflow id, with which ids
+	// in the payload" is exactly the drift that produced the phantom cancel
+	// described above.
 	if s.tempClient == nil {
 		return fmt.Errorf("no temporal client; cannot deliver cancellation for %s", toolCallID)
 	}
-	parentWorkflowID := call.ChatID
-	if chat, err := s.database.GetChat(ctx, call.ChatID); err == nil && chat.WorkflowID != nil && *chat.WorkflowID != "" {
-		parentWorkflowID = *chat.WorkflowID
+	// child_workflow_id names the workflow row for THIS call, which is the row
+	// to reconcile — but it is NOT the child's thread for a resumed spawn,
+	// where the thread is the original one and this id is derived from the new
+	// tool call. The workflow row's own `thread` column is the authoritative
+	// link (CreateWorkflowWithThread always sets it, new or resumed), so read
+	// it rather than assuming the two ids coincide.
+	childThreadID := childWorkflowID
+	if wf, wfErr := s.database.GetWorkflow(ctx, childWorkflowID); wfErr == nil && wf != nil && wf.Thread != "" {
+		childThreadID = wf.Thread
 	}
-	if err := s.tempClient.SignalWorkflow(ctx, parentWorkflowID, "", v2.CancelThreadSignalName, v2.CancelThreadSignal{
-		Thread:     childWorkflowID,
-		ToolCallID: toolCallID,
-	}); err != nil {
-		return fmt.Errorf("failed to signal spawn cancellation to %s: %w", parentWorkflowID, err)
-	}
-	logging.Info("[CancelToolCall] Signalled spawn cancellation",
-		"toolCallID", toolCallID, "childThread", childWorkflowID, "parentWorkflowID", parentWorkflowID)
 
-	// Reconcile the workflow row. CAS rather than a blind write so a child that
-	// settled terminally on its own is never clobbered; cover PAUSED too, since
-	// a user cancel overrides a pause.
-	for _, from := range []db.WorkflowStatus{db.Active(), db.Paused()} {
-		swapped, err := s.database.CompareAndSwapWorkflowStatus(ctx, childWorkflowID, db.Cancelled(), from)
-		if err != nil {
-			logging.Warn("[CancelToolCall] Failed to reconcile spawned workflow status",
-				"childWorkflowID", childWorkflowID, "from", from, "error", err)
-			return nil
+	stopper := rtemporal.NewSpawnStopper(s.tempClient, chatWorkflowIDLookup(s.database), s.database)
+	return stopper.StopSpawn(ctx, call.ChatID, rtemporal.SpawnRef{
+		ThreadID:   childThreadID,
+		WorkflowID: childWorkflowID,
+		ToolCallID: toolCallID,
+	})
+}
+
+// chatWorkflowIDLookup resolves a chat id to the Temporal workflow id driving
+// it, for the spawn stopper.
+//
+// Duplicated from workersetup.ChatWorkflowLookup rather than imported: that
+// package pulls in the worker's whole activity registration, which this
+// service has no business depending on for one field read. A chat's workflow
+// is normally created with the chat id as its identity, but chats.workflow_id
+// is authoritative — a run restarted after the history limit carries a
+// different id, and signalling the chat id would silently reach nothing.
+func chatWorkflowIDLookup(repo db.Repository) func(ctx context.Context, chatID string) (string, bool) {
+	return func(ctx context.Context, chatID string) (string, bool) {
+		if repo == nil {
+			return "", false
 		}
-		if swapped {
-			return nil
+		chat, err := repo.GetChat(ctx, chatID)
+		if err != nil || chat == nil || chat.WorkflowID == nil || *chat.WorkflowID == "" {
+			return "", false
 		}
+		return *chat.WorkflowID, true
 	}
-	return nil
 }
 
 // ConvertToBackground converts an executing tool call to a background process

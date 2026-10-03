@@ -6,12 +6,12 @@
  * selection, presets, branching and worktree selection are all `false` for
  * this surface, and the point of that list is that none of them appear here.
  *
- * Creation itself goes through `chatStore.createChat` — the same call the
- * desktop composer makes. That is not laziness: `createChat` also seeds the
+ * Creation itself goes through `chatStore.startChat` — the same call the
+ * desktop composer makes. That is not laziness: `startChat` also seeds the
  * React Query detail and list caches, initializes per-chat store state, plants
  * the optimistic first user message, and marks the chat RUNNING so the
  * thinking indicator shows before the first stream frame. A "simpler" direct
- * `api.chatsV2.create` here would land on `/m/chats/$chatId` with an empty
+ * `api.chatsV2.start` here would land on `/m/chats/$chatId` with an empty
  * transcript and no spinner until the stream caught up.
  *
  * Worktree: defaults to the project's main worktree, the same default the
@@ -137,7 +137,7 @@ export function MobileNewChat() {
     try {
       const chat = await useChatStore
         .getState()
-        .createChat(targetWorktree?.id, content, undefined, undefined, effectiveWorkflow);
+        .startChat(targetWorktree?.id, content, undefined, undefined, effectiveWorkflow);
 
       trackEvent("chat_created", {
         has_attachments: false,

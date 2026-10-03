@@ -4,7 +4,7 @@ package services
 import (
 	"context"
 	"encoding/json"
-	"fmt"
+	"errors"
 	"strings"
 	"time"
 
@@ -12,10 +12,9 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/analytics"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/logging"
-	"github.com/reliant-labs/reliant/internal/preset"
 	"github.com/reliant-labs/reliant/internal/workflow/builtin"
-	"github.com/reliant-labs/reliant/internal/workflow/model"
 )
 
 // activeWorkflowNameForResume returns the workflow name to (re)start for an
@@ -142,6 +141,10 @@ func chatToProto(c *db.Chat) *reliantv1.Chat {
 	if c.ActiveDaemonID != nil {
 		proto.ActiveDaemonId = c.ActiveDaemonID
 	}
+	// The root run's lifecycle: the web decides paused/pending from these, and
+	// a pending state is what tells it to StartChat rather than SendMessage.
+	proto.WorkflowState = workflowStateToProto(c.RootStatus.State)
+	proto.WorkflowStopReason = workflowStopReasonToProto(c.RootStatus.StopReason)
 	return proto
 }
 
@@ -154,98 +157,76 @@ func displayStyleProtoToInt32Ptr(ds *reliantv1.DisplayStyle) *int32 {
 	return &v
 }
 
-// worktreeLookupLimit bounds the main-worktree scan in resolveChatWorktreeID.
-// A project has a handful of worktrees, not thousands, so this is a sanity
-// ceiling rather than real pagination.
-const worktreeLookupLimit = 1000
-
-// resolveChatWorktreeID resolves the worktree a chat belongs to, and is the
-// single gate that keeps chat.worktree_id non-null.
+// launchErrorToConnect maps a launch error onto the wire code this service has
+// always returned for that failure.
 //
-// Every chat MUST name a resolvable worktree. The UI groups the chat list by
-// worktree and drops chats whose worktree does not resolve, so a chat persisted
-// with a null or dangling worktree_id runs to completion while staying
-// invisible — the failure mode `reliant workflow run` hit, because the CLI has
-// no worktree to name and sent none.
-//
-// Rather than teach every reader to tolerate the broken state, the write
-// boundary refuses it:
-//
-//   - a supplied id must exist and belong to this project (a foreign worktree
-//     would run the chat against another project's tree)
-//   - an omitted id defaults to the project's main worktree, which is what
-//     "run against the project itself" means
-//   - a project with no main worktree is a FailedPrecondition, never a null
-//
-// Callers pass the caller-supplied id (nil when absent) and get back the id to
-// persist, or a connect error to return as-is.
-func (s *ChatService) resolveChatWorktreeID(ctx context.Context, projectID string, requested *string) (*string, error) {
-	if requested != nil && *requested != "" {
-		worktree, err := s.database.GetWorktree(ctx, *requested)
-		if err != nil || worktree == nil {
-			return nil, connect.NewError(connect.CodeNotFound,
-				fmt.Errorf("worktree %s not found", *requested))
-		}
-		if worktree.ProjectID != projectID {
-			return nil, connect.NewError(connect.CodeInvalidArgument,
-				fmt.Errorf("worktree %s belongs to project %s, not %s", *requested, worktree.ProjectID, projectID))
-		}
-		return requested, nil
+// internal/launch deliberately does not import connect — it runs on the worker
+// too, where there is no request to answer — so the handler owns the mapping.
+// The codes here are the ones chat creation returned before the start path moved,
+// and several are asserted by tests.
+func launchErrorToConnect(err error) error {
+	if err == nil {
+		return nil
 	}
 
-	// No worktree named: bind to the project's main checkout. The limit is
-	// explicit because ListWorktrees defaults to 100 and orders by last_active,
-	// which could page the main worktree out of a project with many branches —
-	// and "main is missing" is reported below as a hard failure.
-	worktrees, err := s.database.ListWorktrees(ctx, db.WorktreeFilters{
-		ProjectID: &projectID,
-		Limit:     worktreeLookupLimit,
-	})
-	if err != nil {
-		logging.Error("Failed to list worktrees while resolving chat worktree", "error", err, "projectID", projectID)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to resolve project worktree"))
-	}
-	for _, worktree := range worktrees {
-		if worktree.IsMain {
-			id := worktree.ID
-			return &id, nil
+	var validationErr *launch.ValidationError
+	if errors.As(err, &validationErr) {
+		if validationErr.Kind == launch.ValidationFailedPrecondition {
+			return connect.NewError(connect.CodeFailedPrecondition, errors.New(validationErr.Reason))
 		}
+		return connect.NewError(connect.CodeInvalidArgument, errors.New(validationErr.Reason))
 	}
 
-	// ListWorktrees self-heals this for projects that predate the invariant, so
-	// reaching here means the project is genuinely unusable for chats.
-	return nil, connect.NewError(connect.CodeFailedPrecondition,
-		fmt.Errorf("project %s has no main worktree; cannot create a chat without one", projectID))
+	var notFoundErr *launch.NotFoundError
+	if errors.As(err, &notFoundErr) {
+		return connect.NewError(connect.CodeNotFound, errors.New(notFoundErr.Reason))
+	}
+
+	var alreadyErr *launch.AlreadyLaunchedError
+	if errors.As(err, &alreadyErr) {
+		return connect.NewError(connect.CodeAlreadyExists, errors.New(alreadyErr.Error()))
+	}
+
+	if errors.Is(err, launch.ErrNotPending) {
+		return connect.NewError(connect.CodeFailedPrecondition, err)
+	}
+
+	// Internal failures keep the terse message on the wire and the detail in
+	// the logs, exactly as the inline code did.
+	var internalErr *launch.InternalError
+	if errors.As(err, &internalErr) {
+		return connect.NewError(connect.CodeInternal, errors.New(internalErr.Reason))
+	}
+
+	return connect.NewError(connect.CodeInternal, err)
 }
 
-// getEffectiveWorkingPath returns the working directory path for a chat.
-// If the chat has a worktree, it returns the worktree path.
-// Otherwise, it returns the project path.
-// This ensures tools execute in the correct directory based on the chat's context.
-func (s *ChatService) getEffectiveWorkingPath(ctx context.Context, chat *db.Chat) string {
-	// First try to get worktree path if the chat has one
-	if chat.WorktreeID != nil && *chat.WorktreeID != "" {
-		if worktree, err := s.database.GetWorktree(ctx, *chat.WorktreeID); err == nil && worktree != nil {
-			return worktree.Path
-		} else {
-			// A worktree-bound chat whose worktree can't be resolved must NOT
-			// silently degrade to the project (main) checkout — that runs the
-			// branch chat against the wrong tree and looks like it worked. Make
-			// the failure visible; the caller still gets project path as a
-			// last resort, but the log names the broken invariant.
-			logging.Error("[getEffectiveWorkingPath] chat has worktree_id but worktree could not be resolved; falling back to project path",
-				"chatID", chat.ID, "worktreeID", *chat.WorktreeID, "error", err)
-		}
+// inputMessageFromSeed converts a launch seed message back into the wire type.
+// SendMessage's own save path still speaks InputMessage, so a seed produced by
+// launch (the greenfield guidance) has to come back across the boundary.
+func inputMessageFromSeed(seed launch.SeedMessage) *reliantv1.InputMessage {
+	return &reliantv1.InputMessage{
+		Role:         seed.Role,
+		Content:      seed.Content,
+		DisplayStyle: seed.DisplayStyle,
 	}
+}
 
-	// Fall back to project path
-	if chat.ProjectID != "" {
-		if project, err := s.database.GetProject(ctx, chat.ProjectID); err == nil && project != nil {
-			return project.Path
+// seedMessagesFromInput converts wire InputMessages into launch seed messages.
+// launch holds no proto request types, so the translation is the handler's.
+func seedMessagesFromInput(messages []*reliantv1.InputMessage) []launch.SeedMessage {
+	seeds := make([]launch.SeedMessage, 0, len(messages))
+	for _, msg := range messages {
+		if msg == nil {
+			continue
 		}
+		seeds = append(seeds, launch.SeedMessage{
+			Role:         msg.Role,
+			Content:      msg.Content,
+			DisplayStyle: msg.DisplayStyle,
+		})
 	}
-
-	return ""
+	return seeds
 }
 
 func (s *ChatService) trackMessageSent(ctx context.Context, userID string, chat *db.Chat, messageID, threadID, userContent string, attachmentCount int) {
@@ -344,137 +325,4 @@ func extractMessagesFromInput(messages []*reliantv1.InputMessage) (userContent s
 	userContent = strings.Join(userParts, "\n")
 	hasUserContent = len(userParts) > 0
 	return
-}
-
-// injectSessionDaemonID adds the session's active daemon to workflow inputs.
-// This is a runtime-injected input that flows through to daemon resolution.
-//
-// The preview URL is deliberately NOT injected here. A handoff/terminal node runs
-// INSIDE the session's daemon container, which already knows its own preview URL
-// (RELIANT_PREVIEW_URL_TEMPLATE env var; forge surfaces it directly for the
-// forge-one-shot flow). The agent discovers it at runtime rather than having it
-// threaded through the workflow input plane — that keeps preview delivery out of
-// the CEL/input-schema layer entirely.
-func injectSessionDaemonID(inputs map[string]interface{}, chat *db.Chat) {
-	if chat != nil && chat.ActiveDaemonID != nil && *chat.ActiveDaemonID != "" {
-		inputs["session_daemon_id"] = *chat.ActiveDaemonID
-	}
-}
-
-// normalizeWorkflowSlug produces a URL-safe slug from a workflow name.
-// This MUST stay in sync with generateWorkflowSlug in
-// internal/workflow/runtime/activities/handlers/load_workflow.go.
-func normalizeWorkflowSlug(name string) string {
-	slug := strings.ToLower(strings.TrimSpace(name))
-	slug = strings.ReplaceAll(slug, " ", "-")
-	slug = strings.ReplaceAll(slug, "_", "-")
-	return slug
-}
-
-func dbPresetToRuntimePreset(p *db.Preset) *preset.Preset {
-	description := ""
-	if p.Description != nil {
-		description = *p.Description
-	}
-
-	result := &preset.Preset{
-		Name:        p.Name,
-		Description: description,
-		Tag:         p.Tag,
-		Params:      p.Params,
-		Source:      "user",
-	}
-	// Normalize model params: convert any legacy string model values to {id: string} objects.
-	preset.NormalizeModelParams(result)
-	return result
-}
-
-// normalizeModelInputs walks all model-type inputs using the schema and converts
-// any remaining string values to model selector objects. Legacy "model@provider"
-// strings are normalized to {id, providers} at this boundary.
-// This is the single boundary conversion point — everything downstream expects objects.
-func normalizeModelInputs(inputs map[string]interface{}, schemas map[string]*reliantv1.Input) {
-	for name, schema := range schemas {
-		if schema == nil {
-			continue
-		}
-
-		switch model.GetInputType(schema) {
-		case "model":
-			if value, ok := inputs[name]; ok && value != nil {
-				if s, ok := value.(string); ok {
-					selector, normalized := normalizeLegacyModelSelectorString(s)
-					if normalized != nil {
-						inputs[name] = normalized
-						logging.Info("[normalizeModelInputs] Converted string model to object", "input", name, "model", selector, "providers", normalized["providers"])
-					}
-				}
-			}
-		case "group":
-			groupInputs := model.GetGroupInputs(schema)
-			if groupInputs != nil {
-				if groupValue, ok := inputs[name].(map[string]interface{}); ok {
-					normalizeModelInputs(groupValue, groupInputs)
-				}
-			}
-		}
-	}
-}
-
-func normalizeLegacyModelSelectorString(raw string) (string, map[string]interface{}) {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return "", nil
-	}
-
-	selector := map[string]interface{}{}
-	modelID := raw
-
-	if at := strings.LastIndex(raw, "@"); at > 0 && at < len(raw)-1 {
-		provider := strings.TrimSpace(raw[at+1:])
-		candidateID := strings.TrimSpace(raw[:at])
-		if provider != "" && candidateID != "" {
-			modelID = candidateID
-			selector["providers"] = []interface{}{provider}
-		}
-	}
-
-	selector["id"] = modelID
-	return modelID, selector
-}
-
-// extractModelSelectors recursively extracts model selector values from workflow inputs
-// using proto V2Input schemas. Returns a map of input path -> selector value.
-func extractModelSelectors(inputs map[string]interface{}, schemas map[string]*reliantv1.Input, prefix string) map[string]interface{} {
-	result := make(map[string]interface{})
-
-	for name, schema := range schemas {
-		if schema == nil {
-			continue
-		}
-
-		path := name
-		if prefix != "" {
-			path = prefix + "." + name
-		}
-
-		switch model.GetInputType(schema) {
-		case "model":
-			if value, ok := inputs[name]; ok && value != nil {
-				result[path] = value
-			}
-		case "group":
-			groupInputs := model.GetGroupInputs(schema)
-			if groupInputs != nil {
-				if groupValue, ok := inputs[name].(map[string]interface{}); ok {
-					nestedSelectors := extractModelSelectors(groupValue, groupInputs, path)
-					for k, v := range nestedSelectors {
-						result[k] = v
-					}
-				}
-			}
-		}
-	}
-
-	return result
 }

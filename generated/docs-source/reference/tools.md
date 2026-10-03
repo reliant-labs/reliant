@@ -42,7 +42,7 @@ Tools are organized by tags for filtering:
 - [Information Retrieval](#information-retrieval) (6 tools)
 - [Workflow Management](#workflow-management) (16 tools)
 - [System & Execution](#system--execution) (4 tools)
-- [Other Tools](#other-tools) (9 tools)
+- [Other Tools](#other-tools) (10 tools)
 
 ---
 
@@ -1279,7 +1279,7 @@ _Tools for managing and inspecting workflows, presets, and scenarios._
 
 | Tool | Tags | Description |
 |------|------|-------------|
-| [`create_workflow`](#create_workflow) | workflow | Create a new workflow draft. |
+| [`create_workflow`](#create_workflow) | workflow | Create a new workflow. |
 | [`delete_scenario`](#delete_scenario) | workflow | Delete a test scenario. |
 | [`edit_scenario`](#edit_scenario) | workflow | Make precise text replacements in a scenario's YAML definition. |
 | [`edit_workflow`](#edit_workflow) | workflow | Make precise text replacements in the workflow YAML. |
@@ -1300,16 +1300,23 @@ _Tools for managing and inspecting workflows, presets, and scenarios._
 
 **Tags:** `workflow`
 
-Create a new workflow draft.
+Create a new workflow.
 
-Returns the draft UUID which you can then use with get_workflow, edit_workflow, and write_workflow.
+Returns the workflow UUID which you can then use with get_workflow, edit_workflow, and write_workflow.
+
+Workflows start as DRAFTS: stored even with validation errors, so you can
+iterate, but never runnable. Pass complete: true (here, or on a later
+edit_workflow/write_workflow) once it validates to make it runnable — that is
+rejected while it has errors. YAML that does not parse is rejected either way.
 
 **Parameters:**
 - name: (optional) Workflow name. A random name is generated if omitted.
 - content: (optional) Complete workflow YAML. The default agent template is used if omitted.
+- complete: (optional) true to mark it complete (runnable). Default: draft.
 
 **Response:**
-Returns JSON with id, name, and slug.
+The resulting status and every current validation error and warning, plus
+JSON with id, name, slug, and status.
 
 **Example — create with defaults:**
 {}
@@ -1374,11 +1381,19 @@ Include enough context to ensure a unique match.
 If you provide expected_version (from get_workflow), the edit will fail if the 
 workflow was modified since you last viewed it.
 
+**Draft vs complete:**
+A draft stores the edit even with validation errors. A complete (runnable)
+workflow must stay valid: an edit that introduces errors is rejected unless you
+pass complete: false, which saves it as a draft. Pass complete: true to mark it
+complete once it validates. The response always shows the resulting status and
+every current error and warning.
+
 **Parameters:**
 - id: (optional) Workflow UUID, slug, or name. Omit it to edit the workflow this chat is editing.
 - old_string: (required) Exact text to replace.
 - new_string: (required) Replacement text.
 - expected_version: (optional) Version number for conflict detection.
+- complete: (optional) true = mark complete, false = save as draft, omitted = keep current status.
 
 **Example:**
 {
@@ -1667,14 +1682,22 @@ The content must be valid workflow YAML with at minimum:
 - nodes: Array of node definitions
 - edges: Array of edge definitions (optional for single-node workflows)
 
+**Draft vs complete:**
+A draft stores the content even with validation errors. A complete (runnable)
+workflow must stay valid: content with errors is rejected unless you pass
+complete: false, which saves it as a draft. Pass complete: true to mark it
+complete once it validates.
+
 **Parameters:**
 - id: (optional) Workflow UUID, slug, or name. Omit it to write the workflow this chat is editing.
 - name: (optional) Overrides the name in YAML. Used for display name.
 - content: (required) Complete workflow YAML content.
 - expected_version: (optional) Version number for conflict detection.
+- complete: (optional) true = mark complete, false = save as draft, omitted = keep current status.
 
 **Response:**
-Returns JSON with id, name, slug, and created (false for updates).
+The resulting status and every current validation error and warning, plus
+JSON with id, name, slug, status, and created (false for updates).
 The slug can be used in ref: fields to reference this workflow.
 
 ---
@@ -1894,6 +1917,7 @@ _Miscellaneous tools and utilities._
 | [`skill`](#skill) | coding:default, readonly, coding:plan | Load skills — specialized knowledge and instructions for specific tasks. |
 | [`spawn_send`](#spawn_send) | - | Send a message to a running sub-agent you spawned, or to your own parent agent. |
 | [`spawn_status`](#spawn_status) | readonly | Check on the sub-agents you (the calling thread) have spawned — list them all, or inspect and o... |
+| [`spawn_stop`](#spawn_stop) | - | Stop a sub-agent you spawned, when its work is no longer needed. |
 | [`worktree`](#worktree) | - | Manage git worktrees for parallel development workflows. |
 
 ### ask_user
@@ -2085,6 +2109,35 @@ with timed_out: true and the agent untouched. Call spawn_status again with
 wait: true to keep waiting.
 
 Use spawn_send to message an agent that is still running.
+
+---
+
+### spawn_stop
+
+Stop a sub-agent you spawned, when its work is no longer needed.
+
+THE RECEIPT IS HONEST — READ IT LITERALLY:
+This REQUESTS the stop. The agent is not dead when this returns. A spawn runs
+as a cooperative loop and observes the cancellation at its NEXT STEP BOUNDARY,
+so an agent in the middle of a long tool call — a build, a test run, a wait —
+keeps going until that call returns. Do not treat the work it was doing as
+already abandoned.
+
+To confirm it actually stopped, call spawn_status(agent_id=..., wait: true).
+That blocks until the agent reaches a terminal state, and is the only thing
+that tells you the stop LANDED rather than that it was asked for.
+
+Only a DIRECT sub-agent of yours can be stopped. Your parent, your siblings
+and unrelated agents are rejected — stopping something you did not start is
+not yours to decide.
+
+If the agent has already finished this reports that and does nothing: a
+finished agent has no loop left to stop, and its result (if any) still stands.
+
+Reach for this when a fan-out has already answered the question, when you have
+changed approach and the delegated work is now wrong, or when an agent is
+clearly stuck. Prefer spawn_send to REDIRECT an agent whose work is still
+useful — stopping discards everything it has not reported yet.
 
 ---
 

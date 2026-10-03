@@ -34,7 +34,7 @@ const (
 
 // =============================================================================
 // Helper: creates a chat, workflow, and thread using the same path as
-// grpc/services/chat.go CreateChat and SendMessage.
+// grpc/services/chat.go StartChat and SendMessage.
 // Returns chatID, workflowID (= threadID for root), and the thread service.
 // =============================================================================
 func setupChatWithWorkflowAndThread(t *testing.T, repo db.Repository) (chatID, workflowID string, svc *threads.Service) {
@@ -46,7 +46,7 @@ func setupChatWithWorkflowAndThread(t *testing.T, repo db.Repository) (chatID, w
 
 	svc = threads.NewService(repo)
 
-	// Mimics CreateChat: CreateWorkflowWithThread before any messages
+	// Mimics StartChat: CreateWorkflowWithThread before any messages
 	wf := &db.Workflow{
 		ID:           workflowID,
 		ChatID:       chatID,

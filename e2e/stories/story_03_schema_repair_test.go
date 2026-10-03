@@ -37,7 +37,7 @@ func TestStory03_StringifiedArrayArgIsRepaired(t *testing.T) {
 
 	h := newHarness(t, script)
 
-	created := h.CreateChat("builtin://structured-agent", "Make me a 3-slide outline", map[string]any{
+	created := h.StartChat("builtin://structured-agent", "Make me a 3-slide outline", map[string]any{
 		"mode":               "auto",
 		"response_tool_name": "submit_slides",
 		"response_schema": map[string]any{

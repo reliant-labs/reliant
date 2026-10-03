@@ -17,6 +17,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/runs"
 	"github.com/reliant-labs/reliant/internal/workflow"
@@ -322,7 +323,7 @@ func (s *ChatService) resurrectGhostWorkflow(
 
 	// Step 4: Build workflow inputs (with presets and model defaults)
 	// Use worktree path if available, otherwise project path
-	projectPath := s.getEffectiveWorkingPath(ctx, chat)
+	projectPath := s.launcher().GetEffectiveWorkingPath(ctx, chat)
 
 	// Merge presets: existing chat presets + any new ones from the request
 	effectivePresets := make(map[string]string)
@@ -337,10 +338,10 @@ func (s *ChatService) resurrectGhostWorkflow(
 		}
 	}
 
-	initialData := s.buildWorkflowInputs(ctx, userID, projectPath, chat.ProjectID, workflowName, effectivePresets, req.Msg.WorkflowParams)
+	initialData := s.launcher().BuildWorkflowInputs(ctx, userID, projectPath, chat.ProjectID, workflowName, effectivePresets, req.Msg.WorkflowParams)
 
 	// Validate workflow inputs before starting
-	if validationErrors := s.validateWorkflowInputs(ctx, workflowName, chat.ProjectID, initialData); len(validationErrors) > 0 {
+	if validationErrors := s.launcher().ValidateWorkflowInputs(ctx, userID, workflowName, chat.ProjectID, initialData); len(validationErrors) > 0 {
 		errMsgs := make([]string, len(validationErrors))
 		for i, e := range validationErrors {
 			errMsgs[i] = e.Error()
@@ -364,7 +365,7 @@ func (s *ChatService) resurrectGhostWorkflow(
 	// Note: Message was already saved above before ghost recovery
 
 	// Inject session daemon if set on chat
-	injectSessionDaemonID(initialData, chat)
+	launch.InjectSessionDaemonID(initialData, chat)
 
 	workflowInput := v2.WorkflowInput{
 		ChatID:       req.Msg.ChatId,
@@ -441,7 +442,7 @@ func (s *ChatService) SendMessage(
 	// Removed to allow restarting workflows - SendMessage will start a new workflow
 	// for completed/failed/cancelled workflows (see status switch below).
 
-	if err := validateWorkflowParamStructure(req.Msg.WorkflowParams); err != nil {
+	if err := launch.ValidateWorkflowParamStructure(req.Msg.WorkflowParams); err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
 
@@ -522,6 +523,13 @@ func (s *ChatService) SendMessage(
 			}
 
 			switch existingWorkflow.Status {
+			case db.Pending():
+				// Never started (a branch awaiting its first send). The first
+				// send is StartChat's, which records the launch exactly once;
+				// letting SendMessage start it would bypass that.
+				return nil, connect.NewError(connect.CodeFailedPrecondition,
+					fmt.Errorf("chat has not started; call StartChat"))
+
 			case db.Paused():
 
 				// Discuss mode: lightweight LLM chat without resuming the workflow
@@ -595,10 +603,10 @@ func (s *ChatService) SendMessage(
 
 				// Signal workflow with param/preset input updates when provided.
 				if len(req.Msg.WorkflowParams) > 0 || len(req.Msg.SelectedPresets) > 0 {
-					stateUpdate := s.buildStateUpdateForActiveWorkflow(ctx, userID, chat, existingWorkflow.WorkflowName, req.Msg.SelectedPresets, req.Msg.WorkflowParams)
+					stateUpdate := s.launcher().BuildStateUpdateForActiveWorkflow(ctx, userID, chat, existingWorkflow.WorkflowName, req.Msg.SelectedPresets, req.Msg.WorkflowParams)
 
 					// Validate model selectors in updated params
-					if validationErrors := s.validateWorkflowInputs(ctx, existingWorkflow.WorkflowName, chat.ProjectID, stateUpdate); len(validationErrors) > 0 {
+					if validationErrors := s.launcher().ValidateWorkflowInputs(ctx, userID, existingWorkflow.WorkflowName, chat.ProjectID, stateUpdate); len(validationErrors) > 0 {
 						errMsgs := make([]string, len(validationErrors))
 						for i, e := range validationErrors {
 							errMsgs[i] = e.Error()
@@ -728,10 +736,10 @@ func (s *ChatService) SendMessage(
 
 				// Signal workflow with param/preset input updates when provided.
 				if len(req.Msg.WorkflowParams) > 0 || len(req.Msg.SelectedPresets) > 0 {
-					stateUpdate := s.buildStateUpdateForActiveWorkflow(ctx, userID, chat, existingWorkflow.WorkflowName, req.Msg.SelectedPresets, req.Msg.WorkflowParams)
+					stateUpdate := s.launcher().BuildStateUpdateForActiveWorkflow(ctx, userID, chat, existingWorkflow.WorkflowName, req.Msg.SelectedPresets, req.Msg.WorkflowParams)
 
 					// Validate model selectors in updated params
-					if validationErrors := s.validateWorkflowInputs(ctx, existingWorkflow.WorkflowName, chat.ProjectID, stateUpdate); len(validationErrors) > 0 {
+					if validationErrors := s.launcher().ValidateWorkflowInputs(ctx, userID, existingWorkflow.WorkflowName, chat.ProjectID, stateUpdate); len(validationErrors) > 0 {
 						errMsgs := make([]string, len(validationErrors))
 						for i, e := range validationErrors {
 							errMsgs[i] = e.Error()
@@ -925,47 +933,19 @@ func (s *ChatService) SendMessage(
 
 	needsChatUpdate := false
 
-	// Use existing workflow ID from chat, or use chat ID as root workflow ID
-	var workflowID string
-	if id := chat.MainThreadID(); id != "" {
-		workflowID = id
-	} else {
-		workflowID = req.Msg.ChatId // Root workflow ID = chat ID
-		chat.WorkflowID = &workflowID
-		needsChatUpdate = true
+	// A chat with no root workflow has never started; that first send is
+	// StartChat's.
+	workflowID := chat.MainThreadID()
+	if workflowID == "" {
+		return nil, connect.NewError(connect.CodeFailedPrecondition,
+			fmt.Errorf("chat has not started; call StartChat"))
 	}
 
-	// Handle workflow switching - only allowed when root workflow is pending (chat hasn't started)
+	// A started chat's workflow is fixed. Switching is only possible while a
+	// chat is pending, and StartChat owns that.
 	if req.Msg.Workflow != nil && *req.Msg.Workflow != "" && *req.Msg.Workflow != workflowName {
-		// Check if root workflow is pending
-		rootWorkflow, err := s.database.GetWorkflow(ctx, workflowID)
-		if err != nil {
-			logging.Error("Failed to get root workflow", "error", err, "workflowID", workflowID)
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to check workflow status"))
-		}
-
-		// Allow switching if workflow doesn't exist yet (new chat) or is pending (branched chat)
-		if rootWorkflow != nil && rootWorkflow.Status != db.Pending() {
-			return nil, connect.NewError(connect.CodeFailedPrecondition,
-				fmt.Errorf("cannot change workflow after chat has started - use Branch to create a new chat with a different workflow"))
-		}
-
-		// Validate workflow exists
-		if _, err := s.loadWorkflowForValidation(ctx, *req.Msg.Workflow, chat.ProjectID); err != nil {
-			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("workflow not found: %s", *req.Msg.Workflow))
-		}
-
-		// Update workflow name on both chat and workflow record
-		workflowName = *req.Msg.Workflow
-		chat.WorkflowName = req.Msg.Workflow
-		needsChatUpdate = true
-
-		if rootWorkflow != nil {
-			if err := s.database.UpdateWorkflowName(ctx, workflowID, workflowName); err != nil {
-				logging.Error("Failed to update workflow name", "error", err, "workflowID", workflowID)
-				// Continue - chat update is more important
-			}
-		}
+		return nil, connect.NewError(connect.CodeFailedPrecondition,
+			fmt.Errorf("cannot change workflow after chat has started - use Branch to create a new chat with a different workflow"))
 	}
 
 	// Update selected presets if provided
@@ -1004,10 +984,10 @@ func (s *ChatService) SendMessage(
 	}
 
 	// Resolve path for preset loading and workflow validation - use worktree if available
-	projectPath := s.getEffectiveWorkingPath(ctx, chat)
+	projectPath := s.launcher().GetEffectiveWorkingPath(ctx, chat)
 
 	// Build workflow inputs from merged presets and user params
-	initialData := s.buildWorkflowInputs(ctx, userID, projectPath, chat.ProjectID, workflowName, effectivePresets, req.Msg.WorkflowParams)
+	initialData := s.launcher().BuildWorkflowInputs(ctx, userID, projectPath, chat.ProjectID, workflowName, effectivePresets, req.Msg.WorkflowParams)
 
 	// Determine target thread. Resume runs continue the interrupted run's
 	// thread (which may be a forked/child thread) so history stays continuous.
@@ -1052,8 +1032,8 @@ func (s *ChatService) SendMessage(
 		// plus the criteria for proposing forge, ahead of the user's first
 		// message so it is in view when the model reads the ask. No-ops on
 		// every later turn and whenever the project already holds code.
-		if guidance := s.maybeGreenfieldGuidance(ctx, userID, chat); guidance != nil {
-			systemMessages = append([]*reliantv1.InputMessage{guidance}, systemMessages...)
+		if guidance := s.launcher().MaybeGreenfieldGuidance(ctx, userID, chat); guidance != nil {
+			systemMessages = append([]*reliantv1.InputMessage{inputMessageFromSeed(*guidance)}, systemMessages...)
 		}
 
 		saved, err := s.saveIncomingMessages(ctx, req, targetThread, workflowID, systemMessages, userContent, hasUserContent)
@@ -1066,7 +1046,7 @@ func (s *ChatService) SendMessage(
 
 	// Validate workflow inputs before starting
 	// This catches missing required inputs early (400) instead of at runtime
-	if validationErrors := s.validateWorkflowInputs(ctx, workflowName, chat.ProjectID, initialData); len(validationErrors) > 0 {
+	if validationErrors := s.launcher().ValidateWorkflowInputs(ctx, userID, workflowName, chat.ProjectID, initialData); len(validationErrors) > 0 {
 		errMsgs := make([]string, len(validationErrors))
 		for i, e := range validationErrors {
 			errMsgs[i] = e.Error()
@@ -1075,7 +1055,7 @@ func (s *ChatService) SendMessage(
 	}
 
 	// Inject session daemon if set on chat
-	injectSessionDaemonID(initialData, chat)
+	launch.InjectSessionDaemonID(initialData, chat)
 
 	workflowInput := v2.WorkflowInput{
 		ChatID:       req.Msg.ChatId,

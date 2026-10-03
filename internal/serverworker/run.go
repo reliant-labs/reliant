@@ -24,6 +24,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/debugserver"
 	"github.com/reliant-labs/reliant/internal/drain"
+	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/local"
 	"github.com/reliant-labs/reliant/internal/llm/models"
@@ -31,12 +32,14 @@ import (
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/natsutil"
 	"github.com/reliant-labs/reliant/internal/observability"
+	"github.com/reliant-labs/reliant/internal/runs"
 	"github.com/reliant-labs/reliant/internal/streaming"
 	"github.com/reliant-labs/reliant/internal/telemetry"
 	"github.com/reliant-labs/reliant/internal/temporal"
 	"github.com/reliant-labs/reliant/internal/temporal/claimcheck"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/workersetup"
+	v2workflow "github.com/reliant-labs/reliant/internal/workflow"
 )
 
 // Options holds all configurable values for the Temporal worker.
@@ -182,6 +185,10 @@ func Run(ctx context.Context, opts Options) error {
 		// ExecuteTools activity), so this is the wiring that matters most for
 		// agent-to-agent delivery.
 		AgentMessageNotifier: temporal.NewAgentMessageNotifier(temporalClient, workersetup.ChatWorkflowLookup(repo)),
+		// spawn_stop executes here too, and the stop is NOT best-effort: with
+		// no stopper the tool reports that it cannot stop anything rather than
+		// claiming a cancellation that never left the process.
+		SpawnStopper: temporal.NewSpawnStopper(temporalClient, workersetup.ChatWorkflowLookup(repo), repo),
 		// generate_image executes here, inside the ExecuteTools activity, so
 		// this is the wiring that actually decides whether the tool works.
 		ImageGeneratorResolver: resolveImageGenerator,
@@ -285,15 +292,28 @@ func Run(ctx context.Context, opts Options) error {
 	// -----------------------------------------------------------------
 	// 11. Start the worker
 	// -----------------------------------------------------------------
+	// The launcher a scheduled fire launches through. The prober is the daemon
+	// router, which the worker does have — but triggers never ask for a
+	// greenfield probe, so it is passed for completeness rather than for the
+	// schedule path.
+	triggerLauncher := launch.NewLauncher(
+		repo,
+		temporalClient,
+		runs.NewService(repo, temporalClient, v2workflow.NewPauseService(temporalClient, repo)),
+		v2workflow.SharedTaskQueue,
+		remoteExecutor.DaemonRouter(),
+	)
+
 	handle, _, err := workersetup.StartWorker(&workersetup.Config{
-		TemporalClient: temporalClient,
-		Database:       repo,
-		StreamingHub:   streamingHub,
-		ToolsFactory:   toolsFactory,
-		ToolExecutor:   remoteExecutor,
-		DaemonRouter:   remoteExecutor.DaemonRouter(),
-		MCPBinder:      toolexec.NewDaemonMCPContextBinder(router),
-		ConfigProvider: storedConfigProvider,
+		TemporalClient:  temporalClient,
+		Database:        repo,
+		StreamingHub:    streamingHub,
+		ToolsFactory:    toolsFactory,
+		ToolExecutor:    remoteExecutor,
+		DaemonRouter:    remoteExecutor.DaemonRouter(),
+		MCPBinder:       toolexec.NewDaemonMCPContextBinder(router),
+		ConfigProvider:  storedConfigProvider,
+		TriggerLauncher: triggerLauncher,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to start worker: %w", err)

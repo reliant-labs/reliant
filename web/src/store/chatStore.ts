@@ -843,13 +843,24 @@ interface ChatStoreState {
 
   // Methods for chat management
   loadChats: (projectId?: string) => Promise<void>;
-  createChat: (
+  startChat: (
     worktreeId?: string,
     firstMessage?: string,
     attachmentIds?: string[],
     workflowParams?: Record<string, unknown>,
     workflow?: string | null,
     selectedPresets?: Record<string, string>,
+  ) => Promise<Chat>;
+  // First send of an existing PENDING chat (e.g. a branch): StartChat with chatId.
+  startExistingChat: (
+    chatId: string,
+    firstMessage: string,
+    attachmentIds?: string[],
+    options?: {
+      workflow?: string | null;
+      workflowParams?: Record<string, unknown>;
+      selectedPresets?: Record<string, string>;
+    },
   ) => Promise<Chat>;
   // Methods for chat state management
   initChatState: (chat: Chat) => void;
@@ -1005,6 +1016,65 @@ interface ChatStoreState {
  * If you're in a component and using useChatStore() directly, refactor to use
  * the hooks from './chatStoreHooks' instead!
  */
+// Shared by startChat and startExistingChat: home the chat the server returned,
+// seed the optimistic first user message, flip activity to RUNNING and track it.
+function applyFirstSend(
+  chat: Chat,
+  projectId: string,
+  firstMessage: string,
+  attachmentIds?: string[],
+): void {
+  const chatId = chat.id;
+
+    // Home the new chat into the React Query caches immediately so both
+    // useChat / useActiveChat and list readers (sidebar/search/worktree views)
+    // show it without waiting for a stream-triggered list refetch.
+    seedChatDetail(chat);
+    upsertChatInListCache(projectId, chat);
+    void queryClient.invalidateQueries({ queryKey: chatKeys.list(projectId) });
+
+    // Initialize state for the new chat
+    useChatStore.getState().initChatState(chat);
+
+    // Add optimistic user message immediately so the UI shows it right away
+    // This prevents the race condition where the chat renders before messages load
+    // The real message will replace this when it arrives via gRPC stream or loadMessages()
+    if (firstMessage) {
+      const optimisticAttachments = getAttachmentsFromStore(
+        attachmentIds || [],
+      );
+      const optimisticUserMessage: Message = {
+        id: `optimistic-user-${Date.now()}`,
+        chatId: "",
+        role: MessageRole.USER,
+        contentBlocks: [{ id: "", index: 0, type: ContentBlockType.TEXT, content: firstMessage }],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        streamingState: StreamingState.COMPLETE,
+        seq: BigInt(999998), // Just before streaming message (999999)
+        thread: "",
+        sequenceNumber: BigInt(0),
+        attachments:
+          optimisticAttachments.length > 0 ? optimisticAttachments : [],
+      };
+
+      // Seed the optimistic user message into the RQ message cache (the single
+      // source of truth) so the UI shows it immediately.
+      setMessagesInCache(chatId, [optimisticUserMessage]);
+    }
+
+    // Optimistically mark as RUNNING so the thinking indicator shows immediately
+    // The backend will confirm via CHAT_ACTIVITY_CHANGED event shortly
+    useActivityStore.getState().setActivity(chatId, ChatActivity.RUNNING);
+
+    trackEvent("message_sent", {
+      chatId,
+      contentLength: firstMessage.length,
+      hasAttachments: (attachmentIds?.length ?? 0) > 0,
+      isFirstInChat: true,
+    });
+}
+
 export const useChatStore = create<ChatStoreState>((set, get) => ({
   // Initial state
   discussMode: {},
@@ -1096,8 +1166,8 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     });
   },
 
-  // Create a new chat
-  createChat: async (
+  // First send of a new chat
+  startChat: async (
     worktreeId?: string,
     firstMessage: string = "Hello",
     attachmentIds?: string[],
@@ -1116,7 +1186,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     // Backend can resolve user defaults, but we've had cases where "" ended up as Agent.
     const effectiveWorkflow = workflow ?? DEFAULT_WORKFLOW;
 
-    const chat = await api.chatsV2.create({
+    const chat = await api.chatsV2.start({
       project_id: projectId,
       messages: firstMessage
         ? [{ role: MessageRole.USER, content: firstMessage }]
@@ -1131,56 +1201,38 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       selectedPresets: selectedPresets,
     });
 
-    const chatId = chat.id;
+    applyFirstSend(chat, projectId, firstMessage, attachmentIds);
+    return chat;
+  },
 
-    // Home the new chat into the React Query caches immediately so both
-    // useChat / useActiveChat and list readers (sidebar/search/worktree views)
-    // show it without waiting for a stream-triggered list refetch.
-    seedChatDetail(chat);
-    upsertChatInListCache(projectId, chat);
-    void queryClient.invalidateQueries({ queryKey: chatKeys.list(projectId) });
-
-    // Initialize state for the new chat
-    get().initChatState(chat);
-
-    // Add optimistic user message immediately so the UI shows it right away
-    // This prevents the race condition where the chat renders before messages load
-    // The real message will replace this when it arrives via gRPC stream or loadMessages()
-    if (firstMessage) {
-      const optimisticAttachments = getAttachmentsFromStore(
-        attachmentIds || [],
-      );
-      const optimisticUserMessage: Message = {
-        id: `optimistic-user-${Date.now()}`,
-        chatId: "",
-        role: MessageRole.USER,
-        contentBlocks: [{ id: "", index: 0, type: ContentBlockType.TEXT, content: firstMessage }],
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        streamingState: StreamingState.COMPLETE,
-        seq: BigInt(999998), // Just before streaming message (999999)
-        thread: "",
-        sequenceNumber: BigInt(0),
-        attachments:
-          optimisticAttachments.length > 0 ? optimisticAttachments : [],
-      };
-
-      // Seed the optimistic user message into the RQ message cache (the single
-      // source of truth) so the UI shows it immediately.
-      setMessagesInCache(chatId, [optimisticUserMessage]);
+  startExistingChat: async (
+    chatId: string,
+    firstMessage: string,
+    attachmentIds?: string[],
+    options?: {
+      workflow?: string | null;
+      workflowParams?: Record<string, unknown>;
+      selectedPresets?: Record<string, string>;
+    },
+  ) => {
+    const projectId = useProjectStore.getState().currentProject?.id;
+    if (!projectId) {
+      throw new Error("No project selected");
     }
 
-    // Optimistically mark as RUNNING so the thinking indicator shows immediately
-    // The backend will confirm via CHAT_ACTIVITY_CHANGED event shortly
-    useActivityStore.getState().setActivity(chatId, ChatActivity.RUNNING);
-
-    trackEvent("message_sent", {
-      chatId,
-      contentLength: firstMessage.length,
-      hasAttachments: (attachmentIds?.length ?? 0) > 0,
-      isFirstInChat: true,
+    const workflowParams = options?.workflowParams ?? {};
+    const chat = await api.chatsV2.start({
+      chat_id: chatId,
+      project_id: projectId,
+      messages: [{ role: MessageRole.USER, content: firstMessage }],
+      attachments: attachmentIds,
+      workflow: options?.workflow ?? undefined,
+      workflow_params:
+        Object.keys(workflowParams).length > 0 ? workflowParams : undefined,
+      selectedPresets: options?.selectedPresets,
     });
 
+    applyFirstSend(chat, projectId, firstMessage, attachmentIds);
     return chat;
   },
 

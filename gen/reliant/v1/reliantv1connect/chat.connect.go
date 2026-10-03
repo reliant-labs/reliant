@@ -35,8 +35,8 @@ const (
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// ChatServiceCreateChatProcedure is the fully-qualified name of the ChatService's CreateChat RPC.
-	ChatServiceCreateChatProcedure = "/reliant.v1.ChatService/CreateChat"
+	// ChatServiceStartChatProcedure is the fully-qualified name of the ChatService's StartChat RPC.
+	ChatServiceStartChatProcedure = "/reliant.v1.ChatService/StartChat"
 	// ChatServiceListChatsProcedure is the fully-qualified name of the ChatService's ListChats RPC.
 	ChatServiceListChatsProcedure = "/reliant.v1.ChatService/ListChats"
 	// ChatServiceGetChatProcedure is the fully-qualified name of the ChatService's GetChat RPC.
@@ -111,8 +111,18 @@ const (
 
 // ChatServiceClient is a client for the reliant.v1.ChatService service.
 type ChatServiceClient interface {
-	// CreateChat creates a new chat and starts its workflow
-	CreateChat(context.Context, *connect.Request[v1.CreateChatRequest]) (*connect.Response[v1.CreateChatResponse], error)
+	// StartChat starts a chat's root run — the ONE door through which a session
+	// begins. Either it creates the chat (chat_id unset) or it starts an existing
+	// PENDING one, which is what a branched chat's first send is.
+	//
+	// StartChat vs SendMessage: StartChat is the FIRST send, SendMessage is every
+	// continuation. A chat whose root run is still pending has never started, so
+	// SendMessage rejects it with FailedPrecondition; conversely StartChat
+	// rejects a chat that has already started. The split is not cosmetic — a
+	// start records a trigger_events row whose dedupe key is the chat id, so
+	// "a chat starts exactly once" is a database invariant rather than client
+	// discipline. See research/TRIGGERS.md.
+	StartChat(context.Context, *connect.Request[v1.StartChatRequest]) (*connect.Response[v1.StartChatResponse], error)
 	// ListChats lists all non-archived chats for a project
 	ListChats(context.Context, *connect.Request[v1.ListChatsRequest]) (*connect.Response[v1.ListChatsResponse], error)
 	// GetChat retrieves a specific chat by ID
@@ -214,10 +224,10 @@ func NewChatServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 	baseURL = strings.TrimRight(baseURL, "/")
 	chatServiceMethods := v1.File_reliant_v1_chat_proto.Services().ByName("ChatService").Methods()
 	return &chatServiceClient{
-		createChat: connect.NewClient[v1.CreateChatRequest, v1.CreateChatResponse](
+		startChat: connect.NewClient[v1.StartChatRequest, v1.StartChatResponse](
 			httpClient,
-			baseURL+ChatServiceCreateChatProcedure,
-			connect.WithSchema(chatServiceMethods.ByName("CreateChat")),
+			baseURL+ChatServiceStartChatProcedure,
+			connect.WithSchema(chatServiceMethods.ByName("StartChat")),
 			connect.WithClientOptions(opts...),
 		),
 		listChats: connect.NewClient[v1.ListChatsRequest, v1.ListChatsResponse](
@@ -387,7 +397,7 @@ func NewChatServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 
 // chatServiceClient implements ChatServiceClient.
 type chatServiceClient struct {
-	createChat               *connect.Client[v1.CreateChatRequest, v1.CreateChatResponse]
+	startChat                *connect.Client[v1.StartChatRequest, v1.StartChatResponse]
 	listChats                *connect.Client[v1.ListChatsRequest, v1.ListChatsResponse]
 	getChat                  *connect.Client[v1.GetChatRequest, v1.GetChatResponse]
 	updateChat               *connect.Client[v1.UpdateChatRequest, v1.UpdateChatResponse]
@@ -417,9 +427,9 @@ type chatServiceClient struct {
 	setChatDaemon            *connect.Client[v1.SetChatDaemonRequest, v1.SetChatDaemonResponse]
 }
 
-// CreateChat calls reliant.v1.ChatService.CreateChat.
-func (c *chatServiceClient) CreateChat(ctx context.Context, req *connect.Request[v1.CreateChatRequest]) (*connect.Response[v1.CreateChatResponse], error) {
-	return c.createChat.CallUnary(ctx, req)
+// StartChat calls reliant.v1.ChatService.StartChat.
+func (c *chatServiceClient) StartChat(ctx context.Context, req *connect.Request[v1.StartChatRequest]) (*connect.Response[v1.StartChatResponse], error) {
+	return c.startChat.CallUnary(ctx, req)
 }
 
 // ListChats calls reliant.v1.ChatService.ListChats.
@@ -559,8 +569,18 @@ func (c *chatServiceClient) SetChatDaemon(ctx context.Context, req *connect.Requ
 
 // ChatServiceHandler is an implementation of the reliant.v1.ChatService service.
 type ChatServiceHandler interface {
-	// CreateChat creates a new chat and starts its workflow
-	CreateChat(context.Context, *connect.Request[v1.CreateChatRequest]) (*connect.Response[v1.CreateChatResponse], error)
+	// StartChat starts a chat's root run — the ONE door through which a session
+	// begins. Either it creates the chat (chat_id unset) or it starts an existing
+	// PENDING one, which is what a branched chat's first send is.
+	//
+	// StartChat vs SendMessage: StartChat is the FIRST send, SendMessage is every
+	// continuation. A chat whose root run is still pending has never started, so
+	// SendMessage rejects it with FailedPrecondition; conversely StartChat
+	// rejects a chat that has already started. The split is not cosmetic — a
+	// start records a trigger_events row whose dedupe key is the chat id, so
+	// "a chat starts exactly once" is a database invariant rather than client
+	// discipline. See research/TRIGGERS.md.
+	StartChat(context.Context, *connect.Request[v1.StartChatRequest]) (*connect.Response[v1.StartChatResponse], error)
 	// ListChats lists all non-archived chats for a project
 	ListChats(context.Context, *connect.Request[v1.ListChatsRequest]) (*connect.Response[v1.ListChatsResponse], error)
 	// GetChat retrieves a specific chat by ID
@@ -658,10 +678,10 @@ type ChatServiceHandler interface {
 // and JSON codecs. They also support gzip compression.
 func NewChatServiceHandler(svc ChatServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
 	chatServiceMethods := v1.File_reliant_v1_chat_proto.Services().ByName("ChatService").Methods()
-	chatServiceCreateChatHandler := connect.NewUnaryHandler(
-		ChatServiceCreateChatProcedure,
-		svc.CreateChat,
-		connect.WithSchema(chatServiceMethods.ByName("CreateChat")),
+	chatServiceStartChatHandler := connect.NewUnaryHandler(
+		ChatServiceStartChatProcedure,
+		svc.StartChat,
+		connect.WithSchema(chatServiceMethods.ByName("StartChat")),
 		connect.WithHandlerOptions(opts...),
 	)
 	chatServiceListChatsHandler := connect.NewUnaryHandler(
@@ -828,8 +848,8 @@ func NewChatServiceHandler(svc ChatServiceHandler, opts ...connect.HandlerOption
 	)
 	return "/reliant.v1.ChatService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case ChatServiceCreateChatProcedure:
-			chatServiceCreateChatHandler.ServeHTTP(w, r)
+		case ChatServiceStartChatProcedure:
+			chatServiceStartChatHandler.ServeHTTP(w, r)
 		case ChatServiceListChatsProcedure:
 			chatServiceListChatsHandler.ServeHTTP(w, r)
 		case ChatServiceGetChatProcedure:
@@ -893,8 +913,8 @@ func NewChatServiceHandler(svc ChatServiceHandler, opts ...connect.HandlerOption
 // UnimplementedChatServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedChatServiceHandler struct{}
 
-func (UnimplementedChatServiceHandler) CreateChat(context.Context, *connect.Request[v1.CreateChatRequest]) (*connect.Response[v1.CreateChatResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ChatService.CreateChat is not implemented"))
+func (UnimplementedChatServiceHandler) StartChat(context.Context, *connect.Request[v1.StartChatRequest]) (*connect.Response[v1.StartChatResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ChatService.StartChat is not implemented"))
 }
 
 func (UnimplementedChatServiceHandler) ListChats(context.Context, *connect.Request[v1.ListChatsRequest]) (*connect.Response[v1.ListChatsResponse], error) {

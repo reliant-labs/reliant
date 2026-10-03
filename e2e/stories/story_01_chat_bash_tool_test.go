@@ -23,7 +23,7 @@ import (
 // the conversation is fully persisted in order with the workflow marked
 // completed and the chat IDLE.
 //
-// Full stack exercised: CreateChat handler → Temporal DynamicWorkflow on the
+// Full stack exercised: StartChat handler → Temporal DynamicWorkflow on the
 // story's task queue → CallLLM (scripted driver) → ExecuteTools
 // (LocalToolExecutor + daemon.LocalClient — the daemon runtime's own
 // execution path — running a real shell command) → message/content-block
@@ -49,7 +49,7 @@ func TestStory01_ChatRunsBashToolAndCompletes(t *testing.T) {
 
 	h := newHarness(t, script)
 
-	created := h.CreateChat("builtin://agent", "Please echo something for me", map[string]any{
+	created := h.StartChat("builtin://agent", "Please echo something for me", map[string]any{
 		"mode": "auto",
 	})
 	chatID := created.Chat.Id

@@ -291,20 +291,20 @@ func waitForWorkerPollers(t *testing.T, c temporalclient.Client, taskQueue strin
 // Story actions
 // ---------------------------------------------------------------------------
 
-// CreateChat drives the production CreateChat handler. workflowRef is e.g.
+// StartChat drives the production StartChat handler. workflowRef is e.g.
 // "builtin://agent". params are workflow inputs; a {"model": {"id": "mock"}}
 // entry is added when the caller didn't specify one.
-func (h *Harness) CreateChat(workflowRef, prompt string, params map[string]any) *reliantv1.CreateChatResponse {
+func (h *Harness) StartChat(workflowRef, prompt string, params map[string]any) *reliantv1.StartChatResponse {
 	h.T.Helper()
-	resp, err := h.TryCreateChat(workflowRef, prompt, params)
-	require.NoError(h.T, err, "CreateChat")
+	resp, err := h.TryStartChat(workflowRef, prompt, params)
+	require.NoError(h.T, err, "StartChat")
 	require.NotNil(h.T, resp.Msg.Chat)
 	return resp.Msg
 }
 
-// TryCreateChat is CreateChat without asserting success (for validation-error
+// TryStartChat is StartChat without asserting success (for validation-error
 // stories).
-func (h *Harness) TryCreateChat(workflowRef, prompt string, params map[string]any) (*connect.Response[reliantv1.CreateChatResponse], error) {
+func (h *Harness) TryStartChat(workflowRef, prompt string, params map[string]any) (*connect.Response[reliantv1.StartChatResponse], error) {
 	h.T.Helper()
 
 	if params == nil {
@@ -321,7 +321,7 @@ func (h *Harness) TryCreateChat(workflowRef, prompt string, params map[string]an
 		protoParams[k] = pv
 	}
 
-	req := connect.NewRequest(&reliantv1.CreateChatRequest{
+	req := connect.NewRequest(&reliantv1.StartChatRequest{
 		ProjectId: h.ProjectID,
 		Workflow:  workflowRef,
 		Messages: []*reliantv1.InputMessage{
@@ -329,7 +329,7 @@ func (h *Harness) TryCreateChat(workflowRef, prompt string, params map[string]an
 		},
 		WorkflowParams: protoParams,
 	})
-	return h.ChatSvc.CreateChat(h.Ctx, req)
+	return h.ChatSvc.StartChat(h.Ctx, req)
 }
 
 // SendMessage drives the production SendMessage handler (used to resume

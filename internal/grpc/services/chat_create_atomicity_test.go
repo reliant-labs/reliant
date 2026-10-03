@@ -21,7 +21,7 @@ import (
 )
 
 // fakeWorkflowRun is a minimal client.WorkflowRun for tests that just need
-// CreateChat's post-transaction ExecuteWorkflow calls to succeed.
+// StartChat's post-transaction ExecuteWorkflow calls to succeed.
 type fakeWorkflowRun struct {
 	client.WorkflowRun
 	id    string
@@ -32,7 +32,7 @@ func (f *fakeWorkflowRun) GetID() string    { return f.id }
 func (f *fakeWorkflowRun) GetRunID() string { return f.runID }
 
 // atomicityTestTemporalClient embeds client.Client so it satisfies the whole
-// SDK surface, but only implements ExecuteWorkflow — CreateChat's
+// SDK surface, but only implements ExecuteWorkflow — StartChat's
 // post-transaction best-effort calls (main workflow + title generation).
 type atomicityTestTemporalClient struct {
 	client.Client
@@ -46,7 +46,7 @@ func (c *atomicityTestTemporalClient) ExecuteWorkflow(
 
 // failAfterUserUpdateRepo wraps db.Repository so it satisfies the whole
 // interface, but fails the CreateUserUpdate call — the last write inside
-// CreateChat's transaction — so the test can assert that nothing earlier in
+// StartChat's transaction — so the test can assert that nothing earlier in
 // the transaction (chat row, workflow, thread, messages) survives the abort.
 type failAfterUserUpdateRepo struct {
 	db.Repository
@@ -61,7 +61,7 @@ func (r *failAfterUserUpdateRepo) CreateUserUpdate(ctx context.Context, update *
 }
 
 // TestChatService_CreateChat_AtomicOnMidTransactionFailure proves that a
-// failure on the LAST write inside CreateChat's transaction (the
+// failure on the LAST write inside StartChat's transaction (the
 // chat_created user update) leaves NO partial state behind: no orphan chat
 // row, no orphan workflow/thread, no message rows. Before the transaction
 // wrapper this test fails — see the story in the task description for the
@@ -94,7 +94,7 @@ func TestChatService_CreateChat_AtomicOnMidTransactionFailure(t *testing.T) {
 		runs:       runs.NewService(failingRepo, temporal, nil),
 	}
 
-	_, err := service.CreateChat(ctx, connect.NewRequest(&reliantv1.CreateChatRequest{
+	_, err := service.StartChat(ctx, connect.NewRequest(&reliantv1.StartChatRequest{
 		ProjectId: projectID,
 		Workflow:  "builtin://agent",
 		Messages: []*reliantv1.InputMessage{{
@@ -105,7 +105,7 @@ func TestChatService_CreateChat_AtomicOnMidTransactionFailure(t *testing.T) {
 			"model": mustStructValue(t, map[string]interface{}{"id": "mock"}),
 		},
 	}))
-	require.Error(t, err, "CreateChat must fail when the trailing chat_created write fails")
+	require.Error(t, err, "StartChat must fail when the trailing chat_created write fails")
 
 	// No chat row should have been committed.
 	chats, listErr := repo.ListChats(ctx, db.ChatFilters{ProjectID: &projectID})
@@ -143,7 +143,7 @@ func TestChatService_CreateChat_SucceedsWithoutInjectedFailure(t *testing.T) {
 		UpdatedAt:  now,
 		LastActive: now,
 	}))
-	// CreateChat requires a main worktree to bind the chat to (CreateProject
+	// StartChat requires a main worktree to bind the chat to (CreateProject
 	// makes one in production; this harness inserts the row directly).
 	require.NoError(t, repo.CreateWorktree(ctx, &db.Worktree{
 		ID:         uuid.NewString(),
@@ -168,7 +168,7 @@ func TestChatService_CreateChat_SucceedsWithoutInjectedFailure(t *testing.T) {
 		runs:       runs.NewService(failingRepo, temporal, nil),
 	}
 
-	resp, err := service.CreateChat(ctx, connect.NewRequest(&reliantv1.CreateChatRequest{
+	resp, err := service.StartChat(ctx, connect.NewRequest(&reliantv1.StartChatRequest{
 		ProjectId: projectID,
 		Workflow:  "builtin://agent",
 		Messages: []*reliantv1.InputMessage{{

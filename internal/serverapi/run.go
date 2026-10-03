@@ -41,6 +41,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/temporal"
 	"github.com/reliant-labs/reliant/internal/temporal/claimcheck"
 	"github.com/reliant-labs/reliant/internal/toolexec"
+	"github.com/reliant-labs/reliant/internal/triggers"
 	"github.com/reliant-labs/reliant/internal/workersetup"
 	v2workflow "github.com/reliant-labs/reliant/internal/workflow"
 
@@ -228,6 +229,9 @@ func Run(ctx context.Context, opts Options) error {
 		// Lets spawn_send wake a parent parked on its sub-agents instead of
 		// leaving the message queued until one of them finishes.
 		AgentMessageNotifier: temporal.NewAgentMessageNotifier(temporalClient, workersetup.ChatWorkflowLookup(repo)),
+		// Lets spawn_stop reach the root workflow running a sub-agent. Shares
+		// the one implementation the UI's cancel path uses.
+		SpawnStopper: temporal.NewSpawnStopper(temporalClient, workersetup.ChatWorkflowLookup(repo), repo),
 		// Binds generate_image to the driver layer's image-model selection.
 		// Injected rather than imported: internal/llm/drivers already imports
 		// internal/llm/tools, so the tool cannot reach drivers directly.
@@ -414,6 +418,17 @@ func Run(ctx context.Context, opts Options) error {
 			}
 		}()
 	}
+
+	// Converge every trigger's Temporal Schedule onto its row, and drop
+	// schedules whose row is gone. The DB is the truth, so this repairs drift
+	// left by a write that landed while Temporal was unreachable — and an
+	// orphan schedule keeps firing for a trigger nobody can see or stop.
+	//
+	// In the background with backoff: this races a cold Temporal, and
+	// refusing to serve until schedules converge would turn an ordering
+	// problem into an outage.
+	go triggers.SyncAllOnStartup(ctx, triggers.NewSyncer(
+		temporalClient.ScheduleClient(), repo, v2workflow.SharedTaskQueue))
 
 	// -----------------------------------------------------------------
 	// 4. pprof debug server

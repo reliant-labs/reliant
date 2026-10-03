@@ -5,7 +5,7 @@ import { singleflight } from "../lib/singleflight";
 import { create } from "@bufbuild/protobuf";
 import { jsToProtoValue, protoValueToJs, type ProtoValue } from "./proto-utils";
 import {
-  CreateChatRequestSchema,
+  StartChatRequestSchema,
   ListChatsRequestSchema,
   GetChatRequestSchema,
   UpdateChatRequestSchema,
@@ -164,7 +164,7 @@ export interface ChatPlan {
   completed_at?: string;
 }
 
-// InputMessage for CreateChat/SendMessage requests
+// InputMessage for StartChat/SendMessage requests
 // Supports user and system messages.
 export interface InputMessage {
   role: MessageRole;
@@ -172,14 +172,13 @@ export interface InputMessage {
   display_style?: DisplayStyle;
 }
 
-export interface CreateChatOptions {
+export interface StartChatOptions {
+  chat_id?: string;  // Start an existing PENDING chat (a branch's first send) instead of creating one
   project_id: string;
   messages: InputMessage[];  // At least one user message required
   title?: string;
   worktree_id?: string;
   workflow?: string;  // Optional - defaults to user's preference or builtin://agent
-  temperature?: number;
-  max_tokens?: number;
   mode?: string;
   attachments?: string[];
   workflow_params?: Record<string, unknown>;
@@ -243,36 +242,33 @@ export function buildWorkflowParamsPayload(
 }
 
 export const chatGrpc = {
-  // Create a new chat and start its workflow
-  async create(options: CreateChatOptions): Promise<{
+  // First send: creates a new chat, or starts the existing PENDING chat named by chat_id
+  async start(options: StartChatOptions): Promise<{
     chat: Chat;
     workflow_id: string;
     run_id: string;
-    draft_id?: string;  // Draft ID for workflow builder chats (when a new draft was created)
   }> {
     const client = grpcClient.chat();
     const workflowParams = buildWorkflowParamsPayload(options.workflow_params);
 
-    const request = create(CreateChatRequestSchema, {
+    const request = create(StartChatRequestSchema, {
+      chatId: options.chat_id,
       projectId: options.project_id,
       messages: options.messages.map(m => ({ role: m.role, content: m.content, displayStyle: m.display_style })),
       title: options.title,
       worktreeId: options.worktree_id,
       workflow: options.workflow,
-      temperature: options.temperature,
-      maxTokens: options.max_tokens,
       mode: options.mode,
       attachments: options.attachments || [],
       workflowParams,
       selectedPresets: options.selected_presets || {},
     });
-    const response = await client.createChat(request);
+    const response = await client.startChat(request);
     if (!response.chat) throw new Error("No chat in response");
     return {
       chat: convertProtoChat(response.chat),
       workflow_id: response.workflowId,
       run_id: response.runId,
-      draft_id: response.draftId,
     };
   },
 

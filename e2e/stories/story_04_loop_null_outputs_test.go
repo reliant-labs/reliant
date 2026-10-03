@@ -50,7 +50,7 @@ func TestStory04_LoopOutputsWithNullCompletes(t *testing.T) {
 
 	h := newHarness(t, script)
 
-	created := h.CreateChat("builtin://structured-agent", "Do a check, then finish", map[string]any{
+	created := h.StartChat("builtin://structured-agent", "Do a check, then finish", map[string]any{
 		"mode": "auto",
 	})
 	workflowID := created.WorkflowId

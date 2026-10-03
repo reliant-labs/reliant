@@ -652,6 +652,28 @@ type Repository interface {
 	DeletePresetBySlug(ctx context.Context, userID, slug string) error
 	DeletePresetBySlugAndProject(ctx context.Context, userID, slug, projectID string) error
 
+	// Triggers - standing instructions that start runs without a human typing
+	CreateTrigger(ctx context.Context, t *core.Trigger) error
+	GetTrigger(ctx context.Context, id string) (*core.Trigger, error)
+	ListTriggers(ctx context.Context, f core.TriggerFilters) ([]*core.Trigger, error)
+	UpdateTrigger(ctx context.Context, t *core.Trigger) error
+	DeleteTrigger(ctx context.Context, id string) error
+	SetTriggerEnabled(ctx context.Context, id string, enabled bool) error
+
+	// Trigger events - one row per firing. The insert is ON CONFLICT
+	// (kind, dedupe_key) DO NOTHING, so created=false means a firing for that
+	// key already existed and nothing was written. That constraint is what
+	// makes "a chat starts exactly once" and "a retried scheduled fire cannot
+	// launch twice" database guarantees rather than client conventions.
+	CreateTriggerEvent(ctx context.Context, ev *core.TriggerEvent) (created bool, err error)
+	GetTriggerEventByDedupe(ctx context.Context, kind core.TriggerEventKind, dedupeKey string) (*core.TriggerEvent, error)
+	UpdateTriggerEventOutcome(ctx context.Context, id string, outcome core.TriggerEventOutcome, detail string, chatID *string) error
+	// ListTriggerEvents returns the trigger's firings newest first.
+	ListTriggerEvents(ctx context.Context, triggerID string, limit int) ([]*core.TriggerEvent, error)
+	// GetLatestTriggerEvent returns the trigger's latest firing, optionally
+	// filtered by outcome, and (nil, nil) when it has never fired.
+	GetLatestTriggerEvent(ctx context.Context, triggerID string, outcome *core.TriggerEventOutcome) (*core.TriggerEvent, error)
+
 	// Step Executions (for CEL history queries)
 	CreateStepExecution(ctx context.Context, exec *StepExecution) error
 	GetStepExecution(ctx context.Context, id string) (*StepExecution, error)

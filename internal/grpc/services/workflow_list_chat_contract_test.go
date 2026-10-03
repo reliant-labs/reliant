@@ -115,8 +115,8 @@ nodes:
 		require.False(t, listedWorkflow.IsHidden)
 		require.NotNil(t, listedWorkflow.DraftId)
 
-		err = chatService.validateCreateChatWorkflowTree(ctx, "test-user", listedWorkflow.Filename, projectID)
-		require.NoError(t, err, "workflow returned by default ListWorkflows must pass CreateChat workflow resolution")
+		err = chatService.launcher().ValidateCreateChatWorkflowTree(ctx, "test-user", listedWorkflow.Filename, projectID)
+		require.NoError(t, err, "workflow returned by default ListWorkflows must pass StartChat workflow resolution")
 	})
 
 	t.Run("include_hidden exposes management drafts for workflow hub", func(t *testing.T) {

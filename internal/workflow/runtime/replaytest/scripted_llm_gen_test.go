@@ -131,7 +131,7 @@ func (s *ScriptedLLM) SendMessages(ctx context.Context, prompts []string, msgs [
 // answers a non-streaming request with a bare 400, which became reachable once
 // title model selection opened up beyond Anthropic. That made titling land
 // HERE, where it silently ate turn 1 of every scenario, because
-// GenerateTitleWorkflow is dispatched by CreateChat and races the agent loop.
+// GenerateTitleWorkflow is dispatched by StartChat and races the agent loop.
 // Every scripted scenario then ran one turn off-by-one. It is recognized by the
 // tool the request is pinned to (set_title), which is the request's actual
 // identity rather than prompt wording that can be reworded.

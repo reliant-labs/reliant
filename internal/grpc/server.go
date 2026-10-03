@@ -241,6 +241,16 @@ func NewServer(cfg *Config) (*Server, error) {
 	attachmentPath, attachmentHandler := reliantv1connect.NewAttachmentServiceHandler(attachmentService, opts...)
 	presetPath, presetHandler := reliantv1connect.NewPresetServiceHandler(presetService, opts...)
 
+	// TriggerService converges Temporal Schedules onto the triggers table, so
+	// it needs the Temporal client. Without one, the write paths return
+	// Unavailable rather than storing triggers that could never fire.
+	// The service is constructed through a helper rather than inline because a
+	// nil *triggers.Backend assigned to an interface is NOT nil — the
+	// handler's own nil checks would pass and it would panic on the first
+	// write. NewTriggerServiceFor keeps that conversion in one place.
+	triggerService := services.NewTriggerServiceFor(database, cfg.TemporalClient, cfg.SharedTaskQueue)
+	triggerPath, triggerHandler := reliantv1connect.NewTriggerServiceHandler(triggerService, opts...)
+
 	// FileSystem, Background, and Terminal services: when a daemon router is
 	// available, use proxy services that forward requests through the daemon.
 	// Otherwise fall back to the DB-backed / provider-backed implementations.
@@ -353,6 +363,7 @@ func NewServer(cfg *Config) (*Server, error) {
 
 	mux.Handle(attachmentPath, attachmentHandler)
 	mux.Handle(presetPath, presetHandler)
+	mux.Handle(triggerPath, triggerHandler)
 
 	mux.Handle(daemonRegistryPath, daemonRegistryHandler)
 	mux.Handle(tokenPath, tokenHandler)
@@ -374,7 +385,7 @@ func NewServer(cfg *Config) (*Server, error) {
 	}
 
 	// The CLI's api-token management and workflow-trigger surfaces are Connect
-	// RPCs now (TokenService above, ChatService.CreateChat), not bespoke
+	// RPCs now (TokenService above, ChatService.StartChat), not bespoke
 	// /api/v1 JSON handlers — the CLI speaks the same authenticated Connect
 	// path the web app does.
 

@@ -147,6 +147,7 @@ SELECT
     tc.input AS tool_input,
     tc.requested_at,
     tc.completed_at,
+    tc.child_workflow_id,
     w.thread AS child_thread_id,
     w.state AS workflow_state,
     w.stop_reason AS workflow_stop_reason,
@@ -166,6 +167,7 @@ type ListSpawnChildrenForThreadRow struct {
 	ToolInput           []byte         `json:"tool_input"`
 	RequestedAt         time.Time      `json:"requested_at"`
 	CompletedAt         sql.NullTime   `json:"completed_at"`
+	ChildWorkflowID     sql.NullString `json:"child_workflow_id"`
 	ChildThreadID       sql.NullString `json:"child_thread_id"`
 	WorkflowState       sql.NullInt32  `json:"workflow_state"`
 	WorkflowStopReason  sql.NullInt32  `json:"workflow_stop_reason"`
@@ -193,6 +195,11 @@ type ListSpawnChildrenForThreadRow struct {
 // crashes at runtime. tc.requested_at already carries "when was this spawn
 // issued", so workflow_created_at is omitted rather than selected and left
 // to crash the first time a caller lists mid-dispatch-race.
+//
+// child_workflow_id is selected ALONGSIDE child_thread_id because for a
+// resumed spawn they differ and both are needed: the thread is what a cancel
+// signal names, while the workflow row id is what a status reconcile must
+// CAS. Deriving either from the other is not possible — see spawn_stop.
 func (q *Queries) ListSpawnChildrenForThread(ctx context.Context, threadID sql.NullString) ([]ListSpawnChildrenForThreadRow, error) {
 	rows, err := q.db.QueryContext(ctx, listSpawnChildrenForThread, threadID)
 	if err != nil {
@@ -208,6 +215,7 @@ func (q *Queries) ListSpawnChildrenForThread(ctx context.Context, threadID sql.N
 			&i.ToolInput,
 			&i.RequestedAt,
 			&i.CompletedAt,
+			&i.ChildWorkflowID,
 			&i.ChildThreadID,
 			&i.WorkflowState,
 			&i.WorkflowStopReason,

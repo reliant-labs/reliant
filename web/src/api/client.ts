@@ -10,7 +10,7 @@ import { toolCallGrpc } from "./tool-call-grpc";
 import { logger } from "../lib/logger";
 import { HiddenItemType } from "../gen/reliant/v1/settings_pb";
 import type {
-  CreateChatRequest,
+  StartChatRequest,
   UpdateChatRequest,
   BranchChatRequest,
 } from "../types/api";
@@ -235,8 +235,9 @@ export const api = {
   },
 
   chatsV2: {
-    create: async (request: CreateChatRequest) => {
-      const result = await chatGrpc.create({
+    start: async (request: StartChatRequest) => {
+      const result = await chatGrpc.start({
+        chat_id: request.chat_id,
         project_id: request.project_id!,
         messages: request.messages,
         title: request.title,

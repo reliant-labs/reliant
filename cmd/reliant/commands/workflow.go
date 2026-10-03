@@ -111,7 +111,7 @@ func newWorkflowValidateTreeCmd() *cobra.Command {
 		Use:   "validate-tree <path-or-builtin-ref>",
 		Short: "Validate a workflow tree with preset-aware cross-workflow checks",
 		Long: `Validates a workflow and all recursively reachable child workflows using
-the same static analysis that runs server-side at CreateChat time. Wires a
+the same static analysis that runs server-side at StartChat time. Wires a
 PresetLoader alongside the WorkflowLoader so preset-param mismatches (for
 example a preset setting params that aren't declared inputs on the target
 workflow) are surfaced offline.
@@ -265,7 +265,7 @@ func newWorkflowRunCmd() *cobra.Command {
 		Use:   "run <workflow-name>",
 		Short: "Run a workflow",
 		Long: `Triggers a workflow execution by creating a chat bound to the workflow,
-via the Reliant ChatService.CreateChat Connect RPC — the exact path the web
+via the Reliant ChatService.StartChat Connect RPC — the exact path the web
 app takes. A run IS a chat: sending the first user message kicks the root
 workflow.
 
@@ -338,7 +338,7 @@ format, exit codes, and --hook).`,
 				return err
 			}
 
-			createReq := &reliantv1.CreateChatRequest{
+			createReq := &reliantv1.StartChatRequest{
 				ProjectId: resolvedProjectID,
 				Workflow:  normalizeRunWorkflowRef(workflowName),
 				Messages: []*reliantv1.InputMessage{{
@@ -352,7 +352,7 @@ format, exit codes, and --hook).`,
 			// `reliant workflow follow` builds its ChatService client.
 			chatClient := reliantv1connect.NewChatServiceClient(conn.httpClient(), conn.ServerURL)
 
-			resp, err := chatClient.CreateChat(cmd.Context(), connect.NewRequest(createReq))
+			resp, err := chatClient.StartChat(cmd.Context(), connect.NewRequest(createReq))
 			if err != nil {
 				return conn.annotate(fmt.Errorf("starting workflow: %w", err))
 			}
@@ -373,7 +373,7 @@ format, exit codes, and --hook).`,
 
 			if follow {
 				if chatID == "" {
-					return fmt.Errorf("cannot follow: CreateChat did not return a chat ID")
+					return fmt.Errorf("cannot follow: StartChat did not return a chat ID")
 				}
 				return runWorkflowFollow(cmd, chatID, &followFlags)
 			}
@@ -402,7 +402,7 @@ var reservedMessageKeys = map[string]bool{"message": true, "prompt": true}
 // normalizeRunWorkflowRef maps bare builtin names ("forge-one-shot") to the
 // builtin://<name> refs the web app sends. Refs that already carry a scheme,
 // and names that do not match a builtin (user drafts / project workflows,
-// which CreateChat resolves by slug), pass through unchanged.
+// which StartChat resolves by slug), pass through unchanged.
 func normalizeRunWorkflowRef(name string) string {
 	if strings.Contains(name, "://") {
 		return name
@@ -415,7 +415,7 @@ func normalizeRunWorkflowRef(name string) string {
 
 // resolveRunMessage picks the chat's first user message: explicit --message,
 // then inputs.message, then inputs.prompt, then a generic kick message
-// (CreateChat requires at least one user message; input-driven workflows read
+// (StartChat requires at least one user message; input-driven workflows read
 // their params, not the message).
 func resolveRunMessage(workflowName, explicit string, inputs map[string]interface{}) string {
 	if explicit != "" {

@@ -353,7 +353,7 @@ func NewTimeoutInterceptor() *TimeoutInterceptor {
 			"/reliant.v1.FileSystemService/WriteFile": 30 * time.Second,
 			"/reliant.v1.FileSystemService/ListFiles": 30 * time.Second,
 			// Chat operations that involve workflows - initial setup can take time
-			"/reliant.v1.ChatService/CreateChat":  30 * time.Second,
+			"/reliant.v1.ChatService/StartChat":   30 * time.Second,
 			"/reliant.v1.ChatService/SendMessage": 30 * time.Second,
 			// MCP operations - external process startup can be slow
 			"/reliant.v1.MCPService/StartServer": 60 * time.Second,

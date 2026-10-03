@@ -14,6 +14,18 @@ export function isWorkflowPaused(
   );
 }
 
+/** Whether the chat's root run has not started: its first send must go through StartChat. */
+export function isWorkflowPending(state: WorkflowState): boolean {
+  return state === WorkflowState.PENDING;
+}
+
+/** Whether a send on this chat is its first and must call StartChat instead of SendMessage. */
+export function chatNeedsStart(
+  chat: { workflowState: WorkflowState } | null | undefined,
+): boolean {
+  return !!chat && isWorkflowPending(chat.workflowState);
+}
+
 /**
  * Whether a workflow still has work ahead of it.
  *

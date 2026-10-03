@@ -218,7 +218,7 @@ func (s *ChatService) resolveDiscussDriver(ctx context.Context, userID string, c
 		if presetName == "" {
 			continue
 		}
-		p, err := s.loadPresetFromDB(ctx, userID, chat.ProjectID, presetName)
+		p, err := s.launcher().LoadPresetFromDB(ctx, userID, chat.ProjectID, presetName)
 		if err != nil {
 			continue
 		}

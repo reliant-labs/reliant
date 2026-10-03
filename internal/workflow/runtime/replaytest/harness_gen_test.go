@@ -56,7 +56,7 @@ import (
 // This harness is a trimmed replica of the e2e story harness
 // (e2e/stories/main_test.go + harness_test.go). That package is test-only and
 // build-tagged, so it is not importable; the minimal pieces needed to drive
-// real workflow executions through the PRODUCTION paths (CreateChat handler →
+// real workflow executions through the PRODUCTION paths (StartChat handler →
 // workersetup.StartWorker worker → scripted LLM → local tool execution) are
 // replicated here. Fixture generation must run the production registration
 // path so the captured histories are representative of production runs.
@@ -251,10 +251,10 @@ func newHarness(t *testing.T, llmScript *ScriptedLLM) *Harness {
 		LastActive: now,
 	}), "create scenario project")
 
-	// CreateChat requires every project to have a main worktree
+	// StartChat requires every project to have a main worktree
 	// (resolveChatWorktreeID in chat_helpers.go) — an omitted worktree id on
-	// CreateChat resolves to it. Production project creation provisions this
-	// automatically; this harness must do the same or every CreateChat below
+	// StartChat resolves to it. Production project creation provisions this
+	// automatically; this harness must do the same or every StartChat below
 	// fails FailedPrecondition.
 	require.NoError(t, s.Repo.CreateWorktree(ctx, &db.Worktree{
 		ID:         uuid.New().String(),
@@ -370,8 +370,8 @@ func waitForWorkerPollers(t *testing.T, c temporalclient.Client, taskQueue strin
 // Scenario actions
 // ---------------------------------------------------------------------------
 
-// CreateChat drives the production CreateChat handler.
-func (h *Harness) CreateChat(workflowRef, prompt string, params map[string]any) *reliantv1.CreateChatResponse {
+// StartChat drives the production StartChat handler.
+func (h *Harness) StartChat(workflowRef, prompt string, params map[string]any) *reliantv1.StartChatResponse {
 	h.T.Helper()
 
 	if params == nil {
@@ -388,7 +388,7 @@ func (h *Harness) CreateChat(workflowRef, prompt string, params map[string]any) 
 		protoParams[k] = pv
 	}
 
-	req := connect.NewRequest(&reliantv1.CreateChatRequest{
+	req := connect.NewRequest(&reliantv1.StartChatRequest{
 		ProjectId: h.ProjectID,
 		Workflow:  workflowRef,
 		Messages: []*reliantv1.InputMessage{
@@ -396,8 +396,8 @@ func (h *Harness) CreateChat(workflowRef, prompt string, params map[string]any) 
 		},
 		WorkflowParams: protoParams,
 	})
-	resp, err := h.ChatSvc.CreateChat(h.Ctx, req)
-	require.NoError(h.T, err, "CreateChat")
+	resp, err := h.ChatSvc.StartChat(h.Ctx, req)
+	require.NoError(h.T, err, "StartChat")
 	require.NotNil(h.T, resp.Msg.Chat)
 	return resp.Msg
 }

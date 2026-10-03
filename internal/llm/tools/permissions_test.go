@@ -174,11 +174,15 @@ func TestMinimumPermissionForTool_EverythingElseIsBaseTier(t *testing.T) {
 	}
 }
 
-// spawn_status and spawn_send stay reachable below orchestrator: an agent
-// holding a handle to a sub-agent it spawned needs no extra privilege to look at
-// it or talk to it, and a sub-agent itself does not run at orchestrator tier.
+// spawn_status, spawn_send and spawn_stop stay reachable below orchestrator: an
+// agent holding a handle to a sub-agent it spawned needs no extra privilege to
+// look at it, talk to it, or stop it, and a sub-agent itself does not run at
+// orchestrator tier. spawn_stop is the sharpest case — a spawning agent is
+// itself a child, so gating it at orchestrator would mean nobody could stop
+// their own children.
 func TestMinimumPermissionForTool_SpawnObservabilityNotGated(t *testing.T) {
 	t.Parallel()
 	assert.Equal(t, PermissionMutating, MinimumPermissionForTool(ToolSpawnStatus))
 	assert.Equal(t, PermissionMutating, MinimumPermissionForTool(ToolSpawnSend))
+	assert.Equal(t, PermissionMutating, MinimumPermissionForTool(ToolSpawnStop))
 }

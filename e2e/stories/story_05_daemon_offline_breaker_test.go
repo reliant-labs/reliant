@@ -74,7 +74,7 @@ func TestStory05_DaemonOfflineCircuitBreakerPausesAndResumes(t *testing.T) {
 
 	h := newHarness(t, script, WithToolExecutor(daemonOfflineExecutor{}))
 
-	created := h.CreateChat("builtin://agent", "Run a command for me", map[string]any{
+	created := h.StartChat("builtin://agent", "Run a command for me", map[string]any{
 		"mode": "auto",
 	})
 	chatID := created.Chat.Id

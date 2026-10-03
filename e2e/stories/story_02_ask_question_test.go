@@ -38,7 +38,7 @@ func TestStory02_AskQuestionPauseResumeCompletes(t *testing.T) {
 
 	h := newHarness(t, script)
 
-	created := h.CreateChat("builtin://agent", "Answer my question, then wait for my feedback", map[string]any{
+	created := h.StartChat("builtin://agent", "Answer my question, then wait for my feedback", map[string]any{
 		"mode": "auto",
 		"ask":  true,
 	})

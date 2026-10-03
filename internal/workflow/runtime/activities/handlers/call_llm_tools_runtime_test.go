@@ -396,28 +396,45 @@ func TestCallLLMActivity_UsesWorkingDirForMCPEnumerationScope(t *testing.T) {
 // sub-agent replying to the parent that spawned it, or an orchestrator actually
 // configured to spawn children. A plain root agent has neither, and handing it a
 // mailbox tool it can never use costs schema on every single request.
-func TestCallLLMActivity_SpawnSendOfferedOnlyWhenMailboxReachable(t *testing.T) {
+func TestCallLLMActivity_SpawnToolsOfferedOnlyWhenReachable(t *testing.T) {
+	// spawn_stop rides the same grant but on the STRICTLY TIGHTER condition:
+	// it refuses anything that is not the caller's own direct child, so an
+	// agent that cannot spawn has nothing it could ever legally name. The
+	// depth-1 row is what separates the two — a sub-agent that cannot spawn has
+	// a parent to report to and no children to stop.
 	tests := []struct {
 		name          string
 		spawnDepth    int
 		spawnEntries  []string
 		wantSpawnSend bool
+		wantSpawnStop bool
 	}{
 		{
 			name:          "plain root agent has nobody to message",
 			spawnDepth:    0,
 			wantSpawnSend: false,
+			wantSpawnStop: false,
 		},
 		{
-			name:          "orchestrator configured to spawn can message its children",
+			name:          "orchestrator configured to spawn can message and stop its children",
 			spawnDepth:    0,
 			spawnEntries:  []string{"spawn:builtin://agent(general)"},
 			wantSpawnSend: true,
+			wantSpawnStop: true,
 		},
 		{
-			name:          "sub-agent can always talk back to its parent",
+			// maxSpawnDepth is 1, so a sub-agent cannot spawn at all: its
+			// spawn entries are dropped before reachability is decided. It
+			// therefore has a parent to report to and, by construction, no
+			// children of its own to stop. The entries are declared here
+			// anyway, so this row pins the DEPTH cap rather than an absent
+			// config — if the cap ever rises, spawn_stop follows
+			// canSpawnChildren and this expectation flips with it.
+			name:          "sub-agent cannot spawn at max depth, so has no children to stop",
 			spawnDepth:    1,
+			spawnEntries:  []string{"spawn:builtin://agent(general)"},
 			wantSpawnSend: true,
+			wantSpawnStop: false,
 		},
 	}
 
@@ -481,6 +498,11 @@ func TestCallLLMActivity_SpawnSendOfferedOnlyWhenMailboxReachable(t *testing.T) 
 				assert.Contains(t, mockDriver.capturedTools, tools.ToolSpawnSend)
 			} else {
 				assert.NotContains(t, mockDriver.capturedTools, tools.ToolSpawnSend)
+			}
+			if tc.wantSpawnStop {
+				assert.Contains(t, mockDriver.capturedTools, tools.ToolSpawnStop)
+			} else {
+				assert.NotContains(t, mockDriver.capturedTools, tools.ToolSpawnStop)
 			}
 		})
 	}

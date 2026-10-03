@@ -64,7 +64,7 @@ nodes:
 
 	service := &ChatService{database: repo}
 
-	_, err := service.CreateChat(ctx, connect.NewRequest(&reliantv1.CreateChatRequest{
+	_, err := service.StartChat(ctx, connect.NewRequest(&reliantv1.StartChatRequest{
 		ProjectId: projectID,
 		Workflow:  "invalid-spawn-tree",
 		Messages: []*reliantv1.InputMessage{{
@@ -118,7 +118,7 @@ nodes:
 	}))
 
 	service := &ChatService{database: repo}
-	validationErrors := service.validateWorkflowInputs(ctx, "required-param-workflow", "", map[string]interface{}{})
+	validationErrors := service.launcher().ValidateWorkflowInputs(ctx, "test-user", "required-param-workflow", "", map[string]interface{}{})
 
 	require.NotEmpty(t, validationErrors)
 	require.Contains(t, validationErrors[0].Error(), "required input 'prompt' is not provided")
@@ -173,7 +173,7 @@ nodes:
 	}))
 
 	service := &ChatService{database: repo}
-	err := service.validateCreateChatWorkflowTree(ctx, "test-user", "valid-spawn-tree", "")
+	err := service.launcher().ValidateCreateChatWorkflowTree(ctx, "test-user", "valid-spawn-tree", "")
 	require.NoError(t, err)
 }
 
@@ -230,6 +230,6 @@ nodes:
 	}))
 
 	service := &ChatService{database: repo}
-	err := service.validateCreateChatWorkflowTree(ctx, "test-user", "agent", "")
+	err := service.launcher().ValidateCreateChatWorkflowTree(ctx, "test-user", "agent", "")
 	require.NoError(t, err)
 }

@@ -6,7 +6,7 @@
  * NULL. The sidebar groups by worktree and drops chats whose worktree does not
  * resolve, so CLI runs executed correctly but were invisible.
  *
- * The fix makes the null state unrepresentable: CreateChat resolves an omitted
+ * The fix makes the null state unrepresentable: StartChat resolves an omitted
  * worktree_id to the project's main worktree and refuses to persist a chat
  * without one (see resolveChatWorktreeID and
  * internal/grpc/services/chat_worktree_invariant_test.go). This test guards the

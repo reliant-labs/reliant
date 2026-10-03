@@ -52,9 +52,10 @@ const (
 	// Agent tools
 	ToolAgent = "agent"
 
-	// Spawn observability/messaging tools
+	// Spawn observability/messaging/control tools
 	ToolSpawnStatus = "spawn_status"
 	ToolSpawnSend   = "spawn_send"
+	ToolSpawnStop   = "spawn_stop"
 
 	// Worktree tools
 	ToolWorktree = "worktree"
@@ -113,7 +114,7 @@ var AllToolNames = []string{
 	ToolBuild,
 	ToolStateTransition,
 	ToolAgent,
-	ToolSpawnStatus, ToolSpawnSend,
+	ToolSpawnStatus, ToolSpawnSend, ToolSpawnStop,
 	ToolWorktree,
 	ToolSkill,
 	ToolInstallSkill,

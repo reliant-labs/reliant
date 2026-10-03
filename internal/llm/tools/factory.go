@@ -21,6 +21,12 @@ type ToolsOptions struct {
 	// no doorbell, and delivery falls back to the recipient's next loop
 	// boundary (the daemon runtime has no Temporal connection).
 	AgentMessageNotifier AgentMessageNotifier
+	// SpawnStopper lets spawn_stop reach the workflow running a sub-agent.
+	// Optional: nil means spawn_stop reports that stopping is unavailable
+	// here, which is the honest answer in the daemon runtime (no Temporal
+	// connection) — unlike the doorbell above there is no degraded fallback,
+	// because an undelivered stop stops nothing.
+	SpawnStopper SpawnStopper
 	// ShellPlatform is the shell family of the DAEMON that will execute shell
 	// commands, which is frequently not this process's own platform: the
 	// server and worker run Linux while the daemon may be Windows. The shell
@@ -287,6 +293,10 @@ func (f *ToolsFactory) SpawnStatus() Tool {
 
 func (f *ToolsFactory) SpawnSend() Tool {
 	return NewSpawnSendTool(f.opts.Repo, f.opts.AgentMessageNotifier)
+}
+
+func (f *ToolsFactory) SpawnStop() Tool {
+	return NewSpawnStopTool(f.opts.Repo, f.opts.SpawnStopper)
 }
 
 // Analysis tools

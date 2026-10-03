@@ -4,7 +4,7 @@ import { MessageRole } from '../../gen/reliant/v1/chat_pb';
 import { buildWorkflowParamsPayload, chatGrpc } from '../chat-grpc';
 
 const mocks = vi.hoisted(() => ({
-  createChat: vi.fn(),
+  startChat: vi.fn(),
   sendMessage: vi.fn(),
   updateWorkflowParams: vi.fn(),
 }));
@@ -12,7 +12,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('../grpc-client', () => ({
   grpcClient: {
     chat: () => ({
-      createChat: mocks.createChat,
+      startChat: mocks.startChat,
       sendMessage: mocks.sendMessage,
       updateWorkflowParams: mocks.updateWorkflowParams,
     }),
@@ -21,11 +21,11 @@ vi.mock('../grpc-client', () => ({
 
 describe('chat-grpc workflow_params payload contracts', () => {
   beforeEach(() => {
-    mocks.createChat.mockReset();
+    mocks.startChat.mockReset();
     mocks.sendMessage.mockReset();
     mocks.updateWorkflowParams.mockReset();
 
-    mocks.createChat.mockResolvedValue({
+    mocks.startChat.mockResolvedValue({
       chat: { id: 'chat-1' },
       workflowId: 'workflow-1',
       runId: 'run-1',
@@ -71,8 +71,8 @@ describe('chat-grpc workflow_params payload contracts', () => {
     ).toThrow('workflow_params must use nested object keys. Dotted keys are no longer supported.');
   });
 
-  it('create sends nested workflow_params and preserves selected presets mapping', async () => {
-    await chatGrpc.create({
+  it('start sends nested workflow_params and preserves selected presets mapping', async () => {
+    await chatGrpc.start({
       project_id: 'project-1',
       messages: [{ role: MessageRole.USER, content: 'hello' }],
       workflow_params: {
@@ -86,7 +86,7 @@ describe('chat-grpc workflow_params payload contracts', () => {
       },
     });
 
-    const request = mocks.createChat.mock.calls[0][0];
+    const request = mocks.startChat.mock.calls[0][0];
     expect(request.workflowParams).toHaveProperty('agent');
     expect(request.workflowParams).not.toHaveProperty('agent.model');
     expect(request.selectedPresets).toEqual({

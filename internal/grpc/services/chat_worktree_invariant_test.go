@@ -72,14 +72,14 @@ func TestResolveChatWorktreeID_DefaultsToMainWorktree(t *testing.T) {
 
 	// A caller that names no worktree (the CLI) binds to the main worktree
 	// rather than persisting null.
-	resolved, err := service.resolveChatWorktreeID(ctx, projectID, nil)
+	resolved, err := service.launcher().ResolveChatWorktreeID(ctx, projectID, nil)
 	require.NoError(t, err)
 	require.NotNil(t, resolved, "worktree_id must never resolve to null")
 	require.Equal(t, mainWorktreeID, *resolved)
 
 	// An explicitly empty string is the same "unset" intent as nil.
 	empty := ""
-	resolved, err = service.resolveChatWorktreeID(ctx, projectID, &empty)
+	resolved, err = service.launcher().ResolveChatWorktreeID(ctx, projectID, &empty)
 	require.NoError(t, err)
 	require.NotNil(t, resolved)
 	require.Equal(t, mainWorktreeID, *resolved)
@@ -111,7 +111,7 @@ func TestResolveChatWorktreeID_KeepsValidRequestedWorktree(t *testing.T) {
 
 	service := &ChatService{database: repo}
 
-	resolved, err := service.resolveChatWorktreeID(ctx, projectID, &branchWorktreeID)
+	resolved, err := service.launcher().ResolveChatWorktreeID(ctx, projectID, &branchWorktreeID)
 	require.NoError(t, err)
 	require.NotNil(t, resolved)
 	require.Equal(t, branchWorktreeID, *resolved,
@@ -128,8 +128,12 @@ func TestResolveChatWorktreeID_RejectsUnknownWorktree(t *testing.T) {
 	service := &ChatService{database: repo}
 
 	missing := uuid.NewString()
-	_, err := service.resolveChatWorktreeID(ctx, projectID, &missing)
-	require.Error(t, err, "a dangling worktree_id must be refused, not silently accepted")
+	_, resolveErr := service.launcher().ResolveChatWorktreeID(ctx, projectID, &missing)
+	require.Error(t, resolveErr, "a dangling worktree_id must be refused, not silently accepted")
+
+	// The resolver returns a launch domain error; the handler is what turns it
+	// into a wire code, so assert the pair rather than either half alone.
+	err := launchErrorToConnect(resolveErr)
 
 	connectErr := new(connect.Error)
 	require.ErrorAs(t, err, &connectErr)
@@ -149,8 +153,9 @@ func TestResolveChatWorktreeID_RejectsForeignProjectWorktree(t *testing.T) {
 
 	// Binding a chat to another project's worktree would run it against the
 	// wrong tree and look like it worked.
-	_, err := service.resolveChatWorktreeID(ctx, projectID, &otherMainWorktreeID)
-	require.Error(t, err)
+	_, resolveErr := service.launcher().ResolveChatWorktreeID(ctx, projectID, &otherMainWorktreeID)
+	require.Error(t, resolveErr)
+	err := launchErrorToConnect(resolveErr)
 
 	connectErr := new(connect.Error)
 	require.ErrorAs(t, err, &connectErr)
@@ -166,8 +171,9 @@ func TestResolveChatWorktreeID_RejectsProjectWithoutMainWorktree(t *testing.T) {
 	service := &ChatService{database: repo}
 
 	// The buggy state is refused rather than written as null.
-	_, err := service.resolveChatWorktreeID(ctx, projectID, nil)
-	require.Error(t, err)
+	_, resolveErr := service.launcher().ResolveChatWorktreeID(ctx, projectID, nil)
+	require.Error(t, resolveErr)
+	err := launchErrorToConnect(resolveErr)
 
 	connectErr := new(connect.Error)
 	require.ErrorAs(t, err, &connectErr)
@@ -220,7 +226,7 @@ nodes:
 	}
 
 	// No WorktreeId, exactly as the CLI sends it.
-	resp, err := service.CreateChat(ctx, connect.NewRequest(&reliantv1.CreateChatRequest{
+	resp, err := service.StartChat(ctx, connect.NewRequest(&reliantv1.StartChatRequest{
 		ProjectId: projectID,
 		Workflow:  "worktree-invariant-workflow",
 		Messages: []*reliantv1.InputMessage{{

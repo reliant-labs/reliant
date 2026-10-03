@@ -306,7 +306,7 @@ Repro: `tool_calls: "nodes.a.tool_calls"` (braces missing).
 | Path | Runs StaticAnalysis? | Blocks on errors? |
 |---|---|---|
 | `LoadWorkflowActivity` (run start) | yes, with loader and presets | **yes** (`HasErrors`) |
-| `CreateChat` tree validation (`chat_workflow.go:384`) | yes | yes |
+| `StartChat` tree validation (`chat_workflow.go:384`) | yes | yes |
 | UI save / validate RPCs (`grpc/services/workflow.go:504,1132,1377`) | yes (no skill resolver) | no. Saved with `is_valid=false` |
 | Agent tools `create/update/edit workflow` (`llm/tools/workflow_editing.go:524`) | yes, but **nil loader**: no cross-workflow typing, so ref outputs become dyn | no ("save regardless"), and **warnings are dropped** from the tool response |
 | CLI `workflow validate` | yes, with skill resolver | yes |

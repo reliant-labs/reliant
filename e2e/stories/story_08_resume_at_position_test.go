@@ -134,7 +134,7 @@ func TestStory08_TerminateMidLoopResumesAtPosition(t *testing.T) {
 
 	h := newHarness(t, script)
 
-	// Seed the custom workflow as a user draft; CreateChat and the engine's
+	// Seed the custom workflow as a user draft; StartChat and the engine's
 	// ActivityLoadWorkflow both resolve non-builtin refs by (userID, slug).
 	now := time.Now().UTC()
 	require.NoError(t, h.Stack.Repo.CreateWorkflowDraft(h.Ctx, &db.WorkflowDraft{
@@ -148,7 +148,7 @@ func TestStory08_TerminateMidLoopResumesAtPosition(t *testing.T) {
 		UpdatedAt:  now,
 	}), "seed workflow draft")
 
-	created := h.CreateChat("resume-two-phase", "Build the thing", map[string]any{})
+	created := h.StartChat("resume-two-phase", "Build the thing", map[string]any{})
 	chatID := created.Chat.Id
 	workflowID := created.WorkflowId
 

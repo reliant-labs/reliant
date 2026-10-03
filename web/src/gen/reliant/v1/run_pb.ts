@@ -161,7 +161,7 @@ export type StartRunRequest = Message<"reliant.v1.StartRunRequest"> & {
    * Messages seeds the run's thread before it starts. Optional — a headless
    * run needs none. When a session is supplied these are appended to it.
    *
-   * This is how a caller supplies the "first message" that ChatService.CreateChat
+   * This is how a caller supplies the "first message" that ChatService.StartChat
    * requires today, without the requirement.
    *
    * @generated from field: repeated reliant.v1.InputMessage messages = 4;

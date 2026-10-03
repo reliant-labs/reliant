@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"sort"
-	"strings"
 	"time"
 
 	"connectrpc.com/connect"
@@ -15,6 +14,8 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/runs"
 	"github.com/reliant-labs/reliant/internal/threads"
@@ -26,280 +27,75 @@ import (
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
 )
 
-// CreateChat creates a new chat and starts its workflow
-func (s *ChatService) CreateChat(
+// StartChat starts a chat's root run: it creates the chat, or starts an
+// existing pending one (a branch's first send).
+//
+// The start path itself lives in internal/launch, because a scheduled trigger
+// fires on the worker and the worker cannot import this package. What is left
+// here is the handler's own job: read the caller from auth, translate the wire
+// request into a launch.Spec, and translate launch's domain errors back into
+// the connect codes this RPC has always returned.
+func (s *ChatService) StartChat(
 	ctx context.Context,
-	req *connect.Request[reliantv1.CreateChatRequest],
-) (*connect.Response[reliantv1.CreateChatResponse], error) {
+	req *connect.Request[reliantv1.StartChatRequest],
+) (*connect.Response[reliantv1.StartChatResponse], error) {
 	userID := auth.MustGetUserID(ctx)
 
-	if req.Msg.ProjectId == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("project_id is required"))
+	// An interactive chat start is a trigger event too, of kind chat.start: it
+	// has no stored definition, and its dedupe key is the chat id, which is what
+	// makes "a chat starts exactly once" a database invariant rather than
+	// client discipline. The id is minted here so the event row and the chat
+	// row agree by construction. The payload carries counts, never message
+	// text: the messages table already holds that.
+	chatID := req.Msg.GetChatId()
+	newChatID := ""
+	if chatID == "" {
+		newChatID = uuid.NewString()
+		chatID = newChatID
+	}
+	event := launch.Event{
+		Kind:       core.TriggerEventKindChatStart,
+		DedupeKey:  chatID,
+		OccurredAt: time.Now().UTC(),
+		Payload: map[string]any{
+			"message_count":    len(req.Msg.Messages),
+			"attachment_count": len(req.Msg.Attachments),
+		},
 	}
 
-	// Extract user and system messages from input
-	userContent, systemMessages, hasUserContent := extractMessagesFromInput(req.Msg.Messages)
+	spec := launch.Spec{
+		OwnerUserID: userID,
+		ProjectID:   req.Msg.ProjectId,
+		WorktreeID:  req.Msg.WorktreeId,
+		ChatID:      req.Msg.GetChatId(),
+		NewChatID:   newChatID,
+		Title:       req.Msg.Title,
+		Workflow:    req.Msg.Workflow,
+		Presets:     req.Msg.SelectedPresets,
+		Params:      req.Msg.WorkflowParams,
+		Mode:        req.Msg.Mode,
+		Messages:    seedMessagesFromInput(req.Msg.Messages),
+		Attachments: req.Msg.Attachments,
 
-	// Require at least one user message or attachments
-	if !hasUserContent && len(req.Msg.Attachments) == 0 {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("at least one user message or attachment is required"))
+		// An interactive start always had both of these, and still does. A
+		// branch is not a first turn of new work, so it skips the probe.
+		GenerateTitle:   true,
+		GreenfieldProbe: req.Msg.GetChatId() == "",
+	}
+	if jwt, ok := auth.GetUserJWT(userID); ok {
+		spec.UserJWT = jwt
 	}
 
-	// Verify user owns the project and get project details
-	project, err := s.database.GetProjectWithUserCheck(ctx, req.Msg.ProjectId, userID)
+	result, err := s.launcher().Launch(ctx, event, spec)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("project not found"))
+		return nil, launchErrorToConnect(err)
 	}
 
-	// Resolve workflow - use user's default if not specified
-	workflowName := s.resolveDefaultWorkflow(ctx, userID, req.Msg.Workflow)
-
-	// Resolve execution mode from request
-	// Create chat ID - root workflow ID equals chat ID for simple identification
-	// workflow_name is stored separately in the chat record for querying/debugging
-	chatID := uuid.New().String()
-	workflowID := chatID // Root workflow ID = chat ID
-	now := time.Now().UTC()
-
-	// Prepare title
-	title := ""
-	if req.Msg.Title != nil {
-		title = *req.Msg.Title
-	}
-
-	// Create chat object (not yet persisted) - model/temperature/max_tokens are workflow input params, not stored on chat
-	chat := &db.Chat{
-		ID:              chatID,
-		UserID:          userID,
-		Title:           title,
-		ProjectID:       req.Msg.ProjectId,
-		WorkflowName:    &workflowName,
-		State:           db.ChatStateIdle,
-		WorkflowID:      &workflowID,
-		SelectedPresets: req.Msg.SelectedPresets,
-		CreatedAt:       now,
-		UpdatedAt:       now,
-		LastActive:      now,
-	}
-
-	// Validate workflow tree BEFORE creating chat to avoid runtime graph failures and orphaned chats.
-	// Uses runtime-equivalent loader semantics: builtin:// and usable workflow drafts only.
-	if err := s.validateCreateChatWorkflowTree(ctx, userID, workflowName, project.ID); err != nil {
-		return nil, err
-	}
-
-	if err := validateWorkflowParamStructure(req.Msg.WorkflowParams); err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
-	}
-
-	// Every chat must name a resolvable worktree, or the UI's worktree-grouped
-	// chat list silently hides it. Callers that omit one (e.g. the CLI) bind to
-	// the project's main worktree. Resolved after the request validators so a
-	// malformed request still reports its own error rather than a project-state
-	// precondition, but before getEffectiveWorkingPath below, which reads it.
-	worktreeID, err := s.resolveChatWorktreeID(ctx, req.Msg.ProjectId, req.Msg.WorktreeId)
-	if err != nil {
-		return nil, err
-	}
-	chat.WorktreeID = worktreeID
-
-	// DEBUG: Log raw proto tools value before any processing
-	if toolsProto, ok := req.Msg.WorkflowParams["tools"]; ok {
-		logging.Info("[CreateChat] Raw proto tools param",
-			"chatID", chatID,
-			"asInterface", toolsProto.AsInterface(),
-			"protoString", toolsProto.String(),
-		)
-	} else {
-		logging.Info("[CreateChat] No tools param in workflowParams", "chatID", chatID, "paramKeys", func() []string {
-			keys := make([]string, 0, len(req.Msg.WorkflowParams))
-			for k := range req.Msg.WorkflowParams {
-				keys = append(keys, k)
-			}
-			return keys
-		}())
-	}
-
-	// Build and validate workflow inputs BEFORE creating chat
-	// Use worktree path if chat is in a worktree, otherwise project path
-	workingPath := s.getEffectiveWorkingPath(ctx, chat)
-	initialData := s.buildWorkflowInputs(ctx, userID, workingPath, project.ID, workflowName, req.Msg.SelectedPresets, req.Msg.WorkflowParams)
-
-	// Validate resolved inputs (catches empty model after defaults resolution)
-	if validationErrors := s.validateWorkflowInputs(ctx, workflowName, project.ID, initialData); len(validationErrors) > 0 {
-		errMsgs := make([]string, len(validationErrors))
-		for i, e := range validationErrors {
-			errMsgs[i] = e.Error()
-		}
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("workflow input validation failed: %s", strings.Join(errMsgs, "; ")))
-	}
-
-	// Build execution context for the workflow
-	// This is the source of truth for thread, message, and execution state
-	execContext := &v2.ExecutionContext{
-		WorkflowID:   workflowID,
-		ChatID:       chatID,
-		WorkflowName: workflowName,
-		Thread:       workflowID,
-		ThreadMode:   model.ThreadModeNew,
-	}
-
-	// A brand-new chat is a first turn by construction, so no message count is
-	// needed here. When the project directory holds no code the stack is still
-	// open, and the model gets that observation plus the criteria for
-	// proposing forge ahead of the user's first message. No-op when the
-	// project already holds code or the daemon is unreachable.
-	if guidance := s.greenfieldGuidanceForChat(ctx, userID, chat); guidance != nil {
-		systemMessages = append([]*reliantv1.InputMessage{guidance}, systemMessages...)
-	}
-
-	// Root workflow + thread, created atomically with the chat below.
-	//
-	// OwnerUserID is recorded on the run itself rather than left to be read off
-	// the chat later. Nothing reads it yet — see the migration — but writing it
-	// from the start is what lets the read sites flip without a second backfill.
-	rootWorkflow := &db.Workflow{
-		ID:           workflowID,
-		ChatID:       chatID,
-		WorkflowName: workflowName,
-		Thread:       workflowID, // Root workflow: thread = workflow ID
-		Status:       db.Pending(),
-		CreatedAt:    now,
-		OwnerUserID:  &userID,
-	}
-
-	// chat_created payload for the global websocket, computed from data we
-	// already have (no DB round trip) so it can be emitted inside the same
-	// transaction as the row it announces.
-	chatCreatedData := map[string]interface{}{
-		"chat_id":     chatID,
-		"title":       chat.Title,
-		"project_id":  chat.ProjectID,
-		"worktree_id": chat.WorktreeID,
-		"workflow":    chat.WorkflowName,
-		"state":       string(chat.State),
-		"created_at":  chat.CreatedAt.Format(time.RFC3339),
-	}
-	chatCreatedJSON, marshalErr := json.Marshal(chatCreatedData)
-	if marshalErr != nil {
-		logging.Error("Failed to marshal chat_created data", "error", marshalErr, "chatID", chatID)
-	}
-
-	// The chat row, its root workflow+thread, the initial messages, and the
-	// chat_created announcement must not be observed apart: a client that
-	// sees chat_created must be able to load a chat that already has a
-	// thread. Group them in one transaction so any failure leaves nothing
-	// behind (no orphan chat, no thread-less chat, no announcement for a
-	// chat that doesn't exist).
-	if err := s.database.RunTx(ctx, func(txCtx context.Context) error {
-		if err := s.database.CreateChat(txCtx, chat); err != nil {
-			return fmt.Errorf("failed to create chat: %w", err)
-		}
-
-		if _, _, _, err := s.threads.CreateWorkflowWithThread(txCtx, threads.CreateWorkflowWithThreadOpts{
-			Workflow: rootWorkflow,
-			ThreadID: workflowID,
-			ChatID:   chatID,
-		}); err != nil {
-			return fmt.Errorf("failed to create workflow and thread: %w", err)
-		}
-
-		// Save messages BEFORE starting workflow for consistency.
-		// System messages are saved first, then the user message.
-		for _, sysMsg := range systemMessages {
-			if _, err := s.database.SaveMessageToThread(txCtx, chatID, workflowID, int32(reliantv1.MessageRole_MESSAGE_ROLE_SYSTEM), sysMsg.Content, &workflowID, nil, displayStyleProtoToInt32Ptr(sysMsg.DisplayStyle)); err != nil {
-				return fmt.Errorf("failed to save system message: %w", err)
-			}
-		}
-		if hasUserContent || len(req.Msg.Attachments) > 0 {
-			if _, err := s.database.SaveMessageToThread(txCtx, chatID, workflowID, int32(reliantv1.MessageRole_MESSAGE_ROLE_USER), userContent, &workflowID, req.Msg.Attachments, nil); err != nil {
-				return fmt.Errorf("failed to save first message: %w", err)
-			}
-		}
-
-		if chatCreatedJSON != nil {
-			if err := s.database.CreateUserUpdate(txCtx, &db.UserUpdate{
-				UserID:     userID,
-				ProjectID:  &chat.ProjectID,
-				WorktreeID: chat.WorktreeID,
-				ChatID:     &chatID,
-				UpdateType: db.UserUpdateChatCreated,
-				EntityType: db.EntityTypeChat,
-				EntityID:   chatID,
-				Data:       chatCreatedJSON,
-			}); err != nil {
-				return fmt.Errorf("failed to create chat_created user update: %w", err)
-			}
-		}
-
-		return nil
-	}); err != nil {
-		logging.Error("Failed to create chat", "error", err, "chatID", chatID)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to create chat"))
-	}
-
-	// Start workflow on shared task queue
-	workflowOptions := client.StartWorkflowOptions{
-		ID:                       workflowID,
-		TaskQueue:                s.taskQueue,
-		WorkflowIDConflictPolicy: enums.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING,
-		WorkflowExecutionTimeout: workflow.WorkflowExecutionTimeout,
-	}
-
-	// initialData was already built and validated before chat creation
-
-	// Inject session daemon if set on chat
-	injectSessionDaemonID(initialData, chat)
-
-	workflowInput := v2.WorkflowInput{
-		ChatID:       chatID,
-		WorkflowName: workflowName,
-		Inputs:       initialData,
-		ExecContext:  execContext,
-	}
-
-	workflowRun, err := s.tempClient.ExecuteWorkflow(ctx, workflowOptions, v2.DynamicWorkflow, workflowInput)
-	if err != nil {
-		logging.Error("Failed to start workflow", "error", err, "chatID", chatID)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to start workflow"))
-	}
-
-	runID := workflowRun.GetRunID()
-	s.runs.RecordRun(ctx, chatID, workflowID, runID)
-
-	// Workflow record was already created above with CreateWorkflowWithThread (status=pending)
-	// WorkflowStatus activity will update it to 'running' when the workflow starts
-
-	// Start GenerateTitle workflow
-	generateTitleOptions := client.StartWorkflowOptions{
-		ID:                       fmt.Sprintf("generate-title-%s", chatID),
-		TaskQueue:                s.taskQueue,
-		WorkflowExecutionTimeout: workflow.WorkflowExecutionTimeout,
-	}
-	generateTitleInput := map[string]interface{}{
-		"chat_id":       chatID,
-		"first_message": userContent,
-	}
-	_, titleErr := s.tempClient.ExecuteWorkflow(ctx, generateTitleOptions, "GenerateTitleWorkflow", generateTitleInput)
-	if titleErr != nil {
-		logging.Error("Failed to start title generation workflow", "error", titleErr, "chatID", chatID)
-		// Don't fail the request for title generation failure
-	}
-
-	// Fetch created chat
-	createdChat, err := s.database.GetChat(ctx, chatID)
-	if err != nil {
-		logging.Error("Failed to fetch created chat", "error", err, "chatID", chatID)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to fetch created chat"))
-	}
-
-	createChatProto := chatToProto(createdChat)
-	response := &reliantv1.CreateChatResponse{
-		Chat:       createChatProto,
-		WorkflowId: workflowID,
-		RunId:      runID,
-	}
-	return connect.NewResponse(response), nil
+	return connect.NewResponse(&reliantv1.StartChatResponse{
+		Chat:       chatToProto(result.Chat),
+		WorkflowId: result.WorkflowID,
+		RunId:      result.RunID,
+	}), nil
 }
 
 // ListChats lists all non-archived chats for a project
@@ -433,7 +229,7 @@ func (s *ChatService) UpdateChat(
 	if req.Msg.WorktreeId != nil {
 		// Same invariant as creation: a chat may be moved between the project's
 		// worktrees, but never to a foreign one and never cleared to null.
-		resolved, err := s.resolveChatWorktreeID(ctx, chat.ProjectID, req.Msg.WorktreeId)
+		resolved, err := s.launcher().ResolveChatWorktreeID(ctx, chat.ProjectID, req.Msg.WorktreeId)
 		if err != nil {
 			return nil, err
 		}
@@ -445,7 +241,7 @@ func (s *ChatService) UpdateChat(
 		newWorkflowName := *req.Msg.WorkflowName
 
 		// Validate workflow exists
-		if _, err := s.loadWorkflowForValidation(ctx, newWorkflowName, chat.ProjectID); err != nil {
+		if _, err := s.launcher().LoadWorkflowForValidation(ctx, newWorkflowName, chat.ProjectID); err != nil {
 			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("workflow not found: %s", newWorkflowName))
 		}
 

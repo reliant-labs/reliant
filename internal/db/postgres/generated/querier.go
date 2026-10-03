@@ -143,6 +143,12 @@ type Querier interface {
 	CreateTask(ctx context.Context, arg CreateTaskParams) (Task, error)
 	CreateTaskDependency(ctx context.Context, arg CreateTaskDependencyParams) (TaskDependency, error)
 	CreateThread(ctx context.Context, arg CreateThreadParams) (Thread, error)
+	CreateTrigger(ctx context.Context, arg CreateTriggerParams) error
+	// DO NOTHING rather than DO UPDATE: the first row for a (kind, dedupe_key) is
+	// the authoritative record of intent, and a retry must not overwrite its
+	// outcome. The affected-row count is what tells the caller whether it won the
+	// race (1) or a prior firing already exists (0).
+	CreateTriggerEvent(ctx context.Context, arg CreateTriggerEventParams) (int64, error)
 	CreateWorkflow(ctx context.Context, arg CreateWorkflowParams) (Workflow, error)
 	// Workflow Drafts - Simplified user-owned workflows
 	// Workflows are owned by users and available across all projects
@@ -180,6 +186,7 @@ type Querier interface {
 	DeleteTaskDependencyByPair(ctx context.Context, arg DeleteTaskDependencyByPairParams) error
 	DeleteThread(ctx context.Context, id string) error
 	DeleteThreadsByConversation(ctx context.Context, chatID string) error
+	DeleteTrigger(ctx context.Context, id string) error
 	DeleteVisibilityOverride(ctx context.Context, arg DeleteVisibilityOverrideParams) error
 	DeleteWorkflow(ctx context.Context, id string) error
 	DeleteWorkflowCheckpoint(ctx context.Context, workflowID string) error
@@ -244,6 +251,10 @@ type Querier interface {
 	GetLatestMessageByThread(ctx context.Context, threadID string) (Message, error)
 	// Get the latest message with token data in a thread at a specific context sequence
 	GetLatestMessageWithTokensByThread(ctx context.Context, arg GetLatestMessageWithTokensByThreadParams) (Message, error)
+	// The overlap check ("is this trigger's previous run still going?") asks for
+	// the latest 'launched' event; the detail view asks for the latest of any
+	// outcome. A NULL outcome means no filter.
+	GetLatestTriggerEvent(ctx context.Context, arg GetLatestTriggerEventParams) (TriggerEvent, error)
 	GetMaxSequenceForThread(ctx context.Context, threadID string) (interface{}, error)
 	GetMessage(ctx context.Context, id string) (Message, error)
 	GetMessageByActivityID(ctx context.Context, arg GetMessageByActivityIDParams) (Message, error)
@@ -389,6 +400,8 @@ type Querier interface {
 	GetThreadWithParent(ctx context.Context, id string) (GetThreadWithParentRow, error)
 	GetToolCall(ctx context.Context, id string) (ToolCall, error)
 	GetToolCallResult(ctx context.Context, toolCallID string) (ToolCallResult, error)
+	GetTrigger(ctx context.Context, id string) (Trigger, error)
+	GetTriggerEventByDedupe(ctx context.Context, arg GetTriggerEventByDedupeParams) (TriggerEvent, error)
 	// Get a usable workflow by slug (for runtime loading)
 	GetUsableWorkflowBySlug(ctx context.Context, arg GetUsableWorkflowBySlugParams) (WorkflowDraft, error)
 	GetVisibilityOverride(ctx context.Context, arg GetVisibilityOverrideParams) (bool, error)
@@ -534,6 +547,11 @@ type Querier interface {
 	// crashes at runtime. tc.requested_at already carries "when was this spawn
 	// issued", so workflow_created_at is omitted rather than selected and left
 	// to crash the first time a caller lists mid-dispatch-race.
+	//
+	// child_workflow_id is selected ALONGSIDE child_thread_id because for a
+	// resumed spawn they differ and both are needed: the thread is what a cancel
+	// signal names, while the workflow row id is what a status reconcile must
+	// CAS. Deriving either from the other is not possible — see spawn_stop.
 	ListSpawnChildrenForThread(ctx context.Context, threadID sql.NullString) ([]ListSpawnChildrenForThreadRow, error)
 	// The spawn tool call behind each child thread in one chat, for the reconnect
 	// snapshot: it is what the background-work pill's cancel button addresses, and
@@ -629,6 +647,12 @@ type Querier interface {
 	// writer has to remember to set.
 	ListToolCallsByIDs(ctx context.Context, ids []string) ([]ToolCall, error)
 	ListToolCallsByMessageIDs(ctx context.Context, messageIds []string) ([]ToolCall, error)
+	// Newest first, matching idx_trigger_events_trigger_occurred so this is an
+	// ordered index scan. id breaks ties: two fires can share an occurred_at.
+	ListTriggerEvents(ctx context.Context, arg ListTriggerEventsParams) ([]TriggerEvent, error)
+	// An empty user_id lists every user's triggers, which only the schedule
+	// syncer's startup reconciliation does. project_id narrows to one project.
+	ListTriggers(ctx context.Context, arg ListTriggersParams) ([]Trigger, error)
 	// List all presets for a user (both global and project-specific)
 	ListUserPresets(ctx context.Context, userID string) ([]Preset, error)
 	// List presets for a specific project (includes both global and project-specific)
@@ -850,6 +874,7 @@ type Querier interface {
 	// project. A no-op — zero rows, no updated_at churn — when both already hold,
 	// so callers can run it on every successful forge read.
 	SetProjectForgeName(ctx context.Context, arg SetProjectForgeNameParams) (int64, error)
+	SetTriggerEnabled(ctx context.Context, arg SetTriggerEnabledParams) (int64, error)
 	SetVisibilityOverride(ctx context.Context, arg SetVisibilityOverrideParams) error
 	SetWorkflowDraftHidden(ctx context.Context, arg SetWorkflowDraftHiddenParams) (WorkflowDraft, error)
 	// Move a draft between 'draft' and 'complete'. The caller validates before
@@ -884,6 +909,11 @@ type Querier interface {
 	// when moving a thread back to running.
 	UpdateThreadStatus(ctx context.Context, arg UpdateThreadStatusParams) (Thread, error)
 	UpdateThreadWorkflow(ctx context.Context, arg UpdateThreadWorkflowParams) (Thread, error)
+	// Identity columns (id, user_id, kind) are not updatable: changing the owner
+	// would silently re-point which identity the run executes as, and changing
+	// the kind would leave Config describing a source that no longer applies.
+	UpdateTrigger(ctx context.Context, arg UpdateTriggerParams) (int64, error)
+	UpdateTriggerEventOutcome(ctx context.Context, arg UpdateTriggerEventOutcomeParams) (int64, error)
 	UpdateWorkflowDraft(ctx context.Context, arg UpdateWorkflowDraftParams) (WorkflowDraft, error)
 	UpdateWorkflowDraftDefinition(ctx context.Context, arg UpdateWorkflowDraftDefinitionParams) (WorkflowDraft, error)
 	// Set or update the forked_from origin

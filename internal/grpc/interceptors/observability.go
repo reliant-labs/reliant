@@ -33,7 +33,7 @@ func (o *ObservabilityInterceptor) WrapUnary(next connect.UnaryFunc) connect.Una
 		observability.GRPCInFlight.Inc()
 		defer observability.GRPCInFlight.Dec()
 
-		procedure := req.Spec().Procedure // e.g. "/reliant.v1.ChatService/CreateChat"
+		procedure := req.Spec().Procedure // e.g. "/reliant.v1.ChatService/StartChat"
 		service, method := splitProcedure(procedure)
 
 		ctx, span := grpcTracer.Start(ctx, procedure,
@@ -100,7 +100,7 @@ func (o *ObservabilityInterceptor) WrapStreamingHandler(next connect.StreamingHa
 }
 
 func splitProcedure(procedure string) (service, method string) {
-	// procedure is like "/reliant.v1.ChatService/CreateChat"
+	// procedure is like "/reliant.v1.ChatService/StartChat"
 	parts := strings.Split(strings.TrimPrefix(procedure, "/"), "/")
 	if len(parts) == 2 {
 		return parts[0], parts[1]

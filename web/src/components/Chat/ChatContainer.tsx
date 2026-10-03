@@ -7,6 +7,7 @@
 
 import { useMemo, useCallback, useState, useEffect } from "react";
 import { MessageRole } from "../../gen/reliant/v1/chat_pb";
+import { sendOnExistingChat } from "../../lib/chatSendRouting";
 import { sortMessagesForDisplay } from "../../lib/messageOrder";
 import { ChatPresenter } from "./ChatPresenter";
 import {
@@ -160,7 +161,7 @@ export function ChatContainer({ tabId, isFocused = true }: ChatContainerProps) {
             : undefined;
           const newChat = await useChatStore
             .getState()
-            .createChat(
+            .startChat(
               currentWorktreeId || undefined,
               content,
               attachmentIds,
@@ -179,14 +180,23 @@ export function ChatContainer({ tabId, isFocused = true }: ChatContainerProps) {
                   Object.entries(selectedPresets).filter(([_, v]) => v != null),
                 ) as Record<string, string>)
               : undefined;
-            await useChatStore
-              .getState()
-              .sendMessage(chatId, content, attachmentIds, {
+            const chatActions = useChatStore.getState();
+            await sendOnExistingChat(
+              currentChat,
+              chatId,
+              content,
+              attachmentIds,
+              {
                 workflow: workflow || null,
                 workflowParams,
                 targetThread,
                 selectedPresets: presetsForSend,
-              });
+              },
+              {
+                startExistingChat: chatActions.startExistingChat,
+                sendMessage: chatActions.sendMessage,
+              },
+            );
           } else {
             throw new Error("No chat ID available");
           }

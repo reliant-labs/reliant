@@ -87,7 +87,7 @@ user_id).
 - Invalid with intent complete ⇒ rejected, nothing stored.
 - Mark complete on invalid draft ⇒ rejected with errors; on valid ⇒ complete.
 - Save of a complete workflow that introduces an error ⇒ rejected.
-- Draft never runnable: CreateChat / LoadWorkflowActivity / spawn / ref /
+- Draft never runnable: StartChat / LoadWorkflowActivity / spawn / ref /
   router / scenario loader refuse a draft by slug.
 - List shows computed validity (no stale flag) + status.
 - Agent tools: default draft; complete:true gates; responses carry findings.
