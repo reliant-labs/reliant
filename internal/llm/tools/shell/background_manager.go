@@ -447,6 +447,10 @@ func (m *BackgroundManager) StartProcess(ctx context.Context, opts StartProcessO
 		if err := osutil.AdjustChildOOMScore(cmd.Process.Pid); err != nil {
 			logging.Debug("Failed to adjust background process oom_score_adj", "pid", cmd.Process.Pid, "error", err)
 		}
+		// Yield to the daemon, the UI and Docker when the machine is saturated.
+		if err := osutil.LowerChildPriority(cmd.Process.Pid); err != nil {
+			logging.Debug("Failed to lower background process priority", "pid", cmd.Process.Pid, "error", err)
+		}
 	}
 
 	// Start goroutines to capture output
