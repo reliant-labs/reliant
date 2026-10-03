@@ -71,14 +71,11 @@ import {
   getSecretVersions,
   listSecrets,
   setSecret,
-  setSecretEnsuringEnvironment,
   undeleteSecret,
-  type EnsureEnvironmentInput,
   type ManagedSecretHistory,
   type ManagedSecretSummary,
   type ManagedStoreAvailability,
   type ManagedStoreTarget,
-  type SetSecretEnsuringResult,
   type SetSecretResult,
 } from "../services/forge/secretStore";
 import type { ForgeEnvStatusReport } from "../services/forge/status";
@@ -993,62 +990,21 @@ export function useSetManagedSecret(
   });
 }
 
-/**
- * Set a secret on an environment the control plane has NEVER SEEN, creating
- * its row on the way.
+/*
+ * THERE IS NO "SET A SECRET ON AN ENVIRONMENT THE CONTROL PLANE HAS NEVER
+ * SEEN" HOOK (#353, design §10).
  *
- * A separate hook from useSetManagedSecret rather than a flag on it, because
- * the two have different preconditions: that one requires an environment id
- * and refuses without one (requireEnvironmentId), and this one exists exactly
- * for the case where there is no id yet. Collapsing them would mean the
- * "must have an id" guard could no longer be stated.
+ * `useSetManagedSecretEnsuringEnvironment` used to be here. It merged a kind
+ * the SET-SECRET FORM had collected with one forge may or may not have
+ * reported, and created the environment's row from the result — so an
+ * IMMUTABLE field could be set from component state, with an empty string as
+ * its floor.
  *
- * `ensure` null means the facts needed to create the row — the forge project
- * name and the env's kind — are not known, so there is nothing to call this
- * with; the caller does not offer the write.
- *
- * `ensure.controlPlaneKind` may be "" when forge could not report the kind;
- * the caller then asks the user, and the answer arrives per submit as
- * `controlPlaneKind`. A per-submit kind never overrides one forge reported.
- *
- * On success the cloud environment list is invalidated too: the write may
- * have CREATED the env's row, and once it is listed the screen keys the store
- * on that row instead of offering to create it again.
+ * Creating the row is now Preview's Register alone (useRegisterEnvironment),
+ * from forge's own render, which is the only source that can state the kind
+ * without guessing. Every write through this module therefore keys on a row
+ * that already exists, which is what `requireEnvironmentId` above asserts.
  */
-export function useSetManagedSecretEnsuringEnvironment(
-  projectId: string | null | undefined,
-  env: string | null | undefined,
-  environmentId: string | null | undefined,
-  ensure: EnsureEnvironmentInput | null
-) {
-  const invalidate = useInvalidateManagedSecrets(projectId, env);
-  const invalidateCloud = useInvalidateCloudEnvironments();
-  return useMutation<
-    SetSecretEnsuringResult,
-    Error,
-    { name: string; value: string; cas?: number; controlPlaneKind?: string }
-  >({
-    mutationFn: ({ name, value, cas, controlPlaneKind }) => {
-      if (!ensure) {
-        throw new Error(
-          "Reliant does not know this environment's forge project and kind, so it cannot create it to hold a value."
-        );
-      }
-      const reportedKind = ensure.controlPlaneKind.trim();
-      return setSecretEnsuringEnvironment({
-        environmentId: environmentId ?? "",
-        env: { ...ensure, controlPlaneKind: reportedKind !== "" ? reportedKind : (controlPlaneKind ?? "") },
-        name,
-        value,
-        cas,
-      });
-    },
-    onSuccess: () => {
-      invalidate();
-      invalidateCloud();
-    },
-  });
-}
 
 /** useDeleteManagedSecret soft-deletes. Recoverable — see useUndeleteManagedSecret. */
 export function useDeleteManagedSecret(
