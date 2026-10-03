@@ -4,7 +4,10 @@ package daemonruntime
 import (
 	"context"
 	"encoding/json"
+	"os"
 	"reflect"
+	"regexp"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -130,6 +133,111 @@ func (l *forgeCallLog) wrote() bool {
 	return false
 }
 
+// testPromoteApproval mints an approval for tests that need the apply argv.
+// Not a hole in the guarantee: that is about PRODUCTION reachability, pinned by
+// TestForgePromoteApprovalHasExactlyOneProducer below.
+func testPromoteApproval() forgePromoteApproval {
+	return forgePromoteApproval{release: "v1.5.15"}
+}
+
+func mustPromoteApplyArgs(t *testing.T, args forgePromoteArgs) []string {
+	t.Helper()
+	argv, err := args.applyArgs(testPromoteApproval())
+	if err != nil {
+		t.Fatalf("applyArgs with a validated approval: %v", err)
+	}
+	return argv
+}
+
+// The promote apply must carry --yes. `env deploy <env> <release>` is a RELEASE
+// deploy, so forge's O-13 gate applies to it exactly as it does to the
+// versionless form: without --yes and with no TTY it exits 5 (plan_unconfirmed)
+// and writes nothing, which would break the promote path outright.
+func TestForgePromoteApplyArgvCarriesYes(t *testing.T) {
+	args := forgePromoteArgs{ProjectPath: "/p", Env: "staging", Release: "v1.5.15"}
+
+	if apply := mustPromoteApplyArgs(t, args); !slices.Contains(apply, "--yes") {
+		t.Errorf("the promote apply argv %q must carry --yes, or forge refuses it as "+
+			"plan_unconfirmed and no binding is written", apply)
+	}
+	if plan := args.planArgs(); slices.Contains(plan, "--yes") {
+		t.Errorf("the plan argv %q must NOT carry --yes: it is read-only", plan)
+	}
+}
+
+// --yes is unreachable without a validated token. Deleting
+// validateConfirmation's required-claim check turns this red: an unpopulated
+// request then reaches forgePromoteStaleBinding, which refuses on the mismatch
+// and returns a ZERO approval, and applyArgs will not mint --yes from one.
+func TestForgePromoteYesIsUnreachableWithoutAValidatedToken(t *testing.T) {
+	args := forgePromoteArgs{ProjectPath: "/p", Env: "staging", Release: "v1.5.15"}
+
+	if argv, err := args.applyArgs(forgePromoteApproval{}); err == nil {
+		t.Errorf("applyArgs minted %q from a zero approval; --yes must require a validated "+
+			"confirmation token", argv)
+	}
+
+	facts := forgePromotePlanFacts{Env: "staging"}
+	facts.Current.Bound = true
+	facts.Current.Release = "v1.5.15"
+
+	for _, tc := range []struct {
+		name string
+		req  forgePromoteApplyRequest
+	}{
+		{"no claim at all", forgePromoteApplyRequest{forgePromoteArgs: args}},
+		{"a release the ledger disagrees with", forgePromoteApplyRequest{
+			forgePromoteArgs:       args,
+			ExpectedCurrentRelease: "v1.0.0",
+		}},
+		{"unbound claimed against a bound env", forgePromoteApplyRequest{
+			forgePromoteArgs: args,
+			ExpectUnbound:    true,
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			refusal, approval := forgePromoteStaleBinding(tc.req, facts)
+			if refusal == nil {
+				t.Fatal("expected a refusal; this request must not authorise a write")
+			}
+			if argv, err := args.applyArgs(approval); err == nil {
+				t.Errorf("a refused request still produced the apply argv %q, carrying --yes", argv)
+			}
+		})
+	}
+}
+
+// Exactly ONE non-test producer, which is what makes the guarantee structural.
+func TestForgePromoteApprovalHasExactlyOneProducer(t *testing.T) {
+	entries, err := os.ReadDir(".")
+	if err != nil {
+		t.Fatalf("read package dir: %v", err)
+	}
+	literal := regexp.MustCompile(`forgePromoteApproval\{`)
+	for _, entry := range entries {
+		name := entry.Name()
+		if entry.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		src, err := os.ReadFile(name)
+		if err != nil {
+			t.Fatalf("read %s: %v", name, err)
+		}
+		if len(literal.FindAll(src, -1)) > 0 && name != "cmd_forge_promote.go" {
+			t.Errorf("%s constructs a forgePromoteApproval; only forgePromoteStaleBinding may "+
+				"mint one, because an approval is what produces --yes", name)
+		}
+	}
+	src, err := os.ReadFile("cmd_forge_promote.go")
+	if err != nil {
+		t.Fatalf("read cmd_forge_promote.go: %v", err)
+	}
+	if len(literal.FindAll(src, -1)) == 0 {
+		t.Error("no forgePromoteApproval literal in cmd_forge_promote.go; this test is passing " +
+			"vacuously and no longer guards --yes")
+	}
+}
+
 // TestForgePromoteWroteDetectsTheApplyArgv proves the write detector is not
 // blind, by deriving both argv from the SAME builders production uses rather
 // than restating them.
@@ -142,10 +250,11 @@ func (l *forgeCallLog) wrote() bool {
 func TestForgePromoteWroteDetectsTheApplyArgv(t *testing.T) {
 	args := forgePromoteArgs{ProjectPath: "/p", Env: "staging", Release: "v1.5.15"}
 
-	applied := &forgeCallLog{Args: [][]string{args.applyArgs()}}
+	applyArgs := mustPromoteApplyArgs(t, args)
+	applied := &forgeCallLog{Args: [][]string{applyArgs}}
 	if !applied.wrote() {
 		t.Fatalf("wrote() did not recognise the real apply argv %v as a write — "+
-			"every no-write assertion in this file is passing vacuously", args.applyArgs())
+			"every no-write assertion in this file is passing vacuously", applyArgs)
 	}
 
 	planned := &forgeCallLog{Args: [][]string{args.planArgs()}}
@@ -249,7 +358,9 @@ func TestForgePromoteArgs(t *testing.T) {
 				len(log.Args), log.Args)
 		}
 		wantPlan := []string{"env", "deploy", "staging", "v1.5.15", "--plan", "--json"}
-		wantApply := []string{"env", "deploy", "staging", "v1.5.15", "--json"}
+		// --yes answers forge's O-13 confirmation gate: a release deploy with
+		// no TTY and no --yes exits 5 (plan_unconfirmed) and writes nothing.
+		wantApply := []string{"env", "deploy", "staging", "v1.5.15", "--json", "--yes"}
 		if !reflect.DeepEqual(log.Args[0], wantPlan) {
 			t.Errorf("guard call must be the dry run:\n got %v\nwant %v", log.Args[0], wantPlan)
 		}

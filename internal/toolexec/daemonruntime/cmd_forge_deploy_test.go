@@ -9,6 +9,8 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -280,11 +282,33 @@ func TestForgeDeployRequestsCarryNoEscapeHatches(t *testing.T) {
 	}
 }
 
+// testApproval mints an approval for tests that need the apply argv directly.
+//
+// It is NOT a hole in the guarantee the approval type exists to provide. That
+// guarantee is about PRODUCTION reachability: within this package the only
+// non-test producer is forgeDeployStaleState, and
+// TestForgeDeployApprovalHasExactlyOneProducer pins that by searching the
+// non-test sources. A test may of course construct one — it is testing the
+// argv, not the authorisation — and the mutation test below proves the
+// production path cannot.
+func testApproval() forgeDeployApproval {
+	return forgeDeployApproval{declaredContext: "gke_prod", release: "v1.5.15"}
+}
+
+func mustApplyArgs(t *testing.T, args forgeDeployArgs) []string {
+	t.Helper()
+	argv, err := args.applyArgs(testApproval())
+	if err != nil {
+		t.Fatalf("applyArgs with a validated approval: %v", err)
+	}
+	return argv
+}
+
 // The argv for the apply carries neither escape hatch either — the request shape
 // is only half the guarantee.
 func TestForgeDeployArgvNeverCarriesEscapeHatches(t *testing.T) {
 	args := forgeDeployArgs{ProjectPath: "/p", Env: "prod"}
-	for _, argv := range [][]string{args.planArgs(), args.applyArgs()} {
+	for _, argv := range [][]string{args.planArgs(), mustApplyArgs(t, args)} {
 		joined := strings.Join(argv, " ")
 		for _, flag := range []string{"--skip-preflight", "--no-digest"} {
 			if strings.Contains(joined, flag) {
@@ -295,8 +319,214 @@ func TestForgeDeployArgvNeverCarriesEscapeHatches(t *testing.T) {
 	if !strings.Contains(strings.Join(args.planArgs(), " "), "--dry-run") {
 		t.Error("the plan argv must carry --dry-run")
 	}
-	if strings.Contains(strings.Join(args.applyArgs(), " "), "--dry-run") {
+	if strings.Contains(strings.Join(mustApplyArgs(t, args), " "), "--dry-run") {
 		t.Error("the apply argv must NOT carry --dry-run")
+	}
+}
+
+// =============================================================================
+// --yes is reachable ONLY behind a validated confirmation
+// =============================================================================
+
+// The apply argv must carry --yes: without it forge's O-13 gate refuses a
+// daemon-driven deploy as plan_unconfirmed (exit 5) after building and pushing.
+// The preview must NOT carry it — a read-only plan has nothing to approve.
+func TestForgeDeployApplyArgvCarriesYes(t *testing.T) {
+	args := forgeDeployArgs{ProjectPath: "/p", Env: "prod"}
+
+	apply := mustApplyArgs(t, args)
+	if !slices.Contains(apply, "--yes") {
+		t.Errorf("the apply argv %q must carry --yes: forge's confirmation gate would otherwise "+
+			"refuse it as plan_unconfirmed (exit 5) having already built and pushed", apply)
+	}
+	if plan := args.planArgs(); slices.Contains(plan, "--yes") {
+		t.Errorf("the plan argv %q must NOT carry --yes: it is read-only and approves nothing", plan)
+	}
+}
+
+// THE MUTATION TEST. --yes must be unreachable without an approval, and an
+// approval must be unreachable without validation.
+//
+// Deleting validateConfirmation's declared-context check turns this red: an
+// empty ExpectedDeclaredContext would then reach forgeDeployStaleState, which
+// compares it against the plan's real context, refuses on the mismatch, and
+// returns a ZERO approval — and applyArgs refuses to mint --yes from one.
+func TestForgeDeployYesIsUnreachableWithoutAValidatedToken(t *testing.T) {
+	args := forgeDeployArgs{ProjectPath: "/p", Env: "prod"}
+
+	// A fabricated zero-value approval must not produce an argv at all.
+	if argv, err := args.applyArgs(forgeDeployApproval{}); err == nil {
+		t.Errorf("applyArgs minted %q from a zero approval; --yes must require a validated "+
+			"confirmation token, or a future caller acquires it silently", argv)
+	}
+
+	// And the only producer refuses to mint one for every unauthorised
+	// request shape, so there is no route from a bad request to --yes.
+	facts := forgeDeployPlanFacts{Env: "prod", Mode: forgeDeployModeDryRun, Release: "v1.5.15"}
+	facts.Guard.DeclaredContext = "gke_prod"
+	facts.Guard.Verdict = forgeDeployGuardVerdictAllow
+
+	for _, tc := range []struct {
+		name string
+		req  forgeDeployStartRequest
+	}{
+		{"no declared context at all", forgeDeployStartRequest{
+			forgeDeployArgs:        args,
+			ExpectedCurrentRelease: "v1.5.15",
+		}},
+		{"a declared context the plan disagrees with", forgeDeployStartRequest{
+			forgeDeployArgs:         args,
+			ExpectedDeclaredContext: "k3d-control-plane",
+			ExpectedCurrentRelease:  "v1.5.15",
+		}},
+		{"a release the plan disagrees with", forgeDeployStartRequest{
+			forgeDeployArgs:         args,
+			ExpectedDeclaredContext: "gke_prod",
+			ExpectedCurrentRelease:  "v1.0.0",
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			refusal, approval := forgeDeployStaleState(tc.req, facts)
+			if refusal == nil {
+				t.Fatal("expected a refusal; this request must not authorise a deploy")
+			}
+			if argv, err := args.applyArgs(approval); err == nil {
+				t.Errorf("a refused request still produced the apply argv %q, carrying --yes", argv)
+			}
+		})
+	}
+}
+
+// The approval type has exactly ONE producer in non-test code, which is what
+// makes the guarantee structural rather than a convention a future caller can
+// forget. Asserted against the sources because no type system here can say it.
+func TestForgeDeployApprovalHasExactlyOneProducer(t *testing.T) {
+	entries, err := os.ReadDir(".")
+	if err != nil {
+		t.Fatalf("read package dir: %v", err)
+	}
+
+	// `forgeDeployApproval{` is the only way to construct one — it has no
+	// constructor and every field is unexported, so a literal is required.
+	literal := regexp.MustCompile(`forgeDeployApproval\{`)
+	producers := map[string]int{}
+	for _, entry := range entries {
+		name := entry.Name()
+		if entry.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		src, err := os.ReadFile(name)
+		if err != nil {
+			t.Fatalf("read %s: %v", name, err)
+		}
+		if n := len(literal.FindAll(src, -1)); n > 0 {
+			producers[name] = n
+		}
+	}
+
+	// cmd_forge_deploy.go holds the type declaration, the zero values its
+	// refusal arms return, and the one real mint in forgeDeployStaleState.
+	// Any OTHER file constructing one is the regression this test exists for.
+	for file := range producers {
+		if file != "cmd_forge_deploy.go" {
+			t.Errorf("%s constructs a forgeDeployApproval; only forgeDeployStaleState may mint one, "+
+				"because an approval is what produces --yes on a live-cluster deploy", file)
+		}
+	}
+	if producers["cmd_forge_deploy.go"] == 0 {
+		t.Error("no forgeDeployApproval literal found in cmd_forge_deploy.go; this test is " +
+			"passing vacuously and no longer guards --yes")
+	}
+}
+
+// Exit 5 is plan_unconfirmed, NOT the old timeout. It must surface as a loud
+// non-success naming plan_unconfirmed, and must never read as success or as a
+// rollout still in flight.
+func TestForgeDeployStatus_PlanUnconfirmedIsALoudFailure(t *testing.T) {
+	dir := forgeProject(t)
+	plan := deployPlanJSON("prod", "dry_run", "gke_prod", "gke_prod", "allow", "v1.5.15")
+	stubForge(t, forgeCommandResult{Stdout: []byte(plan)}, nil)
+	// forge's refusal: exit 5, the message on stderr, no document on stdout.
+	stubForgeDeploy(t, forgeCommandResult{
+		ExitCode: 5,
+		Stderr:   []byte("the deploy plan was not confirmed (plan_unconfirmed), so NO promotion was written."),
+	}, nil)
+
+	raw, err := handleForgeDeployStart(context.Background(), mustDeployPayload(t,
+		startRequest(dir, "prod", "gke_prod", "v1.5.15")))
+	if err != nil {
+		t.Fatalf("deploy_start: %v", err)
+	}
+	status := waitForDeployJob(t, decodeDeployStart(t, raw).Handle)
+
+	// NOTHING was applied, and that is knowable — so this is failed, not the
+	// "manifests may have landed" hedge.
+	if status.JobStatus != forgeDeployJobStatusFailed {
+		t.Errorf("job_status = %q, want %q: exit 5 means forge wrote no promotion and applied "+
+			"nothing, which must never read as success or as a rollout in flight",
+			status.JobStatus, forgeDeployJobStatusFailed)
+	}
+	if status.ExitCode != 5 {
+		t.Errorf("exit_code = %d, want 5 carried through verbatim", status.ExitCode)
+	}
+	if !strings.Contains(status.JobStatusDetail, "plan_unconfirmed") {
+		t.Errorf("detail must name plan_unconfirmed so it cannot be read as the old exit-5 "+
+			"timeout; got %q", status.JobStatusDetail)
+	}
+}
+
+// Exit 8 is the wait-budget expiry — the case 5 used to mean. Manifests WERE
+// applied, so it is genuinely indeterminate: unknown, naming the budget.
+func TestForgeDeployStatus_WaitBudgetExpiredIsUnknown(t *testing.T) {
+	dir := forgeProject(t)
+	plan := deployPlanJSON("prod", "dry_run", "gke_prod", "gke_prod", "allow", "v1.5.15")
+	stubForge(t, forgeCommandResult{Stdout: []byte(plan)}, nil)
+	stubForgeDeploy(t, forgeCommandResult{
+		ExitCode: 8,
+		Stderr:   []byte("the wait's budget expired while the rollout was still progressing"),
+	}, nil)
+
+	raw, err := handleForgeDeployStart(context.Background(), mustDeployPayload(t,
+		startRequest(dir, "prod", "gke_prod", "v1.5.15")))
+	if err != nil {
+		t.Fatalf("deploy_start: %v", err)
+	}
+	status := waitForDeployJob(t, decodeDeployStart(t, raw).Handle)
+
+	if status.JobStatus != forgeDeployJobStatusUnknown {
+		t.Errorf("job_status = %q, want %q: the manifests were applied and the rollout was still "+
+			"progressing, so the outcome is not established",
+			status.JobStatus, forgeDeployJobStatusUnknown)
+	}
+	if strings.Contains(status.JobStatusDetail, "plan_unconfirmed") {
+		t.Errorf("exit 8 must not be described as plan_unconfirmed; got %q", status.JobStatusDetail)
+	}
+}
+
+// The real deploy invocation carries --yes end to end. Pinned at the seam the
+// daemon actually hands forge, not at the argv builder, so a call site that
+// bypassed the builder could not satisfy it.
+func TestForgeDeployStart_InvokesForgeWithYes(t *testing.T) {
+	dir := forgeProject(t)
+	plan := deployPlanJSON("prod", "dry_run", "gke_prod", "gke_prod", "allow", "v1.5.15")
+	stubForge(t, forgeCommandResult{Stdout: []byte(plan)}, nil)
+	apply := stubForgeDeploy(t, forgeCommandResult{
+		Stdout: []byte(`{"env":"prod","mode":"apply","ok":true,"exit_code":0}`),
+	}, nil)
+
+	raw, err := handleForgeDeployStart(context.Background(), mustDeployPayload(t,
+		startRequest(dir, "prod", "gke_prod", "v1.5.15")))
+	if err != nil {
+		t.Fatalf("deploy_start: %v", err)
+	}
+	waitForDeployJob(t, decodeDeployStart(t, raw).Handle)
+
+	if !slices.Contains(apply.Args, "--yes") {
+		t.Errorf("the apply invocation %q must carry --yes, or forge refuses it as "+
+			"plan_unconfirmed after building and pushing", apply.Args)
+	}
+	if slices.Contains(apply.Args, "--dry-run") {
+		t.Errorf("the apply invocation %q must not carry --dry-run", apply.Args)
 	}
 }
 

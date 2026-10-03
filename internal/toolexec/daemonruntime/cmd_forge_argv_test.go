@@ -58,11 +58,23 @@ func forgeArgvUnderTest(t *testing.T) map[string][]string {
 
 	deploy := forgeDeployArgs{ProjectPath: "/p", Env: "prod"}
 	argv["deploy plan"] = deploy.planArgs()
-	argv["deploy apply"] = deploy.applyArgs()
+	// The apply argv exists only behind a validated confirmation, so the
+	// parse check builds it the only way production can: through an approval.
+	// testApproval is the test-only minter — see its comment for why a test
+	// helper is not a hole in the guarantee.
+	applyArgs, err := deploy.applyArgs(testApproval())
+	if err != nil {
+		t.Fatalf("deploy applyArgs: %v", err)
+	}
+	argv["deploy apply"] = applyArgs
 
 	promote := forgePromoteArgs{ProjectPath: "/p", Env: "prod", Release: "v1.2.3"}
 	argv["promote plan"] = promote.planArgs()
-	argv["promote apply"] = promote.applyArgs()
+	promoteApply, err := promote.applyArgs(testPromoteApproval())
+	if err != nil {
+		t.Fatalf("promote applyArgs: %v", err)
+	}
+	argv["promote apply"] = promoteApply
 
 	return argv
 }
