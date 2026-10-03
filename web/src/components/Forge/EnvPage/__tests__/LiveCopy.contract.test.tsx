@@ -30,7 +30,22 @@ import { LiveReleases } from "../LiveReleases";
 import { LiveWorkloads } from "../LiveWorkloads";
 import { CloudNotice } from "../../SourceNotices";
 
-/** Nouns that are ours, not the customer's. */
+/**
+ * Nouns that are ours, not the customer's.
+ *
+ * The convergence vocabulary is in here for the same reason as the rest. A
+ * customer did not choose Flux, does not operate a reconciler, and has never
+ * heard of a Kustomization — those are how WE implement "did your release
+ * actually arrive", which is the question they asked. The words appear in the
+ * proto and in our own reasoning, and they must not reach the screen as the
+ * sentence a reader is given. The raw state identifiers are banned for the
+ * same reason: `in_sync` is a wire value, not English.
+ *
+ * The one deliberate exception is a FAILURE's verbatim reason string
+ * (`ReconciliationFailed`, `HealthCheckFailed`), passed through untranslated
+ * because it is the thing someone searches for. It is asserted separately, as
+ * subordinate detail beside a plain sentence — never as the sentence itself.
+ */
 const INTERNAL_NOUNS = [
   /control[ -]plane/i,
   /admin\.reliantapi\.com/i,
@@ -39,6 +54,12 @@ const INTERNAL_NOUNS = [
   /\bdenv_/i,
   /ledger/i,
   /kube[ -]?context/i,
+  /\bflux\b/i,
+  /reconciler/i,
+  /kustomization/i,
+  /\bin_sync\b/i,
+  /\bnot-reported\b/i,
+  /lastAppliedRevision/i,
 ];
 
 function expectNoInternalNouns(text: string) {
@@ -60,6 +81,9 @@ function liveEnv(overrides: Partial<LiveEnv> = {}): LiveEnv {
     promotedByActor: "",
     promotedByUserId: "",
     phase: "unspecified",
+    observed: { state: "not-reported" },
+    drift: { state: "not-reported" },
+    driftDetail: "",
     provenance: "",
     ...overrides,
   };

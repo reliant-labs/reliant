@@ -21,6 +21,8 @@ import { timestampFromDate } from "@bufbuild/protobuf/wkt";
 import { Code, ConnectError } from "@connectrpc/connect";
 
 import {
+  DeployConvergenceSchema,
+  DeployDriftSchema,
   DeployEnvironmentKind,
   DeployEnvironmentSchema,
   DeployLiveEnvironmentSchema,
@@ -38,16 +40,49 @@ vi.mock("@/services/controlPlane/config", () => ({
 import {
   declaredNotBuilt,
   describeSource,
+  driftLine,
+  intentLine,
   isPlacedKind,
   liveAvailabilityFromError,
   liveKindLabel,
   neverBuilt,
+  observedIsFailure,
+  observedLine,
   provenanceLine,
   shortCommit,
+  toLiveConvergence,
   toLiveEnv,
   toLiveShape,
+  type LiveConvergenceState,
+  type LiveEnv,
   type LiveProvenance,
 } from "../live";
+
+/**
+ * A plain LiveEnv, for the copy helpers that take one rather than a wire
+ * message. Distinct from the `liveMsg` builders above, which exercise the
+ * decode path.
+ */
+function liveEnvFixture(overrides: Partial<LiveEnv> = {}): LiveEnv {
+  return {
+    id: "denv_1",
+    name: "prod",
+    project: "hounders",
+    kind: "persistent",
+    declaredShape: null,
+    declaredBy: null,
+    release: "v12",
+    releaseProvenance: null,
+    promotedByActor: "",
+    promotedByUserId: "",
+    phase: "unspecified",
+    observed: { state: "not-reported" },
+    drift: { state: "not-reported" },
+    driftDetail: "",
+    provenance: "",
+    ...overrides,
+  };
+}
 
 // ── Fixtures ────────────────────────────────────────────────────────────────
 
@@ -208,15 +243,27 @@ describe("kinds", () => {
   it("treats only persistent and preview as placed by the platform", () => {
     expect(isPlacedKind("persistent")).toBe(true);
     expect(isPlacedKind("preview")).toBe(true);
-    // Promoted but not converged: the platform places nothing.
+    // The platform places no workloads here — which now governs only the
+    // WORKLOAD table, not the convergence state. See the phase test below.
     expect(isPlacedKind("self_managed")).toBe(false);
     expect(isPlacedKind("local")).toBe(false);
     expect(isPlacedKind("unknown")).toBe(false);
   });
 
-  it("drops a phase for a non-placed kind", () => {
-    // A server that sent a phase for a self-managed env would be claiming a
-    // convergence nobody observed.
+  /**
+   * THE GUARD THAT WAS REMOVED, pinned in its new direction.
+   *
+   * This used to assert the opposite: a phase for a non-placed kind was
+   * dropped, because the phase then came from PER-DEPLOYMENT observations and
+   * a self-managed environment has no deployment rows — so a phase arriving
+   * for one could only be a claim nobody had observed.
+   *
+   * The phase is now derived from the platform's own reading of the cluster
+   * converging, which is per ENVIRONMENT and exists for every kind. Dropping
+   * it here would discard a real observation and silently downgrade a
+   * customer's own cluster to "we cannot say".
+   */
+  it("keeps the phase for a non-placed kind, because the observation is per environment", () => {
     const env = toLiveEnv(
       create(DeployLiveEnvironmentSchema, {
         environment: create(DeployEnvironmentSchema, {
@@ -228,7 +275,7 @@ describe("kinds", () => {
         phase: DeployRolloutPhase.SUCCEEDED,
       })
     );
-    expect(env?.phase).toBe("unspecified");
+    expect(env?.phase).toBe("succeeded");
   });
 
   it("keeps the phase for a placed kind", () => {
@@ -415,6 +462,218 @@ describe("the states that are not errors", () => {
       })
     );
     expect(env?.provenance).toBe("v3 · main@fed4321");
+  });
+});
+
+// ── Intent versus observed ──────────────────────────────────────────────────
+
+/**
+ * THE DERIVATION, pinned at the layer that makes it.
+ *
+ * The component tests cover what a reader SEES; these cover the mapping from
+ * the wire, which is where a wrong answer originates. The property that
+ * matters is one-directional: `converged` must be reachable ONLY from an
+ * explicit in_sync verdict. Every absence, every unrecognised value, and every
+ * failure has to land somewhere else.
+ */
+describe("observed convergence", () => {
+  function liveMsg(args: {
+    kind?: DeployEnvironmentKind;
+    promotion?: boolean;
+    drift?: { state: string; detail?: string; observedAt?: Date };
+    phase?: DeployRolloutPhase;
+  }) {
+    return create(DeployLiveEnvironmentSchema, {
+      environment: create(DeployEnvironmentSchema, {
+        id: "cp-prod",
+        name: "prod",
+        project: "hounders",
+        kind: args.kind ?? DeployEnvironmentKind.PERSISTENT,
+      }),
+      currentPromotion:
+        args.promotion === false
+          ? undefined
+          : create(DeployPromotionSchema, { id: "promo-1", releaseVersion: "v12" }),
+      drift: args.drift
+        ? create(DeployDriftSchema, {
+            state: args.drift.state,
+            detail: args.drift.detail ?? "",
+            observedAt: args.drift.observedAt
+              ? timestampFromDate(args.drift.observedAt)
+              : undefined,
+          })
+        : undefined,
+      phase: args.phase ?? DeployRolloutPhase.UNSPECIFIED,
+    });
+  }
+
+  /**
+   * THE COMMON CASE TODAY, and the single most important assertion in this
+   * file. The platform's convergence observer is dark by default, so it omits
+   * the drift message entirely — and a client that read a MISSING message as
+   * agreement would report every environment in the product as confirmed
+   * running whatever it was actually running.
+   */
+  it("reads an absent drift message as not-reported, never as converged", () => {
+    const env = toLiveEnv(liveMsg({}));
+    expect(env?.drift.state).toBe("not-reported");
+    expect(env?.observed.state).toBe("not-reported");
+  });
+
+  it("reads in_sync as converged", () => {
+    const env = toLiveEnv(
+      liveMsg({ drift: { state: "in_sync" }, phase: DeployRolloutPhase.SUCCEEDED })
+    );
+    expect(env?.observed.state).toBe("converged");
+  });
+
+  /**
+   * Drift splits on the phase, and the split is the difference between "wait"
+   * and "investigate". The platform makes it on whether a reading was an
+   * actual reconciler FAILURE rather than merely being at the wrong revision,
+   * so collapsing the two would make a normal mid-rollout look like an outage.
+   */
+  it("splits drifted into converging and failed on the phase", () => {
+    const converging = toLiveEnv(
+      liveMsg({ drift: { state: "drifted" }, phase: DeployRolloutPhase.PROGRESSING })
+    );
+    expect(converging?.observed.state).toBe("converging");
+
+    const failed = toLiveEnv(
+      liveMsg({ drift: { state: "drifted" }, phase: DeployRolloutPhase.DEGRADED })
+    );
+    expect(failed?.observed.state).toBe("failed");
+  });
+
+  it("reads a present unknown verdict as unknown, distinct from an absent one", () => {
+    // "We looked and cannot say" is a different fact from "nothing has
+    // looked": the first can be an incident, the second is a configuration.
+    const env = toLiveEnv(
+      liveMsg({ drift: { state: "unknown" }, phase: DeployRolloutPhase.UNKNOWN })
+    );
+    expect(env?.drift.state).toBe("unknown");
+    expect(env?.observed.state).toBe("unknown");
+  });
+
+  it("reads a state this build does not recognise as unknown", () => {
+    // A newer platform's verdict must not default into agreement.
+    const env = toLiveEnv(liveMsg({ drift: { state: "something_new" } }));
+    expect(env?.drift.state).toBe("unknown");
+    expect(env?.observed.state).toBe("unknown");
+  });
+
+  it("derives the same answer for an environment on the customer's own cluster", () => {
+    const hosted = toLiveEnv(
+      liveMsg({
+        kind: DeployEnvironmentKind.PERSISTENT,
+        drift: { state: "in_sync" },
+        phase: DeployRolloutPhase.SUCCEEDED,
+      })
+    );
+    const own = toLiveEnv(
+      liveMsg({
+        kind: DeployEnvironmentKind.SELF_MANAGED,
+        drift: { state: "in_sync" },
+        phase: DeployRolloutPhase.SUCCEEDED,
+      })
+    );
+    expect(own?.observed).toEqual(hosted?.observed);
+    expect(own?.drift).toEqual(hosted?.drift);
+  });
+
+  it("carries the observation time and the platform's detail line", () => {
+    const at = new Date("2026-10-01T14:04:00.000Z");
+    const env = toLiveEnv(
+      liveMsg({
+        drift: { state: "drifted", detail: "cluster a is running nothing", observedAt: at },
+        phase: DeployRolloutPhase.DEGRADED,
+      })
+    );
+    expect(env?.observed.observedAt).toBe(at.toISOString());
+    expect(env?.driftDetail).toBe("cluster a is running nothing");
+  });
+});
+
+describe("the state line's words", () => {
+  it("states intent in the present tense with the promoter", () => {
+    expect(intentLine(liveEnvFixture({ release: "v12", promotedByActor: "ci" }))).toBe(
+      "Should be running v12, promoted by ci"
+    );
+  });
+
+  it("falls back to 'a user' when only an id identifies the promoter", () => {
+    expect(intentLine(liveEnvFixture({ release: "v12", promotedByUserId: "u-1" }))).toBe(
+      "Should be running v12, promoted by a user"
+    );
+  });
+
+  it("says nothing when there is no intent to state", () => {
+    // The caller has better copy for this (declared-not-built / never-built).
+    expect(intentLine(liveEnvFixture({ release: "" }))).toBe("");
+  });
+
+  /**
+   * No arm of the observed line may name Flux, a reconciler, a Kustomization
+   * or a raw wire value. A customer asked whether their release arrived; those
+   * are how we answer it, not the answer.
+   */
+  it("names nothing internal in any state", () => {
+    const states: LiveConvergenceState[] = [
+      "converged",
+      "converging",
+      "failed",
+      "unknown",
+      "not-reported",
+    ];
+    for (const state of states) {
+      const line = observedLine({ state });
+      expect(line).not.toMatch(/flux|reconcil|kustomization|bundle|revision|in_sync/i);
+      expect(line.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("only treats a reported failure as a problem", () => {
+    expect(observedIsFailure({ state: "failed" })).toBe(true);
+    // Neither absence is a fault — "nothing has confirmed this yet" is the
+    // normal state of every environment today.
+    expect(observedIsFailure({ state: "not-reported" })).toBe(false);
+    expect(observedIsFailure({ state: "unknown" })).toBe(false);
+    expect(observedIsFailure({ state: "converging" })).toBe(false);
+    expect(observedIsFailure({ state: "converged" })).toBe(false);
+  });
+
+  it("says nothing about drift when there is no verdict", () => {
+    expect(driftLine({ state: "not-reported" })).toBe("");
+    expect(driftLine({ state: "in_sync" })).not.toBe("");
+    expect(driftLine({ state: "unknown" })).not.toBe("");
+  });
+});
+
+describe("toLiveConvergence", () => {
+  it("keeps the platform's verbatim reason and the cluster it is about", () => {
+    const row = toLiveConvergence(
+      create(DeployConvergenceSchema, {
+        id: "conv-1",
+        state: "failed",
+        reason: "HealthCheckFailed",
+        message: "deployment api not ready",
+        cluster: "prod-gke",
+        observedAt: timestampFromDate(new Date("2026-10-01T14:40:00.000Z")),
+      })
+    );
+    expect(row).toEqual({
+      id: "conv-1",
+      state: "failed",
+      reason: "HealthCheckFailed",
+      message: "deployment api not ready",
+      cluster: "prod-gke",
+      observedAt: "2026-10-01T14:40:00.000Z",
+    });
+  });
+
+  it("never folds an unrecognised reading into converged", () => {
+    const row = toLiveConvergence(create(DeployConvergenceSchema, { id: "c", state: "whatever" }));
+    expect(row.state).toBe("unknown");
   });
 });
 

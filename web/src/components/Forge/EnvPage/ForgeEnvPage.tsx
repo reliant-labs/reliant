@@ -47,6 +47,7 @@ import { cn } from "@/lib/utils";
 import {
   useCloudEnvStatus,
   useCloudPromotions,
+  useLiveConvergences,
   useForgeTopology,
   useLiveView,
 } from "@/hooks/forge-queries";
@@ -117,6 +118,13 @@ export function ForgeEnvPage() {
   const placedId = liveEnv && isPlacedKind(liveEnv.kind) ? liveEnv.id : null;
   const cloudStatus = useCloudEnvStatus(placedId);
   const promotions = useCloudPromotions(liveEnv?.id ?? null);
+
+  // ASKED FOR EVERY KIND, unlike GetStatus above. The convergence reading is
+  // the platform watching the cluster converge to the promoted config, which
+  // is per environment and happens wherever that config is applied — so a
+  // customer's own cluster gets the same answer from the same call. Gating it
+  // on `placedId` is what would re-create the per-kind split this replaced.
+  const convergences = useLiveConvergences(liveEnv?.id ?? null);
 
   const daemon = daemonSideOf(topology.data, topology.error);
   const topologyReport = topology.data?.kind === "report" ? topology.data.report : null;
@@ -205,6 +213,7 @@ export function ForgeEnvPage() {
               promotions={promotions.data}
               promotionsLoading={promotions.isLoading}
               promotionsError={promotions.error as Error | null}
+              convergences={convergences.data}
               selectedSecret={secretParam ?? null}
               onSelectSecret={selectSecret}
               onOpenPreview={() => selectTab("preview")}

@@ -40,12 +40,41 @@
  * EXPLICITLY — a field a newer control plane adds is dropped here rather than
  * spread into a component that did not expect it.
  *
+ * ── INTENT IS PRIMARY; CONVERGENCE IS AN OBSERVATION ────────────────────────
+ *
+ * An environment's primary record is its INTENT: "this should run release
+ * v12", written by a promotion. Whether it actually got there is a SECONDARY
+ * reading, made by the control plane watching the reconciler converge the
+ * cluster, and it is derived here as `observed`.
+ *
+ * Nothing on this path is a client's report. There used to be an "apply" — a
+ * forge process announcing it was applying something and then saying how it
+ * went — and every surface that showed one had to label it "reported by forge"
+ * to stay honest. That model is gone: forge does not apply, so there is no
+ * reporter and nothing to label. The same derivation serves every environment
+ * kind, including one on a cluster the customer owns.
+ *
+ * ── ABSENCE IS NOT AGREEMENT ────────────────────────────────────────────────
+ *
+ * Three answers mean "we cannot say", and none of them may render as a
+ * success:
+ *
+ *   not reported   no reading exists at all. The common case right now, and a
+ *                  normal one — an environment nobody has observed yet.
+ *   unknown        a reading exists and does not settle the question: it went
+ *                  stale, or it was taken against an earlier promotion.
+ *   converging     observed at a revision that is not the promoted one, with
+ *                  no reported failure. The reconciler is still working.
+ *
+ * `observed` keeps them apart deliberately, and `provenance`-style collapsing
+ * into one "ok / not ok" flag is exactly what it exists to prevent.
+ *
  * ── WHAT IS DELIBERATELY NOT HERE ───────────────────────────────────────────
  *
- * Phase A fills the environment, its declaration, the promotion and the
- * release. `current_bundle`, `latest_apply`, `sessions` and `drift` are Phase
- * B, and this module does not pretend to read them: a half-decoded apply
- * rendered as "succeeded" would be worse than an absent section.
+ * `current_bundle` and `sessions` are not read. Per-object drift is not read
+ * either, because the control plane does not compute it: the baseline it was
+ * measured against disappeared with the apply model, so the list is always
+ * empty and rendering it would imply a capability the system does not have.
  */
 
 import { Code, ConnectError } from "@connectrpc/connect";
@@ -55,6 +84,7 @@ import { timestampDate, type Timestamp } from "@bufbuild/protobuf/wkt";
 import {
   DeployEnvironmentKind,
   DeployRolloutPhase,
+  type DeployConvergence,
   type DeployEnvironment,
   type DeployLiveEnvironment,
   type DeploySourceProvenance,
@@ -113,9 +143,15 @@ function kindOf(kind: DeployEnvironmentKind): LiveEnvKind {
 
 /**
  * True when the PLATFORM places this environment's workloads, and therefore
- * when a rollout phase and a GetStatus observation mean something. A
- * self-managed env is promoted but not converged, so asking the platform what
- * is running there would answer for a cluster it has never connected to.
+ * when a per-workload GetStatus observation means something. A self-managed
+ * env's workloads run on a cluster the platform has no deployment rows for,
+ * so asking would answer for something it never placed.
+ *
+ * THIS DOES NOT GATE THE CONVERGENCE DISPLAY, and that is the change. The
+ * reconciler's status is per ENVIRONMENT and exists for every kind, so intent
+ * versus observed is one answer for all of them — see LiveEnv.observed. The
+ * only thing still per-kind is the WORKLOAD table, which reads a different
+ * source.
  */
 export function isPlacedKind(kind: LiveEnvKind): boolean {
   return kind === "persistent" || kind === "preview";
@@ -130,7 +166,8 @@ export type LivePhase =
   | "stabilizing"
   | "succeeded"
   | "degraded"
-  | "superseded";
+  | "superseded"
+  | "unknown";
 
 function phaseOf(phase: DeployRolloutPhase): LivePhase {
   switch (phase) {
@@ -146,9 +183,126 @@ function phaseOf(phase: DeployRolloutPhase): LivePhase {
       return "degraded";
     case DeployRolloutPhase.SUPERSEDED:
       return "superseded";
+    case DeployRolloutPhase.UNKNOWN:
+      return "unknown";
     default:
       return "unspecified";
   }
+}
+
+// ── Observed convergence, and drift ─────────────────────────────────────────
+
+/**
+ * WHAT THE RECONCILER WAS OBSERVED TO HAVE DONE about the current intent.
+ *
+ *   converged      every target cluster is running the promoted bundle.
+ *   converging     observed at some other revision, with no reported failure.
+ *                  The reconciler is mid-flight; the answer is "wait".
+ *   failed         the reconciler reported a failure. The answer is
+ *                  "investigate", and it carries the reconciler's own reason.
+ *   unknown        we looked and cannot say: the newest reading went stale, or
+ *                  it was taken against an earlier promotion.
+ *   not-reported   no reading exists. THE COMMON CASE TODAY — the control
+ *                  plane's observer is off by default — and a normal state,
+ *                  not a fault.
+ *
+ * `unknown` and `not-reported` are both absences and are kept apart because
+ * they call for different sentences: one is "our readings went stale", which
+ * is a problem, and the other is "nothing has reported yet", which is Tuesday.
+ * NEITHER may ever render as converged.
+ */
+export type LiveConvergenceState =
+  | "converged"
+  | "converging"
+  | "failed"
+  | "unknown"
+  | "not-reported";
+
+export interface LiveObserved {
+  state: LiveConvergenceState;
+  /** When the reading was made. Absent when there is no reading. */
+  observedAt?: string;
+}
+
+/**
+ * Whether what is RUNNING matches what the intent names — the control plane's
+ * own word, passed through rather than recomputed.
+ *
+ * `not-reported` is this module's, not the server's: the server expresses
+ * "nothing observed" by omitting the field entirely, and a client that read a
+ * missing message as `in_sync` would turn every unobserved environment green.
+ */
+export type LiveDriftState = "in_sync" | "drifted" | "unknown" | "not-reported";
+
+export interface LiveDrift {
+  state: LiveDriftState;
+  observedAt?: string;
+}
+
+function driftStateOf(state: string): LiveDriftState {
+  switch (state) {
+    case "in_sync":
+    case "drifted":
+    case "unknown":
+      return state;
+    // A state this build does not recognise is an absence of information, not
+    // agreement. Same rule, one line up from the server.
+    default:
+      return "unknown";
+  }
+}
+
+/**
+ * Derive the observed reading from the drift verdict and the rollout phase,
+ * which the control plane computes from ONE comparison — so they cannot
+ * disagree, and this cannot invent a third answer.
+ *
+ * The phase is consulted for exactly one thing: splitting `drifted` into
+ * "still working" and "tried and failed". The control plane makes that split
+ * on whether any reading was a reconciler FAILURE as opposed to merely being
+ * at the wrong revision, and the two need opposite responses from a reader.
+ */
+function observedOf(drift: LiveDrift, phase: LivePhase): LiveConvergenceState {
+  switch (drift.state) {
+    case "in_sync":
+      return "converged";
+    case "drifted":
+      return phase === "degraded" ? "failed" : "converging";
+    case "unknown":
+      return "unknown";
+    default:
+      return "not-reported";
+  }
+}
+
+/**
+ * ONE OBSERVATION of one target cluster, as the control plane read it from the
+ * reconciler. A row in the timeline.
+ *
+ * `reason` and `message` are the RECONCILER'S OWN WORDS, untranslated
+ * (ReconciliationFailed, HealthCheckFailed, ArtifactFailed). Somebody chasing
+ * a failed deploy needs the string they can search for, not a paraphrase of
+ * it — this is the one place a technical string beats a friendly one.
+ *
+ * Rows are TRANSITIONS, not polls: the observer appends only when the answer
+ * changed, so a timeline is short and every entry means something.
+ */
+export interface LiveConvergence {
+  id: string;
+  /** converged | failed. Only terminal readings are recorded. */
+  state: "converged" | "failed" | "unknown";
+  /** The reconciler's own reason. A failed record always carries one. */
+  reason: string;
+  message: string;
+  /** Which target cluster this reading is about. */
+  cluster: string;
+  observedAt?: string;
+}
+
+function convergenceStateOf(state: string): LiveConvergence["state"] {
+  // Anything else is a state this build does not know. Never folded into
+  // converged — see LiveConvergenceState.
+  return state === "converged" || state === "failed" ? state : "unknown";
 }
 
 // ── Provenance ──────────────────────────────────────────────────────────────
@@ -405,8 +559,26 @@ export interface LiveEnv {
   promotedByActor: string;
   promotedByUserId: string;
 
-  /** The platform's rollout phase. Always `unspecified` for a non-placed kind. */
+  /**
+   * The rollout phase, for EVERY kind. It is derived from the same comparison
+   * `observed` and `drift` are, so the three cannot contradict each other.
+   */
   phase: LivePhase;
+
+  /**
+   * WHAT WAS OBSERVED about the current intent. The secondary half of the
+   * state line, and the same derivation for a hosted environment and one on
+   * the customer's own cluster.
+   */
+  observed: LiveObserved;
+
+  /**
+   * Whether running matches intended — the control plane's verdict, with its
+   * one human line of detail.
+   */
+  drift: LiveDrift;
+  /** The server's own sentence about the drift verdict. May be empty. */
+  driftDetail: string;
 
   /**
    * The ready-made provenance line (§2.1). Computed here, so the header, the
@@ -455,6 +627,23 @@ export function toLiveEnv(msg: DeployLiveEnvironment): LiveEnv | null {
     toProvenance(release?.provenance) ?? toProvenance(promotion?.releaseProvenance);
   const releaseVersion = promotion?.releaseVersion ?? release?.version ?? "";
 
+  // THE ABSENT DRIFT MESSAGE IS THE COMMON CASE, and it is a state rather
+  // than a gap. The control plane omits the field entirely when no pass has
+  // observed this environment — which is every environment today, because its
+  // observer is off by default — so this reads the absence explicitly as
+  // "not-reported" instead of defaulting a missing message to agreement.
+  const driftMsg = msg.drift;
+  const drift: LiveDrift = driftMsg
+    ? { state: driftStateOf(driftMsg.state), observedAt: toISO(driftMsg.observedAt) }
+    : { state: "not-reported" };
+
+  // The phase is per ENVIRONMENT now, for every kind, and is not gated on
+  // whether the platform places the workloads: it comes from the reconciler's
+  // status, which exists wherever the bundle is applied. The previous guard
+  // zeroed it for a self-managed env because the phase then came from
+  // per-deployment rows that only a placed env has.
+  const phase = phaseOf(msg.phase ?? DeployRolloutPhase.UNSPECIFIED);
+
   return {
     id: environment.id,
     name: environment.name,
@@ -472,11 +661,10 @@ export function toLiveEnv(msg: DeployLiveEnvironment): LiveEnv | null {
     promotedByActor: promotion?.promotedByActor ?? "",
     promotedByUserId: promotion?.promotedByUserId ?? "",
 
-    // A phase only means something where the platform places workloads. For a
-    // self-managed env the server sends UNSPECIFIED in Phase A, and this
-    // guard makes a future server that sends something else harmless rather
-    // than letting it claim a convergence nobody observed.
-    phase: isPlacedKind(kind) ? phaseOf(msg.phase ?? DeployRolloutPhase.UNSPECIFIED) : "unspecified",
+    phase,
+    observed: { state: observedOf(drift, phase), observedAt: drift.observedAt },
+    drift,
+    driftDetail: driftMsg?.detail ?? "",
 
     provenance: provenanceLine({
       release: releaseVersion,
@@ -486,6 +674,78 @@ export function toLiveEnv(msg: DeployLiveEnvironment): LiveEnv | null {
       config: declaredBy,
     }),
   };
+}
+
+// ── The state line's words ──────────────────────────────────────────────────
+
+/**
+ * THE INTENT HALF: what this environment is SUPPOSED to be running, and who
+ * said so.
+ *
+ * Intent is stated first and in the present tense because it is the primary
+ * record — it is true the moment the promotion is written, whatever the
+ * cluster is doing. Returns "" when nothing has been promoted; the caller
+ * already has better copy for that (declared-not-built / never-built).
+ */
+export function intentLine(env: LiveEnv): string {
+  if (env.release.trim() === "") return "";
+  const by = env.promotedByActor || (env.promotedByUserId ? "a user" : "");
+  if (by === "") return `Should be running ${env.release}`;
+  return `Should be running ${env.release}, promoted by ${by}`;
+}
+
+/**
+ * THE OBSERVED HALF, in the customer's nouns.
+ *
+ * Every arm is phrased as a reading rather than a report, because nothing here
+ * is reported by anything any more — the platform watched the cluster and this
+ * is what it saw. "Reconciler", "Flux", "Kustomization" and "bundle digest"
+ * are all ours and stay out: what a customer can act on is whether their
+ * release arrived, and if not, whether to wait or to look.
+ *
+ * NOT-REPORTED AND UNKNOWN BOTH SAY SO PLAINLY, and neither borrows a word
+ * from the converged arm. That is the rule the whole model turns on: an
+ * absence of information must never read as agreement.
+ */
+export function observedLine(observed: LiveObserved): string {
+  switch (observed.state) {
+    case "converged":
+      return "Confirmed running";
+    case "converging":
+      return "Still rolling out";
+    case "failed":
+      return "Couldn't finish rolling out";
+    case "unknown":
+      return "Can't confirm what's running";
+    default:
+      return "Not confirmed yet";
+  }
+}
+
+/** The drift verdict as a short phrase, or "" when there is nothing to say. */
+export function driftLine(drift: LiveDrift): string {
+  switch (drift.state) {
+    case "in_sync":
+      return "Matches what you asked for";
+    case "drifted":
+      return "Doesn't match what you asked for";
+    case "unknown":
+      return "Can't tell whether it matches";
+    default:
+      return "";
+  }
+}
+
+/**
+ * Whether the observed half should read as a PROBLEM.
+ *
+ * True only for an actual reported failure. Neither absence is a problem:
+ * "nothing has confirmed this yet" is the normal state of every environment
+ * today, and styling it as a fault would put a warning on every screen and
+ * teach people to ignore the one that matters.
+ */
+export function observedIsFailure(observed: LiveObserved): boolean {
+  return observed.state === "failed";
 }
 
 // ── Availability ────────────────────────────────────────────────────────────
@@ -554,4 +814,36 @@ export async function getLiveView(project: string): Promise<LiveEnv[]> {
     .map(toLiveEnv)
     .filter((env): env is LiveEnv => env !== null && env.project === project)
     .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+export function toLiveConvergence(msg: DeployConvergence): LiveConvergence {
+  return {
+    id: msg.id,
+    state: convergenceStateOf(msg.state),
+    reason: msg.reason,
+    message: msg.message,
+    cluster: msg.cluster,
+    observedAt: toISO(msg.observedAt),
+  };
+}
+
+/**
+ * One environment's OBSERVATION TIMELINE, newest first.
+ *
+ * It replaces the apply list, and the replacement is the model change rather
+ * than a rename. An apply was a forge process's claim that it was applying
+ * something; forge does not apply, so what is worth listing is not a sequence
+ * of attempts but a sequence of readings.
+ *
+ * An empty list is an EMPTY LIST, and today it is the normal answer: nothing
+ * observes these environments yet. The timeline is derived from the
+ * reconciler's current status and is safe to lose, so its absence is never an
+ * error and never blocks the rest of Live.
+ */
+export async function listEnvironmentConvergences(
+  environmentId: string,
+  limit = 25
+): Promise<LiveConvergence[]> {
+  const res = await getControlPlaneClient(DeployService).listConvergences({ environmentId, limit });
+  return (res.convergences ?? []).map(toLiveConvergence);
 }

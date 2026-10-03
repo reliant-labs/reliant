@@ -42,9 +42,11 @@ import {
 import {
   getLiveView,
   hasLiveControlPlane,
+  listEnvironmentConvergences,
   liveAvailabilityFromError,
   liveErrorDetail,
   type LiveAvailability,
+  type LiveConvergence,
   type LiveEnv,
 } from "../services/forge/live";
 import {
@@ -158,6 +160,8 @@ export const forgeKeys = {
   cloudStatus: (environmentId: string) => [...forgeKeys.all, "cloud-status", environmentId] as const,
   cloudPromotions: (environmentId: string) =>
     [...forgeKeys.all, "cloud-promotions", environmentId] as const,
+  convergences: (environmentId: string) =>
+    [...forgeKeys.all, "convergences", environmentId] as const,
 };
 
 // ── Topology ────────────────────────────────────────────────────────────────
@@ -408,6 +412,37 @@ export function useCloudPromotions(environmentId: string | null | undefined) {
     enabled: !!environmentId,
     staleTime: 15_000,
     retry: forgeRetry,
+  });
+}
+
+/**
+ * One environment's OBSERVATION TIMELINE, newest first.
+ *
+ * Asked for EVERY environment kind, deliberately — unlike useCloudEnvStatus,
+ * which is gated on the platform placing the workloads. The reading here is
+ * made by the platform watching the cluster converge to the promoted config,
+ * which happens for a customer's own cluster as much as for one we host.
+ *
+ * A FAILURE RESOLVES TO AN EMPTY LIST rather than propagating. The timeline is
+ * a secondary record — derived from the cluster's current state, rebuildable,
+ * never required for correctness — so it must not be able to take down the
+ * promotion history or the state line beside it. An empty timeline renders as
+ * nothing at all, which is also the correct rendering for the common case
+ * today, where no observations exist.
+ */
+export function useLiveConvergences(environmentId: string | null | undefined) {
+  return useQuery<LiveConvergence[]>({
+    queryKey: forgeKeys.convergences(environmentId ?? ""),
+    queryFn: async () => {
+      try {
+        return await listEnvironmentConvergences(environmentId as string);
+      } catch {
+        return [];
+      }
+    },
+    enabled: !!environmentId,
+    staleTime: 15_000,
+    retry: false,
   });
 }
 
