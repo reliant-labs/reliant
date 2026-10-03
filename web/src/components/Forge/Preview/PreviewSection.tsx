@@ -70,6 +70,7 @@ import { PromoteDialog } from "../Promote/PromoteDialog";
 import { DevStackPanel } from "../Status/DevStackPanel";
 import { WorkloadInventory } from "../Environments/WorkloadInventory";
 import { CheckoutPicker } from "./CheckoutPicker";
+import { EnvDiffCards } from "./EnvDiffCards";
 import { RegisterEnvPanel } from "./RegisterEnvPanel";
 
 /** The one line Preview shows when the daemon is not answering. */
@@ -244,6 +245,24 @@ export function PreviewSection(props: PreviewSectionProps) {
           {verifyNotice}
         </p>
       )}
+
+      {/* ── WHAT THIS CHECKOUT WOULD CHANGE (§8.2). ──
+          Each card is closed on arrival and asks the daemon only when opened:
+          the answer is a real KCL render of that environment, seconds of the
+          user's own CPU, so it is bought by a click rather than by a page
+          load. See EnvDiffCard. */}
+      <Section
+        title="What would change"
+        subtitle="forge renders the selected checkout and compares each environment against what is deployed."
+        testId="preview-env-diff"
+      >
+        <EnvDiffCards
+          projectId={projectId}
+          topology={props.topologyOutcome?.kind === "report" ? props.topologyOutcome.report : null}
+          checkoutPath={checkoutPath}
+          currentEnv={envName}
+        />
+      </Section>
 
       <Section
         title="What forge sees"

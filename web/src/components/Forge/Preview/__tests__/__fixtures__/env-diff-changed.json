@@ -1,0 +1,111 @@
+{
+  "project": "demo",
+  "source": "/tmp/demo",
+  "against": "live",
+  "charts": false,
+  "environments": [
+    {
+      "env": "prod",
+      "status": "ok",
+      "diff": {
+        "added": [
+          {
+            "cluster": "k3d-demo",
+            "api_version": "apps/v1",
+            "kind": "Deployment",
+            "namespace": "demo-prod",
+            "name": "reports",
+            "workload": "reports",
+            "hash": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+            "config_hash": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+          }
+        ],
+        "removed": [
+          {
+            "cluster": "k3d-demo",
+            "api_version": "v1",
+            "kind": "Namespace",
+            "name": "demo-dev",
+            "hash": "sha256:fd69b05eb9e25375410dd365ac60f5d5e8d72f2b361fdcd9e4da4d1c5c5da39b",
+            "config_hash": "sha256:fd69b05eb9e25375410dd365ac60f5d5e8d72f2b361fdcd9e4da4d1c5c5da39b"
+          }
+        ],
+        "changed": [
+          {
+            "live": {
+              "cluster": "k3d-demo",
+              "api_version": "gateway.networking.k8s.io/v1",
+              "kind": "Gateway",
+              "namespace": "demo-dev",
+              "name": "public",
+              "workload": "public",
+              "hash": "sha256:9a0e6e030c98465be2a2b8e345ec7227c6c8aeb4f63bee97096a69ef767f1199",
+              "config_hash": "sha256:9a0e6e030c98465be2a2b8e345ec7227c6c8aeb4f63bee97096a69ef767f1199"
+            },
+            "candidate": {
+              "cluster": "k3d-demo",
+              "api_version": "gateway.networking.k8s.io/v1",
+              "kind": "Gateway",
+              "namespace": "demo-dev",
+              "name": "public",
+              "workload": "public",
+              "hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+              "config_hash": "sha256:9a0e6e030c98465be2a2b8e345ec7227c6c8aeb4f63bee97096a69ef767f1199",
+              "images": {
+                "demo": "sha256:ab"
+              }
+            },
+            "config_changed": false,
+            "images": [
+              {
+                "artifact": "demo",
+                "to": "sha256:ab"
+              }
+            ]
+          }
+        ],
+        "workloads_added": [
+          "reports"
+        ],
+        "runtime_changes": [
+          {
+            "workload": "migrate",
+            "from": "host",
+            "to": "cluster"
+          }
+        ],
+        "secrets_added": [
+          {
+            "name": "API_KEY",
+            "provider": "hosted",
+            "declared_by": [
+              "reports"
+            ]
+          },
+          {
+            "name": "DB_URL",
+            "provider": "hosted",
+            "declared_by": [
+              "reports"
+            ]
+          },
+          {
+            "name": "EXTERNAL_TOKEN",
+            "provider": "external_secrets",
+            "declared_by": [
+              "reports"
+            ]
+          }
+        ],
+        "domains_added": [
+          "new.example.com"
+        ]
+      },
+      "live_source": "bundle",
+      "secret_presence": {
+        "API_KEY": true,
+        "DB_URL": false
+      }
+    }
+  ]
+}
