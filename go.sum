@@ -275,6 +275,8 @@ github.com/go-openapi/swag/fileutils v0.29.1 h1:ZcPzMceVhU1WPbK6N1G6sNQKdd1CWJlf
 github.com/go-openapi/swag/fileutils v0.29.1/go.mod h1:/wofKYckbtRl2p3+EwQsosie5CT1B38+dQ+PS579BzI=
 github.com/go-openapi/swag/jsonutils v0.29.1 h1:AFCxs0eQZ24/QyfhVHM2t49rMz7Vv3XCsZQI6yrNy+c=
 github.com/go-openapi/swag/jsonutils v0.29.1/go.mod h1:u3+sCfJpttDpcmS5kpm0yxL6GK0eWgODsx8Yw8fcqNM=
+github.com/go-openapi/swag/jsonutils/fixtures_test v0.29.1 h1:BiiXE31Bx9SfpsMmOQj5KYpUhTZBpLVriVhJDuLuY2o=
+github.com/go-openapi/swag/jsonutils/fixtures_test v0.29.1/go.mod h1:julgTUKZ9/D0j6O7GKajmRs+812FWxQg/mMpGunWSjg=
 github.com/go-openapi/swag/loading v0.29.1 h1:FCv5fG8UhTdDJa2R7w+5O9Ekpcbw7tt0nFWvmDKGBjc=
 github.com/go-openapi/swag/loading v0.29.1/go.mod h1:N0ESuem4p2oedKal8EJhciqnJ9Q9Wmt83L1CRB3Fouw=
 github.com/go-openapi/swag/mangling v0.29.1 h1:lHALtvYCdxVnRl4GrHmFPwfBTZYIObqdGNSKyu/8D6I=
@@ -289,6 +291,10 @@ github.com/go-openapi/swag/typeutils v0.29.1 h1:Nzv9nhnlLCRBPQqfOX+7lB6Guju370or
 github.com/go-openapi/swag/typeutils v0.29.1/go.mod h1:hxpgDZJVBkBsi/d3MIUosafoFdE5exaQRmVp0zwu3YE=
 github.com/go-openapi/swag/yamlutils v0.29.1 h1:69w3tsBajm7MR/fejLy7HD/3J68Ys1SeeZMEzZ3w2sk=
 github.com/go-openapi/swag/yamlutils v0.29.1/go.mod h1:rgsp3vT/QdWzKwn43CigDwjOGIenPyTZMKnxEM8jZOA=
+github.com/go-openapi/testify/enable/yaml/v2 v2.6.1 h1:Jm+/ze2rMtbD98yen92AhATGLGREDYXG56Xr4gMjEtE=
+github.com/go-openapi/testify/enable/yaml/v2 v2.6.1/go.mod h1:YDPnwCRDu38/oJBVMBVXOUDiJ9cIeBHWvfImHaXqnv4=
+github.com/go-openapi/testify/v2 v2.6.1 h1:6CNJhTjMzgaeaH8WhshcsZNPIvRemiOcFpU7seO/y7Q=
+github.com/go-openapi/testify/v2 v2.6.1/go.mod h1:SgsVHtfooshd0tublTtJ50FPKhujf47YRqauXXOUxfw=
 github.com/go-quicktest/qt v1.101.1-0.20240301121107-c6c8733fa1e6 h1:teYtXy9B7y5lHTp8V9KPxpYRAVA7dozigQcMiBust1s=
 github.com/go-quicktest/qt v1.101.1-0.20240301121107-c6c8733fa1e6/go.mod h1:p4lGIVX+8Wa6ZPNDvqcxq36XpUDLh42FLetFU7odllI=
 github.com/go-shiori/dom v0.0.0-20230515143342-73569d674e1c h1:wpkoddUomPfHiOziHZixGO5ZBS73cKqVzZipfrLmO1w=
@@ -517,8 +523,8 @@ github.com/prometheus/procfs v0.22.0 h1:6q9+/JL9IKAPbCmBrv9n5O5Ty3NKnciV5X7YGw0o
 github.com/prometheus/procfs v0.22.0/go.mod h1:CvmFr/GVhIjIvWJZW3tgkODBQMRIf0EyWMQLHCHab58=
 github.com/puzpuzpuz/xsync/v3 v3.5.1 h1:GJYJZwO6IdxN/IKbneznS6yPkVC+c3zyY/j19c++5Fg=
 github.com/puzpuzpuz/xsync/v3 v3.5.1/go.mod h1:VjzYrABPabuM4KyBh1Ftq6u8nhwY5tBPKP9jpmh0nnA=
-github.com/reliant-labs/forge v0.1.44-0.20261003195220-e67ea38f464a h1:cEVBcx64HFcttw5EnjpDFptsxGEMycKfTpdbNZeC9bs=
-github.com/reliant-labs/forge v0.1.44-0.20261003195220-e67ea38f464a/go.mod h1:1byXQyyaZxoDCc9gSvPy3CseNGxx6KXgyp8baWCo+QM=
+github.com/reliant-labs/forge v0.1.44-0.20261003211809-b3e416367dc9 h1:A92AgJFD4jHsk572Tzo2wHRnHwlXwhm0Uk5F9lduAE4=
+github.com/reliant-labs/forge v0.1.44-0.20261003211809-b3e416367dc9/go.mod h1:1byXQyyaZxoDCc9gSvPy3CseNGxx6KXgyp8baWCo+QM=
 github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec h1:W09IVJc94icq4NjY3clb7Lk8O1qJ8BdBEF8z0ibU0rE=
 github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec/go.mod h1:qqbHyh8v60DhA7CoWK5oRCqLrMHRGoxYCSS9EjAz6Eo=
 github.com/rivo/uniseg v0.1.0/go.mod h1:J6wj4VEh+S6ZtnVlnTBMWIodfgj8LQOQFoIToxlJtxc=
