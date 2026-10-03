@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/testsuite"
@@ -145,6 +146,19 @@ func successActivity(ctx context.Context) (map[string]interface{}, error) {
 	return map[string]interface{}{"result": "ok"}, nil
 }
 
+func heartbeatDetailsTimeoutActivity(ctx context.Context) (map[string]interface{}, error) {
+	return nil, temporal.NewTimeoutError(
+		enumspb.TIMEOUT_TYPE_HEARTBEAT,
+		errors.New("activity Heartbeat timeout"),
+		map[string]interface{}{
+			"activity_type":   "CallLLM",
+			"attempt":         4,
+			"elapsed_seconds": int64(13),
+			"status":          "running",
+		},
+	)
+}
+
 // stepExecutorWorkflow dispatches an activity with a low retry limit, then
 // uses StepExecutor.HandleCompletion to process the result and reports
 // the RetryExhausted flag.
@@ -177,6 +191,8 @@ func stepExecutorWorkflow(ctx workflow.Context, activityName string) (bool, erro
 		future = workflow.ExecuteActivity(actCtx, genericFailActivity)
 	case "successActivity":
 		future = workflow.ExecuteActivity(actCtx, successActivity)
+	case "heartbeatDetailsTimeoutActivity":
+		future = workflow.ExecuteActivity(actCtx, heartbeatDetailsTimeoutActivity)
 	default:
 		return false, fmt.Errorf("unknown activity: %s", activityName)
 	}
@@ -233,6 +249,20 @@ func (s *StepExecutorRetrySuite) TestSuccessfulActivity_DoesNotSetRetryExhausted
 	var retryExhausted bool
 	s.NoError(env.GetWorkflowResult(&retryExhausted))
 	s.False(retryExhausted, "Successful activity should NOT set RetryExhausted")
+}
+
+func (s *StepExecutorRetrySuite) TestHeartbeatTimeoutDetailsAreNotSuccessfulOutput() {
+	env := s.NewTestWorkflowEnvironment()
+	env.RegisterActivity(heartbeatDetailsTimeoutActivity)
+
+	env.ExecuteWorkflow(stepExecutorWorkflow, "heartbeatDetailsTimeoutActivity")
+
+	s.True(env.IsWorkflowCompleted())
+	s.NoError(env.GetWorkflowError())
+
+	var retryExhausted bool
+	s.NoError(env.GetWorkflowResult(&retryExhausted))
+	s.True(retryExhausted, "heartbeat progress details are telemetry, not a successful activity result")
 }
 
 // =============================================================================

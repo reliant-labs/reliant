@@ -4,6 +4,7 @@ package runtime
 import (
 	"errors"
 
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/temporal"
 )
 
@@ -50,10 +51,11 @@ func heartbeatCancelExhausted(err error) bool {
 		return false
 	}
 	var appErr *temporal.ApplicationError
-	if !errors.As(err, &appErr) {
-		return false
+	if errors.As(err, &appErr) && appErr.Type() == heartbeatCancelErrorType {
+		return true
 	}
-	return appErr.Type() == heartbeatCancelErrorType
+	var timeoutErr *temporal.TimeoutError
+	return errors.As(err, &timeoutErr) && timeoutErr.TimeoutType() == enumspb.TIMEOUT_TYPE_HEARTBEAT
 }
 
 // ladderRestarts counts fresh retry ladders granted per step, so the bound in

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/reliant-labs/reliant/internal/llm/drivererrors"
 	"go.temporal.io/sdk/temporal"
 )
 
@@ -92,6 +93,14 @@ func ClassifyError(err error) error {
 // autoClassify attempts to automatically classify errors based on their content
 func autoClassify(err error) error {
 	errStr := strings.ToLower(err.Error())
+
+	// Provider credit/quota exhaustion is commonly encoded as HTTP 429, but it is
+	// not a backoff-style rate limit. Retrying cannot succeed until the user adds
+	// provider credit, fixes billing/quota, or switches providers, so it must beat
+	// the streaming-429 transient rule below.
+	if drivererrors.IsProviderCreditExhaustion(err) {
+		return temporal.NewNonRetryableApplicationError(err.Error(), "ProviderCreditExhaustion", err)
+	}
 
 	// Check for specific transient error types first (before pattern matching)
 	// MalformedJSONError from streaming indicates network/API issues - always retry
@@ -194,13 +203,14 @@ func IsTerminal(err error) bool {
 		return true
 	}
 
-	// Check for Temporal ApplicationError
+	// Check for Temporal ApplicationError. NonRetryable is the durable signal;
+	// Type is retained for older TerminalError-shaped callers.
 	var appErr *temporal.ApplicationError
 	if errors.As(err, &appErr) {
-		return appErr.Type() == "TerminalError"
+		return appErr.NonRetryable() || appErr.Type() == "TerminalError"
 	}
 
-	return false
+	return drivererrors.IsProviderCreditExhaustion(err)
 }
 
 // ErrorCategory represents the category of an error
@@ -223,6 +233,10 @@ func CategorizeError(err error) ErrorCategory {
 	}
 
 	errStr := strings.ToLower(err.Error())
+
+	if drivererrors.IsProviderCreditExhaustion(err) {
+		return ErrorCategoryTerminal
+	}
 
 	if strings.Contains(errStr, "not found") || strings.Contains(errStr, "does not exist") {
 		return ErrorCategoryNotFound

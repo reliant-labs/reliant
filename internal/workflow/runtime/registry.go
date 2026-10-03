@@ -95,6 +95,14 @@ func classifyError(err error) error {
 	// Auto-classify based on error content
 	errStr := strings.ToLower(err.Error())
 
+	// Provider credit/quota exhaustion is commonly encoded as HTTP 429, but it is
+	// not a backoff-style rate limit. Retrying cannot succeed until the user adds
+	// provider credit, fixes billing/quota, or switches providers, so it must beat
+	// the streaming-429 transient rule below.
+	if drivererrors.IsProviderCreditExhaustion(err) {
+		return temporal.NewNonRetryableApplicationError(err.Error(), "ProviderCreditExhaustion", err)
+	}
+
 	// Check for specific transient error types first (before pattern matching)
 	// MalformedJSONError from streaming indicates network/API issues - always retry
 	if strings.Contains(errStr, "malformed json in tool input (transient)") {
@@ -216,6 +224,10 @@ func categorizeError(err error) string {
 	}
 
 	errStr := strings.ToLower(err.Error())
+
+	if drivererrors.IsProviderCreditExhaustion(err) {
+		return "terminal"
+	}
 
 	if strings.Contains(errStr, "not found") || strings.Contains(errStr, "does not exist") {
 		return "not_found"
@@ -424,13 +436,17 @@ func isTerminal(err error) bool {
 		return true
 	}
 
-	// Check for Temporal ApplicationError
+	// Check for Temporal ApplicationError. NonRetryable is the durable signal;
+	// Type is retained for older TerminalError-shaped callers.
 	var appErr *temporal.ApplicationError
 	if errors.As(err, &appErr) {
-		return appErr.Type() == "TerminalError"
+		return appErr.NonRetryable() || appErr.Type() == "TerminalError"
 	}
 
-	return false
+	if kind, _, ok := chatmarkers.Extract(err.Error()); ok {
+		return kind == chatmarkers.KindProviderUsageLimit || kind == chatmarkers.KindReliantManagedQuotaExhausted
+	}
+	return drivererrors.IsProviderCreditExhaustion(err)
 }
 
 // ============================================================================

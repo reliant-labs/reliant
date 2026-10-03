@@ -595,14 +595,6 @@ func (e *StepExecutor) getRawOutput(running *RunningStep) (map[string]interface{
 	// via JSON fallback.
 	var rawOutput map[string]interface{}
 	if err := running.Future.Get(e.ctx, &rawOutput); err != nil {
-		// A heartbeat timeout never let the activity return at all, so its last
-		// heartbeat is the only record of how far it reached.
-		var timeoutErr *temporal.TimeoutError
-		if errors.As(err, &timeoutErr) && timeoutErr.HasLastHeartbeatDetails() {
-			if detailErr := timeoutErr.LastHeartbeatDetails(&rawOutput); detailErr == nil && rawOutput != nil {
-				return rawOutput, nil
-			}
-		}
 		return nil, err
 	}
 	return rawOutput, nil

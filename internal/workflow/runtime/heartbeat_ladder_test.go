@@ -8,6 +8,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/testsuite"
@@ -63,6 +64,18 @@ func TestHeartbeatCancelExhausted(t *testing.T) {
 			"heartbeat RPC failed while running CallLLM; retrying")
 		assert.True(t, heartbeatCancelExhausted(err),
 			"a ladder spent on heartbeat failures must be recognized so the step gets a fresh one")
+	})
+
+	t.Run("heartbeat timeout is recognized through an error wrapper", func(t *testing.T) {
+		// Build a wrapped shape with the public testing constructor so this covers
+		// host sleep: Temporal saw no activity result, only missed heartbeats.
+		err := temporal.NewApplicationErrorWithCause(
+			"activity failed",
+			"ActivityErrorWrapper",
+			temporal.NewTimeoutError(enumspb.TIMEOUT_TYPE_HEARTBEAT, errors.New("activity Heartbeat timeout"), map[string]interface{}{"status": "running"}),
+		)
+		assert.True(t, heartbeatCancelExhausted(err),
+			"a ladder spent on heartbeat timeouts must be recognized so the step gets a fresh one")
 	})
 
 	t.Run("a real provider failure is not a heartbeat cancel", func(t *testing.T) {
