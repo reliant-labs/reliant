@@ -67,8 +67,8 @@ func TestPowerfulTagMembership(t *testing.T) {
 
 	// claude-5.5-opus is deliberately ABSENT: it is the flagship pick, and
 	// listing it here would collapse the two tiers onto one model.
-	// gpt-6.1-sol follows astra, so an openai-only user's [powerful] stays
-	// on astra; it is reached only when astra is not servable.
+	// gpt-6-sol is deliberately ABSENT: it is the GPT-6 flagship pick. Powerful
+	// stays on astra for GPT users, with 5.6 Sol as the codex-only frontier.
 	//
 	// The last two are per-provider coverage, not frontier picks: copilot and
 	// xai serve nothing above them, and a provider that cannot answer
@@ -78,7 +78,6 @@ func TestPowerfulTagMembership(t *testing.T) {
 	assert.Equal(t, []string{
 		"claude-5.1-fable",
 		"gpt-6-astra",
-		"gpt-6.1-sol",
 		"gpt-5.6-sol",
 		"gemini-3.8-flash",
 		"vertex-claude-5.1-fable",
@@ -198,9 +197,8 @@ func TestResolve_ExistingTagTargetsUnchangedByNewModels(t *testing.T) {
 		// claude-5.5-opus leads flagship. This moved from claude-5-opus
 		// deliberately when 5.5 shipped.
 		TagFlagship: "claude-5.5-opus",
-		// claude-5-opus leads moderate: implementation speed over 5.5
-		// (it measured ~3x faster per edit at the same effort).
-		TagModerate: "claude-5-opus",
+		// claude-5.5-sonnet leads moderate as the implementation tier.
+		TagModerate: "claude-5.5-sonnet",
 		TagCheap:    "claude-4.5-haiku",
 		TagFast:     "gemini-3.5-flash",
 	} {
@@ -243,8 +241,12 @@ func TestNewModelDefinitionsParseWithExpectedCapabilities(t *testing.T) {
 			[]string{"low", "medium", "high"}, TagModerate, "medium", 1048576, 65536},
 		{"gemini-3.5-flash", []string{TagFast, TagModerate, TagReasoning},
 			[]string{"low", "medium", "high"}, TagFast, "low", 1048576, 65536},
-		{"gpt-6-astra", []string{TagFlagship, TagPowerful, TagReasoning},
+		{"gpt-6-astra", []string{TagPowerful, TagReasoning},
 			[]string{"low", "medium", "high", "xhigh", "max"}, TagPowerful, "xhigh", 1050000, 128000},
+		{"gpt-6-sol", []string{TagFlagship, TagReasoning},
+			[]string{"low", "medium", "high", "xhigh", "max"}, TagFlagship, "xhigh", 1050000, 128000},
+		{"gpt-6-terra", []string{TagModerate, TagReasoning},
+			[]string{"low", "medium", "high", "xhigh", "max"}, TagModerate, "medium", 1050000, 128000},
 	}
 
 	for _, tt := range tests {

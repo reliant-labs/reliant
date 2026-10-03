@@ -13,7 +13,7 @@
 #
 # The same model may appear under several tags at different efforts — that is
 # how one model serves several tiers. Each tier is tuned independently:
-# [flagship] is claude-5.5-opus at xhigh, [moderate] is claude-5-opus at
+# [flagship] is claude-5.5-opus at xhigh, [moderate] is claude-5.5-sonnet at
 # medium. Retuning a tier is an edit HERE, never in a preset.
 #
 # thinking_level is an aspiration: it is clamped down to the model's declared
@@ -49,7 +49,6 @@ tags:
   powerful:
     - {model: claude-5.1-fable, thinking_level: xhigh}
     - {model: gpt-6-astra, thinking_level: xhigh}
-    - {model: gpt-6.1-sol, thinking_level: xhigh}
     - {model: gpt-5.6-sol, thinking_level: xhigh}
     - {model: gemini-3.8-flash, thinking_level: high}
     - {model: vertex-claude-5.1-fable, thinking_level: xhigh}
@@ -70,9 +69,8 @@ tags:
     - {model: claude-5-fable, thinking_level: high}
     - {model: claude-4.6-opus, thinking_level: high}
     - {model: claude-4.5-opus, thinking_level: high}
+    - {model: gpt-6-sol, thinking_level: xhigh}
     - {model: gpt-5.5, thinking_level: xhigh}
-    - {model: gpt-6-astra, thinking_level: xhigh}
-    - {model: gpt-6.1-sol, thinking_level: xhigh}
     - {model: gpt-5.6-luna, thinking_level: medium}
     - {model: gpt-5.4, thinking_level: xhigh}
     - {model: gpt-5.4-pro, thinking_level: xhigh}
@@ -94,16 +92,14 @@ tags:
     - {model: gpt-image-2.5-sunburst}
 
   moderate:
-    # Implementation tier (the implementer preset). claude-5-opus, not 5.5:
-    # measured over 148 vs 53 implementer runs, 5-opus @ medium made an edit
-    # every ~0.9 min vs 2.6 min for 5.5 @ medium, on the same task mix, and
-    # reached its first edit sooner (5.5 explores ~2x more before acting at
-    # every effort). flagship stays on 5.5 @ xhigh for orchestration.
+    # Implementation tier (the implementer preset). Sonnet 5.5 is the primary
+    # Anthropic moderate model; Opus remains above it in flagship for orchestration
+    # and below it here as a fallback.
+    - {model: claude-5.5-sonnet, thinking_level: medium}
     - {model: claude-5-opus, thinking_level: medium}
-    - {model: claude-5.5-sonnet, thinking_level: high}
     - {model: claude-5-sonnet, thinking_level: high}
+    - {model: gpt-6-terra, thinking_level: medium}
     - {model: gpt-5.5, thinking_level: xhigh}
-    - {model: gpt-6.1-sol, thinking_level: medium}
     - {model: gpt-5.6-terra, thinking_level: medium}
     - {model: gpt-5.4, thinking_level: xhigh}
     - {model: gemini-3.7-flash, thinking_level: medium}
@@ -114,8 +110,8 @@ tags:
     - {model: gemini-3.6-flash, thinking_level: medium}
     - {model: gemini-3.5-flash, thinking_level: low}
     - {model: gemini-2.5-pro, thinking_level: high}
+    - {model: vertex-claude-5.5-sonnet, thinking_level: medium}
     - {model: vertex-claude-5-opus, thinking_level: medium}
-    - {model: vertex-claude-5.5-sonnet, thinking_level: high}
     - {model: vertex-claude-5-sonnet, thinking_level: high}
     - {model: vertex-claude-4.5-sonnet, thinking_level: medium}
     - {model: vertex-gemini-2.5-pro, thinking_level: high}
@@ -205,8 +201,9 @@ tags:
     - {model: claude-4.5-opus, thinking_level: high}
     - {model: gpt-5.5, thinking_level: xhigh}
     - {model: gpt-6-astra, thinking_level: xhigh}
-    - {model: gpt-6.1-sol, thinking_level: xhigh}
+    - {model: gpt-6-sol, thinking_level: xhigh}
     - {model: gpt-5.6-sol, thinking_level: xhigh}
+    - {model: gpt-6-terra, thinking_level: medium}
     - {model: gpt-5.6-terra, thinking_level: medium}
     - {model: gpt-5.6-luna, thinking_level: medium}
     - {model: gpt-5.4, thinking_level: xhigh}
@@ -244,9 +241,8 @@ models:
 
   # Claude 5.5 Opus leads [flagship] (at xhigh) in the tags section above: the
   # general agent and orchestrators ask for flagship. It is deliberately NOT
-  # in [moderate] — implementation runs on claude-5-opus, which measured ~3x
-  # faster per edit (see the note on the moderate tier). Nor is it listed
-  # under `powerful` — that would collapse the powerful tier onto the
+  # in [moderate] — implementation runs on Sonnet 5.5 at medium. Nor is it
+  # listed under `powerful` — that would collapse the powerful tier onto the
   # flagship model; `powerful` stays on fable-5.1 until that is an explicit
   # decision.
   #
@@ -365,9 +361,8 @@ models:
   # claude-5-sonnet below, which differs in one that is easy to miss:
   # max_tokens is 128000, double sonnet-5's 64000.
   #
-  # It sits directly above claude-5-sonnet in every tier sonnet-5 is in, at the
-  # same effort, so it takes over exactly the slots sonnet-5 held and none of
-  # the ones above it: no tier winner moves.
+  # It leads [moderate] at medium and remains directly above claude-5-sonnet in
+  # the other tiers sonnet-5 is in.
   #
   # Two API differences from sonnet-5 that the drivers already satisfy:
   # adaptive thinking is the only accepted mode (thinking:{type:"disabled"} and
@@ -375,10 +370,9 @@ models:
   # only forced-tool caller is chat titling, whose [fast, moderate] ladder
   # always reaches a haiku first on every provider this model is mapped to.
   #
-  # No vertexai mapping: Vertex users get vertex-claude-5.5-sonnet. A vertexai
-  # mapping here would put this entry above vertex-claude-5-opus in [moderate]
-  # for a Vertex-only user and repoint that tier. No copilot mapping either —
-  # no Copilot account we have probed lists it, and an unserved mapping 400s.
+  # No vertexai mapping: Vertex users get vertex-claude-5.5-sonnet. No copilot
+  # mapping either — no Copilot account we have probed lists it, and an unserved
+  # mapping 400s.
   - id: claude-5.5-sonnet
     name: Claude 5.5 Sonnet
     visibility: user
@@ -568,11 +562,9 @@ models:
   # (developers.openai.com/api/docs/models/gpt-6-astra) lists exactly
   # low/medium/high/xhigh/max. The docs win; sending ultra would be guessing.
   #
-  # It is listed AFTER gpt-5.5 under [flagship] / [reasoning] deliberately: the
-  # codex-provider winners for those tiers are pinned to gpt-5.5 by
-  # TestResolve_CodexTagTargetsArePinned. It does lead gpt-5.6-sol under
-  # [powerful] for a codex-only user, which is intended: astra is the more
-  # capable frontier model, and that is what `powerful` is for.
+  # It is the GPT-6 `powerful` pick. Sol is the GPT-6 flagship and Terra is the
+  # GPT-6 moderate model; astra remains above both for callers explicitly asking
+  # for the frontier tier.
   - id: gpt-6-astra
     name: GPT-6 Astra
     visibility: user
@@ -608,13 +600,12 @@ models:
     # Powerful tier: astra gets its top practical effort. `max` is supported but
     # reserved for explicit opt-in, matching how sol treats max/ultra.
 
-  # GPT-6.1 Sol (2026-09-29) — "near-Astra performance at a lower cost".
-  # Figures from developers.openai.com/api/docs/models/gpt-6.1-sol.
+  # GPT-6 Sol (2026-09-29) — "near-Astra performance at a lower cost".
+  # Figures from developers.openai.com/api/docs/models/gpt-6-sol.
   #
-  # Listed after astra (and after gpt-5.5 in flagship/moderate/reasoning), so it
-  # is a fallback in every tier rather than a new winner: the codex and openai
-  # tier pins are unchanged. It supersedes gpt-6-sol (2026-09-22), which is
-  # therefore not catalogued.
+  # It is the GPT-6 flagship pick, above older GPT-5.6/GPT-5.x models in
+  # [flagship] and [reasoning]. It is deliberately not [powerful]; that tier
+  # stays on Astra for GPT users.
   #
   # Tools require the Responses API — Chat Completions refuses tool calling for
   # this model — so preferred_endpoint is load-bearing. Efforts are exactly
@@ -623,11 +614,11 @@ models:
   # No codex mapping. The ChatGPT-account backend serves a per-model subset
   # that must be probed (see the note above gpt-5.5), and the GPT-6 request
   # envelope is capture-specific (usesAdditionalToolsEnvelope in the codex
-  # driver). Neither has been done for 6.1 Sol, and an unprobed codex mapping
-  # 400s every request. No reliant/vertexai mapping, for astra's reason: Vertex
-  # serves no OpenAI frontier models, and the gateway routes through it.
-  - id: gpt-6.1-sol
-    name: GPT-6.1 Sol
+  # driver). Neither has been done for Sol, and an unprobed codex mapping 400s
+  # every request. No reliant/vertexai mapping, for astra's reason: Vertex serves
+  # no OpenAI frontier models, and the gateway routes through it.
+  - id: gpt-6-sol
+    name: GPT-6 Sol
     visibility: user
     capabilities:
       can_reason: true
@@ -641,9 +632,42 @@ models:
       supported_file_types: [image, text]
     providers:
       - driver: openai
-        api_model: gpt-6.1-sol
+        api_model: gpt-6-sol
       - driver: openrouter
-        api_model: openai/gpt-6.1-sol
+        api_model: openai/gpt-6-sol
+    driver_settings:
+      preferred_endpoint: responses
+      temperature_mode: omit
+      use_max_completion_tokens: true
+
+  # GPT-6 Terra (2026-09-22) — OpenAI's moderate GPT-6 model. Figures from
+  # developers.openai.com/api/docs/models/gpt-6-terra.
+  #
+  # Terra leads the GPT moderate slot at medium effort. It is not tagged fast or
+  # cheap: those tiers run chat titling, compaction and other internal calls for
+  # every OpenAI user, and the existing mini/luna entries stay the lower-latency
+  # picks there.
+  #
+  # Not the same model as gpt-5.6-terra (the codex-only ChatGPT-family model).
+  # Same provider reasoning as gpt-6-sol above.
+  - id: gpt-6-terra
+    name: GPT-6 Terra
+    visibility: user
+    capabilities:
+      can_reason: true
+      supports_tools: true
+      supports_attachments: true
+      supports_streaming: true
+      supports_caching: true
+      max_context_window: 1050000
+      max_output_tokens: 128000
+      thinking_levels: [low, medium, high, xhigh, max]
+      supported_file_types: [image, text]
+    providers:
+      - driver: openai
+        api_model: gpt-6-terra
+      - driver: openrouter
+        api_model: openai/gpt-6-terra
     driver_settings:
       preferred_endpoint: responses
       temperature_mode: omit
@@ -652,14 +676,13 @@ models:
   # GPT-6 Luna (2026-09-22) — OpenAI's "most efficient model for focused,
   # high-volume tasks". Figures from developers.openai.com/api/docs/models/gpt-6-luna.
   #
-  # It is OpenAI's efficiency-tier model, but it is listed
-  # AFTER gpt-5.4-mini and gpt-5-mini under fast/cheap/meta, and at `low`
-  # effort. Those tiers run chat titling, compaction and other internal calls
-  # for every OpenAI user; promoting a model nobody has run through them yet
-  # should be a measured decision, not a side effect of adding it.
+  # It is OpenAI's efficiency-tier model, but it is listed AFTER gpt-5.4-mini and
+  # gpt-5-mini under fast/cheap/meta, and at `low` effort. Those tiers run chat
+  # titling, compaction and other internal calls for every OpenAI user; promoting
+  # it above the existing mini picks should be a measured decision.
   #
-  # Not the same model as gpt-5.6-luna (the codex-only ChatGPT-family
-  # flagship). Same provider reasoning as gpt-6.1-sol above.
+  # Not the same model as gpt-5.6-luna (the codex-only ChatGPT-family flagship).
+  # Same provider reasoning as gpt-6-sol above.
   - id: gpt-6-luna
     name: GPT-6 Luna
     visibility: user
@@ -1429,8 +1452,8 @@ models:
       thinking_mode: adaptive
 
   # The Vertex-only twin of claude-5.5-sonnet, which carries no vertexai
-  # mapping of its own (see the note there). Its tier entries mirror it —
-  # directly above vertex-claude-5-sonnet, at the same effort.
+  # mapping of its own (see the note there). It leads Vertex-only [moderate] at
+  # medium and sits directly above vertex-claude-5-sonnet in the other tiers.
   - id: vertex-claude-5.5-sonnet
     name: Vertex Claude 5.5 Sonnet
     visibility: user
@@ -1694,8 +1717,9 @@ models:
   # once it is known to serve the model", not "map only one surface".
   #
   # Kept alongside the 2.5 entries, not replaced by them: it carries no
-  # deprecation date, and it is the only OpenAI image model the Codex backend is
-  # known to serve, so it is the entire image path for a Codex-only user.
+  # deprecation date, is still known to work on the Codex backend, and remains
+  # a supported fallback/explicit choice even though the 2.5 entries are now
+  # the preferred defaults.
   - id: gpt-image-2
     name: GPT Image 2
     visibility: user

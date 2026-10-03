@@ -62,10 +62,11 @@ func TestGatewayAPIModelSpellings(t *testing.T) {
 	}
 
 	for catalogID, wantAPIModel := range map[string]string{
-		"claude-5-opus":    "claude-opus-5",
-		"claude-5.1-fable": "claude-fable-5-1",
-		"gemini-3.8-flash": "gemini-3.8-flash",
-		"gemini-3.7-flash": "gemini-3.7-flash",
+		"claude-5-opus":     "claude-opus-5",
+		"claude-5.1-fable":  "claude-fable-5-1",
+		"claude-5.5-sonnet": "claude-sonnet-5-5",
+		"gemini-3.8-flash":  "gemini-3.8-flash",
+		"gemini-3.7-flash":  "gemini-3.7-flash",
 	} {
 		model, ok := byID[catalogID]
 		require.True(t, ok, "gateway roster is missing %q", catalogID)
@@ -87,11 +88,13 @@ func TestGatewayAPIModelsIsTheAllowlist(t *testing.T) {
 
 	assert.Contains(t, apiModels, "claude-opus-5")
 	assert.Contains(t, apiModels, "claude-fable-5-1")
+	assert.Contains(t, apiModels, "claude-sonnet-5-5")
 	assert.Contains(t, apiModels, "claude-haiku-4-5")
 
 	// The catalog spellings of those same models must NOT appear.
 	assert.NotContains(t, apiModels, "claude-5-opus")
 	assert.NotContains(t, apiModels, "claude-5.1-fable")
+	assert.NotContains(t, apiModels, "claude-5.5-sonnet")
 	assert.NotContains(t, apiModels, "claude-4.5-haiku")
 }
 
