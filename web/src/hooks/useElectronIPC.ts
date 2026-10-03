@@ -30,7 +30,10 @@ export interface UseElectronIPCOptions {
     projectId?: string,
     worktreeId?: string
   ) => void;
-  /** Function to get the terminal working directory */
+  /**
+   * Function to get the terminal working directory. Undefined means there is
+   * no directory to start in yet; do not create a session.
+   */
   getTerminalWorkingDir: () => string | undefined;
   /** Function to get the current worktree ID */
   getCurrentWorktreeId: () => string | undefined;
@@ -202,8 +205,11 @@ export function useElectronIPC(options: UseElectronIPCOptions): void {
       if (!isTerminalOpenRef.current) {
         openTerminal();
       }
-      // Create new terminal session with context-aware working directory
+      // Create new terminal session with context-aware working directory.
+      // Undefined means the workspace has no directory yet; the opened panel
+      // creates the session once it settles.
       const workingDir = getTerminalWorkingDirRef.current();
+      if (!workingDir) return;
       const projectId = currentProjectIdRef.current;
       const worktreeId = getCurrentWorktreeIdRef.current();
       createTerminalSession(workingDir, projectId, worktreeId);

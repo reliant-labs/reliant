@@ -61,6 +61,7 @@ import { useProjectRescan } from "./hooks/useProjectRescan";
 import { useCancelOnUnload } from "./hooks/useCancelOnUnload";
 import { useTerminalStore } from "./store/terminalStore";
 import { useWorktreeStore } from "./store/worktreeStore";
+import { resolveTerminalWorkingDir } from "./lib/terminalWorkingDir";
 import { useGlobalUpdatesStore } from "./store/globalUpdatesStore";
 import { useProcessStore } from "./store/processStore";
 
@@ -411,27 +412,27 @@ function App() {
     return useWorktreeStore.getState().currentWorktree?.id || undefined;
   }, []);
 
-  // Get terminal working directory based on current context
+  // Working directory for a new terminal in the current workspace, or
+  // undefined when there is none to give yet (a workspace still being created,
+  // or one that failed). Callers must not create a session on undefined: the
+  // daemon would start the shell in its own cwd, and this used to fall back to
+  // the project root — a shell in the main checkout under a branch's tab.
+  // TerminalPanel creates the session itself once the path settles.
   const getTerminalWorkingDir = useCallback(() => {
-    // Check if there's an active chat with a worktree
-    const worktreeId = getCurrentWorktreeId();
-    if (worktreeId) {
-      // Find the worktree and use its path
-      const worktree = worktrees.find((w) => w.id === worktreeId);
-      if (worktree?.path) {
-        logger.info("[Terminal] Using worktree path:", worktree.path);
-        return worktree.path;
-      }
+    const { currentWorktree: selected, worktrees: loaded } = useWorktreeStore.getState();
+    const worktree = selected
+      ? loaded.find((w) => w.id === selected.id) ?? selected
+      : null;
+    const resolved = resolveTerminalWorkingDir(worktree, currentProject);
+    if (resolved.kind !== "ready") {
+      logger.info("[Terminal] Workspace has no directory yet; not creating a terminal", {
+        worktreeId: worktree?.id,
+        state: resolved.kind,
+      });
+      return undefined;
     }
-
-    // Fallback to project path
-    if (currentProject?.path) {
-      logger.info("[Terminal] Using project path:", currentProject.path);
-      return currentProject.path;
-    }
-
-    return undefined;
-  }, [getCurrentWorktreeId, worktrees, currentProject?.path]);
+    return resolved.path;
+  }, [currentProject]);
 
   // Use keyboard shortcuts hook for production security
   useKeyboardShortcuts({
@@ -666,6 +667,7 @@ function App() {
         }
         // Create new terminal session with context-aware working directory, project ID, and worktree ID
         const workingDir = getTerminalWorkingDir();
+        if (!workingDir) return;
         const projectId = currentProject?.id;
         const worktreeId = getCurrentWorktreeId();
         createTerminalSession(workingDir, projectId, worktreeId);
@@ -1955,7 +1957,6 @@ function App() {
                   >
                     <TerminalPanel
                       key={`terminal-panel-${currentProject.id}`}
-                      getWorkingDirectory={getTerminalWorkingDir}
                       hasViewer={hasOpenViewers}
                     />
                   </div>

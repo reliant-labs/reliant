@@ -39,9 +39,19 @@ interface RefetchStoreState {
 // External subscriber registry (not in Zustand state to avoid re-renders)
 const subscribers = new Map<RefetchType, Set<RefetchCallback>>();
 
-// Debounce timers per refetch type — collapses rapid-fire events into one callback
-const debounceTimers = new Map<RefetchType, ReturnType<typeof setTimeout>>();
+// Debounce timers per (refetch type, entity) — collapses rapid-fire events for
+// the SAME entity into one callback. Keying by type alone kept only the last
+// entityId in a burst, so a scoped event was silently replaced by any other
+// entity's event of the same type within the window. worktree_changes fires on
+// every agent tool call, which made that the common case: a workspace's
+// "creation settled" signal was routinely overwritten by tool-call noise from
+// another workspace, and its subscribers never heard about it.
+const debounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const DEBOUNCE_MS = 300;
+
+function debounceKey(type: RefetchType, entityId?: string): string {
+  return `${type}\u0000${entityId ?? ""}`;
+}
 
 export const useRefetchStore = create<RefetchStoreState>()(() => ({
   counters: {
@@ -64,14 +74,14 @@ export function triggerRefetch(
   type: RefetchType,
   entityId?: string,
 ): void {
-  // Clear any pending debounce for this type — we always use the latest entityId
-  const existing = debounceTimers.get(type);
+  const key = debounceKey(type, entityId);
+  const existing = debounceTimers.get(key);
   if (existing) {
     clearTimeout(existing);
   }
 
   const timer = setTimeout(() => {
-    debounceTimers.delete(type);
+    debounceTimers.delete(key);
 
     // Bump the counter (for useEffect-based consumers)
     useRefetchStore.setState((state) => ({
@@ -98,7 +108,7 @@ export function triggerRefetch(
     }
   }, DEBOUNCE_MS);
 
-  debounceTimers.set(type, timer);
+  debounceTimers.set(key, timer);
 }
 
 /**
