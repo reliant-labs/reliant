@@ -85,7 +85,8 @@ var inheritableEnvPrefixes = []string{
 // ChildEnv returns the environment for a process spawned on behalf of the
 // caller in ctx.
 //
-// For an unconfined caller it returns the daemon's full environment, unchanged.
+// For an unconfined caller it returns the daemon's environment minus the
+// daemon's own connection settings (see daemonConnectionEnvVars).
 // For a confined one it returns only the allowlisted subset, so a connector
 // cannot read the user's git token or the deployment's internal URLs out of a
 // command's own environment.
@@ -96,8 +97,9 @@ func ChildEnv(ctx context.Context, extra map[string]string) []string {
 	base := os.Environ()
 
 	if FromContext(ctx) == nil {
-		// First-party: unchanged behavior.
-		return appendExtra(base, extra)
+		// First-party: the daemon's environment, minus the daemon's own
+		// connection settings.
+		return appendExtra(withoutDaemonConnectionEnv(base), extra)
 	}
 
 	filtered := make([]string, 0, len(base))
@@ -111,6 +113,33 @@ func ChildEnv(ctx context.Context, extra map[string]string) []string {
 		}
 	}
 	return appendExtra(filtered, extra)
+}
+
+// daemonConnectionEnvVars are the daemon's OWN connection settings: which
+// Reliant server and gateway it dials and which OAuth provider its login uses.
+// Electron sets them on the daemon process — in cloud-dev to the admin
+// server's origin, which is not the API. They describe how the daemon reaches
+// Reliant, not how the user's tools should, so a `reliant` CLI run by an agent
+// must not inherit them: it would silently target the daemon's internal origin
+// instead of resolving its own default (prod). A user who wants another server
+// passes --server or sets the variable in the command itself.
+var daemonConnectionEnvVars = map[string]bool{
+	"RELIANT_SERVER_URL":  true,
+	"RELIANT_GATEWAY_URL": true,
+	"RELIANT_AUTH_URL":    true,
+	"RELIANT_AUTH_KEY":    true,
+}
+
+func withoutDaemonConnectionEnv(env []string) []string {
+	filtered := make([]string, 0, len(env))
+	for _, kv := range env {
+		name, _, _ := strings.Cut(kv, "=")
+		if daemonConnectionEnvVars[strings.ToUpper(name)] {
+			continue
+		}
+		filtered = append(filtered, kv)
+	}
+	return filtered
 }
 
 // envInheritable reports whether a variable may cross into a confined child.
