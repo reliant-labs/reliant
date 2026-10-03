@@ -52,26 +52,53 @@ describe("whether anything would change", () => {
     return { env: "prod", status: "ok", diff };
   }
 
-  it("finds changes from any of the counts", () => {
-    expect(diffHasChanges(answered({ objects_added: 1 }))).toBe(true);
-    expect(diffHasChanges(answered({ objects_removed: 2 }))).toBe(true);
-    expect(diffHasChanges(answered({ objects_changed: 1 }))).toBe(true);
-    expect(diffHasChanges(answered({ images_changed: 1 }))).toBe(true);
-    expect(diffHasChanges(answered({ config_changed: 1 }))).toBe(true);
+  /**
+   * THESE FIELD NAMES ARE FORGE'S, AND THAT IS THE POINT OF THE TEST.
+   *
+   * An earlier version of this block asserted `objects_added`,
+   * `objects_changed`, `images_changed` and `secrets_needed` — names forge has
+   * never emitted. The tests passed, because the type declared the same
+   * invented names the tests used, and the two agreed with each other about a
+   * shape neither had checked against the producer.
+   *
+   * What shipped behind that agreement was the exact failure this file opens by
+   * describing: a real diff with nine added objects has no key by any of those
+   * names, so every lookup missed, and `diffHasChanges` returned FALSE —
+   * telling the person about to deploy that nothing would change.
+   *
+   * So the names below are read off captured `forge env diff --json` output,
+   * and the cards' own contract tests parse those fixtures directly rather than
+   * hand-building entries. A unit test for a wire contract is only worth what
+   * its fixture is.
+   */
+  it("finds changes from forge's object arrays", () => {
+    expect(diffHasChanges(answered({ added: [{ kind: "Deployment", name: "api" }] }))).toBe(true);
+    expect(diffHasChanges(answered({ removed: [{ kind: "Service", name: "gone" }] }))).toBe(true);
+    expect(
+      diffHasChanges(answered({ changed: [{ candidate: { kind: "Deployment", name: "api" } }] }))
+    ).toBe(true);
   });
 
   it("finds changes from the lists too", () => {
     expect(diffHasChanges(answered({ workloads_added: ["api"] }))).toBe(true);
     expect(diffHasChanges(answered({ workloads_removed: ["old"] }))).toBe(true);
-    expect(diffHasChanges(answered({ secrets_needed: ["DB_URL"] }))).toBe(true);
+    expect(diffHasChanges(answered({ secrets_added: [{ name: "DB_URL" }] }))).toBe(true);
+    expect(diffHasChanges(answered({ domains_added: ["a.example.com"] }))).toBe(true);
+    expect(diffHasChanges(answered({ clusters_added: ["prod-gke"] }))).toBe(true);
+    expect(
+      diffHasChanges(answered({ runtime_changes: [{ workload: "web", from: "hosted", to: "bucket" }] }))
+    ).toBe(true);
+  });
+
+  it("treats a kind change as a change — it is an error, not a no-op", () => {
+    expect(
+      diffHasChanges(answered({ kind_changed: { live: "persistent", candidate: "self_managed" } }))
+    ).toBe(true);
   });
 
   it("reports no changes for a genuinely identical answered diff", () => {
-    expect(
-      diffHasChanges(
-        answered({ objects_added: 0, objects_removed: 0, objects_changed: 0 })
-      )
-    ).toBe(false);
+    // Forge emits a diff object with every array omitted when nothing differs.
+    expect(diffHasChanges(answered({}))).toBe(false);
   });
 
   it("returns false for an UNANSWERED entry — which is why the status must be read too", () => {
