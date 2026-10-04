@@ -67,10 +67,13 @@ function syncProjectUrl(projectId: string | null) {
       if (
         currentPath.startsWith("/settings") ||
         currentPath.startsWith("/workflow") ||
-        // Opening an automation's chat selects that chat's project first and
-        // only then navigates into it (openAutomationChat). Navigating here,
-        // mid-sequence, would mount the app before the chat was selected.
+        // A page in an area that spans projects selects a chat's project as
+        // background context (loadRunContext); the user stays where they are.
         currentPath.startsWith("/automations") ||
+        // A run's page selects the run's project so the transcript can read
+        // it (RunRouteLoader), and the user stays on the run.
+        currentPath === "/runs" ||
+        currentPath.startsWith("/runs/") ||
         currentPath.startsWith("/auth") ||
         currentPath.startsWith("/reset-password") ||
         currentPath.startsWith("/verify-email") ||

@@ -23,6 +23,7 @@ import {
   WorkflowState,
   WorkflowStopReason,
 } from "../gen/reliant/v1/chat_pb";
+import { RunDisplayState } from "../gen/reliant/v1/run_pb";
 
 /** forge-ui StatusDot variants (components/forge-ui/status_dot.tsx). */
 export type RunStatusDotVariant =
@@ -52,13 +53,12 @@ export type RunLifecycleKey =
  * Statuses that override the lifecycle row because the run is blocked on
  * something outside itself.
  *
- * Empty today. "Waiting for machine" (§9, backend gap G7) lands here once the
- * server can say a run is blocked on a daemon: add its key to this union, its
- * row to OVERLAY_ROWS, and its detection to `overlayFor`. Callers do not
- * change, because they already pass the chat's `activity`, which is where G7
- * proposes the signal travels (`ChatActivity.WAITING_FOR_DAEMON`).
+ * "Waiting for machine" (§9, G7): a live run whose last tool call could not
+ * reach its daemon. The signal travels as the chat's activity
+ * (`ChatActivity.WAITING_FOR_DAEMON`), and the server folds the same thing
+ * into `RunDisplayState.WAITING_FOR_MACHINE` for the Runs list.
  */
-export type RunStatusOverlayKey = never;
+export type RunStatusOverlayKey = "waiting_for_machine";
 
 export type RunStatusKey = RunLifecycleKey | RunStatusOverlayKey;
 
@@ -96,11 +96,19 @@ const LIFECYCLE_ROWS: Record<RunLifecycleKey, RunStatusDisplay> = {
   unknown: { key: "unknown", label: "Unknown", dotVariant: "neutral", badgeVariant: "neutral", pulse: false },
 };
 
-const OVERLAY_ROWS: Record<RunStatusOverlayKey, RunStatusDisplay> = {};
+const OVERLAY_ROWS: Record<RunStatusOverlayKey, RunStatusDisplay> = {
+  waiting_for_machine: {
+    key: "waiting_for_machine",
+    label: "Waiting for machine",
+    dotVariant: "pending",
+    badgeVariant: "warning",
+    pulse: false,
+  },
+};
 
 /** The G7 hook point. See RunStatusOverlayKey. */
-function overlayFor(_input: { activity?: ChatActivity }): RunStatusOverlayKey | null {
-  return null;
+function overlayFor(input: { activity?: ChatActivity }): RunStatusOverlayKey | null {
+  return input.activity === ChatActivity.WAITING_FOR_DAEMON ? "waiting_for_machine" : null;
 }
 
 /** The status of a run, from its root workflow's lifecycle. */
@@ -164,13 +172,46 @@ export function runStatusFromActivity(activity: ChatActivity): RunStatusDisplay 
   }
 }
 
+/**
+ * The status of a run from the server's folded `Run.display_state`, which the
+ * cross-cutting run list carries instead of the raw lifecycle triple. The
+ * server derives it with the same table as `runStatus`, so the two agree.
+ * `outcome` still refines a completed run into its declared verdict.
+ */
+export function runStatusFromDisplayState(
+  displayState: RunDisplayState,
+  outcome?: string,
+): RunStatusDisplay {
+  switch (displayState) {
+    case RunDisplayState.QUEUED:
+      return LIFECYCLE_ROWS.queued;
+    case RunDisplayState.RUNNING:
+      return LIFECYCLE_ROWS.running;
+    case RunDisplayState.NEEDS_INPUT:
+      return LIFECYCLE_ROWS.needs_you;
+    case RunDisplayState.PAUSED:
+      return LIFECYCLE_ROWS.paused;
+    case RunDisplayState.COMPLETED:
+      return stoppedStatus(WorkflowStopReason.COMPLETED, outcome);
+    case RunDisplayState.FAILED:
+      return LIFECYCLE_ROWS.failed;
+    case RunDisplayState.CANCELLED:
+      return LIFECYCLE_ROWS.cancelled;
+    case RunDisplayState.WAITING_FOR_MACHINE:
+      return OVERLAY_ROWS.waiting_for_machine;
+    default:
+      return LIFECYCLE_ROWS.unknown;
+  }
+}
+
 /** Whether a status still has work ahead of it, so a view of it goes stale. */
 export function isLiveRunStatus(status: RunStatusDisplay): boolean {
   return (
     status.key === "queued" ||
     status.key === "running" ||
     status.key === "needs_you" ||
-    status.key === "paused"
+    status.key === "paused" ||
+    status.key === "waiting_for_machine"
   );
 }
 

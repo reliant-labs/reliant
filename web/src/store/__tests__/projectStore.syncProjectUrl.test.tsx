@@ -77,11 +77,18 @@ function makeRouter(initialEntry: string) {
     component: () => <div>onboarding</div>,
   });
 
+  const runDetailRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/runs/$runId",
+    component: () => <div>run</div>,
+  });
+
   return createRouter({
     routeTree: rootRoute.addChildren([
       appLayout.addChildren([indexRoute, projectRoute]),
       settingsRoute,
       onboardingRoute,
+      runDetailRoute,
     ]),
     history: createMemoryHistory({ initialEntries: [initialEntry] }),
   } as any);
@@ -172,5 +179,15 @@ describe("syncProjectUrl — search params survive project selection", () => {
     await selectProjectIgnoringSideEffects(useProjectStore, "p1");
 
     expect(router.state.location.pathname).toBe("/settings");
+  });
+
+  it("leaves the user on a run's page when it selects the run's project", async () => {
+    // RunRouteLoader selects the run's project so ChatContainer can read it;
+    // that selection must not navigate the user into the project view.
+    const { router, useProjectStore } = await withRouterAt("/runs/chat-1");
+
+    await selectProjectIgnoringSideEffects(useProjectStore, "p1");
+
+    expect(router.state.location.pathname).toBe("/runs/chat-1");
   });
 });

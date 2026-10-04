@@ -18,9 +18,11 @@ import {
   launchKindDisplay,
   runStatus,
   runStatusFromActivity,
+  runStatusFromDisplayState,
   triggerEventOutcomeDisplay,
   type RunStatusInput,
 } from "../runStatus";
+import { RunDisplayState } from "../../gen/reliant/v1/run_pb";
 
 describe("runStatus: the §0 display vocabulary", () => {
   const rows: Array<{
@@ -175,6 +177,64 @@ describe("runStatusFromActivity: the sidebar's view of the same vocabulary", () 
 
   it("an idle chat has no status to show", () => {
     expect(runStatusFromActivity(ChatActivity.IDLE)).toBeNull();
+  });
+});
+
+describe("runStatusFromDisplayState: the server-folded state the Runs list carries", () => {
+  it.each([
+    [RunDisplayState.QUEUED, "Queued", "pending", "info"],
+    [RunDisplayState.RUNNING, "Running", "active", "info"],
+    [RunDisplayState.NEEDS_INPUT, "Needs you", "warning", "warning"],
+    [RunDisplayState.PAUSED, "Paused", "paused", "warning"],
+    [RunDisplayState.COMPLETED, "Completed", "neutral", "success"],
+    [RunDisplayState.FAILED, "Failed", "error", "error"],
+    [RunDisplayState.CANCELLED, "Cancelled", "neutral", "neutral"],
+    [RunDisplayState.WAITING_FOR_MACHINE, "Waiting for machine", "pending", "warning"],
+  ] as const)("%s reads %s", (state, label, dot, badge) => {
+    const status = runStatusFromDisplayState(state);
+    expect(status.label).toBe(label);
+    expect(status.dotVariant).toBe(dot);
+    expect(status.badgeVariant).toBe(badge);
+  });
+
+  it("agrees with runStatus for every lifecycle row the server folds", () => {
+    // The server derives display_state with the same table; a drift here
+    // means the Runs list and a run's own header could disagree.
+    expect(runStatusFromDisplayState(RunDisplayState.NEEDS_INPUT)).toEqual(
+      runStatus({
+        state: WorkflowState.ACTIVE,
+        stopReason: WorkflowStopReason.UNSPECIFIED,
+        activity: ChatActivity.AWAITING_INPUT,
+      }),
+    );
+  });
+
+  it("a completed run with a declared outcome reads the verdict", () => {
+    expect(runStatusFromDisplayState(RunDisplayState.COMPLETED, "success").label).toBe("Succeeded");
+    expect(runStatusFromDisplayState(RunDisplayState.COMPLETED, "failure").label).toBe("Failed");
+  });
+
+  it("waiting for a machine is still live", () => {
+    expect(isLiveRunStatus(runStatusFromDisplayState(RunDisplayState.WAITING_FOR_MACHINE))).toBe(true);
+  });
+
+  it("unspecified is Unknown", () => {
+    expect(runStatusFromDisplayState(RunDisplayState.UNSPECIFIED).label).toBe("Unknown");
+  });
+});
+
+describe("waiting for a machine overrides the lifecycle row (G7)", () => {
+  it("a live run whose chat is WAITING_FOR_DAEMON reads Waiting for machine", () => {
+    const status = runStatus({
+      state: WorkflowState.ACTIVE,
+      stopReason: WorkflowStopReason.UNSPECIFIED,
+      activity: ChatActivity.WAITING_FOR_DAEMON,
+    });
+    expect(status).toMatchObject({ label: "Waiting for machine", dotVariant: "pending", badgeVariant: "warning" });
+  });
+
+  it("the sidebar's activity view says the same", () => {
+    expect(runStatusFromActivity(ChatActivity.WAITING_FOR_DAEMON)?.label).toBe("Waiting for machine");
   });
 });
 

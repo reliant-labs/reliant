@@ -91,6 +91,9 @@ interface ChatPresenterProps {
   onLoadOlderMessages?: () => void;
   isLoadingOlderMessages?: boolean;
   hasOlderMessages?: boolean;
+
+  /** The host shows the chat's title itself; see ChatHeader.hideTitle. */
+  hideChatTitle?: boolean;
 }
 
 export const ChatPresenter = memo(function ChatPresenter({
@@ -119,6 +122,7 @@ export const ChatPresenter = memo(function ChatPresenter({
   onLoadOlderMessages,
   isLoadingOlderMessages,
   hasOlderMessages,
+  hideChatTitle,
 }: ChatPresenterProps) {
   const chatInputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -461,6 +465,7 @@ export const ChatPresenter = memo(function ChatPresenter({
           // gates on `onToggleWorkflowViewer &&`.
           onToggleWorkflowViewer={showDesktopChrome ? handleToggleWorkflowViewer : undefined}
           isWorkflowViewerOpen={isWorkflowViewerOpen}
+          hideTitle={hideChatTitle}
         />
 
         <ResumeDaemonPill />

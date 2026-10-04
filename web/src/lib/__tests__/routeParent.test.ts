@@ -82,6 +82,11 @@ describe("getParentRouteNavigateOptions", () => {
     });
   });
 
+  it("a run's page steps back to the Runs list; the list exits to the app", () => {
+    expect(getParentRouteNavigateOptions("/runs/chat-1")).toEqual({ to: "/runs" });
+    expect(getParentRouteNavigateOptions("/runs")).toEqual({ to: "/", search: {} });
+  });
+
   it("returns / for unknown routes", () => {
     expect(getParentRouteNavigateOptions("/")).toEqual({ to: "/", search: {} });
     expect(getParentRouteNavigateOptions("/anything/else")).toEqual({

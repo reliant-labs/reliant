@@ -11,8 +11,8 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate, useParams } from "@tanstack/react-router";
-import { ExternalLink, Pencil, Play, Trash2 } from "lucide-react";
+import { Link, useNavigate, useParams } from "@tanstack/react-router";
+import { ArrowRight, Pencil, Play, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import Card, { CardHeader, CardInset } from "../forge-ui/card";
@@ -42,8 +42,9 @@ import { AutomationFormDialog } from "./AutomationFormDialog";
 import { OutcomeBadge } from "./OutcomeBadge";
 import { RunStatusBadge } from "../ui/RunStatusIndicator";
 import { useLaunchedRunStatus } from "./useLaunchedRunStatus";
-import { openAutomationChat } from "./openAutomationChat";
 import { daemonLabel, daemonStatusLabel } from "./daemonChoices";
+import { runStatusFromDisplayState } from "@/lib/runStatus";
+import type { RunDisplayState } from "@/gen/reliant/v1/run_pb";
 
 /** How long to poll for the event a "Run now" produces. */
 const FIRE_POLL_MS = 2_000;
@@ -244,15 +245,6 @@ export function AutomationDetail({ triggerId }: { triggerId: string }) {
           events={eventsQuery.data}
           isLoading={eventsQuery.isLoading}
           error={eventsQuery.isError ? triggerErrorMessage(eventsQuery.error) : undefined}
-          onOpenChat={async (chatId) => {
-            try {
-              await openAutomationChat(chatId, trigger.projectId, (projectId) =>
-                navigate({ to: "/project/$projectId", params: { projectId }, search: {} }),
-              );
-            } catch (error) {
-              toast.error("Could not open that chat", { description: triggerErrorMessage(error) });
-            }
-          }}
         />
       </Card>
 
@@ -362,10 +354,14 @@ function DefinitionList({ trigger }: { trigger: Trigger }) {
  * The status of the run a launched event started. A firing that launched
  * nothing has no run, and says so with a dash rather than borrowing the
  * event's outcome.
+ *
+ * The event carries the run's display state (G3), so the cell reads it from
+ * there; the per-chat read is only for a server that does not send it yet.
  */
-function LaunchedRunCell({ chatId }: { chatId?: string }) {
-  const { status, unavailable } = useLaunchedRunStatus(chatId);
+function LaunchedRunCell({ chatId, displayState }: { chatId?: string; displayState?: RunDisplayState }) {
+  const { status, unavailable } = useLaunchedRunStatus(displayState ? undefined : chatId);
   if (!chatId) return <span className="text-muted-foreground">—</span>;
+  if (displayState) return <RunStatusBadge status={runStatusFromDisplayState(displayState)} />;
   if (unavailable) return <span className="text-xs text-muted-foreground">Unavailable</span>;
   if (!status) {
     return (
@@ -381,10 +377,9 @@ interface EventHistoryProps {
   events?: TriggerEvent[];
   isLoading: boolean;
   error?: string;
-  onOpenChat: (chatId: string) => void;
 }
 
-function EventHistory({ events, isLoading, error, onOpenChat }: EventHistoryProps) {
+function EventHistory({ events, isLoading, error }: EventHistoryProps) {
   if (isLoading) {
     return <p className="px-5 py-6 text-sm text-muted-foreground">Loading history…</p>;
   }
@@ -413,7 +408,7 @@ function EventHistory({ events, isLoading, error, onOpenChat }: EventHistoryProp
             <th scope="col" className="px-5 py-2 font-medium">Firing</th>
             <th scope="col" className="px-5 py-2 font-medium">Run</th>
             <th scope="col" className="px-5 py-2 font-medium">Detail</th>
-            <th scope="col" className="px-5 py-2 font-medium"><span className="sr-only">Chat</span></th>
+            <th scope="col" className="px-5 py-2 font-medium"><span className="sr-only">Run</span></th>
           </tr>
         </thead>
         <tbody className="divide-y divide-border/60">
@@ -432,21 +427,24 @@ function EventHistory({ events, isLoading, error, onOpenChat }: EventHistoryProp
                 <OutcomeBadge outcome={event.outcome} />
               </td>
               <td className="px-5 py-3 align-top">
-                <LaunchedRunCell chatId={event.outcome === "launched" ? event.chatId : undefined} />
+                <LaunchedRunCell
+                  chatId={event.outcome === "launched" ? event.chatId : undefined}
+                  displayState={event.runDisplayState}
+                />
               </td>
               <td className="px-5 py-3 align-top text-muted-foreground">
                 {event.outcomeDetail || (event.outcome === "launched" ? "Started a chat" : "—")}
               </td>
               <td className="whitespace-nowrap px-5 py-3 text-right align-top">
                 {event.chatId && (
-                  <button
-                    type="button"
-                    onClick={() => onOpenChat(event.chatId!)}
+                  <Link
+                    to="/runs/$runId"
+                    params={{ runId: event.chatId }}
                     className="inline-flex items-center gap-1 rounded-sm text-sm font-medium text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
                   >
-                    Open chat
-                    <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
-                  </button>
+                    Open run
+                    <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+                  </Link>
                 )}
               </td>
             </tr>

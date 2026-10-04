@@ -31,6 +31,7 @@ import { queryClient } from "../lib/query-client";
 import { chatKeys, patchChatCaches, removeChatFromListCache, getChatFromCache, resolveChat } from "../hooks/chat-queries";
 import { setMessagesMetaInCache } from "../hooks/message-queries";
 import { approvalKeys } from "../hooks/approval-queries";
+import { runKeys, runsInvalidatingUpdate } from "../hooks/run-queries";
 import { showWorkflowCompletionNotification, showWorkflowFailedNotification, showApprovalRequiredNotification, getNotificationPermission } from "../lib/notifications";
 import { getNotificationSoundOptions, useNotificationStore } from "./notificationStore";
 import { triggerRefetch, type RefetchType } from "./refetchStore";
@@ -307,6 +308,13 @@ export const useGlobalUpdatesStore = create<GlobalUpdatesState>((set, get) => ({
       // Track the highest sequence number
       if (update.sequence_number > get().lastSequence) {
         set({ lastSequence: update.sequence_number });
+      }
+
+      // The Runs list holds chats the sidebar's cache patches never reach
+      // (automation and agent-started runs), so a change to any run marks it
+      // stale. Only observed lists refetch; an unopened Runs page costs nothing.
+      if (runsInvalidatingUpdate(update.update_type)) {
+        queryClient.invalidateQueries({ queryKey: runKeys.lists() });
       }
 
       // Route updates to appropriate stores

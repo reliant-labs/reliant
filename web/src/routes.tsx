@@ -20,6 +20,7 @@ import {
   settingsParamsSchema,
   settingsSearchSchema,
   upgradeSearchSchema,
+  runsSearchSchema,
   workflowSearchSchema,
 } from './routeSchemas'
 import { ErrorFallbackUI } from './components/ErrorBoundary'
@@ -81,6 +82,10 @@ const AutomationsListPage = lazyRouteComponent(
   () => import('./components/Automations/AutomationsListPage'), 'AutomationsListPage')
 const AutomationDetailPage = lazyRouteComponent(
   () => import('./components/Automations/AutomationDetailPage'), 'AutomationDetailPage')
+const RunsPage = lazyRouteComponent(
+  () => import('./components/runs/RunsPage'), 'RunsPage')
+const RunDetailPage = lazyRouteComponent(
+  () => import('./components/runs/RunDetailPage'), 'RunDetailPage')
 const OnboardingRoute = lazyRouteComponent(
   () => import('./components/OnboardingFlow/OnboardingRoute'), 'OnboardingRoute')
 const MobileShell = lazyRouteComponent(
@@ -513,6 +518,24 @@ const automationDetailRoute = createRoute({
   component: AutomationDetailPage,
 })
 
+// Runs: every execution, whatever started it (research/WORKFLOW_UI.md §4–5).
+// /runs            → the cross-project run list, filters in the search params
+// /runs/$runId     → one run (its chat id): header, trigger card, transcript
+// Same position and chrome as /automations; both move under /workflows when
+// the area merges (§12 Phase 3).
+const runsRoute = createRoute({
+  getParentRoute: () => authenticatedLayoutRoute,
+  path: '/runs',
+  validateSearch: runsSearchSchema,
+  component: RunsPage,
+})
+
+const runDetailRoute = createRoute({
+  getParentRoute: () => authenticatedLayoutRoute,
+  path: '/runs/$runId',
+  component: RunDetailPage,
+})
+
 // ── forge UI (experimental, gated) ───────────────────────────────────────────
 //
 // Every forge route goes through ForgeGate. Hiding the sidebar entry is NOT enough
@@ -811,6 +834,8 @@ const routeTree = rootRoute.addChildren([
     workflowBuilderRoute,
     automationsRoute,
     automationDetailRoute,
+    runsRoute,
+    runDetailRoute,
   ]),
   appLayoutRoute.addChildren([indexRoute, projectRoute]),
 ])

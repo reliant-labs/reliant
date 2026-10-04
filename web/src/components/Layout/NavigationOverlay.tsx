@@ -1,4 +1,4 @@
-import { FileText, Terminal as TerminalIcon, FolderOpen, Workflow, FolderGit2 } from "lucide-react";
+import { FileText, Terminal as TerminalIcon, FolderOpen, Workflow, FolderGit2, Activity } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 import { useTerminalStore } from "../../store/terminalStore";
 import { useViewerStore } from "../../store/viewerStore";
@@ -8,7 +8,8 @@ import { BrandMark } from "../icons/BrandMark";
 interface MenuItem {
   label: string;
   icon: React.ComponentType<{ className?: string }>;
-  shortcut: string;
+  /** Shown as key caps. Omitted for a destination that has no binding. */
+  shortcut?: string;
   onClick: () => void;
 }
 
@@ -73,6 +74,14 @@ export function NavigationOverlay({ onClose }: NavigationOverlayProps) {
         onClose();
       },
     },
+    {
+      label: "Runs",
+      icon: Activity,
+      onClick: () => {
+        navigate({ to: '/runs' });
+        onClose();
+      },
+    },
   ];
 
   return (
@@ -124,7 +133,7 @@ export function NavigationOverlay({ onClose }: NavigationOverlayProps) {
                       </span>
                     </div>
                     <div className="flex items-center gap-0.5">
-                      {item.shortcut.split(' ').map((key, idx) => (
+                      {item.shortcut?.split(' ').map((key, idx) => (
                         <kbd
                           key={idx}
                           className="px-1.5 py-0.5 text-2xs font-mono bg-muted/40 border border-border/40 rounded text-muted-foreground/80 group-hover:text-primary group-hover:border-primary/50 transition-colors"

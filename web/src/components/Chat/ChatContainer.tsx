@@ -44,9 +44,11 @@ const EMPTY_ARRAY: never[] = [];
 interface ChatContainerProps {
   tabId: string;
   isFocused?: boolean;
+  /** The host shows the chat's title itself (run detail). */
+  hideChatTitle?: boolean;
 }
 
-export function ChatContainer({ tabId, isFocused = true }: ChatContainerProps) {
+export function ChatContainer({ tabId, isFocused = true, hideChatTitle }: ChatContainerProps) {
   // In the new navigation system, tabId IS the chatId (no separate tabs)
   // We keep the tabId prop name for compatibility but treat it as chatId
   const chatId = tabId;
@@ -326,6 +328,7 @@ export function ChatContainer({ tabId, isFocused = true }: ChatContainerProps) {
       onLoadOlderMessages={handleLoadOlderMessages}
       isLoadingOlderMessages={isLoadingOlderMessages}
       hasOlderMessages={hasOlderMessages}
+      hideChatTitle={hideChatTitle}
     />
   );
 }

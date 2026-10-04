@@ -440,6 +440,66 @@ export const forgeLegacySearchSchema = z.object({
   secret: z.string().optional(),
 });
 
+// ── /runs ───────────────────────────────────────────────────────────────────
+
+/**
+ * The Runs list's state filter, in the words a user picks (§5.2), not the
+ * wire enum. One chip can cover several display states ("Live" is queued,
+ * running, paused and waiting for a machine); run-grpc maps them.
+ */
+export const RUN_STATE_FILTER_KEYS = ["needs_you", "live", "failed", "completed", "cancelled"] as const;
+export type RunStateFilterKey = (typeof RUN_STATE_FILTER_KEYS)[number];
+
+/** Launch kinds the kind chips offer. The server matches any string. */
+export const RUN_KIND_FILTER_KEYS = ["chat.start", "schedule", "agent.start_run"] as const;
+
+export const RUN_RANGE_KEYS = ["24h", "7d", "30d", "all"] as const;
+export type RunRangeKey = (typeof RUN_RANGE_KEYS)[number];
+
+/**
+ * A list param that keeps only the values `keep` accepts. A shared link from a
+ * newer build, or a hand-edited URL, must narrow the list rather than take the
+ * page down, so unknown entries are dropped instead of failing validation.
+ *
+ * Built from catch + transform rather than preprocess on purpose: preprocess
+ * types the INPUT as `unknown`, which makes tanstack-router demand a `search`
+ * object on every link to /runs.
+ */
+function listParam<T extends string>(keep: (value: string) => value is T) {
+  return z
+    .array(z.string())
+    .optional()
+    .catch(undefined)
+    .transform((values): T[] | undefined => {
+      const kept = values?.filter(keep) ?? [];
+      return kept.length > 0 ? kept : undefined;
+    });
+}
+
+const isStateFilter = (value: string): value is RunStateFilterKey =>
+  (RUN_STATE_FILTER_KEYS as readonly string[]).includes(value);
+const isNonEmpty = (value: string): value is string => value !== "";
+
+/**
+ * /runs. Every filter lives in the URL so a filtered list can be shared and
+ * the back button restores it (§5.2). Absent means the default: the current
+ * project, every kind and state, the last 24 hours, repeats grouped.
+ */
+export const runsSearchSchema = z.object({
+  state: listParam(isStateFilter),
+  kind: listParam(isNonEmpty),
+  workflow: listParam(isNonEmpty),
+  trigger: z.string().optional().catch(undefined),
+  range: z.enum(RUN_RANGE_KEYS).optional().catch(undefined),
+  q: z.string().optional().catch(undefined),
+  /** Widen past the current project (decision 10: Runs defaults to it). */
+  allProjects: z.boolean().optional().catch(undefined),
+  /** False turns off grouping of repeated automation runs (on by default). */
+  group: z.boolean().optional().catch(undefined),
+});
+/** Every key optional: absent is the default, which is what links omit. */
+export type RunsSearch = Partial<z.output<typeof runsSearchSchema>>;
+
 export const onboardingSearchSchema = z.object({
   plan: launchPlanSchema.optional(),
   "reset-onboarding": z.boolean().optional(),
