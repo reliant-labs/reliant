@@ -184,6 +184,7 @@ const (
 	TagMCP       ToolTag = "mcp"       // All MCP tools
 	TagMedia     ToolTag = "media"     // Media generation (images, and later audio/video)
 	TagRuns      ToolTag = "runs"      // Start and manage other top-level runs the user owns
+	// TagIntegration (integration_tools.go) marks tools generated from integration manifests.
 
 	// Curated — a product's editorial bundles. Namespaced so no bundle can
 	// masquerade as a universal default. Named explicitly or not granted.
@@ -201,18 +202,19 @@ const (
 // guarantee the removed readonly tier never actually delivered) and had never
 // heard of `media` at all. TestTagDescriptionsAreComplete keeps this honest.
 var TagDescriptions = map[ToolTag]string{
-	TagReadOnly:  "Does not modify files or code",
-	TagFile:      "File operations",
-	TagSearch:    "Search operations",
-	TagExecution: "Command execution",
-	TagShell:     "Shell tools (bash on Unix, powershell on Windows)",
-	TagWeb:       "Web operations",
-	TagPlanning:  "Planning and task management tools",
-	TagAnalysis:  "Analysis tools",
-	TagWorkflow:  "Workflow builder tools",
-	TagMCP:       "Every tool from the chat's connected MCP servers",
-	TagMedia:     "Media generation (images, and later audio/video)",
-	TagRuns:      "Start, inspect, control and message other top-level runs the user owns",
+	TagReadOnly:    "Does not modify files or code",
+	TagFile:        "File operations",
+	TagSearch:      "Search operations",
+	TagExecution:   "Command execution",
+	TagShell:       "Shell tools (bash on Unix, powershell on Windows)",
+	TagWeb:         "Web operations",
+	TagPlanning:    "Planning and task management tools",
+	TagAnalysis:    "Analysis tools",
+	TagWorkflow:    "Workflow builder tools",
+	TagMCP:         "Every tool from the chat's connected MCP servers",
+	TagMedia:       "Media generation (images, and later audio/video)",
+	TagRuns:        "Start, inspect, control and message other top-level runs the user owns",
+	TagIntegration: "Actions from integration manifests, exposed as agent tools",
 
 	TagCodingDefault: "The coding agent's starting bundle — one product's editorial grouping, granted only when named",
 	TagCodingPlan:    "Tools the coding agent's plan mode starts with",
@@ -669,5 +671,5 @@ func GetToolRegistry() []ToolDefinition {
 		})
 	}
 
-	return tools
+	return append(tools, integrationToolDefinitions()...)
 }

@@ -136,6 +136,8 @@ var AllToolNames = []string{
 	ToolCreateWorkflow, ToolEditWorkflow, ToolWriteWorkflow,
 	// Workflow discovery
 	ToolListWorkflows, ToolGetWorkflow, ToolGetWorkflowSuggestions, ToolListPresets, ToolGetPreset, ToolGetSchema, ToolGetCELRef,
+	// Integration manifests (generated from internal/integrations/catalog)
+	"http__request",
 	// Scenarios
 	ToolListScenarios, ToolViewScenario, ToolEditScenario, ToolWriteScenario, ToolDeleteScenario, ToolRunScenario,
 }
@@ -158,7 +160,7 @@ var AllToolNames = []string{
 // comment in registry.go.
 var AllToolTags = []string{
 	"readonly", "file", "search", "execution", "shell", "web",
-	"planning", "analysis", "workflow", "mcp", "media", "runs",
+	"planning", "analysis", "workflow", "mcp", "media", "runs", "integration",
 	"coding:default", "coding:plan",
 }
 

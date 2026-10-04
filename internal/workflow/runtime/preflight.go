@@ -3,6 +3,8 @@ package runtime
 
 import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/integrations/catalog"
+	"github.com/reliant-labs/reliant/internal/integrations/manifest"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 )
 
@@ -91,6 +93,13 @@ func requiresDaemonNode(node *reliantv1.Node, cfg *PreflightConfig) bool {
 		return true
 	}
 
+	// An action node runs where its manifest says. Every curated action is
+	// server/any, so a workflow of only those wakes no daemon. An action we
+	// cannot resolve statically is treated as needing one, like a CEL filter.
+	if nodeType == model.NodeTypeAction {
+		return actionRequiresDaemon(node.GetAction())
+	}
+
 	// Check call_llm nodes for daemon-bound tools.
 	//
 	// BOTH lists count. A tool the model can load on demand still has to run
@@ -134,6 +143,17 @@ func requiresDaemonNode(node *reliantv1.Node, cfg *PreflightConfig) bool {
 	}
 
 	return false
+}
+
+func actionRequiresDaemon(args *reliantv1.ActionArgs) bool {
+	if args == nil || model.CelStringIsExpr(args.GetUses()) {
+		return true
+	}
+	resolved, err := catalog.MustBuiltin().Resolve(model.CelStringRaw(args.GetUses()))
+	if err != nil {
+		return true
+	}
+	return resolved.Spec.GetPlacement() == manifest.PlacementDaemon
 }
 
 // toolFilterHasDaemonTools checks if a CelStringList tool filter contains any

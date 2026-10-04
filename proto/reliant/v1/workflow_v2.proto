@@ -286,6 +286,7 @@ message Node {
     JoinArgs join = 23;
     RouterArgs router = 24;
     InvokeToolArgs invoke_tool = 25;
+    ActionArgs action = 26;
   }
 }
 
@@ -645,6 +646,48 @@ message InvokeToolArgs {
     label: "Parameters"
     visibility_contexts: "basic"
   }];
+}
+
+// ActionArgs configures an action node — runs ONE integration action
+// (`uses: "<integration>/<action>@<major>"`) directly from the graph.
+//
+// Like invoke_tool this is one generic node, never one arm per integration:
+// the parameter and output contracts live in the integration manifest, not in
+// proto. Params are validated against the manifest's JSON Schema.
+//
+// Output fields accessible via nodes.<id>.*:
+//   content, is_error, status_code, data.<field>
+message ActionArgs {
+  option (node_meta) = {
+    node_type: "action"
+    display_name: "Action"
+    description: "Run an integration action (for example an HTTP request)"
+    is_structural: false
+    category: "utility"
+    icon: "Plug"
+  };
+
+  // Uses names the action as <integration>/<action>@<major>, e.g.
+  // "http/request@1". The major version pins the manifest.
+  CelString uses = 1 [(reliant) = {
+    description: "Which integration action to run, as integration/action@major"
+    label: "Action"
+    visibility_contexts: "basic"
+    required: true
+  }];
+
+  // With are the action's parameters, keyed as in the manifest's param schema.
+  // Values may be literals or {{expr}} templates resolved before the activity
+  // runs.
+  map<string, google.protobuf.Value> with = 2 [(reliant) = {
+    description: "Action parameters, keyed as in the action's schema"
+    label: "Parameters"
+    visibility_contexts: "basic"
+  }];
+
+  // Fields 3 and 4 are reserved for the connections phase (connection id or
+  // binding, placement narrowing).
+  reserved 3, 4;
 }
 
 // CompactArgs configures a compact node — compacts conversation context to reduce token usage.
@@ -1444,6 +1487,23 @@ message InvokeToolOutput {
   // Tool echoes which tool ran, so a downstream node can branch on it without
   // re-reading the workflow definition.
   string tool = 5;
+}
+
+// ActionOutput is the output from the action activity.
+message ActionOutput {
+  // Content is the human/model-facing rendering of the result.
+  string content = 1;
+  // IsError reports a failed action. It does NOT fail the node: the graph
+  // decides what to do about it.
+  bool is_error = 2;
+  // StatusCode is the final HTTP status, when the action made a request.
+  int32 status_code = 3;
+  // Data is the selected output, reachable as nodes.<id>.data.<field>.
+  google.protobuf.Struct data = 4;
+  // Uses echoes which action ran.
+  string uses = 5;
+  // Retryable is set on an error the manifest classifies as transient.
+  bool retryable = 6;
 }
 
 // CompactOutput is the output from the compact activity.
