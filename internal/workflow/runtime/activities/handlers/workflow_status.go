@@ -183,6 +183,8 @@ func (a *WorkflowStatusActivity) Execute(ctx context.Context, input WorkflowStat
 //
 // A chat a human started (launch kind "chat.start", or none for a chat that
 // predates trigger events) always notifies: they asked, the answer is ready.
+// So does a builder test run ("builder.test"): a human pressed Run and is
+// waiting on it, usually with the builder in another window.
 // A run nobody started by typing (a schedule, an agent's start_run) does not,
 // because an hourly automation would otherwise notify 24 times a day; its
 // result is recorded in the run history instead (WORKFLOW_UI.md §6.4).
@@ -204,10 +206,10 @@ func (a *WorkflowStatusActivity) completionNotifies(ctx context.Context, input W
 }
 
 // isInteractiveLaunchKind reports whether a chat's launch kind means a human
-// started it. Empty is a chat from before launch kinds were recorded, which
-// was always interactive.
+// started it and is waiting on it. Empty is a chat from before launch kinds
+// were recorded, which was always interactive.
 func isInteractiveLaunchKind(kind string) bool {
-	return kind == "" || kind == string(core.TriggerEventKindChatStart)
+	return kind == "" || kind == string(core.TriggerEventKindChatStart) || kind == string(core.TriggerEventKindBuilderTest)
 }
 
 // reviveThreadForNewRun moves this run's thread out of a terminal status,

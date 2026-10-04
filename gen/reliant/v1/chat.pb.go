@@ -1551,7 +1551,15 @@ type StartChatRequest struct {
 	// is installed anywhere, one it is installed on. A chat_id start whose chat
 	// is already pinned (a branch is pinned to its worktree's daemon) rejects a
 	// different daemon_id: the worktree exists on exactly one machine.
-	DaemonId      *string `protobuf:"bytes,18,opt,name=daemon_id,json=daemonId,proto3,oneof" json:"daemon_id,omitempty"`
+	DaemonId *string `protobuf:"bytes,18,opt,name=daemon_id,json=daemonId,proto3,oneof" json:"daemon_id,omitempty"`
+	// builder_test marks this start as a test run from the workflow builder. The
+	// launch event is recorded as kind "builder.test" instead of "chat.start", so
+	// the run stays out of the sidebar and the default Runs list. It is still an
+	// attended run. `workflow` must name a workflow draft the caller owns; the
+	// draft runs as saved even if it is not marked complete. The client does not
+	// choose the launch kind: this flag is the only way to ask for builder.test,
+	// and no other kind can be claimed through StartChat.
+	BuilderTest   *bool `protobuf:"varint,19,opt,name=builder_test,json=builderTest,proto3,oneof" json:"builder_test,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1661,6 +1669,13 @@ func (x *StartChatRequest) GetDaemonId() string {
 		return *x.DaemonId
 	}
 	return ""
+}
+
+func (x *StartChatRequest) GetBuilderTest() bool {
+	if x != nil && x.BuilderTest != nil {
+		return *x.BuilderTest
+	}
+	return false
 }
 
 // StartChatResponse returns the started chat and the ids of its root run.
@@ -5895,7 +5910,7 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\x04role\x18\x01 \x01(\x0e2\x17.reliant.v1.MessageRoleR\x04role\x12\x18\n" +
 	"\acontent\x18\x02 \x01(\tR\acontent\x12B\n" +
 	"\rdisplay_style\x18\x03 \x01(\x0e2\x18.reliant.v1.DisplayStyleH\x00R\fdisplayStyle\x88\x01\x01B\x10\n" +
-	"\x0e_display_style\"\xfe\x05\n" +
+	"\x0e_display_style\"\xb7\x06\n" +
 	"\x10StartChatRequest\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x19\n" +
@@ -5909,7 +5924,8 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\x10selected_presets\x18\x0f \x03(\v21.reliant.v1.StartChatRequest.SelectedPresetsEntryR\x0fselectedPresets\x124\n" +
 	"\bmessages\x18\x10 \x03(\v2\x18.reliant.v1.InputMessageR\bmessages\x12\x1c\n" +
 	"\achat_id\x18\x11 \x01(\tH\x03R\x06chatId\x88\x01\x01\x12 \n" +
-	"\tdaemon_id\x18\x12 \x01(\tH\x04R\bdaemonId\x88\x01\x01\x1aY\n" +
+	"\tdaemon_id\x18\x12 \x01(\tH\x04R\bdaemonId\x88\x01\x01\x12&\n" +
+	"\fbuilder_test\x18\x13 \x01(\bH\x05R\vbuilderTest\x88\x01\x01\x1aY\n" +
 	"\x13WorkflowParamsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12,\n" +
 	"\x05value\x18\x02 \x01(\v2\x16.google.protobuf.ValueR\x05value:\x028\x01\x1aB\n" +
@@ -5922,7 +5938,8 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\n" +
 	"\b_chat_idB\f\n" +
 	"\n" +
-	"_daemon_idJ\x04\b\x02\x10\x03J\x04\b\x05\x10\x06J\x04\b\a\x10\bJ\x04\b\b\x10\tJ\x04\b\t\x10\n" +
+	"_daemon_idB\x0f\n" +
+	"\r_builder_testJ\x04\b\x02\x10\x03J\x04\b\x05\x10\x06J\x04\b\a\x10\bJ\x04\b\b\x10\tJ\x04\b\t\x10\n" +
 	"J\x04\b\n" +
 	"\x10\vJ\x04\b\v\x10\f\"w\n" +
 	"\x11StartChatResponse\x12$\n" +

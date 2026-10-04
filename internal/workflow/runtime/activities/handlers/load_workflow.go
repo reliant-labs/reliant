@@ -13,6 +13,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	cfg "github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/preset"
 	"github.com/reliant-labs/reliant/internal/workflow/builtin"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
@@ -126,6 +127,9 @@ type workflowContext struct {
 	projectID    string
 	projectPath  string
 	worktreePath string
+	// draftRootSlug is the one workflow that may be loaded from an unfinished
+	// draft: the root of a builder test run. Empty for every other chat.
+	draftRootSlug string
 }
 
 // resolveWorkflowContext resolves user, project, and path from a chat ID
@@ -146,6 +150,9 @@ func (a *LoadWorkflowActivity) resolveWorkflowContext(ctx context.Context, chatI
 	wfCtx := &workflowContext{
 		userID:    chat.UserID,
 		projectID: chat.ProjectID,
+	}
+	if chat.LaunchKind == string(core.TriggerEventKindBuilderTest) && chat.WorkflowName != nil {
+		wfCtx.draftRootSlug = generateWorkflowSlug(*chat.WorkflowName)
 	}
 
 	if chat.ProjectID == "" {
@@ -224,6 +231,16 @@ func (a *LoadWorkflowActivity) loadDBWorkflowWithRaw(ctx context.Context, workfl
 	// Only a complete workflow runs; a draft comes back as
 	// *db.WorkflowDraftNotRunnableError.
 	draft, err := a.repo.GetUsableWorkflowBySlug(ctx, wfCtx.userID, slug)
+	if wfCtx.draftRootSlug != "" && wfCtx.draftRootSlug == slug && draft == nil {
+		// A builder test run runs what the builder just saved, complete or
+		// not. Only the root: a `ref:` child still has to be complete.
+		var notRunnable *db.WorkflowDraftNotRunnableError
+		if err == nil || errors.As(err, &notRunnable) {
+			if saved, getErr := a.repo.GetWorkflowDraftBySlug(ctx, wfCtx.userID, slug); getErr == nil && saved != nil && !saved.IsHidden {
+				draft, err = saved, nil
+			}
+		}
+	}
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to look up workflow '%s': %w", workflowName, err)
 	}

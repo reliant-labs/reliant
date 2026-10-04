@@ -306,7 +306,7 @@ CREATE TABLE public.trigger_events (
     outcome_detail text DEFAULT ''::text NOT NULL,
     chat_id text,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT trigger_events_kind_check CHECK ((kind = ANY (ARRAY['chat.start'::text, 'schedule'::text, 'agent.start_run'::text]))),
+    CONSTRAINT trigger_events_kind_check CHECK ((kind = ANY (ARRAY['chat.start'::text, 'schedule'::text, 'agent.start_run'::text, 'builder.test'::text]))),
     CONSTRAINT trigger_events_outcome_check CHECK ((outcome = ANY (ARRAY['launched'::text, 'skipped'::text, 'failed'::text])))
 );
 

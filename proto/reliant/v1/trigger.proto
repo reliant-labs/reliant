@@ -84,6 +84,10 @@ enum TriggerEventKind {
   // tool. Its dedupe key is "<calling chat id>:<tool call id>" and its payload
   // carries parent_chat_id.
   TRIGGER_EVENT_KIND_AGENT_START_RUN = 3;
+  // BUILDER_TEST is a test run started from the workflow builder's Run tab.
+  // Attended, with the chat id as its dedupe key. It is hidden from the
+  // sidebar and from the default Runs list.
+  TRIGGER_EVENT_KIND_BUILDER_TEST = 4;
 }
 
 // TriggerEventOutcome records what a firing did.

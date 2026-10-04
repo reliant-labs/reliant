@@ -22,6 +22,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	cfg "github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/preset"
@@ -355,13 +356,33 @@ type workflowLookupError struct{ Err error }
 func (e *workflowLookupError) Error() string { return e.Err.Error() }
 func (e *workflowLookupError) Unwrap() error { return e.Err }
 
-func (l *Launcher) loadCreateChatWorkflowForValidation(ctx context.Context, userID, workflowName, projectID string) (*reliantv1.Workflow, error) {
+// draftRootFor names the workflow whose saved draft may run without being
+// marked complete: the root of a builder test run, and nothing else. A test run
+// runs what the builder just saved, which is the point of Run; every other
+// launch, and every workflow nested under the root, still needs a complete one.
+func draftRootFor(ev Event, workflowName string) string {
+	if ev.Kind == core.TriggerEventKindBuilderTest {
+		return workflowName
+	}
+	return ""
+}
+
+func (l *Launcher) loadCreateChatWorkflowForValidation(ctx context.Context, userID, workflowName, projectID, draftRoot string) (*reliantv1.Workflow, error) {
 	if strings.HasPrefix(workflowName, "builtin://") {
 		return l.LoadWorkflowForValidation(ctx, workflowName, projectID)
 	}
 
 	slug := NormalizeWorkflowSlug(workflowName)
-	draft, err := l.repo.GetUsableWorkflowBySlug(ctx, userID, slug)
+	var draft *db.WorkflowDraft
+	var err error
+	if draftRoot != "" && slug == NormalizeWorkflowSlug(draftRoot) {
+		draft, err = l.repo.GetWorkflowDraftBySlug(ctx, userID, slug)
+		if err == nil && (draft == nil || draft.IsHidden) {
+			return nil, fmt.Errorf("workflow '%s' not found", workflowName)
+		}
+	} else {
+		draft, err = l.repo.GetUsableWorkflowBySlug(ctx, userID, slug)
+	}
 	if err != nil {
 		var notRunnable *db.WorkflowDraftNotRunnableError
 		if errors.As(err, &notRunnable) {
@@ -386,9 +407,9 @@ func (l *Launcher) loadCreateChatWorkflowForValidation(ctx context.Context, user
 	return wf, nil
 }
 
-func (l *Launcher) createChatWorkflowLoader(ctx context.Context, userID, projectID string) validation.WorkflowLoader {
+func (l *Launcher) createChatWorkflowLoader(ctx context.Context, userID, projectID, draftRoot string) validation.WorkflowLoader {
 	return func(workflowName string) (*reliantv1.Workflow, error) {
-		return l.loadCreateChatWorkflowForValidation(ctx, userID, workflowName, projectID)
+		return l.loadCreateChatWorkflowForValidation(ctx, userID, workflowName, projectID, draftRoot)
 	}
 }
 
@@ -399,7 +420,13 @@ func (l *Launcher) createChatWorkflowLoader(ctx context.Context, userID, project
 // A workflow that cannot be LOADED is an invalid argument; one that loads but
 // does not validate is a failed precondition.
 func (l *Launcher) ValidateCreateChatWorkflowTree(ctx context.Context, userID, workflowName, projectID string) error {
-	wf, err := l.loadCreateChatWorkflowForValidation(ctx, userID, workflowName, projectID)
+	return l.validateWorkflowTree(ctx, userID, workflowName, projectID, "")
+}
+
+// validateWorkflowTree is ValidateCreateChatWorkflowTree with the one workflow
+// (draftRoot) that may be a draft; see draftRootFor.
+func (l *Launcher) validateWorkflowTree(ctx context.Context, userID, workflowName, projectID, draftRoot string) error {
+	wf, err := l.loadCreateChatWorkflowForValidation(ctx, userID, workflowName, projectID, draftRoot)
 	if err != nil {
 		var lookupErr *workflowLookupError
 		if errors.As(err, &lookupErr) {
@@ -410,7 +437,7 @@ func (l *Launcher) ValidateCreateChatWorkflowTree(ctx context.Context, userID, w
 	}
 
 	validationOpts := &validation.ValidationOptions{
-		WorkflowLoader:       l.createChatWorkflowLoader(ctx, userID, projectID),
+		WorkflowLoader:       l.createChatWorkflowLoader(ctx, userID, projectID, draftRoot),
 		CanonicalWorkflowRef: workflowName,
 	}
 	if projectID != "" {

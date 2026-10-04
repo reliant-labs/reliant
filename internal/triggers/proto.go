@@ -178,6 +178,8 @@ func eventKindToProto(kind core.TriggerEventKind) reliantv1.TriggerEventKind {
 		return reliantv1.TriggerEventKind_TRIGGER_EVENT_KIND_SCHEDULE
 	case core.TriggerEventKindAgentStartRun:
 		return reliantv1.TriggerEventKind_TRIGGER_EVENT_KIND_AGENT_START_RUN
+	case core.TriggerEventKindBuilderTest:
+		return reliantv1.TriggerEventKind_TRIGGER_EVENT_KIND_BUILDER_TEST
 	default:
 		return reliantv1.TriggerEventKind_TRIGGER_EVENT_KIND_UNSPECIFIED
 	}

@@ -41,6 +41,11 @@ const (
 	// and its payload carries parent_chat_id — the lineage the fork-bomb
 	// guard walks.
 	TriggerEventKindAgentStartRun TriggerEventKind = "agent.start_run"
+	// TriggerEventKindBuilderTest is a test run started from the workflow
+	// builder's Run tab. It is attended (a human pressed Run), has no stored
+	// trigger, and is kept out of the sidebar and the default Runs list. Its
+	// dedupe key is the chat id, like chat.start.
+	TriggerEventKindBuilderTest TriggerEventKind = "builder.test"
 )
 
 // TriggerEventOutcome records what a firing did.

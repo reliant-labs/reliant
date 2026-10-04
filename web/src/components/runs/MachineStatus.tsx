@@ -189,6 +189,11 @@ export function RunMachineBanner({ chat }: { chat: Chat }) {
   const daemonId = chat.activeDaemonId || triggerDaemonId;
   if (!daemonId) return null;
 
-  const automation = !!chat.launchKind && chat.launchKind !== "chat.start" && chat.launchKind !== "agent.start_run";
+  // A builder test is attended, like a chat: a person pressed Run.
+  const automation =
+    !!chat.launchKind &&
+    chat.launchKind !== "chat.start" &&
+    chat.launchKind !== "agent.start_run" &&
+    chat.launchKind !== "builder.test";
   return <MachineStatus daemonId={daemonId} automation={automation} />;
 }

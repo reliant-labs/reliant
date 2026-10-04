@@ -61,6 +61,7 @@ SELECT DISTINCT ON (r.workflow_name) r.chat_id, r.run_id, r.title, r.project_id,
 ) r
 WHERE
     r.chat_state IS DISTINCT FROM 3
+    AND r.launch_kind IS DISTINCT FROM 'builder.test'
     AND r.workflow_name <> ''
     AND ($3::text IS NULL OR r.project_id = $3::text)
     AND (cardinality($4::text[]) = 0 OR r.workflow_name = ANY($4::text[]))
@@ -200,8 +201,12 @@ WHERE
     AND (cardinality($5::text[]) = 0 OR r.workflow_name = ANY($5::text[]))
     AND ($6::text IS NULL OR r.trigger_id = $6::text)
     -- A chat with no launch event is an interactive start, as ListChats treats it.
-    AND (cardinality($7::text[]) = 0
-         OR COALESCE(r.launch_kind, 'chat.start') = ANY($7::text[]))
+    -- With no kind named, builder test runs are left out: they are scratch runs
+    -- from the workflow builder, not part of the user's real history. Asking for
+    -- 'builder.test' explicitly (the Runs "Tests" filter) brings them back.
+    AND (CASE WHEN cardinality($7::text[]) = 0
+              THEN COALESCE(r.launch_kind, 'chat.start') <> 'builder.test'
+              ELSE COALESCE(r.launch_kind, 'chat.start') = ANY($7::text[]) END)
     AND (cardinality($8::integer[]) = 0 OR r.display_state = ANY($8::integer[]))
     AND ($9::timestamptz IS NULL OR r.created_at >= $9::timestamptz)
     AND ($10::timestamptz IS NULL OR r.created_at < $10::timestamptz)

@@ -154,7 +154,7 @@ export function RunFilters({ currentProjectName, triggerName, parentTitle }: Run
               pressed={search.kind?.includes(kind) ?? false}
               onClick={() => update({ kind: toggleIn(search.kind, kind) })}
             >
-              {launchKindDisplay(kind).shortLabel}
+              {kind === "builder.test" ? "Tests" : launchKindDisplay(kind).shortLabel}
             </Chip>
           ))}
         </ChipGroup>

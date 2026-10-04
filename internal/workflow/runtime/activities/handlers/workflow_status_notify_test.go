@@ -151,6 +151,7 @@ func TestWorkflowStatus_CompletionUnreadFollowsLaunchKind(t *testing.T) {
 		{"schedule-launched run is silent", core.TriggerEventKindSchedule, "", false},
 		{"schedule-launched declared success is silent", core.TriggerEventKindSchedule, model.OutcomeSuccess, false},
 		{"agent-started run is silent", core.TriggerEventKindAgentStartRun, "", false},
+		{"builder test notifies: the user is waiting on it", core.TriggerEventKindBuilderTest, "", true},
 		{"schedule-launched declared failure still notifies", core.TriggerEventKindSchedule, model.OutcomeFailure, true},
 	}
 	for _, tc := range cases {

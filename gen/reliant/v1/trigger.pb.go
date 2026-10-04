@@ -89,6 +89,10 @@ const (
 	// tool. Its dedupe key is "<calling chat id>:<tool call id>" and its payload
 	// carries parent_chat_id.
 	TriggerEventKind_TRIGGER_EVENT_KIND_AGENT_START_RUN TriggerEventKind = 3
+	// BUILDER_TEST is a test run started from the workflow builder's Run tab.
+	// Attended, with the chat id as its dedupe key. It is hidden from the
+	// sidebar and from the default Runs list.
+	TriggerEventKind_TRIGGER_EVENT_KIND_BUILDER_TEST TriggerEventKind = 4
 )
 
 // Enum value maps for TriggerEventKind.
@@ -98,12 +102,14 @@ var (
 		1: "TRIGGER_EVENT_KIND_CHAT_START",
 		2: "TRIGGER_EVENT_KIND_SCHEDULE",
 		3: "TRIGGER_EVENT_KIND_AGENT_START_RUN",
+		4: "TRIGGER_EVENT_KIND_BUILDER_TEST",
 	}
 	TriggerEventKind_value = map[string]int32{
 		"TRIGGER_EVENT_KIND_UNSPECIFIED":     0,
 		"TRIGGER_EVENT_KIND_CHAT_START":      1,
 		"TRIGGER_EVENT_KIND_SCHEDULE":        2,
 		"TRIGGER_EVENT_KIND_AGENT_START_RUN": 3,
+		"TRIGGER_EVENT_KIND_BUILDER_TEST":    4,
 	}
 )
 
@@ -2102,12 +2108,13 @@ const file_reliant_v1_trigger_proto_rawDesc = "" +
 	"\x06_event*F\n" +
 	"\vTriggerKind\x12\x1c\n" +
 	"\x18TRIGGER_KIND_UNSPECIFIED\x10\x00\x12\x19\n" +
-	"\x15TRIGGER_KIND_SCHEDULE\x10\x01*\xa2\x01\n" +
+	"\x15TRIGGER_KIND_SCHEDULE\x10\x01*\xc7\x01\n" +
 	"\x10TriggerEventKind\x12\"\n" +
 	"\x1eTRIGGER_EVENT_KIND_UNSPECIFIED\x10\x00\x12!\n" +
 	"\x1dTRIGGER_EVENT_KIND_CHAT_START\x10\x01\x12\x1f\n" +
 	"\x1bTRIGGER_EVENT_KIND_SCHEDULE\x10\x02\x12&\n" +
-	"\"TRIGGER_EVENT_KIND_AGENT_START_RUN\x10\x03*\xa5\x01\n" +
+	"\"TRIGGER_EVENT_KIND_AGENT_START_RUN\x10\x03\x12#\n" +
+	"\x1fTRIGGER_EVENT_KIND_BUILDER_TEST\x10\x04*\xa5\x01\n" +
 	"\x13TriggerEventOutcome\x12%\n" +
 	"!TRIGGER_EVENT_OUTCOME_UNSPECIFIED\x10\x00\x12\"\n" +
 	"\x1eTRIGGER_EVENT_OUTCOME_LAUNCHED\x10\x01\x12!\n" +

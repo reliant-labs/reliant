@@ -602,6 +602,7 @@ export function WorkflowBuilderPage({
         success: true,
         validationErrors: response.validationErrors,
         status: response.status,
+        slug: response.slug,
       };
     } catch (err) {
       console.error("Workflow save failed:", err);
@@ -660,6 +661,13 @@ export function WorkflowBuilderPage({
       // CRITICAL: Re-throw the error to signal failure to WorkflowBuilder
       throw err;
     }
+  };
+
+  // Test run: save the canvas, then run it by slug. Only a stored workflow
+  // returns a slug; a rejected or failed save returns null and nothing starts.
+  const handleSaveForTestRun = async (workflow: Workflow): Promise<string | null> => {
+    const result = await handleSave(workflow);
+    return result.success && result.slug ? result.slug : null;
   };
 
   // "Mark complete" / "Move to draft". Marking complete validates the STORED
@@ -1017,6 +1025,7 @@ export function WorkflowBuilderPage({
     <div className="h-full w-full bg-background">
       <WorkflowBuilder
         onSave={handleSave}
+        onSaveForTestRun={handleSaveForTestRun}
         draftStatus={workflowSource === "user" ? draftStatus : "complete"}
         onSetStatus={handleSetStatus}
         saveAsDraftRef={saveAsDraftRef}
