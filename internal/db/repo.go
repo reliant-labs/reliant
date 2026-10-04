@@ -55,10 +55,13 @@ const (
 	// costs nothing when there is no conflict — a transaction that does not
 	// conflict never sleeps at all.
 	//
-	// This is a budget increase, not a fix for the underlying design: one
-	// counter row per user is a hot spot that sharding (or moving allocation
-	// off the serializable path) would remove. That is a larger change; this
-	// makes the current design behave correctly at realistic concurrency.
+	// That budget was never enough on its own: under SERIALIZABLE every
+	// commit on the counter row aborts each writer waiting behind it, so the
+	// failure rate keeps climbing with fan-out whatever the budget is. User
+	// update allocation has since moved off the serializable path
+	// (CreateUserUpdate runs at READ COMMITTED), where a waiter takes the
+	// next number instead of aborting. The budget still covers every other
+	// SERIALIZABLE writer.
 	maxRetries     = 6
 	baseRetryDelay = 50 * time.Millisecond
 	maxRetryDelay  = 1 * time.Second
@@ -1379,17 +1382,43 @@ func (r *Repo) GetLatestUserUpdateSequence(ctx context.Context, userID string) (
 
 // CreateUserUpdate creates a new user update for the global WebSocket.
 //
-// This mirrors CreateChatUpdate semantics:
-// 1) sequence allocation and insert are atomic in a transaction
-// 2) writes go through RunTx with retry logic for transient errors
-// 3) nested transaction calls (ctx already carrying txKey) are supported
+// Sequence allocation and the ledger insert are atomic in one transaction, and
+// a call made inside a caller's transaction joins it.
+//
+// # Why READ COMMITTED
+//
+// Every update for a user is allocated from ONE counter row, so every chat that
+// user has running contends on it — a multi-spawn run is dozens of writers on
+// a single row. Under SERIALIZABLE (the RunTx default) a writer that WAITS on
+// that row lock is aborted with SQLSTATE 40001 the moment the holder commits:
+// Postgres will not let a serializable transaction update a row version that
+// changed after its snapshot. So each commit on the row aborts everyone queued
+// behind it, and under real fan-out writers burned the whole retry budget and
+// the update event was lost ("could not serialize access due to concurrent
+// update"). Raising maxRetries only moved the threshold.
+//
+// At READ COMMITTED the same waiter re-evaluates against the committed row
+// (EvalPlanQual) and takes N+1. The row lock is still held until COMMIT, so
+// sequence order cannot diverge from commit order and the client's `WHERE
+// sequence_number > cursor` resume contract holds exactly. This is the same
+// reasoning, for the same shape of write, as SaveMessageAtomic's counters.
+//
+// What READ COMMITTED gives up is cross-statement stability. The two
+// statements here do not need it: the insert uses only the value the upsert
+// RETURNED, and reads nothing else.
+//
+// This only governs a transaction CreateUserUpdate opens itself. A call that
+// joins an outer transaction (ctx already carries one) inherits that
+// transaction's isolation — see RunTxWithOptions — so the workflow-status
+// writers that emit activity inside their own SERIALIZABLE RunTx still allocate
+// serializably, and still rely on the outer retry ladder.
 func (r *Repo) CreateUserUpdate(ctx context.Context, update *UserUpdate) error {
 	// Whether the caller supplied an explicit ID. When they didn't, derive the
 	// ID again on every transaction retry because the scoped allocation from a
 	// failed attempt rolls back and the retried attempt obtains the then-current
 	// next value.
 	callerSuppliedID := update.ID != ""
-	err := r.RunTx(ctx, func(txCtx context.Context) error {
+	err := r.RunTxWithOptions(ctx, TxOptions{Isolation: IsolationReadCommitted}, func(txCtx context.Context) error {
 		// Get next sequence number within the transaction for atomicity.
 		nextSeq, err := r.allocateUpdateSequence(txCtx, updateStreamKindUser, update.UserID)
 		if err != nil {
