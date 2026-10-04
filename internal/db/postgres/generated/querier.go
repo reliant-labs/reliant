@@ -221,6 +221,29 @@ type Querier interface {
 	GetApprovalByEntityID(ctx context.Context, entityID string) (Approval, error)
 	GetAttachment(ctx context.Context, id string) (Attachment, error)
 	GetAttachmentsByIDs(ctx context.Context, ids []string) ([]Attachment, error)
+	// The steps the chat timeline renders, for ChatService/GetWorkflowExecutions
+	// in its BASIC view. GetStepExecutionsForChat is the FULL view.
+	//
+	// The timeline draws an activity indicator for each USER-FACING step and
+	// reads, for each, whether its "-save" sibling recorded a message (then the
+	// step renders AS that message). Nothing else. On chat 8bb0a875 that is 6 of
+	// 93,568 step rows: 56.8 MB of JSON / ~1s of SQL for the full read against a
+	// few kB / ~6ms here.
+	//
+	// The activity list is a LITERAL, unlike GetStepExecutionsForChat's
+	// parameter: the planner proves a query is covered by a partial index only
+	// from a predicate it can see at plan time, and a bound array is not one.
+	// With the literal it uses idx_step_executions_user_facing (96 kB); without
+	// it, a seq scan over every step row. The literal MUST equal
+	// workflowmodel.InternalActivities and the index predicate;
+	// TestUserFacingStepIndexPredicateMatchesInternalActivities pins all three.
+	//
+	// The second arm finds each visible step's "-save" sibling by
+	// (workflow_id, step_id || '-save', loop scope) through idx_step_executions_saves.
+	// Loop scope is matched with IS NOT DISTINCT FROM so iteration 3's step never
+	// picks up iteration 2's save, and NULL (not in a loop) matches NULL.
+	// Save rows carry no output_json, as in the FULL view.
+	GetBasicStepExecutionsForChat(ctx context.Context, chatID string) ([]GetBasicStepExecutionsForChatRow, error)
 	GetChat(ctx context.Context, id string) (ChatsWithActivity, error)
 	// NOTE: there is deliberately no MAX(sequence_number)+1 allocator here.
 	// Sequence numbers come from the chat's row in update_stream_counters; see
@@ -449,6 +472,10 @@ type Querier interface {
 	ListContentBlocksForMessages(ctx context.Context, messageIds []string) ([]MessageContentBlock, error)
 	ListContextWindowsByThread(ctx context.Context, threadID string) ([]ContextWindow, error)
 	ListDependenciesByPlan(ctx context.Context, planID string) ([]TaskDependency, error)
+	// Which of the given threads are forks: their initial (sequence 0) context
+	// window links to a parent window. One round trip for a whole chat, where
+	// GetContextWindowBySequence(thread, 0) cost one per workflow.
+	ListForkedThreadIDs(ctx context.Context, threadIds []string) ([]string, error)
 	ListHiddenItemDefaults(ctx context.Context, itemType int32) ([]ListHiddenItemDefaultsRow, error)
 	ListItemDefaults(ctx context.Context, itemType int32) ([]ListItemDefaultsRow, error)
 	// Every background spawn issued anywhere inside one root execution that is
@@ -468,6 +495,12 @@ type Querier interface {
 	// relaunching it would report twice. Ordered parents-before-children (depth),
 	// then by id, so a relaunch registers an issuing spawn before its own.
 	ListLiveBackgroundSpawnsForWorkflow(ctx context.Context, rootWorkflowID string) ([]ListLiveBackgroundSpawnsForWorkflowRow, error)
+	// A chat's non-terminal calls (pending/executing/backgrounded). The snapshot
+	// needs these even when their message is outside the window, because their
+	// status is still changing and no block it ships can carry it. Served by the
+	// partial idx_tool_calls_chat_live (a few dozen rows database-wide) instead of
+	// a scan of the chat's ~25k terminal calls.
+	ListLiveToolCallsByChat(ctx context.Context, chatID string) ([]ToolCall, error)
 	ListMessages(ctx context.Context, chatID string) ([]Message, error)
 	// Messages in a single context window with seq >= from_seq, ascending, and
 	// optionally seq < to_seq (NULL means unbounded above). Used to bound a

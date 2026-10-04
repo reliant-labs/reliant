@@ -88,6 +88,10 @@ func (r *snapshotGateRepo) GetLatestNonMessageUpdatesPerEntity(context.Context, 
 	return nil, nil
 }
 
+func (r *snapshotGateRepo) ListLiveToolCallsByChat(context.Context, string) ([]*db.ToolCall, error) {
+	return nil, nil
+}
+
 // The snapshot reconciles each thread update's identity fields against the
 // threads table, which is the authority for them.
 func (r *snapshotGateRepo) ListThreadsByConversation(context.Context, string) ([]*db.Thread, error) {

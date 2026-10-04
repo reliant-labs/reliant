@@ -137,6 +137,9 @@ type ToolCallStore interface {
 	// keying off it is the lookup that cannot miss. Readers use both and
 	// merge (see assembleMessagesForDisplay).
 	ListToolCallsByIDs(ctx context.Context, toolCallIDs []string) ([]*ToolCall, error)
+	// ListLiveToolCallsByChat reads a chat's non-terminal calls (pending,
+	// executing, backgrounded) without touching its terminal history.
+	ListLiveToolCallsByChat(ctx context.Context, chatID string) ([]*ToolCall, error)
 	// ListStrandedSpawnToolCalls reads spawn calls whose child workflow has
 	// reached a terminal status but which never received a result — the join
 	// from a finished sub-agent back to its parent, broken by a worker that

@@ -180,6 +180,9 @@ type ContextWindowStore interface {
 	GetContextWindow(ctx context.Context, id string) (*ContextWindow, error)
 	GetLatestContextWindow(ctx context.Context, threadID string) (*ContextWindow, error)
 	GetContextWindowBySequence(ctx context.Context, threadID string, sequence int) (*ContextWindow, error)
+	// ListForkedThreadIDs returns which of threadIDs are forks (their
+	// sequence-0 context window links to a parent window), in one query.
+	ListForkedThreadIDs(ctx context.Context, threadIDs []string) ([]string, error)
 	GetContextWindowWithThread(ctx context.Context, id string) (*ContextWindow, string, *string, *string, error)
 	ListContextWindowsByThread(ctx context.Context, threadID string) ([]*ContextWindow, error)
 	GetMaxSequenceForThread(ctx context.Context, threadID string) (int, error)

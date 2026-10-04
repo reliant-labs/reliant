@@ -51,3 +51,11 @@ SELECT
 FROM context_windows cw
 JOIN threads t ON t.id = cw.thread_id
 WHERE cw.id = $1;
+-- name: ListForkedThreadIDs :many
+-- Which of the given threads are forks: their initial (sequence 0) context
+-- window links to a parent window. One round trip for a whole chat, where
+-- GetContextWindowBySequence(thread, 0) cost one per workflow.
+SELECT thread_id FROM context_windows
+WHERE thread_id = ANY(sqlc.arg('thread_ids')::text[])
+  AND sequence = 0
+  AND parent_context_window_id IS NOT NULL;

@@ -42,7 +42,7 @@ vi.mock("../../api/chat-grpc", () => ({
 }));
 
 import { useWorkflowExecutions } from "../useWorkflowExecutions";
-import { WorkflowState, WorkflowStopReason } from "../../gen/reliant/v1/chat_pb";
+import { WorkflowExecutionView, WorkflowState, WorkflowStopReason } from "../../gen/reliant/v1/chat_pb";
 import { triggerRefetch } from "../../store/refetchStore";
 import type { WorkflowExecutionData } from "../../api/chat-grpc";
 
@@ -98,7 +98,9 @@ describe("useWorkflowExecutions (characterization)", () => {
 
     await waitFor(() => expect(result.current.allWorkflows).toHaveLength(1));
 
-    expect(getWorkflowExecutionsMock).toHaveBeenCalledWith(chatId);
+    // A reader that does not ask for a view gets the cheap one: the timeline's
+    // handful of steps, not the chat's entire step history.
+    expect(getWorkflowExecutionsMock).toHaveBeenCalledWith(chatId, WorkflowExecutionView.BASIC);
     expect(result.current.data).toEqual(latest);
     expect(result.current.allWorkflows).toEqual(all);
   });
@@ -171,7 +173,7 @@ describe("useWorkflowExecutions (characterization)", () => {
     );
 
     // Still the same chat — the pulse refetches in place, it does not change id.
-    expect(getWorkflowExecutionsMock).toHaveBeenLastCalledWith(chatId);
+    expect(getWorkflowExecutionsMock).toHaveBeenLastCalledWith(chatId, WorkflowExecutionView.BASIC);
     expect(result.current.error).toBeNull();
   });
 });

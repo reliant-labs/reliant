@@ -9,6 +9,8 @@ import (
 	"context"
 	"database/sql"
 	"time"
+
+	"github.com/lib/pq"
 )
 
 const createContextWindow = `-- name: CreateContextWindow :one
@@ -221,6 +223,39 @@ func (q *Queries) ListContextWindowsByThread(ctx context.Context, threadID strin
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listForkedThreadIDs = `-- name: ListForkedThreadIDs :many
+SELECT thread_id FROM context_windows
+WHERE thread_id = ANY($1::text[])
+  AND sequence = 0
+  AND parent_context_window_id IS NOT NULL
+`
+
+// Which of the given threads are forks: their initial (sequence 0) context
+// window links to a parent window. One round trip for a whole chat, where
+// GetContextWindowBySequence(thread, 0) cost one per workflow.
+func (q *Queries) ListForkedThreadIDs(ctx context.Context, threadIds []string) ([]string, error) {
+	rows, err := q.db.QueryContext(ctx, listForkedThreadIDs, pq.Array(threadIds))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []string{}
+	for rows.Next() {
+		var thread_id string
+		if err := rows.Scan(&thread_id); err != nil {
+			return nil, err
+		}
+		items = append(items, thread_id)
 	}
 	if err := rows.Close(); err != nil {
 		return nil, err

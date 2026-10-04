@@ -121,6 +121,9 @@ export function MobileChatWorkflowRoute() {
   const { workflows, loading } = useWorkflows();
   // `data` is the latest execution for this chat — the one the header pill is
   // reporting on, which is what a user tapping through expects to see.
+  //
+  // The default (BASIC) view on purpose: toScreenExecution maps no steps, so
+  // the FULL step history would be fetched only to be discarded.
   const { data: execution } = useWorkflowExecutions(chatId ?? null);
 
   if (loading) {

@@ -162,7 +162,18 @@ func (s *ChatService) GetWorkflowExecutions(
 	// old loop's `continue` meant a transient error silently returned a tree
 	// with a workflow's steps missing, which renders as activity that never
 	// happened. One query either answers or it does not.
-	steps, err := s.database.GetStepExecutionsForChat(ctx, req.Msg.ChatId)
+	//
+	// Which query depends on the view. BASIC (the default) is what the chat
+	// timeline renders: user-facing steps plus the "-save" siblings that
+	// recorded a message — 6 of 93,568 rows on the worst real chat, ~6ms
+	// against ~1s. FULL is every step, for the workflow viewer and the CLI.
+	// Either way it is ONE chat-scoped query.
+	var steps []*db.ChatStepExecution
+	if req.Msg.View == reliantv1.WorkflowExecutionView_WORKFLOW_EXECUTION_VIEW_FULL {
+		steps, err = s.database.GetStepExecutionsForChat(ctx, req.Msg.ChatId)
+	} else {
+		steps, err = s.database.GetBasicStepExecutionsForChat(ctx, req.Msg.ChatId)
+	}
 	if err != nil {
 		logging.Error("Failed to get step executions", "error", err, "chatID", req.Msg.ChatId)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to get step executions"))
@@ -195,17 +206,72 @@ func (s *ChatService) GetWorkflowExecutions(
 		return roots[i].CreatedAt.After(roots[j].CreatedAt)
 	})
 
+	// Thread identity is read once for the whole chat. The tree used to call
+	// GetThread (and, for child threads, GetContextWindowBySequence) once per
+	// workflow with context.Background(): 199 workflows, ~400 serial queries
+	// for the worst real chat, unattached to the request's cancellation.
+	// attachThreadsWithoutWorkflowRow needs the same list.
+	threads, threadsErr := s.database.ListThreadsByConversation(ctx, req.Msg.ChatId)
+	if threadsErr != nil {
+		// Degrade to a tree with no thread metadata rather than failing the
+		// read: a partial timeline beats an error page. Logged loudly because
+		// the symptom (spawned threads rendering inline) is otherwise
+		// unattributable; each workflow also logs its own missing thread.
+		logging.Error("[WorkflowTree] Failed to list threads; thread origin will be empty and threads without a workflow row will be missing from the timeline",
+			"error", threadsErr, "chatID", req.Msg.ChatId)
+	}
+	threadsByID := make(map[string]*db.Thread, len(threads))
+	var childThreadIDs []string
+	for _, thread := range threads {
+		if thread == nil {
+			continue
+		}
+		threadsByID[thread.ID] = thread
+		if thread.ParentThreadID != nil {
+			childThreadIDs = append(childThreadIDs, thread.ID)
+		}
+	}
+	// Which child threads are forks (as opposed to spawns): one batched query
+	// instead of one per workflow.
+	forkedThreads := make(map[string]bool)
+	if len(childThreadIDs) > 0 {
+		forkedIDs, err := s.database.ListForkedThreadIDs(ctx, childThreadIDs)
+		if err != nil {
+			logging.Error("[WorkflowTree] Failed to resolve forked threads; ForkedFromThread will be empty",
+				"error", err, "chatID", req.Msg.ChatId)
+		}
+		for _, id := range forkedIDs {
+			forkedThreads[id] = true
+		}
+	}
+
+	// Index children by parent so the walk is linear, not a scan of every
+	// workflow per node.
+	childrenByParent := make(map[string][]*db.Workflow)
+	for _, wf := range workflows {
+		if wf.ParentID != nil {
+			childrenByParent[*wf.ParentID] = append(childrenByParent[*wf.ParentID], wf)
+		}
+	}
+	tree := &workflowTreeBuilder{
+		threadsByID:      threadsByID,
+		forkedThreads:    forkedThreads,
+		childrenByParent: childrenByParent,
+		stepsByWorkflow:  stepsByWorkflow,
+	}
+
 	// Build tree for each root workflow
 	allRootProtos := make([]*reliantv1.WorkflowExecution, 0, len(roots))
 	for _, root := range roots {
-		rootProto := s.buildWorkflowExecutionTree(root, workflows, stepsByWorkflow)
-		allRootProtos = append(allRootProtos, rootProto)
+		allRootProtos = append(allRootProtos, tree.build(root))
 	}
 
 	// The tree above can only describe threads that a workflow row points at,
 	// and that is strictly fewer than the threads which exist. Fill the gap
 	// from the table that owns thread identity.
-	s.attachThreadsWithoutWorkflowRow(ctx, req.Msg.ChatId, allRootProtos)
+	if threadsErr == nil {
+		s.attachThreadsWithoutWorkflowRow(threads, allRootProtos)
+	}
 
 	// The most recent root is first (for backwards compat)
 	var latestRootProto *reliantv1.WorkflowExecution
@@ -318,21 +384,10 @@ func (s *ChatService) GetThreadWorkflowInputs(
 // "spawn", and so relabelled spawned sub-agents as node threads and dumped their
 // whole transcripts inline into the parent chat.
 func (s *ChatService) attachThreadsWithoutWorkflowRow(
-	ctx context.Context,
-	chatID string,
+	threads []*db.Thread,
 	roots []*reliantv1.WorkflowExecution,
 ) {
 	if len(roots) == 0 {
-		return
-	}
-
-	threads, err := s.database.ListThreadsByConversation(ctx, chatID)
-	if err != nil {
-		// Degrade to the workflow-only tree rather than failing the whole read:
-		// a partial timeline beats an error page. Logged loudly because the
-		// symptom (threads missing from the UI) is otherwise unattributable.
-		logging.Error("[WorkflowTree] Failed to list threads; threads without a workflow row will be missing from the timeline",
-			"error", err, "chatID", chatID)
 		return
 	}
 
@@ -465,12 +520,17 @@ func threadStatusToWorkflowStatus(status int32) (reliantv1.WorkflowState, relian
 	}
 }
 
-// buildWorkflowExecutionTree recursively builds the workflow execution tree
-func (s *ChatService) buildWorkflowExecutionTree(
-	wf *db.Workflow,
-	allWorkflows []*db.Workflow,
-	stepsByWorkflow map[string][]*db.ChatStepExecution,
-) *reliantv1.WorkflowExecution {
+// workflowTreeBuilder holds everything buildWorkflowExecutionTree needs, all
+// loaded once per request so the walk itself issues no queries.
+type workflowTreeBuilder struct {
+	threadsByID      map[string]*db.Thread
+	forkedThreads    map[string]bool
+	childrenByParent map[string][]*db.Workflow
+	stepsByWorkflow  map[string][]*db.ChatStepExecution
+}
+
+// build recursively builds the workflow execution tree
+func (b *workflowTreeBuilder) build(wf *db.Workflow) *reliantv1.WorkflowExecution {
 	proto := &reliantv1.WorkflowExecution{
 		Id:           wf.ID,
 		WorkflowName: wf.WorkflowName,
@@ -500,10 +560,10 @@ func (s *ChatService) buildWorkflowExecutionTree(
 	// spawned sub-agent, and a spawn whose origin is missing renders its entire
 	// transcript inline in the parent chat. Swallowing the error left that
 	// looking like a frontend bug for a long time, so it is logged loudly.
-	thread, threadErr := s.database.GetThread(context.Background(), wf.Thread)
-	if threadErr != nil || thread == nil {
+	thread := b.threadsByID[wf.Thread]
+	if thread == nil {
 		logging.Error("[WorkflowTree] Failed to load thread for workflow; Origin will be empty and spawned threads will render inline",
-			"error", threadErr,
+			"error", fmt.Errorf("thread %q not found in chat", wf.Thread),
 			"workflowID", wf.ID,
 			"thread", wf.Thread,
 			"chatID", wf.ChatID)
@@ -516,7 +576,7 @@ func (s *ChatService) buildWorkflowExecutionTree(
 			// when ForkAtMessageID is nil (forking an empty parent thread) --
 			// createThreadInternal never sets that link. That link, not
 			// ForkAtMessageID, is what "is this a fork" needs to test.
-			if cw, err := s.database.GetContextWindowBySequence(context.Background(), wf.Thread, 0); err == nil && cw != nil && cw.ParentContextWindowID != nil {
+			if b.forkedThreads[wf.Thread] {
 				proto.ForkedFromThread = thread.ParentThreadID
 			}
 			// ParentThread: always set when parent exists (both fork and new)
@@ -549,7 +609,7 @@ func (s *ChatService) buildWorkflowExecutionTree(
 	// for internal plumbing (model.InternalActivities) — and that is where all
 	// the weight is: 32,013 of that chat's 32,023 steps, against 23 kB for the
 	// ten that remain.
-	if steps, ok := stepsByWorkflow[wf.ID]; ok {
+	if steps, ok := b.stepsByWorkflow[wf.ID]; ok {
 		proto.Steps = make([]*reliantv1.StepExecution, len(steps))
 		for i, step := range steps {
 			proto.Steps[i] = &reliantv1.StepExecution{
@@ -584,11 +644,8 @@ func (s *ChatService) buildWorkflowExecutionTree(
 	}
 
 	// Find and add children
-	for _, child := range allWorkflows {
-		if child.ParentID != nil && *child.ParentID == wf.ID {
-			childProto := s.buildWorkflowExecutionTree(child, allWorkflows, stepsByWorkflow)
-			proto.Children = append(proto.Children, childProto)
-		}
+	for _, child := range b.childrenByParent[wf.ID] {
+		proto.Children = append(proto.Children, b.build(child))
 	}
 
 	return proto

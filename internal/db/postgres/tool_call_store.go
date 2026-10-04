@@ -91,6 +91,14 @@ func (s *toolCallStore) ListToolCallsByChat(ctx context.Context, chatID string) 
 	return calls, nil
 }
 
+func (s *toolCallStore) ListLiveToolCallsByChat(ctx context.Context, chatID string) ([]*core.ToolCall, error) {
+	rows, err := s.q.ListLiveToolCallsByChat(ctx, chatID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list live tool calls by chat: %w", err)
+	}
+	return toolCallsFromPG(rows), nil
+}
+
 // ListToolCallsByIDs reads calls by primary key.
 //
 // This is the lookup that cannot miss: a tool-call block always carries its

@@ -30,6 +30,7 @@ vi.mock("../../api/chat-grpc", () => ({
 
 import { useWorkflowExecutions } from "../useWorkflowExecutions";
 import { triggerRefetch } from "../../store/refetchStore";
+import { WorkflowExecutionView } from "../../gen/reliant/v1/chat_pb";
 
 function Reader({ chatId }: { chatId: string }) {
   const { allWorkflows } = useWorkflowExecutions(chatId);
@@ -123,6 +124,45 @@ describe("useWorkflowExecutions request fan-out", () => {
     expect(getWorkflowExecutionsMock).toHaveBeenCalledTimes(2);
 
     releaseSecond?.();
+  });
+
+  // The timeline reads the BASIC tree; the workflow viewer reads FULL. They are
+  // different payloads (six steps vs every step) and must not share a cache
+  // entry, but one refetch pulse must still refresh both — a viewer showing a
+  // stale diagram next to a live timeline is the failure this guards.
+  it("requests BASIC by default, keeps FULL in its own entry, and one pulse refreshes both", async () => {
+    const chatId = nextChatId();
+    const { Wrapper } = makeWrapper();
+
+    function FullReader({ chatId: id }: { chatId: string }) {
+      const { allWorkflows } = useWorkflowExecutions(id, WorkflowExecutionView.FULL);
+      return React.createElement("div", null, String(allWorkflows.length));
+    }
+
+    render(
+      React.createElement(
+        Wrapper,
+        null,
+        React.createElement(Reader, { chatId }),
+        React.createElement(Reader, { chatId }),
+        React.createElement(FullReader, { chatId }),
+      ),
+    );
+
+    await waitFor(() =>
+      expect(getWorkflowExecutionsMock).toHaveBeenCalledTimes(2),
+    );
+    expect(getWorkflowExecutionsMock).toHaveBeenCalledWith(chatId, WorkflowExecutionView.BASIC);
+    expect(getWorkflowExecutionsMock).toHaveBeenCalledWith(chatId, WorkflowExecutionView.FULL);
+
+    triggerRefetch("workflow_executions");
+
+    await waitFor(
+      () => expect(getWorkflowExecutionsMock).toHaveBeenCalledTimes(4),
+      { timeout: 2000 },
+    );
+    await new Promise((r) => setTimeout(r, 50));
+    expect(getWorkflowExecutionsMock).toHaveBeenCalledTimes(4);
   });
 
   it("keeps refetching on later pulses after readers unmount and remount", async () => {

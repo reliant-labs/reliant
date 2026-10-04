@@ -941,19 +941,8 @@ func (r *Repo) GetLatestNonMessageUpdatesPerEntity(ctx context.Context, chatID s
 	// the highest sequence_number — matching the "last write per entity wins"
 	// dedup the Go caller used to do.
 	//
-	// Tool-call updates need a different identity than entity_id. Their entity
-	// id is built as "tool-<tool_call_id>-<timestamp>"
-	// (EntityIDForToolCall), so every status transition of the SAME tool call
-	// — pending → executing → completed — lands under a DISTINCT entity_id and
-	// per-entity dedup can never collapse them. The frontend keys tool state by
-	// tool_call_id and only ever renders the latest status, so replaying every
-	// historical transition is pure weight: deduping on the JSON tool_call_id
-	// instead of the whole entity_id halves the update count on a long chat
-	// (measured 10,571 → 5,327).
-	//
-	// The tool id can contain '-' (for example resumptions and synthesized ids),
-	// so parsing it back out of entity_id with split_part is unsafe. The payload
-	// already carries the canonical key; use data::jsonb->>'tool_call_id'.
+	// (Tool-call updates used to be deduped here by JSON tool_call_id; they are
+	// no longer read by this query at all — see below.)
 	//
 	// Question updates need the same treatment, for a user-visible reason. A
 	// question writes TWO rows over its life — "pending" when the gate opens
@@ -987,47 +976,101 @@ func (r *Repo) GetLatestNonMessageUpdatesPerEntity(ctx context.Context, chatID s
 	// and workflow ids are both bare UUIDs, and an inline fork's workflow id IS
 	// the main thread's id, which would otherwise collide with the main thread's
 	// own bucket.
-	query := `
-		SELECT DISTINCT ON (dedup_key)
-			id,
-			chat_id,
-			sequence_number,
-			update_type,
-			entity_id,
-			data,
-			created_at
-		FROM (
-			SELECT
-				id,
-				chat_id,
-				sequence_number,
-				update_type,
-				entity_id,
-				data,
-				created_at,
-				CASE
-					WHEN update_type = ? THEN COALESCE(NULLIF(data::jsonb->>'tool_call_id', ''), entity_id)
-					WHEN update_type = ? THEN left(entity_id, length(entity_id) - position('-' in reverse(entity_id)))
-					WHEN update_type = ? THEN 'thread:' || COALESCE(NULLIF(data::jsonb->>'thread', ''), entity_id)
-					ELSE entity_id
-				END AS dedup_key
-			FROM chat_updates
-			WHERE chat_id = ? AND update_type NOT IN (?, ?)
-		) t
-		ORDER BY dedup_key, sequence_number DESC
-	`
-	query = r.bindQuery(query)
+	//
+	// Tool calls are NOT read here at all. They were 25,660 of 27,279 rows on
+	// the measured chat and dominated both the sort and the payload; the
+	// snapshot now synthesizes the few it needs from the durable tool_calls
+	// table (see snapshotToolCalls). Excluding them also lets this read use a
+	// skip-scan: types 1, 4 and 19 are excluded by the partial predicate of
+	// idx_chat_updates_snapshot_heads.
+	//
+	// Shape: a recursive skip-scan (one index probe per DISTINCT entity_id)
+	// for every type that dedups by entity_id, plus a separate small read of
+	// the types that re-key (THREAD, QUESTION). The split is load-bearing: a
+	// pure per-entity_id skip-scan LOSES rows, because thread updates share
+	// entity_id (the workflow id) with workflow_status rows, so the newest of
+	// the two would evict the other (measured: 198 workflow_status rows
+	// dropped). Re-keyed types are few (656 + 0 on the measured chat), so they
+	// can afford the CASE-key DISTINCT ON; everything else is bounded by the
+	// number of entities, not the number of updates. Measured on a 2.48M-row
+	// table: ~3-4s before, ~100ms after, with identical results minus tool
+	// calls.
+	//
+	// The update types are LITERALS, not bind parameters, and that is
+	// load-bearing. The planner can use a partial index only when it can PROVE
+	// the query's predicate implies the index's, and it can prove that only
+	// from values it sees at plan time. pgx prepares statements, and Postgres
+	// switches a prepared statement to a generic plan after five executions —
+	// one that cannot see a bound $2..$6. With parameters, that generic plan
+	// lost idx_chat_updates_snapshot_heads and fell back to a per-entity scan
+	// of the chat's whole history: measured >20s (cancelled) on the dev copy.
+	// TestSnapshotHeadsQueryMatchesPartialIndex pins these literals to the
+	// enum values and to the index predicate in the migration.
+	query := r.bindQuery(snapshotHeadsQuery)
 
-	rows, err := r.DB.DB(ctx).QueryContext(ctx, query,
-		int(reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_TOOL_CALL),
-		int(reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_QUESTION),
-		int(reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_THREAD),
-		chatID,
-		int(reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_MESSAGE),
-		int(reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_STREAM_FINALIZED))
+	rows, err := r.DB.DB(ctx).QueryContext(ctx, query, chatID, chatID, chatID, chatID)
 	if err != nil {
 		return nil, err
 	}
+	return scanSnapshotHeads(rows)
+}
+
+// snapshotHeadsQuery is GetLatestNonMessageUpdatesPerEntity's SQL. A
+// package-level constant so the partial-index test can read exactly what runs.
+//
+//	1 = MESSAGE, 4 = TOOL_CALL, 19 = STREAM_FINALIZED  (the index excludes these)
+//	3 = THREAD, 18 = QUESTION                          (re-keyed, read separately)
+const snapshotHeadsQuery = `
+		WITH RECURSIVE heads AS (
+			(SELECT entity_id, sequence_number
+			   FROM chat_updates
+			  WHERE chat_id = ? AND update_type NOT IN (1, 4, 19, 3, 18)
+			  ORDER BY entity_id, sequence_number DESC
+			  LIMIT 1)
+			UNION ALL
+			SELECT nxt.entity_id, nxt.sequence_number
+			  FROM heads h
+			  CROSS JOIN LATERAL (
+				SELECT entity_id, sequence_number
+				  FROM chat_updates
+				 WHERE chat_id = ? AND update_type NOT IN (1, 4, 19, 3, 18)
+				   AND entity_id > h.entity_id
+				 ORDER BY entity_id, sequence_number DESC
+				 LIMIT 1) nxt
+		),
+		rekeyed AS (
+			SELECT DISTINCT ON (dedup_key) id, sequence_number
+			FROM (
+				SELECT
+					id,
+					sequence_number,
+					CASE
+						WHEN update_type = 18 THEN left(entity_id, length(entity_id) - position('-' in reverse(entity_id)))
+						ELSE 'thread:' || COALESCE(NULLIF(data::jsonb->>'thread', ''), entity_id)
+					END AS dedup_key
+				FROM chat_updates
+				WHERE chat_id = ? AND update_type IN (3, 18)
+			) k
+			ORDER BY dedup_key, sequence_number DESC
+		)
+		SELECT
+			cu.id,
+			cu.chat_id,
+			cu.sequence_number,
+			cu.update_type,
+			cu.entity_id,
+			cu.data,
+			cu.created_at
+		FROM (
+			SELECT sequence_number FROM heads
+			UNION
+			SELECT sequence_number FROM rekeyed
+		) picked
+		JOIN chat_updates cu ON cu.chat_id = ? AND cu.sequence_number = picked.sequence_number
+		ORDER BY cu.sequence_number
+	`
+
+func scanSnapshotHeads(rows *sql.Rows) ([]ChatUpdate, error) {
 	defer rows.Close()
 
 	updates := []ChatUpdate{}

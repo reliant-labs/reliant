@@ -947,9 +947,33 @@ message GetThreadWorkflowInputsResponse {
   bool is_running = 3;  // Whether the workflow is still running
 }
 
+// WorkflowExecutionView selects how much step history GetWorkflowExecutions
+// returns. The workflow tree itself (every workflow, its lifecycle, thread
+// identity and origin) is identical in both; only `steps` differs.
+//
+// It exists because the two readers of this RPC need very different amounts
+// of it. The chat timeline draws an activity indicator for a handful of
+// user-facing steps; the workflow viewer reconstructs loop iterations and node
+// history from every step. Serving the viewer's needs to the timeline cost the
+// worst real chat 93,568 step rows and 56.8 MB of JSON on every open, to render
+// six of them.
+enum WorkflowExecutionView {
+  // BASIC: steps of user-facing activities (those not in
+  // workflowmodel.InternalActivities) plus the "-save" sibling of each one that
+  // recorded a message — exactly what the timeline needs to decide whether a
+  // step renders as the message it saved or as an activity indicator. The
+  // zero value, so a caller that does not ask gets the cheap read.
+  WORKFLOW_EXECUTION_VIEW_BASIC = 0;
+  // FULL: every step of every workflow. For the workflow viewer (fetched only
+  // while it is open) and the CLI supervisor, which summarise all of them.
+  // output_json is still sent only for user-facing activities.
+  WORKFLOW_EXECUTION_VIEW_FULL = 1;
+}
+
 // GetWorkflowExecutionsRequest fetches workflow execution tree
 message GetWorkflowExecutionsRequest {
   string chat_id = 1;
+  WorkflowExecutionView view = 2;
 }
 
 // GetWorkflowExecutionsResponse returns the execution tree

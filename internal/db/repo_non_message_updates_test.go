@@ -10,8 +10,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
-
-	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 )
 
 // The chat snapshot used to collect its non-message updates by reading
@@ -25,8 +23,8 @@ import (
 // detection never saw a hole.
 //
 // These tests pin the replacement's two guarantees: completeness regardless of
-// how much message traffic precedes the interesting rows, and per-tool-call
-// dedup down to the latest status.
+// how much message traffic precedes the interesting rows, and exclusion of tool
+// calls (served from the durable table instead).
 
 func seedChatForUpdates(t *testing.T, repo *Repo, ctx context.Context) string {
 	t.Helper()
@@ -85,79 +83,32 @@ func TestGetLatestNonMessageUpdatesPerEntity_NotEvictedByMessageVolume(t *testin
 	require.Less(t, updates[0].SequenceNumber, updates[1].SequenceNumber)
 }
 
-func TestGetLatestNonMessageUpdatesPerEntity_CollapsesToolCallToLatestStatus(t *testing.T) {
+// Tool-call updates are deliberately absent from this read: the snapshot
+// synthesizes them from the durable tool_calls table (see snapshotToolCalls),
+// because replaying the transition history was ~94% of the rows on a long chat.
+// The per-tool-call "latest status wins" intent now lives in the snapshot-level
+// tests in internal/grpc/services.
+func TestGetLatestNonMessageUpdatesPerEntity_ExcludesToolCalls(t *testing.T) {
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 
 	ctx := context.Background()
 	chatID := seedChatForUpdates(t, repo, ctx)
 
-	// EntityIDForToolCall embeds a timestamp, so the three status transitions of
-	// ONE tool call each get a distinct entity_id. Deduping on entity_id alone
-	// would replay all three; the frontend keys tool state by tool_call_id and
-	// only renders the latest, so the snapshot should carry just one.
-	toolCallID := "toolu_regression"
-	for _, status := range []ToolCallStatus{
-		ToolCallStatusPending,
-		ToolCallStatusExecuting,
-		ToolCallStatusCompleted,
-	} {
-		require.NoError(t, repo.EmitToolCallUpdate(ctx, chatID, ToolCallUpdate{
-			ToolCallID: toolCallID,
-			ToolName:   "view",
-			Status:     status,
-		}))
-		// EntityIDForToolCall's timestamp has nanosecond precision, but sleep a
-		// touch so the ids are unambiguously distinct even on a coarse clock —
-		// distinct ids are the precondition this test is about.
-		time.Sleep(time.Millisecond)
+	for _, toolCallID := range []string{"toolu_a", "toolu_hyphen-b-c"} {
+		for _, status := range []ToolCallStatus{ToolCallStatusPending, ToolCallStatusExecuting, ToolCallStatusCompleted} {
+			require.NoError(t, repo.EmitToolCallUpdate(ctx, chatID, ToolCallUpdate{
+				ToolCallID: toolCallID, ToolName: "view", Status: status,
+			}))
+			time.Sleep(time.Millisecond)
+		}
 	}
+	require.NoError(t, repo.CreateChatUpdate(ctx, chatID, UpdateTypeApproval, "approval-1", `{"k":"v"}`))
 
 	updates, err := repo.GetLatestNonMessageUpdatesPerEntity(ctx, chatID)
 	require.NoError(t, err)
-
-	require.Len(t, updates, 1,
-		"three status transitions of one tool call must collapse to the latest")
-	require.Equal(t, reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_TOOL_CALL, updates[0].UpdateType)
-	require.Contains(t, string(updates[0].Data), string(ToolCallStatusCompleted),
-		"the surviving row should be the newest status, not the first")
-}
-
-func TestGetLatestNonMessageUpdatesPerEntity_DedupsToolCallsByJSONToolCallID(t *testing.T) {
-	repo, cleanup := setupTestDB(t)
-	defer cleanup()
-
-	ctx := context.Background()
-	chatID := seedChatForUpdates(t, repo, ctx)
-
-	// EntityIDForToolCall includes the tool-call id, but the id itself can
-	// contain hyphens. Splitting entity_id on '-' collapses these two distinct
-	// calls to the same key ("toolu_same") and drops one from the snapshot.
-	firstToolCallID := "toolu_same-prefix-one"
-	secondToolCallID := "toolu_same-prefix-two"
-	for _, update := range []ToolCallUpdate{
-		{ToolCallID: firstToolCallID, ToolName: "bash", Status: ToolCallStatusExecuting},
-		{ToolCallID: secondToolCallID, ToolName: "bash", Status: ToolCallStatusCompleted},
-	} {
-		require.NoError(t, repo.EmitToolCallUpdate(ctx, chatID, update))
-		time.Sleep(time.Millisecond)
-	}
-
-	updates, err := repo.GetLatestNonMessageUpdatesPerEntity(ctx, chatID)
-	require.NoError(t, err)
-
-	statusesByToolCallID := make(map[string]string, len(updates))
-	for _, update := range updates {
-		require.Equal(t, reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_TOOL_CALL, update.UpdateType)
-		var payload ToolCallUpdate
-		require.NoError(t, json.Unmarshal(update.Data, &payload))
-		statusesByToolCallID[payload.ToolCallID] = string(payload.Status)
-	}
-
-	require.Equal(t, map[string]string{
-		firstToolCallID:  string(ToolCallStatusExecuting),
-		secondToolCallID: string(ToolCallStatusCompleted),
-	}, statusesByToolCallID)
+	require.Len(t, updates, 1)
+	require.Equal(t, "approval-1", updates[0].EntityID)
 }
 
 func TestGetLatestNonMessageUpdatesPerEntity_ThreadAnnouncementSurvivesWorkflowStatus(t *testing.T) {
@@ -291,4 +242,41 @@ func TestGetLatestNonMessageUpdatesPerEntity_ExcludesStreamFinalized(t *testing.
 
 	require.Len(t, updates, 1)
 	require.Equal(t, "approval-1", updates[0].EntityID)
+}
+
+// The skip-scan collapses by entity_id, but thread updates share their entity_id
+// (the workflow id) with workflow_status rows. Reading both through the
+// skip-scan would let the newest evict the other (measured: 198 workflow_status
+// rows lost on a real chat), so both must survive side by side.
+func TestGetLatestNonMessageUpdatesPerEntity_WorkflowStatusSurvivesThreadOnSameWorkflowID(t *testing.T) {
+	repo, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	chatID := seedChatForUpdates(t, repo, ctx)
+	workflowID := uuid.New().String()
+
+	require.NoError(t, repo.CreateChatUpdate(ctx, chatID, UpdateTypeWorkflowStatus, workflowID, `{"status":"running"}`))
+	require.NoError(t, repo.CreateChatUpdate(ctx, chatID, UpdateTypeThread, workflowID, `{"thread":"t-1","status":"running"}`))
+	require.NoError(t, repo.CreateChatUpdate(ctx, chatID, UpdateTypeWorkflowStatus, workflowID, `{"status":"completed"}`))
+	// Newest row on the shared entity_id is a thread update; the status row must still come back.
+	require.NoError(t, repo.CreateChatUpdate(ctx, chatID, UpdateTypeThread, workflowID, `{"thread":"t-2","status":"running"}`))
+
+	updates, err := repo.GetLatestNonMessageUpdatesPerEntity(ctx, chatID)
+	require.NoError(t, err)
+
+	var statuses, threads []string
+	for _, u := range updates {
+		switch u.UpdateType {
+		case UpdateTypeWorkflowStatus:
+			statuses = append(statuses, string(u.Data))
+		case UpdateTypeThread:
+			threads = append(threads, string(u.Data))
+		}
+	}
+	require.Equal(t, []string{`{"status":"completed"}`}, statuses)
+	require.Len(t, threads, 2, "each thread keeps its own latest row")
+	for i := 1; i < len(updates); i++ {
+		require.Less(t, updates[i-1].SequenceNumber, updates[i].SequenceNumber)
+	}
 }

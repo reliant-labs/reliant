@@ -33,6 +33,7 @@ import {
   WorkspaceBranchContextSchema,
   GetWorkflowExecutionsRequestSchema,
   GetThreadWorkflowInputsRequestSchema,
+  WorkflowExecutionView,
   ChatState,
   MessageRole,
   DisplayStyle,
@@ -826,12 +827,17 @@ export const chatGrpc = {
   // ============================================
 
   // Get workflow execution tree for a chat
-  // Returns the latest root workflow (for backwards compat) and all root workflows
+  // Returns the latest root workflow (for backwards compat) and all root workflows.
+  //
+  // `view` decides how many steps ride along — see WorkflowExecutionView.
+  // BASIC (the default) is what the timeline renders; FULL is every step,
+  // which only the workflow viewer needs.
   async getWorkflowExecutions(
-    chatId: string
+    chatId: string,
+    view: WorkflowExecutionView = WorkflowExecutionView.BASIC,
   ): Promise<{ latest: WorkflowExecutionData | null; all: WorkflowExecutionData[] }> {
     const client = grpcClient.chat();
-    const request = create(GetWorkflowExecutionsRequestSchema, { chatId });
+    const request = create(GetWorkflowExecutionsRequestSchema, { chatId, view });
     const response = await client.getWorkflowExecutions(request);
 
     const latest = response.rootWorkflow
