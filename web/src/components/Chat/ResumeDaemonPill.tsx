@@ -6,6 +6,7 @@ import {
   type DaemonInfo as Daemon,
 } from "@/gen/reliant/v1/daemon_registry_pb";
 import { useGoToBilling } from "@/hooks/useGoToBilling";
+import { resumeErrorMessage } from "@/lib/daemon-resume";
 
 const DISMISS_KEY = "reliant.resumeDaemonPill.dismissed";
 
@@ -34,26 +35,6 @@ function writeDismissed(sig: string): void {
   }
 }
 
-function formatResumeError(error: string): string {
-  const normalized = error.toLowerCase();
-  // There is no free tier, so a resume refused for quota means the account's
-  // compute entitlement is spent — the fix is a plan or a coupon, not waiting
-  // for an allowance to reset. The old copy ("Free tier compute limit
-  // reached") named a tier that does not exist and implied the user was on it.
-  //
-  // The literal-string arm is kept alongside the code because the server's
-  // message is not guaranteed to survive as a typed error through every
-  // transport; it now matches on the entitlement wording rather than "free
-  // tier", which nothing emits any more.
-  if (
-    normalized.includes("resource_exhausted") ||
-    normalized.includes("compute limit")
-  ) {
-    return "You've used the compute included with your account. Upgrade or redeem a coupon to resume this environment.";
-  }
-  return error;
-}
-
 export function ResumeDaemonPill({ placement = "absolute" }: ResumeDaemonPillProps) {
   const goToBilling = useGoToBilling();
   const { data: daemons = [] } = useDaemonList();
@@ -63,10 +44,7 @@ export function ResumeDaemonPill({ placement = "absolute" }: ResumeDaemonPillPro
   // and only fires onError for OTHER failures. Without that filter the pill
   // used to render "[resource_exhausted] …" under the modal.
   const resume = useResumeDaemon({
-    onError: (err) => {
-      const message = err instanceof Error ? err.message : "Failed to resume environment";
-      setError(formatResumeError(message));
-    },
+    onError: (err) => setError(resumeErrorMessage(err)),
   });
 
   const { active, suspended } = useMemo(() => {

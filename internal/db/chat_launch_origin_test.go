@@ -153,5 +153,5 @@ func TestListChatsExcludeAutomations(t *testing.T) {
 	assert.True(t, filtered["x-interactive"])
 	assert.True(t, filtered["x-legacy"], "a chat with no launch event is interactive")
 	assert.False(t, filtered["x-schedule-quiet"], "a quiet scheduled chat is hidden")
-	assert.True(t, filtered["x-schedule-needs-approval"], "an automation chat awaiting input is kept")
+	assert.False(t, filtered["x-schedule-needs-approval"], "an automation chat awaiting input is the Inbox's, not the sidebar's")
 }

@@ -4,7 +4,7 @@ import { createPortal } from "react-dom";
 import { 
   Search, Settings, Keyboard, Info, Palette, Shield, 
   FolderOpen, GitBranch, Workflow, Bot, Terminal,
-  Code, CalendarClock, Activity
+  Code, CalendarClock, Activity, Inbox
 } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 import { cn } from "../../lib/utils";
@@ -140,6 +140,18 @@ export const CommandPalette = forwardRef<CommandPaletteRef, CommandPaletteProps>
         keywords: ["schedule", "trigger", "cron", "automation"],
         action: () => {
           navigate({ to: '/automations' });
+          closeAndFocus();
+        },
+      },
+      {
+        id: "inbox",
+        title: "Inbox",
+        description: "Approvals, questions and automation problems waiting on you",
+        icon: <Inbox className="w-4 h-4" />,
+        category: "navigation",
+        keywords: ["approval", "question", "waiting", "needs you", "notifications"],
+        action: () => {
+          navigate({ to: '/inbox' });
           closeAndFocus();
         },
       },

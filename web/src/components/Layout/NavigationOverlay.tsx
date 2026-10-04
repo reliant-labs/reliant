@@ -1,4 +1,4 @@
-import { FileText, Terminal as TerminalIcon, FolderOpen, Workflow, FolderGit2, Activity } from "lucide-react";
+import { FileText, Terminal as TerminalIcon, FolderOpen, Workflow, FolderGit2, Activity, Inbox } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 import { useTerminalStore } from "../../store/terminalStore";
 import { useViewerStore } from "../../store/viewerStore";
@@ -71,6 +71,14 @@ export function NavigationOverlay({ onClose }: NavigationOverlayProps) {
       shortcut: "⌘ K",
       onClick: () => {
         navigate({ to: '/workflow' });
+        onClose();
+      },
+    },
+    {
+      label: "Inbox",
+      icon: Inbox,
+      onClick: () => {
+        navigate({ to: '/inbox' });
         onClose();
       },
     },

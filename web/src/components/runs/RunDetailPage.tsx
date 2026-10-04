@@ -28,6 +28,7 @@ import { RunHeader } from "./RunHeader";
 import { useRunRoute } from "./RunRouteLoader";
 import { RunsShell } from "./RunsPage";
 import { TriggerCard } from "./TriggerCard";
+import { RunMachineBanner } from "./MachineStatus";
 
 export function RunDetailPage() {
   const { runId } = useParams({ strict: false }) as { runId?: string };
@@ -110,6 +111,7 @@ function LoadedRun({ initialChat }: { initialChat: Chat }) {
             onOpenAsChat,
           }}
         />
+        <RunMachineBanner chat={chat} />
         <TriggerCard launchKind={chat.launchKind} triggerId={chat.triggerId} triggerName={triggerName} />
       </div>
       <div className="min-h-0 flex-1">

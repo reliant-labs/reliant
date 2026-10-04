@@ -32,6 +32,7 @@ import { chatKeys, patchChatCaches, removeChatFromListCache, getChatFromCache, r
 import { setMessagesMetaInCache } from "../hooks/message-queries";
 import { approvalKeys } from "../hooks/approval-queries";
 import { runKeys, runsInvalidatingUpdate } from "../hooks/run-queries";
+import { inboxInvalidatingUpdate, inboxKeys } from "../hooks/inbox-queries";
 import { showWorkflowCompletionNotification, showWorkflowFailedNotification, showApprovalRequiredNotification, getNotificationPermission } from "../lib/notifications";
 import { getNotificationSoundOptions, useNotificationStore } from "./notificationStore";
 import { triggerRefetch, type RefetchType } from "./refetchStore";
@@ -315,6 +316,11 @@ export const useGlobalUpdatesStore = create<GlobalUpdatesState>((set, get) => ({
       // stale. Only observed lists refetch; an unopened Runs page costs nothing.
       if (runsInvalidatingUpdate(update.update_type)) {
         queryClient.invalidateQueries({ queryKey: runKeys.lists() });
+      }
+      // The Inbox (and its nav badge) spans every chat, so it is marked stale
+      // too. Only observed queries refetch.
+      if (inboxInvalidatingUpdate(update.update_type)) {
+        queryClient.invalidateQueries({ queryKey: inboxKeys.all });
       }
 
       // Route updates to appropriate stores

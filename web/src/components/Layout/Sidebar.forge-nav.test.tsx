@@ -57,6 +57,10 @@ vi.mock("../../hooks/chat-queries", () => ({
   useChat: () => ({ data: undefined }),
 }));
 
+// The Inbox nav item reads its own counts; nothing is waiting here.
+vi.mock("../../hooks/inbox-queries", () => ({
+  useInboxCounts: () => ({ data: { blockingCount: 0, hasInformational: false }, isError: false }),
+}));
 vi.mock("../../hooks/message-queries", () => ({
   useMarkUnread: () => ({ mutateAsync: vi.fn() }),
 }));
@@ -234,17 +238,18 @@ describe("Sidebar forge nav entry", () => {
     });
   });
 
-  // Forge is promoted, so it sits directly under New chat and ABOVE Projects.
-  // Pinned because the position is the product decision, not an accident of
-  // where the JSX was appended.
-  it("sits between New chat and Projects", () => {
+  // Forge is promoted, so it sits ABOVE Projects, directly after the entries
+  // that outrank every surface: New chat, then the Inbox (WORKFLOW_UI.md §1.2,
+  // §14.1 decision 1). Pinned because the position is the product decision,
+  // not an accident of where the JSX was appended.
+  it("sits between the Inbox and Projects", () => {
     setProject(true);
     renderSidebar();
     const labels = screen
       .getByRole("navigation", { name: /chat sidebar navigation/i })
       .querySelectorAll("button");
     const text = Array.from(labels).map((b) => b.textContent?.trim());
-    expect(text.slice(0, 3)).toEqual(["New chat", "Deployments", "Projects"]);
+    expect(text.slice(0, 4)).toEqual(["New chat", "Inbox", "Deployments", "Projects"]);
   });
 
   // The entry is LABELLED Deployments but is still the forge entry underneath:

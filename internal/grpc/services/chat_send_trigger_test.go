@@ -159,7 +159,7 @@ func TestListChatsAndGetChatCarryLaunchOriginAndExcludeAutomations(t *testing.T)
 	filtered := list(true)
 	assert.False(t, filtered[quiet.chatID], "a quiet scheduled chat is hidden")
 	assert.True(t, filtered["wire-interactive"])
-	assert.True(t, filtered["wire-needs-approval"], "a scheduled chat awaiting approval stays visible")
+	assert.False(t, filtered["wire-needs-approval"], "a scheduled chat awaiting approval surfaces in the Inbox, not the sidebar")
 }
 
 // seedScheduledChat adds a schedule launch event to the fixture chat, the way a

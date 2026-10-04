@@ -361,7 +361,7 @@ CREATE VIEW public.chats_with_activity AS
     root_workflow_stop_reason,
     launch_kind,
     trigger_id,
-    ((launch_kind IS NULL) OR (launch_kind = 'chat.start'::text) OR (adopted_at IS NOT NULL) OR ((launch_kind <> 'agent.start_run'::text) AND (activity = 2))) AS list_in_sidebar,
+    ((launch_kind IS NULL) OR (launch_kind = 'chat.start'::text) OR (adopted_at IS NOT NULL)) AS list_in_sidebar,
         CASE
             WHEN ((root_workflow_state IS NULL) OR (root_workflow_state = 1)) THEN 1
             WHEN ((root_workflow_state = 2) AND (activity = 2)) THEN 3

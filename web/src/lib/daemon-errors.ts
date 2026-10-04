@@ -36,3 +36,18 @@ function extractMessage(error: unknown): string {
 export function isDaemonConnectingError(error: unknown): boolean {
   return extractMessage(error).toLowerCase().includes("no daemon connected");
 }
+
+/**
+ * Returns true for toolexec.ErrDaemonPending as it reads inside a tool result:
+ * "the machine for this request is suspended and will wake…" or "…is still
+ * starting", both wrapping the "no daemon connected" marker.
+ *
+ * This is the FALLBACK. A run's state is read structurally from
+ * `ChatActivity.WAITING_FOR_DAEMON` / `RunDisplayState.WAITING_FOR_MACHINE`
+ * (WORKFLOW_UI.md §9.2, G7); never parse tool text where that is available.
+ */
+export function isDaemonPendingError(error: unknown): boolean {
+  const message = extractMessage(error).toLowerCase();
+  if (!message.includes("no daemon connected")) return false;
+  return message.includes("still starting") || message.includes("suspended");
+}

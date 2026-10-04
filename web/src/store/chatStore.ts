@@ -56,7 +56,6 @@ import type {
   NodeExecutionUpdate,
   QuestionUpdate,
 } from "../types/streaming";
-import { questionGrpc } from "../api/question-grpc";
 
 // ToolExecutionStateUpdate is a CLIENT-SIDE type synthesized from ToolCallUpdate.
 // The backend sends tool_call updates, which the frontend converts to this format
@@ -102,6 +101,7 @@ import {
   approvalKeys,
   upsertApprovalInCache,
   patchPendingQuestionCache,
+  resolvePendingQuestion,
 } from "../hooks/approval-queries";
 import {
   chatKeys,
@@ -3354,9 +3354,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
   },
 
   resolveQuestion: async (chatId, questionId, action, responseData) => {
-    await questionGrpc.resolveQuestion(questionId, action, responseData);
-    // Optimistically clear the pending question in the React Query cache.
-    patchPendingQuestionCache(chatId, null);
+    await resolvePendingQuestion(chatId, questionId, action, responseData);
   },
 
   // Refresh chat - reconnects the unified stream to re-fetch data
