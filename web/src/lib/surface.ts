@@ -59,6 +59,12 @@ export interface SurfaceCapabilities {
   workflowView: boolean;
   /** The graph builder. Monaco + drag-and-drop; desktop only, indefinitely. */
   workflowAuthoring: boolean;
+  /**
+   * The Runs area (/runs) and what links into it from a chat, such as the
+   * header's strip of runs an agent started there. Mobile has no Runs area
+   * (decision 8), so a link to it from the phone header would be a dead end.
+   */
+  runsArea: boolean;
 
   // ─── Workspaces / git ─────────────────────────────────────────────
   /** Create a worktree. Mobile gets a name-only form; advanced opts hidden. */
@@ -146,6 +152,7 @@ const DESKTOP: SurfaceCapabilities = {
   chatExecutionSidebar: true,
   workflowView: true,
   workflowAuthoring: true,
+  runsArea: true,
   worktreeCreate: true,
   worktreeManage: true,
   gitManagement: true,
@@ -194,6 +201,8 @@ const MOBILE: SurfaceCapabilities = {
   // have. Authoring stays off below; this is view-only.
   workflowView: true,
   workflowAuthoring: false,
+  // Mobile is out of scope for the Runs area this round (decision 8).
+  runsArea: false,
   // Off until there is a mobile UI that reaches it. The RPC supports
   // name-only creation, but nothing on the mobile surface opens that flow, and
   // a capability that no screen honours is worse than one set false: it reads
@@ -259,6 +268,7 @@ const EMBED: SurfaceCapabilities = {
   chatExecutionSidebar: false,
   workflowView: true,
   workflowAuthoring: false,
+  runsArea: false,
   worktreeCreate: false,
   worktreeManage: false,
   gitManagement: false,

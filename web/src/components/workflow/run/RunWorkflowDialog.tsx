@@ -34,6 +34,17 @@ export interface RunWorkflowDialogProps {
    * do less.
    */
   onStarted?: (chat: Chat) => void | Promise<void>;
+  /**
+   * Start from these inputs instead of an empty form (a re-run prefilled with
+   * what the original run used). The workflow's default presets are not
+   * layered on top: the prefilled value is the choice.
+   */
+  initialValue?: RunWorkflowValue;
+  initialPrompt?: string;
+  /** Dialog title; defaults to "Run <workflow>". */
+  title?: string;
+  /** Submit button label; defaults to "Run". */
+  submitLabel?: string;
 }
 
 export function RunWorkflowDialog(props: RunWorkflowDialogProps) {
@@ -48,10 +59,19 @@ function errorMessage(error: unknown): string {
   return String(error);
 }
 
-function RunWorkflowDialogBody({ onClose, projectId, workflowRef, onStarted }: RunWorkflowDialogProps) {
+function RunWorkflowDialogBody({
+  onClose,
+  projectId,
+  workflowRef,
+  onStarted,
+  initialValue,
+  initialPrompt,
+  title: titleOverride,
+  submitLabel = "Run",
+}: RunWorkflowDialogProps) {
   const navigate = useNavigate();
-  const [value, setValue] = useState<RunWorkflowValue>(EMPTY_RUN_VALUE);
-  const [prompt, setPrompt] = useState("");
+  const [value, setValue] = useState<RunWorkflowValue>(initialValue ?? EMPTY_RUN_VALUE);
+  const [prompt, setPrompt] = useState(initialPrompt ?? "");
   const [status, setStatus] = useState<RunWorkflowFormStatus>({
     loading: true,
     missingRequired: [],
@@ -62,7 +82,7 @@ function RunWorkflowDialogBody({ onClose, projectId, workflowRef, onStarted }: R
   const [formError, setFormError] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
 
-  const title = `Run ${getWorkflowDisplayName(workflowRef, true)}`;
+  const title = titleOverride ?? `Run ${getWorkflowDisplayName(workflowRef, true)}`;
 
   const openChat = async (chat: Chat) => {
     if (onStarted) {
@@ -150,7 +170,7 @@ function RunWorkflowDialogBody({ onClose, projectId, workflowRef, onStarted }: R
           onChange={setValue}
           onStatusChange={setStatus}
           showValidation={attempted}
-          applyDefaultPresets
+          applyDefaultPresets={!initialValue}
           showMachinePicker
           disabled={starting}
         />
@@ -160,7 +180,7 @@ function RunWorkflowDialogBody({ onClose, projectId, workflowRef, onStarted }: R
             Cancel
           </Button>
           <Button type="submit" variant="primary" loading={starting}>
-            Run
+            {submitLabel}
           </Button>
         </div>
       </form>

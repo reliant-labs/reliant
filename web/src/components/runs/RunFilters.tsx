@@ -38,6 +38,8 @@ interface RunFiltersProps {
   currentProjectName?: string;
   /** The automation named by `trigger`, when the list has resolved it. */
   triggerName?: string;
+  /** The chat named by `parent`, when it has loaded. */
+  parentTitle?: string;
 }
 
 /** Whether any filter narrows the list beyond its defaults. */
@@ -47,6 +49,7 @@ export function hasActiveRunFilters(search: RunsSearch): boolean {
       search.kind?.length ||
       search.workflow?.length ||
       search.trigger ||
+      search.parent ||
       search.q ||
       (search.range && search.range !== "24h"),
   );
@@ -67,7 +70,7 @@ export function useRunsSearch(): [RunsSearch, (next: RunsSearch) => void] {
   return [search, set];
 }
 
-export function RunFilters({ currentProjectName, triggerName }: RunFiltersProps) {
+export function RunFilters({ currentProjectName, triggerName, parentTitle }: RunFiltersProps) {
   const [search, setSearch] = useRunsSearch();
   const update = (patch: Partial<RunsSearch>) => setSearch({ ...search, ...patch });
 
@@ -156,6 +159,12 @@ export function RunFilters({ currentProjectName, triggerName }: RunFiltersProps)
           ))}
         </ChipGroup>
 
+        {search.parent && (
+          <RemovableChip
+            label={`Started in: ${parentTitle ?? "a chat"}`}
+            onRemove={() => update({ parent: undefined })}
+          />
+        )}
         {search.trigger && (
           <RemovableChip
             label={`Automation: ${triggerName ?? "selected automation"}`}

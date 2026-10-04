@@ -27,6 +27,7 @@ import { useMessages } from "../../hooks/message-queries";
 import { ContextUsageIndicator } from "./ContextUsageIndicator";
 import { Tooltip } from "../ui/Tooltip";
 import { useThreads, ThreadTabs } from "./thread-views";
+import { ChildRunsStrip } from "../runs/ChildRunsStrip";
 import type { WorkflowExecution } from "./ExecutionSidebar/types";
 import { ContentBlockType, MessageRole } from "../../gen/reliant/v1/chat_pb";
 
@@ -471,6 +472,9 @@ export function ChatHeader({
               />
             )}
 
+            {/* Row 3: runs an agent started from this chat (decision 4).
+                Renders nothing for a chat that started none. */}
+            {!isNewChat && chatId && <ChildRunsStrip chatId={chatId} />}
           </div>
         </div>
       </div>
