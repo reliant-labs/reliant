@@ -68,6 +68,11 @@ type Spec struct {
 	Messages    []SeedMessage
 	Attachments []string
 
+	// DaemonID is the daemon every tool call in this run executes on. It
+	// becomes the chat's ActiveDaemonID, which the launcher injects as
+	// inputs.session_daemon_id. Empty leaves daemon selection to the runtime.
+	DaemonID string
+
 	// Unattended sets inputs.unattended: no human will answer questions or
 	// approvals, so the run must not block on one.
 	Unattended bool

@@ -606,6 +606,7 @@ type Trigger struct {
 	Config     json.RawMessage `json:"config"`
 	CreatedAt  time.Time       `json:"created_at"`
 	UpdatedAt  time.Time       `json:"updated_at"`
+	DaemonID   string          `json:"daemon_id"`
 }
 
 type TriggerEvent struct {

@@ -141,10 +141,12 @@ func TestScheduleSummaryShowsCronAndIntervalTogether(t *testing.T) {
 func TestTriggerCreateLeavesEnabledUnsetByDefault(t *testing.T) {
 	cmd := newTriggerCreateCmd()
 	flags := &triggerDefinitionFlags{
-		name:      "nightly",
-		projectID: "project-a",
-		message:   "Audit.",
-		cron:      []string{"0 9 * * *"},
+		name:         "nightly",
+		projectID:    "project-a",
+		daemon:       "daemon-a",
+		daemonLister: fakeDaemonLister{{DaemonId: "daemon-a", Hostname: "laptop"}},
+		message:      "Audit.",
+		cron:         []string{"0 9 * * *"},
 	}
 	def, err := flags.definition(context.Background(), cmd, nil, false)
 	require.NoError(t, err)
@@ -160,11 +162,11 @@ func TestTriggerCreateLeavesEnabledUnsetByDefault(t *testing.T) {
 func TestTriggerDefinitionRequiresAPromptAndASchedule(t *testing.T) {
 	cmd := newTriggerCreateCmd()
 
-	noMessage := &triggerDefinitionFlags{name: "n", projectID: "p", cron: []string{"0 9 * * *"}}
+	noMessage := &triggerDefinitionFlags{name: "n", projectID: "p", daemon: "d", daemonLister: fakeDaemonLister{{DaemonId: "d"}}, cron: []string{"0 9 * * *"}}
 	_, err := noMessage.definition(context.Background(), cmd, nil, false)
 	assert.ErrorContains(t, err, "--message is required")
 
-	noSchedule := &triggerDefinitionFlags{name: "n", projectID: "p", message: "go"}
+	noSchedule := &triggerDefinitionFlags{name: "n", projectID: "p", daemon: "d", daemonLister: fakeDaemonLister{{DaemonId: "d"}}, message: "go"}
 	_, err = noSchedule.definition(context.Background(), cmd, nil, false)
 	assert.ErrorContains(t, err, "--cron or --interval")
 }
@@ -175,7 +177,7 @@ func TestTriggerDefinitionNameFallsBackToTheWorkflow(t *testing.T) {
 	cmd := newTriggerCreateCmd()
 
 	flags := &triggerDefinitionFlags{
-		projectID: "p", message: "go", cron: []string{"0 9 * * *"}, workflow: "builtin://agent",
+		projectID: "p", daemon: "d", daemonLister: fakeDaemonLister{{DaemonId: "d"}}, message: "go", cron: []string{"0 9 * * *"}, workflow: "builtin://agent",
 	}
 	def, err := flags.definition(context.Background(), cmd, nil, false)
 	require.NoError(t, err)
@@ -197,4 +199,56 @@ func TestTriggerCommandTreeIsRegistered(t *testing.T) {
 	} {
 		assert.Contains(t, names, want)
 	}
+}
+
+type fakeDaemonLister []*reliantv1.DaemonInfo
+
+func (l fakeDaemonLister) ListDaemons(
+	_ context.Context,
+	_ *connect.Request[reliantv1.ListDaemonsRequest],
+) (*connect.Response[reliantv1.ListDaemonsResponse], error) {
+	return connect.NewResponse(&reliantv1.ListDaemonsResponse{Daemons: l}), nil
+}
+
+func TestTriggerDefinitionRequiresADaemon(t *testing.T) {
+	flags := &triggerDefinitionFlags{name: "n", projectID: "p", message: "go", cron: []string{"0 9 * * *"}}
+	_, err := flags.definition(context.Background(), newTriggerCreateCmd(), nil, false)
+	assert.ErrorContains(t, err, "--daemon is required")
+}
+
+func TestTriggerDefinitionCarriesTheResolvedDaemon(t *testing.T) {
+	flags := &triggerDefinitionFlags{
+		name: "n", projectID: "p", message: "go", cron: []string{"0 9 * * *"},
+		daemon:       "laptop",
+		daemonLister: fakeDaemonLister{{DaemonId: "daemon-1", Hostname: "laptop"}, {DaemonId: "daemon-2", Hostname: "cloud"}},
+	}
+	def, err := flags.definition(context.Background(), newTriggerCreateCmd(), nil, false)
+	require.NoError(t, err)
+	assert.Equal(t, "daemon-1", def.GetDaemonId(), "a hostname resolves to its daemon id")
+}
+
+func TestResolveTriggerDaemon(t *testing.T) {
+	lister := fakeDaemonLister{
+		{DaemonId: "daemon-1", Hostname: "laptop", DaemonType: "self_hosted"},
+		{DaemonId: "daemon-2", Hostname: "shared", DaemonType: "self_hosted"},
+		{DaemonId: "daemon-3", Hostname: "shared", DaemonType: "managed"},
+	}
+	ctx := context.Background()
+
+	got, err := resolveTriggerDaemon(ctx, lister, "daemon-2")
+	require.NoError(t, err)
+	assert.Equal(t, "daemon-2", got, "an exact id wins")
+
+	got, err = resolveTriggerDaemon(ctx, lister, "laptop")
+	require.NoError(t, err)
+	assert.Equal(t, "daemon-1", got)
+
+	_, err = resolveTriggerDaemon(ctx, lister, "shared")
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "matches 2 daemons")
+	assert.ErrorContains(t, err, "daemon-2")
+	assert.ErrorContains(t, err, "daemon-3")
+
+	_, err = resolveTriggerDaemon(ctx, lister, "nope")
+	assert.ErrorContains(t, err, "no daemon with id or hostname")
 }

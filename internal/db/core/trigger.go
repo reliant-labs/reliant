@@ -67,6 +67,10 @@ type Trigger struct {
 	Presets    map[string]string
 	Params     map[string]any
 	Message    string // seed prompt for each launched run
+	// DaemonID is the daemon every tool call in each launched run executes
+	// on. Required; validated at write time (there is no FK because the
+	// daemons table is a cache of the control plane's).
+	DaemonID string
 	// Config is the kind-specific source configuration, e.g. ScheduleConfig
 	// for TriggerKindSchedule. Stored as jsonb.
 	Config    json.RawMessage

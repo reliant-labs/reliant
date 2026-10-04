@@ -369,8 +369,17 @@ func (s *TriggerService) triggerFromDefinition(
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("project_id is required"))
 	}
 
+	if def.DaemonId == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			errors.New("daemon_id is required: a trigger must name the daemon its runs execute on"))
+	}
+
 	if _, err := s.database.GetProjectWithUserCheck(ctx, def.ProjectId, userID); err != nil {
 		return nil, connect.NewError(connect.CodeNotFound, errors.New("project not found"))
+	}
+
+	if err := s.validateTriggerDaemon(ctx, userID, def.ProjectId, def.DaemonId); err != nil {
+		return nil, err
 	}
 
 	if def.WorktreeId != nil && *def.WorktreeId != "" {
@@ -421,6 +430,7 @@ func (s *TriggerService) triggerFromDefinition(
 		Presets:    def.Presets,
 		Params:     triggers.ParamsFromProto(def.Params),
 		Message:    def.Message,
+		DaemonID:   def.DaemonId,
 		Config:     raw,
 		CreatedAt:  now,
 		UpdatedAt:  now,
@@ -429,6 +439,37 @@ func (s *TriggerService) triggerFromDefinition(
 		trigger.WorktreeID = nil
 	}
 	return trigger, nil
+}
+
+// validateTriggerDaemon checks that the daemon exists, is the caller's, and can
+// host the project.
+//
+// Another user's daemon is NotFound, identical to a missing one, so a caller
+// cannot probe which daemon ids exist.
+func (s *TriggerService) validateTriggerDaemon(ctx context.Context, userID, projectID, daemonID string) error {
+	daemon, err := s.database.GetDaemon(ctx, daemonID)
+	if err != nil || daemon == nil || daemon.UserID != userID {
+		return connect.NewError(connect.CodeNotFound, errors.New("daemon not found"))
+	}
+
+	installs, err := s.database.ListProjectDaemonsForProject(ctx, projectID)
+	if err != nil {
+		return triggerDBError("list project daemons", err)
+	}
+	// A project with no project_daemons rows at all has no recorded install
+	// anywhere (a local-path project the daemon discovered, or one predating
+	// install tracking), so there is nothing to contradict and any owned
+	// daemon is accepted. Once the project is installed somewhere, the trigger
+	// must run where the checkout actually is.
+	if len(installs) == 0 {
+		return nil
+	}
+	for _, install := range installs {
+		if install.DaemonID == daemonID && install.InstallState == core.ProjectInstallInstalled {
+			return nil
+		}
+	}
+	return connect.NewError(connect.CodeFailedPrecondition, errors.New("project is not installed on that daemon"))
 }
 
 // render builds the wire trigger, resolving the read-only projections.

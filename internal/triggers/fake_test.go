@@ -3,6 +3,7 @@ package triggers
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"sync"
 	"testing"
@@ -24,13 +25,27 @@ type fakeRepo struct {
 	statuses map[string]core.WorkflowStatus
 
 	getTriggerErr error
+	// daemons are the daemon ids that exist; GetDaemon misses on the rest.
+	daemons map[string]bool
 }
 
 func newFakeRepo() *fakeRepo {
 	return &fakeRepo{
 		triggers: map[string]*core.Trigger{},
 		statuses: map[string]core.WorkflowStatus{},
+		daemons:  map[string]bool{testDaemonID: true},
 	}
+}
+
+const testDaemonID = "daemon-1"
+
+func (r *fakeRepo) GetDaemon(_ context.Context, id string) (*db.Daemon, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if !r.daemons[id] {
+		return nil, sql.ErrNoRows
+	}
+	return &db.Daemon{ID: id, UserID: "user-1"}, nil
 }
 
 func (r *fakeRepo) GetTrigger(_ context.Context, id string) (*core.Trigger, error) {
@@ -175,6 +190,7 @@ func testTrigger(t *testing.T, mutate func(*core.Trigger, *core.ScheduleConfig))
 		Presets:   map[string]string{"model": "fast"},
 		Params:    map[string]any{"depth": float64(2)},
 		Message:   "Audit the dependency tree.",
+		DaemonID:  testDaemonID,
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
 	}

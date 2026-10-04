@@ -363,6 +363,8 @@ type Trigger struct {
 	// Read-only: this trigger's most recent firing, of any outcome. Unset when
 	// it has never fired.
 	LastEvent *TriggerEvent `protobuf:"bytes,13,opt,name=last_event,json=lastEvent,proto3,oneof" json:"last_event,omitempty"`
+	// The daemon every tool call in each launched run executes on. Always set.
+	DaemonId string `protobuf:"bytes,14,opt,name=daemon_id,json=daemonId,proto3" json:"daemon_id,omitempty"`
 	// What makes this trigger fire. One arm per kind; webhook and GitHub become
 	// new arms. The arm set also determines Trigger.kind, so the two cannot
 	// disagree.
@@ -494,6 +496,13 @@ func (x *Trigger) GetLastEvent() *TriggerEvent {
 		return x.LastEvent
 	}
 	return nil
+}
+
+func (x *Trigger) GetDaemonId() string {
+	if x != nil {
+		return x.DaemonId
+	}
+	return ""
 }
 
 func (x *Trigger) GetSource() isTrigger_Source {
@@ -663,6 +672,10 @@ type TriggerDefinition struct {
 	Params map[string]*structpb.Value `protobuf:"bytes,7,rep,name=params,proto3" json:"params,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	// The seed prompt each launched run starts from.
 	Message string `protobuf:"bytes,8,opt,name=message,proto3" json:"message,omitempty"`
+	// The daemon every tool call in each launched run executes on. Required, and
+	// replaceable on update. Must be one of the caller's daemons and, when the
+	// project is installed on any daemon, one that has it installed.
+	DaemonId string `protobuf:"bytes,9,opt,name=daemon_id,json=daemonId,proto3" json:"daemon_id,omitempty"`
 	// What makes this trigger fire. Required on create: a trigger with no source
 	// can never fire.
 	//
@@ -756,6 +769,13 @@ func (x *TriggerDefinition) GetParams() map[string]*structpb.Value {
 func (x *TriggerDefinition) GetMessage() string {
 	if x != nil {
 		return x.Message
+	}
+	return ""
+}
+
+func (x *TriggerDefinition) GetDaemonId() string {
+	if x != nil {
+		return x.DaemonId
 	}
 	return ""
 }
@@ -1556,7 +1576,7 @@ const file_reliant_v1_trigger_proto_rawDesc = "" +
 	"\aoverlap\x18\x04 \x01(\x0e2 .reliant.v1.TriggerOverlapPolicyR\aoverlap\x12*\n" +
 	"\x0ecatchup_window\x18\x05 \x01(\tH\x01R\rcatchupWindow\x88\x01\x01B\v\n" +
 	"\t_intervalB\x11\n" +
-	"\x0f_catchup_window\"\xdd\x05\n" +
+	"\x0f_catchup_window\"\xfa\x05\n" +
 	"\aTrigger\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x1d\n" +
@@ -1577,7 +1597,8 @@ const file_reliant_v1_trigger_proto_rawDesc = "" +
 	"\fnext_fire_at\x18\f \x01(\tH\x02R\n" +
 	"nextFireAt\x88\x01\x01\x12<\n" +
 	"\n" +
-	"last_event\x18\r \x01(\v2\x18.reliant.v1.TriggerEventH\x03R\tlastEvent\x88\x01\x01\x128\n" +
+	"last_event\x18\r \x01(\v2\x18.reliant.v1.TriggerEventH\x03R\tlastEvent\x88\x01\x01\x12\x1b\n" +
+	"\tdaemon_id\x18\x0e \x01(\tR\bdaemonId\x128\n" +
 	"\bschedule\x18\x14 \x01(\v2\x1a.reliant.v1.ScheduleSourceH\x00R\bschedule\x1a:\n" +
 	"\fPresetsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
@@ -1602,7 +1623,7 @@ const file_reliant_v1_trigger_proto_rawDesc = "" +
 	"\apayload\x18\b \x01(\v2\x17.google.protobuf.StructR\apayloadB\r\n" +
 	"\v_trigger_idB\n" +
 	"\n" +
-	"\b_chat_id\"\xb9\x04\n" +
+	"\b_chat_id\"\xd6\x04\n" +
 	"\x11TriggerDefinition\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1d\n" +
 	"\n" +
@@ -1613,7 +1634,8 @@ const file_reliant_v1_trigger_proto_rawDesc = "" +
 	"\bworkflow\x18\x05 \x01(\tR\bworkflow\x12D\n" +
 	"\apresets\x18\x06 \x03(\v2*.reliant.v1.TriggerDefinition.PresetsEntryR\apresets\x12A\n" +
 	"\x06params\x18\a \x03(\v2).reliant.v1.TriggerDefinition.ParamsEntryR\x06params\x12\x18\n" +
-	"\amessage\x18\b \x01(\tR\amessage\x128\n" +
+	"\amessage\x18\b \x01(\tR\amessage\x12\x1b\n" +
+	"\tdaemon_id\x18\t \x01(\tR\bdaemonId\x128\n" +
 	"\bschedule\x18\x14 \x01(\v2\x1a.reliant.v1.ScheduleSourceH\x00R\bschedule\x1a:\n" +
 	"\fPresetsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +

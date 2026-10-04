@@ -165,6 +165,9 @@ message Trigger {
   // it has never fired.
   optional TriggerEvent last_event = 13;
 
+  // The daemon every tool call in each launched run executes on. Always set.
+  string daemon_id = 14;
+
   // What makes this trigger fire. One arm per kind; webhook and GitHub become
   // new arms. The arm set also determines Trigger.kind, so the two cannot
   // disagree.
@@ -238,6 +241,11 @@ message TriggerDefinition {
 
   // The seed prompt each launched run starts from.
   string message = 8;
+
+  // The daemon every tool call in each launched run executes on. Required, and
+  // replaceable on update. Must be one of the caller's daemons and, when the
+  // project is installed on any daemon, one that has it installed.
+  string daemon_id = 9;
 
   // What makes this trigger fire. Required on create: a trigger with no source
   // can never fire.

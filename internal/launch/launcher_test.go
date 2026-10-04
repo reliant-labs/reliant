@@ -708,3 +708,64 @@ func TestLoadChatTriggerReturnsTheLaunchEvent(t *testing.T) {
 	legacy := LoadChatTrigger(ctx, repo, "no-such-chat")
 	assert.Equal(t, "chat.start", legacy.Kind, "a chat with no event reads as an interactive start")
 }
+
+// A pinned daemon has to reach BOTH the chat row (so later sends keep using
+// it) and the run's inputs (which the runtime turns into its daemon selector).
+func TestLaunchPinsSpecDaemonOnNewChat(t *testing.T) {
+	repo, ctx, projectID, _ := launchFixture(t)
+	starter := &fakeStarter{}
+	launcher, _ := newTestLauncher(t, repo, starter)
+
+	result, err := launcher.Launch(ctx, chatStartEvent(), Spec{
+		OwnerUserID: launchTestUserID, ProjectID: projectID, Workflow: "builtin://agent",
+		Params: mockModelParams(t), Messages: userSeed("hi"), DaemonID: "daemon-pinned",
+	})
+	require.NoError(t, err)
+
+	chat, err := repo.GetChat(ctx, result.Chat.ID)
+	require.NoError(t, err)
+	require.NotNil(t, chat.ActiveDaemonID)
+	assert.Equal(t, "daemon-pinned", *chat.ActiveDaemonID)
+
+	_, input := starter.rootRun(t)
+	assert.Equal(t, "daemon-pinned", input.Inputs["session_daemon_id"])
+}
+
+func TestLaunchWithoutSpecDaemonLeavesChatUnpinned(t *testing.T) {
+	repo, ctx, projectID, _ := launchFixture(t)
+	starter := &fakeStarter{}
+	launcher, _ := newTestLauncher(t, repo, starter)
+
+	result, err := launcher.Launch(ctx, chatStartEvent(), Spec{
+		OwnerUserID: launchTestUserID, ProjectID: projectID, Workflow: "builtin://agent",
+		Params: mockModelParams(t), Messages: userSeed("hi"),
+	})
+	require.NoError(t, err)
+
+	chat, err := repo.GetChat(ctx, result.Chat.ID)
+	require.NoError(t, err)
+	assert.Nil(t, chat.ActiveDaemonID)
+	_, input := starter.rootRun(t)
+	assert.NotContains(t, input.Inputs, "session_daemon_id")
+}
+
+func TestLaunchPinsSpecDaemonOnPendingChat(t *testing.T) {
+	repo, ctx, projectID, mainWorktreeID := launchFixture(t)
+	starter := &fakeStarter{}
+	launcher, _ := newTestLauncher(t, repo, starter)
+	chatID := pendingBranch(t, repo, ctx, projectID, mainWorktreeID)
+
+	_, err := launcher.Launch(ctx, Event{Kind: core.TriggerEventKindChatStart, DedupeKey: chatID}, Spec{
+		OwnerUserID: launchTestUserID, ChatID: chatID, Workflow: "builtin://agent",
+		Params: mockModelParams(t), Messages: userSeed("go"), DaemonID: "daemon-pinned",
+	})
+	require.NoError(t, err)
+
+	chat, err := repo.GetChat(ctx, chatID)
+	require.NoError(t, err)
+	require.NotNil(t, chat.ActiveDaemonID)
+	assert.Equal(t, "daemon-pinned", *chat.ActiveDaemonID)
+
+	_, input := starter.rootRun(t)
+	assert.Equal(t, "daemon-pinned", input.Inputs["session_daemon_id"])
+}

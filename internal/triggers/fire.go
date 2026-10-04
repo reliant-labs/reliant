@@ -3,6 +3,7 @@ package triggers
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"time"
@@ -79,6 +80,19 @@ func (f *Firer) Fire(ctx context.Context, req FireRequest) (*FireOutput, error) 
 		if skip {
 			return f.recordSkip(ctx, trigger, req, reason)
 		}
+	}
+
+	// Never fall back to another daemon: the trigger named this one, and the
+	// credential its runs hold is bound to it. Record why and stop.
+	if _, err := f.repo.GetDaemon(ctx, trigger.DaemonID); err != nil {
+		if !errors.Is(err, sql.ErrNoRows) {
+			return nil, fmt.Errorf("load daemon %s: %w", trigger.DaemonID, err)
+		}
+		const detail = "trigger's daemon no longer exists; edit the trigger to choose another"
+		if _, err := f.recordOutcome(ctx, trigger, req, core.TriggerEventFailed, detail); err != nil {
+			return nil, err
+		}
+		return nil, nonRetryable(detail, err)
 	}
 
 	spec, err := f.buildSpec(trigger, req)
@@ -215,6 +229,7 @@ func (f *Firer) buildSpec(trigger *core.Trigger, req FireRequest) (launch.Spec, 
 		NewChatID:   uuid.NewSHA1(chatIDNamespace, []byte(req.FireWorkflowID)).String(),
 		Title:       &title,
 		Workflow:    trigger.Workflow,
+		DaemonID:    trigger.DaemonID,
 		Presets:     trigger.Presets,
 		Params:      params,
 		Messages:    messages,
