@@ -13,6 +13,7 @@ import { SkillToolRenderer } from './SkillToolRenderer';
 import { LoadToolRenderer } from './LoadToolRenderer';
 import { GenericToolRenderer } from './GenericToolRenderer';
 import { SpawnToolRenderer } from './SpawnToolRenderer';
+import { RunToolRenderer } from './RunToolRenderer';
 import {
   isShellTool,
   isFileTool,
@@ -22,6 +23,7 @@ import {
   isSkillTool,
   isLoadToolTool,
   isSpawnTool,
+  isRunLinkTool,
 } from '../../../lib/toolFormatters';
 
 export type { ToolRenderContext, ToolResultData };
@@ -66,6 +68,10 @@ function ToolContentAreaComponent({ ctx }: ToolContentAreaProps) {
     return <SpawnToolRenderer ctx={ctx} />;
   }
 
+  if (isRunLinkTool(toolName)) {
+    return <RunToolRenderer ctx={ctx} />;
+  }
+
   // Default to generic renderer
   return <GenericToolRenderer ctx={ctx} />;
 }
@@ -81,3 +87,4 @@ export { SkillToolRenderer } from './SkillToolRenderer';
 export { LoadToolRenderer } from './LoadToolRenderer';
 export { GenericToolRenderer } from './GenericToolRenderer';
 export { SpawnToolRenderer } from './SpawnToolRenderer';
+export { RunToolRenderer } from './RunToolRenderer';

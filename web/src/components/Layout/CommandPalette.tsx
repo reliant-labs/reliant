@@ -4,7 +4,7 @@ import { createPortal } from "react-dom";
 import { 
   Search, Settings, Keyboard, Info, Palette, Shield, 
   FolderOpen, GitBranch, Workflow, Bot, Terminal,
-  Code
+  Code, CalendarClock, Activity
 } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 import { cn } from "../../lib/utils";
@@ -128,6 +128,30 @@ export const CommandPalette = forwardRef<CommandPaletteRef, CommandPaletteProps>
         keywords: ["workflow", "automation", "flow"],
         action: () => {
           navigate({ to: '/workflow' });
+          closeAndFocus();
+        },
+      },
+      {
+        id: "automations",
+        title: "Automations",
+        description: "Workflows that run on a schedule",
+        icon: <CalendarClock className="w-4 h-4" />,
+        category: "navigation",
+        keywords: ["schedule", "trigger", "cron", "automation"],
+        action: () => {
+          navigate({ to: '/automations' });
+          closeAndFocus();
+        },
+      },
+      {
+        id: "runs",
+        title: "Runs",
+        description: "Every run, including automation and agent runs",
+        icon: <Activity className="w-4 h-4" />,
+        category: "navigation",
+        keywords: ["run", "history", "execution", "agent", "started"],
+        action: () => {
+          navigate({ to: '/runs' });
           closeAndFocus();
         },
       },

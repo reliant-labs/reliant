@@ -1,0 +1,215 @@
+// Copyright (c) 2025 Reliant Labs
+
+/**
+ * The run detail header (WORKFLOW_UI.md §4.2, item 1): title, status, who
+ * started the run, where it runs, how long it has taken, and the actions its
+ * state allows.
+ *
+ * Status comes from lib/runStatus over the chat's lifecycle pair and activity
+ * (the same inputs every other surface uses), and the "started by" line from
+ * the launch-kind vocabulary in the same module.
+ *
+ * Re-run and Retry (§4.2's action table) are not here: they need the run's
+ * original inputs, which no RPC returns yet. Deferred with that gap.
+ */
+
+import { Link } from "@tanstack/react-router";
+import { MessageSquarePlus, Pause, Play, Square, Workflow } from "lucide-react";
+
+import type { Chat } from "@/api/client";
+import { useDaemonStatus } from "@/hooks/useDaemonStatus";
+import { isLiveRunStatus, launchKindDisplay, runStatus } from "@/lib/runStatus";
+import { formatAbsoluteTime } from "@/lib/relativeTime";
+import { Button } from "../ui/Button";
+import { RunStatusBadge } from "../ui/RunStatusIndicator";
+import { daemonLabel } from "../Automations/daemonChoices";
+import { getWorkflowDisplayName } from "../workflow/useWorkflowInputs";
+import { RunDuration } from "./RunRow";
+
+export interface RunHeaderActions {
+  onPause: () => void;
+  onResume: () => void;
+  onStop: () => void;
+  /** Adopt the run into the chat list and open it there. */
+  onOpenAsChat: () => void;
+  /** Show or hide the workflow diagram; omitted where there is no diagram. */
+  onToggleDiagram?: () => void;
+}
+
+interface RunHeaderProps {
+  chat: Chat;
+  /** The automation's current name, when the run was scheduled and it still exists. */
+  triggerName?: string;
+  /** The chat whose agent started this run, when known. */
+  parent?: { chatId: string; title: string };
+  projectName?: string;
+  actions: RunHeaderActions;
+  /** An action is in flight; buttons disable rather than double-fire. */
+  busy?: boolean;
+}
+
+export function RunHeader({ chat, triggerName, parent, projectName, actions, busy }: RunHeaderProps) {
+  const status = runStatus({
+    state: chat.workflowState,
+    stopReason: chat.workflowStopReason,
+    activity: chat.activity,
+  });
+  const live = isLiveRunStatus(status);
+  const launch = launchKindDisplay(chat.launchKind, { triggerName });
+  const { daemons } = useDaemonStatus();
+  const machine = chat.activeDaemonId
+    ? daemonLabel(
+        daemons.find((d) => d.daemonId === chat.activeDaemonId),
+        chat.activeDaemonId,
+      )
+    : undefined;
+  const startedAt = Date.parse(chat.createdAt);
+  // Interactive chats and adopted runs are already in the chat list.
+  const isChat = launch.kind === "chat.start" || Boolean(chat.adoptedAt);
+  const location = [projectName, machine].filter(Boolean).join(" · ");
+
+  return (
+    <header className="space-y-2">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <h1 className="truncate text-xl font-semibold tracking-tight text-foreground">
+            {chat.title || "Untitled run"}
+          </h1>
+          <span className="shrink-0 motion-reduce:[&_*]:animate-none">
+            <RunStatusBadge status={status} />
+          </span>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          {status.key === "paused" ? (
+            <Button
+              size="sm"
+              variant="primary"
+              leftIcon={<Play className="h-4 w-4" />}
+              onClick={actions.onResume}
+              disabled={busy}
+            >
+              Resume
+            </Button>
+          ) : live ? (
+            <Button
+              size="sm"
+              variant="outline"
+              leftIcon={<Pause className="h-4 w-4" />}
+              onClick={actions.onPause}
+              disabled={busy}
+            >
+              Pause
+            </Button>
+          ) : null}
+          {live && (
+            <Button
+              size="sm"
+              variant="outline"
+              leftIcon={<Square className="h-4 w-4" />}
+              onClick={actions.onStop}
+              disabled={busy}
+            >
+              Stop
+            </Button>
+          )}
+          {actions.onToggleDiagram && (
+            <Button
+              size="sm"
+              variant="ghost"
+              leftIcon={<Workflow className="h-4 w-4" />}
+              onClick={actions.onToggleDiagram}
+            >
+              Diagram
+            </Button>
+          )}
+          <Button
+            size="sm"
+            variant="ghost"
+            leftIcon={<MessageSquarePlus className="h-4 w-4" />}
+            onClick={actions.onOpenAsChat}
+            disabled={busy}
+          >
+            {isChat ? "Open chat" : "Open as chat"}
+          </Button>
+        </div>
+      </div>
+
+      <p className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-sm text-muted-foreground">
+        <span data-testid="run-started-by">
+          <StartedBy chat={chat} triggerName={triggerName} parent={parent} line={launch.startedByLine} />
+        </span>
+        {chat.workflowName && (
+          <>
+            <span aria-hidden="true">·</span>
+            <span>{getWorkflowDisplayName(chat.workflowName, true)}</span>
+          </>
+        )}
+        {location && (
+          <>
+            <span aria-hidden="true">·</span>
+            <span>{location}</span>
+          </>
+        )}
+        {!Number.isNaN(startedAt) && (
+          <>
+            <span aria-hidden="true">·</span>
+            <span>
+              Started{" "}
+              <time dateTime={chat.createdAt}>{formatAbsoluteTime(chat.createdAt)}</time>
+              {" · "}
+              <span className="tabular-nums">
+                <RunDuration startedAt={startedAt} live={live} />
+              </span>
+            </span>
+          </>
+        )}
+      </p>
+    </header>
+  );
+}
+
+/** The launch line, with what started the run linked when it can be. */
+function StartedBy({
+  chat,
+  triggerName,
+  parent,
+  line,
+}: {
+  chat: Chat;
+  triggerName?: string;
+  parent?: { chatId: string; title: string };
+  line: string;
+}) {
+  const kind = chat.launchKind || "chat.start";
+  if (kind === "schedule") {
+    if (!chat.triggerId || !triggerName) return <>Started by a schedule that has since been deleted</>;
+    return (
+      <>
+        Started by schedule{" "}
+        <Link
+          to="/automations/$triggerId"
+          params={{ triggerId: chat.triggerId }}
+          className="font-medium text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+        >
+          {triggerName}
+        </Link>
+      </>
+    );
+  }
+  if (kind === "agent.start_run" && parent) {
+    return (
+      <>
+        Started by an agent in{" "}
+        <Link
+          to="/runs/$runId"
+          params={{ runId: parent.chatId }}
+          className="font-medium text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+        >
+          {parent.title || "another run"}
+        </Link>
+      </>
+    );
+  }
+  return <>{line}</>;
+}

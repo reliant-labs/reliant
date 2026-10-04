@@ -1002,6 +1002,19 @@ export function isLoadToolTool(toolName: string): boolean {
  * them as spawns strands them on a status derived from a workflow that will
  * never appear.
  */
+/**
+ * Tools that name one top-level run by id: start_run (the run it started)
+ * and get_run (the run it read). list_runs names many and control_run /
+ * send_to_run act on one without describing it, so they stay generic.
+ */
+export const RUN_LINK_TOOLS = ['start_run', 'get_run'] as const;
+
+export function isRunLinkTool(toolName: string): boolean {
+  const lower = toolName.toLowerCase();
+  const baseName = lower.startsWith('mcp__') ? lower.split('__').pop() || lower : lower;
+  return RUN_LINK_TOOLS.includes(baseName as typeof RUN_LINK_TOOLS[number]);
+}
+
 export const SPAWN_TOOLS = ['spawn'] as const;
 
 /**

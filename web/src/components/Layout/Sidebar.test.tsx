@@ -259,6 +259,7 @@ describe("Sidebar selected chat scroll", () => {
     const onNavigateToProjectPicker = vi.fn();
     const onOpenWorkflows = vi.fn();
     const onOpenAutomations = vi.fn();
+    const onOpenRuns = vi.fn();
     const onOpenChatSearch = vi.fn();
     const onNavigateToSettings = vi.fn();
 
@@ -268,6 +269,7 @@ describe("Sidebar selected chat scroll", () => {
           onNavigateToProjectPicker={onNavigateToProjectPicker}
           onOpenWorkflows={onOpenWorkflows}
           onOpenAutomations={onOpenAutomations}
+          onOpenRuns={onOpenRuns}
           onOpenChatSearch={onOpenChatSearch}
           onNavigateToSettings={onNavigateToSettings}
         />
@@ -288,12 +290,14 @@ describe("Sidebar selected chat scroll", () => {
     fireEvent.click(screen.getByRole("button", { name: "Projects" }));
     fireEvent.click(screen.getByRole("button", { name: "Workflows" }));
     fireEvent.click(screen.getByRole("button", { name: "Automations" }));
+    fireEvent.click(screen.getByRole("button", { name: "Runs" }));
     fireEvent.click(screen.getByRole("button", { name: "Search" }));
     fireEvent.click(screen.getByRole("button", { name: "Settings" }));
 
     expect(onNavigateToProjectPicker).toHaveBeenCalledTimes(1);
     expect(onOpenWorkflows).toHaveBeenCalledTimes(1);
     expect(onOpenAutomations).toHaveBeenCalledTimes(1);
+    expect(onOpenRuns).toHaveBeenCalledTimes(1);
     expect(onOpenChatSearch).toHaveBeenCalledTimes(1);
     expect(onNavigateToSettings).toHaveBeenCalledTimes(1);
   });

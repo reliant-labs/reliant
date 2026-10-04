@@ -17,9 +17,11 @@ import {
   ListTriggerEventsResponseSchema,
   ScheduleSourceSchema,
   TriggerEventOutcome,
+  TriggerEventRunSchema,
   TriggerEventSchema,
   TriggerSchema,
 } from "@/gen/reliant/v1/trigger_pb";
+import { RunDisplayState } from "@/gen/reliant/v1/run_pb";
 import { DaemonInfoSchema, DaemonStatus } from "@/gen/reliant/v1/daemon_registry_pb";
 import {
   ChatActivity,
@@ -56,11 +58,6 @@ vi.mock("sonner", () => ({
     success: (...args: unknown[]) => toastSuccess(...args),
     error: (...args: unknown[]) => toastError(...args),
   }),
-}));
-
-const openAutomationChat = vi.fn(async () => undefined);
-vi.mock("../openAutomationChat", () => ({
-  openAutomationChat: (...args: unknown[]) => openAutomationChat(...(args as [])),
 }));
 
 vi.mock("@/hooks/useTitleBarChrome", () => ({
@@ -188,11 +185,11 @@ describe("AutomationDetail", () => {
     expect(screen.getByText("(idle)")).toBeInTheDocument();
     const launchedRow = await screen.findByTestId("automation-event-ev-1");
     expect(within(launchedRow).getByText("Launched")).toBeInTheDocument();
-    expect(within(launchedRow).getByRole("button", { name: "Open chat" })).toBeInTheDocument();
+    expect(within(launchedRow).getByRole("link", { name: "Open run" })).toBeInTheDocument();
     const skippedRow = screen.getByTestId("automation-event-ev-0");
     expect(within(skippedRow).getByText("Skipped")).toBeInTheDocument();
     expect(within(skippedRow).getByText("previous run still active")).toBeInTheDocument();
-    expect(within(skippedRow).queryByRole("button", { name: "Open chat" })).not.toBeInTheDocument();
+    expect(within(skippedRow).queryByRole("link", { name: "Open run" })).not.toBeInTheDocument();
     expect(listTriggerEvents.mock.calls[0]![0]).toMatchObject({ triggerId: "trig-1" });
   });
 
@@ -230,15 +227,36 @@ describe("AutomationDetail", () => {
     );
   });
 
-  it("opens a launched chat in the automation's project", async () => {
-    const user = userEvent.setup();
+  it("links a launched firing to its run's page in the Runs area", async () => {
     renderAtRoute(<AutomationDetail triggerId="trig-1" />, "/automations/trig-1");
 
     const row = await screen.findByTestId("automation-event-ev-1");
-    await user.click(within(row).getByRole("button", { name: "Open chat" }));
+    expect(within(row).getByRole("link", { name: "Open run" })).toHaveAttribute("href", "/runs/chat-42");
+    // Opening a run no longer leaves the area for the project view.
+    expect(within(row).queryByRole("button", { name: "Open chat" })).not.toBeInTheDocument();
+  });
 
-    await waitFor(() => expect(openAutomationChat).toHaveBeenCalledTimes(1));
-    expect(openAutomationChat.mock.calls[0]).toEqual(["chat-42", "proj-1", expect.any(Function)]);
+  it("reads the run's status from the event when the server sends it", async () => {
+    listTriggerEvents.mockResolvedValue(
+      create(ListTriggerEventsResponseSchema, {
+        events: [
+          create(TriggerEventSchema, {
+            id: "ev-1",
+            triggerId: "trig-1",
+            occurredAt: isoFromNow(-HOUR),
+            outcome: TriggerEventOutcome.LAUNCHED,
+            chatId: "chat-42",
+            run: create(TriggerEventRunSchema, { displayState: RunDisplayState.WAITING_FOR_MACHINE }),
+          }),
+        ],
+      }),
+    );
+    renderAtRoute(<AutomationDetail triggerId="trig-1" />, "/automations/trig-1");
+
+    const row = await screen.findByTestId("automation-event-ev-1");
+    expect(await within(row).findByText("Waiting for machine")).toBeInTheDocument();
+    // One read per launched event is exactly what the event's run field replaces.
+    expect(getChat).not.toHaveBeenCalled();
   });
 
   it("asks before deleting", async () => {

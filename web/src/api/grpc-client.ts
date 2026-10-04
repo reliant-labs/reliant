@@ -29,6 +29,7 @@ import { ConnectorService } from "../gen/reliant/v1/connector_pb";
 import { AccountService } from "../gen/reliant/v1/account_pb";
 import { ForgeService } from "../gen/reliant/v1/forge_pb";
 import { TriggerService } from "../gen/reliant/v1/trigger_pb";
+import { RunService } from "../gen/reliant/v1/run_pb";
 import { logger } from "../lib/logger";
 import {
   buildLocalhostUrl,
@@ -124,6 +125,7 @@ const clearClientCache = () => {
   _questionClient = null;
   _connectorClient = null;
   _triggerClient = null;
+  _runClient = null;
 };
 
 export const getGRPCBaseURLPublic = (): string | null => getGRPCBaseURL();
@@ -367,6 +369,12 @@ export const createTriggerClient = (): Client<typeof TriggerService> => {
   return createClient(TriggerService, getTransport());
 };
 
+// RunService (the engine's run API, and the cross-cutting run list) is served
+// by reliant's api-server, like TriggerService.
+export const createRunClient = (): Client<typeof RunService> => {
+  return createClient(RunService, getTransport());
+};
+
 // Singleton instances (lazy-initialized)
 let _systemClient: Client<typeof SystemService> | null = null;
 let _planClient: Client<typeof PlanService> | null = null;
@@ -395,6 +403,7 @@ let _tokenClient: Client<typeof TokenService> | null = null;
 let _questionClient: Client<typeof QuestionService> | null = null;
 let _connectorClient: Client<typeof ConnectorService> | null = null;
 let _triggerClient: Client<typeof TriggerService> | null = null;
+let _runClient: Client<typeof RunService> | null = null;
 
 export const getSystemClient = (): Client<typeof SystemService> => {
   if (!_systemClient) {
@@ -594,6 +603,13 @@ export const getTriggerClient = (): Client<typeof TriggerService> => {
   return _triggerClient;
 };
 
+export const getRunClient = (): Client<typeof RunService> => {
+  if (!_runClient) {
+    _runClient = createRunClient();
+  }
+  return _runClient;
+};
+
 // Export for convenience
 export const grpcClient = {
   system: () => getSystemClient(),
@@ -624,4 +640,5 @@ export const grpcClient = {
   question: () => getQuestionClient(),
   connector: () => getConnectorClient(),
   trigger: () => getTriggerClient(),
+  run: () => getRunClient(),
 };

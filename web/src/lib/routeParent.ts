@@ -13,6 +13,8 @@
  *   /forge, /forge/*        → /
  *   /automations/$triggerId → /automations
  *   /automations            → /
+ *   /runs/$runId            → /runs
+ *   /runs                   → /
  *   anything else           → /
  *
  * Forge's in-UI close is an EXIT from the whole surface, not a step back
@@ -53,6 +55,10 @@ export function getParentRouteNavigateOptions(
   // real hub with its own actions — so closing one returns there.
   if (pathname.startsWith("/automations/")) {
     return { to: "/automations" };
+  }
+  // Same shape: a run's page is a step into the Runs list.
+  if (pathname.startsWith("/runs/")) {
+    return { to: "/runs" };
   }
   return { to: "/", search: {} };
 }

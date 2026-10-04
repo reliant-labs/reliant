@@ -36,6 +36,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import {
   indexSearchSchema,
   oauthCallbackSearchSchema,
+  runsSearchSchema,
   workflowSearchSchema,
 } from './routeSchemas'
 
@@ -250,6 +251,63 @@ describe('routes: OAuth callback', () => {
     expect(() =>
       oauthCallbackSearchSchema.parse({ source: 'not-a-real-source' })
     ).toThrow()
+  })
+})
+
+describe('routes: /runs search params', () => {
+  it('parses filters as arrays and enums, and drops values it does not know', () => {
+    expect(
+      runsSearchSchema.parse({
+        state: ['failed', 'needs_you'],
+        kind: ['schedule'],
+        workflow: ['builtin://agent'],
+        trigger: 'trig-1',
+        range: '7d',
+        q: 'nightly',
+        allProjects: true,
+        group: false,
+      }),
+    ).toEqual({
+      state: ['failed', 'needs_you'],
+      kind: ['schedule'],
+      workflow: ['builtin://agent'],
+      trigger: 'trig-1',
+      range: '7d',
+      q: 'nightly',
+      allProjects: true,
+      group: false,
+    })
+    // A stale or hand-edited link must not take the page down.
+    expect(runsSearchSchema.parse({ state: ['bogus', 'failed'], range: 'forever' })).toEqual({
+      state: ['failed'],
+    })
+    expect(runsSearchSchema.parse({})).toEqual({})
+  })
+
+  it('round-trips a filter set through navigate()', async () => {
+    const rootRoute = createRootRoute({ component: () => <Outlet /> })
+    function StubRuns() {
+      const search = useSearch({ from: '/runs' })
+      return <pre data-testid="runs-search">{JSON.stringify(search)}</pre>
+    }
+    const runsRoute = createRoute({
+      getParentRoute: () => rootRoute,
+      path: '/runs',
+      validateSearch: runsSearchSchema,
+      component: StubRuns,
+    })
+    const router = createRouter({
+      routeTree: rootRoute.addChildren([runsRoute]),
+      history: createMemoryHistory({ initialEntries: ['/runs'] }),
+    })
+    render(<RouterProvider router={router} />)
+    await router.navigate({ to: '/runs', search: { state: ['live'], kind: ['agent.start_run'] } })
+    await waitFor(() =>
+      expect(JSON.parse(screen.getByTestId('runs-search').textContent || '{}')).toEqual({
+        state: ['live'],
+        kind: ['agent.start_run'],
+      }),
+    )
   })
 })
 

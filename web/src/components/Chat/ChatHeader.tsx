@@ -50,6 +50,11 @@ interface ChatHeaderProps {
   onToggleWorkflowViewer?: () => void;
   /** Whether the workflow viewer is currently open (labels the menu item) */
   isWorkflowViewerOpen?: boolean;
+  /**
+   * The host renders the chat's title itself (run detail's RunHeader). The
+   * menu, context usage and thread tabs stay; the title and time-ago go.
+   */
+  hideTitle?: boolean;
 }
 
 export function ChatHeader({
@@ -61,6 +66,7 @@ export function ChatHeader({
   workflowExecution,
   onToggleWorkflowViewer,
   isWorkflowViewerOpen,
+  hideTitle = false,
 }: ChatHeaderProps) {
   const chatQuery = useChat(chatId || undefined);
   const chat = chatQuery.data;
@@ -336,7 +342,7 @@ export function ChatHeader({
               )}
 
               {/* Title - click to edit inline */}
-              {isEditingTitle ? (
+              {hideTitle && !isEditingTitle ? null : isEditingTitle ? (
                 <input
                   ref={titleInputRef}
                   type="text"
@@ -448,7 +454,7 @@ export function ChatHeader({
               )}
 
               {/* Time ago - top right */}
-              {timeAgo && (
+              {timeAgo && !hideTitle && (
                 <span className="text-xs text-muted-foreground flex-shrink-0">{timeAgo}</span>
               )}
             </div>

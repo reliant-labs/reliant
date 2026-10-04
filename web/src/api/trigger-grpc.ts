@@ -39,6 +39,7 @@ import {
   type TriggerDefinition as ProtoTriggerDefinition,
   type TriggerEvent as ProtoTriggerEvent,
 } from "../gen/reliant/v1/trigger_pb";
+import type { RunDisplayState } from "../gen/reliant/v1/run_pb";
 
 // ============================================
 // Frontend types
@@ -68,6 +69,11 @@ export interface TriggerEvent {
   chatId?: string;
   /** A "Run now" fire rather than a scheduled one. */
   manual: boolean;
+  /**
+   * The display state of the run a launched firing started, as of the read.
+   * Unset for a firing that launched nothing, or one whose chat is gone.
+   */
+  runDisplayState?: RunDisplayState;
 }
 
 export interface Trigger {
@@ -154,6 +160,7 @@ export function eventFromProto(event: ProtoTriggerEvent): TriggerEvent {
     outcomeDetail: event.outcomeDetail,
     chatId: event.chatId || undefined,
     manual: event.payload?.manual === true,
+    runDisplayState: event.run?.displayState || undefined,
   };
 }
 

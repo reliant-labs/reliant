@@ -1886,6 +1886,9 @@ function App() {
                 onOpenAutomations={() => {
                   navigate({ to: '/automations' });
                 }}
+                onOpenRuns={() => {
+                  navigate({ to: '/runs' });
+                }}
                 onOpenChatSearch={() => setShowChatSearch(true)}
                 onNavigateToSettings={() => {
                   navigate({ to: '/settings' });
@@ -1918,6 +1921,9 @@ function App() {
                   }}
                   onOpenAutomations={() => {
                     navigate({ to: '/automations' });
+                  }}
+                  onOpenRuns={() => {
+                    navigate({ to: '/runs' });
                   }}
                   onOpenChatSearch={() => setShowChatSearch(true)}
                   onNavigateToSettings={() => {

@@ -38,6 +38,7 @@ import {
   Workflow,
   Boxes,
   CalendarClock,
+  Activity,
 } from "lucide-react";
 import { useChatStore } from "../../store/chatStore";
 import { useChatList, useArchivedChats, useDeleteChat, useRenameChat, useUnarchiveChat } from "../../hooks/chat-queries";
@@ -117,6 +118,7 @@ interface SidebarProps {
   onNavigateToProjectPicker?: () => void;
   onOpenWorkflows?: () => void;
   onOpenAutomations?: () => void;
+  onOpenRuns?: () => void;
   onOpenChatSearch?: () => void;
   onNavigateToSettings?: () => void;
   onOpenForge?: () => void;
@@ -620,6 +622,7 @@ function SidebarComponent({
   onNavigateToProjectPicker,
   onOpenWorkflows,
   onOpenAutomations,
+  onOpenRuns,
   onOpenChatSearch,
   onNavigateToSettings,
   onOpenForge,
@@ -1460,6 +1463,12 @@ function SidebarComponent({
             label="Automations"
             onClick={onOpenAutomations}
             testId="sidebar-automations-button"
+          />
+          <SidebarNavButton
+            icon={<Activity className="h-4 w-4" />}
+            label="Runs"
+            onClick={onOpenRuns}
+            testId="sidebar-runs-button"
           />
           <SidebarNavButton
             icon={<Search className="h-4 w-4" />}
