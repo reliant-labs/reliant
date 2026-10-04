@@ -31,7 +31,7 @@ import { queryClient } from "../lib/query-client";
 import { chatKeys, patchChatCaches, removeChatFromListCache, getChatFromCache, resolveChat } from "../hooks/chat-queries";
 import { setMessagesMetaInCache } from "../hooks/message-queries";
 import { approvalKeys } from "../hooks/approval-queries";
-import { showWorkflowCompletionNotification, showApprovalRequiredNotification, getNotificationPermission } from "../lib/notifications";
+import { showWorkflowCompletionNotification, showWorkflowFailedNotification, showApprovalRequiredNotification, getNotificationPermission } from "../lib/notifications";
 import { getNotificationSoundOptions, useNotificationStore } from "./notificationStore";
 import { triggerRefetch, type RefetchType } from "./refetchStore";
 import { setDaemonLastSeen } from "../api/grpc-client";
@@ -604,7 +604,7 @@ function handleChatStateChange(update: UserUpdate) {
   }
 
   // Show OS notification if unread and user isn't actively viewing this chat
-  if (unread === true && (data.reason === 'workflow_completed' || data.reason === 'approval_required')) {
+  if (unread === true && (data.reason === 'workflow_completed' || data.reason === 'workflow_failed' || data.reason === 'approval_required')) {
     // Skip notifications for events that happened before the app started
     // This prevents notifications from firing for replayed historical events
     const eventTime = new Date(update.created_at).getTime();
@@ -758,6 +758,8 @@ function handleChatStateChange(update: UserUpdate) {
       
       if (data.reason === 'approval_required') {
         showApprovalRequiredNotification(chat_id, chatTitle, navigateToChat, soundOptions);
+      } else if (data.reason === 'workflow_failed') {
+        showWorkflowFailedNotification(chat_id, chatTitle, navigateToChat, soundOptions);
       } else {
         showWorkflowCompletionNotification(chat_id, chatTitle, navigateToChat, soundOptions);
       }

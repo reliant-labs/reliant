@@ -3,6 +3,7 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -26,6 +27,15 @@ import (
 // when kind is empty), runs WorkflowStatus("completed") on its root workflow
 // with the given declared outcome, and returns the chat's unread flag.
 func completeRootRun(t *testing.T, kind core.TriggerEventKind, outcome string) bool {
+	t.Helper()
+	unread, _ := finishRun(t, kind, "completed", outcome, false)
+	return unread
+}
+
+// finishRun is completeRootRun generalised over the terminal status and over
+// whether the reporting workflow is a child of the chat's root. It returns the
+// chat's unread flag and unread reason.
+func finishRun(t *testing.T, kind core.TriggerEventKind, status, outcome string, child bool) (bool, string) {
 	t.Helper()
 	h := NewIdempotencyTestHelper(t)
 	t.Cleanup(h.Cleanup)
@@ -62,20 +72,71 @@ func completeRootRun(t *testing.T, kind core.TriggerEventKind, outcome string) b
 		require.True(t, created)
 	}
 
-	var output WorkflowStatusOutput
-	require.NoError(t, h.ExecuteActivity(NewWorkflowStatusActivity(h.Repo()).Execute, WorkflowStatusInput{
+	input := WorkflowStatusInput{
 		ChatID:       chatID,
 		WorkflowID:   chatID,
 		WorkflowName: "builtin://agent",
-		Status:       "completed",
+		Status:       status,
 		Thread:       chatID,
 		Outcome:      outcome,
-	}, &output))
+	}
+	if child {
+		input.WorkflowID = uuid.NewString()
+		input.ParentWorkflowID = chatID
+		input.Thread = chatID + "/child"
+	}
+	var output WorkflowStatusOutput
+	require.NoError(t, h.ExecuteActivity(NewWorkflowStatusActivity(h.Repo()).Execute, input, &output))
 	require.True(t, output.Success)
 
 	chat, err := h.Repo().GetChat(ctx, chatID)
 	require.NoError(t, err)
-	return chat.Unread
+	// The reason is not stored on the chat; it travels on the user update the
+	// web client notifies from.
+	reason := ""
+	updates, err := h.Repo().GetUserUpdatesSince(ctx, userID, 0, 100)
+	require.NoError(t, err)
+	for _, u := range updates {
+		var data struct {
+			Reason string `json:"reason"`
+			Unread *bool  `json:"unread"`
+		}
+		if json.Unmarshal(u.Data, &data) == nil && data.Unread != nil && *data.Unread {
+			reason = data.Reason
+		}
+	}
+	return chat.Unread, reason
+}
+
+func TestWorkflowStatus_FailureUnread(t *testing.T) {
+	cases := []struct {
+		name       string
+		kind       core.TriggerEventKind
+		status     string
+		child      bool
+		wantUnread bool
+	}{
+		{"schedule-launched root failed notifies", core.TriggerEventKindSchedule, "failed", false, true},
+		{"interactive root failed notifies", core.TriggerEventKindChatStart, "failed", false, true},
+		{"cancelled stays silent", core.TriggerEventKindChatStart, "cancelled", false, false},
+		{"schedule-launched cancelled stays silent", core.TriggerEventKindSchedule, "cancelled", false, false},
+		{"child failure does not notify", core.TriggerEventKindSchedule, "failed", true, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			unread, reason := finishRun(t, tc.kind, tc.status, "", tc.child)
+			assert.Equal(t, tc.wantUnread, unread)
+			if tc.wantUnread {
+				assert.Equal(t, "workflow_failed", reason)
+			}
+		})
+	}
+}
+
+func TestWorkflowStatus_DeclaredFailureOutcomeUsesFailedReason(t *testing.T) {
+	unread, reason := finishRun(t, core.TriggerEventKindSchedule, "completed", model.OutcomeFailure, false)
+	assert.True(t, unread)
+	assert.Equal(t, "workflow_failed", reason)
 }
 
 func TestWorkflowStatus_CompletionUnreadFollowsLaunchKind(t *testing.T) {

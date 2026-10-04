@@ -393,6 +393,29 @@ export function showWorkflowCompletionNotification(
 }
 
 /**
+ * Show a workflow failure notification. Shares the completion notification's
+ * permission, sound and notifyAlways gating (via showNotification).
+ */
+export function showWorkflowFailedNotification(
+  chatId: string,
+  chatTitle: string,
+  onNavigateToChat: (chatId: string) => void,
+  soundOptions?: SoundOptions
+): boolean {
+  return showNotification(
+    {
+      title: chatTitle ? `Run failed: ${chatTitle}` : "Run failed",
+      body: chatTitle ? "The run ended in failure" : "A workflow run failed",
+      tag: `workflow-${chatId}`,
+      onClick: () => {
+        onNavigateToChat(chatId);
+      },
+    },
+    soundOptions
+  );
+}
+
+/**
  * Show an approval required notification
  * Convenience function for when a tool needs user approval
  */
