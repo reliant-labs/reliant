@@ -621,8 +621,7 @@ message GetCurrentUserInfraOverageResponse {
 // InfraDimensionUsage is one metered infrastructure dimension's current
 // standing: the reading, the allowance, and the ladder rung.
 message InfraDimensionUsage {
-  // Stable dimension id — "infra_cpu", "infra_memory", "infra_storage",
-  // "vcluster_floor".
+  // Stable dimension id — "infra_cpu", "infra_memory", "infra_storage".
   string dimension_id = 1;
   // Human-readable name, ready to display ("CPU", "Memory", "Storage").
   string display_name = 2;

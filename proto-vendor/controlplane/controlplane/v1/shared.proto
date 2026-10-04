@@ -301,7 +301,7 @@ message MeteredDimension {
 //
 //	notify        at notify_threshold_percent of the allowance (default 80)
 //	block_scale_up at 100% — the tenant keeps what is running, but may not
-//	              add replicas, deployments or vClusters
+//	              add replicas or deployments
 //	throttle      after overage_grace_hours (default 72) of continuous
 //	              overage — the workload is rate-limited, not stopped
 //	suspend       ONLY when suspend_on_overage is explicitly true
@@ -415,13 +415,12 @@ message PlanLimits {
   // the allowance above; a per-month rate here would be a 730x error.
   double storage_overage_rate_cents = 18;
 
-  // Maximum provisioned TenantClusters. Each carries a per-hour floor
-  // (~$0.02/hr) whether or not anything runs on it, so this is a metered
-  // cap and not a courtesy limit.
-  int32 max_vclusters = 27;
-  // Per-hour floor charged for each provisioned vCluster, in cents.
-  // 2.0 = $0.02/hr.
-  double vcluster_floor_rate_cents_per_hour = 28;
+  // The vCluster cap and its per-hour floor, deleted with the vCluster
+  // model: hosted scope is Workload + ManagedDatabase + StaticSite, and a
+  // customer-owned cluster is reached through `forge cluster connect`, which
+  // meters no floor because the compute is the customer's.
+  reserved 27, 28;
+  reserved "max_vclusters", "vcluster_floor_rate_cents_per_hour";
 
   // Maximum concurrently deployed workloads (Workload, StaticSite,
   // ManagedDatabase) across the tenant.

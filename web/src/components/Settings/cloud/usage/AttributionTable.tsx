@@ -1,10 +1,10 @@
 // Where the usage is going — per deployment and environment, heaviest first.
 //
 // Rows that name no deployment are KEPT and labelled rather than dropped. A
-// vCluster floor is real money with nothing to attribute it to, and hiding it
-// would make this table quietly disagree with the accrued total above it —
-// the kind of discrepancy that turns into a support ticket about our
-// arithmetic.
+// row whose deployment has since been purged still records what it cost, and
+// hiding it would make this table quietly disagree with the accrued total
+// above it — the kind of discrepancy that turns into a support ticket about
+// our arithmetic.
 //
 // Names arrive as prebuilt maps rather than one lookup per row: this table can
 // reference a dozen deployments, and the caller already lists them once. An id

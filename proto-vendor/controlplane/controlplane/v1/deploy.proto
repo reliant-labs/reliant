@@ -53,8 +53,8 @@ enum DeployTier {
   DEPLOY_TIER_BACKEND = 2;
   // A managed Postgres database and role.
   DEPLOY_TIER_DATABASE = 3;
-  // A workload inside the tenant's own vCluster, carrying the billed
-  // control-plane floor.
+  // A workload inside the tenant's own cluster. No forge CR and no hosted
+  // render path: this tier is declared and refused, not deployed.
   DEPLOY_TIER_CLUSTER = 4;
 }
 
@@ -170,25 +170,16 @@ enum DeployPromotionKind {
   DEPLOY_PROMOTION_KIND_PROMOTE = 1;
 }
 
-// DeployClusterProvider is an IRREVERSIBLE day-0 choice per vCluster:
-// shared-vs-private nodes cannot change after creation, nor can worker node
-// type after deploy. On the wire from day one even though PRIVATE is rejected
-// at render until implemented — a discriminator retrofitted later cannot
-// describe clusters already provisioned under the old assumption.
-enum DeployClusterProvider {
-  DEPLOY_CLUSTER_PROVIDER_UNSPECIFIED = 0;
-  DEPLOY_CLUSTER_PROVIDER_VCLUSTER_SHARED = 1;
-  DEPLOY_CLUSTER_PROVIDER_VCLUSTER_PRIVATE = 2;
-}
-
-// DeployClusterPhase is the vCluster lifecycle, kept deliberately small.
-// Teardown is a deleted timestamp, not a fourth phase.
-enum DeployClusterPhase {
-  DEPLOY_CLUSTER_PHASE_UNSPECIFIED = 0;
-  DEPLOY_CLUSTER_PHASE_PROVISIONING = 1;
-  DEPLOY_CLUSTER_PHASE_READY = 2;
-  DEPLOY_CLUSTER_PHASE_FAILED = 3;
-}
+// DeployClusterProvider and DeployClusterPhase described a Reliant-provisioned
+// vCluster — its irreversible shared-vs-private node choice and its
+// provisioning lifecycle. Both are deleted with the vCluster model. A
+// customer-owned cluster has neither: we do not choose its nodes and we do not
+// provision it, so its readiness is a CONNECTION question, answered by
+// cluster.v1.ClusterConnection.
+//
+// Enum NAMES, not just values, are reserved: proto3 enum value names are
+// scoped to the PACKAGE, so re-using one later in a different enum of this
+// package would collide.
 
 // DeployResourceKind NAMES A METER. The unit is a property of the kind and is
 // never a per-row field: a free-form unit is a rounding bug waiting for the
@@ -201,8 +192,13 @@ enum DeployResourceKind {
   DEPLOY_RESOURCE_KIND_CPU_MILLI = 1;
   // MiB held for the tick.
   DEPLOY_RESOURCE_KIND_MEM_MIB = 2;
-  // Always 1 — the per-cluster floor.
-  DEPLOY_RESOURCE_KIND_VCLUSTER = 5;
+
+  // 5 was VCLUSTER, the per-hour per-cluster floor. Deleted with the
+  // vCluster model: nothing ever wrote a row of this kind, and a connected
+  // cluster's compute is the customer's and carries no floor of ours.
+  reserved 5;
+  reserved "DEPLOY_RESOURCE_KIND_VCLUSTER";
+
   // Mebibytes, not GiB (see the migration's quantity comment).
   DEPLOY_RESOURCE_KIND_EGRESS_GIB = 6;
   DEPLOY_RESOURCE_KIND_CDN_EGRESS_GIB = 7;
@@ -263,29 +259,13 @@ message DeployTenant {
   google.protobuf.Timestamp updated_at = 5;
 }
 
-// DeployTenantCluster is a provisioned vCluster — a real API server, for
-// advanced users, carrying the billed control-plane floor.
+// DeployTenantCluster described a provisioned vCluster and is deleted with the
+// vCluster model. The org-owned cluster message that replaces it is
+// cluster.v1.Cluster, which carries a CONNECTION rather than a provisioning
+// phase, and no floor: a connected cluster's control plane is the customer's.
 //
-// ONE PER TENANT, HOSTING N ENVIRONMENT NAMESPACES, is the default rather than
-// a mode: because an environment REFERENCES a cluster instead of owning one, a
-// tenant who needs per-environment API isolation provisions N of these and
-// points one environment at each.
-//
-// Placement (which host cluster, which host namespace) is NOT here — see
-// DeployTenantClusterInternal.
-message DeployTenantCluster {
-  string id = 1;
-  string name = 2;
-  DeployClusterProvider provider = 3;
-  // READ-ONLY. Reported by the operator.
-  DeployClusterPhase phase = 4;
-  // READ-ONLY. Unset until the control plane answers. Until then the cluster
-  // is DECLARED but not REAL, and the vcluster floor must not tick — so this
-  // being unset is the machine-readable form of "do not bill this yet".
-  google.protobuf.Timestamp ready_at = 5;
-  google.protobuf.Timestamp created_at = 6;
-  google.protobuf.Timestamp updated_at = 7;
-}
+// Nothing here was a BYO concept, so there was no message to split — the
+// connect path (#569) already had its own.
 
 // DeployEnvironment is a namespace-scoped deploy target: dev, staging, prod,
 // or an ephemeral preview.
@@ -308,9 +288,10 @@ message DeployEnvironment {
   // somebody else's.
   string namespace = 4;
 
-  // The vCluster this environment's workloads run inside, or empty for the
-  // static/backend/database tiers, which run on shared platform
-  // infrastructure.
+  // The org-owned cluster this environment's workloads run inside, or empty
+  // for an environment on shared platform infrastructure. Superseded as the
+  // source of truth by DeployEnvironmentSpec.cluster_bindings, which can name
+  // more than one.
   string tenant_cluster_id = 5;
 
   // READ-ONLY and DERIVED: the id of this environment's latest promotion in
@@ -502,6 +483,47 @@ message DeployEnvironmentSpec {
   // Where that render came from (DeployEnvironment.declared_by). The first
   // call carrying provenance also fixes the environment's source repo.
   DeploySourceProvenance declared_by = 13;
+
+  // Which registered cluster each cluster the bundle renders for maps to.
+  //
+  // THE MULTI-CLUSTER SUCCESSOR OF tenant_cluster_id ABOVE, and the SOURCE OF
+  // TRUTH from this release on. A forge bundle may render for several
+  // clusters at once (release.BundleClusterPath / BundleDoc.ClusterPaths), so
+  // one environment can have more than one target — which `tenant_cluster_id`
+  // cannot express, because it is one column holding one id.
+  //
+  // EXPAND NOW, CONTRACT LATER. tenant_cluster_id is still accepted and still
+  // written, because the previous release reads it; a K-task removes it once
+  // no deployed client sends it. While both exist, a request carrying both
+  // must agree — a disagreement is InvalidArgument rather than a silent
+  // preference for one, because the two would then name different clusters
+  // and only one of them would receive the deploy.
+  //
+  // EVERY BINDING IS VALIDATED: the cluster must be this org's, registered,
+  // and live. Checked BEFORE any write, on the create branch and the existing
+  // branch alike, so a cluster deregistered since the environment was
+  // declared surfaces on the ensure the operator is already running rather
+  // than at the next publish.
+  repeated ClusterBinding cluster_bindings = 14;
+}
+
+// ClusterBinding maps ONE cluster the bundle renders for to ONE registered
+// cluster in the control plane.
+//
+// TWO NAMESPACES MEET HERE, and keeping them apart is the whole purpose of
+// the message. `cluster` is forge's key — the RENDERED kube context name,
+// which is what the bundle's per-cluster paths are indexed by and what a KCL
+// author wrote. `cluster_id` is ours — the uuid ConnectCluster/RegisterCluster
+// minted. Neither can be derived from the other, and collapsing them into one
+// string is how a deploy lands on a cluster whose name merely resembled the
+// declared one.
+message ClusterBinding {
+  // The rendered cluster / kube-context name, as it appears in the bundle's
+  // ClusterPaths. forge's key.
+  string cluster = 1;
+  // The registered cluster's id, from ConnectCluster or RegisterCluster. Must
+  // name a live cluster of the caller's org.
+  string cluster_id = 2;
 }
 
 // DeployObservedStateDetail is the operator's CONFIRMATION — the readable
@@ -1818,9 +1840,8 @@ message DeployDriftObject {
 // applied appears in no candidate set and therefore in no row here.
 message DeployUsageRow {
   DeployResourceKind resource_kind = 1;
-  // Attribution dimensions. Any may be empty: a vcluster-floor row names no
-  // deployment, and a row whose deployment has since been purged still
-  // records what it cost.
+  // Attribution dimensions. Any may be empty: a row whose deployment has
+  // since been purged still records what it cost.
   string environment_id = 2;
   string deployment_id = 3;
   string tenant_cluster_id = 4;
@@ -1861,20 +1882,11 @@ message DeployLogLine {
 // The same split public Daemon / DaemonInternal already makes. Reachable only
 // through DeployAdminService.
 
-// DeployTenantClusterInternal carries the fleet PLACEMENT of a vCluster —
-// which host cluster runs its control plane, and in which namespace.
-// Deliberately excluded from the public DeployTenantCluster: host_cluster_id
-// is a CLUSTER_CONFIGS key, and publishing one hands a tenant a map of our
-// infrastructure they have no use for.
-message DeployTenantClusterInternal {
-  string tenant_cluster_id = 1;
-  // Matches a CLUSTER_CONFIGS key, so the placement recorded here is the same
-  // string the reconciler resolves a client from.
-  string host_cluster_id = 2;
-  // The namespace ON THE HOST cluster holding this vCluster's control plane.
-  // Distinct from the tenant-facing workload namespaces.
-  string host_namespace = 3;
-}
+// DeployTenantClusterInternal carried a vCluster's fleet PLACEMENT — which of
+// our host clusters ran its control plane, and in which namespace. Deleted
+// with the vCluster model: a connected cluster runs on nothing of ours, so
+// there is no placement to report (the backing columns are NULL for it by
+// CHECK).
 
 // DeployEnvironmentInternal carries an environment's fleet placement.
 message DeployEnvironmentInternal {

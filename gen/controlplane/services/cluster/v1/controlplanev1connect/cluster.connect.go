@@ -54,6 +54,9 @@ const (
 	// ClusterServiceRemoveClusterProcedure is the fully-qualified name of the ClusterService's
 	// RemoveCluster RPC.
 	ClusterServiceRemoveClusterProcedure = "/controlplane.v1.ClusterService/RemoveCluster"
+	// ClusterServiceConnectClusterProcedure is the fully-qualified name of the ClusterService's
+	// ConnectCluster RPC.
+	ClusterServiceConnectClusterProcedure = "/controlplane.v1.ClusterService/ConnectCluster"
 )
 
 // ClusterServiceClient is a client for the controlplane.v1.ClusterService service.
@@ -74,6 +77,28 @@ type ClusterServiceClient interface {
 	// any outstanding bootstrap, and frees its name. REFUSED (FailedPrecondition)
 	// while any live environment references the cluster.
 	RemoveCluster(context.Context, *connect.Request[v1.RemoveClusterRequest]) (*connect.Response[v1.RemoveClusterResponse], error)
+	// ConnectCluster registers a cluster BY ADDRESS, with no agent in it.
+	//
+	// THE AGENTLESS SIBLING OF RegisterCluster, and the difference is which
+	// party holds the credential. RegisterCluster mints a bootstrap, the
+	// customer installs an agent, and the agent reports {server, CA, token} it
+	// minted itself. ConnectCluster is told the address and the CA up front,
+	// and authenticates either as a cloud workload identity (no secret crosses
+	// the boundary at all) or with a scoped ServiceAccount token the owner
+	// pasted once. Nothing is installed in the target cluster.
+	//
+	// DECLARATIVE AND IDEMPOTENT BY NAME. `forge cluster connect <name>` is
+	// re-run from a checkout, so a second call with different values UPDATES
+	// them rather than failing on a name collision. That is what makes the
+	// connect command safe to put in a script, and it is why there is no
+	// separate UpdateCluster: a second spelling of the same write could
+	// disagree with this one about what a partial request means.
+	//
+	// THE RESPONSE CARRIES THE HUB'S OWN IDENTITY, which is the half a caller
+	// cannot derive. Workload identity means the TARGET cluster must grant
+	// something to US, so forge prints the one-time IAM + RBAC grant the owner
+	// runs — and it can only print it if it knows which principal to name.
+	ConnectCluster(context.Context, *connect.Request[v1.ConnectClusterRequest]) (*connect.Response[v1.ConnectClusterResponse], error)
 }
 
 // NewClusterServiceClient constructs a client for the controlplane.v1.ClusterService service. By
@@ -117,6 +142,12 @@ func NewClusterServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithSchema(clusterServiceMethods.ByName("RemoveCluster")),
 			connect.WithClientOptions(opts...),
 		),
+		connectCluster: connect.NewClient[v1.ConnectClusterRequest, v1.ConnectClusterResponse](
+			httpClient,
+			baseURL+ClusterServiceConnectClusterProcedure,
+			connect.WithSchema(clusterServiceMethods.ByName("ConnectCluster")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -127,6 +158,7 @@ type clusterServiceClient struct {
 	getCluster      *connect.Client[v1.GetClusterRequest, v1.GetClusterResponse]
 	rotateBootstrap *connect.Client[v1.RotateClusterBootstrapRequest, v1.RotateClusterBootstrapResponse]
 	removeCluster   *connect.Client[v1.RemoveClusterRequest, v1.RemoveClusterResponse]
+	connectCluster  *connect.Client[v1.ConnectClusterRequest, v1.ConnectClusterResponse]
 }
 
 // RegisterCluster calls controlplane.v1.ClusterService.RegisterCluster.
@@ -154,6 +186,11 @@ func (c *clusterServiceClient) RemoveCluster(ctx context.Context, req *connect.R
 	return c.removeCluster.CallUnary(ctx, req)
 }
 
+// ConnectCluster calls controlplane.v1.ClusterService.ConnectCluster.
+func (c *clusterServiceClient) ConnectCluster(ctx context.Context, req *connect.Request[v1.ConnectClusterRequest]) (*connect.Response[v1.ConnectClusterResponse], error) {
+	return c.connectCluster.CallUnary(ctx, req)
+}
+
 // ClusterServiceHandler is an implementation of the controlplane.v1.ClusterService service.
 type ClusterServiceHandler interface {
 	// RegisterCluster records a new BYO cluster and mints its one-time
@@ -172,6 +209,28 @@ type ClusterServiceHandler interface {
 	// any outstanding bootstrap, and frees its name. REFUSED (FailedPrecondition)
 	// while any live environment references the cluster.
 	RemoveCluster(context.Context, *connect.Request[v1.RemoveClusterRequest]) (*connect.Response[v1.RemoveClusterResponse], error)
+	// ConnectCluster registers a cluster BY ADDRESS, with no agent in it.
+	//
+	// THE AGENTLESS SIBLING OF RegisterCluster, and the difference is which
+	// party holds the credential. RegisterCluster mints a bootstrap, the
+	// customer installs an agent, and the agent reports {server, CA, token} it
+	// minted itself. ConnectCluster is told the address and the CA up front,
+	// and authenticates either as a cloud workload identity (no secret crosses
+	// the boundary at all) or with a scoped ServiceAccount token the owner
+	// pasted once. Nothing is installed in the target cluster.
+	//
+	// DECLARATIVE AND IDEMPOTENT BY NAME. `forge cluster connect <name>` is
+	// re-run from a checkout, so a second call with different values UPDATES
+	// them rather than failing on a name collision. That is what makes the
+	// connect command safe to put in a script, and it is why there is no
+	// separate UpdateCluster: a second spelling of the same write could
+	// disagree with this one about what a partial request means.
+	//
+	// THE RESPONSE CARRIES THE HUB'S OWN IDENTITY, which is the half a caller
+	// cannot derive. Workload identity means the TARGET cluster must grant
+	// something to US, so forge prints the one-time IAM + RBAC grant the owner
+	// runs — and it can only print it if it knows which principal to name.
+	ConnectCluster(context.Context, *connect.Request[v1.ConnectClusterRequest]) (*connect.Response[v1.ConnectClusterResponse], error)
 }
 
 // NewClusterServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -211,6 +270,12 @@ func NewClusterServiceHandler(svc ClusterServiceHandler, opts ...connect.Handler
 		connect.WithSchema(clusterServiceMethods.ByName("RemoveCluster")),
 		connect.WithHandlerOptions(opts...),
 	)
+	clusterServiceConnectClusterHandler := connect.NewUnaryHandler(
+		ClusterServiceConnectClusterProcedure,
+		svc.ConnectCluster,
+		connect.WithSchema(clusterServiceMethods.ByName("ConnectCluster")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/controlplane.v1.ClusterService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case ClusterServiceRegisterClusterProcedure:
@@ -223,6 +288,8 @@ func NewClusterServiceHandler(svc ClusterServiceHandler, opts ...connect.Handler
 			clusterServiceRotateBootstrapHandler.ServeHTTP(w, r)
 		case ClusterServiceRemoveClusterProcedure:
 			clusterServiceRemoveClusterHandler.ServeHTTP(w, r)
+		case ClusterServiceConnectClusterProcedure:
+			clusterServiceConnectClusterHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -250,4 +317,8 @@ func (UnimplementedClusterServiceHandler) RotateBootstrap(context.Context, *conn
 
 func (UnimplementedClusterServiceHandler) RemoveCluster(context.Context, *connect.Request[v1.RemoveClusterRequest]) (*connect.Response[v1.RemoveClusterResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.ClusterService.RemoveCluster is not implemented"))
+}
+
+func (UnimplementedClusterServiceHandler) ConnectCluster(context.Context, *connect.Request[v1.ConnectClusterRequest]) (*connect.Response[v1.ConnectClusterResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.ClusterService.ConnectCluster is not implemented"))
 }

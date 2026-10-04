@@ -1223,8 +1223,7 @@ export const GetCurrentUserInfraOverageResponseSchema: GenMessage<GetCurrentUser
  */
 export type InfraDimensionUsage = Message<"controlplane.v1.InfraDimensionUsage"> & {
   /**
-   * Stable dimension id — "infra_cpu", "infra_memory", "infra_storage",
-   * "vcluster_floor".
+   * Stable dimension id — "infra_cpu", "infra_memory", "infra_storage".
    *
    * @generated from field: string dimension_id = 1;
    */

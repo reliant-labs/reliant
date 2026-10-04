@@ -549,10 +549,12 @@ message GetDeployTenantRequest {}
 
 message GetDeployTenantResponse {
   DeployTenant tenant = 1;
-  // The tenant's provisioned vClusters, if any. Folded into this response
-  // because the /deploy shell needs both to render at all, and two round
-  // trips to draw one page is a spinner nobody needs to see.
-  repeated DeployTenantCluster clusters = 2;
+
+  // 2 was clusters, the tenant's provisioned vClusters. Deleted with the
+  // vCluster model; an org's clusters are ClusterService.ListClusters, which
+  // serves the connected ones this never could.
+  reserved 2;
+  reserved "clusters";
 }
 
 message CreateDeployTenantRequest {

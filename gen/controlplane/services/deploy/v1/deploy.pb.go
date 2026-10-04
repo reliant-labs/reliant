@@ -65,12 +65,8 @@ func (*GetDeployTenantRequest) Descriptor() ([]byte, []int) {
 }
 
 type GetDeployTenantResponse struct {
-	state  protoimpl.MessageState `protogen:"open.v1"`
-	Tenant *v1.DeployTenant       `protobuf:"bytes,1,opt,name=tenant,proto3" json:"tenant,omitempty"`
-	// The tenant's provisioned vClusters, if any. Folded into this response
-	// because the /deploy shell needs both to render at all, and two round
-	// trips to draw one page is a spinner nobody needs to see.
-	Clusters      []*v1.DeployTenantCluster `protobuf:"bytes,2,rep,name=clusters,proto3" json:"clusters,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Tenant        *v1.DeployTenant       `protobuf:"bytes,1,opt,name=tenant,proto3" json:"tenant,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -108,13 +104,6 @@ func (*GetDeployTenantResponse) Descriptor() ([]byte, []int) {
 func (x *GetDeployTenantResponse) GetTenant() *v1.DeployTenant {
 	if x != nil {
 		return x.Tenant
-	}
-	return nil
-}
-
-func (x *GetDeployTenantResponse) GetClusters() []*v1.DeployTenantCluster {
-	if x != nil {
-		return x.Clusters
 	}
 	return nil
 }
@@ -5146,10 +5135,9 @@ var File_services_deploy_v1_deploy_proto protoreflect.FileDescriptor
 const file_services_deploy_v1_deploy_proto_rawDesc = "" +
 	"\n" +
 	"\x1fservices/deploy/v1/deploy.proto\x12\x0fcontrolplane.v1\x1a\x1ccontrolplane/v1/deploy.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x18\n" +
-	"\x16GetDeployTenantRequest\"\x92\x01\n" +
+	"\x16GetDeployTenantRequest\"`\n" +
 	"\x17GetDeployTenantResponse\x125\n" +
-	"\x06tenant\x18\x01 \x01(\v2\x1d.controlplane.v1.DeployTenantR\x06tenant\x12@\n" +
-	"\bclusters\x18\x02 \x03(\v2$.controlplane.v1.DeployTenantClusterR\bclusters\"/\n" +
+	"\x06tenant\x18\x01 \x01(\v2\x1d.controlplane.v1.DeployTenantR\x06tenantJ\x04\b\x02\x10\x03R\bclusters\"/\n" +
 	"\x19CreateDeployTenantRequest\x12\x12\n" +
 	"\x04slug\x18\x01 \x01(\tR\x04slug\"S\n" +
 	"\x1aCreateDeployTenantResponse\x125\n" +
@@ -5668,212 +5656,210 @@ var file_services_deploy_v1_deploy_proto_goTypes = []any{
 	nil,                                     // 79: controlplane.v1.LedgerImportPromotion.ResolvedArtifactsEntry
 	nil,                                     // 80: controlplane.v1.LedgerImportPromotion.ResolvedSourcesEntry
 	(*v1.DeployTenant)(nil),                 // 81: controlplane.v1.DeployTenant
-	(*v1.DeployTenantCluster)(nil),          // 82: controlplane.v1.DeployTenantCluster
-	(*v1.DeployEnvironmentSpec)(nil),        // 83: controlplane.v1.DeployEnvironmentSpec
-	(*v1.DeployEnvironment)(nil),            // 84: controlplane.v1.DeployEnvironment
-	(*v1.DeployPromotion)(nil),              // 85: controlplane.v1.DeployPromotion
-	(v1.DeployEnvironmentKind)(0),           // 86: controlplane.v1.DeployEnvironmentKind
-	(v1.DeployTier)(0),                      // 87: controlplane.v1.DeployTier
-	(*structpb.Struct)(nil),                 // 88: google.protobuf.Struct
-	(*v1.Deployment)(nil),                   // 89: controlplane.v1.Deployment
-	(v1.DeployObservedState)(0),             // 90: controlplane.v1.DeployObservedState
-	(*v1.DeployGate)(nil),                   // 91: controlplane.v1.DeployGate
-	(*v1.DeployRun)(nil),                    // 92: controlplane.v1.DeployRun
-	(v1.DeployRunState)(0),                  // 93: controlplane.v1.DeployRunState
-	(v1.DeployVerdict)(0),                   // 94: controlplane.v1.DeployVerdict
-	(*timestamppb.Timestamp)(nil),           // 95: google.protobuf.Timestamp
-	(v1.DeployReconcilePolicy)(0),           // 96: controlplane.v1.DeployReconcilePolicy
-	(v1.DeployLogStream)(0),                 // 97: controlplane.v1.DeployLogStream
-	(*v1.DeployLogLine)(nil),                // 98: controlplane.v1.DeployLogLine
-	(*v1.DeployArtifact)(nil),               // 99: controlplane.v1.DeployArtifact
-	(*v1.DeploySourceProvenance)(nil),       // 100: controlplane.v1.DeploySourceProvenance
-	(*v1.DeployRelease)(nil),                // 101: controlplane.v1.DeployRelease
-	(v1.DeployPromotionKind)(0),             // 102: controlplane.v1.DeployPromotionKind
-	(*v1.DeployRollout)(nil),                // 103: controlplane.v1.DeployRollout
-	(*v1.DeployRunStage)(nil),               // 104: controlplane.v1.DeployRunStage
-	(v1.DeployResourceKind)(0),              // 105: controlplane.v1.DeployResourceKind
-	(*v1.DeployUsageRow)(nil),               // 106: controlplane.v1.DeployUsageRow
-	(*v1.DeployBundle)(nil),                 // 107: controlplane.v1.DeployBundle
-	(*v1.DeployConvergence)(nil),            // 108: controlplane.v1.DeployConvergence
-	(*v1.DeployLiveEnvironment)(nil),        // 109: controlplane.v1.DeployLiveEnvironment
-	(*v1.DeployPlan)(nil),                   // 110: controlplane.v1.DeployPlan
-	(*v1.DeployWorktree)(nil),               // 111: controlplane.v1.DeployWorktree
-	(*v1.DeployLocalSession)(nil),           // 112: controlplane.v1.DeployLocalSession
-	(*v1.DeployDrift)(nil),                  // 113: controlplane.v1.DeployDrift
-	(*v1.DeploySource)(nil),                 // 114: controlplane.v1.DeploySource
+	(*v1.DeployEnvironmentSpec)(nil),        // 82: controlplane.v1.DeployEnvironmentSpec
+	(*v1.DeployEnvironment)(nil),            // 83: controlplane.v1.DeployEnvironment
+	(*v1.DeployPromotion)(nil),              // 84: controlplane.v1.DeployPromotion
+	(v1.DeployEnvironmentKind)(0),           // 85: controlplane.v1.DeployEnvironmentKind
+	(v1.DeployTier)(0),                      // 86: controlplane.v1.DeployTier
+	(*structpb.Struct)(nil),                 // 87: google.protobuf.Struct
+	(*v1.Deployment)(nil),                   // 88: controlplane.v1.Deployment
+	(v1.DeployObservedState)(0),             // 89: controlplane.v1.DeployObservedState
+	(*v1.DeployGate)(nil),                   // 90: controlplane.v1.DeployGate
+	(*v1.DeployRun)(nil),                    // 91: controlplane.v1.DeployRun
+	(v1.DeployRunState)(0),                  // 92: controlplane.v1.DeployRunState
+	(v1.DeployVerdict)(0),                   // 93: controlplane.v1.DeployVerdict
+	(*timestamppb.Timestamp)(nil),           // 94: google.protobuf.Timestamp
+	(v1.DeployReconcilePolicy)(0),           // 95: controlplane.v1.DeployReconcilePolicy
+	(v1.DeployLogStream)(0),                 // 96: controlplane.v1.DeployLogStream
+	(*v1.DeployLogLine)(nil),                // 97: controlplane.v1.DeployLogLine
+	(*v1.DeployArtifact)(nil),               // 98: controlplane.v1.DeployArtifact
+	(*v1.DeploySourceProvenance)(nil),       // 99: controlplane.v1.DeploySourceProvenance
+	(*v1.DeployRelease)(nil),                // 100: controlplane.v1.DeployRelease
+	(v1.DeployPromotionKind)(0),             // 101: controlplane.v1.DeployPromotionKind
+	(*v1.DeployRollout)(nil),                // 102: controlplane.v1.DeployRollout
+	(*v1.DeployRunStage)(nil),               // 103: controlplane.v1.DeployRunStage
+	(v1.DeployResourceKind)(0),              // 104: controlplane.v1.DeployResourceKind
+	(*v1.DeployUsageRow)(nil),               // 105: controlplane.v1.DeployUsageRow
+	(*v1.DeployBundle)(nil),                 // 106: controlplane.v1.DeployBundle
+	(*v1.DeployConvergence)(nil),            // 107: controlplane.v1.DeployConvergence
+	(*v1.DeployLiveEnvironment)(nil),        // 108: controlplane.v1.DeployLiveEnvironment
+	(*v1.DeployPlan)(nil),                   // 109: controlplane.v1.DeployPlan
+	(*v1.DeployWorktree)(nil),               // 110: controlplane.v1.DeployWorktree
+	(*v1.DeployLocalSession)(nil),           // 111: controlplane.v1.DeployLocalSession
+	(*v1.DeployDrift)(nil),                  // 112: controlplane.v1.DeployDrift
+	(*v1.DeploySource)(nil),                 // 113: controlplane.v1.DeploySource
 }
 var file_services_deploy_v1_deploy_proto_depIdxs = []int32{
 	81,  // 0: controlplane.v1.GetDeployTenantResponse.tenant:type_name -> controlplane.v1.DeployTenant
-	82,  // 1: controlplane.v1.GetDeployTenantResponse.clusters:type_name -> controlplane.v1.DeployTenantCluster
-	81,  // 2: controlplane.v1.CreateDeployTenantResponse.tenant:type_name -> controlplane.v1.DeployTenant
-	83,  // 3: controlplane.v1.CreateDeployEnvironmentRequest.spec:type_name -> controlplane.v1.DeployEnvironmentSpec
-	84,  // 4: controlplane.v1.CreateDeployEnvironmentResponse.environment:type_name -> controlplane.v1.DeployEnvironment
-	84,  // 5: controlplane.v1.GetDeployEnvironmentResponse.environment:type_name -> controlplane.v1.DeployEnvironment
-	85,  // 6: controlplane.v1.GetDeployEnvironmentResponse.current_promotion:type_name -> controlplane.v1.DeployPromotion
-	86,  // 7: controlplane.v1.ListDeployEnvironmentsRequest.kind:type_name -> controlplane.v1.DeployEnvironmentKind
-	84,  // 8: controlplane.v1.ListDeployEnvironmentsResponse.environments:type_name -> controlplane.v1.DeployEnvironment
-	83,  // 9: controlplane.v1.UpdateDeployEnvironmentRequest.spec:type_name -> controlplane.v1.DeployEnvironmentSpec
-	84,  // 10: controlplane.v1.UpdateDeployEnvironmentResponse.environment:type_name -> controlplane.v1.DeployEnvironment
-	83,  // 11: controlplane.v1.EnsureDeployEnvironmentRequest.spec:type_name -> controlplane.v1.DeployEnvironmentSpec
-	84,  // 12: controlplane.v1.EnsureDeployEnvironmentResponse.environment:type_name -> controlplane.v1.DeployEnvironment
-	87,  // 13: controlplane.v1.CreateDeploymentRequest.tier:type_name -> controlplane.v1.DeployTier
-	88,  // 14: controlplane.v1.CreateDeploymentRequest.spec:type_name -> google.protobuf.Struct
-	89,  // 15: controlplane.v1.CreateDeploymentResponse.deployment:type_name -> controlplane.v1.Deployment
-	89,  // 16: controlplane.v1.GetDeploymentResponse.deployment:type_name -> controlplane.v1.Deployment
-	87,  // 17: controlplane.v1.ListDeploymentsRequest.tier:type_name -> controlplane.v1.DeployTier
-	90,  // 18: controlplane.v1.ListDeploymentsRequest.observed_state:type_name -> controlplane.v1.DeployObservedState
-	89,  // 19: controlplane.v1.ListDeploymentsResponse.deployments:type_name -> controlplane.v1.Deployment
-	88,  // 20: controlplane.v1.UpdateDeploymentRequest.spec:type_name -> google.protobuf.Struct
-	89,  // 21: controlplane.v1.UpdateDeploymentResponse.deployment:type_name -> controlplane.v1.Deployment
-	87,  // 22: controlplane.v1.EnsureDeploymentRequest.tier:type_name -> controlplane.v1.DeployTier
-	88,  // 23: controlplane.v1.EnsureDeploymentRequest.spec:type_name -> google.protobuf.Struct
-	89,  // 24: controlplane.v1.EnsureDeploymentResponse.deployment:type_name -> controlplane.v1.Deployment
-	91,  // 25: controlplane.v1.PromoteReleaseRequest.gates:type_name -> controlplane.v1.DeployGate
-	92,  // 26: controlplane.v1.PromoteReleaseRequest.run:type_name -> controlplane.v1.DeployRun
-	85,  // 27: controlplane.v1.PromoteReleaseResponse.promotion:type_name -> controlplane.v1.DeployPromotion
-	93,  // 28: controlplane.v1.ScaleDeploymentRequest.run_state:type_name -> controlplane.v1.DeployRunState
-	89,  // 29: controlplane.v1.ScaleDeploymentResponse.deployment:type_name -> controlplane.v1.Deployment
-	89,  // 30: controlplane.v1.DeploymentStatus.deployment:type_name -> controlplane.v1.Deployment
-	94,  // 31: controlplane.v1.DeploymentStatus.verdict:type_name -> controlplane.v1.DeployVerdict
-	95,  // 32: controlplane.v1.DeploymentStatus.observed_at:type_name -> google.protobuf.Timestamp
-	89,  // 33: controlplane.v1.GetDeploymentStatusResponse.deployment:type_name -> controlplane.v1.Deployment
-	85,  // 34: controlplane.v1.GetDeploymentStatusResponse.current_promotion:type_name -> controlplane.v1.DeployPromotion
-	95,  // 35: controlplane.v1.GetDeploymentStatusResponse.observed_at:type_name -> google.protobuf.Timestamp
-	94,  // 36: controlplane.v1.GetDeploymentStatusResponse.verdict:type_name -> controlplane.v1.DeployVerdict
-	35,  // 37: controlplane.v1.GetDeploymentStatusResponse.deployments:type_name -> controlplane.v1.DeploymentStatus
-	94,  // 38: controlplane.v1.GetDeploymentStatusResponse.environment_verdict:type_name -> controlplane.v1.DeployVerdict
-	96,  // 39: controlplane.v1.GetDeploymentStatusResponse.reconcile_policy:type_name -> controlplane.v1.DeployReconcilePolicy
-	97,  // 40: controlplane.v1.StreamDeploymentLogsRequest.stream:type_name -> controlplane.v1.DeployLogStream
-	98,  // 41: controlplane.v1.StreamDeploymentLogsResponse.lines:type_name -> controlplane.v1.DeployLogLine
-	99,  // 42: controlplane.v1.CutReleaseRequest.artifacts:type_name -> controlplane.v1.DeployArtifact
-	92,  // 43: controlplane.v1.CutReleaseRequest.run:type_name -> controlplane.v1.DeployRun
-	100, // 44: controlplane.v1.CutReleaseRequest.provenance:type_name -> controlplane.v1.DeploySourceProvenance
-	101, // 45: controlplane.v1.CutReleaseResponse.release:type_name -> controlplane.v1.DeployRelease
-	101, // 46: controlplane.v1.ListDeployReleasesResponse.releases:type_name -> controlplane.v1.DeployRelease
-	101, // 47: controlplane.v1.GetDeployReleaseResponse.release:type_name -> controlplane.v1.DeployRelease
-	102, // 48: controlplane.v1.ListDeployPromotionsRequest.kind:type_name -> controlplane.v1.DeployPromotionKind
-	85,  // 49: controlplane.v1.ListDeployPromotionsResponse.promotions:type_name -> controlplane.v1.DeployPromotion
-	103, // 50: controlplane.v1.GetDeployRolloutResponse.rollout:type_name -> controlplane.v1.DeployRollout
-	91,  // 51: controlplane.v1.RecordDeployGateRequest.gate:type_name -> controlplane.v1.DeployGate
-	91,  // 52: controlplane.v1.RecordDeployGateResponse.gate:type_name -> controlplane.v1.DeployGate
-	91,  // 53: controlplane.v1.ListDeployGatesResponse.gates:type_name -> controlplane.v1.DeployGate
-	92,  // 54: controlplane.v1.GetDeployRunResponse.run:type_name -> controlplane.v1.DeployRun
-	101, // 55: controlplane.v1.GetDeployRunResponse.release:type_name -> controlplane.v1.DeployRelease
-	104, // 56: controlplane.v1.GetDeployRunResponse.stages:type_name -> controlplane.v1.DeployRunStage
-	95,  // 57: controlplane.v1.ListDeployUsageRequest.start_time:type_name -> google.protobuf.Timestamp
-	95,  // 58: controlplane.v1.ListDeployUsageRequest.end_time:type_name -> google.protobuf.Timestamp
-	105, // 59: controlplane.v1.ListDeployUsageRequest.resource_kind:type_name -> controlplane.v1.DeployResourceKind
-	106, // 60: controlplane.v1.ListDeployUsageResponse.rows:type_name -> controlplane.v1.DeployUsageRow
-	92,  // 61: controlplane.v1.RecordDeployBundleRequest.run:type_name -> controlplane.v1.DeployRun
-	107, // 62: controlplane.v1.RecordDeployBundleResponse.bundle:type_name -> controlplane.v1.DeployBundle
-	107, // 63: controlplane.v1.GetDeployBundleResponse.bundle:type_name -> controlplane.v1.DeployBundle
-	108, // 64: controlplane.v1.ListDeployConvergencesResponse.convergences:type_name -> controlplane.v1.DeployConvergence
-	109, // 65: controlplane.v1.GetDeployLiveViewResponse.environments:type_name -> controlplane.v1.DeployLiveEnvironment
-	110, // 66: controlplane.v1.PlanDeployResponse.plan:type_name -> controlplane.v1.DeployPlan
-	111, // 67: controlplane.v1.ReportLocalSessionRequest.worktree:type_name -> controlplane.v1.DeployWorktree
-	100, // 68: controlplane.v1.ReportLocalSessionRequest.provenance:type_name -> controlplane.v1.DeploySourceProvenance
-	112, // 69: controlplane.v1.ReportLocalSessionResponse.session:type_name -> controlplane.v1.DeployLocalSession
-	70,  // 70: controlplane.v1.ImportLedgerRequest.releases:type_name -> controlplane.v1.LedgerImportRelease
-	71,  // 71: controlplane.v1.ImportLedgerRequest.environments:type_name -> controlplane.v1.LedgerImportEnvironment
-	72,  // 72: controlplane.v1.ImportLedgerRequest.promotions:type_name -> controlplane.v1.LedgerImportPromotion
-	73,  // 73: controlplane.v1.ImportLedgerRequest.bundles:type_name -> controlplane.v1.LedgerImportBundle
-	74,  // 74: controlplane.v1.ImportLedgerRequest.applies:type_name -> controlplane.v1.LedgerImportApply
-	99,  // 75: controlplane.v1.LedgerImportRelease.artifacts:type_name -> controlplane.v1.DeployArtifact
-	100, // 76: controlplane.v1.LedgerImportRelease.provenance:type_name -> controlplane.v1.DeploySourceProvenance
-	95,  // 77: controlplane.v1.LedgerImportRelease.created_at:type_name -> google.protobuf.Timestamp
-	86,  // 78: controlplane.v1.LedgerImportEnvironment.kind:type_name -> controlplane.v1.DeployEnvironmentKind
-	95,  // 79: controlplane.v1.LedgerImportEnvironment.deleted_at:type_name -> google.protobuf.Timestamp
-	79,  // 80: controlplane.v1.LedgerImportPromotion.resolved_artifacts:type_name -> controlplane.v1.LedgerImportPromotion.ResolvedArtifactsEntry
-	80,  // 81: controlplane.v1.LedgerImportPromotion.resolved_sources:type_name -> controlplane.v1.LedgerImportPromotion.ResolvedSourcesEntry
-	91,  // 82: controlplane.v1.LedgerImportPromotion.gates:type_name -> controlplane.v1.DeployGate
-	95,  // 83: controlplane.v1.LedgerImportPromotion.promoted_at:type_name -> google.protobuf.Timestamp
-	88,  // 84: controlplane.v1.LedgerImportBundle.shape:type_name -> google.protobuf.Struct
-	100, // 85: controlplane.v1.LedgerImportBundle.provenance:type_name -> controlplane.v1.DeploySourceProvenance
-	95,  // 86: controlplane.v1.LedgerImportBundle.created_at:type_name -> google.protobuf.Timestamp
-	75,  // 87: controlplane.v1.LedgerImportApply.outcome:type_name -> controlplane.v1.LedgerImportApplyOutcome
-	95,  // 88: controlplane.v1.LedgerImportApply.created_at:type_name -> google.protobuf.Timestamp
-	88,  // 89: controlplane.v1.LedgerImportApplyOutcome.workloads:type_name -> google.protobuf.Struct
-	95,  // 90: controlplane.v1.LedgerImportApplyOutcome.finished_at:type_name -> google.protobuf.Timestamp
-	88,  // 91: controlplane.v1.ImportLedgerResponse.counts:type_name -> google.protobuf.Struct
-	113, // 92: controlplane.v1.GetDeployDriftResponse.drift:type_name -> controlplane.v1.DeployDrift
-	114, // 93: controlplane.v1.LedgerImportPromotion.ResolvedSourcesEntry.value:type_name -> controlplane.v1.DeploySource
-	0,   // 94: controlplane.v1.DeployService.GetTenant:input_type -> controlplane.v1.GetDeployTenantRequest
-	2,   // 95: controlplane.v1.DeployService.CreateTenant:input_type -> controlplane.v1.CreateDeployTenantRequest
-	4,   // 96: controlplane.v1.DeployService.CreateEnvironment:input_type -> controlplane.v1.CreateDeployEnvironmentRequest
-	6,   // 97: controlplane.v1.DeployService.GetEnvironment:input_type -> controlplane.v1.GetDeployEnvironmentRequest
-	8,   // 98: controlplane.v1.DeployService.ListEnvironments:input_type -> controlplane.v1.ListDeployEnvironmentsRequest
-	10,  // 99: controlplane.v1.DeployService.UpdateEnvironment:input_type -> controlplane.v1.UpdateDeployEnvironmentRequest
-	12,  // 100: controlplane.v1.DeployService.DeleteEnvironment:input_type -> controlplane.v1.DeleteDeployEnvironmentRequest
-	14,  // 101: controlplane.v1.DeployService.EnsureEnvironment:input_type -> controlplane.v1.EnsureDeployEnvironmentRequest
-	16,  // 102: controlplane.v1.DeployService.CreateDeployment:input_type -> controlplane.v1.CreateDeploymentRequest
-	18,  // 103: controlplane.v1.DeployService.GetDeployment:input_type -> controlplane.v1.GetDeploymentRequest
-	20,  // 104: controlplane.v1.DeployService.ListDeployments:input_type -> controlplane.v1.ListDeploymentsRequest
-	22,  // 105: controlplane.v1.DeployService.UpdateDeployment:input_type -> controlplane.v1.UpdateDeploymentRequest
-	24,  // 106: controlplane.v1.DeployService.DeleteDeployment:input_type -> controlplane.v1.DeleteDeploymentRequest
-	26,  // 107: controlplane.v1.DeployService.EnsureDeployment:input_type -> controlplane.v1.EnsureDeploymentRequest
-	30,  // 108: controlplane.v1.DeployService.Promote:input_type -> controlplane.v1.PromoteReleaseRequest
-	32,  // 109: controlplane.v1.DeployService.Scale:input_type -> controlplane.v1.ScaleDeploymentRequest
-	34,  // 110: controlplane.v1.DeployService.GetStatus:input_type -> controlplane.v1.GetDeploymentStatusRequest
-	37,  // 111: controlplane.v1.DeployService.StreamLogs:input_type -> controlplane.v1.StreamDeploymentLogsRequest
-	28,  // 112: controlplane.v1.DeployService.PublishDeploymentConfig:input_type -> controlplane.v1.PublishDeploymentConfigRequest
-	39,  // 113: controlplane.v1.DeployService.CutRelease:input_type -> controlplane.v1.CutReleaseRequest
-	41,  // 114: controlplane.v1.DeployService.ListReleases:input_type -> controlplane.v1.ListDeployReleasesRequest
-	43,  // 115: controlplane.v1.DeployService.GetRelease:input_type -> controlplane.v1.GetDeployReleaseRequest
-	45,  // 116: controlplane.v1.DeployService.ListPromotions:input_type -> controlplane.v1.ListDeployPromotionsRequest
-	47,  // 117: controlplane.v1.DeployService.GetRollout:input_type -> controlplane.v1.GetDeployRolloutRequest
-	49,  // 118: controlplane.v1.DeployService.RecordGate:input_type -> controlplane.v1.RecordDeployGateRequest
-	51,  // 119: controlplane.v1.DeployService.ListGates:input_type -> controlplane.v1.ListDeployGatesRequest
-	53,  // 120: controlplane.v1.DeployService.GetRun:input_type -> controlplane.v1.GetDeployRunRequest
-	55,  // 121: controlplane.v1.DeployService.ListUsage:input_type -> controlplane.v1.ListDeployUsageRequest
-	57,  // 122: controlplane.v1.DeployService.RecordBundle:input_type -> controlplane.v1.RecordDeployBundleRequest
-	59,  // 123: controlplane.v1.DeployService.GetBundle:input_type -> controlplane.v1.GetDeployBundleRequest
-	61,  // 124: controlplane.v1.DeployService.ListConvergences:input_type -> controlplane.v1.ListDeployConvergencesRequest
-	63,  // 125: controlplane.v1.DeployService.GetLiveView:input_type -> controlplane.v1.GetDeployLiveViewRequest
-	65,  // 126: controlplane.v1.DeployService.PlanDeploy:input_type -> controlplane.v1.PlanDeployRequest
-	67,  // 127: controlplane.v1.DeployService.ReportLocalSession:input_type -> controlplane.v1.ReportLocalSessionRequest
-	69,  // 128: controlplane.v1.DeployService.ImportLedger:input_type -> controlplane.v1.ImportLedgerRequest
-	77,  // 129: controlplane.v1.DeployService.GetDrift:input_type -> controlplane.v1.GetDeployDriftRequest
-	1,   // 130: controlplane.v1.DeployService.GetTenant:output_type -> controlplane.v1.GetDeployTenantResponse
-	3,   // 131: controlplane.v1.DeployService.CreateTenant:output_type -> controlplane.v1.CreateDeployTenantResponse
-	5,   // 132: controlplane.v1.DeployService.CreateEnvironment:output_type -> controlplane.v1.CreateDeployEnvironmentResponse
-	7,   // 133: controlplane.v1.DeployService.GetEnvironment:output_type -> controlplane.v1.GetDeployEnvironmentResponse
-	9,   // 134: controlplane.v1.DeployService.ListEnvironments:output_type -> controlplane.v1.ListDeployEnvironmentsResponse
-	11,  // 135: controlplane.v1.DeployService.UpdateEnvironment:output_type -> controlplane.v1.UpdateDeployEnvironmentResponse
-	13,  // 136: controlplane.v1.DeployService.DeleteEnvironment:output_type -> controlplane.v1.DeleteDeployEnvironmentResponse
-	15,  // 137: controlplane.v1.DeployService.EnsureEnvironment:output_type -> controlplane.v1.EnsureDeployEnvironmentResponse
-	17,  // 138: controlplane.v1.DeployService.CreateDeployment:output_type -> controlplane.v1.CreateDeploymentResponse
-	19,  // 139: controlplane.v1.DeployService.GetDeployment:output_type -> controlplane.v1.GetDeploymentResponse
-	21,  // 140: controlplane.v1.DeployService.ListDeployments:output_type -> controlplane.v1.ListDeploymentsResponse
-	23,  // 141: controlplane.v1.DeployService.UpdateDeployment:output_type -> controlplane.v1.UpdateDeploymentResponse
-	25,  // 142: controlplane.v1.DeployService.DeleteDeployment:output_type -> controlplane.v1.DeleteDeploymentResponse
-	27,  // 143: controlplane.v1.DeployService.EnsureDeployment:output_type -> controlplane.v1.EnsureDeploymentResponse
-	31,  // 144: controlplane.v1.DeployService.Promote:output_type -> controlplane.v1.PromoteReleaseResponse
-	33,  // 145: controlplane.v1.DeployService.Scale:output_type -> controlplane.v1.ScaleDeploymentResponse
-	36,  // 146: controlplane.v1.DeployService.GetStatus:output_type -> controlplane.v1.GetDeploymentStatusResponse
-	38,  // 147: controlplane.v1.DeployService.StreamLogs:output_type -> controlplane.v1.StreamDeploymentLogsResponse
-	29,  // 148: controlplane.v1.DeployService.PublishDeploymentConfig:output_type -> controlplane.v1.PublishDeploymentConfigResponse
-	40,  // 149: controlplane.v1.DeployService.CutRelease:output_type -> controlplane.v1.CutReleaseResponse
-	42,  // 150: controlplane.v1.DeployService.ListReleases:output_type -> controlplane.v1.ListDeployReleasesResponse
-	44,  // 151: controlplane.v1.DeployService.GetRelease:output_type -> controlplane.v1.GetDeployReleaseResponse
-	46,  // 152: controlplane.v1.DeployService.ListPromotions:output_type -> controlplane.v1.ListDeployPromotionsResponse
-	48,  // 153: controlplane.v1.DeployService.GetRollout:output_type -> controlplane.v1.GetDeployRolloutResponse
-	50,  // 154: controlplane.v1.DeployService.RecordGate:output_type -> controlplane.v1.RecordDeployGateResponse
-	52,  // 155: controlplane.v1.DeployService.ListGates:output_type -> controlplane.v1.ListDeployGatesResponse
-	54,  // 156: controlplane.v1.DeployService.GetRun:output_type -> controlplane.v1.GetDeployRunResponse
-	56,  // 157: controlplane.v1.DeployService.ListUsage:output_type -> controlplane.v1.ListDeployUsageResponse
-	58,  // 158: controlplane.v1.DeployService.RecordBundle:output_type -> controlplane.v1.RecordDeployBundleResponse
-	60,  // 159: controlplane.v1.DeployService.GetBundle:output_type -> controlplane.v1.GetDeployBundleResponse
-	62,  // 160: controlplane.v1.DeployService.ListConvergences:output_type -> controlplane.v1.ListDeployConvergencesResponse
-	64,  // 161: controlplane.v1.DeployService.GetLiveView:output_type -> controlplane.v1.GetDeployLiveViewResponse
-	66,  // 162: controlplane.v1.DeployService.PlanDeploy:output_type -> controlplane.v1.PlanDeployResponse
-	68,  // 163: controlplane.v1.DeployService.ReportLocalSession:output_type -> controlplane.v1.ReportLocalSessionResponse
-	76,  // 164: controlplane.v1.DeployService.ImportLedger:output_type -> controlplane.v1.ImportLedgerResponse
-	78,  // 165: controlplane.v1.DeployService.GetDrift:output_type -> controlplane.v1.GetDeployDriftResponse
-	130, // [130:166] is the sub-list for method output_type
-	94,  // [94:130] is the sub-list for method input_type
-	94,  // [94:94] is the sub-list for extension type_name
-	94,  // [94:94] is the sub-list for extension extendee
-	0,   // [0:94] is the sub-list for field type_name
+	81,  // 1: controlplane.v1.CreateDeployTenantResponse.tenant:type_name -> controlplane.v1.DeployTenant
+	82,  // 2: controlplane.v1.CreateDeployEnvironmentRequest.spec:type_name -> controlplane.v1.DeployEnvironmentSpec
+	83,  // 3: controlplane.v1.CreateDeployEnvironmentResponse.environment:type_name -> controlplane.v1.DeployEnvironment
+	83,  // 4: controlplane.v1.GetDeployEnvironmentResponse.environment:type_name -> controlplane.v1.DeployEnvironment
+	84,  // 5: controlplane.v1.GetDeployEnvironmentResponse.current_promotion:type_name -> controlplane.v1.DeployPromotion
+	85,  // 6: controlplane.v1.ListDeployEnvironmentsRequest.kind:type_name -> controlplane.v1.DeployEnvironmentKind
+	83,  // 7: controlplane.v1.ListDeployEnvironmentsResponse.environments:type_name -> controlplane.v1.DeployEnvironment
+	82,  // 8: controlplane.v1.UpdateDeployEnvironmentRequest.spec:type_name -> controlplane.v1.DeployEnvironmentSpec
+	83,  // 9: controlplane.v1.UpdateDeployEnvironmentResponse.environment:type_name -> controlplane.v1.DeployEnvironment
+	82,  // 10: controlplane.v1.EnsureDeployEnvironmentRequest.spec:type_name -> controlplane.v1.DeployEnvironmentSpec
+	83,  // 11: controlplane.v1.EnsureDeployEnvironmentResponse.environment:type_name -> controlplane.v1.DeployEnvironment
+	86,  // 12: controlplane.v1.CreateDeploymentRequest.tier:type_name -> controlplane.v1.DeployTier
+	87,  // 13: controlplane.v1.CreateDeploymentRequest.spec:type_name -> google.protobuf.Struct
+	88,  // 14: controlplane.v1.CreateDeploymentResponse.deployment:type_name -> controlplane.v1.Deployment
+	88,  // 15: controlplane.v1.GetDeploymentResponse.deployment:type_name -> controlplane.v1.Deployment
+	86,  // 16: controlplane.v1.ListDeploymentsRequest.tier:type_name -> controlplane.v1.DeployTier
+	89,  // 17: controlplane.v1.ListDeploymentsRequest.observed_state:type_name -> controlplane.v1.DeployObservedState
+	88,  // 18: controlplane.v1.ListDeploymentsResponse.deployments:type_name -> controlplane.v1.Deployment
+	87,  // 19: controlplane.v1.UpdateDeploymentRequest.spec:type_name -> google.protobuf.Struct
+	88,  // 20: controlplane.v1.UpdateDeploymentResponse.deployment:type_name -> controlplane.v1.Deployment
+	86,  // 21: controlplane.v1.EnsureDeploymentRequest.tier:type_name -> controlplane.v1.DeployTier
+	87,  // 22: controlplane.v1.EnsureDeploymentRequest.spec:type_name -> google.protobuf.Struct
+	88,  // 23: controlplane.v1.EnsureDeploymentResponse.deployment:type_name -> controlplane.v1.Deployment
+	90,  // 24: controlplane.v1.PromoteReleaseRequest.gates:type_name -> controlplane.v1.DeployGate
+	91,  // 25: controlplane.v1.PromoteReleaseRequest.run:type_name -> controlplane.v1.DeployRun
+	84,  // 26: controlplane.v1.PromoteReleaseResponse.promotion:type_name -> controlplane.v1.DeployPromotion
+	92,  // 27: controlplane.v1.ScaleDeploymentRequest.run_state:type_name -> controlplane.v1.DeployRunState
+	88,  // 28: controlplane.v1.ScaleDeploymentResponse.deployment:type_name -> controlplane.v1.Deployment
+	88,  // 29: controlplane.v1.DeploymentStatus.deployment:type_name -> controlplane.v1.Deployment
+	93,  // 30: controlplane.v1.DeploymentStatus.verdict:type_name -> controlplane.v1.DeployVerdict
+	94,  // 31: controlplane.v1.DeploymentStatus.observed_at:type_name -> google.protobuf.Timestamp
+	88,  // 32: controlplane.v1.GetDeploymentStatusResponse.deployment:type_name -> controlplane.v1.Deployment
+	84,  // 33: controlplane.v1.GetDeploymentStatusResponse.current_promotion:type_name -> controlplane.v1.DeployPromotion
+	94,  // 34: controlplane.v1.GetDeploymentStatusResponse.observed_at:type_name -> google.protobuf.Timestamp
+	93,  // 35: controlplane.v1.GetDeploymentStatusResponse.verdict:type_name -> controlplane.v1.DeployVerdict
+	35,  // 36: controlplane.v1.GetDeploymentStatusResponse.deployments:type_name -> controlplane.v1.DeploymentStatus
+	93,  // 37: controlplane.v1.GetDeploymentStatusResponse.environment_verdict:type_name -> controlplane.v1.DeployVerdict
+	95,  // 38: controlplane.v1.GetDeploymentStatusResponse.reconcile_policy:type_name -> controlplane.v1.DeployReconcilePolicy
+	96,  // 39: controlplane.v1.StreamDeploymentLogsRequest.stream:type_name -> controlplane.v1.DeployLogStream
+	97,  // 40: controlplane.v1.StreamDeploymentLogsResponse.lines:type_name -> controlplane.v1.DeployLogLine
+	98,  // 41: controlplane.v1.CutReleaseRequest.artifacts:type_name -> controlplane.v1.DeployArtifact
+	91,  // 42: controlplane.v1.CutReleaseRequest.run:type_name -> controlplane.v1.DeployRun
+	99,  // 43: controlplane.v1.CutReleaseRequest.provenance:type_name -> controlplane.v1.DeploySourceProvenance
+	100, // 44: controlplane.v1.CutReleaseResponse.release:type_name -> controlplane.v1.DeployRelease
+	100, // 45: controlplane.v1.ListDeployReleasesResponse.releases:type_name -> controlplane.v1.DeployRelease
+	100, // 46: controlplane.v1.GetDeployReleaseResponse.release:type_name -> controlplane.v1.DeployRelease
+	101, // 47: controlplane.v1.ListDeployPromotionsRequest.kind:type_name -> controlplane.v1.DeployPromotionKind
+	84,  // 48: controlplane.v1.ListDeployPromotionsResponse.promotions:type_name -> controlplane.v1.DeployPromotion
+	102, // 49: controlplane.v1.GetDeployRolloutResponse.rollout:type_name -> controlplane.v1.DeployRollout
+	90,  // 50: controlplane.v1.RecordDeployGateRequest.gate:type_name -> controlplane.v1.DeployGate
+	90,  // 51: controlplane.v1.RecordDeployGateResponse.gate:type_name -> controlplane.v1.DeployGate
+	90,  // 52: controlplane.v1.ListDeployGatesResponse.gates:type_name -> controlplane.v1.DeployGate
+	91,  // 53: controlplane.v1.GetDeployRunResponse.run:type_name -> controlplane.v1.DeployRun
+	100, // 54: controlplane.v1.GetDeployRunResponse.release:type_name -> controlplane.v1.DeployRelease
+	103, // 55: controlplane.v1.GetDeployRunResponse.stages:type_name -> controlplane.v1.DeployRunStage
+	94,  // 56: controlplane.v1.ListDeployUsageRequest.start_time:type_name -> google.protobuf.Timestamp
+	94,  // 57: controlplane.v1.ListDeployUsageRequest.end_time:type_name -> google.protobuf.Timestamp
+	104, // 58: controlplane.v1.ListDeployUsageRequest.resource_kind:type_name -> controlplane.v1.DeployResourceKind
+	105, // 59: controlplane.v1.ListDeployUsageResponse.rows:type_name -> controlplane.v1.DeployUsageRow
+	91,  // 60: controlplane.v1.RecordDeployBundleRequest.run:type_name -> controlplane.v1.DeployRun
+	106, // 61: controlplane.v1.RecordDeployBundleResponse.bundle:type_name -> controlplane.v1.DeployBundle
+	106, // 62: controlplane.v1.GetDeployBundleResponse.bundle:type_name -> controlplane.v1.DeployBundle
+	107, // 63: controlplane.v1.ListDeployConvergencesResponse.convergences:type_name -> controlplane.v1.DeployConvergence
+	108, // 64: controlplane.v1.GetDeployLiveViewResponse.environments:type_name -> controlplane.v1.DeployLiveEnvironment
+	109, // 65: controlplane.v1.PlanDeployResponse.plan:type_name -> controlplane.v1.DeployPlan
+	110, // 66: controlplane.v1.ReportLocalSessionRequest.worktree:type_name -> controlplane.v1.DeployWorktree
+	99,  // 67: controlplane.v1.ReportLocalSessionRequest.provenance:type_name -> controlplane.v1.DeploySourceProvenance
+	111, // 68: controlplane.v1.ReportLocalSessionResponse.session:type_name -> controlplane.v1.DeployLocalSession
+	70,  // 69: controlplane.v1.ImportLedgerRequest.releases:type_name -> controlplane.v1.LedgerImportRelease
+	71,  // 70: controlplane.v1.ImportLedgerRequest.environments:type_name -> controlplane.v1.LedgerImportEnvironment
+	72,  // 71: controlplane.v1.ImportLedgerRequest.promotions:type_name -> controlplane.v1.LedgerImportPromotion
+	73,  // 72: controlplane.v1.ImportLedgerRequest.bundles:type_name -> controlplane.v1.LedgerImportBundle
+	74,  // 73: controlplane.v1.ImportLedgerRequest.applies:type_name -> controlplane.v1.LedgerImportApply
+	98,  // 74: controlplane.v1.LedgerImportRelease.artifacts:type_name -> controlplane.v1.DeployArtifact
+	99,  // 75: controlplane.v1.LedgerImportRelease.provenance:type_name -> controlplane.v1.DeploySourceProvenance
+	94,  // 76: controlplane.v1.LedgerImportRelease.created_at:type_name -> google.protobuf.Timestamp
+	85,  // 77: controlplane.v1.LedgerImportEnvironment.kind:type_name -> controlplane.v1.DeployEnvironmentKind
+	94,  // 78: controlplane.v1.LedgerImportEnvironment.deleted_at:type_name -> google.protobuf.Timestamp
+	79,  // 79: controlplane.v1.LedgerImportPromotion.resolved_artifacts:type_name -> controlplane.v1.LedgerImportPromotion.ResolvedArtifactsEntry
+	80,  // 80: controlplane.v1.LedgerImportPromotion.resolved_sources:type_name -> controlplane.v1.LedgerImportPromotion.ResolvedSourcesEntry
+	90,  // 81: controlplane.v1.LedgerImportPromotion.gates:type_name -> controlplane.v1.DeployGate
+	94,  // 82: controlplane.v1.LedgerImportPromotion.promoted_at:type_name -> google.protobuf.Timestamp
+	87,  // 83: controlplane.v1.LedgerImportBundle.shape:type_name -> google.protobuf.Struct
+	99,  // 84: controlplane.v1.LedgerImportBundle.provenance:type_name -> controlplane.v1.DeploySourceProvenance
+	94,  // 85: controlplane.v1.LedgerImportBundle.created_at:type_name -> google.protobuf.Timestamp
+	75,  // 86: controlplane.v1.LedgerImportApply.outcome:type_name -> controlplane.v1.LedgerImportApplyOutcome
+	94,  // 87: controlplane.v1.LedgerImportApply.created_at:type_name -> google.protobuf.Timestamp
+	87,  // 88: controlplane.v1.LedgerImportApplyOutcome.workloads:type_name -> google.protobuf.Struct
+	94,  // 89: controlplane.v1.LedgerImportApplyOutcome.finished_at:type_name -> google.protobuf.Timestamp
+	87,  // 90: controlplane.v1.ImportLedgerResponse.counts:type_name -> google.protobuf.Struct
+	112, // 91: controlplane.v1.GetDeployDriftResponse.drift:type_name -> controlplane.v1.DeployDrift
+	113, // 92: controlplane.v1.LedgerImportPromotion.ResolvedSourcesEntry.value:type_name -> controlplane.v1.DeploySource
+	0,   // 93: controlplane.v1.DeployService.GetTenant:input_type -> controlplane.v1.GetDeployTenantRequest
+	2,   // 94: controlplane.v1.DeployService.CreateTenant:input_type -> controlplane.v1.CreateDeployTenantRequest
+	4,   // 95: controlplane.v1.DeployService.CreateEnvironment:input_type -> controlplane.v1.CreateDeployEnvironmentRequest
+	6,   // 96: controlplane.v1.DeployService.GetEnvironment:input_type -> controlplane.v1.GetDeployEnvironmentRequest
+	8,   // 97: controlplane.v1.DeployService.ListEnvironments:input_type -> controlplane.v1.ListDeployEnvironmentsRequest
+	10,  // 98: controlplane.v1.DeployService.UpdateEnvironment:input_type -> controlplane.v1.UpdateDeployEnvironmentRequest
+	12,  // 99: controlplane.v1.DeployService.DeleteEnvironment:input_type -> controlplane.v1.DeleteDeployEnvironmentRequest
+	14,  // 100: controlplane.v1.DeployService.EnsureEnvironment:input_type -> controlplane.v1.EnsureDeployEnvironmentRequest
+	16,  // 101: controlplane.v1.DeployService.CreateDeployment:input_type -> controlplane.v1.CreateDeploymentRequest
+	18,  // 102: controlplane.v1.DeployService.GetDeployment:input_type -> controlplane.v1.GetDeploymentRequest
+	20,  // 103: controlplane.v1.DeployService.ListDeployments:input_type -> controlplane.v1.ListDeploymentsRequest
+	22,  // 104: controlplane.v1.DeployService.UpdateDeployment:input_type -> controlplane.v1.UpdateDeploymentRequest
+	24,  // 105: controlplane.v1.DeployService.DeleteDeployment:input_type -> controlplane.v1.DeleteDeploymentRequest
+	26,  // 106: controlplane.v1.DeployService.EnsureDeployment:input_type -> controlplane.v1.EnsureDeploymentRequest
+	30,  // 107: controlplane.v1.DeployService.Promote:input_type -> controlplane.v1.PromoteReleaseRequest
+	32,  // 108: controlplane.v1.DeployService.Scale:input_type -> controlplane.v1.ScaleDeploymentRequest
+	34,  // 109: controlplane.v1.DeployService.GetStatus:input_type -> controlplane.v1.GetDeploymentStatusRequest
+	37,  // 110: controlplane.v1.DeployService.StreamLogs:input_type -> controlplane.v1.StreamDeploymentLogsRequest
+	28,  // 111: controlplane.v1.DeployService.PublishDeploymentConfig:input_type -> controlplane.v1.PublishDeploymentConfigRequest
+	39,  // 112: controlplane.v1.DeployService.CutRelease:input_type -> controlplane.v1.CutReleaseRequest
+	41,  // 113: controlplane.v1.DeployService.ListReleases:input_type -> controlplane.v1.ListDeployReleasesRequest
+	43,  // 114: controlplane.v1.DeployService.GetRelease:input_type -> controlplane.v1.GetDeployReleaseRequest
+	45,  // 115: controlplane.v1.DeployService.ListPromotions:input_type -> controlplane.v1.ListDeployPromotionsRequest
+	47,  // 116: controlplane.v1.DeployService.GetRollout:input_type -> controlplane.v1.GetDeployRolloutRequest
+	49,  // 117: controlplane.v1.DeployService.RecordGate:input_type -> controlplane.v1.RecordDeployGateRequest
+	51,  // 118: controlplane.v1.DeployService.ListGates:input_type -> controlplane.v1.ListDeployGatesRequest
+	53,  // 119: controlplane.v1.DeployService.GetRun:input_type -> controlplane.v1.GetDeployRunRequest
+	55,  // 120: controlplane.v1.DeployService.ListUsage:input_type -> controlplane.v1.ListDeployUsageRequest
+	57,  // 121: controlplane.v1.DeployService.RecordBundle:input_type -> controlplane.v1.RecordDeployBundleRequest
+	59,  // 122: controlplane.v1.DeployService.GetBundle:input_type -> controlplane.v1.GetDeployBundleRequest
+	61,  // 123: controlplane.v1.DeployService.ListConvergences:input_type -> controlplane.v1.ListDeployConvergencesRequest
+	63,  // 124: controlplane.v1.DeployService.GetLiveView:input_type -> controlplane.v1.GetDeployLiveViewRequest
+	65,  // 125: controlplane.v1.DeployService.PlanDeploy:input_type -> controlplane.v1.PlanDeployRequest
+	67,  // 126: controlplane.v1.DeployService.ReportLocalSession:input_type -> controlplane.v1.ReportLocalSessionRequest
+	69,  // 127: controlplane.v1.DeployService.ImportLedger:input_type -> controlplane.v1.ImportLedgerRequest
+	77,  // 128: controlplane.v1.DeployService.GetDrift:input_type -> controlplane.v1.GetDeployDriftRequest
+	1,   // 129: controlplane.v1.DeployService.GetTenant:output_type -> controlplane.v1.GetDeployTenantResponse
+	3,   // 130: controlplane.v1.DeployService.CreateTenant:output_type -> controlplane.v1.CreateDeployTenantResponse
+	5,   // 131: controlplane.v1.DeployService.CreateEnvironment:output_type -> controlplane.v1.CreateDeployEnvironmentResponse
+	7,   // 132: controlplane.v1.DeployService.GetEnvironment:output_type -> controlplane.v1.GetDeployEnvironmentResponse
+	9,   // 133: controlplane.v1.DeployService.ListEnvironments:output_type -> controlplane.v1.ListDeployEnvironmentsResponse
+	11,  // 134: controlplane.v1.DeployService.UpdateEnvironment:output_type -> controlplane.v1.UpdateDeployEnvironmentResponse
+	13,  // 135: controlplane.v1.DeployService.DeleteEnvironment:output_type -> controlplane.v1.DeleteDeployEnvironmentResponse
+	15,  // 136: controlplane.v1.DeployService.EnsureEnvironment:output_type -> controlplane.v1.EnsureDeployEnvironmentResponse
+	17,  // 137: controlplane.v1.DeployService.CreateDeployment:output_type -> controlplane.v1.CreateDeploymentResponse
+	19,  // 138: controlplane.v1.DeployService.GetDeployment:output_type -> controlplane.v1.GetDeploymentResponse
+	21,  // 139: controlplane.v1.DeployService.ListDeployments:output_type -> controlplane.v1.ListDeploymentsResponse
+	23,  // 140: controlplane.v1.DeployService.UpdateDeployment:output_type -> controlplane.v1.UpdateDeploymentResponse
+	25,  // 141: controlplane.v1.DeployService.DeleteDeployment:output_type -> controlplane.v1.DeleteDeploymentResponse
+	27,  // 142: controlplane.v1.DeployService.EnsureDeployment:output_type -> controlplane.v1.EnsureDeploymentResponse
+	31,  // 143: controlplane.v1.DeployService.Promote:output_type -> controlplane.v1.PromoteReleaseResponse
+	33,  // 144: controlplane.v1.DeployService.Scale:output_type -> controlplane.v1.ScaleDeploymentResponse
+	36,  // 145: controlplane.v1.DeployService.GetStatus:output_type -> controlplane.v1.GetDeploymentStatusResponse
+	38,  // 146: controlplane.v1.DeployService.StreamLogs:output_type -> controlplane.v1.StreamDeploymentLogsResponse
+	29,  // 147: controlplane.v1.DeployService.PublishDeploymentConfig:output_type -> controlplane.v1.PublishDeploymentConfigResponse
+	40,  // 148: controlplane.v1.DeployService.CutRelease:output_type -> controlplane.v1.CutReleaseResponse
+	42,  // 149: controlplane.v1.DeployService.ListReleases:output_type -> controlplane.v1.ListDeployReleasesResponse
+	44,  // 150: controlplane.v1.DeployService.GetRelease:output_type -> controlplane.v1.GetDeployReleaseResponse
+	46,  // 151: controlplane.v1.DeployService.ListPromotions:output_type -> controlplane.v1.ListDeployPromotionsResponse
+	48,  // 152: controlplane.v1.DeployService.GetRollout:output_type -> controlplane.v1.GetDeployRolloutResponse
+	50,  // 153: controlplane.v1.DeployService.RecordGate:output_type -> controlplane.v1.RecordDeployGateResponse
+	52,  // 154: controlplane.v1.DeployService.ListGates:output_type -> controlplane.v1.ListDeployGatesResponse
+	54,  // 155: controlplane.v1.DeployService.GetRun:output_type -> controlplane.v1.GetDeployRunResponse
+	56,  // 156: controlplane.v1.DeployService.ListUsage:output_type -> controlplane.v1.ListDeployUsageResponse
+	58,  // 157: controlplane.v1.DeployService.RecordBundle:output_type -> controlplane.v1.RecordDeployBundleResponse
+	60,  // 158: controlplane.v1.DeployService.GetBundle:output_type -> controlplane.v1.GetDeployBundleResponse
+	62,  // 159: controlplane.v1.DeployService.ListConvergences:output_type -> controlplane.v1.ListDeployConvergencesResponse
+	64,  // 160: controlplane.v1.DeployService.GetLiveView:output_type -> controlplane.v1.GetDeployLiveViewResponse
+	66,  // 161: controlplane.v1.DeployService.PlanDeploy:output_type -> controlplane.v1.PlanDeployResponse
+	68,  // 162: controlplane.v1.DeployService.ReportLocalSession:output_type -> controlplane.v1.ReportLocalSessionResponse
+	76,  // 163: controlplane.v1.DeployService.ImportLedger:output_type -> controlplane.v1.ImportLedgerResponse
+	78,  // 164: controlplane.v1.DeployService.GetDrift:output_type -> controlplane.v1.GetDeployDriftResponse
+	129, // [129:165] is the sub-list for method output_type
+	93,  // [93:129] is the sub-list for method input_type
+	93,  // [93:93] is the sub-list for extension type_name
+	93,  // [93:93] is the sub-list for extension extendee
+	0,   // [0:93] is the sub-list for field type_name
 }
 
 func init() { file_services_deploy_v1_deploy_proto_init() }
