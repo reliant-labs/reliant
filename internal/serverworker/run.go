@@ -4,7 +4,6 @@ package serverworker
 import (
 	"context"
 	"fmt"
-	"github.com/reliant-labs/reliant/internal/integrations/connauth"
 	"net/http"
 	"os"
 	"os/signal"
@@ -169,6 +168,10 @@ func Run(ctx context.Context, opts Options) error {
 	if err != nil {
 		return err
 	}
+	integrationCredentials, err := newIntegrationCredentials(connResolver, os.Getenv)
+	if err != nil {
+		return err
+	}
 
 	// API key provider (allows LLM drivers to resolve per-user keys from DB)
 	drivers.InitializeAPIKeyProvider(repo)
@@ -314,8 +317,9 @@ func Run(ctx context.Context, opts Options) error {
 		RunMessenger: agentRuns,
 		// http__request executes here, inside the ExecuteTools activity, and
 		// resolves its `connection` for the run's owner through the same
-		// resolver the action node uses.
-		IntegrationCredentials: connauth.New(connResolver),
+		// source the action node uses: saved connections, plus GitHub tokens
+		// delegated by control-plane when one is configured.
+		IntegrationCredentials: integrationCredentials,
 	})
 	// Wire server-side tool execution so PlacementServer / PlacementAny
 	// tools execute in the worker process without a daemon round-trip.
@@ -338,16 +342,16 @@ func Run(ctx context.Context, opts Options) error {
 	triggerLauncher := runLauncher
 
 	handle, _, err := workersetup.StartWorker(&workersetup.Config{
-		TemporalClient:  temporalClient,
-		Database:        repo,
-		StreamingHub:    streamingHub,
-		ToolsFactory:    toolsFactory,
-		ToolExecutor:    remoteExecutor,
-		DaemonRouter:    remoteExecutor.DaemonRouter(),
-		MCPBinder:       toolexec.NewDaemonMCPContextBinder(router),
-		ConfigProvider:  storedConfigProvider,
-		TriggerLauncher: triggerLauncher,
-		Connections:     connResolver,
+		TemporalClient:         temporalClient,
+		Database:               repo,
+		StreamingHub:           streamingHub,
+		ToolsFactory:           toolsFactory,
+		ToolExecutor:           remoteExecutor,
+		DaemonRouter:           remoteExecutor.DaemonRouter(),
+		MCPBinder:              toolexec.NewDaemonMCPContextBinder(router),
+		ConfigProvider:         storedConfigProvider,
+		TriggerLauncher:        triggerLauncher,
+		IntegrationCredentials: integrationCredentials,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to start worker: %w", err)
