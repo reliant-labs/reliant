@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/threads"
 	scenariorunner "github.com/reliant-labs/reliant/internal/workflow/scenario/runner"
 
 	"go.temporal.io/sdk/client"
@@ -272,7 +273,7 @@ func Run(ctx context.Context, opts Options) error {
 	// streaming hub they depend on, rather than with the other tool options.
 	pauseService := v2workflow.NewPauseService(temporalClient, repo)
 	runLifecycle := runs.NewService(repo, temporalClient, pauseService)
-	runLauncher := launch.NewLauncher(repo, temporalClient, runLifecycle, v2workflow.SharedTaskQueue, remoteExecutor.DaemonRouter())
+	runLauncher := launch.NewLauncher(repo, threads.NewService(repo), temporalClient, runLifecycle, v2workflow.SharedTaskQueue, remoteExecutor.DaemonRouter())
 	agentRuns := agentruns.New(runLauncher, services.NewRunService(repo,
 		services.NewChatService(repo, temporalClient, pauseService, v2workflow.SharedTaskQueue, streamingHub, router)))
 

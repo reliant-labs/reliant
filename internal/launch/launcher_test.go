@@ -164,7 +164,7 @@ func launchFixture(t *testing.T) (*db.Repo, context.Context, string, string) {
 func newTestLauncher(t *testing.T, repo db.Repository, starter *fakeStarter) (*Launcher, *recordingRunRecorder) {
 	t.Helper()
 	recorder := &recordingRunRecorder{repo: repo}
-	return NewLauncher(repo, starter, recorder, "test-task-queue", nil), recorder
+	return NewLauncher(repo, threads.NewService(repo), starter, recorder, "test-task-queue", nil), recorder
 }
 
 // chatStartEvent is what an interactive first send produces.
