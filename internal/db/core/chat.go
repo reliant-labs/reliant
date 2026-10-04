@@ -199,6 +199,12 @@ type Chat struct {
 	// is distinct from PENDING, which is a root row that exists and has not
 	// begun.
 	RootStatus WorkflowStatus `json:"root_status"`
+
+	// LaunchKind is the kind of the chat's launch event ("chat.start",
+	// "schedule"); empty for a chat that predates trigger events. TriggerID is
+	// the stored trigger that fired it, nil for ad hoc kinds.
+	LaunchKind string  `json:"launch_kind,omitempty"`
+	TriggerID  *string `json:"trigger_id,omitempty"`
 }
 
 // MainThreadID returns the chat's root thread id, or "" if no root workflow
@@ -223,8 +229,11 @@ type ChatFilters struct {
 	ProjectID       *string
 	State           *ChatState
 	ExcludeArchived bool
-	Limit           int
-	Offset          int
+	// ExcludeAutomations hides chats launched by anything but an interactive
+	// start, unless they are awaiting input.
+	ExcludeAutomations bool
+	Limit              int
+	Offset             int
 }
 
 // ChatSearchFilters contains options for searching chats.

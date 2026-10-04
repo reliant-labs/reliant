@@ -521,6 +521,7 @@ func (e *InlineWorkflowExecutor) buildSubWorkflowInputsWithOwnership() (map[stri
 	// every child. See unattended.go for why this is enforced here instead of
 	// being left to each YAML's passthrough list.
 	propagateUnattended(e.workflowInputs, subInputs)
+	propagateTrigger(e.workflowInputs, subInputs)
 
 	return subInputs, ownedKeys, nil
 }

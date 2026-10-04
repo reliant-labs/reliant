@@ -66,7 +66,7 @@ func (q *Queries) DeleteChat(ctx context.Context, id string) error {
 }
 
 const getChat = `-- name: GetChat :one
-SELECT id, title, project_id, user_id, state, workflow_id, run_id, created_at, updated_at, last_active, worktree_id, workflow_name, selected_presets, archived_worktree_name, unread, active_daemon_id, last_message_at, activity, root_workflow_state, root_workflow_stop_reason FROM chats_with_activity WHERE id = $1
+SELECT id, title, project_id, user_id, state, workflow_id, run_id, created_at, updated_at, last_active, worktree_id, workflow_name, selected_presets, archived_worktree_name, unread, active_daemon_id, last_message_at, activity, root_workflow_state, root_workflow_stop_reason, launch_kind, trigger_id FROM chats_with_activity WHERE id = $1
 `
 
 func (q *Queries) GetChat(ctx context.Context, id string) (ChatsWithActivity, error) {
@@ -93,12 +93,14 @@ func (q *Queries) GetChat(ctx context.Context, id string) (ChatsWithActivity, er
 		&i.Activity,
 		&i.RootWorkflowState,
 		&i.RootWorkflowStopReason,
+		&i.LaunchKind,
+		&i.TriggerID,
 	)
 	return i, err
 }
 
 const getChatWithUserCheck = `-- name: GetChatWithUserCheck :one
-SELECT id, title, project_id, user_id, state, workflow_id, run_id, created_at, updated_at, last_active, worktree_id, workflow_name, selected_presets, archived_worktree_name, unread, active_daemon_id, last_message_at, activity, root_workflow_state, root_workflow_stop_reason FROM chats_with_activity WHERE id = $1 AND user_id = $2
+SELECT id, title, project_id, user_id, state, workflow_id, run_id, created_at, updated_at, last_active, worktree_id, workflow_name, selected_presets, archived_worktree_name, unread, active_daemon_id, last_message_at, activity, root_workflow_state, root_workflow_stop_reason, launch_kind, trigger_id FROM chats_with_activity WHERE id = $1 AND user_id = $2
 `
 
 type GetChatWithUserCheckParams struct {
@@ -130,6 +132,8 @@ func (q *Queries) GetChatWithUserCheck(ctx context.Context, arg GetChatWithUserC
 		&i.Activity,
 		&i.RootWorkflowState,
 		&i.RootWorkflowStopReason,
+		&i.LaunchKind,
+		&i.TriggerID,
 	)
 	return i, err
 }
@@ -216,23 +220,33 @@ func (q *Queries) ListArchivedChats(ctx context.Context, userID string) ([]ListA
 }
 
 const listChats = `-- name: ListChats :many
-SELECT id, title, project_id, user_id, state, workflow_id, run_id, created_at, updated_at, last_active, worktree_id, workflow_name, selected_presets, archived_worktree_name, unread, active_daemon_id, last_message_at, activity, root_workflow_state, root_workflow_stop_reason FROM chats_with_activity
+SELECT id, title, project_id, user_id, state, workflow_id, run_id, created_at, updated_at, last_active, worktree_id, workflow_name, selected_presets, archived_worktree_name, unread, active_daemon_id, last_message_at, activity, root_workflow_state, root_workflow_stop_reason, launch_kind, trigger_id FROM chats_with_activity
 WHERE
     user_id = $1
     AND project_id = $2
     AND ($3::integer IS NULL OR state = $3::integer)
     AND (NOT $4::boolean OR state != 3)
+    -- Automation chats (any launch kind other than an interactive start) are
+    -- hidden unless they are waiting on a human: activity 2 is a pending
+    -- approval or question. A chat with no launch event is interactive.
+    AND (
+        NOT $5::boolean
+        OR launch_kind IS NULL
+        OR launch_kind = 'chat.start'
+        OR activity = 2
+    )
 ORDER BY last_active DESC
-LIMIT $6 OFFSET $5
+LIMIT $7 OFFSET $6
 `
 
 type ListChatsParams struct {
-	UserID          string         `json:"user_id"`
-	ProjectID       sql.NullString `json:"project_id"`
-	State           sql.NullInt32  `json:"state"`
-	ExcludeArchived bool           `json:"exclude_archived"`
-	Offset          int32          `json:"offset"`
-	Limit           int32          `json:"limit"`
+	UserID             string         `json:"user_id"`
+	ProjectID          sql.NullString `json:"project_id"`
+	State              sql.NullInt32  `json:"state"`
+	ExcludeArchived    bool           `json:"exclude_archived"`
+	ExcludeAutomations bool           `json:"exclude_automations"`
+	Offset             int32          `json:"offset"`
+	Limit              int32          `json:"limit"`
 }
 
 func (q *Queries) ListChats(ctx context.Context, arg ListChatsParams) ([]ChatsWithActivity, error) {
@@ -241,6 +255,7 @@ func (q *Queries) ListChats(ctx context.Context, arg ListChatsParams) ([]ChatsWi
 		arg.ProjectID,
 		arg.State,
 		arg.ExcludeArchived,
+		arg.ExcludeAutomations,
 		arg.Offset,
 		arg.Limit,
 	)
@@ -272,6 +287,8 @@ func (q *Queries) ListChats(ctx context.Context, arg ListChatsParams) ([]ChatsWi
 			&i.Activity,
 			&i.RootWorkflowState,
 			&i.RootWorkflowStopReason,
+			&i.LaunchKind,
+			&i.TriggerID,
 		); err != nil {
 			return nil, err
 		}
@@ -287,7 +304,7 @@ func (q *Queries) ListChats(ctx context.Context, arg ListChatsParams) ([]ChatsWi
 }
 
 const searchChats = `-- name: SearchChats :many
-SELECT DISTINCT cws.id, cws.title, cws.project_id, cws.user_id, cws.state, cws.workflow_id, cws.run_id, cws.created_at, cws.updated_at, cws.last_active, cws.worktree_id, cws.workflow_name, cws.selected_presets, cws.archived_worktree_name, cws.unread, cws.active_daemon_id, cws.last_message_at, cws.activity, cws.root_workflow_state, cws.root_workflow_stop_reason
+SELECT DISTINCT cws.id, cws.title, cws.project_id, cws.user_id, cws.state, cws.workflow_id, cws.run_id, cws.created_at, cws.updated_at, cws.last_active, cws.worktree_id, cws.workflow_name, cws.selected_presets, cws.archived_worktree_name, cws.unread, cws.active_daemon_id, cws.last_message_at, cws.activity, cws.root_workflow_state, cws.root_workflow_stop_reason, cws.launch_kind, cws.trigger_id
 FROM chats_with_activity cws
 LEFT JOIN messages m ON cws.id = m.chat_id
 LEFT JOIN message_content_blocks mcb ON m.id = mcb.message_id AND mcb.block_type = 1
@@ -355,6 +372,8 @@ func (q *Queries) SearchChats(ctx context.Context, arg SearchChatsParams) ([]Cha
 			&i.Activity,
 			&i.RootWorkflowState,
 			&i.RootWorkflowStopReason,
+			&i.LaunchKind,
+			&i.TriggerID,
 		); err != nil {
 			return nil, err
 		}

@@ -289,6 +289,26 @@ CREATE TABLE public.questions (
 );
 
 --
+-- Name: trigger_events; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.trigger_events (
+    id text NOT NULL,
+    trigger_id text,
+    user_id text NOT NULL,
+    kind text NOT NULL,
+    dedupe_key text NOT NULL,
+    occurred_at timestamp with time zone NOT NULL,
+    payload jsonb DEFAULT '{}'::jsonb NOT NULL,
+    outcome text NOT NULL,
+    outcome_detail text DEFAULT ''::text NOT NULL,
+    chat_id text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT trigger_events_kind_check CHECK ((kind = ANY (ARRAY['chat.start'::text, 'schedule'::text]))),
+    CONSTRAINT trigger_events_outcome_check CHECK ((outcome = ANY (ARRAY['launched'::text, 'skipped'::text, 'failed'::text])))
+);
+
+--
 -- Name: workflows; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -355,9 +375,16 @@ CREATE VIEW public.chats_with_activity AS
             ELSE 0
         END AS activity,
     rw.state AS root_workflow_state,
-    rw.stop_reason AS root_workflow_stop_reason
-   FROM (public.chats c
-     LEFT JOIN public.workflows rw ON ((rw.id = c.workflow_id)));
+    rw.stop_reason AS root_workflow_stop_reason,
+    le.kind AS launch_kind,
+    le.trigger_id
+   FROM ((public.chats c
+     LEFT JOIN public.workflows rw ON ((rw.id = c.workflow_id)))
+     LEFT JOIN public.trigger_events le ON ((le.id = ( SELECT te.id
+           FROM public.trigger_events te
+          WHERE (te.chat_id = c.id)
+          ORDER BY te.created_at, te.id
+         LIMIT 1))));
 
 --
 -- Name: claude_auth_tokens; Type: TABLE; Schema: public; Owner: -
@@ -859,26 +886,6 @@ CREATE TABLE public.tool_calls (
     created_at timestamp with time zone NOT NULL,
     updated_at timestamp with time zone NOT NULL,
     CONSTRAINT tool_calls_completed_has_completed_at CHECK (((status <> 3) OR (completed_at IS NOT NULL)))
-);
-
---
--- Name: trigger_events; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.trigger_events (
-    id text NOT NULL,
-    trigger_id text,
-    user_id text NOT NULL,
-    kind text NOT NULL,
-    dedupe_key text NOT NULL,
-    occurred_at timestamp with time zone NOT NULL,
-    payload jsonb DEFAULT '{}'::jsonb NOT NULL,
-    outcome text NOT NULL,
-    outcome_detail text DEFAULT ''::text NOT NULL,
-    chat_id text,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT trigger_events_kind_check CHECK ((kind = ANY (ARRAY['chat.start'::text, 'schedule'::text]))),
-    CONSTRAINT trigger_events_outcome_check CHECK ((outcome = ANY (ARRAY['launched'::text, 'skipped'::text, 'failed'::text])))
 );
 
 --

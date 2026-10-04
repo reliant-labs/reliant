@@ -73,13 +73,16 @@ func rewindToRenumberWindow(t *testing.T, raw *sql.DB) {
 		`DROP INDEX IF EXISTS idx_workflows_owner_user_id`,
 		`ALTER TABLE workflows DROP COLUMN IF EXISTS owner_user_id`,
 		`ALTER TABLE projects DROP COLUMN IF EXISTS forge_project_name`,
+		// 20261003235633_chat_launch_origin makes chats_with_activity depend on
+		// trigger_events, so the view has to go before the table can. Replaying
+		// 20261003220140 and 20261003235633 (both DROP VIEW IF EXISTS + CREATE
+		// VIEW) rebuilds it, so neither needs undoing beyond this.
+		`DROP VIEW IF EXISTS chats_with_activity`,
 		`DROP TABLE IF EXISTS trigger_events`,
 		`DROP TABLE IF EXISTS triggers`,
-		// 20261003220140_chat_root_workflow_state needs no entry here: it is
-		// DROP VIEW IF EXISTS + CREATE VIEW, so re-running it against the
-		// already-rebuilt view succeeds. Only migrations whose SQL would FAIL
-		// on a second run — a plain ADD COLUMN or CREATE TABLE — have to be
-		// undone to keep the rewind from manufacturing a failure.
+		// Only migrations whose SQL would FAIL on a second run — a plain
+		// ADD COLUMN or CREATE TABLE — have to be undone to keep the rewind
+		// from manufacturing a failure. The view migrations are idempotent.
 	} {
 		_, err := raw.Exec(stmt)
 		require.NoError(t, err)

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	wfcel "github.com/reliant-labs/reliant/internal/workflow/cel"
 	"sort"
 	"strings"
 	"time"
@@ -55,6 +56,11 @@ type WorkflowInput struct {
 	// resolved resume node, with thread history as conversation truth. See
 	// resolveResumeTarget for target resolution order.
 	Resume *ResumeInput
+	// Trigger is the event that launched this chat, fixed for the chat's life.
+	// Every restart of the chat (continue-as-new, SendMessage after completion,
+	// ghost recovery) re-supplies it. The runtime exposes it to CEL as the
+	// `trigger` namespace.
+	Trigger *TriggerInfo
 }
 
 // ResumeInput carries the position checkpoint of the interrupted predecessor
@@ -549,6 +555,12 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	// Initialize inputs map if nil
 	if input.Inputs == nil {
 		input.Inputs = make(map[string]interface{})
+	}
+	// Surface the launch event as the CEL `trigger` namespace. Injected before
+	// the workflow loads so load-time templates see it too; it is a
+	// RuntimeInjectedInput so schema validation and defaults leave it alone.
+	if input.Trigger != nil {
+		input.Inputs[wfcel.TriggerInputKey] = input.Trigger.CELValue()
 	}
 
 	// Get execution context (required)
@@ -2771,6 +2783,7 @@ func buildSpawnChildInputs(workflowInputs map[string]interface{}) map[string]int
 	}
 
 	propagateUnattended(workflowInputs, childInputs)
+	propagateTrigger(workflowInputs, childInputs)
 
 	// Derive parent_permission so child permission is capped to parent's level.
 	// If the parent already has a parent_permission (chained spawn), propagate the

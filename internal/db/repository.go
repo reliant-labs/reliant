@@ -678,6 +678,7 @@ type Repository interface {
 	// launch twice" database guarantees rather than client conventions.
 	CreateTriggerEvent(ctx context.Context, ev *core.TriggerEvent) (created bool, err error)
 	GetTriggerEventByDedupe(ctx context.Context, kind core.TriggerEventKind, dedupeKey string) (*core.TriggerEvent, error)
+	GetTriggerEventByChatID(ctx context.Context, chatID string) (*core.TriggerEvent, error)
 	UpdateTriggerEventOutcome(ctx context.Context, id string, outcome core.TriggerEventOutcome, detail string, chatID *string) error
 	// ListTriggerEvents returns the trigger's firings newest first.
 	ListTriggerEvents(ctx context.Context, triggerID string, limit int) ([]*core.TriggerEvent, error)

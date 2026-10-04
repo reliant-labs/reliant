@@ -401,6 +401,9 @@ type Querier interface {
 	GetToolCall(ctx context.Context, id string) (ToolCall, error)
 	GetToolCallResult(ctx context.Context, toolCallID string) (ToolCallResult, error)
 	GetTrigger(ctx context.Context, id string) (Trigger, error)
+	// The chat's launch event: the earliest event that references it. Served by
+	// idx_trigger_events_chat.
+	GetTriggerEventByChatID(ctx context.Context, chatID sql.NullString) (TriggerEvent, error)
 	GetTriggerEventByDedupe(ctx context.Context, arg GetTriggerEventByDedupeParams) (TriggerEvent, error)
 	// Get a usable workflow by slug (for runtime loading)
 	GetUsableWorkflowBySlug(ctx context.Context, arg GetUsableWorkflowBySlugParams) (WorkflowDraft, error)

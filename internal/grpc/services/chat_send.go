@@ -372,6 +372,7 @@ func (s *ChatService) resurrectGhostWorkflow(
 		WorkflowName: workflowName,
 		Inputs:       initialData,
 		ExecContext:  execContext,
+		Trigger:      launch.LoadChatTrigger(ctx, s.database, req.Msg.ChatId),
 		// A ghost (Temporal lost the running execution) is an infra failure,
 		// not user intent — the fresh execution resumes at position.
 		Resume: s.resumeInputForInterruptedRun(ctx, workflowID),
@@ -1062,6 +1063,7 @@ func (s *ChatService) SendMessage(
 		WorkflowName: workflowName,
 		Inputs:       initialData,
 		ExecContext:  execContext,
+		Trigger:      launch.LoadChatTrigger(ctx, s.database, req.Msg.ChatId),
 		Resume:       resumeInput,
 	}
 

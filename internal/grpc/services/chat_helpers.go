@@ -145,6 +145,12 @@ func chatToProto(c *db.Chat) *reliantv1.Chat {
 	// a pending state is what tells it to StartChat rather than SendMessage.
 	proto.WorkflowState = workflowStateToProto(c.RootStatus.State)
 	proto.WorkflowStopReason = workflowStopReasonToProto(c.RootStatus.StopReason)
+	if c.LaunchKind != "" {
+		proto.LaunchKind = &c.LaunchKind
+	}
+	if c.TriggerID != nil {
+		proto.TriggerId = c.TriggerID
+	}
 	return proto
 }
 

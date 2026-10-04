@@ -176,6 +176,8 @@ type ChatsWithActivity struct {
 	Activity               int32          `json:"activity"`
 	RootWorkflowState      sql.NullInt32  `json:"root_workflow_state"`
 	RootWorkflowStopReason sql.NullInt32  `json:"root_workflow_stop_reason"`
+	LaunchKind             sql.NullString `json:"launch_kind"`
+	TriggerID              sql.NullString `json:"trigger_id"`
 }
 
 type ClaudeAuthToken struct {

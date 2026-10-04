@@ -291,6 +291,13 @@ message Chat {
   // whether a run is going, the stop reason says why a stopped one stopped.
   WorkflowState workflow_state = 31;
   WorkflowStopReason workflow_stop_reason = 32;
+  // What started this chat: the kind of its launch event ("chat.start" for an
+  // interactive chat, "schedule" for a scheduled run). Unset for a chat that
+  // predates trigger events.
+  optional string launch_kind = 33;
+  // The stored trigger that launched this chat. Unset for interactive chats and
+  // once the trigger is deleted.
+  optional string trigger_id = 34;
 }
 
 // ArchivedChat includes worktree information for archived chats
@@ -430,6 +437,9 @@ message StartChatResponse {
 message ListChatsRequest {
   string project_id = 1;               // Required
   optional int32 limit = 2;
+  // When true, omit automation chats (launch kind other than an interactive
+  // start) unless they are awaiting input (pending approval or question).
+  optional bool exclude_automations = 3;
 }
 
 // ListChatsResponse returns the list of chats

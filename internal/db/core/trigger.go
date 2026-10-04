@@ -138,6 +138,9 @@ type TriggerStore interface {
 	CreateTriggerEvent(ctx context.Context, ev *TriggerEvent) (created bool, err error)
 	// GetTriggerEventByDedupe returns ErrTriggerEventNotFound on a miss.
 	GetTriggerEventByDedupe(ctx context.Context, kind TriggerEventKind, dedupeKey string) (*TriggerEvent, error)
+	// GetTriggerEventByChatID returns the event that launched the chat, or
+	// ErrTriggerEventNotFound for a chat with none (it predates trigger events).
+	GetTriggerEventByChatID(ctx context.Context, chatID string) (*TriggerEvent, error)
 	// UpdateTriggerEventOutcome returns ErrTriggerEventNotFound when the id
 	// does not resolve.
 	UpdateTriggerEventOutcome(ctx context.Context, id string, outcome TriggerEventOutcome, detail string, chatID *string) error

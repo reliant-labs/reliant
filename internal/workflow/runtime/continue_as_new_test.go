@@ -220,6 +220,28 @@ func (s *ContinueAsNewInputTestSuite) TestCarriesResumePositionAndInputs() {
 	s.Equal(7, carried.Resume.LoopIteration)
 }
 
+// The trigger is fixed at launch, so every continuation re-supplies it.
+func (s *ContinueAsNewInputTestSuite) TestCarriesTrigger() {
+	env := s.NewTestWorkflowEnvironment()
+	env.RegisterWorkflow(continueAsNewCarryWorkflow)
+
+	env.ExecuteWorkflow(continueAsNewCarryWorkflow, WorkflowInput{
+		ChatID:      "chat-1",
+		ExecContext: &ExecutionContext{Thread: "thread-1"},
+		Trigger:     &TriggerInfo{Kind: "schedule", EventID: "evt-1", Payload: map[string]any{"trigger_name": "nightly"}},
+	})
+
+	var contErr *workflow.ContinueAsNewError
+	s.Require().True(errors.As(env.GetWorkflowError(), &contErr))
+	var carried WorkflowInput
+	s.Require().NoError(converter.GetDefaultDataConverter().FromPayloads(contErr.Input, &carried))
+
+	s.Require().NotNil(carried.Trigger)
+	s.Equal("schedule", carried.Trigger.Kind)
+	s.Equal("evt-1", carried.Trigger.EventID)
+	s.Equal("nightly", carried.Trigger.Payload["trigger_name"])
+}
+
 // The carried position must resolve back to the same loop and iteration the
 // predecessor stopped at. This is the round trip that makes the continuation
 // correct, and it goes through the same resolver the coarse restart uses.

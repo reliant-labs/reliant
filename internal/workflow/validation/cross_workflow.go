@@ -418,6 +418,7 @@ func validateProtoCELExpressionType(expr string, expectedInput *reliantv1.Input,
 
 	namespaces := []wfcel.CELNamespace{
 		wfcel.CELInputs,
+		wfcel.CELTrigger,
 		wfcel.CELWorkflow,
 		wfcel.CELNodes,
 		wfcel.CELIter,

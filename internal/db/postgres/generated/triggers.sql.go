@@ -177,6 +177,34 @@ func (q *Queries) GetTrigger(ctx context.Context, id string) (Trigger, error) {
 	return i, err
 }
 
+const getTriggerEventByChatID = `-- name: GetTriggerEventByChatID :one
+SELECT id, trigger_id, user_id, kind, dedupe_key, occurred_at, payload, outcome, outcome_detail, chat_id, created_at FROM trigger_events
+WHERE chat_id = $1
+ORDER BY created_at ASC, id ASC
+LIMIT 1
+`
+
+// The chat's launch event: the earliest event that references it. Served by
+// idx_trigger_events_chat.
+func (q *Queries) GetTriggerEventByChatID(ctx context.Context, chatID sql.NullString) (TriggerEvent, error) {
+	row := q.db.QueryRowContext(ctx, getTriggerEventByChatID, chatID)
+	var i TriggerEvent
+	err := row.Scan(
+		&i.ID,
+		&i.TriggerID,
+		&i.UserID,
+		&i.Kind,
+		&i.DedupeKey,
+		&i.OccurredAt,
+		&i.Payload,
+		&i.Outcome,
+		&i.OutcomeDetail,
+		&i.ChatID,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const getTriggerEventByDedupe = `-- name: GetTriggerEventByDedupe :one
 SELECT id, trigger_id, user_id, kind, dedupe_key, occurred_at, payload, outcome, outcome_detail, chat_id, created_at FROM trigger_events WHERE kind = $1 AND dedupe_key = $2
 `

@@ -57,6 +57,14 @@ ON CONFLICT (kind, dedupe_key) DO NOTHING;
 -- name: GetTriggerEventByDedupe :one
 SELECT * FROM trigger_events WHERE kind = $1 AND dedupe_key = $2;
 
+-- name: GetTriggerEventByChatID :one
+-- The chat's launch event: the earliest event that references it. Served by
+-- idx_trigger_events_chat.
+SELECT * FROM trigger_events
+WHERE chat_id = $1
+ORDER BY created_at ASC, id ASC
+LIMIT 1;
+
 -- name: UpdateTriggerEventOutcome :execrows
 UPDATE trigger_events SET
     outcome = $1,
