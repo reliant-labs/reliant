@@ -12,7 +12,7 @@ import userEvent from "@testing-library/user-event";
 import { RunFilters } from "../RunFilters";
 import { renderRunsAt } from "./runTestUtils";
 
-function renderFilters(path = "/runs") {
+function renderFilters(path = "/workflows/runs") {
   return renderRunsAt(
     <RunFilters currentProjectName="Reliant" triggerName={undefined} />,
     path,
@@ -77,7 +77,7 @@ describe("RunFilters", () => {
     const user = userEvent.setup();
     const { router } = renderRunsAt(
       <RunFilters currentProjectName="Reliant" triggerName="Hourly sweep" />,
-      "/runs?trigger=trig-1",
+      "/workflows/runs?trigger=trig-1",
     );
     await user.click(await screen.findByRole("button", { name: "Remove filter Automation: Hourly sweep" }));
     await waitFor(() => expect((router.state.location.search as { trigger?: string }).trigger).toBeUndefined());
@@ -85,7 +85,7 @@ describe("RunFilters", () => {
 
   it("Clear removes every filter", async () => {
     const user = userEvent.setup();
-    const { router } = renderFilters('/runs?state=%5B%22failed%22%5D&kind=%5B%22schedule%22%5D&range=%227d%22');
+    const { router } = renderFilters('/workflows/runs?state=%5B%22failed%22%5D&kind=%5B%22schedule%22%5D&range=%227d%22');
     await user.click(await screen.findByRole("button", { name: "Clear filters" }));
     await waitFor(() => expect(router.state.location.search).toEqual({}));
   });

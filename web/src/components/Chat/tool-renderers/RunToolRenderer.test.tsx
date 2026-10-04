@@ -22,7 +22,7 @@ function renderWithRouter(ui: ReactNode) {
   const rootRoute = createRootRoute({ component: () => <Outlet /> });
   const routes = [
     createRoute({ getParentRoute: () => rootRoute, path: "/", component: () => <>{ui}</> }),
-    createRoute({ getParentRoute: () => rootRoute, path: "/runs/$runId" }),
+    createRoute({ getParentRoute: () => rootRoute, path: "/workflows/runs/$runId" }),
   ];
   const router = createRouter({
     routeTree: rootRoute.addChildren(routes),
@@ -63,7 +63,7 @@ describe("RunToolRenderer", () => {
       />,
     );
     const link = await screen.findByRole("link", { name: /Open run/ });
-    expect(link).toHaveAttribute("href", "/runs/chat-77");
+    expect(link).toHaveAttribute("href", "/workflows/runs/chat-77");
     expect(screen.getByText("Fix flake")).toBeInTheDocument();
   });
 
@@ -86,7 +86,7 @@ describe("RunToolRenderer", () => {
 
   it("get_run links the run it read, from its input before the result arrives", async () => {
     renderWithRouter(<RunToolRenderer ctx={ctx({ toolName: "get_run", input: { run_id: "chat-5" } })} />);
-    expect(await screen.findByRole("link", { name: /Open run/ })).toHaveAttribute("href", "/runs/chat-5");
+    expect(await screen.findByRole("link", { name: /Open run/ })).toHaveAttribute("href", "/workflows/runs/chat-5");
   });
 
   it("get_run shows the run's title and state from the result", async () => {

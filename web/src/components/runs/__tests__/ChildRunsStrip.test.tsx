@@ -46,7 +46,7 @@ describe("ChildRunsStrip", () => {
         runs: [child("c1", RunDisplayState.RUNNING, "Fix flaky test"), child("c2", RunDisplayState.FAILED)],
       }),
     );
-    renderRunsAt(<ChildRunsStrip chatId="parent-1" />, "/runs/parent-1");
+    renderRunsAt(<ChildRunsStrip chatId="parent-1" />, "/workflows/runs/parent-1");
 
     const strip = await screen.findByTestId("child-runs-strip");
     expect(strip).toHaveTextContent("2 runs started here");
@@ -58,23 +58,23 @@ describe("ChildRunsStrip", () => {
 
     expect(screen.getByRole("link", { name: "2 runs started here" })).toHaveAttribute(
       "href",
-      "/runs?parent=parent-1",
+      "/workflows/runs?parent=parent-1",
     );
     const first = screen.getByRole("link", { name: /Fix flaky test/ });
-    expect(first).toHaveAttribute("href", "/runs/c1");
+    expect(first).toHaveAttribute("href", "/workflows/runs/c1");
     expect(first.querySelector('[data-run-status="running"]')).not.toBeNull();
     expect(screen.getByRole("link", { name: /Child c2/ }).querySelector('[data-run-status="failed"]')).not.toBeNull();
   });
 
   it("says one run in the singular", async () => {
     listRuns.mockResolvedValue(create(ListRunsResponseSchema, { runs: [child("c1", RunDisplayState.COMPLETED)] }));
-    renderRunsAt(<ChildRunsStrip chatId="parent-1" />, "/runs/parent-1");
+    renderRunsAt(<ChildRunsStrip chatId="parent-1" />, "/workflows/runs/parent-1");
     expect(await screen.findByTestId("child-runs-strip")).toHaveTextContent("1 run started here");
   });
 
   it("renders nothing when the chat started no runs", async () => {
     listRuns.mockResolvedValue(create(ListRunsResponseSchema, { runs: [] }));
-    renderRunsAt(<ChildRunsStrip chatId="parent-1" />, "/runs/parent-1");
+    renderRunsAt(<ChildRunsStrip chatId="parent-1" />, "/workflows/runs/parent-1");
     await waitFor(() => expect(listRuns).toHaveBeenCalledTimes(1));
     expect(screen.queryByTestId("child-runs-strip")).not.toBeInTheDocument();
   });
@@ -86,7 +86,7 @@ describe("ChildRunsStrip", () => {
         <span data-testid="mounted" />
         <ChildRunsStrip chatId="parent-1" />
       </SurfaceProvider>,
-      "/runs/parent-1",
+      "/workflows/runs/parent-1",
     );
     await screen.findByTestId("mounted");
     expect(listRuns).not.toHaveBeenCalled();

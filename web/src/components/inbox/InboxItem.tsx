@@ -494,7 +494,7 @@ export function failedTimesInARow(failures: number): string {
 function RunFinishedAction({ chatId }: { chatId: string }) {
   if (!chatId) return null;
   return (
-    <Link to="/runs/$runId" params={{ runId: chatId }} className={secondaryLinkClass}>
+    <Link to="/workflows/runs/$runId" params={{ runId: chatId }} className={secondaryLinkClass}>
       Open
     </Link>
   );

@@ -1,11 +1,11 @@
 import { useEffect } from 'react'
-import { createRootRoute, createRoute, createRouter, lazyRouteComponent, Outlet, Navigate, redirect, useRouterState, useNavigate } from '@tanstack/react-router'
+import { createRootRoute, createRoute, createRouter, lazyRouteComponent, Outlet, Navigate, useRouterState, useNavigate } from '@tanstack/react-router'
 import { SurfaceProvider } from './lib/surfaceContext'
 import { surfaceForPath } from './lib/surface'
 import { shouldRedirectToMobileNow } from './lib/mobileRedirect'
 import { isForgeUIEnabled } from './lib/forgeFeature'
 import { getIsDev } from './lib/constants'
-import { legacyWorkflowsPath } from './lib/workflowsArea'
+import { createWorkflowsAreaRoutes } from './workflowsAreaRoutes'
 import {
   authSearchSchema,
   githubOAuthCallbackSearchSchema,
@@ -21,9 +21,7 @@ import {
   settingsParamsSchema,
   settingsSearchSchema,
   upgradeSearchSchema,
-  runsSearchSchema,
   workflowSearchSchema,
-  workflowsAreaSearchSchema,
 } from './routeSchemas'
 import { ErrorFallbackUI } from './components/ErrorBoundary'
 import { AuthGuard } from './components/AuthGuard'
@@ -503,106 +501,18 @@ const workflowBuilderRoute = createRoute({
   component: () => <WorkflowPage />,
 })
 
-// ── The Workflows area (research/WORKFLOW_UI.md §1.2–1.3) ───────────────────
-//
-// One area, three tabs — Library (definitions), Runs (every execution) and
-// Automations (standing triggers) — inside one shell, WorkflowsLayout, which
-// owns the tab bar, the exit and project resolution (a `project` search param
-// on every page, so a hard refresh works: the area never mounts ModernApp).
-//
-// Under `_authenticated`, not the app shell: the area spans projects (decision
-// 10), and the app shell is scoped to one. Pathless like `_forge`, so every
-// child carries its full path and `to: "."` resolves to the page itself.
-const workflowsLayoutRoute = createRoute({
-  getParentRoute: () => authenticatedLayoutRoute,
-  id: '_workflows',
-  component: WorkflowsLayout,
+// The Workflows area — Library, Runs, Automations — and the redirects from
+// the paths it replaced. Defined in workflowsAreaRoutes.tsx so the route tests
+// mount the same definitions.
+const workflowsAreaRoutes = createWorkflowsAreaRoutes(() => authenticatedLayoutRoute, {
+  layout: WorkflowsLayout,
+  library: LibraryPage,
+  workflowDetail: WorkflowDetailPage,
+  runs: RunsPage,
+  runDetail: RunDetailPage,
+  automations: AutomationsListPage,
+  automationDetail: AutomationDetailPage,
 })
-
-const workflowsIndexRoute = createRoute({
-  getParentRoute: () => workflowsLayoutRoute,
-  path: '/workflows',
-  validateSearch: workflowsAreaSearchSchema,
-  beforeLoad: ({ search }) => {
-    throw redirect({ to: '/workflows/library', search, replace: true })
-  },
-})
-
-const workflowsLibraryRoute = createRoute({
-  getParentRoute: () => workflowsLayoutRoute,
-  path: '/workflows/library',
-  validateSearch: workflowsAreaSearchSchema,
-  component: LibraryPage,
-})
-
-// $workflowRef is the stored ref — `builtin://agent`, a project or user
-// workflow's name — URL-encoded by the router, as for the builder.
-const workflowDetailRoute = createRoute({
-  getParentRoute: () => workflowsLayoutRoute,
-  path: '/workflows/library/$workflowRef',
-  validateSearch: workflowsAreaSearchSchema,
-  component: WorkflowDetailPage,
-})
-
-// Runs: every execution, whatever started it (§4–5). Filters live in the
-// search params; $runId is the run's chat id.
-const workflowsRunsRoute = createRoute({
-  getParentRoute: () => workflowsLayoutRoute,
-  path: '/workflows/runs',
-  validateSearch: runsSearchSchema,
-  component: RunsPage,
-})
-
-const workflowsRunDetailRoute = createRoute({
-  getParentRoute: () => workflowsLayoutRoute,
-  path: '/workflows/runs/$runId',
-  validateSearch: workflowsAreaSearchSchema,
-  component: RunDetailPage,
-})
-
-// Automations: standing triggers across every project (§7).
-const workflowsAutomationsRoute = createRoute({
-  getParentRoute: () => workflowsLayoutRoute,
-  path: '/workflows/automations',
-  validateSearch: workflowsAreaSearchSchema,
-  component: AutomationsListPage,
-})
-
-const workflowsAutomationDetailRoute = createRoute({
-  getParentRoute: () => workflowsLayoutRoute,
-  path: '/workflows/automations/$triggerId',
-  validateSearch: workflowsAreaSearchSchema,
-  component: AutomationDetailPage,
-})
-
-// ── Retired paths: redirects, so bookmarks, notifications and old links land ─
-//
-//   /workflow              → /workflows/library   (the hub)
-//   /runs[/$runId]         → /workflows/runs[/$runId]
-//   /automations[/$id]     → /workflows/automations[/$id]
-//
-// The search string is carried VERBATIM (a relative href, re-parsed by the
-// router), so a filtered /runs?state=... link keeps every filter. `replace`,
-// so Back does not bounce through the dead URL. The mapping itself lives in
-// lib/workflowsArea.ts; this table and that module are the only places the
-// old paths may be spelled (workflowsAreaLinks.test.ts).
-function legacyWorkflowsRedirectRoute(path: '/workflow' | '/runs' | '/runs/$runId' | '/automations' | '/automations/$triggerId') {
-  return createRoute({
-    getParentRoute: () => authenticatedLayoutRoute,
-    path,
-    beforeLoad: ({ location }) => {
-      const target = legacyWorkflowsPath(location.pathname)
-      if (!target) return
-      throw redirect({ href: `${target}${location.searchStr}${location.hash ? `#${location.hash}` : ''}`, replace: true })
-    },
-  })
-}
-
-const legacyWorkflowHubRoute = legacyWorkflowsRedirectRoute('/workflow')
-const legacyRunsRoute = legacyWorkflowsRedirectRoute('/runs')
-const legacyRunDetailRoute = legacyWorkflowsRedirectRoute('/runs/$runId')
-const legacyAutomationsRoute = legacyWorkflowsRedirectRoute('/automations')
-const legacyAutomationDetailRoute = legacyWorkflowsRedirectRoute('/automations/$triggerId')
 
 // Inbox: everything waiting on the user, across every chat and project
 // (research/WORKFLOW_UI.md §8). Top-level, not under Workflows: interactive
@@ -908,20 +818,7 @@ const routeTree = rootRoute.addChildren([
     settingsSectionRoute,
     workflowNewRoute,
     workflowBuilderRoute,
-    workflowsLayoutRoute.addChildren([
-      workflowsIndexRoute,
-      workflowsLibraryRoute,
-      workflowDetailRoute,
-      workflowsRunsRoute,
-      workflowsRunDetailRoute,
-      workflowsAutomationsRoute,
-      workflowsAutomationDetailRoute,
-    ]),
-    legacyWorkflowHubRoute,
-    legacyRunsRoute,
-    legacyRunDetailRoute,
-    legacyAutomationsRoute,
-    legacyAutomationDetailRoute,
+    ...workflowsAreaRoutes,
     inboxRoute,
   ]),
   appLayoutRoute.addChildren([indexRoute, projectRoute]),

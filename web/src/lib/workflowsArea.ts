@@ -6,8 +6,9 @@
  * One area, three tabs: Library (definitions), Runs (every execution) and
  * Automations (standing triggers). They replaced three separate places — the
  * `/workflow` hub, `/runs` and `/automations` — which survive only as
- * redirects (routes.tsx). This module and routes.tsx are the only files that
- * may spell those retired paths; workflowsAreaLinks.test.ts enforces it.
+ * redirects (workflowsAreaRoutes.tsx). This module and that one are the only
+ * files that may spell those retired paths; workflowsAreaLinks.test.ts
+ * enforces it.
  *
  * Dependency-free on purpose: projectStore, ModernApp and the onboarding
  * wizard all ask "is this a workflow page?", and none of them may import the

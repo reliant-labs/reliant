@@ -8,7 +8,7 @@
  * URL, and keeps a route alive that should be dead. This scan is what notices.
  *
  * The only files allowed to spell the old paths are the redirect table
- * itself and the route tree that mounts it. The builder's own paths
+ * (workflowsAreaRoutes.tsx) and the path mapping it uses (lib/workflowsArea.ts). The builder's own paths
  * (`/workflow/$workflowName`, `/workflow/new`) are unchanged and allowed.
  */
 
@@ -18,8 +18,8 @@ import { describe, expect, it } from "vitest";
 
 const SRC_DIR = join(__dirname, "..", "..", "..");
 
-/** The redirect table and the route tree that mounts it. */
-const ALLOWED = new Set(["routes.tsx", "lib/workflowsArea.ts"]);
+/** The redirect table and the path mapping it uses. */
+const ALLOWED = new Set(["workflowsAreaRoutes.tsx", "lib/workflowsArea.ts"]);
 
 /** A quoted string that IS an old path: "/runs", '/runs/$runId', `/automations`, "/workflow". */
 const OLD_PATH_LITERAL = /(["'`])\/(?:runs|automations)(?:\/[^"'`\s]*)?\1|(["'`])\/workflow\2/;

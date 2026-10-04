@@ -238,13 +238,13 @@ describe("run detail: launch event", () => {
         }),
       }),
     );
-    renderRunsAt(<RunDetail chatId="chat-1" />, "/runs/chat-1");
+    renderRunsAt(<RunDetail chatId="chat-1" />, "/workflows/runs/chat-1");
 
     const line = await screen.findByTestId("run-started-by");
     await waitFor(() => expect(line).toHaveTextContent("Started by an agent in Refactor auth"));
     const links = screen.getAllByRole("link", { name: "Refactor auth" });
     expect(links.length).toBeGreaterThan(0);
-    for (const link of links) expect(link).toHaveAttribute("href", "/runs/parent-1");
+    for (const link of links) expect(link).toHaveAttribute("href", "/workflows/runs/parent-1");
   });
 
   it("falls back to 'Started by an agent' when the parent is gone or not the caller's", async () => {
@@ -257,7 +257,7 @@ describe("run detail: launch event", () => {
         }),
       }),
     );
-    renderRunsAt(<RunDetail chatId="chat-1" />, "/runs/chat-1");
+    renderRunsAt(<RunDetail chatId="chat-1" />, "/workflows/runs/chat-1");
 
     await screen.findByTestId("trigger-card");
     expect(screen.getByTestId("run-started-by")).toHaveTextContent(/^Started by an agent$/);
@@ -269,7 +269,7 @@ describe("run detail: launch event", () => {
     const user = userEvent.setup();
     useChat(protoChat());
     rpc.getLaunchEvent.mockResolvedValue(scheduleLaunch("The recorded prompt"));
-    renderRunsAt(<RunDetail chatId="chat-1" />, "/runs/chat-1");
+    renderRunsAt(<RunDetail chatId="chat-1" />, "/workflows/runs/chat-1");
 
     await user.click(await screen.findByRole("button", { name: "Re-run (current definition)" }));
     await screen.findByRole("form", { name: "Re-run (current definition)" });
@@ -280,7 +280,7 @@ describe("run detail: launch event", () => {
     const user = userEvent.setup();
     useChat(protoChat());
     rpc.getLaunchEvent.mockResolvedValue(scheduleLaunch());
-    const { router } = renderRunsAt(<RunDetail chatId="chat-1" />, "/runs/chat-1");
+    const { router } = renderRunsAt(<RunDetail chatId="chat-1" />, "/workflows/runs/chat-1");
 
     // The card shows the slot in the automation's timezone once the event loads.
     expect(await screen.findByTestId("trigger-card")).toHaveTextContent(
@@ -327,7 +327,7 @@ describe("run detail: launch event", () => {
     const user = userEvent.setup();
     useChat(protoChat());
     rpc.getLaunchEvent.mockResolvedValue(scheduleLaunch());
-    renderRunsAt(<RunDetail chatId="chat-1" />, "/runs/chat-1");
+    renderRunsAt(<RunDetail chatId="chat-1" />, "/workflows/runs/chat-1");
 
     await user.click(await screen.findByRole("button", { name: "Run automation now" }));
     await waitFor(() => expect(rpc.fireTrigger).toHaveBeenCalledTimes(1));
@@ -339,7 +339,7 @@ describe("run detail: launch event", () => {
     const consoleError = vi.spyOn(console, "error");
     useChat(protoChat());
     rpc.getLaunchEvent.mockResolvedValue(create(GetLaunchEventResponseSchema, {}));
-    renderRunsAt(<RunDetail chatId="chat-1" />, "/runs/chat-1");
+    renderRunsAt(<RunDetail chatId="chat-1" />, "/workflows/runs/chat-1");
 
     await screen.findByTestId("transcript");
     const card = await screen.findByTestId("trigger-card");

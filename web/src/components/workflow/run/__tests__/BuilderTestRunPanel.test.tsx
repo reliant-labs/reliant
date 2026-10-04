@@ -65,7 +65,7 @@ function renderPanel(ui: ReactNode) {
   const rootRoute = createRootRoute({ component: () => <Outlet /> });
   const routes = [
     createRoute({ getParentRoute: () => rootRoute, path: "/workflow", component: () => <>{ui}</> }),
-    createRoute({ getParentRoute: () => rootRoute, path: "/runs/$runId", component: () => null }),
+    createRoute({ getParentRoute: () => rootRoute, path: "/workflows/runs/$runId", component: () => null }),
   ];
   const router = createRouter({
     routeTree: rootRoute.addChildren(routes),
@@ -207,7 +207,7 @@ describe("BuilderTestRunPanel", () => {
     const { router } = renderPanel(<BuilderTestRunPanel {...baseProps({ testChatId: "test-chat-1" })} />);
 
     const link = await screen.findByRole("link", { name: "Watch full run" });
-    expect(link).toHaveAttribute("href", "/runs/test-chat-1");
+    expect(link).toHaveAttribute("href", "/workflows/runs/test-chat-1");
     expect(screen.getByRole("button", { name: "Run again" })).toBeInTheDocument();
     expect(router.state.location.pathname).toBe("/workflow");
   });

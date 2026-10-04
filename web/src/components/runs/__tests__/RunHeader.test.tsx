@@ -63,7 +63,7 @@ describe("RunHeader", () => {
         projectName="Reliant"
         actions={handlers}
       />,
-      "/runs/chat-1",
+      "/workflows/runs/chat-1",
     );
     expect(await screen.findByRole("heading", { name: "Nightly triage" })).toBeInTheDocument();
     expect(screen.getByText("Failed")).toBeInTheDocument();
@@ -77,15 +77,15 @@ describe("RunHeader", () => {
         projectName="Reliant"
         actions={handlers}
       />,
-      "/runs/chat-1",
+      "/workflows/runs/chat-1",
     );
     const line = await screen.findByTestId("run-started-by");
     expect(line).toHaveTextContent("Started by an agent in Refactor auth");
-    expect(screen.getByRole("link", { name: "Refactor auth" })).toHaveAttribute("href", "/runs/parent-1");
+    expect(screen.getByRole("link", { name: "Refactor auth" })).toHaveAttribute("href", "/workflows/runs/parent-1");
   });
 
   it("an agent-started run without a known parent still says an agent started it", async () => {
-    renderRunsAt(<RunHeader chat={chat({ launchKind: "agent.start_run" })} actions={handlers} />, "/runs/chat-1");
+    renderRunsAt(<RunHeader chat={chat({ launchKind: "agent.start_run" })} actions={handlers} />, "/workflows/runs/chat-1");
     expect(await screen.findByTestId("run-started-by")).toHaveTextContent("Started by an agent");
   });
 
@@ -96,14 +96,14 @@ describe("RunHeader", () => {
         triggerName="Hourly sweep"
         actions={handlers}
       />,
-      "/runs/chat-1",
+      "/workflows/runs/chat-1",
     );
     expect(await screen.findByTestId("run-started-by")).toHaveTextContent("Started by schedule Hourly sweep");
-    expect(screen.getByRole("link", { name: "Hourly sweep" })).toHaveAttribute("href", "/automations/trig-1");
+    expect(screen.getByRole("link", { name: "Hourly sweep" })).toHaveAttribute("href", "/workflows/automations/trig-1");
   });
 
   it("a run whose automation was deleted says so", async () => {
-    renderRunsAt(<RunHeader chat={chat({ launchKind: "schedule" })} actions={handlers} />, "/runs/chat-1");
+    renderRunsAt(<RunHeader chat={chat({ launchKind: "schedule" })} actions={handlers} />, "/workflows/runs/chat-1");
     expect(await screen.findByTestId("run-started-by")).toHaveTextContent(
       "Started by a schedule that has since been deleted",
     );
@@ -116,7 +116,7 @@ describe("RunHeader", () => {
         chat={chat({ workflowState: WorkflowState.ACTIVE, workflowStopReason: WorkflowStopReason.UNSPECIFIED, activity: ChatActivity.RUNNING })}
         actions={handlers}
       />,
-      "/runs/chat-1",
+      "/workflows/runs/chat-1",
     );
     await user.click(await screen.findByRole("button", { name: "Pause" }));
     expect(handlers.onPause).toHaveBeenCalledTimes(1);
@@ -129,7 +129,7 @@ describe("RunHeader", () => {
     const user = userEvent.setup();
     renderRunsAt(
       <RunHeader chat={chat({ workflowStopReason: WorkflowStopReason.PAUSED })} actions={handlers} />,
-      "/runs/chat-1",
+      "/workflows/runs/chat-1",
     );
     await user.click(await screen.findByRole("button", { name: "Resume" }));
     expect(handlers.onResume).toHaveBeenCalledTimes(1);
@@ -137,13 +137,13 @@ describe("RunHeader", () => {
 
   it("offers Open as chat on an automation run that has not been adopted", async () => {
     const user = userEvent.setup();
-    renderRunsAt(<RunHeader chat={chat({ launchKind: "schedule" })} actions={handlers} />, "/runs/chat-1");
+    renderRunsAt(<RunHeader chat={chat({ launchKind: "schedule" })} actions={handlers} />, "/workflows/runs/chat-1");
     await user.click(await screen.findByRole("button", { name: "Open as chat" }));
     await waitFor(() => expect(handlers.onOpenAsChat).toHaveBeenCalledTimes(1));
   });
 
   it("an interactive chat, or an adopted run, is already a chat", async () => {
-    const { unmount } = renderRunsAt(<RunHeader chat={chat()} actions={handlers} />, "/runs/chat-1");
+    const { unmount } = renderRunsAt(<RunHeader chat={chat()} actions={handlers} />, "/workflows/runs/chat-1");
     await screen.findByRole("heading", { name: "Nightly triage" });
     expect(screen.getByRole("button", { name: "Open chat" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Open as chat" })).not.toBeInTheDocument();
@@ -151,14 +151,14 @@ describe("RunHeader", () => {
 
     renderRunsAt(
       <RunHeader chat={chat({ launchKind: "schedule", adoptedAt: new Date().toISOString() })} actions={handlers} />,
-      "/runs/chat-1",
+      "/workflows/runs/chat-1",
     );
     await screen.findByRole("heading", { name: "Nightly triage" });
     expect(screen.queryByRole("button", { name: "Open as chat" })).not.toBeInTheDocument();
   });
 
   it("names the machine", async () => {
-    renderRunsAt(<RunHeader chat={chat({ activeDaemonId: "d-1" })} projectName="Reliant" actions={handlers} />, "/runs/chat-1");
+    renderRunsAt(<RunHeader chat={chat({ activeDaemonId: "d-1" })} projectName="Reliant" actions={handlers} />, "/workflows/runs/chat-1");
     expect(await screen.findByText(/Reliant · laptop/)).toBeInTheDocument();
   });
 });
