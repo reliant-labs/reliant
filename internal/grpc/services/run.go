@@ -286,8 +286,8 @@ func (s *RunService) respondWithSessionRun(
 // This is the half of SendMessage that is not "start". SendMessage decides
 // between the two by reading the run's status, so a caller cannot say which it
 // meant; here the choice is the RPC. A run that is not live reports
-// delivered=false rather than quietly starting a new one — the messages are
-// still persisted, so the next run reads them.
+// delivered=false rather than quietly starting a new one. Nothing is persisted
+// for an undelivered signal; the caller owns retrying.
 func (s *RunService) SignalRun(
 	ctx context.Context,
 	req *connect.Request[reliantv1.SignalRunRequest],
@@ -303,9 +303,11 @@ func (s *RunService) SignalRun(
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("messages is required"))
 	}
 
-	// Live means executing, or will execute again on its own — the same
-	// predicate the send path uses to decide whether a run can receive work.
-	if !run.Status.Live() {
+	// Deliverable means executing, or paused and about to resume. Live() also
+	// counts PENDING, but a pending run has never started and SendMessage
+	// refuses to start it (the first send is StartChat's), so a signal to it
+	// would surface FailedPrecondition instead of delivered=false.
+	if !run.Status.Live() || run.Status == db.Pending() {
 		return connect.NewResponse(&reliantv1.SignalRunResponse{Delivered: false}), nil
 	}
 

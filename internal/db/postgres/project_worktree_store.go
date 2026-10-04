@@ -85,7 +85,7 @@ func (s *projectStore) GetProjectWithUserCheck(ctx context.Context, id string, u
 	row, err := s.q.GetProjectWithUserCheck(ctx, pgdb.GetProjectWithUserCheckParams{ID: id, UserID: userID})
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf("project not found or access denied")
+			return nil, core.ErrProjectNotFound
 		}
 		return nil, fmt.Errorf("failed to get project: %w", err)
 	}

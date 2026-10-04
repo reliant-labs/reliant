@@ -30,7 +30,7 @@ func (s *chatStore) GetChat(ctx context.Context, id string) (*core.Chat, error) 
 	row, err := s.q.GetChat(ctx, id)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf("chat not found: %s", id)
+			return nil, fmt.Errorf("%w: %s", core.ErrChatNotFound, id)
 		}
 		return nil, fmt.Errorf("failed to get chat: %w", err)
 	}
@@ -44,7 +44,7 @@ func (s *chatStore) GetChatWithUserCheck(ctx context.Context, id string, userID 
 	})
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf("chat not found: %s", id)
+			return nil, fmt.Errorf("%w: %s", core.ErrChatNotFound, id)
 		}
 		return nil, fmt.Errorf("failed to get chat: %w", err)
 	}
@@ -252,6 +252,7 @@ func archivedChatInfosFromRows(rows []pgdb.ListArchivedChatsRow) []*core.Archive
 	items := make([]*core.ArchivedChatInfo, len(rows))
 	for i, row := range rows {
 		worktreeName := row.WorktreeName
+		activity := int(row.Activity)
 		items[i] = &core.ArchivedChatInfo{
 			Chat: core.Chat{
 				ID:              row.ID,
@@ -268,6 +269,12 @@ func archivedChatInfosFromRows(rows []pgdb.ListArchivedChatsRow) []*core.Archive
 				UpdatedAt:       row.UpdatedAt,
 				LastActive:      row.LastActive,
 				LastMessageAt:   chatInterfaceToTimePtr(row.LastMessageAt),
+				Activity:        &activity,
+				Unread:          row.Unread != 0,
+				ActiveDaemonID:  chatNullStringToPtr(row.ActiveDaemonID),
+				LaunchKind:      row.LaunchKind.String,
+				TriggerID:       chatNullStringToPtr(row.TriggerID),
+				RootStatus:      chatRootStatus(row.RootWorkflowState, row.RootWorkflowStopReason),
 			},
 			WorktreeName:      &worktreeName,
 			WorktreeDeletedAt: chatNullTimeToPtr(row.WorktreeDeletedAt),

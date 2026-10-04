@@ -86,14 +86,14 @@ ORDER BY cws.last_active DESC
 LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
 
 -- name: ListArchivedChats :many
--- List archived chats with worktree info and computed last_message_at
--- Falls back to project name if worktree name is unavailable
+-- List archived chats with worktree info. Reads chats_with_activity (not chats)
+-- so the root workflow state and last_message_at come back like every other
+-- chat read; falls back to project name if worktree name is unavailable.
 SELECT
     c.*,
-    (SELECT MAX(m.created_at) FROM messages m WHERE m.chat_id = c.id) as last_message_at,
     COALESCE(w.name, c.archived_worktree_name, p.name) as worktree_name,
     w.deleted_at as worktree_deleted_at
-FROM chats c
+FROM chats_with_activity c
 LEFT JOIN worktrees w ON c.worktree_id = w.id
 LEFT JOIN projects p ON c.project_id = p.id
 WHERE c.state = 3
