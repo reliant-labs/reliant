@@ -9,7 +9,6 @@
 
 import { useEffect, useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { Bot, CalendarClock, MessageSquare, Zap } from "lucide-react";
 
 import type { RunSummary } from "@/api/run-grpc";
 import { useDaemonStatus } from "@/hooks/useDaemonStatus";
@@ -20,6 +19,7 @@ import { getWorkflowDisplayName } from "../workflow/useWorkflowInputs";
 import { daemonLabel } from "../Automations/daemonChoices";
 import { RunStatusDot } from "../ui/RunStatusIndicator";
 import { formatDuration } from "./runSections";
+import { LaunchKindIcon } from "./LaunchKindIcon";
 
 interface RunRowProps {
   run: RunSummary;
@@ -28,12 +28,7 @@ interface RunRowProps {
   className?: string;
 }
 
-/** The launch kind's icon. Decorative: the short label beside it carries the meaning. */
-export function LaunchKindIcon({ kind, className }: { kind: string; className?: string }) {
-  const Icon =
-    kind === "schedule" ? CalendarClock : kind === "agent.start_run" ? Bot : kind === "chat.start" ? MessageSquare : Zap;
-  return <Icon className={cn("h-3.5 w-3.5 shrink-0", className)} aria-hidden="true" />;
-}
+export { LaunchKindIcon };
 
 export function RunRow({ run, projectName, className }: RunRowProps) {
   const status = runStatusFromDisplayState(run.displayState, run.outcome);

@@ -212,4 +212,15 @@ export const runGrpc = {
     const { $typeName: _, ...chat } = response.chat;
     return chat;
   },
+
+  /**
+   * Undo an adoption: the run leaves the chat list and lives in Runs again.
+   * Not an archive; origin and history are untouched. Returns the updated chat.
+   */
+  async unadopt(chatId: string): Promise<Chat> {
+    const response = await grpcClient.chat().unadoptChat({ chatId });
+    if (!response.chat) throw new Error("No chat in response");
+    const { $typeName: _, ...chat } = response.chat;
+    return chat;
+  },
 };

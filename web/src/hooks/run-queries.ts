@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
-import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { create } from "@bufbuild/protobuf";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import {
   buildListRunsRequest,
@@ -7,6 +8,7 @@ import {
   type RunListFilters,
   type RunSummary,
 } from "../api/run-grpc";
+import { ListRunsRequestSchema, RunDisplayState } from "../gen/reliant/v1/run_pb";
 import { UserUpdateType } from "../gen/reliant/v1/streaming_pb";
 import { chatKeys, seedChatDetail } from "./chat-queries";
 
@@ -116,6 +118,94 @@ export function useAdoptRun() {
     onSuccess: (chat) => {
       seedChatDetail(chat);
       void queryClient.invalidateQueries({ queryKey: chatKeys.lists() });
+      void queryClient.invalidateQueries({ queryKey: runKeys.lists() });
     },
+  });
+}
+
+/**
+ * Un-adopt a run ("Move back to Runs", §6.3): it leaves the sidebar list and
+ * stays in Runs. The list refetch is what removes the row; the detail cache is
+ * patched so anything showing the chat stops calling it adopted.
+ */
+export function useUnadoptRun() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (chatId: string) => runGrpc.unadopt(chatId),
+    onSuccess: (chat) => {
+      seedChatDetail(chat);
+      void queryClient.invalidateQueries({ queryKey: chatKeys.lists() });
+      void queryClient.invalidateQueries({ queryKey: runKeys.lists() });
+    },
+  });
+}
+
+// ── Live automation runs (the sidebar footer pill) ──────────────────────────
+
+/**
+ * What the pill counts: a run that is executing, or blocked on the user or on
+ * a machine. Queued and paused are deliberately out: neither is "running",
+ * and a paused run waits for a person who already paused it.
+ */
+const LIVE_AUTOMATION_STATES: readonly RunDisplayState[] = [
+  RunDisplayState.RUNNING,
+  RunDisplayState.NEEDS_INPUT,
+  RunDisplayState.WAITING_FOR_MACHINE,
+];
+
+/** The pill reads one page; a count past this reads "N+". */
+export const LIVE_AUTOMATION_LIMIT = 100;
+
+export interface LiveAutomationSummary {
+  running: number;
+  needsYou: number;
+  /** True when the server had more than one page: the counts are a floor. */
+  truncated: boolean;
+}
+
+/**
+ * Count live automation runs that are NOT in the chat list.
+ *
+ * `excludeChatIds` is the sidebar's own list: an adopted run that is live is
+ * already a row with an activity dot, so counting it again in the pill would
+ * report it twice. Pure so the counting rule is testable without a server.
+ */
+export function summarizeLiveAutomations(
+  runs: readonly RunSummary[],
+  excludeChatIds: ReadonlySet<string>,
+  truncated = false,
+): LiveAutomationSummary {
+  let running = 0;
+  let needsYou = 0;
+  for (const run of runs) {
+    if (!run.launchKind || run.launchKind === "chat.start") continue;
+    if (excludeChatIds.has(run.chatId)) continue;
+    if (!LIVE_AUTOMATION_STATES.includes(run.displayState)) continue;
+    running += 1;
+    if (run.displayState === RunDisplayState.NEEDS_INPUT) needsYou += 1;
+  }
+  return { running, needsYou, truncated };
+}
+
+/**
+ * Live runs across every project, for the sidebar footer pill.
+ *
+ * Keyed under `runKeys.lists()`, so it does not poll: the global updates store
+ * already invalidates that prefix on chat_state_change, chat_activity_changed
+ * and chat_created, which are exactly the events that start, block or end a
+ * run. No time window: a run that started three days ago and is still going is
+ * still live.
+ */
+export function useLiveRuns() {
+  return useQuery({
+    queryKey: [...runKeys.lists(), "live-pill"] as const,
+    queryFn: () =>
+      runGrpc.list(
+        create(ListRunsRequestSchema, {
+          displayStates: [...LIVE_AUTOMATION_STATES],
+          limit: LIVE_AUTOMATION_LIMIT,
+          includeArchived: false,
+        }),
+      ),
   });
 }
