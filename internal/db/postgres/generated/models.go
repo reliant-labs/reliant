@@ -58,12 +58,13 @@ type AntigravityAuthToken struct {
 }
 
 type ApiKey struct {
-	ID        string    `json:"id"`
-	UserID    string    `json:"user_id"`
-	Provider  string    `json:"provider"`
-	ApiKey    string    `json:"api_key"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID           string    `json:"id"`
+	UserID       string    `json:"user_id"`
+	Provider     string    `json:"provider"`
+	ApiKey       string    `json:"api_key"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
+	ApiKeySealed []byte    `json:"api_key_sealed"`
 }
 
 type Approval struct {
@@ -654,6 +655,17 @@ type UserUpdate struct {
 	EntityID       string         `json:"entity_id"`
 	Data           string         `json:"data"`
 	CreatedAt      time.Time      `json:"created_at"`
+}
+
+type VaultKey struct {
+	ID         string    `json:"id"`
+	TenantKind string    `json:"tenant_kind"`
+	TenantID   string    `json:"tenant_id"`
+	Version    int32     `json:"version"`
+	KekID      string    `json:"kek_id"`
+	WrappedDek []byte    `json:"wrapped_dek"`
+	State      string    `json:"state"`
+	CreatedAt  time.Time `json:"created_at"`
 }
 
 type VisibilityOverride struct {

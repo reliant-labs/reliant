@@ -41,6 +41,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/telemetry"
 	"github.com/reliant-labs/reliant/internal/temporal"
 	"github.com/reliant-labs/reliant/internal/temporal/claimcheck"
+	"github.com/reliant-labs/reliant/internal/tokenauthority"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/workersetup"
 	v2workflow "github.com/reliant-labs/reliant/internal/workflow"
@@ -156,6 +157,12 @@ func Run(ctx context.Context, opts Options) error {
 		return fmt.Errorf("failed to initialize database: %w", err)
 	}
 	defer func() { _ = repo.Close() }()
+
+	// Credential vault: required when hosted, generated when self-hosted.
+	// Fails startup on a missing or malformed key.
+	if _, err := db.BootVault(ctx, repo, tokenauthority.ControlPlaneURL() != "", opts.DataDir); err != nil {
+		return err
+	}
 
 	// API key provider (allows LLM drivers to resolve per-user keys from DB)
 	drivers.InitializeAPIKeyProvider(repo)
