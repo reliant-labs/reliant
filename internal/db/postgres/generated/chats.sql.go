@@ -140,11 +140,10 @@ func (q *Queries) GetChatWithUserCheck(ctx context.Context, arg GetChatWithUserC
 
 const listArchivedChats = `-- name: ListArchivedChats :many
 SELECT
-    c.id, c.title, c.project_id, c.user_id, c.state, c.workflow_id, c.run_id, c.created_at, c.updated_at, c.last_active, c.worktree_id, c.workflow_name, c.selected_presets, c.archived_worktree_name, c.unread, c.active_daemon_id,
-    (SELECT MAX(m.created_at) FROM messages m WHERE m.chat_id = c.id) as last_message_at,
+    c.id, c.title, c.project_id, c.user_id, c.state, c.workflow_id, c.run_id, c.created_at, c.updated_at, c.last_active, c.worktree_id, c.workflow_name, c.selected_presets, c.archived_worktree_name, c.unread, c.active_daemon_id, c.last_message_at, c.activity, c.root_workflow_state, c.root_workflow_stop_reason, c.launch_kind, c.trigger_id,
     COALESCE(w.name, c.archived_worktree_name, p.name) as worktree_name,
     w.deleted_at as worktree_deleted_at
-FROM chats c
+FROM chats_with_activity c
 LEFT JOIN worktrees w ON c.worktree_id = w.id
 LEFT JOIN projects p ON c.project_id = p.id
 WHERE c.state = 3
@@ -153,29 +152,35 @@ ORDER BY c.updated_at DESC
 `
 
 type ListArchivedChatsRow struct {
-	ID                   string         `json:"id"`
-	Title                string         `json:"title"`
-	ProjectID            string         `json:"project_id"`
-	UserID               string         `json:"user_id"`
-	State                sql.NullInt32  `json:"state"`
-	WorkflowID           sql.NullString `json:"workflow_id"`
-	RunID                sql.NullString `json:"run_id"`
-	CreatedAt            time.Time      `json:"created_at"`
-	UpdatedAt            time.Time      `json:"updated_at"`
-	LastActive           time.Time      `json:"last_active"`
-	WorktreeID           sql.NullString `json:"worktree_id"`
-	WorkflowName         sql.NullString `json:"workflow_name"`
-	SelectedPresets      sql.NullString `json:"selected_presets"`
-	ArchivedWorktreeName sql.NullString `json:"archived_worktree_name"`
-	Unread               int32          `json:"unread"`
-	ActiveDaemonID       sql.NullString `json:"active_daemon_id"`
-	LastMessageAt        interface{}    `json:"last_message_at"`
-	WorktreeName         string         `json:"worktree_name"`
-	WorktreeDeletedAt    sql.NullTime   `json:"worktree_deleted_at"`
+	ID                     string         `json:"id"`
+	Title                  string         `json:"title"`
+	ProjectID              string         `json:"project_id"`
+	UserID                 string         `json:"user_id"`
+	State                  sql.NullInt32  `json:"state"`
+	WorkflowID             sql.NullString `json:"workflow_id"`
+	RunID                  sql.NullString `json:"run_id"`
+	CreatedAt              time.Time      `json:"created_at"`
+	UpdatedAt              time.Time      `json:"updated_at"`
+	LastActive             time.Time      `json:"last_active"`
+	WorktreeID             sql.NullString `json:"worktree_id"`
+	WorkflowName           sql.NullString `json:"workflow_name"`
+	SelectedPresets        sql.NullString `json:"selected_presets"`
+	ArchivedWorktreeName   sql.NullString `json:"archived_worktree_name"`
+	Unread                 int32          `json:"unread"`
+	ActiveDaemonID         sql.NullString `json:"active_daemon_id"`
+	LastMessageAt          interface{}    `json:"last_message_at"`
+	Activity               int32          `json:"activity"`
+	RootWorkflowState      sql.NullInt32  `json:"root_workflow_state"`
+	RootWorkflowStopReason sql.NullInt32  `json:"root_workflow_stop_reason"`
+	LaunchKind             sql.NullString `json:"launch_kind"`
+	TriggerID              sql.NullString `json:"trigger_id"`
+	WorktreeName           string         `json:"worktree_name"`
+	WorktreeDeletedAt      sql.NullTime   `json:"worktree_deleted_at"`
 }
 
-// List archived chats with worktree info and computed last_message_at
-// Falls back to project name if worktree name is unavailable
+// List archived chats with worktree info. Reads chats_with_activity (not chats)
+// so the root workflow state and last_message_at come back like every other
+// chat read; falls back to project name if worktree name is unavailable.
 func (q *Queries) ListArchivedChats(ctx context.Context, userID string) ([]ListArchivedChatsRow, error) {
 	rows, err := q.db.QueryContext(ctx, listArchivedChats, userID)
 	if err != nil {
@@ -203,6 +208,11 @@ func (q *Queries) ListArchivedChats(ctx context.Context, userID string) ([]ListA
 			&i.Unread,
 			&i.ActiveDaemonID,
 			&i.LastMessageAt,
+			&i.Activity,
+			&i.RootWorkflowState,
+			&i.RootWorkflowStopReason,
+			&i.LaunchKind,
+			&i.TriggerID,
 			&i.WorktreeName,
 			&i.WorktreeDeletedAt,
 		); err != nil {

@@ -3,6 +3,8 @@ package launch
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -17,6 +19,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/workflow"
@@ -170,13 +173,15 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 	if spec.NewChatID != "" {
 		if _, err := l.repo.GetChat(ctx, chatID); err == nil {
 			return nil, &AlreadyLaunchedError{ChatID: chatID}
+		} else if !errors.Is(err, core.ErrChatNotFound) {
+			return nil, &InternalError{Reason: "failed to check for an existing chat", Err: err}
 		}
 	}
 
 	// Verify user owns the project and get project details
 	project, err := l.repo.GetProjectWithUserCheck(ctx, spec.ProjectID, userID)
 	if err != nil {
-		return nil, &NotFoundError{Reason: "project not found", Err: err}
+		return nil, projectLookupError(err)
 	}
 
 	// Resolve workflow - use user's default if not specified
@@ -295,7 +300,12 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 		logging.Error("Failed to marshal chat_created data", "error", marshalErr, "chatID", chatID)
 	}
 
-	eventRow := newEventRow(ev, userID, chatID, workflowName, worktreeID)
+	eventRow := newEventRow(ev, userID, chatID, workflowName, worktreeID, startRecord{
+		Fingerprint: seedFingerprint(spec.Messages, spec.Attachments),
+		Workflow:    workflowName,
+		Presets:     spec.Presets,
+		Params:      spec.Params,
+	})
 
 	// The event row is inserted before the chat, so the (kind, dedupe_key)
 	// constraint — not the chat's primary key — decides which of two
@@ -391,11 +401,39 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 	})
 }
 
-// launchPending starts an existing PENDING chat: a branched chat's first send.
+// launchPending starts an existing PENDING chat: a branched chat's first send,
+// or the retry of a start that committed but never reached Temporal.
+//
+// Whether a call is a retry or a new turn is decided from durable state: the
+// event row for (kind, dedupe key) records a fingerprint of the seed it was
+// started with, plus the effective workflow, presets and params.
+//
+//   - No event yet: the first start. Apply the workflow switch, presets and
+//     seed messages and record the event, in one transaction.
+//   - Event with the same fingerprint (or any non-interactive source, whose
+//     retries are by definition the same fire): a true retry. Nothing is
+//     written; the run starts from the PERSISTED workflow, presets and params,
+//     never from this call's Spec, which may have drifted (an edited trigger).
+//   - Event with a different fingerprint on an interactive start: the caller
+//     is sending something new into a chat that has not started. Nothing has
+//     run, so the switch, presets and messages apply to the pending chat in
+//     one transaction (appending after the earlier seed, which stays), the
+//     event's record is updated, and the run starts from the persisted
+//     result. The alternative — start the original, then deliver the new
+//     message as a continuation — needs SendMessage's machinery, which this
+//     package cannot call, and would run the original workflow only to
+//     interrupt it.
+//
+// The pending check is repeated inside the transaction, so a start that lands
+// between the check and the write reports ErrNotPending rather than saving a
+// message onto a run that has already begun.
 func (l *Launcher) launchPending(ctx context.Context, ev Event, spec Spec, seed seedContent) (*Result, error) {
 	userID := spec.OwnerUserID
 
 	chat, err := l.repo.GetChat(ctx, spec.ChatID)
+	if err != nil && !errors.Is(err, core.ErrChatNotFound) {
+		return nil, &InternalError{Reason: "failed to load chat", Err: err}
+	}
 	if err != nil || chat == nil || chat.UserID != userID {
 		return nil, &NotFoundError{Reason: "chat not found", Err: err}
 	}
@@ -417,79 +455,98 @@ func (l *Launcher) launchPending(ctx context.Context, ev Event, spec Spec, seed 
 	if err != nil || root == nil {
 		return nil, &InternalError{Reason: "failed to check workflow status", Err: err}
 	}
-	if root.Status != db.Pending() {
+	pending := root.Status == db.Pending()
+
+	if ev.DedupeKey == "" && ev.Kind == core.TriggerEventKindChatStart {
+		ev.DedupeKey = chat.ID
+	}
+	fingerprint := seedFingerprint(spec.Messages, spec.Attachments)
+
+	// The event row decides what this call is, not the chat's state. A call
+	// that repeats an event already recorded is a duplicate of it: finish it
+	// while the chat is still pending, and report "already launched" once the
+	// run has started — never "use SendMessage", which is only the answer to a
+	// NEW event aimed at a chat that has already begun.
+	existing, err := l.repo.GetTriggerEventByDedupe(ctx, ev.Kind, ev.DedupeKey)
+	switch {
+	case err == nil:
+		if isRetryOf(existing, ev.Kind, fingerprint) {
+			if !pending {
+				return nil, &AlreadyLaunchedError{ChatID: chat.ID, EventID: existing.ID}
+			}
+			return l.startRecorded(ctx, existing, spec, seed)
+		}
+	case !errors.Is(err, core.ErrTriggerEventNotFound):
+		return nil, &InternalError{Reason: "failed to check for an earlier launch", Err: err}
+	}
+	if !pending {
 		return nil, ErrNotPending
 	}
 
 	project, err := l.repo.GetProjectWithUserCheck(ctx, chat.ProjectID, userID)
 	if err != nil {
-		return nil, &NotFoundError{Reason: "project not found", Err: err}
+		return nil, projectLookupError(err)
 	}
 
-	// A pending chat has produced nothing, so its workflow can still change;
-	// this is the one place the system allows it.
-	workflowName := ""
-	if chat.WorkflowName != nil {
-		workflowName = *chat.WorkflowName
-	}
-	switching := spec.Workflow != "" && spec.Workflow != workflowName
-	if switching {
-		workflowName = spec.Workflow
-	}
-
+	// Validate the new request BEFORE writing anything, against the workflow
+	// it would run. A pending chat has produced nothing, so its workflow can
+	// still change; this is the one place the system allows it.
+	workflowName, _, _ := effectiveStart(chat, spec)
 	if err := l.ValidateCreateChatWorkflowTree(ctx, userID, workflowName, project.ID); err != nil {
 		return nil, err
 	}
 	if err := ValidateWorkflowParamStructure(spec.Params); err != nil {
 		return nil, &ValidationError{Reason: err.Error()}
 	}
-
-	// Pin before buildInputs, which reads ActiveDaemonID to inject
-	// session_daemon_id. UpdateChat does not write the column, so it is
-	// persisted separately inside the transaction below.
-	pinDaemon := spec.DaemonID != "" && (chat.ActiveDaemonID == nil || *chat.ActiveDaemonID != spec.DaemonID)
-	if pinDaemon {
-		chat.ActiveDaemonID = &spec.DaemonID
-	}
-
-	// Merge presets: chat presets are base, request presets override
-	presets := make(map[string]string)
-	for k, v := range chat.SelectedPresets {
-		if v != "" {
-			presets[k] = v
+	{
+		checked := *chat
+		_, presets, _ := effectiveStart(chat, spec)
+		if spec.DaemonID != "" {
+			checked.ActiveDaemonID = &spec.DaemonID
+		}
+		if _, err := l.buildInputs(ctx, userID, &checked, workflowName, presets, spec.Params); err != nil {
+			return nil, err
 		}
 	}
-	for k, v := range spec.Presets {
-		if v != "" {
-			presets[k] = v
-		}
-	}
-
-	initialData, err := l.buildInputs(ctx, userID, chat, workflowName, presets, spec.Params)
-	if err != nil {
-		return nil, err
-	}
-
-	if ev.DedupeKey == "" && ev.Kind == core.TriggerEventKindChatStart {
-		ev.DedupeKey = chat.ID
-	}
-	eventRow := newEventRow(ev, userID, chat.ID, workflowName, chat.WorktreeID)
 
 	if err := l.repo.RunTx(ctx, func(txCtx context.Context) error {
+		cur, err := l.repo.GetChat(txCtx, chat.ID)
+		if err != nil {
+			return fmt.Errorf("failed to reload chat: %w", err)
+		}
+		curRoot, err := l.repo.GetWorkflow(txCtx, workflowID)
+		if err != nil || curRoot == nil {
+			return fmt.Errorf("failed to reload workflow: %w", err)
+		}
+		if curRoot.Status != db.Pending() {
+			return ErrNotPending
+		}
+
+		workflowName, presets, switching := effectiveStart(cur, spec)
+		eventRow := newEventRow(ev, userID, cur.ID, workflowName, cur.WorktreeID, startRecord{
+			Fingerprint: fingerprint,
+			Workflow:    workflowName,
+			Presets:     presets,
+			Params:      spec.Params,
+		})
+
 		created, err := l.repo.CreateTriggerEvent(txCtx, eventRow)
 		if err != nil {
 			return fmt.Errorf("failed to record trigger event: %w", err)
 		}
 		if !created {
-			// A previous attempt committed everything below and then failed to
-			// start Temporal. Its messages are already on the thread; saving
-			// them again would double them.
-			existing, err := l.repo.GetTriggerEventByDedupe(txCtx, ev.Kind, ev.DedupeKey)
+			stored, err := l.repo.GetTriggerEventByDedupe(txCtx, ev.Kind, ev.DedupeKey)
 			if err != nil {
 				return fmt.Errorf("failed to load earlier trigger event: %w", err)
 			}
-			eventRow.ID = existing.ID
-			return nil
+			if isRetryOf(stored, ev.Kind, fingerprint) {
+				// A concurrent identical start committed first; its messages
+				// are already on the thread.
+				return nil
+			}
+			if err := l.repo.UpdateTriggerEventPayload(txCtx, stored.ID, eventRow.Payload); err != nil {
+				return fmt.Errorf("failed to record the new start: %w", err)
+			}
 		}
 
 		if switching {
@@ -497,16 +554,17 @@ func (l *Launcher) launchPending(ctx context.Context, ev Event, spec Spec, seed 
 				return fmt.Errorf("failed to update workflow name: %w", err)
 			}
 		}
-		if pinDaemon {
-			if err := l.repo.UpdateChatActiveDaemon(txCtx, chat.ID, chat.ActiveDaemonID); err != nil {
+		if spec.DaemonID != "" && (cur.ActiveDaemonID == nil || *cur.ActiveDaemonID != spec.DaemonID) {
+			daemonID := spec.DaemonID
+			if err := l.repo.UpdateChatActiveDaemon(txCtx, cur.ID, &daemonID); err != nil {
 				return fmt.Errorf("failed to pin chat to daemon: %w", err)
 			}
 		}
 		if switching || len(spec.Presets) > 0 {
-			chat.WorkflowName = &workflowName
-			chat.SelectedPresets = presets
-			chat.UpdatedAt = time.Now().UTC()
-			if err := l.repo.UpdateChat(txCtx, chat); err != nil {
+			cur.WorkflowName = &workflowName
+			cur.SelectedPresets = presets
+			cur.UpdatedAt = time.Now().UTC()
+			if err := l.repo.UpdateChat(txCtx, cur); err != nil {
 				return fmt.Errorf("failed to update chat: %w", err)
 			}
 		}
@@ -514,10 +572,94 @@ func (l *Launcher) launchPending(ctx context.Context, ev Event, spec Spec, seed 
 		// The branch's thread was forked by BranchChat; the seed messages
 		// append to it. No greenfield probe: a branch is not a first turn of
 		// new work.
-		return l.saveSeedMessages(txCtx, chat.ID, workflowID, seed.systemMessages, seed, spec.Attachments)
+		return l.saveSeedMessages(txCtx, cur.ID, workflowID, seed.systemMessages, seed, spec.Attachments)
 	}); err != nil {
+		if errors.Is(err, ErrNotPending) {
+			// The chat started between the check above and the transaction.
+			// If that start was a duplicate of this very event, say so.
+			if stored, lookupErr := l.repo.GetTriggerEventByDedupe(ctx, ev.Kind, ev.DedupeKey); lookupErr == nil && isRetryOf(stored, ev.Kind, fingerprint) {
+				return nil, &AlreadyLaunchedError{ChatID: chat.ID, EventID: stored.ID}
+			}
+			return nil, ErrNotPending
+		}
 		logging.Error("Failed to start pending chat", "error", err, "chatID", chat.ID)
 		return nil, &InternalError{Reason: "failed to start chat", Err: err}
+	}
+
+	recorded, err := l.repo.GetTriggerEventByDedupe(ctx, ev.Kind, ev.DedupeKey)
+	if err != nil {
+		return nil, &InternalError{Reason: "failed to reload the recorded start", Err: err}
+	}
+	return l.startRecorded(ctx, recorded, spec, seed)
+}
+
+// effectiveStart is what a start of chat with spec would run as: the workflow
+// (the spec's, when it names one, else the chat's), the presets (the chat's as
+// the base, the spec's overriding) and whether that is a workflow switch.
+func effectiveStart(chat *db.Chat, spec Spec) (workflowName string, presets map[string]string, switching bool) {
+	if chat.WorkflowName != nil {
+		workflowName = *chat.WorkflowName
+	}
+	if spec.Workflow != "" && spec.Workflow != workflowName {
+		workflowName = spec.Workflow
+		switching = true
+	}
+	presets = make(map[string]string)
+	for key, value := range chat.SelectedPresets {
+		if value != "" {
+			presets[key] = value
+		}
+	}
+	for key, value := range spec.Presets {
+		if value != "" {
+			presets[key] = value
+		}
+	}
+	return workflowName, presets, switching
+}
+
+// isRetryOf reports whether a call carrying fingerprint is a retry of the
+// start the event recorded. Only an interactive start can be a new turn: its
+// dedupe key is the chat id, so a second call with different content is a
+// second thing the user said. Any other source dedupes on its own identity (a
+// fire id), so a repeat is the same fire even if its definition has since
+// been edited.
+func isRetryOf(stored *core.TriggerEvent, kind core.TriggerEventKind, fingerprint string) bool {
+	if kind != core.TriggerEventKindChatStart {
+		return true
+	}
+	recorded, _ := stored.Payload[payloadSeedFingerprint].(string)
+	return recorded == fingerprint
+}
+
+// startRecorded starts the chat from the state the database holds: the chat
+// row's workflow and presets, and the params recorded on the event. The call's
+// own Spec contributes only what is never persisted (unattended, the JWT, the
+// title flag).
+func (l *Launcher) startRecorded(ctx context.Context, recorded *core.TriggerEvent, spec Spec, seed seedContent) (*Result, error) {
+	if recorded.ChatID == nil {
+		return nil, &AlreadyLaunchedError{EventID: recorded.ID}
+	}
+	chat, err := l.repo.GetChat(ctx, *recorded.ChatID)
+	if err != nil && !errors.Is(err, core.ErrChatNotFound) {
+		return nil, &InternalError{Reason: "failed to load chat", Err: err}
+	}
+	if err != nil || chat == nil || chat.UserID != spec.OwnerUserID {
+		return nil, &NotFoundError{Reason: "chat not found", Err: err}
+	}
+
+	workflowName := ""
+	if chat.WorkflowName != nil {
+		workflowName = *chat.WorkflowName
+	}
+	params, err := recordedParams(recorded)
+	if err != nil {
+		return nil, &InternalError{Reason: "failed to read the recorded start", Err: err}
+	}
+
+	initialData, err := l.buildInputs(ctx, spec.OwnerUserID, chat, workflowName, chat.SelectedPresets, params)
+	if err != nil {
+		return nil, err
 	}
 
 	return l.start(ctx, startParams{
@@ -526,8 +668,8 @@ func (l *Launcher) launchPending(ctx context.Context, ev Event, spec Spec, seed 
 		spec:          spec,
 		initialData:   initialData,
 		userContent:   seed.userContent,
-		eventID:       eventRow.ID,
-		trigger:       TriggerInfoFromEvent(eventRow),
+		eventID:       recorded.ID,
+		trigger:       TriggerInfoFromEvent(recorded),
 		generateTitle: spec.GenerateTitle && chat.Title == "",
 	})
 }
@@ -545,6 +687,9 @@ func (l *Launcher) finishExisting(ctx context.Context, ev Event, spec Spec, seed
 	}
 
 	chat, err := l.repo.GetChat(ctx, *existing.ChatID)
+	if err != nil && !errors.Is(err, core.ErrChatNotFound) {
+		return nil, &InternalError{Reason: "failed to load chat", Err: err}
+	}
 	if err != nil || chat == nil || chat.UserID != spec.OwnerUserID {
 		return nil, &NotFoundError{Reason: "chat not found", Err: err}
 	}
@@ -560,14 +705,85 @@ func (l *Launcher) finishExisting(ctx context.Context, ev Event, spec Spec, seed
 	return nil, &AlreadyLaunchedError{ChatID: chat.ID, EventID: existing.ID}
 }
 
+const (
+	payloadSeedFingerprint = "seed_fingerprint"
+	payloadStart           = "start"
+)
+
+// startRecord is what the event row remembers about a start, so a retry can be
+// told from a new turn and can rebuild the run without trusting the retrying
+// caller's Spec.
+type startRecord struct {
+	Fingerprint string
+	Workflow    string
+	Presets     map[string]string
+	Params      map[string]*structpb.Value
+}
+
+func (r startRecord) addTo(payload map[string]any) {
+	params := make(map[string]any, len(r.Params))
+	for key, value := range r.Params {
+		params[key] = value.AsInterface()
+	}
+	presets := make(map[string]any, len(r.Presets))
+	for key, value := range r.Presets {
+		presets[key] = value
+	}
+	payload[payloadSeedFingerprint] = r.Fingerprint
+	payload[payloadStart] = map[string]any{
+		"workflow": r.Workflow,
+		"presets":  presets,
+		"params":   params,
+	}
+}
+
+// recordedParams reads back the workflow params a start was recorded with.
+func recordedParams(row *core.TriggerEvent) (map[string]*structpb.Value, error) {
+	start, _ := row.Payload[payloadStart].(map[string]any)
+	raw, _ := start["params"].(map[string]any)
+	params := make(map[string]*structpb.Value, len(raw))
+	for key, value := range raw {
+		converted, err := structpb.NewValue(value)
+		if err != nil {
+			return nil, fmt.Errorf("param %q: %w", key, err)
+		}
+		params[key] = converted
+	}
+	return params, nil
+}
+
+// seedFingerprint identifies what a start was asked to say: its messages, in
+// order, and its attachments. The greenfield guidance the launcher may prepend
+// is derived, not requested, so it is not part of it.
+func seedFingerprint(messages []SeedMessage, attachments []string) string {
+	hash := sha256.New()
+	for _, message := range messages {
+		fmt.Fprintf(hash, "m\x00%d\x00%s\x00", message.Role, message.Content)
+	}
+	for _, attachment := range attachments {
+		fmt.Fprintf(hash, "a\x00%s\x00", attachment)
+	}
+	return hex.EncodeToString(hash.Sum(nil))
+}
+
+// projectLookupError separates a project that is not there (final) from a
+// store failure (worth retrying).
+func projectLookupError(err error) error {
+	if errors.Is(err, core.ErrProjectNotFound) {
+		return &NotFoundError{Reason: "project not found", Err: err}
+	}
+	return &InternalError{Reason: "failed to load project", Err: err}
+}
+
 // newEventRow builds the trigger_events row a launch records. For an ad hoc
 // chat start it fills in the resolved workflow and worktree, which the
 // handler cannot know when the request left them to defaults.
-func newEventRow(ev Event, userID, chatID, workflowName string, worktreeID *string) *core.TriggerEvent {
-	payload := make(map[string]any, len(ev.Payload)+2)
+func newEventRow(ev Event, userID, chatID, workflowName string, worktreeID *string, record startRecord) *core.TriggerEvent {
+	payload := make(map[string]any, len(ev.Payload)+4)
 	for key, value := range ev.Payload {
 		payload[key] = value
 	}
+	record.addTo(payload)
 	if ev.Kind == core.TriggerEventKindChatStart {
 		payload["workflow"] = workflowName
 		if worktreeID != nil {
@@ -610,6 +826,11 @@ func (l *Launcher) buildInputs(
 	if validationErrors := l.ValidateWorkflowInputs(ctx, userID, workflowName, chat.ProjectID, initialData); len(validationErrors) > 0 {
 		errMsgs := make([]string, len(validationErrors))
 		for i, e := range validationErrors {
+			if errors.Is(e, drivers.ErrDriverLookupFailed) {
+				// Could not read the user's provider settings: a store
+				// problem, not a verdict on the inputs.
+				return nil, &InternalError{Reason: "failed to read provider settings", Err: e}
+			}
 			errMsgs[i] = e.Error()
 		}
 		return nil, &ValidationError{

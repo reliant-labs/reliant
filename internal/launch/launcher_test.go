@@ -69,6 +69,20 @@ func (f *fakeStarter) rootRun(t *testing.T) (startCall, v2.WorkflowInput) {
 	return startCall{}, v2.WorkflowInput{}
 }
 
+// lastRootInput is the WorkflowInput of the most recent DynamicWorkflow start.
+func (f *fakeStarter) lastRootInput(t *testing.T) v2.WorkflowInput {
+	t.Helper()
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for i := len(f.calls) - 1; i >= 0; i-- {
+		if input, ok := f.calls[i].args[0].(v2.WorkflowInput); ok {
+			return input
+		}
+	}
+	t.Fatal("no DynamicWorkflow start was issued")
+	return v2.WorkflowInput{}
+}
+
 func (f *fakeStarter) startedIDs() []string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -545,7 +559,13 @@ func TestLaunchStartsPendingBranchAndRefusesASecondStart(t *testing.T) {
 
 	before := len(starter.startedIDs())
 	_, err = launcher.Launch(ctx, ev, spec)
-	require.ErrorIs(t, err, ErrNotPending)
+	require.ErrorIs(t, err, ErrAlreadyLaunched, "the same send again is a duplicate of the recorded start")
+	assert.NotErrorIs(t, err, ErrNotPending)
+
+	different := spec
+	different.Messages = userSeed("a different message")
+	_, err = launcher.Launch(ctx, ev, different)
+	require.ErrorIs(t, err, ErrNotPending, "new content for a started chat belongs to SendMessage")
 	assert.Len(t, starter.startedIDs(), before, "a refused start must not call Temporal again")
 }
 

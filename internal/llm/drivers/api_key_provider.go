@@ -10,6 +10,7 @@ package drivers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 
@@ -41,6 +42,24 @@ func InitializeAPIKeyProvider(repo db.Repository) {
 
 // ErrNoAPIKeysConfigured is returned when no API keys are available
 var ErrNoAPIKeysConfigured = fmt.Errorf("no API keys configured: please add an API key in Settings > API Keys")
+
+// ErrDriverLookupFailed marks a failure to READ the user's provider settings, as
+// opposed to a successful read that found no usable key. The first is a store
+// problem worth retrying; the second is a verdict about the user's setup.
+var ErrDriverLookupFailed = errors.New("could not read provider settings")
+
+// LookupAvailableDrivers is GetAvailableDrivers for callers that must tell a
+// failed read (error wrapping ErrDriverLookupFailed) from an empty result.
+func LookupAvailableDrivers(ctx context.Context, userID string) (models.AvailableDrivers, error) {
+	if globalAPIKeyProvider == nil {
+		return models.AvailableDrivers{}, fmt.Errorf("%w: API key provider not initialized", ErrDriverLookupFailed)
+	}
+	availableDrivers, err := BuildAvailableDrivers(ctx, globalAPIKeyProvider.repo, userID)
+	if err != nil {
+		return models.AvailableDrivers{}, fmt.Errorf("%w: %w", ErrDriverLookupFailed, err)
+	}
+	return availableDrivers, nil
+}
 
 // GetAvailableDrivers returns the available drivers with their API keys
 // Returns an error if no API keys are configured - users must configure keys via settings

@@ -13,6 +13,7 @@ package launch
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -346,6 +347,14 @@ func (l *Launcher) LoadWorkflowForValidation(ctx context.Context, workflowName, 
 	return nil, fmt.Errorf("workflow not found: %s", workflowName)
 }
 
+// workflowLookupError marks a failure to READ a workflow, as opposed to a
+// workflow that is absent or malformed. The first is a store problem and
+// retryable; only the second can never launch.
+type workflowLookupError struct{ Err error }
+
+func (e *workflowLookupError) Error() string { return e.Err.Error() }
+func (e *workflowLookupError) Unwrap() error { return e.Err }
+
 func (l *Launcher) loadCreateChatWorkflowForValidation(ctx context.Context, userID, workflowName, projectID string) (*reliantv1.Workflow, error) {
 	if strings.HasPrefix(workflowName, "builtin://") {
 		return l.LoadWorkflowForValidation(ctx, workflowName, projectID)
@@ -354,7 +363,13 @@ func (l *Launcher) loadCreateChatWorkflowForValidation(ctx context.Context, user
 	slug := NormalizeWorkflowSlug(workflowName)
 	draft, err := l.repo.GetUsableWorkflowBySlug(ctx, userID, slug)
 	if err != nil {
-		return nil, fmt.Errorf("failed to look up workflow '%s': %w", workflowName, err)
+		var notRunnable *db.WorkflowDraftNotRunnableError
+		if errors.As(err, &notRunnable) {
+			// A verdict about the draft (it is not marked complete), not a
+			// store failure: final, and the message names the remedy.
+			return nil, err
+		}
+		return nil, &workflowLookupError{Err: fmt.Errorf("failed to look up workflow '%s': %w", workflowName, err)}
 	}
 	if draft != nil {
 		wf, parseErr := wfyaml.ParseWorkflow([]byte(draft.Definition))
@@ -386,6 +401,11 @@ func (l *Launcher) createChatWorkflowLoader(ctx context.Context, userID, project
 func (l *Launcher) ValidateCreateChatWorkflowTree(ctx context.Context, userID, workflowName, projectID string) error {
 	wf, err := l.loadCreateChatWorkflowForValidation(ctx, userID, workflowName, projectID)
 	if err != nil {
+		var lookupErr *workflowLookupError
+		if errors.As(err, &lookupErr) {
+			// The store failed; the workflow may well exist. Retryable.
+			return &InternalError{Reason: "failed to look up workflow", Err: err}
+		}
 		return &ValidationError{Kind: ValidationInvalidArgument, Reason: err.Error()}
 	}
 

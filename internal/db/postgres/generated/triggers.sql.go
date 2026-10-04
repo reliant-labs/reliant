@@ -555,3 +555,20 @@ func (q *Queries) UpdateTriggerEventOutcome(ctx context.Context, arg UpdateTrigg
 	}
 	return result.RowsAffected()
 }
+
+const updateTriggerEventPayload = `-- name: UpdateTriggerEventPayload :execrows
+UPDATE trigger_events SET payload = $1 WHERE id = $2
+`
+
+type UpdateTriggerEventPayloadParams struct {
+	Payload json.RawMessage `json:"payload"`
+	ID      string          `json:"id"`
+}
+
+func (q *Queries) UpdateTriggerEventPayload(ctx context.Context, arg UpdateTriggerEventPayloadParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, updateTriggerEventPayload, arg.Payload, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}

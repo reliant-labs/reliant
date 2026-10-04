@@ -175,7 +175,7 @@ export interface InputMessage {
 
 export interface StartChatOptions {
   chat_id?: string;  // Start an existing PENDING chat (a branch's first send) instead of creating one
-  project_id: string;
+  project_id?: string; // Required for a new chat; omit with chat_id, where the chat names its own project
   messages: InputMessage[];  // At least one user message required
   title?: string;
   worktree_id?: string;

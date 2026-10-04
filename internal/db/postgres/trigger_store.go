@@ -247,6 +247,21 @@ func (s *triggerStore) UpdateTriggerEventOutcome(ctx context.Context, id string,
 	return nil
 }
 
+func (s *triggerStore) UpdateTriggerEventPayload(ctx context.Context, id string, payload map[string]any) error {
+	encoded, err := triggerMapToJSON(payload)
+	if err != nil {
+		return fmt.Errorf("marshal trigger event payload: %w", err)
+	}
+	affected, err := s.q.UpdateTriggerEventPayload(ctx, pgdb.UpdateTriggerEventPayloadParams{Payload: encoded, ID: id})
+	if err != nil {
+		return fmt.Errorf("failed to update trigger event payload: %w", err)
+	}
+	if affected == 0 {
+		return core.ErrTriggerEventNotFound
+	}
+	return nil
+}
+
 func (s *triggerStore) ListTriggerEvents(ctx context.Context, triggerID string, limit int) ([]*core.TriggerEvent, error) {
 	if limit <= 0 {
 		limit = defaultTriggerEventLimit

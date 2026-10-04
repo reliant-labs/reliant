@@ -1,3 +1,4 @@
+import { Code, ConnectError } from "@connectrpc/connect";
 import type { WorkflowState } from "../gen/reliant/v1/chat_pb";
 import { chatNeedsStart } from "./workflowLifecycle";
 
@@ -23,6 +24,19 @@ export interface ExistingChatSendActions {
   ) => Promise<unknown>;
 }
 
+// The server's refusal of SendMessage on a chat that has not started
+// (internal/grpc/services/chat_send.go). It carries no typed detail, so the
+// message is matched, but only together with the FailedPrecondition code.
+const NOT_STARTED_MESSAGE = "chat has not started";
+
+function isNotStartedError(error: unknown): boolean {
+  const connectError = ConnectError.from(error);
+  return (
+    connectError.code === Code.FailedPrecondition &&
+    connectError.rawMessage.includes(NOT_STARTED_MESSAGE)
+  );
+}
+
 /**
  * Routes a send on an existing chat. A chat whose root run is PENDING (a
  * branch's first send) must go through StartChat; the server rejects
@@ -41,5 +55,13 @@ export async function sendOnExistingChat(
     await actions.startExistingChat(chatId, content, attachmentIds, startOptions);
     return;
   }
-  await actions.sendMessage(chatId, content, attachmentIds, options);
+  try {
+    await actions.sendMessage(chatId, content, attachmentIds, options);
+  } catch (error) {
+    // Defence in depth: the cached chat said "started" but the server says it
+    // has not (a stale detail entry). Start it once instead of failing the send.
+    if (!isNotStartedError(error)) throw error;
+    const { targetThread: _targetThread, ...startOptions } = options;
+    await actions.startExistingChat(chatId, content, attachmentIds, startOptions);
+  }
 }

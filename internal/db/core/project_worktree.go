@@ -2,8 +2,18 @@ package core
 
 import (
 	"context"
+	"errors"
 	"time"
 )
+
+// ErrProjectNotFound is returned when no project matches the id and owner.
+// Absent and not-owned are deliberately the same error. A store failure is
+// never this error.
+// ErrWorktreeNotFound is returned when no worktree matches the id. A store
+// failure is never this error.
+var ErrWorktreeNotFound = errors.New("worktree not found")
+
+var ErrProjectNotFound = errors.New("project not found or access denied")
 
 // Project represents a code repository.
 //

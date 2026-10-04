@@ -238,7 +238,7 @@ export const api = {
     start: async (request: StartChatRequest) => {
       const result = await chatGrpc.start({
         chat_id: request.chat_id,
-        project_id: request.project_id!,
+        project_id: request.project_id,
         messages: request.messages,
         title: request.title,
         worktree_id: request.worktree_id,

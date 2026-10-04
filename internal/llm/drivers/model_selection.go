@@ -118,8 +118,12 @@ func ValidateModelSelector(ctx context.Context, userID string, selector interfac
 		return nil
 	}
 
-	// Get available drivers/providers for the user
-	availableDrivers := GetAvailableDrivers(ctx, userID)
+	// Get available drivers/providers for the user. A failed settings read is
+	// not "no API keys": it must stay distinguishable so callers can retry it.
+	availableDrivers, err := LookupAvailableDrivers(ctx, userID)
+	if err != nil {
+		return err
+	}
 
 	// Check if user has any API keys configured
 	if len(availableDrivers.Drivers) == 0 {

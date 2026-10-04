@@ -468,8 +468,9 @@ type Querier interface {
 	ListAllTriggers(ctx context.Context) ([]Trigger, error)
 	// List all approvals for a chat (including resolved)
 	ListApprovalsByChat(ctx context.Context, chatID string) ([]Approval, error)
-	// List archived chats with worktree info and computed last_message_at
-	// Falls back to project name if worktree name is unavailable
+	// List archived chats with worktree info. Reads chats_with_activity (not chats)
+	// so the root workflow state and last_message_at come back like every other
+	// chat read; falls back to project name if worktree name is unavailable.
 	ListArchivedChats(ctx context.Context, userID string) ([]ListArchivedChatsRow, error)
 	ListAttachmentsByUser(ctx context.Context, arg ListAttachmentsByUserParams) ([]Attachment, error)
 	ListBlockersForTask(ctx context.Context, toTaskID string) ([]TaskDependency, error)
@@ -964,6 +965,7 @@ type Querier interface {
 	// the kind would leave Config describing a source that no longer applies.
 	UpdateTrigger(ctx context.Context, arg UpdateTriggerParams) (int64, error)
 	UpdateTriggerEventOutcome(ctx context.Context, arg UpdateTriggerEventOutcomeParams) (int64, error)
+	UpdateTriggerEventPayload(ctx context.Context, arg UpdateTriggerEventPayloadParams) (int64, error)
 	UpdateWorkflowDraft(ctx context.Context, arg UpdateWorkflowDraftParams) (WorkflowDraft, error)
 	UpdateWorkflowDraftDefinition(ctx context.Context, arg UpdateWorkflowDraftDefinitionParams) (WorkflowDraft, error)
 	// Set or update the forked_from origin

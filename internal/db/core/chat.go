@@ -3,10 +3,16 @@ package core
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"time"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 )
+
+// ErrChatNotFound is returned by chat reads when no row matches. Anything else
+// a chat read returns is a store failure, which callers must not mistake for
+// absence: "not found" is final, a database error is worth retrying.
+var ErrChatNotFound = errors.New("chat not found")
 
 // ChatState represents the notification/lifecycle state of a chat.
 type ChatState = reliantv1.ChatState

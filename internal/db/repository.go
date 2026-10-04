@@ -693,6 +693,7 @@ type Repository interface {
 	// event whose root run is still live (pending, active or paused).
 	CountLiveLaunchedRuns(ctx context.Context, userID string, kind core.TriggerEventKind) (int, error)
 	UpdateTriggerEventOutcome(ctx context.Context, id string, outcome core.TriggerEventOutcome, detail string, chatID *string) error
+	UpdateTriggerEventPayload(ctx context.Context, id string, payload map[string]any) error
 	// ListTriggerEvents returns the trigger's firings newest first.
 	ListTriggerEvents(ctx context.Context, triggerID string, limit int) ([]*core.TriggerEvent, error)
 	// GetLatestTriggerEvent returns the trigger's latest firing, optionally

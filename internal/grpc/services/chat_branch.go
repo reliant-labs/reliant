@@ -303,9 +303,17 @@ func (s *ChatService) BranchChat(
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to create branch"))
 	}
 
-	branchChatProto := chatToProto(branchChat)
+	// Answer from the committed row, not the in-memory struct: the root
+	// workflow state (PENDING, which tells the client its first send is a
+	// StartChat) is derived by the chat view and cannot be set by hand
+	// without drifting from it.
+	committed, err := s.database.GetChat(ctx, branchChatID)
+	if err != nil {
+		logging.Error("Failed to re-read branched chat after commit", "error", err, "chatID", branchChatID)
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to load branch"))
+	}
 	return connect.NewResponse(&reliantv1.BranchChatResponse{
-		Chat: branchChatProto,
+		Chat: chatToProto(committed),
 	}), nil
 }
 

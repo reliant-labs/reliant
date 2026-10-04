@@ -104,6 +104,9 @@ UPDATE trigger_events SET
     chat_id = $3
 WHERE id = $4;
 
+-- name: UpdateTriggerEventPayload :execrows
+UPDATE trigger_events SET payload = $1 WHERE id = $2;
+
 -- name: ListTriggerEvents :many
 -- Newest first, matching idx_trigger_events_trigger_occurred so this is an
 -- ordered index scan. id breaks ties: two fires can share an occurred_at.
