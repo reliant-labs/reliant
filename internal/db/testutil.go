@@ -3,11 +3,15 @@ package db
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"database/sql"
+	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"github.com/reliant-labs/forge/pkg/crypto"
+	"github.com/reliant-labs/reliant/internal/vault"
 	"net/url"
 	"os"
 	"strconv"
@@ -137,6 +141,18 @@ func setupTestRepo(t *testing.T) (*Repo, *sql.DB, func()) {
 	}
 
 	repo := NewRepoWithDriver(db, DriverPostgres)
+	// Provider keys exist only sealed, so every test repo gets a throwaway vault.
+	keyBytes := make([]byte, 32)
+	if _, err := rand.Read(keyBytes); err != nil {
+		t.Fatalf("generate test vault key: %v", err)
+	}
+	ring, err := crypto.ParseKeyring("v1:" + base64.StdEncoding.EncodeToString(keyBytes))
+	if err != nil {
+		t.Fatalf("parse test vault key: %v", err)
+	}
+	if err := repo.EnableAPIKeySealing(vault.New(db, vault.NewEnvKeyWrapper(ring))); err != nil {
+		t.Fatalf("enable api key sealing: %v", err)
+	}
 	cleanup := func() {
 		db.Close()
 		dropTestDB(name)

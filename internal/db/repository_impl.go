@@ -4425,10 +4425,11 @@ type apiKeySealing interface {
 	SetSealer(postgresstore.APIKeySealer)
 	BackfillAPIKeys(ctx context.Context, batch int) (int, error)
 	CountUnsealedAPIKeys(ctx context.Context) (int64, error)
+	ValidateAPIKeysSealedConstraint(ctx context.Context) error
 }
 
-// EnableAPIKeySealing turns on sealed dual-writes and sealed-preferring reads
-// for api_keys. Call once at boot, before serving.
+// EnableAPIKeySealing gives the api_keys store its vault; without one provider
+// keys cannot be read or written. Call once at boot, before serving.
 func (r *Repo) EnableAPIKeySealing(sealer postgresstore.APIKeySealer) error {
 	s, ok := r.settings.(apiKeySealing)
 	if !ok {
@@ -4455,4 +4456,13 @@ func (r *Repo) CountUnsealedAPIKeys(ctx context.Context) (int64, error) {
 		return 0, fmt.Errorf("settings store does not support api key sealing")
 	}
 	return s.CountUnsealedAPIKeys(ctx)
+}
+
+// ValidateAPIKeysSealedConstraint validates the api_key_sealed NOT NULL check.
+func (r *Repo) ValidateAPIKeysSealedConstraint(ctx context.Context) error {
+	s, ok := r.settings.(apiKeySealing)
+	if !ok {
+		return fmt.Errorf("settings store does not support api key sealing")
+	}
+	return s.ValidateAPIKeysSealedConstraint(ctx)
 }

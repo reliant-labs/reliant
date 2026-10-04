@@ -139,19 +139,24 @@ type APIKeySealer interface {
 	Open(ctx context.Context, tenant vault.Tenant, ciphertext, aad []byte) ([]byte, error)
 }
 
-// SetSealer enables sealing of api_keys. Without one the store behaves as it
-// did before the vault: plaintext only.
+// SetSealer enables the api_keys vault. The sealed column is the only source
+// of truth, so the store refuses to read or write provider keys without one.
 func (s *settingStore) SetSealer(sealer APIKeySealer) { s.sealer = sealer }
+
+var errAPIKeyVaultDisabled = errors.New("api keys require the credential vault; none is configured")
 
 func apiKeyAAD(userID, provider string) []byte {
 	return []byte("api_keys\x00" + userID + "\x00" + provider + "\x00api_key")
 }
 
-// openAPIKey prefers the sealed column and falls back to plaintext for rows
-// the backfill has not reached yet.
-func (s *settingStore) openAPIKey(ctx context.Context, userID, provider, plaintext string, sealed []byte) (string, error) {
-	if len(sealed) == 0 || s.sealer == nil {
-		return plaintext, nil
+// openAPIKey decrypts the sealed column. There is deliberately no plaintext
+// fallback: a row without a sealed value is an error, not a downgrade.
+func (s *settingStore) openAPIKey(ctx context.Context, userID, provider string, sealed []byte) (string, error) {
+	if s.sealer == nil {
+		return "", errAPIKeyVaultDisabled
+	}
+	if len(sealed) == 0 {
+		return "", fmt.Errorf("api key for provider %q has no sealed value", provider)
 	}
 	pt, err := s.sealer.Open(ctx, vault.UserTenant(userID), sealed, apiKeyAAD(userID, provider))
 	if err != nil {
@@ -161,35 +166,33 @@ func (s *settingStore) openAPIKey(ctx context.Context, userID, provider, plainte
 }
 
 func (s *settingStore) GetProviderAPIKey(ctx context.Context, userID string, provider string) (string, error) {
-	var apiKey string
 	var sealed []byte
-	query := s.bind("SELECT api_key, api_key_sealed FROM api_keys WHERE user_id = ? AND provider = ?")
-	if err := s.db.QueryRowContext(ctx, query, userID, provider).Scan(&apiKey, &sealed); err != nil {
+	query := s.bind("SELECT api_key_sealed FROM api_keys WHERE user_id = ? AND provider = ?")
+	if err := s.db.QueryRowContext(ctx, query, userID, provider).Scan(&sealed); err != nil {
 		return "", err
 	}
-	return s.openAPIKey(ctx, userID, provider, apiKey, sealed)
+	return s.openAPIKey(ctx, userID, provider, sealed)
 }
 
-// SetProviderAPIKey dual-writes the plaintext and sealed columns (expand phase
-// of the roll-forward migration).
+// SetProviderAPIKey writes only the sealed column. The legacy plaintext column
+// is kept (always ”) until a later migration drops it.
 func (s *settingStore) SetProviderAPIKey(ctx context.Context, userID string, provider, apiKey string) error {
-	var sealed []byte
-	if s.sealer != nil {
-		var err error
-		sealed, err = s.sealer.Seal(ctx, vault.UserTenant(userID), []byte(apiKey), apiKeyAAD(userID, provider))
-		if err != nil {
-			return fmt.Errorf("sealing api key for provider %q: %w", provider, err)
-		}
+	if s.sealer == nil {
+		return errAPIKeyVaultDisabled
+	}
+	sealed, err := s.sealer.Seal(ctx, vault.UserTenant(userID), []byte(apiKey), apiKeyAAD(userID, provider))
+	if err != nil {
+		return fmt.Errorf("sealing api key for provider %q: %w", provider, err)
 	}
 	now := time.Now().UTC()
 	id := uuid.New().String()
 	query := s.bind(`INSERT INTO api_keys (id, user_id, provider, api_key, api_key_sealed, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?)
+		 VALUES (?, ?, ?, '', ?, ?, ?)
 		 ON CONFLICT(user_id, provider) DO UPDATE SET
-		   api_key = excluded.api_key,
+		   api_key = '',
 		   api_key_sealed = excluded.api_key_sealed,
 		   updated_at = excluded.updated_at`)
-	_, err := s.db.ExecContext(ctx, query, id, userID, provider, apiKey, sealed, now, now)
+	_, err = s.db.ExecContext(ctx, query, id, userID, provider, sealed, now, now)
 	return err
 }
 
@@ -202,7 +205,7 @@ func (s *settingStore) DeleteProviderAPIKey(ctx context.Context, userID string, 
 func (s *settingStore) GetProviderAPIKeys(ctx context.Context, userID string) (map[string]string, error) {
 	// Automation credentials live in this table under a reserved prefix and
 	// must never surface as provider keys (settings, LLM driver selection).
-	query := s.bind("SELECT provider, api_key, api_key_sealed FROM api_keys WHERE user_id = ? AND provider NOT LIKE ?")
+	query := s.bind("SELECT provider, api_key_sealed FROM api_keys WHERE user_id = ? AND provider NOT LIKE ?")
 	rows, err := s.db.QueryContext(ctx, query, userID, core.AutomationProviderPrefix+"%")
 	if err != nil {
 		return nil, err
@@ -211,12 +214,12 @@ func (s *settingStore) GetProviderAPIKeys(ctx context.Context, userID string) (m
 
 	result := make(map[string]string)
 	for rows.Next() {
-		var provider, apiKey string
+		var provider string
 		var sealed []byte
-		if err := rows.Scan(&provider, &apiKey, &sealed); err != nil {
+		if err := rows.Scan(&provider, &sealed); err != nil {
 			return nil, err
 		}
-		opened, err := s.openAPIKey(ctx, userID, provider, apiKey, sealed)
+		opened, err := s.openAPIKey(ctx, userID, provider, sealed)
 		if err != nil {
 			return nil, err
 		}
@@ -234,6 +237,14 @@ func (s *settingStore) CountUnsealedAPIKeys(ctx context.Context) (int64, error) 
 	var n int64
 	err := s.db.QueryRowContext(ctx, "SELECT count(*) FROM api_keys WHERE api_key_sealed IS NULL").Scan(&n)
 	return n, err
+}
+
+// ValidateAPIKeysSealedConstraint validates the NOT VALID CHECK the contract
+// migration added. Call only after the backfill has sealed every row; it fails
+// if any NULL remains. Safe to run repeatedly and from several processes.
+func (s *settingStore) ValidateAPIKeysSealedConstraint(ctx context.Context) error {
+	_, err := s.db.ExecContext(ctx, "ALTER TABLE api_keys VALIDATE CONSTRAINT api_keys_sealed_not_null")
+	return err
 }
 
 // BackfillAPIKeys seals rows whose api_key_sealed IS NULL, batch rows at a
