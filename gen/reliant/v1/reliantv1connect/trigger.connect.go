@@ -84,7 +84,8 @@ type TriggerServiceClient interface {
 	// fire skips the enabled and overlap checks: the human asking for it has
 	// already made that decision.
 	FireTrigger(context.Context, *connect.Request[v1.FireTriggerRequest]) (*connect.Response[v1.FireTriggerResponse], error)
-	// ListTriggerEvents returns a trigger's firings, newest first.
+	// ListTriggerEvents returns a trigger's firings, newest first, paged by a
+	// keyset cursor. Each launched firing carries the state of the run it started.
 	ListTriggerEvents(context.Context, *connect.Request[v1.ListTriggerEventsRequest]) (*connect.Response[v1.ListTriggerEventsResponse], error)
 }
 
@@ -225,7 +226,8 @@ type TriggerServiceHandler interface {
 	// fire skips the enabled and overlap checks: the human asking for it has
 	// already made that decision.
 	FireTrigger(context.Context, *connect.Request[v1.FireTriggerRequest]) (*connect.Response[v1.FireTriggerResponse], error)
-	// ListTriggerEvents returns a trigger's firings, newest first.
+	// ListTriggerEvents returns a trigger's firings, newest first, paged by a
+	// keyset cursor. Each launched firing carries the state of the run it started.
 	ListTriggerEvents(context.Context, *connect.Request[v1.ListTriggerEventsRequest]) (*connect.Response[v1.ListTriggerEventsResponse], error)
 }
 

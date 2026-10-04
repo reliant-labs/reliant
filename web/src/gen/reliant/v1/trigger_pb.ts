@@ -9,13 +9,104 @@ import type { GenEnum, GenFile, GenMessage, GenService } from "@bufbuild/protobu
 import { enumDesc, fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
 import type { Value } from "@bufbuild/protobuf/wkt";
 import { file_google_protobuf_struct } from "@bufbuild/protobuf/wkt";
+import type { WorkflowState, WorkflowStopReason } from "./chat_pb";
+import { file_reliant_v1_chat } from "./chat_pb";
+import type { RunDisplayState } from "./run_pb";
+import { file_reliant_v1_run } from "./run_pb";
 import type { JsonObject, Message } from "@bufbuild/protobuf";
 
 /**
  * Describes the file reliant/v1/trigger.proto.
  */
 export const file_reliant_v1_trigger: GenFile = /*@__PURE__*/
-  fileDesc("ChhyZWxpYW50L3YxL3RyaWdnZXIucHJvdG8SCnJlbGlhbnQudjEitwEKDlNjaGVkdWxlU291cmNlEgwKBGNyb24YASADKAkSFQoIaW50ZXJ2YWwYAiABKAlIAIgBARIQCgh0aW1lem9uZRgDIAEoCRIxCgdvdmVybGFwGAQgASgOMiAucmVsaWFudC52MS5UcmlnZ2VyT3ZlcmxhcFBvbGljeRIbCg5jYXRjaHVwX3dpbmRvdxgFIAEoCUgBiAEBQgsKCV9pbnRlcnZhbEIRCg9fY2F0Y2h1cF93aW5kb3ci0wQKB1RyaWdnZXISCgoCaWQYASABKAkSDAoEbmFtZRgCIAEoCRISCgpwcm9qZWN0X2lkGAMgASgJEhgKC3dvcmt0cmVlX2lkGAQgASgJSAGIAQESDwoHZW5hYmxlZBgFIAEoCBIQCgh3b3JrZmxvdxgGIAEoCRIxCgdwcmVzZXRzGAcgAygLMiAucmVsaWFudC52MS5UcmlnZ2VyLlByZXNldHNFbnRyeRIvCgZwYXJhbXMYCCADKAsyHy5yZWxpYW50LnYxLlRyaWdnZXIuUGFyYW1zRW50cnkSDwoHbWVzc2FnZRgJIAEoCRISCgpjcmVhdGVkX2F0GAogASgJEhIKCnVwZGF0ZWRfYXQYCyABKAkSGQoMbmV4dF9maXJlX2F0GAwgASgJSAKIAQESMQoKbGFzdF9ldmVudBgNIAEoCzIYLnJlbGlhbnQudjEuVHJpZ2dlckV2ZW50SAOIAQESEQoJZGFlbW9uX2lkGA4gASgJEi4KCHNjaGVkdWxlGBQgASgLMhoucmVsaWFudC52MS5TY2hlZHVsZVNvdXJjZUgAGi4KDFByZXNldHNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBGkUKC1BhcmFtc0VudHJ5EgsKA2tleRgBIAEoCRIlCgV2YWx1ZRgCIAEoCzIWLmdvb2dsZS5wcm90b2J1Zi5WYWx1ZToCOAFCCAoGc291cmNlQg4KDF93b3JrdHJlZV9pZEIPCg1fbmV4dF9maXJlX2F0Qg0KC19sYXN0X2V2ZW50IpkCCgxUcmlnZ2VyRXZlbnQSCgoCaWQYASABKAkSFwoKdHJpZ2dlcl9pZBgCIAEoCUgAiAEBEioKBGtpbmQYAyABKA4yHC5yZWxpYW50LnYxLlRyaWdnZXJFdmVudEtpbmQSEwoLb2NjdXJyZWRfYXQYBCABKAkSMAoHb3V0Y29tZRgFIAEoDjIfLnJlbGlhbnQudjEuVHJpZ2dlckV2ZW50T3V0Y29tZRIWCg5vdXRjb21lX2RldGFpbBgGIAEoCRIUCgdjaGF0X2lkGAcgASgJSAGIAQESKAoHcGF5bG9hZBgIIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3RCDQoLX3RyaWdnZXJfaWRCCgoIX2NoYXRfaWQi4AMKEVRyaWdnZXJEZWZpbml0aW9uEgwKBG5hbWUYASABKAkSEgoKcHJvamVjdF9pZBgCIAEoCRIYCgt3b3JrdHJlZV9pZBgDIAEoCUgBiAEBEhQKB2VuYWJsZWQYBCABKAhIAogBARIQCgh3b3JrZmxvdxgFIAEoCRI7CgdwcmVzZXRzGAYgAygLMioucmVsaWFudC52MS5UcmlnZ2VyRGVmaW5pdGlvbi5QcmVzZXRzRW50cnkSOQoGcGFyYW1zGAcgAygLMikucmVsaWFudC52MS5UcmlnZ2VyRGVmaW5pdGlvbi5QYXJhbXNFbnRyeRIPCgdtZXNzYWdlGAggASgJEhEKCWRhZW1vbl9pZBgJIAEoCRIuCghzY2hlZHVsZRgUIAEoCzIaLnJlbGlhbnQudjEuU2NoZWR1bGVTb3VyY2VIABouCgxQcmVzZXRzRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ARpFCgtQYXJhbXNFbnRyeRILCgNrZXkYASABKAkSJQoFdmFsdWUYAiABKAsyFi5nb29nbGUucHJvdG9idWYuVmFsdWU6AjgBQggKBnNvdXJjZUIOCgxfd29ya3RyZWVfaWRCCgoIX2VuYWJsZWQiRgoUQ3JlYXRlVHJpZ2dlclJlcXVlc3QSLgoHdHJpZ2dlchgBIAEoCzIdLnJlbGlhbnQudjEuVHJpZ2dlckRlZmluaXRpb24iPQoVQ3JlYXRlVHJpZ2dlclJlc3BvbnNlEiQKB3RyaWdnZXIYASABKAsyEy5yZWxpYW50LnYxLlRyaWdnZXIiHwoRR2V0VHJpZ2dlclJlcXVlc3QSCgoCaWQYASABKAkiOgoSR2V0VHJpZ2dlclJlc3BvbnNlEiQKB3RyaWdnZXIYASABKAsyEy5yZWxpYW50LnYxLlRyaWdnZXIiPQoTTGlzdFRyaWdnZXJzUmVxdWVzdBIXCgpwcm9qZWN0X2lkGAEgASgJSACIAQFCDQoLX3Byb2plY3RfaWQiPQoUTGlzdFRyaWdnZXJzUmVzcG9uc2USJQoIdHJpZ2dlcnMYASADKAsyEy5yZWxpYW50LnYxLlRyaWdnZXIiUgoUVXBkYXRlVHJpZ2dlclJlcXVlc3QSCgoCaWQYASABKAkSLgoHdHJpZ2dlchgCIAEoCzIdLnJlbGlhbnQudjEuVHJpZ2dlckRlZmluaXRpb24iPQoVVXBkYXRlVHJpZ2dlclJlc3BvbnNlEiQKB3RyaWdnZXIYASABKAsyEy5yZWxpYW50LnYxLlRyaWdnZXIiIgoURGVsZXRlVHJpZ2dlclJlcXVlc3QSCgoCaWQYASABKAkiFwoVRGVsZXRlVHJpZ2dlclJlc3BvbnNlIjcKGFNldFRyaWdnZXJFbmFibGVkUmVxdWVzdBIKCgJpZBgBIAEoCRIPCgdlbmFibGVkGAIgASgIIkEKGVNldFRyaWdnZXJFbmFibGVkUmVzcG9uc2USJAoHdHJpZ2dlchgBIAEoCzITLnJlbGlhbnQudjEuVHJpZ2dlciIgChJGaXJlVHJpZ2dlclJlcXVlc3QSCgoCaWQYASABKAkiLwoTRmlyZVRyaWdnZXJSZXNwb25zZRIYChBmaXJlX3dvcmtmbG93X2lkGAEgASgJIj0KGExpc3RUcmlnZ2VyRXZlbnRzUmVxdWVzdBISCgp0cmlnZ2VyX2lkGAEgASgJEg0KBWxpbWl0GAIgASgFIkUKGUxpc3RUcmlnZ2VyRXZlbnRzUmVzcG9uc2USKAoGZXZlbnRzGAEgAygLMhgucmVsaWFudC52MS5UcmlnZ2VyRXZlbnQqRgoLVHJpZ2dlcktpbmQSHAoYVFJJR0dFUl9LSU5EX1VOU1BFQ0lGSUVEEAASGQoVVFJJR0dFUl9LSU5EX1NDSEVEVUxFEAEqogEKEFRyaWdnZXJFdmVudEtpbmQSIgoeVFJJR0dFUl9FVkVOVF9LSU5EX1VOU1BFQ0lGSUVEEAASIQodVFJJR0dFUl9FVkVOVF9LSU5EX0NIQVRfU1RBUlQQARIfChtUUklHR0VSX0VWRU5UX0tJTkRfU0NIRURVTEUQAhImCiJUUklHR0VSX0VWRU5UX0tJTkRfQUdFTlRfU1RBUlRfUlVOEAMqpQEKE1RyaWdnZXJFdmVudE91dGNvbWUSJQohVFJJR0dFUl9FVkVOVF9PVVRDT01FX1VOU1BFQ0lGSUVEEAASIgoeVFJJR0dFUl9FVkVOVF9PVVRDT01FX0xBVU5DSEVEEAESIQodVFJJR0dFUl9FVkVOVF9PVVRDT01FX1NLSVBQRUQQAhIgChxUUklHR0VSX0VWRU5UX09VVENPTUVfRkFJTEVEEAMqgQEKFFRyaWdnZXJPdmVybGFwUG9saWN5EiYKIlRSSUdHRVJfT1ZFUkxBUF9QT0xJQ1lfVU5TUEVDSUZJRUQQABIfChtUUklHR0VSX09WRVJMQVBfUE9MSUNZX1NLSVAQARIgChxUUklHR0VSX09WRVJMQVBfUE9MSUNZX0FMTE9XEAIy1gUKDlRyaWdnZXJTZXJ2aWNlElYKDUNyZWF0ZVRyaWdnZXISIC5yZWxpYW50LnYxLkNyZWF0ZVRyaWdnZXJSZXF1ZXN0GiEucmVsaWFudC52MS5DcmVhdGVUcmlnZ2VyUmVzcG9uc2UiABJNCgpHZXRUcmlnZ2VyEh0ucmVsaWFudC52MS5HZXRUcmlnZ2VyUmVxdWVzdBoeLnJlbGlhbnQudjEuR2V0VHJpZ2dlclJlc3BvbnNlIgASUwoMTGlzdFRyaWdnZXJzEh8ucmVsaWFudC52MS5MaXN0VHJpZ2dlcnNSZXF1ZXN0GiAucmVsaWFudC52MS5MaXN0VHJpZ2dlcnNSZXNwb25zZSIAElYKDVVwZGF0ZVRyaWdnZXISIC5yZWxpYW50LnYxLlVwZGF0ZVRyaWdnZXJSZXF1ZXN0GiEucmVsaWFudC52MS5VcGRhdGVUcmlnZ2VyUmVzcG9uc2UiABJWCg1EZWxldGVUcmlnZ2VyEiAucmVsaWFudC52MS5EZWxldGVUcmlnZ2VyUmVxdWVzdBohLnJlbGlhbnQudjEuRGVsZXRlVHJpZ2dlclJlc3BvbnNlIgASYgoRU2V0VHJpZ2dlckVuYWJsZWQSJC5yZWxpYW50LnYxLlNldFRyaWdnZXJFbmFibGVkUmVxdWVzdBolLnJlbGlhbnQudjEuU2V0VHJpZ2dlckVuYWJsZWRSZXNwb25zZSIAElAKC0ZpcmVUcmlnZ2VyEh4ucmVsaWFudC52MS5GaXJlVHJpZ2dlclJlcXVlc3QaHy5yZWxpYW50LnYxLkZpcmVUcmlnZ2VyUmVzcG9uc2UiABJiChFMaXN0VHJpZ2dlckV2ZW50cxIkLnJlbGlhbnQudjEuTGlzdFRyaWdnZXJFdmVudHNSZXF1ZXN0GiUucmVsaWFudC52MS5MaXN0VHJpZ2dlckV2ZW50c1Jlc3BvbnNlIgBCOlo4Z2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vcmVsaWFudC92MTtyZWxpYW50djFiBnByb3RvMw", [file_google_protobuf_struct]);
+  fileDesc("ChhyZWxpYW50L3YxL3RyaWdnZXIucHJvdG8SCnJlbGlhbnQudjEilgEKDVRyaWdnZXJIZWFsdGgSLwoGc3RhdHVzGAEgASgOMh8ucmVsaWFudC52MS5UcmlnZ2VySGVhbHRoU3RhdHVzEhwKFGNvbnNlY3V0aXZlX2ZhaWx1cmVzGAIgASgFEhkKEWNvbnNlY3V0aXZlX3NraXBzGAMgASgFEhsKE2xhc3RfZmFpbHVyZV9kZXRhaWwYBCABKAkiswEKD1RyaWdnZXJFdmVudFJ1bhIyCg1kaXNwbGF5X3N0YXRlGAEgASgOMhsucmVsaWFudC52MS5SdW5EaXNwbGF5U3RhdGUSDQoFdGl0bGUYAiABKAkSKAoFc3RhdGUYAyABKA4yGS5yZWxpYW50LnYxLldvcmtmbG93U3RhdGUSMwoLc3RvcF9yZWFzb24YBCABKA4yHi5yZWxpYW50LnYxLldvcmtmbG93U3RvcFJlYXNvbiK3AQoOU2NoZWR1bGVTb3VyY2USDAoEY3JvbhgBIAMoCRIVCghpbnRlcnZhbBgCIAEoCUgAiAEBEhAKCHRpbWV6b25lGAMgASgJEjEKB292ZXJsYXAYBCABKA4yIC5yZWxpYW50LnYxLlRyaWdnZXJPdmVybGFwUG9saWN5EhsKDmNhdGNodXBfd2luZG93GAUgASgJSAGIAQFCCwoJX2ludGVydmFsQhEKD19jYXRjaHVwX3dpbmRvdyKpBQoHVHJpZ2dlchIKCgJpZBgBIAEoCRIMCgRuYW1lGAIgASgJEhIKCnByb2plY3RfaWQYAyABKAkSGAoLd29ya3RyZWVfaWQYBCABKAlIAYgBARIPCgdlbmFibGVkGAUgASgIEhAKCHdvcmtmbG93GAYgASgJEjEKB3ByZXNldHMYByADKAsyIC5yZWxpYW50LnYxLlRyaWdnZXIuUHJlc2V0c0VudHJ5Ei8KBnBhcmFtcxgIIAMoCzIfLnJlbGlhbnQudjEuVHJpZ2dlci5QYXJhbXNFbnRyeRIPCgdtZXNzYWdlGAkgASgJEhIKCmNyZWF0ZWRfYXQYCiABKAkSEgoKdXBkYXRlZF9hdBgLIAEoCRIZCgxuZXh0X2ZpcmVfYXQYDCABKAlIAogBARIxCgpsYXN0X2V2ZW50GA0gASgLMhgucmVsaWFudC52MS5UcmlnZ2VyRXZlbnRIA4gBARIRCglkYWVtb25faWQYDiABKAkSKQoGaGVhbHRoGA8gASgLMhkucmVsaWFudC52MS5UcmlnZ2VySGVhbHRoEhQKDHByb2plY3RfbmFtZRgQIAEoCRITCgtkYWVtb25fbmFtZRgRIAEoCRIuCghzY2hlZHVsZRgUIAEoCzIaLnJlbGlhbnQudjEuU2NoZWR1bGVTb3VyY2VIABouCgxQcmVzZXRzRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ARpFCgtQYXJhbXNFbnRyeRILCgNrZXkYASABKAkSJQoFdmFsdWUYAiABKAsyFi5nb29nbGUucHJvdG9idWYuVmFsdWU6AjgBQggKBnNvdXJjZUIOCgxfd29ya3RyZWVfaWRCDwoNX25leHRfZmlyZV9hdEINCgtfbGFzdF9ldmVudCLQAgoMVHJpZ2dlckV2ZW50EgoKAmlkGAEgASgJEhcKCnRyaWdnZXJfaWQYAiABKAlIAIgBARIqCgRraW5kGAMgASgOMhwucmVsaWFudC52MS5UcmlnZ2VyRXZlbnRLaW5kEhMKC29jY3VycmVkX2F0GAQgASgJEjAKB291dGNvbWUYBSABKA4yHy5yZWxpYW50LnYxLlRyaWdnZXJFdmVudE91dGNvbWUSFgoOb3V0Y29tZV9kZXRhaWwYBiABKAkSFAoHY2hhdF9pZBgHIAEoCUgBiAEBEigKB3BheWxvYWQYCCABKAsyFy5nb29nbGUucHJvdG9idWYuU3RydWN0Ei0KA3J1bhgJIAEoCzIbLnJlbGlhbnQudjEuVHJpZ2dlckV2ZW50UnVuSAKIAQFCDQoLX3RyaWdnZXJfaWRCCgoIX2NoYXRfaWRCBgoEX3J1biLgAwoRVHJpZ2dlckRlZmluaXRpb24SDAoEbmFtZRgBIAEoCRISCgpwcm9qZWN0X2lkGAIgASgJEhgKC3dvcmt0cmVlX2lkGAMgASgJSAGIAQESFAoHZW5hYmxlZBgEIAEoCEgCiAEBEhAKCHdvcmtmbG93GAUgASgJEjsKB3ByZXNldHMYBiADKAsyKi5yZWxpYW50LnYxLlRyaWdnZXJEZWZpbml0aW9uLlByZXNldHNFbnRyeRI5CgZwYXJhbXMYByADKAsyKS5yZWxpYW50LnYxLlRyaWdnZXJEZWZpbml0aW9uLlBhcmFtc0VudHJ5Eg8KB21lc3NhZ2UYCCABKAkSEQoJZGFlbW9uX2lkGAkgASgJEi4KCHNjaGVkdWxlGBQgASgLMhoucmVsaWFudC52MS5TY2hlZHVsZVNvdXJjZUgAGi4KDFByZXNldHNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBGkUKC1BhcmFtc0VudHJ5EgsKA2tleRgBIAEoCRIlCgV2YWx1ZRgCIAEoCzIWLmdvb2dsZS5wcm90b2J1Zi5WYWx1ZToCOAFCCAoGc291cmNlQg4KDF93b3JrdHJlZV9pZEIKCghfZW5hYmxlZCJGChRDcmVhdGVUcmlnZ2VyUmVxdWVzdBIuCgd0cmlnZ2VyGAEgASgLMh0ucmVsaWFudC52MS5UcmlnZ2VyRGVmaW5pdGlvbiI9ChVDcmVhdGVUcmlnZ2VyUmVzcG9uc2USJAoHdHJpZ2dlchgBIAEoCzITLnJlbGlhbnQudjEuVHJpZ2dlciIfChFHZXRUcmlnZ2VyUmVxdWVzdBIKCgJpZBgBIAEoCSI6ChJHZXRUcmlnZ2VyUmVzcG9uc2USJAoHdHJpZ2dlchgBIAEoCzITLnJlbGlhbnQudjEuVHJpZ2dlciI9ChNMaXN0VHJpZ2dlcnNSZXF1ZXN0EhcKCnByb2plY3RfaWQYASABKAlIAIgBAUINCgtfcHJvamVjdF9pZCI9ChRMaXN0VHJpZ2dlcnNSZXNwb25zZRIlCgh0cmlnZ2VycxgBIAMoCzITLnJlbGlhbnQudjEuVHJpZ2dlciJSChRVcGRhdGVUcmlnZ2VyUmVxdWVzdBIKCgJpZBgBIAEoCRIuCgd0cmlnZ2VyGAIgASgLMh0ucmVsaWFudC52MS5UcmlnZ2VyRGVmaW5pdGlvbiI9ChVVcGRhdGVUcmlnZ2VyUmVzcG9uc2USJAoHdHJpZ2dlchgBIAEoCzITLnJlbGlhbnQudjEuVHJpZ2dlciIiChREZWxldGVUcmlnZ2VyUmVxdWVzdBIKCgJpZBgBIAEoCSIXChVEZWxldGVUcmlnZ2VyUmVzcG9uc2UiNwoYU2V0VHJpZ2dlckVuYWJsZWRSZXF1ZXN0EgoKAmlkGAEgASgJEg8KB2VuYWJsZWQYAiABKAgiQQoZU2V0VHJpZ2dlckVuYWJsZWRSZXNwb25zZRIkCgd0cmlnZ2VyGAEgASgLMhMucmVsaWFudC52MS5UcmlnZ2VyIiAKEkZpcmVUcmlnZ2VyUmVxdWVzdBIKCgJpZBgBIAEoCSIvChNGaXJlVHJpZ2dlclJlc3BvbnNlEhgKEGZpcmVfd29ya2Zsb3dfaWQYASABKAkimAEKGExpc3RUcmlnZ2VyRXZlbnRzUmVxdWVzdBISCgp0cmlnZ2VyX2lkGAEgASgJEg0KBWxpbWl0GAIgASgFEhcKCnBhZ2VfdG9rZW4YAyABKAlIAIgBARIxCghvdXRjb21lcxgEIAMoDjIfLnJlbGlhbnQudjEuVHJpZ2dlckV2ZW50T3V0Y29tZUINCgtfcGFnZV90b2tlbiJeChlMaXN0VHJpZ2dlckV2ZW50c1Jlc3BvbnNlEigKBmV2ZW50cxgBIAMoCzIYLnJlbGlhbnQudjEuVHJpZ2dlckV2ZW50EhcKD25leHRfcGFnZV90b2tlbhgCIAEoCSpGCgtUcmlnZ2VyS2luZBIcChhUUklHR0VSX0tJTkRfVU5TUEVDSUZJRUQQABIZChVUUklHR0VSX0tJTkRfU0NIRURVTEUQASqiAQoQVHJpZ2dlckV2ZW50S2luZBIiCh5UUklHR0VSX0VWRU5UX0tJTkRfVU5TUEVDSUZJRUQQABIhCh1UUklHR0VSX0VWRU5UX0tJTkRfQ0hBVF9TVEFSVBABEh8KG1RSSUdHRVJfRVZFTlRfS0lORF9TQ0hFRFVMRRACEiYKIlRSSUdHRVJfRVZFTlRfS0lORF9BR0VOVF9TVEFSVF9SVU4QAyqlAQoTVHJpZ2dlckV2ZW50T3V0Y29tZRIlCiFUUklHR0VSX0VWRU5UX09VVENPTUVfVU5TUEVDSUZJRUQQABIiCh5UUklHR0VSX0VWRU5UX09VVENPTUVfTEFVTkNIRUQQARIhCh1UUklHR0VSX0VWRU5UX09VVENPTUVfU0tJUFBFRBACEiAKHFRSSUdHRVJfRVZFTlRfT1VUQ09NRV9GQUlMRUQQAyqBAQoUVHJpZ2dlck92ZXJsYXBQb2xpY3kSJgoiVFJJR0dFUl9PVkVSTEFQX1BPTElDWV9VTlNQRUNJRklFRBAAEh8KG1RSSUdHRVJfT1ZFUkxBUF9QT0xJQ1lfU0tJUBABEiAKHFRSSUdHRVJfT1ZFUkxBUF9QT0xJQ1lfQUxMT1cQAirJAQoTVHJpZ2dlckhlYWx0aFN0YXR1cxIlCiFUUklHR0VSX0hFQUxUSF9TVEFUVVNfVU5TUEVDSUZJRUQQABIhCh1UUklHR0VSX0hFQUxUSF9TVEFUVVNfSEVBTFRIWRABEiIKHlRSSUdHRVJfSEVBTFRIX1NUQVRVU19ERUdSQURFRBACEiEKHVRSSUdHRVJfSEVBTFRIX1NUQVRVU19GQUlMSU5HEAMSIQodVFJJR0dFUl9IRUFMVEhfU1RBVFVTX1VOS05PV04QBDLWBQoOVHJpZ2dlclNlcnZpY2USVgoNQ3JlYXRlVHJpZ2dlchIgLnJlbGlhbnQudjEuQ3JlYXRlVHJpZ2dlclJlcXVlc3QaIS5yZWxpYW50LnYxLkNyZWF0ZVRyaWdnZXJSZXNwb25zZSIAEk0KCkdldFRyaWdnZXISHS5yZWxpYW50LnYxLkdldFRyaWdnZXJSZXF1ZXN0Gh4ucmVsaWFudC52MS5HZXRUcmlnZ2VyUmVzcG9uc2UiABJTCgxMaXN0VHJpZ2dlcnMSHy5yZWxpYW50LnYxLkxpc3RUcmlnZ2Vyc1JlcXVlc3QaIC5yZWxpYW50LnYxLkxpc3RUcmlnZ2Vyc1Jlc3BvbnNlIgASVgoNVXBkYXRlVHJpZ2dlchIgLnJlbGlhbnQudjEuVXBkYXRlVHJpZ2dlclJlcXVlc3QaIS5yZWxpYW50LnYxLlVwZGF0ZVRyaWdnZXJSZXNwb25zZSIAElYKDURlbGV0ZVRyaWdnZXISIC5yZWxpYW50LnYxLkRlbGV0ZVRyaWdnZXJSZXF1ZXN0GiEucmVsaWFudC52MS5EZWxldGVUcmlnZ2VyUmVzcG9uc2UiABJiChFTZXRUcmlnZ2VyRW5hYmxlZBIkLnJlbGlhbnQudjEuU2V0VHJpZ2dlckVuYWJsZWRSZXF1ZXN0GiUucmVsaWFudC52MS5TZXRUcmlnZ2VyRW5hYmxlZFJlc3BvbnNlIgASUAoLRmlyZVRyaWdnZXISHi5yZWxpYW50LnYxLkZpcmVUcmlnZ2VyUmVxdWVzdBofLnJlbGlhbnQudjEuRmlyZVRyaWdnZXJSZXNwb25zZSIAEmIKEUxpc3RUcmlnZ2VyRXZlbnRzEiQucmVsaWFudC52MS5MaXN0VHJpZ2dlckV2ZW50c1JlcXVlc3QaJS5yZWxpYW50LnYxLkxpc3RUcmlnZ2VyRXZlbnRzUmVzcG9uc2UiAEI6WjhnaXRodWIuY29tL3JlbGlhbnQtbGFicy9yZWxpYW50L2dlbi9yZWxpYW50L3YxO3JlbGlhbnR2MWIGcHJvdG8z", [file_google_protobuf_struct, file_reliant_v1_chat, file_reliant_v1_run]);
+
+/**
+ * TriggerHealth is the read-only health summary of a trigger. See
+ * TriggerHealthStatus for the rules.
+ *
+ * @generated from message reliant.v1.TriggerHealth
+ */
+export type TriggerHealth = Message<"reliant.v1.TriggerHealth"> & {
+  /**
+   * @generated from field: reliant.v1.TriggerHealthStatus status = 1;
+   */
+  status: TriggerHealthStatus;
+
+  /**
+   * Failures in a row from the newest firing back, passing over skipped and
+   * unresolved firings; a success ends the streak. Within the last 10 firings.
+   *
+   * @generated from field: int32 consecutive_failures = 2;
+   */
+  consecutiveFailures: number;
+
+  /**
+   * Skipped firings in a row from the newest firing back, within the last 10
+   * firings. Anything other than a skip ends the streak.
+   *
+   * @generated from field: int32 consecutive_skips = 3;
+   */
+  consecutiveSkips: number;
+
+  /**
+   * What went wrong in the most recent failure in the window: the launch
+   * error for a FAILED firing, or a short description of the failed run.
+   * Empty when the window holds no failure.
+   *
+   * @generated from field: string last_failure_detail = 4;
+   */
+  lastFailureDetail: string;
+};
+
+/**
+ * Describes the message reliant.v1.TriggerHealth.
+ * Use `create(TriggerHealthSchema)` to create a new message.
+ */
+export const TriggerHealthSchema: GenMessage<TriggerHealth> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_trigger, 0);
+
+/**
+ * TriggerEventRun is the run a launched firing started, as of now.
+ *
+ * @generated from message reliant.v1.TriggerEventRun
+ */
+export type TriggerEventRun = Message<"reliant.v1.TriggerEventRun"> & {
+  /**
+   * The single state a user reads for the run. Derived by the same rule as
+   * Run.display_state, so a firing and the Runs list cannot disagree.
+   *
+   * @generated from field: reliant.v1.RunDisplayState display_state = 1;
+   */
+  displayState: RunDisplayState;
+
+  /**
+   * The run's title.
+   *
+   * @generated from field: string title = 2;
+   */
+  title: string;
+
+  /**
+   * The root workflow's lifecycle state and, when STOPPED, why. Unspecified
+   * when the run has no root workflow row yet.
+   *
+   * @generated from field: reliant.v1.WorkflowState state = 3;
+   */
+  state: WorkflowState;
+
+  /**
+   * @generated from field: reliant.v1.WorkflowStopReason stop_reason = 4;
+   */
+  stopReason: WorkflowStopReason;
+};
+
+/**
+ * Describes the message reliant.v1.TriggerEventRun.
+ * Use `create(TriggerEventRunSchema)` to create a new message.
+ */
+export const TriggerEventRunSchema: GenMessage<TriggerEventRun> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_trigger, 1);
 
 /**
  * ScheduleSource is the trigger.source arm for schedule triggers.
@@ -69,7 +160,7 @@ export type ScheduleSource = Message<"reliant.v1.ScheduleSource"> & {
  * Use `create(ScheduleSourceSchema)` to create a new message.
  */
 export const ScheduleSourceSchema: GenMessage<ScheduleSource> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_trigger, 0);
+  messageDesc(file_reliant_v1_trigger, 2);
 
 /**
  * Trigger is a stored trigger definition.
@@ -184,6 +275,29 @@ export type Trigger = Message<"reliant.v1.Trigger"> & {
   daemonId: string;
 
   /**
+   * Read-only: how this trigger's recent firings went.
+   *
+   * @generated from field: reliant.v1.TriggerHealth health = 15;
+   */
+  health?: TriggerHealth | undefined;
+
+  /**
+   * Read-only: name of the project the runs execute in. Empty if it was
+   * deleted.
+   *
+   * @generated from field: string project_name = 16;
+   */
+  projectName: string;
+
+  /**
+   * Read-only: display name (hostname) of the daemon the runs execute on.
+   * Empty when the daemon has not reported one.
+   *
+   * @generated from field: string daemon_name = 17;
+   */
+  daemonName: string;
+
+  /**
    * What makes this trigger fire. One arm per kind; webhook and GitHub become
    * new arms. The arm set also determines Trigger.kind, so the two cannot
    * disagree.
@@ -204,7 +318,7 @@ export type Trigger = Message<"reliant.v1.Trigger"> & {
  * Use `create(TriggerSchema)` to create a new message.
  */
 export const TriggerSchema: GenMessage<Trigger> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_trigger, 1);
+  messageDesc(file_reliant_v1_trigger, 3);
 
 /**
  * TriggerEvent is one firing — the durable record of intent to launch, written
@@ -273,6 +387,14 @@ export type TriggerEvent = Message<"reliant.v1.TriggerEvent"> & {
    * @generated from field: google.protobuf.Struct payload = 8;
    */
   payload?: JsonObject | undefined;
+
+  /**
+   * Read-only: the run this firing started, as of now. Set when the firing
+   * launched a chat that still exists; unset otherwise.
+   *
+   * @generated from field: optional reliant.v1.TriggerEventRun run = 9;
+   */
+  run?: TriggerEventRun | undefined;
 };
 
 /**
@@ -280,7 +402,7 @@ export type TriggerEvent = Message<"reliant.v1.TriggerEvent"> & {
  * Use `create(TriggerEventSchema)` to create a new message.
  */
 export const TriggerEventSchema: GenMessage<TriggerEvent> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_trigger, 2);
+  messageDesc(file_reliant_v1_trigger, 4);
 
 /**
  * TriggerDefinition is the writable half of a Trigger: the fields a caller
@@ -380,7 +502,7 @@ export type TriggerDefinition = Message<"reliant.v1.TriggerDefinition"> & {
  * Use `create(TriggerDefinitionSchema)` to create a new message.
  */
 export const TriggerDefinitionSchema: GenMessage<TriggerDefinition> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_trigger, 3);
+  messageDesc(file_reliant_v1_trigger, 5);
 
 /**
  * CreateTriggerRequest is the request for CreateTrigger.
@@ -401,7 +523,7 @@ export type CreateTriggerRequest = Message<"reliant.v1.CreateTriggerRequest"> & 
  * Use `create(CreateTriggerRequestSchema)` to create a new message.
  */
 export const CreateTriggerRequestSchema: GenMessage<CreateTriggerRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_trigger, 4);
+  messageDesc(file_reliant_v1_trigger, 6);
 
 /**
  * CreateTriggerResponse is the response for CreateTrigger.
@@ -422,7 +544,7 @@ export type CreateTriggerResponse = Message<"reliant.v1.CreateTriggerResponse"> 
  * Use `create(CreateTriggerResponseSchema)` to create a new message.
  */
 export const CreateTriggerResponseSchema: GenMessage<CreateTriggerResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_trigger, 5);
+  messageDesc(file_reliant_v1_trigger, 7);
 
 /**
  * GetTriggerRequest is the request for GetTrigger.
@@ -443,7 +565,7 @@ export type GetTriggerRequest = Message<"reliant.v1.GetTriggerRequest"> & {
  * Use `create(GetTriggerRequestSchema)` to create a new message.
  */
 export const GetTriggerRequestSchema: GenMessage<GetTriggerRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_trigger, 6);
+  messageDesc(file_reliant_v1_trigger, 8);
 
 /**
  * GetTriggerResponse is the response for GetTrigger.
@@ -464,7 +586,7 @@ export type GetTriggerResponse = Message<"reliant.v1.GetTriggerResponse"> & {
  * Use `create(GetTriggerResponseSchema)` to create a new message.
  */
 export const GetTriggerResponseSchema: GenMessage<GetTriggerResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_trigger, 7);
+  messageDesc(file_reliant_v1_trigger, 9);
 
 /**
  * ListTriggersRequest is the request for ListTriggers.
@@ -486,7 +608,7 @@ export type ListTriggersRequest = Message<"reliant.v1.ListTriggersRequest"> & {
  * Use `create(ListTriggersRequestSchema)` to create a new message.
  */
 export const ListTriggersRequestSchema: GenMessage<ListTriggersRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_trigger, 8);
+  messageDesc(file_reliant_v1_trigger, 10);
 
 /**
  * ListTriggersResponse is the response for ListTriggers.
@@ -507,7 +629,7 @@ export type ListTriggersResponse = Message<"reliant.v1.ListTriggersResponse"> & 
  * Use `create(ListTriggersResponseSchema)` to create a new message.
  */
 export const ListTriggersResponseSchema: GenMessage<ListTriggersResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_trigger, 9);
+  messageDesc(file_reliant_v1_trigger, 11);
 
 /**
  * UpdateTriggerRequest is the request for UpdateTrigger.
@@ -536,7 +658,7 @@ export type UpdateTriggerRequest = Message<"reliant.v1.UpdateTriggerRequest"> & 
  * Use `create(UpdateTriggerRequestSchema)` to create a new message.
  */
 export const UpdateTriggerRequestSchema: GenMessage<UpdateTriggerRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_trigger, 10);
+  messageDesc(file_reliant_v1_trigger, 12);
 
 /**
  * UpdateTriggerResponse is the response for UpdateTrigger.
@@ -557,7 +679,7 @@ export type UpdateTriggerResponse = Message<"reliant.v1.UpdateTriggerResponse"> 
  * Use `create(UpdateTriggerResponseSchema)` to create a new message.
  */
 export const UpdateTriggerResponseSchema: GenMessage<UpdateTriggerResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_trigger, 11);
+  messageDesc(file_reliant_v1_trigger, 13);
 
 /**
  * DeleteTriggerRequest is the request for DeleteTrigger.
@@ -578,7 +700,7 @@ export type DeleteTriggerRequest = Message<"reliant.v1.DeleteTriggerRequest"> & 
  * Use `create(DeleteTriggerRequestSchema)` to create a new message.
  */
 export const DeleteTriggerRequestSchema: GenMessage<DeleteTriggerRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_trigger, 12);
+  messageDesc(file_reliant_v1_trigger, 14);
 
 /**
  * DeleteTriggerResponse is the response for DeleteTrigger.
@@ -593,7 +715,7 @@ export type DeleteTriggerResponse = Message<"reliant.v1.DeleteTriggerResponse"> 
  * Use `create(DeleteTriggerResponseSchema)` to create a new message.
  */
 export const DeleteTriggerResponseSchema: GenMessage<DeleteTriggerResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_trigger, 13);
+  messageDesc(file_reliant_v1_trigger, 15);
 
 /**
  * SetTriggerEnabledRequest is the request for SetTriggerEnabled.
@@ -621,7 +743,7 @@ export type SetTriggerEnabledRequest = Message<"reliant.v1.SetTriggerEnabledRequ
  * Use `create(SetTriggerEnabledRequestSchema)` to create a new message.
  */
 export const SetTriggerEnabledRequestSchema: GenMessage<SetTriggerEnabledRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_trigger, 14);
+  messageDesc(file_reliant_v1_trigger, 16);
 
 /**
  * SetTriggerEnabledResponse is the response for SetTriggerEnabled.
@@ -642,7 +764,7 @@ export type SetTriggerEnabledResponse = Message<"reliant.v1.SetTriggerEnabledRes
  * Use `create(SetTriggerEnabledResponseSchema)` to create a new message.
  */
 export const SetTriggerEnabledResponseSchema: GenMessage<SetTriggerEnabledResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_trigger, 15);
+  messageDesc(file_reliant_v1_trigger, 17);
 
 /**
  * FireTriggerRequest is the request for FireTrigger.
@@ -663,7 +785,7 @@ export type FireTriggerRequest = Message<"reliant.v1.FireTriggerRequest"> & {
  * Use `create(FireTriggerRequestSchema)` to create a new message.
  */
 export const FireTriggerRequestSchema: GenMessage<FireTriggerRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_trigger, 16);
+  messageDesc(file_reliant_v1_trigger, 18);
 
 /**
  * FireTriggerResponse is the response for FireTrigger.
@@ -685,7 +807,7 @@ export type FireTriggerResponse = Message<"reliant.v1.FireTriggerResponse"> & {
  * Use `create(FireTriggerResponseSchema)` to create a new message.
  */
 export const FireTriggerResponseSchema: GenMessage<FireTriggerResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_trigger, 17);
+  messageDesc(file_reliant_v1_trigger, 19);
 
 /**
  * ListTriggerEventsRequest is the request for ListTriggerEvents.
@@ -706,6 +828,22 @@ export type ListTriggerEventsRequest = Message<"reliant.v1.ListTriggerEventsRequ
    * @generated from field: int32 limit = 2;
    */
   limit: number;
+
+  /**
+   * Continues a previous response's next_page_token. Keyset on (occurred_at,
+   * id), so a firing recorded mid-pagination can neither repeat nor be
+   * skipped. Opaque.
+   *
+   * @generated from field: optional string page_token = 3;
+   */
+  pageToken?: string | undefined;
+
+  /**
+   * Only firings with one of these outcomes. Empty returns every outcome.
+   *
+   * @generated from field: repeated reliant.v1.TriggerEventOutcome outcomes = 4;
+   */
+  outcomes: TriggerEventOutcome[];
 };
 
 /**
@@ -713,7 +851,7 @@ export type ListTriggerEventsRequest = Message<"reliant.v1.ListTriggerEventsRequ
  * Use `create(ListTriggerEventsRequestSchema)` to create a new message.
  */
 export const ListTriggerEventsRequestSchema: GenMessage<ListTriggerEventsRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_trigger, 18);
+  messageDesc(file_reliant_v1_trigger, 20);
 
 /**
  * ListTriggerEventsResponse is the response for ListTriggerEvents.
@@ -727,6 +865,13 @@ export type ListTriggerEventsResponse = Message<"reliant.v1.ListTriggerEventsRes
    * @generated from field: repeated reliant.v1.TriggerEvent events = 1;
    */
   events: TriggerEvent[];
+
+  /**
+   * Set when more firings follow. Empty on the last page.
+   *
+   * @generated from field: string next_page_token = 2;
+   */
+  nextPageToken: string;
 };
 
 /**
@@ -734,7 +879,7 @@ export type ListTriggerEventsResponse = Message<"reliant.v1.ListTriggerEventsRes
  * Use `create(ListTriggerEventsResponseSchema)` to create a new message.
  */
 export const ListTriggerEventsResponseSchema: GenMessage<ListTriggerEventsResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_trigger, 19);
+  messageDesc(file_reliant_v1_trigger, 21);
 
 /**
  * TriggerKind is the source a stored trigger listens to.
@@ -881,6 +1026,63 @@ export const TriggerOverlapPolicySchema: GenEnum<TriggerOverlapPolicy> = /*@__PU
   enumDesc(file_reliant_v1_trigger, 3);
 
 /**
+ * TriggerHealthStatus summarises how a trigger's recent firings went.
+ *
+ * It is computed on read from the trigger's last 10 firings (newest first),
+ * plus the run each launched firing started. Each firing resolves to one result:
+ *   - SKIPPED outcome: skipped.
+ *   - FAILED outcome (the launch failed): failure.
+ *   - LAUNCHED whose run ended FAILED: failure. A run that launched and then
+ *     died is a failed automation, which is the point of this status.
+ *   - LAUNCHED whose run COMPLETED: success.
+ *   - LAUNCHED whose run is still going (queued, running, needs input, paused),
+ *     was cancelled, or whose chat was deleted: unresolved. Unresolved firings
+ *     are neither a success nor a failure and never end a failure streak.
+ *
+ * The status is then, first match wins:
+ *   - FAILING: two or more consecutive failures, newest first. Skipped and
+ *     unresolved firings are passed over; a success ends the streak.
+ *   - DEGRADED: exactly one such failure, or any failure elsewhere in the
+ *     window, or three or more consecutive skipped firings.
+ *   - HEALTHY: no failure in the window and at least one completed run.
+ *   - UNKNOWN: anything else, including a trigger that has never fired.
+ *
+ * @generated from enum reliant.v1.TriggerHealthStatus
+ */
+export enum TriggerHealthStatus {
+  /**
+   * @generated from enum value: TRIGGER_HEALTH_STATUS_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: TRIGGER_HEALTH_STATUS_HEALTHY = 1;
+   */
+  HEALTHY = 1,
+
+  /**
+   * @generated from enum value: TRIGGER_HEALTH_STATUS_DEGRADED = 2;
+   */
+  DEGRADED = 2,
+
+  /**
+   * @generated from enum value: TRIGGER_HEALTH_STATUS_FAILING = 3;
+   */
+  FAILING = 3,
+
+  /**
+   * @generated from enum value: TRIGGER_HEALTH_STATUS_UNKNOWN = 4;
+   */
+  UNKNOWN = 4,
+}
+
+/**
+ * Describes the enum reliant.v1.TriggerHealthStatus.
+ */
+export const TriggerHealthStatusSchema: GenEnum<TriggerHealthStatus> = /*@__PURE__*/
+  enumDesc(file_reliant_v1_trigger, 4);
+
+/**
  * TriggerService manages standing instructions that start runs without a human
  * typing: "every weekday at 9am, run workflow W in project P with prompt M".
  *
@@ -973,7 +1175,8 @@ export const TriggerService: GenService<{
     output: typeof FireTriggerResponseSchema;
   },
   /**
-   * ListTriggerEvents returns a trigger's firings, newest first.
+   * ListTriggerEvents returns a trigger's firings, newest first, paged by a
+   * keyset cursor. Each launched firing carries the state of the run it started.
    *
    * @generated from rpc reliant.v1.TriggerService.ListTriggerEvents
    */

@@ -8,16 +8,32 @@ INSERT INTO triggers (
 );
 
 -- name: GetTrigger :one
-SELECT * FROM triggers WHERE id = $1;
+-- Joins the display names so a trigger can be shown without a second lookup.
+-- LEFT JOINs: a daemon id is not a foreign key, and an absent name must not
+-- hide the trigger.
+SELECT
+    sqlc.embed(t),
+    COALESCE(p.name, '')::text AS project_name,
+    COALESCE(d.hostname, '')::text AS daemon_name
+FROM triggers t
+LEFT JOIN projects p ON p.id = t.project_id
+LEFT JOIN daemons d ON d.id = t.daemon_id AND d.user_id = t.user_id
+WHERE t.id = $1;
 
 -- name: ListTriggers :many
 -- Always scoped to one user; project_id narrows further. The unscoped listing
 -- is ListAllTriggers, a separate query so "no user" can never be reached by
 -- passing an empty string.
-SELECT * FROM triggers
-WHERE user_id = sqlc.arg('user_id')::text
-    AND (sqlc.narg('project_id')::text IS NULL OR project_id = sqlc.narg('project_id')::text)
-ORDER BY created_at DESC, id;
+SELECT
+    sqlc.embed(t),
+    COALESCE(p.name, '')::text AS project_name,
+    COALESCE(d.hostname, '')::text AS daemon_name
+FROM triggers t
+LEFT JOIN projects p ON p.id = t.project_id
+LEFT JOIN daemons d ON d.id = t.daemon_id AND d.user_id = t.user_id
+WHERE t.user_id = sqlc.arg('user_id')::text
+    AND (sqlc.narg('project_id')::text IS NULL OR t.project_id = sqlc.narg('project_id')::text)
+ORDER BY t.created_at DESC, t.id;
 
 -- name: ListAllTriggers :many
 -- Every user's triggers. Only the schedule syncer's reconciliation calls this.
@@ -108,12 +124,76 @@ WHERE id = $4;
 UPDATE trigger_events SET payload = $1 WHERE id = $2;
 
 -- name: ListTriggerEvents :many
--- Newest first, matching idx_trigger_events_trigger_occurred so this is an
--- ordered index scan. id breaks ties: two fires can share an occurred_at.
-SELECT * FROM trigger_events
-WHERE trigger_id = $1
-ORDER BY occurred_at DESC, id DESC
-LIMIT sqlc.arg('limit');
+-- Newest first, keyset on (occurred_at, id) so a firing recorded mid-pagination
+-- can neither repeat nor be skipped; two fires can share an occurred_at, and id
+-- breaks the tie. Served by idx_trigger_events_trigger_occurred_id.
+--
+-- Each launched firing carries its run. run_display_state is the SAME table as
+-- queries/runs.sql (ListRuns) — keep the two in step; a test pins them equal.
+-- user_id scopes the rows even though the handler already checked ownership.
+SELECT
+    sqlc.embed(e),
+    c.id AS run_chat_id,
+    c.title AS run_title,
+    rw.state AS run_root_state,
+    rw.stop_reason AS run_root_stop_reason,
+    CASE
+        WHEN rw.state IS NULL OR rw.state = 1 THEN 1
+        WHEN rw.state = 2 AND c.activity = 2 THEN 3
+        WHEN rw.state = 2 THEN 2
+        WHEN rw.state = 3 AND rw.stop_reason = 3 THEN 4
+        WHEN rw.state = 3 AND rw.stop_reason = 1 THEN 5
+        WHEN rw.state = 3 AND rw.stop_reason = 2 THEN 6
+        WHEN rw.state = 3 AND rw.stop_reason = 4 THEN 7
+        ELSE 0
+    END::integer AS run_display_state
+FROM trigger_events e
+LEFT JOIN chats_with_activity c ON c.id = e.chat_id AND c.user_id = e.user_id
+LEFT JOIN workflows rw ON rw.id = c.workflow_id
+WHERE e.trigger_id = sqlc.arg('trigger_id')::text
+    AND e.user_id = sqlc.arg('user_id')::text
+    AND (cardinality(sqlc.arg('outcomes')::text[]) = 0 OR e.outcome = ANY(sqlc.arg('outcomes')::text[]))
+    AND (sqlc.narg('cursor_occurred_at')::timestamptz IS NULL
+         OR (e.occurred_at, e.id) < (sqlc.narg('cursor_occurred_at')::timestamptz, sqlc.narg('cursor_id')::text))
+ORDER BY e.occurred_at DESC, e.id DESC
+LIMIT sqlc.arg('row_limit');
+
+-- name: ListRecentTriggerFirings :many
+-- The newest per_trigger firings of each named trigger, with their runs, in ONE
+-- query. This is what health and last_event are computed from, so listing N
+-- triggers costs one extra query rather than N. Same run_display_state table as
+-- ListTriggerEvents above. run_display_state is meaningful only when
+-- run_chat_id is set.
+WITH ranked AS (
+    SELECT
+        e.id,
+        row_number() OVER (PARTITION BY e.trigger_id ORDER BY e.occurred_at DESC, e.id DESC) AS rn
+    FROM trigger_events e
+    WHERE e.user_id = sqlc.arg('user_id')::text
+        AND e.trigger_id = ANY(sqlc.arg('trigger_ids')::text[])
+)
+SELECT
+    sqlc.embed(e),
+    c.id AS run_chat_id,
+    c.title AS run_title,
+    rw.state AS run_root_state,
+    rw.stop_reason AS run_root_stop_reason,
+    CASE
+        WHEN rw.state IS NULL OR rw.state = 1 THEN 1
+        WHEN rw.state = 2 AND c.activity = 2 THEN 3
+        WHEN rw.state = 2 THEN 2
+        WHEN rw.state = 3 AND rw.stop_reason = 3 THEN 4
+        WHEN rw.state = 3 AND rw.stop_reason = 1 THEN 5
+        WHEN rw.state = 3 AND rw.stop_reason = 2 THEN 6
+        WHEN rw.state = 3 AND rw.stop_reason = 4 THEN 7
+        ELSE 0
+    END::integer AS run_display_state
+FROM ranked r
+JOIN trigger_events e ON e.id = r.id
+LEFT JOIN chats_with_activity c ON c.id = e.chat_id AND c.user_id = e.user_id
+LEFT JOIN workflows rw ON rw.id = c.workflow_id
+WHERE r.rn <= sqlc.arg('per_trigger')::integer
+ORDER BY e.trigger_id, e.occurred_at DESC, e.id DESC;
 
 -- name: GetLatestTriggerEvent :one
 -- The overlap check ("is this trigger's previous run still going?") asks for

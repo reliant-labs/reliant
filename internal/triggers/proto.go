@@ -78,27 +78,33 @@ func overlapToProto(overlap string) reliantv1.TriggerOverlapPolicy {
 	return reliantv1.TriggerOverlapPolicy_TRIGGER_OVERLAP_POLICY_SKIP
 }
 
-// ToProto renders a stored trigger. nextFireAt and lastEvent are the read-only
-// projections the caller resolved; either may be nil.
-func ToProto(t *core.Trigger, nextFireAt *time.Time, lastEvent *core.TriggerEvent) (*reliantv1.Trigger, error) {
+// ToProto renders a stored trigger. nextFireAt and firings are the read-only
+// projections the caller resolved; either may be empty.
+//
+// firings is the trigger's recent window, newest first; the newest becomes
+// last_event and the whole window yields health.
+func ToProto(t *core.Trigger, nextFireAt *time.Time, firings []*core.TriggerEventWithRun) (*reliantv1.Trigger, error) {
 	params, err := paramsToProto(t.Params)
 	if err != nil {
 		return nil, fmt.Errorf("trigger %s params: %w", t.ID, err)
 	}
 
 	out := &reliantv1.Trigger{
-		Id:         t.ID,
-		Name:       t.Name,
-		ProjectId:  t.ProjectID,
-		WorktreeId: t.WorktreeID,
-		Enabled:    t.Enabled,
-		Workflow:   t.Workflow,
-		Presets:    t.Presets,
-		Params:     params,
-		Message:    t.Message,
-		DaemonId:   t.DaemonID,
-		CreatedAt:  t.CreatedAt.UTC().Format(time.RFC3339),
-		UpdatedAt:  t.UpdatedAt.UTC().Format(time.RFC3339),
+		Id:          t.ID,
+		Name:        t.Name,
+		ProjectId:   t.ProjectID,
+		WorktreeId:  t.WorktreeID,
+		Enabled:     t.Enabled,
+		Workflow:    t.Workflow,
+		Presets:     t.Presets,
+		Params:      params,
+		Message:     t.Message,
+		DaemonId:    t.DaemonID,
+		ProjectName: t.ProjectName,
+		DaemonName:  t.DaemonName,
+		Health:      ComputeHealth(firings),
+		CreatedAt:   t.CreatedAt.UTC().Format(time.RFC3339),
+		UpdatedAt:   t.UpdatedAt.UTC().Format(time.RFC3339),
 	}
 
 	if t.Kind == core.TriggerKindSchedule {
@@ -115,8 +121,8 @@ func ToProto(t *core.Trigger, nextFireAt *time.Time, lastEvent *core.TriggerEven
 		next := nextFireAt.UTC().Format(time.RFC3339)
 		out.NextFireAt = &next
 	}
-	if lastEvent != nil {
-		ev, err := EventToProto(lastEvent)
+	if len(firings) > 0 {
+		ev, err := EventWithRunToProto(firings[0])
 		if err != nil {
 			return nil, err
 		}
@@ -145,6 +151,23 @@ func EventToProto(ev *core.TriggerEvent) (*reliantv1.TriggerEvent, error) {
 		ChatId:        ev.ChatID,
 		Payload:       payload,
 	}, nil
+}
+
+// EventWithRunToProto renders one firing together with the run it launched.
+func EventWithRunToProto(ev *core.TriggerEventWithRun) (*reliantv1.TriggerEvent, error) {
+	out, err := EventToProto(ev.Event)
+	if err != nil {
+		return nil, err
+	}
+	if ev.Run != nil {
+		out.Run = &reliantv1.TriggerEventRun{
+			DisplayState: reliantv1.RunDisplayState(ev.Run.DisplayState),
+			Title:        ev.Run.Title,
+			State:        reliantv1.WorkflowState(ev.Run.RootStatus.State),
+			StopReason:   reliantv1.WorkflowStopReason(ev.Run.RootStatus.StopReason),
+		}
+	}
+	return out, nil
 }
 
 func eventKindToProto(kind core.TriggerEventKind) reliantv1.TriggerEventKind {

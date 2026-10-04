@@ -1992,10 +1992,10 @@ CREATE INDEX idx_tool_calls_thread_id ON public.tool_calls USING btree (thread_i
 CREATE INDEX idx_trigger_events_chat ON public.trigger_events USING btree (chat_id);
 
 --
--- Name: idx_trigger_events_trigger_occurred; Type: INDEX; Schema: public; Owner: -
+-- Name: idx_trigger_events_trigger_occurred_id; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX idx_trigger_events_trigger_occurred ON public.trigger_events USING btree (trigger_id, occurred_at DESC);
+CREATE INDEX idx_trigger_events_trigger_occurred_id ON public.trigger_events USING btree (trigger_id, occurred_at DESC, id DESC);
 
 --
 -- Name: idx_triggers_project; Type: INDEX; Schema: public; Owner: -
