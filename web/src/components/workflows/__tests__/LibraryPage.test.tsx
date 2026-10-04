@@ -12,7 +12,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
+import { create } from "@bufbuild/protobuf";
+
 import { RunDisplayState } from "@/gen/reliant/v1/run_pb";
+import { TriggerHealthSchema, TriggerHealthStatus, TriggerSchema } from "@/gen/reliant/v1/trigger_pb";
 import { libraryResponse, protoRun, protoTrigger, renderWorkflowsPage } from "./workflowsTestUtils";
 
 const mocks = vi.hoisted(() => ({
@@ -134,6 +137,60 @@ describe("LibraryPage", () => {
     await userEvent.click(within(triage).getByRole("button", { name: "More actions for Triage" }));
     await userEvent.click(await screen.findByRole("menuitem", { name: "Edit" }));
     await waitFor(() => expect(router.state.location.pathname).toBe("/workflow/triage"));
+  });
+
+  it("search filters the rows and lands in the URL; Clear search brings them back", async () => {
+    const { router } = renderLibrary();
+    await screen.findByTestId("workflow-row-triage");
+    await userEvent.type(screen.getByRole("searchbox", { name: "Search workflows" }), "coding agent");
+    await waitFor(() => expect(router.state.location.search).toMatchObject({ q: "coding agent" }));
+    expect(screen.queryByTestId("workflow-row-triage")).toBeNull();
+    expect(screen.getByTestId("workflow-row-builtin://agent")).toBeInTheDocument();
+
+    await userEvent.clear(screen.getByRole("searchbox", { name: "Search workflows" }));
+    await userEvent.type(screen.getByRole("searchbox", { name: "Search workflows" }), "nothing like this");
+    expect(await screen.findByText("No workflows match “nothing like this”.")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Clear search" }));
+    expect(await screen.findByTestId("workflow-row-triage")).toBeInTheDocument();
+    expect(router.state.location.search).not.toHaveProperty("q");
+  });
+
+  it("reads source and sort from the URL: Built-in only, recently run first", async () => {
+    mocks.lastRunPerWorkflow.mockResolvedValue({ runs: [protoRun("builtin://agent", "chat-a")] });
+    renderWorkflowsPage(<LibraryPage />, "/workflows/library?source=%22builtin%22&sort=%22recent%22", "/workflows/library");
+    const list = await screen.findByRole("list", { name: "Built-in" });
+    expect(within(list).getByTestId("workflow-row-builtin://agent")).toBeInTheDocument();
+    expect(screen.queryByTestId("workflow-row-triage")).toBeNull();
+    expect(screen.queryByRole("list", { name: "Failed to load" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Built-in" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Recently run" })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("the source chips write the URL", async () => {
+    const { router } = renderLibrary();
+    await screen.findByTestId("workflow-row-triage");
+    await userEvent.click(screen.getByRole("button", { name: "Failed to load" }));
+    await waitFor(() => expect(router.state.location.search).toMatchObject({ source: "failed" }));
+    expect(screen.queryByTestId("workflow-row-triage")).toBeNull();
+    expect(screen.getByRole("list", { name: "Failed to load" })).toBeInTheDocument();
+  });
+
+  it("pins a workflow whose automation is failing under Needs attention", async () => {
+    mocks.listTriggers.mockResolvedValue({
+      triggers: [
+        protoTrigger("t1", "triage"),
+        create(TriggerSchema, {
+          ...protoTrigger("t2", "triage"),
+          health: create(TriggerHealthSchema, { status: TriggerHealthStatus.FAILING, consecutiveFailures: 3 }),
+        }),
+      ],
+    });
+    renderLibrary();
+    const attention = await screen.findByRole("list", { name: "Needs attention" });
+    const triage = within(attention).getByTestId("workflow-row-triage");
+    expect(within(triage).getByTestId("workflow-row-failing")).toHaveTextContent("1 failing");
+    // Listed once: out of its section, not in both.
+    expect(within(screen.getByRole("list", { name: "Your workflows" })).queryByTestId("workflow-row-triage")).toBeNull();
   });
 
   it("a user workflow's menu offers Export and Delete; a built-in's does not", async () => {

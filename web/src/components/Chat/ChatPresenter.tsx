@@ -16,6 +16,7 @@ import { PermissionsPanel } from "./PermissionsPanel";
 import { ChatHeader } from "./ChatHeader";
 import { ResumeDaemonPill } from "./ResumeDaemonPill";
 import { OomKillBanner } from "./OomKillBanner";
+import { ComposerWakeStatus } from "./ComposerWakeStatus";
 import { BackgroundWorkPill } from "./BackgroundWorkPill";
 import { QueuedMessages } from "./QueuedMessages";
 import type { WorkflowExecution } from "./ExecutionSidebar/types";
@@ -380,7 +381,25 @@ export const ChatPresenter = memo(function ChatPresenter({
   // Replying in an automation run takes it over (§6.3). The composer starts
   // collapsed to a bar that says so; expanding it is per chat, so opening the
   // next run starts collapsed again.
-  const handleSend = useAdoptOnSend(chatForQueue, handleSendWithThread);
+  const handleAdoptingSend = useAdoptOnSend(chatForQueue, handleSendWithThread);
+
+  // Which chat has a send awaiting the server. The server wakes the chat's
+  // machine inside that call, so this is half of the "Waking <machine>…"
+  // signal (ComposerWakeStatus); keyed by chat so a send left in flight by a
+  // chat switch never lights the next chat's composer.
+  const [sendingChatId, setSendingChatId] = useState<string | null>(null);
+  const handleSend = useCallback(
+    async (...args: Parameters<typeof handleAdoptingSend>) => {
+      const sendingFor = chatId;
+      setSendingChatId(sendingFor);
+      try {
+        await handleAdoptingSend(...args);
+      } finally {
+        setSendingChatId((current) => (current === sendingFor ? null : current));
+      }
+    },
+    [handleAdoptingSend, chatId],
+  );
   const [takeOverExpandedFor, setTakeOverExpandedFor] = useState<string | null>(null);
   const showTakeOverBar =
     !!chatForQueue && chatForQueue.id === chatId && isUnadoptedAutomation(chatForQueue) && takeOverExpandedFor !== chatId;
@@ -592,6 +611,12 @@ export const ChatPresenter = memo(function ChatPresenter({
 
         {/* OOM banner — machine ran out of memory recently (cloud daemons) */}
         <OomKillBanner />
+
+        {/* "Waking <machine>…" while this send wakes the chat's machine. */}
+        <ComposerWakeStatus
+          sending={!!chatId && sendingChatId === chatId}
+          daemonId={chatForQueue?.id === chatId ? chatForQueue?.activeDaemonId : undefined}
+        />
 
         {/* Recovery Banner - shown when workflow was lost */}
         {needsRecovery && (

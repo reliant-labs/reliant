@@ -8,8 +8,9 @@
  * Main column: recent runs (the Runs tab's own RunList, so the two cannot
  * drift), the automations that run it (the Automations tab's own row), and
  * the definition — its diagram, read-only, and its typed inputs. Side rail:
- * About, and this workflow's Presets (decision 7: presets moved here from the
- * old hub, with the global list in Settings → Presets).
+ * About, this workflow's Presets (decision 7: presets moved here from the
+ * old hub, with the global list in Settings → Presets), and Used by: the
+ * workflows that call this one through `ref:`.
  *
  * Actions: Run… (RunWorkflowDialog), Edit (the builder), New automation
  * (AutomationFormDialog, prefilled with this workflow).
@@ -20,6 +21,7 @@ import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { CalendarClock, Pencil, Play, Plus } from "lucide-react";
 
 import type { Trigger } from "@/api/trigger-grpc";
+import type { WorkflowResponse } from "@/api/workflow-grpc";
 import { useRunList } from "@/hooks/run-queries";
 import { useTriggers } from "@/hooks/trigger-queries";
 import { useWorkflowLibrary } from "@/hooks/workflow-library-queries";
@@ -38,6 +40,7 @@ import { getWorkflowDisplayName, normalizeWorkflowRef } from "../../workflow/use
 import { useWorkflowDefinition } from "../../workflow/useWorkflowDefinition";
 import { WorkflowBadge, WorkflowSourceBadge } from "../WorkflowSourceBadge";
 import { WorkflowPresetsSection } from "./WorkflowPresetsSection";
+import { workflowsUsing } from "./workflowUsedBy";
 
 /** How many runs the Recent runs card shows; "View all" opens the Runs tab. */
 export const RECENT_RUNS_LIMIT = 10;
@@ -149,6 +152,7 @@ export function WorkflowDetail({ projectId, workflowRef }: { projectId: string; 
             </dl>
           </Card>
           <WorkflowPresetsSection projectId={projectId} workflowRef={workflowRef} />
+          <UsedByCard workflowRef={workflowRef} workflows={library.data?.workflows ?? []} />
         </aside>
       </div>
 
@@ -165,6 +169,39 @@ export function WorkflowDetail({ projectId, workflowRef }: { projectId: string; 
 
 function sourceLong(source: "builtin" | "user" | "project"): string {
   return source === "builtin" ? "Built-in" : source === "project" ? "This project's repository" : "Yours";
+}
+
+/**
+ * The workflows that call this one through `ref:` (workflowUsedBy.ts), from
+ * the library list detail already has loaded. Each links to its own detail.
+ */
+function UsedByCard({ workflowRef, workflows }: { workflowRef: string; workflows: WorkflowResponse[] }) {
+  const usedBy = useMemo(() => workflowsUsing(workflowRef, workflows), [workflowRef, workflows]);
+  return (
+    <section aria-label="Used by">
+      <Card>
+        <CardHeader title="Used by" />
+        {usedBy.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No other workflow calls this one.</p>
+        ) : (
+          <ul aria-label="Workflows that call this one" className="space-y-1.5" data-testid="workflow-detail-used-by">
+            {usedBy.map((workflow) => (
+              <li key={workflow.name} className="flex min-w-0 items-center justify-between gap-2">
+                <Link
+                  to="/workflows/library/$workflowRef"
+                  params={{ workflowRef: workflow.name }}
+                  className="truncate rounded-sm text-sm font-medium text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+                >
+                  {getWorkflowDisplayName(workflow.name, true)}
+                </Link>
+                <WorkflowSourceBadge source={workflow.source} />
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
+    </section>
+  );
 }
 
 function AboutRow({ label, value }: { label: string; value: React.ReactNode }) {

@@ -240,6 +240,54 @@ describe("InboxPage grouping and navigation", () => {
     expect(screen.getByTestId("inbox-item-appr-4")).toBeInTheDocument();
   });
 
+  // The server dedupes a failure EPISODE into one item per kind (#432), but one
+  // automation can still produce several rows: a failed launch counts as a
+  // failure, so two failed launches make it both FAILING and launch-failed, and
+  // an opted-in automation leaves one run-finished row per unread run.
+  it("groups one automation's informational items under that automation", async () => {
+    respond([
+      failingItem({ triggerId: "trg-1", triggerName: "Nightly triage" }),
+      launchFailedItem({ triggerId: "trg-1", triggerName: "Nightly triage", itemId: "launch_failed:evt-5" }),
+      runFinishedItem({ triggerId: "trg-1", chatId: "chat-a", runId: "wf-a", itemId: "run_finished:chat-a", chatTitle: "Mon run" }),
+      runFinishedItem({ triggerId: "trg-1", chatId: "chat-b", runId: "wf-b", itemId: "run_finished:chat-b", chatTitle: "Tue run" }),
+      launchFailedItem({ triggerId: "trg-2", triggerName: "Weekly report", itemId: "launch_failed:evt-7" }),
+    ]);
+    const { router } = renderInboxAt(<InboxPage />);
+    const group = await screen.findByTestId("inbox-group-trigger:trg-1");
+    expect(within(group).getAllByTestId(/^inbox-item-/)).toHaveLength(4);
+    expect(within(group).getByText("Failing · could not start · 2 runs finished")).toBeInTheDocument();
+    // A different automation's single item stands alone.
+    expect(screen.queryByTestId("inbox-group-trigger:trg-2")).toBeNull();
+    expect(screen.getByTestId("inbox-item-launch_failed:evt-7")).toBeInTheDocument();
+
+    // The heading opens the automation; each finished run still opens its run.
+    await userEvent.click(within(group).getByRole("link", { name: "Nightly triage" }));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/workflows/automations/trg-1"));
+  });
+
+  it("inside an automation group each finished run still links to its run", async () => {
+    respond([
+      runFinishedItem({ triggerId: "trg-1", chatId: "chat-a", runId: "wf-a", itemId: "run_finished:chat-a", chatTitle: "Mon run" }),
+      runFinishedItem({ triggerId: "trg-1", chatId: "chat-b", runId: "wf-b", itemId: "run_finished:chat-b", chatTitle: "Tue run" }),
+    ]);
+    renderInboxAt(<InboxPage />);
+    const group = await screen.findByTestId("inbox-group-trigger:trg-1");
+    expect(within(group).getByText("2 runs finished")).toBeInTheDocument();
+    expect(within(group).getByRole("link", { name: "Mon run" })).toHaveAttribute("href", "/workflows/runs/chat-a");
+    expect(within(group).getByRole("link", { name: "Tue run" })).toHaveAttribute("href", "/workflows/runs/chat-b");
+  });
+
+  it("a blocking item of an automation's run groups by run, not with the automation's failures", async () => {
+    respond([
+      approvalItem({ triggerId: "trg-1", triggerName: "Nightly triage" }, "appr-1"),
+      failingItem({ triggerId: "trg-1", triggerName: "Nightly triage" }),
+    ]);
+    renderInboxAt(<InboxPage />);
+    await screen.findByTestId("inbox-item-appr-1");
+    expect(screen.queryByTestId("inbox-group-trigger:trg-1")).toBeNull();
+    expect(screen.getAllByTestId(/^inbox-item-/)).toHaveLength(2);
+  });
+
   it("clicking a row opens run detail by the run's chat id", async () => {
     respond([waitingItem({ chatId: "chat-9", runId: "wf-root-9", itemId: "chat-9" })]);
     const { router } = renderInboxAt(<InboxPage />);

@@ -80,11 +80,14 @@ export function machineName(daemonName: string, daemonId: string): string {
 
 interface InboxItemProps {
   item: InboxItemData;
-  /** Inside a run group the run's name is already the group's heading. */
-  grouped?: boolean;
+  /**
+   * The group the row sits in, whose heading already names and links the run
+   * (a run group) or the automation (an automation group).
+   */
+  groupedBy?: "run" | "automation";
 }
 
-export function InboxItem({ item, grouped }: InboxItemProps) {
+export function InboxItem({ item, groupedBy }: InboxItemProps) {
   const [handled, setHandled] = useState(false);
 
   // "Already handled": show it, then take the row out (§8.3).
@@ -120,7 +123,7 @@ export function InboxItem({ item, grouped }: InboxItemProps) {
         <div className="min-w-0 flex-1 space-y-2">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <ItemTitle item={item} grouped={grouped} />
+              <ItemTitle item={item} groupedBy={groupedBy} />
               {context && <p className="mt-0.5 truncate text-xs text-muted-foreground">{context}</p>}
             </div>
             {isDismissableKind(item.kind) && !handled && <DismissButton itemId={item.itemId} />}
@@ -164,7 +167,7 @@ function subjectName(item: InboxItemData): string {
 }
 
 /** The one-line title; the run's name links to run detail (§8.2). */
-function ItemTitle({ item, grouped }: { item: InboxItemData; grouped?: boolean }) {
+function ItemTitle({ item, groupedBy }: { item: InboxItemData; groupedBy?: "run" | "automation" }) {
   const name = subjectName(item);
   const lead = titleLead(item);
   const runLink = item.chatId ? (
@@ -190,8 +193,10 @@ function ItemTitle({ item, grouped }: { item: InboxItemData; grouped?: boolean }
   return (
     <p className="text-sm text-foreground">
       {lead}
-      {/* Inside a run group the group's heading names and links the run. */}
-      {(!grouped || !item.chatId) && (
+      {/* A group's heading already names and links what it groups: the run,
+          or the automation. Inside an automation group a run-finished row
+          still links its own run, since each is a different run. */}
+      {(groupedBy === "run" ? !item.chatId : groupedBy === "automation" ? !!item.chatId : true) && (
         <>
           {" in "}
           {runLink}

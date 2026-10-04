@@ -9,16 +9,29 @@
  * run went (LastRunPerWorkflow, one request for the whole list). The hub's
  * sections are kept: Custom, Built-in, and "Failed to load" for definitions
  * that did not parse. Clicking a workflow opens its detail page.
+ *
+ * Above the list: a search, a source filter and a sort, all search params
+ * (librarySearchSchema) so a narrowed library is a link. What they select is
+ * libraryView.ts, including the "Needs attention" section pinned on top.
  */
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { AlertTriangle, BookOpen, FolderOpen, Plus, Upload } from "lucide-react";
+import { AlertTriangle, BookOpen, FolderOpen, Plus, Search, Upload } from "lucide-react";
 import { toast } from "sonner";
 
 import type { InvalidWorkflow, WorkflowResponse } from "@/api/workflow-grpc";
+import { useDebounce } from "@/hooks/useDebounce";
 import { useLastRunPerWorkflow } from "@/hooks/run-queries";
 import { useTriggers } from "@/hooks/trigger-queries";
+import { cn } from "@/lib/utils";
+import { WORKFLOWS_LIBRARY_PATH } from "@/lib/workflowsArea";
+import {
+  LIBRARY_SOURCE_KEYS,
+  type LibrarySearch,
+  type LibrarySortKey,
+  type LibrarySourceKey,
+} from "@/routeSchemas";
 import {
   useCopyWorkflow,
   useDeleteWorkflow,
@@ -36,6 +49,35 @@ import { RunWorkflowDialog } from "../../workflow/run/RunWorkflowDialog";
 import { getWorkflowDisplayName, normalizeWorkflowRef } from "../../workflow/useWorkflowInputs";
 import { splitFindings } from "../../workflow/workflowDraftStatus";
 import { WorkflowRow, type WorkflowRowAction, type WorkflowRowItem } from "./WorkflowRow";
+import { libraryView, type LibrarySection as LibraryViewSection } from "./libraryView";
+
+const SOURCE_LABELS: Record<LibrarySourceKey, string> = {
+  yours: "Your workflows",
+  builtin: "Built-in",
+  failed: "Failed to load",
+};
+
+const SORT_LABELS: Record<LibrarySortKey, string> = {
+  name: "Name",
+  recent: "Recently run",
+};
+
+/**
+ * The Library's search params, and a setter that replaces them. Replace, not
+ * push, as on Runs: narrowing the list adjusts a view, and Back should leave
+ * the library rather than undo it one keystroke at a time.
+ */
+function useLibrarySearch(): [LibrarySearch, (next: LibrarySearch) => void] {
+  const search = useSearch({ strict: false }) as LibrarySearch;
+  const navigate = useNavigate();
+  const set = (next: LibrarySearch) => {
+    const compacted = Object.fromEntries(
+      Object.entries(next).filter(([, value]) => value !== undefined && value !== ""),
+    ) as LibrarySearch;
+    void navigate({ to: WORKFLOWS_LIBRARY_PATH, search: compacted, replace: true });
+  };
+  return [search, set];
+}
 
 export function LibraryPage() {
   const currentProject = useProjectStore((state) => state.currentProject);
@@ -224,7 +266,7 @@ function ImportConflictModal({
 
 function LibraryBody({ projectId }: { projectId: string }) {
   const navigate = useNavigate();
-  const search = useSearch({ strict: false }) as { project?: string };
+  const [search, setSearch] = useLibrarySearch();
   const library = useWorkflowLibrary(projectId);
   const lastRuns = useLastRunPerWorkflow(projectId);
   const triggers = useTriggers(projectId);
@@ -238,24 +280,19 @@ function LibraryBody({ projectId }: { projectId: string }) {
   const isWorkflowHidden = usePreferencesStore((state) => state.isWorkflowHidden);
   const toggleWorkflowVisibility = usePreferencesStore((state) => state.toggleWorkflowVisibility);
 
-  const automationCounts = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const trigger of triggers.data ?? []) {
-      const key = normalizeWorkflowRef(trigger.workflow);
-      counts.set(key, (counts.get(key) ?? 0) + 1);
-    }
-    return counts;
-  }, [triggers.data]);
-
-  const { custom, builtin } = useMemo(() => {
-    const workflows = library.data?.workflows ?? [];
-    const byName = (a: WorkflowResponse, b: WorkflowResponse) =>
-      normalizeWorkflowRef(a.name).localeCompare(normalizeWorkflowRef(b.name));
-    return {
-      custom: workflows.filter((w) => w.source !== "builtin").sort(byName),
-      builtin: workflows.filter((w) => w.source === "builtin").sort(byName),
-    };
-  }, [library.data]);
+  const view = useMemo(
+    () =>
+      libraryView({
+        workflows: library.data?.workflows ?? [],
+        invalid: library.data?.invalidWorkflows ?? [],
+        triggers: triggers.data ?? [],
+        lastRuns: lastRuns.data,
+        q: search.q,
+        source: search.source,
+        sort: search.sort,
+      }),
+    [library.data, triggers.data, lastRuns.data, search.q, search.source, search.sort],
+  );
 
   if (library.isLoading) return <LibrarySkeleton />;
   if (library.isError) {
@@ -364,26 +401,35 @@ function LibraryBody({ projectId }: { projectId: string }) {
   };
 
   const renderRows = (workflows: WorkflowResponse[]) =>
-    workflows.map((workflow) => (
-      <WorkflowRow
-        key={workflow.name}
-        workflow={toItem(workflow)}
-        lastRun={lastRuns.data?.get(workflow.name)}
-        automationCount={automationCounts.get(normalizeWorkflowRef(workflow.name)) ?? 0}
-        project={search.project}
-        onRun={workflow.status === "draft" ? undefined : () => setRunRef(workflow.name)}
-        actions={actionsFor(workflow)}
-      />
-    ));
+    workflows.map((workflow) => {
+      const ref = normalizeWorkflowRef(workflow.name);
+      return (
+        <WorkflowRow
+          key={workflow.name}
+          workflow={toItem(workflow)}
+          lastRun={lastRuns.data?.get(workflow.name)}
+          automationCount={view.automationCounts.get(ref) ?? 0}
+          failingAutomationCount={view.failingCounts.get(ref) ?? 0}
+          project={search.project}
+          onRun={workflow.status === "draft" ? undefined : () => setRunRef(workflow.name)}
+          actions={actionsFor(workflow)}
+        />
+      );
+    });
 
-  const invalid = library.data?.invalidWorkflows ?? [];
+  const clearNarrowing = () => setSearch({ ...search, q: undefined, source: undefined });
 
-  return (
-    <div className="space-y-6" data-onboarding="workflow-hub">
-      <LibrarySection
-        label="Your workflows"
-        count={custom.length}
-        empty={
+  const renderSection = (section: LibraryViewSection) => (
+    <LibrarySection
+      key={section.key}
+      label={section.label}
+      count={section.workflows.length}
+      attention={section.key === "attention"}
+      description={
+        section.key === "attention" ? "An automation that runs these has failed twice or more in a row." : undefined
+      }
+      empty={
+        section.key === "yours" ? (
           <p className="px-5 py-4 text-sm text-muted-foreground">
             Start from a built-in, or{" "}
             <button
@@ -395,18 +441,32 @@ function LibraryBody({ projectId }: { projectId: string }) {
             </button>
             .
           </p>
-        }
-      >
-        {renderRows(custom)}
-      </LibrarySection>
+        ) : undefined
+      }
+    >
+      {renderRows(section.workflows)}
+    </LibrarySection>
+  );
 
-      {builtin.length > 0 && (
-        <LibrarySection label="Built-in" count={builtin.length}>
-          {renderRows(builtin)}
-        </LibrarySection>
+  return (
+    <div className="space-y-6" data-onboarding="workflow-hub">
+      <LibraryControls search={search} onChange={setSearch} />
+
+      {view.noMatches ? (
+        <Card padding="lg" role="status">
+          <p className="text-sm font-medium text-foreground">
+            {search.q?.trim() ? `No workflows match “${search.q.trim()}”.` : "No workflows here."}
+          </p>
+          <Button className="mt-4" variant="outline" size="sm" onClick={clearNarrowing}>
+            {search.q?.trim() ? "Clear search" : "Show all workflows"}
+          </Button>
+        </Card>
+      ) : (
+        <>
+          {view.sections.map(renderSection)}
+          {view.invalid.length > 0 && <InvalidSection workflows={view.invalid} />}
+        </>
       )}
-
-      {invalid.length > 0 && <InvalidSection workflows={invalid} />}
 
       <RunWorkflowDialog
         open={runRef !== null}
@@ -418,24 +478,124 @@ function LibraryBody({ projectId }: { projectId: string }) {
   );
 }
 
+/**
+ * Search, source and sort. Chips, as on the Runs filter row: each says its
+ * own state (aria-pressed) and nothing hides behind a popover.
+ */
+function LibraryControls({ search, onChange }: { search: LibrarySearch; onChange: (next: LibrarySearch) => void }) {
+  // The box writes to the URL once typing pauses, not per keystroke.
+  const [query, setQuery] = useState(search.q ?? "");
+  const debouncedQuery = useDebounce(query, 200);
+  useEffect(() => {
+    if ((search.q ?? "") !== debouncedQuery.trim()) onChange({ ...search, q: debouncedQuery.trim() || undefined });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only the debounced text drives this
+  }, [debouncedQuery]);
+  useEffect(() => {
+    // An outside change (Clear search, Back) resets the box.
+    if ((search.q ?? "") !== query.trim()) setQuery(search.q ?? "");
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only the URL drives this
+  }, [search.q]);
+
+  const sort = search.sort ?? "name";
+  return (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-2" role="group" aria-label="Find workflows">
+      <label className="relative flex min-w-[14rem] flex-1 items-center sm:max-w-xs">
+        <span className="sr-only">Search workflows</span>
+        <Search className="pointer-events-none absolute left-2.5 h-4 w-4 text-muted-foreground" aria-hidden="true" />
+        <input
+          type="search"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Search names and descriptions"
+          className="h-8 w-full rounded-md border border-border bg-background pl-8 pr-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+        />
+      </label>
+      <ChipGroup label="Source">
+        <Chip pressed={!search.source} onClick={() => onChange({ ...search, source: undefined })}>
+          All
+        </Chip>
+        {LIBRARY_SOURCE_KEYS.map((key) => (
+          <Chip key={key} pressed={search.source === key} onClick={() => onChange({ ...search, source: key })}>
+            {SOURCE_LABELS[key]}
+          </Chip>
+        ))}
+      </ChipGroup>
+      <ChipGroup label="Sort">
+        {(Object.keys(SORT_LABELS) as LibrarySortKey[]).map((key) => (
+          <Chip
+            key={key}
+            pressed={sort === key}
+            onClick={() => onChange({ ...search, sort: key === "name" ? undefined : key })}
+          >
+            {SORT_LABELS[key]}
+          </Chip>
+        ))}
+      </ChipGroup>
+    </div>
+  );
+}
+
+function ChipGroup({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div role="group" aria-label={label} className="flex flex-wrap items-center gap-1">
+      <span className="mr-0.5 text-xs text-muted-foreground" aria-hidden="true">
+        {label}
+      </span>
+      {children}
+    </div>
+  );
+}
+
+function Chip({ pressed, onClick, children }: { pressed: boolean; onClick: () => void; children: ReactNode }) {
+  return (
+    <button
+      type="button"
+      aria-pressed={pressed}
+      onClick={onClick}
+      className={cn(
+        "inline-flex h-7 items-center rounded-full border px-2.5 text-xs font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
+        pressed
+          ? "border-primary/50 bg-primary/10 text-foreground"
+          : "border-border bg-background text-muted-foreground hover:bg-muted/50 hover:text-foreground",
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
 function LibrarySection({
   label,
   count,
+  attention = false,
+  description,
   empty,
   children,
 }: {
   label: string;
   count: number;
+  /** The pinned "Needs attention" section: a warning heading and border. */
+  attention?: boolean;
+  description?: string;
   empty?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
     <section aria-label={label}>
-      <h2 className="mb-2 px-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+      <h2
+        className={cn(
+          "mb-2 flex items-center gap-1.5 px-1 text-xs font-semibold uppercase tracking-wide",
+          attention ? "text-warning" : "text-muted-foreground",
+        )}
+      >
+        {attention && <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />}
         {label}
-        <span className="ml-1.5 font-medium text-muted-foreground/70">{count}</span>
+        <span className={cn("ml-0.5 font-medium", attention ? "text-warning/70" : "text-muted-foreground/70")}>
+          {count}
+        </span>
       </h2>
-      <Card padding="none">
+      {description && <p className="-mt-1 mb-2 px-1 text-xs text-muted-foreground">{description}</p>}
+      <Card padding="none" className={cn(attention && "border-warning/60")}>
         {count === 0 && empty ? (
           empty
         ) : (
