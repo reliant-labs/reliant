@@ -32,17 +32,7 @@ SELECT DISTINCT ON (r.workflow_name) r.chat_id, r.run_id, r.title, r.project_id,
         c.trigger_id,
         t.name AS trigger_name,
         c.active_daemon_id,
-        CASE
-            WHEN rw.state IS NULL OR rw.state = 1 THEN 1
-            WHEN rw.state = 2 AND c.activity = 2 THEN 3
-            WHEN rw.state = 2 AND c.activity = 5 THEN 8
-            WHEN rw.state = 2 THEN 2
-            WHEN rw.state = 3 AND rw.stop_reason = 3 THEN 4
-            WHEN rw.state = 3 AND rw.stop_reason = 1 THEN 5
-            WHEN rw.state = 3 AND rw.stop_reason = 2 THEN 6
-            WHEN rw.state = 3 AND rw.stop_reason = 4 THEN 7
-            ELSE 0
-        END::integer AS display_state,
+        COALESCE(c.display_state, 1)::integer AS display_state,
         c.state AS chat_state
     FROM chats_with_activity c
     LEFT JOIN workflows rw ON rw.id = c.workflow_id
@@ -147,17 +137,7 @@ SELECT chat_id, run_id, title, project_id, created_at, last_active, completed_at
         c.trigger_id,
         t.name AS trigger_name,
         c.active_daemon_id,
-        CASE
-            WHEN rw.state IS NULL OR rw.state = 1 THEN 1
-            WHEN rw.state = 2 AND c.activity = 2 THEN 3
-            WHEN rw.state = 2 AND c.activity = 5 THEN 8
-            WHEN rw.state = 2 THEN 2
-            WHEN rw.state = 3 AND rw.stop_reason = 3 THEN 4
-            WHEN rw.state = 3 AND rw.stop_reason = 1 THEN 5
-            WHEN rw.state = 3 AND rw.stop_reason = 2 THEN 6
-            WHEN rw.state = 3 AND rw.stop_reason = 4 THEN 7
-            ELSE 0
-        END::integer AS display_state,
+        COALESCE(c.display_state, 1)::integer AS display_state,
         c.state AS chat_state
     FROM chats_with_activity c
     LEFT JOIN workflows rw ON rw.id = c.workflow_id
@@ -227,8 +207,8 @@ type ListRunsRow struct {
 // A run is a chat row (chat id == root workflow id), so the list is
 // chats_with_activity joined to its root workflow and, for automation-fired
 // runs, to the trigger. display_state is the one status vocabulary the UI
-// shows, derived here so a filter on it and the label a row carries cannot
-// disagree:
+// shows, derived once in chats_with_activity.display_state so a filter on it
+// and the label a row carries cannot disagree:
 //
 //	1 queued       no root workflow row yet, or PENDING
 //	2 running      ACTIVE

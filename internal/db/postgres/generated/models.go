@@ -183,6 +183,7 @@ type ChatsWithActivity struct {
 	LaunchKind             sql.NullString `json:"launch_kind"`
 	TriggerID              sql.NullString `json:"trigger_id"`
 	ListInSidebar          sql.NullBool   `json:"list_in_sidebar"`
+	DisplayState           int32          `json:"display_state"`
 }
 
 type ClaudeAuthToken struct {

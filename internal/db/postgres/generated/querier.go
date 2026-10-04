@@ -582,8 +582,8 @@ type Querier interface {
 	// A run is a chat row (chat id == root workflow id), so the list is
 	// chats_with_activity joined to its root workflow and, for automation-fired
 	// runs, to the trigger. display_state is the one status vocabulary the UI
-	// shows, derived here so a filter on it and the label a row carries cannot
-	// disagree:
+	// shows, derived once in chats_with_activity.display_state so a filter on it
+	// and the label a row carries cannot disagree:
 	//   1 queued       no root workflow row yet, or PENDING
 	//   2 running      ACTIVE
 	//   3 needs-input  ACTIVE and activity = awaiting input (2)

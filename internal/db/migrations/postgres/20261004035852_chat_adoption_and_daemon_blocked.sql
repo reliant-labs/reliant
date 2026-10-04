@@ -11,8 +11,8 @@
 -- cleared by the next successful tool call. The view only reports it while a
 -- workflow of the chat is ACTIVE, so a run that stopped cannot leave a stale
 -- "waiting for machine" behind.
-ALTER TABLE chats ADD COLUMN adopted_at timestamptz;
-ALTER TABLE chats ADD COLUMN daemon_blocked_at timestamptz;
+ALTER TABLE chats ADD COLUMN IF NOT EXISTS adopted_at timestamptz;
+ALTER TABLE chats ADD COLUMN IF NOT EXISTS daemon_blocked_at timestamptz;
 
 -- Rebuild chats_with_activity. DROP + CREATE, never CREATE OR REPLACE: Postgres
 -- expands `c.*` once at CREATE VIEW time (see 20261003220140). `c.*` stays
@@ -37,7 +37,22 @@ SELECT
         OR base.launch_kind = 'chat.start'
         OR base.adopted_at IS NOT NULL
         OR (base.launch_kind <> 'agent.start_run' AND base.activity = 2)
-    ) AS list_in_sidebar
+    ) AS list_in_sidebar,
+    -- The one RunDisplayState derivation. ListRuns, LastRunPerWorkflow,
+    -- ListTriggerEvents and ListRecentTriggerFirings all read this column, so
+    -- they cannot disagree. 1 queued, 2 running, 3 needs input, 4 paused,
+    -- 5 completed, 6 failed, 7 cancelled, 8 waiting for machine.
+    (CASE
+        WHEN base.root_workflow_state IS NULL OR base.root_workflow_state = 1 THEN 1
+        WHEN base.root_workflow_state = 2 AND base.activity = 2 THEN 3
+        WHEN base.root_workflow_state = 2 AND base.activity = 5 THEN 8
+        WHEN base.root_workflow_state = 2 THEN 2
+        WHEN base.root_workflow_state = 3 AND base.root_workflow_stop_reason = 3 THEN 4
+        WHEN base.root_workflow_state = 3 AND base.root_workflow_stop_reason = 1 THEN 5
+        WHEN base.root_workflow_state = 3 AND base.root_workflow_stop_reason = 2 THEN 6
+        WHEN base.root_workflow_state = 3 AND base.root_workflow_stop_reason = 4 THEN 7
+        ELSE 0
+    END)::integer AS display_state
 FROM (
     SELECT
         c.*,
