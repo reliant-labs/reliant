@@ -39,18 +39,12 @@ const (
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// ClusterServiceRegisterClusterProcedure is the fully-qualified name of the ClusterService's
-	// RegisterCluster RPC.
-	ClusterServiceRegisterClusterProcedure = "/controlplane.v1.ClusterService/RegisterCluster"
 	// ClusterServiceListClustersProcedure is the fully-qualified name of the ClusterService's
 	// ListClusters RPC.
 	ClusterServiceListClustersProcedure = "/controlplane.v1.ClusterService/ListClusters"
 	// ClusterServiceGetClusterProcedure is the fully-qualified name of the ClusterService's GetCluster
 	// RPC.
 	ClusterServiceGetClusterProcedure = "/controlplane.v1.ClusterService/GetCluster"
-	// ClusterServiceRotateBootstrapProcedure is the fully-qualified name of the ClusterService's
-	// RotateBootstrap RPC.
-	ClusterServiceRotateBootstrapProcedure = "/controlplane.v1.ClusterService/RotateBootstrap"
 	// ClusterServiceRemoveClusterProcedure is the fully-qualified name of the ClusterService's
 	// RemoveCluster RPC.
 	ClusterServiceRemoveClusterProcedure = "/controlplane.v1.ClusterService/RemoveCluster"
@@ -61,31 +55,20 @@ const (
 
 // ClusterServiceClient is a client for the controlplane.v1.ClusterService service.
 type ClusterServiceClient interface {
-	// RegisterCluster records a new BYO cluster and mints its one-time
-	// bootstrap. The cluster is WAITING until the agent exchanges the token.
-	RegisterCluster(context.Context, *connect.Request[v1.RegisterClusterRequest]) (*connect.Response[v1.RegisterClusterResponse], error)
 	// ListClusters returns every live cluster of the caller's org, by name.
 	ListClusters(context.Context, *connect.Request[v1.ListClustersRequest]) (*connect.Response[v1.ListClustersResponse], error)
 	// GetCluster returns one cluster of the caller's org.
 	GetCluster(context.Context, *connect.Request[v1.GetClusterRequest]) (*connect.Response[v1.GetClusterResponse], error)
-	// RotateBootstrap mints a NEW one-time bootstrap for a BYO cluster and
-	// revokes any outstanding one. Used when the first command expired, and to
-	// re-bootstrap an agent whose credential is lost. The credential the new
-	// token yields REPLACES the cluster's current one on exchange.
-	RotateBootstrap(context.Context, *connect.Request[v1.RotateClusterBootstrapRequest]) (*connect.Response[v1.RotateClusterBootstrapResponse], error)
-	// RemoveCluster disconnects a BYO cluster: revokes its agent credential and
-	// any outstanding bootstrap, and frees its name. REFUSED (FailedPrecondition)
+	// RemoveCluster disconnects a BYO cluster, dropping its stored connection
+	// material, and frees its name. REFUSED (FailedPrecondition)
 	// while any live environment references the cluster.
 	RemoveCluster(context.Context, *connect.Request[v1.RemoveClusterRequest]) (*connect.Response[v1.RemoveClusterResponse], error)
 	// ConnectCluster registers a cluster BY ADDRESS, with no agent in it.
 	//
-	// THE AGENTLESS SIBLING OF RegisterCluster, and the difference is which
-	// party holds the credential. RegisterCluster mints a bootstrap, the
-	// customer installs an agent, and the agent reports {server, CA, token} it
-	// minted itself. ConnectCluster is told the address and the CA up front,
-	// and authenticates either as a cloud workload identity (no secret crosses
-	// the boundary at all) or with a scoped ServiceAccount token the owner
-	// pasted once. Nothing is installed in the target cluster.
+	// The platform is told the address and the CA up front, and authenticates
+	// either as a cloud workload identity (no secret crosses the boundary at
+	// all) or with a scoped ServiceAccount token the owner pasted once. Nothing
+	// is installed in the target cluster.
 	//
 	// DECLARATIVE AND IDEMPOTENT BY NAME. `forge cluster connect <name>` is
 	// re-run from a checkout, so a second call with different values UPDATES
@@ -112,12 +95,6 @@ func NewClusterServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 	baseURL = strings.TrimRight(baseURL, "/")
 	clusterServiceMethods := v1.File_services_cluster_v1_cluster_proto.Services().ByName("ClusterService").Methods()
 	return &clusterServiceClient{
-		registerCluster: connect.NewClient[v1.RegisterClusterRequest, v1.RegisterClusterResponse](
-			httpClient,
-			baseURL+ClusterServiceRegisterClusterProcedure,
-			connect.WithSchema(clusterServiceMethods.ByName("RegisterCluster")),
-			connect.WithClientOptions(opts...),
-		),
 		listClusters: connect.NewClient[v1.ListClustersRequest, v1.ListClustersResponse](
 			httpClient,
 			baseURL+ClusterServiceListClustersProcedure,
@@ -128,12 +105,6 @@ func NewClusterServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			httpClient,
 			baseURL+ClusterServiceGetClusterProcedure,
 			connect.WithSchema(clusterServiceMethods.ByName("GetCluster")),
-			connect.WithClientOptions(opts...),
-		),
-		rotateBootstrap: connect.NewClient[v1.RotateClusterBootstrapRequest, v1.RotateClusterBootstrapResponse](
-			httpClient,
-			baseURL+ClusterServiceRotateBootstrapProcedure,
-			connect.WithSchema(clusterServiceMethods.ByName("RotateBootstrap")),
 			connect.WithClientOptions(opts...),
 		),
 		removeCluster: connect.NewClient[v1.RemoveClusterRequest, v1.RemoveClusterResponse](
@@ -153,17 +124,10 @@ func NewClusterServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 
 // clusterServiceClient implements ClusterServiceClient.
 type clusterServiceClient struct {
-	registerCluster *connect.Client[v1.RegisterClusterRequest, v1.RegisterClusterResponse]
-	listClusters    *connect.Client[v1.ListClustersRequest, v1.ListClustersResponse]
-	getCluster      *connect.Client[v1.GetClusterRequest, v1.GetClusterResponse]
-	rotateBootstrap *connect.Client[v1.RotateClusterBootstrapRequest, v1.RotateClusterBootstrapResponse]
-	removeCluster   *connect.Client[v1.RemoveClusterRequest, v1.RemoveClusterResponse]
-	connectCluster  *connect.Client[v1.ConnectClusterRequest, v1.ConnectClusterResponse]
-}
-
-// RegisterCluster calls controlplane.v1.ClusterService.RegisterCluster.
-func (c *clusterServiceClient) RegisterCluster(ctx context.Context, req *connect.Request[v1.RegisterClusterRequest]) (*connect.Response[v1.RegisterClusterResponse], error) {
-	return c.registerCluster.CallUnary(ctx, req)
+	listClusters   *connect.Client[v1.ListClustersRequest, v1.ListClustersResponse]
+	getCluster     *connect.Client[v1.GetClusterRequest, v1.GetClusterResponse]
+	removeCluster  *connect.Client[v1.RemoveClusterRequest, v1.RemoveClusterResponse]
+	connectCluster *connect.Client[v1.ConnectClusterRequest, v1.ConnectClusterResponse]
 }
 
 // ListClusters calls controlplane.v1.ClusterService.ListClusters.
@@ -174,11 +138,6 @@ func (c *clusterServiceClient) ListClusters(ctx context.Context, req *connect.Re
 // GetCluster calls controlplane.v1.ClusterService.GetCluster.
 func (c *clusterServiceClient) GetCluster(ctx context.Context, req *connect.Request[v1.GetClusterRequest]) (*connect.Response[v1.GetClusterResponse], error) {
 	return c.getCluster.CallUnary(ctx, req)
-}
-
-// RotateBootstrap calls controlplane.v1.ClusterService.RotateBootstrap.
-func (c *clusterServiceClient) RotateBootstrap(ctx context.Context, req *connect.Request[v1.RotateClusterBootstrapRequest]) (*connect.Response[v1.RotateClusterBootstrapResponse], error) {
-	return c.rotateBootstrap.CallUnary(ctx, req)
 }
 
 // RemoveCluster calls controlplane.v1.ClusterService.RemoveCluster.
@@ -193,31 +152,20 @@ func (c *clusterServiceClient) ConnectCluster(ctx context.Context, req *connect.
 
 // ClusterServiceHandler is an implementation of the controlplane.v1.ClusterService service.
 type ClusterServiceHandler interface {
-	// RegisterCluster records a new BYO cluster and mints its one-time
-	// bootstrap. The cluster is WAITING until the agent exchanges the token.
-	RegisterCluster(context.Context, *connect.Request[v1.RegisterClusterRequest]) (*connect.Response[v1.RegisterClusterResponse], error)
 	// ListClusters returns every live cluster of the caller's org, by name.
 	ListClusters(context.Context, *connect.Request[v1.ListClustersRequest]) (*connect.Response[v1.ListClustersResponse], error)
 	// GetCluster returns one cluster of the caller's org.
 	GetCluster(context.Context, *connect.Request[v1.GetClusterRequest]) (*connect.Response[v1.GetClusterResponse], error)
-	// RotateBootstrap mints a NEW one-time bootstrap for a BYO cluster and
-	// revokes any outstanding one. Used when the first command expired, and to
-	// re-bootstrap an agent whose credential is lost. The credential the new
-	// token yields REPLACES the cluster's current one on exchange.
-	RotateBootstrap(context.Context, *connect.Request[v1.RotateClusterBootstrapRequest]) (*connect.Response[v1.RotateClusterBootstrapResponse], error)
-	// RemoveCluster disconnects a BYO cluster: revokes its agent credential and
-	// any outstanding bootstrap, and frees its name. REFUSED (FailedPrecondition)
+	// RemoveCluster disconnects a BYO cluster, dropping its stored connection
+	// material, and frees its name. REFUSED (FailedPrecondition)
 	// while any live environment references the cluster.
 	RemoveCluster(context.Context, *connect.Request[v1.RemoveClusterRequest]) (*connect.Response[v1.RemoveClusterResponse], error)
 	// ConnectCluster registers a cluster BY ADDRESS, with no agent in it.
 	//
-	// THE AGENTLESS SIBLING OF RegisterCluster, and the difference is which
-	// party holds the credential. RegisterCluster mints a bootstrap, the
-	// customer installs an agent, and the agent reports {server, CA, token} it
-	// minted itself. ConnectCluster is told the address and the CA up front,
-	// and authenticates either as a cloud workload identity (no secret crosses
-	// the boundary at all) or with a scoped ServiceAccount token the owner
-	// pasted once. Nothing is installed in the target cluster.
+	// The platform is told the address and the CA up front, and authenticates
+	// either as a cloud workload identity (no secret crosses the boundary at
+	// all) or with a scoped ServiceAccount token the owner pasted once. Nothing
+	// is installed in the target cluster.
 	//
 	// DECLARATIVE AND IDEMPOTENT BY NAME. `forge cluster connect <name>` is
 	// re-run from a checkout, so a second call with different values UPDATES
@@ -240,12 +188,6 @@ type ClusterServiceHandler interface {
 // and JSON codecs. They also support gzip compression.
 func NewClusterServiceHandler(svc ClusterServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
 	clusterServiceMethods := v1.File_services_cluster_v1_cluster_proto.Services().ByName("ClusterService").Methods()
-	clusterServiceRegisterClusterHandler := connect.NewUnaryHandler(
-		ClusterServiceRegisterClusterProcedure,
-		svc.RegisterCluster,
-		connect.WithSchema(clusterServiceMethods.ByName("RegisterCluster")),
-		connect.WithHandlerOptions(opts...),
-	)
 	clusterServiceListClustersHandler := connect.NewUnaryHandler(
 		ClusterServiceListClustersProcedure,
 		svc.ListClusters,
@@ -256,12 +198,6 @@ func NewClusterServiceHandler(svc ClusterServiceHandler, opts ...connect.Handler
 		ClusterServiceGetClusterProcedure,
 		svc.GetCluster,
 		connect.WithSchema(clusterServiceMethods.ByName("GetCluster")),
-		connect.WithHandlerOptions(opts...),
-	)
-	clusterServiceRotateBootstrapHandler := connect.NewUnaryHandler(
-		ClusterServiceRotateBootstrapProcedure,
-		svc.RotateBootstrap,
-		connect.WithSchema(clusterServiceMethods.ByName("RotateBootstrap")),
 		connect.WithHandlerOptions(opts...),
 	)
 	clusterServiceRemoveClusterHandler := connect.NewUnaryHandler(
@@ -278,14 +214,10 @@ func NewClusterServiceHandler(svc ClusterServiceHandler, opts ...connect.Handler
 	)
 	return "/controlplane.v1.ClusterService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case ClusterServiceRegisterClusterProcedure:
-			clusterServiceRegisterClusterHandler.ServeHTTP(w, r)
 		case ClusterServiceListClustersProcedure:
 			clusterServiceListClustersHandler.ServeHTTP(w, r)
 		case ClusterServiceGetClusterProcedure:
 			clusterServiceGetClusterHandler.ServeHTTP(w, r)
-		case ClusterServiceRotateBootstrapProcedure:
-			clusterServiceRotateBootstrapHandler.ServeHTTP(w, r)
 		case ClusterServiceRemoveClusterProcedure:
 			clusterServiceRemoveClusterHandler.ServeHTTP(w, r)
 		case ClusterServiceConnectClusterProcedure:
@@ -299,20 +231,12 @@ func NewClusterServiceHandler(svc ClusterServiceHandler, opts ...connect.Handler
 // UnimplementedClusterServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedClusterServiceHandler struct{}
 
-func (UnimplementedClusterServiceHandler) RegisterCluster(context.Context, *connect.Request[v1.RegisterClusterRequest]) (*connect.Response[v1.RegisterClusterResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.ClusterService.RegisterCluster is not implemented"))
-}
-
 func (UnimplementedClusterServiceHandler) ListClusters(context.Context, *connect.Request[v1.ListClustersRequest]) (*connect.Response[v1.ListClustersResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.ClusterService.ListClusters is not implemented"))
 }
 
 func (UnimplementedClusterServiceHandler) GetCluster(context.Context, *connect.Request[v1.GetClusterRequest]) (*connect.Response[v1.GetClusterResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.ClusterService.GetCluster is not implemented"))
-}
-
-func (UnimplementedClusterServiceHandler) RotateBootstrap(context.Context, *connect.Request[v1.RotateClusterBootstrapRequest]) (*connect.Response[v1.RotateClusterBootstrapResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.ClusterService.RotateBootstrap is not implemented"))
 }
 
 func (UnimplementedClusterServiceHandler) RemoveCluster(context.Context, *connect.Request[v1.RemoveClusterRequest]) (*connect.Response[v1.RemoveClusterResponse], error) {

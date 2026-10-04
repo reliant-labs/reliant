@@ -20,7 +20,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file services/cluster/v1/cluster.proto.
  */
 export const file_services_cluster_v1_cluster: GenFile = /*@__PURE__*/
-  fileDesc("CiFzZXJ2aWNlcy9jbHVzdGVyL3YxL2NsdXN0ZXIucHJvdG8SD2NvbnRyb2xwbGFuZS52MSI2CgtIdWJJZGVudGl0eRIbChNnY3Bfc2VydmljZV9hY2NvdW50GAEgASgJSgQIAhADSgQIAxAEIt8DCgdDbHVzdGVyEgoKAmlkGAEgASgJEgwKBG5hbWUYAiABKAkSMgoIcHJvdmlkZXIYAyABKA4yIC5jb250cm9scGxhbmUudjEuQ2x1c3RlclByb3ZpZGVyEjYKCmNvbm5lY3Rpb24YBCABKA4yIi5jb250cm9scGxhbmUudjEuQ2x1c3RlckNvbm5lY3Rpb24SMAoMbGFzdF9zZWVuX2F0GAUgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIaChJrdWJlcm5ldGVzX3ZlcnNpb24YBiABKAkSFQoNYWdlbnRfdmVyc2lvbhgHIAEoCRISCgpub2RlX2NvdW50GAggASgNEhcKD2Vudmlyb25tZW50X2lkcxgJIAMoCRIuCgpjcmVhdGVkX2F0GAogASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBI4ChRib290c3RyYXBfZXhwaXJlc19hdBgLIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASKgoEYXV0aBgMIAEoDjIcLmNvbnRyb2xwbGFuZS52MS5DbHVzdGVyQXV0aBIPCgdhZGRyZXNzGA0gASgJEhUKDWNsb3VkX2NsdXN0ZXIYDiABKAkiaQoQQ2x1c3RlckJvb3RzdHJhcBIUCgxtYW5pZmVzdF91cmwYASABKAkSDwoHY29tbWFuZBgCIAEoCRIuCgpleHBpcmVzX2F0GAMgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCImChZSZWdpc3RlckNsdXN0ZXJSZXF1ZXN0EgwKBG5hbWUYASABKAkiegoXUmVnaXN0ZXJDbHVzdGVyUmVzcG9uc2USKQoHY2x1c3RlchgBIAEoCzIYLmNvbnRyb2xwbGFuZS52MS5DbHVzdGVyEjQKCWJvb3RzdHJhcBgCIAEoCzIhLmNvbnRyb2xwbGFuZS52MS5DbHVzdGVyQm9vdHN0cmFwIhUKE0xpc3RDbHVzdGVyc1JlcXVlc3QiQgoUTGlzdENsdXN0ZXJzUmVzcG9uc2USKgoIY2x1c3RlcnMYASADKAsyGC5jb250cm9scGxhbmUudjEuQ2x1c3RlciIfChFHZXRDbHVzdGVyUmVxdWVzdBIKCgJpZBgBIAEoCSI/ChJHZXRDbHVzdGVyUmVzcG9uc2USKQoHY2x1c3RlchgBIAEoCzIYLmNvbnRyb2xwbGFuZS52MS5DbHVzdGVyIisKHVJvdGF0ZUNsdXN0ZXJCb290c3RyYXBSZXF1ZXN0EgoKAmlkGAEgASgJIlYKHlJvdGF0ZUNsdXN0ZXJCb290c3RyYXBSZXNwb25zZRI0Cglib290c3RyYXAYASABKAsyIS5jb250cm9scGxhbmUudjEuQ2x1c3RlckJvb3RzdHJhcCIiChRSZW1vdmVDbHVzdGVyUmVxdWVzdBIKCgJpZBgBIAEoCSIXChVSZW1vdmVDbHVzdGVyUmVzcG9uc2UizgEKFUNvbm5lY3RDbHVzdGVyUmVxdWVzdBIMCgRuYW1lGAEgASgJEioKBGF1dGgYAiABKA4yHC5jb250cm9scGxhbmUudjEuQ2x1c3RlckF1dGgSDwoHYWRkcmVzcxgDIAEoCRIOCgZjYV9wZW0YBCABKAkSFQoNY2xvdWRfY2x1c3RlchgFIAEoCRINCgV0b2tlbhgGIAEoCRI0ChB0b2tlbl9leHBpcmVzX2F0GAcgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCJ3ChZDb25uZWN0Q2x1c3RlclJlc3BvbnNlEikKB2NsdXN0ZXIYASABKAsyGC5jb250cm9scGxhbmUudjEuQ2x1c3RlchIyCgxodWJfaWRlbnRpdHkYAiABKAsyHC5jb250cm9scGxhbmUudjEuSHViSWRlbnRpdHkqngEKD0NsdXN0ZXJQcm92aWRlchIgChxDTFVTVEVSX1BST1ZJREVSX1VOU1BFQ0lGSUVEEAASGAoUQ0xVU1RFUl9QUk9WSURFUl9CWU8QASIECAIQAiIECAMQAyogQ0xVU1RFUl9QUk9WSURFUl9WQ0xVU1RFUl9TSEFSRUQqIUNMVVNURVJfUFJPVklERVJfVkNMVVNURVJfUFJJVkFURSq4AQoRQ2x1c3RlckNvbm5lY3Rpb24SIgoeQ0xVU1RFUl9DT05ORUNUSU9OX1VOU1BFQ0lGSUVEEAASHgoaQ0xVU1RFUl9DT05ORUNUSU9OX1dBSVRJTkcQARIgChxDTFVTVEVSX0NPTk5FQ1RJT05fQ09OTkVDVEVEEAISHAoYQ0xVU1RFUl9DT05ORUNUSU9OX1NUQUxFEAMiBAgEEAQqGUNMVVNURVJfQ09OTkVDVElPTl9GQUlMRUQqhwEKC0NsdXN0ZXJBdXRoEhwKGENMVVNURVJfQVVUSF9VTlNQRUNJRklFRBAAEiYKIkNMVVNURVJfQVVUSF9XT1JLTE9BRF9JREVOVElUWV9HQ1AQARImCiJDTFVTVEVSX0FVVEhfU0VSVklDRV9BQ0NPVU5UX1RPS0VOEAQiBAgCEAIiBAgDEAMykQUKDkNsdXN0ZXJTZXJ2aWNlEmwKD1JlZ2lzdGVyQ2x1c3RlchInLmNvbnRyb2xwbGFuZS52MS5SZWdpc3RlckNsdXN0ZXJSZXF1ZXN0GiguY29udHJvbHBsYW5lLnYxLlJlZ2lzdGVyQ2x1c3RlclJlc3BvbnNlIgaiuxgCCAESYwoMTGlzdENsdXN0ZXJzEiQuY29udHJvbHBsYW5lLnYxLkxpc3RDbHVzdGVyc1JlcXVlc3QaJS5jb250cm9scGxhbmUudjEuTGlzdENsdXN0ZXJzUmVzcG9uc2UiBqK7GAIIARJdCgpHZXRDbHVzdGVyEiIuY29udHJvbHBsYW5lLnYxLkdldENsdXN0ZXJSZXF1ZXN0GiMuY29udHJvbHBsYW5lLnYxLkdldENsdXN0ZXJSZXNwb25zZSIGorsYAggBEnoKD1JvdGF0ZUJvb3RzdHJhcBIuLmNvbnRyb2xwbGFuZS52MS5Sb3RhdGVDbHVzdGVyQm9vdHN0cmFwUmVxdWVzdBovLmNvbnRyb2xwbGFuZS52MS5Sb3RhdGVDbHVzdGVyQm9vdHN0cmFwUmVzcG9uc2UiBqK7GAIIARJmCg1SZW1vdmVDbHVzdGVyEiUuY29udHJvbHBsYW5lLnYxLlJlbW92ZUNsdXN0ZXJSZXF1ZXN0GiYuY29udHJvbHBsYW5lLnYxLlJlbW92ZUNsdXN0ZXJSZXNwb25zZSIGorsYAggBEmkKDkNvbm5lY3RDbHVzdGVyEiYuY29udHJvbHBsYW5lLnYxLkNvbm5lY3RDbHVzdGVyUmVxdWVzdBonLmNvbnRyb2xwbGFuZS52MS5Db25uZWN0Q2x1c3RlclJlc3BvbnNlIgaiuxgCCAFC1QEKE2NvbS5jb250cm9scGxhbmUudjFCDENsdXN0ZXJQcm90b1ABWlNnaXRodWIuY29tL3JlbGlhbnQtbGFicy9yZWxpYW50L2dlbi9jb250cm9scGxhbmUvc2VydmljZXMvY2x1c3Rlci92MTtjb250cm9scGxhbmV2MaICA0NYWKoCD0NvbnRyb2xwbGFuZS5WMcoCD0NvbnRyb2xwbGFuZVxWMeICG0NvbnRyb2xwbGFuZVxWMVxHUEJNZXRhZGF0YeoCEENvbnRyb2xwbGFuZTo6VjFiBnByb3RvMw", [file_forge_v1_forge, file_google_protobuf_timestamp]);
+  fileDesc("CiFzZXJ2aWNlcy9jbHVzdGVyL3YxL2NsdXN0ZXIucHJvdG8SD2NvbnRyb2xwbGFuZS52MSI2CgtIdWJJZGVudGl0eRIbChNnY3Bfc2VydmljZV9hY2NvdW50GAEgASgJSgQIAhADSgQIAxAEIp0DCgdDbHVzdGVyEgoKAmlkGAEgASgJEgwKBG5hbWUYAiABKAkSMgoIcHJvdmlkZXIYAyABKA4yIC5jb250cm9scGxhbmUudjEuQ2x1c3RlclByb3ZpZGVyEjYKCmNvbm5lY3Rpb24YBCABKA4yIi5jb250cm9scGxhbmUudjEuQ2x1c3RlckNvbm5lY3Rpb24SFwoPZW52aXJvbm1lbnRfaWRzGAkgAygJEi4KCmNyZWF0ZWRfYXQYCiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEioKBGF1dGgYDCABKA4yHC5jb250cm9scGxhbmUudjEuQ2x1c3RlckF1dGgSDwoHYWRkcmVzcxgNIAEoCRIVCg1jbG91ZF9jbHVzdGVyGA4gASgJSgQIBRAGSgQIBhAHSgQIBxAISgQICBAJSgQICxAMUgxsYXN0X3NlZW5fYXRSEmt1YmVybmV0ZXNfdmVyc2lvblINYWdlbnRfdmVyc2lvblIKbm9kZV9jb3VudFIUYm9vdHN0cmFwX2V4cGlyZXNfYXQiFQoTTGlzdENsdXN0ZXJzUmVxdWVzdCJCChRMaXN0Q2x1c3RlcnNSZXNwb25zZRIqCghjbHVzdGVycxgBIAMoCzIYLmNvbnRyb2xwbGFuZS52MS5DbHVzdGVyIh8KEUdldENsdXN0ZXJSZXF1ZXN0EgoKAmlkGAEgASgJIj8KEkdldENsdXN0ZXJSZXNwb25zZRIpCgdjbHVzdGVyGAEgASgLMhguY29udHJvbHBsYW5lLnYxLkNsdXN0ZXIiIgoUUmVtb3ZlQ2x1c3RlclJlcXVlc3QSCgoCaWQYASABKAkiFwoVUmVtb3ZlQ2x1c3RlclJlc3BvbnNlIs4BChVDb25uZWN0Q2x1c3RlclJlcXVlc3QSDAoEbmFtZRgBIAEoCRIqCgRhdXRoGAIgASgOMhwuY29udHJvbHBsYW5lLnYxLkNsdXN0ZXJBdXRoEg8KB2FkZHJlc3MYAyABKAkSDgoGY2FfcGVtGAQgASgJEhUKDWNsb3VkX2NsdXN0ZXIYBSABKAkSDQoFdG9rZW4YBiABKAkSNAoQdG9rZW5fZXhwaXJlc19hdBgHIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAidwoWQ29ubmVjdENsdXN0ZXJSZXNwb25zZRIpCgdjbHVzdGVyGAEgASgLMhguY29udHJvbHBsYW5lLnYxLkNsdXN0ZXISMgoMaHViX2lkZW50aXR5GAIgASgLMhwuY29udHJvbHBsYW5lLnYxLkh1YklkZW50aXR5Kp4BCg9DbHVzdGVyUHJvdmlkZXISIAocQ0xVU1RFUl9QUk9WSURFUl9VTlNQRUNJRklFRBAAEhgKFENMVVNURVJfUFJPVklERVJfQllPEAEiBAgCEAIiBAgDEAMqIENMVVNURVJfUFJPVklERVJfVkNMVVNURVJfU0hBUkVEKiFDTFVTVEVSX1BST1ZJREVSX1ZDTFVTVEVSX1BSSVZBVEUquAEKEUNsdXN0ZXJDb25uZWN0aW9uEiIKHkNMVVNURVJfQ09OTkVDVElPTl9VTlNQRUNJRklFRBAAEh4KGkNMVVNURVJfQ09OTkVDVElPTl9XQUlUSU5HEAESIAocQ0xVU1RFUl9DT05ORUNUSU9OX0NPTk5FQ1RFRBACEhwKGENMVVNURVJfQ09OTkVDVElPTl9TVEFMRRADIgQIBBAEKhlDTFVTVEVSX0NPTk5FQ1RJT05fRkFJTEVEKocBCgtDbHVzdGVyQXV0aBIcChhDTFVTVEVSX0FVVEhfVU5TUEVDSUZJRUQQABImCiJDTFVTVEVSX0FVVEhfV09SS0xPQURfSURFTlRJVFlfR0NQEAESJgoiQ0xVU1RFUl9BVVRIX1NFUlZJQ0VfQUNDT1VOVF9UT0tFThAEIgQIAhACIgQIAxADMqcDCg5DbHVzdGVyU2VydmljZRJjCgxMaXN0Q2x1c3RlcnMSJC5jb250cm9scGxhbmUudjEuTGlzdENsdXN0ZXJzUmVxdWVzdBolLmNvbnRyb2xwbGFuZS52MS5MaXN0Q2x1c3RlcnNSZXNwb25zZSIGorsYAggBEl0KCkdldENsdXN0ZXISIi5jb250cm9scGxhbmUudjEuR2V0Q2x1c3RlclJlcXVlc3QaIy5jb250cm9scGxhbmUudjEuR2V0Q2x1c3RlclJlc3BvbnNlIgaiuxgCCAESZgoNUmVtb3ZlQ2x1c3RlchIlLmNvbnRyb2xwbGFuZS52MS5SZW1vdmVDbHVzdGVyUmVxdWVzdBomLmNvbnRyb2xwbGFuZS52MS5SZW1vdmVDbHVzdGVyUmVzcG9uc2UiBqK7GAIIARJpCg5Db25uZWN0Q2x1c3RlchImLmNvbnRyb2xwbGFuZS52MS5Db25uZWN0Q2x1c3RlclJlcXVlc3QaJy5jb250cm9scGxhbmUudjEuQ29ubmVjdENsdXN0ZXJSZXNwb25zZSIGorsYAggBQtUBChNjb20uY29udHJvbHBsYW5lLnYxQgxDbHVzdGVyUHJvdG9QAVpTZ2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vY29udHJvbHBsYW5lL3NlcnZpY2VzL2NsdXN0ZXIvdjE7Y29udHJvbHBsYW5ldjGiAgNDWFiqAg9Db250cm9scGxhbmUuVjHKAg9Db250cm9scGxhbmVcVjHiAhtDb250cm9scGxhbmVcVjFcR1BCTWV0YWRhdGHqAhBDb250cm9scGxhbmU6OlYxYgZwcm90bzM", [file_forge_v1_forge, file_google_protobuf_timestamp]);
 
 /**
  * HubIdentity is the principal the CONTROL PLANE acts as.
@@ -89,30 +89,6 @@ export type Cluster = Message<"controlplane.v1.Cluster"> & {
   connection: ClusterConnection;
 
   /**
-   * The agent's last heartbeat. Unset until the first one.
-   *
-   * @generated from field: google.protobuf.Timestamp last_seen_at = 5;
-   */
-  lastSeenAt?: Timestamp | undefined;
-
-  /**
-   * Facts the agent reports. Empty until the first heartbeat.
-   *
-   * @generated from field: string kubernetes_version = 6;
-   */
-  kubernetesVersion: string;
-
-  /**
-   * @generated from field: string agent_version = 7;
-   */
-  agentVersion: string;
-
-  /**
-   * @generated from field: uint32 node_count = 8;
-   */
-  nodeCount: number;
-
-  /**
    * Live environments that target this cluster. Non-empty blocks removal.
    *
    * @generated from field: repeated string environment_ids = 9;
@@ -125,17 +101,7 @@ export type Cluster = Message<"controlplane.v1.Cluster"> & {
   createdAt?: Timestamp | undefined;
 
   /**
-   * When the outstanding one-time bootstrap expires. Unset when there is
-   * none (already exchanged, revoked, or a cluster connected by address).
-   *
-   * @generated from field: google.protobuf.Timestamp bootstrap_expires_at = 11;
-   */
-  bootstrapExpiresAt?: Timestamp | undefined;
-
-  /**
-   * How the platform authenticates to this cluster. UNSPECIFIED on an
-   * agent-registered cluster, whose credential arrives by report rather than
-   * by declaration.
+   * How the platform authenticates to this cluster.
    *
    * @generated from field: controlplane.v1.ClusterAuth auth = 12;
    */
@@ -143,8 +109,7 @@ export type Cluster = Message<"controlplane.v1.Cluster"> & {
 
   /**
    * The API server address, as the hub dials it. https only. Set by
-   * ConnectCluster; empty on an agent-registered cluster, where the address
-   * is part of the agent's reported credential and is not a declared field.
+   * ConnectCluster.
    *
    * @generated from field: string address = 13;
    */
@@ -168,85 +133,6 @@ export const ClusterSchema: GenMessage<Cluster> = /*@__PURE__*/
   messageDesc(file_services_cluster_v1_cluster, 1);
 
 /**
- * ClusterBootstrap is a one-time install command. The URL embeds a
- * single-use token valid for 15 minutes; this response is the ONLY place the
- * token is ever shown — the platform stores its hash.
- *
- * @generated from message controlplane.v1.ClusterBootstrap
- */
-export type ClusterBootstrap = Message<"controlplane.v1.ClusterBootstrap"> & {
-  /**
-   * Serves the rendered agent manifest (namespace, service account,
-   * read-only RBAC, Deployment) with the token embedded. Safe to open first
-   * and read: fetching it does not spend the token; the agent's exchange does.
-   *
-   * @generated from field: string manifest_url = 1;
-   */
-  manifestUrl: string;
-
-  /**
-   * The one command a customer runs: `kubectl apply -f <manifest_url>`.
-   *
-   * @generated from field: string command = 2;
-   */
-  command: string;
-
-  /**
-   * @generated from field: google.protobuf.Timestamp expires_at = 3;
-   */
-  expiresAt?: Timestamp | undefined;
-};
-
-/**
- * Describes the message controlplane.v1.ClusterBootstrap.
- * Use `create(ClusterBootstrapSchema)` to create a new message.
- */
-export const ClusterBootstrapSchema: GenMessage<ClusterBootstrap> = /*@__PURE__*/
-  messageDesc(file_services_cluster_v1_cluster, 2);
-
-/**
- * @generated from message controlplane.v1.RegisterClusterRequest
- */
-export type RegisterClusterRequest = Message<"controlplane.v1.RegisterClusterRequest"> & {
-  /**
-   * A DNS label: lowercase alphanumerics and '-', 1-63 characters, unique
-   * among the org's live clusters.
-   *
-   * @generated from field: string name = 1;
-   */
-  name: string;
-};
-
-/**
- * Describes the message controlplane.v1.RegisterClusterRequest.
- * Use `create(RegisterClusterRequestSchema)` to create a new message.
- */
-export const RegisterClusterRequestSchema: GenMessage<RegisterClusterRequest> = /*@__PURE__*/
-  messageDesc(file_services_cluster_v1_cluster, 3);
-
-/**
- * @generated from message controlplane.v1.RegisterClusterResponse
- */
-export type RegisterClusterResponse = Message<"controlplane.v1.RegisterClusterResponse"> & {
-  /**
-   * @generated from field: controlplane.v1.Cluster cluster = 1;
-   */
-  cluster?: Cluster | undefined;
-
-  /**
-   * @generated from field: controlplane.v1.ClusterBootstrap bootstrap = 2;
-   */
-  bootstrap?: ClusterBootstrap | undefined;
-};
-
-/**
- * Describes the message controlplane.v1.RegisterClusterResponse.
- * Use `create(RegisterClusterResponseSchema)` to create a new message.
- */
-export const RegisterClusterResponseSchema: GenMessage<RegisterClusterResponse> = /*@__PURE__*/
-  messageDesc(file_services_cluster_v1_cluster, 4);
-
-/**
  * @generated from message controlplane.v1.ListClustersRequest
  */
 export type ListClustersRequest = Message<"controlplane.v1.ListClustersRequest"> & {
@@ -257,7 +143,7 @@ export type ListClustersRequest = Message<"controlplane.v1.ListClustersRequest">
  * Use `create(ListClustersRequestSchema)` to create a new message.
  */
 export const ListClustersRequestSchema: GenMessage<ListClustersRequest> = /*@__PURE__*/
-  messageDesc(file_services_cluster_v1_cluster, 5);
+  messageDesc(file_services_cluster_v1_cluster, 2);
 
 /**
  * @generated from message controlplane.v1.ListClustersResponse
@@ -276,7 +162,7 @@ export type ListClustersResponse = Message<"controlplane.v1.ListClustersResponse
  * Use `create(ListClustersResponseSchema)` to create a new message.
  */
 export const ListClustersResponseSchema: GenMessage<ListClustersResponse> = /*@__PURE__*/
-  messageDesc(file_services_cluster_v1_cluster, 6);
+  messageDesc(file_services_cluster_v1_cluster, 3);
 
 /**
  * @generated from message controlplane.v1.GetClusterRequest
@@ -293,7 +179,7 @@ export type GetClusterRequest = Message<"controlplane.v1.GetClusterRequest"> & {
  * Use `create(GetClusterRequestSchema)` to create a new message.
  */
 export const GetClusterRequestSchema: GenMessage<GetClusterRequest> = /*@__PURE__*/
-  messageDesc(file_services_cluster_v1_cluster, 7);
+  messageDesc(file_services_cluster_v1_cluster, 4);
 
 /**
  * @generated from message controlplane.v1.GetClusterResponse
@@ -310,41 +196,7 @@ export type GetClusterResponse = Message<"controlplane.v1.GetClusterResponse"> &
  * Use `create(GetClusterResponseSchema)` to create a new message.
  */
 export const GetClusterResponseSchema: GenMessage<GetClusterResponse> = /*@__PURE__*/
-  messageDesc(file_services_cluster_v1_cluster, 8);
-
-/**
- * @generated from message controlplane.v1.RotateClusterBootstrapRequest
- */
-export type RotateClusterBootstrapRequest = Message<"controlplane.v1.RotateClusterBootstrapRequest"> & {
-  /**
-   * @generated from field: string id = 1;
-   */
-  id: string;
-};
-
-/**
- * Describes the message controlplane.v1.RotateClusterBootstrapRequest.
- * Use `create(RotateClusterBootstrapRequestSchema)` to create a new message.
- */
-export const RotateClusterBootstrapRequestSchema: GenMessage<RotateClusterBootstrapRequest> = /*@__PURE__*/
-  messageDesc(file_services_cluster_v1_cluster, 9);
-
-/**
- * @generated from message controlplane.v1.RotateClusterBootstrapResponse
- */
-export type RotateClusterBootstrapResponse = Message<"controlplane.v1.RotateClusterBootstrapResponse"> & {
-  /**
-   * @generated from field: controlplane.v1.ClusterBootstrap bootstrap = 1;
-   */
-  bootstrap?: ClusterBootstrap | undefined;
-};
-
-/**
- * Describes the message controlplane.v1.RotateClusterBootstrapResponse.
- * Use `create(RotateClusterBootstrapResponseSchema)` to create a new message.
- */
-export const RotateClusterBootstrapResponseSchema: GenMessage<RotateClusterBootstrapResponse> = /*@__PURE__*/
-  messageDesc(file_services_cluster_v1_cluster, 10);
+  messageDesc(file_services_cluster_v1_cluster, 5);
 
 /**
  * @generated from message controlplane.v1.RemoveClusterRequest
@@ -361,7 +213,7 @@ export type RemoveClusterRequest = Message<"controlplane.v1.RemoveClusterRequest
  * Use `create(RemoveClusterRequestSchema)` to create a new message.
  */
 export const RemoveClusterRequestSchema: GenMessage<RemoveClusterRequest> = /*@__PURE__*/
-  messageDesc(file_services_cluster_v1_cluster, 11);
+  messageDesc(file_services_cluster_v1_cluster, 6);
 
 /**
  * @generated from message controlplane.v1.RemoveClusterResponse
@@ -374,10 +226,10 @@ export type RemoveClusterResponse = Message<"controlplane.v1.RemoveClusterRespon
  * Use `create(RemoveClusterResponseSchema)` to create a new message.
  */
 export const RemoveClusterResponseSchema: GenMessage<RemoveClusterResponse> = /*@__PURE__*/
-  messageDesc(file_services_cluster_v1_cluster, 12);
+  messageDesc(file_services_cluster_v1_cluster, 7);
 
 /**
- * ConnectClusterRequest declares an agentless cluster.
+ * ConnectClusterRequest declares a cluster by address.
  *
  * ADDRESSED BY NAME, NOT BY ID, and that is what makes it idempotent in the
  * way `forge cluster connect <name>` needs. A caller running from a checkout
@@ -389,9 +241,7 @@ export const RemoveClusterResponseSchema: GenMessage<RemoveClusterResponse> = /*
 export type ConnectClusterRequest = Message<"controlplane.v1.ConnectClusterRequest"> & {
   /**
    * A DNS label, unique among the org's live clusters. An EXISTING cluster
-   * with this name is UPDATED — including a cluster that was registered with
-   * an agent, which is how a cluster migrates from the agent path to the
-   * connected one.
+   * with this name is UPDATED.
    *
    * @generated from field: string name = 1;
    */
@@ -477,7 +327,7 @@ export type ConnectClusterRequest = Message<"controlplane.v1.ConnectClusterReque
  * Use `create(ConnectClusterRequestSchema)` to create a new message.
  */
 export const ConnectClusterRequestSchema: GenMessage<ConnectClusterRequest> = /*@__PURE__*/
-  messageDesc(file_services_cluster_v1_cluster, 13);
+  messageDesc(file_services_cluster_v1_cluster, 8);
 
 /**
  * @generated from message controlplane.v1.ConnectClusterResponse
@@ -501,11 +351,11 @@ export type ConnectClusterResponse = Message<"controlplane.v1.ConnectClusterResp
  * Use `create(ConnectClusterResponseSchema)` to create a new message.
  */
 export const ConnectClusterResponseSchema: GenMessage<ConnectClusterResponse> = /*@__PURE__*/
-  messageDesc(file_services_cluster_v1_cluster, 14);
+  messageDesc(file_services_cluster_v1_cluster, 9);
 
 /**
  * ClusterProvider is who runs the cluster. BYO — the customer's own, whether
- * an agent reported it or ConnectCluster declared it — is the only one, and
+ * declared by ConnectCluster — is the only one, and
  * the enum survives the deletion of the others because it is the stored
  * `provider` column's wire form and new providers are plausible.
  *
@@ -532,11 +382,9 @@ export const ClusterProviderSchema: GenEnum<ClusterProvider> = /*@__PURE__*/
 /**
  * ClusterConnection is whether the platform can currently reach the cluster.
  *
- * For BYO clusters:
- *   WAITING   — registered; no agent has exchanged a bootstrap token yet.
- *   CONNECTED — the agent's last heartbeat is recent.
- *   STALE     — the agent has a credential but has missed
- *               ClusterConnectionPolicy.stale_after_missed heartbeats.
+ *   WAITING   — declared incompletely; the platform holds nothing to try with.
+ *   CONNECTED — the platform holds usable, unexpired connection material.
+ *   STALE     — a ServiceAccount token's expiry has passed.
  * A removed cluster is not listed at all, so there is no REVOKED here.
  *
  * @generated from enum controlplane.v1.ClusterConnection
@@ -637,43 +485,30 @@ export const ClusterAuthSchema: GenEnum<ClusterAuth> = /*@__PURE__*/
  * === ClusterService ===
  *
  * A CLUSTER is an org-level resource: a row, not a kubectl context. This is
- * the customer-facing surface for connecting one (FORGE_CLUSTERS_DESIGN.md §6,
- * §8 slice 1) — register a name, get a one-time install command, watch the
- * card turn CONNECTED when the in-cluster agent's first heartbeat lands.
+ * the customer-facing surface for connecting one BY ADDRESS (ConnectCluster)
+ * and for listing, reading and removing what is connected.
  *
- * SLICE 1 IS "A CLUSTER AS A CONNECTED PRIMITIVE". Nothing deploys through a
- * cluster yet; environments cannot be pointed at one from this API. The
- * agent heartbeats cluster facts over ClusterAgentService and that is all.
+ * ONE WAY IN. A cluster is connected by address and authenticated either as the
+ * hub's cloud workload identity or with a scoped ServiceAccount token the
+ * owner supplies once. There is no in-cluster agent: nothing is installed in
+ * the target cluster, so there is no second registration path to keep in step
+ * with this one.
  *
  * ORG-SCOPED, AND THE ORG IS NEVER A REQUEST FIELD. Every RPC acts on the
  * caller's org, resolved server-side from the authenticated principal. A
  * cluster id belonging to another org is NotFound — never an existence
  * oracle over another tenant's infrastructure.
  *
- * AUTHORITY (a working default pending a product decision — design §9 Q5):
+ * AUTHORITY:
  *   - List / Get: any member of the org, or an org token carrying deploy:read.
- *   - Register / RotateBootstrap / Remove: an org ADMIN. A machine token is
- *     refused until the `cluster:manage` scope exists (it is not yet in
- *     forge's closed scope vocabulary, forge/pkg/accesstoken/scope.go).
+ *   - Connect / Remove: an org ADMIN, or an org token carrying cluster:manage.
  *
- * PROVIDERS. Every cluster here is the customer's own, reached either by an
- * agent that dials out (RegisterCluster) or by address (ConnectCluster).
- * "Clusters" is every cluster the org's workloads can land on.
+ * Every cluster here is the customer's own. "Clusters" is every cluster the
+ * org's workloads can land on.
  *
  * @generated from service controlplane.v1.ClusterService
  */
 export const ClusterService: GenService<{
-  /**
-   * RegisterCluster records a new BYO cluster and mints its one-time
-   * bootstrap. The cluster is WAITING until the agent exchanges the token.
-   *
-   * @generated from rpc controlplane.v1.ClusterService.RegisterCluster
-   */
-  registerCluster: {
-    methodKind: "unary";
-    input: typeof RegisterClusterRequestSchema;
-    output: typeof RegisterClusterResponseSchema;
-  },
   /**
    * ListClusters returns every live cluster of the caller's org, by name.
    *
@@ -695,21 +530,8 @@ export const ClusterService: GenService<{
     output: typeof GetClusterResponseSchema;
   },
   /**
-   * RotateBootstrap mints a NEW one-time bootstrap for a BYO cluster and
-   * revokes any outstanding one. Used when the first command expired, and to
-   * re-bootstrap an agent whose credential is lost. The credential the new
-   * token yields REPLACES the cluster's current one on exchange.
-   *
-   * @generated from rpc controlplane.v1.ClusterService.RotateBootstrap
-   */
-  rotateBootstrap: {
-    methodKind: "unary";
-    input: typeof RotateClusterBootstrapRequestSchema;
-    output: typeof RotateClusterBootstrapResponseSchema;
-  },
-  /**
-   * RemoveCluster disconnects a BYO cluster: revokes its agent credential and
-   * any outstanding bootstrap, and frees its name. REFUSED (FailedPrecondition)
+   * RemoveCluster disconnects a BYO cluster, dropping its stored connection
+   * material, and frees its name. REFUSED (FailedPrecondition)
    * while any live environment references the cluster.
    *
    * @generated from rpc controlplane.v1.ClusterService.RemoveCluster
@@ -722,13 +544,10 @@ export const ClusterService: GenService<{
   /**
    * ConnectCluster registers a cluster BY ADDRESS, with no agent in it.
    *
-   * THE AGENTLESS SIBLING OF RegisterCluster, and the difference is which
-   * party holds the credential. RegisterCluster mints a bootstrap, the
-   * customer installs an agent, and the agent reports {server, CA, token} it
-   * minted itself. ConnectCluster is told the address and the CA up front,
-   * and authenticates either as a cloud workload identity (no secret crosses
-   * the boundary at all) or with a scoped ServiceAccount token the owner
-   * pasted once. Nothing is installed in the target cluster.
+   * The platform is told the address and the CA up front, and authenticates
+   * either as a cloud workload identity (no secret crosses the boundary at
+   * all) or with a scoped ServiceAccount token the owner pasted once. Nothing
+   * is installed in the target cluster.
    *
    * DECLARATIVE AND IDEMPOTENT BY NAME. `forge cluster connect <name>` is
    * re-run from a checkout, so a second call with different values UPDATES

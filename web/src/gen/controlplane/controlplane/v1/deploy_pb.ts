@@ -414,7 +414,7 @@ export const DeployEnvironmentSpecSchema: GenMessage<DeployEnvironmentSpec> = /*
  * TWO NAMESPACES MEET HERE, and keeping them apart is the whole purpose of
  * the message. `cluster` is forge's key — the RENDERED kube context name,
  * which is what the bundle's per-cluster paths are indexed by and what a KCL
- * author wrote. `cluster_id` is ours — the uuid ConnectCluster/RegisterCluster
+ * author wrote. `cluster_id` is ours — the uuid ConnectCluster
  * minted. Neither can be derived from the other, and collapsing them into one
  * string is how a deploy lands on a cluster whose name merely resembled the
  * declared one.
@@ -431,7 +431,7 @@ export type ClusterBinding = Message<"controlplane.v1.ClusterBinding"> & {
   cluster: string;
 
   /**
-   * The registered cluster's id, from ConnectCluster or RegisterCluster. Must
+   * The registered cluster's id, from ConnectCluster. Must
    * name a live cluster of the caller's org.
    *
    * @generated from field: string cluster_id = 2;

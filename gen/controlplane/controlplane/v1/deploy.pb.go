@@ -1373,7 +1373,7 @@ func (x *DeployEnvironmentSpec) GetClusterBindings() []*ClusterBinding {
 // TWO NAMESPACES MEET HERE, and keeping them apart is the whole purpose of
 // the message. `cluster` is forge's key — the RENDERED kube context name,
 // which is what the bundle's per-cluster paths are indexed by and what a KCL
-// author wrote. `cluster_id` is ours — the uuid ConnectCluster/RegisterCluster
+// author wrote. `cluster_id` is ours — the uuid ConnectCluster
 // minted. Neither can be derived from the other, and collapsing them into one
 // string is how a deploy lands on a cluster whose name merely resembled the
 // declared one.
@@ -1382,7 +1382,7 @@ type ClusterBinding struct {
 	// The rendered cluster / kube-context name, as it appears in the bundle's
 	// ClusterPaths. forge's key.
 	Cluster string `protobuf:"bytes,1,opt,name=cluster,proto3" json:"cluster,omitempty"`
-	// The registered cluster's id, from ConnectCluster or RegisterCluster. Must
+	// The registered cluster's id, from ConnectCluster. Must
 	// name a live cluster of the caller's org.
 	ClusterId     string `protobuf:"bytes,2,opt,name=cluster_id,json=clusterId,proto3" json:"cluster_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
