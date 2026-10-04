@@ -1254,6 +1254,13 @@ ALTER TABLE ONLY public.api_keys
     ADD CONSTRAINT api_keys_pkey PRIMARY KEY (id);
 
 --
+-- Name: api_keys api_keys_sealed_not_null; Type: CHECK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE public.api_keys
+    ADD CONSTRAINT api_keys_sealed_not_null CHECK ((api_key_sealed IS NOT NULL)) NOT VALID;
+
+--
 -- Name: api_keys api_keys_user_id_provider_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
