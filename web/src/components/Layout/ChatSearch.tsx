@@ -6,7 +6,7 @@ import { Search, MessageSquare, Loader2, Clock, ArrowRight } from "lucide-react"
 import { cn } from "../../lib/utils";
 import { useChatStore } from "../../store/chatStore";
 import { useProjectStore } from "../../store/projectStore";
-import { useChatList } from "../../hooks/chat-queries";
+import { useChat, useChatList } from "../../hooks/chat-queries";
 import { useChatNavigationStore } from "../../store/chatNavigationStore";
 import { useWorktreeStore } from "../../store/worktreeStore";
 import { api, type Message } from "../../api/client";
@@ -83,7 +83,9 @@ export const ChatSearch = forwardRef<ChatSearchRef, ChatSearchProps>(({ isOpen: 
   const worktrees = useWorktreeStore((state) => state.worktrees);
 
   // Get current chat messages
-  const currentChat = chats.find((c) => c.id === activeChatId);
+  // From the detail cache, not the project list: the list omits automation-
+  // launched chats, and searching inside one should still name it.
+  const { data: currentChat } = useChat(activeChatId ?? undefined);
 
   // Close helper
   const closeAndFocus = useCallback(() => {

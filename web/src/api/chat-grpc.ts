@@ -285,6 +285,15 @@ export const chatGrpc = {
     const request = create(ListChatsRequestSchema, {
       projectId,
       limit: limit,
+      // The project chat list is the sidebar's: it lists conversations the
+      // user is having. Runs an automation started live on the Automations
+      // pages instead, and the server keeps any that are waiting on the user
+      // (pending approval/question) in this list so they cannot go unseen.
+      // Filtering server-side, not in the sidebar, is what stops a busy
+      // schedule from filling the default 100-chat page and pushing real
+      // conversations out of it. An automation chat is still reachable by id
+      // (GetChat) — see resolveChat in hooks/chat-queries.ts.
+      excludeAutomations: true,
     });
     const response = await client.listChats(request);
     return {
