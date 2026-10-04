@@ -12,6 +12,7 @@ import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	structpb "google.golang.org/protobuf/types/known/structpb"
+	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
@@ -23,6 +24,80 @@ const (
 	// Verify that runtime/protoimpl is sufficiently up-to-date.
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
+
+// RunDisplayState is the single status vocabulary the UI shows for a run
+// (research/WORKFLOW_UI.md section 0). It folds the (state, stop_reason,
+// activity) triple into one value so a filter and a label can never disagree.
+type RunDisplayState int32
+
+const (
+	RunDisplayState_RUN_DISPLAY_STATE_UNSPECIFIED RunDisplayState = 0
+	// QUEUED: PENDING, or a chat whose root workflow has not been created yet.
+	RunDisplayState_RUN_DISPLAY_STATE_QUEUED RunDisplayState = 1
+	// RUNNING: ACTIVE and not waiting on a human.
+	RunDisplayState_RUN_DISPLAY_STATE_RUNNING RunDisplayState = 2
+	// NEEDS_INPUT: ACTIVE and awaiting input (a pending approval or question).
+	RunDisplayState_RUN_DISPLAY_STATE_NEEDS_INPUT RunDisplayState = 3
+	// PAUSED: STOPPED with stop_reason PAUSED. Live and resumable.
+	RunDisplayState_RUN_DISPLAY_STATE_PAUSED RunDisplayState = 4
+	// COMPLETED: STOPPED with stop_reason COMPLETED.
+	RunDisplayState_RUN_DISPLAY_STATE_COMPLETED RunDisplayState = 5
+	// FAILED: STOPPED with stop_reason FAILED.
+	RunDisplayState_RUN_DISPLAY_STATE_FAILED RunDisplayState = 6
+	// CANCELLED: STOPPED with stop_reason CANCELLED.
+	RunDisplayState_RUN_DISPLAY_STATE_CANCELLED RunDisplayState = 7
+)
+
+// Enum value maps for RunDisplayState.
+var (
+	RunDisplayState_name = map[int32]string{
+		0: "RUN_DISPLAY_STATE_UNSPECIFIED",
+		1: "RUN_DISPLAY_STATE_QUEUED",
+		2: "RUN_DISPLAY_STATE_RUNNING",
+		3: "RUN_DISPLAY_STATE_NEEDS_INPUT",
+		4: "RUN_DISPLAY_STATE_PAUSED",
+		5: "RUN_DISPLAY_STATE_COMPLETED",
+		6: "RUN_DISPLAY_STATE_FAILED",
+		7: "RUN_DISPLAY_STATE_CANCELLED",
+	}
+	RunDisplayState_value = map[string]int32{
+		"RUN_DISPLAY_STATE_UNSPECIFIED": 0,
+		"RUN_DISPLAY_STATE_QUEUED":      1,
+		"RUN_DISPLAY_STATE_RUNNING":     2,
+		"RUN_DISPLAY_STATE_NEEDS_INPUT": 3,
+		"RUN_DISPLAY_STATE_PAUSED":      4,
+		"RUN_DISPLAY_STATE_COMPLETED":   5,
+		"RUN_DISPLAY_STATE_FAILED":      6,
+		"RUN_DISPLAY_STATE_CANCELLED":   7,
+	}
+)
+
+func (x RunDisplayState) Enum() *RunDisplayState {
+	p := new(RunDisplayState)
+	*p = x
+	return p
+}
+
+func (x RunDisplayState) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (RunDisplayState) Descriptor() protoreflect.EnumDescriptor {
+	return file_reliant_v1_run_proto_enumTypes[0].Descriptor()
+}
+
+func (RunDisplayState) Type() protoreflect.EnumType {
+	return &file_reliant_v1_run_proto_enumTypes[0]
+}
+
+func (x RunDisplayState) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use RunDisplayState.Descriptor instead.
+func (RunDisplayState) EnumDescriptor() ([]byte, []int) {
+	return file_reliant_v1_run_proto_rawDescGZIP(), []int{0}
+}
 
 // Run is one workflow execution.
 //
@@ -66,6 +141,26 @@ type Run struct {
 	Outcome       string `protobuf:"bytes,10,opt,name=outcome,proto3" json:"outcome,omitempty"`
 	CreatedAtMs   int64  `protobuf:"varint,11,opt,name=created_at_ms,json=createdAtMs,proto3" json:"created_at_ms,omitempty"`
 	CompletedAtMs int64  `protobuf:"varint,12,opt,name=completed_at_ms,json=completedAtMs,proto3" json:"completed_at_ms,omitempty"`
+	// Title is the backing chat's title.
+	Title string `protobuf:"bytes,13,opt,name=title,proto3" json:"title,omitempty"`
+	// ProjectId is the project the run belongs to.
+	ProjectId string `protobuf:"bytes,14,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
+	// LaunchKind is what started the run: "chat.start", "schedule" or
+	// "agent.start_run". Empty for a run that predates launch events.
+	LaunchKind string `protobuf:"bytes,15,opt,name=launch_kind,json=launchKind,proto3" json:"launch_kind,omitempty"`
+	// TriggerId is the automation that fired the run. Empty for ad hoc kinds.
+	TriggerId string `protobuf:"bytes,16,opt,name=trigger_id,json=triggerId,proto3" json:"trigger_id,omitempty"`
+	// TriggerName is that automation's current name. Empty when there is no
+	// trigger, or it has since been deleted.
+	TriggerName string `protobuf:"bytes,17,opt,name=trigger_name,json=triggerName,proto3" json:"trigger_name,omitempty"`
+	// DaemonId is the machine the run's tools execute on. Empty when none is
+	// attached.
+	DaemonId string `protobuf:"bytes,18,opt,name=daemon_id,json=daemonId,proto3" json:"daemon_id,omitempty"`
+	// Activity is the run's live activity (running, awaiting input, ...).
+	Activity ChatActivity `protobuf:"varint,19,opt,name=activity,proto3,enum=reliant.v1.ChatActivity" json:"activity,omitempty"`
+	// DisplayState is the one state a user reads, derived from state,
+	// stop_reason and activity. See RunDisplayState.
+	DisplayState  RunDisplayState `protobuf:"varint,20,opt,name=display_state,json=displayState,proto3,enum=reliant.v1.RunDisplayState" json:"display_state,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -182,6 +277,62 @@ func (x *Run) GetCompletedAtMs() int64 {
 		return x.CompletedAtMs
 	}
 	return 0
+}
+
+func (x *Run) GetTitle() string {
+	if x != nil {
+		return x.Title
+	}
+	return ""
+}
+
+func (x *Run) GetProjectId() string {
+	if x != nil {
+		return x.ProjectId
+	}
+	return ""
+}
+
+func (x *Run) GetLaunchKind() string {
+	if x != nil {
+		return x.LaunchKind
+	}
+	return ""
+}
+
+func (x *Run) GetTriggerId() string {
+	if x != nil {
+		return x.TriggerId
+	}
+	return ""
+}
+
+func (x *Run) GetTriggerName() string {
+	if x != nil {
+		return x.TriggerName
+	}
+	return ""
+}
+
+func (x *Run) GetDaemonId() string {
+	if x != nil {
+		return x.DaemonId
+	}
+	return ""
+}
+
+func (x *Run) GetActivity() ChatActivity {
+	if x != nil {
+		return x.Activity
+	}
+	return ChatActivity_CHAT_ACTIVITY_IDLE
+}
+
+func (x *Run) GetDisplayState() RunDisplayState {
+	if x != nil {
+		return x.DisplayState
+	}
+	return RunDisplayState_RUN_DISPLAY_STATE_UNSPECIFIED
 }
 
 type StartRunRequest struct {
@@ -547,12 +698,38 @@ type ListRunsRequest struct {
 	SessionId string `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
 	// ParentId scopes the list to one run's children.
 	ParentId string `protobuf:"bytes,2,opt,name=parent_id,json=parentId,proto3" json:"parent_id,omitempty"`
-	// State filters by lifecycle state. Unspecified returns all.
-	State         WorkflowState `protobuf:"varint,3,opt,name=state,proto3,enum=reliant.v1.WorkflowState" json:"state,omitempty"`
-	Limit         int32         `protobuf:"varint,4,opt,name=limit,proto3" json:"limit,omitempty"`
-	Offset        int32         `protobuf:"varint,5,opt,name=offset,proto3" json:"offset,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	// State filters by lifecycle state. Unspecified returns all. Applies to the
+	// session and parent lists; the cross-cutting list filters with
+	// display_states.
+	State WorkflowState `protobuf:"varint,3,opt,name=state,proto3,enum=reliant.v1.WorkflowState" json:"state,omitempty"`
+	// Limit is the page size. The cross-cutting list defaults to 50 and caps at
+	// 200.
+	Limit int32 `protobuf:"varint,4,opt,name=limit,proto3" json:"limit,omitempty"`
+	// ProjectId restricts to one project.
+	ProjectId *string `protobuf:"bytes,6,opt,name=project_id,json=projectId,proto3,oneof" json:"project_id,omitempty"`
+	// Workflow restricts to these workflow names (any of).
+	Workflow []string `protobuf:"bytes,7,rep,name=workflow,proto3" json:"workflow,omitempty"`
+	// TriggerId restricts to runs fired by one automation.
+	TriggerId *string `protobuf:"bytes,8,opt,name=trigger_id,json=triggerId,proto3,oneof" json:"trigger_id,omitempty"`
+	// LaunchKind restricts to these launch kinds (any of).
+	LaunchKind []string `protobuf:"bytes,9,rep,name=launch_kind,json=launchKind,proto3" json:"launch_kind,omitempty"`
+	// DisplayStates restricts to runs in any of these states.
+	DisplayStates []RunDisplayState `protobuf:"varint,10,rep,packed,name=display_states,json=displayStates,proto3,enum=reliant.v1.RunDisplayState" json:"display_states,omitempty"`
+	// StartedAfter / StartedBefore bound the run's start time. After is
+	// inclusive, before is exclusive.
+	StartedAfter  *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=started_after,json=startedAfter,proto3" json:"started_after,omitempty"`
+	StartedBefore *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=started_before,json=startedBefore,proto3" json:"started_before,omitempty"`
+	// Query is a case-insensitive substring match on the run's title.
+	Query *string `protobuf:"bytes,13,opt,name=query,proto3,oneof" json:"query,omitempty"`
+	// PageToken continues a previous response's next_page_token. Keyset on
+	// (started time, id), so a run that starts mid-pagination can neither
+	// duplicate nor skip rows the way an offset would. Opaque.
+	PageToken *string `protobuf:"bytes,14,opt,name=page_token,json=pageToken,proto3,oneof" json:"page_token,omitempty"`
+	// IncludeArchived also returns runs whose chat is archived. Archived runs
+	// are hidden by default.
+	IncludeArchived bool `protobuf:"varint,15,opt,name=include_archived,json=includeArchived,proto3" json:"include_archived,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *ListRunsRequest) Reset() {
@@ -613,17 +790,85 @@ func (x *ListRunsRequest) GetLimit() int32 {
 	return 0
 }
 
-func (x *ListRunsRequest) GetOffset() int32 {
-	if x != nil {
-		return x.Offset
+func (x *ListRunsRequest) GetProjectId() string {
+	if x != nil && x.ProjectId != nil {
+		return *x.ProjectId
 	}
-	return 0
+	return ""
+}
+
+func (x *ListRunsRequest) GetWorkflow() []string {
+	if x != nil {
+		return x.Workflow
+	}
+	return nil
+}
+
+func (x *ListRunsRequest) GetTriggerId() string {
+	if x != nil && x.TriggerId != nil {
+		return *x.TriggerId
+	}
+	return ""
+}
+
+func (x *ListRunsRequest) GetLaunchKind() []string {
+	if x != nil {
+		return x.LaunchKind
+	}
+	return nil
+}
+
+func (x *ListRunsRequest) GetDisplayStates() []RunDisplayState {
+	if x != nil {
+		return x.DisplayStates
+	}
+	return nil
+}
+
+func (x *ListRunsRequest) GetStartedAfter() *timestamppb.Timestamp {
+	if x != nil {
+		return x.StartedAfter
+	}
+	return nil
+}
+
+func (x *ListRunsRequest) GetStartedBefore() *timestamppb.Timestamp {
+	if x != nil {
+		return x.StartedBefore
+	}
+	return nil
+}
+
+func (x *ListRunsRequest) GetQuery() string {
+	if x != nil && x.Query != nil {
+		return *x.Query
+	}
+	return ""
+}
+
+func (x *ListRunsRequest) GetPageToken() string {
+	if x != nil && x.PageToken != nil {
+		return *x.PageToken
+	}
+	return ""
+}
+
+func (x *ListRunsRequest) GetIncludeArchived() bool {
+	if x != nil {
+		return x.IncludeArchived
+	}
+	return false
 }
 
 type ListRunsResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Runs          []*Run                 `protobuf:"bytes,1,rep,name=runs,proto3" json:"runs,omitempty"`
-	Total         int32                  `protobuf:"varint,2,opt,name=total,proto3" json:"total,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Runs  []*Run                 `protobuf:"bytes,1,rep,name=runs,proto3" json:"runs,omitempty"`
+	// Total is the number of runs in the session or parent list. It is not
+	// computed for the cross-cutting list, where a count over every run the
+	// caller owns would cost a second full scan per page; use next_page_token.
+	Total int32 `protobuf:"varint,2,opt,name=total,proto3" json:"total,omitempty"`
+	// NextPageToken is set when more runs follow. Empty on the last page.
+	NextPageToken string `protobuf:"bytes,3,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -672,6 +917,114 @@ func (x *ListRunsResponse) GetTotal() int32 {
 	return 0
 }
 
+func (x *ListRunsResponse) GetNextPageToken() string {
+	if x != nil {
+		return x.NextPageToken
+	}
+	return ""
+}
+
+type LastRunPerWorkflowRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// ProjectId restricts to one project.
+	ProjectId *string `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3,oneof" json:"project_id,omitempty"`
+	// Workflow restricts the result to these workflow names. Empty returns every
+	// workflow the caller has run.
+	Workflow      []string `protobuf:"bytes,2,rep,name=workflow,proto3" json:"workflow,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *LastRunPerWorkflowRequest) Reset() {
+	*x = LastRunPerWorkflowRequest{}
+	mi := &file_reliant_v1_run_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LastRunPerWorkflowRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LastRunPerWorkflowRequest) ProtoMessage() {}
+
+func (x *LastRunPerWorkflowRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_run_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LastRunPerWorkflowRequest.ProtoReflect.Descriptor instead.
+func (*LastRunPerWorkflowRequest) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_run_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *LastRunPerWorkflowRequest) GetProjectId() string {
+	if x != nil && x.ProjectId != nil {
+		return *x.ProjectId
+	}
+	return ""
+}
+
+func (x *LastRunPerWorkflowRequest) GetWorkflow() []string {
+	if x != nil {
+		return x.Workflow
+	}
+	return nil
+}
+
+type LastRunPerWorkflowResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Runs holds at most one run per workflow name: its newest root run, ordered
+	// by workflow name.
+	Runs          []*Run `protobuf:"bytes,1,rep,name=runs,proto3" json:"runs,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *LastRunPerWorkflowResponse) Reset() {
+	*x = LastRunPerWorkflowResponse{}
+	mi := &file_reliant_v1_run_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LastRunPerWorkflowResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LastRunPerWorkflowResponse) ProtoMessage() {}
+
+func (x *LastRunPerWorkflowResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_run_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LastRunPerWorkflowResponse.ProtoReflect.Descriptor instead.
+func (*LastRunPerWorkflowResponse) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_run_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *LastRunPerWorkflowResponse) GetRuns() []*Run {
+	if x != nil {
+		return x.Runs
+	}
+	return nil
+}
+
 type PauseRunRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	RunId         string                 `protobuf:"bytes,1,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
@@ -681,7 +1034,7 @@ type PauseRunRequest struct {
 
 func (x *PauseRunRequest) Reset() {
 	*x = PauseRunRequest{}
-	mi := &file_reliant_v1_run_proto_msgTypes[9]
+	mi := &file_reliant_v1_run_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -693,7 +1046,7 @@ func (x *PauseRunRequest) String() string {
 func (*PauseRunRequest) ProtoMessage() {}
 
 func (x *PauseRunRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_run_proto_msgTypes[9]
+	mi := &file_reliant_v1_run_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -706,7 +1059,7 @@ func (x *PauseRunRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PauseRunRequest.ProtoReflect.Descriptor instead.
 func (*PauseRunRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_run_proto_rawDescGZIP(), []int{9}
+	return file_reliant_v1_run_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *PauseRunRequest) GetRunId() string {
@@ -728,7 +1081,7 @@ type PauseRunResponse struct {
 
 func (x *PauseRunResponse) Reset() {
 	*x = PauseRunResponse{}
-	mi := &file_reliant_v1_run_proto_msgTypes[10]
+	mi := &file_reliant_v1_run_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -740,7 +1093,7 @@ func (x *PauseRunResponse) String() string {
 func (*PauseRunResponse) ProtoMessage() {}
 
 func (x *PauseRunResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_run_proto_msgTypes[10]
+	mi := &file_reliant_v1_run_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -753,7 +1106,7 @@ func (x *PauseRunResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PauseRunResponse.ProtoReflect.Descriptor instead.
 func (*PauseRunResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_run_proto_rawDescGZIP(), []int{10}
+	return file_reliant_v1_run_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *PauseRunResponse) GetSuccess() bool {
@@ -779,7 +1132,7 @@ type ResumeRunRequest struct {
 
 func (x *ResumeRunRequest) Reset() {
 	*x = ResumeRunRequest{}
-	mi := &file_reliant_v1_run_proto_msgTypes[11]
+	mi := &file_reliant_v1_run_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -791,7 +1144,7 @@ func (x *ResumeRunRequest) String() string {
 func (*ResumeRunRequest) ProtoMessage() {}
 
 func (x *ResumeRunRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_run_proto_msgTypes[11]
+	mi := &file_reliant_v1_run_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -804,7 +1157,7 @@ func (x *ResumeRunRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResumeRunRequest.ProtoReflect.Descriptor instead.
 func (*ResumeRunRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_run_proto_rawDescGZIP(), []int{11}
+	return file_reliant_v1_run_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *ResumeRunRequest) GetRunId() string {
@@ -828,7 +1181,7 @@ type ResumeRunResponse struct {
 
 func (x *ResumeRunResponse) Reset() {
 	*x = ResumeRunResponse{}
-	mi := &file_reliant_v1_run_proto_msgTypes[12]
+	mi := &file_reliant_v1_run_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -840,7 +1193,7 @@ func (x *ResumeRunResponse) String() string {
 func (*ResumeRunResponse) ProtoMessage() {}
 
 func (x *ResumeRunResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_run_proto_msgTypes[12]
+	mi := &file_reliant_v1_run_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -853,7 +1206,7 @@ func (x *ResumeRunResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResumeRunResponse.ProtoReflect.Descriptor instead.
 func (*ResumeRunResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_run_proto_rawDescGZIP(), []int{12}
+	return file_reliant_v1_run_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *ResumeRunResponse) GetSuccess() bool {
@@ -886,7 +1239,7 @@ type CancelRunRequest struct {
 
 func (x *CancelRunRequest) Reset() {
 	*x = CancelRunRequest{}
-	mi := &file_reliant_v1_run_proto_msgTypes[13]
+	mi := &file_reliant_v1_run_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -898,7 +1251,7 @@ func (x *CancelRunRequest) String() string {
 func (*CancelRunRequest) ProtoMessage() {}
 
 func (x *CancelRunRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_run_proto_msgTypes[13]
+	mi := &file_reliant_v1_run_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -911,7 +1264,7 @@ func (x *CancelRunRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CancelRunRequest.ProtoReflect.Descriptor instead.
 func (*CancelRunRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_run_proto_rawDescGZIP(), []int{13}
+	return file_reliant_v1_run_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *CancelRunRequest) GetRunId() string {
@@ -931,7 +1284,7 @@ type CancelRunResponse struct {
 
 func (x *CancelRunResponse) Reset() {
 	*x = CancelRunResponse{}
-	mi := &file_reliant_v1_run_proto_msgTypes[14]
+	mi := &file_reliant_v1_run_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -943,7 +1296,7 @@ func (x *CancelRunResponse) String() string {
 func (*CancelRunResponse) ProtoMessage() {}
 
 func (x *CancelRunResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_run_proto_msgTypes[14]
+	mi := &file_reliant_v1_run_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -956,7 +1309,7 @@ func (x *CancelRunResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CancelRunResponse.ProtoReflect.Descriptor instead.
 func (*CancelRunResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_run_proto_rawDescGZIP(), []int{14}
+	return file_reliant_v1_run_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *CancelRunResponse) GetSuccess() bool {
@@ -984,7 +1337,7 @@ type InterruptRunRequest struct {
 
 func (x *InterruptRunRequest) Reset() {
 	*x = InterruptRunRequest{}
-	mi := &file_reliant_v1_run_proto_msgTypes[15]
+	mi := &file_reliant_v1_run_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -996,7 +1349,7 @@ func (x *InterruptRunRequest) String() string {
 func (*InterruptRunRequest) ProtoMessage() {}
 
 func (x *InterruptRunRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_run_proto_msgTypes[15]
+	mi := &file_reliant_v1_run_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1009,7 +1362,7 @@ func (x *InterruptRunRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InterruptRunRequest.ProtoReflect.Descriptor instead.
 func (*InterruptRunRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_run_proto_rawDescGZIP(), []int{15}
+	return file_reliant_v1_run_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *InterruptRunRequest) GetRunId() string {
@@ -1044,7 +1397,7 @@ type InterruptRunResponse struct {
 
 func (x *InterruptRunResponse) Reset() {
 	*x = InterruptRunResponse{}
-	mi := &file_reliant_v1_run_proto_msgTypes[16]
+	mi := &file_reliant_v1_run_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1056,7 +1409,7 @@ func (x *InterruptRunResponse) String() string {
 func (*InterruptRunResponse) ProtoMessage() {}
 
 func (x *InterruptRunResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_run_proto_msgTypes[16]
+	mi := &file_reliant_v1_run_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1069,7 +1422,7 @@ func (x *InterruptRunResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InterruptRunResponse.ProtoReflect.Descriptor instead.
 func (*InterruptRunResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_run_proto_rawDescGZIP(), []int{16}
+	return file_reliant_v1_run_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *InterruptRunResponse) GetCancelledToolCalls() int32 {
@@ -1091,7 +1444,7 @@ var File_reliant_v1_run_proto protoreflect.FileDescriptor
 const file_reliant_v1_run_proto_rawDesc = "" +
 	"\n" +
 	"\x14reliant/v1/run.proto\x12\n" +
-	"reliant.v1\x1a\x1cgoogle/protobuf/struct.proto\x1a\x15reliant/v1/chat.proto\"\xba\x03\n" +
+	"reliant.v1\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x15reliant/v1/chat.proto\"\xe7\x05\n" +
 	"\x03Run\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12#\n" +
 	"\rworkflow_name\x18\x02 \x01(\tR\fworkflowName\x12\x16\n" +
@@ -1107,7 +1460,18 @@ const file_reliant_v1_run_proto_rawDesc = "" +
 	"\aoutcome\x18\n" +
 	" \x01(\tR\aoutcome\x12\"\n" +
 	"\rcreated_at_ms\x18\v \x01(\x03R\vcreatedAtMs\x12&\n" +
-	"\x0fcompleted_at_ms\x18\f \x01(\x03R\rcompletedAtMs\"\xaa\x03\n" +
+	"\x0fcompleted_at_ms\x18\f \x01(\x03R\rcompletedAtMs\x12\x14\n" +
+	"\x05title\x18\r \x01(\tR\x05title\x12\x1d\n" +
+	"\n" +
+	"project_id\x18\x0e \x01(\tR\tprojectId\x12\x1f\n" +
+	"\vlaunch_kind\x18\x0f \x01(\tR\n" +
+	"launchKind\x12\x1d\n" +
+	"\n" +
+	"trigger_id\x18\x10 \x01(\tR\ttriggerId\x12!\n" +
+	"\ftrigger_name\x18\x11 \x01(\tR\vtriggerName\x12\x1b\n" +
+	"\tdaemon_id\x18\x12 \x01(\tR\bdaemonId\x124\n" +
+	"\bactivity\x18\x13 \x01(\x0e2\x18.reliant.v1.ChatActivityR\bactivity\x12@\n" +
+	"\rdisplay_state\x18\x14 \x01(\x0e2\x1b.reliant.v1.RunDisplayStateR\fdisplayState\"\xaa\x03\n" +
 	"\x0fStartRunRequest\x12\x1a\n" +
 	"\bworkflow\x18\x01 \x01(\tR\bworkflow\x12?\n" +
 	"\x06inputs\x18\x02 \x03(\v2'.reliant.v1.StartRunRequest.InputsEntryR\x06inputs\x12\x1d\n" +
@@ -1135,17 +1499,43 @@ const file_reliant_v1_run_proto_rawDesc = "" +
 	"\rGetRunRequest\x12\x15\n" +
 	"\x06run_id\x18\x01 \x01(\tR\x05runId\"3\n" +
 	"\x0eGetRunResponse\x12!\n" +
-	"\x03run\x18\x01 \x01(\v2\x0f.reliant.v1.RunR\x03run\"\xac\x01\n" +
+	"\x03run\x18\x01 \x01(\v2\x0f.reliant.v1.RunR\x03run\"\x90\x05\n" +
 	"\x0fListRunsRequest\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x1b\n" +
 	"\tparent_id\x18\x02 \x01(\tR\bparentId\x12/\n" +
 	"\x05state\x18\x03 \x01(\x0e2\x19.reliant.v1.WorkflowStateR\x05state\x12\x14\n" +
-	"\x05limit\x18\x04 \x01(\x05R\x05limit\x12\x16\n" +
-	"\x06offset\x18\x05 \x01(\x05R\x06offset\"M\n" +
+	"\x05limit\x18\x04 \x01(\x05R\x05limit\x12\"\n" +
+	"\n" +
+	"project_id\x18\x06 \x01(\tH\x00R\tprojectId\x88\x01\x01\x12\x1a\n" +
+	"\bworkflow\x18\a \x03(\tR\bworkflow\x12\"\n" +
+	"\n" +
+	"trigger_id\x18\b \x01(\tH\x01R\ttriggerId\x88\x01\x01\x12\x1f\n" +
+	"\vlaunch_kind\x18\t \x03(\tR\n" +
+	"launchKind\x12B\n" +
+	"\x0edisplay_states\x18\n" +
+	" \x03(\x0e2\x1b.reliant.v1.RunDisplayStateR\rdisplayStates\x12?\n" +
+	"\rstarted_after\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\fstartedAfter\x12A\n" +
+	"\x0estarted_before\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\rstartedBefore\x12\x19\n" +
+	"\x05query\x18\r \x01(\tH\x02R\x05query\x88\x01\x01\x12\"\n" +
+	"\n" +
+	"page_token\x18\x0e \x01(\tH\x03R\tpageToken\x88\x01\x01\x12)\n" +
+	"\x10include_archived\x18\x0f \x01(\bR\x0fincludeArchivedB\r\n" +
+	"\v_project_idB\r\n" +
+	"\v_trigger_idB\b\n" +
+	"\x06_queryB\r\n" +
+	"\v_page_tokenJ\x04\b\x05\x10\x06R\x06offset\"u\n" +
 	"\x10ListRunsResponse\x12#\n" +
 	"\x04runs\x18\x01 \x03(\v2\x0f.reliant.v1.RunR\x04runs\x12\x14\n" +
-	"\x05total\x18\x02 \x01(\x05R\x05total\"(\n" +
+	"\x05total\x18\x02 \x01(\x05R\x05total\x12&\n" +
+	"\x0fnext_page_token\x18\x03 \x01(\tR\rnextPageToken\"j\n" +
+	"\x19LastRunPerWorkflowRequest\x12\"\n" +
+	"\n" +
+	"project_id\x18\x01 \x01(\tH\x00R\tprojectId\x88\x01\x01\x12\x1a\n" +
+	"\bworkflow\x18\x02 \x03(\tR\bworkflowB\r\n" +
+	"\v_project_id\"A\n" +
+	"\x1aLastRunPerWorkflowResponse\x12#\n" +
+	"\x04runs\x18\x01 \x03(\v2\x0f.reliant.v1.RunR\x04runs\"(\n" +
 	"\x0fPauseRunRequest\x12\x15\n" +
 	"\x06run_id\x18\x01 \x01(\tR\x05runId\"F\n" +
 	"\x10PauseRunResponse\x12\x18\n" +
@@ -1167,13 +1557,23 @@ const file_reliant_v1_run_proto_rawDesc = "" +
 	"\x06thread\x18\x02 \x01(\tR\x06thread\"\x82\x01\n" +
 	"\x14InterruptRunResponse\x120\n" +
 	"\x14cancelled_tool_calls\x18\x01 \x01(\x05R\x12cancelledToolCalls\x128\n" +
-	"\x18undeliverable_tool_calls\x18\x02 \x03(\tR\x16undeliverableToolCalls2\xe3\x04\n" +
+	"\x18undeliverable_tool_calls\x18\x02 \x03(\tR\x16undeliverableToolCalls*\x92\x02\n" +
+	"\x0fRunDisplayState\x12!\n" +
+	"\x1dRUN_DISPLAY_STATE_UNSPECIFIED\x10\x00\x12\x1c\n" +
+	"\x18RUN_DISPLAY_STATE_QUEUED\x10\x01\x12\x1d\n" +
+	"\x19RUN_DISPLAY_STATE_RUNNING\x10\x02\x12!\n" +
+	"\x1dRUN_DISPLAY_STATE_NEEDS_INPUT\x10\x03\x12\x1c\n" +
+	"\x18RUN_DISPLAY_STATE_PAUSED\x10\x04\x12\x1f\n" +
+	"\x1bRUN_DISPLAY_STATE_COMPLETED\x10\x05\x12\x1c\n" +
+	"\x18RUN_DISPLAY_STATE_FAILED\x10\x06\x12\x1f\n" +
+	"\x1bRUN_DISPLAY_STATE_CANCELLED\x10\a2\xca\x05\n" +
 	"\n" +
 	"RunService\x12G\n" +
 	"\bStartRun\x12\x1b.reliant.v1.StartRunRequest\x1a\x1c.reliant.v1.StartRunResponse\"\x00\x12J\n" +
 	"\tSignalRun\x12\x1c.reliant.v1.SignalRunRequest\x1a\x1d.reliant.v1.SignalRunResponse\"\x00\x12A\n" +
 	"\x06GetRun\x12\x19.reliant.v1.GetRunRequest\x1a\x1a.reliant.v1.GetRunResponse\"\x00\x12G\n" +
-	"\bListRuns\x12\x1b.reliant.v1.ListRunsRequest\x1a\x1c.reliant.v1.ListRunsResponse\"\x00\x12G\n" +
+	"\bListRuns\x12\x1b.reliant.v1.ListRunsRequest\x1a\x1c.reliant.v1.ListRunsResponse\"\x00\x12e\n" +
+	"\x12LastRunPerWorkflow\x12%.reliant.v1.LastRunPerWorkflowRequest\x1a&.reliant.v1.LastRunPerWorkflowResponse\"\x00\x12G\n" +
 	"\bPauseRun\x12\x1b.reliant.v1.PauseRunRequest\x1a\x1c.reliant.v1.PauseRunResponse\"\x00\x12J\n" +
 	"\tResumeRun\x12\x1c.reliant.v1.ResumeRunRequest\x1a\x1d.reliant.v1.ResumeRunResponse\"\x00\x12J\n" +
 	"\tCancelRun\x12\x1c.reliant.v1.CancelRunRequest\x1a\x1d.reliant.v1.CancelRunResponse\"\x00\x12S\n" +
@@ -1191,66 +1591,80 @@ func file_reliant_v1_run_proto_rawDescGZIP() []byte {
 	return file_reliant_v1_run_proto_rawDescData
 }
 
-var file_reliant_v1_run_proto_msgTypes = make([]protoimpl.MessageInfo, 19)
+var file_reliant_v1_run_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_reliant_v1_run_proto_msgTypes = make([]protoimpl.MessageInfo, 21)
 var file_reliant_v1_run_proto_goTypes = []any{
-	(*Run)(nil),                  // 0: reliant.v1.Run
-	(*StartRunRequest)(nil),      // 1: reliant.v1.StartRunRequest
-	(*StartRunResponse)(nil),     // 2: reliant.v1.StartRunResponse
-	(*SignalRunRequest)(nil),     // 3: reliant.v1.SignalRunRequest
-	(*SignalRunResponse)(nil),    // 4: reliant.v1.SignalRunResponse
-	(*GetRunRequest)(nil),        // 5: reliant.v1.GetRunRequest
-	(*GetRunResponse)(nil),       // 6: reliant.v1.GetRunResponse
-	(*ListRunsRequest)(nil),      // 7: reliant.v1.ListRunsRequest
-	(*ListRunsResponse)(nil),     // 8: reliant.v1.ListRunsResponse
-	(*PauseRunRequest)(nil),      // 9: reliant.v1.PauseRunRequest
-	(*PauseRunResponse)(nil),     // 10: reliant.v1.PauseRunResponse
-	(*ResumeRunRequest)(nil),     // 11: reliant.v1.ResumeRunRequest
-	(*ResumeRunResponse)(nil),    // 12: reliant.v1.ResumeRunResponse
-	(*CancelRunRequest)(nil),     // 13: reliant.v1.CancelRunRequest
-	(*CancelRunResponse)(nil),    // 14: reliant.v1.CancelRunResponse
-	(*InterruptRunRequest)(nil),  // 15: reliant.v1.InterruptRunRequest
-	(*InterruptRunResponse)(nil), // 16: reliant.v1.InterruptRunResponse
-	nil,                          // 17: reliant.v1.StartRunRequest.InputsEntry
-	nil,                          // 18: reliant.v1.StartRunRequest.PresetsEntry
-	(WorkflowState)(0),           // 19: reliant.v1.WorkflowState
-	(WorkflowStopReason)(0),      // 20: reliant.v1.WorkflowStopReason
-	(*InputMessage)(nil),         // 21: reliant.v1.InputMessage
-	(*structpb.Value)(nil),       // 22: google.protobuf.Value
+	(RunDisplayState)(0),               // 0: reliant.v1.RunDisplayState
+	(*Run)(nil),                        // 1: reliant.v1.Run
+	(*StartRunRequest)(nil),            // 2: reliant.v1.StartRunRequest
+	(*StartRunResponse)(nil),           // 3: reliant.v1.StartRunResponse
+	(*SignalRunRequest)(nil),           // 4: reliant.v1.SignalRunRequest
+	(*SignalRunResponse)(nil),          // 5: reliant.v1.SignalRunResponse
+	(*GetRunRequest)(nil),              // 6: reliant.v1.GetRunRequest
+	(*GetRunResponse)(nil),             // 7: reliant.v1.GetRunResponse
+	(*ListRunsRequest)(nil),            // 8: reliant.v1.ListRunsRequest
+	(*ListRunsResponse)(nil),           // 9: reliant.v1.ListRunsResponse
+	(*LastRunPerWorkflowRequest)(nil),  // 10: reliant.v1.LastRunPerWorkflowRequest
+	(*LastRunPerWorkflowResponse)(nil), // 11: reliant.v1.LastRunPerWorkflowResponse
+	(*PauseRunRequest)(nil),            // 12: reliant.v1.PauseRunRequest
+	(*PauseRunResponse)(nil),           // 13: reliant.v1.PauseRunResponse
+	(*ResumeRunRequest)(nil),           // 14: reliant.v1.ResumeRunRequest
+	(*ResumeRunResponse)(nil),          // 15: reliant.v1.ResumeRunResponse
+	(*CancelRunRequest)(nil),           // 16: reliant.v1.CancelRunRequest
+	(*CancelRunResponse)(nil),          // 17: reliant.v1.CancelRunResponse
+	(*InterruptRunRequest)(nil),        // 18: reliant.v1.InterruptRunRequest
+	(*InterruptRunResponse)(nil),       // 19: reliant.v1.InterruptRunResponse
+	nil,                                // 20: reliant.v1.StartRunRequest.InputsEntry
+	nil,                                // 21: reliant.v1.StartRunRequest.PresetsEntry
+	(WorkflowState)(0),                 // 22: reliant.v1.WorkflowState
+	(WorkflowStopReason)(0),            // 23: reliant.v1.WorkflowStopReason
+	(ChatActivity)(0),                  // 24: reliant.v1.ChatActivity
+	(*InputMessage)(nil),               // 25: reliant.v1.InputMessage
+	(*timestamppb.Timestamp)(nil),      // 26: google.protobuf.Timestamp
+	(*structpb.Value)(nil),             // 27: google.protobuf.Value
 }
 var file_reliant_v1_run_proto_depIdxs = []int32{
-	19, // 0: reliant.v1.Run.state:type_name -> reliant.v1.WorkflowState
-	20, // 1: reliant.v1.Run.stop_reason:type_name -> reliant.v1.WorkflowStopReason
-	17, // 2: reliant.v1.StartRunRequest.inputs:type_name -> reliant.v1.StartRunRequest.InputsEntry
-	21, // 3: reliant.v1.StartRunRequest.messages:type_name -> reliant.v1.InputMessage
-	18, // 4: reliant.v1.StartRunRequest.presets:type_name -> reliant.v1.StartRunRequest.PresetsEntry
-	0,  // 5: reliant.v1.StartRunResponse.run:type_name -> reliant.v1.Run
-	21, // 6: reliant.v1.SignalRunRequest.messages:type_name -> reliant.v1.InputMessage
-	0,  // 7: reliant.v1.GetRunResponse.run:type_name -> reliant.v1.Run
-	19, // 8: reliant.v1.ListRunsRequest.state:type_name -> reliant.v1.WorkflowState
-	0,  // 9: reliant.v1.ListRunsResponse.runs:type_name -> reliant.v1.Run
-	0,  // 10: reliant.v1.ResumeRunResponse.run:type_name -> reliant.v1.Run
-	22, // 11: reliant.v1.StartRunRequest.InputsEntry.value:type_name -> google.protobuf.Value
-	1,  // 12: reliant.v1.RunService.StartRun:input_type -> reliant.v1.StartRunRequest
-	3,  // 13: reliant.v1.RunService.SignalRun:input_type -> reliant.v1.SignalRunRequest
-	5,  // 14: reliant.v1.RunService.GetRun:input_type -> reliant.v1.GetRunRequest
-	7,  // 15: reliant.v1.RunService.ListRuns:input_type -> reliant.v1.ListRunsRequest
-	9,  // 16: reliant.v1.RunService.PauseRun:input_type -> reliant.v1.PauseRunRequest
-	11, // 17: reliant.v1.RunService.ResumeRun:input_type -> reliant.v1.ResumeRunRequest
-	13, // 18: reliant.v1.RunService.CancelRun:input_type -> reliant.v1.CancelRunRequest
-	15, // 19: reliant.v1.RunService.InterruptRun:input_type -> reliant.v1.InterruptRunRequest
-	2,  // 20: reliant.v1.RunService.StartRun:output_type -> reliant.v1.StartRunResponse
-	4,  // 21: reliant.v1.RunService.SignalRun:output_type -> reliant.v1.SignalRunResponse
-	6,  // 22: reliant.v1.RunService.GetRun:output_type -> reliant.v1.GetRunResponse
-	8,  // 23: reliant.v1.RunService.ListRuns:output_type -> reliant.v1.ListRunsResponse
-	10, // 24: reliant.v1.RunService.PauseRun:output_type -> reliant.v1.PauseRunResponse
-	12, // 25: reliant.v1.RunService.ResumeRun:output_type -> reliant.v1.ResumeRunResponse
-	14, // 26: reliant.v1.RunService.CancelRun:output_type -> reliant.v1.CancelRunResponse
-	16, // 27: reliant.v1.RunService.InterruptRun:output_type -> reliant.v1.InterruptRunResponse
-	20, // [20:28] is the sub-list for method output_type
-	12, // [12:20] is the sub-list for method input_type
-	12, // [12:12] is the sub-list for extension type_name
-	12, // [12:12] is the sub-list for extension extendee
-	0,  // [0:12] is the sub-list for field type_name
+	22, // 0: reliant.v1.Run.state:type_name -> reliant.v1.WorkflowState
+	23, // 1: reliant.v1.Run.stop_reason:type_name -> reliant.v1.WorkflowStopReason
+	24, // 2: reliant.v1.Run.activity:type_name -> reliant.v1.ChatActivity
+	0,  // 3: reliant.v1.Run.display_state:type_name -> reliant.v1.RunDisplayState
+	20, // 4: reliant.v1.StartRunRequest.inputs:type_name -> reliant.v1.StartRunRequest.InputsEntry
+	25, // 5: reliant.v1.StartRunRequest.messages:type_name -> reliant.v1.InputMessage
+	21, // 6: reliant.v1.StartRunRequest.presets:type_name -> reliant.v1.StartRunRequest.PresetsEntry
+	1,  // 7: reliant.v1.StartRunResponse.run:type_name -> reliant.v1.Run
+	25, // 8: reliant.v1.SignalRunRequest.messages:type_name -> reliant.v1.InputMessage
+	1,  // 9: reliant.v1.GetRunResponse.run:type_name -> reliant.v1.Run
+	22, // 10: reliant.v1.ListRunsRequest.state:type_name -> reliant.v1.WorkflowState
+	0,  // 11: reliant.v1.ListRunsRequest.display_states:type_name -> reliant.v1.RunDisplayState
+	26, // 12: reliant.v1.ListRunsRequest.started_after:type_name -> google.protobuf.Timestamp
+	26, // 13: reliant.v1.ListRunsRequest.started_before:type_name -> google.protobuf.Timestamp
+	1,  // 14: reliant.v1.ListRunsResponse.runs:type_name -> reliant.v1.Run
+	1,  // 15: reliant.v1.LastRunPerWorkflowResponse.runs:type_name -> reliant.v1.Run
+	1,  // 16: reliant.v1.ResumeRunResponse.run:type_name -> reliant.v1.Run
+	27, // 17: reliant.v1.StartRunRequest.InputsEntry.value:type_name -> google.protobuf.Value
+	2,  // 18: reliant.v1.RunService.StartRun:input_type -> reliant.v1.StartRunRequest
+	4,  // 19: reliant.v1.RunService.SignalRun:input_type -> reliant.v1.SignalRunRequest
+	6,  // 20: reliant.v1.RunService.GetRun:input_type -> reliant.v1.GetRunRequest
+	8,  // 21: reliant.v1.RunService.ListRuns:input_type -> reliant.v1.ListRunsRequest
+	10, // 22: reliant.v1.RunService.LastRunPerWorkflow:input_type -> reliant.v1.LastRunPerWorkflowRequest
+	12, // 23: reliant.v1.RunService.PauseRun:input_type -> reliant.v1.PauseRunRequest
+	14, // 24: reliant.v1.RunService.ResumeRun:input_type -> reliant.v1.ResumeRunRequest
+	16, // 25: reliant.v1.RunService.CancelRun:input_type -> reliant.v1.CancelRunRequest
+	18, // 26: reliant.v1.RunService.InterruptRun:input_type -> reliant.v1.InterruptRunRequest
+	3,  // 27: reliant.v1.RunService.StartRun:output_type -> reliant.v1.StartRunResponse
+	5,  // 28: reliant.v1.RunService.SignalRun:output_type -> reliant.v1.SignalRunResponse
+	7,  // 29: reliant.v1.RunService.GetRun:output_type -> reliant.v1.GetRunResponse
+	9,  // 30: reliant.v1.RunService.ListRuns:output_type -> reliant.v1.ListRunsResponse
+	11, // 31: reliant.v1.RunService.LastRunPerWorkflow:output_type -> reliant.v1.LastRunPerWorkflowResponse
+	13, // 32: reliant.v1.RunService.PauseRun:output_type -> reliant.v1.PauseRunResponse
+	15, // 33: reliant.v1.RunService.ResumeRun:output_type -> reliant.v1.ResumeRunResponse
+	17, // 34: reliant.v1.RunService.CancelRun:output_type -> reliant.v1.CancelRunResponse
+	19, // 35: reliant.v1.RunService.InterruptRun:output_type -> reliant.v1.InterruptRunResponse
+	27, // [27:36] is the sub-list for method output_type
+	18, // [18:27] is the sub-list for method input_type
+	18, // [18:18] is the sub-list for extension type_name
+	18, // [18:18] is the sub-list for extension extendee
+	0,  // [0:18] is the sub-list for field type_name
 }
 
 func init() { file_reliant_v1_run_proto_init() }
@@ -1259,18 +1673,21 @@ func file_reliant_v1_run_proto_init() {
 		return
 	}
 	file_reliant_v1_chat_proto_init()
+	file_reliant_v1_run_proto_msgTypes[7].OneofWrappers = []any{}
+	file_reliant_v1_run_proto_msgTypes[9].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_reliant_v1_run_proto_rawDesc), len(file_reliant_v1_run_proto_rawDesc)),
-			NumEnums:      0,
-			NumMessages:   19,
+			NumEnums:      1,
+			NumMessages:   21,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
 		GoTypes:           file_reliant_v1_run_proto_goTypes,
 		DependencyIndexes: file_reliant_v1_run_proto_depIdxs,
+		EnumInfos:         file_reliant_v1_run_proto_enumTypes,
 		MessageInfos:      file_reliant_v1_run_proto_msgTypes,
 	}.Build()
 	File_reliant_v1_run_proto = out.File

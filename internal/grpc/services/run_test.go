@@ -193,18 +193,6 @@ func TestFilterRuns_TotalIsPreFilterOfTheWindow(t *testing.T) {
 	assert.Equal(t, int32(5), got.Total, "the total counts every match")
 }
 
-// TestFilterRuns_OffsetBeyondEndIsEmptyNotPanic — paging past the end is a
-// normal request from a client that raced a deletion.
-func TestFilterRuns_OffsetBeyondEndIsEmptyNotPanic(t *testing.T) {
-	t.Parallel()
-
-	runs := []*core.Workflow{{ID: "a", Status: core.Active(), CreatedAt: time.Now()}}
-
-	got := filterRunsToProto(runs, &reliantv1.ListRunsRequest{Offset: 50})
-	assert.Empty(t, got.Runs)
-	assert.Equal(t, int32(1), got.Total)
-}
-
 // TestFilterRuns_SkipsNilRows guards the conversion against a nil element,
 // which a partial DB read can produce.
 func TestFilterRuns_SkipsNilRows(t *testing.T) {

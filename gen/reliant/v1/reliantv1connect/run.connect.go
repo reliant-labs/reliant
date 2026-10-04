@@ -43,6 +43,9 @@ const (
 	RunServiceGetRunProcedure = "/reliant.v1.RunService/GetRun"
 	// RunServiceListRunsProcedure is the fully-qualified name of the RunService's ListRuns RPC.
 	RunServiceListRunsProcedure = "/reliant.v1.RunService/ListRuns"
+	// RunServiceLastRunPerWorkflowProcedure is the fully-qualified name of the RunService's
+	// LastRunPerWorkflow RPC.
+	RunServiceLastRunPerWorkflowProcedure = "/reliant.v1.RunService/LastRunPerWorkflow"
 	// RunServicePauseRunProcedure is the fully-qualified name of the RunService's PauseRun RPC.
 	RunServicePauseRunProcedure = "/reliant.v1.RunService/PauseRun"
 	// RunServiceResumeRunProcedure is the fully-qualified name of the RunService's ResumeRun RPC.
@@ -73,7 +76,21 @@ type RunServiceClient interface {
 	// GetRun returns one run's current state.
 	GetRun(context.Context, *connect.Request[v1.GetRunRequest]) (*connect.Response[v1.GetRunResponse], error)
 	// ListRuns lists runs, newest first.
+	//
+	// With neither session_id nor parent_id it is the cross-cutting run list:
+	// every root run the caller owns, narrowed by the filters on the request and
+	// paged by page_token. With one of them it lists that session's runs or that
+	// run's children.
 	ListRuns(context.Context, *connect.Request[v1.ListRunsRequest]) (*connect.Response[v1.ListRunsResponse], error)
+	// LastRunPerWorkflow returns the most recent root run of each workflow the
+	// caller has run, one Run per workflow name. It is the Library's "last run"
+	// column in one round trip, where ListRuns would need a query per workflow.
+	//
+	// A separate RPC rather than a group_by switch on ListRuns: grouping changes
+	// the response's meaning (one row per workflow, no paging, no total), and a
+	// flag that changes what a response means is how a caller ends up paging a
+	// result that cannot be paged.
+	LastRunPerWorkflow(context.Context, *connect.Request[v1.LastRunPerWorkflowRequest]) (*connect.Response[v1.LastRunPerWorkflowResponse], error)
 	// PauseRun parks a run. It stays live and resumable — see
 	// WORKFLOW_STOP_REASON_PAUSED.
 	PauseRun(context.Context, *connect.Request[v1.PauseRunRequest]) (*connect.Response[v1.PauseRunResponse], error)
@@ -123,6 +140,12 @@ func NewRunServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 			connect.WithSchema(runServiceMethods.ByName("ListRuns")),
 			connect.WithClientOptions(opts...),
 		),
+		lastRunPerWorkflow: connect.NewClient[v1.LastRunPerWorkflowRequest, v1.LastRunPerWorkflowResponse](
+			httpClient,
+			baseURL+RunServiceLastRunPerWorkflowProcedure,
+			connect.WithSchema(runServiceMethods.ByName("LastRunPerWorkflow")),
+			connect.WithClientOptions(opts...),
+		),
 		pauseRun: connect.NewClient[v1.PauseRunRequest, v1.PauseRunResponse](
 			httpClient,
 			baseURL+RunServicePauseRunProcedure,
@@ -152,14 +175,15 @@ func NewRunServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 
 // runServiceClient implements RunServiceClient.
 type runServiceClient struct {
-	startRun     *connect.Client[v1.StartRunRequest, v1.StartRunResponse]
-	signalRun    *connect.Client[v1.SignalRunRequest, v1.SignalRunResponse]
-	getRun       *connect.Client[v1.GetRunRequest, v1.GetRunResponse]
-	listRuns     *connect.Client[v1.ListRunsRequest, v1.ListRunsResponse]
-	pauseRun     *connect.Client[v1.PauseRunRequest, v1.PauseRunResponse]
-	resumeRun    *connect.Client[v1.ResumeRunRequest, v1.ResumeRunResponse]
-	cancelRun    *connect.Client[v1.CancelRunRequest, v1.CancelRunResponse]
-	interruptRun *connect.Client[v1.InterruptRunRequest, v1.InterruptRunResponse]
+	startRun           *connect.Client[v1.StartRunRequest, v1.StartRunResponse]
+	signalRun          *connect.Client[v1.SignalRunRequest, v1.SignalRunResponse]
+	getRun             *connect.Client[v1.GetRunRequest, v1.GetRunResponse]
+	listRuns           *connect.Client[v1.ListRunsRequest, v1.ListRunsResponse]
+	lastRunPerWorkflow *connect.Client[v1.LastRunPerWorkflowRequest, v1.LastRunPerWorkflowResponse]
+	pauseRun           *connect.Client[v1.PauseRunRequest, v1.PauseRunResponse]
+	resumeRun          *connect.Client[v1.ResumeRunRequest, v1.ResumeRunResponse]
+	cancelRun          *connect.Client[v1.CancelRunRequest, v1.CancelRunResponse]
+	interruptRun       *connect.Client[v1.InterruptRunRequest, v1.InterruptRunResponse]
 }
 
 // StartRun calls reliant.v1.RunService.StartRun.
@@ -180,6 +204,11 @@ func (c *runServiceClient) GetRun(ctx context.Context, req *connect.Request[v1.G
 // ListRuns calls reliant.v1.RunService.ListRuns.
 func (c *runServiceClient) ListRuns(ctx context.Context, req *connect.Request[v1.ListRunsRequest]) (*connect.Response[v1.ListRunsResponse], error) {
 	return c.listRuns.CallUnary(ctx, req)
+}
+
+// LastRunPerWorkflow calls reliant.v1.RunService.LastRunPerWorkflow.
+func (c *runServiceClient) LastRunPerWorkflow(ctx context.Context, req *connect.Request[v1.LastRunPerWorkflowRequest]) (*connect.Response[v1.LastRunPerWorkflowResponse], error) {
+	return c.lastRunPerWorkflow.CallUnary(ctx, req)
 }
 
 // PauseRun calls reliant.v1.RunService.PauseRun.
@@ -222,7 +251,21 @@ type RunServiceHandler interface {
 	// GetRun returns one run's current state.
 	GetRun(context.Context, *connect.Request[v1.GetRunRequest]) (*connect.Response[v1.GetRunResponse], error)
 	// ListRuns lists runs, newest first.
+	//
+	// With neither session_id nor parent_id it is the cross-cutting run list:
+	// every root run the caller owns, narrowed by the filters on the request and
+	// paged by page_token. With one of them it lists that session's runs or that
+	// run's children.
 	ListRuns(context.Context, *connect.Request[v1.ListRunsRequest]) (*connect.Response[v1.ListRunsResponse], error)
+	// LastRunPerWorkflow returns the most recent root run of each workflow the
+	// caller has run, one Run per workflow name. It is the Library's "last run"
+	// column in one round trip, where ListRuns would need a query per workflow.
+	//
+	// A separate RPC rather than a group_by switch on ListRuns: grouping changes
+	// the response's meaning (one row per workflow, no paging, no total), and a
+	// flag that changes what a response means is how a caller ends up paging a
+	// result that cannot be paged.
+	LastRunPerWorkflow(context.Context, *connect.Request[v1.LastRunPerWorkflowRequest]) (*connect.Response[v1.LastRunPerWorkflowResponse], error)
 	// PauseRun parks a run. It stays live and resumable — see
 	// WORKFLOW_STOP_REASON_PAUSED.
 	PauseRun(context.Context, *connect.Request[v1.PauseRunRequest]) (*connect.Response[v1.PauseRunResponse], error)
@@ -268,6 +311,12 @@ func NewRunServiceHandler(svc RunServiceHandler, opts ...connect.HandlerOption) 
 		connect.WithSchema(runServiceMethods.ByName("ListRuns")),
 		connect.WithHandlerOptions(opts...),
 	)
+	runServiceLastRunPerWorkflowHandler := connect.NewUnaryHandler(
+		RunServiceLastRunPerWorkflowProcedure,
+		svc.LastRunPerWorkflow,
+		connect.WithSchema(runServiceMethods.ByName("LastRunPerWorkflow")),
+		connect.WithHandlerOptions(opts...),
+	)
 	runServicePauseRunHandler := connect.NewUnaryHandler(
 		RunServicePauseRunProcedure,
 		svc.PauseRun,
@@ -302,6 +351,8 @@ func NewRunServiceHandler(svc RunServiceHandler, opts ...connect.HandlerOption) 
 			runServiceGetRunHandler.ServeHTTP(w, r)
 		case RunServiceListRunsProcedure:
 			runServiceListRunsHandler.ServeHTTP(w, r)
+		case RunServiceLastRunPerWorkflowProcedure:
+			runServiceLastRunPerWorkflowHandler.ServeHTTP(w, r)
 		case RunServicePauseRunProcedure:
 			runServicePauseRunHandler.ServeHTTP(w, r)
 		case RunServiceResumeRunProcedure:
@@ -333,6 +384,10 @@ func (UnimplementedRunServiceHandler) GetRun(context.Context, *connect.Request[v
 
 func (UnimplementedRunServiceHandler) ListRuns(context.Context, *connect.Request[v1.ListRunsRequest]) (*connect.Response[v1.ListRunsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.RunService.ListRuns is not implemented"))
+}
+
+func (UnimplementedRunServiceHandler) LastRunPerWorkflow(context.Context, *connect.Request[v1.LastRunPerWorkflowRequest]) (*connect.Response[v1.LastRunPerWorkflowResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.RunService.LastRunPerWorkflow is not implemented"))
 }
 
 func (UnimplementedRunServiceHandler) PauseRun(context.Context, *connect.Request[v1.PauseRunRequest]) (*connect.Response[v1.PauseRunResponse], error) {

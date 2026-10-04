@@ -1686,6 +1686,12 @@ CREATE INDEX idx_chat_updates_created ON public.chat_updates USING btree (create
 CREATE INDEX idx_chat_updates_snapshot_heads ON public.chat_updates USING btree (chat_id, entity_id, sequence_number DESC) WHERE (update_type <> ALL (ARRAY[1, 4, 19]));
 
 --
+-- Name: idx_chats_user_created_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_chats_user_created_id ON public.chats USING btree (user_id, created_at DESC, id DESC);
+
+--
 -- Name: idx_chats_user_project; Type: INDEX; Schema: public; Owner: -
 --
 

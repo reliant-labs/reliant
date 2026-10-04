@@ -77,6 +77,14 @@ func (r *Repo) ListArchivedChats(ctx context.Context, userID string) ([]*Archive
 	return r.chats.ListArchivedChats(ctx, userID)
 }
 
+func (r *Repo) ListRuns(ctx context.Context, filters RunListFilters) ([]*RunListItem, bool, error) {
+	return r.runs.ListRuns(ctx, filters)
+}
+
+func (r *Repo) LastRunPerWorkflow(ctx context.Context, filters RunListFilters) ([]*RunListItem, error) {
+	return r.runs.LastRunPerWorkflow(ctx, filters)
+}
+
 // ==================== Messages ====================
 
 // CreateMessage creates a message record in the database.

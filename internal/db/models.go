@@ -21,6 +21,24 @@ const (
 	ChatStateArchived ChatState = core.ChatStateArchived
 )
 
+// Run-list types.
+type (
+	RunListFilters  = core.RunListFilters
+	RunListItem     = core.RunListItem
+	RunCursor       = core.RunCursor
+	RunDisplayState = core.RunDisplayState
+)
+
+const (
+	RunDisplayQueued     = core.RunDisplayQueued
+	RunDisplayRunning    = core.RunDisplayRunning
+	RunDisplayNeedsInput = core.RunDisplayNeedsInput
+	RunDisplayPaused     = core.RunDisplayPaused
+	RunDisplayCompleted  = core.RunDisplayCompleted
+	RunDisplayFailed     = core.RunDisplayFailed
+	RunDisplayCancelled  = core.RunDisplayCancelled
+)
+
 // Chat represents a top-level conversation.
 type Chat = core.Chat
 

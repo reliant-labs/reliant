@@ -21,6 +21,10 @@ type Repository interface {
 	DeleteChat(ctx context.Context, id string) error
 	ListArchivedChats(ctx context.Context, userID string) ([]*ArchivedChatInfo, error)
 
+	// Runs: the cross-cutting run list, scoped to filters.UserID.
+	ListRuns(ctx context.Context, filters RunListFilters) ([]*RunListItem, bool, error)
+	LastRunPerWorkflow(ctx context.Context, filters RunListFilters) ([]*RunListItem, error)
+
 	// Messages
 	// WARNING: Prefer SaveMessageToThread for most use cases. CreateMessage requires manual
 	// Ordinal and ContextSequence which is error-prone. Only use for workflow activities.

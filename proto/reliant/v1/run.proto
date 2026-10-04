@@ -4,6 +4,7 @@ syntax = "proto3";
 package reliant.v1;
 
 import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
 import "reliant/v1/chat.proto";
 
 option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
@@ -49,7 +50,22 @@ service RunService {
   rpc GetRun(GetRunRequest) returns (GetRunResponse) {}
 
   // ListRuns lists runs, newest first.
+  //
+  // With neither session_id nor parent_id it is the cross-cutting run list:
+  // every root run the caller owns, narrowed by the filters on the request and
+  // paged by page_token. With one of them it lists that session's runs or that
+  // run's children.
   rpc ListRuns(ListRunsRequest) returns (ListRunsResponse) {}
+
+  // LastRunPerWorkflow returns the most recent root run of each workflow the
+  // caller has run, one Run per workflow name. It is the Library's "last run"
+  // column in one round trip, where ListRuns would need a query per workflow.
+  //
+  // A separate RPC rather than a group_by switch on ListRuns: grouping changes
+  // the response's meaning (one row per workflow, no paging, no total), and a
+  // flag that changes what a response means is how a caller ends up paging a
+  // result that cannot be paged.
+  rpc LastRunPerWorkflow(LastRunPerWorkflowRequest) returns (LastRunPerWorkflowResponse) {}
 
   // PauseRun parks a run. It stays live and resumable — see
   // WORKFLOW_STOP_REASON_PAUSED.
@@ -119,6 +135,59 @@ message Run {
 
   int64 created_at_ms = 11;
   int64 completed_at_ms = 12;
+
+  // The fields below are filled by the cross-cutting list (ListRuns without a
+  // session or parent, LastRunPerWorkflow). GetRun and the session/parent
+  // lists read the workflows table alone and leave them empty.
+
+  // Title is the backing chat's title.
+  string title = 13;
+
+  // ProjectId is the project the run belongs to.
+  string project_id = 14;
+
+  // LaunchKind is what started the run: "chat.start", "schedule" or
+  // "agent.start_run". Empty for a run that predates launch events.
+  string launch_kind = 15;
+
+  // TriggerId is the automation that fired the run. Empty for ad hoc kinds.
+  string trigger_id = 16;
+
+  // TriggerName is that automation's current name. Empty when there is no
+  // trigger, or it has since been deleted.
+  string trigger_name = 17;
+
+  // DaemonId is the machine the run's tools execute on. Empty when none is
+  // attached.
+  string daemon_id = 18;
+
+  // Activity is the run's live activity (running, awaiting input, ...).
+  ChatActivity activity = 19;
+
+  // DisplayState is the one state a user reads, derived from state,
+  // stop_reason and activity. See RunDisplayState.
+  RunDisplayState display_state = 20;
+}
+
+// RunDisplayState is the single status vocabulary the UI shows for a run
+// (research/WORKFLOW_UI.md section 0). It folds the (state, stop_reason,
+// activity) triple into one value so a filter and a label can never disagree.
+enum RunDisplayState {
+  RUN_DISPLAY_STATE_UNSPECIFIED = 0;
+  // QUEUED: PENDING, or a chat whose root workflow has not been created yet.
+  RUN_DISPLAY_STATE_QUEUED = 1;
+  // RUNNING: ACTIVE and not waiting on a human.
+  RUN_DISPLAY_STATE_RUNNING = 2;
+  // NEEDS_INPUT: ACTIVE and awaiting input (a pending approval or question).
+  RUN_DISPLAY_STATE_NEEDS_INPUT = 3;
+  // PAUSED: STOPPED with stop_reason PAUSED. Live and resumable.
+  RUN_DISPLAY_STATE_PAUSED = 4;
+  // COMPLETED: STOPPED with stop_reason COMPLETED.
+  RUN_DISPLAY_STATE_COMPLETED = 5;
+  // FAILED: STOPPED with stop_reason FAILED.
+  RUN_DISPLAY_STATE_FAILED = 6;
+  // CANCELLED: STOPPED with stop_reason CANCELLED.
+  RUN_DISPLAY_STATE_CANCELLED = 7;
 }
 
 message StartRunRequest {
@@ -197,16 +266,86 @@ message ListRunsRequest {
   // ParentId scopes the list to one run's children.
   string parent_id = 2;
 
-  // State filters by lifecycle state. Unspecified returns all.
+  // State filters by lifecycle state. Unspecified returns all. Applies to the
+  // session and parent lists; the cross-cutting list filters with
+  // display_states.
   WorkflowState state = 3;
 
+  // Limit is the page size. The cross-cutting list defaults to 50 and caps at
+  // 200.
   int32 limit = 4;
-  int32 offset = 5;
+
+  // Offset paging is gone: the cross-cutting list pages by page_token, and the
+  // session and parent lists are one chat's runs, which are never numerous
+  // enough to need it.
+  reserved 5;
+  reserved "offset";
+
+  // ---- Cross-cutting filters ----
+  //
+  // Ignored when session_id or parent_id is set. Every one is optional or
+  // repeated, never a bare scalar: a bare scalar's zero value would be
+  // indistinguishable from "filter by the empty value", so an unset field
+  // would silently match nothing.
+
+  // ProjectId restricts to one project.
+  optional string project_id = 6;
+
+  // Workflow restricts to these workflow names (any of).
+  repeated string workflow = 7;
+
+  // TriggerId restricts to runs fired by one automation.
+  optional string trigger_id = 8;
+
+  // LaunchKind restricts to these launch kinds (any of).
+  repeated string launch_kind = 9;
+
+  // DisplayStates restricts to runs in any of these states.
+  repeated RunDisplayState display_states = 10;
+
+  // StartedAfter / StartedBefore bound the run's start time. After is
+  // inclusive, before is exclusive.
+  google.protobuf.Timestamp started_after = 11;
+  google.protobuf.Timestamp started_before = 12;
+
+  // Query is a case-insensitive substring match on the run's title.
+  optional string query = 13;
+
+  // PageToken continues a previous response's next_page_token. Keyset on
+  // (started time, id), so a run that starts mid-pagination can neither
+  // duplicate nor skip rows the way an offset would. Opaque.
+  optional string page_token = 14;
+
+  // IncludeArchived also returns runs whose chat is archived. Archived runs
+  // are hidden by default.
+  bool include_archived = 15;
 }
 
 message ListRunsResponse {
   repeated Run runs = 1;
+
+  // Total is the number of runs in the session or parent list. It is not
+  // computed for the cross-cutting list, where a count over every run the
+  // caller owns would cost a second full scan per page; use next_page_token.
   int32 total = 2;
+
+  // NextPageToken is set when more runs follow. Empty on the last page.
+  string next_page_token = 3;
+}
+
+message LastRunPerWorkflowRequest {
+  // ProjectId restricts to one project.
+  optional string project_id = 1;
+
+  // Workflow restricts the result to these workflow names. Empty returns every
+  // workflow the caller has run.
+  repeated string workflow = 2;
+}
+
+message LastRunPerWorkflowResponse {
+  // Runs holds at most one run per workflow name: its newest root run, ordered
+  // by workflow name.
+  repeated Run runs = 1;
 }
 
 message PauseRunRequest {

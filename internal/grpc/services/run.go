@@ -3,7 +3,11 @@ package services
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
+	"strconv"
+	"strings"
+	"time"
 
 	"connectrpc.com/connect"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -349,12 +353,10 @@ func (s *RunService) GetRun(
 	return connect.NewResponse(&reliantv1.GetRunResponse{Run: runToProto(run)}), nil
 }
 
-// ListRuns lists runs for a session, or the children of a parent run.
-//
-// One of session_id or parent_id is required. An unscoped list is deliberately
-// refused rather than returning every run the caller owns: until runs carry a
-// tenant of their own, "all runs" would mean a full scan filtered in memory,
-// which is the kind of endpoint that looks fine until a workspace is large.
+// ListRuns lists runs. With session_id or parent_id it lists that session's
+// root runs or that run's children (one chat's worth, filtered in memory).
+// With neither it is the cross-cutting run list: every root run the caller
+// owns, narrowed by the request's filters and paged by keyset.
 func (s *RunService) ListRuns(
 	ctx context.Context,
 	req *connect.Request[reliantv1.ListRunsRequest],
@@ -385,9 +387,147 @@ func (s *RunService) ListRuns(
 		return connect.NewResponse(filterRunsToProto(runs, req.Msg)), nil
 
 	default:
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("one of session_id or parent_id is required"))
+		return s.listAllRuns(ctx, userID, req.Msg)
 	}
+}
+
+const (
+	defaultRunsPageSize = 50
+	maxRunsPageSize     = 200
+)
+
+func (s *RunService) listAllRuns(
+	ctx context.Context,
+	userID string,
+	req *reliantv1.ListRunsRequest,
+) (*connect.Response[reliantv1.ListRunsResponse], error) {
+	limit := int(req.Limit)
+	if limit <= 0 {
+		limit = defaultRunsPageSize
+	}
+	if limit > maxRunsPageSize {
+		limit = maxRunsPageSize
+	}
+
+	filters := db.RunListFilters{
+		UserID:          userID,
+		ProjectID:       req.ProjectId,
+		Workflows:       req.Workflow,
+		TriggerID:       req.TriggerId,
+		LaunchKinds:     req.LaunchKind,
+		Query:           req.Query,
+		IncludeArchived: req.IncludeArchived,
+		Limit:           limit,
+	}
+	for _, st := range req.DisplayStates {
+		if st == reliantv1.RunDisplayState_RUN_DISPLAY_STATE_UNSPECIFIED {
+			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("display_states must not contain UNSPECIFIED"))
+		}
+		filters.DisplayStates = append(filters.DisplayStates, db.RunDisplayState(st))
+	}
+	if req.StartedAfter != nil {
+		t := req.StartedAfter.AsTime()
+		filters.StartedAfter = &t
+	}
+	if req.StartedBefore != nil {
+		t := req.StartedBefore.AsTime()
+		filters.StartedBefore = &t
+	}
+	if req.PageToken != nil && *req.PageToken != "" {
+		cursor, err := decodeRunCursor(*req.PageToken)
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid page_token"))
+		}
+		filters.After = cursor
+	}
+
+	items, hasMore, err := s.database.ListRuns(ctx, filters)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list runs"))
+	}
+
+	resp := &reliantv1.ListRunsResponse{Runs: make([]*reliantv1.Run, 0, len(items))}
+	for _, item := range items {
+		resp.Runs = append(resp.Runs, runItemToProto(item))
+	}
+	if hasMore && len(items) > 0 {
+		last := items[len(items)-1]
+		resp.NextPageToken = encodeRunCursor(db.RunCursor{CreatedAt: last.CreatedAt, ChatID: last.ChatID})
+	}
+	return connect.NewResponse(resp), nil
+}
+
+// LastRunPerWorkflow returns the newest run of each workflow the caller has run.
+func (s *RunService) LastRunPerWorkflow(
+	ctx context.Context,
+	req *connect.Request[reliantv1.LastRunPerWorkflowRequest],
+) (*connect.Response[reliantv1.LastRunPerWorkflowResponse], error) {
+	userID := auth.MustGetUserID(ctx)
+
+	items, err := s.database.LastRunPerWorkflow(ctx, db.RunListFilters{
+		UserID:    userID,
+		ProjectID: req.Msg.ProjectId,
+		Workflows: req.Msg.Workflow,
+	})
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list runs"))
+	}
+	resp := &reliantv1.LastRunPerWorkflowResponse{Runs: make([]*reliantv1.Run, 0, len(items))}
+	for _, item := range items {
+		resp.Runs = append(resp.Runs, runItemToProto(item))
+	}
+	return connect.NewResponse(resp), nil
+}
+
+// runItemToProto converts a run-list row, which carries the chat and trigger
+// columns on top of the workflow row's.
+func runItemToProto(item *db.RunListItem) *reliantv1.Run {
+	out := &reliantv1.Run{
+		Id:           item.RunID,
+		WorkflowName: item.WorkflowName,
+		Thread:       item.RunID,
+		SessionId:    item.ChatID,
+		State:        workflowStateToProto(item.RootStatus.State),
+		StopReason:   workflowStopReasonToProto(item.RootStatus.StopReason),
+		Outcome:      item.Outcome,
+		CreatedAtMs:  item.CreatedAt.UnixMilli(),
+		Title:        item.Title,
+		ProjectId:    item.ProjectID,
+		LaunchKind:   item.LaunchKind,
+		TriggerId:    item.TriggerID,
+		TriggerName:  item.TriggerName,
+		DaemonId:     item.DaemonID,
+		Activity:     reliantv1.ChatActivity(item.Activity),
+		DisplayState: reliantv1.RunDisplayState(item.DisplayState),
+	}
+	if item.CompletedAt != nil {
+		out.CompletedAtMs = item.CompletedAt.UnixMilli()
+	}
+	return out
+}
+
+// The page token is the last row's (created_at, chat id), base64url-encoded.
+// It is opaque to callers; the keyset it encodes is the list's sort key, so a
+// row inserted mid-pagination can neither repeat nor be skipped.
+func encodeRunCursor(c db.RunCursor) string {
+	raw := strconv.FormatInt(c.CreatedAt.UnixMicro(), 10) + "|" + c.ChatID
+	return base64.RawURLEncoding.EncodeToString([]byte(raw))
+}
+
+func decodeRunCursor(token string) (*db.RunCursor, error) {
+	raw, err := base64.RawURLEncoding.DecodeString(token)
+	if err != nil {
+		return nil, err
+	}
+	micros, id, ok := strings.Cut(string(raw), "|")
+	if !ok || id == "" {
+		return nil, fmt.Errorf("malformed cursor")
+	}
+	n, err := strconv.ParseInt(micros, 10, 64)
+	if err != nil {
+		return nil, err
+	}
+	return &db.RunCursor{CreatedAt: time.UnixMicro(n).UTC(), ChatID: id}, nil
 }
 
 // filterRunsToProto applies the state filter and paging, then converts.
@@ -406,11 +546,7 @@ func filterRunsToProto(runs []*core.Workflow, req *reliantv1.ListRunsRequest) *r
 
 	total := int32(len(filtered))
 
-	offset := int(req.Offset)
-	if offset > len(filtered) {
-		offset = len(filtered)
-	}
-	windowed := filtered[offset:]
+	windowed := filtered
 	if req.Limit > 0 && int(req.Limit) < len(windowed) {
 		windowed = windowed[:req.Limit]
 	}
