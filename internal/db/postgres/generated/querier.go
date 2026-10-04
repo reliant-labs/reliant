@@ -88,6 +88,11 @@ type Querier interface {
 	// for different reasons are different statuses, and a swap expecting one must
 	// not win against the other.
 	CompareAndSwapWorkflowStatus(ctx context.Context, arg CompareAndSwapWorkflowStatusParams) (Workflow, error)
+	// Chats the user launched through this kind of event whose ROOT run is still
+	// live: pending (1), active (2), or stopped-because-paused (state 3, stop
+	// reason 3). The inner joins drop events whose chat was deleted or never got a
+	// root workflow, neither of which can be running.
+	CountLiveLaunchedRuns(ctx context.Context, arg CountLiveLaunchedRunsParams) (int64, error)
 	// True total message count for a chat, so a bounded snapshot can report an
 	// honest `total` rather than the length of the window it happened to send.
 	CountMessagesByChat(ctx context.Context, chatID string) (int64, error)
@@ -401,6 +406,9 @@ type Querier interface {
 	GetToolCall(ctx context.Context, id string) (ToolCall, error)
 	GetToolCallResult(ctx context.Context, toolCallID string) (ToolCallResult, error)
 	GetTrigger(ctx context.Context, id string) (Trigger, error)
+	// The event that launched a chat. The oldest wins: a chat is launched once, and
+	// a later row naming it can only be a replay. Served by idx_trigger_events_chat.
+	GetTriggerEventByChat(ctx context.Context, arg GetTriggerEventByChatParams) (TriggerEvent, error)
 	// The chat's launch event: the earliest event that references it. Served by
 	// idx_trigger_events_chat.
 	GetTriggerEventByChatID(ctx context.Context, chatID sql.NullString) (TriggerEvent, error)

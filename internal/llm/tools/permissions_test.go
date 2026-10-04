@@ -186,3 +186,21 @@ func TestMinimumPermissionForTool_SpawnObservabilityNotGated(t *testing.T) {
 	assert.Equal(t, PermissionMutating, MinimumPermissionForTool(ToolSpawnSend))
 	assert.Equal(t, PermissionMutating, MinimumPermissionForTool(ToolSpawnStop))
 }
+
+// start_run, control_run and send_to_run create, stop or steer standing work,
+// so they sit with spawn at orchestrator tier. send_to_run is NOT given
+// spawn_send's base tier: spawn_send is confined to parent<->child, but
+// send_to_run reaches any of the user's runs, including one running at a
+// higher privilege than the sender. list_runs and get_run only read.
+func TestMinimumPermissionForTool_RunManagement(t *testing.T) {
+	t.Parallel()
+	for _, name := range []string{ToolStartRun, ToolControlRun, ToolSendToRun} {
+		assert.Equal(t, PermissionOrchestrator, MinimumPermissionForTool(name), "%s must be orchestrator-tier", name)
+		assert.False(t, PermissionAtLeast(PermissionMutating, MinimumPermissionForTool(name)),
+			"a base-tier agent must not be able to use %s", name)
+		assert.True(t, PermissionAtLeast(PermissionOrchestrator, MinimumPermissionForTool(name)))
+	}
+	for _, name := range []string{ToolListRuns, ToolGetRun} {
+		assert.Equal(t, PermissionMutating, MinimumPermissionForTool(name), "%s only reads and is base tier", name)
+	}
+}

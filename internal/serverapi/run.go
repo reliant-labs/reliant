@@ -17,6 +17,7 @@ import (
 	scenariorunner "github.com/reliant-labs/reliant/internal/workflow/scenario/runner"
 
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
+	"github.com/reliant-labs/reliant/internal/agentruns"
 	"github.com/reliant-labs/reliant/internal/analytics"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/certs"
@@ -28,6 +29,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/drain"
 	grpcserver "github.com/reliant-labs/reliant/internal/grpc"
 	"github.com/reliant-labs/reliant/internal/grpc/services"
+	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/local"
 	"github.com/reliant-labs/reliant/internal/llm/models"
@@ -36,6 +38,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/mcp"
 	"github.com/reliant-labs/reliant/internal/natsutil"
 	"github.com/reliant-labs/reliant/internal/observability"
+	"github.com/reliant-labs/reliant/internal/runs"
 	"github.com/reliant-labs/reliant/internal/streaming"
 	"github.com/reliant-labs/reliant/internal/telemetry"
 	"github.com/reliant-labs/reliant/internal/temporal"
@@ -222,25 +225,9 @@ func Run(ctx context.Context, opts Options) error {
 	}
 	logging.Info("Connected to external Temporal server", "host", opts.TemporalHost, "port", opts.TemporalPort)
 
-	// Tools factory + remote executor
+	// Remote executor (the tools factory is built below, once the daemon
+	// router and streaming hub it depends on exist)
 	mcpManager := mcp.NewManager()
-	toolsFactory := tools.NewToolsFactory(&tools.ToolsOptions{
-		Repo: repo,
-		// Lets spawn_send wake a parent parked on its sub-agents instead of
-		// leaving the message queued until one of them finishes.
-		AgentMessageNotifier: temporal.NewAgentMessageNotifier(temporalClient, workersetup.ChatWorkflowLookup(repo)),
-		// Lets spawn_stop reach the root workflow running a sub-agent. Shares
-		// the one implementation the UI's cancel path uses.
-		SpawnStopper: temporal.NewSpawnStopper(temporalClient, workersetup.ChatWorkflowLookup(repo), repo),
-		// Binds generate_image to the driver layer's image-model selection.
-		// Injected rather than imported: internal/llm/drivers already imports
-		// internal/llm/tools, so the tool cannot reach drivers directly.
-		ImageGeneratorResolver: resolveImageGenerator,
-		// run_scenario / write_scenario execute on the real runtime via the
-		// scenario runner; injected because the runner imports this package's
-		// dependents.
-		ScenarioRunner: scenariorunner.RunScenario,
-	})
 	remoteExecutor := toolexec.NewRemoteExecutor(nil)
 
 	// Streaming hub
@@ -352,6 +339,36 @@ func Run(ctx context.Context, opts Options) error {
 	remoteExecutor.SetDaemonRouter(daemonRouter)
 	logging.Info("Using NATS daemon router — daemon services run in separate daemon-gateway process")
 
+	// The run-management tools act as the calling chat's owner through the
+	// same launcher and run service the gRPC handlers use.
+	runLifecycle := runs.NewService(repo, temporalClient, pauseService)
+	runLauncher := launch.NewLauncher(repo, temporalClient, runLifecycle, v2workflow.SharedTaskQueue, daemonRouter)
+	agentRuns := agentruns.New(runLauncher, services.NewRunService(repo,
+		services.NewChatService(repo, temporalClient, pauseService, v2workflow.SharedTaskQueue, streamingHub, daemonRouter)))
+
+	// Tools factory
+	toolsFactory := tools.NewToolsFactory(&tools.ToolsOptions{
+		Repo: repo,
+		// Lets spawn_send wake a parent parked on its sub-agents instead of
+		// leaving the message queued until one of them finishes.
+		AgentMessageNotifier: temporal.NewAgentMessageNotifier(temporalClient, workersetup.ChatWorkflowLookup(repo)),
+		// Lets spawn_stop reach the root workflow running a sub-agent. Shares
+		// the one implementation the UI's cancel path uses.
+		SpawnStopper: temporal.NewSpawnStopper(temporalClient, workersetup.ChatWorkflowLookup(repo), repo),
+		// Binds generate_image to the driver layer's image-model selection.
+		// Injected rather than imported: internal/llm/drivers already imports
+		// internal/llm/tools, so the tool cannot reach drivers directly.
+		ImageGeneratorResolver: resolveImageGenerator,
+		// run_scenario / write_scenario execute on the real runtime via the
+		// scenario runner; injected because the runner imports this package's
+		// dependents.
+		ScenarioRunner: scenariorunner.RunScenario,
+		// start_run / control_run / send_to_run, for runs whose tools execute
+		// in this process.
+		RunStarter:   agentRuns,
+		RunLifecycle: agentRuns,
+		RunMessenger: agentRuns,
+	})
 	// Wire server-side tool execution
 	serverExecutor := toolexec.NewLocalToolExecutor(toolsFactory)
 	serverExecutor.SetMCPContextBinder(toolexec.NewLocalMCPContextBinder(mcpManager))

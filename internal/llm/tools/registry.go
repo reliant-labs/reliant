@@ -68,6 +68,13 @@ const (
 	ToolSpawnSend   = "spawn_send"
 	ToolSpawnStop   = "spawn_stop"
 
+	// Run-management tools: start and manage OTHER top-level runs the user owns
+	ToolStartRun   = "start_run"
+	ToolListRuns   = "list_runs"
+	ToolGetRun     = "get_run"
+	ToolControlRun = "control_run"
+	ToolSendToRun  = "send_to_run"
+
 	// Worktree tools
 	ToolWorktree = "worktree"
 
@@ -176,6 +183,7 @@ const (
 	TagWorkflow  ToolTag = "workflow"  // Workflow builder tools
 	TagMCP       ToolTag = "mcp"       // All MCP tools
 	TagMedia     ToolTag = "media"     // Media generation (images, and later audio/video)
+	TagRuns      ToolTag = "runs"      // Start and manage other top-level runs the user owns
 
 	// Curated — a product's editorial bundles. Namespaced so no bundle can
 	// masquerade as a universal default. Named explicitly or not granted.
@@ -204,6 +212,7 @@ var TagDescriptions = map[ToolTag]string{
 	TagWorkflow:  "Workflow builder tools",
 	TagMCP:       "Every tool from the chat's connected MCP servers",
 	TagMedia:     "Media generation (images, and later audio/video)",
+	TagRuns:      "Start, inspect, control and message other top-level runs the user owns",
 
 	TagCodingDefault: "The coding agent's starting bundle — one product's editorial grouping, granted only when named",
 	TagCodingPlan:    "Tools the coding agent's plan mode starts with",
@@ -577,6 +586,17 @@ func GetToolRegistry() []ToolDefinition {
 		{ToolSpawnStatus, (*ToolsFactory).SpawnStatus, []ToolTag{TagReadOnly}, ToolRunsOnServer},
 		{ToolSpawnSend, (*ToolsFactory).SpawnSend, []ToolTag{}, ToolRunsOnServer},
 		{ToolSpawnStop, (*ToolsFactory).SpawnStop, []ToolTag{}, ToolRunsOnServer},
+
+		// Run-management tools. These act on detached, top-level runs (chats)
+		// the calling chat's user owns, not on the caller's own sub-agents —
+		// that is spawn_*. They are in no curated bundle: a workflow grants
+		// them by naming tag:runs or the tool, and the orchestrator-tier ones
+		// are further gated in MinimumPermissionForTool.
+		{ToolStartRun, (*ToolsFactory).StartRun, []ToolTag{TagRuns}, ToolRunsOnServer},
+		{ToolListRuns, (*ToolsFactory).ListRuns, []ToolTag{TagRuns, TagReadOnly}, ToolRunsOnServer},
+		{ToolGetRun, (*ToolsFactory).GetRun, []ToolTag{TagRuns, TagReadOnly}, ToolRunsOnServer},
+		{ToolControlRun, (*ToolsFactory).ControlRun, []ToolTag{TagRuns}, ToolRunsOnServer},
+		{ToolSendToRun, (*ToolsFactory).SendToRun, []ToolTag{TagRuns}, ToolRunsOnServer},
 
 		// Analysis tools - conditionally add project analyzer
 		{ToolSourcegraph, (*ToolsFactory).Sourcegraph, []ToolTag{TagAnalysis, TagReadOnly, TagCodingPlan}, ToolRunsAnywhere},

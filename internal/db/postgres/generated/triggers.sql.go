@@ -12,6 +12,32 @@ import (
 	"time"
 )
 
+const countLiveLaunchedRuns = `-- name: CountLiveLaunchedRuns :one
+SELECT count(*) FROM trigger_events e
+JOIN chats c ON c.id = e.chat_id
+JOIN workflows w ON w.id = c.workflow_id
+WHERE e.user_id = $1
+  AND e.kind = $2
+  AND e.outcome = 'launched'
+  AND (w.state IN (1, 2) OR (w.state = 3 AND w.stop_reason = 3))
+`
+
+type CountLiveLaunchedRunsParams struct {
+	UserID string `json:"user_id"`
+	Kind   string `json:"kind"`
+}
+
+// Chats the user launched through this kind of event whose ROOT run is still
+// live: pending (1), active (2), or stopped-because-paused (state 3, stop
+// reason 3). The inner joins drop events whose chat was deleted or never got a
+// root workflow, neither of which can be running.
+func (q *Queries) CountLiveLaunchedRuns(ctx context.Context, arg CountLiveLaunchedRunsParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countLiveLaunchedRuns, arg.UserID, arg.Kind)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createTrigger = `-- name: CreateTrigger :exec
 INSERT INTO triggers (
     id, user_id, project_id, worktree_id, name, kind, enabled,
@@ -177,6 +203,39 @@ func (q *Queries) GetTrigger(ctx context.Context, id string) (Trigger, error) {
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DaemonID,
+	)
+	return i, err
+}
+
+const getTriggerEventByChat = `-- name: GetTriggerEventByChat :one
+SELECT id, trigger_id, user_id, kind, dedupe_key, occurred_at, payload, outcome, outcome_detail, chat_id, created_at FROM trigger_events
+WHERE kind = $1 AND chat_id = $2
+ORDER BY occurred_at, id
+LIMIT 1
+`
+
+type GetTriggerEventByChatParams struct {
+	Kind   string         `json:"kind"`
+	ChatID sql.NullString `json:"chat_id"`
+}
+
+// The event that launched a chat. The oldest wins: a chat is launched once, and
+// a later row naming it can only be a replay. Served by idx_trigger_events_chat.
+func (q *Queries) GetTriggerEventByChat(ctx context.Context, arg GetTriggerEventByChatParams) (TriggerEvent, error) {
+	row := q.db.QueryRowContext(ctx, getTriggerEventByChat, arg.Kind, arg.ChatID)
+	var i TriggerEvent
+	err := row.Scan(
+		&i.ID,
+		&i.TriggerID,
+		&i.UserID,
+		&i.Kind,
+		&i.DedupeKey,
+		&i.OccurredAt,
+		&i.Payload,
+		&i.Outcome,
+		&i.OutcomeDetail,
+		&i.ChatID,
+		&i.CreatedAt,
 	)
 	return i, err
 }

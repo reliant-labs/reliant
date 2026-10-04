@@ -55,6 +55,14 @@ var generatedToolParams = map[string]ToolParams{
 		},
 		Unbindable: map[string]string{},
 	},
+	"control_run": {
+		Bindable: map[string]struct{}{
+			"action": {},
+		},
+		Unbindable: map[string]string{
+			"run_id": "identifies one run, which is chosen per call and cannot be known in advance",
+		},
+	},
 	"create_plan": {
 		Bindable: map[string]struct{}{
 			"complexity":  {},
@@ -168,6 +176,12 @@ var generatedToolParams = map[string]ToolParams{
 		},
 		Unbindable: map[string]string{},
 	},
+	"get_run": {
+		Bindable: map[string]struct{}{},
+		Unbindable: map[string]string{
+			"run_id": "identifies one run, which is chosen per call and cannot be known in advance",
+		},
+	},
 	"get_schema": {
 		Bindable: map[string]struct{}{
 			"name": {},
@@ -190,6 +204,14 @@ var generatedToolParams = map[string]ToolParams{
 	},
 	"list_ready_tasks": {
 		Bindable:   map[string]struct{}{},
+		Unbindable: map[string]string{},
+	},
+	"list_runs": {
+		Bindable: map[string]struct{}{
+			"limit":      {},
+			"project_id": {},
+			"state":      {},
+		},
 		Unbindable: map[string]string{},
 	},
 	"list_scenarios": {
@@ -268,6 +290,14 @@ var generatedToolParams = map[string]ToolParams{
 		Unbindable: map[string]string{
 			"attachment_id": "names the one attachment to save, which is chosen per call and cannot be known in advance",
 			"save_to":       "every save would target the same file, so each call destroys the last one's output",
+		},
+	},
+	"send_to_run": {
+		Bindable: map[string]struct{}{
+			"message": {},
+		},
+		Unbindable: map[string]string{
+			"run_id": "identifies one run, which is chosen per call and cannot be known in advance",
 		},
 	},
 	"shell": {
@@ -368,6 +398,17 @@ var generatedToolParams = map[string]ToolParams{
 		Unbindable: map[string]string{
 			"agent_id": "identifies one running sub-agent, which is chosen per call",
 		},
+	},
+	"start_run": {
+		Bindable: map[string]struct{}{
+			"inputs":     {},
+			"message":    {},
+			"presets":    {},
+			"project_id": {},
+			"title":      {},
+			"workflow":   {},
+		},
+		Unbindable: map[string]string{},
 	},
 	"update_plan": {
 		Bindable: map[string]struct{}{

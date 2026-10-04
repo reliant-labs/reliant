@@ -16,6 +16,7 @@ import (
 	"go.temporal.io/sdk/client"
 
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
+	"github.com/reliant-labs/reliant/internal/agentruns"
 	"github.com/reliant-labs/reliant/internal/analytics"
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/configadapter"
@@ -24,6 +25,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/debugserver"
 	"github.com/reliant-labs/reliant/internal/drain"
+	"github.com/reliant-labs/reliant/internal/grpc/services"
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/local"
@@ -179,24 +181,6 @@ func Run(ctx context.Context, opts Options) error {
 	// -----------------------------------------------------------------
 	// 6. Tools factory + remote executor
 	// -----------------------------------------------------------------
-	toolsFactory := tools.NewToolsFactory(&tools.ToolsOptions{
-		Repo: repo,
-		// The worker is where spawn_send actually executes (inside the
-		// ExecuteTools activity), so this is the wiring that matters most for
-		// agent-to-agent delivery.
-		AgentMessageNotifier: temporal.NewAgentMessageNotifier(temporalClient, workersetup.ChatWorkflowLookup(repo)),
-		// spawn_stop executes here too, and the stop is NOT best-effort: with
-		// no stopper the tool reports that it cannot stop anything rather than
-		// claiming a cancellation that never left the process.
-		SpawnStopper: temporal.NewSpawnStopper(temporalClient, workersetup.ChatWorkflowLookup(repo), repo),
-		// generate_image executes here, inside the ExecuteTools activity, so
-		// this is the wiring that actually decides whether the tool works.
-		ImageGeneratorResolver: resolveImageGenerator,
-		// run_scenario / write_scenario execute on the real runtime via the
-		// scenario runner; injected because the runner imports this package's
-		// dependents.
-		ScenarioRunner: scenariorunner.RunScenario,
-	})
 	remoteExecutor := toolexec.NewRemoteExecutor(nil)
 
 	// Stored config provider
@@ -278,6 +262,39 @@ func Run(ctx context.Context, opts Options) error {
 	natsChecker := nc.IsConnected
 	logging.Info("Tool execution routing via NATS")
 
+	// The run-management tools (start_run, control_run, send_to_run) act as the
+	// calling chat's owner through the same launcher and run service the
+	// api-server uses. They are built here, after the daemon router and
+	// streaming hub they depend on, rather than with the other tool options.
+	pauseService := v2workflow.NewPauseService(temporalClient, repo)
+	runLifecycle := runs.NewService(repo, temporalClient, pauseService)
+	runLauncher := launch.NewLauncher(repo, temporalClient, runLifecycle, v2workflow.SharedTaskQueue, remoteExecutor.DaemonRouter())
+	agentRuns := agentruns.New(runLauncher, services.NewRunService(repo,
+		services.NewChatService(repo, temporalClient, pauseService, v2workflow.SharedTaskQueue, streamingHub, router)))
+
+	toolsFactory := tools.NewToolsFactory(&tools.ToolsOptions{
+		Repo: repo,
+		// The worker is where spawn_send actually executes (inside the
+		// ExecuteTools activity), so this is the wiring that matters most for
+		// agent-to-agent delivery.
+		AgentMessageNotifier: temporal.NewAgentMessageNotifier(temporalClient, workersetup.ChatWorkflowLookup(repo)),
+		// spawn_stop executes here too, and the stop is NOT best-effort: with
+		// no stopper the tool reports that it cannot stop anything rather than
+		// claiming a cancellation that never left the process.
+		SpawnStopper: temporal.NewSpawnStopper(temporalClient, workersetup.ChatWorkflowLookup(repo), repo),
+		// generate_image executes here, inside the ExecuteTools activity, so
+		// this is the wiring that actually decides whether the tool works.
+		ImageGeneratorResolver: resolveImageGenerator,
+		// run_scenario / write_scenario execute on the real runtime via the
+		// scenario runner; injected because the runner imports this package's
+		// dependents.
+		ScenarioRunner: scenariorunner.RunScenario,
+		// start_run / control_run / send_to_run execute here, inside the
+		// ExecuteTools activity.
+		RunStarter:   agentRuns,
+		RunLifecycle: agentRuns,
+		RunMessenger: agentRuns,
+	})
 	// Wire server-side tool execution so ToolRunsOnServer / ToolRunsAnywhere
 	// tools execute in the worker process without a daemon round-trip.
 	serverExecutor := toolexec.NewLocalToolExecutor(toolsFactory)
@@ -296,13 +313,7 @@ func Run(ctx context.Context, opts Options) error {
 	// router, which the worker does have — but triggers never ask for a
 	// greenfield probe, so it is passed for completeness rather than for the
 	// schedule path.
-	triggerLauncher := launch.NewLauncher(
-		repo,
-		temporalClient,
-		runs.NewService(repo, temporalClient, v2workflow.NewPauseService(temporalClient, repo)),
-		v2workflow.SharedTaskQueue,
-		remoteExecutor.DaemonRouter(),
-	)
+	triggerLauncher := runLauncher
 
 	handle, _, err := workersetup.StartWorker(&workersetup.Config{
 		TemporalClient:  temporalClient,

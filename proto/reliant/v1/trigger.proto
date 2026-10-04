@@ -68,6 +68,10 @@ enum TriggerEventKind {
   // SCHEDULE is a scheduled fire. Its dedupe key is the Temporal
   // fire-workflow id, which is unique per scheduled time.
   TRIGGER_EVENT_KIND_SCHEDULE = 2;
+  // AGENT_START_RUN is a top-level run an agent started with its start_run
+  // tool. Its dedupe key is "<calling chat id>:<tool call id>" and its payload
+  // carries parent_chat_id.
+  TRIGGER_EVENT_KIND_AGENT_START_RUN = 3;
 }
 
 // TriggerEventOutcome records what a firing did.

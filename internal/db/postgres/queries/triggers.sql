@@ -67,6 +67,27 @@ WHERE chat_id = $1
 ORDER BY created_at ASC, id ASC
 LIMIT 1;
 
+-- name: GetTriggerEventByChat :one
+-- The event that launched a chat. The oldest wins: a chat is launched once, and
+-- a later row naming it can only be a replay. Served by idx_trigger_events_chat.
+SELECT * FROM trigger_events
+WHERE kind = $1 AND chat_id = $2
+ORDER BY occurred_at, id
+LIMIT 1;
+
+-- name: CountLiveLaunchedRuns :one
+-- Chats the user launched through this kind of event whose ROOT run is still
+-- live: pending (1), active (2), or stopped-because-paused (state 3, stop
+-- reason 3). The inner joins drop events whose chat was deleted or never got a
+-- root workflow, neither of which can be running.
+SELECT count(*) FROM trigger_events e
+JOIN chats c ON c.id = e.chat_id
+JOIN workflows w ON w.id = c.workflow_id
+WHERE e.user_id = sqlc.arg('user_id')
+  AND e.kind = sqlc.arg('kind')
+  AND e.outcome = 'launched'
+  AND (w.state IN (1, 2) OR (w.state = 3 AND w.stop_reason = 3));
+
 -- name: UpdateTriggerEventOutcome :execrows
 UPDATE trigger_events SET
     outcome = $1,

@@ -27,6 +27,16 @@ type ToolsOptions struct {
 	// connection) — unlike the doorbell above there is no degraded fallback,
 	// because an undelivered stop stops nothing.
 	SpawnStopper SpawnStopper
+	// RunStarter launches a new top-level run for start_run. Optional: nil
+	// means start_run reports it is unavailable here (the daemon runtime has
+	// no Temporal connection and no launcher).
+	RunStarter RunStarter
+	// RunLifecycle pauses, resumes and cancels an existing top-level run for
+	// control_run. Optional, same as above.
+	RunLifecycle RunLifecycle
+	// RunMessenger delivers a message to a live top-level run for
+	// send_to_run. Optional, same as above.
+	RunMessenger RunMessenger
 	// ShellPlatform is the shell family of the DAEMON that will execute shell
 	// commands, which is frequently not this process's own platform: the
 	// server and worker run Linux while the daemon may be Windows. The shell
@@ -297,6 +307,26 @@ func (f *ToolsFactory) SpawnSend() Tool {
 
 func (f *ToolsFactory) SpawnStop() Tool {
 	return NewSpawnStopTool(f.opts.Repo, f.opts.SpawnStopper)
+}
+
+func (f *ToolsFactory) StartRun() Tool {
+	return NewStartRunTool(f.opts.Repo, f.opts.RunStarter)
+}
+
+func (f *ToolsFactory) ListRuns() Tool {
+	return NewListRunsTool(f.opts.Repo)
+}
+
+func (f *ToolsFactory) GetRun() Tool {
+	return NewGetRunTool(f.opts.Repo)
+}
+
+func (f *ToolsFactory) ControlRun() Tool {
+	return NewControlRunTool(f.opts.Repo, f.opts.RunLifecycle)
+}
+
+func (f *ToolsFactory) SendToRun() Tool {
+	return NewSendToRunTool(f.opts.Repo, f.opts.RunMessenger)
 }
 
 // Analysis tools

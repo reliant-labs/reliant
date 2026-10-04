@@ -36,6 +36,11 @@ const (
 	// TriggerEventKindSchedule is a scheduled fire. Its dedupe key is the
 	// Temporal fire-workflow id, unique per scheduled time.
 	TriggerEventKindSchedule TriggerEventKind = "schedule"
+	// TriggerEventKindAgentStartRun is a top-level run started by an agent's
+	// start_run tool. Its dedupe key is "<calling chat id>:<tool call id>",
+	// and its payload carries parent_chat_id — the lineage the fork-bomb
+	// guard walks.
+	TriggerEventKindAgentStartRun TriggerEventKind = "agent.start_run"
 )
 
 // TriggerEventOutcome records what a firing did.
@@ -145,6 +150,14 @@ type TriggerStore interface {
 	// GetTriggerEventByChatID returns the event that launched the chat, or
 	// ErrTriggerEventNotFound for a chat with none (it predates trigger events).
 	GetTriggerEventByChatID(ctx context.Context, chatID string) (*TriggerEvent, error)
+	// GetTriggerEventByChat returns the event of the given kind that launched
+	// chatID, or ErrTriggerEventNotFound when that chat was not launched by
+	// that kind of event.
+	GetTriggerEventByChat(ctx context.Context, kind TriggerEventKind, chatID string) (*TriggerEvent, error)
+	// CountLiveLaunchedRuns counts the user's chats launched by an event of
+	// the given kind whose root run is still live (pending, active or
+	// paused). A chat deleted since its launch is not counted.
+	CountLiveLaunchedRuns(ctx context.Context, userID string, kind TriggerEventKind) (int, error)
 	// UpdateTriggerEventOutcome returns ErrTriggerEventNotFound when the id
 	// does not resolve.
 	UpdateTriggerEventOutcome(ctx context.Context, id string, outcome TriggerEventOutcome, detail string, chatID *string) error

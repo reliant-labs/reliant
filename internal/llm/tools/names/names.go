@@ -57,6 +57,13 @@ const (
 	ToolSpawnSend   = "spawn_send"
 	ToolSpawnStop   = "spawn_stop"
 
+	// Run-management tools: start and manage OTHER top-level runs the user owns
+	ToolStartRun   = "start_run"
+	ToolListRuns   = "list_runs"
+	ToolGetRun     = "get_run"
+	ToolControlRun = "control_run"
+	ToolSendToRun  = "send_to_run"
+
 	// Worktree tools
 	ToolWorktree = "worktree"
 
@@ -115,6 +122,7 @@ var AllToolNames = []string{
 	ToolStateTransition,
 	ToolAgent,
 	ToolSpawnStatus, ToolSpawnSend, ToolSpawnStop,
+	ToolStartRun, ToolListRuns, ToolGetRun, ToolControlRun, ToolSendToRun,
 	ToolWorktree,
 	ToolSkill,
 	ToolInstallSkill,
@@ -150,7 +158,7 @@ var AllToolNames = []string{
 // comment in registry.go.
 var AllToolTags = []string{
 	"readonly", "file", "search", "execution", "shell", "web",
-	"planning", "analysis", "workflow", "mcp", "media",
+	"planning", "analysis", "workflow", "mcp", "media", "runs",
 	"coding:default", "coding:plan",
 }
 
