@@ -130,7 +130,7 @@ function chatOf(proto: ReturnType<typeof protoChat>) {
   return chat;
 }
 
-function scheduleLaunch() {
+function scheduleLaunch(recordedPrompt?: string) {
   return create(GetLaunchEventResponseSchema, {
     event: create(TriggerEventSchema, {
       kind: TriggerEventKind.SCHEDULE,
@@ -145,6 +145,7 @@ function scheduleLaunch() {
           workflow: "triage",
           presets: { "": "careful" },
           params: { depth: 4, label: "bug", review: { strictness: "high" } },
+          ...(recordedPrompt === undefined ? {} : { prompt: recordedPrompt }),
         },
       },
     }),
@@ -262,6 +263,17 @@ describe("run detail: launch event", () => {
     expect(screen.getByTestId("run-started-by")).toHaveTextContent(/^Started by an agent$/);
     expect(rpc.getChat).toHaveBeenCalledWith(expect.objectContaining({ chatId: "someone-elses-chat" }));
     expect(screen.queryByRole("link", { name: /another run/ })).not.toBeInTheDocument();
+  });
+
+  it("Re-run prefers the prompt the launch recorded over the transcript's first message", async () => {
+    const user = userEvent.setup();
+    useChat(protoChat());
+    rpc.getLaunchEvent.mockResolvedValue(scheduleLaunch("The recorded prompt"));
+    renderRunsAt(<RunDetail chatId="chat-1" />, "/runs/chat-1");
+
+    await user.click(await screen.findByRole("button", { name: "Re-run (current definition)" }));
+    await screen.findByRole("form", { name: "Re-run (current definition)" });
+    expect(screen.getByLabelText("Message")).toHaveValue("The recorded prompt");
   });
 
   it("Re-run (current definition) prefills the Run… dialog and starts an attended chat with the recorded inputs", async () => {

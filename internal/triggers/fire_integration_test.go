@@ -289,3 +289,29 @@ func TestFireRecordsAFailedEventForUnrepresentableParams(t *testing.T) {
 	assert.Equal(t, core.TriggerEventFailed, events[0].Outcome)
 	assert.Contains(t, events[0].OutcomeDetail, "params")
 }
+
+// A retried fire keeps the first attempt's fired_at: the event row is written
+// once, by the attempt that launched, and the retry only finishes the start.
+func TestFireRetryKeepsTheFirstFiredAt(t *testing.T) {
+	f := newFireFixture(t, nil)
+	ctx := context.Background()
+	req := f.fireAt(2)
+
+	first := req.ScheduledAt.Add(4 * time.Minute)
+	f.firer.now = func() time.Time { return first }
+	f.starter.setDown(true)
+	_, err := f.firer.Fire(ctx, req)
+	require.Error(t, err)
+
+	f.starter.setDown(false)
+	f.firer.now = func() time.Time { return first.Add(time.Hour) }
+	out, err := f.firer.Fire(ctx, req)
+	require.NoError(t, err)
+	require.Equal(t, string(core.TriggerEventLaunched), out.Outcome)
+
+	ev, err := f.repo.GetTriggerEventByDedupe(ctx, core.TriggerEventKindSchedule, req.FireWorkflowID)
+	require.NoError(t, err)
+	assert.Equal(t, "2026-01-02T09:04:00Z", ev.Payload["fired_at"])
+	start, _ := ev.Payload["start"].(map[string]any)
+	assert.NotEmpty(t, start["prompt"], "a schedule fire records its prompt too")
+}

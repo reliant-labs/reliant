@@ -199,6 +199,8 @@ export interface LaunchStart {
   presets: Record<string, string>;
   /** Explicit input values, nested by group. */
   params: Record<string, unknown>;
+  /** The seed prompt, exactly as the run started; absent on runs recorded before it was kept. */
+  prompt?: string;
 }
 
 /**
@@ -217,6 +219,8 @@ export interface LaunchEvent {
   start?: LaunchStart;
   /** RFC3339 UTC slot of a scheduled fire. */
   scheduledFor?: string;
+  /** RFC3339 UTC time the fire actually ran; absent on events recorded before it was kept. */
+  firedAt?: string;
   /** The automation's name when it fired. */
   triggerName?: string;
   /** A "Run now" fire of a schedule. */
@@ -260,9 +264,11 @@ export function launchEventFromProto(event: ProtoTriggerEvent): LaunchEvent {
           workflow: typeof start.workflow === "string" ? start.workflow : "",
           presets: stringRecord(start.presets),
           params: isRecord(start.params) ? start.params : {},
+          prompt: optionalString(start.prompt),
         }
       : undefined,
     scheduledFor: optionalString(payload.scheduled_for),
+    firedAt: optionalString(payload.fired_at),
     triggerName: optionalString(payload.trigger_name),
     manual: payload.manual === true,
     parentChatId: optionalString(payload.parent_chat_id),

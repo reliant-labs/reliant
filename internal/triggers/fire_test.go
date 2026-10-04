@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/temporal"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -511,4 +513,23 @@ func TestFireFailsNonRetryablyWhenTheTriggersDaemonIsGone(t *testing.T) {
 	if !strings.Contains(events[0].OutcomeDetail, "trigger's daemon no longer exists; edit the trigger to choose another") {
 		t.Errorf("OutcomeDetail = %q", events[0].OutcomeDetail)
 	}
+}
+
+func TestFireRecordsWhenTheFireActuallyRan(t *testing.T) {
+	repo := newFakeRepo()
+	trigger := testTrigger(t, nil)
+	repo.triggers[trigger.ID] = trigger
+	launcher := &fakeLauncher{}
+
+	req := fireReq(trigger.ID)
+	late := req.ScheduledAt.Add(4 * time.Minute)
+	firer := NewFirer(repo, launcher)
+	firer.now = func() time.Time { return late }
+	_, err := firer.Fire(context.Background(), req)
+	require.NoError(t, err)
+
+	ev := launcher.snapshot()[0].Event
+	assert.Equal(t, "2026-01-02T09:04:00Z", ev.Payload["fired_at"])
+	assert.Equal(t, "2026-01-02T09:00:00Z", ev.Payload["scheduled_for"])
+	assert.True(t, ev.OccurredAt.Equal(req.ScheduledAt), "OccurredAt must stay the scheduled time")
 }
