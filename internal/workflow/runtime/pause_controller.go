@@ -51,6 +51,13 @@ type PauseController struct {
 	//
 	// nil when not wired (tests, non-spawn executors).
 	Cancelled func() bool
+
+	// ResetCancelled clears the thread-keyed cancellation flag. A resumption
+	// of an agent reuses the agent's thread id, so a stop aimed at an earlier
+	// run of that thread must not cancel the new one. The tool-call-keyed
+	// flag is left alone: it names exactly one run and is never reused.
+	// nil when not wired.
+	ResetCancelled func()
 }
 
 // IsCancelled reports whether this thread has been cancelled by the user.
