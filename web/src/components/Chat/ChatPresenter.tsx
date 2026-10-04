@@ -37,6 +37,8 @@ import { useCapability } from "../../lib/surfaceContext";
 import { useThreadMessages } from "../../hooks/message-queries";
 import { useChat } from "../../hooks/chat-queries";
 import { useQueuedAgentMessages } from "../../hooks/queued-agent-messages";
+import { isUnadoptedAutomation } from "../../lib/sidebarChatList";
+import { TakeOverRunBar, useAdoptOnSend } from "./TakeOverRunBar";
 
 interface ChatPresenterProps {
   // Message data
@@ -375,6 +377,13 @@ export const ChatPresenter = memo(function ChatPresenter({
     },
     [onSendMessage, selectedThreadId]
   );
+  // Replying in an automation run takes it over (§6.3). The composer starts
+  // collapsed to a bar that says so; expanding it is per chat, so opening the
+  // next run starts collapsed again.
+  const handleSend = useAdoptOnSend(chatForQueue, handleSendWithThread);
+  const [takeOverExpandedFor, setTakeOverExpandedFor] = useState<string | null>(null);
+  const showTakeOverBar =
+    !!chatForQueue && chatForQueue.id === chatId && isUnadoptedAutomation(chatForQueue) && takeOverExpandedFor !== chatId;
 
   // Scroll state bridge: whether the transcript is at the bottom (drives the
   // scroll-to-bottom button), and the timeline's "jump to bottom and resume
@@ -614,12 +623,21 @@ export const ChatPresenter = memo(function ChatPresenter({
         />
 
         {/* Input Area - Collapsible when not focused, hidden when workflow viewer is expanded in inline mode */}
-        {!(isWorkflowViewerExpanded && workflowViewerMode === 'inline') && isFocused ? (
+        {!(isWorkflowViewerExpanded && workflowViewerMode === 'inline') && isFocused && showTakeOverBar && chatForQueue ? (
+          <TakeOverRunBar
+            chat={chatForQueue}
+            onReply={() => {
+              setTakeOverExpandedFor(chatId);
+              // The composer mounts on this render; focus it on the next frame.
+              requestAnimationFrame(() => chatInputRef.current?.focus());
+            }}
+          />
+        ) : !(isWorkflowViewerExpanded && workflowViewerMode === 'inline') && isFocused ? (
           <div className="flex-shrink-0">
             <ChatInputWrapper
               ref={chatInputRef}
               onScrollToBottom={scrollToBottom}
-              onSend={handleSendWithThread}
+              onSend={handleSend}
               onStop={onStopStreaming}
               disabled={false}
               worktreeId={worktreeId ?? undefined}

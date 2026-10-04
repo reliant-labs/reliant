@@ -1886,8 +1886,8 @@ function App() {
                 onOpenAutomations={() => {
                   navigate({ to: '/automations' });
                 }}
-                onOpenRuns={() => {
-                  navigate({ to: '/runs' });
+                onOpenRuns={(search) => {
+                  navigate({ to: '/runs', search: search ?? {} });
                 }}
                 onOpenChatSearch={() => setShowChatSearch(true)}
                 onNavigateToSettings={() => {
@@ -1922,8 +1922,8 @@ function App() {
                   onOpenAutomations={() => {
                     navigate({ to: '/automations' });
                   }}
-                  onOpenRuns={() => {
-                    navigate({ to: '/runs' });
+                  onOpenRuns={(search) => {
+                    navigate({ to: '/runs', search: search ?? {} });
                   }}
                   onOpenChatSearch={() => setShowChatSearch(true)}
                   onNavigateToSettings={() => {

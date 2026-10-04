@@ -37,6 +37,22 @@ export function useTriggers(projectId?: string) {
   });
 }
 
+/**
+ * An automation's name by id, for labels outside the Automations area (the
+ * sidebar's origin glyph). Shares useTriggers' every-project cache entry but
+ * never polls on its own: a name is not worth a request a minute from every
+ * sidebar row. Undefined while loading, or when the automation was deleted.
+ */
+export function useTriggerName(triggerId: string | undefined): string | undefined {
+  const { data } = useQuery({
+    queryKey: triggerKeys.list(undefined),
+    queryFn: () => triggerGrpc.list(undefined),
+    enabled: !!triggerId,
+    staleTime: 5 * 60_000,
+  });
+  return triggerId ? data?.find((trigger) => trigger.id === triggerId)?.name : undefined;
+}
+
 export function useTrigger(id?: string) {
   return useQuery({
     queryKey: triggerKeys.detail(id ?? ""),

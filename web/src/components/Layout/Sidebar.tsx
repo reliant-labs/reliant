@@ -41,7 +41,14 @@ import {
   Activity,
 } from "lucide-react";
 import { useChatStore } from "../../store/chatStore";
-import { useChatList, useArchivedChats, useDeleteChat, useRenameChat, useUnarchiveChat } from "../../hooks/chat-queries";
+import { useChat, useChatList, useArchivedChats, useDeleteChat, useRenameChat, useUnarchiveChat } from "../../hooks/chat-queries";
+import { useAdoptRun, useUnadoptRun } from "../../hooks/run-queries";
+import { useTriggerName } from "../../hooks/trigger-queries";
+import { isAdoptedAutomation, isAutomationLaunch, withOpenChatPinned } from "../../lib/sidebarChatList";
+import { useSidebarPinStore } from "../../store/sidebarPinStore";
+import { LaunchKindIcon } from "../runs/LaunchKindIcon";
+import { AutomationActivityPill } from "./AutomationActivityPill";
+import type { RunsSearch } from "../../routeSchemas";
 import { isForgeUIEnabled } from "../../lib/forgeFeature";
 import { useMarkUnread } from "../../hooks/message-queries";
 import { useChatNavigationStore } from "../../store/chatNavigationStore";
@@ -62,7 +69,7 @@ import {
 import { sortChats, compareChatGroups } from "../../lib/chatListOrder";
 import { Dropdown } from "../ui/Dropdown";
 import { RunStatusDot } from "../ui/RunStatusIndicator";
-import { runStatusFromActivity } from "../../lib/runStatus";
+import { launchKindDisplay, runStatusFromActivity } from "../../lib/runStatus";
 import {
   useActivityStore,
   activityToDotState,
@@ -118,10 +125,38 @@ interface SidebarProps {
   onNavigateToProjectPicker?: () => void;
   onOpenWorkflows?: () => void;
   onOpenAutomations?: () => void;
-  onOpenRuns?: () => void;
+  /** Open Runs; the footer pill passes filters (live, needs you). */
+  onOpenRuns?: (search?: RunsSearch) => void;
   onOpenChatSearch?: () => void;
   onNavigateToSettings?: () => void;
   onOpenForge?: () => void;
+}
+
+/**
+ * The small launch-kind icon before an automation row's title (§6.3): this
+ * conversation was started by a schedule or an agent, not by you. Adopted
+ * runs carry it permanently; a run listed only because it is open carries it
+ * too, so the row says why it is there.
+ */
+function AutomationOriginGlyph({ chat }: { chat: Chat }) {
+  const triggerName = useTriggerName(chat.triggerId);
+  const launch = launchKindDisplay(chat.launchKind, { triggerName });
+  const label = isAdoptedAutomation(chat)
+    ? launch.startedByLine
+    : `${launch.startedByLine}. Shown while open; reply to keep it in your chats.`;
+  return (
+    <Tooltip content={label} placement="top" delay={300}>
+      <span
+        role="img"
+        aria-label={label}
+        className="flex shrink-0 text-muted-foreground"
+        data-testid={`chat-origin-glyph-${chat.id}`}
+        data-launch-kind={launch.kind}
+      >
+        <LaunchKindIcon kind={launch.kind} className="h-3 w-3" />
+      </span>
+    </Tooltip>
+  );
 }
 
 interface SidebarNavButtonProps {
@@ -301,8 +336,11 @@ const ChatItem = memo(function ChatItem({
             className="w-full px-2 py-1 bg-background border border-primary rounded text-xs font-mono focus:outline-none focus:ring-2 focus:ring-primary/50"
           />
         ) : (
-          <div className="truncate group-hover:text-foreground transition-colors duration-200">
-            {chatTitle}
+          <div className="flex min-w-0 items-center gap-1.5">
+            {isAutomationLaunch(chat.launchKind) && <AutomationOriginGlyph chat={chat} />}
+            <div className="truncate group-hover:text-foreground transition-colors duration-200">
+              {chatTitle}
+            </div>
           </div>
         )}
         {!inGroup && workspaceBranch && (
@@ -628,7 +666,28 @@ function SidebarComponent({
   onOpenForge,
 }: SidebarProps) {
   const currentProject = useProjectStore((state) => state.currentProject);
-  const { data: chats = [] } = useChatList(currentProject?.id);
+  const { data: listedChats = [] } = useChatList(currentProject?.id);
+  // Get active chat from navigation store
+  const activeChatId = useChatStore((state) => state.activeChatId);
+  // The open chat stays in the list even when the server left it out (§6.2
+  // rule 4, the L2 fix). Read from the detail cache, which selectChat seeds
+  // and the update stream keeps current, so a run opened from Runs or the
+  // Inbox has a row, and one whose question was just answered keeps it.
+  const { data: openChat } = useChat(activeChatId ?? undefined);
+  const releasedChatId = useSidebarPinStore((state) => state.releasedChatId);
+  const forgetReleasedUnless = useSidebarPinStore((state) => state.forgetUnless);
+  useEffect(() => {
+    forgetReleasedUnless(activeChatId);
+  }, [activeChatId, forgetReleasedUnless]);
+  const chats = useMemo(
+    () =>
+      withOpenChatPinned(listedChats, openChat?.id === activeChatId ? openChat : undefined, {
+        projectId: currentProject?.id,
+        releasedChatId,
+      }),
+    [listedChats, openChat, activeChatId, currentProject?.id, releasedChatId],
+  );
+  const listedChatIds = useMemo(() => new Set(listedChats.map((chat) => chat.id)), [listedChats]);
   // ONE condition: the experimental gate. While the forge UI is unreleased this
   // is off in a packaged build, so the entry does not exist for anyone who has
   // not opted in.
@@ -673,9 +732,8 @@ function SidebarComponent({
   const fetchProcesses = useProcessStore(
     (state) => state.fetchProcesses
   );
-
-  // Get active chat from navigation store
-  const activeChatId = useChatStore((state) => state.activeChatId);
+  const adoptRunMutation = useAdoptRun();
+  const unadoptRunMutation = useUnadoptRun();
 
   // Chat list preferences
   const sortOrder = useChatListPreferencesStore((state) => state.sortOrder);
@@ -1094,6 +1152,16 @@ function SidebarComponent({
       });
     }
 
+    // Un-adopt (§6.3): the run leaves the chat list and lives in Runs again.
+    // Not archive: nothing about the run changes but where it is listed.
+    if (isAdoptedAutomation(chat)) {
+      menuItems.push({
+        label: "Move back to Runs",
+        icon: <Activity className="w-4 h-4" />,
+        onClick: () => handleUnadoptChat(chatId),
+      });
+    }
+
     menuItems.push(
       { label: "", onClick: () => {}, separator: true },
       {
@@ -1119,6 +1187,29 @@ function SidebarComponent({
       },
     ];
   };
+
+  const handleUnadoptChat = useCallback(
+    (chatId: string) => {
+      // Released first: the chat may be the open one, and pinning it would
+      // keep the row the user just asked to move.
+      useSidebarPinStore.getState().release(chatId);
+      unadoptRunMutation.mutate(chatId, {
+        onSuccess: () => {
+          toast.notify("Moved back to Runs", {
+            action: {
+              label: "Undo",
+              onClick: () => adoptRunMutation.mutate(chatId),
+            },
+          });
+        },
+        onError: (error) => {
+          useSidebarPinStore.getState().forgetUnless(null);
+          void toast.error(error);
+        },
+      });
+    },
+    [adoptRunMutation, unadoptRunMutation],
+  );
 
   const handleArchiveChat = useCallback(async (chatId: string) => {
     await deleteChatMutation.mutateAsync(chatId);
@@ -1467,7 +1558,7 @@ function SidebarComponent({
           <SidebarNavButton
             icon={<Activity className="h-4 w-4" />}
             label="Runs"
-            onClick={onOpenRuns}
+            onClick={onOpenRuns ? () => onOpenRuns() : undefined}
             testId="sidebar-runs-button"
           />
           <SidebarNavButton
@@ -1734,6 +1825,7 @@ function SidebarComponent({
       </div>
 
       <div className="border-t border-border/40 bg-card px-3 py-2">
+        <AutomationActivityPill listedChatIds={listedChatIds} onOpenRuns={onOpenRuns} />
         <SidebarNavButton
           icon={<Settings className="h-4 w-4" />}
           label="Settings"

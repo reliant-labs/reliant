@@ -81,6 +81,7 @@ vi.mock("../../hooks/chat-queries", () => ({
   useDeleteChat: () => ({ mutateAsync: vi.fn() }),
   useRenameChat: () => ({ mutateAsync: vi.fn() }),
   useUnarchiveChat: () => ({ mutateAsync: vi.fn() }),
+  useChat: () => ({ data: undefined }),
 }));
 
 vi.mock("../../hooks/message-queries", () => ({
