@@ -18,6 +18,16 @@ import (
 
 // schedulePrefix namespaces our schedule ids inside the Temporal namespace, so
 // SyncAll can tell a schedule it owns from one some other component created.
+//
+// It deliberately carries no per-deployment discriminator. Two deployments
+// sharing one Temporal namespace would delete each other's schedules as
+// orphans, but that topology does not exist: every deployment gets its own
+// namespace — dev derives one per stack (control-plane
+// deploy/kcl/lib/identity.k temporal_namespace, passed as TEMPORAL_NAMESPACE),
+// and e2e/prod each run their own in-cluster Temporal. The namespace IS the
+// discriminator. Pointing two deployments (two databases) at one namespace
+// is unsupported; if that is ever wanted, add the discriminator here AND to
+// FireWorkflowID, and migrate existing schedules.
 const schedulePrefix = "trigger-"
 
 // ScheduleID is the Temporal Schedule id for a trigger.
@@ -57,9 +67,26 @@ func NewSyncer(schedules ScheduleClient, repo Repo, taskQueue string) *Syncer {
 //
 // It is idempotent, which is what lets every write path call it unconditionally
 // and lets SyncAll repair drift at startup without knowing what drifted.
-func (s *Syncer) Sync(ctx context.Context, t *core.Trigger) error {
+//
+// It converges from a FRESH read of the row, never from the caller's copy:
+// two concurrent writes each call Sync after their own commit, and whichever
+// Temporal call lands last must carry the latest row, not the one its caller
+// happened to hold. A row that is gone converges to no schedule.
+func (s *Syncer) Sync(ctx context.Context, triggerID string) error {
+	t, err := s.repo.GetTrigger(ctx, triggerID)
+	if err != nil {
+		if errors.Is(err, core.ErrTriggerNotFound) {
+			return s.Delete(ctx, triggerID)
+		}
+		return fmt.Errorf("load trigger %s: %w", triggerID, err)
+	}
+	return s.converge(ctx, t)
+}
+
+// converge makes the schedule match t, which the caller has just read.
+func (s *Syncer) converge(ctx context.Context, t *core.Trigger) error {
 	if t == nil {
-		return errors.New("triggers: Sync called with nil trigger")
+		return errors.New("triggers: converge called with nil trigger")
 	}
 	if t.Kind != core.TriggerKindSchedule {
 		return fmt.Errorf("triggers: cannot sync a schedule for kind %q", t.Kind)
@@ -166,10 +193,10 @@ func (s *Syncer) NextFireAt(ctx context.Context, triggerID string) (*time.Time, 
 //
 // The converge half never deletes, so a stale List cannot remove a live
 // trigger's schedule: ids absent from the listing are simply not considered.
+// The orphan half re-reads the row before each delete, so a trigger created
+// after the snapshot keeps its schedule.
 func (s *Syncer) SyncAll(ctx context.Context) error {
-	// An empty UserID lists every user's triggers. This reconciliation is the
-	// only caller allowed to do that.
-	all, err := s.repo.ListTriggers(ctx, core.TriggerFilters{})
+	all, err := s.repo.ListAllTriggers(ctx)
 	if err != nil {
 		return fmt.Errorf("list triggers: %w", err)
 	}
@@ -181,7 +208,7 @@ func (s *Syncer) SyncAll(ctx context.Context) error {
 			continue
 		}
 		live[ScheduleID(t.ID)] = struct{}{}
-		if err := s.Sync(ctx, t); err != nil {
+		if err := s.converge(ctx, t); err != nil {
 			// Keep going: one malformed trigger must not stop the rest of the
 			// fleet from being repaired.
 			errs = append(errs, fmt.Errorf("sync trigger %s: %w", t.ID, err))
@@ -206,6 +233,15 @@ func (s *Syncer) SyncAll(ctx context.Context) error {
 			continue
 		}
 		triggerID := strings.TrimPrefix(entry.ID, schedulePrefix)
+		// `live` is a snapshot from before the converge loop, so a trigger
+		// created since then is absent from it while its schedule is already
+		// listed. Re-check the row before deleting anything.
+		if _, err := s.repo.GetTrigger(ctx, triggerID); err == nil {
+			continue
+		} else if !errors.Is(err, core.ErrTriggerNotFound) {
+			errs = append(errs, fmt.Errorf("re-check orphan schedule %s: %w", entry.ID, err))
+			continue
+		}
 		if err := s.Delete(ctx, triggerID); err != nil {
 			errs = append(errs, fmt.Errorf("delete orphan schedule %s: %w", entry.ID, err))
 		}

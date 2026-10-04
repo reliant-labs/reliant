@@ -441,6 +441,8 @@ type Querier interface {
 	// compute hasMore for the cursor-bounded read without fetching the rows.
 	HasMessagesBeforeInContextWindow(ctx context.Context, arg HasMessagesBeforeInContextWindowParams) (bool, error)
 	IsCommandFavorite(ctx context.Context, arg IsCommandFavoriteParams) (int32, error)
+	// Every user's triggers. Only the schedule syncer's reconciliation calls this.
+	ListAllTriggers(ctx context.Context) ([]Trigger, error)
 	// List all approvals for a chat (including resolved)
 	ListApprovalsByChat(ctx context.Context, chatID string) ([]Approval, error)
 	// List archived chats with worktree info and computed last_message_at
@@ -661,8 +663,9 @@ type Querier interface {
 	// Newest first, matching idx_trigger_events_trigger_occurred so this is an
 	// ordered index scan. id breaks ties: two fires can share an occurred_at.
 	ListTriggerEvents(ctx context.Context, arg ListTriggerEventsParams) ([]TriggerEvent, error)
-	// An empty user_id lists every user's triggers, which only the schedule
-	// syncer's startup reconciliation does. project_id narrows to one project.
+	// Always scoped to one user; project_id narrows further. The unscoped listing
+	// is ListAllTriggers, a separate query so "no user" can never be reached by
+	// passing an empty string.
 	ListTriggers(ctx context.Context, arg ListTriggersParams) ([]Trigger, error)
 	// List all presets for a user (both global and project-specific)
 	ListUserPresets(ctx context.Context, userID string) ([]Preset, error)
@@ -682,6 +685,9 @@ type Querier interface {
 	// Used for startup recovery to restart workers for active workflows.
 	ListWorkflowsByStatus(ctx context.Context, arg ListWorkflowsByStatusParams) ([]Workflow, error)
 	ListWorktrees(ctx context.Context, arg ListWorktreesParams) ([]Worktree, error)
+	// Row lock on the trigger for the rest of the transaction. Serializes the
+	// overlap check with the launch it guards across concurrent fires.
+	LockTrigger(ctx context.Context, id string) (string, error)
 	// Conditional on status = 1, and returns the ids it actually moved.
 	//
 	// Both halves matter, for the same reason every other statement in this file

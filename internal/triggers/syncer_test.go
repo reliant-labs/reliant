@@ -98,7 +98,7 @@ func TestSyncCreatesTheSchedule(t *testing.T) {
 	repo.triggers[trigger.ID] = trigger
 	cleanupSchedule(t, s, trigger.ID)
 
-	if err := s.Sync(ctx, trigger); err != nil {
+	if err := s.Sync(ctx, trigger.ID); err != nil {
 		t.Fatalf("Sync: %v", err)
 	}
 
@@ -152,7 +152,7 @@ func TestSyncUpdatesTheScheduleWhenTheRowChanges(t *testing.T) {
 	repo.triggers[trigger.ID] = trigger
 	cleanupSchedule(t, s, trigger.ID)
 
-	if err := s.Sync(ctx, trigger); err != nil {
+	if err := s.Sync(ctx, trigger.ID); err != nil {
 		t.Fatalf("first Sync: %v", err)
 	}
 
@@ -163,7 +163,7 @@ func TestSyncUpdatesTheScheduleWhenTheRowChanges(t *testing.T) {
 		cfg.Timezone = "Europe/London"
 	})
 	repo.triggers[trigger.ID] = trigger
-	if err := s.Sync(ctx, trigger); err != nil {
+	if err := s.Sync(ctx, trigger.ID); err != nil {
 		t.Fatalf("second Sync: %v", err)
 	}
 
@@ -192,12 +192,12 @@ func TestSyncPausesADisabledTriggerAndUnpausesOnReenable(t *testing.T) {
 	repo.triggers[trigger.ID] = trigger
 	cleanupSchedule(t, s, trigger.ID)
 
-	if err := s.Sync(ctx, trigger); err != nil {
+	if err := s.Sync(ctx, trigger.ID); err != nil {
 		t.Fatalf("Sync enabled: %v", err)
 	}
 
 	trigger.Enabled = false
-	if err := s.Sync(ctx, trigger); err != nil {
+	if err := s.Sync(ctx, trigger.ID); err != nil {
 		t.Fatalf("Sync disabled: %v", err)
 	}
 	desc, err := s.schedules.GetHandle(ctx, ScheduleID(trigger.ID)).Describe(ctx)
@@ -209,7 +209,7 @@ func TestSyncPausesADisabledTriggerAndUnpausesOnReenable(t *testing.T) {
 	}
 
 	trigger.Enabled = true
-	if err := s.Sync(ctx, trigger); err != nil {
+	if err := s.Sync(ctx, trigger.ID); err != nil {
 		t.Fatalf("Sync re-enabled: %v", err)
 	}
 	desc, err = s.schedules.GetHandle(ctx, ScheduleID(trigger.ID)).Describe(ctx)
@@ -232,7 +232,7 @@ func TestSyncCreatesADisabledTriggersSchedulePaused(t *testing.T) {
 	repo.triggers[trigger.ID] = trigger
 	cleanupSchedule(t, s, trigger.ID)
 
-	if err := s.Sync(ctx, trigger); err != nil {
+	if err := s.Sync(ctx, trigger.ID); err != nil {
 		t.Fatalf("Sync: %v", err)
 	}
 	desc, err := s.schedules.GetHandle(ctx, ScheduleID(trigger.ID)).Describe(ctx)
@@ -251,7 +251,7 @@ func TestDeleteIsIdempotent(t *testing.T) {
 	trigger := testTrigger(t, nil)
 	repo.triggers[trigger.ID] = trigger
 
-	if err := s.Sync(ctx, trigger); err != nil {
+	if err := s.Sync(ctx, trigger.ID); err != nil {
 		t.Fatalf("Sync: %v", err)
 	}
 	if err := s.Delete(ctx, trigger.ID); err != nil {
@@ -282,7 +282,7 @@ func TestSyncRejectsAnInvalidConfigWithoutTouchingTemporal(t *testing.T) {
 	})
 	repo.triggers[trigger.ID] = trigger
 
-	err := s.Sync(ctx, trigger)
+	err := s.Sync(ctx, trigger.ID)
 	if err == nil {
 		t.Fatal("want a rejection for a schedule with no cron and no interval")
 	}
@@ -313,7 +313,7 @@ func TestSyncAllConvergesAndRemovesOrphans(t *testing.T) {
 	// unreachable.
 	orphan := testTrigger(t, nil)
 	repo.triggers[orphan.ID] = orphan
-	if err := s.Sync(ctx, orphan); err != nil {
+	if err := s.Sync(ctx, orphan.ID); err != nil {
 		t.Fatalf("seed orphan: %v", err)
 	}
 	delete(repo.triggers, orphan.ID)
@@ -403,7 +403,7 @@ func TestNextFireAt(t *testing.T) {
 		t.Errorf("next = %v, want nil before the schedule exists", next)
 	}
 
-	if err := s.Sync(ctx, trigger); err != nil {
+	if err := s.Sync(ctx, trigger.ID); err != nil {
 		t.Fatalf("Sync: %v", err)
 	}
 	next, err = s.NextFireAt(ctx, trigger.ID)
@@ -416,7 +416,7 @@ func TestNextFireAt(t *testing.T) {
 
 	// Paused means there is no next fire, which is what the UI needs to say.
 	trigger.Enabled = false
-	if err := s.Sync(ctx, trigger); err != nil {
+	if err := s.Sync(ctx, trigger.ID); err != nil {
 		t.Fatalf("Sync disabled: %v", err)
 	}
 	next, err = s.NextFireAt(ctx, trigger.ID)
@@ -426,4 +426,100 @@ func TestNextFireAt(t *testing.T) {
 	if next != nil {
 		t.Errorf("next = %v, want nil for a paused schedule", next)
 	}
+}
+
+// M5b: Sync converges from the row's current state, and a row that is gone
+// converges to no schedule — there is no caller-supplied copy to go stale.
+func TestSyncConvergesFromTheCurrentRowAndRemovesTheScheduleOfAMissingRow(t *testing.T) {
+	s, repo := newSyncer(t)
+	ctx := context.Background()
+
+	trigger := testTrigger(t, nil)
+	repo.triggers[trigger.ID] = trigger
+	cleanupSchedule(t, s, trigger.ID)
+	if err := s.Sync(ctx, trigger.ID); err != nil {
+		t.Fatalf("Sync: %v", err)
+	}
+
+	// A write lands after the caller read its copy; Sync must see it.
+	repo.mu.Lock()
+	repo.triggers[trigger.ID].Enabled = false
+	repo.mu.Unlock()
+	if err := s.Sync(ctx, trigger.ID); err != nil {
+		t.Fatalf("Sync after write: %v", err)
+	}
+	desc, err := s.schedules.GetHandle(ctx, ScheduleID(trigger.ID)).Describe(ctx)
+	if err != nil {
+		t.Fatalf("Describe: %v", err)
+	}
+	if !desc.Schedule.State.Paused {
+		t.Error("Sync must converge to the stored row's enabled=false")
+	}
+
+	repo.mu.Lock()
+	delete(repo.triggers, trigger.ID)
+	repo.mu.Unlock()
+	if err := s.Sync(ctx, trigger.ID); err != nil {
+		t.Fatalf("Sync of a missing row: %v", err)
+	}
+	if _, err := s.schedules.GetHandle(ctx, ScheduleID(trigger.ID)).Describe(ctx); !isNotFound(err) {
+		t.Errorf("Describe after Sync of a missing row = %v, want NotFound", err)
+	}
+}
+
+// staleSnapshotRepo reports an empty trigger list while GetTrigger still finds
+// the row: a trigger created after SyncAll took its snapshot.
+type staleSnapshotRepo struct{ *fakeRepo }
+
+func (r staleSnapshotRepo) ListAllTriggers(context.Context) ([]*core.Trigger, error) { return nil, nil }
+
+// M-D: the orphan sweep re-checks the row before deleting, so a trigger
+// created after the snapshot keeps its schedule.
+func TestSyncAllKeepsTheScheduleOfATriggerCreatedAfterTheSnapshot(t *testing.T) {
+	c := temporalForTest(t)
+	fake := newFakeRepo()
+	s := NewSyncer(c.ScheduleClient(), staleSnapshotRepo{fake}, "triggers-test-queue")
+	ctx := context.Background()
+
+	trigger := testTrigger(t, nil)
+	fake.triggers[trigger.ID] = trigger
+	cleanupSchedule(t, s, trigger.ID)
+	if err := s.Sync(ctx, trigger.ID); err != nil {
+		t.Fatalf("Sync: %v", err)
+	}
+
+	// Schedule listing is eventually consistent; wait until the sweep would
+	// actually see it, or the test proves nothing.
+	deadline := time.Now().Add(30 * time.Second)
+	for !scheduleListed(t, s, ScheduleID(trigger.ID)) {
+		if time.Now().After(deadline) {
+			t.Fatal("the schedule never appeared in the schedule listing")
+		}
+		time.Sleep(250 * time.Millisecond)
+	}
+
+	if err := s.SyncAll(ctx); err != nil {
+		t.Fatalf("SyncAll: %v", err)
+	}
+	if _, err := s.schedules.GetHandle(ctx, ScheduleID(trigger.ID)).Describe(ctx); err != nil {
+		t.Fatalf("SyncAll deleted the schedule of a live trigger: %v", err)
+	}
+}
+
+func scheduleListed(t *testing.T, s *Syncer, id string) bool {
+	t.Helper()
+	iter, err := s.schedules.List(context.Background(), client.ScheduleListOptions{})
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	for iter.HasNext() {
+		entry, err := iter.Next()
+		if err != nil {
+			t.Fatalf("List next: %v", err)
+		}
+		if entry.ID == id {
+			return true
+		}
+	}
+	return false
 }

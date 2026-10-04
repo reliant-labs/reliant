@@ -11,13 +11,22 @@ INSERT INTO triggers (
 SELECT * FROM triggers WHERE id = $1;
 
 -- name: ListTriggers :many
--- An empty user_id lists every user's triggers, which only the schedule
--- syncer's startup reconciliation does. project_id narrows to one project.
+-- Always scoped to one user; project_id narrows further. The unscoped listing
+-- is ListAllTriggers, a separate query so "no user" can never be reached by
+-- passing an empty string.
 SELECT * FROM triggers
-WHERE
-    (sqlc.arg('user_id')::text = '' OR user_id = sqlc.arg('user_id')::text)
+WHERE user_id = sqlc.arg('user_id')::text
     AND (sqlc.narg('project_id')::text IS NULL OR project_id = sqlc.narg('project_id')::text)
 ORDER BY created_at DESC, id;
+
+-- name: ListAllTriggers :many
+-- Every user's triggers. Only the schedule syncer's reconciliation calls this.
+SELECT * FROM triggers ORDER BY created_at DESC, id;
+
+-- name: LockTrigger :one
+-- Row lock on the trigger for the rest of the transaction. Serializes the
+-- overlap check with the launch it guards across concurrent fires.
+SELECT id FROM triggers WHERE id = $1 FOR UPDATE;
 
 -- name: UpdateTrigger :execrows
 -- Identity columns (id, user_id, kind) are not updatable: changing the owner

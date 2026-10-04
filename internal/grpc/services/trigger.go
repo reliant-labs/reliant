@@ -33,7 +33,7 @@ const maxTriggerEventLimit = 500
 // triggerSyncer is the schedule backend this handler converges onto. Declared
 // here, at the consumer, so the handler can be tested without Temporal.
 type triggerSyncer interface {
-	Sync(ctx context.Context, t *core.Trigger) error
+	Sync(ctx context.Context, triggerID string) error
 	Delete(ctx context.Context, triggerID string) error
 	NextFireAt(ctx context.Context, triggerID string) (*time.Time, error)
 }
@@ -136,9 +136,14 @@ func (s *TriggerService) CreateTrigger(
 		return nil, triggerDBError("create trigger", err)
 	}
 
-	if err := s.syncer.Sync(ctx, trigger); err != nil {
-		// Remove the row we just wrote. Leaving it would mean an API that
-		// reported success for a trigger with no schedule behind it.
+	if err := s.syncer.Sync(ctx, trigger.ID); err != nil {
+		// Remove the schedule Sync may have half-created, then the row we
+		// just wrote. Leaving either would mean an API that reported failure
+		// for a trigger that still fires, or success for one with no schedule.
+		if schedErr := s.syncer.Delete(ctx, trigger.ID); schedErr != nil {
+			logging.Error("failed to remove the schedule of a trigger that could not be created",
+				"trigger_id", trigger.ID, "sync_error", err, "delete_error", schedErr)
+		}
 		if delErr := s.database.DeleteTrigger(ctx, trigger.ID); delErr != nil {
 			logging.Error("failed to remove a trigger whose schedule could not be created",
 				"trigger_id", trigger.ID, "sync_error", err, "delete_error", delErr)
@@ -230,7 +235,7 @@ func (s *TriggerService) UpdateTrigger(
 	// truth and is now correct, and SyncAll repairs Temporal at the next
 	// startup. Reverting would throw away the user's edit to protect a
 	// projection.
-	if err := s.syncer.Sync(ctx, updated); err != nil {
+	if err := s.syncer.Sync(ctx, updated.ID); err != nil {
 		return nil, triggerSyncError(err)
 	}
 
@@ -288,7 +293,7 @@ func (s *TriggerService) SetTriggerEnabled(
 	}
 	trigger.Enabled = req.Msg.Enabled
 
-	if err := s.syncer.Sync(ctx, trigger); err != nil {
+	if err := s.syncer.Sync(ctx, trigger.ID); err != nil {
 		return nil, triggerSyncError(err)
 	}
 	if trigger.Enabled {

@@ -297,6 +297,14 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 
 	eventRow := newEventRow(ev, userID, chatID, workflowName, worktreeID)
 
+	// The event row is inserted before the chat, so the (kind, dedupe_key)
+	// constraint — not the chat's primary key — decides which of two
+	// concurrent launches of the same event wins. It goes in without its
+	// chat_id because trigger_events.chat_id references chats; the id is
+	// attached once the chat exists.
+	insertRow := *eventRow
+	insertRow.ChatID = nil
+
 	// The chat row, its root workflow+thread, the initial messages, the
 	// chat_created announcement and the trigger event must not be observed
 	// apart: a client that sees chat_created must be able to load a chat that
@@ -305,8 +313,30 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 	// behind (no orphan chat, no thread-less chat, no announcement for a
 	// chat that doesn't exist).
 	if err := l.repo.RunTx(ctx, func(txCtx context.Context) error {
+		if spec.Guard != nil {
+			reason, err := spec.Guard(txCtx)
+			if err != nil {
+				return fmt.Errorf("launch guard: %w", err)
+			}
+			if reason != "" {
+				return &DeclinedError{Reason: reason}
+			}
+		}
+
+		created, err := l.repo.CreateTriggerEvent(txCtx, &insertRow)
+		if err != nil {
+			return fmt.Errorf("failed to record trigger event: %w", err)
+		}
+		if !created {
+			return errEventExists
+		}
+
 		if err := l.repo.CreateChat(txCtx, chat); err != nil {
 			return fmt.Errorf("failed to create chat: %w", err)
+		}
+
+		if err := l.repo.UpdateTriggerEventOutcome(txCtx, eventRow.ID, core.TriggerEventLaunched, "", &chatID); err != nil {
+			return fmt.Errorf("failed to attach chat to trigger event: %w", err)
 		}
 
 		if _, _, _, err := l.threads.CreateWorkflowWithThread(txCtx, threads.CreateWorkflowWithThreadOpts{
@@ -335,16 +365,12 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 				return fmt.Errorf("failed to create chat_created user update: %w", err)
 			}
 		}
-
-		created, err := l.repo.CreateTriggerEvent(txCtx, eventRow)
-		if err != nil {
-			return fmt.Errorf("failed to record trigger event: %w", err)
-		}
-		if !created {
-			return errEventExists
-		}
 		return nil
 	}); err != nil {
+		var declined *DeclinedError
+		if errors.As(err, &declined) {
+			return nil, declined
+		}
 		if errors.Is(err, errEventExists) {
 			// Lost a race with a concurrent launch of the same event.
 			return l.finishExisting(ctx, ev, spec, seed)
