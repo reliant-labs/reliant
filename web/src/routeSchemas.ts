@@ -254,9 +254,9 @@ export const SETTINGS_SECTION_IDS = [
   "mcp",
   "about",
   "tokens",
-  // Grants for third-party MCP clients (ChatGPT, Claude, mobile) that drive a
-  // cloud workspace. Route: /settings/connectors.
-  "connectors",
+  // (No "connectors": grants for outside AI apps live on each machine, in
+  // Settings → Machines. /settings/connectors redirects there — see
+  // settingsConnectorRoutes.tsx.)
   // Every preset across workflows (WORKFLOW_UI.md §14.1 decision 7). A
   // workflow's own presets live on its detail page in the Workflows area.
   "presets",
@@ -271,6 +271,8 @@ export const SETTINGS_SECTION_IDS = [
   // organization to grant within, so SettingsNavigation gates the entry on
   // hasControlPlane. Route: /settings/member-permissions.
   "member-permissions",
+  // Machines. Shown in every build: registered machines, and the outside AI
+  // apps granted access to each, exist without a control plane too.
   "environments",
 ] as const;
 export type SettingsSection = (typeof SETTINGS_SECTION_IDS)[number];

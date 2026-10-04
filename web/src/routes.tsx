@@ -6,6 +6,7 @@ import { shouldRedirectToMobileNow } from './lib/mobileRedirect'
 import { isForgeUIEnabled } from './lib/forgeFeature'
 import { getIsDev } from './lib/constants'
 import { createWorkflowsAreaRoutes } from './workflowsAreaRoutes'
+import { createSettingsConnectorRoutes } from './settingsConnectorRoutes'
 import {
   authSearchSchema,
   githubOAuthCallbackSearchSchema,
@@ -453,14 +454,12 @@ const settingsRoute = createRoute({
   component: SettingsPage,
 })
 
-// OAuth consent: where a third-party application's user chooses which
-// connector it may act through. Under the authenticated layout, so the page
-// already knows who the user is from the existing Supabase session — no new
-// browser-auth path is needed.
-const connectorConsentRoute = createRoute({
-  getParentRoute: () => authenticatedLayoutRoute,
-  path: '/settings/connectors/authorize',
-  component: ConnectorConsentPage,
+// /settings/connectors/authorize (the OAuth consent page third parties
+// redirect to — its path is a contract) and the retired /settings/connectors
+// section, which redirects to Machines. Defined in settingsConnectorRoutes.tsx
+// so the route tests mount the same definitions.
+const settingsConnectorRoutes = createSettingsConnectorRoutes(() => authenticatedLayoutRoute, {
+  consent: ConnectorConsentPage,
 })
 
 const settingsSectionRoute = createRoute({
@@ -814,7 +813,7 @@ const routeTree = rootRoute.addChildren([
       forgeSecretsRedirectRoute,
     ]),
     settingsRoute,
-    connectorConsentRoute,
+    ...settingsConnectorRoutes,
     settingsSectionRoute,
     workflowNewRoute,
     workflowBuilderRoute,

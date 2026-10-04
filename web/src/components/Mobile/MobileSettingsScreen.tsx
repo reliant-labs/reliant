@@ -15,7 +15,7 @@
  * URL. Each sub-screen's own "back" button clears the selection.
  *
  * Sections not listed here (MCP, Prompts, Keyboard shortcuts, Developer,
- * Connectors, Port access rules) are desktop-only by design — see the
+ * per-machine app access and port access rules) are desktop-only by design — see the
  * "Manage on desktop" note at the bottom of the list.
  */
 
@@ -267,7 +267,7 @@ export function MobileSettingsScreen() {
           <Monitor className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
           <p className="text-xs leading-relaxed text-muted-foreground">
             Machines and GitHub are available from the main menu. MCP servers,
-            prompts, keyboard shortcuts, developer tools, connectors, and port
+            prompts, keyboard shortcuts, developer tools, app access, and port
             access rules aren&apos;t available here. Manage those on desktop.
           </p>
         </div>
