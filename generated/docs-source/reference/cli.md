@@ -6665,6 +6665,7 @@ reliant trigger create [flags]
 |------|------|---------|-------------|
 | `--catchup-window` | `string` | - | How late a fire missed during an outage may still run (default: 10m) |
 | `--cron` | `stringArray` | `[]` | 5-field cron expression; repeatable, and the union of all of them |
+| `--daemon` | `string` | - | Daemon the runs execute on, by id or hostname (required) |
 | `--disabled` | `bool` | - | Create the trigger paused |
 | `--interval` | `string` | - | Fire every interval, as a Go duration (e.g. 30m); at least 1m |
 | `--message` | `string` | - | The prompt each run starts from (required) |
@@ -6804,6 +6805,7 @@ reliant trigger update <id-or-name> [flags]
 |------|------|---------|-------------|
 | `--catchup-window` | `string` | - | How late a fire missed during an outage may still run (default: 10m) |
 | `--cron` | `stringArray` | `[]` | 5-field cron expression; repeatable, and the union of all of them |
+| `--daemon` | `string` | - | Daemon the runs execute on, by id or hostname (required) |
 | `--disabled` | `bool` | - | Pause the trigger (omit to leave its current state alone) |
 | `--interval` | `string` | - | Fire every interval, as a Go duration (e.g. 30m); at least 1m |
 | `--message` | `string` | - | The prompt each run starts from (required) |

@@ -56,6 +56,9 @@ func TestFireLaunchesWithTheTriggersIdentityAndPrompt(t *testing.T) {
 	if spec.Workflow != trigger.Workflow {
 		t.Errorf("Workflow = %q", spec.Workflow)
 	}
+	if spec.DaemonID != trigger.DaemonID {
+		t.Errorf("DaemonID = %q, want the trigger's daemon %q", spec.DaemonID, trigger.DaemonID)
+	}
 	if !spec.Unattended {
 		t.Error("a scheduled run must be Unattended: nobody is there to answer")
 	}
@@ -455,5 +458,33 @@ func TestFireRejectsAnIncompleteRequest(t *testing.T) {
 		if _, err := firer.Fire(context.Background(), req); err == nil {
 			t.Errorf("Fire(%+v) = nil error, want a rejection", req)
 		}
+	}
+}
+
+// A deleted daemon must fail loudly. Falling back to another daemon would run
+// the trigger somewhere the owner never chose.
+func TestFireFailsNonRetryablyWhenTheTriggersDaemonIsGone(t *testing.T) {
+	repo := newFakeRepo()
+	trigger := testTrigger(t, func(tr *core.Trigger, _ *core.ScheduleConfig) {
+		tr.DaemonID = "daemon-deleted"
+	})
+	repo.triggers[trigger.ID] = trigger
+	launcher := &fakeLauncher{}
+
+	_, err := NewFirer(repo, launcher).Fire(context.Background(), fireReq(trigger.ID))
+	var appErr *temporal.ApplicationError
+	if !errors.As(err, &appErr) || !appErr.NonRetryable() || appErr.Type() != nonRetryableFireError {
+		t.Fatalf("want a non-retryable fire error, got %T: %v", err, err)
+	}
+
+	if calls := launcher.snapshot(); len(calls) != 0 {
+		t.Fatalf("launcher got %d calls, want none: never launch on another daemon", len(calls))
+	}
+	events := repo.eventsFor(trigger.ID)
+	if len(events) != 1 || events[0].Outcome != core.TriggerEventFailed {
+		t.Fatalf("want one failed event, got %+v", events)
+	}
+	if !strings.Contains(events[0].OutcomeDetail, "trigger's daemon no longer exists; edit the trigger to choose another") {
+		t.Errorf("OutcomeDetail = %q", events[0].OutcomeDetail)
 	}
 }

@@ -41,6 +41,7 @@ func (s *triggerStore) CreateTrigger(ctx context.Context, t *core.Trigger) error
 		Config:     triggerConfigToJSON(t.Config),
 		CreatedAt:  t.CreatedAt,
 		UpdatedAt:  t.UpdatedAt,
+		DaemonID:   t.DaemonID,
 	})
 }
 
@@ -96,6 +97,7 @@ func (s *triggerStore) UpdateTrigger(ctx context.Context, t *core.Trigger) error
 		Message:    t.Message,
 		Config:     triggerConfigToJSON(t.Config),
 		UpdatedAt:  t.UpdatedAt,
+		DaemonID:   t.DaemonID,
 		ID:         t.ID,
 	})
 	if err != nil {
@@ -274,6 +276,7 @@ func triggerFromPG(row pgdb.Trigger) (*core.Trigger, error) {
 		Config:     config,
 		CreatedAt:  row.CreatedAt,
 		UpdatedAt:  row.UpdatedAt,
+		DaemonID:   row.DaemonID,
 	}, nil
 }
 

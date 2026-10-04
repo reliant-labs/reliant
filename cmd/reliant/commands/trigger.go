@@ -57,10 +57,14 @@ proceed.`,
 
 // triggerDefinitionFlags are the fields shared by create and update.
 type triggerDefinitionFlags struct {
-	name          string
-	projectPath   string
-	projectID     string
-	worktreeID    string
+	name        string
+	projectPath string
+	projectID   string
+	worktreeID  string
+	daemon      string
+	// daemonLister overrides the registry client built from the connection;
+	// tests set it.
+	daemonLister  triggerDaemonLister
 	workflow      string
 	message       string
 	cron          []string
@@ -79,6 +83,7 @@ func (f *triggerDefinitionFlags) bind(cmd *cobra.Command) {
 	fl.StringVar(&f.projectPath, "project", "", "Project path (resolved to a project id; defaults to the working directory)")
 	fl.StringVar(&f.projectID, "project-id", "", "Project id, if you already have it")
 	fl.StringVar(&f.worktreeID, "worktree", "", "Worktree id to run in (default: the project's main worktree)")
+	fl.StringVar(&f.daemon, "daemon", "", "Daemon the runs execute on, by id or hostname (required)")
 	fl.StringVar(&f.workflow, "workflow", "", "Workflow to run (default: your default workflow)")
 	fl.StringVar(&f.message, "message", "", "The prompt each run starts from (required)")
 	fl.StringArrayVar(&f.cron, "cron", nil, "5-field cron expression; repeatable, and the union of all of them")
@@ -108,6 +113,17 @@ func (f *triggerDefinitionFlags) definition(
 	}
 
 	projectID, err := f.resolveProjectID(ctx, cmd, conn)
+	if err != nil {
+		return nil, err
+	}
+	if f.daemon == "" {
+		return nil, fmt.Errorf("--daemon is required: a trigger must name the daemon its runs execute on")
+	}
+	lister := f.daemonLister
+	if lister == nil {
+		lister = newDaemonRegistryClient(conn)
+	}
+	daemonID, err := resolveTriggerDaemon(ctx, lister, f.daemon)
 	if err != nil {
 		return nil, err
 	}
@@ -151,6 +167,7 @@ func (f *triggerDefinitionFlags) definition(
 	def := &reliantv1.TriggerDefinition{
 		Name:      name,
 		ProjectId: projectID,
+		DaemonId:  daemonID,
 		Workflow:  f.workflow,
 		Presets:   presets,
 		Params:    params,
@@ -574,12 +591,13 @@ func printTriggerTable(out io.Writer, list []*reliantv1.Trigger) {
 		return
 	}
 	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "NAME\tSTATE\tSCHEDULE\tWORKFLOW\tNEXT FIRE\tLAST")
+	fmt.Fprintln(w, "NAME\tSTATE\tSCHEDULE\tDAEMON\tWORKFLOW\tNEXT FIRE\tLAST")
 	for _, t := range list {
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n",
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
 			t.GetName(),
 			triggerStateLabel(t),
 			scheduleSummary(t.GetSchedule()),
+			orDash(t.GetDaemonId()),
 			orDash(t.GetWorkflow()),
 			orDash(t.GetNextFireAt()),
 			lastEventSummary(t.GetLastEvent()),
@@ -600,6 +618,7 @@ func printTriggerDetail(out io.Writer, t *reliantv1.Trigger) {
 	if wt := t.GetWorktreeId(); wt != "" {
 		fmt.Fprintf(w, "Worktree:\t%s\n", wt)
 	}
+	fmt.Fprintf(w, "Daemon:\t%s\n", orDash(t.GetDaemonId()))
 	fmt.Fprintf(w, "Workflow:\t%s\n", orDash(t.GetWorkflow()))
 	if sched := t.GetSchedule(); sched != nil {
 		fmt.Fprintf(w, "Schedule:\t%s\n", scheduleSummary(sched))
@@ -703,4 +722,49 @@ func lastEventSummary(ev *reliantv1.TriggerEvent) string {
 		return "never"
 	}
 	return fmt.Sprintf("%s at %s", outcomeLabel(ev.GetOutcome()), ev.GetOccurredAt())
+}
+
+// triggerDaemonLister is the one daemon-registry call --daemon needs.
+type triggerDaemonLister interface {
+	ListDaemons(context.Context, *connect.Request[reliantv1.ListDaemonsRequest]) (*connect.Response[reliantv1.ListDaemonsResponse], error)
+}
+
+func newDaemonRegistryClient(conn *connection) reliantv1connect.DaemonRegistryServiceClient {
+	return reliantv1connect.NewDaemonRegistryServiceClient(conn.httpClient(), conn.ServerURL)
+}
+
+// resolveTriggerDaemon turns --daemon into a daemon id. An exact id wins;
+// otherwise a hostname that matches exactly one daemon resolves to it, and a
+// hostname shared by several is reported with its candidates rather than
+// guessed at.
+func resolveTriggerDaemon(ctx context.Context, client triggerDaemonLister, idOrHostname string) (string, error) {
+	resp, err := client.ListDaemons(ctx, connect.NewRequest(&reliantv1.ListDaemonsRequest{}))
+	if err != nil {
+		return "", fmt.Errorf("listing daemons to resolve --daemon %q: %w", idOrHostname, err)
+	}
+	daemons := resp.Msg.GetDaemons()
+	for _, d := range daemons {
+		if d.GetDaemonId() == idOrHostname {
+			return d.GetDaemonId(), nil
+		}
+	}
+	var matches []*reliantv1.DaemonInfo
+	for _, d := range daemons {
+		if d.GetHostname() == idOrHostname {
+			matches = append(matches, d)
+		}
+	}
+	switch len(matches) {
+	case 0:
+		return "", fmt.Errorf("no daemon with id or hostname %q", idOrHostname)
+	case 1:
+		return matches[0].GetDaemonId(), nil
+	default:
+		var lines []string
+		for _, m := range matches {
+			lines = append(lines, fmt.Sprintf("%s (%s)", m.GetDaemonId(), m.GetDaemonType()))
+		}
+		return "", fmt.Errorf("hostname %q matches %d daemons; use an id:\n  %s",
+			idOrHostname, len(matches), strings.Join(lines, "\n  "))
+	}
 }

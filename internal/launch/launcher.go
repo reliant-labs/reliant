@@ -224,6 +224,9 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 		return nil, err
 	}
 	chat.WorktreeID = worktreeID
+	if spec.DaemonID != "" {
+		chat.ActiveDaemonID = &spec.DaemonID
+	}
 
 	// DEBUG: Log raw proto tools value before any processing
 	if toolsProto, ok := spec.Params["tools"]; ok {
@@ -415,6 +418,14 @@ func (l *Launcher) launchPending(ctx context.Context, ev Event, spec Spec, seed 
 		return nil, &ValidationError{Reason: err.Error()}
 	}
 
+	// Pin before buildInputs, which reads ActiveDaemonID to inject
+	// session_daemon_id. UpdateChat does not write the column, so it is
+	// persisted separately inside the transaction below.
+	pinDaemon := spec.DaemonID != "" && (chat.ActiveDaemonID == nil || *chat.ActiveDaemonID != spec.DaemonID)
+	if pinDaemon {
+		chat.ActiveDaemonID = &spec.DaemonID
+	}
+
 	// Merge presets: chat presets are base, request presets override
 	presets := make(map[string]string)
 	for k, v := range chat.SelectedPresets {
@@ -458,6 +469,11 @@ func (l *Launcher) launchPending(ctx context.Context, ev Event, spec Spec, seed 
 		if switching {
 			if err := l.repo.UpdateWorkflowName(txCtx, workflowID, workflowName); err != nil {
 				return fmt.Errorf("failed to update workflow name: %w", err)
+			}
+		}
+		if pinDaemon {
+			if err := l.repo.UpdateChatActiveDaemon(txCtx, chat.ID, chat.ActiveDaemonID); err != nil {
+				return fmt.Errorf("failed to pin chat to daemon: %w", err)
 			}
 		}
 		if switching || len(spec.Presets) > 0 {

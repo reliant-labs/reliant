@@ -96,6 +96,7 @@ func ToProto(t *core.Trigger, nextFireAt *time.Time, lastEvent *core.TriggerEven
 		Presets:    t.Presets,
 		Params:     params,
 		Message:    t.Message,
+		DaemonId:   t.DaemonID,
 		CreatedAt:  t.CreatedAt.UTC().Format(time.RFC3339),
 		UpdatedAt:  t.UpdatedAt.UTC().Format(time.RFC3339),
 	}

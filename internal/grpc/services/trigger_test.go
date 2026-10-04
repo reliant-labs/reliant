@@ -86,6 +86,7 @@ type triggerTestEnv struct {
 	repo      *db.Repo
 	userID    string
 	projectID string
+	daemonID  string
 	ctx       context.Context
 }
 
@@ -108,8 +109,12 @@ func setupTriggerTest(t *testing.T) *triggerTestEnv {
 		LastActive: now,
 	}))
 
+	daemonID := uuid.NewString()
+	require.NoError(t, repo.UpsertDaemon(context.Background(), &db.Daemon{ID: daemonID, UserID: userID}))
+
 	return &triggerTestEnv{
 		svc:       NewTriggerService(repo, backend, backend),
+		daemonID:  daemonID,
 		backend:   backend,
 		repo:      repo,
 		userID:    userID,
@@ -122,6 +127,7 @@ func (e *triggerTestEnv) definition(mutate func(*reliantv1.TriggerDefinition)) *
 	def := &reliantv1.TriggerDefinition{
 		Name:      "nightly audit",
 		ProjectId: e.projectID,
+		DaemonId:  e.daemonID,
 		Workflow:  "builtin://agent",
 		Message:   "Audit the dependency tree.",
 		Source: &reliantv1.TriggerDefinition_Schedule{
@@ -207,6 +213,7 @@ func TestCreateTriggerValidates(t *testing.T) {
 		{"no name", env.definition(func(d *reliantv1.TriggerDefinition) { d.Name = "" })},
 		{"no message", env.definition(func(d *reliantv1.TriggerDefinition) { d.Message = "" })},
 		{"no project", env.definition(func(d *reliantv1.TriggerDefinition) { d.ProjectId = "" })},
+		{"no daemon", env.definition(func(d *reliantv1.TriggerDefinition) { d.DaemonId = "" })},
 		{"no source", env.definition(func(d *reliantv1.TriggerDefinition) { d.Source = nil })},
 		{"empty schedule", env.definition(func(d *reliantv1.TriggerDefinition) {
 			d.Source = &reliantv1.TriggerDefinition_Schedule{Schedule: &reliantv1.ScheduleSource{}}
@@ -563,4 +570,85 @@ func TestLastEventIsProjectedOntoTheTrigger(t *testing.T) {
 	require.NotNil(t, last, "a trigger that has fired must report its last firing")
 	assert.Equal(t, reliantv1.TriggerEventOutcome_TRIGGER_EVENT_OUTCOME_FAILED, last.GetOutcome())
 	assert.Equal(t, "workflow does not exist", last.GetOutcomeDetail())
+}
+
+func TestCreateTriggerPersistsAndRoundTripsTheDaemon(t *testing.T) {
+	env := setupTriggerTest(t)
+
+	created := env.create(t, env.definition(nil))
+	assert.Equal(t, env.daemonID, created.GetDaemonId())
+
+	stored, err := env.repo.GetTrigger(context.Background(), created.GetId())
+	require.NoError(t, err)
+	assert.Equal(t, env.daemonID, stored.DaemonID)
+
+	got, err := env.svc.GetTrigger(env.ctx, connect.NewRequest(&reliantv1.GetTriggerRequest{Id: created.GetId()}))
+	require.NoError(t, err)
+	assert.Equal(t, env.daemonID, got.Msg.GetTrigger().GetDaemonId())
+}
+
+// Another user's daemon and a nonexistent one must be indistinguishable, or
+// the error becomes a way to probe which daemon ids exist.
+func TestCreateTriggerRejectsUnownedOrMissingDaemons(t *testing.T) {
+	env := setupTriggerTest(t)
+	foreign := uuid.NewString()
+	require.NoError(t, env.repo.UpsertDaemon(context.Background(), &db.Daemon{ID: foreign, UserID: uuid.NewString()}))
+
+	for name, daemonID := range map[string]string{"another user's": foreign, "nonexistent": uuid.NewString()} {
+		t.Run(name, func(t *testing.T) {
+			_, err := env.svc.CreateTrigger(env.ctx, connect.NewRequest(&reliantv1.CreateTriggerRequest{
+				Trigger: env.definition(func(d *reliantv1.TriggerDefinition) { d.DaemonId = daemonID }),
+			}))
+			require.Error(t, err)
+			assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
+			assert.ErrorContains(t, err, "daemon not found")
+			assert.Zero(t, env.backend.syncCount())
+		})
+	}
+}
+
+func TestCreateTriggerRequiresTheProjectInstalledOnTheDaemon(t *testing.T) {
+	env := setupTriggerTest(t)
+	ctx := context.Background()
+
+	// No project_daemons rows at all: any owned daemon is accepted.
+	env.create(t, env.definition(func(d *reliantv1.TriggerDefinition) { d.Name = "unrecorded" }))
+
+	// Once the project is installed on one daemon, a different daemon is refused.
+	installedOn := uuid.NewString()
+	require.NoError(t, env.repo.UpsertDaemon(ctx, &db.Daemon{ID: installedOn, UserID: env.userID}))
+	require.NoError(t, env.repo.UpsertProjectDaemon(ctx, env.projectID, installedOn, "/work/project", nil))
+
+	_, err := env.svc.CreateTrigger(env.ctx, connect.NewRequest(&reliantv1.CreateTriggerRequest{
+		Trigger: env.definition(func(d *reliantv1.TriggerDefinition) { d.Name = "elsewhere" }),
+	}))
+	require.Error(t, err)
+	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
+	assert.ErrorContains(t, err, "project is not installed on that daemon")
+
+	created := env.create(t, env.definition(func(d *reliantv1.TriggerDefinition) {
+		d.Name = "installed"
+		d.DaemonId = installedOn
+	}))
+	assert.Equal(t, installedOn, created.GetDaemonId())
+}
+
+func TestUpdateTriggerReplacesAndValidatesTheDaemon(t *testing.T) {
+	env := setupTriggerTest(t)
+	created := env.create(t, env.definition(nil))
+
+	other := uuid.NewString()
+	require.NoError(t, env.repo.UpsertDaemon(context.Background(), &db.Daemon{ID: other, UserID: env.userID}))
+	resp, err := env.svc.UpdateTrigger(env.ctx, connect.NewRequest(&reliantv1.UpdateTriggerRequest{
+		Id:      created.GetId(),
+		Trigger: env.definition(func(d *reliantv1.TriggerDefinition) { d.DaemonId = other }),
+	}))
+	require.NoError(t, err)
+	assert.Equal(t, other, resp.Msg.GetTrigger().GetDaemonId())
+
+	_, err = env.svc.UpdateTrigger(env.ctx, connect.NewRequest(&reliantv1.UpdateTriggerRequest{
+		Id:      created.GetId(),
+		Trigger: env.definition(func(d *reliantv1.TriggerDefinition) { d.DaemonId = uuid.NewString() }),
+	}))
+	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
 }

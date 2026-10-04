@@ -68,6 +68,7 @@ func newTestTrigger(id, userID, projectID, name string) *core.Trigger {
 		Presets:   map[string]string{"": "careful", "Critic": "strict"},
 		Params:    map[string]any{"depth": float64(3), "unattended": true, "label": "nightly"},
 		Message:   "audit the repo and open issues for what you find",
+		DaemonID:  "daemon-" + id,
 		Config:    config,
 		CreatedAt: now,
 		UpdatedAt: now,
@@ -114,6 +115,9 @@ func TestTriggerCRUDRoundTrip(t *testing.T) {
 	if got.Kind != core.TriggerKindSchedule {
 		t.Errorf("Kind: got %q, want %q", got.Kind, core.TriggerKindSchedule)
 	}
+	if got.DaemonID != want.DaemonID {
+		t.Errorf("DaemonID: got %q, want %q", got.DaemonID, want.DaemonID)
+	}
 	if !got.Enabled {
 		t.Error("Enabled: got false, want true")
 	}
@@ -152,6 +156,7 @@ func TestTriggerCRUDRoundTrip(t *testing.T) {
 	got.Presets = map[string]string{"": "fast"}
 	got.Params = map[string]any{"depth": float64(1)}
 	got.Message = "shorter prompt"
+	got.DaemonID = "daemon-replaced"
 	got.Config = json.RawMessage(`{"interval":"1h"}`)
 	got.UpdatedAt = time.Now().UTC().Add(time.Second).Truncate(time.Microsecond)
 	if err := repo.UpdateTrigger(ctx, got); err != nil {
@@ -164,6 +169,9 @@ func TestTriggerCRUDRoundTrip(t *testing.T) {
 	}
 	if updated.Name != "nightly audit (renamed)" || updated.Workflow != "weekly-audit" || updated.Enabled {
 		t.Errorf("after update: got (%q, %q, enabled=%v)", updated.Name, updated.Workflow, updated.Enabled)
+	}
+	if updated.DaemonID != "daemon-replaced" {
+		t.Errorf("after update DaemonID: got %q, want daemon-replaced", updated.DaemonID)
 	}
 	if len(updated.Presets) != 1 || updated.Presets[""] != "fast" {
 		t.Errorf("after update Presets: got %#v", updated.Presets)

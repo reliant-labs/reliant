@@ -6,6 +6,7 @@ import (
 
 	"go.temporal.io/sdk/client"
 
+	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/launch"
 )
@@ -23,6 +24,9 @@ type Repo interface {
 
 	CreateTriggerEvent(ctx context.Context, ev *core.TriggerEvent) (created bool, err error)
 	GetLatestTriggerEvent(ctx context.Context, triggerID string, outcome *core.TriggerEventOutcome) (*core.TriggerEvent, error)
+
+	// GetDaemon reports a missing row as sql.ErrNoRows.
+	GetDaemon(ctx context.Context, id string) (*db.Daemon, error)
 
 	GetRootWorkflowStatusForChats(ctx context.Context, chatIDs []string) (map[string]core.WorkflowStatus, error)
 }

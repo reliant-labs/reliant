@@ -86,6 +86,8 @@ func TestTriggerFiresEndToEnd(t *testing.T) {
 		IsGitRepo: true, CreatedAt: now, UpdatedAt: now, LastActive: now,
 	}))
 	createMainWorktree(t, repo, projectID, now)
+	daemonID := uuid.NewString()
+	require.NoError(t, repo.UpsertDaemon(ctx, &db.Daemon{ID: daemonID, UserID: userID}))
 	authCtx := context.WithValue(ctx, auth.UserIDContextKey, userID)
 
 	// A real 2s interval. The 1m floor exists because a whole agent run cannot
@@ -98,6 +100,7 @@ func TestTriggerFiresEndToEnd(t *testing.T) {
 		Trigger: &reliantv1.TriggerDefinition{
 			Name:      "e2e sweep",
 			ProjectId: projectID,
+			DaemonId:  daemonID,
 			Workflow:  "builtin://agent",
 			Message:   "Sweep the dependency tree.",
 			// The run's model comes from the trigger's params, which is the
@@ -224,12 +227,15 @@ func TestCronTriggerFiresEndToEnd(t *testing.T) {
 		IsGitRepo: true, CreatedAt: now, UpdatedAt: now, LastActive: now,
 	}))
 	createMainWorktree(t, repo, projectID, now)
+	daemonID := uuid.NewString()
+	require.NoError(t, repo.UpsertDaemon(ctx, &db.Daemon{ID: daemonID, UserID: userID}))
 	authCtx := context.WithValue(ctx, auth.UserIDContextKey, userID)
 
 	created, err := svc.CreateTrigger(authCtx, connect.NewRequest(&reliantv1.CreateTriggerRequest{
 		Trigger: &reliantv1.TriggerDefinition{
 			Name:      "every minute",
 			ProjectId: projectID,
+			DaemonId:  daemonID,
 			Workflow:  "builtin://agent",
 			Message:   "Check the build.",
 			Params:    mockModelTriggerParams(t),
@@ -312,6 +318,8 @@ func TestManualFireEndToEnd(t *testing.T) {
 		IsGitRepo: true, CreatedAt: now, UpdatedAt: now, LastActive: now,
 	}))
 	createMainWorktree(t, repo, projectID, now)
+	daemonID := uuid.NewString()
+	require.NoError(t, repo.UpsertDaemon(ctx, &db.Daemon{ID: daemonID, UserID: userID}))
 	authCtx := context.WithValue(ctx, auth.UserIDContextKey, userID)
 
 	// Created DISABLED, and fired anyway: the manual path must bypass the
@@ -322,6 +330,7 @@ func TestManualFireEndToEnd(t *testing.T) {
 		Trigger: &reliantv1.TriggerDefinition{
 			Name:      "manual only",
 			ProjectId: projectID,
+			DaemonId:  daemonID,
 			Enabled:   &disabled,
 			Workflow:  "builtin://agent",
 			Message:   "Run once, on request.",
