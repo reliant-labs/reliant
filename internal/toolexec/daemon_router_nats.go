@@ -4,6 +4,7 @@ package toolexec
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -60,6 +61,7 @@ type NATSDaemonRouter struct {
 	db                 db.Repository
 	resolver           DaemonResolver                               // optional: used to resolve daemonID for a user
 	controlPlaneClient reliantv1connect.DaemonRegistryServiceClient // optional: gRPC client for control plane resolution
+	credentials        ControlPlaneCredentials                      // optional: Bearer source for control-plane calls
 
 	// jsOnce lazily initializes the JetStream context the first time
 	// EnqueueDaemonCommand is called. JetStream is only used for the
@@ -105,6 +107,27 @@ func WithControlPlaneClient(client reliantv1connect.DaemonRegistryServiceClient)
 	return func(r *NATSDaemonRouter) {
 		r.controlPlaneClient = client
 	}
+}
+
+// ControlPlaneCredentials supplies the Bearer for a control-plane call made on
+// a user's behalf. Declared here, at the consumer.
+//
+// BearerFor returns the user's JWT when there is one; otherwise, ONLY when
+// daemonID is non-empty, the delegated token bound to exactly that daemon;
+// otherwise "".
+type ControlPlaneCredentials interface {
+	BearerFor(ctx context.Context, userID, daemonID string) (string, error)
+}
+
+// ErrAutomationAccessNotGranted: no user JWT and no delegated token for the
+// pinned daemon, so the control plane cannot be asked to wake it.
+var ErrAutomationAccessNotGranted = errors.New(
+	"automation access not granted for this machine: sign in to reliant to re-enable the trigger")
+
+// WithControlPlaneCredentials sets where the router gets control-plane Bearers.
+// Only the worker wires this; without it the router uses the user's JWT alone.
+func WithControlPlaneCredentials(c ControlPlaneCredentials) NATSRouterOption {
+	return func(r *NATSDaemonRouter) { r.credentials = c }
 }
 
 // resolveDefaultDaemonID resolves the default daemon ID for a user.
@@ -163,6 +186,9 @@ func (r *NATSDaemonRouter) resolveDaemonID(ctx context.Context, userID string, s
 		daemonID, sawRecord, err := r.resolveViaControlPlane(ctx, userID, selector)
 		if err == nil {
 			return daemonID, nil
+		}
+		if errors.Is(err, ErrAutomationAccessNotGranted) {
+			return "", err
 		}
 		sawDaemonRecord = sawDaemonRecord || sawRecord
 		// If control plane doesn't find a daemon, fall through to DB.
@@ -292,8 +318,23 @@ func (r *NATSDaemonRouter) resolveViaControlPlane(ctx context.Context, userID st
 	// control-plane client configured" and was why control-plane
 	// resolution silently never contributed a result.
 	bearer := ""
-	if jwt, ok := auth.GetUserJWT(userID); ok && jwt != "" {
+	if r.credentials != nil {
+		pinned := ""
+		if selector != nil {
+			pinned = selector.ID
+		}
+		token, credErr := r.credentials.BearerFor(ctx, userID, pinned)
+		if credErr != nil {
+			return "", false, fmt.Errorf("loading control-plane credential: %w", credErr)
+		}
+		if token == "" {
+			return "", false, ErrAutomationAccessNotGranted
+		}
+		bearer = "Bearer " + token
+	} else if jwt, ok := auth.GetUserJWT(userID); ok && jwt != "" {
 		bearer = "Bearer " + jwt
+	}
+	if bearer != "" {
 		connReq.Header().Set("Authorization", bearer)
 	}
 

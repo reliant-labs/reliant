@@ -58,7 +58,7 @@ CREATE TABLE public.access_tokens (
     CONSTRAINT access_tokens_name_present CHECK ((length(TRIM(BOTH FROM name)) > 0)),
     CONSTRAINT access_tokens_resource_kind CHECK (((resource_kind IS NULL) OR (resource_kind = ANY (ARRAY['daemon'::text, 'port'::text, 'connector'::text])))),
     CONSTRAINT access_tokens_resource_pair CHECK (((resource_kind IS NULL) = (resource_id IS NULL))),
-    CONSTRAINT access_tokens_scopes CHECK (((cardinality(scopes) > 0) AND (scopes <@ ARRAY['deploy:read'::text, 'deploy:write'::text, 'token:read'::text, 'token:write'::text, 'reliant:api'::text, 'daemon:connect'::text, 'llm:invoke'::text, 'proxy:port'::text, 'mcp:connector'::text, 'secret:read'::text, 'secret:write'::text])))
+    CONSTRAINT access_tokens_scopes CHECK (((cardinality(scopes) > 0) AND (scopes <@ ARRAY['deploy:read'::text, 'deploy:write'::text, 'cluster:manage'::text, 'token:read'::text, 'token:write'::text, 'reliant:api'::text, 'daemon:connect'::text, 'llm:invoke'::text, 'proxy:port'::text, 'mcp:connector'::text, 'daemon:resume'::text, 'secret:read'::text, 'secret:write'::text, 'domain:read'::text, 'domain:write'::text])))
 );
 
 --

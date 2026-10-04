@@ -48,10 +48,33 @@ type LLMKey struct {
 	Rotated bool
 }
 
+// DaemonResumeToken is a freshly minted daemon-bound `daemon:resume` token.
+// Returned exactly once.
+type DaemonResumeToken struct {
+	Plaintext string
+}
+
+// daemonResumeScope and daemonResourceKind are the wire spellings of forge's
+// accesstoken.ScopeDaemonResume and accesstoken.ResourceDaemon.
+const (
+	daemonResumeScope  = "daemon:resume"
+	daemonResourceKind = "daemon"
+)
+
 type Client interface {
 	// MintLLMKey mints the caller's LLM gateway key for deviceName, atomically
 	// revoking that device's previous key.
 	MintLLMKey(ctx context.Context, jwt, deviceName string) (LLMKey, error)
+
+	// MintDaemonResumeToken mints the caller's delegated automation credential
+	// for ONE daemon: a daemon-bound `daemon:resume` token that can resolve
+	// and wake that daemon and nothing else. Rotate replaces the previous
+	// token for the same name, so re-minting never accumulates live secrets.
+	MintDaemonResumeToken(ctx context.Context, jwt, daemonID, name string) (DaemonResumeToken, error)
+
+	// RevokeDaemonResumeTokens revokes every live `daemon:resume` token the
+	// caller holds that is bound to daemonID.
+	RevokeDaemonResumeTokens(ctx context.Context, jwt, daemonID string) error
 
 	// DeleteCurrentUserAccount asks the control plane to tombstone the
 	// caller's platform account (billing identity, daemons, PII), forwarding
@@ -200,6 +223,46 @@ func (c *connectClient) MintLLMKey(ctx context.Context, jwt, deviceName string) 
 		Plaintext: strings.TrimSpace(resp.Msg.GetSecret()),
 		Rotated:   resp.Msg.GetRotated(),
 	}, nil
+}
+
+func (c *connectClient) MintDaemonResumeToken(ctx context.Context, jwt, daemonID, name string) (DaemonResumeToken, error) {
+	req := connect.NewRequest(&accesstokenv1.CreateMyTokenRequest{
+		Name:     name,
+		Scopes:   []string{daemonResumeScope},
+		Resource: &accesstokenv1.ResourceBinding{Kind: daemonResourceKind, Id: daemonID},
+		Rotate:   true,
+	})
+	attachAuthorization(req, "Bearer "+strings.TrimSpace(jwt))
+	resp, err := c.accessTokenClient().CreateMyToken(ctx, req)
+	if err != nil {
+		return DaemonResumeToken{}, err
+	}
+	return DaemonResumeToken{Plaintext: strings.TrimSpace(resp.Msg.GetSecret())}, nil
+}
+
+func (c *connectClient) RevokeDaemonResumeTokens(ctx context.Context, jwt, daemonID string) error {
+	scope := daemonResumeScope
+	listReq := connect.NewRequest(&accesstokenv1.ListMyTokensRequest{Scope: &scope})
+	attachAuthorization(listReq, "Bearer "+strings.TrimSpace(jwt))
+	listed, err := c.accessTokenClient().ListMyTokens(ctx, listReq)
+	if err != nil {
+		return err
+	}
+	var firstErr error
+	for _, tok := range listed.Msg.GetTokens() {
+		if tok.GetResource().GetKind() != daemonResourceKind || tok.GetResource().GetId() != daemonID {
+			continue
+		}
+		if tok.GetRevokedAt() != nil {
+			continue
+		}
+		revokeReq := connect.NewRequest(&accesstokenv1.RevokeMyTokenRequest{Id: tok.GetId()})
+		attachAuthorization(revokeReq, "Bearer "+strings.TrimSpace(jwt))
+		if _, err := c.accessTokenClient().RevokeMyToken(ctx, revokeReq); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	return firstErr
 }
 
 func attachAuthorization[T any](req *connect.Request[T], authHeader string) {
