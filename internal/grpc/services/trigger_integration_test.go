@@ -25,6 +25,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/runs"
+	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/triggers"
 	v2workflow "github.com/reliant-labs/reliant/internal/workflow"
 )
@@ -53,6 +54,7 @@ func TestTriggerFiresEndToEnd(t *testing.T) {
 
 	launcher := launch.NewLauncher(
 		repo,
+		threads.NewService(repo),
 		temporalClient,
 		runs.NewService(repo, temporalClient, v2workflow.NewPauseService(temporalClient, repo)),
 		taskQueue,
@@ -200,7 +202,7 @@ func TestCronTriggerFiresEndToEnd(t *testing.T) {
 	temporalClient := startTriggerDevServer(t)
 	taskQueue := "trigger-cron-e2e-" + uuid.NewString()
 
-	launcher := launch.NewLauncher(repo, temporalClient,
+	launcher := launch.NewLauncher(repo, threads.NewService(repo), temporalClient,
 		runs.NewService(repo, temporalClient, v2workflow.NewPauseService(temporalClient, repo)),
 		taskQueue, nil)
 
@@ -291,7 +293,7 @@ func TestManualFireEndToEnd(t *testing.T) {
 	temporalClient := startTriggerDevServer(t)
 	taskQueue := "trigger-manual-e2e-" + uuid.NewString()
 
-	launcher := launch.NewLauncher(repo, temporalClient,
+	launcher := launch.NewLauncher(repo, threads.NewService(repo), temporalClient,
 		runs.NewService(repo, temporalClient, v2workflow.NewPauseService(temporalClient, repo)),
 		taskQueue, nil)
 

@@ -50,36 +50,33 @@ type DaemonProber interface {
 
 // Launcher turns an (Event, Spec) into a running session. See the package doc.
 type Launcher struct {
-	repo      db.Repository
+	repo      Store
 	temporal  TemporalStarter
 	runs      RunRecorder
-	threads   *threads.Service
+	threads   ThreadCreator
 	taskQueue string
 	prober    DaemonProber
 }
 
-// NewLauncher builds a launcher over the chat store, Temporal and the task
+// NewLauncher builds a launcher over the store, the thread creator, Temporal and the task
 // queue runs execute on.
 //
 // prober may be nil, which skips the greenfield probe — the api-server has a
 // daemon router, a scheduled fire on the worker does not, and neither is worth
 // a second constructor.
 func NewLauncher(
-	repo db.Repository,
+	repo Store,
+	threadCreator ThreadCreator,
 	temporal TemporalStarter,
 	runRecorder RunRecorder,
 	taskQueue string,
 	prober DaemonProber,
 ) *Launcher {
-	var threadsSvc *threads.Service
-	if repo != nil {
-		threadsSvc = threads.NewService(repo)
-	}
 	return &Launcher{
 		repo:      repo,
 		temporal:  temporal,
 		runs:      runRecorder,
-		threads:   threadsSvc,
+		threads:   threadCreator,
 		taskQueue: taskQueue,
 		prober:    prober,
 	}

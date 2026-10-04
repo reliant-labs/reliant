@@ -94,7 +94,7 @@ func greenfieldFixture(t *testing.T) (db.Repository, context.Context, *db.Chat) 
 func TestGreenfieldGuidanceFiresOnEmptyProject(t *testing.T) {
 	repo, ctx, chat := greenfieldFixture(t)
 	prober := &greenfieldProber{hasCode: false}
-	svc := NewLauncher(repo, nil, nil, "", prober)
+	svc := NewLauncher(repo, threads.NewService(repo), nil, nil, "", prober)
 
 	msg := svc.MaybeGreenfieldGuidance(ctx, chat.UserID, chat)
 
@@ -113,7 +113,7 @@ func TestGreenfieldGuidanceFiresOnEmptyProject(t *testing.T) {
 func TestGreenfieldGuidanceSkipsProjectWithCode(t *testing.T) {
 	repo, ctx, chat := greenfieldFixture(t)
 	prober := &greenfieldProber{hasCode: true}
-	svc := NewLauncher(repo, nil, nil, "", prober)
+	svc := NewLauncher(repo, threads.NewService(repo), nil, nil, "", prober)
 
 	assert.Nil(t, svc.MaybeGreenfieldGuidance(ctx, chat.UserID, chat),
 		"a project with existing code must never get stack guidance")
@@ -125,7 +125,7 @@ func TestGreenfieldGuidanceSkipsProjectWithCode(t *testing.T) {
 func TestGreenfieldGuidanceSkipsAfterFirstTurn(t *testing.T) {
 	repo, ctx, chat := greenfieldFixture(t)
 	prober := &greenfieldProber{hasCode: false}
-	svc := NewLauncher(repo, nil, nil, "", prober)
+	svc := NewLauncher(repo, threads.NewService(repo), nil, nil, "", prober)
 
 	// A prior turn exists. The root workflow and thread have to exist first —
 	// messages hang off a context window, which is scoped to a real thread.
@@ -160,7 +160,7 @@ func TestGreenfieldGuidanceSkipsAfterFirstTurn(t *testing.T) {
 func TestGreenfieldGuidanceSkipsWhenDaemonUnavailable(t *testing.T) {
 	repo, ctx, chat := greenfieldFixture(t)
 	prober := &greenfieldProber{failWith: errors.New("daemon offline")}
-	svc := NewLauncher(repo, nil, nil, "", prober)
+	svc := NewLauncher(repo, threads.NewService(repo), nil, nil, "", prober)
 
 	assert.Nil(t, svc.MaybeGreenfieldGuidance(ctx, chat.UserID, chat),
 		"an offline daemon must skip the guidance, never fail the send")
@@ -170,7 +170,7 @@ func TestGreenfieldGuidanceSkipsWhenDaemonUnavailable(t *testing.T) {
 // other daemon-less construction take this path.
 func TestGreenfieldGuidanceSkipsWithoutRouter(t *testing.T) {
 	repo, ctx, chat := greenfieldFixture(t)
-	svc := NewLauncher(repo, nil, nil, "", nil)
+	svc := NewLauncher(repo, threads.NewService(repo), nil, nil, "", nil)
 
 	assert.Nil(t, svc.MaybeGreenfieldGuidance(ctx, chat.UserID, chat))
 }
@@ -184,7 +184,7 @@ func TestGreenfieldGuidanceNamesStackDeclaringConfig(t *testing.T) {
 		hasCode:     false,
 		configFiles: []string{".gitignore", ".vscode/settings.json"},
 	}
-	svc := NewLauncher(repo, nil, nil, "", prober)
+	svc := NewLauncher(repo, threads.NewService(repo), nil, nil, "", prober)
 
 	msg := svc.MaybeGreenfieldGuidance(ctx, chat.UserID, chat)
 	require.NotNil(t, msg)
