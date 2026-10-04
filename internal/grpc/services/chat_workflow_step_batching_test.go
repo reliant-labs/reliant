@@ -50,6 +50,48 @@ type countingRepo struct {
 	perWorkflowCalls    int
 	chatScopedCalls     int
 	perWorkflowArgument []string
+	basicCalls          int
+
+	// Thread-identity reads the tree walk must NOT make per workflow.
+	getThreadCalls           int
+	contextWindowBySeqCalls  int
+	listThreadsCalls         int
+	listForkedThreadIDsCalls int
+}
+
+func (r *countingRepo) GetBasicStepExecutionsForChat(ctx context.Context, chatID string) ([]*db.ChatStepExecution, error) {
+	r.mu.Lock()
+	r.basicCalls++
+	r.mu.Unlock()
+	return r.Repository.GetBasicStepExecutionsForChat(ctx, chatID)
+}
+
+func (r *countingRepo) GetThread(ctx context.Context, id string) (*db.Thread, error) {
+	r.mu.Lock()
+	r.getThreadCalls++
+	r.mu.Unlock()
+	return r.Repository.GetThread(ctx, id)
+}
+
+func (r *countingRepo) GetContextWindowBySequence(ctx context.Context, threadID string, sequence int) (*db.ContextWindow, error) {
+	r.mu.Lock()
+	r.contextWindowBySeqCalls++
+	r.mu.Unlock()
+	return r.Repository.GetContextWindowBySequence(ctx, threadID, sequence)
+}
+
+func (r *countingRepo) ListThreadsByConversation(ctx context.Context, chatID string) ([]*db.Thread, error) {
+	r.mu.Lock()
+	r.listThreadsCalls++
+	r.mu.Unlock()
+	return r.Repository.ListThreadsByConversation(ctx, chatID)
+}
+
+func (r *countingRepo) ListForkedThreadIDs(ctx context.Context, threadIDs []string) ([]string, error) {
+	r.mu.Lock()
+	r.listForkedThreadIDsCalls++
+	r.mu.Unlock()
+	return r.Repository.ListForkedThreadIDs(ctx, threadIDs)
 }
 
 func (r *countingRepo) GetStepExecutionsByWorkflow(ctx context.Context, workflowID string) ([]*db.StepExecution, error) {
@@ -168,6 +210,7 @@ func TestGetWorkflowExecutions_OneStepQueryRegardlessOfWorkflowCount(t *testing.
 
 	resp, err := service.GetWorkflowExecutions(ctx, connect.NewRequest(&reliantv1.GetWorkflowExecutionsRequest{
 		ChatId: chatID,
+		View:   reliantv1.WorkflowExecutionView_WORKFLOW_EXECUTION_VIEW_FULL,
 	}))
 	require.NoError(t, err)
 	require.NotNil(t, resp.Msg.RootWorkflow)
@@ -175,6 +218,7 @@ func TestGetWorkflowExecutions_OneStepQueryRegardlessOfWorkflowCount(t *testing.
 	perWorkflow, chatScoped := counting.counts()
 	require.Equal(t, 1, chatScoped,
 		"steps must be read in exactly one chat-scoped query")
+	require.Zero(t, counting.basicCalls, "FULL view must not run the BASIC query")
 	require.Zero(t, perWorkflow,
 		"no per-workflow step query may run; the N+1 is back (called for: %v)",
 		counting.perWorkflowArgument)
@@ -237,6 +281,7 @@ func TestGetWorkflowExecutions_SavedMessageIdWithoutOutputJson(t *testing.T) {
 	service := &ChatService{database: repo}
 	resp, err := service.GetWorkflowExecutions(ctx, connect.NewRequest(&reliantv1.GetWorkflowExecutionsRequest{
 		ChatId: chatID,
+		View:   reliantv1.WorkflowExecutionView_WORKFLOW_EXECUTION_VIEW_FULL,
 	}))
 	require.NoError(t, err)
 	require.NotNil(t, resp.Msg.RootWorkflow)

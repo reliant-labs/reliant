@@ -3710,6 +3710,10 @@ func (r *Repo) GetStepExecution(ctx context.Context, id string) (*StepExecution,
 	return r.workflows.GetStepExecution(ctx, id)
 }
 
+func (r *Repo) GetBasicStepExecutionsForChat(ctx context.Context, chatID string) ([]*ChatStepExecution, error) {
+	return r.workflows.GetBasicStepExecutionsForChat(ctx, chatID)
+}
+
 func (r *Repo) GetStepExecutionsForChat(ctx context.Context, chatID string) ([]*ChatStepExecution, error) {
 	return r.workflows.GetStepExecutionsForChat(ctx, chatID)
 }
@@ -3946,6 +3950,13 @@ func (r *Repo) GetContextWindowBySequence(ctx context.Context, threadID string, 
 		return nil, fmt.Errorf("thread ID cannot be empty")
 	}
 	return r.contextWindows.GetContextWindowBySequence(ctx, threadID, sequence)
+}
+
+func (r *Repo) ListForkedThreadIDs(ctx context.Context, threadIDs []string) ([]string, error) {
+	if len(threadIDs) == 0 {
+		return nil, nil
+	}
+	return r.contextWindows.ListForkedThreadIDs(ctx, threadIDs)
 }
 
 func (r *Repo) GetContextWindowWithThread(ctx context.Context, id string) (*ContextWindow, string, *string, *string, error) {

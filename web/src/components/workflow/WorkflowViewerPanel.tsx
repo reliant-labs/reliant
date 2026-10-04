@@ -7,12 +7,15 @@
  * - Breadcrumb display and navigation
  */
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { WorkflowViewer } from './WorkflowViewer'
 import { WorkflowBreadcrumb, type BreadcrumbLevel } from './WorkflowBreadcrumb'
 import { getWorkflow } from '../../api/workflow-grpc'
 import type { Workflow } from '../../types/workflow'
 import type { WorkflowExecution, StepExecution } from '../Chat/ExecutionSidebar/types'
+import { transformWorkflowExecution } from '../Chat/ExecutionSidebar/transformApiData'
+import { useWorkflowExecutions } from '../../hooks/useWorkflowExecutions'
+import { WorkflowExecutionView } from '../../gen/reliant/v1/chat_pb'
 import { Loader2 } from 'lucide-react'
 
 /** Navigation stack entry */
@@ -31,6 +34,36 @@ interface NavigationLevel {
   loading: boolean
   /** Error message if fetch failed */
   error?: string
+}
+
+/**
+ * The viewer's execution, with every step.
+ *
+ * Callers hand the panel the execution they already hold, and that one comes
+ * from the chat's BASIC tree: the timeline needs only the few steps it draws,
+ * so that is all it carries. The viewer is the one surface that reconstructs
+ * loop iterations, node history and the activity log from EVERY step, so it
+ * asks for the FULL view itself — and only while it is mounted, which is the
+ * whole point: a long chat's full step history is tens of thousands of rows
+ * that nobody pays for until they open the diagram.
+ *
+ * Until FULL arrives (and for callers with no chat to fetch from) the passed
+ * execution is shown as-is, so the diagram renders its structure immediately
+ * and fills in step detail when it lands.
+ */
+function useFullStepExecution(
+  chatId: string | null | undefined,
+  execution: WorkflowExecution | undefined,
+): WorkflowExecution | undefined {
+  const { allWorkflows } = useWorkflowExecutions(
+    chatId && execution ? chatId : null,
+    WorkflowExecutionView.FULL,
+  )
+  return useMemo(() => {
+    if (!execution) return execution
+    const full = allWorkflows.find((wf) => wf.id === execution.id)
+    return full ? transformWorkflowExecution(full) : execution
+  }, [allWorkflows, execution])
 }
 
 interface WorkflowViewerPanelProps {
@@ -62,7 +95,7 @@ export function WorkflowViewerPanel({
   projectId,
   chatId,
   workflowName,
-  execution,
+  execution: executionProp,
   onClose,
   onNodeClick,
   compact = false,
@@ -71,6 +104,8 @@ export function WorkflowViewerPanel({
   onToggleViewerMode,
   onExpandedChange,
 }: WorkflowViewerPanelProps) {
+  const execution = useFullStepExecution(chatId, executionProp)
+
   // Navigation stack - first entry is root, last is current view
   const [navStack, setNavStack] = useState<NavigationLevel[]>([
     {

@@ -115,6 +115,14 @@ func (r *Repo) ListToolCallsByMessageIDs(ctx context.Context, messageIDs []strin
 	return store.ListToolCallsByMessageIDs(ctx, messageIDs)
 }
 
+func (r *Repo) ListLiveToolCallsByChat(ctx context.Context, chatID string) ([]*ToolCall, error) {
+	store, err := r.toolCalls(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return store.ListLiveToolCallsByChat(ctx, chatID)
+}
+
 func (r *Repo) ListToolCallsByIDs(ctx context.Context, toolCallIDs []string) ([]*ToolCall, error) {
 	if len(toolCallIDs) == 0 {
 		return []*ToolCall{}, nil

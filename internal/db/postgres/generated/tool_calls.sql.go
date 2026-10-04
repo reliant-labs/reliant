@@ -140,6 +140,56 @@ func (q *Queries) ListLiveBackgroundSpawnsForWorkflow(ctx context.Context, rootW
 	return items, nil
 }
 
+const listLiveToolCallsByChat = `-- name: ListLiveToolCallsByChat :many
+SELECT id, chat_id, thread_id, message_id, tool_name, input, status, error_message, child_workflow_id, background_process_id, requested_at, started_at, completed_at, created_at, updated_at FROM tool_calls
+WHERE chat_id = $1 AND status IN (1, 2, 6)
+ORDER BY requested_at ASC
+`
+
+// A chat's non-terminal calls (pending/executing/backgrounded). The snapshot
+// needs these even when their message is outside the window, because their
+// status is still changing and no block it ships can carry it. Served by the
+// partial idx_tool_calls_chat_live (a few dozen rows database-wide) instead of
+// a scan of the chat's ~25k terminal calls.
+func (q *Queries) ListLiveToolCallsByChat(ctx context.Context, chatID string) ([]ToolCall, error) {
+	rows, err := q.db.QueryContext(ctx, listLiveToolCallsByChat, chatID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ToolCall{}
+	for rows.Next() {
+		var i ToolCall
+		if err := rows.Scan(
+			&i.ID,
+			&i.ChatID,
+			&i.ThreadID,
+			&i.MessageID,
+			&i.ToolName,
+			&i.Input,
+			&i.Status,
+			&i.ErrorMessage,
+			&i.ChildWorkflowID,
+			&i.BackgroundProcessID,
+			&i.RequestedAt,
+			&i.StartedAt,
+			&i.CompletedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listSpawnChildrenForThread = `-- name: ListSpawnChildrenForThread :many
 SELECT
     tc.id AS tool_call_id,

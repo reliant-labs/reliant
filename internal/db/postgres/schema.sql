@@ -1668,12 +1668,6 @@ CREATE INDEX idx_bg_processes_user ON public.background_processes USING btree (u
 CREATE INDEX idx_bg_processes_worktree ON public.background_processes USING btree (worktree_id, status);
 
 --
--- Name: idx_chat_updates_chat_entity_seq; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_chat_updates_chat_entity_seq ON public.chat_updates USING btree (chat_id, entity_id, sequence_number DESC);
-
---
 -- Name: idx_chat_updates_chat_seq; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1684,6 +1678,12 @@ CREATE INDEX idx_chat_updates_chat_seq ON public.chat_updates USING btree (chat_
 --
 
 CREATE INDEX idx_chat_updates_created ON public.chat_updates USING btree (created_at DESC);
+
+--
+-- Name: idx_chat_updates_snapshot_heads; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_chat_updates_snapshot_heads ON public.chat_updates USING btree (chat_id, entity_id, sequence_number DESC) WHERE (update_type <> ALL (ARRAY[1, 4, 19]));
 
 --
 -- Name: idx_chats_user_project; Type: INDEX; Schema: public; Owner: -
@@ -1902,6 +1902,18 @@ CREATE INDEX idx_repos_project ON public.repos USING btree (project_id);
 CREATE INDEX idx_step_executions_chat_read ON public.step_executions USING btree (workflow_id, created_at) INCLUDE (id, step_id, activity_name, exit_code, success, duration_ms, loop_node_id, loop_iteration, saved_message_id);
 
 --
+-- Name: idx_step_executions_saves; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_step_executions_saves ON public.step_executions USING btree (workflow_id, step_id) INCLUDE (loop_node_id, loop_iteration, saved_message_id, id, created_at) WHERE (saved_message_id IS NOT NULL);
+
+--
+-- Name: idx_step_executions_user_facing; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_step_executions_user_facing ON public.step_executions USING btree (workflow_id, created_at) INCLUDE (id, step_id, activity_name, exit_code, success, duration_ms, loop_node_id, loop_iteration) WHERE (activity_name <> ALL (ARRAY['WorkflowStatus'::text, 'WorkflowError'::text, 'Cleanup'::text, 'FetchThreadResult'::text, 'FailStep'::text, 'SaveMessage'::text, 'CallLLM'::text, 'Approval'::text, 'ExecuteTools'::text]));
+
+--
 -- Name: idx_task_deps_from; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1942,6 +1954,12 @@ CREATE INDEX idx_tool_call_results_message_id ON public.tool_call_results USING 
 --
 
 CREATE INDEX idx_tool_calls_chat ON public.tool_calls USING btree (chat_id);
+
+--
+-- Name: idx_tool_calls_chat_live; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_tool_calls_chat_live ON public.tool_calls USING btree (chat_id) WHERE (status = ANY (ARRAY[1, 2, 6]));
 
 --
 -- Name: idx_tool_calls_child_workflow_id; Type: INDEX; Schema: public; Owner: -

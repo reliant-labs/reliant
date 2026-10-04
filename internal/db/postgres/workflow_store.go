@@ -337,26 +337,54 @@ func (s *workflowStore) GetStepExecutionsForChat(ctx context.Context, chatID str
 	}
 	items := make([]*core.ChatStepExecution, len(rows))
 	for i, row := range rows {
-		var success sql.NullBool
-		if row.Success.Valid {
-			success = sql.NullBool{Bool: row.Success.Int64 != 0, Valid: true}
-		}
-		items[i] = &core.ChatStepExecution{
-			ID:             row.ID,
-			WorkflowID:     row.WorkflowID,
-			StepID:         row.StepID,
-			ActivityName:   row.ActivityName,
-			ExitCode:       row.ExitCode,
-			Success:        success,
-			DurationMs:     row.DurationMs,
-			LoopNodeID:     row.LoopNodeID,
-			LoopIteration:  row.LoopIteration,
-			CreatedAt:      row.CreatedAt,
-			SavedMessageID: row.SavedMessageID,
-			OutputJSON:     row.OutputJson,
-		}
+		items[i] = chatStepExecutionFromPG(row.ID, row.WorkflowID, row.StepID, row.ActivityName,
+			row.ExitCode, row.Success, row.DurationMs, row.LoopNodeID, row.LoopIteration,
+			row.CreatedAt, row.SavedMessageID, row.OutputJson)
 	}
 	return items, nil
+}
+
+// GetBasicStepExecutionsForChat loads only the steps the chat timeline
+// renders. Its activity list is a literal in the SQL, not a parameter; see
+// queries/step_executions.sql.
+func (s *workflowStore) GetBasicStepExecutionsForChat(ctx context.Context, chatID string) ([]*core.ChatStepExecution, error) {
+	rows, err := s.q.GetBasicStepExecutionsForChat(ctx, chatID)
+	if err != nil {
+		return nil, err
+	}
+	items := make([]*core.ChatStepExecution, len(rows))
+	for i, row := range rows {
+		items[i] = chatStepExecutionFromPG(row.ID, row.WorkflowID, row.StepID, row.ActivityName,
+			row.ExitCode, row.Success, row.DurationMs, row.LoopNodeID, row.LoopIteration,
+			row.CreatedAt, row.SavedMessageID, row.OutputJson)
+	}
+	return items, nil
+}
+
+func chatStepExecutionFromPG(
+	id, workflowID, stepID, activityName string,
+	exitCode, successInt, durationMs sql.NullInt64,
+	loopNodeID sql.NullString, loopIteration sql.NullInt64,
+	createdAt time.Time, savedMessageID sql.NullString, outputJSON string,
+) *core.ChatStepExecution {
+	var success sql.NullBool
+	if successInt.Valid {
+		success = sql.NullBool{Bool: successInt.Int64 != 0, Valid: true}
+	}
+	return &core.ChatStepExecution{
+		ID:             id,
+		WorkflowID:     workflowID,
+		StepID:         stepID,
+		ActivityName:   activityName,
+		ExitCode:       exitCode,
+		Success:        success,
+		DurationMs:     durationMs,
+		LoopNodeID:     loopNodeID,
+		LoopIteration:  loopIteration,
+		CreatedAt:      createdAt,
+		SavedMessageID: savedMessageID,
+		OutputJSON:     outputJSON,
+	}
 }
 
 func (s *workflowStore) GetStepExecutionsByStep(ctx context.Context, workflowID, stepID string) ([]*core.StepExecution, error) {

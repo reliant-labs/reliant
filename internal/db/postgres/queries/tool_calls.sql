@@ -84,6 +84,16 @@ SELECT * FROM tool_calls
 WHERE id = ANY(sqlc.arg('ids')::text[])
 ORDER BY requested_at ASC;
 
+-- name: ListLiveToolCallsByChat :many
+-- A chat's non-terminal calls (pending/executing/backgrounded). The snapshot
+-- needs these even when their message is outside the window, because their
+-- status is still changing and no block it ships can carry it. Served by the
+-- partial idx_tool_calls_chat_live (a few dozen rows database-wide) instead of
+-- a scan of the chat's ~25k terminal calls.
+SELECT * FROM tool_calls
+WHERE chat_id = $1 AND status IN (1, 2, 6)
+ORDER BY requested_at ASC;
+
 -- name: ListToolCallsByMessageIDs :many
 SELECT * FROM tool_calls
 WHERE message_id = ANY(sqlc.arg('message_ids')::text[])

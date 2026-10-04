@@ -156,6 +156,10 @@ type WorkflowStore interface {
 	// chat in a single query, without OutputJSON. It replaces a
 	// per-workflow loop over GetStepExecutionsByWorkflow.
 	GetStepExecutionsForChat(ctx context.Context, chatID string) ([]*ChatStepExecution, error)
+	// GetBasicStepExecutionsForChat returns only the steps the chat timeline
+	// renders: user-facing steps plus their "-save" siblings that recorded a
+	// message. The BASIC view of GetWorkflowExecutions.
+	GetBasicStepExecutionsForChat(ctx context.Context, chatID string) ([]*ChatStepExecution, error)
 	DeleteStepExecutionsByWorkflow(ctx context.Context, workflowID string) error
 
 	ListCommandFavorites(ctx context.Context, userID, projectID string) ([]string, error)

@@ -192,6 +192,10 @@ func (s *contextWindowStore) GetContextWindowBySequence(ctx context.Context, thr
 	return contextWindowFromPG(result), nil
 }
 
+func (s *contextWindowStore) ListForkedThreadIDs(ctx context.Context, threadIDs []string) ([]string, error) {
+	return s.q.ListForkedThreadIDs(ctx, threadIDs)
+}
+
 func (s *contextWindowStore) GetContextWindowWithThread(ctx context.Context, id string) (*core.ContextWindow, string, *string, *string, error) {
 	result, err := s.q.GetContextWindowWithThread(ctx, id)
 	if err != nil {

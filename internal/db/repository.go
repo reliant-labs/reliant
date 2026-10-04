@@ -178,6 +178,9 @@ type Repository interface {
 	// ListToolCallsByIDs reads calls by their own primary key — the lookup
 	// that does not depend on tool_calls.message_id being populated.
 	ListToolCallsByIDs(ctx context.Context, toolCallIDs []string) ([]*ToolCall, error)
+	// ListLiveToolCallsByChat reads a chat's non-terminal calls only — a
+	// bounded read that does not scale with the chat's tool-call history.
+	ListLiveToolCallsByChat(ctx context.Context, chatID string) ([]*ToolCall, error)
 	// ListStrandedSpawnToolCalls reads spawn calls whose child workflow is
 	// terminal but which never received a result — a sub-agent whose work was
 	// silently dropped because the worker died between the two writes.
@@ -607,6 +610,7 @@ type Repository interface {
 	GetContextWindow(ctx context.Context, id string) (*ContextWindow, error)
 	GetLatestContextWindow(ctx context.Context, threadID string) (*ContextWindow, error)
 	GetContextWindowBySequence(ctx context.Context, threadID string, sequence int) (*ContextWindow, error)
+	ListForkedThreadIDs(ctx context.Context, threadIDs []string) ([]string, error)
 	GetContextWindowWithThread(ctx context.Context, id string) (*ContextWindow, string, *string, *string, error) // Returns cw, chatID, parentThreadID, forkAtMessageID
 	ListContextWindowsByThread(ctx context.Context, threadID string) ([]*ContextWindow, error)
 	GetMaxSequenceForThread(ctx context.Context, threadID string) (int, error)
@@ -704,6 +708,7 @@ type Repository interface {
 	// chat in a single query, without OutputJSON. It replaces a
 	// per-workflow loop over GetStepExecutionsByWorkflow.
 	GetStepExecutionsForChat(ctx context.Context, chatID string) ([]*ChatStepExecution, error)
+	GetBasicStepExecutionsForChat(ctx context.Context, chatID string) ([]*ChatStepExecution, error)
 	DeleteStepExecutionsByWorkflow(ctx context.Context, workflowID string) error
 
 	// Node Execution Events (for real-time UI streaming)

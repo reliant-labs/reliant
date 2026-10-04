@@ -475,6 +475,7 @@ func (s *StreamingService) buildChatSnapshot(ctx context.Context, chatID string)
 		childMessages     []*db.Message
 		otherUpdates      []*reliantv1.ChatUpdateData
 		totalMessageCount int
+		liveToolCalls     []*db.ToolCall
 	)
 
 	g1, gctx := errgroup.WithContext(ctx)
@@ -506,6 +507,18 @@ func (s *StreamingService) buildChatSnapshot(ctx context.Context, chatID string)
 		if err != nil {
 			logging.Warn(LOG_PREFIX_STREAM_CHAT+" Failed to count messages", "error", err, "chatID", chatID[:8])
 			return nil // non-fatal; falls back to the assembled count below
+		}
+		return nil
+	})
+
+	g1.Go(func() error {
+		// Independent of the message window, so it rides phase 1. A failure
+		// degrades to "no out-of-window live calls" rather than failing the open.
+		var err error
+		liveToolCalls, err = s.database.ListLiveToolCallsByChat(gctx, chatID)
+		if err != nil {
+			logging.Warn(LOG_PREFIX_STREAM_CHAT+" Failed to list live tool calls", "error", err, "chatID", chatID[:8])
+			liveToolCalls = nil
 		}
 		return nil
 	})
@@ -705,6 +718,8 @@ func (s *StreamingService) buildChatSnapshot(ctx context.Context, chatID string)
 			"chatID", chatID[:8], "messages", len(assembledMessages), "skipped", messagesSkipped)
 	}
 
+	otherUpdates = append(otherUpdates, s.snapshotToolCalls(ctx, allBlocks, liveToolCalls, mainThread, latestSeq)...)
+
 	snapshot := &reliantv1.ChatSyncSnapshot{
 		Messages:            assembledMessages,
 		OtherUpdates:        otherUpdates,
@@ -735,16 +750,12 @@ func (s *StreamingService) getNonMessageUpdates(ctx context.Context, chatID stri
 	}
 
 	metadata := s.threadMetadata(ctx, chatID)
-	toolCalls := s.snapshotToolCalls(ctx, updates)
 
 	result := make([]*reliantv1.ChatUpdateData, 0, len(updates))
 	for _, update := range updates {
 		data := update.Data
 		if update.UpdateType == reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_THREAD {
 			data = withThreadMetadata(data, metadata)
-		}
-		if update.UpdateType == reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_TOOL_CALL {
-			data = withToolCallSnapshot(data, toolCalls)
 		}
 		result = append(result, &reliantv1.ChatUpdateData{
 			UpdateType:     update.UpdateType,
@@ -943,80 +954,107 @@ func withThreadMetadata(data json.RawMessage, metadata map[string]threadSnapshot
 	return patched
 }
 
-func (s *StreamingService) snapshotToolCalls(ctx context.Context, updates []db.ChatUpdate) map[string]*db.ToolCall {
-	toolCallIDs := make([]string, 0)
-	seen := make(map[string]struct{})
-	for _, update := range updates {
-		if update.UpdateType != reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_TOOL_CALL {
+// snapshotToolCalls synthesizes tool_call updates from the durable tool_calls
+// table for exactly the calls a snapshot can need:
+//
+//   - every call referenced by a content block in the message window, and
+//   - every non-terminal call of the chat (liveCalls), wherever its message is.
+//
+// This replaces replaying the chat_updates tool_call history, which was 25,660
+// of 27,279 rows (≈10 MB) on a measured chat and carried nothing the durable
+// row does not: the client keeps tool state last-write-wins by tool_call_id and
+// only ever renders the newest status. Every older call is reachable through
+// its block (which already carries durable status) when the user scrolls back.
+//
+// SequenceNumber is latestSeq. These rows are read at snapshot time, so they
+// are at least as new as every chat_updates row at or below the high-water
+// mark; the live stream then continues from latestSeq and overwrites them with
+// anything newer. A tool_call update that raced in between the two reads is
+// delivered again from the cursor and wins by arriving later.
+//
+// In-window calls apply the same inheritedInFlightCall rule as the block path
+// (contentBlockToProto): an in-flight call owned by another thread is reported
+// CANCELLED to the thread being viewed. The client resolves status as live
+// state first and block status second, so a synthesized "executing" here would
+// override the block's "cancelled" and the two would contradict. Out-of-window
+// live calls have no block in the snapshot to contradict, so they keep their
+// real status; they stay correct if a scroll-back page later renders them,
+// because that block path computes the same status from the same row.
+func (s *StreamingService) snapshotToolCalls(ctx context.Context, blocks []*db.MessageContentBlock, liveCalls []*db.ToolCall, viewingThreadID string, latestSeq int64) []*reliantv1.ChatUpdateData {
+	blockCallIDs := make([]string, 0)
+	inWindow := make(map[string]struct{})
+	for _, block := range blocks {
+		if block.BlockType != reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_TOOL_CALL || block.ToolCallID == nil || *block.ToolCallID == "" {
 			continue
 		}
-		var payload struct {
-			ToolCallID string `json:"tool_call_id"`
-		}
-		if err := json.Unmarshal(update.Data, &payload); err != nil || payload.ToolCallID == "" {
+		if _, ok := inWindow[*block.ToolCallID]; ok {
 			continue
 		}
-		if _, ok := seen[payload.ToolCallID]; ok {
+		inWindow[*block.ToolCallID] = struct{}{}
+		blockCallIDs = append(blockCallIDs, *block.ToolCallID)
+	}
+
+	calls := make(map[string]*db.ToolCall, len(blockCallIDs)+len(liveCalls))
+	order := make([]string, 0, len(blockCallIDs)+len(liveCalls))
+	add := func(call *db.ToolCall) {
+		if call == nil {
+			return
+		}
+		if _, ok := calls[call.ID]; !ok {
+			order = append(order, call.ID)
+		}
+		calls[call.ID] = call
+	}
+	if len(blockCallIDs) > 0 {
+		byID, err := s.database.ListToolCallsByIDs(ctx, blockCallIDs)
+		if err != nil {
+			logging.Warn(LOG_PREFIX_STREAM_CHAT+" Failed to list tool calls for snapshot", "error", err, "toolCallCount", len(blockCallIDs))
+		}
+		for _, call := range byID {
+			add(call)
+		}
+	}
+	for _, call := range liveCalls {
+		add(call)
+	}
+
+	updates := make([]*reliantv1.ChatUpdateData, 0, len(order))
+	for _, id := range order {
+		call := calls[id]
+		status := call.Status
+		if _, ok := inWindow[id]; ok && inheritedInFlightCall(call, viewingThreadID) {
+			status = core.ToolCallStatusCancelled
+		}
+		payload := db.ToolCallUpdate{
+			UpdateType:  db.UpdateTypeToolCall,
+			ToolCallID:  call.ID,
+			ToolName:    call.ToolName,
+			Status:      db.ToolCallStatus(toolCallStatusString(status)),
+			RequestedAt: call.RequestedAt.UTC().Format(time.RFC3339Nano),
+		}
+		if call.StartedAt != nil {
+			payload.StartedAt = call.StartedAt.UTC().Format(time.RFC3339Nano)
+		}
+		if call.CompletedAt != nil {
+			payload.CompletedAt = call.CompletedAt.UTC().Format(time.RFC3339Nano)
+		}
+		if call.ChildWorkflowID != nil && *call.ChildWorkflowID != "" {
+			payload.ChildWorkflowID = *call.ChildWorkflowID
+		}
+		data, err := json.Marshal(payload)
+		if err != nil {
 			continue
 		}
-		seen[payload.ToolCallID] = struct{}{}
-		toolCallIDs = append(toolCallIDs, payload.ToolCallID)
+		updates = append(updates, &reliantv1.ChatUpdateData{
+			UpdateType:     reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_TOOL_CALL,
+			SequenceNumber: latestSeq,
+			EntityId:       db.EntityIDForToolCall(call.ID),
+			ChatId:         call.ChatID,
+			DataJson:       string(data),
+			CreatedAt:      call.UpdatedAt.UTC().Format(time.RFC3339Nano),
+		})
 	}
-	if len(toolCallIDs) == 0 {
-		return map[string]*db.ToolCall{}
-	}
-	calls, err := s.database.ListToolCallsByIDs(ctx, toolCallIDs)
-	if err != nil {
-		logging.Warn(LOG_PREFIX_STREAM_CHAT+" Failed to list tool calls for snapshot reconciliation",
-			"error", err, "toolCallCount", len(toolCallIDs))
-		return map[string]*db.ToolCall{}
-	}
-	byID := make(map[string]*db.ToolCall, len(calls))
-	for _, call := range calls {
-		if call != nil {
-			byID[call.ID] = call
-		}
-	}
-	return byID
-}
-
-func withToolCallSnapshot(data json.RawMessage, toolCalls map[string]*db.ToolCall) json.RawMessage {
-	if len(toolCalls) == 0 {
-		return data
-	}
-
-	var payload map[string]any
-	if err := json.Unmarshal(data, &payload); err != nil {
-		return data
-	}
-	toolCallID, ok := payload["tool_call_id"].(string)
-	if !ok || toolCallID == "" {
-		return data
-	}
-	call, ok := toolCalls[toolCallID]
-	if !ok || call == nil {
-		return data
-	}
-
-	payload["status"] = toolCallStatusString(call.Status)
-	if call.ToolName != "" {
-		payload["tool_name"] = call.ToolName
-	}
-	if call.StartedAt != nil {
-		payload["started_at"] = call.StartedAt.UTC().Format(time.RFC3339Nano)
-	}
-	if call.CompletedAt != nil {
-		payload["completed_at"] = call.CompletedAt.UTC().Format(time.RFC3339Nano)
-	}
-	if call.ChildWorkflowID != nil && *call.ChildWorkflowID != "" {
-		payload["child_workflow_id"] = *call.ChildWorkflowID
-	}
-
-	patched, err := json.Marshal(payload)
-	if err != nil {
-		return data
-	}
-	return patched
+	return updates
 }
 
 func toolCallStatusString(status core.ToolCallStatus) string {

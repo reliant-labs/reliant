@@ -15,7 +15,7 @@
 import { useEffect } from "react";
 import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { chatGrpc, type WorkflowExecutionData } from "../api/chat-grpc";
-import { WorkflowState } from "../gen/reliant/v1/chat_pb";
+import { WorkflowExecutionView, WorkflowState } from "../gen/reliant/v1/chat_pb";
 import { subscribeToRefetch } from "../store/refetchStore";
 import { chatDetailKeys } from "./chat-detail-keys";
 
@@ -71,6 +71,9 @@ function acquireRefetchSubscription(
       readers: 0,
       unsubscribe: subscribeToRefetch("workflow_executions", () => {
         queryClient.invalidateQueries(
+          // The chat's key PREFIX, so one pulse refreshes every view of the
+          // tree that is cached (BASIC for the timeline, FULL while the viewer
+          // is open) — and React Query refetches only the ones still mounted.
           { queryKey: chatDetailKeys.workflowExecutions(chatId) },
           // SECOND argument. invalidateQueries is
           // (filters, options) — cancelRefetch is an InvalidateOptions field,
@@ -104,16 +107,24 @@ function acquireRefetchSubscription(
  * Fetches and maintains the workflow execution tree for a chat.
  * Automatically updates when the backend emits workflow_executions refetch events.
  *
- * Multiple hook instances for the same chatId share a single query cache entry.
+ * Multiple hook instances for the same (chatId, view) share a single query
+ * cache entry.
+ *
+ * `view` defaults to BASIC, which is what the chat timeline and everything that
+ * only walks the tree need: the full workflow tree, but only the handful of
+ * steps the timeline draws. Ask for FULL only from a surface that summarises
+ * every step — the workflow viewer — and only while it is mounted. For the
+ * worst real chat FULL is 93,568 steps and 56.8 MB; BASIC is six steps.
  */
 export function useWorkflowExecutions(
   chatId: string | null,
+  view: WorkflowExecutionView = WorkflowExecutionView.BASIC,
 ): UseWorkflowExecutionsResult {
   const queryClient = useQueryClient();
 
   const query = useQuery({
-    queryKey: chatDetailKeys.workflowExecutions(chatId ?? ""),
-    queryFn: () => chatGrpc.getWorkflowExecutions(chatId!),
+    queryKey: chatDetailKeys.workflowExecutionsView(chatId ?? "", view),
+    queryFn: () => chatGrpc.getWorkflowExecutions(chatId!, view),
     enabled: !!chatId,
   });
 

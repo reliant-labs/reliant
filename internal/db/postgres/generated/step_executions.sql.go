@@ -120,6 +120,118 @@ func (q *Queries) GetAllStepExecutionsForWorkflow(ctx context.Context, workflowI
 	return items, nil
 }
 
+const getBasicStepExecutionsForChat = `-- name: GetBasicStepExecutionsForChat :many
+SELECT u.id, u.workflow_id, u.step_id, u.activity_name,
+       u.exit_code, u.success, u.duration_ms,
+       u.loop_node_id, u.loop_iteration, u.created_at,
+       u.saved_message_id, u.output_json::text AS output_json
+FROM (
+    SELECT se.id, se.workflow_id, se.step_id, se.activity_name,
+           se.exit_code, se.success, se.duration_ms,
+           se.loop_node_id, se.loop_iteration, se.created_at,
+           se.saved_message_id,
+           COALESCE(se.output_json, '') AS output_json
+    FROM step_executions se
+    JOIN workflows w ON w.id = se.workflow_id
+    WHERE w.chat_id = $1
+      AND se.activity_name NOT IN (
+          'WorkflowStatus', 'WorkflowError', 'Cleanup', 'FetchThreadResult',
+          'FailStep', 'SaveMessage', 'CallLLM', 'Approval', 'ExecuteTools')
+    UNION ALL
+    SELECT sv.id, sv.workflow_id, sv.step_id, sv.activity_name,
+           sv.exit_code, sv.success, sv.duration_ms,
+           sv.loop_node_id, sv.loop_iteration, sv.created_at,
+           sv.saved_message_id,
+           '' AS output_json
+    FROM step_executions vis
+    JOIN workflows vw ON vw.id = vis.workflow_id
+    JOIN step_executions sv
+      ON sv.workflow_id = vis.workflow_id
+     AND sv.step_id = vis.step_id || '-save'
+     AND sv.loop_node_id IS NOT DISTINCT FROM vis.loop_node_id
+     AND sv.loop_iteration IS NOT DISTINCT FROM vis.loop_iteration
+     AND sv.saved_message_id IS NOT NULL
+    WHERE vw.chat_id = $1
+      AND vis.activity_name NOT IN (
+          'WorkflowStatus', 'WorkflowError', 'Cleanup', 'FetchThreadResult',
+          'FailStep', 'SaveMessage', 'CallLLM', 'Approval', 'ExecuteTools')
+) u
+ORDER BY u.workflow_id, u.created_at ASC
+`
+
+type GetBasicStepExecutionsForChatRow struct {
+	ID             string         `json:"id"`
+	WorkflowID     string         `json:"workflow_id"`
+	StepID         string         `json:"step_id"`
+	ActivityName   string         `json:"activity_name"`
+	ExitCode       sql.NullInt64  `json:"exit_code"`
+	Success        sql.NullInt64  `json:"success"`
+	DurationMs     sql.NullInt64  `json:"duration_ms"`
+	LoopNodeID     sql.NullString `json:"loop_node_id"`
+	LoopIteration  sql.NullInt64  `json:"loop_iteration"`
+	CreatedAt      time.Time      `json:"created_at"`
+	SavedMessageID sql.NullString `json:"saved_message_id"`
+	OutputJson     string         `json:"output_json"`
+}
+
+// The steps the chat timeline renders, for ChatService/GetWorkflowExecutions
+// in its BASIC view. GetStepExecutionsForChat is the FULL view.
+//
+// The timeline draws an activity indicator for each USER-FACING step and
+// reads, for each, whether its "-save" sibling recorded a message (then the
+// step renders AS that message). Nothing else. On chat 8bb0a875 that is 6 of
+// 93,568 step rows: 56.8 MB of JSON / ~1s of SQL for the full read against a
+// few kB / ~6ms here.
+//
+// The activity list is a LITERAL, unlike GetStepExecutionsForChat's
+// parameter: the planner proves a query is covered by a partial index only
+// from a predicate it can see at plan time, and a bound array is not one.
+// With the literal it uses idx_step_executions_user_facing (96 kB); without
+// it, a seq scan over every step row. The literal MUST equal
+// workflowmodel.InternalActivities and the index predicate;
+// TestUserFacingStepIndexPredicateMatchesInternalActivities pins all three.
+//
+// The second arm finds each visible step's "-save" sibling by
+// (workflow_id, step_id || '-save', loop scope) through idx_step_executions_saves.
+// Loop scope is matched with IS NOT DISTINCT FROM so iteration 3's step never
+// picks up iteration 2's save, and NULL (not in a loop) matches NULL.
+// Save rows carry no output_json, as in the FULL view.
+func (q *Queries) GetBasicStepExecutionsForChat(ctx context.Context, chatID string) ([]GetBasicStepExecutionsForChatRow, error) {
+	rows, err := q.db.QueryContext(ctx, getBasicStepExecutionsForChat, chatID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetBasicStepExecutionsForChatRow{}
+	for rows.Next() {
+		var i GetBasicStepExecutionsForChatRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkflowID,
+			&i.StepID,
+			&i.ActivityName,
+			&i.ExitCode,
+			&i.Success,
+			&i.DurationMs,
+			&i.LoopNodeID,
+			&i.LoopIteration,
+			&i.CreatedAt,
+			&i.SavedMessageID,
+			&i.OutputJson,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getStepExecution = `-- name: GetStepExecution :one
 SELECT id, workflow_id, step_id, activity_name, output_json, exit_code, success, duration_ms, created_at, loop_node_id, loop_iteration, saved_message_id FROM step_executions WHERE id = $1
 `

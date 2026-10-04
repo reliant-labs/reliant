@@ -497,8 +497,11 @@ func runWorkflowStatus(cmd *cobra.Command, executionID string, jsonOut bool) err
 	}
 	ctx := cmd.Context()
 
+	// FULL: summarizeSteps counts every step, and BASIC withholds the internal
+	// ones (SaveMessage / CallLLM / ...) that make up nearly all of them.
 	execResp, err := clients.chat.GetWorkflowExecutions(ctx, connect.NewRequest(&reliantv1.GetWorkflowExecutionsRequest{
 		ChatId: executionID,
+		View:   reliantv1.WorkflowExecutionView_WORKFLOW_EXECUTION_VIEW_FULL,
 	}))
 	if err != nil {
 		return clients.rpcError(err, "fetching workflow executions")

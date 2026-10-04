@@ -171,6 +171,8 @@ func (s *chatUpdateSource) Updates(ctx context.Context, sinceSeq int64) ([]execf
 }
 
 func (s *chatUpdateSource) Root(ctx context.Context) (execfollow.RootState, error) {
+	// Only root status is read, so the default BASIC view is enough; FULL would
+	// ship every step row of the chat.
 	resp, err := s.client.GetWorkflowExecutions(ctx, connect.NewRequest(&reliantv1.GetWorkflowExecutionsRequest{
 		ChatId: s.chatID,
 	}))
