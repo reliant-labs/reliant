@@ -440,6 +440,14 @@ message StartChatRequest {
   // still free. That is the one and only workflow switch the system allows, and
   // it is why SendMessage no longer has a switch branch.
   optional string chat_id = 17;
+
+  // daemon_id picks the machine every tool call in this run executes on. It
+  // becomes the chat's active daemon. Unset leaves selection to default
+  // resolution. It must be one of the caller's daemons and, when the project
+  // is installed anywhere, one it is installed on. A chat_id start whose chat
+  // is already pinned (a branch is pinned to its worktree's daemon) rejects a
+  // different daemon_id: the worktree exists on exactly one machine.
+  optional string daemon_id = 18;
 }
 
 // StartChatResponse returns the started chat and the ids of its root run.

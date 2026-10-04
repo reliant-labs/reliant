@@ -89,6 +89,7 @@ function RunWorkflowDialogBody({ onClose, projectId, workflowRef, onStarted }: R
       const { chat } = await chatGrpc.start({
         project_id: projectId,
         worktree_id: value.worktreeId,
+        daemon_id: value.daemonId,
         workflow: workflowRef,
         messages: [{ role: MessageRole.USER, content: prompt.trim() }],
         workflow_params: value.params,
@@ -150,6 +151,7 @@ function RunWorkflowDialogBody({ onClose, projectId, workflowRef, onStarted }: R
           onStatusChange={setStatus}
           showValidation={attempted}
           applyDefaultPresets
+          showMachinePicker
           disabled={starting}
         />
 

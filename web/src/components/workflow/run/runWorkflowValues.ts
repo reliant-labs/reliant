@@ -32,6 +32,8 @@ export interface RunWorkflowValue {
   params: Record<string, unknown>;
   /** Unset runs in the project's main checkout. */
   worktreeId?: string;
+  /** The machine the run executes on. Unset leaves it to default resolution. */
+  daemonId?: string;
 }
 
 export const EMPTY_RUN_VALUE: RunWorkflowValue = { presets: {}, params: {} };

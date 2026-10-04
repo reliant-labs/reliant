@@ -86,14 +86,40 @@ func (s *ChatService) StartChat(
 		spec.UserJWT = jwt
 	}
 
+	// The chat the wake should target: a branch's own chat (pinned by its
+	// worktree) or, for a new chat, one that carries the chosen daemon.
+	var wakeChat *db.Chat
+	chosen := req.Msg.GetDaemonId()
 	if id := req.Msg.GetChatId(); id != "" {
-		// A branch's first send: wake the daemon it is pinned to.
+		// A branch's first send.
 		if branch, getErr := s.getChatForUser(ctx, id, userID); getErr == nil {
-			s.wakeDaemonForAttendedTurn(ctx, userID, branch)
+			wakeChat = branch
 		}
-	} else {
-		s.wakeDaemonForAttendedTurn(ctx, userID, nil)
 	}
+	if chosen != "" {
+		projectID := req.Msg.ProjectId
+		if wakeChat != nil {
+			projectID = wakeChat.ProjectID
+			// The branch's worktree lives on one machine, so a pinned chat's
+			// daemon is authoritative; a different choice cannot be honored.
+			if pinned := wakeChat.ActiveDaemonID; pinned != nil && *pinned != "" && *pinned != chosen {
+				return nil, connect.NewError(connect.CodeInvalidArgument,
+					fmt.Errorf("daemon_id conflicts with the chat's pinned daemon: a branch runs on its worktree's machine"))
+			}
+		}
+		if err := validateOwnedProjectDaemon(ctx, s.database, userID, projectID, chosen); err != nil {
+			return nil, err
+		}
+		spec.DaemonID = chosen
+		if wakeChat == nil {
+			wakeChat = &db.Chat{ActiveDaemonID: &chosen}
+		} else {
+			pinnedCopy := *wakeChat
+			pinnedCopy.ActiveDaemonID = &chosen
+			wakeChat = &pinnedCopy
+		}
+	}
+	s.wakeDaemonForAttendedTurn(ctx, userID, wakeChat)
 
 	result, err := s.launcher().Launch(ctx, event, spec)
 	if err != nil {

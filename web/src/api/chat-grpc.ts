@@ -179,6 +179,7 @@ export interface StartChatOptions {
   messages: InputMessage[];  // At least one user message required
   title?: string;
   worktree_id?: string;
+  daemon_id?: string; // Machine the run executes on; omit for default resolution
   workflow?: string;  // Optional - defaults to user's preference or builtin://agent
   mode?: string;
   attachments?: string[];
@@ -258,6 +259,7 @@ export const chatGrpc = {
       messages: options.messages.map(m => ({ role: m.role, content: m.content, displayStyle: m.display_style })),
       title: options.title,
       worktreeId: options.worktree_id,
+      daemonId: options.daemon_id || undefined,
       workflow: options.workflow,
       mode: options.mode,
       attachments: options.attachments || [],
