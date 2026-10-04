@@ -9,7 +9,9 @@ import { useMemo, useState, useEffect } from 'react'
 import { WorkflowViewerPanel } from './WorkflowViewerPanel'
 import { useWorkflowExecutions } from '../../hooks/useWorkflowExecutions'
 import { transformWorkflowExecution } from '../Chat/ExecutionSidebar'
-import { Loader2, ChevronLeft, CheckCircle, XCircle, Clock } from 'lucide-react'
+import { Loader2, ChevronLeft } from 'lucide-react'
+import { runStatus } from '../../lib/runStatus'
+import { RunStatusBadge, RunStatusDot } from '../ui/RunStatusIndicator'
 
 interface WorkflowViewerTabProps {
   projectId: string
@@ -31,20 +33,6 @@ function formatRelativeTime(timestamp: number): string {
   return new Date(timestamp).toLocaleDateString()
 }
 
-/** Status icon for workflow */
-function WorkflowStatusIcon({ status }: { status: string }) {
-  switch (status) {
-    case 'running':
-      return <Loader2 className="w-4 h-4 text-sky-500 animate-spin" />
-    case 'completed':
-      return <CheckCircle className="w-4 h-4 text-emerald-500" />
-    case 'failed':
-      return <XCircle className="w-4 h-4 text-red-500" />
-    default:
-      return <Clock className="w-4 h-4 text-muted-foreground" />
-  }
-}
-
 export function WorkflowViewerTab({ projectId, chatId, workflowName }: WorkflowViewerTabProps) {
   // Fetch workflow execution data for this chat
   const { allWorkflows, hasRunningWorkflow, isLoading } = useWorkflowExecutions(chatId)
@@ -53,6 +41,16 @@ export function WorkflowViewerTab({ projectId, chatId, workflowName }: WorkflowV
   const transformedWorkflows = useMemo(() => {
     return allWorkflows.map(transformWorkflowExecution)
   }, [allWorkflows])
+
+  // Read from the wire lifecycle, not the transformed `status`: that one is a
+  // smaller viewer vocabulary that folds paused and queued into "running".
+  const statuses = useMemo(
+    () =>
+      allWorkflows.map((wf) =>
+        runStatus({ state: wf.state, stopReason: wf.stopReason, outcome: wf.outcome }),
+      ),
+    [allWorkflows],
+  )
   
   // Selected workflow index (null = show list)
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null)
@@ -106,20 +104,16 @@ export function WorkflowViewerTab({ projectId, chatId, workflowName }: WorkflowV
               onClick={() => setSelectedIndex(index)}
               className="w-full px-4 py-3 flex items-center gap-3 hover:bg-muted/50 border-b border-border transition-colors text-left"
             >
-              <WorkflowStatusIcon status={wf.status} />
+              <RunStatusDot status={statuses[index]!} />
               <div className="flex-1 min-w-0">
                 <div className="font-medium text-sm text-foreground truncate">
                   {wf.workflowName.replace('builtin://', '')}
                 </div>
                 <div className="text-xs text-muted-foreground">
-                  {formatRelativeTime(wf.createdAt)} • {wf.status}
+                  {formatRelativeTime(wf.createdAt)}
                 </div>
               </div>
-              {wf.status === 'running' && (
-                <span className="text-xs bg-sky-100 text-sky-700 px-2 py-0.5 rounded-full">
-                  Active
-                </span>
-              )}
+              <RunStatusBadge status={statuses[index]!} />
             </button>
           ))}
         </div>

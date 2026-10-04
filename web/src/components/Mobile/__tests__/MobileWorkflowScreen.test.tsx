@@ -8,6 +8,8 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { Workflow, Step } from "../../../types/workflow";
 import type { WorkflowExecution, StepExecution } from "../../Chat/ExecutionSidebar/types";
+import { WorkflowState, WorkflowStopReason } from "../../../gen/reliant/v1/chat_pb";
+import { runStatus } from "../../../lib/runStatus";
 
 vi.mock("@tanstack/react-router", () => ({
   Link: ({ children, ...props }: { children?: React.ReactNode }) => (
@@ -62,14 +64,23 @@ describe("MobileWorkflowScreen", () => {
     expect(screen.getByText("act")).toBeInTheDocument();
   });
 
-  it("shows the execution status pill when a live execution is provided", () => {
-    render(<MobileWorkflowScreen workflow={workflow()} execution={execution({ status: "running" })} />);
-    expect(screen.getByText("running")).toBeInTheDocument();
+  it("shows the run's status pill when a run is provided", () => {
+    render(
+      <MobileWorkflowScreen
+        workflow={workflow()}
+        execution={execution({ status: "running" })}
+        runStatus={runStatus({ state: WorkflowState.STOPPED, stopReason: WorkflowStopReason.PAUSED })}
+      />,
+    );
+    // The run-status vocabulary, not the step view's collapsed "running".
+    expect(screen.getByText("Paused")).toBeInTheDocument();
   });
 
-  it("omits the execution status pill when there is no execution", () => {
+  it("omits the status pill when there is no run", () => {
     render(<MobileWorkflowScreen workflow={workflow()} />);
-    expect(screen.queryByText(/running|completed|failed|cancelled/)).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/Queued|Running|Needs you|Paused|Completed|Failed|Cancelled/),
+    ).not.toBeInTheDocument();
   });
 
   it("reflects per-node execution status derived from the execution tree", () => {

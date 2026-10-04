@@ -17,28 +17,18 @@ import { MobileWorkflowStepList } from "./MobileWorkflowStepList";
 import { MobileWorkflowNodeSheet } from "./MobileWorkflowNodeSheet";
 import { getWorkflowDisplayName } from "../workflow/useWorkflowInputs";
 import { MobileScreenHeader } from "./MobileChrome";
-
-function ExecutionStatusPill({ status }: { status: WorkflowExecution["status"] }) {
-  const config = {
-    running: "bg-primary/10 text-primary",
-    completed: "bg-success/10 text-success",
-    failed: "bg-destructive/10 text-destructive",
-    cancelled: "bg-muted text-muted-foreground",
-  } as const;
-
-  return (
-    <span
-      className={`rounded-full px-2 py-0.5 text-xs font-medium capitalize ${config[status]}`}
-    >
-      {status}
-    </span>
-  );
-}
+import type { RunStatusDisplay } from "../../lib/runStatus";
+import { RunStatusBadge } from "../ui/RunStatusIndicator";
 
 interface MobileWorkflowScreenProps {
   workflow: Workflow;
   /** Live execution, when this workflow is (or was) driving a chat. */
   execution?: WorkflowExecution;
+  /**
+   * The run's status for the header pill, from lib/runStatus. Absent when
+   * there is no run (catalog browsing), which renders no pill.
+   */
+  runStatus?: RunStatusDisplay;
   /** Connects status to the authoritative node_execution stream — see useExtendedExecutionStatus. */
   chatId?: string | null;
   /** Where the back button goes. Defaults to the workflow catalog. */
@@ -48,6 +38,7 @@ interface MobileWorkflowScreenProps {
 export function MobileWorkflowScreen({
   workflow,
   execution,
+  runStatus,
   chatId,
   backTo = "/m/workflows",
 }: MobileWorkflowScreenProps) {
@@ -82,9 +73,7 @@ export function MobileWorkflowScreen({
             <ChevronLeft className="h-5 w-5" />
           </Link>
         }
-        trailing={
-          execution ? <ExecutionStatusPill status={execution.status} /> : undefined
-        }
+        trailing={runStatus ? <RunStatusBadge status={runStatus} /> : undefined}
       />
 
       <MobileWorkflowStepList

@@ -30,10 +30,6 @@ vi.mock("../ui/ContextMenu", () => ({
 // The real Dropdown is used here on purpose: these tests assert open/close
 // behavior (choose-an-option and Escape), which a passthrough mock would fake.
 
-vi.mock("../ui/ActivityDot", () => ({
-  ActivityDot: () => <div data-testid="activity-dot" />,
-}));
-
 vi.mock("../../hooks/useDebounce", () => ({
   useDebounce: <T,>(value: T) => value,
 }));

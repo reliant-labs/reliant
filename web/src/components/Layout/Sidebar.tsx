@@ -60,8 +60,14 @@ import {
 } from "../../store/chatListPreferencesStore";
 import { sortChats, compareChatGroups } from "../../lib/chatListOrder";
 import { Dropdown } from "../ui/Dropdown";
-import { ActivityDot, type ChatActivityState } from "../ui/ActivityDot";
-import { useActivityStore, activityToDotState, ChatActivity } from "../../store/activityStore";
+import { RunStatusDot } from "../ui/RunStatusIndicator";
+import { runStatusFromActivity } from "../../lib/runStatus";
+import {
+  useActivityStore,
+  activityToDotState,
+  ChatActivity,
+  type DotState as ChatActivityState,
+} from "../../store/activityStore";
 
 const CHAT_HEADER_ACTION_BUTTON_CLASS =
   "flex h-7 w-7 shrink-0 items-center justify-center rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-ring/40";
@@ -166,7 +172,10 @@ interface ArchivedChatGroup {
 }
 
 interface ChatWithActivity extends Chat {
+  /** Coarse classification for sorting, grouping and the unread badge. */
   activityState: ChatActivityState;
+  /** The live activity itself; the dot's label and color come from lib/runStatus. */
+  liveActivity: ChatActivity;
   priority: number;
   lastActivity?: string;
 }
@@ -225,6 +234,7 @@ const ChatItem = memo(function ChatItem({
   onArchiveChat,
 }: ChatItemProps) {
   const isActive = activeChatId === chat.id;
+  const runStatus = runStatusFromActivity(chat.liveActivity);
   const showStatusDot = chat.activityState !== "idle" && chat.activityState !== "awaiting_approval";
   const showNotificationBadge = chat.unread || chat.activityState === "awaiting_approval";
   const chatTitle = chat.title || "New chat";
@@ -256,13 +266,15 @@ const ChatItem = memo(function ChatItem({
         </Tooltip>
       )}
 
-      {showStatusDot && (
+      {showStatusDot && runStatus && (
         <div 
           className="flex-shrink-0 group-hover:scale-110 transition-transform duration-200"
           data-testid={`chat-activity-dot-${chat.id}`}
           data-activity-state={chat.activityState}
         >
-          <ActivityDot state={chat.activityState} />
+          <Tooltip content={runStatus.label} placement="left" delay={300}>
+            <RunStatusDot status={runStatus} size="lg" />
+          </Tooltip>
         </div>
       )}
 
@@ -719,10 +731,8 @@ function SidebarComponent({
   }, [chats.length, fetchProcesses]);
 
   // Activity detection - reads directly from activityStore (SINGLE SOURCE OF TRUTH)
-  const getChatActivityState = useCallback(
-    (chat: Chat): ChatActivityState => {
-      return activityToDotState(activities.get(chat.id) ?? ChatActivity.IDLE);
-    },
+  const getChatActivity = useCallback(
+    (chat: Chat): ChatActivity => activities.get(chat.id) ?? ChatActivity.IDLE,
     [activities]
   );
 
@@ -742,13 +752,13 @@ function SidebarComponent({
     });
 
     return activeChats.map((chat) => {
-      const activityState = getChatActivityState(chat);
+      const liveActivity = getChatActivity(chat);
+      const activityState = activityToDotState(liveActivity);
 
       // Priority calculation for sorting (only truly active chats float to top)
       let priority = 0;
       if (activityState === "awaiting_approval") priority += 1000; // Highest - needs user action
-      if (activityState === "thinking" || activityState === "streaming")
-        priority += 800; // AI actively working
+      if (activityState === "thinking") priority += 800; // AI actively working
       if (activityState === "error") priority += 400; // Errors need attention
       // Unread chats get a boost (but lower than active work)
       if (chat.unread) priority += 200;
@@ -756,11 +766,12 @@ function SidebarComponent({
       return {
         ...chat,
         activityState,
+        liveActivity,
         priority,
         lastActivity: chat.updatedAt,
       };
     });
-  }, [chats, getChatActivityState]);
+  }, [chats, getChatActivity]);
 
   // Get worktree for a chat - all chats now have worktree_id
   const getWorktreeForChat = useCallback(
@@ -802,6 +813,7 @@ function SidebarComponent({
     const archivedList: ChatWithActivity[] = projectArchivedChats.map((chat) => ({
       ...chat,
       activityState: "idle" as const,
+      liveActivity: ChatActivity.IDLE,
       priority: 0,
       lastActivity: chat.updatedAt,
     }));

@@ -37,7 +37,9 @@ import { ChatActivity } from "../gen/reliant/v1/chat_pb";
 // Re-export the proto enum so consumers don't need to import from gen/
 export { ChatActivity } from "../gen/reliant/v1/chat_pb";
 
-// Map activity enum to dot states for the sidebar ActivityDot component
+// Coarse activity classes the sidebar and keyboard navigation sort, group and
+// filter by. What a user READS for an activity (label, color) is not here: it
+// is lib/runStatus's runStatusFromActivity.
 export type DotState = "idle" | "thinking" | "awaiting_approval" | "error" | "paused";
 
 export function activityToDotState(activity: ChatActivity): DotState {

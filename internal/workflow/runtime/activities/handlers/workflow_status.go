@@ -11,8 +11,10 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/analytics"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/workflow/builtin"
+	"github.com/reliant-labs/reliant/internal/workflow/model"
 )
 
 // ============================================================================
@@ -98,10 +100,11 @@ func (a *WorkflowStatusActivity) Execute(ctx context.Context, input WorkflowStat
 	// Update chat notification state based on workflow status
 	// Note: Activity (running) is derived from workflow.status, not stored in chat.state
 	// - "started" -> no change
-	// - "completed" -> mark unread (only for ROOT workflow - user should see result)
+	// - "completed" -> mark unread (only for ROOT workflow - user should see
+	//   result), unless nobody started it by typing (completionNotifies)
 	// - "cancelled" -> no change (user cancelled, no action needed)
 	// - "failed" -> no change (nothing pending)
-	if input.Status == "completed" && isRootWorkflow {
+	if input.Status == "completed" && isRootWorkflow && a.completionNotifies(ctx, input) {
 		if err := a.repo.UpdateChatUnread(ctx, input.ChatID, true, "workflow_completed"); err != nil {
 			logging.Warn("[WorkflowStatus] Failed to mark chat as unread", "error", err)
 		}
@@ -158,6 +161,40 @@ func (a *WorkflowStatusActivity) Execute(ctx context.Context, input WorkflowStat
 	}
 
 	return WorkflowStatusOutput{Success: true}, nil
+}
+
+// completionNotifies reports whether a ROOT completion should mark the chat
+// unread. The unread mark is also what raises the OS notification: the web
+// notifies on exactly the `unread=true, reason=workflow_completed` user update
+// this write emits, so skipping it silences both.
+//
+// A chat a human started (launch kind "chat.start", or none for a chat that
+// predates trigger events) always notifies: they asked, the answer is ready.
+// A run nobody started by typing (a schedule, an agent's start_run) does not,
+// because an hourly automation would otherwise notify 24 times a day; its
+// result is recorded in the run history instead (WORKFLOW_UI.md §6.4).
+//
+// Failures stay on. A run that completed into a declared `failure` outcome
+// still notifies whatever launched it. Runs that need input are not affected
+// at all: approvals and questions mark unread on their own paths.
+func (a *WorkflowStatusActivity) completionNotifies(ctx context.Context, input WorkflowStatusInput) bool {
+	if input.Outcome == model.OutcomeFailure {
+		return true
+	}
+	chat, err := a.repo.GetChat(ctx, input.ChatID)
+	if err != nil || chat == nil {
+		// Unknown origin: surface the result rather than silently drop it.
+		logging.Warn("[WorkflowStatus] Could not read chat launch kind; notifying", "chat_id", input.ChatID, "error", err)
+		return true
+	}
+	return isInteractiveLaunchKind(chat.LaunchKind)
+}
+
+// isInteractiveLaunchKind reports whether a chat's launch kind means a human
+// started it. Empty is a chat from before launch kinds were recorded, which
+// was always interactive.
+func isInteractiveLaunchKind(kind string) bool {
+	return kind == "" || kind == string(core.TriggerEventKindChatStart)
 }
 
 // reviveThreadForNewRun moves this run's thread out of a terminal status,
