@@ -1528,6 +1528,25 @@ is ready for integration nodes.*
 
 ---
 
+### 14.1 Decisions (2026-10-04)
+
+The user delegated these ("fix as you see fit"). They are settled for the
+build; revisit only with a concrete reason.
+
+| # | Decision | Why |
+|---|---|---|
+| 1 | **Inbox is a top-level nav item** with a count badge. | It is the only interruption automations get (decision 9), so it must be visible without opening anything. |
+| 2 | **The Inbox includes interactive chats awaiting approval or an answer.** It is "everything waiting on me". The sidebar badge stays too. | One place to clear; a user should not have to know which surface a pending item came from. |
+| 3 | **Re-run uses the current definition**, labelled "Re-run (current definition)". There is no definition snapshot in v1. | Snapshotting needs a launch-time YAML/hash record and a loader for historical definitions. That is not worth it until someone asks. |
+| 4 | **Agent-started runs are never listed in the sidebar.** They show in Runs, and as a linked child-runs strip in the parent chat's header. | Nesting rules with time windows are hard to predict. Runs is the home for runs; the parent link covers discovery. |
+| 5 | **Keep the "awaiting input" exception in `exclude_automations` until the Inbox ships**, then remove it in the same PR that adds the Inbox. | Removing it first would make an automation's question invisible. |
+| 6 | **No "continue on another machine" in v1.** Offer "Re-run on…" only. | The worktree lives on the original daemon. |
+| 7 | **Presets move to workflow detail plus a Settings section.** There is no fourth hub tab. | Presets belong to a workflow's inputs. |
+| 8 | **Mobile is out of scope this round, except** that `/m` must not break. | Desktop first; mobile already has a run-scoped viewer. |
+| 9 | **Notifications for non-interactive runs:** completions are silent (#411); failures notify. A failure is a `failed` status **or** a declared failure outcome. | An hourly automation must not notify 24×/day, and a broken one must not be silent. |
+| 10 | **Defaults:** Automations lists all projects; Runs lists the current project, with an "All projects" chip. | Automations are few; runs are many. |
+| 11 | **Manual "Run…" is attended.** There is no "run without me" toggle in v1. | A human pressed the button. |
+
 ## 15. Build next, ranked
 
 1. **Runs list and run detail inside the app area** (Phase 1, with G1). It
