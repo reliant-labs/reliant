@@ -1,6 +1,8 @@
 // Copyright (c) 2025 Reliant Labs
 package tools
 
+import "strings"
+
 // LoadableWildcard means "anything in the registry" in a loadable_tools list.
 const LoadableWildcard = "*"
 
@@ -86,4 +88,28 @@ func ResolveToolAccess(preloaded []string, loadable []string, mcpToolNames []str
 
 	access.Loadable = ExpandToolFilter(loadable, mcpToolNames)
 	return access
+}
+
+// mcpProbeName is a name shaped like any MCP tool, used to test whether a glob
+// filter entry can match one without knowing which servers are connected.
+const mcpProbeName = "mcp__server__tool"
+
+// FilterReachesMCP reports whether any of the filters can name an `mcp__*`
+// tool. It is static: MCP tool names are only known once a daemon has been
+// asked, so deciding whether to ask has to work from the filter text alone.
+// Exclusions never grant reach and are ignored.
+func FilterReachesMCP(filters ...[]string) bool {
+	for _, filter := range filters {
+		for _, spec := range filter {
+			switch {
+			case strings.HasPrefix(spec, "!"), strings.HasPrefix(spec, "spawn:"):
+				continue
+			case spec == "tag:"+string(TagMCP), strings.HasPrefix(spec, "mcp__"):
+				return true
+			case containsGlobChars(spec) && matchGlob(spec, mcpProbeName):
+				return true
+			}
+		}
+	}
+	return false
 }
