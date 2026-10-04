@@ -32,12 +32,14 @@ import {
   SetTriggerEnabledRequestSchema,
   TriggerDefinitionSchema,
   TriggerEventOutcome,
+  TriggerHealthStatus,
   TriggerOverlapPolicy,
   UpdateTriggerRequestSchema,
   type ScheduleSource as ProtoScheduleSource,
   type Trigger as ProtoTrigger,
   type TriggerDefinition as ProtoTriggerDefinition,
   type TriggerEvent as ProtoTriggerEvent,
+  type TriggerHealth as ProtoTriggerHealth,
 } from "../gen/reliant/v1/trigger_pb";
 import type { RunDisplayState } from "../gen/reliant/v1/run_pb";
 
@@ -76,6 +78,18 @@ export interface TriggerEvent {
   runDisplayState?: RunDisplayState;
 }
 
+/** TriggerHealthStatus; UNSPECIFIED (an older server) reads as unknown. */
+export type TriggerHealthStatusKey = "healthy" | "degraded" | "failing" | "unknown";
+
+/** The server's read-only health summary. Rules: TriggerHealthStatus in trigger.proto. */
+export interface TriggerHealth {
+  status: TriggerHealthStatusKey;
+  consecutiveFailures: number;
+  consecutiveSkips: number;
+  /** Empty when the window holds no failure. */
+  lastFailureDetail: string;
+}
+
 export interface Trigger {
   id: string;
   name: string;
@@ -88,6 +102,11 @@ export interface Trigger {
   message: string;
   /** The daemon every launched run executes on. Always set by the server. */
   daemonId: string;
+  /** The project's name, joined by the server. Unset when the project was deleted. */
+  projectName?: string;
+  /** The daemon's hostname, joined by the server. Unset when it never reported one. */
+  daemonName?: string;
+  health: TriggerHealth;
   createdAt: string;
   updatedAt: string;
   nextFireAt?: string;
@@ -152,6 +171,28 @@ function scheduleFromProto(source: ProtoScheduleSource): TriggerSchedule {
   };
 }
 
+function healthStatusFromProto(status: TriggerHealthStatus): TriggerHealthStatusKey {
+  switch (status) {
+    case TriggerHealthStatus.HEALTHY:
+      return "healthy";
+    case TriggerHealthStatus.DEGRADED:
+      return "degraded";
+    case TriggerHealthStatus.FAILING:
+      return "failing";
+    default:
+      return "unknown";
+  }
+}
+
+function healthFromProto(health: ProtoTriggerHealth | undefined): TriggerHealth {
+  return {
+    status: healthStatusFromProto(health?.status ?? TriggerHealthStatus.UNSPECIFIED),
+    consecutiveFailures: health?.consecutiveFailures ?? 0,
+    consecutiveSkips: health?.consecutiveSkips ?? 0,
+    lastFailureDetail: health?.lastFailureDetail ?? "",
+  };
+}
+
 export function eventFromProto(event: ProtoTriggerEvent): TriggerEvent {
   return {
     id: event.id,
@@ -180,6 +221,9 @@ export function triggerFromProto(proto: ProtoTrigger): Trigger {
     params,
     message: proto.message,
     daemonId: proto.daemonId,
+    projectName: proto.projectName || undefined,
+    daemonName: proto.daemonName || undefined,
+    health: healthFromProto(proto.health),
     createdAt: proto.createdAt,
     updatedAt: proto.updatedAt,
     nextFireAt: proto.nextFireAt || undefined,
