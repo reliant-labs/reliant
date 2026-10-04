@@ -20,6 +20,7 @@ import { useWorkflows } from "../../store/globalDataStore";
 import { useWorkflowExecutions } from "../../hooks/useWorkflowExecutions";
 import { normalizeWorkflowRef } from "../workflow/useWorkflowInputs";
 import type { WorkflowExecutionData } from "../../types/chat";
+import { runStatus } from "../../lib/runStatus";
 import type { WorkflowExecution } from "../Chat/ExecutionSidebar/types";
 import {
   WorkflowState,
@@ -31,8 +32,9 @@ import {
  * screen renders.
  *
  * The wire model preserves workflow state and stop reason separately. The
- * workflow viewer has a smaller display-only status vocabulary, so collapse
- * the pair only at this rendering boundary.
+ * per-node step view has a smaller status vocabulary, so collapse the pair
+ * only for it. The header pill does NOT read this collapsed status: it gets
+ * the run's status from lib/runStatus, which keeps paused and queued distinct.
  */
 function toScreenExecution(
   execution: WorkflowExecutionData | null | undefined,
@@ -146,6 +148,15 @@ export function MobileChatWorkflowRoute() {
     <MobileWorkflowScreen
       workflow={workflow}
       execution={toScreenExecution(execution)}
+      runStatus={
+        execution
+          ? runStatus({
+              state: execution.state,
+              stopReason: execution.stopReason,
+              outcome: execution.outcome,
+            })
+          : undefined
+      }
       chatId={chatId}
       backTo={`/m/chats/${chatId}`}
     />

@@ -21,16 +21,25 @@ import {
   TriggerSchema,
 } from "@/gen/reliant/v1/trigger_pb";
 import { DaemonInfoSchema, DaemonStatus } from "@/gen/reliant/v1/daemon_registry_pb";
+import {
+  ChatActivity,
+  ChatSchema,
+  GetChatResponseSchema,
+  WorkflowState,
+  WorkflowStopReason,
+} from "@/gen/reliant/v1/chat_pb";
 import { HOUR, isoFromNow, renderAtRoute } from "./automationTestUtils";
 
 const getTrigger = vi.fn();
 const listTriggerEvents = vi.fn();
 const fireTrigger = vi.fn();
 const deleteTrigger = vi.fn();
+const getChat = vi.fn();
 
 vi.mock("@/api/grpc-client", () => ({
   grpcClient: {
     trigger: () => ({ getTrigger, listTriggerEvents, fireTrigger, deleteTrigger }),
+    chat: () => ({ getChat }),
     daemonRegistry: () => ({
       listDaemons: vi.fn(async () => ({
         daemons: [create(DaemonInfoSchema, { daemonId: "daemon-1", hostname: "laptop", status: DaemonStatus.IDLE })],
@@ -111,6 +120,21 @@ const skipped = create(TriggerEventSchema, {
   outcomeDetail: "previous run still active",
 });
 
+/** The chat a launched event started, with its root run's lifecycle. */
+function launchedChat(state: WorkflowState, stopReason: WorkflowStopReason, activity = ChatActivity.IDLE) {
+  return create(GetChatResponseSchema, {
+    chat: create(ChatSchema, {
+      id: "chat-42",
+      projectId: "proj-1",
+      workflowState: state,
+      workflowStopReason: stopReason,
+      activity,
+      launchKind: "schedule",
+      triggerId: "trig-1",
+    }),
+  });
+}
+
 describe("AutomationDetail", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -118,6 +142,41 @@ describe("AutomationDetail", () => {
     listTriggerEvents.mockResolvedValue(
       create(ListTriggerEventsResponseSchema, { events: [launched, skipped] }),
     );
+    getChat.mockResolvedValue(launchedChat(WorkflowState.STOPPED, WorkflowStopReason.COMPLETED));
+  });
+
+  it("a run that launched and then failed does not read as green", async () => {
+    getChat.mockResolvedValue(launchedChat(WorkflowState.STOPPED, WorkflowStopReason.FAILED, ChatActivity.ERROR));
+    renderAtRoute(<AutomationDetail triggerId="trig-1" />, "/automations/trig-1");
+
+    const row = await screen.findByTestId("automation-event-ev-1");
+    // The firing keeps its own word, in a color that claims nothing about the run.
+    expect(within(row).getByText("Launched")).toBeInTheDocument();
+    // The run's own status is what the row reports as its result.
+    expect(await within(row).findByText("Failed")).toBeInTheDocument();
+    expect(getChat.mock.calls[0]![0]).toMatchObject({ chatId: "chat-42" });
+    // Asserted on the rendered pills, not on a test hook: green is the class.
+    expect(row.querySelector('[class*="bg-success"]')).toBeNull();
+    // A firing that launched nothing has no run to look up.
+    expect(getChat).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows the launched run's live status", async () => {
+    getChat.mockResolvedValue(
+      launchedChat(WorkflowState.ACTIVE, WorkflowStopReason.UNSPECIFIED, ChatActivity.AWAITING_INPUT),
+    );
+    renderAtRoute(<AutomationDetail triggerId="trig-1" />, "/automations/trig-1");
+
+    const row = await screen.findByTestId("automation-event-ev-1");
+    expect(await within(row).findByText("Needs you")).toBeInTheDocument();
+  });
+
+  it("says so when the launched chat can no longer be read", async () => {
+    getChat.mockRejectedValue(new Error("chat not found"));
+    renderAtRoute(<AutomationDetail triggerId="trig-1" />, "/automations/trig-1");
+
+    const row = await screen.findByTestId("automation-event-ev-1");
+    expect(await within(row).findByText("Unavailable")).toBeInTheDocument();
   });
 
   it("renders the definition and the event history", async () => {

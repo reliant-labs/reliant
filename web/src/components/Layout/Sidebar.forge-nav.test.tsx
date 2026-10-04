@@ -46,7 +46,6 @@ vi.mock("../ui/Button", () => ({
 }));
 
 vi.mock("../ui/ContextMenu", () => ({ ContextMenu: () => null }));
-vi.mock("../ui/ActivityDot", () => ({ ActivityDot: () => <div /> }));
 vi.mock("../../hooks/useDebounce", () => ({ useDebounce: <T,>(value: T) => value }));
 
 vi.mock("../../hooks/chat-queries", () => ({

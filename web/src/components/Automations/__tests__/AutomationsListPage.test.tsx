@@ -106,7 +106,7 @@ describe("AutomationsListPage", () => {
     expect(
       await within(row).findByText("Reliant on laptop · Every weekday at 9:00 AM ET"),
     ).toBeInTheDocument();
-    expect(within(row).getByText("Failed")).toBeInTheDocument();
+    expect(within(row).getByText("Failed to launch")).toBeInTheDocument();
     expect(within(row).getByText("3 hours ago")).toBeInTheDocument();
     expect(within(row).getByText("in 2 hours")).toBeInTheDocument();
     expect(within(row).getByRole("switch", { name: "Morning triage enabled" })).toHaveAttribute(
@@ -115,6 +115,37 @@ describe("AutomationsListPage", () => {
     );
     // Listed across every project: no project filter on the request.
     expect(listTriggers.mock.calls[0]![0].projectId).toBeUndefined();
+  });
+
+  it("a launched firing is not shown as success: the list cannot see how the run went", async () => {
+    listTriggers.mockResolvedValue({
+      triggers: [
+        protoTrigger({
+          lastEvent: create(TriggerEventSchema, {
+            id: "ev-2",
+            occurredAt: isoFromNow(-HOUR),
+            outcome: TriggerEventOutcome.LAUNCHED,
+            chatId: "chat-that-then-failed",
+          }),
+        }),
+      ],
+    });
+
+    renderAtRoute(<AutomationsListPage />);
+
+    const row = await screen.findByTestId("automation-row-trig-1");
+    const launched = within(row).getByText("Launched");
+    // Asserted on the rendered pill, not on a test hook: green is the class.
+    expect(launched.className).not.toMatch(/\bbg-success/);
+    expect(row.querySelector('[class*="bg-success"]')).toBeNull();
+  });
+
+  it("names a launch failure as a failure to launch, not a failed run", async () => {
+    listTriggers.mockResolvedValue({ triggers: [protoTrigger()] });
+    renderAtRoute(<AutomationsListPage />);
+
+    const row = await screen.findByTestId("automation-row-trig-1");
+    expect(within(row).getByText("Failed to launch")).toBeInTheDocument();
   });
 
   it("shows a never-run, paused trigger as such", async () => {

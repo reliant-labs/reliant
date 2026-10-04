@@ -40,6 +40,8 @@ import { formatAbsoluteTime, formatRelativeTime } from "@/lib/relativeTime";
 import { AutomationsShell } from "./AutomationsShell";
 import { AutomationFormDialog } from "./AutomationFormDialog";
 import { OutcomeBadge } from "./OutcomeBadge";
+import { RunStatusBadge } from "../ui/RunStatusIndicator";
+import { useLaunchedRunStatus } from "./useLaunchedRunStatus";
 import { openAutomationChat } from "./openAutomationChat";
 import { daemonLabel, daemonStatusLabel } from "./daemonChoices";
 
@@ -356,6 +358,25 @@ function DefinitionList({ trigger }: { trigger: Trigger }) {
   );
 }
 
+/**
+ * The status of the run a launched event started. A firing that launched
+ * nothing has no run, and says so with a dash rather than borrowing the
+ * event's outcome.
+ */
+function LaunchedRunCell({ chatId }: { chatId?: string }) {
+  const { status, unavailable } = useLaunchedRunStatus(chatId);
+  if (!chatId) return <span className="text-muted-foreground">—</span>;
+  if (unavailable) return <span className="text-xs text-muted-foreground">Unavailable</span>;
+  if (!status) {
+    return (
+      <span className="text-xs text-muted-foreground" aria-busy="true">
+        Loading…
+      </span>
+    );
+  }
+  return <RunStatusBadge status={status} />;
+}
+
 interface EventHistoryProps {
   events?: TriggerEvent[];
   isLoading: boolean;
@@ -389,7 +410,8 @@ function EventHistory({ events, isLoading, error, onOpenChat }: EventHistoryProp
         <thead>
           <tr className="border-b border-border/60 text-left text-xs uppercase tracking-wide text-muted-foreground">
             <th scope="col" className="px-5 py-2 font-medium">Time</th>
-            <th scope="col" className="px-5 py-2 font-medium">Outcome</th>
+            <th scope="col" className="px-5 py-2 font-medium">Firing</th>
+            <th scope="col" className="px-5 py-2 font-medium">Run</th>
             <th scope="col" className="px-5 py-2 font-medium">Detail</th>
             <th scope="col" className="px-5 py-2 font-medium"><span className="sr-only">Chat</span></th>
           </tr>
@@ -408,6 +430,9 @@ function EventHistory({ events, isLoading, error, onOpenChat }: EventHistoryProp
               </td>
               <td className="px-5 py-3 align-top">
                 <OutcomeBadge outcome={event.outcome} />
+              </td>
+              <td className="px-5 py-3 align-top">
+                <LaunchedRunCell chatId={event.outcome === "launched" ? event.chatId : undefined} />
               </td>
               <td className="px-5 py-3 align-top text-muted-foreground">
                 {event.outcomeDetail || (event.outcome === "launched" ? "Started a chat" : "—")}

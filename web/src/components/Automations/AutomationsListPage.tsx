@@ -5,8 +5,9 @@
  *
  * One row per automation, answering the three questions someone opening this
  * page has: what does it do (name, project, schedule in words), is it on
- * (the switch), and is it working (the last run's outcome, and when it runs
- * next). Everything else is on the automation's own page.
+ * (the switch), and is it working (the last firing's outcome, and when it runs
+ * next). Everything else, including how each launched run went, is on the
+ * automation's own page.
  */
 
 import { useMemo, useState } from "react";
@@ -171,7 +172,10 @@ export function AutomationRow({ trigger, projectName, daemonName }: AutomationRo
       </div>
 
       <div className="order-3 col-span-2 flex min-w-0 items-center gap-2 md:order-none md:col-span-1">
-        <span className="sr-only">Last run:</span>
+        {/* The last FIRING, not the last run's result: "Launched" says a run
+            started, not how it went. The run's own status is on the
+            automation's page, which can afford one read per run. */}
+        <span className="sr-only">Last firing:</span>
         {lastEvent ? (
           <>
             <OutcomeBadge outcome={lastEvent.outcome} />

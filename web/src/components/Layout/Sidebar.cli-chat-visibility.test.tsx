@@ -42,10 +42,6 @@ vi.mock("../ui/ContextMenu", () => ({
   ContextMenu: () => null,
 }));
 
-vi.mock("../ui/ActivityDot", () => ({
-  ActivityDot: () => <div data-testid="activity-dot" />,
-}));
-
 vi.mock("../../hooks/useDebounce", () => ({
   useDebounce: <T,>(value: T) => value,
 }));
