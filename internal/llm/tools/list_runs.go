@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/rctx"
 )
 
@@ -25,17 +26,30 @@ Each entry has the run id (use it with get_run, control_run and send_to_run), ti
 
 	listRunsDefaultLimit = 20
 	listRunsMaxLimit     = 100
-	// listRunsStateScan is how many chats are read when a state filter is
-	// applied. State lives on the root workflow, not the chat row, so the
-	// filter runs after the read; scanning a wider window keeps a filter on a
-	// rare state from coming back empty only because the newest chats are
-	// all another state.
-	listRunsStateScan = 500
 )
 
 var validRunStates = map[string]bool{
 	"pending": true, "running": true, "paused": true,
 	"completed": true, "failed": true, "cancelled": true,
+}
+
+// runStateDisplayStates maps the tool's state words onto the run list's display
+// states. "running" includes a run waiting on a human: the tool's vocabulary
+// has no "needs input", and such a run is still running.
+var runStateDisplayStates = map[string][]db.RunDisplayState{
+	"pending":   {db.RunDisplayQueued},
+	"running":   {db.RunDisplayRunning, db.RunDisplayNeedsInput},
+	"paused":    {db.RunDisplayPaused},
+	"completed": {db.RunDisplayCompleted},
+	"failed":    {db.RunDisplayFailed},
+	"cancelled": {db.RunDisplayCancelled},
+}
+
+func runListStateLabel(run *db.RunListItem) string {
+	if run.RootStatus.State == core.WorkflowStateUnspecified {
+		return "pending"
+	}
+	return run.RootStatus.Label()
 }
 
 type listRunsTool struct {
@@ -83,41 +97,31 @@ func (l *listRunsTool) Execute(rctx *rctx.ToolContext, params ListRunsParams) (T
 		limit = listRunsMaxLimit
 	}
 
-	filters := db.ChatFilters{UserID: caller.userID, ExcludeArchived: true, Limit: limit}
+	filters := db.RunListFilters{UserID: caller.userID, ByLastActive: true, Limit: limit}
 	if params.ProjectID != "" {
 		projectID := params.ProjectID
 		filters.ProjectID = &projectID
 	}
 	if state != "" {
-		filters.Limit = listRunsStateScan
+		filters.DisplayStates = runStateDisplayStates[state]
 	}
 
-	chats, err := l.repo.ListChats(rctx.Context, filters)
+	runs, _, err := l.repo.ListRuns(rctx.Context, filters)
 	if err != nil {
 		return NewTextErrorResponse("Could not list runs: " + err.Error()), nil
 	}
 
-	summaries := make([]RunSummary, 0, len(chats))
-	for _, chat := range chats {
-		label := runStateLabel(chat)
-		if state != "" && label != state {
-			continue
-		}
-		summary := RunSummary{
-			RunID:        chat.ID,
-			Title:        chat.Title,
-			ProjectID:    chat.ProjectID,
-			State:        label,
-			LastActiveAt: formatRunTime(chat.LastActive),
-			Current:      chat.ID == rctx.ChatID,
-		}
-		if chat.WorkflowName != nil {
-			summary.Workflow = *chat.WorkflowName
-		}
-		summaries = append(summaries, summary)
-		if len(summaries) == limit {
-			break
-		}
+	summaries := make([]RunSummary, 0, len(runs))
+	for _, run := range runs {
+		summaries = append(summaries, RunSummary{
+			RunID:        run.ChatID,
+			Title:        run.Title,
+			Workflow:     run.WorkflowName,
+			ProjectID:    run.ProjectID,
+			State:        runListStateLabel(run),
+			LastActiveAt: formatRunTime(run.LastActive),
+			Current:      run.ChatID == rctx.ChatID,
+		})
 	}
 
 	if len(summaries) == 0 {

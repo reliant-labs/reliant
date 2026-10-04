@@ -5,11 +5,11 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
-import { fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
-import type { Value } from "@bufbuild/protobuf/wkt";
-import { file_google_protobuf_struct } from "@bufbuild/protobuf/wkt";
-import type { InputMessage, WorkflowState, WorkflowStopReason } from "./chat_pb";
+import type { GenEnum, GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
+import { enumDesc, fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
+import type { Timestamp, Value } from "@bufbuild/protobuf/wkt";
+import { file_google_protobuf_struct, file_google_protobuf_timestamp } from "@bufbuild/protobuf/wkt";
+import type { ChatActivity, InputMessage, WorkflowState, WorkflowStopReason } from "./chat_pb";
 import { file_reliant_v1_chat } from "./chat_pb";
 import type { Message } from "@bufbuild/protobuf";
 
@@ -17,7 +17,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file reliant/v1/run.proto.
  */
 export const file_reliant_v1_run: GenFile = /*@__PURE__*/
-  fileDesc("ChRyZWxpYW50L3YxL3J1bi5wcm90bxIKcmVsaWFudC52MSKzAgoDUnVuEgoKAmlkGAEgASgJEhUKDXdvcmtmbG93X25hbWUYAiABKAkSDgoGdGhyZWFkGAMgASgJEhIKCnNlc3Npb25faWQYBCABKAkSEQoJcGFyZW50X2lkGAUgASgJEhoKEnNwYXduZWRfYnlfbm9kZV9pZBgGIAEoCRIWCg5sb29wX2l0ZXJhdGlvbhgHIAEoAxIoCgVzdGF0ZRgIIAEoDjIZLnJlbGlhbnQudjEuV29ya2Zsb3dTdGF0ZRIzCgtzdG9wX3JlYXNvbhgJIAEoDjIeLnJlbGlhbnQudjEuV29ya2Zsb3dTdG9wUmVhc29uEg8KB291dGNvbWUYCiABKAkSFQoNY3JlYXRlZF9hdF9tcxgLIAEoAxIXCg9jb21wbGV0ZWRfYXRfbXMYDCABKAMi3AIKD1N0YXJ0UnVuUmVxdWVzdBIQCgh3b3JrZmxvdxgBIAEoCRI3CgZpbnB1dHMYAiADKAsyJy5yZWxpYW50LnYxLlN0YXJ0UnVuUmVxdWVzdC5JbnB1dHNFbnRyeRISCgpzZXNzaW9uX2lkGAMgASgJEioKCG1lc3NhZ2VzGAQgAygLMhgucmVsaWFudC52MS5JbnB1dE1lc3NhZ2USOQoHcHJlc2V0cxgFIAMoCzIoLnJlbGlhbnQudjEuU3RhcnRSdW5SZXF1ZXN0LlByZXNldHNFbnRyeRIMCgRtb2RlGAYgASgJGkUKC0lucHV0c0VudHJ5EgsKA2tleRgBIAEoCRIlCgV2YWx1ZRgCIAEoCzIWLmdvb2dsZS5wcm90b2J1Zi5WYWx1ZToCOAEaLgoMUHJlc2V0c0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEiMAoQU3RhcnRSdW5SZXNwb25zZRIcCgNydW4YASABKAsyDy5yZWxpYW50LnYxLlJ1biJeChBTaWduYWxSdW5SZXF1ZXN0Eg4KBnJ1bl9pZBgBIAEoCRIOCgZ0aHJlYWQYAiABKAkSKgoIbWVzc2FnZXMYAyADKAsyGC5yZWxpYW50LnYxLklucHV0TWVzc2FnZSI7ChFTaWduYWxSdW5SZXNwb25zZRIRCglkZWxpdmVyZWQYASABKAgSEwoLbWVzc2FnZV9pZHMYAiADKAkiHwoNR2V0UnVuUmVxdWVzdBIOCgZydW5faWQYASABKAkiLgoOR2V0UnVuUmVzcG9uc2USHAoDcnVuGAEgASgLMg8ucmVsaWFudC52MS5SdW4igQEKD0xpc3RSdW5zUmVxdWVzdBISCgpzZXNzaW9uX2lkGAEgASgJEhEKCXBhcmVudF9pZBgCIAEoCRIoCgVzdGF0ZRgDIAEoDjIZLnJlbGlhbnQudjEuV29ya2Zsb3dTdGF0ZRINCgVsaW1pdBgEIAEoBRIOCgZvZmZzZXQYBSABKAUiQAoQTGlzdFJ1bnNSZXNwb25zZRIdCgRydW5zGAEgAygLMg8ucmVsaWFudC52MS5SdW4SDQoFdG90YWwYAiABKAUiIQoPUGF1c2VSdW5SZXF1ZXN0Eg4KBnJ1bl9pZBgBIAEoCSI0ChBQYXVzZVJ1blJlc3BvbnNlEg8KB3N1Y2Nlc3MYASABKAgSDwoHbWVzc2FnZRgCIAEoCSIiChBSZXN1bWVSdW5SZXF1ZXN0Eg4KBnJ1bl9pZBgBIAEoCSJTChFSZXN1bWVSdW5SZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIEg8KB21lc3NhZ2UYAiABKAkSHAoDcnVuGAMgASgLMg8ucmVsaWFudC52MS5SdW4iIgoQQ2FuY2VsUnVuUmVxdWVzdBIOCgZydW5faWQYASABKAkiNQoRQ2FuY2VsUnVuUmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCBIPCgdtZXNzYWdlGAIgASgJIjUKE0ludGVycnVwdFJ1blJlcXVlc3QSDgoGcnVuX2lkGAEgASgJEg4KBnRocmVhZBgCIAEoCSJWChRJbnRlcnJ1cHRSdW5SZXNwb25zZRIcChRjYW5jZWxsZWRfdG9vbF9jYWxscxgBIAEoBRIgChh1bmRlbGl2ZXJhYmxlX3Rvb2xfY2FsbHMYAiADKAky4wQKClJ1blNlcnZpY2USRwoIU3RhcnRSdW4SGy5yZWxpYW50LnYxLlN0YXJ0UnVuUmVxdWVzdBocLnJlbGlhbnQudjEuU3RhcnRSdW5SZXNwb25zZSIAEkoKCVNpZ25hbFJ1bhIcLnJlbGlhbnQudjEuU2lnbmFsUnVuUmVxdWVzdBodLnJlbGlhbnQudjEuU2lnbmFsUnVuUmVzcG9uc2UiABJBCgZHZXRSdW4SGS5yZWxpYW50LnYxLkdldFJ1blJlcXVlc3QaGi5yZWxpYW50LnYxLkdldFJ1blJlc3BvbnNlIgASRwoITGlzdFJ1bnMSGy5yZWxpYW50LnYxLkxpc3RSdW5zUmVxdWVzdBocLnJlbGlhbnQudjEuTGlzdFJ1bnNSZXNwb25zZSIAEkcKCFBhdXNlUnVuEhsucmVsaWFudC52MS5QYXVzZVJ1blJlcXVlc3QaHC5yZWxpYW50LnYxLlBhdXNlUnVuUmVzcG9uc2UiABJKCglSZXN1bWVSdW4SHC5yZWxpYW50LnYxLlJlc3VtZVJ1blJlcXVlc3QaHS5yZWxpYW50LnYxLlJlc3VtZVJ1blJlc3BvbnNlIgASSgoJQ2FuY2VsUnVuEhwucmVsaWFudC52MS5DYW5jZWxSdW5SZXF1ZXN0Gh0ucmVsaWFudC52MS5DYW5jZWxSdW5SZXNwb25zZSIAElMKDEludGVycnVwdFJ1bhIfLnJlbGlhbnQudjEuSW50ZXJydXB0UnVuUmVxdWVzdBogLnJlbGlhbnQudjEuSW50ZXJydXB0UnVuUmVzcG9uc2UiAEI6WjhnaXRodWIuY29tL3JlbGlhbnQtbGFicy9yZWxpYW50L2dlbi9yZWxpYW50L3YxO3JlbGlhbnR2MWIGcHJvdG8z", [file_google_protobuf_struct, file_reliant_v1_chat]);
+  fileDesc("ChRyZWxpYW50L3YxL3J1bi5wcm90bxIKcmVsaWFudC52MSKIBAoDUnVuEgoKAmlkGAEgASgJEhUKDXdvcmtmbG93X25hbWUYAiABKAkSDgoGdGhyZWFkGAMgASgJEhIKCnNlc3Npb25faWQYBCABKAkSEQoJcGFyZW50X2lkGAUgASgJEhoKEnNwYXduZWRfYnlfbm9kZV9pZBgGIAEoCRIWCg5sb29wX2l0ZXJhdGlvbhgHIAEoAxIoCgVzdGF0ZRgIIAEoDjIZLnJlbGlhbnQudjEuV29ya2Zsb3dTdGF0ZRIzCgtzdG9wX3JlYXNvbhgJIAEoDjIeLnJlbGlhbnQudjEuV29ya2Zsb3dTdG9wUmVhc29uEg8KB291dGNvbWUYCiABKAkSFQoNY3JlYXRlZF9hdF9tcxgLIAEoAxIXCg9jb21wbGV0ZWRfYXRfbXMYDCABKAMSDQoFdGl0bGUYDSABKAkSEgoKcHJvamVjdF9pZBgOIAEoCRITCgtsYXVuY2hfa2luZBgPIAEoCRISCgp0cmlnZ2VyX2lkGBAgASgJEhQKDHRyaWdnZXJfbmFtZRgRIAEoCRIRCglkYWVtb25faWQYEiABKAkSKgoIYWN0aXZpdHkYEyABKA4yGC5yZWxpYW50LnYxLkNoYXRBY3Rpdml0eRIyCg1kaXNwbGF5X3N0YXRlGBQgASgOMhsucmVsaWFudC52MS5SdW5EaXNwbGF5U3RhdGUi3AIKD1N0YXJ0UnVuUmVxdWVzdBIQCgh3b3JrZmxvdxgBIAEoCRI3CgZpbnB1dHMYAiADKAsyJy5yZWxpYW50LnYxLlN0YXJ0UnVuUmVxdWVzdC5JbnB1dHNFbnRyeRISCgpzZXNzaW9uX2lkGAMgASgJEioKCG1lc3NhZ2VzGAQgAygLMhgucmVsaWFudC52MS5JbnB1dE1lc3NhZ2USOQoHcHJlc2V0cxgFIAMoCzIoLnJlbGlhbnQudjEuU3RhcnRSdW5SZXF1ZXN0LlByZXNldHNFbnRyeRIMCgRtb2RlGAYgASgJGkUKC0lucHV0c0VudHJ5EgsKA2tleRgBIAEoCRIlCgV2YWx1ZRgCIAEoCzIWLmdvb2dsZS5wcm90b2J1Zi5WYWx1ZToCOAEaLgoMUHJlc2V0c0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEiMAoQU3RhcnRSdW5SZXNwb25zZRIcCgNydW4YASABKAsyDy5yZWxpYW50LnYxLlJ1biJeChBTaWduYWxSdW5SZXF1ZXN0Eg4KBnJ1bl9pZBgBIAEoCRIOCgZ0aHJlYWQYAiABKAkSKgoIbWVzc2FnZXMYAyADKAsyGC5yZWxpYW50LnYxLklucHV0TWVzc2FnZSI7ChFTaWduYWxSdW5SZXNwb25zZRIRCglkZWxpdmVyZWQYASABKAgSEwoLbWVzc2FnZV9pZHMYAiADKAkiHwoNR2V0UnVuUmVxdWVzdBIOCgZydW5faWQYASABKAkiLgoOR2V0UnVuUmVzcG9uc2USHAoDcnVuGAEgASgLMg8ucmVsaWFudC52MS5SdW4i8gMKD0xpc3RSdW5zUmVxdWVzdBISCgpzZXNzaW9uX2lkGAEgASgJEhEKCXBhcmVudF9pZBgCIAEoCRIoCgVzdGF0ZRgDIAEoDjIZLnJlbGlhbnQudjEuV29ya2Zsb3dTdGF0ZRINCgVsaW1pdBgEIAEoBRIXCgpwcm9qZWN0X2lkGAYgASgJSACIAQESEAoId29ya2Zsb3cYByADKAkSFwoKdHJpZ2dlcl9pZBgIIAEoCUgBiAEBEhMKC2xhdW5jaF9raW5kGAkgAygJEjMKDmRpc3BsYXlfc3RhdGVzGAogAygOMhsucmVsaWFudC52MS5SdW5EaXNwbGF5U3RhdGUSMQoNc3RhcnRlZF9hZnRlchgLIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASMgoOc3RhcnRlZF9iZWZvcmUYDCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhIKBXF1ZXJ5GA0gASgJSAKIAQESFwoKcGFnZV90b2tlbhgOIAEoCUgDiAEBEhgKEGluY2x1ZGVfYXJjaGl2ZWQYDyABKAhCDQoLX3Byb2plY3RfaWRCDQoLX3RyaWdnZXJfaWRCCAoGX3F1ZXJ5Qg0KC19wYWdlX3Rva2VuSgQIBRAGUgZvZmZzZXQiWQoQTGlzdFJ1bnNSZXNwb25zZRIdCgRydW5zGAEgAygLMg8ucmVsaWFudC52MS5SdW4SDQoFdG90YWwYAiABKAUSFwoPbmV4dF9wYWdlX3Rva2VuGAMgASgJIlUKGUxhc3RSdW5QZXJXb3JrZmxvd1JlcXVlc3QSFwoKcHJvamVjdF9pZBgBIAEoCUgAiAEBEhAKCHdvcmtmbG93GAIgAygJQg0KC19wcm9qZWN0X2lkIjsKGkxhc3RSdW5QZXJXb3JrZmxvd1Jlc3BvbnNlEh0KBHJ1bnMYASADKAsyDy5yZWxpYW50LnYxLlJ1biIhCg9QYXVzZVJ1blJlcXVlc3QSDgoGcnVuX2lkGAEgASgJIjQKEFBhdXNlUnVuUmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCBIPCgdtZXNzYWdlGAIgASgJIiIKEFJlc3VtZVJ1blJlcXVlc3QSDgoGcnVuX2lkGAEgASgJIlMKEVJlc3VtZVJ1blJlc3BvbnNlEg8KB3N1Y2Nlc3MYASABKAgSDwoHbWVzc2FnZRgCIAEoCRIcCgNydW4YAyABKAsyDy5yZWxpYW50LnYxLlJ1biIiChBDYW5jZWxSdW5SZXF1ZXN0Eg4KBnJ1bl9pZBgBIAEoCSI1ChFDYW5jZWxSdW5SZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIEg8KB21lc3NhZ2UYAiABKAkiNQoTSW50ZXJydXB0UnVuUmVxdWVzdBIOCgZydW5faWQYASABKAkSDgoGdGhyZWFkGAIgASgJIlYKFEludGVycnVwdFJ1blJlc3BvbnNlEhwKFGNhbmNlbGxlZF90b29sX2NhbGxzGAEgASgFEiAKGHVuZGVsaXZlcmFibGVfdG9vbF9jYWxscxgCIAMoCSqSAgoPUnVuRGlzcGxheVN0YXRlEiEKHVJVTl9ESVNQTEFZX1NUQVRFX1VOU1BFQ0lGSUVEEAASHAoYUlVOX0RJU1BMQVlfU1RBVEVfUVVFVUVEEAESHQoZUlVOX0RJU1BMQVlfU1RBVEVfUlVOTklORxACEiEKHVJVTl9ESVNQTEFZX1NUQVRFX05FRURTX0lOUFVUEAMSHAoYUlVOX0RJU1BMQVlfU1RBVEVfUEFVU0VEEAQSHwobUlVOX0RJU1BMQVlfU1RBVEVfQ09NUExFVEVEEAUSHAoYUlVOX0RJU1BMQVlfU1RBVEVfRkFJTEVEEAYSHwobUlVOX0RJU1BMQVlfU1RBVEVfQ0FOQ0VMTEVEEAcyygUKClJ1blNlcnZpY2USRwoIU3RhcnRSdW4SGy5yZWxpYW50LnYxLlN0YXJ0UnVuUmVxdWVzdBocLnJlbGlhbnQudjEuU3RhcnRSdW5SZXNwb25zZSIAEkoKCVNpZ25hbFJ1bhIcLnJlbGlhbnQudjEuU2lnbmFsUnVuUmVxdWVzdBodLnJlbGlhbnQudjEuU2lnbmFsUnVuUmVzcG9uc2UiABJBCgZHZXRSdW4SGS5yZWxpYW50LnYxLkdldFJ1blJlcXVlc3QaGi5yZWxpYW50LnYxLkdldFJ1blJlc3BvbnNlIgASRwoITGlzdFJ1bnMSGy5yZWxpYW50LnYxLkxpc3RSdW5zUmVxdWVzdBocLnJlbGlhbnQudjEuTGlzdFJ1bnNSZXNwb25zZSIAEmUKEkxhc3RSdW5QZXJXb3JrZmxvdxIlLnJlbGlhbnQudjEuTGFzdFJ1blBlcldvcmtmbG93UmVxdWVzdBomLnJlbGlhbnQudjEuTGFzdFJ1blBlcldvcmtmbG93UmVzcG9uc2UiABJHCghQYXVzZVJ1bhIbLnJlbGlhbnQudjEuUGF1c2VSdW5SZXF1ZXN0GhwucmVsaWFudC52MS5QYXVzZVJ1blJlc3BvbnNlIgASSgoJUmVzdW1lUnVuEhwucmVsaWFudC52MS5SZXN1bWVSdW5SZXF1ZXN0Gh0ucmVsaWFudC52MS5SZXN1bWVSdW5SZXNwb25zZSIAEkoKCUNhbmNlbFJ1bhIcLnJlbGlhbnQudjEuQ2FuY2VsUnVuUmVxdWVzdBodLnJlbGlhbnQudjEuQ2FuY2VsUnVuUmVzcG9uc2UiABJTCgxJbnRlcnJ1cHRSdW4SHy5yZWxpYW50LnYxLkludGVycnVwdFJ1blJlcXVlc3QaIC5yZWxpYW50LnYxLkludGVycnVwdFJ1blJlc3BvbnNlIgBCOlo4Z2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vcmVsaWFudC92MTtyZWxpYW50djFiBnByb3RvMw", [file_google_protobuf_struct, file_google_protobuf_timestamp, file_reliant_v1_chat]);
 
 /**
  * Run is one workflow execution.
@@ -121,6 +121,66 @@ export type Run = Message<"reliant.v1.Run"> & {
    * @generated from field: int64 completed_at_ms = 12;
    */
   completedAtMs: bigint;
+
+  /**
+   * Title is the backing chat's title.
+   *
+   * @generated from field: string title = 13;
+   */
+  title: string;
+
+  /**
+   * ProjectId is the project the run belongs to.
+   *
+   * @generated from field: string project_id = 14;
+   */
+  projectId: string;
+
+  /**
+   * LaunchKind is what started the run: "chat.start", "schedule" or
+   * "agent.start_run". Empty for a run that predates launch events.
+   *
+   * @generated from field: string launch_kind = 15;
+   */
+  launchKind: string;
+
+  /**
+   * TriggerId is the automation that fired the run. Empty for ad hoc kinds.
+   *
+   * @generated from field: string trigger_id = 16;
+   */
+  triggerId: string;
+
+  /**
+   * TriggerName is that automation's current name. Empty when there is no
+   * trigger, or it has since been deleted.
+   *
+   * @generated from field: string trigger_name = 17;
+   */
+  triggerName: string;
+
+  /**
+   * DaemonId is the machine the run's tools execute on. Empty when none is
+   * attached.
+   *
+   * @generated from field: string daemon_id = 18;
+   */
+  daemonId: string;
+
+  /**
+   * Activity is the run's live activity (running, awaiting input, ...).
+   *
+   * @generated from field: reliant.v1.ChatActivity activity = 19;
+   */
+  activity: ChatActivity;
+
+  /**
+   * DisplayState is the one state a user reads, derived from state,
+   * stop_reason and activity. See RunDisplayState.
+   *
+   * @generated from field: reliant.v1.RunDisplayState display_state = 20;
+   */
+  displayState: RunDisplayState;
 };
 
 /**
@@ -332,21 +392,93 @@ export type ListRunsRequest = Message<"reliant.v1.ListRunsRequest"> & {
   parentId: string;
 
   /**
-   * State filters by lifecycle state. Unspecified returns all.
+   * State filters by lifecycle state. Unspecified returns all. Applies to the
+   * session and parent lists; the cross-cutting list filters with
+   * display_states.
    *
    * @generated from field: reliant.v1.WorkflowState state = 3;
    */
   state: WorkflowState;
 
   /**
+   * Limit is the page size. The cross-cutting list defaults to 50 and caps at
+   * 200.
+   *
    * @generated from field: int32 limit = 4;
    */
   limit: number;
 
   /**
-   * @generated from field: int32 offset = 5;
+   * ProjectId restricts to one project.
+   *
+   * @generated from field: optional string project_id = 6;
    */
-  offset: number;
+  projectId?: string | undefined;
+
+  /**
+   * Workflow restricts to these workflow names (any of).
+   *
+   * @generated from field: repeated string workflow = 7;
+   */
+  workflow: string[];
+
+  /**
+   * TriggerId restricts to runs fired by one automation.
+   *
+   * @generated from field: optional string trigger_id = 8;
+   */
+  triggerId?: string | undefined;
+
+  /**
+   * LaunchKind restricts to these launch kinds (any of).
+   *
+   * @generated from field: repeated string launch_kind = 9;
+   */
+  launchKind: string[];
+
+  /**
+   * DisplayStates restricts to runs in any of these states.
+   *
+   * @generated from field: repeated reliant.v1.RunDisplayState display_states = 10;
+   */
+  displayStates: RunDisplayState[];
+
+  /**
+   * StartedAfter / StartedBefore bound the run's start time. After is
+   * inclusive, before is exclusive.
+   *
+   * @generated from field: google.protobuf.Timestamp started_after = 11;
+   */
+  startedAfter?: Timestamp | undefined;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp started_before = 12;
+   */
+  startedBefore?: Timestamp | undefined;
+
+  /**
+   * Query is a case-insensitive substring match on the run's title.
+   *
+   * @generated from field: optional string query = 13;
+   */
+  query?: string | undefined;
+
+  /**
+   * PageToken continues a previous response's next_page_token. Keyset on
+   * (started time, id), so a run that starts mid-pagination can neither
+   * duplicate nor skip rows the way an offset would. Opaque.
+   *
+   * @generated from field: optional string page_token = 14;
+   */
+  pageToken?: string | undefined;
+
+  /**
+   * IncludeArchived also returns runs whose chat is archived. Archived runs
+   * are hidden by default.
+   *
+   * @generated from field: bool include_archived = 15;
+   */
+  includeArchived: boolean;
 };
 
 /**
@@ -366,9 +498,20 @@ export type ListRunsResponse = Message<"reliant.v1.ListRunsResponse"> & {
   runs: Run[];
 
   /**
+   * Total is the number of runs in the session or parent list. It is not
+   * computed for the cross-cutting list, where a count over every run the
+   * caller owns would cost a second full scan per page; use next_page_token.
+   *
    * @generated from field: int32 total = 2;
    */
   total: number;
+
+  /**
+   * NextPageToken is set when more runs follow. Empty on the last page.
+   *
+   * @generated from field: string next_page_token = 3;
+   */
+  nextPageToken: string;
 };
 
 /**
@@ -377,6 +520,53 @@ export type ListRunsResponse = Message<"reliant.v1.ListRunsResponse"> & {
  */
 export const ListRunsResponseSchema: GenMessage<ListRunsResponse> = /*@__PURE__*/
   messageDesc(file_reliant_v1_run, 8);
+
+/**
+ * @generated from message reliant.v1.LastRunPerWorkflowRequest
+ */
+export type LastRunPerWorkflowRequest = Message<"reliant.v1.LastRunPerWorkflowRequest"> & {
+  /**
+   * ProjectId restricts to one project.
+   *
+   * @generated from field: optional string project_id = 1;
+   */
+  projectId?: string | undefined;
+
+  /**
+   * Workflow restricts the result to these workflow names. Empty returns every
+   * workflow the caller has run.
+   *
+   * @generated from field: repeated string workflow = 2;
+   */
+  workflow: string[];
+};
+
+/**
+ * Describes the message reliant.v1.LastRunPerWorkflowRequest.
+ * Use `create(LastRunPerWorkflowRequestSchema)` to create a new message.
+ */
+export const LastRunPerWorkflowRequestSchema: GenMessage<LastRunPerWorkflowRequest> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_run, 9);
+
+/**
+ * @generated from message reliant.v1.LastRunPerWorkflowResponse
+ */
+export type LastRunPerWorkflowResponse = Message<"reliant.v1.LastRunPerWorkflowResponse"> & {
+  /**
+   * Runs holds at most one run per workflow name: its newest root run, ordered
+   * by workflow name.
+   *
+   * @generated from field: repeated reliant.v1.Run runs = 1;
+   */
+  runs: Run[];
+};
+
+/**
+ * Describes the message reliant.v1.LastRunPerWorkflowResponse.
+ * Use `create(LastRunPerWorkflowResponseSchema)` to create a new message.
+ */
+export const LastRunPerWorkflowResponseSchema: GenMessage<LastRunPerWorkflowResponse> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_run, 10);
 
 /**
  * @generated from message reliant.v1.PauseRunRequest
@@ -393,7 +583,7 @@ export type PauseRunRequest = Message<"reliant.v1.PauseRunRequest"> & {
  * Use `create(PauseRunRequestSchema)` to create a new message.
  */
 export const PauseRunRequestSchema: GenMessage<PauseRunRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_run, 9);
+  messageDesc(file_reliant_v1_run, 11);
 
 /**
  * @generated from message reliant.v1.PauseRunResponse
@@ -418,7 +608,7 @@ export type PauseRunResponse = Message<"reliant.v1.PauseRunResponse"> & {
  * Use `create(PauseRunResponseSchema)` to create a new message.
  */
 export const PauseRunResponseSchema: GenMessage<PauseRunResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_run, 10);
+  messageDesc(file_reliant_v1_run, 12);
 
 /**
  * @generated from message reliant.v1.ResumeRunRequest
@@ -435,7 +625,7 @@ export type ResumeRunRequest = Message<"reliant.v1.ResumeRunRequest"> & {
  * Use `create(ResumeRunRequestSchema)` to create a new message.
  */
 export const ResumeRunRequestSchema: GenMessage<ResumeRunRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_run, 11);
+  messageDesc(file_reliant_v1_run, 13);
 
 /**
  * @generated from message reliant.v1.ResumeRunResponse
@@ -466,7 +656,7 @@ export type ResumeRunResponse = Message<"reliant.v1.ResumeRunResponse"> & {
  * Use `create(ResumeRunResponseSchema)` to create a new message.
  */
 export const ResumeRunResponseSchema: GenMessage<ResumeRunResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_run, 12);
+  messageDesc(file_reliant_v1_run, 14);
 
 /**
  * @generated from message reliant.v1.CancelRunRequest
@@ -483,7 +673,7 @@ export type CancelRunRequest = Message<"reliant.v1.CancelRunRequest"> & {
  * Use `create(CancelRunRequestSchema)` to create a new message.
  */
 export const CancelRunRequestSchema: GenMessage<CancelRunRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_run, 13);
+  messageDesc(file_reliant_v1_run, 15);
 
 /**
  * @generated from message reliant.v1.CancelRunResponse
@@ -505,7 +695,7 @@ export type CancelRunResponse = Message<"reliant.v1.CancelRunResponse"> & {
  * Use `create(CancelRunResponseSchema)` to create a new message.
  */
 export const CancelRunResponseSchema: GenMessage<CancelRunResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_run, 14);
+  messageDesc(file_reliant_v1_run, 16);
 
 /**
  * @generated from message reliant.v1.InterruptRunRequest
@@ -529,7 +719,7 @@ export type InterruptRunRequest = Message<"reliant.v1.InterruptRunRequest"> & {
  * Use `create(InterruptRunRequestSchema)` to create a new message.
  */
 export const InterruptRunRequestSchema: GenMessage<InterruptRunRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_run, 15);
+  messageDesc(file_reliant_v1_run, 17);
 
 /**
  * @generated from message reliant.v1.InterruptRunResponse
@@ -561,7 +751,76 @@ export type InterruptRunResponse = Message<"reliant.v1.InterruptRunResponse"> & 
  * Use `create(InterruptRunResponseSchema)` to create a new message.
  */
 export const InterruptRunResponseSchema: GenMessage<InterruptRunResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_run, 16);
+  messageDesc(file_reliant_v1_run, 18);
+
+/**
+ * RunDisplayState is the single status vocabulary the UI shows for a run
+ * (research/WORKFLOW_UI.md section 0). It folds the (state, stop_reason,
+ * activity) triple into one value so a filter and a label can never disagree.
+ *
+ * @generated from enum reliant.v1.RunDisplayState
+ */
+export enum RunDisplayState {
+  /**
+   * @generated from enum value: RUN_DISPLAY_STATE_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * QUEUED: PENDING, or a chat whose root workflow has not been created yet.
+   *
+   * @generated from enum value: RUN_DISPLAY_STATE_QUEUED = 1;
+   */
+  QUEUED = 1,
+
+  /**
+   * RUNNING: ACTIVE and not waiting on a human.
+   *
+   * @generated from enum value: RUN_DISPLAY_STATE_RUNNING = 2;
+   */
+  RUNNING = 2,
+
+  /**
+   * NEEDS_INPUT: ACTIVE and awaiting input (a pending approval or question).
+   *
+   * @generated from enum value: RUN_DISPLAY_STATE_NEEDS_INPUT = 3;
+   */
+  NEEDS_INPUT = 3,
+
+  /**
+   * PAUSED: STOPPED with stop_reason PAUSED. Live and resumable.
+   *
+   * @generated from enum value: RUN_DISPLAY_STATE_PAUSED = 4;
+   */
+  PAUSED = 4,
+
+  /**
+   * COMPLETED: STOPPED with stop_reason COMPLETED.
+   *
+   * @generated from enum value: RUN_DISPLAY_STATE_COMPLETED = 5;
+   */
+  COMPLETED = 5,
+
+  /**
+   * FAILED: STOPPED with stop_reason FAILED.
+   *
+   * @generated from enum value: RUN_DISPLAY_STATE_FAILED = 6;
+   */
+  FAILED = 6,
+
+  /**
+   * CANCELLED: STOPPED with stop_reason CANCELLED.
+   *
+   * @generated from enum value: RUN_DISPLAY_STATE_CANCELLED = 7;
+   */
+  CANCELLED = 7,
+}
+
+/**
+ * Describes the enum reliant.v1.RunDisplayState.
+ */
+export const RunDisplayStateSchema: GenEnum<RunDisplayState> = /*@__PURE__*/
+  enumDesc(file_reliant_v1_run, 0);
 
 /**
  * RunService is the engine's execution API: start a workflow, control it while
@@ -631,12 +890,34 @@ export const RunService: GenService<{
   /**
    * ListRuns lists runs, newest first.
    *
+   * With neither session_id nor parent_id it is the cross-cutting run list:
+   * every root run the caller owns, narrowed by the filters on the request and
+   * paged by page_token. With one of them it lists that session's runs or that
+   * run's children.
+   *
    * @generated from rpc reliant.v1.RunService.ListRuns
    */
   listRuns: {
     methodKind: "unary";
     input: typeof ListRunsRequestSchema;
     output: typeof ListRunsResponseSchema;
+  },
+  /**
+   * LastRunPerWorkflow returns the most recent root run of each workflow the
+   * caller has run, one Run per workflow name. It is the Library's "last run"
+   * column in one round trip, where ListRuns would need a query per workflow.
+   *
+   * A separate RPC rather than a group_by switch on ListRuns: grouping changes
+   * the response's meaning (one row per workflow, no paging, no total), and a
+   * flag that changes what a response means is how a caller ends up paging a
+   * result that cannot be paged.
+   *
+   * @generated from rpc reliant.v1.RunService.LastRunPerWorkflow
+   */
+  lastRunPerWorkflow: {
+    methodKind: "unary";
+    input: typeof LastRunPerWorkflowRequestSchema;
+    output: typeof LastRunPerWorkflowResponseSchema;
   },
   /**
    * PauseRun parks a run. It stays live and resumable — see

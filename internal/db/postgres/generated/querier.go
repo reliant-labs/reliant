@@ -464,6 +464,8 @@ type Querier interface {
 	// compute hasMore for the cursor-bounded read without fetching the rows.
 	HasMessagesBeforeInContextWindow(ctx context.Context, arg HasMessagesBeforeInContextWindowParams) (bool, error)
 	IsCommandFavorite(ctx context.Context, arg IsCommandFavoriteParams) (int32, error)
+	// Newest run of each workflow name. Same columns and display_state as ListRuns.
+	LastRunPerWorkflow(ctx context.Context, arg LastRunPerWorkflowParams) ([]LastRunPerWorkflowRow, error)
 	// Every user's triggers. Only the schedule syncer's reconciliation calls this.
 	ListAllTriggers(ctx context.Context) ([]Trigger, error)
 	// List all approvals for a chat (including resolved)
@@ -566,6 +568,22 @@ type Querier interface {
 	// List root workflows (parent_id IS NULL) at a specific lifecycle.
 	// Root workflows are the entry points that need dedicated workers.
 	ListRootWorkflowsByStatus(ctx context.Context, arg ListRootWorkflowsByStatusParams) ([]Workflow, error)
+	// The cross-cutting run list (RunService.ListRuns, list_runs tool).
+	//
+	// A run is a chat row (chat id == root workflow id), so the list is
+	// chats_with_activity joined to its root workflow and, for automation-fired
+	// runs, to the trigger. display_state is the one status vocabulary the UI
+	// shows, derived here so a filter on it and the label a row carries cannot
+	// disagree:
+	//   1 queued       no root workflow row yet, or PENDING
+	//   2 running      ACTIVE
+	//   3 needs-input  ACTIVE and activity = awaiting input (2)
+	//   4 paused       STOPPED, stop_reason PAUSED (3)
+	//   5 completed    STOPPED, stop_reason COMPLETED (1)
+	//   6 failed       STOPPED, stop_reason FAILED (2)
+	//   7 cancelled    STOPPED, stop_reason CANCELLED (4)
+	// Every filter argument is nullable or an array: an unset one must not narrow.
+	ListRuns(ctx context.Context, arg ListRunsParams) ([]ListRunsRow, error)
 	// ORDER BY key, updated_at: key alone is not a total order, so any duplicate
 	// rows came back in an arbitrary sequence and the client — which loads rows
 	// into localStorage one after another — could end up keeping a stale value.

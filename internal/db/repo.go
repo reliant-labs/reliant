@@ -115,6 +115,7 @@ type Repo struct {
 	driver          DatabaseDriver
 	planTasks       core.PlanTaskStore
 	chats           core.ChatStore
+	runs            core.RunStore
 	messages        core.MessageStore
 	approvals       core.ApprovalStore
 	agentMessages   core.AgentMessageStore
@@ -154,6 +155,7 @@ func NewRepoWithDriver(db *sql.DB, driver DatabaseDriver) *Repo {
 		driver:        driver,
 		planTasks:     postgresstore.NewPlanTaskStore(pgQueries),
 		chats:         postgresstore.NewChatStore(pgQueries, q),
+		runs:          postgresstore.NewRunStore(pgQueries),
 		messages:      postgresstore.NewMessageStore(pgQueries, q),
 		approvals:     postgresstore.NewApprovalStore(pgQueries),
 		agentMessages: postgresstore.NewAgentMessageStore(pgQueries, q),
