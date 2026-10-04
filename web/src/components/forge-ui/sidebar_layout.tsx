@@ -41,6 +41,16 @@ interface SidebarLayoutProps {
    * that should style the nav without reaching into the page content.
    */
   sidebarClassName?: string;
+  /**
+   * Rendered under the brand row, above the nav — a scope switcher, for
+   * example. Hidden while collapsed.
+   */
+  brandAccessory?: React.ReactNode;
+  /**
+   * Rendered after the nav sections — a loading skeleton for a list still
+   * arriving, or a one-line note about it. Hidden while collapsed.
+   */
+  navAppendix?: React.ReactNode;
 }
 
 export default function SidebarLayout({
@@ -54,6 +64,8 @@ export default function SidebarLayout({
   contentLayout = "padded",
   navLabel,
   sidebarClassName,
+  brandAccessory,
+  navAppendix,
 }: SidebarLayoutProps) {
   const [internalCollapsed, setInternalCollapsed] = useState(false);
   const collapsed = controlledCollapsed ?? internalCollapsed;
@@ -108,6 +120,10 @@ export default function SidebarLayout({
           </button>
         </div>
 
+        {brandAccessory && !collapsed && (
+          <div className="shrink-0 border-b border-border px-3 py-2">{brandAccessory}</div>
+        )}
+
         {/* Navigation */}
         <nav className="flex-1 overflow-y-auto p-3" aria-label={navLabel}>
           {Array.from(sections.entries()).map(([section, items], si) => (
@@ -145,6 +161,7 @@ export default function SidebarLayout({
               </ul>
             </div>
           ))}
+          {navAppendix && !collapsed && <div className="mt-3">{navAppendix}</div>}
         </nav>
 
         {/* User Area */}
@@ -177,10 +194,13 @@ export default function SidebarLayout({
 
       {/* Main */}
       <div className="flex flex-1 flex-col overflow-hidden">
-        {/* Header Bar */}
-        <header className="flex h-16 shrink-0 items-center border-b border-border bg-surface px-6">
-          {headerContent}
-        </header>
+        {/* Header Bar — omitted when there is nothing to put in it, so a
+            page that owns its own header does not sit under an empty bar. */}
+        {headerContent && (
+          <header className="flex h-16 shrink-0 items-center border-b border-border bg-surface px-6">
+            {headerContent}
+          </header>
+        )}
 
         {/*
          * Content. `relative` is load-bearing: it makes the scroller the

@@ -433,19 +433,21 @@ export const forgeEnvPageSearchSchema = z.object({
    */
   secret: z.string().optional(),
   /**
-   * Which of the two tabs is open — `live` (the default) or `preview`.
+   * Which tab is open. In the URL for the same reason `secret` is: people link
+   * each other to an answer ("look at prod's releases"), and a refresh should
+   * not throw you back to the default.
    *
-   * In the URL for the same reason `secret` is: the two answer different
-   * questions and people link each other to the answer ("look at what Preview
-   * says about staging"). It is also what lets Live's "Open Preview" remedy be
-   * a real navigation rather than hidden component state, so a refresh while
-   * reading Preview does not throw you back to Live.
+   * ABSENT means the environment's default tab — `overview` for a deployed
+   * env, `running` for a local one — so a bare link to an environment opens
+   * whatever that environment leads with.
    *
-   * `live` is encoded as ABSENT rather than as the string, so the default view
-   * has the plain URL and a bare link to an environment means "its Live
-   * state" — which is the view that needs no daemon.
+   * `live` and `preview` are the retired two-tab names, still accepted so old
+   * links land somewhere sensible: `live` is the default tab, `preview` is
+   * Changes (what the old Preview tab led with).
    */
-  tab: z.enum(["live", "preview"]).optional(),
+  tab: z
+    .enum(["overview", "running", "releases", "secrets", "changes", "checks", "live", "preview"])
+    .optional(),
 });
 
 /**

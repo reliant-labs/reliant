@@ -45,7 +45,6 @@ function renderLiveRows(envs: LiveEnv[], statuses: Record<string, CloudEnvStatus
     <EnvironmentTable
       rows={envs.map((env) => ({ env, status: statuses[env.id], statusLoading: false }))}
       onOpen={vi.fn()}
-      onPreview={vi.fn()}
     />
   );
 }

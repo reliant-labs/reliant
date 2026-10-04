@@ -20,7 +20,7 @@
  * makes 200px rows that line up with nothing.
  */
 
-import { Clock } from "lucide-react";
+import { ChevronRight, Clock } from "lucide-react";
 
 import Badge from "@/components/forge-ui/badge";
 import { Button } from "@/components/ui/Button";
@@ -41,15 +41,13 @@ export interface EnvironmentRow {
 export interface EnvironmentTableProps {
   rows: EnvironmentRow[];
   onOpen: (env: string) => void;
-  /** Open the env's Preview tab — where the daemon surfaces and Register live. */
-  onPreview: (env: string) => void;
 }
 
 const HEADER_CELL =
   "whitespace-nowrap px-3 py-2 text-left text-2xs font-medium uppercase tracking-wide text-muted-foreground";
 const CELL = "px-3 py-2.5 align-middle";
 
-export function EnvironmentTable({ rows, onOpen, onPreview }: EnvironmentTableProps) {
+export function EnvironmentTable({ rows, onOpen }: EnvironmentTableProps) {
   return (
     <div className="overflow-x-auto rounded-lg border border-border bg-card" data-testid="forge-env-table">
       <table className="w-full border-collapse text-sm">
@@ -77,7 +75,7 @@ export function EnvironmentTable({ rows, onOpen, onPreview }: EnvironmentTablePr
               Promoted
             </th>
             <th scope="col" className={cn(HEADER_CELL, "text-right")}>
-              Actions
+              <span className="sr-only">Open</span>
             </th>
           </tr>
         </thead>
@@ -146,18 +144,19 @@ export function EnvironmentTable({ rows, onOpen, onPreview }: EnvironmentTablePr
               </td>
 
               <td className={cn(CELL, "whitespace-nowrap text-right")}>
-                {/* Promote and Deploy are PREVIEW's, because forge computes
-                    both plans on the daemon against the user's checkout. This
-                    column links there rather than offering a button that
-                    would need a daemon it cannot see from here. */}
+                {/* Promote, deploy and history live on the environment's page,
+                    in its header, where they can say why one is unavailable.
+                    A row button that opened a daemon-only tab promised an
+                    action it could not take from here. */}
                 <Button
-                  variant="outline"
+                  variant="ghost"
                   size="sm"
-                  onClick={() => onPreview(env.name)}
-                  data-testid={`env-preview-${env.name}`}
-                  aria-label={`Open ${env.name}'s Preview to deploy or promote it`}
+                  onClick={() => onOpen(env.name)}
+                  data-testid={`env-row-open-${env.name}`}
+                  aria-label={`Open ${env.name}`}
+                  rightIcon={<ChevronRight className="h-3.5 w-3.5" />}
                 >
-                  Preview…
+                  Open
                 </Button>
               </td>
             </tr>

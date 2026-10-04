@@ -201,7 +201,7 @@ export default function SecretsPreview() {
   return (
     <ForgeShell
       activePath="/forge/env/prod"
-      envs={[{ name: "dev", where: "local" }, { name: "prod", where: "cloud" }]}
+      envs={[{ name: "dev", lifecycle: "local", source: "backend" }, { name: "prod", lifecycle: "deployed", source: "backend" }]}
       headerContent={
         <div className="flex flex-wrap items-center gap-3 px-4">
         <select

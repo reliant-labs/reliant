@@ -1,70 +1,73 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * Route component for /forge/env/$env — ONE ENVIRONMENT, IN TWO TABS.
+ * Route component for /forge/env/$env — ONE ENVIRONMENT.
  *
- * ── THE SPLIT IS THE DAEMON BOUNDARY (design §8.0, owner decision O-14) ─────
+ * ── TABS BY QUESTION, SOURCES BY TAB ────────────────────────────────────────
  *
- *   LIVE (the default)  the control plane ONLY: the declared shape, the bound
- *                       release and its provenance, the promotion history,
- *                       what is deployed, and secrets. ONE GetLiveView round
- *                       trip, from the browser, with the user's session. The
- *                       daemon is never called.
- *   PREVIEW             everything that needs the user's CHECKOUT: forge's
- *                       render, the cluster inventory, the dev stack, the
- *                       audit, the Deploy/Promote plans, and Register. The
- *                       daemon is required.
+ * The page used to be two tabs, Live and Preview: the daemon boundary drawn
+ * on screen. The tabs now follow what a reader asks (envTabs.ts), and the
+ * boundary is held per tab instead:
  *
- * Two rules follow, and they are the whole decision:
+ *   Overview · Releases · Secrets   the control plane only (design §8.0,
+ *                                   O-14). Render with the daemon asleep.
+ *   Running                         what `forge env up` runs on the daemon's
+ *                                   machine — a LOCAL env's first question.
+ *   Changes · Checks                read the user's checkout via the daemon.
  *
- *   1. LIVE IS NEVER DEGRADED BY DAEMON STATE and carries NO BANNER. A daemon
- *      that is offline, slow, or has never existed changes nothing about what
- *      Live shows. A test renders this page's Live tab with the daemon
- *      transport mocked to throw and asserts zero daemon calls
- *      (__tests__/ForgeEnvPage.liveNoDaemon.test.tsx).
- *   2. PREVIEW ALONE says the daemon is offline, in one short line.
+ * ── WHEN THIS PAGE ASKS THE DAEMON WITHOUT A TAB ASKING ─────────────────────
  *
- * Why this page was rebuilt rather than patched: it used to mix the two
- * sources per section, asking the daemon for `forge.env_status` — and forge
- * then called control-plane ListEnvironments with the DAEMON's token, which
- * 403'd a page the user was entitled to see. A daemon-sourced row sitting
- * beside a hosted one is why an asleep laptop degraded a page describing a
- * production environment the control plane was watching the whole time.
+ * Only to learn what an environment IS when the control plane cannot say:
  *
- * ── A NEVER-BUILT ENVIRONMENT IS A NORMAL STATE ─────────────────────────────
+ *   - the env's status (forge's `runtime.lifecycle`), when the control plane
+ *     has no row or records it as local — that is how dev is known to be a
+ *     local env that runs from the working tree rather than one that was
+ *     "never built";
+ *   - forge's topology, when the control plane has no row — for the release
+ *     forge's own ledger has bound, and the Register action.
  *
- * An env in the KCL that the control plane has no row for is not an error and
- * is not "unknown". Live says it has not been built yet and points at Preview
- * or `forge env build`; Preview shows it as "would be created" with a Register
- * button. No error styling anywhere on that path.
+ * An environment the control plane records as deployed — persistent, preview
+ * or self-managed — makes ZERO daemon calls until a daemon tab is opened
+ * (ForgeEnvPage.liveNoDaemon.test.tsx).
+ *
+ * ── HEADER ACTIONS ──────────────────────────────────────────────────────────
+ *
+ * Promote and Deploy sit in the header on every tab of a deployed env, and
+ * are disabled with a reason rather than hidden (EnvPageHeader).
  */
 
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams, useSearch } from "@tanstack/react-router";
-import { ArrowLeft } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import {
   useCloudEnvStatus,
   useCloudPromotions,
-  useLiveConvergences,
+  useForgeEnvStatus,
   useForgeTopology,
+  useLiveConvergences,
   useLiveView,
 } from "@/hooks/forge-queries";
-import {
-  daemonSideOf,
-  resolveForgeProjectName,
-  type ForgeEnvSummary,
-} from "@/services/forge/environments";
+import { daemonSideOf, resolveForgeProjectName } from "@/services/forge/environments";
 import { isPlacedKind } from "@/services/forge/live";
-import { environments, type ForgeTopologyEnv } from "@/services/forge/topology";
+import { lifecycleOf } from "@/services/forge/roster";
+import { isLocalLifecycle } from "@/services/forge/status";
+import { environments } from "@/services/forge/topology";
 import { useProjectStore, type Project } from "@/store/projectStore";
 
-import { PreviewSection } from "../Preview/PreviewSection";
+import { DeployDialog } from "../Deploy/DeployDialog";
+import { PromoteDialog } from "../Promote/PromoteDialog";
 import { CloudNotice } from "../SourceNotices";
-import { LiveSection } from "./LiveSection";
-
-type EnvTab = "live" | "preview";
+import { EnvPageHeader } from "./EnvPageHeader";
+import {
+  ChangesTab,
+  ChecksTab,
+  OverviewTab,
+  ReleasesTab,
+  RunningTab,
+  SecretsTab,
+} from "./EnvTabPanels";
+import { resolveTab, tabParam, tabsFor, type EnvTab } from "./envTabs";
 
 export function ForgeEnvPage() {
   const navigate = useNavigate();
@@ -72,82 +75,85 @@ export function ForgeEnvPage() {
   const {
     project: projectParam,
     secret: secretParam,
-    tab: tabParam,
+    tab: tabSearch,
   } = useSearch({ from: "/_authenticated/_forge/forge/env/$env" });
   const currentProject = useProjectStore((state) => state.currentProject);
   const persistedName = useProjectStore((state) => persistedForgeProjectName(state, projectParam ?? currentProject?.id));
   const projectId = projectParam ?? currentProject?.id ?? null;
 
-  const tab: EnvTab = tabParam === "preview" ? "preview" : "live";
+  // ── THE BACKEND: the record of this environment. ──
+  // The join key is the forge project name Reliant persisted on the project
+  // row, so this needs no daemon.
+  const persistedOnly = resolveForgeProjectName(persistedName, undefined);
+  const liveFirst = useLiveView(persistedOnly.name);
+  const liveEnvFromPersisted = useMemo(
+    () => (liveFirst.data?.envs ?? []).find((candidate) => candidate.name === envName) ?? null,
+    [liveFirst.data, envName]
+  );
 
-  // ── PREVIEW's source, AND IT IS ENABLED ONLY ON THE PREVIEW TAB. ──
-  //
-  // The gate is the rule, not an optimisation. An always-enabled topology
-  // query would put a daemon call behind the Live tab — exactly what O-14
-  // forbids — and it would do so invisibly, because Live's own rendering would
-  // not change. So the query is off until the user opens Preview, and the
-  // zero-daemon-call test holds by construction rather than by inspection.
-  const topology = useForgeTopology(tab === "preview" ? projectId : null);
+  // ── WHAT THIS ENVIRONMENT IS, when the backend cannot say. ──
+  const backendSettled = !persistedOnly.name || !liveFirst.isLoading;
+  const backendKnowsDeployed =
+    !!liveEnvFromPersisted && liveEnvFromPersisted.kind !== "local" && liveEnvFromPersisted.kind !== "unknown";
+  const askDaemonForIdentity = backendSettled && !backendKnowsDeployed;
 
-  // ── LIVE's join key, and why it needs no daemon. ──
-  //
-  // The forge project name is the project half of an environment's
-  // (org, project, name) identity. Reliant persists it on the project row
-  // (forge.yaml `name`, recorded the first time a daemon read it), so Live has
-  // it with the daemon down and in any browser. forge's live report wins when
-  // there is one — it is forge's answer this second — which only ever happens
-  // on the Preview tab, where the topology query runs.
-  //
-  // Nothing is guessed from the Reliant project's DISPLAY name: a guess that
-  // matched another project's `prod` would put the wrong environment on screen
-  // beside this one's buttons.
+  const [requestedTab, setRequestedTab] = useState<EnvTab | null>(null);
+  const tabWantsDaemon =
+    tabSearch === "changes" || tabSearch === "checks" || tabSearch === "running" || tabSearch === "preview";
+
+  // A header action is a request for the daemon too: Promote and Deploy are
+  // planned by forge on the user's checkout.
+  const [pendingAction, setPendingAction] = useState<"promote" | "deploy" | null>(null);
+  const [actionAsked, setActionAsked] = useState(false);
+  const daemonWanted = askDaemonForIdentity || tabWantsDaemon || actionAsked;
+
+  const topology = useForgeTopology(daemonWanted ? projectId : null);
+  const daemon = daemonSideOf(topology.data, topology.error);
+
+  // A topology report can name the project when nothing was persisted yet.
   const projectName = resolveForgeProjectName(persistedName, topology.data);
-
-  // ── LIVE. One call, and the only source the Live tab reads. ──
   const live = useLiveView(projectName.name);
-  const liveState = live;
-
   const liveEnv = useMemo(
     () => (live.data?.envs ?? []).find((candidate) => candidate.name === envName) ?? null,
     [live.data, envName]
   );
 
-  // GetStatus is an OBSERVATION and only the platform makes one. Asked for a
-  // placed env alone — a self-managed env has no server-side observer, and
-  // asking would answer for a cluster the platform has never connected to.
+  const forgeEnv = useMemo(() => {
+    const report = topology.data?.kind === "report" ? topology.data.report : null;
+    return report ? (environments(report).find((candidate) => candidate.env === envName) ?? null) : null;
+  }, [topology.data, envName]);
+
+  const envStatus = useForgeEnvStatus(
+    askDaemonForIdentity || tabWantsDaemon ? projectId : null,
+    envName
+  );
+  const envStatusReport = envStatus.data?.kind === "report" ? envStatus.data.report : null;
+  const lifecycle = lifecycleOf(liveEnv, forgeEnv, isLocalLifecycle(envStatusReport));
+
+  const tab = requestedTab && tabsFor(lifecycle).some((spec) => spec.id === requestedTab)
+    ? requestedTab
+    : resolveTab(tabSearch, lifecycle);
+
+  // ── The backend's per-env reads. ──
   const placedId = liveEnv && isPlacedKind(liveEnv.kind) ? liveEnv.id : null;
   const cloudStatus = useCloudEnvStatus(placedId);
   const promotions = useCloudPromotions(liveEnv?.id ?? null);
-
-  // ASKED FOR EVERY KIND, unlike GetStatus above. The convergence reading is
-  // the platform watching the cluster converge to the promoted config, which
-  // is per environment and happens wherever that config is applied — so a
-  // customer's own cluster gets the same answer from the same call. Gating it
-  // on `placedId` is what would re-create the per-kind split this replaced.
   const convergences = useLiveConvergences(liveEnv?.id ?? null);
 
-  const daemon = daemonSideOf(topology.data, topology.error);
-  const topologyReport = topology.data?.kind === "report" ? topology.data.report : null;
-  const summary: ForgeEnvSummary | null = useMemo(() => {
-    const forgeEnv: ForgeTopologyEnv | null = topologyReport
-      ? (environments(topologyReport).find((candidate) => candidate.env === envName) ?? null)
-      : null;
-    if (!forgeEnv) return null;
-    return { name: envName, where: "unknown", forge: forgeEnv, cloud: null };
-  }, [topologyReport, envName]);
+  const [checkoutPath, setCheckoutPath] = useState("");
+  const [promoteOpen, setPromoteOpen] = useState(false);
+  const [deployOpen, setDeployOpen] = useState(false);
 
   const selectTab = useCallback(
     (next: EnvTab) => {
+      setRequestedTab(next);
       void navigate({
         to: ".",
-        search: (prev: Record<string, unknown>) => ({
-          ...prev,
-          tab: next === "live" ? undefined : next,
-        }),
+        search: (prev: Record<string, unknown>) => ({ ...prev, tab: tabParam(next, lifecycle) }),
         replace: true,
       });
     },
-    [navigate]
+    [navigate, lifecycle]
   );
 
   const selectSecret = useCallback(
@@ -161,105 +167,207 @@ export function ForgeEnvPage() {
     [navigate]
   );
 
-  const backToOverview = (
-    <button
-      type="button"
-      onClick={() => void navigate({ to: "/forge", search: { project: projectId ?? undefined } })}
-      className="inline-flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
-    >
-      <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />
-      All environments
-    </button>
-  );
+  // ── Header actions: always present on a deployed env, disabled with a reason. ──
+  const latestRelease = topology.data?.kind === "report" ? (topology.data.report.latest_release ?? null) : null;
+  const currentRelease = liveEnv?.release || forgeEnv?.release || "";
+  // Until something has asked the daemon there is no reason to show: the
+  // buttons are enabled, and a click asks (see the effect below).
+  const daemonReason = !daemonWanted
+    ? null
+    : daemon === "ok"
+      ? null
+      : daemon === "loading"
+        ? "Checking your daemon…"
+        : "Needs your daemon: forge plans this against your checkout.";
+  const promoteReason =
+    daemonReason ??
+    (!daemonWanted
+      ? null
+      : !latestRelease
+        ? "No release has been cut from this checkout yet. Run forge env build --release."
+        : latestRelease === currentRelease
+          ? `Already on the latest release, ${latestRelease}.`
+          : null);
+
+  const requestAction = useCallback((action: "promote" | "deploy") => {
+    setActionAsked(true);
+    setPendingAction(action);
+  }, []);
+
+  // Open the requested dialog once the daemon has answered — or drop the
+  // request, leaving the button disabled with the reason it now knows.
+  useEffect(() => {
+    if (!pendingAction || daemon === "loading") return;
+    if (pendingAction === "promote" && promoteReason === null && latestRelease) setPromoteOpen(true);
+    if (pendingAction === "deploy" && daemonReason === null) setDeployOpen(true);
+    setPendingAction(null);
+  }, [pendingAction, daemon, promoteReason, daemonReason, latestRelease]);
+
+  const tabs = tabsFor(lifecycle);
+  const identityLoading = !backendSettled || (askDaemonForIdentity && envStatus.isLoading && !envStatus.data && !liveEnv);
 
   return (
-    <div className="space-y-6" data-testid="forge-env-page" data-tab={tab}>
-      {backToOverview}
+    <div className="space-y-6" data-testid="forge-env-page" data-tab={tab} data-lifecycle={lifecycle}>
+      <EnvPageHeader
+        envName={envName}
+        lifecycle={lifecycle}
+        live={liveEnv}
+        forgeRelease={forgeEnv?.release ?? null}
+        promote={
+          lifecycle === "local"
+            ? null
+            : {
+                target: latestRelease && latestRelease !== currentRelease ? latestRelease : null,
+                disabledReason: promoteReason,
+                pending: pendingAction === "promote",
+                onClick: () => requestAction("promote"),
+              }
+        }
+        deploy={
+          lifecycle === "local"
+            ? null
+            : {
+                disabledReason: daemonReason,
+                pending: pendingAction === "deploy",
+                onClick: () => requestAction("deploy"),
+              }
+        }
+      />
 
       {/* The control plane could not answer at all — a role without deploy
-          read access, a build with no control plane, an outage. Said once
-          here, because with no control plane Live has no source. Never shown
-          for `available` or `no-control-plane`. */}
-      <CloudNotice availability={liveState.data?.availability} detail={liveState.data?.detail} />
+          read access, a build with no control plane, an outage. Said once. */}
+      <CloudNotice availability={live.data?.availability} detail={live.data?.detail} />
 
-      <div
-        className="flex items-center gap-1 border-b border-border"
-        role="tablist"
-        aria-label={`${envName} views`}
-      >
-        <Tab current={tab} value="live" onSelect={selectTab}>
-          Live
-        </Tab>
-        <Tab current={tab} value="preview" onSelect={selectTab}>
-          Preview
-        </Tab>
+      <div className="flex items-center gap-1 border-b border-border" role="tablist" aria-label={`${envName} views`}>
+        {tabs.map((spec) => (
+          <TabButton key={spec.id} active={tab === spec.id} id={spec.id} onSelect={selectTab}>
+            {spec.label}
+          </TabButton>
+        ))}
       </div>
 
-      {tab === "live" ? (
-        <div role="tabpanel" aria-label="Live" id="env-tab-live">
-          {liveState.isLoading && !liveState.data ? (
-            <p data-testid="live-loading" className="text-sm text-muted-foreground">
-              Reading <span className="font-mono">{envName}</span>…
-            </p>
-          ) : (
-            <LiveSection
-              envName={envName}
-              env={liveEnv}
-              forgeProject={projectName.name}
-              projectId={projectId}
-              status={cloudStatus.data}
-              statusLoading={cloudStatus.isLoading}
-              statusError={cloudStatus.error as Error | null}
-              promotions={promotions.data}
-              promotionsLoading={promotions.isLoading}
-              promotionsError={promotions.error as Error | null}
-              convergences={convergences.data}
-              selectedSecret={secretParam ?? null}
-              onSelectSecret={selectSecret}
-              onOpenPreview={() => selectTab("preview")}
-            />
-          )}
-        </div>
-      ) : (
-        <div role="tabpanel" aria-label="Preview" id="env-tab-preview">
-          <PreviewSection
+      <div role="tabpanel" id={`env-tab-${tab}`} aria-labelledby={`env-tab-button-${tab}`}>
+        {identityLoading && (tab === "overview" || tab === "running") ? (
+          <div className="space-y-4" data-testid="live-loading" aria-busy="true">
+            <div className="h-28 animate-pulse rounded-lg border border-border bg-card motion-reduce:animate-none" />
+            <div className="h-40 animate-pulse rounded-lg border border-border bg-card motion-reduce:animate-none" />
+          </div>
+        ) : tab === "overview" ? (
+          <OverviewTab
+            envName={envName}
+            live={liveEnv}
+            liveLoading={live.isLoading}
+            status={cloudStatus.data}
+            statusLoading={cloudStatus.isLoading}
+            statusError={cloudStatus.error as Error | null}
+            promotions={promotions.data}
+            forgeEnv={forgeEnv}
+            daemon={daemon}
+            projectId={projectId}
+            forgeProject={projectName.name}
+            onOpenReleases={() => selectTab("releases")}
+          />
+        ) : tab === "running" ? (
+          <RunningTab
+            envName={envName}
+            daemon={daemon}
+            envStatus={envStatus.data}
+            envStatusLoading={envStatus.isLoading}
+            envStatusError={envStatus.error as Error | null}
+            onRetry={() => {
+              void topology.refetch();
+              void envStatus.refetch();
+            }}
+            retrying={envStatus.isFetching}
+            projectName={currentProject?.name}
+          />
+        ) : tab === "releases" ? (
+          <ReleasesTab
+            live={liveEnv}
+            promotions={promotions.data}
+            convergences={convergences.data}
+            isLoading={promotions.isLoading}
+            error={promotions.error as Error | null}
+            forgeEnv={forgeEnv}
+          />
+        ) : tab === "secrets" ? (
+          <SecretsTab
+            projectId={projectId}
+            live={liveEnv}
+            envName={envName}
+            forgeProject={projectName.name}
+            selectedSecret={secretParam ?? null}
+            onSelectSecret={selectSecret}
+          />
+        ) : tab === "changes" ? (
+          <ChangesTab
             projectId={projectId}
             envName={envName}
-            projectName={currentProject?.name}
-            forgeProject={projectName.name}
-            summary={summary}
-            liveEnv={liveEnv}
-            daemonState={daemon}
-            daemonError={topology.error as Error | null}
-            topologyOutcome={topology.data}
-            latestRelease={topologyReport?.latest_release ?? null}
+            daemon={daemon}
+            lifecycle={lifecycle}
+            checkoutPath={checkoutPath}
+            onCheckoutChange={setCheckoutPath}
+            onDeploy={lifecycle === "local" ? undefined : () => setDeployOpen(true)}
           />
-        </div>
+        ) : (
+          <ChecksTab
+            projectId={projectId}
+            envName={envName}
+            daemon={daemon}
+            lifecycle={lifecycle}
+            envStatus={envStatus.data}
+            envStatusLoading={envStatus.isLoading}
+            envStatusError={envStatus.error as Error | null}
+            canVerify={(forgeEnv?.images?.length ?? 0) > 0}
+            projectName={currentProject?.name}
+          />
+        )}
+      </div>
+
+      {promoteOpen && latestRelease && (
+        <PromoteDialog
+          isOpen
+          onClose={() => setPromoteOpen(false)}
+          projectId={projectId}
+          env={envName}
+          release={latestRelease}
+          projectName={currentProject?.name}
+        />
+      )}
+      {deployOpen && (
+        <DeployDialog
+          isOpen
+          onClose={() => setDeployOpen(false)}
+          projectId={projectId}
+          env={envName}
+          projectName={currentProject?.name}
+          checkoutPath={checkoutPath}
+        />
       )}
     </div>
   );
 }
 
-function Tab({
-  current,
-  value,
+function TabButton({
+  active,
+  id,
   onSelect,
   children,
 }: {
-  current: EnvTab;
-  value: EnvTab;
+  active: boolean;
+  id: EnvTab;
   onSelect: (tab: EnvTab) => void;
   children: React.ReactNode;
 }) {
-  const active = current === value;
   return (
     <button
       type="button"
       role="tab"
+      id={`env-tab-button-${id}`}
       aria-selected={active}
-      aria-controls={`env-tab-${value}`}
-      data-testid={`env-tab-${value}`}
-      onClick={() => onSelect(value)}
+      aria-controls={`env-tab-${id}`}
+      data-testid={`env-tab-${id}`}
+      onClick={() => onSelect(id)}
       className={cn(
         "-mb-px rounded-sm border-b-2 px-3 py-2 text-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         active
@@ -284,4 +392,3 @@ function persistedForgeProjectName(
       : state.projects.find((project) => project.id === projectId);
   return row?.forge_project_name ?? null;
 }
-

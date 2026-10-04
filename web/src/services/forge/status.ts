@@ -189,6 +189,13 @@ export interface ForgeServiceRow {
 export interface ForgeEnvStatusReport {
   env?: string;
   /**
+   * "local" for an environment that runs on a developer machine via
+   * `forge env up` and is never built or released; absent otherwise. This is
+   * what lets an env page say "running on this machine" instead of
+   * "not built yet" for dev.
+   */
+  lifecycle?: string;
+  /**
    * Where this env's workloads run — the same additive fields and vocabulary
    * as the topology env row (see topology.ts destinationOf). Absent from an
    * older forge; an absent or unrecognised destination is `unknown`, never
@@ -237,6 +244,42 @@ export interface ForgeEnvStatusReport {
   /** Forge's own roll-up. Recomputed locally so it cannot disagree with the rows. */
   overall?: string;
   duration_ms?: number;
+}
+
+// ── Wire shape ──────────────────────────────────────────────────────────────
+
+/**
+ * The runtime half of `forge env status <env> --json`, lifted to where every
+ * reader of ForgeEnvStatusReport looks for it.
+ *
+ * forge v0.1.42 folded `env verify` into `env status` (ADR V4): the document's
+ * top level became the RELEASE half (bound, images, tally, records) and the
+ * stack this machine runs moved under `runtime` — services, checks, the cluster
+ * inventory, destination and lifecycle. Every panel here still read them at
+ * the top, so against a current forge the dev stack showed no services and no
+ * checks, and the inventory said nothing was reported.
+ *
+ * Top-level keys WIN when both exist, so an older forge's flat document is
+ * untouched. `runtime` is removed rather than left alongside, so nothing can
+ * read a second copy.
+ */
+export function normalizeEnvStatus(report: Record<string, unknown>): ForgeEnvStatusReport {
+  const runtime = report.runtime;
+  if (!runtime || typeof runtime !== "object" || Array.isArray(runtime)) {
+    return report as ForgeEnvStatusReport;
+  }
+  const { runtime: _runtime, ...rest } = report;
+  void _runtime;
+  const merged: Record<string, unknown> = { ...(runtime as Record<string, unknown>) };
+  for (const [key, value] of Object.entries(rest)) {
+    if (value !== undefined) merged[key] = value;
+  }
+  return merged as ForgeEnvStatusReport;
+}
+
+/** Whether this report says the environment runs on a developer machine. */
+export function isLocalLifecycle(report: Pick<ForgeEnvStatusReport, "lifecycle"> | null | undefined): boolean {
+  return report?.lifecycle?.trim().toLowerCase() === "local";
 }
 
 // ── Projection (still pure) ─────────────────────────────────────────────────

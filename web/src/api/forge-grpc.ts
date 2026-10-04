@@ -54,6 +54,7 @@ import type { ForgeCheckoutsReport } from "../services/forge/checkouts";
 import type { ForgeEnvDiffReport } from "../services/forge/envDiff";
 import type { ForgePromotePlan, PromoteConfirmationToken, PromoteRefusal } from "../services/forge/promote";
 import type { ForgeEnvShapeReport } from "../services/forge/register";
+import { normalizeEnvStatus, type ForgeEnvStatusReport } from "../services/forge/status";
 import {
   classifyForgeResponse,
   type ForgeOutcome,
@@ -121,14 +122,20 @@ export async function getAudit(projectId: string): Promise<ForgeOutcome<Record<s
   return classifyForgeResponse<Record<string, unknown>>(res.meta, res.reportJson);
 }
 
+/**
+ * getEnvStatus returns one environment's status with forge's `runtime` block
+ * lifted to the top level — see normalizeEnvStatus for why.
+ */
 export async function getEnvStatus(
   projectId: string,
   env: string
-): Promise<ForgeOutcome<Record<string, unknown>>> {
+): Promise<ForgeOutcome<ForgeEnvStatusReport>> {
   const res = await createForgeClient().getEnvStatus(
     create(GetForgeEnvStatusRequestSchema, { projectId, env })
   );
-  return classifyForgeResponse<Record<string, unknown>>(res.meta, res.reportJson);
+  const outcome = classifyForgeResponse<Record<string, unknown>>(res.meta, res.reportJson);
+  if (outcome.kind !== "report") return outcome;
+  return { ...outcome, report: normalizeEnvStatus(outcome.report) };
 }
 
 /**

@@ -67,7 +67,7 @@ export function RegisterEnvPanel({
 
   return (
     <section
-      className="space-y-3 rounded-lg border border-dashed border-border px-4 py-3"
+      className="space-y-3"
       data-testid="register-env-panel"
       aria-labelledby="register-env-heading"
     >
@@ -83,7 +83,7 @@ export function RegisterEnvPanel({
           "the control plane has no row" is a fact about our database. */}
       <p className="text-xs text-muted-foreground">
         {declaredHere
-          ? "Your code declares this environment and Reliant hasn't seen it yet. Adding it records what forge renders, so it shows up in Live and you can set its secrets — even with your daemon offline."
+          ? "Your code declares this environment. Registering records what forge renders for it, so its releases and secrets are tracked here — even with your daemon offline."
           : "Reliant hasn't seen this environment yet. Adding it records what forge renders for it."}
       </p>
 
@@ -118,11 +118,6 @@ export function RegisterEnvPanel({
             >
               {register.isPending ? "Registering…" : "Register"}
             </Button>
-            {register.isSuccess && (
-              <span data-testid="register-done" className="text-xs text-muted-foreground">
-                Added. It&apos;s on the Live tab now, declared and not built yet.
-              </span>
-            )}
           </div>
           {register.error && (
             // The server's own words, as `detail`. EnsureEnvironment refuses —
