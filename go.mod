@@ -36,7 +36,7 @@ require (
 	github.com/pressly/goose/v3 v3.28.0
 	github.com/prometheus/client_golang v1.24.1
 	github.com/prometheus/client_model v0.6.3
-	github.com/reliant-labs/forge v0.1.44-0.20261004004951-877b006655bf
+	github.com/reliant-labs/forge v0.1.44-0.20261004040605-83abc631eda0
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
