@@ -35,10 +35,9 @@ option go_package = "github.com/reliant-labs/control-plane/gen/services/cluster/
 //     refused until the `cluster:manage` scope exists (it is not yet in
 //     forge's closed scope vocabulary, forge/pkg/accesstoken/scope.go).
 //
-// PROVIDERS. Reliant-provisioned vClusters are listed here too, read-only,
-// under the same provider enum (design §9 Q6 working default): "Clusters" is
-// every cluster the org's workloads can land on. Rotate and Remove refuse a
-// vCluster — its lifecycle belongs to the platform.
+// PROVIDERS. Every cluster here is the customer's own, reached either by an
+// agent that dials out (RegisterCluster) or by address (ConnectCluster).
+// "Clusters" is every cluster the org's workloads can land on.
 service ClusterService {
   // RegisterCluster records a new BYO cluster and mints its one-time
   // bootstrap. The cluster is WAITING until the agent exchanges the token.
@@ -66,16 +65,45 @@ service ClusterService {
   rpc RemoveCluster(RemoveClusterRequest) returns (RemoveClusterResponse) {
     option (forge.v1.method) = {auth_required: true};
   }
+  // ConnectCluster registers a cluster BY ADDRESS, with no agent in it.
+  //
+  // THE AGENTLESS SIBLING OF RegisterCluster, and the difference is which
+  // party holds the credential. RegisterCluster mints a bootstrap, the
+  // customer installs an agent, and the agent reports {server, CA, token} it
+  // minted itself. ConnectCluster is told the address and the CA up front,
+  // and authenticates either as a cloud workload identity (no secret crosses
+  // the boundary at all) or with a scoped ServiceAccount token the owner
+  // pasted once. Nothing is installed in the target cluster.
+  //
+  // DECLARATIVE AND IDEMPOTENT BY NAME. `forge cluster connect <name>` is
+  // re-run from a checkout, so a second call with different values UPDATES
+  // them rather than failing on a name collision. That is what makes the
+  // connect command safe to put in a script, and it is why there is no
+  // separate UpdateCluster: a second spelling of the same write could
+  // disagree with this one about what a partial request means.
+  //
+  // THE RESPONSE CARRIES THE HUB'S OWN IDENTITY, which is the half a caller
+  // cannot derive. Workload identity means the TARGET cluster must grant
+  // something to US, so forge prints the one-time IAM + RBAC grant the owner
+  // runs — and it can only print it if it knows which principal to name.
+  rpc ConnectCluster(ConnectClusterRequest) returns (ConnectClusterResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
 }
 
-// ClusterProvider is who runs the cluster. BYO is the customer's own;
-// the VCLUSTER_* values are Reliant-provisioned tenant vClusters (the same
-// discriminator as DeployClusterProvider, one table behind both).
+// ClusterProvider is who runs the cluster. BYO — the customer's own, whether
+// an agent reported it or ConnectCluster declared it — is the only one, and
+// the enum survives the deletion of the others because it is the stored
+// `provider` column's wire form and new providers are plausible.
 enum ClusterProvider {
   CLUSTER_PROVIDER_UNSPECIFIED = 0;
   CLUSTER_PROVIDER_BYO = 1;
-  CLUSTER_PROVIDER_VCLUSTER_SHARED = 2;
-  CLUSTER_PROVIDER_VCLUSTER_PRIVATE = 3;
+
+  // 2 and 3 were VCLUSTER_SHARED / VCLUSTER_PRIVATE, Reliant-provisioned
+  // tenant vClusters. Deleted with the vCluster model: there was never a
+  // provisioner, so no row ever carried either value.
+  reserved 2, 3;
+  reserved "CLUSTER_PROVIDER_VCLUSTER_SHARED", "CLUSTER_PROVIDER_VCLUSTER_PRIVATE";
 }
 
 // ClusterConnection is whether the platform can currently reach the cluster.
@@ -86,15 +114,94 @@ enum ClusterProvider {
 //   STALE     — the agent has a credential but has missed
 //               ClusterConnectionPolicy.stale_after_missed heartbeats.
 // A removed cluster is not listed at all, so there is no REVOKED here.
-//
-// For vClusters (read-only): CONNECTED once ready, WAITING while
-// provisioning, FAILED when provisioning failed.
 enum ClusterConnection {
   CLUSTER_CONNECTION_UNSPECIFIED = 0;
   CLUSTER_CONNECTION_WAITING = 1;
   CLUSTER_CONNECTION_CONNECTED = 2;
   CLUSTER_CONNECTION_STALE = 3;
-  CLUSTER_CONNECTION_FAILED = 4;
+
+  // 4 was FAILED, reachable only as a vCluster's failed PROVISIONING phase.
+  // Deleted with the vCluster model: we do not provision a customer's
+  // cluster, so there is no provisioning of ours to fail. An unreachable
+  // cluster is WAITING (never connected) or STALE (connected, now silent),
+  // and those are states a heartbeat can actually distinguish.
+  reserved 4;
+  reserved "CLUSTER_CONNECTION_FAILED";
+}
+
+// ClusterAuth is HOW the platform authenticates to a cluster's API server.
+//
+// TWO VALUES, AND THEY ARE THE TWO ENDS OF A REAL TRADE-OFF rather than two
+// clouds.
+//
+// WORKLOAD_IDENTITY_GCP is the good one, where it applies: Flux presents the
+// HUB's own GCP identity through `kubeConfig.configMapRef`, the target
+// cluster's IAM decides whether that identity may act, and NO SECRET EVER
+// CROSSES THE BOUNDARY — there is nothing in our database for a read to leak.
+// Flux's own recommended route.
+//
+// SERVICE_ACCOUNT_TOKEN is the one that works ANYWHERE: an RBAC-scoped
+// ServiceAccount token the owner supplies once, projected into a kubeconfig
+// Secret. It is strictly worse — a replayable bearer token at rest — and it is
+// how a cluster with no cloud identity to trust (Vultr VKE, bare metal, k3s)
+// becomes a target at all. Scoped down by the owner's own RBAC rather than by
+// our promise.
+//
+// EKS AND AKS ARE DELIBERATELY ABSENT, not forgotten. Flux's configMapRef
+// supports `aws` and `azure` providers and adding them is a small change to
+// the validator and one config field each — but there is no user on either
+// cloud today, and an untested code path that LOOKS supported is worse than
+// an absent one: it gets chosen, fails inside a cloud client, and reports a
+// problem with the customer's cluster. Tags 2 and 3 are RESERVED below so
+// those values can be added later without renumbering, and a generic
+// token-authenticated cluster on EKS or AKS already works today.
+//
+// UNSPECIFIED is not a default. A request that does not say how to
+// authenticate is InvalidArgument, because every possible default is wrong:
+// guessing workload identity on a cluster with none produces an auth failure
+// against a healthy cluster, and guessing token with no token produces a
+// kubeconfig authenticating as nobody.
+enum ClusterAuth {
+  CLUSTER_AUTH_UNSPECIFIED = 0;
+  // GKE. cloud_cluster is `projects/<project>/locations/<location>/clusters/<name>`.
+  CLUSTER_AUTH_WORKLOAD_IDENTITY_GCP = 1;
+  // A scoped ServiceAccount token the owner supplies. Works on ANY Kubernetes
+  // cluster; no cloud identity required, and cloud_cluster is not used.
+  CLUSTER_AUTH_SERVICE_ACCOUNT_TOKEN = 4;
+
+  // RESERVED FOR THE TWO CLOUDS WE HAVE NOT BUILT. Holding the tags means
+  // adding EKS/AKS workload identity later is additive rather than a
+  // renumbering — and renumbering an enum whose values are already stored in
+  // a database column is not a thing we would be willing to do.
+  reserved 2; // CLUSTER_AUTH_WORKLOAD_IDENTITY_AWS — EKS, cluster ARN
+  reserved 3; // CLUSTER_AUTH_WORKLOAD_IDENTITY_AZURE — AKS, ARM resource id
+}
+
+// HubIdentity is the principal the CONTROL PLANE acts as.
+//
+// WHY THIS IS A RESPONSE FIELD AND NOT DOCUMENTATION. Workload identity
+// inverts who holds the credential: instead of the owner handing us a token,
+// the owner grants OUR identity access in THEIR cloud. That grant names a
+// principal, and the principal is a deployment-level fact about the platform
+// the caller has no way to know. So the connect response hands it back and
+// forge renders the exact `gcloud` command plus the target cluster RBAC.
+//
+// ONE FIELD, because there is one workload-identity provider. The AWS and
+// Azure principals are reserved alongside the enum values they would serve:
+// returning an empty `aws_role_arn` today would advertise a capability that
+// does not exist, which is the thing the enum's reservation is avoiding.
+//
+// EMPTY IS THE NORMAL STATE IN DEV, where the control plane has no cloud
+// identity. forge must then say "this deployment has no GCP identity
+// configured" rather than print a grant command with a blank principal in it.
+message HubIdentity {
+  // The GCP service account email the hub's workloads run as, e.g.
+  // `control-plane@reliant-labs-475814.iam.gserviceaccount.com`. Granted
+  // `roles/container.clusterViewer` plus target-cluster RBAC.
+  string gcp_service_account = 1;
+
+  reserved 2; // aws_role_arn — with CLUSTER_AUTH_WORKLOAD_IDENTITY_AWS
+  reserved 3; // azure_client_id — with CLUSTER_AUTH_WORKLOAD_IDENTITY_AZURE
 }
 
 message Cluster {
@@ -114,8 +221,26 @@ message Cluster {
   repeated string environment_ids = 9;
   google.protobuf.Timestamp created_at = 10;
   // When the outstanding one-time bootstrap expires. Unset when there is
-  // none (already exchanged, revoked, or a vCluster).
+  // none (already exchanged, revoked, or a cluster connected by address).
   google.protobuf.Timestamp bootstrap_expires_at = 11;
+
+  // How the platform authenticates to this cluster. UNSPECIFIED on an
+  // agent-registered cluster, whose credential arrives by report rather than
+  // by declaration.
+  ClusterAuth auth = 12;
+  // The API server address, as the hub dials it. https only. Set by
+  // ConnectCluster; empty on an agent-registered cluster, where the address
+  // is part of the agent's reported credential and is not a declared field.
+  string address = 13;
+  // The provider's own resource name for the cluster, set iff auth is a
+  // workload-identity auth (today only WORKLOAD_IDENTITY_GCP). Empty
+  // otherwise.
+  string cloud_cluster = 14;
+
+  // THERE IS NO ca_pem AND NO token HERE, AND THAT IS DELIBERATE. The CA is
+  // not secret but it is bulky and nothing in a UI needs it, and a token must
+  // never be returned at all — a field that exists is a field some future
+  // handler populates. See ConnectClusterRequest.token.
 }
 
 // ClusterBootstrap is a one-time install command. The URL embeds a
@@ -170,3 +295,73 @@ message RemoveClusterRequest {
 }
 
 message RemoveClusterResponse {}
+
+// ConnectClusterRequest declares an agentless cluster.
+//
+// ADDRESSED BY NAME, NOT BY ID, and that is what makes it idempotent in the
+// way `forge cluster connect <name>` needs. A caller running from a checkout
+// knows the name it declared; it does not know the uuid we minted, and
+// requiring one would mean every connect is preceded by a list.
+message ConnectClusterRequest {
+  // A DNS label, unique among the org's live clusters. An EXISTING cluster
+  // with this name is UPDATED — including a cluster that was registered with
+  // an agent, which is how a cluster migrates from the agent path to the
+  // connected one.
+  string name = 1;
+
+  // REQUIRED. UNSPECIFIED is InvalidArgument; see ClusterAuth.
+  ClusterAuth auth = 2;
+
+  // The API server address the HUB will dial, e.g.
+  // `https://10.0.0.1` or `https://my-cluster.example.com:6443`.
+  //
+  // REQUIRED, https ONLY, and a loopback or wildcard host is refused. The
+  // hub's kustomize-controller reads this from a pod, where `127.0.0.1` and
+  // `0.0.0.0` mean THAT POD — so such an address fails as "connection
+  // refused" against a target cluster that is perfectly healthy, which is the
+  // one place the fault is not.
+  string address = 3;
+
+  // The PEM CA bundle that signed the API server's certificate.
+  //
+  // REQUIRED, and there is deliberately no insecure-skip-tls-verify anywhere
+  // in this path. A target we cannot verify is one we decline to deploy to;
+  // the alternative is sending a standing credential to whatever answers that
+  // address.
+  string ca_pem = 4;
+
+  // The provider's fully-qualified resource name for the cluster. For
+  // WORKLOAD_IDENTITY_GCP that is
+  // `projects/<project>/locations/<location>/clusters/<name>`.
+  //
+  // REQUIRED for a workload-identity auth and REFUSED for
+  // SERVICE_ACCOUNT_TOKEN, which does not use it. Flux's configMapRef needs
+  // it to perform the provider token exchange, and its format is VALIDATED —
+  // a malformed path produces a Flux reconcile error naming a cloud API, two
+  // layers from the typo.
+  string cloud_cluster = 5;
+
+  // The ServiceAccount token, for SERVICE_ACCOUNT_TOKEN only.
+  //
+  // WRITE-ONLY. It is REQUIRED iff auth is SERVICE_ACCOUNT_TOKEN, REFUSED on
+  // every other auth (a token on a workload-identity request means the caller
+  // misunderstands which credential is in play, and silently ignoring it
+  // would store a secret nothing reads), and it is NEVER RETURNED by any RPC
+  // on this service — there is no field on Cluster to return it in. A request
+  // carrying one is never logged, in whole or in part.
+  string token = 6;
+
+  // When token stops working, if the owner bound it. Optional: a token with
+  // no expiry is accepted, because an owner may legitimately have minted a
+  // non-expiring one and refusing it would push them toward a worse
+  // credential. When set, an expired cluster reads as not live, so the
+  // refusal is diagnosable ("the token expired at T") rather than an
+  // authentication failure against the target.
+  google.protobuf.Timestamp token_expires_at = 7;
+}
+
+message ConnectClusterResponse {
+  Cluster cluster = 1;
+  // The hub's own identities, for the IAM grant forge prints. See HubIdentity.
+  HubIdentity hub_identity = 2;
+}

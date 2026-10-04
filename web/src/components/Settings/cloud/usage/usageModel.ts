@@ -251,11 +251,10 @@ interface DimensionPresentation {
 /**
  * Maps the server's stable dimension ids to how this product talks about them.
  *
- * ONLY these three are rendered. "vcluster_floor" is a real dimension the RPC
- * may report, but it is not one of the three tiers this product sells, so it
- * is folded out rather than shown as a fourth allowance a customer cannot act
- * on. Egress, CDN and build dimensions cannot appear at all — they were
- * removed from the catalog because nothing measures them.
+ * ONLY these three exist. Egress, CDN and build dimensions cannot appear at
+ * all — they were removed from the catalog because nothing measures them. A
+ * dimension id the server reports that is not listed here is folded out
+ * rather than shown as an allowance a customer cannot act on.
  */
 const PRESENTATION: Record<string, DimensionPresentation> = {
   infra_cpu: {
@@ -287,8 +286,6 @@ export function unitLabel(unit: string): string {
       return "GiB-hours";
     case "minutes":
       return "minutes";
-    case "vcluster_hours":
-      return "vCluster-hours";
     default:
       // An unrecognised unit is shown verbatim rather than guessed at. The
       // number is still the server's; only the label is unknown.
@@ -306,8 +303,9 @@ export function timestampToDate(ts: WireTimestamp | undefined): Date | undefined
  * Folds usage rows into per-deployment attribution, heaviest spender first.
  *
  * Rows naming no deployment are kept under an empty id rather than dropped: a
- * vCluster-floor row is real money with no deployment to blame, and silently
- * discarding it makes the attribution table disagree with the total above it.
+ * row whose deployment has since been purged still records what it cost, and
+ * silently discarding it makes the attribution table disagree with the total
+ * above it.
  *
  * The conversions here are the ONLY unit arithmetic in this file, and they are
  * display-only: ListUsage reports raw meter quantities (milli-vCPU-hours,
@@ -356,8 +354,8 @@ export function buildUsageSummary(input: BuildSummaryInput): UsageSummary {
   const dimensions: DimensionReading[] = [];
   for (const dimension of overage?.dimensions ?? []) {
     const presentation = PRESENTATION[dimension.dimensionId];
-    // A dimension this product does not sell (vcluster_floor) is folded out
-    // rather than rendered as an allowance the customer cannot act on.
+    // A dimension this product does not sell is folded out rather than
+    // rendered as an allowance the customer cannot act on.
     if (!presentation) continue;
 
     const allowance =

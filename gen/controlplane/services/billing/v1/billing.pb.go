@@ -2757,8 +2757,7 @@ func (x *GetCurrentUserInfraOverageResponse) GetPeriodEnd() *timestamppb.Timesta
 // standing: the reading, the allowance, and the ladder rung.
 type InfraDimensionUsage struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Stable dimension id — "infra_cpu", "infra_memory", "infra_storage",
-	// "vcluster_floor".
+	// Stable dimension id — "infra_cpu", "infra_memory", "infra_storage".
 	DimensionId string `protobuf:"bytes,1,opt,name=dimension_id,json=dimensionId,proto3" json:"dimension_id,omitempty"`
 	// Human-readable name, ready to display ("CPU", "Memory", "Storage").
 	DisplayName string `protobuf:"bytes,2,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`

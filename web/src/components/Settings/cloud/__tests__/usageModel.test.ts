@@ -202,17 +202,18 @@ describe("buildUsageSummary — consumption against allowance", () => {
     expect(noAllowance?.percentUsed).toBe(100);
   });
 
-  it("surfaces only cpu, memory and storage — never vcluster, egress or build", () => {
-    // vcluster_floor is a real dimension the RPC can report, but it is not one
-    // of the three tiers this product sells. Egress/CDN/build cannot appear at
-    // all — nothing measures them, so they were removed from the catalog.
+  it("surfaces only cpu, memory and storage — an unsold dimension is folded out", () => {
+    // A dimension id the server reports that this product does not sell must
+    // not render as an allowance the customer cannot act on. Egress/CDN/build
+    // cannot appear at all — nothing measures them, so they were removed from
+    // the catalog.
     const summary = buildUsageSummary({
       overage: overageResponse({
         dimensions: [
           dimension({ dimensionId: "infra_cpu" }),
           dimension({ dimensionId: "infra_memory" }),
           dimension({ dimensionId: "infra_storage", suspendable: false }),
-          dimension({ dimensionId: "vcluster_floor" }),
+          dimension({ dimensionId: "an_unsold_dimension" }),
         ],
       }),
       rows: [],
@@ -358,8 +359,8 @@ describe("buildAttribution", () => {
   });
 
   it("keeps rows that name no deployment instead of dropping them", () => {
-    // A vCluster floor is real money with nothing to blame. Dropping it makes
-    // this table disagree with the total above it.
+    // A row whose deployment was purged still records what it cost. Dropping
+    // it makes this table disagree with the total above it.
     const attribution = buildAttribution([
       usageRow({ deploymentId: "", environmentId: "", costUsdNanos: 50_000_000n }),
     ]);
