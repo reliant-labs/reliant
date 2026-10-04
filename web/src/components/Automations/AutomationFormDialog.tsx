@@ -27,11 +27,14 @@ import { getWorkflowDisplayName, normalizeWorkflowRef } from "../workflow/useWor
 import { RunWorkflowForm, type RunWorkflowFormStatus } from "../workflow/run/RunWorkflowForm";
 import { countRunInputs, type RunWorkflowValue } from "../workflow/run/runWorkflowValues";
 import {
+  sourceKindLabel,
   triggerErrorMessage,
+  triggerSchedule,
   type OverlapPolicy,
   type Trigger,
   type TriggerDefinitionInput,
   type TriggerSchedule,
+  type TriggerSource,
 } from "@/api/trigger-grpc";
 import {
   useCreateTrigger,
@@ -90,6 +93,13 @@ export interface AutomationFormDialogProps {
 /** A Go duration ("90s", "10m", "1h30m"); the server is the final judge. */
 const GO_DURATION = /^(\d+(\.\d+)?(ns|us|µs|ms|s|m|h))+$/;
 
+/**
+ * A source arm this build's generated code predates arrives with nothing to
+ * send back, and UpdateTrigger is a full replacement — so it cannot be saved.
+ */
+const UNKNOWN_SOURCE_MESSAGE =
+  "This automation's trigger was set up in a newer version of Reliant. Reload the app to edit it.";
+
 function browserTimezone(): string {
   try {
     return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
@@ -147,7 +157,11 @@ function AutomationFormBody({
   }, [loadProjects]);
 
   // An edit starts from the trigger; a new automation from the prefill.
-  const initialSchedule = trigger?.schedule ?? prefill?.schedule;
+  const initialSchedule = trigger ? triggerSchedule(trigger) : prefill?.schedule;
+  // Only a schedule has an editor here. Any other kind of source is shown
+  // read-only and sent back exactly as stored, so editing the name or prompt
+  // can never rewrite what makes the trigger fire.
+  const lockedSource = trigger && trigger.source.kind !== "schedule" ? trigger.source : undefined;
 
   const [name, setName] = useState(trigger?.name ?? prefill?.name ?? "");
   const [projectId, setProjectId] = useState(
@@ -279,18 +293,11 @@ function AutomationFormBody({
   const updateSchedule = (patch: Partial<ScheduleFormState>) =>
     setSchedule((prev) => ({ ...prev, ...patch }));
 
-  const buildDefinition = (): TriggerDefinitionInput => {
+  const buildSource = (): TriggerSource => {
+    if (lockedSource) return lockedSource;
     const wire = scheduleFromForm(schedule);
     return {
-      name: name.trim(),
-      projectId,
-      worktreeId: inputs.worktreeId,
-      workflow,
-      presets: inputs.presets,
-      params: inputs.params,
-      message: message.trim(),
-      daemonId,
-      notifyOnComplete,
+      kind: "schedule",
       schedule: {
         cron: wire.cron,
         interval: wire.interval,
@@ -300,6 +307,19 @@ function AutomationFormBody({
       },
     };
   };
+
+  const buildDefinition = (): TriggerDefinitionInput => ({
+    name: name.trim(),
+    projectId,
+    worktreeId: inputs.worktreeId,
+    workflow,
+    presets: inputs.presets,
+    params: inputs.params,
+    message: message.trim(),
+    daemonId,
+    notifyOnComplete,
+    source: buildSource(),
+  });
 
   const onSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -320,9 +340,10 @@ function AutomationFormBody({
     } else if (inputsStatus && inputsStatus.missingRequired.length > 0) {
       next.inputs = `Fill in the required inputs: ${inputsStatus.missingRequired.join(", ")}.`;
     }
-    if (scheduleError) next.schedule = scheduleError;
+    if (lockedSource?.kind === "unknown") next.form = UNKNOWN_SOURCE_MESSAGE;
+    if (scheduleError && !lockedSource) next.schedule = scheduleError;
     const catchup = catchupWindow.trim();
-    if (catchup && !GO_DURATION.test(catchup)) {
+    if (catchup && !lockedSource && !GO_DURATION.test(catchup)) {
       next.catchup = "Use a duration like 10m, 2h or 1h30m.";
       setAdvancedOpen(true);
     }
@@ -582,51 +603,66 @@ function AutomationFormBody({
             When it runs
           </h3>
 
-          <ScheduleFields
-            fieldId={fieldId}
-            schedule={schedule}
-            onChange={updateSchedule}
-            error={errors.schedule}
-          />
-
-          <div>
-            <label htmlFor={fieldId("timezone")} className={labelClass}>
-              Time zone
-            </label>
-            <input
-              id={fieldId("timezone")}
-              className={fieldClass}
-              value={timezone}
-              onChange={(e) => setTimezone(e.target.value)}
-              list={fieldId("timezones")}
-              autoComplete="off"
-              spellCheck={false}
-              aria-invalid={!!errors.timezone}
-              aria-describedby={describedBy(fieldId("timezone-hint"), errors.timezone && fieldId("timezone-error"))}
-            />
-            <datalist id={fieldId("timezones")}>
-              {zones.map((zone) => (
-                <option key={zone} value={zone} />
-              ))}
-            </datalist>
-            <p id={fieldId("timezone-hint")} className={hintClass}>
-              An IANA zone such as America/New_York. Times above are in this zone.
+          {lockedSource ? (
+            <p
+              id={fieldId("locked-source")}
+              className="rounded-md border border-border/60 bg-background px-3 py-2 text-sm text-foreground"
+            >
+              <span className="font-medium">{sourceKindLabel(lockedSource)} trigger.</span>{" "}
+              <span className="text-muted-foreground">
+                {lockedSource.kind === "unknown"
+                  ? UNKNOWN_SOURCE_MESSAGE
+                  : "Its trigger settings can't be changed here yet. Saving keeps them exactly as they are."}
+              </span>
             </p>
-            {errors.timezone && (
-              <p id={fieldId("timezone-error")} className={errorTextClass}>
-                {errors.timezone}
+          ) : (
+            <>
+              <ScheduleFields
+                fieldId={fieldId}
+                schedule={schedule}
+                onChange={updateSchedule}
+                error={errors.schedule}
+              />
+
+              <div>
+                <label htmlFor={fieldId("timezone")} className={labelClass}>
+                  Time zone
+                </label>
+                <input
+                  id={fieldId("timezone")}
+                  className={fieldClass}
+                  value={timezone}
+                  onChange={(e) => setTimezone(e.target.value)}
+                  list={fieldId("timezones")}
+                  autoComplete="off"
+                  spellCheck={false}
+                  aria-invalid={!!errors.timezone}
+                  aria-describedby={describedBy(fieldId("timezone-hint"), errors.timezone && fieldId("timezone-error"))}
+                />
+                <datalist id={fieldId("timezones")}>
+                  {zones.map((zone) => (
+                    <option key={zone} value={zone} />
+                  ))}
+                </datalist>
+                <p id={fieldId("timezone-hint")} className={hintClass}>
+                  An IANA zone such as America/New_York. Times above are in this zone.
+                </p>
+                {errors.timezone && (
+                  <p id={fieldId("timezone-error")} className={errorTextClass}>
+                    {errors.timezone}
+                  </p>
+                )}
+              </div>
+
+              <p
+                className="rounded-md border border-border/60 bg-background px-3 py-2 text-sm text-foreground"
+                aria-live="polite"
+              >
+                <span className="text-muted-foreground">Runs: </span>
+                {preview ?? "Finish the schedule to see when this runs."}
               </p>
-            )}
-          </div>
-
-          <p
-            className="rounded-md border border-border/60 bg-background px-3 py-2 text-sm text-foreground"
-            aria-live="polite"
-          >
-            <span className="text-muted-foreground">Runs: </span>
-            {preview ?? "Finish the schedule to see when this runs."}
-          </p>
-
+            </>
+          )}
         </section>
 
         <section aria-labelledby={fieldId("advanced-heading")}>
@@ -647,27 +683,30 @@ function AutomationFormBody({
           </h3>
           {/* Kept mounted while closed so a value set here is never lost. */}
           <div id={fieldId("advanced-body")} hidden={!advancedOpen} className="mt-4 space-y-4">
-            <fieldset>
-              <legend className={labelClass}>If the previous run is still going</legend>
-              <div className="space-y-2">
-                <OverlapOption
-                  id={fieldId("overlap-skip")}
-                  name={fieldId("overlap")}
-                  checked={overlap === "skip"}
-                  onSelect={() => setOverlap("skip")}
-                  title="Skip this run"
-                  description="Recommended. Nothing starts while the last run is active or paused; the skip is recorded in the history."
-                />
-                <OverlapOption
-                  id={fieldId("overlap-allow")}
-                  name={fieldId("overlap")}
-                  checked={overlap === "allow"}
-                  onSelect={() => setOverlap("allow")}
-                  title="Start another run anyway"
-                  description="Runs can pile up side by side if each one takes longer than the gap between them."
-                />
-              </div>
-            </fieldset>
+            {/* Overlap and catch-up live on the schedule source; a locked source keeps its own. */}
+            {!lockedSource && (
+              <fieldset>
+                <legend className={labelClass}>If the previous run is still going</legend>
+                <div className="space-y-2">
+                  <OverlapOption
+                    id={fieldId("overlap-skip")}
+                    name={fieldId("overlap")}
+                    checked={overlap === "skip"}
+                    onSelect={() => setOverlap("skip")}
+                    title="Skip this run"
+                    description="Recommended. Nothing starts while the last run is active or paused; the skip is recorded in the history."
+                  />
+                  <OverlapOption
+                    id={fieldId("overlap-allow")}
+                    name={fieldId("overlap")}
+                    checked={overlap === "allow"}
+                    onSelect={() => setOverlap("allow")}
+                    title="Start another run anyway"
+                    description="Runs can pile up side by side if each one takes longer than the gap between them."
+                  />
+                </div>
+              </fieldset>
+            )}
 
             <div>
               <label className="flex cursor-pointer items-start gap-2 text-sm text-foreground">
@@ -687,30 +726,32 @@ function AutomationFormBody({
               </p>
             </div>
 
-            <div>
-              <label htmlFor={fieldId("catchup")} className={labelClass}>
-                Catch-up window
-              </label>
-              <input
-                id={fieldId("catchup")}
-                className={cn(fieldClass, "font-mono sm:w-48")}
-                value={catchupWindow}
-                onChange={(e) => setCatchupWindow(e.target.value)}
-                placeholder="10m"
-                spellCheck={false}
-                autoComplete="off"
-                aria-invalid={!!errors.catchup}
-                aria-describedby={describedBy(fieldId("catchup-hint"), errors.catchup && fieldId("catchup-error"))}
-              />
-              <p id={fieldId("catchup-hint")} className={hintClass}>
-                How late a run missed during an outage may still start, such as 30m or 2h. Empty means 10 minutes.
-              </p>
-              {errors.catchup && (
-                <p id={fieldId("catchup-error")} className={errorTextClass}>
-                  {errors.catchup}
+            {!lockedSource && (
+              <div>
+                <label htmlFor={fieldId("catchup")} className={labelClass}>
+                  Catch-up window
+                </label>
+                <input
+                  id={fieldId("catchup")}
+                  className={cn(fieldClass, "font-mono sm:w-48")}
+                  value={catchupWindow}
+                  onChange={(e) => setCatchupWindow(e.target.value)}
+                  placeholder="10m"
+                  spellCheck={false}
+                  autoComplete="off"
+                  aria-invalid={!!errors.catchup}
+                  aria-describedby={describedBy(fieldId("catchup-hint"), errors.catchup && fieldId("catchup-error"))}
+                />
+                <p id={fieldId("catchup-hint")} className={hintClass}>
+                  How late a run missed during an outage may still start, such as 30m or 2h. Empty means 10 minutes.
                 </p>
-              )}
-            </div>
+                {errors.catchup && (
+                  <p id={fieldId("catchup-error")} className={errorTextClass}>
+                    {errors.catchup}
+                  </p>
+                )}
+              </div>
+            )}
           </div>
         </section>
 

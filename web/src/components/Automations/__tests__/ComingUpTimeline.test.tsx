@@ -31,7 +31,7 @@ function trigger(overrides: Partial<Trigger> & Pick<Trigger, "id">): Trigger {
     health: { status: "healthy", consecutiveFailures: 0, consecutiveSkips: 0, lastFailureDetail: "" },
     createdAt: "",
     updatedAt: "",
-    schedule: { cron: ["0 9 * * *"], timezone: "Europe/London", overlap: "skip" },
+    source: { kind: "schedule", schedule: { cron: ["0 9 * * *"], timezone: "Europe/London", overlap: "skip" } },
     nextFireAt: "2026-10-02T08:00:00Z",
     ...overrides,
   };
@@ -40,7 +40,7 @@ function trigger(overrides: Partial<Trigger> & Pick<Trigger, "id">): Trigger {
 describe("laneTicks", () => {
   it("enumerates the window's fires from the schedule", () => {
     const ticks = laneTicks(
-      trigger({ id: "a", schedule: { cron: ["0 */6 * * *"], timezone: "UTC", overlap: "skip" }, nextFireAt: "2026-10-02T12:00:00Z" }),
+      trigger({ id: "a", source: { kind: "schedule", schedule: { cron: ["0 */6 * * *"], timezone: "UTC", overlap: "skip" } }, nextFireAt: "2026-10-02T12:00:00Z" }),
       NOW,
       NOW + 24 * HOUR,
     );
@@ -56,7 +56,7 @@ describe("laneTicks", () => {
     // The client computes 12:00 next; the server says 14:00 (say, a skip the
     // client cannot know about). The server wins, and nothing before it shows.
     const ticks = laneTicks(
-      trigger({ id: "a", schedule: { cron: ["0 */6 * * *"], timezone: "UTC", overlap: "skip" }, nextFireAt: "2026-10-02T14:00:00Z" }),
+      trigger({ id: "a", source: { kind: "schedule", schedule: { cron: ["0 */6 * * *"], timezone: "UTC", overlap: "skip" } }, nextFireAt: "2026-10-02T14:00:00Z" }),
       NOW,
       NOW + 24 * HOUR,
     );
@@ -77,7 +77,7 @@ describe("timelineModel", () => {
   it("has no lanes with zero enabled schedule automations", () => {
     expect(timelineModel([], NOW).lanes).toEqual([]);
     const model = timelineModel(
-      [trigger({ id: "off", enabled: false }), trigger({ id: "no-schedule", schedule: undefined })],
+      [trigger({ id: "off", enabled: false }), trigger({ id: "no-schedule", source: { kind: "unknown" } })],
       NOW,
     );
     expect(model.lanes).toEqual([]);
@@ -89,7 +89,7 @@ describe("timelineModel", () => {
       trigger({
         id: `t${i}`,
         // Hour i+1 from now, so t0 is soonest and t10 latest.
-        schedule: { cron: [`0 ${(7 + i) % 24} * * *`], timezone: "UTC", overlap: "skip" },
+        source: { kind: "schedule", schedule: { cron: [`0 ${(7 + i) % 24} * * *`], timezone: "UTC", overlap: "skip" } },
         nextFireAt: iso(Date.parse("2026-10-02T07:00:00Z") + i * HOUR),
       }),
     ).reverse();

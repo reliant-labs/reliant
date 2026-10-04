@@ -14,6 +14,10 @@
  * through from the loaded trigger, or the update
  * silently clears them. `definitionFromTrigger` exists to make that the
  * default rather than something each caller has to remember.
+ *
+ * The same holds for the source: a kind this client cannot edit is carried
+ * through as the opaque proto arm (`TriggerSource`), never re-encoded, so
+ * renaming a webhook trigger cannot turn it into an empty schedule.
  */
 
 import { create } from "@bufbuild/protobuf";
@@ -50,6 +54,29 @@ import type { RunDisplayState } from "../gen/reliant/v1/run_pb";
 export type TriggerOutcome = "launched" | "skipped" | "failed" | "unknown";
 
 export type OverlapPolicy = "skip" | "allow";
+
+/**
+ * A proto `source` arm other than schedule, exactly as the server sent it.
+ * Derived from the generated oneof, so a new arm in trigger.proto widens this
+ * type on regeneration with no change here.
+ */
+export type PassthroughSourceArm = Exclude<ProtoTrigger["source"], { case: "schedule" } | { case: undefined }>;
+
+/**
+ * What makes a trigger fire: the proto `source` oneof.
+ *
+ *   - `schedule`: the one kind this client reads and edits.
+ *   - `passthrough`: any other arm this client's generated code knows but no
+ *     editor handles yet. Carried opaquely, so the full-replacement update
+ *     sends it back exactly as stored.
+ *   - `unknown`: the server sent an arm this client's generated code predates.
+ *     JSON decoding drops an unknown field, so nothing is left to send back,
+ *     and the trigger's definition cannot be saved from this client.
+ */
+export type TriggerSource =
+  | { kind: "schedule"; schedule: TriggerSchedule }
+  | { kind: "passthrough"; arm: PassthroughSourceArm }
+  | { kind: "unknown" };
 
 export interface TriggerSchedule {
   /** 5-field cron expressions; a union with each other and the interval. */
@@ -113,8 +140,32 @@ export interface Trigger {
   updatedAt: string;
   nextFireAt?: string;
   lastEvent?: TriggerEvent;
-  /** Unset only for a source arm this client does not know yet. */
-  schedule?: TriggerSchedule;
+  source: TriggerSource;
+}
+
+/** The trigger's schedule, or undefined for any other kind of source. */
+export function triggerSchedule(trigger: Pick<Trigger, "source">): TriggerSchedule | undefined {
+  return trigger.source.kind === "schedule" ? trigger.source.schedule : undefined;
+}
+
+/**
+ * A source's kind in words, for a kind this client has no editor for yet:
+ * the proto arm name ("workflowEvent") read as "Workflow event".
+ */
+export function sourceKindLabel(source: TriggerSource): string {
+  switch (source.kind) {
+    case "schedule":
+      return "Schedule";
+    case "passthrough": {
+      // Read structurally: while schedule is the only generated arm the
+      // passthrough type is `never`, and it widens as arms are added.
+      const armCase = (source.arm as { case: string }).case;
+      const words = armCase.replace(/([a-z0-9])([A-Z])/g, "$1 $2").toLowerCase();
+      return words.charAt(0).toUpperCase() + words.slice(1);
+    }
+    case "unknown":
+      return "Unknown kind";
+  }
 }
 
 /** The writable half of a trigger — what create and update send. */
@@ -136,7 +187,8 @@ export interface TriggerDefinitionInput {
   daemonId: string;
   /** Replaced on update like every field here, so an edit must send it back. */
   notifyOnComplete: boolean;
-  schedule: TriggerSchedule;
+  /** Replaced on update too: an edit that does not change it sends the stored one. */
+  source: TriggerSource;
 }
 
 // ============================================
@@ -173,6 +225,17 @@ function scheduleFromProto(source: ProtoScheduleSource): TriggerSchedule {
     overlap: overlapFromProto(source.overlap),
     catchupWindow: source.catchupWindow || undefined,
   };
+}
+
+function sourceFromProto(source: ProtoTrigger["source"]): TriggerSource {
+  switch (source.case) {
+    case "schedule":
+      return { kind: "schedule", schedule: scheduleFromProto(source.value) };
+    case undefined:
+      return { kind: "unknown" };
+    default:
+      return { kind: "passthrough", arm: source };
+  }
 }
 
 function healthStatusFromProto(status: TriggerHealthStatus): TriggerHealthStatusKey {
@@ -233,7 +296,7 @@ export function triggerFromProto(proto: ProtoTrigger): Trigger {
     updatedAt: proto.updatedAt,
     nextFireAt: proto.nextFireAt || undefined,
     lastEvent: proto.lastEvent ? eventFromProto(proto.lastEvent) : undefined,
-    schedule: proto.source.case === "schedule" ? scheduleFromProto(proto.source.value) : undefined,
+    source: sourceFromProto(proto.source),
   };
 }
 
@@ -246,14 +309,7 @@ export function definitionToProto(input: TriggerDefinitionInput): ProtoTriggerDe
   for (const [key, value] of Object.entries(input.params)) {
     params[key] = jsToProtoValue(value);
   }
-  const schedule = create(ScheduleSourceSchema, {
-    cron: input.schedule.cron,
-    interval: input.schedule.interval || undefined,
-    timezone: input.schedule.timezone,
-    overlap: overlapToProto(input.schedule.overlap),
-    catchupWindow: input.schedule.catchupWindow || undefined,
-  });
-  return create(TriggerDefinitionSchema, {
+  const definition = create(TriggerDefinitionSchema, {
     name: input.name,
     projectId: input.projectId,
     worktreeId: input.worktreeId || undefined,
@@ -264,8 +320,37 @@ export function definitionToProto(input: TriggerDefinitionInput): ProtoTriggerDe
     message: input.message,
     daemonId: input.daemonId,
     notifyOnComplete: input.notifyOnComplete,
-    source: { case: "schedule", value: schedule },
   });
+  // Assigned rather than passed to create(): a passthrough arm is the decoded
+  // message the server sent, and goes back as that same object.
+  definition.source = sourceToProto(input.source);
+  return definition;
+}
+
+function sourceToProto(source: TriggerSource): ProtoTriggerDefinition["source"] {
+  switch (source.kind) {
+    case "schedule":
+      return {
+        case: "schedule",
+        value: create(ScheduleSourceSchema, {
+          cron: source.schedule.cron,
+          interval: source.schedule.interval || undefined,
+          timezone: source.schedule.timezone,
+          overlap: overlapToProto(source.schedule.overlap),
+          catchupWindow: source.schedule.catchupWindow || undefined,
+        }),
+      };
+    case "passthrough":
+      // Trigger and TriggerDefinition declare the same arms, so the stored arm
+      // is already a valid definition arm. Never rebuilt: what was stored goes back.
+      return source.arm;
+    case "unknown":
+      // Sending no source (or an invented one) would replace the stored
+      // trigger's source on a full-replacement update.
+      throw new Error(
+        "This automation's trigger was set up in a newer version of Reliant. Reload the app to edit it.",
+      );
+  }
 }
 
 /**
@@ -283,7 +368,7 @@ export function definitionFromTrigger(trigger: Trigger): TriggerDefinitionInput 
     message: trigger.message,
     daemonId: trigger.daemonId,
     notifyOnComplete: trigger.notifyOnComplete,
-    schedule: trigger.schedule ?? { cron: [], timezone: "UTC", overlap: "skip" },
+    source: trigger.source,
   };
 }
 

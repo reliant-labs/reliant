@@ -10,7 +10,7 @@
 import type { Trigger } from "../api/trigger-grpc";
 import { normalizeWorkflowRef } from "../components/workflow/useWorkflowInputs";
 import { automationHealth, type AutomationHealthDisplay } from "./automationHealth";
-import { describeSchedule } from "./cronText";
+import { describeTriggerSource } from "./cronText";
 
 export interface TriggerRailLine {
   trigger: Trigger;
@@ -48,7 +48,7 @@ export function triggerRailLines(
       const health = automationHealth(trigger);
       return {
         trigger,
-        scheduleText: trigger.schedule ? describeSchedule(trigger.schedule) : "Custom trigger",
+        scheduleText: describeTriggerSource(trigger.source),
         health,
         paused: !trigger.enabled,
         failing: health.key === "failing",

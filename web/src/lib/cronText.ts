@@ -17,6 +17,8 @@
  * reads the same on every machine and the tests are deterministic.
  */
 
+import { sourceKindLabel, type TriggerSource } from "@/api/trigger-grpc";
+
 const WEEKDAY_NAMES = [
   "Sunday",
   "Monday",
@@ -281,4 +283,12 @@ export function describeSchedule(schedule: ScheduleText): string {
     .map((expression) => describeCron(expression, schedule.timezone));
   if (schedule.interval) parts.push(describeInterval(schedule.interval));
   return parts.length > 0 ? parts.join("; ") : "No schedule";
+}
+
+/**
+ * One line for what makes a trigger fire: the schedule in words, or the kind
+ * of source when this client has no editor for it yet.
+ */
+export function describeTriggerSource(source: TriggerSource): string {
+  return source.kind === "schedule" ? describeSchedule(source.schedule) : sourceKindLabel(source);
 }
