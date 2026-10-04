@@ -477,6 +477,84 @@ CREATE TABLE public.command_favorites (
 );
 
 --
+-- Name: connection_events; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.connection_events (
+    id bigint NOT NULL,
+    connection_id text NOT NULL,
+    user_id text NOT NULL,
+    kind text NOT NULL,
+    run_id text,
+    node_id text,
+    tool_call_id text,
+    actor text NOT NULL,
+    at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+--
+-- Name: connection_events_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.connection_events_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+--
+-- Name: connection_events_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.connection_events_id_seq OWNED BY public.connection_events.id;
+
+--
+-- Name: connection_secrets; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.connection_secrets (
+    connection_id text NOT NULL,
+    field text NOT NULL,
+    vault_key_id text NOT NULL,
+    ciphertext bytea NOT NULL,
+    generation bigint DEFAULT 1 NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT connection_secrets_field_check CHECK ((field = ANY (ARRAY['access_token'::text, 'refresh_token'::text, 'api_key'::text, 'password'::text, 'client_secret'::text])))
+);
+
+--
+-- Name: connections; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.connections (
+    id text NOT NULL,
+    owner_kind text DEFAULT 'user'::text NOT NULL,
+    user_id text NOT NULL,
+    org_id text,
+    integration_id text NOT NULL,
+    auth_kind text NOT NULL,
+    name text NOT NULL,
+    account_label text,
+    external_account_id text,
+    scopes text[] DEFAULT '{}'::text[] NOT NULL,
+    oauth_client text,
+    auth_header text,
+    status text NOT NULL,
+    status_reason text,
+    is_default boolean DEFAULT false NOT NULL,
+    access_expires_at timestamp with time zone,
+    last_used_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    deleted_at timestamp with time zone,
+    CONSTRAINT connections_auth_kind_check CHECK ((auth_kind = ANY (ARRAY['oauth2'::text, 'github_app_user'::text, 'api_key'::text, 'basic'::text, 'none'::text]))),
+    CONSTRAINT connections_check CHECK ((((owner_kind = 'user'::text) AND (org_id IS NULL)) OR ((owner_kind = 'org'::text) AND (org_id IS NOT NULL)))),
+    CONSTRAINT connections_owner_kind_check CHECK ((owner_kind = ANY (ARRAY['user'::text, 'org'::text]))),
+    CONSTRAINT connections_status_check CHECK ((status = ANY (ARRAY['active'::text, 'needs_reauth'::text, 'revoked'::text])))
+);
+
+--
 -- Name: connector_audit_log; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -678,6 +756,23 @@ CREATE TABLE public.message_order_counters (
     scope_id text NOT NULL,
     last_assigned bigint NOT NULL,
     CONSTRAINT message_order_counters_kind_check CHECK ((counter_kind = ANY (ARRAY['ordinal'::text, 'seq'::text])))
+);
+
+--
+-- Name: oauth_flows; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.oauth_flows (
+    state_hash bytea NOT NULL,
+    user_id text NOT NULL,
+    session_id_hash bytea NOT NULL,
+    integration_id text NOT NULL,
+    pkce_verifier_sealed bytea NOT NULL,
+    redirect_after text,
+    reconnect_connection_id text,
+    connection_name text,
+    expires_at timestamp with time zone NOT NULL,
+    consumed_at timestamp with time zone
 );
 
 --
@@ -1111,6 +1206,12 @@ CREATE TABLE public.worktrees (
 ALTER TABLE ONLY public.background_process_output ALTER COLUMN id SET DEFAULT nextval('public.background_process_output_id_seq'::regclass);
 
 --
+-- Name: connection_events id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.connection_events ALTER COLUMN id SET DEFAULT nextval('public.connection_events_id_seq'::regclass);
+
+--
 -- Name: access_tokens access_tokens_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1258,6 +1359,27 @@ ALTER TABLE ONLY public.command_favorites
     ADD CONSTRAINT command_favorites_user_id_project_id_command_key_key UNIQUE (user_id, project_id, command_key);
 
 --
+-- Name: connection_events connection_events_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.connection_events
+    ADD CONSTRAINT connection_events_pkey PRIMARY KEY (id);
+
+--
+-- Name: connection_secrets connection_secrets_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.connection_secrets
+    ADD CONSTRAINT connection_secrets_pkey PRIMARY KEY (connection_id, field);
+
+--
+-- Name: connections connections_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.connections
+    ADD CONSTRAINT connections_pkey PRIMARY KEY (id);
+
+--
 -- Name: connector_audit_log connector_audit_log_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1389,6 +1511,13 @@ ALTER TABLE ONLY public.messages
 
 ALTER TABLE ONLY public.messages
     ADD CONSTRAINT messages_thread_ordinal_key UNIQUE (thread_id, ordinal);
+
+--
+-- Name: oauth_flows oauth_flows_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.oauth_flows
+    ADD CONSTRAINT oauth_flows_pkey PRIMARY KEY (state_hash);
 
 --
 -- Name: plans plans_pkey; Type: CONSTRAINT; Schema: public; Owner: -
@@ -1687,6 +1816,30 @@ CREATE INDEX access_tokens_live_hash ON public.access_tokens USING btree (token_
 --
 
 CREATE INDEX access_tokens_live_resource ON public.access_tokens USING btree (resource_kind, resource_id) WHERE ((revoked_at IS NULL) AND (resource_kind IS NOT NULL));
+
+--
+-- Name: connection_events_conn; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX connection_events_conn ON public.connection_events USING btree (connection_id, id DESC);
+
+--
+-- Name: connections_name; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX connections_name ON public.connections USING btree (user_id, integration_id, name) WHERE (deleted_at IS NULL);
+
+--
+-- Name: connections_one_default; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX connections_one_default ON public.connections USING btree (user_id, integration_id) WHERE (is_default AND (deleted_at IS NULL) AND (owner_kind = 'user'::text));
+
+--
+-- Name: connections_user; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX connections_user ON public.connections USING btree (user_id) WHERE (deleted_at IS NULL);
 
 --
 -- Name: idx_agent_messages_inbox; Type: INDEX; Schema: public; Owner: -
@@ -2193,6 +2346,12 @@ CREATE UNIQUE INDEX idx_worktrees_idempotency_key ON public.worktrees USING btre
 CREATE UNIQUE INDEX messages_chat_activity_key ON public.messages USING btree (chat_id, activity_id) WHERE ((activity_id IS NOT NULL) AND (activity_id <> ''::text));
 
 --
+-- Name: oauth_flows_expires; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX oauth_flows_expires ON public.oauth_flows USING btree (expires_at);
+
+--
 -- Name: project_daemons_daemon_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2278,6 +2437,20 @@ ALTER TABLE ONLY public.background_processes
 
 ALTER TABLE ONLY public.background_processes
     ADD CONSTRAINT background_processes_worktree_id_fkey FOREIGN KEY (worktree_id) REFERENCES public.worktrees(id) ON DELETE SET NULL;
+
+--
+-- Name: connection_secrets connection_secrets_connection_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.connection_secrets
+    ADD CONSTRAINT connection_secrets_connection_id_fkey FOREIGN KEY (connection_id) REFERENCES public.connections(id) ON DELETE CASCADE;
+
+--
+-- Name: connection_secrets connection_secrets_vault_key_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.connection_secrets
+    ADD CONSTRAINT connection_secrets_vault_key_id_fkey FOREIGN KEY (vault_key_id) REFERENCES public.vault_keys(id);
 
 --
 -- Name: connector_client_bindings connector_client_bindings_grant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -

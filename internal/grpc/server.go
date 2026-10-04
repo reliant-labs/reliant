@@ -25,6 +25,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/accesstokenclient"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/cliauth"
+	"github.com/reliant-labs/reliant/internal/connections"
 	"github.com/reliant-labs/reliant/internal/connectorgrant"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/grpc/interceptors"
@@ -98,6 +99,14 @@ type Config struct {
 	// from the environment (tokenauthority.DepsFromEnv): control-plane when
 	// RELIANT_CONTROL_PLANE_URL is set, else reliant's own store — exactly one.
 	TokenAuthority tokenauthority.Authority
+
+	// Connections backs ConnectionService. nil leaves the service unmounted
+	// (a test or CLI composition with no vault).
+	Connections *connections.Service
+
+	// OAuthRoutes mounts the browser half of the connection OAuth broker
+	// (/integrations/oauth/{provider}/{start,callback}). nil leaves it off.
+	OAuthRoutes *connections.OAuthHTTP
 }
 
 // NewServer creates a new Connect/gRPC server.
@@ -370,6 +379,15 @@ func NewServer(cfg *Config) (*Server, error) {
 
 	if accountHandler != nil {
 		mux.Handle(accountPath, accountHandler)
+	}
+
+	if cfg.Connections != nil {
+		connectionPath, connectionHandler := reliantv1connect.NewConnectionServiceHandler(
+			services.NewConnectionService(cfg.Connections), opts...)
+		mux.Handle(connectionPath, connectionHandler)
+	}
+	if cfg.OAuthRoutes != nil {
+		cfg.OAuthRoutes.Register(func(pattern string, h http.Handler) { mux.Handle(pattern, h) })
 	}
 
 	if connectorHandler != nil {

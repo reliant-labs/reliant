@@ -202,7 +202,12 @@ func Run(ctx context.Context, opts Options) error {
 
 	// Credential vault: required when hosted, generated when self-hosted.
 	// Fails startup on a missing or malformed key.
-	if _, err := db.BootVault(ctx, repo, tokenauthority.ControlPlaneURL() != "", opts.DataDir); err != nil {
+	vaultKeys, err := db.BootVault(ctx, repo, tokenauthority.ControlPlaneURL() != "", opts.DataDir)
+	if err != nil {
+		return err
+	}
+	connSvc, oauthRoutes, err := wireConnections(repo, vaultKeys, jwtPublicKey, jwksURL, strings.TrimSpace(os.Getenv("PUBLIC_URL")))
+	if err != nil {
 		return err
 	}
 
@@ -365,6 +370,8 @@ func Run(ctx context.Context, opts Options) error {
 		BindAddress:  opts.BindAddress,
 		JWTPublicKey: jwtPublicKey,
 		JWKSURL:      jwksURL,
+		Connections:  connSvc,
+		OAuthRoutes:  oauthRoutes,
 		// Connector/MCP surface. PUBLIC_URL is this server's externally
 		// reachable base URL, used to tell a user where to point a
 		// third-party MCP client and to build the OAuth discovery document.

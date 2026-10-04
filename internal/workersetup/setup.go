@@ -2,6 +2,7 @@
 package workersetup
 
 import (
+	"github.com/reliant-labs/reliant/internal/connections"
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/config"
@@ -58,6 +59,12 @@ type Config struct {
 	// no launcher fails loudly and is retried on one that has it, instead of
 	// being silently dropped.
 	TriggerLauncher triggers.Launcher
+
+	// Connections resolves a run's connection reference to an authenticated
+	// request (research/CONNECTIONS_VAULT.md §3.1). It exists on the worker
+	// only: the worker is the one reader of connection secrets. No activity
+	// consumes it yet; the action node that will is a separate change.
+	Connections *connections.Resolver
 
 	// Optional overrides (for testing)
 	RunExecutorOverride handlers.RunExecutor

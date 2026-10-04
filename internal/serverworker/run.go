@@ -160,7 +160,12 @@ func Run(ctx context.Context, opts Options) error {
 
 	// Credential vault: required when hosted, generated when self-hosted.
 	// Fails startup on a missing or malformed key.
-	if _, err := db.BootVault(ctx, repo, tokenauthority.ControlPlaneURL() != "", opts.DataDir); err != nil {
+	vaultKeys, err := db.BootVault(ctx, repo, tokenauthority.ControlPlaneURL() != "", opts.DataDir)
+	if err != nil {
+		return err
+	}
+	connResolver, err := newConnectionResolver(repo, vaultKeys)
+	if err != nil {
 		return err
 	}
 
@@ -337,6 +342,7 @@ func Run(ctx context.Context, opts Options) error {
 		MCPBinder:       toolexec.NewDaemonMCPContextBinder(router),
 		ConfigProvider:  storedConfigProvider,
 		TriggerLauncher: triggerLauncher,
+		Connections:     connResolver,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to start worker: %w", err)

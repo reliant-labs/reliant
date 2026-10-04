@@ -376,3 +376,60 @@ func TestPurge_IsIdempotent(t *testing.T) {
 		t.Errorf("second Purge deleted %d rows, want 0", second)
 	}
 }
+
+// A deleted account leaves no connection, ciphertext, audit row, in-flight
+// OAuth flow, or wrapped data-encryption key. Dropping the DEK is the
+// crypto-shredding step: it makes any sealed copy that survives elsewhere
+// (a backup) unreadable.
+func TestPurge_RemovesConnectionsAndShredsVaultKey(t *testing.T) {
+	_, rawDB, cleanup := db.SetupTestDBWithRawDB(t)
+	defer cleanup()
+	ctx := context.Background()
+	const userID, otherID = "user-under-test", "bystander"
+
+	for _, u := range []string{userID, otherID} {
+		mustExec(t, rawDB, `INSERT INTO vault_keys (id, tenant_kind, tenant_id, version, kek_id, wrapped_dek, state)
+			VALUES ($1,'user',$2,1,'v1','\x01','primary')`, "vk-"+u, u)
+		mustExec(t, rawDB, `INSERT INTO connections (id, user_id, integration_id, auth_kind, name, status)
+			VALUES ($1,$2,'github','api_key','n','active')`, "conn-"+u, u)
+		mustExec(t, rawDB, `INSERT INTO connection_secrets (connection_id, field, vault_key_id, ciphertext)
+			VALUES ($1,'api_key',$2,'\x02')`, "conn-"+u, "vk-"+u)
+		mustExec(t, rawDB, `INSERT INTO connection_events (connection_id, user_id, kind, actor) VALUES ($1,$2,'created','x')`, "conn-"+u, u)
+		mustExec(t, rawDB, `INSERT INTO oauth_flows (state_hash, user_id, session_id_hash, integration_id, pkce_verifier_sealed, expires_at)
+			VALUES ($1,$2,'\x01','github','\x01', now())`, []byte("h-"+u), u)
+	}
+
+	if _, err := accountpurge.Purge(ctx, rawDB, userID); err != nil {
+		t.Fatalf("Purge: %v", err)
+	}
+	for _, q := range []string{
+		`SELECT count(*) FROM connections WHERE user_id = $1`,
+		`SELECT count(*) FROM connection_secrets WHERE connection_id = 'conn-' || $1`,
+		`SELECT count(*) FROM connection_events WHERE user_id = $1`,
+		`SELECT count(*) FROM oauth_flows WHERE user_id = $1`,
+		`SELECT count(*) FROM vault_keys WHERE tenant_id = $1`,
+	} {
+		var n int
+		if err := rawDB.QueryRowContext(ctx, q, userID).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		if n != 0 {
+			t.Errorf("%s: %d rows survived the purge", q, n)
+		}
+	}
+	var survived int
+	if err := rawDB.QueryRowContext(ctx, `SELECT (SELECT count(*) FROM connections WHERE user_id=$1)
+		+ (SELECT count(*) FROM vault_keys WHERE tenant_id=$1) + (SELECT count(*) FROM connection_secrets WHERE connection_id='conn-'||$1)`, otherID).Scan(&survived); err != nil {
+		t.Fatal(err)
+	}
+	if survived != 3 {
+		t.Errorf("the purge touched another user's vault data: %d/3 rows remain", survived)
+	}
+}
+
+func mustExec(t *testing.T, d *sql.DB, q string, args ...any) {
+	t.Helper()
+	if _, err := d.Exec(q, args...); err != nil {
+		t.Fatalf("exec %q: %v", q, err)
+	}
+}
