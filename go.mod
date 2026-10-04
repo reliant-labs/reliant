@@ -36,7 +36,7 @@ require (
 	github.com/pressly/goose/v3 v3.28.0
 	github.com/prometheus/client_golang v1.24.1
 	github.com/prometheus/client_model v0.6.3
-	github.com/reliant-labs/forge v0.1.44-0.20261004153558-90f1200ce191
+	github.com/reliant-labs/forge v0.1.44-0.20261004164747-1be14263b877
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
@@ -285,12 +285,12 @@ require (
 	k8s.io/api v0.37.1 // indirect
 	k8s.io/apiextensions-apiserver v0.37.0 // indirect
 	k8s.io/apimachinery v0.37.1 // indirect
-	k8s.io/client-go v0.37.0 // indirect
+	k8s.io/client-go v0.37.1 // indirect
 	k8s.io/klog/v2 v2.140.0 // indirect
 	k8s.io/kube-openapi v0.0.0-20260821135717-be32def86098 // indirect
 	k8s.io/utils v0.0.0-20260707023825-cf1189d6abe3 // indirect
 	kcl-lang.io/kcl-go v0.13.0 // indirect
-	kcl-lang.io/kpm v0.12.9 // indirect
+	kcl-lang.io/kpm v0.13.0 // indirect
 	kcl-lang.io/lib v0.13.0 // indirect
 	oras.land/oras-go/v2 v2.6.2 // indirect
 	sigs.k8s.io/controller-tools v0.22.0 // indirect
