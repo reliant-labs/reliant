@@ -30,13 +30,14 @@ type (
 )
 
 const (
-	RunDisplayQueued     = core.RunDisplayQueued
-	RunDisplayRunning    = core.RunDisplayRunning
-	RunDisplayNeedsInput = core.RunDisplayNeedsInput
-	RunDisplayPaused     = core.RunDisplayPaused
-	RunDisplayCompleted  = core.RunDisplayCompleted
-	RunDisplayFailed     = core.RunDisplayFailed
-	RunDisplayCancelled  = core.RunDisplayCancelled
+	RunDisplayQueued            = core.RunDisplayQueued
+	RunDisplayRunning           = core.RunDisplayRunning
+	RunDisplayNeedsInput        = core.RunDisplayNeedsInput
+	RunDisplayPaused            = core.RunDisplayPaused
+	RunDisplayCompleted         = core.RunDisplayCompleted
+	RunDisplayFailed            = core.RunDisplayFailed
+	RunDisplayCancelled         = core.RunDisplayCancelled
+	RunDisplayWaitingForMachine = core.RunDisplayWaitingForMachine
 )
 
 // Chat represents a top-level conversation.

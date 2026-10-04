@@ -238,7 +238,9 @@ CREATE TABLE public.chats (
     selected_presets text,
     archived_worktree_name text,
     unread integer DEFAULT 0 NOT NULL,
-    active_daemon_id text
+    active_daemon_id text,
+    adopted_at timestamp with time zone,
+    daemon_blocked_at timestamp with time zone
 );
 
 --
@@ -335,56 +337,86 @@ CREATE TABLE public.workflows (
 --
 
 CREATE VIEW public.chats_with_activity AS
- SELECT c.id,
-    c.title,
-    c.project_id,
-    c.user_id,
-    c.state,
-    c.workflow_id,
-    c.run_id,
-    c.created_at,
-    c.updated_at,
-    c.last_active,
-    c.worktree_id,
-    c.workflow_name,
-    c.selected_presets,
-    c.archived_worktree_name,
-    c.unread,
-    c.active_daemon_id,
-    ( SELECT max(m.created_at) AS max
-           FROM public.messages m
-          WHERE (m.chat_id = c.id)) AS last_message_at,
-        CASE
-            WHEN (EXISTS ( SELECT 1
-               FROM public.approvals a
-              WHERE ((a.chat_id = c.id) AND (a.status = 1)))) THEN 2
-            WHEN (EXISTS ( SELECT 1
-               FROM public.questions q
-              WHERE ((q.chat_id = c.id) AND (q.status = 1)))) THEN 2
-            WHEN (EXISTS ( SELECT 1
-               FROM public.workflows w
-              WHERE ((w.chat_id = c.id) AND (w.state = 2)))) THEN 1
-            WHEN (( SELECT max(w.completed_at) FILTER (WHERE ((w.state = 3) AND (w.stop_reason = 2))) AS max
-               FROM public.workflows w
-              WHERE (w.chat_id = c.id)) > COALESCE(( SELECT max(w.completed_at) FILTER (WHERE ((w.state = 3) AND (w.stop_reason = 1))) AS max
-               FROM public.workflows w
-              WHERE (w.chat_id = c.id)), '-infinity'::timestamp with time zone)) THEN 3
-            WHEN (EXISTS ( SELECT 1
-               FROM public.workflows w
-              WHERE ((w.chat_id = c.id) AND (w.state = 3) AND (w.stop_reason = 3)))) THEN 4
-            ELSE 0
-        END AS activity,
-    rw.state AS root_workflow_state,
-    rw.stop_reason AS root_workflow_stop_reason,
-    le.kind AS launch_kind,
-    le.trigger_id
-   FROM ((public.chats c
-     LEFT JOIN public.workflows rw ON ((rw.id = c.workflow_id)))
-     LEFT JOIN public.trigger_events le ON ((le.id = ( SELECT te.id
-           FROM public.trigger_events te
-          WHERE (te.chat_id = c.id)
-          ORDER BY te.created_at, te.id
-         LIMIT 1))));
+ SELECT id,
+    title,
+    project_id,
+    user_id,
+    state,
+    workflow_id,
+    run_id,
+    created_at,
+    updated_at,
+    last_active,
+    worktree_id,
+    workflow_name,
+    selected_presets,
+    archived_worktree_name,
+    unread,
+    active_daemon_id,
+    adopted_at,
+    daemon_blocked_at,
+    last_message_at,
+    activity,
+    root_workflow_state,
+    root_workflow_stop_reason,
+    launch_kind,
+    trigger_id,
+    ((launch_kind IS NULL) OR (launch_kind = 'chat.start'::text) OR (adopted_at IS NOT NULL) OR ((launch_kind <> 'agent.start_run'::text) AND (activity = 2))) AS list_in_sidebar
+   FROM ( SELECT c.id,
+            c.title,
+            c.project_id,
+            c.user_id,
+            c.state,
+            c.workflow_id,
+            c.run_id,
+            c.created_at,
+            c.updated_at,
+            c.last_active,
+            c.worktree_id,
+            c.workflow_name,
+            c.selected_presets,
+            c.archived_worktree_name,
+            c.unread,
+            c.active_daemon_id,
+            c.adopted_at,
+            c.daemon_blocked_at,
+            ( SELECT max(m.created_at) AS max
+                   FROM public.messages m
+                  WHERE (m.chat_id = c.id)) AS last_message_at,
+                CASE
+                    WHEN (EXISTS ( SELECT 1
+                       FROM public.approvals a
+                      WHERE ((a.chat_id = c.id) AND (a.status = 1)))) THEN 2
+                    WHEN (EXISTS ( SELECT 1
+                       FROM public.questions q
+                      WHERE ((q.chat_id = c.id) AND (q.status = 1)))) THEN 2
+                    WHEN ((c.daemon_blocked_at IS NOT NULL) AND (EXISTS ( SELECT 1
+                       FROM public.workflows w
+                      WHERE ((w.chat_id = c.id) AND (w.state = 2))))) THEN 5
+                    WHEN (EXISTS ( SELECT 1
+                       FROM public.workflows w
+                      WHERE ((w.chat_id = c.id) AND (w.state = 2)))) THEN 1
+                    WHEN (( SELECT max(w.completed_at) FILTER (WHERE ((w.state = 3) AND (w.stop_reason = 2))) AS max
+                       FROM public.workflows w
+                      WHERE (w.chat_id = c.id)) > COALESCE(( SELECT max(w.completed_at) FILTER (WHERE ((w.state = 3) AND (w.stop_reason = 1))) AS max
+                       FROM public.workflows w
+                      WHERE (w.chat_id = c.id)), '-infinity'::timestamp with time zone)) THEN 3
+                    WHEN (EXISTS ( SELECT 1
+                       FROM public.workflows w
+                      WHERE ((w.chat_id = c.id) AND (w.state = 3) AND (w.stop_reason = 3)))) THEN 4
+                    ELSE 0
+                END AS activity,
+            rw.state AS root_workflow_state,
+            rw.stop_reason AS root_workflow_stop_reason,
+            le.kind AS launch_kind,
+            le.trigger_id
+           FROM ((public.chats c
+             LEFT JOIN public.workflows rw ON ((rw.id = c.workflow_id)))
+             LEFT JOIN public.trigger_events le ON ((le.id = ( SELECT te.id
+                   FROM public.trigger_events te
+                  WHERE (te.chat_id = c.id)
+                  ORDER BY te.created_at, te.id
+                 LIMIT 1))))) base;
 
 --
 -- Name: claude_auth_tokens; Type: TABLE; Schema: public; Owner: -
@@ -610,9 +642,9 @@ CREATE TABLE public.message_content_blocks (
     workflow_run_id text,
     attempt_number bigint,
     thought_signature text,
-    phase text,
     created_at timestamp with time zone NOT NULL,
-    updated_at timestamp with time zone NOT NULL
+    updated_at timestamp with time zone NOT NULL,
+    phase text
 );
 
 --

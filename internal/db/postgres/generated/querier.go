@@ -587,6 +587,7 @@ type Querier interface {
 	//   1 queued       no root workflow row yet, or PENDING
 	//   2 running      ACTIVE
 	//   3 needs-input  ACTIVE and activity = awaiting input (2)
+	//   8 waiting-for-machine  ACTIVE and activity = waiting for daemon (5)
 	//   4 paused       STOPPED, stop_reason PAUSED (3)
 	//   5 completed    STOPPED, stop_reason COMPLETED (1)
 	//   6 failed       STOPPED, stop_reason FAILED (2)
@@ -951,6 +952,14 @@ type Querier interface {
 	// status = 2 from our own claim, and re-applying the status = 1 guard here
 	// would match nothing.
 	SetAgentMessagesDeliveredMessageID(ctx context.Context, arg SetAgentMessagesDeliveredMessageIDParams) error
+	// Idempotent: adopting an adopted chat keeps its original adopted_at, and
+	// clearing an un-adopted one is a no-op. Scoped to the owner; zero rows means
+	// the chat is not the caller's (or does not exist).
+	SetChatAdoptedAt(ctx context.Context, arg SetChatAdoptedAtParams) (int64, error)
+	// Sets or clears the daemon-pending marker. Returns 1 only when the value
+	// actually changed, so callers emit chat_activity_changed on transitions and
+	// not on every tool call.
+	SetChatDaemonBlocked(ctx context.Context, arg SetChatDaemonBlockedParams) (int64, error)
 	SetCompactionSummaryMessage(ctx context.Context, arg SetCompactionSummaryMessageParams) (ContextWindow, error)
 	SetDefaultPresetAssignment(ctx context.Context, arg SetDefaultPresetAssignmentParams) error
 	// Records forge's name for a project (forge.yaml `name`) and marks it a forge

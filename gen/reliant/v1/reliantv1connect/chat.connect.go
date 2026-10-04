@@ -37,6 +37,10 @@ const (
 const (
 	// ChatServiceStartChatProcedure is the fully-qualified name of the ChatService's StartChat RPC.
 	ChatServiceStartChatProcedure = "/reliant.v1.ChatService/StartChat"
+	// ChatServiceAdoptChatProcedure is the fully-qualified name of the ChatService's AdoptChat RPC.
+	ChatServiceAdoptChatProcedure = "/reliant.v1.ChatService/AdoptChat"
+	// ChatServiceUnadoptChatProcedure is the fully-qualified name of the ChatService's UnadoptChat RPC.
+	ChatServiceUnadoptChatProcedure = "/reliant.v1.ChatService/UnadoptChat"
 	// ChatServiceListChatsProcedure is the fully-qualified name of the ChatService's ListChats RPC.
 	ChatServiceListChatsProcedure = "/reliant.v1.ChatService/ListChats"
 	// ChatServiceGetChatProcedure is the fully-qualified name of the ChatService's GetChat RPC.
@@ -123,6 +127,13 @@ type ChatServiceClient interface {
 	// "a chat starts exactly once" is a database invariant rather than client
 	// discipline. See research/TRIGGERS.md.
 	StartChat(context.Context, *connect.Request[v1.StartChatRequest]) (*connect.Response[v1.StartChatResponse], error)
+	// AdoptChat takes a run (typically an automation's) into the caller's own
+	// chats: sets adopted_at, which lists it in the sidebar, and makes the NEXT
+	// root run started by SendMessage attended. Idempotent; owner-only.
+	AdoptChat(context.Context, *connect.Request[v1.AdoptChatRequest]) (*connect.Response[v1.AdoptChatResponse], error)
+	// UnadoptChat clears adopted_at. It is not archive: the run stays in Runs.
+	// Idempotent; owner-only.
+	UnadoptChat(context.Context, *connect.Request[v1.UnadoptChatRequest]) (*connect.Response[v1.UnadoptChatResponse], error)
 	// ListChats lists all non-archived chats for a project
 	ListChats(context.Context, *connect.Request[v1.ListChatsRequest]) (*connect.Response[v1.ListChatsResponse], error)
 	// GetChat retrieves a specific chat by ID
@@ -228,6 +239,18 @@ func NewChatServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			httpClient,
 			baseURL+ChatServiceStartChatProcedure,
 			connect.WithSchema(chatServiceMethods.ByName("StartChat")),
+			connect.WithClientOptions(opts...),
+		),
+		adoptChat: connect.NewClient[v1.AdoptChatRequest, v1.AdoptChatResponse](
+			httpClient,
+			baseURL+ChatServiceAdoptChatProcedure,
+			connect.WithSchema(chatServiceMethods.ByName("AdoptChat")),
+			connect.WithClientOptions(opts...),
+		),
+		unadoptChat: connect.NewClient[v1.UnadoptChatRequest, v1.UnadoptChatResponse](
+			httpClient,
+			baseURL+ChatServiceUnadoptChatProcedure,
+			connect.WithSchema(chatServiceMethods.ByName("UnadoptChat")),
 			connect.WithClientOptions(opts...),
 		),
 		listChats: connect.NewClient[v1.ListChatsRequest, v1.ListChatsResponse](
@@ -398,6 +421,8 @@ func NewChatServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 // chatServiceClient implements ChatServiceClient.
 type chatServiceClient struct {
 	startChat                *connect.Client[v1.StartChatRequest, v1.StartChatResponse]
+	adoptChat                *connect.Client[v1.AdoptChatRequest, v1.AdoptChatResponse]
+	unadoptChat              *connect.Client[v1.UnadoptChatRequest, v1.UnadoptChatResponse]
 	listChats                *connect.Client[v1.ListChatsRequest, v1.ListChatsResponse]
 	getChat                  *connect.Client[v1.GetChatRequest, v1.GetChatResponse]
 	updateChat               *connect.Client[v1.UpdateChatRequest, v1.UpdateChatResponse]
@@ -430,6 +455,16 @@ type chatServiceClient struct {
 // StartChat calls reliant.v1.ChatService.StartChat.
 func (c *chatServiceClient) StartChat(ctx context.Context, req *connect.Request[v1.StartChatRequest]) (*connect.Response[v1.StartChatResponse], error) {
 	return c.startChat.CallUnary(ctx, req)
+}
+
+// AdoptChat calls reliant.v1.ChatService.AdoptChat.
+func (c *chatServiceClient) AdoptChat(ctx context.Context, req *connect.Request[v1.AdoptChatRequest]) (*connect.Response[v1.AdoptChatResponse], error) {
+	return c.adoptChat.CallUnary(ctx, req)
+}
+
+// UnadoptChat calls reliant.v1.ChatService.UnadoptChat.
+func (c *chatServiceClient) UnadoptChat(ctx context.Context, req *connect.Request[v1.UnadoptChatRequest]) (*connect.Response[v1.UnadoptChatResponse], error) {
+	return c.unadoptChat.CallUnary(ctx, req)
 }
 
 // ListChats calls reliant.v1.ChatService.ListChats.
@@ -581,6 +616,13 @@ type ChatServiceHandler interface {
 	// "a chat starts exactly once" is a database invariant rather than client
 	// discipline. See research/TRIGGERS.md.
 	StartChat(context.Context, *connect.Request[v1.StartChatRequest]) (*connect.Response[v1.StartChatResponse], error)
+	// AdoptChat takes a run (typically an automation's) into the caller's own
+	// chats: sets adopted_at, which lists it in the sidebar, and makes the NEXT
+	// root run started by SendMessage attended. Idempotent; owner-only.
+	AdoptChat(context.Context, *connect.Request[v1.AdoptChatRequest]) (*connect.Response[v1.AdoptChatResponse], error)
+	// UnadoptChat clears adopted_at. It is not archive: the run stays in Runs.
+	// Idempotent; owner-only.
+	UnadoptChat(context.Context, *connect.Request[v1.UnadoptChatRequest]) (*connect.Response[v1.UnadoptChatResponse], error)
 	// ListChats lists all non-archived chats for a project
 	ListChats(context.Context, *connect.Request[v1.ListChatsRequest]) (*connect.Response[v1.ListChatsResponse], error)
 	// GetChat retrieves a specific chat by ID
@@ -682,6 +724,18 @@ func NewChatServiceHandler(svc ChatServiceHandler, opts ...connect.HandlerOption
 		ChatServiceStartChatProcedure,
 		svc.StartChat,
 		connect.WithSchema(chatServiceMethods.ByName("StartChat")),
+		connect.WithHandlerOptions(opts...),
+	)
+	chatServiceAdoptChatHandler := connect.NewUnaryHandler(
+		ChatServiceAdoptChatProcedure,
+		svc.AdoptChat,
+		connect.WithSchema(chatServiceMethods.ByName("AdoptChat")),
+		connect.WithHandlerOptions(opts...),
+	)
+	chatServiceUnadoptChatHandler := connect.NewUnaryHandler(
+		ChatServiceUnadoptChatProcedure,
+		svc.UnadoptChat,
+		connect.WithSchema(chatServiceMethods.ByName("UnadoptChat")),
 		connect.WithHandlerOptions(opts...),
 	)
 	chatServiceListChatsHandler := connect.NewUnaryHandler(
@@ -850,6 +904,10 @@ func NewChatServiceHandler(svc ChatServiceHandler, opts ...connect.HandlerOption
 		switch r.URL.Path {
 		case ChatServiceStartChatProcedure:
 			chatServiceStartChatHandler.ServeHTTP(w, r)
+		case ChatServiceAdoptChatProcedure:
+			chatServiceAdoptChatHandler.ServeHTTP(w, r)
+		case ChatServiceUnadoptChatProcedure:
+			chatServiceUnadoptChatHandler.ServeHTTP(w, r)
 		case ChatServiceListChatsProcedure:
 			chatServiceListChatsHandler.ServeHTTP(w, r)
 		case ChatServiceGetChatProcedure:
@@ -915,6 +973,14 @@ type UnimplementedChatServiceHandler struct{}
 
 func (UnimplementedChatServiceHandler) StartChat(context.Context, *connect.Request[v1.StartChatRequest]) (*connect.Response[v1.StartChatResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ChatService.StartChat is not implemented"))
+}
+
+func (UnimplementedChatServiceHandler) AdoptChat(context.Context, *connect.Request[v1.AdoptChatRequest]) (*connect.Response[v1.AdoptChatResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ChatService.AdoptChat is not implemented"))
+}
+
+func (UnimplementedChatServiceHandler) UnadoptChat(context.Context, *connect.Request[v1.UnadoptChatRequest]) (*connect.Response[v1.UnadoptChatResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ChatService.UnadoptChat is not implemented"))
 }
 
 func (UnimplementedChatServiceHandler) ListChats(context.Context, *connect.Request[v1.ListChatsRequest]) (*connect.Response[v1.ListChatsResponse], error) {

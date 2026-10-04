@@ -343,13 +343,14 @@ func (e *RemoteExecutor) executeOnDaemon(ctx context.Context, req *ToolRequest, 
 		// failure that leaves the command orphaned.
 		abandoned = true
 		return &ToolResult{
-			Success:      false,
-			IsError:      true,
-			Content:      fmt.Sprintf("Failed to execute tool on daemon: %s", err.Error()),
-			ErrorMessage: err.Error(),
-			ErrorCode:    ErrorCodeDaemonUnreached,
-			StartTime:    startTime,
-			EndTime:      time.Now(),
+			Success:       false,
+			IsError:       true,
+			Content:       fmt.Sprintf("Failed to execute tool on daemon: %s", err.Error()),
+			ErrorMessage:  err.Error(),
+			ErrorCode:     ErrorCodeDaemonUnreached,
+			DaemonPending: IsDaemonPending(err),
+			StartTime:     startTime,
+			EndTime:       time.Now(),
 		}, nil
 	}
 
@@ -369,6 +370,7 @@ func (e *RemoteExecutor) executeOnDaemon(ctx context.Context, req *ToolRequest, 
 		Backgrounded: resp.Backgrounded,
 		Content:      capLLMToolContent(content),
 		Metadata:     resp.Metadata,
+		RanOnDaemon:  true,
 		StartTime:    startTime,
 		EndTime:      time.Now(),
 		ErrorMessage: resp.ErrorMessage,

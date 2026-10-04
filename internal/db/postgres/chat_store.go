@@ -58,13 +58,13 @@ func (s *chatStore) ListChats(ctx context.Context, filters core.ChatFilters) ([]
 	}
 
 	rows, err := s.q.ListChats(ctx, pgdb.ListChatsParams{
-		UserID:             filters.UserID,
-		ProjectID:          chatPtrToNullString(filters.ProjectID),
-		State:              stateNull,
-		ExcludeArchived:    filters.ExcludeArchived,
-		ExcludeAutomations: filters.ExcludeAutomations,
-		Limit:              int32(filters.Limit),
-		Offset:             int32(filters.Offset),
+		UserID:          filters.UserID,
+		ProjectID:       chatPtrToNullString(filters.ProjectID),
+		State:           stateNull,
+		ExcludeArchived: filters.ExcludeArchived,
+		SidebarOnly:     filters.SidebarOnly,
+		Limit:           int32(filters.Limit),
+		Offset:          int32(filters.Offset),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to list chats: %w", err)
@@ -108,6 +108,22 @@ func (s *chatStore) UpdateChatActiveDaemon(ctx context.Context, chatID string, d
 		ActiveDaemonID: chatPtrToNullString(daemonID),
 		ID:             chatID,
 	})
+}
+
+func (s *chatStore) SetChatAdopted(ctx context.Context, chatID, userID string, adopted bool) (bool, error) {
+	n, err := s.q.SetChatAdoptedAt(ctx, pgdb.SetChatAdoptedAtParams{Adopted: adopted, ID: chatID, UserID: userID})
+	if err != nil {
+		return false, fmt.Errorf("failed to set chat adoption: %w", err)
+	}
+	return n > 0, nil
+}
+
+func (s *chatStore) SetChatDaemonBlocked(ctx context.Context, chatID string, blocked bool) (bool, error) {
+	n, err := s.q.SetChatDaemonBlocked(ctx, pgdb.SetChatDaemonBlockedParams{Blocked: blocked, ID: chatID})
+	if err != nil {
+		return false, fmt.Errorf("failed to set chat daemon-blocked marker: %w", err)
+	}
+	return n > 0, nil
 }
 
 func (s *chatStore) DeleteChat(ctx context.Context, id string) error {
@@ -168,6 +184,8 @@ func chatFromRow(row pgdb.ChatsWithActivity) *core.Chat {
 		Activity:        &activity,
 		Unread:          row.Unread != 0,
 		ActiveDaemonID:  chatNullStringToPtr(row.ActiveDaemonID),
+		AdoptedAt:       chatNullTimeToPtr(row.AdoptedAt),
+		ListInSidebar:   row.ListInSidebar.Bool,
 		LaunchKind:      row.LaunchKind.String,
 		TriggerID:       chatNullStringToPtr(row.TriggerID),
 		RootStatus: chatRootStatus(

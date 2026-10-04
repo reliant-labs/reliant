@@ -131,7 +131,7 @@ describe("project chat list", () => {
     await chatGrpc.list("proj-1");
 
     expect(listChats).toHaveBeenCalledTimes(1);
-    expect(listChats.mock.calls[0]![0]).toMatchObject({ projectId: "proj-1", excludeAutomations: true });
+    expect(listChats.mock.calls[0]![0]).toMatchObject({ projectId: "proj-1", sidebarOnly: true });
   });
 });
 

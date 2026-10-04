@@ -137,7 +137,7 @@ func (q *Queries) CreateContentBlockIfNotExists(ctx context.Context, arg CreateC
 }
 
 const getContentBlock = `-- name: GetContentBlock :one
-SELECT id, message_id, position, block_type, content, tool_name, tool_input, tool_call_id, is_error, version, node_id, node_path, activity_id, workflow_run_id, attempt_number, thought_signature, phase, created_at, updated_at FROM message_content_blocks WHERE id = $1
+SELECT id, message_id, position, block_type, content, tool_name, tool_input, tool_call_id, is_error, version, node_id, node_path, activity_id, workflow_run_id, attempt_number, thought_signature, created_at, updated_at, phase FROM message_content_blocks WHERE id = $1
 `
 
 func (q *Queries) GetContentBlock(ctx context.Context, id string) (MessageContentBlock, error) {
@@ -160,15 +160,15 @@ func (q *Queries) GetContentBlock(ctx context.Context, id string) (MessageConten
 		&i.WorkflowRunID,
 		&i.AttemptNumber,
 		&i.ThoughtSignature,
-		&i.Phase,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Phase,
 	)
 	return i, err
 }
 
 const listContentBlocks = `-- name: ListContentBlocks :many
-SELECT id, message_id, position, block_type, content, tool_name, tool_input, tool_call_id, is_error, version, node_id, node_path, activity_id, workflow_run_id, attempt_number, thought_signature, phase, created_at, updated_at FROM message_content_blocks
+SELECT id, message_id, position, block_type, content, tool_name, tool_input, tool_call_id, is_error, version, node_id, node_path, activity_id, workflow_run_id, attempt_number, thought_signature, created_at, updated_at, phase FROM message_content_blocks
 WHERE message_id = $1
 ORDER BY position ASC
 `
@@ -199,9 +199,9 @@ func (q *Queries) ListContentBlocks(ctx context.Context, messageID string) ([]Me
 			&i.WorkflowRunID,
 			&i.AttemptNumber,
 			&i.ThoughtSignature,
-			&i.Phase,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.Phase,
 		); err != nil {
 			return nil, err
 		}
@@ -217,7 +217,7 @@ func (q *Queries) ListContentBlocks(ctx context.Context, messageID string) ([]Me
 }
 
 const listContentBlocksForMessages = `-- name: ListContentBlocksForMessages :many
-SELECT id, message_id, position, block_type, content, tool_name, tool_input, tool_call_id, is_error, version, node_id, node_path, activity_id, workflow_run_id, attempt_number, thought_signature, phase, created_at, updated_at FROM message_content_blocks
+SELECT id, message_id, position, block_type, content, tool_name, tool_input, tool_call_id, is_error, version, node_id, node_path, activity_id, workflow_run_id, attempt_number, thought_signature, created_at, updated_at, phase FROM message_content_blocks
 WHERE message_id = ANY($1::text[])
 ORDER BY message_id, position ASC
 `
@@ -248,9 +248,9 @@ func (q *Queries) ListContentBlocksForMessages(ctx context.Context, messageIds [
 			&i.WorkflowRunID,
 			&i.AttemptNumber,
 			&i.ThoughtSignature,
-			&i.Phase,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.Phase,
 		); err != nil {
 			return nil, err
 		}

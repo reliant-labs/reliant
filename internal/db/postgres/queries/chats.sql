@@ -15,15 +15,9 @@ WHERE
     AND (sqlc.narg('project_id')::text IS NULL OR project_id = sqlc.narg('project_id')::text)
     AND (sqlc.narg('state')::integer IS NULL OR state = sqlc.narg('state')::integer)
     AND (NOT sqlc.arg('exclude_archived')::boolean OR state != 3)
-    -- Automation chats (any launch kind other than an interactive start) are
-    -- hidden unless they are waiting on a human: activity 2 is a pending
-    -- approval or question. A chat with no launch event is interactive.
-    AND (
-        NOT sqlc.arg('exclude_automations')::boolean
-        OR launch_kind IS NULL
-        OR launch_kind = 'chat.start'
-        OR activity = 2
-    )
+    -- sidebar_only keeps chats the sidebar lists. The policy lives in ONE place,
+    -- the chats_with_activity.list_in_sidebar view column.
+    AND (NOT sqlc.arg('sidebar_only')::boolean OR list_in_sidebar)
 ORDER BY last_active DESC
 LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
 
@@ -99,3 +93,23 @@ LEFT JOIN projects p ON c.project_id = p.id
 WHERE c.state = 3
   AND c.user_id = @user_id
 ORDER BY c.updated_at DESC;
+-- name: SetChatAdoptedAt :execrows
+-- Idempotent: adopting an adopted chat keeps its original adopted_at, and
+-- clearing an un-adopted one is a no-op. Scoped to the owner; zero rows means
+-- the chat is not the caller's (or does not exist).
+UPDATE chats SET
+    adopted_at = CASE
+        WHEN sqlc.arg('adopted')::boolean THEN COALESCE(adopted_at, NOW())
+        ELSE NULL
+    END,
+    updated_at = NOW()
+WHERE id = sqlc.arg('id') AND user_id = sqlc.arg('user_id');
+
+-- name: SetChatDaemonBlocked :execrows
+-- Sets or clears the daemon-pending marker. Returns 1 only when the value
+-- actually changed, so callers emit chat_activity_changed on transitions and
+-- not on every tool call.
+UPDATE chats SET
+    daemon_blocked_at = CASE WHEN sqlc.arg('blocked')::boolean THEN NOW() ELSE NULL END
+WHERE id = sqlc.arg('id')
+  AND (daemon_blocked_at IS NOT NULL) IS DISTINCT FROM sqlc.arg('blocked')::boolean;

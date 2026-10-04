@@ -454,6 +454,8 @@ type Repository interface {
 	UpdateChatState(ctx context.Context, chatID string, state ChatState, reason string) error
 	UpdateChatUnread(ctx context.Context, chatID string, unread bool, reason string) error
 	UpdateChatActiveDaemon(ctx context.Context, chatID string, daemonID *string) error
+	SetChatAdopted(ctx context.Context, chatID, userID string, adopted bool) (bool, error)
+	SetChatDaemonBlocked(ctx context.Context, chatID string, blocked bool) error
 
 	// Background Processes
 	CreateBackgroundProcess(ctx context.Context, process *BackgroundProcess) error

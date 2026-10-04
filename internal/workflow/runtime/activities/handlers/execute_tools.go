@@ -688,6 +688,8 @@ func (a *ExecuteToolsActivity) handleToolExecutionResult(
 		return result
 	}
 
+	a.trackDaemonPending(ctx, chatID, execResult, execErr)
+
 	// Check for execution error
 	if execErr != nil {
 		a.emitToolStatus(ctx, chatID, toolCallID, toolName, "failed")
@@ -754,6 +756,36 @@ func (a *ExecuteToolsActivity) handleToolExecutionResult(
 	}, &toolCallResultWrite{content: durableContent, isError: isError})
 
 	return result
+}
+
+// trackDaemonPending keeps chats.daemon_blocked_at in step with what tool calls
+// report about the machine: set when a call could not run because it is
+// suspended or still starting, cleared by the next call that completed a round
+// trip to a daemon. A server-side tool succeeding says nothing about the
+// machine, so it does not clear. The marker drives ChatActivity.WAITING_FOR_DAEMON.
+//
+// Best-effort: a failure to record the marker must not fail the tool call.
+func (a *ExecuteToolsActivity) trackDaemonPending(ctx context.Context, chatID string, res *toolexec.ToolResult, execErr error) {
+	var blocked, ran bool
+	switch {
+	case toolexec.IsDaemonPending(execErr):
+		blocked = true
+	case execErr != nil:
+		return
+	case res != nil && res.DaemonPending:
+		blocked = true
+	case res != nil && res.RanOnDaemon:
+		ran = true
+	default:
+		return
+	}
+	if chatID == "" || (!blocked && !ran) {
+		return
+	}
+	if err := a.repo.SetChatDaemonBlocked(ctx, chatID, blocked); err != nil {
+		activity.GetLogger(ctx).Warn("[ExecuteTools] Failed to record daemon-pending state",
+			"chatID", chatID, "blocked", blocked, "error", err)
+	}
 }
 
 // toolCallResultWrite is the result half of a terminal tool-call write.

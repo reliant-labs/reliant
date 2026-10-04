@@ -124,11 +124,11 @@ func (s *ChatService) ListChats(
 	}
 
 	filters := db.ChatFilters{
-		UserID:             userID,
-		ProjectID:          &req.Msg.ProjectId,
-		Limit:              limit,
-		ExcludeArchived:    true,
-		ExcludeAutomations: req.Msg.GetExcludeAutomations(),
+		UserID:          userID,
+		ProjectID:       &req.Msg.ProjectId,
+		Limit:           limit,
+		ExcludeArchived: true,
+		SidebarOnly:     req.Msg.GetSidebarOnly(),
 	}
 
 	chats, err := s.database.ListChats(ctx, filters)
@@ -1185,6 +1185,52 @@ func (s *ChatService) SetChatDaemon(
 	return connect.NewResponse(&reliantv1.SetChatDaemonResponse{
 		Chat: chatToProto(updatedChat),
 	}), nil
+}
+
+// AdoptChat takes a run into the caller's own chats. Idempotent: adopting an
+// adopted chat keeps its original adopted_at. A chat that is not the caller's
+// reads as not found, the same as any other owner-scoped chat RPC.
+func (s *ChatService) AdoptChat(
+	ctx context.Context,
+	req *connect.Request[reliantv1.AdoptChatRequest],
+) (*connect.Response[reliantv1.AdoptChatResponse], error) {
+	chat, err := s.setChatAdopted(ctx, req.Msg.GetChatId(), true)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(&reliantv1.AdoptChatResponse{Chat: chatToProto(chat)}), nil
+}
+
+// UnadoptChat clears adoption. Idempotent; the run stays in Runs.
+func (s *ChatService) UnadoptChat(
+	ctx context.Context,
+	req *connect.Request[reliantv1.UnadoptChatRequest],
+) (*connect.Response[reliantv1.UnadoptChatResponse], error) {
+	chat, err := s.setChatAdopted(ctx, req.Msg.GetChatId(), false)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(&reliantv1.UnadoptChatResponse{Chat: chatToProto(chat)}), nil
+}
+
+func (s *ChatService) setChatAdopted(ctx context.Context, chatID string, adopted bool) (*db.Chat, error) {
+	userID := auth.MustGetUserID(ctx)
+	if chatID == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("chat_id is required"))
+	}
+	owned, err := s.database.SetChatAdopted(ctx, chatID, userID, adopted)
+	if err != nil {
+		logging.Error("Failed to set chat adoption", "error", err, "chatID", chatID, "adopted", adopted)
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to update chat"))
+	}
+	if !owned {
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("chat not found"))
+	}
+	chat, err := s.getChatForUser(ctx, chatID, userID)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to reload chat"))
+	}
+	return chat, nil
 }
 
 // ListChatPlans lists plans associated with a chat

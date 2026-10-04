@@ -8,6 +8,7 @@
 --   1 queued       no root workflow row yet, or PENDING
 --   2 running      ACTIVE
 --   3 needs-input  ACTIVE and activity = awaiting input (2)
+--   8 waiting-for-machine  ACTIVE and activity = waiting for daemon (5)
 --   4 paused       STOPPED, stop_reason PAUSED (3)
 --   5 completed    STOPPED, stop_reason COMPLETED (1)
 --   6 failed       STOPPED, stop_reason FAILED (2)
@@ -36,6 +37,7 @@ SELECT * FROM (
         CASE
             WHEN rw.state IS NULL OR rw.state = 1 THEN 1
             WHEN rw.state = 2 AND c.activity = 2 THEN 3
+            WHEN rw.state = 2 AND c.activity = 5 THEN 8
             WHEN rw.state = 2 THEN 2
             WHEN rw.state = 3 AND rw.stop_reason = 3 THEN 4
             WHEN rw.state = 3 AND rw.stop_reason = 1 THEN 5
@@ -91,6 +93,7 @@ SELECT DISTINCT ON (r.workflow_name) r.* FROM (
         CASE
             WHEN rw.state IS NULL OR rw.state = 1 THEN 1
             WHEN rw.state = 2 AND c.activity = 2 THEN 3
+            WHEN rw.state = 2 AND c.activity = 5 THEN 8
             WHEN rw.state = 2 THEN 2
             WHEN rw.state = 3 AND rw.stop_reason = 3 THEN 4
             WHEN rw.state = 3 AND rw.stop_reason = 1 THEN 5
