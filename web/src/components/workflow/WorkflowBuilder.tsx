@@ -35,8 +35,15 @@ import { autoLayoutWorkflow } from "../../lib/workflow-layout";
 import {
   workflowToFlowElements,
   resolveNodeOverlaps,
+  isEntryFlowNodeType,
+  ENTRY_NODE_ID,
   type FlowNodeData,
 } from "../../lib/workflow-flow";
+import { AutomationFormDialog } from "../Automations/AutomationFormDialog";
+import type { Trigger } from "../../api/trigger-grpc";
+import { workflowRefForTrigger } from "../../lib/triggerRail";
+import { TriggerRailProvider, type TriggerRailContextValue } from "./TriggerRailContext";
+import { TriggerPayloadPanel } from "./config/TriggerPayloadPanel";
 import { nodesEdgesToWorkflow } from "../../lib/nodes-edges-to-workflow";
 import { useFitViewWithPanels } from "./hooks/useFitViewWithPanels";
 import { useWorkflowKeyboardShortcuts } from "./hooks/useWorkflowKeyboardShortcuts";
@@ -222,6 +229,13 @@ function WorkflowBuilderInner({
   const [interactionMode, setInteractionMode] =
     useState<InteractionMode>("pan");
   const [showSettingsEditor, setShowSettingsEditor] = useState(false);
+  // The start node's panel (Trigger payload). Not a selection: it can stay
+  // open beside a step's panel.
+  const [showStartPanel, setShowStartPanel] = useState(false);
+
+  // The automation dialog opened from the trigger rail: `null` is closed,
+  // `{}` is create (prefilled with this workflow), `{ trigger }` is edit.
+  const [automationDialog, setAutomationDialog] = useState<{ trigger?: Trigger } | null>(null);
 
   // Chat panel state (controlled) - used for dynamic fit view padding
   const [chatPanelOpen, setChatPanelOpen] = useState(true);
@@ -620,6 +634,11 @@ function WorkflowBuilderInner({
     onBack?.();
   }, [onBack]);
 
+  const deselectNodeAndStartPanel = useCallback((nodeId: string | null) => {
+    setSelectedNodeId(nodeId);
+    if (nodeId === null) setShowStartPanel(false);
+  }, []);
+
   // Keyboard shortcuts (Ctrl/Cmd+Z undo, +Shift+Z / +Y redo, and Escape
   // deselect/exit-inline/back) — see ./hooks/useWorkflowKeyboardShortcuts.
   useWorkflowKeyboardShortcuts({
@@ -629,10 +648,12 @@ function WorkflowBuilderInner({
     isEditingLoop,
     exitLoopEdit,
     isBuiltinWorkflow,
-    hasSelectedNode: !!selectedNodeId,
+    // The start panel counts as a selection, so Escape closes it before it
+    // falls back to leaving the builder.
+    hasSelectedNode: !!selectedNodeId || showStartPanel,
     hasSelectedEdge: !!selectedEdgeId,
     showSettingsEditor,
-    setSelectedNodeId,
+    setSelectedNodeId: deselectNodeAndStartPanel,
     setSelectedEdgeId,
     setShowSettingsEditor,
     showTemplateModal,
@@ -694,6 +715,7 @@ function WorkflowBuilderInner({
     setSelectedNodeId(null);
     setSelectedEdgeId(null);
     setShowSettingsEditor(false);
+    setShowStartPanel(false);
   }, []);
 
   // Mutation handlers (updateStep, removeNode, renameNode, updateSwitchNode,
@@ -719,7 +741,7 @@ function WorkflowBuilderInner({
       // This is needed for buildWorkflow to correctly convert edges back to workflow format
       const sourceNodeData = sourceNode.data as { eventType?: string };
       const sourceEvent =
-        sourceNode.type === "eventNode" && sourceNodeData.eventType
+        isEntryFlowNodeType(sourceNode.type) && sourceNodeData.eventType
           ? sourceNodeData.eventType
           : undefined;
 
@@ -753,12 +775,19 @@ function WorkflowBuilderInner({
     [createEdge],
   );
 
-  // Handle node selection
+  // Handle node selection. The start node opens its own panel (Trigger
+  // payload), which stays open beside a step panel while the user picks a
+  // step to write an expression in.
   const onNodeClick = useCallback((_event: React.MouseEvent, node: Node) => {
     setShowSettingsEditor(false);
-    setSelectedNodeId(node.id);
     setSelectedEdgeId(null);
     setChatPanelOpen(false); // Close chat when config panel opens
+    if (isEntryFlowNodeType(node.type)) {
+      setShowStartPanel(true);
+      setSelectedNodeId(null);
+      return;
+    }
+    setSelectedNodeId(node.id);
   }, []);
 
   // Navigate to a node by ID (used by validation error clicks)
@@ -954,7 +983,7 @@ function WorkflowBuilderInner({
   // trip this, so Monaco completion doesn't re-init on every keypress.
   const celContextKey = useMemo(() => {
     const nodeBits = nodes.map((node) => {
-      if (node.type === "eventNode" || node.type === "switchNode") return "";
+      if (isEntryFlowNodeType(node.type) || node.type === "switchNode") return "";
       const step = (node.data as FlowNodeData).step as Step | undefined;
       let routerOutputKeys = "";
       if (step?.type === "router" && step.args?.case === "router") {
@@ -985,7 +1014,7 @@ function WorkflowBuilderInner({
     const nodeTypeMap: Record<string, string> = {};
     const nodeDeclaredOutputs: Record<string, string[]> = {};
     for (const node of nodes) {
-      if (node.type === "eventNode" || node.type === "switchNode") continue;
+      if (isEntryFlowNodeType(node.type) || node.type === "switchNode") continue;
       const step = (node.data as FlowNodeData).step as Step | undefined;
       nodeIds.push(node.id);
       if (step?.type) {
@@ -1014,6 +1043,27 @@ function WorkflowBuilderInner({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally
     // keyed on the structural fingerprint to avoid re-init on label/CEL keystrokes
   }, [celContextKey]);
+
+  // The trigger rail's data (research/WORKFLOW_UI.md §3.2). Keyed on the
+  // STORED name: an automation names a saved workflow, so a rename in progress
+  // must not re-filter the rail. A new, never-saved workflow cannot have one.
+  const savedWorkflowName = initialWorkflow?.name ?? "";
+  const handleEditTrigger = useCallback((trigger: Trigger) => {
+    setAutomationDialog({ trigger });
+  }, []);
+  const handleAddTrigger = useCallback(() => {
+    setAutomationDialog({});
+  }, []);
+  const triggerRail = useMemo<TriggerRailContextValue>(
+    () => ({
+      workflowRef: savedWorkflowName,
+      projectId: currentProject?.id ?? "",
+      canAddTrigger: !isNewWorkflow && savedWorkflowName !== "" && !!currentProject?.id,
+      onEditTrigger: handleEditTrigger,
+      onAddTrigger: handleAddTrigger,
+    }),
+    [savedWorkflowName, currentProject?.id, isNewWorkflow, handleEditTrigger, handleAddTrigger],
+  );
 
   // Handle workflow updates from the chat assistant.
   //
@@ -1063,7 +1113,7 @@ function WorkflowBuilderInner({
 
       const { nodes: allNodes, edges: flowEdges } = workflowToFlowElements(
         updatedWorkflow,
-        { draggable: canDragNodes },
+        { draggable: canDragNodes, entryNode: "triggerRail" },
       );
       setWorkflow(updatedWorkflow);
       setNodes(allNodes as Node[]);
@@ -1316,6 +1366,7 @@ function WorkflowBuilderInner({
       onExpandLoop={(_loopNodeId, step) => enterLoopEdit(step)}
       onExpandWorkflow={(_workflowNodeId, step) => enterWorkflowEdit(step)}
     >
+    <TriggerRailProvider value={triggerRail}>
     <div className="relative h-full bg-background">
       {/* Floating Left Sidebar Stack - position based on visible headers (builtin banner + breadcrumb) */}
       <div
@@ -1784,6 +1835,23 @@ function WorkflowBuilderInner({
               />
             )}
 
+            {/* Start node panel: what `trigger.*` exposes, inserted into the
+                focused expression. Docks beside a step/edge panel so both
+                are visible. Not offered inside a loop body, whose start is
+                the loop, not a trigger. */}
+            {showStartPanel && !isEditingLoop && (
+              <TriggerPayloadPanel
+                onClose={() => setShowStartPanel(false)}
+                bottomOffset={configPanelBottomOffset}
+                topOffset={configPanelTopOffset}
+                docked={
+                  !!(selectedNode && selectedNode.id !== ENTRY_NODE_ID) ||
+                  !!selectedEdge ||
+                  (!isBuiltinWorkflow && showSettingsEditor)
+                }
+              />
+            )}
+
             {/* Workflow Settings Editor - hidden for builtin workflows */}
             {!isBuiltinWorkflow && showSettingsEditor && (
               <WorkflowSettingsEditor
@@ -1842,6 +1910,7 @@ function WorkflowBuilderInner({
               setSelectedNodeId(null);
               setSelectedEdgeId(null);
               setShowSettingsEditor(false);
+              setShowStartPanel(false);
             }
           }}
           panelSize={chatPanelSize}
@@ -1850,7 +1919,7 @@ function WorkflowBuilderInner({
           draftId={draftId}
           workflowSessionId={workflowSessionId}
           isConfigPanelOpen={
-            !!(selectedNodeId || selectedEdgeId || showSettingsEditor)
+            !!(selectedNodeId || selectedEdgeId || showSettingsEditor || showStartPanel)
           }
           onChatIdChange={onChatIdChange}
           onDraftIdChange={onDraftIdChange}
@@ -2032,7 +2101,25 @@ function WorkflowBuilderInner({
           </div>
         </Modal>
       )}
+
+      {/* Automation dialog, opened from the trigger rail. Allowed for
+          read-only and builtin workflows too: a trigger is its own row and
+          does not edit the definition. */}
+      <AutomationFormDialog
+        open={automationDialog !== null}
+        onClose={() => setAutomationDialog(null)}
+        trigger={automationDialog?.trigger}
+        prefill={
+          automationDialog && !automationDialog.trigger
+            ? {
+                workflow: workflowRefForTrigger(savedWorkflowName, source),
+                projectId: currentProject?.id,
+              }
+            : undefined
+        }
+      />
     </div>
+    </TriggerRailProvider>
     </WorkflowNodeCallbacksProvider>
     </WorkflowMutationProvider>
   );

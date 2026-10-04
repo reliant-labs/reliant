@@ -26,7 +26,7 @@ import {
   sanitizeWorkflowReferences,
 } from "../components/workflow/workflowRef";
 import { directCel } from "./celAdapter";
-import type { FlowNodeData } from "./workflow-flow";
+import { isEntryFlowNodeType, type FlowNodeData } from "./workflow-flow";
 
 /**
  * Workflow-level metadata that lives outside of nodes/edges in the builder.
@@ -62,7 +62,7 @@ export function nodesEdgesToWorkflow(
 ): Workflow {
   // Extract steps from nodes (excluding event nodes and switch nodes - they're UI-only)
   const steps = nodes
-    .filter((node) => node.type !== "eventNode" && node.type !== "switchNode")
+    .filter((node) => !isEntryFlowNodeType(node.type) && node.type !== "switchNode")
     .map((node) => {
       const step = node.data.step as WorkflowStep;
       // Remove triggers and position from steps (deprecated, now using edges and ui.positions)

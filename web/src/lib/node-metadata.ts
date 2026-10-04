@@ -375,3 +375,44 @@ export function sortCategories(categories: string[]): string[] {
     return a.localeCompare(b)
   })
 }
+
+/** The fields palette grouping reads; `NodeInfo` satisfies it. */
+export interface PaletteNode {
+  id: string
+  category?: string
+}
+
+/** Which group a palette node belongs to. */
+export type PaletteGroupKey<T extends PaletteNode> = (node: T) => string
+
+/** The default group: the node's category, with uncategorised nodes as utilities. */
+export function categoryGroupKey(node: PaletteNode): string {
+  return node.category || 'utility'
+}
+
+export interface PaletteGroup<T extends PaletteNode> {
+  key: string
+  nodes: T[]
+}
+
+/**
+ * Group palette nodes for the sidebar, in display order.
+ *
+ * The key is a parameter, not a hardcoded category, so the palette can group
+ * by integration ("GitHub ▸ Create issue …") once `NodeInfo.integration`
+ * exists (research/WORKFLOW_UI.md §3.4), by passing a key that prefers it and
+ * falls back to the category. Nodes keep their input order within a group.
+ */
+export function groupPaletteNodes<T extends PaletteNode>(
+  nodes: T[],
+  groupKey: PaletteGroupKey<T> = categoryGroupKey,
+): PaletteGroup<T>[] {
+  const grouped = new Map<string, T[]>()
+  for (const node of nodes) {
+    const key = groupKey(node) || categoryGroupKey(node)
+    const group = grouped.get(key)
+    if (group) group.push(node)
+    else grouped.set(key, [node])
+  }
+  return sortCategories([...grouped.keys()]).map((key) => ({ key, nodes: grouped.get(key)! }))
+}

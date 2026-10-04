@@ -905,3 +905,66 @@
 }
 .cpv2-cel-field:focus { border-color: var(--cpv2-accent-focus); box-shadow: 0 0 0 2px var(--cpv2-accent-ring); }
 .cpv2-cel-field::placeholder { color: hsl(var(--muted-foreground)); }
+/* --- Trigger payload panel (workflow start) ---
+ * Owned by config/TriggerPayloadPanel.tsx. When a step panel is open the start
+ * panel docks to its left, so the expression being written and the fields to
+ * insert are visible together; 380px is .config-panel-v2's width. */
+.cpv2-trigger-payload--docked .config-panel-v2 {
+  right: calc(0.75rem + 380px + 0.75rem);
+  width: 300px;
+}
+
+.cpv2-trigger-payload-target {
+  margin-top: 8px;
+  font-size: 0.9286rem;
+  line-height: 1.4;
+  color: hsl(var(--muted-foreground));
+}
+
+.cpv2-trigger-payload-list {
+  display: flex;
+  flex-direction: column;
+  padding: 0 8px 12px;
+}
+
+.cpv2-trigger-payload-field {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px;
+  border-radius: var(--cpv2-radius-sm);
+  text-align: left;
+  transition: background-color var(--cpv2-transition);
+}
+
+.cpv2-trigger-payload-field:hover:not(:disabled) {
+  background: hsl(var(--muted));
+}
+
+.cpv2-trigger-payload-field:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: -2px;
+}
+
+.cpv2-trigger-payload-field:disabled {
+  cursor: default;
+}
+
+.cpv2-trigger-payload-path {
+  font-family: 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 0.9286rem;
+  color: var(--cpv2-accent);
+}
+
+.cpv2-trigger-payload-type {
+  margin-left: auto;
+  font-size: 0.7857rem;
+  color: hsl(var(--muted-foreground) / 0.72);
+}
+
+.cpv2-trigger-payload-desc {
+  font-size: 0.9286rem;
+  line-height: 1.4;
+  color: hsl(var(--muted-foreground));
+}

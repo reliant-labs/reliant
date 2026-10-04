@@ -6,6 +6,20 @@ import { ensureCELCompletionsCached } from '../../lib/cel-completion-service';
 import { getCurrentMonacoTheme, configureMonacoTheme, MONACO_FONT_FAMILY } from '../../lib/monacoTheme';
 import { cn } from '../../lib/utils';
 import type { Monaco } from '@monaco-editor/react';
+import { useCELInsertRegistry, type CELInsertTarget } from './CELCompletionContext';
+
+/**
+ * The text to insert a CEL path at `offset` of `value`. A pure expression
+ * takes the bare path; a templated string needs `{{ }}` around it unless the
+ * cursor is already inside an open `{{`.
+ */
+export function celInsertText(value: string, offset: number, path: string, pureExpression: boolean): string {
+  if (pureExpression) return path;
+  const before = value.slice(0, offset);
+  const open = before.lastIndexOf('{{');
+  const insideTemplate = open !== -1 && before.indexOf('}}', open) === -1;
+  return insideTemplate ? path : `{{ ${path} }}`;
+}
 
 export interface MonacoCELEditorProps {
   value: string;
@@ -58,6 +72,30 @@ export function MonacoCELEditor({
   useEffect(() => {
     onChangeRef.current = onChange;
   });
+
+  // Report focus to the insertion registry, so a panel outside this input
+  // (the Trigger payload tab) can insert a path at the cursor.
+  const insertRegistry = useCELInsertRegistry();
+  const pureExpressionRef = useRef(pureExpression);
+  pureExpressionRef.current = pureExpression;
+  const insertTargetRef = useRef<CELInsertTarget | null>(null);
+  insertTargetRef.current ??= {
+    label: placeholder,
+    insert: (path: string) => {
+      const editor = editorRef.current;
+      const model = editor?.getModel();
+      const selection = editor?.getSelection();
+      if (!editor || !model || !selection) return;
+      const offset = model.getOffsetAt(selection.getStartPosition());
+      const text = celInsertText(model.getValue(), offset, path, pureExpressionRef.current);
+      editor.executeEdits('cel-insert', [{ range: selection, text, forceMoveMarkers: true }]);
+      editor.focus();
+    },
+  };
+  useEffect(() => {
+    const target = insertTargetRef.current!;
+    return () => insertRegistry?.clearTarget(target);
+  }, [insertRegistry]);
 
   // Keep context in a ref so the completion provider callback always sees fresh values
   const contextRef = useRef<CELCompletionContext>({
@@ -178,6 +216,7 @@ export function MonacoCELEditor({
     // Focus / blur tracking
     const focusDisposable = editor.onDidFocusEditorText(() => {
       setIsFocused(true);
+      insertRegistry?.setTarget(insertTargetRef.current!);
     });
 
     const blurDisposable = editor.onDidBlurEditorText(() => {
@@ -278,6 +317,7 @@ export function MonacoCELEditor({
         disabled={disabled}
         className={className}
         id={id}
+        pureExpression={pureExpression}
       />
     );
   }
@@ -321,9 +361,10 @@ function FallbackInput({
   disabled,
   className,
   id,
+  pureExpression = false,
 }: Pick<
   MonacoCELEditorProps,
-  'value' | 'onChange' | 'placeholder' | 'multiline' | 'rows' | 'disabled' | 'className' | 'id'
+  'value' | 'onChange' | 'placeholder' | 'multiline' | 'rows' | 'disabled' | 'className' | 'id' | 'pureExpression'
 >) {
   const handleChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -331,6 +372,31 @@ function FallbackInput({
     },
     [onChange],
   );
+
+  // The plain input is an insertion target too, so inserting works before
+  // Monaco has loaded (and in tests, where it never does).
+  const insertRegistry = useCELInsertRegistry();
+  const elementRef = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null);
+  const latestRef = useRef({ value, onChange, pureExpression });
+  latestRef.current = { value, onChange, pureExpression };
+  const targetRef = useRef<CELInsertTarget | null>(null);
+  targetRef.current ??= {
+    label: placeholder,
+    insert: (path: string) => {
+      const { value: current, onChange: change, pureExpression: pure } = latestRef.current;
+      const element = elementRef.current;
+      const start = element?.selectionStart ?? current.length;
+      const end = element?.selectionEnd ?? start;
+      const text = celInsertText(current, start, path, pure);
+      change(current.slice(0, start) + text + current.slice(end));
+      element?.focus();
+    },
+  };
+  useEffect(() => {
+    const target = targetRef.current!;
+    return () => insertRegistry?.clearTarget(target);
+  }, [insertRegistry]);
+  const handleFocus = () => insertRegistry?.setTarget(targetRef.current!);
 
   const classes = cn(
     'w-full px-2.5 py-1.5 border rounded-[6px] text-xs font-mono',
@@ -343,9 +409,11 @@ function FallbackInput({
   if (multiline) {
     return (
       <textarea
+        ref={(element) => { elementRef.current = element; }}
         id={id}
         value={value}
         onChange={handleChange}
+        onFocus={handleFocus}
         placeholder={placeholder}
         rows={rows}
         disabled={disabled}
@@ -356,10 +424,12 @@ function FallbackInput({
 
   return (
     <input
+      ref={(element) => { elementRef.current = element; }}
       id={id}
       type="text"
       value={value}
       onChange={handleChange}
+      onFocus={handleFocus}
       placeholder={placeholder}
       disabled={disabled}
       className={classes}

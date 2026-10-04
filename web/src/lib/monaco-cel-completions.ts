@@ -15,6 +15,7 @@ import {
   getNamespaceFields,
 } from './cel-completion-service'
 import type { CELFieldInfo } from '../gen/reliant/v1/catalog_pb'
+import { TRIGGER_CEL_FIELDS, TRIGGER_CEL_NAMESPACE } from './trigger-cel-fields'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -54,11 +55,14 @@ export interface ParsedCELContext {
 // Namespace filtering by CEL context
 // ---------------------------------------------------------------------------
 
+// `trigger` is bound wherever the runtime has workflow inputs (see the
+// Namespaces() of each context in internal/workflow/cel/types.go); the thread
+// context is the only one without it.
 const CONTEXT_NAMESPACES: Record<CELCompletionContext['celContext'], string[]> = {
-  default: ['inputs', 'workflow', 'nodes', 'iter'],
-  loop_while: ['outputs', 'iter', 'inputs'],
-  edge_condition: ['inputs', 'workflow', 'nodes', 'iter', 'outputs'],
-  save_message: ['inputs', 'workflow', 'nodes', 'output'],
+  default: ['inputs', 'trigger', 'workflow', 'nodes', 'iter'],
+  loop_while: ['outputs', 'iter', 'inputs', 'trigger'],
+  edge_condition: ['inputs', 'trigger', 'workflow', 'nodes', 'iter', 'outputs'],
+  save_message: ['inputs', 'trigger', 'workflow', 'nodes', 'output'],
   thread: ['workflow', 'nodes'],
 }
 
@@ -311,7 +315,7 @@ function skipBalancedParens(text: string, endIdx: number): number {
 // Completion Resolver
 // ---------------------------------------------------------------------------
 
-interface CompletionEntry {
+export interface CompletionEntry {
   label: string
   kind: 'namespace' | 'field' | 'function' | 'method' | 'variable'
   insertText: string
@@ -322,8 +326,9 @@ interface CompletionEntry {
 
 /**
  * Resolve completions based on parsed context and dynamic workflow context.
+ * Exported for testing.
  */
-function resolveCompletions(
+export function resolveCompletions(
   parsed: ParsedCELContext,
   ctx: CELCompletionContext,
 ): CompletionEntry[] {
@@ -381,6 +386,22 @@ function resolveCompletions(
   // path = ["inputs"]
   if (root === 'inputs' && parsed.path.length === 1) {
     return getInputParamCompletions(ctx)
+  }
+
+  // path = ["trigger"] — the catalog lists it without fields (it is dynamic
+  // on the wire), so the envelope's fields come from the shared client list.
+  if (root === TRIGGER_CEL_NAMESPACE && parsed.path.length === 1) {
+    return [
+      ...TRIGGER_CEL_FIELDS.map((field) => ({
+        label: field.name,
+        kind: 'field' as const,
+        insertText: field.name,
+        detail: field.type,
+        documentation: field.description,
+        sortGroup: 1,
+      })),
+      ...getMemberFunctionCompletions(),
+    ]
   }
 
   // path = ["output"] or ["outputs"]
