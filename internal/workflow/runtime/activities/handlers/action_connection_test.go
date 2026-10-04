@@ -63,6 +63,47 @@ func TestActionNodeWithoutConnectionSourceRefusesInsteadOfRunningUnauthenticated
 	assert.Equal(t, httpaction.CodeFailedPrecondition, out.GetErrorCode())
 }
 
+// recordingSource captures the request it was asked to resolve, then refuses
+// it so no request leaves the test.
+type recordingSource struct {
+	got []httpaction.CredentialRequest
+}
+
+func (r *recordingSource) Credential(_ context.Context, req httpaction.CredentialRequest) (httpaction.Credential, error) {
+	r.got = append(r.got, req)
+	return nil, &httpaction.CredentialError{Code: httpaction.CodeFailedPrecondition, Message: "recorded"}
+}
+
+// The owner a connection resolves for is derived from the run id, so the node
+// must pass ITS OWN run, never the chat, thread or any other id on the context.
+// Every sibling id is set to something distinct so a swap is caught.
+func TestActionNodeResolvesForItsOwnRun(t *testing.T) {
+	src := &recordingSource{}
+	a := NewActionActivityWith(catalog.MustBuiltin(), httpaction.NewRunner(netguard.New()), src)
+	node := &reliantv1.Node{Id: "fetch", Type: "action", Args: &reliantv1.Node_Action{Action: &reliantv1.ActionArgs{
+		Uses:       &reliantv1.CelString{Value: &reliantv1.CelString_Literal{Literal: "http/request@1"}},
+		With:       map[string]*structpb.Value{"url": structpb.NewStringValue("https://example.com/")},
+		Connection: &reliantv1.CelString{Value: &reliantv1.CelString_Literal{Literal: "conn_1"}},
+	}}}
+	runtime := types.RuntimeContext{
+		ChatID: "chat-other", Thread: "thread-other", SessionID: "session-other",
+		WorkflowID: "run-own", StepID: "fetch", LoopNodeID: "each", LoopIteration: 2,
+	}
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestActivityEnvironment()
+	env.RegisterActivity(a.Execute)
+	_, err := env.ExecuteActivity(a.Execute, types.ActivityInput{Runtime: runtime, Node: node})
+	require.NoError(t, err)
+
+	require.Len(t, src.got, 1)
+	req := src.got[0]
+	assert.Equal(t, "run-own", req.RunID, "the connection must resolve for the node's own run")
+	assert.Equal(t, "fetch", req.NodeID)
+	assert.Equal(t, "run-own:fetch:each#2", req.ToolCallID, "loop iterations get distinct audit ids")
+	assert.Equal(t, "conn_1", req.ConnectionID)
+	assert.True(t, req.ServerPlaced)
+}
+
 // The node carries only the connection reference.
 func TestActionNodeInputCarriesOnlyTheReference(t *testing.T) {
 	node := &reliantv1.Node{Args: &reliantv1.Node_Action{Action: &reliantv1.ActionArgs{
