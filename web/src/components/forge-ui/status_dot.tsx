@@ -64,7 +64,7 @@ export default function StatusDot({
         aria-hidden="true"
         className={`inline-block rounded-full ${dotTint[variant]} ${
           dotSize[size]
-        } ${pulse ? "animate-pulse" : ""}`}
+        } ${pulse ? "animate-pulse motion-reduce:animate-none" : ""}`}
       />
       {label !== undefined && (
         <span className={`text-xs font-medium ${labelTint[variant]}`}>

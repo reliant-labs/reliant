@@ -33,7 +33,7 @@ function SkeletonPulse({
 }) {
   return (
     <div
-      className={`animate-pulse rounded bg-border ${className}`}
+      className={`animate-pulse motion-reduce:animate-none rounded bg-border ${className}`}
       style={style}
     />
   );

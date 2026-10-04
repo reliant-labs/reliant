@@ -61,9 +61,7 @@ export function RunRow({ run, projectName, className }: RunRowProps) {
       )}
       data-testid={`run-row-${run.chatId}`}
     >
-      <span className="motion-reduce:[&_*]:animate-none">
-        <RunStatusDot status={status} />
-      </span>
+      <RunStatusDot status={status} />
 
       <div className="min-w-0">
         <Link
