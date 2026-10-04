@@ -23,7 +23,10 @@ func registryEntry(name string) (ToolDefinition, bool) {
 func TestExposedActionIsRegisteredAsATool(t *testing.T) {
 	def, ok := registryEntry("http__request")
 	require.True(t, ok, "http/request sets tool.expose, so http__request must be in the registry")
-	assert.Equal(t, ToolRunsOnServer, def.RunsOn)
+	assert.Equal(t, PlacementServer, def.Placement)
+	placement, err := PlacementOf("http__request")
+	require.NoError(t, err, "PlacementOf must resolve an integration tool")
+	assert.Equal(t, PlacementServer, placement)
 	assert.Contains(t, def.Tags, TagIntegration)
 
 	tool := NewToolsFactory(nil).GetToolByName("http__request", nil)

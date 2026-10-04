@@ -168,7 +168,7 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 
 	v2.RegisterActivity(registry, handlers.NewExecuteToolsActivity(deps.Repo, deps.ToolExecutor))
 	v2.RegisterActivity(registry, handlers.NewInvokeToolActivity(deps.Repo, deps.ToolExecutor))
-	v2.RegisterActivity(registry, handlers.NewActionActivity())
+	v2.RegisterActivity(registry, handlers.NewActionActivity(deps.Connections))
 
 	// ========================================================================
 	// CONTEXT MANAGEMENT ACTIVITIES

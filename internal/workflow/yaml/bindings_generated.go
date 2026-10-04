@@ -51,8 +51,9 @@ var generatedNodeBindingsByType = map[string]generatedNodeBinding{
 		oneofFieldName: "action",
 		isStructural:   false,
 		argFieldKeys: map[string]struct{}{
-			"uses": {},
-			"with": {},
+			"connection": {},
+			"uses":       {},
+			"with":       {},
 		},
 	},
 	"approval": {

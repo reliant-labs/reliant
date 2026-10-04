@@ -7,6 +7,7 @@ package schema
 // init populates FieldDescriptions with descriptions from proto annotations.
 // The map and GetFieldDescription function are defined in field_descriptions_base.go.
 func init() {
+	FieldDescriptions["action.connection"] = "Saved connection id to authenticate this action with"
 	FieldDescriptions["action.uses"] = "Which integration action to run, as integration/action@major"
 	FieldDescriptions["action.with"] = "Action parameters, keyed as in the action's schema"
 	FieldDescriptions["ask_question.metadata"] = "JSON metadata with question text and options"

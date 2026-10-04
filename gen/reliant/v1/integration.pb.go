@@ -160,8 +160,13 @@ type ConnectionSpec struct {
 	// generic HTTP integration only; the loader accepts it solely with type
 	// "none", and the runtime still refuses private addresses after DNS.
 	AllowAnyPublicHost bool `protobuf:"varint,5,opt,name=allow_any_public_host,json=allowAnyPublicHost,proto3" json:"allow_any_public_host,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	// OptionalAuthKinds lets a connection of type "none" still accept a saved
+	// credential when the caller names one. Values: "api_key", "basic". The
+	// credential must belong to a connection for THIS integration id, so a token
+	// saved for another service can never be pointed at an arbitrary host.
+	OptionalAuthKinds []string `protobuf:"bytes,6,rep,name=optional_auth_kinds,json=optionalAuthKinds,proto3" json:"optional_auth_kinds,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *ConnectionSpec) Reset() {
@@ -227,6 +232,13 @@ func (x *ConnectionSpec) GetAllowAnyPublicHost() bool {
 		return x.AllowAnyPublicHost
 	}
 	return false
+}
+
+func (x *ConnectionSpec) GetOptionalAuthKinds() []string {
+	if x != nil {
+		return x.OptionalAuthKinds
+	}
+	return nil
 }
 
 // ActionSpec is one operation: usable as a workflow node and, optionally, as
@@ -864,13 +876,14 @@ const file_reliant_v1_integration_proto_rawDesc = "" +
 	"connection\x18\a \x01(\v2\x1a.reliant.v1.ConnectionSpecR\n" +
 	"connection\x120\n" +
 	"\aactions\x18\b \x03(\v2\x16.reliant.v1.ActionSpecR\aactions\x123\n" +
-	"\btriggers\x18\t \x03(\v2\x17.reliant.v1.TriggerSpecR\btriggers\"\xb3\x02\n" +
+	"\btriggers\x18\t \x03(\v2\x17.reliant.v1.TriggerSpecR\btriggers\"\xe3\x02\n" +
 	"\x0eConnectionSpec\x12\x12\n" +
 	"\x04type\x18\x01 \x01(\tR\x04type\x12\x19\n" +
 	"\bbase_url\x18\x02 \x01(\tR\abaseUrl\x12#\n" +
 	"\rallowed_hosts\x18\x03 \x03(\tR\fallowedHosts\x12W\n" +
 	"\x0fdefault_headers\x18\x04 \x03(\v2..reliant.v1.ConnectionSpec.DefaultHeadersEntryR\x0edefaultHeaders\x121\n" +
-	"\x15allow_any_public_host\x18\x05 \x01(\bR\x12allowAnyPublicHost\x1aA\n" +
+	"\x15allow_any_public_host\x18\x05 \x01(\bR\x12allowAnyPublicHost\x12.\n" +
+	"\x13optional_auth_kinds\x18\x06 \x03(\tR\x11optionalAuthKinds\x1aA\n" +
 	"\x13DefaultHeadersEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xef\x02\n" +

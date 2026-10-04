@@ -34,6 +34,15 @@ var (
 	integrationRunner     *httpaction.Runner
 )
 
+// UseIntegrationRunner swaps the runner integration tools execute through and
+// returns a restore func. For tests that must trust an httptest TLS server.
+func UseIntegrationRunner(r *httpaction.Runner) (restore func()) {
+	integrationRunnerOnce.Do(func() {})
+	prev := integrationRunner
+	integrationRunner = r
+	return func() { integrationRunner = prev }
+}
+
 func sharedIntegrationRunner() *httpaction.Runner {
 	integrationRunnerOnce.Do(func() { integrationRunner = httpaction.NewRunner(netguard.New()) })
 	return integrationRunner
@@ -58,10 +67,10 @@ func integrationToolDefinitions() []ToolDefinition {
 			}
 			m, a := m, a
 			defs = append(defs, ToolDefinition{
-				Name:    manifest.ToolName(m, a),
-				Factory: func(*ToolsFactory) Tool { return newIntegrationTool(m, a) },
-				Tags:    []ToolTag{TagIntegration},
-				RunsOn:  ToolLocation(a.GetPlacement()),
+				Name:      manifest.ToolName(m, a),
+				Factory:   func(f *ToolsFactory) Tool { return newIntegrationTool(m, a, f.integrationCredentials()) },
+				Tags:      []ToolTag{TagIntegration},
+				Placement: Placement(a.GetPlacement()),
 			})
 		}
 	}
@@ -72,6 +81,10 @@ type integrationTool struct {
 	manifest *reliantv1.IntegrationManifest
 	action   *reliantv1.ActionSpec
 	bindings Bindings
+	// credentials resolves the `connection` param for the run's owner. The
+	// owner is read from the run record by the source, never taken from the
+	// model's arguments.
+	credentials httpaction.CredentialSource
 }
 
 var _ BindableTool = (*integrationTool)(nil)
@@ -97,8 +110,15 @@ func (t *integrationTool) WithBindings(bindings Bindings) (Tool, error) {
 
 func (t *integrationTool) Bindings() Bindings { return t.bindings }
 
-func newIntegrationTool(m *reliantv1.IntegrationManifest, a *reliantv1.ActionSpec) Tool {
-	return &integrationTool{manifest: m, action: a}
+func newIntegrationTool(m *reliantv1.IntegrationManifest, a *reliantv1.ActionSpec, credentials httpaction.CredentialSource) Tool {
+	return &integrationTool{manifest: m, action: a, credentials: credentials}
+}
+
+func (f *ToolsFactory) integrationCredentials() httpaction.CredentialSource {
+	if f == nil || f.opts == nil {
+		return nil
+	}
+	return f.opts.IntegrationCredentials
 }
 
 // fullSchema builds a fresh schema on every call: withoutBoundParams mutates
@@ -154,14 +174,28 @@ func (t *integrationTool) Run(rc *rctx.ToolContext, call ToolCall) (ToolResponse
 	if ctx == nil {
 		return NewTextErrorResponse("no execution context"), nil
 	}
-	result, err := sharedIntegrationRunner().Run(ctx, t.manifest, t.action, params)
+	// The run is the workflow the tool executes in (Thread is its id), falling
+	// back to the chat for runs whose id is the chat id.
+	runID := rc.Thread
+	if runID == "" {
+		runID = rc.ChatID
+	}
+	site := httpaction.CallSite{RunID: runID, ToolCallID: call.ID}
+	result, err := sharedIntegrationRunner().RunAuthenticated(ctx, t.manifest, t.action, params, t.credentials, site)
 	if err != nil {
 		return NewTextErrorResponse(err.Error()), nil
 	}
 	resp := NewTextResponse(result.Content)
 	resp.IsError = result.IsError
-	if result.Data != nil {
-		resp = WithResponseMetadata(resp, result.Data)
+	if result.Data != nil || result.ConnectionID != "" {
+		meta := map[string]any{}
+		for k, v := range result.Data {
+			meta[k] = v
+		}
+		if result.ConnectionID != "" {
+			meta["connection_id"] = result.ConnectionID
+		}
+		resp = WithResponseMetadata(resp, meta)
 	}
 	return resp, nil
 }

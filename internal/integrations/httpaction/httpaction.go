@@ -7,6 +7,8 @@ package httpaction
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -43,11 +45,21 @@ type Result struct {
 	Retryable  bool
 	StatusCode int
 	Data       map[string]any
+	// ConnectionID is the connection the call was authenticated with, for audit.
+	ConnectionID string
 }
 
 // Runner executes actions through a guarded HTTP client.
 type Runner struct {
 	client *http.Client
+}
+
+// WithRootCAs returns a Runner that trusts pool for TLS, for tests that talk to
+// an httptest TLS server. Production runners use the system roots.
+func (r *Runner) WithRootCAs(pool *x509.CertPool) *Runner {
+	tr := r.client.Transport.(*http.Transport).Clone()
+	tr.TLSClientConfig = &tls.Config{RootCAs: pool, MinVersion: tls.VersionTLS12}
+	return &Runner{client: &http.Client{Transport: tr}}
 }
 
 // NewRunner builds a Runner whose every connection goes through guard.
@@ -57,6 +69,18 @@ func NewRunner(guard *netguard.Guard) *Runner {
 
 // Run validates params against the action's schema, then performs the request.
 func (r *Runner) Run(ctx context.Context, m *reliantv1.IntegrationManifest, a *reliantv1.ActionSpec, params map[string]any) (*Result, error) {
+	return r.run(ctx, m, a, params, nil)
+}
+
+func (r *Runner) run(ctx context.Context, m *reliantv1.IntegrationManifest, a *reliantv1.ActionSpec, params map[string]any, cred Credential) (res *Result, err error) {
+	if cred != nil {
+		defer func() {
+			scrubResult(cred, res)
+			if err != nil {
+				err = errors.New(cred.Scrub(err.Error()))
+			}
+		}()
+	}
 	if params == nil {
 		params = map[string]any{}
 	}
@@ -154,11 +178,33 @@ func (r *Runner) Run(ctx context.Context, m *reliantv1.IntegrationManifest, a *r
 
 	allowed := allowedHosts(m)
 	anyHost := m.GetConnection().GetAllowAnyPublicHost()
+	// A credential must never reach a host other than the one the call started
+	// at: custom auth headers (X-Api-Key) survive a redirect, so a redirect or a
+	// pagination link to another host would leak it.
+	pinnedHost := ""
+	if cred != nil {
+		pinnedHost = strings.ToLower(target.Host)
+		if target.Scheme != "https" {
+			return nil, fmt.Errorf("a connection is only sent over https")
+		}
+	}
+	checkPinned := func(u *url.URL) error {
+		if pinnedHost != "" && strings.ToLower(u.Host) != pinnedHost {
+			return fmt.Errorf("host %q differs from %q: a credential is never sent to a second host", u.Host, pinnedHost)
+		}
+		if pinnedHost != "" && u.Scheme != "https" {
+			return fmt.Errorf("a connection is only sent over https")
+		}
+		return nil
+	}
 	r2 := &http.Client{Transport: r.client.Transport, CheckRedirect: func(next *http.Request, via []*http.Request) error {
 		if len(via) >= 5 {
 			return errors.New("too many redirects")
 		}
 		if err := checkURL(next.URL, allowed, anyHost); err != nil {
+			return fmt.Errorf("redirect refused: %w", err)
+		}
+		if err := checkPinned(next.URL); err != nil {
 			return fmt.Errorf("redirect refused: %w", err)
 		}
 		return nil
@@ -184,7 +230,7 @@ func (r *Runner) Run(ctx context.Context, m *reliantv1.IntegrationManifest, a *r
 		}
 		u := *target
 		u.RawQuery = query.Encode()
-		pgResp, err := r.do(ctx, r2, method, &u, headers, body, maxBytes, allowed, anyHost)
+		pgResp, err := r.do(ctx, r2, method, &u, headers, body, maxBytes, allowed, anyHost, cred)
 		if err != nil {
 			return nil, err
 		}
@@ -215,6 +261,9 @@ func (r *Runner) Run(ctx context.Context, m *reliantv1.IntegrationManifest, a *r
 			if err := checkURL(next, allowed, anyHost); err != nil {
 				return nil, fmt.Errorf("pagination link refused: %w", err)
 			}
+			if err := checkPinned(next); err != nil {
+				return nil, fmt.Errorf("pagination link refused: %w", err)
+			}
 			target = next
 			query = target.Query()
 		}
@@ -237,7 +286,7 @@ type page struct {
 	parsed  any
 }
 
-func (r *Runner) do(ctx context.Context, client *http.Client, method string, u *url.URL, headers http.Header, body []byte, maxBytes int64, allowed map[string]bool, anyHost bool) (*page, error) {
+func (r *Runner) do(ctx context.Context, client *http.Client, method string, u *url.URL, headers http.Header, body []byte, maxBytes int64, allowed map[string]bool, anyHost bool, cred Credential) (*page, error) {
 	if err := checkURL(u, allowed, anyHost); err != nil {
 		return nil, err
 	}
@@ -250,6 +299,11 @@ func (r *Runner) do(ctx context.Context, client *http.Client, method string, u *
 		return nil, err
 	}
 	httpReq.Header = headers.Clone()
+	if cred != nil {
+		if err := cred.Apply(httpReq); err != nil {
+			return nil, fmt.Errorf("applying credential: %w", err)
+		}
+	}
 	resp, err := client.Do(httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("request failed: %w", err)

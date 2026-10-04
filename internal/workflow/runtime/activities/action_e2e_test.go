@@ -38,7 +38,7 @@ func TestActionNodeRunsEndToEnd(t *testing.T) {
 
 	guard := netguard.New()
 	guard.AllowLoopback = true
-	action := handlers.NewActionActivityWith(catalog.MustBuiltin(), httpaction.NewRunner(guard))
+	action := handlers.NewActionActivityWith(catalog.MustBuiltin(), httpaction.NewRunner(guard), nil)
 
 	wf := &reliantv1.Workflow{
 		Name:  "action-e2e",

@@ -685,9 +685,17 @@ message ActionArgs {
     visibility_contexts: "basic"
   }];
 
-  // Fields 3 and 4 are reserved for the connections phase (connection id or
-  // binding, placement narrowing).
-  reserved 3, 4;
+  // Connection names the saved connection to authenticate with, by id. Only
+  // the reference travels in the node; the secret is resolved on the worker at
+  // call time and never enters workflow history. Omitted: no authentication.
+  CelString connection = 3 [(reliant) = {
+    description: "Saved connection id to authenticate this action with"
+    label: "Connection"
+    visibility_contexts: "basic"
+  }];
+
+  // Field 4 is reserved for placement narrowing.
+  reserved 4;
 }
 
 // CompactArgs configures a compact node — compacts conversation context to reduce token usage.
@@ -1504,6 +1512,12 @@ message ActionOutput {
   string uses = 5;
   // Retryable is set on an error the manifest classifies as transient.
   bool retryable = 6;
+  // ConnectionID is the connection the call was authenticated with, recorded
+  // for audit. Empty when the call was unauthenticated.
+  string connection_id = 7;
+  // ErrorCode classifies a connection failure ("failed_precondition",
+  // "needs_reauth", "unavailable"); empty otherwise.
+  string error_code = 8;
 }
 
 // CompactOutput is the output from the compact activity.

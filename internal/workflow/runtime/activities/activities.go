@@ -11,6 +11,7 @@ package activities
 import (
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/integrations/httpaction"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/streaming"
@@ -35,6 +36,10 @@ type Activities struct {
 	RunExecutor    handlers.RunExecutor   // Optional: for testing shell command execution
 	DriverResolver drivers.DriverResolver // Optional: custom LLM driver resolver (nil = use drivers.GetDriver)
 	TemporalClient client.Client
+	// Connections resolves a run's saved connection for integration actions.
+	// Optional: nil makes an action that names a connection fail rather than
+	// run unauthenticated.
+	Connections httpaction.CredentialSource
 }
 
 // NewActivities creates a new Activities container

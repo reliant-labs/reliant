@@ -61,7 +61,8 @@ type Guard struct {
 	AllowLoopback bool
 	Timeout       time.Duration
 
-	resolve func(ctx context.Context, host string) ([]net.IP, error)
+	// Resolve overrides DNS lookup; tests use it to make a hostname resolve to a chosen address.
+	Resolve func(ctx context.Context, host string) ([]net.IP, error)
 }
 
 // New returns a Guard with a 10s connect timeout.
@@ -87,7 +88,7 @@ func (g *Guard) DialContext(ctx context.Context, network, address string) (net.C
 	if literal := net.ParseIP(host); literal != nil {
 		ips = []net.IP{literal}
 	} else {
-		resolve := g.resolve
+		resolve := g.Resolve
 		if resolve == nil {
 			resolve = func(ctx context.Context, h string) ([]net.IP, error) {
 				return net.DefaultResolver.LookupIP(ctx, "ip", h)

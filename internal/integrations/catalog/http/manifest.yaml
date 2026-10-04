@@ -12,6 +12,9 @@ category: core
 connection:
   type: none
   allow_any_public_host: true
+  # A saved api_key or basic connection for integration `http` may be named per
+  # call. It is only ever sent to the host the call started at.
+  optional_auth_kinds: [api_key, basic]
 
 actions:
   - id: request
@@ -46,6 +49,12 @@ actions:
           description: Query parameters appended to the URL.
         body:
           description: JSON request body (any JSON value). Omit for no body.
+        connection:
+          type: string
+          description: >-
+            Id of a saved api_key or basic connection for the http integration
+            to authenticate with. Omit for an unauthenticated request. The
+            credential is only sent to the URL's own host.
     request:
       method: "{{ params.method }}"
       url: "{{ params.url }}"

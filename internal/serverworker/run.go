@@ -4,6 +4,7 @@ package serverworker
 import (
 	"context"
 	"fmt"
+	"github.com/reliant-labs/reliant/internal/integrations/connauth"
 	"net/http"
 	"os"
 	"os/signal"
@@ -311,6 +312,10 @@ func Run(ctx context.Context, opts Options) error {
 		RunStarter:   agentRuns,
 		RunLifecycle: agentRuns,
 		RunMessenger: agentRuns,
+		// http__request executes here, inside the ExecuteTools activity, and
+		// resolves its `connection` for the run's owner through the same
+		// resolver the action node uses.
+		IntegrationCredentials: connauth.New(connResolver),
 	})
 	// Wire server-side tool execution so PlacementServer / PlacementAny
 	// tools execute in the worker process without a daemon round-trip.

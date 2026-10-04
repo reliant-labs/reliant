@@ -44,7 +44,7 @@ func TestDialRefusesLiteralPrivateIPs(t *testing.T) {
 
 func TestDialRefusesHostnameResolvingToPrivateIP(t *testing.T) {
 	g := New()
-	g.resolve = fakeResolver("10.9.9.9")
+	g.Resolve = fakeResolver("10.9.9.9")
 	_, err := g.DialContext(context.Background(), "tcp", "innocent.example.com:80")
 	if err == nil || !strings.Contains(err.Error(), "blocked") {
 		t.Fatalf("want blocked error, got %v", err)
@@ -53,7 +53,7 @@ func TestDialRefusesHostnameResolvingToPrivateIP(t *testing.T) {
 
 func TestDialRefusesWhenAnyResolvedIPIsPrivate(t *testing.T) {
 	g := New()
-	g.resolve = fakeResolver("8.8.8.8", "169.254.169.254")
+	g.Resolve = fakeResolver("8.8.8.8", "169.254.169.254")
 	if _, err := g.DialContext(context.Background(), "tcp", "mixed.example.com:80"); err == nil {
 		t.Fatal("a mixed public/private answer must be refused")
 	}

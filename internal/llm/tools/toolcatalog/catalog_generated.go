@@ -200,11 +200,12 @@ var generatedToolParams = map[string]ToolParams{
 	},
 	"http__request": {
 		Bindable: map[string]struct{}{
-			"body":    {},
-			"headers": {},
-			"method":  {},
-			"query":   {},
-			"url":     {},
+			"body":       {},
+			"connection": {},
+			"headers":    {},
+			"method":     {},
+			"query":      {},
+			"url":        {},
 		},
 		Unbindable: map[string]string{},
 	},

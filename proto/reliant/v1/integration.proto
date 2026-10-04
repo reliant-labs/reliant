@@ -46,6 +46,11 @@ message ConnectionSpec {
   // generic HTTP integration only; the loader accepts it solely with type
   // "none", and the runtime still refuses private addresses after DNS.
   bool allow_any_public_host = 5;
+  // OptionalAuthKinds lets a connection of type "none" still accept a saved
+  // credential when the caller names one. Values: "api_key", "basic". The
+  // credential must belong to a connection for THIS integration id, so a token
+  // saved for another service can never be pointed at an arbitrary host.
+  repeated string optional_auth_kinds = 6;
 }
 
 // ActionSpec is one operation: usable as a workflow node and, optionally, as

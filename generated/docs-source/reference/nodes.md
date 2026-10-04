@@ -81,6 +81,7 @@ Run an integration action (for example an HTTP request)
 |-------|------|----------|---------|-------------|
 | `uses` | string | No | - | Which integration action to run, as integration/action@major |
 | `with` | map | No | - | Action parameters, keyed as in the action's schema |
+| `connection` | string | No | - | Saved connection id to authenticate this action with |
 
 ### Outputs
 
@@ -91,6 +92,8 @@ Run an integration action (for example an HTTP request)
 | `status_code` | integer | - |
 | `uses` | string | - |
 | `retryable` | boolean | - |
+| `connection_id` | string | - |
+| `error_code` | string | - |
 
 ---
 

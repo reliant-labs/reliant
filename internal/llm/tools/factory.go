@@ -2,6 +2,7 @@
 package tools
 
 import (
+	"github.com/reliant-labs/reliant/internal/integrations/httpaction"
 	"log/slog"
 
 	"github.com/reliant-labs/reliant/internal/config"
@@ -27,6 +28,10 @@ type ToolsOptions struct {
 	// connection) — unlike the doorbell above there is no degraded fallback,
 	// because an undelivered stop stops nothing.
 	SpawnStopper SpawnStopper
+	// IntegrationCredentials resolves a saved connection for integration tools
+	// (http__request's `connection`). Optional: nil makes a call that names a
+	// connection fail with a FailedPrecondition rather than run unauthenticated.
+	IntegrationCredentials httpaction.CredentialSource
 	// RunStarter launches a new top-level run for start_run. Optional: nil
 	// means start_run reports it is unavailable here (the daemon runtime has
 	// no Temporal connection and no launcher).

@@ -153,6 +153,11 @@ func Validate(m *reliantv1.IntegrationManifest, trust Trust) error {
 	if connType != ConnectionNone {
 		return fmt.Errorf("connection type %q is reserved; only %q is supported", connType, ConnectionNone)
 	}
+	for _, kind := range conn.GetOptionalAuthKinds() {
+		if kind != "api_key" && kind != "basic" {
+			return fmt.Errorf("connection.optional_auth_kinds: %q must be api_key or basic", kind)
+		}
+	}
 	if conn.GetAllowAnyPublicHost() && trust != TrustCurated {
 		return fmt.Errorf("allow_any_public_host is only valid in curated manifests")
 	}

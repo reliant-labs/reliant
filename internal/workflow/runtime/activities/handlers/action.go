@@ -3,6 +3,7 @@ package handlers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -29,19 +30,24 @@ import (
 
 // ActionActivity implements the action node type.
 type ActionActivity struct {
-	catalog *catalog.Catalog
-	runner  *httpaction.Runner
+	catalog     *catalog.Catalog
+	runner      *httpaction.Runner
+	credentials httpaction.CredentialSource
 }
 
 // NewActionActivity builds the activity over the embedded catalog and a runner
 // whose connections go through the SSRF guard.
-func NewActionActivity() *ActionActivity {
-	return &ActionActivity{catalog: catalog.MustBuiltin(), runner: httpaction.NewRunner(netguard.New())}
+//
+// credentials resolves a named connection for the run's owner; nil means the
+// process has none, and an action that names a connection then fails with a
+// FailedPrecondition instead of running unauthenticated.
+func NewActionActivity(credentials httpaction.CredentialSource) *ActionActivity {
+	return &ActionActivity{catalog: catalog.MustBuiltin(), runner: httpaction.NewRunner(netguard.New()), credentials: credentials}
 }
 
 // NewActionActivityWith builds the activity over a specific catalog and runner.
-func NewActionActivityWith(c *catalog.Catalog, r *httpaction.Runner) *ActionActivity {
-	return &ActionActivity{catalog: c, runner: r}
+func NewActionActivityWith(c *catalog.Catalog, r *httpaction.Runner, credentials httpaction.CredentialSource) *ActionActivity {
+	return &ActionActivity{catalog: c, runner: r, credentials: credentials}
 }
 
 func (a *ActionActivity) Name() string        { return "Action" }
@@ -73,17 +79,29 @@ func (a *ActionActivity) Execute(ctx context.Context, input ActivityInput) (*rel
 		return nil, fmt.Errorf("action node %s: %s is %s-placed, which has no executor yet", rtx.StepID, uses, p)
 	}
 
-	params := make(map[string]any, len(args.GetWith()))
+	params := make(map[string]any, len(args.GetWith())+1)
 	for name, value := range args.GetWith() {
 		params[name] = value.AsInterface()
 	}
+	// Only the connection REFERENCE travels in the node. The secret is resolved
+	// here, on the worker, at call time, and never enters history.
+	if connection := strings.TrimSpace(model.CelStringRaw(args.GetConnection())); connection != "" {
+		params[httpaction.ConnectionParam] = connection
+	}
 
-	result, runErr := a.runner.Run(ctx, resolved.Manifest, resolved.Spec, params)
+	site := httpaction.CallSite{RunID: rtx.WorkflowID, NodeID: rtx.StepID, ToolCallID: invokeToolCallID(rtx.WorkflowID, rtx.StepID, rtx.LoopNodeID, rtx.LoopIteration)}
+	result, runErr := a.runner.RunAuthenticated(ctx, resolved.Manifest, resolved.Spec, params, a.credentials, site)
 	out := &reliantv1.ActionOutput{Uses: uses}
 	if runErr != nil {
 		out.Content = runErr.Error()
 		out.IsError = true
+		var credErr *httpaction.CredentialError
+		if errors.As(runErr, &credErr) {
+			out.ErrorCode = credErr.Code
+			out.Content = credErr.Message
+		}
 	} else {
+		out.ConnectionId = result.ConnectionID
 		out.Content = result.Content
 		out.IsError = result.IsError
 		out.Retryable = result.Retryable

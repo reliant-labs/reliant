@@ -3,6 +3,7 @@ package workersetup
 
 import (
 	"github.com/reliant-labs/reliant/internal/connections"
+	"github.com/reliant-labs/reliant/internal/integrations/connauth"
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/config"
@@ -62,8 +63,8 @@ type Config struct {
 
 	// Connections resolves a run's connection reference to an authenticated
 	// request (research/CONNECTIONS_VAULT.md §3.1). It exists on the worker
-	// only: the worker is the one reader of connection secrets. No activity
-	// consumes it yet; the action node that will is a separate change.
+	// only: the worker is the one reader of connection secrets. The action
+	// node consumes it through connauth.
 	Connections *connections.Resolver
 
 	// Optional overrides (for testing)
@@ -120,6 +121,8 @@ func StartWorker(cfg *Config) (*Handle, *v2.ActivityRegistry, error) {
 	if cfg.DriverResolver != nil {
 		activityDeps.DriverResolver = cfg.DriverResolver
 	}
+
+	activityDeps.Connections = connauth.New(cfg.Connections)
 
 	// Register all activities
 	v2activities.RegisterAll(registry, activityDeps)

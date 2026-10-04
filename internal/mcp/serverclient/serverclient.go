@@ -14,6 +14,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/reliant-labs/reliant/internal/netguard"
 	"io"
 	"net"
 	"net/http"
@@ -64,6 +65,14 @@ type Client struct {
 
 // NewServerClient validates the entry and returns an uninitialised client.
 func NewServerClient(entry Entry, creds Creds) (*Client, error) {
+	return NewServerClientWithGuard(entry, creds, netguard.New())
+}
+
+// NewServerClientWithGuard is NewServerClient with an explicit dial guard. The
+// guard refuses any connection to a non-public address AFTER DNS resolution,
+// which the URL checks above cannot see (a hostname may resolve to 10.x or the
+// metadata address).
+func NewServerClientWithGuard(entry Entry, creds Creds, guard *netguard.Guard) (*Client, error) {
 	u, err := url.Parse(entry.URL)
 	if err != nil || u.Host == "" {
 		return nil, fmt.Errorf("catalog entry %q: invalid URL %q", entry.Name, entry.URL)
@@ -74,7 +83,7 @@ func NewServerClient(entry Entry, creds Creds) (*Client, error) {
 	if !hostAllowed(entry, u.Hostname()) {
 		return nil, fmt.Errorf("catalog entry %q: host %q is not allowed", entry.Name, u.Hostname())
 	}
-	return &Client{entry: entry, creds: creds, http: &http.Client{Timeout: 60 * time.Second}}, nil
+	return &Client{entry: entry, creds: creds, http: &http.Client{Timeout: 60 * time.Second, Transport: guard.Transport()}}, nil
 }
 
 func hostAllowed(entry Entry, host string) bool {
