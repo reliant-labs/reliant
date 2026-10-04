@@ -573,13 +573,13 @@ Usage notes:
 	)
 }
 
-// ListAvailableToolsForLocation returns tool names that can run at the given location.
-// Tools with ToolRunsAnywhere are included for all locations.
-func (f *ToolsFactory) ListAvailableToolsForLocation(location ToolLocation) []string {
+// ListAvailableToolsForPlacement returns tool names that can run at the given location.
+// Tools with PlacementAny are included for all locations.
+func (f *ToolsFactory) ListAvailableToolsForPlacement(location Placement) []string {
 	registry := GetToolRegistry()
 	var names []string
 	for _, def := range registry {
-		if def.RunsOn == location || def.RunsOn == ToolRunsAnywhere || location == "" {
+		if def.Placement == location || def.Placement == PlacementAny || location == "" {
 			names = append(names, def.Name)
 		}
 	}

@@ -300,7 +300,7 @@ func Run(ctx context.Context, opts Options) error {
 		RunLifecycle: agentRuns,
 		RunMessenger: agentRuns,
 	})
-	// Wire server-side tool execution so ToolRunsOnServer / ToolRunsAnywhere
+	// Wire server-side tool execution so PlacementServer / PlacementAny
 	// tools execute in the worker process without a daemon round-trip.
 	serverExecutor := toolexec.NewLocalToolExecutor(toolsFactory)
 	serverExecutor.SetMCPContextBinder(toolexec.NewDaemonMCPContextBinder(router))

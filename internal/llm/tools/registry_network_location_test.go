@@ -31,9 +31,9 @@ func TestNetworkToolsAreNotDaemonBound(t *testing.T) {
 		if found == nil {
 			t.Fatalf("tool %q is not in the registry", name)
 		}
-		if found.RunsOn == ToolRunsOnDaemon {
+		if found.Placement == PlacementDaemon {
 			t.Errorf("tool %q is marked %q; network-only tools must not require a daemon",
-				name, ToolRunsOnDaemon)
+				name, PlacementDaemon)
 		}
 	}
 }

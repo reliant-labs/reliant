@@ -31,7 +31,7 @@ func TestRunTools_AreRegisteredAndConstructible(t *testing.T) {
 	for _, name := range runToolNames {
 		def, ok := registered[name]
 		require.True(t, ok, "%s missing from GetToolRegistry()", name)
-		assert.Equal(t, ToolRunsOnServer, def.RunsOn, "%s reaches the database and the launcher, so it executes on the server", name)
+		assert.Equal(t, PlacementServer, def.Placement, "%s reaches the database and the launcher, so it executes on the server", name)
 		assert.True(t, validatorNames[name], "%s missing from names.AllToolNames", name)
 
 		tool := factory.GetToolByName(name, nil)

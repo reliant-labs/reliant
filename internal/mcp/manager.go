@@ -3,6 +3,7 @@ package mcp
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -111,6 +112,10 @@ func detectSystemChrome() string {
 
 // Manager manages multiple MCP server connections and aggregates their capabilities
 type Manager struct {
+	// role is fixed at construction. A Server-role manager can never hold a
+	// stdio server and never reads the local filesystem for config.
+	role Role
+
 	clients        map[string]Client
 	projectServers map[string]map[string]bool // projectPath -> set of server names
 	mu             sync.RWMutex
@@ -187,10 +192,32 @@ type healthStatus struct {
 	lastError  error
 }
 
-// NewManager creates a new MCP manager
-func NewManager() *Manager {
+// Role is the kind of process hosting a Manager.
+type Role string
+
+const (
+	// RoleDaemon runs on the user's machine: every transport, filesystem
+	// config, built-in stdio servers.
+	RoleDaemon Role = "daemon"
+	// RoleServer runs in a server process (api-server / worker). It must never
+	// spawn a subprocess, so stdio servers are refused.
+	RoleServer Role = "server"
+)
+
+// ErrStdioOnServer is returned when a server-role manager is asked to run a
+// stdio MCP server, which would spawn a process on the server instead of the
+// user's daemon.
+var ErrStdioOnServer = errors.New("stdio MCP servers can only run on a daemon, not on the server")
+
+func isStdioConfig(cfg config.MCPServer) bool {
+	return cfg.Type == config.MCPStdio || cfg.Command != ""
+}
+
+// NewManager creates a new MCP manager for the given host role.
+func NewManager(role Role) *Manager {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &Manager{
+		role:                role,
 		clients:             make(map[string]Client),
 		projectServers:      make(map[string]map[string]bool),
 		serverConfigs:       make(map[string]config.MCPServer),
@@ -352,6 +379,9 @@ func (m *Manager) Initialize(servers map[string]config.MCPServer) error {
 // AddServer adds and initializes a new MCP server.
 // The context is used for timeout/cancellation during initialization.
 func (m *Manager) AddServer(ctx context.Context, name string, cfg config.MCPServer) error {
+	if m.role != RoleDaemon && isStdioConfig(cfg) {
+		return fmt.Errorf("MCP server %q: %w", name, ErrStdioOnServer)
+	}
 	logging.Info("Adding MCP server", "name", name, "type", cfg.Type)
 
 	spawn := func() (Client, error) { return m.clientFactory(name, cfg) }
@@ -1431,6 +1461,11 @@ func builtinMCPServers() map[string]config.MCPServer {
 }
 
 func (m *Manager) loadProjectServersFromConfig(ctx context.Context, projectPath string) map[string]config.MCPServer {
+	// The server role has no filesystem to read and no built-in stdio servers;
+	// project config reaches it, if ever, only through a curated catalog.
+	if m.role != RoleDaemon {
+		return nil
+	}
 	m.mu.RLock()
 	resolver := m.projectConfigResolver
 	m.mu.RUnlock()

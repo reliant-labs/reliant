@@ -64,7 +64,7 @@ func (f *fakeManagerClient) ServerInfo() *ServerInfo {
 func TestEnsureProjectServersLoaded_DisabledServerNotLoadedOrFailed(t *testing.T) {
 	t.Setenv("RELIANT_USER_CONFIG_DIR", t.TempDir())
 
-	manager := NewManager()
+	manager := NewManager(RoleDaemon)
 	t.Cleanup(func() {
 		_ = manager.Close()
 	})
@@ -106,7 +106,7 @@ func TestEnsureProjectServersLoaded_DisabledServerNotLoadedOrFailed(t *testing.T
 func TestEnsureProjectServersLoaded_DisabledServerStopsRunningClient(t *testing.T) {
 	t.Setenv("RELIANT_USER_CONFIG_DIR", t.TempDir())
 
-	manager := NewManager()
+	manager := NewManager(RoleDaemon)
 	t.Cleanup(func() {
 		_ = manager.Close()
 	})
@@ -148,7 +148,7 @@ func TestEnsureProjectServersLoaded_DisabledServerStopsRunningClient(t *testing.
 }
 
 func TestGetProjectLastError_ReturnsStartupError(t *testing.T) {
-	manager := NewManager()
+	manager := NewManager(RoleDaemon)
 	t.Cleanup(func() {
 		_ = manager.Close()
 	})
@@ -169,7 +169,7 @@ func TestGetProjectLastError_ReturnsStartupError(t *testing.T) {
 func TestEnsureProjectServersLoaded_AssociatesAlreadyRunningServerWithNewScope(t *testing.T) {
 	t.Setenv("RELIANT_USER_CONFIG_DIR", t.TempDir())
 
-	manager := NewManager()
+	manager := NewManager(RoleDaemon)
 	t.Cleanup(func() {
 		_ = manager.Close()
 	})
@@ -225,7 +225,7 @@ func TestEnsureProjectServersLoaded_AssociatesAlreadyRunningServerWithNewScope(t
 }
 
 func TestLoadProjectServersFromConfig_MergesFilesystemScopeOverridesOverResolvedConfig(t *testing.T) {
-	manager := NewManager()
+	manager := NewManager(RoleDaemon)
 	t.Cleanup(func() {
 		_ = manager.Close()
 	})
@@ -283,7 +283,7 @@ func TestLoadProjectServersFromConfig_MergesFilesystemScopeOverridesOverResolved
 }
 
 func TestLoadProjectServersFromConfig_FallsBackToFilesystemWhenResolverFails(t *testing.T) {
-	manager := NewManager()
+	manager := NewManager(RoleDaemon)
 	t.Cleanup(func() {
 		_ = manager.Close()
 	})
@@ -321,7 +321,7 @@ func TestLoadProjectServersFromConfig_FallsBackToFilesystemWhenResolverFails(t *
 }
 
 func TestLoadProjectServersFromConfig_IncludesBuiltinServers(t *testing.T) {
-	manager := NewManager()
+	manager := NewManager(RoleDaemon)
 	t.Cleanup(func() {
 		_ = manager.Close()
 	})
@@ -349,7 +349,7 @@ func TestLoadProjectServersFromConfig_IncludesBuiltinServers(t *testing.T) {
 }
 
 func TestLoadProjectServersFromConfig_UserConfigOverridesBuiltin(t *testing.T) {
-	manager := NewManager()
+	manager := NewManager(RoleDaemon)
 	t.Cleanup(func() {
 		_ = manager.Close()
 	})

@@ -307,7 +307,7 @@ func newHarness(t *testing.T, llmScript *ScriptedLLM) *Harness {
 		ToolsFactory:    toolsFactory,
 		ToolExecutor:    executor,
 		DaemonRouter:    nil, // hermetic: no daemon transport
-		MCPBinder:       toolexec.NewLocalMCPContextBinder(mcp.NewManager()),
+		MCPBinder:       toolexec.NewLocalMCPContextBinder(mcp.NewManager(mcp.RoleDaemon)),
 		ConfigProvider:  config.NewStoredConfigProvider(configadapter.NewRepoConfigStore(s.Repo)),
 		DriverResolver:  resolver,
 		TaskQueueSuffix: taskQueueSuffix,

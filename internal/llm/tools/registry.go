@@ -123,21 +123,21 @@ const (
 	ToolAskUser = "ask_user"
 )
 
-// ToolLocation specifies where a tool executes.
-type ToolLocation string
+// Placement says where a tool or MCP server may execute. See PlacementOf.
+type Placement string
 
 const (
-	// ToolRunsOnDaemon means the tool needs daemon primitives (filesystem, shell, git).
-	// In distributed mode, it runs on the server but calls daemon for FS/exec ops.
-	ToolRunsOnDaemon ToolLocation = "daemon"
+	// PlacementDaemon means the tool needs daemon primitives (filesystem, shell, git).
+	// RemoteExecutor ships the whole call to the run's daemon.
+	PlacementDaemon Placement = "daemon"
 
-	// ToolRunsOnServer means the tool only needs the database/repo.
+	// PlacementServer means the tool only needs the database/repo.
 	// It runs entirely on the server with no daemon interaction.
-	ToolRunsOnServer ToolLocation = "server"
+	PlacementServer Placement = "server"
 
-	// ToolRunsAnywhere means the tool has no special requirements.
+	// PlacementAny means the tool has no special requirements.
 	// It can run on either side (e.g., network-only tools like fetch/websearch).
-	ToolRunsAnywhere ToolLocation = "any"
+	PlacementAny Placement = "any"
 )
 
 // ToolTag is a label a workflow can name to reach a group of tools at once.
@@ -220,10 +220,10 @@ var TagDescriptions = map[ToolTag]string{
 
 // ToolDefinition defines a tool's factory function and metadata
 type ToolDefinition struct {
-	Name    string
-	Factory func(f *ToolsFactory) Tool
-	Tags    []ToolTag
-	RunsOn  ToolLocation // Where this tool executes
+	Name      string
+	Factory   func(f *ToolsFactory) Tool
+	Tags      []ToolTag
+	Placement Placement // Where this tool executes
 }
 
 // SpawnFilterConfig represents a spawn tool configuration parsed from tool_filter.
@@ -494,8 +494,8 @@ func matchGlob(pattern, name string) bool {
 func GetToolRegistry() []ToolDefinition {
 	tools := []ToolDefinition{
 		// File tools
-		{ToolView, (*ToolsFactory).View, []ToolTag{TagFile, TagReadOnly, TagCodingPlan, TagCodingDefault}, ToolRunsAnywhere},
-		{ToolReadAttachment, (*ToolsFactory).ReadAttachment, []ToolTag{TagFile, TagReadOnly, TagCodingPlan, TagCodingDefault}, ToolRunsOnServer},
+		{ToolView, (*ToolsFactory).View, []ToolTag{TagFile, TagReadOnly, TagCodingPlan, TagCodingDefault}, PlacementAny},
+		{ToolReadAttachment, (*ToolsFactory).ReadAttachment, []ToolTag{TagFile, TagReadOnly, TagCodingPlan, TagCodingDefault}, PlacementServer},
 		// TagCodingDefault, unlike generate_image. The argument that keeps
 		// generate_image out of every workflow is cost: it spends real money
 		// on a provider the user may not have configured. This tool spends
@@ -505,10 +505,10 @@ func GetToolRegistry() []ToolDefinition {
 		// regenerate an image it already had. Server-located because the bytes
 		// are in the database; the file still reaches the user's disk through
 		// the daemon client on the tool context.
-		{ToolSaveAttachment, (*ToolsFactory).SaveAttachment, []ToolTag{TagFile, TagCodingDefault}, ToolRunsOnServer},
-		{ToolWrite, (*ToolsFactory).Write, []ToolTag{TagFile, TagCodingDefault}, ToolRunsAnywhere},
-		{ToolEdit, (*ToolsFactory).Edit, []ToolTag{TagFile, TagCodingDefault}, ToolRunsAnywhere},
-		{ToolFindReplace, (*ToolsFactory).FindAndReplace, []ToolTag{TagFile, TagCodingDefault}, ToolRunsAnywhere},
+		{ToolSaveAttachment, (*ToolsFactory).SaveAttachment, []ToolTag{TagFile, TagCodingDefault}, PlacementServer},
+		{ToolWrite, (*ToolsFactory).Write, []ToolTag{TagFile, TagCodingDefault}, PlacementAny},
+		{ToolEdit, (*ToolsFactory).Edit, []ToolTag{TagFile, TagCodingDefault}, PlacementAny},
+		{ToolFindReplace, (*ToolsFactory).FindAndReplace, []ToolTag{TagFile, TagCodingDefault}, PlacementAny},
 
 		// Search: there are no dedicated grep/glob LLM tools. Agents search with
 		// the shell (ripgrep preferred, degrading to grep -r/find). The shell
@@ -538,11 +538,11 @@ func GetToolRegistry() []ToolDefinition {
 		// whole is what stops the next prompt from drifting the same way — and
 		// `!tag:shell` correspondingly removes the family, which is what an author
 		// excluding the shell means.
-		{ShellToolName, (*ToolsFactory).Shell, []ToolTag{TagExecution, TagShell, TagSearch, TagCodingDefault}, ToolRunsOnDaemon},
-		{ToolShellList, (*ToolsFactory).ShellList, []ToolTag{TagExecution, TagShell, TagReadOnly, TagCodingPlan, TagCodingDefault}, ToolRunsOnDaemon},
-		{ToolShellOutput, (*ToolsFactory).ShellOutput, []ToolTag{TagExecution, TagShell, TagReadOnly, TagCodingPlan, TagCodingDefault}, ToolRunsOnDaemon},
-		{ToolShellWait, (*ToolsFactory).ShellWait, []ToolTag{TagExecution, TagShell, TagReadOnly, TagCodingPlan, TagCodingDefault}, ToolRunsOnDaemon},
-		{ToolShellKill, (*ToolsFactory).ShellKill, []ToolTag{TagExecution, TagShell, TagCodingDefault}, ToolRunsOnDaemon},
+		{ShellToolName, (*ToolsFactory).Shell, []ToolTag{TagExecution, TagShell, TagSearch, TagCodingDefault}, PlacementDaemon},
+		{ToolShellList, (*ToolsFactory).ShellList, []ToolTag{TagExecution, TagShell, TagReadOnly, TagCodingPlan, TagCodingDefault}, PlacementDaemon},
+		{ToolShellOutput, (*ToolsFactory).ShellOutput, []ToolTag{TagExecution, TagShell, TagReadOnly, TagCodingPlan, TagCodingDefault}, PlacementDaemon},
+		{ToolShellWait, (*ToolsFactory).ShellWait, []ToolTag{TagExecution, TagShell, TagReadOnly, TagCodingPlan, TagCodingDefault}, PlacementDaemon},
+		{ToolShellKill, (*ToolsFactory).ShellKill, []ToolTag{TagExecution, TagShell, TagCodingDefault}, PlacementDaemon},
 
 		// Network tools. Both are pure net/http plus HTML parsing — no filesystem,
 		// no subprocess — so they carry no daemon requirement. They were daemon-routed
@@ -551,8 +551,8 @@ func GetToolRegistry() []ToolDefinition {
 		// node's filter as proof the whole workflow needs a daemon. With TagCodingDefault on
 		// both, `tag:coding:default` alone was enough to fire the preflight gate and refuse a
 		// workflow that never touches the user's machine.
-		{ToolFetch, (*ToolsFactory).Fetch, []ToolTag{TagWeb, TagReadOnly, TagCodingPlan, TagCodingDefault}, ToolRunsAnywhere},
-		{ToolWebSearch, (*ToolsFactory).WebSearch, []ToolTag{TagWeb, TagReadOnly, TagCodingPlan, TagCodingDefault}, ToolRunsAnywhere},
+		{ToolFetch, (*ToolsFactory).Fetch, []ToolTag{TagWeb, TagReadOnly, TagCodingPlan, TagCodingDefault}, PlacementAny},
+		{ToolWebSearch, (*ToolsFactory).WebSearch, []ToolTag{TagWeb, TagReadOnly, TagCodingPlan, TagCodingDefault}, PlacementAny},
 
 		// Media tools. Deliberately NOT TagCodingDefault: generating an image costs
 		// real money on a provider the user may not have configured, and it is
@@ -563,43 +563,43 @@ func GetToolRegistry() []ToolDefinition {
 		// call, neither of which the daemon has. save_to still reaches the
 		// user's disk — through the daemon client on the tool context, the
 		// same way every other server-run tool does.
-		{ToolGenerateImage, (*ToolsFactory).GenerateImage, []ToolTag{TagMedia}, ToolRunsOnServer},
+		{ToolGenerateImage, (*ToolsFactory).GenerateImage, []ToolTag{TagMedia}, PlacementServer},
 
 		// Planning tools
-		{ToolCreatePlan, (*ToolsFactory).CreatePlan, []ToolTag{TagPlanning, TagCodingPlan, TagCodingDefault}, ToolRunsOnServer},
-		{ToolUpdatePlan, (*ToolsFactory).UpdatePlan, []ToolTag{TagPlanning, TagCodingPlan}, ToolRunsOnServer},
-		{ToolGetPlan, (*ToolsFactory).GetPlan, []ToolTag{TagPlanning, TagReadOnly, TagCodingPlan}, ToolRunsOnServer},
+		{ToolCreatePlan, (*ToolsFactory).CreatePlan, []ToolTag{TagPlanning, TagCodingPlan, TagCodingDefault}, PlacementServer},
+		{ToolUpdatePlan, (*ToolsFactory).UpdatePlan, []ToolTag{TagPlanning, TagCodingPlan}, PlacementServer},
+		{ToolGetPlan, (*ToolsFactory).GetPlan, []ToolTag{TagPlanning, TagReadOnly, TagCodingPlan}, PlacementServer},
 
 		// Task tools
-		{ToolListTasks, (*ToolsFactory).ListTasks, []ToolTag{TagPlanning, TagReadOnly, TagCodingPlan, TagCodingDefault}, ToolRunsOnServer},
-		{ToolAddTask, (*ToolsFactory).AddTask, []ToolTag{TagPlanning, TagCodingPlan, TagCodingDefault}, ToolRunsOnServer},
-		{ToolUpdateTask, (*ToolsFactory).UpdateTask, []ToolTag{TagPlanning, TagCodingPlan, TagCodingDefault}, ToolRunsOnServer},
-		{ToolCreateSubtask, (*ToolsFactory).CreateSubtask, []ToolTag{TagPlanning, TagCodingPlan}, ToolRunsOnServer},
-		{ToolAddDependency, (*ToolsFactory).AddDependency, []ToolTag{TagPlanning, TagCodingPlan}, ToolRunsOnServer},
-		{ToolRemoveDependency, (*ToolsFactory).RemoveDependency, []ToolTag{TagPlanning, TagCodingPlan}, ToolRunsOnServer},
-		{ToolListReadyTasks, (*ToolsFactory).ListReadyTasks, []ToolTag{TagPlanning, TagReadOnly, TagCodingPlan}, ToolRunsOnServer},
+		{ToolListTasks, (*ToolsFactory).ListTasks, []ToolTag{TagPlanning, TagReadOnly, TagCodingPlan, TagCodingDefault}, PlacementServer},
+		{ToolAddTask, (*ToolsFactory).AddTask, []ToolTag{TagPlanning, TagCodingPlan, TagCodingDefault}, PlacementServer},
+		{ToolUpdateTask, (*ToolsFactory).UpdateTask, []ToolTag{TagPlanning, TagCodingPlan, TagCodingDefault}, PlacementServer},
+		{ToolCreateSubtask, (*ToolsFactory).CreateSubtask, []ToolTag{TagPlanning, TagCodingPlan}, PlacementServer},
+		{ToolAddDependency, (*ToolsFactory).AddDependency, []ToolTag{TagPlanning, TagCodingPlan}, PlacementServer},
+		{ToolRemoveDependency, (*ToolsFactory).RemoveDependency, []ToolTag{TagPlanning, TagCodingPlan}, PlacementServer},
+		{ToolListReadyTasks, (*ToolsFactory).ListReadyTasks, []ToolTag{TagPlanning, TagReadOnly, TagCodingPlan}, PlacementServer},
 
 		// Spawn observability/messaging/control tools. An agent that already
 		// holds a handle to a sub-agent it spawned needs no extra privilege to
 		// look at it, talk to it, or stop it, so these are NOT gated at
 		// orchestrator tier — see MinimumPermissionForTool.
-		{ToolSpawnStatus, (*ToolsFactory).SpawnStatus, []ToolTag{TagReadOnly}, ToolRunsOnServer},
-		{ToolSpawnSend, (*ToolsFactory).SpawnSend, []ToolTag{}, ToolRunsOnServer},
-		{ToolSpawnStop, (*ToolsFactory).SpawnStop, []ToolTag{}, ToolRunsOnServer},
+		{ToolSpawnStatus, (*ToolsFactory).SpawnStatus, []ToolTag{TagReadOnly}, PlacementServer},
+		{ToolSpawnSend, (*ToolsFactory).SpawnSend, []ToolTag{}, PlacementServer},
+		{ToolSpawnStop, (*ToolsFactory).SpawnStop, []ToolTag{}, PlacementServer},
 
 		// Run-management tools. These act on detached, top-level runs (chats)
 		// the calling chat's user owns, not on the caller's own sub-agents —
 		// that is spawn_*. They are in no curated bundle: a workflow grants
 		// them by naming tag:runs or the tool, and the orchestrator-tier ones
 		// are further gated in MinimumPermissionForTool.
-		{ToolStartRun, (*ToolsFactory).StartRun, []ToolTag{TagRuns}, ToolRunsOnServer},
-		{ToolListRuns, (*ToolsFactory).ListRuns, []ToolTag{TagRuns, TagReadOnly}, ToolRunsOnServer},
-		{ToolGetRun, (*ToolsFactory).GetRun, []ToolTag{TagRuns, TagReadOnly}, ToolRunsOnServer},
-		{ToolControlRun, (*ToolsFactory).ControlRun, []ToolTag{TagRuns}, ToolRunsOnServer},
-		{ToolSendToRun, (*ToolsFactory).SendToRun, []ToolTag{TagRuns}, ToolRunsOnServer},
+		{ToolStartRun, (*ToolsFactory).StartRun, []ToolTag{TagRuns}, PlacementServer},
+		{ToolListRuns, (*ToolsFactory).ListRuns, []ToolTag{TagRuns, TagReadOnly}, PlacementServer},
+		{ToolGetRun, (*ToolsFactory).GetRun, []ToolTag{TagRuns, TagReadOnly}, PlacementServer},
+		{ToolControlRun, (*ToolsFactory).ControlRun, []ToolTag{TagRuns}, PlacementServer},
+		{ToolSendToRun, (*ToolsFactory).SendToRun, []ToolTag{TagRuns}, PlacementServer},
 
 		// Analysis tools - conditionally add project analyzer
-		{ToolSourcegraph, (*ToolsFactory).Sourcegraph, []ToolTag{TagAnalysis, TagReadOnly, TagCodingPlan}, ToolRunsAnywhere},
+		{ToolSourcegraph, (*ToolsFactory).Sourcegraph, []ToolTag{TagAnalysis, TagReadOnly, TagCodingPlan}, PlacementAny},
 
 		// code_context is a SYMBOL-graph tool, not a text-search tool, which is
 		// why it exists where the grep/glob tools above were deleted. It answers
@@ -608,64 +608,64 @@ func GetToolRegistry() []ToolDefinition {
 		// It is TagCodingDefault because its value is in replacing a multi-turn grep
 		// walk, and a tool an agent must first discover does not get used.
 		// Daemon-located: it needs the real checkout and a language server.
-		{ToolCodeContext, (*ToolsFactory).CodeContext, []ToolTag{TagAnalysis, TagSearch, TagReadOnly, TagCodingPlan, TagCodingDefault}, ToolRunsOnDaemon},
+		{ToolCodeContext, (*ToolsFactory).CodeContext, []ToolTag{TagAnalysis, TagSearch, TagReadOnly, TagCodingPlan, TagCodingDefault}, PlacementDaemon},
 
 		// State tools
 		// Note: StateTransition is registered dynamically with flow context
 
 		// Metadata tools
-		{ToolMetadataWriter, (*ToolsFactory).MetadataWriter, []ToolTag{}, ToolRunsAnywhere},
+		{ToolMetadataWriter, (*ToolsFactory).MetadataWriter, []ToolTag{}, PlacementAny},
 
 		// Component tools
-		{ToolComponentLibrary, (*ToolsFactory).ComponentLibrary, []ToolTag{TagReadOnly, TagCodingPlan}, ToolRunsAnywhere},
+		{ToolComponentLibrary, (*ToolsFactory).ComponentLibrary, []ToolTag{TagReadOnly, TagCodingPlan}, PlacementAny},
 
 		// Worktree tools
-		{ToolWorktree, (*ToolsFactory).Worktree, []ToolTag{}, ToolRunsAnywhere},
+		{ToolWorktree, (*ToolsFactory).Worktree, []ToolTag{}, PlacementAny},
 
 		// Skill tools
-		{ToolSkill, (*ToolsFactory).Skill, []ToolTag{TagCodingDefault, TagReadOnly, TagCodingPlan}, ToolRunsAnywhere},
+		{ToolSkill, (*ToolsFactory).Skill, []ToolTag{TagCodingDefault, TagReadOnly, TagCodingPlan}, PlacementAny},
 
 		// Load tool (dynamic tool loading)
-		{ToolLoadTool, (*ToolsFactory).LoadTool, []ToolTag{TagCodingDefault, TagReadOnly, TagCodingPlan}, ToolRunsAnywhere},
+		{ToolLoadTool, (*ToolsFactory).LoadTool, []ToolTag{TagCodingDefault, TagReadOnly, TagCodingPlan}, PlacementAny},
 
 		// Code manipulation tools
-		{ToolMoveCode, (*ToolsFactory).MoveCode, []ToolTag{TagFile}, ToolRunsAnywhere},
+		{ToolMoveCode, (*ToolsFactory).MoveCode, []ToolTag{TagFile}, PlacementAny},
 
 		// Workflow editing tools
-		{ToolCreateWorkflow, (*ToolsFactory).CreateWorkflow, []ToolTag{TagWorkflow}, ToolRunsOnServer},
-		{ToolEditWorkflow, (*ToolsFactory).EditWorkflow, []ToolTag{TagWorkflow}, ToolRunsOnServer},
-		{ToolWriteWorkflow, (*ToolsFactory).WriteWorkflow, []ToolTag{TagWorkflow}, ToolRunsOnServer},
+		{ToolCreateWorkflow, (*ToolsFactory).CreateWorkflow, []ToolTag{TagWorkflow}, PlacementServer},
+		{ToolEditWorkflow, (*ToolsFactory).EditWorkflow, []ToolTag{TagWorkflow}, PlacementServer},
+		{ToolWriteWorkflow, (*ToolsFactory).WriteWorkflow, []ToolTag{TagWorkflow}, PlacementServer},
 
 		// Workflow discovery tools
-		{ToolGetSchema, (*ToolsFactory).GetSchema, []ToolTag{TagWorkflow, TagReadOnly}, ToolRunsAnywhere},
-		{ToolGetCELReference, (*ToolsFactory).GetCELReference, []ToolTag{TagWorkflow, TagReadOnly}, ToolRunsAnywhere},
-		{ToolListWorkflows, (*ToolsFactory).ListWorkflows, []ToolTag{TagWorkflow, TagReadOnly}, ToolRunsOnServer},
-		{ToolGetWorkflow, (*ToolsFactory).GetWorkflow, []ToolTag{TagWorkflow, TagReadOnly}, ToolRunsOnServer},
-		{ToolGetWorkflowSuggestions, (*ToolsFactory).GetWorkflowSuggestions, []ToolTag{TagWorkflow, TagReadOnly}, ToolRunsOnServer},
-		{ToolListPresets, (*ToolsFactory).ListPresets, []ToolTag{TagWorkflow, TagReadOnly}, ToolRunsOnServer},
-		{ToolGetPreset, (*ToolsFactory).GetPreset, []ToolTag{TagWorkflow, TagReadOnly}, ToolRunsOnServer},
+		{ToolGetSchema, (*ToolsFactory).GetSchema, []ToolTag{TagWorkflow, TagReadOnly}, PlacementAny},
+		{ToolGetCELReference, (*ToolsFactory).GetCELReference, []ToolTag{TagWorkflow, TagReadOnly}, PlacementAny},
+		{ToolListWorkflows, (*ToolsFactory).ListWorkflows, []ToolTag{TagWorkflow, TagReadOnly}, PlacementServer},
+		{ToolGetWorkflow, (*ToolsFactory).GetWorkflow, []ToolTag{TagWorkflow, TagReadOnly}, PlacementServer},
+		{ToolGetWorkflowSuggestions, (*ToolsFactory).GetWorkflowSuggestions, []ToolTag{TagWorkflow, TagReadOnly}, PlacementServer},
+		{ToolListPresets, (*ToolsFactory).ListPresets, []ToolTag{TagWorkflow, TagReadOnly}, PlacementServer},
+		{ToolGetPreset, (*ToolsFactory).GetPreset, []ToolTag{TagWorkflow, TagReadOnly}, PlacementServer},
 
 		// Interaction tools
 		// ask_user is a schema-only tool — execution is intercepted by the workflow
 		// runtime (splitProtoToolCalls → executeAskUserInline), not the normal tool path.
-		{ToolAskUser, (*ToolsFactory).AskUser, nil, ToolRunsOnServer},
+		{ToolAskUser, (*ToolsFactory).AskUser, nil, PlacementServer},
 
 		// Scenario tools
-		{ToolListScenarios, (*ToolsFactory).ListScenarios, []ToolTag{TagWorkflow, TagReadOnly}, ToolRunsOnServer},
-		{ToolViewScenario, (*ToolsFactory).ViewScenario, []ToolTag{TagWorkflow, TagReadOnly}, ToolRunsOnServer},
-		{ToolEditScenario, (*ToolsFactory).EditScenario, []ToolTag{TagWorkflow}, ToolRunsOnServer},
-		{ToolWriteScenario, (*ToolsFactory).WriteScenario, []ToolTag{TagWorkflow}, ToolRunsOnServer},
-		{ToolDeleteScenario, (*ToolsFactory).DeleteScenario, []ToolTag{TagWorkflow}, ToolRunsOnServer},
-		{ToolRunScenario, (*ToolsFactory).RunScenario, []ToolTag{TagWorkflow}, ToolRunsOnServer},
+		{ToolListScenarios, (*ToolsFactory).ListScenarios, []ToolTag{TagWorkflow, TagReadOnly}, PlacementServer},
+		{ToolViewScenario, (*ToolsFactory).ViewScenario, []ToolTag{TagWorkflow, TagReadOnly}, PlacementServer},
+		{ToolEditScenario, (*ToolsFactory).EditScenario, []ToolTag{TagWorkflow}, PlacementServer},
+		{ToolWriteScenario, (*ToolsFactory).WriteScenario, []ToolTag{TagWorkflow}, PlacementServer},
+		{ToolDeleteScenario, (*ToolsFactory).DeleteScenario, []ToolTag{TagWorkflow}, PlacementServer},
+		{ToolRunScenario, (*ToolsFactory).RunScenario, []ToolTag{TagWorkflow}, PlacementServer},
 	}
 
 	// Only add project analyzer if not disabled
 	if !features.GetGlobalRegistry().EvaluateBool(context.Background(), "project_analyzer_disabled", false) {
 		tools = append(tools, ToolDefinition{
-			Name:    ToolProjectAnalyzer,
-			Factory: (*ToolsFactory).ProjectAnalyzer,
-			Tags:    []ToolTag{TagAnalysis, TagReadOnly, TagCodingPlan},
-			RunsOn:  ToolRunsAnywhere,
+			Name:      ToolProjectAnalyzer,
+			Factory:   (*ToolsFactory).ProjectAnalyzer,
+			Tags:      []ToolTag{TagAnalysis, TagReadOnly, TagCodingPlan},
+			Placement: PlacementAny,
 		})
 	}
 

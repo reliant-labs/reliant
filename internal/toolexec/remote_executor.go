@@ -54,7 +54,7 @@ type RemoteExecutor struct {
 	// Daemon routing (for online/offline check and notifications)
 	router DaemonRouter
 
-	// serverExecutor runs server-side tools (ToolRunsOnServer / ToolRunsAnywhere) in-process,
+	// serverExecutor runs server-side tools (PlacementServer / PlacementAny) in-process,
 	// avoiding a round-trip to the daemon. Nil means all tools route to the daemon.
 	serverExecutor *LocalToolExecutor
 
@@ -85,7 +85,7 @@ func NewRemoteExecutor(router DaemonRouter) *RemoteExecutor {
 }
 
 // SetServerExecutor configures a local executor for server-side tools.
-// When set, tools with RunsOn == ToolRunsOnServer or ToolRunsAnywhere execute
+// When set, tools with Placement == PlacementServer or PlacementAny execute
 // in-process instead of routing through the daemon.
 func (e *RemoteExecutor) SetServerExecutor(executor *LocalToolExecutor) {
 	e.serverExecutor = executor
@@ -112,8 +112,8 @@ func (e *RemoteExecutor) SetDaemonRouter(router DaemonRouter) {
 	e.router = router
 }
 
-// ExecuteTool executes a tool via server-side or daemon-side execution based on the tool's RunsOn location.
-// ToolRunsOnDaemon tools are dispatched to the user's daemon; all others execute in-process on the server.
+// ExecuteTool executes a tool via server-side or daemon-side execution based on the tool's placement.
+// PlacementDaemon tools are dispatched to the user's daemon; server/any tools execute in-process.
 func (e *RemoteExecutor) ExecuteTool(ctx context.Context, req *ToolRequest) (*ToolResult, error) {
 	startTime := time.Now()
 
@@ -156,18 +156,17 @@ func (e *RemoteExecutor) ExecuteTool(ctx context.Context, req *ToolRequest) (*To
 		return nil, fmt.Errorf("server executor not configured: wiring bug — all tools require server-side execution")
 	}
 
-	loc := toolRunsOn(req.ToolName)
-	if loc == tools.ToolRunsOnDaemon {
-		return e.executeOnDaemon(ctx, req, startTime)
+	placement, err := tools.PlacementOf(req.ToolName)
+	if err != nil {
+		return nil, err
 	}
-
-	// ToolRunsOnServer, ToolRunsAnywhere, and unknown tools (e.g. MCP) execute on the server.
-	if loc == tools.ToolRunsOnServer || loc == tools.ToolRunsAnywhere || loc == "" {
+	switch placement {
+	case tools.PlacementDaemon:
+		return e.executeOnDaemon(ctx, req, startTime)
+	case tools.PlacementServer, tools.PlacementAny:
 		return e.executeOnServer(ctx, req, startTime)
 	}
-
-	// Should be unreachable — all ToolLocation values are covered above.
-	return nil, fmt.Errorf("unexpected tool location %q for tool %q", loc, req.ToolName)
+	return nil, fmt.Errorf("unexpected placement %q for tool %q", placement, req.ToolName)
 }
 
 // executeOnServer runs a tool in-process via the server executor.
@@ -376,17 +375,6 @@ func (e *RemoteExecutor) executeOnDaemon(ctx context.Context, req *ToolRequest, 
 		ErrorMessage: resp.ErrorMessage,
 		ErrorCode:    resp.ErrorCode,
 	}, nil
-}
-
-// toolRunsOn returns the ToolLocation for the named tool from the registry.
-// Returns empty string if the tool is not found (caller falls through to server execution).
-func toolRunsOn(name string) tools.ToolLocation {
-	for _, def := range tools.GetToolRegistry() {
-		if def.Name == name {
-			return def.RunsOn
-		}
-	}
-	return "" // unknown tool — execute on server
 }
 
 // Close cleans up resources (no-op currently).
