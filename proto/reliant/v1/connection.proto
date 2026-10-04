@@ -1,0 +1,230 @@
+// Copyright (c) 2025 Reliant Labs. All rights reserved.
+syntax = "proto3";
+
+package reliant.v1;
+
+option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
+
+// ConnectionService manages a user's saved logins to external services
+// (research/CONNECTIONS_VAULT.md §4.2).
+//
+// NO RPC RETURNS A SECRET VALUE. Secrets are write-only: they enter through
+// CreateApiKeyConnection or the OAuth callback, are sealed in the vault, and
+// are read back only by the worker at call time. A reflection test pins that
+// no response message can carry one.
+//
+// Every RPC is scoped to the caller. A connection that is missing, deleted or
+// owned by someone else is NOT_FOUND in every case, so ids are not an oracle.
+service ConnectionService {
+  // ListIntegrations lists what a connection can be made to. An OAuth
+  // integration whose deployment has no client credentials is listed with
+  // available = false rather than hidden, so the UI can say why.
+  rpc ListIntegrations(ListIntegrationsRequest) returns (ListIntegrationsResponse) {}
+
+  // ListConnections returns the caller's connections. Metadata only.
+  rpc ListConnections(ListConnectionsRequest) returns (ListConnectionsResponse) {}
+
+  // GetConnection returns one connection's metadata.
+  rpc GetConnection(GetConnectionRequest) returns (GetConnectionResponse) {}
+
+  // CreateApiKeyConnection saves a pasted API key or basic credential.
+  rpc CreateApiKeyConnection(CreateApiKeyConnectionRequest) returns (CreateApiKeyConnectionResponse) {}
+
+  // StartOAuth begins an authorization-code flow and returns the provider URL
+  // to send the user to. For a browser, prefer navigating to
+  // /integrations/oauth/{provider}/start, which also binds the flow to the
+  // browser with a cookie; this RPC binds it to the authenticated caller.
+  rpc StartOAuth(StartOAuthRequest) returns (StartOAuthResponse) {}
+
+  // CompleteOAuth finishes a flow begun with StartOAuth, for clients that
+  // receive the provider redirect themselves (Electron, deep links).
+  rpc CompleteOAuth(CompleteOAuthRequest) returns (CompleteOAuthResponse) {}
+
+  // TestConnection runs the integration's probe against the live credential
+  // and records the account label it identifies.
+  rpc TestConnection(TestConnectionRequest) returns (TestConnectionResponse) {}
+
+  rpc RenameConnection(RenameConnectionRequest) returns (RenameConnectionResponse) {}
+
+  // SetDefaultConnection makes this the connection used when a workflow names
+  // only the integration.
+  rpc SetDefaultConnection(SetDefaultConnectionRequest) returns (SetDefaultConnectionResponse) {}
+
+  // DeleteConnection revokes at the provider where an API exists (best
+  // effort), then soft-deletes the row and destroys its ciphertext.
+  rpc DeleteConnection(DeleteConnectionRequest) returns (DeleteConnectionResponse) {}
+
+  // ListConnectionEvents is the audit view, newest first.
+  rpc ListConnectionEvents(ListConnectionEventsRequest) returns (ListConnectionEventsResponse) {}
+}
+
+enum ConnectionAuthKind {
+  CONNECTION_AUTH_KIND_UNSPECIFIED = 0;
+  CONNECTION_AUTH_KIND_OAUTH2 = 1;
+  // A GitHub App user-to-server credential: expiring access tokens with a
+  // rotating refresh token.
+  CONNECTION_AUTH_KIND_GITHUB_APP_USER = 2;
+  CONNECTION_AUTH_KIND_API_KEY = 3;
+  CONNECTION_AUTH_KIND_BASIC = 4;
+  CONNECTION_AUTH_KIND_NONE = 5;
+}
+
+enum ConnectionStatus {
+  CONNECTION_STATUS_UNSPECIFIED = 0;
+  CONNECTION_STATUS_ACTIVE = 1;
+  // The provider refused the refresh grant; the user must reconnect.
+  CONNECTION_STATUS_NEEDS_REAUTH = 2;
+  CONNECTION_STATUS_REVOKED = 3;
+}
+
+// Connection is metadata only. There is deliberately no field that could hold
+// a credential.
+message Connection {
+  string id = 1;
+  string integration_id = 2;
+  ConnectionAuthKind auth_kind = 3;
+  string name = 4;
+  // The provider-side identity this connection acts as ("octocat").
+  string account_label = 5;
+  string external_account_id = 6;
+  repeated string scopes = 7;
+  ConnectionStatus status = 8;
+  // A short class ("invalid_grant"), never a provider response body.
+  string status_reason = 9;
+  bool is_default = 10;
+  // RFC3339 UTC timestamps, matching the other services; empty when unset.
+  string access_expires_at = 11;
+  string last_used_at = 12;
+  string created_at = 13;
+  string updated_at = 14;
+}
+
+message Integration {
+  string id = 1;
+  string display_name = 2;
+  ConnectionAuthKind auth_kind = 3;
+  // False when the deployment has not configured this integration.
+  bool available = 4;
+  // Why it is unavailable, in words for an operator ("RELIANT_GITHUB_APP_CLIENT_ID is not set").
+  string unavailable_reason = 5;
+}
+
+message ListIntegrationsRequest {}
+message ListIntegrationsResponse {
+  repeated Integration integrations = 1;
+}
+
+message ListConnectionsRequest {
+  string integration_id = 1;
+}
+message ListConnectionsResponse {
+  repeated Connection connections = 1;
+}
+
+message GetConnectionRequest {
+  string id = 1;
+}
+message GetConnectionResponse {
+  Connection connection = 1;
+}
+
+enum ApiKeyConnectionKind {
+  API_KEY_CONNECTION_KIND_UNSPECIFIED = 0;
+  // fields: "api_key" (required), "header" (optional; one of "bearer",
+  // "x-api-key", "api-key", "x-auth-token"; default "bearer").
+  API_KEY_CONNECTION_KIND_API_KEY = 1;
+  // fields: "username" and "password", both required.
+  API_KEY_CONNECTION_KIND_BASIC = 2;
+}
+
+message CreateApiKeyConnectionRequest {
+  // A free-form id for the service this credential is for ("linear"). It may
+  // not be an integration that has its own OAuth flow.
+  string integration_id = 1;
+  string name = 2;
+  ApiKeyConnectionKind kind = 3;
+  // WRITE-ONLY. The only message in this API that carries a secret.
+  map<string, string> fields = 4 [debug_redact = true];
+}
+message CreateApiKeyConnectionResponse {
+  Connection connection = 1;
+}
+
+message StartOAuthRequest {
+  string integration_id = 1;
+  // Optional display name for a new connection.
+  string name = 2;
+  // Reconnect an existing connection in place instead of creating one.
+  string reconnect_id = 3;
+  // Where the client wants to land afterwards: a relative path only.
+  string redirect_after = 4;
+}
+message StartOAuthResponse {
+  string authorize_url = 1;
+}
+
+message CompleteOAuthRequest {
+  string state = 1 [debug_redact = true];
+  string code = 2 [debug_redact = true];
+}
+message CompleteOAuthResponse {
+  Connection connection = 1;
+  string redirect_after = 2;
+}
+
+message TestConnectionRequest {
+  string id = 1;
+}
+message TestConnectionResponse {
+  bool ok = 1;
+  // True when the integration has a probe that ran; false means only that the
+  // stored secret opened.
+  bool probed = 2;
+  string account_label = 3;
+  // "unauthorized", "unreachable", "needs_reauth", or empty when ok.
+  string error_class = 4;
+}
+
+message RenameConnectionRequest {
+  string id = 1;
+  string name = 2;
+}
+message RenameConnectionResponse {
+  Connection connection = 1;
+}
+
+message SetDefaultConnectionRequest {
+  string id = 1;
+}
+message SetDefaultConnectionResponse {
+  Connection connection = 1;
+}
+
+message DeleteConnectionRequest {
+  string id = 1;
+}
+message DeleteConnectionResponse {}
+
+message ConnectionEvent {
+  int64 id = 1;
+  string connection_id = 2;
+  // created, used, refreshed, refresh_failed, needs_reauth, reconnected,
+  // renamed, revoked, deleted, default_changed.
+  string kind = 3;
+  string run_id = 4;
+  string node_id = 5;
+  string tool_call_id = 6;
+  // "user:<id>", "worker", or "trigger:<id>".
+  string actor = 7;
+  string at = 8;
+}
+
+message ListConnectionEventsRequest {
+  string id = 1;
+  int32 limit = 2;
+  // Return events older than this id; 0 for the newest page.
+  int64 before_id = 3;
+}
+message ListConnectionEventsResponse {
+  repeated ConnectionEvent events = 1;
+}

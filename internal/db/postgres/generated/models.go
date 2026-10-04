@@ -221,6 +221,50 @@ type CommandFavorite struct {
 	CreatedAt  time.Time `json:"created_at"`
 }
 
+type Connection struct {
+	ID                string         `json:"id"`
+	OwnerKind         string         `json:"owner_kind"`
+	UserID            string         `json:"user_id"`
+	OrgID             sql.NullString `json:"org_id"`
+	IntegrationID     string         `json:"integration_id"`
+	AuthKind          string         `json:"auth_kind"`
+	Name              string         `json:"name"`
+	AccountLabel      sql.NullString `json:"account_label"`
+	ExternalAccountID sql.NullString `json:"external_account_id"`
+	Scopes            []string       `json:"scopes"`
+	OauthClient       sql.NullString `json:"oauth_client"`
+	AuthHeader        sql.NullString `json:"auth_header"`
+	Status            string         `json:"status"`
+	StatusReason      sql.NullString `json:"status_reason"`
+	IsDefault         bool           `json:"is_default"`
+	AccessExpiresAt   sql.NullTime   `json:"access_expires_at"`
+	LastUsedAt        sql.NullTime   `json:"last_used_at"`
+	CreatedAt         time.Time      `json:"created_at"`
+	UpdatedAt         time.Time      `json:"updated_at"`
+	DeletedAt         sql.NullTime   `json:"deleted_at"`
+}
+
+type ConnectionEvent struct {
+	ID           int64          `json:"id"`
+	ConnectionID string         `json:"connection_id"`
+	UserID       string         `json:"user_id"`
+	Kind         string         `json:"kind"`
+	RunID        sql.NullString `json:"run_id"`
+	NodeID       sql.NullString `json:"node_id"`
+	ToolCallID   sql.NullString `json:"tool_call_id"`
+	Actor        string         `json:"actor"`
+	At           time.Time      `json:"at"`
+}
+
+type ConnectionSecret struct {
+	ConnectionID string    `json:"connection_id"`
+	Field        string    `json:"field"`
+	VaultKeyID   string    `json:"vault_key_id"`
+	Ciphertext   []byte    `json:"ciphertext"`
+	Generation   int64     `json:"generation"`
+	UpdatedAt    time.Time `json:"updated_at"`
+}
+
 type ConnectorAuditLog struct {
 	ID           string          `json:"id"`
 	GrantID      string          `json:"grant_id"`
@@ -389,6 +433,19 @@ type MessageOrderCounter struct {
 	CounterKind  string `json:"counter_kind"`
 	ScopeID      string `json:"scope_id"`
 	LastAssigned int64  `json:"last_assigned"`
+}
+
+type OauthFlow struct {
+	StateHash             []byte         `json:"state_hash"`
+	UserID                string         `json:"user_id"`
+	SessionIDHash         []byte         `json:"session_id_hash"`
+	IntegrationID         string         `json:"integration_id"`
+	PkceVerifierSealed    []byte         `json:"pkce_verifier_sealed"`
+	RedirectAfter         sql.NullString `json:"redirect_after"`
+	ReconnectConnectionID sql.NullString `json:"reconnect_connection_id"`
+	ConnectionName        sql.NullString `json:"connection_name"`
+	ExpiresAt             time.Time      `json:"expires_at"`
+	ConsumedAt            sql.NullTime   `json:"consumed_at"`
 }
 
 type Plan struct {

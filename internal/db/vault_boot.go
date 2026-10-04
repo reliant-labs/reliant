@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/reliant-labs/reliant/internal/db/core"
+	postgresstore "github.com/reliant-labs/reliant/internal/db/postgres"
 	"github.com/reliant-labs/reliant/internal/vault"
 )
 
@@ -36,4 +38,10 @@ func BootVault(ctx context.Context, repo *Repo, hosted bool, dataDir string) (*v
 	}
 	slog.Info("vault ready", "api_keys_sealed_now", sealed, "api_keys_unsealed", remaining)
 	return v, nil
+}
+
+// Connections returns the store for user connections (the credential vault's
+// metadata and ciphertext tables).
+func (r *Repo) Connections() core.ConnectionStore {
+	return postgresstore.NewConnectionStore(r.DB.SQLDB())
 }

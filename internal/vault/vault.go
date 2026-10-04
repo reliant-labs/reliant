@@ -259,3 +259,7 @@ func (v *Vault) install(t Tenant, id string, wrapped []byte) (*crypto.Keyring, e
 	v.mu.Unlock()
 	return ring, nil
 }
+
+// KeyIDOf returns the id of the vault key (vault_keys.id) that sealed blob, so
+// a row can record which key it needs without a second lookup.
+func KeyIDOf(blob []byte) (string, error) { return envelopeKeyID(blob) }
