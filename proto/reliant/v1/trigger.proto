@@ -1,0 +1,352 @@
+// Copyright (c) 2025 Reliant Labs. All rights reserved.
+syntax = "proto3";
+
+package reliant.v1;
+
+import "google/protobuf/struct.proto";
+
+option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
+
+// TriggerService manages standing instructions that start runs without a human
+// typing: "every weekday at 9am, run workflow W in project P with prompt M".
+//
+// A Trigger is the stored definition. A TriggerEvent is one firing of it —
+// kind, dedupe key, when, payload, and what the firing did. Both are described
+// in research/TRIGGERS.md.
+//
+// Only schedule triggers exist today. Webhook, GitHub and manual/form sources
+// become new arms of Trigger.source rather than new services: they differ in
+// what makes them fire, not in what they do once fired.
+service TriggerService {
+  // CreateTrigger stores a new trigger and converges its schedule.
+  rpc CreateTrigger(CreateTriggerRequest) returns (CreateTriggerResponse) {}
+
+  // GetTrigger returns one trigger, including its read-only next fire time
+  // and most recent firing.
+  rpc GetTrigger(GetTriggerRequest) returns (GetTriggerResponse) {}
+
+  // ListTriggers returns the caller's triggers, optionally narrowed to one
+  // project.
+  rpc ListTriggers(ListTriggersRequest) returns (ListTriggersResponse) {}
+
+  // UpdateTrigger replaces a trigger's definition and reconverges its
+  // schedule. The owner and kind are not updatable.
+  rpc UpdateTrigger(UpdateTriggerRequest) returns (UpdateTriggerResponse) {}
+
+  // DeleteTrigger removes a trigger and its schedule. Its firing history
+  // survives, with trigger_id cleared — the runs it started still exist.
+  rpc DeleteTrigger(DeleteTriggerRequest) returns (DeleteTriggerResponse) {}
+
+  // SetTriggerEnabled pauses or resumes a trigger. Disabling pauses the
+  // schedule rather than deleting it, so re-enabling needs no re-derivation.
+  rpc SetTriggerEnabled(SetTriggerEnabledRequest) returns (SetTriggerEnabledResponse) {}
+
+  // FireTrigger runs a trigger now, out of band with its schedule. A manual
+  // fire skips the enabled and overlap checks: the human asking for it has
+  // already made that decision.
+  rpc FireTrigger(FireTriggerRequest) returns (FireTriggerResponse) {}
+
+  // ListTriggerEvents returns a trigger's firings, newest first.
+  rpc ListTriggerEvents(ListTriggerEventsRequest) returns (ListTriggerEventsResponse) {}
+}
+
+// TriggerKind is the source a stored trigger listens to.
+enum TriggerKind {
+  TRIGGER_KIND_UNSPECIFIED = 0;
+  // SCHEDULE fires on a cron or interval schedule.
+  TRIGGER_KIND_SCHEDULE = 1;
+}
+
+// TriggerEventKind is the kind of a single firing. It is wider than
+// TriggerKind: ad hoc sources produce events with no stored trigger behind
+// them.
+enum TriggerEventKind {
+  TRIGGER_EVENT_KIND_UNSPECIFIED = 0;
+  // CHAT_START is the first send of a chat — an interactive start, which is a
+  // trigger event with no stored definition. Its dedupe key is the chat id.
+  TRIGGER_EVENT_KIND_CHAT_START = 1;
+  // SCHEDULE is a scheduled fire. Its dedupe key is the Temporal
+  // fire-workflow id, which is unique per scheduled time.
+  TRIGGER_EVENT_KIND_SCHEDULE = 2;
+}
+
+// TriggerEventOutcome records what a firing did.
+enum TriggerEventOutcome {
+  TRIGGER_EVENT_OUTCOME_UNSPECIFIED = 0;
+  // LAUNCHED: a session was materialized and its run started. chat_id is set.
+  TRIGGER_EVENT_OUTCOME_LAUNCHED = 1;
+  // SKIPPED: the firing was deliberately not launched — the trigger was
+  // disabled, or its previous run was still going under overlap SKIP.
+  TRIGGER_EVENT_OUTCOME_SKIPPED = 2;
+  // FAILED: the firing tried to launch and could not. outcome_detail says why.
+  TRIGGER_EVENT_OUTCOME_FAILED = 3;
+}
+
+// TriggerOverlapPolicy decides what a scheduled fire does when this trigger's
+// previous run has not finished.
+enum TriggerOverlapPolicy {
+  TRIGGER_OVERLAP_POLICY_UNSPECIFIED = 0;
+  // SKIP (the default): do not fire while the previous run is active or
+  // paused. Record a skipped event instead.
+  TRIGGER_OVERLAP_POLICY_SKIP = 1;
+  // ALLOW: fire regardless, launching a concurrent run.
+  TRIGGER_OVERLAP_POLICY_ALLOW = 2;
+}
+
+// ScheduleSource is the trigger.source arm for schedule triggers.
+message ScheduleSource {
+  // 5-field cron expressions. Multiple entries are a UNION: the trigger fires
+  // at every time any of them matches.
+  repeated string cron = 1;
+
+  // Fire every interval, as a Go duration ("15m", "1h"). Combined with cron
+  // as a union rather than overriding it.
+  optional string interval = 2;
+
+  // IANA zone name the cron expressions are interpreted in. Empty means UTC.
+  string timezone = 3;
+
+  // What a fire does when the previous run is still going. Unspecified is
+  // treated as SKIP.
+  TriggerOverlapPolicy overlap = 4;
+
+  // How late a missed fire may still run after an outage, as a Go duration.
+  // Empty means 10m — deliberately not Temporal's one-year default, which
+  // would replay a year of missed unattended runs on recovery.
+  optional string catchup_window = 5;
+}
+
+// Trigger is a stored trigger definition.
+message Trigger {
+  // Server-assigned id.
+  string id = 1;
+
+  // Human-readable name, unique per user per project. How a human and the CLI
+  // refer to this trigger.
+  string name = 2;
+
+  // Project the launched runs execute in.
+  string project_id = 3;
+
+  // Worktree the launched runs execute in. Unset means the project's main
+  // worktree.
+  optional string worktree_id = 4;
+
+  // Disabled triggers keep their definition and history; their schedule is
+  // paused.
+  bool enabled = 5;
+
+  // Workflow slug each launched run executes. Empty means the owner's default
+  // workflow, resolved at fire time.
+  string workflow = 6;
+
+  // Preset assignments applied to the launched run's inputs, keyed by group
+  // name ("" for top level) — the same shape an interactive start sends.
+  map<string, string> presets = 7;
+
+  // Workflow input values applied to each launched run.
+  map<string, google.protobuf.Value> params = 8;
+
+  // The seed prompt each launched run starts from.
+  string message = 9;
+
+  // RFC3339 UTC timestamp of creation, matching chat.proto's string
+  // timestamps.
+  string created_at = 10;
+
+  // RFC3339 UTC timestamp of the last definition change.
+  string updated_at = 11;
+
+  // Read-only: RFC3339 UTC time this trigger will next fire, as computed by
+  // the schedule backend. Unset when disabled or when no future fire exists.
+  optional string next_fire_at = 12;
+
+  // Read-only: this trigger's most recent firing, of any outcome. Unset when
+  // it has never fired.
+  optional TriggerEvent last_event = 13;
+
+  // What makes this trigger fire. One arm per kind; webhook and GitHub become
+  // new arms. The arm set also determines Trigger.kind, so the two cannot
+  // disagree.
+  oneof source {
+    ScheduleSource schedule = 20;
+  }
+}
+
+// TriggerEvent is one firing — the durable record of intent to launch, written
+// before the run is started so the start is safe to retry.
+message TriggerEvent {
+  // Server-assigned id.
+  string id = 1;
+
+  // The stored trigger that fired. Unset for ad hoc kinds (chat.start), and
+  // cleared when the trigger is later deleted.
+  optional string trigger_id = 2;
+
+  // Which kind of firing this was.
+  TriggerEventKind kind = 3;
+
+  // RFC3339 UTC time the firing was FOR, which is not necessarily when the
+  // row was written: a scheduled fire replayed after an outage occurred at its
+  // scheduled time.
+  string occurred_at = 4;
+
+  // What the firing did.
+  TriggerEventOutcome outcome = 5;
+
+  // Human-readable detail, set for SKIPPED and FAILED. Empty otherwise.
+  string outcome_detail = 6;
+
+  // The chat this firing launched. Set when outcome is LAUNCHED; cleared if
+  // that chat is later deleted.
+  optional string chat_id = 7;
+
+  // Source-specific detail recorded verbatim at fire time — for a schedule,
+  // the scheduled time and the trigger's name.
+  google.protobuf.Struct payload = 8;
+}
+
+// TriggerDefinition is the writable half of a Trigger: the fields a caller
+// supplies, without the server-assigned id, timestamps and read-only
+// projections. Shared by create and update so the two cannot drift.
+message TriggerDefinition {
+  // Human-readable name, unique per user per project.
+  string name = 1;
+
+  // Project the launched runs execute in.
+  string project_id = 2;
+
+  // Worktree the launched runs execute in. Unset means the project's main
+  // worktree.
+  optional string worktree_id = 3;
+
+  // Whether the trigger fires. Unset means true on create and "unchanged" on
+  // update. Optional because a plain proto3 bool cannot tell an omitted field
+  // from an explicit false — every create that left it out would have stored
+  // a disabled trigger.
+  optional bool enabled = 4;
+
+  // Workflow slug each launched run executes. Empty means the owner's default
+  // workflow.
+  string workflow = 5;
+
+  // Preset assignments applied to the launched run's inputs.
+  map<string, string> presets = 6;
+
+  // Workflow input values applied to each launched run.
+  map<string, google.protobuf.Value> params = 7;
+
+  // The seed prompt each launched run starts from.
+  string message = 8;
+
+  // What makes this trigger fire. Required on create: a trigger with no source
+  // can never fire.
+  oneof source {
+    ScheduleSource schedule = 20;
+  }
+}
+
+// CreateTriggerRequest is the request for CreateTrigger.
+message CreateTriggerRequest {
+  // The trigger to create. Its source arm determines the kind.
+  TriggerDefinition trigger = 1;
+}
+
+// CreateTriggerResponse is the response for CreateTrigger.
+message CreateTriggerResponse {
+  // The stored trigger, with its assigned id and computed next fire time.
+  Trigger trigger = 1;
+}
+
+// GetTriggerRequest is the request for GetTrigger.
+message GetTriggerRequest {
+  // Id of the trigger to fetch.
+  string id = 1;
+}
+
+// GetTriggerResponse is the response for GetTrigger.
+message GetTriggerResponse {
+  // The requested trigger.
+  Trigger trigger = 1;
+}
+
+// ListTriggersRequest is the request for ListTriggers.
+message ListTriggersRequest {
+  // Narrow to one project. Unset lists the caller's triggers across every
+  // project.
+  optional string project_id = 1;
+}
+
+// ListTriggersResponse is the response for ListTriggers.
+message ListTriggersResponse {
+  // The caller's triggers, newest first.
+  repeated Trigger triggers = 1;
+}
+
+// UpdateTriggerRequest is the request for UpdateTrigger.
+message UpdateTriggerRequest {
+  // Id of the trigger to update.
+  string id = 1;
+
+  // The replacement definition. This is a full replacement, not a patch: a
+  // field left at its zero value is written as the zero value.
+  TriggerDefinition trigger = 2;
+}
+
+// UpdateTriggerResponse is the response for UpdateTrigger.
+message UpdateTriggerResponse {
+  // The stored trigger after the update.
+  Trigger trigger = 1;
+}
+
+// DeleteTriggerRequest is the request for DeleteTrigger.
+message DeleteTriggerRequest {
+  // Id of the trigger to delete.
+  string id = 1;
+}
+
+// DeleteTriggerResponse is the response for DeleteTrigger.
+message DeleteTriggerResponse {}
+
+// SetTriggerEnabledRequest is the request for SetTriggerEnabled.
+message SetTriggerEnabledRequest {
+  // Id of the trigger to pause or resume.
+  string id = 1;
+
+  // True resumes the schedule, false pauses it.
+  bool enabled = 2;
+}
+
+// SetTriggerEnabledResponse is the response for SetTriggerEnabled.
+message SetTriggerEnabledResponse {
+  // The trigger after the change, including its recomputed next fire time.
+  Trigger trigger = 1;
+}
+
+// FireTriggerRequest is the request for FireTrigger.
+message FireTriggerRequest {
+  // Id of the trigger to run now.
+  string id = 1;
+}
+
+// FireTriggerResponse is the response for FireTrigger.
+message FireTriggerResponse {
+  // Id of the fire workflow this request started. The firing itself is
+  // asynchronous: poll ListTriggerEvents for its outcome.
+  string fire_workflow_id = 1;
+}
+
+// ListTriggerEventsRequest is the request for ListTriggerEvents.
+message ListTriggerEventsRequest {
+  // Trigger whose firings to list.
+  string trigger_id = 1;
+
+  // Maximum firings to return. Unset or zero applies the server default.
+  int32 limit = 2;
+}
+
+// ListTriggerEventsResponse is the response for ListTriggerEvents.
+message ListTriggerEventsResponse {
+  // The trigger's firings, newest first.
+  repeated TriggerEvent events = 1;
+}

@@ -11,6 +11,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/preset"
 	"github.com/reliant-labs/reliant/internal/ptr"
@@ -56,7 +57,7 @@ func TestBuildWorkflowInputs_EmptyToolsOverridesPreset(t *testing.T) {
 		"tools": structpb.NewListValue(&structpb.ListValue{Values: []*structpb.Value{}}),
 	}
 
-	initialInputs := service.buildWorkflowInputs(
+	initialInputs := service.launcher().BuildWorkflowInputs(
 		context.Background(),
 		"user-1",
 		projectPath,
@@ -92,7 +93,7 @@ func TestBuildWorkflowInputs_EmptySpawnPresetsOverridesPreset(t *testing.T) {
 		"spawn_presets": structpb.NewListValue(&structpb.ListValue{Values: []*structpb.Value{}}),
 	}
 
-	initialInputs := service.buildWorkflowInputs(
+	initialInputs := service.launcher().BuildWorkflowInputs(
 		context.Background(),
 		"user-1",
 		projectPath,
@@ -119,7 +120,7 @@ func TestBuildWorkflowInputs_NonEmptyToolsStillOverridePreset(t *testing.T) {
 		}}),
 	}
 
-	initialInputs := service.buildWorkflowInputs(
+	initialInputs := service.launcher().BuildWorkflowInputs(
 		context.Background(),
 		"user-1",
 		projectPath,
@@ -140,7 +141,7 @@ func TestBuildWorkflowInputs_WorkflowBuilderPresetUsesProviderNeutralFlagshipMod
 	service := &ChatService{}
 	projectPath := t.TempDir()
 
-	initialInputs := service.buildWorkflowInputs(
+	initialInputs := service.launcher().BuildWorkflowInputs(
 		context.Background(),
 		"user-1",
 		projectPath,
@@ -176,7 +177,7 @@ func TestValidateWorkflowInputs_WorkflowBuilderModelThinkingShape(t *testing.T) 
 		},
 	}
 
-	require.Empty(t, service.validateWorkflowInputs(ctx, "builtin://agent", "project-1", validInputs))
+	require.Empty(t, service.launcher().ValidateWorkflowInputs(ctx, "user-1", "builtin://agent", "project-1", validInputs))
 
 	invalidInputs := map[string]interface{}{
 		"mode":           "auto",
@@ -186,7 +187,7 @@ func TestValidateWorkflowInputs_WorkflowBuilderModelThinkingShape(t *testing.T) 
 		},
 	}
 
-	validationErrors := service.validateWorkflowInputs(ctx, "builtin://agent", "project-1", invalidInputs)
+	validationErrors := service.launcher().ValidateWorkflowInputs(ctx, "user-1", "builtin://agent", "project-1", invalidInputs)
 	require.NotEmpty(t, validationErrors)
 	require.Contains(t, validationErrors[0].Error(), "unknown input(s): thinking_level")
 }
@@ -224,7 +225,7 @@ func TestBuildStateUpdateForActiveWorkflow_AppliesSelectedPresetAndEmptyToolOver
 		"tools": structpb.NewListValue(&structpb.ListValue{Values: []*structpb.Value{}}),
 	}
 
-	stateUpdate := service.buildStateUpdateForActiveWorkflow(
+	stateUpdate := service.launcher().BuildStateUpdateForActiveWorkflow(
 		ctx,
 		"user-1",
 		chat,
@@ -269,7 +270,7 @@ func TestBuildStateUpdateForActiveWorkflow_UsesNewPresetSelection(t *testing.T) 
 		SelectedPresets: map[string]string{"default": "general"},
 	}
 
-	stateUpdate := service.buildStateUpdateForActiveWorkflow(
+	stateUpdate := service.launcher().BuildStateUpdateForActiveWorkflow(
 		ctx,
 		"user-2",
 		chat,
@@ -320,7 +321,7 @@ func TestBuildStateUpdateForActiveWorkflow_AcceptsThinkingInModelSelector(t *tes
 		}}),
 	}
 
-	stateUpdate := service.buildStateUpdateForActiveWorkflow(
+	stateUpdate := service.launcher().BuildStateUpdateForActiveWorkflow(
 		ctx,
 		"user-3",
 		chat,
@@ -334,7 +335,7 @@ func TestBuildStateUpdateForActiveWorkflow_AcceptsThinkingInModelSelector(t *tes
 	require.True(t, ok)
 	require.Equal(t, "mock", modelMap["id"])
 	require.Equal(t, "high", modelMap["thinking_level"])
-	require.Empty(t, service.validateWorkflowInputs(ctx, "builtin://agent", "project-3", stateUpdate))
+	require.Empty(t, service.launcher().ValidateWorkflowInputs(ctx, "user-3", "builtin://agent", "project-3", stateUpdate))
 }
 
 func TestBuildWorkflowInputs_LoadsUserPresetToolsFromDatabase(t *testing.T) {
@@ -375,7 +376,7 @@ func TestBuildWorkflowInputs_LoadsUserPresetToolsFromDatabase(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	initialInputs := service.buildWorkflowInputs(
+	initialInputs := service.launcher().BuildWorkflowInputs(
 		ctx,
 		userID,
 		projectPath,
@@ -426,7 +427,7 @@ func TestNormalizeLegacyModelSelectorString(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotID, got := normalizeLegacyModelSelectorString(tt.raw)
+			gotID, got := launch.NormalizeLegacyModelSelectorString(tt.raw)
 			if tt.wantNil {
 				require.Nil(t, got)
 				require.Empty(t, gotID)
@@ -457,7 +458,7 @@ func TestNormalizeModelInputs_ConvertsLegacyModelProviderString(t *testing.T) {
 		}),
 	}
 
-	normalizeModelInputs(inputs, schemas)
+	launch.NormalizeModelInputs(inputs, schemas)
 
 	agent, ok := inputs["agent"].(map[string]interface{})
 	require.True(t, ok)
@@ -477,7 +478,7 @@ func TestBuildWorkflowInputs_EmptyNestedListsOverridePresetGroupValues(t *testin
 	})
 	require.NoError(t, err)
 
-	initialInputs := service.buildWorkflowInputs(
+	initialInputs := service.launcher().BuildWorkflowInputs(
 		context.Background(),
 		"user-1",
 		projectPath,
@@ -500,7 +501,7 @@ func TestValidateWorkflowParamStructure_AcceptsNestedKeys(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	err = validateWorkflowParamStructure(map[string]*structpb.Value{
+	err = launch.ValidateWorkflowParamStructure(map[string]*structpb.Value{
 		"agent": agentValue,
 	})
 	require.NoError(t, err)
@@ -532,7 +533,7 @@ func TestValidateWorkflowParamStructure_RejectsDottedKeys(t *testing.T) {
 
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
-			err := validateWorkflowParamStructure(testCase.params)
+			err := launch.ValidateWorkflowParamStructure(testCase.params)
 			require.Error(t, err)
 			require.Contains(t, err.Error(), testCase.expected)
 			require.Contains(t, err.Error(), "nested objects")
@@ -575,7 +576,7 @@ func TestBuildStateUpdateForActiveWorkflow_AcceptsNestedWorkflowParams(t *testin
 		"mode": structpb.NewStringValue("planning"),
 	}})
 
-	stateUpdate := service.buildStateUpdateForActiveWorkflow(
+	stateUpdate := service.launcher().BuildStateUpdateForActiveWorkflow(
 		ctx,
 		"user-nested-params",
 		chat,
@@ -594,7 +595,7 @@ func TestBuildWorkflowInputs_NormalizesBuiltinNestedLegacyModelSelector(t *testi
 	service := &ChatService{}
 	projectPath := t.TempDir()
 
-	initialInputs := service.buildWorkflowInputs(
+	initialInputs := service.launcher().BuildWorkflowInputs(
 		context.Background(),
 		"user-builtin-model-normalize",
 		projectPath,

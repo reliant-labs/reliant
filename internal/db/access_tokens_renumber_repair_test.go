@@ -65,12 +65,21 @@ func rewindToRenumberWindow(t *testing.T, raw *sql.DB) {
 	_, err := raw.Exec(`DROP TABLE IF EXISTS temporal_payload_blobs`)
 	require.NoError(t, err)
 
-	// 20260926000000_add_workflow_owner_user_id and
-	// 20260926000001_add_forge_project_name_to_projects.
+	// 20260926000000_add_workflow_owner_user_id,
+	// 20260926000001_add_forge_project_name_to_projects, and
+	// 20261003213733_add_triggers (trigger_events first — it references
+	// triggers).
 	for _, stmt := range []string{
 		`DROP INDEX IF EXISTS idx_workflows_owner_user_id`,
 		`ALTER TABLE workflows DROP COLUMN IF EXISTS owner_user_id`,
 		`ALTER TABLE projects DROP COLUMN IF EXISTS forge_project_name`,
+		`DROP TABLE IF EXISTS trigger_events`,
+		`DROP TABLE IF EXISTS triggers`,
+		// 20261003220140_chat_root_workflow_state needs no entry here: it is
+		// DROP VIEW IF EXISTS + CREATE VIEW, so re-running it against the
+		// already-rebuilt view succeeds. Only migrations whose SQL would FAIL
+		// on a second run — a plain ADD COLUMN or CREATE TABLE — have to be
+		// undone to keep the rewind from manufacturing a failure.
 	} {
 		_, err := raw.Exec(stmt)
 		require.NoError(t, err)

@@ -22,7 +22,7 @@ import (
 	"go.temporal.io/sdk/testsuite"
 )
 
-// titleInput is the input CreateChat sends.
+// titleInput is the input StartChat sends.
 func titleInput() map[string]interface{} {
 	return map[string]interface{}{
 		"chat_id":       "chat-123",

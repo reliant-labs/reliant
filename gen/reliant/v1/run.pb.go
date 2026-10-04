@@ -197,7 +197,7 @@ type StartRunRequest struct {
 	// Messages seeds the run's thread before it starts. Optional — a headless
 	// run needs none. When a session is supplied these are appended to it.
 	//
-	// This is how a caller supplies the "first message" that ChatService.CreateChat
+	// This is how a caller supplies the "first message" that ChatService.StartChat
 	// requires today, without the requirement.
 	Messages []*InputMessage `protobuf:"bytes,4,rep,name=messages,proto3" json:"messages,omitempty"`
 	// Presets selects preset bundles by tag, matching ChatService's

@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, type Chat } from "../api/client";
 import { queryClient } from "../lib/query-client";
-import type { CreateChatRequest, UpdateChatRequest } from "../types/api";
+import type { StartChatRequest, UpdateChatRequest } from "../types/api";
 
 // ── Query key factory ───────────────────────────────────────────────────────
 
@@ -195,10 +195,10 @@ export function useArchivedChats() {
 
 // ── Mutation hooks ──────────────────────────────────────────────────────────
 
-export function useCreateChat() {
+export function useStartChat() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (request: CreateChatRequest) => api.chatsV2.create(request),
+    mutationFn: (request: StartChatRequest) => api.chatsV2.start(request),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: chatKeys.lists() });
     },

@@ -361,6 +361,14 @@ var generatedToolParams = map[string]ToolParams{
 			"agent_id": "identifies one running sub-agent, which is chosen per call",
 		},
 	},
+	"spawn_stop": {
+		Bindable: map[string]struct{}{
+			"reason": {},
+		},
+		Unbindable: map[string]string{
+			"agent_id": "identifies one running sub-agent, which is chosen per call",
+		},
+	},
 	"update_plan": {
 		Bindable: map[string]struct{}{
 			"complexity":  {},

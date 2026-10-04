@@ -10,6 +10,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -165,7 +166,7 @@ func TestInjectSessionDaemonID(t *testing.T) {
 	t.Run("injects when set", func(t *testing.T) {
 		inputs := make(map[string]interface{})
 		chat := &db.Chat{ActiveDaemonID: &daemonID}
-		injectSessionDaemonID(inputs, chat)
+		launch.InjectSessionDaemonID(inputs, chat)
 		assert.Equal(t, daemonID, inputs["session_daemon_id"])
 
 		// The preview URL is deliberately NOT threaded through workflow inputs.
@@ -179,7 +180,7 @@ func TestInjectSessionDaemonID(t *testing.T) {
 	t.Run("skips when nil", func(t *testing.T) {
 		inputs := make(map[string]interface{})
 		chat := &db.Chat{ActiveDaemonID: nil}
-		injectSessionDaemonID(inputs, chat)
+		launch.InjectSessionDaemonID(inputs, chat)
 		_, exists := inputs["session_daemon_id"]
 		assert.False(t, exists)
 	})
@@ -188,14 +189,14 @@ func TestInjectSessionDaemonID(t *testing.T) {
 		inputs := make(map[string]interface{})
 		empty := ""
 		chat := &db.Chat{ActiveDaemonID: &empty}
-		injectSessionDaemonID(inputs, chat)
+		launch.InjectSessionDaemonID(inputs, chat)
 		_, exists := inputs["session_daemon_id"]
 		assert.False(t, exists)
 	})
 
 	t.Run("skips when chat is nil", func(t *testing.T) {
 		inputs := make(map[string]interface{})
-		injectSessionDaemonID(inputs, nil)
+		launch.InjectSessionDaemonID(inputs, nil)
 		_, exists := inputs["session_daemon_id"]
 		assert.False(t, exists)
 	})

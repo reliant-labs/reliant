@@ -291,8 +291,10 @@ func (r *NATSDaemonRouter) resolveViaControlPlane(ctx context.Context, userID st
 	// header every call here 401s, which is indistinguishable from "no
 	// control-plane client configured" and was why control-plane
 	// resolution silently never contributed a result.
+	bearer := ""
 	if jwt, ok := auth.GetUserJWT(userID); ok && jwt != "" {
-		connReq.Header().Set("Authorization", "Bearer "+jwt)
+		bearer = "Bearer " + jwt
+		connReq.Header().Set("Authorization", bearer)
 	}
 
 	resp, err := r.controlPlaneClient.ResolveDaemon(ctx, connReq)
@@ -328,9 +330,18 @@ func (r *NATSDaemonRouter) resolveViaControlPlane(ctx context.Context, userID st
 	// If daemon is suspended or idle, try to wake it up.
 	if daemon.Status == reliantv1.DaemonStatus_DAEMON_STATUS_IDLE ||
 		daemon.Status == reliantv1.DaemonStatus_DAEMON_STATUS_DISCONNECTED {
-		resumeResp, err := r.controlPlaneClient.ResumeDaemon(ctx, connect.NewRequest(&reliantv1.ResumeDaemonRequest{
+		// The same Bearer as the resolve above, for the same reason: the
+		// control plane's ResumeDaemon derives the owner from it, so a resume
+		// sent without one is rejected as unauthenticated. It was, every time
+		// — which made this whole branch dead code that reported "could not
+		// be resumed" for every suspended daemon.
+		resumeReq := connect.NewRequest(&reliantv1.ResumeDaemonRequest{
 			DaemonId: daemon.DaemonId,
-		}))
+		})
+		if bearer != "" {
+			resumeReq.Header().Set("Authorization", bearer)
+		}
+		resumeResp, err := r.controlPlaneClient.ResumeDaemon(ctx, resumeReq)
 		if err != nil {
 			return "", true, fmt.Errorf("control plane ResumeDaemon(%s): %w", daemon.DaemonId, err)
 		}

@@ -187,12 +187,18 @@ ORDER BY tc.requested_at ASC;
 -- crashes at runtime. tc.requested_at already carries "when was this spawn
 -- issued", so workflow_created_at is omitted rather than selected and left
 -- to crash the first time a caller lists mid-dispatch-race.
+--
+-- child_workflow_id is selected ALONGSIDE child_thread_id because for a
+-- resumed spawn they differ and both are needed: the thread is what a cancel
+-- signal names, while the workflow row id is what a status reconcile must
+-- CAS. Deriving either from the other is not possible — see spawn_stop.
 SELECT
     tc.id AS tool_call_id,
     tc.status AS tool_call_status,
     tc.input AS tool_input,
     tc.requested_at,
     tc.completed_at,
+    tc.child_workflow_id,
     w.thread AS child_thread_id,
     w.state AS workflow_state,
     w.stop_reason AS workflow_stop_reason,

@@ -1015,13 +1015,17 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 		// orchestrator actually configured to spawn children. A plain root
 		// agent has neither, so offering it there is pure tool-surface noise on
 		// every request.
+		//
+		// spawn_stop is narrower still: it only acts on a sub-agent the caller
+		// spawned, so it rides canSpawnChildren alone. A depth-1 sub-agent that
+		// cannot spawn has children to report to but none to stop.
 		canSpawnChildren := !spawnDisabled && len(model.CelStringListValue(tc.GetSpawn())) > 0
 		mailboxReachable := rtx.SpawnDepth > 0 || canSpawnChildren
 		// loadable_tools bounds what load_tool may reach, and declaring nothing
 		// means nothing: reaching the whole registry is spelled ["*"].
 		loadable := model.CelStringListValue(tc.GetLoadableTools())
 
-		toolsResult = a.getAvailableToolsWithSpawn(ctx, chat, workingDir, worktreeDaemonID, projectCfg, toolFilter, loadable, thread, mailboxReachable)
+		toolsResult = a.getAvailableToolsWithSpawn(ctx, chat, workingDir, worktreeDaemonID, projectCfg, toolFilter, loadable, thread, mailboxReachable, canSpawnChildren)
 		availableTools = toolsResult.Tools
 
 		// Emit warning to chat if MCP servers failed to load
@@ -1887,7 +1891,7 @@ func validateToolNamesForLLMRequest(availableTools []tools.Tool) error {
 // getAvailableToolsWithSpawn returns available tools and spawn configurations from the filter.
 // Spawn configs are extracted from spawn:workflow(presets) syntax in the filter.
 // Dynamically loaded tools (via load_tool) are automatically included.
-func (a *CallLLMActivity) getAvailableToolsWithSpawn(ctx context.Context, chat *db.Chat, scopePath string, worktreeDaemonID string, projectCfg *cfgpkg.Config, toolFilter []string, loadableFilter []string, thread string, mailboxReachable bool) toolsWithSpawnResult {
+func (a *CallLLMActivity) getAvailableToolsWithSpawn(ctx context.Context, chat *db.Chat, scopePath string, worktreeDaemonID string, projectCfg *cfgpkg.Config, toolFilter []string, loadableFilter []string, thread string, mailboxReachable bool, canSpawnChildren bool) toolsWithSpawnResult {
 	if a.toolsFactory == nil {
 		return toolsWithSpawnResult{}
 	}
@@ -2002,7 +2006,7 @@ func (a *CallLLMActivity) getAvailableToolsWithSpawn(ctx context.Context, chat *
 	if chat != nil {
 		scoped := access
 		if !scoped.LoadableAll {
-			scoped.Loadable = append(scoped.Loadable, tools.ToolLoadTool, tools.ToolSpawnSend)
+			scoped.Loadable = append(scoped.Loadable, tools.ToolLoadTool, tools.ToolSpawnSend, tools.ToolSpawnStop)
 		}
 		tools.GetLoadedToolsStore().SetToolAccess(tools.Scope(chat.ID, thread), scoped)
 	}
@@ -2131,6 +2135,29 @@ func (a *CallLLMActivity) getAvailableToolsWithSpawn(ctx context.Context, chat *
 		}
 	}
 
+	// spawn_stop travels with the "spawn" virtual tool for the same reason
+	// spawn_send travels with the mailbox: it is granted here rather than
+	// through a preset's tool filter, because a preset author configuring
+	// children was never asked to also remember the tool that stops them.
+	//
+	// Gated on canSpawnChildren rather than mailboxReachable, which is a
+	// strictly tighter condition: spawn_stop refuses anything that is not the
+	// caller's own direct child, so an agent that cannot spawn has nothing it
+	// could ever legally name. Offering it there would be a schema the model
+	// can only misuse.
+	if canSpawnChildren {
+		spawnStopPresent := false
+		for _, t := range toolsList {
+			if t.Name() == tools.ToolSpawnStop {
+				spawnStopPresent = true
+				break
+			}
+		}
+		if !spawnStopPresent {
+			toolsList = append(toolsList, projectScopedToolsFactory.SpawnStop())
+		}
+	}
+
 	sort.Slice(toolsList, func(i, j int) bool {
 		return toolsList[i].Name() < toolsList[j].Name()
 	})
@@ -2215,7 +2242,7 @@ func (a *CallLLMActivity) getSpawnTool(ctx context.Context, projectID string, co
 
 KEEP ABOUT 6 SUB-AGENTS OUTSTANDING AT ONCE. Past that the provider starts throttling, and a throttled agent's requests queue behind rate limits — so the 7th does not run alongside the first six, it makes all seven slower. Observed: an 11-agent fan-out hit throttling and was slower than the same work would have been six at a time. More than six units of work is fine and often right; hold the extras as a QUEUE instead of a wider wave — spawn six, then spawn the next one each time one finishes. Do not merge units to get under six: an oversized unit sets the floor for the whole wave, which is worse than a queued one.
 
-While a spawned agent runs you can steer and observe it: spawn_status(agent_id, wait: true) to block until it finishes when you genuinely cannot proceed without the answer, or without wait to just check progress; spawn_send to give it new instructions mid-flight. spawn_status with no agent_id lists your children and their states, which is how you count what is outstanding before spawning more.
+While a spawned agent runs you can steer, observe and stop it: spawn_status(agent_id, wait: true) to block until it finishes when you genuinely cannot proceed without the answer, or without wait to just check progress; spawn_send to give it new instructions mid-flight; spawn_stop(agent_id) to abandon work you no longer need — note that the stop takes effect at that agent's next step boundary, so confirm it with spawn_status(agent_id, wait: true) rather than assuming. Prefer spawn_send to REDIRECT an agent whose work is still useful; stopping discards whatever it has not reported. spawn_status with no agent_id lists your children and their states, which is how you count what is outstanding before spawning more.
 
 Available presets:
 %s

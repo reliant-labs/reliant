@@ -1360,7 +1360,7 @@ func (x *Attachment) GetUrl() string {
 	return ""
 }
 
-// InputMessage represents a message in a request (for CreateChat/SendMessage)
+// InputMessage represents a message in a request (for StartChat/SendMessage)
 // Supports user and system messages.
 type InputMessage struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -1422,38 +1422,45 @@ func (x *InputMessage) GetDisplayStyle() DisplayStyle {
 	return DisplayStyle_DISPLAY_STYLE_UNSPECIFIED
 }
 
-// CreateChatRequest creates a new chat
-type CreateChatRequest struct {
+// StartChatRequest starts a chat's root run.
+type StartChatRequest struct {
 	state           protoimpl.MessageState     `protogen:"open.v1"`
 	ProjectId       string                     `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
 	Title           *string                    `protobuf:"bytes,3,opt,name=title,proto3,oneof" json:"title,omitempty"`
 	WorktreeId      *string                    `protobuf:"bytes,4,opt,name=worktree_id,json=worktreeId,proto3,oneof" json:"worktree_id,omitempty"`
-	Workflow        string                     `protobuf:"bytes,6,opt,name=workflow,proto3" json:"workflow,omitempty"` // Workflow name (optional - defaults to user preference or builtin://agent)
-	Temperature     *float64                   `protobuf:"fixed64,8,opt,name=temperature,proto3,oneof" json:"temperature,omitempty"`
-	MaxTokens       *int32                     `protobuf:"varint,9,opt,name=max_tokens,json=maxTokens,proto3,oneof" json:"max_tokens,omitempty"`
+	Workflow        string                     `protobuf:"bytes,6,opt,name=workflow,proto3" json:"workflow,omitempty"`                                                                                                                 // Workflow name (optional - defaults to user preference or builtin://agent)
 	Attachments     []string                   `protobuf:"bytes,12,rep,name=attachments,proto3" json:"attachments,omitempty"`                                                                                                          // Attachment IDs
 	WorkflowParams  map[string]*structpb.Value `protobuf:"bytes,13,rep,name=workflow_params,json=workflowParams,proto3" json:"workflow_params,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`    // Workflow input parameters
-	Mode            *string                    `protobuf:"bytes,14,opt,name=mode,proto3,oneof" json:"mode,omitempty"`                                                                                                                  // Execution mode
+	Mode            *string                    `protobuf:"bytes,14,opt,name=mode,proto3,oneof" json:"mode,omitempty"`                                                                                                                  // Execution mode; becomes workflow_params.mode
 	SelectedPresets map[string]string          `protobuf:"bytes,15,rep,name=selected_presets,json=selectedPresets,proto3" json:"selected_presets,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"` // Preset selections per target ("" = workflow-level, "Agent A" = group)
 	Messages        []*InputMessage            `protobuf:"bytes,16,rep,name=messages,proto3" json:"messages,omitempty"`                                                                                                                // Messages to send (user and system). At least one user message required.
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// chat_id names an existing PENDING chat to start — a branched chat's first
+	// send. Unset creates a new chat.
+	//
+	// When set, project_id and worktree_id must be empty or match the chat's own,
+	// because the chat already decided where it runs. workflow MAY differ from
+	// the chat's: a pending chat has produced nothing yet, so switching it is
+	// still free. That is the one and only workflow switch the system allows, and
+	// it is why SendMessage no longer has a switch branch.
+	ChatId        *string `protobuf:"bytes,17,opt,name=chat_id,json=chatId,proto3,oneof" json:"chat_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
-func (x *CreateChatRequest) Reset() {
-	*x = CreateChatRequest{}
+func (x *StartChatRequest) Reset() {
+	*x = StartChatRequest{}
 	mi := &file_reliant_v1_chat_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *CreateChatRequest) String() string {
+func (x *StartChatRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*CreateChatRequest) ProtoMessage() {}
+func (*StartChatRequest) ProtoMessage() {}
 
-func (x *CreateChatRequest) ProtoReflect() protoreflect.Message {
+func (x *StartChatRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_reliant_v1_chat_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -1465,113 +1472,105 @@ func (x *CreateChatRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use CreateChatRequest.ProtoReflect.Descriptor instead.
-func (*CreateChatRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use StartChatRequest.ProtoReflect.Descriptor instead.
+func (*StartChatRequest) Descriptor() ([]byte, []int) {
 	return file_reliant_v1_chat_proto_rawDescGZIP(), []int{7}
 }
 
-func (x *CreateChatRequest) GetProjectId() string {
+func (x *StartChatRequest) GetProjectId() string {
 	if x != nil {
 		return x.ProjectId
 	}
 	return ""
 }
 
-func (x *CreateChatRequest) GetTitle() string {
+func (x *StartChatRequest) GetTitle() string {
 	if x != nil && x.Title != nil {
 		return *x.Title
 	}
 	return ""
 }
 
-func (x *CreateChatRequest) GetWorktreeId() string {
+func (x *StartChatRequest) GetWorktreeId() string {
 	if x != nil && x.WorktreeId != nil {
 		return *x.WorktreeId
 	}
 	return ""
 }
 
-func (x *CreateChatRequest) GetWorkflow() string {
+func (x *StartChatRequest) GetWorkflow() string {
 	if x != nil {
 		return x.Workflow
 	}
 	return ""
 }
 
-func (x *CreateChatRequest) GetTemperature() float64 {
-	if x != nil && x.Temperature != nil {
-		return *x.Temperature
-	}
-	return 0
-}
-
-func (x *CreateChatRequest) GetMaxTokens() int32 {
-	if x != nil && x.MaxTokens != nil {
-		return *x.MaxTokens
-	}
-	return 0
-}
-
-func (x *CreateChatRequest) GetAttachments() []string {
+func (x *StartChatRequest) GetAttachments() []string {
 	if x != nil {
 		return x.Attachments
 	}
 	return nil
 }
 
-func (x *CreateChatRequest) GetWorkflowParams() map[string]*structpb.Value {
+func (x *StartChatRequest) GetWorkflowParams() map[string]*structpb.Value {
 	if x != nil {
 		return x.WorkflowParams
 	}
 	return nil
 }
 
-func (x *CreateChatRequest) GetMode() string {
+func (x *StartChatRequest) GetMode() string {
 	if x != nil && x.Mode != nil {
 		return *x.Mode
 	}
 	return ""
 }
 
-func (x *CreateChatRequest) GetSelectedPresets() map[string]string {
+func (x *StartChatRequest) GetSelectedPresets() map[string]string {
 	if x != nil {
 		return x.SelectedPresets
 	}
 	return nil
 }
 
-func (x *CreateChatRequest) GetMessages() []*InputMessage {
+func (x *StartChatRequest) GetMessages() []*InputMessage {
 	if x != nil {
 		return x.Messages
 	}
 	return nil
 }
 
-// CreateChatResponse returns the created chat
-type CreateChatResponse struct {
+func (x *StartChatRequest) GetChatId() string {
+	if x != nil && x.ChatId != nil {
+		return *x.ChatId
+	}
+	return ""
+}
+
+// StartChatResponse returns the started chat and the ids of its root run.
+type StartChatResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Chat          *Chat                  `protobuf:"bytes,1,opt,name=chat,proto3" json:"chat,omitempty"`
 	WorkflowId    string                 `protobuf:"bytes,2,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`
 	RunId         string                 `protobuf:"bytes,3,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
-	DraftId       *string                `protobuf:"bytes,4,opt,name=draft_id,json=draftId,proto3,oneof" json:"draft_id,omitempty"` // Draft ID for workflow builder chats (when a new draft was created)
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *CreateChatResponse) Reset() {
-	*x = CreateChatResponse{}
+func (x *StartChatResponse) Reset() {
+	*x = StartChatResponse{}
 	mi := &file_reliant_v1_chat_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *CreateChatResponse) String() string {
+func (x *StartChatResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*CreateChatResponse) ProtoMessage() {}
+func (*StartChatResponse) ProtoMessage() {}
 
-func (x *CreateChatResponse) ProtoReflect() protoreflect.Message {
+func (x *StartChatResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_reliant_v1_chat_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -1583,35 +1582,28 @@ func (x *CreateChatResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use CreateChatResponse.ProtoReflect.Descriptor instead.
-func (*CreateChatResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use StartChatResponse.ProtoReflect.Descriptor instead.
+func (*StartChatResponse) Descriptor() ([]byte, []int) {
 	return file_reliant_v1_chat_proto_rawDescGZIP(), []int{8}
 }
 
-func (x *CreateChatResponse) GetChat() *Chat {
+func (x *StartChatResponse) GetChat() *Chat {
 	if x != nil {
 		return x.Chat
 	}
 	return nil
 }
 
-func (x *CreateChatResponse) GetWorkflowId() string {
+func (x *StartChatResponse) GetWorkflowId() string {
 	if x != nil {
 		return x.WorkflowId
 	}
 	return ""
 }
 
-func (x *CreateChatResponse) GetRunId() string {
+func (x *StartChatResponse) GetRunId() string {
 	if x != nil {
 		return x.RunId
-	}
-	return ""
-}
-
-func (x *CreateChatResponse) GetDraftId() string {
-	if x != nil && x.DraftId != nil {
-		return *x.DraftId
 	}
 	return ""
 }
@@ -5582,22 +5574,20 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\x04role\x18\x01 \x01(\x0e2\x17.reliant.v1.MessageRoleR\x04role\x12\x18\n" +
 	"\acontent\x18\x02 \x01(\tR\acontent\x12B\n" +
 	"\rdisplay_style\x18\x03 \x01(\x0e2\x18.reliant.v1.DisplayStyleH\x00R\fdisplayStyle\x88\x01\x01B\x10\n" +
-	"\x0e_display_style\"\x85\x06\n" +
-	"\x11CreateChatRequest\x12\x1d\n" +
+	"\x0e_display_style\"\xce\x05\n" +
+	"\x10StartChatRequest\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x19\n" +
 	"\x05title\x18\x03 \x01(\tH\x00R\x05title\x88\x01\x01\x12$\n" +
 	"\vworktree_id\x18\x04 \x01(\tH\x01R\n" +
 	"worktreeId\x88\x01\x01\x12\x1a\n" +
-	"\bworkflow\x18\x06 \x01(\tR\bworkflow\x12%\n" +
-	"\vtemperature\x18\b \x01(\x01H\x02R\vtemperature\x88\x01\x01\x12\"\n" +
-	"\n" +
-	"max_tokens\x18\t \x01(\x05H\x03R\tmaxTokens\x88\x01\x01\x12 \n" +
-	"\vattachments\x18\f \x03(\tR\vattachments\x12Z\n" +
-	"\x0fworkflow_params\x18\r \x03(\v21.reliant.v1.CreateChatRequest.WorkflowParamsEntryR\x0eworkflowParams\x12\x17\n" +
-	"\x04mode\x18\x0e \x01(\tH\x04R\x04mode\x88\x01\x01\x12]\n" +
-	"\x10selected_presets\x18\x0f \x03(\v22.reliant.v1.CreateChatRequest.SelectedPresetsEntryR\x0fselectedPresets\x124\n" +
-	"\bmessages\x18\x10 \x03(\v2\x18.reliant.v1.InputMessageR\bmessages\x1aY\n" +
+	"\bworkflow\x18\x06 \x01(\tR\bworkflow\x12 \n" +
+	"\vattachments\x18\f \x03(\tR\vattachments\x12Y\n" +
+	"\x0fworkflow_params\x18\r \x03(\v20.reliant.v1.StartChatRequest.WorkflowParamsEntryR\x0eworkflowParams\x12\x17\n" +
+	"\x04mode\x18\x0e \x01(\tH\x02R\x04mode\x88\x01\x01\x12\\\n" +
+	"\x10selected_presets\x18\x0f \x03(\v21.reliant.v1.StartChatRequest.SelectedPresetsEntryR\x0fselectedPresets\x124\n" +
+	"\bmessages\x18\x10 \x03(\v2\x18.reliant.v1.InputMessageR\bmessages\x12\x1c\n" +
+	"\achat_id\x18\x11 \x01(\tH\x03R\x06chatId\x88\x01\x01\x1aY\n" +
 	"\x13WorkflowParamsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12,\n" +
 	"\x05value\x18\x02 \x01(\v2\x16.google.protobuf.ValueR\x05value:\x028\x01\x1aB\n" +
@@ -5605,18 +5595,17 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\b\n" +
 	"\x06_titleB\x0e\n" +
-	"\f_worktree_idB\x0e\n" +
-	"\f_temperatureB\r\n" +
-	"\v_max_tokensB\a\n" +
-	"\x05_modeJ\x04\b\x02\x10\x03J\x04\b\x05\x10\x06J\x04\b\a\x10\bJ\x04\b\n" +
-	"\x10\vJ\x04\b\v\x10\f\"\x9f\x01\n" +
-	"\x12CreateChatResponse\x12$\n" +
+	"\f_worktree_idB\a\n" +
+	"\x05_modeB\n" +
+	"\n" +
+	"\b_chat_idJ\x04\b\x02\x10\x03J\x04\b\x05\x10\x06J\x04\b\a\x10\bJ\x04\b\b\x10\tJ\x04\b\t\x10\n" +
+	"J\x04\b\n" +
+	"\x10\vJ\x04\b\v\x10\f\"w\n" +
+	"\x11StartChatResponse\x12$\n" +
 	"\x04chat\x18\x01 \x01(\v2\x10.reliant.v1.ChatR\x04chat\x12\x1f\n" +
 	"\vworkflow_id\x18\x02 \x01(\tR\n" +
 	"workflowId\x12\x15\n" +
-	"\x06run_id\x18\x03 \x01(\tR\x05runId\x12\x1e\n" +
-	"\bdraft_id\x18\x04 \x01(\tH\x00R\adraftId\x88\x01\x01B\v\n" +
-	"\t_draft_id\"V\n" +
+	"\x06run_id\x18\x03 \x01(\tR\x05runIdJ\x04\b\x04\x10\x05\"V\n" +
 	"\x10ListChatsRequest\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x19\n" +
@@ -6017,10 +6006,9 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\fRecoveryType\x12\x1d\n" +
 	"\x19RECOVERY_TYPE_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15RECOVERY_TYPE_RESUMED\x10\x01\x12\x1f\n" +
-	"\x1bRECOVERY_TYPE_WORKFLOW_LOST\x10\x022\xe9\x13\n" +
-	"\vChatService\x12M\n" +
-	"\n" +
-	"CreateChat\x12\x1d.reliant.v1.CreateChatRequest\x1a\x1e.reliant.v1.CreateChatResponse\"\x00\x12J\n" +
+	"\x1bRECOVERY_TYPE_WORKFLOW_LOST\x10\x022\xe6\x13\n" +
+	"\vChatService\x12J\n" +
+	"\tStartChat\x12\x1c.reliant.v1.StartChatRequest\x1a\x1d.reliant.v1.StartChatResponse\"\x00\x12J\n" +
 	"\tListChats\x12\x1c.reliant.v1.ListChatsRequest\x1a\x1d.reliant.v1.ListChatsResponse\"\x00\x12D\n" +
 	"\aGetChat\x12\x1a.reliant.v1.GetChatRequest\x1a\x1b.reliant.v1.GetChatResponse\"\x00\x12M\n" +
 	"\n" +
@@ -6085,8 +6073,8 @@ var file_reliant_v1_chat_proto_goTypes = []any{
 	(*MatchedToolResult)(nil),                // 14: reliant.v1.MatchedToolResult
 	(*Attachment)(nil),                       // 15: reliant.v1.Attachment
 	(*InputMessage)(nil),                     // 16: reliant.v1.InputMessage
-	(*CreateChatRequest)(nil),                // 17: reliant.v1.CreateChatRequest
-	(*CreateChatResponse)(nil),               // 18: reliant.v1.CreateChatResponse
+	(*StartChatRequest)(nil),                 // 17: reliant.v1.StartChatRequest
+	(*StartChatResponse)(nil),                // 18: reliant.v1.StartChatResponse
 	(*ListChatsRequest)(nil),                 // 19: reliant.v1.ListChatsRequest
 	(*ListChatsResponse)(nil),                // 20: reliant.v1.ListChatsResponse
 	(*GetChatRequest)(nil),                   // 21: reliant.v1.GetChatRequest
@@ -6149,8 +6137,8 @@ var file_reliant_v1_chat_proto_goTypes = []any{
 	(*SetChatDaemonRequest)(nil),             // 78: reliant.v1.SetChatDaemonRequest
 	(*SetChatDaemonResponse)(nil),            // 79: reliant.v1.SetChatDaemonResponse
 	nil,                                      // 80: reliant.v1.Chat.SelectedPresetsEntry
-	nil,                                      // 81: reliant.v1.CreateChatRequest.WorkflowParamsEntry
-	nil,                                      // 82: reliant.v1.CreateChatRequest.SelectedPresetsEntry
+	nil,                                      // 81: reliant.v1.StartChatRequest.WorkflowParamsEntry
+	nil,                                      // 82: reliant.v1.StartChatRequest.SelectedPresetsEntry
 	nil,                                      // 83: reliant.v1.SendMessageRequest.WorkflowParamsEntry
 	nil,                                      // 84: reliant.v1.SendMessageRequest.SelectedPresetsEntry
 	nil,                                      // 85: reliant.v1.UpdateWorkflowParamsRequest.ParamsEntry
@@ -6175,10 +6163,10 @@ var file_reliant_v1_chat_proto_depIdxs = []int32{
 	8,  // 13: reliant.v1.ContentBlock.tool_call_status:type_name -> reliant.v1.ToolCallStatus
 	3,  // 14: reliant.v1.InputMessage.role:type_name -> reliant.v1.MessageRole
 	5,  // 15: reliant.v1.InputMessage.display_style:type_name -> reliant.v1.DisplayStyle
-	81, // 16: reliant.v1.CreateChatRequest.workflow_params:type_name -> reliant.v1.CreateChatRequest.WorkflowParamsEntry
-	82, // 17: reliant.v1.CreateChatRequest.selected_presets:type_name -> reliant.v1.CreateChatRequest.SelectedPresetsEntry
-	16, // 18: reliant.v1.CreateChatRequest.messages:type_name -> reliant.v1.InputMessage
-	10, // 19: reliant.v1.CreateChatResponse.chat:type_name -> reliant.v1.Chat
+	81, // 16: reliant.v1.StartChatRequest.workflow_params:type_name -> reliant.v1.StartChatRequest.WorkflowParamsEntry
+	82, // 17: reliant.v1.StartChatRequest.selected_presets:type_name -> reliant.v1.StartChatRequest.SelectedPresetsEntry
+	16, // 18: reliant.v1.StartChatRequest.messages:type_name -> reliant.v1.InputMessage
+	10, // 19: reliant.v1.StartChatResponse.chat:type_name -> reliant.v1.Chat
 	10, // 20: reliant.v1.ListChatsResponse.chats:type_name -> reliant.v1.Chat
 	10, // 21: reliant.v1.GetChatResponse.chat:type_name -> reliant.v1.Chat
 	10, // 22: reliant.v1.UpdateChatResponse.chat:type_name -> reliant.v1.Chat
@@ -6210,11 +6198,11 @@ var file_reliant_v1_chat_proto_depIdxs = []int32{
 	73, // 48: reliant.v1.GetWorkflowExecutionsResponse.root_workflow:type_name -> reliant.v1.WorkflowExecution
 	73, // 49: reliant.v1.GetWorkflowExecutionsResponse.all_root_workflows:type_name -> reliant.v1.WorkflowExecution
 	10, // 50: reliant.v1.SetChatDaemonResponse.chat:type_name -> reliant.v1.Chat
-	88, // 51: reliant.v1.CreateChatRequest.WorkflowParamsEntry.value:type_name -> google.protobuf.Value
+	88, // 51: reliant.v1.StartChatRequest.WorkflowParamsEntry.value:type_name -> google.protobuf.Value
 	88, // 52: reliant.v1.SendMessageRequest.WorkflowParamsEntry.value:type_name -> google.protobuf.Value
 	88, // 53: reliant.v1.UpdateWorkflowParamsRequest.ParamsEntry.value:type_name -> google.protobuf.Value
 	88, // 54: reliant.v1.GetThreadWorkflowInputsResponse.InputsEntry.value:type_name -> google.protobuf.Value
-	17, // 55: reliant.v1.ChatService.CreateChat:input_type -> reliant.v1.CreateChatRequest
+	17, // 55: reliant.v1.ChatService.StartChat:input_type -> reliant.v1.StartChatRequest
 	19, // 56: reliant.v1.ChatService.ListChats:input_type -> reliant.v1.ListChatsRequest
 	21, // 57: reliant.v1.ChatService.GetChat:input_type -> reliant.v1.GetChatRequest
 	23, // 58: reliant.v1.ChatService.UpdateChat:input_type -> reliant.v1.UpdateChatRequest
@@ -6242,7 +6230,7 @@ var file_reliant_v1_chat_proto_depIdxs = []int32{
 	76, // 80: reliant.v1.ChatService.GetWorkflowExecutions:input_type -> reliant.v1.GetWorkflowExecutionsRequest
 	74, // 81: reliant.v1.ChatService.GetThreadWorkflowInputs:input_type -> reliant.v1.GetThreadWorkflowInputsRequest
 	78, // 82: reliant.v1.ChatService.SetChatDaemon:input_type -> reliant.v1.SetChatDaemonRequest
-	18, // 83: reliant.v1.ChatService.CreateChat:output_type -> reliant.v1.CreateChatResponse
+	18, // 83: reliant.v1.ChatService.StartChat:output_type -> reliant.v1.StartChatResponse
 	20, // 84: reliant.v1.ChatService.ListChats:output_type -> reliant.v1.ListChatsResponse
 	22, // 85: reliant.v1.ChatService.GetChat:output_type -> reliant.v1.GetChatResponse
 	24, // 86: reliant.v1.ChatService.UpdateChat:output_type -> reliant.v1.UpdateChatResponse
@@ -6290,7 +6278,6 @@ func file_reliant_v1_chat_proto_init() {
 	file_reliant_v1_chat_proto_msgTypes[4].OneofWrappers = []any{}
 	file_reliant_v1_chat_proto_msgTypes[6].OneofWrappers = []any{}
 	file_reliant_v1_chat_proto_msgTypes[7].OneofWrappers = []any{}
-	file_reliant_v1_chat_proto_msgTypes[8].OneofWrappers = []any{}
 	file_reliant_v1_chat_proto_msgTypes[9].OneofWrappers = []any{}
 	file_reliant_v1_chat_proto_msgTypes[13].OneofWrappers = []any{}
 	file_reliant_v1_chat_proto_msgTypes[17].OneofWrappers = []any{}

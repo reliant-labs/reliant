@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package launch
 
 import (
 	"context"
@@ -75,14 +75,14 @@ type codePresenceResult struct {
 	Error       string   `json:"error"`
 }
 
-// maybeGreenfieldGuidance returns a hidden system message when an EXISTING
+// MaybeGreenfieldGuidance returns a hidden system message when an EXISTING
 // chat's next send is still its first turn, or nil otherwise.
 //
-// Used from the SendMessage fresh-start path. CreateChat has its own entry
-// point below: there the chat row does not exist yet, so counting its messages
-// would be both meaningless and a wasted query.
-func (s *ChatService) maybeGreenfieldGuidance(ctx context.Context, userID string, chat *db.Chat) *reliantv1.InputMessage {
-	if s == nil || s.daemonRouter == nil || chat == nil {
+// Used from the SendMessage fresh-start path. Launch has its own entry point
+// below: there the chat row does not exist yet, so counting its messages would
+// be both meaningless and a wasted query.
+func (l *Launcher) MaybeGreenfieldGuidance(ctx context.Context, userID string, chat *db.Chat) *SeedMessage {
+	if l == nil || l.prober == nil || chat == nil {
 		return nil
 	}
 
@@ -90,7 +90,7 @@ func (s *ChatService) maybeGreenfieldGuidance(ctx context.Context, userID string
 	// a conversation that is already underway — and on later turns the model
 	// has the user's own words about the stack, which are better evidence
 	// than a directory listing.
-	count, err := s.database.CountMessagesInChat(ctx, chat.ID)
+	count, err := l.repo.CountMessagesInChat(ctx, chat.ID)
 	if err != nil {
 		logging.Warn("Greenfield probe: could not count chat messages; skipping",
 			"error", err, "chatID", chat.ID)
@@ -100,29 +100,29 @@ func (s *ChatService) maybeGreenfieldGuidance(ctx context.Context, userID string
 		return nil
 	}
 
-	return s.greenfieldGuidanceForChat(ctx, userID, chat)
+	return l.GreenfieldGuidanceForChat(ctx, userID, chat)
 }
 
-// greenfieldGuidanceForChat probes the chat's working directory and builds the
+// GreenfieldGuidanceForChat probes the chat's working directory and builds the
 // guidance when it holds no code. The caller is responsible for having
-// established that this is the chat's first turn — CreateChat knows that by
+// established that this is the chat's first turn — Launch knows that by
 // construction, SendMessage has to count.
 //
 // Every failure returns nil. A missing daemon, a timeout, a malformed response,
 // a project whose path cannot be resolved — none of them are worth failing a
 // user's message over, and the cost of skipping is that one chat does not get
 // a stack suggestion.
-func (s *ChatService) greenfieldGuidanceForChat(ctx context.Context, userID string, chat *db.Chat) *reliantv1.InputMessage {
-	if s == nil || s.daemonRouter == nil || chat == nil {
+func (l *Launcher) GreenfieldGuidanceForChat(ctx context.Context, userID string, chat *db.Chat) *SeedMessage {
+	if l == nil || l.prober == nil || chat == nil {
 		return nil
 	}
 
-	projectPath := s.getEffectiveWorkingPath(ctx, chat)
+	projectPath := l.GetEffectiveWorkingPath(ctx, chat)
 	if strings.TrimSpace(projectPath) == "" {
 		return nil
 	}
 
-	presence, err := s.probeCodePresence(ctx, userID, projectPath)
+	presence, err := l.probeCodePresence(ctx, userID, projectPath)
 	if err != nil {
 		// An offline daemon is the common case here (onboarding races daemon
 		// provisioning), not an anomaly. Debug, not Warn.
@@ -134,21 +134,21 @@ func (s *ChatService) greenfieldGuidanceForChat(ctx context.Context, userID stri
 		return nil
 	}
 
-	return &reliantv1.InputMessage{
+	return &SeedMessage{
 		Role:         reliantv1.MessageRole_MESSAGE_ROLE_SYSTEM,
-		Content:      buildGreenfieldGuidance(presence.ConfigFiles),
+		Content:      BuildGreenfieldGuidance(presence.ConfigFiles),
 		DisplayStyle: reliantv1.DisplayStyle_DISPLAY_STYLE_HIDDEN.Enum(),
 	}
 }
 
 // probeCodePresence asks the daemon whether the project directory holds code.
-func (s *ChatService) probeCodePresence(ctx context.Context, userID, projectPath string) (*codePresenceResult, error) {
+func (l *Launcher) probeCodePresence(ctx context.Context, userID, projectPath string) (*codePresenceResult, error) {
 	payload, err := json.Marshal(map[string]string{"path": projectPath})
 	if err != nil {
 		return nil, fmt.Errorf("marshal payload: %w", err)
 	}
 
-	respBytes, err := s.daemonRouter.SendDaemonCommand(ctx, userID, "project.code_presence", payload, greenfieldProbeTimeoutMs)
+	respBytes, err := l.prober.SendDaemonCommand(ctx, userID, "project.code_presence", payload, greenfieldProbeTimeoutMs)
 	if err != nil {
 		return nil, fmt.Errorf("daemon command project.code_presence: %w", err)
 	}
@@ -163,11 +163,11 @@ func (s *ChatService) probeCodePresence(ctx context.Context, userID, projectPath
 	return &result, nil
 }
 
-// buildGreenfieldGuidance renders the injected message. configFiles are the
+// BuildGreenfieldGuidance renders the injected message. configFiles are the
 // non-code files the scan found that may still name a stack; when present the
 // model is told to read them before recommending anything, because "no code"
 // and "no stack opinion" are different facts.
-func buildGreenfieldGuidance(configFiles []string) string {
+func BuildGreenfieldGuidance(configFiles []string) string {
 	var b strings.Builder
 
 	b.WriteString("<greenfield_stack_guidance>\n")

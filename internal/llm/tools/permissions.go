@@ -121,11 +121,13 @@ func InitialToolsForPermission(permission string) []string {
 func MinimumPermissionForTool(toolName string) string {
 	// Explicit orchestrator-only tools.
 	//
-	// spawn_status is deliberately NOT here. An agent that already holds a
-	// handle to a sub-agent it spawned needs no extra privilege to look at
-	// that sub-agent or talk to it, and gating it above the tier a sub-agent
-	// actually runs at only produced a warning on a tool the model was
-	// correctly reaching for.
+	// spawn_status, spawn_send and spawn_stop are deliberately NOT here. An
+	// agent that already holds a handle to a sub-agent it spawned needs no
+	// extra privilege to look at that sub-agent, talk to it, or stop it, and
+	// gating them above the tier a sub-agent actually runs at only produced a
+	// warning on a tool the model was correctly reaching for. spawn_stop in
+	// particular has to work at depth 1: a spawning agent is itself a child,
+	// so an orchestrator gate would mean nobody could stop their own children.
 	if toolName == "spawn" || toolName == ToolAgent {
 		return PermissionOrchestrator
 	}

@@ -11,7 +11,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 
-const createChat = vi.fn()
+const startChat = vi.fn()
 const selectChat = vi.fn()
 const navigate = vi.fn()
 
@@ -28,7 +28,7 @@ vi.mock('@tanstack/react-router', () => ({
 
 vi.mock('../../../store/chatStore', () => ({
   useChatStore: Object.assign(vi.fn(), {
-    getState: () => ({ createChat, selectChat }),
+    getState: () => ({ startChat, selectChat }),
   }),
 }))
 
@@ -71,8 +71,8 @@ vi.mock('../../../lib/analytics', () => ({ trackEvent: vi.fn() }))
 const { MobileNewChat } = await import('../MobileNewChat')
 
 beforeEach(() => {
-  createChat.mockReset()
-  createChat.mockResolvedValue({ id: 'chat-9' })
+  startChat.mockReset()
+  startChat.mockResolvedValue({ id: 'chat-9' })
   selectChat.mockReset()
   navigate.mockReset()
 })
@@ -94,9 +94,9 @@ describe('MobileNewChat', () => {
     await userEvent.type(screen.getByLabelText('Message'), 'ship it')
     await userEvent.click(screen.getByLabelText('Send'))
 
-    await waitFor(() => expect(createChat).toHaveBeenCalled())
+    await waitFor(() => expect(startChat).toHaveBeenCalled())
     const [worktreeId, content, attachments, params, workflow] =
-      createChat.mock.calls[0]
+      startChat.mock.calls[0]
     expect(worktreeId).toBe('wt-main')
     expect(content).toBe('ship it')
     // Attachments and workflow params are out of scope on this surface —
@@ -123,8 +123,8 @@ describe('MobileNewChat', () => {
     await userEvent.type(screen.getByLabelText('Message'), 'hello')
     await userEvent.click(screen.getByLabelText('Send'))
 
-    await waitFor(() => expect(createChat).toHaveBeenCalled())
-    expect(createChat.mock.calls[0][4]).toBe('builtin://agent')
+    await waitFor(() => expect(startChat).toHaveBeenCalled())
+    expect(startChat.mock.calls[0][4]).toBe('builtin://agent')
   })
 
   it('will not send an empty message', async () => {
@@ -133,11 +133,11 @@ describe('MobileNewChat', () => {
 
     await userEvent.type(screen.getByLabelText('Message'), '   ')
     expect(screen.getByLabelText('Send')).toBeDisabled()
-    expect(createChat).not.toHaveBeenCalled()
+    expect(startChat).not.toHaveBeenCalled()
   })
 
   it('keeps the typed message when creation fails', async () => {
-    createChat.mockRejectedValue(new Error('no daemon available'))
+    startChat.mockRejectedValue(new Error('no daemon available'))
     render(<MobileNewChat />)
 
     const input = screen.getByLabelText('Message')

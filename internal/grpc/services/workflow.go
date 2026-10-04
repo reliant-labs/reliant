@@ -22,6 +22,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	cfg "github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/ptr"
 	"github.com/reliant-labs/reliant/internal/toolexec"
@@ -321,36 +322,6 @@ func discoverProjectWorkflowsFromDB(repo db.Repository, ctx context.Context, pro
 	return items, invalidWorkflows
 }
 
-// loadProjectWorkflowBySlugFromDB loads a project workflow by slug from the stored config record.
-// Returns the workflow, its YAML content, and error. Returns nil, "", nil if not found.
-func loadProjectWorkflowBySlugFromDB(repo db.Repository, ctx context.Context, projectID string, slug string) (*reliantv1.Workflow, string, error) {
-	if projectID == "" || slug == "" {
-		return nil, "", nil
-	}
-
-	record, err := repo.GetProjectConfigRecord(ctx, projectID)
-	if err != nil {
-		return nil, "", nil
-	}
-
-	workflows, err := cfg.ParseStoredWorkflows(record.ProjectWorkflowsJSON)
-	if err != nil {
-		return nil, "", fmt.Errorf("failed to parse stored workflows: %w", err)
-	}
-
-	sw := cfg.FindStoredWorkflowBySlug(workflows, slug)
-	if sw == nil {
-		return nil, "", nil // Not found
-	}
-
-	protoWf, err := parseWorkflowYAML([]byte(sw.YAMLContent))
-	if err != nil {
-		return nil, "", fmt.Errorf("failed to parse project workflow %s: %w", slug, err)
-	}
-
-	return protoWf, sw.YAMLContent, nil
-}
-
 // Word lists for random workflow name generation (adjective-noun pattern)
 var workflowAdjectives = []string{
 	"swift", "bright", "calm", "bold", "keen",
@@ -488,7 +459,7 @@ func (s *WorkflowService) SaveWorkflow(
 		}
 
 		// Check against project workflows - project not found is ok, just skip check
-		projectWf, _, err := loadProjectWorkflowBySlugFromDB(s.database, ctx, req.Msg.ProjectId, slug)
+		projectWf, _, err := launch.LoadProjectWorkflowBySlugFromDB(s.database, ctx, req.Msg.ProjectId, slug)
 		if err != nil {
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to load project workflow: %w", err))
 		}
@@ -1076,7 +1047,7 @@ func (s *WorkflowService) GetWorkflow(
 		if err := s.projectBelongsToUser(ctx, req.Msg.ProjectId, userID); err != nil {
 			return nil, err
 		}
-		projectWf, yamlContent, err := loadProjectWorkflowBySlugFromDB(s.database, ctx, req.Msg.ProjectId, slug)
+		projectWf, yamlContent, err := launch.LoadProjectWorkflowBySlugFromDB(s.database, ctx, req.Msg.ProjectId, slug)
 		if err == nil && projectWf != nil {
 			return connect.NewResponse(&reliantv1.GetWorkflowResponse{
 				Workflow:       projectWf,

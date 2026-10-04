@@ -39,6 +39,7 @@ Reliant server components.`,
 	root.AddCommand(newOpenCmd())
 	root.AddCommand(newProjectCmd())
 	root.AddCommand(newWorkflowCmd())
+	root.AddCommand(newTriggerCmd())
 	root.AddCommand(newVersionCmd())
 	root.AddCommand(newForgeCmd())
 	root.AddCommand(newPreviewURLCmd())

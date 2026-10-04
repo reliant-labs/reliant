@@ -11,10 +11,17 @@ import (
 )
 
 // SpawnChild is one spawn call a thread has issued, joined to the state of
-// the child it names. ChildThreadID/WorkflowStatus/ThreadTitle are nil when
-// the child's workflow+thread rows have not landed yet (a narrow window
-// right after dispatch, before CreateWorkflowWithThread's activity commits) —
-// callers should treat that as "still starting", not as an error.
+// the child it names. ChildThreadID/ChildWorkflowID/WorkflowStatus/ThreadTitle
+// are nil when the child's workflow+thread rows have not landed yet (a narrow
+// window right after dispatch, before CreateWorkflowWithThread's activity
+// commits) — callers should treat that as "still starting", not as an error.
+//
+// ChildThreadID and ChildWorkflowID are BOTH carried because they are the same
+// value only for a first spawn. A resumed spawn (spawn with agent_id) keeps the
+// original thread id and gets a fresh workflow row per resumption, so code that
+// addresses a spawn needs to know which identity it is holding: the thread is
+// what a cancel signal names, the workflow row id is what a status write must
+// target. Neither is derivable from the other.
 type SpawnChild struct {
 	ToolCallID        string
 	ToolCallStatus    int32
@@ -22,6 +29,7 @@ type SpawnChild struct {
 	RequestedAt       time.Time
 	CompletedAt       *time.Time
 	ChildThreadID     *string
+	ChildWorkflowID   *string
 	WorkflowStatus    *WorkflowStatus
 	WorkflowCompleted *time.Time
 	ThreadTitle       *string
@@ -96,6 +104,10 @@ func (r *Repo) ListSpawnChildren(ctx context.Context, threadID string) ([]*Spawn
 		if row.ChildThreadID.Valid {
 			s := row.ChildThreadID.String
 			child.ChildThreadID = &s
+		}
+		if row.ChildWorkflowID.Valid {
+			s := row.ChildWorkflowID.String
+			child.ChildWorkflowID = &s
 		}
 		// state and stop_reason arrive from the same LEFT JOIN, so either both
 		// are present or the child's workflow row has not landed yet.

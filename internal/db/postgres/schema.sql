@@ -315,22 +315,22 @@ CREATE TABLE public.workflows (
 --
 
 CREATE VIEW public.chats_with_activity AS
- SELECT id,
-    title,
-    project_id,
-    user_id,
-    state,
-    workflow_id,
-    run_id,
-    created_at,
-    updated_at,
-    last_active,
-    worktree_id,
-    workflow_name,
-    selected_presets,
-    archived_worktree_name,
-    unread,
-    active_daemon_id,
+ SELECT c.id,
+    c.title,
+    c.project_id,
+    c.user_id,
+    c.state,
+    c.workflow_id,
+    c.run_id,
+    c.created_at,
+    c.updated_at,
+    c.last_active,
+    c.worktree_id,
+    c.workflow_name,
+    c.selected_presets,
+    c.archived_worktree_name,
+    c.unread,
+    c.active_daemon_id,
     ( SELECT max(m.created_at) AS max
            FROM public.messages m
           WHERE (m.chat_id = c.id)) AS last_message_at,
@@ -353,8 +353,11 @@ CREATE VIEW public.chats_with_activity AS
                FROM public.workflows w
               WHERE ((w.chat_id = c.id) AND (w.state = 3) AND (w.stop_reason = 3)))) THEN 4
             ELSE 0
-        END AS activity
-   FROM public.chats c;
+        END AS activity,
+    rw.state AS root_workflow_state,
+    rw.stop_reason AS root_workflow_stop_reason
+   FROM (public.chats c
+     LEFT JOIN public.workflows rw ON ((rw.id = c.workflow_id)));
 
 --
 -- Name: claude_auth_tokens; Type: TABLE; Schema: public; Owner: -
@@ -755,11 +758,10 @@ CREATE TABLE public.step_executions (
     loop_node_id text,
     loop_iteration bigint,
     saved_message_id text GENERATED ALWAYS AS (
-        CASE
-            WHEN step_id LIKE '%-save'::text AND output_json IS JSON OBJECT
-            THEN ((output_json)::jsonb ->> 'message_id'::text)
-        END
-    ) STORED
+CASE
+    WHEN ((step_id ~~ '%-save'::text) AND (output_json IS JSON OBJECT)) THEN ((output_json)::jsonb ->> 'message_id'::text)
+    ELSE NULL::text
+END) STORED
 );
 
 --
@@ -857,6 +859,48 @@ CREATE TABLE public.tool_calls (
     created_at timestamp with time zone NOT NULL,
     updated_at timestamp with time zone NOT NULL,
     CONSTRAINT tool_calls_completed_has_completed_at CHECK (((status <> 3) OR (completed_at IS NOT NULL)))
+);
+
+--
+-- Name: trigger_events; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.trigger_events (
+    id text NOT NULL,
+    trigger_id text,
+    user_id text NOT NULL,
+    kind text NOT NULL,
+    dedupe_key text NOT NULL,
+    occurred_at timestamp with time zone NOT NULL,
+    payload jsonb DEFAULT '{}'::jsonb NOT NULL,
+    outcome text NOT NULL,
+    outcome_detail text DEFAULT ''::text NOT NULL,
+    chat_id text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT trigger_events_kind_check CHECK ((kind = ANY (ARRAY['chat.start'::text, 'schedule'::text]))),
+    CONSTRAINT trigger_events_outcome_check CHECK ((outcome = ANY (ARRAY['launched'::text, 'skipped'::text, 'failed'::text])))
+);
+
+--
+-- Name: triggers; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.triggers (
+    id text NOT NULL,
+    user_id text NOT NULL,
+    project_id text NOT NULL,
+    worktree_id text,
+    name text NOT NULL,
+    kind text NOT NULL,
+    enabled boolean DEFAULT true NOT NULL,
+    workflow text NOT NULL,
+    presets jsonb DEFAULT '{}'::jsonb NOT NULL,
+    params jsonb DEFAULT '{}'::jsonb NOT NULL,
+    message text DEFAULT ''::text NOT NULL,
+    config jsonb DEFAULT '{}'::jsonb NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT triggers_kind_check CHECK ((kind = 'schedule'::text))
 );
 
 --
@@ -1414,6 +1458,34 @@ ALTER TABLE ONLY public.tool_calls
     ADD CONSTRAINT tool_calls_pkey PRIMARY KEY (id);
 
 --
+-- Name: trigger_events trigger_events_kind_dedupe_key_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.trigger_events
+    ADD CONSTRAINT trigger_events_kind_dedupe_key_key UNIQUE (kind, dedupe_key);
+
+--
+-- Name: trigger_events trigger_events_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.trigger_events
+    ADD CONSTRAINT trigger_events_pkey PRIMARY KEY (id);
+
+--
+-- Name: triggers triggers_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.triggers
+    ADD CONSTRAINT triggers_pkey PRIMARY KEY (id);
+
+--
+-- Name: triggers triggers_user_id_project_id_name_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.triggers
+    ADD CONSTRAINT triggers_user_id_project_id_name_key UNIQUE (user_id, project_id, name);
+
+--
 -- Name: update_stream_counters update_stream_counters_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1882,6 +1954,30 @@ CREATE INDEX idx_tool_calls_message ON public.tool_calls USING btree (message_id
 CREATE INDEX idx_tool_calls_thread_id ON public.tool_calls USING btree (thread_id) WHERE (thread_id IS NOT NULL);
 
 --
+-- Name: idx_trigger_events_chat; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_trigger_events_chat ON public.trigger_events USING btree (chat_id);
+
+--
+-- Name: idx_trigger_events_trigger_occurred; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_trigger_events_trigger_occurred ON public.trigger_events USING btree (trigger_id, occurred_at DESC);
+
+--
+-- Name: idx_triggers_project; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_triggers_project ON public.triggers USING btree (project_id);
+
+--
+-- Name: idx_triggers_user; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_triggers_user ON public.triggers USING btree (user_id);
+
+--
 -- Name: idx_user_updates_chat; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2167,6 +2263,34 @@ ALTER TABLE ONLY public.tool_calls
 
 ALTER TABLE ONLY public.tool_calls
     ADD CONSTRAINT tool_calls_thread_id_fkey FOREIGN KEY (thread_id) REFERENCES public.threads(id) ON DELETE RESTRICT;
+
+--
+-- Name: trigger_events trigger_events_chat_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.trigger_events
+    ADD CONSTRAINT trigger_events_chat_id_fkey FOREIGN KEY (chat_id) REFERENCES public.chats(id) ON DELETE SET NULL;
+
+--
+-- Name: trigger_events trigger_events_trigger_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.trigger_events
+    ADD CONSTRAINT trigger_events_trigger_id_fkey FOREIGN KEY (trigger_id) REFERENCES public.triggers(id) ON DELETE SET NULL;
+
+--
+-- Name: triggers triggers_project_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.triggers
+    ADD CONSTRAINT triggers_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(id) ON DELETE CASCADE;
+
+--
+-- Name: triggers triggers_worktree_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.triggers
+    ADD CONSTRAINT triggers_worktree_id_fkey FOREIGN KEY (worktree_id) REFERENCES public.worktrees(id) ON DELETE SET NULL;
 
 --
 -- Name: user_updates user_updates_chat_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -

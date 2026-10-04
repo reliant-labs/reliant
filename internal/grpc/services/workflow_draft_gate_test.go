@@ -16,7 +16,7 @@ import (
 
 // A draft is never runnable (specs/workflow-draft-lifecycle.md). The request-
 // side resolvers that start runs refuse a draft by slug with an actionable
-// "is a draft" message: CreateChat, the scenario runner's workflow loader, and
+// "is a draft" message: StartChat, the scenario runner's workflow loader, and
 // preset resolution. (ref/spawn/router resolution at run time is
 // ActivityLoadWorkflow; see load_workflow_draft_gate_test.go.)
 func TestDraftWorkflowIsNeverRunnable(t *testing.T) {
@@ -43,9 +43,9 @@ nodes:
 		Status: db.WorkflowDraftStatusDraft, CreatedAt: now, UpdatedAt: now, Version: 1,
 	}))
 
-	t.Run("CreateChat", func(t *testing.T) {
+	t.Run("StartChat", func(t *testing.T) {
 		chatService := &ChatService{database: repo}
-		_, err := chatService.CreateChat(ctx, connect.NewRequest(&reliantv1.CreateChatRequest{
+		_, err := chatService.StartChat(ctx, connect.NewRequest(&reliantv1.StartChatRequest{
 			ProjectId: projectID,
 			Workflow:  "gate-draft",
 			Messages:  []*reliantv1.InputMessage{{Role: reliantv1.MessageRole_MESSAGE_ROLE_USER, Content: "hello"}},

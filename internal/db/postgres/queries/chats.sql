@@ -62,15 +62,19 @@ FROM chats_with_activity cws
 LEFT JOIN messages m ON cws.id = m.chat_id
 LEFT JOIN message_content_blocks mcb ON m.id = mcb.message_id AND mcb.block_type = 1
 WHERE
-    cws.user_id = $1
-    AND cws.project_id = $2
-    AND ($3 IS NULL OR cws.state = $4)
+    cws.user_id = sqlc.arg('user_id')
+    AND cws.project_id = sqlc.arg('project_id')
+    -- The cast is load-bearing. `$3 IS NULL` on a bare parameter is a
+    -- PARSE-time error in Postgres ("could not determine data type of
+    -- parameter $3", 42P18) for every input, null or not, so this query
+    -- failed unconditionally. ListChats above already casts for this reason.
+    AND (sqlc.narg('state')::integer IS NULL OR cws.state = sqlc.narg('state')::integer)
     AND (
-        cws.title LIKE $5
-        OR mcb.content LIKE $6
+        cws.title LIKE sqlc.arg('title')
+        OR mcb.content LIKE sqlc.arg('content')
     )
 ORDER BY cws.last_active DESC
-LIMIT $7 OFFSET $8;
+LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
 
 -- name: ListArchivedChats :many
 -- List archived chats with worktree info and computed last_message_at

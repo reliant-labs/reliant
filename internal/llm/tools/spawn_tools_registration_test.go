@@ -17,7 +17,7 @@ func TestSpawnStatus_IsNotOrchestratorTier(t *testing.T) {
 // against.
 func TestSpawnTools_AreRegistered(t *testing.T) {
 	t.Parallel()
-	names := map[string]bool{ToolSpawnStatus: false, ToolSpawnSend: false}
+	names := map[string]bool{ToolSpawnStatus: false, ToolSpawnSend: false, ToolSpawnStop: false}
 	for _, def := range GetToolRegistry() {
 		if _, ok := names[def.Name]; ok {
 			names[def.Name] = true
@@ -62,7 +62,7 @@ func TestSpawnStatus_IsReadOnlyTagged(t *testing.T) {
 func TestSpawnTools_ConstructibleViaFactory(t *testing.T) {
 	t.Parallel()
 	factory := NewToolsFactory(&ToolsOptions{})
-	for _, name := range []string{ToolSpawnStatus, ToolSpawnSend} {
+	for _, name := range []string{ToolSpawnStatus, ToolSpawnSend, ToolSpawnStop} {
 		tool := factory.GetToolByName(name, nil)
 		if tool == nil {
 			t.Fatalf("factory.GetToolByName(%q) returned nil", name)

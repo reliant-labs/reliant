@@ -240,3 +240,63 @@ func TestCancelToolCall_RegularToolTouchesNoWorkflow(t *testing.T) {
 	require.Equal(t, core.Active(), wf.Status,
 		"cancelling one tool must not stop the chat, nor its siblings")
 }
+
+// A RESUMED spawn's tool call names a workflow row that is NOT the child's
+// thread: the thread is the original one being resumed, while child_workflow_id
+// is derived from the new tool call. The UI path used to pass child_workflow_id
+// as the signal's "thread", which only worked because the runtime also matches
+// the tool call id. The thread must come from the workflow row's own `thread`
+// column, and the reconcile must still CAS the workflow row.
+func TestCancelToolCall_ResumedSpawn_SignalsOriginalThreadAndReconcilesWorkflowRow(t *testing.T) {
+	repo, cleanup := db.SetupTestDB(t)
+	defer cleanup()
+	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "test-user")
+
+	toolCallID, resumedWorkflowID := seedCancellableSpawn(t, repo, ctx, core.Active())
+	wf, err := repo.GetWorkflow(ctx, resumedWorkflowID)
+	require.NoError(t, err)
+
+	// The pre-existing thread being resumed, and a fresh workflow row — derived
+	// from the new tool call — that executes it. seedCancellableSpawn made the
+	// first-spawn shape (thread == workflow id); build the resumption by hand.
+	originalThreadID := uuid.New().String()
+	_, err = repo.CreateThread(ctx, &db.Thread{ID: originalThreadID, ChatID: wf.ChatID, CreatedAt: time.Now().UTC()})
+	require.NoError(t, err)
+
+	liveWorkflowID := "wf-resume-" + uuid.New().String()[:8]
+	resumeToolCallID := "toolu_resume_" + uuid.New().String()[:8]
+	now := time.Now().UTC()
+	require.NoError(t, repo.CreateWorkflow(ctx, &db.Workflow{
+		ID: liveWorkflowID, ChatID: wf.ChatID, WorkflowName: "builtin://agent",
+		Thread: originalThreadID, Status: core.Active(), CreatedAt: now,
+	}))
+	require.NoError(t, repo.UpsertToolCall(ctx, &db.ToolCall{
+		ID: resumeToolCallID, ChatID: wf.ChatID, ThreadID: &wf.ChatID,
+		ToolName: "spawn", Status: core.ToolCallStatusExecuting,
+		ChildWorkflowID: &liveWorkflowID,
+		RequestedAt:     now, CreatedAt: now, UpdatedAt: now,
+	}))
+	require.NotEqual(t, liveWorkflowID, originalThreadID)
+
+	// Cancel by the resumption's call. It has no content block, so go through
+	// the helper directly rather than the RPC, which resolves chat via a block.
+	tc := &spawnCancelTemporalClient{}
+	svc := NewToolCallService(repo, tc, &fakeDaemonRouter{})
+	require.NoError(t, svc.cancelChildWorkflowForToolCall(ctx, resumeToolCallID))
+	_ = toolCallID
+
+	require.Len(t, tc.signals, 1)
+	sig, ok := tc.signals[0].arg.(v2.CancelThreadSignal)
+	require.True(t, ok)
+	require.Equal(t, originalThreadID, sig.Thread,
+		"the signal must name the original thread, read from the workflow row — not child_workflow_id")
+	require.Equal(t, resumeToolCallID, sig.ToolCallID)
+
+	after, err := repo.GetWorkflow(ctx, liveWorkflowID)
+	require.NoError(t, err)
+	require.Equal(t, core.Cancelled(), after.Status, "the live workflow row must be the one reconciled")
+
+	original, err := repo.GetWorkflow(ctx, resumedWorkflowID)
+	require.NoError(t, err)
+	require.Equal(t, core.Active(), original.Status, "an unrelated row must be left alone")
+}

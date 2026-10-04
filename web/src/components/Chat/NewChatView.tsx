@@ -192,7 +192,7 @@ export function NewChatView({
 
       const chat = await useChatStore
         .getState()
-        .createChat(chatWorktreeId, content, attachmentIds, workflowParams, workflow);
+        .startChat(chatWorktreeId, content, attachmentIds, workflowParams, workflow);
 
       trackEvent('chat_created', {
         has_attachments: Boolean(attachmentIds?.length),

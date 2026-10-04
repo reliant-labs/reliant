@@ -117,8 +117,18 @@ service ChatService {
   // Phase 3: Core Chat Operations
   // ============================================
   
-  // CreateChat creates a new chat and starts its workflow
-  rpc CreateChat(CreateChatRequest) returns (CreateChatResponse) {}
+  // StartChat starts a chat's root run — the ONE door through which a session
+  // begins. Either it creates the chat (chat_id unset) or it starts an existing
+  // PENDING one, which is what a branched chat's first send is.
+  //
+  // StartChat vs SendMessage: StartChat is the FIRST send, SendMessage is every
+  // continuation. A chat whose root run is still pending has never started, so
+  // SendMessage rejects it with FailedPrecondition; conversely StartChat
+  // rejects a chat that has already started. The split is not cosmetic — a
+  // start records a trigger_events row whose dedupe key is the chat id, so
+  // "a chat starts exactly once" is a database invariant rather than client
+  // discipline. See research/TRIGGERS.md.
+  rpc StartChat(StartChatRequest) returns (StartChatResponse) {}
   
   // ListChats lists all non-archived chats for a project
   rpc ListChats(ListChatsRequest) returns (ListChatsResponse) {}
@@ -370,7 +380,7 @@ message Attachment {
   string url = 5;
 }
 
-// InputMessage represents a message in a request (for CreateChat/SendMessage)
+// InputMessage represents a message in a request (for StartChat/SendMessage)
 // Supports user and system messages.
 message InputMessage {
   MessageRole role = 1;
@@ -378,8 +388,8 @@ message InputMessage {
   optional DisplayStyle display_style = 3;
 }
 
-// CreateChatRequest creates a new chat
-message CreateChatRequest {
+// StartChatRequest starts a chat's root run.
+message StartChatRequest {
   string project_id = 1;
   reserved 2;                          // was: first_message - use messages instead
   optional string title = 3;
@@ -387,23 +397,33 @@ message CreateChatRequest {
   reserved 5;                          // was: agent - use workflow_params instead
   string workflow = 6;                 // Workflow name (optional - defaults to user preference or builtin://agent)
   reserved 7;                          // was: model - use workflow_params instead
-  optional double temperature = 8;
-  optional int32 max_tokens = 9;
+  reserved 8;                          // was: temperature (never read by the server; use workflow_params)
+  reserved 9;                          // was: max_tokens (never read by the server; use workflow_params)
   reserved 10;                         // was: auto_approve - use mode or workflow_params instead
   reserved 11;                         // was: is_planning_mode - use mode or workflow_params instead
   repeated string attachments = 12;    // Attachment IDs
   map<string, google.protobuf.Value> workflow_params = 13;  // Workflow input parameters
-  optional string mode = 14;           // Execution mode
+  optional string mode = 14;           // Execution mode; becomes workflow_params.mode
   map<string, string> selected_presets = 15; // Preset selections per target ("" = workflow-level, "Agent A" = group)
   repeated InputMessage messages = 16; // Messages to send (user and system). At least one user message required.
+
+  // chat_id names an existing PENDING chat to start — a branched chat's first
+  // send. Unset creates a new chat.
+  //
+  // When set, project_id and worktree_id must be empty or match the chat's own,
+  // because the chat already decided where it runs. workflow MAY differ from
+  // the chat's: a pending chat has produced nothing yet, so switching it is
+  // still free. That is the one and only workflow switch the system allows, and
+  // it is why SendMessage no longer has a switch branch.
+  optional string chat_id = 17;
 }
 
-// CreateChatResponse returns the created chat
-message CreateChatResponse {
+// StartChatResponse returns the started chat and the ids of its root run.
+message StartChatResponse {
   Chat chat = 1;
   string workflow_id = 2;
   string run_id = 3;
-  optional string draft_id = 4;  // Draft ID for workflow builder chats (when a new draft was created)
+  reserved 4;                          // was: draft_id (no server code ever set it)
 }
 
 // ListChatsRequest lists chats for a project

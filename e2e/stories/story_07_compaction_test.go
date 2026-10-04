@@ -45,7 +45,7 @@ func TestStory07_CompactionTriggersAndConversationContinues(t *testing.T) {
 	)
 	h := newHarness(t, script)
 
-	created := h.CreateChat("builtin://agent", "Do something token-heavy", map[string]any{
+	created := h.StartChat("builtin://agent", "Do something token-heavy", map[string]any{
 		"mode": "auto",
 		// compaction_threshold rides on the model input object (see
 		// agent.yaml: args.compaction_threshold ← inputs.model.compaction_threshold).

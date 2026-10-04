@@ -24,7 +24,7 @@ func TestChatService_CreateChat_RejectsDottedWorkflowParams(t *testing.T) {
 	require.NoError(t, repo.CreateProject(ctx, &db.Project{
 		ID:         projectID,
 		UserID:     "test-user",
-		Name:       "CreateChat Workflow Params Validation",
+		Name:       "StartChat Workflow Params Validation",
 		Path:       t.TempDir(),
 		IsGitRepo:  false,
 		CreatedAt:  now,
@@ -34,7 +34,7 @@ func TestChatService_CreateChat_RejectsDottedWorkflowParams(t *testing.T) {
 
 	service := &ChatService{database: repo}
 
-	_, err := service.CreateChat(ctx, connect.NewRequest(&reliantv1.CreateChatRequest{
+	_, err := service.StartChat(ctx, connect.NewRequest(&reliantv1.StartChatRequest{
 		ProjectId: projectID,
 		Workflow:  "builtin://agent",
 		Messages: []*reliantv1.InputMessage{{

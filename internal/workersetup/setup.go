@@ -9,15 +9,18 @@ import (
 	"github.com/reliant-labs/reliant/internal/instanceid"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
+	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/observability"
 	"github.com/reliant-labs/reliant/internal/streaming"
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/toolexec"
+	"github.com/reliant-labs/reliant/internal/triggers"
 	v2workflow "github.com/reliant-labs/reliant/internal/workflow"
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
 	v2activities "github.com/reliant-labs/reliant/internal/workflow/runtime/activities"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/handlers"
 
+	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/interceptor"
 	"go.temporal.io/sdk/worker"
@@ -43,6 +46,18 @@ type Config struct {
 	DaemonRouter   toolexec.DaemonRouter // Routes commands to user's daemon (nil = worktree ops unavailable)
 	MCPBinder      toolexec.MCPContextBinder
 	ConfigProvider config.ConfigProvider
+
+	// TriggerLauncher is the one door a scheduled fire launches through,
+	// normally *launch.Launcher.
+	//
+	// INJECTED rather than constructed here on purpose. launch.NewLauncher
+	// needs a run recorder and a daemon prober that this package does not
+	// have and should not acquire — the api-server and the worker build them
+	// differently, and a test wants neither. nil registers the schedule
+	// workflow but not its activity, so a fire that arrives at a worker with
+	// no launcher fails loudly and is retried on one that has it, instead of
+	// being silently dropped.
+	TriggerLauncher triggers.Launcher
 
 	// Optional overrides (for testing)
 	RunExecutorOverride handlers.RunExecutor
@@ -184,6 +199,23 @@ func StartWorker(cfg *Config) (*Handle, *v2.ActivityRegistry, error) {
 	w.RegisterWorkflowWithOptions(GenerateTitleWorkflow, workflow.RegisterOptions{
 		Name: "GenerateTitleWorkflow",
 	})
+
+	// Schedule triggers. The workflow is always registered — it is pure
+	// orchestration — but the activity needs a launcher. Registering the
+	// workflow without the activity means a fire on a launcher-less worker
+	// retries rather than failing to start at all, which is what makes a
+	// partially-rolled-out deploy safe.
+	w.RegisterWorkflowWithOptions(triggers.TriggerFireWorkflow, workflow.RegisterOptions{
+		Name: triggers.FireWorkflowName,
+	})
+	if cfg.TriggerLauncher != nil {
+		w.RegisterActivityWithOptions(
+			triggers.NewFirer(cfg.Database, cfg.TriggerLauncher).Fire,
+			activity.RegisterOptions{Name: triggers.FireActivityName},
+		)
+	} else {
+		logging.Warn("no trigger launcher configured; this worker will not execute scheduled fires")
+	}
 
 	// Start worker with lifecycle management
 	handle := &Handle{

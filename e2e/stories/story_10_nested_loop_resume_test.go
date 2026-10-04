@@ -133,7 +133,7 @@ func TestStory10_TerminateMidNestedLoopResumesAtInnerIteration(t *testing.T) {
 		UpdatedAt:  now,
 	}), "seed nested-loop workflow draft")
 
-	created := h.CreateChat("resume-nested-loop", "Do the nested work", map[string]any{})
+	created := h.StartChat("resume-nested-loop", "Do the nested work", map[string]any{})
 	chatID := created.Chat.Id
 	workflowID := created.WorkflowId
 

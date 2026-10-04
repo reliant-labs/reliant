@@ -19,6 +19,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	cfg "github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
 	wfscenario "github.com/reliant-labs/reliant/internal/workflow/scenario"
@@ -314,7 +315,7 @@ func (s *ScenarioService) RunScenario(
 				workflowYAML = draft.Definition
 			} else {
 				// Try to load from stored project workflows (synced by daemon)
-				wf, yamlContent, loadErr := loadProjectWorkflowBySlugFromDB(s.database, ctx, project.ID, workflowSlug)
+				wf, yamlContent, loadErr := launch.LoadProjectWorkflowBySlugFromDB(s.database, ctx, project.ID, workflowSlug)
 				if loadErr != nil || wf == nil {
 					return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("workflow not found: %s", workflowSlug))
 				}

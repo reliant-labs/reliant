@@ -646,6 +646,21 @@ type NodeExecutionState struct {
 type Preset = core.Preset
 
 // ============================================================================
+// Trigger Types
+// ============================================================================
+
+// Trigger is an alias to the shared core trigger model — a standing
+// instruction to start a run without a human typing.
+type Trigger = core.Trigger
+
+// TriggerEvent is an alias to the shared core trigger-event model — one
+// firing, of a stored trigger or of an ad hoc source such as a chat start.
+type TriggerEvent = core.TriggerEvent
+
+// TriggerFilters contains options for filtering triggers.
+type TriggerFilters = core.TriggerFilters
+
+// ============================================================================
 // Question Types
 // ============================================================================
 

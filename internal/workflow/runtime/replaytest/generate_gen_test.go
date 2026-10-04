@@ -27,7 +27,7 @@ import (
 )
 
 // TestGenerateFixture_AgentToolLoop pins the plain agent loop:
-// CreateChat(builtin://agent) → CallLLM → ExecuteTools (real bash through the
+// StartChat(builtin://agent) → CallLLM → ExecuteTools (real bash through the
 // local daemon execution path) → CallLLM → end turn → completion.
 func TestGenerateFixture_AgentToolLoop(t *testing.T) {
 	script := NewScriptedLLM(
@@ -41,7 +41,7 @@ func TestGenerateFixture_AgentToolLoop(t *testing.T) {
 	)
 	h := newHarness(t, script)
 
-	created := h.CreateChat("builtin://agent", "Please echo something for me", map[string]any{
+	created := h.StartChat("builtin://agent", "Please echo something for me", map[string]any{
 		"mode": "auto",
 	})
 	workflowID := created.WorkflowId
@@ -74,7 +74,7 @@ func TestGenerateFixture_StructuredAgentLoop(t *testing.T) {
 	)
 	h := newHarness(t, script)
 
-	created := h.CreateChat("builtin://structured-agent", "Do a check, then finish", map[string]any{
+	created := h.StartChat("builtin://structured-agent", "Do a check, then finish", map[string]any{
 		"mode": "auto",
 	})
 	workflowID := created.WorkflowId
@@ -122,7 +122,7 @@ func TestGenerateFixture_Spawn(t *testing.T) {
 	)
 	h := newHarness(t, script)
 
-	created := h.CreateChat("builtin://agent", "Please delegate a small task to a sub-agent", map[string]any{
+	created := h.StartChat("builtin://agent", "Please delegate a small task to a sub-agent", map[string]any{
 		"mode": "auto",
 	})
 	workflowID := created.WorkflowId
@@ -137,7 +137,7 @@ func TestGenerateFixture_Spawn(t *testing.T) {
 // replayRouterWorkflowYAML is a minimal pitch-deck-shaped workflow: an
 // LLM-backed node router (like pitch-deck's `classify`) that dynamically
 // dispatches to an inline builtin://agent sub-workflow node. It is stored as
-// a user workflow draft so the production CreateChat validation + runtime
+// a user workflow draft so the production StartChat validation + runtime
 // ActivityLoadWorkflow draft-loading paths are the ones captured in history.
 const replayRouterWorkflowYAML = `name: replay-router
 apiVersion: "0.0.5"
@@ -232,7 +232,7 @@ func TestGenerateFixture_RouterDispatch(t *testing.T) {
 		UpdatedAt:  now,
 	}), "create router workflow draft")
 
-	created := h.CreateChat("replay-router", "Please do the work", map[string]any{
+	created := h.StartChat("replay-router", "Please do the work", map[string]any{
 		"mode": "auto",
 	})
 	workflowID := created.WorkflowId
@@ -258,7 +258,7 @@ func TestGenerateFixture_PauseResume(t *testing.T) {
 	)
 	h := newHarness(t, script)
 
-	created := h.CreateChat("builtin://agent", "Answer, then wait for my feedback", map[string]any{
+	created := h.StartChat("builtin://agent", "Answer, then wait for my feedback", map[string]any{
 		"mode": "auto",
 		"ask":  true,
 	})
@@ -311,7 +311,7 @@ func TestGenerateFixture_Compaction(t *testing.T) {
 	)
 	h := newHarness(t, script)
 
-	created := h.CreateChat("builtin://agent", "Do something token-heavy", map[string]any{
+	created := h.StartChat("builtin://agent", "Do something token-heavy", map[string]any{
 		"mode": "auto",
 		// compaction_threshold rides on the model input object (see
 		// agent.yaml: args.compaction_threshold ← inputs.model.compaction_threshold).

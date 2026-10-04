@@ -103,7 +103,7 @@ end-to-end.
 
 A scenario's `Turn`s are for the AGENT LOOP. Other production code paths share
 the same injected driver and are not part of that sequence: the compaction
-summary, and **chat title generation**, which `CreateChat` dispatches as its
+summary, and **chat title generation**, which `StartChat` dispatches as its
 own workflow that races the agent loop. `ScriptedLLM.StreamResponse` recognizes
 each and answers it with a canned reply instead of advancing the script.
 

@@ -103,7 +103,7 @@ func TestStory11_TerminateQuestionParkedResumesViaMarkedAnswer(t *testing.T) {
 		UpdatedAt:  now,
 	}), "seed nested-question workflow draft")
 
-	created := h.CreateChat("resume-question-nested", "Do the nested work", map[string]any{})
+	created := h.StartChat("resume-question-nested", "Do the nested work", map[string]any{})
 	chatID := created.Chat.Id
 	workflowID := created.WorkflowId
 

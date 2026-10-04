@@ -47,7 +47,7 @@ func TestChatService_CreateChat_RootRunCarriesOwner(t *testing.T) {
 	t.Cleanup(cleanup)
 
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "test-user")
-	// CreateChat refuses a project without a main worktree.
+	// StartChat refuses a project without a main worktree.
 	projectID, _ := newInvariantTestProject(t, ctx, repo, true)
 
 	temporal := &atomicityTestTemporalClient{}
@@ -58,7 +58,7 @@ func TestChatService_CreateChat_RootRunCarriesOwner(t *testing.T) {
 		runs:       runs.NewService(repo, temporal, nil),
 	}
 
-	resp, err := service.CreateChat(ctx, connect.NewRequest(&reliantv1.CreateChatRequest{
+	resp, err := service.StartChat(ctx, connect.NewRequest(&reliantv1.StartChatRequest{
 		ProjectId: projectID,
 		Workflow:  "builtin://agent",
 		Messages: []*reliantv1.InputMessage{{

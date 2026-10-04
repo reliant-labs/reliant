@@ -66,7 +66,7 @@ func (q *Queries) DeleteChat(ctx context.Context, id string) error {
 }
 
 const getChat = `-- name: GetChat :one
-SELECT id, title, project_id, user_id, state, workflow_id, run_id, created_at, updated_at, last_active, worktree_id, workflow_name, selected_presets, archived_worktree_name, unread, active_daemon_id, last_message_at, activity FROM chats_with_activity WHERE id = $1
+SELECT id, title, project_id, user_id, state, workflow_id, run_id, created_at, updated_at, last_active, worktree_id, workflow_name, selected_presets, archived_worktree_name, unread, active_daemon_id, last_message_at, activity, root_workflow_state, root_workflow_stop_reason FROM chats_with_activity WHERE id = $1
 `
 
 func (q *Queries) GetChat(ctx context.Context, id string) (ChatsWithActivity, error) {
@@ -91,12 +91,14 @@ func (q *Queries) GetChat(ctx context.Context, id string) (ChatsWithActivity, er
 		&i.ActiveDaemonID,
 		&i.LastMessageAt,
 		&i.Activity,
+		&i.RootWorkflowState,
+		&i.RootWorkflowStopReason,
 	)
 	return i, err
 }
 
 const getChatWithUserCheck = `-- name: GetChatWithUserCheck :one
-SELECT id, title, project_id, user_id, state, workflow_id, run_id, created_at, updated_at, last_active, worktree_id, workflow_name, selected_presets, archived_worktree_name, unread, active_daemon_id, last_message_at, activity FROM chats_with_activity WHERE id = $1 AND user_id = $2
+SELECT id, title, project_id, user_id, state, workflow_id, run_id, created_at, updated_at, last_active, worktree_id, workflow_name, selected_presets, archived_worktree_name, unread, active_daemon_id, last_message_at, activity, root_workflow_state, root_workflow_stop_reason FROM chats_with_activity WHERE id = $1 AND user_id = $2
 `
 
 type GetChatWithUserCheckParams struct {
@@ -126,6 +128,8 @@ func (q *Queries) GetChatWithUserCheck(ctx context.Context, arg GetChatWithUserC
 		&i.ActiveDaemonID,
 		&i.LastMessageAt,
 		&i.Activity,
+		&i.RootWorkflowState,
+		&i.RootWorkflowStopReason,
 	)
 	return i, err
 }
@@ -212,7 +216,7 @@ func (q *Queries) ListArchivedChats(ctx context.Context, userID string) ([]ListA
 }
 
 const listChats = `-- name: ListChats :many
-SELECT id, title, project_id, user_id, state, workflow_id, run_id, created_at, updated_at, last_active, worktree_id, workflow_name, selected_presets, archived_worktree_name, unread, active_daemon_id, last_message_at, activity FROM chats_with_activity
+SELECT id, title, project_id, user_id, state, workflow_id, run_id, created_at, updated_at, last_active, worktree_id, workflow_name, selected_presets, archived_worktree_name, unread, active_daemon_id, last_message_at, activity, root_workflow_state, root_workflow_stop_reason FROM chats_with_activity
 WHERE
     user_id = $1
     AND project_id = $2
@@ -266,6 +270,8 @@ func (q *Queries) ListChats(ctx context.Context, arg ListChatsParams) ([]ChatsWi
 			&i.ActiveDaemonID,
 			&i.LastMessageAt,
 			&i.Activity,
+			&i.RootWorkflowState,
+			&i.RootWorkflowStopReason,
 		); err != nil {
 			return nil, err
 		}
@@ -281,43 +287,45 @@ func (q *Queries) ListChats(ctx context.Context, arg ListChatsParams) ([]ChatsWi
 }
 
 const searchChats = `-- name: SearchChats :many
-SELECT DISTINCT cws.id, cws.title, cws.project_id, cws.user_id, cws.state, cws.workflow_id, cws.run_id, cws.created_at, cws.updated_at, cws.last_active, cws.worktree_id, cws.workflow_name, cws.selected_presets, cws.archived_worktree_name, cws.unread, cws.active_daemon_id, cws.last_message_at, cws.activity
+SELECT DISTINCT cws.id, cws.title, cws.project_id, cws.user_id, cws.state, cws.workflow_id, cws.run_id, cws.created_at, cws.updated_at, cws.last_active, cws.worktree_id, cws.workflow_name, cws.selected_presets, cws.archived_worktree_name, cws.unread, cws.active_daemon_id, cws.last_message_at, cws.activity, cws.root_workflow_state, cws.root_workflow_stop_reason
 FROM chats_with_activity cws
 LEFT JOIN messages m ON cws.id = m.chat_id
 LEFT JOIN message_content_blocks mcb ON m.id = mcb.message_id AND mcb.block_type = 1
 WHERE
     cws.user_id = $1
     AND cws.project_id = $2
-    AND ($3 IS NULL OR cws.state = $4)
+    -- The cast is load-bearing. ` + "`" + `$3 IS NULL` + "`" + ` on a bare parameter is a
+    -- PARSE-time error in Postgres ("could not determine data type of
+    -- parameter $3", 42P18) for every input, null or not, so this query
+    -- failed unconditionally. ListChats above already casts for this reason.
+    AND ($3::integer IS NULL OR cws.state = $3::integer)
     AND (
-        cws.title LIKE $5
-        OR mcb.content LIKE $6
+        cws.title LIKE $4
+        OR mcb.content LIKE $5
     )
 ORDER BY cws.last_active DESC
-LIMIT $7 OFFSET $8
+LIMIT $7 OFFSET $6
 `
 
 type SearchChatsParams struct {
 	UserID    string         `json:"user_id"`
 	ProjectID string         `json:"project_id"`
-	Column3   interface{}    `json:"column_3"`
 	State     sql.NullInt32  `json:"state"`
 	Title     string         `json:"title"`
 	Content   sql.NullString `json:"content"`
-	Limit     int32          `json:"limit"`
 	Offset    int32          `json:"offset"`
+	Limit     int32          `json:"limit"`
 }
 
 func (q *Queries) SearchChats(ctx context.Context, arg SearchChatsParams) ([]ChatsWithActivity, error) {
 	rows, err := q.db.QueryContext(ctx, searchChats,
 		arg.UserID,
 		arg.ProjectID,
-		arg.Column3,
 		arg.State,
 		arg.Title,
 		arg.Content,
-		arg.Limit,
 		arg.Offset,
+		arg.Limit,
 	)
 	if err != nil {
 		return nil, err
@@ -345,6 +353,8 @@ func (q *Queries) SearchChats(ctx context.Context, arg SearchChatsParams) ([]Cha
 			&i.ActiveDaemonID,
 			&i.LastMessageAt,
 			&i.Activity,
+			&i.RootWorkflowState,
+			&i.RootWorkflowStopReason,
 		); err != nil {
 			return nil, err
 		}

@@ -16,6 +16,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/workflow/core"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
+	"github.com/reliant-labs/reliant/internal/workflow/threadcancel"
 	"github.com/reliant-labs/reliant/internal/workflow/threadwake"
 	"github.com/reliant-labs/reliant/internal/workflow/validation"
 	"go.temporal.io/sdk/log"
@@ -2390,15 +2391,18 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 // The doneCh channel signals the handler to exit when the workflow completes.
 // CancelThreadSignalName is the signal a client sends to stop ONE spawned
 // thread without touching the rest of the run.
-const CancelThreadSignalName = "cancel_thread"
+//
+// Aliased from the threadcancel leaf package, as ThreadWakeSignalName is from
+// threadwake: the senders (internal/grpc/services, and internal/llm/tools via
+// internal/temporal) cannot import this package, so the contract has to live
+// somewhere both ends can reach. The aliases stay because the runtime's own
+// tests and read sites spell it this way.
+const CancelThreadSignalName = threadcancel.SignalName
 
 // CancelThreadSignal names the spawn to stop. Either identifier may be set:
 // Thread is the spawn's own thread id, ToolCallID is the spawn tool call that
 // created it — the only id a user cancelling from the UI can name.
-type CancelThreadSignal struct {
-	Thread     string `json:"thread,omitempty"`
-	ToolCallID string `json:"tool_call_id,omitempty"`
-}
+type CancelThreadSignal = threadcancel.Signal
 
 // setupCancelThreadHandler records cancel-thread signals for spawned threads to
 // observe at their next step boundary.

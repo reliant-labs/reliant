@@ -177,9 +177,9 @@ func (s *ChatService) BranchChat(
 
 	// Create new branched chat with pointer to parent (NO message copying)
 	// IMPORTANT: Set workflow_id = chat_id for root workflow identification
-	// This is consistent with CreateChat behavior and ensures UI can detect root workflows
+	// This is consistent with StartChat behavior and ensures UI can detect root workflows
 	branchChatID := uuid.New().String()
-	branchWorkflowID := branchChatID // Root workflow ID = chat ID (same pattern as CreateChat)
+	branchWorkflowID := branchChatID // Root workflow ID = chat ID (same pattern as StartChat)
 
 	// NOTE: Context inheritance is now handled via workflow fork (see below)
 	// The Chat struct no longer has BranchedFromChatID, BranchedAtOrdinal, ParentContextSequence
@@ -205,7 +205,7 @@ func (s *ChatService) BranchChat(
 		workflowName = *sourceChat.WorkflowName
 	} else {
 		// Source chat has no workflow, use user's default preference
-		workflowName = s.resolveDefaultWorkflow(ctx, userID, "")
+		workflowName = s.launcher().ResolveDefaultWorkflow(ctx, userID, "")
 	}
 
 	// Create root workflow - fork metadata lives in the Thread record, not here
@@ -219,12 +219,12 @@ func (s *ChatService) BranchChat(
 		OwnerUserID:  &userID,
 	}
 
-	// Announce the new chat on the user stream, exactly as CreateChat does.
+	// Announce the new chat on the user stream, exactly as StartChat does.
 	//
 	// Without this the branch exists but no client knows about it: the chat list
 	// is patched from user updates, so the new branch only appears after a full
 	// page refetch. A branch is a chat creation from the list's point of view,
-	// and the fact that it was produced by forking rather than by CreateChat is
+	// and the fact that it was produced by forking rather than by StartChat is
 	// not something the list cares about.
 	chatCreatedData := map[string]interface{}{
 		"chat_id":     branchChat.ID,

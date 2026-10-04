@@ -48,6 +48,9 @@ var unbindableParams = map[string]map[string]string{
 	"spawn_status": {
 		"agent_id": "identifies one running sub-agent, which is chosen per call",
 	},
+	"spawn_stop": {
+		"agent_id": "identifies one running sub-agent, which is chosen per call",
+	},
 }
 
 // UnbindableParams returns the parameters of toolName that may not be bound,

@@ -77,10 +77,8 @@ func (s *chatStore) SearchChats(ctx context.Context, filters core.ChatSearchFilt
 		return []*core.Chat{}, nil
 	}
 
-	var stateCheck interface{}
 	var stateNullInt sql.NullInt32
 	if filters.State != nil {
-		stateCheck = int32(*filters.State)
 		stateNullInt = sql.NullInt32{Int32: int32(*filters.State), Valid: true}
 	}
 
@@ -88,7 +86,6 @@ func (s *chatStore) SearchChats(ctx context.Context, filters core.ChatSearchFilt
 	rows, err := s.q.SearchChats(ctx, pgdb.SearchChatsParams{
 		UserID:    filters.UserID,
 		ProjectID: filters.ProjectID,
-		Column3:   stateCheck,
 		State:     stateNullInt,
 		Title:     searchPattern,
 		Content:   chatPtrToNullString(&searchPattern),
@@ -170,6 +167,29 @@ func chatFromRow(row pgdb.ChatsWithActivity) *core.Chat {
 		Activity:        &activity,
 		Unread:          row.Unread != 0,
 		ActiveDaemonID:  chatNullStringToPtr(row.ActiveDaemonID),
+		RootStatus: chatRootStatus(
+			row.RootWorkflowState,
+			row.RootWorkflowStopReason,
+		),
+	}
+}
+
+// chatRootStatus maps the view's root_workflow_state / stop_reason onto a
+// WorkflowStatus. Both are NULL together when the chat has no root workflow
+// row, which is the zero status — WORKFLOW_STATE_UNSPECIFIED — and not any of
+// the real lifecycle states.
+//
+// The integers are the proto enum values written by workflow_store.go, so this
+// is the same cast GetRootWorkflowStatusForChats performs; only the source
+// differs (a view column here, a CASE expression there, which is why that one
+// has to coerce an interface{} first).
+func chatRootStatus(state, stopReason sql.NullInt32) core.WorkflowStatus {
+	if !state.Valid {
+		return core.WorkflowStatus{}
+	}
+	return core.WorkflowStatus{
+		State:      core.WorkflowState(state.Int32),
+		StopReason: core.WorkflowStopReason(stopReason.Int32),
 	}
 }
 

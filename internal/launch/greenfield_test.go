@@ -1,10 +1,11 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package launch
 
 import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -14,15 +15,17 @@ import (
 	"github.com/stretchr/testify/require"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/threads"
 )
 
-// greenfieldDaemonRouter answers project.code_presence with a canned result and
+// greenfieldProber answers project.code_presence with a canned result and
 // records that it was asked.
-type greenfieldDaemonRouter struct {
-	worktreeTestDaemonRouter
+//
+// It implements DaemonProber, which is one method — the whole reason the probe
+// takes a narrow interface rather than toolexec.DaemonRouter. The old version
+// of this fake had to embed a stub of the entire router surface.
+type greenfieldProber struct {
 	hasCode     bool
 	configFiles []string
 	// failWith, when set, is returned instead of a response — the offline
@@ -31,13 +34,9 @@ type greenfieldDaemonRouter struct {
 	probed   bool
 }
 
-func (r *greenfieldDaemonRouter) SendDaemonCommandToDaemon(ctx context.Context, userID, _ string, commandType string, payload []byte, timeoutMs int32) ([]byte, error) {
-	return r.SendDaemonCommand(ctx, userID, commandType, payload, timeoutMs)
-}
-
-func (r *greenfieldDaemonRouter) SendDaemonCommand(ctx context.Context, userID string, commandType string, payload []byte, timeoutMs int32) ([]byte, error) {
+func (r *greenfieldProber) SendDaemonCommand(_ context.Context, _ string, commandType string, _ []byte, _ int32) ([]byte, error) {
 	if commandType != "project.code_presence" {
-		return r.worktreeTestDaemonRouter.SendDaemonCommand(ctx, userID, commandType, payload, timeoutMs)
+		return nil, fmt.Errorf("unexpected command %q", commandType)
 	}
 	r.probed = true
 	if r.failWith != nil {
@@ -57,7 +56,9 @@ func greenfieldFixture(t *testing.T) (db.Repository, context.Context, *db.Chat) 
 	t.Cleanup(cleanup)
 
 	userID := "greenfield-user"
-	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, userID)
+	// No auth-carrying context: launch takes the owner explicitly, which is
+	// what lets it run on the worker.
+	ctx := context.Background()
 
 	projectID := "greenfield-project-" + uuid.NewString()
 	now := time.Now().UTC()
@@ -92,13 +93,13 @@ func greenfieldFixture(t *testing.T) (db.Repository, context.Context, *db.Chat) 
 // guidance, hidden from the transcript but visible to the model.
 func TestGreenfieldGuidanceFiresOnEmptyProject(t *testing.T) {
 	repo, ctx, chat := greenfieldFixture(t)
-	router := &greenfieldDaemonRouter{hasCode: false}
-	svc := &ChatService{database: repo, daemonRouter: router}
+	prober := &greenfieldProber{hasCode: false}
+	svc := NewLauncher(repo, nil, nil, "", prober)
 
-	msg := svc.maybeGreenfieldGuidance(ctx, chat.UserID, chat)
+	msg := svc.MaybeGreenfieldGuidance(ctx, chat.UserID, chat)
 
 	require.NotNil(t, msg, "an empty project on its first turn must get stack guidance")
-	assert.True(t, router.probed, "the daemon must actually be asked about code presence")
+	assert.True(t, prober.probed, "the daemon must actually be asked about code presence")
 	assert.Equal(t, reliantv1.MessageRole_MESSAGE_ROLE_SYSTEM, msg.Role,
 		"USER-role messages short-circuit to ChatMessage in InterleavedTimeline before displayStyle is read, "+
 			"so a USER role here would render harness framing as a chat bubble")
@@ -111,10 +112,10 @@ func TestGreenfieldGuidanceFiresOnEmptyProject(t *testing.T) {
 // the expensive misfire: it reads as a pitch to someone who already chose.
 func TestGreenfieldGuidanceSkipsProjectWithCode(t *testing.T) {
 	repo, ctx, chat := greenfieldFixture(t)
-	router := &greenfieldDaemonRouter{hasCode: true}
-	svc := &ChatService{database: repo, daemonRouter: router}
+	prober := &greenfieldProber{hasCode: true}
+	svc := NewLauncher(repo, nil, nil, "", prober)
 
-	assert.Nil(t, svc.maybeGreenfieldGuidance(ctx, chat.UserID, chat),
+	assert.Nil(t, svc.MaybeGreenfieldGuidance(ctx, chat.UserID, chat),
 		"a project with existing code must never get stack guidance")
 }
 
@@ -123,8 +124,8 @@ func TestGreenfieldGuidanceSkipsProjectWithCode(t *testing.T) {
 // it every turn would be noise.
 func TestGreenfieldGuidanceSkipsAfterFirstTurn(t *testing.T) {
 	repo, ctx, chat := greenfieldFixture(t)
-	router := &greenfieldDaemonRouter{hasCode: false}
-	svc := &ChatService{database: repo, daemonRouter: router}
+	prober := &greenfieldProber{hasCode: false}
+	svc := NewLauncher(repo, nil, nil, "", prober)
 
 	// A prior turn exists. The root workflow and thread have to exist first —
 	// messages hang off a context window, which is scoped to a real thread.
@@ -148,9 +149,9 @@ func TestGreenfieldGuidanceSkipsAfterFirstTurn(t *testing.T) {
 		int32(reliantv1.MessageRole_MESSAGE_ROLE_USER), "build me something", nil, nil, nil)
 	require.NoError(t, err)
 
-	assert.Nil(t, svc.maybeGreenfieldGuidance(ctx, chat.UserID, chat),
+	assert.Nil(t, svc.MaybeGreenfieldGuidance(ctx, chat.UserID, chat),
 		"guidance must only fire on the first turn of a chat")
-	assert.False(t, router.probed,
+	assert.False(t, prober.probed,
 		"a chat past its first turn should not even pay for the daemon roundtrip")
 }
 
@@ -158,20 +159,20 @@ func TestGreenfieldGuidanceSkipsAfterFirstTurn(t *testing.T) {
 // It must cost the user nothing.
 func TestGreenfieldGuidanceSkipsWhenDaemonUnavailable(t *testing.T) {
 	repo, ctx, chat := greenfieldFixture(t)
-	router := &greenfieldDaemonRouter{failWith: errors.New("daemon offline")}
-	svc := &ChatService{database: repo, daemonRouter: router}
+	prober := &greenfieldProber{failWith: errors.New("daemon offline")}
+	svc := NewLauncher(repo, nil, nil, "", prober)
 
-	assert.Nil(t, svc.maybeGreenfieldGuidance(ctx, chat.UserID, chat),
+	assert.Nil(t, svc.MaybeGreenfieldGuidance(ctx, chat.UserID, chat),
 		"an offline daemon must skip the guidance, never fail the send")
 }
 
-// Without a router there is no filesystem to ask. The replay harness and any
+// Without a prober there is no filesystem to ask. The replay harness and any
 // other daemon-less construction take this path.
 func TestGreenfieldGuidanceSkipsWithoutRouter(t *testing.T) {
 	repo, ctx, chat := greenfieldFixture(t)
-	svc := &ChatService{database: repo}
+	svc := NewLauncher(repo, nil, nil, "", nil)
 
-	assert.Nil(t, svc.maybeGreenfieldGuidance(ctx, chat.UserID, chat))
+	assert.Nil(t, svc.MaybeGreenfieldGuidance(ctx, chat.UserID, chat))
 }
 
 // "No code" is not "no opinion". A .gitignore listing node_modules/ or a
@@ -179,13 +180,13 @@ func TestGreenfieldGuidanceSkipsWithoutRouter(t *testing.T) {
 // and the model is told to read them before recommending anything.
 func TestGreenfieldGuidanceNamesStackDeclaringConfig(t *testing.T) {
 	repo, ctx, chat := greenfieldFixture(t)
-	router := &greenfieldDaemonRouter{
+	prober := &greenfieldProber{
 		hasCode:     false,
 		configFiles: []string{".gitignore", ".vscode/settings.json"},
 	}
-	svc := &ChatService{database: repo, daemonRouter: router}
+	svc := NewLauncher(repo, nil, nil, "", prober)
 
-	msg := svc.maybeGreenfieldGuidance(ctx, chat.UserID, chat)
+	msg := svc.MaybeGreenfieldGuidance(ctx, chat.UserID, chat)
 	require.NotNil(t, msg)
 
 	assert.Contains(t, msg.Content, ".gitignore")
@@ -197,7 +198,7 @@ func TestGreenfieldGuidanceNamesStackDeclaringConfig(t *testing.T) {
 // becomes a standing preference that fires on every empty directory, which is
 // the failure mode that makes a suggestion feel like an ad.
 func TestGreenfieldGuidanceContent(t *testing.T) {
-	content := buildGreenfieldGuidance(nil)
+	content := BuildGreenfieldGuidance(nil)
 
 	assert.Contains(t, content, "When this chat started",
 		"phrasing must be point-in-time: the row persists, and the project will not stay empty")
@@ -227,7 +228,7 @@ func TestGreenfieldGuidanceContent(t *testing.T) {
 // away from a case forge actually serves. A roofing app whose crews work off phones
 // is the example that surfaced it.
 func TestGreenfieldGuidanceDoesNotExcludeMobile(t *testing.T) {
-	content := buildGreenfieldGuidance(nil)
+	content := BuildGreenfieldGuidance(nil)
 
 	_, negative, found := strings.Cut(content, "Do NOT suggest forge when")
 	require.True(t, found)
@@ -242,7 +243,7 @@ func TestGreenfieldGuidanceDoesNotExcludeMobile(t *testing.T) {
 // to many services, several frontends and non-k3d deploy targets. A model that thinks
 // forge is a starter kit will propose it and then migrate off it.
 func TestGreenfieldGuidanceStatesTheCeiling(t *testing.T) {
-	content := buildGreenfieldGuidance(nil)
+	content := BuildGreenfieldGuidance(nil)
 
 	assert.Contains(t, content, "scales the whole way up",
 		"the guidance must say forge is not just a scaffold you outgrow")
@@ -259,7 +260,7 @@ func TestGreenfieldGuidanceStatesTheCeiling(t *testing.T) {
 // workload to Fly, Cloud Run, ECS or Lambda. Naming them made the model promise
 // a deploy target forge cannot reach (tracked in reliant-labs/forge#400).
 func TestGreenfieldGuidanceDoesNotPromiseRemovedDeployTargets(t *testing.T) {
-	content := buildGreenfieldGuidance(nil)
+	content := BuildGreenfieldGuidance(nil)
 
 	for _, removed := range []string{"Fly", "Cloud Run", "ECS", "Lambda"} {
 		assert.NotContains(t, content, removed,
@@ -272,7 +273,7 @@ func TestGreenfieldGuidanceDoesNotPromiseRemovedDeployTargets(t *testing.T) {
 // later grows its API. Without saying so, the model treats "no backend" as "not
 // forge" and hands the user a page with no deploy story.
 func TestGreenfieldGuidanceOffersForgeForStaticSites(t *testing.T) {
-	content := buildGreenfieldGuidance(nil)
+	content := BuildGreenfieldGuidance(nil)
 
 	positive, negative, found := strings.Cut(content, "Do NOT suggest forge when")
 	require.True(t, found)
@@ -298,7 +299,7 @@ func TestGreenfieldGuidanceOffersForgeForStaticSites(t *testing.T) {
 // see, with no name to look up. The instruction to announce it and link the
 // repo is the only thing closing that gap.
 func TestGreenfieldGuidanceRequiresDisclosure(t *testing.T) {
-	content := buildGreenfieldGuidance(nil)
+	content := BuildGreenfieldGuidance(nil)
 
 	assert.Contains(t, content, forgeRepoURL,
 		"the guidance must carry the forge repo link for the model to show the user")

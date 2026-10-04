@@ -572,7 +572,7 @@ export function WorkflowBuilderChat({
         // the chat association, so nothing about the draft is injected here.
         const messages = [{ role: MessageRole.USER, content: userContent }];
 
-        const result = await chatGrpc.create({
+        const result = await chatGrpc.start({
           project_id: projectId,
           messages,
           workflow: "builtin://agent",

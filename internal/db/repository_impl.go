@@ -3566,6 +3566,97 @@ func (r *Repo) DeleteWorkflowsByChat(ctx context.Context, chatID string) error {
 	return r.workflows.DeleteWorkflowsByChat(ctx, chatID)
 }
 
+// ==================== Triggers ====================
+//
+// Every method here goes through r.triggers, whose queries run against
+// WrappedDBTX.DB(ctx) — so they pick up an ambient RunTx transaction
+// automatically. That is what lets the launcher write the trigger event row in
+// the SAME transaction as the chat it launches: either both commit or neither
+// does, and there is no window where a chat exists with nothing recording why.
+
+func (r *Repo) CreateTrigger(ctx context.Context, t *core.Trigger) error {
+	if t == nil {
+		return fmt.Errorf("trigger cannot be nil")
+	}
+	return r.triggers.CreateTrigger(ctx, t)
+}
+
+func (r *Repo) GetTrigger(ctx context.Context, id string) (*core.Trigger, error) {
+	if id == "" {
+		return nil, fmt.Errorf("trigger ID cannot be empty")
+	}
+	return r.triggers.GetTrigger(ctx, id)
+}
+
+func (r *Repo) ListTriggers(ctx context.Context, f core.TriggerFilters) ([]*core.Trigger, error) {
+	return r.triggers.ListTriggers(ctx, f)
+}
+
+func (r *Repo) UpdateTrigger(ctx context.Context, t *core.Trigger) error {
+	if t == nil {
+		return fmt.Errorf("trigger cannot be nil")
+	}
+	if t.ID == "" {
+		return fmt.Errorf("trigger ID cannot be empty")
+	}
+	return r.triggers.UpdateTrigger(ctx, t)
+}
+
+func (r *Repo) DeleteTrigger(ctx context.Context, id string) error {
+	if id == "" {
+		return fmt.Errorf("trigger ID cannot be empty")
+	}
+	return r.triggers.DeleteTrigger(ctx, id)
+}
+
+func (r *Repo) SetTriggerEnabled(ctx context.Context, id string, enabled bool) error {
+	if id == "" {
+		return fmt.Errorf("trigger ID cannot be empty")
+	}
+	return r.triggers.SetTriggerEnabled(ctx, id, enabled)
+}
+
+func (r *Repo) CreateTriggerEvent(ctx context.Context, ev *core.TriggerEvent) (bool, error) {
+	if ev == nil {
+		return false, fmt.Errorf("trigger event cannot be nil")
+	}
+	if ev.DedupeKey == "" {
+		// An empty dedupe key would make every firing of this kind collide
+		// with every other one, which is far worse than a missing row: the
+		// second real firing would silently report "already launched".
+		return false, fmt.Errorf("trigger event dedupe key cannot be empty")
+	}
+	return r.triggers.CreateTriggerEvent(ctx, ev)
+}
+
+func (r *Repo) GetTriggerEventByDedupe(ctx context.Context, kind core.TriggerEventKind, dedupeKey string) (*core.TriggerEvent, error) {
+	if dedupeKey == "" {
+		return nil, fmt.Errorf("trigger event dedupe key cannot be empty")
+	}
+	return r.triggers.GetTriggerEventByDedupe(ctx, kind, dedupeKey)
+}
+
+func (r *Repo) UpdateTriggerEventOutcome(ctx context.Context, id string, outcome core.TriggerEventOutcome, detail string, chatID *string) error {
+	if id == "" {
+		return fmt.Errorf("trigger event ID cannot be empty")
+	}
+	return r.triggers.UpdateTriggerEventOutcome(ctx, id, outcome, detail, chatID)
+}
+
+func (r *Repo) ListTriggerEvents(ctx context.Context, triggerID string, limit int) ([]*core.TriggerEvent, error) {
+	if triggerID == "" {
+		return nil, fmt.Errorf("trigger ID cannot be empty")
+	}
+	return r.triggers.ListTriggerEvents(ctx, triggerID, limit)
+}
+
+func (r *Repo) GetLatestTriggerEvent(ctx context.Context, triggerID string, outcome *core.TriggerEventOutcome) (*core.TriggerEvent, error) {
+	if triggerID == "" {
+		return nil, fmt.Errorf("trigger ID cannot be empty")
+	}
+	return r.triggers.GetLatestTriggerEvent(ctx, triggerID, outcome)
+}
+
 // ==================== Step Executions ====================
 
 func (r *Repo) CreateStepExecution(ctx context.Context, exec *StepExecution) error {

@@ -120,7 +120,7 @@ const LONG_TIMEOUT_METHODS: Record<string, number> = {
   WriteFile: FILE_OPERATION_TIMEOUT_MS,
   ListFiles: FILE_OPERATION_TIMEOUT_MS,
   // Chat operations that involve workflows - initial setup can take time
-  CreateChat: CHAT_OPERATION_TIMEOUT_MS,
+  StartChat: CHAT_OPERATION_TIMEOUT_MS,
   SendMessage: CHAT_OPERATION_TIMEOUT_MS,
   // MCP operations - external process startup can be slow
   StartServer: MCP_OPERATION_TIMEOUT_MS,

@@ -190,7 +190,7 @@ describe("message merge (snapshot)", () => {
 
 describe("message merge (optimistic user replacement)", () => {
   it("drops the optimistic-user placeholder when a real user message arrives", () => {
-    // Seed an optimistic user message directly into the cache (as createChat does).
+    // Seed an optimistic user message directly into the cache (as startChat does).
     setMessagesInCache(CHAT, [
       {
         id: "optimistic-user-abc",

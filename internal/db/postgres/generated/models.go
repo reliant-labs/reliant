@@ -156,24 +156,26 @@ type ChatUpdate struct {
 }
 
 type ChatsWithActivity struct {
-	ID                   string         `json:"id"`
-	Title                string         `json:"title"`
-	ProjectID            string         `json:"project_id"`
-	UserID               string         `json:"user_id"`
-	State                sql.NullInt32  `json:"state"`
-	WorkflowID           sql.NullString `json:"workflow_id"`
-	RunID                sql.NullString `json:"run_id"`
-	CreatedAt            time.Time      `json:"created_at"`
-	UpdatedAt            time.Time      `json:"updated_at"`
-	LastActive           time.Time      `json:"last_active"`
-	WorktreeID           sql.NullString `json:"worktree_id"`
-	WorkflowName         sql.NullString `json:"workflow_name"`
-	SelectedPresets      sql.NullString `json:"selected_presets"`
-	ArchivedWorktreeName sql.NullString `json:"archived_worktree_name"`
-	Unread               int32          `json:"unread"`
-	ActiveDaemonID       sql.NullString `json:"active_daemon_id"`
-	LastMessageAt        interface{}    `json:"last_message_at"`
-	Activity             int32          `json:"activity"`
+	ID                     string         `json:"id"`
+	Title                  string         `json:"title"`
+	ProjectID              string         `json:"project_id"`
+	UserID                 string         `json:"user_id"`
+	State                  sql.NullInt32  `json:"state"`
+	WorkflowID             sql.NullString `json:"workflow_id"`
+	RunID                  sql.NullString `json:"run_id"`
+	CreatedAt              time.Time      `json:"created_at"`
+	UpdatedAt              time.Time      `json:"updated_at"`
+	LastActive             time.Time      `json:"last_active"`
+	WorktreeID             sql.NullString `json:"worktree_id"`
+	WorkflowName           sql.NullString `json:"workflow_name"`
+	SelectedPresets        sql.NullString `json:"selected_presets"`
+	ArchivedWorktreeName   sql.NullString `json:"archived_worktree_name"`
+	Unread                 int32          `json:"unread"`
+	ActiveDaemonID         sql.NullString `json:"active_daemon_id"`
+	LastMessageAt          interface{}    `json:"last_message_at"`
+	Activity               int32          `json:"activity"`
+	RootWorkflowState      sql.NullInt32  `json:"root_workflow_state"`
+	RootWorkflowStopReason sql.NullInt32  `json:"root_workflow_stop_reason"`
 }
 
 type ClaudeAuthToken struct {
@@ -585,6 +587,37 @@ type ToolCallResult struct {
 	IsError    bool           `json:"is_error"`
 	CreatedAt  time.Time      `json:"created_at"`
 	UpdatedAt  time.Time      `json:"updated_at"`
+}
+
+type Trigger struct {
+	ID         string          `json:"id"`
+	UserID     string          `json:"user_id"`
+	ProjectID  string          `json:"project_id"`
+	WorktreeID sql.NullString  `json:"worktree_id"`
+	Name       string          `json:"name"`
+	Kind       string          `json:"kind"`
+	Enabled    bool            `json:"enabled"`
+	Workflow   string          `json:"workflow"`
+	Presets    json.RawMessage `json:"presets"`
+	Params     json.RawMessage `json:"params"`
+	Message    string          `json:"message"`
+	Config     json.RawMessage `json:"config"`
+	CreatedAt  time.Time       `json:"created_at"`
+	UpdatedAt  time.Time       `json:"updated_at"`
+}
+
+type TriggerEvent struct {
+	ID            string          `json:"id"`
+	TriggerID     sql.NullString  `json:"trigger_id"`
+	UserID        string          `json:"user_id"`
+	Kind          string          `json:"kind"`
+	DedupeKey     string          `json:"dedupe_key"`
+	OccurredAt    time.Time       `json:"occurred_at"`
+	Payload       json.RawMessage `json:"payload"`
+	Outcome       string          `json:"outcome"`
+	OutcomeDetail string          `json:"outcome_detail"`
+	ChatID        sql.NullString  `json:"chat_id"`
+	CreatedAt     time.Time       `json:"created_at"`
 }
 
 type UpdateStreamCounter struct {

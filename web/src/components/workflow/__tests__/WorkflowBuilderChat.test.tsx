@@ -18,7 +18,7 @@ const mocks = vi.hoisted(() => {
 
   return {
     chatGrpc: {
-      create: vi.fn(),
+      start: vi.fn(),
       get: vi.fn(),
       cancel: vi.fn(),
     },
@@ -283,7 +283,7 @@ beforeEach(() => {
   mocks.globalDataState.isInitialized = true;
   mocks.globalDataState.isPrefetching = false;
 
-  mocks.chatGrpc.create.mockResolvedValue({
+  mocks.chatGrpc.start.mockResolvedValue({
     chat: { id: "chat-new" },
   });
   mocks.chatGrpc.get.mockResolvedValue({ id: "chat-existing" });
@@ -302,8 +302,8 @@ describe("WorkflowBuilderChat send workflow params", () => {
 
     await enterAndSend("Build a workflow");
 
-    await waitFor(() => expect(mocks.chatGrpc.create).toHaveBeenCalledTimes(1));
-    expect(mocks.chatGrpc.create).toHaveBeenCalledWith(
+    await waitFor(() => expect(mocks.chatGrpc.start).toHaveBeenCalledTimes(1));
+    expect(mocks.chatGrpc.start).toHaveBeenCalledWith(
       expect.objectContaining({
         project_id: "project-1",
         workflow: "builtin://agent",
@@ -372,7 +372,7 @@ describe("WorkflowBuilderChat send workflow params", () => {
   });
 
   it("renders create errors inline and restores the draft message for retry", async () => {
-    mocks.chatGrpc.create.mockRejectedValueOnce(
+    mocks.chatGrpc.start.mockRejectedValueOnce(
       new Error("workflow input validation failed: model unavailable"),
     );
 
@@ -398,8 +398,8 @@ describe("WorkflowBuilderChat send workflow params", () => {
 
     await enterAndSend("Build a workflow");
 
-    await waitFor(() => expect(mocks.chatGrpc.create).toHaveBeenCalledTimes(1));
-    const [createArgs] = mocks.chatGrpc.create.mock.calls[0] as [
+    await waitFor(() => expect(mocks.chatGrpc.start).toHaveBeenCalledTimes(1));
+    const [createArgs] = mocks.chatGrpc.start.mock.calls[0] as [
       { messages: Array<{ role: number; content: string }> },
     ];
     expect(createArgs.messages).toEqual([
@@ -453,7 +453,7 @@ describe("WorkflowBuilderChat canvas sync", () => {
       onWorkflowChange,
     });
     await enterAndSend("Build a workflow");
-    await waitFor(() => expect(mocks.chatGrpc.create).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(mocks.chatGrpc.start).toHaveBeenCalledTimes(1));
 
     mocks.chatMessages["chat-new"] = messages;
     // Any state change re-runs the effect with the new store messages.

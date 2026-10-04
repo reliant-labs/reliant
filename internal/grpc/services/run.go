@@ -142,7 +142,7 @@ func workflowStopReasonToProto(reason core.WorkflowStopReason) reliantv1.Workflo
 //     the headless run becomes genuinely chatless.
 //
 // The message requirement is already gone at this layer: a caller may start a
-// run with no messages at all, which CreateChat and SendMessage both reject.
+// run with no messages at all, which StartChat and SendMessage both reject.
 func (s *RunService) StartRun(
 	ctx context.Context,
 	req *connect.Request[reliantv1.StartRunRequest],
@@ -170,6 +170,25 @@ func (s *RunService) startInSession(
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("session not found"))
 	}
 
+	// A session that has never started (a branch) is started, not continued:
+	// SendMessage rejects it.
+	if chat.RootStatus.State == core.WorkflowStatePending {
+		start := &reliantv1.StartChatRequest{
+			ChatId:          &msg.SessionId,
+			Workflow:        msg.Workflow,
+			Messages:        msg.Messages,
+			WorkflowParams:  msg.Inputs,
+			SelectedPresets: msg.Presets,
+		}
+		if msg.Mode != "" {
+			start.Mode = &msg.Mode
+		}
+		if _, err := s.chats.StartChat(ctx, connect.NewRequest(start)); err != nil {
+			return nil, err
+		}
+		return s.respondWithSessionRun(ctx, msg.SessionId)
+	}
+
 	send := &reliantv1.SendMessageRequest{
 		ChatId:          msg.SessionId,
 		Messages:        msg.Messages,
@@ -192,7 +211,7 @@ func (s *RunService) startInSession(
 
 // startWithNewSession creates a session to host a run.
 //
-// The project requirement is the honest edge of this API today. CreateChat
+// The project requirement is the honest edge of this API today. StartChat
 // demands a project_id, so a caller who supplies none gets their default
 // project rather than a failure — which keeps the headless path usable now and
 // is exactly the coupling the run-container work removes.
@@ -206,7 +225,7 @@ func (s *RunService) startWithNewSession(
 		return nil, err
 	}
 
-	create := &reliantv1.CreateChatRequest{
+	create := &reliantv1.StartChatRequest{
 		ProjectId:       projectID,
 		Workflow:        msg.Workflow,
 		Messages:        msg.Messages,
@@ -217,7 +236,7 @@ func (s *RunService) startWithNewSession(
 		create.Mode = &msg.Mode
 	}
 
-	resp, err := s.chats.CreateChat(ctx, connect.NewRequest(create))
+	resp, err := s.chats.StartChat(ctx, connect.NewRequest(create))
 	if err != nil {
 		return nil, err
 	}

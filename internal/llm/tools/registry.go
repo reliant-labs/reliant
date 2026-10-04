@@ -63,9 +63,10 @@ const (
 	// Agent tools (v2)
 	ToolAgent = "agent"
 
-	// Spawn observability/messaging tools
+	// Spawn observability/messaging/control tools
 	ToolSpawnStatus = "spawn_status"
 	ToolSpawnSend   = "spawn_send"
+	ToolSpawnStop   = "spawn_stop"
 
 	// Worktree tools
 	ToolWorktree = "worktree"
@@ -569,12 +570,13 @@ func GetToolRegistry() []ToolDefinition {
 		{ToolRemoveDependency, (*ToolsFactory).RemoveDependency, []ToolTag{TagPlanning, TagCodingPlan}, ToolRunsOnServer},
 		{ToolListReadyTasks, (*ToolsFactory).ListReadyTasks, []ToolTag{TagPlanning, TagReadOnly, TagCodingPlan}, ToolRunsOnServer},
 
-		// Spawn observability/messaging tools. An agent that already holds a
-		// handle to a sub-agent it spawned needs no extra privilege to look
-		// at it or talk to it, so this is NOT gated at orchestrator tier —
-		// see MinimumPermissionForTool.
+		// Spawn observability/messaging/control tools. An agent that already
+		// holds a handle to a sub-agent it spawned needs no extra privilege to
+		// look at it, talk to it, or stop it, so these are NOT gated at
+		// orchestrator tier — see MinimumPermissionForTool.
 		{ToolSpawnStatus, (*ToolsFactory).SpawnStatus, []ToolTag{TagReadOnly}, ToolRunsOnServer},
 		{ToolSpawnSend, (*ToolsFactory).SpawnSend, []ToolTag{}, ToolRunsOnServer},
+		{ToolSpawnStop, (*ToolsFactory).SpawnStop, []ToolTag{}, ToolRunsOnServer},
 
 		// Analysis tools - conditionally add project analyzer
 		{ToolSourcegraph, (*ToolsFactory).Sourcegraph, []ToolTag{TagAnalysis, TagReadOnly, TagCodingPlan}, ToolRunsAnywhere},

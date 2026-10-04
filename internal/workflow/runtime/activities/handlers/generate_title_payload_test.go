@@ -10,7 +10,7 @@ import (
 )
 
 // GenerateTitleWorkflow builds its activity input as a map[string]interface{}
-// (that is what CreateChat sends), while the activity receives the typed
+// (that is what StartChat sends), while the activity receives the typed
 // GenerateTitleInput. Temporal's payload converter bridges the two, so the
 // fallback flag only works if the JSON tag matches the map key exactly.
 //

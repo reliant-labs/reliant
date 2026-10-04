@@ -52,7 +52,7 @@ vi.mock("../../../store/chatStore", () => ({
   useChatStore: storeMock(() => ({
     hasLoaded: true,
     chats: new Map(),
-    createChat: vi.fn(),
+    startChat: vi.fn(),
     selectChat: vi.fn(),
   })),
 }));

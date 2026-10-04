@@ -185,6 +185,20 @@ type Chat struct {
 	Activity             *int              `json:"activity,omitempty"`
 	Unread               bool              `json:"unread"`
 	ActiveDaemonID       *string           `json:"active_daemon_id,omitempty"`
+
+	// RootStatus is the lifecycle of the chat's ROOT workflow — the row whose
+	// id is WorkflowID. It travels with every chat read because callers that
+	// ask "is this chat paused" or "has this chat started yet" are asking
+	// about that one run, and looking it up separately made the question an
+	// N+1 that most call sites simply skipped: Chat.workflow_state on the wire
+	// was never populated at all, so the web's paused detection was
+	// permanently false.
+	//
+	// A chat with no root workflow row (a branch that has not started) leaves
+	// this at the zero WorkflowStatus, i.e. WORKFLOW_STATE_UNSPECIFIED. That
+	// is distinct from PENDING, which is a root row that exists and has not
+	// begun.
+	RootStatus WorkflowStatus `json:"root_status"`
 }
 
 // MainThreadID returns the chat's root thread id, or "" if no root workflow
