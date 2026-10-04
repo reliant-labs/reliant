@@ -259,7 +259,7 @@ func populateCELNamespaces() {
 		{"nodes", "Output from completed nodes (nodes.<id>.<field>)"},
 		{"output", "Current activity output (for save_message context)"},
 		{"outputs", "Loop iteration outputs for while condition evaluation"},
-		{"trigger", "Trigger context (message, attachments) for triggered workflows"},
+		{"trigger", "The event that started this run, fixed at launch (trigger.kind, trigger.name, trigger.scheduled_for, trigger.payload.<x>). Interactive chats have kind chat.start"},
 		{"thread", "Current thread context (token_count, message_count)"},
 	}
 

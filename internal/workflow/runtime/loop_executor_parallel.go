@@ -768,6 +768,7 @@ func (e *InlineLoopExecutor) buildParallelIterationInputs(
 	}
 	// An unattended run stays unattended in every parallel branch. See unattended.go.
 	propagateUnattended(e.workflowInputs, iterInputs)
+	propagateTrigger(e.workflowInputs, iterInputs)
 	iterInputs["loop"] = map[string]interface{}{"iteration": index}
 	iterInputs["iter"] = model.BuildParallelIterContext(index, item, key)
 	return iterInputs, nil

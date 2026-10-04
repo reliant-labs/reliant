@@ -1050,3 +1050,60 @@ outputs:
 			"get-it-right pattern should pass validation: run node output fields (exit_code, log_file, working_dir) must be known to CEL")
 	})
 }
+
+// `trigger.*` is a declared namespace: a template may read the event that
+// started the run. An undeclared root must still fail, so this is not a
+// blanket loosening.
+func TestValidateCELWithCompilation_AcceptsTriggerNamespace(t *testing.T) {
+	t.Parallel()
+	workflowYAML := `
+name: test-trigger-root
+entry: [step1]
+nodes:
+  - id: step1
+    type: call_llm
+    model:
+      tags: [flagship]
+  - id: step2
+    type: call_llm
+    model:
+      tags: [flagship]
+edges:
+  - from: step1
+    cases:
+      - to: step2
+        condition: "trigger.kind == 'schedule' && trigger.payload.trigger_name == 'nightly' && trigger.scheduled_for != ''"
+`
+	wf, err := wfyaml.ParseWorkflow([]byte(workflowYAML))
+	require.NoError(t, err)
+
+	result := &Result{}
+	ValidateCELWithCompilation(wf, result, nil)
+	for _, e := range result.Errors() {
+		t.Errorf("unexpected validation error: %s - %s", e.Path, e.Message)
+	}
+
+	bad := `
+name: test-trigger-bogus-root
+entry: [step1]
+nodes:
+  - id: step1
+    type: call_llm
+    model:
+      tags: [flagship]
+  - id: step2
+    type: call_llm
+    model:
+      tags: [flagship]
+edges:
+  - from: step1
+    cases:
+      - to: step2
+        condition: "triggers.kind == 'schedule'"
+`
+	wf, err = wfyaml.ParseWorkflow([]byte(bad))
+	require.NoError(t, err)
+	result = &Result{}
+	ValidateCELWithCompilation(wf, result, nil)
+	assert.NotEmpty(t, result.Errors(), "a misspelled root must still be rejected")
+}

@@ -34,6 +34,11 @@ const (
 	// Type: map[string]any (dynamic - user-defined inputs vary by workflow)
 	CELInputs CELNamespace = "inputs"
 
+	// CELTrigger provides the event that started the run, fixed at launch.
+	// Usage: trigger.kind, trigger.name, trigger.scheduled_for, trigger.payload.<x>
+	// Type: map[string]any (dynamic - payload shape varies by trigger kind)
+	CELTrigger CELNamespace = "trigger"
+
 	// CELWorkflow provides workflow metadata and environment context.
 	// Usage: workflow.id, workflow.name, workflow.path, workflow.branch
 	// Type: model.WorkflowContext (statically typed - known fields)
@@ -64,6 +69,7 @@ const (
 func AllNamespaces() []CELNamespace {
 	return []CELNamespace{
 		CELInputs,
+		CELTrigger,
 		CELWorkflow,
 		CELNodes,
 		CELIter,
@@ -111,6 +117,9 @@ func (c *EdgeEvalContext) Activation() map[string]interface{} {
 	}
 	if c.Inputs != nil {
 		m[string(CELInputs)] = c.Inputs
+		if t := triggerFromInputs(c.Inputs); t != nil {
+			m[string(CELTrigger)] = t
+		}
 	}
 	if c.Workflow != nil {
 		m[string(CELWorkflow)] = c.Workflow
@@ -125,7 +134,7 @@ func (c *EdgeEvalContext) Activation() map[string]interface{} {
 }
 
 func (c *EdgeEvalContext) Namespaces() []CELNamespace {
-	return withLoopOutputs([]CELNamespace{CELInputs, CELWorkflow, CELNodes, CELIter}, c.Outputs)
+	return withLoopOutputs([]CELNamespace{CELInputs, CELTrigger, CELWorkflow, CELNodes, CELIter}, c.Outputs)
 }
 
 // =============================================================================
@@ -155,6 +164,9 @@ func (c *LoopEvalContext) Activation() map[string]interface{} {
 	}
 	if c.Inputs != nil {
 		m[string(CELInputs)] = c.Inputs
+		if t := triggerFromInputs(c.Inputs); t != nil {
+			m[string(CELTrigger)] = t
+		}
 	}
 	if c.Nodes != nil {
 		m[string(CELNodes)] = c.Nodes
@@ -166,7 +178,7 @@ func (c *LoopEvalContext) Activation() map[string]interface{} {
 }
 
 func (c *LoopEvalContext) Namespaces() []CELNamespace {
-	return withLoopOutputs([]CELNamespace{CELIter, CELInputs, CELNodes, CELWorkflow}, c.Outputs)
+	return withLoopOutputs([]CELNamespace{CELIter, CELInputs, CELTrigger, CELNodes, CELWorkflow}, c.Outputs)
 }
 
 // =============================================================================
@@ -200,6 +212,9 @@ func (c *PostActivityContext) Activation() map[string]interface{} {
 	}
 	if c.Inputs != nil {
 		m[string(CELInputs)] = c.Inputs
+		if t := triggerFromInputs(c.Inputs); t != nil {
+			m[string(CELTrigger)] = t
+		}
 	}
 	if c.Workflow != nil {
 		m[string(CELWorkflow)] = c.Workflow
@@ -237,6 +252,9 @@ func (c *NodeResolutionContext) Activation() map[string]interface{} {
 	m := make(map[string]interface{})
 	if c.Inputs != nil {
 		m[string(CELInputs)] = c.Inputs
+		if t := triggerFromInputs(c.Inputs); t != nil {
+			m[string(CELTrigger)] = t
+		}
 	}
 	if c.Nodes != nil {
 		m[string(CELNodes)] = c.Nodes
@@ -254,7 +272,7 @@ func (c *NodeResolutionContext) Activation() map[string]interface{} {
 }
 
 func (c *NodeResolutionContext) Namespaces() []CELNamespace {
-	return withLoopOutputs([]CELNamespace{CELInputs, CELNodes, CELIter, CELWorkflow}, c.Outputs)
+	return withLoopOutputs([]CELNamespace{CELInputs, CELTrigger, CELNodes, CELIter, CELWorkflow}, c.Outputs)
 }
 
 // withLoopOutputs appends `outputs` to a context's fixed namespaces when the
@@ -297,6 +315,9 @@ func (c *RouterOutputContext) Activation() map[string]interface{} {
 	}
 	if c.Inputs != nil {
 		m[string(CELInputs)] = c.Inputs
+		if t := triggerFromInputs(c.Inputs); t != nil {
+			m[string(CELTrigger)] = t
+		}
 	}
 	if c.Workflow != nil {
 		m[string(CELWorkflow)] = c.Workflow
@@ -305,7 +326,7 @@ func (c *RouterOutputContext) Activation() map[string]interface{} {
 }
 
 func (c *RouterOutputContext) Namespaces() []CELNamespace {
-	return []CELNamespace{CELOutputs, CELInputs, CELWorkflow}
+	return []CELNamespace{CELOutputs, CELInputs, CELTrigger, CELWorkflow}
 }
 
 // =============================================================================
@@ -325,6 +346,9 @@ func (c *WorkflowTemplateContext) Activation() map[string]interface{} {
 	m := make(map[string]interface{})
 	if c.Inputs != nil {
 		m[string(CELInputs)] = c.Inputs
+		if t := triggerFromInputs(c.Inputs); t != nil {
+			m[string(CELTrigger)] = t
+		}
 	}
 	if c.Workflow != nil {
 		m[string(CELWorkflow)] = c.Workflow
@@ -334,4 +358,15 @@ func (c *WorkflowTemplateContext) Activation() map[string]interface{} {
 
 func (c *WorkflowTemplateContext) Namespaces() []CELNamespace {
 	return TemplateResolutionCELEnvConfig().Namespaces
+}
+
+// TriggerInputKey is the reserved workflow-input key under which the runtime
+// carries the launch event (see runtime.TriggerInfo). Every typed context that
+// has Inputs exposes it as the `trigger` namespace, so no evaluation site has
+// to thread it separately.
+const TriggerInputKey = "__trigger"
+
+func triggerFromInputs(inputs map[string]interface{}) map[string]interface{} {
+	trigger, _ := inputs[TriggerInputKey].(map[string]interface{})
+	return trigger
 }

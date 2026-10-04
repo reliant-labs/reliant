@@ -3636,6 +3636,13 @@ func (r *Repo) GetTriggerEventByDedupe(ctx context.Context, kind core.TriggerEve
 	return r.triggers.GetTriggerEventByDedupe(ctx, kind, dedupeKey)
 }
 
+func (r *Repo) GetTriggerEventByChatID(ctx context.Context, chatID string) (*core.TriggerEvent, error) {
+	if chatID == "" {
+		return nil, fmt.Errorf("chat ID cannot be empty")
+	}
+	return r.triggers.GetTriggerEventByChatID(ctx, chatID)
+}
+
 func (r *Repo) UpdateTriggerEventOutcome(ctx context.Context, id string, outcome core.TriggerEventOutcome, detail string, chatID *string) error {
 	if id == "" {
 		return fmt.Errorf("trigger event ID cannot be empty")

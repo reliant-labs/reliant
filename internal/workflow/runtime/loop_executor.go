@@ -1157,6 +1157,7 @@ func (e *InlineLoopExecutor) buildIterationInputs() (map[string]interface{}, err
 	}
 	// An unattended run stays unattended in the loop body. See unattended.go.
 	propagateUnattended(e.workflowInputs, iterInputs)
+	propagateTrigger(e.workflowInputs, iterInputs)
 	iterInputs["loop"] = map[string]interface{}{"iteration": e.iteration}
 	iterInputs["iter"] = e.buildIterCtx()
 	return iterInputs, nil

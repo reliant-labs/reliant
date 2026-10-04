@@ -50,6 +50,7 @@ func DefaultCELEnvConfig() CELEnvConfig {
 	return CELEnvConfig{
 		Namespaces: []CELNamespace{
 			CELInputs,
+			CELTrigger,
 			CELWorkflow,
 			CELNodes,
 			CELIter,
@@ -67,6 +68,7 @@ func SaveMessageCELEnvConfig() CELEnvConfig {
 		Namespaces: []CELNamespace{
 			CELOutput,
 			CELInputs,
+			CELTrigger,
 			CELWorkflow,
 			CELIter,
 		},
@@ -88,6 +90,7 @@ func LoopWhileCELEnvConfig() CELEnvConfig {
 			CELOutputs,
 			CELIter,
 			CELInputs,
+			CELTrigger,
 			CELNodes,
 		},
 		IncludeStdLib:          true,
@@ -101,6 +104,7 @@ func TemplateResolutionCELEnvConfig() CELEnvConfig {
 	return CELEnvConfig{
 		Namespaces: []CELNamespace{
 			CELInputs,
+			CELTrigger,
 			CELWorkflow,
 		},
 		IncludeStdLib:          true,
@@ -114,6 +118,7 @@ func EdgeConditionCELEnvConfig() CELEnvConfig {
 	return CELEnvConfig{
 		Namespaces: []CELNamespace{
 			CELInputs,
+			CELTrigger,
 			CELWorkflow,
 			CELNodes,
 			CELIter,

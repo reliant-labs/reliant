@@ -647,8 +647,15 @@ type Chat struct {
 	// whether a run is going, the stop reason says why a stopped one stopped.
 	WorkflowState      WorkflowState      `protobuf:"varint,31,opt,name=workflow_state,json=workflowState,proto3,enum=reliant.v1.WorkflowState" json:"workflow_state,omitempty"`
 	WorkflowStopReason WorkflowStopReason `protobuf:"varint,32,opt,name=workflow_stop_reason,json=workflowStopReason,proto3,enum=reliant.v1.WorkflowStopReason" json:"workflow_stop_reason,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	// What started this chat: the kind of its launch event ("chat.start" for an
+	// interactive chat, "schedule" for a scheduled run). Unset for a chat that
+	// predates trigger events.
+	LaunchKind *string `protobuf:"bytes,33,opt,name=launch_kind,json=launchKind,proto3,oneof" json:"launch_kind,omitempty"`
+	// The stored trigger that launched this chat. Unset for interactive chats and
+	// once the trigger is deleted.
+	TriggerId     *string `protobuf:"bytes,34,opt,name=trigger_id,json=triggerId,proto3,oneof" json:"trigger_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Chat) Reset() {
@@ -819,6 +826,20 @@ func (x *Chat) GetWorkflowStopReason() WorkflowStopReason {
 		return x.WorkflowStopReason
 	}
 	return WorkflowStopReason_WORKFLOW_STOP_REASON_UNSPECIFIED
+}
+
+func (x *Chat) GetLaunchKind() string {
+	if x != nil && x.LaunchKind != nil {
+		return *x.LaunchKind
+	}
+	return ""
+}
+
+func (x *Chat) GetTriggerId() string {
+	if x != nil && x.TriggerId != nil {
+		return *x.TriggerId
+	}
+	return ""
 }
 
 // ArchivedChat includes worktree information for archived chats
@@ -1610,11 +1631,14 @@ func (x *StartChatResponse) GetRunId() string {
 
 // ListChatsRequest lists chats for a project
 type ListChatsRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ProjectId     string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"` // Required
-	Limit         *int32                 `protobuf:"varint,2,opt,name=limit,proto3,oneof" json:"limit,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	ProjectId string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"` // Required
+	Limit     *int32                 `protobuf:"varint,2,opt,name=limit,proto3,oneof" json:"limit,omitempty"`
+	// When true, omit automation chats (launch kind other than an interactive
+	// start) unless they are awaiting input (pending approval or question).
+	ExcludeAutomations *bool `protobuf:"varint,3,opt,name=exclude_automations,json=excludeAutomations,proto3,oneof" json:"exclude_automations,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *ListChatsRequest) Reset() {
@@ -1659,6 +1683,13 @@ func (x *ListChatsRequest) GetLimit() int32 {
 		return *x.Limit
 	}
 	return 0
+}
+
+func (x *ListChatsRequest) GetExcludeAutomations() bool {
+	if x != nil && x.ExcludeAutomations != nil {
+		return *x.ExcludeAutomations
+	}
+	return false
 }
 
 // ListChatsResponse returns the list of chats
@@ -5449,7 +5480,7 @@ var File_reliant_v1_chat_proto protoreflect.FileDescriptor
 const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\n" +
 	"\x15reliant/v1/chat.proto\x12\n" +
-	"reliant.v1\x1a\x1cgoogle/protobuf/struct.proto\x1a\x17reliant/v1/common.proto\"\xab\b\n" +
+	"reliant.v1\x1a\x1cgoogle/protobuf/struct.proto\x1a\x17reliant/v1/common.proto\"\x94\t\n" +
 	"\x04Chat\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x17\n" +
 	"\auser_id\x18\x02 \x01(\tR\x06userId\x12\x14\n" +
@@ -5476,7 +5507,11 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\x06unread\x18\x1c \x01(\bR\x06unread\x12-\n" +
 	"\x10active_daemon_id\x18\x1e \x01(\tH\x05R\x0eactiveDaemonId\x88\x01\x01\x12@\n" +
 	"\x0eworkflow_state\x18\x1f \x01(\x0e2\x19.reliant.v1.WorkflowStateR\rworkflowState\x12P\n" +
-	"\x14workflow_stop_reason\x18  \x01(\x0e2\x1e.reliant.v1.WorkflowStopReasonR\x12workflowStopReason\x1aB\n" +
+	"\x14workflow_stop_reason\x18  \x01(\x0e2\x1e.reliant.v1.WorkflowStopReasonR\x12workflowStopReason\x12$\n" +
+	"\vlaunch_kind\x18! \x01(\tH\x06R\n" +
+	"launchKind\x88\x01\x01\x12\"\n" +
+	"\n" +
+	"trigger_id\x18\" \x01(\tH\aR\ttriggerId\x88\x01\x01\x1aB\n" +
 	"\x14SelectedPresetsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\x0e\n" +
@@ -5485,7 +5520,9 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\f_workflow_idB\t\n" +
 	"\a_run_idB\x12\n" +
 	"\x10_last_message_atB\x13\n" +
-	"\x11_active_daemon_idJ\x04\b\x06\x10\aJ\x04\b\a\x10\bJ\x04\b\t\x10\n" +
+	"\x11_active_daemon_idB\x0e\n" +
+	"\f_launch_kindB\r\n" +
+	"\v_trigger_idJ\x04\b\x06\x10\aJ\x04\b\a\x10\bJ\x04\b\t\x10\n" +
 	"J\x04\b\n" +
 	"\x10\vJ\x04\b\v\x10\fJ\x04\b\f\x10\rJ\x04\b\x0e\x10\x0fJ\x04\b\x0f\x10\x10J\x04\b\x10\x10\x11J\x04\b\x17\x10\x18J\x04\b\x18\x10\x19J\x04\b\x1d\x10\x1e\"\xbd\x01\n" +
 	"\fArchivedChat\x12$\n" +
@@ -5605,12 +5642,14 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\x04chat\x18\x01 \x01(\v2\x10.reliant.v1.ChatR\x04chat\x12\x1f\n" +
 	"\vworkflow_id\x18\x02 \x01(\tR\n" +
 	"workflowId\x12\x15\n" +
-	"\x06run_id\x18\x03 \x01(\tR\x05runIdJ\x04\b\x04\x10\x05\"V\n" +
+	"\x06run_id\x18\x03 \x01(\tR\x05runIdJ\x04\b\x04\x10\x05\"\xa4\x01\n" +
 	"\x10ListChatsRequest\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x19\n" +
-	"\x05limit\x18\x02 \x01(\x05H\x00R\x05limit\x88\x01\x01B\b\n" +
-	"\x06_limit\"\x8c\x01\n" +
+	"\x05limit\x18\x02 \x01(\x05H\x00R\x05limit\x88\x01\x01\x124\n" +
+	"\x13exclude_automations\x18\x03 \x01(\bH\x01R\x12excludeAutomations\x88\x01\x01B\b\n" +
+	"\x06_limitB\x16\n" +
+	"\x14_exclude_automations\"\x8c\x01\n" +
 	"\x11ListChatsResponse\x12&\n" +
 	"\x05chats\x18\x01 \x03(\v2\x10.reliant.v1.ChatR\x05chats\x12\x14\n" +
 	"\x05total\x18\x02 \x01(\x05R\x05total\x129\n" +

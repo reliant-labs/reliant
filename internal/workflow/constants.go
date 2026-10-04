@@ -76,6 +76,7 @@ var RuntimeInjectedInputs = map[string]bool{
 	"spawned_by":         true, // Injected after validation
 	"__thread":           true, // Internal signal routing key for thread-scoped updates
 	"session_daemon_id":  true, // Session-level active daemon for tool execution
+	"__trigger":          true, // Launch event, exposed to CEL as `trigger`
 }
 
 // NewWorkflowID generates a new random UUID for a root workflow.

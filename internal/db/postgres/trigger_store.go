@@ -167,6 +167,17 @@ func (s *triggerStore) GetTriggerEventByDedupe(ctx context.Context, kind core.Tr
 	return triggerEventFromPG(row)
 }
 
+func (s *triggerStore) GetTriggerEventByChatID(ctx context.Context, chatID string) (*core.TriggerEvent, error) {
+	row, err := s.q.GetTriggerEventByChatID(ctx, triggerPtrToNullString(&chatID))
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, core.ErrTriggerEventNotFound
+		}
+		return nil, fmt.Errorf("failed to get trigger event by chat id: %w", err)
+	}
+	return triggerEventFromPG(row)
+}
+
 func (s *triggerStore) UpdateTriggerEventOutcome(ctx context.Context, id string, outcome core.TriggerEventOutcome, detail string, chatID *string) error {
 	affected, err := s.q.UpdateTriggerEventOutcome(ctx, pgdb.UpdateTriggerEventOutcomeParams{
 		Outcome:       string(outcome),

@@ -115,10 +115,11 @@ func (s *ChatService) ListChats(
 	}
 
 	filters := db.ChatFilters{
-		UserID:          userID,
-		ProjectID:       &req.Msg.ProjectId,
-		Limit:           limit,
-		ExcludeArchived: true,
+		UserID:             userID,
+		ProjectID:          &req.Msg.ProjectId,
+		Limit:              limit,
+		ExcludeArchived:    true,
+		ExcludeAutomations: req.Msg.GetExcludeAutomations(),
 	}
 
 	chats, err := s.database.ListChats(ctx, filters)
@@ -1067,6 +1068,7 @@ func (s *ChatService) CompactChat(
 			Thread:       threadToCompact,
 			ThreadMode:   model.ThreadModeInherit,
 		},
+		Trigger: launch.LoadChatTrigger(ctx, s.database, req.Msg.ChatId),
 	}
 
 	workflowRun, err := s.tempClient.ExecuteWorkflow(ctx, workflowOptions, v2.DynamicWorkflow, workflowInput)

@@ -58,12 +58,13 @@ func (s *chatStore) ListChats(ctx context.Context, filters core.ChatFilters) ([]
 	}
 
 	rows, err := s.q.ListChats(ctx, pgdb.ListChatsParams{
-		UserID:          filters.UserID,
-		ProjectID:       chatPtrToNullString(filters.ProjectID),
-		State:           stateNull,
-		ExcludeArchived: filters.ExcludeArchived,
-		Limit:           int32(filters.Limit),
-		Offset:          int32(filters.Offset),
+		UserID:             filters.UserID,
+		ProjectID:          chatPtrToNullString(filters.ProjectID),
+		State:              stateNull,
+		ExcludeArchived:    filters.ExcludeArchived,
+		ExcludeAutomations: filters.ExcludeAutomations,
+		Limit:              int32(filters.Limit),
+		Offset:             int32(filters.Offset),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to list chats: %w", err)
@@ -167,6 +168,8 @@ func chatFromRow(row pgdb.ChatsWithActivity) *core.Chat {
 		Activity:        &activity,
 		Unread:          row.Unread != 0,
 		ActiveDaemonID:  chatNullStringToPtr(row.ActiveDaemonID),
+		LaunchKind:      row.LaunchKind.String,
+		TriggerID:       chatNullStringToPtr(row.TriggerID),
 		RootStatus: chatRootStatus(
 			row.RootWorkflowState,
 			row.RootWorkflowStopReason,

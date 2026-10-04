@@ -636,3 +636,75 @@ func TestLaunchCarriesUserJWTAndMode(t *testing.T) {
 	assert.Equal(t, "jwt-123", input.ExecContext.UserJWT)
 	assert.Equal(t, "plan", input.Inputs["mode"])
 }
+
+// A scheduled run reads the event that started it. The launcher builds the
+// trigger from the event row it just wrote, so id and payload round-trip.
+func TestLaunchCarriesTheTriggerOnWorkflowInput(t *testing.T) {
+	repo, ctx, projectID, _ := launchFixture(t)
+	starter := &fakeStarter{}
+	launcher, _ := newTestLauncher(t, repo, starter)
+
+	scheduledFor := time.Date(2026, 1, 2, 9, 0, 0, 0, time.UTC)
+	triggerID := uuid.NewString()
+	require.NoError(t, repo.CreateTrigger(ctx, &core.Trigger{
+		ID: triggerID, UserID: launchTestUserID, ProjectID: projectID, Name: "nightly",
+		Kind: core.TriggerKindSchedule, Enabled: true, Workflow: "builtin://agent",
+		Config: []byte(`{"interval":"1h"}`), CreatedAt: scheduledFor, UpdatedAt: scheduledFor,
+	}))
+
+	result, err := launcher.Launch(ctx, Event{
+		Kind:       core.TriggerEventKindSchedule,
+		TriggerID:  triggerID,
+		DedupeKey:  "fire-" + uuid.NewString(),
+		OccurredAt: scheduledFor,
+		Payload:    map[string]any{"scheduled_for": "2026-01-02T09:00:00Z", "trigger_name": "nightly"},
+	}, Spec{
+		OwnerUserID: launchTestUserID,
+		ProjectID:   projectID,
+		Workflow:    "builtin://agent",
+		Params:      mockModelParams(t),
+		Messages:    userSeed("run the nightly build"),
+		Unattended:  true,
+	})
+	require.NoError(t, err)
+
+	_, input := starter.rootRun(t)
+	require.NotNil(t, input.Trigger, "the root run must carry the event that launched it")
+	assert.Equal(t, "schedule", input.Trigger.Kind)
+	assert.Equal(t, triggerID, input.Trigger.TriggerID)
+	assert.Equal(t, result.EventID, input.Trigger.EventID)
+	assert.Equal(t, "2026-01-02T09:00:00Z", input.Trigger.OccurredAt)
+	assert.Equal(t, "nightly", input.Trigger.Payload["trigger_name"])
+
+	// An interactive start is an event too.
+	starter2 := &fakeStarter{}
+	launcher2, _ := newTestLauncher(t, repo, starter2)
+	_, err = launcher2.Launch(ctx, chatStartEvent(), Spec{
+		OwnerUserID: launchTestUserID, ProjectID: projectID, Workflow: "builtin://agent",
+		Params: mockModelParams(t), Messages: userSeed("hi"),
+	})
+	require.NoError(t, err)
+	_, input = starter2.rootRun(t)
+	require.NotNil(t, input.Trigger)
+	assert.Equal(t, "chat.start", input.Trigger.Kind)
+}
+
+// A chat's launch event is found by chat id, which is how restarts rebuild it.
+func TestLoadChatTriggerReturnsTheLaunchEvent(t *testing.T) {
+	repo, ctx, projectID, _ := launchFixture(t)
+	starter := &fakeStarter{}
+	launcher, _ := newTestLauncher(t, repo, starter)
+
+	result, err := launcher.Launch(ctx, chatStartEvent(), Spec{
+		OwnerUserID: launchTestUserID, ProjectID: projectID, Workflow: "builtin://agent",
+		Params: mockModelParams(t), Messages: userSeed("hi"),
+	})
+	require.NoError(t, err)
+
+	got := LoadChatTrigger(ctx, repo, result.Chat.ID)
+	assert.Equal(t, "chat.start", got.Kind)
+	assert.Equal(t, result.EventID, got.EventID)
+
+	legacy := LoadChatTrigger(ctx, repo, "no-such-chat")
+	assert.Equal(t, "chat.start", legacy.Kind, "a chat with no event reads as an interactive start")
+}

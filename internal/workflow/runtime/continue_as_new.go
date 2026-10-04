@@ -266,6 +266,7 @@ func newContinueAsNewError(ctx workflow.Context, input WorkflowInput, nodeID str
 		WorkflowName: input.WorkflowName,
 		Inputs:       input.Inputs,
 		ExecContext:  input.ExecContext,
+		Trigger:      input.Trigger,
 		Resume:       resume,
 	})
 }

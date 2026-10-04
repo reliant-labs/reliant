@@ -357,6 +357,7 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 		initialData:   initialData,
 		userContent:   seed.userContent,
 		eventID:       eventRow.ID,
+		trigger:       TriggerInfoFromEvent(eventRow),
 		generateTitle: spec.GenerateTitle,
 	})
 }
@@ -484,6 +485,7 @@ func (l *Launcher) launchPending(ctx context.Context, ev Event, spec Spec, seed 
 		initialData:   initialData,
 		userContent:   seed.userContent,
 		eventID:       eventRow.ID,
+		trigger:       TriggerInfoFromEvent(eventRow),
 		generateTitle: spec.GenerateTitle && chat.Title == "",
 	})
 }
@@ -604,6 +606,7 @@ type startParams struct {
 	initialData   map[string]interface{}
 	userContent   string
 	eventID       string
+	trigger       *v2.TriggerInfo
 	generateTitle bool
 }
 
@@ -664,6 +667,7 @@ func (l *Launcher) start(ctx context.Context, p startParams) (*Result, error) {
 		WorkflowName: p.workflowName,
 		Inputs:       initialData,
 		ExecContext:  execContext,
+		Trigger:      p.trigger,
 	}
 
 	workflowRun, err := l.temporal.ExecuteWorkflow(ctx, workflowOptions, v2.DynamicWorkflow, workflowInput)
@@ -746,4 +750,31 @@ func displayStyleProtoToInt32Ptr(ds *reliantv1.DisplayStyle) *int32 {
 	}
 	v := int32(*ds)
 	return &v
+}
+
+// TriggerInfoFromEvent is the launch event as the runtime carries it.
+func TriggerInfoFromEvent(row *core.TriggerEvent) *v2.TriggerInfo {
+	info := &v2.TriggerInfo{
+		Kind:       string(row.Kind),
+		EventID:    row.ID,
+		OccurredAt: row.OccurredAt.UTC().Format(time.RFC3339),
+		Payload:    row.Payload,
+	}
+	if row.TriggerID != nil {
+		info.TriggerID = *row.TriggerID
+	}
+	return info
+}
+
+// LoadChatTrigger returns the launch event of an existing chat, for restarts
+// that rebuild its WorkflowInput. A chat that predates trigger events has none,
+// so it reads as an interactive start.
+func LoadChatTrigger(ctx context.Context, repo interface {
+	GetTriggerEventByChatID(ctx context.Context, chatID string) (*core.TriggerEvent, error)
+}, chatID string) *v2.TriggerInfo {
+	row, err := repo.GetTriggerEventByChatID(ctx, chatID)
+	if err != nil || row == nil {
+		return &v2.TriggerInfo{Kind: string(core.TriggerEventKindChatStart)}
+	}
+	return TriggerInfoFromEvent(row)
 }

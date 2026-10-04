@@ -15,6 +15,15 @@ WHERE
     AND project_id = sqlc.narg('project_id')
     AND (sqlc.narg('state')::integer IS NULL OR state = sqlc.narg('state')::integer)
     AND (NOT sqlc.arg('exclude_archived')::boolean OR state != 3)
+    -- Automation chats (any launch kind other than an interactive start) are
+    -- hidden unless they are waiting on a human: activity 2 is a pending
+    -- approval or question. A chat with no launch event is interactive.
+    AND (
+        NOT sqlc.arg('exclude_automations')::boolean
+        OR launch_kind IS NULL
+        OR launch_kind = 'chat.start'
+        OR activity = 2
+    )
 ORDER BY last_active DESC
 LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
 
