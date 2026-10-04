@@ -4,6 +4,8 @@ syntax = "proto3";
 package reliant.v1;
 
 import "google/protobuf/struct.proto";
+import "reliant/v1/chat.proto";
+import "reliant/v1/run.proto";
 
 option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
 
@@ -46,7 +48,8 @@ service TriggerService {
   // already made that decision.
   rpc FireTrigger(FireTriggerRequest) returns (FireTriggerResponse) {}
 
-  // ListTriggerEvents returns a trigger's firings, newest first.
+  // ListTriggerEvents returns a trigger's firings, newest first, paged by a
+  // keyset cursor. Each launched firing carries the state of the run it started.
   rpc ListTriggerEvents(ListTriggerEventsRequest) returns (ListTriggerEventsResponse) {}
 }
 
@@ -95,6 +98,68 @@ enum TriggerOverlapPolicy {
   TRIGGER_OVERLAP_POLICY_SKIP = 1;
   // ALLOW: fire regardless, launching a concurrent run.
   TRIGGER_OVERLAP_POLICY_ALLOW = 2;
+}
+
+// TriggerHealthStatus summarises how a trigger's recent firings went.
+//
+// It is computed on read from the trigger's last 10 firings (newest first),
+// plus the run each launched firing started. Each firing resolves to one result:
+//   - SKIPPED outcome: skipped.
+//   - FAILED outcome (the launch failed): failure.
+//   - LAUNCHED whose run ended FAILED: failure. A run that launched and then
+//     died is a failed automation, which is the point of this status.
+//   - LAUNCHED whose run COMPLETED: success.
+//   - LAUNCHED whose run is still going (queued, running, needs input, paused),
+//     was cancelled, or whose chat was deleted: unresolved. Unresolved firings
+//     are neither a success nor a failure and never end a failure streak.
+//
+// The status is then, first match wins:
+//   - FAILING: two or more consecutive failures, newest first. Skipped and
+//     unresolved firings are passed over; a success ends the streak.
+//   - DEGRADED: any failure in the window that did not make it FAILING, or
+//     three or more consecutive skipped firings from the newest back.
+//   - HEALTHY: no failure in the window and at least one completed run.
+//   - UNKNOWN: anything else, including a trigger that has never fired.
+enum TriggerHealthStatus {
+  TRIGGER_HEALTH_STATUS_UNSPECIFIED = 0;
+  TRIGGER_HEALTH_STATUS_HEALTHY = 1;
+  TRIGGER_HEALTH_STATUS_DEGRADED = 2;
+  TRIGGER_HEALTH_STATUS_FAILING = 3;
+  TRIGGER_HEALTH_STATUS_UNKNOWN = 4;
+}
+
+// TriggerHealth is the read-only health summary of a trigger. See
+// TriggerHealthStatus for the rules.
+message TriggerHealth {
+  TriggerHealthStatus status = 1;
+
+  // Failures in a row from the newest firing back, passing over skipped and
+  // unresolved firings; a success ends the streak. Within the last 10 firings.
+  int32 consecutive_failures = 2;
+
+  // Skipped firings in a row from the newest firing back, within the last 10
+  // firings. Anything other than a skip ends the streak.
+  int32 consecutive_skips = 3;
+
+  // What went wrong in the most recent failure in the window: the launch
+  // error for a FAILED firing, or a short description of the failed run.
+  // Empty when the window holds no failure.
+  string last_failure_detail = 4;
+}
+
+// TriggerEventRun is the run a launched firing started, as of now.
+message TriggerEventRun {
+  // The single state a user reads for the run. Derived by the same rule as
+  // Run.display_state, so a firing and the Runs list cannot disagree.
+  RunDisplayState display_state = 1;
+
+  // The run's title.
+  string title = 2;
+
+  // The root workflow's lifecycle state and, when STOPPED, why. Unspecified
+  // when the run has no root workflow row yet.
+  WorkflowState state = 3;
+  WorkflowStopReason stop_reason = 4;
 }
 
 // ScheduleSource is the trigger.source arm for schedule triggers.
@@ -172,6 +237,17 @@ message Trigger {
   // The daemon every tool call in each launched run executes on. Always set.
   string daemon_id = 14;
 
+  // Read-only: how this trigger's recent firings went.
+  TriggerHealth health = 15;
+
+  // Read-only: name of the project the runs execute in. Empty if it was
+  // deleted.
+  string project_name = 16;
+
+  // Read-only: display name (hostname) of the daemon the runs execute on.
+  // Empty when the daemon has not reported one.
+  string daemon_name = 17;
+
   // What makes this trigger fire. One arm per kind; webhook and GitHub become
   // new arms. The arm set also determines Trigger.kind, so the two cannot
   // disagree.
@@ -211,6 +287,10 @@ message TriggerEvent {
   // Source-specific detail recorded verbatim at fire time — for a schedule,
   // the scheduled time and the trigger's name.
   google.protobuf.Struct payload = 8;
+
+  // Read-only: the run this firing started, as of now. Set when the firing
+  // launched a chat that still exists; unset otherwise.
+  optional TriggerEventRun run = 9;
 }
 
 // TriggerDefinition is the writable half of a Trigger: the fields a caller
@@ -355,10 +435,21 @@ message ListTriggerEventsRequest {
 
   // Maximum firings to return. Unset or zero applies the server default.
   int32 limit = 2;
+
+  // Continues a previous response's next_page_token. Keyset on (occurred_at,
+  // id), so a firing recorded mid-pagination can neither repeat nor be
+  // skipped. Opaque.
+  optional string page_token = 3;
+
+  // Only firings with one of these outcomes. Empty returns every outcome.
+  repeated TriggerEventOutcome outcomes = 4;
 }
 
 // ListTriggerEventsResponse is the response for ListTriggerEvents.
 message ListTriggerEventsResponse {
   // The trigger's firings, newest first.
   repeated TriggerEvent events = 1;
+
+  // Set when more firings follow. Empty on the last page.
+  string next_page_token = 2;
 }

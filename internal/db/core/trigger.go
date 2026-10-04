@@ -81,6 +81,12 @@ type Trigger struct {
 	Config    json.RawMessage
 	CreatedAt time.Time
 	UpdatedAt time.Time
+
+	// ProjectName and DaemonName are read-only display names joined in by
+	// GetTrigger and ListTriggers. Empty when the project or daemon row is
+	// gone or has no name; never written.
+	ProjectName string
+	DaemonName  string
 }
 
 // ScheduleConfig is Trigger.Config for TriggerKindSchedule.
@@ -118,6 +124,41 @@ type TriggerEvent struct {
 	OutcomeDetail string
 	ChatID        *string // the chat this firing launched, when it launched one
 	CreatedAt     time.Time
+}
+
+// TriggerEventRun is the run a launched firing started, as the firing's
+// reader sees it now. DisplayState is derived in SQL by the same table as
+// RunListItem.DisplayState.
+type TriggerEventRun struct {
+	ChatID       string
+	Title        string
+	DisplayState RunDisplayState
+	RootStatus   WorkflowStatus
+}
+
+// TriggerEventWithRun is a firing with its run. Run is nil unless the firing
+// launched a chat that still exists.
+type TriggerEventWithRun struct {
+	Event *TriggerEvent
+	Run   *TriggerEventRun
+}
+
+// TriggerEventCursor is a keyset position in a trigger's firing list, which is
+// ordered by (OccurredAt, ID) descending.
+type TriggerEventCursor struct {
+	OccurredAt time.Time
+	ID         string
+}
+
+// TriggerEventFilters narrows ListTriggerEvents. UserID and TriggerID are both
+// mandatory; UserID is the only scoping and is never taken from a request.
+// Empty Outcomes means every outcome.
+type TriggerEventFilters struct {
+	UserID    string
+	TriggerID string
+	Outcomes  []TriggerEventOutcome
+	After     *TriggerEventCursor
+	Limit     int
 }
 
 // TriggerFilters narrows ListTriggers. UserID is required: the unscoped
@@ -170,8 +211,13 @@ type TriggerStore interface {
 	// UpdateTriggerEventPayload replaces the event's payload. It returns
 	// ErrTriggerEventNotFound when the id does not resolve.
 	UpdateTriggerEventPayload(ctx context.Context, id string, payload map[string]any) error
-	// ListTriggerEvents returns the trigger's events newest first.
-	ListTriggerEvents(ctx context.Context, triggerID string, limit int) ([]*TriggerEvent, error)
+	// ListTriggerEvents returns up to f.Limit of the trigger's firings newest
+	// first, each with the run it launched, and whether more follow.
+	ListTriggerEvents(ctx context.Context, f TriggerEventFilters) ([]*TriggerEventWithRun, bool, error)
+	// RecentTriggerFirings returns each named trigger's newest perTrigger
+	// firings (newest first, with their runs) in one query. A trigger with no
+	// firings has no map entry. Triggers belonging to other users never appear.
+	RecentTriggerFirings(ctx context.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*TriggerEventWithRun, error)
 	// GetLatestTriggerEvent returns the trigger's latest event, optionally
 	// filtered by outcome, and (nil, nil) when it has none.
 	GetLatestTriggerEvent(ctx context.Context, triggerID string, outcome *TriggerEventOutcome) (*TriggerEvent, error)

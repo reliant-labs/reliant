@@ -498,7 +498,7 @@ func TestListTriggerEventsOrderAndLimit(t *testing.T) {
 		t.Fatalf("CreateTriggerEvent(foreign): %v", err)
 	}
 
-	all, err := repo.ListTriggerEvents(ctx, trigger.ID, 10)
+	all, _, err := repo.ListTriggerEvents(ctx, core.TriggerEventFilters{UserID: "test-user", TriggerID: trigger.ID, Limit: 10})
 	if err != nil {
 		t.Fatalf("ListTriggerEvents: %v", err)
 	}
@@ -507,7 +507,7 @@ func TestListTriggerEventsOrderAndLimit(t *testing.T) {
 		t.Errorf("ListTriggerEvents order: got %v, want %v (newest first)", got, wantOrder)
 	}
 
-	limited, err := repo.ListTriggerEvents(ctx, trigger.ID, 2)
+	limited, _, err := repo.ListTriggerEvents(ctx, core.TriggerEventFilters{UserID: "test-user", TriggerID: trigger.ID, Limit: 2})
 	if err != nil {
 		t.Fatalf("ListTriggerEvents(limit=2): %v", err)
 	}
@@ -710,10 +710,10 @@ func idsOf(triggers []*core.Trigger) []string {
 	return ids
 }
 
-func idsOfEvents(events []*core.TriggerEvent) []string {
+func idsOfEvents(events []*core.TriggerEventWithRun) []string {
 	ids := make([]string, len(events))
 	for i, ev := range events {
-		ids[i] = ev.ID
+		ids[i] = ev.Event.ID
 	}
 	return ids
 }

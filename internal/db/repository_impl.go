@@ -3693,11 +3693,21 @@ func (r *Repo) UpdateTriggerEventPayload(ctx context.Context, id string, payload
 	return r.triggers.UpdateTriggerEventPayload(ctx, id, payload)
 }
 
-func (r *Repo) ListTriggerEvents(ctx context.Context, triggerID string, limit int) ([]*core.TriggerEvent, error) {
-	if triggerID == "" {
-		return nil, fmt.Errorf("trigger ID cannot be empty")
+func (r *Repo) ListTriggerEvents(ctx context.Context, f core.TriggerEventFilters) ([]*core.TriggerEventWithRun, bool, error) {
+	if f.TriggerID == "" {
+		return nil, false, fmt.Errorf("trigger ID cannot be empty")
 	}
-	return r.triggers.ListTriggerEvents(ctx, triggerID, limit)
+	if f.UserID == "" {
+		return nil, false, fmt.Errorf("user ID cannot be empty")
+	}
+	return r.triggers.ListTriggerEvents(ctx, f)
+}
+
+func (r *Repo) RecentTriggerFirings(ctx context.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error) {
+	if userID == "" {
+		return nil, fmt.Errorf("user ID cannot be empty")
+	}
+	return r.triggers.RecentTriggerFirings(ctx, userID, triggerIDs, perTrigger)
 }
 
 func (r *Repo) GetLatestTriggerEvent(ctx context.Context, triggerID string, outcome *core.TriggerEventOutcome) (*core.TriggerEvent, error) {

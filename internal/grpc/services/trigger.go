@@ -3,9 +3,12 @@ package services
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
 	"connectrpc.com/connect"
@@ -188,9 +191,21 @@ func (s *TriggerService) ListTriggers(
 		return nil, triggerDBError("list triggers", err)
 	}
 
+	// One query for every trigger's recent firings: health and last_event are
+	// computed from it, so the list costs a constant number of queries.
+	ids := make([]string, len(stored))
+	for i, t := range stored {
+		ids[i] = t.ID
+	}
+	recent, err := s.database.RecentTriggerFirings(ctx, userID, ids, triggers.HealthWindow)
+	if err != nil {
+		logging.Warn("could not resolve triggers' recent firings", "error", err)
+		recent = nil
+	}
+
 	out := make([]*reliantv1.Trigger, 0, len(stored))
 	for _, t := range stored {
-		out = append(out, s.render(ctx, t))
+		out = append(out, s.renderWith(ctx, t, recent[t.ID]))
 	}
 	return connect.NewResponse(&reliantv1.ListTriggersResponse{Triggers: out}), nil
 }
@@ -347,20 +362,81 @@ func (s *TriggerService) ListTriggerEvents(
 		limit = maxTriggerEventLimit
 	}
 
-	stored, err := s.database.ListTriggerEvents(ctx, req.Msg.TriggerId, limit)
+	filters := core.TriggerEventFilters{
+		UserID:    auth.MustGetUserID(ctx),
+		TriggerID: req.Msg.TriggerId,
+		Limit:     limit,
+	}
+	for _, o := range req.Msg.Outcomes {
+		outcome, ok := triggerOutcomeFromProto(o)
+		if !ok {
+			return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("outcomes: unspecified outcome"))
+		}
+		filters.Outcomes = append(filters.Outcomes, outcome)
+	}
+	if req.Msg.PageToken != nil && *req.Msg.PageToken != "" {
+		cursor, err := decodeTriggerEventCursor(*req.Msg.PageToken)
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("invalid page_token"))
+		}
+		filters.After = cursor
+	}
+
+	stored, hasMore, err := s.database.ListTriggerEvents(ctx, filters)
 	if err != nil {
 		return nil, triggerDBError("list trigger events", err)
 	}
 
 	out := make([]*reliantv1.TriggerEvent, 0, len(stored))
 	for _, ev := range stored {
-		proto, err := triggers.EventToProto(ev)
+		proto, err := triggers.EventWithRunToProto(ev)
 		if err != nil {
 			return nil, connect.NewError(connect.CodeInternal, err)
 		}
 		out = append(out, proto)
 	}
-	return connect.NewResponse(&reliantv1.ListTriggerEventsResponse{Events: out}), nil
+	resp := &reliantv1.ListTriggerEventsResponse{Events: out}
+	if hasMore && len(stored) > 0 {
+		last := stored[len(stored)-1].Event
+		resp.NextPageToken = encodeTriggerEventCursor(core.TriggerEventCursor{OccurredAt: last.OccurredAt, ID: last.ID})
+	}
+	return connect.NewResponse(resp), nil
+}
+
+// The page token is the last firing's (occurred_at, id), base64url-encoded and
+// opaque to callers. It is the list's sort key, so a firing recorded
+// mid-pagination can neither repeat nor be skipped.
+func encodeTriggerEventCursor(c core.TriggerEventCursor) string {
+	raw := strconv.FormatInt(c.OccurredAt.UnixMicro(), 10) + "|" + c.ID
+	return base64.RawURLEncoding.EncodeToString([]byte(raw))
+}
+
+func decodeTriggerEventCursor(token string) (*core.TriggerEventCursor, error) {
+	raw, err := base64.RawURLEncoding.DecodeString(token)
+	if err != nil {
+		return nil, err
+	}
+	micros, id, ok := strings.Cut(string(raw), "|")
+	if !ok || id == "" {
+		return nil, errors.New("malformed cursor")
+	}
+	n, err := strconv.ParseInt(micros, 10, 64)
+	if err != nil {
+		return nil, err
+	}
+	return &core.TriggerEventCursor{OccurredAt: time.UnixMicro(n).UTC(), ID: id}, nil
+}
+
+func triggerOutcomeFromProto(o reliantv1.TriggerEventOutcome) (core.TriggerEventOutcome, bool) {
+	switch o {
+	case reliantv1.TriggerEventOutcome_TRIGGER_EVENT_OUTCOME_LAUNCHED:
+		return core.TriggerEventLaunched, true
+	case reliantv1.TriggerEventOutcome_TRIGGER_EVENT_OUTCOME_SKIPPED:
+		return core.TriggerEventSkipped, true
+	case reliantv1.TriggerEventOutcome_TRIGGER_EVENT_OUTCOME_FAILED:
+		return core.TriggerEventFailed, true
+	}
+	return "", false
 }
 
 // ownedTrigger loads a trigger and verifies the caller owns it.
@@ -517,6 +593,20 @@ func (s *TriggerService) validateTriggerDaemon(ctx context.Context, userID, proj
 // see at all is a worse outcome than one whose next fire time is momentarily
 // absent.
 func (s *TriggerService) render(ctx context.Context, t *core.Trigger) *reliantv1.Trigger {
+	// The write paths hand over the row they just stored, which has no joined
+	// names; re-read it so every response carries them.
+	if fresh, err := s.database.GetTrigger(ctx, t.ID); err == nil {
+		t = fresh
+	}
+	recent, err := s.database.RecentTriggerFirings(ctx, t.UserID, []string{t.ID}, triggers.HealthWindow)
+	if err != nil {
+		logging.Warn("could not resolve a trigger's recent firings", "trigger_id", t.ID, "error", err)
+	}
+	return s.renderWith(ctx, t, recent[t.ID])
+}
+
+// renderWith renders a trigger whose recent firings the caller already loaded.
+func (s *TriggerService) renderWith(ctx context.Context, t *core.Trigger, firings []*core.TriggerEventWithRun) *reliantv1.Trigger {
 	var nextFireAt *time.Time
 	if s.syncer != nil {
 		next, err := s.syncer.NextFireAt(ctx, t.ID)
@@ -527,13 +617,7 @@ func (s *TriggerService) render(ctx context.Context, t *core.Trigger) *reliantv1
 		}
 	}
 
-	lastEvent, err := s.database.GetLatestTriggerEvent(ctx, t.ID, nil)
-	if err != nil && !errors.Is(err, core.ErrTriggerEventNotFound) {
-		logging.Warn("could not resolve a trigger's last event", "trigger_id", t.ID, "error", err)
-		lastEvent = nil
-	}
-
-	proto, err := triggers.ToProto(t, nextFireAt, lastEvent)
+	proto, err := triggers.ToProto(t, nextFireAt, firings)
 	if err != nil {
 		// Params that will not round-trip through structpb. Report the trigger
 		// without them rather than failing the whole call.

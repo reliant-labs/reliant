@@ -428,7 +428,10 @@ type Querier interface {
 	GetThreadWithParent(ctx context.Context, id string) (GetThreadWithParentRow, error)
 	GetToolCall(ctx context.Context, id string) (ToolCall, error)
 	GetToolCallResult(ctx context.Context, toolCallID string) (ToolCallResult, error)
-	GetTrigger(ctx context.Context, id string) (Trigger, error)
+	// Joins the display names so a trigger can be shown without a second lookup.
+	// LEFT JOINs: a daemon id is not a foreign key, and an absent name must not
+	// hide the trigger.
+	GetTrigger(ctx context.Context, id string) (GetTriggerRow, error)
 	// The event that launched a chat. The oldest wins: a chat is launched once, and
 	// a later row naming it can only be a replay. Served by idx_trigger_events_chat.
 	GetTriggerEventByChat(ctx context.Context, arg GetTriggerEventByChatParams) (TriggerEvent, error)
@@ -563,6 +566,12 @@ type Querier interface {
 	// order. Paired with HasMessagesBeforeInContextWindow for the cursor path's
 	// hasMore check.
 	ListRecentMessagesInContextWindowBeforeSeq(ctx context.Context, arg ListRecentMessagesInContextWindowBeforeSeqParams) ([]Message, error)
+	// The newest per_trigger firings of each named trigger, with their runs, in ONE
+	// query. This is what health and last_event are computed from, so listing N
+	// triggers costs one extra query rather than N. Same run_display_state table as
+	// ListTriggerEvents above. run_display_state is meaningful only when
+	// run_chat_id is set.
+	ListRecentTriggerFirings(ctx context.Context, arg ListRecentTriggerFiringsParams) ([]ListRecentTriggerFiringsRow, error)
 	ListReposByProject(ctx context.Context, projectID string) ([]Repo, error)
 	ListRootWorkflows(ctx context.Context, chatID string) ([]Workflow, error)
 	// List root workflows (parent_id IS NULL) at a specific lifecycle.
@@ -712,13 +721,18 @@ type Querier interface {
 	// writer has to remember to set.
 	ListToolCallsByIDs(ctx context.Context, ids []string) ([]ToolCall, error)
 	ListToolCallsByMessageIDs(ctx context.Context, messageIds []string) ([]ToolCall, error)
-	// Newest first, matching idx_trigger_events_trigger_occurred so this is an
-	// ordered index scan. id breaks ties: two fires can share an occurred_at.
-	ListTriggerEvents(ctx context.Context, arg ListTriggerEventsParams) ([]TriggerEvent, error)
+	// Newest first, keyset on (occurred_at, id) so a firing recorded mid-pagination
+	// can neither repeat nor be skipped; two fires can share an occurred_at, and id
+	// breaks the tie. Served by idx_trigger_events_trigger_occurred_id.
+	//
+	// Each launched firing carries its run. run_display_state is the SAME table as
+	// queries/runs.sql (ListRuns) — keep the two in step; a test pins them equal.
+	// user_id scopes the rows even though the handler already checked ownership.
+	ListTriggerEvents(ctx context.Context, arg ListTriggerEventsParams) ([]ListTriggerEventsRow, error)
 	// Always scoped to one user; project_id narrows further. The unscoped listing
 	// is ListAllTriggers, a separate query so "no user" can never be reached by
 	// passing an empty string.
-	ListTriggers(ctx context.Context, arg ListTriggersParams) ([]Trigger, error)
+	ListTriggers(ctx context.Context, arg ListTriggersParams) ([]ListTriggersRow, error)
 	// List all presets for a user (both global and project-specific)
 	ListUserPresets(ctx context.Context, userID string) ([]Preset, error)
 	// List presets for a specific project (includes both global and project-specific)

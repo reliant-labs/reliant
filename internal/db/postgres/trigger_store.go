@@ -53,7 +53,7 @@ func (s *triggerStore) GetTrigger(ctx context.Context, id string) (*core.Trigger
 		}
 		return nil, fmt.Errorf("failed to get trigger: %w", err)
 	}
-	return triggerFromPG(row)
+	return triggerFromPGNamed(row.Trigger, row.ProjectName, row.DaemonName)
 }
 
 func (s *triggerStore) ListTriggers(ctx context.Context, f core.TriggerFilters) ([]*core.Trigger, error) {
@@ -67,7 +67,7 @@ func (s *triggerStore) ListTriggers(ctx context.Context, f core.TriggerFilters) 
 
 	triggers := make([]*core.Trigger, 0, len(rows))
 	for _, row := range rows {
-		t, err := triggerFromPG(row)
+		t, err := triggerFromPGNamed(row.Trigger, row.ProjectName, row.DaemonName)
 		if err != nil {
 			return nil, err
 		}
@@ -262,28 +262,91 @@ func (s *triggerStore) UpdateTriggerEventPayload(ctx context.Context, id string,
 	return nil
 }
 
-func (s *triggerStore) ListTriggerEvents(ctx context.Context, triggerID string, limit int) ([]*core.TriggerEvent, error) {
+// ListTriggerEvents returns one page. It reads one row beyond the limit to
+// learn whether another page exists without a count.
+func (s *triggerStore) ListTriggerEvents(ctx context.Context, f core.TriggerEventFilters) ([]*core.TriggerEventWithRun, bool, error) {
+	limit := f.Limit
 	if limit <= 0 {
 		limit = defaultTriggerEventLimit
 	}
-
-	rows, err := s.q.ListTriggerEvents(ctx, pgdb.ListTriggerEventsParams{
-		TriggerID: triggerPtrToNullString(&triggerID),
-		Limit:     int32(limit),
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to list trigger events: %w", err)
+	outcomes := make([]string, len(f.Outcomes))
+	for i, o := range f.Outcomes {
+		outcomes[i] = string(o)
+	}
+	params := pgdb.ListTriggerEventsParams{
+		TriggerID: f.TriggerID,
+		UserID:    f.UserID,
+		Outcomes:  outcomes,
+		RowLimit:  int32(limit + 1),
+	}
+	if f.After != nil {
+		params.CursorOccurredAt = sql.NullTime{Time: f.After.OccurredAt, Valid: true}
+		params.CursorID = sql.NullString{String: f.After.ID, Valid: true}
 	}
 
-	events := make([]*core.TriggerEvent, 0, len(rows))
+	rows, err := s.q.ListTriggerEvents(ctx, params)
+	if err != nil {
+		return nil, false, fmt.Errorf("failed to list trigger events: %w", err)
+	}
+	hasMore := len(rows) > limit
+	if hasMore {
+		rows = rows[:limit]
+	}
+
+	events := make([]*core.TriggerEventWithRun, 0, len(rows))
 	for _, row := range rows {
-		ev, err := triggerEventFromPG(row)
+		ev, err := triggerEventFromPG(row.TriggerEvent)
+		if err != nil {
+			return nil, false, err
+		}
+		events = append(events, &core.TriggerEventWithRun{
+			Event: ev,
+			Run:   triggerRunFromPG(row.RunChatID, row.RunTitle, row.RunRootState, row.RunRootStopReason, row.RunDisplayState),
+		})
+	}
+	return events, hasMore, nil
+}
+
+func (s *triggerStore) RecentTriggerFirings(ctx context.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error) {
+	out := make(map[string][]*core.TriggerEventWithRun, len(triggerIDs))
+	if len(triggerIDs) == 0 || perTrigger <= 0 {
+		return out, nil
+	}
+	rows, err := s.q.ListRecentTriggerFirings(ctx, pgdb.ListRecentTriggerFiringsParams{
+		UserID:     userID,
+		TriggerIds: triggerIDs,
+		PerTrigger: int32(perTrigger),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list recent trigger firings: %w", err)
+	}
+	for _, row := range rows {
+		ev, err := triggerEventFromPG(row.TriggerEvent)
 		if err != nil {
 			return nil, err
 		}
-		events = append(events, ev)
+		if ev.TriggerID == nil {
+			continue
+		}
+		out[*ev.TriggerID] = append(out[*ev.TriggerID], &core.TriggerEventWithRun{
+			Event: ev,
+			Run:   triggerRunFromPG(row.RunChatID, row.RunTitle, row.RunRootState, row.RunRootStopReason, row.RunDisplayState),
+		})
 	}
-	return events, nil
+	return out, nil
+}
+
+// triggerRunFromPG is nil unless the firing joined a chat that still exists.
+func triggerRunFromPG(chatID, title sql.NullString, rootState, rootStop sql.NullInt32, display int32) *core.TriggerEventRun {
+	if !chatID.Valid {
+		return nil
+	}
+	return &core.TriggerEventRun{
+		ChatID:       chatID.String,
+		Title:        title.String,
+		DisplayState: core.RunDisplayState(display),
+		RootStatus:   chatRootStatus(rootState, rootStop),
+	}
 }
 
 // defaultTriggerEventLimit bounds an unspecified limit. An unbounded history
@@ -310,6 +373,16 @@ func (s *triggerStore) GetLatestTriggerEvent(ctx context.Context, triggerID stri
 		return nil, fmt.Errorf("failed to get latest trigger event: %w", err)
 	}
 	return triggerEventFromPG(row)
+}
+
+func triggerFromPGNamed(row pgdb.Trigger, projectName, daemonName string) (*core.Trigger, error) {
+	t, err := triggerFromPG(row)
+	if err != nil {
+		return nil, err
+	}
+	t.ProjectName = projectName
+	t.DaemonName = daemonName
+	return t, nil
 }
 
 func triggerFromPG(row pgdb.Trigger) (*core.Trigger, error) {

@@ -698,8 +698,12 @@ type Repository interface {
 	CountLiveLaunchedRuns(ctx context.Context, userID string, kind core.TriggerEventKind) (int, error)
 	UpdateTriggerEventOutcome(ctx context.Context, id string, outcome core.TriggerEventOutcome, detail string, chatID *string) error
 	UpdateTriggerEventPayload(ctx context.Context, id string, payload map[string]any) error
-	// ListTriggerEvents returns the trigger's firings newest first.
-	ListTriggerEvents(ctx context.Context, triggerID string, limit int) ([]*core.TriggerEvent, error)
+	// ListTriggerEvents returns one page of the trigger's firings newest first,
+	// each with the run it launched, and whether more follow.
+	ListTriggerEvents(ctx context.Context, f core.TriggerEventFilters) ([]*core.TriggerEventWithRun, bool, error)
+	// RecentTriggerFirings returns each trigger's newest perTrigger firings in
+	// one query. Used to compute health and last_event for a list of triggers.
+	RecentTriggerFirings(ctx context.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error)
 	// GetLatestTriggerEvent returns the trigger's latest firing, optionally
 	// filtered by outcome, and (nil, nil) when it has never fired.
 	GetLatestTriggerEvent(ctx context.Context, triggerID string, outcome *core.TriggerEventOutcome) (*core.TriggerEvent, error)

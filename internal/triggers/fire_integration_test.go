@@ -169,7 +169,7 @@ func TestFireRetryResumesAHalfLaunchedFireInsteadOfWedgingTheTrigger(t *testing.
 	stored, err := f.repo.GetTriggerEventByDedupe(ctx, core.TriggerEventKindSchedule, first.FireWorkflowID)
 	require.NoError(t, err)
 	assert.Equal(t, core.TriggerEventLaunched, stored.Outcome)
-	events, err := f.repo.ListTriggerEvents(ctx, f.trigger.ID, 10)
+	events, _, err := f.repo.ListTriggerEvents(ctx, core.TriggerEventFilters{UserID: f.trigger.UserID, TriggerID: f.trigger.ID, Limit: 10})
 	require.NoError(t, err)
 	assert.Len(t, events, 1, "retries must not accumulate event rows")
 

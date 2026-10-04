@@ -10,6 +10,8 @@ import (
 	"database/sql"
 	"encoding/json"
 	"time"
+
+	"github.com/lib/pq"
 )
 
 const countLiveLaunchedRuns = `-- name: CountLiveLaunchedRuns :one
@@ -181,28 +183,46 @@ func (q *Queries) GetLatestTriggerEvent(ctx context.Context, arg GetLatestTrigge
 }
 
 const getTrigger = `-- name: GetTrigger :one
-SELECT id, user_id, project_id, worktree_id, name, kind, enabled, workflow, presets, params, message, config, created_at, updated_at, daemon_id FROM triggers WHERE id = $1
+SELECT
+    t.id, t.user_id, t.project_id, t.worktree_id, t.name, t.kind, t.enabled, t.workflow, t.presets, t.params, t.message, t.config, t.created_at, t.updated_at, t.daemon_id,
+    COALESCE(p.name, '')::text AS project_name,
+    COALESCE(d.hostname, '')::text AS daemon_name
+FROM triggers t
+LEFT JOIN projects p ON p.id = t.project_id
+LEFT JOIN daemons d ON d.id = t.daemon_id AND d.user_id = t.user_id
+WHERE t.id = $1
 `
 
-func (q *Queries) GetTrigger(ctx context.Context, id string) (Trigger, error) {
+type GetTriggerRow struct {
+	Trigger     Trigger `json:"trigger"`
+	ProjectName string  `json:"project_name"`
+	DaemonName  string  `json:"daemon_name"`
+}
+
+// Joins the display names so a trigger can be shown without a second lookup.
+// LEFT JOINs: a daemon id is not a foreign key, and an absent name must not
+// hide the trigger.
+func (q *Queries) GetTrigger(ctx context.Context, id string) (GetTriggerRow, error) {
 	row := q.db.QueryRowContext(ctx, getTrigger, id)
-	var i Trigger
+	var i GetTriggerRow
 	err := row.Scan(
-		&i.ID,
-		&i.UserID,
-		&i.ProjectID,
-		&i.WorktreeID,
-		&i.Name,
-		&i.Kind,
-		&i.Enabled,
-		&i.Workflow,
-		&i.Presets,
-		&i.Params,
-		&i.Message,
-		&i.Config,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DaemonID,
+		&i.Trigger.ID,
+		&i.Trigger.UserID,
+		&i.Trigger.ProjectID,
+		&i.Trigger.WorktreeID,
+		&i.Trigger.Name,
+		&i.Trigger.Kind,
+		&i.Trigger.Enabled,
+		&i.Trigger.Workflow,
+		&i.Trigger.Presets,
+		&i.Trigger.Params,
+		&i.Trigger.Message,
+		&i.Trigger.Config,
+		&i.Trigger.CreatedAt,
+		&i.Trigger.UpdatedAt,
+		&i.Trigger.DaemonID,
+		&i.ProjectName,
+		&i.DaemonName,
 	)
 	return i, err
 }
@@ -340,41 +360,186 @@ func (q *Queries) ListAllTriggers(ctx context.Context) ([]Trigger, error) {
 	return items, nil
 }
 
-const listTriggerEvents = `-- name: ListTriggerEvents :many
-SELECT id, trigger_id, user_id, kind, dedupe_key, occurred_at, payload, outcome, outcome_detail, chat_id, created_at FROM trigger_events
-WHERE trigger_id = $1
-ORDER BY occurred_at DESC, id DESC
-LIMIT $2
+const listRecentTriggerFirings = `-- name: ListRecentTriggerFirings :many
+WITH ranked AS (
+    SELECT
+        e.id,
+        row_number() OVER (PARTITION BY e.trigger_id ORDER BY e.occurred_at DESC, e.id DESC) AS rn
+    FROM trigger_events e
+    WHERE e.user_id = $2::text
+        AND e.trigger_id = ANY($3::text[])
+)
+SELECT
+    e.id, e.trigger_id, e.user_id, e.kind, e.dedupe_key, e.occurred_at, e.payload, e.outcome, e.outcome_detail, e.chat_id, e.created_at,
+    c.id AS run_chat_id,
+    c.title AS run_title,
+    rw.state AS run_root_state,
+    rw.stop_reason AS run_root_stop_reason,
+    CASE
+        WHEN rw.state IS NULL OR rw.state = 1 THEN 1
+        WHEN rw.state = 2 AND c.activity = 2 THEN 3
+        WHEN rw.state = 2 THEN 2
+        WHEN rw.state = 3 AND rw.stop_reason = 3 THEN 4
+        WHEN rw.state = 3 AND rw.stop_reason = 1 THEN 5
+        WHEN rw.state = 3 AND rw.stop_reason = 2 THEN 6
+        WHEN rw.state = 3 AND rw.stop_reason = 4 THEN 7
+        ELSE 0
+    END::integer AS run_display_state
+FROM ranked r
+JOIN trigger_events e ON e.id = r.id
+LEFT JOIN chats_with_activity c ON c.id = e.chat_id AND c.user_id = e.user_id
+LEFT JOIN workflows rw ON rw.id = c.workflow_id
+WHERE r.rn <= $1::integer
+ORDER BY e.trigger_id, e.occurred_at DESC, e.id DESC
 `
 
-type ListTriggerEventsParams struct {
-	TriggerID sql.NullString `json:"trigger_id"`
-	Limit     int32          `json:"limit"`
+type ListRecentTriggerFiringsParams struct {
+	PerTrigger int32    `json:"per_trigger"`
+	UserID     string   `json:"user_id"`
+	TriggerIds []string `json:"trigger_ids"`
 }
 
-// Newest first, matching idx_trigger_events_trigger_occurred so this is an
-// ordered index scan. id breaks ties: two fires can share an occurred_at.
-func (q *Queries) ListTriggerEvents(ctx context.Context, arg ListTriggerEventsParams) ([]TriggerEvent, error) {
-	rows, err := q.db.QueryContext(ctx, listTriggerEvents, arg.TriggerID, arg.Limit)
+type ListRecentTriggerFiringsRow struct {
+	TriggerEvent      TriggerEvent   `json:"trigger_event"`
+	RunChatID         sql.NullString `json:"run_chat_id"`
+	RunTitle          sql.NullString `json:"run_title"`
+	RunRootState      sql.NullInt32  `json:"run_root_state"`
+	RunRootStopReason sql.NullInt32  `json:"run_root_stop_reason"`
+	RunDisplayState   int32          `json:"run_display_state"`
+}
+
+// The newest per_trigger firings of each named trigger, with their runs, in ONE
+// query. This is what health and last_event are computed from, so listing N
+// triggers costs one extra query rather than N. Same run_display_state table as
+// ListTriggerEvents above. run_display_state is meaningful only when
+// run_chat_id is set.
+func (q *Queries) ListRecentTriggerFirings(ctx context.Context, arg ListRecentTriggerFiringsParams) ([]ListRecentTriggerFiringsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listRecentTriggerFirings, arg.PerTrigger, arg.UserID, pq.Array(arg.TriggerIds))
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []TriggerEvent{}
+	items := []ListRecentTriggerFiringsRow{}
 	for rows.Next() {
-		var i TriggerEvent
+		var i ListRecentTriggerFiringsRow
 		if err := rows.Scan(
-			&i.ID,
-			&i.TriggerID,
-			&i.UserID,
-			&i.Kind,
-			&i.DedupeKey,
-			&i.OccurredAt,
-			&i.Payload,
-			&i.Outcome,
-			&i.OutcomeDetail,
-			&i.ChatID,
-			&i.CreatedAt,
+			&i.TriggerEvent.ID,
+			&i.TriggerEvent.TriggerID,
+			&i.TriggerEvent.UserID,
+			&i.TriggerEvent.Kind,
+			&i.TriggerEvent.DedupeKey,
+			&i.TriggerEvent.OccurredAt,
+			&i.TriggerEvent.Payload,
+			&i.TriggerEvent.Outcome,
+			&i.TriggerEvent.OutcomeDetail,
+			&i.TriggerEvent.ChatID,
+			&i.TriggerEvent.CreatedAt,
+			&i.RunChatID,
+			&i.RunTitle,
+			&i.RunRootState,
+			&i.RunRootStopReason,
+			&i.RunDisplayState,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTriggerEvents = `-- name: ListTriggerEvents :many
+SELECT
+    e.id, e.trigger_id, e.user_id, e.kind, e.dedupe_key, e.occurred_at, e.payload, e.outcome, e.outcome_detail, e.chat_id, e.created_at,
+    c.id AS run_chat_id,
+    c.title AS run_title,
+    rw.state AS run_root_state,
+    rw.stop_reason AS run_root_stop_reason,
+    CASE
+        WHEN rw.state IS NULL OR rw.state = 1 THEN 1
+        WHEN rw.state = 2 AND c.activity = 2 THEN 3
+        WHEN rw.state = 2 THEN 2
+        WHEN rw.state = 3 AND rw.stop_reason = 3 THEN 4
+        WHEN rw.state = 3 AND rw.stop_reason = 1 THEN 5
+        WHEN rw.state = 3 AND rw.stop_reason = 2 THEN 6
+        WHEN rw.state = 3 AND rw.stop_reason = 4 THEN 7
+        ELSE 0
+    END::integer AS run_display_state
+FROM trigger_events e
+LEFT JOIN chats_with_activity c ON c.id = e.chat_id AND c.user_id = e.user_id
+LEFT JOIN workflows rw ON rw.id = c.workflow_id
+WHERE e.trigger_id = $1::text
+    AND e.user_id = $2::text
+    AND (cardinality($3::text[]) = 0 OR e.outcome = ANY($3::text[]))
+    AND ($4::timestamptz IS NULL
+         OR (e.occurred_at, e.id) < ($4::timestamptz, $5::text))
+ORDER BY e.occurred_at DESC, e.id DESC
+LIMIT $6
+`
+
+type ListTriggerEventsParams struct {
+	TriggerID        string         `json:"trigger_id"`
+	UserID           string         `json:"user_id"`
+	Outcomes         []string       `json:"outcomes"`
+	CursorOccurredAt sql.NullTime   `json:"cursor_occurred_at"`
+	CursorID         sql.NullString `json:"cursor_id"`
+	RowLimit         int32          `json:"row_limit"`
+}
+
+type ListTriggerEventsRow struct {
+	TriggerEvent      TriggerEvent   `json:"trigger_event"`
+	RunChatID         sql.NullString `json:"run_chat_id"`
+	RunTitle          sql.NullString `json:"run_title"`
+	RunRootState      sql.NullInt32  `json:"run_root_state"`
+	RunRootStopReason sql.NullInt32  `json:"run_root_stop_reason"`
+	RunDisplayState   int32          `json:"run_display_state"`
+}
+
+// Newest first, keyset on (occurred_at, id) so a firing recorded mid-pagination
+// can neither repeat nor be skipped; two fires can share an occurred_at, and id
+// breaks the tie. Served by idx_trigger_events_trigger_occurred_id.
+//
+// Each launched firing carries its run. run_display_state is the SAME table as
+// queries/runs.sql (ListRuns) — keep the two in step; a test pins them equal.
+// user_id scopes the rows even though the handler already checked ownership.
+func (q *Queries) ListTriggerEvents(ctx context.Context, arg ListTriggerEventsParams) ([]ListTriggerEventsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listTriggerEvents,
+		arg.TriggerID,
+		arg.UserID,
+		pq.Array(arg.Outcomes),
+		arg.CursorOccurredAt,
+		arg.CursorID,
+		arg.RowLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListTriggerEventsRow{}
+	for rows.Next() {
+		var i ListTriggerEventsRow
+		if err := rows.Scan(
+			&i.TriggerEvent.ID,
+			&i.TriggerEvent.TriggerID,
+			&i.TriggerEvent.UserID,
+			&i.TriggerEvent.Kind,
+			&i.TriggerEvent.DedupeKey,
+			&i.TriggerEvent.OccurredAt,
+			&i.TriggerEvent.Payload,
+			&i.TriggerEvent.Outcome,
+			&i.TriggerEvent.OutcomeDetail,
+			&i.TriggerEvent.ChatID,
+			&i.TriggerEvent.CreatedAt,
+			&i.RunChatID,
+			&i.RunTitle,
+			&i.RunRootState,
+			&i.RunRootStopReason,
+			&i.RunDisplayState,
 		); err != nil {
 			return nil, err
 		}
@@ -390,10 +555,16 @@ func (q *Queries) ListTriggerEvents(ctx context.Context, arg ListTriggerEventsPa
 }
 
 const listTriggers = `-- name: ListTriggers :many
-SELECT id, user_id, project_id, worktree_id, name, kind, enabled, workflow, presets, params, message, config, created_at, updated_at, daemon_id FROM triggers
-WHERE user_id = $1::text
-    AND ($2::text IS NULL OR project_id = $2::text)
-ORDER BY created_at DESC, id
+SELECT
+    t.id, t.user_id, t.project_id, t.worktree_id, t.name, t.kind, t.enabled, t.workflow, t.presets, t.params, t.message, t.config, t.created_at, t.updated_at, t.daemon_id,
+    COALESCE(p.name, '')::text AS project_name,
+    COALESCE(d.hostname, '')::text AS daemon_name
+FROM triggers t
+LEFT JOIN projects p ON p.id = t.project_id
+LEFT JOIN daemons d ON d.id = t.daemon_id AND d.user_id = t.user_id
+WHERE t.user_id = $1::text
+    AND ($2::text IS NULL OR t.project_id = $2::text)
+ORDER BY t.created_at DESC, t.id
 `
 
 type ListTriggersParams struct {
@@ -401,34 +572,42 @@ type ListTriggersParams struct {
 	ProjectID sql.NullString `json:"project_id"`
 }
 
+type ListTriggersRow struct {
+	Trigger     Trigger `json:"trigger"`
+	ProjectName string  `json:"project_name"`
+	DaemonName  string  `json:"daemon_name"`
+}
+
 // Always scoped to one user; project_id narrows further. The unscoped listing
 // is ListAllTriggers, a separate query so "no user" can never be reached by
 // passing an empty string.
-func (q *Queries) ListTriggers(ctx context.Context, arg ListTriggersParams) ([]Trigger, error) {
+func (q *Queries) ListTriggers(ctx context.Context, arg ListTriggersParams) ([]ListTriggersRow, error) {
 	rows, err := q.db.QueryContext(ctx, listTriggers, arg.UserID, arg.ProjectID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []Trigger{}
+	items := []ListTriggersRow{}
 	for rows.Next() {
-		var i Trigger
+		var i ListTriggersRow
 		if err := rows.Scan(
-			&i.ID,
-			&i.UserID,
-			&i.ProjectID,
-			&i.WorktreeID,
-			&i.Name,
-			&i.Kind,
-			&i.Enabled,
-			&i.Workflow,
-			&i.Presets,
-			&i.Params,
-			&i.Message,
-			&i.Config,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.DaemonID,
+			&i.Trigger.ID,
+			&i.Trigger.UserID,
+			&i.Trigger.ProjectID,
+			&i.Trigger.WorktreeID,
+			&i.Trigger.Name,
+			&i.Trigger.Kind,
+			&i.Trigger.Enabled,
+			&i.Trigger.Workflow,
+			&i.Trigger.Presets,
+			&i.Trigger.Params,
+			&i.Trigger.Message,
+			&i.Trigger.Config,
+			&i.Trigger.CreatedAt,
+			&i.Trigger.UpdatedAt,
+			&i.Trigger.DaemonID,
+			&i.ProjectName,
+			&i.DaemonName,
 		); err != nil {
 			return nil, err
 		}
