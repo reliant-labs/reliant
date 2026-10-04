@@ -13,6 +13,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
+	"github.com/reliant-labs/reliant/internal/automationcred"
 )
 
 // stubRegistry is the control plane's side of
@@ -112,4 +113,23 @@ func TestCallerTokenAbsentForConnectorCredentials(t *testing.T) {
 	require.Empty(t, CallerToken(context.Background()))
 	require.Equal(t, "jwt-abc",
 		CallerToken(withCallerToken(context.Background(), "jwt-abc")))
+}
+
+// A connector caller has no user token. Even when the user holds a stored
+// automation credential for that very daemon, the resumer must still refuse and
+// must not call the control plane: only a registered workflow's trigger may use
+// that credential, and the resumer has no access to it at all.
+func TestResumerRefusesConnectorCallerEvenWithStoredAutomationToken(t *testing.T) {
+	srv, stub := resumeRecorder(t, true, "")
+	r := NewControlPlaneResumer(srv.URL)
+
+	// The stored token exists for (user-1, daemon-1) — the strongest case.
+	keys := map[string]string{"user-1|" + automationcred.Provider("daemon-1"): "rlat_resume"}
+	require.NotEmpty(t, keys)
+
+	err := r.ResumeDaemon(context.Background(), "user-1", "daemon-1") // no caller token
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "connector credential")
+	require.Zero(t, stub.callCount, "no control-plane call may be made on a connector's behalf")
+	require.Empty(t, stub.gotAuth)
 }

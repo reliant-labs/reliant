@@ -15,6 +15,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -50,6 +51,16 @@ type TriggerService struct {
 	database db.Repository
 	syncer   triggerSyncer
 	fires    triggerFireStarter
+	grants   *automationGrants
+}
+
+// WithControlPlaneClient enables delegated automation credentials: while a
+// user has an enabled trigger for a daemon, a daemon-bound daemon:resume token
+// is held so an unattended fire can wake exactly that daemon. Without it
+// (self-hosted) nothing is minted.
+func (s *TriggerService) WithControlPlaneClient(client controlplane.Client) *TriggerService {
+	s.grants = &automationGrants{client: client, keys: s.database, triggers: s.database}
+	return s
 }
 
 // NewTriggerService creates a new TriggerService.
@@ -70,16 +81,23 @@ func NewTriggerService(database db.Repository, syncer triggerSyncer, fires trigg
 // panic — a trap the call site cannot see. Here the interface fields are only
 // ever assigned a real backend.
 func NewTriggerServiceFor(database db.Repository, temporalClient client.Client, taskQueue string) *TriggerService {
+	var svc *TriggerService
 	if temporalClient == nil {
-		return &TriggerService{database: database}
+		svc = &TriggerService{database: database}
+	} else {
+		backend := triggers.NewBackend(
+			temporalClient.ScheduleClient(),
+			temporalClient,
+			database,
+			taskQueue,
+		)
+		svc = &TriggerService{database: database, syncer: backend, fires: backend}
 	}
-	backend := triggers.NewBackend(
-		temporalClient.ScheduleClient(),
-		temporalClient,
-		database,
-		taskQueue,
-	)
-	return &TriggerService{database: database, syncer: backend, fires: backend}
+	// Delegated automation credentials exist only against a control plane.
+	if baseURL := controlplane.BaseURLFromEnv(); baseURL != "" {
+		svc.WithControlPlaneClient(controlplane.NewClient(baseURL))
+	}
+	return svc
 }
 
 // CreateTrigger stores the trigger, then converges its schedule.
@@ -126,6 +144,9 @@ func (s *TriggerService) CreateTrigger(
 				"trigger_id", trigger.ID, "sync_error", err, "delete_error", delErr)
 		}
 		return nil, triggerSyncError(err)
+	}
+	if trigger.Enabled {
+		s.grants.ensure(ctx, userID, trigger.DaemonID)
 	}
 
 	return connect.NewResponse(&reliantv1.CreateTriggerResponse{
@@ -213,6 +234,12 @@ func (s *TriggerService) UpdateTrigger(
 		return nil, triggerSyncError(err)
 	}
 
+	if updated.Enabled {
+		s.grants.ensure(ctx, updated.UserID, updated.DaemonID)
+	}
+	if existing.DaemonID != updated.DaemonID || !updated.Enabled {
+		s.grants.releaseIfUnused(ctx, existing.UserID, existing.DaemonID)
+	}
 	return connect.NewResponse(&reliantv1.UpdateTriggerResponse{
 		Trigger: s.render(ctx, updated),
 	}), nil
@@ -239,6 +266,7 @@ func (s *TriggerService) DeleteTrigger(
 	if err := s.database.DeleteTrigger(ctx, trigger.ID); err != nil {
 		return nil, triggerDBError("delete trigger", err)
 	}
+	s.grants.releaseIfUnused(ctx, trigger.UserID, trigger.DaemonID)
 	return connect.NewResponse(&reliantv1.DeleteTriggerResponse{}), nil
 }
 
@@ -262,6 +290,11 @@ func (s *TriggerService) SetTriggerEnabled(
 
 	if err := s.syncer.Sync(ctx, trigger); err != nil {
 		return nil, triggerSyncError(err)
+	}
+	if trigger.Enabled {
+		s.grants.ensure(ctx, trigger.UserID, trigger.DaemonID)
+	} else {
+		s.grants.releaseIfUnused(ctx, trigger.UserID, trigger.DaemonID)
 	}
 	return connect.NewResponse(&reliantv1.SetTriggerEnabledResponse{
 		Trigger: s.render(ctx, trigger),

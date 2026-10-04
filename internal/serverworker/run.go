@@ -18,6 +18,7 @@ import (
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/agentruns"
 	"github.com/reliant-labs/reliant/internal/analytics"
+	"github.com/reliant-labs/reliant/internal/automationcred"
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/configadapter"
 	"github.com/reliant-labs/reliant/internal/controlplane"
@@ -255,7 +256,10 @@ func Run(ctx context.Context, opts Options) error {
 		// still-provisioning cloud daemon is indistinguishable from "no
 		// daemon at all".
 		daemonRouterOpts = append(daemonRouterOpts,
-			toolexec.WithControlPlaneClient(reliantv1connect.NewDaemonRegistryServiceClient(http.DefaultClient, cpURL)))
+			toolexec.WithControlPlaneClient(reliantv1connect.NewDaemonRegistryServiceClient(http.DefaultClient, cpURL)),
+			// The worker alone may fall back to a trigger's delegated
+			// token: an unattended fire has no user JWT.
+			toolexec.WithControlPlaneCredentials(automationcred.NewResolver(repo)))
 	}
 	router := toolexec.NewNATSDaemonRouter(nc, daemonRouterOpts...)
 	remoteExecutor.SetDaemonRouter(router)

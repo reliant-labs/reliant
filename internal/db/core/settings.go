@@ -79,6 +79,13 @@ type AntigravityAuthTokens struct {
 	Scope        string
 }
 
+// AutomationProviderPrefix namespaces the api_keys rows that hold a user's
+// delegated automation credentials ("reliant-automation:<daemonID>"). They share
+// the table because it is the existing per-user secret store, but they are NOT
+// provider credentials: GetProviderAPIKeys never returns them, so no settings
+// surface lists them and no LLM driver is ever built from one.
+const AutomationProviderPrefix = "reliant-automation:"
+
 // SettingStore is the shared contract for settings persistence across drivers.
 type SettingStore interface {
 	CreateSetting(ctx context.Context, setting *Setting) error

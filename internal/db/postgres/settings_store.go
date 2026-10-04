@@ -158,8 +158,10 @@ func (s *settingStore) DeleteProviderAPIKey(ctx context.Context, userID string, 
 }
 
 func (s *settingStore) GetProviderAPIKeys(ctx context.Context, userID string) (map[string]string, error) {
-	query := s.bind("SELECT provider, api_key FROM api_keys WHERE user_id = ?")
-	rows, err := s.db.QueryContext(ctx, query, userID)
+	// Automation credentials live in this table under a reserved prefix and
+	// must never surface as provider keys (settings, LLM driver selection).
+	query := s.bind("SELECT provider, api_key FROM api_keys WHERE user_id = ? AND provider NOT LIKE ?")
+	rows, err := s.db.QueryContext(ctx, query, userID, core.AutomationProviderPrefix+"%")
 	if err != nil {
 		return nil, err
 	}
