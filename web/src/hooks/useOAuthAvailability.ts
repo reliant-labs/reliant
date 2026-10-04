@@ -30,7 +30,13 @@ export interface UseOAuthAvailabilityReturn {
   recheck: () => void
 }
 
-const POLL_INTERVAL_MS = 2000
+/**
+ * How often the panel re-checks the helper while it is on screen — and so the
+ * longest a dead helper can go unnoticed before the UI falls back to the
+ * instructions. Exported so tests can drive the poll on a fake clock instead of
+ * racing a wall clock.
+ */
+export const OAUTH_HELPER_POLL_INTERVAL_MS = 2000
 const HEALTH_TIMEOUT_MS = 2000
 
 // Identity-checked: a 200 alone proves only that SOMETHING holds port 19284,
@@ -155,7 +161,7 @@ export function useOAuthAvailability(
       } finally {
         inFlight = false
       }
-    }, POLL_INTERVAL_MS)
+    }, OAUTH_HELPER_POLL_INTERVAL_MS)
     return () => clearInterval(id)
   }, [isElectron, enabled])
 

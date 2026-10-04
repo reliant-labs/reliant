@@ -3,6 +3,7 @@ package db
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"sync"
@@ -476,32 +477,30 @@ func TestUserUpdateSequencesStrictlyIncrease(t *testing.T) {
 	}
 }
 
-// The scoped allocator intentionally serializes writers to one user by
-// updating that user's counter row. Under this repository's SERIALIZABLE
-// isolation, waiters may retry with SQLSTATE 40001 after the row conflict.
-// The production transaction wrapper must absorb those retries rather than
-// surfacing a failed SendMessage under normal fan-out.
-//
 // Every update sequence for a user is allocated from ONE counter row, so all
 // of that user's concurrent chats serialize on it. This test pins the property
-// that matters: under realistic concurrency those writes must all SUCCEED, not
-// merely mostly succeed. A dropped allocation is a lost update event in the UI.
+// that matters: under realistic fan-out those writes must all SUCCEED, not
+// merely mostly succeed, and the cursor they produce must stay contiguous. A
+// dropped allocation is a lost update event in the UI.
 //
-// Sizing is empirical, not arbitrary. With the old maxRetries=3 budget the
-// measured failure rate on one counter row was 0% at 4 writers, 5% at 8, and
-// 8.8% at 16 — so 8 writers (the previous value) sat right at the threshold
-// and failed only intermittently, which is why this read as a flaky test for
-// a long time rather than as the real defect it was.
-//
-// The count here is chosen so the OLD budget fails every time rather than one
-// run in five: an intermittent regression test is barely better than none,
-// because the next person to see it green will assume the property holds.
-// Verified by reverting maxRetries to 3, where this fails consistently.
+// This used to fail intermittently (4 runs in 20 on main) with "could not
+// serialize access due to concurrent update (SQLSTATE 40001)". That was not a
+// test bug: under SERIALIZABLE, a writer that WAITS on the counter row is
+// aborted the moment the holder commits, so 48 writers on one row kept aborting
+// each other until someone exhausted the retry budget. CreateUserUpdate now
+// allocates at READ COMMITTED, where a waiter re-reads the committed row and
+// takes the next number instead — so this fan-out cannot raise 40001 at all,
+// and passes deterministically rather than by winning a race against the
+// retry ladder. TestUserUpdateAllocationWaitsOutAConcurrentCommit pins that
+// mechanism directly, without relying on a race to reach it.
 func TestConcurrentUserUpdatesDoNotSerializationConflict(t *testing.T) {
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 
-	const writers = 48
+	const (
+		writers         = 48
+		writesPerWriter = 5
+	)
 	chatIDs := make([]string, writers)
 	for i := range chatIDs {
 		chatIDs[i] = fmt.Sprintf("chat-seq-conc-%d", i)
@@ -517,7 +516,7 @@ func TestConcurrentUserUpdatesDoNotSerializationConflict(t *testing.T) {
 		wg.Add(1)
 		go func(chatID string) {
 			defer wg.Done()
-			for n := 0; n < 5; n++ {
+			for n := 0; n < writesPerWriter; n++ {
 				if err := repo.emitChatActivityChanged(context.Background(), chatID, n%5); err != nil {
 					errCh <- err
 					return
@@ -530,5 +529,142 @@ func TestConcurrentUserUpdatesDoNotSerializationConflict(t *testing.T) {
 
 	for err := range errCh {
 		t.Fatalf("concurrent user-update writes must not fail: %v", err)
+	}
+
+	// Weakening isolation must not cost the cursor contract: every write
+	// landed, and the user's stream has no gap a reconnecting client would
+	// read as lost delivery.
+	updates, err := repo.GetUserUpdatesSince(context.Background(), "test-user", 0, writers*writesPerWriter+1)
+	if err != nil {
+		t.Fatalf("GetUserUpdatesSince: %v", err)
+	}
+	if len(updates) != writers*writesPerWriter {
+		t.Fatalf("got %d user updates, want %d", len(updates), writers*writesPerWriter)
+	}
+	for i := 1; i < len(updates); i++ {
+		if updates[i].SequenceNumber != updates[i-1].SequenceNumber+1 {
+			t.Fatalf("user update sequence has a gap at index %d: %d then %d",
+				i, updates[i-1].SequenceNumber, updates[i].SequenceNumber)
+		}
+	}
+}
+
+// The deterministic form of the race above: a writer that has to WAIT for a
+// user's counter row must, once the holder commits, take the next number — not
+// be aborted because the holder got there first.
+//
+// A rival transaction takes the row lock first and commits only once the
+// writer is provably blocked behind it (pg_stat_activity shows the lock wait),
+// then immediately takes the lock again for the writer's next attempt. Under
+// SERIALIZABLE every one of those commits aborts the writer with SQLSTATE
+// 40001, so the writer burns its whole retry budget and the update is lost —
+// this fails on every run against the old code, not one run in five. At READ
+// COMMITTED the writer simply proceeds after the first commit.
+func TestUserUpdateAllocationWaitsOutAConcurrentCommit(t *testing.T) {
+	repo, rawDB, cleanup := SetupTestDBWithRawDB(t)
+	defer cleanup()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	const userID = "contended-user"
+	newUpdate := func(entityID string) *UserUpdate {
+		return &UserUpdate{
+			UserID:     userID,
+			UpdateType: UserUpdateNotification,
+			EntityType: EntityTypeSystem,
+			EntityID:   entityID,
+			Data:       []byte(`{}`),
+		}
+	}
+
+	// Seed the counter row so every later allocation contends on an existing
+	// row, which is the production steady state.
+	seed := newUpdate("seed")
+	if err := repo.CreateUserUpdate(ctx, seed); err != nil {
+		t.Fatalf("seed CreateUserUpdate: %v", err)
+	}
+
+	// holdCounterRow is the rival: another of this user's chats allocating
+	// from the same row, left uncommitted until we choose to release it.
+	holdCounterRow := func() *sql.Tx {
+		t.Helper()
+		tx, err := rawDB.BeginTx(ctx, nil)
+		if err != nil {
+			t.Fatalf("rival BeginTx: %v", err)
+		}
+		if _, err := tx.ExecContext(ctx, `
+			UPDATE update_stream_counters
+			SET last_assigned_seq = last_assigned_seq + 1
+			WHERE stream_kind = 'user' AND stream_id = $1`, userID); err != nil {
+			_ = tx.Rollback()
+			t.Fatalf("rival allocation: %v", err)
+		}
+		return tx
+	}
+
+	// awaitWriter blocks until the writer is either waiting on a lock or has
+	// returned. pg_stat_activity is read through the pool, outside any
+	// transaction, so each poll sees a fresh view.
+	writerDone := make(chan error, 1)
+	awaitWriter := func() (finished bool, writerErr error) {
+		t.Helper()
+		for {
+			select {
+			case err := <-writerDone:
+				return true, err
+			case <-ctx.Done():
+				t.Fatalf("writer neither blocked on the counter row nor finished: %v", ctx.Err())
+			default:
+			}
+			var lockWaiters int
+			if err := rawDB.QueryRowContext(ctx, `
+				SELECT count(*) FROM pg_stat_activity
+				WHERE datname = current_database()
+				  AND wait_event_type = 'Lock'
+				  AND pid <> pg_backend_pid()`).Scan(&lockWaiters); err != nil {
+				t.Fatalf("poll pg_stat_activity: %v", err)
+			}
+			if lockWaiters > 0 {
+				return false, nil
+			}
+			time.Sleep(5 * time.Millisecond)
+		}
+	}
+
+	rival := holdCounterRow()
+	writer := newUpdate("writer")
+	go func() { writerDone <- repo.CreateUserUpdate(ctx, writer) }()
+
+	// One commit per writer attempt, plus one so an exhausted retry budget is
+	// reached rather than stopped short of.
+	rivalCommits := 0
+	var writerErr error
+	for round := 0; round <= maxRetries+1; round++ {
+		finished, err := awaitWriter()
+		if finished {
+			writerErr = err
+			_ = rival.Rollback()
+			break
+		}
+		if err := rival.Commit(); err != nil {
+			t.Fatalf("rival commit: %v", err)
+		}
+		rivalCommits++
+		rival = holdCounterRow()
+	}
+
+	if writerErr != nil {
+		t.Fatalf("a writer waiting on the counter row was aborted instead of waiting "+
+			"(rival commits: %d): %v", rivalCommits, writerErr)
+	}
+	if rivalCommits != 1 {
+		t.Fatalf("writer should proceed after the first rival commit, took %d", rivalCommits)
+	}
+	// Seed took 1, the rival 2: the writer must observe the rival's committed
+	// value and take the very next number.
+	if writer.SequenceNumber != seed.SequenceNumber+2 {
+		t.Fatalf("writer sequence = %d, want %d (the number after the rival's)",
+			writer.SequenceNumber, seed.SequenceNumber+2)
 	}
 }
