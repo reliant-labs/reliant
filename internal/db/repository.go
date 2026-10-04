@@ -679,6 +679,12 @@ type Repository interface {
 	CreateTriggerEvent(ctx context.Context, ev *core.TriggerEvent) (created bool, err error)
 	GetTriggerEventByDedupe(ctx context.Context, kind core.TriggerEventKind, dedupeKey string) (*core.TriggerEvent, error)
 	GetTriggerEventByChatID(ctx context.Context, chatID string) (*core.TriggerEvent, error)
+	// GetTriggerEventByChat returns the event of the given kind that launched
+	// chatID (core.ErrTriggerEventNotFound when none did).
+	GetTriggerEventByChat(ctx context.Context, kind core.TriggerEventKind, chatID string) (*core.TriggerEvent, error)
+	// CountLiveLaunchedRuns counts the user's chats launched by this kind of
+	// event whose root run is still live (pending, active or paused).
+	CountLiveLaunchedRuns(ctx context.Context, userID string, kind core.TriggerEventKind) (int, error)
 	UpdateTriggerEventOutcome(ctx context.Context, id string, outcome core.TriggerEventOutcome, detail string, chatID *string) error
 	// ListTriggerEvents returns the trigger's firings newest first.
 	ListTriggerEvents(ctx context.Context, triggerID string, limit int) ([]*core.TriggerEvent, error)

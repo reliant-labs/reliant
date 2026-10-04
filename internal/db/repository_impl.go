@@ -3643,6 +3643,20 @@ func (r *Repo) GetTriggerEventByChatID(ctx context.Context, chatID string) (*cor
 	return r.triggers.GetTriggerEventByChatID(ctx, chatID)
 }
 
+func (r *Repo) GetTriggerEventByChat(ctx context.Context, kind core.TriggerEventKind, chatID string) (*core.TriggerEvent, error) {
+	if chatID == "" {
+		return nil, fmt.Errorf("chat ID cannot be empty")
+	}
+	return r.triggers.GetTriggerEventByChat(ctx, kind, chatID)
+}
+
+func (r *Repo) CountLiveLaunchedRuns(ctx context.Context, userID string, kind core.TriggerEventKind) (int, error) {
+	if userID == "" {
+		return 0, fmt.Errorf("user ID cannot be empty")
+	}
+	return r.triggers.CountLiveLaunchedRuns(ctx, userID, kind)
+}
+
 func (r *Repo) UpdateTriggerEventOutcome(ctx context.Context, id string, outcome core.TriggerEventOutcome, detail string, chatID *string) error {
 	if id == "" {
 		return fmt.Errorf("trigger event ID cannot be empty")

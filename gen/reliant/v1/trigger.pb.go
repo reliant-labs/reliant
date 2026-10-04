@@ -85,6 +85,10 @@ const (
 	// SCHEDULE is a scheduled fire. Its dedupe key is the Temporal
 	// fire-workflow id, which is unique per scheduled time.
 	TriggerEventKind_TRIGGER_EVENT_KIND_SCHEDULE TriggerEventKind = 2
+	// AGENT_START_RUN is a top-level run an agent started with its start_run
+	// tool. Its dedupe key is "<calling chat id>:<tool call id>" and its payload
+	// carries parent_chat_id.
+	TriggerEventKind_TRIGGER_EVENT_KIND_AGENT_START_RUN TriggerEventKind = 3
 )
 
 // Enum value maps for TriggerEventKind.
@@ -93,11 +97,13 @@ var (
 		0: "TRIGGER_EVENT_KIND_UNSPECIFIED",
 		1: "TRIGGER_EVENT_KIND_CHAT_START",
 		2: "TRIGGER_EVENT_KIND_SCHEDULE",
+		3: "TRIGGER_EVENT_KIND_AGENT_START_RUN",
 	}
 	TriggerEventKind_value = map[string]int32{
-		"TRIGGER_EVENT_KIND_UNSPECIFIED": 0,
-		"TRIGGER_EVENT_KIND_CHAT_START":  1,
-		"TRIGGER_EVENT_KIND_SCHEDULE":    2,
+		"TRIGGER_EVENT_KIND_UNSPECIFIED":     0,
+		"TRIGGER_EVENT_KIND_CHAT_START":      1,
+		"TRIGGER_EVENT_KIND_SCHEDULE":        2,
+		"TRIGGER_EVENT_KIND_AGENT_START_RUN": 3,
 	}
 )
 
@@ -1686,11 +1692,12 @@ const file_reliant_v1_trigger_proto_rawDesc = "" +
 	"\x06events\x18\x01 \x03(\v2\x18.reliant.v1.TriggerEventR\x06events*F\n" +
 	"\vTriggerKind\x12\x1c\n" +
 	"\x18TRIGGER_KIND_UNSPECIFIED\x10\x00\x12\x19\n" +
-	"\x15TRIGGER_KIND_SCHEDULE\x10\x01*z\n" +
+	"\x15TRIGGER_KIND_SCHEDULE\x10\x01*\xa2\x01\n" +
 	"\x10TriggerEventKind\x12\"\n" +
 	"\x1eTRIGGER_EVENT_KIND_UNSPECIFIED\x10\x00\x12!\n" +
 	"\x1dTRIGGER_EVENT_KIND_CHAT_START\x10\x01\x12\x1f\n" +
-	"\x1bTRIGGER_EVENT_KIND_SCHEDULE\x10\x02*\xa5\x01\n" +
+	"\x1bTRIGGER_EVENT_KIND_SCHEDULE\x10\x02\x12&\n" +
+	"\"TRIGGER_EVENT_KIND_AGENT_START_RUN\x10\x03*\xa5\x01\n" +
 	"\x13TriggerEventOutcome\x12%\n" +
 	"!TRIGGER_EVENT_OUTCOME_UNSPECIFIED\x10\x00\x12\"\n" +
 	"\x1eTRIGGER_EVENT_OUTCOME_LAUNCHED\x10\x01\x12!\n" +

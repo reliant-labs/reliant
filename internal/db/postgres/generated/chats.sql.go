@@ -223,7 +223,7 @@ const listChats = `-- name: ListChats :many
 SELECT id, title, project_id, user_id, state, workflow_id, run_id, created_at, updated_at, last_active, worktree_id, workflow_name, selected_presets, archived_worktree_name, unread, active_daemon_id, last_message_at, activity, root_workflow_state, root_workflow_stop_reason, launch_kind, trigger_id FROM chats_with_activity
 WHERE
     user_id = $1
-    AND project_id = $2
+    AND ($2::text IS NULL OR project_id = $2::text)
     AND ($3::integer IS NULL OR state = $3::integer)
     AND (NOT $4::boolean OR state != 3)
     -- Automation chats (any launch kind other than an interactive start) are

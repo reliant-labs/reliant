@@ -180,6 +180,31 @@ func (s *triggerStore) GetTriggerEventByChatID(ctx context.Context, chatID strin
 	return triggerEventFromPG(row)
 }
 
+func (s *triggerStore) GetTriggerEventByChat(ctx context.Context, kind core.TriggerEventKind, chatID string) (*core.TriggerEvent, error) {
+	row, err := s.q.GetTriggerEventByChat(ctx, pgdb.GetTriggerEventByChatParams{
+		Kind:   string(kind),
+		ChatID: triggerPtrToNullString(&chatID),
+	})
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, core.ErrTriggerEventNotFound
+		}
+		return nil, fmt.Errorf("failed to get trigger event by chat: %w", err)
+	}
+	return triggerEventFromPG(row)
+}
+
+func (s *triggerStore) CountLiveLaunchedRuns(ctx context.Context, userID string, kind core.TriggerEventKind) (int, error) {
+	count, err := s.q.CountLiveLaunchedRuns(ctx, pgdb.CountLiveLaunchedRunsParams{
+		UserID: userID,
+		Kind:   string(kind),
+	})
+	if err != nil {
+		return 0, fmt.Errorf("failed to count live launched runs: %w", err)
+	}
+	return int(count), nil
+}
+
 func (s *triggerStore) UpdateTriggerEventOutcome(ctx context.Context, id string, outcome core.TriggerEventOutcome, detail string, chatID *string) error {
 	affected, err := s.q.UpdateTriggerEventOutcome(ctx, pgdb.UpdateTriggerEventOutcomeParams{
 		Outcome:       string(outcome),

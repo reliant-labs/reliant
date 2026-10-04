@@ -12,7 +12,7 @@ SELECT * FROM chats_with_activity WHERE id = $1;
 SELECT * FROM chats_with_activity
 WHERE
     user_id = sqlc.arg('user_id')
-    AND project_id = sqlc.narg('project_id')
+    AND (sqlc.narg('project_id')::text IS NULL OR project_id = sqlc.narg('project_id')::text)
     AND (sqlc.narg('state')::integer IS NULL OR state = sqlc.narg('state')::integer)
     AND (NOT sqlc.arg('exclude_archived')::boolean OR state != 3)
     -- Automation chats (any launch kind other than an interactive start) are

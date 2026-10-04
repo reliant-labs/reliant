@@ -132,6 +132,22 @@ func MinimumPermissionForTool(toolName string) string {
 		return PermissionOrchestrator
 	}
 
+	// start_run and control_run create or stop standing work, which is the
+	// same class of act as spawn.
+	//
+	// send_to_run is orchestrator-tier too, and deliberately not the base tier
+	// spawn_send gets. spawn_send is safe at base because it is confined to
+	// parent<->child, so the recipient already runs at or below the sender's
+	// own privilege. send_to_run reaches ANY of the user's runs, including one
+	// running a workflow with a wider tool set or a higher permission than the
+	// sender holds — a message is an instruction to that run, so base-tier
+	// access would let a low-privilege agent steer a higher-privilege one.
+	// list_runs and get_run only read, and sit at the base tier.
+	switch toolName {
+	case ToolStartRun, ToolControlRun, ToolSendToRun:
+		return PermissionOrchestrator
+	}
+
 	// Everything else — including MCP and unknown tools — sits at the base tier.
 	// Tag-based classification existed only to separate mutating from readonly;
 	// with readonly gone there is nothing left for it to decide, and a tag table

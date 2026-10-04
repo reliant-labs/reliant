@@ -28,6 +28,7 @@ Tools are organized by tags for filtering:
 | `tag:media` | Media generation (images, and later audio/video) |
 | `tag:planning` | Planning and task management tools |
 | `tag:readonly` | Does not modify files or code |
+| `tag:runs` | Start, inspect, control and message other top-level runs the user owns |
 | `tag:search` | Search operations |
 | `tag:shell` | Shell tools (bash on Unix, powershell on Windows) |
 | `tag:web` | Web operations |
@@ -42,7 +43,7 @@ Tools are organized by tags for filtering:
 - [Information Retrieval](#information-retrieval) (6 tools)
 - [Workflow Management](#workflow-management) (16 tools)
 - [System & Execution](#system--execution) (4 tools)
-- [Other Tools](#other-tools) (10 tools)
+- [Other Tools](#other-tools) (15 tools)
 
 ---
 
@@ -1911,13 +1912,18 @@ _Miscellaneous tools and utilities._
 |------|------|-------------|
 | [`ask_user`](#ask_user) | - | Ask the user one or more questions and wait for their responses. Use this when you need to: |
 | [`component_library`](#component_library) | readonly, coding:plan | Component library with 61 production-ready React/TypeScript components for building UIs, dashboar... |
+| [`control_run`](#control_run) | runs | Pause, resume or cancel another top-level run the user owns. |
 | [`generate_image`](#generate_image) | media | Generate an image from a text description. |
+| [`get_run`](#get_run) | runs, readonly | Check on one top-level run: its state, title, workflow, when it was created and last active, and ... |
+| [`list_runs`](#list_runs) | runs, readonly | List the user's recent top-level runs (chats), most recently active first, with the state of each... |
 | [`load_tool`](#load_tool) | coding:default, readonly, coding:plan | Dynamically load a tool by name or search for available tools. |
 | [`metadata_writer`](#metadata_writer) | - | Writes and updates project metadata YAML file |
+| [`send_to_run`](#send_to_run) | runs | Send a message to another top-level run that is still going, as if the user had typed it into tha... |
 | [`skill`](#skill) | coding:default, readonly, coding:plan | Load skills — specialized knowledge and instructions for specific tasks. |
 | [`spawn_send`](#spawn_send) | - | Send a message to a running sub-agent you spawned, or to your own parent agent. |
 | [`spawn_status`](#spawn_status) | readonly | Check on the sub-agents you (the calling thread) have spawned — list them all, or inspect and o... |
 | [`spawn_stop`](#spawn_stop) | - | Stop a sub-agent you spawned, when its work is no longer needed. |
+| [`start_run`](#start_run) | runs | Start a NEW top-level run — a separate chat the user can open and watch — and return immediat... |
 | [`worktree`](#worktree) | - | Manage git worktrees for parallel development workflows. |
 
 ### ask_user
@@ -1969,6 +1975,22 @@ CHARTS handle all coordinate math internally — pass data, get pixels. No spati
 
 ---
 
+### control_run
+
+**Tags:** `runs`
+
+Pause, resume or cancel another top-level run the user owns.
+
+- pause: park the run at its next step boundary. It stays alive and resumable.
+- resume: continue a paused (or interrupted) run from where it stopped.
+- cancel: hard-stop the run. This is terminal — a cancelled run is not resumed; sending it a message starts a fresh run in the same chat.
+
+THE RECEIPT IS HONEST: pause and cancel REQUEST the stop. A run in the middle of a long tool call stops when that call returns. Confirm with get_run.
+
+You cannot control the run you are executing in, and you can only touch runs the user owns. To stop a sub-agent you spawned, use spawn_stop.
+
+---
+
 ### generate_image
 
 **Tags:** `media`
@@ -2001,6 +2023,30 @@ NOTES:
 
 ---
 
+### get_run
+
+**Tags:** `runs`, `readonly`
+
+Check on one top-level run: its state, title, workflow, when it was created and last active, and an excerpt of the last thing its agent said.
+
+The state is the run's root workflow: pending, running, paused, completed, failed or cancelled. "completed" means the workflow reached its end, not that the work was right — read the excerpt.
+
+Only runs the user owns can be inspected. To check on a sub-agent you spawned, use spawn_status.
+
+---
+
+### list_runs
+
+**Tags:** `runs`, `readonly`
+
+List the user's recent top-level runs (chats), most recently active first, with the state of each run's root workflow.
+
+These are detached runs — the ones start_run creates and the ones the user starts themselves — not your own sub-agents (spawn_status lists those). Archived chats are not shown.
+
+Each entry has the run id (use it with get_run, control_run and send_to_run), title, workflow, project and state: pending, running, paused, completed, failed or cancelled. The run you are executing in is marked.
+
+---
+
 ### load_tool
 
 **Tags:** `coding:default`, `readonly`, `coding:plan`
@@ -2018,6 +2064,22 @@ Loaded tools become available immediately on the next turn.
 ### metadata_writer
 
 Writes and updates project metadata YAML file
+
+---
+
+### send_to_run
+
+**Tags:** `runs`
+
+Send a message to another top-level run that is still going, as if the user had typed it into that chat.
+
+ONLY LIVE RUNS: a run that is running or paused. If the run has finished, or has not started yet, this delivers nothing and says so (delivered: false) — it never starts or restarts a run. Use start_run for new work.
+
+A PAUSED run is resumed by the message, exactly as if the user had typed into the paused chat. If you do not want that, do not send it.
+
+THE RECEIPT IS HONEST: delivered means the message was saved to the run's thread and the run was nudged to look. It does NOT mean the run has read it or acted on it. Check with get_run.
+
+You cannot message the run you are executing in, and you can only message runs the user owns. To message a sub-agent you spawned, use spawn_send.
 
 ---
 
@@ -2138,6 +2200,24 @@ Reach for this when a fan-out has already answered the question, when you have
 changed approach and the delegated work is now wrong, or when an agent is
 clearly stuck. Prefer spawn_send to REDIRECT an agent whose work is still
 useful — stopping discards everything it has not reported yet.
+
+---
+
+### start_run
+
+**Tags:** `runs`
+
+Start a NEW top-level run — a separate chat the user can open and watch — and return immediately with its ids.
+
+This is not a sub-agent. A sub-agent (the agent tool) runs inside YOUR execution and reports back to you; a run started here is detached: it has its own chat, its own workflow and its own lifetime, and it keeps going whether or not you do. Use it for standing or parallel work that should outlive this conversation. Use the agent tool for work you need the answer to.
+
+The run belongs to the user, who can see it in the sidebar and stop it. It is NOT unattended: if it asks a question, it waits for the human.
+
+RETURNS the new chat id (also its run id for list_runs, get_run, control_run and send_to_run). The run is started, not finished — check on it with get_run.
+
+Calling this again with the same tool call (a retry) attaches to the run already started instead of starting a second one.
+
+LIMITS: an agent-started run may start further runs, but only 3 levels deep, and the user may have at most 10 agent-started runs live at once. Past either limit this fails; finish or cancel something first.
 
 ---
 
