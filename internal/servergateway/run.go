@@ -240,9 +240,6 @@ func Run(ctx context.Context, opts Options) error {
 	go toolsDaemonService.Start(ctx)
 	logging.Info("Stale-connection sweeper started for ToolsDaemonService")
 
-	// RemoteExecutor is used by DaemonServer to wire the local daemon router
-	remoteExecutor := toolexec.NewRemoteExecutor(nil)
-
 	// JetStream context — shared by the tool bridge (pending command drain)
 	// and the daemon lifecycle event publisher.
 	js, err := jetstream.New(nc)
@@ -321,7 +318,6 @@ func Run(ctx context.Context, opts Options) error {
 		Port:               opts.ToolsDaemonPort,
 		BindAddress:        opts.BindAddress,
 		ToolsDaemonService: toolsDaemonService,
-		ToolExecutor:       remoteExecutor,
 		DaemonTokens:       tokenAuthority,
 		TLSCertFile:        tlsCertFile,
 		TLSKeyFile:         tlsKeyFile,
