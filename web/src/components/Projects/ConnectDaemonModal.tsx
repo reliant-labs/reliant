@@ -36,6 +36,12 @@
  * Extracted from ProjectPicker.tsx so the gate is directly testable.
  */
 import { useCallback, useEffect, useState } from "react";
+import { create } from "@bufbuild/protobuf";
+import { grpcClient } from "@/api/grpc-client";
+import {
+  DaemonStatus,
+  ListDaemonsRequestSchema,
+} from "@/gen/reliant/v1/daemon_registry_pb";
 import { ArrowLeft, Check, Cloud, Loader2, Monitor } from "lucide-react";
 import { Modal } from "../ui/Modal";
 import { SelfHostedDaemonConnect } from "./SelfHostedDaemonConnect";
@@ -102,11 +108,13 @@ export function ConnectDaemonModal({
 
     setCloudError(null);
     try {
-      const { listDaemons, hasActiveDaemon } = await import(
-        "../../services/controlPlane/daemon"
-      );
-      const { daemons } = await listDaemons();
-      if (hasActiveDaemon(daemons)) {
+      // The registry list, not control-plane's: it is the one that knows
+      // whether a machine has actually attached, which is exactly the question
+      // being asked here (docs/design/one-daemon-list.md).
+      const { daemons } = await grpcClient
+        .daemonRegistry()
+        .listDaemons(create(ListDaemonsRequestSchema));
+      if (daemons.some((d) => d.status === DaemonStatus.ACTIVE)) {
         // Already have an active daemon — nothing to provision; the picker
         // will pick it up on the next poll.
         setCloudStarted(true);
@@ -116,7 +124,7 @@ export function ConnectDaemonModal({
         // A suspended/disconnected daemon exists — resume it instead of
         // creating a duplicate. Resume failures are non-fatal; the user can
         // retry from the "Resume a daemon" list.
-        const id = daemons[0]?.id ?? "";
+        const id = daemons[0]?.daemonId ?? "";
         if (id) {
           const { resumeDaemon } = await import(
             "../../services/controlPlane/daemon"

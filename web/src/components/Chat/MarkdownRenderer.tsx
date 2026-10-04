@@ -318,9 +318,9 @@ export function MarkdownRenderer({
   const [previewImage, setPreviewImage] = useState<{ url: string; filename: string } | null>(null);
   const [imageErrors, setImageErrors] = useState<Set<string>>(new Set());
 
-  const handleImageClick = (url: string, alt: string) => {
+  const handleImageClick = useCallback((url: string, alt: string) => {
     setPreviewImage({ url, filename: alt || 'Image' });
-  };
+  }, []);
 
   const handleLinkClick = useCallback((url: string) => {
     // Only handle http(s) links
@@ -333,13 +333,25 @@ export function MarkdownRenderer({
     return convertPlainImageUrlsToMarkdown(content);
   }, [content]);
 
-  const markdownComponents = createMarkdownComponents(
-    handleImageClick,
-    imageErrors,
-    setImageErrors,
-    worktreeId,
-    handleLinkClick,
-    localImages,
+  // Memoized, and that is load-bearing for text selection, not just speed.
+  // Every entry is a component FUNCTION, and react-markdown uses them as the
+  // element types for <p>, <li>, <code>, … A fresh object per render means
+  // fresh types per render, so React unmounted and rebuilt the message's
+  // entire DOM on every re-render of an already-settled message. Any text
+  // selection anchored in it lost its anchor node mid-drag — the highlight
+  // "jumped" or collapsed onto unrelated text while a reply streamed, because
+  // streaming re-renders the visible messages many times a second.
+  const markdownComponents = useMemo(
+    () =>
+      createMarkdownComponents(
+        handleImageClick,
+        imageErrors,
+        setImageErrors,
+        worktreeId,
+        handleLinkClick,
+        localImages,
+      ),
+    [handleImageClick, imageErrors, worktreeId, handleLinkClick, localImages],
   );
   
   // Skip expensive syntax highlighting during streaming for better performance

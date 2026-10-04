@@ -1,11 +1,7 @@
 import {
-  DAEMON_STATUS_ACTIVE,
-  DAEMON_STATUS_FAILED,
-  DAEMON_STATUS_PENDING,
-  DAEMON_STATUS_SUSPENDED,
-  DAEMON_STATUS_DISCONNECTED,
-  type Daemon as CloudDaemon,
-} from "../../services/controlPlane/daemon";
+  DaemonStatus,
+  type DaemonInfo as CloudDaemon,
+} from "../../gen/reliant/v1/daemon_registry_pb";
 
 /**
  * Which cloud daemons can accept a clone, and what to tell the user when none
@@ -26,10 +22,12 @@ import {
 
 /** Statuses whose machine will eventually drain a queued clone. */
 const CLONEABLE_STATUSES = [
-  DAEMON_STATUS_ACTIVE,
-  DAEMON_STATUS_PENDING,
-  DAEMON_STATUS_SUSPENDED,
-  DAEMON_STATUS_DISCONNECTED,
+  DaemonStatus.ACTIVE,
+  DaemonStatus.PENDING,
+  DaemonStatus.SUSPENDED,
+  DaemonStatus.DISCONNECTED,
+  // IDLE is in the registry enum but is never emitted by the list handler.
+  // Listing it would imply a state that cannot occur.
 ];
 
 export function isCloneableDaemon(daemon: CloudDaemon): boolean {
@@ -37,7 +35,7 @@ export function isCloneableDaemon(daemon: CloudDaemon): boolean {
 }
 
 export function isFailedDaemon(daemon: CloudDaemon): boolean {
-  return daemon.status === DAEMON_STATUS_FAILED;
+  return daemon.status === DaemonStatus.FAILED;
 }
 
 /**
@@ -66,8 +64,8 @@ function byRecency(a: CloudDaemon, b: CloudDaemon): number {
  * would read as a bug.
  */
 function byReadinessThenRecency(a: CloudDaemon, b: CloudDaemon): number {
-  const aActive = a.status === DAEMON_STATUS_ACTIVE ? 0 : 1;
-  const bActive = b.status === DAEMON_STATUS_ACTIVE ? 0 : 1;
+  const aActive = a.status === DaemonStatus.ACTIVE ? 0 : 1;
+  const bActive = b.status === DaemonStatus.ACTIVE ? 0 : 1;
   return aActive - bActive || byRecency(a, b);
 }
 
@@ -84,7 +82,7 @@ function byReadinessThenRecency(a: CloudDaemon, b: CloudDaemon): number {
  * somewhere they did not ask for.
  */
 export function pickCloneTarget(daemons: CloudDaemon[]): CloudDaemon | null {
-  const active = daemons.filter((d) => d.status === DAEMON_STATUS_ACTIVE);
+  const active = daemons.filter((d) => d.status === DaemonStatus.ACTIVE);
   if (active.length > 0) return [...active].sort(byRecency)[0];
 
   const cloneable = daemons.filter(isCloneableDaemon);
@@ -115,7 +113,7 @@ export function cloneTargetOptions(daemons: CloudDaemon[]): CloneTargetOption[] 
     .sort(byReadinessThenRecency)
     .map((daemon) => ({
       daemon,
-      immediate: daemon.status === DAEMON_STATUS_ACTIVE,
+      immediate: daemon.status === DaemonStatus.ACTIVE,
     }));
 }
 
@@ -134,7 +132,7 @@ export function cloneAvailability(daemons: CloudDaemon[]): CloneAvailability {
     return {
       kind: "ready",
       target,
-      immediate: target.status === DAEMON_STATUS_ACTIVE,
+      immediate: target.status === DaemonStatus.ACTIVE,
     };
   }
   if (daemons.length === 0) {
@@ -170,7 +168,7 @@ export function cloneDescription({
   if (!hasGitHubCredential) return "Connect GitHub to clone a repository";
 
   const name =
-    cloneState.target.name || cloneState.target.hostname || fallbackHost || "your machine";
+    cloneState.target.hostname || fallbackHost || "your machine";
   return cloneState.immediate
     ? `Pull a GitHub repo onto ${name}`
     : `Queue a GitHub repo — it'll clone when ${name} is ready`;

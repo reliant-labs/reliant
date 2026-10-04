@@ -131,10 +131,9 @@ Send a prompt to a language model and get a response
 | `compaction_threshold` | integer | - |
 | `model` | string | - |
 | `pending_inbox` | boolean | - |
-| `aborted` | boolean | - |
 | `message_id` | string | - |
 | `last_stream_seq` | integer | - |
-| `stop_kind` | string | - |
+| `stop_reason` | string | - |
 | `finish_reason` | string | - |
 
 ---
@@ -320,6 +319,7 @@ Save a message to the conversation thread
 | `message.id` | string |  |
 | `message.role` | string |  |
 | `message.text` | string |  |
+| `message.phase` | string |  |
 | `message_id` | string | - |
 | `thread` | string | - |
 | `tool_calls` | array | - |

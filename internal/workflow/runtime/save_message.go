@@ -339,6 +339,27 @@ func evaluateSaveMessageConfig(
 		}
 	}
 
+	// Auto-extract the assistant message's Responses `phase` from the activity
+	// output, for the same reason thinking is auto-extracted above: it must
+	// survive without any workflow saying so, because what needs it is the
+	// NEXT turn's request, not this node.
+	//
+	// Unlike thinking, a malformed shape here is not an error. Phase is
+	// advisory — openai-go says dropping it "can degrade performance", not
+	// that it breaks the request — so a message map that is not the expected
+	// shape loses the phase rather than failing a save that would otherwise
+	// have persisted the turn's actual content.
+	phase := ""
+	if msg, hasMessage := activityOutput["message"]; hasMessage && msg != nil {
+		if messageMap, ok := msg.(map[string]interface{}); ok {
+			if phaseValue, hasPhase := messageMap["phase"]; hasPhase && phaseValue != nil {
+				if phaseStr, ok := phaseValue.(string); ok {
+					phase = phaseStr
+				}
+			}
+		}
+	}
+
 	// Thread is always inherited from the executing thread; there is no
 	// explicit thread field — messages are saved to the current thread.
 	return &types.SaveMessageInput{
@@ -357,6 +378,7 @@ func evaluateSaveMessageConfig(
 		Agent:        scope.AgentName,
 		WorkflowID:   scope.WorkflowID,
 		Thinking:     thinkingOutput,
+		Phase:        phase,
 	}, nil
 }
 
@@ -757,6 +779,7 @@ func buildSaveMessageNode(input *types.SaveMessageInput) *reliantv1.Node {
 		Cost:                 input.Cost,
 		ResolvedModel:        input.Model,
 		ResolvedAgent:        input.Agent,
+		ResolvedPhase:        input.Phase,
 	}
 
 	// Convert tool calls

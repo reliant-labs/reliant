@@ -24,13 +24,9 @@
  */
 
 import {
-  DAEMON_STATUS_ACTIVE,
-  DAEMON_STATUS_DISCONNECTED,
-  DAEMON_STATUS_FAILED,
-  DAEMON_STATUS_PENDING,
-  DAEMON_STATUS_SUSPENDED,
-  type Daemon as CloudDaemon,
-} from "../../services/controlPlane/daemon";
+  DaemonStatus,
+  type DaemonInfo as CloudDaemon,
+} from "../../gen/reliant/v1/daemon_registry_pb";
 
 export function cloudDaemonStatusLabel(
   daemon: CloudDaemon,
@@ -38,15 +34,15 @@ export function cloudDaemonStatusLabel(
 ): string {
   if (isResuming) return "resuming";
   switch (daemon.status) {
-    case DAEMON_STATUS_ACTIVE:
+    case DaemonStatus.ACTIVE:
       return "active";
-    case DAEMON_STATUS_SUSPENDED:
+    case DaemonStatus.SUSPENDED:
       return "suspended";
-    case DAEMON_STATUS_PENDING:
+    case DaemonStatus.PENDING:
       return "starting";
-    case DAEMON_STATUS_DISCONNECTED:
+    case DaemonStatus.DISCONNECTED:
       return "disconnected";
-    case DAEMON_STATUS_FAILED:
+    case DaemonStatus.FAILED:
       return "failed";
     default:
       return "unknown";

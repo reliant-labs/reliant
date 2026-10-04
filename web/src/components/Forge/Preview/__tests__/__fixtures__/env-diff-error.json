@@ -1,0 +1,160 @@
+{
+  "project": "demo",
+  "source": "/tmp/demo",
+  "against": "live",
+  "charts": false,
+  "environments": [
+    {
+      "env": "dev",
+      "status": "ok",
+      "diff": {
+        "live_unknown": true,
+        "added": [
+          {
+            "cluster": "k3d-demo",
+            "api_version": "gateway.networking.k8s.io/v1",
+            "kind": "Gateway",
+            "namespace": "demo-dev",
+            "name": "public",
+            "workload": "public",
+            "hash": "sha256:9a0e6e030c98465be2a2b8e345ec7227c6c8aeb4f63bee97096a69ef767f1199",
+            "config_hash": "sha256:9a0e6e030c98465be2a2b8e345ec7227c6c8aeb4f63bee97096a69ef767f1199"
+          },
+          {
+            "cluster": "k3d-demo",
+            "api_version": "v1",
+            "kind": "Namespace",
+            "name": "demo-dev",
+            "hash": "sha256:fd69b05eb9e25375410dd365ac60f5d5e8d72f2b361fdcd9e4da4d1c5c5da39b",
+            "config_hash": "sha256:fd69b05eb9e25375410dd365ac60f5d5e8d72f2b361fdcd9e4da4d1c5c5da39b"
+          }
+        ],
+        "workloads_added": [
+          "migrate"
+        ],
+        "clusters_added": [
+          "k3d-demo"
+        ]
+      },
+      "would_be_created": true,
+      "live_source": "none"
+    },
+    {
+      "env": "prod",
+      "status": "ok",
+      "diff": {
+        "live_unknown": true,
+        "added": [
+          {
+            "cluster": "demo-prod",
+            "api_version": "cert-manager.io/v1",
+            "kind": "Certificate",
+            "namespace": "demo-prod",
+            "name": "public-tls",
+            "workload": "public",
+            "hash": "sha256:ca6f79a7542f5bb65e187853714aed65d6b60e85c64cb1d78144b5451a3ce6f7",
+            "config_hash": "sha256:ca6f79a7542f5bb65e187853714aed65d6b60e85c64cb1d78144b5451a3ce6f7"
+          },
+          {
+            "cluster": "demo-prod",
+            "api_version": "gateway.networking.k8s.io/v1",
+            "kind": "Gateway",
+            "namespace": "demo-prod",
+            "name": "public",
+            "workload": "public",
+            "hash": "sha256:fc62c3c6fad23407ce9fefae246985be08d548158492b13ed048e582752d6cc2",
+            "config_hash": "sha256:fc62c3c6fad23407ce9fefae246985be08d548158492b13ed048e582752d6cc2"
+          },
+          {
+            "cluster": "demo-prod",
+            "api_version": "v1",
+            "kind": "Namespace",
+            "name": "demo-prod",
+            "hash": "sha256:3726dc03831d7b031234e9b2c0a1a479036271f25720fc10404b6a51c9e2211b",
+            "config_hash": "sha256:3726dc03831d7b031234e9b2c0a1a479036271f25720fc10404b6a51c9e2211b"
+          },
+          {
+            "cluster": "demo-prod",
+            "api_version": "networking.k8s.io/v1",
+            "kind": "NetworkPolicy",
+            "namespace": "demo-prod",
+            "name": "allow-dns",
+            "hash": "sha256:3a4737440bc34383db5279fa17b94bc38739c8ae1c1611fc1dddaf7d545d786f",
+            "config_hash": "sha256:3a4737440bc34383db5279fa17b94bc38739c8ae1c1611fc1dddaf7d545d786f"
+          },
+          {
+            "cluster": "demo-prod",
+            "api_version": "networking.k8s.io/v1",
+            "kind": "NetworkPolicy",
+            "namespace": "demo-prod",
+            "name": "allow-egress-external",
+            "hash": "sha256:5110c32ea1453f2f93f952c319148007b36cd5077518e0b871d4609d1f7c00c8",
+            "config_hash": "sha256:5110c32ea1453f2f93f952c319148007b36cd5077518e0b871d4609d1f7c00c8"
+          },
+          {
+            "cluster": "demo-prod",
+            "api_version": "networking.k8s.io/v1",
+            "kind": "NetworkPolicy",
+            "namespace": "demo-prod",
+            "name": "allow-egress-telemetry",
+            "hash": "sha256:8e6d10c90e0748c6948e57a272d6b212d7f302f2f526d7f7bb0ff52eef387256",
+            "config_hash": "sha256:8e6d10c90e0748c6948e57a272d6b212d7f302f2f526d7f7bb0ff52eef387256"
+          },
+          {
+            "cluster": "demo-prod",
+            "api_version": "networking.k8s.io/v1",
+            "kind": "NetworkPolicy",
+            "namespace": "demo-prod",
+            "name": "allow-ingress-controller",
+            "hash": "sha256:ede4c41fd0cd131fe70e42752b5c4339f2a0ad5fe37385b8c62c79cf53807cb8",
+            "config_hash": "sha256:ede4c41fd0cd131fe70e42752b5c4339f2a0ad5fe37385b8c62c79cf53807cb8"
+          },
+          {
+            "cluster": "demo-prod",
+            "api_version": "networking.k8s.io/v1",
+            "kind": "NetworkPolicy",
+            "namespace": "demo-prod",
+            "name": "allow-internal",
+            "hash": "sha256:85b5f1751b5e24a068f9f7a29232f98b116aaa6b768407b83ccec7a2e5c701c2",
+            "config_hash": "sha256:85b5f1751b5e24a068f9f7a29232f98b116aaa6b768407b83ccec7a2e5c701c2"
+          },
+          {
+            "cluster": "demo-prod",
+            "api_version": "networking.k8s.io/v1",
+            "kind": "NetworkPolicy",
+            "namespace": "demo-prod",
+            "name": "default-deny",
+            "hash": "sha256:5780bec9799b12b7cc582bc3fd0e1d0c3a3eeebf93a35c0748c6807ff046a592",
+            "config_hash": "sha256:5780bec9799b12b7cc582bc3fd0e1d0c3a3eeebf93a35c0748c6807ff046a592"
+          }
+        ],
+        "workloads_added": [
+          "migrate"
+        ],
+        "secrets_added": [
+          {
+            "name": "demo-secrets",
+            "provider": "external",
+            "declared_by": [
+              "migrate"
+            ]
+          }
+        ],
+        "domains_added": [
+          "demo.example.com"
+        ],
+        "clusters_added": [
+          "demo-prod"
+        ]
+      },
+      "would_be_created": true,
+      "live_source": "none"
+    },
+    {
+      "env": "staging",
+      "status": "error",
+      "detail": "render deploy/kcl/staging/: error[E1001]: InvalidSyntax invalid syntax",
+      "live_source": "none"
+    }
+  ]
+}

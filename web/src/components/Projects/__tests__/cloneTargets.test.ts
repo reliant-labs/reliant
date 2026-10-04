@@ -7,12 +7,14 @@ import {
   pickCloneTarget,
 } from "../cloneTargets";
 import {
-  DAEMON_STATUS_ACTIVE,
-  DAEMON_STATUS_FAILED,
-  DAEMON_STATUS_PENDING,
-  DAEMON_STATUS_SUSPENDED,
-  type Daemon as CloudDaemon,
-} from "../../../services/controlPlane/daemon";
+  DaemonStatus,
+  type DaemonInfo as CloudDaemon,
+} from "../../../gen/reliant/v1/daemon_registry_pb";
+
+const DAEMON_STATUS_ACTIVE = DaemonStatus.ACTIVE;
+const DAEMON_STATUS_FAILED = DaemonStatus.FAILED;
+const DAEMON_STATUS_PENDING = DaemonStatus.PENDING;
+const DAEMON_STATUS_SUSPENDED = DaemonStatus.SUSPENDED;
 
 // The picker used to hide "Clone repo" unless a daemon was ACTIVE. A user
 // whose only machine had FAILED therefore had no way to add a project from
@@ -21,8 +23,8 @@ import {
 
 function daemon(overrides: Partial<CloudDaemon> & { status: number }): CloudDaemon {
   return {
-    id: "daemon-1",
-    name: "machine",
+    daemonId: "daemon-1",
+    hosthostname: "machine",
     status: overrides.status,
     lastStatusMessage: "",
     ...overrides,
@@ -42,37 +44,37 @@ function daemonSeenAt(
 
 describe("cloneAvailability", () => {
   it("offers an active machine as an immediate target", () => {
-    const active = daemon({ id: "d-active", status: DAEMON_STATUS_ACTIVE });
+    const active = daemon({ daemonId: "d-active", status: DAEMON_STATUS_ACTIVE });
     const result = cloneAvailability([active]);
 
     expect(result).toMatchObject({ kind: "ready", immediate: true });
-    if (result.kind === "ready") expect(result.target.id).toBe("d-active");
+    if (result.kind === "ready") expect(result.target.daemonId).toBe("d-active");
   });
 
   it("allows cloning onto a machine that is still starting", () => {
     // The clone is durably queued and drained when the daemon connects, so a
     // PENDING machine is a valid target — blocking here would strand a user
     // who just created their first machine.
-    const result = cloneAvailability([daemon({ id: "d-pending", status: DAEMON_STATUS_PENDING })]);
+    const result = cloneAvailability([daemon({ daemonId: "d-pending", status: DAEMON_STATUS_PENDING })]);
 
     expect(result.kind).toBe("ready");
     if (result.kind === "ready") {
-      expect(result.target.id).toBe("d-pending");
+      expect(result.target.daemonId).toBe("d-pending");
       expect(result.immediate).toBe(false);
     }
   });
 
   it("allows cloning onto a suspended machine", () => {
     const result = cloneAvailability([
-      daemon({ id: "d-susp", status: DAEMON_STATUS_SUSPENDED }),
+      daemon({ daemonId: "d-susp", status: DAEMON_STATUS_SUSPENDED }),
     ]);
 
     expect(result.kind).toBe("ready");
-    if (result.kind === "ready") expect(result.target.id).toBe("d-susp");
+    if (result.kind === "ready") expect(result.target.daemonId).toBe("d-susp");
   });
 
   it("blocks with a reason when every machine has failed", () => {
-    const result = cloneAvailability([daemon({ id: "d-failed", status: DAEMON_STATUS_FAILED })]);
+    const result = cloneAvailability([daemon({ daemonId: "d-failed", status: DAEMON_STATUS_FAILED })]);
 
     expect(result.kind).toBe("blocked");
     if (result.kind === "blocked") {
@@ -92,23 +94,23 @@ describe("cloneAvailability", () => {
 
   it("prefers an active machine over one that is still starting", () => {
     const result = cloneAvailability([
-      daemon({ id: "d-pending", status: DAEMON_STATUS_PENDING }),
-      daemon({ id: "d-active", status: DAEMON_STATUS_ACTIVE }),
+      daemon({ daemonId: "d-pending", status: DAEMON_STATUS_PENDING }),
+      daemon({ daemonId: "d-active", status: DAEMON_STATUS_ACTIVE }),
     ]);
 
     if (result.kind !== "ready") throw new Error("expected a ready target");
-    expect(result.target.id).toBe("d-active");
+    expect(result.target.daemonId).toBe("d-active");
     expect(result.immediate).toBe(true);
   });
 
   it("ignores failed machines when a usable one exists", () => {
     const result = cloneAvailability([
-      daemon({ id: "d-failed", status: DAEMON_STATUS_FAILED }),
-      daemon({ id: "d-pending", status: DAEMON_STATUS_PENDING }),
+      daemon({ daemonId: "d-failed", status: DAEMON_STATUS_FAILED }),
+      daemon({ daemonId: "d-pending", status: DAEMON_STATUS_PENDING }),
     ]);
 
     if (result.kind !== "ready") throw new Error("expected a ready target");
-    expect(result.target.id).toBe("d-pending");
+    expect(result.target.daemonId).toBe("d-pending");
   });
 });
 
@@ -134,12 +136,12 @@ describe("pickCloneTarget", () => {
     // working on, not whichever the server happened to list first — a clone
     // that silently lands on a stale machine is the mistake this prevents.
     const target = pickCloneTarget([
-      daemonSeenAt({ id: "d-stale", status: DAEMON_STATUS_ACTIVE }, 86400),
-      daemonSeenAt({ id: "d-recent", status: DAEMON_STATUS_ACTIVE }, 60),
-      daemonSeenAt({ id: "d-middling", status: DAEMON_STATUS_ACTIVE }, 3600),
+      daemonSeenAt({ daemonId: "d-stale", status: DAEMON_STATUS_ACTIVE }, 86400),
+      daemonSeenAt({ daemonId: "d-recent", status: DAEMON_STATUS_ACTIVE }, 60),
+      daemonSeenAt({ daemonId: "d-middling", status: DAEMON_STATUS_ACTIVE }, 3600),
     ]);
 
-    expect(target?.id).toBe("d-recent");
+    expect(target?.daemonId).toBe("d-recent");
   });
 
   it("still prefers any active machine over a more recently used inactive one", () => {
@@ -147,42 +149,42 @@ describe("pickCloneTarget", () => {
     // suspended machine over a running one, because the running one clones
     // now and the suspended one clones whenever it wakes.
     const target = pickCloneTarget([
-      daemonSeenAt({ id: "d-susp-recent", status: DAEMON_STATUS_SUSPENDED }, 10),
-      daemonSeenAt({ id: "d-active-old", status: DAEMON_STATUS_ACTIVE }, 99999),
+      daemonSeenAt({ daemonId: "d-susp-recent", status: DAEMON_STATUS_SUSPENDED }, 10),
+      daemonSeenAt({ daemonId: "d-active-old", status: DAEMON_STATUS_ACTIVE }, 99999),
     ]);
 
-    expect(target?.id).toBe("d-active-old");
+    expect(target?.daemonId).toBe("d-active-old");
   });
 });
 
 describe("cloneTargetOptions", () => {
   it("offers every machine that can take a clone, most recent first", () => {
     const options = cloneTargetOptions([
-      daemonSeenAt({ id: "d-old", status: DAEMON_STATUS_ACTIVE }, 900),
-      daemonSeenAt({ id: "d-new", status: DAEMON_STATUS_ACTIVE }, 30),
-      daemonSeenAt({ id: "d-pending", status: DAEMON_STATUS_PENDING }, 5),
+      daemonSeenAt({ daemonId: "d-old", status: DAEMON_STATUS_ACTIVE }, 900),
+      daemonSeenAt({ daemonId: "d-new", status: DAEMON_STATUS_ACTIVE }, 30),
+      daemonSeenAt({ daemonId: "d-pending", status: DAEMON_STATUS_PENDING }, 5),
     ]);
 
-    expect(options.map((o) => o.daemon.id)).toEqual(["d-new", "d-old", "d-pending"]);
+    expect(options.map((o) => o.daemon.daemonId)).toEqual(["d-new", "d-old", "d-pending"]);
   });
 
   it("omits failed machines — the user cannot usefully choose one", () => {
     const options = cloneTargetOptions([
-      daemon({ id: "d-failed", status: DAEMON_STATUS_FAILED }),
-      daemon({ id: "d-ok", status: DAEMON_STATUS_ACTIVE }),
+      daemon({ daemonId: "d-failed", status: DAEMON_STATUS_FAILED }),
+      daemon({ daemonId: "d-ok", status: DAEMON_STATUS_ACTIVE }),
     ]);
 
-    expect(options.map((o) => o.daemon.id)).toEqual(["d-ok"]);
+    expect(options.map((o) => o.daemon.daemonId)).toEqual(["d-ok"]);
   });
 
   it("says whether each machine clones now or only once it is ready", () => {
     const options = cloneTargetOptions([
-      daemon({ id: "d-active", status: DAEMON_STATUS_ACTIVE }),
-      daemon({ id: "d-pending", status: DAEMON_STATUS_PENDING }),
+      daemon({ daemonId: "d-active", status: DAEMON_STATUS_ACTIVE }),
+      daemon({ daemonId: "d-pending", status: DAEMON_STATUS_PENDING }),
     ]);
 
-    expect(options.find((o) => o.daemon.id === "d-active")?.immediate).toBe(true);
-    expect(options.find((o) => o.daemon.id === "d-pending")?.immediate).toBe(false);
+    expect(options.find((o) => o.daemon.daemonId === "d-active")?.immediate).toBe(true);
+    expect(options.find((o) => o.daemon.daemonId === "d-pending")?.immediate).toBe(false);
   });
 });
 

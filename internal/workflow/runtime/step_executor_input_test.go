@@ -33,7 +33,7 @@ func TestNormalizeOutput_MergesSnakeCaseDefaults(t *testing.T) {
 	require.Contains(t, normalized, "tool_calls")
 	require.Contains(t, normalized, "message")
 	// An unset message is filled as its full zero shape from the descriptor.
-	assert.Equal(t, map[string]interface{}{"id": "", "role": "", "text": ""}, normalized["message"])
+	assert.Equal(t, map[string]interface{}{"id": "", "role": "", "text": "", "phase": ""}, normalized["message"])
 }
 
 func TestNormalizeOutput_CallLLMAddsMissingToolCallsField(t *testing.T) {

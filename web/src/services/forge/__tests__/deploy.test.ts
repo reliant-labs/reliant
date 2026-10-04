@@ -18,7 +18,6 @@ import {
   deployModeOf,
   deployModeWrites,
   deployTokenFor,
-  describeDeployToken,
   guardVerdictOf,
   isMultiCluster,
   pinningOf,
@@ -260,15 +259,19 @@ describe("deployTokenFor", () => {
     ).toHaveLength(1);
   });
 
-  it("describes the claim with the cluster first", () => {
-    const described = describeDeployToken(deployTokenFor(plan)!);
-    expect(described).toContain("gke-prod");
-    expect(described).toContain("v1.5.15");
-    expect(described.indexOf("gke-prod")).toBeLessThan(described.indexOf("v1.5.15"));
-
-    expect(describeDeployToken(deployTokenFor({ ...plan, release: "" })!)).toMatch(
-      /no release binding/i
-    );
+  it("carries the declared context even though nothing asks the user to type it", () => {
+    // The confirm step has no typed phrase and no claim sentence any more, so
+    // the token is the ONLY place the declared target is pinned client-side —
+    // and it is what the server re-checks. Asserted here because there is no
+    // longer a rendered string to catch a regression in it.
+    expect(deployTokenFor(plan)).toEqual({
+      expectedDeclaredContext: "gke-prod",
+      expectedCurrentRelease: "v1.5.15",
+    });
+    expect(deployTokenFor({ ...plan, release: "" })).toEqual({
+      expectedDeclaredContext: "gke-prod",
+      expectUnbound: true,
+    });
   });
 });
 
@@ -365,3 +368,4 @@ describe("the deploy's verdict", () => {
     ).toEqual({ ready: 2, failed: 1, timedOut: 0, notWaited: 3, unknown: 0, total: 6 });
   });
 });
+

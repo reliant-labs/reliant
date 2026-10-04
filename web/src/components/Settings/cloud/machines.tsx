@@ -63,24 +63,34 @@ import {
 } from "./ui";
 import {
   DaemonSize,
-  DaemonStatus,
-  DaemonType,
   PortAccessMode,
   createEnvironment,
   deleteDaemon,
   describeError,
   getComputeSubscription,
   getDaemon,
-  listDaemons,
   listPortAccessRules,
   portAccessRulesQueryKey,
   removePortAccess,
   resumeEnvironment,
   setPortAccess,
   suspendDaemon,
-  type Daemon,
   type PortAccessRule,
 } from "@/services/controlPlane/environments";
+import { create } from "@bufbuild/protobuf";
+import { grpcClient } from "@/api/grpc-client";
+import {
+  DaemonStatus,
+  ListDaemonsRequestSchema,
+  type DaemonInfo as Daemon,
+} from "@/gen/reliant/v1/daemon_registry_pb";
+import {
+  LIFECYCLE_PHASE_UNSPECIFIED,
+  lifecyclePlan,
+  restartMachine,
+  type LifecycleAction,
+  type RestartStage,
+} from "./machineLifecycle";
 import { SelfHostedDaemonConnect } from "@/components/Projects/SelfHostedDaemonConnect";
 import { getComputeEligibility } from "@/services/controlPlane/billing";
 import { useGoToBilling } from "@/hooks/useGoToBilling";
@@ -93,6 +103,12 @@ import { formatOverageRate } from "./billingUtils";
 // ── Query keys ──────────────────────────────────────────────────────────────
 const QK = {
   daemons: ["cp", "environments", "list"] as const,
+  // The detail view reads the same registry list but on its own cadence (2s
+  // during a restart). A separate key rather than sharing QK.daemons: two
+  // observers of one key negotiate a single interval, so sharing would either
+  // slow the restart progress copy to the list's 15s or speed the whole list
+  // up to 2s for every mounted consumer.
+  detailList: ["cp", "environments", "detailList"] as const,
   daemon: (id: string) => ["cp", "environments", "detail", id] as const,
   // Shared with the header DetectedPortsChip's one-click-public toggle so a
   // "Make public" there invalidates this panel's rules query and vice-versa.
@@ -165,8 +181,14 @@ function daemonFailureReason(d: Daemon): string | null {
   return message ? message : null;
 }
 
+// The registry carries daemon_type as the string the daemon registered with.
+// "self_hosted" is what tools_daemon.go records; "external" is control-plane's
+// word for the same thing, accepted so a row back-filled from its vocabulary
+// is still treated as unmanaged.
+const EXTERNAL_DAEMON_TYPES = ["self_hosted", "external"];
+
 function isExternalDaemon(d: Pick<Daemon, "daemonType">): boolean {
-  return d.daemonType === DaemonType.EXTERNAL;
+  return EXTERNAL_DAEMON_TYPES.includes(d.daemonType);
 }
 
 // A UUID (v4-shaped, 36 chars with dashes at the standard offsets) is not a
@@ -180,12 +202,11 @@ function looksLikeBareUuid(name: string): boolean {
   return UUID_RE.test(name.trim());
 }
 
-export function daemonDisplayName(d: Pick<Daemon, "id" | "name" | "hostname">): string {
-  const name = d.name?.trim() ?? "";
-  const isPlaceholder = !name || name === d.id || looksLikeBareUuid(name);
+export function daemonDisplayName(d: Pick<Daemon, "daemonId" | "hostname">): string {
+  const name = d.hostname?.trim() ?? "";
+  const isPlaceholder = !name || name === d.daemonId || looksLikeBareUuid(name);
   if (!isPlaceholder) return name;
-  if (d.hostname?.trim()) return d.hostname.trim();
-  const shortId = (d.id || "").slice(0, 8);
+  const shortId = (d.daemonId || "").slice(0, 8);
   return shortId ? `Self-hosted machine (${shortId})` : "Self-hosted machine";
 }
 
@@ -203,13 +224,6 @@ const SIZE_TIERS = [
   { value: DaemonSize.DAEMON_SIZE_LARGE, name: "large", label: "Large", specs: "4 CPU · 8GB RAM" },
   { value: DaemonSize.DAEMON_SIZE_XL, name: "xl", label: "XL", specs: "8 CPU · 16GB RAM" },
 ] as const;
-
-const sizeLabel: Record<number, string> = {
-  [DaemonSize.DAEMON_SIZE_SMALL]: "Small",
-  [DaemonSize.DAEMON_SIZE_MEDIUM]: "Medium",
-  [DaemonSize.DAEMON_SIZE_LARGE]: "Large",
-  [DaemonSize.DAEMON_SIZE_XL]: "XL",
-};
 
 // ── Copy for the un-funded state ────────────────────────────────────────────
 //
@@ -270,7 +284,7 @@ const accessModeLabel: Record<number, string> = {
  * the server sent no price list or the size is unknown to it.
  */
 function suspendedFeeOf(d: Daemon, pricing?: DaemonPricingLike): string | null {
-  const name = SIZE_TIERS.find((t) => t.value === d.size)?.name;
+  const name = SIZE_TIERS.find((t) => t.name === d.size)?.name;
   const row = name ? pricing?.sizes.find((s) => s.size === name) : undefined;
   return row ? suspendedFeeLabel(pricing, Number(row.storageGib)) : null;
 }
@@ -442,9 +456,19 @@ function EnvironmentsList({ onOpenDetail }: { onOpenDetail: (id: string) => void
   // the destination cannot drift; see the hook's own header.
   const goToBilling = useGoToBilling();
 
+  // The LIST comes from reliant's registry — the one daemon list
+  // (docs/design/one-daemon-list.md). The per-machine DETAIL view below still
+  // calls control-plane's GetDaemon, which is kept deliberately: port-access
+  // rules, the workspace base domain and the provisioning spec are
+  // control-plane concerns with no reliant equivalent.
   const daemonsQ = useQuery({
     queryKey: QK.daemons,
-    queryFn: async () => (await listDaemons()).daemons,
+    queryFn: async () => {
+      const resp = await grpcClient
+        .daemonRegistry()
+        .listDaemons(create(ListDaemonsRequestSchema));
+      return resp.daemons;
+    },
     staleTime: 10_000,
     refetchInterval: 15_000,
   });
@@ -625,7 +649,7 @@ function EnvironmentsList({ onOpenDetail }: { onOpenDetail: (id: string) => void
         target={deleteTarget}
         isPending={deleteMut.isPending}
         onClose={() => setDeleteTarget(null)}
-        onConfirm={() => deleteTarget && deleteMut.mutate(deleteTarget.id)}
+        onConfirm={() => deleteTarget && deleteMut.mutate(deleteTarget.daemonId)}
       />
     </div>
   );
@@ -665,16 +689,20 @@ function ManagedMachinesTable({
           const badge = statusBadge[status];
           const failureReason = daemonFailureReason(d);
           const isSuspended = d.status === DaemonStatus.SUSPENDED;
+          // Specs come from the size tier rather than from per-machine
+          // resource requests. Those requests are part of the provisioning
+          // SPEC, which lives only in control-plane and is deliberately absent
+          // from the one list; the size determines them, and SIZE_TIERS already
+          // states the mapping this page renders everywhere else. A machine
+          // with no reported size (every self-hosted one) shows "—".
           const resources =
-            [d.resources?.cpuRequest, d.resources?.memoryRequest, d.storageSize]
-              .filter(Boolean)
-              .join(" · ") || "—";
+            SIZE_TIERS.find((t) => t.name === d.size)?.specs || "—";
           return (
-            <Tr key={d.id}>
+            <Tr key={d.daemonId}>
               <Td>
                 <button
                   type="button"
-                  onClick={() => onOpenDetail(d.id)}
+                  onClick={() => onOpenDetail(d.daemonId)}
                   className="font-medium text-foreground hover:text-primary hover:underline"
                 >
                   {daemonDisplayName(d)}
@@ -706,7 +734,7 @@ function ManagedMachinesTable({
                     variant="ghost"
                     size="sm"
                     disabled={busy}
-                    onClick={() => (isSuspended ? onResume(d.id) : onSuspend(d.id))}
+                    onClick={() => (isSuspended ? onResume(d.daemonId) : onSuspend(d.daemonId))}
                   >
                     {isSuspended ? <Play className="h-4 w-4" /> : <Pause className="h-4 w-4" />}
                     {isSuspended ? "Resume" : "Suspend"}
@@ -759,13 +787,13 @@ function SelfHostedMachinesTable({
           const connected = d.status === DaemonStatus.ACTIVE;
           const lastSeen = connected
             ? "Connected now"
-            : fmtTimestamp(d.disconnectedAt);
+            : fmtTimestamp(d.connectedAt);
           return (
-            <Tr key={d.id}>
+            <Tr key={d.daemonId}>
               <Td>
                 <button
                   type="button"
-                  onClick={() => onOpenDetail(d.id)}
+                  onClick={() => onOpenDetail(d.daemonId)}
                   className="font-medium text-foreground hover:text-primary hover:underline"
                 >
                   {daemonDisplayName(d)}
@@ -822,7 +850,7 @@ function RemoveMachineModal({
         ) : (
           <>
             Are you sure you want to delete{" "}
-            <span className="font-semibold text-foreground">{target?.name}</span>? This action cannot be undone.
+            <span className="font-semibold text-foreground">{target ? daemonDisplayName(target) : ""}</span>? This action cannot be undone.
           </>
         )}
       </p>
@@ -1005,6 +1033,129 @@ function CreateEnvironmentModal({
 }
 
 // ── Machine detail ──────────────────────────────────────────────────────────
+
+/**
+ * The lifecycle buttons for a machine, per its status.
+ *
+ * Which buttons exist and whether they are clickable is `lifecyclePlan`'s
+ * decision, not this component's — the policy is a table, it is tested
+ * directly, and keeping it out of here is what stops "can a failed machine
+ * resume" from being re-derived inline. This renders the plan.
+ *
+ * Self-hosted machines get nothing: `lifecyclePlan` returns an empty offer
+ * for them, and the detail view explains why in prose instead.
+ */
+function MachineLifecycleActions({
+  daemon,
+  busy,
+  restartStage,
+  onSuspend,
+  onResume,
+  onRestart,
+}: {
+  daemon: Daemon;
+  busy: boolean;
+  restartStage: RestartStage | null;
+  onSuspend: () => void;
+  onResume: () => void;
+  onRestart: () => void;
+}) {
+  const plan = lifecyclePlan(daemon, restartStage);
+  if (plan.offer.length === 0) return null;
+
+  // The reason rides on `title` as well as disabling the button, so a user
+  // who wonders why Resume is dead can find out by hovering rather than
+  // guessing. A disabled control with no stated cause is the thing this
+  // avoids.
+  const disabled = busy || plan.disabledReason !== null;
+  const reason = plan.disabledReason ?? undefined;
+
+  const label: Record<LifecycleAction, string> = {
+    suspend: "Suspend",
+    resume: "Resume",
+    // While a restart runs, the button narrates the stage it is in — the
+    // whole operation takes a pod teardown plus a cold start, which is long
+    // enough that a silent spinner reads as a hang.
+    restart: restartStage === "stopping" ? "Stopping…" : restartStage === "starting" ? "Starting…" : "Restart",
+  };
+  const icon: Record<LifecycleAction, React.ReactNode> = {
+    suspend: <Pause className="h-4 w-4" />,
+    resume: <Play className="h-4 w-4" />,
+    restart: <RefreshCw className={cn("h-4 w-4", restartStage && "animate-spin")} />,
+  };
+  const onClick: Record<LifecycleAction, () => void> = {
+    suspend: onSuspend,
+    resume: onResume,
+    restart: onRestart,
+  };
+
+  return (
+    <>
+      {plan.offer.map((action) => (
+        <Button
+          key={action}
+          variant="outline"
+          disabled={disabled}
+          title={reason}
+          onClick={onClick[action]}
+        >
+          {icon[action]} {label[action]}
+        </Button>
+      ))}
+    </>
+  );
+}
+
+/**
+ * Restart confirmation.
+ *
+ * A restart is not destructive but it IS disruptive, and the disruption is
+ * invisible from this page: anything running on the machine — an agent
+ * mid-task, an open terminal, a dev server — goes away when the pod does.
+ * Naming that before the first RPC is the difference between a restart and a
+ * surprise.
+ */
+function RestartMachineModal({
+  target,
+  isPending,
+  stage,
+  onClose,
+  onConfirm,
+}: {
+  target: Daemon | null;
+  isPending: boolean;
+  stage: RestartStage | null;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <Modal open={target !== null} onClose={onClose} title="Restart Machine">
+      <p className="text-sm text-muted-foreground">
+        Restart <span className="font-semibold text-foreground">{target && daemonDisplayName(target)}</span>? The
+        machine stops and starts again, so any open sessions on it — running agents,
+        terminals and dev servers — will disconnect. Files on its disk are kept.
+      </p>
+      <p className="mt-3 text-sm text-muted-foreground">
+        A restart is also how a machine picks up a new workspace image.
+      </p>
+      {/* Progress, in the modal that started it. The sequence outlives a
+          single RPC, so closing this on click would leave the user watching
+          an unchanged page with no indication anything was happening. */}
+      {stage && (
+        <p className="mt-4 text-sm font-medium text-foreground" data-testid="restart-progress">
+          {stage === "stopping" ? "Stopping the machine…" : "Starting the machine…"}
+        </p>
+      )}
+      <div className="mt-6 flex justify-end gap-3">
+        <Button variant="outline" disabled={isPending} onClick={onClose}>Cancel</Button>
+        <Button isLoading={isPending} onClick={onConfirm}>
+          {isPending ? "Restarting…" : "Restart machine"}
+        </Button>
+      </div>
+    </Modal>
+  );
+}
+
 function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="flex justify-between gap-4 border-b border-border py-2 last:border-0">
@@ -1018,17 +1169,49 @@ function EnvironmentDetail({ daemonId, onBack }: { daemonId: string; onBack: () 
   const qc = useQueryClient();
   const [error, setError] = useState("");
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [restartOpen, setRestartOpen] = useState(false);
+  // Non-null only while THIS client is driving a restart. It gates every
+  // lifecycle button (see lifecyclePlan) and drives the progress copy, since
+  // a restart is two RPCs with a wait between them and the daemon's own
+  // status is not sufficient to tell you one is in flight.
+  const [restartStage, setRestartStage] = useState<RestartStage | null>(null);
+
+  // The detail view reads BOTH halves, from the service that owns each.
+  //
+  // Status, lifecycle phase and liveness come from the one daemon list — the
+  // registry is the only thing that knows whether a machine has actually
+  // attached, and the lifecycle buttons below act on that. The provisioning
+  // SPEC and the preview-proxy facts (port-access rules, the workspace base
+  // domain, idle timeout, storage) come from control-plane's GetDaemon, which
+  // is kept deliberately for exactly this: they have no reliant equivalent.
+  // See docs/design/one-daemon-list.md.
+  const listQ = useQuery({
+    queryKey: QK.detailList,
+    queryFn: async () => {
+      const resp = await grpcClient
+        .daemonRegistry()
+        .listDaemons(create(ListDaemonsRequestSchema));
+      return resp.daemons;
+    },
+    refetchInterval: restartStage ? 2_000 : 15_000,
+  });
+  const daemon = listQ.data?.find((d) => d.daemonId === daemonId);
 
   const daemonQ = useQuery({
     queryKey: QK.daemon(daemonId),
     queryFn: () => getDaemon(daemonId),
-    refetchInterval: 15_000,
+    // 2s while a restart runs: the default 15s would leave the progress copy
+    // ("Stopping…" → "Starting…") lagging the machine by up to a quarter
+    // minute, which reads as a hang during the one operation that most needs
+    // to look alive.
+    refetchInterval: restartStage ? 2_000 : 15_000,
   });
-  const daemon = daemonQ.data?.daemon;
+  const spec = daemonQ.data?.daemon;
   const workspaceBaseDomain = daemonQ.data?.workspaceBaseDomain ?? "";
 
   const refetchAll = () => {
     qc.invalidateQueries({ queryKey: QK.daemon(daemonId) });
+    qc.invalidateQueries({ queryKey: QK.detailList });
     qc.invalidateQueries({ queryKey: QK.daemons });
   };
 
@@ -1048,11 +1231,58 @@ function EnvironmentDetail({ daemonId, onBack }: { daemonId: string; onBack: () 
     onError: (e) => setError(describeError(e, "Failed to delete machine")),
   });
 
+  /**
+   * Restart = suspend, wait for the pod to actually stop, resume.
+   *
+   * The wait is not padding. SuspendDaemon marks the daemon row SUSPENDED
+   * before the pod is torn down, so a restart that trusted `status` would
+   * resume into a still-running pod and the pod would never be rebuilt —
+   * which is exactly the "my machine won't pick up the new image" problem
+   * this feature exists to solve. restartMachine polls `lifecycle_phase`,
+   * which tracks the real workspace. See machineLifecycle.ts's header.
+   *
+   * Resume is also the point at which the control plane re-stamps the
+   * desired image (prod runs ROLLOUT_STRATEGY=resume, which never
+   * force-rolls a running pod), so this sequence is what actually rolls a
+   * new workspace image.
+   */
+  const restartMut = useMutation({
+    mutationFn: async () => {
+      await restartMachine({
+        suspend: () => suspendDaemon(daemonId),
+        resume: () => resumeEnvironment(daemonId),
+        // Polls the REGISTRY, which owns status and lifecycle phase. This
+        // read used to be control-plane's GetDaemon; pointing it at the one
+        // list keeps the signal restartMachine waits on (phase SUSPENDED) and
+        // the status the UI shows from coming out of two different services,
+        // which is the disagreement docs/design/one-daemon-list.md removes.
+        poll: async () => {
+          const resp = await grpcClient
+            .daemonRegistry()
+            .listDaemons(create(ListDaemonsRequestSchema));
+          const row = resp.daemons.find((d) => d.daemonId === daemonId);
+          return {
+            phase: row?.lifecyclePhase ?? LIFECYCLE_PHASE_UNSPECIFIED,
+            status: row?.status ?? 0,
+          };
+        },
+        sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+        onStage: setRestartStage,
+      });
+    },
+    onSuccess: () => { setError(""); refetchAll(); },
+    onError: (e) => setError(describeError(e, "Failed to restart machine")),
+    // Clear the stage on BOTH paths: leaving it set after a failure would
+    // disable every lifecycle button with a stale "Stopping…" reason and
+    // strand the machine with no way to act on it from this page.
+    onSettled: () => { setRestartStage(null); refetchAll(); },
+  });
+
   const status = daemon ? daemonStatus(daemon) : "pending";
   const badge = statusBadge[status];
   const connected = daemon?.status === DaemonStatus.ACTIVE;
-  const isSuspended = daemon?.status === DaemonStatus.SUSPENDED;
-  const busy = suspendMut.isPending || resumeMut.isPending || deleteMut.isPending;
+  const busy =
+    suspendMut.isPending || resumeMut.isPending || deleteMut.isPending || restartMut.isPending;
   const external = daemon ? isExternalDaemon(daemon) : false;
 
   return (
@@ -1073,23 +1303,51 @@ function EnvironmentDetail({ daemonId, onBack }: { daemonId: string; onBack: () 
         <Card><CardContent className="text-sm text-muted-foreground">Machine not found.</CardContent></Card>
       ) : (
         <>
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div
+            data-testid="machine-detail-header"
+            className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+          >
             <div className="flex flex-wrap items-center gap-3">
               <h2 className="text-xl font-semibold text-foreground">{daemonDisplayName(daemon)}</h2>
+              {/*
+                ONE badge. This header used to render two: the status badge
+                ("Disconnected", red) and a separate connection badge
+                ("Disconnected", grey), which for a disconnected machine
+                printed the same word twice in two different colors and read
+                as two conflicting facts. Lifecycle status is the broader of
+                the two and already covers the connection case, so the
+                connection badge is gone from here — the Status & Activity
+                card below still states it as a labelled row, which is where
+                a second opinion belongs if the two ever disagree.
+              */}
               <Badge label={badge.label} variant={badge.variant} />
-              <Badge label={connected ? "Connected" : "Disconnected"} variant={connected ? "success" : "neutral"} />
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              {!external && (
-                <Button variant="outline" disabled={busy} onClick={() => (isSuspended ? resumeMut.mutate() : suspendMut.mutate())}>
-                  {isSuspended ? <><Play className="h-4 w-4" /> Resume</> : <><Pause className="h-4 w-4" /> Suspend</>}
-                </Button>
-              )}
+              <MachineLifecycleActions
+                daemon={daemon}
+                busy={busy}
+                restartStage={restartStage}
+                onSuspend={() => suspendMut.mutate()}
+                onResume={() => resumeMut.mutate()}
+                onRestart={() => setRestartOpen(true)}
+              />
               <Button variant="danger" disabled={busy} onClick={() => setDeleteOpen(true)}>
                 <Trash2 className="h-4 w-4" /> {external ? "Remove" : "Delete"}
               </Button>
             </div>
           </div>
+
+          {/* A self-hosted machine runs on hardware this page does not
+              control, so it gets an explanation rather than disabled
+              buttons — a greyed-out Suspend would imply the capability
+              exists and is merely unavailable right now. */}
+          {external && (
+            <p className="text-sm text-muted-foreground">
+              This machine runs on your own hardware, so it can't be suspended or
+              restarted from here. Stop or restart the Reliant daemon on the machine
+              itself.
+            </p>
+          )}
 
           {error && <ErrorNote message={error} />}
 
@@ -1124,12 +1382,12 @@ function EnvironmentDetail({ daemonId, onBack }: { daemonId: string; onBack: () 
                     </>
                   ) : (
                     <>
-                      <InfoRow label="Size" value={sizeLabel[daemon.size] ?? "Custom"} />
-                      <InfoRow label="Storage" value={daemon.storageSize} />
+                      <InfoRow label="Size" value={SIZE_TIERS.find((t) => t.name === daemon.size)?.label ?? "Custom"} />
+                      <InfoRow label="Storage" value={spec?.storageSize} />
                     </>
                   )}
                   <InfoRow label="Created" value={fmtTimestamp(daemon.createdAt)} />
-                  <InfoRow label="Updated" value={fmtTimestamp(daemon.updatedAt)} />
+                  <InfoRow label="Updated" value={fmtTimestamp(spec?.updatedAt)} />
                 </dl>
               </CardContent>
             </Card>
@@ -1138,21 +1396,41 @@ function EnvironmentDetail({ daemonId, onBack }: { daemonId: string; onBack: () 
               <CardContent>
                 <dl>
                   <InfoRow label="Connection" value={<Badge label={connected ? "Connected" : "Disconnected"} variant={connected ? "success" : "neutral"} />} />
-                  <InfoRow label="Connected at" value={fmtTimestamp(daemon.connectedAt)} />
-                  {!external && <InfoRow label="Idle timeout" value={daemon.idleTimeout || "Not set"} />}
+                  {/*
+                    The label tracks the state. "Connected at <timestamp>"
+                    beside a DISCONNECTED machine describes a connection that
+                    no longer exists, and reads as a live one — the timestamp
+                    is in fact when the machine was last connected. Same
+                    value, honestly captioned.
+                  */}
+                  <InfoRow
+                    label={connected ? "Connected at" : "Last connected"}
+                    value={fmtTimestamp(daemon.connectedAt)}
+                  />
+                  {!external && <InfoRow label="Idle timeout" value={spec?.idleTimeout || "Not set"} />}
                   <InfoRow label="Last status" value={daemon.lastStatusMessage} />
                 </dl>
               </CardContent>
             </Card>
           </div>
 
-          <PortAccessPanel daemonId={daemon.id} workspaceBaseDomain={workspaceBaseDomain} />
+          <PortAccessPanel daemonId={daemonId} workspaceBaseDomain={workspaceBaseDomain} />
 
           <RemoveMachineModal
             target={deleteOpen ? daemon : null}
             isPending={deleteMut.isPending}
             onClose={() => setDeleteOpen(false)}
             onConfirm={() => deleteMut.mutate()}
+          />
+
+          <RestartMachineModal
+            target={restartOpen ? daemon : null}
+            isPending={restartMut.isPending}
+            stage={restartStage}
+            onClose={() => setRestartOpen(false)}
+            onConfirm={() =>
+              restartMut.mutate(undefined, { onSuccess: () => setRestartOpen(false) })
+            }
           />
         </>
       )}

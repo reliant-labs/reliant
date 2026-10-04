@@ -19,7 +19,8 @@ var memReader = cgroupmem.NewReader(cgroupmem.DefaultRoot)
 
 // steerOOMKiller raises the started command's oom_score_adj so that when the
 // pod cgroup runs out of memory the kernel kills the workload, not the
-// daemon (see osutil.ChildOOMScoreAdj). Call immediately after Start; the
+// daemon (see osutil.ChildOOMScoreAdj), and lowers its scheduling priority
+// (osutil.ChildNiceValue). Call immediately after Start; the
 // child's descendants inherit the score on fork. Best-effort: a failure is
 // logged and never fails the spawn.
 func steerOOMKiller(cmd *exec.Cmd) {
@@ -28,6 +29,10 @@ func steerOOMKiller(cmd *exec.Cmd) {
 	}
 	if err := osutil.AdjustChildOOMScore(cmd.Process.Pid); err != nil {
 		logging.Debug(logPrefix+" Failed to adjust child oom_score_adj",
+			"pid", cmd.Process.Pid, "error", err)
+	}
+	if err := osutil.LowerChildPriority(cmd.Process.Pid); err != nil {
+		logging.Debug(logPrefix+" Failed to lower child priority",
 			"pid", cmd.Process.Pid, "error", err)
 	}
 }

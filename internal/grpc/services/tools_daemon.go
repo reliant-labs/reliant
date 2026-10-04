@@ -1248,11 +1248,83 @@ func (s *ToolsDaemonService) handleFileSystemChanged(ctx context.Context, conn *
 	if err := s.database.MarkProjectDaemonInstalled(ctx, project.ID, conn.daemonID); err != nil {
 		logging.Warn("could not settle queued clone after filesystem change",
 			"error", err, "project_id", project.ID, "daemon_id", conn.daemonID)
+	} else {
+		// The clone just SUCCEEDED on this daemon, which means forge.yaml is
+		// on its disk right now. Read the project's forge name here rather
+		// than waiting for someone to open the Forge tab with a daemon
+		// online — see forge_name_learn.go for why that wait was the bug.
+		s.learnForgeNameForProject(ctx, conn, project)
 	}
 
 	return s.database.EmitUserRefetch(ctx, conn.userID, db.RefetchFileTree, db.RefetchOpts{
 		ProjectID: &project.ID,
 	})
+}
+
+// learnForgeNameForProject reads forge.yaml's `name` off the daemon that just
+// finished a clone and persists it on the project row.
+//
+// Dispatched onto its own goroutine, NOT awaited: the response it waits for is
+// delivered by the very receive loop that called this, so waiting here would
+// deadlock until the command timed out and stall every other message from this
+// daemon in the meantime (see forge_name_learn.go). The settle it follows is
+// already committed, so nothing depends on the answer.
+//
+// conn.done bounds the goroutine: a daemon that disconnects mid-read releases
+// it rather than leaving it parked on a response that can no longer arrive.
+func (s *ToolsDaemonService) learnForgeNameForProject(ctx context.Context, conn *daemonConnection, project *db.Project) {
+	if conn == nil || project == nil {
+		return
+	}
+	go func() {
+		// Deliberately detached from the message's ctx, which is scoped to
+		// handling one DaemonMessage and is cancelled as soon as this
+		// handler returns. Bounded by the command timeout and by conn.done.
+		readCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
+		defer cancel()
+		go func() {
+			select {
+			case <-conn.done:
+				cancel()
+			case <-readCtx.Done():
+			}
+		}()
+		learnForgeProjectName(readCtx, connCommandSender{svc: s, conn: conn},
+			s.database, conn.userID, conn.daemonID, project.ID, project.Path)
+	}()
+}
+
+// connCommandSender adapts one daemon CONNECTION to the forgeNameReader the
+// learn helper declares.
+//
+// It targets the connection directly rather than resolving the user's default
+// daemon: the checkout exists on the machine that just cloned it, and a user
+// with two daemons would otherwise have forge.yaml read off the wrong disk.
+type connCommandSender struct {
+	svc  *ToolsDaemonService
+	conn *daemonConnection
+}
+
+func (c connCommandSender) SendDaemonCommandToDaemon(
+	ctx context.Context, _, _, commandType string, payload []byte, timeoutMs int32,
+) ([]byte, error) {
+	resp, err := c.svc.sendCommandToConn(ctx, c.conn, &reliantv1.DaemonCommandRequest{
+		RequestId:   uuid.NewString(),
+		CommandType: commandType,
+		Payload:     payload,
+		TimeoutMs:   timeoutMs,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if !resp.GetSuccess() {
+		msg := strings.TrimSpace(resp.GetErrorMessage())
+		if msg == "" {
+			msg = "the daemon reported no reason"
+		}
+		return nil, fmt.Errorf("daemon command %s: %s", commandType, msg)
+	}
+	return resp.GetPayload(), nil
 }
 
 // cloneFailureReason keeps the stored reason bounded and non-empty. The
@@ -2094,6 +2166,26 @@ func (s *ToolsDaemonService) SendDaemonCommand(ctx context.Context, userID strin
 	return s.sendCommandToConn(ctx, conn, req)
 }
 
+// SendDaemonCommandToDaemon sends a generic command to ONE named daemon and
+// waits for its response. It never falls back to another of the user's
+// daemons: a command addressed to a daemon (everything drained from that
+// daemon's own pending queue) must run there or not at all. With a local
+// daemon and a cloud daemon both connected, the default pick is the LOCAL one,
+// so a git.clone queued for the cloud machine used to land on the user's
+// laptop instead.
+//
+// The daemon must also belong to userID, so a caller cannot reach another
+// user's machine by naming its id.
+func (s *ToolsDaemonService) SendDaemonCommandToDaemon(ctx context.Context, userID, daemonID string, req *reliantv1.DaemonCommandRequest) (*reliantv1.DaemonCommandResponse, error) {
+	s.mu.RLock()
+	conn := s.connections[daemonID]
+	s.mu.RUnlock()
+	if conn == nil || conn.userID != userID {
+		return nil, fmt.Errorf("daemon %s is not connected for user %s", daemonID, userID)
+	}
+	return s.sendCommandToConn(ctx, conn, req)
+}
+
 // sendCommandToConn sends a generic command to a specific daemon connection and
 // waits for the correlated DaemonCommandResponse. It mirrors SendDaemonCommand's
 // correlation logic but targets the passed conn directly rather than resolving
@@ -2102,6 +2194,14 @@ func (s *ToolsDaemonService) SendDaemonCommand(ctx context.Context, userID strin
 func (s *ToolsDaemonService) sendCommandToConn(ctx context.Context, conn *daemonConnection, req *reliantv1.DaemonCommandRequest) (*reliantv1.DaemonCommandResponse, error) {
 	if conn == nil {
 		return nil, fmt.Errorf("nil daemon connection")
+	}
+	// A connection assembled without its correlation map cannot carry a
+	// command: registering the waiter below would panic on a nil map write
+	// and take the whole server down. Refusing is correct and survivable —
+	// only a connection built outside newDaemonConnection can be in this
+	// state, and every caller here already tolerates a send failure.
+	if conn.pendingCommands == nil {
+		return nil, fmt.Errorf("daemon connection for user %s cannot carry commands", conn.userID)
 	}
 
 	// Register a pending response channel keyed by request id on this conn.

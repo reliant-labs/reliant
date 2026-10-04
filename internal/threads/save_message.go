@@ -75,6 +75,11 @@ type SaveMessageOpts struct {
 	// Agent is the agent/workflow identity that produced the message
 	// (e.g. "builtin://agent", "get-it-right"). Persisted to messages.agent.
 	Agent string
+	// Phase is the OpenAI Responses `phase` of an assistant message
+	// ("commentary" / "final_answer"). Persisted onto the TEXT content block —
+	// it describes that emission, and the replay path reads it back from
+	// there to resend on the next turn. Empty on every other provider.
+	Phase string
 
 	// Display and workflow context
 	DisplayStyle int32 // DisplayStyle proto enum value (0=unspecified, 1=info, 2=warning, 3=success, 4=hidden)
@@ -612,12 +617,24 @@ func (s *Service) buildAssistantContentBlocks(messageID string, opts SaveMessage
 
 	// Create text block if content is provided
 	if opts.Content != "" {
+		// Phase belongs to the TEXT block specifically: it labels the
+		// assistant's message emission ("commentary" / "final_answer"), which
+		// is the text, and the replay path rebuilds assistant history from
+		// these blocks. Nil when unreported so the column stays NULL rather
+		// than storing "" — the wire field is an enum, and "absent" and
+		// "empty" must not collapse.
+		var phase *string
+		if opts.Phase != "" {
+			phase = &opts.Phase
+		}
+
 		blocks = append(blocks, db.MessageContentBlock{
 			ID:        uuid.New().String(),
 			MessageID: messageID,
 			Position:  position,
 			BlockType: reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_TEXT,
 			Content:   &opts.Content,
+			Phase:     phase,
 			Version:   ptr.Of(1),
 			CreatedAt: timestamp,
 			UpdatedAt: timestamp,

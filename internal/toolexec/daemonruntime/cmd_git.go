@@ -59,13 +59,8 @@ func handleGitClone(ctx context.Context, payload []byte) ([]byte, error) {
 	// Idempotency guard: a redelivered git.clone (JetStream WorkQueue
 	// redelivery after a dispatch timeout/NAK — see drainPendingCommands in
 	// nats_bridge.go) can arrive after the FIRST attempt already completed
-	// the clone on disk. `git clone` itself refuses to run into an existing
-	// non-empty directory, so without this check a redelivered clone that
-	// already succeeded would report failure on retry even though req.Path
-	// is a valid, complete clone. Only short-circuits when req.Path already
-	// looks like a real clone (has .git); any other pre-existing conflict
-	// (a non-git directory in the way) still falls through to the normal
-	// clone attempt and its normal failure.
+	// the clone on disk. Because the clone is atomic (below), a .git at
+	// req.Path can only be a finished checkout, never a partial one.
 	if _, err := os.Stat(filepath.Join(req.Path, ".git")); err == nil {
 		return json.Marshal(gitCloneResponse{
 			Success: true,
@@ -73,28 +68,8 @@ func handleGitClone(ctx context.Context, payload []byte) ([]byte, error) {
 		})
 	}
 
-	// Ensure parent directory exists
-	if err := os.MkdirAll(filepath.Dir(req.Path), 0755); err != nil {
-		return nil, fmt.Errorf("failed to create directory: %v", err)
-	}
-
-	// Build the repo URL with token if provided
-	cloneURL := req.Repo
-	if req.Token != "" {
-		cloneURL = injectTokenInURL(req.Repo, req.Token)
-	}
-
-	// Run git clone
-	args := []string{"clone", "--branch", req.Branch, cloneURL, req.Path}
-	cmd := exec.CommandContext(ctx, "git", args...)
-	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
-
-	// git clone can be memory-heavy on large repos; attribute a SIGKILL to
-	// the workspace OOM killer when the cgroup recorded one.
-	oomSnap := memReader.SnapshotOOMKills()
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return nil, fmt.Errorf("git clone failed: %v: %s", wrapChildOOMKill(err, oomSnap), sanitizeGitOutput(string(output), req.Token))
+	if err := cloneAtomically(ctx, req.Repo, req.Branch, req.Path, req.Token); err != nil {
+		return nil, err
 	}
 
 	// If token was provided, set up credential helper for this repo so push/pull works
@@ -106,6 +81,116 @@ func handleGitClone(ctx context.Context, payload []byte) ([]byte, error) {
 		Success: true,
 		Path:    req.Path,
 	})
+}
+
+// cloneStagingPrefix names the hidden sibling directory a clone is built in
+// before it is renamed into place.
+const cloneStagingPrefix = ".reliant-clone-"
+
+// cloneAtomically clones repo into dest so that dest only ever holds a
+// COMPLETE checkout or nothing at all.
+//
+// `git clone` writes straight into its destination as it goes. A clone that
+// fails, times out, or dies with the daemon (an OOM kill, a pod suspended
+// mid-clone) therefore leaves a partial directory at the project path — and a
+// directory at the project path is exactly what the rest of the product reads
+// as "the project is there". So the clone is built in a hidden sibling
+// directory and renamed into place only once git has exited successfully. A
+// sibling, not os.TempDir: rename(2) is atomic only within one filesystem, and
+// the projects directory is a mounted volume while /tmp is not.
+//
+// dest may already exist as an EMPTY directory (created by an older
+// pre-create path, or by the user), and is adopted: the rename replaces it.
+// A NON-EMPTY dest that is not a checkout is someone's files, never ours to
+// replace, and is refused.
+func cloneAtomically(ctx context.Context, repo, branch, dest, token string) error {
+	parent := filepath.Dir(dest)
+	if err := os.MkdirAll(parent, 0o755); err != nil {
+		return fmt.Errorf("failed to create directory: %v", err)
+	}
+	if err := ensureCloneTargetAvailable(dest); err != nil {
+		return err
+	}
+	// Staging directories orphaned by a clone that died mid-way (the process
+	// was killed, so no defer ran) are swept here, so they cannot accumulate.
+	removeStaleCloneStaging(parent, filepath.Base(dest))
+
+	staging, err := os.MkdirTemp(parent, cloneStagingPrefix+filepath.Base(dest)+"-")
+	if err != nil {
+		return fmt.Errorf("failed to create clone staging directory: %v", err)
+	}
+	// Whatever happens below, the staging directory does not outlive this
+	// call: on success it has been renamed away and this is a no-op.
+	defer func() { _ = os.RemoveAll(staging) }()
+
+	cloneURL := repo
+	if token != "" {
+		cloneURL = injectTokenInURL(repo, token)
+	}
+	// Clone INTO the (empty) staging directory: `git clone <url> <dir>`
+	// accepts an existing empty directory.
+	cmd := exec.CommandContext(ctx, "git", "clone", "--branch", branch, cloneURL, staging)
+	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
+
+	// git clone can be memory-heavy on large repos; attribute a SIGKILL to
+	// the workspace OOM killer when the cgroup recorded one.
+	oomSnap := memReader.SnapshotOOMKills()
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("git clone failed: %v: %s", wrapChildOOMKill(err, oomSnap), sanitizeGitOutput(string(output), token))
+	}
+
+	// An empty directory at dest (checked above) is replaced by the rename on
+	// POSIX only when it is removed first; os.Rename onto a non-empty or
+	// existing directory fails with ENOTEMPTY/EEXIST.
+	if err := os.Remove(dest); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("failed to clear empty clone target %s: %v", dest, err)
+	}
+	if err := os.Rename(staging, dest); err != nil {
+		return fmt.Errorf("failed to move clone into place at %s: %v", dest, err)
+	}
+	return nil
+}
+
+// ensureCloneTargetAvailable allows a clone into dest when dest is absent or
+// an empty directory, and refuses anything else with a reason the user can
+// act on.
+func ensureCloneTargetAvailable(dest string) error {
+	info, err := os.Stat(dest)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("cannot inspect clone target %s: %v", dest, err)
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("cannot clone into %s: a file already exists there", dest)
+	}
+	entries, err := os.ReadDir(dest)
+	if err != nil {
+		return fmt.Errorf("cannot inspect clone target %s: %v", dest, err)
+	}
+	if len(entries) > 0 {
+		return fmt.Errorf("cannot clone into %s: the directory already exists and is not empty", dest)
+	}
+	return nil
+}
+
+// removeStaleCloneStaging deletes staging directories for the same target
+// left behind by an earlier clone that was killed before its cleanup ran.
+// Scoped to this target's prefix, so a concurrent clone of a DIFFERENT repo
+// in the same parent is never touched. Best-effort: a failure here costs disk
+// space, never correctness.
+func removeStaleCloneStaging(parent, base string) {
+	entries, err := os.ReadDir(parent)
+	if err != nil {
+		return
+	}
+	prefix := cloneStagingPrefix + base + "-"
+	for _, e := range entries {
+		if e.IsDir() && strings.HasPrefix(e.Name(), prefix) {
+			_ = os.RemoveAll(filepath.Join(parent, e.Name()))
+		}
+	}
 }
 
 // repoNameFromURL extracts the repository name from a git URL.
@@ -290,19 +375,8 @@ func handleGitReclone(ctx context.Context, payload []byte) ([]byte, error) {
 		}
 	}
 
-	if err := os.MkdirAll(filepath.Dir(req.Path), 0755); err != nil {
-		return nil, fmt.Errorf("failed to create parent directory: %w", err)
-	}
-
-	cloneURL := req.Repo
-	if req.Token != "" {
-		cloneURL = injectTokenInURL(req.Repo, req.Token)
-	}
-	args := []string{"clone", "--branch", branch, cloneURL, req.Path}
-	cmd := exec.CommandContext(ctx, "git", args...)
-	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
-	if output, err := cmd.CombinedOutput(); err != nil {
-		return nil, fmt.Errorf("git clone failed: %v: %s", err, sanitizeGitOutput(string(output), req.Token))
+	if err := cloneAtomically(ctx, req.Repo, branch, req.Path, req.Token); err != nil {
+		return nil, err
 	}
 	if req.Token != "" {
 		setupCredentialForRepo(ctx, req.Path, req.Repo, req.Token)

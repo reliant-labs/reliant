@@ -2,10 +2,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { ArrowUpRight, Play, X } from "lucide-react";
 import { useDaemonList, useResumeDaemon } from "@/hooks/useOnboardingQueries";
 import {
-  DAEMON_STATUS_ACTIVE,
-  DAEMON_STATUS_SUSPENDED,
-  type Daemon,
-} from "@/services/controlPlane/daemon";
+  DaemonStatus,
+  type DaemonInfo as Daemon,
+} from "@/gen/reliant/v1/daemon_registry_pb";
 import { useGoToBilling } from "@/hooks/useGoToBilling";
 
 const DISMISS_KEY = "reliant.resumeDaemonPill.dismissed";
@@ -74,15 +73,15 @@ export function ResumeDaemonPill({ placement = "absolute" }: ResumeDaemonPillPro
     const a: Daemon[] = [];
     const s: Daemon[] = [];
     for (const d of daemons) {
-      if (d.status === DAEMON_STATUS_ACTIVE) a.push(d);
-      else if (d.status === DAEMON_STATUS_SUSPENDED) s.push(d);
+      if (d.status === DaemonStatus.ACTIVE) a.push(d);
+      else if (d.status === DaemonStatus.SUSPENDED) s.push(d);
     }
     return { active: a, suspended: s };
   }, [daemons]);
 
   // Signature changes when a new daemon gets suspended → pill reappears even if
   // the user dismissed an earlier set.
-  const sig = useMemo(() => signature(suspended.map((d) => d.id)), [suspended]);
+  const sig = useMemo(() => signature(suspended.map((d) => d.daemonId)), [suspended]);
 
   const dismiss = useCallback(() => {
     setDismissedSig(sig);
@@ -131,7 +130,7 @@ export function ResumeDaemonPill({ placement = "absolute" }: ResumeDaemonPillPro
             <ResumeButton
               daemon={suspended[0]}
               onResume={handleResume}
-              busy={busyId === suspended[0].id}
+              busy={busyId === suspended[0].daemonId}
             />
           )}
           <button
@@ -171,13 +170,13 @@ function ResumeButton({ daemon, onResume, busy }: ResumeButtonProps) {
   return (
     <button
       type="button"
-      onClick={() => void onResume(daemon.id)}
+      onClick={() => void onResume(daemon.daemonId)}
       disabled={busy}
-      title={`Resume ${daemon.name}`}
+      title={`Resume ${daemon.hostname}`}
       className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 font-medium text-amber-500 transition-colors hover:bg-amber-500/10 disabled:opacity-60"
     >
       <Play className="h-3.5 w-3.5" />
-      <span>{busy ? "Resuming…" : `Resume ${daemon.name}`}</span>
+      <span>{busy ? "Resuming…" : `Resume ${daemon.hostname}`}</span>
     </button>
   );
 }
@@ -217,19 +216,19 @@ function PillDropdown({ suspended, onResume, busyId }: PillDropdownProps) {
             Resume an environment
           </div>
           {suspended.map((d) => {
-            const busy = busyId === d.id;
+            const busy = busyId === d.daemonId;
             return (
               <button
-                key={d.id}
+                key={d.daemonId}
                 type="button"
                 onClick={() => {
                   setOpen(false);
-                  void onResume(d.id);
+                  void onResume(d.daemonId);
                 }}
                 disabled={busy}
                 className="flex w-full items-center justify-between gap-3 px-3 py-2 text-sm hover:bg-accent disabled:opacity-60"
               >
-                <span className="truncate">{d.name}</span>
+                <span className="truncate">{d.hostname}</span>
                 <span className="inline-flex items-center gap-1 text-amber-500">
                   <Play className="h-3.5 w-3.5" />
                   {busy ? "Resuming…" : "Resume"}

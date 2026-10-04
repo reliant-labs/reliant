@@ -9,11 +9,19 @@
  *
  *   not-forge-project  informational. Most reliant projects are not forge
  *                      projects, so this is the expected answer and must not
- *                      look like an error.
+ *                      look like an error. It states the fact, then makes a
+ *                      short case for forge and names how to start.
  *   unsupported        names the forge VERSION and forge's own complaint. An
  *                      empty screen here would read as "you have no
  *                      environments", which is the failure mode this exists to
  *                      prevent.
+ *   cannot-render      the daemon is REACHABLE and its forge cannot render any
+ *                      environment (a CGO-free build has no kcl_plugin.forge).
+ *                      Kept apart from `unsupported` because that is fixed by
+ *                      upgrading and this is not, and kept apart from a
+ *                      transport error because this condition used to surface
+ *                      as "Could not reach your daemon" — which blamed the
+ *                      network for a build flag and sent people nowhere useful.
  *   unreachable        UNKNOWN, in the unknown vocabulary — dashed border, muted
  *                      text. Not a red banner: a check that reports a VPN blip
  *                      as a release failure gets switched off in its first week.
@@ -21,7 +29,7 @@
  *                      Says so plainly instead of crashing the view.
  */
 
-import { CloudOff, FileQuestion, PackageOpen, Wrench } from "lucide-react";
+import { CloudOff, Code2, FileQuestion, PackageOpen, Rocket, ShieldCheck, Wrench } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -52,15 +60,162 @@ function StateShell({ icon: Icon, title, children, testId, unknown }: ShellProps
   );
 }
 
+/**
+ * Why a project would want forge. Each point is backed by something forge
+ * actually does — a command, a generator or a check — and none of them
+ * carries a number. A claim here that the product does not keep is worse
+ * than no pitch at all.
+ */
+const FORGE_PITCH_POINTS: { icon: LucideIcon; title: string; body: React.ReactNode }[] = [
+  {
+    icon: Rocket,
+    title: "Deploy without the yak-shaving",
+    body: (
+      <>
+        Every environment is declared in the repo.{" "}
+        <code className="font-mono text-foreground">forge env deploy</code> records the release,
+        applies it and waits until it is healthy. Domains, secrets and promotions are managed here.
+      </>
+    ),
+  },
+  {
+    icon: Code2,
+    title: "Fewer tokens, less guesswork",
+    body: (
+      <>
+        Generated API stubs, ORM, frontend hooks and wiring mean your agent writes the business
+        logic, not the boilerplate. Skills and{" "}
+        <code className="font-mono text-foreground">forge project</code> introspection hand it the
+        project&apos;s shape instead of making it rediscover it file by file.
+      </>
+    ),
+  },
+  {
+    icon: ShieldCheck,
+    title: "Best practices, enforced",
+    body: (
+      <>
+        Built-in skills teach your agent forge&apos;s conventions, and{" "}
+        <code className="font-mono text-foreground">forge lint</code> checks them, so drift fails a
+        check instead of slipping through to review.
+      </>
+    ),
+  },
+];
+
+/**
+ * Not a StateShell: this one carries a pitch, and a centered max-w-lg column
+ * turns a list into a ragged wall of text. The panel is a surface (bg-card)
+ * so the call to action can sit in an inset (bg-background) beneath it —
+ * see the elevation rule in components/forge-ui/card.tsx.
+ */
 export function NotForgeProject({ projectName }: { projectName?: string }) {
   return (
-    <StateShell icon={PackageOpen} title="Not a forge project" testId="forge-not-project">
+    <section
+      data-testid="forge-not-project"
+      aria-labelledby="forge-not-project-heading"
+      className="mx-auto max-w-2xl space-y-6 rounded-lg border border-border bg-card px-6 py-8"
+    >
+      <div className="flex items-start gap-3">
+        <PackageOpen className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+        <p data-testid="forge-not-project-fact" className="text-sm text-muted-foreground">
+          {projectName ? <span className="font-mono text-foreground">{projectName}</span> : "This project"}{" "}
+          has no <span className="font-mono text-foreground">forge.yaml</span> at its root, so there is
+          no release ledger or environment topology to show.
+        </p>
+      </div>
+
+      <div className="space-y-2">
+        <h2 id="forge-not-project-heading" className="text-lg font-semibold text-foreground">
+          Ship this project with forge
+        </h2>
+        <p className="text-sm text-muted-foreground">
+          forge is the framework built into Reliant. It scaffolds a production-ready app and gives
+          your agent the conventions to keep it that way.
+        </p>
+      </div>
+
+      <ul className="space-y-4">
+        {FORGE_PITCH_POINTS.map(({ icon: Icon, title, body }) => (
+          <li key={title} className="flex items-start gap-3">
+            <Icon className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+            <div className="space-y-1">
+              <h3 className="text-sm font-medium text-foreground">{title}</h3>
+              <p className="text-sm text-muted-foreground">{body}</p>
+            </div>
+          </li>
+        ))}
+      </ul>
+
+      <div
+        data-testid="forge-not-project-cta"
+        className="space-y-1 rounded-md border border-border/60 bg-background px-4 py-3 text-sm text-muted-foreground"
+      >
+        <p>
+          <span className="font-medium text-foreground">To start,</span> run the{" "}
+          <span className="font-medium text-foreground">Forge Migrate</span> workflow in a chat on this
+          project. It reads the code, writes a migration plan and waits for your approval before it
+          scaffolds anything.
+        </p>
+        <p>
+          Starting from scratch? <code className="font-mono text-foreground">forge project new</code>{" "}
+          creates a forge project.
+        </p>
+      </div>
+    </section>
+  );
+}
+
+/**
+ * The daemon is REACHABLE and its forge simply cannot render any environment.
+ *
+ * This state exists because the condition was previously displayed as "Could
+ * not reach your daemon", which blames the network for a build flag. On every
+ * managed cloud workspace the daemon was connected and healthy; its embedded
+ * forge had been compiled without CGO, so forge's kcl_plugin.forge namespace
+ * was never registered and every render was refused. A user following the old
+ * message would check their connection, and nothing they found there could
+ * explain it.
+ *
+ * Distinct from `unsupported` on purpose. That one means "this forge is too
+ * OLD for the command this screen needs" and is fixed by upgrading; this one
+ * means "this forge cannot render AT ALL, at any version" and is fixed by
+ * rebuilding/reinstalling it. Collapsing them would send people to a version
+ * bump that cannot help.
+ *
+ * `reason` and `detail` are forge's OWN words, forwarded from its doctor
+ * report, so this panel and `forge doctor` never tell different stories.
+ */
+export function ForgeCannotRender({
+  forgeVersion,
+  reason,
+  detail,
+}: {
+  forgeVersion?: string;
+  reason?: string;
+  detail?: string;
+}) {
+  return (
+    <StateShell
+      icon={Wrench}
+      title="This machine's forge can't render environments"
+      testId="forge-cannot-render"
+    >
       <p>
-        {projectName ? <span className="font-mono">{projectName}</span> : "This project"} has no{" "}
-        <span className="font-mono">forge.yaml</span> at its root, so there is no release ledger or
-        environment topology to show.
+        Your daemon is reachable, but the forge on it —{" "}
+        <span className="font-mono text-foreground">{forgeVersion || "an unknown version"}</span> —
+        cannot render, deploy or bring up any environment.
       </p>
-      <p>This is expected — most projects are not forge projects.</p>
+      {reason && <p className="font-mono text-xs">{reason}</p>}
+      {detail && (
+        <pre className="whitespace-pre-wrap break-words text-left font-mono text-xs text-muted-foreground">
+          {detail}
+        </pre>
+      )}
+      <p>
+        Nothing is wrong with this project or your connection — the forge binary itself is missing
+        the KCL plugin it renders through, which usually means it was built without CGO.
+      </p>
     </StateShell>
   );
 }

@@ -39,6 +39,7 @@ func forgeArgvUnderTest(t *testing.T) map[string][]string {
 		{"secret_list", "forge.secret_list", map[string]any{"env": "dev"}},
 		{"audit", "forge.audit", nil},
 		{"env_status", "forge.env_status", map[string]any{"env": "dev"}},
+		{"render_capability", "forge.render_capability", nil},
 	} {
 		dir := forgeProject(t)
 		call := stubForge(t, forgeCommandResult{Stdout: []byte(`{"ok":true}`)}, nil)
@@ -57,11 +58,40 @@ func forgeArgvUnderTest(t *testing.T) map[string][]string {
 
 	deploy := forgeDeployArgs{ProjectPath: "/p", Env: "prod"}
 	argv["deploy plan"] = deploy.planArgs()
-	argv["deploy apply"] = deploy.applyArgs()
+	argv["deploy plan-only"] = deploy.planOnlyArgs()
+	argv["checkouts"] = forgeCheckoutsRequest{ProjectPath: "/p"}.args()
+	argv["checkouts with tree"] = forgeCheckoutsRequest{ProjectPath: "/p", WithTree: true}.args()
+	argv["env diff all"] = forgeEnvDiffRequest{ProjectPath: "/p", All: true}.args()
+	argv["env diff one env"] = forgeEnvDiffRequest{ProjectPath: "/p", Env: "prod"}.args()
+
+	// The acknowledged-codes form of the apply argv parses too. Checked
+	// separately because --acknowledge-destructive is a StringSlice flag,
+	// and a comma-joined value is exactly the shape that would break if
+	// forge ever made it repeatable-only.
+	ackApproval := testApproval()
+	ackApproval.acknowledgedFindings = []string{"stateful_deletion", "lb_identity_change"}
+	ackArgs, err := deploy.applyArgs(ackApproval)
+	if err != nil {
+		t.Fatalf("deploy applyArgs with acknowledged findings: %v", err)
+	}
+	argv["deploy apply with acknowledgements"] = ackArgs
+	// The apply argv exists only behind a validated confirmation, so the
+	// parse check builds it the only way production can: through an approval.
+	// testApproval is the test-only minter — see its comment for why a test
+	// helper is not a hole in the guarantee.
+	applyArgs, err := deploy.applyArgs(testApproval())
+	if err != nil {
+		t.Fatalf("deploy applyArgs: %v", err)
+	}
+	argv["deploy apply"] = applyArgs
 
 	promote := forgePromoteArgs{ProjectPath: "/p", Env: "prod", Release: "v1.2.3"}
 	argv["promote plan"] = promote.planArgs()
-	argv["promote apply"] = promote.applyArgs()
+	promoteApply, err := promote.applyArgs(testPromoteApproval())
+	if err != nil {
+		t.Fatalf("promote applyArgs: %v", err)
+	}
+	argv["promote apply"] = promoteApply
 
 	return argv
 }
@@ -90,6 +120,32 @@ func parseAgainstEmbeddedForge(args []string) (string, error) {
 	return cmd.CommandPath(), nil
 }
 
+// leadingVerbs returns the argv's leading non-flag words — the subcommand path
+// it names. It stops at the first token beginning with "-", so the positionals
+// that follow a flag (`--env=dev`) are not mistaken for verbs; a bare
+// positional before any flag (`env status dev`) is intentionally NOT a verb,
+// which is why the scan also stops once a flag has been seen.
+func leadingVerbs(args []string) []string {
+	var verbs []string
+	for _, arg := range args {
+		if strings.HasPrefix(arg, "-") {
+			break
+		}
+		verbs = append(verbs, arg)
+	}
+	// `env status dev` names the two-word command `env status` with `dev`
+	// as its positional. Resolution is cobra's: keep only the words that
+	// actually resolve to a command, which is what the caller compares.
+	for len(verbs) > 1 {
+		root := forgecli.NewRootCmd()
+		if cmd, _, err := root.Find(append([]string{"--silence-experimental"}, verbs...)); err == nil && cmd.CommandPath() == "forge "+strings.Join(verbs, " ") {
+			break
+		}
+		verbs = verbs[:len(verbs)-1]
+	}
+	return verbs
+}
+
 type errNotALeafCommand string
 
 func (e errNotALeafCommand) Error() string {
@@ -103,9 +159,19 @@ func TestForgeDaemonArgvParsesAgainstEmbeddedForge(t *testing.T) {
 			if err != nil {
 				t.Fatalf("embedded forge rejects daemon argv %q (resolved %q): %v", args, path, err)
 			}
-			// Every daemon call is a two-word forge subcommand; resolving to
-			// anything else means a leading arg was swallowed as a command.
-			if want := "forge " + strings.Join(args[:2], " "); path != want {
+			// The resolved command must be exactly the leading
+			// NON-FLAG words of the argv. Checking it pins the half a
+			// successful parse does not: cobra is happy to resolve
+			// `env deploy prod v1` to `forge env deploy` with the
+			// positionals left over, and equally happy to resolve a
+			// typo'd verb to its PARENT with the verb swallowed as a
+			// positional — which parses clean and runs the wrong
+			// command.
+			//
+			// Derived from the argv rather than fixed at two words
+			// because the daemon's forge calls are not all the same
+			// depth: `env status` is two, `doctor` is one.
+			if want := "forge " + strings.Join(leadingVerbs(args), " "); path != want {
 				t.Errorf("argv %q resolved to %q, want %q", args, path, want)
 			}
 		})

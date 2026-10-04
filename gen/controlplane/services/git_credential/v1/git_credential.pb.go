@@ -603,11 +603,17 @@ func (*DeleteGitCredentialResponse) Descriptor() ([]byte, []int) {
 }
 
 type CloneRepoRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	DaemonId      string                 `protobuf:"bytes,1,opt,name=daemon_id,json=daemonId,proto3" json:"daemon_id,omitempty"`
-	GitRepo       string                 `protobuf:"bytes,2,opt,name=git_repo,json=gitRepo,proto3" json:"git_repo,omitempty"`
-	GitBranch     string                 `protobuf:"bytes,3,opt,name=git_branch,json=gitBranch,proto3" json:"git_branch,omitempty"`
-	Path          string                 `protobuf:"bytes,4,opt,name=path,proto3" json:"path,omitempty"` // optional, defaults to /home/workspace/projects/<repo-name>
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	DaemonId  string                 `protobuf:"bytes,1,opt,name=daemon_id,json=daemonId,proto3" json:"daemon_id,omitempty"`
+	GitRepo   string                 `protobuf:"bytes,2,opt,name=git_repo,json=gitRepo,proto3" json:"git_repo,omitempty"`
+	GitBranch string                 `protobuf:"bytes,3,opt,name=git_branch,json=gitBranch,proto3" json:"git_branch,omitempty"`
+	Path      string                 `protobuf:"bytes,4,opt,name=path,proto3" json:"path,omitempty"` // optional, defaults to /home/workspace/projects/<repo-name>
+	// The id the queued git.clone command carries, echoed by the daemon on its
+	// DaemonCommandFailed announcement. A caller that records the clone (reliant's
+	// CreateProjectFromRepo writes a row keyed by it) passes its own id, so the
+	// failure can be matched back to that record. Empty means the control plane
+	// generates one; a caller that leaves it empty cannot correlate the outcome.
+	RequestId     string `protobuf:"bytes,5,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -666,6 +672,13 @@ func (x *CloneRepoRequest) GetGitBranch() string {
 func (x *CloneRepoRequest) GetPath() string {
 	if x != nil {
 		return x.Path
+	}
+	return ""
+}
+
+func (x *CloneRepoRequest) GetRequestId() string {
+	if x != nil {
+		return x.RequestId
 	}
 	return ""
 }
@@ -1024,13 +1037,15 @@ const file_services_git_credential_v1_git_credential_proto_rawDesc = "" +
 	"\bapp_slug\x18\r \x01(\tR\aappSlug\"8\n" +
 	"\x1aDeleteGitCredentialRequest\x12\x1a\n" +
 	"\bprovider\x18\x01 \x01(\tR\bprovider\"\x1d\n" +
-	"\x1bDeleteGitCredentialResponse\"}\n" +
+	"\x1bDeleteGitCredentialResponse\"\x9c\x01\n" +
 	"\x10CloneRepoRequest\x12\x1b\n" +
 	"\tdaemon_id\x18\x01 \x01(\tR\bdaemonId\x12\x19\n" +
 	"\bgit_repo\x18\x02 \x01(\tR\agitRepo\x12\x1d\n" +
 	"\n" +
 	"git_branch\x18\x03 \x01(\tR\tgitBranch\x12\x12\n" +
-	"\x04path\x18\x04 \x01(\tR\x04path\"\x8a\x01\n" +
+	"\x04path\x18\x04 \x01(\tR\x04path\x12\x1d\n" +
+	"\n" +
+	"request_id\x18\x05 \x01(\tR\trequestId\"\x8a\x01\n" +
 	"\x11CloneRepoResponse\x12\x1f\n" +
 	"\vcloned_path\x18\x01 \x01(\tR\n" +
 	"clonedPath\x12\x16\n" +

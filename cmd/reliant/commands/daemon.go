@@ -346,10 +346,18 @@ func pollDaemonCredentials(cmd *cobra.Command, conn *connection, account string)
 func resolveOrAwaitCredentials(ctx context.Context, cmd *cobra.Command, conn *connection, account, dataDir string, nonInteractive bool) (*auth.DaemonCredentials, error) {
 	creds, err := ensureDaemonCredentials(ctx, cmd, conn, account, nonInteractive)
 	if err == nil {
+		depositDaemonCredsForForge(ctx, conn, creds)
 		return creds, nil
 	}
 	if nonInteractive && errors.Is(err, cliauth.ErrInteractiveRequired) {
-		return waitForCredentialsNonInteractive(ctx, cmd, conn, account, dataDir)
+		awaited, awaitErr := waitForCredentialsNonInteractive(ctx, cmd, conn, account, dataDir)
+		if awaitErr == nil {
+			// This is the Electron path: the credential appeared on disk
+			// because electron/src/daemon-creds.js minted it, so nothing
+			// upstream of here has ever deposited it.
+			depositDaemonCredsForForge(ctx, conn, awaited)
+		}
+		return awaited, awaitErr
 	}
 	return nil, err
 }
@@ -365,12 +373,55 @@ func registerOrAwaitCredentials(ctx context.Context, cmd *cobra.Command, conn *c
 		if readErr != nil || newCreds == nil {
 			return nil, fmt.Errorf("failed to read credentials after re-registration")
 		}
+		depositDaemonCredsForForge(ctx, conn, newCreds)
 		return newCreds, nil
 	}
 	if nonInteractive && errors.Is(regErr, cliauth.ErrInteractiveRequired) {
-		return waitForCredentialsNonInteractive(ctx, cmd, conn, account, dataDir)
+		awaited, awaitErr := waitForCredentialsNonInteractive(ctx, cmd, conn, account, dataDir)
+		if awaitErr == nil {
+			depositDaemonCredsForForge(ctx, conn, awaited)
+		}
+		return awaited, awaitErr
 	}
 	return nil, fmt.Errorf("re-registration failed: %w", regErr)
+}
+
+// depositDaemonCredsForForge makes "this daemon is signed in to Reliant" mean
+// "forge on this daemon is signed in to Reliant cloud".
+//
+// ── WHY HERE, AND NOT ONLY IN registerDaemon ──────────────────────────
+//
+// registerDaemon already deposits, but it only RUNS on an interactive
+// registration — and the two populations that matter never reach it. An
+// Electron user's PAT is minted by electron/src/daemon-creds.js, in
+// JavaScript, which writes daemon.json directly and lets the daemon skip
+// registration entirely; a managed daemon's PAT arrives in a mounted
+// Kubernetes Secret. Both then take the "credentials already on disk" branch
+// of ensureDaemonCredentials, which deposited nothing. That is exactly the
+// reported bug: a laptop signed in to prod through the app had only the local
+// dev origin in forge's store.
+//
+// So the deposit belongs where the credential is RESOLVED, not where it
+// happens to be minted. Every `daemon start` passes through here with whatever
+// credential it ended up with, whatever produced it — which is the property
+// that makes the three mint paths stop mattering.
+//
+// Best-effort by design: the daemon is registered and functional either way,
+// and failing a daemon start over a deploy convenience would be the worse
+// outcome. It is also why this takes the daemon's own PAT rather than
+// re-minting — a `forge deploy` re-exec'd by the Deploy button inherits the
+// daemon's environment and nothing else, so this file is its only way in.
+func depositDaemonCredsForForge(ctx context.Context, conn *connection, creds *auth.DaemonCredentials) {
+	if creds == nil || creds.PAT == "" {
+		return
+	}
+	server := creds.ServerURL
+	if server == "" {
+		server = conn.ServerURL
+	}
+	if err := cliauth.DepositTokenForServer(ctx, server, creds.PAT, creds.ExpiresAt); err != nil {
+		logging.Warn("could not log forge in to Reliant cloud for this daemon", "error", err)
+	}
 }
 
 // persistDaemonCredentials best-effort writes daemon credentials to disk.
@@ -481,6 +532,10 @@ func credentialsFromToken(ctx context.Context, cmd *cobra.Command, conn *connect
 	if err := auth.WriteDaemonCredentials(creds); err != nil {
 		return nil, fmt.Errorf("saving daemon credentials: %w", err)
 	}
+
+	// A token pasted from the web UI carries no issuer either, so it needs the
+	// same discovery-based deposit as the other two mint paths.
+	depositDaemonCredsForForge(ctx, conn, creds)
 
 	fmt.Fprintf(cmd.OutOrStdout(), "\u2713 Token accepted (host: %s)\n", instanceid.Label())
 	return creds, nil

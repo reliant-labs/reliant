@@ -30,7 +30,6 @@ import {
 } from "../topology";
 import { hostedWorkloadsOfStatus, type ForgeEnvStatusReport } from "../status";
 import {
-  confirmPhrase,
   deployBlockers,
   deployTokenFor,
   isHostedPlan,
@@ -138,7 +137,6 @@ describe("forge env deploy --json (hosted)", () => {
       expectedCurrentRelease: "v1",
       hosted: { environmentId: ENV_ID },
     });
-    expect(confirmPhrase(token!)).toBe("127.0.0.1:56171");
   });
 
   it("never derives a token from the APPLY report", () => {

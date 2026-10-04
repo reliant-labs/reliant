@@ -28,13 +28,13 @@ outputs:
   response_content: "{{nodes.llm.message.content}}"
   
   # ✅ VALID - Boolean type from comparison expression
-  is_complete: "{{nodes.llm.stop_reason == 'end_turn'}}"
+  is_complete: "{{nodes.llm.stop_reason == 'done'}}"
   
   # ✅ VALID - Integer type from size() function
   tool_count: "{{size(nodes.llm.tool_calls)}}"
   
   # ✅ VALID - String type from ternary expression
-  status: "{{nodes.llm.stop_reason == 'end_turn' ? 'done' : 'continuing'}}"
+  status: "{{nodes.llm.stop_reason == 'done' ? 'done' : 'continuing'}}"
 
 # Uncomment to see validation errors:
 #

@@ -35,10 +35,22 @@
 import { Button } from "@/components/ui/Button";
 import { describeActualBinding, type DeployRefusal } from "@/services/forge/deploy";
 
-import { REFUSAL_COPY, REFUSAL_ICON } from "./deployVocabulary";
+import { HOSTED_REFUSAL_COPY, REFUSAL_COPY, REFUSAL_ICON } from "./deployVocabulary";
 
 export interface DeployRefusalNoticeProps {
   refusal: DeployRefusal;
+  /**
+   * Whether the plan this refusal answers was HOSTED. The refusal detail itself
+   * cannot say — the server reports the stale declared target in one field for
+   * both destinations — so the destination has to come from the plan, and the
+   * caller is the only thing holding it.
+   *
+   * It changes two things: the copy (see HOSTED_REFUSAL_COPY) and whether the
+   * declared-target diff renders at all. On hosted that diff is two of OUR
+   * endpoints under the label "You approved the cluster", which is unactionable
+   * and mislabelled at the same time.
+   */
+  hosted?: boolean;
   /** Recompute the plan against real current state. */
   onReplan: () => void;
   isReplanning?: boolean;
@@ -51,11 +63,12 @@ export interface DeployRefusalNoticeProps {
 
 export function DeployRefusalNotice({
   refusal,
+  hosted,
   onReplan,
   isReplanning,
   onWatchRunning,
 }: DeployRefusalNoticeProps) {
-  const copy = REFUSAL_COPY[refusal.reason];
+  const copy = (hosted && HOSTED_REFUSAL_COPY[refusal.reason]) || REFUSAL_COPY[refusal.reason];
   const Icon = REFUSAL_ICON;
   const alreadyRunning = refusal.reason === "already-running";
   const canWatch = alreadyRunning && !!onWatchRunning && refusal.runningHandle !== "";
@@ -88,8 +101,13 @@ export function DeployRefusalNotice({
       )}
 
       {/* THE CLUSTER DIFF, on a stale-context refusal. This is the whole content
-          of that refusal: you approved X, it now says Y. */}
-      {refusal.reason === "stale-declared-context" && (
+          of that refusal: you approved X, it now says Y.
+
+          CLUSTER ONLY. On a hosted env both sides of this diff are control-plane
+          endpoints the customer never chose, so the diff would name two things
+          they cannot act on under a label ("cluster") that is not even what they
+          are. The hosted copy carries the whole message instead. */}
+      {refusal.reason === "stale-declared-context" && !hosted && (
         <dl
           className="grid gap-x-4 gap-y-1 text-xs sm:grid-cols-[auto_1fr]"
           data-testid="deploy-refusal-context-diff"

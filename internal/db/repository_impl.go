@@ -1185,7 +1185,13 @@ func (r *Repo) GetDaemon(ctx context.Context, id string) (*Daemon, error) {
 			project_paths,
 			daemon_type,
 			created_at,
-			updated_at
+			updated_at,
+			lifecycle_phase,
+			size,
+			last_status_message,
+			last_status_changed_at,
+			last_oom_killed_at,
+			oom_kill_count
 		FROM daemons
 		WHERE id = ?
 		LIMIT 1
@@ -1199,6 +1205,7 @@ func (r *Repo) GetDaemon(ctx context.Context, id string) (*Daemon, error) {
 		capabilities sql.NullString
 		projectPaths sql.NullString
 		daemonType   sql.NullString
+		lifecycle    daemonLifecycleScan
 	)
 
 	err := r.DB.QueryRowContext(ctx, query, id).Scan(
@@ -1211,6 +1218,12 @@ func (r *Repo) GetDaemon(ctx context.Context, id string) (*Daemon, error) {
 		&daemonType,
 		&daemon.CreatedAt,
 		&daemon.UpdatedAt,
+		&lifecycle.phase,
+		&lifecycle.size,
+		&lifecycle.statusMessage,
+		&lifecycle.statusChangedAt,
+		&lifecycle.oomKilledAt,
+		&lifecycle.oomKillCount,
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -1224,8 +1237,97 @@ func (r *Repo) GetDaemon(ctx context.Context, id string) (*Daemon, error) {
 	daemon.Capabilities = nullStringToPtr(capabilities)
 	daemon.ProjectPaths = nullStringToPtr(projectPaths)
 	daemon.DaemonType = nullStringToPtr(daemonType)
+	lifecycle.applyTo(&daemon)
 
 	return &daemon, nil
+}
+
+// daemonLifecycleScan holds the nullable lifecycle columns during a row scan.
+// It exists so the two daemon SELECTs (GetDaemon and ListDaemonsByUserID)
+// cannot interpret the same six columns differently — the bug that motivated
+// consolidating the daemon list in the first place was two readers of the same
+// concept disagreeing.
+type daemonLifecycleScan struct {
+	phase           sql.NullString
+	size            sql.NullString
+	statusMessage   sql.NullString
+	statusChangedAt sql.NullTime
+	oomKilledAt     sql.NullTime
+	oomKillCount    sql.NullInt32
+}
+
+func (s daemonLifecycleScan) applyTo(d *Daemon) {
+	d.LifecyclePhase = nullStringToPtr(s.phase)
+	d.Size = nullStringToPtr(s.size)
+	if s.statusMessage.Valid {
+		d.LastStatusMessage = s.statusMessage.String
+	}
+	if s.statusChangedAt.Valid {
+		t := s.statusChangedAt.Time
+		d.LastStatusChangedAt = &t
+	}
+	if s.oomKilledAt.Valid {
+		t := s.oomKilledAt.Time
+		d.LastOOMKilledAt = &t
+	}
+	if s.oomKillCount.Valid {
+		d.OOMKillCount = s.oomKillCount.Int32
+	}
+}
+
+// ApplyDaemonLifecycle mirrors one control-plane lifecycle event onto an
+// existing daemons row.
+//
+// The WHERE clause is the whole point: last_status_changed_at is compared, not
+// just written. Lifecycle events travel on plain NATS, which is newest-wins
+// with no redelivery and no ordering guarantee, so a delayed "provisioning"
+// can arrive after the "ready" that superseded it. Dropping it in SQL means
+// the guard holds across every replica and every retry, not only within one
+// consumer goroutine.
+func (r *Repo) ApplyDaemonLifecycle(ctx context.Context, lc DaemonLifecycleUpdate) (bool, error) {
+	if lc.DaemonID == "" {
+		return false, fmt.Errorf("daemon ID cannot be empty")
+	}
+	if lc.ChangedAt.IsZero() {
+		return false, fmt.Errorf("lifecycle changed_at cannot be zero")
+	}
+
+	// COALESCE on size/oom: a lifecycle event that omits them is reporting a
+	// phase change, not asserting the machine has no size and has never been
+	// OOM-killed. Phase and status message are authoritative per event.
+	query := `
+		UPDATE daemons
+		SET
+			lifecycle_phase = ?,
+			size = COALESCE(NULLIF(?, ''), size),
+			last_status_message = ?,
+			last_status_changed_at = ?,
+			last_oom_killed_at = COALESCE(?, last_oom_killed_at),
+			oom_kill_count = GREATEST(oom_kill_count, ?),
+			updated_at = CURRENT_TIMESTAMP
+		WHERE id = ?
+		  AND (last_status_changed_at IS NULL OR last_status_changed_at < ?)
+	`
+	query = r.bindQuery(query)
+
+	res, err := r.DB.ExecContext(ctx, query,
+		lc.Phase,
+		lc.Size,
+		lc.StatusMessage,
+		lc.ChangedAt,
+		lc.LastOOMKilledAt,
+		lc.OOMKillCount,
+		lc.DaemonID,
+		lc.ChangedAt,
+	)
+	if err != nil {
+		return false, fmt.Errorf("failed to apply daemon lifecycle for %s: %w", lc.DaemonID, err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, fmt.Errorf("failed reading lifecycle update result for %s: %w", lc.DaemonID, err)
+	}
+	return n > 0, nil
 }
 
 func (r *Repo) ListDaemonsByUserID(ctx context.Context, userID string) ([]*Daemon, error) {
@@ -1243,7 +1345,13 @@ func (r *Repo) ListDaemonsByUserID(ctx context.Context, userID string) ([]*Daemo
 			project_paths,
 			daemon_type,
 			created_at,
-			updated_at
+			updated_at,
+			lifecycle_phase,
+			size,
+			last_status_message,
+			last_status_changed_at,
+			last_oom_killed_at,
+			oom_kill_count
 		FROM daemons
 		WHERE user_id = ?
 		ORDER BY updated_at DESC
@@ -1265,6 +1373,7 @@ func (r *Repo) ListDaemonsByUserID(ctx context.Context, userID string) ([]*Daemo
 			capabilities sql.NullString
 			projectPaths sql.NullString
 			daemonType   sql.NullString
+			lifecycle    daemonLifecycleScan
 		)
 
 		if err := rows.Scan(
@@ -1277,6 +1386,12 @@ func (r *Repo) ListDaemonsByUserID(ctx context.Context, userID string) ([]*Daemo
 			&daemonType,
 			&daemon.CreatedAt,
 			&daemon.UpdatedAt,
+			&lifecycle.phase,
+			&lifecycle.size,
+			&lifecycle.statusMessage,
+			&lifecycle.statusChangedAt,
+			&lifecycle.oomKilledAt,
+			&lifecycle.oomKillCount,
 		); err != nil {
 			return nil, fmt.Errorf("failed to scan daemon row: %w", err)
 		}
@@ -1286,6 +1401,7 @@ func (r *Repo) ListDaemonsByUserID(ctx context.Context, userID string) ([]*Daemo
 		daemon.Capabilities = nullStringToPtr(capabilities)
 		daemon.ProjectPaths = nullStringToPtr(projectPaths)
 		daemon.DaemonType = nullStringToPtr(daemonType)
+		lifecycle.applyTo(&daemon)
 
 		result = append(result, &daemon)
 	}

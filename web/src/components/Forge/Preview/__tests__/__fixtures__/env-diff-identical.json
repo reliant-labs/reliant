@@ -1,0 +1,14 @@
+{
+  "project": "demo",
+  "source": "/tmp/demo",
+  "against": "live",
+  "charts": false,
+  "environments": [
+    {
+      "env": "prod",
+      "status": "ok",
+      "diff": {},
+      "live_source": "bundle"
+    }
+  ]
+}

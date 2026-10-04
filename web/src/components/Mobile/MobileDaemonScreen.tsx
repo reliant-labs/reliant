@@ -17,16 +17,16 @@ import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { AlertTriangle, ChevronLeft, Loader2, Pause, Play, Trash2 } from "lucide-react";
 import { timestampDate } from "@bufbuild/protobuf/wkt";
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
+import { useQuery } from "@tanstack/react-query";
 import {
   useDaemonList,
   useDeleteDaemon,
   useResumeDaemon,
   useSuspendDaemon,
 } from "@/hooks/useOnboardingQueries";
-import {
-  getDaemonStatusMessage,
-  type Daemon,
-} from "@/services/controlPlane/daemon";
+import type { DaemonInfo } from "@/gen/reliant/v1/daemon_registry_pb";
+import { capabilities } from "@/services/controlPlane/capabilities";
+import { getDaemon } from "@/services/controlPlane/environments";
 import { cn } from "../../lib/utils";
 import { canResume, canSuspend, lastSeenMs, sizeLabel } from "./daemonPresentation";
 import { DaemonStatusPill } from "./MobileDaemonList";
@@ -69,7 +69,7 @@ function DetailRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-function LifecycleActions({ daemon }: { daemon: Daemon }) {
+function LifecycleActions({ daemon }: { daemon: DaemonInfo }) {
   const navigate = useNavigate();
   const [error, setError] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -103,7 +103,7 @@ function LifecycleActions({ daemon }: { daemon: Daemon }) {
             type="button"
             onClick={() => {
               setError("");
-              resume.mutate(daemon.id);
+              resume.mutate(daemon.daemonId);
             }}
             disabled={busy}
             // 56px, above the shared 48px floor — a primary action a user may be
@@ -125,7 +125,7 @@ function LifecycleActions({ daemon }: { daemon: Daemon }) {
             type="button"
             onClick={() => {
               setError("");
-              suspend.mutate(daemon.id);
+              suspend.mutate(daemon.daemonId);
             }}
             disabled={busy}
             className={cn(MOBILE_SECONDARY_ACTION, "w-full")}
@@ -170,7 +170,7 @@ function LifecycleActions({ daemon }: { daemon: Daemon }) {
                 type="button"
                 onClick={() => {
                   setError("");
-                  remove.mutate(daemon.id);
+                  remove.mutate(daemon.daemonId);
                 }}
                 disabled={busy}
                 className={MOBILE_DANGER_ACTION}
@@ -202,13 +202,36 @@ export function MobileDaemonScreen() {
   // page, which has no tab bar and no back link.
   const { daemonId } = useParams({ strict: false });
   const refetchInterval = useVisibilityPolling(POLL_INTERVAL_MS);
-  const { data: daemons, isLoading } = useDaemonList({ refetchInterval });
 
-  const daemon = daemons?.find((d) => d.id === daemonId);
+  // This screen reads BOTH halves, from the service that owns each
+  // (docs/design/one-daemon-list.md).
+  //
+  // Status, lifecycle phase and liveness come from the registry list — the one
+  // list, and the only thing that knows whether a machine has actually
+  // attached. The provisioning SPEC (repository, branch, idle timeout) comes
+  // from control-plane's GetDaemon, which is kept precisely for per-machine
+  // detail: those are control-plane concerns with no reliant equivalent, and
+  // teaching the registry that vocabulary would give it fields it has no
+  // source for.
+  //
+  // Two queries rather than one merged response, deliberately: each half stays
+  // attributable to its owner, and the spec half can fail (no control plane, a
+  // transient error) while the status half still renders — which is the half
+  // the lifecycle actions depend on.
+  const { data: daemons, isLoading } = useDaemonList({ refetchInterval });
+  const daemon = daemons?.find((d) => d.daemonId === daemonId);
+
+  const { data: cpDetail } = useQuery({
+    queryKey: ["controlPlane", "daemon", daemonId],
+    queryFn: () => getDaemon(daemonId as string),
+    enabled: !!daemonId && capabilities.cloudDaemons,
+    refetchInterval,
+  });
+  const spec = cpDetail?.daemon;
 
   const header = (
     <MobileScreenHeader
-      title={daemon?.name || "Machine"}
+      title={daemon?.hostname || "Machine"}
       leading={
         <Link
           to="/m/daemons"
@@ -242,7 +265,7 @@ export function MobileDaemonScreen() {
   }
 
   const lastSeen = lastSeenMs(daemon);
-  const statusMessage = getDaemonStatusMessage(daemon);
+  const statusMessage = daemon?.lastStatusMessage ?? "";
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -274,11 +297,11 @@ export function MobileDaemonScreen() {
             label="Last seen"
             value={lastSeen === null ? "—" : relativeTimeFromMs(lastSeen)}
           />
-          <DetailRow label="Repository" value={daemon.gitRepo} />
-          <DetailRow label="Branch" value={daemon.gitBranch} />
+          <DetailRow label="Repository" value={spec?.gitRepo ?? ""} />
+          <DetailRow label="Branch" value={spec?.gitBranch ?? ""} />
           <DetailRow label="Host" value={daemon.hostname} />
           <DetailRow label="Platform" value={daemon.platform} />
-          <DetailRow label="Idle timeout" value={daemon.idleTimeout} />
+          <DetailRow label="Idle timeout" value={spec?.idleTimeout ?? ""} />
           <DetailRow label="Connected" value={fmtTimestamp(daemon.connectedAt)} />
           <DetailRow label="Created" value={fmtTimestamp(daemon.createdAt)} />
         </MobileCardGroup>

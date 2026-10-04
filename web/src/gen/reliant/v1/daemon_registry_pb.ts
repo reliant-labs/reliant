@@ -17,7 +17,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file reliant/v1/daemon_registry.proto.
  */
 export const file_reliant_v1_daemon_registry: GenFile = /*@__PURE__*/
-  fileDesc("CiByZWxpYW50L3YxL2RhZW1vbl9yZWdpc3RyeS5wcm90bxIKcmVsaWFudC52MSIUChJMaXN0RGFlbW9uc1JlcXVlc3QiPgoTTGlzdERhZW1vbnNSZXNwb25zZRInCgdkYWVtb25zGAEgAygLMhYucmVsaWFudC52MS5EYWVtb25JbmZvIiUKEEdldERhZW1vblJlcXVlc3QSEQoJZGFlbW9uX2lkGAEgASgJIjsKEUdldERhZW1vblJlc3BvbnNlEiYKBmRhZW1vbhgBIAEoCzIWLnJlbGlhbnQudjEuRGFlbW9uSW5mbyLAAQoUUmVzb2x2ZURhZW1vblJlcXVlc3QSEQoJZGFlbW9uX2lkGAEgASgJEhMKC2RhZW1vbl9uYW1lGAIgASgJEhMKC2RhZW1vbl90eXBlGAMgASgJEjwKBmxhYmVscxgEIAMoCzIsLnJlbGlhbnQudjEuUmVzb2x2ZURhZW1vblJlcXVlc3QuTGFiZWxzRW50cnkaLQoLTGFiZWxzRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASJOChVSZXNvbHZlRGFlbW9uUmVzcG9uc2USJgoGZGFlbW9uGAEgASgLMhYucmVsaWFudC52MS5EYWVtb25JbmZvEg0KBWZvdW5kGAIgASgIIigKE1Jlc3VtZURhZW1vblJlcXVlc3QSEQoJZGFlbW9uX2lkGAEgASgJIj4KFFJlc3VtZURhZW1vblJlc3BvbnNlEg8KB3Jlc3VtZWQYASABKAgSFQoNZXJyb3JfbWVzc2FnZRgCIAEoCSKSAwoKRGFlbW9uSW5mbxIRCglkYWVtb25faWQYASABKAkSDwoHdXNlcl9pZBgCIAEoCRIQCghob3N0bmFtZRgDIAEoCRIQCghwbGF0Zm9ybRgEIAEoCRIoCgZzdGF0dXMYBSABKA4yGC5yZWxpYW50LnYxLkRhZW1vblN0YXR1cxIvCghwcm9qZWN0cxgGIAMoCzIdLnJlbGlhbnQudjEuRGlzY292ZXJlZFByb2plY3QSMAoMY29ubmVjdGVkX2F0GAcgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIyCg5sYXN0X2hlYXJ0YmVhdBgIIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEwoLZGFlbW9uX3R5cGUYCSABKAkSGQoRbWVtb3J5X3VzZWRfYnl0ZXMYCiABKAQSGgoSbWVtb3J5X2xpbWl0X2J5dGVzGAsgASgEEhcKD21lbW9yeV9wcmVzc3VyZRgMIAEoCBIWCg5kZXRlY3RlZF9wb3J0cxgNIAMoDSp/CgxEYWVtb25TdGF0dXMSHQoZREFFTU9OX1NUQVRVU19VTlNQRUNJRklFRBAAEhgKFERBRU1PTl9TVEFUVVNfQUNUSVZFEAESFgoSREFFTU9OX1NUQVRVU19JRExFEAISHgoaREFFTU9OX1NUQVRVU19ESVNDT05ORUNURUQQAzLiAgoVRGFlbW9uUmVnaXN0cnlTZXJ2aWNlElAKC0xpc3REYWVtb25zEh4ucmVsaWFudC52MS5MaXN0RGFlbW9uc1JlcXVlc3QaHy5yZWxpYW50LnYxLkxpc3REYWVtb25zUmVzcG9uc2UiABJKCglHZXREYWVtb24SHC5yZWxpYW50LnYxLkdldERhZW1vblJlcXVlc3QaHS5yZWxpYW50LnYxLkdldERhZW1vblJlc3BvbnNlIgASVgoNUmVzb2x2ZURhZW1vbhIgLnJlbGlhbnQudjEuUmVzb2x2ZURhZW1vblJlcXVlc3QaIS5yZWxpYW50LnYxLlJlc29sdmVEYWVtb25SZXNwb25zZSIAElMKDFJlc3VtZURhZW1vbhIfLnJlbGlhbnQudjEuUmVzdW1lRGFlbW9uUmVxdWVzdBogLnJlbGlhbnQudjEuUmVzdW1lRGFlbW9uUmVzcG9uc2UiAEI6WjhnaXRodWIuY29tL3JlbGlhbnQtbGFicy9yZWxpYW50L2dlbi9yZWxpYW50L3YxO3JlbGlhbnR2MWIGcHJvdG8z", [file_google_protobuf_timestamp, file_reliant_v1_tools_daemon]);
+  fileDesc("CiByZWxpYW50L3YxL2RhZW1vbl9yZWdpc3RyeS5wcm90bxIKcmVsaWFudC52MSIUChJMaXN0RGFlbW9uc1JlcXVlc3QiPgoTTGlzdERhZW1vbnNSZXNwb25zZRInCgdkYWVtb25zGAEgAygLMhYucmVsaWFudC52MS5EYWVtb25JbmZvIiUKEEdldERhZW1vblJlcXVlc3QSEQoJZGFlbW9uX2lkGAEgASgJIjsKEUdldERhZW1vblJlc3BvbnNlEiYKBmRhZW1vbhgBIAEoCzIWLnJlbGlhbnQudjEuRGFlbW9uSW5mbyLAAQoUUmVzb2x2ZURhZW1vblJlcXVlc3QSEQoJZGFlbW9uX2lkGAEgASgJEhMKC2RhZW1vbl9uYW1lGAIgASgJEhMKC2RhZW1vbl90eXBlGAMgASgJEjwKBmxhYmVscxgEIAMoCzIsLnJlbGlhbnQudjEuUmVzb2x2ZURhZW1vblJlcXVlc3QuTGFiZWxzRW50cnkaLQoLTGFiZWxzRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASJOChVSZXNvbHZlRGFlbW9uUmVzcG9uc2USJgoGZGFlbW9uGAEgASgLMhYucmVsaWFudC52MS5EYWVtb25JbmZvEg0KBWZvdW5kGAIgASgIIigKE1Jlc3VtZURhZW1vblJlcXVlc3QSEQoJZGFlbW9uX2lkGAEgASgJIj4KFFJlc3VtZURhZW1vblJlc3BvbnNlEg8KB3Jlc3VtZWQYASABKAgSFQoNZXJyb3JfbWVzc2FnZRgCIAEoCSK0BQoKRGFlbW9uSW5mbxIRCglkYWVtb25faWQYASABKAkSDwoHdXNlcl9pZBgCIAEoCRIQCghob3N0bmFtZRgDIAEoCRIQCghwbGF0Zm9ybRgEIAEoCRIoCgZzdGF0dXMYBSABKA4yGC5yZWxpYW50LnYxLkRhZW1vblN0YXR1cxIvCghwcm9qZWN0cxgGIAMoCzIdLnJlbGlhbnQudjEuRGlzY292ZXJlZFByb2plY3QSMAoMY29ubmVjdGVkX2F0GAcgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIyCg5sYXN0X2hlYXJ0YmVhdBgIIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEwoLZGFlbW9uX3R5cGUYCSABKAkSGQoRbWVtb3J5X3VzZWRfYnl0ZXMYCiABKAQSGgoSbWVtb3J5X2xpbWl0X2J5dGVzGAsgASgEEhcKD21lbW9yeV9wcmVzc3VyZRgMIAEoCBIWCg5kZXRlY3RlZF9wb3J0cxgNIAMoDRI5Cg9saWZlY3ljbGVfcGhhc2UYDiABKA4yIC5yZWxpYW50LnYxLkRhZW1vbkxpZmVjeWNsZVBoYXNlEgwKBHNpemUYDyABKAkSGwoTbGFzdF9zdGF0dXNfbWVzc2FnZRgQIAEoCRI6ChZsYXN0X3N0YXR1c19jaGFuZ2VkX2F0GBEgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBI2ChJsYXN0X29vbV9raWxsZWRfYXQYEiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhYKDm9vbV9raWxsX2NvdW50GBMgASgFEi4KCmNyZWF0ZWRfYXQYFCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wKtEBCgxEYWVtb25TdGF0dXMSHQoZREFFTU9OX1NUQVRVU19VTlNQRUNJRklFRBAAEhgKFERBRU1PTl9TVEFUVVNfQUNUSVZFEAESFgoSREFFTU9OX1NUQVRVU19JRExFEAISHgoaREFFTU9OX1NUQVRVU19ESVNDT05ORUNURUQQAxIZChVEQUVNT05fU1RBVFVTX1BFTkRJTkcQBBIbChdEQUVNT05fU1RBVFVTX1NVU1BFTkRFRBAFEhgKFERBRU1PTl9TVEFUVVNfRkFJTEVEEAYqnQIKFERhZW1vbkxpZmVjeWNsZVBoYXNlEiYKIkRBRU1PTl9MSUZFQ1lDTEVfUEhBU0VfVU5TUEVDSUZJRUQQABInCiNEQUVNT05fTElGRUNZQ0xFX1BIQVNFX1BST1ZJU0lPTklORxABEiIKHkRBRU1PTl9MSUZFQ1lDTEVfUEhBU0VfQ0xPTklORxACEiAKHERBRU1PTl9MSUZFQ1lDTEVfUEhBU0VfUkVBRFkQAxIlCiFEQUVNT05fTElGRUNZQ0xFX1BIQVNFX1NVU1BFTkRJTkcQBBIkCiBEQUVNT05fTElGRUNZQ0xFX1BIQVNFX1NVU1BFTkRFRBAFEiEKHURBRU1PTl9MSUZFQ1lDTEVfUEhBU0VfRkFJTEVEEAYy4gIKFURhZW1vblJlZ2lzdHJ5U2VydmljZRJQCgtMaXN0RGFlbW9ucxIeLnJlbGlhbnQudjEuTGlzdERhZW1vbnNSZXF1ZXN0Gh8ucmVsaWFudC52MS5MaXN0RGFlbW9uc1Jlc3BvbnNlIgASSgoJR2V0RGFlbW9uEhwucmVsaWFudC52MS5HZXREYWVtb25SZXF1ZXN0Gh0ucmVsaWFudC52MS5HZXREYWVtb25SZXNwb25zZSIAElYKDVJlc29sdmVEYWVtb24SIC5yZWxpYW50LnYxLlJlc29sdmVEYWVtb25SZXF1ZXN0GiEucmVsaWFudC52MS5SZXNvbHZlRGFlbW9uUmVzcG9uc2UiABJTCgxSZXN1bWVEYWVtb24SHy5yZWxpYW50LnYxLlJlc3VtZURhZW1vblJlcXVlc3QaIC5yZWxpYW50LnYxLlJlc3VtZURhZW1vblJlc3BvbnNlIgBCOlo4Z2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vcmVsaWFudC92MTtyZWxpYW50djFiBnByb3RvMw", [file_google_protobuf_timestamp, file_reliant_v1_tools_daemon]);
 
 /**
  * @generated from message reliant.v1.ListDaemonsRequest
@@ -221,6 +221,19 @@ export type DaemonInfo = Message<"reliant.v1.DaemonInfo"> & {
   projects: DiscoveredProject[];
 
   /**
+   * When the daemon's current stream attached, and when it last showed
+   * activity on it. Both come from the attachment lease, so both are unset
+   * while nothing is attached — "last connected" is deliberately NOT retained
+   * after a disconnect, because the lease row is deleted and this service
+   * keeps no history of it.
+   *
+   * These were previously declared and never populated: the columns that once
+   * backed them were dropped by the demote migration, and the attachment row
+   * that replaced them was not read for this purpose. They are now sourced
+   * from the attachment, because recency ordering in the UI needs them —
+   * picking a clone target by "whichever the server listed first" is
+   * indistinguishable from correct with one machine and wrong with several.
+   *
    * @generated from field: google.protobuf.Timestamp connected_at = 7;
    */
   connectedAt?: Timestamp | undefined;
@@ -270,6 +283,68 @@ export type DaemonInfo = Message<"reliant.v1.DaemonInfo"> & {
    * @generated from field: repeated uint32 detected_ports = 13;
    */
   detectedPorts: number[];
+
+  /**
+   * What the machine is currently DOING, when it isn't ready yet.
+   *
+   * `status` answers "can I route work to this machine" and deliberately
+   * collapses the whole startup sequence into PENDING. That is the right
+   * granularity for routing and the wrong one for a user watching a spinner:
+   * "pulling the image" and "cloning your repository" have very different
+   * expected durations, and a wait that explains itself reads as progress
+   * rather than as a hang.
+   *
+   * @generated from field: reliant.v1.DaemonLifecyclePhase lifecycle_phase = 14;
+   */
+  lifecyclePhase: DaemonLifecyclePhase;
+
+  /**
+   * Provisioned machine size ("small", "medium", …). Empty for self-hosted.
+   *
+   * @generated from field: string size = 15;
+   */
+  size: string;
+
+  /**
+   * Human-readable reason for the most recent lifecycle transition, e.g.
+   * "image pull failed". Empty when there is nothing to explain.
+   *
+   * @generated from field: string last_status_message = 16;
+   */
+  lastStatusMessage: string;
+
+  /**
+   * When lifecycle_phase / last_status_message last changed.
+   *
+   * @generated from field: google.protobuf.Timestamp last_status_changed_at = 17;
+   */
+  lastStatusChangedAt?: Timestamp | undefined;
+
+  /**
+   * OOM-kill tracking for managed machines, mirrored from the Workspace CR.
+   * Unset/zero when no OOM kill has been observed; the UI keys "recent" off
+   * last_oom_killed_at.
+   *
+   * @generated from field: google.protobuf.Timestamp last_oom_killed_at = 18;
+   */
+  lastOomKilledAt?: Timestamp | undefined;
+
+  /**
+   * @generated from field: int32 oom_kill_count = 19;
+   */
+  oomKillCount: number;
+
+  /**
+   * When the registry first saw this daemon. Always set.
+   *
+   * Needed because it is the recency fallback for a machine that has never
+   * attached — a provisioning one, where connected_at is necessarily unset. An
+   * unknown recency sorts a brand-new machine last, which is the opposite of
+   * what the user means.
+   *
+   * @generated from field: google.protobuf.Timestamp created_at = 20;
+   */
+  createdAt?: Timestamp | undefined;
 };
 
 /**
@@ -280,6 +355,22 @@ export const DaemonInfoSchema: GenMessage<DaemonInfo> = /*@__PURE__*/
   messageDesc(file_reliant_v1_daemon_registry, 8);
 
 /**
+ * DaemonStatus is the SINGLE status vocabulary for a daemon in this registry.
+ *
+ * It previously had only two reachable values, because the registry could see
+ * nothing but attachment freshness: ACTIVE or DISCONNECTED. A provisioning
+ * machine and a crashed one both read DISCONNECTED, so the UI fetched a second
+ * list from control-plane carrying a second DaemonStatus enum whose numeric
+ * values disagreed with this one (ACTIVE was 1 here and 2 there), and
+ * reconciled them by hand. This enum now covers the whole vocabulary so there
+ * is one answer and one set of numbers.
+ *
+ * Composition rule, implemented in daemonToProto: an attached daemon is ACTIVE
+ * whatever its lifecycle phase says, because a stream is attached and work can
+ * be routed — that is observed, not inferred. An unattached daemon takes its
+ * status from the lifecycle phase, and falls back to DISCONNECTED when there
+ * is no phase (every self-hosted daemon, permanently).
+ *
  * @generated from enum reliant.v1.DaemonStatus
  */
 export enum DaemonStatus {
@@ -302,6 +393,28 @@ export enum DaemonStatus {
    * @generated from enum value: DAEMON_STATUS_DISCONNECTED = 3;
    */
   DISCONNECTED = 3,
+
+  /**
+   * Provisioning / cloning — the machine is coming up and is not routable yet.
+   *
+   * @generated from enum value: DAEMON_STATUS_PENDING = 4;
+   */
+  PENDING = 4,
+
+  /**
+   * Suspended by the user or by idle timeout. Persistent intent: an
+   * unreachable suspended machine is not evidence it was un-suspended.
+   *
+   * @generated from enum value: DAEMON_STATUS_SUSPENDED = 5;
+   */
+  SUSPENDED = 5,
+
+  /**
+   * The machine failed to come up or crashed terminally.
+   *
+   * @generated from enum value: DAEMON_STATUS_FAILED = 6;
+   */
+  FAILED = 6,
 }
 
 /**
@@ -309,6 +422,62 @@ export enum DaemonStatus {
  */
 export const DaemonStatusSchema: GenEnum<DaemonStatus> = /*@__PURE__*/
   enumDesc(file_reliant_v1_daemon_registry, 0);
+
+/**
+ * DaemonLifecyclePhase is the public lifecycle vocabulary for a managed
+ * machine. It mirrors control-plane's DaemonLifecyclePhase rather than the
+ * Workspace CR's raw Kubernetes phase strings, so renaming a k8s phase
+ * upstream is not a wire break here.
+ *
+ * UNSPECIFIED means "no lifecycle detail available" — the permanent state for
+ * self-hosted daemons, and the transient state for a managed machine whose
+ * first lifecycle event has not landed yet. Clients must treat it as "fall
+ * back to status", which is always correct if less specific.
+ *
+ * @generated from enum reliant.v1.DaemonLifecyclePhase
+ */
+export enum DaemonLifecyclePhase {
+  /**
+   * @generated from enum value: DAEMON_LIFECYCLE_PHASE_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: DAEMON_LIFECYCLE_PHASE_PROVISIONING = 1;
+   */
+  PROVISIONING = 1,
+
+  /**
+   * @generated from enum value: DAEMON_LIFECYCLE_PHASE_CLONING = 2;
+   */
+  CLONING = 2,
+
+  /**
+   * @generated from enum value: DAEMON_LIFECYCLE_PHASE_READY = 3;
+   */
+  READY = 3,
+
+  /**
+   * @generated from enum value: DAEMON_LIFECYCLE_PHASE_SUSPENDING = 4;
+   */
+  SUSPENDING = 4,
+
+  /**
+   * @generated from enum value: DAEMON_LIFECYCLE_PHASE_SUSPENDED = 5;
+   */
+  SUSPENDED = 5,
+
+  /**
+   * @generated from enum value: DAEMON_LIFECYCLE_PHASE_FAILED = 6;
+   */
+  FAILED = 6,
+}
+
+/**
+ * Describes the enum reliant.v1.DaemonLifecyclePhase.
+ */
+export const DaemonLifecyclePhaseSchema: GenEnum<DaemonLifecyclePhase> = /*@__PURE__*/
+  enumDesc(file_reliant_v1_daemon_registry, 1);
 
 /**
  * DaemonRegistryService exposes daemon registry queries to the web UI.

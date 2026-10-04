@@ -8,12 +8,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Claude Sonnet 5.5 (2026-09-28), GPT-6 Luna (2026-09-22) and GPT-6.1 Sol
-// (2026-09-29). Every figure below is taken from the vendor's own model page —
+// Claude Sonnet 5.5 (2026-09-28) and the GPT-6 Astra/Sol/Terra/Luna models.
+// Every figure below is taken from the vendor's own model page —
 // platform.claude.com/docs/en/models/sonnet-5-5 and
-// developers.openai.com/api/docs/models/{gpt-6-luna,gpt-6.1-sol} — not from a
-// neighbouring catalog entry, because the entries they sit next to differ from
-// them in exactly the fields that are easy to copy by mistake.
+// developers.openai.com/api/docs/models/{gpt-6-astra,gpt-6-sol,gpt-6-terra,gpt-6-luna}
+// — not from a neighbouring catalog entry, because the entries they sit next to
+// differ from them in exactly the fields that are easy to copy by mistake.
 
 // providerAPIModels maps each provider driver to the api_model it sends.
 func providerAPIModels(t *testing.T, reg *ModelRegistry, id string) map[string]string {
@@ -34,9 +34,7 @@ func providerAPIModels(t *testing.T, reg *ModelRegistry, id string) map[string]s
 //
 // There is no vertexai mapping on the primary entry, deliberately. Vertex
 // users reach it through vertex-claude-5.5-sonnet, the same split
-// claude-5-sonnet uses. A vertexai mapping here would let this entry, which
-// sits above vertex-claude-5-opus in [moderate], take that tier over for
-// every Vertex-only user.
+// claude-5-sonnet uses.
 //
 // No copilot mapping either: Copilot's /models reports sonnet-5.5 for no
 // account we have probed, and a mapping it does not serve 400s upstream.
@@ -76,13 +74,13 @@ func TestClaude55SonnetCapabilities(t *testing.T) {
 	}
 }
 
-// GPT-6.1 Sol and GPT-6 Luna reach users through openai and openrouter only.
+// GPT-6 Sol, Terra and Luna reach users through openai and openrouter only.
 //
 // codex is absent on purpose. The ChatGPT-account backend serves a subset of
 // the catalog that has to be probed per model (see the note above gpt-5.5 in
 // models.yaml), and the GPT-6 family's request envelope is capture-specific
-// (usesAdditionalToolsEnvelope in the codex driver). Neither has been done for
-// these two, and a codex mapping the backend refuses 400s every request.
+// (usesAdditionalToolsEnvelope in the codex driver). That has only been done for
+// Astra, and a codex mapping the backend refuses 400s every request.
 //
 // reliant and vertexai are absent for the reason astra's are: Vertex serves
 // no OpenAI frontier models, and the gateway routes everything through it.
@@ -90,21 +88,22 @@ func TestGPT6NewModelProviderMappings(t *testing.T) {
 	reg := MustGetRegistry()
 
 	for id, want := range map[string]map[string]string{
-		"gpt-6.1-sol": {"openai": "gpt-6.1-sol", "openrouter": "openai/gpt-6.1-sol"},
+		"gpt-6-sol":   {"openai": "gpt-6-sol", "openrouter": "openai/gpt-6-sol"},
+		"gpt-6-terra": {"openai": "gpt-6-terra", "openrouter": "openai/gpt-6-terra"},
 		"gpt-6-luna":  {"openai": "gpt-6-luna", "openrouter": "openai/gpt-6-luna"},
 	} {
 		assert.Equal(t, want, providerAPIModels(t, reg, id), "%s providers", id)
 	}
 }
 
-// Both models take tools only on the Responses API (Chat Completions refuses
-// tool calling for 6.1 Sol outright, and accepts it on Luna only at effort
-// `none`), so the responses endpoint is a correctness setting, not a
-// preference. They share the rest of the OpenAI reasoning-model envelope.
+// These models take tools only on the Responses API (Chat Completions refuses
+// tool calling for Sol outright, and accepts it on Luna only at effort `none`),
+// so the responses endpoint is a correctness setting, not a preference. They
+// share the rest of the OpenAI reasoning-model envelope.
 func TestGPT6NewModelCapabilities(t *testing.T) {
 	reg := MustGetRegistry()
 
-	for _, id := range []string{"gpt-6.1-sol", "gpt-6-luna"} {
+	for _, id := range []string{"gpt-6-sol", "gpt-6-terra", "gpt-6-luna"} {
 		t.Run(id, func(t *testing.T) {
 			def, ok := reg.GetDefinition(id)
 			require.True(t, ok)
@@ -123,11 +122,9 @@ func TestGPT6NewModelCapabilities(t *testing.T) {
 	}
 }
 
-// The new models join existing tiers without taking any over. Every row is a
-// provider set whose current winner must stay put: adding a catalog entry is
-// not a decision to change what a preset runs on. Repointing a tier is a
-// separate, deliberate edit to these pins.
-func TestSept2026ModelsLeaveTierWinnersUnchanged(t *testing.T) {
+// The new models pin the intended tier winners for each provider set. Every row
+// is a provider set whose winner must stay put unless a tier retune is explicit.
+func TestSept2026ModelsPinTierWinners(t *testing.T) {
 	reg := MustGetRegistry()
 
 	tests := []struct {
@@ -136,17 +133,17 @@ func TestSept2026ModelsLeaveTierWinnersUnchanged(t *testing.T) {
 		want      string
 	}{
 		{TagFlagship, allTestProviders, "claude-5.5-opus"},
-		{TagModerate, allTestProviders, "claude-5-opus"},
+		{TagModerate, allTestProviders, "claude-5.5-sonnet"},
 		{TagReasoning, allTestProviders, "claude-5.5-opus"},
 		{TagPowerful, allTestProviders, "claude-5.1-fable"},
 		{TagFast, allTestProviders, "gemini-3.5-flash"},
 		{TagCheap, allTestProviders, "claude-4.5-haiku"},
 
-		{TagModerate, []string{"vertexai"}, "vertex-claude-5-opus"},
+		{TagModerate, []string{"vertexai"}, "vertex-claude-5.5-sonnet"},
 		{TagFlagship, []string{"vertexai"}, "claude-5.5-opus"},
 
-		{TagFlagship, []string{"openai"}, "gpt-5.5"},
-		{TagModerate, []string{"openai"}, "gpt-5.5"},
+		{TagFlagship, []string{"openai"}, "gpt-6-sol"},
+		{TagModerate, []string{"openai"}, "gpt-6-terra"},
 		{TagReasoning, []string{"openai"}, "gpt-5.5"},
 		{TagPowerful, []string{"openai"}, "gpt-6-astra"},
 		{TagFast, []string{"openai"}, "gpt-5.4-mini"},
@@ -176,21 +173,21 @@ func TestSept2026ModelsAreReachableThroughTheirTiers(t *testing.T) {
 		tag   string
 		level string
 	}{
-		// Sonnet 5.5 sits directly above Sonnet 5 wherever Sonnet 5 appears,
-		// at the same effort — a like-for-like upgrade of that slot.
+		// Sonnet 5.5 is the new moderate leader and stays directly above Sonnet 5
+		// in the other tiers where Sonnet 5 appears.
 		{"claude-5.5-sonnet", TagFlagship, "high"},
-		{"claude-5.5-sonnet", TagModerate, "high"},
+		{"claude-5.5-sonnet", TagModerate, "medium"},
 		{"claude-5.5-sonnet", TagReasoning, "high"},
 		{"vertex-claude-5.5-sonnet", TagFlagship, "high"},
-		{"vertex-claude-5.5-sonnet", TagModerate, "high"},
+		{"vertex-claude-5.5-sonnet", TagModerate, "medium"},
 		{"vertex-claude-5.5-sonnet", TagReasoning, "high"},
 
-		// 6.1 Sol is a frontier model priced like a mid-tier one; it follows
-		// astra and gpt-5.5 rather than displacing either.
-		{"gpt-6.1-sol", TagPowerful, "xhigh"},
-		{"gpt-6.1-sol", TagFlagship, "xhigh"},
-		{"gpt-6.1-sol", TagModerate, "medium"},
-		{"gpt-6.1-sol", TagReasoning, "xhigh"},
+		// GPT-6 tiers: Astra is powerful, Sol is flagship, Terra is moderate.
+		{"gpt-6-astra", TagPowerful, "xhigh"},
+		{"gpt-6-sol", TagFlagship, "xhigh"},
+		{"gpt-6-sol", TagReasoning, "xhigh"},
+		{"gpt-6-terra", TagModerate, "medium"},
+		{"gpt-6-terra", TagReasoning, "medium"},
 
 		// Luna is priced below every existing cheap/fast GPT entry, but it is
 		// placed AFTER them: those tiers carry chat titling and compaction for

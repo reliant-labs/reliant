@@ -53,6 +53,7 @@ func TestSupportedModelsExcludeNonReliantVertexVariants(t *testing.T) {
 }
 
 func TestSupportedModelsExposeSupportedClaudeModels(t *testing.T) {
+	assert.Contains(t, SupportedModels, models.Claude55Sonnet)
 	assert.Contains(t, SupportedModels, models.Claude46Opus)
 	assert.Contains(t, SupportedModels, models.Claude45Opus)
 	assert.Contains(t, SupportedModels, models.Claude46Sonnet)

@@ -58,11 +58,14 @@ examples/
 
 Test scenarios for each workflow live in subdirectories under `scenarios/`. Each directory contains multiple `.yaml` files that define inputs, simulated events, and expected outcomes.
 
+Each directory is a symlink to the builtin scenarios it documents, so there is
+one copy and `go test ./internal/workflow/builtin/` runs it. Edit the files
+under `internal/workflow/builtin/scenarios/<workflow>/`.
+
 | Directory | Description |
 |-----------|-------------|
 | `agent/` | Agent workflow test cases (happy path, manual mode, compaction, multi-tool, etc.) |
 | `auditing-agent/` | Auditing agent test cases (approval, rejection, guidance flows) |
-| `context-reducing-agent/` | Context-reducing agent test cases (compaction, large result filtering) |
 | `get-it-right/` | Get-it-right test cases (retries, max retries exhausted, restart) |
 | `one-ring/` | One-ring pipeline test cases (full pipeline, individual steps, retries) |
 | `parallel-compete/` | Parallel compete test cases (winner selection, synthesis, failure handling) |
@@ -79,7 +82,6 @@ nodes:
     ref: builtin://agent
     args:
       mode: auto
-      max_turns: 50
 ```
 
 ### Applying Presets

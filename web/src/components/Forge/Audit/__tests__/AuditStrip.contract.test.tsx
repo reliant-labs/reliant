@@ -281,7 +281,11 @@ describe("the non-report outcomes", () => {
     renderStrip(outcome);
     const panel = screen.getByTestId("forge-audit-not-project");
     expect(panel.textContent).toContain("forge.yaml");
-    expect(panel.textContent).toContain("expected");
+    expect(panel.textContent).toContain("no audit to show");
+    // The "this is expected" reassurance is gone: the not-forge-project screen
+    // now pitches forge, so telling people the state is unremarkable there and
+    // worth acting on here read as a contradiction.
+    expect(panel.textContent).not.toContain("expected");
     expect(panel.className).not.toMatch(/destructive/);
     expect(screen.queryByTestId("forge-audit-strip")).toBeNull();
   });

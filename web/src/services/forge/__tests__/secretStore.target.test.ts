@@ -50,7 +50,7 @@ describe("managedStoreTarget", () => {
     ).toEqual({ kind: "lookup", environmentId: "denv_1", endpoint: "http://127.0.0.1:8090" });
   });
 
-  it.each(["cluster", "compose", "host", "external", "static", "mixed", undefined, "moon-base"])(
+  it.each(["cluster", "compose", "host", "external", "static", "mixed"])(
     "gives a %s env no lookup (no managed store, no fake id)",
     (destination) => {
       expect(managedStoreTarget({ destination, environment_id: "denv_should_be_ignored" })).toEqual({
@@ -59,6 +59,23 @@ describe("managedStoreTarget", () => {
       });
     }
   );
+
+  // forge named NO destination (an older forge, a KCL render that failed) or
+  // one this build does not know. Still no lookup — but not "not-hosted"
+  // either: nothing said the env uses a different provider.
+  it.each([undefined, "", "moon-base"])(
+    "gives a %s destination no lookup and calls the provider unknown, not not-hosted",
+    (destination) => {
+      expect(managedStoreTarget({ destination, environment_id: "denv_should_be_ignored" })).toEqual({
+        kind: "none",
+        availability: "provider-unknown",
+      });
+    }
+  );
+
+  it("calls the provider unknown when there is no forge report at all", () => {
+    expect(managedStoreTarget(null)).toEqual({ kind: "none", availability: "provider-unknown" });
+  });
 
   it("refuses to look up a hosted env that was never ensured", () => {
     expect(managedStoreTarget({ destination: "hosted", endpoint: "http://localhost:8090", environment_id: "" })).toEqual({

@@ -41,9 +41,6 @@ import { getControlPlaneClient } from "./client";
 // one module. `listDaemons`, the `Daemon` type and the DAEMON_STATUS_*
 // constants live in ./daemon and are reused as-is.
 export {
-  listDaemons,
-  hasActiveDaemon,
-  getDaemonStatusMessage,
   DAEMON_STATUS_PENDING,
   DAEMON_STATUS_ACTIVE,
   DAEMON_STATUS_SUSPENDED,

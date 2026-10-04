@@ -34,6 +34,29 @@ describe("refetchStore", () => {
     vi.useRealTimers();
   });
 
+  it("delivers each entity's event when a burst spans several entities", () => {
+    // worktree_changes fires on every agent tool call. Debouncing by type
+    // alone kept only the LAST entityId in the window, so a workspace's
+    // "creation settled" event was swallowed by another workspace's noise.
+    vi.useFakeTimers();
+    const events: RefetchEvent[] = [];
+    const unsubscribe = subscribeToRefetch("worktree_changes", (event) => {
+      events.push(event);
+    });
+
+    triggerRefetch("worktree_changes", "wt-settled");
+    vi.advanceTimersByTime(50);
+    triggerRefetch("worktree_changes", "wt-busy");
+    vi.advanceTimersByTime(50);
+    triggerRefetch("worktree_changes", "wt-busy");
+    vi.advanceTimersByTime(300);
+
+    unsubscribe();
+
+    expect(events.map((e) => e.entityId).sort()).toEqual(["wt-busy", "wt-settled"]);
+    vi.useRealTimers();
+  });
+
   it("matches worktree-scoped refetches only for the active worktree", () => {
     expect(
       matchesRefetchScope(

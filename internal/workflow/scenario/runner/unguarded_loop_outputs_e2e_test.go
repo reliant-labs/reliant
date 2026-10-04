@@ -66,7 +66,7 @@ nodes:
         tool_calls: "{{nodes.call_llm.tool_calls}}"
         response_text: "{{nodes.call_llm.response_text}}"
         pending_inbox: "{{nodes.call_llm.pending_inbox}}"
-        aborted: "{{nodes.call_llm.aborted}}"
+        stop_reason: "{{nodes.call_llm.stop_reason}}"
         # tool_calls above is the UNGUARDED container reference this test exists
         # for. ask_question's outputs below stay guarded on purpose: it has only
         # scalar fields (response, has_feedback), and scalars are deliberately

@@ -53,8 +53,8 @@ enum DeployTier {
   DEPLOY_TIER_BACKEND = 2;
   // A managed Postgres database and role.
   DEPLOY_TIER_DATABASE = 3;
-  // A workload inside the tenant's own vCluster, carrying the billed
-  // control-plane floor.
+  // A workload inside the tenant's own cluster. No forge CR and no hosted
+  // render path: this tier is declared and refused, not deployed.
   DEPLOY_TIER_CLUSTER = 4;
 }
 
@@ -80,6 +80,23 @@ enum DeployEnvironmentKind {
   // readable. EnsureEnvironment with a kind differing from the stored row is
   // FailedPrecondition, never a silent change.
   DEPLOY_ENVIRONMENT_KIND_LOCAL = 3;
+
+  // FORGE APPLIES IT; THE PLATFORM PLACES NOTHING. The tenant's own cluster
+  // runs the workloads, so this environment holds no namespace on our fleet,
+  // and there is nothing here for the converger to observe or patch — its
+  // reconcile lease deliberately excludes this kind.
+  //
+  // It IS a promotion target, which is what separates it from LOCAL: the
+  // ledger records releases, promotions and applies for it exactly as for a
+  // hosted environment, and that record is the whole point — it is how a
+  // self-hosted deploy gets a history, an approver and a plan. What it does
+  // not get is convergence: a promotion here moves no bytes until forge
+  // applies it and reports the outcome back through FinishApply.
+  //
+  // Its secrets are WRITE-ONLY. Unlike LOCAL, whose secrets are pulled back
+  // by `forge env up`, nothing on a self-managed environment reads a secret
+  // out of the platform — forge pushes them into the tenant's own store.
+  DEPLOY_ENVIRONMENT_KIND_SELF_MANAGED = 4;
 }
 
 // DeployRunState is what the TENANT asked for. Distinct from scale-to-zero,
@@ -153,25 +170,16 @@ enum DeployPromotionKind {
   DEPLOY_PROMOTION_KIND_PROMOTE = 1;
 }
 
-// DeployClusterProvider is an IRREVERSIBLE day-0 choice per vCluster:
-// shared-vs-private nodes cannot change after creation, nor can worker node
-// type after deploy. On the wire from day one even though PRIVATE is rejected
-// at render until implemented — a discriminator retrofitted later cannot
-// describe clusters already provisioned under the old assumption.
-enum DeployClusterProvider {
-  DEPLOY_CLUSTER_PROVIDER_UNSPECIFIED = 0;
-  DEPLOY_CLUSTER_PROVIDER_VCLUSTER_SHARED = 1;
-  DEPLOY_CLUSTER_PROVIDER_VCLUSTER_PRIVATE = 2;
-}
-
-// DeployClusterPhase is the vCluster lifecycle, kept deliberately small.
-// Teardown is a deleted timestamp, not a fourth phase.
-enum DeployClusterPhase {
-  DEPLOY_CLUSTER_PHASE_UNSPECIFIED = 0;
-  DEPLOY_CLUSTER_PHASE_PROVISIONING = 1;
-  DEPLOY_CLUSTER_PHASE_READY = 2;
-  DEPLOY_CLUSTER_PHASE_FAILED = 3;
-}
+// DeployClusterProvider and DeployClusterPhase described a Reliant-provisioned
+// vCluster — its irreversible shared-vs-private node choice and its
+// provisioning lifecycle. Both are deleted with the vCluster model. A
+// customer-owned cluster has neither: we do not choose its nodes and we do not
+// provision it, so its readiness is a CONNECTION question, answered by
+// cluster.v1.ClusterConnection.
+//
+// Enum NAMES, not just values, are reserved: proto3 enum value names are
+// scoped to the PACKAGE, so re-using one later in a different enum of this
+// package would collide.
 
 // DeployResourceKind NAMES A METER. The unit is a property of the kind and is
 // never a per-row field: a free-form unit is a rounding bug waiting for the
@@ -184,8 +192,13 @@ enum DeployResourceKind {
   DEPLOY_RESOURCE_KIND_CPU_MILLI = 1;
   // MiB held for the tick.
   DEPLOY_RESOURCE_KIND_MEM_MIB = 2;
-  // Always 1 — the per-cluster floor.
-  DEPLOY_RESOURCE_KIND_VCLUSTER = 5;
+
+  // 5 was VCLUSTER, the per-hour per-cluster floor. Deleted with the
+  // vCluster model: nothing ever wrote a row of this kind, and a connected
+  // cluster's compute is the customer's and carries no floor of ours.
+  reserved 5;
+  reserved "DEPLOY_RESOURCE_KIND_VCLUSTER";
+
   // Mebibytes, not GiB (see the migration's quantity comment).
   DEPLOY_RESOURCE_KIND_EGRESS_GIB = 6;
   DEPLOY_RESOURCE_KIND_CDN_EGRESS_GIB = 7;
@@ -246,29 +259,13 @@ message DeployTenant {
   google.protobuf.Timestamp updated_at = 5;
 }
 
-// DeployTenantCluster is a provisioned vCluster — a real API server, for
-// advanced users, carrying the billed control-plane floor.
+// DeployTenantCluster described a provisioned vCluster and is deleted with the
+// vCluster model. The org-owned cluster message that replaces it is
+// cluster.v1.Cluster, which carries a CONNECTION rather than a provisioning
+// phase, and no floor: a connected cluster's control plane is the customer's.
 //
-// ONE PER TENANT, HOSTING N ENVIRONMENT NAMESPACES, is the default rather than
-// a mode: because an environment REFERENCES a cluster instead of owning one, a
-// tenant who needs per-environment API isolation provisions N of these and
-// points one environment at each.
-//
-// Placement (which host cluster, which host namespace) is NOT here — see
-// DeployTenantClusterInternal.
-message DeployTenantCluster {
-  string id = 1;
-  string name = 2;
-  DeployClusterProvider provider = 3;
-  // READ-ONLY. Reported by the operator.
-  DeployClusterPhase phase = 4;
-  // READ-ONLY. Unset until the control plane answers. Until then the cluster
-  // is DECLARED but not REAL, and the vcluster floor must not tick — so this
-  // being unset is the machine-readable form of "do not bill this yet".
-  google.protobuf.Timestamp ready_at = 5;
-  google.protobuf.Timestamp created_at = 6;
-  google.protobuf.Timestamp updated_at = 7;
-}
+// Nothing here was a BYO concept, so there was no message to split — the
+// connect path (#569) already had its own.
 
 // DeployEnvironment is a namespace-scoped deploy target: dev, staging, prod,
 // or an ephemeral preview.
@@ -291,9 +288,10 @@ message DeployEnvironment {
   // somebody else's.
   string namespace = 4;
 
-  // The vCluster this environment's workloads run inside, or empty for the
-  // static/backend/database tiers, which run on shared platform
-  // infrastructure.
+  // The org-owned cluster this environment's workloads run inside, or empty
+  // for an environment on shared platform infrastructure. Superseded as the
+  // source of truth by DeployEnvironmentSpec.cluster_bindings, which can name
+  // more than one.
   string tenant_cluster_id = 5;
 
   // READ-ONLY and DERIVED: the id of this environment's latest promotion in
@@ -327,20 +325,34 @@ message DeployEnvironment {
   // What the platform may do about drift here. Defaults to OBSERVE.
   DeployReconcilePolicy reconcile_policy = 13;
 
-  // READ-ONLY and DERIVED: the registry path this org's images must live
-  // under to be admitted by the platform registry boundary —
-  // `<registry_base>/<org_id>`. It is computed by the same function the
-  // publish-time check uses (ociregistry.TenantSubtree, which
-  // ociregistry.Contains is expressed in), so the two cannot disagree.
+  // Tag 14 ("image_push_base") was removed when the push base became the
+  // CLIENT's to compose rather than the server's to advertise (ADR-0003 F1).
   //
-  // A client uses it to refuse, BEFORE writing anything, an image the
-  // platform will not publish: push to `<image_push_base>/<name>`, re-cut
-  // the release, re-promote.
+  // It carried `<registry_base>/<org_id>`, derived from
+  // ociregistry.TenantSubtree so the advertised value and the enforced one
+  // could not disagree. forge read it off every environment, cached it per
+  // env under .forge/state, and resolved a bare hosted image against the
+  // cached copy. Three costs, all structural: the base was unknowable before
+  // the first successful AUTHENTICATED call, so a fresh checkout could not
+  // render; a stale record silently weakened forge's own off-base check
+  // rather than failing it; and "the server said" plus "the client wrote it
+  // down" are two sources of one fact. forge now composes
+  // `<registry_host>/<organization>/<project>` from its own declaration, with
+  // the host a forge default.
   //
-  // EMPTY MEANS THE PLATFORM ADMITS NO REGISTRY: this deployment has no
-  // registry base configured, and PublishDeploymentConfig refuses every
-  // backend image rather than admitting an unchecked one.
-  string image_push_base = 14;
+  // ENFORCEMENT DID NOT MOVE, and that is the distinction to keep: only the
+  // DERIVATION did. ociregistry.Admit still gates publish, and the registry
+  // realm still mints a token scoped to the authenticated row's org and
+  // refuses any repository outside that subtree — so a client that composes
+  // the wrong base is refused at its first push, by the party that actually
+  // knows. Deps.RegistryBase remains, because that is what both enforce with.
+  //
+  // RESERVED RATHER THAN RECYCLED, for the reason tag 16 below records:
+  // reusing 14 would not fail, it would decode as whatever the new field is
+  // and be read as a registry subtree by any client still on a forge release
+  // that consumed it — the quietest possible wire bug.
+  reserved 14;
+  reserved "image_push_base";
 
   // The forge project this environment belongs to (forge.yaml `name`).
   // Environment identity is (org, project, name): two projects in one org
@@ -377,6 +389,48 @@ message DeployEnvironment {
   // fact about the server's own configuration and the env's policy, and a
   // stored copy could disagree with either.
   bool converges_promotions = 17;
+
+  // Tags 18 and 19 are `protection` (DeployEnvironmentProtection) and
+  // `main_ref`, the protected-environment half of the source-of-truth design.
+  // They are deferred to #516 along with the source verifier that would give
+  // them meaning — a protection flag nothing enforces is worse than no flag,
+  // because it reads as a guarantee. Reserved now so the numbering below does
+  // not shift when they land.
+  reserved 18; // protection — #516
+  reserved 19; // main_ref — #516
+
+  // What the project's checked-in config SAYS this environment contains: the
+  // release.Shape JSON (kind, workloads, secrets by name, domains, clusters,
+  // and a hash per rendered object).
+  //
+  // This is the DECLARATION, and it is distinct from both halves a Deployment
+  // carries. A Deployment's spec is one unit's declaration as the platform
+  // stored it; this is the whole environment as the tenant's render produced
+  // it, including the objects the platform never sees because a self-managed
+  // cluster applies them. It is what makes a deploy plan computable
+  // server-side: without it there is no "before" to diff a candidate bundle
+  // against, and the plan would have to trust whatever the client said Live
+  // was.
+  //
+  // Refreshed by EnsureEnvironment when the spec carries a shape, and by
+  // RecordBundle from the bundle's verified document. An ensure that carries
+  // no shape leaves it alone — a client that cannot render must not be able
+  // to erase what a client that could rendered.
+  //
+  // NEVER CARRIES A SECRET VALUE. The shape's secrets are names and providers
+  // only, and the server refuses a shape that holds anything value-like.
+  google.protobuf.Struct declared_shape = 20;
+
+  // The source the declaration above came from: repo, commit, dirty, and the
+  // forge version that rendered it. "prod says X, declared from main@abc by
+  // forge v0.1.43, clean" is the sentence an operator needs before trusting
+  // the shape, and a shape with no provenance cannot support it.
+  DeploySourceProvenance declared_by = 21;
+
+  // When the declaration was last refreshed. The staleness signal: a shape
+  // from six weeks ago is still a shape, but a plan computed against it is
+  // worth less than one computed against this morning's.
+  google.protobuf.Timestamp declared_at = 22;
 }
 
 // DeployEnvironmentSpec is THE WRITABLE HALF of an environment — the whole of
@@ -406,6 +460,70 @@ message DeployEnvironmentSpec {
   // Part of the environment's identity — EnsureEnvironment addresses by
   // (project, name) — and immutable after creation like name and kind.
   string project = 9;
+
+  // The writable twins of DeployEnvironment's reserved 18/19. Deferred with
+  // them to #516; reserved so this spec's numbering cannot shift either.
+  reserved 10; // protection — #516
+  reserved 11; // main_ref — #516
+
+  // The rendered shape this declaration describes (DeployEnvironment.declared_shape).
+  // Sent by `forge env build` / `forge env deploy` BEFORE anything else, so
+  // the control plane knows what the project declares even for an environment
+  // it will never place.
+  //
+  // Absent leaves the stored shape unchanged, which is why this is not a
+  // "replace the spec wholesale" field like reconcile_policy: a caller that
+  // could not render — an older forge, a `forge env status` on a machine with
+  // no checkout — must not erase a shape by omitting it.
+  //
+  // `shape.kind` must agree with `kind` above; a mismatch is InvalidArgument
+  // rather than a silent preference for one of them.
+  google.protobuf.Struct shape = 12;
+
+  // Where that render came from (DeployEnvironment.declared_by). The first
+  // call carrying provenance also fixes the environment's source repo.
+  DeploySourceProvenance declared_by = 13;
+
+  // Which registered cluster each cluster the bundle renders for maps to.
+  //
+  // THE MULTI-CLUSTER SUCCESSOR OF tenant_cluster_id ABOVE, and the SOURCE OF
+  // TRUTH from this release on. A forge bundle may render for several
+  // clusters at once (release.BundleClusterPath / BundleDoc.ClusterPaths), so
+  // one environment can have more than one target — which `tenant_cluster_id`
+  // cannot express, because it is one column holding one id.
+  //
+  // EXPAND NOW, CONTRACT LATER. tenant_cluster_id is still accepted and still
+  // written, because the previous release reads it; a K-task removes it once
+  // no deployed client sends it. While both exist, a request carrying both
+  // must agree — a disagreement is InvalidArgument rather than a silent
+  // preference for one, because the two would then name different clusters
+  // and only one of them would receive the deploy.
+  //
+  // EVERY BINDING IS VALIDATED: the cluster must be this org's, registered,
+  // and live. Checked BEFORE any write, on the create branch and the existing
+  // branch alike, so a cluster deregistered since the environment was
+  // declared surfaces on the ensure the operator is already running rather
+  // than at the next publish.
+  repeated ClusterBinding cluster_bindings = 14;
+}
+
+// ClusterBinding maps ONE cluster the bundle renders for to ONE registered
+// cluster in the control plane.
+//
+// TWO NAMESPACES MEET HERE, and keeping them apart is the whole purpose of
+// the message. `cluster` is forge's key — the RENDERED kube context name,
+// which is what the bundle's per-cluster paths are indexed by and what a KCL
+// author wrote. `cluster_id` is ours — the uuid ConnectCluster/RegisterCluster
+// minted. Neither can be derived from the other, and collapsing them into one
+// string is how a deploy lands on a cluster whose name merely resembled the
+// declared one.
+message ClusterBinding {
+  // The rendered cluster / kube-context name, as it appears in the bundle's
+  // ClusterPaths. forge's key.
+  string cluster = 1;
+  // The registered cluster's id, from ConnectCluster or RegisterCluster. Must
+  // name a live cluster of the caller's org.
+  string cluster_id = 2;
 }
 
 // DeployObservedStateDetail is the operator's CONFIRMATION — the readable
@@ -733,6 +851,20 @@ message Deployment {
   //
   // Empty on a row that has never been pinned from a promotion.
   string applied_promotion_id = 13;
+
+  // The bundle whose rendered CONFIG this row's spec came from, as distinct
+  // from applied_promotion_id above, which says where its IMAGES came from.
+  //
+  // The two move independently and must both be readable. A converger patches
+  // a workload's digest to realize a promotion and leaves the config exactly
+  // as the last apply rendered it, so "config from bundle B, images from
+  // promotion P" is the accurate description of a converged row — and
+  // collapsing them into one pointer would make one of the two a lie every
+  // time the converger ran.
+  //
+  // Empty on a row written before bundles existed, or by a path that rendered
+  // from no bundle.
+  string applied_bundle_id = 14;
 }
 
 // DeployArtifact is one image's resolved identity within a release.
@@ -847,6 +979,40 @@ message DeployRelease {
   // The CI run that cut this release, when one was supplied. The join key
   // that ties a release to the promotions and gates from the same run.
   DeployRun run = 9;
+
+  // The full source provenance of the cut, superseding the three git_* fields
+  // above rather than duplicating them: it adds the branch, the working-tree
+  // state as a content hash (`tree`), which worktree and machine cut it, the
+  // forge version, and a CI attestation when one was supplied.
+  //
+  // The git_* fields stay because old readers read them, and the server fills
+  // them FROM this when they are unset, so one write satisfies both.
+  //
+  // WHY A TREE HASH AND NOT JUST `dirty`. A dirty release is not a mistake to
+  // be flagged and forgotten — v1.0.0 of this very product was cut dirty from
+  // a laptop — it is a thing that has to stay IDENTIFIABLE afterwards. A hash
+  // over the working tree gives two dirty builds from the same commit
+  // different identities, which a boolean cannot.
+  DeploySourceProvenance provenance = 10;
+
+  // Tag 11 is `source_status` (DeploySourceStatus): the verifier's verdict on
+  // whether this release's commit is an ancestor of the project's main ref.
+  // Deferred to #516 with the verifier itself. Until then the row carries
+  // provenance and no verdict, which is honest — a verdict field defaulting
+  // to "unchecked" would be read as "checked and fine".
+  reserved 11; // source_status — #516
+
+  // The forge project (forge.yaml `name`) this version belongs to.
+  //
+  // A release's identity is (org, project, version), because one org may hold
+  // several forge projects and each cuts its own `v1.0.0`. Before this field
+  // the ledger's uniqueness was (org, version), so a second project's first
+  // release collided with the first project's.
+  //
+  // EMPTY IS LEGACY, not "no project": releases cut before this field existed
+  // carry "" and are resolved by falling back to it, so a project's lookup
+  // finds its own row first and the pre-project history second.
+  string project = 12;
 }
 
 // DeployGate is one check's result, recorded against a promotion.
@@ -1053,7 +1219,23 @@ message DeployRunStage {
 // promoted by alice 4 minutes ago" and lets a script decide without a second
 // round trip.
 message DeployPromoteRefusal {
-  // promotion_conflict | rollout_in_flight | environment_pinned.
+  // promotion_conflict | rollout_in_flight | environment_pinned |
+  // plan_stale | plan_unacknowledged.
+  //
+  // `plan_stale`: the plan the caller approved no longer describes what would
+  // happen. The server recomputed it under the environment's row lock and got
+  // a different digest, because Live moved — someone promoted, an apply
+  // landed, or drift was observed. It is the same situation as a
+  // promotion_conflict from the operator's point of view ("the world moved
+  // under me") and carries the same remedy, re-run the plan, which is why
+  // forge maps both to one exit code.
+  //
+  // `plan_unacknowledged`: the recomputed plan holds a stop-class finding — a
+  // stateful deletion, a load-balancer identity change — that the request did
+  // not name in acknowledged_findings. Deliberately not satisfiable by a
+  // blanket "yes": a flag that can be hard-coded in a workflow pre-approves
+  // every future destructive change to that environment, while a finding code
+  // cannot be known until the plan is computed.
   string reason = 1;
   // Echoed back from the request, so a log line is self-contained.
   string expected_current_promotion_id = 2;
@@ -1064,6 +1246,18 @@ message DeployPromoteRefusal {
   DeployRolloutPhase actual_phase = 5;
   // One human sentence.
   string detail = 6;
+
+  // Tag 7 is `findings` (repeated DeployPolicyFinding), the source-policy
+  // refusal detail, deferred to #516 with the policy that produces it.
+  reserved 7; // findings — #516
+
+  // The plan as the server just RECOMPUTED it, for the two plan_* reasons.
+  //
+  // Carried so a refused caller can show the operator what changed without a
+  // second round trip — the same reasoning actual_current follows. For
+  // plan_stale this is the plan they should have approved; for
+  // plan_unacknowledged its findings name exactly which codes are missing.
+  DeployPlan current_plan = 8;
 }
 
 // DeployPromotion is one entry in the append-only ledger: this environment ran
@@ -1151,7 +1345,492 @@ message DeployPromotion {
 
   // The CI run that performed this promotion.
   DeployRun run = 18;
+
+  // The promoted release's provenance, joined on read.
+  //
+  // Here so a ledger timeline renders "v12, from main@abc" for every row
+  // without a GetRelease per row. A timeline that shows versions alone is the
+  // one that cannot answer the question an incident actually asks, which is
+  // what CODE was running — and resolving that per row is what makes a
+  // sixteen-row page sixteen extra round trips.
+  DeploySourceProvenance release_provenance = 19;
+
+  // Tags 20 and 21 are `regression_acknowledged` and `admitted_findings`
+  // (repeated DeployPolicyFinding) — the record of what the source policy
+  // admitted at promote time. Deferred to #516 with the policy.
+  reserved 20; // regression_acknowledged — #516
+  reserved 21; // admitted_findings — #516
+
+  // Set when this row came from `forge ledger import` rather than from a
+  // promote: the source it was read out of, e.g.
+  // "git:.forge/promotions/prod.jsonl@<blob sha>".
+  //
+  // It is both the idempotency key for the import and the label that keeps
+  // imported history honest. An imported row's `promoted_by_actor` is a
+  // string copied out of a file, not an identity this system ever
+  // authenticated, and a reader needs to be able to tell the difference.
+  string imported_from = 22;
+
+  // The deploy plan the approver approved, as a digest.
+  //
+  // The plan itself is not stored. It is derivable from the bundle and the
+  // Live state at that instant, both already recorded, and a stored second
+  // copy would be exactly the "derived timeline stored twice" mistake the
+  // converger design rejects. The digest is enough to prove WHICH plan was
+  // approved, which is the only thing the row needs to carry.
+  //
+  // REQUIRED on environments whose promotions the converger applies, because
+  // for those the promotion row IS the deploy — there is no later apply at
+  // which a plan could be checked. Optional elsewhere, and recorded when
+  // present.
+  string plan_digest = 23;
+
+  // Who approved that plan, set by the SERVER from the caller's credential.
+  // Never a name the client supplied: an approval attributed to a
+  // client-chosen string is an audit trail that proves nothing.
+  string approved_by = 24;
+
+  // The stop-class finding codes the approver named explicitly, e.g.
+  // "stateful_deletion". Recorded because an acknowledged destruction that
+  // leaves no trace is indistinguishable afterwards from one nobody was ever
+  // warned about.
+  repeated string acknowledged_findings = 25;
 }
+
+// === Source of truth: provenance, bundles, applies, plans ===
+//
+// These messages exist so the control plane can answer "what is running, from
+// what code, applied by whom" for an environment it does not place. For a
+// hosted environment the platform is the observer and the answer is derived
+// from what it sees; for a self-managed or local one there is no server-side
+// observer at all, so the record has to be written at the moments that matter:
+// the declaration, the bundle, the apply, and the apply's outcome.
+//
+// The protection half of the design (DeployEnvironmentProtection,
+// DeploySourceStatus, DeployPolicyFinding and the fields carrying them) is
+// deferred to #516. Their tags are reserved throughout this file so the
+// numbering here is already final.
+
+// DeploySourceProvenance is where a thing came from, in enough detail to find
+// it again. It mirrors forge's release.Provenance field for field, because the
+// CLI and the server must agree on the record's shape to agree on its digest.
+message DeploySourceProvenance {
+  // The repository, as forge resolved it from the remote.
+  string repo = 1;
+  string commit = 2;
+  string branch = 3;
+  string tag = 4;
+
+  // The working tree had uncommitted changes. Reported, never refused: a
+  // dirty build is a fact to record, and #516 is what gives it consequences.
+  bool dirty = 5;
+
+  // A content hash over the working tree — 40 or 64 hex, empty when the tree
+  // was not hashed.
+  //
+  // THIS IS WHAT GIVES A DIRTY BUILD AN IDENTITY. `commit` plus `dirty` says
+  // "something off main@abc", which is the same string for every dirty build
+  // anyone ever makes from that commit. The tree hash distinguishes them, so
+  // two developers debugging "the build that was running at 03:00" can tell
+  // whether they are looking at the same bytes.
+  string tree = 6;
+
+  // Which checkout on which machine, for a local or self-managed deploy.
+  DeployWorktree worktree = 7;
+
+  // The forge version that produced this. Load-bearing for a shape: two forge
+  // versions can render the same project into different objects, so a shape
+  // with no renderer version is not reproducible.
+  string forge_version = 8;
+
+  // A CI attestation, when the caller had one.
+  //
+  // THE SAME FIELD CARRIES DIFFERENT THINGS IN EACH DIRECTION. On a WRITE it
+  // holds the raw OIDC token, which is the only form the server can verify.
+  // On a READ it holds the claims that verification established, never the
+  // token — handing a token back out would make every reader of the ledger a
+  // holder of a credential.
+  DeploySourceAttestation attestation = 9;
+}
+
+// DeployWorktree identifies one checkout on one machine.
+//
+// A developer runs several worktrees of one project at once, and each may have
+// its own `forge env up`. So a local environment's presence is per WORKTREE,
+// not per user and not per machine: keyed on the user alone, two worktrees
+// would overwrite each other's session and Live would show one of them at
+// random.
+message DeployWorktree {
+  // Stable and opaque, chosen by forge. The upsert key for a local session.
+  string key = 1;
+  // What a human calls it — a branch name, a directory name. Display only.
+  string label = 2;
+  // The machine. Deliberately an id and not a hostname: a hostname is a
+  // person's laptop name, shown to everyone in the org.
+  string host_id = 3;
+}
+
+// DeploySourceAttestation is a CI system's claim about who built something.
+//
+// It is provenance, not authorization. Authorization is the caller's token,
+// as everywhere else on this service; this says "GitHub Actions asserts this
+// came from repo X, run Y", which is what makes a release traceable to a
+// pipeline rather than to a token someone pasted into a terminal.
+message DeploySourceAttestation {
+  // "github" | "gitlab".
+  string provider = 1;
+  // The OIDC subject: the workflow identity the provider vouched for.
+  string subject = 2;
+  string run_id = 3;
+  // WRITE-ONLY, and empty on every read. The raw OIDC JWT the server
+  // verifies; see DeploySourceProvenance.attestation.
+  string token = 4;
+}
+
+// DeployBundle is one rendered, content-addressed deploy artifact: the whole
+// of what an environment should contain, as an OCI artifact plus the document
+// describing it.
+//
+// WHY THIS EXISTS WHEN PROMOTIONS ALREADY DO. A promotion freezes IMAGES. It
+// says nothing about the rest of a render — the replica counts, the flags, the
+// objects a self-managed cluster applies that the platform never sees — so an
+// environment bound to a promotion is still only half described. A bundle is
+// the other half, which is what makes a deploy plan computable: without a
+// recorded "what is there now", a plan can only diff against whatever the
+// client claims Live is.
+//
+// Every field here is taken from the bundle's own VERIFIED bytes, never from
+// a description the client supplied alongside them. RecordBundle re-derives
+// the digest, checks the config blob against the manifest, and decodes the
+// document strictly, so a client cannot record a shape that disagrees with the
+// artifact it points at.
+message DeployBundle {
+  string id = 1;
+  string environment_id = 2;
+  // The release this render pinned its images from, by version label.
+  string release_version = 3;
+  // Canonical `sha256:<64 hex>` of the OCI manifest. THE IDENTITY: bundles
+  // are idempotent on (environment, digest).
+  string digest = 4;
+  // The canonical digest reference, `repository@digest`.
+  string reference = 5;
+  // The hash of the config half of the render, isolated from the images.
+  //
+  // It is the SHORT-CIRCUIT: two bundles with the same config digest differ
+  // only in which images they pin, so a deploy between them has no config to
+  // apply. A plan reports that as "nothing to apply" rather than walking a
+  // diff it already knows is empty.
+  string config_digest = 6;
+  // release.Shape, from the verified document (DeployEnvironment.declared_shape).
+  google.protobuf.Struct shape = 7;
+  DeploySourceProvenance provenance = 8;
+
+  // Tag 9 is `source_status` (DeploySourceStatus) — deferred to #516 with the
+  // verifier. See DeployRelease.reserved 11 for why an unchecked verdict is
+  // worse than no field.
+  reserved 9; // source_status — #516
+
+  DeployRun run = 10;
+  // Set by the SERVER from the caller's credential.
+  string created_by = 11;
+  google.protobuf.Timestamp created_at = 12;
+}
+
+// DeployConvergence is the control plane's own OBSERVATION that an environment
+// did, or did not, reach the bundle its intent names.
+//
+// IT REPLACES DeployApply AND DeployApplyOutcome, and the replacement is the
+// whole model change rather than a rename. Those messages described a CLIENT
+// claiming it was applying something and then reporting how it went, which is
+// why DeployApplyOutcome had to carry `reported_by` and be labelled "reported
+// by forge · alice" wherever it was shown. Under the spec-driven model forge
+// does not apply at all: a promotion declares intent, the reconciler converges
+// reality to it, and the control plane reads the reconciler's status itself. So
+// nothing here is a report, and nothing needs labelling as one.
+//
+// THESE ROWS ARE SECONDARY AND REBUILDABLE. The primary record is the
+// promotion. Every field below is derived from the reconciler's current status,
+// so the whole timeline can be dropped and re-observed; no correctness depends
+// on it. That is what makes it safe for this to be append-only and lossy at the
+// edges where an apply record could not be.
+//
+// ONE ROW PER TRANSITION, NOT PER POLL. The observer looks every couple of
+// minutes and appends only when the answer CHANGED, so a timeline is short and
+// every entry means something.
+message DeployConvergence {
+  string id = 1;
+  string environment_id = 2;
+  // The bundle the observed revision resolves to. EMPTY IS A REAL ANSWER: the
+  // observation is of a REVISION, and the reconciler can legitimately report
+  // one that maps to no recorded bundle.
+  string bundle_id = 3;
+  // The intent this reading was judged against — the environment's current
+  // promotion at the moment of the pass.
+  string promotion_id = 4;
+
+  // What the reconciler reported as APPLIED (a Kustomization's
+  // lastAppliedRevision), verbatim, so it is comparable byte-for-byte to what
+  // the reconciler says.
+  string revision = 5;
+
+  // converged | failed.
+  //
+  // ONLY THE TWO TERMINAL READINGS ARE RECORDED, and the two that are missing
+  // are the point. `progressing` is a moment in flight rather than an outcome,
+  // and is already derivable from (intent, newest record) with no history.
+  // `unknown` is an ABSENCE of information, and an absence is not an event —
+  // recording one would make "we could not look" indistinguishable from a
+  // reading. A reader sees that case as "the newest record predates the
+  // current promotion".
+  string state = 6;
+
+  // The reconciler's OWN reason and message, passed through untranslated (for
+  // Flux: ReconciliationSucceeded, ReconciliationFailed, HealthCheckFailed,
+  // ArtifactFailed). A human chasing a failure needs the reconciler's words,
+  // not a paraphrase. A failed record always carries a reason.
+  string reason = 7;
+  string message = 8;
+
+  // Which target cluster this reading is about. Convergence is per
+  // (environment, cluster) because one bundle is applied by one Kustomization
+  // PER target cluster — a single row could not describe an environment half
+  // of whose clusters failed.
+  string cluster = 9;
+
+  // When the OBSERVATION was made, which is not when the row was written: a
+  // pass reads several objects and then records what it found.
+  google.protobuf.Timestamp observed_at = 10;
+  google.protobuf.Timestamp created_at = 11;
+}
+
+// DeployLocalSession is one `forge env up` worktree, present in Live.
+//
+// WHY A LOCAL ENVIRONMENT APPEARS AT ALL. Its workloads run on a developer's
+// machine and the platform places nothing, but the environment is real, has
+// secrets in the platform's store, and is the one somebody is actually
+// debugging. Showing it as "no promotion, nothing deployed" is accurate and
+// useless; showing "alice's feature-x worktree, up since 09:14, on main@abc"
+// is what a team needs.
+//
+// PRESENCE, NOT CONTROL. The platform cannot start, stop or observe these; a
+// session is upserted by the client and goes stale on its own. Nothing about
+// it blocks `forge env up` — a developer whose network is down keeps working.
+message DeployLocalSession {
+  string id = 1;
+  string environment_id = 2;
+  // One session per worktree, never per user — see DeployWorktree.
+  DeployWorktree worktree = 3;
+  DeploySourceProvenance provenance = 4;
+  // The bundle the session is running, by digest rather than id: a local
+  // render is never recorded as a bundle row, so there is no id to name.
+  string bundle_digest = 5;
+  google.protobuf.Timestamp started_at = 6;
+  // The staleness clock. A session whose last_seen_at is hours old is shown
+  // as stale rather than running — the client stopped reporting, which is not
+  // the same as having stopped.
+  google.protobuf.Timestamp last_seen_at = 7;
+  // Set when the client reported `state = stopped`. A clean exit, as distinct
+  // from a session that simply went quiet.
+  google.protobuf.Timestamp stopped_at = 8;
+}
+
+// DeployPlan is what a deploy WOULD do, computed before anyone approves it.
+//
+// It is computed by PlanDeploy as a pure read, and RECOMPUTED by Promote and
+// BeginApply under the environment's row lock. Recomputing rather than
+// trusting the plan the client submitted is what makes the digest a guarantee
+// instead of a claim — the server never has to believe a client's copy,
+// because it can derive the same answer from the bundle and Live.
+//
+// NEVER STORED AS A BLOB. The digest is recorded on the promotion and the
+// apply; the plan itself is derivable from the bundle and the Live state at
+// that instant, both of which are already recorded.
+message DeployPlan {
+  // `sha256:<hex>` over this message's canonical JSON with `digest` AND
+  // `computed_at` cleared, and findings sorted.
+  //
+  // BOTH EXCLUSIONS ARE NECESSARY. Excluding `digest` is the ordinary
+  // self-reference problem. Excluding `computed_at` is what makes the digest
+  // comparable at all: the server recomputes the plan at approval time, so a
+  // digest covering its own timestamp could never match the one the client
+  // computed a minute earlier, and the check would refuse every promote.
+  //
+  // What the digest DOES cover is the bundle, the Live state it was computed
+  // against (live_basis) and every finding — so it changes exactly when the
+  // approval stops describing reality.
+  string digest = 1;
+
+  string environment_id = 2;
+  string bundle_id = 3;
+  string release_version = 4;
+
+  // What the plan was computed AGAINST. A change here invalidates the digest,
+  // which is the whole mechanism: this is the CAS extended from the promotion
+  // pointer to cover the state the plan was reasoned over.
+  DeployPlanBasis live_basis = 5;
+
+  repeated DeployPlanFinding findings = 6;
+
+  // The config_digest short-circuit fired: this bundle's config is identical
+  // to what is applied, so there is nothing to apply. Reported as a field
+  // rather than as an empty findings list, because "no differences" and "not
+  // computed" must not look the same.
+  bool config_identical = 7;
+
+  // Excluded from the digest — see `digest`.
+  google.protobuf.Timestamp computed_at = 8;
+}
+
+// DeployPlanBasis is the Live state a plan was computed against.
+message DeployPlanBasis {
+  string current_promotion_id = 1;
+  string applied_bundle_id = 2;
+  string applied_config_digest = 3;
+  // Live objects diverge from the applied bundle. Part of the basis because a
+  // plan computed over a clean environment is wrong once someone has changed
+  // an object by hand: the deploy will silently revert their change, and the
+  // plan has to be able to say so.
+  bool drift_observed = 4;
+}
+
+// DeployPlanFinding is one thing the deploy would do, with a severity.
+message DeployPlanFinding {
+  // object_added | object_changed | object_removed | image_changed |
+  // config_changed | secret_needed | stateful_deletion | lb_identity_change |
+  // drift.
+  string code = 1;
+
+  // info | warn | stop.
+  //
+  // `stop` is the class that cannot be approved in bulk: it must appear in
+  // the request's acknowledged_findings BY CODE, and a blanket `--yes` does
+  // not satisfy it. The two stop-class cases are a stateful deletion and a
+  // load-balancer identity change, both of which destroy something that
+  // cannot be recreated by re-running the deploy.
+  string class = 2;
+
+  // Which section of the rendered plan this belongs under.
+  string section = 3;
+  // "<cluster>/<kind>/<ns>/<name>", or a workload or secret name.
+  string subject = 4;
+  // Human-readable. NEVER a secret value — a plan is printed in CI logs.
+  string detail = 5;
+}
+
+// DeployLiveEnvironment is one environment's whole Live answer, folded into
+// one message.
+//
+// ONE ROUND TRIP, for GetTenant's reason. Live renders an environment from its
+// declaration, its current promotion, the release behind it, the bundle its
+// config came from, the latest apply and any local sessions. Fetching those
+// separately is six calls per environment and a page that renders in stages,
+// each stage from a slightly different instant.
+message DeployLiveEnvironment {
+  DeployEnvironment environment = 1;
+  // Where the IMAGES come from.
+  DeployPromotion current_promotion = 2;
+  DeployRelease current_release = 3;
+  // Where the CONFIG comes from: the newest bundle with a succeeded apply, or
+  // on a hosted environment the row's applied_bundle_id. See
+  // Deployment.applied_bundle_id for why these are two pointers.
+  DeployBundle current_bundle = 4;
+  // Tag 5 was `latest_apply` (DeployApply): the newest attempt a CLIENT
+  // reported it was making. Nothing applies any more, so there is no such
+  // attempt to show — the reconciler converges the intent above and the
+  // control plane observes the result. `drift` below carries that
+  // observation, and the timeline is ListConvergences.
+  //
+  // RESERVED rather than removed outright, because this message SURVIVES: a
+  // deployed client that still sends or reads tag 5 as a DeployApply must
+  // never find a different type there. The messages that were deleted whole
+  // need no tombstone; a tag inside a living message does.
+  reserved 5; // latest_apply — deleted with the imperative apply model
+
+  DeployRolloutPhase phase = 6;
+  repeated DeployLocalSession sessions = 7;
+
+  // Tag 8 is `findings` (repeated DeployPolicyFinding), the per-environment
+  // policy state. Deferred to #516.
+  reserved 8; // findings — #516
+
+  DeployDrift drift = 9;
+}
+
+// DeployDrift is whether what is RUNNING still matches what was applied.
+//
+// Distinct from DeployVerdict, which compares a deployment's observed image
+// against its own declared one. This compares the environment's live objects
+// against the bundle that was applied to it, so it catches the thing a digest
+// comparison cannot: an object someone edited by hand. That matters before a
+// deploy, not after — the next apply reverts the edit silently, and the plan
+// is where it has to be named.
+message DeployDrift {
+  // in_sync | drifted | unknown.
+  //
+  // UNKNOWN IS NOT in_sync, and keeping them apart is the point. An
+  // environment nobody has observed yet, one whose observations have gone
+  // stale, and one promoted seconds ago all answer "we cannot say yet" — and
+  // reporting any of them as agreement is the confidently-wrong badge people
+  // stop reading.
+  string state = 1;
+  // The bundle the comparison was made against: the one this environment's
+  // current promotion names.
+  string bundle_id = 2;
+
+  // Tag 3 was `apply_id`. There are no applies to compare against any more —
+  // the comparison is intent (the promoted bundle above) versus the
+  // reconciler's observed revision. Reserved because this message survives.
+  reserved 3; // apply_id — deleted with the imperative apply model
+
+  google.protobuf.Timestamp observed_at = 4;
+
+  // Per-object drift is NOT COMPUTED in this cut (owner ruling D3), so this
+  // list is always empty — which the proto's own rule reads as "not
+  // recorded", never as "we looked and every object matches".
+  //
+  // The reason is that the baseline disappeared with the apply model. Drift
+  // per object was measured against the hash of every object AS IT LANDED,
+  // which only the applying client could report. Measuring against the
+  // bundle's own hashes instead would flag every object an admission webhook
+  // or a defaulting controller touched as drifted from the first second,
+  // which is a badge that is wrong on day one.
+  repeated DeployDriftObject objects = 5;
+  // One human line.
+  string detail = 6;
+}
+
+// DeployDriftObject is one object's drift state.
+//
+// UNPOPULATED IN THIS CUT — see DeployDrift.objects. Kept because the shape is
+// right for when a reconciler-side baseline exists.
+message DeployDriftObject {
+  string cluster = 1;
+  string kind = 2;
+  string namespace = 3;
+  string name = 4;
+  // From the applied bundle's shape.
+  string expected_hash = 5;
+  // From the live object, empty when it could not be read.
+  string observed_hash = 6;
+  // in_sync | drifted | missing | unobservable.
+  //
+  // `missing` and `unobservable` are separate for DeployDrift.state's reason:
+  // an object that is gone is a finding, and an object nobody could look at
+  // is an absence of information.
+  string state = 7;
+}
+
+// DeployObjectHash is DELETED.
+//
+// It was the baseline per-object drift was measured from: the hash of every
+// object AS IT LANDED, which only the client performing the apply could report
+// (FinishDeployApplyRequest.observed_objects). forge does not apply, so there
+// is no sender, and a message no one can populate is worse than none — it
+// reads as a capability the system has.
+//
+// What would replace it is a reconciler-side baseline, which Flux's
+// Kustomization inventory could supply. That is not this cut (owner ruling
+// D3), and DeployDrift.objects stays empty until it is.
 
 // DeployUsageRow is one metered quantity for one resource over one window —
 // the shape the usage table and any per-dimension chart read.
@@ -1161,9 +1840,8 @@ message DeployPromotion {
 // applied appears in no candidate set and therefore in no row here.
 message DeployUsageRow {
   DeployResourceKind resource_kind = 1;
-  // Attribution dimensions. Any may be empty: a vcluster-floor row names no
-  // deployment, and a row whose deployment has since been purged still
-  // records what it cost.
+  // Attribution dimensions. Any may be empty: a row whose deployment has
+  // since been purged still records what it cost.
   string environment_id = 2;
   string deployment_id = 3;
   string tenant_cluster_id = 4;
@@ -1204,20 +1882,11 @@ message DeployLogLine {
 // The same split public Daemon / DaemonInternal already makes. Reachable only
 // through DeployAdminService.
 
-// DeployTenantClusterInternal carries the fleet PLACEMENT of a vCluster —
-// which host cluster runs its control plane, and in which namespace.
-// Deliberately excluded from the public DeployTenantCluster: host_cluster_id
-// is a CLUSTER_CONFIGS key, and publishing one hands a tenant a map of our
-// infrastructure they have no use for.
-message DeployTenantClusterInternal {
-  string tenant_cluster_id = 1;
-  // Matches a CLUSTER_CONFIGS key, so the placement recorded here is the same
-  // string the reconciler resolves a client from.
-  string host_cluster_id = 2;
-  // The namespace ON THE HOST cluster holding this vCluster's control plane.
-  // Distinct from the tenant-facing workload namespaces.
-  string host_namespace = 3;
-}
+// DeployTenantClusterInternal carried a vCluster's fleet PLACEMENT — which of
+// our host clusters ran its control plane, and in which namespace. Deleted
+// with the vCluster model: a connected cluster runs on nothing of ours, so
+// there is no placement to report (the backing columns are NULL for it by
+// CHECK).
 
 // DeployEnvironmentInternal carries an environment's fleet placement.
 message DeployEnvironmentInternal {

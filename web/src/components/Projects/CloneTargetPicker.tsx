@@ -1,6 +1,6 @@
 import { Check, Server } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { Daemon as CloudDaemon } from "@/services/controlPlane/daemon";
+import type { DaemonInfo as CloudDaemon } from "@/gen/reliant/v1/daemon_registry_pb";
 import { cloneTargetOptions } from "./cloneTargets";
 
 /**
@@ -38,16 +38,16 @@ export function CloneTargetPicker({
       <legend className="mb-2 text-sm font-medium text-foreground">Clone onto</legend>
       <div className="space-y-1.5">
         {options.map(({ daemon, immediate }) => {
-          const isSelected = daemon.id === selectedDaemonId;
-          const label = daemon.name || daemon.hostname || `machine ${daemon.id.slice(0, 8)}`;
+          const isSelected = daemon.daemonId === selectedDaemonId;
+          const label = daemon.hostname || `machine ${daemon.daemonId.slice(0, 8)}`;
           return (
             <button
-              key={daemon.id}
+              key={daemon.daemonId}
               type="button"
               role="radio"
               aria-checked={isSelected}
-              onClick={() => onSelect(daemon.id)}
-              data-testid={`clone-target-${daemon.id}`}
+              onClick={() => onSelect(daemon.daemonId)}
+              data-testid={`clone-target-${daemon.daemonId}`}
               className={cn(
                 "flex w-full items-center gap-3 rounded-lg border px-3 py-2.5 text-left transition-colors",
                 isSelected

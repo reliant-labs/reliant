@@ -361,8 +361,7 @@ function AuditNotice({
         false,
         <>
           {projectName ? <span className="font-mono">{projectName}</span> : "This project"} has no{" "}
-          <span className="font-mono">forge.yaml</span>, so there is no audit to show. This is
-          expected — most projects are not forge projects.
+          <span className="font-mono">forge.yaml</span>, so there is no audit to show.
         </>
       );
     case "unsupported":

@@ -38,10 +38,21 @@ type fakeRepo struct {
 	reapCalls   int
 	lastReapTTL time.Duration
 	reapErr     error
+
+	// daemons are the identity rows lifecycle events land on. Separate from
+	// rows above because they are separate tables with separate owners:
+	// attachment is this service's lease, the daemons row carries mirrored
+	// control-plane lifecycle.
+	daemons        map[string]*db.Daemon
+	lifecycleCalls int
+	lifecycleErr   error
 }
 
 func newFakeRepo() *fakeRepo {
-	return &fakeRepo{rows: map[string]*db.DaemonAttachment{}}
+	return &fakeRepo{
+		rows:    map[string]*db.DaemonAttachment{},
+		daemons: map[string]*db.Daemon{},
+	}
 }
 
 func (f *fakeRepo) UpsertDaemonAttachment(_ context.Context, att *db.DaemonAttachment) error {
@@ -95,6 +106,67 @@ func (f *fakeRepo) DeleteStaleDaemonAttachments(_ context.Context, olderThan tim
 		}
 	}
 	return n, nil
+}
+
+// ApplyDaemonLifecycle mirrors the SQL's two conditions — the row must exist,
+// and the event must be strictly newer than the stored change — so these tests
+// fail for a missing guard in EITHER the consumer or the repository, the same
+// way the attachment fakes above do.
+func (f *fakeRepo) ApplyDaemonLifecycle(_ context.Context, lc db.DaemonLifecycleUpdate) (bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.lifecycleCalls++
+	if f.lifecycleErr != nil {
+		return false, f.lifecycleErr
+	}
+	row, ok := f.daemons[lc.DaemonID]
+	if !ok {
+		return false, nil // matches SQL: no row, nothing updated
+	}
+	if row.LastStatusChangedAt != nil && !lc.ChangedAt.After(*row.LastStatusChangedAt) {
+		return false, nil // mirrors WHERE last_status_changed_at < new
+	}
+	phase := lc.Phase
+	row.LifecyclePhase = &phase
+	row.LastStatusMessage = lc.StatusMessage
+	changed := lc.ChangedAt
+	row.LastStatusChangedAt = &changed
+	if lc.Size != "" { // COALESCE(NULLIF(?,''), size)
+		size := lc.Size
+		row.Size = &size
+	}
+	if lc.LastOOMKilledAt != nil {
+		row.LastOOMKilledAt = lc.LastOOMKilledAt
+	}
+	if lc.OOMKillCount > row.OOMKillCount { // GREATEST
+		row.OOMKillCount = lc.OOMKillCount
+	}
+	return true, nil
+}
+
+// seedDaemon registers an identity row so lifecycle events have something to
+// attach to, which is what the real ApplyDaemonLifecycle requires.
+func (f *fakeRepo) seedDaemon(d *db.Daemon) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.daemons[d.ID] = d
+}
+
+func (f *fakeRepo) daemonSnapshot(daemonID string) (*db.Daemon, bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	row, ok := f.daemons[daemonID]
+	if !ok {
+		return nil, false
+	}
+	cp := *row
+	return &cp, true
+}
+
+func (f *fakeRepo) lifecycleCallCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.lifecycleCalls
 }
 
 func (f *fakeRepo) reapStats() (calls int, ttl time.Duration) {

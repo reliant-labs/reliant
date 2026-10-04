@@ -251,10 +251,6 @@ export interface ForgePromotePlan {
   commits?: ForgePromoteCommitRange;
   /** False only when this promote would alter nothing at all. */
   changed?: boolean;
-  /** Always true. Promote moves a pointer; nothing reaches a cluster. */
-  ships_nothing?: boolean;
-  /** The command that actually ships these digests. */
-  next_step?: string;
   note?: string;
   ok?: boolean;
 }

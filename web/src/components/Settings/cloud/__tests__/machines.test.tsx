@@ -103,7 +103,19 @@ vi.mock('@/services/controlPlane/environments', () => ({
   revokeDaemonToken: vi.fn(),
 }))
 
+// The machine LIST comes from reliant's daemon registry
+// (docs/design/one-daemon-list.md). It is fed from the same mocks.listDaemons
+// the tests already drive, so their setup calls keep working unchanged.
+vi.mock('@/api/grpc-client', () => ({
+  grpcClient: {
+    daemonRegistry: () => ({
+      listDaemons: async () => mocks.listDaemons(),
+    }),
+  },
+}))
+
 import { MachinesSection, daemonDisplayName } from '@/components/Settings/cloud/machines'
+import { DaemonStatus } from '@/gen/reliant/v1/daemon_registry_pb'
 
 function renderSection() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
@@ -185,29 +197,29 @@ describe('MachinesSection', () => {
   })
 
   describe('managed vs self-hosted grouping', () => {
+    // Registry rows: daemon_type is the string the daemon registered with, and
+    // size is the lifecycle mirror's tier name. The table's spec column is
+    // derived from size (the per-machine resource requests are control-plane
+    // spec and are not on the one list).
     const managedDaemon = {
-      id: 'dd67e516-d02c-49d0-8210-8749022aba61',
-      name: 'onboarding-daemon',
-      daemonType: 1, // MANAGED
-      status: 2, // ACTIVE
-      resources: { cpuRequest: '2', cpuLimit: '2', memoryRequest: '4Gi', memoryLimit: '4Gi' },
-      storageSize: '20Gi',
-      hostname: '',
+      daemonId: 'dd67e516-d02c-49d0-8210-8749022aba61',
+      hostname: 'onboarding-daemon',
+      daemonType: 'managed',
+      status: DaemonStatus.ACTIVE,
       platform: '',
-      size: 2,
-      idleTimeout: '30m',
+      size: 'medium',
     }
     const externalDaemon = {
-      id: '2a76a273-f04d-4a8a-8391-864ad4e018f1',
-      name: '2a76a273-f04d-4a8a-8391-864ad4e018f1', // UUID fallback name, as seen in prod
-      daemonType: 2, // EXTERNAL
-      status: 2, // ACTIVE
-      resources: undefined,
-      storageSize: '',
-      hostname: '',
+      daemonId: '2a76a273-f04d-4a8a-8391-864ad4e018f1',
+      // UUID fallback name, as seen in prod.
+      hostname: '2a76a273-f04d-4a8a-8391-864ad4e018f1',
+      daemonType: 'self_hosted',
+      status: DaemonStatus.ACTIVE,
       platform: 'darwin',
-      size: 2, // invented by the backend fallback; must not be shown
-      idleTimeout: '',
+      // A self-hosted machine genuinely has no size. control-plane's row
+      // carried an invented 'medium' placeholder to satisfy a NOT NULL column;
+      // the registry reports the truth, and nothing renders.
+      size: '',
     }
 
     it('renders managed and self-hosted machines in separate groups', async () => {
@@ -254,41 +266,42 @@ describe('MachinesSection', () => {
     })
   })
 
+  // The registry row has ONE name field — hostname — where control-plane's had
+  // a separate display `name` that fell back to it. So these cases collapse:
+  // there is no "name is a bare UUID, fall back to hostname" anymore, because
+  // the UUID and the hostname were never two different fields here. What still
+  // matters is that a UUID-shaped or absent name never reaches the user as-is.
   describe('daemonDisplayName', () => {
     it('keeps a real, human-chosen name as-is', () => {
       expect(
-        daemonDisplayName({ id: 'dd67e516-d02c-49d0-8210-8749022aba61', name: 'onboarding-daemon', hostname: '' }),
+        daemonDisplayName({
+          daemonId: 'dd67e516-d02c-49d0-8210-8749022aba61',
+          hostname: 'onboarding-daemon',
+        }),
       ).toBe('onboarding-daemon')
     })
 
-    it('falls back to the hostname when the name is a bare UUID', () => {
+    it('falls back to a short id label when the name is a bare UUID', () => {
+      // control-plane's daemon_event_consumer writes the UUID as the name when
+      // a self-hosted daemon registers without one.
       expect(
         daemonDisplayName({
-          id: '2a76a273-f04d-4a8a-8391-864ad4e018f1',
-          name: '2a76a273-f04d-4a8a-8391-864ad4e018f1',
-          hostname: "seans-macbook",
-        }),
-      ).toBe('seans-macbook')
-    })
-
-    it('falls back to a short id label when name and hostname are both unusable', () => {
-      expect(
-        daemonDisplayName({
-          id: '2a76a273-f04d-4a8a-8391-864ad4e018f1',
-          name: '2a76a273-f04d-4a8a-8391-864ad4e018f1',
-          hostname: '',
+          daemonId: '2a76a273-f04d-4a8a-8391-864ad4e018f1',
+          hostname: '2a76a273-f04d-4a8a-8391-864ad4e018f1',
         }),
       ).toBe('Self-hosted machine (2a76a273)')
     })
 
-    it('falls back when name equals id but is not UUID-shaped', () => {
-      expect(daemonDisplayName({ id: 'abc123', name: 'abc123', hostname: '' })).toBe(
+    it('falls back when the name equals the id but is not UUID-shaped', () => {
+      expect(daemonDisplayName({ daemonId: 'abc123', hostname: 'abc123' })).toBe(
         'Self-hosted machine (abc123)',
       )
     })
 
     it('falls back when the name is empty', () => {
-      expect(daemonDisplayName({ id: 'abc123', name: '', hostname: 'my-laptop' })).toBe('my-laptop')
+      expect(daemonDisplayName({ daemonId: 'abc123', hostname: '' })).toBe(
+        'Self-hosted machine (abc123)',
+      )
     })
   })
 })

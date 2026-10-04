@@ -202,6 +202,33 @@ export interface RefusalCopy {
  * apply races the first one's rollout and leaves the cluster converging toward
  * two manifest streams, so the offer is to WATCH the deploy that exists.
  */
+/**
+ * The hosted overrides, for the two reasons whose cluster-shaped copy is wrong
+ * on a hosted env.
+ *
+ * Only a subset: "the bound release moved" and "a deploy is already in flight"
+ * are true in the same words on both destinations, so they are not repeated
+ * here — a second copy of identical text is a second thing to keep in sync.
+ * What IS overridden is every sentence naming a cluster, a kubeconfig or a
+ * declared context, because on a hosted env the thing that moved is ours and
+ * the customer can neither see nor fix it. The honest message is that the
+ * environment changed and the plan is stale, with the same action.
+ */
+export const HOSTED_REFUSAL_COPY: Partial<Record<DeployRefusalReason, RefusalCopy>> = {
+  "stale-declared-context": {
+    heading: "Refused — this environment changed while you were reviewing",
+    explanation:
+      "Nothing was deployed. This environment is not set up the way it was when the plan was made, so continuing would have deployed somewhere you never reviewed. Plan it again to see what would happen now.",
+    action: "Show me the current plan",
+  },
+  "guard-refused": {
+    heading: "Refused — this environment can't be deployed right now",
+    explanation:
+      "Nothing was deployed. This environment is not in a state that can accept a deploy. Planning again will not change that until the environment does.",
+    action: "Re-check",
+  },
+};
+
 export const REFUSAL_COPY: Record<DeployRefusalReason, RefusalCopy> = {
   "stale-declared-context": {
     heading: "Refused — this environment now declares a DIFFERENT cluster",

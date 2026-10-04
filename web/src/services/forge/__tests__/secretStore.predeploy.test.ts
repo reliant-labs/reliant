@@ -1,23 +1,35 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * Setting a secret BEFORE the environment's first deploy.
+ * SETTING A SECRET BEFORE THE ENVIRONMENT'S FIRST BUILD — and the ONE path
+ * that creates the environment's row (#353, design §10).
  *
- * The managed store is keyed by a control-plane `deploy_environments` row id,
- * and that row — not anything in OpenBao — is the only prerequisite for a
- * write. control-plane pins the backend half of this claim in
- * internal/isolation/predeploy_secret_integration_test.go: with the row
- * present and NOTHING deployed, set/list/delete all work, because KV-v2
- * creates its path on first write.
+ * ── WHAT THIS FILE USED TO PIN, AND WHY IT CHANGED ──────────────────────────
  *
- * So the chicken-and-egg the user hit was never a storage problem. forge's CLI
- * already resolves it — every mutating hosted command ensures the environment
- * first (forge/internal/cli/hosted_env_resolver.go) — and the browser was the
- * one caller that did not, leaving "Set value" hidden behind CLI instructions
- * for a user whose whole reason for being on the page is that they have not
- * deployed yet.
+ * It used to pin a SECOND EnsureEnvironment living in secretStore.ts
+ * (`ensureEnvironmentForSecrets` / `setSecretEnsuringEnvironment`), reachable
+ * from the set-secret form, which accepted `controlPlaneKind: ""` and expected
+ * a caller to have filled it in — from a radio group the form showed the user.
  *
- * These tests pin the browser doing what the CLI does: ensure, then write.
+ * An environment's kind is IMMUTABLE once its row exists. So that design had a
+ * human answering, under a secret form, a question whose wrong answer produces
+ * an environment that can only be abandoned — and the control plane then had
+ * to catch it server-side with a FailedPrecondition. #353 deletes the
+ * question, and R4 deletes the ensure that existed to consume its answer.
+ *
+ * ── THE CONTRACT NOW ────────────────────────────────────────────────────────
+ *
+ * There is exactly ONE writer of that immutable field in the browser:
+ * Preview's Register (services/forge/register.ts), which reads forge's own
+ * render and sends the kind AND shape from it. So "an empty kind can never be
+ * sent" is not enforced by a validation branch that a caller might skip — it
+ * holds because no other path to EnsureEnvironment exists, and because the one
+ * path takes a candidate that `registerCandidate` refuses to produce without a
+ * kind forge stated.
+ *
+ * That is a stronger property than the guard it replaces, and these tests pin
+ * both halves: the absence of a second ensure, and the refusal of the one that
+ * remains.
  */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -27,8 +39,8 @@ const setSecretRpc = vi.fn();
 
 // One fake transport for both services. `getControlPlaneClient` is called with
 // the service descriptor, so returning a single object with every method on it
-// is enough and keeps the call ORDER observable across the two services —
-// which is the property under test.
+// is enough — and it means an ensure fired by ANY module under test is
+// observable here, which is what the "no second ensure" assertions rest on.
 vi.mock("@/services/controlPlane/client", () => ({
   getControlPlaneClient: () => ({
     ensureEnvironment: ensureEnvironmentRpc,
@@ -40,13 +52,9 @@ vi.mock("@/services/controlPlane/config", () => ({
   CONTROL_PLANE_API_URL: "http://localhost:8090",
 }));
 
-import {
-  ensureEnvironmentForSecrets,
-  managedStoreTarget,
-  availabilityExplanation,
-  availabilitySupportsWrite,
-  setSecretEnsuringEnvironment,
-} from "../secretStore";
+import * as secretStore from "../secretStore";
+import { availabilityExplanation, managedStoreTarget, setSecret } from "../secretStore";
+import { registerCandidate, registerEnvironment } from "../register";
 
 beforeEach(() => {
   ensureEnvironmentRpc.mockReset().mockResolvedValue({
@@ -56,142 +64,137 @@ beforeEach(() => {
   setSecretRpc.mockReset().mockResolvedValue({ version: 1 });
 });
 
-describe("a hosted env that was never ensured is still writable", () => {
-  it("treats not-ensured as a state that can be written to", () => {
-    // The distinction that matters: not-ensured is a row we can CREATE, so it
-    // must not be lumped in with the states where no write is possible.
-    expect(availabilitySupportsWrite("not-ensured")).toBe(true);
+describe("the secret store has no ensure path of its own", () => {
+  // Pinned as an ABSENCE, which is the only way to state it. A second ensure
+  // would not fail any other test in this file — it would simply give the
+  // immutable kind a second author, and whichever call landed first would win.
+  it.each([
+    "ensureEnvironmentForSecrets",
+    "setSecretEnsuringEnvironment",
+    // The predicate that advertised `not-ensured` / `provider-unknown` as
+    // writable, on the strength of the ensure above. A function promising a
+    // write nothing can perform is worse than no function.
+    "availabilitySupportsWrite",
+  ])("does not export %s", (name) => {
+    expect(name in secretStore).toBe(false);
   });
 
-  it.each(["not-hosted", "other-control-plane", "unreachable", "no-control-plane", "not-configured"] as const)(
-    "still refuses to write a %s env",
-    (availability) => {
-      expect(availabilitySupportsWrite(availability)).toBe(false);
-    }
-  );
+  it("writes only against an environment id the caller already has", async () => {
+    await setSecret({ environmentId: "denv_existing", name: "API_KEY", value: "v", cas: 0 });
 
-  it("no longer tells the user to go and run the CLI", () => {
-    const text = availabilityExplanation("not-ensured") ?? "";
-    expect(text).not.toContain("forge secret set");
-    // And it should say the useful thing instead: the value is kept and used
-    // by the first deploy.
-    expect(text.toLowerCase()).toContain("first deploy");
+    expect(setSecretRpc).toHaveBeenCalledTimes(1);
+    expect(setSecretRpc.mock.calls[0][0].environmentId).toBe("denv_existing");
+    // The write did not create anything on the way. §10 state 1 is a single
+    // round trip to a row that already exists.
+    expect(ensureEnvironmentRpc).not.toHaveBeenCalled();
   });
+});
 
-  it("still keeps the target a non-lookup — there is no id to read with yet", () => {
-    // Writability must not be confused with readability. Until the row
-    // exists there is genuinely nothing to LIST, and inventing an id is the
-    // thing this state exists to refuse.
+describe("a no-row environment is §10 state 3, not a writable one", () => {
+  it("still refuses to invent an id for a hosted env forge never ensured", () => {
+    // Unchanged, and still the point: there is genuinely nothing to LIST
+    // until the row exists, and a fabricated id is what this state refuses.
     expect(
       managedStoreTarget({ destination: "hosted", endpoint: "http://localhost:8090", environment_id: "" })
     ).toEqual({ kind: "none", availability: "not-ensured" });
   });
+
+  it.each(["not-ensured", "provider-unknown"] as const)(
+    "tells a %s env what to RUN rather than offering a write",
+    (availability) => {
+      const text = availabilityExplanation(availability) ?? "";
+
+      // The remedy, which is what makes the environment writable for good.
+      expect(text).toMatch(/forge env build/);
+      expect(text).toMatch(/Preview/);
+
+      // And NOT the retired promise. "Values you set here are kept and used
+      // by the first deploy" could only be honoured by guessing the
+      // environment's immutable kind.
+      expect(text.toLowerCase()).not.toContain("you can still set values");
+      expect(text.toLowerCase()).not.toContain("kept and used by the first deploy");
+    }
+  );
+
+  it("never tells a provider-unknown env that forge named a different provider", () => {
+    // Unchanged from before R4: "unknown" must not be reported as a positive
+    // claim about some other secret provider.
+    const text = (availabilityExplanation("provider-unknown") ?? "").toLowerCase();
+    expect(text).not.toContain("different");
+    expect(text).not.toContain("not hosted");
+  });
+
+  it("does not send users to the CLI to read a store, only to build an env", () => {
+    // The distinction the old copy got wrong: `forge secret set` is a WRITE
+    // instruction, and offering it here implied the value belongs somewhere
+    // this console cannot see. The honest instruction is to build.
+    for (const availability of ["not-ensured", "provider-unknown"] as const) {
+      expect(availabilityExplanation(availability) ?? "").not.toContain("forge secret set");
+    }
+  });
 });
 
-describe("ensureEnvironmentForSecrets", () => {
-  it("creates the row from the env's declared identity and returns its id", async () => {
-    const id = await ensureEnvironmentForSecrets({
-      project: "acme",
-      name: "staging",
-      controlPlaneKind: "persistent",
-    });
+describe("Register is the single writer of the environment's kind", () => {
+  const SHAPE = { kind: "persistent", workloads: [], secrets: [], domains: [], clusters: [] };
+
+  it("ensures the row with forge's own kind and the shape from the same render", async () => {
+    const candidate = registerCandidate(
+      { project: "acme", env: "staging", kind: "persistent", shape: SHAPE },
+      { project: "acme", env: "staging" }
+    );
+    expect(candidate.ok).toBe(true);
+    if (!candidate.ok) return;
+
+    const id = await registerEnvironment(candidate.candidate);
 
     expect(id).toBe("denv_created");
     expect(ensureEnvironmentRpc).toHaveBeenCalledTimes(1);
     const spec = ensureEnvironmentRpc.mock.calls[0][0].spec;
     expect(spec.project).toBe("acme");
     expect(spec.name).toBe("staging");
-    // PERSISTENT = 1. The kind is IMMUTABLE server-side, so sending the wrong
-    // one is not a cosmetic error — it is an environment that can never be
-    // corrected, only abandoned.
+    // PERSISTENT = 1, and it came from the render rather than from a form.
     expect(spec.kind).toBe(1);
+    expect(spec.shape).toEqual(SHAPE);
   });
 
-  it("sends LOCAL for an env whose control plane is only its secret store", async () => {
-    await ensureEnvironmentForSecrets({ project: "acme", name: "dev", controlPlaneKind: "local" });
-    expect(ensureEnvironmentRpc.mock.calls[0][0].spec.kind).toBe(3);
-  });
+  it("refuses to produce a candidate at all when forge stated no kind", () => {
+    // THE REPLACEMENT FOR "reject an empty kind". The old contract validated
+    // a string field at the call; this one makes the call unconstructable, so
+    // there is no code path on which an empty kind reaches the wire.
+    const candidate = registerCandidate(
+      { project: "acme", env: "staging", kind: "", shape: { ...SHAPE, kind: "" } },
+      { project: "acme", env: "staging" }
+    );
 
-  it("refuses to guess a kind forge did not report", async () => {
-    // UNSPECIFIED is refused by the server precisely so a caller cannot get a
-    // silently-persistent environment. Failing here names the real problem
-    // rather than sending a guess and reading the server's refusal.
-    await expect(
-      ensureEnvironmentForSecrets({ project: "acme", name: "staging", controlPlaneKind: "" })
-    ).rejects.toThrow();
+    expect(candidate.ok).toBe(false);
+    if (candidate.ok) return;
+    expect(candidate.reason).toMatch(/did not say how this environment runs/i);
     expect(ensureEnvironmentRpc).not.toHaveBeenCalled();
   });
 
-  it("refuses to ensure without a project, rather than creating it under the wrong key", async () => {
-    // (org, project, name) is the environment's identity. An empty project
-    // would create a DIFFERENT environment from the one on screen and then
-    // write the user's secret into it.
-    await expect(
-      ensureEnvironmentForSecrets({ project: "", name: "staging", controlPlaneKind: "persistent" })
-    ).rejects.toThrow();
+  it("refuses an unrecognised kind from a newer forge rather than coercing it", async () => {
+    const candidate = registerCandidate(
+      { project: "acme", env: "staging", kind: "something_new", shape: { ...SHAPE, kind: "something_new" } },
+      { project: "acme", env: "staging" }
+    );
+
+    // Not coerced to the nearest familiar kind, which would write a claim
+    // forge never made into a field nothing can change.
+    expect(candidate.ok).toBe(false);
     expect(ensureEnvironmentRpc).not.toHaveBeenCalled();
   });
-});
 
-describe("setSecretEnsuringEnvironment", () => {
-  it("ensures the environment, then writes the secret against the new id", async () => {
-    const result = await setSecretEnsuringEnvironment({
-      environmentId: "",
-      env: { project: "acme", name: "staging", controlPlaneKind: "persistent" },
-      name: "STRIPE_SECRET_KEY",
-      value: "sk-test-not-a-real-key",
-    });
+  it("refuses to ensure without a project, rather than filing the env under the wrong key", () => {
+    // (org, project, name) is the environment's identity. A blank project
+    // would create a DIFFERENT environment from the one on screen.
+    const candidate = registerCandidate(
+      { env: "staging", kind: "persistent", shape: SHAPE },
+      { project: null, env: "staging" }
+    );
 
-    expect(ensureEnvironmentRpc).toHaveBeenCalledTimes(1);
-    expect(setSecretRpc).toHaveBeenCalledTimes(1);
-    expect(setSecretRpc.mock.calls[0][0].environmentId).toBe("denv_created");
-    expect(setSecretRpc.mock.calls[0][0].secretValue).toBe("sk-test-not-a-real-key");
-    expect(result.version).toBe(1);
-    // The caller needs the id back so the surface can re-read with it instead
-    // of staying stuck in not-ensured until something else refreshes.
-    expect(result.environmentId).toBe("denv_created");
-  });
-
-  it("does not ensure when the environment already has an id", async () => {
-    await setSecretEnsuringEnvironment({
-      environmentId: "denv_existing",
-      env: { project: "acme", name: "staging", controlPlaneKind: "persistent" },
-      name: "STRIPE_SECRET_KEY",
-      value: "v",
-    });
-
+    expect(candidate.ok).toBe(false);
+    if (candidate.ok) return;
+    expect(candidate.reason).toMatch(/which forge project/i);
     expect(ensureEnvironmentRpc).not.toHaveBeenCalled();
-    expect(setSecretRpc.mock.calls[0][0].environmentId).toBe("denv_existing");
-  });
-
-  it("does not write the secret when the ensure fails", async () => {
-    ensureEnvironmentRpc.mockRejectedValue(new Error("forbidden"));
-
-    await expect(
-      setSecretEnsuringEnvironment({
-        environmentId: "",
-        env: { project: "acme", name: "staging", controlPlaneKind: "persistent" },
-        name: "STRIPE_SECRET_KEY",
-        value: "sk-test-not-a-real-key",
-      })
-    ).rejects.toThrow();
-
-    // The value must not be sent anywhere if we could not establish WHERE it
-    // belongs — a write keyed on a failed ensure could land in the wrong row.
-    expect(setSecretRpc).not.toHaveBeenCalled();
-  });
-
-  it("keeps the secret value out of the error when the ensure fails", async () => {
-    ensureEnvironmentRpc.mockRejectedValue(new Error("forbidden"));
-    const value = "sk-test-super-secret-value";
-
-    await expect(
-      setSecretEnsuringEnvironment({
-        environmentId: "",
-        env: { project: "acme", name: "staging", controlPlaneKind: "persistent" },
-        name: "STRIPE_SECRET_KEY",
-        value,
-      })
-    ).rejects.toSatisfy((err: unknown) => !JSON.stringify((err as Error).message).includes(value));
   });
 });

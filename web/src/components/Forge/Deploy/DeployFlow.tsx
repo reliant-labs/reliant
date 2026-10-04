@@ -29,13 +29,15 @@
  */
 
 import { Button } from "@/components/ui/Button";
-import type { StartDeployResult } from "@/api/forge-grpc";
+import type { DeployStatus, StartDeployResult } from "@/api/forge-grpc";
 import {
   deployBlockers,
   deployTokenFor,
+  isHostedPlan,
   type DeployBlocker,
   type ForgeDeployReport,
 } from "@/services/forge/deploy";
+import type { DeployPlanReport, PlanApproval } from "@/services/forge/deployPlan";
 import { classifyDeployAuthzError } from "@/services/forge/deployAuthz";
 import type { ForgeOutcome } from "@/services/forge/topology";
 
@@ -45,9 +47,11 @@ import {
   ForgeUnsupported,
   NotForgeProject,
 } from "../ForgeStates";
-import { DeployConfirmStep } from "./DeployConfirmStep";
+import { ApprovablePlanView } from "./ApprovablePlanView";
+import { DeployApproveStep } from "./DeployApproveStep";
 import { DeployPlanView } from "./DeployPlanView";
 import { DeployRefusalNotice } from "./DeployRefusalNotice";
+import { PlanStaleNotice } from "./PlanStaleNotice";
 
 export interface DeployFlowProps {
   /** The plan outcome. Confirm is reachable only from the `report` branch. */
@@ -60,8 +64,30 @@ export interface DeployFlowProps {
   /** A thrown failure from the start. Distinct from a refusal. */
   startError?: Error | null;
   isStarting: boolean;
-  onConfirm: (plan: ForgeDeployReport) => void;
   onReplan: () => void;
+
+  // ── The approvable half ───────────────────────────────────────────────────
+  //
+  // Stage one BUILDS: it pushes images and cuts a release, which is why it is
+  // a thing the operator asks for rather than something that happens on open.
+  // The instant preview above is what the dialog shows for free.
+  /** Start working out what this deploy would ship. */
+  onBuildAndPlan: () => void;
+  isBuildingPlan?: boolean;
+  /** The plan job's start result — a refusal lands here. */
+  planJobResult?: StartDeployResult | null;
+  planJobError?: Error | null;
+  /** The plan job's poll, while it is the job being followed. */
+  planJobStatus?: DeployStatus | null;
+  /** The plan to approve, once the job produced one. */
+  approvablePlan?: DeployPlanReport | null;
+  /** The irreversible changes accepted so far, by code. */
+  acknowledged: ReadonlySet<string>;
+  onAcknowledge: (code: string, accepted: boolean) => void;
+  /** Deploy the plan on screen, bound to its digest. */
+  onApprove: (approval: PlanApproval) => void;
+  /** Work the plan out again after it moved underneath an approval. */
+  onReplanAfterStale: () => void;
   /** Follow a deploy that was already in flight, from an already-running refusal. */
   onWatchRunning?: (handle: string) => void;
   onClose: () => void;
@@ -77,12 +103,21 @@ export function DeployFlow({
   startResult,
   startError,
   isStarting,
-  onConfirm,
   onReplan,
   onWatchRunning,
   onClose,
   projectName,
   jobPanel,
+  onBuildAndPlan,
+  isBuildingPlan,
+  planJobResult,
+  planJobError,
+  planJobStatus,
+  approvablePlan,
+  acknowledged,
+  onAcknowledge,
+  onApprove,
+  onReplanAfterStale,
 }: DeployFlowProps) {
   // A DEPLOY IS IN FLIGHT (or being watched). Terminal for this flow: the plan is
   // no longer the thing on screen, and there is no route back to a confirm.
@@ -147,6 +182,7 @@ export function DeployFlow({
         // rejected. No confirm until a fresh plan replaces it.
         <DeployRefusalNotice
           refusal={refused}
+          hosted={isHostedPlan(plan)}
           onReplan={onReplan}
           isReplanning={isPlanning}
           onWatchRunning={onWatchRunning}
@@ -192,9 +228,18 @@ export function DeployFlow({
           )}
 
           {confirmable ? (
-            <DeployConfirmStep
-              plan={plan}
-              onConfirm={() => onConfirm(plan)}
+            <ApprovalStage
+              env={plan.env}
+              onBuildAndPlan={onBuildAndPlan}
+              isBuildingPlan={isBuildingPlan}
+              planJobResult={planJobResult}
+              planJobError={planJobError}
+              planJobStatus={planJobStatus}
+              approvablePlan={approvablePlan}
+              acknowledged={acknowledged}
+              onAcknowledge={onAcknowledge}
+              onApprove={onApprove}
+              onReplanAfterStale={onReplanAfterStale}
               onCancel={onClose}
               isStarting={isStarting}
             />
@@ -206,6 +251,239 @@ export function DeployFlow({
         </>
       )}
     </div>
+  );
+}
+
+/**
+ * THE TWO STAGES, and naming them is half the design.
+ *
+ * The preview above this is instant and describes the environment as it is. It
+ * cannot say what a deploy would ship, because a deploy builds from this
+ * checkout and cuts a new release — so the only honest thing to put beside a
+ * deploy button is a plan computed by actually doing that work.
+ *
+ * Hence: "Work out what this would ship" is a thing the operator asks for and
+ * waits minutes on, and only once its plan is on screen does a deploy control
+ * exist at all. There is no path from the instant preview to a write.
+ */
+function ApprovalStage({
+  env,
+  onBuildAndPlan,
+  isBuildingPlan,
+  planJobResult,
+  planJobError,
+  planJobStatus,
+  approvablePlan,
+  acknowledged,
+  onAcknowledge,
+  onApprove,
+  onReplanAfterStale,
+  onCancel,
+  isStarting,
+}: {
+  env?: string;
+  onBuildAndPlan: () => void;
+  isBuildingPlan?: boolean;
+  planJobResult?: StartDeployResult | null;
+  planJobError?: Error | null;
+  planJobStatus?: DeployStatus | null;
+  approvablePlan?: DeployPlanReport | null;
+  acknowledged: ReadonlySet<string>;
+  onAcknowledge: (code: string, accepted: boolean) => void;
+  onApprove: (approval: PlanApproval) => void;
+  onReplanAfterStale: () => void;
+  onCancel: () => void;
+  isStarting?: boolean;
+}) {
+  // The plan job was REFUSED — in practice a deploy of this environment is
+  // already in flight. Nothing was built and nothing was deployed.
+  if (planJobResult?.kind === "refused") {
+    return (
+      <div
+        data-testid="deploy-plan-refused"
+        className="space-y-2 rounded-lg border border-warning/50 bg-warning/10 px-3 py-2 text-xs"
+      >
+        <p className="text-foreground">{planJobResult.refusal.detail}</p>
+        <p className="text-muted-foreground">
+          Nothing was built and nothing was deployed.
+        </p>
+      </div>
+    );
+  }
+
+  if (planJobError) {
+    return (
+      <div
+        data-testid="deploy-plan-job-error"
+        className="space-y-2 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive"
+      >
+        <p>The changes could not be worked out: {planJobError.message}</p>
+        <p className="text-muted-foreground">
+          Nothing was deployed. Your environment is unchanged.
+        </p>
+        <Button variant="secondary" size="xs" onClick={onBuildAndPlan}>
+          Try again
+        </Button>
+      </div>
+    );
+  }
+
+  // FORGE REFUSED THE WRITE after recomputing the plan. The stale case is the
+  // one that matters most: it re-renders the NEW plan and asks again, and it
+  // never offers to re-send what was refused.
+  const jobRefusal = planJobStatus?.refusal ?? null;
+  if (jobRefusal?.kind === "plan-stale") {
+    return (
+      <div className="space-y-3">
+        <PlanStaleNotice
+          approved={approvablePlan?.deploy_plan}
+          current={jobRefusal.currentPlan?.deploy_plan}
+        />
+        {jobRefusal.currentPlan && (
+          <>
+            <ApprovablePlanView
+              report={jobRefusal.currentPlan}
+              acknowledged={acknowledged}
+              onAcknowledge={onAcknowledge}
+            />
+            {/* Working it out again, NOT re-approving. The recomputed plan was
+                not built here, so its release may not exist to deploy — the
+                honest next step is a fresh plan. */}
+            <div className="flex items-center justify-end gap-2">
+              <Button variant="ghost" size="sm" onClick={onCancel}>
+                Cancel
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={onReplanAfterStale}
+                loading={isBuildingPlan}
+                disabled={isBuildingPlan}
+                data-testid="deploy-replan-after-stale"
+              >
+                {isBuildingPlan ? "Working it out…" : "Work out the changes again"}
+              </Button>
+            </div>
+          </>
+        )}
+      </div>
+    );
+  }
+
+  // An irreversible change was not accepted by name. Forge built and cut, and
+  // wrote no promotion.
+  if (jobRefusal?.kind === "plan-unacknowledged") {
+    return (
+      <div
+        data-testid="deploy-plan-unacknowledged"
+        className="space-y-2 rounded-lg border border-destructive/50 bg-destructive/10 px-3 py-2 text-xs"
+      >
+        <p className="text-foreground">
+          This was not deployed, because it destroys something that was not accepted.
+        </p>
+        <p className="text-muted-foreground">
+          Your environment is unchanged. Work the changes out again and accept each
+          irreversible one explicitly.
+        </p>
+        <Button variant="secondary" size="xs" onClick={onReplanAfterStale}>
+          Work out the changes again
+        </Button>
+      </div>
+    );
+  }
+
+  // Any other refusal from forge. Never collapsed into a success.
+  if (jobRefusal) {
+    return (
+      <div
+        data-testid="deploy-plan-other-refusal"
+        className="space-y-1 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs"
+      >
+        <p className="text-foreground">
+          {jobRefusal.detail || "forge declined to deploy this."}
+        </p>
+        <p className="text-muted-foreground">Nothing was deployed.</p>
+      </div>
+    );
+  }
+
+  // STAGE ONE IN FLIGHT. Minutes, and it says what it is doing — a bare
+  // spinner on a multi-minute build reads as a hang.
+  if (isBuildingPlan && !approvablePlan) {
+    return (
+      <p
+        data-testid="deploy-building-plan"
+        className="rounded-lg border border-dashed border-border px-6 py-10 text-center text-sm text-muted-foreground"
+      >
+        Working out what this would ship. It builds your code first, so this takes a few
+        minutes. Nothing is deployed yet.
+      </p>
+    );
+  }
+
+  // The plan job finished without producing a plan. Not a deploy, and not
+  // success: said plainly, with the environment's state stated.
+  if (planJobStatus && !approvablePlan && planJobStatus.jobStatus !== "running") {
+    return (
+      <div
+        data-testid="deploy-plan-job-failed"
+        className="space-y-2 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs"
+      >
+        <p className="text-foreground">
+          {planJobStatus.jobStatusDetail || "The changes could not be worked out."}
+        </p>
+        <Button variant="secondary" size="xs" onClick={onBuildAndPlan}>
+          Try again
+        </Button>
+      </div>
+    );
+  }
+
+  // THE PLAN IS IN. This is the only state with a deploy control.
+  if (approvablePlan) {
+    return (
+      <div className="space-y-3">
+        <ApprovablePlanView
+          report={approvablePlan}
+          acknowledged={acknowledged}
+          onAcknowledge={onAcknowledge}
+        />
+        <DeployApproveStep
+          report={approvablePlan}
+          acknowledged={acknowledged}
+          onApprove={onApprove}
+          onCancel={onCancel}
+          isDeploying={isStarting}
+          env={env}
+        />
+      </div>
+    );
+  }
+
+  // NOTHING HAS BEEN WORKED OUT YET, and there is deliberately no deploy
+  // control here. The preview above cannot authorise a deploy.
+  return (
+    <section className="space-y-2" data-testid="deploy-stage-one">
+      <p className="text-xs text-muted-foreground">
+        Nothing is deployed yet. Work out the changes first — that builds your code and
+        shows exactly what would ship.
+      </p>
+      <div className="flex items-center justify-end gap-2">
+        <Button variant="ghost" size="sm" onClick={onCancel}>
+          Cancel
+        </Button>
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={onBuildAndPlan}
+          loading={isBuildingPlan}
+          disabled={isBuildingPlan}
+          data-testid="deploy-build-and-plan"
+        >
+          {isBuildingPlan ? "Working it out…" : "Work out what this would ship"}
+        </Button>
+      </div>
+    </section>
   );
 }
 
@@ -358,7 +636,10 @@ function describeBlocker(blocker: DeployBlocker): string {
     case "no-declared-cluster":
       return "This environment declares no cluster, so there is no target to authorise a deploy against.";
     case "no-declared-endpoint":
-      return "This hosted environment's plan names no control-plane endpoint, so there is no target to authorise a deploy against.";
+      // The hosted twin of no-declared-cluster, and the one blocker whose cause
+      // is entirely on our side of the line — so it says what is true without
+      // naming the endpoint the customer never configured.
+      return "This environment isn't set up to be deployed to yet, so there is nothing to deploy against.";
     case "not-a-preview":
       return `This document is not a read-only preview (mode: ${blocker.mode}), so it cannot authorise a deploy.`;
   }

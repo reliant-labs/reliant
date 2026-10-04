@@ -529,9 +529,16 @@ func TestForgeService_PromoteResponsesDoNotImplyADeploy(t *testing.T) {
 // token. A method named "Deploy" or "ApplyDeploy" would be exactly that.
 func TestNoUnguardedDeployRPCExists(t *testing.T) {
 	allowed := map[string]bool{
-		"PlanDeploy":      true, // read-only preview
-		"StartDeploy":     true, // guarded, asynchronous, token-bearing
+		"PlanDeploy":  true, // read-only preview; builds nothing
+		"StartDeploy": true, // the ONLY path that writes a promotion, and it
+		// requires the target token AND the approved plan digest
 		"GetDeployStatus": true, // a poll
+		// StartDeployPlan builds, pushes and cuts, and writes NO promotion:
+		// it is what PRODUCES the plan StartDeploy's digest approves. It is
+		// allowed here because it cannot change what any environment runs —
+		// not because planning is harmless. If it ever gains the ability to
+		// write a promotion, it stops belonging on this list.
+		"StartDeployPlan": true,
 	}
 	svc := reflect.TypeOf(&ForgeService{})
 	for i := 0; i < svc.NumMethod(); i++ {
@@ -539,10 +546,10 @@ func TestNoUnguardedDeployRPCExists(t *testing.T) {
 		if !strings.Contains(strings.ToLower(name), "deploy") || allowed[name] {
 			continue
 		}
-		t.Errorf("ForgeService gained deploy method %q. Deploying is reachable ONLY through "+
-			"PlanDeploy (read-only) and StartDeploy (which requires a confirmation token naming "+
-			"the cluster and the release); a fourth spelling would be an unguarded path to a "+
-			"live cluster", name)
+		t.Errorf("ForgeService gained deploy method %q. Writing to an environment is reachable "+
+			"ONLY through StartDeploy, which requires both the target token (cluster, binding) "+
+			"and the digest of a plan a human approved; another spelling would be an unguarded "+
+			"path to a live cluster", name)
 	}
 }
 

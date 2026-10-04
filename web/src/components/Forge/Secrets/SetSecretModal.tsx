@@ -41,6 +41,31 @@
  * The failure is surfaced as its own sentence rather than a raw error, because
  * "someone else changed this while you had the form open" is a thing a person
  * can act on and `cas` is not.
+ *
+ * ── THE USER IS NEVER ASKED HOW THE ENVIRONMENT RUNS (#353, design §10) ─────
+ *
+ * This form used to ask, with a radio group, when nothing had stated the
+ * environment's kind. It no longer does, and the question is not kept as a
+ * fallback.
+ *
+ * The kind is IMMUTABLE once the environment's row exists, so a human
+ * answering it under a secret form is a guess written into a field that can
+ * never be corrected — which is exactly what the control plane then had to
+ * guard against afterwards with a FailedPrecondition. The three states leave
+ * no room for the question:
+ *
+ *   1. the row exists    the kind is already recorded. Nothing to ask, and
+ *                        nothing to ask it OF — this state reads the row and
+ *                        makes no daemon call at all, which is what keeps the
+ *                        form usable with the daemon offline.
+ *   2. no row, Preview   forge's render states the kind, and Preview's
+ *                        Register records it. Not this form's job.
+ *   3. no row, no render the kind is genuinely UNKNOWN, so the form is
+ *                        DISABLED with the remedy — see `disabledReason`.
+ *
+ * State 3 is disabled because the VALUE IS UNKNOWN, not because the daemon is
+ * offline. That asymmetry is deliberate: an environment built once never
+ * returns to state 3, however often the daemon comes and goes.
  */
 
 import { useEffect, useId, useRef, useState } from "react";
@@ -66,6 +91,18 @@ export interface SetSecretModalProps {
   isSubmitting: boolean;
   /** The mutation's error, if the last attempt failed. */
   error: Error | null;
+  /**
+   * §10 STATE 3: why there is nowhere to write this value yet.
+   *
+   * Set to the remedy sentence when nothing — neither a control-plane row nor
+   * a Preview render — has stated how this environment runs. The whole form is
+   * then inert and submit is impossible, because the DESTINATION is unknown:
+   * an environment's kind cannot be changed once recorded, so Reliant will not
+   * guess it and will not ask.
+   *
+   * Absent in states 1 and 2, which is the ordinary case.
+   */
+  disabledReason?: string | null;
 }
 
 /** forge's env-var naming shape. Matching it early beats a server rejection. */
@@ -80,6 +117,7 @@ export function SetSecretModal({
   onSubmit,
   isSubmitting,
   error,
+  disabledReason = null,
 }: SetSecretModalProps) {
   const nameId = useId();
   const valueId = useId();
@@ -89,6 +127,7 @@ export function SetSecretModal({
   const valueRef = useRef<HTMLInputElement>(null);
 
   const isUpdate = existing !== null;
+  const disabled = disabledReason !== null && disabledReason !== "";
 
   // Reset on every open. A modal that reopens holding the previous attempt's
   // value would keep a secret in component state indefinitely, and would also
@@ -119,8 +158,7 @@ export function SetSecretModal({
       ? "Use upper-case letters, digits and underscores, starting with a letter — the same shape as the environment variable it becomes."
       : null;
 
-  const canSubmit =
-    trimmedName !== "" && value !== "" && !nameError && !isSubmitting;
+  const canSubmit = !disabled && trimmedName !== "" && value !== "" && !nameError && !isSubmitting;
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -144,6 +182,30 @@ export function SetSecretModal({
       title={isUpdate ? `Set a new version of ${existing.name}` : "Add a secret"}
     >
       <form onSubmit={handleSubmit} className="space-y-5" data-testid="set-secret-form">
+        {/*
+         * §10 STATE 3. First, because it is the reason everything below it is
+         * inert — a reader who meets the disabled fields first has to hunt for
+         * the explanation.
+         *
+         * An INSET on the modal surface, in the ordinary quiet register:
+         * bg-background + border-border/60 per the elevation rules. NOT
+         * destructive styling — nothing has failed, and nothing is broken. The
+         * environment simply has not been built yet, which is the normal state
+         * of a new environment.
+         */}
+        {disabled && (
+          <div
+            data-testid="set-secret-disabled"
+            className="flex gap-2.5 rounded-md border border-border/60 bg-background px-3 py-2.5"
+          >
+            <AlertTriangle
+              className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground"
+              aria-hidden="true"
+            />
+            <p className="text-xs leading-relaxed text-muted-foreground">{disabledReason}</p>
+          </div>
+        )}
+
         {/*
          * The environment, stated as an identifier. Writing a production value
          * into dev (or the reverse) is the expensive mistake this form can
@@ -173,7 +235,7 @@ export function SetSecretModal({
             value={name}
             onChange={(e) => setName(e.target.value)}
             onBlur={() => setTouched(true)}
-            disabled={isUpdate}
+            disabled={isUpdate || disabled}
             autoComplete="off"
             spellCheck={false}
             placeholder="DATABASE_URL"
@@ -213,13 +275,15 @@ export function SetSecretModal({
             type="password"
             value={value}
             onChange={(e) => setValue(e.target.value)}
+            disabled={disabled}
             /* See the header: keeps it out of the browser's password manager. */
             autoComplete="new-password"
             spellCheck={false}
             aria-describedby={`${valueId}-writeonly`}
             className={cn(
               "w-full rounded-md border border-border bg-background px-3 py-2 font-mono text-sm text-foreground",
-              "focus:outline-none focus:ring-2 focus:ring-primary/40"
+              "focus:outline-none focus:ring-2 focus:ring-primary/40",
+              "disabled:cursor-not-allowed disabled:text-muted-foreground"
             )}
           />
 

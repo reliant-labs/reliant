@@ -68,6 +68,18 @@ message DaemonInfo {
   string platform = 4;
   DaemonStatus status = 5;
   repeated DiscoveredProject projects = 6;
+  // When the daemon's current stream attached, and when it last showed
+  // activity on it. Both come from the attachment lease, so both are unset
+  // while nothing is attached — "last connected" is deliberately NOT retained
+  // after a disconnect, because the lease row is deleted and this service
+  // keeps no history of it.
+  //
+  // These were previously declared and never populated: the columns that once
+  // backed them were dropped by the demote migration, and the attachment row
+  // that replaced them was not read for this purpose. They are now sourced
+  // from the attachment, because recency ordering in the UI needs them —
+  // picking a clone target by "whichever the server listed first" is
+  // indistinguishable from correct with one machine and wrong with several.
   google.protobuf.Timestamp connected_at = 7;
   google.protobuf.Timestamp last_heartbeat = 8;
   // Type of daemon: "managed" (cloud-hosted) or "self_hosted" (user-run local daemon).
@@ -87,11 +99,95 @@ message DaemonInfo {
   // memory telemetry above). The UI renders these as preview affordances.
   // Empty for local daemons and while nothing is listening.
   repeated uint32 detected_ports = 13;
+
+  // The fields below mirror managed-machine lifecycle state owned by the
+  // control plane, which watches the Workspace CR. They arrive over
+  // daemon.v1.state.<id>.lifecycle and are unset for self-hosted daemons,
+  // which have no Workspace CR and no lifecycle at all.
+  //
+  // They exist so this is the ONE list the UI calls. Before them a caller
+  // needing "is this machine provisioning or did it crash" had to fetch a
+  // second list from a second service with a second status enum and reconcile
+  // the two by hand — see docs/design/one-daemon-list.md.
+
+  // What the machine is currently DOING, when it isn't ready yet.
+  //
+  // `status` answers "can I route work to this machine" and deliberately
+  // collapses the whole startup sequence into PENDING. That is the right
+  // granularity for routing and the wrong one for a user watching a spinner:
+  // "pulling the image" and "cloning your repository" have very different
+  // expected durations, and a wait that explains itself reads as progress
+  // rather than as a hang.
+  DaemonLifecyclePhase lifecycle_phase = 14;
+
+  // Provisioned machine size ("small", "medium", …). Empty for self-hosted.
+  string size = 15;
+
+  // Human-readable reason for the most recent lifecycle transition, e.g.
+  // "image pull failed". Empty when there is nothing to explain.
+  string last_status_message = 16;
+  // When lifecycle_phase / last_status_message last changed.
+  google.protobuf.Timestamp last_status_changed_at = 17;
+
+  // OOM-kill tracking for managed machines, mirrored from the Workspace CR.
+  // Unset/zero when no OOM kill has been observed; the UI keys "recent" off
+  // last_oom_killed_at.
+  google.protobuf.Timestamp last_oom_killed_at = 18;
+  int32 oom_kill_count = 19;
+
+  // When the registry first saw this daemon. Always set.
+  //
+  // Needed because it is the recency fallback for a machine that has never
+  // attached — a provisioning one, where connected_at is necessarily unset. An
+  // unknown recency sorts a brand-new machine last, which is the opposite of
+  // what the user means.
+  google.protobuf.Timestamp created_at = 20;
 }
 
+// DaemonStatus is the SINGLE status vocabulary for a daemon in this registry.
+//
+// It previously had only two reachable values, because the registry could see
+// nothing but attachment freshness: ACTIVE or DISCONNECTED. A provisioning
+// machine and a crashed one both read DISCONNECTED, so the UI fetched a second
+// list from control-plane carrying a second DaemonStatus enum whose numeric
+// values disagreed with this one (ACTIVE was 1 here and 2 there), and
+// reconciled them by hand. This enum now covers the whole vocabulary so there
+// is one answer and one set of numbers.
+//
+// Composition rule, implemented in daemonToProto: an attached daemon is ACTIVE
+// whatever its lifecycle phase says, because a stream is attached and work can
+// be routed — that is observed, not inferred. An unattached daemon takes its
+// status from the lifecycle phase, and falls back to DISCONNECTED when there
+// is no phase (every self-hosted daemon, permanently).
 enum DaemonStatus {
   DAEMON_STATUS_UNSPECIFIED = 0;
   DAEMON_STATUS_ACTIVE = 1;
   DAEMON_STATUS_IDLE = 2;
   DAEMON_STATUS_DISCONNECTED = 3;
+  // Provisioning / cloning — the machine is coming up and is not routable yet.
+  DAEMON_STATUS_PENDING = 4;
+  // Suspended by the user or by idle timeout. Persistent intent: an
+  // unreachable suspended machine is not evidence it was un-suspended.
+  DAEMON_STATUS_SUSPENDED = 5;
+  // The machine failed to come up or crashed terminally.
+  DAEMON_STATUS_FAILED = 6;
+}
+
+// DaemonLifecyclePhase is the public lifecycle vocabulary for a managed
+// machine. It mirrors control-plane's DaemonLifecyclePhase rather than the
+// Workspace CR's raw Kubernetes phase strings, so renaming a k8s phase
+// upstream is not a wire break here.
+//
+// UNSPECIFIED means "no lifecycle detail available" — the permanent state for
+// self-hosted daemons, and the transient state for a managed machine whose
+// first lifecycle event has not landed yet. Clients must treat it as "fall
+// back to status", which is always correct if less specific.
+enum DaemonLifecyclePhase {
+  DAEMON_LIFECYCLE_PHASE_UNSPECIFIED = 0;
+  DAEMON_LIFECYCLE_PHASE_PROVISIONING = 1;
+  DAEMON_LIFECYCLE_PHASE_CLONING = 2;
+  DAEMON_LIFECYCLE_PHASE_READY = 3;
+  DAEMON_LIFECYCLE_PHASE_SUSPENDING = 4;
+  DAEMON_LIFECYCLE_PHASE_SUSPENDED = 5;
+  DAEMON_LIFECYCLE_PHASE_FAILED = 6;
 }

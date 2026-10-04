@@ -315,13 +315,25 @@ describe("ComputeStep loading gate", () => {
     expect(onNext).toHaveBeenCalledTimes(1);
   });
 
-  it("auto-skips for IDLE daemons too (transitional cloud / local reconnect state)", async () => {
+  // The where-question is moot for any machine the user has clearly already
+  // asked for, not only a connected one.
+  //
+  // This used to assert IDLE, which is declared in the enum but never emitted
+  // by the list handler — so it pinned a state that could not occur. PENDING
+  // and SUSPENDED are the states that genuinely mean "already decided": a
+  // managed machine mid-provision, and one deliberately parked. Both became
+  // nameable here only once the registry grew the full status vocabulary
+  // (docs/design/one-daemon-list.md).
+  it.each([
+    ["PENDING (provisioning)", DaemonStatus.PENDING],
+    ["SUSPENDED (parked, resumes on use)", DaemonStatus.SUSPENDED],
+  ])("auto-skips for a %s machine", async (_label, status) => {
     const onNext = vi.fn();
     const updatePlan = vi.fn(async () => {});
 
     await act(async () => {
       renderComputeStep({
-        daemons: [makeDaemon({ id: "d-idle", status: DaemonStatus.IDLE })],
+        daemons: [makeDaemon({ daemonId: "d-1", status })],
         loading: false,
         onNext,
         updatePlan,

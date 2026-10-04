@@ -525,7 +525,14 @@ CREATE TABLE public.daemons (
     projects_json text,
     created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
     updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    daemon_type text
+    daemon_type text,
+    lifecycle_phase text,
+    size text,
+    last_status_message text DEFAULT ''::text NOT NULL,
+    last_status_changed_at timestamp with time zone,
+    last_oom_killed_at timestamp with time zone,
+    oom_kill_count integer DEFAULT 0 NOT NULL,
+    CONSTRAINT daemons_lifecycle_phase_check CHECK (((lifecycle_phase IS NULL) OR (lifecycle_phase = ANY (ARRAY['provisioning'::text, 'cloning'::text, 'ready'::text, 'suspending'::text, 'suspended'::text, 'failed'::text]))))
 );
 
 --
@@ -576,6 +583,7 @@ CREATE TABLE public.message_content_blocks (
     workflow_run_id text,
     attempt_number bigint,
     thought_signature text,
+    phase text,
     created_at timestamp with time zone NOT NULL,
     updated_at timestamp with time zone NOT NULL
 );

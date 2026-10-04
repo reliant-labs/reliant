@@ -50,7 +50,7 @@ import { CHANGE_STYLES, DIRECTION_STYLES } from "./promoteVocabulary";
 export interface PromotePlanViewProps {
   plan: ForgePromotePlan;
   /**
-   * Set false when the CONTAINER renders the ships-nothing notice itself, as the
+   * Set false when the CONTAINER renders the writes-nothing notice itself, as the
    * applied panel does to give it top billing. Rendering it in both places would
    * put the same statement on screen twice, which reads as a template bug and
    * teaches the eye to skip it — the opposite of what this notice is for.
@@ -118,7 +118,7 @@ export function PromotePlanView({ plan, showShipsNothing = true }: PromotePlanVi
 
       <CommitRange commits={plan.commits} />
 
-      {showShipsNothing && <ShipsNothingNotice plan={plan} />}
+      {showShipsNothing && <PlanWritesNothingNotice plan={plan} />}
     </div>
   );
 }
@@ -384,35 +384,39 @@ function CommitRange({ commits }: { commits: ForgePromoteCommitRange | undefined
 }
 
 /**
- * Promote ships NOTHING.
+ * What this PREVIEW will do when applied.
  *
- * Rendered from `ships_nothing`, which forge sets on every plan including
- * applied ones, and it carries forge's `next_step` verbatim. A UI that let a
- * user leave believing they had deployed would be worse than no UI at all —
- * that gap is why `forge env verify` exists.
+ * Previously "Promote ships NOTHING", driven by forge's `ships_nothing` /
+ * `next_step` fields. Both the claim and the fields are gone: forge v0.1.42
+ * deleted `env promote` and folded it into `env deploy`, which RECORDS the
+ * binding, APPLIES it, and waits for health (ADR V3). forge's own reasoning was
+ * that a step which only recorded a binding reported success before any byte
+ * moved, so every pipeline spelled it `promote --deploy --wait` and the
+ * spellings that omitted a half were latent incidents.
+ *
+ * Leaving the old copy would have been the inverse of the bug it was written to
+ * prevent, and worse: it told a user that nothing had shipped at the exact
+ * moment a real deploy had. So the notice now says what the PLAN is — a dry run
+ * that writes nothing — which stays true, because `--plan` still computes the
+ * whole change set without writing the binding or applying anything.
+ *
+ * `plan.note` is forge's own annotation and is preferred when present.
  */
-export function ShipsNothingNotice({ plan }: { plan: ForgePromotePlan }) {
-  if (plan.ships_nothing === false) return null;
+export function PlanWritesNothingNotice({ plan }: { plan: ForgePromotePlan }) {
+  // Only meaningful while this is still a preview. Once applied, the deploy
+  // has happened and a "nothing has been written" line would be a lie.
+  if (plan.applied) return null;
 
   return (
     <section
-      data-testid="promote-ships-nothing"
+      data-testid="promote-plan-writes-nothing"
       className="rounded-lg border border-dashed border-border px-4 py-3"
     >
       <p className="text-xs text-foreground">
-        {plan.note || "Promoting moves a pointer. Nothing is deployed and no cluster changes."}
+        {plan.note ||
+          "This is a preview. Nothing has been written or deployed yet — confirming records " +
+            "the release, applies it, and waits for it to become healthy."}
       </p>
-      {plan.next_step && (
-        <p className="mt-1.5 text-xs text-muted-foreground">
-          To actually ship these digests, run{" "}
-          <code
-            data-testid="promote-next-step"
-            className="rounded bg-muted px-1.5 py-0.5 font-mono text-2xs text-foreground"
-          >
-            {plan.next_step}
-          </code>
-        </p>
-      )}
     </section>
   );
 }

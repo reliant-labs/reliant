@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
@@ -87,16 +88,29 @@ func (s *ProjectService) CreateProjectFromRepo(
 			fmt.Errorf("project path must be absolute, got: %q", path))
 	}
 
+	// The project's id is settled BEFORE the clone is dispatched, because the
+	// clone's request id is derived from it: the daemon echoes that id on its
+	// failure announcement, and it is the only thing that can find this
+	// project's install row again. Settling it here persists nothing — the
+	// row is written only after the control plane accepts the clone.
+	existing := s.existingProjectForRepo(ctx, userID, path, cloneURL)
+	projectID := uuid.New().String()
+	if existing != nil {
+		projectID = existing.ID
+	}
+	requestID := cloneRequestID(projectID, daemonID)
+
 	// Ask the control plane to start the clone BEFORE creating the project
 	// row. If this is going to be refused — no credential, machine failed,
 	// not the caller's daemon — it must fail with nothing persisted, rather
 	// than leaving a project the user then has to clean up by hand.
 	cloneResult, err := s.controlPlane.CloneRepoOntoDaemon(ctx, bearerToken(req.Header().Get("Authorization")),
 		controlplane.CloneRepoRequest{
-			DaemonID: daemonID,
-			CloneURL: cloneURL,
-			Branch:   branch,
-			Path:     path,
+			DaemonID:  daemonID,
+			CloneURL:  cloneURL,
+			Branch:    branch,
+			Path:      path,
+			RequestID: requestID,
 		})
 	if err != nil {
 		// The control plane's codes are already the right ones for the user
@@ -112,9 +126,12 @@ func (s *ProjectService) CreateProjectFromRepo(
 		clonedPath = path
 	}
 
-	project, err := s.findOrCreateProjectForRepo(ctx, userID, name, clonedPath, cloneURL, branch)
-	if err != nil {
-		return nil, err
+	project := existing
+	if project == nil {
+		project, err = s.createProjectForRepo(ctx, projectID, userID, name, clonedPath, cloneURL, branch)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	var branchPtr *string
@@ -127,7 +144,7 @@ func (s *ProjectService) CreateProjectFromRepo(
 	if cloneResult.Queued {
 		installState = core.ProjectInstallInstalling
 		if err := s.database.UpsertQueuedProjectDaemon(
-			ctx, project.ID, daemonID, clonedPath, branchPtr, cloneRequestID(project.ID, daemonID),
+			ctx, project.ID, daemonID, clonedPath, branchPtr, requestID,
 		); err != nil {
 			logging.Error("CreateProjectFromRepo: failed to record queued install",
 				"error", err, "project_id", project.ID, "daemon_id", daemonID)
@@ -161,31 +178,45 @@ func (s *ProjectService) CreateProjectFromRepo(
 	}), nil
 }
 
-// findOrCreateProjectForRepo returns the caller's existing project for this
-// repo, or creates one.
+// existingProjectForRepo returns the caller's existing project for this repo,
+// or nil.
 //
 // Re-adding a repo the user already has is a normal thing to do — they may be
-// putting it on a SECOND machine — so this is find-or-create rather than an
+// putting it on a SECOND machine — so the add is find-or-create rather than an
 // error. Matching on remote URL first and path second mirrors how the old
 // client chain recovered from AlreadyExists.
-func (s *ProjectService) findOrCreateProjectForRepo(
-	ctx context.Context, userID, name, path, cloneURL, branch string,
-) (*core.Project, error) {
+func (s *ProjectService) existingProjectForRepo(ctx context.Context, userID, path, cloneURL string) *core.Project {
 	if existing, err := s.database.GetProjectByRemoteURLAndUser(ctx, cloneURL, userID); err == nil && existing != nil {
-		return existing, nil
+		return existing
 	}
 	if existing, err := s.database.GetProjectByPathAndUser(ctx, path, userID); err == nil && existing != nil {
-		return existing, nil
+		return existing
 	}
+	return nil
+}
 
+// createProjectForRepo creates the project row for a repo being added, under
+// the id the clone's request id was already derived from.
+func (s *ProjectService) createProjectForRepo(
+	ctx context.Context, projectID, userID, name, path, cloneURL, branch string,
+) (*core.Project, error) {
+	// The store writes these columns verbatim — they have no database
+	// default — so a project created without them is dated 0001-01-01 and
+	// sorts as the oldest thing the user owns, under a "last active" of
+	// never. CreateProject (project.go) has always set them; this path did
+	// not.
+	now := time.Now().UTC()
 	project := &core.Project{
 		// The repository requires the caller to assign the id; it does not
 		// mint one.
-		ID:        uuid.New().String(),
-		Name:      name,
-		Path:      path,
-		UserID:    userID,
-		IsGitRepo: true,
+		ID:         projectID,
+		Name:       name,
+		Path:       path,
+		UserID:     userID,
+		IsGitRepo:  true,
+		CreatedAt:  now,
+		UpdatedAt:  now,
+		LastActive: now,
 	}
 	if cloneURL != "" {
 		project.RemoteURL = &cloneURL

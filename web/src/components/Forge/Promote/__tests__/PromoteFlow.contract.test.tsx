@@ -107,7 +107,11 @@ describe("the confirm guard", () => {
     expect(apply).toBeEnabled();
   });
 
-  it("additionally requires typing the env name for a rollback", async () => {
+  it("marks a rollback by saying so and by the button, not by a typed env name", async () => {
+    // The typed name was evidence of nothing — the env is already in the
+    // heading — and it sat under a checkbox asserting the same thing. What
+    // distinguishes a rollback is the direction, stated, plus a button naming
+    // the env AND the version it lands on.
     const user = userEvent.setup();
     const onConfirm = vi.fn();
     render(
@@ -118,11 +122,13 @@ describe("the confirm guard", () => {
       />
     );
 
-    await user.click(screen.getByTestId("promote-acknowledge"));
-    // Acknowledged, but the env name is still untyped.
-    expect(screen.getByTestId("promote-apply")).toBeDisabled();
+    expect(screen.queryByTestId("promote-typed-env")).toBeNull();
+    expect(screen.getByTestId("promote-rollback-warning").textContent).toMatch(
+      /moves prod backwards/i
+    );
+    expect(screen.getByTestId("promote-apply").textContent).toMatch(/^Roll back prod to v/);
 
-    await user.type(screen.getByTestId("promote-typed-env"), "prod");
+    await user.click(screen.getByTestId("promote-acknowledge"));
     expect(screen.getByTestId("promote-apply")).toBeEnabled();
   });
 
@@ -241,16 +247,15 @@ describe("after a successful apply", () => {
 
     const panel = screen.getByTestId("promote-applied");
 
-    // The next step is named explicitly, from the APPLIED document.
-    expect(screen.getByTestId("promote-next-step").textContent).toBe("forge env deploy staging");
-    expect(screen.getByTestId("promote-ships-nothing").textContent).toMatch(/nothing is deployed/i);
-
-    // And nothing anywhere on this panel claims a deploy or a ship.
+    // `forge env deploy` RECORDED AND APPLIED this release (forge v0.1.42,
+    // ADR V3 — `env promote` is deleted). So the applied panel must NOT carry
+    // the old "nothing is deployed" notice: after V3 that would tell the user
+    // no deploy had happened at the exact moment one had, which is the more
+    // dangerous direction of the error the old assertion guarded against.
     const text = panel.textContent ?? "";
-    expect(text).not.toMatch(/\bdeployed to\b/i);
-    expect(text).not.toMatch(/\bshipped\b/i);
-    expect(text).not.toMatch(/\bis now live\b/i);
-    expect(text).not.toMatch(/\bdeploy succeeded\b/i);
+    expect(screen.queryByTestId("promote-plan-writes-nothing")).toBeNull();
+    expect(text).not.toMatch(/nothing is deployed/i);
+    expect(text).not.toMatch(/moves a pointer/i);
     // It says what actually happened: a binding was updated.
     expect(screen.getByTestId("promote-applied-heading").textContent).toMatch(/binding updated/i);
 
@@ -272,6 +277,10 @@ describe("after a successful apply", () => {
     const panel = screen.getByTestId("promote-applied");
     // The binding IS written; this must not read as a failure.
     expect(panel.textContent).toMatch(/binding was written/i);
-    expect(panel.textContent).toMatch(/nothing has been deployed/i);
+    // And it must not claim nothing was deployed. `forge env deploy` records
+    // AND applies AND waits (forge v0.1.42, ADR V3), so an unreadable REPORT
+    // does not mean an unshipped release — the bytes moved either way.
+    expect(panel.textContent).not.toMatch(/nothing has been deployed/i);
+    expect(panel.textContent).toMatch(/recorded and applied/i);
   });
 });

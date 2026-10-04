@@ -9,7 +9,10 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
+	"slices"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -196,12 +199,25 @@ func mustDeployPayload(t *testing.T, v any) []byte {
 	return b
 }
 
-// startRequest is a fully-authorised start request against the canned plan.
+// testApprovedDigest is the plan digest the canned start requests approve. A
+// fixed value so a test can assert the argv carries THIS digest rather than
+// merely some digest.
+const testApprovedDigest = "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+
+// testApprovedVersion is the auto version a plan-only stage would have cut —
+// `<YYYYMMDD>.<HHMMSS>-<tree12>`, forge's O-15 shape.
+const testApprovedVersion = "20261003.114500-abcdef123456"
+
+// startRequest is a fully-authorised start request against the canned plan:
+// both halves of the target token, plus the content approval (the digest of the
+// plan the operator read, and the release that plan was computed for).
 func startRequest(dir, env, declaredContext, release string) forgeDeployStartRequest {
 	return forgeDeployStartRequest{
 		forgeDeployArgs:         forgeDeployArgs{ProjectPath: dir, Env: env},
 		ExpectedDeclaredContext: declaredContext,
 		ExpectedCurrentRelease:  release,
+		ApproveDigest:           testApprovedDigest,
+		ReleaseVersion:          testApprovedVersion,
 	}
 }
 
@@ -279,11 +295,38 @@ func TestForgeDeployRequestsCarryNoEscapeHatches(t *testing.T) {
 	}
 }
 
+// testApproval mints an approval for tests that need the apply argv directly.
+//
+// It is NOT a hole in the guarantee the approval type exists to provide. That
+// guarantee is about PRODUCTION reachability: within this package the only
+// non-test producer is forgeDeployStaleState, and
+// TestForgeDeployApprovalHasExactlyOneProducer pins that by searching the
+// non-test sources. A test may of course construct one — it is testing the
+// argv, not the authorisation — and the mutation test below proves the
+// production path cannot.
+func testApproval() forgeDeployApproval {
+	return forgeDeployApproval{
+		declaredContext: "gke_prod",
+		release:         "v1.5.15",
+		digest:          "sha256:" + strings.Repeat("ab", 32),
+		releaseVersion:  "20261003.120000-abcdef123456",
+	}
+}
+
+func mustApplyArgs(t *testing.T, args forgeDeployArgs) []string {
+	t.Helper()
+	argv, err := args.applyArgs(testApproval())
+	if err != nil {
+		t.Fatalf("applyArgs with a validated approval: %v", err)
+	}
+	return argv
+}
+
 // The argv for the apply carries neither escape hatch either — the request shape
 // is only half the guarantee.
 func TestForgeDeployArgvNeverCarriesEscapeHatches(t *testing.T) {
 	args := forgeDeployArgs{ProjectPath: "/p", Env: "prod"}
-	for _, argv := range [][]string{args.planArgs(), args.applyArgs()} {
+	for _, argv := range [][]string{args.planArgs(), mustApplyArgs(t, args)} {
 		joined := strings.Join(argv, " ")
 		for _, flag := range []string{"--skip-preflight", "--no-digest"} {
 			if strings.Contains(joined, flag) {
@@ -294,8 +337,364 @@ func TestForgeDeployArgvNeverCarriesEscapeHatches(t *testing.T) {
 	if !strings.Contains(strings.Join(args.planArgs(), " "), "--dry-run") {
 		t.Error("the plan argv must carry --dry-run")
 	}
-	if strings.Contains(strings.Join(args.applyArgs(), " "), "--dry-run") {
+	if strings.Contains(strings.Join(mustApplyArgs(t, args), " "), "--dry-run") {
 		t.Error("the apply argv must NOT carry --dry-run")
+	}
+}
+
+// =============================================================================
+// THE DAEMON NEVER PASSES --yes. Approval is by plan digest.
+// =============================================================================
+
+// NO ARGV THIS DAEMON BUILDS MAY CARRY --yes, on any path.
+//
+// --yes means "I read the plan" and approves whatever forge computes at the
+// moment that command runs. Under O-15 a versionless deploy builds new images
+// and cuts a NEW auto-version from the checkout, so --yes on a UI's behalf
+// approves a change set nobody has seen. That was the interim this replaced.
+//
+// The guarantee is structural — no code path produces the flag — and this test
+// is the proof, swept over every builder rather than asserted on one, because
+// the failure mode is a NEW path acquiring it quietly.
+func TestForgeDaemonArgvNeverCarriesYes(t *testing.T) {
+	deploy := forgeDeployArgs{ProjectPath: "/p", Env: "prod"}
+	promote := forgePromoteArgs{ProjectPath: "/p", Env: "prod", Release: "v1.2.3"}
+
+	argv := map[string][]string{
+		"deploy preview":   deploy.planArgs(),
+		"deploy plan-only": deploy.planOnlyArgs(),
+		"deploy apply":     mustApplyArgs(t, deploy),
+		"promote plan":     promote.planArgs(),
+		"promote apply":    mustPromoteApplyArgs(t, promote),
+		"checkouts":        forgeCheckoutsRequest{ProjectPath: "/p"}.args(),
+		"env diff":         forgeEnvDiffRequest{ProjectPath: "/p", All: true}.args(),
+	}
+
+	for name, args := range argv {
+		if slices.Contains(args, "--yes") {
+			t.Errorf("%s argv %q carries --yes: the daemon must never tell forge a human "+
+				"approved a plan it has not seen. Approval travels as --approve <digest>", name, args)
+		}
+	}
+}
+
+// The apply argv carries the APPROVAL instead: the digest, the release version
+// stage one cut, and the acknowledged codes when there are any.
+func TestForgeDeployApplyArgvApprovesByDigest(t *testing.T) {
+	args := forgeDeployArgs{ProjectPath: "/p", Env: "prod"}
+
+	apply := mustApplyArgs(t, args)
+	joined := strings.Join(apply, " ")
+
+	if !slices.Contains(apply, "--approve") {
+		t.Errorf("the apply argv %q must carry --approve: it binds the deploy to the plan a "+
+			"human read, and forge refuses a mismatch (exit 3, plan_stale)", apply)
+	}
+	if !strings.Contains(joined, testApproval().digest) {
+		t.Errorf("the apply argv %q must carry the approved digest verbatim", apply)
+	}
+
+	// THE VERSION IS POSITIONAL AND LOAD-BEARING. Without it the deploy is
+	// versionless, which under O-15 builds and cuts a SECOND release whose
+	// plan the approved digest could never match.
+	version := testApproval().releaseVersion
+	if !slices.Contains(apply, version) {
+		t.Errorf("the apply argv %q must name the release version the plan was computed for (%s), "+
+			"or it would build and cut a second release", apply, version)
+	}
+	if got, want := apply[:4], []string{"env", "deploy", "prod", version}; !slices.Equal(got, want) {
+		t.Errorf("the release version must be forge's SECOND positional; got %q, want %q", got, want)
+	}
+
+	// The read-only preview approves nothing and must carry no approval.
+	if plan := args.planArgs(); slices.Contains(plan, "--approve") {
+		t.Errorf("the preview argv %q must NOT carry --approve: it is read-only", plan)
+	}
+	if planOnly := args.planOnlyArgs(); slices.Contains(planOnly, "--approve") {
+		t.Errorf("the plan-only argv %q must NOT carry --approve: it PRODUCES the plan to "+
+			"approve, it does not consume one", planOnly)
+	}
+}
+
+// Stop-class findings travel as --acknowledge-destructive, comma-joined, and
+// ONLY when the approval named some.
+func TestForgeDeployApplyArgvCarriesAcknowledgedFindings(t *testing.T) {
+	args := forgeDeployArgs{ProjectPath: "/p", Env: "prod"}
+
+	approval := testApproval()
+	approval.acknowledgedFindings = []string{"stateful_deletion", "lb_identity_change"}
+	apply, err := args.applyArgs(approval)
+	if err != nil {
+		t.Fatalf("applyArgs: %v", err)
+	}
+	if got := strings.Join(apply, " "); !strings.Contains(got,
+		"--acknowledge-destructive stateful_deletion,lb_identity_change") {
+		t.Errorf("the apply argv must name every acknowledged code, comma-joined; got %q", got)
+	}
+
+	// Absent when there is nothing to acknowledge: an empty flag value
+	// would read to forge as a code named "".
+	if plain := mustApplyArgs(t, args); slices.Contains(plain, "--acknowledge-destructive") {
+		t.Errorf("the apply argv %q must omit --acknowledge-destructive when no finding was "+
+			"acknowledged", plain)
+	}
+}
+
+// The approval is unreachable without BOTH halves of the content claim. A
+// target token alone is what the interim had, and it is what this replaced.
+func TestForgeDeployApplyArgvRefusesIncompleteApproval(t *testing.T) {
+	args := forgeDeployArgs{ProjectPath: "/p", Env: "prod"}
+
+	for name, approval := range map[string]forgeDeployApproval{
+		"no digest": {
+			declaredContext: "gke_prod", release: "v1", releaseVersion: "20261003.120000-abc",
+		},
+		"no release version": {
+			declaredContext: "gke_prod", release: "v1", digest: "sha256:abc",
+		},
+		"target token only": {
+			declaredContext: "gke_prod", release: "v1",
+		},
+	} {
+		if argv, err := args.applyArgs(approval); err == nil {
+			t.Errorf("%s: applyArgs minted %q from an incomplete approval; a deploy must name "+
+				"both the plan it approves and the release that plan was computed for", name, argv)
+		}
+	}
+}
+
+// THE MUTATION TEST. --yes must be unreachable without an approval, and an
+// approval must be unreachable without validation.
+//
+// Deleting validateConfirmation's declared-context check turns this red: an
+// empty ExpectedDeclaredContext would then reach forgeDeployStaleState, which
+// compares it against the plan's real context, refuses on the mismatch, and
+// returns a ZERO approval — and applyArgs refuses to mint --yes from one.
+func TestForgeDeployYesIsUnreachableWithoutAValidatedToken(t *testing.T) {
+	args := forgeDeployArgs{ProjectPath: "/p", Env: "prod"}
+
+	// A fabricated zero-value approval must not produce an argv at all.
+	if argv, err := args.applyArgs(forgeDeployApproval{}); err == nil {
+		t.Errorf("applyArgs minted %q from a zero approval; --yes must require a validated "+
+			"confirmation token, or a future caller acquires it silently", argv)
+	}
+
+	// And the only producer refuses to mint one for every unauthorised
+	// request shape, so there is no route from a bad request to --yes.
+	facts := forgeDeployPlanFacts{Env: "prod", Mode: forgeDeployModeDryRun, Release: "v1.5.15"}
+	facts.Guard.DeclaredContext = "gke_prod"
+	facts.Guard.Verdict = forgeDeployGuardVerdictAllow
+
+	for _, tc := range []struct {
+		name string
+		req  forgeDeployStartRequest
+	}{
+		{"no declared context at all", forgeDeployStartRequest{
+			forgeDeployArgs:        args,
+			ExpectedCurrentRelease: "v1.5.15",
+		}},
+		{"a declared context the plan disagrees with", forgeDeployStartRequest{
+			forgeDeployArgs:         args,
+			ExpectedDeclaredContext: "k3d-control-plane",
+			ExpectedCurrentRelease:  "v1.5.15",
+		}},
+		{"a release the plan disagrees with", forgeDeployStartRequest{
+			forgeDeployArgs:         args,
+			ExpectedDeclaredContext: "gke_prod",
+			ExpectedCurrentRelease:  "v1.0.0",
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			refusal, approval := forgeDeployStaleState(tc.req, facts)
+			if refusal == nil {
+				t.Fatal("expected a refusal; this request must not authorise a deploy")
+			}
+			if argv, err := args.applyArgs(approval); err == nil {
+				t.Errorf("a refused request still produced the apply argv %q, carrying --yes", argv)
+			}
+		})
+	}
+}
+
+// The approval type has exactly ONE producer in non-test code, which is what
+// makes the guarantee structural rather than a convention a future caller can
+// forget. Asserted against the sources because no type system here can say it.
+func TestForgeDeployApprovalHasExactlyOneProducer(t *testing.T) {
+	entries, err := os.ReadDir(".")
+	if err != nil {
+		t.Fatalf("read package dir: %v", err)
+	}
+
+	// `forgeDeployApproval{` is the only way to construct one — it has no
+	// constructor and every field is unexported, so a literal is required.
+	literal := regexp.MustCompile(`forgeDeployApproval\{`)
+	producers := map[string]int{}
+	for _, entry := range entries {
+		name := entry.Name()
+		if entry.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		src, err := os.ReadFile(name)
+		if err != nil {
+			t.Fatalf("read %s: %v", name, err)
+		}
+		if n := len(literal.FindAll(src, -1)); n > 0 {
+			producers[name] = n
+		}
+	}
+
+	// cmd_forge_deploy.go holds the type declaration, the zero values its
+	// refusal arms return, and the one real mint in forgeDeployStaleState.
+	// Any OTHER file constructing one is the regression this test exists for.
+	for file := range producers {
+		if file != "cmd_forge_deploy.go" {
+			t.Errorf("%s constructs a forgeDeployApproval; only forgeDeployStaleState may mint one, "+
+				"because an approval is what produces --yes on a live-cluster deploy", file)
+		}
+	}
+	if producers["cmd_forge_deploy.go"] == 0 {
+		t.Error("no forgeDeployApproval literal found in cmd_forge_deploy.go; this test is " +
+			"passing vacuously and no longer guards --yes")
+	}
+}
+
+// Exit 5 is plan_unconfirmed, NOT the old timeout. It must surface as a loud
+// non-success naming plan_unconfirmed, and must never read as success or as a
+// rollout still in flight.
+func TestForgeDeployStatus_PlanUnconfirmedIsALoudFailure(t *testing.T) {
+	dir := forgeProject(t)
+	plan := deployPlanJSON("prod", "dry_run", "gke_prod", "gke_prod", "allow", "v1.5.15")
+	stubForge(t, forgeCommandResult{Stdout: []byte(plan)}, nil)
+	// forge's refusal: exit 5, the message on stderr, no document on stdout.
+	stubForgeDeploy(t, forgeCommandResult{
+		ExitCode: 5,
+		Stderr:   []byte("the deploy plan was not confirmed (plan_unconfirmed), so NO promotion was written."),
+	}, nil)
+
+	raw, err := handleForgeDeployStart(context.Background(), mustDeployPayload(t,
+		startRequest(dir, "prod", "gke_prod", "v1.5.15")))
+	if err != nil {
+		t.Fatalf("deploy_start: %v", err)
+	}
+	status := waitForDeployJob(t, decodeDeployStart(t, raw).Handle)
+
+	// NOTHING was applied, and that is knowable — so this is failed, not the
+	// "manifests may have landed" hedge.
+	if status.JobStatus != forgeDeployJobStatusFailed {
+		t.Errorf("job_status = %q, want %q: exit 5 means forge wrote no promotion and applied "+
+			"nothing, which must never read as success or as a rollout in flight",
+			status.JobStatus, forgeDeployJobStatusFailed)
+	}
+	if status.ExitCode != 5 {
+		t.Errorf("exit_code = %d, want 5 carried through verbatim", status.ExitCode)
+	}
+	if !strings.Contains(status.JobStatusDetail, "plan_unconfirmed") {
+		t.Errorf("detail must name plan_unconfirmed so it cannot be read as the old exit-5 "+
+			"timeout; got %q", status.JobStatusDetail)
+	}
+}
+
+// Exit 8 is the wait-budget expiry — the case 5 used to mean. Manifests WERE
+// applied, so it is genuinely indeterminate: unknown, naming the budget.
+func TestForgeDeployStatus_WaitBudgetExpiredIsUnknown(t *testing.T) {
+	dir := forgeProject(t)
+	plan := deployPlanJSON("prod", "dry_run", "gke_prod", "gke_prod", "allow", "v1.5.15")
+	stubForge(t, forgeCommandResult{Stdout: []byte(plan)}, nil)
+	stubForgeDeploy(t, forgeCommandResult{
+		ExitCode: 8,
+		Stderr:   []byte("the wait's budget expired while the rollout was still progressing"),
+	}, nil)
+
+	raw, err := handleForgeDeployStart(context.Background(), mustDeployPayload(t,
+		startRequest(dir, "prod", "gke_prod", "v1.5.15")))
+	if err != nil {
+		t.Fatalf("deploy_start: %v", err)
+	}
+	status := waitForDeployJob(t, decodeDeployStart(t, raw).Handle)
+
+	if status.JobStatus != forgeDeployJobStatusUnknown {
+		t.Errorf("job_status = %q, want %q: the manifests were applied and the rollout was still "+
+			"progressing, so the outcome is not established",
+			status.JobStatus, forgeDeployJobStatusUnknown)
+	}
+	if strings.Contains(status.JobStatusDetail, "plan_unconfirmed") {
+		t.Errorf("exit 8 must not be described as plan_unconfirmed; got %q", status.JobStatusDetail)
+	}
+}
+
+// The real deploy invocation carries --yes end to end. Pinned at the seam the
+// daemon actually hands forge, not at the argv builder, so a call site that
+// bypassed the builder could not satisfy it.
+// END TO END THROUGH THE HANDLER: the deploy forge is actually invoked with
+// approves the plan by digest and never says --yes.
+//
+// Distinct from the argv-builder tests above: those prove the builder cannot
+// produce --yes, this proves the HANDLER does not route around the builder.
+func TestForgeDeployStart_InvokesForgeWithTheApprovedDigest(t *testing.T) {
+	dir := forgeProject(t)
+	plan := deployPlanJSON("prod", "dry_run", "gke_prod", "gke_prod", "allow", "v1.5.15")
+	stubForge(t, forgeCommandResult{Stdout: []byte(plan)}, nil)
+	apply := stubForgeDeploy(t, forgeCommandResult{
+		Stdout: []byte(`{"env":"prod","mode":"apply","ok":true,"exit_code":0}`),
+	}, nil)
+
+	raw, err := handleForgeDeployStart(context.Background(), mustDeployPayload(t,
+		startRequest(dir, "prod", "gke_prod", "v1.5.15")))
+	if err != nil {
+		t.Fatalf("deploy_start: %v", err)
+	}
+	waitForDeployJob(t, decodeDeployStart(t, raw).Handle)
+
+	if slices.Contains(apply.Args, "--yes") {
+		t.Errorf("the apply invocation %q must NOT carry --yes: the daemon never tells forge a "+
+			"human approved a plan it has not seen", apply.Args)
+	}
+	if !slices.Contains(apply.Args, "--approve") ||
+		!slices.Contains(apply.Args, testApprovedDigest) {
+		t.Errorf("the apply invocation %q must approve the plan by digest (%s)",
+			apply.Args, testApprovedDigest)
+	}
+	// The version stage one cut, positionally — without it forge would
+	// build and cut a second release whose plan the digest cannot match.
+	if !slices.Contains(apply.Args, testApprovedVersion) {
+		t.Errorf("the apply invocation %q must name the approved release version %s",
+			apply.Args, testApprovedVersion)
+	}
+	if slices.Contains(apply.Args, "--dry-run") {
+		t.Errorf("the apply invocation %q must not carry --dry-run", apply.Args)
+	}
+}
+
+// A start with no approved digest is refused BEFORE any forge process runs.
+// The target token alone is what the interim accepted, and it is not enough.
+func TestForgeDeployStart_RefusesAStartWithNoApprovedPlan(t *testing.T) {
+	dir := forgeProject(t)
+	call := stubForge(t, forgeCommandResult{
+		Stdout: []byte(deployPlanJSON("prod", "dry_run", "gke_prod", "gke_prod", "allow", "v1.5.15")),
+	}, nil)
+
+	for name, req := range map[string]forgeDeployStartRequest{
+		"no digest": {
+			forgeDeployArgs:         forgeDeployArgs{ProjectPath: dir, Env: "prod"},
+			ExpectedDeclaredContext: "gke_prod",
+			ExpectedCurrentRelease:  "v1.5.15",
+			ReleaseVersion:          testApprovedVersion,
+		},
+		"no release version": {
+			forgeDeployArgs:         forgeDeployArgs{ProjectPath: dir, Env: "prod"},
+			ExpectedDeclaredContext: "gke_prod",
+			ExpectedCurrentRelease:  "v1.5.15",
+			ApproveDigest:           testApprovedDigest,
+		},
+	} {
+		if _, err := handleForgeDeployStart(context.Background(), mustDeployPayload(t, req)); err == nil {
+			t.Errorf("%s: deploy_start accepted a request with no complete content approval", name)
+		}
+	}
+
+	if call.Count != 0 {
+		t.Errorf("an unauthorised start ran %d forge processes; it must be refused before forge "+
+			"is invoked at all, since a plan-only run builds and pushes", call.Count)
 	}
 }
 
@@ -697,8 +1096,17 @@ func TestForgeDeployStart_RefusesConcurrentDeployOfSameEnv(t *testing.T) {
 		<-release
 		return forgeCommandResult{Stdout: []byte(deployAppliedJSON("prod", nil, true))}, nil
 	}
+	var firstHandle string
 	t.Cleanup(func() {
+		// Let the first job finish and WAIT for it before restoring the
+		// seam. Its goroutine reads runForgeDeploy, and closing release
+		// does not order that read before this write — only the job's
+		// own terminal state does. Restoring early is a data race, and
+		// leaves a running deploy in the shared registry besides.
 		close(release)
+		if firstHandle != "" {
+			waitForDeployJob(t, firstHandle)
+		}
 		runForgeDeploy = prev
 	})
 
@@ -707,7 +1115,12 @@ func TestForgeDeployStart_RefusesConcurrentDeployOfSameEnv(t *testing.T) {
 	if err != nil {
 		t.Fatalf("first start: %v", err)
 	}
-	firstHandle := decodeDeployStart(t, first).Handle
+	firstHandle = decodeDeployStart(t, first).Handle
+	// Without a handle here the RunningHandle comparison below would pass
+	// against "" without proving anything.
+	if firstHandle == "" {
+		t.Fatal("the first start must start a job and return its handle")
+	}
 
 	second, err := handleForgeDeployStart(context.Background(), mustDeployPayload(t,
 		startRequest(dir, "prod", "gke_prod", "v1.5.15")))
@@ -722,6 +1135,149 @@ func TestForgeDeployStart_RefusesConcurrentDeployOfSameEnv(t *testing.T) {
 	if got.DeployRefused.RunningHandle != firstHandle {
 		t.Errorf("the refusal must name the in-flight handle: got %q want %q",
 			got.DeployRefused.RunningHandle, firstHandle)
+	}
+}
+
+// The in-flight check and the job's registration are separated by the guard
+// plan — a forge subprocess that takes seconds — and the daemon dispatches every
+// command on its own goroutine. A second start arriving inside that window must
+// be refused too, or both see "nothing running" and both apply.
+func TestForgeDeployStart_RefusesSecondStartDuringGuardPlan(t *testing.T) {
+	dir := forgeProject(t)
+	plan := deployPlanJSON("prod", "dry_run", "gke_prod", "k3d", "allow", "v1.5.15")
+	req := startRequest(dir, "prod", "gke_prod", "v1.5.15")
+
+	var applies atomic.Int32
+	prevApply := runForgeDeploy
+	runForgeDeploy = func(_ context.Context, _ string, _ []string) (forgeCommandResult, error) {
+		applies.Add(1)
+		return forgeCommandResult{Stdout: []byte(deployAppliedJSON("prod", nil, true))}, nil
+	}
+
+	// The second start is issued from INSIDE the first start's guard plan.
+	// On the daemon these are two commands on two goroutines; nesting them
+	// makes that interleaving deterministic.
+	var second forgeDeployStartResponse
+	planCalls := 0
+	prevPlan := runForge
+	runForge = func(_ context.Context, _ string, _ []string) (forgeCommandResult, error) {
+		planCalls++
+		if planCalls == 1 {
+			raw, err := handleForgeDeployStart(context.Background(), mustDeployPayload(t, req))
+			if err != nil {
+				t.Errorf("second start: %v", err)
+			} else {
+				second = decodeDeployStart(t, raw)
+			}
+		}
+		return forgeCommandResult{Stdout: []byte(plan)}, nil
+	}
+
+	var started []string
+	t.Cleanup(func() {
+		// Every job this test started must settle before the seams it
+		// reads are restored.
+		for _, handle := range started {
+			waitForDeployJob(t, handle)
+		}
+		runForge = prevPlan
+		runForgeDeploy = prevApply
+	})
+
+	raw, err := handleForgeDeployStart(context.Background(), mustDeployPayload(t, req))
+	if err != nil {
+		t.Fatalf("first start: %v", err)
+	}
+	first := decodeDeployStart(t, raw)
+	for _, handle := range []string{first.Handle, second.Handle} {
+		if handle != "" {
+			started = append(started, handle)
+		}
+	}
+
+	if second.DeployRefused == nil || second.DeployRefused.Reason != forgeDeployRefusalReasonAlreadyRunning {
+		t.Fatalf("a start arriving during another start's guard plan must be refused as already_running; "+
+			"got handle %q, refusal %+v", second.Handle, second.DeployRefused)
+	}
+	if second.Handle != "" {
+		t.Errorf("a refused start must return no handle, got %q", second.Handle)
+	}
+	// The first start has no job yet, so there is no handle to name — and
+	// the refusal must not invent one.
+	if second.DeployRefused.RunningHandle != "" {
+		t.Errorf("no job exists yet, so no running handle can be named, got %q",
+			second.DeployRefused.RunningHandle)
+	}
+	if planCalls != 1 {
+		t.Errorf("the refused start must not run a guard plan: %d plans ran", planCalls)
+	}
+
+	// The first start is unaffected and is the one deploy that runs.
+	if first.DeployRefused != nil || first.Handle == "" {
+		t.Fatalf("the first start must proceed: handle %q, refusal %+v", first.Handle, first.DeployRefused)
+	}
+	waitForDeployJob(t, first.Handle)
+	if n := applies.Load(); n != 1 {
+		t.Errorf("exactly one apply may run for one env, got %d", n)
+	}
+}
+
+// A start that ends WITHOUT starting a job — refused, or failed before the
+// apply — must give its claim back. A leaked claim would refuse every later
+// deploy of that env as already_running until the daemon restarted.
+func TestForgeDeployStart_EarlyExitReleasesTheClaim(t *testing.T) {
+	cases := map[string]struct {
+		plan    forgeCommandResult
+		planErr error
+		claimed string // the declared context the failing start asserts
+	}{
+		"stale declared context": {
+			plan:    forgeCommandResult{Stdout: []byte(deployPlanJSON("prod", "dry_run", "gke_prod", "k3d", "allow", "v1.5.15"))},
+			claimed: "k3d-control-plane",
+		},
+		"forge guard refusal": {
+			plan:    forgeCommandResult{Stdout: []byte(deployPlanJSON("prod", "dry_run", "gke_prod", "", "refuse", "v1.5.15")), ExitCode: 1},
+			claimed: "gke_prod",
+		},
+		"preview that applied": {
+			plan:    forgeCommandResult{Stdout: []byte(deployPlanJSON("prod", "apply", "gke_prod", "k3d", "allow", "v1.5.15"))},
+			claimed: "gke_prod",
+		},
+		"forge could not run": {
+			planErr: errors.New("exec: forge: not found"),
+			claimed: "gke_prod",
+		},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			dir := forgeProject(t)
+			stubForge(t, tc.plan, tc.planErr)
+			stubNoForgeDeploy(t)
+
+			raw, err := handleForgeDeployStart(context.Background(), mustDeployPayload(t,
+				startRequest(dir, "prod", tc.claimed, "v1.5.15")))
+			if err == nil && decodeDeployStart(t, raw).Handle != "" {
+				t.Fatal("the setup must not start a job")
+			}
+
+			// Same env, a plan that would be accepted: it must start.
+			stubForge(t, forgeCommandResult{
+				Stdout: []byte(deployPlanJSON("prod", "dry_run", "gke_prod", "k3d", "allow", "v1.5.15")),
+			}, nil)
+			stubForgeDeploy(t, forgeCommandResult{Stdout: []byte(deployAppliedJSON("prod", nil, true))}, nil)
+
+			raw, err = handleForgeDeployStart(context.Background(), mustDeployPayload(t,
+				startRequest(dir, "prod", "gke_prod", "v1.5.15")))
+			if err != nil {
+				t.Fatalf("follow-up start: %v", err)
+			}
+			got := decodeDeployStart(t, raw)
+			if got.DeployRefused != nil {
+				t.Fatalf("the earlier start leaked its claim — the env is refused with nothing running: %+v",
+					got.DeployRefused)
+			}
+			waitForDeployJob(t, got.Handle)
+		})
 	}
 }
 

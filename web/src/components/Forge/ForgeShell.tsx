@@ -142,7 +142,7 @@ export function ForgeShell({ activePath, envs = [], search, headerContent, child
             className="flex items-center transition-[padding] duration-200 ease-in-out"
             style={{ paddingLeft: trafficLightPadding }}
           >
-            <span className="text-sm font-semibold tracking-tight text-ink">forge</span>
+            <span className="text-sm font-semibold tracking-tight text-ink">Deployments</span>
           </div>
         }
         navItems={navItems}

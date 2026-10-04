@@ -16,7 +16,8 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { DeployFlow } from "../DeployFlow";
-import { DeployConfirmStep } from "../DeployConfirmStep";
+import type { DeployPlanReport } from "@/services/forge/deployPlan";
+import { deployTokenFor } from "@/services/forge/deploy";
 import {
   devPlan,
   guardRefusedPlan,
@@ -33,9 +34,34 @@ function baseProps() {
   return {
     isPlanning: false,
     isStarting: false,
-    onConfirm: noop,
     onReplan: noop,
     onClose: noop,
+    onBuildAndPlan: noop,
+    acknowledged: new Set<string>(),
+    onAcknowledge: noop,
+    onApprove: noop,
+    onReplanAfterStale: noop,
+  };
+}
+
+const APPROVED_DIGEST =
+  "sha256:1111111111111111111111111111111111111111111111111111111111111111";
+const APPROVED_RELEASE = "20261003.114500-abcdef123456";
+
+/** A clean plan-only document — the only thing a deploy may be approved from. */
+function approvablePlan(env = "prod"): DeployPlanReport {
+  return {
+    env,
+    ok: true,
+    exit_code: 0,
+    target: { release: APPROVED_RELEASE },
+    deploy_plan: {
+      digest: APPROVED_DIGEST,
+      environment_id: env,
+      bundle_id: "bundle-1",
+      release_version: APPROVED_RELEASE,
+      findings: [{ code: "image_changed", class: "info", section: "images", subject: "api" }],
+    },
   };
 }
 
@@ -52,14 +78,14 @@ describe("the confirm guard", () => {
 
     for (const outcome of outcomes) {
       const view = render(<DeployFlow {...baseProps()} planOutcome={outcome} />);
-      expect(screen.queryByTestId("deploy-confirm")).toBeNull();
-      expect(screen.queryByTestId("deploy-start")).toBeNull();
+      expect(screen.queryByTestId("deploy-approve")).toBeNull();
+      expect(screen.queryByTestId("deploy-approve-start")).toBeNull();
       view.unmount();
     }
 
     const loading = render(<DeployFlow {...baseProps()} isPlanning planOutcome={undefined} />);
     expect(screen.getByTestId("deploy-planning")).toBeTruthy();
-    expect(screen.queryByTestId("deploy-start")).toBeNull();
+    expect(screen.queryByTestId("deploy-approve-start")).toBeNull();
     loading.unmount();
 
     render(
@@ -70,14 +96,22 @@ describe("the confirm guard", () => {
       />
     );
     expect(screen.getByTestId("deploy-plan-error")).toBeTruthy();
-    expect(screen.queryByTestId("deploy-start")).toBeNull();
+    expect(screen.queryByTestId("deploy-approve-start")).toBeNull();
   });
 
-  it("renders the plan ABOVE the confirm when one exists", () => {
-    render(<DeployFlow {...baseProps()} planOutcome={planOutcome(prodPlan())} />);
-    const plan = screen.getByTestId("deploy-plan");
-    const confirm = screen.getByTestId("deploy-confirm");
-    expect(plan.compareDocumentPosition(confirm) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  it("renders the plan ABOVE the approval when one exists", () => {
+    // The approval exists only once there is an approvable plan, so this needs
+    // both documents: the preview, and the plan the deploy is bound to.
+    render(
+      <DeployFlow
+        {...baseProps()}
+        planOutcome={planOutcome(prodPlan())}
+        approvablePlan={approvablePlan()}
+      />
+    );
+    const plan = screen.getByTestId("approvable-plan");
+    const approve = screen.getByTestId("deploy-approve");
+    expect(plan.compareDocumentPosition(approve) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it("offers NO confirm at all — not a disabled one — when preflight blocks", () => {
@@ -85,8 +119,8 @@ describe("the confirm guard", () => {
     // to it: the confirm step is absent, and the reason is rendered in its place.
     render(<DeployFlow {...baseProps()} planOutcome={planOutcome(devPlan())} />);
 
-    expect(screen.queryByTestId("deploy-confirm")).toBeNull();
-    expect(screen.queryByTestId("deploy-start")).toBeNull();
+    expect(screen.queryByTestId("deploy-approve")).toBeNull();
+    expect(screen.queryByTestId("deploy-approve-start")).toBeNull();
     expect(screen.queryByTestId("deploy-acknowledge")).toBeNull();
 
     const blocked = screen.getByTestId("deploy-blocked");
@@ -98,7 +132,7 @@ describe("the confirm guard", () => {
 
   it("offers no confirm when forge's own guard refused, and names every blocker", () => {
     render(<DeployFlow {...baseProps()} planOutcome={planOutcome(guardRefusedPlan())} />);
-    expect(screen.queryByTestId("deploy-start")).toBeNull();
+    expect(screen.queryByTestId("deploy-approve-start")).toBeNull();
     expect(screen.getByTestId("deploy-blocker-guard-refused").textContent).toMatch(
       /will not deploy/i
     );
@@ -106,7 +140,7 @@ describe("the confirm guard", () => {
 
   it("offers no confirm for an env that declares no cluster", () => {
     render(<DeployFlow {...baseProps()} planOutcome={planOutcome(noClusterPlan())} />);
-    expect(screen.queryByTestId("deploy-start")).toBeNull();
+    expect(screen.queryByTestId("deploy-approve-start")).toBeNull();
     expect(screen.getByTestId("deploy-blocker-no-declared-cluster")).toBeTruthy();
   });
 
@@ -114,81 +148,94 @@ describe("the confirm guard", () => {
     // An apply report describes a deploy that already happened; it cannot
     // authorise another.
     render(<DeployFlow {...baseProps()} planOutcome={planOutcome(prodPlan({ mode: "apply" }))} />);
-    expect(screen.queryByTestId("deploy-start")).toBeNull();
+    expect(screen.queryByTestId("deploy-approve-start")).toBeNull();
     expect(screen.getByTestId("deploy-blocker-not-a-preview").textContent).toContain("apply");
   });
 
-  it("requires acknowledging the claim AND typing the declared cluster", async () => {
+  it("approves with the button alone, named for the environment", async () => {
+    // NO TYPED CONTEXT AND NO BLANKET CHECKBOX. The cluster is declared in
+    // KCL, so the user never chose it and there is no wrong one to catch — see
+    // DeployApproveStep's header. The plan is the review; this is the approval.
     const user = userEvent.setup();
-    const onConfirm = vi.fn();
+    const onApprove = vi.fn();
     render(
-      <DeployFlow {...baseProps()} onConfirm={onConfirm} planOutcome={planOutcome(prodPlan())} />
+      <DeployFlow
+        {...baseProps()}
+        onApprove={onApprove}
+        planOutcome={planOutcome(prodPlan())}
+        approvablePlan={approvablePlan()}
+      />
     );
 
-    const start = screen.getByTestId("deploy-start");
-    expect(start).toBeDisabled();
-    await user.click(start);
-    expect(onConfirm).not.toHaveBeenCalled();
-
-    await user.click(screen.getByTestId("deploy-acknowledge"));
-    // Acknowledged, cluster still untyped — every deploy types it, not just a
-    // subset. There is no "dev is safe" exemption.
-    expect(start).toBeDisabled();
-
-    await user.type(
-      screen.getByTestId("deploy-typed-context"),
-      "gke_reliant-labs-475814_us-central1_prod"
-    );
+    const start = screen.getByTestId("deploy-approve-start");
     expect(start).toBeEnabled();
+    expect(start.textContent).toContain("prod");
+    expect(screen.queryByTestId("deploy-typed-context")).toBeNull();
+    expect(screen.queryByTestId("deploy-acknowledge")).toBeNull();
+
+    await user.click(start);
+    expect(onApprove).toHaveBeenCalledTimes(1);
   });
 
-  it("rejects the WRONG cluster name typed into the confirm", async () => {
-    const user = userEvent.setup();
+  it("offers NO approval until the changes have been worked out", () => {
+    // The instant preview cannot say what a deploy would ship, so on its own
+    // it offers only the control that works that out.
     render(<DeployFlow {...baseProps()} planOutcome={planOutcome(prodPlan())} />);
-    await user.click(screen.getByTestId("deploy-acknowledge"));
-    // The ambient context is NOT the target, and typing it must not unlock this.
-    await user.type(screen.getByTestId("deploy-typed-context"), "k3d-control-plane");
-    expect(screen.getByTestId("deploy-start")).toBeDisabled();
+
+    expect(screen.queryByTestId("deploy-approve-start")).toBeNull();
+    expect(screen.getByTestId("deploy-build-and-plan")).toBeInTheDocument();
   });
 
-  it("states the claim, cluster first, in the words the server re-checks", () => {
-    render(<DeployFlow {...baseProps()} planOutcome={planOutcome(prodPlan())} />);
-    const claim = screen.getByTestId("deploy-claim").textContent ?? "";
-    expect(claim).toContain("gke_reliant-labs-475814_us-central1_prod");
-    expect(claim).toContain("v1.5.15");
+  it("still binds the declared cluster in the token the request carries", () => {
+    // The guard the typing used to advertise, asserted directly. The server
+    // re-checks this, so a KCL that moved still refuses after the click.
+    const token = deployTokenFor(prodPlan());
+    expect(token?.expectedDeclaredContext).toBe("gke_reliant-labs-475814_us-central1_prod");
+    expect(token?.expectedCurrentRelease).toBe("v1.5.15");
   });
 
-  it("names every cluster again at the point of the click, for a multi-cluster env", () => {
+  it("uses the one rule for a multi-cluster env too", () => {
     // devPlan blocks on preflight, so use a clean two-cluster plan to isolate this.
     const twoClusters = devPlan({
       preflight: { status: "ran", findings: [], blocking: 0 },
       ok: true,
       exit_code: 0,
     });
-    render(<DeployConfirmStep plan={twoClusters} onConfirm={noop} onCancel={noop} />);
-    const note = screen.getByTestId("deploy-confirm-all-contexts").textContent ?? "";
-    expect(note).toContain("k3d-control-plane");
-    expect(note).toContain("k3d-cp-daemon");
-    expect(note).toMatch(/2 clusters/);
+    render(
+      <DeployFlow
+        {...baseProps()}
+        planOutcome={planOutcome(twoClusters)}
+        approvablePlan={approvablePlan("dev")}
+      />
+    );
+    expect(screen.getByTestId("deploy-approve-start").textContent).toContain("dev");
+    expect(screen.queryByTestId("deploy-typed-context")).toBeNull();
+    // The cluster list is information on the PLAN, not a hurdle at the click.
+    expect(screen.queryByTestId("deploy-confirm-all-contexts")).toBeNull();
   });
 
-  it("passes the RENDERED plan object to onConfirm", async () => {
-    // The token — including the declared context — is derived from this object
-    // downstream, so its identity is the guarantee the claim matches the screen.
+  it("passes an approval derived from the RENDERED plan to onApprove", async () => {
+    // The digest comes off the plan document on screen, so what is approved and
+    // what is deployed are the same change set by construction.
     const user = userEvent.setup();
-    const onConfirm = vi.fn();
-    const plan = prodPlan();
-    render(<DeployFlow {...baseProps()} onConfirm={onConfirm} planOutcome={planOutcome(plan)} />);
-
-    await user.click(screen.getByTestId("deploy-acknowledge"));
-    await user.type(
-      screen.getByTestId("deploy-typed-context"),
-      "gke_reliant-labs-475814_us-central1_prod"
+    const onApprove = vi.fn();
+    render(
+      <DeployFlow
+        {...baseProps()}
+        onApprove={onApprove}
+        planOutcome={planOutcome(prodPlan())}
+        approvablePlan={approvablePlan()}
+      />
     );
-    await user.click(screen.getByTestId("deploy-start"));
 
-    expect(onConfirm).toHaveBeenCalledTimes(1);
-    expect(onConfirm.mock.calls[0][0]).toBe(plan);
+    await user.click(screen.getByTestId("deploy-approve-start"));
+
+    expect(onApprove).toHaveBeenCalledTimes(1);
+    expect(onApprove.mock.calls[0][0]).toEqual({
+      approveDigest: APPROVED_DIGEST,
+      releaseVersion: APPROVED_RELEASE,
+      acknowledgedFindings: [],
+    });
   });
 });
 
@@ -207,16 +254,11 @@ describe("no escape hatches", () => {
       expect(text).not.toContain(phrase);
     }
 
-    // And no interactive control beyond the two the confirm step defines: the
-    // acknowledge checkbox and the typed cluster name.
-    const inputs = [...container.querySelectorAll("input")];
-    expect(inputs).toHaveLength(2);
-    expect(inputs.map((input) => input.getAttribute("data-testid")).sort()).toEqual([
-      "deploy-acknowledge",
-      "deploy-typed-context",
-    ]);
-    // No toggles, switches or checkboxes other than the acknowledgement.
-    expect(inputs.filter((input) => input.type === "checkbox")).toHaveLength(1);
+    // And NO interactive control at all on a clean plan. The confirm step
+    // defines none: the button is the whole confirmation. The only input this
+    // flow can ever render is the destructive-findings tick, which requires a
+    // finding reporting irreversible loss to exist.
+    expect(container.querySelectorAll("input")).toHaveLength(0);
   });
 });
 
@@ -281,7 +323,7 @@ describe("the four refusal reasons", () => {
 
       // The stale confirm is gone — the claim is known bad and must not be
       // re-sendable.
-      expect(screen.queryByTestId("deploy-start")).toBeNull();
+      expect(screen.queryByTestId("deploy-approve-start")).toBeNull();
 
       // The copy is genuinely distinct per reason, not one message with a label.
       expect(seen.has(heading)).toBe(false);

@@ -50,6 +50,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
 	"github.com/reliant-labs/reliant/internal/workflow/scenario"
+	"github.com/reliant-labs/reliant/internal/workflow/stopreason"
 	wfyaml "github.com/reliant-labs/reliant/internal/workflow/yaml"
 	"github.com/stretchr/testify/mock"
 	"go.temporal.io/sdk/activity"
@@ -2084,6 +2085,12 @@ func normalizeOutput(raw map[string]interface{}, activityName string) map[string
 	}
 	for k, v := range raw {
 		out[k] = v
+	}
+	// Mirrors runtime.normalizeActivityOutput: a call_llm mock that names only
+	// its tool_calls must reach the loop condition with the stop_reason
+	// production would have derived from them, not an empty one.
+	if activityName == "CallLLM" {
+		stopreason.FillDefault(out)
 	}
 	return out
 }

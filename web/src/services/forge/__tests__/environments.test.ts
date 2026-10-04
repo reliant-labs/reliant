@@ -212,6 +212,28 @@ describe("managedTargetFor", () => {
     const [summary] = joinEnvironments([{ env: "staging", declared: true, destination: "cluster" }], []);
     expect(managedTargetFor(summary)).toEqual({ kind: "none", availability: "not-hosted" });
   });
+
+  // forge could not be asked (or could not answer) and the control plane holds
+  // no row: NOTHING has said where this env's secrets live. Reporting that as
+  // "not hosted" is claiming forge named a different provider when it named
+  // nothing — which is what hounders prod showed while its KCL declared
+  // `secret_provider = forge.HostedSecrets {}`.
+  it("does not claim not-hosted when neither forge nor the control plane reported the env", () => {
+    expect(managedTargetFor({ forge: null, cloud: null })).toEqual({
+      kind: "none",
+      availability: "provider-unknown",
+    });
+  });
+
+  it("does not claim not-hosted when forge's row could not resolve a destination", () => {
+    // forge's row when it cannot render the env's KCL: declared, with a note
+    // and no destination (forge internal/cli/env_topology.go).
+    const [summary] = joinEnvironments(
+      [{ env: "prod", declared: true, note: "could not render this environment to resolve where it runs: kcl: exit 1" }],
+      []
+    );
+    expect(managedTargetFor(summary)).toEqual({ kind: "none", availability: "provider-unknown" });
+  });
 });
 
 describe("devStackRunsHere", () => {

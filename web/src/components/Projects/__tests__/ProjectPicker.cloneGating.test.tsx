@@ -29,26 +29,45 @@ vi.mock("@/services/controlPlane/capabilities", () => ({
   capabilities: { cloudDaemons: true, managedCredits: true, gitConnections: true },
 }));
 
-const mockListDaemons = vi.fn(async () => ({ daemons: [] as unknown[] }));
+// One array drives both the shared registry poll (useDaemonStatus) and the
+// raw client, because the picker reads ONE list and a fixture that set them
+// differently would be testing a state the app cannot be in.
+let registryDaemons: unknown[] = [];
+
+const mockListDaemons = vi.fn(async () => ({ daemons: registryDaemons }));
+
+// The picker now reads ONE list, from the registry
+// (docs/design/one-daemon-list.md), so the grpc client is what gets stubbed.
+// It used to poll this list AND control-plane's, and reconcile them by hand.
+vi.mock("@/api/grpc-client", () => ({
+  grpcClient: {
+    daemonRegistry: () => ({
+      listDaemons: (...args: unknown[]) => mockListDaemons(...(args as [])),
+    }),
+  },
+}));
 
 vi.mock("@/services/controlPlane/daemon", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/services/controlPlane/daemon")>()),
-  listDaemons: (...args: unknown[]) => mockListDaemons(...(args as [])),
   resumeDaemon: vi.fn(),
   deleteDaemon: vi.fn(),
-  hasActiveDaemon: () => false,
 }));
 
 // Web mode with no ACTIVE registry daemon: activeDaemon undefined is exactly
 // the condition that used to blank the whole action card.
-vi.mock("@/hooks/useDaemonStatus", () => ({
-  useDaemonStatus: () => ({
-    daemons: [],
-    activeDaemon: undefined,
-    loading: false,
-    refresh: vi.fn(),
-  }),
-}));
+vi.mock("@/hooks/useDaemonStatus", async () => {
+  const { DaemonStatus } = await import("@/gen/reliant/v1/daemon_registry_pb");
+  return {
+    useDaemonStatus: () => ({
+      daemons: registryDaemons,
+      activeDaemon: (registryDaemons as Array<{ status: number }>).find(
+        (d) => d.status === DaemonStatus.ACTIVE,
+      ),
+      loading: false,
+      refresh: vi.fn(),
+    }),
+  };
+});
 
 vi.mock("@/hooks/useGitHubCredential", () => ({
   useGitHubCredential: () => ({ hasToken: true }),
@@ -85,18 +104,20 @@ vi.mock("@/store/apiKeySetupStore", () => ({
 }));
 
 import { ProjectPicker } from "../ProjectPicker";
-import {
-  DAEMON_STATUS_ACTIVE,
-  DAEMON_STATUS_FAILED,
-  DAEMON_STATUS_SUSPENDED,
-} from "@/services/controlPlane/daemon";
+import { DaemonStatus } from "@/gen/reliant/v1/daemon_registry_pb";
+
+const DAEMON_STATUS_ACTIVE = DaemonStatus.ACTIVE;
+const DAEMON_STATUS_FAILED = DaemonStatus.FAILED;
+const DAEMON_STATUS_SUSPENDED = DaemonStatus.SUSPENDED;
 
 function daemon(id: string, status: number, extra: Record<string, unknown> = {}) {
   return {
-    id,
-    name: id,
+    daemonId: id,
     status,
     hostname: id,
+    // Cloud rows only: the picker filters the one list by daemon type, and a
+    // self-hosted machine is not a clone target.
+    daemonType: "managed",
     lastStatusMessage: "",
     ...extra,
   };
@@ -123,18 +144,16 @@ function renderPicker() {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mockListDaemons.mockResolvedValue({ daemons: [] });
+  registryDaemons = [];
 });
 
 describe("ProjectPicker clone gating — failed-only daemons", () => {
   beforeEach(() => {
-    mockListDaemons.mockResolvedValue({
-      daemons: [
+    registryDaemons = [
         daemon("machine-a", DAEMON_STATUS_FAILED, {
           lastStatusMessage: "exceeded storage quota",
         }),
-      ],
-    });
+      ];
   });
 
   it("still offers Clone repo rather than hiding every add-project entry point", async () => {
@@ -167,9 +186,7 @@ describe("ProjectPicker clone gating — failed-only daemons", () => {
 
 describe("ProjectPicker clone gating — suspended-only daemons", () => {
   beforeEach(() => {
-    mockListDaemons.mockResolvedValue({
-      daemons: [daemon("machine-b", DAEMON_STATUS_SUSPENDED)],
-    });
+    registryDaemons = [daemon("machine-b", DAEMON_STATUS_SUSPENDED)];
   });
 
   it("enables Clone repo — the command queues until the machine wakes", async () => {
@@ -193,9 +210,7 @@ describe("ProjectPicker clone gating — suspended-only daemons", () => {
 
 describe("ProjectPicker clone gating — an active daemon", () => {
   beforeEach(() => {
-    mockListDaemons.mockResolvedValue({
-      daemons: [daemon("machine-c", DAEMON_STATUS_ACTIVE)],
-    });
+    registryDaemons = [daemon("machine-c", DAEMON_STATUS_ACTIVE)];
   });
 
   it("enables Clone repo and presents it as an immediate pull", async () => {

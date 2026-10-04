@@ -12,7 +12,7 @@
  *
  *   - `startIndex` is the first RENDERED row, inflated by `overscan` and
  *     `increaseViewportBy`, so it is not the visual top and it is not
- *     monotonic. Recorded scrollDebug frames from a real session show it
+ *     monotonic. Recorded scroll frames from a real session showed it
  *     stepping 115 → 111 → 112 → 105 → 115 → 104 across consecutive animation
  *     frames with no user input at all. Driving a visible overlay from that
  *     toggles it on and off between frames — the reported jitter.

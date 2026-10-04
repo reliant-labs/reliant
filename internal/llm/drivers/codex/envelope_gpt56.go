@@ -3,12 +3,14 @@ package codex
 
 import (
 	"encoding/json"
+	"strconv"
 	"strings"
 
 	"github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/packages/param"
 	"github.com/openai/openai-go/v3/responses"
 	"github.com/openai/openai-go/v3/shared"
+	"github.com/reliant-labs/reliant/internal/llm/drivers/responseswire"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/logging"
 )
@@ -258,12 +260,27 @@ func (c *CodexClient) logServedResponse(resp *responses.Response, upstreamReques
 		)
 	}
 
+	// endTurn / phase / incompleteReason are the three fields that decide
+	// whether the agent loop continues, and none of them is visible anywhere
+	// else: end_turn is undocumented and absent from the SDK types, phase is
+	// dropped when we replay history, and the incomplete reason was previously
+	// collapsed into a single MaxTokens claim. "absent" rather than a bare
+	// false for end_turn because the two mean opposite things — see
+	// responseswire.EndTurn.
+	endTurn := "absent"
+	if value, present := responseswire.EndTurn(resp); present {
+		endTurn = strconv.FormatBool(value)
+	}
+
 	logging.Info("[Codex] Served",
 		"model", string(c.options.Model.ID),
 		"servedModel", served,
 		"servedEffort", string(resp.Reasoning.Effort),
 		"servedSummary", string(resp.Reasoning.Summary),
 		"status", string(resp.Status),
+		"endTurn", endTurn,
+		"phase", responseswire.AssistantPhase(resp),
+		"incompleteReason", resp.IncompleteDetails.Reason,
 		"reasoningTokens", resp.Usage.OutputTokensDetails.ReasoningTokens,
 		"cachedTokens", resp.Usage.InputTokensDetails.CachedTokens,
 		"totalTokens", resp.Usage.TotalTokens,

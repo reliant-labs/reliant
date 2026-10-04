@@ -239,6 +239,9 @@ type DaemonConnectionManager interface {
 	SendToolExecutionBackground(ctx context.Context, userID, requestID, toolCallID string) error
 	SendKillProcess(userID, processID string) error
 	SendDaemonCommand(ctx context.Context, userID string, req *reliantv1.DaemonCommandRequest) (*reliantv1.DaemonCommandResponse, error)
+	// SendDaemonCommandToDaemon runs a command on ONE named daemon of the
+	// user, never on another of their daemons.
+	SendDaemonCommandToDaemon(ctx context.Context, userID, daemonID string, req *reliantv1.DaemonCommandRequest) (*reliantv1.DaemonCommandResponse, error)
 	SendLoadProjectConfigs(ctx context.Context, userID string, projectPath string, requestID string) error
 	SendWatchProjectConfigs(ctx context.Context, userID string, projectPath string, includeInitial bool) error
 	SendTerminalInput(userID string, sessionID string, data []byte) error

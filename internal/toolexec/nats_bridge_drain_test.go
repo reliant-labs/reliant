@@ -22,13 +22,25 @@ import (
 type recordingDaemonMgr struct {
 	mu       sync.Mutex
 	commands []*reliantv1.DaemonCommandRequest
-	err      error
+	// targets records, per command, which daemon it was addressed to; ""
+	// means it went through the user-default SendDaemonCommand.
+	targets []string
+	err     error
 }
 
 func (m *recordingDaemonMgr) SendDaemonCommand(_ context.Context, _ string, req *reliantv1.DaemonCommandRequest) (*reliantv1.DaemonCommandResponse, error) {
+	return m.record("", req)
+}
+
+func (m *recordingDaemonMgr) SendDaemonCommandToDaemon(_ context.Context, _, daemonID string, req *reliantv1.DaemonCommandRequest) (*reliantv1.DaemonCommandResponse, error) {
+	return m.record(daemonID, req)
+}
+
+func (m *recordingDaemonMgr) record(daemonID string, req *reliantv1.DaemonCommandRequest) (*reliantv1.DaemonCommandResponse, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.commands = append(m.commands, req)
+	m.targets = append(m.targets, daemonID)
 	if m.err != nil {
 		return nil, m.err
 	}
@@ -47,9 +59,13 @@ type slowDaemonMgr struct {
 }
 
 func (m *slowDaemonMgr) SendDaemonCommand(ctx context.Context, userID string, req *reliantv1.DaemonCommandRequest) (*reliantv1.DaemonCommandResponse, error) {
+	return m.SendDaemonCommandToDaemon(ctx, userID, "", req)
+}
+
+func (m *slowDaemonMgr) SendDaemonCommandToDaemon(ctx context.Context, userID, daemonID string, req *reliantv1.DaemonCommandRequest) (*reliantv1.DaemonCommandResponse, error) {
 	select {
 	case <-time.After(m.delay):
-		return m.recordingDaemonMgr.SendDaemonCommand(ctx, userID, req)
+		return m.recordingDaemonMgr.SendDaemonCommandToDaemon(ctx, userID, daemonID, req)
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	}
@@ -540,6 +556,32 @@ func TestDrainPendingCommands_DispatchesPendingMessages(t *testing.T) {
 	assert.Equal(t, "req-2", mgr.commands[1].RequestId)
 	assert.Equal(t, "git.pull", mgr.commands[1].CommandType)
 	assert.Equal(t, int32(15000), mgr.commands[1].TimeoutMs)
+}
+
+// A queued command belongs to the daemon whose queue it was drained from
+// (daemon.pending.<daemonID>), and must run THERE. Dispatching by user ran it
+// on the user's default daemon, which prefers a local machine over a cloud
+// one: with a laptop connected, a clone queued for the cloud machine landed on
+// the laptop.
+func TestDrainPendingCommands_DispatchesToTheQueuesOwnDaemon(t *testing.T) {
+	mgr := &recordingDaemonMgr{}
+	consumer := &stubConsumer{
+		batches: []jetstream.MessageBatch{
+			&stubMessageBatch{
+				msgs: []jetstream.Msg{makePendingMsg(t, "clone:p:cloud-daemon", "git.clone", json.RawMessage(`{}`), 60000)},
+				err:  jetstream.ErrMsgIteratorClosed,
+			},
+		},
+	}
+	bridge := newTestBridge(&stubJetStream{stream: &stubStream{consumer: consumer}}, mgr)
+	defer bridge.cancel()
+
+	bridge.drainPendingCommands(context.Background(), "user-1", "cloud-daemon")
+
+	mgr.mu.Lock()
+	defer mgr.mu.Unlock()
+	require.Equal(t, []string{"cloud-daemon"}, mgr.targets,
+		"a drained command must be addressed to the daemon whose queue it came from, not the user's default")
 }
 
 func TestDrainPendingCommands_MessagesAreAcked(t *testing.T) {

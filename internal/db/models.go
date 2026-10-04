@@ -174,6 +174,41 @@ type Daemon struct {
 	DaemonType *string
 	CreatedAt  time.Time
 	UpdatedAt  time.Time
+
+	// Lifecycle state mirrored from the control plane over
+	// daemon.v1.state.<id>.lifecycle. This service does NOT own these — the
+	// Workspace CR does, and only the control-plane operator watches it. They
+	// are stored so the registry can serve one list carrying both liveness
+	// (derived from daemon_attachment, which this service does own) and
+	// lifecycle. All nil/zero for self-hosted daemons, permanently.
+	//
+	// LifecyclePhase holds the public vocabulary (daemonstate.LifecyclePhase
+	// values), never a raw Kubernetes phase.
+	LifecyclePhase *string
+	Size           *string
+	// LastStatusMessage is shown verbatim in the UI.
+	LastStatusMessage string
+	// LastStatusChangedAt is the ordering key for lifecycle writes: an event
+	// older than this is dropped, which is what makes out-of-order delivery
+	// safe on a newest-wins stream with no redelivery.
+	LastStatusChangedAt *time.Time
+	LastOOMKilledAt     *time.Time
+	OOMKillCount        int32
+}
+
+// DaemonLifecycleUpdate is one control-plane lifecycle observation, as applied
+// to a daemons row by ApplyDaemonLifecycle.
+//
+// ChangedAt is required and load-bearing: it is the ordering key the
+// conditional write compares against, not merely a timestamp to store.
+type DaemonLifecycleUpdate struct {
+	DaemonID        string
+	Phase           string
+	Size            string
+	StatusMessage   string
+	ChangedAt       time.Time
+	LastOOMKilledAt *time.Time
+	OOMKillCount    int32
 }
 
 type DaemonAttachmentSource string
