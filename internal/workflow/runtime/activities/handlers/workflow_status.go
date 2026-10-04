@@ -103,10 +103,23 @@ func (a *WorkflowStatusActivity) Execute(ctx context.Context, input WorkflowStat
 	// - "completed" -> mark unread (only for ROOT workflow - user should see
 	//   result), unless nobody started it by typing (completionNotifies)
 	// - "cancelled" -> no change (user cancelled, no action needed)
-	// - "failed" -> no change (nothing pending)
-	if input.Status == "completed" && isRootWorkflow && a.completionNotifies(ctx, input) {
-		if err := a.repo.UpdateChatUnread(ctx, input.ChatID, true, "workflow_completed"); err != nil {
-			logging.Warn("[WorkflowStatus] Failed to mark chat as unread", "error", err)
+	// - "failed" -> mark unread for ROOT with reason workflow_failed, whatever
+	//   launched it: a crashed run is never expected, and an unattended one has
+	//   nobody watching. This covers preflight failures such as an unavailable
+	//   daemon, which also end the root as "failed".
+	// A completed run that declared a failure outcome is also a failure.
+	if isRootWorkflow {
+		reason := ""
+		switch {
+		case input.Status == "failed", input.Status == "completed" && input.Outcome == model.OutcomeFailure:
+			reason = "workflow_failed"
+		case input.Status == "completed" && a.completionNotifies(ctx, input):
+			reason = "workflow_completed"
+		}
+		if reason != "" {
+			if err := a.repo.UpdateChatUnread(ctx, input.ChatID, true, reason); err != nil {
+				logging.Warn("[WorkflowStatus] Failed to mark chat as unread", "error", err, "reason", reason)
+			}
 		}
 	}
 
