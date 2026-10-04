@@ -75,7 +75,7 @@ export function RunHeader({ chat, triggerName, parent, projectName, actions, bus
           <h1 className="truncate text-xl font-semibold tracking-tight text-foreground">
             {chat.title || "Untitled run"}
           </h1>
-          <span className="shrink-0 motion-reduce:[&_*]:animate-none">
+          <span className="shrink-0">
             <RunStatusBadge status={status} />
           </span>
         </div>
