@@ -59,6 +59,9 @@ const (
 	// TriggerServiceListTriggerEventsProcedure is the fully-qualified name of the TriggerService's
 	// ListTriggerEvents RPC.
 	TriggerServiceListTriggerEventsProcedure = "/reliant.v1.TriggerService/ListTriggerEvents"
+	// TriggerServiceGetLaunchEventProcedure is the fully-qualified name of the TriggerService's
+	// GetLaunchEvent RPC.
+	TriggerServiceGetLaunchEventProcedure = "/reliant.v1.TriggerService/GetLaunchEvent"
 )
 
 // TriggerServiceClient is a client for the reliant.v1.TriggerService service.
@@ -87,6 +90,14 @@ type TriggerServiceClient interface {
 	// ListTriggerEvents returns a trigger's firings, newest first, paged by a
 	// keyset cursor. Each launched firing carries the state of the run it started.
 	ListTriggerEvents(context.Context, *connect.Request[v1.ListTriggerEventsRequest]) (*connect.Response[v1.ListTriggerEventsResponse], error)
+	// GetLaunchEvent returns the event that launched a chat: its kind, the
+	// scheduled slot and manual flag for a schedule, the parent chat for an
+	// agent start, and the start (workflow, presets, params) for all of them.
+	// Owner only; a chat that is not the caller's is NotFound.
+	//
+	// A separate RPC rather than a Chat field because trigger.proto imports
+	// chat.proto, so Chat cannot reference TriggerEvent without a cycle.
+	GetLaunchEvent(context.Context, *connect.Request[v1.GetLaunchEventRequest]) (*connect.Response[v1.GetLaunchEventResponse], error)
 }
 
 // NewTriggerServiceClient constructs a client for the reliant.v1.TriggerService service. By
@@ -148,6 +159,12 @@ func NewTriggerServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithSchema(triggerServiceMethods.ByName("ListTriggerEvents")),
 			connect.WithClientOptions(opts...),
 		),
+		getLaunchEvent: connect.NewClient[v1.GetLaunchEventRequest, v1.GetLaunchEventResponse](
+			httpClient,
+			baseURL+TriggerServiceGetLaunchEventProcedure,
+			connect.WithSchema(triggerServiceMethods.ByName("GetLaunchEvent")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -161,6 +178,7 @@ type triggerServiceClient struct {
 	setTriggerEnabled *connect.Client[v1.SetTriggerEnabledRequest, v1.SetTriggerEnabledResponse]
 	fireTrigger       *connect.Client[v1.FireTriggerRequest, v1.FireTriggerResponse]
 	listTriggerEvents *connect.Client[v1.ListTriggerEventsRequest, v1.ListTriggerEventsResponse]
+	getLaunchEvent    *connect.Client[v1.GetLaunchEventRequest, v1.GetLaunchEventResponse]
 }
 
 // CreateTrigger calls reliant.v1.TriggerService.CreateTrigger.
@@ -203,6 +221,11 @@ func (c *triggerServiceClient) ListTriggerEvents(ctx context.Context, req *conne
 	return c.listTriggerEvents.CallUnary(ctx, req)
 }
 
+// GetLaunchEvent calls reliant.v1.TriggerService.GetLaunchEvent.
+func (c *triggerServiceClient) GetLaunchEvent(ctx context.Context, req *connect.Request[v1.GetLaunchEventRequest]) (*connect.Response[v1.GetLaunchEventResponse], error) {
+	return c.getLaunchEvent.CallUnary(ctx, req)
+}
+
 // TriggerServiceHandler is an implementation of the reliant.v1.TriggerService service.
 type TriggerServiceHandler interface {
 	// CreateTrigger stores a new trigger and converges its schedule.
@@ -229,6 +252,14 @@ type TriggerServiceHandler interface {
 	// ListTriggerEvents returns a trigger's firings, newest first, paged by a
 	// keyset cursor. Each launched firing carries the state of the run it started.
 	ListTriggerEvents(context.Context, *connect.Request[v1.ListTriggerEventsRequest]) (*connect.Response[v1.ListTriggerEventsResponse], error)
+	// GetLaunchEvent returns the event that launched a chat: its kind, the
+	// scheduled slot and manual flag for a schedule, the parent chat for an
+	// agent start, and the start (workflow, presets, params) for all of them.
+	// Owner only; a chat that is not the caller's is NotFound.
+	//
+	// A separate RPC rather than a Chat field because trigger.proto imports
+	// chat.proto, so Chat cannot reference TriggerEvent without a cycle.
+	GetLaunchEvent(context.Context, *connect.Request[v1.GetLaunchEventRequest]) (*connect.Response[v1.GetLaunchEventResponse], error)
 }
 
 // NewTriggerServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -286,6 +317,12 @@ func NewTriggerServiceHandler(svc TriggerServiceHandler, opts ...connect.Handler
 		connect.WithSchema(triggerServiceMethods.ByName("ListTriggerEvents")),
 		connect.WithHandlerOptions(opts...),
 	)
+	triggerServiceGetLaunchEventHandler := connect.NewUnaryHandler(
+		TriggerServiceGetLaunchEventProcedure,
+		svc.GetLaunchEvent,
+		connect.WithSchema(triggerServiceMethods.ByName("GetLaunchEvent")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/reliant.v1.TriggerService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case TriggerServiceCreateTriggerProcedure:
@@ -304,6 +341,8 @@ func NewTriggerServiceHandler(svc TriggerServiceHandler, opts ...connect.Handler
 			triggerServiceFireTriggerHandler.ServeHTTP(w, r)
 		case TriggerServiceListTriggerEventsProcedure:
 			triggerServiceListTriggerEventsHandler.ServeHTTP(w, r)
+		case TriggerServiceGetLaunchEventProcedure:
+			triggerServiceGetLaunchEventHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -343,4 +382,8 @@ func (UnimplementedTriggerServiceHandler) FireTrigger(context.Context, *connect.
 
 func (UnimplementedTriggerServiceHandler) ListTriggerEvents(context.Context, *connect.Request[v1.ListTriggerEventsRequest]) (*connect.Response[v1.ListTriggerEventsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.TriggerService.ListTriggerEvents is not implemented"))
+}
+
+func (UnimplementedTriggerServiceHandler) GetLaunchEvent(context.Context, *connect.Request[v1.GetLaunchEventRequest]) (*connect.Response[v1.GetLaunchEventResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.TriggerService.GetLaunchEvent is not implemented"))
 }

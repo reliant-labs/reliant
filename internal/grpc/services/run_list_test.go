@@ -16,6 +16,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
 type runListFixture struct {
@@ -198,4 +199,31 @@ func TestRunCursorRoundTrip(t *testing.T) {
 
 	_, err = decodeRunCursor("")
 	assert.Error(t, err)
+}
+
+func TestListRuns_ParentChatIDFilterAndFields(t *testing.T) {
+	f := newRunListFixture(t)
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	f.seed(t, "parent", "builtin://agent", db.Active(), now)
+	f.seed(t, "kid", "builtin://agent", db.Active(), now.Add(time.Second))
+	f.seed(t, "stranger", "builtin://agent", db.Active(), now.Add(2*time.Second))
+	_, err := f.repo.CreateTriggerEvent(f.ctx, &core.TriggerEvent{
+		ID: "evt-kid", UserID: f.userID, Kind: core.TriggerEventKindAgentStartRun, DedupeKey: "d-kid",
+		OccurredAt: now, Payload: map[string]any{"parent_chat_id": "parent"},
+		Outcome: core.TriggerEventLaunched, ChatID: ptrStr("kid"), CreatedAt: now,
+	})
+	require.NoError(t, err)
+
+	parent := "parent"
+	resp := f.list(t, &reliantv1.ListRunsRequest{ParentChatId: &parent})
+	require.Equal(t, []string{"kid"}, runIDs(resp.Runs))
+	assert.Equal(t, "parent", resp.Runs[0].GetParentChatId())
+	assert.Equal(t, "run parent", resp.Runs[0].GetParentChatTitle())
+
+	all := f.list(t, &reliantv1.ListRunsRequest{})
+	for _, run := range all.Runs {
+		if run.Id != "kid" {
+			assert.Nil(t, run.ParentChatId, "only agent-started runs carry a parent")
+		}
+	}
 }

@@ -342,6 +342,43 @@ func (s *TriggerService) FireTrigger(
 	return connect.NewResponse(&reliantv1.FireTriggerResponse{FireWorkflowId: fireID}), nil
 }
 
+// GetLaunchEvent returns the event that launched a chat. Ownership is the
+// chat's: another user's chat is NotFound, never PermissionDenied, and a chat
+// that exists but has no launch event yields an empty response.
+//
+// The payload is returned as recorded. What the launcher records is the start
+// (workflow, presets, params), the seed fingerprint and the source's own
+// fields; the caller's JWT is never part of it (it travels in the in-memory
+// Spec), so owner-only access is the whole boundary.
+func (s *TriggerService) GetLaunchEvent(
+	ctx context.Context,
+	req *connect.Request[reliantv1.GetLaunchEventRequest],
+) (*connect.Response[reliantv1.GetLaunchEventResponse], error) {
+	userID := auth.MustGetUserID(ctx)
+	if req.Msg.ChatId == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("chat_id is required"))
+	}
+	chat, err := s.database.GetChat(ctx, req.Msg.ChatId)
+	if err != nil || chat == nil || chat.UserID != userID {
+		return nil, connect.NewError(connect.CodeNotFound, errors.New("chat not found"))
+	}
+	ev, err := s.database.GetTriggerEventByChatID(ctx, chat.ID)
+	if err != nil {
+		if errors.Is(err, core.ErrTriggerEventNotFound) {
+			return connect.NewResponse(&reliantv1.GetLaunchEventResponse{}), nil
+		}
+		return nil, triggerDBError("get launch event", err)
+	}
+	if ev == nil || ev.UserID != userID {
+		return connect.NewResponse(&reliantv1.GetLaunchEventResponse{}), nil
+	}
+	out, err := triggers.EventToProto(ev)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, errors.New("render launch event"))
+	}
+	return connect.NewResponse(&reliantv1.GetLaunchEventResponse{Event: out}), nil
+}
+
 // ListTriggerEvents returns a trigger's firings, newest first.
 func (s *TriggerService) ListTriggerEvents(
 	ctx context.Context,

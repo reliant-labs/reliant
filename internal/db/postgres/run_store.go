@@ -46,6 +46,7 @@ func (s *runStore) ListRuns(ctx context.Context, filters core.RunListFilters) ([
 		DisplayStates:   states,
 		Query:           chatPtrToNullString(filters.Query),
 		ByLastActive:    filters.ByLastActive,
+		ParentChatID:    chatPtrToNullString(filters.ParentChatID),
 		// One extra row tells us whether another page exists without a count.
 		RowLimit: int32(limit + 1),
 	}
@@ -72,7 +73,7 @@ func (s *runStore) ListRuns(ctx context.Context, filters core.RunListFilters) ([
 	for i, row := range rows {
 		items[i] = runItem(row.ChatID, row.RunID, row.Title, row.ProjectID, row.WorkflowName,
 			row.CreatedAt, row.LastActive, row.CompletedAt, row.Outcome, row.RootState, row.RootStopReason,
-			row.Activity, row.DisplayState, row.LaunchKind, row.TriggerID, row.TriggerName, row.ActiveDaemonID)
+			row.Activity, row.DisplayState, row.LaunchKind, row.TriggerID, row.TriggerName, row.ActiveDaemonID, row.ParentChatID, row.ParentChatTitle)
 	}
 	return items, hasMore, nil
 }
@@ -93,7 +94,7 @@ func (s *runStore) LastRunPerWorkflow(ctx context.Context, filters core.RunListF
 	for i, row := range rows {
 		items[i] = runItem(row.ChatID, row.RunID, row.Title, row.ProjectID, row.WorkflowName,
 			row.CreatedAt, row.LastActive, row.CompletedAt, row.Outcome, row.RootState, row.RootStopReason,
-			row.Activity, row.DisplayState, row.LaunchKind, row.TriggerID, row.TriggerName, row.ActiveDaemonID)
+			row.Activity, row.DisplayState, row.LaunchKind, row.TriggerID, row.TriggerName, row.ActiveDaemonID, row.ParentChatID, row.ParentChatTitle)
 	}
 	return items, nil
 }
@@ -113,23 +114,26 @@ func runItem(
 	createdAt, lastActive time.Time, completedAt sql.NullTime, outcome sql.NullString,
 	rootState, rootStop sql.NullInt32, activity, display int32,
 	launchKind, triggerID, triggerName, daemonID sql.NullString,
+	parentChatID string, parentChatTitle sql.NullString,
 ) *core.RunListItem {
 	return &core.RunListItem{
-		RunID:        runID,
-		ChatID:       chatID,
-		Title:        title,
-		ProjectID:    projectID,
-		WorkflowName: workflowName,
-		CreatedAt:    createdAt,
-		LastActive:   lastActive,
-		CompletedAt:  chatNullTimeToPtr(completedAt),
-		Outcome:      outcome.String,
-		RootStatus:   chatRootStatus(rootState, rootStop),
-		Activity:     int(activity),
-		DisplayState: core.RunDisplayState(display),
-		LaunchKind:   launchKind.String,
-		TriggerID:    triggerID.String,
-		TriggerName:  triggerName.String,
-		DaemonID:     daemonID.String,
+		RunID:           runID,
+		ChatID:          chatID,
+		Title:           title,
+		ProjectID:       projectID,
+		WorkflowName:    workflowName,
+		CreatedAt:       createdAt,
+		LastActive:      lastActive,
+		CompletedAt:     chatNullTimeToPtr(completedAt),
+		Outcome:         outcome.String,
+		RootStatus:      chatRootStatus(rootState, rootStop),
+		Activity:        int(activity),
+		DisplayState:    core.RunDisplayState(display),
+		LaunchKind:      launchKind.String,
+		TriggerID:       triggerID.String,
+		TriggerName:     triggerName.String,
+		DaemonID:        daemonID.String,
+		ParentChatID:    parentChatID,
+		ParentChatTitle: parentChatTitle.String,
 	}
 }

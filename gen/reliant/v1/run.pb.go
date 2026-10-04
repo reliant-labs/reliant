@@ -165,9 +165,16 @@ type Run struct {
 	Activity ChatActivity `protobuf:"varint,19,opt,name=activity,proto3,enum=reliant.v1.ChatActivity" json:"activity,omitempty"`
 	// DisplayState is the one state a user reads, derived from state,
 	// stop_reason and activity. See RunDisplayState.
-	DisplayState  RunDisplayState `protobuf:"varint,20,opt,name=display_state,json=displayState,proto3,enum=reliant.v1.RunDisplayState" json:"display_state,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	DisplayState RunDisplayState `protobuf:"varint,20,opt,name=display_state,json=displayState,proto3,enum=reliant.v1.RunDisplayState" json:"display_state,omitempty"`
+	// ParentChatId is the chat whose agent started this run with start_run.
+	// Set only for launch_kind "agent.start_run"; unset otherwise. Filled by the
+	// cross-cutting list (ListRuns, LastRunPerWorkflow) like title above.
+	ParentChatId *string `protobuf:"bytes,21,opt,name=parent_chat_id,json=parentChatId,proto3,oneof" json:"parent_chat_id,omitempty"`
+	// ParentChatTitle is that parent chat's title. Unset when parent_chat_id is,
+	// or when the parent chat no longer exists or is not the caller's.
+	ParentChatTitle *string `protobuf:"bytes,22,opt,name=parent_chat_title,json=parentChatTitle,proto3,oneof" json:"parent_chat_title,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *Run) Reset() {
@@ -338,6 +345,20 @@ func (x *Run) GetDisplayState() RunDisplayState {
 		return x.DisplayState
 	}
 	return RunDisplayState_RUN_DISPLAY_STATE_UNSPECIFIED
+}
+
+func (x *Run) GetParentChatId() string {
+	if x != nil && x.ParentChatId != nil {
+		return *x.ParentChatId
+	}
+	return ""
+}
+
+func (x *Run) GetParentChatTitle() string {
+	if x != nil && x.ParentChatTitle != nil {
+		return *x.ParentChatTitle
+	}
+	return ""
 }
 
 type StartRunRequest struct {
@@ -733,8 +754,13 @@ type ListRunsRequest struct {
 	// IncludeArchived also returns runs whose chat is archived. Archived runs
 	// are hidden by default.
 	IncludeArchived bool `protobuf:"varint,15,opt,name=include_archived,json=includeArchived,proto3" json:"include_archived,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// ParentChatId restricts to runs an agent started from this chat (launch
+	// kind "agent.start_run"). Still scoped to the caller's own runs, and not
+	// narrowed by any root-only default: an agent-started run is the root run of
+	// its own chat. Archived children are hidden unless include_archived is set.
+	ParentChatId  *string `protobuf:"bytes,16,opt,name=parent_chat_id,json=parentChatId,proto3,oneof" json:"parent_chat_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ListRunsRequest) Reset() {
@@ -863,6 +889,13 @@ func (x *ListRunsRequest) GetIncludeArchived() bool {
 		return x.IncludeArchived
 	}
 	return false
+}
+
+func (x *ListRunsRequest) GetParentChatId() string {
+	if x != nil && x.ParentChatId != nil {
+		return *x.ParentChatId
+	}
+	return ""
 }
 
 type ListRunsResponse struct {
@@ -1449,7 +1482,7 @@ var File_reliant_v1_run_proto protoreflect.FileDescriptor
 const file_reliant_v1_run_proto_rawDesc = "" +
 	"\n" +
 	"\x14reliant/v1/run.proto\x12\n" +
-	"reliant.v1\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x15reliant/v1/chat.proto\"\xe7\x05\n" +
+	"reliant.v1\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x15reliant/v1/chat.proto\"\xec\x06\n" +
 	"\x03Run\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12#\n" +
 	"\rworkflow_name\x18\x02 \x01(\tR\fworkflowName\x12\x16\n" +
@@ -1476,7 +1509,11 @@ const file_reliant_v1_run_proto_rawDesc = "" +
 	"\ftrigger_name\x18\x11 \x01(\tR\vtriggerName\x12\x1b\n" +
 	"\tdaemon_id\x18\x12 \x01(\tR\bdaemonId\x124\n" +
 	"\bactivity\x18\x13 \x01(\x0e2\x18.reliant.v1.ChatActivityR\bactivity\x12@\n" +
-	"\rdisplay_state\x18\x14 \x01(\x0e2\x1b.reliant.v1.RunDisplayStateR\fdisplayState\"\xaa\x03\n" +
+	"\rdisplay_state\x18\x14 \x01(\x0e2\x1b.reliant.v1.RunDisplayStateR\fdisplayState\x12)\n" +
+	"\x0eparent_chat_id\x18\x15 \x01(\tH\x00R\fparentChatId\x88\x01\x01\x12/\n" +
+	"\x11parent_chat_title\x18\x16 \x01(\tH\x01R\x0fparentChatTitle\x88\x01\x01B\x11\n" +
+	"\x0f_parent_chat_idB\x14\n" +
+	"\x12_parent_chat_title\"\xaa\x03\n" +
 	"\x0fStartRunRequest\x12\x1a\n" +
 	"\bworkflow\x18\x01 \x01(\tR\bworkflow\x12?\n" +
 	"\x06inputs\x18\x02 \x03(\v2'.reliant.v1.StartRunRequest.InputsEntryR\x06inputs\x12\x1d\n" +
@@ -1504,7 +1541,7 @@ const file_reliant_v1_run_proto_rawDesc = "" +
 	"\rGetRunRequest\x12\x15\n" +
 	"\x06run_id\x18\x01 \x01(\tR\x05runId\"3\n" +
 	"\x0eGetRunResponse\x12!\n" +
-	"\x03run\x18\x01 \x01(\v2\x0f.reliant.v1.RunR\x03run\"\x90\x05\n" +
+	"\x03run\x18\x01 \x01(\v2\x0f.reliant.v1.RunR\x03run\"\xce\x05\n" +
 	"\x0fListRunsRequest\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x1b\n" +
@@ -1525,11 +1562,13 @@ const file_reliant_v1_run_proto_rawDesc = "" +
 	"\x05query\x18\r \x01(\tH\x02R\x05query\x88\x01\x01\x12\"\n" +
 	"\n" +
 	"page_token\x18\x0e \x01(\tH\x03R\tpageToken\x88\x01\x01\x12)\n" +
-	"\x10include_archived\x18\x0f \x01(\bR\x0fincludeArchivedB\r\n" +
+	"\x10include_archived\x18\x0f \x01(\bR\x0fincludeArchived\x12)\n" +
+	"\x0eparent_chat_id\x18\x10 \x01(\tH\x04R\fparentChatId\x88\x01\x01B\r\n" +
 	"\v_project_idB\r\n" +
 	"\v_trigger_idB\b\n" +
 	"\x06_queryB\r\n" +
-	"\v_page_tokenJ\x04\b\x05\x10\x06R\x06offset\"u\n" +
+	"\v_page_tokenB\x11\n" +
+	"\x0f_parent_chat_idJ\x04\b\x05\x10\x06R\x06offset\"u\n" +
 	"\x10ListRunsResponse\x12#\n" +
 	"\x04runs\x18\x01 \x03(\v2\x0f.reliant.v1.RunR\x04runs\x12\x14\n" +
 	"\x05total\x18\x02 \x01(\x05R\x05total\x12&\n" +
@@ -1679,6 +1718,7 @@ func file_reliant_v1_run_proto_init() {
 		return
 	}
 	file_reliant_v1_chat_proto_init()
+	file_reliant_v1_run_proto_msgTypes[0].OneofWrappers = []any{}
 	file_reliant_v1_run_proto_msgTypes[7].OneofWrappers = []any{}
 	file_reliant_v1_run_proto_msgTypes[9].OneofWrappers = []any{}
 	type x struct{}

@@ -226,3 +226,102 @@ func TestTriggerFeedHidesOtherUsersData(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, list.Msg.Triggers)
 }
+
+// seedLaunchedChat creates an owned chat launched by an event of the given
+// kind and payload, and returns the chat id.
+func (e *triggerTestEnv) seedLaunchedChat(t *testing.T, kind core.TriggerEventKind, triggerID *string, payload map[string]any) string {
+	t.Helper()
+	ctx := context.Background()
+	chatID := uuid.NewString()
+	now := time.Now().UTC()
+	workflow := "builtin://agent"
+	require.NoError(t, e.repo.CreateChat(ctx, &db.Chat{
+		ID: chatID, Title: "launched", ProjectID: e.projectID, UserID: e.userID,
+		WorkflowName: &workflow, State: db.ChatStateIdle, CreatedAt: now, UpdatedAt: now, LastActive: now,
+	}))
+	if kind == "" {
+		return chatID
+	}
+	created, err := e.repo.CreateTriggerEvent(ctx, &core.TriggerEvent{
+		ID: uuid.NewString(), TriggerID: triggerID, UserID: e.userID, Kind: kind,
+		DedupeKey: uuid.NewString(), OccurredAt: now, Payload: payload,
+		Outcome: core.TriggerEventLaunched, ChatID: &chatID, CreatedAt: now,
+	})
+	require.NoError(t, err)
+	require.True(t, created)
+	return chatID
+}
+
+func (e *triggerTestEnv) launchEvent(t *testing.T, ctx context.Context, chatID string) (*reliantv1.GetLaunchEventResponse, error) {
+	t.Helper()
+	resp, err := e.svc.GetLaunchEvent(ctx, connect.NewRequest(&reliantv1.GetLaunchEventRequest{ChatId: chatID}))
+	if err != nil {
+		return nil, err
+	}
+	return resp.Msg, nil
+}
+
+func TestGetLaunchEventForScheduleChatCarriesSlotManualFlagAndStart(t *testing.T) {
+	env := setupTriggerTest(t)
+	trig := env.create(t, env.definition(nil))
+	chatID := env.seedLaunchedChat(t, core.TriggerEventKindSchedule, &trig.Id, map[string]any{
+		"scheduled_for":    "2026-01-02T09:00:00Z",
+		"trigger_name":     "nightly audit",
+		"manual":           true,
+		"seed_fingerprint": "abc123",
+		"start": map[string]any{
+			"workflow": "builtin://agent",
+			"presets":  map[string]any{"mode": "fast"},
+			"params":   map[string]any{"depth": float64(3)},
+		},
+	})
+
+	resp, err := env.launchEvent(t, env.ctx, chatID)
+	require.NoError(t, err)
+	ev := resp.GetEvent()
+	require.NotNil(t, ev)
+	assert.Equal(t, reliantv1.TriggerEventKind_TRIGGER_EVENT_KIND_SCHEDULE, ev.Kind)
+	assert.Equal(t, trig.Id, ev.GetTriggerId())
+	assert.Equal(t, chatID, ev.GetChatId())
+	fields := ev.Payload.AsMap()
+	assert.Equal(t, "2026-01-02T09:00:00Z", fields["scheduled_for"])
+	assert.Equal(t, true, fields["manual"])
+	start := fields["start"].(map[string]any)
+	assert.Equal(t, "builtin://agent", start["workflow"])
+	assert.Equal(t, map[string]any{"depth": float64(3)}, start["params"])
+}
+
+func TestGetLaunchEventForAgentChatCarriesParentChatID(t *testing.T) {
+	env := setupTriggerTest(t)
+	chatID := env.seedLaunchedChat(t, core.TriggerEventKindAgentStartRun, nil, map[string]any{"parent_chat_id": "parent-chat-1"})
+
+	resp, err := env.launchEvent(t, env.ctx, chatID)
+	require.NoError(t, err)
+	require.NotNil(t, resp.GetEvent())
+	assert.Equal(t, reliantv1.TriggerEventKind_TRIGGER_EVENT_KIND_AGENT_START_RUN, resp.Event.Kind)
+	assert.Equal(t, "parent-chat-1", resp.Event.Payload.AsMap()["parent_chat_id"])
+}
+
+func TestGetLaunchEventForChatWithoutOneIsEmpty(t *testing.T) {
+	env := setupTriggerTest(t)
+	chatID := env.seedLaunchedChat(t, "", nil, nil)
+
+	resp, err := env.launchEvent(t, env.ctx, chatID)
+	require.NoError(t, err)
+	assert.Nil(t, resp.Event)
+}
+
+func TestGetLaunchEventIsOwnerOnly(t *testing.T) {
+	env := setupTriggerTest(t)
+	chatID := env.seedLaunchedChat(t, core.TriggerEventKindAgentStartRun, nil, map[string]any{"parent_chat_id": "p"})
+
+	other := context.WithValue(context.Background(), auth.UserIDContextKey, uuid.NewString())
+	_, err := env.launchEvent(t, other, chatID)
+	require.Error(t, err)
+	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
+
+	_, err = env.launchEvent(t, env.ctx, "no-such-chat")
+	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
+	_, err = env.launchEvent(t, env.ctx, "")
+	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+}

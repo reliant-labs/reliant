@@ -35,11 +35,31 @@ SELECT * FROM (
         t.name AS trigger_name,
         c.active_daemon_id,
         COALESCE(c.display_state, 1)::integer AS display_state,
-        c.state AS chat_state
+        c.state AS chat_state,
+        COALESCE(pe.parent_chat_id, '')::text AS parent_chat_id,
+        pc.title AS parent_chat_title
     FROM chats_with_activity c
     LEFT JOIN workflows rw ON rw.id = c.workflow_id
     LEFT JOIN triggers t ON t.id = c.trigger_id AND t.user_id = c.user_id
+    -- The parent chat of an agent-started run lives only in the launch event's
+    -- payload. Looked up for agent.start_run chats alone, by chat id
+    -- (idx_trigger_events_chat), so every other row pays nothing.
+    LEFT JOIN LATERAL (
+        SELECT te.payload->>'parent_chat_id' AS parent_chat_id
+        FROM trigger_events te
+        WHERE te.chat_id = c.id AND c.launch_kind = 'agent.start_run'
+        ORDER BY te.created_at ASC, te.id ASC
+        LIMIT 1
+    ) pe ON true
+    -- Owner-scoped: a parent that is not the caller's contributes no title.
+    LEFT JOIN chats pc ON pc.id = pe.parent_chat_id AND pc.user_id = c.user_id
     WHERE c.user_id = sqlc.arg('user_id')
+      -- The reverse direction, driven from idx_trigger_events_parent_chat.
+      AND (sqlc.narg('parent_chat_id')::text IS NULL OR c.id IN (
+            SELECT te.chat_id FROM trigger_events te
+            WHERE te.kind = 'agent.start_run'
+              AND te.payload->>'parent_chat_id' = sqlc.narg('parent_chat_id')::text
+              AND te.chat_id IS NOT NULL))
 ) r
 WHERE
     (sqlc.arg('include_archived')::boolean OR r.chat_state IS DISTINCT FROM 3)
@@ -81,11 +101,31 @@ SELECT DISTINCT ON (r.workflow_name) r.* FROM (
         t.name AS trigger_name,
         c.active_daemon_id,
         COALESCE(c.display_state, 1)::integer AS display_state,
-        c.state AS chat_state
+        c.state AS chat_state,
+        COALESCE(pe.parent_chat_id, '')::text AS parent_chat_id,
+        pc.title AS parent_chat_title
     FROM chats_with_activity c
     LEFT JOIN workflows rw ON rw.id = c.workflow_id
     LEFT JOIN triggers t ON t.id = c.trigger_id AND t.user_id = c.user_id
+    -- The parent chat of an agent-started run lives only in the launch event's
+    -- payload. Looked up for agent.start_run chats alone, by chat id
+    -- (idx_trigger_events_chat), so every other row pays nothing.
+    LEFT JOIN LATERAL (
+        SELECT te.payload->>'parent_chat_id' AS parent_chat_id
+        FROM trigger_events te
+        WHERE te.chat_id = c.id AND c.launch_kind = 'agent.start_run'
+        ORDER BY te.created_at ASC, te.id ASC
+        LIMIT 1
+    ) pe ON true
+    -- Owner-scoped: a parent that is not the caller's contributes no title.
+    LEFT JOIN chats pc ON pc.id = pe.parent_chat_id AND pc.user_id = c.user_id
     WHERE c.user_id = sqlc.arg('user_id')
+      -- The reverse direction, driven from idx_trigger_events_parent_chat.
+      AND (sqlc.narg('parent_chat_id')::text IS NULL OR c.id IN (
+            SELECT te.chat_id FROM trigger_events te
+            WHERE te.kind = 'agent.start_run'
+              AND te.payload->>'parent_chat_id' = sqlc.narg('parent_chat_id')::text
+              AND te.chat_id IS NOT NULL))
 ) r
 WHERE
     r.chat_state IS DISTINCT FROM 3

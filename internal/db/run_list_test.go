@@ -26,6 +26,7 @@ type listRunSeed struct {
 	noRoot   bool
 	launch   core.TriggerEventKind
 	trigger  string
+	payload  map[string]any
 }
 
 // seedListRun creates a chat whose root workflow shares its id, as every run is.
@@ -78,9 +79,13 @@ func seedListRun(t *testing.T, repo *Repo, s listRunSeed) {
 		if s.trigger != "" {
 			triggerRef = &s.trigger
 		}
+		payload := s.payload
+		if payload == nil {
+			payload = map[string]any{}
+		}
 		created, err := repo.CreateTriggerEvent(ctx, &core.TriggerEvent{
 			ID: "evt-" + s.id, TriggerID: triggerRef, UserID: s.user, Kind: s.launch,
-			DedupeKey: "dedupe-" + s.id, OccurredAt: s.at, Payload: map[string]any{},
+			DedupeKey: "dedupe-" + s.id, OccurredAt: s.at, Payload: payload,
 			Outcome: core.TriggerEventLaunched, ChatID: &s.id, CreatedAt: s.at,
 		})
 		require.NoError(t, err)

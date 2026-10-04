@@ -51,6 +51,15 @@ service TriggerService {
   // ListTriggerEvents returns a trigger's firings, newest first, paged by a
   // keyset cursor. Each launched firing carries the state of the run it started.
   rpc ListTriggerEvents(ListTriggerEventsRequest) returns (ListTriggerEventsResponse) {}
+
+  // GetLaunchEvent returns the event that launched a chat: its kind, the
+  // scheduled slot and manual flag for a schedule, the parent chat for an
+  // agent start, and the start (workflow, presets, params) for all of them.
+  // Owner only; a chat that is not the caller's is NotFound.
+  //
+  // A separate RPC rather than a Chat field because trigger.proto imports
+  // chat.proto, so Chat cannot reference TriggerEvent without a cycle.
+  rpc GetLaunchEvent(GetLaunchEventRequest) returns (GetLaunchEventResponse) {}
 }
 
 // TriggerKind is the source a stored trigger listens to.
@@ -452,4 +461,13 @@ message ListTriggerEventsResponse {
 
   // Set when more firings follow. Empty on the last page.
   string next_page_token = 2;
+}
+
+message GetLaunchEventRequest {
+  string chat_id = 1;
+}
+
+message GetLaunchEventResponse {
+  // Unset when the chat has no launch event (it predates trigger events).
+  optional TriggerEvent event = 1;
 }
