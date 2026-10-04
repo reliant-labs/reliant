@@ -619,6 +619,16 @@ CREATE TABLE public.default_preset_assignments (
 );
 
 --
+-- Name: inbox_dismissals; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.inbox_dismissals (
+    user_id text NOT NULL,
+    item_id text NOT NULL,
+    dismissed_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+--
 -- Name: item_defaults; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1306,6 +1316,13 @@ ALTER TABLE ONLY public.default_preset_assignments
     ADD CONSTRAINT default_preset_assignments_workflow_name_group_name_key UNIQUE (workflow_name, group_name);
 
 --
+-- Name: inbox_dismissals inbox_dismissals_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.inbox_dismissals
+    ADD CONSTRAINT inbox_dismissals_pkey PRIMARY KEY (user_id, item_id);
+
+--
 -- Name: item_defaults item_defaults_item_type_slug_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1669,6 +1686,12 @@ CREATE INDEX idx_api_keys_provider ON public.api_keys USING btree (user_id, prov
 CREATE INDEX idx_api_keys_user ON public.api_keys USING btree (user_id);
 
 --
+-- Name: idx_approvals_pending; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_approvals_pending ON public.approvals USING btree (chat_id) WHERE (status = 1);
+
+--
 -- Name: idx_approvals_thread_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1927,6 +1950,12 @@ CREATE INDEX idx_provider_backoff_chat_id ON public.provider_backoff USING btree
 CREATE INDEX idx_questions_chat_id ON public.questions USING btree (chat_id);
 
 --
+-- Name: idx_questions_pending; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_questions_pending ON public.questions USING btree (chat_id) WHERE (status = 1);
+
+--
 -- Name: idx_questions_status; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2035,11 +2064,16 @@ CREATE INDEX idx_tool_calls_thread_id ON public.tool_calls USING btree (thread_i
 CREATE INDEX idx_trigger_events_chat ON public.trigger_events USING btree (chat_id);
 
 --
+-- Name: idx_trigger_events_failed; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_trigger_events_failed ON public.trigger_events USING btree (trigger_id, occurred_at DESC, id DESC) WHERE (outcome = 'failed'::text);
+
+--
 -- Name: idx_trigger_events_parent_chat; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_trigger_events_parent_chat ON public.trigger_events USING btree (((payload ->> 'parent_chat_id'::text))) WHERE (kind = 'agent.start_run'::text);
-
 
 --
 -- Name: idx_trigger_events_trigger_occurred_id; Type: INDEX; Schema: public; Owner: -

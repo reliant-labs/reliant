@@ -132,6 +132,7 @@ type Repo struct {
 	contextWindows  core.ContextWindowStore
 	workflowCatalog core.WorkflowCatalogStore
 	triggers        core.TriggerStore
+	inbox           core.InboxStore
 	tokenCounts     tokenCountStore
 
 	// Update notifiers — set via SetUpdateNotifiers to push events to
@@ -174,6 +175,7 @@ func NewRepoWithDriver(db *sql.DB, driver DatabaseDriver) *Repo {
 		contextWindows:  postgresstore.NewContextWindowStore(pgQueries),
 		workflowCatalog: postgresstore.NewWorkflowCatalogStore(pgQueries),
 		triggers:        postgresstore.NewTriggerStore(pgQueries),
+		inbox:           postgresstore.NewInboxStore(pgQueries),
 		tokenCounts:     tokenCounts,
 	}
 }

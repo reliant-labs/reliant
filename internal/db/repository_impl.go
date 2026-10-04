@@ -3703,6 +3703,27 @@ func (r *Repo) ListTriggerEvents(ctx context.Context, f core.TriggerEventFilters
 	return r.triggers.ListTriggerEvents(ctx, f)
 }
 
+func (r *Repo) ListInboxPending(ctx context.Context, userID string) ([]*core.InboxPending, error) {
+	if userID == "" {
+		return nil, fmt.Errorf("user ID cannot be empty")
+	}
+	return r.inbox.ListInboxPending(ctx, userID)
+}
+
+func (r *Repo) ListDismissedInboxItemIDs(ctx context.Context, userID string, itemIDs []string) (map[string]bool, error) {
+	if userID == "" {
+		return nil, fmt.Errorf("user ID cannot be empty")
+	}
+	return r.inbox.ListDismissedInboxItemIDs(ctx, userID, itemIDs)
+}
+
+func (r *Repo) DismissInboxItem(ctx context.Context, userID, itemID string, at time.Time) error {
+	if userID == "" || itemID == "" {
+		return fmt.Errorf("user ID and item ID cannot be empty")
+	}
+	return r.inbox.DismissInboxItem(ctx, userID, itemID, at)
+}
+
 func (r *Repo) RecentTriggerFirings(ctx context.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error) {
 	if userID == "" {
 		return nil, fmt.Errorf("user ID cannot be empty")
