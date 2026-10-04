@@ -144,3 +144,11 @@ func TestDeleteAccount_WithoutControlPlaneStillPurgesLocally(t *testing.T) {
 		t.Fatalf("deletion must work without a control plane: %v", err)
 	}
 }
+
+func (s *stubControlPlane) MintDaemonResumeToken(context.Context, string, string, string) (controlplane.DaemonResumeToken, error) {
+	return controlplane.DaemonResumeToken{}, nil
+}
+
+func (s *stubControlPlane) RevokeDaemonResumeTokens(context.Context, string, string) error {
+	return nil
+}

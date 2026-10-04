@@ -297,3 +297,11 @@ func TestRepoNameFromCloneURL(t *testing.T) {
 		assert.Equal(t, want, repoNameFromCloneURL(url), "clone url %q", url)
 	}
 }
+
+func (s *cloneStubControlPlane) MintDaemonResumeToken(context.Context, string, string, string) (controlplane.DaemonResumeToken, error) {
+	return controlplane.DaemonResumeToken{}, nil
+}
+
+func (s *cloneStubControlPlane) RevokeDaemonResumeTokens(context.Context, string, string) error {
+	return nil
+}

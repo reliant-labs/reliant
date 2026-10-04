@@ -28,18 +28,28 @@ type keyStore interface {
 	GetProviderAPIKey(ctx context.Context, userID, provider string) (string, error)
 }
 
+type allowedKey struct{}
+
+// Allow marks ctx as belonging to a trigger-launched run. Only such a context
+// may fall back to the stored token: a run an agent started with start_run is
+// attended and must keep acting as the signed-in user.
+func Allow(ctx context.Context) context.Context { return context.WithValue(ctx, allowedKey{}, true) }
+
+func allowed(ctx context.Context) bool { v, _ := ctx.Value(allowedKey{}).(bool); return v }
+
 // Resolver picks the Bearer for a control-plane call.
 type Resolver struct{ store keyStore }
 
 func NewResolver(store keyStore) *Resolver { return &Resolver{store: store} }
 
 // BearerFor returns, in order: the user's live JWT; the stored automation token
-// for exactly daemonID (only when daemonID != ""); otherwise "".
+// for exactly daemonID (only when daemonID != "" and ctx is Allow-marked);
+// otherwise "".
 func (r *Resolver) BearerFor(ctx context.Context, userID, daemonID string) (string, error) {
 	if jwt, ok := auth.GetUserJWT(userID); ok && strings.TrimSpace(jwt) != "" {
 		return jwt, nil
 	}
-	if r == nil || r.store == nil || daemonID == "" || userID == "" {
+	if !allowed(ctx) || r == nil || r.store == nil || daemonID == "" || userID == "" {
 		return "", nil
 	}
 	token, err := r.store.GetProviderAPIKey(ctx, userID, Provider(daemonID))

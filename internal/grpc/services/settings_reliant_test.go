@@ -20,6 +20,9 @@ type fakeControlPlaneClient struct {
 	issueRotated   bool
 	issueErr       error
 	issueCallCount int
+	mints          []mintCall
+	mintErr        error
+	revokes        []string
 	lastIssueJWT   string
 	lastDevice     string
 }
@@ -137,4 +140,19 @@ func TestSettingsService_SyncReliantProvider_ControlPlaneErrorPropagates(t *test
 	_, err := svc.SyncReliantProvider(newSettingsServiceTestContext(), connect.NewRequest(&reliantv1.SyncReliantProviderRequest{}))
 	require.Error(t, err)
 	assert.Equal(t, connect.CodeInternal, connect.CodeOf(err))
+}
+
+type mintCall struct{ JWT, DaemonID, Name string }
+
+func (f *fakeControlPlaneClient) MintDaemonResumeToken(_ context.Context, jwt, daemonID, name string) (controlplane.DaemonResumeToken, error) {
+	f.mints = append(f.mints, mintCall{jwt, daemonID, name})
+	if f.mintErr != nil {
+		return controlplane.DaemonResumeToken{}, f.mintErr
+	}
+	return controlplane.DaemonResumeToken{Plaintext: "rlat_resume_" + daemonID}, nil
+}
+
+func (f *fakeControlPlaneClient) RevokeDaemonResumeTokens(_ context.Context, _, daemonID string) error {
+	f.revokes = append(f.revokes, daemonID)
+	return nil
 }

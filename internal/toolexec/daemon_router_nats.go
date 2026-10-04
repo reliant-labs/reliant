@@ -160,6 +160,8 @@ func (r *NATSDaemonRouter) resolveDaemonID(ctx context.Context, userID string, s
 	// cases, which is what made the UI unable to tell a provisioning
 	// machine from a genuinely absent one.
 	sawDaemonRecord := false
+	// Set when the control plane could not be asked for want of any credential.
+	noCredential := false
 
 	// Step 1: Try local resolver (connected daemons).
 	if r.resolver != nil {
@@ -188,7 +190,7 @@ func (r *NATSDaemonRouter) resolveDaemonID(ctx context.Context, userID string, s
 			return daemonID, nil
 		}
 		if errors.Is(err, ErrAutomationAccessNotGranted) {
-			return "", err
+			noCredential = true
 		}
 		sawDaemonRecord = sawDaemonRecord || sawRecord
 		// If control plane doesn't find a daemon, fall through to DB.
@@ -235,6 +237,12 @@ func (r *NATSDaemonRouter) resolveDaemonID(ctx context.Context, userID string, s
 		if fallbackID != "" {
 			return fallbackID, nil
 		}
+	}
+
+	if noCredential && selector != nil && selector.ID != "" {
+		logging.Warn("[DaemonRouter] no control-plane credential for pinned daemon",
+			append([]any{"user_id", userID}, selectorLogFields(selector)...)...)
+		return "", ErrAutomationAccessNotGranted
 	}
 
 	// ── The user id stays in the LOG, never in the message ───────────

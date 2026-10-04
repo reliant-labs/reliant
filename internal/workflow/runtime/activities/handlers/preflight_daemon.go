@@ -5,7 +5,9 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/reliant-labs/reliant/internal/automationcred"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
 )
@@ -76,6 +78,14 @@ func (a *PreflightDaemonCheckActivity) Execute(ctx context.Context, input Prefli
 	router := remoteExec.DaemonRouter()
 	if router == nil {
 		return PreflightDaemonCheckOutput{}, fmt.Errorf("daemon router not configured")
+	}
+
+	// Only a trigger-launched run may wake its daemon with the delegated
+	// automation token; an attended run (chat.start, agent start_run) acts as
+	// the signed-in user or not at all.
+	if ev, evErr := a.repo.GetTriggerEventByChatID(ctx, input.ChatID); evErr == nil && ev != nil &&
+		ev.Kind == core.TriggerEventKindSchedule {
+		ctx = automationcred.Allow(ctx)
 	}
 
 	// Check if daemon is online
