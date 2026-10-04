@@ -378,17 +378,14 @@ test.describe('Onboarding Flow', () => {
   // ── Project-choice (cloud): Start new vs Connect GitHub ─────
 
   test('Project-choice: "Start something new" (cloud) creates a project and leaves onboarding', async ({ page }) => {
-    // A cloud plan's commit provisions a machine (see commitLaunchPlan.ts),
-    // so completing this step lands on ProvisioningGate -> DaemonConnectingGate
-    // rather than navigating immediately. Report the created daemon as
-    // already ACTIVE so the gate resolves to "connected" without waiting out
-    // its real 60s poll timeout.
-    await page.route('**/controlplane.v1.DaemonService/ListDaemons', (route: Route) =>
+    // DaemonConnectingGate reads the daemon registry (reliant.v1), not the
+    // control-plane list, and treats DAEMON_STATUS_ACTIVE as connected.
+    await page.route('**/reliant.v1.DaemonRegistryService/ListDaemons', (route: Route) =>
       route.fulfill({
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
-          daemons: [{ id: 'daemon_1', name: 'onboarding-daemon', status: 2 }],
+          daemons: [{ daemonId: 'daemon_1', hostname: 'onboarding-daemon', status: 'DAEMON_STATUS_ACTIVE' }],
         }),
       }),
     );
@@ -723,12 +720,14 @@ test.describe('Onboarding – Project-choice branch selection', () => {
   // provisions a machine and ProvisioningGate/DaemonConnectingGate gate the
   // actual exit — see commitLaunchPlan.ts and ProvisioningGate.tsx.
   test('Cloud + build_app: "Start something new" leaves onboarding directly', async ({ page }) => {
-    await page.route('**/controlplane.v1.DaemonService/ListDaemons', (route: Route) =>
+    // DaemonConnectingGate reads the daemon registry (reliant.v1), not the
+    // control-plane list, and treats DAEMON_STATUS_ACTIVE as connected.
+    await page.route('**/reliant.v1.DaemonRegistryService/ListDaemons', (route: Route) =>
       route.fulfill({
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
-          daemons: [{ id: 'daemon_1', name: 'onboarding-daemon', status: 2 }],
+          daemons: [{ daemonId: 'daemon_1', hostname: 'onboarding-daemon', status: 'DAEMON_STATUS_ACTIVE' }],
         }),
       }),
     );

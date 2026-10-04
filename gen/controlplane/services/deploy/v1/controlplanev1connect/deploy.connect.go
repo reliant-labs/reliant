@@ -75,9 +75,6 @@ const (
 	// DeployServiceDeleteDeploymentProcedure is the fully-qualified name of the DeployService's
 	// DeleteDeployment RPC.
 	DeployServiceDeleteDeploymentProcedure = "/controlplane.v1.DeployService/DeleteDeployment"
-	// DeployServiceEnsureDeploymentProcedure is the fully-qualified name of the DeployService's
-	// EnsureDeployment RPC.
-	DeployServiceEnsureDeploymentProcedure = "/controlplane.v1.DeployService/EnsureDeployment"
 	// DeployServicePromoteProcedure is the fully-qualified name of the DeployService's Promote RPC.
 	DeployServicePromoteProcedure = "/controlplane.v1.DeployService/Promote"
 	// DeployServiceScaleProcedure is the fully-qualified name of the DeployService's Scale RPC.
@@ -87,9 +84,6 @@ const (
 	// DeployServiceStreamLogsProcedure is the fully-qualified name of the DeployService's StreamLogs
 	// RPC.
 	DeployServiceStreamLogsProcedure = "/controlplane.v1.DeployService/StreamLogs"
-	// DeployServicePublishDeploymentConfigProcedure is the fully-qualified name of the DeployService's
-	// PublishDeploymentConfig RPC.
-	DeployServicePublishDeploymentConfigProcedure = "/controlplane.v1.DeployService/PublishDeploymentConfig"
 	// DeployServiceCutReleaseProcedure is the fully-qualified name of the DeployService's CutRelease
 	// RPC.
 	DeployServiceCutReleaseProcedure = "/controlplane.v1.DeployService/CutRelease"
@@ -185,18 +179,6 @@ type DeployServiceClient interface {
 	// changes the bill in a way that adding replicas at a known size does not.
 	UpdateDeployment(context.Context, *connect.Request[v1.UpdateDeploymentRequest]) (*connect.Response[v1.UpdateDeploymentResponse], error)
 	DeleteDeployment(context.Context, *connect.Request[v1.DeleteDeploymentRequest]) (*connect.Response[v1.DeleteDeploymentResponse], error)
-	// EnsureDeployment makes a deployment with this NAME in this environment
-	// hold exactly this tier spec: created when absent, its spec replaced when
-	// it differs, untouched when identical. The declarative twin of
-	// CreateDeployment + UpdateDeployment, for EnsureEnvironment's reason: a
-	// forge deploy is "make it so", and its next step is
-	// PublishDeploymentConfig on the returned id.
-	//
-	// It runs every gate Create and Update run: role, strict spec
-	// decode, forge's Validate, the hosted shape band, and capacity admission.
-	// A different TIER on an existing name is FailedPrecondition (a tier change
-	// is a delete and a create; see UpdateDeploymentRequest).
-	EnsureDeployment(context.Context, *connect.Request[v1.EnsureDeploymentRequest]) (*connect.Response[v1.EnsureDeploymentResponse], error)
 	// Promote re-points an environment at an ALREADY-BUILT release.
 	//
 	// It NEVER builds. See PromoteReleaseRequest: there is no image field, no
@@ -227,38 +209,6 @@ type DeployServiceClient interface {
 	// transient disconnect a gap of milliseconds instead of a re-read of the
 	// whole buffer.
 	StreamLogs(context.Context, *connect.Request[v1.StreamDeploymentLogsRequest]) (*connect.ServerStreamForClient[v1.StreamDeploymentLogsResponse], error)
-	// PublishDeploymentConfig packages one deployment as a config artifact and
-	// publishes it to the tenant's config subtree in the platform registry.
-	//
-	// THE ARTIFACT HOLDS EXACTLY ONE forge.dev/v1alpha1 CR (a Workload,
-	// StaticSite or ManagedDatabase) whose spec IS the stored forge tier spec.
-	// Identity (org, environment, deployment) is carried in the CR's forge.dev/*
-	// LABELS, never in the spec. Flux applies that CR and nothing else; the
-	// tier operator renders the workload from it, so Flux never owns a
-	// rendered Deployment or Service.
-	//
-	// THIS IS THE ONLY PATH TO PRODUCTION, and the request shape is what makes
-	// that true rather than this server's good behaviour. The request carries a
-	// deployment id and NOTHING ELSE — no image, no manifest, no namespace, no
-	// cluster, no registry path. Every one of those is derived server-side from
-	// the deployment's own row and the platform's own configuration, so there is
-	// no field in which a caller could name bytes to publish or a place to
-	// publish them. An RPC that accepted a loose image reference would be a
-	// second path to production and would void the promotion guarantee; this one
-	// cannot become that by accident, because there is nothing to populate.
-	//
-	// IT PUBLISHES, IT DOES NOT APPLY. The artifact reaches the registry and the
-	// response reports the digest it landed at. Reconciliation — the Flux
-	// objects that pull that digest and apply it to the destination cluster — is
-	// a separate step performed by the platform, so a successful response means
-	// "these bytes exist at this address", never "this is running".
-	//
-	// IDEMPOTENT BY CONTENT ADDRESS rather than by a key. The render is
-	// reproducible, so re-publishing an unchanged deployment produces the same
-	// bytes, the same digest and the same reference — a repeat call overwrites
-	// an object with itself. It is marked idempotent for that reason and not
-	// because the server de-duplicates anything.
-	PublishDeploymentConfig(context.Context, *connect.Request[v1.PublishDeploymentConfigRequest]) (*connect.Response[v1.PublishDeploymentConfigResponse], error)
 	// CutRelease records a version label over a set of artifacts that were
 	// ALREADY BUILT AND PUSHED. It is the other half of Promote: Promote can
 	// only re-point at a release, and until this RPC existed there was no way
@@ -529,12 +479,6 @@ func NewDeployServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(deployServiceMethods.ByName("DeleteDeployment")),
 			connect.WithClientOptions(opts...),
 		),
-		ensureDeployment: connect.NewClient[v1.EnsureDeploymentRequest, v1.EnsureDeploymentResponse](
-			httpClient,
-			baseURL+DeployServiceEnsureDeploymentProcedure,
-			connect.WithSchema(deployServiceMethods.ByName("EnsureDeployment")),
-			connect.WithClientOptions(opts...),
-		),
 		promote: connect.NewClient[v1.PromoteReleaseRequest, v1.PromoteReleaseResponse](
 			httpClient,
 			baseURL+DeployServicePromoteProcedure,
@@ -557,12 +501,6 @@ func NewDeployServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			httpClient,
 			baseURL+DeployServiceStreamLogsProcedure,
 			connect.WithSchema(deployServiceMethods.ByName("StreamLogs")),
-			connect.WithClientOptions(opts...),
-		),
-		publishDeploymentConfig: connect.NewClient[v1.PublishDeploymentConfigRequest, v1.PublishDeploymentConfigResponse](
-			httpClient,
-			baseURL+DeployServicePublishDeploymentConfigProcedure,
-			connect.WithSchema(deployServiceMethods.ByName("PublishDeploymentConfig")),
 			connect.WithClientOptions(opts...),
 		),
 		cutRelease: connect.NewClient[v1.CutReleaseRequest, v1.CutReleaseResponse](
@@ -672,42 +610,40 @@ func NewDeployServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 
 // deployServiceClient implements DeployServiceClient.
 type deployServiceClient struct {
-	getTenant               *connect.Client[v1.GetDeployTenantRequest, v1.GetDeployTenantResponse]
-	createTenant            *connect.Client[v1.CreateDeployTenantRequest, v1.CreateDeployTenantResponse]
-	createEnvironment       *connect.Client[v1.CreateDeployEnvironmentRequest, v1.CreateDeployEnvironmentResponse]
-	getEnvironment          *connect.Client[v1.GetDeployEnvironmentRequest, v1.GetDeployEnvironmentResponse]
-	listEnvironments        *connect.Client[v1.ListDeployEnvironmentsRequest, v1.ListDeployEnvironmentsResponse]
-	updateEnvironment       *connect.Client[v1.UpdateDeployEnvironmentRequest, v1.UpdateDeployEnvironmentResponse]
-	deleteEnvironment       *connect.Client[v1.DeleteDeployEnvironmentRequest, v1.DeleteDeployEnvironmentResponse]
-	ensureEnvironment       *connect.Client[v1.EnsureDeployEnvironmentRequest, v1.EnsureDeployEnvironmentResponse]
-	createDeployment        *connect.Client[v1.CreateDeploymentRequest, v1.CreateDeploymentResponse]
-	getDeployment           *connect.Client[v1.GetDeploymentRequest, v1.GetDeploymentResponse]
-	listDeployments         *connect.Client[v1.ListDeploymentsRequest, v1.ListDeploymentsResponse]
-	updateDeployment        *connect.Client[v1.UpdateDeploymentRequest, v1.UpdateDeploymentResponse]
-	deleteDeployment        *connect.Client[v1.DeleteDeploymentRequest, v1.DeleteDeploymentResponse]
-	ensureDeployment        *connect.Client[v1.EnsureDeploymentRequest, v1.EnsureDeploymentResponse]
-	promote                 *connect.Client[v1.PromoteReleaseRequest, v1.PromoteReleaseResponse]
-	scale                   *connect.Client[v1.ScaleDeploymentRequest, v1.ScaleDeploymentResponse]
-	getStatus               *connect.Client[v1.GetDeploymentStatusRequest, v1.GetDeploymentStatusResponse]
-	streamLogs              *connect.Client[v1.StreamDeploymentLogsRequest, v1.StreamDeploymentLogsResponse]
-	publishDeploymentConfig *connect.Client[v1.PublishDeploymentConfigRequest, v1.PublishDeploymentConfigResponse]
-	cutRelease              *connect.Client[v1.CutReleaseRequest, v1.CutReleaseResponse]
-	listReleases            *connect.Client[v1.ListDeployReleasesRequest, v1.ListDeployReleasesResponse]
-	getRelease              *connect.Client[v1.GetDeployReleaseRequest, v1.GetDeployReleaseResponse]
-	listPromotions          *connect.Client[v1.ListDeployPromotionsRequest, v1.ListDeployPromotionsResponse]
-	getRollout              *connect.Client[v1.GetDeployRolloutRequest, v1.GetDeployRolloutResponse]
-	recordGate              *connect.Client[v1.RecordDeployGateRequest, v1.RecordDeployGateResponse]
-	listGates               *connect.Client[v1.ListDeployGatesRequest, v1.ListDeployGatesResponse]
-	getRun                  *connect.Client[v1.GetDeployRunRequest, v1.GetDeployRunResponse]
-	listUsage               *connect.Client[v1.ListDeployUsageRequest, v1.ListDeployUsageResponse]
-	recordBundle            *connect.Client[v1.RecordDeployBundleRequest, v1.RecordDeployBundleResponse]
-	getBundle               *connect.Client[v1.GetDeployBundleRequest, v1.GetDeployBundleResponse]
-	listConvergences        *connect.Client[v1.ListDeployConvergencesRequest, v1.ListDeployConvergencesResponse]
-	getLiveView             *connect.Client[v1.GetDeployLiveViewRequest, v1.GetDeployLiveViewResponse]
-	planDeploy              *connect.Client[v1.PlanDeployRequest, v1.PlanDeployResponse]
-	reportLocalSession      *connect.Client[v1.ReportLocalSessionRequest, v1.ReportLocalSessionResponse]
-	importLedger            *connect.Client[v1.ImportLedgerRequest, v1.ImportLedgerResponse]
-	getDrift                *connect.Client[v1.GetDeployDriftRequest, v1.GetDeployDriftResponse]
+	getTenant          *connect.Client[v1.GetDeployTenantRequest, v1.GetDeployTenantResponse]
+	createTenant       *connect.Client[v1.CreateDeployTenantRequest, v1.CreateDeployTenantResponse]
+	createEnvironment  *connect.Client[v1.CreateDeployEnvironmentRequest, v1.CreateDeployEnvironmentResponse]
+	getEnvironment     *connect.Client[v1.GetDeployEnvironmentRequest, v1.GetDeployEnvironmentResponse]
+	listEnvironments   *connect.Client[v1.ListDeployEnvironmentsRequest, v1.ListDeployEnvironmentsResponse]
+	updateEnvironment  *connect.Client[v1.UpdateDeployEnvironmentRequest, v1.UpdateDeployEnvironmentResponse]
+	deleteEnvironment  *connect.Client[v1.DeleteDeployEnvironmentRequest, v1.DeleteDeployEnvironmentResponse]
+	ensureEnvironment  *connect.Client[v1.EnsureDeployEnvironmentRequest, v1.EnsureDeployEnvironmentResponse]
+	createDeployment   *connect.Client[v1.CreateDeploymentRequest, v1.CreateDeploymentResponse]
+	getDeployment      *connect.Client[v1.GetDeploymentRequest, v1.GetDeploymentResponse]
+	listDeployments    *connect.Client[v1.ListDeploymentsRequest, v1.ListDeploymentsResponse]
+	updateDeployment   *connect.Client[v1.UpdateDeploymentRequest, v1.UpdateDeploymentResponse]
+	deleteDeployment   *connect.Client[v1.DeleteDeploymentRequest, v1.DeleteDeploymentResponse]
+	promote            *connect.Client[v1.PromoteReleaseRequest, v1.PromoteReleaseResponse]
+	scale              *connect.Client[v1.ScaleDeploymentRequest, v1.ScaleDeploymentResponse]
+	getStatus          *connect.Client[v1.GetDeploymentStatusRequest, v1.GetDeploymentStatusResponse]
+	streamLogs         *connect.Client[v1.StreamDeploymentLogsRequest, v1.StreamDeploymentLogsResponse]
+	cutRelease         *connect.Client[v1.CutReleaseRequest, v1.CutReleaseResponse]
+	listReleases       *connect.Client[v1.ListDeployReleasesRequest, v1.ListDeployReleasesResponse]
+	getRelease         *connect.Client[v1.GetDeployReleaseRequest, v1.GetDeployReleaseResponse]
+	listPromotions     *connect.Client[v1.ListDeployPromotionsRequest, v1.ListDeployPromotionsResponse]
+	getRollout         *connect.Client[v1.GetDeployRolloutRequest, v1.GetDeployRolloutResponse]
+	recordGate         *connect.Client[v1.RecordDeployGateRequest, v1.RecordDeployGateResponse]
+	listGates          *connect.Client[v1.ListDeployGatesRequest, v1.ListDeployGatesResponse]
+	getRun             *connect.Client[v1.GetDeployRunRequest, v1.GetDeployRunResponse]
+	listUsage          *connect.Client[v1.ListDeployUsageRequest, v1.ListDeployUsageResponse]
+	recordBundle       *connect.Client[v1.RecordDeployBundleRequest, v1.RecordDeployBundleResponse]
+	getBundle          *connect.Client[v1.GetDeployBundleRequest, v1.GetDeployBundleResponse]
+	listConvergences   *connect.Client[v1.ListDeployConvergencesRequest, v1.ListDeployConvergencesResponse]
+	getLiveView        *connect.Client[v1.GetDeployLiveViewRequest, v1.GetDeployLiveViewResponse]
+	planDeploy         *connect.Client[v1.PlanDeployRequest, v1.PlanDeployResponse]
+	reportLocalSession *connect.Client[v1.ReportLocalSessionRequest, v1.ReportLocalSessionResponse]
+	importLedger       *connect.Client[v1.ImportLedgerRequest, v1.ImportLedgerResponse]
+	getDrift           *connect.Client[v1.GetDeployDriftRequest, v1.GetDeployDriftResponse]
 }
 
 // GetTenant calls controlplane.v1.DeployService.GetTenant.
@@ -775,11 +711,6 @@ func (c *deployServiceClient) DeleteDeployment(ctx context.Context, req *connect
 	return c.deleteDeployment.CallUnary(ctx, req)
 }
 
-// EnsureDeployment calls controlplane.v1.DeployService.EnsureDeployment.
-func (c *deployServiceClient) EnsureDeployment(ctx context.Context, req *connect.Request[v1.EnsureDeploymentRequest]) (*connect.Response[v1.EnsureDeploymentResponse], error) {
-	return c.ensureDeployment.CallUnary(ctx, req)
-}
-
 // Promote calls controlplane.v1.DeployService.Promote.
 func (c *deployServiceClient) Promote(ctx context.Context, req *connect.Request[v1.PromoteReleaseRequest]) (*connect.Response[v1.PromoteReleaseResponse], error) {
 	return c.promote.CallUnary(ctx, req)
@@ -798,11 +729,6 @@ func (c *deployServiceClient) GetStatus(ctx context.Context, req *connect.Reques
 // StreamLogs calls controlplane.v1.DeployService.StreamLogs.
 func (c *deployServiceClient) StreamLogs(ctx context.Context, req *connect.Request[v1.StreamDeploymentLogsRequest]) (*connect.ServerStreamForClient[v1.StreamDeploymentLogsResponse], error) {
 	return c.streamLogs.CallServerStream(ctx, req)
-}
-
-// PublishDeploymentConfig calls controlplane.v1.DeployService.PublishDeploymentConfig.
-func (c *deployServiceClient) PublishDeploymentConfig(ctx context.Context, req *connect.Request[v1.PublishDeploymentConfigRequest]) (*connect.Response[v1.PublishDeploymentConfigResponse], error) {
-	return c.publishDeploymentConfig.CallUnary(ctx, req)
 }
 
 // CutRelease calls controlplane.v1.DeployService.CutRelease.
@@ -937,18 +863,6 @@ type DeployServiceHandler interface {
 	// changes the bill in a way that adding replicas at a known size does not.
 	UpdateDeployment(context.Context, *connect.Request[v1.UpdateDeploymentRequest]) (*connect.Response[v1.UpdateDeploymentResponse], error)
 	DeleteDeployment(context.Context, *connect.Request[v1.DeleteDeploymentRequest]) (*connect.Response[v1.DeleteDeploymentResponse], error)
-	// EnsureDeployment makes a deployment with this NAME in this environment
-	// hold exactly this tier spec: created when absent, its spec replaced when
-	// it differs, untouched when identical. The declarative twin of
-	// CreateDeployment + UpdateDeployment, for EnsureEnvironment's reason: a
-	// forge deploy is "make it so", and its next step is
-	// PublishDeploymentConfig on the returned id.
-	//
-	// It runs every gate Create and Update run: role, strict spec
-	// decode, forge's Validate, the hosted shape band, and capacity admission.
-	// A different TIER on an existing name is FailedPrecondition (a tier change
-	// is a delete and a create; see UpdateDeploymentRequest).
-	EnsureDeployment(context.Context, *connect.Request[v1.EnsureDeploymentRequest]) (*connect.Response[v1.EnsureDeploymentResponse], error)
 	// Promote re-points an environment at an ALREADY-BUILT release.
 	//
 	// It NEVER builds. See PromoteReleaseRequest: there is no image field, no
@@ -979,38 +893,6 @@ type DeployServiceHandler interface {
 	// transient disconnect a gap of milliseconds instead of a re-read of the
 	// whole buffer.
 	StreamLogs(context.Context, *connect.Request[v1.StreamDeploymentLogsRequest], *connect.ServerStream[v1.StreamDeploymentLogsResponse]) error
-	// PublishDeploymentConfig packages one deployment as a config artifact and
-	// publishes it to the tenant's config subtree in the platform registry.
-	//
-	// THE ARTIFACT HOLDS EXACTLY ONE forge.dev/v1alpha1 CR (a Workload,
-	// StaticSite or ManagedDatabase) whose spec IS the stored forge tier spec.
-	// Identity (org, environment, deployment) is carried in the CR's forge.dev/*
-	// LABELS, never in the spec. Flux applies that CR and nothing else; the
-	// tier operator renders the workload from it, so Flux never owns a
-	// rendered Deployment or Service.
-	//
-	// THIS IS THE ONLY PATH TO PRODUCTION, and the request shape is what makes
-	// that true rather than this server's good behaviour. The request carries a
-	// deployment id and NOTHING ELSE — no image, no manifest, no namespace, no
-	// cluster, no registry path. Every one of those is derived server-side from
-	// the deployment's own row and the platform's own configuration, so there is
-	// no field in which a caller could name bytes to publish or a place to
-	// publish them. An RPC that accepted a loose image reference would be a
-	// second path to production and would void the promotion guarantee; this one
-	// cannot become that by accident, because there is nothing to populate.
-	//
-	// IT PUBLISHES, IT DOES NOT APPLY. The artifact reaches the registry and the
-	// response reports the digest it landed at. Reconciliation — the Flux
-	// objects that pull that digest and apply it to the destination cluster — is
-	// a separate step performed by the platform, so a successful response means
-	// "these bytes exist at this address", never "this is running".
-	//
-	// IDEMPOTENT BY CONTENT ADDRESS rather than by a key. The render is
-	// reproducible, so re-publishing an unchanged deployment produces the same
-	// bytes, the same digest and the same reference — a repeat call overwrites
-	// an object with itself. It is marked idempotent for that reason and not
-	// because the server de-duplicates anything.
-	PublishDeploymentConfig(context.Context, *connect.Request[v1.PublishDeploymentConfigRequest]) (*connect.Response[v1.PublishDeploymentConfigResponse], error)
 	// CutRelease records a version label over a set of artifacts that were
 	// ALREADY BUILT AND PUSHED. It is the other half of Promote: Promote can
 	// only re-point at a release, and until this RPC existed there was no way
@@ -1277,12 +1159,6 @@ func NewDeployServiceHandler(svc DeployServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(deployServiceMethods.ByName("DeleteDeployment")),
 		connect.WithHandlerOptions(opts...),
 	)
-	deployServiceEnsureDeploymentHandler := connect.NewUnaryHandler(
-		DeployServiceEnsureDeploymentProcedure,
-		svc.EnsureDeployment,
-		connect.WithSchema(deployServiceMethods.ByName("EnsureDeployment")),
-		connect.WithHandlerOptions(opts...),
-	)
 	deployServicePromoteHandler := connect.NewUnaryHandler(
 		DeployServicePromoteProcedure,
 		svc.Promote,
@@ -1305,12 +1181,6 @@ func NewDeployServiceHandler(svc DeployServiceHandler, opts ...connect.HandlerOp
 		DeployServiceStreamLogsProcedure,
 		svc.StreamLogs,
 		connect.WithSchema(deployServiceMethods.ByName("StreamLogs")),
-		connect.WithHandlerOptions(opts...),
-	)
-	deployServicePublishDeploymentConfigHandler := connect.NewUnaryHandler(
-		DeployServicePublishDeploymentConfigProcedure,
-		svc.PublishDeploymentConfig,
-		connect.WithSchema(deployServiceMethods.ByName("PublishDeploymentConfig")),
 		connect.WithHandlerOptions(opts...),
 	)
 	deployServiceCutReleaseHandler := connect.NewUnaryHandler(
@@ -1443,8 +1313,6 @@ func NewDeployServiceHandler(svc DeployServiceHandler, opts ...connect.HandlerOp
 			deployServiceUpdateDeploymentHandler.ServeHTTP(w, r)
 		case DeployServiceDeleteDeploymentProcedure:
 			deployServiceDeleteDeploymentHandler.ServeHTTP(w, r)
-		case DeployServiceEnsureDeploymentProcedure:
-			deployServiceEnsureDeploymentHandler.ServeHTTP(w, r)
 		case DeployServicePromoteProcedure:
 			deployServicePromoteHandler.ServeHTTP(w, r)
 		case DeployServiceScaleProcedure:
@@ -1453,8 +1321,6 @@ func NewDeployServiceHandler(svc DeployServiceHandler, opts ...connect.HandlerOp
 			deployServiceGetStatusHandler.ServeHTTP(w, r)
 		case DeployServiceStreamLogsProcedure:
 			deployServiceStreamLogsHandler.ServeHTTP(w, r)
-		case DeployServicePublishDeploymentConfigProcedure:
-			deployServicePublishDeploymentConfigHandler.ServeHTTP(w, r)
 		case DeployServiceCutReleaseProcedure:
 			deployServiceCutReleaseHandler.ServeHTTP(w, r)
 		case DeployServiceListReleasesProcedure:
@@ -1550,10 +1416,6 @@ func (UnimplementedDeployServiceHandler) DeleteDeployment(context.Context, *conn
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.DeleteDeployment is not implemented"))
 }
 
-func (UnimplementedDeployServiceHandler) EnsureDeployment(context.Context, *connect.Request[v1.EnsureDeploymentRequest]) (*connect.Response[v1.EnsureDeploymentResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.EnsureDeployment is not implemented"))
-}
-
 func (UnimplementedDeployServiceHandler) Promote(context.Context, *connect.Request[v1.PromoteReleaseRequest]) (*connect.Response[v1.PromoteReleaseResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.Promote is not implemented"))
 }
@@ -1568,10 +1430,6 @@ func (UnimplementedDeployServiceHandler) GetStatus(context.Context, *connect.Req
 
 func (UnimplementedDeployServiceHandler) StreamLogs(context.Context, *connect.Request[v1.StreamDeploymentLogsRequest], *connect.ServerStream[v1.StreamDeploymentLogsResponse]) error {
 	return connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.StreamLogs is not implemented"))
-}
-
-func (UnimplementedDeployServiceHandler) PublishDeploymentConfig(context.Context, *connect.Request[v1.PublishDeploymentConfigRequest]) (*connect.Response[v1.PublishDeploymentConfigResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.PublishDeploymentConfig is not implemented"))
 }
 
 func (UnimplementedDeployServiceHandler) CutRelease(context.Context, *connect.Request[v1.CutReleaseRequest]) (*connect.Response[v1.CutReleaseResponse], error) {
