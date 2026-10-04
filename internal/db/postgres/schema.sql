@@ -907,6 +907,7 @@ CREATE TABLE public.triggers (
     config jsonb DEFAULT '{}'::jsonb NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    daemon_id text NOT NULL,
     CONSTRAINT triggers_kind_check CHECK ((kind = 'schedule'::text))
 );
 

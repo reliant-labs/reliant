@@ -1,9 +1,10 @@
 -- name: CreateTrigger :exec
 INSERT INTO triggers (
     id, user_id, project_id, worktree_id, name, kind, enabled,
-    workflow, presets, params, message, config, created_at, updated_at
+    workflow, presets, params, message, config, created_at, updated_at,
+    daemon_id
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15
 );
 
 -- name: GetTrigger :one
@@ -32,8 +33,9 @@ UPDATE triggers SET
     params = $7,
     message = $8,
     config = $9,
-    updated_at = $10
-WHERE id = $11;
+    updated_at = $10,
+    daemon_id = $11
+WHERE id = $12;
 
 -- name: DeleteTrigger :exec
 DELETE FROM triggers WHERE id = $1;

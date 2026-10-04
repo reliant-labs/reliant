@@ -15,9 +15,10 @@ import (
 const createTrigger = `-- name: CreateTrigger :exec
 INSERT INTO triggers (
     id, user_id, project_id, worktree_id, name, kind, enabled,
-    workflow, presets, params, message, config, created_at, updated_at
+    workflow, presets, params, message, config, created_at, updated_at,
+    daemon_id
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15
 )
 `
 
@@ -36,6 +37,7 @@ type CreateTriggerParams struct {
 	Config     json.RawMessage `json:"config"`
 	CreatedAt  time.Time       `json:"created_at"`
 	UpdatedAt  time.Time       `json:"updated_at"`
+	DaemonID   string          `json:"daemon_id"`
 }
 
 func (q *Queries) CreateTrigger(ctx context.Context, arg CreateTriggerParams) error {
@@ -54,6 +56,7 @@ func (q *Queries) CreateTrigger(ctx context.Context, arg CreateTriggerParams) er
 		arg.Config,
 		arg.CreatedAt,
 		arg.UpdatedAt,
+		arg.DaemonID,
 	)
 	return err
 }
@@ -152,7 +155,7 @@ func (q *Queries) GetLatestTriggerEvent(ctx context.Context, arg GetLatestTrigge
 }
 
 const getTrigger = `-- name: GetTrigger :one
-SELECT id, user_id, project_id, worktree_id, name, kind, enabled, workflow, presets, params, message, config, created_at, updated_at FROM triggers WHERE id = $1
+SELECT id, user_id, project_id, worktree_id, name, kind, enabled, workflow, presets, params, message, config, created_at, updated_at, daemon_id FROM triggers WHERE id = $1
 `
 
 func (q *Queries) GetTrigger(ctx context.Context, id string) (Trigger, error) {
@@ -173,6 +176,7 @@ func (q *Queries) GetTrigger(ctx context.Context, id string) (Trigger, error) {
 		&i.Config,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DaemonID,
 	)
 	return i, err
 }
@@ -283,7 +287,7 @@ func (q *Queries) ListTriggerEvents(ctx context.Context, arg ListTriggerEventsPa
 }
 
 const listTriggers = `-- name: ListTriggers :many
-SELECT id, user_id, project_id, worktree_id, name, kind, enabled, workflow, presets, params, message, config, created_at, updated_at FROM triggers
+SELECT id, user_id, project_id, worktree_id, name, kind, enabled, workflow, presets, params, message, config, created_at, updated_at, daemon_id FROM triggers
 WHERE
     ($1::text = '' OR user_id = $1::text)
     AND ($2::text IS NULL OR project_id = $2::text)
@@ -321,6 +325,7 @@ func (q *Queries) ListTriggers(ctx context.Context, arg ListTriggersParams) ([]T
 			&i.Config,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.DaemonID,
 		); err != nil {
 			return nil, err
 		}
@@ -363,8 +368,9 @@ UPDATE triggers SET
     params = $7,
     message = $8,
     config = $9,
-    updated_at = $10
-WHERE id = $11
+    updated_at = $10,
+    daemon_id = $11
+WHERE id = $12
 `
 
 type UpdateTriggerParams struct {
@@ -378,6 +384,7 @@ type UpdateTriggerParams struct {
 	Message    string          `json:"message"`
 	Config     json.RawMessage `json:"config"`
 	UpdatedAt  time.Time       `json:"updated_at"`
+	DaemonID   string          `json:"daemon_id"`
 	ID         string          `json:"id"`
 }
 
@@ -396,6 +403,7 @@ func (q *Queries) UpdateTrigger(ctx context.Context, arg UpdateTriggerParams) (i
 		arg.Message,
 		arg.Config,
 		arg.UpdatedAt,
+		arg.DaemonID,
 		arg.ID,
 	)
 	if err != nil {
