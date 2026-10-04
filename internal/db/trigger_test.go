@@ -266,14 +266,19 @@ func TestListTriggersFiltersByUserAndProject(t *testing.T) {
 		t.Errorf("ListTriggers(project=proj-other): got %v, want [trg-mine-b]", got)
 	}
 
-	// An empty UserID is the schedule syncer's startup reconciliation: every
-	// user's triggers, so no schedule is left unconverged.
-	all, err := repo.ListTriggers(ctx, core.TriggerFilters{})
+	// Listing without a user is refused: "empty means everyone" is a footgun.
+	if _, err := repo.ListTriggers(ctx, core.TriggerFilters{}); err == nil {
+		t.Error("ListTriggers with no user must fail rather than list every tenant's triggers")
+	}
+
+	// The schedule syncer's reconciliation lists everyone's through its own
+	// query, so no schedule is left unconverged.
+	all, err := repo.ListAllTriggers(ctx)
 	if err != nil {
-		t.Fatalf("ListTriggers(all): %v", err)
+		t.Fatalf("ListAllTriggers: %v", err)
 	}
 	if len(all) != 3 {
-		t.Errorf("ListTriggers(no filter): got %d triggers, want 3", len(all))
+		t.Errorf("ListAllTriggers: got %d triggers, want 3", len(all))
 	}
 }
 
@@ -732,4 +737,16 @@ func equalStrings(got, want []string) bool {
 		}
 	}
 	return true
+}
+
+func TestLockTriggerRequiresAnExistingRow(t *testing.T) {
+	repo, cleanup := SetupTestDB(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	if err := repo.RunTx(ctx, func(txCtx context.Context) error {
+		return repo.LockTrigger(txCtx, "no-such-trigger")
+	}); !errors.Is(err, core.ErrTriggerNotFound) {
+		t.Errorf("LockTrigger(missing) = %v, want ErrTriggerNotFound", err)
+	}
 }

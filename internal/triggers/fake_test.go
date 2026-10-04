@@ -61,20 +61,35 @@ func (r *fakeRepo) GetTrigger(_ context.Context, id string) (*core.Trigger, erro
 	return t, nil
 }
 
-func (r *fakeRepo) ListTriggers(_ context.Context, f core.TriggerFilters) ([]*core.Trigger, error) {
+func (r *fakeRepo) ListAllTriggers(_ context.Context) ([]*core.Trigger, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	var out []*core.Trigger
 	for _, t := range r.triggers {
-		if f.UserID != "" && t.UserID != f.UserID {
-			continue
-		}
-		if f.ProjectID != nil && t.ProjectID != *f.ProjectID {
-			continue
-		}
 		out = append(out, t)
 	}
 	return out, nil
+}
+
+func (r *fakeRepo) LockTrigger(_ context.Context, id string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, ok := r.triggers[id]; !ok {
+		return core.ErrTriggerNotFound
+	}
+	return nil
+}
+
+func (r *fakeRepo) GetTriggerEventByDedupe(_ context.Context, kind core.TriggerEventKind, dedupeKey string) (*core.TriggerEvent, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, ev := range r.events {
+		if ev.Kind == kind && ev.DedupeKey == dedupeKey {
+			copied := *ev
+			return &copied, nil
+		}
+	}
+	return nil, core.ErrTriggerEventNotFound
 }
 
 func (r *fakeRepo) CreateTriggerEvent(_ context.Context, ev *core.TriggerEvent) (bool, error) {
@@ -147,10 +162,19 @@ type launchCall struct {
 	Spec  launch.Spec
 }
 
-func (l *fakeLauncher) Launch(_ context.Context, ev launch.Event, spec launch.Spec) (*launch.Result, error) {
+func (l *fakeLauncher) Launch(ctx context.Context, ev launch.Event, spec launch.Spec) (*launch.Result, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.calls = append(l.calls, launchCall{Event: ev, Spec: spec})
+	if spec.Guard != nil {
+		reason, err := spec.Guard(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if reason != "" {
+			return nil, &launch.DeclinedError{Reason: reason}
+		}
+	}
 	if l.err != nil {
 		return nil, l.err
 	}

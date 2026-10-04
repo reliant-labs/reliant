@@ -20,9 +20,12 @@ import (
 // signatures match db.Repository exactly.
 type Repo interface {
 	GetTrigger(ctx context.Context, id string) (*core.Trigger, error)
-	ListTriggers(ctx context.Context, f core.TriggerFilters) ([]*core.Trigger, error)
+	ListAllTriggers(ctx context.Context) ([]*core.Trigger, error)
+	// LockTrigger row-locks the trigger until the surrounding transaction ends.
+	LockTrigger(ctx context.Context, id string) error
 
 	CreateTriggerEvent(ctx context.Context, ev *core.TriggerEvent) (created bool, err error)
+	GetTriggerEventByDedupe(ctx context.Context, kind core.TriggerEventKind, dedupeKey string) (*core.TriggerEvent, error)
 	GetLatestTriggerEvent(ctx context.Context, triggerID string, outcome *core.TriggerEventOutcome) (*core.TriggerEvent, error)
 
 	// GetDaemon reports a missing row as sql.ErrNoRows.

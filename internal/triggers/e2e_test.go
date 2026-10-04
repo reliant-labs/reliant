@@ -56,7 +56,7 @@ func TestScheduleFiresThroughToTheLauncher(t *testing.T) {
 
 	s := NewSyncer(c.ScheduleClient(), repo, taskQueue)
 	cleanupSchedule(t, s, trigger.ID)
-	if err := s.Sync(ctx, trigger); err != nil {
+	if err := s.Sync(ctx, trigger.ID); err != nil {
 		t.Fatalf("Sync: %v", err)
 	}
 

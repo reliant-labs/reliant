@@ -120,8 +120,8 @@ type TriggerEvent struct {
 	CreatedAt     time.Time
 }
 
-// TriggerFilters narrows ListTriggers. An empty UserID lists every user's
-// triggers, which only the schedule syncer's startup reconciliation does.
+// TriggerFilters narrows ListTriggers. UserID is required: the unscoped
+// listing is ListAllTriggers.
 type TriggerFilters struct {
 	UserID    string
 	ProjectID *string
@@ -133,7 +133,13 @@ type TriggerStore interface {
 	CreateTrigger(ctx context.Context, t *Trigger) error
 	// GetTrigger returns ErrTriggerNotFound when the id does not resolve.
 	GetTrigger(ctx context.Context, id string) (*Trigger, error)
+	// ListTriggers lists one user's triggers; f.UserID must be set.
 	ListTriggers(ctx context.Context, f TriggerFilters) ([]*Trigger, error)
+	// ListAllTriggers lists every user's triggers, for schedule reconciliation.
+	ListAllTriggers(ctx context.Context) ([]*Trigger, error)
+	// LockTrigger takes a row lock on the trigger until the surrounding
+	// transaction ends, returning ErrTriggerNotFound when it does not exist.
+	LockTrigger(ctx context.Context, id string) error
 	// UpdateTrigger returns ErrTriggerNotFound when the id does not resolve.
 	UpdateTrigger(ctx context.Context, t *Trigger) error
 	DeleteTrigger(ctx context.Context, id string) error

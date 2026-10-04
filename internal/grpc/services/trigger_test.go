@@ -34,13 +34,20 @@ type fakeTriggerBackend struct {
 	deleteErr error
 	fireErr   error
 	nextFire  *time.Time
+
+	// repo is what the real syncer re-reads the row from.
+	repo db.Repository
 }
 
-func (b *fakeTriggerBackend) Sync(_ context.Context, t *core.Trigger) error {
+func (b *fakeTriggerBackend) Sync(ctx context.Context, triggerID string) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if b.syncErr != nil {
 		return b.syncErr
+	}
+	t, err := b.repo.GetTrigger(ctx, triggerID)
+	if err != nil {
+		return err
 	}
 	copied := *t
 	b.synced = append(b.synced, &copied)
@@ -93,7 +100,7 @@ type triggerTestEnv struct {
 func setupTriggerTest(t *testing.T) *triggerTestEnv {
 	t.Helper()
 	repo := db.NewTestRepo(t)
-	backend := &fakeTriggerBackend{}
+	backend := &fakeTriggerBackend{repo: repo}
 
 	userID := uuid.NewString()
 	projectID := uuid.NewString()
@@ -201,6 +208,40 @@ func TestCreateTriggerRollsBackWhenSyncFails(t *testing.T) {
 	stored, err := env.repo.ListTriggers(context.Background(), core.TriggerFilters{UserID: env.userID})
 	require.NoError(t, err)
 	assert.Empty(t, stored, "a trigger whose schedule could not be created must not survive")
+}
+
+// M5a: Sync may have half-created the schedule before failing, so the
+// rollback removes the schedule as well as the row; otherwise it would keep
+// firing for a trigger that no longer exists until the next SyncAll.
+func TestCreateTriggerRollbackAlsoDeletesTheHalfCreatedSchedule(t *testing.T) {
+	env := setupTriggerTest(t)
+	env.backend.syncErr = errors.New("temporal unreachable")
+
+	_, err := env.svc.CreateTrigger(env.ctx,
+		connect.NewRequest(&reliantv1.CreateTriggerRequest{Trigger: env.definition(nil)}))
+	require.Error(t, err)
+
+	env.backend.mu.Lock()
+	defer env.backend.mu.Unlock()
+	require.Len(t, env.backend.deleted, 1, "the rollback must delete the schedule Sync may have created")
+}
+
+// M5b: Sync takes an id and converges from the row as it is NOW, so a
+// concurrent write that lands between this call's commit and its Sync cannot
+// leave Temporal on the older definition.
+func TestSetTriggerEnabledSyncsFromTheStoredRow(t *testing.T) {
+	env := setupTriggerTest(t)
+	created := env.create(t, env.definition(nil))
+
+	_, err := env.svc.SetTriggerEnabled(env.ctx,
+		connect.NewRequest(&reliantv1.SetTriggerEnabledRequest{Id: created.GetId(), Enabled: false}))
+	require.NoError(t, err)
+
+	env.backend.mu.Lock()
+	defer env.backend.mu.Unlock()
+	last := env.backend.synced[len(env.backend.synced)-1]
+	assert.Equal(t, created.GetId(), last.ID)
+	assert.False(t, last.Enabled)
 }
 
 func TestCreateTriggerValidates(t *testing.T) {

@@ -8,8 +8,8 @@ import (
 	"github.com/reliant-labs/reliant/internal/logging"
 )
 
-// startupSyncAttempts bounds the retries. SyncAll is also called by every
-// write path, so a startup that never converges is degraded rather than
+// startupSyncAttempts bounds the retries. Every write path calls
+// Sync for its own trigger, so a startup that never converges is degraded rather than
 // broken: existing schedules keep firing, and the first edit to a trigger
 // repairs it. Retrying forever would instead leave a goroutine hammering an
 // unreachable Temporal for the life of the process.

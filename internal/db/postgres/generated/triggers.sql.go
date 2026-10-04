@@ -296,6 +296,50 @@ func (q *Queries) GetTriggerEventByDedupe(ctx context.Context, arg GetTriggerEve
 	return i, err
 }
 
+const listAllTriggers = `-- name: ListAllTriggers :many
+SELECT id, user_id, project_id, worktree_id, name, kind, enabled, workflow, presets, params, message, config, created_at, updated_at, daemon_id FROM triggers ORDER BY created_at DESC, id
+`
+
+// Every user's triggers. Only the schedule syncer's reconciliation calls this.
+func (q *Queries) ListAllTriggers(ctx context.Context) ([]Trigger, error) {
+	rows, err := q.db.QueryContext(ctx, listAllTriggers)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Trigger{}
+	for rows.Next() {
+		var i Trigger
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.ProjectID,
+			&i.WorktreeID,
+			&i.Name,
+			&i.Kind,
+			&i.Enabled,
+			&i.Workflow,
+			&i.Presets,
+			&i.Params,
+			&i.Message,
+			&i.Config,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DaemonID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listTriggerEvents = `-- name: ListTriggerEvents :many
 SELECT id, trigger_id, user_id, kind, dedupe_key, occurred_at, payload, outcome, outcome_detail, chat_id, created_at FROM trigger_events
 WHERE trigger_id = $1
@@ -347,8 +391,7 @@ func (q *Queries) ListTriggerEvents(ctx context.Context, arg ListTriggerEventsPa
 
 const listTriggers = `-- name: ListTriggers :many
 SELECT id, user_id, project_id, worktree_id, name, kind, enabled, workflow, presets, params, message, config, created_at, updated_at, daemon_id FROM triggers
-WHERE
-    ($1::text = '' OR user_id = $1::text)
+WHERE user_id = $1::text
     AND ($2::text IS NULL OR project_id = $2::text)
 ORDER BY created_at DESC, id
 `
@@ -358,8 +401,9 @@ type ListTriggersParams struct {
 	ProjectID sql.NullString `json:"project_id"`
 }
 
-// An empty user_id lists every user's triggers, which only the schedule
-// syncer's startup reconciliation does. project_id narrows to one project.
+// Always scoped to one user; project_id narrows further. The unscoped listing
+// is ListAllTriggers, a separate query so "no user" can never be reached by
+// passing an empty string.
 func (q *Queries) ListTriggers(ctx context.Context, arg ListTriggersParams) ([]Trigger, error) {
 	rows, err := q.db.QueryContext(ctx, listTriggers, arg.UserID, arg.ProjectID)
 	if err != nil {
@@ -397,6 +441,19 @@ func (q *Queries) ListTriggers(ctx context.Context, arg ListTriggersParams) ([]T
 		return nil, err
 	}
 	return items, nil
+}
+
+const lockTrigger = `-- name: LockTrigger :one
+SELECT id FROM triggers WHERE id = $1 FOR UPDATE
+`
+
+// Row lock on the trigger for the rest of the transaction. Serializes the
+// overlap check with the launch it guards across concurrent fires.
+func (q *Queries) LockTrigger(ctx context.Context, id string) (string, error) {
+	row := q.db.QueryRowContext(ctx, lockTrigger, id)
+	var id_2 string
+	err := row.Scan(&id_2)
+	return id_2, err
 }
 
 const setTriggerEnabled = `-- name: SetTriggerEnabled :execrows

@@ -667,6 +667,9 @@ type Repository interface {
 	CreateTrigger(ctx context.Context, t *core.Trigger) error
 	GetTrigger(ctx context.Context, id string) (*core.Trigger, error)
 	ListTriggers(ctx context.Context, f core.TriggerFilters) ([]*core.Trigger, error)
+	ListAllTriggers(ctx context.Context) ([]*core.Trigger, error)
+	// LockTrigger row-locks the trigger until the surrounding transaction ends.
+	LockTrigger(ctx context.Context, id string) error
 	UpdateTrigger(ctx context.Context, t *core.Trigger) error
 	DeleteTrigger(ctx context.Context, id string) error
 	SetTriggerEnabled(ctx context.Context, id string, enabled bool) error

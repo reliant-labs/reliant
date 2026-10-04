@@ -53,6 +53,23 @@ func (f *Firer) Fire(ctx context.Context, req FireRequest) (*FireOutput, error) 
 		return nil, nonRetryable("fire has no workflow id", nil)
 	}
 
+	// This fire's own identity decides first. A retry of a fire that already
+	// got an event row must continue THAT fire: re-running the enabled and
+	// overlap policy against it would compare the fire with its own
+	// half-launched chat and skip itself, wedging the trigger.
+	existing, err := f.repo.GetTriggerEventByDedupe(ctx, core.TriggerEventKindSchedule, req.FireWorkflowID)
+	switch {
+	case err == nil:
+		if existing.Outcome != core.TriggerEventLaunched {
+			return outputFromEvent(existing), nil
+		}
+	case errors.Is(err, core.ErrTriggerEventNotFound):
+		existing = nil
+	default:
+		return nil, fmt.Errorf("load event for fire %s: %w", req.FireWorkflowID, err)
+	}
+	resuming := existing != nil
+
 	trigger, err := f.repo.GetTrigger(ctx, req.TriggerID)
 	if err != nil {
 		if errors.Is(err, core.ErrTriggerNotFound) {
@@ -65,21 +82,20 @@ func (f *Firer) Fire(ctx context.Context, req FireRequest) (*FireOutput, error) 
 		return nil, fmt.Errorf("load trigger %s: %w", req.TriggerID, err)
 	}
 
-	// A manual fire is a human pressing "run now", so it overrides both the
-	// enabled flag and overlap: they are policies for the unattended schedule,
-	// not for an explicit request.
-	if !req.Manual && !trigger.Enabled {
-		return f.recordSkip(ctx, trigger, req, "trigger is disabled")
+	// A stored config that no longer parses cannot tell us its overlap policy
+	// or timezone. Record that as the verdict rather than guessing, so the
+	// owner can see why the trigger stopped producing runs.
+	sched, err := ScheduleFor(trigger)
+	if err != nil {
+		return f.failPermanently(ctx, trigger, req, "trigger config is invalid: "+err.Error(), err)
 	}
 
-	if !req.Manual {
-		skip, reason, err := f.overlapSkip(ctx, trigger)
-		if err != nil {
-			return nil, err
-		}
-		if skip {
-			return f.recordSkip(ctx, trigger, req, reason)
-		}
+	// A manual fire is a human pressing "run now", so it overrides both the
+	// enabled flag and overlap: they are policies for the unattended schedule,
+	// not for an explicit request. A resumed fire already passed both.
+	enforcePolicy := !req.Manual && !resuming
+	if enforcePolicy && !trigger.Enabled {
+		return f.recordSkip(ctx, trigger, req, "trigger is disabled")
 	}
 
 	// Never fall back to another daemon: the trigger named this one, and the
@@ -95,14 +111,28 @@ func (f *Firer) Fire(ctx context.Context, req FireRequest) (*FireOutput, error) 
 		return nil, nonRetryable(detail, err)
 	}
 
-	spec, err := f.buildSpec(trigger, req)
+	spec, err := f.buildSpec(trigger, sched, req)
 	if err != nil {
-		return nil, err
+		return f.failPermanently(ctx, trigger, req, err.Error(), err)
+	}
+	if enforcePolicy && sched.SkipOnOverlap() {
+		// Checked inside the launch transaction under a row lock on the
+		// trigger, so fires released together after an outage cannot all
+		// pass the check before any of them has launched.
+		spec.Guard = f.overlapGuard(trigger.ID)
 	}
 	ev := f.buildEvent(trigger, req)
 
 	res, launchErr := f.launcher.Launch(ctx, ev, spec)
 	switch {
+	case errors.Is(launchErr, launch.ErrDeclined):
+		var declined *launch.DeclinedError
+		reason := launchErr.Error()
+		if errors.As(launchErr, &declined) {
+			reason = declined.Reason
+		}
+		return f.recordSkip(ctx, trigger, req, reason)
+
 	case launchErr == nil:
 		// Launch recorded the launched event itself, inside the same
 		// transaction as the chat. Writing one here too would either conflict
@@ -141,63 +171,63 @@ func (f *Firer) Fire(ctx context.Context, req FireRequest) (*FireOutput, error) 
 	return nil, fmt.Errorf("launch trigger %s: %w", trigger.ID, launchErr)
 }
 
-// overlapSkip reports whether this trigger's previous run is still going.
-//
-// "Still going" is the root run being live — active, paused or pending.
-// PENDING counts: a chat whose run has not started yet still has all of its
-// work ahead of it, so starting a second one would double the work rather than
-// replace a stalled first.
-func (f *Firer) overlapSkip(ctx context.Context, trigger *core.Trigger) (bool, string, error) {
-	sched, err := ScheduleFor(trigger)
-	if err != nil {
-		// A stored config that no longer parses cannot tell us its overlap
-		// policy. Treat it as a validation problem rather than guessing.
-		return false, "", nonRetryable("trigger config is invalid: "+err.Error(), err)
+// overlapGuard is the launch guard for overlap=skip. It runs in the launch
+// transaction: locking the trigger row first serializes concurrent fires of
+// the same trigger, so each sees the previous one's committed launch.
+func (f *Firer) overlapGuard(triggerID string) func(ctx context.Context) (string, error) {
+	return func(ctx context.Context) (string, error) {
+		if err := f.repo.LockTrigger(ctx, triggerID); err != nil {
+			if errors.Is(err, core.ErrTriggerNotFound) {
+				return "trigger deleted", nil
+			}
+			return "", fmt.Errorf("lock trigger %s: %w", triggerID, err)
+		}
+		return f.previousRunBlocks(ctx, triggerID)
 	}
-	if !sched.SkipOnOverlap() {
-		return false, "", nil
-	}
+}
 
+// previousRunBlocks reports whether this trigger's previous run is still going.
+//
+// "Still going" is the root run being active or paused. PENDING does not
+// count: a pending root has never started, which for a launched event means a
+// half-launched fire whose Temporal start failed — it is stranded, not
+// running, and treating it as live would wedge the trigger behind it forever.
+func (f *Firer) previousRunBlocks(ctx context.Context, triggerID string) (string, error) {
 	launched := core.TriggerEventLaunched
-	prev, err := f.repo.GetLatestTriggerEvent(ctx, trigger.ID, &launched)
+	prev, err := f.repo.GetLatestTriggerEvent(ctx, triggerID, &launched)
 	if err != nil {
 		if errors.Is(err, core.ErrTriggerEventNotFound) {
-			return false, "", nil
+			return "", nil
 		}
-		return false, "", fmt.Errorf("load latest launched event for %s: %w", trigger.ID, err)
+		return "", fmt.Errorf("load latest launched event for %s: %w", triggerID, err)
 	}
 	if prev == nil || prev.ChatID == nil || *prev.ChatID == "" {
-		return false, "", nil
+		return "", nil
 	}
 
 	statuses, err := f.repo.GetRootWorkflowStatusForChats(ctx, []string{*prev.ChatID})
 	if err != nil {
-		return false, "", fmt.Errorf("load root workflow status for chat %s: %w", *prev.ChatID, err)
+		return "", fmt.Errorf("load root workflow status for chat %s: %w", *prev.ChatID, err)
 	}
 	status, ok := statuses[*prev.ChatID]
-	if !ok {
-		return false, "", nil
+	if !ok || status.State == core.WorkflowStatePending {
+		return "", nil
 	}
 	if status.Live() {
-		return true, fmt.Sprintf("previous run is %s (chat %s)", status.Label(), *prev.ChatID), nil
+		return fmt.Sprintf("previous run is %s (chat %s)", status.Label(), *prev.ChatID), nil
 	}
-	return false, "", nil
+	return "", nil
 }
 
 // buildSpec is what a scheduled run is: owned by the trigger's user,
 // unattended, and seeded with the trigger's prompt.
-func (f *Firer) buildSpec(trigger *core.Trigger, req FireRequest) (launch.Spec, error) {
-	sched, err := ScheduleFor(trigger)
-	if err != nil {
-		return launch.Spec{}, nonRetryable("trigger config is invalid: "+err.Error(), err)
-	}
-
+func (f *Firer) buildSpec(trigger *core.Trigger, sched *Schedule, req FireRequest) (launch.Spec, error) {
 	local := req.ScheduledAt.In(sched.Location)
 	title := fmt.Sprintf("%s · %s", trigger.Name, local.Format("2006-01-02 15:04 MST"))
 
 	params, err := paramsToProto(trigger.Params)
 	if err != nil {
-		return launch.Spec{}, nonRetryable("trigger params are not representable: "+err.Error(), err)
+		return launch.Spec{}, fmt.Errorf("trigger params are not representable: %w", err)
 	}
 
 	hidden := reliantv1.DisplayStyle_DISPLAY_STYLE_HIDDEN
@@ -288,14 +318,38 @@ func (f *Firer) recordOutcome(
 		Outcome:       outcome,
 		OutcomeDetail: detail,
 	}
-	// created=false means a row for this (kind, dedupe_key) already exists —
-	// this activity attempt is a retry of one that got this far. The row is
-	// the record, so there is nothing left to do and nothing to report as an
-	// error.
-	if _, err := f.repo.CreateTriggerEvent(ctx, ev); err != nil {
+	created, err := f.repo.CreateTriggerEvent(ctx, ev)
+	if err != nil {
 		return nil, fmt.Errorf("record %s event for trigger %s: %w", outcome, trigger.ID, err)
 	}
+	if !created {
+		// A row for this (kind, dedupe_key) already exists: this attempt is a
+		// retry of one that got this far, or lost a race. The row is the
+		// record, so report IT rather than an id that was never written.
+		stored, err := f.repo.GetTriggerEventByDedupe(ctx, core.TriggerEventKindSchedule, req.FireWorkflowID)
+		if err != nil {
+			return nil, fmt.Errorf("load existing event for fire %s: %w", req.FireWorkflowID, err)
+		}
+		return outputFromEvent(stored), nil
+	}
 	return &FireOutput{Outcome: string(outcome), Reason: detail, EventID: ev.ID}, nil
+}
+
+// failPermanently records a failed event and ends the fire without retries:
+// the trigger can never launch as written.
+func (f *Firer) failPermanently(ctx context.Context, trigger *core.Trigger, req FireRequest, detail string, cause error) (*FireOutput, error) {
+	if _, err := f.recordOutcome(ctx, trigger, req, core.TriggerEventFailed, detail); err != nil {
+		return nil, err
+	}
+	return nil, nonRetryable(detail, cause)
+}
+
+func outputFromEvent(ev *core.TriggerEvent) *FireOutput {
+	out := &FireOutput{Outcome: string(ev.Outcome), Reason: ev.OutcomeDetail, EventID: ev.ID}
+	if ev.ChatID != nil {
+		out.ChatID = *ev.ChatID
+	}
+	return out
 }
 
 func paramsToProto(params map[string]any) (map[string]*structpb.Value, error) {

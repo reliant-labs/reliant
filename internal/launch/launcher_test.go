@@ -769,3 +769,82 @@ func TestLaunchPinsSpecDaemonOnPendingChat(t *testing.T) {
 	_, input := starter.rootRun(t)
 	assert.Equal(t, "daemon-pinned", input.Inputs["session_daemon_id"])
 }
+
+// M4: the event row is inserted before the chat, so for two concurrent
+// launches of the same (kind, dedupe_key) the unique constraint — not the
+// chats primary key — decides the winner. Exactly one creates the chat; the
+// loser finishes the winner's launch (or reports it already launched) and
+// never surfaces an Internal error.
+func TestConcurrentLaunchesOfTheSameEventConvergeOnOneChat(t *testing.T) {
+	repo, ctx, projectID, _ := launchFixture(t)
+	starter := &fakeStarter{}
+	launcher, _ := newTestLauncher(t, repo, starter)
+
+	chatID := uuid.NewString()
+	ev := Event{Kind: core.TriggerEventKindSchedule, DedupeKey: "fire-" + chatID}
+	spec := Spec{
+		OwnerUserID: launchTestUserID, ProjectID: projectID, NewChatID: chatID,
+		Workflow: "builtin://agent", Params: mockModelParams(t), Messages: userSeed("hello"),
+	}
+
+	const launches = 6
+	errs := make([]error, launches)
+	var wg sync.WaitGroup
+	begin := make(chan struct{})
+	for i := 0; i < launches; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			<-begin
+			_, errs[i] = launcher.Launch(ctx, ev, spec)
+		}(i)
+	}
+	close(begin)
+	wg.Wait()
+
+	for i, err := range errs {
+		if err != nil {
+			assert.ErrorIs(t, err, ErrAlreadyLaunched, "launch %d must succeed or report already-launched, got %v", i, err)
+			assert.NotErrorIs(t, err, ErrInternal, "launch %d lost the race with an Internal error", i)
+		}
+	}
+
+	stored, err := repo.GetTriggerEventByDedupe(ctx, core.TriggerEventKindSchedule, ev.DedupeKey)
+	require.NoError(t, err)
+	require.NotNil(t, stored.ChatID)
+	assert.Equal(t, chatID, *stored.ChatID, "the event must point at the one chat")
+
+	rootThread := chatID
+	messages, err := repo.ListMessages(ctx, chatID, db.MessageListOptions{Thread: &rootThread, Limit: 10})
+	require.NoError(t, err)
+	assert.Len(t, messages, 1, "the seed message must be saved exactly once")
+
+	root, err := repo.GetWorkflow(ctx, chatID)
+	require.NoError(t, err)
+	assert.Equal(t, db.Active(), root.Status)
+}
+
+// A guard that declines aborts the launch with nothing written: no chat and
+// no event row.
+func TestLaunchGuardDeclinesWithoutWritingAnything(t *testing.T) {
+	repo, ctx, projectID, _ := launchFixture(t)
+	starter := &fakeStarter{}
+	launcher, _ := newTestLauncher(t, repo, starter)
+
+	chatID := uuid.NewString()
+	ev := Event{Kind: core.TriggerEventKindSchedule, DedupeKey: "fire-" + chatID}
+	_, err := launcher.Launch(ctx, ev, Spec{
+		OwnerUserID: launchTestUserID, ProjectID: projectID, NewChatID: chatID,
+		Workflow: "builtin://agent", Params: mockModelParams(t), Messages: userSeed("hello"),
+		Guard: func(context.Context) (string, error) { return "previous run is running", nil },
+	})
+	var declined *DeclinedError
+	require.ErrorAs(t, err, &declined)
+	assert.Equal(t, "previous run is running", declined.Reason)
+
+	_, err = repo.GetChat(ctx, chatID)
+	assert.Error(t, err, "a declined launch must not create the chat")
+	_, err = repo.GetTriggerEventByDedupe(ctx, core.TriggerEventKindSchedule, ev.DedupeKey)
+	assert.ErrorIs(t, err, core.ErrTriggerEventNotFound, "a declined launch must not write an event row")
+	assert.Empty(t, starter.startedIDs())
+}

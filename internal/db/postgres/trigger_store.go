@@ -76,6 +76,32 @@ func (s *triggerStore) ListTriggers(ctx context.Context, f core.TriggerFilters) 
 	return triggers, nil
 }
 
+func (s *triggerStore) ListAllTriggers(ctx context.Context) ([]*core.Trigger, error) {
+	rows, err := s.q.ListAllTriggers(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list all triggers: %w", err)
+	}
+	triggers := make([]*core.Trigger, 0, len(rows))
+	for _, row := range rows {
+		t, err := triggerFromPG(row)
+		if err != nil {
+			return nil, err
+		}
+		triggers = append(triggers, t)
+	}
+	return triggers, nil
+}
+
+func (s *triggerStore) LockTrigger(ctx context.Context, id string) error {
+	if _, err := s.q.LockTrigger(ctx, id); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return core.ErrTriggerNotFound
+		}
+		return fmt.Errorf("failed to lock trigger: %w", err)
+	}
+	return nil
+}
+
 func (s *triggerStore) UpdateTrigger(ctx context.Context, t *core.Trigger) error {
 	presets, err := triggerMapToJSON(t.Presets)
 	if err != nil {

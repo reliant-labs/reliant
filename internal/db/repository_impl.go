@@ -3589,7 +3589,21 @@ func (r *Repo) GetTrigger(ctx context.Context, id string) (*core.Trigger, error)
 }
 
 func (r *Repo) ListTriggers(ctx context.Context, f core.TriggerFilters) ([]*core.Trigger, error) {
+	if f.UserID == "" {
+		return nil, fmt.Errorf("user ID cannot be empty; use ListAllTriggers to list every user's triggers")
+	}
 	return r.triggers.ListTriggers(ctx, f)
+}
+
+func (r *Repo) ListAllTriggers(ctx context.Context) ([]*core.Trigger, error) {
+	return r.triggers.ListAllTriggers(ctx)
+}
+
+func (r *Repo) LockTrigger(ctx context.Context, id string) error {
+	if id == "" {
+		return fmt.Errorf("trigger ID cannot be empty")
+	}
+	return r.triggers.LockTrigger(ctx, id)
 }
 
 func (r *Repo) UpdateTrigger(ctx context.Context, t *core.Trigger) error {

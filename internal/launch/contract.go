@@ -19,6 +19,7 @@
 package launch
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"time"
@@ -86,6 +87,18 @@ type Spec struct {
 	// GreenfieldProbe asks the daemon whether the working directory holds code
 	// and, when it does not, prepends the greenfield guidance message.
 	GreenfieldProbe bool
+
+	// Guard runs INSIDE the launch transaction, before anything is written, so
+	// a check-then-launch decision (a schedule's overlap policy) is serialized
+	// with the launch it protects instead of racing it. The ctx carries the
+	// transaction: a guard that row-locks something holds the lock until the
+	// launch commits or rolls back.
+	//
+	// A non-empty reason declines the launch: nothing is written and Launch
+	// returns *DeclinedError. The guard may run more than once, because the
+	// transaction retries on a serialization conflict. Applies to new chats
+	// only; resuming an already-recorded launch never consults it.
+	Guard func(ctx context.Context) (declineReason string, err error)
 }
 
 // Result is what Launch produced.
@@ -113,6 +126,20 @@ func (e *AlreadyLaunchedError) Error() string {
 
 // Is makes errors.Is(err, ErrAlreadyLaunched) match.
 func (e *AlreadyLaunchedError) Is(target error) bool { return target == ErrAlreadyLaunched }
+
+// ErrDeclined reports that Spec.Guard declined the launch. Nothing was
+// written. Match with errors.Is; *DeclinedError carries the reason.
+var ErrDeclined = errors.New("launch declined")
+
+// DeclinedError is the concrete ErrDeclined.
+type DeclinedError struct {
+	Reason string
+}
+
+func (e *DeclinedError) Error() string { return "launch declined: " + e.Reason }
+
+// Is makes errors.Is(err, ErrDeclined) match.
+func (e *DeclinedError) Is(target error) bool { return target == ErrDeclined }
 
 // ErrNotPending reports that Spec.ChatID names a chat whose root run has
 // already started; the caller should continue it with SendMessage instead.

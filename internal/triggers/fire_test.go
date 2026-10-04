@@ -215,8 +215,10 @@ func TestFireSkipIsIdempotentOnTheDedupeKey(t *testing.T) {
 
 func TestFireSkipsWhileThePreviousRunIsLive(t *testing.T) {
 	// Each of these is a reason not to start a second run: the previous one is
-	// still going to produce work.
-	for _, status := range []core.WorkflowStatus{core.Active(), core.Paused(), core.Pending()} {
+	// still going to produce work. PENDING is deliberately absent: a pending
+	// root never started, so it is a stranded launch, not a running one (see
+	// TestFireDoesNotTreatAStrandedPendingRunAsLive).
+	for _, status := range []core.WorkflowStatus{core.Active(), core.Paused()} {
 		t.Run(status.Label(), func(t *testing.T) {
 			repo := newFakeRepo()
 			trigger := testTrigger(t, nil)
@@ -243,13 +245,35 @@ func TestFireSkipsWhileThePreviousRunIsLive(t *testing.T) {
 			if out.Outcome != string(core.TriggerEventSkipped) {
 				t.Fatalf("Outcome = %q, want skipped while the previous run is %s", out.Outcome, status.Label())
 			}
-			if len(launcher.snapshot()) != 0 {
-				t.Error("overlap=skip must not launch")
+			if got := repo.eventsFor(trigger.ID); len(got) != 2 || got[1].Outcome != core.TriggerEventSkipped {
+				t.Errorf("events = %+v, want the earlier launch plus a recorded skip", got)
 			}
 			if !strings.Contains(out.Reason, prevChat) {
 				t.Errorf("Reason = %q, want it to name the blocking chat", out.Reason)
 			}
 		})
+	}
+}
+
+func TestFireDoesNotTreatAStrandedPendingRunAsLive(t *testing.T) {
+	repo := newFakeRepo()
+	trigger := testTrigger(t, nil)
+	repo.triggers[trigger.ID] = trigger
+	prevChat := "chat-prev"
+	repo.statuses[prevChat] = core.Pending()
+	repo.events = append(repo.events, &core.TriggerEvent{
+		ID: uuid.NewString(), TriggerID: &trigger.ID, UserID: trigger.UserID,
+		Kind: core.TriggerEventKindSchedule, DedupeKey: "earlier-fire",
+		OccurredAt: time.Date(2026, 1, 1, 9, 0, 0, 0, time.UTC),
+		Outcome:    core.TriggerEventLaunched, ChatID: &prevChat,
+	})
+	launcher := &fakeLauncher{}
+	out, err := NewFirer(repo, launcher).Fire(context.Background(), fireReq(trigger.ID))
+	if err != nil {
+		t.Fatalf("Fire: %v", err)
+	}
+	if out.Outcome != string(core.TriggerEventLaunched) {
+		t.Fatalf("Outcome = %q, want launched: a never-started root must not block the next fire", out.Outcome)
 	}
 }
 
