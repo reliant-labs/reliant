@@ -56,8 +56,10 @@ func TestListInSidebarTruthTable(t *testing.T) {
 				}
 
 				// The documented policy, written independently of the SQL.
-				want := lk.kind == "" || lk.kind == core.TriggerEventKindChatStart || adopted ||
-					(lk.kind != core.TriggerEventKindAgentStartRun && awaiting)
+				// Awaiting input never lists a chat: since the Inbox shipped,
+				// that is where an automation's question surfaces (§14.1
+				// decision 5). Only origin and adoption decide.
+				want := lk.kind == "" || lk.kind == core.TriggerEventKindChatStart || adopted
 
 				chat, err := repo.GetChat(ctx, id)
 				require.NoError(t, err)
@@ -80,6 +82,16 @@ func TestListChatsSidebarOnlyReadsTheViewColumn(t *testing.T) {
 	_, err := repo.SetChatAdopted(ctx, "agent-run-adopted", "test-user", true)
 	require.NoError(t, err)
 	createActivityTestChat(t, repo, "interactive")
+	// An automation asking a question is the Inbox's, not the sidebar's.
+	createActivityTestChat(t, repo, "schedule-awaiting")
+	recordLaunchEvent(t, repo, "schedule-awaiting", core.TriggerEventKindSchedule, nil, now)
+	insertTestApproval(t, repo, "appr-schedule-awaiting", "schedule-awaiting", 1)
+	// Adopted, it is the user's chat and stays listed while it waits.
+	createActivityTestChat(t, repo, "schedule-awaiting-adopted")
+	recordLaunchEvent(t, repo, "schedule-awaiting-adopted", core.TriggerEventKindSchedule, nil, now)
+	insertTestApproval(t, repo, "appr-schedule-awaiting-adopted", "schedule-awaiting-adopted", 1)
+	_, err = repo.SetChatAdopted(ctx, "schedule-awaiting-adopted", "test-user", true)
+	require.NoError(t, err)
 
 	project := "test-project"
 	ids := func(sidebarOnly bool) map[string]bool {
@@ -96,6 +108,9 @@ func TestListChatsSidebarOnlyReadsTheViewColumn(t *testing.T) {
 	assert.False(t, got["agent-run"], "an agent-started run is never listed unless adopted")
 	assert.True(t, got["agent-run-adopted"])
 	assert.True(t, got["interactive"])
+	assert.True(t, ids(false)["schedule-awaiting"])
+	assert.False(t, got["schedule-awaiting"], "an automation awaiting input is in the Inbox, not the sidebar")
+	assert.True(t, got["schedule-awaiting-adopted"], "an adopted automation awaiting input stays listed")
 }
 
 func TestSetChatAdopted_OwnerScopedAndIdempotent(t *testing.T) {
