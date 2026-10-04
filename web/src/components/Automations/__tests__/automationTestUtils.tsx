@@ -32,6 +32,7 @@ export function renderAtRoute(ui: ReactNode, path = "/automations") {
     createRoute({ getParentRoute: () => rootRoute, path: "/" }),
     createRoute({ getParentRoute: () => rootRoute, path: "/project/$projectId" }),
     createRoute({ getParentRoute: () => rootRoute, path: "/runs/$runId" }),
+    createRoute({ getParentRoute: () => rootRoute, path: "/workflow" }),
     path.startsWith("/automations/")
       ? createRoute({ getParentRoute: () => rootRoute, path: "/automations" })
       : createRoute({ getParentRoute: () => rootRoute, path: "/automations/$triggerId" }),
