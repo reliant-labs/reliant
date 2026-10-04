@@ -36,6 +36,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/workflow/builtin"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
+	activitytypes "github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
 	"github.com/reliant-labs/reliant/internal/workflow/stopreason"
 	"go.temporal.io/sdk/activity"
@@ -1025,7 +1026,11 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 		// means nothing: reaching the whole registry is spelled ["*"].
 		loadable := model.CelStringListValue(tc.GetLoadableTools())
 
-		toolsResult = a.getAvailableToolsWithSpawn(ctx, chat, workingDir, worktreeDaemonID, projectCfg, toolFilter, loadable, thread, mailboxReachable, canSpawnChildren)
+		// MCP discovery runs on the run's daemon, resolved the way
+		// ExecuteTools resolves it: node/workflow selector over the worktree's
+		// owning daemon over default resolution.
+		toolCtx := toolexec.WithDaemonSelector(ctx, toolDaemonSelector(worktreeDaemonID, rtx.DaemonSelector))
+		toolsResult = a.getAvailableToolsWithSpawn(toolCtx, chat, workingDir, worktreeDaemonID, projectCfg, toolFilter, loadable, thread, mailboxReachable, canSpawnChildren)
 		availableTools = toolsResult.Tools
 
 		// Emit warning to chat if MCP servers failed to load
@@ -1945,7 +1950,13 @@ func (a *CallLLMActivity) getAvailableToolsWithSpawn(ctx context.Context, chat *
 	// Ensure MCP servers for this project are loaded before getting MCP tools.
 	// Execution-time MCP binding for actual tool runs happens at the executor boundary.
 	var failedMCPServers []string
-	toolRuntime := a.mcpRuntimeFromContext(ctx)
+	// Asking for MCP tools sends daemon commands, which wake a suspended
+	// daemon. Only a node whose filters can name an mcp__ tool has any use for
+	// the answer, so every other node leaves the daemon alone.
+	var toolRuntime tools.MCPRuntime
+	if tools.FilterReachesMCP(toolFilter, loadableFilter) {
+		toolRuntime = a.mcpRuntimeFromContext(ctx)
+	}
 	if toolRuntime != nil {
 		result := toolRuntime.EnsureProjectServersLoaded(ctx, scopePath)
 		if result.HasFailures() {
@@ -3530,4 +3541,18 @@ func celStringValuePtr(c *reliantv1.CelString) *string {
 	}
 	v := model.CelStringValue(c)
 	return &v
+}
+
+// toolDaemonSelector mirrors the daemon routing priority ExecuteTools applies:
+// an explicit node/workflow selector beats the worktree's owning daemon, and
+// neither means default resolution (nil).
+func toolDaemonSelector(worktreeDaemonID string, explicit *activitytypes.DaemonSelector) *toolexec.DaemonSelector {
+	selector := (*toolexec.DaemonSelector)(nil)
+	if worktreeDaemonID != "" {
+		selector = &toolexec.DaemonSelector{ID: worktreeDaemonID}
+	}
+	if explicit != nil {
+		selector = &toolexec.DaemonSelector{ID: explicit.ID, Name: explicit.Name, Type: explicit.Type, Labels: explicit.Labels}
+	}
+	return selector
 }

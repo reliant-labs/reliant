@@ -3,6 +3,7 @@ package activities
 
 import (
 	"reflect"
+	"strings"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
@@ -235,6 +236,11 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 // initPreflightConfig sets up the PreflightConfig for RequiresDaemon.
 // This bridges the tools and runtime packages which can't import each other.
 func initPreflightConfig() {
+	v2.SetPreflightConfig(newPreflightConfig())
+}
+
+// newPreflightConfig builds the production PreflightConfig.
+func newPreflightConfig() *v2.PreflightConfig {
 	// Build daemon tool lookup from the tool registry.
 	registry := tools.GetToolRegistry()
 	daemonTools := make(map[string]bool, len(registry))
@@ -244,12 +250,20 @@ func initPreflightConfig() {
 		}
 	}
 
-	v2.SetPreflightConfig(&v2.PreflightConfig{
+	return &v2.PreflightConfig{
+		// MCP tools execute on the daemon (stdio servers spawn there), and
+		// their names are not in the built-in registry.
 		IsDaemonTool: func(name string) bool {
-			return daemonTools[name]
+			return daemonTools[name] || strings.HasPrefix(name, "mcp__")
 		},
 		ExpandToolFilter: func(filter []string) []string {
-			return tools.ExpandToolFilter(filter, nil)
+			expanded := tools.ExpandToolFilter(filter, nil)
+			// MCP names are unknown statically; surface a probe name for any
+			// filter that can reach one so IsDaemonTool sees it.
+			if tools.FilterReachesMCP(filter) {
+				expanded = append(expanded, "mcp__*")
+			}
+			return expanded
 		},
-	})
+	}
 }

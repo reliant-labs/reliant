@@ -215,6 +215,9 @@ func (e *RemoteExecutor) executeOnServer(ctx context.Context, req *ToolRequest, 
 	if e.daemonFactory != nil {
 		daemonClient = e.daemonFactory(req.UserID)
 	}
+	// MCP tools bind a daemon-backed runtime from this context; carrying the
+	// run's selector keeps them on the daemon built-in tools use.
+	ctx = WithDaemonSelector(ctx, req.DaemonSelector)
 	result := e.serverExecutor.ExecuteToolWithDaemon(ctx, req.ToolName, req.ToolInput, req.ToolCallID, timeoutMs, contextMap, daemonClient)
 
 	return &ToolResult{

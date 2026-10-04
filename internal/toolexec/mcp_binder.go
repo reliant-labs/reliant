@@ -46,13 +46,18 @@ func NewDaemonMCPContextBinder(router DaemonRouter) MCPContextBinder {
 		if !ok || userID == "" {
 			return toolCtx
 		}
-		return toolCtx.WithMCP(&daemonMCPRuntime{router: router, userID: userID})
+		return toolCtx.WithMCP(&daemonMCPRuntime{router: router, userID: userID, selector: DaemonSelectorFromContext(toolCtx.Context)})
 	})
 }
 
 type daemonMCPRuntime struct {
-	router DaemonRouter
-	userID string
+	router   DaemonRouter
+	userID   string
+	selector *DaemonSelector
+}
+
+func (r *daemonMCPRuntime) send(ctx context.Context, commandType string, payload []byte, timeoutMs int32) ([]byte, error) {
+	return SendDaemonCommandForSelector(ctx, r.router, r.userID, r.selector, commandType, payload, timeoutMs)
 }
 
 func (r *daemonMCPRuntime) EnsureProjectServersLoaded(ctx context.Context, projectPath string) *mcp.ProjectServerLoadResult {
@@ -71,7 +76,7 @@ func (r *daemonMCPRuntime) EnsureProjectServersLoaded(ctx context.Context, proje
 		result.Errors[projectPath] = err
 		return result
 	}
-	respData, err := r.router.SendDaemonCommand(ctx, r.userID, "mcp.ensure_loaded", payload, int32((120 * time.Second).Milliseconds()))
+	respData, err := r.send(ctx, "mcp.ensure_loaded", payload, int32((120 * time.Second).Milliseconds()))
 	if err != nil {
 		result.FailedServers = append(result.FailedServers, projectPath)
 		result.Errors[projectPath] = err
@@ -122,7 +127,7 @@ func (r *daemonMCPRuntime) callTool(session, projectPath, serverName, toolName s
 	if err != nil {
 		return nil, fmt.Errorf("marshal mcp call payload: %w", err)
 	}
-	respData, err := r.router.SendDaemonCommand(context.Background(), r.userID, "mcp.call_tool", payload, int32((120 * time.Second).Milliseconds()))
+	respData, err := r.send(context.Background(), "mcp.call_tool", payload, int32((120 * time.Second).Milliseconds()))
 	if err != nil {
 		return nil, err
 	}
@@ -147,7 +152,7 @@ func (r *daemonMCPRuntime) listTools(projectPath string) (map[string][]mcp.Tool,
 	if err != nil {
 		return nil, fmt.Errorf("marshal mcp server status payload: %w", err)
 	}
-	respData, err := r.router.SendDaemonCommand(context.Background(), r.userID, "mcp.server_status", payload, int32((10 * time.Second).Milliseconds()))
+	respData, err := r.send(context.Background(), "mcp.server_status", payload, int32((10 * time.Second).Milliseconds()))
 	if err != nil {
 		return nil, err
 	}
@@ -169,7 +174,7 @@ func (r *daemonMCPRuntime) listTools(projectPath string) (map[string][]mcp.Tool,
 		if err != nil {
 			return nil, fmt.Errorf("marshal mcp.list_tools payload: %w", err)
 		}
-		listRespData, err := r.router.SendDaemonCommand(context.Background(), r.userID, "mcp.list_tools", listPayload, int32((10 * time.Second).Milliseconds()))
+		listRespData, err := r.send(context.Background(), "mcp.list_tools", listPayload, int32((10 * time.Second).Milliseconds()))
 		if err != nil {
 			return nil, err
 		}
