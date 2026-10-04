@@ -48,6 +48,8 @@ type RunListFilters struct {
 	StartedBefore *time.Time
 	Query         *string
 	After         *RunCursor
+	// ParentChatID narrows to runs an agent started from this chat.
+	ParentChatID *string
 	// ByLastActive orders by most recent activity instead of start time. A
 	// keyset cursor only encodes start time, so it cannot be combined with After.
 	ByLastActive    bool
@@ -78,6 +80,11 @@ type RunListItem struct {
 	TriggerID   string
 	TriggerName string
 	DaemonID    string
+
+	// ParentChatID and ParentChatTitle are set for an agent.start_run launch.
+	// The title is empty when the parent chat is gone or not the caller's.
+	ParentChatID    string
+	ParentChatTitle string
 }
 
 // RunStore reads the cross-cutting run list.

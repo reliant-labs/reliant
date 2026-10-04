@@ -167,6 +167,15 @@ message Run {
   // DisplayState is the one state a user reads, derived from state,
   // stop_reason and activity. See RunDisplayState.
   RunDisplayState display_state = 20;
+
+  // ParentChatId is the chat whose agent started this run with start_run.
+  // Set only for launch_kind "agent.start_run"; unset otherwise. Filled by the
+  // cross-cutting list (ListRuns, LastRunPerWorkflow) like title above.
+  optional string parent_chat_id = 21;
+
+  // ParentChatTitle is that parent chat's title. Unset when parent_chat_id is,
+  // or when the parent chat no longer exists or is not the caller's.
+  optional string parent_chat_title = 22;
 }
 
 // RunDisplayState is the single status vocabulary the UI shows for a run
@@ -322,6 +331,12 @@ message ListRunsRequest {
   // IncludeArchived also returns runs whose chat is archived. Archived runs
   // are hidden by default.
   bool include_archived = 15;
+
+  // ParentChatId restricts to runs an agent started from this chat (launch
+  // kind "agent.start_run"). Still scoped to the caller's own runs, and not
+  // narrowed by any root-only default: an agent-started run is the root run of
+  // its own chat. Archived children are hidden unless include_archived is set.
+  optional string parent_chat_id = 16;
 }
 
 message ListRunsResponse {

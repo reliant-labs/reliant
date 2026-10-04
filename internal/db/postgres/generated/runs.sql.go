@@ -14,7 +14,7 @@ import (
 )
 
 const lastRunPerWorkflow = `-- name: LastRunPerWorkflow :many
-SELECT DISTINCT ON (r.workflow_name) r.chat_id, r.run_id, r.title, r.project_id, r.created_at, r.last_active, r.completed_at, r.workflow_name, r.outcome, r.root_state, r.root_stop_reason, r.activity, r.launch_kind, r.trigger_id, r.trigger_name, r.active_daemon_id, r.display_state, r.chat_state FROM (
+SELECT DISTINCT ON (r.workflow_name) r.chat_id, r.run_id, r.title, r.project_id, r.created_at, r.last_active, r.completed_at, r.workflow_name, r.outcome, r.root_state, r.root_stop_reason, r.activity, r.launch_kind, r.trigger_id, r.trigger_name, r.active_daemon_id, r.display_state, r.chat_state, r.parent_chat_id, r.parent_chat_title FROM (
     SELECT
         c.id AS chat_id,
         COALESCE(c.workflow_id, c.id)::text AS run_id,
@@ -33,50 +33,78 @@ SELECT DISTINCT ON (r.workflow_name) r.chat_id, r.run_id, r.title, r.project_id,
         t.name AS trigger_name,
         c.active_daemon_id,
         COALESCE(c.display_state, 1)::integer AS display_state,
-        c.state AS chat_state
+        c.state AS chat_state,
+        COALESCE(pe.parent_chat_id, '')::text AS parent_chat_id,
+        pc.title AS parent_chat_title
     FROM chats_with_activity c
     LEFT JOIN workflows rw ON rw.id = c.workflow_id
     LEFT JOIN triggers t ON t.id = c.trigger_id AND t.user_id = c.user_id
+    -- The parent chat of an agent-started run lives only in the launch event's
+    -- payload. Looked up for agent.start_run chats alone, by chat id
+    -- (idx_trigger_events_chat), so every other row pays nothing.
+    LEFT JOIN LATERAL (
+        SELECT te.payload->>'parent_chat_id' AS parent_chat_id
+        FROM trigger_events te
+        WHERE te.chat_id = c.id AND c.launch_kind = 'agent.start_run'
+        ORDER BY te.created_at ASC, te.id ASC
+        LIMIT 1
+    ) pe ON true
+    -- Owner-scoped: a parent that is not the caller's contributes no title.
+    LEFT JOIN chats pc ON pc.id = pe.parent_chat_id AND pc.user_id = c.user_id
     WHERE c.user_id = $1
+      -- The reverse direction, driven from idx_trigger_events_parent_chat.
+      AND ($2::text IS NULL OR c.id IN (
+            SELECT te.chat_id FROM trigger_events te
+            WHERE te.kind = 'agent.start_run'
+              AND te.payload->>'parent_chat_id' = $2::text
+              AND te.chat_id IS NOT NULL))
 ) r
 WHERE
     r.chat_state IS DISTINCT FROM 3
     AND r.workflow_name <> ''
-    AND ($2::text IS NULL OR r.project_id = $2::text)
-    AND (cardinality($3::text[]) = 0 OR r.workflow_name = ANY($3::text[]))
+    AND ($3::text IS NULL OR r.project_id = $3::text)
+    AND (cardinality($4::text[]) = 0 OR r.workflow_name = ANY($4::text[]))
 ORDER BY r.workflow_name, r.created_at DESC, r.chat_id DESC
 `
 
 type LastRunPerWorkflowParams struct {
-	UserID    string         `json:"user_id"`
-	ProjectID sql.NullString `json:"project_id"`
-	Workflows []string       `json:"workflows"`
+	UserID       string         `json:"user_id"`
+	ParentChatID sql.NullString `json:"parent_chat_id"`
+	ProjectID    sql.NullString `json:"project_id"`
+	Workflows    []string       `json:"workflows"`
 }
 
 type LastRunPerWorkflowRow struct {
-	ChatID         string         `json:"chat_id"`
-	RunID          string         `json:"run_id"`
-	Title          string         `json:"title"`
-	ProjectID      string         `json:"project_id"`
-	CreatedAt      time.Time      `json:"created_at"`
-	LastActive     time.Time      `json:"last_active"`
-	CompletedAt    sql.NullTime   `json:"completed_at"`
-	WorkflowName   string         `json:"workflow_name"`
-	Outcome        sql.NullString `json:"outcome"`
-	RootState      sql.NullInt32  `json:"root_state"`
-	RootStopReason sql.NullInt32  `json:"root_stop_reason"`
-	Activity       int32          `json:"activity"`
-	LaunchKind     sql.NullString `json:"launch_kind"`
-	TriggerID      sql.NullString `json:"trigger_id"`
-	TriggerName    sql.NullString `json:"trigger_name"`
-	ActiveDaemonID sql.NullString `json:"active_daemon_id"`
-	DisplayState   int32          `json:"display_state"`
-	ChatState      sql.NullInt32  `json:"chat_state"`
+	ChatID          string         `json:"chat_id"`
+	RunID           string         `json:"run_id"`
+	Title           string         `json:"title"`
+	ProjectID       string         `json:"project_id"`
+	CreatedAt       time.Time      `json:"created_at"`
+	LastActive      time.Time      `json:"last_active"`
+	CompletedAt     sql.NullTime   `json:"completed_at"`
+	WorkflowName    string         `json:"workflow_name"`
+	Outcome         sql.NullString `json:"outcome"`
+	RootState       sql.NullInt32  `json:"root_state"`
+	RootStopReason  sql.NullInt32  `json:"root_stop_reason"`
+	Activity        int32          `json:"activity"`
+	LaunchKind      sql.NullString `json:"launch_kind"`
+	TriggerID       sql.NullString `json:"trigger_id"`
+	TriggerName     sql.NullString `json:"trigger_name"`
+	ActiveDaemonID  sql.NullString `json:"active_daemon_id"`
+	DisplayState    int32          `json:"display_state"`
+	ChatState       sql.NullInt32  `json:"chat_state"`
+	ParentChatID    string         `json:"parent_chat_id"`
+	ParentChatTitle sql.NullString `json:"parent_chat_title"`
 }
 
 // Newest run of each workflow name. Same columns and display_state as ListRuns.
 func (q *Queries) LastRunPerWorkflow(ctx context.Context, arg LastRunPerWorkflowParams) ([]LastRunPerWorkflowRow, error) {
-	rows, err := q.db.QueryContext(ctx, lastRunPerWorkflow, arg.UserID, arg.ProjectID, pq.Array(arg.Workflows))
+	rows, err := q.db.QueryContext(ctx, lastRunPerWorkflow,
+		arg.UserID,
+		arg.ParentChatID,
+		arg.ProjectID,
+		pq.Array(arg.Workflows),
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -103,6 +131,8 @@ func (q *Queries) LastRunPerWorkflow(ctx context.Context, arg LastRunPerWorkflow
 			&i.ActiveDaemonID,
 			&i.DisplayState,
 			&i.ChatState,
+			&i.ParentChatID,
+			&i.ParentChatTitle,
 		); err != nil {
 			return nil, err
 		}
@@ -119,7 +149,7 @@ func (q *Queries) LastRunPerWorkflow(ctx context.Context, arg LastRunPerWorkflow
 
 const listRuns = `-- name: ListRuns :many
 
-SELECT chat_id, run_id, title, project_id, created_at, last_active, completed_at, workflow_name, outcome, root_state, root_stop_reason, activity, launch_kind, trigger_id, trigger_name, active_daemon_id, display_state, chat_state FROM (
+SELECT chat_id, run_id, title, project_id, created_at, last_active, completed_at, workflow_name, outcome, root_state, root_stop_reason, activity, launch_kind, trigger_id, trigger_name, active_daemon_id, display_state, chat_state, parent_chat_id, parent_chat_title FROM (
     SELECT
         c.id AS chat_id,
         COALESCE(c.workflow_id, c.id)::text AS run_id,
@@ -138,34 +168,55 @@ SELECT chat_id, run_id, title, project_id, created_at, last_active, completed_at
         t.name AS trigger_name,
         c.active_daemon_id,
         COALESCE(c.display_state, 1)::integer AS display_state,
-        c.state AS chat_state
+        c.state AS chat_state,
+        COALESCE(pe.parent_chat_id, '')::text AS parent_chat_id,
+        pc.title AS parent_chat_title
     FROM chats_with_activity c
     LEFT JOIN workflows rw ON rw.id = c.workflow_id
     LEFT JOIN triggers t ON t.id = c.trigger_id AND t.user_id = c.user_id
+    -- The parent chat of an agent-started run lives only in the launch event's
+    -- payload. Looked up for agent.start_run chats alone, by chat id
+    -- (idx_trigger_events_chat), so every other row pays nothing.
+    LEFT JOIN LATERAL (
+        SELECT te.payload->>'parent_chat_id' AS parent_chat_id
+        FROM trigger_events te
+        WHERE te.chat_id = c.id AND c.launch_kind = 'agent.start_run'
+        ORDER BY te.created_at ASC, te.id ASC
+        LIMIT 1
+    ) pe ON true
+    -- Owner-scoped: a parent that is not the caller's contributes no title.
+    LEFT JOIN chats pc ON pc.id = pe.parent_chat_id AND pc.user_id = c.user_id
     WHERE c.user_id = $1
+      -- The reverse direction, driven from idx_trigger_events_parent_chat.
+      AND ($2::text IS NULL OR c.id IN (
+            SELECT te.chat_id FROM trigger_events te
+            WHERE te.kind = 'agent.start_run'
+              AND te.payload->>'parent_chat_id' = $2::text
+              AND te.chat_id IS NOT NULL))
 ) r
 WHERE
-    ($2::boolean OR r.chat_state IS DISTINCT FROM 3)
-    AND ($3::text IS NULL OR r.project_id = $3::text)
-    AND (cardinality($4::text[]) = 0 OR r.workflow_name = ANY($4::text[]))
-    AND ($5::text IS NULL OR r.trigger_id = $5::text)
+    ($3::boolean OR r.chat_state IS DISTINCT FROM 3)
+    AND ($4::text IS NULL OR r.project_id = $4::text)
+    AND (cardinality($5::text[]) = 0 OR r.workflow_name = ANY($5::text[]))
+    AND ($6::text IS NULL OR r.trigger_id = $6::text)
     -- A chat with no launch event is an interactive start, as ListChats treats it.
-    AND (cardinality($6::text[]) = 0
-         OR COALESCE(r.launch_kind, 'chat.start') = ANY($6::text[]))
-    AND (cardinality($7::integer[]) = 0 OR r.display_state = ANY($7::integer[]))
-    AND ($8::timestamptz IS NULL OR r.created_at >= $8::timestamptz)
-    AND ($9::timestamptz IS NULL OR r.created_at < $9::timestamptz)
-    AND ($10::text IS NULL OR position(lower($10::text) in lower(r.title)) > 0)
-    AND ($11::timestamptz IS NULL
-         OR (r.created_at, r.chat_id) < ($11::timestamptz, $12::text))
+    AND (cardinality($7::text[]) = 0
+         OR COALESCE(r.launch_kind, 'chat.start') = ANY($7::text[]))
+    AND (cardinality($8::integer[]) = 0 OR r.display_state = ANY($8::integer[]))
+    AND ($9::timestamptz IS NULL OR r.created_at >= $9::timestamptz)
+    AND ($10::timestamptz IS NULL OR r.created_at < $10::timestamptz)
+    AND ($11::text IS NULL OR position(lower($11::text) in lower(r.title)) > 0)
+    AND ($12::timestamptz IS NULL
+         OR (r.created_at, r.chat_id) < ($12::timestamptz, $13::text))
 ORDER BY
-    CASE WHEN $13::boolean THEN r.last_active END DESC NULLS LAST,
+    CASE WHEN $14::boolean THEN r.last_active END DESC NULLS LAST,
     r.created_at DESC, r.chat_id DESC
-LIMIT $14
+LIMIT $15
 `
 
 type ListRunsParams struct {
 	UserID          string         `json:"user_id"`
+	ParentChatID    sql.NullString `json:"parent_chat_id"`
 	IncludeArchived bool           `json:"include_archived"`
 	ProjectID       sql.NullString `json:"project_id"`
 	Workflows       []string       `json:"workflows"`
@@ -182,24 +233,26 @@ type ListRunsParams struct {
 }
 
 type ListRunsRow struct {
-	ChatID         string         `json:"chat_id"`
-	RunID          string         `json:"run_id"`
-	Title          string         `json:"title"`
-	ProjectID      string         `json:"project_id"`
-	CreatedAt      time.Time      `json:"created_at"`
-	LastActive     time.Time      `json:"last_active"`
-	CompletedAt    sql.NullTime   `json:"completed_at"`
-	WorkflowName   string         `json:"workflow_name"`
-	Outcome        sql.NullString `json:"outcome"`
-	RootState      sql.NullInt32  `json:"root_state"`
-	RootStopReason sql.NullInt32  `json:"root_stop_reason"`
-	Activity       int32          `json:"activity"`
-	LaunchKind     sql.NullString `json:"launch_kind"`
-	TriggerID      sql.NullString `json:"trigger_id"`
-	TriggerName    sql.NullString `json:"trigger_name"`
-	ActiveDaemonID sql.NullString `json:"active_daemon_id"`
-	DisplayState   int32          `json:"display_state"`
-	ChatState      sql.NullInt32  `json:"chat_state"`
+	ChatID          string         `json:"chat_id"`
+	RunID           string         `json:"run_id"`
+	Title           string         `json:"title"`
+	ProjectID       string         `json:"project_id"`
+	CreatedAt       time.Time      `json:"created_at"`
+	LastActive      time.Time      `json:"last_active"`
+	CompletedAt     sql.NullTime   `json:"completed_at"`
+	WorkflowName    string         `json:"workflow_name"`
+	Outcome         sql.NullString `json:"outcome"`
+	RootState       sql.NullInt32  `json:"root_state"`
+	RootStopReason  sql.NullInt32  `json:"root_stop_reason"`
+	Activity        int32          `json:"activity"`
+	LaunchKind      sql.NullString `json:"launch_kind"`
+	TriggerID       sql.NullString `json:"trigger_id"`
+	TriggerName     sql.NullString `json:"trigger_name"`
+	ActiveDaemonID  sql.NullString `json:"active_daemon_id"`
+	DisplayState    int32          `json:"display_state"`
+	ChatState       sql.NullInt32  `json:"chat_state"`
+	ParentChatID    string         `json:"parent_chat_id"`
+	ParentChatTitle sql.NullString `json:"parent_chat_title"`
 }
 
 // The cross-cutting run list (RunService.ListRuns, list_runs tool).
@@ -223,6 +276,7 @@ type ListRunsRow struct {
 func (q *Queries) ListRuns(ctx context.Context, arg ListRunsParams) ([]ListRunsRow, error) {
 	rows, err := q.db.QueryContext(ctx, listRuns,
 		arg.UserID,
+		arg.ParentChatID,
 		arg.IncludeArchived,
 		arg.ProjectID,
 		pq.Array(arg.Workflows),
@@ -263,6 +317,8 @@ func (q *Queries) ListRuns(ctx context.Context, arg ListRunsParams) ([]ListRunsR
 			&i.ActiveDaemonID,
 			&i.DisplayState,
 			&i.ChatState,
+			&i.ParentChatID,
+			&i.ParentChatTitle,
 		); err != nil {
 			return nil, err
 		}

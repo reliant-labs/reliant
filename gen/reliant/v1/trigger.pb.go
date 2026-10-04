@@ -1863,6 +1863,95 @@ func (x *ListTriggerEventsResponse) GetNextPageToken() string {
 	return ""
 }
 
+type GetLaunchEventRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ChatId        string                 `protobuf:"bytes,1,opt,name=chat_id,json=chatId,proto3" json:"chat_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetLaunchEventRequest) Reset() {
+	*x = GetLaunchEventRequest{}
+	mi := &file_reliant_v1_trigger_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetLaunchEventRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetLaunchEventRequest) ProtoMessage() {}
+
+func (x *GetLaunchEventRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_trigger_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetLaunchEventRequest.ProtoReflect.Descriptor instead.
+func (*GetLaunchEventRequest) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *GetLaunchEventRequest) GetChatId() string {
+	if x != nil {
+		return x.ChatId
+	}
+	return ""
+}
+
+type GetLaunchEventResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Unset when the chat has no launch event (it predates trigger events).
+	Event         *TriggerEvent `protobuf:"bytes,1,opt,name=event,proto3,oneof" json:"event,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetLaunchEventResponse) Reset() {
+	*x = GetLaunchEventResponse{}
+	mi := &file_reliant_v1_trigger_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetLaunchEventResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetLaunchEventResponse) ProtoMessage() {}
+
+func (x *GetLaunchEventResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_trigger_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetLaunchEventResponse.ProtoReflect.Descriptor instead.
+func (*GetLaunchEventResponse) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *GetLaunchEventResponse) GetEvent() *TriggerEvent {
+	if x != nil {
+		return x.Event
+	}
+	return nil
+}
+
 var File_reliant_v1_trigger_proto protoreflect.FileDescriptor
 
 const file_reliant_v1_trigger_proto_rawDesc = "" +
@@ -2005,7 +2094,12 @@ const file_reliant_v1_trigger_proto_rawDesc = "" +
 	"\v_page_token\"u\n" +
 	"\x19ListTriggerEventsResponse\x120\n" +
 	"\x06events\x18\x01 \x03(\v2\x18.reliant.v1.TriggerEventR\x06events\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken*F\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"0\n" +
+	"\x15GetLaunchEventRequest\x12\x17\n" +
+	"\achat_id\x18\x01 \x01(\tR\x06chatId\"W\n" +
+	"\x16GetLaunchEventResponse\x123\n" +
+	"\x05event\x18\x01 \x01(\v2\x18.reliant.v1.TriggerEventH\x00R\x05event\x88\x01\x01B\b\n" +
+	"\x06_event*F\n" +
 	"\vTriggerKind\x12\x1c\n" +
 	"\x18TRIGGER_KIND_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15TRIGGER_KIND_SCHEDULE\x10\x01*\xa2\x01\n" +
@@ -2028,7 +2122,7 @@ const file_reliant_v1_trigger_proto_rawDesc = "" +
 	"\x1dTRIGGER_HEALTH_STATUS_HEALTHY\x10\x01\x12\"\n" +
 	"\x1eTRIGGER_HEALTH_STATUS_DEGRADED\x10\x02\x12!\n" +
 	"\x1dTRIGGER_HEALTH_STATUS_FAILING\x10\x03\x12!\n" +
-	"\x1dTRIGGER_HEALTH_STATUS_UNKNOWN\x10\x042\xd6\x05\n" +
+	"\x1dTRIGGER_HEALTH_STATUS_UNKNOWN\x10\x042\xb1\x06\n" +
 	"\x0eTriggerService\x12V\n" +
 	"\rCreateTrigger\x12 .reliant.v1.CreateTriggerRequest\x1a!.reliant.v1.CreateTriggerResponse\"\x00\x12M\n" +
 	"\n" +
@@ -2038,7 +2132,8 @@ const file_reliant_v1_trigger_proto_rawDesc = "" +
 	"\rDeleteTrigger\x12 .reliant.v1.DeleteTriggerRequest\x1a!.reliant.v1.DeleteTriggerResponse\"\x00\x12b\n" +
 	"\x11SetTriggerEnabled\x12$.reliant.v1.SetTriggerEnabledRequest\x1a%.reliant.v1.SetTriggerEnabledResponse\"\x00\x12P\n" +
 	"\vFireTrigger\x12\x1e.reliant.v1.FireTriggerRequest\x1a\x1f.reliant.v1.FireTriggerResponse\"\x00\x12b\n" +
-	"\x11ListTriggerEvents\x12$.reliant.v1.ListTriggerEventsRequest\x1a%.reliant.v1.ListTriggerEventsResponse\"\x00B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
+	"\x11ListTriggerEvents\x12$.reliant.v1.ListTriggerEventsRequest\x1a%.reliant.v1.ListTriggerEventsResponse\"\x00\x12Y\n" +
+	"\x0eGetLaunchEvent\x12!.reliant.v1.GetLaunchEventRequest\x1a\".reliant.v1.GetLaunchEventResponse\"\x00B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
 
 var (
 	file_reliant_v1_trigger_proto_rawDescOnce sync.Once
@@ -2053,7 +2148,7 @@ func file_reliant_v1_trigger_proto_rawDescGZIP() []byte {
 }
 
 var file_reliant_v1_trigger_proto_enumTypes = make([]protoimpl.EnumInfo, 5)
-var file_reliant_v1_trigger_proto_msgTypes = make([]protoimpl.MessageInfo, 26)
+var file_reliant_v1_trigger_proto_msgTypes = make([]protoimpl.MessageInfo, 28)
 var file_reliant_v1_trigger_proto_goTypes = []any{
 	(TriggerKind)(0),                  // 0: reliant.v1.TriggerKind
 	(TriggerEventKind)(0),             // 1: reliant.v1.TriggerEventKind
@@ -2082,33 +2177,35 @@ var file_reliant_v1_trigger_proto_goTypes = []any{
 	(*FireTriggerResponse)(nil),       // 24: reliant.v1.FireTriggerResponse
 	(*ListTriggerEventsRequest)(nil),  // 25: reliant.v1.ListTriggerEventsRequest
 	(*ListTriggerEventsResponse)(nil), // 26: reliant.v1.ListTriggerEventsResponse
-	nil,                               // 27: reliant.v1.Trigger.PresetsEntry
-	nil,                               // 28: reliant.v1.Trigger.ParamsEntry
-	nil,                               // 29: reliant.v1.TriggerDefinition.PresetsEntry
-	nil,                               // 30: reliant.v1.TriggerDefinition.ParamsEntry
-	(RunDisplayState)(0),              // 31: reliant.v1.RunDisplayState
-	(WorkflowState)(0),                // 32: reliant.v1.WorkflowState
-	(WorkflowStopReason)(0),           // 33: reliant.v1.WorkflowStopReason
-	(*structpb.Struct)(nil),           // 34: google.protobuf.Struct
-	(*structpb.Value)(nil),            // 35: google.protobuf.Value
+	(*GetLaunchEventRequest)(nil),     // 27: reliant.v1.GetLaunchEventRequest
+	(*GetLaunchEventResponse)(nil),    // 28: reliant.v1.GetLaunchEventResponse
+	nil,                               // 29: reliant.v1.Trigger.PresetsEntry
+	nil,                               // 30: reliant.v1.Trigger.ParamsEntry
+	nil,                               // 31: reliant.v1.TriggerDefinition.PresetsEntry
+	nil,                               // 32: reliant.v1.TriggerDefinition.ParamsEntry
+	(RunDisplayState)(0),              // 33: reliant.v1.RunDisplayState
+	(WorkflowState)(0),                // 34: reliant.v1.WorkflowState
+	(WorkflowStopReason)(0),           // 35: reliant.v1.WorkflowStopReason
+	(*structpb.Struct)(nil),           // 36: google.protobuf.Struct
+	(*structpb.Value)(nil),            // 37: google.protobuf.Value
 }
 var file_reliant_v1_trigger_proto_depIdxs = []int32{
 	4,  // 0: reliant.v1.TriggerHealth.status:type_name -> reliant.v1.TriggerHealthStatus
-	31, // 1: reliant.v1.TriggerEventRun.display_state:type_name -> reliant.v1.RunDisplayState
-	32, // 2: reliant.v1.TriggerEventRun.state:type_name -> reliant.v1.WorkflowState
-	33, // 3: reliant.v1.TriggerEventRun.stop_reason:type_name -> reliant.v1.WorkflowStopReason
+	33, // 1: reliant.v1.TriggerEventRun.display_state:type_name -> reliant.v1.RunDisplayState
+	34, // 2: reliant.v1.TriggerEventRun.state:type_name -> reliant.v1.WorkflowState
+	35, // 3: reliant.v1.TriggerEventRun.stop_reason:type_name -> reliant.v1.WorkflowStopReason
 	3,  // 4: reliant.v1.ScheduleSource.overlap:type_name -> reliant.v1.TriggerOverlapPolicy
-	27, // 5: reliant.v1.Trigger.presets:type_name -> reliant.v1.Trigger.PresetsEntry
-	28, // 6: reliant.v1.Trigger.params:type_name -> reliant.v1.Trigger.ParamsEntry
+	29, // 5: reliant.v1.Trigger.presets:type_name -> reliant.v1.Trigger.PresetsEntry
+	30, // 6: reliant.v1.Trigger.params:type_name -> reliant.v1.Trigger.ParamsEntry
 	9,  // 7: reliant.v1.Trigger.last_event:type_name -> reliant.v1.TriggerEvent
 	5,  // 8: reliant.v1.Trigger.health:type_name -> reliant.v1.TriggerHealth
 	7,  // 9: reliant.v1.Trigger.schedule:type_name -> reliant.v1.ScheduleSource
 	1,  // 10: reliant.v1.TriggerEvent.kind:type_name -> reliant.v1.TriggerEventKind
 	2,  // 11: reliant.v1.TriggerEvent.outcome:type_name -> reliant.v1.TriggerEventOutcome
-	34, // 12: reliant.v1.TriggerEvent.payload:type_name -> google.protobuf.Struct
+	36, // 12: reliant.v1.TriggerEvent.payload:type_name -> google.protobuf.Struct
 	6,  // 13: reliant.v1.TriggerEvent.run:type_name -> reliant.v1.TriggerEventRun
-	29, // 14: reliant.v1.TriggerDefinition.presets:type_name -> reliant.v1.TriggerDefinition.PresetsEntry
-	30, // 15: reliant.v1.TriggerDefinition.params:type_name -> reliant.v1.TriggerDefinition.ParamsEntry
+	31, // 14: reliant.v1.TriggerDefinition.presets:type_name -> reliant.v1.TriggerDefinition.PresetsEntry
+	32, // 15: reliant.v1.TriggerDefinition.params:type_name -> reliant.v1.TriggerDefinition.ParamsEntry
 	7,  // 16: reliant.v1.TriggerDefinition.schedule:type_name -> reliant.v1.ScheduleSource
 	10, // 17: reliant.v1.CreateTriggerRequest.trigger:type_name -> reliant.v1.TriggerDefinition
 	8,  // 18: reliant.v1.CreateTriggerResponse.trigger:type_name -> reliant.v1.Trigger
@@ -2119,29 +2216,32 @@ var file_reliant_v1_trigger_proto_depIdxs = []int32{
 	8,  // 23: reliant.v1.SetTriggerEnabledResponse.trigger:type_name -> reliant.v1.Trigger
 	2,  // 24: reliant.v1.ListTriggerEventsRequest.outcomes:type_name -> reliant.v1.TriggerEventOutcome
 	9,  // 25: reliant.v1.ListTriggerEventsResponse.events:type_name -> reliant.v1.TriggerEvent
-	35, // 26: reliant.v1.Trigger.ParamsEntry.value:type_name -> google.protobuf.Value
-	35, // 27: reliant.v1.TriggerDefinition.ParamsEntry.value:type_name -> google.protobuf.Value
-	11, // 28: reliant.v1.TriggerService.CreateTrigger:input_type -> reliant.v1.CreateTriggerRequest
-	13, // 29: reliant.v1.TriggerService.GetTrigger:input_type -> reliant.v1.GetTriggerRequest
-	15, // 30: reliant.v1.TriggerService.ListTriggers:input_type -> reliant.v1.ListTriggersRequest
-	17, // 31: reliant.v1.TriggerService.UpdateTrigger:input_type -> reliant.v1.UpdateTriggerRequest
-	19, // 32: reliant.v1.TriggerService.DeleteTrigger:input_type -> reliant.v1.DeleteTriggerRequest
-	21, // 33: reliant.v1.TriggerService.SetTriggerEnabled:input_type -> reliant.v1.SetTriggerEnabledRequest
-	23, // 34: reliant.v1.TriggerService.FireTrigger:input_type -> reliant.v1.FireTriggerRequest
-	25, // 35: reliant.v1.TriggerService.ListTriggerEvents:input_type -> reliant.v1.ListTriggerEventsRequest
-	12, // 36: reliant.v1.TriggerService.CreateTrigger:output_type -> reliant.v1.CreateTriggerResponse
-	14, // 37: reliant.v1.TriggerService.GetTrigger:output_type -> reliant.v1.GetTriggerResponse
-	16, // 38: reliant.v1.TriggerService.ListTriggers:output_type -> reliant.v1.ListTriggersResponse
-	18, // 39: reliant.v1.TriggerService.UpdateTrigger:output_type -> reliant.v1.UpdateTriggerResponse
-	20, // 40: reliant.v1.TriggerService.DeleteTrigger:output_type -> reliant.v1.DeleteTriggerResponse
-	22, // 41: reliant.v1.TriggerService.SetTriggerEnabled:output_type -> reliant.v1.SetTriggerEnabledResponse
-	24, // 42: reliant.v1.TriggerService.FireTrigger:output_type -> reliant.v1.FireTriggerResponse
-	26, // 43: reliant.v1.TriggerService.ListTriggerEvents:output_type -> reliant.v1.ListTriggerEventsResponse
-	36, // [36:44] is the sub-list for method output_type
-	28, // [28:36] is the sub-list for method input_type
-	28, // [28:28] is the sub-list for extension type_name
-	28, // [28:28] is the sub-list for extension extendee
-	0,  // [0:28] is the sub-list for field type_name
+	9,  // 26: reliant.v1.GetLaunchEventResponse.event:type_name -> reliant.v1.TriggerEvent
+	37, // 27: reliant.v1.Trigger.ParamsEntry.value:type_name -> google.protobuf.Value
+	37, // 28: reliant.v1.TriggerDefinition.ParamsEntry.value:type_name -> google.protobuf.Value
+	11, // 29: reliant.v1.TriggerService.CreateTrigger:input_type -> reliant.v1.CreateTriggerRequest
+	13, // 30: reliant.v1.TriggerService.GetTrigger:input_type -> reliant.v1.GetTriggerRequest
+	15, // 31: reliant.v1.TriggerService.ListTriggers:input_type -> reliant.v1.ListTriggersRequest
+	17, // 32: reliant.v1.TriggerService.UpdateTrigger:input_type -> reliant.v1.UpdateTriggerRequest
+	19, // 33: reliant.v1.TriggerService.DeleteTrigger:input_type -> reliant.v1.DeleteTriggerRequest
+	21, // 34: reliant.v1.TriggerService.SetTriggerEnabled:input_type -> reliant.v1.SetTriggerEnabledRequest
+	23, // 35: reliant.v1.TriggerService.FireTrigger:input_type -> reliant.v1.FireTriggerRequest
+	25, // 36: reliant.v1.TriggerService.ListTriggerEvents:input_type -> reliant.v1.ListTriggerEventsRequest
+	27, // 37: reliant.v1.TriggerService.GetLaunchEvent:input_type -> reliant.v1.GetLaunchEventRequest
+	12, // 38: reliant.v1.TriggerService.CreateTrigger:output_type -> reliant.v1.CreateTriggerResponse
+	14, // 39: reliant.v1.TriggerService.GetTrigger:output_type -> reliant.v1.GetTriggerResponse
+	16, // 40: reliant.v1.TriggerService.ListTriggers:output_type -> reliant.v1.ListTriggersResponse
+	18, // 41: reliant.v1.TriggerService.UpdateTrigger:output_type -> reliant.v1.UpdateTriggerResponse
+	20, // 42: reliant.v1.TriggerService.DeleteTrigger:output_type -> reliant.v1.DeleteTriggerResponse
+	22, // 43: reliant.v1.TriggerService.SetTriggerEnabled:output_type -> reliant.v1.SetTriggerEnabledResponse
+	24, // 44: reliant.v1.TriggerService.FireTrigger:output_type -> reliant.v1.FireTriggerResponse
+	26, // 45: reliant.v1.TriggerService.ListTriggerEvents:output_type -> reliant.v1.ListTriggerEventsResponse
+	28, // 46: reliant.v1.TriggerService.GetLaunchEvent:output_type -> reliant.v1.GetLaunchEventResponse
+	38, // [38:47] is the sub-list for method output_type
+	29, // [29:38] is the sub-list for method input_type
+	29, // [29:29] is the sub-list for extension type_name
+	29, // [29:29] is the sub-list for extension extendee
+	0,  // [0:29] is the sub-list for field type_name
 }
 
 func init() { file_reliant_v1_trigger_proto_init() }
@@ -2161,13 +2261,14 @@ func file_reliant_v1_trigger_proto_init() {
 	}
 	file_reliant_v1_trigger_proto_msgTypes[10].OneofWrappers = []any{}
 	file_reliant_v1_trigger_proto_msgTypes[20].OneofWrappers = []any{}
+	file_reliant_v1_trigger_proto_msgTypes[23].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_reliant_v1_trigger_proto_rawDesc), len(file_reliant_v1_trigger_proto_rawDesc)),
 			NumEnums:      5,
-			NumMessages:   26,
+			NumMessages:   28,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

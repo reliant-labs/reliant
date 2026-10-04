@@ -416,6 +416,7 @@ func (s *RunService) listAllRuns(
 		TriggerID:       req.TriggerId,
 		LaunchKinds:     req.LaunchKind,
 		Query:           req.Query,
+		ParentChatID:    req.ParentChatId,
 		IncludeArchived: req.IncludeArchived,
 		Limit:           limit,
 	}
@@ -502,6 +503,12 @@ func runItemToProto(item *db.RunListItem) *reliantv1.Run {
 	}
 	if item.CompletedAt != nil {
 		out.CompletedAtMs = item.CompletedAt.UnixMilli()
+	}
+	if item.ParentChatID != "" {
+		out.ParentChatId = &item.ParentChatID
+		if item.ParentChatTitle != "" {
+			out.ParentChatTitle = &item.ParentChatTitle
+		}
 	}
 	return out
 }

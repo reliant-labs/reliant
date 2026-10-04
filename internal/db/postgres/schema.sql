@@ -2035,6 +2035,13 @@ CREATE INDEX idx_tool_calls_thread_id ON public.tool_calls USING btree (thread_i
 CREATE INDEX idx_trigger_events_chat ON public.trigger_events USING btree (chat_id);
 
 --
+-- Name: idx_trigger_events_parent_chat; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_trigger_events_parent_chat ON public.trigger_events USING btree (((payload ->> 'parent_chat_id'::text))) WHERE (kind = 'agent.start_run'::text);
+
+
+--
 -- Name: idx_trigger_events_trigger_occurred_id; Type: INDEX; Schema: public; Owner: -
 --
 
