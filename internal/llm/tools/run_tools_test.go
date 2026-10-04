@@ -499,3 +499,27 @@ func TestListRuns_FiltersByStateAndReportsEachRunsRootState(t *testing.T) {
 	bad := callRunTool(t, NewListRunsTool(repo), callerRC(callerID, "tc3"), ListRunsToolName, ListRunsParams{State: "bogus"})
 	assert.True(t, bad.IsError)
 }
+
+// An agent's list_runs shows real runs; a builder test run is a scratch run
+// from the workflow builder and is not offered to agents by default.
+func TestListRuns_OmitsBuilderTestRuns(t *testing.T) {
+	t.Parallel()
+	repo, cleanup := setupTestDB(t)
+	defer cleanup()
+	callerID := newCaller(t, repo)
+
+	realID, testID := uuid.NewString(), uuid.NewString()
+	seedRun(t, repo, runSeed{id: realID, user: runTestUser, status: db.Completed()})
+	seedRun(t, repo, runSeed{id: testID, user: runTestUser, status: db.Completed()})
+	created, err := repo.CreateTriggerEvent(context.Background(), &core.TriggerEvent{
+		ID: uuid.NewString(), UserID: runTestUser, Kind: core.TriggerEventKindBuilderTest, DedupeKey: testID,
+		OccurredAt: time.Now().UTC(), Outcome: core.TriggerEventLaunched, ChatID: &testID,
+	})
+	require.NoError(t, err)
+	require.True(t, created)
+
+	resp := callRunTool(t, NewListRunsTool(repo), callerRC(callerID, "tc"), ListRunsToolName, ListRunsParams{})
+	require.False(t, resp.IsError, resp.Content)
+	assert.Contains(t, resp.Content, realID)
+	assert.NotContains(t, resp.Content, testID)
+}

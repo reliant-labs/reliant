@@ -67,8 +67,12 @@ WHERE
     AND (cardinality(sqlc.arg('workflows')::text[]) = 0 OR r.workflow_name = ANY(sqlc.arg('workflows')::text[]))
     AND (sqlc.narg('trigger_id')::text IS NULL OR r.trigger_id = sqlc.narg('trigger_id')::text)
     -- A chat with no launch event is an interactive start, as ListChats treats it.
-    AND (cardinality(sqlc.arg('launch_kinds')::text[]) = 0
-         OR COALESCE(r.launch_kind, 'chat.start') = ANY(sqlc.arg('launch_kinds')::text[]))
+    -- With no kind named, builder test runs are left out: they are scratch runs
+    -- from the workflow builder, not part of the user's real history. Asking for
+    -- 'builder.test' explicitly (the Runs "Tests" filter) brings them back.
+    AND (CASE WHEN cardinality(sqlc.arg('launch_kinds')::text[]) = 0
+              THEN COALESCE(r.launch_kind, 'chat.start') <> 'builder.test'
+              ELSE COALESCE(r.launch_kind, 'chat.start') = ANY(sqlc.arg('launch_kinds')::text[]) END)
     AND (cardinality(sqlc.arg('display_states')::integer[]) = 0 OR r.display_state = ANY(sqlc.arg('display_states')::integer[]))
     AND (sqlc.narg('started_after')::timestamptz IS NULL OR r.created_at >= sqlc.narg('started_after')::timestamptz)
     AND (sqlc.narg('started_before')::timestamptz IS NULL OR r.created_at < sqlc.narg('started_before')::timestamptz)
@@ -129,6 +133,7 @@ SELECT DISTINCT ON (r.workflow_name) r.* FROM (
 ) r
 WHERE
     r.chat_state IS DISTINCT FROM 3
+    AND r.launch_kind IS DISTINCT FROM 'builder.test'
     AND r.workflow_name <> ''
     AND (sqlc.narg('project_id')::text IS NULL OR r.project_id = sqlc.narg('project_id')::text)
     AND (cardinality(sqlc.arg('workflows')::text[]) = 0 OR r.workflow_name = ANY(sqlc.arg('workflows')::text[]))

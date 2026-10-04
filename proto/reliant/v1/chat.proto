@@ -448,6 +448,15 @@ message StartChatRequest {
   // is already pinned (a branch is pinned to its worktree's daemon) rejects a
   // different daemon_id: the worktree exists on exactly one machine.
   optional string daemon_id = 18;
+
+  // builder_test marks this start as a test run from the workflow builder. The
+  // launch event is recorded as kind "builder.test" instead of "chat.start", so
+  // the run stays out of the sidebar and the default Runs list. It is still an
+  // attended run. `workflow` must name a workflow draft the caller owns; the
+  // draft runs as saved even if it is not marked complete. The client does not
+  // choose the launch kind: this flag is the only way to ask for builder.test,
+  // and no other kind can be claimed through StartChat.
+  optional bool builder_test = 19;
 }
 
 // StartChatResponse returns the started chat and the ids of its root run.

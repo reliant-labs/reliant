@@ -155,7 +155,7 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 		chatID = uuid.New().String()
 	}
 	workflowID := chatID // Root workflow ID = chat ID
-	if ev.DedupeKey == "" && ev.Kind == core.TriggerEventKindChatStart {
+	if ev.DedupeKey == "" && isAttendedStartKind(ev.Kind) {
 		ev.DedupeKey = chatID
 	}
 
@@ -208,7 +208,7 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 
 	// Validate workflow tree BEFORE creating chat to avoid runtime graph failures and orphaned chats.
 	// Uses runtime-equivalent loader semantics: builtin:// and usable workflow drafts only.
-	if err := l.ValidateCreateChatWorkflowTree(ctx, userID, workflowName, project.ID); err != nil {
+	if err := l.validateWorkflowTree(ctx, userID, workflowName, project.ID, draftRootFor(ev, workflowName)); err != nil {
 		return nil, err
 	}
 
@@ -454,7 +454,7 @@ func (l *Launcher) launchPending(ctx context.Context, ev Event, spec Spec, seed 
 	}
 	pending := root.Status == db.Pending()
 
-	if ev.DedupeKey == "" && ev.Kind == core.TriggerEventKindChatStart {
+	if ev.DedupeKey == "" && isAttendedStartKind(ev.Kind) {
 		ev.DedupeKey = chat.ID
 	}
 	fingerprint := seedFingerprint(spec.Messages, spec.Attachments)
@@ -489,7 +489,7 @@ func (l *Launcher) launchPending(ctx context.Context, ev Event, spec Spec, seed 
 	// it would run. A pending chat has produced nothing, so its workflow can
 	// still change; this is the one place the system allows it.
 	workflowName, _, _ := effectiveStart(chat, spec)
-	if err := l.ValidateCreateChatWorkflowTree(ctx, userID, workflowName, project.ID); err != nil {
+	if err := l.validateWorkflowTree(ctx, userID, workflowName, project.ID, draftRootFor(ev, workflowName)); err != nil {
 		return nil, err
 	}
 	if err := ValidateWorkflowParamStructure(spec.Params); err != nil {
@@ -615,6 +615,14 @@ func effectiveStart(chat *db.Chat, spec Spec) (workflowName string, presets map[
 	return workflowName, presets, switching
 }
 
+// isAttendedStartKind reports whether a launch kind is a human starting a chat
+// by hand: the interactive start, and a test run pressed in the workflow
+// builder. Both dedupe on the chat id, so a second call with different content
+// is a second thing the user said rather than a retry.
+func isAttendedStartKind(kind core.TriggerEventKind) bool {
+	return kind == core.TriggerEventKindChatStart || kind == core.TriggerEventKindBuilderTest
+}
+
 // isRetryOf reports whether a call carrying fingerprint is a retry of the
 // start the event recorded. Only an interactive start can be a new turn: its
 // dedupe key is the chat id, so a second call with different content is a
@@ -622,7 +630,7 @@ func effectiveStart(chat *db.Chat, spec Spec) (workflowName string, presets map[
 // fire id), so a repeat is the same fire even if its definition has since
 // been edited.
 func isRetryOf(stored *core.TriggerEvent, kind core.TriggerEventKind, fingerprint string) bool {
-	if kind != core.TriggerEventKindChatStart {
+	if !isAttendedStartKind(kind) {
 		return true
 	}
 	recorded, _ := stored.Payload[payloadSeedFingerprint].(string)
@@ -781,7 +789,7 @@ func newEventRow(ev Event, userID, chatID, workflowName string, worktreeID *stri
 		payload[key] = value
 	}
 	record.addTo(payload)
-	if ev.Kind == core.TriggerEventKindChatStart {
+	if isAttendedStartKind(ev.Kind) {
 		payload["workflow"] = workflowName
 		if worktreeID != nil {
 			payload["worktree_id"] = *worktreeID

@@ -53,8 +53,18 @@ func (s *ChatService) StartChat(
 		newChatID = uuid.NewString()
 		chatID = newChatID
 	}
+	// The launch kind is the server's decision. A client can ask for exactly
+	// one non-default kind, builder.test, through builder_test; schedule and
+	// agent.start_run have no way in through this RPC.
+	eventKind := core.TriggerEventKindChatStart
+	if req.Msg.GetBuilderTest() {
+		if err := s.validateBuilderTest(ctx, userID, req.Msg); err != nil {
+			return nil, err
+		}
+		eventKind = core.TriggerEventKindBuilderTest
+	}
 	event := launch.Event{
-		Kind:       core.TriggerEventKindChatStart,
+		Kind:       eventKind,
 		DedupeKey:  chatID,
 		OccurredAt: time.Now().UTC(),
 		Payload: map[string]any{
@@ -131,6 +141,27 @@ func (s *ChatService) StartChat(
 		WorkflowId: result.WorkflowID,
 		RunId:      result.RunID,
 	}), nil
+}
+
+// validateBuilderTest checks a builder_test start: it names a workflow draft
+// the caller owns, and it starts a new chat. The draft is what the builder just
+// saved; running someone else's draft, or a builtin or project workflow, is not
+// a test run of anything the caller is editing.
+func (s *ChatService) validateBuilderTest(ctx context.Context, userID string, msg *reliantv1.StartChatRequest) error {
+	if msg.GetChatId() != "" {
+		return connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("builder_test starts a new chat; chat_id must be empty"))
+	}
+	if msg.Workflow == "" {
+		return connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("builder_test requires the workflow to run"))
+	}
+	draft, err := s.database.GetWorkflowDraftBySlug(ctx, userID, launch.NormalizeWorkflowSlug(msg.Workflow))
+	if err != nil {
+		return connect.NewError(connect.CodeInternal, fmt.Errorf("failed to look up workflow draft: %w", err))
+	}
+	if draft == nil || draft.UserID != userID {
+		return connect.NewError(connect.CodeNotFound, fmt.Errorf("builder_test requires a saved workflow draft you own: %q", msg.Workflow))
+	}
+	return nil
 }
 
 // ListChats lists all non-archived chats for a project

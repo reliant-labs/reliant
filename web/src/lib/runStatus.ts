@@ -248,6 +248,7 @@ export type LaunchKind =
   | "chat.start"
   | "schedule"
   | "agent.start_run"
+  | "builder.test"
   | "webhook"
   | "integration";
 
@@ -311,6 +312,8 @@ export function launchKindDisplay(
           ? `Started by an agent in ${context.parentChatTitle}`
           : "Started by an agent",
       };
+    case "builder.test":
+      return { kind, shortLabel: "Test", startedByLine: "Test run from the builder" };
     case "webhook": {
       const who = context.webhookName ? `Started by webhook ${context.webhookName}` : "Started by a webhook";
       return { kind, shortLabel: "Webhook", startedByLine: context.at ? `${who} at ${context.at}` : who };

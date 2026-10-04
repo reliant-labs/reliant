@@ -32,6 +32,7 @@ func TestListInSidebarTruthTable(t *testing.T) {
 		{"chat.start", core.TriggerEventKindChatStart},
 		{"schedule", core.TriggerEventKindSchedule},
 		{"agent.start_run", core.TriggerEventKindAgentStartRun},
+		{"builder.test", core.TriggerEventKindBuilderTest},
 	}
 
 	for _, lk := range launchKinds {

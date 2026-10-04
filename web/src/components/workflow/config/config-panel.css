@@ -968,3 +968,10 @@
   line-height: 1.4;
   color: hsl(var(--muted-foreground));
 }
+
+/* --- Test run panel (builder Run tab) ---
+ * Owned by run/BuilderTestRunPanel.tsx. Docks left of an open step panel, like
+ * the trigger payload panel; 380px is .config-panel-v2's width. */
+.cpv2-test-run--docked .config-panel-v2 {
+  right: calc(0.75rem + 380px + 0.75rem);
+}

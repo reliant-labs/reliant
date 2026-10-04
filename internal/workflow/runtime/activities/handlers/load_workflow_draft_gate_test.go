@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -80,6 +81,72 @@ nodes:
 
 	t.Run("a complete parent that refs a draft child is refused", func(t *testing.T) {
 		_, err := activity.Execute(ctx, LoadWorkflowInput{ChatID: chatID, WorkflowName: "gate-parent"})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "is a draft")
+	})
+}
+
+// A builder test run executes the draft the builder just saved, so its ROOT
+// workflow loads even though it is not marked complete. Nothing else gets that
+// pass: the same draft still refuses for an ordinary chat, and a draft `ref:`
+// child of the test run's root still refuses.
+func TestLoadWorkflowActivity_BuilderTestRootMayBeADraft(t *testing.T) {
+	repo := db.NewTestRepo(t)
+	defer repo.Close()
+	ctx := context.Background()
+	userID := "user-" + uuid.NewString()
+	now := time.Now().UTC()
+
+	projectID := "project-" + uuid.NewString()
+	require.NoError(t, repo.CreateProject(ctx, &db.Project{
+		ID: projectID, UserID: userID, Name: "Builder Test", Path: t.TempDir(),
+		CreatedAt: now, UpdatedAt: now, LastActive: now,
+	}))
+	newChat := func(workflow string, kind core.TriggerEventKind) string {
+		chatID := "chat-" + uuid.NewString()
+		require.NoError(t, repo.CreateChat(ctx, &db.Chat{
+			ID: chatID, UserID: userID, ProjectID: projectID, Title: "t", WorkflowName: &workflow,
+			State: db.ChatStateIdle, CreatedAt: now, UpdatedAt: now, LastActive: now,
+		}))
+		created, err := repo.CreateTriggerEvent(ctx, &core.TriggerEvent{
+			ID: uuid.NewString(), UserID: userID, Kind: kind, DedupeKey: chatID,
+			OccurredAt: now, Outcome: core.TriggerEventLaunched, ChatID: &chatID, CreatedAt: now,
+		})
+		require.NoError(t, err)
+		require.True(t, created)
+		return chatID
+	}
+	save := func(slug, definition string, status db.WorkflowDraftStatus) {
+		require.NoError(t, repo.CreateWorkflowDraft(ctx, &db.WorkflowDraft{
+			ID: uuid.NewString(), UserID: userID, Name: slug, Slug: slug,
+			Definition: definition, Status: status, CreatedAt: now, UpdatedAt: now,
+		}))
+	}
+	leaf := func(name string) string {
+		return "name: " + name + "\nentry: [echo]\nnodes:\n  - id: echo\n    type: run\n    command: \"echo hi\"\n"
+	}
+	save("bt-leaf", leaf("bt-leaf"), db.WorkflowDraftStatusDraft)
+	save("bt-parent", "name: bt-parent\nentry: [child]\nnodes:\n  - id: child\n    type: workflow\n    ref: bt-leaf\n", db.WorkflowDraftStatusDraft)
+
+	activity := NewLoadWorkflowActivity(repo)
+
+	t.Run("builder test root loads as a draft", func(t *testing.T) {
+		chatID := newChat("bt-leaf", core.TriggerEventKindBuilderTest)
+		out, err := activity.Execute(ctx, LoadWorkflowInput{ChatID: chatID, WorkflowName: "bt-leaf"})
+		require.NoError(t, err)
+		assert.Contains(t, string(out.WorkflowJSON), "bt-leaf")
+	})
+
+	t.Run("the same draft still refuses for an ordinary chat", func(t *testing.T) {
+		chatID := newChat("bt-leaf", core.TriggerEventKindChatStart)
+		_, err := activity.Execute(ctx, LoadWorkflowInput{ChatID: chatID, WorkflowName: "bt-leaf"})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "is a draft")
+	})
+
+	t.Run("a draft child of a builder test root still refuses", func(t *testing.T) {
+		chatID := newChat("bt-parent", core.TriggerEventKindBuilderTest)
+		_, err := activity.Execute(ctx, LoadWorkflowInput{ChatID: chatID, WorkflowName: "bt-parent"})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "is a draft")
 	})

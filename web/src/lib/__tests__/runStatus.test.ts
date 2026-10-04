@@ -279,6 +279,7 @@ describe("launchKindDisplay: the §0 launch-kind vocabulary", () => {
       "Started by an agent in Refactor auth",
     ],
     ["agent.start_run", {}, "Agent", "Started by an agent"],
+    ["builder.test", {}, "Test", "Test run from the builder"],
     [
       "webhook",
       { webhookName: "deploy-hook", at: "14:02" },
@@ -302,10 +303,10 @@ describe("launchKindDisplay: the §0 launch-kind vocabulary", () => {
   });
 
   it("names a kind this client does not know rather than guessing", () => {
-    expect(launchKindDisplay("builder.test")).toEqual({
-      kind: "builder.test",
-      shortLabel: "builder.test",
-      startedByLine: "Started by builder.test",
+    expect(launchKindDisplay("future.kind")).toEqual({
+      kind: "future.kind",
+      shortLabel: "future.kind",
+      startedByLine: "Started by future.kind",
     });
   });
 });

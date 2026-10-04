@@ -185,6 +185,7 @@ export interface StartChatOptions {
   attachments?: string[];
   workflow_params?: Record<string, unknown>;
   selected_presets?: Record<string, string>; // Preset selections per target
+  builder_test?: boolean; // Test run from the workflow builder: recorded as launch kind builder.test; workflow must be a saved draft the caller owns
 }
 
 // Chat updates only affect title and worktree_id
@@ -265,6 +266,7 @@ export const chatGrpc = {
       attachments: options.attachments || [],
       workflowParams,
       selectedPresets: options.selected_presets || {},
+      builderTest: options.builder_test || undefined,
     });
     const response = await client.startChat(request);
     if (!response.chat) throw new Error("No chat in response");

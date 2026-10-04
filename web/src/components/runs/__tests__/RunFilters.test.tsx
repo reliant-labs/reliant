@@ -42,6 +42,20 @@ describe("RunFilters", () => {
     await waitFor(() => expect(router.state.location.search).toMatchObject({ kind: ["agent.start_run"] }));
   });
 
+  it("the Tests chip filters to builder test runs and toggles back off", async () => {
+    const user = userEvent.setup();
+    const { router } = renderFilters();
+    const tests = await screen.findByRole("button", { name: "Tests" });
+    expect(tests).toHaveAttribute("aria-pressed", "false");
+
+    await user.click(tests);
+    await waitFor(() => expect(router.state.location.search).toMatchObject({ kind: ["builder.test"] }));
+    expect(screen.getByRole("button", { name: "Tests" })).toHaveAttribute("aria-pressed", "true");
+
+    await user.click(screen.getByRole("button", { name: "Tests" }));
+    await waitFor(() => expect((router.state.location.search as { kind?: string[] }).kind).toBeUndefined());
+  });
+
   it("defaults to the current project; the All projects chip widens it", async () => {
     const user = userEvent.setup();
     const { router } = renderFilters();

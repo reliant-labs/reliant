@@ -63,6 +63,7 @@ import {
   Info,
   Code,
   TestTube2,
+  Play,
   Settings2,
   Lock,
   ExternalLink,
@@ -90,6 +91,8 @@ import { Button } from "../ui/Button";
 import type { BackgroundVariant, SelectionMode } from "@xyflow/react";
 import { WorkflowBuilderChat, type PanelSize } from "./WorkflowBuilderChat";
 import { ScenarioPanel } from "./ScenarioPanel";
+import { BuilderTestRunPanel } from "./run/BuilderTestRunPanel";
+import { useBuilderTestRun, withTestRunStatus } from "./hooks/useBuilderTestRun";
 import { useProjectStore } from "../../store/projectStore";
 import { useIsChatRunning } from "../../store/activityStore";
 import { useGlobalUpdatesStore } from "../../store/globalUpdatesStore";
@@ -112,6 +115,8 @@ export interface SaveResult {
   status?: DraftStatus;
   /** True when validation blocked a save of a complete workflow (nothing stored). */
   rejected?: boolean;
+  /** Runtime slug of the stored workflow (absent in tour mode). */
+  slug?: string;
 }
 
 /** Result of marking a workflow complete / moving it to draft. */
@@ -121,6 +126,11 @@ export interface StatusChangeResult {
 }
 
 interface WorkflowBuilderProps {
+  /**
+   * Saves the canvas for a test run and resolves to the stored workflow's slug,
+   * or null when nothing was saved. A save that fails must not start a run.
+   */
+  onSaveForTestRun?: (workflow: Workflow) => Promise<string | null>;
   /** Saves the canvas. `intent` overrides the stored status (e.g. "draft"
    * to take a complete workflow back to work in progress). */
   onSave?: (workflow: Workflow, intent?: DraftStatus) => void | Promise<void | SaveResult>;
@@ -177,6 +187,7 @@ interface WorkflowBuilderProps {
 
 function WorkflowBuilderInner({
   onSave,
+  onSaveForTestRun,
   draftStatus = "complete",
   onSetStatus,
   saveAsDraftRef,
@@ -313,6 +324,11 @@ function WorkflowBuilderInner({
 
   // Scenario panel modal state
   const [showScenarioPanel, setShowScenarioPanel] = useState(false);
+
+  // Test run: a docked panel (not a modal) so the canvas, which shows each
+  // node's status as the run goes, stays visible.
+  const [showTestRunPanel, setShowTestRunPanel] = useState(false);
+  const [testRunChatId, setTestRunChatId] = useState<string | null>(null);
 
   // Get current project for the chat assistant
   const currentProject = useProjectStore((state) => state.currentProject);
@@ -850,6 +866,32 @@ function WorkflowBuilderInner({
       console.error("Save failed:", error);
     }
   }, [buildWorkflow, onSave, workflow.name, isBuiltinWorkflow, nodes, edges]);
+
+  // Save-then-run for the Test run panel. Nothing runs unless the draft was
+  // stored: an unnamed canvas, a rejected save and a failed save all end here.
+  const saveForTestRun = useCallback(async (): Promise<string | null> => {
+    if (!onSaveForTestRun) return null;
+    if (!workflow.name || workflow.name.trim() === "") {
+      toast.error("Please give your workflow a name before running it", { duration: 3000 });
+      return null;
+    }
+    try {
+      const slug = await onSaveForTestRun(buildWorkflow());
+      if (!slug) return null;
+      setLoadedWorkflowName(workflow.name);
+      setHasModifications(false);
+      return slug;
+    } catch (error) {
+      // The page has already told the user why the save failed.
+      console.error("Save before test run failed:", error);
+      return null;
+    }
+  }, [onSaveForTestRun, buildWorkflow, workflow.name]);
+
+  // A running test paints its node statuses onto the canvas.
+  const nodeIds = useMemo(() => nodes.map((n) => n.id), [nodes]);
+  const testRunStatuses = useBuilderTestRun(testRunChatId, nodeIds, builderChatId);
+  const displayedNodes = useMemo(() => withTestRunStatus(nodes, testRunStatuses), [nodes, testRunStatuses]);
 
   // Offered by a rejected save of a complete workflow: store the canvas as a
   // draft instead (it stops being runnable until marked complete again).
@@ -1593,6 +1635,16 @@ function WorkflowBuilderInner({
                   <Code className="w-4 h-4" />
                   YAML
                 </button>
+                {onSaveForTestRun && !isBuiltinWorkflow && (
+                  <button
+                    onClick={() => setShowTestRunPanel((open) => !open)}
+                    className={headerButtonClass}
+                    aria-pressed={showTestRunPanel}
+                  >
+                    <Play className="w-4 h-4" />
+                    Run
+                  </button>
+                )}
                 <button
                   onClick={() => setShowScenarioPanel(true)}
                   className={headerButtonClass}
@@ -1682,7 +1734,7 @@ function WorkflowBuilderInner({
           data-onboarding="workflow-canvas"
         >
           <ReactFlow
-            nodes={nodes}
+            nodes={displayedNodes}
             edges={edges}
             onNodesChange={handleNodesChange}
             onEdgesChange={handleEdgesChange}
@@ -1852,6 +1904,26 @@ function WorkflowBuilderInner({
               />
             )}
 
+            {/* Test run: saves the draft, runs it, and the canvas shows the run. */}
+            {showTestRunPanel && onSaveForTestRun && currentProject?.id && !isBuiltinWorkflow && !isEditingLoop && (
+              <BuilderTestRunPanel
+                projectId={currentProject.id}
+                workflowRef={savedWorkflowName}
+                saveDraft={saveForTestRun}
+                testChatId={testRunChatId}
+                onStarted={setTestRunChatId}
+                onClose={() => setShowTestRunPanel(false)}
+                bottomOffset={configPanelBottomOffset}
+                topOffset={configPanelTopOffset}
+                docked={
+                  !!(selectedNode && selectedNode.id !== ENTRY_NODE_ID) ||
+                  !!selectedEdge ||
+                  showStartPanel ||
+                  showSettingsEditor
+                }
+              />
+            )}
+
             {/* Workflow Settings Editor - hidden for builtin workflows */}
             {!isBuiltinWorkflow && showSettingsEditor && (
               <WorkflowSettingsEditor
@@ -1919,7 +1991,7 @@ function WorkflowBuilderInner({
           draftId={draftId}
           workflowSessionId={workflowSessionId}
           isConfigPanelOpen={
-            !!(selectedNodeId || selectedEdgeId || showSettingsEditor || showStartPanel)
+            !!(selectedNodeId || selectedEdgeId || showSettingsEditor || showStartPanel || showTestRunPanel)
           }
           onChatIdChange={onChatIdChange}
           onDraftIdChange={onDraftIdChange}

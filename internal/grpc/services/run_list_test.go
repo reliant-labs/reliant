@@ -227,3 +227,24 @@ func TestListRuns_ParentChatIDFilterAndFields(t *testing.T) {
 		}
 	}
 }
+
+// A builder test run is scratch work: the default Runs list leaves it out and
+// the "Tests" kind filter shows only those (WORKFLOW_UI.md §13 G6).
+func TestListRuns_BuilderTestsHiddenUnlessFilteredByKind(t *testing.T) {
+	f := newRunListFixture(t)
+	base := time.Now().UTC().Truncate(time.Microsecond).Add(-time.Hour)
+	f.seed(t, "real", "wf-a", db.Completed(), base)
+	f.seed(t, "test", "wf-a", db.Completed(), base.Add(time.Minute))
+	_, err := f.repo.CreateTriggerEvent(f.ctx, &core.TriggerEvent{
+		ID: "evt-test", UserID: f.userID, Kind: core.TriggerEventKindBuilderTest, DedupeKey: "test",
+		OccurredAt: base, Outcome: core.TriggerEventLaunched, ChatID: ptrString("test"),
+	})
+	require.NoError(t, err)
+
+	assert.Equal(t, []string{"real"}, runIDs(f.list(t, &reliantv1.ListRunsRequest{}).Runs))
+	tests := f.list(t, &reliantv1.ListRunsRequest{LaunchKind: []string{"builder.test"}}).Runs
+	assert.Equal(t, []string{"test"}, runIDs(tests))
+	assert.Equal(t, "builder.test", tests[0].LaunchKind)
+}
+
+func ptrString(s string) *string { return &s }
