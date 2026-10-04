@@ -115,6 +115,32 @@ export interface ConvertOptions {
   draggable?: boolean
   /** Label for the workflow start node (default: "Workflow Start"). Used for "Loop Start" when entering a loop body. */
   workflowStartLabel?: string
+  /**
+   * How the entry node is drawn. `event` (default) is the plain start node.
+   * `triggerRail` is the builder's top-level entry: it also lists how the
+   * workflow gets started (research/WORKFLOW_UI.md §3.2). Both carry the same
+   * id and data; only the React Flow type differs, so the choice never reaches
+   * the saved graph.
+   */
+  entryNode?: EntryNodeKind
+}
+
+export type EntryNodeKind = 'event' | 'triggerRail'
+
+/** The synthesised entry node's id. It is never a step. */
+export const ENTRY_NODE_ID = 'workflow'
+
+const ENTRY_FLOW_TYPES: Record<EntryNodeKind, string> = {
+  event: 'eventNode',
+  triggerRail: 'triggerRailNode',
+}
+
+/**
+ * Whether a React Flow node type is a synthesised entry (start) node rather
+ * than a step. Entry nodes are UI-only and are dropped on serialisation.
+ */
+export function isEntryFlowNodeType(type: string | undefined): boolean {
+  return type === ENTRY_FLOW_TYPES.event || type === ENTRY_FLOW_TYPES.triggerRail
 }
 
 // Constants for switch node positioning
@@ -340,13 +366,20 @@ export function workflowToFlowElements(
   workflow: Workflow,
   options: ConvertOptions = {}
 ): WorkflowFlowElements {
-  const { executionStatus = {}, loopInfo = {}, draggable = true, workflowStartLabel = 'Workflow Start' } = options
+  const {
+    executionStatus = {},
+    loopInfo = {},
+    draggable = true,
+    workflowStartLabel = 'Workflow Start',
+    entryNode = 'event',
+  } = options
+  const entryFlowType = ENTRY_FLOW_TYPES[entryNode]
 
   if (!workflow.nodes || workflow.nodes.length === 0) {
     // Empty workflow - just return the start node
     const workflowNode: Node<FlowNodeData> = {
-      id: 'workflow',
-      type: 'eventNode',
+      id: ENTRY_NODE_ID,
+      type: entryFlowType,
       position: { x: 50, y: 200 },
       data: {
         eventType: 'started',
@@ -424,9 +457,13 @@ export function workflowToFlowElements(
   const workflowNodePosition = (savedWorkflowPos?.x !== undefined && savedWorkflowPos?.y !== undefined)
     ? { x: savedWorkflowPos.x, y: savedWorkflowPos.y }
     : { x: 50, y: 200 }
+  // Laid out as the plain event node whatever it is drawn as: the rail is
+  // taller, and letting its footprint into overlap resolution would move the
+  // steps — a projection must not change the saved positions. The type is
+  // swapped after resolution, below.
   const workflowNode: Node<FlowNodeData> = {
-    id: 'workflow',
-    type: 'eventNode',
+    id: ENTRY_NODE_ID,
+    type: ENTRY_FLOW_TYPES.event,
     position: workflowNodePosition,
     data: {
       eventType: 'started',
@@ -481,7 +518,9 @@ export function workflowToFlowElements(
 
   // Combine all nodes and resolve any remaining overlaps
   const allFinalNodes = [workflowNode, ...stepNodes, ...switchNodesWithStatus]
-  const resolvedNodes = resolveNodeOverlaps(allFinalNodes)
+  const resolvedNodes = resolveNodeOverlaps(allFinalNodes).map((node) =>
+    node.id === ENTRY_NODE_ID ? { ...node, type: entryFlowType } : node,
+  )
 
   return {
     nodes: resolvedNodes,
@@ -496,6 +535,7 @@ export function workflowToFlowElements(
  */
 const NODE_DIMENSIONS: Record<string, { width: number; height: number }> = {
   eventNode: { width: SHARED_NODE_DIMENSIONS.event.width, height: SHARED_NODE_DIMENSIONS.event.height },
+  triggerRailNode: { width: SHARED_NODE_DIMENSIONS.triggerRail.width, height: SHARED_NODE_DIMENSIONS.triggerRail.height },
   runNode: { width: SHARED_NODE_DIMENSIONS.run.width, height: SHARED_NODE_DIMENSIONS.run.height },
   actionNode: { width: SHARED_NODE_DIMENSIONS.action.width, height: SHARED_NODE_DIMENSIONS.action.height },
   workflowNode: { width: SHARED_NODE_DIMENSIONS.workflow.width, height: SHARED_NODE_DIMENSIONS.workflow.height },

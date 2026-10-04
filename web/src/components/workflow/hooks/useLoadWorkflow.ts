@@ -102,7 +102,7 @@ export function useLoadWorkflow({
       // switch node generation, and overlap resolution.
       const { nodes: resolvedNodes, edges: resolvedEdges } = workflowToFlowElements(
         initialWorkflow,
-        { draggable: canDragNodes },
+        { draggable: canDragNodes, entryNode: "triggerRail" },
       );
       loadedNodes = resolvedNodes as Node[];
       loadedEdges = resolvedEdges as Edge[];
@@ -111,10 +111,11 @@ export function useLoadWorkflow({
         name: initialWorkflow.name || initialName || "New Workflow",
       };
     } else {
-      // New workflow - only create workflow entry point node
+      // New workflow - only create workflow entry point node, drawn as the
+      // trigger rail like any top-level builder graph.
       const workflowNode: Node = {
         id: "workflow",
-        type: "eventNode",
+        type: "triggerRailNode",
         position: { x: 50, y: 200 },
         data: {
           eventType: "started",

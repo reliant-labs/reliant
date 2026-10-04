@@ -27,10 +27,11 @@ export const triggerKeys = {
 // ── Query hooks ─────────────────────────────────────────────────────────────
 
 /** The caller's automations, optionally narrowed to one project. */
-export function useTriggers(projectId?: string) {
+export function useTriggers(projectId?: string, options: { enabled?: boolean } = {}) {
   return useQuery({
     queryKey: triggerKeys.list(projectId),
     queryFn: () => triggerGrpc.list(projectId),
+    enabled: options.enabled ?? true,
     // next_fire_at and last_event move on their own as schedules fire, so a
     // page left open should not show a stale "next run" indefinitely.
     refetchInterval: 60_000,

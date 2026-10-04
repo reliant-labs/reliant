@@ -7,6 +7,7 @@
 export { RunNode } from './RunNode'
 export { ActionNode } from './ActionNode'
 export { EventNode } from './EventNode'
+export { TriggerRailNode } from './TriggerRailNode'
 export { WorkflowNode } from './WorkflowNode'
 export { JoinNode } from './JoinNode'
 export { LoopNode } from './LoopNode'
@@ -19,6 +20,7 @@ export { NodeStatusWrapper, buildHandleClassName, type NodeTheme } from './NodeS
 import { RunNode } from './RunNode'
 import { ActionNode } from './ActionNode'
 import { EventNode } from './EventNode'
+import { TriggerRailNode } from './TriggerRailNode'
 import { WorkflowNode } from './WorkflowNode'
 import { JoinNode } from './JoinNode'
 import { LoopNode } from './LoopNode'
@@ -38,6 +40,7 @@ export const nodeTypes = {
   loopNode: LoopNode,
   expandedLoopNode: ExpandedLoopNode,
   eventNode: EventNode,
+  triggerRailNode: TriggerRailNode,
   switchNode: SwitchNode,
   routerNode: RouterNode,
 }

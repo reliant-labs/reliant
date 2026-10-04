@@ -13,19 +13,27 @@ import {
   getNodeIcon,
   getNodeBgColor,
   getCategoryLabel,
-  sortCategories,
+  groupPaletteNodes,
+  categoryGroupKey,
   type NodeInfo,
+  type PaletteGroupKey,
 } from '../../lib/node-metadata'
 import { cn } from '../../lib/utils'
 
 interface FloatingWorkflowSidebarProps {
   onAddStep: (type: string) => void
   onAddSwitch: () => void
+  /**
+   * Which section a node is listed under. Defaults to its category; the
+   * integrations work passes one that prefers the node's integration.
+   */
+  groupKey?: PaletteGroupKey<NodeInfo>
 }
 
 export function FloatingWorkflowSidebar({
   onAddStep,
   onAddSwitch,
+  groupKey = categoryGroupKey,
 }: FloatingWorkflowSidebarProps) {
   const [nodes, setNodes] = useState<NodeInfo[]>(getCachedNodes)
   const [loadingNodes, setLoadingNodes] = useState(true)
@@ -45,21 +53,7 @@ export function FloatingWorkflowSidebar({
     return () => { cancelled = true }
   }, [])
 
-  const nodesByCategory = useMemo(() => {
-    const grouped: Record<string, NodeInfo[]> = {}
-    for (const node of nodes) {
-      const category = node.category || 'utility'
-      if (!grouped[category]) {
-        grouped[category] = []
-      }
-      grouped[category].push(node)
-    }
-    return grouped
-  }, [nodes])
-
-  const sortedCategories = useMemo(() => {
-    return sortCategories(Object.keys(nodesByCategory))
-  }, [nodesByCategory])
+  const groups = useMemo(() => groupPaletteNodes(nodes, groupKey), [nodes, groupKey])
 
   const toggleCategory = (category: string) => {
     setExpandedCategories(prev => ({
@@ -177,18 +171,16 @@ export function FloatingWorkflowSidebar({
         )}
       </div>
 
-      {!loadingNodes && sortedCategories.length > 0 && (
+      {!loadingNodes && groups.length > 0 && (
         <div className="border-t border-border/70" />
       )}
 
       {loadingNodes ? (
         <div className="px-2 py-2 text-xs text-muted-foreground">Loading nodes...</div>
-      ) : sortedCategories.length === 0 ? (
+      ) : groups.length === 0 ? (
         <div className="px-2 py-2 text-xs text-muted-foreground">No nodes available</div>
       ) : (
-        sortedCategories.map(category =>
-          renderCategorySection(category, nodesByCategory[category])
-        )
+        groups.map(group => renderCategorySection(group.key, group.nodes))
       )}
     </div>
   )
