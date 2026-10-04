@@ -302,6 +302,7 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 		Workflow:    workflowName,
 		Presets:     spec.Presets,
 		Params:      spec.Params,
+		Prompt:      seed.userContent,
 	})
 
 	// The event row is inserted before the chat, so the (kind, dedupe_key)
@@ -525,6 +526,7 @@ func (l *Launcher) launchPending(ctx context.Context, ev Event, spec Spec, seed 
 			Workflow:    workflowName,
 			Presets:     presets,
 			Params:      spec.Params,
+			Prompt:      seed.userContent,
 		})
 
 		created, err := l.repo.CreateTriggerEvent(txCtx, eventRow)
@@ -715,7 +717,16 @@ type startRecord struct {
 	Workflow    string
 	Presets     map[string]string
 	Params      map[string]*structpb.Value
+	// Prompt is the seed user text, so a re-run starts from exactly what this
+	// run did instead of guessing it back out of the transcript.
+	Prompt string
 }
+
+// maxRecordedPrompt bounds the prompt copied into the event payload. A longer
+// prompt is left out rather than truncated: a clipped prompt would re-run as a
+// different run, and the transcript still holds the full text for a reader
+// that falls back to it.
+const maxRecordedPrompt = 32 * 1024
 
 func (r startRecord) addTo(payload map[string]any) {
 	params := make(map[string]any, len(r.Params))
@@ -727,11 +738,15 @@ func (r startRecord) addTo(payload map[string]any) {
 		presets[key] = value
 	}
 	payload[payloadSeedFingerprint] = r.Fingerprint
-	payload[payloadStart] = map[string]any{
+	start := map[string]any{
 		"workflow": r.Workflow,
 		"presets":  presets,
 		"params":   params,
 	}
+	if r.Prompt != "" && len(r.Prompt) <= maxRecordedPrompt {
+		start["prompt"] = r.Prompt
+	}
+	payload[payloadStart] = start
 }
 
 // recordedParams reads back the workflow params a start was recorded with.

@@ -74,6 +74,20 @@ export function formatScheduleSlot(iso: string, timezone?: string): string {
   return timezone ? `${slot} (${timezone})` : slot;
 }
 
+const LATE_THRESHOLD_MS = 60_000;
+
+/** "4 min" / "2 h 5 min" when the fire ran more than a minute after its slot, else undefined. */
+export function lateBy(scheduledFor?: string, firedAt?: string): string | undefined {
+  if (!scheduledFor || !firedAt) return undefined;
+  const lateMs = Date.parse(firedAt) - Date.parse(scheduledFor);
+  if (!(lateMs > LATE_THRESHOLD_MS)) return undefined;
+  const minutes = Math.round(lateMs / 60_000);
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return rest ? `${hours} h ${rest} min` : `${hours} h`;
+}
+
 function formatClock(iso: string): string {
   const time = Date.parse(iso);
   if (Number.isNaN(time)) return iso;
@@ -110,6 +124,7 @@ export function TriggerCard({
       "an automation that has since been deleted"
     );
   const start = event?.start;
+  const late = event?.manual ? undefined : lateBy(event?.scheduledFor, event?.firedAt);
 
   return (
     <CardInset padding="sm" className="px-3 text-xs text-muted-foreground" data-testid="trigger-card">
@@ -153,6 +168,7 @@ export function TriggerCard({
             launchKindDisplay(launchKind, { triggerName }).startedByLine
           )}
         </span>
+        {late && <span data-testid="trigger-card-late">· Fired {late} late (catch-up)</span>}
         {unattended && <span>· Unattended: questions and approvals were answered automatically</span>}
         {start && (
           <button

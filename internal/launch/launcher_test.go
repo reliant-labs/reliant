@@ -4,6 +4,7 @@ package launch
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -867,4 +868,37 @@ func TestLaunchGuardDeclinesWithoutWritingAnything(t *testing.T) {
 	_, err = repo.GetTriggerEventByDedupe(ctx, core.TriggerEventKindSchedule, ev.DedupeKey)
 	assert.ErrorIs(t, err, core.ErrTriggerEventNotFound, "a declined launch must not write an event row")
 	assert.Empty(t, starter.startedIDs())
+}
+
+// A re-run must start from exactly what the run started from, so the seed user
+// text is recorded on the start, for every kind of launch.
+func TestLaunchRecordsThePromptOnTheStart(t *testing.T) {
+	for _, kind := range []core.TriggerEventKind{core.TriggerEventKindChatStart, core.TriggerEventKindAgentStartRun} {
+		t.Run(string(kind), func(t *testing.T) {
+			repo, ctx, projectID, _ := launchFixture(t)
+			launcher, _ := newTestLauncher(t, repo, &fakeStarter{})
+
+			chatID := uuid.NewString()
+			_, err := launcher.Launch(ctx, Event{Kind: kind, DedupeKey: chatID}, Spec{
+				OwnerUserID: launchTestUserID, ProjectID: projectID, NewChatID: chatID,
+				Workflow: "builtin://agent", Params: mockModelParams(t), Messages: userSeed("review the diff"),
+			})
+			require.NoError(t, err)
+
+			ev, err := repo.GetTriggerEventByDedupe(ctx, kind, chatID)
+			require.NoError(t, err)
+			start, ok := ev.Payload["start"].(map[string]any)
+			require.True(t, ok, "payload = %v", ev.Payload)
+			assert.Equal(t, "review the diff", start["prompt"])
+		})
+	}
+}
+
+func TestStartRecordLeavesAnOversizedPromptOut(t *testing.T) {
+	payload := map[string]any{}
+	startRecord{Workflow: "w", Prompt: strings.Repeat("x", maxRecordedPrompt+1)}.addTo(payload)
+	assert.NotContains(t, payload["start"], "prompt")
+	payload = map[string]any{}
+	startRecord{Workflow: "w", Prompt: strings.Repeat("x", maxRecordedPrompt)}.addTo(payload)
+	assert.Contains(t, payload["start"], "prompt")
 }

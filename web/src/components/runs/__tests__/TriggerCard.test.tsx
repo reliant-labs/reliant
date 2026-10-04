@@ -58,6 +58,34 @@ describe("TriggerCard", () => {
     expect(screen.getByRole("link", { name: "Nightly triage" })).toHaveAttribute("href", "/automations/trig-1");
   });
 
+  it("says a fire ran late once it is more than a minute past its slot", async () => {
+    renderRunsAt(
+      <TriggerCard
+        launchKind="schedule"
+        triggerId="trig-1"
+        triggerName="Nightly triage"
+        event={scheduleEvent({ firedAt: "2026-10-06T08:04:10Z" })}
+      />,
+      "/runs/chat-1",
+    );
+    expect(await screen.findByTestId("trigger-card-late")).toHaveTextContent("Fired 4 min late (catch-up)");
+  });
+
+  it("stays quiet for a fire within a minute of its slot, or one with no fired_at", async () => {
+    renderRunsAt(
+      <TriggerCard launchKind="schedule" triggerName="N" event={scheduleEvent({ firedAt: "2026-10-06T08:00:50Z" })} />,
+      "/runs/chat-1",
+    );
+    await screen.findByTestId("trigger-card");
+    expect(screen.queryByTestId("trigger-card-late")).not.toBeInTheDocument();
+  });
+
+  it("does not call a fire without fired_at late", async () => {
+    renderRunsAt(<TriggerCard launchKind="schedule" triggerName="N" event={scheduleEvent()} />, "/runs/chat-1");
+    await screen.findByTestId("trigger-card");
+    expect(screen.queryByTestId("trigger-card-late")).not.toBeInTheDocument();
+  });
+
   it("a manual fire says Run now, not a schedule slot", async () => {
     renderRunsAt(
       <TriggerCard

@@ -32,11 +32,12 @@ var chatIDNamespace = uuid.MustParse("2b2e5f21-6c3d-4f8a-9c41-7e5a0d9b3c66")
 type Firer struct {
 	repo     Repo
 	launcher Launcher
+	now      func() time.Time
 }
 
 // NewFirer builds the fire activity's receiver.
 func NewFirer(repo Repo, launcher Launcher) *Firer {
-	return &Firer{repo: repo, launcher: launcher}
+	return &Firer{repo: repo, launcher: launcher, now: time.Now}
 }
 
 // Fire is the FireTrigger activity.
@@ -287,8 +288,12 @@ func (f *Firer) buildEvent(trigger *core.Trigger, req FireRequest) launch.Event 
 		OccurredAt: req.ScheduledAt,
 		Payload: map[string]any{
 			"scheduled_for": req.ScheduledAt.UTC().Format(time.RFC3339),
-			"trigger_name":  trigger.Name,
-			"manual":        req.Manual,
+			// Wall-clock time of this activity attempt (not workflow code, so
+			// time.Now is fine). The event row is written once, so a retried
+			// fire keeps the first attempt's time.
+			"fired_at":     f.now().UTC().Format(time.RFC3339),
+			"trigger_name": trigger.Name,
+			"manual":       req.Manual,
 		},
 	}
 }

@@ -40,8 +40,12 @@ export interface Rerun {
 export function useRerun(chat: Chat, event: LaunchEvent | null | undefined, triggerName?: string): Rerun {
   const [open, setOpen] = useState(false);
   const start = event?.start;
-  // The prompt is only worth reading for a run that can be re-run.
-  const prompt = useFirstPrompt(chat.id, !!start);
+  // The launch records the prompt it started from; only a run from before that
+  // was kept falls back to guessing it from the transcript.
+  const recordedPrompt = start?.prompt;
+  const guessedPrompt = useFirstPrompt(chat.id, !!start && recordedPrompt === undefined);
+  const promptLoading = recordedPrompt === undefined && guessedPrompt.isLoading;
+  const promptText = recordedPrompt ?? guessedPrompt.data ?? undefined;
   const fire = useFireTrigger();
 
   const automationId = chat.launchKind === "schedule" ? chat.triggerId : undefined;
@@ -58,9 +62,9 @@ export function useRerun(chat: Chat, event: LaunchEvent | null | undefined, trig
 
   return {
     // Wait for the prompt too, so the dialog never opens blank and then fills.
-    onRerun: start && !prompt.isLoading ? () => setOpen(true) : undefined,
+    onRerun: start && !promptLoading ? () => setOpen(true) : undefined,
     onRunAutomationNow,
-    prompt: prompt.data ?? undefined,
+    prompt: promptText,
     busy: fire.isPending,
     dialog: start ? (
       <RunWorkflowDialog
@@ -70,7 +74,7 @@ export function useRerun(chat: Chat, event: LaunchEvent | null | undefined, trig
         workflowRef={start.workflow}
         title="Re-run (current definition)"
         submitLabel="Re-run"
-        initialPrompt={prompt.data ?? ""}
+        initialPrompt={promptText ?? ""}
         initialValue={{
           presets: start.presets,
           params: start.params,

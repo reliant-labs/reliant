@@ -51,6 +51,32 @@ describe("launchEventFromProto", () => {
     });
   });
 
+  it("reads the recorded prompt and the time the fire actually ran", () => {
+    const event = launchEventFromProto(
+      create(TriggerEventSchema, {
+        kind: TriggerEventKind.SCHEDULE,
+        payload: {
+          scheduled_for: "2026-10-04T09:00:00Z",
+          fired_at: "2026-10-04T09:04:00Z",
+          start: { workflow: "triage", presets: {}, params: {}, prompt: "Triage the new issues" },
+        },
+      }),
+    );
+    expect(event.firedAt).toBe("2026-10-04T09:04:00Z");
+    expect(event.start?.prompt).toBe("Triage the new issues");
+  });
+
+  it("reads absent prompt and fired_at as absent", () => {
+    const event = launchEventFromProto(
+      create(TriggerEventSchema, {
+        kind: TriggerEventKind.SCHEDULE,
+        payload: { start: { workflow: "triage", presets: {}, params: {} } },
+      }),
+    );
+    expect(event.firedAt).toBeUndefined();
+    expect(event.start?.prompt).toBeUndefined();
+  });
+
   it("reads an agent launch's parent chat", () => {
     const event = launchEventFromProto(
       create(TriggerEventSchema, {
