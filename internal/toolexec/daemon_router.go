@@ -127,7 +127,7 @@ type DaemonRouter interface {
 	SendToolRequest(ctx context.Context, userID string, request *ToolExecutionRequest) error
 
 	// SendToolRequestSync routes a tool execution request to the user's daemon and waits
-	// for the result. Used for tools with RunsOn == ToolRunsOnDaemon.
+	// for the result. Used for tools with Placement == PlacementDaemon.
 	SendToolRequestSync(ctx context.Context, userID string, request *ToolExecutionRequest) (*ToolExecutionResponse, error)
 
 	// SendToolRequestSyncWithSelector routes a tool execution request to a specific daemon

@@ -230,7 +230,7 @@ func TestSaveAttachment_Registration(t *testing.T) {
 		}
 	}
 	require.NotNil(t, found, "save_attachment must be registered")
-	assert.Equal(t, ToolRunsOnServer, found.RunsOn,
+	assert.Equal(t, PlacementServer, found.Placement,
 		"the bytes live in the database, which the daemon cannot reach")
 	assert.Contains(t, found.Tags, TagCodingDefault,
 		"saving an existing attachment is free and is the only alternative to regenerating")

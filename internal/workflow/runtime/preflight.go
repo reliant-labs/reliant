@@ -6,9 +6,9 @@ import (
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 )
 
-// ToolLocationChecker determines if a tool name runs on the daemon.
+// DaemonToolChecker determines if a tool name runs on the daemon.
 // Provided by callers to avoid import cycles with the tools package.
-type ToolLocationChecker func(toolName string) bool
+type DaemonToolChecker func(toolName string) bool
 
 // ToolFilterExpander expands a tool filter (tags/globs) into concrete tool names.
 // Provided by callers to avoid import cycles with the tools package.
@@ -18,7 +18,7 @@ type ToolFilterExpander func(filter []string) []string
 // Injected to avoid import cycles between runtime and tools packages.
 type PreflightConfig struct {
 	// IsDaemonTool returns true if the named tool runs on the daemon.
-	IsDaemonTool ToolLocationChecker
+	IsDaemonTool DaemonToolChecker
 	// ExpandToolFilter expands tool filter specs (tags, globs) into tool names.
 	ExpandToolFilter ToolFilterExpander
 }
@@ -45,7 +45,7 @@ func buildPreflightConfig() *PreflightConfig {
 // contains:
 //   - Any "run" type node (shell execution always runs on daemon)
 //   - Any node with an explicit "daemon" field set
-//   - Any call_llm node whose tool_filter includes tools annotated ToolRunsOnDaemon
+//   - Any call_llm node whose tool_filter includes tools annotated PlacementDaemon
 //   - Workflow-level daemon field set
 //
 // This is used for preflight checks to fail fast before starting execution

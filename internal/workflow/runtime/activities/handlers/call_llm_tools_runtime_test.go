@@ -342,7 +342,7 @@ func TestCallLLMActivity_UsesWorkingDirForMCPEnumerationScope(t *testing.T) {
 		return mockDriver, nil
 	}
 
-	mcpManager := mcp.NewManager()
+	mcpManager := mcp.NewManager(mcp.RoleDaemon)
 	defer func() {
 		_ = mcpManager.Close()
 	}()

@@ -52,7 +52,7 @@ func dirScopedServer(requires ...string) config.MCPServer {
 func managerWithServer(t *testing.T, name string, cfg config.MCPServer) (*Manager, *[]string) {
 	t.Helper()
 	spawned := &[]string{}
-	m := NewManager()
+	m := NewManager(RoleDaemon)
 	t.Cleanup(func() { _ = m.Close() })
 	m.clientFactory = func(_ string, c config.MCPServer) (Client, error) {
 		*spawned = append(*spawned, c.Dir)
@@ -208,7 +208,7 @@ func TestPrecondition_MalformedPatternDoesNotSpawn(t *testing.T) {
 // through would answer this project from another project's index — the exact
 // wrong-tree defect dir scoping exists to prevent.
 func TestPrecondition_RefusalDoesNotFallBackToTheSharedClient(t *testing.T) {
-	m := NewManager()
+	m := NewManager(RoleDaemon)
 	t.Cleanup(func() { _ = m.Close() })
 
 	shared := &countingClient{}
@@ -241,7 +241,7 @@ func TestPrecondition_RefusalDoesNotFallBackToTheSharedClient(t *testing.T) {
 func TestPrecondition_EnsureProjectServersLoadedSkipsUnsatisfiedServer(t *testing.T) {
 	t.Setenv("RELIANT_USER_CONFIG_DIR", t.TempDir())
 
-	m := NewManager()
+	m := NewManager(RoleDaemon)
 	t.Cleanup(func() { _ = m.Close() })
 
 	// Count spawns of THIS server only: the autoload path also loads reliant's

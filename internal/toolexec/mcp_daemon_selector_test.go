@@ -62,26 +62,32 @@ func TestDaemonMCPRuntime_NilSelectorUsesDefaultLikeBuiltins(t *testing.T) {
 	require.Empty(t, router.pinnedCommands)
 }
 
-type contextCapturingBinder struct{ selector *DaemonSelector }
-
-func (b *contextCapturingBinder) Bind(toolCtx *rctx.ToolContext) *rctx.ToolContext {
-	b.selector = DaemonSelectorFromContext(toolCtx.Context)
-	return toolCtx
+type selectorCapturingRouter struct {
+	routerStub
+	selector *DaemonSelector
+	tool     string
 }
 
-func TestRemoteExecutor_PropagatesDaemonSelectorToServerTools(t *testing.T) {
-	binder := &contextCapturingBinder{}
-	local := NewLocalToolExecutor(nil)
-	local.SetMCPContextBinder(binder)
-	exec := NewRemoteExecutor(&routerStub{})
-	exec.SetServerExecutor(local)
+func (r *selectorCapturingRouter) SendToolRequestSyncWithSelector(_ context.Context, _ string, req *ToolExecutionRequest, sel *DaemonSelector) (*ToolExecutionResponse, error) {
+	r.selector, r.tool = sel, req.ToolName
+	return &ToolExecutionResponse{Success: true}, nil
+}
 
-	_, err := exec.ExecuteTool(context.Background(), &ToolRequest{
+// MCP tools are daemon-placed, so the call is shipped whole to the run's
+// pinned daemon rather than executed on the server.
+func TestRemoteExecutor_MCPToolsGoToTheRunsPinnedDaemon(t *testing.T) {
+	router := &selectorCapturingRouter{}
+	exec := NewRemoteExecutor(router)
+	exec.SetServerExecutor(NewLocalToolExecutor(nil))
+
+	res, err := exec.ExecuteTool(context.Background(), &ToolRequest{
 		ToolName: "mcp__server__tool", ToolInput: `{}`, ToolCallID: "c1",
 		UserID: "user-1", ChatID: "chat", ProjectID: "proj",
 		DaemonSelector: &DaemonSelector{ID: "daemon-B"},
 	})
 	require.NoError(t, err)
-	require.NotNil(t, binder.selector)
-	require.Equal(t, "daemon-B", binder.selector.ID)
+	require.True(t, res.RanOnDaemon)
+	require.Equal(t, "mcp__server__tool", router.tool)
+	require.NotNil(t, router.selector)
+	require.Equal(t, "daemon-B", router.selector.ID)
 }

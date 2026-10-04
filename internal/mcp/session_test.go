@@ -15,7 +15,7 @@ import (
 // of every delegate the manager spawned. Nothing here launches a subprocess.
 func newFactoryManager() (*Manager, *spawnRecorder) {
 	rec := &spawnRecorder{}
-	m := NewManager()
+	m := NewManager(RoleDaemon)
 	m.clientFactory = func(name string, cfg config.MCPServer) (Client, error) {
 		return rec.next(name), nil
 	}

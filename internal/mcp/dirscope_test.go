@@ -32,7 +32,7 @@ func TestDirScopedServer_EachProjectGetsItsOwnClient(t *testing.T) {
 	projB := t.TempDir()
 
 	spawned := map[string]config.MCPServer{}
-	m := NewManager()
+	m := NewManager(RoleDaemon)
 	defer func() { _ = m.Close() }()
 	m.clientFactory = func(name string, cfg config.MCPServer) (Client, error) {
 		spawned[cfg.Dir] = cfg
@@ -76,7 +76,7 @@ func TestDirScopedServer_EachProjectGetsItsOwnClient(t *testing.T) {
 // behaviour. This is the guard on the change: sharing is correct and cheaper for
 // the stateless majority, and dir scoping must not silently multiply processes.
 func TestNonDirScopedServer_StillShared(t *testing.T) {
-	m := NewManager()
+	m := NewManager(RoleDaemon)
 	defer func() { _ = m.Close() }()
 	m.serverConfigs["plain"] = config.MCPServer{
 		Command: "x", Type: config.MCPStdio, Enabled: true,
@@ -89,7 +89,7 @@ func TestNonDirScopedServer_StillShared(t *testing.T) {
 // An unregistered server, and an empty project path, both route to the shared
 // client rather than spawning something unkeyed.
 func TestDirClientFor_RequiresRegistrationAndPath(t *testing.T) {
-	m := NewManager()
+	m := NewManager(RoleDaemon)
 	defer func() { _ = m.Close() }()
 	m.serverConfigs["lsp"] = config.MCPServer{
 		Command: "x", Type: config.MCPStdio, Enabled: true, DirScoped: true,
@@ -188,7 +188,7 @@ func (b *blockingClient) CallTool(name string, arguments map[string]interface{})
 // no declared precondition, so these tests exercise the ceiling alone.
 func dirScopedManager(t *testing.T) *Manager {
 	t.Helper()
-	m := NewManager()
+	m := NewManager(RoleDaemon)
 	t.Cleanup(func() { _ = m.Close() })
 	m.clientFactory = func(_ string, _ config.MCPServer) (Client, error) {
 		return &fakeManagerClient{}, nil
@@ -270,7 +270,7 @@ func TestDirClients_LRUEvictsAtTheCeiling(t *testing.T) {
 // recently used client is skipped while it is mid-call, and the next-oldest idle
 // one goes instead — a bound worth breaching for the seconds a call takes.
 func TestDirClients_LRUNeverEvictsAClientMidCall(t *testing.T) {
-	m := NewManager()
+	m := NewManager(RoleDaemon)
 	t.Cleanup(func() { _ = m.Close() })
 
 	busyProject := t.TempDir()
