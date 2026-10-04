@@ -20,22 +20,26 @@ import { Toggle } from "../ui/Toggle";
 import { useProjectStore } from "@/store/projectStore";
 import { triggerErrorMessage, type Trigger } from "@/api/trigger-grpc";
 import { useSetTriggerEnabled, useTriggers } from "@/hooks/trigger-queries";
+import { useDaemonStatus } from "@/hooks/useDaemonStatus";
 import { describeSchedule } from "@/lib/cronText";
 import { formatAbsoluteTime, formatRelativeTime } from "@/lib/relativeTime";
 import { cn } from "@/lib/utils";
 import { AutomationsShell } from "./AutomationsShell";
 import { AutomationFormDialog } from "./AutomationFormDialog";
 import { OutcomeBadge } from "./OutcomeBadge";
+import { daemonLabel } from "./daemonChoices";
 
 export function AutomationsListPage() {
   const triggersQuery = useTriggers();
   const projects = useProjectStore((state) => state.projects);
+  const { daemons } = useDaemonStatus();
   const [creating, setCreating] = useState(false);
 
   const projectNames = useMemo(
     () => new Map(projects.map((project) => [project.id, project.name])),
     [projects],
   );
+  const daemonsById = useMemo(() => new Map(daemons.map((d) => [d.daemonId, d])), [daemons]);
 
   const triggers = triggersQuery.data ?? [];
 
@@ -76,6 +80,7 @@ export function AutomationsListPage() {
                 key={trigger.id}
                 trigger={trigger}
                 projectName={projectNames.get(trigger.projectId)}
+                daemonName={daemonLabel(daemonsById.get(trigger.daemonId), trigger.daemonId)}
               />
             ))}
           </ul>
@@ -123,9 +128,10 @@ function ListSkeleton() {
 interface AutomationRowProps {
   trigger: Trigger;
   projectName?: string;
+  daemonName?: string;
 }
 
-export function AutomationRow({ trigger, projectName }: AutomationRowProps) {
+export function AutomationRow({ trigger, projectName, daemonName }: AutomationRowProps) {
   const setEnabled = useSetTriggerEnabled();
   const scheduleText = trigger.schedule ? describeSchedule(trigger.schedule) : "Unknown source";
   const lastEvent = trigger.lastEvent;
@@ -159,7 +165,8 @@ export function AutomationRow({ trigger, projectName }: AutomationRowProps) {
           {trigger.name}
         </Link>
         <p className="mt-0.5 truncate text-xs text-muted-foreground">
-          {projectName ?? "Unknown project"} · {scheduleText}
+          {projectName ?? "Unknown project"}
+          {daemonName ? ` on ${daemonName}` : ""} · {scheduleText}
         </p>
       </div>
 

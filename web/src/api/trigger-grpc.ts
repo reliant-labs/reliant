@@ -10,7 +10,8 @@
  *
  * UpdateTrigger is a FULL replacement on the server. Callers editing a trigger
  * must therefore carry every field they do not show (presets, params,
- * worktree, catch-up window) through from the loaded trigger, or the update
+ * worktree, catch-up window) — and the daemon, which the server requires —
+ * through from the loaded trigger, or the update
  * silently clears them. `definitionFromTrigger` exists to make that the
  * default rather than something each caller has to remember.
  */
@@ -79,6 +80,8 @@ export interface Trigger {
   presets: Record<string, string>;
   params: Record<string, unknown>;
   message: string;
+  /** The daemon every launched run executes on. Always set by the server. */
+  daemonId: string;
   createdAt: string;
   updatedAt: string;
   nextFireAt?: string;
@@ -99,6 +102,11 @@ export interface TriggerDefinitionInput {
   presets: Record<string, string>;
   params: Record<string, unknown>;
   message: string;
+  /**
+   * Required. One of the caller's daemons and, when the project is installed
+   * on any daemon, one that has it installed (validateTriggerDaemon).
+   */
+  daemonId: string;
   schedule: TriggerSchedule;
 }
 
@@ -164,6 +172,7 @@ export function triggerFromProto(proto: ProtoTrigger): Trigger {
     presets: { ...proto.presets },
     params,
     message: proto.message,
+    daemonId: proto.daemonId,
     createdAt: proto.createdAt,
     updatedAt: proto.updatedAt,
     nextFireAt: proto.nextFireAt || undefined,
@@ -197,6 +206,7 @@ export function definitionToProto(input: TriggerDefinitionInput): ProtoTriggerDe
     presets: input.presets,
     params,
     message: input.message,
+    daemonId: input.daemonId,
     source: { case: "schedule", value: schedule },
   });
 }
@@ -214,6 +224,7 @@ export function definitionFromTrigger(trigger: Trigger): TriggerDefinitionInput 
     presets: { ...trigger.presets },
     params: { ...trigger.params },
     message: trigger.message,
+    daemonId: trigger.daemonId,
     schedule: trigger.schedule ?? { cron: [], timezone: "UTC", overlap: "skip" },
   };
 }

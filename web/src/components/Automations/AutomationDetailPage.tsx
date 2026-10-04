@@ -20,6 +20,7 @@ import ConfirmationDialog from "../forge-ui/confirmation_dialog";
 import { Button } from "../ui/Button";
 import { Toggle } from "../ui/Toggle";
 import { useProjectStore } from "@/store/projectStore";
+import { useDaemonStatus } from "@/hooks/useDaemonStatus";
 import { getWorkflowDisplayName } from "../workflow/useWorkflowInputs";
 import {
   isTriggerNotFound,
@@ -40,6 +41,7 @@ import { AutomationsShell } from "./AutomationsShell";
 import { AutomationFormDialog } from "./AutomationFormDialog";
 import { OutcomeBadge } from "./OutcomeBadge";
 import { openAutomationChat } from "./openAutomationChat";
+import { daemonLabel, daemonStatusLabel } from "./daemonChoices";
 
 /** How long to poll for the event a "Run now" produces. */
 const FIRE_POLL_MS = 2_000;
@@ -83,6 +85,7 @@ export function AutomationDetail({ triggerId }: { triggerId: string }) {
 
   const projects = useProjectStore((state) => state.projects);
   const loadProjects = useProjectStore((state) => state.loadProjects);
+  const { daemons } = useDaemonStatus();
   useEffect(() => {
     void loadProjects().catch(() => undefined);
   }, [loadProjects]);
@@ -174,7 +177,12 @@ export function AutomationDetail({ triggerId }: { triggerId: string }) {
         <div className="min-w-0">
           <h1 className="truncate text-2xl font-semibold tracking-tight text-foreground">{trigger.name}</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            {projectName ?? "Unknown project"} ·{" "}
+            {projectName ?? "Unknown project"} on{" "}
+            {daemonLabel(
+              daemons.find((d) => d.daemonId === trigger.daemonId),
+              trigger.daemonId,
+            )}{" "}
+            ·{" "}
             {trigger.schedule ? describeSchedule(trigger.schedule) : "Unknown source"}
           </p>
         </div>
@@ -267,11 +275,25 @@ export function AutomationDetail({ triggerId }: { triggerId: string }) {
 
 function DefinitionList({ trigger }: { trigger: Trigger }) {
   const schedule = trigger.schedule;
+  const { daemons } = useDaemonStatus();
+  const daemon = daemons.find((d) => d.daemonId === trigger.daemonId);
   const inputCount = Object.keys(trigger.presets).length + Object.keys(trigger.params).length;
   const rows: Array<{ label: string; value: React.ReactNode }> = [
     {
       label: "Workflow",
       value: trigger.workflow ? getWorkflowDisplayName(trigger.workflow, true) : "Your default workflow",
+    },
+    {
+      label: "Runs on",
+      value: (
+        <span>
+          {daemonLabel(daemon, trigger.daemonId)}
+          <span className="text-muted-foreground">
+            {" "}
+            ({daemon ? daemonStatusLabel(daemon.status) : "not in your daemon list"})
+          </span>
+        </span>
+      ),
     },
     {
       label: "Schedule",

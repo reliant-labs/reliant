@@ -23,19 +23,33 @@ import {
   UpdateTriggerResponseSchema,
 } from "@/gen/reliant/v1/trigger_pb";
 import { jsToProtoValue } from "@/api/proto-utils";
+import { DaemonInfoSchema, DaemonStatus } from "@/gen/reliant/v1/daemon_registry_pb";
+import { ProjectDaemonSchema, ProjectInstallState } from "@/gen/reliant/v1/project_pb";
 import { triggerFromProto } from "@/api/trigger-grpc";
 import { renderAtRoute } from "./automationTestUtils";
 
 const createTrigger = vi.fn();
 const updateTrigger = vi.fn();
 const listWorkflows = vi.fn();
+const listDaemons = vi.fn();
+const listProjectDaemons = vi.fn();
 
 vi.mock("@/api/grpc-client", () => ({
   grpcClient: {
     trigger: () => ({ createTrigger, updateTrigger }),
     workflow: () => ({ listWorkflows }),
+    daemonRegistry: () => ({ listDaemons }),
+    project: () => ({ listProjectDaemons }),
   },
 }));
+
+function daemon(daemonId: string, hostname: string, status = DaemonStatus.ACTIVE) {
+  return create(DaemonInfoSchema, { daemonId, hostname, status });
+}
+
+function install(projectId: string, daemonId: string, installState = ProjectInstallState.INSTALLED) {
+  return create(ProjectDaemonSchema, { projectId, daemonId, installState });
+}
 
 vi.mock("@/store/projectStore", () => {
   const snapshot = () => ({
@@ -75,6 +89,7 @@ function storedTrigger() {
     presets: { "": "fast" },
     params: { depth: jsToProtoValue(2) },
     message: "Bump dependencies",
+    daemonId: "daemon-2",
     source: {
       case: "schedule",
       value: create(ScheduleSourceSchema, {
@@ -91,6 +106,16 @@ describe("AutomationFormDialog", () => {
   beforeEach(() => {
     createTrigger.mockReset();
     updateTrigger.mockReset();
+    listDaemons.mockReset();
+    listProjectDaemons.mockReset();
+    listDaemons.mockResolvedValue({
+      daemons: [daemon("daemon-1", "laptop"), daemon("daemon-2", "cloud-box", DaemonStatus.SUSPENDED)],
+    });
+    // Forge (proj-2, the current project) is installed on daemon-1 only; Reliant
+    // (proj-1) is installed on both.
+    listProjectDaemons.mockResolvedValue({
+      projectDaemons: [install("proj-2", "daemon-1"), install("proj-1", "daemon-1"), install("proj-1", "daemon-2")],
+    });
     listWorkflows.mockReset();
     listWorkflows.mockResolvedValue({
       workflows: [
@@ -113,6 +138,11 @@ describe("AutomationFormDialog", () => {
     fill(await screen.findByLabelText("Name"), "Morning triage");
     // The current project is the default.
     expect(screen.getByLabelText("Project")).toHaveValue("proj-2");
+    // The one daemon with Forge installed is preselected; the other is shown
+    // but cannot be chosen, because the server would refuse it.
+    await waitFor(() => expect(screen.getByLabelText("Runs on")).toHaveValue("daemon-1"));
+    expect(screen.getByRole("option", { name: /laptop \(online, project installed\)/ })).toBeEnabled();
+    expect(screen.getByRole("option", { name: /cloud-box \(suspended, project not installed\)/ })).toBeDisabled();
     await screen.findByRole("option", { name: "Triage" });
     await user.selectOptions(screen.getByLabelText("Workflow"), "triage");
     fill(screen.getByLabelText("Prompt"), "Triage new issues");
@@ -133,6 +163,7 @@ describe("AutomationFormDialog", () => {
       message: "Triage new issues",
       presets: {},
       params: {},
+      daemonId: "daemon-1",
     });
     expect(definition.enabled).toBeUndefined();
     expect(definition.worktreeId).toBeUndefined();
@@ -215,6 +246,8 @@ describe("AutomationFormDialog", () => {
 
     // Reopens on the preset that produced the stored cron.
     expect(await screen.findByLabelText("Repeat")).toHaveValue("daily");
+    await screen.findByRole("option", { name: /cloud-box/ });
+    expect(screen.getByLabelText("Runs on")).toHaveValue("daemon-2");
     expect(screen.getByLabelText("At")).toHaveValue("02:00");
     fill(screen.getByLabelText("Name"), "Nightly dependency bump");
     await user.click(screen.getByRole("button", { name: "Save changes" }));
@@ -228,6 +261,9 @@ describe("AutomationFormDialog", () => {
       worktreeId: "wt-1",
       workflow: "builtin://agent",
       presets: { "": "fast" },
+      // The stored daemon round-trips untouched — even though daemon-1 would
+      // be the "first" choice, an edit never re-defaults it.
+      daemonId: "daemon-2",
     });
     expect(request.trigger.params.depth.kind).toEqual({ case: "numberValue", value: 2 });
     // Unset enabled means "unchanged" on update.
@@ -238,5 +274,70 @@ describe("AutomationFormDialog", () => {
       overlap: TriggerOverlapPolicy.ALLOW,
       catchupWindow: "30m",
     });
+  });
+
+  it("lets an edit change the daemon, and sends the new one", async () => {
+    const stored = storedTrigger();
+    updateTrigger.mockResolvedValue(create(UpdateTriggerResponseSchema, { trigger: stored }));
+    const user = userEvent.setup();
+
+    renderAtRoute(<AutomationFormDialog open onClose={vi.fn()} trigger={triggerFromProto(stored)} />);
+    await screen.findByRole("option", { name: /laptop/ });
+    await user.selectOptions(screen.getByLabelText("Runs on"), "daemon-1");
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+
+    await waitFor(() => expect(updateTrigger).toHaveBeenCalledTimes(1));
+    expect(updateTrigger.mock.calls[0]![0].trigger.daemonId).toBe("daemon-1");
+  });
+
+  it("blocks submit and explains when the user has no daemon", async () => {
+    listDaemons.mockResolvedValue({ daemons: [] });
+    listProjectDaemons.mockResolvedValue({ projectDaemons: [] });
+    const user = userEvent.setup();
+
+    renderAtRoute(<AutomationFormDialog open onClose={vi.fn()} />);
+    fill(await screen.findByLabelText("Name"), "Morning triage");
+    fill(screen.getByLabelText("Prompt"), "Triage new issues");
+    expect(await screen.findByText(/You have no daemon yet/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Create automation" }));
+
+    expect(
+      await screen.findByText("Connect a daemon first — automations run on one of your daemons."),
+    ).toBeInTheDocument();
+    expect(createTrigger).not.toHaveBeenCalled();
+  });
+
+  it("blocks submit when several daemons fit and none is chosen", async () => {
+    listProjectDaemons.mockResolvedValue({ projectDaemons: [] }); // not tracked: both eligible
+    const user = userEvent.setup();
+
+    renderAtRoute(<AutomationFormDialog open onClose={vi.fn()} />);
+    fill(await screen.findByLabelText("Name"), "Morning triage");
+    fill(screen.getByLabelText("Prompt"), "Triage new issues");
+    await screen.findByRole("option", { name: /cloud-box/ });
+    // Two equally valid daemons: no guess.
+    expect(screen.getByLabelText("Runs on")).toHaveValue("");
+    await user.click(screen.getByRole("button", { name: "Create automation" }));
+
+    expect(await screen.findByText("Choose the daemon this automation runs on.")).toBeInTheDocument();
+    expect(screen.getByLabelText("Runs on")).toHaveAttribute("aria-invalid", "true");
+    expect(screen.getByLabelText("Runs on")).toHaveFocus();
+    expect(createTrigger).not.toHaveBeenCalled();
+  });
+
+  it("shows the server's daemon rejection beside the daemon field", async () => {
+    createTrigger.mockRejectedValue(
+      new ConnectError("project is not installed on that daemon", Code.FailedPrecondition),
+    );
+    const user = userEvent.setup();
+
+    renderAtRoute(<AutomationFormDialog open onClose={vi.fn()} />);
+    fill(await screen.findByLabelText("Name"), "Morning triage");
+    fill(screen.getByLabelText("Prompt"), "Triage new issues");
+    await waitFor(() => expect(screen.getByLabelText("Runs on")).toHaveValue("daemon-1"));
+    await user.click(screen.getByRole("button", { name: "Create automation" }));
+
+    expect(await screen.findByText("project is not installed on that daemon")).toBeInTheDocument();
+    expect(screen.getByLabelText("Runs on")).toHaveAttribute("aria-invalid", "true");
   });
 });

@@ -33,7 +33,10 @@ import {
   ListProjectDaemonsRequestSchema,
   MarkProjectInstalledRequestSchema,
   CreateProjectFromRepoRequestSchema,
+  ProjectInstallState,
 } from "../gen/reliant/v1/project_pb";
+
+export { ProjectInstallState };
 
 // Type definitions matching frontend expectations (snake_case to match store interface)
 export interface Project {
@@ -134,6 +137,8 @@ export interface ProjectDaemonInfo {
   path: string;
   default_branch?: string;
   cloned_at: string;
+  /** A row can be mid-clone or failed; only INSTALLED means the checkout is there. */
+  install_state: ProjectInstallState;
 }
 
 function protoProjectDaemonToFrontend(proto: ProtoProjectDaemon): ProjectDaemonInfo {
@@ -143,6 +148,7 @@ function protoProjectDaemonToFrontend(proto: ProtoProjectDaemon): ProjectDaemonI
     path: proto.path,
     default_branch: proto.defaultBranch || undefined,
     cloned_at: proto.clonedAt,
+    install_state: proto.installState,
   };
 }
 

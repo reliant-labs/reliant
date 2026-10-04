@@ -17,7 +17,7 @@
  * workflow that declared them.
  */
 
-import { useEffect, useId, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from "react";
 
 import { Modal } from "../ui/Modal";
 import { Button } from "../ui/Button";
@@ -32,9 +32,11 @@ import {
 } from "@/api/trigger-grpc";
 import {
   useCreateTrigger,
+  useProjectDaemonInstalls,
   useProjectWorkflowList,
   useUpdateTrigger,
 } from "@/hooks/trigger-queries";
+import { useDaemonStatus } from "@/hooks/useDaemonStatus";
 import { describeSchedule } from "@/lib/cronText";
 import { cn } from "@/lib/utils";
 import {
@@ -50,6 +52,7 @@ import {
   type SchedulePreset,
 } from "./scheduleForm";
 import { errorTextClass, fieldClass, hintClass, labelClass, textareaClass } from "./automationFormStyles";
+import { buildDaemonChoices, defaultDaemonId } from "./daemonChoices";
 
 export interface AutomationFormDialogProps {
   open: boolean;
@@ -81,6 +84,7 @@ function timezoneOptions(): string[] {
 interface FieldErrors {
   name?: string;
   project?: string;
+  daemon?: string;
   message?: string;
   schedule?: string;
   timezone?: string;
@@ -117,6 +121,10 @@ function AutomationFormBody({
     trigger?.projectId ?? defaultProjectId ?? currentProjectId ?? "",
   );
   const [workflow, setWorkflow] = useState(trigger?.workflow ?? "");
+  const [daemonId, setDaemonId] = useState(trigger?.daemonId ?? "");
+  // Once the user (or an edit's stored value) has chosen a daemon, the form
+  // stops defaulting it — a project switch must not silently move the run.
+  const daemonChosen = useRef(!!trigger?.daemonId);
   const [message, setMessage] = useState(trigger?.message ?? "");
   const [schedule, setSchedule] = useState<ScheduleFormState>(() =>
     trigger?.schedule ? formFromSchedule(trigger.schedule) : DEFAULT_SCHEDULE_FORM,
@@ -148,6 +156,42 @@ function AutomationFormBody({
     }
     return options;
   }, [workflowsQuery.data, workflow]);
+
+  const { daemons, loading: daemonsLoading } = useDaemonStatus();
+  const installsQuery = useProjectDaemonInstalls();
+  const daemonChoices = useMemo(
+    () => buildDaemonChoices(daemons, installsQuery.data ?? [], projectId),
+    [daemons, installsQuery.data, projectId],
+  );
+  const daemonDataReady = !daemonsLoading && !installsQuery.isLoading;
+
+  // Preselect the single obvious daemon for the project until a daemon has been
+  // chosen (by the user, or by an edit's stored value, which is always kept —
+  // the server is the judge of whether it is still valid, and says so inline).
+  useEffect(() => {
+    if (!daemonDataReady || daemonChosen.current) return;
+    const next = defaultDaemonId(daemonChoices) ?? "";
+    if (next !== daemonId) setDaemonId(next);
+  }, [daemonDataReady, daemonChoices, daemonId]);
+
+  // An edit's stored daemon stays selectable even if the registry no longer
+  // lists it (deleted, or not yet re-registered) — the user sees what it is set
+  // to and can change it, rather than the field silently going blank.
+  const daemonOptions = useMemo(() => {
+    if (!daemonId || daemonChoices.some((c) => c.daemonId === daemonId)) return daemonChoices;
+    return [
+      {
+        daemonId,
+        label: `daemon ${daemonId.slice(0, 8)}`,
+        statusLabel: "not found",
+        installed: false,
+        eligible: true,
+      },
+      ...daemonChoices,
+    ];
+  }, [daemonChoices, daemonId]);
+  const noDaemons = daemonDataReady && daemons.length === 0 && !daemonId;
+  const noEligibleDaemons = daemonDataReady && daemons.length > 0 && !daemonChoices.some((c) => c.eligible);
 
   const zones = useMemo(timezoneOptions, []);
   const createMutation = useCreateTrigger();
@@ -181,6 +225,7 @@ function AutomationFormBody({
       presets: keepInputs ? base.presets : {},
       params: keepInputs ? base.params : {},
       message: message.trim(),
+      daemonId,
       schedule: {
         cron: wire.cron,
         interval: wire.interval,
@@ -196,11 +241,16 @@ function AutomationFormBody({
     const next: FieldErrors = {};
     if (!name.trim()) next.name = "Give the automation a name.";
     if (!projectId) next.project = "Choose a project.";
+    if (!daemonId) {
+      next.daemon = noDaemons
+        ? "Connect a daemon first — automations run on one of your daemons."
+        : "Choose the daemon this automation runs on.";
+    }
     if (!message.trim()) next.message = "Write the prompt each run starts from.";
     if (scheduleError) next.schedule = scheduleError;
     setErrors(next);
     if (Object.keys(next).length > 0) {
-      const first = (["name", "project", "message", "schedule"] as const).find((k) => next[k]);
+      const first = (["name", "project", "daemon", "message", "schedule"] as const).find((k) => next[k]);
       if (first) document.getElementById(fieldId(first))?.focus();
       return;
     }
@@ -318,6 +368,58 @@ function AutomationFormBody({
                   : "The default is resolved each time the automation runs."}
               </p>
             </div>
+          </div>
+
+          <div>
+            <label htmlFor={fieldId("daemon")} className={labelClass}>
+              Runs on
+            </label>
+            {noDaemons ? (
+              <div
+                id={fieldId("daemon")}
+                tabIndex={-1}
+                className="rounded-md border border-border/60 bg-background px-3 py-2 text-sm text-muted-foreground"
+                aria-describedby={describedBy(errors.daemon && fieldId("daemon-error"))}
+              >
+                You have no daemon yet. An automation's runs execute on one of your daemons — connect
+                one (a cloud machine or your own) from the project picker, then come back.
+              </div>
+            ) : (
+              <select
+                id={fieldId("daemon")}
+                className={fieldClass}
+                value={daemonId}
+                onChange={(e) => {
+                  daemonChosen.current = true;
+                  setDaemonId(e.target.value);
+                }}
+                aria-invalid={!!errors.daemon}
+                aria-describedby={describedBy(fieldId("daemon-hint"), errors.daemon && fieldId("daemon-error"))}
+              >
+                <option value="" disabled>
+                  {daemonDataReady ? "Choose a daemon" : "Loading daemons…"}
+                </option>
+                {daemonOptions.map((choice) => (
+                  <option key={choice.daemonId} value={choice.daemonId} disabled={!choice.eligible}>
+                    {choice.label} ({choice.statusLabel}
+                    {choice.installed ? ", project installed" : ""}
+                    {choice.ineligibleReason ? `, ${choice.ineligibleReason}` : ""})
+                  </option>
+                ))}
+              </select>
+            )}
+            {!noDaemons && (
+              <p id={fieldId("daemon-hint")} className={hintClass}>
+                {noEligibleDaemons
+                  ? "None of your daemons has this project installed. Install it on one from the project picker."
+                  : "Every run's tools execute here. A daemon that is offline when the automation fires is woken if it can be."}
+              </p>
+            )}
+            {errors.daemon && (
+              <p id={fieldId("daemon-error")} className={errorTextClass}>
+                {errors.daemon}
+              </p>
+            )}
           </div>
 
           <div>

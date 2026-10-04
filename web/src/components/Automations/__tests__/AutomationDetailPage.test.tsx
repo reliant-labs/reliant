@@ -20,6 +20,7 @@ import {
   TriggerEventSchema,
   TriggerSchema,
 } from "@/gen/reliant/v1/trigger_pb";
+import { DaemonInfoSchema, DaemonStatus } from "@/gen/reliant/v1/daemon_registry_pb";
 import { HOUR, isoFromNow, renderAtRoute } from "./automationTestUtils";
 
 const getTrigger = vi.fn();
@@ -30,6 +31,11 @@ const deleteTrigger = vi.fn();
 vi.mock("@/api/grpc-client", () => ({
   grpcClient: {
     trigger: () => ({ getTrigger, listTriggerEvents, fireTrigger, deleteTrigger }),
+    daemonRegistry: () => ({
+      listDaemons: vi.fn(async () => ({
+        daemons: [create(DaemonInfoSchema, { daemonId: "daemon-1", hostname: "laptop", status: DaemonStatus.IDLE })],
+      })),
+    }),
     workflow: () => ({ listWorkflows: vi.fn(async () => ({ workflows: [], invalidWorkflows: [] })) }),
   },
 }));
@@ -81,6 +87,7 @@ const trigger = create(TriggerSchema, {
   enabled: true,
   workflow: "builtin://agent",
   message: "Triage new issues",
+  daemonId: "daemon-1",
   nextFireAt: isoFromNow(5 * HOUR),
   source: {
     case: "schedule",
@@ -118,6 +125,8 @@ describe("AutomationDetail", () => {
 
     expect(await screen.findByRole("heading", { name: "Morning triage" })).toBeInTheDocument();
     expect(screen.getByText("Triage new issues")).toBeInTheDocument();
+    expect(await screen.findByText("laptop")).toBeInTheDocument();
+    expect(screen.getByText("(idle)")).toBeInTheDocument();
     const launchedRow = await screen.findByTestId("automation-event-ev-1");
     expect(within(launchedRow).getByText("Launched")).toBeInTheDocument();
     expect(within(launchedRow).getByRole("button", { name: "Open chat" })).toBeInTheDocument();

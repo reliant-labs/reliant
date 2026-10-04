@@ -215,7 +215,10 @@ export function formFromSchedule(schedule: WireSchedule): ScheduleFormState {
  * shown beside that field. The server's ConfigError renders as
  * "<field>: <reason>" (internal/triggers/config.go).
  */
-export function serverErrorField(message: string): "schedule" | "timezone" | "form" {
+export function serverErrorField(message: string): "schedule" | "timezone" | "daemon" | "form" {
+  // validateTriggerDaemon: "daemon_id is required…", "daemon not found",
+  // "project is not installed on that daemon".
+  if (/^daemon(_id)?\b/.test(message) || /installed on that daemon/.test(message)) return "daemon";
   if (/^(cron|interval|catchup_window)\b/.test(message) || /schedule needs/.test(message)) {
     return "schedule";
   }

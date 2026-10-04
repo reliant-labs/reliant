@@ -19,6 +19,7 @@ import {
   TriggerEventSchema,
   TriggerSchema,
 } from "@/gen/reliant/v1/trigger_pb";
+import { DaemonInfoSchema, DaemonStatus } from "@/gen/reliant/v1/daemon_registry_pb";
 import { HOUR, isoFromNow, renderAtRoute } from "./automationTestUtils";
 
 const listTriggers = vi.fn();
@@ -27,6 +28,11 @@ const setTriggerEnabled = vi.fn();
 vi.mock("@/api/grpc-client", () => ({
   grpcClient: {
     trigger: () => ({ listTriggers, setTriggerEnabled }),
+    daemonRegistry: () => ({
+      listDaemons: vi.fn(async () => ({
+        daemons: [create(DaemonInfoSchema, { daemonId: "daemon-1", hostname: "laptop", status: DaemonStatus.ACTIVE })],
+      })),
+    }),
     workflow: () => ({ listWorkflows: vi.fn(async () => ({ workflows: [], invalidWorkflows: [] })) }),
   },
 }));
@@ -65,6 +71,7 @@ function protoTrigger(overrides: Partial<Parameters<typeof create<typeof Trigger
     enabled: true,
     workflow: "builtin://agent",
     message: "Triage new issues",
+    daemonId: "daemon-1",
     nextFireAt: isoFromNow(2 * HOUR + 60_000),
     lastEvent: create(TriggerEventSchema, {
       id: "ev-1",
@@ -96,7 +103,9 @@ describe("AutomationsListPage", () => {
       "href",
       "/automations/trig-1",
     );
-    expect(within(row).getByText("Reliant · Every weekday at 9:00 AM ET")).toBeInTheDocument();
+    expect(
+      await within(row).findByText("Reliant on laptop · Every weekday at 9:00 AM ET"),
+    ).toBeInTheDocument();
     expect(within(row).getByText("Failed")).toBeInTheDocument();
     expect(within(row).getByText("3 hours ago")).toBeInTheDocument();
     expect(within(row).getByText("in 2 hours")).toBeInTheDocument();
