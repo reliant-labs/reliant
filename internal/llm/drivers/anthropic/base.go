@@ -15,6 +15,7 @@ import (
 	"github.com/anthropics/anthropic-sdk-go/option"
 	"github.com/anthropics/anthropic-sdk-go/packages/ssestream"
 	"github.com/reliant-labs/reliant/internal/llm"
+	"github.com/reliant-labs/reliant/internal/llm/cache"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/anthropicwire"
 	toolsPkg "github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -46,6 +47,12 @@ func IsMalformedJSONError(err error) bool {
 type baseClient struct {
 	options llm.DriverOptions
 	client  anthropic.Client
+
+	// cacheTTL is the ttl stamped on every cache_control breakpoint this client
+	// emits. It is cache.ExtendedTTL for every Anthropic endpoint we know accepts
+	// it, and empty (the API's 5m default, sent as a bare {type:"ephemeral"}) for
+	// a host that has not been shown to — see NewAnthropicClientWithOptions.
+	cacheTTL anthropic.CacheControlEphemeralTTL
 }
 
 func newBase(opts llm.DriverOptions, clientOptions []option.RequestOption) *baseClient {
@@ -58,9 +65,18 @@ func newBase(opts llm.DriverOptions, clientOptions []option.RequestOption) *base
 	// is what extended thinking requires. Adaptive models (opus-4.8/sonnet-5/fable-5)
 	// 400 if temperature is sent at all, so omitting it is mandatory.
 	return &baseClient{
-		options: opts,
-		client:  llm.NewAnthropicSDKClient(clientOptions...),
+		options:  opts,
+		client:   llm.NewAnthropicSDKClient(clientOptions...),
+		cacheTTL: anthropic.CacheControlEphemeralTTL(cache.ExtendedTTL),
 	}
+}
+
+// cacheControl is the single place a breakpoint's cache_control is built, so
+// every breakpoint in one request carries the same TTL. Anthropic requires
+// longer-TTL breakpoints to precede shorter ones; a uniform TTL can never
+// violate that.
+func (b *baseClient) cacheControl() anthropic.CacheControlEphemeralParam {
+	return anthropic.CacheControlEphemeralParam{Type: "ephemeral", TTL: b.cacheTTL}
 }
 
 func (b *baseClient) addCacheControl(block *anthropic.ContentBlockParamUnion) {
@@ -70,9 +86,9 @@ func (b *baseClient) addCacheControl(block *anthropic.ContentBlockParamUnion) {
 
 	switch {
 	case block.OfText != nil:
-		block.OfText.CacheControl = anthropic.CacheControlEphemeralParam{Type: "ephemeral"}
+		block.OfText.CacheControl = b.cacheControl()
 	case block.OfToolResult != nil:
-		block.OfToolResult.CacheControl = anthropic.CacheControlEphemeralParam{Type: "ephemeral"}
+		block.OfToolResult.CacheControl = b.cacheControl()
 	}
 }
 
@@ -375,9 +391,7 @@ func (b *baseClient) convertTools(tools []toolsPkg.Tool) []anthropic.ToolUnionPa
 		// Cache only the last tool
 		if !b.options.DisableCache && i == len(tools)-1 {
 			logging.Debug("Anthropic: Caching last tool", "name", tool.Name(), "index", i)
-			toolParam.CacheControl = anthropic.CacheControlEphemeralParam{
-				Type: "ephemeral",
-			}
+			toolParam.CacheControl = b.cacheControl()
 		}
 
 		anthropicTools[i] = anthropic.ToolUnionParam{OfTool: &toolParam}
@@ -731,9 +745,7 @@ func (b *baseClient) prepareSystemPrompts(prompts []string) []anthropic.TextBloc
 		// Cache the last 2 system prompts
 		totalPrompts := len(prompts)
 		if !b.options.DisableCache && totalPrompts > 0 && i >= totalPrompts-2 {
-			block.CacheControl = anthropic.CacheControlEphemeralParam{
-				Type: "ephemeral",
-			}
+			block.CacheControl = b.cacheControl()
 		}
 		systemPrompts = append(systemPrompts, block)
 	}

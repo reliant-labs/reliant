@@ -56,6 +56,15 @@ type claudeImageSource struct {
 
 type claudeCacheControl struct {
 	Type string `json:"type"`
+	TTL  string `json:"ttl,omitempty"`
+}
+
+// extendedCacheControl is the only cache_control this driver emits. Every
+// breakpoint in a request must carry the same TTL — Anthropic requires
+// longer-TTL breakpoints to precede shorter ones, so a mixed request can 400.
+// See cache.ExtendedTTL for why 1h.
+func extendedCacheControl() *claudeCacheControl {
+	return &claudeCacheControl{Type: "ephemeral", TTL: cache.ExtendedTTL}
 }
 
 type claudeSystemPrompt struct {
@@ -223,7 +232,7 @@ func (c *VertexAIClient) buildClaudeRequest(prompts []string, messages []message
 
 			// Apply caching to last 2 system prompts
 			if cache.ShouldCacheSystemPrompt(i, len(prompts), c.options.DisableCache) {
-				sysPrompt.CacheControl = &claudeCacheControl{Type: "ephemeral"}
+				sysPrompt.CacheControl = extendedCacheControl()
 				logging.Info("Vertex AI Claude: Caching system prompt", "index", i)
 			}
 
@@ -366,7 +375,7 @@ func (c *VertexAIClient) convertMessagesToClaude(messages []message.Message) []c
 			lastBlock := &lastMsg.Content[len(lastMsg.Content)-1]
 			// Only cache text and tool_result blocks
 			if lastBlock.Type == "text" || lastBlock.Type == "tool_result" {
-				lastBlock.CacheControl = &claudeCacheControl{Type: "ephemeral"}
+				lastBlock.CacheControl = extendedCacheControl()
 				logging.Info("Vertex AI Claude: Caching last message block")
 			}
 		}
@@ -405,7 +414,7 @@ func (c *VertexAIClient) convertToolsToClaude(toolsList []tools.Tool) []claudeTo
 
 		// Cache only the last tool
 		if cache.ShouldCacheTool(i, len(toolsList), 0, 0, c.options.DisableCache) {
-			claudeTools[i].CacheControl = &claudeCacheControl{Type: "ephemeral"}
+			claudeTools[i].CacheControl = extendedCacheControl()
 			logging.Info("Vertex AI Claude: Caching last tool", "name", tool.Name())
 		}
 	}

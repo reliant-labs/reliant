@@ -23,9 +23,11 @@ import (
 
 	"github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
+	"github.com/openai/openai-go/v3/packages/param"
 	accesstoken "github.com/reliant-labs/forge/pkg/accesstoken"
 	"github.com/reliant-labs/reliant/internal/chatmarkers"
 	"github.com/reliant-labs/reliant/internal/llm"
+	"github.com/reliant-labs/reliant/internal/llm/cache"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -273,6 +275,143 @@ func (c *ReliantClient) ConvertTools(toolList []tools.Tool) []openai.ChatComplet
 	return openaiTools
 }
 
+// isClaudeModel reports whether this request will be routed to Claude by the
+// gateway. LiteLLM maps our `claude-*` api_models onto `vertex_ai/claude-*`,
+// which is the Anthropic dialect and the only route that reads cache_control.
+//
+// The gate is deliberately narrow. LiteLLM strips cache_control for real
+// openai.com hosts, but its Gemini path is untraced (see
+// research/PROMPT_CACHE_TTL_LITELLM.md §5) — a key that survives into a
+// `contents` translation it has no field for is an unknown, and an unknown on
+// every request is not worth a cache we cannot confirm.
+func (c *ReliantClient) isClaudeModel() bool {
+	return strings.HasPrefix(strings.ToLower(c.Options.Model.APIModel), "claude")
+}
+
+// claudeCacheControl is the single place a breakpoint's cache_control is built,
+// so every breakpoint in one request carries the same TTL. Anthropic requires
+// longer-TTL breakpoints to precede shorter ones; a uniform TTL can never
+// violate that.
+func claudeCacheControl() map[string]any {
+	return map[string]any{"type": "ephemeral", "ttl": cache.ExtendedTTL}
+}
+
+// setCacheControl marks a param struct with a cache_control extra field.
+// openai-go has no typed field for it — it is an Anthropic-dialect key LiteLLM
+// reads out of the OpenAI-shaped body — so it rides as an extra field.
+//
+// Not to be confused with ChatCompletionContentPartTextParam's typed
+// PromptCacheBreakpoint: that is OpenAI's own prompt-cache scheme, which
+// neither LiteLLM nor Anthropic reads.
+func setCacheControl(target interface{ SetExtraFields(map[string]any) }) {
+	target.SetExtraFields(map[string]any{"cache_control": claudeCacheControl()})
+}
+
+// applyClaudeCacheBreakpoints adds Anthropic prompt-cache breakpoints to an
+// already-converted Chat Completions request, in place.
+//
+// Without this the managed gateway got NO caching at all for Claude: every turn
+// rebilled the whole prompt at base input price, while the direct Anthropic
+// driver paid 0.1x for the same prefix. The strategy mirrors
+// internal/llm/drivers/anthropic/base.go so a model behaves the same whichever
+// route reaches it — at most 4 breakpoints: the last tool definition, the last
+// two system prompts, and the last message.
+//
+// Placements are the ones verified in LiteLLM's source
+// (research/PROMPT_CACHE_TTL_LITELLM.md §1); they differ by role, so each
+// case below is a distinct wire shape rather than one generic rule.
+func (c *ReliantClient) applyClaudeCacheBreakpoints(messages []openai.ChatCompletionMessageParamUnion, toolParams []openai.ChatCompletionToolUnionParam) {
+	if c.Options.DisableCache || !c.isClaudeModel() {
+		return
+	}
+
+	// Last tool definition, at the TOP level of the tool object. LiteLLM also
+	// accepts it inside "function", but top level takes precedence there and is
+	// the shape its own transformation reads first.
+	if last := len(toolParams) - 1; last >= 0 {
+		if fn := toolParams[last].OfFunction; fn != nil &&
+			cache.ShouldCacheTool(last, len(toolParams), 0, 0, false) {
+			setCacheControl(fn)
+		}
+	}
+
+	// Last two system prompts, as a cache_control on a text content PART.
+	// ConvertMessages emits them with string content, so they are rewritten to
+	// single-part array content here — LiteLLM's system translation only looks
+	// for the key inside a content part.
+	var systemIndices []int
+	for i := range messages {
+		if messages[i].OfSystem != nil {
+			systemIndices = append(systemIndices, i)
+		}
+	}
+	for position, index := range systemIndices {
+		if !cache.ShouldCacheSystemPrompt(position, len(systemIndices), false) {
+			continue
+		}
+		system := messages[index].OfSystem
+		parts := system.Content.OfArrayOfContentParts
+		if len(parts) == 0 {
+			text := system.Content.OfString.Or("")
+			if strings.TrimSpace(text) == "" {
+				// An empty text block with cache_control is an Anthropic 400.
+				continue
+			}
+			parts = []openai.ChatCompletionContentPartTextParam{{Text: text}}
+			system.Content.OfString = param.Opt[string]{}
+		}
+		setCacheControl(&parts[len(parts)-1])
+		system.Content.OfArrayOfContentParts = parts
+	}
+
+	if len(messages) == 0 {
+		return
+	}
+	last := &messages[len(messages)-1]
+	switch {
+	case last.OfTool != nil:
+		// Tool results take a MESSAGE-LEVEL key, which LiteLLM moves onto the
+		// tool_result block. String content is fine, so the message is left as
+		// ConvertMessages built it.
+		setCacheControl(last.OfTool)
+
+	case last.OfUser != nil:
+		// Including history System messages: ConvertMessages emits those as a
+		// user turn wrapped in <system>, so they arrive here as OfUser.
+		parts := last.OfUser.Content.OfArrayOfContentParts
+		if len(parts) == 0 {
+			text := last.OfUser.Content.OfString.Or("")
+			if strings.TrimSpace(text) == "" {
+				return
+			}
+			part := openai.ChatCompletionContentPartTextParam{Text: text}
+			setCacheControl(&part)
+			last.OfUser.Content.OfString = param.Opt[string]{}
+			last.OfUser.Content.OfArrayOfContentParts = []openai.ChatCompletionContentPartUnionParam{{OfText: &part}}
+			return
+		}
+		// Mark the last TEXT part. When an attachment makes the final part an
+		// image, the breakpoint moves back to the last text part rather than
+		// onto the image: LiteLLM's add_cache_control_to_content only copies the
+		// key from text parts, so marking an image part would silently drop the
+		// breakpoint and we would pay for a cache that was never written. A
+		// message with no text part at all gets none.
+		for i := len(parts) - 1; i >= 0; i-- {
+			if parts[i].OfText != nil {
+				setCacheControl(parts[i].OfText)
+				return
+			}
+		}
+
+	// An assistant-last message is skipped. LiteLLM reads a message-level
+	// cache_control for tool results only, and nothing in its source copies the
+	// key off an assistant message — so a breakpoint there would be dropped
+	// silently. It is also rare: a request is built to be answered, so the last
+	// message is a user turn or a tool result almost every time.
+	default:
+	}
+}
+
 func (c *ReliantClient) finishReason(reason string) message.FinishReason {
 	switch reason {
 	case "stop":
@@ -303,6 +442,12 @@ func toolListHasFunction(tools []openai.ChatCompletionToolUnionParam, name strin
 }
 
 func (c *ReliantClient) preparedParams(messages []openai.ChatCompletionMessageParamUnion, toolParams []openai.ChatCompletionToolUnionParam) openai.ChatCompletionNewParams {
+	// Marked here rather than inside ConvertMessages/ConvertTools so the
+	// breakpoints are decided once, with the whole request in view: the
+	// allocation depends on the system-prompt, message and tool counts
+	// together, and the last message's role decides its wire shape.
+	c.applyClaudeCacheBreakpoints(messages, toolParams)
+
 	params := openai.ChatCompletionNewParams{
 		Model:    openai.ChatModel(c.Options.Model.APIModel),
 		Messages: messages,
@@ -383,9 +528,11 @@ func (c *ReliantClient) SendMessages(ctx context.Context, prompts []string, mess
 		upstreamRequestID, upstreamProxymanID := extractUpstreamCorrelationHeaders(rawResp)
 
 		return &llm.DriverResponse{
-			Content:            content,
-			ToolCalls:          toolCalls,
-			Usage:              c.usage(*openaiResponse, gatewayReportedCost(rawResp, openaiResponse.Usage)),
+			Content:   content,
+			ToolCalls: toolCalls,
+			Usage: c.usage(*openaiResponse,
+				gatewayReportedCost(rawResp, openaiResponse.Usage),
+				cacheCreationInputTokens(openaiResponse.Usage)),
 			FinishReason:       finishReason,
 			UpstreamRequestID:  upstreamRequestID,
 			UpstreamProxymanID: upstreamProxymanID,
@@ -421,9 +568,11 @@ func (c *ReliantClient) StreamResponse(ctx context.Context, prompts []string, me
 			currentContent := ""
 			toolCallResults := make([]message.ToolCall, 0)
 			// The accumulator sums the usage fields it knows about, which drops
-			// LiteLLM's `cost` — it lives in the chunk's extra fields, so it has
-			// to be taken from the usage chunk itself as it goes past.
+			// LiteLLM's `cost` and `cache_creation_input_tokens` — both live in
+			// the chunk's extra fields, so they have to be taken from the usage
+			// chunk itself as it goes past.
 			reportedCost := 0.0
+			reportedCacheCreation := int64(0)
 
 			for openaiStream.Next() {
 				chunk := openaiStream.Current()
@@ -431,6 +580,9 @@ func (c *ReliantClient) StreamResponse(ctx context.Context, prompts []string, me
 
 				if cost := usageCost(chunk.Usage); cost > 0 {
 					reportedCost = cost
+				}
+				if written := cacheCreationInputTokens(chunk.Usage); written > 0 {
+					reportedCacheCreation = written
 				}
 
 				for _, choice := range chunk.Choices {
@@ -482,7 +634,7 @@ func (c *ReliantClient) StreamResponse(ctx context.Context, prompts []string, me
 					Response: &llm.DriverResponse{
 						Content:            currentContent,
 						ToolCalls:          toolCallResults,
-						Usage:              c.usage(acc.ChatCompletion, reportedCost),
+						Usage:              c.usage(acc.ChatCompletion, reportedCost, reportedCacheCreation),
 						FinishReason:       finishReason,
 						UpstreamRequestID:  upstreamRequestID,
 						UpstreamProxymanID: upstreamProxymanID,
@@ -856,11 +1008,16 @@ func (c *ReliantClient) toolCalls(completion openai.ChatCompletion) []message.To
 	return toolCalls
 }
 
-// usage converts the completion's token counts, pairing them with the cost the
-// gateway reported for this request. Cost is passthrough: reliant keeps no
-// per-token price table, so a request the gateway did not price costs 0 rather
-// than an estimate.
-func (c *ReliantClient) usage(completion openai.ChatCompletion, cost float64) llm.TokenUsage {
+// usage converts the completion's token counts, pairing them with the cost and
+// cache-write count the gateway reported for this request. Cost is passthrough:
+// reliant keeps no per-token price table, so a request the gateway did not
+// price costs 0 rather than an estimate.
+//
+// cacheCreation is a parameter rather than read from completion for the same
+// reason cost is: it lives in the usage object's extra fields, and the stream
+// accumulator does not carry those forward, so a stream has to capture it off
+// the usage chunk as it goes past.
+func (c *ReliantClient) usage(completion openai.ChatCompletion, cost float64, cacheCreation int64) llm.TokenUsage {
 	cachedInputTokens := completion.Usage.PromptTokensDetails.CachedTokens
 	inputTokens := completion.Usage.PromptTokens - cachedInputTokens
 	if inputTokens < 0 {
@@ -870,12 +1027,41 @@ func (c *ReliantClient) usage(completion openai.ChatCompletion, cost float64) ll
 	if cost < 0 {
 		cost = 0
 	}
-	return llm.TokenUsage{
-		TokenCount:   completion.Usage.TotalTokens,
-		InputTokens:  inputTokens,
-		OutputTokens: completion.Usage.CompletionTokens,
-		Cost:         cost,
+	if cacheCreation < 0 {
+		cacheCreation = 0
 	}
+	return llm.TokenUsage{
+		TokenCount:        completion.Usage.TotalTokens,
+		InputTokens:       inputTokens,
+		OutputTokens:      completion.Usage.CompletionTokens,
+		CachedInputTokens: cachedInputTokens,
+		Cost:              cost,
+		// Carry the cache split through so a gateway turn can be attributed
+		// the same way a direct-Anthropic one can. Both numbers were available
+		// and dropped, which is why `[CallLLM] Usage` showed nothing for
+		// managed traffic even on a full cache hit.
+		CacheReadInputTokens:     cachedInputTokens,
+		CacheCreationInputTokens: cacheCreation,
+	}
+}
+
+// cacheCreationInputTokens reads the `cache_creation_input_tokens` field
+// LiteLLM adds to the usage object from Anthropic's own usage. It is not part of
+// the OpenAI schema, so the SDK has no field for it and it survives only in the
+// decoded extra fields — the same path as `cost`.
+//
+// Its counterpart, cache READS, does have a home in the OpenAI schema
+// (prompt_tokens_details.cached_tokens), so it is read there rather than here.
+func cacheCreationInputTokens(usage openai.CompletionUsage) int64 {
+	field, ok := usage.JSON.ExtraFields["cache_creation_input_tokens"]
+	if !ok {
+		return 0
+	}
+	tokens, err := strconv.ParseInt(strings.TrimSpace(field.Raw()), 10, 64)
+	if err != nil || tokens < 0 {
+		return 0
+	}
+	return tokens
 }
 
 // gatewayReportedCost resolves LiteLLM's cost for one request, in the order it
