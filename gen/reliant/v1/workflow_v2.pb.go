@@ -3288,7 +3288,8 @@ type LoopArgs struct {
 	Key string `protobuf:"bytes,10,opt,name=key,proto3" json:"key,omitempty"`
 	// OnFailure controls behavior when a parallel iteration fails.
 	// Values: "continue" (default, others keep running), "fail_fast" (cancel remaining),
-	//   "fail_all" (wait for all, then fail if any failed).
+	//
+	//	"fail_all" (wait for all, then fail if any failed).
 	OnFailure string `protobuf:"bytes,11,opt,name=on_failure,json=onFailure,proto3" json:"on_failure,omitempty"`
 	// Thread configures how parallel iterations relate to conversation threads.
 	// Each parallel iteration creates its own thread. Defaults to mode: new.
@@ -5418,16 +5419,16 @@ type CallLLMOutput struct {
 	// reads to decide whether the model has more to do. Closed vocabulary,
 	// derived once in Go (internal/workflow/stopreason), first match wins:
 	//
-	//   interrupted  our stream was cut short mid-flight; the work is unfinished
-	//   tool_use     the model requested tools; their results are new input
-	//   refused      the safety system declined (refusal / content_filter)
-	//   truncated    it ran out of output room mid-turn (max_tokens)
-	//   incomplete   the provider paused the turn and expects it handed back —
-	//                Anthropic pause_turn, OpenAI Responses end_turn:false or
-	//                incomplete:interrupted — and the turn produced text
-	//   error        a provider/transport failure, a pause that produced
-	//                nothing, or any reason this vocabulary does not recognize
-	//   done         the model finished on its own terms
+	//	interrupted  our stream was cut short mid-flight; the work is unfinished
+	//	tool_use     the model requested tools; their results are new input
+	//	refused      the safety system declined (refusal / content_filter)
+	//	truncated    it ran out of output room mid-turn (max_tokens)
+	//	incomplete   the provider paused the turn and expects it handed back —
+	//	             Anthropic pause_turn, OpenAI Responses end_turn:false or
+	//	             incomplete:interrupted — and the turn produced text
+	//	error        a provider/transport failure, a pause that produced
+	//	             nothing, or any reason this vocabulary does not recognize
+	//	done         the model finished on its own terms
 	//
 	// A provider adding a stop reason maps into one of these rather than
 	// becoming an eighth value, so a condition written against them cannot
