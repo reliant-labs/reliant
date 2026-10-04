@@ -491,6 +491,13 @@ type Querier interface {
 	ListDependenciesByPlan(ctx context.Context, planID string) ([]TaskDependency, error)
 	// Which of the candidate item ids this user has dismissed.
 	ListDismissedInboxItemIDs(ctx context.Context, arg ListDismissedInboxItemIDsParams) ([]string, error)
+	// Every firing of each named trigger after its newest SUCCESS (a launched
+	// firing whose run completed), newest first, capped at per_trigger rows. A
+	// trigger with no success returns its whole history up to the cap. This is
+	// the failure episode: Go reads its length and its oldest failure from it, so
+	// the episode is not truncated at the 10-firing health window. Same run
+	// columns and display-state table as ListRecentTriggerFirings.
+	ListFiringsSinceLastSuccess(ctx context.Context, arg ListFiringsSinceLastSuccessParams) ([]ListFiringsSinceLastSuccessRow, error)
 	// Which of the given threads are forks: their initial (sequence 0) context
 	// window links to a parent window. One round trip for a whole chat, where
 	// GetContextWindowBySequence(thread, 0) cost one per workflow.
@@ -503,14 +510,15 @@ type Querier interface {
 	// Dismissal is applied in Go (ListDismissedInboxItemIDs), uniformly for every
 	// dismissable kind. Disabled automations are not listed: pausing is the cure.
 	// kind (reliantv1.InboxItemKind): 1 approval, 2 question, 3 waiting for
-	// machine, 5 automation launch failed. 4 (automation failing) is derived in Go from
-	// the trigger's health — internal/triggers.ComputeHealth is its only
-	// implementation — and 6 (run finished) is reserved. Archived chats are not waiting on anyone.
+	// machine, 5 automation launch failed (one per failure episode), 6 run
+	// finished (opted-in automation). 4 (automation failing) is derived in Go from
+	// the trigger's firings — internal/triggers owns that rule. Archived chats are
+	// not waiting on anyone.
 	//
 	// Generic payload columns (a_text, b_text, a_int) carry the kind-specific bits:
 	//   approval:        a_text title, b_text metadata JSON, a_int approval_type
 	//   question:        a_text thread_id, b_text metadata JSON
-	//   launch failed:   a_text outcome_detail, b_text event kind
+	//   launch failed:   a_text newest outcome_detail, b_text event kind, a_int failures in the episode
 	//   waiting machine: a_text daemon_id, b_text daemon name
 	ListInboxPending(ctx context.Context, userID string) ([]ListInboxPendingRow, error)
 	ListItemDefaults(ctx context.Context, itemType int32) ([]ListItemDefaultsRow, error)

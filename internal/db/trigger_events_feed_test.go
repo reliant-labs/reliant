@@ -226,3 +226,60 @@ func TestTriggerNamesJoined(t *testing.T) {
 	assert.Equal(t, project.Name, byID["trg-orphan"].ProjectName)
 	assert.Empty(t, byID["trg-orphan"].DaemonName)
 }
+
+func TestFiringsSinceLastSuccess_StopsAtTheNewestSuccessAndIsNotWindowed(t *testing.T) {
+	repo, cleanup := setupTestDB(t)
+	defer cleanup()
+	ctx := context.Background()
+	tr := feedTrigger(t, repo, "trg-since")
+	base := time.Now().UTC().Truncate(time.Microsecond).Add(-2 * time.Hour)
+
+	// An old failure, a success, then 15 failures: longer than the 10-firing
+	// health window, so a window-based count would be wrong.
+	feedEvent(t, repo, "ev-old-fail", tr.ID, "test-user", core.TriggerEventFailed, base)
+	chatID := "chat-since-ok"
+	require.NoError(t, repo.CreateChat(ctx, &Chat{ID: chatID, ProjectID: "test-project", UserID: "test-user", WorkflowID: &chatID}))
+	require.NoError(t, repo.CreateWorkflow(ctx, &Workflow{ID: chatID, ChatID: chatID, WorkflowName: "wf", Thread: chatID, Status: Completed()}))
+	ok := newTestTriggerEvent("ev-ok", tr.ID, "test-user", "dd-ev-ok", base.Add(time.Minute))
+	ok.Outcome = core.TriggerEventLaunched
+	ok.ChatID = &chatID
+	created, err := repo.CreateTriggerEvent(ctx, ok)
+	require.NoError(t, err)
+	require.True(t, created)
+	for i := 0; i < 15; i++ {
+		feedEvent(t, repo, fmt.Sprintf("ev-fail-%02d", i), tr.ID, "test-user", core.TriggerEventFailed, base.Add(time.Duration(i+2)*time.Minute))
+	}
+
+	got, err := repo.FiringsSinceLastSuccess(ctx, "test-user", []string{tr.ID}, 500)
+	require.NoError(t, err)
+	require.Len(t, got[tr.ID], 15, "only the failures after the success, beyond the 10-firing window")
+	assert.Equal(t, "ev-fail-14", got[tr.ID][0].Event.ID, "newest first")
+	assert.Equal(t, "ev-fail-00", got[tr.ID][14].Event.ID, "the oldest is the episode's first failure")
+
+	capped, err := repo.FiringsSinceLastSuccess(ctx, "test-user", []string{tr.ID}, 3)
+	require.NoError(t, err)
+	assert.Len(t, capped[tr.ID], 3)
+
+	other, err := repo.FiringsSinceLastSuccess(ctx, "someone-else", []string{tr.ID}, 500)
+	require.NoError(t, err)
+	assert.Empty(t, other[tr.ID], "scoped to the user")
+}
+
+func TestTrigger_NotifyOnCompleteRoundTrips(t *testing.T) {
+	repo, cleanup := setupTestDB(t)
+	defer cleanup()
+	ctx := context.Background()
+	tr := newTestTrigger("trg-notify", "test-user", "test-project", "notify")
+	tr.NotifyOnComplete = true
+	require.NoError(t, repo.CreateTrigger(ctx, tr))
+
+	got, err := repo.GetTrigger(ctx, tr.ID)
+	require.NoError(t, err)
+	assert.True(t, got.NotifyOnComplete)
+
+	got.NotifyOnComplete = false
+	require.NoError(t, repo.UpdateTrigger(ctx, got))
+	got, err = repo.GetTrigger(ctx, tr.ID)
+	require.NoError(t, err)
+	assert.False(t, got.NotifyOnComplete)
+}

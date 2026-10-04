@@ -102,6 +102,8 @@ export interface Trigger {
   message: string;
   /** The daemon every launched run executes on. Always set by the server. */
   daemonId: string;
+  /** Tell the owner when a run completes (unread, OS notification, Inbox item). */
+  notifyOnComplete: boolean;
   /** The project's name, joined by the server. Unset when the project was deleted. */
   projectName?: string;
   /** The daemon's hostname, joined by the server. Unset when it never reported one. */
@@ -132,6 +134,8 @@ export interface TriggerDefinitionInput {
    * on any daemon, one that has it installed (validateTriggerDaemon).
    */
   daemonId: string;
+  /** Replaced on update like every field here, so an edit must send it back. */
+  notifyOnComplete: boolean;
   schedule: TriggerSchedule;
 }
 
@@ -221,6 +225,7 @@ export function triggerFromProto(proto: ProtoTrigger): Trigger {
     params,
     message: proto.message,
     daemonId: proto.daemonId,
+    notifyOnComplete: proto.notifyOnComplete,
     projectName: proto.projectName || undefined,
     daemonName: proto.daemonName || undefined,
     health: healthFromProto(proto.health),
@@ -258,6 +263,7 @@ export function definitionToProto(input: TriggerDefinitionInput): ProtoTriggerDe
     params,
     message: input.message,
     daemonId: input.daemonId,
+    notifyOnComplete: input.notifyOnComplete,
     source: { case: "schedule", value: schedule },
   });
 }
@@ -276,6 +282,7 @@ export function definitionFromTrigger(trigger: Trigger): TriggerDefinitionInput 
     params: { ...trigger.params },
     message: trigger.message,
     daemonId: trigger.daemonId,
+    notifyOnComplete: trigger.notifyOnComplete,
     schedule: trigger.schedule ?? { cron: [], timezone: "UTC", overlap: "skip" },
   };
 }

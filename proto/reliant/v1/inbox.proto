@@ -40,8 +40,8 @@ enum InboxItemKind {
   // An automation's newest firing failed to launch and no later firing has.
   // Informational.
   INBOX_ITEM_KIND_AUTOMATION_LAUNCH_FAILED = 5;
-  // Reserved: a root completion of an automation that opted in (G10, not yet
-  // built). Never returned today.
+  // An automation that opted in (Trigger.notify_on_complete) completed a run
+  // that has not been opened yet. Informational.
   INBOX_ITEM_KIND_RUN_FINISHED = 6;
 }
 
@@ -71,8 +71,10 @@ message InboxItem {
   InboxItemKind kind = 1;
 
   // Stable key for dismissal and de-duplication. Approvals and questions use
-  // their row id; waiting-for-machine uses the chat id. Failure items embed the
-  // id of the failing event, so a newer failure is a new item.
+  // their row id; waiting-for-machine uses the chat id; run-finished uses the
+  // chat id. Automation failure items embed the id of the FIRST failing event
+  // of the current failure episode, so repeated failures stay one item and a
+  // new episode is a new item.
   string item_id = 2;
 
   // The chat the item belongs to. Empty for automation failure kinds that have
@@ -100,6 +102,7 @@ message InboxItem {
     InboxWaitingForMachine waiting_for_machine = 22;
     InboxAutomationFailing automation_failing = 23;
     InboxAutomationLaunchFailed automation_launch_failed = 24;
+    InboxRunFinished run_finished = 25;
   }
 }
 
@@ -140,9 +143,17 @@ message InboxAutomationFailing {
 message InboxAutomationLaunchFailed {
   // Why the launch failed (the event's outcome detail).
   string reason = 1;
-  // The id of the failed trigger event.
+  // The id of the FIRST failed trigger event of this episode; the item id
+  // derives from it.
   string event_id = 2;
+  // How many consecutive firings have failed to launch in this episode.
+  int32 consecutive_failures = 3;
 }
+
+// InboxRunFinished is a completed run of an automation that opted in to
+// notifications. Open the item's chat_id to read the result; opening it clears
+// the item.
+message InboxRunFinished {}
 
 message DismissInboxItemRequest {
   string item_id = 1;

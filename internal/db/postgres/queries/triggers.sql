@@ -2,9 +2,9 @@
 INSERT INTO triggers (
     id, user_id, project_id, worktree_id, name, kind, enabled,
     workflow, presets, params, message, config, created_at, updated_at,
-    daemon_id
+    daemon_id, notify_on_complete
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16
 );
 
 -- name: GetTrigger :one
@@ -59,8 +59,9 @@ UPDATE triggers SET
     message = $8,
     config = $9,
     updated_at = $10,
-    daemon_id = $11
-WHERE id = $12;
+    daemon_id = $11,
+    notify_on_complete = $12
+WHERE id = $13;
 
 -- name: DeleteTrigger :exec
 DELETE FROM triggers WHERE id = $1;
@@ -187,3 +188,43 @@ WHERE
     AND (sqlc.narg('outcome')::text IS NULL OR outcome = sqlc.narg('outcome')::text)
 ORDER BY occurred_at DESC, id DESC
 LIMIT 1;
+
+-- name: ListFiringsSinceLastSuccess :many
+-- Every firing of each named trigger after its newest SUCCESS (a launched
+-- firing whose run completed), newest first, capped at per_trigger rows. A
+-- trigger with no success returns its whole history up to the cap. This is
+-- the failure episode: Go reads its length and its oldest failure from it, so
+-- the episode is not truncated at the 10-firing health window. Same run
+-- columns and display-state table as ListRecentTriggerFirings.
+WITH last_success AS (
+    SELECT DISTINCT ON (e.trigger_id) e.trigger_id, e.occurred_at, e.id
+    FROM trigger_events e
+    JOIN chats_with_activity c ON c.id = e.chat_id AND c.user_id = e.user_id
+    WHERE e.user_id = sqlc.arg('user_id')::text
+        AND e.trigger_id = ANY(sqlc.arg('trigger_ids')::text[])
+        AND e.outcome = 'launched'
+        AND c.display_state = 5
+    ORDER BY e.trigger_id, e.occurred_at DESC, e.id DESC
+), ranked AS (
+    SELECT
+        e.id,
+        row_number() OVER (PARTITION BY e.trigger_id ORDER BY e.occurred_at DESC, e.id DESC) AS rn
+    FROM trigger_events e
+    LEFT JOIN last_success s ON s.trigger_id = e.trigger_id
+    WHERE e.user_id = sqlc.arg('user_id')::text
+        AND e.trigger_id = ANY(sqlc.arg('trigger_ids')::text[])
+        AND (s.id IS NULL OR (e.occurred_at, e.id) > (s.occurred_at, s.id))
+)
+SELECT
+    sqlc.embed(e),
+    c.id AS run_chat_id,
+    c.title AS run_title,
+    rw.state AS run_root_state,
+    rw.stop_reason AS run_root_stop_reason,
+    COALESCE(c.display_state, 1)::integer AS run_display_state
+FROM ranked r
+JOIN trigger_events e ON e.id = r.id
+LEFT JOIN chats_with_activity c ON c.id = e.chat_id AND c.user_id = e.user_id
+LEFT JOIN workflows rw ON rw.id = c.workflow_id
+WHERE r.rn <= sqlc.arg('per_trigger')::integer
+ORDER BY e.trigger_id, e.occurred_at DESC, e.id DESC;

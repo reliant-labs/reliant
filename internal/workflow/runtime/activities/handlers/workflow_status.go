@@ -13,6 +13,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/triggers"
 	"github.com/reliant-labs/reliant/internal/workflow/builtin"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 )
@@ -112,7 +113,9 @@ func (a *WorkflowStatusActivity) Execute(ctx context.Context, input WorkflowStat
 		reason := ""
 		switch {
 		case input.Status == "failed", input.Status == "completed" && input.Outcome == model.OutcomeFailure:
-			reason = "workflow_failed"
+			if a.failureNotifies(ctx, input) {
+				reason = "workflow_failed"
+			}
 		case input.Status == "completed" && a.completionNotifies(ctx, input):
 			reason = "workflow_completed"
 		}
@@ -202,7 +205,36 @@ func (a *WorkflowStatusActivity) completionNotifies(ctx context.Context, input W
 		logging.Warn("[WorkflowStatus] Could not read chat launch kind; notifying", "chat_id", input.ChatID, "error", err)
 		return true
 	}
-	return isInteractiveLaunchKind(chat.LaunchKind)
+	if isInteractiveLaunchKind(chat.LaunchKind) {
+		return true
+	}
+	// An unattended schedule run stays silent unless its automation opted in.
+	if chat.LaunchKind == string(core.TriggerEventKindSchedule) && chat.TriggerID != nil {
+		trigger, err := a.repo.GetTrigger(ctx, *chat.TriggerID)
+		return err == nil && trigger != nil && trigger.NotifyOnComplete
+	}
+	return false
+}
+
+// failureNotifies reports whether a ROOT failure should mark the chat unread.
+// Every failure does, except a repeat: when a schedule-launched run fails and
+// the firing right before it in the same trigger also failed (with no success
+// between), the Inbox item for that automation just counts one more, and a
+// second OS notification would be the "hourly job pages you 24 times a day"
+// problem. The first failure of a streak notifies; a success ends the streak.
+// Interactive chats and agent-started runs always notify.
+func (a *WorkflowStatusActivity) failureNotifies(ctx context.Context, input WorkflowStatusInput) bool {
+	chat, err := a.repo.GetChat(ctx, input.ChatID)
+	if err != nil || chat == nil || chat.LaunchKind != string(core.TriggerEventKindSchedule) || chat.TriggerID == nil {
+		return true
+	}
+	firings, err := a.repo.FiringsSinceLastSuccess(ctx, chat.UserID, []string{*chat.TriggerID}, triggers.EpisodeFirings)
+	if err != nil {
+		logging.Warn("[WorkflowStatus] Could not read trigger firings; notifying", "chat_id", input.ChatID, "error", err)
+		return true
+	}
+	prior, found := triggers.PriorFailureStreak(firings[*chat.TriggerID], input.ChatID)
+	return !found || prior.Count == 0
 }
 
 // isInteractiveLaunchKind reports whether a chat's launch kind means a human

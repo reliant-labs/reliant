@@ -611,6 +611,11 @@ type Trigger struct {
 	// Read-only: display name (hostname) of the daemon the runs execute on.
 	// Empty when the daemon has not reported one.
 	DaemonName string `protobuf:"bytes,17,opt,name=daemon_name,json=daemonName,proto3" json:"daemon_name,omitempty"`
+	// When true, a completed run of this trigger marks its chat unread
+	// (raising the OS notification) and appears in the Inbox as "Run finished".
+	// Off by default: unattended completions are silent, failures always notify
+	// (research/WORKFLOW_UI.md §6.4).
+	NotifyOnComplete bool `protobuf:"varint,18,opt,name=notify_on_complete,json=notifyOnComplete,proto3" json:"notify_on_complete,omitempty"`
 	// What makes this trigger fire. One arm per kind; webhook and GitHub become
 	// new arms. The arm set also determines Trigger.kind, so the two cannot
 	// disagree.
@@ -770,6 +775,13 @@ func (x *Trigger) GetDaemonName() string {
 		return x.DaemonName
 	}
 	return ""
+}
+
+func (x *Trigger) GetNotifyOnComplete() bool {
+	if x != nil {
+		return x.NotifyOnComplete
+	}
+	return false
 }
 
 func (x *Trigger) GetSource() isTrigger_Source {
@@ -953,6 +965,10 @@ type TriggerDefinition struct {
 	// replaceable on update. Must be one of the caller's daemons and, when the
 	// project is installed on any daemon, one that has it installed.
 	DaemonId string `protobuf:"bytes,9,opt,name=daemon_id,json=daemonId,proto3" json:"daemon_id,omitempty"`
+	// Notify the owner when a run completes. Replaced on update, like every
+	// other field here, so a client editing a trigger must send the current
+	// value back.
+	NotifyOnComplete bool `protobuf:"varint,10,opt,name=notify_on_complete,json=notifyOnComplete,proto3" json:"notify_on_complete,omitempty"`
 	// What makes this trigger fire. Required on create: a trigger with no source
 	// can never fire.
 	//
@@ -1055,6 +1071,13 @@ func (x *TriggerDefinition) GetDaemonId() string {
 		return x.DaemonId
 	}
 	return ""
+}
+
+func (x *TriggerDefinition) GetNotifyOnComplete() bool {
+	if x != nil {
+		return x.NotifyOnComplete
+	}
+	return false
 }
 
 func (x *TriggerDefinition) GetSource() isTriggerDefinition_Source {
@@ -1982,7 +2005,7 @@ const file_reliant_v1_trigger_proto_rawDesc = "" +
 	"\aoverlap\x18\x04 \x01(\x0e2 .reliant.v1.TriggerOverlapPolicyR\aoverlap\x12*\n" +
 	"\x0ecatchup_window\x18\x05 \x01(\tH\x01R\rcatchupWindow\x88\x01\x01B\v\n" +
 	"\t_intervalB\x11\n" +
-	"\x0f_catchup_window\"\xf1\x06\n" +
+	"\x0f_catchup_window\"\x9f\a\n" +
 	"\aTrigger\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x1d\n" +
@@ -2008,7 +2031,8 @@ const file_reliant_v1_trigger_proto_rawDesc = "" +
 	"\x06health\x18\x0f \x01(\v2\x19.reliant.v1.TriggerHealthR\x06health\x12!\n" +
 	"\fproject_name\x18\x10 \x01(\tR\vprojectName\x12\x1f\n" +
 	"\vdaemon_name\x18\x11 \x01(\tR\n" +
-	"daemonName\x128\n" +
+	"daemonName\x12,\n" +
+	"\x12notify_on_complete\x18\x12 \x01(\bR\x10notifyOnComplete\x128\n" +
 	"\bschedule\x18\x14 \x01(\v2\x1a.reliant.v1.ScheduleSourceH\x00R\bschedule\x1a:\n" +
 	"\fPresetsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
@@ -2035,7 +2059,7 @@ const file_reliant_v1_trigger_proto_rawDesc = "" +
 	"\v_trigger_idB\n" +
 	"\n" +
 	"\b_chat_idB\x06\n" +
-	"\x04_run\"\xd6\x04\n" +
+	"\x04_run\"\x84\x05\n" +
 	"\x11TriggerDefinition\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1d\n" +
 	"\n" +
@@ -2047,7 +2071,9 @@ const file_reliant_v1_trigger_proto_rawDesc = "" +
 	"\apresets\x18\x06 \x03(\v2*.reliant.v1.TriggerDefinition.PresetsEntryR\apresets\x12A\n" +
 	"\x06params\x18\a \x03(\v2).reliant.v1.TriggerDefinition.ParamsEntryR\x06params\x12\x18\n" +
 	"\amessage\x18\b \x01(\tR\amessage\x12\x1b\n" +
-	"\tdaemon_id\x18\t \x01(\tR\bdaemonId\x128\n" +
+	"\tdaemon_id\x18\t \x01(\tR\bdaemonId\x12,\n" +
+	"\x12notify_on_complete\x18\n" +
+	" \x01(\bR\x10notifyOnComplete\x128\n" +
 	"\bschedule\x18\x14 \x01(\v2\x1a.reliant.v1.ScheduleSourceH\x00R\bschedule\x1a:\n" +
 	"\fPresetsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +

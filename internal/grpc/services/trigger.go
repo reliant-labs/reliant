@@ -572,19 +572,20 @@ func (s *TriggerService) triggerFromDefinition(
 
 	now := time.Now().UTC()
 	trigger := &core.Trigger{
-		UserID:     userID,
-		ProjectID:  def.ProjectId,
-		WorktreeID: def.WorktreeId,
-		Name:       def.Name,
-		Kind:       core.TriggerKindSchedule,
-		Workflow:   def.Workflow,
-		Presets:    def.Presets,
-		Params:     triggers.ParamsFromProto(def.Params),
-		Message:    def.Message,
-		DaemonID:   def.DaemonId,
-		Config:     raw,
-		CreatedAt:  now,
-		UpdatedAt:  now,
+		UserID:           userID,
+		ProjectID:        def.ProjectId,
+		WorktreeID:       def.WorktreeId,
+		Name:             def.Name,
+		Kind:             core.TriggerKindSchedule,
+		Workflow:         def.Workflow,
+		Presets:          def.Presets,
+		Params:           triggers.ParamsFromProto(def.Params),
+		Message:          def.Message,
+		DaemonID:         def.DaemonId,
+		NotifyOnComplete: def.NotifyOnComplete,
+		Config:           raw,
+		CreatedAt:        now,
+		UpdatedAt:        now,
 	}
 	if trigger.WorktreeID != nil && *trigger.WorktreeID == "" {
 		trigger.WorktreeID = nil

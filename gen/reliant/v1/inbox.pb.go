@@ -41,8 +41,8 @@ const (
 	// An automation's newest firing failed to launch and no later firing has.
 	// Informational.
 	InboxItemKind_INBOX_ITEM_KIND_AUTOMATION_LAUNCH_FAILED InboxItemKind = 5
-	// Reserved: a root completion of an automation that opted in (G10, not yet
-	// built). Never returned today.
+	// An automation that opted in (Trigger.notify_on_complete) completed a run
+	// that has not been opened yet. Informational.
 	InboxItemKind_INBOX_ITEM_KIND_RUN_FINISHED InboxItemKind = 6
 )
 
@@ -219,8 +219,10 @@ type InboxItem struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Kind  InboxItemKind          `protobuf:"varint,1,opt,name=kind,proto3,enum=reliant.v1.InboxItemKind" json:"kind,omitempty"`
 	// Stable key for dismissal and de-duplication. Approvals and questions use
-	// their row id; waiting-for-machine uses the chat id. Failure items embed the
-	// id of the failing event, so a newer failure is a new item.
+	// their row id; waiting-for-machine uses the chat id; run-finished uses the
+	// chat id. Automation failure items embed the id of the FIRST failing event
+	// of the current failure episode, so repeated failures stay one item and a
+	// new episode is a new item.
 	ItemId string `protobuf:"bytes,2,opt,name=item_id,json=itemId,proto3" json:"item_id,omitempty"`
 	// The chat the item belongs to. Empty for automation failure kinds that have
 	// no run.
@@ -245,6 +247,7 @@ type InboxItem struct {
 	//	*InboxItem_WaitingForMachine
 	//	*InboxItem_AutomationFailing
 	//	*InboxItem_AutomationLaunchFailed
+	//	*InboxItem_RunFinished
 	Payload       isInboxItem_Payload `protobuf_oneof:"payload"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -409,6 +412,15 @@ func (x *InboxItem) GetAutomationLaunchFailed() *InboxAutomationLaunchFailed {
 	return nil
 }
 
+func (x *InboxItem) GetRunFinished() *InboxRunFinished {
+	if x != nil {
+		if x, ok := x.Payload.(*InboxItem_RunFinished); ok {
+			return x.RunFinished
+		}
+	}
+	return nil
+}
+
 type isInboxItem_Payload interface {
 	isInboxItem_Payload()
 }
@@ -433,6 +445,10 @@ type InboxItem_AutomationLaunchFailed struct {
 	AutomationLaunchFailed *InboxAutomationLaunchFailed `protobuf:"bytes,24,opt,name=automation_launch_failed,json=automationLaunchFailed,proto3,oneof"`
 }
 
+type InboxItem_RunFinished struct {
+	RunFinished *InboxRunFinished `protobuf:"bytes,25,opt,name=run_finished,json=runFinished,proto3,oneof"`
+}
+
 func (*InboxItem_Approval) isInboxItem_Payload() {}
 
 func (*InboxItem_Question) isInboxItem_Payload() {}
@@ -442,6 +458,8 @@ func (*InboxItem_WaitingForMachine) isInboxItem_Payload() {}
 func (*InboxItem_AutomationFailing) isInboxItem_Payload() {}
 
 func (*InboxItem_AutomationLaunchFailed) isInboxItem_Payload() {}
+
+func (*InboxItem_RunFinished) isInboxItem_Payload() {}
 
 type InboxApproval struct {
 	state        protoimpl.MessageState `protogen:"open.v1"`
@@ -711,10 +729,13 @@ type InboxAutomationLaunchFailed struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Why the launch failed (the event's outcome detail).
 	Reason string `protobuf:"bytes,1,opt,name=reason,proto3" json:"reason,omitempty"`
-	// The id of the failed trigger event.
-	EventId       string `protobuf:"bytes,2,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	// The id of the FIRST failed trigger event of this episode; the item id
+	// derives from it.
+	EventId string `protobuf:"bytes,2,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"`
+	// How many consecutive firings have failed to launch in this episode.
+	ConsecutiveFailures int32 `protobuf:"varint,3,opt,name=consecutive_failures,json=consecutiveFailures,proto3" json:"consecutive_failures,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *InboxAutomationLaunchFailed) Reset() {
@@ -761,6 +782,52 @@ func (x *InboxAutomationLaunchFailed) GetEventId() string {
 	return ""
 }
 
+func (x *InboxAutomationLaunchFailed) GetConsecutiveFailures() int32 {
+	if x != nil {
+		return x.ConsecutiveFailures
+	}
+	return 0
+}
+
+// InboxRunFinished is a completed run of an automation that opted in to
+// notifications. Open the item's chat_id to read the result; opening it clears
+// the item.
+type InboxRunFinished struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *InboxRunFinished) Reset() {
+	*x = InboxRunFinished{}
+	mi := &file_reliant_v1_inbox_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *InboxRunFinished) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*InboxRunFinished) ProtoMessage() {}
+
+func (x *InboxRunFinished) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_inbox_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use InboxRunFinished.ProtoReflect.Descriptor instead.
+func (*InboxRunFinished) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_inbox_proto_rawDescGZIP(), []int{8}
+}
+
 type DismissInboxItemRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	ItemId        string                 `protobuf:"bytes,1,opt,name=item_id,json=itemId,proto3" json:"item_id,omitempty"`
@@ -770,7 +837,7 @@ type DismissInboxItemRequest struct {
 
 func (x *DismissInboxItemRequest) Reset() {
 	*x = DismissInboxItemRequest{}
-	mi := &file_reliant_v1_inbox_proto_msgTypes[8]
+	mi := &file_reliant_v1_inbox_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -782,7 +849,7 @@ func (x *DismissInboxItemRequest) String() string {
 func (*DismissInboxItemRequest) ProtoMessage() {}
 
 func (x *DismissInboxItemRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_inbox_proto_msgTypes[8]
+	mi := &file_reliant_v1_inbox_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -795,7 +862,7 @@ func (x *DismissInboxItemRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DismissInboxItemRequest.ProtoReflect.Descriptor instead.
 func (*DismissInboxItemRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_inbox_proto_rawDescGZIP(), []int{8}
+	return file_reliant_v1_inbox_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *DismissInboxItemRequest) GetItemId() string {
@@ -813,7 +880,7 @@ type DismissInboxItemResponse struct {
 
 func (x *DismissInboxItemResponse) Reset() {
 	*x = DismissInboxItemResponse{}
-	mi := &file_reliant_v1_inbox_proto_msgTypes[9]
+	mi := &file_reliant_v1_inbox_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -825,7 +892,7 @@ func (x *DismissInboxItemResponse) String() string {
 func (*DismissInboxItemResponse) ProtoMessage() {}
 
 func (x *DismissInboxItemResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_inbox_proto_msgTypes[9]
+	mi := &file_reliant_v1_inbox_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -838,7 +905,7 @@ func (x *DismissInboxItemResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DismissInboxItemResponse.ProtoReflect.Descriptor instead.
 func (*DismissInboxItemResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_inbox_proto_rawDescGZIP(), []int{9}
+	return file_reliant_v1_inbox_proto_rawDescGZIP(), []int{10}
 }
 
 var File_reliant_v1_inbox_proto protoreflect.FileDescriptor
@@ -854,7 +921,7 @@ const file_reliant_v1_inbox_proto_rawDesc = "" +
 	"\x05items\x18\x01 \x03(\v2\x15.reliant.v1.InboxItemR\x05items\x12%\n" +
 	"\x0eblocking_count\x18\x02 \x01(\x05R\rblockingCount\x12+\n" +
 	"\x11has_informational\x18\x03 \x01(\bR\x10hasInformational\x12\x1c\n" +
-	"\ttruncated\x18\x04 \x01(\bR\ttruncated\"\xfd\x05\n" +
+	"\ttruncated\x18\x04 \x01(\bR\ttruncated\"\xc0\x06\n" +
 	"\tInboxItem\x12-\n" +
 	"\x04kind\x18\x01 \x01(\x0e2\x19.reliant.v1.InboxItemKindR\x04kind\x12\x17\n" +
 	"\aitem_id\x18\x02 \x01(\tR\x06itemId\x12\x17\n" +
@@ -875,7 +942,8 @@ const file_reliant_v1_inbox_proto_rawDesc = "" +
 	"\bquestion\x18\x15 \x01(\v2\x19.reliant.v1.InboxQuestionH\x00R\bquestion\x12T\n" +
 	"\x13waiting_for_machine\x18\x16 \x01(\v2\".reliant.v1.InboxWaitingForMachineH\x00R\x11waitingForMachine\x12S\n" +
 	"\x12automation_failing\x18\x17 \x01(\v2\".reliant.v1.InboxAutomationFailingH\x00R\x11automationFailing\x12c\n" +
-	"\x18automation_launch_failed\x18\x18 \x01(\v2'.reliant.v1.InboxAutomationLaunchFailedH\x00R\x16automationLaunchFailedB\t\n" +
+	"\x18automation_launch_failed\x18\x18 \x01(\v2'.reliant.v1.InboxAutomationLaunchFailedH\x00R\x16automationLaunchFailed\x12A\n" +
+	"\frun_finished\x18\x19 \x01(\v2\x1c.reliant.v1.InboxRunFinishedH\x00R\vrunFinishedB\t\n" +
 	"\apayload\"\x98\x02\n" +
 	"\rInboxApproval\x12\x1f\n" +
 	"\vapproval_id\x18\x01 \x01(\tR\n" +
@@ -903,10 +971,12 @@ const file_reliant_v1_inbox_proto_rawDesc = "" +
 	"\x16InboxAutomationFailing\x121\n" +
 	"\x06health\x18\x01 \x01(\v2\x19.reliant.v1.TriggerHealthR\x06health\x12,\n" +
 	"\x10last_run_chat_id\x18\x02 \x01(\tH\x00R\rlastRunChatId\x88\x01\x01B\x13\n" +
-	"\x11_last_run_chat_id\"P\n" +
+	"\x11_last_run_chat_id\"\x83\x01\n" +
 	"\x1bInboxAutomationLaunchFailed\x12\x16\n" +
 	"\x06reason\x18\x01 \x01(\tR\x06reason\x12\x19\n" +
-	"\bevent_id\x18\x02 \x01(\tR\aeventId\"2\n" +
+	"\bevent_id\x18\x02 \x01(\tR\aeventId\x121\n" +
+	"\x14consecutive_failures\x18\x03 \x01(\x05R\x13consecutiveFailures\"\x12\n" +
+	"\x10InboxRunFinished\"2\n" +
 	"\x17DismissInboxItemRequest\x12\x17\n" +
 	"\aitem_id\x18\x01 \x01(\tR\x06itemId\"\x1a\n" +
 	"\x18DismissInboxItemResponse*\x8d\x02\n" +
@@ -935,7 +1005,7 @@ func file_reliant_v1_inbox_proto_rawDescGZIP() []byte {
 }
 
 var file_reliant_v1_inbox_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_reliant_v1_inbox_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
+var file_reliant_v1_inbox_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
 var file_reliant_v1_inbox_proto_goTypes = []any{
 	(InboxItemKind)(0),                  // 0: reliant.v1.InboxItemKind
 	(*ListInboxRequest)(nil),            // 1: reliant.v1.ListInboxRequest
@@ -946,10 +1016,11 @@ var file_reliant_v1_inbox_proto_goTypes = []any{
 	(*InboxWaitingForMachine)(nil),      // 6: reliant.v1.InboxWaitingForMachine
 	(*InboxAutomationFailing)(nil),      // 7: reliant.v1.InboxAutomationFailing
 	(*InboxAutomationLaunchFailed)(nil), // 8: reliant.v1.InboxAutomationLaunchFailed
-	(*DismissInboxItemRequest)(nil),     // 9: reliant.v1.DismissInboxItemRequest
-	(*DismissInboxItemResponse)(nil),    // 10: reliant.v1.DismissInboxItemResponse
-	(ApprovalType)(0),                   // 11: reliant.v1.ApprovalType
-	(*TriggerHealth)(nil),               // 12: reliant.v1.TriggerHealth
+	(*InboxRunFinished)(nil),            // 9: reliant.v1.InboxRunFinished
+	(*DismissInboxItemRequest)(nil),     // 10: reliant.v1.DismissInboxItemRequest
+	(*DismissInboxItemResponse)(nil),    // 11: reliant.v1.DismissInboxItemResponse
+	(ApprovalType)(0),                   // 12: reliant.v1.ApprovalType
+	(*TriggerHealth)(nil),               // 13: reliant.v1.TriggerHealth
 }
 var file_reliant_v1_inbox_proto_depIdxs = []int32{
 	3,  // 0: reliant.v1.ListInboxResponse.items:type_name -> reliant.v1.InboxItem
@@ -959,17 +1030,18 @@ var file_reliant_v1_inbox_proto_depIdxs = []int32{
 	6,  // 4: reliant.v1.InboxItem.waiting_for_machine:type_name -> reliant.v1.InboxWaitingForMachine
 	7,  // 5: reliant.v1.InboxItem.automation_failing:type_name -> reliant.v1.InboxAutomationFailing
 	8,  // 6: reliant.v1.InboxItem.automation_launch_failed:type_name -> reliant.v1.InboxAutomationLaunchFailed
-	11, // 7: reliant.v1.InboxApproval.approval_type:type_name -> reliant.v1.ApprovalType
-	12, // 8: reliant.v1.InboxAutomationFailing.health:type_name -> reliant.v1.TriggerHealth
-	1,  // 9: reliant.v1.InboxService.ListInbox:input_type -> reliant.v1.ListInboxRequest
-	9,  // 10: reliant.v1.InboxService.DismissInboxItem:input_type -> reliant.v1.DismissInboxItemRequest
-	2,  // 11: reliant.v1.InboxService.ListInbox:output_type -> reliant.v1.ListInboxResponse
-	10, // 12: reliant.v1.InboxService.DismissInboxItem:output_type -> reliant.v1.DismissInboxItemResponse
-	11, // [11:13] is the sub-list for method output_type
-	9,  // [9:11] is the sub-list for method input_type
-	9,  // [9:9] is the sub-list for extension type_name
-	9,  // [9:9] is the sub-list for extension extendee
-	0,  // [0:9] is the sub-list for field type_name
+	9,  // 7: reliant.v1.InboxItem.run_finished:type_name -> reliant.v1.InboxRunFinished
+	12, // 8: reliant.v1.InboxApproval.approval_type:type_name -> reliant.v1.ApprovalType
+	13, // 9: reliant.v1.InboxAutomationFailing.health:type_name -> reliant.v1.TriggerHealth
+	1,  // 10: reliant.v1.InboxService.ListInbox:input_type -> reliant.v1.ListInboxRequest
+	10, // 11: reliant.v1.InboxService.DismissInboxItem:input_type -> reliant.v1.DismissInboxItemRequest
+	2,  // 12: reliant.v1.InboxService.ListInbox:output_type -> reliant.v1.ListInboxResponse
+	11, // 13: reliant.v1.InboxService.DismissInboxItem:output_type -> reliant.v1.DismissInboxItemResponse
+	12, // [12:14] is the sub-list for method output_type
+	10, // [10:12] is the sub-list for method input_type
+	10, // [10:10] is the sub-list for extension type_name
+	10, // [10:10] is the sub-list for extension extendee
+	0,  // [0:10] is the sub-list for field type_name
 }
 
 func init() { file_reliant_v1_inbox_proto_init() }
@@ -986,6 +1058,7 @@ func file_reliant_v1_inbox_proto_init() {
 		(*InboxItem_WaitingForMachine)(nil),
 		(*InboxItem_AutomationFailing)(nil),
 		(*InboxItem_AutomationLaunchFailed)(nil),
+		(*InboxItem_RunFinished)(nil),
 	}
 	file_reliant_v1_inbox_proto_msgTypes[3].OneofWrappers = []any{}
 	file_reliant_v1_inbox_proto_msgTypes[4].OneofWrappers = []any{}
@@ -996,7 +1069,7 @@ func file_reliant_v1_inbox_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_reliant_v1_inbox_proto_rawDesc), len(file_reliant_v1_inbox_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   10,
+			NumMessages:   11,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

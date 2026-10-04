@@ -20,6 +20,7 @@ import {
   launchFailedItem,
   questionItem,
   renderInboxAt,
+  runFinishedItem,
   waitingItem,
 } from "./inboxTestUtils";
 
@@ -133,13 +134,61 @@ describe("InboxPage item kinds", () => {
     respond([failingItem()]);
     const { router } = renderInboxAt(<InboxPage />);
     const row = await screen.findByTestId("inbox-item-failing:trg-1:evt-9");
-    expect(within(row).getByText(/failed 3 times in a row/)).toBeInTheDocument();
+    expect(within(row).getByText(/Failed 3 times in a row/)).toBeInTheDocument();
 
     await userEvent.click(within(row).getByRole("button", { name: "Pause automation" }));
     expect(mocks.setEnabled).toHaveBeenCalledWith({ id: "trg-1", enabled: false }, expect.anything());
 
     await userEvent.click(within(row).getByRole("link", { name: "Open last run" }));
     await waitFor(() => expect(router.state.location.pathname).toBe("/runs/chat-last"));
+  });
+
+  it("a repeated failing automation shows one row counting the streak", async () => {
+    respond([failingItem()]);
+    renderInboxAt(<InboxPage />);
+    const row = await screen.findByTestId("inbox-item-failing:trg-1:evt-9");
+    expect(within(row).getByText("Failed 3 times in a row. tool error")).toBeInTheDocument();
+    expect(screen.getAllByTestId(/^inbox-item-/)).toHaveLength(1);
+  });
+
+  it("a launch-failed episode shows its count", async () => {
+    respond([
+      launchFailedItem({
+        payload: {
+          case: "automationLaunchFailed",
+          value: { reason: "machine was deleted", eventId: "evt-5", consecutiveFailures: 4 },
+        },
+      }),
+    ]);
+    renderInboxAt(<InboxPage />);
+    const row = await screen.findByTestId("inbox-item-evt-5");
+    expect(within(row).getByText("Failed 4 times in a row.")).toBeInTheDocument();
+  });
+
+  it("a single launch failure shows no streak count", async () => {
+    respond([launchFailedItem()]);
+    renderInboxAt(<InboxPage />);
+    const row = await screen.findByTestId("inbox-item-evt-5");
+    expect(within(row).queryByText(/in a row/)).toBeNull();
+  });
+
+  it("a finished run renders, opens its run, and can be dismissed without blocking", async () => {
+    respond([runFinishedItem()]);
+    renderInboxAt(<InboxPage />);
+    const row = await screen.findByTestId("inbox-item-run_finished:chat-1");
+    expect(within(row).getByText(/Run finished/)).toBeInTheDocument();
+    expect(within(row).getByLabelText("Run finished")).toBeInTheDocument();
+
+    await userEvent.click(within(row).getByRole("button", { name: /Dismiss/ }));
+    expect(mocks.dismissInboxItem.mock.calls[0]![0]).toMatchObject({ itemId: "run_finished:chat-1" });
+  });
+
+  it("the Open action of a finished run navigates to the run", async () => {
+    respond([runFinishedItem()]);
+    const { router } = renderInboxAt(<InboxPage />);
+    const row = await screen.findByTestId("inbox-item-run_finished:chat-1");
+    await userEvent.click(within(row).getByRole("link", { name: "Open" }));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/runs/chat-1"));
   });
 
   it("a failed launch shows the reason and Edit automation", async () => {

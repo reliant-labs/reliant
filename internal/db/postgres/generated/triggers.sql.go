@@ -44,28 +44,29 @@ const createTrigger = `-- name: CreateTrigger :exec
 INSERT INTO triggers (
     id, user_id, project_id, worktree_id, name, kind, enabled,
     workflow, presets, params, message, config, created_at, updated_at,
-    daemon_id
+    daemon_id, notify_on_complete
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16
 )
 `
 
 type CreateTriggerParams struct {
-	ID         string          `json:"id"`
-	UserID     string          `json:"user_id"`
-	ProjectID  string          `json:"project_id"`
-	WorktreeID sql.NullString  `json:"worktree_id"`
-	Name       string          `json:"name"`
-	Kind       string          `json:"kind"`
-	Enabled    bool            `json:"enabled"`
-	Workflow   string          `json:"workflow"`
-	Presets    json.RawMessage `json:"presets"`
-	Params     json.RawMessage `json:"params"`
-	Message    string          `json:"message"`
-	Config     json.RawMessage `json:"config"`
-	CreatedAt  time.Time       `json:"created_at"`
-	UpdatedAt  time.Time       `json:"updated_at"`
-	DaemonID   string          `json:"daemon_id"`
+	ID               string          `json:"id"`
+	UserID           string          `json:"user_id"`
+	ProjectID        string          `json:"project_id"`
+	WorktreeID       sql.NullString  `json:"worktree_id"`
+	Name             string          `json:"name"`
+	Kind             string          `json:"kind"`
+	Enabled          bool            `json:"enabled"`
+	Workflow         string          `json:"workflow"`
+	Presets          json.RawMessage `json:"presets"`
+	Params           json.RawMessage `json:"params"`
+	Message          string          `json:"message"`
+	Config           json.RawMessage `json:"config"`
+	CreatedAt        time.Time       `json:"created_at"`
+	UpdatedAt        time.Time       `json:"updated_at"`
+	DaemonID         string          `json:"daemon_id"`
+	NotifyOnComplete bool            `json:"notify_on_complete"`
 }
 
 func (q *Queries) CreateTrigger(ctx context.Context, arg CreateTriggerParams) error {
@@ -85,6 +86,7 @@ func (q *Queries) CreateTrigger(ctx context.Context, arg CreateTriggerParams) er
 		arg.CreatedAt,
 		arg.UpdatedAt,
 		arg.DaemonID,
+		arg.NotifyOnComplete,
 	)
 	return err
 }
@@ -184,7 +186,7 @@ func (q *Queries) GetLatestTriggerEvent(ctx context.Context, arg GetLatestTrigge
 
 const getTrigger = `-- name: GetTrigger :one
 SELECT
-    t.id, t.user_id, t.project_id, t.worktree_id, t.name, t.kind, t.enabled, t.workflow, t.presets, t.params, t.message, t.config, t.created_at, t.updated_at, t.daemon_id,
+    t.id, t.user_id, t.project_id, t.worktree_id, t.name, t.kind, t.enabled, t.workflow, t.presets, t.params, t.message, t.config, t.created_at, t.updated_at, t.daemon_id, t.notify_on_complete,
     COALESCE(p.name, '')::text AS project_name,
     COALESCE(d.hostname, '')::text AS daemon_name
 FROM triggers t
@@ -221,6 +223,7 @@ func (q *Queries) GetTrigger(ctx context.Context, id string) (GetTriggerRow, err
 		&i.Trigger.CreatedAt,
 		&i.Trigger.UpdatedAt,
 		&i.Trigger.DaemonID,
+		&i.Trigger.NotifyOnComplete,
 		&i.ProjectName,
 		&i.DaemonName,
 	)
@@ -317,7 +320,7 @@ func (q *Queries) GetTriggerEventByDedupe(ctx context.Context, arg GetTriggerEve
 }
 
 const listAllTriggers = `-- name: ListAllTriggers :many
-SELECT id, user_id, project_id, worktree_id, name, kind, enabled, workflow, presets, params, message, config, created_at, updated_at, daemon_id FROM triggers ORDER BY created_at DESC, id
+SELECT id, user_id, project_id, worktree_id, name, kind, enabled, workflow, presets, params, message, config, created_at, updated_at, daemon_id, notify_on_complete FROM triggers ORDER BY created_at DESC, id
 `
 
 // Every user's triggers. Only the schedule syncer's reconciliation calls this.
@@ -346,6 +349,103 @@ func (q *Queries) ListAllTriggers(ctx context.Context) ([]Trigger, error) {
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DaemonID,
+			&i.NotifyOnComplete,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listFiringsSinceLastSuccess = `-- name: ListFiringsSinceLastSuccess :many
+WITH last_success AS (
+    SELECT DISTINCT ON (e.trigger_id) e.trigger_id, e.occurred_at, e.id
+    FROM trigger_events e
+    JOIN chats_with_activity c ON c.id = e.chat_id AND c.user_id = e.user_id
+    WHERE e.user_id = $2::text
+        AND e.trigger_id = ANY($3::text[])
+        AND e.outcome = 'launched'
+        AND c.display_state = 5
+    ORDER BY e.trigger_id, e.occurred_at DESC, e.id DESC
+), ranked AS (
+    SELECT
+        e.id,
+        row_number() OVER (PARTITION BY e.trigger_id ORDER BY e.occurred_at DESC, e.id DESC) AS rn
+    FROM trigger_events e
+    LEFT JOIN last_success s ON s.trigger_id = e.trigger_id
+    WHERE e.user_id = $2::text
+        AND e.trigger_id = ANY($3::text[])
+        AND (s.id IS NULL OR (e.occurred_at, e.id) > (s.occurred_at, s.id))
+)
+SELECT
+    e.id, e.trigger_id, e.user_id, e.kind, e.dedupe_key, e.occurred_at, e.payload, e.outcome, e.outcome_detail, e.chat_id, e.created_at,
+    c.id AS run_chat_id,
+    c.title AS run_title,
+    rw.state AS run_root_state,
+    rw.stop_reason AS run_root_stop_reason,
+    COALESCE(c.display_state, 1)::integer AS run_display_state
+FROM ranked r
+JOIN trigger_events e ON e.id = r.id
+LEFT JOIN chats_with_activity c ON c.id = e.chat_id AND c.user_id = e.user_id
+LEFT JOIN workflows rw ON rw.id = c.workflow_id
+WHERE r.rn <= $1::integer
+ORDER BY e.trigger_id, e.occurred_at DESC, e.id DESC
+`
+
+type ListFiringsSinceLastSuccessParams struct {
+	PerTrigger int32    `json:"per_trigger"`
+	UserID     string   `json:"user_id"`
+	TriggerIds []string `json:"trigger_ids"`
+}
+
+type ListFiringsSinceLastSuccessRow struct {
+	TriggerEvent      TriggerEvent   `json:"trigger_event"`
+	RunChatID         sql.NullString `json:"run_chat_id"`
+	RunTitle          sql.NullString `json:"run_title"`
+	RunRootState      sql.NullInt32  `json:"run_root_state"`
+	RunRootStopReason sql.NullInt32  `json:"run_root_stop_reason"`
+	RunDisplayState   int32          `json:"run_display_state"`
+}
+
+// Every firing of each named trigger after its newest SUCCESS (a launched
+// firing whose run completed), newest first, capped at per_trigger rows. A
+// trigger with no success returns its whole history up to the cap. This is
+// the failure episode: Go reads its length and its oldest failure from it, so
+// the episode is not truncated at the 10-firing health window. Same run
+// columns and display-state table as ListRecentTriggerFirings.
+func (q *Queries) ListFiringsSinceLastSuccess(ctx context.Context, arg ListFiringsSinceLastSuccessParams) ([]ListFiringsSinceLastSuccessRow, error) {
+	rows, err := q.db.QueryContext(ctx, listFiringsSinceLastSuccess, arg.PerTrigger, arg.UserID, pq.Array(arg.TriggerIds))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListFiringsSinceLastSuccessRow{}
+	for rows.Next() {
+		var i ListFiringsSinceLastSuccessRow
+		if err := rows.Scan(
+			&i.TriggerEvent.ID,
+			&i.TriggerEvent.TriggerID,
+			&i.TriggerEvent.UserID,
+			&i.TriggerEvent.Kind,
+			&i.TriggerEvent.DedupeKey,
+			&i.TriggerEvent.OccurredAt,
+			&i.TriggerEvent.Payload,
+			&i.TriggerEvent.Outcome,
+			&i.TriggerEvent.OutcomeDetail,
+			&i.TriggerEvent.ChatID,
+			&i.TriggerEvent.CreatedAt,
+			&i.RunChatID,
+			&i.RunTitle,
+			&i.RunRootState,
+			&i.RunRootStopReason,
+			&i.RunDisplayState,
 		); err != nil {
 			return nil, err
 		}
@@ -538,7 +638,7 @@ func (q *Queries) ListTriggerEvents(ctx context.Context, arg ListTriggerEventsPa
 
 const listTriggers = `-- name: ListTriggers :many
 SELECT
-    t.id, t.user_id, t.project_id, t.worktree_id, t.name, t.kind, t.enabled, t.workflow, t.presets, t.params, t.message, t.config, t.created_at, t.updated_at, t.daemon_id,
+    t.id, t.user_id, t.project_id, t.worktree_id, t.name, t.kind, t.enabled, t.workflow, t.presets, t.params, t.message, t.config, t.created_at, t.updated_at, t.daemon_id, t.notify_on_complete,
     COALESCE(p.name, '')::text AS project_name,
     COALESCE(d.hostname, '')::text AS daemon_name
 FROM triggers t
@@ -588,6 +688,7 @@ func (q *Queries) ListTriggers(ctx context.Context, arg ListTriggersParams) ([]L
 			&i.Trigger.CreatedAt,
 			&i.Trigger.UpdatedAt,
 			&i.Trigger.DaemonID,
+			&i.Trigger.NotifyOnComplete,
 			&i.ProjectName,
 			&i.DaemonName,
 		); err != nil {
@@ -646,23 +747,25 @@ UPDATE triggers SET
     message = $8,
     config = $9,
     updated_at = $10,
-    daemon_id = $11
-WHERE id = $12
+    daemon_id = $11,
+    notify_on_complete = $12
+WHERE id = $13
 `
 
 type UpdateTriggerParams struct {
-	ProjectID  string          `json:"project_id"`
-	WorktreeID sql.NullString  `json:"worktree_id"`
-	Name       string          `json:"name"`
-	Enabled    bool            `json:"enabled"`
-	Workflow   string          `json:"workflow"`
-	Presets    json.RawMessage `json:"presets"`
-	Params     json.RawMessage `json:"params"`
-	Message    string          `json:"message"`
-	Config     json.RawMessage `json:"config"`
-	UpdatedAt  time.Time       `json:"updated_at"`
-	DaemonID   string          `json:"daemon_id"`
-	ID         string          `json:"id"`
+	ProjectID        string          `json:"project_id"`
+	WorktreeID       sql.NullString  `json:"worktree_id"`
+	Name             string          `json:"name"`
+	Enabled          bool            `json:"enabled"`
+	Workflow         string          `json:"workflow"`
+	Presets          json.RawMessage `json:"presets"`
+	Params           json.RawMessage `json:"params"`
+	Message          string          `json:"message"`
+	Config           json.RawMessage `json:"config"`
+	UpdatedAt        time.Time       `json:"updated_at"`
+	DaemonID         string          `json:"daemon_id"`
+	NotifyOnComplete bool            `json:"notify_on_complete"`
+	ID               string          `json:"id"`
 }
 
 // Identity columns (id, user_id, kind) are not updatable: changing the owner
@@ -681,6 +784,7 @@ func (q *Queries) UpdateTrigger(ctx context.Context, arg UpdateTriggerParams) (i
 		arg.Config,
 		arg.UpdatedAt,
 		arg.DaemonID,
+		arg.NotifyOnComplete,
 		arg.ID,
 	)
 	if err != nil {

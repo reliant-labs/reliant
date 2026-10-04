@@ -81,6 +81,10 @@ type Trigger struct {
 	// on. Required; validated at write time (there is no FK because the
 	// daemons table is a cache of the control plane's).
 	DaemonID string
+	// NotifyOnComplete opts the owner in to being told when a run of this
+	// trigger completes (unread + OS notification + a Run finished Inbox
+	// item). Unattended completions are otherwise silent.
+	NotifyOnComplete bool
 	// Config is the kind-specific source configuration, e.g. ScheduleConfig
 	// for TriggerKindSchedule. Stored as jsonb.
 	Config    json.RawMessage
@@ -223,6 +227,10 @@ type TriggerStore interface {
 	// firings (newest first, with their runs) in one query. A trigger with no
 	// firings has no map entry. Triggers belonging to other users never appear.
 	RecentTriggerFirings(ctx context.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*TriggerEventWithRun, error)
+	// FiringsSinceLastSuccess returns each trigger's firings newer than its
+	// newest success (a launched firing whose run completed), newest first,
+	// capped at perTrigger. It is the failure episode, not a fixed window.
+	FiringsSinceLastSuccess(ctx context.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*TriggerEventWithRun, error)
 	// GetLatestTriggerEvent returns the trigger's latest event, optionally
 	// filtered by outcome, and (nil, nil) when it has none.
 	GetLatestTriggerEvent(ctx context.Context, triggerID string, outcome *TriggerEventOutcome) (*TriggerEvent, error)

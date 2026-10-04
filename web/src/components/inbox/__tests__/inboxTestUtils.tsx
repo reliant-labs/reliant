@@ -140,7 +140,22 @@ export function launchFailedItem(overrides: Partial<InboxItem> = {}): InboxItem 
     projectName: "reliant",
     workflowName: "builtin://agent",
     waitingSince: new Date(Date.now() - 90 * 60_000).toISOString(),
-    payload: { case: "automationLaunchFailed", value: { reason: "machine was deleted", eventId: "evt-5" } },
+    payload: {
+      case: "automationLaunchFailed",
+      value: { reason: "machine was deleted", eventId: "evt-5", consecutiveFailures: 1 },
+    },
+    ...overrides,
+  });
+}
+
+export function runFinishedItem(overrides: Partial<InboxItem> = {}): InboxItem {
+  return create(InboxItemSchema, {
+    ...base,
+    kind: InboxItemKind.RUN_FINISHED,
+    itemId: "run_finished:chat-1",
+    triggerId: "trg-3",
+    triggerName: "Nightly triage",
+    payload: { case: "runFinished", value: {} },
     ...overrides,
   });
 }

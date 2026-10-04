@@ -42,6 +42,8 @@ func (s *triggerStore) CreateTrigger(ctx context.Context, t *core.Trigger) error
 		CreatedAt:  t.CreatedAt,
 		UpdatedAt:  t.UpdatedAt,
 		DaemonID:   t.DaemonID,
+
+		NotifyOnComplete: t.NotifyOnComplete,
 	})
 }
 
@@ -113,18 +115,19 @@ func (s *triggerStore) UpdateTrigger(ctx context.Context, t *core.Trigger) error
 	}
 
 	affected, err := s.q.UpdateTrigger(ctx, pgdb.UpdateTriggerParams{
-		ProjectID:  t.ProjectID,
-		WorktreeID: triggerPtrToNullString(t.WorktreeID),
-		Name:       t.Name,
-		Enabled:    t.Enabled,
-		Workflow:   t.Workflow,
-		Presets:    presets,
-		Params:     params,
-		Message:    t.Message,
-		Config:     triggerConfigToJSON(t.Config),
-		UpdatedAt:  t.UpdatedAt,
-		DaemonID:   t.DaemonID,
-		ID:         t.ID,
+		ProjectID:        t.ProjectID,
+		WorktreeID:       triggerPtrToNullString(t.WorktreeID),
+		Name:             t.Name,
+		Enabled:          t.Enabled,
+		Workflow:         t.Workflow,
+		Presets:          presets,
+		Params:           params,
+		Message:          t.Message,
+		Config:           triggerConfigToJSON(t.Config),
+		UpdatedAt:        t.UpdatedAt,
+		DaemonID:         t.DaemonID,
+		NotifyOnComplete: t.NotifyOnComplete,
+		ID:               t.ID,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to update trigger: %w", err)
@@ -336,6 +339,35 @@ func (s *triggerStore) RecentTriggerFirings(ctx context.Context, userID string, 
 	return out, nil
 }
 
+func (s *triggerStore) FiringsSinceLastSuccess(ctx context.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error) {
+	out := make(map[string][]*core.TriggerEventWithRun, len(triggerIDs))
+	if len(triggerIDs) == 0 || perTrigger <= 0 {
+		return out, nil
+	}
+	rows, err := s.q.ListFiringsSinceLastSuccess(ctx, pgdb.ListFiringsSinceLastSuccessParams{
+		UserID:     userID,
+		TriggerIds: triggerIDs,
+		PerTrigger: int32(perTrigger),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list firings since last success: %w", err)
+	}
+	for _, row := range rows {
+		ev, err := triggerEventFromPG(row.TriggerEvent)
+		if err != nil {
+			return nil, err
+		}
+		if ev.TriggerID == nil {
+			continue
+		}
+		out[*ev.TriggerID] = append(out[*ev.TriggerID], &core.TriggerEventWithRun{
+			Event: ev,
+			Run:   triggerRunFromPG(row.RunChatID, row.RunTitle, row.RunRootState, row.RunRootStopReason, row.RunDisplayState),
+		})
+	}
+	return out, nil
+}
+
 // triggerRunFromPG is nil unless the firing joined a chat that still exists.
 func triggerRunFromPG(chatID, title sql.NullString, rootState, rootStop sql.NullInt32, display int32) *core.TriggerEventRun {
 	if !chatID.Valid {
@@ -401,21 +433,22 @@ func triggerFromPG(row pgdb.Trigger) (*core.Trigger, error) {
 	}
 
 	return &core.Trigger{
-		ID:         row.ID,
-		UserID:     row.UserID,
-		ProjectID:  row.ProjectID,
-		WorktreeID: triggerNullStringToPtr(row.WorktreeID),
-		Name:       row.Name,
-		Kind:       core.TriggerKind(row.Kind),
-		Enabled:    row.Enabled,
-		Workflow:   row.Workflow,
-		Presets:    presets,
-		Params:     params,
-		Message:    row.Message,
-		Config:     config,
-		CreatedAt:  row.CreatedAt,
-		UpdatedAt:  row.UpdatedAt,
-		DaemonID:   row.DaemonID,
+		ID:               row.ID,
+		UserID:           row.UserID,
+		ProjectID:        row.ProjectID,
+		WorktreeID:       triggerNullStringToPtr(row.WorktreeID),
+		Name:             row.Name,
+		Kind:             core.TriggerKind(row.Kind),
+		Enabled:          row.Enabled,
+		Workflow:         row.Workflow,
+		Presets:          presets,
+		Params:           params,
+		Message:          row.Message,
+		Config:           config,
+		CreatedAt:        row.CreatedAt,
+		UpdatedAt:        row.UpdatedAt,
+		DaemonID:         row.DaemonID,
+		NotifyOnComplete: row.NotifyOnComplete,
 	}, nil
 }
 

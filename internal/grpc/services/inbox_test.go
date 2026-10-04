@@ -189,7 +189,7 @@ func TestListInbox_AutomationFailingReusesHealthAndClearsOnSuccess(t *testing.T)
 	failing := inboxByKind(resp.Items, reliantv1.InboxItemKind_INBOX_ITEM_KIND_AUTOMATION_FAILING)
 	require.Len(t, failing, 1)
 	assert.Equal(t, "trg-f", failing[0].TriggerId)
-	assert.Equal(t, "automation_failing:ev2", failing[0].ItemId)
+	assert.Equal(t, "automation_failing:ev1", failing[0].ItemId, "keyed by the first failure of the streak")
 	h := failing[0].GetAutomationFailing().Health
 	assert.Equal(t, reliantv1.TriggerHealthStatus_TRIGGER_HEALTH_STATUS_FAILING, h.Status)
 	assert.EqualValues(t, 2, h.ConsecutiveFailures)
@@ -229,8 +229,136 @@ func TestListInbox_LaunchFailedDismissalAndNewerFailureReappears(t *testing.T) {
 
 	f.firing(t, "evL2", "trg-l", core.TriggerEventFailed, "daemon still gone", base.Add(time.Minute))
 	resp = f.list(t, nil)
-	require.NotEmpty(t, resp.Items, "a newer failure reappears")
-	assert.Equal(t, "automation_launch_failed:evL2", inboxByKind(resp.Items, reliantv1.InboxItemKind_INBOX_ITEM_KIND_AUTOMATION_LAUNCH_FAILED)[0].ItemId)
+	assert.Empty(t, inboxByKind(resp.Items, reliantv1.InboxItemKind_INBOX_ITEM_KIND_AUTOMATION_LAUNCH_FAILED),
+		"a further failure in the same episode stays dismissed")
+
+	// A launch ends the episode; the next failure is a new one and reappears.
+	f.launched(t, "evL3", "chat-l3", "trg-l", base.Add(2*time.Minute), db.Completed())
+	f.firing(t, "evL4", "trg-l", core.TriggerEventFailed, "gone again", base.Add(3*time.Minute))
+	resp = f.list(t, nil)
+	launchFailed := inboxByKind(resp.Items, reliantv1.InboxItemKind_INBOX_ITEM_KIND_AUTOMATION_LAUNCH_FAILED)
+	require.Len(t, launchFailed, 1, "a new episode reappears")
+	assert.Equal(t, "automation_launch_failed:evL4", launchFailed[0].ItemId)
+	assert.EqualValues(t, 1, launchFailed[0].GetAutomationLaunchFailed().ConsecutiveFailures)
+}
+
+// launched records a launched firing of the trigger, backed by a run in the
+// given status, so the trigger has a success (or a failed run) to read.
+func (f *inboxFixture) launched(t *testing.T, eventID, chatID, triggerID string, at time.Time, status db.WorkflowStatus) {
+	t.Helper()
+	f.seed(t, chatID, "wf", status, at)
+	tid := triggerID
+	created, err := f.repo.CreateTriggerEvent(f.ctx, &core.TriggerEvent{
+		ID: eventID, TriggerID: &tid, UserID: f.userID, Kind: core.TriggerEventKindSchedule,
+		DedupeKey: "dd-" + eventID, OccurredAt: at.UTC().Truncate(time.Microsecond),
+		Payload: map[string]any{}, Outcome: core.TriggerEventLaunched, ChatID: &chatID,
+		CreatedAt: time.Now().UTC().Truncate(time.Microsecond),
+	})
+	require.NoError(t, err)
+	require.True(t, created)
+}
+
+func TestListInbox_FailingItemIDIsStableAcrossAStreakAndNewForANewOne(t *testing.T) {
+	f := newInboxFixture(t)
+	f.trigger(t, "trg-s")
+	base := time.Now().UTC().Add(-6 * time.Hour)
+	failing := func() []*reliantv1.InboxItem {
+		return inboxByKind(f.list(t, nil).Items, reliantv1.InboxItemKind_INBOX_ITEM_KIND_AUTOMATION_FAILING)
+	}
+
+	f.launched(t, "s1", "chat-s1", "trg-s", base, db.Failed())
+	f.launched(t, "s2", "chat-s2", "trg-s", base.Add(time.Hour), db.Failed())
+	first := failing()
+	require.Len(t, first, 1)
+	assert.Equal(t, "automation_failing:s1", first[0].ItemId)
+	assert.EqualValues(t, 2, first[0].GetAutomationFailing().Health.ConsecutiveFailures)
+
+	f.launched(t, "s3", "chat-s3", "trg-s", base.Add(2*time.Hour), db.Failed())
+	f.launched(t, "s4", "chat-s4", "trg-s", base.Add(3*time.Hour), db.Failed())
+	later := failing()
+	require.Len(t, later, 1)
+	assert.Equal(t, first[0].ItemId, later[0].ItemId, "more failures do not change the item id")
+	assert.EqualValues(t, 4, later[0].GetAutomationFailing().Health.ConsecutiveFailures, "the count is the whole streak")
+
+	// Dismissing the episode hides the rest of it.
+	_, err := f.inbox.DismissInboxItem(f.ctx, connect.NewRequest(&reliantv1.DismissInboxItemRequest{ItemId: later[0].ItemId}))
+	require.NoError(t, err)
+	f.launched(t, "s5", "chat-s5", "trg-s", base.Add(4*time.Hour), db.Failed())
+	assert.Empty(t, failing(), "a further failure of a dismissed episode stays hidden")
+
+	// A success ends the episode; the next streak is a new item and shows again.
+	f.launched(t, "s6", "chat-s6", "trg-s", base.Add(5*time.Hour), db.Completed())
+	assert.Empty(t, failing())
+	f.launched(t, "s7", "chat-s7", "trg-s", base.Add(6*time.Hour), db.Failed())
+	f.launched(t, "s8", "chat-s8", "trg-s", base.Add(7*time.Hour), db.Failed())
+	again := failing()
+	require.Len(t, again, 1, "a new episode reappears after a dismissal of the old one")
+	assert.Equal(t, "automation_failing:s7", again[0].ItemId)
+	assert.EqualValues(t, 2, again[0].GetAutomationFailing().Health.ConsecutiveFailures)
+}
+
+func TestListInbox_LaunchFailedItemCountsTheEpisode(t *testing.T) {
+	f := newInboxFixture(t)
+	f.trigger(t, "trg-c")
+	base := time.Now().UTC().Add(-time.Hour)
+	f.firing(t, "c1", "trg-c", core.TriggerEventFailed, "one", base)
+	f.firing(t, "c2", "trg-c", core.TriggerEventFailed, "two", base.Add(time.Minute))
+	f.firing(t, "c3", "trg-c", core.TriggerEventFailed, "three", base.Add(2*time.Minute))
+	items := inboxByKind(f.list(t, nil).Items, reliantv1.InboxItemKind_INBOX_ITEM_KIND_AUTOMATION_LAUNCH_FAILED)
+	require.Len(t, items, 1)
+	assert.Equal(t, "automation_launch_failed:c1", items[0].ItemId)
+	assert.EqualValues(t, 3, items[0].GetAutomationLaunchFailed().ConsecutiveFailures)
+	assert.Equal(t, "three", items[0].GetAutomationLaunchFailed().Reason, "the reason is the newest failure's")
+}
+
+func (f *inboxFixture) notifyingTrigger(t *testing.T, id string, notify bool) {
+	t.Helper()
+	f.trigger(t, id)
+	tr, err := f.repo.GetTrigger(f.ctx, id)
+	require.NoError(t, err)
+	tr.NotifyOnComplete = notify
+	require.NoError(t, f.repo.UpdateTrigger(f.ctx, tr))
+}
+
+func TestListInbox_RunFinishedOnlyForOptedInAutomationAndClearsWhenOpened(t *testing.T) {
+	f := newInboxFixture(t)
+	f.notifyingTrigger(t, "trg-on", true)
+	f.notifyingTrigger(t, "trg-off", false)
+	at := time.Now().UTC().Add(-time.Hour)
+	f.launched(t, "rf-on", "chat-on", "trg-on", at, db.Completed())
+	f.launched(t, "rf-off", "chat-off", "trg-off", at, db.Completed())
+	require.NoError(t, f.repo.UpdateChatUnread(f.ctx, "chat-on", true, "workflow_completed"))
+	require.NoError(t, f.repo.UpdateChatUnread(f.ctx, "chat-off", true, "workflow_completed"))
+
+	finished := inboxByKind(f.list(t, nil).Items, reliantv1.InboxItemKind_INBOX_ITEM_KIND_RUN_FINISHED)
+	require.Len(t, finished, 1, "only the opted-in automation produces a Run finished item")
+	assert.Equal(t, "run_finished:chat-on", finished[0].ItemId)
+	assert.Equal(t, "chat-on", finished[0].ChatId)
+	assert.Equal(t, "trg-on", finished[0].TriggerId)
+	assert.NotNil(t, finished[0].GetRunFinished())
+	resp := f.list(t, nil)
+	assert.True(t, resp.HasInformational)
+	assert.EqualValues(t, 0, resp.BlockingCount)
+
+	require.NoError(t, f.repo.UpdateChatUnread(f.ctx, "chat-on", false, "opened"))
+	assert.Empty(t, inboxByKind(f.list(t, nil).Items, reliantv1.InboxItemKind_INBOX_ITEM_KIND_RUN_FINISHED), "opening the chat clears it")
+}
+
+func TestListInbox_RunFinishedCanBeDismissedAndExcludesFailedAndRunning(t *testing.T) {
+	f := newInboxFixture(t)
+	f.notifyingTrigger(t, "trg-d", true)
+	at := time.Now().UTC().Add(-time.Hour)
+	f.launched(t, "d1", "chat-d1", "trg-d", at, db.Completed())
+	f.launched(t, "d2", "chat-d2", "trg-d", at.Add(time.Minute), db.Failed())
+	f.launched(t, "d3", "chat-d3", "trg-d", at.Add(2*time.Minute), db.Active())
+	for _, c := range []string{"chat-d1", "chat-d2", "chat-d3"} {
+		require.NoError(t, f.repo.UpdateChatUnread(f.ctx, c, true, "x"))
+	}
+	finished := inboxByKind(f.list(t, nil).Items, reliantv1.InboxItemKind_INBOX_ITEM_KIND_RUN_FINISHED)
+	require.Len(t, finished, 1, "a failed or still-running run is not a finish")
+	_, err := f.inbox.DismissInboxItem(f.ctx, connect.NewRequest(&reliantv1.DismissInboxItemRequest{ItemId: finished[0].ItemId}))
+	require.NoError(t, err)
+	assert.Empty(t, inboxByKind(f.list(t, nil).Items, reliantv1.InboxItemKind_INBOX_ITEM_KIND_RUN_FINISHED))
 }
 
 func TestDismissInboxItem_RejectsApprovalsAndQuestions(t *testing.T) {
