@@ -198,6 +198,17 @@ var generatedToolParams = map[string]ToolParams{
 		Bindable:   map[string]struct{}{},
 		Unbindable: map[string]string{},
 	},
+	"http__request": {
+		Bindable: map[string]struct{}{
+			"body":       {},
+			"connection": {},
+			"headers":    {},
+			"method":     {},
+			"query":      {},
+			"url":        {},
+		},
+		Unbindable: map[string]string{},
+	},
 	"list_presets": {
 		Bindable:   map[string]struct{}{},
 		Unbindable: map[string]string{},

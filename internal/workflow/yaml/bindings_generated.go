@@ -47,6 +47,15 @@ var generatedEdgeCaseFieldKeys = map[string]struct{}{
 }
 
 var generatedNodeBindingsByType = map[string]generatedNodeBinding{
+	"action": {
+		oneofFieldName: "action",
+		isStructural:   false,
+		argFieldKeys: map[string]struct{}{
+			"connection": {},
+			"uses":       {},
+			"with":       {},
+		},
+	},
 	"approval": {
 		oneofFieldName: "approval",
 		isStructural:   false,

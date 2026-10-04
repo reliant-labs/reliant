@@ -4,12 +4,14 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os/exec"
 	"strings"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/netguard"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -41,6 +43,33 @@ func TestNewServerClientRejectsUnsafeEntries(t *testing.T) {
 	}
 	_, err := NewServerClient(Entry{Name: "ok", URL: "https://example.com/mcp"}, Creds{})
 	assert.NoError(t, err)
+}
+
+// A hostname that passes the literal-IP check but resolves to a private
+// address must be refused at dial time, not just by inspecting the URL string.
+func TestHostnameResolvingToPrivateIPIsRefused(t *testing.T) {
+	guard := netguard.New()
+	guard.Resolve = func(context.Context, string) ([]net.IP, error) { return []net.IP{net.ParseIP("10.9.9.9")}, nil }
+	c, err := NewServerClientWithGuard(Entry{Name: "x", URL: "https://innocent.example.com/mcp"}, Creds{}, guard)
+	require.NoError(t, err, "the URL string alone looks fine")
+	err = c.Initialize(context.Background())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "blocked")
+
+	guard.Resolve = func(context.Context, string) ([]net.IP, error) { return []net.IP{net.ParseIP("169.254.169.254")}, nil }
+	c, err = NewServerClientWithGuard(Entry{Name: "x", URL: "https://innocent.example.com/mcp"}, Creds{}, guard)
+	require.NoError(t, err)
+	_, err = c.ListTools(context.Background())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "blocked")
+}
+
+func TestDefaultClientUsesTheGuard(t *testing.T) {
+	c, err := NewServerClient(Entry{Name: "ok", URL: "https://example.com/mcp"}, Creds{})
+	require.NoError(t, err)
+	tr, ok := c.http.Transport.(*http.Transport)
+	require.True(t, ok)
+	require.NotNil(t, tr.DialContext, "the default client must dial through netguard")
 }
 
 func TestClientSpeaksStreamableHTTP(t *testing.T) {

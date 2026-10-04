@@ -71,6 +71,32 @@ Use `save_message` to capture output without a separate save_message node:
 
 ---
 
+## Action
+
+Run an integration action (for example an HTTP request)
+
+### Inputs
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `uses` | string | No | - | Which integration action to run, as integration/action@major |
+| `with` | map | No | - | Action parameters, keyed as in the action's schema |
+| `connection` | string | No | - | Saved connection id to authenticate this action with |
+
+### Outputs
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `content` | string | - |
+| `is_error` | boolean | - |
+| `status_code` | integer | - |
+| `uses` | string | - |
+| `retryable` | boolean | - |
+| `connection_id` | string | - |
+| `error_code` | string | - |
+
+---
+
 ## Agent
 
 Invoke an agent or sub-workflow

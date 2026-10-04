@@ -1,0 +1,161 @@
+// Copyright (c) 2025 Reliant Labs. All rights reserved.
+syntax = "proto3";
+
+package reliant.v1;
+
+import "google/protobuf/struct.proto";
+
+option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
+
+// IntegrationManifest is the declarative description of one integration: how a
+// user authenticates (connection), what it can do (actions), and what can start
+// a run from it (triggers). It is authored as YAML, embedded in the binary, and
+// decoded through protojson, so an unknown field is a load error.
+//
+// Enum-like fields (connection type, placement, pagination style) are strings
+// validated by the loader rather than proto enums, so manifests stay readable
+// (`placement: server`) and new values do not need a wire change.
+message IntegrationManifest {
+  // Id is the stable integration id, e.g. "http". Lower-case, [a-z][a-z0-9_]*.
+  string id = 1;
+  // Version is the manifest MAJOR version. `uses: http/request@1` pins it;
+  // breaking param changes ship as version 2 alongside version 1.
+  int32 version = 2;
+  string display_name = 3;
+  string description = 4;
+  string icon = 5;
+  string category = 6;
+  ConnectionSpec connection = 7;
+  repeated ActionSpec actions = 8;
+  // Triggers are reserved for a later phase. A manifest that declares any is
+  // rejected at load until trigger support exists.
+  repeated TriggerSpec triggers = 9;
+}
+
+// ConnectionSpec says how requests are authenticated and where they may go.
+message ConnectionSpec {
+  // Type is "none" today. "api_key", "oauth2", "oauth_app" and "basic" are
+  // reserved for the connections phase and rejected at load.
+  string type = 1;
+  // BaseUrl is the https origin (and optional path prefix) request `path`s
+  // resolve against. Every request host must be this host or in allowed_hosts.
+  string base_url = 2;
+  repeated string allowed_hosts = 3;
+  map<string, string> default_headers = 4;
+  // AllowAnyPublicHost lets request.url name any host. It exists for the
+  // generic HTTP integration only; the loader accepts it solely with type
+  // "none", and the runtime still refuses private addresses after DNS.
+  bool allow_any_public_host = 5;
+  // OptionalAuthKinds lets a connection of type "none" still accept a saved
+  // credential when the caller names one. Values: "api_key", "basic". The
+  // credential must belong to a connection for THIS integration id, so a token
+  // saved for another service can never be pointed at an arbitrary host.
+  repeated string optional_auth_kinds = 6;
+}
+
+// ActionSpec is one operation: usable as a workflow node and, optionally, as
+// an agent tool, with one parameter schema and one output schema.
+message ActionSpec {
+  // Id is unique within the manifest, e.g. "request" or "issue.create".
+  string id = 1;
+  string display_name = 2;
+  string description = 3;
+  // Kind is "call" (default). "await_external" is reserved.
+  string kind = 4;
+  // Placement is "server", "any" or "daemon". Only curated (embedded)
+  // manifests may claim server or any.
+  string placement = 5;
+  // Mutates is the capability-class flag: the action changes external state.
+  // Recorded now; enforcement for triggered runs is a later phase.
+  bool mutates = 6;
+  ToolSpec tool = 7;
+  // Params is a JSON Schema for the action's parameters.
+  google.protobuf.Struct params = 8;
+  HttpRequestSpec request = 9;
+  OutputSpec output = 10;
+}
+
+// ToolSpec controls exposing an action to agents as a tool.
+message ToolSpec {
+  bool expose = 1;
+  // Name overrides the derived tool name (`<integration>__<action>` with dots
+  // in the action id turned into underscores).
+  string name = 2;
+  repeated string tags = 3;
+}
+
+// HttpRequestSpec is the declarative request template. String values may embed
+// {{ expr }} (CEL over `params`). A string that is exactly one {{ expr }}
+// keeps the expression's native type; otherwise the result is stringified.
+// Values interpolated into `path` are percent-escaped.
+message HttpRequestSpec {
+  // Method is GET, POST, PUT, PATCH or DELETE. A template may be used.
+  string method = 1;
+  // Url is a full URL template, for integrations that allow it.
+  string url = 2;
+  // Path is appended to the connection base_url. Mutually exclusive with url.
+  string path = 3;
+  map<string, string> query = 4;
+  map<string, string> headers = 5;
+  // Body is a JSON template (any JSON shape); strings inside are templated.
+  google.protobuf.Value body = 6;
+  PaginationSpec pagination = 7;
+  // Errors maps response statuses to retryable/permanent plus a message.
+  // The first matching rule wins; unmatched non-2xx use the defaults
+  // (429 and 5xx retryable, other statuses permanent).
+  repeated ErrorRule errors = 8;
+  // TimeoutSeconds defaults to 30, max 120.
+  int32 timeout_seconds = 9;
+  // MaxResponseBytes defaults to 1 MiB, max 10 MiB. Larger bodies are an error.
+  int64 max_response_bytes = 10;
+  // HeadersExpr, QueryExpr and BodyExpr are CEL over `params`, for requests
+  // whose shape the caller supplies (the generic HTTP action). HeadersExpr and
+  // QueryExpr must yield a map of scalars; BodyExpr any JSON value, or null for
+  // no body. They are merged over the static maps / replace `body`.
+  string headers_expr = 11;
+  string query_expr = 12;
+  string body_expr = 13;
+}
+
+// PaginationSpec follows pages and concatenates each page's selected list.
+message PaginationSpec {
+  // Style is "link_header", "cursor" or "page".
+  string style = 1;
+  // MaxPages bounds the walk (default 10, max 100).
+  int32 max_pages = 2;
+  // CursorParam is the query parameter that carries the cursor (cursor style).
+  string cursor_param = 3;
+  // NextCursor is CEL over `response` yielding the next cursor, or empty/null
+  // to stop (cursor style).
+  string next_cursor = 4;
+  // PageParam is the query parameter carrying the page number (page style).
+  string page_param = 5;
+  // StartPage is the first page number (default 1).
+  int32 start_page = 6;
+}
+
+// ErrorRule maps one status (or an inclusive range) to an error outcome.
+message ErrorRule {
+  int32 status = 1;
+  int32 status_min = 2;
+  int32 status_max = 3;
+  bool retryable = 4;
+  // Message is a template over `status` and `response`.
+  string message = 5;
+}
+
+// OutputSpec selects what part of the response becomes the node's data.
+message OutputSpec {
+  // Select is "$" (whole parsed body; the default), "$raw" (raw body text as
+  // {"body": "..."}) or CEL over `response`, `status` and `headers`. With
+  // pagination, select is evaluated per page, must yield a list, and the
+  // lists are concatenated into {"items": [...]}.
+  string select = 1;
+  // Schema is a JSON Schema for `data`.
+  google.protobuf.Struct schema = 2;
+}
+
+// TriggerSpec is reserved for the triggers phase.
+message TriggerSpec {
+  string id = 1;
+}
