@@ -1886,6 +1886,9 @@ function App() {
                 onOpenAutomations={() => {
                   navigate({ to: '/automations' });
                 }}
+                onOpenInbox={() => {
+                  navigate({ to: '/inbox' });
+                }}
                 onOpenRuns={(search) => {
                   navigate({ to: '/runs', search: search ?? {} });
                 }}
@@ -1921,6 +1924,9 @@ function App() {
                   }}
                   onOpenAutomations={() => {
                     navigate({ to: '/automations' });
+                  }}
+                  onOpenInbox={() => {
+                    navigate({ to: '/inbox' });
                   }}
                   onOpenRuns={(search) => {
                     navigate({ to: '/runs', search: search ?? {} });

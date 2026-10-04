@@ -75,6 +75,32 @@ export function patchPendingQuestionCache(
 }
 
 /**
+ * Answer a pending ask_user question by id, then clear that chat's pending
+ * question from the cache. Store-free, so the chat composer (through
+ * chatStore.resolveQuestion) and the Inbox, which holds questions from many
+ * chats, share one path.
+ */
+export async function answerQuestion(
+  chatId: string,
+  questionId: string,
+  answers: { answers: Array<{ question: string; selected: string[]; freetext?: string }> },
+): Promise<void> {
+  await resolvePendingQuestion(chatId, questionId, "reply", JSON.stringify(answers));
+}
+
+/** Resolve a question with any action, and clear the chat's pending cache. */
+export async function resolvePendingQuestion(
+  chatId: string,
+  questionId: string,
+  action: string,
+  responseData?: string,
+): Promise<void> {
+  await questionGrpc.resolveQuestion(questionId, action, responseData);
+  // Optimistically clear the pending question in the React Query cache.
+  patchPendingQuestionCache(chatId, null);
+}
+
+/**
  * Imperatively approve every pending approval for a chat — for non-component
  * contexts like the global keyboard shortcut. Reads pending straight from the
  * cache, optimistically resolves, then calls the batch API (rolling back on

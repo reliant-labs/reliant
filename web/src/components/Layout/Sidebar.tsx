@@ -48,6 +48,7 @@ import { isAdoptedAutomation, isAutomationLaunch, withOpenChatPinned } from "../
 import { useSidebarPinStore } from "../../store/sidebarPinStore";
 import { LaunchKindIcon } from "../runs/LaunchKindIcon";
 import { AutomationActivityPill } from "./AutomationActivityPill";
+import { InboxNavItem } from "../inbox/InboxNavItem";
 import type { RunsSearch } from "../../routeSchemas";
 import { isForgeUIEnabled } from "../../lib/forgeFeature";
 import { useMarkUnread } from "../../hooks/message-queries";
@@ -130,6 +131,7 @@ interface SidebarProps {
   onOpenChatSearch?: () => void;
   onNavigateToSettings?: () => void;
   onOpenForge?: () => void;
+  onOpenInbox?: () => void;
 }
 
 /**
@@ -661,6 +663,7 @@ function SidebarComponent({
   onOpenWorkflows,
   onOpenAutomations,
   onOpenRuns,
+  onOpenInbox,
   onOpenChatSearch,
   onNavigateToSettings,
   onOpenForge,
@@ -1530,6 +1533,7 @@ function SidebarComponent({
             onClick={handleNewChat}
             testId="create-chat-button"
           />
+          <InboxNavItem onOpen={onOpenInbox} />
           {showForgeEntry && (
             <SidebarNavButton
               icon={<Boxes className="h-4 w-4" />}

@@ -1730,9 +1730,9 @@ type ListChatsRequest struct {
 	ProjectId string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"` // Required
 	Limit     *int32                 `protobuf:"varint,2,opt,name=limit,proto3,oneof" json:"limit,omitempty"`
 	// When true, return only chats the sidebar lists (chats_with_activity.
-	// list_in_sidebar): interactive chats, adopted chats, and — until the Inbox
-	// ships — non-agent automations awaiting input. Agent-started runs appear
-	// only once adopted.
+	// list_in_sidebar): interactive chats and adopted chats. An automation or
+	// agent-started run appears only once adopted; one awaiting input surfaces
+	// in the Inbox instead.
 	SidebarOnly   *bool `protobuf:"varint,3,opt,name=sidebar_only,json=sidebarOnly,proto3,oneof" json:"sidebar_only,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

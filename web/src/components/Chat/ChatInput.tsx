@@ -50,7 +50,7 @@ import { useProjectStore } from "../../store/projectStore";
 import { usePreferencesStore, DEFAULT_WORKFLOW } from "../../store/preferencesStore";
 import { useChatStore } from "../../store/chatStore";
 import { useChat, getChatFromCache, patchChatCaches } from "../../hooks/chat-queries";
-import { usePendingQuestion } from "../../hooks/approval-queries";
+import { answerQuestion, usePendingQuestion } from "../../hooks/approval-queries";
 import { isWorkflowPaused } from "../../lib/workflowLifecycle";
 import type { WorkflowExecution } from "./ExecutionSidebar/types";
 import { getThreadColor, formatNodeId, resolveThreadNameFromActiveThreads } from "./thread-views/threadUtils";
@@ -61,7 +61,7 @@ import {
   paramValuesEqual,
   reconcileParamsWithServer,
 } from "../../lib/paramUtils";
-import { parseAskUserMetadata } from "./askUserUtils";
+import { askUserQuestionItems } from "./askUserUtils";
 import { QuestionPrompt } from "./QuestionPrompt";
 import { useQueuedAgentMessages } from "../../hooks/queued-agent-messages";
 import { loadTagModelConfigs } from "../Settings/ModelPreferences";
@@ -271,7 +271,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
     const pendingQuestion = pendingQuestionQuery.data ?? null;
     const hasPendingQuestion = !!pendingQuestion;
     const askUserQuestion = useMemo(
-      () => parseAskUserMetadata(pendingQuestion?.metadata),
+      () => askUserQuestionItems(pendingQuestion?.metadata),
       [pendingQuestion?.metadata]
     );
     const showAskOnly = hasPendingQuestion && !!askUserQuestion;
@@ -1207,12 +1207,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
 
     const handleQuestionSubmit = useCallback(async (answer: { answers: Array<{ question: string; selected: string[]; freetext?: string }> }) => {
       if (!chatId || !pendingQuestion) return;
-      await useChatStore.getState().resolveQuestion(
-        chatId,
-        pendingQuestion.question_id,
-        "reply",
-        JSON.stringify(answer)
-      );
+      await answerQuestion(chatId, pendingQuestion.question_id, answer);
     }, [chatId, pendingQuestion]);
 
     const handleSend = async () => {
@@ -1706,11 +1701,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
                   {/* Question prompt - replaces normal input when ask_user question is pending */}
                   {hasPendingQuestion && askUserQuestion && (
                     <QuestionPrompt
-                      questions={askUserQuestion.questions.map((q: any) => ({
-                        question: q.question,
-                        options: q.options || [],
-                        allowMultiple: q.allow_multiple ?? false,
-                      }))}
+                      questions={askUserQuestion}
                       onSubmit={handleQuestionSubmit}
                     />
                   )}
@@ -1768,11 +1759,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
                   {/* Question prompt - shown when agent is waiting for user input */}
                   {hasPendingQuestion && askUserQuestion && (
                       <QuestionPrompt
-                        questions={askUserQuestion.questions.map((q: any) => ({
-                          question: q.question,
-                          options: q.options || [],
-                          allowMultiple: q.allow_multiple ?? false,
-                        }))}
+                        questions={askUserQuestion}
                         onSubmit={handleQuestionSubmit}
                       />
                   )}

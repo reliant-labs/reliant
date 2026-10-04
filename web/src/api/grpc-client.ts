@@ -30,6 +30,7 @@ import { AccountService } from "../gen/reliant/v1/account_pb";
 import { ForgeService } from "../gen/reliant/v1/forge_pb";
 import { TriggerService } from "../gen/reliant/v1/trigger_pb";
 import { RunService } from "../gen/reliant/v1/run_pb";
+import { InboxService } from "../gen/reliant/v1/inbox_pb";
 import { logger } from "../lib/logger";
 import {
   buildLocalhostUrl,
@@ -126,6 +127,7 @@ const clearClientCache = () => {
   _connectorClient = null;
   _triggerClient = null;
   _runClient = null;
+  _inboxClient = null;
 };
 
 export const getGRPCBaseURLPublic = (): string | null => getGRPCBaseURL();
@@ -375,6 +377,12 @@ export const createRunClient = (): Client<typeof RunService> => {
   return createClient(RunService, getTransport());
 };
 
+// InboxService (everything waiting on the user, across chats) is served by
+// reliant's api-server, like RunService.
+export const createInboxClient = (): Client<typeof InboxService> => {
+  return createClient(InboxService, getTransport());
+};
+
 // Singleton instances (lazy-initialized)
 let _systemClient: Client<typeof SystemService> | null = null;
 let _planClient: Client<typeof PlanService> | null = null;
@@ -404,6 +412,7 @@ let _questionClient: Client<typeof QuestionService> | null = null;
 let _connectorClient: Client<typeof ConnectorService> | null = null;
 let _triggerClient: Client<typeof TriggerService> | null = null;
 let _runClient: Client<typeof RunService> | null = null;
+let _inboxClient: Client<typeof InboxService> | null = null;
 
 export const getSystemClient = (): Client<typeof SystemService> => {
   if (!_systemClient) {
@@ -610,6 +619,13 @@ export const getRunClient = (): Client<typeof RunService> => {
   return _runClient;
 };
 
+export const getInboxClient = (): Client<typeof InboxService> => {
+  if (!_inboxClient) {
+    _inboxClient = createInboxClient();
+  }
+  return _inboxClient;
+};
+
 // Export for convenience
 export const grpcClient = {
   system: () => getSystemClient(),
@@ -641,4 +657,5 @@ export const grpcClient = {
   connector: () => getConnectorClient(),
   trigger: () => getTriggerClient(),
   run: () => getRunClient(),
+  inbox: () => getInboxClient(),
 };

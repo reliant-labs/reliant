@@ -80,3 +80,20 @@ export interface AskUserMetadata {
   tool_call_id?: string;
   questions: AskUserQuestion[];
 }
+
+/**
+ * The ask_user metadata as QuestionPrompt's items, or null when it is not an
+ * ask_user question. The chat composer and the Inbox both render a question
+ * from metadata, so the mapping lives here once.
+ */
+export function askUserQuestionItems(
+  metadata: string | undefined | null,
+): Array<{ question: string; options: AskUserQuestionOption[]; allowMultiple: boolean }> | null {
+  const parsed = parseAskUserMetadata(metadata);
+  if (!parsed) return null;
+  return parsed.questions.map((q) => ({
+    question: q.question,
+    options: q.options || [],
+    allowMultiple: q.allow_multiple ?? false,
+  }));
+}

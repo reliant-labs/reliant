@@ -87,6 +87,10 @@ describe("getParentRouteNavigateOptions", () => {
     expect(getParentRouteNavigateOptions("/runs")).toEqual({ to: "/", search: {} });
   });
 
+  it("the Inbox is a single page; its exit returns to the app", () => {
+    expect(getParentRouteNavigateOptions("/inbox")).toEqual({ to: "/", search: {} });
+  });
+
   it("returns / for unknown routes", () => {
     expect(getParentRouteNavigateOptions("/")).toEqual({ to: "/", search: {} });
     expect(getParentRouteNavigateOptions("/anything/else")).toEqual({

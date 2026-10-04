@@ -685,9 +685,9 @@ export type ListChatsRequest = Message$1<"reliant.v1.ListChatsRequest"> & {
 
   /**
    * When true, return only chats the sidebar lists (chats_with_activity.
-   * list_in_sidebar): interactive chats, adopted chats, and — until the Inbox
-   * ships — non-agent automations awaiting input. Agent-started runs appear
-   * only once adopted.
+   * list_in_sidebar): interactive chats and adopted chats. An automation or
+   * agent-started run appears only once adopted; one awaiting input surfaces
+   * in the Inbox instead.
    *
    * @generated from field: optional bool sidebar_only = 3;
    */

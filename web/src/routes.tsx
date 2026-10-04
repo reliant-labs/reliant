@@ -86,6 +86,8 @@ const RunsPage = lazyRouteComponent(
   () => import('./components/runs/RunsPage'), 'RunsPage')
 const RunDetailPage = lazyRouteComponent(
   () => import('./components/runs/RunDetailPage'), 'RunDetailPage')
+const InboxPage = lazyRouteComponent(
+  () => import('./components/inbox/InboxPage'), 'InboxPage')
 const OnboardingRoute = lazyRouteComponent(
   () => import('./components/OnboardingFlow/OnboardingRoute'), 'OnboardingRoute')
 const MobileShell = lazyRouteComponent(
@@ -536,6 +538,15 @@ const runDetailRoute = createRoute({
   component: RunDetailPage,
 })
 
+// Inbox: everything waiting on the user, across every chat and project
+// (research/WORKFLOW_UI.md §8). Top-level, not under Workflows: interactive
+// chats awaiting an answer belong in it too (§14.1 decisions 1 and 2).
+const inboxRoute = createRoute({
+  getParentRoute: () => authenticatedLayoutRoute,
+  path: '/inbox',
+  component: InboxPage,
+})
+
 // ── forge UI (experimental, gated) ───────────────────────────────────────────
 //
 // Every forge route goes through ForgeGate. Hiding the sidebar entry is NOT enough
@@ -836,6 +847,7 @@ const routeTree = rootRoute.addChildren([
     automationDetailRoute,
     runsRoute,
     runDetailRoute,
+    inboxRoute,
   ]),
   appLayoutRoute.addChildren([indexRoute, projectRoute]),
 ])

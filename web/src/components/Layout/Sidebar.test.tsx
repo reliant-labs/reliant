@@ -59,6 +59,12 @@ vi.mock("../../hooks/chat-queries", () => ({
   useChat: () => ({ data: undefined }),
 }));
 
+// The Inbox nav item reads its own counts; the Sidebar test only checks it is
+// placed and wired.
+vi.mock("../../hooks/inbox-queries", () => ({
+  useInboxCounts: () => ({ data: { blockingCount: 2, hasInformational: false }, isError: false }),
+}));
+
 vi.mock("../../hooks/message-queries", () => ({
   useMarkUnread: () => ({ mutateAsync: vi.fn() }),
 }));
@@ -263,6 +269,7 @@ describe("Sidebar selected chat scroll", () => {
     const onOpenRuns = vi.fn();
     const onOpenChatSearch = vi.fn();
     const onNavigateToSettings = vi.fn();
+    const onOpenInbox = vi.fn();
 
     render(
       <QueryClientProvider client={queryClient}>
@@ -273,11 +280,17 @@ describe("Sidebar selected chat scroll", () => {
           onOpenRuns={onOpenRuns}
           onOpenChatSearch={onOpenChatSearch}
           onNavigateToSettings={onNavigateToSettings}
+          onOpenInbox={onOpenInbox}
         />
       </QueryClientProvider>
     );
 
     expect(screen.getByRole("button", { name: "New chat" })).toBeInTheDocument();
+    // Inbox sits directly under New chat (WORKFLOW_UI.md §1.2), with its badge.
+    const nav = screen.getByRole("navigation", { name: "Chat sidebar navigation" });
+    const navButtons = Array.from(nav.querySelectorAll("button"));
+    expect(navButtons[1]).toHaveAttribute("data-testid", "sidebar-inbox-button");
+    expect(screen.getByTestId("inbox-badge-count")).toHaveTextContent("2");
     expect(screen.getByRole("button", { name: "Projects" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Workflows" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Automations" })).toBeInTheDocument();
@@ -294,7 +307,9 @@ describe("Sidebar selected chat scroll", () => {
     fireEvent.click(screen.getByRole("button", { name: "Runs" }));
     fireEvent.click(screen.getByRole("button", { name: "Search" }));
     fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    fireEvent.click(screen.getByTestId("sidebar-inbox-button"));
 
+    expect(onOpenInbox).toHaveBeenCalledTimes(1);
     expect(onNavigateToProjectPicker).toHaveBeenCalledTimes(1);
     expect(onOpenWorkflows).toHaveBeenCalledTimes(1);
     expect(onOpenAutomations).toHaveBeenCalledTimes(1);
