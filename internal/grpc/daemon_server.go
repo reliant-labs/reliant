@@ -22,7 +22,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/grpc/interceptors"
 	"github.com/reliant-labs/reliant/internal/grpc/services"
 	"github.com/reliant-labs/reliant/internal/logging"
-	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/toolexec/transport"
 )
 
@@ -32,7 +31,6 @@ type DaemonServer struct {
 	tlsCertFile string
 	tlsKeyFile  string
 
-	toolExecutor       *toolexec.RemoteExecutor
 	toolsDaemonService *services.ToolsDaemonService
 }
 
@@ -42,7 +40,6 @@ type DaemonConfig struct {
 	BindAddress string // Bind address (default: "127.0.0.1", use "0.0.0.0" for containers)
 
 	ToolsDaemonService *services.ToolsDaemonService
-	ToolExecutor       *toolexec.RemoteExecutor
 
 	// DaemonTokens resolves daemons' `rlat_` credentials (uncached).
 	DaemonTokens auth.AccessTokenIntrospector
@@ -108,7 +105,6 @@ func NewDaemonServer(cfg *DaemonConfig) *DaemonServer {
 		server:             srv,
 		tlsCertFile:        cfg.TLSCertFile,
 		tlsKeyFile:         cfg.TLSKeyFile,
-		toolExecutor:       cfg.ToolExecutor,
 		toolsDaemonService: toolsDaemonService,
 	}
 }

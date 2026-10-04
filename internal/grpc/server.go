@@ -46,8 +46,6 @@ type Server struct {
 	tlsCertFile string
 	tlsKeyFile  string
 
-	toolExecutor *toolexec.RemoteExecutor
-
 	// ProjectService is exposed so callers can wire it to out-of-band
 	// inputs (e.g. the daemon-events JetStream consumer in serverapi.Run).
 	projectService *services.ProjectService
@@ -72,8 +70,7 @@ type Config struct {
 	PauseService        *workflow.PauseService             // Pause service for unified pause/resume operations
 	SharedTaskQueue     string                             // Shared workflow task queue name
 
-	ToolExecutor *toolexec.RemoteExecutor // Optional remote tool executor to bind to daemon service
-	DaemonRouter toolexec.DaemonRouter    // Optional pre-created daemon router for transport-agnostic daemon access
+	DaemonRouter toolexec.DaemonRouter // Optional pre-created daemon router for transport-agnostic daemon access
 
 	BackgroundProvider services.BackgroundProcessProvider // Provider for background process state
 
@@ -481,16 +478,11 @@ func NewServer(cfg *Config) (*Server, error) {
 		IdleTimeout:       transport.ServerIdleTimeout,
 	}
 
-	if cfg.ToolExecutor != nil {
-		cfg.ToolExecutor.SetDaemonRouter(router)
-	}
-
 	return &Server{
 		server:         srv,
 		mux:            mux,
 		tlsCertFile:    cfg.TLSCertFile,
 		tlsKeyFile:     cfg.TLSKeyFile,
-		toolExecutor:   cfg.ToolExecutor,
 		projectService: projectService,
 		router:         router,
 	}, nil
