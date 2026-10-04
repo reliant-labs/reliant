@@ -42,6 +42,8 @@ interface WorkflowRowProps {
   lastRun?: RunSummary;
   /** How many automations run this workflow. */
   automationCount: number;
+  /** How many of those are FAILING; says why the row is under "Needs attention". */
+  failingAutomationCount?: number;
   /** The `project` search param the area carries, so the link keeps it. */
   project?: string;
   /** Opens Run…; absent for a workflow that cannot run (a draft). */
@@ -49,7 +51,15 @@ interface WorkflowRowProps {
   actions: WorkflowRowAction[];
 }
 
-export function WorkflowRow({ workflow, lastRun, automationCount, project, onRun, actions }: WorkflowRowProps) {
+export function WorkflowRow({
+  workflow,
+  lastRun,
+  automationCount,
+  failingAutomationCount = 0,
+  project,
+  onRun,
+  actions,
+}: WorkflowRowProps) {
   const displayName = getWorkflowDisplayName(workflow.name, true);
   return (
     <li
@@ -91,6 +101,12 @@ export function WorkflowRow({ workflow, lastRun, automationCount, project, onRun
             ? `${automationCount} ${automationCount === 1 ? "automation" : "automations"}`
             : <span aria-hidden="true">—</span>}
           {automationCount === 0 && <span className="sr-only">none</span>}
+          {failingAutomationCount > 0 && (
+            <span className="text-destructive" data-testid="workflow-row-failing">
+              {" · "}
+              {failingAutomationCount} failing
+            </span>
+          )}
         </p>
         <div className="min-w-0" data-testid="workflow-row-last-run">
           <span className="sr-only">Last run: </span>

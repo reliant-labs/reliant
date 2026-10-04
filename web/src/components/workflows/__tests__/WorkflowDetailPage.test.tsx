@@ -13,7 +13,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
+import { create } from "@bufbuild/protobuf";
+
 import { RunDisplayState } from "@/gen/reliant/v1/run_pb";
+import { CelStringSchema, NodeSchema, SubWorkflowArgsSchema } from "@/gen/reliant/v1/workflow_v2_pb";
 import { getWorkflowByName, presetsResponse } from "../../workflow/run/__tests__/runFormFixtures";
 import { libraryResponse, protoRun, protoTrigger, renderWorkflowsPage } from "./workflowsTestUtils";
 
@@ -166,6 +169,44 @@ describe("WorkflowDetailPage", () => {
     await screen.findByRole("heading", { level: 1, name: "My Draft" });
     expect(screen.getByRole("button", { name: "Run…" })).toBeDisabled();
     expect(screen.getByText("Drafts cannot run until they are marked complete.")).toBeInTheDocument();
+  });
+
+  it("Used by lists the workflows that call this one through ref:, from the loaded library", async () => {
+    const callsTriage = create(NodeSchema, {
+      id: "triage-each",
+      type: "workflow",
+      args: {
+        case: "workflow",
+        value: create(SubWorkflowArgsSchema, {
+          ref: create(CelStringSchema, { value: { case: "literal", value: "project://triage" } }),
+        }),
+      },
+    });
+    const base = libraryResponse();
+    mocks.listWorkflows.mockResolvedValue({
+      ...base,
+      workflows: [
+        ...base.workflows,
+        { ...base.workflows[1]!, name: "nightly-sweep", filename: "nightly-sweep", description: "Sweeps", nodes: [callsTriage] },
+      ],
+    });
+    renderDetail();
+    const usedBy = await screen.findByTestId("workflow-detail-used-by");
+    expect(within(usedBy).getByRole("link", { name: "Nightly Sweep" })).toHaveAttribute(
+      "href",
+      "/workflows/library/nightly-sweep",
+    );
+    expect(within(usedBy).getAllByRole("link")).toHaveLength(1);
+    // A scan of the library list detail already loads, not a request of its
+    // own. (useWorkflowDefinition makes its own include_hidden=false call.)
+    const libraryCalls = mocks.listWorkflows.mock.calls.filter(([request]) => request.includeHidden);
+    expect(libraryCalls).toHaveLength(1);
+  });
+
+  it("Used by says so when nothing calls it", async () => {
+    renderDetail();
+    const usedBy = await screen.findByRole("region", { name: "Used by" });
+    expect(within(usedBy).getByText("No other workflow calls this one.")).toBeInTheDocument();
   });
 
   it("a workflow that no longer exists says so and links back", async () => {

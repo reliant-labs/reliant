@@ -461,6 +461,32 @@ export const workflowsAreaSearchSchema = z.object({
 });
 export type WorkflowsAreaSearch = Partial<z.output<typeof workflowsAreaSearchSchema>>;
 
+// ── /workflows/library ──────────────────────────────────────────────────────
+
+/** The Library's source filter. Absent means every source. */
+export const LIBRARY_SOURCE_KEYS = ["yours", "builtin", "failed"] as const;
+export type LibrarySourceKey = (typeof LIBRARY_SOURCE_KEYS)[number];
+
+/**
+ * The Library's sort. Absent means by name: a list that reorders itself when
+ * the last-run data arrives would move rows under the pointer.
+ */
+export const LIBRARY_SORT_KEYS = ["name", "recent"] as const;
+export type LibrarySortKey = (typeof LIBRARY_SORT_KEYS)[number];
+
+/**
+ * /workflows/library (§2.2). The search, source and sort live in the URL like
+ * the Runs filters, so a narrowed library is a link and Back restores it. An
+ * unknown value is dropped rather than failing the route.
+ */
+export const librarySearchSchema = workflowsAreaSearchSchema.extend({
+  q: z.string().optional().catch(undefined),
+  source: z.enum(LIBRARY_SOURCE_KEYS).optional().catch(undefined),
+  sort: z.enum(LIBRARY_SORT_KEYS).optional().catch(undefined),
+});
+/** Every key optional: absent is the default, which is what links omit. */
+export type LibrarySearch = Partial<z.output<typeof librarySearchSchema>>;
+
 // ── /workflows/runs ─────────────────────────────────────────────────────────
 
 /**

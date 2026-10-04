@@ -19,7 +19,7 @@ import {
   RouterProvider,
 } from "@tanstack/react-router";
 
-import { runsSearchSchema, workflowsAreaSearchSchema } from "@/routeSchemas";
+import { librarySearchSchema, runsSearchSchema, workflowsAreaSearchSchema } from "@/routeSchemas";
 import { ChatActivity, WorkflowState, WorkflowStopReason } from "@/gen/reliant/v1/chat_pb";
 import { RunDisplayState, RunSchema } from "@/gen/reliant/v1/run_pb";
 import { WorkflowDraftStatus } from "@/gen/reliant/v1/workflow_pb";
@@ -52,7 +52,12 @@ export function renderWorkflowsPage(ui: ReactNode, path: string, pattern: string
     createRoute({
       getParentRoute: () => rootRoute,
       path: pattern,
-      validateSearch: pattern === "/workflows/runs" ? runsSearchSchema : workflowsAreaSearchSchema,
+      validateSearch:
+        pattern === "/workflows/runs"
+          ? runsSearchSchema
+          : pattern === "/workflows/library"
+            ? librarySearchSchema
+            : workflowsAreaSearchSchema,
       component: () => <>{ui}</>,
     }),
     ...linkTargets.map((target) =>
