@@ -680,7 +680,7 @@ func (r *NATSDaemonRouter) SendDaemonCommandToDaemon(ctx context.Context, userID
 // preflight. Split out so both the default-routing and daemon-pinned entry
 // points run the client-side size check before any daemon resolution.
 func (r *NATSDaemonRouter) buildDaemonCommand(ctx context.Context, commandType string, payload []byte, timeoutMs int32) (data []byte, requestID string, err error) {
-	requestID = fmt.Sprintf("%d", time.Now().UnixNano())
+	requestID = newRequestID()
 	req := struct {
 		RequestID   string                   `json:"request_id"`
 		CommandType string                   `json:"command_type"`
@@ -1150,7 +1150,7 @@ func (r *NATSDaemonRouter) EnqueueDaemonCommand(ctx context.Context, userID, com
 		TimeoutMs   int32                    `json:"timeout_ms"`
 		Policy      *daemonpolicy.WirePolicy `json:"policy,omitempty"`
 	}{
-		RequestID:   fmt.Sprintf("enq-%d", time.Now().UnixNano()),
+		RequestID:   "enq-" + newRequestID(),
 		CommandType: commandType,
 		Payload:     json.RawMessage(payload),
 		TimeoutMs:   timeoutMs,

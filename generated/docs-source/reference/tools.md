@@ -2249,17 +2249,18 @@ WORKTREE DATA STORAGE:
 - Use in subsequent steps: worktree_data.path, worktree_data.branch, etc.
 
 FILE COPYING:
-- copy_files: Searches recursively for matching files (e.g., ".env" finds all .env files in any directory)
-- Directory structure is preserved (frontend/.env -> worktree/frontend/.env)
+- copy_files: exact paths relative to the repository root, for gitignored files a fresh checkout lacks
+- Nothing is searched for: ".env" copies only the root .env; name "frontend/.env" to copy that one
+- A directory is copied whole (e.g. "web/node_modules"); a missing path is skipped
 
 EXAMPLES:
 
-Create a worktree with recursive file copy:
+Create a worktree that carries over local env files:
 {
   "action": "create",
   "name": "feature-auth",
   "base_branch": "main",
-  "copy_files": [".env", ".env.local"]
+  "copy_files": [".env", "frontend/.env.local"]
 }
 
 List all worktrees:

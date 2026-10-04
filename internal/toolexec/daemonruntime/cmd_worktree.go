@@ -18,6 +18,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/reliant-labs/reliant/internal/copypath"
 	"github.com/reliant-labs/reliant/internal/daemonpolicy"
 	"github.com/reliant-labs/reliant/internal/gitutil"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -27,6 +28,7 @@ func init() {
 	RegisterCommand("worktree.generate_repo_id", handleGenerateRepoID)
 	RegisterCommand("worktree.validate_path", handleValidatePath)
 	RegisterCommand("worktree.create", handleWorktreeCreate)
+	RegisterCommand("worktree.copy_paths", handleWorktreeCopyPaths)
 	RegisterCommand("worktree.force_cleanup", handleWorktreeForceCleanup)
 	RegisterCommand("worktree.delete_directory", handleWorktreeDeleteDirectory)
 	RegisterCommand("worktree.remove_workspace_dir", handleWorktreeRemoveWorkspaceDir)
@@ -142,11 +144,9 @@ type worktreeCreateRequest struct {
 	WorkspaceID string `json:"workspace_id,omitempty"`
 	// SubPath is the path component under the workspace dir for this repo's
 	// checkout. Empty means the workspace root itself (single-repo project).
-	SubPath    string   `json:"sub_path,omitempty"`
-	BaseBranch string   `json:"base_branch"`
-	Force      bool     `json:"force"`
-	CopyFiles  []string `json:"copy_files,omitempty"`
-	SourcePath string   `json:"source_path,omitempty"`
+	SubPath    string `json:"sub_path,omitempty"`
+	BaseBranch string `json:"base_branch"`
+	Force      bool   `json:"force"`
 }
 
 type worktreeCreateResponse struct {
@@ -238,6 +238,7 @@ func handleWorktreeCreate(ctx context.Context, payload []byte) ([]byte, error) {
 	}
 	worktreeCmd.Dir = req.ProjectPath
 
+	checkoutStart := time.Now()
 	if output, err := worktreeCmd.CombinedOutput(); err != nil {
 		// Roll back the directory this call created.
 		//
@@ -287,16 +288,74 @@ func handleWorktreeCreate(ctx context.Context, payload []byte) ([]byte, error) {
 		})
 	}
 
-	// Copy specified files to the new worktree
-	sourcePath := req.SourcePath
-	if sourcePath == "" {
-		sourcePath = req.ProjectPath
-	}
-	if len(req.CopyFiles) > 0 {
-		copyFilesToWorktree(sourcePath, worktreePath, req.CopyFiles)
-	}
+	// A new workspace waits on this whole command; say how long git took, so
+	// a slow create can be told apart from a slow copy (worktree.copy_paths
+	// logs its own time).
+	logging.Info("worktree checked out",
+		"worktree_path", worktreePath,
+		"elapsed", time.Since(checkoutStart).Round(time.Millisecond).String())
 
 	return json.Marshal(worktreeCreateResponse{Success: true, WorktreePath: worktreePath, BaseBranch: req.BaseBranch})
+}
+
+// =============================================================================
+// worktree.copy_paths
+// =============================================================================
+//
+// Copies named paths from a source tree into a freshly created workspace —
+// the gitignored pieces (.env, node_modules, local config) a checkout does
+// not bring. It runs ONCE per workspace, after every repo is checked out,
+// between the two workspace ROOTS: the project root (or the workspace being
+// branched from) and the new workspace root. The workspace mirrors the
+// project's layout, so an entry like `reliant/.env` lands inside the reliant
+// checkout and a root-level `.env` lands at the workspace root, with no
+// per-repo routing.
+//
+// Entries are exact paths; nothing is searched for. See copypath.
+
+type worktreeCopyPathsRequest struct {
+	SourceRoot string   `json:"source_root"`
+	DestRoot   string   `json:"dest_root"`
+	Paths      []string `json:"paths"`
+}
+
+type worktreeCopyPathsResponse struct {
+	Copied  []string `json:"copied,omitempty"`
+	Missing []string `json:"missing,omitempty"`
+	// Failed maps an entry that exists but could not be copied to the reason.
+	Failed map[string]string `json:"failed,omitempty"`
+	Error  string            `json:"error,omitempty"`
+}
+
+func handleWorktreeCopyPaths(_ context.Context, payload []byte) ([]byte, error) {
+	var req worktreeCopyPathsRequest
+	if err := json.Unmarshal(payload, &req); err != nil {
+		return nil, fmt.Errorf("invalid payload: %w", err)
+	}
+	if req.SourceRoot == "" || req.DestRoot == "" {
+		return json.Marshal(worktreeCopyPathsResponse{Error: "source_root and dest_root are required"})
+	}
+	// The server validates too; this is the boundary that touches the disk,
+	// so it does not trust that it did.
+	paths, err := copypath.CleanAll(req.Paths)
+	if err != nil {
+		return json.Marshal(worktreeCopyPathsResponse{Error: err.Error()})
+	}
+
+	start := time.Now()
+	result := copypath.Copy(req.SourceRoot, req.DestRoot, paths)
+	resp := worktreeCopyPathsResponse{Copied: result.Copied, Missing: result.Missing}
+	for _, failure := range result.Failed {
+		if resp.Failed == nil {
+			resp.Failed = make(map[string]string, len(result.Failed))
+		}
+		resp.Failed[failure.Path] = failure.Err.Error()
+	}
+	logging.Info("worktree paths copied",
+		"dest_root", req.DestRoot,
+		"elapsed", time.Since(start).Round(time.Millisecond).String(),
+		"copied", resp.Copied, "missing", resp.Missing, "failed", resp.Failed)
+	return json.Marshal(resp)
 }
 
 // =============================================================================
@@ -1773,131 +1832,4 @@ func worktreeParseGitStatusPath(rawPath string) string {
 		}
 	}
 	return path
-}
-
-// copyFilesToWorktree copies specified files from source to destination recursively.
-func copyFilesToWorktree(srcDir, dstDir string, patterns []string) {
-	files := findMatchingFiles(srcDir, patterns)
-	if len(files) == 0 {
-		return
-	}
-	copyFilePaths(srcDir, dstDir, files)
-}
-
-func findMatchingFiles(srcDir string, patterns []string) []string {
-	var matches []string
-	matchSet := make(map[string]bool)
-
-	for _, pattern := range patterns {
-		fullPath := filepath.Join(srcDir, pattern)
-		info, err := os.Stat(fullPath)
-		if err == nil {
-			if info.IsDir() {
-				_ = filepath.WalkDir(fullPath, func(path string, d os.DirEntry, err error) error {
-					if err != nil {
-						return nil
-					}
-					if d.IsDir() && d.Name() == ".git" {
-						return filepath.SkipDir
-					}
-					if !d.IsDir() {
-						relPath, err := filepath.Rel(srcDir, path)
-						if err == nil && !matchSet[relPath] {
-							matches = append(matches, relPath)
-							matchSet[relPath] = true
-						}
-					}
-					return nil
-				})
-				continue
-			} else if strings.Contains(pattern, string(filepath.Separator)) || strings.Contains(pattern, "/") {
-				if !matchSet[pattern] {
-					matches = append(matches, pattern)
-					matchSet[pattern] = true
-				}
-				continue
-			}
-		} else if strings.Contains(pattern, string(filepath.Separator)) || strings.Contains(pattern, "/") {
-			continue
-		}
-
-		_ = filepath.WalkDir(srcDir, func(path string, d os.DirEntry, err error) error {
-			if err != nil {
-				return nil
-			}
-			if d.IsDir() && d.Name() == ".git" {
-				return filepath.SkipDir
-			}
-			if d.IsDir() {
-				return nil
-			}
-			if d.Name() == pattern {
-				relPath, err := filepath.Rel(srcDir, path)
-				if err != nil {
-					return nil
-				}
-				if !matchSet[relPath] {
-					matches = append(matches, relPath)
-					matchSet[relPath] = true
-				}
-			}
-			return nil
-		})
-	}
-
-	return matches
-}
-
-func copyFilePaths(srcDir, dstDir string, relativePaths []string) {
-	for _, relPath := range relativePaths {
-		srcPath := filepath.Join(srcDir, relPath)
-		dstPath := filepath.Join(dstDir, relPath)
-
-		info, err := os.Stat(srcPath)
-		if err != nil {
-			continue
-		}
-
-		if info.IsDir() {
-			_ = filepath.WalkDir(srcPath, func(path string, d os.DirEntry, err error) error {
-				if err != nil {
-					return nil
-				}
-				if d.IsDir() && d.Name() == ".git" {
-					return filepath.SkipDir
-				}
-				if !d.IsDir() {
-					fileRelPath, err := filepath.Rel(srcDir, path)
-					if err != nil {
-						return nil
-					}
-					fileDstPath := filepath.Join(dstDir, fileRelPath)
-					_ = os.MkdirAll(filepath.Dir(fileDstPath), 0755)
-					data, err := os.ReadFile(path)
-					if err != nil {
-						return nil
-					}
-					fileInfo, err := os.Stat(path)
-					perm := os.FileMode(0644)
-					if err == nil {
-						perm = fileInfo.Mode().Perm()
-					}
-					_ = os.WriteFile(fileDstPath, data, perm)
-				}
-				return nil
-			})
-			continue
-		}
-
-		_ = os.MkdirAll(filepath.Dir(dstPath), 0755)
-		data, err := os.ReadFile(srcPath)
-		if err != nil {
-			continue
-		}
-		perm := os.FileMode(0644)
-		if err == nil {
-			perm = info.Mode().Perm()
-		}
-		_ = os.WriteFile(dstPath, data, perm)
-	}
 }

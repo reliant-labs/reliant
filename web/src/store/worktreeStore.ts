@@ -31,7 +31,7 @@ export interface Worktree {
   session_id?: string;
   status: WorktreeStatus;
   is_main: boolean; // TRUE for the main/default project worktree
-  copy_files?: string[]; // Files to copy from source repo (e.g., .env, .env.local)
+  copy_files?: string[]; // Exact paths from the workspace root (e.g. ".env", "web/node_modules") — never searched for
   created_at: string;
   updated_at: string;
   last_active: string;
