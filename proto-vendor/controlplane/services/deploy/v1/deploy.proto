@@ -150,24 +150,6 @@ service DeployService {
     option (forge.v1.method) = {auth_required: true};
   }
 
-  // EnsureDeployment makes a deployment with this NAME in this environment
-  // hold exactly this tier spec: created when absent, its spec replaced when
-  // it differs, untouched when identical. The declarative twin of
-  // CreateDeployment + UpdateDeployment, for EnsureEnvironment's reason: a
-  // forge deploy is "make it so", and its next step is
-  // PublishDeploymentConfig on the returned id.
-  //
-  // It runs every gate Create and Update run: role, strict spec
-  // decode, forge's Validate, the hosted shape band, and capacity admission.
-  // A different TIER on an existing name is FailedPrecondition (a tier change
-  // is a delete and a create; see UpdateDeploymentRequest).
-  rpc EnsureDeployment(EnsureDeploymentRequest) returns (EnsureDeploymentResponse) {
-    option (forge.v1.method) = {
-      auth_required: true
-      idempotent: true
-    };
-  }
-
   // --- Lifecycle operations -------------------------------------------
   //
   // These are UI-NATIVE and never touch the tenant's declared config. The
@@ -227,44 +209,6 @@ service DeployService {
   // whole buffer.
   rpc StreamLogs(StreamDeploymentLogsRequest) returns (stream StreamDeploymentLogsResponse) {
     option (forge.v1.method) = {auth_required: true};
-  }
-
-  // PublishDeploymentConfig packages one deployment as a config artifact and
-  // publishes it to the tenant's config subtree in the platform registry.
-  //
-  // THE ARTIFACT HOLDS EXACTLY ONE forge.dev/v1alpha1 CR (a Workload,
-  // StaticSite or ManagedDatabase) whose spec IS the stored forge tier spec.
-  // Identity (org, environment, deployment) is carried in the CR's forge.dev/*
-  // LABELS, never in the spec. Flux applies that CR and nothing else; the
-  // tier operator renders the workload from it, so Flux never owns a
-  // rendered Deployment or Service.
-  //
-  // THIS IS THE ONLY PATH TO PRODUCTION, and the request shape is what makes
-  // that true rather than this server's good behaviour. The request carries a
-  // deployment id and NOTHING ELSE — no image, no manifest, no namespace, no
-  // cluster, no registry path. Every one of those is derived server-side from
-  // the deployment's own row and the platform's own configuration, so there is
-  // no field in which a caller could name bytes to publish or a place to
-  // publish them. An RPC that accepted a loose image reference would be a
-  // second path to production and would void the promotion guarantee; this one
-  // cannot become that by accident, because there is nothing to populate.
-  //
-  // IT PUBLISHES, IT DOES NOT APPLY. The artifact reaches the registry and the
-  // response reports the digest it landed at. Reconciliation — the Flux
-  // objects that pull that digest and apply it to the destination cluster — is
-  // a separate step performed by the platform, so a successful response means
-  // "these bytes exist at this address", never "this is running".
-  //
-  // IDEMPOTENT BY CONTENT ADDRESS rather than by a key. The render is
-  // reproducible, so re-publishing an unchanged deployment produces the same
-  // bytes, the same digest and the same reference — a repeat call overwrites
-  // an object with itself. It is marked idempotent for that reason and not
-  // because the server de-duplicates anything.
-  rpc PublishDeploymentConfig(PublishDeploymentConfigRequest) returns (PublishDeploymentConfigResponse) {
-    option (forge.v1.method) = {
-      auth_required: true
-      idempotent: true
-    };
   }
 
   // --- Releases and history -------------------------------------------
@@ -730,92 +674,6 @@ message DeleteDeploymentRequest {
 }
 
 message DeleteDeploymentResponse {}
-
-message EnsureDeploymentRequest {
-  string environment_id = 1;
-  // The deployment is addressed by name within the environment.
-  string name = 2;
-  DeployTier tier = 3;
-  // See CreateDeploymentRequest.spec.
-  google.protobuf.Struct spec = 4;
-
-  // The release ARTIFACT KEY whose digest this deployment runs — the same key
-  // the client already computed for its own plan.
-  //
-  // The client sends it rather than the server inferring it, so the two cannot
-  // pair a workload with a digest differently. Empty means not release-bound
-  // (a database, a pinned third-party image), and the server's converger skips
-  // such a row rather than guessing from the deployment's name.
-  string artifact = 5;
-
-  // The promotion whose pins this spec was rendered from, recorded as
-  // Deployment.applied_promotion_id. Empty when the client pinned from
-  // nothing. A promotion belonging to another environment is refused.
-  string promotion_id = 6;
-
-  // The apply this call is part of. The server reads the apply's bundle and
-  // records it as Deployment.applied_bundle_id, which is how a converged row
-  // keeps saying where its CONFIG came from after the converger has moved its
-  // images — see Deployment.applied_bundle_id.
-  //
-  // Empty is admitted: there are no protected environments yet, and refusing
-  // it before there are would break every existing caller to enforce nothing.
-  string apply_id = 7;
-}
-
-message EnsureDeploymentResponse {
-  Deployment deployment = 1;
-  // True when this call created the deployment.
-  bool created = 2;
-  // True when this call replaced an existing deployment's spec. False for a
-  // create, and for a re-run of an identical spec.
-  bool updated = 3;
-}
-
-// === Config publish ===
-
-// PublishDeploymentConfigRequest names ONE deployment and nothing else.
-//
-// THE EMPTINESS IS THE CONTRACT. Everything the publish needs — the tier, its
-// forge spec, namespace, host cluster — is already stored
-// against the deployment row and its environment, written through the
-// deployment's own write path where it was validated. Restating any of it here
-// would create a second, unvalidated source for a value the platform already
-// owns, and the two would eventually disagree: a caller-supplied namespace or
-// registry path is precisely the destination error the platform's destination
-// guard exists to prevent.
-//
-// There is no org_id for the reason the service header gives, and no
-// environment_id because the deployment already names its environment — a
-// second field could name a different one.
-message PublishDeploymentConfigRequest {
-  string deployment_id = 1;
-}
-
-// PublishDeploymentConfigResponse reports WHAT was published and WHERE.
-//
-// The digest is the load-bearing field. It was computed from the rendered
-// bytes and then CONFIRMED against what the registry reported, so a caller
-// holding it holds an identifier for content that is verified to be present at
-// that address — which is what lets a later promotion, audit or incident
-// review correlate a deployment to exact bytes.
-message PublishDeploymentConfigResponse {
-  // Canonical `sha256:<64 hex>` content digest of the published artifact.
-  string digest = 1;
-  // The OCI repository the artifact was published to, with no reference.
-  string repository = 2;
-  // The canonical digest reference, `repository@digest`. Composed by the
-  // server from the VERIFIED digest rather than the planned one, so a client
-  // never has to assemble it and cannot assemble it from a digest the
-  // registry did not confirm.
-  string reference = 3;
-  // The namespace the artifact's objects are addressed to, as resolved by the
-  // platform's destination guard. Reported so a caller can see where this
-  // will land without being able to have influenced it.
-  string namespace = 4;
-  // The cluster the destination namespace lives in.
-  string cluster_id = 5;
-}
 
 // === Promotion ===
 
