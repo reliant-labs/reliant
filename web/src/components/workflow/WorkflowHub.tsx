@@ -16,7 +16,8 @@ import {
   BookOpen,
   Expand,
   AlertTriangle,
-  Loader2
+  Loader2,
+  Play
 } from 'lucide-react'
 import { cn } from '../../lib/utils'
 import { toast } from 'sonner'
@@ -40,6 +41,7 @@ import type { InputDef } from '../../lib/inputHelpers'
 import { getInputPresetConfig, getInputDefault, getInputDescription, setInputEnumValues } from '../../lib/inputHelpers'
 import { useModels, useGlobalDataStore } from '../../store/globalDataStore'
 import { DraftStatusBadge } from './DraftStatusBadge'
+import { RunWorkflowDialog } from './run/RunWorkflowDialog'
 import { splitFindings, type DraftStatus, type Finding } from './workflowDraftStatus'
 import { useThinkingCapability, reconcileThinkingLevel } from '../../hooks/useThinkingCapability'
 
@@ -147,6 +149,8 @@ interface WorkflowCardProps {
   presetDefaults?: Record<string, string>
   isBuilderActive?: boolean
   onClick: () => void
+  /** Opens the Run… form. Absent for a workflow that cannot run (a draft). */
+  onRun?: () => void
   onDelete?: () => void
   onExport?: () => void
   onCopy?: () => void
@@ -165,6 +169,7 @@ function WorkflowCard({
   presetDefaults,
   isBuilderActive,
   onClick,
+  onRun,
   onDelete,
   onExport,
   onCopy,
@@ -267,8 +272,21 @@ function WorkflowCard({
 
       </div>
 
-      {/* Hover actions */}
-      <div className="absolute top-3 right-3 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+      {/* Hover actions. Revealed on keyboard focus too, so Run… and the rest
+          are reachable without a pointer. */}
+      <div className="absolute top-3 right-3 flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+        {onRun && (
+          <Tooltip content="Run with inputs">
+            <button
+              type="button"
+              aria-label={`Run ${displayName}`}
+              onClick={(e) => { e.stopPropagation(); onRun(); }}
+              className="p-1.5 rounded-md bg-background/80 hover:bg-muted border border-border/50 text-muted-foreground hover:text-primary transition-colors"
+            >
+              <Play className="w-3.5 h-3.5" />
+            </button>
+          </Tooltip>
+        )}
         {onConfigurePresets && (
           <Tooltip content="Configure presets">
             <button
@@ -1584,6 +1602,7 @@ export function WorkflowHub({
   const [newWorkflowName, setNewWorkflowName] = useState('')
   const [isImporting, setIsImporting] = useState(false)
   const [presetConfigWorkflow, setPresetConfigWorkflow] = useState<string | null>(null)
+  const [runWorkflowName, setRunWorkflowName] = useState<string | null>(null)
   const [editingPreset, setEditingPreset] = useState<Preset | null>(null)
   const [viewingPreset, setViewingPreset] = useState<Preset | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -1885,6 +1904,8 @@ export function WorkflowHub({
         presetDefaults={getPresetDefaults(workflow.name)}
         isBuilderActive={activeBuilderWorkflows.has(workflow.name)}
         onClick={() => onSelectWorkflow(workflow.name)}
+        // A draft cannot run until it validates, so it gets no Run….
+        onRun={projectId && workflow.status !== 'draft' ? () => setRunWorkflowName(workflow.name) : undefined}
         onDelete={workflow.source === 'user' ? () => handleDeleteWorkflow(workflow.name) : undefined}
         onExport={workflow.source === 'user' && onExportWorkflow ? () => handleExportWorkflow(workflow.name) : undefined}
         onCopy={projectId ? () => handleCopyWorkflow(workflow.name) : undefined}
@@ -2185,6 +2206,15 @@ export function WorkflowHub({
       )}
 
       {/* Preset Config Modal */}
+      {projectId && (
+        <RunWorkflowDialog
+          open={runWorkflowName !== null}
+          onClose={() => setRunWorkflowName(null)}
+          projectId={projectId}
+          workflowRef={runWorkflowName ?? ''}
+        />
+      )}
+
       {presetConfigWorkflow && projectId && (
         <PresetConfigModal
           workflowName={presetConfigWorkflow}

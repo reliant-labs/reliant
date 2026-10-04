@@ -15,7 +15,11 @@
    text) now sits at 0.9286rem ≈ 13.9px at the default `lg`.
    ========================================================================== */
 
-.config-panel-v2 {
+/* The cpv2 tokens, alone, for cpv2 primitives rendered outside the floating
+   panel — RunWorkflowForm reuses WorkflowInputGroup inside a dialog, and
+   must not inherit the panel's absolute positioning and fixed width. */
+.config-panel-v2,
+.cpv2-scope {
   --cpv2-radius-xs: 4px;
   --cpv2-radius-sm: 6px;
   --cpv2-radius-md: 10px;
@@ -27,6 +31,9 @@
   --cpv2-accent-ring: hsl(var(--primary) / 0.1);
   --cpv2-shadow: 0 8px 32px rgba(0,0,0,.4), 0 2px 8px rgba(0,0,0,.2);
   --cpv2-transition: 150ms cubic-bezier(.4,0,.2,1);
+}
+
+.config-panel-v2 {
   position: absolute;
   right: 0.75rem;
   z-index: 40;

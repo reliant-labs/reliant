@@ -1,7 +1,7 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * Field classes shared by the automation form's native controls. Native
+ * Field classes shared by the run and automation forms' native controls. Native
  * <select>/<input>/<textarea> rather than the app's custom dropdowns because
  * they are keyboard- and screen-reader-complete for free, and every one of
  * them here has a real <label for>.
