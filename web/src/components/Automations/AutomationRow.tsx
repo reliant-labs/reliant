@@ -71,7 +71,7 @@ export function AutomationRow({ trigger }: { trigger: Trigger }) {
 
       <div className="min-w-0">
         <Link
-          to="/automations/$triggerId"
+          to="/workflows/automations/$triggerId"
           params={{ triggerId: trigger.id }}
           className={cn(
             "block truncate rounded-sm text-sm font-medium hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",

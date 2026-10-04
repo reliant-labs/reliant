@@ -39,6 +39,7 @@ import { OnboardingChecklist } from "./OnboardingChecklist";
 import type { OnboardingStepId, StepProps } from "./types";
 import { CompletionStep } from "./steps";
 import { useTourNavigation, STEP_EXPECTED_PATH } from "./useTourNavigation";
+import { isWorkflowSurfacePath } from "../../lib/workflowsArea";
 
 // ─── Page-redirect modal ─────────────────────────────────────────────────────
 // Rendered when a spotlight step's expected page is not the current page.
@@ -328,7 +329,7 @@ export function OnboardingWizard() {
 
   const location = useLocation();
   const isSettingsMode = location.pathname.startsWith("/settings");
-  const isWorkflowMode = location.pathname.startsWith("/workflow");
+  const isWorkflowMode = isWorkflowSurfacePath(location.pathname);
   // The dedicated /onboarding route IS the onboarding experience — showing
   // the post-onboarding "Setup Guide" floating panel on top of it is a
   // bad-UX dupe of the same information. Phase 2 (the checklist) is for

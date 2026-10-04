@@ -126,7 +126,7 @@ function buildRouter(initialEntries: string[], HookHarness: React.ComponentType)
   });
   const workflowHubRoute = createRoute({
     getParentRoute: () => rootRoute,
-    path: "/workflow",
+    path: "/workflows/library",
     validateSearch: tourSearchSchema,
     component: () => null,
   });
@@ -250,7 +250,7 @@ describe("useTourNavigation", () => {
   });
 
   describe("goToStep", () => {
-    it("navigates to /workflow?tour=workflow-hub for the workflow-hub step", async () => {
+    it("navigates to the Library ?tour=workflow-hub for the workflow-hub step", async () => {
       const useTourNavigation = await loadHook();
       if (!useTourNavigation) {
         expect.fail("useTourNavigation hook not implemented yet");
@@ -264,7 +264,7 @@ describe("useTourNavigation", () => {
       await act(async () => {
         await result.current.goToStep("workflow-hub");
       });
-      expect(router.state.location.pathname).toBe("/workflow");
+      expect(router.state.location.pathname).toBe("/workflows/library");
       expect(router.state.location.search).toMatchObject({
         tour: "workflow-hub",
       });
@@ -337,7 +337,7 @@ describe("useTourNavigation", () => {
       });
     });
 
-    it("leaves /workflow when transitioning to workspaces step", async () => {
+    it("leaves the Library when transitioning to workspaces step", async () => {
       const useTourNavigation = await loadHook();
       if (!useTourNavigation) {
         expect.fail("useTourNavigation hook not implemented yet");
@@ -345,7 +345,7 @@ describe("useTourNavigation", () => {
       }
       const { result, router } = renderHookWithRouter(
         () => useTourNavigation(),
-        ["/workflow?tour=workflow-hub"]
+        ["/workflows/library?tour=workflow-hub"]
       );
       await waitFor(() => expect(result.current).toBeDefined());
       await act(async () => {
@@ -354,7 +354,7 @@ describe("useTourNavigation", () => {
       expect(router.state.location.search).toMatchObject({
         tour: "workspaces",
       });
-      // Allow either: hook stays on /workflow updating only search, OR
+      // Allow either: hook stays on the Library updating only search, OR
       // hook bounces to the chat route. Both are acceptable per the contract.
     });
   });
@@ -368,13 +368,13 @@ describe("useTourNavigation", () => {
       }
       const { result, router } = renderHookWithRouter(
         () => useTourNavigation(),
-        ["/workflow?tour=workflow-hub"]
+        ["/workflows/library?tour=workflow-hub"]
       );
       await waitFor(() => expect(result.current).toBeDefined());
       await act(async () => {
         await result.current.exitTour();
       });
-      expect(router.state.location.pathname).toBe("/workflow");
+      expect(router.state.location.pathname).toBe("/workflows/library");
       expect(router.state.location.search.tour).toBeUndefined();
     });
   });
@@ -437,7 +437,7 @@ describe("useTourNavigation", () => {
       );
     });
 
-    it("advances from workflow-intro to workflow-hub at /workflow", async () => {
+    it("advances from workflow-intro to workflow-hub at the Library", async () => {
       const useTourNavigation = await loadHook();
       if (!useTourNavigation) {
         expect.fail("useTourNavigation hook not implemented yet");
@@ -451,7 +451,7 @@ describe("useTourNavigation", () => {
       await act(async () => {
         await result.current.completeAndAdvance();
       });
-      expect(router.state.location.pathname).toBe("/workflow");
+      expect(router.state.location.pathname).toBe("/workflows/library");
       expect(router.state.location.search).toMatchObject({
         tour: "workflow-hub",
       });
@@ -507,7 +507,7 @@ describe("useTourNavigation", () => {
       }
       const { result, router } = renderHookWithRouter(
         () => useTourNavigation(),
-        ["/workflow?tour=completion"]
+        ["/workflows/library?tour=completion"]
       );
       await waitFor(() => expect(result.current).toBeDefined());
       await act(async () => {
@@ -548,7 +548,7 @@ describe("useTourNavigation", () => {
       }
       const { result, router } = renderHookWithRouter(
         () => useTourNavigation(),
-        ["/workflow?tour=workflow-hub"]
+        ["/workflows/library?tour=workflow-hub"]
       );
       await waitFor(() => expect(result.current).toBeDefined());
       await act(async () => {

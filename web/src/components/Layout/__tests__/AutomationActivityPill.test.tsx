@@ -107,18 +107,25 @@ describe("AutomationActivityPill", () => {
     expect(onOpenRuns).toHaveBeenCalledWith({ state: ["live"], allProjects: true, range: "all" });
   });
 
-  it("shows how many need you, linking to those", async () => {
+  // "Needs you" is the Inbox's job (§8, §14.1 decision 1): the Inbox is where
+  // the question or approval can be ANSWERED, while a filtered run list only
+  // points at it. So the pill opens the Inbox, not Runs.
+  it("shows how many need you, and opens the Inbox", async () => {
     listRuns.mockResolvedValue({
       runs: [run("a", "schedule", RunDisplayState.RUNNING), run("b", "agent.start_run", RunDisplayState.NEEDS_INPUT)],
       nextPageToken: "",
     });
     const onOpenRuns = vi.fn();
-    renderWithQuery(<AutomationActivityPill listedChatIds={new Set()} onOpenRuns={onOpenRuns} />);
+    const onOpenInbox = vi.fn();
+    renderWithQuery(
+      <AutomationActivityPill listedChatIds={new Set()} onOpenRuns={onOpenRuns} onOpenInbox={onOpenInbox} />,
+    );
 
     const needsYou = await screen.findByTestId("automation-activity-pill-needs-you");
     expect(needsYou).toHaveTextContent("1 needs you");
     fireEvent.click(needsYou);
-    expect(onOpenRuns).toHaveBeenCalledWith({ state: ["needs_you"], allProjects: true, range: "all" });
+    expect(onOpenInbox).toHaveBeenCalledTimes(1);
+    expect(onOpenRuns).not.toHaveBeenCalled();
   });
 
   it("says the count is a floor when the server has more", async () => {

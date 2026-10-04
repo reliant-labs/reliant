@@ -1,7 +1,8 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * /runs — every run, whatever started it (WORKFLOW_UI.md §5.2).
+ * The Runs tab (/workflows/runs) — every run, whatever started it
+ * (WORKFLOW_UI.md §5.2). Rendered inside WorkflowsShell.
  *
  * The one place an hourly automation and an agent-started run are MEANT to be
  * seen, which is why the default is every kind: the chat list hides them, and
@@ -20,24 +21,12 @@ import { useTriggers } from "@/hooks/trigger-queries";
 import { useProjectStore } from "@/store/projectStore";
 import Card from "../forge-ui/card";
 import { Button } from "../ui/Button";
-import { AreaShell } from "../Layout/AreaShell";
+import { WORKFLOWS_AUTOMATIONS_PATH, WORKFLOWS_LIBRARY_PATH } from "@/lib/workflowsArea";
 import { RunList } from "./RunList";
 import { RunFilters, hasActiveRunFilters, useRunsSearch } from "./RunFilters";
 
-export function RunsShell({ layout, children }: { layout?: "column" | "fill"; children: React.ReactNode }) {
-  return (
-    <AreaShell areaPath="/runs" areaLabel="All runs" areaNoun="runs" layout={layout}>
-      {children}
-    </AreaShell>
-  );
-}
-
 export function RunsPage() {
-  return (
-    <RunsShell>
-      <RunsView />
-    </RunsShell>
-  );
+  return <RunsView />;
 }
 
 export function RunsView() {
@@ -194,10 +183,10 @@ function NoRuns() {
         Runs appear here when you start a chat, run a workflow, or an automation fires.
       </p>
       <div className="mt-6 flex flex-wrap justify-center gap-2">
-        <Button variant="primary" leftIcon={<Workflow className="h-4 w-4" />} onClick={() => void navigate({ to: "/workflow" })}>
+        <Button variant="primary" leftIcon={<Workflow className="h-4 w-4" />} onClick={() => void navigate({ to: WORKFLOWS_LIBRARY_PATH })}>
           Run a workflow
         </Button>
-        <Button variant="outline" leftIcon={<CalendarClock className="h-4 w-4" />} onClick={() => void navigate({ to: "/automations" })}>
+        <Button variant="outline" leftIcon={<CalendarClock className="h-4 w-4" />} onClick={() => void navigate({ to: WORKFLOWS_AUTOMATIONS_PATH })}>
           Create an automation
         </Button>
       </div>
@@ -208,7 +197,7 @@ function NoRuns() {
 function NoMatchingRuns() {
   const [search, setSearch] = useRunsSearch();
   const range = search.range;
-  const clear = () => setSearch({ allProjects: search.allProjects, group: search.group });
+  const clear = () => setSearch({ allProjects: search.allProjects, group: search.group, project: search.project });
   const widen = () => setSearch({ ...search, range: "30d" });
   const windowLabel = range === "7d" ? "7 days" : range === "30d" ? "30 days" : range === "all" ? undefined : "24 hours";
 

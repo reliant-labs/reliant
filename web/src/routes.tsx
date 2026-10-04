@@ -1,10 +1,11 @@
 import { useEffect } from 'react'
-import { createRootRoute, createRoute, createRouter, lazyRouteComponent, Outlet, Navigate, useRouterState, useNavigate } from '@tanstack/react-router'
+import { createRootRoute, createRoute, createRouter, lazyRouteComponent, Outlet, Navigate, redirect, useRouterState, useNavigate } from '@tanstack/react-router'
 import { SurfaceProvider } from './lib/surfaceContext'
 import { surfaceForPath } from './lib/surface'
 import { shouldRedirectToMobileNow } from './lib/mobileRedirect'
 import { isForgeUIEnabled } from './lib/forgeFeature'
 import { getIsDev } from './lib/constants'
+import { legacyWorkflowsPath } from './lib/workflowsArea'
 import {
   authSearchSchema,
   githubOAuthCallbackSearchSchema,
@@ -22,6 +23,7 @@ import {
   upgradeSearchSchema,
   runsSearchSchema,
   workflowSearchSchema,
+  workflowsAreaSearchSchema,
 } from './routeSchemas'
 import { ErrorFallbackUI } from './components/ErrorBoundary'
 import { AuthGuard } from './components/AuthGuard'
@@ -86,6 +88,12 @@ const RunsPage = lazyRouteComponent(
   () => import('./components/runs/RunsPage'), 'RunsPage')
 const RunDetailPage = lazyRouteComponent(
   () => import('./components/runs/RunDetailPage'), 'RunDetailPage')
+const WorkflowsLayout = lazyRouteComponent(
+  () => import('./components/workflows/WorkflowsShell'), 'WorkflowsLayout')
+const LibraryPage = lazyRouteComponent(
+  () => import('./components/workflows/library/LibraryPage'), 'LibraryPage')
+const WorkflowDetailPage = lazyRouteComponent(
+  () => import('./components/workflows/detail/WorkflowDetailPage'), 'WorkflowDetailPage')
 const InboxPage = lazyRouteComponent(
   () => import('./components/inbox/InboxPage'), 'InboxPage')
 const OnboardingRoute = lazyRouteComponent(
@@ -132,7 +140,7 @@ const App = lazyRouteComponent(() => import('./App'), 'default')
 // import them without dragging in the route-tree's component graph).
 
 // Truly app-global overlays live at the root so they render on every route —
-// including /settings, /workflow/*, and the unauthenticated /auth routes. They
+// including /settings, /workflows/*, /workflow/*, and the unauthenticated /auth routes. They
 // were previously mounted inside ModernApp (which only mounts on `/` and
 // `/project/$projectId`), so users on any other route silently got no toasts,
 // no modals registered via ModalLayer (incl. ApiKeySetupModal), no contextual
@@ -473,21 +481,14 @@ const settingsSectionRoute = createRoute({
   component: SettingsPage,
 })
 
-// Workflow routes — replace viewerStore.isWorkflowMode + workflowToOpen.
-// /workflow                    → hub view (browse templates, list saved)
+// The workflow BUILDER keeps its own full-screen chrome (WorkflowHeader):
 // /workflow/new                → new blank workflow (static segment, takes
 //                                precedence over the dynamic one below)
 // /workflow/$workflowName      → opens a named workflow. workflowName is the
 //                                full identifier — e.g. `builtin://get-it-right`
 //                                or a user workflow's name. URL-encoding is
 //                                handled by tanstack-router.
-const workflowHubRoute = createRoute({
-  getParentRoute: () => authenticatedLayoutRoute,
-  path: '/workflow',
-  validateSearch: workflowSearchSchema,
-  component: () => <WorkflowPage />,
-})
-
+// The bare /workflow (the old hub) is a redirect, below.
 const workflowNewRoute = createRoute({
   getParentRoute: () => authenticatedLayoutRoute,
   path: '/workflow/new',
@@ -502,41 +503,106 @@ const workflowBuilderRoute = createRoute({
   component: () => <WorkflowPage />,
 })
 
-// Automations (schedule triggers).
-// /automations              → every automation the user owns, across projects
-// /automations/$triggerId   → one automation: definition, actions, history
-// Under `_authenticated` like /workflow, so the pages render their own chrome
-// (AutomationsShell) rather than the app shell — they span projects, and the
-// app shell is scoped to one.
-const automationsRoute = createRoute({
+// ── The Workflows area (research/WORKFLOW_UI.md §1.2–1.3) ───────────────────
+//
+// One area, three tabs — Library (definitions), Runs (every execution) and
+// Automations (standing triggers) — inside one shell, WorkflowsLayout, which
+// owns the tab bar, the exit and project resolution (a `project` search param
+// on every page, so a hard refresh works: the area never mounts ModernApp).
+//
+// Under `_authenticated`, not the app shell: the area spans projects (decision
+// 10), and the app shell is scoped to one. Pathless like `_forge`, so every
+// child carries its full path and `to: "."` resolves to the page itself.
+const workflowsLayoutRoute = createRoute({
   getParentRoute: () => authenticatedLayoutRoute,
-  path: '/automations',
-  component: AutomationsListPage,
+  id: '_workflows',
+  component: WorkflowsLayout,
 })
 
-const automationDetailRoute = createRoute({
-  getParentRoute: () => authenticatedLayoutRoute,
-  path: '/automations/$triggerId',
-  component: AutomationDetailPage,
+const workflowsIndexRoute = createRoute({
+  getParentRoute: () => workflowsLayoutRoute,
+  path: '/workflows',
+  validateSearch: workflowsAreaSearchSchema,
+  beforeLoad: ({ search }) => {
+    throw redirect({ to: '/workflows/library', search, replace: true })
+  },
 })
 
-// Runs: every execution, whatever started it (research/WORKFLOW_UI.md §4–5).
-// /runs            → the cross-project run list, filters in the search params
-// /runs/$runId     → one run (its chat id): header, trigger card, transcript
-// Same position and chrome as /automations; both move under /workflows when
-// the area merges (§12 Phase 3).
-const runsRoute = createRoute({
-  getParentRoute: () => authenticatedLayoutRoute,
-  path: '/runs',
+const workflowsLibraryRoute = createRoute({
+  getParentRoute: () => workflowsLayoutRoute,
+  path: '/workflows/library',
+  validateSearch: workflowsAreaSearchSchema,
+  component: LibraryPage,
+})
+
+// $workflowRef is the stored ref — `builtin://agent`, a project or user
+// workflow's name — URL-encoded by the router, as for the builder.
+const workflowDetailRoute = createRoute({
+  getParentRoute: () => workflowsLayoutRoute,
+  path: '/workflows/library/$workflowRef',
+  validateSearch: workflowsAreaSearchSchema,
+  component: WorkflowDetailPage,
+})
+
+// Runs: every execution, whatever started it (§4–5). Filters live in the
+// search params; $runId is the run's chat id.
+const workflowsRunsRoute = createRoute({
+  getParentRoute: () => workflowsLayoutRoute,
+  path: '/workflows/runs',
   validateSearch: runsSearchSchema,
   component: RunsPage,
 })
 
-const runDetailRoute = createRoute({
-  getParentRoute: () => authenticatedLayoutRoute,
-  path: '/runs/$runId',
+const workflowsRunDetailRoute = createRoute({
+  getParentRoute: () => workflowsLayoutRoute,
+  path: '/workflows/runs/$runId',
+  validateSearch: workflowsAreaSearchSchema,
   component: RunDetailPage,
 })
+
+// Automations: standing triggers across every project (§7).
+const workflowsAutomationsRoute = createRoute({
+  getParentRoute: () => workflowsLayoutRoute,
+  path: '/workflows/automations',
+  validateSearch: workflowsAreaSearchSchema,
+  component: AutomationsListPage,
+})
+
+const workflowsAutomationDetailRoute = createRoute({
+  getParentRoute: () => workflowsLayoutRoute,
+  path: '/workflows/automations/$triggerId',
+  validateSearch: workflowsAreaSearchSchema,
+  component: AutomationDetailPage,
+})
+
+// ── Retired paths: redirects, so bookmarks, notifications and old links land ─
+//
+//   /workflow              → /workflows/library   (the hub)
+//   /runs[/$runId]         → /workflows/runs[/$runId]
+//   /automations[/$id]     → /workflows/automations[/$id]
+//
+// The search string is carried VERBATIM (a relative href, re-parsed by the
+// router), so a filtered /runs?state=... link keeps every filter. `replace`,
+// so Back does not bounce through the dead URL. The mapping itself lives in
+// lib/workflowsArea.ts; this table and that module are the only places the
+// old paths may be spelled (workflowsAreaLinks.test.ts).
+function legacyWorkflowsRedirectRoute(path: '/workflow' | '/runs' | '/runs/$runId' | '/automations' | '/automations/$triggerId') {
+  return createRoute({
+    getParentRoute: () => authenticatedLayoutRoute,
+    path,
+    beforeLoad: ({ location }) => {
+      const target = legacyWorkflowsPath(location.pathname)
+      if (!target) return
+      throw redirect({ href: `${target}${location.searchStr}${location.hash ? `#${location.hash}` : ''}`, replace: true })
+    },
+  })
+}
+
+const legacyWorkflowHubRoute = legacyWorkflowsRedirectRoute('/workflow')
+const legacyRunsRoute = legacyWorkflowsRedirectRoute('/runs')
+const legacyRunDetailRoute = legacyWorkflowsRedirectRoute('/runs/$runId')
+const legacyAutomationsRoute = legacyWorkflowsRedirectRoute('/automations')
+const legacyAutomationDetailRoute = legacyWorkflowsRedirectRoute('/automations/$triggerId')
 
 // Inbox: everything waiting on the user, across every chat and project
 // (research/WORKFLOW_UI.md §8). Top-level, not under Workflows: interactive
@@ -840,13 +906,22 @@ const routeTree = rootRoute.addChildren([
     settingsRoute,
     connectorConsentRoute,
     settingsSectionRoute,
-    workflowHubRoute,
     workflowNewRoute,
     workflowBuilderRoute,
-    automationsRoute,
-    automationDetailRoute,
-    runsRoute,
-    runDetailRoute,
+    workflowsLayoutRoute.addChildren([
+      workflowsIndexRoute,
+      workflowsLibraryRoute,
+      workflowDetailRoute,
+      workflowsRunsRoute,
+      workflowsRunDetailRoute,
+      workflowsAutomationsRoute,
+      workflowsAutomationDetailRoute,
+    ]),
+    legacyWorkflowHubRoute,
+    legacyRunsRoute,
+    legacyRunDetailRoute,
+    legacyAutomationsRoute,
+    legacyAutomationDetailRoute,
     inboxRoute,
   ]),
   appLayoutRoute.addChildren([indexRoute, projectRoute]),

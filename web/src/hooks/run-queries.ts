@@ -20,6 +20,8 @@ export const runKeys = {
   all: ["runs"] as const,
   lists: () => [...runKeys.all, "list"] as const,
   list: (filters: RunListFilters) => [...runKeys.lists(), filters] as const,
+  /** Under lists(), so the update stream's invalidation refreshes it too. */
+  lastPerWorkflow: (projectId?: string) => [...runKeys.lists(), "lastPerWorkflow", projectId ?? null] as const,
   /** Under lists(): the update stream's invalidation reaches it too. */
   children: (parentChatId: string) => [...runKeys.lists(), "children", parentChatId] as const,
   launchEvent: (chatId: string) => [...runKeys.all, "launch-event", chatId] as const,
@@ -150,6 +152,19 @@ export function useChildRuns(parentChatId: string | undefined, enabled = true) {
       /** More than the strip shows. */
       hasMore: page.runs.length > CHILD_RUNS_LIMIT || page.nextPageToken !== "",
     }),
+  });
+}
+
+/**
+ * The newest run of every workflow, for the Library's "Last run" column and
+ * workflow detail. One request for the whole list (LastRunPerWorkflow), never
+ * one per row.
+ */
+export function useLastRunPerWorkflow(projectId: string | undefined) {
+  return useQuery({
+    queryKey: runKeys.lastPerWorkflow(projectId),
+    queryFn: () => runGrpc.lastRunPerWorkflow(projectId),
+    enabled: !!projectId,
   });
 }
 

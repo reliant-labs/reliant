@@ -18,6 +18,7 @@ import {
   getPreviousStepId,
 } from "./constants";
 import type { OnboardingStepId } from "./types";
+import { WORKFLOWS_LIBRARY_PATH } from "../../lib/workflowsArea";
 import { useTourStore } from "../../store/tourStore";
 import { useChatStore } from "../../store/chatStore";
 
@@ -37,9 +38,8 @@ async function promptApiKeyIfNeededAfterTour(): Promise<void> {
 // ─── Per-step expected pathname ─────────────────────────────────────────────
 // Tells callers (and the step components) where each step's spotlight lives:
 //
-//   "/workflow"  → hub-only step (matched with === '/workflow' or startsWith
-//                  if router appends a trailing slash, callers should use
-//                  startsWith).
+//   "/workflows/library" → the Library (the old hub's home since the
+//                  Workflows area merged; WORKFLOW_UI.md §1.3).
 //   "/workflow/" → workflow-builder routes — pathname must start with
 //                  '/workflow/' (the trailing slash distinguishes hub).
 //   null         → step has no path constraint; render wherever the user is.
@@ -50,7 +50,7 @@ async function promptApiKeyIfNeededAfterTour(): Promise<void> {
 export function STEP_EXPECTED_PATH(stepId: OnboardingStepId): string | null {
   switch (stepId) {
     case "workflow-hub":
-      return "/workflow";
+      return WORKFLOWS_LIBRARY_PATH;
     case "workflow-builder":
     case "workflow-builder-chat":
       return "/workflow/";
@@ -85,9 +85,9 @@ export function useTourNavigation(): TourNavigation {
     (stepId: OnboardingStepId) => {
       const expected = STEP_EXPECTED_PATH(stepId);
       if (stepId === "workflow-hub") {
-        // workflow-hub specifically needs `/workflow` (not the builder).
+        // workflow-hub specifically needs the Library (not the builder).
         void navigate({
-          to: "/workflow",
+          to: WORKFLOWS_LIBRARY_PATH,
           search: (prev: Record<string, unknown>) => ({ ...prev, tour: stepId }),
         });
         return;

@@ -1,4 +1,5 @@
 import { logger } from "../lib/logger";
+import { isWorkflowSurfacePath } from "../lib/workflowsArea";
 import { create } from "zustand";
 import { ConnectError, Code } from "@connectrpc/connect";
 
@@ -66,14 +67,13 @@ function syncProjectUrl(projectId: string | null) {
       // doing something else and the project is just background context.
       if (
         currentPath.startsWith("/settings") ||
-        currentPath.startsWith("/workflow") ||
-        // A page in an area that spans projects selects a chat's project as
-        // background context (loadRunContext); the user stays where they are.
-        currentPath.startsWith("/automations") ||
-        // A run's page selects the run's project so the transcript can read
-        // it (RunRouteLoader), and the user stays on the run.
-        currentPath === "/runs" ||
-        currentPath.startsWith("/runs/") ||
+        // The Workflows area and the builder. The area spans projects and
+        // selects a chat's project as background context (loadRunContext,
+        // RunRouteLoader — a run's page selects the run's project so its
+        // transcript can read it); the user stays where they are.
+        isWorkflowSurfacePath(currentPath) ||
+        // The Inbox spans projects the same way.
+        currentPath === "/inbox" ||
         currentPath.startsWith("/auth") ||
         currentPath.startsWith("/reset-password") ||
         currentPath.startsWith("/verify-email") ||
@@ -99,7 +99,7 @@ function syncProjectUrl(projectId: string | null) {
         search: preserveSearch,
       });
     } else {
-      if (currentPath === "/" || currentPath.startsWith("/settings") || currentPath.startsWith("/workflow")) {
+      if (currentPath === "/" || currentPath.startsWith("/settings") || isWorkflowSurfacePath(currentPath)) {
         return;
       }
       router.navigate({ to: "/", search: preserveSearch });

@@ -6,6 +6,7 @@ import { ChatState } from "./gen/reliant/v1/chat_pb";
 import type { Chat } from "./api/client";
 import { logger } from "./lib/logger";
 import { cn } from "./lib/utils";
+import { isWorkflowSurfacePath } from "./lib/workflowsArea";
 import {
   useEffect,
   useState,
@@ -190,7 +191,7 @@ function App() {
   const setActiveViewer = useViewerStore((state) => state.setActiveViewer);
   const location = useLocation();
   const isSettingsMode = location.pathname.startsWith("/settings");
-  const isWorkflowMode = location.pathname.startsWith("/workflow");
+  const isWorkflowMode = isWorkflowSurfacePath(location.pathname);
   // Calculate hasOpenViewers based on subscribed state
   const hasOpenViewers = viewerProjectId
     ? viewers.filter((v) => v.projectId === viewerProjectId).length > 0
@@ -596,7 +597,7 @@ function App() {
         // own ESC handler (registered on window capture). When ModernApp is
         // mounted we're not on a workflow route, but on multi-window setups
         // this guards against the rare case where both are alive.
-        if (window.location.pathname.startsWith("/workflow")) {
+        if (isWorkflowSurfacePath(window.location.pathname)) {
           return;
         }
 
@@ -729,7 +730,7 @@ function App() {
         });
       },
       onOpenWorkflows: () => {
-        navigate({ to: '/workflow' });
+        navigate({ to: '/workflows' });
       },
       onNextRightSidebarTab: () => {
         const projectId = currentProject?.id;
@@ -1562,7 +1563,7 @@ function App() {
       const unsubscribe = window.electronAPI.onTrayGoToWorkflowHub(() => {
         const projectId = useProjectStore.getState().currentProject?.id;
         if (!projectId) return;
-        navigate({ to: '/workflow' });
+        navigate({ to: '/workflows' });
       });
       if (typeof unsubscribe === "function") cleanups.push(unsubscribe);
     }
@@ -1881,16 +1882,13 @@ function App() {
                 paddingClass=""
                 onNavigateToProjectPicker={handleNavigateToProjectPicker}
                 onOpenWorkflows={() => {
-                  navigate({ to: '/workflow' });
-                }}
-                onOpenAutomations={() => {
-                  navigate({ to: '/automations' });
+                  navigate({ to: '/workflows' });
                 }}
                 onOpenInbox={() => {
                   navigate({ to: '/inbox' });
                 }}
                 onOpenRuns={(search) => {
-                  navigate({ to: '/runs', search: search ?? {} });
+                  navigate({ to: '/workflows/runs', search: search ?? {} });
                 }}
                 onOpenChatSearch={() => setShowChatSearch(true)}
                 onNavigateToSettings={() => {
@@ -1920,16 +1918,13 @@ function App() {
                   paddingClass=""
                   onNavigateToProjectPicker={handleNavigateToProjectPicker}
                   onOpenWorkflows={() => {
-                    navigate({ to: '/workflow' });
-                  }}
-                  onOpenAutomations={() => {
-                    navigate({ to: '/automations' });
+                    navigate({ to: '/workflows' });
                   }}
                   onOpenInbox={() => {
                     navigate({ to: '/inbox' });
                   }}
                   onOpenRuns={(search) => {
-                    navigate({ to: '/runs', search: search ?? {} });
+                    navigate({ to: '/workflows/runs', search: search ?? {} });
                   }}
                   onOpenChatSearch={() => setShowChatSearch(true)}
                   onNavigateToSettings={() => {
@@ -2115,7 +2110,7 @@ function App() {
           onToggleFileBrowser={() => setShowFileBrowser((prev) => !prev)}
           onToggleChatSidebar={() => setShowChatSidebar((prev) => !prev)}
           onOpenWorkflows={() => {
-            navigate({ to: '/workflow' });
+            navigate({ to: '/workflows' });
           }}
         />
       )}

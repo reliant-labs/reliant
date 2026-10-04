@@ -127,7 +127,7 @@ export const CommandPalette = forwardRef<CommandPaletteRef, CommandPaletteProps>
         category: "navigation",
         keywords: ["workflow", "automation", "flow"],
         action: () => {
-          navigate({ to: '/workflow' });
+          navigate({ to: '/workflows' });
           closeAndFocus();
         },
       },
@@ -139,7 +139,7 @@ export const CommandPalette = forwardRef<CommandPaletteRef, CommandPaletteProps>
         category: "navigation",
         keywords: ["schedule", "trigger", "cron", "automation"],
         action: () => {
-          navigate({ to: '/automations' });
+          navigate({ to: '/workflows/automations' });
           closeAndFocus();
         },
       },
@@ -163,7 +163,7 @@ export const CommandPalette = forwardRef<CommandPaletteRef, CommandPaletteProps>
         category: "navigation",
         keywords: ["run", "history", "execution", "agent", "started"],
         action: () => {
-          navigate({ to: '/runs' });
+          navigate({ to: '/workflows/runs' });
           closeAndFocus();
         },
       },

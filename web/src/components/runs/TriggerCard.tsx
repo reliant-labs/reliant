@@ -115,7 +115,7 @@ export function TriggerCard({
   // The live automation links; one deleted since keeps the name it fired under.
   const automation =
     triggerId && triggerName ? (
-      <Link to="/automations/$triggerId" params={{ triggerId }} className={linkClass}>
+      <Link to="/workflows/automations/$triggerId" params={{ triggerId }} className={linkClass}>
         {triggerName}
       </Link>
     ) : event?.triggerName ? (
@@ -154,7 +154,7 @@ export function TriggerCard({
               {parent && (
                 <>
                   {" in "}
-                  <Link to="/runs/$runId" params={{ runId: parent.chatId }} className={linkClass}>
+                  <Link to="/workflows/runs/$runId" params={{ runId: parent.chatId }} className={linkClass}>
                     {parent.title || "another run"}
                   </Link>
                 </>

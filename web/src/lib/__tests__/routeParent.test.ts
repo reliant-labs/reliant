@@ -2,23 +2,18 @@ import { describe, it, expect } from "vitest";
 import { getParentRouteNavigateOptions } from "../routeParent";
 
 describe("getParentRouteNavigateOptions", () => {
-  it("returns /workflow as parent of /workflow/$workflowName", () => {
+  // The builder's parent is the Library — the hub it used to step back to is
+  // gone (WORKFLOW_UI.md §1.3).
+  it("returns the Library as parent of /workflow/$workflowName", () => {
     expect(getParentRouteNavigateOptions("/workflow/my-flow")).toEqual({
-      to: "/workflow",
+      to: "/workflows/library",
     });
   });
 
   it("handles URL-encoded workflow names (e.g. builtin://...)", () => {
     expect(
       getParentRouteNavigateOptions("/workflow/builtin%3A%2F%2Fchat"),
-    ).toEqual({ to: "/workflow" });
-  });
-
-  it("returns / as parent of /workflow", () => {
-    expect(getParentRouteNavigateOptions("/workflow")).toEqual({
-      to: "/",
-      search: {},
-    });
+    ).toEqual({ to: "/workflows/library" });
   });
 
   // /settings and /settings/$section render the same SettingsPage, so there is
@@ -67,24 +62,29 @@ describe("getParentRouteNavigateOptions", () => {
     });
   });
 
-  // An automation's page is a step into the list, so it closes back to it; the
-  // list itself exits to the app.
-  it("returns /automations as parent of an automation's page", () => {
-    expect(getParentRouteNavigateOptions("/automations/trig-1")).toEqual({
-      to: "/automations",
+  // The Workflows area (WORKFLOW_UI.md §1.3): a detail page steps back to its
+  // tab's list; a tab's list exits to the app. A workflow's detail page is a
+  // step into the Library, and the builder opened from it returns there too.
+  it("a workflow's detail page steps back to the Library", () => {
+    expect(getParentRouteNavigateOptions("/workflows/library/builtin%3A%2F%2Fagent")).toEqual({
+      to: "/workflows/library",
     });
   });
 
-  it("returns / as parent of /automations", () => {
-    expect(getParentRouteNavigateOptions("/automations")).toEqual({
-      to: "/",
-      search: {},
+  it("an automation's page steps back to the Automations tab", () => {
+    expect(getParentRouteNavigateOptions("/workflows/automations/trig-1")).toEqual({
+      to: "/workflows/automations",
     });
   });
 
-  it("a run's page steps back to the Runs list; the list exits to the app", () => {
-    expect(getParentRouteNavigateOptions("/runs/chat-1")).toEqual({ to: "/runs" });
-    expect(getParentRouteNavigateOptions("/runs")).toEqual({ to: "/", search: {} });
+  it("a run's page steps back to the Runs tab", () => {
+    expect(getParentRouteNavigateOptions("/workflows/runs/chat-1")).toEqual({ to: "/workflows/runs" });
+  });
+
+  it("every tab's list exits to the app", () => {
+    for (const path of ["/workflows", "/workflows/library", "/workflows/runs", "/workflows/automations"]) {
+      expect(getParentRouteNavigateOptions(path), path).toEqual({ to: "/", search: {} });
+    }
   });
 
   it("the Inbox is a single page; its exit returns to the app", () => {

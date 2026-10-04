@@ -37,7 +37,6 @@ import {
   Settings,
   Workflow,
   Boxes,
-  CalendarClock,
   Activity,
 } from "lucide-react";
 import { useChatStore } from "../../store/chatStore";
@@ -124,9 +123,9 @@ const SORT_OPTIONS: {
 interface SidebarProps {
   paddingClass?: string;
   onNavigateToProjectPicker?: () => void;
+  /** Open the Workflows area (Library · Runs · Automations). */
   onOpenWorkflows?: () => void;
-  onOpenAutomations?: () => void;
-  /** Open Runs; the footer pill passes filters (live, needs you). */
+  /** Open the Runs tab with filters; the footer pill passes "live". */
   onOpenRuns?: (search?: RunsSearch) => void;
   onOpenChatSearch?: () => void;
   onNavigateToSettings?: () => void;
@@ -661,7 +660,6 @@ function SidebarComponent({
   paddingClass = "",
   onNavigateToProjectPicker,
   onOpenWorkflows,
-  onOpenAutomations,
   onOpenRuns,
   onOpenInbox,
   onOpenChatSearch,
@@ -1534,6 +1532,14 @@ function SidebarComponent({
             testId="create-chat-button"
           />
           <InboxNavItem onOpen={onOpenInbox} />
+          {/* One entry for the whole area: Library, Runs and Automations are
+              its tabs (WORKFLOW_UI.md §1.2), so they get no entries here. */}
+          <SidebarNavButton
+            icon={<Workflow className="h-4 w-4" />}
+            label="Workflows"
+            onClick={onOpenWorkflows}
+            onboardingId="workflow-button"
+          />
           {showForgeEntry && (
             <SidebarNavButton
               icon={<Boxes className="h-4 w-4" />}
@@ -1546,24 +1552,6 @@ function SidebarComponent({
             icon={<FolderOpen className="h-4 w-4" />}
             label="Projects"
             onClick={onNavigateToProjectPicker}
-          />
-          <SidebarNavButton
-            icon={<Workflow className="h-4 w-4" />}
-            label="Workflows"
-            onClick={onOpenWorkflows}
-            onboardingId="workflow-button"
-          />
-          <SidebarNavButton
-            icon={<CalendarClock className="h-4 w-4" />}
-            label="Automations"
-            onClick={onOpenAutomations}
-            testId="sidebar-automations-button"
-          />
-          <SidebarNavButton
-            icon={<Activity className="h-4 w-4" />}
-            label="Runs"
-            onClick={onOpenRuns ? () => onOpenRuns() : undefined}
-            testId="sidebar-runs-button"
           />
           <SidebarNavButton
             icon={<Search className="h-4 w-4" />}
@@ -1829,7 +1817,7 @@ function SidebarComponent({
       </div>
 
       <div className="border-t border-border/40 bg-card px-3 py-2">
-        <AutomationActivityPill listedChatIds={listedChatIds} onOpenRuns={onOpenRuns} />
+        <AutomationActivityPill listedChatIds={listedChatIds} onOpenRuns={onOpenRuns} onOpenInbox={onOpenInbox} />
         <SidebarNavButton
           icon={<Settings className="h-4 w-4" />}
           label="Settings"

@@ -78,7 +78,7 @@ export function CompletionStep({
               // first (clears active chat, persists state) before the user
               // lands on the workflow hub.
               setTimeout(() => {
-                void navigate({ to: "/workflow", search: {} });
+                void navigate({ to: "/workflows/library", search: {} });
               }, 300);
             }}
             className="text-muted-foreground hover:text-primary transition-colors"

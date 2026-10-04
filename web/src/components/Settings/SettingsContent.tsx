@@ -16,6 +16,7 @@ import { GitConnectionsSettings } from "./GitConnectionsSettings";
 import type { SettingsSection } from "./SettingsNavigation";
 import { lazy, Suspense, useEffect, useState } from "react";
 import { PromptsSettings } from "./PromptsSettings";
+import { PresetsSettings } from "./PresetsSettings";
 import { useProjectStore } from "../../store/projectStore";
 import { api } from "../../api/client";
 import { ProjectPanel } from "../Projects/ProjectPanel";
@@ -137,6 +138,18 @@ export function SettingsContent({
             affordances appear — rendered without it they were dead, which is
             how Settings ended up with no add-project entry point at all. */}
         <ProjectPanel onNavigateToProjectPicker={navigateToProjectPicker} />
+      </div>
+    );
+  }
+
+  // Presets draws its own panels (one per group), so it skips the shared card
+  // wrapper below rather than nesting cards inside it.
+  if (activeSection === "presets") {
+    return (
+      <div className="h-full overflow-auto bg-background">
+        <div className="mx-auto w-full max-w-4xl">
+          <PresetsSettings />
+        </div>
       </div>
     );
   }

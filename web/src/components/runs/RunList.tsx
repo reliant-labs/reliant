@@ -28,9 +28,15 @@ interface RunListProps {
   projectNames?: Map<string, string>;
   /** Rendered after the last row: Load more, or a page error. */
   footer?: ReactNode;
+  /**
+   * Render the sections without their own Card, for a host that already is
+   * one (workflow detail's Recent runs) — a card in a card is the one nesting
+   * the elevation rule forbids.
+   */
+  bare?: boolean;
 }
 
-export function RunList({ runs, groupRepeats, projectNames, footer }: RunListProps) {
+export function RunList({ runs, groupRepeats, projectNames, footer, bare = false }: RunListProps) {
   const sections = useMemo(() => sectionRuns(runs), [runs]);
   const finishedItems = useMemo<RunListItem[]>(
     () =>
@@ -41,8 +47,8 @@ export function RunList({ runs, groupRepeats, projectNames, footer }: RunListPro
   );
   const projectName = (run: RunSummary) => projectNames?.get(run.projectId);
 
-  return (
-    <Card padding="none" className="overflow-hidden bg-card">
+  const body = (
+    <>
       {sections.needsYou.length > 0 && (
         <RunSection label="Needs you" id="runs-needs-you">
           {sections.needsYou.map((run) => (
@@ -69,6 +75,12 @@ export function RunList({ runs, groupRepeats, projectNames, footer }: RunListPro
         </RunSection>
       )}
       {footer}
+    </>
+  );
+  if (bare) return body;
+  return (
+    <Card padding="none" className="overflow-hidden bg-card">
+      {body}
     </Card>
   );
 }
