@@ -25,6 +25,9 @@ import { useQuery } from "@tanstack/react-query";
 
 import { presetGrpc, type Preset } from "@/api/preset-grpc";
 import { worktreeGrpc } from "@/api/worktree-grpc";
+import { buildDaemonChoices } from "@/components/Automations/daemonChoices";
+import { useDaemonStatus } from "@/hooks/useDaemonStatus";
+import { useProjectDaemonInstalls } from "@/hooks/trigger-queries";
 import { CardInset } from "@/components/forge-ui/card";
 import { inputDefToSchema } from "@/lib/nodeFieldAdapter";
 import type { InputDef } from "@/lib/inputHelpers";
@@ -75,6 +78,12 @@ export interface RunWorkflowFormProps {
    * the saved automation made and must not be silently changed.
    */
   applyDefaultPresets?: boolean;
+  /**
+   * Offer an optional "Runs on" machine picker. Off by default: a host that
+   * already has its own required machine field (the automation dialog) must
+   * not show a second one.
+   */
+  showMachinePicker?: boolean;
   disabled?: boolean;
 }
 
@@ -86,6 +95,7 @@ export function RunWorkflowForm({
   onStatusChange,
   showValidation = false,
   applyDefaultPresets = false,
+  showMachinePicker = false,
   disabled = false,
 }: RunWorkflowFormProps) {
   const ids = useId();
@@ -237,6 +247,16 @@ export function RunWorkflowForm({
         onChange={(worktreeId) => onChange({ ...valueRef.current, worktreeId })}
       />
 
+      {showMachinePicker && (
+        <MachineField
+          id={fieldId("machine")}
+          projectId={projectId}
+          daemonId={value.daemonId}
+          disabled={disabled}
+          onChange={(daemonId) => onChange({ ...valueRef.current, daemonId })}
+        />
+      )}
+
       <div>
         <span id={fieldId("inputs-label")} className={labelClass}>
           Inputs
@@ -349,6 +369,59 @@ function WorktreeField({ id, projectId, worktreeId, disabled, onChange }: Worktr
           : worktreesQuery.isError
             ? "Could not load this project's workspaces; the main checkout is still available."
             : "The checkout the run works in."}
+      </p>
+    </div>
+  );
+}
+
+interface MachineFieldProps {
+  id: string;
+  projectId: string;
+  daemonId: string | undefined;
+  disabled: boolean;
+  onChange: (daemonId: string | undefined) => void;
+}
+
+function MachineField({ id, projectId, daemonId, disabled, onChange }: MachineFieldProps) {
+  const { daemons, loading: daemonsLoading } = useDaemonStatus();
+  const installsQuery = useProjectDaemonInstalls();
+  const ready = !daemonsLoading && !installsQuery.isLoading;
+
+  // Only machines the server would accept. Unlike an automation, a manual run
+  // has a sensible default (the runtime's own resolution), so nothing is
+  // preselected even when several machines qualify.
+  const choices = useMemo(
+    () => buildDaemonChoices(daemons, installsQuery.data ?? [], projectId).filter((c) => c.eligible),
+    [daemons, installsQuery.data, projectId],
+  );
+
+  return (
+    <div>
+      <label htmlFor={id} className={labelClass}>
+        Runs on
+      </label>
+      <select
+        id={id}
+        className={fieldClass}
+        value={daemonId ?? ""}
+        disabled={disabled}
+        onChange={(e) => onChange(e.target.value || undefined)}
+        aria-describedby={`${id}-hint`}
+      >
+        <option value="">Default machine</option>
+        {choices.map((choice) => (
+          <option key={choice.daemonId} value={choice.daemonId}>
+            {choice.label} ({choice.statusLabel}
+            {choice.installed ? ", project installed" : ""})
+          </option>
+        ))}
+      </select>
+      <p id={`${id}-hint`} className={hintClass}>
+        {!ready
+          ? "Loading your machines…"
+          : choices.length === 0
+            ? "No machine of yours has this project installed; the run uses the default."
+            : "The machine the run's tools execute on."}
       </p>
     </div>
   );

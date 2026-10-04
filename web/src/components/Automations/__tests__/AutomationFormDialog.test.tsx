@@ -155,6 +155,15 @@ describe("AutomationFormDialog", () => {
     );
   });
 
+  it("shows exactly one machine picker: the embedded run form does not add its own", async () => {
+    renderAtRoute(<AutomationFormDialog open onClose={vi.fn()} onSaved={vi.fn()} />);
+
+    await screen.findByLabelText("Runs on");
+    await screen.findByLabelText("Workspace");
+    expect(screen.getAllByLabelText("Runs on")).toHaveLength(1);
+    expect(screen.queryByRole("option", { name: "Default machine" })).not.toBeInTheDocument();
+  });
+
   it("builds a CreateTriggerRequest from the weekdays preset", async () => {
     const created = create(TriggerSchema, { id: "new-1", name: "Morning triage", projectId: "proj-2" });
     createTrigger.mockResolvedValue(create(CreateTriggerResponseSchema, { trigger: created }));

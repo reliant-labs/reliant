@@ -1544,7 +1544,14 @@ type StartChatRequest struct {
 	// the chat's: a pending chat has produced nothing yet, so switching it is
 	// still free. That is the one and only workflow switch the system allows, and
 	// it is why SendMessage no longer has a switch branch.
-	ChatId        *string `protobuf:"bytes,17,opt,name=chat_id,json=chatId,proto3,oneof" json:"chat_id,omitempty"`
+	ChatId *string `protobuf:"bytes,17,opt,name=chat_id,json=chatId,proto3,oneof" json:"chat_id,omitempty"`
+	// daemon_id picks the machine every tool call in this run executes on. It
+	// becomes the chat's active daemon. Unset leaves selection to default
+	// resolution. It must be one of the caller's daemons and, when the project
+	// is installed anywhere, one it is installed on. A chat_id start whose chat
+	// is already pinned (a branch is pinned to its worktree's daemon) rejects a
+	// different daemon_id: the worktree exists on exactly one machine.
+	DaemonId      *string `protobuf:"bytes,18,opt,name=daemon_id,json=daemonId,proto3,oneof" json:"daemon_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1645,6 +1652,13 @@ func (x *StartChatRequest) GetMessages() []*InputMessage {
 func (x *StartChatRequest) GetChatId() string {
 	if x != nil && x.ChatId != nil {
 		return *x.ChatId
+	}
+	return ""
+}
+
+func (x *StartChatRequest) GetDaemonId() string {
+	if x != nil && x.DaemonId != nil {
+		return *x.DaemonId
 	}
 	return ""
 }
@@ -5881,7 +5895,7 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\x04role\x18\x01 \x01(\x0e2\x17.reliant.v1.MessageRoleR\x04role\x12\x18\n" +
 	"\acontent\x18\x02 \x01(\tR\acontent\x12B\n" +
 	"\rdisplay_style\x18\x03 \x01(\x0e2\x18.reliant.v1.DisplayStyleH\x00R\fdisplayStyle\x88\x01\x01B\x10\n" +
-	"\x0e_display_style\"\xce\x05\n" +
+	"\x0e_display_style\"\xfe\x05\n" +
 	"\x10StartChatRequest\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x19\n" +
@@ -5894,7 +5908,8 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\x04mode\x18\x0e \x01(\tH\x02R\x04mode\x88\x01\x01\x12\\\n" +
 	"\x10selected_presets\x18\x0f \x03(\v21.reliant.v1.StartChatRequest.SelectedPresetsEntryR\x0fselectedPresets\x124\n" +
 	"\bmessages\x18\x10 \x03(\v2\x18.reliant.v1.InputMessageR\bmessages\x12\x1c\n" +
-	"\achat_id\x18\x11 \x01(\tH\x03R\x06chatId\x88\x01\x01\x1aY\n" +
+	"\achat_id\x18\x11 \x01(\tH\x03R\x06chatId\x88\x01\x01\x12 \n" +
+	"\tdaemon_id\x18\x12 \x01(\tH\x04R\bdaemonId\x88\x01\x01\x1aY\n" +
 	"\x13WorkflowParamsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12,\n" +
 	"\x05value\x18\x02 \x01(\v2\x16.google.protobuf.ValueR\x05value:\x028\x01\x1aB\n" +
@@ -5905,7 +5920,9 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\f_worktree_idB\a\n" +
 	"\x05_modeB\n" +
 	"\n" +
-	"\b_chat_idJ\x04\b\x02\x10\x03J\x04\b\x05\x10\x06J\x04\b\a\x10\bJ\x04\b\b\x10\tJ\x04\b\t\x10\n" +
+	"\b_chat_idB\f\n" +
+	"\n" +
+	"_daemon_idJ\x04\b\x02\x10\x03J\x04\b\x05\x10\x06J\x04\b\a\x10\bJ\x04\b\b\x10\tJ\x04\b\t\x10\n" +
 	"J\x04\b\n" +
 	"\x10\vJ\x04\b\v\x10\f\"w\n" +
 	"\x11StartChatResponse\x12$\n" +

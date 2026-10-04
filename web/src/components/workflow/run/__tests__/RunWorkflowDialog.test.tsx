@@ -27,6 +27,8 @@ import {
 } from "@tanstack/react-router";
 
 import { ChatSchema, StartChatResponseSchema } from "@/gen/reliant/v1/chat_pb";
+import { DaemonInfoSchema, DaemonStatus } from "@/gen/reliant/v1/daemon_registry_pb";
+import { ProjectDaemonSchema, ProjectInstallState } from "@/gen/reliant/v1/project_pb";
 import {
   WORKFLOW_LIST,
   getWorkflowByName,
@@ -40,6 +42,8 @@ const listPresetsForWorkflow = vi.fn();
 const getDefaultPresetsBatch = vi.fn();
 const listWorktrees = vi.fn();
 const startChat = vi.fn();
+const listDaemons = vi.fn();
+const listProjectDaemons = vi.fn();
 
 vi.mock("@/api/grpc-client", () => ({
   grpcClient: {
@@ -47,6 +51,8 @@ vi.mock("@/api/grpc-client", () => ({
     preset: () => ({ listPresetsForWorkflow, getDefaultPresetsBatch }),
     worktree: () => ({ listWorktrees }),
     chat: () => ({ startChat }),
+    daemonRegistry: () => ({ listDaemons }),
+    project: () => ({ listProjectDaemons }),
   },
 }));
 
@@ -102,6 +108,22 @@ describe("RunWorkflowDialog", () => {
     listWorktrees.mockImplementation(async (request: { projectId: string }) =>
       worktreesResponse(request.projectId),
     );
+    listDaemons.mockResolvedValue({
+      daemons: [
+        create(DaemonInfoSchema, { daemonId: "daemon-1", hostname: "laptop", status: DaemonStatus.ACTIVE }),
+        create(DaemonInfoSchema, { daemonId: "daemon-2", hostname: "cloud-box", status: DaemonStatus.ACTIVE }),
+      ],
+    });
+    // proj-1 is installed on daemon-1 only, so daemon-2 must not be offered.
+    listProjectDaemons.mockResolvedValue({
+      projectDaemons: [
+        create(ProjectDaemonSchema, {
+          projectId: "proj-1",
+          daemonId: "daemon-1",
+          installState: ProjectInstallState.INSTALLED,
+        }),
+      ],
+    });
     startChat.mockResolvedValue(
       create(StartChatResponseSchema, {
         chat: create(ChatSchema, { id: "chat-new", projectId: "proj-1", title: "Triage" }),
@@ -235,5 +257,36 @@ describe("RunWorkflowDialog", () => {
     expect(await screen.findByText("Write the message the run starts from.")).toBeInTheDocument();
     expect(screen.getByLabelText("Message")).toHaveAttribute("aria-invalid", "true");
     expect(startChat).not.toHaveBeenCalled();
+  });
+  it("offers only machines the project is installed on, and sends the chosen one", async () => {
+    const user = userEvent.setup();
+    renderDialog(<RunWorkflowDialog open onClose={vi.fn()} projectId="proj-1" workflowRef="triage" />);
+
+    const machine = await screen.findByLabelText("Runs on");
+    await screen.findByRole("option", { name: /laptop \(online, project installed\)/ });
+    expect(screen.queryByRole("option", { name: /cloud-box/ })).not.toBeInTheDocument();
+    // Optional, and nothing is forced even though only one machine qualifies.
+    expect(machine).toHaveValue("");
+
+    fill(screen.getByLabelText("Message"), "Triage the new issues");
+    fill(await screen.findByLabelText("Label"), "bug");
+    await user.selectOptions(machine, "daemon-1");
+    await user.click(screen.getByRole("button", { name: "Run" }));
+
+    await waitFor(() => expect(startChat).toHaveBeenCalledTimes(1));
+    expect(startChat.mock.calls[0]![0].daemonId).toBe("daemon-1");
+  });
+
+  it("sends no daemon_id when no machine is chosen", async () => {
+    const user = userEvent.setup();
+    renderDialog(<RunWorkflowDialog open onClose={vi.fn()} projectId="proj-1" workflowRef="triage" />);
+
+    await screen.findByLabelText("Runs on");
+    fill(screen.getByLabelText("Message"), "Triage the new issues");
+    fill(await screen.findByLabelText("Label"), "bug");
+    await user.click(screen.getByRole("button", { name: "Run" }));
+
+    await waitFor(() => expect(startChat).toHaveBeenCalledTimes(1));
+    expect(startChat.mock.calls[0]![0].daemonId).toBeUndefined();
   });
 });
