@@ -167,6 +167,9 @@ type TriggerStore interface {
 	// UpdateTriggerEventOutcome returns ErrTriggerEventNotFound when the id
 	// does not resolve.
 	UpdateTriggerEventOutcome(ctx context.Context, id string, outcome TriggerEventOutcome, detail string, chatID *string) error
+	// UpdateTriggerEventPayload replaces the event's payload. It returns
+	// ErrTriggerEventNotFound when the id does not resolve.
+	UpdateTriggerEventPayload(ctx context.Context, id string, payload map[string]any) error
 	// ListTriggerEvents returns the trigger's events newest first.
 	ListTriggerEvents(ctx context.Context, triggerID string, limit int) ([]*TriggerEvent, error)
 	// GetLatestTriggerEvent returns the trigger's latest event, optionally

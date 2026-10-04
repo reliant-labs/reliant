@@ -965,6 +965,7 @@ type Querier interface {
 	// the kind would leave Config describing a source that no longer applies.
 	UpdateTrigger(ctx context.Context, arg UpdateTriggerParams) (int64, error)
 	UpdateTriggerEventOutcome(ctx context.Context, arg UpdateTriggerEventOutcomeParams) (int64, error)
+	UpdateTriggerEventPayload(ctx context.Context, arg UpdateTriggerEventPayloadParams) (int64, error)
 	UpdateWorkflowDraft(ctx context.Context, arg UpdateWorkflowDraftParams) (WorkflowDraft, error)
 	UpdateWorkflowDraftDefinition(ctx context.Context, arg UpdateWorkflowDraftDefinitionParams) (WorkflowDraft, error)
 	// Set or update the forked_from origin

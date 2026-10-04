@@ -1018,11 +1018,16 @@ interface ChatStoreState {
  */
 // Shared by startChat and startExistingChat: home the chat the server returned,
 // seed the optimistic first user message, flip activity to RUNNING and track it.
+//
+// `replace` is for a brand-new chat, whose message cache is empty. A started
+// existing chat (a branch) already holds inherited history in the cache, which
+// the optimistic message must be appended to, not replace.
 function applyFirstSend(
   chat: Chat,
   projectId: string,
   firstMessage: string,
-  attachmentIds?: string[],
+  attachmentIds: string[] | undefined,
+  mode: "replace" | "append",
 ): void {
   const chatId = chat.id;
 
@@ -1060,7 +1065,11 @@ function applyFirstSend(
 
       // Seed the optimistic user message into the RQ message cache (the single
       // source of truth) so the UI shows it immediately.
-      setMessagesInCache(chatId, [optimisticUserMessage]);
+      if (mode === "replace") {
+        setMessagesInCache(chatId, [optimisticUserMessage]);
+      } else {
+        patchMessagesCache(chatId, (msgs) => [...msgs, optimisticUserMessage]);
+      }
     }
 
     // Optimistically mark as RUNNING so the thinking indicator shows immediately
@@ -1201,7 +1210,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       selectedPresets: selectedPresets,
     });
 
-    applyFirstSend(chat, projectId, firstMessage, attachmentIds);
+    applyFirstSend(chat, projectId, firstMessage, attachmentIds, "replace");
     return chat;
   },
 
@@ -1215,15 +1224,11 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       selectedPresets?: Record<string, string>;
     },
   ) => {
-    const projectId = useProjectStore.getState().currentProject?.id;
-    if (!projectId) {
-      throw new Error("No project selected");
-    }
-
     const workflowParams = options?.workflowParams ?? {};
+    // The chat names its own project; the selected project may be a different
+    // one (deep link, cross-project tab), and the server rejects a mismatch.
     const chat = await api.chatsV2.start({
       chat_id: chatId,
-      project_id: projectId,
       messages: [{ role: MessageRole.USER, content: firstMessage }],
       attachments: attachmentIds,
       workflow: options?.workflow ?? undefined,
@@ -1232,7 +1237,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       selectedPresets: options?.selectedPresets,
     });
 
-    applyFirstSend(chat, projectId, firstMessage, attachmentIds);
+    applyFirstSend(chat, chat.projectId, firstMessage, attachmentIds, "append");
     return chat;
   },
 

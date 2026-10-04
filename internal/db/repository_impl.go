@@ -3678,6 +3678,13 @@ func (r *Repo) UpdateTriggerEventOutcome(ctx context.Context, id string, outcome
 	return r.triggers.UpdateTriggerEventOutcome(ctx, id, outcome, detail, chatID)
 }
 
+func (r *Repo) UpdateTriggerEventPayload(ctx context.Context, id string, payload map[string]any) error {
+	if id == "" {
+		return fmt.Errorf("trigger event ID cannot be empty")
+	}
+	return r.triggers.UpdateTriggerEventPayload(ctx, id, payload)
+}
+
 func (r *Repo) ListTriggerEvents(ctx context.Context, triggerID string, limit int) ([]*core.TriggerEvent, error) {
 	if triggerID == "" {
 		return nil, fmt.Errorf("trigger ID cannot be empty")

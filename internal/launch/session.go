@@ -8,11 +8,13 @@ package launch
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/preset"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
@@ -46,6 +48,9 @@ const worktreeLookupLimit = 1000
 func (l *Launcher) ResolveChatWorktreeID(ctx context.Context, projectID string, requested *string) (*string, error) {
 	if requested != nil && *requested != "" {
 		worktree, err := l.repo.GetWorktree(ctx, *requested)
+		if err != nil && !errors.Is(err, core.ErrWorktreeNotFound) {
+			return nil, &InternalError{Reason: "failed to load worktree", Err: err}
+		}
 		if err != nil || worktree == nil {
 			return nil, &NotFoundError{Reason: fmt.Sprintf("worktree %s not found", *requested)}
 		}

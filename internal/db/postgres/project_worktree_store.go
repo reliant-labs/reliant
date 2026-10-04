@@ -305,7 +305,7 @@ func (s *worktreeStore) GetWorktree(ctx context.Context, id string) (*core.Workt
 	row, err := s.q.GetWorktree(ctx, id)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf("worktree not found: %s", id)
+			return nil, fmt.Errorf("%w: %s", core.ErrWorktreeNotFound, id)
 		}
 		return nil, fmt.Errorf("failed to get worktree: %w", err)
 	}
