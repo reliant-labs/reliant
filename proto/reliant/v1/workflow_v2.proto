@@ -816,8 +816,9 @@ message CreateWorktreeArgs {
   }];
   // BaseBranch is the branch to branch from. Defaults to repo's default branch.
   CelString base_branch = 3 [(reliant) = {description: "Base branch to branch from"}];
-  // CopyFiles lists files to copy from the source repo (searches recursively).
-  repeated string copy_files = 4 [(reliant) = {description: "Files to copy from source repo (e.g. .env)"}];
+  // CopyFiles lists exact paths, relative to the project root, to copy into
+  // the new workspace. Never searched for: ".env" is only the root .env.
+  repeated string copy_files = 4 [(reliant) = {description: "Exact paths from the project root to copy into the workspace (e.g. .env, web/node_modules)"}];
   // Force deletes existing worktree/branch if they exist.
   CelBool force = 5 [(reliant) = {description: "Force creation by deleting existing worktree"}];
 }

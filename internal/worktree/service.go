@@ -24,6 +24,8 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
+
+	"github.com/reliant-labs/reliant/internal/copypath"
 )
 
 var (
@@ -88,6 +90,13 @@ func (s *service) Create(ctx context.Context, name string, opts CreateOptions) (
 	defer span.End()
 
 	s.logger.Info("creating worktree", "name", name, "branch", opts.Branch)
+
+	// Exact paths, validated before any git work so a bad entry is an error
+	// rather than a worktree that silently lacks its .env.
+	copyPaths, err := copypath.CleanAll(opts.CopyFiles)
+	if err != nil {
+		return nil, fmt.Errorf("invalid copy_files: %w", err)
+	}
 
 	// Validate that we're in a git repository
 	gitDir := filepath.Join(s.currentRepo, ".git")
@@ -251,9 +260,8 @@ func (s *service) Create(ctx context.Context, name string, opts CreateOptions) (
 	}
 
 	// Copy specified files from source repo to worktree
-	if len(opts.CopyFiles) > 0 {
-		s.logger.Info("copying files to worktree", "patterns", opts.CopyFiles, "from", s.currentRepo, "to", worktreePath)
-		s.copyFiles(ctx, s.currentRepo, worktreePath, opts.CopyFiles)
+	if len(copyPaths) > 0 {
+		s.copyFiles(s.currentRepo, worktreePath, copyPaths)
 	}
 
 	// Save metadata
@@ -659,219 +667,13 @@ func (s *service) saveMetadata() error {
 	return os.WriteFile(metadataPath, data, 0644)
 }
 
-// copyFiles copies specified files or directories from source to destination
-// Patterns can be:
-// - Simple names like ".env" - will search recursively for all matching files
-// - Explicit paths like "frontend/.env" - will copy that specific file
-// - Directory paths like "frontend/" or "frontend" - will recursively copy all files within the directory
-func (s *service) copyFiles(ctx context.Context, srcDir, dstDir string, files []string) {
-	// Expand file patterns to actual file paths
-	expandedFiles := s.findMatchingFiles(srcDir, files)
-
-	if len(expandedFiles) == 0 {
-		s.logger.Info("no matching files found to copy", "patterns", files)
-		return
+// copyFiles copies the requested paths from srcDir into the new worktree.
+// Each entry is an exact path relative to srcDir — never searched for; see
+// copypath. Entries were validated by Create before any git work.
+func (s *service) copyFiles(srcDir, dstDir string, paths []string) {
+	result := copypath.Copy(srcDir, dstDir, paths)
+	s.logger.Info("copied paths to worktree", "copied", result.Copied, "missing", result.Missing)
+	for _, failure := range result.Failed {
+		s.logger.Warn("failed to copy path to worktree", "path", failure.Path, "error", failure.Err)
 	}
-
-	s.logger.Info("copying files to worktree", "count", len(expandedFiles), "files", expandedFiles)
-	s.copyFilePaths(srcDir, dstDir, expandedFiles)
-}
-
-// copyFilePaths copies a list of relative file paths from source to destination,
-// preserving directory structure
-// If a path points to a directory, it recursively copies all files within it
-func (s *service) copyFilePaths(srcDir, dstDir string, relativePaths []string) {
-	for _, relPath := range relativePaths {
-		srcPath := filepath.Join(srcDir, relPath)
-		dstPath := filepath.Join(dstDir, relPath)
-
-		// Check if source exists
-		info, err := os.Stat(srcPath)
-		if err != nil {
-			s.logger.Warn("source path does not exist", "path", relPath, "error", err)
-			continue
-		}
-
-		// Handle directories by recursively copying all files within
-		if info.IsDir() {
-			err := filepath.WalkDir(srcPath, func(path string, d os.DirEntry, err error) error {
-				if err != nil {
-					return nil // Skip errors, continue walking
-				}
-
-				// Skip .git directory
-				if d.IsDir() && d.Name() == ".git" {
-					return filepath.SkipDir
-				}
-
-				// Only copy files, not directories
-				if !d.IsDir() {
-					// Get relative path from srcDir
-					fileRelPath, err := filepath.Rel(srcDir, path)
-					if err != nil {
-						return nil
-					}
-
-					fileDstPath := filepath.Join(dstDir, fileRelPath)
-
-					// Create destination directory if needed
-					fileDstDirPath := filepath.Dir(fileDstPath)
-					if err := os.MkdirAll(fileDstDirPath, 0755); err != nil {
-						s.logger.Warn("failed to create destination directory", "dir", fileDstDirPath, "error", err)
-						return nil
-					}
-
-					// Read source file
-					data, err := os.ReadFile(path)
-					if err != nil {
-						s.logger.Warn("failed to read file for copying", "file", fileRelPath, "error", err)
-						return nil
-					}
-
-					// Preserve original file permissions
-					fileInfo, err := os.Stat(path)
-					perm := os.FileMode(0644)
-					if err == nil {
-						perm = fileInfo.Mode().Perm()
-					}
-
-					// Write to destination
-					if err := os.WriteFile(fileDstPath, data, perm); err != nil {
-						s.logger.Warn("failed to copy file", "file", fileRelPath, "error", err)
-						return nil
-					}
-
-					s.logger.Info("copied file to worktree", "file", fileRelPath, "destination", fileDstPath)
-				}
-				return nil
-			})
-			if err != nil {
-				s.logger.Warn("error walking directory for copying", "dir", relPath, "error", err)
-			}
-			continue
-		}
-
-		// Handle regular files
-		// Create destination directory if needed
-		dstDirPath := filepath.Dir(dstPath)
-		if err := os.MkdirAll(dstDirPath, 0755); err != nil {
-			s.logger.Warn("failed to create destination directory", "dir", dstDirPath, "error", err)
-			continue
-		}
-
-		// Read source file
-		data, err := os.ReadFile(srcPath)
-		if err != nil {
-			s.logger.Warn("failed to read file for copying", "file", relPath, "error", err)
-			continue
-		}
-
-		// Preserve original file permissions
-		perm := os.FileMode(0644)
-		if err == nil {
-			perm = info.Mode().Perm()
-		}
-
-		// Write to destination
-		if err := os.WriteFile(dstPath, data, perm); err != nil {
-			s.logger.Warn("failed to copy file", "file", relPath, "error", err)
-			continue
-		}
-
-		s.logger.Info("copied file to worktree", "file", relPath, "destination", dstPath)
-	}
-}
-
-// findMatchingFiles searches for files matching the given patterns recursively
-// Patterns can be:
-// - Simple file names like ".env" - matches any file with that name in any directory
-// - Paths with directories like "frontend/.env" - matches that specific file path
-// - Directory paths like "frontend/" or "frontend" - matches all files within that directory
-// Returns relative paths from srcDir
-func (s *service) findMatchingFiles(srcDir string, patterns []string) []string {
-	var matches []string
-	matchSet := make(map[string]bool) // Deduplicate matches
-
-	for _, pattern := range patterns {
-		// First check if pattern exists as a file or directory
-		fullPath := filepath.Join(srcDir, pattern)
-		info, err := os.Stat(fullPath)
-		if err == nil {
-			if info.IsDir() {
-				// If it's a directory, recursively find all files within it
-				err := filepath.WalkDir(fullPath, func(path string, d os.DirEntry, err error) error {
-					if err != nil {
-						return nil // Skip errors, continue walking
-					}
-
-					// Skip .git directory
-					if d.IsDir() && d.Name() == ".git" {
-						return filepath.SkipDir
-					}
-
-					// Only add files, not directories
-					if !d.IsDir() {
-						relPath, err := filepath.Rel(srcDir, path)
-						if err == nil && !matchSet[relPath] {
-							matches = append(matches, relPath)
-							matchSet[relPath] = true
-						}
-					}
-					return nil
-				})
-				if err != nil {
-					s.logger.Warn("error walking directory", "dir", fullPath, "error", err)
-				}
-				continue
-			} else if strings.Contains(pattern, string(filepath.Separator)) || strings.Contains(pattern, "/") {
-				// It's a file with a directory separator - add it directly
-				if !matchSet[pattern] {
-					matches = append(matches, pattern)
-					matchSet[pattern] = true
-				}
-				continue
-			}
-			// If it's a file without a separator, fall through to filename matching below
-		} else if strings.Contains(pattern, string(filepath.Separator)) || strings.Contains(pattern, "/") {
-			// Path with separator doesn't exist - skip it
-			continue
-		}
-
-		// Simple file name - search recursively
-		err = filepath.WalkDir(srcDir, func(path string, d os.DirEntry, err error) error {
-			if err != nil {
-				return nil // Skip errors, continue walking
-			}
-
-			// Skip .git directory
-			if d.IsDir() && d.Name() == ".git" {
-				return filepath.SkipDir
-			}
-
-			// Skip directories
-			if d.IsDir() {
-				return nil
-			}
-
-			// Check if file name matches the pattern
-			if d.Name() == pattern {
-				relPath, err := filepath.Rel(srcDir, path)
-				if err != nil {
-					return nil
-				}
-				if !matchSet[relPath] {
-					matches = append(matches, relPath)
-					matchSet[relPath] = true
-				}
-			}
-
-			return nil
-		})
-
-		if err != nil {
-			s.logger.Warn("error walking directory", "dir", srcDir, "pattern", pattern, "error", err)
-		}
-	}
-
-	return matches
 }

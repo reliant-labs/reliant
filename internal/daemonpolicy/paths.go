@@ -44,8 +44,13 @@ var pathFields = map[string]bool{
 	"repo_path":     true,
 	"target":        true,
 	"base_path":     true,
-	"paths":         true,
-	"files":         true,
+	// worktree.copy_paths: both roots are real filesystem locations. Its
+	// "paths" entries are relative to them, and the daemon rejects any that
+	// climb out, so confining the roots confines every copy.
+	"source_root": true,
+	"dest_root":   true,
+	"paths":       true,
+	"files":       true,
 	// base_dir is where fs.glob, fs.search, and fs.find_replace carry their
 	// search root — nested under "opts", not at the top level. Omitting it
 	// would let a connector search the whole filesystem while every top-level

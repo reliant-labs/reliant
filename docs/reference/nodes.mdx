@@ -160,7 +160,7 @@ Create a git worktree for isolated development
 |-------|------|----------|---------|-------------|
 | `name` | string | No | - | Worktree name, used in path |
 | `base_branch` | string | No | - | Base branch to branch from |
-| `copy_files` | string | No | - | Files to copy from source repo (e.g. .env) |
+| `copy_files` | string | No | - | Exact paths from the project root to copy into the workspace (e.g. .env, web/node_modules) |
 | `force` | boolean | No | - | Force creation by deleting existing worktree |
 
 ### Outputs
