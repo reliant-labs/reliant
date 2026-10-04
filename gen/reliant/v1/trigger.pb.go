@@ -261,8 +261,8 @@ func (TriggerOverlapPolicy) EnumDescriptor() ([]byte, []int) {
 // The status is then, first match wins:
 //   - FAILING: two or more consecutive failures, newest first. Skipped and
 //     unresolved firings are passed over; a success ends the streak.
-//   - DEGRADED: exactly one such failure, or any failure elsewhere in the
-//     window, or three or more consecutive skipped firings.
+//   - DEGRADED: any failure in the window that did not make it FAILING, or
+//     three or more consecutive skipped firings from the newest back.
 //   - HEALTHY: no failure in the window and at least one completed run.
 //   - UNKNOWN: anything else, including a trigger that has never fired.
 type TriggerHealthStatus int32
