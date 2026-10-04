@@ -455,23 +455,32 @@ func (l *Launcher) launchPending(ctx context.Context, ev Event, spec Spec, seed 
 	if err != nil || root == nil {
 		return nil, &InternalError{Reason: "failed to check workflow status", Err: err}
 	}
-	if root.Status != db.Pending() {
-		return nil, ErrNotPending
-	}
+	pending := root.Status == db.Pending()
 
 	if ev.DedupeKey == "" && ev.Kind == core.TriggerEventKindChatStart {
 		ev.DedupeKey = chat.ID
 	}
 	fingerprint := seedFingerprint(spec.Messages, spec.Attachments)
 
+	// The event row decides what this call is, not the chat's state. A call
+	// that repeats an event already recorded is a duplicate of it: finish it
+	// while the chat is still pending, and report "already launched" once the
+	// run has started — never "use SendMessage", which is only the answer to a
+	// NEW event aimed at a chat that has already begun.
 	existing, err := l.repo.GetTriggerEventByDedupe(ctx, ev.Kind, ev.DedupeKey)
 	switch {
 	case err == nil:
 		if isRetryOf(existing, ev.Kind, fingerprint) {
+			if !pending {
+				return nil, &AlreadyLaunchedError{ChatID: chat.ID, EventID: existing.ID}
+			}
 			return l.startRecorded(ctx, existing, spec, seed)
 		}
 	case !errors.Is(err, core.ErrTriggerEventNotFound):
 		return nil, &InternalError{Reason: "failed to check for an earlier launch", Err: err}
+	}
+	if !pending {
+		return nil, ErrNotPending
 	}
 
 	project, err := l.repo.GetProjectWithUserCheck(ctx, chat.ProjectID, userID)
@@ -566,6 +575,11 @@ func (l *Launcher) launchPending(ctx context.Context, ev Event, spec Spec, seed 
 		return l.saveSeedMessages(txCtx, cur.ID, workflowID, seed.systemMessages, seed, spec.Attachments)
 	}); err != nil {
 		if errors.Is(err, ErrNotPending) {
+			// The chat started between the check above and the transaction.
+			// If that start was a duplicate of this very event, say so.
+			if stored, lookupErr := l.repo.GetTriggerEventByDedupe(ctx, ev.Kind, ev.DedupeKey); lookupErr == nil && isRetryOf(stored, ev.Kind, fingerprint) {
+				return nil, &AlreadyLaunchedError{ChatID: chat.ID, EventID: stored.ID}
+			}
 			return nil, ErrNotPending
 		}
 		logging.Error("Failed to start pending chat", "error", err, "chatID", chat.ID)

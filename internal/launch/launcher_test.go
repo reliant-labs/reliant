@@ -559,7 +559,13 @@ func TestLaunchStartsPendingBranchAndRefusesASecondStart(t *testing.T) {
 
 	before := len(starter.startedIDs())
 	_, err = launcher.Launch(ctx, ev, spec)
-	require.ErrorIs(t, err, ErrNotPending)
+	require.ErrorIs(t, err, ErrAlreadyLaunched, "the same send again is a duplicate of the recorded start")
+	assert.NotErrorIs(t, err, ErrNotPending)
+
+	different := spec
+	different.Messages = userSeed("a different message")
+	_, err = launcher.Launch(ctx, ev, different)
+	require.ErrorIs(t, err, ErrNotPending, "new content for a started chat belongs to SendMessage")
 	assert.Len(t, starter.startedIDs(), before, "a refused start must not call Temporal again")
 }
 

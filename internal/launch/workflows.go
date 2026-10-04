@@ -363,6 +363,12 @@ func (l *Launcher) loadCreateChatWorkflowForValidation(ctx context.Context, user
 	slug := NormalizeWorkflowSlug(workflowName)
 	draft, err := l.repo.GetUsableWorkflowBySlug(ctx, userID, slug)
 	if err != nil {
+		var notRunnable *db.WorkflowDraftNotRunnableError
+		if errors.As(err, &notRunnable) {
+			// A verdict about the draft (it is not marked complete), not a
+			// store failure: final, and the message names the remedy.
+			return nil, err
+		}
 		return nil, &workflowLookupError{Err: fmt.Errorf("failed to look up workflow '%s': %w", workflowName, err)}
 	}
 	if draft != nil {

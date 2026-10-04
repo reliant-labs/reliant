@@ -3,6 +3,7 @@ import {
   WorkflowState,
   WorkflowStopReason,
 } from "../../gen/reliant/v1/chat_pb";
+import { Code, ConnectError } from "@connectrpc/connect";
 import { sendOnExistingChat } from "../chatSendRouting";
 import { chatNeedsStart, isWorkflowPending } from "../workflowLifecycle";
 
@@ -70,6 +71,36 @@ describe("sendOnExistingChat", () => {
     };
     await sendOnExistingChat(paused, "chat-1", "hi", undefined, options, actions);
     expect(actions.sendMessage).toHaveBeenCalledTimes(1);
+    expect(actions.startExistingChat).not.toHaveBeenCalled();
+  });
+
+  it("a stale ACTIVE chat the server says has not started is started once", async () => {
+    const actions = makeActions();
+    actions.sendMessage.mockRejectedValue(
+      new ConnectError("chat has not started; call StartChat", Code.FailedPrecondition),
+    );
+    await sendOnExistingChat(
+      { workflowState: WorkflowState.ACTIVE },
+      "chat-1",
+      "hi",
+      undefined,
+      options,
+      actions,
+    );
+    expect(actions.startExistingChat).toHaveBeenCalledTimes(1);
+    expect(actions.startExistingChat).toHaveBeenCalledWith("chat-1", "hi", undefined, {
+      workflow: null,
+      workflowParams: { a: 1 },
+    });
+  });
+
+  it("other sendMessage failures are not retried as a start", async () => {
+    const actions = makeActions();
+    const failure = new ConnectError("workflow switch not allowed", Code.FailedPrecondition);
+    actions.sendMessage.mockRejectedValue(failure);
+    await expect(
+      sendOnExistingChat({ workflowState: WorkflowState.ACTIVE }, "c", "hi", undefined, options, actions),
+    ).rejects.toBe(failure);
     expect(actions.startExistingChat).not.toHaveBeenCalled();
   });
 });

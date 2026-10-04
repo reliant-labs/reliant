@@ -6,6 +6,7 @@ import (
 	"errors"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -256,4 +257,58 @@ func TestLaunchMissingProjectIsNotFound(t *testing.T) {
 		Params: mockModelParams(t), Messages: userSeed("hi"),
 	})
 	require.ErrorIs(t, err, ErrNotFound)
+}
+
+// A duplicate of an event whose run has ALREADY started is "already launched",
+// not "use SendMessage". This forces the ordering the concurrent launch test
+// only hits one run in ten: the winner has started Temporal before the loser
+// reaches the existing chat. The loser targets the chat (Spec.ChatID) with the
+// same (kind, dedupe key).
+func TestLaunchDuplicateOfStartedEventIsAlreadyLaunched(t *testing.T) {
+	repo, ctx, projectID, _ := launchFixture(t)
+	starter := &fakeStarter{}
+	launcher, _ := newTestLauncher(t, repo, starter)
+
+	chatID := uuid.NewString()
+	ev := Event{Kind: core.TriggerEventKindSchedule, DedupeKey: "fire-" + chatID}
+	spec := Spec{
+		OwnerUserID: launchTestUserID, ProjectID: projectID, NewChatID: chatID,
+		Workflow: "builtin://agent", Params: mockModelParams(t), Messages: userSeed("hello"),
+	}
+	_, err := launcher.Launch(ctx, ev, spec)
+	require.NoError(t, err)
+	root, err := repo.GetWorkflow(ctx, chatID)
+	require.NoError(t, err)
+	require.Equal(t, db.Active(), root.Status, "the winner has started")
+
+	loser := spec
+	loser.NewChatID = ""
+	loser.ChatID = chatID
+	loser.ProjectID = ""
+	_, err = launcher.Launch(ctx, ev, loser)
+	require.ErrorIs(t, err, ErrAlreadyLaunched)
+	assert.NotErrorIs(t, err, ErrNotPending)
+	assert.Len(t, starter.startedIDs(), 1, "the duplicate must not start Temporal again")
+}
+
+// A workflow that exists but is still a draft is a verdict, not a store
+// failure: it must stay a final validation error that names the draft.
+func TestLaunchDraftWorkflowStaysAValidationError(t *testing.T) {
+	repo, ctx, projectID, _ := launchFixture(t)
+	now := time.Now().UTC()
+	require.NoError(t, repo.CreateWorkflowDraft(ctx, &db.WorkflowDraft{
+		ID: uuid.NewString(), UserID: launchTestUserID, Name: "still-draft", Slug: "still-draft",
+		Definition: "name: still-draft\nentry: [echo]\nnodes:\n  - id: echo\n    type: run\n    command: \"echo hi\"\n",
+		Status:     db.WorkflowDraftStatusDraft, CreatedAt: now, UpdatedAt: now, Version: 1,
+	}))
+	launcher, _ := newTestLauncher(t, repo, &fakeStarter{})
+
+	_, err := launcher.Launch(ctx, Event{Kind: core.TriggerEventKindSchedule, DedupeKey: "k-" + uuid.NewString()}, Spec{
+		OwnerUserID: launchTestUserID, ProjectID: projectID, Workflow: "still-draft",
+		Params: mockModelParams(t), Messages: userSeed("hi"),
+	})
+	var validation *ValidationError
+	require.ErrorAs(t, err, &validation)
+	assert.Contains(t, validation.Reason, "is a draft")
+	assert.NotErrorIs(t, err, ErrInternal)
 }
