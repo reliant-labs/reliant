@@ -85,6 +85,7 @@ type automationHarness struct {
 	daemonID  string
 	chatID    string
 	toolCalls *int
+	router    *toolexec.NATSDaemonRouter
 	mu        *sync.Mutex
 }
 
@@ -145,7 +146,7 @@ func newAutomationHarness(t *testing.T, launchKind core.TriggerEventKind) *autom
 	require.True(t, created)
 
 	return &automationHarness{
-		repo: repo, cp: cp, userID: userID, daemonID: daemonID, chatID: chatID, toolCalls: &calls, mu: &mu,
+		repo: repo, cp: cp, router: router, userID: userID, daemonID: daemonID, chatID: chatID, toolCalls: &calls, mu: &mu,
 		activity: NewPreflightDaemonCheckActivity(repo, toolexec.NewRemoteExecutor(router)),
 	}
 }
@@ -174,6 +175,13 @@ func TestScheduledFireWithoutJWTResumesPinnedDaemonOnce(t *testing.T) {
 	assert.True(t, out.DaemonAvailable)
 
 	assert.Equal(t, 1, h.cp.resumes, "the daemon is resumed exactly once")
+	assert.Equal(t, h.daemonID, out.DaemonID)
+
+	// The woken daemon now answers a tool call, and that call wakes nothing.
+	_, err = h.router.SendToolRequestSyncWithSelector(context.Background(), h.userID,
+		&toolexec.ToolExecutionRequest{RequestID: "r1", ToolName: "ping"}, &toolexec.DaemonSelector{ID: h.daemonID})
+	require.NoError(t, err)
+	assert.Equal(t, 1, h.cp.resumes, "tool-time traffic never resumes")
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	assert.Equal(t, 1, *h.toolCalls, "the tool call reached the woken daemon")

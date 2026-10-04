@@ -439,6 +439,8 @@ func (s *ChatService) SendMessage(
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("chat not found"))
 	}
 
+	s.wakeDaemonForAttendedTurn(ctx, userID, chat)
+
 	// Note: Previously checked if workflow completed and thread is closed.
 	// Removed to allow restarting workflows - SendMessage will start a new workflow
 	// for completed/failed/cancelled workflows (see status switch below).

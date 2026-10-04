@@ -96,14 +96,11 @@ func (a *PreflightDaemonCheckActivity) Execute(ctx context.Context, input Prefli
 	}
 
 	if !online {
-		// Try resolution with selector (may wake up a suspended daemon via control plane).
-		if input.DaemonSelector != nil {
-			_, err := router.SendToolRequestSyncWithSelector(ctx, project.UserID, &toolexec.ToolExecutionRequest{
-				RequestID: "preflight-check",
-				ToolName:  "__preflight_ping",
-			}, input.DaemonSelector)
-			if err == nil {
-				return PreflightDaemonCheckOutput{DaemonAvailable: true}, nil
+		// Preflight is the run's wake point: the only place, besides an
+		// attended send, that may resume a suspended daemon.
+		if waker, ok := router.(toolexec.DaemonWaker); ok {
+			if daemonID, wakeErr := waker.EnsureAwake(ctx, project.UserID, input.DaemonSelector); wakeErr == nil {
+				return PreflightDaemonCheckOutput{DaemonAvailable: true, DaemonID: daemonID}, nil
 			}
 		}
 

@@ -86,6 +86,15 @@ func (s *ChatService) StartChat(
 		spec.UserJWT = jwt
 	}
 
+	if id := req.Msg.GetChatId(); id != "" {
+		// A branch's first send: wake the daemon it is pinned to.
+		if branch, getErr := s.getChatForUser(ctx, id, userID); getErr == nil {
+			s.wakeDaemonForAttendedTurn(ctx, userID, branch)
+		}
+	} else {
+		s.wakeDaemonForAttendedTurn(ctx, userID, nil)
+	}
+
 	result, err := s.launcher().Launch(ctx, event, spec)
 	if err != nil {
 		return nil, launchErrorToConnect(err)

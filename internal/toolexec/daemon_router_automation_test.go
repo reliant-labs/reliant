@@ -98,7 +98,7 @@ func TestRouterUsesAutomationTokenAndPinnedDaemonOnResolveAndResume(t *testing.T
 		return "", nil
 	}))
 
-	id, _, err := router.resolveViaControlPlane(context.Background(), "user-x", &DaemonSelector{ID: "daemon-a"})
+	id, err := router.EnsureAwake(context.Background(), "user-x", &DaemonSelector{ID: "daemon-a"})
 	require.NoError(t, err)
 	assert.Equal(t, "daemon-a", id)
 	assert.Equal(t, []string{"Bearer rlat_a"}, reg.resolves)
@@ -112,7 +112,7 @@ func TestRouterRefusesDaemonTheTokenIsNotBoundTo(t *testing.T) {
 	// A (buggy) credential source that hands daemon-a's token for daemon-b.
 	router := newBindingRouter(t, reg, credFunc(func(context.Context, string, string) (string, error) { return "rlat_a", nil }))
 
-	_, _, err := router.resolveViaControlPlane(context.Background(), "user-x", &DaemonSelector{ID: "daemon-b"})
+	_, err := router.EnsureAwake(context.Background(), "user-x", &DaemonSelector{ID: "daemon-b"})
 	require.Error(t, err)
 	assert.Empty(t, reg.resumes)
 }
@@ -121,12 +121,17 @@ func TestRouterWithoutAnyCredentialReportsAutomationNotGranted(t *testing.T) {
 	reg := &bindingRegistry{token: "rlat_a", daemonID: "daemon-a"}
 	router := newBindingRouter(t, reg, credFunc(func(context.Context, string, string) (string, error) { return "", nil }))
 
-	_, _, err := router.resolveViaControlPlane(context.Background(), "user-x", &DaemonSelector{ID: "daemon-a"})
+	_, err := router.EnsureAwake(context.Background(), "user-x", &DaemonSelector{ID: "daemon-a"})
 	require.ErrorIs(t, err, ErrAutomationAccessNotGranted)
 	assert.Empty(t, reg.resolves, "no request is sent without a credential")
 
-	_, err = router.resolveDaemonID(context.Background(), "user-x", &DaemonSelector{ID: "daemon-a"})
-	require.ErrorIs(t, err, ErrAutomationAccessNotGranted, "an opaque 401 is replaced by the clear outcome")
+	// Tool-time resolution of a pinned daemon needs no credential and sends no
+	// control-plane request; NATS decides whether the daemon is reachable.
+	id, err := router.resolveDaemonID(context.Background(), "user-x", &DaemonSelector{ID: "daemon-a"})
+	require.NoError(t, err)
+	assert.Equal(t, "daemon-a", id)
+	assert.Empty(t, reg.resolves)
+	assert.Empty(t, reg.resumes)
 }
 
 func TestRouterWithoutCredentialsOptionKeepsUsingUserJWT(t *testing.T) {
@@ -140,7 +145,7 @@ func TestRouterWithoutCredentialsOptionKeepsUsingUserJWT(t *testing.T) {
 	defer srv.Close()
 	router := NewNATSDaemonRouter(nil, WithControlPlaneClient(reliantv1connect.NewDaemonRegistryServiceClient(http.DefaultClient, srv.URL)))
 
-	id, _, err := router.resolveViaControlPlane(context.Background(), "user-jwt-only", &DaemonSelector{ID: "daemon-a"})
+	id, err := router.EnsureAwake(context.Background(), "user-jwt-only", &DaemonSelector{ID: "daemon-a"})
 	require.NoError(t, err)
 	assert.Equal(t, "daemon-a", id)
 }

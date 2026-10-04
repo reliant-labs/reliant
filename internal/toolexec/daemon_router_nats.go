@@ -148,8 +148,8 @@ func (r *NATSDaemonRouter) ResolveDaemonID(ctx context.Context, userID string) (
 //  2. Control plane gRPC (ResolveDaemon RPC) if controlPlaneClient is set
 //  3. DB fallback
 //
-// If the resolved daemon is suspended and controlPlaneClient is set,
-// ResumeDaemon is called to wake it up.
+// Resolution never wakes anything: a suspended daemon yields ErrDaemonPending.
+// Waking is EnsureAwake's job alone.
 func (r *NATSDaemonRouter) resolveDaemonID(ctx context.Context, userID string, selector *DaemonSelector) (string, error) {
 	// Tracks whether ANY step below observed a daemon RECORD for this user
 	// (provisioning, suspended, whatever) even though none of them are
@@ -189,6 +189,11 @@ func (r *NATSDaemonRouter) resolveDaemonID(ctx context.Context, userID string, s
 		if err == nil {
 			return daemonID, nil
 		}
+		if errors.Is(err, ErrDaemonPending) {
+			// Suspended: the DB fallback below would hand back this very id
+			// and the request would die on a missing subscription instead.
+			return "", err
+		}
 		if errors.Is(err, ErrAutomationAccessNotGranted) {
 			noCredential = true
 		}
@@ -227,6 +232,9 @@ func (r *NATSDaemonRouter) resolveDaemonID(ctx context.Context, userID string, s
 			if selector != nil && selector.Type != "" && selector.Type != "any" {
 				continue
 			}
+			if selector != nil && selector.ID != "" && selector.ID != d.ID {
+				continue
+			}
 			if attached[d.ID] {
 				return d.ID, nil
 			}
@@ -239,10 +247,14 @@ func (r *NATSDaemonRouter) resolveDaemonID(ctx context.Context, userID string, s
 		}
 	}
 
+	// Tool-time resolution never needs the control plane: with no credential
+	// held (an unattended run whose delegated token is wake-only), a PINNED
+	// daemon id goes straight to NATS. Routing is authoritative there, and the
+	// subject is scoped to this user, so a suspended daemon surfaces as "no
+	// daemon connected" rather than being woken or misreported as an
+	// authorisation failure.
 	if noCredential && selector != nil && selector.ID != "" {
-		logging.Warn("[DaemonRouter] no control-plane credential for pinned daemon",
-			append([]any{"user_id", userID}, selectorLogFields(selector)...)...)
-		return "", ErrAutomationAccessNotGranted
+		return selector.ID, nil
 	}
 
 	// ── The user id stays in the LOG, never in the message ───────────
@@ -294,22 +306,13 @@ func selectorLogFields(selector *DaemonSelector) []any {
 	}
 }
 
-// resolveViaControlPlane calls the control plane's ResolveDaemon RPC.
-// If the resolved daemon is suspended, it calls ResumeDaemon to wake it.
+// lookupViaControlPlane calls the control plane's ResolveDaemon RPC and returns
+// the daemon it names with the Bearer used, so a caller allowed to wake can
+// reuse it. It never resumes anything.
 //
-// Returns (daemonID, sawRecord, err). sawRecord is true whenever the control
-// plane's response names a daemon record for this user at all — even one it
-// reports as Found=false because it isn't routable yet (still provisioning,
-// no endpoint assigned). The daemonregistry adapter
-// (control-plane/internal/daemonregistry/adapter.go, translateResolveDaemon)
-// computes Found purely from `endpoint_url != "" || connected`, which is
-// false for a daemon mid-provisioning even though the underlying
-// ResolveDaemonEndpoint call proves the row exists (it only 404s when there
-// is truly no row). So a non-empty Daemon.DaemonId on an unfound response is
-// the signal that distinguishes "still starting" from "never existed" —
-// callers use sawRecord to choose ErrDaemonPending over a flat resolution
-// failure.
-func (r *NATSDaemonRouter) resolveViaControlPlane(ctx context.Context, userID string, selector *DaemonSelector) (daemonID string, sawRecord bool, err error) {
+// sawRecord is true when the control plane knew of a daemon record, which
+// separates "still coming up / suspended" from "never existed".
+func (r *NATSDaemonRouter) lookupViaControlPlane(ctx context.Context, userID string, selector *DaemonSelector) (daemon *reliantv1.DaemonInfo, bearer string, sawRecord bool, err error) {
 	req := &reliantv1.ResolveDaemonRequest{}
 	if selector != nil {
 		req.DaemonId = selector.ID
@@ -325,7 +328,6 @@ func (r *NATSDaemonRouter) resolveViaControlPlane(ctx context.Context, userID st
 	// header every call here 401s, which is indistinguishable from "no
 	// control-plane client configured" and was why control-plane
 	// resolution silently never contributed a result.
-	bearer := ""
 	if r.credentials != nil {
 		pinned := ""
 		if selector != nil {
@@ -333,10 +335,10 @@ func (r *NATSDaemonRouter) resolveViaControlPlane(ctx context.Context, userID st
 		}
 		token, credErr := r.credentials.BearerFor(ctx, userID, pinned)
 		if credErr != nil {
-			return "", false, fmt.Errorf("loading control-plane credential: %w", credErr)
+			return nil, "", false, fmt.Errorf("loading control-plane credential: %w", credErr)
 		}
 		if token == "" {
-			return "", false, ErrAutomationAccessNotGranted
+			return nil, "", false, ErrAutomationAccessNotGranted
 		}
 		bearer = "Bearer " + token
 	} else if jwt, ok := auth.GetUserJWT(userID); ok && jwt != "" {
@@ -351,11 +353,11 @@ func (r *NATSDaemonRouter) resolveViaControlPlane(ctx context.Context, userID st
 		// A NotFound from the control plane means no record exists at all;
 		// any other transport/infra error is surfaced as-is with no record
 		// claim either way, since we can't tell.
-		return "", false, fmt.Errorf("control plane ResolveDaemon: %w", err)
+		return nil, "", false, fmt.Errorf("control plane ResolveDaemon: %w", err)
 	}
 	if !resp.Msg.Found || resp.Msg.Daemon == nil {
 		if resp.Msg.Daemon != nil && resp.Msg.Daemon.DaemonId != "" {
-			return "", true, fmt.Errorf("control plane found a daemon record but it is not yet routable")
+			return nil, "", true, fmt.Errorf("control plane found a daemon record but it is not yet routable")
 		}
 		// Found=false with a nil Daemon is ambiguous, and resolving it the wrong
 		// way is what told a user mid-provision "no machine is connected to your
@@ -371,35 +373,76 @@ func (r *NATSDaemonRouter) resolveViaControlPlane(ctx context.Context, userID st
 		// safe only because the OR lets a later step correct it; saying so
 		// explicitly keeps the next reader from "simplifying" this into an
 		// early return.
-		return "", false, fmt.Errorf("control plane found no matching daemon")
+		return nil, "", false, fmt.Errorf("control plane found no matching daemon")
 	}
 
-	daemon := resp.Msg.Daemon
+	return resp.Msg.Daemon, bearer, true, nil
+}
 
-	// If daemon is suspended or idle, try to wake it up.
-	if daemon.Status == reliantv1.DaemonStatus_DAEMON_STATUS_IDLE ||
-		daemon.Status == reliantv1.DaemonStatus_DAEMON_STATUS_DISCONNECTED {
-		// The same Bearer as the resolve above, for the same reason: the
-		// control plane's ResumeDaemon derives the owner from it, so a resume
-		// sent without one is rejected as unauthenticated. It was, every time
-		// — which made this whole branch dead code that reported "could not
-		// be resumed" for every suspended daemon.
-		resumeReq := connect.NewRequest(&reliantv1.ResumeDaemonRequest{
-			DaemonId: daemon.DaemonId,
-		})
-		if bearer != "" {
-			resumeReq.Header().Set("Authorization", bearer)
-		}
-		resumeResp, err := r.controlPlaneClient.ResumeDaemon(ctx, resumeReq)
-		if err != nil {
-			return "", true, fmt.Errorf("control plane ResumeDaemon(%s): %w", daemon.DaemonId, err)
-		}
-		if !resumeResp.Msg.Resumed {
-			return "", true, fmt.Errorf("daemon %s could not be resumed: %s", daemon.DaemonId, resumeResp.Msg.ErrorMessage)
-		}
+func daemonIsSuspended(d *reliantv1.DaemonInfo) bool {
+	return d.Status == reliantv1.DaemonStatus_DAEMON_STATUS_IDLE ||
+		d.Status == reliantv1.DaemonStatus_DAEMON_STATUS_DISCONNECTED
+}
+
+// resolveViaControlPlane is the non-waking resolution: a suspended daemon is
+// reported as ErrDaemonPending, never resumed.
+func (r *NATSDaemonRouter) resolveViaControlPlane(ctx context.Context, userID string, selector *DaemonSelector) (daemonID string, sawRecord bool, err error) {
+	daemon, _, sawRecord, err := r.lookupViaControlPlane(ctx, userID, selector)
+	if err != nil {
+		return "", sawRecord, err
 	}
-
+	if daemonIsSuspended(daemon) {
+		logging.Info("[DaemonRouter] daemon is suspended; not waking it from tool-time resolution",
+			append([]any{"user_id", userID, "daemon_id", daemon.DaemonId}, selectorLogFields(selector)...)...)
+		return "", true, fmt.Errorf("the machine for this request is suspended and will wake when you next message it: %w", ErrDaemonPending)
+	}
 	return daemon.DaemonId, true, nil
+}
+
+// DaemonWaker wakes a suspended daemon. It is held only by the callers that
+// are allowed to: run preflight and the attended send/start path. Tool-time
+// code holds DaemonRouter, which has no such method.
+type DaemonWaker interface {
+	EnsureAwake(ctx context.Context, userID string, selector *DaemonSelector) (daemonID string, err error)
+}
+
+var _ DaemonWaker = (*NATSDaemonRouter)(nil)
+
+// EnsureAwake returns the id of a reachable daemon for the selector, resuming
+// it through the control plane when it is suspended. It is the ONLY code in
+// this router that calls ResumeDaemon.
+//
+// The Bearer is whatever lookupViaControlPlane chose: the user's JWT, or, for
+// a ctx marked by automationcred.Allow, the delegated token bound to the
+// selector's daemon.
+func (r *NATSDaemonRouter) EnsureAwake(ctx context.Context, userID string, selector *DaemonSelector) (string, error) {
+	if r.resolver != nil {
+		if daemons, err := r.resolver.ResolveDaemons(ctx, userID, selector); err == nil && len(daemons) > 0 {
+			return daemons[0].DaemonID, nil
+		}
+	}
+	if r.controlPlaneClient == nil {
+		return r.resolveDaemonID(ctx, userID, selector)
+	}
+	daemon, bearer, _, err := r.lookupViaControlPlane(ctx, userID, selector)
+	if err != nil {
+		return "", err
+	}
+	if !daemonIsSuspended(daemon) {
+		return daemon.DaemonId, nil
+	}
+	resumeReq := connect.NewRequest(&reliantv1.ResumeDaemonRequest{DaemonId: daemon.DaemonId})
+	if bearer != "" {
+		resumeReq.Header().Set("Authorization", bearer)
+	}
+	resumeResp, err := r.controlPlaneClient.ResumeDaemon(ctx, resumeReq)
+	if err != nil {
+		return "", fmt.Errorf("control plane ResumeDaemon(%s): %w", daemon.DaemonId, err)
+	}
+	if !resumeResp.Msg.Resumed {
+		return "", fmt.Errorf("daemon %s could not be resumed: %s", daemon.DaemonId, resumeResp.Msg.ErrorMessage)
+	}
+	return daemon.DaemonId, nil
 }
 
 // daemonStaleThreshold is 6 missed 15s heartbeats, matching the gateway's

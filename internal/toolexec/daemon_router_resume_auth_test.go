@@ -40,7 +40,7 @@ func (f *authRecordingRegistryClient) ResumeDaemon(_ context.Context, req *conne
 	return connect.NewResponse(&reliantv1.ResumeDaemonResponse{Resumed: true}), nil
 }
 
-// TestResolveViaControlPlane_ResumeCarriesTheCallersBearer: waking a suspended
+// TestEnsureAwake_ResumeCarriesTheCallersBearer: waking a suspended
 // daemon must authenticate as the user, exactly like resolving it does.
 //
 // The control plane's DaemonRegistryService adapter has no service-credential
@@ -50,7 +50,7 @@ func (f *authRecordingRegistryClient) ResumeDaemon(_ context.Context, req *conne
 // it did not, so every automatic wake from the router was rejected as
 // unauthenticated and surfaced as "daemon could not be resumed" — the router's
 // whole suspended-daemon branch could never succeed.
-func TestResolveViaControlPlane_ResumeCarriesTheCallersBearer(t *testing.T) {
+func TestEnsureAwake_ResumeCarriesTheCallersBearer(t *testing.T) {
 	const userID = "user-resume-auth"
 	auth.SetUserJWT(userID, "jwt-for-resume")
 	t.Cleanup(func() { auth.SetUserJWT(userID, "") })
@@ -58,9 +58,8 @@ func TestResolveViaControlPlane_ResumeCarriesTheCallersBearer(t *testing.T) {
 	registry := &authRecordingRegistryClient{}
 	router := NewNATSDaemonRouter(nil, WithControlPlaneClient(registry))
 
-	id, sawRecord, err := router.resolveViaControlPlane(context.Background(), userID, nil)
+	id, err := router.EnsureAwake(context.Background(), userID, nil)
 	require.NoError(t, err)
-	assert.True(t, sawRecord)
 	assert.Equal(t, "daemon-suspended", id)
 
 	require.True(t, registry.resumed, "a suspended daemon must be resumed")
