@@ -11,6 +11,9 @@ import (
 // HealthWindow is how many of a trigger's newest firings health is read from.
 const HealthWindow = 10
 
+// EpisodeFirings bounds how many firings are read to size a failure episode.
+const EpisodeFirings = 500
+
 // skipStreakDegraded is the run of consecutive skipped firings that marks a
 // trigger DEGRADED: it is firing but never launching.
 const skipStreakDegraded = 3
@@ -36,7 +39,6 @@ func ComputeHealth(firings []*core.TriggerEventWithRun) *reliantv1.TriggerHealth
 	var (
 		anyFailure  bool
 		anySuccess  bool
-		failStreak  = true // still counting consecutive failures
 		skipStreak  = true
 		lastFailure string
 		haveFailure bool
@@ -49,13 +51,9 @@ func ComputeHealth(firings []*core.TriggerEventWithRun) *reliantv1.TriggerHealth
 			if !haveFailure {
 				lastFailure, haveFailure = detail, true
 			}
-			if failStreak {
-				health.ConsecutiveFailures++
-			}
 			skipStreak = false
 		case resultSuccess:
 			anySuccess = true
-			failStreak = false
 			skipStreak = false
 		case resultSkipped:
 			if skipStreak {
@@ -66,6 +64,7 @@ func ComputeHealth(firings []*core.TriggerEventWithRun) *reliantv1.TriggerHealth
 		}
 	}
 	health.LastFailureDetail = lastFailure
+	health.ConsecutiveFailures = FailureStreak(firings).Count
 
 	switch {
 	case health.ConsecutiveFailures >= 2:
@@ -109,17 +108,50 @@ func resolveFiring(f *core.TriggerEventWithRun) (firingResult, string) {
 	return resultUnresolved, ""
 }
 
-// NewestFailure returns the newest firing in the window that counts as a
-// failure under ComputeHealth's rules, or nil when none does. Callers key
-// "this failure" on its event id, so a newer failure is a different one.
-func NewestFailure(firings []*core.TriggerEventWithRun) *core.TriggerEventWithRun {
-	if len(firings) > HealthWindow {
-		firings = firings[:HealthWindow]
-	}
+// Streak is a trigger's current run of consecutive failures, newest-first
+// input, ended by the first success. Skipped and still-running firings neither
+// extend nor end it, exactly as in ComputeHealth.
+type Streak struct {
+	// Count is how many failures the streak holds.
+	Count int32
+	// First is the OLDEST failure of the streak: the episode's identity. A
+	// later failure of the same streak leaves it unchanged, which is what keeps
+	// one Inbox item (and one dismissal) per episode. Nil when Count is 0.
+	First *core.TriggerEventWithRun
+	// Newest is the most recent failure. Nil when Count is 0.
+	Newest *core.TriggerEventWithRun
+}
+
+// FailureStreak reads the failure streak from newest-first firings. Unlike
+// ComputeHealth it is NOT limited to HealthWindow: callers pass the firings
+// since the last success, so a long outage is one episode, not a sliding one.
+func FailureStreak(firings []*core.TriggerEventWithRun) Streak {
+	var streak Streak
 	for _, f := range firings {
-		if result, _ := resolveFiring(f); result == resultFailure {
-			return f
+		result, _ := resolveFiring(f)
+		if result == resultSuccess {
+			break
+		}
+		if result != resultFailure {
+			continue
+		}
+		streak.Count++
+		streak.First = f
+		if streak.Newest == nil {
+			streak.Newest = f
 		}
 	}
-	return nil
+	return streak
+}
+
+// PriorFailureStreak is the streak of firings OLDER than the one launching
+// chatID, and reports whether chatID's firing was found. It answers "was the
+// run that just failed the first of its streak?" without counting itself.
+func PriorFailureStreak(firings []*core.TriggerEventWithRun, chatID string) (Streak, bool) {
+	for i, f := range firings {
+		if f.Event != nil && f.Event.ChatID != nil && *f.Event.ChatID == chatID {
+			return FailureStreak(firings[i+1:]), true
+		}
+	}
+	return Streak{}, false
 }

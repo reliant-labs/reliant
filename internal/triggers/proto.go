@@ -90,21 +90,22 @@ func ToProto(t *core.Trigger, nextFireAt *time.Time, firings []*core.TriggerEven
 	}
 
 	out := &reliantv1.Trigger{
-		Id:          t.ID,
-		Name:        t.Name,
-		ProjectId:   t.ProjectID,
-		WorktreeId:  t.WorktreeID,
-		Enabled:     t.Enabled,
-		Workflow:    t.Workflow,
-		Presets:     t.Presets,
-		Params:      params,
-		Message:     t.Message,
-		DaemonId:    t.DaemonID,
-		ProjectName: t.ProjectName,
-		DaemonName:  t.DaemonName,
-		Health:      ComputeHealth(firings),
-		CreatedAt:   t.CreatedAt.UTC().Format(time.RFC3339),
-		UpdatedAt:   t.UpdatedAt.UTC().Format(time.RFC3339),
+		Id:               t.ID,
+		Name:             t.Name,
+		ProjectId:        t.ProjectID,
+		WorktreeId:       t.WorktreeID,
+		Enabled:          t.Enabled,
+		Workflow:         t.Workflow,
+		Presets:          t.Presets,
+		Params:           params,
+		Message:          t.Message,
+		DaemonId:         t.DaemonID,
+		NotifyOnComplete: t.NotifyOnComplete,
+		ProjectName:      t.ProjectName,
+		DaemonName:       t.DaemonName,
+		Health:           ComputeHealth(firings),
+		CreatedAt:        t.CreatedAt.UTC().Format(time.RFC3339),
+		UpdatedAt:        t.UpdatedAt.UTC().Format(time.RFC3339),
 	}
 
 	if t.Kind == core.TriggerKindSchedule {

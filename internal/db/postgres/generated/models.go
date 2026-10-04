@@ -604,21 +604,22 @@ type ToolCallResult struct {
 }
 
 type Trigger struct {
-	ID         string          `json:"id"`
-	UserID     string          `json:"user_id"`
-	ProjectID  string          `json:"project_id"`
-	WorktreeID sql.NullString  `json:"worktree_id"`
-	Name       string          `json:"name"`
-	Kind       string          `json:"kind"`
-	Enabled    bool            `json:"enabled"`
-	Workflow   string          `json:"workflow"`
-	Presets    json.RawMessage `json:"presets"`
-	Params     json.RawMessage `json:"params"`
-	Message    string          `json:"message"`
-	Config     json.RawMessage `json:"config"`
-	CreatedAt  time.Time       `json:"created_at"`
-	UpdatedAt  time.Time       `json:"updated_at"`
-	DaemonID   string          `json:"daemon_id"`
+	ID               string          `json:"id"`
+	UserID           string          `json:"user_id"`
+	ProjectID        string          `json:"project_id"`
+	WorktreeID       sql.NullString  `json:"worktree_id"`
+	Name             string          `json:"name"`
+	Kind             string          `json:"kind"`
+	Enabled          bool            `json:"enabled"`
+	Workflow         string          `json:"workflow"`
+	Presets          json.RawMessage `json:"presets"`
+	Params           json.RawMessage `json:"params"`
+	Message          string          `json:"message"`
+	Config           json.RawMessage `json:"config"`
+	CreatedAt        time.Time       `json:"created_at"`
+	UpdatedAt        time.Time       `json:"updated_at"`
+	DaemonID         string          `json:"daemon_id"`
+	NotifyOnComplete bool            `json:"notify_on_complete"`
 }
 
 type TriggerEvent struct {

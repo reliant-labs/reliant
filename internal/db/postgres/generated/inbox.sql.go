@@ -142,10 +142,13 @@ SELECT kind, item_key, chat_id, run_id, trigger_id, project_id, project_name, wo
 
     UNION ALL
 
-    -- The newest failed launch of each trigger, unless a later firing launched.
+    -- One row per failed-launch EPISODE: the failures since the trigger's last
+    -- launched firing. The key is the episode's FIRST failed event, so more
+    -- failures keep the same item (and the same dismissal) and a new episode,
+    -- after a launch, is a new item. a_int is the episode's failure count.
     SELECT
         5,
-        f.id,
+        ep.first_id,
         '',
         '',
         t.id,
@@ -154,10 +157,10 @@ SELECT kind, item_key, chat_id, run_id, trigger_id, project_id, project_name, wo
         t.workflow,
         '',
         t.name,
-        f.occurred_at,
+        ep.first_at,
         f.outcome_detail,
         f.kind,
-        0
+        ep.failures
     FROM triggers t
     JOIN LATERAL (
         SELECT e.id, e.kind, e.occurred_at, e.outcome_detail
@@ -166,14 +169,59 @@ SELECT kind, item_key, chat_id, run_id, trigger_id, project_id, project_name, wo
         ORDER BY e.occurred_at DESC, e.id DESC
         LIMIT 1
     ) f ON true
+    LEFT JOIN LATERAL (
+        SELECT l.occurred_at, l.id
+        FROM trigger_events l
+        WHERE l.trigger_id = t.id AND l.outcome = 'launched'
+        ORDER BY l.occurred_at DESC, l.id DESC
+        LIMIT 1
+    ) lt ON true
+    JOIN LATERAL (
+        SELECT
+            (array_agg(x.id ORDER BY x.occurred_at, x.id))[1]::text AS first_id,
+            min(x.occurred_at)::timestamptz AS first_at,
+            count(*)::integer AS failures
+        FROM trigger_events x
+        WHERE x.trigger_id = t.id AND x.outcome = 'failed'
+          AND (lt.id IS NULL OR (x.occurred_at, x.id) > (lt.occurred_at, lt.id))
+    ) ep ON true
     LEFT JOIN projects p ON p.id = t.project_id
     WHERE t.user_id = $1::text
       AND t.enabled
-      AND NOT EXISTS (
-          SELECT 1 FROM trigger_events l
-          WHERE l.trigger_id = t.id AND l.outcome = 'launched'
-            AND (l.occurred_at, l.id) > (f.occurred_at, f.id)
-      )
+      AND ep.failures > 0
+
+    UNION ALL
+
+    -- A completed, still-unread run of an automation that opted in to
+    -- "Notify me when it finishes". Unread is the clear condition: opening the
+    -- chat marks it read. A run that declared a failure outcome is a failure,
+    -- not a finish.
+    SELECT
+        6,
+        c.id,
+        c.id,
+        COALESCE(c.workflow_id, c.id),
+        t.id,
+        c.project_id,
+        COALESCE(p.name, ''),
+        COALESCE(c.workflow_name, ''),
+        c.title,
+        t.name,
+        COALESCE(rw.completed_at, c.last_active),
+        '',
+        '',
+        0
+    FROM chats_with_activity c
+    JOIN triggers t ON t.id = c.trigger_id AND t.user_id = c.user_id
+    LEFT JOIN projects p ON p.id = c.project_id
+    LEFT JOIN workflows rw ON rw.id = c.workflow_id
+    WHERE c.launch_kind = 'schedule'
+      AND t.notify_on_complete
+      AND c.display_state = 5
+      AND c.unread = 1
+      AND COALESCE(rw.outcome, '') <> 'failure'
+      AND c.user_id = $1::text
+      AND c.state IS DISTINCT FROM 3
 ) inbox
 ORDER BY kind, waiting_since, item_key
 `
@@ -202,15 +250,16 @@ type ListInboxPendingRow struct {
 // Dismissal is applied in Go (ListDismissedInboxItemIDs), uniformly for every
 // dismissable kind. Disabled automations are not listed: pausing is the cure.
 // kind (reliantv1.InboxItemKind): 1 approval, 2 question, 3 waiting for
-// machine, 5 automation launch failed. 4 (automation failing) is derived in Go from
-// the trigger's health — internal/triggers.ComputeHealth is its only
-// implementation — and 6 (run finished) is reserved. Archived chats are not waiting on anyone.
+// machine, 5 automation launch failed (one per failure episode), 6 run
+// finished (opted-in automation). 4 (automation failing) is derived in Go from
+// the trigger's firings — internal/triggers owns that rule. Archived chats are
+// not waiting on anyone.
 //
 // Generic payload columns (a_text, b_text, a_int) carry the kind-specific bits:
 //
 //	approval:        a_text title, b_text metadata JSON, a_int approval_type
 //	question:        a_text thread_id, b_text metadata JSON
-//	launch failed:   a_text outcome_detail, b_text event kind
+//	launch failed:   a_text newest outcome_detail, b_text event kind, a_int failures in the episode
 //	waiting machine: a_text daemon_id, b_text daemon name
 func (q *Queries) ListInboxPending(ctx context.Context, userID string) ([]ListInboxPendingRow, error) {
 	rows, err := q.db.QueryContext(ctx, listInboxPending, userID)

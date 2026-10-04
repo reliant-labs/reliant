@@ -24,11 +24,14 @@ import (
 
 const defaultInboxLimit = 100
 
-// Item id prefixes for the dismissable kinds. The id embeds the failing event's
-// id, so a newer failure is a new item and is not hidden by an old dismissal.
+// Item id prefixes for the dismissable kinds. A failure id embeds the FIRST
+// failing event of the current episode, so more failures stay one item (and
+// one dismissal), while a new episode after a success is a new item. A
+// run-finished id embeds its chat.
 const (
 	inboxFailingPrefix      = "automation_failing:"
 	inboxLaunchFailedPrefix = "automation_launch_failed:"
+	inboxRunFinishedPrefix  = "run_finished:"
 )
 
 // InboxService implements the InboxService RPC handlers.
@@ -125,7 +128,7 @@ func (s *InboxService) DismissInboxItem(
 	itemID := req.Msg.ItemId
 	if !isDismissableInboxItem(itemID) {
 		return nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("only automation failure items can be dismissed; approvals and questions clear when resolved"))
+			fmt.Errorf("only automation failure and run-finished items can be dismissed; approvals and questions clear when resolved"))
 	}
 	if err := s.database.DismissInboxItem(ctx, userID, itemID, time.Now().UTC()); err != nil {
 		logging.Error("Failed to dismiss inbox item", "error", err, "itemID", itemID)
@@ -135,7 +138,7 @@ func (s *InboxService) DismissInboxItem(
 }
 
 func isDismissableInboxItem(itemID string) bool {
-	for _, prefix := range []string{inboxFailingPrefix, inboxLaunchFailedPrefix} {
+	for _, prefix := range []string{inboxFailingPrefix, inboxLaunchFailedPrefix, inboxRunFinishedPrefix} {
 		if strings.HasPrefix(itemID, prefix) && len(itemID) > len(prefix) {
 			return true
 		}
@@ -161,6 +164,13 @@ func (s *InboxService) failingAutomations(ctx context.Context, userID string) ([
 		return nil, err
 	}
 
+	// The episode is read separately from the health window: a streak longer
+	// than the window must still be one item with an honest count.
+	episodes, err := s.database.FiringsSinceLastSuccess(ctx, userID, ids, triggers.EpisodeFirings)
+	if err != nil {
+		return nil, err
+	}
+
 	var out []*reliantv1.InboxItem
 	for _, t := range stored {
 		if !t.Enabled {
@@ -171,10 +181,11 @@ func (s *InboxService) failingAutomations(ctx context.Context, userID string) ([
 		if health.Status != reliantv1.TriggerHealthStatus_TRIGGER_HEALTH_STATUS_FAILING {
 			continue
 		}
-		newest := triggers.NewestFailure(firings)
-		if newest == nil {
+		streak := triggers.FailureStreak(episodes[t.ID])
+		if streak.First == nil {
 			continue
 		}
+		health.ConsecutiveFailures = streak.Count
 		payload := &reliantv1.InboxAutomationFailing{Health: health}
 		for _, f := range firings {
 			if f.Run != nil {
@@ -185,13 +196,13 @@ func (s *InboxService) failingAutomations(ctx context.Context, userID string) ([
 		}
 		out = append(out, &reliantv1.InboxItem{
 			Kind:         reliantv1.InboxItemKind_INBOX_ITEM_KIND_AUTOMATION_FAILING,
-			ItemId:       inboxFailingPrefix + newest.Event.ID,
+			ItemId:       inboxFailingPrefix + streak.First.Event.ID,
 			TriggerId:    t.ID,
 			TriggerName:  t.Name,
 			ProjectId:    t.ProjectID,
 			ProjectName:  t.ProjectName,
 			WorkflowName: t.Workflow,
-			WaitingSince: newest.Event.OccurredAt.UTC().Format(time.RFC3339Nano),
+			WaitingSince: streak.First.Event.OccurredAt.UTC().Format(time.RFC3339Nano),
 			Payload:      &reliantv1.InboxItem_AutomationFailing{AutomationFailing: payload},
 		})
 	}
@@ -255,8 +266,12 @@ func inboxItemFromPending(p *core.InboxPending) *reliantv1.InboxItem {
 		item.Kind = reliantv1.InboxItemKind_INBOX_ITEM_KIND_AUTOMATION_LAUNCH_FAILED
 		item.ItemId = inboxLaunchFailedPrefix + p.ItemKey
 		item.Payload = &reliantv1.InboxItem_AutomationLaunchFailed{AutomationLaunchFailed: &reliantv1.InboxAutomationLaunchFailed{
-			Reason: p.Text1, EventId: p.ItemKey,
+			Reason: p.Text1, EventId: p.ItemKey, ConsecutiveFailures: p.Int1,
 		}}
+	case core.InboxPendingRunFinished:
+		item.Kind = reliantv1.InboxItemKind_INBOX_ITEM_KIND_RUN_FINISHED
+		item.ItemId = inboxRunFinishedPrefix + p.ItemKey
+		item.Payload = &reliantv1.InboxItem_RunFinished{RunFinished: &reliantv1.InboxRunFinished{}}
 	}
 	return item
 }

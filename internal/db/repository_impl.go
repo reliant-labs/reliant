@@ -3731,6 +3731,13 @@ func (r *Repo) RecentTriggerFirings(ctx context.Context, userID string, triggerI
 	return r.triggers.RecentTriggerFirings(ctx, userID, triggerIDs, perTrigger)
 }
 
+func (r *Repo) FiringsSinceLastSuccess(ctx context.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error) {
+	if userID == "" {
+		return nil, fmt.Errorf("user ID cannot be empty")
+	}
+	return r.triggers.FiringsSinceLastSuccess(ctx, userID, triggerIDs, perTrigger)
+}
+
 func (r *Repo) GetLatestTriggerEvent(ctx context.Context, triggerID string, outcome *core.TriggerEventOutcome) (*core.TriggerEvent, error) {
 	if triggerID == "" {
 		return nil, fmt.Errorf("trigger ID cannot be empty")

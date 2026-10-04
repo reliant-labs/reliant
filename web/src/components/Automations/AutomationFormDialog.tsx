@@ -175,10 +175,11 @@ function AutomationFormBody({
   const [timezone, setTimezone] = useState(initialSchedule?.timezone ?? browserTimezone());
   const [overlap, setOverlap] = useState<OverlapPolicy>(initialSchedule?.overlap ?? "skip");
   const [catchupWindow, setCatchupWindow] = useState(initialSchedule?.catchupWindow ?? "");
+  const [notifyOnComplete, setNotifyOnComplete] = useState(trigger?.notifyOnComplete ?? false);
   // Advanced settings open on their own when they hold something non-default,
   // so an edit never hides a value it is about to save.
   const [advancedOpen, setAdvancedOpen] = useState(
-    !!initialSchedule?.catchupWindow || initialSchedule?.overlap === "allow",
+    !!initialSchedule?.catchupWindow || initialSchedule?.overlap === "allow" || !!trigger?.notifyOnComplete,
   );
   const [errors, setErrors] = useState<FieldErrors>({});
   const [attempted, setAttempted] = useState(false);
@@ -289,6 +290,7 @@ function AutomationFormBody({
       params: inputs.params,
       message: message.trim(),
       daemonId,
+      notifyOnComplete,
       schedule: {
         cron: wire.cron,
         interval: wire.interval,
@@ -666,6 +668,24 @@ function AutomationFormBody({
                 />
               </div>
             </fieldset>
+
+            <div>
+              <label className="flex cursor-pointer items-start gap-2 text-sm text-foreground">
+                <input
+                  id={fieldId("notify-on-complete")}
+                  type="checkbox"
+                  className="mt-0.5 h-4 w-4 rounded border-border"
+                  checked={notifyOnComplete}
+                  onChange={(e) => setNotifyOnComplete(e.target.checked)}
+                  aria-describedby={fieldId("notify-on-complete-hint")}
+                />
+                <span>Notify me when it finishes</span>
+              </label>
+              <p id={fieldId("notify-on-complete-hint")} className={hintClass}>
+                Off by default: finished runs are silent and only land in Runs. Failures always notify, once per
+                streak.
+              </p>
+            </div>
 
             <div>
               <label htmlFor={fieldId("catchup")} className={labelClass}>

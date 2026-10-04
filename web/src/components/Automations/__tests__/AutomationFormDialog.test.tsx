@@ -570,6 +570,43 @@ describe("AutomationFormDialog", () => {
       });
     });
 
+    it("creates with Notify me when it finishes off, then on when ticked", async () => {
+      createTrigger.mockResolvedValue(create(CreateTriggerResponseSchema, { trigger: storedTrigger() }));
+      const user = userEvent.setup();
+      renderAtRoute(<AutomationFormDialog open onClose={vi.fn()} />);
+      fill(await screen.findByLabelText("Name"), "Sweep");
+      fill(screen.getByLabelText("Prompt"), "Sweep");
+      await waitFor(() => expect(screen.getByLabelText("Runs on")).toHaveValue("daemon-1"));
+      await user.click(screen.getByRole("button", { name: "Advanced" }));
+      const toggle = screen.getByRole("checkbox", { name: "Notify me when it finishes" });
+      expect(toggle).not.toBeChecked();
+      await user.click(toggle);
+      await user.click(screen.getByRole("button", { name: "Create automation" }));
+
+      await waitFor(() => expect(createTrigger).toHaveBeenCalledTimes(1));
+      expect(createTrigger.mock.calls[0]![0].trigger.notifyOnComplete).toBe(true);
+    });
+
+    it("an edit shows the stored value, opens Advanced for it, and sends changes back", async () => {
+      const stored = storedTrigger();
+      stored.notifyOnComplete = true;
+      updateTrigger.mockResolvedValue(create(UpdateTriggerResponseSchema, { trigger: stored }));
+      const user = userEvent.setup();
+
+      renderAtRoute(<AutomationFormDialog open onClose={vi.fn()} trigger={triggerFromProto(stored)} />);
+      const toggle = await screen.findByRole("checkbox", { name: "Notify me when it finishes" });
+      expect(toggle).toBeChecked();
+      await user.click(screen.getByRole("button", { name: "Save changes" }));
+      await waitFor(() => expect(updateTrigger).toHaveBeenCalledTimes(1));
+      expect(updateTrigger.mock.calls[0]![0].trigger.notifyOnComplete).toBe(true);
+
+      updateTrigger.mockClear();
+      await user.click(toggle);
+      await user.click(screen.getByRole("button", { name: "Save changes" }));
+      await waitFor(() => expect(updateTrigger).toHaveBeenCalledTimes(1));
+      expect(updateTrigger.mock.calls[0]![0].trigger.notifyOnComplete).toBe(false);
+    });
+
     it("clears the catch-up window back to the server default", async () => {
       const stored = storedTrigger();
       updateTrigger.mockResolvedValue(create(UpdateTriggerResponseSchema, { trigger: stored }));

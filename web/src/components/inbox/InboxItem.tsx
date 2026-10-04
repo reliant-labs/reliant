@@ -53,9 +53,13 @@ export function isBlockingKind(kind: InboxItemKind): boolean {
   );
 }
 
-/** Failure kinds are the only dismissable ones; the rest clear when resolved. */
+/** Failure and run-finished items are dismissable; the rest clear when resolved. */
 export function isDismissableKind(kind: InboxItemKind): boolean {
-  return kind === InboxItemKind.AUTOMATION_FAILING || kind === InboxItemKind.AUTOMATION_LAUNCH_FAILED;
+  return (
+    kind === InboxItemKind.AUTOMATION_FAILING ||
+    kind === InboxItemKind.AUTOMATION_LAUNCH_FAILED ||
+    kind === InboxItemKind.RUN_FINISHED
+  );
 }
 
 /** The server reports an item someone else already resolved this way. */
@@ -147,6 +151,8 @@ function KindIcon({ kind }: { kind: InboxItemKind }) {
       return <AlertTriangle className={cn(className, "text-destructive")} aria-label="Automation failing" />;
     case InboxItemKind.AUTOMATION_LAUNCH_FAILED:
       return <CalendarX className={cn(className, "text-destructive")} aria-label="Automation launch failed" />;
+    case InboxItemKind.RUN_FINISHED:
+      return <CheckCircle2 className={cn(className, "text-success")} aria-label="Run finished" />;
     default:
       return <CheckCircle2 className={className} aria-hidden="true" />;
   }
@@ -217,6 +223,8 @@ function titleLead(item: InboxItemData): ReactNode {
       return <>Automation failing</>;
     case "automationLaunchFailed":
       return <>Automation could not start</>;
+    case "runFinished":
+      return <>Run finished</>;
     default:
       return <>Waiting on you</>;
   }
@@ -263,7 +271,15 @@ function ItemAction({ item, onRaceOrError }: ItemActionProps) {
         />
       );
     case "automationLaunchFailed":
-      return <LaunchFailedAction triggerId={item.triggerId} reason={payload.value.reason} />;
+      return (
+        <LaunchFailedAction
+          triggerId={item.triggerId}
+          reason={payload.value.reason}
+          failures={payload.value.consecutiveFailures}
+        />
+      );
+    case "runFinished":
+      return <RunFinishedAction chatId={item.chatId} />;
     default:
       return null;
   }
@@ -432,7 +448,7 @@ function FailingAutomationAction({
   const setEnabled = useSetTriggerEnabled();
   const queryClient = useQueryClient();
   const description =
-    failures > 1 ? `It has failed ${failures} times in a row.` : failures === 1 ? "Its last run failed." : "It is failing.";
+    failures > 1 ? failedTimesInARow(failures) : failures === 1 ? "Its last run failed." : "It is failing.";
   return (
     <div className="space-y-2">
       <p className="text-sm text-muted-foreground">
@@ -470,9 +486,32 @@ function FailingAutomationAction({
   );
 }
 
-function LaunchFailedAction({ triggerId, reason }: { triggerId: string; reason: string }) {
+/** "Failed 3 times in a row": one Inbox item counts the whole failure streak. */
+export function failedTimesInARow(failures: number): string {
+  return `Failed ${failures} times in a row.`;
+}
+
+function RunFinishedAction({ chatId }: { chatId: string }) {
+  if (!chatId) return null;
+  return (
+    <Link to="/runs/$runId" params={{ runId: chatId }} className={secondaryLinkClass}>
+      Open
+    </Link>
+  );
+}
+
+function LaunchFailedAction({
+  triggerId,
+  reason,
+  failures,
+}: {
+  triggerId: string;
+  reason: string;
+  failures: number;
+}) {
   return (
     <div className="space-y-2">
+      {failures > 1 && <p className="text-sm text-muted-foreground">{failedTimesInARow(failures)}</p>}
       {reason && <CardInset className="text-sm text-foreground">{reason}</CardInset>}
       <Link to="/automations/$triggerId" params={{ triggerId }} className={secondaryLinkClass}>
         Edit automation

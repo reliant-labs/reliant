@@ -16,6 +16,7 @@ const (
 	InboxPendingQuestion          InboxPendingKind = 2
 	InboxPendingWaitingForMachine InboxPendingKind = 3
 	InboxPendingLaunchFailed      InboxPendingKind = 5
+	InboxPendingRunFinished       InboxPendingKind = 6
 )
 
 // InboxPending is one row of the cross-chat pending list. Text1, Text2 and
@@ -23,7 +24,8 @@ const (
 //
 //	approval:        Text1 title, Text2 metadata JSON, Int1 approval type
 //	question:        Text1 thread id, Text2 metadata JSON
-//	launch failed:   Text1 outcome detail, Text2 event kind
+//	launch failed:   Text1 newest outcome detail, Text2 event kind, Int1 failures in the episode; ItemKey is the episode's first failed event
+//	run finished:    ItemKey and ChatID are the chat
 //	waiting machine: Text1 daemon id, Text2 daemon name
 type InboxPending struct {
 	Kind         InboxPendingKind

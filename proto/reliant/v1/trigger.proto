@@ -261,6 +261,12 @@ message Trigger {
   // Empty when the daemon has not reported one.
   string daemon_name = 17;
 
+  // When true, a completed run of this trigger marks its chat unread
+  // (raising the OS notification) and appears in the Inbox as "Run finished".
+  // Off by default: unattended completions are silent, failures always notify
+  // (research/WORKFLOW_UI.md §6.4).
+  bool notify_on_complete = 18;
+
   // What makes this trigger fire. One arm per kind; webhook and GitHub become
   // new arms. The arm set also determines Trigger.kind, so the two cannot
   // disagree.
@@ -343,6 +349,11 @@ message TriggerDefinition {
   // replaceable on update. Must be one of the caller's daemons and, when the
   // project is installed on any daemon, one that has it installed.
   string daemon_id = 9;
+
+  // Notify the owner when a run completes. Replaced on update, like every
+  // other field here, so a client editing a trigger must send the current
+  // value back.
+  bool notify_on_complete = 10;
 
   // What makes this trigger fire. Required on create: a trigger with no source
   // can never fire.

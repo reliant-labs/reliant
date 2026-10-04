@@ -17,7 +17,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file reliant/v1/inbox.proto.
  */
 export const file_reliant_v1_inbox: GenFile = /*@__PURE__*/
-  fileDesc("ChZyZWxpYW50L3YxL2luYm94LnByb3RvEgpyZWxpYW50LnYxIjAKEExpc3RJbmJveFJlcXVlc3QSEgoFbGltaXQYASABKAVIAIgBAUIICgZfbGltaXQifwoRTGlzdEluYm94UmVzcG9uc2USJAoFaXRlbXMYASADKAsyFS5yZWxpYW50LnYxLkluYm94SXRlbRIWCg5ibG9ja2luZ19jb3VudBgCIAEoBRIZChFoYXNfaW5mb3JtYXRpb25hbBgDIAEoCBIRCgl0cnVuY2F0ZWQYBCABKAgitwQKCUluYm94SXRlbRInCgRraW5kGAEgASgOMhkucmVsaWFudC52MS5JbmJveEl0ZW1LaW5kEg8KB2l0ZW1faWQYAiABKAkSDwoHY2hhdF9pZBgDIAEoCRIOCgZydW5faWQYBCABKAkSEgoKdHJpZ2dlcl9pZBgFIAEoCRIUCgx0cmlnZ2VyX25hbWUYBiABKAkSEgoKcHJvamVjdF9pZBgHIAEoCRIUCgxwcm9qZWN0X25hbWUYCCABKAkSFQoNd29ya2Zsb3dfbmFtZRgJIAEoCRISCgpjaGF0X3RpdGxlGAogASgJEhUKDXdhaXRpbmdfc2luY2UYCyABKAkSLQoIYXBwcm92YWwYFCABKAsyGS5yZWxpYW50LnYxLkluYm94QXBwcm92YWxIABItCghxdWVzdGlvbhgVIAEoCzIZLnJlbGlhbnQudjEuSW5ib3hRdWVzdGlvbkgAEkEKE3dhaXRpbmdfZm9yX21hY2hpbmUYFiABKAsyIi5yZWxpYW50LnYxLkluYm94V2FpdGluZ0Zvck1hY2hpbmVIABJAChJhdXRvbWF0aW9uX2ZhaWxpbmcYFyABKAsyIi5yZWxpYW50LnYxLkluYm94QXV0b21hdGlvbkZhaWxpbmdIABJLChhhdXRvbWF0aW9uX2xhdW5jaF9mYWlsZWQYGCABKAsyJy5yZWxpYW50LnYxLkluYm94QXV0b21hdGlvbkxhdW5jaEZhaWxlZEgAQgkKB3BheWxvYWQi0AEKDUluYm94QXBwcm92YWwSEwoLYXBwcm92YWxfaWQYASABKAkSLwoNYXBwcm92YWxfdHlwZRgCIAEoDjIYLnJlbGlhbnQudjEuQXBwcm92YWxUeXBlEg0KBXRpdGxlGAMgASgJEhYKCXRvb2xfbmFtZRgEIAEoCUgAiAEBEhkKDHRvb2xfY2FsbF9pZBgFIAEoCUgBiAEBEhgKEGFyZ3VtZW50X3N1bW1hcnkYBiABKAlCDAoKX3Rvb2xfbmFtZUIPCg1fdG9vbF9jYWxsX2lkImsKDUluYm94UXVlc3Rpb24SEwoLcXVlc3Rpb25faWQYASABKAkSEQoJdGhyZWFkX2lkGAIgASgJEg4KBnByb21wdBgDIAEoCRIVCghtZXRhZGF0YRgEIAEoCUgAiAEBQgsKCV9tZXRhZGF0YSJAChZJbmJveFdhaXRpbmdGb3JNYWNoaW5lEhEKCWRhZW1vbl9pZBgBIAEoCRITCgtkYWVtb25fbmFtZRgCIAEoCSJ3ChZJbmJveEF1dG9tYXRpb25GYWlsaW5nEikKBmhlYWx0aBgBIAEoCzIZLnJlbGlhbnQudjEuVHJpZ2dlckhlYWx0aBIdChBsYXN0X3J1bl9jaGF0X2lkGAIgASgJSACIAQFCEwoRX2xhc3RfcnVuX2NoYXRfaWQiPwobSW5ib3hBdXRvbWF0aW9uTGF1bmNoRmFpbGVkEg4KBnJlYXNvbhgBIAEoCRIQCghldmVudF9pZBgCIAEoCSIqChdEaXNtaXNzSW5ib3hJdGVtUmVxdWVzdBIPCgdpdGVtX2lkGAEgASgJIhoKGERpc21pc3NJbmJveEl0ZW1SZXNwb25zZSqNAgoNSW5ib3hJdGVtS2luZBIfChtJTkJPWF9JVEVNX0tJTkRfVU5TUEVDSUZJRUQQABIcChhJTkJPWF9JVEVNX0tJTkRfQVBQUk9WQUwQARIcChhJTkJPWF9JVEVNX0tJTkRfUVVFU1RJT04QAhInCiNJTkJPWF9JVEVNX0tJTkRfV0FJVElOR19GT1JfTUFDSElORRADEiYKIklOQk9YX0lURU1fS0lORF9BVVRPTUFUSU9OX0ZBSUxJTkcQBBIsCihJTkJPWF9JVEVNX0tJTkRfQVVUT01BVElPTl9MQVVOQ0hfRkFJTEVEEAUSIAocSU5CT1hfSVRFTV9LSU5EX1JVTl9GSU5JU0hFRBAGMrsBCgxJbmJveFNlcnZpY2USSgoJTGlzdEluYm94EhwucmVsaWFudC52MS5MaXN0SW5ib3hSZXF1ZXN0Gh0ucmVsaWFudC52MS5MaXN0SW5ib3hSZXNwb25zZSIAEl8KEERpc21pc3NJbmJveEl0ZW0SIy5yZWxpYW50LnYxLkRpc21pc3NJbmJveEl0ZW1SZXF1ZXN0GiQucmVsaWFudC52MS5EaXNtaXNzSW5ib3hJdGVtUmVzcG9uc2UiAEI6WjhnaXRodWIuY29tL3JlbGlhbnQtbGFicy9yZWxpYW50L2dlbi9yZWxpYW50L3YxO3JlbGlhbnR2MWIGcHJvdG8z", [file_reliant_v1_approval, file_reliant_v1_trigger]);
+  fileDesc("ChZyZWxpYW50L3YxL2luYm94LnByb3RvEgpyZWxpYW50LnYxIjAKEExpc3RJbmJveFJlcXVlc3QSEgoFbGltaXQYASABKAVIAIgBAUIICgZfbGltaXQifwoRTGlzdEluYm94UmVzcG9uc2USJAoFaXRlbXMYASADKAsyFS5yZWxpYW50LnYxLkluYm94SXRlbRIWCg5ibG9ja2luZ19jb3VudBgCIAEoBRIZChFoYXNfaW5mb3JtYXRpb25hbBgDIAEoCBIRCgl0cnVuY2F0ZWQYBCABKAgi7QQKCUluYm94SXRlbRInCgRraW5kGAEgASgOMhkucmVsaWFudC52MS5JbmJveEl0ZW1LaW5kEg8KB2l0ZW1faWQYAiABKAkSDwoHY2hhdF9pZBgDIAEoCRIOCgZydW5faWQYBCABKAkSEgoKdHJpZ2dlcl9pZBgFIAEoCRIUCgx0cmlnZ2VyX25hbWUYBiABKAkSEgoKcHJvamVjdF9pZBgHIAEoCRIUCgxwcm9qZWN0X25hbWUYCCABKAkSFQoNd29ya2Zsb3dfbmFtZRgJIAEoCRISCgpjaGF0X3RpdGxlGAogASgJEhUKDXdhaXRpbmdfc2luY2UYCyABKAkSLQoIYXBwcm92YWwYFCABKAsyGS5yZWxpYW50LnYxLkluYm94QXBwcm92YWxIABItCghxdWVzdGlvbhgVIAEoCzIZLnJlbGlhbnQudjEuSW5ib3hRdWVzdGlvbkgAEkEKE3dhaXRpbmdfZm9yX21hY2hpbmUYFiABKAsyIi5yZWxpYW50LnYxLkluYm94V2FpdGluZ0Zvck1hY2hpbmVIABJAChJhdXRvbWF0aW9uX2ZhaWxpbmcYFyABKAsyIi5yZWxpYW50LnYxLkluYm94QXV0b21hdGlvbkZhaWxpbmdIABJLChhhdXRvbWF0aW9uX2xhdW5jaF9mYWlsZWQYGCABKAsyJy5yZWxpYW50LnYxLkluYm94QXV0b21hdGlvbkxhdW5jaEZhaWxlZEgAEjQKDHJ1bl9maW5pc2hlZBgZIAEoCzIcLnJlbGlhbnQudjEuSW5ib3hSdW5GaW5pc2hlZEgAQgkKB3BheWxvYWQi0AEKDUluYm94QXBwcm92YWwSEwoLYXBwcm92YWxfaWQYASABKAkSLwoNYXBwcm92YWxfdHlwZRgCIAEoDjIYLnJlbGlhbnQudjEuQXBwcm92YWxUeXBlEg0KBXRpdGxlGAMgASgJEhYKCXRvb2xfbmFtZRgEIAEoCUgAiAEBEhkKDHRvb2xfY2FsbF9pZBgFIAEoCUgBiAEBEhgKEGFyZ3VtZW50X3N1bW1hcnkYBiABKAlCDAoKX3Rvb2xfbmFtZUIPCg1fdG9vbF9jYWxsX2lkImsKDUluYm94UXVlc3Rpb24SEwoLcXVlc3Rpb25faWQYASABKAkSEQoJdGhyZWFkX2lkGAIgASgJEg4KBnByb21wdBgDIAEoCRIVCghtZXRhZGF0YRgEIAEoCUgAiAEBQgsKCV9tZXRhZGF0YSJAChZJbmJveFdhaXRpbmdGb3JNYWNoaW5lEhEKCWRhZW1vbl9pZBgBIAEoCRITCgtkYWVtb25fbmFtZRgCIAEoCSJ3ChZJbmJveEF1dG9tYXRpb25GYWlsaW5nEikKBmhlYWx0aBgBIAEoCzIZLnJlbGlhbnQudjEuVHJpZ2dlckhlYWx0aBIdChBsYXN0X3J1bl9jaGF0X2lkGAIgASgJSACIAQFCEwoRX2xhc3RfcnVuX2NoYXRfaWQiXQobSW5ib3hBdXRvbWF0aW9uTGF1bmNoRmFpbGVkEg4KBnJlYXNvbhgBIAEoCRIQCghldmVudF9pZBgCIAEoCRIcChRjb25zZWN1dGl2ZV9mYWlsdXJlcxgDIAEoBSISChBJbmJveFJ1bkZpbmlzaGVkIioKF0Rpc21pc3NJbmJveEl0ZW1SZXF1ZXN0Eg8KB2l0ZW1faWQYASABKAkiGgoYRGlzbWlzc0luYm94SXRlbVJlc3BvbnNlKo0CCg1JbmJveEl0ZW1LaW5kEh8KG0lOQk9YX0lURU1fS0lORF9VTlNQRUNJRklFRBAAEhwKGElOQk9YX0lURU1fS0lORF9BUFBST1ZBTBABEhwKGElOQk9YX0lURU1fS0lORF9RVUVTVElPThACEicKI0lOQk9YX0lURU1fS0lORF9XQUlUSU5HX0ZPUl9NQUNISU5FEAMSJgoiSU5CT1hfSVRFTV9LSU5EX0FVVE9NQVRJT05fRkFJTElORxAEEiwKKElOQk9YX0lURU1fS0lORF9BVVRPTUFUSU9OX0xBVU5DSF9GQUlMRUQQBRIgChxJTkJPWF9JVEVNX0tJTkRfUlVOX0ZJTklTSEVEEAYyuwEKDEluYm94U2VydmljZRJKCglMaXN0SW5ib3gSHC5yZWxpYW50LnYxLkxpc3RJbmJveFJlcXVlc3QaHS5yZWxpYW50LnYxLkxpc3RJbmJveFJlc3BvbnNlIgASXwoQRGlzbWlzc0luYm94SXRlbRIjLnJlbGlhbnQudjEuRGlzbWlzc0luYm94SXRlbVJlcXVlc3QaJC5yZWxpYW50LnYxLkRpc21pc3NJbmJveEl0ZW1SZXNwb25zZSIAQjpaOGdpdGh1Yi5jb20vcmVsaWFudC1sYWJzL3JlbGlhbnQvZ2VuL3JlbGlhbnQvdjE7cmVsaWFudHYxYgZwcm90bzM", [file_reliant_v1_approval, file_reliant_v1_trigger]);
 
 /**
  * @generated from message reliant.v1.ListInboxRequest
@@ -92,8 +92,10 @@ export type InboxItem = Message<"reliant.v1.InboxItem"> & {
 
   /**
    * Stable key for dismissal and de-duplication. Approvals and questions use
-   * their row id; waiting-for-machine uses the chat id. Failure items embed the
-   * id of the failing event, so a newer failure is a new item.
+   * their row id; waiting-for-machine uses the chat id; run-finished uses the
+   * chat id. Automation failure items embed the id of the FIRST failing event
+   * of the current failure episode, so repeated failures stay one item and a
+   * new episode is a new item.
    *
    * @generated from field: string item_id = 2;
    */
@@ -188,6 +190,12 @@ export type InboxItem = Message<"reliant.v1.InboxItem"> & {
      */
     value: InboxAutomationLaunchFailed;
     case: "automationLaunchFailed";
+  } | {
+    /**
+     * @generated from field: reliant.v1.InboxRunFinished run_finished = 25;
+     */
+    value: InboxRunFinished;
+    case: "runFinished";
   } | { case: undefined; value?: undefined };
 };
 
@@ -343,11 +351,19 @@ export type InboxAutomationLaunchFailed = Message<"reliant.v1.InboxAutomationLau
   reason: string;
 
   /**
-   * The id of the failed trigger event.
+   * The id of the FIRST failed trigger event of this episode; the item id
+   * derives from it.
    *
    * @generated from field: string event_id = 2;
    */
   eventId: string;
+
+  /**
+   * How many consecutive firings have failed to launch in this episode.
+   *
+   * @generated from field: int32 consecutive_failures = 3;
+   */
+  consecutiveFailures: number;
 };
 
 /**
@@ -356,6 +372,23 @@ export type InboxAutomationLaunchFailed = Message<"reliant.v1.InboxAutomationLau
  */
 export const InboxAutomationLaunchFailedSchema: GenMessage<InboxAutomationLaunchFailed> = /*@__PURE__*/
   messageDesc(file_reliant_v1_inbox, 7);
+
+/**
+ * InboxRunFinished is a completed run of an automation that opted in to
+ * notifications. Open the item's chat_id to read the result; opening it clears
+ * the item.
+ *
+ * @generated from message reliant.v1.InboxRunFinished
+ */
+export type InboxRunFinished = Message<"reliant.v1.InboxRunFinished"> & {
+};
+
+/**
+ * Describes the message reliant.v1.InboxRunFinished.
+ * Use `create(InboxRunFinishedSchema)` to create a new message.
+ */
+export const InboxRunFinishedSchema: GenMessage<InboxRunFinished> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_inbox, 8);
 
 /**
  * @generated from message reliant.v1.DismissInboxItemRequest
@@ -372,7 +405,7 @@ export type DismissInboxItemRequest = Message<"reliant.v1.DismissInboxItemReques
  * Use `create(DismissInboxItemRequestSchema)` to create a new message.
  */
 export const DismissInboxItemRequestSchema: GenMessage<DismissInboxItemRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_inbox, 8);
+  messageDesc(file_reliant_v1_inbox, 9);
 
 /**
  * @generated from message reliant.v1.DismissInboxItemResponse
@@ -385,7 +418,7 @@ export type DismissInboxItemResponse = Message<"reliant.v1.DismissInboxItemRespo
  * Use `create(DismissInboxItemResponseSchema)` to create a new message.
  */
 export const DismissInboxItemResponseSchema: GenMessage<DismissInboxItemResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_inbox, 9);
+  messageDesc(file_reliant_v1_inbox, 10);
 
 /**
  * InboxItemKind is declared in priority order: lower values sort first. The
@@ -437,8 +470,8 @@ export enum InboxItemKind {
   AUTOMATION_LAUNCH_FAILED = 5,
 
   /**
-   * Reserved: a root completion of an automation that opted in (G10, not yet
-   * built). Never returned today.
+   * An automation that opted in (Trigger.notify_on_complete) completed a run
+   * that has not been opened yet. Informational.
    *
    * @generated from enum value: INBOX_ITEM_KIND_RUN_FINISHED = 6;
    */

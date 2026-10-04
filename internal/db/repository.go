@@ -711,6 +711,9 @@ type Repository interface {
 	// RecentTriggerFirings returns each trigger's newest perTrigger firings in
 	// one query. Used to compute health and last_event for a list of triggers.
 	RecentTriggerFirings(ctx context.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error)
+	// FiringsSinceLastSuccess returns each trigger's firings since its newest
+	// success, newest first, capped at perTrigger: the current failure episode.
+	FiringsSinceLastSuccess(ctx context.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error)
 	// GetLatestTriggerEvent returns the trigger's latest firing, optionally
 	// filtered by outcome, and (nil, nil) when it has never fired.
 	GetLatestTriggerEvent(ctx context.Context, triggerID string, outcome *core.TriggerEventOutcome) (*core.TriggerEvent, error)
