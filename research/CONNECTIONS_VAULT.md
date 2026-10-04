@@ -773,7 +773,7 @@ What the schema reserves so that org ownership is additive:
 - After the contract step, a plaintext-only row yields `ErrReenterKey`, not
   the plaintext.
 - `GetProviderAPIKeys` still excludes `reliant-automation:%`
-  (`settings_store.go:157`).
+  (`settings_store.go:163`).
 
 **Connections**
 
