@@ -35,7 +35,34 @@ type approvalExecution struct {
 	NodePath   string
 	Title      string
 	TimeoutStr string
+	// Unattended is true when the run has no human to act on an approval.
+	Unattended bool
 	Logger     log.Logger
+}
+
+// unattendedApprovalChangeID gates auto-resolving approvals in unattended runs
+// with workflow.GetVersion: histories recorded before it created an approval
+// row and waited on a timer, which the new path would not replay.
+const unattendedApprovalChangeID = "unattended-approval-auto-resolve"
+
+// approvalStatusUnattended is the status an approval node resolves to when no
+// human was available. It is neither "approved" nor "denied": nobody decided.
+// Every builtin gates on status == 'approved', so it takes the not-approved
+// branch without a fabricated denial reason.
+const approvalStatusUnattended = "unattended"
+
+// autoResolveUnattendedApproval mirrors autoResolveUnattendedQuestion: it
+// decides nothing on anyone's behalf and is labelled as auto-resolved.
+func autoResolveUnattendedApproval() map[string]interface{} {
+	return map[string]interface{}{
+		"approval_id":   "",
+		"status":        approvalStatusUnattended,
+		"action_taken":  "",
+		"auto_resolved": true,
+		"resolved_by":   UnattendedResolver,
+		"record": UnattendedMarker + " no human is available in this run — this approval " +
+			"was NOT granted and NOT denied; it was resolved without a decision.",
+	}
 }
 
 // approvalExecutionFromNode evaluates an approval node's config and returns the
@@ -86,6 +113,7 @@ func approvalExecutionFromNode(
 		NodePath:      nodePath,
 		Title:         model.CelStringValue(args.GetTitle()),
 		TimeoutStr:    model.CelStringValue(args.GetTimeout()),
+		Unattended:    IsUnattended(workflowInputs),
 		Logger:        logger,
 	}, nil
 }
@@ -112,6 +140,15 @@ func approvalExecutionFromNode(
 // reproduced, the existing row is found, and a resolved one short-circuits the
 // wait instead of creating a duplicate.
 func executeApprovalSignalFlow(ctx workflow.Context, input approvalExecution) (map[string]interface{}, error) {
+	// Unattended: never create the approval row, never wait. Nobody can act on
+	// it, so it would only be a gate that resolves "timeout" after an hour.
+	if input.Unattended &&
+		workflow.GetVersion(ctx, unattendedApprovalChangeID, workflow.DefaultVersion, 1) != workflow.DefaultVersion {
+		input.Logger.Info("[Unattended] approval auto-resolved with no decision",
+			"stepID", input.StepID, "loopNodeID", input.LoopNodeID, "loopIteration", input.LoopIteration)
+		return autoResolveUnattendedApproval(), nil
+	}
+
 	timeout := defaultApprovalTimeout
 	if input.TimeoutStr != "" {
 		if parsed, parseErr := time.ParseDuration(input.TimeoutStr); parseErr == nil {

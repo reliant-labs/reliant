@@ -1092,6 +1092,9 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 			RequestPause:  requestPause,
 			DaemonOffline: daemonOfflineBreaker,
 			Cancelled:     func() bool { return cancelledThreads[thread] },
+			ResetCancelled: func() {
+				delete(cancelledThreads, thread)
+			},
 		}
 	}
 
@@ -2995,6 +2998,11 @@ type spawnPrepResult struct {
 	pauseCtrl        *PauseController
 }
 
+// resumeClearsStopChangeID gates clearing a thread's stale cancellation when a
+// spawn resumes it (workflow.GetVersion): replaying histories from before the
+// fix must keep the resumption cancelled exactly as it was recorded.
+const resumeClearsStopChangeID = "spawn-resume-clears-stale-stop"
+
 // prepareSpawnInline runs everything about starting a spawn that must happen
 // before its tool result can settle: validate resumption ownership, create
 // the child thread/workflow row (and inject the seed message), and notify
@@ -3073,6 +3081,16 @@ func prepareSpawnInline(
 			"childThread", config.childThread,
 			"chatID", chatID,
 		)
+
+		// A stop aimed at this agent's earlier run was recorded under the
+		// thread id, which this resumption reuses. The tool-call key already
+		// scopes a cancel to one run, so drop the stale thread-keyed flag now
+		// that a new run owns the thread. A stop sent after this point names
+		// the new tool call (and the thread) and cancels it normally.
+		if pauseCtrl != nil && pauseCtrl.ResetCancelled != nil &&
+			workflow.GetVersion(ctx, resumeClearsStopChangeID, workflow.DefaultVersion, 1) != workflow.DefaultVersion {
+			pauseCtrl.ResetCancelled()
+		}
 	}
 
 	targetWorkflow := spawnTargetWorkflow
