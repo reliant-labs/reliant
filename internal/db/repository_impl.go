@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	postgresstore "github.com/reliant-labs/reliant/internal/db/postgres"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/logging"
 )
@@ -4417,4 +4418,41 @@ func (r *Repo) ResolveQuestion(ctx context.Context, id string, responseData *str
 // generateID generates a new UUID string
 func generateID() string {
 	return uuid.New().String()
+}
+
+// apiKeySealing is the optional sealing surface of the api_keys store.
+type apiKeySealing interface {
+	SetSealer(postgresstore.APIKeySealer)
+	BackfillAPIKeys(ctx context.Context, batch int) (int, error)
+	CountUnsealedAPIKeys(ctx context.Context) (int64, error)
+}
+
+// EnableAPIKeySealing turns on sealed dual-writes and sealed-preferring reads
+// for api_keys. Call once at boot, before serving.
+func (r *Repo) EnableAPIKeySealing(sealer postgresstore.APIKeySealer) error {
+	s, ok := r.settings.(apiKeySealing)
+	if !ok {
+		return fmt.Errorf("settings store does not support api key sealing")
+	}
+	s.SetSealer(sealer)
+	return nil
+}
+
+// BackfillAPIKeys seals legacy plaintext api_keys rows. Idempotent; returns the
+// number of rows sealed. Requires EnableAPIKeySealing.
+func (r *Repo) BackfillAPIKeys(ctx context.Context, batch int) (int, error) {
+	s, ok := r.settings.(apiKeySealing)
+	if !ok {
+		return 0, fmt.Errorf("settings store does not support api key sealing")
+	}
+	return s.BackfillAPIKeys(ctx, batch)
+}
+
+// CountUnsealedAPIKeys returns count(api_keys WHERE api_key_sealed IS NULL).
+func (r *Repo) CountUnsealedAPIKeys(ctx context.Context) (int64, error) {
+	s, ok := r.settings.(apiKeySealing)
+	if !ok {
+		return 0, fmt.Errorf("settings store does not support api key sealing")
+	}
+	return s.CountUnsealedAPIKeys(ctx)
 }

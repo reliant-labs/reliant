@@ -107,7 +107,8 @@ CREATE TABLE public.api_keys (
     provider text NOT NULL,
     api_key text NOT NULL,
     created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL
+    updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    api_key_sealed bytea
 );
 
 --
@@ -996,6 +997,23 @@ CREATE TABLE public.user_updates (
 );
 
 --
+-- Name: vault_keys; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.vault_keys (
+    id text NOT NULL,
+    tenant_kind text NOT NULL,
+    tenant_id text NOT NULL,
+    version integer NOT NULL,
+    kek_id text NOT NULL,
+    wrapped_dek bytea NOT NULL,
+    state text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT vault_keys_state_check CHECK ((state = ANY (ARRAY['primary'::text, 'decrypt_only'::text, 'destroyed'::text]))),
+    CONSTRAINT vault_keys_tenant_kind_check CHECK ((tenant_kind = ANY (ARRAY['user'::text, 'org'::text])))
+);
+
+--
 -- Name: visibility_overrides; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1574,6 +1592,20 @@ ALTER TABLE ONLY public.user_updates
 
 ALTER TABLE ONLY public.user_updates
     ADD CONSTRAINT user_updates_user_id_sequence_number_key UNIQUE (user_id, sequence_number);
+
+--
+-- Name: vault_keys vault_keys_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.vault_keys
+    ADD CONSTRAINT vault_keys_pkey PRIMARY KEY (id);
+
+--
+-- Name: vault_keys vault_keys_tenant_kind_tenant_id_version_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.vault_keys
+    ADD CONSTRAINT vault_keys_tenant_kind_tenant_id_version_key UNIQUE (tenant_kind, tenant_id, version);
 
 --
 -- Name: visibility_overrides visibility_overrides_pkey; Type: CONSTRAINT; Schema: public; Owner: -
@@ -2177,6 +2209,12 @@ CREATE UNIQUE INDEX projects_user_remote_url_uniq ON public.projects USING btree
 --
 
 CREATE UNIQUE INDEX settings_user_key_unique ON public.settings USING btree (user_id, key) WHERE (project_id IS NULL);
+
+--
+-- Name: vault_keys_one_primary; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX vault_keys_one_primary ON public.vault_keys USING btree (tenant_kind, tenant_id) WHERE (state = 'primary'::text);
 
 --
 -- Name: agent_messages agent_messages_chat_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
