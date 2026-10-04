@@ -202,6 +202,7 @@ type Querier interface {
 	DeleteWorkflowScenariosByDraft(ctx context.Context, workflowDraftID sql.NullString) error
 	DeleteWorkflowsByChat(ctx context.Context, chatID string) error
 	DeleteWorktree(ctx context.Context, id string) error
+	DismissInboxItem(ctx context.Context, arg DismissInboxItemParams) error
 	EnqueueAgentMessage(ctx context.Context, arg EnqueueAgentMessageParams) error
 	// The stranded-background-spawn sweep's write half (spec §7.1). ON CONFLICT
 	// against idx_agent_messages_one_terminal_report_per_spawn is what makes this
@@ -488,11 +489,30 @@ type Querier interface {
 	ListContentBlocksForMessages(ctx context.Context, messageIds []string) ([]MessageContentBlock, error)
 	ListContextWindowsByThread(ctx context.Context, threadID string) ([]ContextWindow, error)
 	ListDependenciesByPlan(ctx context.Context, planID string) ([]TaskDependency, error)
+	// Which of the candidate item ids this user has dismissed.
+	ListDismissedInboxItemIDs(ctx context.Context, arg ListDismissedInboxItemIDsParams) ([]string, error)
 	// Which of the given threads are forks: their initial (sequence 0) context
 	// window links to a parent window. One round trip for a whole chat, where
 	// GetContextWindowBySequence(thread, 0) cost one per workflow.
 	ListForkedThreadIDs(ctx context.Context, threadIds []string) ([]string, error)
 	ListHiddenItemDefaults(ctx context.Context, itemType int32) ([]ListHiddenItemDefaultsRow, error)
+	// The Inbox: everything waiting on one user, across every chat and project
+	// (research/WORKFLOW_UI.md §8). One UNION ALL so the read is one round trip;
+	// every branch is scoped by c.user_id / t.user_id, never by a request value.
+	//
+	// Dismissal is applied in Go (ListDismissedInboxItemIDs), uniformly for every
+	// dismissable kind. Disabled automations are not listed: pausing is the cure.
+	// kind (reliantv1.InboxItemKind): 1 approval, 2 question, 3 waiting for
+	// machine, 5 automation launch failed. 4 (automation failing) is derived in Go from
+	// the trigger's health — internal/triggers.ComputeHealth is its only
+	// implementation — and 6 (run finished) is reserved. Archived chats are not waiting on anyone.
+	//
+	// Generic payload columns (a_text, b_text, a_int) carry the kind-specific bits:
+	//   approval:        a_text title, b_text metadata JSON, a_int approval_type
+	//   question:        a_text thread_id, b_text metadata JSON
+	//   launch failed:   a_text outcome_detail, b_text event kind
+	//   waiting machine: a_text daemon_id, b_text daemon name
+	ListInboxPending(ctx context.Context, userID string) ([]ListInboxPendingRow, error)
 	ListItemDefaults(ctx context.Context, itemType int32) ([]ListItemDefaultsRow, error)
 	// Every background spawn issued anywhere inside one root execution that is
 	// still open: tool_calls.status = 6 (backgrounded) and no terminal report in

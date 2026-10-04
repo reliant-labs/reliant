@@ -324,6 +324,12 @@ type DefaultPresetAssignment struct {
 	UpdatedAt    time.Time `json:"updated_at"`
 }
 
+type InboxDismissal struct {
+	UserID      string    `json:"user_id"`
+	ItemID      string    `json:"item_id"`
+	DismissedAt time.Time `json:"dismissed_at"`
+}
+
 type ItemDefault struct {
 	ID        string         `json:"id"`
 	ItemType  int32          `json:"item_type"`

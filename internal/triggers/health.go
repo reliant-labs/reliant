@@ -108,3 +108,18 @@ func resolveFiring(f *core.TriggerEventWithRun) (firingResult, string) {
 	}
 	return resultUnresolved, ""
 }
+
+// NewestFailure returns the newest firing in the window that counts as a
+// failure under ComputeHealth's rules, or nil when none does. Callers key
+// "this failure" on its event id, so a newer failure is a different one.
+func NewestFailure(firings []*core.TriggerEventWithRun) *core.TriggerEventWithRun {
+	if len(firings) > HealthWindow {
+		firings = firings[:HealthWindow]
+	}
+	for _, f := range firings {
+		if result, _ := resolveFiring(f); result == resultFailure {
+			return f
+		}
+	}
+	return nil
+}

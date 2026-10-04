@@ -1,0 +1,151 @@
+// Copyright (c) 2025 Reliant Labs. All rights reserved.
+syntax = "proto3";
+
+package reliant.v1;
+
+import "reliant/v1/approval.proto";
+import "reliant/v1/trigger.proto";
+
+option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
+
+// InboxService lists everything waiting on the calling user, across every
+// project and launch kind (research/WORKFLOW_UI.md §8). Scope is always the
+// caller; no request carries a user id.
+service InboxService {
+  // ListInbox returns the caller's inbox items in priority order. One round
+  // trip. With limit = 0 it returns no items, only the counts, which is the
+  // cheap call the nav badge makes.
+  rpc ListInbox(ListInboxRequest) returns (ListInboxResponse) {}
+
+  // DismissInboxItem hides a failure item. Approvals and questions are not
+  // dismissable (they clear when resolved) and are rejected with
+  // INVALID_ARGUMENT. A newer failure of the same automation has a new item_id,
+  // so it reappears.
+  rpc DismissInboxItem(DismissInboxItemRequest) returns (DismissInboxItemResponse) {}
+}
+
+// InboxItemKind is declared in priority order: lower values sort first. The
+// kinds that block a live run (approval, question, waiting for machine) come
+// before the informational failures, so the badge count is a prefix of the list.
+enum InboxItemKind {
+  INBOX_ITEM_KIND_UNSPECIFIED = 0;
+  // A tool or workflow-step approval is pending. Blocks a live run.
+  INBOX_ITEM_KIND_APPROVAL = 1;
+  // An ask_user question is pending. Blocks a live run.
+  INBOX_ITEM_KIND_QUESTION = 2;
+  // A live run is blocked on a suspended or starting machine. Blocks a run.
+  INBOX_ITEM_KIND_WAITING_FOR_MACHINE = 3;
+  // An automation's health is FAILING. Informational.
+  INBOX_ITEM_KIND_AUTOMATION_FAILING = 4;
+  // An automation's newest firing failed to launch and no later firing has.
+  // Informational.
+  INBOX_ITEM_KIND_AUTOMATION_LAUNCH_FAILED = 5;
+  // Reserved: a root completion of an automation that opted in (G10, not yet
+  // built). Never returned today.
+  INBOX_ITEM_KIND_RUN_FINISHED = 6;
+}
+
+message ListInboxRequest {
+  // Maximum items returned. 0 returns counts only. Default (unset) is 100.
+  optional int32 limit = 1;
+}
+
+message ListInboxResponse {
+  // Sorted by kind (priority), then waiting_since ascending (longest-waiting
+  // first), then item_id. Group by run_id client-side.
+  repeated InboxItem items = 1;
+
+  // Approvals + questions + waiting-for-machine: the items that block a live
+  // run. The nav badge shows this as a number. Counted over the full inbox,
+  // independent of limit.
+  int32 blocking_count = 2;
+
+  // True when any failure item exists (the badge shows a dot, not a count).
+  bool has_informational = 3;
+
+  // True when limit cut the list short.
+  bool truncated = 4;
+}
+
+message InboxItem {
+  InboxItemKind kind = 1;
+
+  // Stable key for dismissal and de-duplication. Approvals and questions use
+  // their row id; waiting-for-machine uses the chat id. Failure items embed the
+  // id of the failing event, so a newer failure is a new item.
+  string item_id = 2;
+
+  // The chat the item belongs to. Empty for automation failure kinds that have
+  // no run.
+  string chat_id = 3;
+  // The run (root workflow) id. Equal to chat_id for a root run. Items sharing
+  // a run_id group together.
+  string run_id = 4;
+  // Set when the run was launched by an automation, and for both automation
+  // failure kinds.
+  string trigger_id = 5;
+  string trigger_name = 6;
+
+  string project_id = 7;
+  string project_name = 8;
+  string workflow_name = 9;
+  string chat_title = 10;
+
+  // RFC 3339. When the item started waiting.
+  string waiting_since = 11;
+
+  oneof payload {
+    InboxApproval approval = 20;
+    InboxQuestion question = 21;
+    InboxWaitingForMachine waiting_for_machine = 22;
+    InboxAutomationFailing automation_failing = 23;
+    InboxAutomationLaunchFailed automation_launch_failed = 24;
+  }
+}
+
+message InboxApproval {
+  string approval_id = 1;
+  ApprovalType approval_type = 2;
+  // The approval's title.
+  string title = 3;
+  // Set for tool approvals.
+  optional string tool_name = 4;
+  optional string tool_call_id = 5;
+  // A short, single-line summary of the tool's arguments, when the approval's
+  // metadata carries them. Empty otherwise.
+  string argument_summary = 6;
+}
+
+message InboxQuestion {
+  string question_id = 1;
+  string thread_id = 2;
+  // The first question's text, when the metadata carries one.
+  string prompt = 3;
+  // The raw question metadata (JSON), so the client can render the full form.
+  optional string metadata = 4;
+}
+
+message InboxWaitingForMachine {
+  string daemon_id = 1;
+  // Hostname the daemon reported. Empty if it has not reported one.
+  string daemon_name = 2;
+}
+
+message InboxAutomationFailing {
+  TriggerHealth health = 1;
+  // The run to open: the newest launched firing's chat, when it still exists.
+  optional string last_run_chat_id = 2;
+}
+
+message InboxAutomationLaunchFailed {
+  // Why the launch failed (the event's outcome detail).
+  string reason = 1;
+  // The id of the failed trigger event.
+  string event_id = 2;
+}
+
+message DismissInboxItemRequest {
+  string item_id = 1;
+}
+
+message DismissInboxItemResponse {}

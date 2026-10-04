@@ -246,6 +246,7 @@ func NewServer(cfg *Config) (*Server, error) {
 	// handler's own nil checks would pass and it would panic on the first
 	// write. NewTriggerServiceFor keeps that conversion in one place.
 	triggerService := services.NewTriggerServiceFor(database, cfg.TemporalClient, cfg.SharedTaskQueue)
+	inboxPath, inboxHandler := reliantv1connect.NewInboxServiceHandler(services.NewInboxService(database), opts...)
 	triggerPath, triggerHandler := reliantv1connect.NewTriggerServiceHandler(triggerService, opts...)
 
 	// FileSystem, Background, and Terminal services: when a daemon router is
@@ -361,6 +362,7 @@ func NewServer(cfg *Config) (*Server, error) {
 	mux.Handle(attachmentPath, attachmentHandler)
 	mux.Handle(presetPath, presetHandler)
 	mux.Handle(triggerPath, triggerHandler)
+	mux.Handle(inboxPath, inboxHandler)
 
 	mux.Handle(daemonRegistryPath, daemonRegistryHandler)
 	mux.Handle(tokenPath, tokenHandler)

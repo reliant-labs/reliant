@@ -703,6 +703,11 @@ type Repository interface {
 	// ListTriggerEvents returns one page of the trigger's firings newest first,
 	// each with the run it launched, and whether more follow.
 	ListTriggerEvents(ctx context.Context, f core.TriggerEventFilters) ([]*core.TriggerEventWithRun, bool, error)
+	// ListInboxPending, ListDismissedInboxItemIDs and DismissInboxItem back the
+	// Inbox. Each is scoped by an explicit user id.
+	ListInboxPending(ctx context.Context, userID string) ([]*core.InboxPending, error)
+	ListDismissedInboxItemIDs(ctx context.Context, userID string, itemIDs []string) (map[string]bool, error)
+	DismissInboxItem(ctx context.Context, userID, itemID string, at time.Time) error
 	// RecentTriggerFirings returns each trigger's newest perTrigger firings in
 	// one query. Used to compute health and last_event for a list of triggers.
 	RecentTriggerFirings(ctx context.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error)
