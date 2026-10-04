@@ -6,7 +6,7 @@ import { projectGrpc, type Project as GrpcProject } from "../api/project-grpc";
 import { toast } from "../lib/toast-manager";
 import { useWorktreeStore } from "./worktreeStore";
 import { useChatStore } from "./chatStore";
-import { getChatFromCache } from "../hooks/chat-queries";
+import { resolveChat } from "../hooks/chat-queries";
 import { useWorkspaceStateStore } from "./workspaceStateStore";
 import { useViewerStore } from "./viewerStore";
 import { useChatNavigationStore } from "./chatNavigationStore";
@@ -67,6 +67,10 @@ function syncProjectUrl(projectId: string | null) {
       if (
         currentPath.startsWith("/settings") ||
         currentPath.startsWith("/workflow") ||
+        // Opening an automation's chat selects that chat's project first and
+        // only then navigates into it (openAutomationChat). Navigating here,
+        // mid-sequence, would mount the app before the chat was selected.
+        currentPath.startsWith("/automations") ||
         currentPath.startsWith("/auth") ||
         currentPath.startsWith("/reset-password") ||
         currentPath.startsWith("/verify-email") ||
@@ -282,7 +286,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       const worktreeState = useWorkspaceStateStore.getState().getWorktreeState(project.id, currentWorktreeId);
       if (worktreeState.activeChatId) {
         const chat = worktreeState.activeChatId
-          ? getChatFromCache(worktreeState.activeChatId)
+          ? await resolveChat(worktreeState.activeChatId)
           : undefined;
         if (chat) {
           logger.info("[ProjectStore] Restoring active chat on project switch", {

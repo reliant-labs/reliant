@@ -28,7 +28,7 @@ import type { BackgroundProcess } from "../api/background-grpc";
 import { logger } from "../lib/logger";
 import { getEventBus } from "../lib/events";
 import { queryClient } from "../lib/query-client";
-import { chatKeys, patchChatCaches, removeChatFromListCache, getChatFromCache } from "../hooks/chat-queries";
+import { chatKeys, patchChatCaches, removeChatFromListCache, getChatFromCache, resolveChat } from "../hooks/chat-queries";
 import { setMessagesMetaInCache } from "../hooks/message-queries";
 import { approvalKeys } from "../hooks/approval-queries";
 import { showWorkflowCompletionNotification, showApprovalRequiredNotification, getNotificationPermission } from "../lib/notifications";
@@ -691,7 +691,9 @@ function handleChatStateChange(update: UserUpdate) {
           if (!chat) {
             // Try to reload chats in case it's not in the list yet
             await useChatStore.getState().loadChats();
-            chat = getChatFromCache(id);
+            // An automation-launched chat is never in the project list, so
+            // fall back to fetching it by id.
+            chat = await resolveChat(id);
             if (!chat) {
               logger.error(`${LOG_PREFIX} Chat not found after reload: ${id.slice(0, 8)}`);
               return;

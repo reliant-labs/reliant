@@ -262,6 +262,7 @@ describe("Sidebar selected chat scroll", () => {
     });
     const onNavigateToProjectPicker = vi.fn();
     const onOpenWorkflows = vi.fn();
+    const onOpenAutomations = vi.fn();
     const onOpenChatSearch = vi.fn();
     const onNavigateToSettings = vi.fn();
 
@@ -270,6 +271,7 @@ describe("Sidebar selected chat scroll", () => {
         <Sidebar
           onNavigateToProjectPicker={onNavigateToProjectPicker}
           onOpenWorkflows={onOpenWorkflows}
+          onOpenAutomations={onOpenAutomations}
           onOpenChatSearch={onOpenChatSearch}
           onNavigateToSettings={onNavigateToSettings}
         />
@@ -279,6 +281,7 @@ describe("Sidebar selected chat scroll", () => {
     expect(screen.getByRole("button", { name: "New chat" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Projects" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Workflows" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Automations" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Search" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Settings" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Workflows" })).toHaveAttribute(
@@ -288,11 +291,13 @@ describe("Sidebar selected chat scroll", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Projects" }));
     fireEvent.click(screen.getByRole("button", { name: "Workflows" }));
+    fireEvent.click(screen.getByRole("button", { name: "Automations" }));
     fireEvent.click(screen.getByRole("button", { name: "Search" }));
     fireEvent.click(screen.getByRole("button", { name: "Settings" }));
 
     expect(onNavigateToProjectPicker).toHaveBeenCalledTimes(1);
     expect(onOpenWorkflows).toHaveBeenCalledTimes(1);
+    expect(onOpenAutomations).toHaveBeenCalledTimes(1);
     expect(onOpenChatSearch).toHaveBeenCalledTimes(1);
     expect(onNavigateToSettings).toHaveBeenCalledTimes(1);
   });

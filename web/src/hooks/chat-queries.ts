@@ -129,6 +129,28 @@ export function getChatFromCache(chatId: string): Chat | undefined {
 }
 
 /**
+ * Resolve a chat by id: the detail cache, or GetChat on a miss (seeding the
+ * cache with the result). Resolves undefined when the chat does not exist.
+ *
+ * Use this — not getChatFromCache alone — anywhere a chat is reopened from a
+ * stored id (workspace restore, project switch, a notification). The detail
+ * cache is seeded from the project chat list, and that list deliberately omits
+ * automation-launched chats (ListChats exclude_automations), so a cache miss
+ * no longer means the chat is gone.
+ */
+export async function resolveChat(chatId: string): Promise<Chat | undefined> {
+  const cached = getChatFromCache(chatId);
+  if (cached) return cached;
+  try {
+    const chat = await api.chatsV2.get(chatId);
+    seedChatDetail(chat);
+    return chat;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * Read the cached chat list for a project (imperative, non-reactive).
  * Returns [] when the list has not been loaded/seeded.
  */

@@ -77,6 +77,10 @@ const ConnectorConsentPage = lazyRouteComponent(
   () => import('./components/Settings/ConnectorConsentPage'), 'ConnectorConsentPage')
 const WorkflowPage = lazyRouteComponent(
   () => import('./components/workflow/WorkflowPage'), 'WorkflowPage')
+const AutomationsListPage = lazyRouteComponent(
+  () => import('./components/Automations/AutomationsListPage'), 'AutomationsListPage')
+const AutomationDetailPage = lazyRouteComponent(
+  () => import('./components/Automations/AutomationDetailPage'), 'AutomationDetailPage')
 const OnboardingRoute = lazyRouteComponent(
   () => import('./components/OnboardingFlow/OnboardingRoute'), 'OnboardingRoute')
 const MobileShell = lazyRouteComponent(
@@ -491,6 +495,24 @@ const workflowBuilderRoute = createRoute({
   component: () => <WorkflowPage />,
 })
 
+// Automations (schedule triggers).
+// /automations              → every automation the user owns, across projects
+// /automations/$triggerId   → one automation: definition, actions, history
+// Under `_authenticated` like /workflow, so the pages render their own chrome
+// (AutomationsShell) rather than the app shell — they span projects, and the
+// app shell is scoped to one.
+const automationsRoute = createRoute({
+  getParentRoute: () => authenticatedLayoutRoute,
+  path: '/automations',
+  component: AutomationsListPage,
+})
+
+const automationDetailRoute = createRoute({
+  getParentRoute: () => authenticatedLayoutRoute,
+  path: '/automations/$triggerId',
+  component: AutomationDetailPage,
+})
+
 // ── forge UI (experimental, gated) ───────────────────────────────────────────
 //
 // Every forge route goes through ForgeGate. Hiding the sidebar entry is NOT enough
@@ -787,6 +809,8 @@ const routeTree = rootRoute.addChildren([
     workflowHubRoute,
     workflowNewRoute,
     workflowBuilderRoute,
+    automationsRoute,
+    automationDetailRoute,
   ]),
   appLayoutRoute.addChildren([indexRoute, projectRoute]),
 ])

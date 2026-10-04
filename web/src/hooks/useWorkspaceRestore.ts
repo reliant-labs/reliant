@@ -18,7 +18,7 @@ import { useProjectStore } from "../store/projectStore";
 import { useWorktreeStore } from "../store/worktreeStore";
 import { useViewerStore } from "../store/viewerStore";
 import { useChatStore } from "../store/chatStore";
-import { getChatFromCache } from "../hooks/chat-queries";
+import { resolveChat } from "../hooks/chat-queries";
 import { useChatNavigationStore } from "../store/chatNavigationStore";
 import { useTerminalStore } from "../store/terminalStore";
 
@@ -245,8 +245,10 @@ export function useWorkspaceRestore(
 
       // Restore active chat if one was saved
       if (worktreeState.activeChatId) {
-        // Find and select the chat from the React Query cache (source of truth)
-        const chatToRestore = getChatFromCache(worktreeState.activeChatId);
+        // Resolve, not just read the cache: an automation-launched chat is not
+        // in the project list loadChats seeded, but it still exists — clearing
+        // it as "no longer exists" would drop the user out of it on reload.
+        const chatToRestore = await resolveChat(worktreeState.activeChatId);
 
         if (chatToRestore) {
           logger.info("[WorkspaceRestore] Restoring active chat", {
