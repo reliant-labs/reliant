@@ -10,7 +10,7 @@
 export { Button } from "./button";
 export type { ButtonProps, ButtonVariant, ButtonSize } from "./button";
 
-export { Card, CardHeader, CardTitle, CardContent } from "./card";
+export { Card, CardHeader, CardTitle, CardContent, CardInset } from "./card";
 export type {
   CardProps,
   CardHeaderProps,

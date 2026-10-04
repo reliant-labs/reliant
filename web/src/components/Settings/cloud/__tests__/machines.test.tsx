@@ -156,7 +156,11 @@ describe('MachinesSection', () => {
     ).toBeInTheDocument()
   })
 
-  it('renders the capability-gated fallback when cloud daemons are unavailable', () => {
+  // Without a control plane the section is NOT a dead end: registered
+  // machines (and the app access granted to them, which is reliant's, not
+  // control-plane's) still exist. It lists them, and offers nothing that
+  // would need the control plane to answer.
+  it('renders a registry-only list when cloud daemons are unavailable', async () => {
     mocks.caps.cloudDaemons = false
     renderSection()
 
@@ -164,8 +168,11 @@ describe('MachinesSection', () => {
       screen.getByRole('heading', { level: 1, name: /machines/i }),
     ).toBeInTheDocument()
     expect(
-      screen.getByRole('heading', { level: 3, name: /machines unavailable/i }),
+      await screen.findByRole('heading', { level: 3, name: /no machines/i }),
     ).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /new machine/i })).not.toBeInTheDocument()
+    expect(mocks.getComputeEligibility).not.toHaveBeenCalled()
+    expect(mocks.getComputeSubscription).not.toHaveBeenCalled()
   })
 
   // The self-hosted setup instructions are the SHARED onboarding panel, and

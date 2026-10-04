@@ -11,7 +11,6 @@ import { WorkspacesSection } from "./WorkspacesSection";
 import { BrowserSettings } from "./BrowserSettings";
 import { TokenSettings } from "./TokenSettings";
 import { MemberPermissions } from "./cloud/MemberPermissions";
-import { ConnectorSettings } from "./ConnectorSettings";
 import { GitConnectionsSettings } from "./GitConnectionsSettings";
 import type { SettingsSection } from "./SettingsNavigation";
 import { lazy, Suspense, useEffect, useState } from "react";
@@ -105,9 +104,6 @@ export function SettingsContent({
     }
     if (activeSection === "member-permissions") {
       return <MemberPermissions />;
-    }
-    if (activeSection === "connectors") {
-      return <ConnectorSettings />;
     }
     if (activeSection === "git-connections") {
       return <GitConnectionsSettings />;

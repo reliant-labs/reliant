@@ -131,11 +131,12 @@ export function useComputeUsage(period: "current" | "previous") {
   });
 }
 
-export function usePlans() {
+export function usePlans({ enabled = true }: { enabled?: boolean } = {}) {
   return useQuery({
     queryKey: cloudBillingKeys.plans,
     queryFn: () => billingClient().listPlans({}),
     staleTime: 5 * 60_000,
+    enabled,
   });
 }
 

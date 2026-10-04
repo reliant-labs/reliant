@@ -13,6 +13,13 @@
  * param deep-links straight into a detail view (used by the onboarding
  * DaemonConnectingGate "View logs" action). Daemon access tokens are managed
  * in the standalone System → Access Tokens settings section.
+ *
+ * Each machine's detail view carries an Access section (./machineAccess): the
+ * outside AI apps granted access to that machine. Those grants are reliant's,
+ * not control-plane's, so they exist on a build with no control plane too —
+ * which is why this section renders a registry-only mode there (list, detail,
+ * Access) instead of a dead end: it is the only place such a grant can be
+ * seen or revoked.
  */
 import React, { useMemo, useState } from "react";
 import { createPortal } from "react-dom";
@@ -96,6 +103,8 @@ import { getComputeEligibility } from "@/services/controlPlane/billing";
 import { useGoToBilling } from "@/hooks/useGoToBilling";
 import { usePlans } from "@/hooks/useCloudBillingQueries";
 import { suspendedFeeLabel, type DaemonPricingLike } from "@/components/Billing/daemonUsage";
+import { CLOUD_PROJECT_ROOT } from "@/lib/cloudProjectPath";
+import { MachineAccess, activeGrantCounts, appCountLabel, useConnectors } from "./machineAccess";
 // The overage formatter, shared with the billing purchase grid so the two
 // surfaces cannot disagree about how a rate is written.
 import { formatOverageRate } from "./billingUtils";
@@ -403,28 +412,16 @@ export function MachinesSection() {
   const search = useSearch({ strict: false }) as { daemon?: string };
   // Deep-link: ?daemon=<id> opens the detail view directly.
   const [selectedId, setSelectedId] = useState<string | null>(search.daemon ?? null);
-
-  // Without a control plane there are no managed machines to list, but the
-  // self-hosted path is exactly the one that still works — so the setup
-  // instructions matter MORE here, not less.
-  if (!capabilities.cloudDaemons) {
-    return (
-      <div className="mx-auto max-w-4xl space-y-6">
-        <PageHeader title="Machines" subtitle="Managed and self-hosted machines that run your projects." />
-        <EmptyState
-          icon={Server}
-          title="Machines unavailable"
-          description="Machines are managed by the Reliant control plane, which isn't configured for this build. Connect a self-hosted machine to keep working locally."
-        />
-        <SelfHostedSetupCard />
-      </div>
-    );
-  }
+  // Without a control plane there are no managed machines to create or
+  // drive, but registered machines — and the app access granted to them —
+  // still exist, so the list and detail render in a registry-only mode rather
+  // than a dead end. The self-hosted setup instructions matter MORE here.
+  const cloud = capabilities.cloudDaemons;
 
   return (
     <div className="mx-auto max-w-5xl">
       {selectedId ? (
-        <EnvironmentDetail daemonId={selectedId} onBack={() => setSelectedId(null)} />
+        <EnvironmentDetail daemonId={selectedId} cloud={cloud} onBack={() => setSelectedId(null)} />
       ) : (
         <div className="space-y-6">
           <div>
@@ -432,7 +429,13 @@ export function MachinesSection() {
               title="Machines"
               subtitle="Managed and self-hosted machines that run your projects."
             />
-            <EnvironmentsList onOpenDetail={(id) => setSelectedId(id)} />
+            {!cloud && (
+              <p className="mb-4 text-sm text-muted-foreground">
+                Cloud machines are managed by the Reliant control plane, which isn&apos;t configured for this build.
+                Self-hosted machines you connect still appear here.
+              </p>
+            )}
+            <EnvironmentsList cloud={cloud} onOpenDetail={(id) => setSelectedId(id)} />
           </div>
           <SelfHostedSetupCard />
         </div>
@@ -442,7 +445,7 @@ export function MachinesSection() {
 }
 
 // ── Machines list + create ──────────────────────────────────────────────────
-function EnvironmentsList({ onOpenDetail }: { onOpenDetail: (id: string) => void }) {
+function EnvironmentsList({ cloud, onOpenDetail }: { cloud: boolean; onOpenDetail: (id: string) => void }) {
   const qc = useQueryClient();
   const [statusFilter, setStatusFilter] = useState<number>(DaemonStatus.UNSPECIFIED);
   const [createOpen, setCreateOpen] = useState(false);
@@ -450,7 +453,10 @@ function EnvironmentsList({ onOpenDetail }: { onOpenDetail: (id: string) => void
   const [actionError, setActionError] = useState("");
   // The per-daemon price list (design §6.2), for the suspended-disk fee shown
   // beside Delete. Absent from an older server, in which case no fee renders.
-  const daemonPricing = usePlans().data?.daemonPricing;
+  const daemonPricing = usePlans({ enabled: cloud }).data?.daemonPricing;
+  // Which machines outside AI apps can reach. Read once for the whole list
+  // (ListConnectors is per user, not per machine) and counted per row.
+  const appCounts = activeGrantCounts(useConnectors().data);
   // Routes to /settings/billing?tab=plans — the place a coupon is redeemed and
   // a plan is bought. Shared with every other "go buy compute" call site so
   // the destination cannot drift; see the hook's own header.
@@ -488,6 +494,7 @@ function EnvironmentsList({ onOpenDetail }: { onOpenDetail: (id: string) => void
     queryKey: QK.computeEligibility,
     queryFn: () => getComputeEligibility(),
     staleTime: 30_000,
+    enabled: cloud,
   });
   const allowedSizes = useMemo(
     () => sizeTiersFromWire(eligibilityQ.data?.allowedDaemonSizes ?? []),
@@ -508,6 +515,7 @@ function EnvironmentsList({ onOpenDetail }: { onOpenDetail: (id: string) => void
     queryKey: QK.computeSub,
     queryFn: () => getComputeSubscription(),
     staleTime: 30_000,
+    enabled: cloud,
   });
   const plan = computeSubQ.data?.plan;
 
@@ -554,7 +562,7 @@ function EnvironmentsList({ onOpenDetail }: { onOpenDetail: (id: string) => void
           <option value={String(DaemonStatus.FAILED)}>Failed</option>
           <option value={String(DaemonStatus.DISCONNECTED)}>Disconnected</option>
         </select>
-        {canCreate ? (
+        {!cloud ? null : canCreate ? (
           <Button onClick={() => setCreateOpen(true)}>
             <Plus className="h-4 w-4" /> New Machine
           </Button>
@@ -581,6 +589,12 @@ function EnvironmentsList({ onOpenDetail }: { onOpenDetail: (id: string) => void
             </Button>
           </CardContent>
         </Card>
+      ) : daemons.length === 0 && !cloud ? (
+        <EmptyState
+          icon={Server}
+          title="No machines"
+          description="Connect a self-hosted machine with the steps below."
+        />
       ) : daemons.length === 0 ? (
         <EmptyState
           icon={Server}
@@ -611,6 +625,8 @@ function EnvironmentsList({ onOpenDetail }: { onOpenDetail: (id: string) => void
               </h3>
               <ManagedMachinesTable
                 daemons={managedDaemons}
+                appCounts={appCounts}
+                cloud={cloud}
                 onOpenDetail={onOpenDetail}
                 onDelete={setDeleteTarget}
                 onSuspend={(id) => suspendMut.mutate(id)}
@@ -627,8 +643,10 @@ function EnvironmentsList({ onOpenDetail }: { onOpenDetail: (id: string) => void
               </h3>
               <SelfHostedMachinesTable
                 daemons={selfHostedDaemons}
+                appCounts={appCounts}
                 onOpenDetail={onOpenDetail}
-                onRemove={setDeleteTarget}
+                // Forgetting a machine is a control-plane write.
+                onRemove={cloud ? setDeleteTarget : undefined}
               />
             </div>
           )}
@@ -655,8 +673,27 @@ function EnvironmentsList({ onOpenDetail }: { onOpenDetail: (id: string) => void
   );
 }
 
+/**
+ * "N apps" beside a machine's name when outside AI apps can reach it — so a
+ * user scanning the list can tell which machines have been opened up without
+ * opening each one. Nothing renders for a machine with no active grants.
+ */
+function AppAccessIndicator({ count }: { count: number }) {
+  if (count <= 0) return null;
+  return (
+    <Badge
+      label={appCountLabel(count)}
+      variant="info"
+      size="sm"
+      className="ml-2 align-middle"
+    />
+  );
+}
+
 function ManagedMachinesTable({
   daemons,
+  appCounts,
+  cloud,
   onOpenDetail,
   onDelete,
   onSuspend,
@@ -665,6 +702,9 @@ function ManagedMachinesTable({
   pricing,
 }: {
   daemons: Daemon[];
+  appCounts: Map<string, number>;
+  /** False without a control plane: lifecycle and delete are its writes. */
+  cloud: boolean;
   onOpenDetail: (id: string) => void;
   onDelete: (d: Daemon) => void;
   onSuspend: (id: string) => void;
@@ -707,6 +747,7 @@ function ManagedMachinesTable({
                 >
                   {daemonDisplayName(d)}
                 </button>
+                <AppAccessIndicator count={appCounts.get(d.daemonId) ?? 0} />
               </Td>
               <Td>
                 <StatusDot variant={statusDotVariant[status]} label={badge.label} />
@@ -729,28 +770,30 @@ function ManagedMachinesTable({
               <Td className="text-muted-foreground">{resources}</Td>
               <Td className="text-muted-foreground">{fmtTimestamp(d.createdAt)}</Td>
               <Td className="text-right">
-                <div className="inline-flex items-center gap-1">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    disabled={busy}
-                    onClick={() => (isSuspended ? onResume(d.daemonId) : onSuspend(d.daemonId))}
-                  >
-                    {isSuspended ? <Play className="h-4 w-4" /> : <Pause className="h-4 w-4" />}
-                    {isSuspended ? "Resume" : "Suspend"}
-                  </Button>
-                  {/* A suspended machine still holds its disk, and the disk is
-                      billed (design §5.1). Shown beside Delete because Delete
-                      is the only thing that stops it. */}
-                  {isSuspended && suspendedFeeOf(d, pricing) && (
-                    <span className="text-xs text-muted-foreground" data-testid="machine-suspended-fee">
-                      {suspendedFeeOf(d, pricing)} while suspended
-                    </span>
-                  )}
-                  <Button variant="ghost" size="sm" onClick={() => onDelete(d)}>
-                    <Trash2 className="h-4 w-4 text-destructive" />
-                  </Button>
-                </div>
+                {cloud && (
+                  <div className="inline-flex items-center gap-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={busy}
+                      onClick={() => (isSuspended ? onResume(d.daemonId) : onSuspend(d.daemonId))}
+                    >
+                      {isSuspended ? <Play className="h-4 w-4" /> : <Pause className="h-4 w-4" />}
+                      {isSuspended ? "Resume" : "Suspend"}
+                    </Button>
+                    {/* A suspended machine still holds its disk, and the disk is
+                        billed (design §5.1). Shown beside Delete because Delete
+                        is the only thing that stops it. */}
+                    {isSuspended && suspendedFeeOf(d, pricing) && (
+                      <span className="text-xs text-muted-foreground" data-testid="machine-suspended-fee">
+                        {suspendedFeeOf(d, pricing)} while suspended
+                      </span>
+                    )}
+                    <Button variant="ghost" size="sm" onClick={() => onDelete(d)}>
+                      <Trash2 className="h-4 w-4 text-destructive" />
+                    </Button>
+                  </div>
+                )}
               </Td>
             </Tr>
           );
@@ -762,12 +805,15 @@ function ManagedMachinesTable({
 
 function SelfHostedMachinesTable({
   daemons,
+  appCounts,
   onOpenDetail,
   onRemove,
 }: {
   daemons: Daemon[];
+  appCounts: Map<string, number>;
   onOpenDetail: (id: string) => void;
-  onRemove: (d: Daemon) => void;
+  /** Absent without a control plane, which owns the machine record. */
+  onRemove?: (d: Daemon) => void;
 }) {
   return (
     <Table>
@@ -798,6 +844,7 @@ function SelfHostedMachinesTable({
                 >
                   {daemonDisplayName(d)}
                 </button>
+                <AppAccessIndicator count={appCounts.get(d.daemonId) ?? 0} />
               </Td>
               <Td>
                 <StatusDot variant={statusDotVariant[status]} label={badge.label} />
@@ -805,9 +852,11 @@ function SelfHostedMachinesTable({
               <Td className="text-muted-foreground">{d.platform || "—"}</Td>
               <Td className="text-muted-foreground">{lastSeen}</Td>
               <Td className="text-right">
-                <Button variant="ghost" size="sm" onClick={() => onRemove(d)}>
-                  <Trash2 className="h-4 w-4 text-destructive" /> Remove
-                </Button>
+                {onRemove && (
+                  <Button variant="ghost" size="sm" onClick={() => onRemove(d)}>
+                    <Trash2 className="h-4 w-4 text-destructive" /> Remove
+                  </Button>
+                )}
               </Td>
             </Tr>
           );
@@ -1165,7 +1214,16 @@ function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
-function EnvironmentDetail({ daemonId, onBack }: { daemonId: string; onBack: () => void }) {
+function EnvironmentDetail({
+  daemonId,
+  cloud,
+  onBack,
+}: {
+  daemonId: string;
+  /** False without a control plane: no spec, lifecycle, delete or port rules. */
+  cloud: boolean;
+  onBack: () => void;
+}) {
   const qc = useQueryClient();
   const [error, setError] = useState("");
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -1205,6 +1263,7 @@ function EnvironmentDetail({ daemonId, onBack }: { daemonId: string; onBack: () 
     // minute, which reads as a hang during the one operation that most needs
     // to look alive.
     refetchInterval: restartStage ? 2_000 : 15_000,
+    enabled: cloud,
   });
   const spec = daemonQ.data?.daemon;
   const workspaceBaseDomain = daemonQ.data?.workspaceBaseDomain ?? "";
@@ -1284,6 +1343,15 @@ function EnvironmentDetail({ daemonId, onBack }: { daemonId: string; onBack: () 
   const busy =
     suspendMut.isPending || resumeMut.isPending || deleteMut.isPending || restartMut.isPending;
   const external = daemon ? isExternalDaemon(daemon) : false;
+  // The registry list is what proves the machine exists; the control-plane
+  // spec is an extra half that only a cloud build has.
+  const loading = listQ.isLoading || (cloud && daemonQ.isLoading);
+  const loadError = cloud ? daemonQ.error : listQ.error;
+  // A managed pod's projects live under the clone root; a personal machine
+  // has no safe default, so the user names one (or picks a reported project).
+  const suggestedRoots = Array.from(
+    new Set((daemon?.projects ?? []).map((p) => p.path?.trim()).filter((p): p is string => Boolean(p))),
+  ).slice(0, 6);
 
   return (
     <div className="space-y-6">
@@ -1295,10 +1363,10 @@ function EnvironmentDetail({ daemonId, onBack }: { daemonId: string; onBack: () 
         <ArrowLeft className="h-4 w-4" /> Back to Machines
       </button>
 
-      {daemonQ.isLoading ? (
+      {loading ? (
         <Card><CardContent className="text-sm text-muted-foreground">Loading machine…</CardContent></Card>
-      ) : daemonQ.error ? (
-        <Card><CardContent className="text-sm text-destructive">{describeError(daemonQ.error)}</CardContent></Card>
+      ) : loadError ? (
+        <Card><CardContent className="text-sm text-destructive">{describeError(loadError)}</CardContent></Card>
       ) : !daemon ? (
         <Card><CardContent className="text-sm text-muted-foreground">Machine not found.</CardContent></Card>
       ) : (
@@ -1322,26 +1390,28 @@ function EnvironmentDetail({ daemonId, onBack }: { daemonId: string; onBack: () 
               */}
               <Badge label={badge.label} variant={badge.variant} />
             </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <MachineLifecycleActions
-                daemon={daemon}
-                busy={busy}
-                restartStage={restartStage}
-                onSuspend={() => suspendMut.mutate()}
-                onResume={() => resumeMut.mutate()}
-                onRestart={() => setRestartOpen(true)}
-              />
-              <Button variant="danger" disabled={busy} onClick={() => setDeleteOpen(true)}>
-                <Trash2 className="h-4 w-4" /> {external ? "Remove" : "Delete"}
-              </Button>
-            </div>
+            {cloud && (
+              <div className="flex flex-wrap items-center gap-2">
+                <MachineLifecycleActions
+                  daemon={daemon}
+                  busy={busy}
+                  restartStage={restartStage}
+                  onSuspend={() => suspendMut.mutate()}
+                  onResume={() => resumeMut.mutate()}
+                  onRestart={() => setRestartOpen(true)}
+                />
+                <Button variant="danger" disabled={busy} onClick={() => setDeleteOpen(true)}>
+                  <Trash2 className="h-4 w-4" /> {external ? "Remove" : "Delete"}
+                </Button>
+              </div>
+            )}
           </div>
 
           {/* A self-hosted machine runs on hardware this page does not
               control, so it gets an explanation rather than disabled
               buttons — a greyed-out Suspend would imply the capability
               exists and is merely unavailable right now. */}
-          {external && (
+          {external && cloud && (
             <p className="text-sm text-muted-foreground">
               This machine runs on your own hardware, so it can't be suspended or
               restarted from here. Stop or restart the Reliant daemon on the machine
@@ -1414,7 +1484,17 @@ function EnvironmentDetail({ daemonId, onBack }: { daemonId: string; onBack: () 
             </Card>
           </div>
 
-          <PortAccessPanel daemonId={daemonId} workspaceBaseDomain={workspaceBaseDomain} />
+          {/* Which outside AI apps can reach this machine. Above port access:
+              it is the broader grant — tools on the machine, not one port. */}
+          <MachineAccess
+            daemonId={daemonId}
+            machineName={daemonDisplayName(daemon)}
+            personal={external}
+            defaultPathRoot={external ? "" : CLOUD_PROJECT_ROOT}
+            suggestedRoots={suggestedRoots}
+          />
+
+          {cloud && <PortAccessPanel daemonId={daemonId} workspaceBaseDomain={workspaceBaseDomain} />}
 
           <RemoveMachineModal
             target={deleteOpen ? daemon : null}
