@@ -220,7 +220,7 @@ function StartedBy({
       <>
         Started by schedule{" "}
         <Link
-          to="/automations/$triggerId"
+          to="/workflows/automations/$triggerId"
           params={{ triggerId: chat.triggerId }}
           className="font-medium text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
         >
@@ -234,7 +234,7 @@ function StartedBy({
       <>
         Started by an agent in{" "}
         <Link
-          to="/runs/$runId"
+          to="/workflows/runs/$runId"
           params={{ runId: parent.chatId }}
           className="font-medium text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
         >

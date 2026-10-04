@@ -22,31 +22,31 @@ import { ChatActivity, WorkflowState, WorkflowStopReason } from "@/gen/reliant/v
 import type { RunSummary } from "@/api/run-grpc";
 import { runsSearchSchema } from "@/routeSchemas";
 
-export function renderRunsAt(ui: ReactNode, path = "/runs") {
+export function renderRunsAt(ui: ReactNode, path = "/workflows/runs") {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
   const rootRoute = createRootRoute({ component: () => <Outlet /> });
-  const isDetail = path.startsWith("/runs/");
+  const isDetail = path.startsWith("/workflows/runs/");
   const pageRoute = createRoute({
     getParentRoute: () => rootRoute,
-    path: isDetail ? "/runs/$runId" : "/runs",
+    path: isDetail ? "/workflows/runs/$runId" : "/workflows/runs",
     validateSearch: isDetail ? undefined : runsSearchSchema,
     component: () => <>{ui}</>,
   });
   const otherRoutes = [
     createRoute({ getParentRoute: () => rootRoute, path: "/" }),
     createRoute({ getParentRoute: () => rootRoute, path: "/project/$projectId" }),
-    createRoute({ getParentRoute: () => rootRoute, path: "/automations" }),
-    createRoute({ getParentRoute: () => rootRoute, path: "/automations/$triggerId" }),
-    createRoute({ getParentRoute: () => rootRoute, path: "/workflow" }),
+    createRoute({ getParentRoute: () => rootRoute, path: "/workflows/automations" }),
+    createRoute({ getParentRoute: () => rootRoute, path: "/workflows/automations/$triggerId" }),
+    createRoute({ getParentRoute: () => rootRoute, path: "/workflows/library" }),
     isDetail
       ? createRoute({
           getParentRoute: () => rootRoute,
-          path: "/runs",
+          path: "/workflows/runs",
           validateSearch: runsSearchSchema,
         })
-      : createRoute({ getParentRoute: () => rootRoute, path: "/runs/$runId" }),
+      : createRoute({ getParentRoute: () => rootRoute, path: "/workflows/runs/$runId" }),
   ];
   const router = createRouter({
     routeTree: rootRoute.addChildren([pageRoute, ...otherRoutes]),

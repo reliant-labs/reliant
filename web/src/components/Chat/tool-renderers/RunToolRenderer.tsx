@@ -75,7 +75,7 @@ function RunToolRendererComponent({ ctx }: ToolContentProps) {
         </span>
         {runId && (
           <Link
-            to="/runs/$runId"
+            to="/workflows/runs/$runId"
             params={{ runId }}
             className="ml-auto inline-flex shrink-0 items-center gap-1 rounded-sm font-medium text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
           >

@@ -17,25 +17,25 @@ import {
   RouterProvider,
 } from "@tanstack/react-router";
 
-export function renderAtRoute(ui: ReactNode, path = "/automations") {
+export function renderAtRoute(ui: ReactNode, path = "/workflows/automations") {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
   const rootRoute = createRootRoute({ component: () => <Outlet /> });
   const pageRoute = createRoute({
     getParentRoute: () => rootRoute,
-    path: path.startsWith("/automations/") ? "/automations/$triggerId" : "/automations",
+    path: path.startsWith("/workflows/automations/") ? "/workflows/automations/$triggerId" : "/workflows/automations",
     component: () => <>{ui}</>,
   });
   // Link targets have to exist for the router to build their hrefs.
   const otherRoutes = [
     createRoute({ getParentRoute: () => rootRoute, path: "/" }),
     createRoute({ getParentRoute: () => rootRoute, path: "/project/$projectId" }),
-    createRoute({ getParentRoute: () => rootRoute, path: "/runs/$runId" }),
-    createRoute({ getParentRoute: () => rootRoute, path: "/workflow" }),
-    path.startsWith("/automations/")
-      ? createRoute({ getParentRoute: () => rootRoute, path: "/automations" })
-      : createRoute({ getParentRoute: () => rootRoute, path: "/automations/$triggerId" }),
+    createRoute({ getParentRoute: () => rootRoute, path: "/workflows/runs/$runId" }),
+    createRoute({ getParentRoute: () => rootRoute, path: "/workflows/library" }),
+    path.startsWith("/workflows/automations/")
+      ? createRoute({ getParentRoute: () => rootRoute, path: "/workflows/automations" })
+      : createRoute({ getParentRoute: () => rootRoute, path: "/workflows/automations/$triggerId" }),
   ];
   const router = createRouter({
     routeTree: rootRoute.addChildren([pageRoute, ...otherRoutes]),

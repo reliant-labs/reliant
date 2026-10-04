@@ -128,7 +128,7 @@ function Lane({
   return (
     <>
       <Link
-        to="/automations/$triggerId"
+        to="/workflows/automations/$triggerId"
         params={{ triggerId: lane.trigger.id }}
         tabIndex={-1}
         className="truncate text-xs text-foreground hover:underline"

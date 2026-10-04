@@ -239,17 +239,47 @@ describe("Sidebar forge nav entry", () => {
   });
 
   // Forge is promoted, so it sits ABOVE Projects, directly after the entries
-  // that outrank every surface: New chat, then the Inbox (WORKFLOW_UI.md §1.2,
-  // §14.1 decision 1). Pinned because the position is the product decision,
-  // not an accident of where the JSX was appended.
-  it("sits between the Inbox and Projects", () => {
+  // that outrank every surface: New chat, the Inbox, and the Workflows area
+  // (WORKFLOW_UI.md §1.2, §14.1 decision 1). Pinned because the position is
+  // the product decision, not an accident of where the JSX was appended.
+  //
+  // This used to assert Inbox → Deployments. Phase 3 moved Workflows up to
+  // sit under the Inbox (§1.2's nav), so Deployments now follows Workflows;
+  // it still sits directly above Projects, which is the part that matters.
+  it("sits between Workflows and Projects", () => {
     setProject(true);
     renderSidebar();
     const labels = screen
       .getByRole("navigation", { name: /chat sidebar navigation/i })
       .querySelectorAll("button");
     const text = Array.from(labels).map((b) => b.textContent?.trim());
-    expect(text.slice(0, 4)).toEqual(["New chat", "Inbox", "Deployments", "Projects"]);
+    expect(text.slice(0, 5)).toEqual(["New chat", "Inbox", "Workflows", "Deployments", "Projects"]);
+  });
+
+  // The whole nav, in order (WORKFLOW_UI.md §1.2). Workflows is ONE entry for
+  // the area — Library, Runs and Automations are its tabs — and it sits
+  // directly under the Inbox, above Projects, because "what can run / what
+  // ran / what runs on its own" outranks switching project. Deployments is the
+  // gated forge entry and keeps its place just above Projects.
+  it("orders the nav New chat, Inbox, Workflows, Deployments, Projects, Search", () => {
+    setProject(true);
+    renderSidebar();
+    const labels = screen
+      .getByRole("navigation", { name: /chat sidebar navigation/i })
+      .querySelectorAll("button");
+    const text = Array.from(labels).map((b) => b.textContent?.trim());
+    expect(text).toEqual(["New chat", "Inbox", "Workflows", "Deployments", "Projects", "Search"]);
+  });
+
+  it("orders the nav New chat, Inbox, Workflows, Projects, Search with Deployments gated off", () => {
+    experimentalGate.enabled = false;
+    setProject(true);
+    renderSidebar();
+    const labels = screen
+      .getByRole("navigation", { name: /chat sidebar navigation/i })
+      .querySelectorAll("button");
+    const text = Array.from(labels).map((b) => b.textContent?.trim());
+    expect(text).toEqual(["New chat", "Inbox", "Workflows", "Projects", "Search"]);
   });
 
   // The entry is LABELLED Deployments but is still the forge entry underneath:

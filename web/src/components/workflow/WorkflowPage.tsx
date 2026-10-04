@@ -1,8 +1,8 @@
 /**
- * Route-rendered wrapper for the workflow hub + builder.
+ * Route-rendered wrapper for the workflow builder. (The hub it used to also
+ * render is the Workflows Library now, at /workflows/library.)
  *
  * Reads its inputs from the URL (route params and search):
- *   /workflow                  → hub
  *   /workflow/new              → new blank workflow (isNew={true})
  *   /workflow/$workflowName    → load named workflow (incl. builtin://...)
  *   ?drill=<nodeId>            → one-shot: drill into a loop on load (tour)

@@ -1,7 +1,7 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * /automations — every automation the user owns, across projects
+ * The Automations tab (/workflows/automations) — every automation the user owns, across projects
  * (research/WORKFLOW_UI.md §7.2, decision 10: all projects).
  *
  * The page answers "what will run on its own, is it healthy, and what fires
@@ -18,7 +18,6 @@ import Card from "../forge-ui/card";
 import { Button } from "../ui/Button";
 import { triggerErrorMessage } from "@/api/trigger-grpc";
 import { useTriggers } from "@/hooks/trigger-queries";
-import { AutomationsShell } from "./AutomationsShell";
 import { AutomationFormDialog } from "./AutomationFormDialog";
 import { AutomationGroups, GroupBySwitch } from "./AutomationGroups";
 import { ComingUpTimeline } from "./ComingUpTimeline";
@@ -33,7 +32,7 @@ export function AutomationsListPage() {
   const hasTriggers = triggers.length > 0;
 
   return (
-    <AutomationsShell>
+    <>
       <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div className="min-w-0">
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">Automations</h1>
@@ -72,7 +71,7 @@ export function AutomationsListPage() {
       )}
 
       <AutomationFormDialog open={creating} onClose={() => setCreating(false)} />
-    </AutomationsShell>
+    </>
   );
 }
 
@@ -92,7 +91,7 @@ function EmptyAutomations({ onCreate }: { onCreate: () => void }) {
           New automation
         </Button>
         <Link
-          to="/workflow"
+          to="/workflows/library"
           className="inline-flex h-9 items-center rounded-md border border-border px-4 text-sm font-medium text-foreground transition-colors hover:bg-muted/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
         >
           Browse workflows

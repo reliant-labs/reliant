@@ -9,7 +9,6 @@ export { WorkflowBuilder } from './WorkflowBuilder'
 export { WorkflowViewer } from './WorkflowViewer'
 export { WorkflowViewerPanel } from './WorkflowViewerPanel'
 export { WorkflowBuilderPage } from './WorkflowBuilderPage'
-export { WorkflowHub } from './WorkflowHub'
 
 // Re-export node types for customization
 export { nodeTypes } from './nodes'

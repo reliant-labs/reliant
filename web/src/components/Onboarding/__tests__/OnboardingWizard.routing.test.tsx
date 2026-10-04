@@ -226,7 +226,7 @@ function makeRouter(initialEntries: string[], Wizard: React.ComponentType<any>) 
   });
   const workflowHubRoute = createRoute({
     getParentRoute: () => rootRoute,
-    path: "/workflow",
+    path: "/workflows/library",
     validateSearch: searchSchema,
     component: () =>
       React.createElement("div", { "data-testid": "workflow-hub-page" }),
@@ -310,7 +310,7 @@ describe("OnboardingWizard URL gating", () => {
     ).toBeInTheDocument();
   });
 
-  it("clicking 'Open Workflows' navigates to /workflow with the tour param preserved", async () => {
+  it("clicking 'Open Workflows' navigates to the Library with the tour param preserved", async () => {
     const Wizard = await loadWizard();
     if (!Wizard) {
       expect.fail("OnboardingWizard not importable");
@@ -325,7 +325,7 @@ describe("OnboardingWizard URL gating", () => {
     await userEvent.click(button);
 
     await waitFor(() => {
-      expect(router.state.location.pathname).toBe("/workflow");
+      expect(router.state.location.pathname).toBe("/workflows/library");
     });
     // The wizard should preserve the tour param across the navigation so
     // the spotlight branch can take over on the right page.
@@ -334,13 +334,13 @@ describe("OnboardingWizard URL gating", () => {
     });
   });
 
-  it("renders the spotlight branch (not the open-page modal) at /workflow?tour=workflow-hub", async () => {
+  it("renders the spotlight branch (not the open-page modal) at /workflows/library?tour=workflow-hub", async () => {
     const Wizard = await loadWizard();
     if (!Wizard) {
       expect.fail("OnboardingWizard not importable");
       return;
     }
-    const router = makeRouter(["/workflow?tour=workflow-hub"], Wizard);
+    const router = makeRouter(["/workflows/library?tour=workflow-hub"], Wizard);
     render(React.createElement(RouterProvider as any, { router }));
     await waitFor(() =>
       expect(screen.getByTestId("workflow-hub-page")).toBeInTheDocument()

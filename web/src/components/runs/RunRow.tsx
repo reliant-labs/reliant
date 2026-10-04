@@ -60,7 +60,7 @@ export function RunRow({ run, projectName, className }: RunRowProps) {
 
       <div className="min-w-0">
         <Link
-          to="/runs/$runId"
+          to="/workflows/runs/$runId"
           params={{ runId: run.chatId }}
           className="block truncate rounded-sm text-sm font-medium text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
         >
@@ -77,7 +77,7 @@ export function RunRow({ run, projectName, className }: RunRowProps) {
         <LaunchKindIcon kind={launch.kind} />
         {run.launchKind === "schedule" && run.triggerId && run.triggerName ? (
           <Link
-            to="/automations/$triggerId"
+            to="/workflows/automations/$triggerId"
             params={{ triggerId: run.triggerId }}
             className="truncate rounded-sm hover:text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
           >

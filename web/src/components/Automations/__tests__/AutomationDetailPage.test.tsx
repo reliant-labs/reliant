@@ -144,7 +144,7 @@ describe("AutomationDetail", () => {
 
   it("a run that launched and then failed does not read as green", async () => {
     getChat.mockResolvedValue(launchedChat(WorkflowState.STOPPED, WorkflowStopReason.FAILED, ChatActivity.ERROR));
-    renderAtRoute(<AutomationDetail triggerId="trig-1" />, "/automations/trig-1");
+    renderAtRoute(<AutomationDetail triggerId="trig-1" />, "/workflows/automations/trig-1");
 
     const row = await screen.findByTestId("automation-event-ev-1");
     // The firing keeps its own word, in a color that claims nothing about the run.
@@ -162,7 +162,7 @@ describe("AutomationDetail", () => {
     getChat.mockResolvedValue(
       launchedChat(WorkflowState.ACTIVE, WorkflowStopReason.UNSPECIFIED, ChatActivity.AWAITING_INPUT),
     );
-    renderAtRoute(<AutomationDetail triggerId="trig-1" />, "/automations/trig-1");
+    renderAtRoute(<AutomationDetail triggerId="trig-1" />, "/workflows/automations/trig-1");
 
     const row = await screen.findByTestId("automation-event-ev-1");
     expect(await within(row).findByText("Needs you")).toBeInTheDocument();
@@ -170,14 +170,14 @@ describe("AutomationDetail", () => {
 
   it("says so when the launched chat can no longer be read", async () => {
     getChat.mockRejectedValue(new Error("chat not found"));
-    renderAtRoute(<AutomationDetail triggerId="trig-1" />, "/automations/trig-1");
+    renderAtRoute(<AutomationDetail triggerId="trig-1" />, "/workflows/automations/trig-1");
 
     const row = await screen.findByTestId("automation-event-ev-1");
     expect(await within(row).findByText("Unavailable")).toBeInTheDocument();
   });
 
   it("renders the definition and the event history", async () => {
-    renderAtRoute(<AutomationDetail triggerId="trig-1" />, "/automations/trig-1");
+    renderAtRoute(<AutomationDetail triggerId="trig-1" />, "/workflows/automations/trig-1");
 
     expect(await screen.findByRole("heading", { name: "Morning triage" })).toBeInTheDocument();
     expect(screen.getByText("Triage new issues")).toBeInTheDocument();
@@ -198,7 +198,7 @@ describe("AutomationDetail", () => {
       create(FireTriggerResponseSchema, { fireWorkflowId: "trigger-fire-trig-1-manual" }),
     );
     const user = userEvent.setup();
-    renderAtRoute(<AutomationDetail triggerId="trig-1" />, "/automations/trig-1");
+    renderAtRoute(<AutomationDetail triggerId="trig-1" />, "/workflows/automations/trig-1");
     await screen.findByTestId("automation-event-ev-1");
     const eventCallsBefore = listTriggerEvents.mock.calls.length;
 
@@ -216,7 +216,7 @@ describe("AutomationDetail", () => {
   it("reports a failed Run now", async () => {
     fireTrigger.mockRejectedValue(new Error("temporal unavailable"));
     const user = userEvent.setup();
-    renderAtRoute(<AutomationDetail triggerId="trig-1" />, "/automations/trig-1");
+    renderAtRoute(<AutomationDetail triggerId="trig-1" />, "/workflows/automations/trig-1");
 
     await user.click(await screen.findByRole("button", { name: "Run now" }));
 
@@ -228,10 +228,10 @@ describe("AutomationDetail", () => {
   });
 
   it("links a launched firing to its run's page in the Runs area", async () => {
-    renderAtRoute(<AutomationDetail triggerId="trig-1" />, "/automations/trig-1");
+    renderAtRoute(<AutomationDetail triggerId="trig-1" />, "/workflows/automations/trig-1");
 
     const row = await screen.findByTestId("automation-event-ev-1");
-    expect(within(row).getByRole("link", { name: "Open run" })).toHaveAttribute("href", "/runs/chat-42");
+    expect(within(row).getByRole("link", { name: "Open run" })).toHaveAttribute("href", "/workflows/runs/chat-42");
     // Opening a run no longer leaves the area for the project view.
     expect(within(row).queryByRole("button", { name: "Open chat" })).not.toBeInTheDocument();
   });
@@ -251,7 +251,7 @@ describe("AutomationDetail", () => {
         ],
       }),
     );
-    renderAtRoute(<AutomationDetail triggerId="trig-1" />, "/automations/trig-1");
+    renderAtRoute(<AutomationDetail triggerId="trig-1" />, "/workflows/automations/trig-1");
 
     const row = await screen.findByTestId("automation-event-ev-1");
     expect(await within(row).findByText("Waiting for machine")).toBeInTheDocument();
@@ -262,7 +262,7 @@ describe("AutomationDetail", () => {
   it("asks before deleting", async () => {
     deleteTrigger.mockResolvedValue({});
     const user = userEvent.setup();
-    renderAtRoute(<AutomationDetail triggerId="trig-1" />, "/automations/trig-1");
+    renderAtRoute(<AutomationDetail triggerId="trig-1" />, "/workflows/automations/trig-1");
 
     await user.click(await screen.findByRole("button", { name: "Delete" }));
     expect(deleteTrigger).not.toHaveBeenCalled();

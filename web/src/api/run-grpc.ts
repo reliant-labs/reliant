@@ -148,7 +148,7 @@ const RANGE_MS: Record<Exclude<RunRangeKey, "all">, number> = {
 export const DEFAULT_RUN_RANGE: RunRangeKey = "24h";
 
 /** The search-param filters plus the resolved project (decision 10). */
-export type RunListFilters = Omit<RunsSearch, "allProjects" | "group" | "parent"> & {
+export type RunListFilters = Omit<RunsSearch, "allProjects" | "group" | "parent" | "project"> & {
   /** Only runs an agent started from this chat (`?parent=`). */
   parentChatId?: string;
   /** Set to scope to one project; unset lists every project. */
@@ -321,6 +321,15 @@ export const runGrpc = {
   async list(request: ListRunsRequest): Promise<RunPage> {
     const response = await grpcClient.run().listRuns(request);
     return { runs: response.runs.map(runFromProto), nextPageToken: response.nextPageToken };
+  },
+
+  /**
+   * The newest run of each workflow the caller has run, keyed by workflow
+   * name (the stored ref, e.g. `builtin://agent`). Optionally one project.
+   */
+  async lastRunPerWorkflow(projectId?: string): Promise<Map<string, RunSummary>> {
+    const response = await grpcClient.run().lastRunPerWorkflow({ projectId, workflow: [] });
+    return new Map(response.runs.map((run) => [run.workflowName, runFromProto(run)]));
   },
 
   async pause(chatId: string): Promise<void> {

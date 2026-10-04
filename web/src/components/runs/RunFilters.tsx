@@ -25,6 +25,7 @@ import {
   type RunsSearch,
 } from "@/routeSchemas";
 import { getWorkflowDisplayName } from "../workflow/useWorkflowInputs";
+import { WORKFLOWS_RUNS_PATH } from "@/lib/workflowsArea";
 
 const RANGE_LABELS: Record<RunRangeKey, string> = {
   "24h": "24 hours",
@@ -65,7 +66,7 @@ export function useRunsSearch(): [RunsSearch, (next: RunsSearch) => void] {
   const navigate = useNavigate();
   const set = (next: RunsSearch) => {
     // Drop empty values so the URL only names what narrows the list.
-    void navigate({ to: "/runs", search: compact(next), replace: true });
+    void navigate({ to: WORKFLOWS_RUNS_PATH, search: compact(next), replace: true });
   };
   return [search, set];
 }
@@ -184,7 +185,7 @@ export function RunFilters({ currentProjectName, triggerName, parentTitle }: Run
             type="button"
             onClick={() => {
               setQuery("");
-              setSearch({ allProjects: search.allProjects, group: search.group });
+              setSearch({ allProjects: search.allProjects, group: search.group, project: search.project });
             }}
             className="ml-1 rounded-sm text-xs font-medium text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
             aria-label="Clear filters"

@@ -46,13 +46,13 @@ describe("RunRow", () => {
   it("links the title to the run's page", async () => {
     renderRow({ chatId: "chat-9", title: "Nightly triage" });
     const link = await screen.findByRole("link", { name: "Nightly triage" });
-    expect(link).toHaveAttribute("href", "/runs/chat-9");
+    expect(link).toHaveAttribute("href", "/workflows/runs/chat-9");
   });
 
   it("names the automation for a scheduled run, linked to it", async () => {
     renderRow({ launchKind: "schedule", triggerId: "trig-1", triggerName: "Hourly sweep" });
     const link = await screen.findByRole("link", { name: "Hourly sweep" });
-    expect(link).toHaveAttribute("href", "/automations/trig-1");
+    expect(link).toHaveAttribute("href", "/workflows/automations/trig-1");
   });
 
   it("says an agent started an agent-started run", async () => {

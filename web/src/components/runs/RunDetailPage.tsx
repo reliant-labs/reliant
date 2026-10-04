@@ -24,7 +24,6 @@ import { Button } from "../ui/Button";
 import { ChatContainer } from "../Chat/ChatContainer";
 import { RunHeader } from "./RunHeader";
 import { useRunRoute } from "./RunRouteLoader";
-import { RunsShell } from "./RunsPage";
 import { TriggerCard } from "./TriggerCard";
 import { useRerun } from "./useRerun";
 import { useRunLaunch } from "./useRunLaunch";
@@ -32,7 +31,7 @@ import { RunMachineBanner } from "./MachineStatus";
 
 export function RunDetailPage() {
   const { runId } = useParams({ strict: false }) as { runId?: string };
-  return <RunsShell layout="fill">{runId ? <RunDetail chatId={runId} /> : <RunNotFound />}</RunsShell>;
+  return runId ? <RunDetail chatId={runId} /> : <RunNotFound />;
 }
 
 export function RunDetail({ chatId }: { chatId: string }) {
@@ -146,7 +145,7 @@ function RunNotFound() {
         <p className="text-sm font-medium text-foreground">This run doesn't exist or isn't yours.</p>
         <p className="mt-1 text-sm text-muted-foreground">It may have been deleted.</p>
         <Link
-          to="/runs"
+          to="/workflows/runs"
           className="mt-4 inline-flex h-9 items-center rounded-md border border-border px-3 text-sm font-medium text-foreground hover:bg-muted/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
         >
           All runs

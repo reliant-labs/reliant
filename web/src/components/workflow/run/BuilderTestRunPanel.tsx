@@ -153,7 +153,7 @@ export function BuilderTestRunPanel({
             <div className="flex flex-wrap items-center gap-2" data-testid="test-run-status">
               {runState && <RunStatusBadge status={runState} />}
               <Link
-                to="/runs/$runId"
+                to="/workflows/runs/$runId"
                 params={{ runId: testChatId }}
                 className="text-sm font-medium text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
               >

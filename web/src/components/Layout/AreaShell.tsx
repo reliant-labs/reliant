@@ -1,9 +1,10 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * Chrome for an app area that lives outside the project shell — /automations
- * and /runs today, the merged Workflows area later (WORKFLOW_UI.md §12 Phase
- * 3). A title bar with the way out, and the content below it.
+ * Chrome for an app area that lives outside the project shell — the Inbox,
+ * and the Workflows area, which adds its tab bar through `nav`
+ * (workflows/WorkflowsShell.tsx). A title bar with the way out, and the
+ * content below it.
  *
  * These routes sit under the bare `_authenticated` layout, which renders no
  * app chrome (the same position /settings and /forge are in), so without this
@@ -21,7 +22,7 @@ import { cn } from "@/lib/utils";
 import { Tooltip } from "../ui/Tooltip";
 
 interface AreaShellProps {
-  /** The area's list path, e.g. "/runs". Anything below it is a detail page. */
+  /** The area's list path, e.g. "/inbox". Anything below it is a detail page. */
   areaPath: string;
   /** What the detail page's exit returns to, e.g. "All runs". */
   areaLabel: string;
@@ -33,10 +34,12 @@ interface AreaShellProps {
    * scrolling, for a page hosting a transcript.
    */
   layout?: "column" | "fill";
+  /** The area's own navigation (a tab bar), beside the exit. */
+  nav?: ReactNode;
   children: ReactNode;
 }
 
-export function AreaShell({ areaPath, areaLabel, areaNoun, layout = "column", children }: AreaShellProps) {
+export function AreaShell({ areaPath, areaLabel, areaNoun, layout = "column", nav, children }: AreaShellProps) {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const { isElectron, trafficLightPadding, dragRegionStyle, noDragRegionStyle } =
@@ -107,6 +110,7 @@ export function AreaShell({ areaPath, areaLabel, areaNoun, layout = "column", ch
                 <span>{exitLabel}</span>
               </button>
             </Tooltip>
+            {nav}
           </div>
         </div>
         <div className="flex-1 self-stretch" style={dragRegionStyle} />

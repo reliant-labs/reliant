@@ -77,10 +77,17 @@ function makeRouter(initialEntry: string) {
     component: () => <div>onboarding</div>,
   });
 
-  const runDetailRoute = createRoute({
+  // A splat stands in for every Workflows-area page: the store only reads the
+  // pathname, so one route that matches them all is enough.
+  const workflowsRoute = createRoute({
     getParentRoute: () => rootRoute,
-    path: "/runs/$runId",
-    component: () => <div>run</div>,
+    path: "/workflows/$",
+    component: () => <div>workflows</div>,
+  });
+  const inboxRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/inbox",
+    component: () => <div>inbox</div>,
   });
 
   return createRouter({
@@ -88,7 +95,8 @@ function makeRouter(initialEntry: string) {
       appLayout.addChildren([indexRoute, projectRoute]),
       settingsRoute,
       onboardingRoute,
-      runDetailRoute,
+      workflowsRoute,
+      inboxRoute,
     ]),
     history: createMemoryHistory({ initialEntries: [initialEntry] }),
   } as any);
@@ -181,13 +189,22 @@ describe("syncProjectUrl — search params survive project selection", () => {
     expect(router.state.location.pathname).toBe("/settings");
   });
 
-  it("leaves the user on a run's page when it selects the run's project", async () => {
-    // RunRouteLoader selects the run's project so ChatContainer can read it;
-    // that selection must not navigate the user into the project view.
-    const { router, useProjectStore } = await withRouterAt("/runs/chat-1");
+  // RunRouteLoader selects the run's project so ChatContainer can read it, and
+  // WorkflowsShell restores a project on a cold load; neither selection may
+  // navigate the user out of the Workflows area (WORKFLOW_UI.md §1.3) or the
+  // Inbox into the project view.
+  it.each([
+    "/workflows/runs/chat-1",
+    "/workflows/runs",
+    "/workflows/automations/trig-1",
+    "/workflows/library",
+    "/workflows/library/builtin%3A%2F%2Fagent",
+    "/inbox",
+  ])("leaves the user on %s when a project is selected", async (path) => {
+    const { router, useProjectStore } = await withRouterAt(path);
 
     await selectProjectIgnoringSideEffects(useProjectStore, "p1");
 
-    expect(router.state.location.pathname).toBe("/runs/chat-1");
+    expect(router.state.location.pathname).toBe(path);
   });
 });

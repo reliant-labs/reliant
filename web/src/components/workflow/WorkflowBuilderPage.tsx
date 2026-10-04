@@ -10,7 +10,6 @@ import {
   isCompleteSaveRejection,
   type DraftStatus,
 } from "./workflowDraftStatus";
-import { WorkflowHub } from "./WorkflowHub";
 import { WorkflowParseErrorView } from "./WorkflowParseErrorView";
 import { WorkflowHeader } from "./WorkflowHeader";
 import { LoadingSpinner } from "../Layout/LoadingSpinner";
@@ -24,9 +23,7 @@ import {
   getWorkflowWithDraftId,
   getWorkflowByDraftId,
   type WorkflowResponse,
-  type InvalidWorkflow,
 } from "../../api/workflow-grpc";
-// Preset imports removed - handlers moved to WorkflowHub
 import { toast } from "sonner";
 import {
   useGlobalDataStore,
@@ -34,13 +31,12 @@ import {
   type WorkflowDef,
 } from "../../store/globalDataStore";
 import { useProjectStore } from "../../store/projectStore";
-import { usePreferencesStore } from "../../store/preferencesStore";
 import { trackEvent } from "../../lib/analytics";
 
 interface WorkflowBuilderPageProps {
   selectedWorkflow?: Workflow | null;
   onWorkflowChange?: (workflow: Workflow) => void;
-  /** Workflow name from the URL route. Undefined means hub view. */
+  /** Workflow name from the URL route (`/workflow/$workflowName`). */
   routeWorkflowName?: string;
   /** When true, the route is `/workflow/new` and a fresh blank workflow should be created. */
   routeIsNew?: boolean;
@@ -131,17 +127,10 @@ export function WorkflowBuilderPage({
     string | undefined
   >(undefined);
 
-  // View is fully derived from URL (+ a parse error from the last load and a
-  // prop selectedWorkflow for embedded composition). No setState — keeping
-  // currentView as separate state was the bug that let URL and view diverge.
-  // Order matters: parse errors win so the user can recover; otherwise any of
-  // routeWorkflowName / routeIsNew / selectedWorkflow is enough to be in the
-  // builder; else hub.
-  const currentView: "hub" | "builder" | "error" = parseError
-    ? "error"
-    : routeWorkflowName || routeIsNew || selectedWorkflow
-      ? "builder"
-      : "hub";
+  // View is derived: a parse error from the last load shows the error view
+  // (so the user can recover), anything else the builder. There is no hub
+  // view any more — the Library (/workflows/library) replaced it.
+  const currentView: "builder" | "error" = parseError ? "error" : "builder";
 
   // Session ID for new/unsaved workflows - used as a stable key for localStorage before workflow is saved
   // This is a ref to avoid unnecessary re-renders
@@ -156,9 +145,6 @@ export function WorkflowBuilderPage({
     Map<string, WorkflowResponse>
   >(new Map());
   // Track invalid workflows that failed to load
-  const [invalidWorkflows, setInvalidWorkflows] = useState<InvalidWorkflow[]>(
-    [],
-  );
   const currentProject = useProjectStore((state) => state.currentProject);
   const projectId = currentProject?.id;
   // Track whether the projects list is being fetched. Used below to distinguish
@@ -167,27 +153,11 @@ export function WorkflowBuilderPage({
   const projectsLoading = useProjectStore((state) => state.isLoading);
 
   // Use cached workflows from global store for immediate display
-  const { workflows: cachedWorkflows, loading: workflowsLoading } =
-    useWorkflows();
+  const { workflows: cachedWorkflows } = useWorkflows();
 
   // Get presets from global store
   const presets = useGlobalDataStore((state) => state.presets);
   const refetchPresets = useGlobalDataStore((state) => state.refetchPresets);
-
-  // Get default workflow preference
-  const {
-    preferences,
-    updatePreferences,
-    loadPreferences,
-    isLoading: preferencesLoading,
-  } = usePreferencesStore();
-
-  // Load preferences on mount
-  useEffect(() => {
-    if (!preferences && !preferencesLoading) {
-      loadPreferences();
-    }
-  }, [preferences, preferencesLoading, loadPreferences]);
 
   // Ensure presets are loaded when component mounts with a projectId
   useEffect(() => {
@@ -227,11 +197,10 @@ export function WorkflowBuilderPage({
       const result = await workflowGrpc.listWorkflowsWithErrors(
         projectId,
         true,
-      ); // includeHidden for hub
+      ); // includeHidden: the builder resolves hidden workflows too
       const detailed = new Map<string, WorkflowResponse>();
       result.workflows.forEach((w) => detailed.set(w.name, w));
       setDetailedWorkflows(detailed);
-      setInvalidWorkflows(result.invalidWorkflows);
     } catch (err) {
       console.error("Failed to load detailed workflows:", err);
     }
@@ -278,7 +247,7 @@ export function WorkflowBuilderPage({
 
   // Drive view state from the URL route:
   //   routeIsNew === true                       → new blank editable workflow
-  //   routeWorkflowName === undefined && !isNew → hub view
+  //   routeWorkflowName === undefined && !isNew → nothing to load
   //   routeWorkflowName set                     → load that workflow
   // The route is the source of truth; no flag to clear afterwards.
   useEffect(() => {
@@ -336,7 +305,7 @@ export function WorkflowBuilderPage({
     }
 
     if (!routeWorkflowName) {
-      // No workflow name and not "new" → hub view (derived from props).
+      // No workflow name and not "new": nothing to load.
       // Clear any lingering editor data so the next time the user opens a
       // workflow they don't see a flash of the previous one.
       setEditingWorkflow(undefined);
@@ -415,56 +384,19 @@ export function WorkflowBuilderPage({
           workflowSessionIdRef.current = undefined;
         } else {
           toast.error(`Workflow "${workflowName}" not found`);
-          // Workflow was deleted or doesn't exist - fall back to hub
-          navigate({ to: "/workflow" });
+          // Workflow was deleted or does not exist - back to the Library
+          navigate({ to: "/workflows/library" });
         }
       } catch (err) {
         console.error("Failed to load workflow:", err);
         toast.error(`Failed to load workflow "${workflowName}"`);
         // Same fallback logic for errors
-        navigate({ to: "/workflow" });
+        navigate({ to: "/workflows/library" });
       }
     };
 
     loadWorkflow();
   }, [routeWorkflowName, routeIsNew, projectId, projectsLoading, existingWorkflows, navigate, tourMode]);
-
-  // Escape key handling for hub view - close the workflow route
-  // When in builder view, WorkflowBuilder handles escape itself
-  useEffect(() => {
-    const handleEscape = (e: KeyboardEvent) => {
-      // Only handle escape when in hub view
-      if (e.key !== "Escape" || currentView !== "hub") return;
-
-      // Skip if we're in an input field
-      const target = e.target as HTMLElement;
-      if (
-        target.tagName === "INPUT" ||
-        target.tagName === "TEXTAREA" ||
-        target.contentEditable === "true"
-      ) {
-        return;
-      }
-
-      // Defer to onboarding tour if it's active. Tour activity now lives in
-      // the URL (`?tour=<step>`); this handler runs outside React so we read
-      // directly from window.location rather than via a hook.
-      if (new URLSearchParams(window.location.search).has("tour")) return;
-
-      // Prevent ModernApp from handling this ESC
-      e.preventDefault();
-      e.stopPropagation();
-      e.stopImmediatePropagation();
-
-      // Exit the workflow route (go back to main chat)
-      onClose?.();
-    };
-
-    // Use window with capture phase to run BEFORE document-level handlers (like ModernApp's global shortcuts)
-    // This ensures the workflow navigation stack is respected (panels → hub → exit)
-    window.addEventListener("keydown", handleEscape, true);
-    return () => window.removeEventListener("keydown", handleEscape, true);
-  }, [currentView, onClose]);
 
   const handleSave = async (
     workflow: Workflow,
@@ -594,7 +526,7 @@ export function WorkflowBuilderPage({
       });
 
       // Refresh global store + detailed data so cached list and all
-      // subscribers (AgentSelector, hub, etc.) see the save.
+      // subscribers (AgentSelector, the Library, etc.) see the save.
       await refreshWorkflowList();
 
       // Return save result for WorkflowBuilder to show appropriate toasts
@@ -708,141 +640,6 @@ export function WorkflowBuilderPage({
     }
   };
 
-  const handleCreateNew = async () => {
-    // Navigate to /workflow/new — the route effect will create the draft and
-    // flip to the builder view. No need for workspaceStateStore persistence;
-    // the URL is the source of truth.
-    navigate({ to: "/workflow/new" });
-  };
-
-  const handleSelectWorkflow = (
-    workflowName: string,
-    _isReadOnlyWorkflow: boolean = false,
-    _source?: "builtin" | "user" | "project",
-    _updatedAt?: string,
-    _slug?: string,
-    _draftIdFromList?: string,
-  ) => {
-    // Selecting a workflow from the hub just navigates — the route effect
-    // takes care of fetching the workflow content, source detection, etc.
-    navigate({
-      to: "/workflow/$workflowName",
-      params: { workflowName },
-    });
-  };
-
-  const handleDeleteWorkflow = async (name: string) => {
-    if (!projectId) {
-      toast.error("No project selected", { duration: 5000 });
-      return;
-    }
-
-    try {
-      await workflowGrpc.deleteWorkflow(projectId, name);
-
-      // Refresh global store (primary source) and detailed data so the UI
-      // reflects the delete before returning.
-      await refreshWorkflowList();
-    } catch (err) {
-      console.error("Delete workflow failed:", err);
-      toast.error(
-        err instanceof Error ? err.message : "Failed to delete workflow",
-        { duration: 5000 },
-      );
-    }
-  };
-
-  const handleImportWorkflow = async (
-    yamlContent: string,
-    overwrite: boolean = false,
-  ) => {
-    if (!projectId) {
-      toast.error("No project selected", { duration: 5000 });
-      return { success: false, message: "No project selected" };
-    }
-
-    try {
-      const response = await workflowGrpc.importWorkflow(
-        projectId,
-        yamlContent,
-        overwrite,
-      );
-
-      if (response.success) {
-        // Refresh global store (primary source) and detailed data.
-        await refreshWorkflowList();
-      }
-
-      // Return the response for WorkflowHub to handle toasts and conflict modal
-      return {
-        success: response.success,
-        conflict: response.conflict,
-        existingId: response.existingId,
-        slug: response.slug,
-        message: response.message,
-      };
-    } catch (err) {
-      console.error("Import workflow failed:", err);
-      return {
-        success: false,
-        message:
-          err instanceof Error ? err.message : "Failed to import workflow",
-      };
-    }
-  };
-
-  const handleExportWorkflow = async (slug: string) => {
-    if (!projectId) {
-      toast.error("No project selected", { duration: 5000 });
-      return;
-    }
-
-    try {
-      await workflowGrpc.downloadWorkflow(projectId, slug);
-      toast.success("Workflow exported", { duration: 3000 });
-    } catch (err) {
-      console.error("Export workflow failed:", err);
-      toast.error(
-        err instanceof Error ? err.message : "Failed to export workflow",
-        { duration: 5000 },
-      );
-    }
-  };
-
-  const handleSetDefaultWorkflow = async (workflowName: string) => {
-    try {
-      await updatePreferences({ defaultWorkflow: workflowName });
-    } catch (err) {
-      console.error("Failed to set default workflow:", err);
-      throw err;
-    }
-  };
-
-  const handleToggleVisibility = async (
-    workflowName: string,
-    isHidden: boolean,
-  ) => {
-    if (!projectId) return;
-    // Find the workflow to get its slug/filename
-    const workflow = existingWorkflows.find((w) => w.name === workflowName);
-    if (!workflow) return;
-
-    try {
-      const result = await workflowGrpc.setWorkflowVisibility(
-        projectId,
-        workflow.filename,
-        isHidden,
-      );
-      if (result.success) {
-        // Refresh both the global store and local detailed workflows.
-        await refreshWorkflowList();
-      }
-    } catch (err) {
-      console.error("Failed to toggle workflow visibility:", err);
-      throw err;
-    }
-  };
-
   // Shared full-screen layout: header (with close + settings) + content below.
   // The header is only rendered when route adapters provide handlers (route
   // mode); when WorkflowBuilderPage is composed directly with no onClose
@@ -872,50 +669,9 @@ export function WorkflowBuilderPage({
     return <LoadingSpinner />;
   }
 
-  if (currentView === "hub") {
-    return renderWithChrome(
-      <WorkflowHub
-        onCreateNew={handleCreateNew}
-        onSelectWorkflow={(name) => {
-          // Find the workflow to check if it's read-only (builtin or project)
-          const workflow = existingWorkflows.find((w) => w.name === name);
-          const isReadOnlySource =
-            workflow?.source === "builtin" || workflow?.source === "project";
-          // Pass draftId for user workflows to enable stable ID-based lookups
-          handleSelectWorkflow(
-            name,
-            isReadOnlySource,
-            workflow?.source,
-            workflow?.updatedAt,
-            workflow?.filename,
-            workflow?.draftId,
-          );
-        }}
-        onDeleteWorkflow={(name) => {
-          // Find the filename for this workflow name
-          const workflow = existingWorkflows.find((w) => w.name === name);
-          if (workflow) {
-            handleDeleteWorkflow(workflow.filename);
-          }
-        }}
-        onImportWorkflow={handleImportWorkflow}
-        onExportWorkflow={(slug) => handleExportWorkflow(slug)}
-        onToggleVisibility={handleToggleVisibility}
-        existingWorkflows={existingWorkflows}
-        invalidWorkflows={invalidWorkflows}
-        isLoading={workflowsLoading && existingWorkflows.length === 0}
-        presets={presets}
-        defaultWorkflow={preferences?.defaultWorkflow}
-        onSetDefaultWorkflow={handleSetDefaultWorkflow}
-        projectId={projectId}
-      />,
-    );
-  }
-
   const handleBack = async () => {
     // Navigate to the logical parent of the current route (lib/routeParent).
-    // From /workflow/$name that's /workflow (the hub); the route effect will
-    // reset the view to hub.
+    // From /workflow/$name that's the Library (/workflows/library).
     navigate(getParentRouteNavigateOptions(pathname));
 
     // Refresh workflow list to show any changes made.
@@ -942,14 +698,13 @@ export function WorkflowBuilderPage({
 
       toast.success("Workflow cleared");
 
-      // Clear error state and navigate back to the hub URL — clearing the
-      // route param is what flips the derived view back to "hub".
+      // Clear error state and go back to the Library.
       setParseError(undefined);
       setRawDefinition(undefined);
       setErrorWorkflowName(undefined);
       setDraftId(undefined);
       setBuilderChatId(undefined);
-      navigate({ to: "/workflow" });
+      navigate({ to: "/workflows/library" });
 
       // Refresh workflows.
       refreshWorkflowList();

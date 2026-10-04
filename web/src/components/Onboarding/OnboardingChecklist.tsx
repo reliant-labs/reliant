@@ -37,10 +37,10 @@ function executeItemAction(item: ChecklistItem, deps: ItemActionDeps) {
       document.querySelector<HTMLElement>("[data-chat-input]")?.focus();
       break;
     case "use-custom-workflow":
-      void deps.navigate({ to: "/workflow", search: {} });
+      void deps.navigate({ to: "/workflows/library", search: {} });
       break;
     case "create-workflow":
-      void deps.navigate({ to: "/workflow", search: {} });
+      void deps.navigate({ to: "/workflows/library", search: {} });
       break;
     case "take-product-tour":
       deps.startTour();
@@ -49,7 +49,7 @@ function executeItemAction(item: ChecklistItem, deps: ItemActionDeps) {
       window.dispatchEvent(new CustomEvent("open-create-worktree-modal"));
       break;
     case "create-preset":
-      void deps.navigate({ to: "/workflow", search: {} });
+      void deps.navigate({ to: "/workflows/library", search: {} });
       break;
     case "install-mcp":
       void deps.navigate({ to: "/settings/$section", params: { section: "mcp" } });

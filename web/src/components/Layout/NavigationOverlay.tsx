@@ -70,7 +70,7 @@ export function NavigationOverlay({ onClose }: NavigationOverlayProps) {
       icon: Workflow,
       shortcut: "⌘ K",
       onClick: () => {
-        navigate({ to: '/workflow' });
+        navigate({ to: '/workflows' });
         onClose();
       },
     },
@@ -86,7 +86,7 @@ export function NavigationOverlay({ onClose }: NavigationOverlayProps) {
       label: "Runs",
       icon: Activity,
       onClick: () => {
-        navigate({ to: '/runs' });
+        navigate({ to: '/workflows/runs' });
         onClose();
       },
     },

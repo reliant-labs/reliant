@@ -140,7 +140,7 @@ describe("InboxPage item kinds", () => {
     expect(mocks.setEnabled).toHaveBeenCalledWith({ id: "trg-1", enabled: false }, expect.anything());
 
     await userEvent.click(within(row).getByRole("link", { name: "Open last run" }));
-    await waitFor(() => expect(router.state.location.pathname).toBe("/runs/chat-last"));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/workflows/runs/chat-last"));
   });
 
   it("a repeated failing automation shows one row counting the streak", async () => {
@@ -188,7 +188,7 @@ describe("InboxPage item kinds", () => {
     const { router } = renderInboxAt(<InboxPage />);
     const row = await screen.findByTestId("inbox-item-run_finished:chat-1");
     await userEvent.click(within(row).getByRole("link", { name: "Open" }));
-    await waitFor(() => expect(router.state.location.pathname).toBe("/runs/chat-1"));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/workflows/runs/chat-1"));
   });
 
   it("a failed launch shows the reason and Edit automation", async () => {
@@ -197,7 +197,7 @@ describe("InboxPage item kinds", () => {
     const row = await screen.findByTestId("inbox-item-evt-5");
     expect(within(row).getByText("machine was deleted")).toBeInTheDocument();
     await userEvent.click(within(row).getByRole("link", { name: "Edit automation" }));
-    await waitFor(() => expect(router.state.location.pathname).toBe("/automations/trg-2"));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/workflows/automations/trg-2"));
   });
 
   it("only failure kinds offer Dismiss; dismissing calls the RPC and the row leaves", async () => {
@@ -245,7 +245,7 @@ describe("InboxPage grouping and navigation", () => {
     const { router } = renderInboxAt(<InboxPage />);
     const row = await screen.findByTestId("inbox-item-chat-9");
     await userEvent.click(within(row).getByRole("link", { name: /Nightly triage/ }));
-    await waitFor(() => expect(router.state.location.pathname).toBe("/runs/chat-9"));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/workflows/runs/chat-9"));
   });
 });
 

@@ -1,7 +1,7 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * /automations/$triggerId — one automation: its definition, its controls, and
+ * /workflows/automations/$triggerId — one automation: its definition, its controls, and
  * the history of every time it fired.
  *
  * "Run now" is asynchronous on the server: FireTrigger only starts the fire
@@ -37,7 +37,6 @@ import {
 } from "@/hooks/trigger-queries";
 import { describeSchedule } from "@/lib/cronText";
 import { formatAbsoluteTime, formatRelativeTime } from "@/lib/relativeTime";
-import { AutomationsShell } from "./AutomationsShell";
 import { AutomationFormDialog } from "./AutomationFormDialog";
 import { OutcomeBadge } from "./OutcomeBadge";
 import { RunStatusBadge } from "../ui/RunStatusIndicator";
@@ -52,11 +51,7 @@ const FIRE_POLL_WINDOW_MS = 30_000;
 
 export function AutomationDetailPage() {
   const { triggerId } = useParams({ strict: false }) as { triggerId?: string };
-  return (
-    <AutomationsShell>
-      {triggerId ? <AutomationDetail triggerId={triggerId} /> : <NotFound />}
-    </AutomationsShell>
-  );
+  return triggerId ? <AutomationDetail triggerId={triggerId} /> : <NotFound />;
 }
 
 function NotFound() {
@@ -65,7 +60,7 @@ function NotFound() {
     <Card padding="lg" role="alert">
       <p className="text-sm font-medium text-foreground">This automation does not exist.</p>
       <p className="mt-1 text-sm text-muted-foreground">It may have been deleted.</p>
-      <Button className="mt-4" variant="outline" onClick={() => void navigate({ to: "/automations" })}>
+      <Button className="mt-4" variant="outline" onClick={() => void navigate({ to: "/workflows/automations" })}>
         All automations
       </Button>
     </Card>
@@ -165,7 +160,7 @@ export function AutomationDetail({ triggerId }: { triggerId: string }) {
       onSuccess: () => {
         setConfirmingDelete(false);
         toast.success(`Deleted ${trigger.name}`);
-        void navigate({ to: "/automations" });
+        void navigate({ to: "/workflows/automations" });
       },
       onError: (error) => {
         setConfirmingDelete(false);
@@ -438,7 +433,7 @@ function EventHistory({ events, isLoading, error }: EventHistoryProps) {
               <td className="whitespace-nowrap px-5 py-3 text-right align-top">
                 {event.chatId && (
                   <Link
-                    to="/runs/$runId"
+                    to="/workflows/runs/$runId"
                     params={{ runId: event.chatId }}
                     className="inline-flex items-center gap-1 rounded-sm text-sm font-medium text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
                   >

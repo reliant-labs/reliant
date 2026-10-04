@@ -26,6 +26,11 @@ interface AutomationActivityPillProps {
   listedChatIds: ReadonlySet<string>;
   /** Open the Runs list with these filters. */
   onOpenRuns?: (search: RunsSearch) => void;
+  /**
+   * Open the Inbox. "Needs you" goes there rather than to a filtered run list:
+   * the Inbox is where the question or approval can be answered (§8).
+   */
+  onOpenInbox?: () => void;
 }
 
 /**
@@ -34,12 +39,11 @@ interface AutomationActivityPillProps {
  * hide exactly the long-running automation the pill just counted.
  */
 const LIVE_SEARCH: RunsSearch = { state: ["live"], allProjects: true, range: "all" };
-const NEEDS_YOU_SEARCH: RunsSearch = { state: ["needs_you"], allProjects: true, range: "all" };
 
 const RUNNING_STATUS = runStatusFromDisplayState(RunDisplayState.RUNNING);
 const NEEDS_YOU_STATUS = runStatusFromDisplayState(RunDisplayState.NEEDS_INPUT);
 
-export function AutomationActivityPill({ listedChatIds, onOpenRuns }: AutomationActivityPillProps) {
+export function AutomationActivityPill({ listedChatIds, onOpenRuns, onOpenInbox }: AutomationActivityPillProps) {
   const { data } = useLiveRuns();
 
   const summary = useMemo(
@@ -73,14 +77,14 @@ export function AutomationActivityPill({ listedChatIds, onOpenRuns }: Automation
       {summary.needsYou > 0 && (
         <button
           type="button"
-          onClick={() => onOpenRuns?.(NEEDS_YOU_SEARCH)}
-          disabled={!onOpenRuns}
+          onClick={() => onOpenInbox?.()}
+          disabled={!onOpenInbox}
           className={cn(
             "inline-flex h-6 items-center gap-1.5 rounded-full border border-warning/40 bg-warning/10 px-2.5 text-2xs font-medium text-warning",
             "transition-colors hover:bg-warning/15 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
             "disabled:cursor-default",
           )}
-          aria-label={`${needsYouLabel}. Open runs that need you`}
+          aria-label={`${needsYouLabel}. Open the Inbox`}
           data-testid="automation-activity-pill-needs-you"
         >
           <RunStatusDot status={NEEDS_YOU_STATUS} size="sm" />

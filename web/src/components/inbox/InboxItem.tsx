@@ -169,7 +169,7 @@ function ItemTitle({ item, grouped }: { item: InboxItemData; grouped?: boolean }
   const lead = titleLead(item);
   const runLink = item.chatId ? (
     <Link
-      to="/runs/$runId"
+      to="/workflows/runs/$runId"
       params={{ runId: item.chatId }}
       className="font-semibold text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
     >
@@ -177,7 +177,7 @@ function ItemTitle({ item, grouped }: { item: InboxItemData; grouped?: boolean }
     </Link>
   ) : item.triggerId ? (
     <Link
-      to="/automations/$triggerId"
+      to="/workflows/automations/$triggerId"
       params={{ triggerId: item.triggerId }}
       className="font-semibold text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
     >
@@ -457,7 +457,7 @@ function FailingAutomationAction({
       </p>
       <div className="flex flex-wrap items-center gap-2">
         {lastRunChatId && (
-          <Link to="/runs/$runId" params={{ runId: lastRunChatId }} className={secondaryLinkClass}>
+          <Link to="/workflows/runs/$runId" params={{ runId: lastRunChatId }} className={secondaryLinkClass}>
             Open last run
           </Link>
         )}
@@ -494,7 +494,7 @@ export function failedTimesInARow(failures: number): string {
 function RunFinishedAction({ chatId }: { chatId: string }) {
   if (!chatId) return null;
   return (
-    <Link to="/runs/$runId" params={{ runId: chatId }} className={secondaryLinkClass}>
+    <Link to="/workflows/runs/$runId" params={{ runId: chatId }} className={secondaryLinkClass}>
       Open
     </Link>
   );
@@ -513,7 +513,7 @@ function LaunchFailedAction({
     <div className="space-y-2">
       {failures > 1 && <p className="text-sm text-muted-foreground">{failedTimesInARow(failures)}</p>}
       {reason && <CardInset className="text-sm text-foreground">{reason}</CardInset>}
-      <Link to="/automations/$triggerId" params={{ triggerId }} className={secondaryLinkClass}>
+      <Link to="/workflows/automations/$triggerId" params={{ triggerId }} className={secondaryLinkClass}>
         Edit automation
       </Link>
     </div>

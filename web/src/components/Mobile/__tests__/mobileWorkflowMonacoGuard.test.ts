@@ -3,7 +3,7 @@
  *
  * `main.tsx` skips the Monaco preload on `/m/*` (see `lib/monacoPreload.ts`)
  * specifically because no mobile screen was expected to need an editor. The
- * desktop `WorkflowHub`/`WorkflowParamsPanel` pull Monaco in transitively via
+ * desktop preset editor/`WorkflowParamsPanel` pull Monaco in transitively via
  * `ProtoFieldRenderer` → `CELInput` → `MonacoCELEditor` for their *editable*
  * param fields — exactly the path these mobile components must not join.
  * `WorkflowViewer`/`PresetPicker` do NOT pull it in (confirmed empirically:
@@ -91,11 +91,13 @@ describe("mobile workflow viewer never reaches Monaco", () => {
   });
 
   it("sanity-checks the scanner catches a real Monaco import", () => {
-    // WorkflowHub is the known-dirty case (imports ProtoFieldRenderer
+    // PresetEditModal is the known-dirty case (imports ProtoFieldRenderer
     // directly, which reaches CELInput -> MonacoCELEditor) — if the scanner
-    // ever reports this clean, the guard above is not actually guarding.
-    const hubPath = join(SRC_DIR, "components", "workflow", "WorkflowHub.tsx");
-    const hit = scanForMonaco(hubPath);
+    // ever reports this clean, the guard above is not actually guarding. It
+    // took over from WorkflowHub, which held this modal until the hub was
+    // retired.
+    const dirtyPath = join(SRC_DIR, "components", "workflow", "presets", "PresetEditModal.tsx");
+    const hit = scanForMonaco(dirtyPath);
     expect(hit).not.toBeNull();
   });
 });

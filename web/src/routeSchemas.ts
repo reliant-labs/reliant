@@ -257,6 +257,9 @@ export const SETTINGS_SECTION_IDS = [
   // Grants for third-party MCP clients (ChatGPT, Claude, mobile) that drive a
   // cloud workspace. Route: /settings/connectors.
   "connectors",
+  // Every preset across workflows (WORKFLOW_UI.md §14.1 decision 7). A
+  // workflow's own presets live on its detail page in the Workflows area.
+  "presets",
   "git-connections",
   "developer",
   // Cloud settings sections — in-app control-plane (controlplane.v1) surfaces
@@ -440,7 +443,25 @@ export const forgeLegacySearchSchema = z.object({
   secret: z.string().optional(),
 });
 
-// ── /runs ───────────────────────────────────────────────────────────────────
+// ── /workflows ──────────────────────────────────────────────────────────────
+
+/**
+ * Every page of the Workflows area carries `project`, for the same reason the
+ * forge screens do: the area renders outside ModernApp, which is the only
+ * thing that resolves `currentProject` on a page load, so a hard refresh must
+ * be able to read the project from the URL (WorkflowsShell resolves it).
+ * Absent means "resolve it the normal way", not "no project".
+ *
+ * `tour` is here because the onboarding tour's hub step spotlights the
+ * Library, and strict search validation would otherwise strip it.
+ */
+export const workflowsAreaSearchSchema = z.object({
+  project: z.string().optional().catch(undefined),
+  tour: tourParam.catch(undefined),
+});
+export type WorkflowsAreaSearch = Partial<z.output<typeof workflowsAreaSearchSchema>>;
+
+// ── /workflows/runs ─────────────────────────────────────────────────────────
 
 /**
  * The Runs list's state filter, in the words a user picks (§5.2), not the
@@ -467,7 +488,7 @@ export type RunRangeKey = (typeof RUN_RANGE_KEYS)[number];
  *
  * Built from catch + transform rather than preprocess on purpose: preprocess
  * types the INPUT as `unknown`, which makes tanstack-router demand a `search`
- * object on every link to /runs.
+ * object on every link to the Runs tab.
  */
 function listParam<T extends string>(keep: (value: string) => value is T) {
   return z
@@ -485,7 +506,7 @@ const isStateFilter = (value: string): value is RunStateFilterKey =>
 const isNonEmpty = (value: string): value is string => value !== "";
 
 /**
- * /runs. Every filter lives in the URL so a filtered list can be shared and
+ * /workflows/runs. Every filter lives in the URL so a filtered list can be shared and
  * the back button restores it (§5.2). Absent means the default: the current
  * project, every kind and state, the last 24 hours, repeats grouped.
  */
@@ -507,6 +528,8 @@ export const runsSearchSchema = z.object({
    * or older than the default window is still that chat's child.
    */
   parent: z.string().min(1).optional().catch(undefined),
+  /** The area's project param (workflowsAreaSearchSchema); not a filter. */
+  project: z.string().optional().catch(undefined),
 });
 /** Every key optional: absent is the default, which is what links omit. */
 export type RunsSearch = Partial<z.output<typeof runsSearchSchema>>;

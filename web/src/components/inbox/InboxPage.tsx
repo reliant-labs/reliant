@@ -162,7 +162,7 @@ function RunGroup({ group }: { group: InboxGroup }) {
     <li data-testid={`inbox-group-${group.key}`}>
       <div className="flex items-baseline justify-between gap-3 px-4 pt-3">
         <Link
-          to="/runs/$runId"
+          to="/workflows/runs/$runId"
           params={{ runId: first.chatId }}
           className="truncate text-sm font-semibold text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
         >

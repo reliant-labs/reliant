@@ -126,7 +126,7 @@ describe("AutomationsListPage", () => {
     const row = await screen.findByTestId("automation-row-trig-1");
     expect(within(row).getByRole("link", { name: "Morning triage" })).toHaveAttribute(
       "href",
-      "/automations/trig-1",
+      "/workflows/automations/trig-1",
     );
     expect(within(row).getByText("Reliant · MacBook")).toBeInTheDocument();
     expect(within(row).getByText("Every weekday at 9:00 AM ET")).toBeInTheDocument();
@@ -363,7 +363,7 @@ describe("AutomationsListPage", () => {
     renderAtRoute(<AutomationsListPage />);
 
     expect(await screen.findByRole("heading", { name: "Nothing runs on its own yet" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Browse workflows" })).toHaveAttribute("href", "/workflow");
+    expect(screen.getByRole("link", { name: "Browse workflows" })).toHaveAttribute("href", "/workflows/library");
     expect(screen.queryByTestId("coming-up-timeline")).toBeNull();
     await userEvent.click(screen.getByRole("button", { name: "New automation" }));
     expect(await screen.findByRole("dialog")).toBeInTheDocument();

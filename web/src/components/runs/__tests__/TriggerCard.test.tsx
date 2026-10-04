@@ -35,7 +35,7 @@ function scheduleEvent(overrides: Partial<LaunchEvent> = {}): LaunchEvent {
 
 describe("TriggerCard", () => {
   it("renders nothing for an interactive chat", async () => {
-    const { container } = renderRunsAt(<TriggerCard launchKind="chat.start" />, "/runs/chat-1");
+    const { container } = renderRunsAt(<TriggerCard launchKind="chat.start" />, "/workflows/runs/chat-1");
     await screen.findByTestId("trigger-card-absent");
     expect(container.querySelector('[data-testid="trigger-card"]')).toBeNull();
   });
@@ -49,13 +49,13 @@ describe("TriggerCard", () => {
         timezone="Europe/London"
         event={scheduleEvent()}
       />,
-      "/runs/chat-1",
+      "/workflows/runs/chat-1",
     );
     const card = await screen.findByTestId("trigger-card");
     // 08:00Z on 6 Oct 2026 is 09:00 BST.
     expect(card).toHaveTextContent("Scheduled for Tue 6 Oct, 09:00 (Europe/London) by Nightly triage");
     expect(card).toHaveTextContent("questions and approvals were answered automatically");
-    expect(screen.getByRole("link", { name: "Nightly triage" })).toHaveAttribute("href", "/automations/trig-1");
+    expect(screen.getByRole("link", { name: "Nightly triage" })).toHaveAttribute("href", "/workflows/automations/trig-1");
   });
 
   it("says a fire ran late once it is more than a minute past its slot", async () => {
@@ -66,7 +66,7 @@ describe("TriggerCard", () => {
         triggerName="Nightly triage"
         event={scheduleEvent({ firedAt: "2026-10-06T08:04:10Z" })}
       />,
-      "/runs/chat-1",
+      "/workflows/runs/chat-1",
     );
     expect(await screen.findByTestId("trigger-card-late")).toHaveTextContent("Fired 4 min late (catch-up)");
   });
@@ -74,14 +74,14 @@ describe("TriggerCard", () => {
   it("stays quiet for a fire within a minute of its slot, or one with no fired_at", async () => {
     renderRunsAt(
       <TriggerCard launchKind="schedule" triggerName="N" event={scheduleEvent({ firedAt: "2026-10-06T08:00:50Z" })} />,
-      "/runs/chat-1",
+      "/workflows/runs/chat-1",
     );
     await screen.findByTestId("trigger-card");
     expect(screen.queryByTestId("trigger-card-late")).not.toBeInTheDocument();
   });
 
   it("does not call a fire without fired_at late", async () => {
-    renderRunsAt(<TriggerCard launchKind="schedule" triggerName="N" event={scheduleEvent()} />, "/runs/chat-1");
+    renderRunsAt(<TriggerCard launchKind="schedule" triggerName="N" event={scheduleEvent()} />, "/workflows/runs/chat-1");
     await screen.findByTestId("trigger-card");
     expect(screen.queryByTestId("trigger-card-late")).not.toBeInTheDocument();
   });
@@ -94,7 +94,7 @@ describe("TriggerCard", () => {
         triggerName="Nightly triage"
         event={scheduleEvent({ manual: true })}
       />,
-      "/runs/chat-1",
+      "/workflows/runs/chat-1",
     );
     const card = await screen.findByTestId("trigger-card");
     expect(card).toHaveTextContent("Run now on Nightly triage");
@@ -111,7 +111,7 @@ describe("TriggerCard", () => {
         event={scheduleEvent()}
         prompt="Triage the new issues"
       />,
-      "/runs/chat-1",
+      "/workflows/runs/chat-1",
     );
     const toggle = await screen.findByRole("button", { name: "Show what it ran with" });
     expect(toggle).toHaveAttribute("aria-expanded", "false");
@@ -130,7 +130,7 @@ describe("TriggerCard", () => {
   it("an older scheduled run with no launch event still names the automation, with no slot", async () => {
     renderRunsAt(
       <TriggerCard launchKind="schedule" triggerId="trig-1" triggerName="Nightly triage" event={null} />,
-      "/runs/chat-1",
+      "/workflows/runs/chat-1",
     );
     const card = await screen.findByTestId("trigger-card");
     expect(card).toHaveTextContent("Scheduled by Nightly triage");
@@ -140,16 +140,16 @@ describe("TriggerCard", () => {
   it("an agent run names the parent chat, linked, and is not called unattended", async () => {
     renderRunsAt(
       <TriggerCard launchKind="agent.start_run" parent={{ chatId: "parent-1", title: "Refactor auth" }} />,
-      "/runs/chat-1",
+      "/workflows/runs/chat-1",
     );
     const card = await screen.findByTestId("trigger-card");
     expect(card).toHaveTextContent("Started by an agent in Refactor auth");
-    expect(screen.getByRole("link", { name: "Refactor auth" })).toHaveAttribute("href", "/runs/parent-1");
+    expect(screen.getByRole("link", { name: "Refactor auth" })).toHaveAttribute("href", "/workflows/runs/parent-1");
     expect(card).not.toHaveTextContent("answered automatically");
   });
 
   it("an agent run whose parent is gone still says an agent started it", async () => {
-    renderRunsAt(<TriggerCard launchKind="agent.start_run" />, "/runs/chat-1");
+    renderRunsAt(<TriggerCard launchKind="agent.start_run" />, "/workflows/runs/chat-1");
     const card = await screen.findByTestId("trigger-card");
     expect(card).toHaveTextContent("Started by an agent");
     expect(screen.queryByRole("link")).not.toBeInTheDocument();
