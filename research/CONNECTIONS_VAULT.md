@@ -11,19 +11,48 @@ Anything I could not verify is marked **[unverified]** and collected in §11.
 
 ---
 
+## Terms
+
+- **Connection.** A user's saved, authorized login to an external service:
+  their GitHub account via OAuth, or a pasted Linear API key. Workflows and
+  agents use it to call that service *as the user*.
+- **Secret.** The token or key inside a connection: an OAuth access or refresh
+  token, an API key, a password. Stored only encrypted.
+- **Encryption key (KEK, "key-encryption key").** The one master key, held in a
+  Kubernetes Secret and given to the server as an env var. It never encrypts
+  secrets directly. It encrypts DEKs. This document does **not** mean an OS
+  keyring. It may hold more than one key *version* during a rotation (§5);
+  each ciphertext names the version that sealed it.
+- **DEK (data-encryption key).** A random per-tenant key, stored in the
+  database encrypted by the encryption key. DEKs encrypt the secrets. With two
+  levels, rotating the encryption key re-wraps a few small rows, and deleting
+  a tenant's DEK makes all of its secrets unrecoverable.
+- **api-server vs worker.** Both are reliant server processes. The
+  **api-server** answers the UI and API and receives OAuth callbacks and
+  webhooks; it is internet-facing. The **worker** runs workflow steps
+  (Temporal activities), including the actual calls to GitHub, Slack and so on.
+  Neither can see the user's filesystem.
+- **Daemon-placed action.** A workflow step or tool that runs on the user's
+  machine (or their cloud workspace) through the reliant daemon, rather than
+  on the server.
+
+---
+
 ## 0. Decision summary
 
-| # | Question | Recommendation |
-|---|---|---|
-| 1 | Where secrets live | **(b) A reliant-side envelope vault.** Ciphertext goes in reliant's Postgres, each tenant's DEK is wrapped by a KEK, and the KEK sits behind a `KeyWrapper` seam. v1 ships one wrapper, a versioned env keyring. That is the same mechanism control-plane already runs for `git_credentials` (`pkg/crypto/aesgcm.go`). A Cloud KMS or OpenBao Transit wrapper can be added later behind the same seam. **Do not** put integration secrets in control-plane's OpenBao KV store. |
-| 2 | Worker call-time path | The activity input carries only `connection_id` (or a binding name). The worker resolves the run's owner **from the DB** (run → owner), checks `connection.user_id == owner`, opens the secret in process and builds the HTTP request. The plaintext lives inside one `vault.Secret` value that cannot be formatted, logged or serialized. No `rlat_` is involved, because the reliant worker is not calling control-plane. |
-| 3 | Schema and RPCs | Metadata (`connections`) is split from ciphertext (`connection_secrets`). Wrapped DEKs live in `vault_keys`, single-use OAuth state in `oauth_flows`, and an append-only audit trail in `connection_events`. `ConnectionService` has no RPC that returns a value, and a reflection test pins that, copied from control-plane's secret store. |
-| 4 | GitHub App owner | **Reliant.** Self-hosted reliant has no control-plane and still needs GitHub, so reliant must be able to own an App anyway. Control-plane's `git_credentials` and the clone flow converge onto reliant connections in a later phase (§6). |
-| 5 | Org-shared connections | User-owned only in v1. The schema reserves `owner_kind` / `org_id`, and the DEK is keyed by *tenant* rather than by user, so org ownership later is a policy change and not a re-encryption. |
-| 6 | Plaintext today | `api_keys.api_key` is plaintext (`internal/db/postgres/settings_store.go:142-153`). Fix it roll-forward through the same vault: expand, backfill, switch readers, contract. **Correction to the brief:** control-plane's `git_credentials.access_token` is **already sealed** with AES-GCM (`internal/db/postgres.go:5779`). Only a legacy plaintext pass-through remains (`postgres.go:5741-5757`). |
+Decisions taken by the user on 2026-10-04 are marked **Decided**.
 
-The rest of this document justifies those choices, argues against each one, and
-turns them into a phased plan.
+| # | Question | Answer |
+|---|---|---|
+| 1 | Where secrets live | **Decided.** Per-connection ciphertext goes in reliant Postgres. One encryption key sits in a k8s Secret, declared through forge as a `forge.EnvVar {secret_ref, secret_key}` exactly like control-plane's `LLM_KEY_ENCRYPTION_KEY` (`control-plane/deploy/kcl/dev/main.k:1184`). It wraps per-tenant DEKs. The envelope is versioned (key id in the ciphertext header), so rotation means adding a new key id to the same Secret. **No OpenBao and no KMS in v1.** |
+| 2 | Worker call-time path | The activity input carries only `connection_id`. The worker resolves the run owner **from the DB**, checks ownership and decrypts in process into a `vault.Secret` that cannot be logged or serialized. No `rlat_` is involved (§3). |
+| 3 | Who writes and who reads | **Decided: no asymmetric sealing in v1.** The api-server and the worker mount the same key. The api-server writes; the worker writes on refresh and is the only reader (§3.3). |
+| 4 | Schema and RPCs | Metadata (`connections`) is split from ciphertext (`connection_secrets`). There are also `vault_keys`, `oauth_flows` and `connection_events`. `ConnectionService` cannot return a value, and a reflection test pins that (§4). |
+| 5 | GitHub App owner | **Decided: reliant** (§6). |
+| 6 | Daemon-placed actions with connections | **Decided: forbidden in v1.** A step that runs on the user's machine cannot use a connection, so tokens never leave the server (§8.2). |
+| 7 | Org-shared connections | **Decided: per-user only in v1**, with `owner_kind`/`org_id` reserved (§7). |
+| 8 | Key missing at boot | **Decided: a hosted server refuses to start.** Self-hosted generates a key on first boot, persists it and warns (§2.4). |
+| 9 | Plaintext today | `api_keys.api_key` is plaintext (`internal/db/postgres/settings_store.go:142-153`). It is migrated roll-forward through the vault (§2.5). Control-plane's `git_credentials` is already sealed (`internal/db/postgres.go:5779`); only a legacy plaintext pass-through remains (`:5741-5757`). |
 
 ---
 
@@ -65,13 +94,13 @@ turns them into a phased plan.
 
 ### 1.2 control-plane: `pkg/crypto` envelope and `git_credentials`
 
-- `pkg/crypto/aesgcm.go` is AES-256-GCM under a **versioned keyring**:
+- `pkg/crypto/aesgcm.go` is AES-256-GCM under a **versioned set of encryption keys** (control-plane's code calls it a "keyring"; it is an env var, not an OS keyring):
   - The blob is self-describing: `CPK1 ‖ idLen ‖ keyID ‖ nonce ‖ ct`
     (`aesgcm.go:24-60`).
   - `EncryptWithAAD` / `DecryptWithAAD` bind ciphertext to a context
     (`:137`, `:177`).
   - New writes always use the primary key (`:130-136`).
-  - The keyring is env `LLM_KEY_ENCRYPTION_KEY` (`pkg/crypto/keyring.go:27`).
+  - The key set is env `LLM_KEY_ENCRYPTION_KEY` (`pkg/crypto/keyring.go:27`).
 - `git_credentials.access_token` and `refresh_token` are **sealed at the
   persistence boundary** (`internal/db/postgres.go:5776-5795`;
   migration `00109_git_credential_refresh_tokens.up.sql:12-13`).
@@ -117,179 +146,124 @@ turns them into a phased plan.
 
 ## 2. Where secrets live
 
-### 2.1 The forces
+### 2.1 Decision (2026-10-04): one k8s-Secret encryption key, ciphertext in Postgres
 
-1. **Read frequency.** Integration secrets are read on *every* action call,
-   and refresh writes happen roughly hourly per OAuth connection. The Bao store
-   was built for reads at deploy time.
-2. **Self-hosted parity.** Self-hosted reliant (`ModeLocal`) has no
-   control-plane and no Bao, yet GitHub, Slack and HTTP connections must still
-   work there. Whatever we pick needs a reliant-local implementation.
-3. **Tenant model mismatch.** Bao paths are keyed by control-plane
-   `org_id`/`deploy_environment_id` (`secretstore/contract.go:81-94`).
-   Connections are keyed by reliant `user_id` (later `org_id`). The user-id
-   mapping between the two systems is itself an open question
-   (`DELEGATED_CREDENTIAL.md` §13.5).
-4. **Blast radius of the reader.** Whichever process can turn a
-   `connection_id` into plaintext is the crown jewel. Today that process is
-   the reliant worker under every option, because it makes the outbound call.
-   The question is only where the *decrypt authority* sits.
-5. **Audit and DR maturity.** Bao's audit is not durable in prod today
-   (§1.1). A Postgres audit table is durable now.
+- **The encryption key** is one 32-byte key, versioned as `v1:<base64>`. It is
+  delivered to the reliant api-server and worker as env `RELIANT_VAULT_KEY`,
+  declared in the deploy KCL exactly the way control-plane declares its own:
 
-### 2.2 Options
+  ```kcl
+  forge.EnvVar {name = "RELIANT_VAULT_KEY", secret_ref = "reliant-vault", secret_key = "vault_key"}
+  ```
 
-**(a) Reuse control-plane's OpenBao.** Add a `connections/<user>/<conn_id>`
-KV root, plus a new `connection-revealer` principal and RPC for the reliant
-worker, modelled on `localsecret`.
+  - The precedent is `LLM_KEY_ENCRYPTION_KEY` →
+    `secret_ref = "control-plane-secrets"` (`control-plane/deploy/kcl/dev/main.k:1184`).
+  - The value is set with `forge secret set --env <env> <KEY>`, checked with
+    `forge secret ensure --env <env>` (`main.k:824-826`), and rendered into
+    the cluster from the same store (`main.k:829-833`).
+  - Reliant's workloads are declared in control-plane's KCL, not in reliant;
+    reliant has no `deploy/` KCL of its own. Their shared env lives in
+    `control-plane/deploy/kcl/lib/env.k`: `reliant_base_env` at `:224` reaches
+    both api-server and worker, and `reliant_api_env` at `:307`. For dev host
+    processes it lives in `deploy/kcl/dev/main.k`: `_reliant_host_env` at
+    `:1303`, and `_reliant_worker_host_env` at `:1417`, derived from it. The
+    new `EnvVar` goes in `reliant_base_env` and `_reliant_host_env` (§9).
+- **Ciphertext** stays in reliant Postgres: `connection_secrets` and
+  `vault_keys` (§4.1).
+- **The envelope** is versioned, as in control-plane's `pkg/crypto`: the key id
+  lives in the ciphertext header (`aesgcm.go:24-60`), AAD binds a ciphertext
+  to its row, and only the primary key seals. Rotation means adding `v2` to
+  the same Secret value (`v2:…,v1:…`, primary first), re-wrapping, then
+  dropping `v1` (§5).
+- **OpenBao and KMS are out of v1.** The `KeyWrapper` interface around
+  wrap/unwrap leaves room to move the encryption key into Bao Transit or Cloud
+  KMS later without touching stored secrets.
 
-- For:
-  - reviewed crypto
-  - Bao's audit device records every reveal
-  - one secret store for the company
-  - the "separately granted reveal" pattern already exists (`localsecret`)
-- Against:
-  - **Every action call becomes a cross-service RPC** (reliant worker →
-    control-plane → Bao), so control-plane availability gates every
-    integration call. Today it gates only daemon wake and LLM.
-  - Self-hosted needs a **second implementation anyway**, so (a) never removes
-    the reliant-side vault. It adds one.
-  - The reveal RPC must authenticate "the reliant worker acting for user U".
-    That means either:
-    - a service secret plus a body `user_id`, which `DELEGATED_CREDENTIAL.md`
-      §12 rejected, or
-    - a per-user `rlat_` minted with a new `connection:reveal` scope, which
-      turns a long-lived bearer into a skeleton key for every connection the
-      user has.
-  - Bao's ops gaps (audit shipping, Raft DR rehearsal) become blockers for
-    integrations.
-  - Refresh writes go through the `writer` path, and the `writer` path cannot
-    read back. The refresh flow therefore needs both read and write, which
-    breaks the "no single principal reads and writes" split the store was
-    built around.
+### 2.2 Why not one k8s Secret per connection
 
-**(b) A reliant-side envelope vault.**
+Putting each connection's token directly in a k8s Secret looks simpler, but
+it fails on three counts:
 
-- Layout:
-  - a `vault_keys` table holding one DEK per tenant, wrapped by a KEK
-  - a `connection_secrets` table holding AES-256-GCM ciphertext, with AAD
-    bound to `(connection_id, tenant_id, field)`
-- The KEK sits behind an interface:
-  `KeyWrapper{ Wrap(ctx, dek) ; Unwrap(ctx, wrapped, keyID) }`. Planned
-  implementations:
-  - `envkeyring`: v1, all modes. A versioned keyring in an env var with the
-    same grammar as control-plane's `LLM_KEY_ENCRYPTION_KEY`.
-  - `gcpkms`: later, prod-only, if the KEK should leave the namespace.
-  - `baotransit`: later, if the company standardizes on Bao.
-- For:
-  - one code path for hosted and self-hosted
-  - no new runtime dependency on each call
-  - audit in the same transaction as the access
-  - AAD stops row transplant
-  - the per-tenant DEK lets a tenant be crypto-shredded by deleting one row
-- Against:
-  - We own the crypto. `ENGINE_SPLIT_PLAN.md:328` warns against n8n's
-    "instance-wide key with no tenant isolation", and
-    `openbao-secret-store.md` §8 states the same trade.
-  - In v1 the KEK is an env var in the same k8s namespace as the DB
-    credentials, so anyone who reads Secrets in the namespace can decrypt.
-    `openbao-secret-store.md` §2 accepted exactly this for Bao's static seal
-    with the same reasoning: the namespace is already the trust boundary.
-    That makes it consistent, not strong.
+1. **Volume.** There would be one Secret per user per integration: thousands,
+   all in one namespace, listed and watched by kubelet and controllers.
+2. **Churn.** OAuth access tokens expire hourly and refresh-token rotation
+   rewrites them. Each refresh would be a k8s API write, which turns the
+   apiserver/etcd into a hot OLTP store.
+3. **Privilege.** The worker would need RBAC to *create and update Secrets*
+   in its namespace. That is a far larger capability than reading one env var:
+   it could overwrite the DB credentials or the encryption key itself.
 
-**(c) Hybrid.** Store ciphertext in reliant's DB (b), and do KEK wrap and
-unwrap through Bao **Transit** in control-plane (`transit/encrypt`,
-`transit/decrypt`), with a local keyring in self-hosted mode.
+So k8s holds the **one** key, which is static, set by forge and readable only
+as an env var, and Postgres holds the many rows of ciphertext, which are
+transactional, auditable and cascade with the user.
 
-- For: the KEK never exists in reliant's memory or env, and every DEK unwrap
-  is audited by Bao.
-- Against:
-  - It needs a Transit mount and policy that do not exist yet (**[unverified]**
-    that Transit is enabled; `bootstrap.sh` converges only KV-v2 policies).
-  - It inherits Bao's availability on cache miss.
-  - It adds a cross-repo deploy dependency for little gain over (b), because
-    the DEK must still be cached in worker memory for performance. A
-    compromised worker therefore gets DEKs either way.
+### 2.3 Alternatives considered (not chosen for v1)
 
-### 2.3 Recommendation: (b), with (c) as a pluggable upgrade, not a v1 dependency
+- **Control-plane's OpenBao KV with a per-call reveal.** Rejected:
+  - every integration call would become a control-plane round-trip
+  - self-hosted would still need this vault
+  - the worker's reveal would need a broad per-user `rlat_` or a service
+    secret (`DELEGATED_CREDENTIAL.md` §12)
+  - Bao's audit shipping and DR are unresolved in prod
+    (`openbao-secret-store.md` §5, §9)
+- **Encryption key in Bao Transit or Cloud KMS.** Deferred by decision. The
+  gain over a k8s Secret is real but small while the namespace is already the
+  trust boundary (the same argument `openbao-secret-store.md` §2 accepted for
+  Bao's static seal).
 
-Option (b) is the only one that serves both modes with one implementation. Its
-weakness, a KEK co-located with the data, is a property of the key wrapper,
-and the `KeyWrapper` seam turns that into a configuration choice instead of a
-redesign.
+**Argument against the decision.** Anyone who can read Secrets in the reliant
+namespace, or the worker's environment, can decrypt every connection. That is
+true, and it is the same exposure the namespace already has for DB
+credentials and the Stripe key. Per-tenant DEKs still mean a database-only
+leak (backup, replica, SQL injection) yields nothing.
 
-- **Reuse, don't reinvent.**
-  - Port control-plane's `pkg/crypto` envelope format (versioned key id in the
-    blob, AAD binding, primary-key-only sealing). Prefer importing it if
-    control-plane's module is importable from reliant **[unverified:
-    reliant's `go.mod` has no control-plane require; a copy or an upstream to
-    `forge/pkg` is likely needed]**.
-  - **Best: upstream it into `forge/pkg/crypto`**, so that control-plane and
-    reliant share one reviewed AEAD envelope. That is what
-    `forge project libraries` exists for, and it follows the
-    "fix it in forge" rule.
-- **Two-level keys.** The KEK wraps a per-tenant DEK, and the DEK seals
-  values. Rotating the KEK re-wraps N small rows and never re-encrypts
-  secrets. Rotating a DEK is a per-tenant backfill.
-- **Argument against my own choice.** The company already decided to host
-  OpenBao precisely so that it would *not* own crypto
-  (`openbao-secret-store.md` §8: "I would make the same call"). Option (b)
-  partly reverses that for a second class of secret. My answer:
-  - That decision was about a KV store with versions, ACLs and read-back
-    semantics. Here we need only seal and open, plus one AEAD and one wrap.
-    Control-plane already ships exactly that (`pkg/crypto`) for
-    `git_credentials` and the LLM key. We would be reusing crypto the company
-    already owns, not adding new crypto.
-  - If the user prefers that *all* KEK material live in Bao, choose (c) and
-    keep everything else in this document unchanged. That is the purpose of
-    the seam. **This is open question Q1.**
+### 2.4 Missing key at boot (decided 2026-10-04)
 
-### 2.4 Self-hosted mode
-
-- The vault is identical. `KeyWrapper` = `envkeyring`, reading
-  `RELIANT_VAULT_KEYRING` (format `v1:<base64-32B>[,v2:...]`, primary first).
-- **No key configured** (the decided behaviour):
-  - Connections refuse to be created, with a clear
-    `FailedPrecondition("vault key not configured")`.
-  - Hosted boot **fails** when `RELIANT_CONTROL_PLANE_URL` is set and no
-    keyring exists.
-  - Self-hosted boot only warns, because connections are optional there.
-  - Never fall back to plaintext.
-- **First-run convenience:** `reliant` can generate a keyring into its data
-  dir with mode `0600` when none exists. This is self-hosted only, and it
-  carries a loud warning that losing the file loses every connection.
-  Forge-declared secrets (`forge.ExternalSecret`, generatable) cover the
-  hosted case **[confirm reliant's KCL declares secrets the same way;
-  unverified]**.
+- **Hosted** (`RELIANT_CONTROL_PLANE_URL` set, i.e. not `ModeLocal`,
+  `internal/tokenauthority/authority.go:50-66`): **the api-server and worker
+  refuse to start** without a parseable `RELIANT_VAULT_KEY`. Declaring it as a
+  `secret_ref` also makes forge's deploy preflight fail before rollout.
+- **Self-hosted** (`ModeLocal`): there is no forge-managed secret.
+  - Options: (i) refuse to start, which breaks first-run for everyone, even
+    those who never use connections; (ii) disable connections until the
+    operator sets a key, which is a scavenger hunt; (iii) **generate and
+    persist**.
+  - **Chosen: (iii).** If `RELIANT_VAULT_KEY` is unset, on first boot generate
+    32 random bytes, write `v1:<base64>` to `<data dir>/vault.key` with mode
+    `0600` (create-exclusive, so two processes cannot both generate), and log
+    a WARN: "generated vault key at …; back it up — losing it loses every
+    saved connection".
+  - On later boots, read the file. If the env var is set, it wins, so an
+    operator can move to their own secret management.
+  - If the DB already holds `vault_keys` rows but no key is found, **refuse to
+    start**. Generating a fresh key would silently orphan every connection.
+  - This is cleaner than (i) or (ii) because it follows the "working defaults,
+    not empty ones" rule and never loses data silently.
+  - **[unverified]** That the self-hosted api-server and worker share one data
+    dir. If they run on separate hosts, the operator must set the env var, and
+    the second process hits the refuse-to-start check above.
 
 ### 2.5 Migrating today's plaintext (roll-forward only)
 
 **`api_keys` (reliant).** Expand, backfill, switch, contract. There is no down
 file.
 
-1. Migration A (expand): add `api_key_sealed bytea NULL` and
-   `vault_key_id text NULL`. Writers dual-write the sealed column, and readers
-   prefer sealed, falling back to plaintext.
-2. Backfill: a one-shot, idempotent backfill run at boot, batched with
-   `WHERE api_key_sealed IS NULL`. It is safe to re-run.
+1. Migration A (expand): add `api_key_sealed bytea NULL`. Writers dual-write,
+   and readers prefer sealed, falling back to plaintext.
+2. Backfill: idempotent, run at boot, batched on
+   `WHERE api_key_sealed IS NULL`.
 3. Release N+1: readers use sealed only. A plaintext-only row becomes an
    explicit error, and "re-enter your key" surfaces in settings.
-4. Migration B (contract): `UPDATE api_keys SET api_key = ''`, then later
-   drop the column.
+4. Migration B (contract): blank `api_key`, then drop it later.
 
-AAD is `("api_keys", user_id, provider)`. The automation `rlat_` rows are
-covered by the same backfill. **The api_keys path must not depend on the
-`connections` feature shipping.** It is a standalone hardening that lands in
-phase 1a.
+AAD is `("api_keys", user_id, provider)`. This covers the
+`reliant-automation:<daemon>` `rlat_` rows too. It does not depend on the
+`connections` feature shipping (phase 1a).
 
-**`git_credentials` (control-plane).**
-
-- These are already sealed. The remaining work is to retire the legacy
-  plaintext pass-through:
-  - a backfill that re-seals any row `decodeGitCredentialToken` reads as
-    plaintext (`postgres.go:5741-5746`), then
-  - deletion of that branch, which its own comment authorises (`:5733-5734`).
-- Their long-term home is §6.
+**`git_credentials` (control-plane).** These are already sealed. The remaining
+work is to re-seal any legacy plaintext rows and delete the pass-through
+(`postgres.go:5741-5746`), which its own comment authorises (`:5733-5734`).
+Their long-term home is §6.
 
 ---
 
@@ -347,39 +321,33 @@ connections.Resolver.ForCall(ctx, runID, ref)
   strips `Authorization`, `Cookie`, `X-Api-Key` and every header the manifest
   marks `secret: true` from OTel span attributes and debug logs.
 
-### 3.3 Who authenticates the worker's reveal?
+### 3.3 Who writes and who reads (decided 2026-10-04: no asymmetric sealing in v1)
 
-There is **no reveal RPC** under the recommendation. The worker already has
-DB access to the run, and it holds the vault keyring, so the authorisation
-check is the in-process step 3 above.
+Secrets are written to reliant Postgres (`connection_secrets`), always
+encrypted. **Writers:**
 
-Credentials the worker presents:
+- the **api-server**, when an OAuth callback completes or a user pastes an
+  API key
+- the **worker**, when it refreshes an expiring OAuth token
+
+**Reader:** only the **worker**, at the moment it makes a call. No RPC
+returns a value, so the api-server never decrypts anything.
+
+Both processes mount the same encryption key (`RELIANT_VAULT_KEY`). Limiting
+the api-server to "can encrypt, cannot decrypt" (per-tenant public sealing
+keys) is a possible later hardening. It adds a column and changes how *new*
+values are sealed; existing ciphertext never needs re-encrypting.
+
+There is **no reveal RPC**. The worker already has DB access to the run, and
+it holds the encryption key, so authorisation is the in-process step 3 of
+§3.1.
 
 | To | Credential | Why |
 |---|---|---|
-| reliant Postgres (`connection_secrets`, `vault_keys`) | the worker's existing DB role | Same as today. Separating it into a dedicated role is phase 4 hardening (§9). |
-| KEK (`envkeyring`) | env var, mounted only on **worker** and **api-server** pods | The api-server needs to *seal* (create and OAuth callback). The worker needs to *open*. See the split below. |
+| reliant Postgres (`connection_secrets`, `vault_keys`) | the worker's existing DB role | Same as today. A dedicated role is phase 4 hardening (§9). |
+| encryption key | env `RELIANT_VAULT_KEY`, from a forge `secret_ref`, on **api-server and worker** only | The api-server seals; the worker seals on refresh and opens. |
 | a third-party API | the connection's token | Never the user's JWT or `rlat_` (`INTEGRATIONS.md:319-321`). |
 | control-plane | none for connections | — |
-
-**Seal/open split (recommended hardening, phase 1b).** The api-server only
-needs to *encrypt*. Make sealing asymmetric with a per-tenant X25519 "sealing
-key":
-
-- `vault_keys` stores the public half in the clear, and the private half
-  sealed by the KEK.
-- The api-server seals new values with the public key (HPKE base mode) and
-  **never holds the KEK**.
-- Only the worker can open.
-- A compromised api-server, which is the internet-facing process, can then
-  write connections but cannot read any existing secret.
-
-Cost: one HPKE dependency (`github.com/cloudflare/circl/hpke`, or Go 1.24+
-`crypto/hpke` **[unverified which Go version reliant pins]**). Argument
-against: OAuth **refresh** happens in the worker, and the worker must re-seal,
-so the worker holds both halves regardless. The gain is only "api-server
-compromise ≠ read". I think that is worth it, because the api-server is the
-public ingress and runs the webhook receivers. **This is open question Q3.**
 
 ### 3.4 Unattended runs: "may this run act as user U?"
 
@@ -400,13 +368,10 @@ public ingress and runs the webhook receivers. **This is open question Q3.**
   owner's account is disabled or deleted. The resolver checks
   `users.disabled_at IS NULL` **[confirm the column exists; unverified]**.
   Connection rows cascade on user delete.
-- **If option (a) or (c) is chosen instead,** the reveal or unwrap call to
-  control-plane must authenticate as "reliant worker acting for user U" with
-  a **per-user, `connection:use`-scoped, daemon-unbound `rlat_`**. That means
-  minting a second automation token next to `daemon:resume`, with the same
-  mint, store and `BearerFor` pattern as `automationcred.Resolver`
-  (`automationcred.go:46-62`). It is extra machinery that (b) avoids, and is
-  one more reason for (b).
+- If the encryption key ever moves behind a control-plane service (Bao
+  Transit), that unwrap call would need a per-user, `connection:use`-scoped
+  `rlat_`, following the `automationcred.Resolver` pattern
+  (`automationcred.go:46-62`). v1 needs none of that.
 
 ---
 
@@ -421,9 +386,8 @@ CREATE TABLE vault_keys (
   tenant_kind   text NOT NULL CHECK (tenant_kind IN ('user','org')),
   tenant_id     text NOT NULL,
   version       int  NOT NULL,
-  kek_id        text NOT NULL,                  -- which KEK wrapped it ("env:v1", "kms:...")
+  kek_id        text NOT NULL,                  -- which encryption-key version wrapped it ("v1")
   wrapped_dek   bytea NOT NULL,
-  seal_pubkey   bytea NULL,                     -- §3.3 asymmetric sealing (phase 1b)
   state         text NOT NULL CHECK (state IN ('primary','decrypt_only','destroyed')),
   created_at    timestamptz NOT NULL DEFAULT now(),
   UNIQUE (tenant_kind, tenant_id, version)
@@ -492,7 +456,7 @@ CREATE TABLE connection_events (
 Refinements over `INTEGRATIONS.md` §4.1, with reasons:
 
 - `secret_ref` becomes the **`connection_secrets` table**. A ref string into
-  some external store is unnecessary under (b), and a separate table means a
+  some external store is unnecessary when ciphertext lives in reliant Postgres, and a separate table means a
   `SELECT *` on `connections` cannot return ciphertext.
 - `owner_kind` + `org_id` + `CHECK`: §7.
 - `external_account_id`: dedupes "connect the same GitHub account twice", and
@@ -603,10 +567,10 @@ rotated client is detectable.
 
 | Event | Action |
 |---|---|
-| KEK rotation | Add `v2` to the keyring as primary, then re-wrap every `vault_keys` row (`kek_id` changes, DEKs do not). Remove `v1` from the keyring once `SELECT count(*) WHERE kek_id='env:v1' = 0`. |
+| Encryption key rotation | `forge secret set --env <env> RELIANT_VAULT_KEY 'v2:<new>,v1:<old>'` (primary first) and roll the pods. A boot task re-wraps every `vault_keys` row under `v2` (`kek_id` changes; DEKs and secrets do not). Once `SELECT count(*) FROM vault_keys WHERE kek_id='v1'` is 0, set the Secret to `v2:<new>` alone. |
 | DEK rotation (per tenant) | Insert a new primary version, demote the old one to `decrypt_only`, and backfill-reseal that tenant's `connection_secrets`. On completion, mark the old one `destroyed` and zero `wrapped_dek`. |
 | Tenant deleted | Delete that tenant's `vault_keys` rows. Every ciphertext they sealed, including those in backups, becomes unrecoverable (crypto-shredding). |
-| KEK lost | Every connection is lost. Users reconnect. Unlike Bao's root key, nothing else depends on it. The KEK is still **durable per environment** and never regenerated, following the Zitadel masterkey precedent (`openbao-secret-store.md` §3). |
+| Encryption key lost | Every connection is lost. Users reconnect. Nothing else depends on it. The key is still **durable per environment** and never regenerated: `forge secret set` must never overwrite it outside a rotation, following the Zitadel masterkey precedent (`openbao-secret-store.md` §3). |
 
 ## 6. GitHub App ownership (INTEGRATIONS §11 Q2)
 
@@ -627,8 +591,8 @@ it through `controlplane.Client.CloneRepoOntoDaemon`
 ### Options
 
 1. **Control-plane owns the App.**
-   - Reliant fetches tokens from control-plane per call, which is option (a)'s
-     cross-service read in disguise.
+   - Reliant fetches tokens from control-plane per call, which is a
+     per-call cross-service read.
    - Self-hosted reliant has no GitHub integration at all, or needs a second
      App path.
    - The webhook endpoint must live in control-plane and forward events to
@@ -659,7 +623,7 @@ The clone flow converges in phase 5:
 - `git_credentials` is then retired roll-forward:
   1. stop writing it
   2. a one-time import into reliant `connections` (decrypt with
-     control-plane's keyring in a job that has both keys; **this is the only
+     control-plane's `LLM_KEY_ENCRYPTION_KEY` in a job that has both keys; **this is the only
      step that needs both repos' keys at once**)
   3. switch reads
   4. drop it in a later migration
@@ -710,8 +674,8 @@ What the schema reserves so that org ownership is additive:
 
 | # | Threat | What it gets | Mitigations | Residual |
 |---|---|---|---|---|
-| 8.1 | **Stolen worker credential** (worker pod env plus DB creds) | Under (b): every connection of every tenant, because the worker holds the KEK. This is the dominant risk, and it is the same under every option, because the worker must hold plaintext to call the API. | KEK only on the worker and api-server pods (and with §3.3 sealing, the api-server cannot open); a dedicated DB role for `connection_secrets` (phase 4); short-lived OAuth access tokens, so stolen ones expire; per-tenant DEKs, so a *DB-only* theft (backup, replica, SQL injection) yields nothing without the KEK; `connection_events` makes misuse auditable. Option (c) moves the KEK into Bao, but cached DEKs still live in worker memory. | Accepted. The only real fix is a separate egress-signing service (an "integration proxy" that holds tokens and makes the calls). Noted as a v2 option, not v1. |
-| 8.2 | **Compromised daemon** | Nothing, for server-placed actions: secrets never leave the worker. For `daemon`-placed manifest actions (`INTEGRATIONS.md` §3.3: "credentials … passed to the daemon per call"), the token for that call. | **v1 rule: integration actions that need a connection may not be `daemon`-placed.** The catalog loader rejects `placement: daemon` together with `connection` (a fail-first test). If that is ever needed, pass a *derived* narrow token (for example a repo-scoped GitHub installation token, 1h), never the refresh token. The clone flow (§6) uses exactly that. | A daemon sees tool *outputs*, which may contain provider data. That is by design. |
+| 8.1 | **Stolen worker credential** (worker pod env plus DB creds) | Every connection of every tenant, because the worker holds the encryption key. This is the dominant risk, and it is the same under every option, because the worker must hold plaintext to call the API. | encryption key only on the worker and api-server (a later api-server encrypt-only hardening is possible, §3.3); a dedicated DB role for `connection_secrets` (phase 4); short-lived OAuth access tokens, so stolen ones expire; per-tenant DEKs, so a *DB-only* theft (backup, replica, SQL injection) yields nothing without the encryption key; `connection_events` makes misuse auditable. Moving the key into Bao/KMS later would not change this, because unwrapped DEKs live in worker memory. | Accepted. The only real fix is a separate egress-signing service (an "integration proxy" that holds tokens and makes the calls). Noted as a v2 option, not v1. |
+| 8.2 | **Compromised daemon** | Nothing: secrets never leave the worker. | **Decided 2026-10-04: daemon-placed actions cannot use connections.** A step that runs on the user's machine cannot use a connection, so tokens never leave the server. This overrides `INTEGRATIONS.md` §3.3's "passed to the daemon per call". The catalog loader rejects `placement: daemon` together with `connection` (a fail-first test). If that is ever needed, pass a *derived* narrow token (for example a repo-scoped GitHub installation token, 1h), never the refresh token. The clone flow (§6) uses exactly that. | A daemon sees tool *outputs*, which may contain provider data. That is by design. |
 | 8.3 | **Malicious workflow author** shares a workflow whose nodes say `connection: conn_author` | Nothing. The resolver checks `conn.user_id == runs.OwnerOf(run)`; it does not trust the workflow. A foreign id answers the same as a missing one: `FailedPrecondition("no github connection")`. | Fail-first test: user B runs A's shared workflow with A's connection id hard-coded → error, and zero `used` events on A's connection. The same applies to trigger rows: a trigger's `connection_bindings` are validated at create time *and* at fire time against the trigger owner. | — |
 | 8.4 | **SSRF via OAuth endpoints** | If `authorize_url`/`token_url` came from user input, the api-server or worker would POST secrets to arbitrary hosts, including `169.254.169.254` and cluster services. | v1: `token_url`, `authorize_url`, `revoke_url` and `base_url` come **only from embedded catalog manifests**, never from a request or a DB row. The `generic HTTP` connection (`api_key`, `basic`) has no OAuth. Its *request* URL is user-supplied, so `httpaction` uses a dialer that resolves and then rejects private, loopback, link-local and CGNAT addresses on **every connection, including redirects** (checked at dial time, which defeats DNS rebinding), with redirects capped at 3. User-authored manifests (`INTEGRATIONS.md` §11 Q4) are forced to daemon placement *and* cannot reference connections in v1. | Self-hosted operators may want internal hosts; provide `RELIANT_HTTP_ALLOW_PRIVATE_CIDRS`. |
 | 8.5 | **Log, trace and history leakage** | Tokens in Temporal history, slog, OTel spans, error strings or provider error echoes. | `vault.Secret` cannot be formatted or serialized (§3.2); the activity-type reflection test; header stripping in the transport; per-call redaction of error and output text; `debug_redact` on `CreateApiKeyConnection.fields`; OAuth `code`, `state` and `code_verifier` never logged (the callback logs only `state_hash[:8]`). A **canary test** creates a connection whose secret is a random sentinel, runs an action that fails, then greps the Temporal history export, the captured slog output and the span exporter for the sentinel. It must find zero hits. | `UserJWT` in history (`runtime/context.go:67`) is a pre-existing, separate exposure; out of scope, flagged. |
@@ -725,11 +689,11 @@ What the schema reserves so that org ownership is additive:
 
 | Phase | Deliverable | Files (new unless noted) |
 |---|---|---|
-| **1a: Envelope library + `api_keys` hardening** | The AEAD envelope (port of control-plane `pkg/crypto`), upstreamed to forge so both repos share it; reliant `internal/vault` (`KeyWrapper`, `envkeyring`, per-tenant DEK, `Secret` type); `api_keys` expand migration, dual-write, boot backfill | **forge:** `pkg/crypto/envelope.go` (+ tests), released. **reliant:** `internal/vault/{contract.go,vault.go,envkeyring.go,secret.go,secret_test.go}`; `internal/db/migrations/postgres/<ts>_vault_keys_and_api_keys_sealed.sql`; edit `internal/db/postgres/settings_store.go:132-175` (seal and open); `internal/db/postgres/schema.sql`; `make sqlc`; config wiring for `RELIANT_VAULT_KEYRING` in api-server/worker setup and the control-plane KCL `deploy/kcl/*/main.k` (`forge.ExternalSecret`, generatable, durable). **control-plane:** switch `pkg/crypto` to the forge import (no format change: `CPK1` must remain readable). |
-| **1b: Connections core** | Tables (§4.1), `ConnectionService`, OAuth broker, `TokenSource`, resolver, audit events, asymmetric sealing (if Q3 = yes) | `proto/reliant/v1/connection.proto`; migration `<ts>_connections.sql`; `internal/db/core/connection.go`; `internal/db/postgres/connection_store.go`; `internal/connections/{contract.go,service.go,oauth.go,tokensource.go,resolver.go,authenticator.go,events.go}`; `internal/grpc/services/connection.go`; HTTP routes in `internal/serverapi` (callback); worker wiring next to `automationcred` in workersetup. |
+| **1a: Envelope library + `api_keys` hardening** | The AEAD envelope (port of control-plane `pkg/crypto`), upstreamed to forge so both repos share it; reliant `internal/vault` (`KeyWrapper` with one implementation, `envkey`; per-tenant DEK; `Secret` type; hosted refuse-to-start and self-hosted generate-on-first-boot, §2.4); `api_keys` expand migration, dual-write, boot backfill; forge KCL `secret_ref` for the key | **forge:** `pkg/crypto/envelope.go` (+ tests), released. **reliant:** `internal/vault/{contract.go,vault.go,envkey.go,localkeyfile.go,secret.go,secret_test.go}`; `internal/db/migrations/postgres/<ts>_vault_keys_and_api_keys_sealed.sql`; edit `internal/db/postgres/settings_store.go:132-175` (seal and open); `internal/db/postgres/schema.sql`; `make sqlc`; config wiring for `RELIANT_VAULT_KEY` in api-server/worker setup. **control-plane KCL (where reliant's workloads are declared):** add `forge.EnvVar {name = "RELIANT_VAULT_KEY", secret_ref = "reliant-vault", secret_key = "vault_key"}` to `deploy/kcl/lib/env.k` `reliant_base_env` (`:224`, reaching the cluster api-server and worker) and to `deploy/kcl/dev/main.k` `_reliant_host_env` (`:1303`; `_reliant_worker_host_env` at `:1417` inherits it); per env, `forge secret set --env <env> RELIANT_VAULT_KEY v1:<base64>`. **[unverified]** whether e2e/prod reliant workloads all draw from `reliant_base_env`; e2e declares env inline (`deploy/kcl/e2e/main.k:671`, `:726`) and may need the line added directly. **control-plane:** switch `pkg/crypto` to the forge import (no format change: `CPK1` must remain readable). |
+| **1b: Connections core** | Tables (§4.1), `ConnectionService`, OAuth broker, `TokenSource`, resolver, audit events | `proto/reliant/v1/connection.proto`; migration `<ts>_connections.sql`; `internal/db/core/connection.go`; `internal/db/postgres/connection_store.go`; `internal/connections/{contract.go,service.go,oauth.go,tokensource.go,resolver.go,authenticator.go,events.go}`; `internal/grpc/services/connection.go`; HTTP routes in `internal/serverapi` (callback); worker wiring next to `automationcred` in workersetup. |
 | **1c: First consumers** | GitHub (`github_app_user`) and generic HTTP (`api_key`/`basic`) connections; `TestConnection`; settings UI list, connect, reconnect and delete | `internal/integrations/catalog/{github,http}/manifest.yaml` (connection block only); `web/src/components/settings/Connections*.tsx`. The action node is INTEGRATIONS phase 2. |
 | **1d: control-plane cleanup** | Re-seal legacy plaintext `git_credentials` rows; delete the pass-through branch | control-plane: a backfill (boot task or Job) plus edits to `internal/db/postgres.go:5711-5757`; test that a plaintext row is re-sealed. |
-| **4 (hardening)** | Dedicated Postgres role: only the worker can `SELECT connection_secrets`; `connection_events` insert-only; optional `gcpkms` or `baotransit` `KeyWrapper` | migration (GRANTs), deploy KCL. |
+| **4 (hardening)** | Dedicated Postgres role: only the worker can `SELECT connection_secrets`; `connection_events` insert-only; later, optionally, an api-server encrypt-only split or a Bao/KMS `KeyWrapper` | migration (GRANTs), deploy KCL. |
 | **5 (convergence)** | GitHub clone via a reliant connection; import and retire `git_credentials`; retire control-plane's GitHub OAuth routes | both repos; §6. |
 
 ### Rollout order
@@ -737,8 +701,9 @@ What the schema reserves so that org ownership is additive:
 1. forge: release the envelope package.
 2. control-plane: switch to the forge `pkg/crypto`. This is behaviour-neutral;
    pin it with existing tests plus a golden `CPK1` blob test. Deploy.
-3. reliant 1a: deploy with the keyring secret provisioned *first* (preflight
-   blocks otherwise). Dual-write, then backfill, then confirm
+3. reliant 1a: run `forge secret set` for `RELIANT_VAULT_KEY` in each env and
+   land the control-plane KCL `secret_ref` *first* (the forge preflight
+   blocks otherwise, and hosted reliant refuses to start without it). Dual-write, then backfill, then confirm
    `count(api_key_sealed IS NULL) = 0`.
 4. reliant 1b and 1c behind a `connections` feature flag in the UI. The
    server side ships dark.
@@ -760,8 +725,12 @@ What the schema reserves so that org ownership is additive:
   generic auth failure.
 - Sealing always uses the primary key. Opening succeeds under `decrypt_only`
   and fails under `destroyed`.
-- KEK rotation: wrap under v1, add v2 primary, rewrap, remove v1; every
-  secret still opens.
+- Encryption key rotation: wrap under v1, set `RELIANT_VAULT_KEY=v2:..,v1:..`,
+  rewrap, then set `v2` alone; every secret still opens.
+- Boot: hosted mode with the key unset or unparseable → startup error.
+  Self-hosted with no key → `vault.key` created `0600` and a WARN logged; a
+  second boot reuses it. Self-hosted with `vault_keys` rows but no key →
+  startup error (it never generates over existing data).
 - The golden `CPK1` blob produced by control-plane opens with the forge
   package (format compatibility).
 
@@ -817,7 +786,8 @@ What the schema reserves so that org ownership is additive:
 - The HTTP action against `127.0.0.1`, `169.254.169.254`, `10/8`, an IPv6
   ULA, and a hostname that resolves to private on its second lookup
   (rebinding), plus a redirect to private: all refused.
-- The catalog loader rejects `placement: daemon` plus `connection`.
+- The catalog loader rejects `placement: daemon` plus `connection`
+  (decided 2026-10-04).
 
 **control-plane 1d**
 
@@ -827,33 +797,40 @@ What the schema reserves so that org ownership is additive:
 
 ---
 
-## 11. Unverified, and open questions for the user
+## 11. Decided, unverified, and still open
+
+### Decided (2026-10-04)
+
+1. **Key storage.** One encryption key in a k8s Secret, declared as a forge
+   `secret_ref` and set with `forge secret set`. Ciphertext lives in reliant
+   Postgres. The envelope is versioned for rotation. No OpenBao and no KMS in
+   v1 (§2).
+2. **GitHub App.** Reliant owns it (§6).
+3. **Asymmetric sealing.** Dropped for v1. The api-server and worker share the
+   key (§3.3).
+4. **Daemon-placed actions with connections.** Forbidden in v1 (§8.2).
+5. **Org connections.** Per-user only in v1; columns reserved (§7).
+6. **Missing key at boot.** A hosted server refuses to start. Self-hosted
+   generates the key on first boot, persists it to the data dir and warns
+   (§2.4).
 
 ### Unverified (resolve during implementation)
 
 1. Whether any prod `git_credentials` rows are still plaintext (§1.2).
 2. Whether control-plane's GitHub client is a GitHub App or an OAuth App (§6).
 3. Whether control-plane's `pkg/crypto` can be imported from reliant, or
-   needs an upstream to forge (§2.3).
+   needs an upstream to forge (§2.1, §9).
 4. Whether reliant's Connect logging honours `debug_redact` (§4.2).
 5. Whether a `users.disabled_at`-style column exists in reliant (§3.4).
-6. Reliant's Go version, for `crypto/hpke` (§3.3).
-7. Whether OpenBao Transit is enabled (only relevant if Q1 = (c)).
+6. Whether every hosted reliant workload draws env from `reliant_base_env`,
+   or whether e2e and prod need the `secret_ref` added inline (§9).
+7. Whether the self-hosted api-server and worker share one data dir, which
+   the generated key file depends on (§2.4).
 
-### Questions for the user (each with a recommendation)
+### Still open
 
-- **Q1. Vault backend.** (b) reliant envelope vault with an env-keyring KEK,
-  or (c) the same vault with the KEK in control-plane's OpenBao Transit?
-  **Recommend (b) now**, with the `KeyWrapper` seam so (c) is a later config
-  change. (a), Bao KV with a reveal per call, is not recommended.
-- **Q2. GitHub App ownership.** **Recommend reliant**, sharing the existing
-  App registration in phase 1, with clone converging in phase 5.
-- **Q3. Asymmetric sealing**, so the api-server can write but not read
-  (§3.3). **Recommend yes, in phase 1b.** It costs one dependency, and it
-  removes the read capability from the internet-facing process.
-- **Q4. Daemon-placed actions with connections.** **Recommend forbidding
-  them in v1** (§8.2).
-- **Q5. Org connections.** **Recommend user-owned for v1**, with the columns
-  reserved (§7).
-- **Q6. Hosted boot without a keyring.** **Recommend failing hard** in hosted
-  mode and warning in self-hosted mode (§2.4).
+- **Phase-5 clone convergence shape.** Should reliant pass a repo-scoped
+  installation token to control-plane's `CloneRepo`, or enqueue `git.clone`
+  to the daemon itself? **Recommend** passing the token in phase 5. It keeps
+  control-plane's daemon command path, and drops only its token custody.
+  This is not needed for phase 1.
