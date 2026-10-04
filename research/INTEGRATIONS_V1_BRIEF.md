@@ -172,6 +172,23 @@ descendants), and the launch chain depth is capped.
 
 Providers (GitHub, Slack, Gmail, Twilio manifests) start once A and B land.
 
+## 4a. Using n8n as a reference (user direction)
+
+n8n is a REFERENCE for understanding a provider's API, auth shape and webhook
+behaviour. It is never code to copy. A checkout is at `~/src/n8n`:
+
+- `packages/nodes-base/credentials/<Provider>*.credentials.ts`: what a
+  provider's auth actually needs (OAuth URLs, scopes, extra params, where an
+  API key goes, per-connection fields such as a subdomain).
+- `packages/nodes-base/nodes/<Provider>/`: actions, and `*Trigger.node.ts` for
+  how webhooks are registered and verified.
+
+Do not port, translate or paste n8n code or text. Its licence (the
+Sustainable Use License) is not open source and forbids that kind of reuse,
+and our manifests are declarative anyway. Read it to learn the API, then
+write ours from the provider's own docs (`research/INTEGRATIONS_V1_PROVIDERS.md`
+collects them).
+
 ## 5. Gates
 
 ```
