@@ -11,6 +11,8 @@
  *   /workflow               → /
  *   /settings, /settings/*  → /
  *   /forge, /forge/*        → /
+ *   /automations/$triggerId → /automations
+ *   /automations            → /
  *   anything else           → /
  *
  * Forge's in-UI close is an EXIT from the whole surface, not a step back
@@ -46,6 +48,11 @@ export function getParentRouteNavigateOptions(
   }
   if (pathname === "/forge" || pathname.startsWith("/forge/")) {
     return { to: "/", search: {} };
+  }
+  // Unlike forge, an automation's page is a step INTO the list — the list is a
+  // real hub with its own actions — so closing one returns there.
+  if (pathname.startsWith("/automations/")) {
+    return { to: "/automations" };
   }
   return { to: "/", search: {} };
 }

@@ -1883,6 +1883,9 @@ function App() {
                 onOpenWorkflows={() => {
                   navigate({ to: '/workflow' });
                 }}
+                onOpenAutomations={() => {
+                  navigate({ to: '/automations' });
+                }}
                 onOpenChatSearch={() => setShowChatSearch(true)}
                 onNavigateToSettings={() => {
                   navigate({ to: '/settings' });
@@ -1912,6 +1915,9 @@ function App() {
                   onNavigateToProjectPicker={handleNavigateToProjectPicker}
                   onOpenWorkflows={() => {
                     navigate({ to: '/workflow' });
+                  }}
+                  onOpenAutomations={() => {
+                    navigate({ to: '/automations' });
                   }}
                   onOpenChatSearch={() => setShowChatSearch(true)}
                   onNavigateToSettings={() => {

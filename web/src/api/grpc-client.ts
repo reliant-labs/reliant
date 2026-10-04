@@ -28,6 +28,7 @@ import { QuestionService } from "../gen/reliant/v1/question_pb";
 import { ConnectorService } from "../gen/reliant/v1/connector_pb";
 import { AccountService } from "../gen/reliant/v1/account_pb";
 import { ForgeService } from "../gen/reliant/v1/forge_pb";
+import { TriggerService } from "../gen/reliant/v1/trigger_pb";
 import { logger } from "../lib/logger";
 import {
   buildLocalhostUrl,
@@ -122,6 +123,7 @@ const clearClientCache = () => {
   _daemonRegistryClient = null;
   _questionClient = null;
   _connectorClient = null;
+  _triggerClient = null;
 };
 
 export const getGRPCBaseURLPublic = (): string | null => getGRPCBaseURL();
@@ -359,6 +361,12 @@ export const createConnectorClient = (): Client<typeof ConnectorService> => {
   return createClient(ConnectorService, getTransport());
 };
 
+// TriggerService (automations) is served by reliant's api-server: the triggers
+// table and the Temporal schedules it converges live there.
+export const createTriggerClient = (): Client<typeof TriggerService> => {
+  return createClient(TriggerService, getTransport());
+};
+
 // Singleton instances (lazy-initialized)
 let _systemClient: Client<typeof SystemService> | null = null;
 let _planClient: Client<typeof PlanService> | null = null;
@@ -386,6 +394,7 @@ let _daemonRegistryClient: Client<typeof DaemonRegistryService> | null = null;
 let _tokenClient: Client<typeof TokenService> | null = null;
 let _questionClient: Client<typeof QuestionService> | null = null;
 let _connectorClient: Client<typeof ConnectorService> | null = null;
+let _triggerClient: Client<typeof TriggerService> | null = null;
 
 export const getSystemClient = (): Client<typeof SystemService> => {
   if (!_systemClient) {
@@ -578,6 +587,13 @@ export const getQuestionClient = (): Client<typeof QuestionService> => {
   return _questionClient;
 };
 
+export const getTriggerClient = (): Client<typeof TriggerService> => {
+  if (!_triggerClient) {
+    _triggerClient = createTriggerClient();
+  }
+  return _triggerClient;
+};
+
 // Export for convenience
 export const grpcClient = {
   system: () => getSystemClient(),
@@ -607,4 +623,5 @@ export const grpcClient = {
   token: () => getTokenClient(),
   question: () => getQuestionClient(),
   connector: () => getConnectorClient(),
+  trigger: () => getTriggerClient(),
 };

@@ -67,6 +67,21 @@ describe("getParentRouteNavigateOptions", () => {
     });
   });
 
+  // An automation's page is a step into the list, so it closes back to it; the
+  // list itself exits to the app.
+  it("returns /automations as parent of an automation's page", () => {
+    expect(getParentRouteNavigateOptions("/automations/trig-1")).toEqual({
+      to: "/automations",
+    });
+  });
+
+  it("returns / as parent of /automations", () => {
+    expect(getParentRouteNavigateOptions("/automations")).toEqual({
+      to: "/",
+      search: {},
+    });
+  });
+
   it("returns / for unknown routes", () => {
     expect(getParentRouteNavigateOptions("/")).toEqual({ to: "/", search: {} });
     expect(getParentRouteNavigateOptions("/anything/else")).toEqual({

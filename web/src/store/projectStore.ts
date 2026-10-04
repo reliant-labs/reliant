@@ -67,6 +67,10 @@ function syncProjectUrl(projectId: string | null) {
       if (
         currentPath.startsWith("/settings") ||
         currentPath.startsWith("/workflow") ||
+        // Opening an automation's chat selects that chat's project first and
+        // only then navigates into it (openAutomationChat). Navigating here,
+        // mid-sequence, would mount the app before the chat was selected.
+        currentPath.startsWith("/automations") ||
         currentPath.startsWith("/auth") ||
         currentPath.startsWith("/reset-password") ||
         currentPath.startsWith("/verify-email") ||

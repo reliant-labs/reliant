@@ -37,6 +37,7 @@ import {
   Settings,
   Workflow,
   Boxes,
+  CalendarClock,
 } from "lucide-react";
 import { useChatStore } from "../../store/chatStore";
 import { useChatList, useArchivedChats, useDeleteChat, useRenameChat, useUnarchiveChat } from "../../hooks/chat-queries";
@@ -109,6 +110,7 @@ interface SidebarProps {
   paddingClass?: string;
   onNavigateToProjectPicker?: () => void;
   onOpenWorkflows?: () => void;
+  onOpenAutomations?: () => void;
   onOpenChatSearch?: () => void;
   onNavigateToSettings?: () => void;
   onOpenForge?: () => void;
@@ -605,6 +607,7 @@ function SidebarComponent({
   paddingClass = "",
   onNavigateToProjectPicker,
   onOpenWorkflows,
+  onOpenAutomations,
   onOpenChatSearch,
   onNavigateToSettings,
   onOpenForge,
@@ -1439,6 +1442,12 @@ function SidebarComponent({
             label="Workflows"
             onClick={onOpenWorkflows}
             onboardingId="workflow-button"
+          />
+          <SidebarNavButton
+            icon={<CalendarClock className="h-4 w-4" />}
+            label="Automations"
+            onClick={onOpenAutomations}
+            testId="sidebar-automations-button"
           />
           <SidebarNavButton
             icon={<Search className="h-4 w-4" />}
