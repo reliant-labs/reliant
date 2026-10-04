@@ -134,7 +134,7 @@ func TestListChatsExcludeAutomations(t *testing.T) {
 		project := "test-project"
 		chats, err := repo.ListChats(ctx, ChatFilters{
 			UserID: "test-user", ProjectID: &project, Limit: 100,
-			ExcludeAutomations: excludeAutomations,
+			SidebarOnly: excludeAutomations,
 		})
 		require.NoError(t, err)
 		ids := map[string]bool{}

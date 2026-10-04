@@ -46,6 +46,9 @@ const (
 	RunDisplayState_RUN_DISPLAY_STATE_FAILED RunDisplayState = 6
 	// CANCELLED: STOPPED with stop_reason CANCELLED.
 	RunDisplayState_RUN_DISPLAY_STATE_CANCELLED RunDisplayState = 7
+	// Live, but its last tool call could not reach the machine it needs (asleep or
+	// still starting). See ChatActivity.WAITING_FOR_DAEMON.
+	RunDisplayState_RUN_DISPLAY_STATE_WAITING_FOR_MACHINE RunDisplayState = 8
 )
 
 // Enum value maps for RunDisplayState.
@@ -59,16 +62,18 @@ var (
 		5: "RUN_DISPLAY_STATE_COMPLETED",
 		6: "RUN_DISPLAY_STATE_FAILED",
 		7: "RUN_DISPLAY_STATE_CANCELLED",
+		8: "RUN_DISPLAY_STATE_WAITING_FOR_MACHINE",
 	}
 	RunDisplayState_value = map[string]int32{
-		"RUN_DISPLAY_STATE_UNSPECIFIED": 0,
-		"RUN_DISPLAY_STATE_QUEUED":      1,
-		"RUN_DISPLAY_STATE_RUNNING":     2,
-		"RUN_DISPLAY_STATE_NEEDS_INPUT": 3,
-		"RUN_DISPLAY_STATE_PAUSED":      4,
-		"RUN_DISPLAY_STATE_COMPLETED":   5,
-		"RUN_DISPLAY_STATE_FAILED":      6,
-		"RUN_DISPLAY_STATE_CANCELLED":   7,
+		"RUN_DISPLAY_STATE_UNSPECIFIED":         0,
+		"RUN_DISPLAY_STATE_QUEUED":              1,
+		"RUN_DISPLAY_STATE_RUNNING":             2,
+		"RUN_DISPLAY_STATE_NEEDS_INPUT":         3,
+		"RUN_DISPLAY_STATE_PAUSED":              4,
+		"RUN_DISPLAY_STATE_COMPLETED":           5,
+		"RUN_DISPLAY_STATE_FAILED":              6,
+		"RUN_DISPLAY_STATE_CANCELLED":           7,
+		"RUN_DISPLAY_STATE_WAITING_FOR_MACHINE": 8,
 	}
 )
 
@@ -1557,7 +1562,7 @@ const file_reliant_v1_run_proto_rawDesc = "" +
 	"\x06thread\x18\x02 \x01(\tR\x06thread\"\x82\x01\n" +
 	"\x14InterruptRunResponse\x120\n" +
 	"\x14cancelled_tool_calls\x18\x01 \x01(\x05R\x12cancelledToolCalls\x128\n" +
-	"\x18undeliverable_tool_calls\x18\x02 \x03(\tR\x16undeliverableToolCalls*\x92\x02\n" +
+	"\x18undeliverable_tool_calls\x18\x02 \x03(\tR\x16undeliverableToolCalls*\xbd\x02\n" +
 	"\x0fRunDisplayState\x12!\n" +
 	"\x1dRUN_DISPLAY_STATE_UNSPECIFIED\x10\x00\x12\x1c\n" +
 	"\x18RUN_DISPLAY_STATE_QUEUED\x10\x01\x12\x1d\n" +
@@ -1566,7 +1571,8 @@ const file_reliant_v1_run_proto_rawDesc = "" +
 	"\x18RUN_DISPLAY_STATE_PAUSED\x10\x04\x12\x1f\n" +
 	"\x1bRUN_DISPLAY_STATE_COMPLETED\x10\x05\x12\x1c\n" +
 	"\x18RUN_DISPLAY_STATE_FAILED\x10\x06\x12\x1f\n" +
-	"\x1bRUN_DISPLAY_STATE_CANCELLED\x10\a2\xca\x05\n" +
+	"\x1bRUN_DISPLAY_STATE_CANCELLED\x10\a\x12)\n" +
+	"%RUN_DISPLAY_STATE_WAITING_FOR_MACHINE\x10\b2\xca\x05\n" +
 	"\n" +
 	"RunService\x12G\n" +
 	"\bStartRun\x12\x1b.reliant.v1.StartRunRequest\x1a\x1c.reliant.v1.StartRunResponse\"\x00\x12J\n" +

@@ -20,6 +20,9 @@ const (
 	RunDisplayCompleted   RunDisplayState = 5
 	RunDisplayFailed      RunDisplayState = 6
 	RunDisplayCancelled   RunDisplayState = 7
+	// RunDisplayWaitingForMachine is a live run whose last tool call could not
+	// reach its suspended or starting machine (chats_with_activity.activity = 5).
+	RunDisplayWaitingForMachine RunDisplayState = 8
 )
 
 // RunCursor is a keyset position in the run list, which is ordered by

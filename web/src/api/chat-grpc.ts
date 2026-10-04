@@ -294,7 +294,7 @@ export const chatGrpc = {
       // schedule from filling the default 100-chat page and pushing real
       // conversations out of it. An automation chat is still reachable by id
       // (GetChat) — see resolveChat in hooks/chat-queries.ts.
-      excludeAutomations: true,
+      sidebarOnly: true,
     });
     const response = await client.listChats(request);
     return {

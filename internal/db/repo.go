@@ -1674,6 +1674,37 @@ func (r *Repo) UpdateChatActiveDaemon(ctx context.Context, chatID string, daemon
 	return r.chats.UpdateChatActiveDaemon(ctx, chatID, daemonID)
 }
 
+// SetChatAdopted adopts or un-adopts a chat for its owner. It reports whether
+// the chat exists and belongs to userID. Repeating the call is a no-op that
+// still reports true. Adoption changes list_in_sidebar, so it emits
+// chat_activity_changed to make the sidebar refetch.
+func (r *Repo) SetChatAdopted(ctx context.Context, chatID, userID string, adopted bool) (bool, error) {
+	var owned bool
+	err := r.RunTx(ctx, func(txCtx context.Context) error {
+		ok, err := r.chats.SetChatAdopted(txCtx, chatID, userID, adopted)
+		if err != nil || !ok {
+			return err
+		}
+		owned = true
+		return r.emitChatActivityIfChanged(txCtx, chatID)
+	})
+	return owned, err
+}
+
+// SetChatDaemonBlocked records (or clears) that the chat's run is blocked on a
+// suspended or starting machine. It emits chat_activity_changed only when the
+// stored value changed, so a stream of healthy tool calls costs one cheap
+// UPDATE that matches no row.
+func (r *Repo) SetChatDaemonBlocked(ctx context.Context, chatID string, blocked bool) error {
+	return r.RunTx(ctx, func(txCtx context.Context) error {
+		changed, err := r.chats.SetChatDaemonBlocked(txCtx, chatID, blocked)
+		if err != nil || !changed {
+			return err
+		}
+		return r.emitChatActivityIfChanged(txCtx, chatID)
+	})
+}
+
 // UpdateChatUnread sets the unread flag on a chat and emits a user update.
 func (r *Repo) UpdateChatUnread(ctx context.Context, chatID string, unread bool, reason string) error {
 	chat, err := r.GetChat(ctx, chatID)

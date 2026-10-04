@@ -188,6 +188,9 @@ enum RunDisplayState {
   RUN_DISPLAY_STATE_FAILED = 6;
   // CANCELLED: STOPPED with stop_reason CANCELLED.
   RUN_DISPLAY_STATE_CANCELLED = 7;
+  // Live, but its last tool call could not reach the machine it needs (asleep or
+  // still starting). See ChatActivity.WAITING_FOR_DAEMON.
+  RUN_DISPLAY_STATE_WAITING_FOR_MACHINE = 8;
 }
 
 message StartRunRequest {

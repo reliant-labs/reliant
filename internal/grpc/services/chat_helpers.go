@@ -151,6 +151,10 @@ func chatToProto(c *db.Chat) *reliantv1.Chat {
 	if c.TriggerID != nil {
 		proto.TriggerId = c.TriggerID
 	}
+	if c.AdoptedAt != nil {
+		adopted := c.AdoptedAt.Format(time.RFC3339)
+		proto.AdoptedAt = &adopted
+	}
 	return proto
 }
 

@@ -143,6 +143,8 @@ type Chat struct {
 	ArchivedWorktreeName sql.NullString `json:"archived_worktree_name"`
 	Unread               int32          `json:"unread"`
 	ActiveDaemonID       sql.NullString `json:"active_daemon_id"`
+	AdoptedAt            sql.NullTime   `json:"adopted_at"`
+	DaemonBlockedAt      sql.NullTime   `json:"daemon_blocked_at"`
 }
 
 type ChatUpdate struct {
@@ -172,12 +174,16 @@ type ChatsWithActivity struct {
 	ArchivedWorktreeName   sql.NullString `json:"archived_worktree_name"`
 	Unread                 int32          `json:"unread"`
 	ActiveDaemonID         sql.NullString `json:"active_daemon_id"`
+	AdoptedAt              sql.NullTime   `json:"adopted_at"`
+	DaemonBlockedAt        sql.NullTime   `json:"daemon_blocked_at"`
 	LastMessageAt          interface{}    `json:"last_message_at"`
 	Activity               int32          `json:"activity"`
 	RootWorkflowState      sql.NullInt32  `json:"root_workflow_state"`
 	RootWorkflowStopReason sql.NullInt32  `json:"root_workflow_stop_reason"`
 	LaunchKind             sql.NullString `json:"launch_kind"`
 	TriggerID              sql.NullString `json:"trigger_id"`
+	ListInSidebar          sql.NullBool   `json:"list_in_sidebar"`
+	DisplayState           int32          `json:"display_state"`
 }
 
 type ClaudeAuthToken struct {
@@ -367,9 +373,9 @@ type MessageContentBlock struct {
 	WorkflowRunID    sql.NullString `json:"workflow_run_id"`
 	AttemptNumber    sql.NullInt64  `json:"attempt_number"`
 	ThoughtSignature sql.NullString `json:"thought_signature"`
-	Phase            sql.NullString `json:"phase"`
 	CreatedAt        time.Time      `json:"created_at"`
 	UpdatedAt        time.Time      `json:"updated_at"`
+	Phase            sql.NullString `json:"phase"`
 }
 
 type MessageOrderCounter struct {

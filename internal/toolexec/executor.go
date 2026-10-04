@@ -88,6 +88,15 @@ type ToolResult struct {
 
 	// Binary content (images, PDFs) to pass to the LLM
 	BinaryParts []message.BinaryContent
+
+	// DaemonPending is true when the tool never ran because the machine it needs
+	// is suspended or still starting (ErrDaemonPending). It carries the typed
+	// error across the flattening into a result, so nothing downstream has to
+	// parse Content to learn why the run is stuck.
+	DaemonPending bool
+	// RanOnDaemon is true when the call completed a round trip to a daemon. A
+	// success with this set is proof the machine is reachable again.
+	RanOnDaemon bool
 }
 
 // ExecutionMetrics provides telemetry for tool execution

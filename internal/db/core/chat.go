@@ -191,6 +191,10 @@ type Chat struct {
 	Activity             *int              `json:"activity,omitempty"`
 	Unread               bool              `json:"unread"`
 	ActiveDaemonID       *string           `json:"active_daemon_id,omitempty"`
+	// AdoptedAt is when the user adopted this run into their chats; nil if not.
+	AdoptedAt *time.Time `json:"adopted_at,omitempty"`
+	// ListInSidebar is the view's sidebar policy for this chat.
+	ListInSidebar bool `json:"list_in_sidebar"`
 
 	// RootStatus is the lifecycle of the chat's ROOT workflow — the row whose
 	// id is WorkflowID. It travels with every chat read because callers that
@@ -235,11 +239,11 @@ type ChatFilters struct {
 	ProjectID       *string
 	State           *ChatState
 	ExcludeArchived bool
-	// ExcludeAutomations hides chats launched by anything but an interactive
-	// start, unless they are awaiting input.
-	ExcludeAutomations bool
-	Limit              int
-	Offset             int
+	// SidebarOnly keeps only chats the sidebar lists: the view's
+	// list_in_sidebar column is the single definition of that policy.
+	SidebarOnly bool
+	Limit       int
+	Offset      int
 }
 
 // ChatSearchFilters contains options for searching chats.
@@ -273,6 +277,12 @@ type ChatStore interface {
 	UpdateChat(ctx context.Context, chat *Chat) error
 	DeleteChat(ctx context.Context, id string) error
 	UpdateChatActiveDaemon(ctx context.Context, chatID string, daemonID *string) error
+	// SetChatAdopted adopts or un-adopts a chat owned by userID. It reports
+	// whether the chat exists and is the user's; repeating it is a no-op.
+	SetChatAdopted(ctx context.Context, chatID, userID string, adopted bool) (bool, error)
+	// SetChatDaemonBlocked sets or clears the daemon-pending marker and reports
+	// whether the stored value changed.
+	SetChatDaemonBlocked(ctx context.Context, chatID string, blocked bool) (bool, error)
 	ListArchivedChats(ctx context.Context, userID string) ([]*ArchivedChatInfo, error)
 	CreateChatUpdate(ctx context.Context, update ChatUpdate) error
 }

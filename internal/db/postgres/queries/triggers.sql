@@ -137,16 +137,7 @@ SELECT
     c.title AS run_title,
     rw.state AS run_root_state,
     rw.stop_reason AS run_root_stop_reason,
-    CASE
-        WHEN rw.state IS NULL OR rw.state = 1 THEN 1
-        WHEN rw.state = 2 AND c.activity = 2 THEN 3
-        WHEN rw.state = 2 THEN 2
-        WHEN rw.state = 3 AND rw.stop_reason = 3 THEN 4
-        WHEN rw.state = 3 AND rw.stop_reason = 1 THEN 5
-        WHEN rw.state = 3 AND rw.stop_reason = 2 THEN 6
-        WHEN rw.state = 3 AND rw.stop_reason = 4 THEN 7
-        ELSE 0
-    END::integer AS run_display_state
+    COALESCE(c.display_state, 1)::integer AS run_display_state
 FROM trigger_events e
 LEFT JOIN chats_with_activity c ON c.id = e.chat_id AND c.user_id = e.user_id
 LEFT JOIN workflows rw ON rw.id = c.workflow_id
@@ -178,16 +169,7 @@ SELECT
     c.title AS run_title,
     rw.state AS run_root_state,
     rw.stop_reason AS run_root_stop_reason,
-    CASE
-        WHEN rw.state IS NULL OR rw.state = 1 THEN 1
-        WHEN rw.state = 2 AND c.activity = 2 THEN 3
-        WHEN rw.state = 2 THEN 2
-        WHEN rw.state = 3 AND rw.stop_reason = 3 THEN 4
-        WHEN rw.state = 3 AND rw.stop_reason = 1 THEN 5
-        WHEN rw.state = 3 AND rw.stop_reason = 2 THEN 6
-        WHEN rw.state = 3 AND rw.stop_reason = 4 THEN 7
-        ELSE 0
-    END::integer AS run_display_state
+    COALESCE(c.display_state, 1)::integer AS run_display_state
 FROM ranked r
 JOIN trigger_events e ON e.id = r.id
 LEFT JOIN chats_with_activity c ON c.id = e.chat_id AND c.user_id = e.user_id

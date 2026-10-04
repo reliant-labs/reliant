@@ -135,7 +135,7 @@ export function getChatFromCache(chatId: string): Chat | undefined {
  * Use this — not getChatFromCache alone — anywhere a chat is reopened from a
  * stored id (workspace restore, project switch, a notification). The detail
  * cache is seeded from the project chat list, and that list deliberately omits
- * automation-launched chats (ListChats exclude_automations), so a cache miss
+ * automation-launched chats (ListChats sidebar_only), so a cache miss
  * no longer means the chat is gone.
  */
 export async function resolveChat(chatId: string): Promise<Chat | undefined> {

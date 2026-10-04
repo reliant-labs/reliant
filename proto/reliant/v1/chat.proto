@@ -109,6 +109,11 @@ enum ChatActivity {
   CHAT_ACTIVITY_AWAITING_INPUT = 2;
   CHAT_ACTIVITY_ERROR = 3;
   CHAT_ACTIVITY_PAUSED = 4;
+  // A live run whose last tool call hit a machine that is suspended or still
+  // starting (toolexec.ErrDaemonPending). Outranked by AWAITING_INPUT, outranks
+  // RUNNING; cleared by the next successful tool call. Chat.active_daemon_id
+  // names the machine when the chat pins one.
+  CHAT_ACTIVITY_WAITING_FOR_DAEMON = 5;
 }
 
 // ChatService handles chat-related operations
@@ -130,6 +135,15 @@ service ChatService {
   // discipline. See research/TRIGGERS.md.
   rpc StartChat(StartChatRequest) returns (StartChatResponse) {}
   
+  // AdoptChat takes a run (typically an automation's) into the caller's own
+  // chats: sets adopted_at, which lists it in the sidebar, and makes the NEXT
+  // root run started by SendMessage attended. Idempotent; owner-only.
+  rpc AdoptChat(AdoptChatRequest) returns (AdoptChatResponse) {}
+
+  // UnadoptChat clears adopted_at. It is not archive: the run stays in Runs.
+  // Idempotent; owner-only.
+  rpc UnadoptChat(UnadoptChatRequest) returns (UnadoptChatResponse) {}
+
   // ListChats lists all non-archived chats for a project
   rpc ListChats(ListChatsRequest) returns (ListChatsResponse) {}
   
@@ -298,6 +312,9 @@ message Chat {
   // The stored trigger that launched this chat. Unset for interactive chats and
   // once the trigger is deleted.
   optional string trigger_id = 34;
+  // When the user adopted this run into their chats (AdoptChat). Unset when not
+  // adopted. Origin (launch_kind, trigger_id) is never rewritten by adoption.
+  optional string adopted_at = 35;
 }
 
 // ArchivedChat includes worktree information for archived chats
@@ -437,9 +454,11 @@ message StartChatResponse {
 message ListChatsRequest {
   string project_id = 1;               // Required
   optional int32 limit = 2;
-  // When true, omit automation chats (launch kind other than an interactive
-  // start) unless they are awaiting input (pending approval or question).
-  optional bool exclude_automations = 3;
+  // When true, return only chats the sidebar lists (chats_with_activity.
+  // list_in_sidebar): interactive chats, adopted chats, and — until the Inbox
+  // ships — non-agent automations awaiting input. Agent-started runs appear
+  // only once adopted.
+  optional bool sidebar_only = 3;
 }
 
 // ListChatsResponse returns the list of chats
@@ -476,6 +495,22 @@ message UpdateChatRequest {
 
 // UpdateChatResponse returns the updated chat
 message UpdateChatResponse {
+  Chat chat = 1;
+}
+
+message AdoptChatRequest {
+  string chat_id = 1;
+}
+
+message AdoptChatResponse {
+  Chat chat = 1;
+}
+
+message UnadoptChatRequest {
+  string chat_id = 1;
+}
+
+message UnadoptChatResponse {
   Chat chat = 1;
 }
 

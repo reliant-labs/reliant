@@ -35,10 +35,10 @@ var validRunStates = map[string]bool{
 
 // runStateDisplayStates maps the tool's state words onto the run list's display
 // states. "running" includes a run waiting on a human: the tool's vocabulary
-// has no "needs input", and such a run is still running.
+// has no "needs input", and such a run, or one waiting for its machine, is still running.
 var runStateDisplayStates = map[string][]db.RunDisplayState{
 	"pending":   {db.RunDisplayQueued},
-	"running":   {db.RunDisplayRunning, db.RunDisplayNeedsInput},
+	"running":   {db.RunDisplayRunning, db.RunDisplayNeedsInput, db.RunDisplayWaitingForMachine},
 	"paused":    {db.RunDisplayPaused},
 	"completed": {db.RunDisplayCompleted},
 	"failed":    {db.RunDisplayFailed},

@@ -13,6 +13,7 @@ import (
 	"go.temporal.io/sdk/client"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/runs"
@@ -145,7 +146,7 @@ func TestListChatsAndGetChatCarryLaunchOriginAndExcludeAutomations(t *testing.T)
 	assert.Equal(t, triggerID, *getResp.Msg.Chat.TriggerId)
 
 	list := func(exclude bool) map[string]bool {
-		resp, err := service.ListChats(ctx, connect.NewRequest(&reliantv1.ListChatsRequest{ProjectId: projectID, ExcludeAutomations: &exclude}))
+		resp, err := service.ListChats(ctx, connect.NewRequest(&reliantv1.ListChatsRequest{ProjectId: projectID, SidebarOnly: &exclude}))
 		require.NoError(t, err)
 		ids := map[string]bool{}
 		for _, c := range resp.Msg.Chats {
@@ -159,4 +160,101 @@ func TestListChatsAndGetChatCarryLaunchOriginAndExcludeAutomations(t *testing.T)
 	assert.False(t, filtered[quiet.chatID], "a quiet scheduled chat is hidden")
 	assert.True(t, filtered["wire-interactive"])
 	assert.True(t, filtered["wire-needs-approval"], "a scheduled chat awaiting approval stays visible")
+}
+
+// seedScheduledChat adds a schedule launch event to the fixture chat, the way a
+// fired automation leaves one.
+func seedScheduledChat(t *testing.T, ctx context.Context, repo *db.Repo, chatID string) {
+	t.Helper()
+	at := time.Date(2026, 1, 2, 9, 0, 0, 0, time.UTC)
+	triggerID := "trg-adopt-" + chatID
+	require.NoError(t, repo.CreateTrigger(ctx, &core.Trigger{
+		ID: triggerID, UserID: "test-user", ProjectID: mustChatProject(t, ctx, repo, chatID),
+		Name: "nightly", Kind: core.TriggerKindSchedule, Enabled: true, Workflow: "builtin://agent",
+		Config: []byte(`{"interval":"1h"}`), CreatedAt: at, UpdatedAt: at,
+	}))
+	created, err := repo.CreateTriggerEvent(ctx, &core.TriggerEvent{
+		ID: "evt-" + chatID, TriggerID: &triggerID, UserID: "test-user",
+		Kind: core.TriggerEventKindSchedule, DedupeKey: "fire-" + chatID, OccurredAt: at,
+		Payload: map[string]any{"trigger_name": "nightly"}, Outcome: core.TriggerEventLaunched,
+		ChatID: &chatID, CreatedAt: at,
+	})
+	require.NoError(t, err)
+	require.True(t, created)
+}
+
+// Adoption means a human is now present: the continuation's root run is
+// attended. Unattended is a fact about a run, and the next run is a new one.
+func TestSendMessage_AdoptedScheduleChatStartsAttendedRootRun(t *testing.T) {
+	for _, adopt := range []bool{false, true} {
+		t.Run(map[bool]string{false: "not adopted", true: "adopted"}[adopt], func(t *testing.T) {
+			repo, cleanup := db.SetupTestDB(t)
+			t.Cleanup(cleanup)
+			ctx, fx := setupAbsorbFixture(t, repo, "test-user", db.Completed())
+			seedScheduledChat(t, ctx, repo, fx.chatID)
+
+			temporal := &inputCapturingTemporalClient{
+				absorbTestTemporalClient: absorbTestTemporalClient{exists: true, status: enums.WORKFLOW_EXECUTION_STATUS_COMPLETED},
+			}
+			service := &ChatService{database: repo, tempClient: temporal, runs: runs.NewService(repo, temporal, nil)}
+
+			if adopt {
+				_, err := service.AdoptChat(ctx, connect.NewRequest(&reliantv1.AdoptChatRequest{ChatId: fx.chatID}))
+				require.NoError(t, err)
+			}
+			_, err := service.SendMessage(ctx, sendMessageRequest(t, fx.chatID, "carry on"))
+			require.NoError(t, err)
+
+			require.Len(t, temporal.inputs, 1)
+			assert.False(t, v2.IsUnattended(temporal.inputs[0].Inputs),
+				"the continuation's root run must not carry unattended")
+		})
+	}
+}
+
+func TestAdoptChat_OwnerScopedIdempotentAndExposedOnTheWire(t *testing.T) {
+	repo, cleanup := db.SetupTestDB(t)
+	t.Cleanup(cleanup)
+	ctx, fx := setupAbsorbFixture(t, repo, "test-user", db.Completed())
+	seedScheduledChat(t, ctx, repo, fx.chatID)
+	service := &ChatService{database: repo}
+
+	otherCtx := context.WithValue(context.Background(), auth.UserIDContextKey, "someone-else")
+	_, err := service.AdoptChat(otherCtx, connect.NewRequest(&reliantv1.AdoptChatRequest{ChatId: fx.chatID}))
+	require.Error(t, err)
+	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
+	_, err = service.UnadoptChat(otherCtx, connect.NewRequest(&reliantv1.UnadoptChatRequest{ChatId: fx.chatID}))
+	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
+	_, err = service.AdoptChat(ctx, connect.NewRequest(&reliantv1.AdoptChatRequest{}))
+	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+
+	first, err := service.AdoptChat(ctx, connect.NewRequest(&reliantv1.AdoptChatRequest{ChatId: fx.chatID}))
+	require.NoError(t, err)
+	require.NotNil(t, first.Msg.Chat.AdoptedAt, "adopted_at is on the Chat proto")
+	assert.Equal(t, "schedule", first.Msg.Chat.GetLaunchKind(), "adoption never rewrites origin")
+
+	second, err := service.AdoptChat(ctx, connect.NewRequest(&reliantv1.AdoptChatRequest{ChatId: fx.chatID}))
+	require.NoError(t, err)
+	assert.Equal(t, first.Msg.Chat.GetAdoptedAt(), second.Msg.Chat.GetAdoptedAt())
+
+	list := func() map[string]bool {
+		yes := true
+		resp, err := service.ListChats(ctx, connect.NewRequest(&reliantv1.ListChatsRequest{
+			ProjectId: mustChatProject(t, ctx, repo, fx.chatID), SidebarOnly: &yes,
+		}))
+		require.NoError(t, err)
+		ids := map[string]bool{}
+		for _, c := range resp.Msg.Chats {
+			ids[c.Id] = true
+		}
+		return ids
+	}
+	assert.True(t, list()[fx.chatID], "an adopted automation chat is in the sidebar list")
+
+	for i := 0; i < 2; i++ {
+		un, err := service.UnadoptChat(ctx, connect.NewRequest(&reliantv1.UnadoptChatRequest{ChatId: fx.chatID}))
+		require.NoError(t, err)
+		assert.Nil(t, un.Msg.Chat.AdoptedAt)
+	}
+	assert.False(t, list()[fx.chatID])
 }

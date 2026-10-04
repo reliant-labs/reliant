@@ -110,12 +110,17 @@ func TestListTriggerEvents_JoinsRunState(t *testing.T) {
 		trigger: tr.ID, at: base.Add(time.Duration(i) * time.Minute),
 	})
 	insertTestApproval(t, repo, "appr-feed", "r-needs", 1)
+	seedListRun(t, repo, listRunSeed{
+		id: "r-wait", title: "title of r-wait", status: Active(), launch: core.TriggerEventKindSchedule,
+		trigger: tr.ID, at: base.Add(time.Duration(i+1) * time.Minute),
+	})
+	require.NoError(t, repo.SetChatDaemonBlocked(ctx, "r-wait", true))
 	// A skipped firing has no run, and a launched firing whose chat is gone has none either.
 	feedEvent(t, repo, "ev-skipped", tr.ID, "test-user", core.TriggerEventSkipped, base.Add(time.Hour))
 
 	items, _, err := repo.ListTriggerEvents(ctx, core.TriggerEventFilters{UserID: "test-user", TriggerID: tr.ID, Limit: 50})
 	require.NoError(t, err)
-	require.Len(t, items, 8)
+	require.Len(t, items, 9)
 
 	runs, _, err := repo.ListRuns(ctx, RunListFilters{UserID: "test-user", Limit: 50})
 	require.NoError(t, err)
