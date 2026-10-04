@@ -8,27 +8,30 @@
  * real <label>, so the form is fully keyboard- and screen-reader-operable
  * without any custom focus management beyond the Modal's.
  *
- * WHAT IS NOT EDITABLE HERE. A trigger also carries preset assignments and
- * workflow input values. The chat composer's controls for those are bound to
- * the chat params store and the CURRENT project, not to a free-standing value,
- * so they are not reusable as-is. Rather than drop them, an edit carries them
- * through untouched (UpdateTrigger is a full replacement, so omitting them
- * would erase them) — unless the workflow changes, since inputs belong to the
- * workflow that declared them.
+ * The workflow's inputs, presets and workspace are RunWorkflowForm — the same
+ * store-free form the Run… dialog uses — so an automation edits exactly what a
+ * manual run would send. Inputs belong to the workflow that declared them, so
+ * switching workflow clears them, after a confirmation when any are set.
+ *
+ * UpdateTrigger is a full replacement on the server, so every field the
+ * trigger carries is in this form's state and goes back on save.
  */
 
 import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from "react";
+import { ChevronRight } from "lucide-react";
 
 import { Modal } from "../ui/Modal";
 import { Button } from "../ui/Button";
 import { useProjectStore } from "@/store/projectStore";
 import { getWorkflowDisplayName, normalizeWorkflowRef } from "../workflow/useWorkflowInputs";
+import { RunWorkflowForm, type RunWorkflowFormStatus } from "../workflow/run/RunWorkflowForm";
+import { countRunInputs, type RunWorkflowValue } from "../workflow/run/runWorkflowValues";
 import {
-  definitionFromTrigger,
   triggerErrorMessage,
   type OverlapPolicy,
   type Trigger,
   type TriggerDefinitionInput,
+  type TriggerSchedule,
 } from "@/api/trigger-grpc";
 import {
   useCreateTrigger,
@@ -51,18 +54,41 @@ import {
   type ScheduleFormState,
   type SchedulePreset,
 } from "./scheduleForm";
-import { errorTextClass, fieldClass, hintClass, labelClass, textareaClass } from "./automationFormStyles";
+import { errorTextClass, fieldClass, hintClass, labelClass, textareaClass } from "../workflow/run/runFormStyles";
 import { buildDaemonChoices, defaultDaemonId } from "./daemonChoices";
+
+/**
+ * Starting values for a NEW automation — a starter template, or "Save as
+ * automation" from a run. Ignored when editing, where the trigger is the
+ * source of truth.
+ */
+export interface AutomationPrefill {
+  name?: string;
+  projectId?: string;
+  workflow?: string;
+  message?: string;
+  /** Any subset; unset fields take the form's defaults. */
+  schedule?: Partial<TriggerSchedule>;
+  presets?: Record<string, string>;
+  /** Nested, as the wire carries them. */
+  params?: Record<string, unknown>;
+  worktreeId?: string;
+}
 
 export interface AutomationFormDialogProps {
   open: boolean;
   onClose: () => void;
   /** The trigger being edited; absent to create a new one. */
   trigger?: Trigger;
+  /** Starting values for a new automation. */
+  prefill?: AutomationPrefill;
   /** Project a new automation starts in. Defaults to the current project. */
   defaultProjectId?: string;
   onSaved?: (trigger: Trigger) => void;
 }
+
+/** A Go duration ("90s", "10m", "1h30m"); the server is the final judge. */
+const GO_DURATION = /^(\d+(\.\d+)?(ns|us|µs|ms|s|m|h))+$/;
 
 function browserTimezone(): string {
   try {
@@ -86,8 +112,10 @@ interface FieldErrors {
   project?: string;
   daemon?: string;
   message?: string;
+  inputs?: string;
   schedule?: string;
   timezone?: string;
+  catchup?: string;
   form?: string;
 }
 
@@ -101,10 +129,12 @@ export function AutomationFormDialog(props: AutomationFormDialogProps) {
 function AutomationFormBody({
   onClose,
   trigger,
+  prefill: prefillProp,
   defaultProjectId,
   onSaved,
 }: AutomationFormDialogProps) {
   const isEdit = !!trigger;
+  const prefill = isEdit ? undefined : prefillProp;
   const ids = useId();
   const fieldId = (name: string) => `${ids}-${name}`;
 
@@ -116,27 +146,69 @@ function AutomationFormBody({
     void loadProjects().catch(() => undefined);
   }, [loadProjects]);
 
-  const [name, setName] = useState(trigger?.name ?? "");
+  // An edit starts from the trigger; a new automation from the prefill.
+  const initialSchedule = trigger?.schedule ?? prefill?.schedule;
+
+  const [name, setName] = useState(trigger?.name ?? prefill?.name ?? "");
   const [projectId, setProjectId] = useState(
-    trigger?.projectId ?? defaultProjectId ?? currentProjectId ?? "",
+    trigger?.projectId ?? prefill?.projectId ?? defaultProjectId ?? currentProjectId ?? "",
   );
-  const [workflow, setWorkflow] = useState(trigger?.workflow ?? "");
+  const [workflow, setWorkflow] = useState(trigger?.workflow ?? prefill?.workflow ?? "");
+  const [inputs, setInputs] = useState<RunWorkflowValue>(() => ({
+    presets: { ...(trigger?.presets ?? prefill?.presets ?? {}) },
+    params: { ...(trigger?.params ?? prefill?.params ?? {}) },
+    worktreeId: trigger?.worktreeId ?? prefill?.worktreeId,
+  }));
+  const [inputsStatus, setInputsStatus] = useState<RunWorkflowFormStatus | null>(null);
+  // A workflow switch waiting on "clear the inputs?" confirmation.
+  const [pendingWorkflow, setPendingWorkflow] = useState<string | null>(null);
   const [daemonId, setDaemonId] = useState(trigger?.daemonId ?? "");
   // Once the user (or an edit's stored value) has chosen a daemon, the form
   // stops defaulting it — a project switch must not silently move the run.
   const daemonChosen = useRef(!!trigger?.daemonId);
-  const [message, setMessage] = useState(trigger?.message ?? "");
+  const [message, setMessage] = useState(trigger?.message ?? prefill?.message ?? "");
   const [schedule, setSchedule] = useState<ScheduleFormState>(() =>
-    trigger?.schedule ? formFromSchedule(trigger.schedule) : DEFAULT_SCHEDULE_FORM,
+    initialSchedule?.cron || initialSchedule?.interval
+      ? formFromSchedule({ cron: initialSchedule.cron ?? [], interval: initialSchedule.interval })
+      : DEFAULT_SCHEDULE_FORM,
   );
-  const [timezone, setTimezone] = useState(trigger?.schedule?.timezone ?? browserTimezone());
-  const [overlap, setOverlap] = useState<OverlapPolicy>(trigger?.schedule?.overlap ?? "skip");
+  const [timezone, setTimezone] = useState(initialSchedule?.timezone ?? browserTimezone());
+  const [overlap, setOverlap] = useState<OverlapPolicy>(initialSchedule?.overlap ?? "skip");
+  const [catchupWindow, setCatchupWindow] = useState(initialSchedule?.catchupWindow ?? "");
+  // Advanced settings open on their own when they hold something non-default,
+  // so an edit never hides a value it is about to save.
+  const [advancedOpen, setAdvancedOpen] = useState(
+    !!initialSchedule?.catchupWindow || initialSchedule?.overlap === "allow",
+  );
   const [errors, setErrors] = useState<FieldErrors>({});
+  const [attempted, setAttempted] = useState(false);
 
   // The project list loads asynchronously; settle on a project once it does.
   useEffect(() => {
     if (!projectId && projects.length > 0) setProjectId(projects[0]!.id);
   }, [projectId, projects]);
+
+  /** Inputs belong to the workflow (and a workspace to the project): reset both. */
+  const applyWorkflow = (next: string) => {
+    setWorkflow(next);
+    setInputs((prev) => ({ presets: {}, params: {}, worktreeId: prev.worktreeId }));
+    setPendingWorkflow(null);
+  };
+
+  const requestWorkflowChange = (next: string) => {
+    if (normalizeWorkflowRef(next) === normalizeWorkflowRef(workflow)) return;
+    if (countRunInputs(inputs) > 0) {
+      setPendingWorkflow(next);
+      return;
+    }
+    applyWorkflow(next);
+  };
+
+  const changeProject = (next: string) => {
+    setProjectId(next);
+    // A worktree belongs to one project; moving the automation drops it.
+    setInputs((prev) => ({ ...prev, worktreeId: undefined }));
+  };
 
   const workflowsQuery = useProjectWorkflowList(projectId || undefined);
   const workflowOptions = useMemo(() => {
@@ -203,27 +275,18 @@ function AutomationFormBody({
     ? null
     : describeSchedule({ ...scheduleFromForm(schedule), timezone });
 
-  const carriedInputCount = trigger
-    ? Object.keys(trigger.presets).length + Object.keys(trigger.params).length
-    : 0;
-  const workflowChanged =
-    !!trigger && normalizeWorkflowRef(trigger.workflow) !== normalizeWorkflowRef(workflow);
-
   const updateSchedule = (patch: Partial<ScheduleFormState>) =>
     setSchedule((prev) => ({ ...prev, ...patch }));
 
   const buildDefinition = (): TriggerDefinitionInput => {
-    const base = trigger ? definitionFromTrigger(trigger) : undefined;
     const wire = scheduleFromForm(schedule);
-    const keepInputs = base && !workflowChanged;
     return {
       name: name.trim(),
       projectId,
-      // A worktree belongs to one project; moving the automation drops it.
-      worktreeId: base && base.projectId === projectId ? base.worktreeId : undefined,
+      worktreeId: inputs.worktreeId,
       workflow,
-      presets: keepInputs ? base.presets : {},
-      params: keepInputs ? base.params : {},
+      presets: inputs.presets,
+      params: inputs.params,
       message: message.trim(),
       daemonId,
       schedule: {
@@ -231,13 +294,14 @@ function AutomationFormBody({
         interval: wire.interval,
         timezone: timezone.trim() || "UTC",
         overlap,
-        catchupWindow: base?.schedule.catchupWindow,
+        catchupWindow: catchupWindow.trim() || undefined,
       },
     };
   };
 
   const onSubmit = async (event: FormEvent) => {
     event.preventDefault();
+    setAttempted(true);
     const next: FieldErrors = {};
     if (!name.trim()) next.name = "Give the automation a name.";
     if (!projectId) next.project = "Choose a project.";
@@ -247,10 +311,24 @@ function AutomationFormBody({
         : "Choose the daemon this automation runs on.";
     }
     if (!message.trim()) next.message = "Write the prompt each run starts from.";
+    if (pendingWorkflow !== null) {
+      next.inputs = "Confirm or cancel the workflow change first.";
+    } else if (inputsStatus?.loading && workflow) {
+      next.inputs = "Wait for this workflow's inputs to load.";
+    } else if (inputsStatus && inputsStatus.missingRequired.length > 0) {
+      next.inputs = `Fill in the required inputs: ${inputsStatus.missingRequired.join(", ")}.`;
+    }
     if (scheduleError) next.schedule = scheduleError;
+    const catchup = catchupWindow.trim();
+    if (catchup && !GO_DURATION.test(catchup)) {
+      next.catchup = "Use a duration like 10m, 2h or 1h30m.";
+      setAdvancedOpen(true);
+    }
     setErrors(next);
     if (Object.keys(next).length > 0) {
-      const first = (["name", "project", "daemon", "message", "schedule"] as const).find((k) => next[k]);
+      const first = (["name", "project", "daemon", "message", "inputs", "schedule", "catchup"] as const).find(
+        (k) => next[k],
+      );
       if (first) document.getElementById(fieldId(first))?.focus();
       return;
     }
@@ -267,7 +345,9 @@ function AutomationFormBody({
       // back as InvalidArgument with a precise message; put it next to the
       // field it is about.
       const text = triggerErrorMessage(error);
-      setErrors({ [serverErrorField(text)]: text });
+      const field = serverErrorField(text);
+      if (field === "catchup") setAdvancedOpen(true);
+      setErrors({ [field]: text });
     }
   };
 
@@ -326,7 +406,7 @@ function AutomationFormBody({
                 id={fieldId("project")}
                 className={fieldClass}
                 value={projectId}
-                onChange={(e) => setProjectId(e.target.value)}
+                onChange={(e) => changeProject(e.target.value)}
                 aria-invalid={!!errors.project}
                 aria-describedby={describedBy(errors.project && fieldId("project-error"))}
               >
@@ -351,8 +431,8 @@ function AutomationFormBody({
               <select
                 id={fieldId("workflow")}
                 className={fieldClass}
-                value={workflow}
-                onChange={(e) => setWorkflow(e.target.value)}
+                value={pendingWorkflow ?? workflow}
+                onChange={(e) => requestWorkflowChange(e.target.value)}
                 aria-describedby={fieldId("workflow-hint")}
               >
                 <option value="">Your default workflow</option>
@@ -446,12 +526,52 @@ function AutomationFormBody({
             )}
           </div>
 
-          {carriedInputCount > 0 && (
-            <p className="rounded-md border border-border/60 bg-background px-3 py-2 text-xs text-muted-foreground">
-              {workflowChanged
-                ? `This automation's ${carriedInputCount} workflow input setting${carriedInputCount === 1 ? "" : "s"} will be cleared, because they belong to the previous workflow.`
-                : `This automation also sets ${carriedInputCount} workflow input${carriedInputCount === 1 ? "" : "s"}, which are kept as they are.`}
-            </p>
+          {pendingWorkflow !== null && (
+            <div
+              role="alertdialog"
+              aria-labelledby={fieldId("switch-title")}
+              aria-describedby={fieldId("switch-description")}
+              className="rounded-md border border-warning/40 bg-background px-3 py-3"
+            >
+              <p id={fieldId("switch-title")} className="text-sm font-medium text-foreground">
+                Switch to {pendingWorkflow ? getWorkflowDisplayName(pendingWorkflow, true) : "your default workflow"}?
+              </p>
+              <p id={fieldId("switch-description")} className="mt-1 text-xs text-muted-foreground">
+                {(() => {
+                  const count = countRunInputs(inputs);
+                  return `This clears the ${count} input setting${count === 1 ? "" : "s"} you have made, because they belong to the current workflow.`;
+                })()}
+              </p>
+              <div className="mt-3 flex justify-end gap-2">
+                <Button type="button" variant="ghost" size="sm" onClick={() => setPendingWorkflow(null)}>
+                  Keep current workflow
+                </Button>
+                <Button type="button" variant="primary" size="sm" onClick={() => applyWorkflow(pendingWorkflow)}>
+                  Switch and clear inputs
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {projectId && (
+            <div id={fieldId("inputs")} tabIndex={-1} className="focus:outline-none">
+              <RunWorkflowForm
+                projectId={projectId}
+                workflowRef={workflow}
+                value={inputs}
+                onChange={setInputs}
+                onStatusChange={setInputsStatus}
+                showValidation={attempted}
+                // A new automation starts from the workflow's default presets,
+                // as a manual run would; an edit keeps exactly what was saved.
+                applyDefaultPresets={!isEdit && !prefill?.presets && !prefill?.params}
+              />
+              {errors.inputs && !(attempted && inputsStatus?.missingRequired.length) && (
+                <p className={errorTextClass} role="alert">
+                  {errors.inputs}
+                </p>
+              )}
+            </div>
           )}
         </section>
 
@@ -505,27 +625,73 @@ function AutomationFormBody({
             {preview ?? "Finish the schedule to see when this runs."}
           </p>
 
-          <fieldset>
-            <legend className={labelClass}>If the previous run is still going</legend>
-            <div className="space-y-2">
-              <OverlapOption
-                id={fieldId("overlap-skip")}
-                name={fieldId("overlap")}
-                checked={overlap === "skip"}
-                onSelect={() => setOverlap("skip")}
-                title="Skip this run"
-                description="Recommended. Nothing starts while the last run is active or paused; the skip is recorded in the history."
+        </section>
+
+        <section aria-labelledby={fieldId("advanced-heading")}>
+          <h3 id={fieldId("advanced-heading")} className="m-0">
+            <button
+              type="button"
+              className="flex items-center gap-1.5 rounded-sm text-xs font-semibold uppercase tracking-wide text-muted-foreground hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+              aria-expanded={advancedOpen}
+              aria-controls={fieldId("advanced-body")}
+              onClick={() => setAdvancedOpen((open) => !open)}
+            >
+              <ChevronRight
+                aria-hidden="true"
+                className={cn("h-3.5 w-3.5 transition-transform motion-reduce:transition-none", advancedOpen && "rotate-90")}
               />
-              <OverlapOption
-                id={fieldId("overlap-allow")}
-                name={fieldId("overlap")}
-                checked={overlap === "allow"}
-                onSelect={() => setOverlap("allow")}
-                title="Start another run anyway"
-                description="Runs can pile up side by side if each one takes longer than the gap between them."
+              Advanced
+            </button>
+          </h3>
+          {/* Kept mounted while closed so a value set here is never lost. */}
+          <div id={fieldId("advanced-body")} hidden={!advancedOpen} className="mt-4 space-y-4">
+            <fieldset>
+              <legend className={labelClass}>If the previous run is still going</legend>
+              <div className="space-y-2">
+                <OverlapOption
+                  id={fieldId("overlap-skip")}
+                  name={fieldId("overlap")}
+                  checked={overlap === "skip"}
+                  onSelect={() => setOverlap("skip")}
+                  title="Skip this run"
+                  description="Recommended. Nothing starts while the last run is active or paused; the skip is recorded in the history."
+                />
+                <OverlapOption
+                  id={fieldId("overlap-allow")}
+                  name={fieldId("overlap")}
+                  checked={overlap === "allow"}
+                  onSelect={() => setOverlap("allow")}
+                  title="Start another run anyway"
+                  description="Runs can pile up side by side if each one takes longer than the gap between them."
+                />
+              </div>
+            </fieldset>
+
+            <div>
+              <label htmlFor={fieldId("catchup")} className={labelClass}>
+                Catch-up window
+              </label>
+              <input
+                id={fieldId("catchup")}
+                className={cn(fieldClass, "font-mono sm:w-48")}
+                value={catchupWindow}
+                onChange={(e) => setCatchupWindow(e.target.value)}
+                placeholder="10m"
+                spellCheck={false}
+                autoComplete="off"
+                aria-invalid={!!errors.catchup}
+                aria-describedby={describedBy(fieldId("catchup-hint"), errors.catchup && fieldId("catchup-error"))}
               />
+              <p id={fieldId("catchup-hint")} className={hintClass}>
+                How late a run missed during an outage may still start, such as 30m or 2h. Empty means 10 minutes.
+              </p>
+              {errors.catchup && (
+                <p id={fieldId("catchup-error")} className={errorTextClass}>
+                  {errors.catchup}
+                </p>
+              )}
             </div>
-          </fieldset>
+          </div>
         </section>
 
         <div className="flex justify-end gap-2 border-t border-border/60 pt-4">

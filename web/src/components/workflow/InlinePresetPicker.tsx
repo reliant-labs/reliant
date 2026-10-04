@@ -105,6 +105,7 @@ export function InlinePresetPicker({
         placement="top"
       >
         <button
+          type="button"
           onClick={handleTriggerClick}
           disabled={!canInteract}
           className={cn(
@@ -201,6 +202,7 @@ export function InlinePresetPicker({
 
             {/* None Option */}
             <button
+              type="button"
               onClick={() => handleSelect(null)}
               className={cn(
                 "w-full px-3 py-1.5 text-left text-xs transition-colors",
@@ -279,6 +281,7 @@ interface PresetOptionProps {
 function PresetOption({ preset, isSelected, onSelect }: PresetOptionProps) {
   return (
     <button
+      type="button"
       onClick={() => onSelect(preset)}
       className={cn(
         "w-full px-3 py-1.5 text-left text-xs transition-colors",

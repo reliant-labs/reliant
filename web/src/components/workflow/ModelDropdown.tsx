@@ -110,6 +110,7 @@ export function ModelDropdown({
                   return (
                     <button
                       key={model.id}
+                      type="button"
                       onClick={() => {
                         onChange({ id: model.id })
                         setIsOpen(false)

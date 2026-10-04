@@ -447,6 +447,7 @@ export function ToolsSelector({
                       return (
                         <button
                           key={tool.name}
+                          type="button"
                           onClick={() => toggleTool(tool.name)}
                           className={cn(
                             "w-full px-3 py-2 text-left text-sm transition-colors",

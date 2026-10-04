@@ -296,16 +296,25 @@ export const usePresets = () => {
   return { presets, loading: presetsLoading, error: presetsError };
 };
 
-// Get presets filtered for a specific workflow
+// Get presets filtered for a specific workflow, in the CURRENT project.
+// The chat composer's reading: its presets follow whichever project is open.
+export const usePresetsForWorkflow = (workflowName: string) => {
+  const projectId = useProjectStore((state) => state.currentProject?.id);
+  return useWorkflowPresets(projectId, workflowName);
+};
+
+// Get presets filtered for a specific workflow in an explicit project.
 // This calls the ListPresetsForWorkflow gRPC endpoint which validates
 // that preset params exist in the workflow and match tags.
-export const usePresetsForWorkflow = (workflowName: string) => {
+//
+// Forms that are not bound to the open project (the Run… form, an
+// automation being edited for another project) must use this one: project
+// presets differ per project, so reading the current one would offer — and
+// store — presets the run's project does not have.
+export const useWorkflowPresets = (projectId: string | undefined, workflowName: string) => {
   const [presets, setPresets] = React.useState<Preset[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
-
-  // Get current project from project store
-  const projectId = useProjectStore((state) => state.currentProject?.id);
 
   // Subscribe to presetsVersion to re-fetch when presets are updated
   const presetsVersion = useGlobalDataStore((state) => state.presetsVersion);

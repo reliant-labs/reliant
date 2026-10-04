@@ -37,7 +37,7 @@ vi.mock('../../../api/preset-grpc', () => ({
 }))
 
 vi.mock('../../../store/globalDataStore', () => ({
-  usePresetsForWorkflow: () => ({ presets: [], loading: false }),
+  useWorkflowPresets: () => ({ presets: [], loading: false }),
 }))
 
 vi.mock('../../../store/preferencesStore', () => ({

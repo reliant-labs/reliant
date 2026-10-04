@@ -1,17 +1,17 @@
 // Copyright (c) 2025 Reliant Labs
 
-import { useState, useMemo, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { fromJson } from "@bufbuild/protobuf";
 import { ValueSchema } from "@bufbuild/protobuf/wkt";
-import { workflowGrpc, type Workflow } from "../../api/workflow-grpc";
+import type { Workflow } from "../../api/workflow-grpc";
 import { presetGrpc } from "../../api/preset-grpc";
-import { usePresetsForWorkflow, type Preset } from "../../store/globalDataStore";
+import { useWorkflowPresets, type Preset } from "../../store/globalDataStore";
 import { usePreferencesStore } from "../../store/preferencesStore";
 import type { InputGroupDef } from "./WorkflowInputGroup";
 import type { InputDef } from "../../lib/inputHelpers";
-import { isConfigurableInput, getInputNestedInputs, getInputPresetConfig, getInputUI, getInputDefault } from "../../lib/inputHelpers";
-import { canonicalizeBuiltinWorkflowRef } from "./workflowRef";
+import { getInputDefault } from "../../lib/inputHelpers";
 import { isCelTemplate } from "../../lib/celTemplate";
+import { useWorkflowDefinition } from "./useWorkflowDefinition";
 
 // ============================================
 // Types
@@ -107,63 +107,6 @@ function ensureWorkflowRefPrefix(ref: string): string {
   return `builtin://${ref}`;
 }
 
-/** Build input groups from workflow definition by iterating proto inputs directly */
-function buildInputGroups(workflowDef: Workflow | null): InputGroupDef[] {
-  if (!workflowDef) return [];
-
-  const rawInputs = (workflowDef.inputs ?? (workflowDef as any).params) as Record<string, any> | undefined;
-  if (!rawInputs || Object.keys(rawInputs).length === 0) return [];
-
-  const groups: InputGroupDef[] = [];
-  const topLevel: Array<{ name: string; schema: InputDef }> = [];
-  const groupedMap = new Map<string, { presets?: { tag: string }; ui?: string; inputs: Array<{ name: string; schema: InputDef }> }>();
-
-  for (const [name, rawInput] of Object.entries(rawInputs)) {
-    if (rawInput?.type === "group") {
-      const nestedInputs = getInputNestedInputs(rawInput);
-      const presetConfig = getInputPresetConfig(rawInput);
-      const ui = getInputUI(rawInput);
-      const group: { presets?: { tag: string }; ui?: string; inputs: Array<{ name: string; schema: InputDef }> } = {
-        presets: presetConfig?.tag ? { tag: presetConfig.tag } : undefined,
-        ui,
-        inputs: [],
-      };
-      if (nestedInputs) {
-        for (const [paramName, nestedRaw] of Object.entries(nestedInputs)) {
-          if (!isConfigurableInput(nestedRaw)) continue;
-          group.inputs.push({ name: `${name}.${paramName}`, schema: nestedRaw });
-        }
-      }
-      if (group.inputs.length > 0) {
-        groupedMap.set(name, group);
-      }
-    } else {
-      if (!isConfigurableInput(rawInput)) continue;
-      topLevel.push({ name, schema: rawInput });
-    }
-  }
-
-  if (topLevel.length > 0) {
-    groups.push({
-      name: "",
-      label: "Parameters",
-      presets: workflowDef.presets,
-      inputs: topLevel,
-    });
-  }
-
-  for (const [groupName, groupData] of groupedMap) {
-    groups.push({
-      name: groupName,
-      label: groupName,
-      presets: groupData.presets,
-      inputs: groupData.inputs,
-    });
-  }
-
-  return groups;
-}
-
 // ============================================
 // Hook
 // ============================================
@@ -176,59 +119,30 @@ export function useWorkflowInputs({
   enabled = true,
   storedPresets: storedPresetsFromStep,
 }: UseWorkflowInputsOptions): UseWorkflowInputsResult {
-  // Workflow definition state
-  const [workflowDef, setWorkflowDef] = useState<Workflow | null>(null);
-  const [loadingDef, setLoadingDef] = useState(false);
-
   // Selected presets per group
   const [selectedPresets, setSelectedPresets] = useState<Record<string, string | null>>({});
 
   // Full ref with prefix for preset lookup
   const fullWorkflowRef = ensureWorkflowRefPrefix(workflowRef);
 
-  // Fetch presets for this workflow
-  const { presets, loading: presetsLoading } = usePresetsForWorkflow(fullWorkflowRef);
+  // Presets for this workflow, in the project the caller named.
+  const { presets, loading: presetsLoading } = useWorkflowPresets(projectId, fullWorkflowRef);
 
-  // Fetch workflow definition when selection changes
-  useEffect(() => {
-    if (!projectId || !workflowRef || !enabled) {
-      setWorkflowDef(null);
-      return;
-    }
-
-    const fetchDef = async () => {
-      setLoadingDef(true);
-      try {
-        const builtinWorkflowRefs = (await workflowGrpc.listWorkflows(projectId))
-          .filter((workflow) => workflow.source === "builtin")
-          .map((workflow) => workflow.name);
-        const canonicalWorkflowRef = canonicalizeBuiltinWorkflowRef(
-          workflowRef,
-          builtinWorkflowRefs,
-        );
-        const result = await workflowGrpc.getWorkflow(projectId, {
-          name: canonicalWorkflowRef,
-        });
-        setWorkflowDef(result.workflow ?? null);
-        // Reset preset selection and the "stored presets applied" gate so the
-        // stored-presets effect re-runs against the new workflow's preset list.
-        setSelectedPresets({});
-        setStoredPresetsApplied(false);
-      } catch (error) {
-        console.error("Failed to fetch workflow definition:", error);
-        setWorkflowDef(null);
-      } finally {
-        setLoadingDef(false);
-      }
-    };
-    fetchDef();
-  }, [projectId, workflowRef, enabled]);
-
-  // Build input groups from workflow definition
-  const inputGroups = useMemo(
-    () => buildInputGroups(workflowDef),
-    [workflowDef]
+  // Workflow definition and its input groups, refetched when selection changes.
+  const { workflowDef, loading: loadingDef, inputGroups } = useWorkflowDefinition(
+    projectId,
+    workflowRef,
+    enabled,
   );
+
+  // A newly loaded definition resets preset selection and the "stored presets
+  // applied" gate so the stored-presets effect re-runs against the new
+  // workflow's preset list.
+  useEffect(() => {
+    if (!workflowDef) return;
+    setSelectedPresets({});
+    setStoredPresetsApplied(false);
+  }, [workflowDef]);
 
   // Ref to read latest values without re-triggering the effect
   const valuesRef = useRef(values);
