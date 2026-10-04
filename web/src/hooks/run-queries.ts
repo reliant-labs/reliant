@@ -20,6 +20,10 @@ export const runKeys = {
   all: ["runs"] as const,
   lists: () => [...runKeys.all, "list"] as const,
   list: (filters: RunListFilters) => [...runKeys.lists(), filters] as const,
+  /** Under lists(): the update stream's invalidation reaches it too. */
+  children: (parentChatId: string) => [...runKeys.lists(), "children", parentChatId] as const,
+  launchEvent: (chatId: string) => [...runKeys.all, "launch-event", chatId] as const,
+  firstPrompt: (chatId: string) => [...runKeys.all, "first-prompt", chatId] as const,
 };
 
 /**
@@ -85,6 +89,68 @@ export function useRunList(filters: RunListFilters) {
     /** A page after the first failed; the loaded rows stay. */
     isFetchNextPageError: query.isFetchNextPageError,
   };
+}
+
+/**
+ * The event that launched a chat: who started it, the scheduled slot, and
+ * what it was started with. `data` is null for a chat with no launch event
+ * (one from before launch events existed), which is not an error.
+ *
+ * A launch event is written once and never changes, so it is never refetched.
+ */
+export function useLaunchEvent(chatId: string | undefined) {
+  return useQuery({
+    queryKey: runKeys.launchEvent(chatId ?? ""),
+    queryFn: async () => (await runGrpc.launchEvent(chatId!)) ?? null,
+    enabled: !!chatId,
+    staleTime: Infinity,
+  });
+}
+
+/**
+ * The prompt a run was started with, read from its first messages (the launch
+ * event records no message text). Immutable, so never refetched. Only fetched
+ * when a caller asks; `enabled` lets run detail defer it until needed.
+ */
+export function useFirstPrompt(chatId: string | undefined, enabled = true) {
+  return useQuery({
+    queryKey: runKeys.firstPrompt(chatId ?? ""),
+    queryFn: async () => (await runGrpc.firstPrompt(chatId!)) ?? null,
+    enabled: !!chatId && enabled,
+    staleTime: Infinity,
+  });
+}
+
+/** How many child runs the parent chat's header lists. */
+export const CHILD_RUNS_LIMIT = 5;
+
+/**
+ * The runs an agent started from this chat (decision 4: they are not listed
+ * in the sidebar, so the parent's header is where they are discovered).
+ *
+ * One small page, for ONE chat: the open chat's header, never a sidebar row.
+ * Keyed under `runKeys.lists()`, so the update stream's invalidation on
+ * chat_created and chat_activity_changed refreshes it; it does not poll.
+ * Every project and every time: a child is a child wherever it runs.
+ */
+export function useChildRuns(parentChatId: string | undefined, enabled = true) {
+  return useQuery({
+    queryKey: runKeys.children(parentChatId ?? ""),
+    queryFn: () =>
+      runGrpc.list(
+        create(ListRunsRequestSchema, {
+          parentChatId,
+          limit: CHILD_RUNS_LIMIT + 1,
+          includeArchived: false,
+        }),
+      ),
+    enabled: !!parentChatId && enabled,
+    select: (page) => ({
+      runs: page.runs.slice(0, CHILD_RUNS_LIMIT),
+      /** More than the strip shows. */
+      hasMore: page.runs.length > CHILD_RUNS_LIMIT || page.nextPageToken !== "",
+    }),
+  });
 }
 
 // ── Mutation hooks ──────────────────────────────────────────────────────────

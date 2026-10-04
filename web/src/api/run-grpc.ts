@@ -26,9 +26,17 @@ import {
   type ListRunsRequest,
   type Run as ProtoRun,
 } from "../gen/reliant/v1/run_pb";
-import type { ChatActivity, WorkflowState, WorkflowStopReason } from "../gen/reliant/v1/chat_pb";
+import {
+  ContentBlockType,
+  MessageRole,
+  type ChatActivity,
+  type WorkflowState,
+  type WorkflowStopReason,
+} from "../gen/reliant/v1/chat_pb";
+import { TriggerEventKind, type TriggerEvent as ProtoTriggerEvent } from "../gen/reliant/v1/trigger_pb";
 import type { RunRangeKey, RunStateFilterKey, RunsSearch } from "../routeSchemas";
-import type { Chat } from "../types/chat";
+import type { Chat, Message } from "../types/chat";
+import { chatGrpc } from "./chat-grpc";
 
 // ============================================
 // Frontend types
@@ -58,6 +66,10 @@ export interface RunSummary {
   createdAt: number;
   /** Epoch ms; unset while the run has not finished. */
   completedAt?: number;
+  /** The chat whose agent started this run; set for agent.start_run only. */
+  parentChatId?: string;
+  /** That chat's title; unset when it is gone or not the caller's. */
+  parentChatTitle?: string;
 }
 
 export interface RunPage {
@@ -85,6 +97,8 @@ export function runFromProto(run: ProtoRun): RunSummary {
     outcome: run.outcome,
     createdAt: Number(run.createdAtMs),
     completedAt: completedAt > 0 ? completedAt : undefined,
+    parentChatId: run.parentChatId || undefined,
+    parentChatTitle: run.parentChatTitle || undefined,
   };
 }
 
@@ -134,7 +148,9 @@ const RANGE_MS: Record<Exclude<RunRangeKey, "all">, number> = {
 export const DEFAULT_RUN_RANGE: RunRangeKey = "24h";
 
 /** The search-param filters plus the resolved project (decision 10). */
-export type RunListFilters = Omit<RunsSearch, "allProjects" | "group"> & {
+export type RunListFilters = Omit<RunsSearch, "allProjects" | "group" | "parent"> & {
+  /** Only runs an agent started from this chat (`?parent=`). */
+  parentChatId?: string;
   /** Set to scope to one project; unset lists every project. */
   projectId?: string;
 };
@@ -164,11 +180,122 @@ export function buildListRunsRequest(
     displayStates: [...displayStates],
     startedAfter: range === "all" ? undefined : timestampFromMs(options.now - RANGE_MS[range]),
     query: query || undefined,
+    parentChatId: filters.parentChatId || undefined,
     pageToken: options.pageToken || undefined,
     limit: options.limit ?? 0,
     includeArchived: false,
   });
 }
+
+// ============================================
+// Launch event
+// ============================================
+
+/** What a run was started with, as the launcher recorded it. */
+export interface LaunchStart {
+  /** The resolved workflow name. */
+  workflow: string;
+  /** Preset per input group; "" is the workflow-level group. */
+  presets: Record<string, string>;
+  /** Explicit input values, nested by group. */
+  params: Record<string, unknown>;
+}
+
+/**
+ * The event that launched a chat (TriggerService.GetLaunchEvent), with its
+ * free-form payload read into the fields the run detail shows. Every
+ * payload field is optional: the payload is recorded verbatim at launch, so
+ * an older row may lack any of them.
+ */
+export interface LaunchEvent {
+  /** "chat.start", "schedule" or "agent.start_run"; empty for a kind this client does not know. */
+  kind: string;
+  /** Unset for ad hoc kinds, and once the automation is deleted. */
+  triggerId?: string;
+  /** RFC3339; for a schedule, the time the fire was FOR. */
+  occurredAt: string;
+  start?: LaunchStart;
+  /** RFC3339 UTC slot of a scheduled fire. */
+  scheduledFor?: string;
+  /** The automation's name when it fired. */
+  triggerName?: string;
+  /** A "Run now" fire of a schedule. */
+  manual: boolean;
+  /** The chat whose agent started this run. */
+  parentChatId?: string;
+}
+
+const LAUNCH_EVENT_KINDS: Partial<Record<TriggerEventKind, string>> = {
+  [TriggerEventKind.CHAT_START]: "chat.start",
+  [TriggerEventKind.SCHEDULE]: "schedule",
+  [TriggerEventKind.AGENT_START_RUN]: "agent.start_run",
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function optionalString(value: unknown): string | undefined {
+  return typeof value === "string" && value !== "" ? value : undefined;
+}
+
+function stringRecord(value: unknown): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (!isRecord(value)) return out;
+  for (const [key, entry] of Object.entries(value)) {
+    if (typeof entry === "string") out[key] = entry;
+  }
+  return out;
+}
+
+export function launchEventFromProto(event: ProtoTriggerEvent): LaunchEvent {
+  const payload: Record<string, unknown> = isRecord(event.payload) ? event.payload : {};
+  const start = isRecord(payload.start) ? payload.start : undefined;
+  return {
+    kind: LAUNCH_EVENT_KINDS[event.kind] ?? "",
+    triggerId: event.triggerId || undefined,
+    occurredAt: event.occurredAt,
+    start: start
+      ? {
+          workflow: typeof start.workflow === "string" ? start.workflow : "",
+          presets: stringRecord(start.presets),
+          params: isRecord(start.params) ? start.params : {},
+        }
+      : undefined,
+    scheduledFor: optionalString(payload.scheduled_for),
+    triggerName: optionalString(payload.trigger_name),
+    manual: payload.manual === true,
+    parentChatId: optionalString(payload.parent_chat_id),
+  };
+}
+
+/**
+ * The prompt a run was started with: the earliest user message the chat
+ * itself holds.
+ *
+ * The launch event deliberately does not record message text (the messages
+ * table holds it), so it is read back from there. A launched chat's seed
+ * messages are its first rows, and `seq` is chat-global, so a small window
+ * below a low cursor reaches them without loading the transcript. Only rows
+ * this chat owns count: a branch would otherwise report its parent's prompt.
+ */
+export function firstPromptOf(messages: Message[], chatId: string): string | undefined {
+  let first: Message | undefined;
+  for (const message of messages) {
+    if (message.role !== MessageRole.USER || message.chatId !== chatId) continue;
+    if (!first || message.seq < first.seq) first = message;
+  }
+  if (!first) return undefined;
+  const text = first.contentBlocks
+    .filter((block) => block.type === ContentBlockType.TEXT && block.content)
+    .map((block) => block.content)
+    .join("\n\n")
+    .trim();
+  return text || undefined;
+}
+
+/** How far into a chat to look for its seed messages. */
+const SEED_WINDOW = 16;
 
 // ============================================
 // Errors
@@ -211,6 +338,21 @@ export const runGrpc = {
     if (!response.chat) throw new Error("No chat in response");
     const { $typeName: _, ...chat } = response.chat;
     return chat;
+  },
+
+  /**
+   * The event that launched a chat. Undefined for a chat with none: one that
+   * predates launch events. NotFound (not the caller's, or gone) throws.
+   */
+  async launchEvent(chatId: string): Promise<LaunchEvent | undefined> {
+    const response = await grpcClient.trigger().getLaunchEvent({ chatId });
+    return response.event ? launchEventFromProto(response.event) : undefined;
+  },
+
+  /** The prompt a run was started with; see firstPromptOf. */
+  async firstPrompt(chatId: string): Promise<string | undefined> {
+    const page = await chatGrpc.listMessages(chatId, { recent: SEED_WINDOW, before_seq: SEED_WINDOW });
+    return firstPromptOf(page.messages, chatId);
   },
 
   /**

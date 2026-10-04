@@ -9,12 +9,15 @@
  * (the same inputs every other surface uses), and the "started by" line from
  * the launch-kind vocabulary in the same module.
  *
- * Re-run and Retry (§4.2's action table) are not here: they need the run's
- * original inputs, which no RPC returns yet. Deferred with that gap.
+ * Once a run has stopped it offers "Re-run (current definition)" (§14.1
+ * decision 3: there is no definition snapshot, so the label says which
+ * definition it uses). A failed run's Retry is the same action, not a second
+ * path. A scheduled run also offers "Run automation now", which fires the
+ * automation itself and stays unattended under its policy.
  */
 
 import { Link } from "@tanstack/react-router";
-import { MessageSquarePlus, Pause, Play, Square, Workflow } from "lucide-react";
+import { CalendarClock, MessageSquarePlus, Pause, Play, RotateCcw, Square, Workflow } from "lucide-react";
 
 import type { Chat } from "@/api/client";
 import { useDaemonStatus } from "@/hooks/useDaemonStatus";
@@ -34,6 +37,13 @@ export interface RunHeaderActions {
   onOpenAsChat: () => void;
   /** Show or hide the workflow diagram; omitted where there is no diagram. */
   onToggleDiagram?: () => void;
+  /**
+   * Start a new attended run with this run's recorded inputs. Omitted while
+   * they are unknown (still loading, or a run from before launch events).
+   */
+  onRerun?: () => void;
+  /** Fire this run's automation now; omitted unless it is a live automation's run. */
+  onRunAutomationNow?: () => void;
 }
 
 interface RunHeaderProps {
@@ -111,6 +121,28 @@ export function RunHeader({ chat, triggerName, parent, projectName, actions, bus
               disabled={busy}
             >
               Stop
+            </Button>
+          )}
+          {!live && actions.onRerun && (
+            <Button
+              size="sm"
+              variant={status.key === "failed" ? "primary" : "outline"}
+              leftIcon={<RotateCcw className="h-4 w-4" />}
+              onClick={actions.onRerun}
+              disabled={busy}
+            >
+              Re-run (current definition)
+            </Button>
+          )}
+          {actions.onRunAutomationNow && (
+            <Button
+              size="sm"
+              variant="ghost"
+              leftIcon={<CalendarClock className="h-4 w-4" />}
+              onClick={actions.onRunAutomationNow}
+              disabled={busy}
+            >
+              Run automation now
             </Button>
           )}
           {actions.onToggleDiagram && (

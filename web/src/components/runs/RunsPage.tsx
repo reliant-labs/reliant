@@ -14,6 +14,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { Activity, CalendarClock, Workflow } from "lucide-react";
 
 import { runErrorMessage } from "@/api/run-grpc";
+import { useChat } from "@/hooks/chat-queries";
 import { useRunList } from "@/hooks/run-queries";
 import { useTriggers } from "@/hooks/trigger-queries";
 import { useProjectStore } from "@/store/projectStore";
@@ -48,19 +49,25 @@ export function RunsView() {
     void loadProjects().catch(() => undefined);
   }, [loadProjects]);
 
-  const scopeProjectId = search.allProjects ? undefined : currentProject?.id;
+  // A chat's children (?parent=) are listed wherever and whenever they ran:
+  // the parent chat's header promised "N runs started here", and a project
+  // scope or the 24-hour default would silently drop some of them.
+  const parent = search.parent;
+  const scopeProjectId = search.allProjects || parent ? undefined : currentProject?.id;
   const filters = useMemo(
     () => ({
       projectId: scopeProjectId,
+      parentChatId: parent,
       state: search.state,
       kind: search.kind,
       workflow: search.workflow,
       trigger: search.trigger,
-      range: search.range,
+      range: parent && !search.range ? ("all" as const) : search.range,
       q: search.q,
     }),
-    [scopeProjectId, search.state, search.kind, search.workflow, search.trigger, search.range, search.q],
+    [scopeProjectId, parent, search.state, search.kind, search.workflow, search.trigger, search.range, search.q],
   );
+  const parentTitle = useChat(parent).data?.title;
   const list = useRunList(filters);
 
   // Name the automation a ?trigger= link filters by. Automations are few, and
@@ -101,6 +108,7 @@ export function RunsView() {
       <RunFilters
         currentProjectName={currentProject?.name}
         triggerName={triggerName}
+        parentTitle={parentTitle}
       />
 
       {list.isLoading ? (

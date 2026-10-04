@@ -25,7 +25,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { presetGrpc, type Preset } from "@/api/preset-grpc";
 import { worktreeGrpc } from "@/api/worktree-grpc";
-import { buildDaemonChoices } from "@/components/Automations/daemonChoices";
+import { buildDaemonChoices, daemonLabel } from "@/components/Automations/daemonChoices";
 import { useDaemonStatus } from "@/hooks/useDaemonStatus";
 import { useProjectDaemonInstalls } from "@/hooks/trigger-queries";
 import { CardInset } from "@/components/forge-ui/card";
@@ -394,6 +394,13 @@ function MachineField({ id, projectId, daemonId, disabled, onChange }: MachineFi
     () => buildDaemonChoices(daemons, installsQuery.data ?? [], projectId).filter((c) => c.eligible),
     [daemons, installsQuery.data, projectId],
   );
+  // A prefilled machine (a re-run's original) stays selectable even when it no
+  // longer qualifies, so the field shows what will be sent instead of reading
+  // "Default machine" over an id it still submits.
+  const storedUnlisted = daemonId && ready && !choices.some((c) => c.daemonId === daemonId);
+  const storedLabel = storedUnlisted
+    ? `${daemonLabel(daemons.find((d) => d.daemonId === daemonId), daemonId)} (unavailable)`
+    : undefined;
 
   return (
     <div>
@@ -409,6 +416,7 @@ function MachineField({ id, projectId, daemonId, disabled, onChange }: MachineFi
         aria-describedby={`${id}-hint`}
       >
         <option value="">Default machine</option>
+        {storedLabel && <option value={daemonId}>{storedLabel}</option>}
         {choices.map((choice) => (
           <option key={choice.daemonId} value={choice.daemonId}>
             {choice.label} ({choice.statusLabel}

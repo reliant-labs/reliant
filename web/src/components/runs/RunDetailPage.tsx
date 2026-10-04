@@ -11,7 +11,6 @@
  * offers the run's controls, and a card saying what fired it.
  */
 
-import { useMemo } from "react";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { toast } from "sonner";
 
@@ -19,7 +18,6 @@ import type { Chat } from "@/api/client";
 import { runErrorMessage } from "@/api/run-grpc";
 import { useChat } from "@/hooks/chat-queries";
 import { useAdoptRun, useRunControl } from "@/hooks/run-queries";
-import { useTriggers } from "@/hooks/trigger-queries";
 import { useProjectStore } from "@/store/projectStore";
 import Card from "../forge-ui/card";
 import { Button } from "../ui/Button";
@@ -28,6 +26,8 @@ import { RunHeader } from "./RunHeader";
 import { useRunRoute } from "./RunRouteLoader";
 import { RunsShell } from "./RunsPage";
 import { TriggerCard } from "./TriggerCard";
+import { useRerun } from "./useRerun";
+import { useRunLaunch } from "./useRunLaunch";
 import { RunMachineBanner } from "./MachineStatus";
 
 export function RunDetailPage() {
@@ -64,11 +64,9 @@ function LoadedRun({ initialChat }: { initialChat: Chat }) {
   const projectName = useProjectStore(
     (state) => state.projects.find((p) => p.id === chat.projectId)?.name,
   );
-  const triggers = useTriggers();
-  const triggerName = useMemo(
-    () => (chat.triggerId ? triggers.data?.find((t) => t.id === chat.triggerId)?.name : undefined),
-    [chat.triggerId, triggers.data],
-  );
+  const launch = useRunLaunch(chat);
+  const triggerName = launch.triggerName;
+  const rerun = useRerun(chat, launch.event, triggerName);
 
   const control = useRunControl();
   const adopt = useAdoptRun();
@@ -102,18 +100,34 @@ function LoadedRun({ initialChat }: { initialChat: Chat }) {
         <RunHeader
           chat={chat}
           triggerName={triggerName}
+          parent={launch.parent}
           projectName={projectName}
-          busy={control.isPending || adopt.isPending}
+          busy={control.isPending || adopt.isPending || rerun.busy}
           actions={{
             onPause: () => runAction("pause", "pause"),
             onResume: () => runAction("resume", "resume"),
             onStop: () => runAction("stop", "stop"),
             onOpenAsChat,
+            onRerun: rerun.onRerun,
+            onRunAutomationNow: rerun.onRunAutomationNow,
           }}
         />
         <RunMachineBanner chat={chat} />
-        <TriggerCard launchKind={chat.launchKind} triggerId={chat.triggerId} triggerName={triggerName} />
+        {/* Not until the launch event has loaded: the card must not show
+            text that later changes meaning (§4.4). */}
+        {!launch.loading && (
+          <TriggerCard
+            launchKind={chat.launchKind}
+            triggerId={chat.triggerId}
+            triggerName={triggerName}
+            timezone={launch.timezone}
+            parent={launch.parent}
+            event={launch.event}
+            prompt={rerun.prompt}
+          />
+        )}
       </div>
+      {rerun.dialog}
       <div className="min-h-0 flex-1">
         <ChatContainer tabId={chat.id} hideChatTitle />
       </div>

@@ -45,13 +45,22 @@ export function useTriggers(projectId?: string, options: { enabled?: boolean } =
  * sidebar row. Undefined while loading, or when the automation was deleted.
  */
 export function useTriggerName(triggerId: string | undefined): string | undefined {
+  return useTriggerById(triggerId)?.name;
+}
+
+/**
+ * An automation by id, from the same non-polling every-project entry as
+ * useTriggerName, for labels that need more than its name (run detail's
+ * schedule timezone). Undefined while loading, or when it was deleted.
+ */
+export function useTriggerById(triggerId: string | undefined): Trigger | undefined {
   const { data } = useQuery({
     queryKey: triggerKeys.list(undefined),
     queryFn: () => triggerGrpc.list(undefined),
     enabled: !!triggerId,
     staleTime: 5 * 60_000,
   });
-  return triggerId ? data?.find((trigger) => trigger.id === triggerId)?.name : undefined;
+  return triggerId ? data?.find((trigger) => trigger.id === triggerId) : undefined;
 }
 
 export function useTrigger(id?: string) {

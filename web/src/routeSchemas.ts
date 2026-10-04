@@ -496,6 +496,13 @@ export const runsSearchSchema = z.object({
   allProjects: z.boolean().optional().catch(undefined),
   /** False turns off grouping of repeated automation runs (on by default). */
   group: z.boolean().optional().catch(undefined),
+  /**
+   * Only the runs an agent started from this chat (decision 4: they are not in
+   * the sidebar; the parent chat's header links here). Spans every project
+   * and every time: a chat's children are few, and a child in another project
+   * or older than the default window is still that chat's child.
+   */
+  parent: z.string().min(1).optional().catch(undefined),
 });
 /** Every key optional: absent is the default, which is what links omit. */
 export type RunsSearch = Partial<z.output<typeof runsSearchSchema>>;
