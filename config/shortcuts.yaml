@@ -71,6 +71,7 @@ categories:
   - "Terminal"
   - "Chat Control"
   - "Parameters"
+  - "Workflow Builder"
 
 shortcuts:
   # ==================================
@@ -666,7 +667,19 @@ shortcuts:
     binding: Cmd+K I
     handler: onEditWorkflowParams
 
-  # NOTE: an "edit the focused parameter" binding in the workflow-canvas context
-  # was removed rather than shipped dead — nothing in the workflow builder marks
-  # itself with data-context="workflow-canvas", so the shortcut could never
-  # resolve. Add the marker to the canvas first, then reintroduce the binding.
+  # ==================================
+  # Workflow builder
+  # ==================================
+  # The builder marks its whole surface data-context="workflow-canvas" and
+  # mounts a dispatcher for these handlers (useWorkflowBuilderShortcuts), so a
+  # binding here actually fires on /workflow/*. An "edit the focused
+  # parameter" binding was removed earlier for lack of that marker; it can
+  # return now that the marker exists.
+  - id: openStepPalette
+    name: Add Step
+    description: Search built-in steps and integration actions to add one
+    category: Workflow Builder
+    binding: Cmd+I
+    context: workflow-canvas
+    allow_in_input: true
+    handler: onOpenStepPalette

@@ -307,3 +307,14 @@ describe("shortcut definitions", () => {
     expect(focus.shortcut?.handler).toBe("onFocusRightSidebar");
   });
 });
+
+describe("workflow builder shortcuts", () => {
+  it("opens the step palette inside the builder, even from a config field, and nowhere else", () => {
+    for (const platform of [MAC_DESKTOP, MAC_WEB, PC_WEB]) {
+      const registry = buildRegistry(platform);
+      const chord = parseBinding("Cmd+I", platform.isMac);
+      expect(registry.resolve(chord, ["workflow-canvas", "global"]).shortcut?.handler).toBe("onOpenStepPalette");
+      expect(registry.resolve(chord, ["global"]).kind).toBe("none");
+    }
+  });
+});

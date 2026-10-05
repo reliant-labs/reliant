@@ -50,6 +50,10 @@ import {
   withWorkflowArgs,
 } from "../../../types/workflow";
 import { workflowToFlowElements } from "../../../lib/workflow-flow";
+import {
+  carriedDefinitionFields,
+  withoutCarriedDefinitionFields,
+} from "../../../lib/nodes-edges-to-workflow";
 
 /**
  * Navigation context for editing inline workflows (loops or workflow nodes
@@ -206,8 +210,11 @@ export function useInlineEditStack({
       setEdges(loadedEdges as Edge[]);
       // Swap workflow metadata to the inline body's. Clear entry so that
       // buildWorkflow derives entry from the visual edges.
+      // The parent's carried fields (declared triggers, title, …) are the
+      // parent's: the body gets its own, so they cannot leak into it.
       setWorkflow((prev) => ({
-        ...prev,
+        ...withoutCarriedDefinitionFields(prev),
+        ...carriedDefinitionFields(inlineWorkflow),
         name: inlineWorkflow.name || "",
         description: inlineWorkflow.description || "",
         inputs: inlineWorkflow.inputs || {},
@@ -262,7 +269,8 @@ export function useInlineEditStack({
       // Restore parent metadata (shared across save/discard branches).
       const restoreParentMeta = () => {
         setWorkflow((prev) => ({
-          ...prev,
+          ...withoutCarriedDefinitionFields(prev),
+          ...carriedDefinitionFields(context.parentWorkflow),
           name: context.parentWorkflow.name || "",
           description: context.parentWorkflow.description || "",
           inputs: context.parentWorkflow.inputs || {},

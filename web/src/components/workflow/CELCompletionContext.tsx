@@ -1,4 +1,5 @@
 import { createContext, useContext, useRef, useSyncExternalStore, type ReactNode } from 'react';
+import type { JsonSchema } from '../../lib/jsonSchema';
 
 export interface CELCompletionContextValue {
   /** All node IDs in the workflow */
@@ -11,6 +12,10 @@ export interface CELCompletionContextValue {
   edges?: Array<{ source: string; target: string }>;
   /** Per-node declared output keys (e.g., from router outputs map) */
   nodeDeclaredOutputs?: Record<string, string[]>;
+  /** Per-node JSON Schema of `nodes.<id>.data` (action output schemas). */
+  nodeOutputSchemas?: Record<string, JsonSchema>;
+  /** JSON Schema of `trigger.payload` for this workflow's declared triggers. */
+  triggerPayloadSchema?: JsonSchema;
 }
 
 const CELCompletionCtx = createContext<CELCompletionContextValue | null>(null);

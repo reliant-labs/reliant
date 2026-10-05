@@ -16,6 +16,7 @@ import {
 } from './cel-completion-service'
 import type { CELFieldInfo } from '../gen/reliant/v1/catalog_pb'
 import { TRIGGER_CEL_FIELDS, TRIGGER_CEL_NAMESPACE } from './trigger-cel-fields'
+import { schemaAtPath, schemaProperties, schemaType, type JsonSchema } from './jsonSchema'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -38,6 +39,13 @@ export interface CELCompletionContext {
   currentNodeType?: string
   /** Per-node declared output keys (e.g., router declared outputs) */
   nodeDeclaredOutputs?: Record<string, string[]>
+  /**
+   * Per-node JSON Schema of `nodes.<id>.data` — an action node's
+   * output_schema from its integration manifest.
+   */
+  nodeOutputSchemas?: Record<string, JsonSchema>
+  /** JSON Schema of `trigger.payload`, from the declared triggers' catalog entries. */
+  triggerPayloadSchema?: JsonSchema
 }
 
 export interface ParsedCELContext {
@@ -358,7 +366,11 @@ export function resolveCompletions(
     if (nodeType) {
       const schemaFields = getFieldCompletions(getNodeOutputSchema(nodeType))
       // Merge declared output keys (e.g., from router outputs map)
-      const declaredKeys = ctx.nodeDeclaredOutputs?.[nodeId] ?? []
+      const declaredKeys = [...(ctx.nodeDeclaredOutputs?.[nodeId] ?? [])]
+      // An action whose output schema is known also exposes `data`.
+      if (ctx.nodeOutputSchemas?.[nodeId] && !schemaFields.some((f) => f.label === 'data')) {
+        declaredKeys.push('data')
+      }
       const declaredFields: CompletionEntry[] = declaredKeys
         .filter((k) => !schemaFields.some((f) => f.label === k))
         .map((k) => ({
@@ -378,9 +390,28 @@ export function resolveCompletions(
     return getMemberFunctionCompletions()
   }
 
+  // path = ["nodes", "<id>", "data", ...deeper] — an action's output schema
+  if (root === 'nodes' && parsed.path.length > 2 && parsed.path[2] === 'data') {
+    const schema = ctx.nodeOutputSchemas?.[parsed.path[1]]
+    if (schema) {
+      return [
+        ...getSchemaFieldCompletions(schemaAtPath(schema, parsed.path.slice(3))),
+        ...getMemberFunctionCompletions(),
+      ]
+    }
+  }
+
   // path = ["nodes", "<id>", ...deeper]
   if (root === 'nodes' && parsed.path.length > 2) {
     return getMemberFunctionCompletions()
+  }
+
+  // path = ["trigger", "payload", ...deeper] — the declared triggers' payload
+  if (root === TRIGGER_CEL_NAMESPACE && parsed.path.length >= 2 && parsed.path[1] === 'payload' && ctx.triggerPayloadSchema) {
+    return [
+      ...getSchemaFieldCompletions(schemaAtPath(ctx.triggerPayloadSchema, parsed.path.slice(2))),
+      ...getMemberFunctionCompletions(),
+    ]
   }
 
   // path = ["inputs"]
@@ -487,6 +518,18 @@ function getMemberFunctionCompletions(): CompletionEntry[] {
     detail: fn.signature,
     documentation: fn.description + (fn.example ? `\n\nExample: ${fn.example}` : ''),
     sortGroup: 2,
+  }))
+}
+
+function getSchemaFieldCompletions(schema: JsonSchema | undefined): CompletionEntry[] {
+  const target = schema && schemaType(schema) === 'array' && schema.items ? schema.items : schema
+  return schemaProperties(target).map(([name, property]) => ({
+    label: name,
+    kind: 'field' as const,
+    insertText: name,
+    detail: schemaType(property) ?? 'any',
+    documentation: property.description ?? '',
+    sortGroup: 1,
   }))
 }
 

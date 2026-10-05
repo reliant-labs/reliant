@@ -35,6 +35,8 @@ import { NodeThreadConfigEditor } from "../NodeThreadConfigEditor";
 import { getConditionExpression, getStringValue, AdvancedProjectSettings } from "./shared";
 import { RunStepConfig } from "./RunStepConfig";
 import { ActionStepConfig } from "./ActionStepConfig";
+import { IntegrationActionConfig } from "./IntegrationActionConfig";
+import { getActionUses, isIntegrationActionStep } from "../../../lib/actionNodeArgs";
 import { WorkflowStepConfig } from "./WorkflowStepConfig";
 import { JoinStepConfig } from "./JoinStepConfig";
 import { LoopStepConfig } from "./LoopStepConfig";
@@ -297,8 +299,9 @@ export function ConfigPanel({
 
   // Determine if Config tab has content
   const hasConfigContent = useMemo(() => {
-    // Non-action step types always have config content
-    if (!isActionStep(step)) return true;
+    // Non-action step types always have config content, and an integration
+    // action's form comes from its catalog entry, not ListNodes.
+    if (!isActionStep(step) || isIntegrationActionStep(step)) return true;
     // Action steps: check if the catalog node has input fields
     const node = catalogNodes.find((n) => n.id === step.type);
     // While loading (no nodes yet), show Config tab
@@ -340,6 +343,9 @@ export function ConfigPanel({
   const getStepTitle = () => {
     if (isRunStep(step)) {
       return getStepCommand(step) || "Run";
+    }
+    if (isIntegrationActionStep(step)) {
+      return getActionUses(step) || "Action";
     }
     if (isActionStep(step)) {
       // Format snake_case type to Title Case (e.g., "call_llm" -> "Call LLM")
@@ -472,7 +478,10 @@ export function ConfigPanel({
               isReadOnly={isReadOnly}
             />
           )}
-          {isActionStep(step) && (
+          {isIntegrationActionStep(step) && (
+            <IntegrationActionConfig step={step} onUpdate={onUpdate} isReadOnly={isReadOnly} />
+          )}
+          {isActionStep(step) && !isIntegrationActionStep(step) && (
             <ActionStepConfig
               step={step as ActionStep}
               onUpdate={onUpdate}

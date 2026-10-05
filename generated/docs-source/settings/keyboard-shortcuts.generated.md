@@ -136,6 +136,12 @@ Where the **Browser** column is blank the shortcut is the same on both.
 | `Cmd+K Y` |  | Change Workflow |
 | `Cmd+K I` |  | Edit Workflow Parameters |
 
+## Workflow Builder
+
+| Desktop | Browser | Action |
+|---------|---------|--------|
+| `Cmd+I` |  | Add Step |
+
 ## Customizing Shortcuts
 
 To customize keyboard shortcuts:

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   ReactFlow,
   Background,
@@ -47,6 +48,7 @@ import { TriggerPayloadPanel } from "./config/TriggerPayloadPanel";
 import { nodesEdgesToWorkflow } from "../../lib/nodes-edges-to-workflow";
 import { useFitViewWithPanels } from "./hooks/useFitViewWithPanels";
 import { useWorkflowKeyboardShortcuts } from "./hooks/useWorkflowKeyboardShortcuts";
+import { useStepPaletteShortcutLabel, useWorkflowBuilderShortcuts } from "./hooks/useWorkflowBuilderShortcuts";
 import {
   useInlineEditStack,
   type InlineEditContext,
@@ -104,6 +106,24 @@ import {
 } from "./CELCompletionContext";
 import { WorkflowMutationProvider } from "./WorkflowMutationContext";
 import { WorkflowNodeCallbacksProvider } from "./WorkflowNodeCallbacksContext";
+import { StepPalette } from "./palette/StepPalette";
+import { ConnectIntegrationDialog, type ConnectIntegrationTarget } from "./connections/ConnectIntegrationDialog";
+import {
+  catalogSearchGrpc,
+  type CatalogEntry,
+  type CatalogEntrySummary,
+} from "../../api/catalog-search-grpc";
+import { connectionKeys, useActionOutputSchemas } from "../../hooks/connection-queries";
+import {
+  actionNodeIdBase,
+  getActionParams,
+  getActionUses,
+  isIntegrationActionStep,
+  newActionStep,
+  uniqueNodeId,
+  withActionParam,
+} from "../../lib/actionNodeArgs";
+import { actionParamDefaults } from "../../lib/jsonSchemaFields";
 
 /** Result of a save operation */
 export interface SaveResult {
@@ -218,15 +238,14 @@ function WorkflowBuilderInner({
   // (React Flow owns its array refs for drag/connect efficiency).
   // `currentWorkflow` (the persistence representation) is derived from
   // `workflow` + `nodes` + `edges` via `nodesEdgesToWorkflow`.
+  // Seeded from the whole definition (minus the graph, which lives in
+  // `nodes`/`edges`), so fields the canvas does not draw — declared
+  // `triggers`, `title`, `daemon` — survive a save.
   const [workflow, setWorkflow] = useState<Workflow>(() => ({
+    ...initialWorkflow,
+    nodes: undefined,
+    edges: undefined,
     name: initialWorkflow?.name || initialName || "New Workflow",
-    description: initialWorkflow?.description,
-    inputs: initialWorkflow?.inputs,
-    outputs: initialWorkflow?.outputs,
-    entry: initialWorkflow?.entry,
-    presets: initialWorkflow?.presets,
-    apiVersion: initialWorkflow?.apiVersion,
-    ui: initialWorkflow?.ui,
   }));
 
   // Selection by id (not by node-object). The selectedNode / selectedEdge
@@ -242,6 +261,13 @@ function WorkflowBuilderInner({
   // The start node's panel (Trigger payload). Not a selection: it can stay
   // open beside a step's panel.
   const [showStartPanel, setShowStartPanel] = useState(false);
+
+  // The step palette ("Add step"): one searchable list of built-in steps
+  // and integration actions. `connectTarget` is the integration a palette
+  // row's Connect affordance is connecting.
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [connectTarget, setConnectTarget] = useState<ConnectIntegrationTarget | null>(null);
+  const queryClient = useQueryClient();
 
   // The automation dialog opened from the trigger rail: `null` is closed,
   // `{}` is create (prefilled with this workflow), `{ trigger }` is edit.
@@ -458,6 +484,7 @@ function WorkflowBuilderInner({
         presetDefault: workflow.presets?.default,
         apiVersion: workflow.apiVersion,
         isLocked,
+        definition: workflow,
       }),
     [nodes, edges, workflow, isLocked],
   );
@@ -1001,7 +1028,8 @@ function WorkflowBuilderInner({
           routerOutputKeys = Object.keys(routerOutputs).sort().join(",");
         }
       }
-      return `${node.id}:${step?.type ?? ""}:${routerOutputKeys}`;
+      const actionRef = step && isIntegrationActionStep(step) ? getActionUses(step) : "";
+      return `${node.id}:${step?.type ?? ""}:${routerOutputKeys}:${actionRef}`;
     });
     const edgeBits = edges.map((e) => `${e.source}>${e.target}`);
     const inputBits = workflow.inputs
@@ -1012,6 +1040,23 @@ function WorkflowBuilderInner({
       : "";
     return `${nodeBits.join("|")}__${edgeBits.join("|")}__${inputBits}`;
   }, [nodes, edges, workflow.inputs]);
+
+  // The output schema of every integration action on the canvas, so
+  // `nodes.<id>.data.*` autocompletes downstream (one cached GetCatalogEntry
+  // per distinct ref, shared with the config panel and the palette).
+  const actionRefsByNode = useMemo(() => {
+    const out: Array<[string, string]> = [];
+    for (const node of nodes) {
+      const step = (node.data as FlowNodeData).step as Step | undefined;
+      if (step && isIntegrationActionStep(step)) {
+        const uses = getActionUses(step);
+        if (uses && !uses.includes("{{")) out.push([node.id, uses]);
+      }
+    }
+    return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on the structural fingerprint
+  }, [celContextKey]);
+  const actionOutputSchemas = useActionOutputSchemas(actionRefsByNode);
 
   // Build CEL completion context for Monaco editors in config panels.
   // Keyed on the structural fingerprint above so it's stable across edits
@@ -1046,10 +1091,10 @@ function WorkflowBuilderInner({
       }
     }
     const edgeList = edges.map((e) => ({ source: e.source, target: e.target }));
-    return { nodeIds, nodeTypeMap, inputParams, edges: edgeList, nodeDeclaredOutputs };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally
-    // keyed on the structural fingerprint to avoid re-init on label/CEL keystrokes
-  }, [celContextKey]);
+    return { nodeIds, nodeTypeMap, inputParams, edges: edgeList, nodeDeclaredOutputs, nodeOutputSchemas: actionOutputSchemas };
+    // Intentionally keyed on the structural fingerprint to avoid re-init on label/CEL keystrokes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [celContextKey, actionOutputSchemas]);
 
   // The trigger rail's data (research/WORKFLOW_UI.md §3.2). Keyed on the
   // STORED name: an automation names a saved workflow, so a rename in progress
@@ -1278,14 +1323,15 @@ function WorkflowBuilderInner({
     [],
   );
 
-  const addStep = useCallback(
-    (stepType: string) => {
+  /** Place a prepared step at the viewport centre, select it and open its panel. */
+  const insertStep = useCallback(
+    (step: Step) => {
       // Take snapshot BEFORE adding node
       takeSnapshot(nodes, edges);
       setHasModifications(true);
 
-      // Use a CEL-safe ID prefix (e.g., call_llm_123, run_456)
-      const id = `${stepType}_${Date.now()}`;
+      const id = step.id!;
+      const stepType = step.type ?? "";
       // Place new node at the center of the current viewport
       const wrapper = reactFlowWrapper.current;
       const vpCenterX = (wrapper?.clientWidth ?? 1200) / 2;
@@ -1298,29 +1344,6 @@ function WorkflowBuilderInner({
         data: { label: '' },
       };
       const position = findNonOverlappingPosition(candidateNode, nodes);
-
-      // Build step with args oneof initialized
-      // Note: position is stored in workflow.ui.positions, not on step
-      let step: Step = {
-        id,
-        type: stepType,
-        args: initStepArgs(stepType),
-      };
-
-      // Add type-specific default fields
-      if (stepType === "run") {
-        step = withRunArgs(step, { command: celString("") });
-      } else if (stepType === "workflow") {
-        step = withWorkflowArgs(step, { ref: celString("builtin://agent") });
-      } else if (stepType === "agent") {
-        // agent is not a structural type, no args oneof needed
-      } else if (stepType === "join") {
-        step.condition = directCel("all");
-      } else if (stepType === "loop") {
-        step = withLoopArgs(step, { while: directCel(""), ref: celString("") });
-      } else if (stepType === "router") {
-        // Router args are initialized by initStepArgs — no additional defaults needed
-      }
 
       // Determine React Flow node type
       const flowNodeType = STRUCTURAL_TYPES.has(stepType)
@@ -1346,6 +1369,74 @@ function WorkflowBuilderInner({
       setChatPanelOpen(false);
     },
     [setNodes, nodes, edges, takeSnapshot, STRUCTURAL_TYPES, screenToFlowPosition, findNonOverlappingPosition],
+  );
+
+  const addStep = useCallback(
+    (stepType: string) => {
+      // Use a CEL-safe ID prefix (e.g., call_llm_123, run_456)
+      const id = `${stepType}_${Date.now()}`;
+
+      // Build step with args oneof initialized
+      // Note: position is stored in workflow.ui.positions, not on step
+      let step: Step = {
+        id,
+        type: stepType,
+        args: initStepArgs(stepType),
+      };
+
+      // Add type-specific default fields
+      if (stepType === "run") {
+        step = withRunArgs(step, { command: celString("") });
+      } else if (stepType === "workflow") {
+        step = withWorkflowArgs(step, { ref: celString("builtin://agent") });
+      } else if (stepType === "join") {
+        step.condition = directCel("all");
+      } else if (stepType === "loop") {
+        step = withLoopArgs(step, { while: directCel(""), ref: celString("") });
+      }
+
+      insertStep(step);
+    },
+    [insertStep],
+  );
+
+  /**
+   * Add an integration action from the palette: `type: action`,
+   * `uses: <ref>`, with its parameters' declared defaults. The entry is
+   * usually already cached (the palette prefetches the highlighted row); if
+   * not, the node goes in immediately and the defaults follow.
+   */
+  const addActionStep = useCallback(
+    (entry: CatalogEntrySummary) => {
+      const id = uniqueNodeId(actionNodeIdBase(entry.ref), nodes.map((n) => n.id));
+      const cached = queryClient.getQueryData<CatalogEntry>(connectionKeys.catalogEntry(entry.ref));
+      insertStep(newActionStep(id, entry.ref, actionParamDefaults(cached?.paramsSchema)));
+      if (cached) return;
+      void queryClient
+        .fetchQuery({
+          queryKey: connectionKeys.catalogEntry(entry.ref),
+          queryFn: () => catalogSearchGrpc.get(entry.ref),
+          staleTime: 5 * 60_000,
+        })
+        .then((full) => {
+          const defaults = actionParamDefaults(full.paramsSchema);
+          if (Object.keys(defaults).length === 0) return;
+          setNodes((nds) =>
+            nds.map((node) => {
+              if (node.id !== id) return node;
+              const current = (node.data as FlowNodeData).step as Step;
+              let next = current;
+              const existing = getActionParams(current);
+              for (const [key, value] of Object.entries(defaults)) {
+                if (existing[key] === undefined) next = withActionParam(next, key, value);
+              }
+              return { ...node, data: { ...node.data, step: next } };
+            }),
+          );
+        })
+        .catch(() => undefined); // the config panel reports a missing entry
+    },
+    [insertStep, nodes, queryClient, setNodes],
   );
 
   const addSwitch = useCallback(() => {
@@ -1389,6 +1480,40 @@ function WorkflowBuilderInner({
     setChatPanelOpen(false);
   }, [setNodes, nodes, edges, takeSnapshot, canDragNodes, screenToFlowPosition, findNonOverlappingPosition]);
 
+  const openStepPalette = useCallback(() => {
+    if (isBuiltinWorkflow) return;
+    setPaletteOpen(true);
+  }, [isBuiltinWorkflow]);
+
+  useWorkflowBuilderShortcuts({ onOpenStepPalette: openStepPalette });
+  const paletteShortcutLabel = useStepPaletteShortcutLabel();
+
+  const choosePaletteBuiltin = useCallback(
+    (type: string) => {
+      setPaletteOpen(false);
+      if (type === "switch") addSwitch();
+      else addStep(type);
+    },
+    [addStep, addSwitch],
+  );
+
+  const choosePaletteAction = useCallback(
+    (entry: CatalogEntrySummary) => {
+      setPaletteOpen(false);
+      addActionStep(entry);
+    },
+    [addActionStep],
+  );
+
+  const connectFromPalette = useCallback((entry: CatalogEntrySummary) => {
+    setConnectTarget({
+      ref: entry.ref,
+      integrationId: entry.integration.id,
+      displayName: entry.integration.displayName,
+      icon: entry.integration.icon,
+    });
+  }, []);
+
   const headerButtonClass = "inline-flex items-center gap-2 rounded-lg border border-border/70 bg-card/90 px-3 py-2 text-sm font-medium text-muted-foreground shadow-sm shadow-black/5 transition-colors hover:bg-muted hover:text-foreground";
   const secondaryHeaderButtonClass = "inline-flex items-center gap-2 rounded-lg border border-border/70 bg-secondary px-3 py-2 text-sm font-semibold text-secondary-foreground shadow-sm shadow-black/5 transition-colors hover:bg-secondary/90";
   const primaryHeaderButtonClass = "inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground shadow-sm shadow-primary/20 transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50";
@@ -1410,7 +1535,7 @@ function WorkflowBuilderInner({
       onExpandWorkflow={(_workflowNodeId, step) => enterWorkflowEdit(step)}
     >
     <TriggerRailProvider value={triggerRail}>
-    <div className="relative h-full bg-background">
+    <div className="relative h-full bg-background" data-context="workflow-canvas">
       {/* Floating Left Sidebar Stack - position based on visible headers (builtin banner + breadcrumb) */}
       <div
         className={`absolute left-6 z-50 flex flex-col gap-3 ${
@@ -1426,6 +1551,8 @@ function WorkflowBuilderInner({
           <FloatingWorkflowSidebar
             onAddStep={addStep}
             onAddSwitch={addSwitch}
+            onOpenPalette={openStepPalette}
+            paletteShortcutLabel={paletteShortcutLabel}
           />
         )}
 
@@ -2127,6 +2254,16 @@ function WorkflowBuilderInner({
           </div>
         </Modal>
       )}
+
+      {/* Step palette: built-in steps and integration actions in one search. */}
+      <StepPalette
+        open={paletteOpen}
+        onClose={() => setPaletteOpen(false)}
+        onChooseBuiltin={choosePaletteBuiltin}
+        onChooseAction={choosePaletteAction}
+        onConnect={connectFromPalette}
+      />
+      <ConnectIntegrationDialog target={connectTarget} onClose={() => setConnectTarget(null)} />
 
       {/* Automation dialog, opened from the trigger rail. Allowed for
           read-only and builtin workflows too: a trigger is its own row and
