@@ -8,6 +8,8 @@ import (
 
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
+
+	"github.com/reliant-labs/reliant/internal/triggers/triggerspec"
 )
 
 // StartManualFire runs a trigger now, bypassing its enabled flag and overlap
@@ -43,7 +45,5 @@ func StartManualFire(ctx context.Context, starter WorkflowStarter, triggerID, ta
 // SetMinIntervalForTest lowers the interval floor so tests can use a schedule
 // that fires within a bounded wait. It returns a restore func.
 func SetMinIntervalForTest(d time.Duration) func() {
-	prev := MinInterval
-	MinInterval = d
-	return func() { MinInterval = prev }
+	return triggerspec.SetMinIntervalForTest(d)
 }

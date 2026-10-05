@@ -1,0 +1,23 @@
+name: deploy-hook
+description: Run when CI posts a deploy notification.
+inputs:
+    ref:
+        type: string
+entry: [deploy]
+triggers:
+    - name: ci-deploy
+      webhook:
+        hmac:
+            header: X-Hub-Signature-256
+            algorithm: sha256
+            prefix: sha256=
+            encoding: hex
+      filter: trigger.payload.body.status == 'success'
+      inputs:
+        ref: '{{ trigger.payload.body.ref }}'
+    - name: zapier
+      description: Unsigned hook for Zapier; the token in the URL authenticates it
+      webhook: {}
+nodes:
+    - id: deploy
+      type: call_llm

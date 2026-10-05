@@ -9,6 +9,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/triggers/triggerspec"
 )
 
 // Conversion between the wire shape and the stored row lives here rather than
@@ -17,21 +18,7 @@ import (
 
 // ScheduleConfigFromProto reads a ScheduleSource into the stored config shape.
 func ScheduleConfigFromProto(src *reliantv1.ScheduleSource) core.ScheduleConfig {
-	if src == nil {
-		return core.ScheduleConfig{}
-	}
-	cfg := core.ScheduleConfig{
-		Cron:     src.Cron,
-		Timezone: src.Timezone,
-		Overlap:  overlapFromProto(src.Overlap),
-	}
-	if src.Interval != nil {
-		cfg.Interval = *src.Interval
-	}
-	if src.CatchupWindow != nil {
-		cfg.CatchupWindow = *src.CatchupWindow
-	}
-	return cfg
+	return triggerspec.ScheduleConfigFromProto(src)
 }
 
 // scheduleConfigToProto is the reverse. It renders the DEFAULTS explicitly
@@ -57,17 +44,6 @@ func scheduleConfigToProto(cfg core.ScheduleConfig) *reliantv1.ScheduleSource {
 	}
 	src.CatchupWindow = &catchup
 	return src
-}
-
-func overlapFromProto(p reliantv1.TriggerOverlapPolicy) string {
-	switch p {
-	case reliantv1.TriggerOverlapPolicy_TRIGGER_OVERLAP_POLICY_ALLOW:
-		return core.ScheduleOverlapAllow
-	default:
-		// UNSPECIFIED is SKIP. A client that omits the field gets the safe
-		// behavior rather than concurrent unattended runs.
-		return core.ScheduleOverlapSkip
-	}
 }
 
 func overlapToProto(overlap string) reliantv1.TriggerOverlapPolicy {

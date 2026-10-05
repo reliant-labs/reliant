@@ -1,0 +1,20 @@
+name: on-deploy-failure
+description: Investigate when a deploy run fails or blocks.
+inputs:
+    failed_chat:
+        type: string
+entry: [investigate]
+triggers:
+    - name: deploy-failed
+      workflow_event:
+        workflows: [deploy, 'builtin://agent']
+        outcomes: [failed, blocked]
+      filter: trigger.payload.outcome == 'failed' || trigger.payload.workflow == 'deploy'
+      inputs:
+        failed_chat: '{{ trigger.payload.chat_id }}'
+    - name: any-run
+      description: Every run of every workflow, for an audit log
+      workflow_event: {}
+nodes:
+    - id: investigate
+      type: call_llm

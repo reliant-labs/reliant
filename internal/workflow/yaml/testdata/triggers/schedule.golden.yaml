@@ -1,0 +1,24 @@
+name: nightly-report
+description: Summarize yesterday's activity every weekday morning.
+inputs:
+    report_date:
+        type: string
+        description: Day to report on
+entry: [report]
+triggers:
+    - name: weekday-morning
+      description: Weekdays at 9am New York time
+      schedule:
+        cron: [0 9 * * 1-5]
+        timezone: America/New_York
+        overlap: skip
+        catchup_window: 30m
+      inputs:
+        report_date: '{{ trigger.scheduled_for }}'
+    - name: hourly
+      schedule:
+        interval: 1h
+        overlap: allow
+nodes:
+    - id: report
+      type: call_llm

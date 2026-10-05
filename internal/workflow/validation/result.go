@@ -44,6 +44,7 @@ const (
 	CategoryNodeOrdering      Category = "node_ordering"      // nodes.<id> references to nodes not guaranteed to have executed
 	CategorySkillRef          Category = "skill_ref"          // skills: names that do not resolve in the skill catalog
 	CategoryToolBinding       Category = "tool_binding"       // tools_config.tools: unknown tool, or a parameter that tool cannot bind
+	CategoryTrigger           Category = "trigger"            // triggers: a declared trigger that cannot be activated or cannot run
 )
 
 // Error represents a single validation issue.
