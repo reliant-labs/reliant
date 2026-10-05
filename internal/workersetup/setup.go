@@ -2,13 +2,12 @@
 package workersetup
 
 import (
-	"github.com/reliant-labs/reliant/internal/connections"
-	"github.com/reliant-labs/reliant/internal/integrations/connauth"
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/instanceid"
+	"github.com/reliant-labs/reliant/internal/integrations/httpaction"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -61,11 +60,13 @@ type Config struct {
 	// being silently dropped.
 	TriggerLauncher triggers.Launcher
 
-	// Connections resolves a run's connection reference to an authenticated
-	// request (research/CONNECTIONS_VAULT.md §3.1). It exists on the worker
-	// only: the worker is the one reader of connection secrets. The action
-	// node consumes it through connauth.
-	Connections *connections.Resolver
+	// IntegrationCredentials authenticates the action node's integration
+	// calls (research/CONNECTIONS_VAULT.md §3.1): saved connections, plus
+	// control-plane-delegated GitHub tokens when hosted. It exists on the
+	// worker only: the worker is the one reader of connection secrets. It is
+	// the SAME source the http__request tool uses, so the two doors resolve
+	// a credential identically. nil refuses every authenticated call.
+	IntegrationCredentials httpaction.CredentialSource
 
 	// Optional overrides (for testing)
 	RunExecutorOverride handlers.RunExecutor
@@ -122,7 +123,7 @@ func StartWorker(cfg *Config) (*Handle, *v2.ActivityRegistry, error) {
 		activityDeps.DriverResolver = cfg.DriverResolver
 	}
 
-	activityDeps.Connections = connauth.New(cfg.Connections)
+	activityDeps.Connections = cfg.IntegrationCredentials
 
 	// Register all activities
 	v2activities.RegisterAll(registry, activityDeps)
