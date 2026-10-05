@@ -172,6 +172,87 @@ descendants), and the launch chain depth is capped.
 
 Providers (GitHub, Slack, Gmail, Twilio manifests) start once A and B land.
 
+Wave 1 also includes two authoring streams (see §3a), which start once A and B
+land:
+
+| Stream | Owns |
+|---|---|
+| F: YAML + agent tools | `internal/workflow/yaml/`, workflow validation of `triggers:` (CEL filter against the payload schema, refs resolve), `create_workflow`/`edit_workflow` feedback, new `search_integrations` / `get_integration_schema` / `activate_trigger` tools, the trigger-row `workflow_trigger` activation path |
+| G: builder UI + search | `IntegrationService.SearchCatalog` / `GetCatalogEntry` (server + proto), `web/src/components/workflow/**` (node picker, action config, trigger rail editor), `web/src/components/Automations/**` for activation |
+
+## 3a. Authoring: YAML, agent tools, builder, search (user, 2026-10-05)
+
+The user's three requirements, and the design that meets them:
+
+1. **Everything works in workflow YAML.** Every new concept (action nodes on
+   any integration, cron/webhook/integration/workflow-event triggers, CEL
+   filters) round-trips through `.reliant/workflows/*.yaml` and the DB-stored
+   workflow YAML with no loss.
+2. **`create_workflow` / `edit_workflow` handle all of it.** The agent writes
+   and edits YAML, so (1) gives the agent the capability. The agent also needs
+   validation feedback for triggers and actions, plus a way to discover what
+   exists (see 4).
+3. **The UI builder handles all of it,** including integrations, with a search
+   mechanism that scales to hundreds of integrations.
+
+**Triggers move into the workflow definition, split into WHEN and AS WHOM.**
+This supersedes `research/WORKFLOW_UI.md` §3.2's "not saved in the YAML".
+
+```yaml
+name: triage-new-issues
+triggers:
+  - name: new-issue                    # unique within the workflow
+    integration:                       # or: schedule / webhook / workflow_event
+      event: github/issue.opened@1
+      params: { repo: reliant-labs/reliant }
+    filter: "!trigger.payload.issue.labels.exists(l, l.name == 'wontfix')"   # CEL
+    inputs:                            # CEL mapping trigger.payload -> workflow inputs
+      issue_number: "{{ trigger.payload.issue.number }}"
+  - name: nightly
+    schedule: { cron: ["0 9 * * 1-5"], timezone: America/New_York }
+nodes: ...
+```
+
+- **The definition carries the WHEN:** the source spec, the CEL `filter`, the
+  `inputs` mapping. These are the same proto messages the trigger rows use
+  (stream B makes them standalone and embeddable).
+- **The trigger ROW is an activation (the AS WHOM / WHERE):** owner, project,
+  daemon, connection id, enabled, plus `workflow_trigger: <name>`, which
+  points at a declared trigger. Ad hoc rows with an inline source keep working,
+  so the existing schedule automations are unchanged.
+- Why the split holds: a builtin or shared workflow is read-only but users
+  activate it differently (their daemon, their GitHub connection), which is
+  WORKFLOW_UI §3.2's original reason. Declaring the WHEN in YAML gives the
+  user's requirement without losing that.
+- **Activation UX:** declaring a trigger does not fire anything. The builder
+  rail and the Automations page show declared triggers as "Activate", which
+  picks a connection and a daemon. The agent can do it too, via an
+  `activate_trigger` tool. The CEL filter is validated at save time against the
+  trigger type's payload schema (from the manifest), so the agent gets errors
+  from `create_workflow` / `edit_workflow` like any other validation error.
+
+**Discovery and search for hundreds of integrations:**
+- One server-side index over the manifest catalog: integrations, actions and
+  trigger types, each with display name, description, category, keywords, auth
+  type, and whether the caller has a connection. The service is
+  `IntegrationService.SearchCatalog(query, kind: action|trigger, category,
+  connected_only, page)`, which returns lightweight entries. A separate
+  `GetCatalogEntry(ref)` returns the full param/output/payload JSON schemas.
+  Nothing ever ships the whole catalog to the client or into a prompt.
+- **Agent:** one `search_integrations` tool (query → top N refs with one-line
+  descriptions) and one `get_integration_schema` tool (ref → params/outputs or
+  trigger payload schema). The agent searches, reads one schema, then writes
+  YAML. `get_workflow_suggestions` / the node schema stay for core node types.
+- **Builder:** a command-palette-style node picker ("Add step" and "Add
+  trigger") backed by `SearchCatalog`: fuzzy search, category facets,
+  connected-first ranking, recent and popular items. The action node's config
+  panel and the trigger editor render forms from `GetCatalogEntry` schemas
+  via the existing `ProtoFieldRenderer` / schema-form path. There are no
+  per-integration React components.
+- Ranking v1 is plain lexical search (name/keywords/description) plus connected
+  and recent boosts, in memory; the catalog is embedded and small enough.
+  Semantic search is a later improvement, not v1.
+
 ## 4a. Using n8n as a reference (user direction)
 
 n8n is a REFERENCE for understanding a provider's API, auth shape and webhook
