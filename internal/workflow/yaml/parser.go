@@ -109,6 +109,9 @@ func unmarshalWorkflow(node *yaml.Node) (*reliantv1.Workflow, error) {
 		case "transitionTo", "transition_to":
 			wf.TransitionTo = val.Value
 
+		case "triggers":
+			wf.Triggers, err = unmarshalWorkflowTriggers(val)
+
 		// Syntactic sugar: sequence: is a shorthand for entry + nodes + edges
 		// for linear chains. See sugar.go for documentation.
 		case "sequence":
@@ -456,6 +459,15 @@ func marshalWorkflow(wf *reliantv1.Workflow) (*yaml.Node, error) {
 	// transition_to
 	if wf.TransitionTo != "" {
 		m.Content = append(m.Content, scalarNode("transition_to", ""), scalarNode(wf.TransitionTo, ""))
+	}
+
+	// triggers — what makes the workflow run, read before its graph.
+	if len(wf.Triggers) > 0 {
+		triggersNode, err := marshalWorkflowTriggers(wf.Triggers)
+		if err != nil {
+			return nil, err
+		}
+		m.Content = append(m.Content, scalarNode("triggers", ""), triggersNode)
 	}
 
 	// nodes

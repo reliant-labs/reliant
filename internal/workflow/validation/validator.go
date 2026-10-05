@@ -76,6 +76,10 @@ func StaticAnalysisWithOptions(wf *reliantv1.Workflow, opts *ValidationOptions) 
 		opts = &ValidationOptions{}
 	}
 
+	// Layer 7 runs first and regardless of the graph: a declared trigger is
+	// independent of the nodes, and one save should show every finding.
+	validateTriggers(wf, opts, catalogIntegrations{}, result)
+
 	// Layer 1: Structural validation
 	validateStructure(wf, result)
 	if result.HasErrors() {

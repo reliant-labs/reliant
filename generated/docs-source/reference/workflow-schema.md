@@ -30,7 +30,7 @@ Defines a complete workflow with nodes, edges, inputs, and outputs.
 | `daemon` | CelDaemonSelector | No | - |
 | `resume_node` | string | No | - |
 | `transition_to` | string | No | - |
-| `triggers` | WorkflowTrigger[] | No | - |
+| `triggers` | WorkflowTrigger[] | No | *WHEN the workflow runs: a list of {name, description, one source (schedule \| webhook \| integration \| workflow_event), filter (raw CEL over `trigger`), inputs (templates over `trigger`)}. Declaring one fires nothing; activate it with activate_trigger. See the workflow-builder skill's Triggers section.* |
 | `title` | string | No | - |
 | `hidden` | boolean | No | - |
 

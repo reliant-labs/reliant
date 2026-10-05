@@ -50,6 +50,13 @@ func ResolveWorkflowTemplates(raw map[string]interface{}, inputs map[string]inte
 	topLevelSkip := map[string]bool{
 		"outputs": true, // Workflow outputs reference nodes.*, evaluated at completion
 	}
+	// triggers[].inputs are templates over the launch event, evaluated when an
+	// event fires the trigger (see wfyaml.IsRuntimeEvaluatedTopLevelKey).
+	for _, key := range []string{"triggers"} {
+		if wfyaml.IsRuntimeEvaluatedTopLevelKey(key) {
+			topLevelSkip[key] = true
+		}
+	}
 
 	// runtimeEvaluatedKeys: Keys to skip when inside ANY node in the nodes array
 	// This applies to the entire subtree under each node element (including nested structures)

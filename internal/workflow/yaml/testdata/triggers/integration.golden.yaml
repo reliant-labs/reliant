@@ -1,0 +1,28 @@
+name: triage-new-issues
+description: Triage each new issue in the repo.
+inputs:
+    issue_number:
+        type: integer
+    title:
+        type: string
+entry: [triage]
+triggers:
+    - name: new-issue
+      description: A new or reopened issue
+      integration:
+        integration: github
+        events: [issues.opened, issues.reopened]
+        match:
+            repository: reliant-labs/reliant
+      filter: '!trigger.payload.data.issue.labels.exists(l, l.name == ''wontfix'')'
+      inputs:
+        issue_number: '{{ trigger.payload.data.issue.number }}'
+        title: '#{{ trigger.payload.data.issue.number }}: {{ trigger.payload.data.issue.title }}'
+    - name: polled
+      integration:
+        integration: test-poll
+        events: ['*']
+        poll_interval: 10m
+nodes:
+    - id: triage
+      type: call_llm
