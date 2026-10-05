@@ -2632,6 +2632,13 @@ ALTER TABLE ONLY public.background_processes
     ADD CONSTRAINT background_processes_worktree_id_fkey FOREIGN KEY (worktree_id) REFERENCES public.worktrees(id) ON DELETE SET NULL;
 
 --
+-- Name: chats chats_project_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.chats
+    ADD CONSTRAINT chats_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(id) ON DELETE CASCADE;
+
+--
 -- Name: connection_secrets connection_secrets_connection_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2854,6 +2861,13 @@ ALTER TABLE ONLY public.user_updates
 
 ALTER TABLE ONLY public.user_updates
     ADD CONSTRAINT user_updates_worktree_id_fkey FOREIGN KEY (worktree_id) REFERENCES public.worktrees(id) ON DELETE CASCADE;
+
+--
+-- Name: worktrees worktrees_project_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.worktrees
+    ADD CONSTRAINT worktrees_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(id) ON DELETE CASCADE;
 
 --
 -- PostgreSQL database dump complete

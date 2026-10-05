@@ -131,6 +131,10 @@ func TestListChats_NilProjectMeansEveryProject(t *testing.T) {
 	for _, project := range []string{"project-a", "project-b"} {
 		id := uuid.NewString()
 		now := time.Now()
+		require.NoError(t, repo.CreateProject(ctx, &Project{
+			ID: project, Name: project, Path: "/tmp/" + project, UserID: "list-user",
+			CreatedAt: now, UpdatedAt: now, LastActive: now,
+		}))
 		require.NoError(t, repo.CreateChat(ctx, &Chat{
 			ID: id, Title: project, ProjectID: project, UserID: "list-user",
 			CreatedAt: now, UpdatedAt: now, LastActive: now,
