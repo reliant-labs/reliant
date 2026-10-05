@@ -126,7 +126,7 @@ export function WorkflowErrorMessage({ error }: WorkflowErrorMessageProps) {
       >
         <Icon className={cn(
           "w-3.5 h-3.5 flex-shrink-0",
-          isRetrying ? "text-warning animate-spin" : "text-destructive-ink"
+          isRetrying ? "text-warning animate-spin" : "text-destructive"
         )} data-testid={isRetrying ? "rotate-cw" : "alert-triangle"} />
         <span className="text-xs font-medium text-foreground truncate min-w-0 flex-1">
           {summary}
