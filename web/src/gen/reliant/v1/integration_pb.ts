@@ -860,6 +860,11 @@ export const PaginationSpecSchema: GenMessage<PaginationSpec> = /*@__PURE__*/
 /**
  * ErrorRule maps one status (or an inclusive range) to an error outcome.
  *
+ * A rule may cover a 2xx status, for providers that report failure in a
+ * successful response's body (Slack answers HTTP 200 with
+ * {"ok": false, "error": "..."}). Such a rule must carry a `when`, and a 2xx
+ * response that no rule matches is a success.
+ *
  * @generated from message reliant.v1.ErrorRule
  */
 export type ErrorRule = Message<"reliant.v1.ErrorRule"> & {

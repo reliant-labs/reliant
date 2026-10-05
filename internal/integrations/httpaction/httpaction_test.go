@@ -226,6 +226,87 @@ func TestErrorRuleWhenThatErrorsDoesNotMatch(t *testing.T) {
 	}
 }
 
+// Some providers report failure in a 2xx body: Slack answers HTTP 200 with
+// {"ok": false, "error": "not_in_channel"}. A rule whose range covers the 2xx
+// status, narrowed by `when`, turns that into an error result; a 2xx body the
+// guard does not match is still a success.
+func TestErrorRuleMatchesAFailureReportedIn2xx(t *testing.T) {
+	var body atomic.Value
+	body.Store(`{"ok": true, "ts": "1.2"}`)
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(body.Load().(string)))
+	}))
+	defer srv.Close()
+	m, a := mustParse(t, manifestFor(srv.URL, `    params: { type: object }
+    request:
+      method: POST
+      path: /chat.postMessage
+      errors:
+        - status_min: 200
+          status_max: 299
+          when: "response.?ok.orValue(true) == false && response.?error.orValue('') == 'ratelimited'"
+          retryable: true
+          message: "rate limited"
+        - status_min: 200
+          status_max: 299
+          when: "response.?ok.orValue(true) == false"
+          retryable: false
+          message: "slack said {{ response.error }}"
+    output: { select: "{'ts': response.ts}" }
+`))
+	run := func() *Result {
+		r := newRunner()
+		r.client.Transport.(*http.Transport).TLSClientConfig = srv.Client().Transport.(*http.Transport).TLSClientConfig
+		res, err := r.Run(context.Background(), m, a, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return res
+	}
+	if res := run(); res.IsError || res.Data["ts"] != "1.2" {
+		t.Errorf("ok:true is a success: %+v", res)
+	}
+	body.Store(`{"ok": false, "error": "not_in_channel"}`)
+	if res := run(); !res.IsError || res.Retryable || res.Content != "slack said not_in_channel" || res.StatusCode != 200 {
+		t.Errorf("ok:false must be an error result: %+v", res)
+	}
+	body.Store(`{"ok": false, "error": "ratelimited"}`)
+	if res := run(); !res.IsError || !res.Retryable || res.Content != "rate limited" {
+		t.Errorf("the first matching 2xx rule wins: %+v", res)
+	}
+}
+
+// A page that reports failure in its body stops a paginated walk as an
+// error: the items gathered so far are not a complete answer.
+func TestErrorRuleIn2xxStopsPagination(t *testing.T) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("cursor") == "" {
+			_, _ = w.Write([]byte(`{"ok":true,"items":[1],"next":"c2"}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"ok":false,"error":"invalid_cursor"}`))
+	}))
+	defer srv.Close()
+	m, a := mustParse(t, manifestFor(srv.URL, `    params: { type: object }
+    request:
+      method: GET
+      path: /list
+      pagination: { style: cursor, cursor_param: cursor, next_cursor: "response.?next.orValue('')", max_pages: 5 }
+      errors:
+        - { status_min: 200, status_max: 299, when: "response.?ok.orValue(true) == false", message: "failed: {{ response.error }}" }
+    output: { select: "response.items" }
+`))
+	r := newRunner()
+	r.client.Transport.(*http.Transport).TLSClientConfig = srv.Client().Transport.(*http.Transport).TLSClientConfig
+	res, err := r.Run(context.Background(), m, a, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.IsError || res.Content != "failed: invalid_cursor" {
+		t.Errorf("a failing second page is an error result: %+v", res)
+	}
+}
+
 func TestPaginationCursor(t *testing.T) {
 	var calls int32
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

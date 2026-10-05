@@ -291,6 +291,11 @@ message PaginationSpec {
 }
 
 // ErrorRule maps one status (or an inclusive range) to an error outcome.
+//
+// A rule may cover a 2xx status, for providers that report failure in a
+// successful response's body (Slack answers HTTP 200 with
+// {"ok": false, "error": "..."}). Such a rule must carry a `when`, and a 2xx
+// response that no rule matches is a success.
 message ErrorRule {
   int32 status = 1;
   int32 status_min = 2;

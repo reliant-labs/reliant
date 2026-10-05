@@ -257,12 +257,21 @@ func (s *TokenSource) refreshLocked(ctx context.Context, conn *core.Connection, 
 		var clientSecret string
 		_ = provider.ClientSecret.Use(func(b []byte) error { clientSecret = string(b); return nil })
 		ex := &oauth2.Exchanger{Client: s.doer, UserAgent: "reliant-connections"}
-		refreshed, err := ex.Refresh(ctx, oauth2.RefreshRequest{
+		spec := oauthSpec(provider)
+		req := oauth2.RefreshRequest{
 			Endpoint:     tokenURL,
 			ClientID:     provider.ClientID,
 			ClientSecret: clientSecret,
 			RefreshToken: token,
-		})
+		}
+		// A comma-scoped provider (Slack) is sent the scopes it granted,
+		// joined its way, so a refresh can never be read as a request to
+		// widen or blank the grant. Space-scoped providers keep RFC 6749's
+		// default of omitting scope, which means "what was granted".
+		if spec.GetScopeSeparator() == "," && len(conn.Scopes) > 0 {
+			req.Scopes, req.ScopeSeparator = conn.Scopes, scopeSeparator(spec)
+		}
+		refreshed, err := ex.Refresh(ctx, req)
 		if err != nil {
 			var oerr *oauth2.Error
 			if errors.As(err, &oerr) && isPermanentRefreshFailure(oerr) {
@@ -334,12 +343,17 @@ func (s *TokenSource) markNeedsReauth(ctx context.Context, tx core.SecretsTx, co
 	return newError(CodeNeedsReauth, "connection %q needs to be reconnected", conn.Name)
 }
 
-// isPermanentRefreshFailure: RFC 6749 §5.2 invalid_grant, plus GitHub's
-// bad_refresh_token, mean the grant is dead. Anything else (invalid_client, a
-// 5xx) is a deployment or transient problem and must not condemn the user's
-// connection.
+// isPermanentRefreshFailure: RFC 6749 §5.2 invalid_grant, GitHub's
+// bad_refresh_token, and Slack's invalid_refresh_token / token_revoked (sent
+// as HTTP 200 {"ok": false, "error": ...}) mean the grant is dead. Anything
+// else (invalid_client, a 5xx) is a deployment or transient problem and must
+// not condemn the user's connection.
 func isPermanentRefreshFailure(e *oauth2.Error) bool {
-	return e.Code == oauth2.ErrCodeInvalidGrant || e.Code == "bad_refresh_token"
+	switch e.Code {
+	case oauth2.ErrCodeInvalidGrant, "bad_refresh_token", "invalid_refresh_token", "token_revoked":
+		return true
+	}
+	return false
 }
 
 func refreshFailureClass(err error) string {

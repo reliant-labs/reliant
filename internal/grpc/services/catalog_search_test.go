@@ -289,11 +289,25 @@ func TestGetCatalogEntry_EveryEmbeddedEntryConverts(t *testing.T) {
 	all, err := svc.SearchCatalog(asUser("u"), connect.NewRequest(&reliantv1.SearchCatalogRequest{PageSize: catalogindex.MaxPageSize}))
 	require.NoError(t, err)
 	require.NotEmpty(t, all.Msg.GetEntries())
+	kinds := map[reliantv1.CatalogEntryKind]int{}
 	for _, s := range all.Msg.GetEntries() {
 		resp, err := svc.GetCatalogEntry(asUser("u"), connect.NewRequest(&reliantv1.GetCatalogEntryRequest{Ref: s.GetRef()}))
 		require.NoError(t, err, s.GetRef())
-		assert.NotNil(t, resp.Msg.GetEntry().GetParamsSchema(), s.GetRef())
+		e := resp.Msg.GetEntry()
+		kinds[s.GetKind()]++
+		// An action converts with its params schema, a trigger with its
+		// payload schema; each carries only its own.
+		switch s.GetKind() {
+		case reliantv1.CatalogEntryKind_CATALOG_ENTRY_KIND_TRIGGER:
+			assert.NotNil(t, e.GetPayloadSchema(), s.GetRef())
+			assert.Nil(t, e.GetParamsSchema(), s.GetRef())
+		default:
+			assert.NotNil(t, e.GetParamsSchema(), s.GetRef())
+			assert.Nil(t, e.GetPayloadSchema(), s.GetRef())
+		}
 	}
+	assert.Positive(t, kinds[reliantv1.CatalogEntryKind_CATALOG_ENTRY_KIND_ACTION])
+	assert.Positive(t, kinds[reliantv1.CatalogEntryKind_CATALOG_ENTRY_KIND_TRIGGER], "the embedded catalog ships triggers (Slack)")
 }
 
 const catalogTriggerFixture = `

@@ -328,6 +328,10 @@ func validateRequest(req *reliantv1.HttpRequestSpec) error {
 			if err := tmpl.ValidateExpr(when); err != nil {
 				return fmt.Errorf("request.errors[%d].when: %w", i, err)
 			}
+		} else if ruleCovers2xx(rule) {
+			// A 2xx rule turns a success into a failure (Slack's 200 with
+			// ok:false); unguarded it would fail every call.
+			return fmt.Errorf("request.errors[%d] covers a 2xx status and needs a when that says which bodies are failures", i)
 		}
 	}
 	if p := req.GetPagination(); p != nil {
@@ -336,6 +340,19 @@ func validateRequest(req *reliantv1.HttpRequestSpec) error {
 		}
 	}
 	return nil
+}
+
+// ruleCovers2xx reports whether an error rule's status or range includes a
+// success status.
+func ruleCovers2xx(rule *reliantv1.ErrorRule) bool {
+	lo, hi := rule.GetStatus(), rule.GetStatus()
+	if rule.GetStatusMin() != 0 {
+		lo, hi = rule.GetStatusMin(), rule.GetStatusMax()
+		if hi == 0 {
+			hi = lo
+		}
+	}
+	return lo <= 299 && hi >= 200
 }
 
 func validateBodyTemplates(v any) error {

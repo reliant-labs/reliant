@@ -62,6 +62,11 @@ func RegistryFromEnv(getenv func(string) string) (*Registry, error) {
 		getenv = os.Getenv
 	}
 	r := NewRegistry()
+	if secret := strings.TrimSpace(getenv(SlackSigningSecretEnv)); secret != "" {
+		if err := r.Register(NewSlackProvider(secret)); err != nil {
+			return nil, err
+		}
+	}
 	if secret := strings.TrimSpace(getenv("RELIANT_TEST_INTEGRATION_SECRET")); secret != "" {
 		if err := r.Register(NewTestProvider(secret)); err != nil {
 			return nil, err

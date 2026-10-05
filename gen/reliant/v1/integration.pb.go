@@ -1434,6 +1434,11 @@ func (x *PaginationSpec) GetStartPage() int32 {
 }
 
 // ErrorRule maps one status (or an inclusive range) to an error outcome.
+//
+// A rule may cover a 2xx status, for providers that report failure in a
+// successful response's body (Slack answers HTTP 200 with
+// {"ok": false, "error": "..."}). Such a rule must carry a `when`, and a 2xx
+// response that no rule matches is a success.
 type ErrorRule struct {
 	state     protoimpl.MessageState `protogen:"open.v1"`
 	Status    int32                  `protobuf:"varint,1,opt,name=status,proto3" json:"status,omitempty"`
