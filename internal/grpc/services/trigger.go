@@ -899,9 +899,20 @@ func (s *TriggerService) renderFirings(ctx context.Context, t *core.Trigger, fir
 		logging.Error("could not fully render a trigger", "trigger_id", t.ID, "error", err)
 		return &reliantv1.Trigger{Id: t.ID, Name: t.Name, ProjectId: t.ProjectID, Enabled: t.Enabled}
 	}
-	if t.Kind == core.TriggerKindWebhook {
+	switch t.Kind {
+	case core.TriggerKindWebhook:
 		webhookURL := triggers.WebhookURL(s.inbound.PublicURL, t.ID)
 		proto.WebhookUrl = &webhookURL
+	case core.TriggerKindIntegration:
+		// A provider whose webhook each user sets on their own resources
+		// (Twilio's per-number "A message comes in" URL) needs the user to
+		// know it; an operator-registered app webhook does not.
+		if uc, ok := s.inbound.Catalog.(userConfiguredCatalog); ok {
+			if cfg, err := triggers.IntegrationConfigFor(t); err == nil && uc.UserConfiguredURL(cfg.Integration) {
+				eventsURL := triggers.IntegrationEventsURL(s.inbound.PublicURL, cfg.Integration)
+				proto.WebhookUrl = &eventsURL
+			}
+		}
 	}
 	return proto
 }

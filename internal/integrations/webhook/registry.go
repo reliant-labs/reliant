@@ -92,6 +92,18 @@ func (r *Registry) HasInboundSource(integration string) bool {
 	return pushed || r.IsPolled(integration)
 }
 
+// UserConfiguredURL reports whether integration's webhook is one each user
+// points their own resources at (see UserConfigured), so its trigger should
+// show the user the URL.
+func (r *Registry) UserConfiguredURL(integration string) bool {
+	p, ok := r.Provider(integration)
+	if !ok {
+		return false
+	}
+	uc, ok := p.(UserConfigured)
+	return ok && uc.UserConfiguresWebhook()
+}
+
 // IDs lists the registered provider ids, sorted.
 func (r *Registry) IDs() []string {
 	r.mu.RLock()

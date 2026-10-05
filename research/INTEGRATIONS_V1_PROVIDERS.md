@@ -551,6 +551,16 @@ webhooks, UNVERIFIED but standard). If users connect with an API key, the
 inbound trigger needs the account's Auth Token separately. Simplest v1:
 collect SID + Auth Token.
 
+**As built (#twilio, verified 2026-10-05):** SID + Auth Token only. Verified
+against twilio.com/docs/usage/webhooks/webhooks-security: webhooks are signed
+with the account's **primary** Auth Token (a secondary token signs nothing
+until promoted), and every SDK validator (twilio-go, -python, -node) keys the
+HMAC with the Auth Token. And twilio.com/docs/iam/api-keys: a **Standard** API
+key cannot read `/Accounts` (the probe) or `/Keys`. So an API-key connection
+could neither be probed nor verify an inbound message; it is not offered.
+The probe is `url: .../Accounts/{{ connection.params.account_sid }}.json`
+(a sibling of `base_url`, not a path under it).
+
 ### 4.2 Action: send message
 
 `POST https://api.twilio.com/2010-04-01/Accounts/{AccountSid}/Messages.json`,
@@ -572,6 +582,21 @@ Errors: JSON `{code, message, more_info, status}`. 400 invalid params (e.g.
 outside the 24 h window, UNVERIFIED codes), 401 bad creds, 429 too many
 requests (error 20429). Queueing is per sender, so a 429 at the API is rare.
 
+**Verified against Twilio's error catalog** (twilio.com/docs/api/errors/
+twilio-error-codes.json, 2026-10-05): 20003 Permission Denied (credentials),
+20404 Not Found, 20429 Too many requests (safe to retry), 21211 Invalid 'To',
+21614 'To' not a mobile number, 21608 unverified recipient (trial or no
+approved Primary Compliance Profile), 21606 'From' not a usable sender, 21610
+recipient replied STOP, 63007 no channel for the 'From', 63015 sandbox
+recipient has not joined, 63016 outside the WhatsApp window (log type TWILIO:
+it can arrive as `status: failed` + `error_code` on an accepted message as
+well as a 4xx; since 2025-04-01 a template sent in `Body` outside the window
+also fails with it — use `ContentSid`). The manifest maps all of these, and
+maps a 201 whose status is already failed/undelivered on `message.send`.
+List responses page with `next_page_uri` (a path on api.twilio.com carrying
+its own `PageToken`, null on the last page): the runner's `next_url`
+pagination style follows it verbatim.
+
 ### 4.3 Trigger: inbound message (webhook)
 
 The webhook is configured **per phone number / messaging service / WhatsApp
@@ -581,7 +606,7 @@ sender**, as a "A message comes in" URL. Use
 | Item | Value |
 |---|---|
 | Signature | `X-Twilio-Signature = base64(HMAC-SHA1(AuthToken, URL + concat(sorted(key)+value for each POST param)))`. The URL is the **full URL exactly as configured, including query string**. Params are sorted by key; for repeated keys, all values in order. |
-| Port quirk | Twilio's own SDK validates both with and without the explicit default port (`:443`/`:80`) because signing is inconsistent; do the same. |
+| Port quirk | Twilio's own SDK validates both with and without the explicit default port (`:443`/`:80`) because signing is inconsistent; do the same. (Verified in twilio-go/-python/-node `request_validator`.) |
 | JSON bodies | If the request has a `bodySHA256` query param, the signature is over the URL only and the body must hash to it. Not used for SMS inbound. |
 | Replay | No timestamp: dedupe on `MessageSid`. |
 | Routing | `AccountSid` → connection(s); `To` → trigger (which number) |
@@ -622,6 +647,44 @@ MessageSid=SM1234…&AccountSid=AC1234…&From=whatsapp:+15551230000
   The connection flow could set it via the API
   (`POST /IncomingPhoneNumbers/{sid}.json SmsUrl=…`), which needs write creds.
   Decide in the trigger stream.
+
+**As built — verification and routing.** One URL for everyone,
+`<PUBLIC_URL>/integrations/twilio/events` (no per-connection path token), and
+the user sets it on each number themselves; the integration trigger's
+`webhook_url` shows it. Setting `SmsUrl` via the API was deferred (it
+overwrites whatever the number pointed at, which should be an explicit user
+action with a picker).
+
+The signature is per ACCOUNT (its Auth Token), and the Auth Token is a
+user's sealed connection credential, so no deployment secret can verify a
+delivery. The webhook package gained `ConnectionSigned` (a provider
+reports the account a delivery claims, and verifies against a given
+secret) and `EventsOptions.ConnectionSecrets` (the connections
+`TokenSource`, which opens a connection's credential for its owner only).
+For a Twilio delivery the receiver:
+
+1. reads `AccountSid` from the form (part of the signed payload; only a
+   lookup key — a forged one finds candidates whose tokens cannot sign the
+   forgery);
+2. takes the candidate connections = live, owner-matched connections that
+   record that account AND back an enabled twilio trigger
+   (`ListIntegrationTriggers`);
+3. opens each candidate's Auth Token and tries HMAC-SHA1 over PUBLIC_URL
+   (+/- the default port) + sorted params;
+4. 401s if none verifies; otherwise routes the event ONLY through triggers
+   on connections whose own token verified (a stale/rotated token receives
+   nothing), then `match` and the CEL filter as usual.
+
+No `ResourceKey` (#474's access-gated routing): anyone holding an account's
+Auth Token has full access to every number on it, so gating by `To` would
+protect nothing; users on a shared account narrow with `match: {to: …}`.
+`external_account_id` is Twilio-asserted: the manifest's probe says
+`routes_events: true`, so `CreateAPIKey` runs it before saving and stores the
+`sid` Twilio returns, refusing a credential Twilio rejects. So a user cannot
+claim another account's SID without that account's token.
+
+Response: empty TwiML `<?xml …?><Response></Response>`, `text/xml`, via a new
+`Delivery.Ack` (sent after the events are recorded, unlike `Respond`).
 
 ### 4.5 Gotchas
 

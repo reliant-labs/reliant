@@ -77,6 +77,12 @@ type Provider struct {
 	paramPatterns map[string]*regexp.Regexp
 }
 
+// RoutesByAccount reports whether the integration's inbound events route by
+// the connection's external account (its probe says routes_events). Such a
+// connection must record the account the PROVIDER names for its credential
+// (see Service.CreateAPIKey).
+func (p *Provider) RoutesByAccount() bool { return p.spec.GetProbe().GetRoutesEvents() }
+
 // Spec is the integration's connection declaration.
 func (p *Provider) Spec() *reliantv1.ConnectionSpec { return p.spec }
 

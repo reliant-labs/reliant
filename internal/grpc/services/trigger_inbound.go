@@ -35,6 +35,14 @@ type integrationCatalog interface {
 	HasInboundSource(integration string) bool
 }
 
+// userConfiguredCatalog is the optional half of a catalog that knows which
+// integrations' webhooks the user configures themselves (Twilio's per-number
+// URL), so a trigger can show its owner the URL. The provider registry
+// satisfies it.
+type userConfiguredCatalog interface {
+	UserConfiguredURL(integration string) bool
+}
+
 // eventIntake records a manual fire of an inbound trigger. Satisfied by
 // *triggers.Intake.
 type eventIntake interface {

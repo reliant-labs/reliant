@@ -1130,11 +1130,19 @@ type Trigger struct {
 	// kinds, and cleared if the connection is deleted (the trigger then
 	// receives nothing until it is edited).
 	ConnectionId *string `protobuf:"bytes,24,opt,name=connection_id,json=connectionId,proto3,oneof" json:"connection_id,omitempty"`
-	// Read-only, webhook triggers: <PUBLIC_URL>/hooks/{id}, the URL to POST to
-	// with `Authorization: Bearer <token>` or an HMAC signature. Append
-	// "/<token>" for a sender that cannot set headers. The token itself is
-	// returned only by CreateTrigger and RotateWebhookToken. A bare path when
-	// the server has no PUBLIC_URL.
+	// Read-only, the URL a sender must be pointed at, when the user has to
+	// configure it themselves.
+	//
+	// Webhook triggers: <PUBLIC_URL>/hooks/{id}, the URL to POST to with
+	// `Authorization: Bearer <token>` or an HMAC signature. Append "/<token>"
+	// for a sender that cannot set headers. The token itself is returned only
+	// by CreateTrigger and RotateWebhookToken. A bare path when the server has
+	// no PUBLIC_URL.
+	//
+	// Integration triggers whose provider is configured per resource by the
+	// user (Twilio: each phone number's "A message comes in" webhook):
+	// <PUBLIC_URL>/integrations/{integration}/events. Unset for providers whose
+	// app-level webhook the operator registers once (GitHub, Slack).
 	WebhookUrl *string `protobuf:"bytes,25,opt,name=webhook_url,json=webhookUrl,proto3,oneof" json:"webhook_url,omitempty"`
 	// The workflow-declared trigger (WorkflowTrigger.name) this row activates,
 	// when it activates one. The source, filter and inputs are then that

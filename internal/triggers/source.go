@@ -122,3 +122,15 @@ func HooksPath(triggerID string) string { return "/hooks/" + url.PathEscape(trig
 func WebhookURL(publicURL, triggerID string) string {
 	return strings.TrimSuffix(strings.TrimSpace(publicURL), "/") + HooksPath(triggerID)
 }
+
+// IntegrationEventsPath is the path a provider's app-level webhook delivers
+// to; the receiver mounts POST /integrations/{provider}/events.
+func IntegrationEventsPath(integration string) string {
+	return "/integrations/" + url.PathEscape(integration) + "/events"
+}
+
+// IntegrationEventsURL is the absolute URL of a provider's app-level webhook
+// (the bare path without a public URL, as WebhookURL).
+func IntegrationEventsURL(publicURL, integration string) string {
+	return strings.TrimSuffix(strings.TrimSpace(publicURL), "/") + IntegrationEventsPath(integration)
+}

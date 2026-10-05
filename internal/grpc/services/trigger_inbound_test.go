@@ -283,3 +283,41 @@ func TestFireInboundTriggerGoesThroughIntake(t *testing.T) {
 	assert.Empty(t, env.backend.fires, "an inbound trigger's run-now never goes to the schedule backend")
 	env.backend.mu.Unlock()
 }
+
+// texterCatalog is a catalog whose "texter" integration's webhook URL
+// is set by each user on their own resources (Twilio's per-number webhook).
+type texterCatalog struct{ fakeCatalog }
+
+func (texterCatalog) UserConfiguredURL(integration string) bool { return integration == "texter" }
+
+// A trigger on a provider whose webhook the user configures themselves shows
+// them the URL to paste into the provider's console; one whose app-level
+// webhook the operator registers does not.
+func TestIntegrationTriggerShowsTheWebhookURLTheUserMustConfigure(t *testing.T) {
+	env := setupTriggerTest(t)
+	env.svc.WithInbound(InboundOptions{
+		PublicURL: "https://api.example.com/",
+		Sealer:    fakeSealer{},
+		Catalog:   texterCatalog{fakeCatalog{"texter": true, "test": true}},
+		Intake:    &fakeIntake{},
+	})
+	env.createConnection(t, env.userID, "texter", "AC0001", core.ConnectionStatusActive)
+	env.createConnection(t, env.userID, "test", "acct-1", core.ConnectionStatusActive)
+	integration := func(id string) *reliantv1.TriggerDefinition {
+		return env.definition(func(d *reliantv1.TriggerDefinition) {
+			d.Name = "on " + id
+			d.Source = &reliantv1.TriggerDefinition_Integration{Integration: &reliantv1.IntegrationSource{
+				Integration: id, Events: []string{"message.received"},
+			}}
+		})
+	}
+
+	texter := env.create(t, integration("texter"))
+	assert.Equal(t, "https://api.example.com/integrations/texter/events", texter.GetWebhookUrl())
+	got, err := env.svc.GetTrigger(env.ctx, connect.NewRequest(&reliantv1.GetTriggerRequest{Id: texter.GetId()}))
+	require.NoError(t, err)
+	assert.Equal(t, texter.GetWebhookUrl(), got.Msg.GetTrigger().GetWebhookUrl(), "every read shows it, not only the create")
+
+	appLevel := env.create(t, integration("test"))
+	assert.Nil(t, appLevel.WebhookUrl, "an operator-registered webhook is not the user's to configure")
+}

@@ -301,6 +301,32 @@ each enabled by its own secret (e.g. `RELIANT_GITHUB_WEBHOOK_SECRET`).
   nodes see). False → `skipped` row; an eval error → `failed` with a `has()`
   hint.
 
+**Added by the Twilio stream (code against these too):**
+- `HttpRequestSpec.body_format: form` — the body (static or `body_expr`)
+  encodes as `application/x-www-form-urlencoded`; lists repeat their key,
+  nulls are dropped, nested objects are refused. `PaginationSpec` style
+  `next_url` with `next_url: <CEL>` follows a provider-supplied next-page URL
+  verbatim (relative resolves against the current page; same host rules as a
+  Link header). Followed Link-header URLs are now also requested verbatim.
+- A probe may be a `url:` (catalog-fixed, templated) when the identity
+  resource is not under `base_url`.
+- `IdentityProbe.routes_events: true` declares that the probe's external id
+  is what inbound events route on (connection-account routing, as Twilio's
+  AccountSid). For such an integration `connections.Service.CreateAPIKey`
+  runs the probe before saving, records the provider's `external_id` /
+  `label`, and refuses a credential the provider rejects (InvalidArgument).
+  Everything else is unchanged (no network call at create) — including
+  GitHub, whose events are access-gated (#474) rather than account-routed.
+- `webhook.ConnectionSigned` (`SignedAccount`, `VerifyWith(req, secret)`) +
+  `EventsOptions.ConnectionSecrets` / `Inbound.WithConnectionSecrets`: for a
+  provider whose deliveries are signed with a per-connection secret. The
+  receiver verifies against each candidate connection's secret and routes
+  only through the verified ones. `Delivery.Ack` is a reply sent after
+  events are recorded (TwiML). `webhook.UserConfigured` /
+  `Registry.UserConfiguredURL` mark providers whose webhook the user sets per
+  resource; their integration triggers render `webhook_url` =
+  `<PUBLIC_URL>/integrations/<id>/events`.
+
 **Known gaps (owned by named wave-1 streams):**
 - Pollers have no credential path: `Resolver.ForCall` needs a run id. The
   Gmail stream adds a by-connection credential resolution for pollers.

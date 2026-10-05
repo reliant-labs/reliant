@@ -207,7 +207,7 @@ func Run(ctx context.Context, opts Options) error {
 	if err != nil {
 		return err
 	}
-	connSvc, oauthRoutes, err := wireConnections(repo, vaultKeys, jwtPublicKey, jwksURL, strings.TrimSpace(os.Getenv("PUBLIC_URL")))
+	conns, err := wireConnections(repo, vaultKeys, jwtPublicKey, jwksURL, strings.TrimSpace(os.Getenv("PUBLIC_URL")))
 	if err != nil {
 		return err
 	}
@@ -388,7 +388,8 @@ func Run(ctx context.Context, opts Options) error {
 	triggerInbound := webhook.NewInbound(repo,
 		triggers.NewIntake(repo, temporalClient, v2workflow.SharedTaskQueue).
 			WithWorkflows(triggers.LaunchWorkflows{Repo: repo}),
-		inboundRegistry, vaultKeys, strings.TrimSpace(os.Getenv("PUBLIC_URL")))
+		inboundRegistry, vaultKeys, strings.TrimSpace(os.Getenv("PUBLIC_URL"))).
+		WithConnectionSecrets(conns.tokens)
 	// GitHub events are access-gated: each owner's repository access is
 	// refreshed when a trigger is activated and every few minutes while one
 	// exists. Every replica runs the loop; leases share the work.
@@ -406,9 +407,9 @@ func Run(ctx context.Context, opts Options) error {
 		BindAddress:    opts.BindAddress,
 		JWTPublicKey:   jwtPublicKey,
 		JWKSURL:        jwksURL,
-		Connections:    connSvc,
+		Connections:    conns.service,
 		CatalogSearch:  catalogSearch,
-		OAuthRoutes:    oauthRoutes,
+		OAuthRoutes:    conns.oauth,
 		TriggerInbound: triggerInbound,
 		// Connector/MCP surface. PUBLIC_URL is this server's externally
 		// reachable base URL, used to tell a user where to point a

@@ -149,19 +149,31 @@ func (r *Runner) run(ctx context.Context, m *reliantv1.IntegrationManifest, a *r
 			}
 		}
 	}
-	var body []byte
+	var (
+		rendered any
+		hasBody  bool
+	)
 	if req.GetBodyExpr() != "" {
 		v, err := tmpl.EvalExpr(req.GetBodyExpr(), vars)
 		if err != nil {
 			return nil, fmt.Errorf("request.body_expr: %w", err)
 		}
-		if v != nil {
-			if body, err = json.Marshal(v); err != nil {
+		rendered, hasBody = v, v != nil
+	} else if req.GetBody() != nil {
+		if rendered, err = renderValue(req.GetBody().AsInterface(), vars); err != nil {
+			return nil, fmt.Errorf("request.body: %w", err)
+		}
+		hasBody = true
+	}
+	var body []byte
+	bodyType := "application/json"
+	if hasBody {
+		if req.GetBodyFormat() == manifest.BodyFormatForm {
+			if body, err = encodeForm(rendered); err != nil {
 				return nil, err
 			}
-		}
-	} else if req.GetBody() != nil {
-		if body, err = renderBody(req.GetBody(), vars); err != nil {
+			bodyType = "application/x-www-form-urlencoded"
+		} else if body, err = json.Marshal(rendered); err != nil {
 			return nil, err
 		}
 	}
@@ -189,7 +201,7 @@ func (r *Runner) run(ctx context.Context, m *reliantv1.IntegrationManifest, a *r
 		}
 	}
 	if body != nil && headers.Get("Content-Type") == "" {
-		headers.Set("Content-Type", "application/json")
+		headers.Set("Content-Type", bodyType)
 	}
 	headers.Set("User-Agent", userAgent)
 
@@ -241,12 +253,20 @@ func (r *Runner) run(ctx context.Context, m *reliantv1.IntegrationManifest, a *r
 	}
 	var items []any
 	var last *page
+	// followed is a URL the provider handed back (a Link header, a
+	// next_url). It is requested verbatim: a next link is opaque, and
+	// re-encoding its query could reorder or re-escape what the provider
+	// signed or parses positionally.
+	var followed *url.URL
 	for i := 0; i < maxPages; i++ {
 		if pg != nil && pg.GetStyle() == "page" {
 			query.Set(pg.GetPageParam(), strconv.FormatInt(pageNum, 10))
 		}
 		u := *target
 		u.RawQuery = query.Encode()
+		if followed != nil {
+			u = *followed
+		}
 		pgResp, err := r.do(ctx, r2, method, &u, headers, body, maxBytes, allowed, anyHost, cred)
 		if err != nil {
 			return nil, err
@@ -272,7 +292,7 @@ func (r *Runner) run(ctx context.Context, m *reliantv1.IntegrationManifest, a *r
 			return nil, fmt.Errorf("a paginated action's output.select must yield a list, got %T", selected)
 		}
 		items = append(items, list...)
-		next, more, err := advance(pg, pgResp, query, &pageNum)
+		next, more, err := advance(pg, pgResp, &u, query, &pageNum)
 		if err != nil {
 			return nil, err
 		}
@@ -286,8 +306,7 @@ func (r *Runner) run(ctx context.Context, m *reliantv1.IntegrationManifest, a *r
 			if err := checkPinned(next); err != nil {
 				return nil, fmt.Errorf("pagination link refused: %w", err)
 			}
-			target = next
-			query = target.Query()
+			followed = next
 		}
 	}
 	if pg != nil {
@@ -512,12 +531,45 @@ func checkHeader(name, value string) error {
 	return nil
 }
 
-func renderBody(body interface{ AsInterface() any }, vars map[string]any) ([]byte, error) {
-	rendered, err := renderValue(body.AsInterface(), vars)
-	if err != nil {
-		return nil, fmt.Errorf("request.body: %w", err)
+// encodeForm renders a body as application/x-www-form-urlencoded. The body
+// must be an object; a scalar value is one key=value, a list repeats its key
+// in order (Twilio's MediaUrl), and a null leaves the key out. Anything
+// nested has no encoding every form API reads the same way, so it is refused
+// rather than guessed at.
+func encodeForm(v any) ([]byte, error) {
+	obj, ok := v.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("a form body must render to an object, got %T", v)
 	}
-	return json.Marshal(rendered)
+	form := url.Values{}
+	for k, val := range obj {
+		switch t := val.(type) {
+		case nil:
+		case []any:
+			for i, e := range t {
+				s, err := formScalar(e)
+				if err != nil {
+					return nil, fmt.Errorf("form field %s[%d]: %w", k, i, err)
+				}
+				form.Add(k, s)
+			}
+		default:
+			s, err := formScalar(t)
+			if err != nil {
+				return nil, fmt.Errorf("form field %s: %w", k, err)
+			}
+			form.Set(k, s)
+		}
+	}
+	return []byte(form.Encode()), nil
+}
+
+func formScalar(v any) (string, error) {
+	switch v.(type) {
+	case string, float64, bool:
+		return scalarString(v), nil
+	}
+	return "", fmt.Errorf("a form value must be a string, number or boolean, got %T", v)
 }
 
 func renderValue(v any, vars map[string]any) (any, error) {
@@ -667,9 +719,10 @@ func defaultErrorMessage(p *page) string {
 
 var linkNext = regexp.MustCompile(`<([^>]+)>\s*;[^,]*rel="?next"?`)
 
-// advance moves to the next page. It returns the next URL (link_header), or
-// mutates query/pageNum in place and returns nil.
-func advance(pg *reliantv1.PaginationSpec, p *page, query url.Values, pageNum *int64) (*url.URL, bool, error) {
+// advance moves to the next page. It returns the next URL (link_header,
+// next_url), or mutates query/pageNum in place and returns nil. current is
+// the URL of the page just read, which a relative next_url resolves against.
+func advance(pg *reliantv1.PaginationSpec, p *page, current *url.URL, query url.Values, pageNum *int64) (*url.URL, bool, error) {
 	switch pg.GetStyle() {
 	case "link_header":
 		m := linkNext.FindStringSubmatch(strings.Join(p.headers.Values("Link"), ","))
@@ -698,6 +751,25 @@ func advance(pg *reliantv1.PaginationSpec, p *page, query url.Values, pageNum *i
 	case "page":
 		*pageNum++
 		return nil, true, nil
+	case "next_url":
+		v, err := tmpl.EvalExpr(pg.GetNextUrl(), responseVars(p))
+		if err != nil {
+			return nil, false, fmt.Errorf("pagination.next_url: %w", err)
+		}
+		raw := ""
+		if v != nil {
+			raw = strings.TrimSpace(scalarString(v))
+		}
+		if raw == "" {
+			return nil, false, nil
+		}
+		ref, err := url.Parse(raw)
+		if err != nil {
+			return nil, false, fmt.Errorf("pagination.next_url %q: %w", raw, err)
+		}
+		// The caller checks the resolved URL against the allowed hosts and
+		// the credential's pinned host before following it.
+		return current.ResolveReference(ref), true, nil
 	}
 	return nil, false, nil
 }

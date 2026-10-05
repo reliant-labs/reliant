@@ -66,6 +66,14 @@ func NewInbound(store Store, intake Intake, registry *Registry, v Vault, publicU
 	return in
 }
 
+// WithConnectionSecrets lets the app-level receiver verify deliveries that
+// are signed with a per-connection secret (Twilio's Auth Token). Without it,
+// such providers answer 503.
+func (in *Inbound) WithConnectionSecrets(secrets ConnectionSecrets) *Inbound {
+	in.events.opts.ConnectionSecrets = secrets
+	return in
+}
+
 // Register mounts every inbound route.
 func (in *Inbound) Register(handle func(pattern string, handler http.Handler)) {
 	in.hooks.Register(handle)
@@ -112,6 +120,14 @@ func RegistryFromEnv(getenv func(string) string) (*Registry, error) {
 			return nil, err
 		}
 		if err := r.RegisterPoller(gmail.ID, p); err != nil {
+			return nil, err
+		}
+	}
+	// Twilio: no deployment secret — each delivery is verified against its
+	// account's Auth Token, from the users' own connections. What it does
+	// need is PUBLIC_URL, because Twilio signs the URL itself.
+	if parsePublicBase(getenv("PUBLIC_URL")) != nil {
+		if err := r.Register(NewTwilioProvider()); err != nil {
 			return nil, err
 		}
 	}
