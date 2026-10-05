@@ -178,20 +178,21 @@ func TestEmbeddedCatalogRanksTheObviousActionFirst(t *testing.T) {
 	}
 }
 
-// Manifests can declare triggers, but no embedded manifest does yet: a
-// trigger type is declared together with the provider that delivers it, so
-// the catalog never lists one this server cannot receive. When the first
-// provider lands (GitHub), this test changes to assert its entries.
-func TestEmbeddedCatalogIsActionsOnlyUntilTriggersLand(t *testing.T) {
+// A trigger type is declared together with the provider that delivers it
+// (Slack's in internal/integrations/webhook/slack.go), so the embedded
+// catalog's trigger entries are exactly the shipped providers' events.
+func TestEmbeddedSlackTriggersAreIndexed(t *testing.T) {
 	idx, err := Build(catalog.MustBuiltin().Manifests())
 	require.NoError(t, err)
-	require.Positive(t, idx.Len())
-	r := search(t, idx, Query{Kinds: []Kind{KindTrigger}})
-	assert.Zero(t, r.Total, "no manifest declares triggers yet")
-	all := search(t, idx, Query{PageSize: MaxPageSize})
-	for _, h := range all.Hits {
-		assert.Equal(t, KindAction, h.Entry.Kind, h.Entry.Ref)
+	r := search(t, idx, Query{Text: "slack", Kinds: []Kind{KindTrigger}, PageSize: MaxPageSize})
+	assert.ElementsMatch(t, []string{"slack/message.posted@1", "slack/app_mentioned@1", "slack/reaction.added@1"}, refs(r))
+	for _, h := range r.Hits {
+		assert.Equal(t, KindTrigger, h.Entry.Kind, h.Entry.Ref)
+		assert.True(t, h.Entry.ConnectionRequired, "%s listens through a Slack connection", h.Entry.Ref)
 	}
+	r = search(t, idx, Query{Text: "mention", Kinds: []Kind{KindTrigger}})
+	require.NotEmpty(t, r.Hits)
+	assert.Equal(t, "slack/app_mentioned@1", r.Hits[0].Entry.Ref)
 }
 
 // A trigger declared in a manifest gets its own entry and kind.

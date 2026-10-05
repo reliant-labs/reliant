@@ -187,6 +187,30 @@ Sources: docs.github.com
 
 ## 2. Slack
 
+> **As built (integrations-slack).** Manifest
+> `internal/integrations/catalog/slack/manifest.yaml`; Events API provider
+> `internal/integrations/webhook/slack.go`. Where the notes below differ from
+> what shipped, the code wins:
+>
+> - Bot scopes: `chat:write, channels:read, groups:read, channels:history,
+>   groups:history, im:history, reactions:read, reactions:write, users:read,
+>   users:read.email, app_mentions:read` (`reactions:write` for reactions.add,
+>   `channels:read`/`groups:read` for conversations.list). Comma-joined on
+>   authorize and on refresh (`scope_separator: ","`).
+> - The bot token is `oauth.v2.access`'s TOP-LEVEL `access_token`; only the
+>   installer's user token is nested (`authed_user`), and it is ignored. The
+>   connection's `external_account_id` is `auth.test`'s `team_id` (the probe).
+> - No `revoke`: Slack gives every installer in a workspace the SAME bot
+>   token, so revoking it on one user's delete would break the others.
+> - Trigger event types: `message.channels|groups|im|mpim` (by
+>   `channel_type`), `app_mention`, `reaction_added`; catalog triggers
+>   `slack/message.posted@1`, `slack/app_mentioned@1`,
+>   `slack/reaction.added@1`. Bot messages and edits/deletes never fire.
+> - Enabled by `RELIANT_SLACK_SIGNING_SECRET`.
+> - PKCE is always sent by the broker. Slack treats PKCE as an opt-in app
+>   setting; whether a non-PKCE app ignores `code_challenge`/`code_verifier`
+>   is still UNVERIFIED against a live workspace.
+
 ### 2.1 Auth
 
 | Item | Value |

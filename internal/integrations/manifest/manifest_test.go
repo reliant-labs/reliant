@@ -67,6 +67,30 @@ func TestErrorRuleWhenIsValidatedAtLoad(t *testing.T) {
 	}
 }
 
+// A rule that covers a 2xx status classifies a SUCCESSFUL response as an
+// error, so it must say when: without a `when` it would fail every call.
+func TestErrorRuleOn2xxNeedsWhen(t *testing.T) {
+	rule := func(r string) string {
+		return strings.Replace(validHTTP, "path: /things/{{ params.id }}",
+			"path: /things/{{ params.id }}\n      errors:\n        - "+r, 1)
+	}
+	for name, r := range map[string]string{
+		"exact 200":      `{ status: 200, message: "x" }`,
+		"range into 2xx": `{ status_min: 199, status_max: 200, message: "x" }`,
+		"2xx range":      `{ status_min: 200, status_max: 299, message: "x" }`,
+	} {
+		if _, err := Parse([]byte(rule(r)), TrustCurated); err == nil || !strings.Contains(err.Error(), "when") {
+			t.Errorf("%s: a 2xx rule without when must fail to load, got %v", name, err)
+		}
+	}
+	if _, err := Parse([]byte(rule(`{ status_min: 200, status_max: 299, when: "response.ok == false", message: "x" }`)), TrustCurated); err != nil {
+		t.Errorf("a guarded 2xx rule loads: %v", err)
+	}
+	if _, err := Parse([]byte(rule(`{ status_min: 400, status_max: 499, message: "x" }`)), TrustCurated); err != nil {
+		t.Errorf("a 4xx range needs no guard: %v", err)
+	}
+}
+
 func TestDuplicateYAMLKeyFails(t *testing.T) {
 	doc := strings.Replace(validHTTP, "version: 1", "version: 1\nversion: 2", 1)
 	if _, err := Parse([]byte(doc), TrustCurated); err == nil {

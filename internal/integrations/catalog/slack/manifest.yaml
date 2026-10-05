@@ -1,0 +1,641 @@
+# Slack. Authored from Slack's Web API and OAuth v2 documentation
+# (docs.slack.dev/reference/methods, docs.slack.dev/authentication).
+#
+# Auth: OAuth v2 with a BOT token (xoxb-). One Slack app per deployment, its
+# client in RELIANT_OAUTH_SLACK_CLIENT_ID / _CLIENT_SECRET. oauth.v2.access
+# returns the bot token at the top level (access_token) and nests the
+# installing user's token under authed_user; the broker reads the top-level
+# token, so reliant always acts as the bot and never stores the user token.
+# Bot scopes are comma-separated in Slack's v2 flow (scope_separator). A bot
+# token does not expire unless the app opts into token rotation; when it does,
+# Slack sends expires_in and a refresh_token and the token source refreshes it.
+#
+# A connection is a WORKSPACE: the probe (auth.test) records team_id as the
+# connection's external account, which is what Events API deliveries route on
+# (internal/integrations/webhook/slack.go).
+#
+# Slack reports almost every failure as HTTP 200 with
+# {"ok": false, "error": "<code>"}, so each action's errors list matches 2xx
+# responses on `ok == false` and classifies the code:
+#   ratelimited                    retryable (Slack also uses 429 + Retry-After)
+#   invalid_auth, token_revoked,
+#   token_expired, not_authed,
+#   account_inactive               reconnect Slack
+#   missing_scope                  the app lacks a scope (named in `needed`)
+#   not_in_channel                 invite the bot to the channel
+#   channel_not_found, users_not_found, message_not_found, ...: permanent
+#   internal_error, fatal_error,
+#   service_unavailable            retryable
+# The list is repeated per action (as in the GitHub manifest) through a YAML
+# anchor, because a manifest has no shared rule set.
+#
+# Channel parameters are conversation IDs (C…, G…, D…), never "#name": Slack
+# resolves names inconsistently. conversations.list is the picker.
+id: slack
+version: 1
+display_name: Slack
+description: Post and read messages, react, and look up people in a Slack workspace, as the Reliant bot.
+icon: slack
+category: communication
+keywords: [chat, messaging, channels, team, notifications, bot]
+
+connection:
+  base_url: https://slack.com/api
+  auth:
+    - oauth2:
+        authorize_url: https://slack.com/oauth/v2/authorize
+        token_url: https://slack.com/api/oauth.v2.access
+        scope_separator: ","
+        scopes:
+          - chat:write          # chat.postMessage / chat.update / thread replies
+          - channels:read       # conversations.list (public channels)
+          - groups:read         # conversations.list (private channels the bot is in)
+          - channels:history    # conversations.history + message.channels events
+          - groups:history      # message.groups events
+          - im:history          # message.im events
+          - reactions:read      # reaction_added events
+          - reactions:write     # reactions.add
+          - users:read          # users.lookupByEmail
+          - users:read.email    # users.lookupByEmail
+          - app_mentions:read   # app_mention events
+        # No revoke: Slack issues ONE bot token per app per workspace and hands
+        # the same one to every user who installs it there, so revoking it when
+        # one user deletes their connection would break every other user's
+        # connection to that workspace. Removing the app is a workspace admin's
+        # call, made in Slack.
+  probe:
+    method: POST
+    path: /auth.test
+    ok: response.ok == true
+    external_id: response.team_id
+    label: response.team
+
+actions:
+  - id: message.post
+    display_name: Post message
+    summary: Send a message to a channel, DM or thread.
+    description: >-
+      Post a message as the Reliant bot to a channel or DM by its ID. Give text,
+      Block Kit blocks, or both (text is then the notification fallback). Set
+      thread_ts to post inside a thread. The bot must be a member of the
+      channel. Returns the message's ts, which identifies it for updates,
+      replies and reactions.
+    keywords: [send, post, message, notify, chat, announce]
+    placement: server
+    mutates: true
+    tool:
+      expose: true
+    params:
+      type: object
+      additionalProperties: false
+      required: [channel]
+      properties:
+        channel: &channel
+          type: string
+          pattern: "^[CGD][A-Z0-9]{2,}$"
+          description: >-
+            The conversation ID (C… public channel, G… private channel, D…
+            direct message), not its #name. List them with conversations.list.
+        text: &text
+          type: string
+          minLength: 1
+          maxLength: 40000
+          description: >-
+            Message text in Slack mrkdwn. Required unless blocks is given; with
+            blocks it is the notification fallback.
+        blocks: &blocks
+          type: array
+          maxItems: 50
+          items: { type: object }
+          description: Block Kit blocks (layout objects with a "type").
+        thread_ts: &thread_ts
+          type: string
+          pattern: "^[0-9]+\\.[0-9]+$"
+          description: The ts of a thread's parent message, to post as a reply in that thread.
+        reply_broadcast:
+          type: boolean
+          description: With thread_ts, also show the reply in the channel.
+        unfurl_links:
+          type: boolean
+          description: Expand link previews. Slack's default applies when omitted.
+        connection: &connection
+          type: string
+          description: >-
+            Id of a saved Slack connection (a workspace) to use. Omit to use your
+            default Slack connection.
+    request:
+      method: POST
+      path: /chat.postMessage
+      headers: &json_headers
+        Content-Type: application/json; charset=utf-8
+      body_expr: >-
+        {"channel": params.channel,
+         ?"text": params.?text,
+         ?"blocks": params.?blocks,
+         ?"thread_ts": params.?thread_ts,
+         ?"reply_broadcast": params.?reply_broadcast,
+         ?"unfurl_links": params.?unfurl_links}
+      errors: &slack_errors
+        - status: 429
+          retryable: true
+          message: &slack_rate_limited >-
+            Slack rate limit exceeded.
+            {{ headers[?'retry-after'].hasValue() ? 'Retry after ' + headers['retry-after'] + ' seconds.' : 'Retry after at least 30 seconds.' }}
+        - status_min: 200
+          status_max: 299
+          when: "response.?ok.orValue(true) == false && response.?error.orValue('') == 'ratelimited'"
+          retryable: true
+          message: *slack_rate_limited
+        - status_min: 200
+          status_max: 299
+          when: >-
+            response.?ok.orValue(true) == false &&
+            response.?error.orValue('') in ['invalid_auth', 'token_revoked', 'token_expired', 'not_authed', 'account_inactive']
+          retryable: false
+          message: "Slack rejected the credential ({{ response.error }}): reconnect Slack in Settings."
+        - status_min: 200
+          status_max: 299
+          when: "response.?ok.orValue(true) == false && response.?error.orValue('') == 'missing_scope'"
+          retryable: false
+          message: >-
+            The Slack app lacks a permission this action needs
+            ({{ response.?needed.orValue('a scope') }}): an admin must add it to
+            the app and reconnect Slack.
+        - status_min: 200
+          status_max: 299
+          when: "response.?ok.orValue(true) == false && response.?error.orValue('') == 'not_in_channel'"
+          retryable: false
+          message: "The Reliant bot is not in that channel (not_in_channel): invite it with /invite @Reliant, then retry."
+        - status_min: 200
+          status_max: 299
+          when: "response.?ok.orValue(true) == false && response.?error.orValue('') == 'channel_not_found'"
+          retryable: false
+          message: >-
+            Slack could not find that channel (channel_not_found): pass a
+            conversation ID (C…/G…/D…) the bot can see, not a #name.
+        - status_min: 200
+          status_max: 299
+          when: >-
+            response.?ok.orValue(true) == false &&
+            response.?error.orValue('') in ['internal_error', 'fatal_error', 'service_unavailable', 'request_timeout']
+          retryable: true
+          message: "Slack failed on its side ({{ response.error }}); retry."
+        - status_min: 200
+          status_max: 299
+          when: "response.?ok.orValue(true) == false"
+          retryable: false
+          message: "Slack refused the request: {{ response.?error.orValue('unknown_error') }}."
+    output:
+      select: >-
+        {"channel": response.channel,
+         "ts": response.ts,
+         "thread_ts": response.?message.?thread_ts.orValue(null),
+         "text": response.?message.?text.orValue(null)}
+      schema: &message_ref
+        type: object
+        properties:
+          channel: { type: string, description: The conversation ID the message is in. }
+          ts: { type: string, description: The message's timestamp id. }
+          thread_ts: { type: [string, "null"], description: The thread it belongs to, if any. }
+          text: { type: [string, "null"] }
+
+  - id: message.reply
+    display_name: Reply in thread
+    summary: Reply in a message's thread.
+    description: >-
+      Post a reply in the thread of an existing message, identified by its
+      channel and ts (a reply to a reply goes to the same thread). Set
+      reply_broadcast to also show it in the channel.
+    keywords: [reply, thread, respond, answer, conversation]
+    placement: server
+    mutates: true
+    tool:
+      expose: true
+    params:
+      type: object
+      additionalProperties: false
+      required: [channel, thread_ts]
+      properties:
+        channel: *channel
+        thread_ts:
+          type: string
+          pattern: "^[0-9]+\\.[0-9]+$"
+          description: The ts of the message to reply to (its thread's parent).
+        text: *text
+        blocks: *blocks
+        reply_broadcast:
+          type: boolean
+          description: Also show the reply in the channel.
+        connection: *connection
+    request:
+      method: POST
+      path: /chat.postMessage
+      headers: *json_headers
+      body_expr: >-
+        {"channel": params.channel,
+         "thread_ts": params.thread_ts,
+         ?"text": params.?text,
+         ?"blocks": params.?blocks,
+         ?"reply_broadcast": params.?reply_broadcast}
+      errors: *slack_errors
+    output:
+      select: >-
+        {"channel": response.channel,
+         "ts": response.ts,
+         "thread_ts": response.?message.?thread_ts.orValue(null),
+         "text": response.?message.?text.orValue(null)}
+      schema: *message_ref
+
+  - id: message.update
+    display_name: Update message
+    summary: Edit a message the bot posted.
+    description: >-
+      Replace the text and/or blocks of a message the Reliant bot posted,
+      identified by channel and ts. A bot can only edit its own messages
+      (cant_update_message otherwise).
+    keywords: [edit, update, change, message, correct]
+    placement: server
+    mutates: true
+    tool:
+      expose: true
+    params:
+      type: object
+      additionalProperties: false
+      required: [channel, ts]
+      properties:
+        channel: *channel
+        ts:
+          type: string
+          pattern: "^[0-9]+\\.[0-9]+$"
+          description: The ts of the message to edit.
+        text: *text
+        blocks: *blocks
+        connection: *connection
+    request:
+      method: POST
+      path: /chat.update
+      headers: *json_headers
+      body_expr: >-
+        {"channel": params.channel,
+         "ts": params.ts,
+         ?"text": params.?text,
+         ?"blocks": params.?blocks}
+      errors: *slack_errors
+    output:
+      select: >-
+        {"channel": response.channel,
+         "ts": response.ts,
+         "text": response.?text.orValue(null)}
+      schema:
+        type: object
+        properties:
+          channel: { type: string }
+          ts: { type: string }
+          text: { type: [string, "null"] }
+
+  - id: reaction.add
+    display_name: Add reaction
+    summary: React to a message with an emoji.
+    description: >-
+      Add an emoji reaction, as the bot, to the message at channel + ts. Name
+      the emoji without colons ("thumbsup", "white_check_mark"). Reacting twice
+      with one emoji fails with already_reacted.
+    keywords: [react, reaction, emoji, acknowledge, ack]
+    placement: server
+    mutates: true
+    tool:
+      expose: true
+    params:
+      type: object
+      additionalProperties: false
+      required: [channel, timestamp, name]
+      properties:
+        channel: *channel
+        timestamp:
+          type: string
+          pattern: "^[0-9]+\\.[0-9]+$"
+          description: The ts of the message to react to.
+        name:
+          type: string
+          pattern: "^[a-z0-9_+'-]+(::skin-tone-[2-6])?$"
+          maxLength: 100
+          description: The emoji name, without colons.
+        connection: *connection
+    request:
+      method: POST
+      path: /reactions.add
+      headers: *json_headers
+      body_expr: '{"channel": params.channel, "timestamp": params.timestamp, "name": params.name}'
+      errors: *slack_errors
+    output:
+      select: '{"ok": response.ok}'
+      schema:
+        type: object
+        properties:
+          ok: { type: boolean }
+
+  - id: user.lookup_by_email
+    display_name: Find user by email
+    summary: Find a workspace member by email address.
+    description: >-
+      Look up a member of the workspace by email address and return their user
+      ID (for mentions as <@ID> and DMs), names and timezone. An address with
+      no member is users_not_found.
+    keywords: [user, person, member, email, lookup, find, mention]
+    placement: server
+    mutates: false
+    tool:
+      expose: true
+    params:
+      type: object
+      additionalProperties: false
+      required: [email]
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 320
+          description: The member's email address.
+        connection: *connection
+    request:
+      method: GET
+      path: /users.lookupByEmail
+      query: { email: "{{ params.email }}" }
+      errors: *slack_errors
+    output:
+      select: >-
+        {"id": response.user.id,
+         "team_id": response.user.?team_id.orValue(null),
+         "name": response.user.?name.orValue(null),
+         "real_name": response.user.?real_name.orValue(response.user.?profile.?real_name.orValue(null)),
+         "display_name": response.user.?profile.?display_name.orValue(null),
+         "email": response.user.?profile.?email.orValue(null),
+         "is_bot": response.user.?is_bot.orValue(false),
+         "deleted": response.user.?deleted.orValue(false),
+         "tz": response.user.?tz.orValue(null)}
+      schema:
+        type: object
+        properties:
+          id: { type: string, description: The user ID (U…). }
+          team_id: { type: [string, "null"] }
+          name: { type: [string, "null"] }
+          real_name: { type: [string, "null"] }
+          display_name: { type: [string, "null"] }
+          email: { type: [string, "null"] }
+          is_bot: { type: boolean }
+          deleted: { type: boolean }
+          tz: { type: [string, "null"] }
+
+  - id: conversations.list
+    display_name: List channels
+    summary: Channels the bot can see, for pickers and lookups.
+    description: >-
+      List the workspace's conversations: public channels, and private channels
+      the bot is a member of. Returns each channel's ID (what every other
+      action takes), name, and whether the bot is a member — it can only post
+      to and read channels it is in. Follows Slack's cursor pagination.
+    keywords: [channels, list, picker, conversations, rooms]
+    placement: server
+    mutates: false
+    tool:
+      expose: true
+    params:
+      type: object
+      additionalProperties: false
+      properties:
+        types:
+          type: string
+          pattern: "^(public_channel|private_channel|mpim|im)(,(public_channel|private_channel|mpim|im))*$"
+          default: public_channel,private_channel
+          description: Comma-separated conversation types to include.
+        exclude_archived:
+          type: boolean
+          default: true
+          description: Leave out archived channels.
+        connection: *connection
+    request:
+      method: GET
+      path: /conversations.list
+      query:
+        limit: "200"
+        types: "{{ params.types }}"
+        exclude_archived: "{{ params.exclude_archived }}"
+      pagination:
+        style: cursor
+        cursor_param: cursor
+        next_cursor: "response.?response_metadata.?next_cursor.orValue('')"
+        max_pages: 20
+      max_response_bytes: 5242880
+      errors: *slack_errors
+    output:
+      select: >-
+        response.channels.map(c, {"id": c.id,
+         "name": c.?name.orValue(null),
+         "is_private": c.?is_private.orValue(false),
+         "is_member": c.?is_member.orValue(false),
+         "is_archived": c.?is_archived.orValue(false),
+         "num_members": c.?num_members.orValue(null),
+         "topic": c.?topic.?value.orValue(null)})
+      schema:
+        type: object
+        properties:
+          items:
+            type: array
+            items:
+              type: object
+              properties:
+                id: { type: string, description: The conversation ID every other action takes. }
+                name: { type: [string, "null"] }
+                is_private: { type: boolean }
+                is_member: { type: boolean, description: Whether the bot can post and read here. }
+                is_archived: { type: boolean }
+                num_members: { type: [integer, "null"] }
+                topic: { type: [string, "null"] }
+
+  - id: conversations.history
+    display_name: Read channel history
+    summary: Recent messages in a channel, newest first.
+    description: >-
+      Read messages from a channel the bot is a member of, newest first,
+      optionally between oldest and latest (ts values). limit bounds the page
+      size; up to max_pages pages are followed. Thread replies are not
+      included, only the thread's parent with its reply_count.
+    keywords: [history, messages, read, channel, recent, conversation]
+    placement: server
+    mutates: false
+    tool:
+      expose: true
+    params:
+      type: object
+      additionalProperties: false
+      required: [channel]
+      properties:
+        channel: *channel
+        oldest:
+          type: string
+          pattern: "^[0-9]+(\\.[0-9]+)?$"
+          description: Only messages after this ts.
+        latest:
+          type: string
+          pattern: "^[0-9]+(\\.[0-9]+)?$"
+          description: Only messages before this ts.
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 200
+          default: 100
+          description: Messages per page.
+        connection: *connection
+    request:
+      method: GET
+      path: /conversations.history
+      query:
+        channel: "{{ params.channel }}"
+        limit: "{{ params.limit }}"
+      query_expr: '{?"oldest": params.?oldest, ?"latest": params.?latest}'
+      pagination:
+        style: cursor
+        cursor_param: cursor
+        next_cursor: "response.?response_metadata.?next_cursor.orValue('')"
+        max_pages: 5
+      max_response_bytes: 5242880
+      errors: *slack_errors
+    output:
+      select: >-
+        response.messages.map(m, {"ts": m.ts,
+         "user": m.?user.orValue(null),
+         "bot_id": m.?bot_id.orValue(null),
+         "subtype": m.?subtype.orValue(null),
+         "text": m.?text.orValue(""),
+         "thread_ts": m.?thread_ts.orValue(null),
+         "reply_count": m.?reply_count.orValue(0)})
+      schema:
+        type: object
+        properties:
+          items:
+            type: array
+            items:
+              type: object
+              properties:
+                ts: { type: string }
+                user: { type: [string, "null"] }
+                bot_id: { type: [string, "null"] }
+                subtype: { type: [string, "null"] }
+                text: { type: string }
+                thread_ts: { type: [string, "null"] }
+                reply_count: { type: integer }
+
+# Events API triggers. Slack pushes every installed workspace's events to one
+# Request URL, <PUBLIC_URL>/integrations/slack/events, verified with the app's
+# signing secret (RELIANT_SLACK_SIGNING_SECRET); internal/integrations/webhook/
+# slack.go is the provider. An event reaches a trigger only through a Slack
+# connection to the SAME workspace (its team_id), and a trigger's `match` can
+# narrow it by the attributes below. The bot receives events only from
+# conversations it is a member of: invite it with /invite @Reliant.
+#
+# Messages posted by bots — the Reliant bot's own among them — never fire, so
+# a workflow that posts cannot trigger itself; edits and deletions don't fire
+# either. An attribute Slack leaves out is the empty string.
+triggers:
+  - id: message.posted
+    display_name: New message
+    summary: Someone posted a message in a channel, DM or thread the bot is in.
+    description: >-
+      Fires when a person posts in a conversation the Reliant bot is a member
+      of. The event type says where: message.channels (public channel),
+      message.groups (private channel), message.im (DM with the bot),
+      message.mpim (group DM); list one or more of them. Thread replies carry
+      their thread's thread_ts. Match on channel to listen to one channel, and
+      on subtype to react to (say) file shares only.
+    keywords: [message, post, chat, channel, dm, new, posted]
+    events: [message.channels, message.groups, message.im, message.mpim]
+    attributes:
+      - { name: channel, description: The conversation ID the message was posted in., example: C0123ABCD }
+      - { name: channel_type, description: "channel, group, im or mpim.", example: channel }
+      - { name: user, description: The user ID of the author., example: U0123ABCD }
+      - { name: thread_ts, description: "The thread's parent ts for a reply; empty for a top-level message.", example: "1700000000.000100" }
+      - { name: subtype, description: "Slack's message subtype (file_share, me_message, ...); empty for a plain message.", example: file_share }
+    data:
+      type: object
+      required: [type, channel, ts, team_id, event_id]
+      properties:
+        type: { type: string, const: message }
+        subtype: { type: string }
+        channel: { type: string }
+        channel_type: { type: string, enum: [channel, group, im, mpim] }
+        user: { type: string, description: The author's user ID. }
+        text: { type: string, description: The message text in Slack mrkdwn. }
+        ts: { type: string, description: "The message's id; reply in its thread with thread_ts = ts." }
+        thread_ts: { type: string }
+        event_ts: { type: string }
+        blocks: { type: array, items: { type: object } }
+        files: { type: array, items: { type: object } }
+        team_id: { type: string }
+        api_app_id: { type: string }
+        event_id: { type: string }
+        truncated: { type: boolean, description: "Set when the event exceeded 64 KiB and only its routing fields were kept." }
+
+  - id: app_mentioned
+    display_name: Bot mentioned
+    summary: Someone @-mentioned the Reliant bot.
+    description: >-
+      Fires when a person mentions @Reliant in a channel the bot is in. text
+      contains the mention as <@BOTID>. To answer in the thread, reply with
+      thread_ts set to the event's thread_ts when present, else its ts.
+    keywords: [mention, at, bot, ask, summon, app_mention]
+    events: [app_mention]
+    attributes:
+      - { name: channel, description: The conversation ID of the mention., example: C0123ABCD }
+      - { name: user, description: The user ID who mentioned the bot., example: U0123ABCD }
+      - { name: thread_ts, description: "The thread's parent ts when the mention is in a thread; empty otherwise.", example: "1700000000.000100" }
+    data:
+      type: object
+      required: [type, channel, ts, team_id, event_id]
+      properties:
+        type: { type: string, const: app_mention }
+        channel: { type: string }
+        user: { type: string }
+        text: { type: string, description: "The message text, including <@BOTID>." }
+        ts: { type: string }
+        thread_ts: { type: string }
+        event_ts: { type: string }
+        blocks: { type: array, items: { type: object } }
+        team_id: { type: string }
+        api_app_id: { type: string }
+        event_id: { type: string }
+        truncated: { type: boolean }
+
+  - id: reaction.added
+    display_name: Reaction added
+    summary: Someone added an emoji reaction to a message.
+    description: >-
+      Fires when a person adds an emoji reaction to a message in a
+      conversation the bot is in. Match on reaction (the emoji name, without
+      colons) to build an emoji-driven workflow, e.g. "ticket" files an issue.
+      item.channel and item.ts identify the message reacted to.
+    keywords: [reaction, emoji, react, added, acknowledge]
+    events: [reaction_added]
+    attributes:
+      - { name: channel, description: The conversation ID of the message reacted to., example: C0123ABCD }
+      - { name: user, description: The user ID who reacted., example: U0123ABCD }
+      - { name: reaction, description: "The emoji name, without colons.", example: white_check_mark }
+      - { name: item_user, description: "The user ID who wrote the message reacted to; empty when Slack omits it.", example: U0456EFGH }
+    data:
+      type: object
+      required: [type, reaction, item, team_id, event_id]
+      properties:
+        type: { type: string, const: reaction_added }
+        user: { type: string }
+        reaction: { type: string }
+        item_user: { type: string }
+        item:
+          type: object
+          properties:
+            type: { type: string }
+            channel: { type: string }
+            ts: { type: string }
+        event_ts: { type: string }
+        team_id: { type: string }
+        api_app_id: { type: string }
+        event_id: { type: string }
+        truncated: { type: boolean }

@@ -190,12 +190,6 @@ func (b *Broker) Start(ctx context.Context, p StartParams) (string, error) {
 		return "", err
 	}
 	spec := oauthSpec(prov)
-	if spec.GetScopeSeparator() == "," && len(spec.GetScopes()) > 1 {
-		// forge/pkg/oauth2.AuthRequest always space-joins Scopes and refuses a
-		// "scope" in Extra, so a comma-delimited scope cannot be sent yet.
-		// Refuse rather than send a scope string the provider will misread.
-		return "", newError(CodeFailedPrecondition, "%s needs comma-separated scopes, which this build cannot send yet", prov.DisplayName)
-	}
 	authorizeURL, err := prov.endpoint(spec.GetAuthorizeUrl(), params)
 	if err != nil {
 		return "", err
@@ -228,14 +222,25 @@ func (b *Broker) Start(ctx context.Context, p StartParams) (string, error) {
 		}
 	}
 	return oauth2.AuthRequest{
-		Endpoint:    authorizeURL,
-		ClientID:    prov.ClientID,
-		RedirectURI: redirectURI,
-		Scopes:      spec.GetScopes(),
-		State:       state,
-		Challenge:   challenge,
-		Extra:       authorizeExtra(spec),
+		Endpoint:       authorizeURL,
+		ClientID:       prov.ClientID,
+		RedirectURI:    redirectURI,
+		Scopes:         spec.GetScopes(),
+		ScopeSeparator: scopeSeparator(spec),
+		State:          state,
+		Challenge:      challenge,
+		Extra:          authorizeExtra(spec),
 	}.URL()
+}
+
+// scopeSeparator is the manifest's scope_separator as forge/pkg/oauth2 takes
+// it: "" (a space, RFC 6749) or "," (Slack's v2 bot scopes). The loader
+// refused anything else.
+func scopeSeparator(o *reliantv1.OAuth2Auth) string {
+	if o.GetScopeSeparator() == "," {
+		return ","
+	}
+	return ""
 }
 
 // CompleteParams is one callback.

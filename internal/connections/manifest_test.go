@@ -229,19 +229,56 @@ func TestManifestOAuth_FullFlowAtTheTenantHost(t *testing.T) {
 	require.Equal(t, "blue.acme.example.com", f.lastHost())
 }
 
-// scope_separator "," loads (it is valid manifest data), but the flow refuses
-// to start until forge's AuthRequest can send a comma-delimited scope, rather
-// than sending a string the provider will misread.
-func TestManifestOAuth_CommaScopesRefusedUntilSupported(t *testing.T) {
+// scope_separator "," joins the authorize URL's scopes with commas (Slack's
+// v2 flow), and the refresh presents the granted scopes the same way.
+func TestManifestOAuth_CommaScopesAreSentCommaJoined(t *testing.T) {
 	e := newEnv(t)
 	comma := strings.Replace(acmeManifest, "        scopes: [records.read, records.write]\n", "        scopes: [records.read, records.write]\n        scope_separator: \",\"\n", 1)
+	f := newFakeAcme(t)
 	providers, err := connections.ProvidersFromCatalog(testManifests(t, comma), oauthEnv(acmeCreds))
 	require.NoError(t, err)
-	b := connections.NewBroker(e.store, e.vault, providers, nil, "https://reliant.example")
-	_, err = b.Start(context.Background(), connections.StartParams{UserID: "alice", IntegrationID: "acme", Binder: "b", Params: map[string]string{"tenant": "blue"}})
-	require.ErrorIs(t, err, connections.ErrFailedPrecondition)
-	require.Contains(t, err.Error(), "comma-separated scopes")
-	require.Zero(t, e.count(`SELECT count(*) FROM oauth_flows`))
+	doer := hostRouter{"acme.example.com": f.srv, "": e.gh.srv}
+	tokens := connections.NewTokenSource(e.store, e.vault, providers, doer)
+	b := connections.NewBroker(e.store, e.vault, providers, doer, "https://reliant.example")
+	ctx := context.Background()
+
+	authURL, err := b.Start(ctx, connections.StartParams{UserID: "alice", IntegrationID: "acme", Binder: "b", Params: map[string]string{"tenant": "blue"}})
+	require.NoError(t, err)
+	u, err := url.Parse(authURL)
+	require.NoError(t, err)
+	require.Equal(t, "records.read,records.write", u.Query().Get("scope"))
+	require.Contains(t, u.RawQuery, "scope=records.read%2Crecords.write", "one scope parameter, comma-joined")
+
+	done, err := b.Complete(ctx, connections.CompleteParams{State: u.Query().Get("state"), Code: "c", Binder: "b"})
+	require.NoError(t, err)
+	e.expireAccessToken(done.Connection.ID)
+	_, err = tokens.Token(ctx, "alice", done.Connection.ID)
+	require.NoError(t, err)
+	f.mu.Lock()
+	form := f.tokenForm
+	f.mu.Unlock()
+	require.Equal(t, "refresh_token", form.Get("grant_type"))
+	require.Equal(t, "records.read,records.write", form.Get("scope"), "the refresh sends the granted scopes comma-joined")
+}
+
+// A space-separated provider's refresh omits scope (RFC 6749 §6: "what was
+// granted"), exactly as before comma scopes existed.
+func TestManifestOAuth_SpaceScopedRefreshOmitsScope(t *testing.T) {
+	e, f := acmeEnv(t, acmeCreds)
+	ctx := context.Background()
+	authURL, err := e.svc.StartOAuth(ctx, connections.StartParams{UserID: "alice", IntegrationID: "acme", Params: map[string]string{"tenant": "blue"}})
+	require.NoError(t, err)
+	done, err := e.svc.CompleteOAuth(ctx, "alice", mustQuery(t, authURL, "state"), "c")
+	require.NoError(t, err)
+	e.expireAccessToken(done.Connection.ID)
+	_, err = e.tokens.Token(ctx, "alice", done.Connection.ID)
+	require.NoError(t, err)
+	f.mu.Lock()
+	form := f.tokenForm
+	f.mu.Unlock()
+	require.Equal(t, "refresh_token", form.Get("grant_type"))
+	_, sent := form["scope"]
+	require.False(t, sent, "no scope parameter on a space-scoped refresh")
 }
 
 // A tenant that is not a single DNS label, or does not match the declared

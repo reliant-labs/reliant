@@ -252,6 +252,11 @@ func (r *Runner) run(ctx context.Context, m *reliantv1.IntegrationManifest, a *r
 		if pgResp.status < 200 || pgResp.status >= 300 {
 			return errorResult(req, pgResp)
 		}
+		// A provider that reports failure in a 2xx body (Slack's ok:false)
+		// declares a guarded rule for it; any other 2xx is a success.
+		if rule := matchErrorRule(req, pgResp); rule != nil {
+			return ruleResult(rule, pgResp), nil
+		}
 		if pg == nil {
 			break
 		}
@@ -563,15 +568,19 @@ func truncate(text string) string {
 	return text
 }
 
+// errorResult classifies a non-2xx response: the first matching rule, else
+// the defaults (429 and 5xx retryable, everything else permanent).
 func errorResult(req *reliantv1.HttpRequestSpec, p *page) (*Result, error) {
-	retryable := p.status == http.StatusTooManyRequests || p.status >= 500
-	message := fmt.Sprintf("HTTP %d", p.status)
-	if snippet := strings.TrimSpace(string(p.raw)); snippet != "" {
-		if len(snippet) > 300 {
-			snippet = snippet[:300] + "…"
-		}
-		message += ": " + snippet
+	if rule := matchErrorRule(req, p); rule != nil {
+		return ruleResult(rule, p), nil
 	}
+	return &Result{Content: defaultErrorMessage(p), IsError: true,
+		Retryable: p.status == http.StatusTooManyRequests || p.status >= 500, StatusCode: p.status}, nil
+}
+
+// matchErrorRule returns the first rule whose status (or range) and `when`
+// both hold for the response, or nil.
+func matchErrorRule(req *reliantv1.HttpRequestSpec, p *page) *reliantv1.ErrorRule {
 	for _, rule := range req.GetErrors() {
 		match := rule.GetStatus() != 0 && int(rule.GetStatus()) == p.status
 		if rule.GetStatusMin() != 0 {
@@ -588,19 +597,32 @@ func errorResult(req *reliantv1.HttpRequestSpec, p *page) (*Result, error) {
 			holds, _ := v.(bool)
 			match = err == nil && holds
 		}
-		if !match {
-			continue
+		if match {
+			return rule
 		}
-		retryable = rule.GetRetryable()
-		if rule.GetMessage() != "" {
-			rendered, err := tmpl.RenderString(rule.GetMessage(), responseVars(p), tmpl.Options{})
-			if err == nil {
-				message = rendered
-			}
-		}
-		break
 	}
-	return &Result{Content: message, IsError: true, Retryable: retryable, StatusCode: p.status}, nil
+	return nil
+}
+
+func ruleResult(rule *reliantv1.ErrorRule, p *page) *Result {
+	message := defaultErrorMessage(p)
+	if rule.GetMessage() != "" {
+		if rendered, err := tmpl.RenderString(rule.GetMessage(), responseVars(p), tmpl.Options{}); err == nil {
+			message = rendered
+		}
+	}
+	return &Result{Content: message, IsError: true, Retryable: rule.GetRetryable(), StatusCode: p.status}
+}
+
+func defaultErrorMessage(p *page) string {
+	message := fmt.Sprintf("HTTP %d", p.status)
+	if snippet := strings.TrimSpace(string(p.raw)); snippet != "" {
+		if len(snippet) > 300 {
+			snippet = snippet[:300] + "…"
+		}
+		message += ": " + snippet
+	}
+	return message
 }
 
 var linkNext = regexp.MustCompile(`<([^>]+)>\s*;[^,]*rel="?next"?`)
