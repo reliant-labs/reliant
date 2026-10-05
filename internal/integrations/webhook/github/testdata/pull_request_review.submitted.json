@@ -1,0 +1,117 @@
+{
+  "action": "submitted",
+  "review": {
+    "id": 3003,
+    "node_id": "PRR_kwDOAB",
+    "user": {
+      "login": "hubot",
+      "id": 2,
+      "type": "User"
+    },
+    "body": "Looks good",
+    "commit_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "submitted_at": "2026-10-05T12:30:00Z",
+    "state": "approved",
+    "html_url": "https://github.com/acme/app/pull/7#pullrequestreview-3003",
+    "author_association": "MEMBER"
+  },
+  "pull_request": {
+    "url": "https://api.github.com/repos/acme/app/pulls/7",
+    "id": 2002,
+    "node_id": "PR_kwDOAB",
+    "number": 7,
+    "html_url": "https://github.com/acme/app/pull/7",
+    "state": "open",
+    "locked": false,
+    "title": "Fix crash on save",
+    "body": "Fixes #42",
+    "user": {
+      "login": "octocat",
+      "id": 1,
+      "type": "User"
+    },
+    "draft": false,
+    "merged": false,
+    "merged_at": null,
+    "merge_commit_sha": null,
+    "created_at": "2026-10-05T11:00:00Z",
+    "updated_at": "2026-10-05T11:00:00Z",
+    "closed_at": null,
+    "labels": [],
+    "requested_reviewers": [],
+    "requested_teams": [],
+    "head": {
+      "label": "octocat:fix-save",
+      "ref": "fix-save",
+      "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "repo": {
+        "id": 123456,
+        "node_id": "R_kgDOAB",
+        "name": "app",
+        "full_name": "acme/app",
+        "private": true,
+        "owner": {
+          "login": "acme",
+          "id": 9001,
+          "type": "Organization"
+        },
+        "html_url": "https://github.com/acme/app",
+        "default_branch": "main",
+        "description": "The app",
+        "fork": false
+      }
+    },
+    "base": {
+      "label": "acme:main",
+      "ref": "main",
+      "sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "repo": {
+        "id": 123456,
+        "node_id": "R_kgDOAB",
+        "name": "app",
+        "full_name": "acme/app",
+        "private": true,
+        "owner": {
+          "login": "acme",
+          "id": 9001,
+          "type": "Organization"
+        },
+        "html_url": "https://github.com/acme/app",
+        "default_branch": "main",
+        "description": "The app",
+        "fork": false
+      }
+    },
+    "additions": 10,
+    "deletions": 2,
+    "changed_files": 1,
+    "commits": 1,
+    "comments": 0,
+    "review_comments": 0
+  },
+  "repository": {
+    "id": 123456,
+    "node_id": "R_kgDOAB",
+    "name": "app",
+    "full_name": "acme/app",
+    "private": true,
+    "owner": {
+      "login": "acme",
+      "id": 9001,
+      "type": "Organization"
+    },
+    "html_url": "https://github.com/acme/app",
+    "default_branch": "main",
+    "description": "The app",
+    "fork": false
+  },
+  "sender": {
+    "login": "hubot",
+    "id": 2,
+    "type": "User"
+  },
+  "installation": {
+    "id": 98765,
+    "node_id": "MDIzOkludGVncmF0aW9uSW5zdGFsbGF0aW9uOTg3NjU="
+  }
+}

@@ -1,0 +1,81 @@
+{
+  "action": "created",
+  "issue": {
+    "url": "https://api.github.com/repos/acme/app/issues/42",
+    "html_url": "https://github.com/acme/app/issues/42",
+    "id": 1001,
+    "node_id": "I_kwDOAB",
+    "number": 42,
+    "title": "Crash on save",
+    "state": "open",
+    "body": "Steps to reproduce:\n1. Save\n2. Crash",
+    "user": {
+      "login": "octocat",
+      "id": 1,
+      "type": "User"
+    },
+    "labels": [
+      {
+        "id": 7,
+        "name": "bug",
+        "color": "d73a4a"
+      }
+    ],
+    "assignees": [],
+    "assignee": null,
+    "comments": 0,
+    "created_at": "2026-10-05T10:00:00Z",
+    "updated_at": "2026-10-05T10:00:00Z",
+    "closed_at": null,
+    "author_association": "MEMBER",
+    "active_lock_reason": null,
+    "milestone": null,
+    "reactions": {
+      "url": "https://api.github.com/repos/acme/app/issues/42/reactions",
+      "total_count": 0
+    }
+  },
+  "comment": {
+    "id": 555,
+    "node_id": "IC_kwDOAB",
+    "html_url": "https://github.com/acme/app/issues/42#issuecomment-555",
+    "body": "Done.",
+    "user": {
+      "login": "reliant-labs[bot]",
+      "id": 777,
+      "type": "Bot"
+    },
+    "created_at": "2026-10-05T10:05:00Z",
+    "updated_at": "2026-10-05T10:05:00Z",
+    "author_association": "MEMBER",
+    "performed_via_github_app": null,
+    "reactions": {
+      "total_count": 0
+    }
+  },
+  "repository": {
+    "id": 123456,
+    "node_id": "R_kgDOAB",
+    "name": "app",
+    "full_name": "acme/app",
+    "private": true,
+    "owner": {
+      "login": "acme",
+      "id": 9001,
+      "type": "Organization"
+    },
+    "html_url": "https://github.com/acme/app",
+    "default_branch": "main",
+    "description": "The app",
+    "fork": false
+  },
+  "sender": {
+    "login": "reliant-labs[bot]",
+    "id": 777,
+    "type": "Bot"
+  },
+  "installation": {
+    "id": 98765,
+    "node_id": "MDIzOkludGVncmF0aW9uSW5zdGFsbGF0aW9uOTg3NjU="
+  }
+}

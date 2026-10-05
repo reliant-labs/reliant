@@ -1,0 +1,34 @@
+{
+  "action": "removed",
+  "installation": {
+    "id": 98765,
+    "node_id": "MDIzOkludGVncmF0aW9uSW5zdGFsbGF0aW9uOTg3NjU=",
+    "account": {
+      "login": "acme",
+      "id": 9001,
+      "type": "Organization"
+    },
+    "app_id": 42
+  },
+  "repository_selection": "selected",
+  "repositories_added": [],
+  "repositories_removed": [
+    {
+      "id": 123456,
+      "node_id": "R_kgDOAB",
+      "name": "app",
+      "full_name": "acme/app",
+      "private": true
+    }
+  ],
+  "requester": null,
+  "sender": {
+    "login": "octocat",
+    "id": 1,
+    "node_id": "MDQ6VXNlcjE=",
+    "type": "User",
+    "site_admin": false,
+    "avatar_url": "https://avatars.githubusercontent.com/u/1?v=4",
+    "html_url": "https://github.com/octocat"
+  }
+}

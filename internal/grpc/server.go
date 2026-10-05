@@ -280,6 +280,12 @@ func NewServer(cfg *Config) (*Server, error) {
 		if in.Vault != nil {
 			opts.Sealer = in.Vault
 		}
+		if len(in.Access) > 0 {
+			opts.Access = make(map[string]services.IntegrationAccess, len(in.Access))
+			for id, a := range in.Access {
+				opts.Access[id] = a
+			}
+		}
 		triggerService.WithInbound(opts).WithPolledIntegrations(in.Registry.IsPolled)
 	}
 	inboxPath, inboxHandler := reliantv1connect.NewInboxServiceHandler(services.NewInboxService(database), opts...)

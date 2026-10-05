@@ -172,9 +172,15 @@ func TestEmbeddedCatalogRanksTheObviousActionFirst(t *testing.T) {
 		"dispatch workflow":     "github/workflow.dispatch@1",
 		"http request":          "http/request@1",
 	} {
-		r := search(t, idx, Query{Text: query})
+		// Scoped to actions, as "Add step" and an agent looking for an action
+		// search: the catalog now also lists GitHub trigger types, and
+		// "comment" names one of those too.
+		r := search(t, idx, Query{Text: query, Kinds: []Kind{KindAction}})
 		require.NotEmpty(t, r.Hits, query)
 		assert.Equal(t, want, r.Hits[0].Entry.Ref, "query %q", query)
+		// Unscoped, the action still comes up near the top.
+		all := search(t, idx, Query{Text: query, PageSize: 3})
+		assert.Contains(t, refs(all), want, "unscoped query %q", query)
 	}
 }
 
@@ -193,6 +199,36 @@ func TestEmbeddedSlackTriggersAreIndexed(t *testing.T) {
 	r = search(t, idx, Query{Text: "mention", Kinds: []Kind{KindTrigger}})
 	require.NotEmpty(t, r.Hits)
 	assert.Equal(t, "slack/app_mentioned@1", r.Hits[0].Entry.Ref)
+}
+
+// GitHub's trigger types, declared together with the provider that delivers
+// them (internal/integrations/webhook/github): each is searchable by what a
+// user would type and carries its payload schema.
+func TestEmbeddedGitHubTriggersAreIndexed(t *testing.T) {
+	idx, err := Build(catalog.MustBuiltin().Manifests())
+	require.NoError(t, err)
+	r := search(t, idx, Query{Text: "github", Kinds: []Kind{KindTrigger}, PageSize: MaxPageSize})
+	got := refs(r)
+	for _, want := range []string{
+		"github/issue.opened@1", "github/issue_comment.created@1", "github/pull_request.opened@1",
+		"github/pull_request_review.submitted@1", "github/push.received@1", "github/workflow_run.completed@1",
+	} {
+		assert.Contains(t, got, want)
+	}
+	for _, h := range r.Hits {
+		assert.Equal(t, "github", h.Entry.IntegrationID(), h.Entry.Ref)
+		assert.NotNil(t, h.Entry.PayloadSchema(), h.Entry.Ref)
+	}
+	for query, want := range map[string]string{
+		"issue opened":    "github/issue.opened@1",
+		"push":            "github/push.received@1",
+		"ci failed":       "github/workflow_run.completed@1",
+		"review approved": "github/pull_request_review.submitted@1",
+	} {
+		hits := search(t, idx, Query{Text: query, Kinds: []Kind{KindTrigger}})
+		require.NotEmpty(t, hits.Hits, query)
+		assert.Equal(t, want, hits.Hits[0].Entry.Ref, "query %q", query)
+	}
 }
 
 // A trigger declared in a manifest gets its own entry and kind.

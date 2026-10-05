@@ -41,6 +41,18 @@ type eventIntake interface {
 	Accept(ctx context.Context, trigger *core.Trigger, ev triggers.InboundEvent, opts triggers.AcceptOptions) (*triggers.AcceptResult, error)
 }
 
+// IntegrationAccess keeps one user's access snapshot for an access-gated
+// integration fresh (GitHub: which repositories, in which App installations,
+// the user's own token can see). Satisfied by *ghaccess.Refresher via an
+// adapter in serverapi.
+type IntegrationAccess interface {
+	// Refresh re-reads userID's access now.
+	Refresh(ctx context.Context, userID string) error
+	// IsPermanent reports whether a Refresh error needs the user to act
+	// (connect, reconnect) rather than a retry.
+	IsPermanent(err error) bool
+}
+
 // InboundOptions wires the inbound kinds into TriggerService. Each field is
 // optional; a kind whose dependency is missing is rejected with Unavailable
 // at write time rather than stored unable to fire.
@@ -51,6 +63,11 @@ type InboundOptions struct {
 	Sealer    webhookSealer
 	Catalog   integrationCatalog
 	Intake    eventIntake
+	// Access names the integrations whose events are access-gated, keyed by
+	// integration id. A trigger of one needs no saved connection (its token
+	// may be delegated), and writing or re-enabling it refreshes the owner's
+	// access so the first event routes. See webhook.Event.ResourceKey.
+	Access map[string]IntegrationAccess
 }
 
 // WithInbound enables webhook, integration and workflow-event triggers.
@@ -100,6 +117,18 @@ func (s *TriggerService) applyInboundDefinition(ctx context.Context, userID stri
 			return connect.NewError(connect.CodeInvalidArgument,
 				fmt.Errorf("integration %q does not deliver events on this server", src.Integration))
 		}
+		if _, gated := s.inbound.Access[src.Integration]; gated {
+			// Access-gated: events route by the owner's own access, so a
+			// connection is bound when one exists (and a named one must be
+			// the caller's) but is not required — hosted GitHub's token is
+			// delegated by control-plane and has no row here.
+			connID, err := s.resolveOptionalTriggerConnection(ctx, userID, src.Integration, def.ConnectionId)
+			if err != nil {
+				return err
+			}
+			trigger.ConnectionID = connID
+			break
+		}
 		connID, err := s.resolveTriggerConnection(ctx, userID, src.Integration, def.ConnectionId)
 		if err != nil {
 			return err
@@ -144,6 +173,57 @@ func (s *TriggerService) resolveTriggerConnection(ctx context.Context, userID, i
 		return "", connect.NewError(connect.CodeNotFound, errors.New("connection not found"))
 	}
 	return conn.ID, nil
+}
+
+// resolveOptionalTriggerConnection is resolveTriggerConnection for an
+// access-gated integration: a named connection must resolve exactly as
+// there, but with none named, the caller's default is bound when it exists
+// and nil is returned when it does not.
+func (s *TriggerService) resolveOptionalTriggerConnection(ctx context.Context, userID, integration string, requested *string) (*string, error) {
+	if requested != nil && *requested != "" {
+		id, err := s.resolveTriggerConnection(ctx, userID, integration, requested)
+		if err != nil {
+			return nil, err
+		}
+		return &id, nil
+	}
+	store := s.connections()
+	if store == nil {
+		return nil, nil
+	}
+	conn, err := store.DefaultConnection(ctx, userID, integration)
+	if err != nil || conn == nil || conn.UserID != userID || conn.Status == core.ConnectionStatusRevoked {
+		return nil, nil
+	}
+	return &conn.ID, nil
+}
+
+// refreshTriggerAccess re-reads the owner's access for an access-gated
+// integration trigger that is (being made) enabled, so its first event
+// routes, and so a trigger the owner cannot actually listen through is
+// refused with the reason instead of silently never firing.
+func (s *TriggerService) refreshTriggerAccess(ctx context.Context, trigger *core.Trigger) error {
+	if trigger == nil || trigger.Kind != core.TriggerKindIntegration || !trigger.Enabled {
+		return nil
+	}
+	cfg, err := triggers.IntegrationConfigFor(trigger)
+	if err != nil {
+		return connect.NewError(connect.CodeInternal, err)
+	}
+	access, ok := s.inbound.Access[cfg.Integration]
+	if !ok || access == nil {
+		return nil
+	}
+	if err := access.Refresh(ctx, trigger.UserID); err != nil {
+		if access.IsPermanent(err) {
+			return connect.NewError(connect.CodeFailedPrecondition,
+				fmt.Errorf("%s triggers need access to your %s repositories: %w", cfg.Integration, cfg.Integration, err))
+		}
+		logging.Warn("refreshing integration access failed", "integration", cfg.Integration, "user_id", trigger.UserID, "error", err)
+		return connect.NewError(connect.CodeUnavailable,
+			fmt.Errorf("could not read your %s access right now; try again", cfg.Integration))
+	}
+	return nil
 }
 
 func (s *TriggerService) storedSecret(ctx context.Context, triggerID string) bool {

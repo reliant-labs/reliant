@@ -98,6 +98,11 @@ func TriggerPayloadSchema(m *reliantv1.IntegrationManifest, t *reliantv1.Trigger
 				"type":        "string",
 				"description": "The provider's id for the event, stable across redeliveries.",
 			},
+			"resource": map[string]any{
+				"type": "string",
+				"description": "The resource inside the account the event is about (a GitHub repository id), " +
+					"when the provider routes by access to it.",
+			},
 			"attributes": attributes,
 			"data":       data,
 		},

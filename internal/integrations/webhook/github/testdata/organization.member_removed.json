@@ -1,0 +1,29 @@
+{
+  "action": "member_removed",
+  "membership": {
+    "user": {
+      "login": "bob",
+      "id": 22,
+      "type": "User"
+    },
+    "role": "member",
+    "state": "active"
+  },
+  "organization": {
+    "login": "acme",
+    "id": 9001
+  },
+  "sender": {
+    "login": "octocat",
+    "id": 1,
+    "node_id": "MDQ6VXNlcjE=",
+    "type": "User",
+    "site_admin": false,
+    "avatar_url": "https://avatars.githubusercontent.com/u/1?v=4",
+    "html_url": "https://github.com/octocat"
+  },
+  "installation": {
+    "id": 98765,
+    "node_id": "MDIzOkludGVncmF0aW9uSW5zdGFsbGF0aW9uOTg3NjU="
+  }
+}

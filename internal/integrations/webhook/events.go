@@ -19,7 +19,20 @@ type EventsStore interface {
 	// ListIntegrationTriggers lists every enabled integration trigger for
 	// one integration whose connection is its own owner's.
 	ListIntegrationTriggers(ctx context.Context, integration string) ([]*core.IntegrationTriggerRoute, error)
+	// ListAccessRoutedTriggers lists the enabled integration triggers whose
+	// owner holds an access grant for (account, resource) refreshed at or
+	// after freshAfter.
+	ListAccessRoutedTriggers(ctx context.Context, integration, account, resource string, freshAfter time.Time) ([]*core.Trigger, error)
+	// RevokeIntegrationAccess deletes the grants a revocation names.
+	RevokeIntegrationAccess(ctx context.Context, integration string, rev core.IntegrationAccessRevocation) (int64, error)
 }
+
+// AccessFreshness is how recently an access grant must have been confirmed
+// for an access-gated event to route through it. Grants are refreshed every
+// accessRefreshInterval while their owner has a trigger, so a healthy grant
+// is never near this; one older than it means refreshing has been failing,
+// and access nobody has re-confirmed in that long is not trusted.
+const AccessFreshness = time.Hour
 
 // EventsOptions configures the app-level receiver.
 type EventsOptions struct {
@@ -108,6 +121,14 @@ func (e *EventsReceiver) serve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Revocations first: an event in the same delivery routes under the
+	// reduced access. A failure here is a 503 like a routing failure — the
+	// receiver must not ack a revocation it did not apply.
+	if err := e.revoke(ctx, providerID, delivery.Revocations); err != nil {
+		logging.Error("integration access revocation could not be applied", "provider", providerID, "error", err)
+		writeStatus(w, http.StatusServiceUnavailable, "could not record the delivery; retry")
+		return
+	}
 	if err := e.route(ctx, providerID, delivery.Events); err != nil {
 		// A partial failure still recorded what it could. Asking the sender
 		// to retry is right: the recorded half dedupes.
@@ -126,20 +147,35 @@ func (e *EventsReceiver) serve(w http.ResponseWriter, r *http.Request) {
 // matches the event's type and attributes. A trigger that passes is handed to
 // the intake, which records it (and applies the owner's CEL filter). One
 // delivery reaching many triggers is many events, each deduped on its own.
+//
+// An event with a ResourceKey is access-gated instead: it reaches only the
+// triggers whose owner holds a fresh access grant for its (account,
+// resource), and the connection-account routes are not consulted for it.
 func (e *EventsReceiver) route(ctx context.Context, providerID string, events []Event) error {
 	if len(events) == 0 {
 		return nil
 	}
-	routes, err := e.opts.Store.ListIntegrationTriggers(ctx, providerID)
-	if err != nil {
-		return fmt.Errorf("list %s triggers: %w", providerID, err)
-	}
-	var errs []error
+	var (
+		routes       []*core.IntegrationTriggerRoute
+		routesLoaded bool
+		errs         []error
+	)
 	for _, ev := range events {
 		if ev.AccountKey == "" || ev.DeliveryID == "" || ev.Type == "" {
 			logging.Warn("integration event is missing its account, delivery id or type; dropped",
 				"provider", providerID, "type", ev.Type)
 			continue
+		}
+		if ev.ResourceKey != "" {
+			errs = append(errs, e.routeByAccess(ctx, providerID, ev))
+			continue
+		}
+		if !routesLoaded {
+			var err error
+			if routes, err = e.opts.Store.ListIntegrationTriggers(ctx, providerID); err != nil {
+				return fmt.Errorf("list %s triggers: %w", providerID, err)
+			}
+			routesLoaded = true
 		}
 		for _, r := range routes {
 			if !routeMatches(r, ev) {
@@ -149,6 +185,47 @@ func (e *EventsReceiver) route(ctx context.Context, providerID string, events []
 				errs = append(errs, fmt.Errorf("trigger %s: %w", r.Trigger.ID, err))
 			}
 		}
+	}
+	return errors.Join(errs...)
+}
+
+// routeByAccess hands an access-gated event to every trigger whose owner can
+// see its resource. The decision is made before any row is written, so the
+// event never appears in the history of a user who cannot see it.
+func (e *EventsReceiver) routeByAccess(ctx context.Context, providerID string, ev Event) error {
+	matched, err := e.opts.Store.ListAccessRoutedTriggers(ctx, providerID, ev.AccountKey, ev.ResourceKey, e.now().Add(-AccessFreshness))
+	if err != nil {
+		return fmt.Errorf("list %s triggers for %s/%s: %w", providerID, ev.AccountKey, ev.ResourceKey, err)
+	}
+	var errs []error
+	for _, t := range matched {
+		cfg, err := triggers.IntegrationConfigFor(t)
+		if err != nil || !t.Enabled || !triggers.IntegrationEventMatches(cfg, ev.Type, ev.Attributes) {
+			continue
+		}
+		if _, err := e.opts.Intake.Accept(ctx, t, toInbound(providerID, t, ev), triggers.AcceptOptions{}); err != nil {
+			errs = append(errs, fmt.Errorf("trigger %s: %w", t.ID, err))
+		}
+	}
+	return errors.Join(errs...)
+}
+
+// revoke applies a delivery's access revocations. An unscoped one (no account
+// and no subject) would delete every user's access, so it is dropped loudly.
+func (e *EventsReceiver) revoke(ctx context.Context, providerID string, revs []core.IntegrationAccessRevocation) error {
+	var errs []error
+	for _, rev := range revs {
+		if rev.AccountKey == "" && rev.SubjectID == "" {
+			logging.Warn("integration access revocation names no account or subject; ignored", "provider", providerID)
+			continue
+		}
+		n, err := e.opts.Store.RevokeIntegrationAccess(ctx, providerID, rev)
+		if err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		logging.Info("integration access revoked", "provider", providerID,
+			"account", rev.AccountKey, "resource", rev.ResourceKey, "subject", rev.SubjectID, "grants", n)
 	}
 	return errors.Join(errs...)
 }
@@ -178,15 +255,25 @@ func toInbound(providerID string, trigger *core.Trigger, ev Event) triggers.Inbo
 		Kind:       core.TriggerEventKindIntegration,
 		DedupeKey:  trigger.ID + ":" + ev.DeliveryID,
 		OccurredAt: ev.OccurredAt,
-		Payload: map[string]any{
-			"integration": providerID,
-			"event":       ev.Type,
-			"account":     ev.AccountKey,
-			"delivery_id": ev.DeliveryID,
-			"attributes":  attrs,
-			"data":        ev.Data,
-		},
+		Payload:    inboundPayload(providerID, ev, attrs),
 	}
+}
+
+// inboundPayload is trigger.payload for an integration event. Its shape is
+// manifest.TriggerPayloadSchema's envelope; keep the two in step.
+func inboundPayload(providerID string, ev Event, attrs map[string]any) map[string]any {
+	payload := map[string]any{
+		"integration": providerID,
+		"event":       ev.Type,
+		"account":     ev.AccountKey,
+		"delivery_id": ev.DeliveryID,
+		"attributes":  attrs,
+		"data":        ev.Data,
+	}
+	if ev.ResourceKey != "" {
+		payload["resource"] = ev.ResourceKey
+	}
+	return payload
 }
 
 func writeResponse(w http.ResponseWriter, resp *Response) {

@@ -167,6 +167,11 @@ func (s *TriggerService) CreateTrigger(
 	// nil enabled means true: a create that omits the field wants a working
 	// trigger, not a disabled one.
 	trigger.Enabled = def.Enabled == nil || *def.Enabled
+	// Before the row: a trigger whose owner's access cannot be read is
+	// refused, not stored unable to fire.
+	if err := s.refreshTriggerAccess(ctx, trigger); err != nil {
+		return nil, err
+	}
 
 	if err := s.database.CreateTrigger(ctx, trigger); err != nil {
 		return nil, triggerDBError("create trigger", err)
@@ -302,6 +307,9 @@ func (s *TriggerService) UpdateTrigger(
 	if def.Enabled != nil {
 		updated.Enabled = *def.Enabled
 	}
+	if err := s.refreshTriggerAccess(ctx, updated); err != nil {
+		return nil, err
+	}
 
 	if err := s.database.UpdateTrigger(ctx, updated); err != nil {
 		return nil, triggerDBError("update trigger", err)
@@ -369,6 +377,13 @@ func (s *TriggerService) SetTriggerEnabled(
 	}
 	if trigger.Kind == core.TriggerKindSchedule && s.syncer == nil {
 		return nil, connect.NewError(connect.CodeUnavailable, errors.New("the schedule backend is unavailable"))
+	}
+	if req.Msg.Enabled {
+		enabling := *trigger
+		enabling.Enabled = true
+		if err := s.refreshTriggerAccess(ctx, &enabling); err != nil {
+			return nil, err
+		}
 	}
 
 	if err := s.database.SetTriggerEnabled(ctx, trigger.ID, req.Msg.Enabled); err != nil {
