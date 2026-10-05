@@ -4,10 +4,12 @@ package connections
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
+	"strings"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/vault"
@@ -46,10 +48,21 @@ type CallSite struct {
 	TriggerID string
 }
 
-// runOwners reads who a run belongs to. Satisfied by db.Repository.
+// TriggerSite identifies one use of a trigger's connection outside any run: a
+// poll. It carries the trigger id and nothing else. The owner, the connection
+// and the integration are read from the trigger row, so there is no field a
+// forged poll input could set to reach another user's connection.
+type TriggerSite struct {
+	TriggerID string
+	Placement Placement
+}
+
+// runOwners reads who a run, or a trigger, belongs to. Satisfied by
+// db.Repository.
 type runOwners interface {
 	GetWorkflow(ctx context.Context, id string) (*core.Workflow, error)
 	GetChat(ctx context.Context, id string) (*core.Chat, error)
+	GetTrigger(ctx context.Context, id string) (*core.Trigger, error)
 }
 
 type resolverStore interface {
@@ -84,6 +97,12 @@ type Resolved struct {
 	auth   Authenticator
 	secret vault.Secret
 	params map[string]string
+	// hosts are the hosts this integration's catalog entry lets a request
+	// reach: base_url's (with the connection's params expanded) and
+	// allowed_hosts. Apply refuses any other. Empty means the integration
+	// takes any public host (the generic HTTP one), where the runtime's
+	// start-host pin is the guard.
+	hosts map[string]bool
 }
 
 // Params are the connection's non-secret settings (a Shopify shop).
@@ -105,8 +124,20 @@ func (r Resolved) LogValue() slog.Value {
 	return slog.GroupValue(slog.String("connection_id", r.ConnectionID), slog.String("integration_id", r.IntegrationID))
 }
 
-// Apply writes the credential into req.
-func (r *Resolved) Apply(req *http.Request) error { return r.auth.Apply(req, r.secret, r.Redactor) }
+// Apply writes the credential into req, and only into a request to one of the
+// integration's own hosts over https. The declarative runner already pins a
+// credential to the host its call started at; this pin is the credential's
+// own, so a Go executor or a poller that builds its own URL cannot send it
+// anywhere the catalog did not name.
+func (r *Resolved) Apply(req *http.Request) error {
+	if req == nil || req.URL == nil || req.URL.Scheme != "https" || req.URL.Hostname() == "" || req.URL.User != nil {
+		return newError(CodeFailedPrecondition, "a %s credential is only sent over https", r.IntegrationID)
+	}
+	if len(r.hosts) > 0 && !r.hosts[strings.ToLower(req.URL.Host)] && !r.hosts[strings.ToLower(req.URL.Hostname())] {
+		return newError(CodeFailedPrecondition, "a %s credential is never sent to %q: it is not one of the integration's hosts", r.IntegrationID, req.URL.Host)
+	}
+	return r.auth.Apply(req, r.secret, r.Redactor)
+}
 
 // OwnerOf returns the user a run belongs to, read from the database. It tries
 // the run's recorded owner first and the chat second, the same order the rest
@@ -143,8 +174,63 @@ func (r *Resolver) ForCall(ctx context.Context, call CallSite, ref Ref) (*Resolv
 	if err != nil {
 		return nil, err
 	}
+	actor := ActorWorker
+	if call.TriggerID != "" {
+		actor = ActorTrigger(call.TriggerID)
+	}
+	return r.resolve(ctx, owner, ref, core.ConnectionEvent{
+		RunID: call.RunID, NodeID: call.NodeID, ToolCallID: call.ToolCallID, Actor: actor,
+	})
+}
 
-	var conn *core.Connection
+// ForTrigger resolves the connection a trigger listens through, for a use
+// that has no run: a poll.
+//
+// Everything that decides WHOSE credential this is comes from the trigger
+// row — its owner (user_id), its connection (connection_id) and its
+// integration (config.integration) — exactly as ForCall reads the owner from
+// the run row. The connection is then held to every rule ForCall applies:
+// server placement only, the owner's own connection (a foreign or missing id
+// reads like none), for that integration, active (needs_reauth is a typed
+// CodeNeedsReauth), refreshed through the TokenSource, and the use audited
+// with the trigger as actor.
+func (r *Resolver) ForTrigger(ctx context.Context, site TriggerSite) (*Resolved, error) {
+	if site.Placement != PlacementServer {
+		return nil, &Error{Code: CodeFailedPrecondition, Message: ErrDaemonPlacement.Error(), Err: ErrDaemonPlacement}
+	}
+	if site.TriggerID == "" {
+		return nil, newError(CodeFailedPrecondition, "no trigger to resolve a connection for")
+	}
+	trigger, err := r.owners.GetTrigger(ctx, site.TriggerID)
+	if err != nil || trigger == nil {
+		return nil, newError(CodeFailedPrecondition, "trigger %q not found", site.TriggerID)
+	}
+	if trigger.UserID == "" {
+		return nil, newError(CodeFailedPrecondition, "trigger %q has no owner", site.TriggerID)
+	}
+	if trigger.Kind != core.TriggerKindIntegration {
+		return nil, newError(CodeFailedPrecondition, "trigger %q is a %s trigger, which listens through no connection", site.TriggerID, trigger.Kind)
+	}
+	var cfg core.IntegrationConfig
+	if err := json.Unmarshal(trigger.Config, &cfg); err != nil || cfg.Integration == "" {
+		return nil, newError(CodeFailedPrecondition, "trigger %q names no integration", site.TriggerID)
+	}
+	if trigger.ConnectionID == nil || *trigger.ConnectionID == "" {
+		// The connection was deleted (the FK nulls it). Never fall back to the
+		// owner's default: the owner picked a specific account to listen to.
+		return nil, noConnection(Ref{})
+	}
+	return r.resolve(ctx, trigger.UserID, Ref{ConnectionID: *trigger.ConnectionID, IntegrationID: cfg.Integration},
+		core.ConnectionEvent{Actor: ActorTrigger(trigger.ID)})
+}
+
+// resolve turns (owner, ref) into a credential. It is the one implementation
+// of the rules every door shares; use carries the audit attribution.
+func (r *Resolver) resolve(ctx context.Context, owner string, ref Ref, use core.ConnectionEvent) (*Resolved, error) {
+	var (
+		conn *core.Connection
+		err  error
+	)
 	switch {
 	case ref.ConnectionID != "":
 		conn, err = r.store.GetConnection(ctx, owner, ref.ConnectionID)
@@ -181,22 +267,23 @@ func (r *Resolver) ForCall(ctx context.Context, call CallSite, ref Ref) (*Resolv
 	if err != nil {
 		return nil, err
 	}
+	hosts, err := prov.hosts(conn.Params)
+	if err != nil {
+		return nil, err
+	}
 	secret, err := r.tokens.Token(ctx, owner, conn.ID)
 	if err != nil {
 		return nil, err
 	}
 
-	actor := ActorWorker
-	if call.TriggerID != "" {
-		actor = ActorTrigger(call.TriggerID)
-	}
-	appendBestEffort(ctx, r.store, core.ConnectionEvent{
-		ConnectionID: conn.ID, UserID: owner, Kind: core.ConnectionEventUsed,
-		RunID: call.RunID, NodeID: call.NodeID, ToolCallID: call.ToolCallID, Actor: actor,
-	})
+	use.ConnectionID, use.UserID, use.Kind = conn.ID, owner, core.ConnectionEventUsed
+	appendBestEffort(ctx, r.store, use)
 	_ = r.store.TouchConnectionUsed(context.WithoutCancel(ctx), owner, conn.ID)
 
-	return &Resolved{ConnectionID: conn.ID, IntegrationID: conn.IntegrationID, Redactor: NewRedactor(), auth: auth, secret: secret, params: conn.Params}, nil
+	return &Resolved{
+		ConnectionID: conn.ID, IntegrationID: conn.IntegrationID, Redactor: NewRedactor(),
+		auth: auth, secret: secret, params: conn.Params, hosts: hosts,
+	}, nil
 }
 
 func noConnection(ref Ref) error {

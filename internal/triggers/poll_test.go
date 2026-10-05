@@ -5,6 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net/http"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -15,6 +17,7 @@ import (
 	"go.temporal.io/sdk/client"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/integrations/httpaction"
 )
 
 // scriptedPoller is a test poller over an append-only feed. The cursor is
@@ -24,6 +27,34 @@ type scriptedPoller struct {
 	items []PollItem
 	calls int
 	err   error
+	last  PollRequest
+}
+
+// fakeCred is a resolved credential as the poller sees it.
+type fakeCred struct{ id string }
+
+func (c fakeCred) ConnectionID() string    { return c.id }
+func (fakeCred) Apply(*http.Request) error { return nil }
+func (fakeCred) Scrub(s string) string     { return s }
+func (fakeCred) Params() map[string]string { return nil }
+
+// fakeCreds records what the activity asked for. It answers from the
+// trigger id alone, as the real source does.
+type fakeCreds struct {
+	mu    sync.Mutex
+	asked []string
+	err   error
+	cred  httpaction.Credential
+}
+
+func (f *fakeCreds) ForTrigger(_ context.Context, triggerID string) (httpaction.Credential, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.asked = append(f.asked, triggerID)
+	if f.err != nil {
+		return nil, f.err
+	}
+	return f.cred, nil
 }
 
 func (p *scriptedPoller) add(item PollItem) {
@@ -36,6 +67,7 @@ func (p *scriptedPoller) Poll(_ context.Context, req PollRequest) (*PollResult, 
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.calls++
+	p.last = req
 	if p.err != nil {
 		return nil, p.err
 	}
@@ -103,6 +135,11 @@ func pollTrigger(t *testing.T) *core.Trigger {
 }
 
 func newPollEnv(t *testing.T) (*pollRepo, *core.Trigger, *scriptedPoller, *recordingStarter, *TriggerPoller) {
+	repo, trigger, poller, starter, p, _ := newPollEnvWithCreds(t)
+	return repo, trigger, poller, starter, p
+}
+
+func newPollEnvWithCreds(t *testing.T) (*pollRepo, *core.Trigger, *scriptedPoller, *recordingStarter, *TriggerPoller, *fakeCreds) {
 	t.Helper()
 	repo := &pollRepo{fakeRepo: newFakeRepo(), regs: map[string]*core.TriggerRegistration{}, accounts: map[string]*core.Connection{}}
 	trigger := pollTrigger(t)
@@ -110,8 +147,119 @@ func newPollEnv(t *testing.T) (*pollRepo, *core.Trigger, *scriptedPoller, *recor
 	repo.accounts["conn-1"] = &core.Connection{ID: "conn-1", UserID: trigger.UserID, IntegrationID: "feed", Status: core.ConnectionStatusActive}
 	poller := &scriptedPoller{}
 	starter := &recordingStarter{}
-	p := NewTriggerPoller(repo, fakePollers{"feed": poller}, NewIntake(repo, starter, ""))
-	return repo, trigger, poller, starter, p
+	creds := &fakeCreds{cred: fakeCred{id: "conn-1"}}
+	p := NewTriggerPoller(repo, fakePollers{"feed": poller}, NewIntake(repo, starter, ""), creds)
+	return repo, trigger, poller, starter, p, creds
+}
+
+// The activity resolves the credential by trigger id — nothing else crosses
+// that boundary — and the poller receives it on the request.
+func TestPollHandsThePollerTheTriggersCredential(t *testing.T) {
+	_, trigger, poller, _, p, creds := newPollEnvWithCreds(t)
+	_, err := p.Poll(context.Background(), PollInput{TriggerID: trigger.ID})
+	require.NoError(t, err)
+	assert.Equal(t, []string{trigger.ID}, creds.asked)
+	require.NotNil(t, poller.last.Credential, "the poller is handed a credential, never a source")
+	assert.Equal(t, "conn-1", poller.last.Credential.ConnectionID())
+	assert.Equal(t, trigger.UserID, poller.last.OwnerUserID, "the owner is the trigger row's")
+}
+
+// A refused refresh (Gmail's seven-day testing tokens) is recorded on the
+// registration as needs_reauth and the poll is skipped: no retry loop, the
+// cursor kept, and the poller never called.
+func TestPollNeedsReauthIsRecordedAndNotRetried(t *testing.T) {
+	repo, trigger, poller, _, p, creds := newPollEnvWithCreds(t)
+	ctx := context.Background()
+	_, err := p.Poll(ctx, PollInput{TriggerID: trigger.ID})
+	require.NoError(t, err)
+	callsAfterBaseline := poller.calls
+
+	creds.err = &httpaction.CredentialError{Code: httpaction.CodeNeedsReauth, Message: `connection "work" needs to be reconnected`}
+	out, err := p.Poll(ctx, PollInput{TriggerID: trigger.ID})
+	require.NoError(t, err, "a non-nil error would make Temporal retry a dead grant")
+	assert.True(t, out.Skipped)
+	assert.Contains(t, out.Reason, "reconnect")
+	assert.Equal(t, callsAfterBaseline, poller.calls, "nothing is polled without a credential")
+
+	reg, err := repo.GetTriggerRegistration(ctx, trigger.ID)
+	require.NoError(t, err)
+	assert.Equal(t, core.TriggerRegistrationNeedsReauth, reg.Status)
+	assert.Contains(t, reg.StatusDetail, "reconnect")
+	assert.Equal(t, "0", reg.Cursor, "the cursor survives, so a reconnect resumes without replay")
+	require.NotNil(t, reg.LastPolledAt)
+
+	// Reconnected: the next poll clears the state and resumes from the cursor.
+	creds.err = nil
+	_, err = p.Poll(ctx, PollInput{TriggerID: trigger.ID})
+	require.NoError(t, err)
+	reg, _ = repo.GetTriggerRegistration(ctx, trigger.ID)
+	assert.Equal(t, core.TriggerRegistrationActive, reg.Status)
+}
+
+// A provider that refuses the credential mid-poll (Google answering 401 for a
+// token revoked before it expired) is the same verdict, reported by the
+// poller: needs_reauth, no retry, cursor kept. Anything else the poller
+// returns is scrubbed before it is stored.
+func TestPollerReportedNeedsReauthAndScrubbedErrors(t *testing.T) {
+	repo, trigger, poller, _, p, creds := newPollEnvWithCreds(t)
+	ctx := context.Background()
+	_, err := p.Poll(ctx, PollInput{TriggerID: trigger.ID})
+	require.NoError(t, err)
+
+	poller.err = &httpaction.CredentialError{Code: httpaction.CodeNeedsReauth, Message: "Gmail rejected the credential: reconnect Gmail"}
+	out, err := p.Poll(ctx, PollInput{TriggerID: trigger.ID})
+	require.NoError(t, err)
+	assert.True(t, out.Skipped)
+	reg, _ := repo.GetTriggerRegistration(ctx, trigger.ID)
+	assert.Equal(t, core.TriggerRegistrationNeedsReauth, reg.Status)
+	assert.Equal(t, "0", reg.Cursor)
+
+	creds.cred = scrubbingCred{fakeCred: fakeCred{id: "conn-1"}, secret: "ya29.SECRET"}
+	poller.err = errors.New("upstream echoed Authorization: Bearer ya29.SECRET")
+	_, err = p.Poll(ctx, PollInput{TriggerID: trigger.ID})
+	require.Error(t, err)
+	assert.NotContains(t, err.Error(), "ya29.SECRET")
+	reg, _ = repo.GetTriggerRegistration(ctx, trigger.ID)
+	assert.Equal(t, core.TriggerRegistrationError, reg.Status)
+	assert.NotContains(t, reg.StatusDetail, "ya29.SECRET")
+}
+
+type scrubbingCred struct {
+	fakeCred
+	secret string
+}
+
+func (c scrubbingCred) Scrub(s string) string { return strings.ReplaceAll(s, c.secret, "[redacted]") }
+
+// A transient credential failure (a 503 from the token endpoint) is a poll
+// error: recorded, and retried by the schedule.
+func TestPollTransientCredentialFailureIsRetried(t *testing.T) {
+	repo, trigger, _, _, p, creds := newPollEnvWithCreds(t)
+	creds.err = &httpaction.CredentialError{Code: httpaction.CodeUnavailable, Message: "token refresh is temporarily unavailable"}
+	_, err := p.Poll(context.Background(), PollInput{TriggerID: trigger.ID})
+	require.Error(t, err)
+	reg, _ := repo.GetTriggerRegistration(context.Background(), trigger.ID)
+	assert.Equal(t, core.TriggerRegistrationError, reg.Status)
+}
+
+// A connection the source refuses outright (foreign, deleted, wrong
+// integration) is a skip, like the activity's own pre-check.
+func TestPollRefusedCredentialIsASkip(t *testing.T) {
+	_, trigger, poller, _, p, creds := newPollEnvWithCreds(t)
+	creds.err = &httpaction.CredentialError{Code: httpaction.CodeFailedPrecondition, Message: "no such connection"}
+	out, err := p.Poll(context.Background(), PollInput{TriggerID: trigger.ID})
+	require.NoError(t, err)
+	assert.True(t, out.Skipped)
+	assert.Zero(t, poller.calls)
+}
+
+func TestPollWithoutCredentialsIsSkippedNotUnauthenticated(t *testing.T) {
+	repo, trigger, poller, starter, _ := newPollEnv(t)
+	p := NewTriggerPoller(repo, fakePollers{"feed": poller}, NewIntake(repo, starter, ""), nil)
+	out, err := p.Poll(context.Background(), PollInput{TriggerID: trigger.ID})
+	require.NoError(t, err)
+	assert.True(t, out.Skipped)
+	assert.Zero(t, poller.calls, "a poller never runs without a credential")
 }
 
 func TestPollBaselineFiresNothingThenANewItemFiresOnce(t *testing.T) {

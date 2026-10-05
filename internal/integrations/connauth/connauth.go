@@ -10,7 +10,9 @@
 //  3. the integration's `delegated` broker, when its manifest declares one and
 //     this process registered it (GitHub through the control plane).
 //
-// The owner is always read from the run record, never from the request.
+// The owner is always read from the run record, never from the request. A
+// poll, which has no run, resolves by trigger id and reads the owner and the
+// connection from the trigger record instead (ForTrigger).
 package connauth
 
 import (
@@ -28,6 +30,7 @@ import (
 
 type forCaller interface {
 	ForCall(ctx context.Context, call connections.CallSite, ref connections.Ref) (*connections.Resolved, error)
+	ForTrigger(ctx context.Context, site connections.TriggerSite) (*connections.Resolved, error)
 	OwnerOf(ctx context.Context, runID string) (string, error)
 }
 
@@ -142,6 +145,25 @@ func (s *Source) Credential(ctx context.Context, req httpaction.CredentialReques
 		}
 	}
 	return nil, mapError(err)
+}
+
+// ForTrigger resolves the credential a polled trigger authenticates with. It
+// takes the trigger id and nothing else: the owner, the connection and the
+// integration are read from the trigger row (connections.Resolver.ForTrigger),
+// so a poller cannot be pointed at another user's account by anything it is
+// handed. A poll is always server-placed.
+//
+// There is no delegated fall-back: a polled trigger listens through the one
+// connection its owner picked, and a missing one stays missing.
+func (s *Source) ForTrigger(ctx context.Context, triggerID string) (httpaction.Credential, error) {
+	if s == nil || s.resolver == nil {
+		return nil, &httpaction.CredentialError{Code: httpaction.CodeFailedPrecondition, Message: "connections are not available in this process"}
+	}
+	resolved, err := s.resolver.ForTrigger(ctx, connections.TriggerSite{TriggerID: triggerID, Placement: connections.PlacementServer})
+	if err != nil {
+		return nil, mapError(err)
+	}
+	return credential{r: resolved}, nil
 }
 
 // delegatedBroker returns the registered broker the integration's manifest

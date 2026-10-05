@@ -234,6 +234,11 @@ type TriggerRegistration struct {
 const (
 	TriggerRegistrationActive = "active"
 	TriggerRegistrationError  = "error"
+	// TriggerRegistrationNeedsReauth: the trigger's connection can no longer
+	// authenticate (its refresh grant was refused, or it was marked for
+	// reconnect). Polls do nothing until the owner reconnects it, then resume
+	// on their own.
+	TriggerRegistrationNeedsReauth = "needs_reauth"
 )
 
 // ErrTriggerRegistrationNotFound is returned when a trigger has no

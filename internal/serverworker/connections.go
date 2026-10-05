@@ -18,6 +18,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/integrations/connauth"
 	"github.com/reliant-labs/reliant/internal/integrations/ghdelegated"
 	"github.com/reliant-labs/reliant/internal/integrations/httpaction"
+	"github.com/reliant-labs/reliant/internal/triggers"
 	"github.com/reliant-labs/reliant/internal/vault"
 )
 
@@ -66,6 +67,17 @@ func newIntegrationCredentials(resolver *connections.Resolver, getenv func(strin
 		return nil, fmt.Errorf("integrations: %w", err)
 	}
 	return saved.WithBrokers(brokers), nil
+}
+
+// triggerCredentials is what the poll activity resolves a polled trigger's
+// credential with: the same source integration actions use, asked by trigger
+// id rather than by run. nil (the poll is skipped) when the source is not one
+// that can.
+func triggerCredentials(creds httpaction.CredentialSource) triggers.PollCredentials {
+	if cs, ok := creds.(*connauth.Source); ok && cs != nil {
+		return cs
+	}
+	return nil
 }
 
 // newCatalogSearch is the caller-aware integration catalog search the

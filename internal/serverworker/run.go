@@ -393,6 +393,7 @@ func Run(ctx context.Context, opts Options) error {
 		TriggerLauncher:        triggerLauncher,
 		IntegrationCredentials: integrationCredentials,
 		TriggerPollers:         triggerPollers,
+		TriggerCredentials:     triggerCredentials(integrationCredentials),
 	})
 	if err != nil {
 		return fmt.Errorf("failed to start worker: %w", err)

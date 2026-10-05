@@ -11,6 +11,7 @@ import (
 	"go.temporal.io/sdk/workflow"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/integrations/httpaction"
 	"github.com/reliant-labs/reliant/internal/logging"
 )
 
@@ -44,6 +45,11 @@ type Poller interface {
 	// position and NO items. A cursor the provider no longer honours (Gmail's
 	// 404 on a stale history id) should be answered with a fresh baseline
 	// and no items, never a replay.
+	//
+	// A provider that refuses req.Credential outright (a 401 after the token
+	// was revoked) should be reported as an *httpaction.CredentialError with
+	// CodeNeedsReauth: the poll is then recorded as waiting on a reconnect
+	// and is not retried.
 	Poll(ctx context.Context, req PollRequest) (*PollResult, error)
 }
 
@@ -52,6 +58,13 @@ type PollRequest struct {
 	TriggerID    string
 	OwnerUserID  string
 	ConnectionID string
+	// Credential authenticates the poll's requests as the trigger's owner,
+	// through the trigger's connection. The activity resolved it from the
+	// trigger ROW (PollCredentials), so a poller holds one account's
+	// credential and has nothing it could ask for another with. Apply writes
+	// it only into a request to one of the integration's own hosts, and
+	// Scrub removes it from anything the poller is about to return.
+	Credential httpaction.Credential
 	// Cursor is what the previous poll returned; empty for the baseline.
 	Cursor string
 	// Config is the trigger's source config, for pollers that narrow the
@@ -106,17 +119,27 @@ type PollOutput struct {
 	Accepted int    `json:"accepted"`
 }
 
+// PollCredentials resolves the credential a polled trigger authenticates with.
+// It is handed the trigger id and nothing else: the owner, the connection and
+// the integration are read from the trigger row. connauth.Source satisfies it.
+type PollCredentials interface {
+	ForTrigger(ctx context.Context, triggerID string) (httpaction.Credential, error)
+}
+
 // TriggerPoller runs polls. It is the PollTrigger activity.
 type TriggerPoller struct {
 	repo    PollRepo
 	pollers Pollers
 	intake  *Intake
+	creds   PollCredentials
 	now     func() time.Time
 }
 
-// NewTriggerPoller builds the poll activity's receiver.
-func NewTriggerPoller(repo PollRepo, pollers Pollers, intake *Intake) *TriggerPoller {
-	return &TriggerPoller{repo: repo, pollers: pollers, intake: intake, now: time.Now}
+// NewTriggerPoller builds the poll activity's receiver. creds may be nil (a
+// worker with no connections), in which case every poll is skipped rather
+// than run unauthenticated.
+func NewTriggerPoller(repo PollRepo, pollers Pollers, intake *Intake, creds PollCredentials) *TriggerPoller {
+	return &TriggerPoller{repo: repo, pollers: pollers, intake: intake, creds: creds, now: time.Now}
 }
 
 // Poll is the PollTrigger activity.
@@ -149,9 +172,6 @@ func (p *TriggerPoller) Poll(ctx context.Context, in PollInput) (*PollOutput, er
 	if err != nil || conn == nil || conn.UserID != trigger.UserID || conn.IntegrationID != cfg.Integration {
 		return &PollOutput{Skipped: true, Reason: "the trigger's connection is unavailable"}, nil
 	}
-	if conn.Status != core.ConnectionStatusActive {
-		return &PollOutput{Skipped: true, Reason: "the trigger's connection needs to be reconnected"}, nil
-	}
 
 	reg, err := p.repo.GetTriggerRegistration(ctx, trigger.ID)
 	switch {
@@ -162,14 +182,50 @@ func (p *TriggerPoller) Poll(ctx context.Context, in PollInput) (*PollOutput, er
 	}
 	baseline := reg.Cursor == ""
 
+	if conn.Status == core.ConnectionStatusNeedsReauth {
+		// Marked by an earlier refresh (an action node's, or this trigger's
+		// last poll). Record it here too, so trigger health says why nothing
+		// arrives.
+		now := p.now().UTC()
+		reg.LastPolledAt, reg.Provider = &now, cfg.Integration
+		return p.needsReauth(ctx, reg, &httpaction.CredentialError{
+			Code: httpaction.CodeNeedsReauth, Message: fmt.Sprintf("connection %q needs to be reconnected", conn.Name),
+		})
+	}
+	if conn.Status != core.ConnectionStatusActive {
+		return &PollOutput{Skipped: true, Reason: "the trigger's connection is unavailable"}, nil
+	}
+
+	if p.creds == nil {
+		return &PollOutput{Skipped: true, Reason: "connections are not available on this worker"}, nil
+	}
+	// By trigger id alone: the source reads the owner and the connection from
+	// the trigger row again, so the checks above are not what keeps a poll on
+	// its owner's account — the resolver is.
+	cred, credErr := p.creds.ForTrigger(ctx, trigger.ID)
+	if credErr == nil && cred == nil {
+		credErr = &httpaction.CredentialError{Code: httpaction.CodeInternal, Message: "the trigger's connection resolved to no credential"}
+	}
+	if credErr != nil {
+		return p.credentialFailed(ctx, reg, cfg, credErr)
+	}
+
 	res, pollErr := poller.Poll(ctx, PollRequest{
 		TriggerID: trigger.ID, OwnerUserID: trigger.UserID, ConnectionID: conn.ID,
-		Cursor: reg.Cursor, Config: cfg,
+		Credential: cred, Cursor: reg.Cursor, Config: cfg,
 	})
 	now := p.now().UTC()
 	reg.LastPolledAt = &now
 	reg.Provider = cfg.Integration
 	if pollErr != nil {
+		if isNeedsReauth(pollErr) {
+			// The provider refused the credential mid-poll (a revoked grant
+			// whose access token had not yet expired).
+			return p.needsReauth(ctx, reg, pollErr)
+		}
+		// What is stored and returned is scrubbed: a provider error body can
+		// echo the request, credential included.
+		pollErr = errors.New(cred.Scrub(pollErr.Error()))
 		// Keep the cursor: advancing past items never delivered loses them.
 		reg.Status, reg.StatusDetail = core.TriggerRegistrationError, truncate(pollErr.Error(), 500)
 		if err := p.repo.UpsertTriggerRegistration(ctx, reg); err != nil {
@@ -202,6 +258,54 @@ func (p *TriggerPoller) Poll(ctx context.Context, in PollInput) (*PollOutput, er
 		return nil, fmt.Errorf("save cursor for %s: %w", trigger.ID, err)
 	}
 	return out, nil
+}
+
+// credentialFailed records why a poll could not get its credential. A
+// connection that needs reconnecting, or that the resolver refuses outright,
+// is a skip: retrying cannot help, and a refresh grant that is dead must not
+// be hammered (Gmail testing-mode tokens die weekly). Anything else is
+// transient and retried.
+func (p *TriggerPoller) credentialFailed(ctx context.Context, reg *core.TriggerRegistration, cfg core.IntegrationConfig, err error) (*PollOutput, error) {
+	now := p.now().UTC()
+	reg.LastPolledAt = &now
+	reg.Provider = cfg.Integration
+	if isNeedsReauth(err) {
+		return p.needsReauth(ctx, reg, err)
+	}
+	var ce *httpaction.CredentialError
+	if errors.As(err, &ce) {
+		switch ce.Code {
+		case httpaction.CodeFailedPrecondition, httpaction.CodeNotFound, httpaction.CodeInvalidArgument:
+			return &PollOutput{Skipped: true, Reason: "the trigger's connection is unavailable: " + ce.Message}, nil
+		}
+	}
+	reg.Status, reg.StatusDetail = core.TriggerRegistrationError, truncate(err.Error(), 500)
+	if uerr := p.repo.UpsertTriggerRegistration(ctx, reg); uerr != nil {
+		logging.Warn("could not record a poll credential failure", "trigger_id", reg.TriggerID, "error", uerr)
+	}
+	return nil, fmt.Errorf("resolve credential for trigger %s: %w", reg.TriggerID, err)
+}
+
+// needsReauth records that the trigger's connection must be reconnected and
+// ends the poll without an error, so Temporal does not retry it. The cursor
+// is kept: once the owner reconnects, the next poll resumes where this one
+// stopped, with nothing replayed.
+func (p *TriggerPoller) needsReauth(ctx context.Context, reg *core.TriggerRegistration, cause error) (*PollOutput, error) {
+	detail := "the connection needs to be reconnected"
+	var ce *httpaction.CredentialError
+	if errors.As(cause, &ce) && ce.Message != "" {
+		detail = ce.Message
+	}
+	reg.Status, reg.StatusDetail = core.TriggerRegistrationNeedsReauth, truncate(detail, 500)
+	if err := p.repo.UpsertTriggerRegistration(ctx, reg); err != nil {
+		return nil, fmt.Errorf("record needs_reauth for %s: %w", reg.TriggerID, err)
+	}
+	return &PollOutput{Skipped: true, Reason: detail}, nil
+}
+
+func isNeedsReauth(err error) bool {
+	var ce *httpaction.CredentialError
+	return errors.As(err, &ce) && ce.Code == httpaction.CodeNeedsReauth
 }
 
 func pollEvent(trigger *core.Trigger, integration string, conn *core.Connection, item PollItem) InboundEvent {
