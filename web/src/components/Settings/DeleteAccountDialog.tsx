@@ -106,7 +106,7 @@ export function DeleteAccountDialog({ isOpen, onClose, onDeleted }: DeleteAccoun
       <div className="space-y-5 p-1">
         <div className="flex items-start gap-3">
           <div className="p-2 bg-destructive/10 rounded-lg shrink-0">
-            <AlertTriangle className="w-5 h-5 text-destructive" />
+            <AlertTriangle className="w-5 h-5 text-destructive-ink" />
           </div>
           <p className="text-sm text-muted-foreground">
             This permanently deletes everything Reliant stores for your account.

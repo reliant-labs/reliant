@@ -139,7 +139,7 @@ export function InitializeGitModal({
         </div>
 
         {error && (
-          <div className="p-4 bg-destructive/10 text-destructive rounded-lg text-sm">
+          <div className="p-4 bg-destructive/10 text-destructive-ink rounded-lg text-sm">
             {error}
           </div>
         )}

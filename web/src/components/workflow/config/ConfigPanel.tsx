@@ -442,7 +442,7 @@ export function ConfigPanel({
             <button
               type="button"
               onClick={handleIdSave}
-              className="cpv2-header-btn text-success hover:text-success"
+              className="cpv2-header-btn text-success-ink hover:text-success-ink"
               title="Save"
             >
               <Check />
@@ -456,7 +456,7 @@ export function ConfigPanel({
               <X />
             </button>
           </div>
-          {idError && <p className="cpv2-field-hint !text-destructive">{idError}</p>}
+          {idError && <p className="cpv2-field-hint !text-destructive-ink">{idError}</p>}
         </div>
       )}
 

@@ -225,7 +225,7 @@ export function WorktreesPanel({
       </div>
 
       {error && (
-        <div className="mx-4 mt-4 rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+        <div className="mx-4 mt-4 rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-xs text-destructive-ink">
           {error}
         </div>
       )}

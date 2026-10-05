@@ -22,15 +22,15 @@ const badgeVariants = {
     border border-secondary/20
   `,
   success: `
-    bg-success/10 text-success
+    bg-success/10 text-success-ink
     border border-success/20
   `,
   warning: `
-    bg-warning/10 text-warning
+    bg-warning/10 text-warning-ink
     border border-warning/20
   `,
   destructive: `
-    bg-destructive/10 text-destructive
+    bg-destructive/10 text-destructive-ink
     border border-destructive/20
   `,
   outline: `

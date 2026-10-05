@@ -408,8 +408,8 @@ export function FindReplace({ isOpen, onClose }: FindReplaceProps) {
         <div ref={resultsRef} className="max-h-[50vh] overflow-y-auto">
           {error ? (
             <div className="px-4 py-8 text-center">
-              <AlertCircle className="w-8 h-8 text-destructive mx-auto mb-2" />
-              <p className="text-sm text-destructive font-mono">{error}</p>
+              <AlertCircle className="w-8 h-8 text-destructive-ink mx-auto mb-2" />
+              <p className="text-sm text-destructive-ink font-mono">{error}</p>
             </div>
           ) : results.length === 0 ? (
             <div className="px-4 py-8 text-center">

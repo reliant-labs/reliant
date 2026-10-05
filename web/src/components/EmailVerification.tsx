@@ -45,7 +45,7 @@ export function EmailVerification({ email }: { email?: string }) {
       <button
         type="button"
         onClick={() => void handleSignOut()}
-        className="flex items-center justify-center gap-2 mx-auto text-sm font-medium text-muted-foreground transition-colors hover:text-destructive"
+        className="flex items-center justify-center gap-2 mx-auto text-sm font-medium text-muted-foreground transition-colors hover:text-destructive-ink"
       >
         <LogOut className="w-4 h-4" />
         Sign out and use a different email

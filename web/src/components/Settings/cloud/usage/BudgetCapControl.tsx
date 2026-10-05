@@ -247,7 +247,7 @@ export function BudgetCapControl({
       </p>
 
       {error ? (
-        <p id={`${fieldId}-error`} role="alert" className="text-xs text-destructive">
+        <p id={`${fieldId}-error`} role="alert" className="text-xs text-destructive-ink">
           {error}
         </p>
       ) : null}

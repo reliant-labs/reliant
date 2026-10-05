@@ -626,7 +626,7 @@ export const FileTreeItem = memo(function FileTreeItem({
                       }${isDirectory ? " in this folder" : ""}`}
                       placement="top"
                     >
-                      <div className="flex items-center gap-0.5 text-destructive">
+                      <div className="flex items-center gap-0.5 text-destructive-ink">
                         <AlertCircle className="w-3 h-3" />
                         <span className="text-xs font-medium">
                           {errorCount}

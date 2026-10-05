@@ -75,7 +75,7 @@ export function DeployApproveStep({
     return (
       <p
         data-testid="deploy-not-approvable"
-        className="rounded-lg border border-dashed border-destructive/50 px-3 py-2 text-xs text-destructive"
+        className="rounded-lg border border-dashed border-destructive/50 px-3 py-2 text-xs text-destructive-ink"
       >
         This cannot be deployed from what is on screen. Work out the changes again, and if
         that keeps happening the environment may never have been built.

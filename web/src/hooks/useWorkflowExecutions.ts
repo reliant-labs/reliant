@@ -126,6 +126,17 @@ export function useWorkflowExecutions(
     queryKey: chatDetailKeys.workflowExecutionsView(chatId ?? "", view),
     queryFn: () => chatGrpc.getWorkflowExecutions(chatId!, view),
     enabled: !!chatId,
+    // The tree must outlive an unmount exactly as long as the messages it
+    // classifies. The messages cache is gcTime: Infinity (message-queries.ts),
+    // so a chat switched back to renders its transcript on the first frame —
+    // and the tree is the only thing that then says which thread is a spawned
+    // sub-agent, because the chat's live thread records were cleared on
+    // unsubscribe. With the 5-minute default, any chat left for longer
+    // rendered its cached messages against NO tree: InterleavedTimeline could
+    // not classify a single spawn thread and dropped all of their messages
+    // until the refetch landed. Both caches are released together by
+    // evictChat (archive/delete) and queryClient.clear() (logout).
+    gcTime: Infinity,
   });
 
   // Behavior-preserving bridge: the backend drives freshness via

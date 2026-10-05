@@ -107,7 +107,7 @@ export function DeleteWorktreeModal({
             <p className="text-sm text-muted-foreground">
               {isArchived ? (
                 <>
-                  This will <strong className="text-destructive">permanently delete</strong>{" "}
+                  This will <strong className="text-destructive-ink">permanently delete</strong>{" "}
                   the worktree record <strong className="font-mono">{worktree.name}</strong> from the database.
                   {chatCount > 0 && (
                     <>
@@ -118,7 +118,7 @@ export function DeleteWorktreeModal({
                   )}
                   <br />
                   <br />
-                  <span className="text-destructive font-medium">This action cannot be undone.</span>
+                  <span className="text-destructive-ink font-medium">This action cannot be undone.</span>
                 </>
               ) : (
                 <>
@@ -215,7 +215,7 @@ export function DeleteWorktreeModal({
                   Permanently deletes the branch <span className="font-mono">{worktree.branch}</span> from git repository
                 </p>
                 {deleteGitBranch && (
-                  <p className="text-xs text-destructive font-medium mt-1">
+                  <p className="text-xs text-destructive-ink font-medium mt-1">
                     ⚠️ This will delete the branch completely - make sure it's merged or you have backups!
                   </p>
                 )}
@@ -314,7 +314,7 @@ export function DeleteWorktreeModal({
                   Permanently deletes the branch <span className="font-mono">{worktree.branch}</span> from git repository
                 </p>
                 {deleteGitBranch && (
-                  <p className="text-xs text-destructive font-medium mt-1">
+                  <p className="text-xs text-destructive-ink font-medium mt-1">
                     ⚠️ This will delete the branch completely - make sure it's merged or you have backups!
                   </p>
                 )}

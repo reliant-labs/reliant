@@ -235,7 +235,7 @@ export function MobileAccountScreen({ onBack }: MobileAccountScreenProps = {}) {
               <button
                 type="button"
                 onClick={() => setConfirming(true)}
-                className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-lg border border-border text-sm font-medium text-destructive active:bg-foreground/5"
+                className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-lg border border-border text-sm font-medium text-destructive-ink active:bg-foreground/5"
               >
                 <LogOut className="h-4 w-4" />
                 Sign out
@@ -243,7 +243,7 @@ export function MobileAccountScreen({ onBack }: MobileAccountScreenProps = {}) {
             )}
 
             {error && (
-              <p className="mt-2 text-center text-xs text-destructive">{error}</p>
+              <p className="mt-2 text-center text-xs text-destructive-ink">{error}</p>
             )}
           </div>
         </MobileCardGroup>

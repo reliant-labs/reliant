@@ -102,7 +102,7 @@ export function CodeViewerComparison() {
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold">Lightweight Viewer (Prism)</h2>
-              <span className="text-xs text-success font-mono">~50KB bundle</span>
+              <span className="text-xs text-success-ink font-mono">~50KB bundle</span>
             </div>
             <LightweightCodeViewer
               content={sampleCode}
@@ -146,7 +146,7 @@ export function CodeViewerComparison() {
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold">Lightweight Diff Viewer</h2>
-              <span className="text-xs text-success font-mono">~10KB bundle</span>
+              <span className="text-xs text-success-ink font-mono">~10KB bundle</span>
             </div>
             <LightweightDiffViewer
               original={originalCode}
@@ -178,15 +178,15 @@ export function CodeViewerComparison() {
         <div className="grid grid-cols-3 gap-4 text-sm">
           <div>
             <div className="text-muted-foreground">Initial Bundle</div>
-            <div className="text-2xl font-bold text-destructive">-5MB</div>
+            <div className="text-2xl font-bold text-destructive-ink">-5MB</div>
           </div>
           <div>
             <div className="text-muted-foreground">Chat Load Time</div>
-            <div className="text-2xl font-bold text-success">-500ms</div>
+            <div className="text-2xl font-bold text-success-ink">-500ms</div>
           </div>
           <div>
             <div className="text-muted-foreground">Time to Interactive</div>
-            <div className="text-2xl font-bold text-success">4-6x faster</div>
+            <div className="text-2xl font-bold text-success-ink">4-6x faster</div>
           </div>
         </div>
       </div>

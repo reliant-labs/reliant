@@ -220,7 +220,7 @@ function ToolExecutionGroupComponent({
             </span>
           )}
           {summary.completed > 0 && (
-            <span className="inline-flex items-center gap-1 text-xs font-mono text-success/60">
+            <span className="inline-flex items-center gap-1 text-xs font-mono text-success-ink/60">
               <CheckCircle2 className="w-3.5 h-3.5" /> {summary.completed}
             </span>
           )}
@@ -230,7 +230,7 @@ function ToolExecutionGroupComponent({
             </span>
           )}
           {summary.errors > 0 && (
-            <span className="inline-flex items-center gap-1 text-xs font-mono text-warning">
+            <span className="inline-flex items-center gap-1 text-xs font-mono text-warning-ink">
               <AlertCircle className="w-3.5 h-3.5" /> {summary.errors}
             </span>
           )}

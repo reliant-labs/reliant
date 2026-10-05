@@ -112,9 +112,9 @@ export function CustomEdge({
                 selected
                   ? 'border-primary bg-primary text-primary-foreground shadow-primary/20'
                   : isTaken
-                    ? 'border-success/50 bg-success/10 text-success'
+                    ? 'border-success/50 bg-success/10 text-success-ink'
                     : isFailed
-                      ? 'border-destructive/50 bg-destructive/10 text-destructive'
+                      ? 'border-destructive/50 bg-destructive/10 text-destructive-ink'
                       : 'border-border bg-card/95 text-muted-foreground hover:text-foreground'
               }`}
               title={label}

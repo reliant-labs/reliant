@@ -43,9 +43,9 @@ export function ResetPassword({ onSubmit, onSuccess }: ResetPasswordProps) {
 
   const getStrengthTextClassName = (strength: PasswordStrength) => {
     switch (strength) {
-      case 'strong': return 'text-success'
-      case 'medium': return 'text-warning'
-      case 'weak': return 'text-destructive'
+      case 'strong': return 'text-success-ink'
+      case 'medium': return 'text-warning-ink'
+      case 'weak': return 'text-destructive-ink'
     }
   }
 
@@ -145,8 +145,8 @@ export function ResetPassword({ onSubmit, onSuccess }: ResetPasswordProps) {
         {/* Error Message */}
         {error && (
           <div className="p-4 rounded-lg border border-destructive/30 bg-destructive/10 flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5 text-destructive" />
-            <p className="text-sm text-destructive">
+            <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5 text-destructive-ink" />
+            <p className="text-sm text-destructive-ink">
               {error}
             </p>
           </div>
@@ -229,7 +229,7 @@ export function ResetPassword({ onSubmit, onSuccess }: ResetPasswordProps) {
               </button>
             </div>
             {confirmPassword && password !== confirmPassword && (
-              <p className="text-xs text-destructive">
+              <p className="text-xs text-destructive-ink">
                 Passwords do not match
               </p>
             )}
@@ -249,7 +249,7 @@ export function ResetPassword({ onSubmit, onSuccess }: ResetPasswordProps) {
                   ) : (
                     <X className="w-3.5 h-3.5 text-muted-foreground" />
                   )}
-                  <span className={`text-xs ${isMet ? 'text-success' : 'text-muted-foreground'}`}>
+                  <span className={`text-xs ${isMet ? 'text-success-ink' : 'text-muted-foreground'}`}>
                     {req.label}
                   </span>
                 </div>

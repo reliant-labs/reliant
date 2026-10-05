@@ -79,7 +79,7 @@ export function OnboardingEscapeHatch({ className }: { className?: string }) {
         </button>
       </div>
       {error && (
-        <p className="text-xs text-destructive" role="alert">
+        <p className="text-xs text-destructive-ink" role="alert">
           {error}
         </p>
       )}

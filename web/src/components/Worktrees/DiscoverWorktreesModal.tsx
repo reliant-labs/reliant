@@ -173,9 +173,9 @@ export function DiscoverWorktreesModal({
     <Modal isOpen={isOpen} onClose={onClose} title="Discover Worktrees" size="xl">
       <div className="space-y-4">
         {error && (
-          <div className="p-4 bg-destructive/10 border border-destructive/30 text-destructive rounded-lg text-sm">
+          <div className="p-4 bg-destructive/10 border border-destructive/30 text-destructive-ink rounded-lg text-sm">
             <div className="flex items-start gap-2">
-              <span className="text-destructive mt-0.5">⚠️</span>
+              <span className="text-destructive-ink mt-0.5">⚠️</span>
               <span className="flex-1">{error}</span>
             </div>
           </div>
@@ -332,7 +332,7 @@ export function DiscoverWorktreesModal({
                             {worktree.name}
                           </span>
                           {worktree.is_imported && (
-                            <span className="text-xs px-2 py-0.5 bg-success/10 text-success rounded-full font-mono">
+                            <span className="text-xs px-2 py-0.5 bg-success/10 text-success-ink rounded-full font-mono">
                               Imported
                             </span>
                           )}
@@ -349,7 +349,7 @@ export function DiscoverWorktreesModal({
                           </div>
                         </div>
                         {importError && (
-                          <div className="mt-2 text-xs text-destructive font-mono">
+                          <div className="mt-2 text-xs text-destructive-ink font-mono">
                             ⚠️ {importError}
                           </div>
                         )}

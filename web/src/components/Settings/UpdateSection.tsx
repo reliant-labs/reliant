@@ -159,7 +159,7 @@ export function UpdateSection() {
         return {
           icon: AlertCircle,
           message: 'Update check failed',
-          iconClass: 'text-destructive',
+          iconClass: 'text-destructive-ink',
         };
       default:
         return null;
@@ -185,7 +185,7 @@ export function UpdateSection() {
           {updateStatus?.type === 'downloaded' ? (
             <button
               onClick={() => setShowUpdateModal(true)}
-              className="text-xs font-medium text-success hover:text-success/80 transition-colors"
+              className="text-xs font-medium text-success-ink hover:text-success-ink/80 transition-colors"
             >
               Install
             </button>

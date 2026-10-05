@@ -256,7 +256,7 @@ export function TerminalOutput({
                 "p-1.5 rounded transition-colors",
                 isCanceling 
                   ? "text-yellow-500 cursor-wait" 
-                  : "hover:bg-destructive/10 text-destructive"
+                  : "hover:bg-destructive/10 text-destructive-ink"
               )}
               title={isCanceling ? "Stopping..." : "Stop process"}
             >

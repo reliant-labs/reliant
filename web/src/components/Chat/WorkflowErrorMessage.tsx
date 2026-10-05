@@ -135,8 +135,8 @@ export function WorkflowErrorMessage({ error }: WorkflowErrorMessageProps) {
           <span className={cn(
             "text-xs font-normal px-1.5 rounded-full whitespace-nowrap flex-shrink-0",
             isRetrying
-              ? "bg-warning/20 text-warning"
-              : "bg-destructive/20 text-destructive"
+              ? "bg-warning/20 text-warning-ink"
+              : "bg-destructive/20 text-destructive-ink"
           )}>
             {isRetrying ? `Retrying (${retryLabel})` : retryLabel}
           </span>

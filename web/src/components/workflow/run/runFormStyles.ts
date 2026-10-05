@@ -20,4 +20,4 @@ export const labelClass = "mb-1.5 block text-sm font-medium text-foreground";
 
 export const hintClass = "mt-1 text-xs text-muted-foreground";
 
-export const errorTextClass = "mt-1 text-xs text-destructive";
+export const errorTextClass = "mt-1 text-xs text-destructive-ink";

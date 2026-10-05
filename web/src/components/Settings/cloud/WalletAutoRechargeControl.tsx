@@ -286,7 +286,7 @@ export function WalletAutoRechargeControl({
           <p
             className={cn(
               "text-xs font-semibold",
-              failure.tone === "error" ? "text-destructive" : "text-warning",
+              failure.tone === "error" ? "text-destructive-ink" : "text-warning-ink",
             )}
           >
             {failure.title}
@@ -372,18 +372,18 @@ export function WalletAutoRechargeControl({
           </div>
 
           {thresholdInvalid && (
-            <p className="text-xs text-destructive">
+            <p className="text-xs text-destructive-ink">
               Enter a balance above $0 to top up from.
             </p>
           )}
           {amountInvalid && (
-            <p className="text-xs text-destructive">
+            <p className="text-xs text-destructive-ink">
               Top-ups start at{" "}
               {formatCentsAsDollars(MIN_AUTO_RECHARGE_AMOUNT_CENTS)}.
             </p>
           )}
           {ceilingInvalid && (
-            <p className="text-xs text-destructive">
+            <p className="text-xs text-destructive-ink">
               The monthly limit has to be at least one top-up, and it can&apos;t
               be $0 — an automatic charger must have a wall.
             </p>
@@ -417,7 +417,7 @@ export function WalletAutoRechargeControl({
       )}
 
       {error && (
-        <p className="text-xs text-destructive" role="alert">
+        <p className="text-xs text-destructive-ink" role="alert">
           {error}
         </p>
       )}

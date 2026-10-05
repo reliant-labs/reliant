@@ -193,7 +193,7 @@ export function TargetPanel({ plan }: { plan: ForgeDeployReport }) {
           data-testid="deploy-guard-refused"
           className="space-y-1 rounded-md border border-solid border-destructive/50 bg-destructive/10 px-3 py-2"
         >
-          <p className="text-xs font-medium text-destructive">
+          <p className="text-xs font-medium text-destructive-ink">
             Forge will not deploy this environment.
           </p>
           {plan.guard?.reason && (
@@ -293,7 +293,7 @@ function HostedTargetPanel({ plan }: { plan: ForgeDeployReport }) {
           data-testid="deploy-guard-refused"
           className="space-y-1 rounded-md border border-solid border-destructive/50 bg-destructive/10 px-3 py-2"
         >
-          <p className="text-xs font-medium text-destructive">
+          <p className="text-xs font-medium text-destructive-ink">
             This environment can&apos;t be deployed right now.
           </p>
           {plan.guard?.reason && (
@@ -370,7 +370,7 @@ export function PreflightPanel({ plan }: { plan: ForgeDeployReport }) {
           data-testid="deploy-preflight-blocking"
           className="space-y-2 rounded-md border border-solid border-destructive/50 bg-destructive/10 px-3 py-2"
         >
-          <p className="text-xs font-medium text-destructive">
+          <p className="text-xs font-medium text-destructive-ink">
             {blocking.length} blocking finding{blocking.length === 1 ? "" : "s"} — this deploy would
             fail.
           </p>
@@ -421,7 +421,7 @@ function FindingRow({ finding, blocking }: { finding: ForgeDeployFinding; blocki
       data-blocking={blocking ? "true" : "false"}
       className={cn(
         "space-y-0.5 rounded px-2 py-1 text-2xs",
-        blocking ? "bg-destructive/10 text-destructive" : "text-muted-foreground"
+        blocking ? "bg-destructive/10 text-destructive-ink" : "text-muted-foreground"
       )}
     >
       <span className="font-mono">{finding.check || "check"}</span>
@@ -468,14 +468,14 @@ export function ImagesPanel({ plan }: { plan: ForgeDeployReport }) {
         <div className="flex flex-wrap items-center gap-1.5">
           <span
             data-testid="deploy-digest-count"
-            className="inline-flex items-center gap-1 rounded-full border border-solid border-success/40 bg-success/15 px-2 py-0.5 text-2xs text-success"
+            className="inline-flex items-center gap-1 rounded-full border border-solid border-success/40 bg-success/15 px-2 py-0.5 text-2xs text-success-ink"
           >
             {digestCount} digest-pinned
           </span>
           {tagCount > 0 && (
             <span
               data-testid="deploy-tag-count"
-              className="inline-flex items-center gap-1 rounded-full border border-solid border-warning/40 bg-warning/15 px-2 py-0.5 text-2xs text-warning"
+              className="inline-flex items-center gap-1 rounded-full border border-solid border-warning/40 bg-warning/15 px-2 py-0.5 text-2xs text-warning-ink"
             >
               <TAG_PINNING_ICON className="h-3 w-3" aria-hidden="true" />
               {tagCount} by mutable tag
@@ -485,7 +485,7 @@ export function ImagesPanel({ plan }: { plan: ForgeDeployReport }) {
       </div>
 
       {tagCount > 0 && (
-        <p data-testid="deploy-tag-caveat" className="text-2xs text-warning">
+        <p data-testid="deploy-tag-caveat" className="text-2xs text-warning-ink">
           {tagCount === 1 ? "One image is" : `${tagCount} images are`} referenced by a mutable tag.
           Whatever that tag points at when the kubelet pulls is what runs, so the bytes this deploy
           ships cannot be proven to be the bytes that were built.
@@ -508,7 +508,7 @@ export function ImagesPanel({ plan }: { plan: ForgeDeployReport }) {
                 <span
                   className={cn(
                     "w-16 text-2xs font-medium",
-                    pinning === "digest" ? "text-success" : "text-warning"
+                    pinning === "digest" ? "text-success-ink" : "text-warning-ink"
                   )}
                 >
                   {pinning === "digest" ? "digest" : pinning === "tag" ? "tag" : "unknown"}
@@ -597,7 +597,7 @@ export function RolloutPanel({ plan }: { plan: ForgeDeployReport }) {
 
       <p
         data-testid="deploy-rollout-mode"
-        className={cn("text-2xs", mode === "skip" ? "text-warning" : "text-muted-foreground")}
+        className={cn("text-2xs", mode === "skip" ? "text-warning-ink" : "text-muted-foreground")}
       >
         {ROLLOUT_MODE_LABELS[mode]}
       </p>

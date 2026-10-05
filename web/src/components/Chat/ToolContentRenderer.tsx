@@ -459,7 +459,7 @@ export const ToolContentRenderer = memo(function ToolContentRenderer({
             // Logical operators
             if (trimmed.match(/^(&&|\|\||;)$/)) {
               return (
-                <span key={index} className="text-warning font-bold mx-1">
+                <span key={index} className="text-warning-ink font-bold mx-1">
                   {part}
                 </span>
               );
@@ -477,14 +477,14 @@ export const ToolContentRenderer = memo(function ToolContentRenderer({
             // Quoted strings
             if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
               return (
-                <span key={index} className="text-success">
+                <span key={index} className="text-success-ink">
                   {part}
                 </span>
               );
             }
             if (trimmed.startsWith("'") && trimmed.endsWith("'")) {
               return (
-                <span key={index} className="text-success">
+                <span key={index} className="text-success-ink">
                   {part}
                 </span>
               );
@@ -502,7 +502,7 @@ export const ToolContentRenderer = memo(function ToolContentRenderer({
             // Environment variables
             if (trimmed.match(/^\$\w+/) || trimmed.match(/^\*.+\*/)) {
               return (
-                <span key={index} className="text-warning">
+                <span key={index} className="text-warning-ink">
                   {part}
                 </span>
               );

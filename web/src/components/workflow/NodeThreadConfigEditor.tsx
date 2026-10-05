@@ -282,7 +282,7 @@ export function NodeThreadConfigEditor({
               <button
                 type="button"
                 onClick={clearInjectConfig}
-                className="text-xs text-muted-foreground hover:text-destructive transition-colors"
+                className="text-xs text-muted-foreground hover:text-destructive-ink transition-colors"
               >
                 Clear inject message
               </button>
@@ -323,7 +323,7 @@ export function NodeThreadConfigEditor({
             <button
               type="button"
               onClick={clearInjectConfig}
-              className="text-xs text-muted-foreground hover:text-destructive transition-colors"
+              className="text-xs text-muted-foreground hover:text-destructive-ink transition-colors"
             >
               Clear inject message
             </button>

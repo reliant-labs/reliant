@@ -327,7 +327,7 @@ export function SimpleBrowserView({ worktreeId }: SimpleBrowserViewProps) {
                 )}
                 <span className="truncate">{tab.title}</span>
                 <X
-                  className="w-3 h-3 flex-shrink-0 hover:text-destructive"
+                  className="w-3 h-3 flex-shrink-0 hover:text-destructive-ink"
                   onClick={(e) => handleCloseTab(tab.id, e)}
                 />
               </button>

@@ -210,7 +210,7 @@ function ParamField({
                                 const newItems = items.filter((_: any, i: number) => i !== idx)
                                 onChange(newItems)
                             }}
-                            className="p-2 hover:bg-destructive/10 text-muted-foreground hover:text-destructive rounded-md transition-colors"
+                            className="p-2 hover:bg-destructive/10 text-muted-foreground hover:text-destructive-ink rounded-md transition-colors"
                         >
                             <Trash2 className="w-4 h-4" />
                         </button>

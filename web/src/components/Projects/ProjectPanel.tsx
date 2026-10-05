@@ -325,7 +325,7 @@ export function ProjectPanel({ onNavigateToProjectPicker, onNavigateToChats }: P
                     <AlertCircle className="w-4 h-4 mt-0.5 text-warning" />
                     <div className="flex-1">
                       <div className="text-sm font-mono">Uncommitted Changes</div>
-                      <div className="text-xs text-warning mt-1 font-mono">
+                      <div className="text-xs text-warning-ink mt-1 font-mono">
                         {gitStatus.uncommitted_changes} file{gitStatus.uncommitted_changes !== 1 ? 's' : ''} modified
                       </div>
                     </div>
@@ -363,7 +363,7 @@ export function ProjectPanel({ onNavigateToProjectPicker, onNavigateToChats }: P
                   <div className="w-2 h-2 rounded-full bg-status-active"></div>
                   <span className="text-muted-foreground">Active</span>
                 </div>
-                <span className="text-success font-semibold">{worktreeStats.active}</span>
+                <span className="text-success-ink font-semibold">{worktreeStats.active}</span>
               </div>
               <div className="flex items-center justify-between text-xs font-mono">
                 <div className="flex items-center gap-2">
@@ -499,7 +499,7 @@ export function ProjectPanel({ onNavigateToProjectPicker, onNavigateToChats }: P
             className="px-3 py-2 elevation-1 hover:elevation-2 border border-border/40 rounded-lg hover:bg-destructive/10 hover:border-destructive/30 transition-all group flex items-center gap-2"
           >
             <Trash2 className="w-4 h-4 text-muted-foreground group-hover:text-destructive transition-colors" />
-            <span className="text-sm font-mono group-hover:text-destructive transition-colors">Remove Project</span>
+            <span className="text-sm font-mono group-hover:text-destructive-ink transition-colors">Remove Project</span>
           </button>
         </div>
       </div>

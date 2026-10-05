@@ -100,7 +100,7 @@ export function MobileGitHubPanel() {
     <div className="divide-y divide-border">
       {error && (
         <div className="mx-4 mt-4 rounded-lg border border-destructive/30 bg-destructive/10 p-3">
-          <p className="text-sm text-destructive">{error}</p>
+          <p className="text-sm text-destructive-ink">{error}</p>
         </div>
       )}
 
@@ -176,7 +176,7 @@ export function MobileGitHubPanel() {
               <button
                 type="button"
                 onClick={() => setConfirmingDisconnect(true)}
-                className="flex min-h-[44px] w-full items-center justify-center rounded-lg border border-border text-sm font-medium text-destructive active:bg-foreground/5"
+                className="flex min-h-[44px] w-full items-center justify-center rounded-lg border border-border text-sm font-medium text-destructive-ink active:bg-foreground/5"
               >
                 Disconnect
               </button>

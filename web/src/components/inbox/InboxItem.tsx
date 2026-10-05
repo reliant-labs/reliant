@@ -203,13 +203,13 @@ function KindIcon({ kind }: { kind: InboxItemKind }) {
     case InboxItemKind.QUESTION:
       return <HelpCircle className={className} aria-label="Question" />;
     case InboxItemKind.WAITING_FOR_MACHINE:
-      return <MonitorPause className={cn(className, "text-warning")} aria-label="Waiting for machine" />;
+      return <MonitorPause className={cn(className, "text-warning-ink")} aria-label="Waiting for machine" />;
     case InboxItemKind.AUTOMATION_FAILING:
-      return <AlertTriangle className={cn(className, "text-destructive")} aria-label="Automation failing" />;
+      return <AlertTriangle className={cn(className, "text-destructive-ink")} aria-label="Automation failing" />;
     case InboxItemKind.AUTOMATION_LAUNCH_FAILED:
       return <CalendarX className={cn(className, "text-destructive")} aria-label="Automation could not start" />;
     case InboxItemKind.RUN_FINISHED:
-      return <CheckCircle2 className={cn(className, "text-success")} aria-label="Run finished" />;
+      return <CheckCircle2 className={cn(className, "text-success-ink")} aria-label="Run finished" />;
     default:
       return <CheckCircle2 className={className} aria-hidden="true" />;
   }
@@ -468,7 +468,7 @@ export function WakeMachineAction({
   return (
     <span className="flex shrink-0 items-center gap-2">
       {error && (
-        <span className="max-w-64 truncate text-xs text-destructive" role="alert" title={resumeErrorMessage(new Error(error))}>
+        <span className="max-w-64 truncate text-xs text-destructive-ink" role="alert" title={resumeErrorMessage(new Error(error))}>
           {resumeErrorMessage(new Error(error))}
           {isQuotaResumeError(error) ? (
             <button type="button" onClick={goToBilling} className="ml-1.5 font-medium underline-offset-2 hover:underline">

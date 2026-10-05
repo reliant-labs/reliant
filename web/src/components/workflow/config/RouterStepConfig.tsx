@@ -123,7 +123,7 @@ function RouterCandidateCard({
           <button
             type="button"
             onClick={() => onDelete(index)}
-            className="p-0.5 text-muted-foreground hover:text-destructive transition-colors"
+            className="p-0.5 text-muted-foreground hover:text-destructive-ink transition-colors"
             title="Remove candidate"
           >
             <X className="w-3.5 h-3.5" />
@@ -269,7 +269,7 @@ function NodeRouterCandidateCard({
           <button
             type="button"
             onClick={() => onDelete(index)}
-            className="p-0.5 text-muted-foreground hover:text-destructive transition-colors"
+            className="p-0.5 text-muted-foreground hover:text-destructive-ink transition-colors"
             title="Remove candidate"
           >
             <X className="w-3.5 h-3.5" />
@@ -636,7 +636,7 @@ function RouterOutputsEditor({
                   <button
                     type="button"
                     onClick={() => removeOutput(key)}
-                    className="p-0.5 text-muted-foreground hover:text-destructive transition-colors"
+                    className="p-0.5 text-muted-foreground hover:text-destructive-ink transition-colors"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>

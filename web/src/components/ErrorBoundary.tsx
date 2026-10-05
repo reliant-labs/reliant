@@ -110,7 +110,7 @@ export function ErrorFallbackUI(props: {
     >
       <div className="w-full max-w-2xl rounded-xl border border-border/60 bg-card elevation-4 p-6">
         <div className="flex items-start gap-4">
-          <div className="mt-0.5 flex h-12 w-12 items-center justify-center rounded-full bg-destructive/10 text-destructive">
+          <div className="mt-0.5 flex h-12 w-12 items-center justify-center rounded-full bg-destructive/10 text-destructive-ink">
             <AlertTriangle className="h-6 w-6" />
           </div>
 
@@ -152,7 +152,7 @@ export function ErrorFallbackUI(props: {
                   </span>
                 ) : null}
               </div>
-              <div className="mt-2 font-mono text-xs text-destructive break-words">
+              <div className="mt-2 font-mono text-xs text-destructive-ink break-words">
                 {err.name}: {err.message}
               </div>
             </div>

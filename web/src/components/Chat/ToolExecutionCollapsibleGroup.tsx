@@ -111,7 +111,7 @@ function ToolExecutionCollapsibleGroupComponent({
           ) : (
             <Eye className="w-3.5 h-3.5 text-muted-foreground" />
           )}
-          <span className={cn("text-xs font-mono", hasWarnings ? "text-warning" : "text-muted-foreground")}>
+          <span className={cn("text-xs font-mono", hasWarnings ? "text-warning-ink" : "text-muted-foreground")}>
             {summaryText}
           </span>
         </div>

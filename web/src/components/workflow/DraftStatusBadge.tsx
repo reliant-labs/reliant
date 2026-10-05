@@ -30,7 +30,7 @@ export function DraftStatusBadge({ errorCount = 0, className }: DraftStatusBadge
       >
         <PencilRuler className="h-2.5 w-2.5" />
         Draft
-        {errorCount > 0 && <span className="text-destructive">· {errorCount}</span>}
+        {errorCount > 0 && <span className="text-destructive-ink">· {errorCount}</span>}
       </span>
     </Tooltip>
   );

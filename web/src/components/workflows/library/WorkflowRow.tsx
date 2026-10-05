@@ -112,7 +112,7 @@ function NameCell({ row, project }: { row: LibraryTableRow; project?: string }) 
     <div className="min-w-0">
       <div className="flex min-w-0 items-center gap-2">
         {row.attention && (
-          <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-warning" aria-label="Needs attention" />
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-warning-ink" aria-label="Needs attention" />
         )}
         <Link
           to="/workflows/library/$workflowRef"
@@ -151,7 +151,7 @@ function AutomationsCell({ row }: { row: LibraryTableRow }) {
     <span data-testid="workflow-row-automations" className="block truncate text-xs text-muted-foreground" title={summary}>
       {`${row.automationCount} ${row.automationCount === 1 ? "automation" : "automations"}`}
       {row.failingAutomationCount > 0 && (
-        <span className="text-destructive" data-testid="workflow-row-failing">
+        <span className="text-destructive-ink" data-testid="workflow-row-failing">
           {` · ${row.failingAutomationCount} failing`}
         </span>
       )}

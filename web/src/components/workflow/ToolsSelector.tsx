@@ -410,7 +410,7 @@ export function ToolsSelector({
                     Add
                   </button>
                 </div>
-                {customError && <p className="text-xs text-destructive mt-1">{customError}</p>}
+                {customError && <p className="text-xs text-destructive-ink mt-1">{customError}</p>}
               </div>
 
               {/* Concrete tools by category */}

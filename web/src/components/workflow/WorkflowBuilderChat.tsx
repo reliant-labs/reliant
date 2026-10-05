@@ -887,7 +887,7 @@ export function WorkflowBuilderChat({
         {sendError && (
           <div
             role="alert"
-            className="mb-2 flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive"
+            className="mb-2 flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive-ink"
           >
             <AlertCircle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
             <span>{sendError}</span>

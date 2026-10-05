@@ -115,7 +115,7 @@ export const BaseChatInput = forwardRef<HTMLTextAreaElement, BaseChatInputProps>
         className={cn(
           "h-7 w-7 p-0 rounded-full border transition-colors duration-150",
           stableStreaming
-            ? "bg-[var(--chat-button-bg)] text-destructive border-[var(--chat-border)] hover:bg-[var(--chat-button-hover)] hover:border-destructive/30"
+            ? "bg-[var(--chat-button-bg)] text-destructive-ink border-[var(--chat-border)] hover:bg-[var(--chat-button-hover)] hover:border-destructive/30"
             : canSend
             ? "bg-[var(--chat-button-bg)] text-primary border-[var(--chat-border)] hover:bg-[var(--chat-button-hover)] hover:border-primary/30"
             : "bg-[var(--chat-button-bg)] text-[var(--chat-button-text)] border-[var(--chat-border)] opacity-60"

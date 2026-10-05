@@ -966,13 +966,13 @@ function Notice({
   children: React.ReactNode;
 }) {
   const tones = {
-    error: "border-destructive/40 bg-destructive/10 text-destructive",
+    error: "border-destructive/40 bg-destructive/10 text-destructive-ink",
     muted: "border-border bg-muted/40 text-foreground",
     pending: "border-primary/40 bg-primary/10 text-foreground",
     success: "border-primary/40 bg-primary/10 text-foreground",
   } as const;
   const iconTones = {
-    error: "text-destructive",
+    error: "text-destructive-ink",
     muted: "text-muted-foreground",
     pending: "text-primary",
     success: "text-primary",
