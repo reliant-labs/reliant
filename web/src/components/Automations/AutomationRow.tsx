@@ -16,14 +16,14 @@
  */
 
 import { Link } from "@tanstack/react-router";
-import { CalendarClock, CircleHelp } from "lucide-react";
+import { AlertOctagon, CalendarClock, CircleHelp, Plug, Webhook, Workflow } from "lucide-react";
 import { toast } from "sonner";
 
 import StatusDot from "../forge-ui/status_dot";
 import { Toggle } from "../ui/Toggle";
 import { Tooltip } from "../ui/Tooltip";
 import { RunStatusBadge } from "../ui/RunStatusIndicator";
-import { sourceKindLabel, triggerErrorMessage, type Trigger } from "@/api/trigger-grpc";
+import { sourceKindLabel, triggerErrorMessage, type Trigger, type TriggerSource } from "@/api/trigger-grpc";
 import { useSetTriggerEnabled } from "@/hooks/trigger-queries";
 import { automationHealth, type AutomationHealthDisplay } from "@/lib/automationHealth";
 import { describeTriggerSource } from "@/lib/cronText";
@@ -145,8 +145,28 @@ export function AutomationRow({ trigger }: { trigger: Trigger }) {
   );
 }
 
+/** The icon for a source: an activation is drawn as the kind it declares. */
+function sourceIcon(source: TriggerSource | undefined) {
+  if (!source) return CircleHelp;
+  switch (source.kind) {
+    case "schedule":
+      return CalendarClock;
+    case "activation":
+      return sourceIcon(source.declared);
+    case "passthrough": {
+      const armCase = (source.arm as { case: string }).case;
+      if (armCase === "webhook") return Webhook;
+      if (armCase === "integration") return Plug;
+      if (armCase === "workflowEvent") return Workflow;
+      return CircleHelp;
+    }
+    default:
+      return CircleHelp;
+  }
+}
+
 function KindIcon({ trigger }: { trigger: Trigger }) {
-  const Icon = trigger.source.kind === "schedule" ? CalendarClock : CircleHelp;
+  const Icon = trigger.health.status === "broken" ? AlertOctagon : sourceIcon(trigger.source);
   return (
     <span className="flex h-7 w-7 items-center justify-center rounded-md border border-border/60 bg-background text-muted-foreground">
       <Icon className="h-4 w-4" aria-hidden="true" />

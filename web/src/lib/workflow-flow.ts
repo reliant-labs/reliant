@@ -522,9 +522,21 @@ export function workflowToFlowElements(
     node.id === ENTRY_NODE_ID ? { ...node, type: entryFlowType } : node,
   )
 
+  // The rail says "Starts when" itself, so its outgoing edges carry no
+  // "started" pill — and the pill, which renders above every node, would
+  // otherwise sit over the rail's own controls.
+  const edges =
+    entryFlowType === ENTRY_FLOW_TYPES.triggerRail
+      ? loadedEdges.map((edge) =>
+          edge.source === ENTRY_NODE_ID && (edge.data as { label?: string } | undefined)?.label === 'started'
+            ? { ...edge, data: { ...edge.data, label: '' } }
+            : edge,
+        )
+      : loadedEdges
+
   return {
     nodes: resolvedNodes,
-    edges: loadedEdges,
+    edges,
   }
 }
 

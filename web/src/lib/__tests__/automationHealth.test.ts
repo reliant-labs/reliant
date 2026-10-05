@@ -156,3 +156,29 @@ describe("automationHealth: waiting for a machine", () => {
     );
   });
 });
+
+describe("automationHealth: broken activations", () => {
+  const reason =
+    'declared trigger "nightly" of workflow "triage": the workflow no longer declares a trigger named "nightly"';
+
+  it("reads Broken with the server's reason, outranking every firing-derived state", () => {
+    const display = automationHealth({
+      enabled: true,
+      health: health("broken", { lastFailureDetail: reason }),
+      lastEvent: { ...EVENT, runDisplayState: RunDisplayState.WAITING_FOR_MACHINE },
+    });
+    expect(display.key).toBe("broken");
+    expect(display.label).toBe("Broken");
+    expect(display.detail).toBe(reason);
+    expect(display.dotVariant).toBe("error");
+    expect(display.badgeVariant).toBe("error");
+    expect(display.needsAttention).toBe(true);
+    expect(display.severity).toBeLessThan(automationHealth({ enabled: true, health: health("failing", { consecutiveFailures: 9 }) }).severity);
+  });
+
+  it("stays Broken when paused: resuming would not fix it", () => {
+    const display = automationHealth({ enabled: false, health: health("broken", { lastFailureDetail: reason }) });
+    expect(display.key).toBe("broken");
+    expect(display.detail).toBe(`Paused. ${reason}`);
+  });
+});

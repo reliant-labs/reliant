@@ -32,6 +32,7 @@ import {
   GetTriggerRequestSchema,
   ListTriggerEventsRequestSchema,
   ListTriggersRequestSchema,
+  RotateWebhookTokenRequestSchema,
   ScheduleSourceSchema,
   SetTriggerEnabledRequestSchema,
   TriggerDefinitionSchema,
@@ -44,6 +45,7 @@ import {
   type TriggerDefinition as ProtoTriggerDefinition,
   type TriggerEvent as ProtoTriggerEvent,
   type TriggerHealth as ProtoTriggerHealth,
+  type WebhookCredential as ProtoWebhookCredential,
 } from "../gen/reliant/v1/trigger_pb";
 import type { RunDisplayState } from "../gen/reliant/v1/run_pb";
 
@@ -63,6 +65,12 @@ export type OverlapPolicy = "skip" | "allow";
 export type PassthroughSourceArm = Exclude<ProtoTrigger["source"], { case: "schedule" } | { case: undefined }>;
 
 /**
+ * Which kind of source a passthrough arm (or a declared trigger) is. Read
+ * structurally from the arm, so it widens with trigger.proto.
+ */
+export type SourceArmCase = PassthroughSourceArm["case"];
+
+/**
  * What makes a trigger fire: the proto `source` oneof.
  *
  *   - `schedule`: the one kind this client reads and edits.
@@ -72,10 +80,16 @@ export type PassthroughSourceArm = Exclude<ProtoTrigger["source"], { case: "sche
  *   - `unknown`: the server sent an arm this client's generated code predates.
  *     JSON decoding drops an unknown field, so nothing is left to send back,
  *     and the trigger's definition cannot be saved from this client.
+ *   - `activation`: the trigger activates the workflow's declared trigger
+ *     `workflowTrigger` (research/INTEGRATIONS_V1_BRIEF.md §3a). Its source,
+ *     filter and inputs are the declaration's, re-read on every fire, so the
+ *     write sends only the name — never an inline copy. `declared` is the
+ *     declaration's source as of the last save, for display only.
  */
 export type TriggerSource =
   | { kind: "schedule"; schedule: TriggerSchedule }
   | { kind: "passthrough"; arm: PassthroughSourceArm }
+  | { kind: "activation"; workflowTrigger: string; declared?: TriggerSource }
   | { kind: "unknown" };
 
 export interface TriggerSchedule {
@@ -106,7 +120,7 @@ export interface TriggerEvent {
 }
 
 /** TriggerHealthStatus; UNSPECIFIED (an older server) reads as unknown. */
-export type TriggerHealthStatusKey = "healthy" | "degraded" | "failing" | "unknown";
+export type TriggerHealthStatusKey = "healthy" | "degraded" | "failing" | "broken" | "unknown";
 
 /** The server's read-only health summary. Rules: TriggerHealthStatus in trigger.proto. */
 export interface TriggerHealth {
@@ -141,11 +155,23 @@ export interface Trigger {
   nextFireAt?: string;
   lastEvent?: TriggerEvent;
   source: TriggerSource;
+  /** The workflow-declared trigger this row activates, when it activates one. */
+  workflowTrigger?: string;
+  /** Launched runs have no machine (only once the server supports it). */
+  noMachine?: boolean;
+  /** The connection an integration trigger listens through. */
+  connectionId?: string;
+  /**
+   * Webhook triggers: the URL to POST to. A bare `/hooks/<id>` path when the
+   * server has no PUBLIC_URL; see webhookUrlForDisplay.
+   */
+  webhookUrl?: string;
 }
 
 /** The trigger's schedule, or undefined for any other kind of source. */
 export function triggerSchedule(trigger: Pick<Trigger, "source">): TriggerSchedule | undefined {
-  return trigger.source.kind === "schedule" ? trigger.source.schedule : undefined;
+  const source = trigger.source.kind === "activation" ? trigger.source.declared : trigger.source;
+  return source?.kind === "schedule" ? source.schedule : undefined;
 }
 
 /**
@@ -163,6 +189,8 @@ export function sourceKindLabel(source: TriggerSource): string {
       const words = armCase.replace(/([a-z0-9])([A-Z])/g, "$1 $2").toLowerCase();
       return words.charAt(0).toUpperCase() + words.slice(1);
     }
+    case "activation":
+      return source.declared ? sourceKindLabel(source.declared) : "Declared trigger";
     case "unknown":
       return "Unknown kind";
   }
@@ -189,7 +217,25 @@ export interface TriggerDefinitionInput {
   notifyOnComplete: boolean;
   /** Replaced on update too: an edit that does not change it sends the stored one. */
   source: TriggerSource;
+  /**
+   * Integration triggers: the connection to listen through. Unset on create
+   * means the owner's default for the integration.
+   */
+  connectionId?: string;
+  /**
+   * Launched runs have no machine (TriggerDefinition.no_machine, daemon-less
+   * runs). Mutually exclusive with daemonId. Sent only when this client's
+   * generated code has the field; see NO_MACHINE_SUPPORTED.
+   */
+  noMachine?: boolean;
 }
+
+/**
+ * Whether this build's generated TriggerDefinition carries `no_machine`
+ * (research/INTEGRATIONS_V1_BRIEF.md §3c, stream H). Read from the schema,
+ * so the "No machine" choice turns on when the proto lands, with no edit.
+ */
+export const NO_MACHINE_SUPPORTED: boolean = TriggerDefinitionSchema.fields.some((field) => field.localName === "noMachine");
 
 // ============================================
 // Proto → frontend
@@ -227,7 +273,15 @@ function scheduleFromProto(source: ProtoScheduleSource): TriggerSchedule {
   };
 }
 
-function sourceFromProto(source: ProtoTrigger["source"]): TriggerSource {
+function sourceFromProto(source: ProtoTrigger["source"], workflowTrigger?: string): TriggerSource {
+  const inline = inlineSourceFromProto(source);
+  // An activation's stored arm is its declaration as of the last save: shown,
+  // never sent back (the server re-reads the declaration).
+  if (workflowTrigger) return { kind: "activation", workflowTrigger, declared: inline.kind === "unknown" ? undefined : inline };
+  return inline;
+}
+
+function inlineSourceFromProto(source: ProtoTrigger["source"]): TriggerSource {
   switch (source.case) {
     case "schedule":
       return { kind: "schedule", schedule: scheduleFromProto(source.value) };
@@ -246,6 +300,8 @@ function healthStatusFromProto(status: TriggerHealthStatus): TriggerHealthStatus
       return "degraded";
     case TriggerHealthStatus.FAILING:
       return "failing";
+    case TriggerHealthStatus.BROKEN:
+      return "broken";
     default:
       return "unknown";
   }
@@ -296,7 +352,11 @@ export function triggerFromProto(proto: ProtoTrigger): Trigger {
     updatedAt: proto.updatedAt,
     nextFireAt: proto.nextFireAt || undefined,
     lastEvent: proto.lastEvent ? eventFromProto(proto.lastEvent) : undefined,
-    source: sourceFromProto(proto.source),
+    source: sourceFromProto(proto.source, proto.workflowTrigger || undefined),
+    workflowTrigger: proto.workflowTrigger || undefined,
+    connectionId: proto.connectionId || undefined,
+    webhookUrl: proto.webhookUrl || undefined,
+    noMachine: (proto as unknown as { noMachine?: boolean }).noMachine || undefined,
   };
 }
 
@@ -320,7 +380,12 @@ export function definitionToProto(input: TriggerDefinitionInput): ProtoTriggerDe
     message: input.message,
     daemonId: input.daemonId,
     notifyOnComplete: input.notifyOnComplete,
+    connectionId: input.connectionId || undefined,
   });
+  if (input.noMachine && NO_MACHINE_SUPPORTED) {
+    (definition as unknown as { noMachine: boolean }).noMachine = true;
+    definition.daemonId = "";
+  }
   // Assigned rather than passed to create(): a passthrough arm is the decoded
   // message the server sent, and goes back as that same object.
   definition.source = sourceToProto(input.source);
@@ -344,6 +409,9 @@ function sourceToProto(source: TriggerSource): ProtoTriggerDefinition["source"] 
       // Trigger and TriggerDefinition declare the same arms, so the stored arm
       // is already a valid definition arm. Never rebuilt: what was stored goes back.
       return source.arm;
+    case "activation":
+      // The name only: the declaration supplies source, filter and inputs.
+      return { case: "workflowTrigger", value: source.workflowTrigger };
     case "unknown":
       // Sending no source (or an invented one) would replace the stored
       // trigger's source on a full-replacement update.
@@ -369,7 +437,40 @@ export function definitionFromTrigger(trigger: Trigger): TriggerDefinitionInput 
     daemonId: trigger.daemonId,
     notifyOnComplete: trigger.notifyOnComplete,
     source: trigger.source,
+    connectionId: trigger.connectionId,
+    noMachine: trigger.noMachine,
   };
+}
+
+/**
+ * A webhook trigger's token, returned exactly once (by create and by
+ * rotation). `url` already embeds the token, for senders that cannot set an
+ * Authorization header.
+ */
+export interface WebhookCredential {
+  token: string;
+  url: string;
+}
+
+function credentialFromProto(proto: ProtoWebhookCredential | undefined): WebhookCredential | undefined {
+  return proto?.token ? { token: proto.token, url: proto.url } : undefined;
+}
+
+/**
+ * A webhook URL to show and copy. The server returns a bare `/hooks/<id>`
+ * path when its worker has no PUBLIC_URL; that path is relative to the API
+ * origin the app talks to, so it is resolved against `apiOrigin`.
+ */
+export function webhookUrlForDisplay(url: string | undefined, apiOrigin: string): string {
+  if (!url) return "";
+  if (url.startsWith("/")) {
+    try {
+      return new URL(url, apiOrigin).toString();
+    } catch {
+      return url;
+    }
+  }
+  return url;
 }
 
 // ============================================
@@ -416,6 +517,22 @@ export const triggerGrpc = {
       .createTrigger(create(CreateTriggerRequestSchema, { trigger: definitionToProto(input) }));
     if (!response.trigger) throw new Error("No trigger in response");
     return triggerFromProto(response.trigger);
+  },
+
+  /** Create, and return the webhook token when the trigger is a webhook (shown once). */
+  async createWithCredential(input: TriggerDefinitionInput): Promise<{ trigger: Trigger; webhook?: WebhookCredential }> {
+    const response = await grpcClient
+      .trigger()
+      .createTrigger(create(CreateTriggerRequestSchema, { trigger: definitionToProto(input) }));
+    if (!response.trigger) throw new Error("No trigger in response");
+    return { trigger: triggerFromProto(response.trigger), webhook: credentialFromProto(response.webhook) };
+  },
+
+  /** Replace a webhook trigger's token; the old one stops working at once. */
+  async rotateWebhookToken(id: string): Promise<{ trigger: Trigger; webhook?: WebhookCredential }> {
+    const response = await grpcClient.trigger().rotateWebhookToken(create(RotateWebhookTokenRequestSchema, { id }));
+    if (!response.trigger) throw new Error("No trigger in response");
+    return { trigger: triggerFromProto(response.trigger), webhook: credentialFromProto(response.webhook) };
   },
 
   async update(id: string, input: TriggerDefinitionInput): Promise<Trigger> {

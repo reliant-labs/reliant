@@ -11,8 +11,14 @@
  * proto/reliant/v1/trigger.proto). The server has four statuses and the
  * design has more display states, because some facts are the client's:
  *
- *   Paused               the trigger is disabled. Wins over everything: a
- *                        paused automation is not firing, so not failing.
+ *   Broken               BROKEN: it activates a workflow-declared trigger
+ *                        that is gone or changed (the workflow deleted, the
+ *                        trigger renamed, its kind or integration changed).
+ *                        Wins over everything, Paused included: resuming it
+ *                        would not make it fire, only fixing the workflow or
+ *                        removing the activation does.
+ *   Paused               the trigger is disabled. Wins over everything else:
+ *                        a paused automation is not firing, so not failing.
  *   Failing              FAILING, shown as "N failed".
  *   Waiting for machine  the last firing's run is blocked on its daemon
  *                        (RunDisplayState.WAITING_FOR_MACHINE). Only a
@@ -32,6 +38,7 @@ import type { TriggerEvent, TriggerHealth } from "../api/trigger-grpc";
 import type { RunStatusBadgeVariant, RunStatusDotVariant } from "./runStatus";
 
 export type AutomationHealthKey =
+  | "broken"
   | "failing"
   | "waiting_for_machine"
   | "skipping"
@@ -60,6 +67,7 @@ export const SKIPPING_STREAK = 3;
 type Row = Omit<AutomationHealthDisplay, "label" | "detail"> & { label: string };
 
 const ROWS: Record<AutomationHealthKey, Row> = {
+  broken: { key: "broken", label: "Broken", dotVariant: "error", badgeVariant: "error", needsAttention: true, severity: -1 },
   failing: { key: "failing", label: "Failing", dotVariant: "error", badgeVariant: "error", needsAttention: true, severity: 0 },
   waiting_for_machine: {
     key: "waiting_for_machine",
@@ -88,6 +96,11 @@ function detailOrUndefined(text: string): string | undefined {
 }
 
 export function automationHealth({ enabled, health, lastEvent }: AutomationHealthInput): AutomationHealthDisplay {
+  if (health.status === "broken") {
+    const reason = detailOrUndefined(health.lastFailureDetail) ?? "Its workflow's declared trigger is missing or changed";
+    return { ...ROWS.broken, detail: enabled ? reason : `Paused. ${reason}` };
+  }
+
   if (!enabled) return { ...ROWS.paused };
 
   if (health.status === "failing") {

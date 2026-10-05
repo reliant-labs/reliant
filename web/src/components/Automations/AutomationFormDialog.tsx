@@ -689,12 +689,24 @@ function AutomationFormBody({
               id={fieldId("locked-source")}
               className="rounded-md border border-border/60 bg-background px-3 py-2 text-sm text-foreground"
             >
-              <span className="font-medium">{sourceKindLabel(lockedSource)} trigger.</span>{" "}
-              <span className="text-muted-foreground">
-                {lockedSource.kind === "unknown"
-                  ? UNKNOWN_SOURCE_MESSAGE
-                  : "Its trigger settings can't be changed here yet. Saving keeps them exactly as they are."}
-              </span>
+              {lockedSource.kind === "activation" ? (
+                <>
+                  <span className="font-medium">The workflow's “{lockedSource.workflowTrigger}” trigger.</span>{" "}
+                  <span className="text-muted-foreground">
+                    When it fires, and its filter and inputs, are part of the workflow. Edit them in the workflow; every
+                    activation follows.
+                  </span>
+                </>
+              ) : (
+                <>
+                  <span className="font-medium">{sourceKindLabel(lockedSource)} trigger.</span>{" "}
+                  <span className="text-muted-foreground">
+                    {lockedSource.kind === "unknown"
+                      ? UNKNOWN_SOURCE_MESSAGE
+                      : "Its trigger settings can't be changed here yet. Saving keeps them exactly as they are."}
+                  </span>
+                </>
+              )}
             </p>
           ) : (
             <>
@@ -883,14 +895,15 @@ function AutomationFormBody({
   );
 }
 
-interface ScheduleFieldsProps {
+export interface ScheduleFieldsProps {
   fieldId: (name: string) => string;
   schedule: ScheduleFormState;
   onChange: (patch: Partial<ScheduleFormState>) => void;
   error?: string;
 }
 
-function ScheduleFields({ fieldId, schedule, onChange, error }: ScheduleFieldsProps) {
+/** The schedule presets editor; also the builder's declared-schedule editor. */
+export function ScheduleFields({ fieldId, schedule, onChange, error }: ScheduleFieldsProps) {
   const errorId = error ? fieldId("schedule-error") : undefined;
   const needsTime =
     schedule.preset === "daily" || schedule.preset === "weekdays" || schedule.preset === "weekly";

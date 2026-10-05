@@ -43,6 +43,7 @@ import { OutcomeBadge } from "./OutcomeBadge";
 import { RunStatusBadge } from "../ui/RunStatusIndicator";
 import { useLaunchedRunStatus } from "./useLaunchedRunStatus";
 import { daemonLabel, daemonStatusLabel } from "./daemonChoices";
+import { BrokenActivationNotice } from "./BrokenActivationNotice";
 import { runStatusFromDisplayState } from "@/lib/runStatus";
 import type { RunDisplayState } from "@/gen/reliant/v1/run_pb";
 
@@ -206,6 +207,10 @@ export function AutomationDetail({ triggerId }: { triggerId: string }) {
           </Button>
         </div>
       </div>
+
+      {trigger.health.status === "broken" && (
+        <BrokenActivationNotice trigger={trigger} onRemoved={() => void navigate({ to: "/workflows/automations" })} />
+      )}
 
       <Card padding="lg">
         <CardHeader
