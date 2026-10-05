@@ -12,7 +12,8 @@
  * Each request is logged to the console with which side it would have gone
  * to, which is how a screenshot can be checked against the source model.
  *
- * The fixtures are control-plane's REAL state on 2026-10-04: four declared
+ * The fixtures MIRROR control-plane's state on 2026-10-04 (cluster names
+ * scrubbed — this file ships in a public repo): four declared
  * environments, prod on v1.7.15 by forge's file ledger, dev running locally
  * via `forge env up` — and, in the `unregistered` scenario, no rows in the
  * control plane for any of them, which is what produced "Not built yet" on
@@ -44,7 +45,7 @@ type Scenario = "registered" | "unregistered" | "daemon-offline";
 const PROJECT: Project = {
   id: "cp-project",
   name: "control-plane",
-  path: "/Users/dev/src/reliant-labs/control-plane",
+  path: "/src/control-plane",
   is_git_repo: true,
   worktree_count: 0,
   last_active: "",
@@ -83,7 +84,7 @@ const TOPOLOGY = {
       destination: "mixed",
       release: "v1.7.15",
       promoted_at: "2026-10-04T21:18:54Z",
-      kube_context: "gke_reliant-labs-475814_us-central1_prod",
+      kube_context: "gke-prod-context",
       namespace: "control-plane-prod",
       images: [{ image: "control-plane", state: "not_verified" }],
     },
@@ -184,7 +185,7 @@ function liveEnvironments(scenario: Scenario) {
             { name: "reliant-api-server", runtime: "cluster", cluster: "gke-prod" },
           ],
           secrets: [{ name: "STRIPE_WEBHOOK_SECRET", provider: "hosted", declared_by: ["admin-server"] }],
-          domains: ["api.reliantapi.com"],
+          domains: ["api.example.com"],
           clusters: ["gke-prod"],
         },
         declaredBy: { repo: "github.com/reliant-labs/control-plane", commit: "47d0d1525ccc", branch: "main", forgeVersion: "v0.1.44" },
