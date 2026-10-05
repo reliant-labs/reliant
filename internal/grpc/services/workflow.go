@@ -23,6 +23,7 @@ import (
 	cfg "github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/launch"
+	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/ptr"
 	"github.com/reliant-labs/reliant/internal/toolexec"
@@ -223,6 +224,19 @@ func (s *WorkflowService) ListWorkflows(
 	wfHiddenDefaultSet := make(map[string]bool, len(wfHiddenDefaults))
 	for _, slug := range wfHiddenDefaults {
 		wfHiddenDefaultSet[slug] = true
+	}
+
+	// What keeps each workflow from running with no machine, at its declared
+	// defaults: the Automations form offers "No machine" only when this is
+	// empty. Refs resolve through the same loader a run uses.
+	refLoader := func(ref string) (*reliantv1.Workflow, error) {
+		return launch.ResolveRunWorkflow(ctx, s.database, userID, ref, req.Msg.ProjectId)
+	}
+	preflight := tools.PreflightConfig()
+	for _, wf := range workflowsBySlug {
+		def := &reliantv1.Workflow{Name: wf.Name, Nodes: wf.Nodes, Edges: wf.Edges, Inputs: wf.Inputs}
+		req := v2.MachineRequirements(def, nil, refLoader, preflight)
+		wf.NeedsMachine = append(append([]string(nil), req.Hard...), req.Tools...)
 	}
 
 	// Filter by visibility and convert map to slice

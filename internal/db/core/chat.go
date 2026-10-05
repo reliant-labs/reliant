@@ -191,6 +191,11 @@ type Chat struct {
 	Activity             *int              `json:"activity,omitempty"`
 	Unread               bool              `json:"unread"`
 	ActiveDaemonID       *string           `json:"active_daemon_id,omitempty"`
+	// NoMachine records that this chat's runs have no machine by design: set
+	// at launch, never inferred from a daemon being absent (an absent pinned
+	// daemon is asleep and gets woken). Every run in the chat is offered only
+	// tools that run without the user's machine. See research/DAEMONLESS_RUNS.md.
+	NoMachine bool `json:"no_machine,omitempty"`
 	// AdoptedAt is when the user adopted this run into their chats; nil if not.
 	AdoptedAt *time.Time `json:"adopted_at,omitempty"`
 	// ListInSidebar is the view's sidebar policy for this chat.

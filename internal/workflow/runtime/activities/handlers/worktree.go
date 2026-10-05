@@ -17,11 +17,13 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/nomachine"
 	repopkg "github.com/reliant-labs/reliant/internal/repo"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
 	"github.com/reliant-labs/reliant/internal/worktreepath"
+	"go.temporal.io/sdk/temporal"
 )
 
 const worktreeCreateDaemonTimeoutMs int32 = 120_000
@@ -104,6 +106,13 @@ func (a *CreateWorktreeActivity) Execute(ctx context.Context, input ActivityInpu
 
 	if chat.ProjectID == "" {
 		return CreateWorktreeOutput{}, fmt.Errorf("chat has no project_id")
+	}
+	// Launch refuses a no-machine run of a workflow with this node; a git
+	// checkout has nowhere to live without one.
+	if chat.NoMachine {
+		return CreateWorktreeOutput{}, temporal.NewNonRetryableApplicationError(
+			nomachine.ErrNoMachine.Error()+": create_worktree needs a git checkout on the user's machine",
+			"NoMachine", nil)
 	}
 
 	// Get project to access working directory

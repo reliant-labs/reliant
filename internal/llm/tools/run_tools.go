@@ -46,6 +46,10 @@ type StartRunRequest struct {
 	// the daemon it names: the run must land on the user's machine the caller
 	// is already using, not on whichever daemon the runtime would pick.
 	DaemonID string
+	// NoMachine is inherited from a calling chat that has no machine, for
+	// the same reason: start_run must not be the door through which a run
+	// with no machine reaches one (research/DAEMONLESS_RUNS.md).
+	NoMachine bool
 
 	// ParentChatID is the chat whose agent is starting this run. It is
 	// recorded on the launch event, and the fork-bomb guard walks it.

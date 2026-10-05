@@ -24,6 +24,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
+	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/preset"
 	"github.com/reliant-labs/reliant/internal/workflow"
@@ -135,6 +136,14 @@ func (l *Launcher) BuildWorkflowInputs(
 	// Params must use nested structure (e.g., {"agent": {"model": "..."}}).
 	// Flat keys like "agent.model" are rejected by validation.
 	for key, value := range userParams {
+		// An engine-injected input is the engine's to set: validation skips
+		// these keys precisely because the engine writes them, so taking one
+		// from a request would let a client claim a session daemon, a trigger
+		// event, or that nobody is watching its run.
+		if workflow.RuntimeInjectedInputs[key] {
+			logging.Warn("[buildWorkflowInputs] Ignoring a client param that names an engine-injected input", "key", key)
+			continue
+		}
 		v := value.AsInterface()
 
 		if key == "tools" {
@@ -474,6 +483,29 @@ func (l *Launcher) validateWorkflowTree(ctx context.Context, userID, workflowNam
 		}
 	}
 
+	return nil
+}
+
+// validateNoMachine refuses a no-machine launch of a workflow with a node that
+// cannot run without one. Only HARD reasons refuse here: an attended chat
+// whose agent was given tag:coding:default still starts, and is simply offered
+// the subset that runs without a machine. The trigger write path is stricter
+// (see TriggerService), because an unattended run's silent downgrade has no one
+// watching it.
+func (l *Launcher) validateNoMachine(ctx context.Context, userID, workflowName, projectID, draftRoot string) error {
+	wf, err := l.loadCreateChatWorkflowForValidation(ctx, userID, workflowName, projectID, draftRoot)
+	if err != nil {
+		// validateWorkflowTree already reported a load failure; nothing new.
+		return nil
+	}
+	loader := l.createChatWorkflowLoader(ctx, userID, projectID, draftRoot)
+	req := v2.MachineRequirements(wf, nil, v2.WorkflowRefLoader(loader), tools.PreflightConfig())
+	if len(req.Hard) > 0 {
+		return &ValidationError{
+			Kind:   ValidationFailedPrecondition,
+			Reason: fmt.Sprintf("workflow '%s' needs a machine (%s), so it cannot run with no machine", workflowName, strings.Join(req.Hard, "; ")),
+		}
+	}
 	return nil
 }
 

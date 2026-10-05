@@ -796,4 +796,121 @@ describe("AutomationFormDialog", () => {
     expect(sent.params.review.kind.value.fields.strictness.kind).toEqual({ case: "stringValue", value: "high" });
     expect(sent.source.value).toMatchObject({ cron: ["0 * * * *"], overlap: TriggerOverlapPolicy.ALLOW });
   });
+
+  // research/DAEMONLESS_RUNS.md: an automation may have no machine, chosen
+  // explicitly, and only for a workflow that runs without one.
+  describe("no machine", () => {
+    beforeEach(() => {
+      listWorkflows.mockResolvedValue({
+        workflows: [
+          {
+            name: "agent", source: "builtin", stepCount: 1, nodes: [], edges: [], validationErrors: [],
+            status: WorkflowDraftStatus.COMPLETE,
+            needsMachine: ["input `tools` includes shell, view"],
+          },
+          {
+            name: "digest", source: "user", stepCount: 1, nodes: [], edges: [], validationErrors: [],
+            status: WorkflowDraftStatus.COMPLETE, needsMachine: [],
+          },
+        ],
+        invalidWorkflows: [],
+      });
+    });
+
+    it("offers No machine only for a workflow that runs without one", async () => {
+      const user = userEvent.setup();
+      renderAtRoute(<AutomationFormDialog open onClose={vi.fn()} />);
+
+      // "Your default workflow" resolves to the agent and its coding tools.
+      const option = await screen.findByRole("option", { name: /No machine \(server only/ });
+      expect(option).toBeDisabled();
+      expect(option).toHaveTextContent(/your default workflow needs a machine/);
+
+      // So does the agent chosen explicitly: the server said so.
+      await user.selectOptions(await screen.findByLabelText("Workflow"), "agent");
+      await waitFor(() =>
+        expect(screen.getByRole("option", { name: /No machine \(server only/ })).toHaveTextContent(
+          /this workflow needs a machine/,
+        ),
+      );
+      expect(screen.getByRole("option", { name: /No machine \(server only/ })).toBeDisabled();
+
+      await user.selectOptions(screen.getByLabelText("Workflow"), "digest");
+      await waitFor(() => expect(screen.getByRole("option", { name: /No machine \(server only\)/ })).toBeEnabled());
+    });
+
+    it("creates a no-machine automation with no daemon", async () => {
+      createTrigger.mockResolvedValue(create(CreateTriggerResponseSchema, { trigger: create(TriggerSchema, { id: "nm" }) }));
+      const user = userEvent.setup();
+      renderAtRoute(<AutomationFormDialog open onClose={vi.fn()} />);
+
+      fill(await screen.findByLabelText("Name"), "Morning digest");
+      fill(screen.getByLabelText("Prompt"), "Summarise the status page");
+      await user.selectOptions(await screen.findByLabelText("Workflow"), "digest");
+      await waitFor(() => expect(screen.getByRole("option", { name: /No machine \(server only\)/ })).toBeEnabled());
+      await user.selectOptions(screen.getByLabelText("Runs on"), "__no_machine__");
+      expect(screen.getByText(/runs on Reliant's servers only/)).toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: "Create automation" }));
+
+      await waitFor(() => expect(createTrigger).toHaveBeenCalledTimes(1));
+      const definition = createTrigger.mock.calls[0]![0].trigger;
+      expect(definition.noMachine).toBe(true);
+      expect(definition.daemonId).toBe("");
+    });
+
+    it("needs no daemon at all to save a no-machine automation", async () => {
+      listDaemons.mockResolvedValue({ daemons: [] });
+      listProjectDaemons.mockResolvedValue({ projectDaemons: [] });
+      createTrigger.mockResolvedValue(create(CreateTriggerResponseSchema, { trigger: create(TriggerSchema, { id: "nm" }) }));
+      const user = userEvent.setup();
+      renderAtRoute(<AutomationFormDialog open onClose={vi.fn()} />);
+
+      fill(await screen.findByLabelText("Name"), "Morning digest");
+      fill(screen.getByLabelText("Prompt"), "Summarise");
+      await user.selectOptions(await screen.findByLabelText("Workflow"), "digest");
+      await waitFor(() => expect(screen.getByRole("option", { name: /No machine \(server only\)/ })).toBeEnabled());
+      await user.selectOptions(screen.getByLabelText("Runs on"), "__no_machine__");
+      await user.click(screen.getByRole("button", { name: "Create automation" }));
+
+      await waitFor(() => expect(createTrigger).toHaveBeenCalledTimes(1));
+      expect(createTrigger.mock.calls[0]![0].trigger.noMachine).toBe(true);
+    });
+
+    it("shows the server's needs-a-machine refusal beside the machine field", async () => {
+      createTrigger.mockRejectedValue(
+        new ConnectError(
+          "this workflow needs a machine: input `tools` includes shell. Pick a machine for this automation, or give it only tools that run without one",
+          Code.FailedPrecondition,
+        ),
+      );
+      const user = userEvent.setup();
+      renderAtRoute(<AutomationFormDialog open onClose={vi.fn()} />);
+
+      fill(await screen.findByLabelText("Name"), "Morning digest");
+      fill(screen.getByLabelText("Prompt"), "Summarise");
+      await user.selectOptions(await screen.findByLabelText("Workflow"), "digest");
+      await waitFor(() => expect(screen.getByRole("option", { name: /No machine \(server only\)/ })).toBeEnabled());
+      await user.selectOptions(screen.getByLabelText("Runs on"), "__no_machine__");
+      await user.click(screen.getByRole("button", { name: "Create automation" }));
+
+      expect(await screen.findByText(/this workflow needs a machine/)).toBeInTheDocument();
+      expect(screen.getByLabelText("Runs on")).toHaveAttribute("aria-invalid", "true");
+    });
+
+    it("shows an existing no-machine automation as No machine", async () => {
+      const stored = create(TriggerSchema, {
+        id: "trig-nm", name: "Digest", projectId: "proj-2", enabled: true, workflow: "digest",
+        message: "Summarise", noMachine: true, daemonId: "",
+        source: { case: "schedule", value: create(ScheduleSourceSchema, { cron: ["0 9 * * *"], timezone: "UTC" }) },
+      });
+      updateTrigger.mockResolvedValue(create(UpdateTriggerResponseSchema, { trigger: stored }));
+      const user = userEvent.setup();
+      renderAtRoute(<AutomationFormDialog open onClose={vi.fn()} trigger={triggerFromProto(stored)} />);
+
+      await waitFor(() => expect(screen.getByLabelText("Runs on")).toHaveValue("__no_machine__"));
+      await user.click(screen.getByRole("button", { name: "Save changes" }));
+      await waitFor(() => expect(updateTrigger).toHaveBeenCalledTimes(1));
+      expect(updateTrigger.mock.calls[0]![0].trigger.noMachine).toBe(true);
+    });
+  });
 });

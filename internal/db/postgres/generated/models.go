@@ -147,6 +147,7 @@ type Chat struct {
 	ActiveDaemonID       sql.NullString `json:"active_daemon_id"`
 	AdoptedAt            sql.NullTime   `json:"adopted_at"`
 	DaemonBlockedAt      sql.NullTime   `json:"daemon_blocked_at"`
+	NoMachine            bool           `json:"no_machine"`
 }
 
 type ChatUpdate struct {
@@ -178,6 +179,7 @@ type ChatsWithActivity struct {
 	ActiveDaemonID         sql.NullString `json:"active_daemon_id"`
 	AdoptedAt              sql.NullTime   `json:"adopted_at"`
 	DaemonBlockedAt        sql.NullTime   `json:"daemon_blocked_at"`
+	NoMachine              bool           `json:"no_machine"`
 	LastMessageAt          interface{}    `json:"last_message_at"`
 	Activity               int32          `json:"activity"`
 	RootWorkflowState      sql.NullInt32  `json:"root_workflow_state"`
@@ -730,13 +732,14 @@ type Trigger struct {
 	Config              json.RawMessage `json:"config"`
 	CreatedAt           time.Time       `json:"created_at"`
 	UpdatedAt           time.Time       `json:"updated_at"`
-	DaemonID            string          `json:"daemon_id"`
+	DaemonID            sql.NullString  `json:"daemon_id"`
 	NotifyOnComplete    bool            `json:"notify_on_complete"`
 	Filter              string          `json:"filter"`
 	ConnectionID        sql.NullString  `json:"connection_id"`
 	WebhookTokenHash    []byte          `json:"webhook_token_hash"`
 	WebhookSecretSealed []byte          `json:"webhook_secret_sealed"`
 	WorkflowTrigger     sql.NullString  `json:"workflow_trigger"`
+	NoMachine           bool            `json:"no_machine"`
 }
 
 type TriggerEvent struct {

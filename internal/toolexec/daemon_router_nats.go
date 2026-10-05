@@ -19,6 +19,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/daemonpolicy"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/nomachine"
 	"github.com/reliant-labs/reliant/internal/observability"
 )
 
@@ -151,6 +152,12 @@ func (r *NATSDaemonRouter) ResolveDaemonID(ctx context.Context, userID string) (
 // Resolution never wakes anything: a suspended daemon yields ErrDaemonPending.
 // Waking is EnsureAwake's job alone.
 func (r *NATSDaemonRouter) resolveDaemonID(ctx context.Context, userID string, selector *DaemonSelector) (string, error) {
+	// A run with no machine never resolves one: resolution is what reaches the
+	// control plane and can resume a suspended daemon. Every send path
+	// resolves through here, so this one check closes them all.
+	if nomachine.Is(ctx) {
+		return "", nomachine.ErrNoMachine
+	}
 	// Tracks whether ANY step below observed a daemon RECORD for this user
 	// (provisioning, suspended, whatever) even though none of them are
 	// currently reachable. That distinction is what separates "this user
@@ -416,6 +423,9 @@ var _ DaemonWaker = (*NATSDaemonRouter)(nil)
 // a ctx marked by automationcred.Allow, the delegated token bound to the
 // selector's daemon.
 func (r *NATSDaemonRouter) EnsureAwake(ctx context.Context, userID string, selector *DaemonSelector) (string, error) {
+	if nomachine.Is(ctx) {
+		return "", nomachine.ErrNoMachine
+	}
 	if r.resolver != nil {
 		if daemons, err := r.resolver.ResolveDaemons(ctx, userID, selector); err == nil && len(daemons) > 0 {
 			return daemons[0].DaemonID, nil

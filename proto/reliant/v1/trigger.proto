@@ -398,8 +398,12 @@ message Trigger {
   // it has never fired.
   optional TriggerEvent last_event = 13;
 
-  // The daemon every tool call in each launched run executes on. Always set.
+  // The daemon every tool call in each launched run executes on. Empty exactly
+  // when no_machine is set.
   string daemon_id = 14;
+
+  // Launched runs have no machine; see TriggerDefinition.no_machine.
+  bool no_machine = 27;
 
   // Read-only: how this trigger's recent firings went.
   TriggerHealth health = 15;
@@ -524,10 +528,21 @@ message TriggerDefinition {
   // The seed prompt each launched run starts from.
   string message = 8;
 
-  // The daemon every tool call in each launched run executes on. Required, and
-  // replaceable on update. Must be one of the caller's daemons and, when the
-  // project is installed on any daemon, one that has it installed.
+  // The daemon every tool call in each launched run executes on. Required
+  // unless no_machine is set, and replaceable on update. Must be one of the
+  // caller's daemons and, when the project is installed on any daemon, one
+  // that has it installed.
   string daemon_id = 9;
+
+  // Launched runs have no machine: they run on Reliant's servers only and are
+  // offered only tools that run there (web, integrations, planning). An
+  // explicit choice, so that leaving daemon_id empty is still a mistake rather
+  // than a silent mode switch. Mutually exclusive with daemon_id. Refused with
+  // FailedPrecondition, naming what needs a machine, when the workflow has a
+  // node that cannot run without one or its agent is given machine tools (for
+  // the builtin agent: its `tools` param, which defaults to tag:coding:default;
+  // set it to e.g. ["tag:web"]). See research/DAEMONLESS_RUNS.md.
+  bool no_machine = 14;
 
   // Notify the owner when a run completes. Replaced on update, like every
   // other field here, so a client editing a trigger must send the current

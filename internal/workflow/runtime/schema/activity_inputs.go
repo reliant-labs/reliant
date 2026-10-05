@@ -13,6 +13,7 @@ package schema
 import (
 	"reflect"
 	"strings"
+	"sync"
 
 	wfcel "github.com/reliant-labs/reliant/internal/workflow/cel"
 	"google.golang.org/protobuf/reflect/protoreflect"
@@ -33,6 +34,13 @@ type ActivityInputType struct {
 // registry of activity types - populated at init time by handlers package
 var activityTypes = make(map[string]*ActivityInputType)
 
+// activityTypesMu serializes WRITES to activityTypes. Most registration happens
+// in init(), but StartWorker also registers — and a process that starts two
+// workers concurrently (the parallel e2e stories) raced a check-then-register
+// into a duplicate-registration panic. Reads happen after registration settles
+// and are not locked.
+var activityTypesMu sync.Mutex
+
 // RegisterActivityType registers an activity's input/output types for schema introspection.
 // Called by handlers package during init.
 //
@@ -41,6 +49,8 @@ var activityTypes = make(map[string]*ActivityInputType)
 // Panics if the activity is already registered - use this to catch duplicate registrations
 // which indicate a programming error (e.g., RegisterActivity overwriting init() registration).
 func RegisterActivityType(name string, inputType, outputType reflect.Type) {
+	activityTypesMu.Lock()
+	defer activityTypesMu.Unlock()
 	if _, exists := activityTypes[name]; exists {
 		panic("activity type already registered: " + name + " (duplicate registration is a programming error)")
 	}
@@ -51,9 +61,27 @@ func RegisterActivityType(name string, inputType, outputType reflect.Type) {
 	}
 }
 
+// RegisterActivityTypeIfAbsent registers name unless it already is, as one
+// atomic step. It is for runtime registration (StartWorker), which may run
+// once per worker in the same process; IsActivityTypeRegistered followed by
+// RegisterActivityType is two steps another worker can interleave.
+func RegisterActivityTypeIfAbsent(name string, inputType, outputType reflect.Type) {
+	activityTypesMu.Lock()
+	defer activityTypesMu.Unlock()
+	if _, exists := activityTypes[name]; exists {
+		return
+	}
+	activityTypes[name] = &ActivityInputType{
+		Name:       name,
+		InputType:  inputType,
+		OutputType: outputType,
+	}
+}
+
 // IsActivityTypeRegistered returns true if an activity type is already registered.
-// Used to check before calling RegisterActivityType to avoid the panic.
 func IsActivityTypeRegistered(name string) bool {
+	activityTypesMu.Lock()
+	defer activityTypesMu.Unlock()
 	_, ok := activityTypes[name]
 	return ok
 }
@@ -259,6 +287,8 @@ func getFieldNames(t reflect.Type) []string {
 // These are used for metadata extraction (field descriptions, enum values, etc.)
 // and take precedence over Go reflect-based extraction.
 func RegisterActivityProtoDescriptors(name string, inputDesc, outputDesc protoreflect.MessageDescriptor) {
+	activityTypesMu.Lock()
+	defer activityTypesMu.Unlock()
 	info, ok := activityTypes[name]
 	if !ok {
 		// Activity not yet registered via RegisterActivityType, create stub

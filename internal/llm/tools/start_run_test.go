@@ -92,6 +92,25 @@ func TestStartRun_InheritsTheCallersDaemon(t *testing.T) {
 	assert.Equal(t, "daemon-42", starter.calls()[0].DaemonID)
 }
 
+// A run started from a no-machine chat has no machine either: start_run must
+// not become the door through which a no-machine run reaches a daemon.
+func TestStartRun_InheritsTheCallersNoMachine(t *testing.T) {
+	t.Parallel()
+	repo, cleanup := setupTestDB(t)
+	defer cleanup()
+	callerID := newCaller(t, repo)
+	// no_machine is set only at launch; there is no write path to flip it.
+	_, err := repo.(*db.Repo).DB.SQLDB().Exec(`UPDATE chats SET no_machine = true WHERE id = $1`, callerID)
+	require.NoError(t, err)
+
+	starter := &fakeRunStarter{}
+	resp := startRunCall(t, repo, starter, callerID, "toolu_nm", StartRunParams{Workflow: "builtin://agent", Message: "go"})
+	require.False(t, resp.IsError, resp.Content)
+	require.Len(t, starter.calls(), 1)
+	assert.True(t, starter.calls()[0].NoMachine)
+	assert.Empty(t, starter.calls()[0].DaemonID)
+}
+
 func TestStartRun_ExplicitProjectOverridesTheDefault(t *testing.T) {
 	t.Parallel()
 	repo, cleanup := setupTestDB(t)

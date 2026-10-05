@@ -22,6 +22,11 @@ const attendedWakeTimeout = 30 * time.Second
 // Best-effort: a failed wake is logged and the message is still accepted; the
 // tool call then reports ErrDaemonPending.
 func (s *ChatService) wakeDaemonForAttendedTurn(ctx context.Context, userID string, chat *db.Chat) {
+	// A chat with no machine by design has nothing to wake, and waking the
+	// user's default machine is exactly what it must never do.
+	if chat != nil && chat.NoMachine {
+		return
+	}
 	waker, ok := s.daemonRouter.(toolexec.DaemonWaker)
 	if !ok {
 		return

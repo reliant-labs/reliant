@@ -12,7 +12,9 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/nomachine"
 	"github.com/reliant-labs/reliant/internal/toolexec"
+	"github.com/reliant-labs/reliant/internal/workflow/model"
 	activitytypes "github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
 	"go.temporal.io/sdk/activity"
@@ -133,6 +135,17 @@ func (a *ExecuteRunStepActivity) Execute(ctx context.Context, input ExecuteRunSt
 	execCtx, err := resolveRunExecutorContext(ctx, a.repo, input.ChatID)
 	if err != nil {
 		return ExecuteRunStepOutput{}, fmt.Errorf("failed to resolve working directory: %w", err)
+	}
+
+	// A shell command cannot run without a machine. Launch refuses a
+	// no-machine run of a workflow with a `run` node, so this is a backstop:
+	// a failed COMMAND (exit -1), not a Go error, so the step neither burns
+	// Temporal retries nor enters the retry-exhaustion pause waiting for a
+	// machine that is not coming.
+	if execCtx.NoMachine {
+		refusal := nomachine.Refusal(model.NodeTypeRun)
+		return ExecuteRunStepOutput{Stderr: refusal, Output: refusal, ExitCode: -1,
+			Duration: time.Since(startTime).Milliseconds()}, nil
 	}
 
 	// Propagate daemon selector from workflow input. Priority: explicit

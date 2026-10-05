@@ -242,23 +242,5 @@ func initPreflightConfig() {
 
 // newPreflightConfig builds the production PreflightConfig.
 func newPreflightConfig() *v2.PreflightConfig {
-	return &v2.PreflightConfig{
-		// Static analysis cannot see which MCP servers a user will have, and
-		// PlacementOf resolves every mcp__ name (including the "mcp__*" probe
-		// below) to its server placement. An unresolvable tool is treated as
-		// daemon-bound: better to check for a daemon than to skip the check.
-		IsDaemonTool: func(name string) bool {
-			placement, err := tools.PlacementOf(name)
-			return err != nil || placement == tools.PlacementDaemon
-		},
-		ExpandToolFilter: func(filter []string) []string {
-			expanded := tools.ExpandToolFilter(filter, nil)
-			// MCP names are unknown statically; surface a probe name for any
-			// filter that can reach one so IsDaemonTool sees it.
-			if tools.FilterReachesMCP(filter) {
-				expanded = append(expanded, "mcp__*")
-			}
-			return expanded
-		},
-	}
+	return tools.PreflightConfig()
 }

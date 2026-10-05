@@ -74,6 +74,14 @@ type Spec struct {
 	// inputs.session_daemon_id. Empty leaves daemon selection to the runtime.
 	DaemonID string
 
+	// NoMachine launches a run that has no machine by design (research/
+	// DAEMONLESS_RUNS.md). It becomes the chat's NoMachine, which every
+	// activity reads: the run is offered only tools that run without the
+	// user's machine, and nothing in it resolves or wakes a daemon. A workflow
+	// with a node that cannot run without one (a shell `run`, a
+	// `create_worktree`, …) is refused here. Mutually exclusive with DaemonID.
+	NoMachine bool
+
 	// Unattended sets inputs.unattended: no human will answer questions or
 	// approvals, so the run must not block on one.
 	Unattended bool

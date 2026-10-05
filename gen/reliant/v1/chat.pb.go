@@ -727,7 +727,10 @@ type Chat struct {
 	TriggerId *string `protobuf:"bytes,34,opt,name=trigger_id,json=triggerId,proto3,oneof" json:"trigger_id,omitempty"`
 	// When the user adopted this run into their chats (AdoptChat). Unset when not
 	// adopted. Origin (launch_kind, trigger_id) is never rewritten by adoption.
-	AdoptedAt     *string `protobuf:"bytes,35,opt,name=adopted_at,json=adoptedAt,proto3,oneof" json:"adopted_at,omitempty"`
+	AdoptedAt *string `protobuf:"bytes,35,opt,name=adopted_at,json=adoptedAt,proto3,oneof" json:"adopted_at,omitempty"`
+	// This chat has no machine by design (StartChatRequest.no_machine, or a
+	// no-machine trigger). Its runs are offered only server-side tools.
+	NoMachine     bool `protobuf:"varint,36,opt,name=no_machine,json=noMachine,proto3" json:"no_machine,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -921,6 +924,13 @@ func (x *Chat) GetAdoptedAt() string {
 		return *x.AdoptedAt
 	}
 	return ""
+}
+
+func (x *Chat) GetNoMachine() bool {
+	if x != nil {
+		return x.NoMachine
+	}
+	return false
 }
 
 // ArchivedChat includes worktree information for archived chats
@@ -1552,6 +1562,14 @@ type StartChatRequest struct {
 	// is already pinned (a branch is pinned to its worktree's daemon) rejects a
 	// different daemon_id: the worktree exists on exactly one machine.
 	DaemonId *string `protobuf:"bytes,18,opt,name=daemon_id,json=daemonId,proto3,oneof" json:"daemon_id,omitempty"`
+	// no_machine starts a chat with no machine by design: every run in it is
+	// offered only tools that run on Reliant's servers (web, integrations,
+	// planning), and nothing resolves or wakes a daemon. Mutually exclusive with
+	// daemon_id, and not allowed with chat_id (a branch runs on its worktree's
+	// machine). A workflow with a node that cannot run without a machine (a shell
+	// `run`, a `create_worktree`) is refused with FailedPrecondition. See
+	// research/DAEMONLESS_RUNS.md.
+	NoMachine *bool `protobuf:"varint,20,opt,name=no_machine,json=noMachine,proto3,oneof" json:"no_machine,omitempty"`
 	// builder_test marks this start as a test run from the workflow builder. The
 	// launch event is recorded as kind "builder.test" instead of "chat.start", so
 	// the run stays out of the sidebar and the default Runs list. It is still an
@@ -1669,6 +1687,13 @@ func (x *StartChatRequest) GetDaemonId() string {
 		return *x.DaemonId
 	}
 	return ""
+}
+
+func (x *StartChatRequest) GetNoMachine() bool {
+	if x != nil && x.NoMachine != nil {
+		return *x.NoMachine
+	}
+	return false
 }
 
 func (x *StartChatRequest) GetBuilderTest() bool {
@@ -5776,7 +5801,7 @@ var File_reliant_v1_chat_proto protoreflect.FileDescriptor
 const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\n" +
 	"\x15reliant/v1/chat.proto\x12\n" +
-	"reliant.v1\x1a\x1cgoogle/protobuf/struct.proto\x1a\x17reliant/v1/common.proto\"\xc7\t\n" +
+	"reliant.v1\x1a\x1cgoogle/protobuf/struct.proto\x1a\x17reliant/v1/common.proto\"\xe6\t\n" +
 	"\x04Chat\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x17\n" +
 	"\auser_id\x18\x02 \x01(\tR\x06userId\x12\x14\n" +
@@ -5809,7 +5834,9 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\n" +
 	"trigger_id\x18\" \x01(\tH\aR\ttriggerId\x88\x01\x01\x12\"\n" +
 	"\n" +
-	"adopted_at\x18# \x01(\tH\bR\tadoptedAt\x88\x01\x01\x1aB\n" +
+	"adopted_at\x18# \x01(\tH\bR\tadoptedAt\x88\x01\x01\x12\x1d\n" +
+	"\n" +
+	"no_machine\x18$ \x01(\bR\tnoMachine\x1aB\n" +
 	"\x14SelectedPresetsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\x0e\n" +
@@ -5910,7 +5937,7 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\x04role\x18\x01 \x01(\x0e2\x17.reliant.v1.MessageRoleR\x04role\x12\x18\n" +
 	"\acontent\x18\x02 \x01(\tR\acontent\x12B\n" +
 	"\rdisplay_style\x18\x03 \x01(\x0e2\x18.reliant.v1.DisplayStyleH\x00R\fdisplayStyle\x88\x01\x01B\x10\n" +
-	"\x0e_display_style\"\xb7\x06\n" +
+	"\x0e_display_style\"\xea\x06\n" +
 	"\x10StartChatRequest\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x19\n" +
@@ -5924,8 +5951,10 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\x10selected_presets\x18\x0f \x03(\v21.reliant.v1.StartChatRequest.SelectedPresetsEntryR\x0fselectedPresets\x124\n" +
 	"\bmessages\x18\x10 \x03(\v2\x18.reliant.v1.InputMessageR\bmessages\x12\x1c\n" +
 	"\achat_id\x18\x11 \x01(\tH\x03R\x06chatId\x88\x01\x01\x12 \n" +
-	"\tdaemon_id\x18\x12 \x01(\tH\x04R\bdaemonId\x88\x01\x01\x12&\n" +
-	"\fbuilder_test\x18\x13 \x01(\bH\x05R\vbuilderTest\x88\x01\x01\x1aY\n" +
+	"\tdaemon_id\x18\x12 \x01(\tH\x04R\bdaemonId\x88\x01\x01\x12\"\n" +
+	"\n" +
+	"no_machine\x18\x14 \x01(\bH\x05R\tnoMachine\x88\x01\x01\x12&\n" +
+	"\fbuilder_test\x18\x13 \x01(\bH\x06R\vbuilderTest\x88\x01\x01\x1aY\n" +
 	"\x13WorkflowParamsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12,\n" +
 	"\x05value\x18\x02 \x01(\v2\x16.google.protobuf.ValueR\x05value:\x028\x01\x1aB\n" +
@@ -5938,7 +5967,8 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\n" +
 	"\b_chat_idB\f\n" +
 	"\n" +
-	"_daemon_idB\x0f\n" +
+	"_daemon_idB\r\n" +
+	"\v_no_machineB\x0f\n" +
 	"\r_builder_testJ\x04\b\x02\x10\x03J\x04\b\x05\x10\x06J\x04\b\a\x10\bJ\x04\b\b\x10\tJ\x04\b\t\x10\n" +
 	"J\x04\b\n" +
 	"\x10\vJ\x04\b\v\x10\f\"w\n" +

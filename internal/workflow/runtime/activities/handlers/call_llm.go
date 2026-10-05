@@ -29,6 +29,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/models/message"
 	"github.com/reliant-labs/reliant/internal/netguard"
+	"github.com/reliant-labs/reliant/internal/nomachine"
 	"github.com/reliant-labs/reliant/internal/preset"
 	"github.com/reliant-labs/reliant/internal/rctx"
 	"github.com/reliant-labs/reliant/internal/skills/suggest"
@@ -142,10 +143,11 @@ func (a *CallLLMActivity) WithLocalModels(relay toolexec.LocalModelRelay) *CallL
 
 // localModelSpec is what resolving a "<name>@local" selector needs. Without a
 // relay, detected local models and via-machine endpoints report themselves
-// unavailable; endpoints reached directly still work.
-func (a *CallLLMActivity) localModelSpec(preferDaemonID string) *LocalModelSpec {
+// unavailable; endpoints reached directly still work. A run with no machine
+// gets no relay, because relaying IS reaching the user's machine.
+func (a *CallLLMActivity) localModelSpec(preferDaemonID string, noMachine bool) *LocalModelSpec {
 	var relay local.TransportFactory
-	if a.localRelay != nil {
+	if a.localRelay != nil && !noMachine {
 		relay = func(userID, daemonID, endpointID string) http.RoundTripper {
 			return toolexec.NewLocalModelTransport(a.localRelay, userID, daemonID, endpointID)
 		}
@@ -286,6 +288,13 @@ func (a *CallLLMActivity) executeCore(ctx context.Context, rtx RuntimeContext, a
 
 	// Add userID to context for API key loading
 	ctx = context.WithValue(ctx, auth.UserIDContextKey, chat.UserID)
+
+	// A run with no machine marks its context so nothing below — tool
+	// discovery, MCP, a @local model relay — reaches for a daemon. The menu
+	// itself is filtered in getAvailableToolsWithSpawn.
+	if chat.NoMachine {
+		ctx = nomachine.With(ctx)
+	}
 
 	// Hydrate the user's JWT into the in-memory auth map so the Reliant LLM
 	// driver can be resolved on workers that didn't see the originating gRPC
@@ -979,7 +988,7 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 		MaxTokens:      explicitMaxTokens,
 		WorkingDir:     workingDir,
 		TagPrefsReader: a.repo,
-		Local:          a.localModelSpec(worktreeDaemonID),
+		Local:          a.localModelSpec(worktreeDaemonID, chat.NoMachine),
 	})
 	if err != nil {
 		return nil, err
@@ -1172,6 +1181,9 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 		repos,
 		celStringValuePtr(args.GetSystemPrompt()),
 	)
+	if chat.NoMachine {
+		systemPrompts = append(systemPrompts, noMachineSystemNote)
+	}
 
 	// Set deferred tools on the load_tool so its description advertises them
 	if len(availableTools) > 0 {
@@ -2011,8 +2023,12 @@ func (a *CallLLMActivity) getAvailableToolsWithSpawn(ctx context.Context, chat *
 	// Asking for MCP tools sends daemon commands, which wake a suspended
 	// daemon. Only a node whose filters can name an mcp__ tool has any use for
 	// the answer, so every other node leaves the daemon alone.
+	//
+	// A run with no machine has no MCP servers to ask: every user-configured
+	// server runs on the daemon.
+	noMachine := chat != nil && chat.NoMachine
 	var toolRuntime tools.MCPRuntime
-	if tools.FilterReachesMCP(toolFilter, loadableFilter) {
+	if !noMachine && tools.FilterReachesMCP(toolFilter, loadableFilter) {
 		toolRuntime = a.mcpRuntimeFromContext(ctx)
 	}
 	if toolRuntime != nil {
@@ -2071,6 +2087,13 @@ func (a *CallLLMActivity) getAvailableToolsWithSpawn(ctx context.Context, chat *
 	// wanted discovery.
 	access := tools.ResolveToolAccess(toolFilter, loadableFilter, mcpToolNames)
 	declaredAnyLoadable := access.LoadableAll || len(access.Loadable) > 0
+	if noMachine {
+		// The run's whole reach — what it is handed AND what load_tool may
+		// add — is narrowed to tools that run without a machine, so neither
+		// this turn nor a later load can offer one that cannot run.
+		access = withoutMachineTools(access)
+		filterResult.ToolNames = withoutMachineToolNames(filterResult.ToolNames)
+	}
 
 	if chat != nil {
 		scoped := access
@@ -2225,6 +2248,18 @@ func (a *CallLLMActivity) getAvailableToolsWithSpawn(ctx context.Context, chat *
 		if !spawnStopPresent {
 			toolsList = append(toolsList, projectScopedToolsFactory.SpawnStop())
 		}
+	}
+
+	// Last pass over the assembled list, after the universally granted tools
+	// were appended: nothing that needs a machine reaches a no-machine model.
+	if noMachine {
+		kept := toolsList[:0]
+		for _, t := range toolsList {
+			if !tools.NeedsMachine(t.Name()) {
+				kept = append(kept, t)
+			}
+		}
+		toolsList = kept
 	}
 
 	sort.Slice(toolsList, func(i, j int) bool {

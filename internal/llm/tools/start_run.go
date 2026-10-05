@@ -138,6 +138,7 @@ func (s *startRunTool) Execute(rctx *rctx.ToolContext, params StartRunParams) (T
 		Presets:      params.Presets,
 		Title:        params.Title,
 		DaemonID:     callerDaemonID(caller.chat),
+		NoMachine:    caller.chat.NoMachine,
 		ParentChatID: rctx.ChatID,
 		DedupeKey:    dedupeKey,
 	})

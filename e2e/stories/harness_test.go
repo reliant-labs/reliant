@@ -32,13 +32,16 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/grpc/services"
+	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/mcp"
+	"github.com/reliant-labs/reliant/internal/runs"
 	"github.com/reliant-labs/reliant/internal/streaming"
 	"github.com/reliant-labs/reliant/internal/temporal"
+	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/workersetup"
 	"github.com/reliant-labs/reliant/internal/workflow"
@@ -141,7 +144,10 @@ type Harness struct {
 	ChatSvc     *services.ChatService
 	QuestionSvc *services.QuestionService
 	ApprovalSvc *services.ApprovalService
-	Pause       *workflow.PauseService
+	// TriggerSvc is the production TriggerService over the story's Temporal:
+	// a fire goes through the real fire workflow, Firer and launcher.
+	TriggerSvc *services.TriggerService
+	Pause      *workflow.PauseService
 
 	// Ctx carries the story's user identity, exactly as the auth interceptor
 	// would have injected it.
@@ -150,6 +156,15 @@ type Harness struct {
 
 type harnessConfig struct {
 	toolExecutor toolexec.ToolExecutor
+	mcpBinder    toolexec.MCPContextBinder
+}
+
+// WithMCPBinder swaps the MCP binder call_llm discovers MCP tools through.
+// The default is a real manager, whose builtin chrome-devtools server connects
+// wherever Chrome is installed — so a story that asserts the exact tool list
+// supplies its own instead of asserting about the host it ran on.
+func WithMCPBinder(binder toolexec.MCPContextBinder) HarnessOption {
+	return func(c *harnessConfig) { c.mcpBinder = binder }
 }
 
 // HarnessOption customizes harness construction.
@@ -214,6 +229,19 @@ func newHarness(t *testing.T, llmScript *ScriptedLLM, opts ...HarnessOption) *Ha
 
 	hub := noopStreamingHub{}
 	taskQueueSuffix := shortID()
+	taskQueue := workersetup.TaskQueueName(taskQueueSuffix)
+
+	mcpBinder := cfg.mcpBinder
+	if mcpBinder == nil {
+		mcpBinder = toolexec.NewLocalMCPContextBinder(mcp.NewManager(mcp.RoleDaemon))
+	}
+
+	// The launcher a trigger fire launches through, built the way the worker
+	// builds it (serverworker.Run). nil prober: triggers never ask for a
+	// greenfield probe.
+	pause := workflow.NewPauseService(s.Temporal, s.Repo)
+	triggerLauncher := launch.NewLauncher(s.Repo, threads.NewService(s.Repo), s.Temporal,
+		runs.NewService(s.Repo, s.Temporal, pause), taskQueue, nil)
 
 	handle, _, err := workersetup.StartWorker(&workersetup.Config{
 		TemporalClient:  s.Temporal,
@@ -222,10 +250,11 @@ func newHarness(t *testing.T, llmScript *ScriptedLLM, opts ...HarnessOption) *Ha
 		ToolsFactory:    toolsFactory,
 		ToolExecutor:    executor,
 		DaemonRouter:    nil, // hermetic: no daemon transport; worktree ops unavailable
-		MCPBinder:       toolexec.NewLocalMCPContextBinder(mcp.NewManager(mcp.RoleDaemon)),
+		MCPBinder:       mcpBinder,
 		ConfigProvider:  config.NewStoredConfigProvider(configadapter.NewRepoConfigStore(s.Repo)),
 		DriverResolver:  resolver,
 		TaskQueueSuffix: taskQueueSuffix,
+		TriggerLauncher: triggerLauncher,
 	})
 	require.NoError(t, err, "start story worker")
 	t.Cleanup(func() {
@@ -243,15 +272,16 @@ func newHarness(t *testing.T, llmScript *ScriptedLLM, opts ...HarnessOption) *Ha
 	// (worker.Run racing worker.Stop during startup trips the race detector).
 	waitForWorkerPollers(t, s.Temporal, workersetup.TaskQueueName(taskQueueSuffix))
 
-	pause := workflow.NewPauseService(s.Temporal, s.Repo)
 	// nil daemonRouter: these stories run without a daemon, and the router is
 	// only used for the greenfield code-presence probe, which skips itself when
 	// it is nil.
 	chatSvc := services.NewChatService(s.Repo, s.Temporal, pause, workersetup.TaskQueueName(taskQueueSuffix), hub, nil)
 	questionSvc := services.NewQuestionService(s.Repo, pause)
 	approvalSvc := services.NewApprovalService(s.Repo, pause)
+	triggerSvc := services.NewTriggerServiceFor(s.Repo, s.Temporal, taskQueue)
 
 	return &Harness{
+		TriggerSvc:  triggerSvc,
 		T:           t,
 		Stack:       s,
 		UserID:      userID,
@@ -309,6 +339,20 @@ func (h *Harness) StartChat(workflowRef, prompt string, params map[string]any) *
 // stories).
 func (h *Harness) TryStartChat(workflowRef, prompt string, params map[string]any) (*connect.Response[reliantv1.StartChatResponse], error) {
 	h.T.Helper()
+	return h.tryStartChat(workflowRef, prompt, params, false)
+}
+
+// StartNoMachineChat starts a chat with no machine by design
+// (StartChatRequest.no_machine).
+func (h *Harness) StartNoMachineChat(workflowRef, prompt string, params map[string]any) *reliantv1.StartChatResponse {
+	h.T.Helper()
+	resp, err := h.tryStartChat(workflowRef, prompt, params, true)
+	require.NoError(h.T, err, "StartChat(no_machine)")
+	return resp.Msg
+}
+
+func (h *Harness) tryStartChat(workflowRef, prompt string, params map[string]any, noMachine bool) (*connect.Response[reliantv1.StartChatResponse], error) {
+	h.T.Helper()
 
 	if params == nil {
 		params = map[string]any{}
@@ -332,6 +376,9 @@ func (h *Harness) TryStartChat(workflowRef, prompt string, params map[string]any
 		},
 		WorkflowParams: protoParams,
 	})
+	if noMachine {
+		req.Msg.NoMachine = &noMachine
+	}
 	return h.ChatSvc.StartChat(h.Ctx, req)
 }
 

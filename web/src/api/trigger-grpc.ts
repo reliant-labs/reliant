@@ -127,8 +127,10 @@ export interface Trigger {
   presets: Record<string, string>;
   params: Record<string, unknown>;
   message: string;
-  /** The daemon every launched run executes on. Always set by the server. */
+  /** The daemon every launched run executes on. Empty exactly when noMachine. */
   daemonId: string;
+  /** Runs have no machine: server-side tools only (research/DAEMONLESS_RUNS.md). */
+  noMachine: boolean;
   /** Tell the owner when a run completes (unread, OS notification, Inbox item). */
   notifyOnComplete: boolean;
   /** The project's name, joined by the server. Unset when the project was deleted. */
@@ -181,10 +183,16 @@ export interface TriggerDefinitionInput {
   params: Record<string, unknown>;
   message: string;
   /**
-   * Required. One of the caller's daemons and, when the project is installed
-   * on any daemon, one that has it installed (validateTriggerDaemon).
+   * Required unless noMachine. One of the caller's daemons and, when the
+   * project is installed on any daemon, one that has it installed
+   * (validateTriggerDaemon).
    */
   daemonId: string;
+  /**
+   * Runs have no machine. The explicit choice an empty daemonId means; the
+   * server refuses a workflow that needs a machine (FailedPrecondition).
+   */
+  noMachine?: boolean;
   /** Replaced on update like every field here, so an edit must send it back. */
   notifyOnComplete: boolean;
   /** Replaced on update too: an edit that does not change it sends the stored one. */
@@ -288,6 +296,7 @@ export function triggerFromProto(proto: ProtoTrigger): Trigger {
     params,
     message: proto.message,
     daemonId: proto.daemonId,
+    noMachine: proto.noMachine,
     notifyOnComplete: proto.notifyOnComplete,
     projectName: proto.projectName || undefined,
     daemonName: proto.daemonName || undefined,
@@ -318,7 +327,8 @@ export function definitionToProto(input: TriggerDefinitionInput): ProtoTriggerDe
     presets: input.presets,
     params,
     message: input.message,
-    daemonId: input.daemonId,
+    daemonId: input.noMachine ? "" : input.daemonId,
+    noMachine: input.noMachine ?? false,
     notifyOnComplete: input.notifyOnComplete,
   });
   // Assigned rather than passed to create(): a passthrough arm is the decoded
@@ -367,6 +377,7 @@ export function definitionFromTrigger(trigger: Trigger): TriggerDefinitionInput 
     params: { ...trigger.params },
     message: trigger.message,
     daemonId: trigger.daemonId,
+    noMachine: trigger.noMachine,
     notifyOnComplete: trigger.notifyOnComplete,
     source: trigger.source,
   };

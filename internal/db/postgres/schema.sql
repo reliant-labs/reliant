@@ -242,7 +242,8 @@ CREATE TABLE public.chats (
     unread integer DEFAULT 0 NOT NULL,
     active_daemon_id text,
     adopted_at timestamp with time zone,
-    daemon_blocked_at timestamp with time zone
+    daemon_blocked_at timestamp with time zone,
+    no_machine boolean DEFAULT false NOT NULL
 );
 
 --
@@ -357,6 +358,7 @@ CREATE VIEW public.chats_with_activity AS
     active_daemon_id,
     adopted_at,
     daemon_blocked_at,
+    no_machine,
     last_message_at,
     activity,
     root_workflow_state,
@@ -393,6 +395,7 @@ CREATE VIEW public.chats_with_activity AS
             c.active_daemon_id,
             c.adopted_at,
             c.daemon_blocked_at,
+            c.no_machine,
             ( SELECT max(m.created_at) AS max
                    FROM public.messages m
                   WHERE (m.chat_id = c.id)) AS last_message_at,
@@ -1151,14 +1154,16 @@ CREATE TABLE public.triggers (
     config jsonb DEFAULT '{}'::jsonb NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    daemon_id text NOT NULL,
+    daemon_id text,
     notify_on_complete boolean DEFAULT false NOT NULL,
     filter text DEFAULT ''::text NOT NULL,
     connection_id text,
     webhook_token_hash bytea,
     webhook_secret_sealed bytea,
     workflow_trigger text,
-    CONSTRAINT triggers_kind_check CHECK ((kind = ANY (ARRAY['schedule'::text, 'webhook'::text, 'integration'::text, 'workflow_event'::text])))
+    no_machine boolean DEFAULT false NOT NULL,
+    CONSTRAINT triggers_kind_check CHECK ((kind = ANY (ARRAY['schedule'::text, 'webhook'::text, 'integration'::text, 'workflow_event'::text]))),
+    CONSTRAINT triggers_no_machine_names_no_daemon_check CHECK (((NOT no_machine) OR (daemon_id IS NULL)))
 );
 
 --

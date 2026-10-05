@@ -80,6 +80,11 @@ describe("validateScheduleForm", () => {
 });
 
 describe("serverErrorField", () => {
+  it("puts a no-machine refusal beside the machine picker", () => {
+    expect(serverErrorField("this workflow needs a machine: input `tools` includes shell")).toBe("daemon");
+    expect(serverErrorField("no_machine and daemon_id are mutually exclusive")).toBe("daemon");
+  });
+
   it("routes the server's ConfigError fields to the right control", () => {
     expect(serverErrorField("cron: invalid expression")).toBe("schedule");
     expect(serverErrorField("interval: must be at least 1m0s, got 30s")).toBe("schedule");

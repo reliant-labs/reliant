@@ -58,7 +58,7 @@ import {
   type SchedulePreset,
 } from "./scheduleForm";
 import { errorTextClass, fieldClass, hintClass, labelClass, textareaClass } from "../workflow/run/runFormStyles";
-import { buildDaemonChoices, defaultDaemonId } from "./daemonChoices";
+import { buildDaemonChoices, defaultDaemonId, NO_MACHINE, noMachineBlockerFor } from "./daemonChoices";
 import { validateTimezone } from "./timezone";
 
 /**
@@ -177,10 +177,13 @@ function AutomationFormBody({
   const [inputsStatus, setInputsStatus] = useState<RunWorkflowFormStatus | null>(null);
   // A workflow switch waiting on "clear the inputs?" confirmation.
   const [pendingWorkflow, setPendingWorkflow] = useState<string | null>(null);
-  const [daemonId, setDaemonId] = useState(trigger?.daemonId ?? "");
+  // The "Runs on" value: a daemon id, or NO_MACHINE for an automation that
+  // runs on Reliant's servers only (research/DAEMONLESS_RUNS.md).
+  const [daemonId, setDaemonId] = useState(trigger?.noMachine ? NO_MACHINE : (trigger?.daemonId ?? ""));
   // Once the user (or an edit's stored value) has chosen a daemon, the form
   // stops defaulting it — a project switch must not silently move the run.
-  const daemonChosen = useRef(!!trigger?.daemonId);
+  const daemonChosen = useRef(!!trigger?.daemonId || !!trigger?.noMachine);
+  const noMachine = daemonId === NO_MACHINE;
   const [message, setMessage] = useState(trigger?.message ?? prefill?.message ?? "");
   const [schedule, setSchedule] = useState<ScheduleFormState>(() =>
     initialSchedule?.cron || initialSchedule?.interval
@@ -300,11 +303,20 @@ function AutomationFormBody({
     if (next !== daemonId) setDaemonId(next);
   }, [daemonDataReady, daemonChoices, daemonId]);
 
+  // Whether the selected workflow can run with no machine. Offered only when
+  // the server says so (needsMachine empty); a workflow it has not analysed —
+  // or "your default", which resolves to the agent and its coding tools — is
+  // not. The server re-checks with the trigger's own inputs on save.
+  const noMachineBlocker = useMemo(
+    () => noMachineBlockerFor(workflowsQuery.data ?? [], workflow),
+    [workflowsQuery.data, workflow],
+  );
+
   // An edit's stored daemon stays selectable even if the registry no longer
   // lists it (deleted, or not yet re-registered) — the user sees what it is set
   // to and can change it, rather than the field silently going blank.
   const daemonOptions = useMemo(() => {
-    if (!daemonId || daemonChoices.some((c) => c.daemonId === daemonId)) return daemonChoices;
+    if (!daemonId || noMachine || daemonChoices.some((c) => c.daemonId === daemonId)) return daemonChoices;
     return [
       {
         daemonId,
@@ -315,8 +327,10 @@ function AutomationFormBody({
       },
       ...daemonChoices,
     ];
-  }, [daemonChoices, daemonId]);
-  const noDaemons = daemonDataReady && daemons.length === 0 && !daemonId;
+  }, [daemonChoices, daemonId, noMachine]);
+  // With no daemon at all, the picker still renders when no-machine is an
+  // option for this workflow, so the automation can be saved without one.
+  const noDaemons = daemonDataReady && daemons.length === 0 && !daemonId && !!noMachineBlocker;
   const noEligibleDaemons = daemonDataReady && daemons.length > 0 && !daemonChoices.some((c) => c.eligible);
 
   const zones = useMemo(timezoneOptions, []);
@@ -355,7 +369,8 @@ function AutomationFormBody({
     presets: inputs.presets,
     params: inputs.params,
     message: message.trim(),
-    daemonId,
+    daemonId: noMachine ? "" : daemonId,
+    noMachine,
     notifyOnComplete,
     source: buildSource(),
   });
@@ -370,6 +385,10 @@ function AutomationFormBody({
       next.daemon = noDaemons
         ? "Connect a daemon first — automations run on one of your daemons."
         : "Choose the daemon this automation runs on.";
+    } else if (noMachine && noMachineBlocker && !trigger?.noMachine) {
+      // A workflow switch after choosing No machine. An edit of a stored
+      // no-machine trigger is left for the server to judge with its inputs.
+      next.daemon = `No machine is not available: ${noMachineBlocker}. Choose a daemon.`;
     }
     if (!message.trim()) next.message = "Write the prompt each run starts from.";
     if (pendingWorkflow !== null) {
@@ -429,7 +448,8 @@ function AutomationFormBody({
       overlap !== initial.overlap ||
       catchupWindow !== initial.catchupWindow ||
       notifyOnComplete !== initial.notifyOnComplete ||
-      (daemonChosen.current && daemonId !== (trigger?.daemonId ?? "")) ||
+      (daemonChosen.current &&
+        daemonId !== (trigger?.noMachine ? NO_MACHINE : (trigger?.daemonId ?? ""))) ||
       (inputsTouched.current && JSON.stringify(inputs) !== inputsBaseline.current)
     );
   };
@@ -574,6 +594,9 @@ function AutomationFormBody({
                 <option value="" disabled>
                   {daemonDataReady ? "Choose a daemon" : "Loading daemons…"}
                 </option>
+                <option value={NO_MACHINE} disabled={!!noMachineBlocker && !noMachine}>
+                  {noMachineBlocker ? `No machine (server only, ${noMachineBlocker})` : "No machine (server only)"}
+                </option>
                 {daemonOptions.map((choice) => (
                   <option key={choice.daemonId} value={choice.daemonId} disabled={!choice.eligible}>
                     {choice.label} ({choice.statusLabel}
@@ -585,9 +608,11 @@ function AutomationFormBody({
             )}
             {!noDaemons && (
               <p id={fieldId("daemon-hint")} className={hintClass}>
-                {noEligibleDaemons
-                  ? "None of your daemons has this project installed. Install it on one from the project picker."
-                  : "Every run's tools execute here. A daemon that is offline when the automation fires is woken if it can be."}
+                {noMachine
+                  ? "Each run runs on Reliant's servers only: web, integrations and planning tools, with no files, shell or local MCP servers."
+                  : noEligibleDaemons
+                    ? "None of your daemons has this project installed. Install it on one from the project picker."
+                    : "Every run's tools execute here. A daemon that is offline when the automation fires is woken if it can be."}
               </p>
             )}
             {errors.daemon && (

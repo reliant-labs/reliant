@@ -15,8 +15,8 @@ const createChat = `-- name: CreateChat :exec
 INSERT INTO chats (
     id, user_id, title, project_id, worktree_id,
     workflow_name, state, workflow_id, run_id, selected_presets, created_at, updated_at, last_active,
-    active_daemon_id
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+    active_daemon_id, no_machine
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
 `
 
 type CreateChatParams struct {
@@ -34,6 +34,7 @@ type CreateChatParams struct {
 	UpdatedAt       time.Time      `json:"updated_at"`
 	LastActive      time.Time      `json:"last_active"`
 	ActiveDaemonID  sql.NullString `json:"active_daemon_id"`
+	NoMachine       bool           `json:"no_machine"`
 }
 
 func (q *Queries) CreateChat(ctx context.Context, arg CreateChatParams) error {
@@ -52,6 +53,7 @@ func (q *Queries) CreateChat(ctx context.Context, arg CreateChatParams) error {
 		arg.UpdatedAt,
 		arg.LastActive,
 		arg.ActiveDaemonID,
+		arg.NoMachine,
 	)
 	return err
 }
@@ -66,7 +68,7 @@ func (q *Queries) DeleteChat(ctx context.Context, id string) error {
 }
 
 const getChat = `-- name: GetChat :one
-SELECT id, title, project_id, user_id, state, workflow_id, run_id, created_at, updated_at, last_active, worktree_id, workflow_name, selected_presets, archived_worktree_name, unread, active_daemon_id, adopted_at, daemon_blocked_at, last_message_at, activity, root_workflow_state, root_workflow_stop_reason, launch_kind, trigger_id, list_in_sidebar, display_state FROM chats_with_activity WHERE id = $1
+SELECT id, title, project_id, user_id, state, workflow_id, run_id, created_at, updated_at, last_active, worktree_id, workflow_name, selected_presets, archived_worktree_name, unread, active_daemon_id, adopted_at, daemon_blocked_at, no_machine, last_message_at, activity, root_workflow_state, root_workflow_stop_reason, launch_kind, trigger_id, list_in_sidebar, display_state FROM chats_with_activity WHERE id = $1
 `
 
 func (q *Queries) GetChat(ctx context.Context, id string) (ChatsWithActivity, error) {
@@ -91,6 +93,7 @@ func (q *Queries) GetChat(ctx context.Context, id string) (ChatsWithActivity, er
 		&i.ActiveDaemonID,
 		&i.AdoptedAt,
 		&i.DaemonBlockedAt,
+		&i.NoMachine,
 		&i.LastMessageAt,
 		&i.Activity,
 		&i.RootWorkflowState,
@@ -104,7 +107,7 @@ func (q *Queries) GetChat(ctx context.Context, id string) (ChatsWithActivity, er
 }
 
 const getChatWithUserCheck = `-- name: GetChatWithUserCheck :one
-SELECT id, title, project_id, user_id, state, workflow_id, run_id, created_at, updated_at, last_active, worktree_id, workflow_name, selected_presets, archived_worktree_name, unread, active_daemon_id, adopted_at, daemon_blocked_at, last_message_at, activity, root_workflow_state, root_workflow_stop_reason, launch_kind, trigger_id, list_in_sidebar, display_state FROM chats_with_activity WHERE id = $1 AND user_id = $2
+SELECT id, title, project_id, user_id, state, workflow_id, run_id, created_at, updated_at, last_active, worktree_id, workflow_name, selected_presets, archived_worktree_name, unread, active_daemon_id, adopted_at, daemon_blocked_at, no_machine, last_message_at, activity, root_workflow_state, root_workflow_stop_reason, launch_kind, trigger_id, list_in_sidebar, display_state FROM chats_with_activity WHERE id = $1 AND user_id = $2
 `
 
 type GetChatWithUserCheckParams struct {
@@ -134,6 +137,7 @@ func (q *Queries) GetChatWithUserCheck(ctx context.Context, arg GetChatWithUserC
 		&i.ActiveDaemonID,
 		&i.AdoptedAt,
 		&i.DaemonBlockedAt,
+		&i.NoMachine,
 		&i.LastMessageAt,
 		&i.Activity,
 		&i.RootWorkflowState,
@@ -148,7 +152,7 @@ func (q *Queries) GetChatWithUserCheck(ctx context.Context, arg GetChatWithUserC
 
 const listArchivedChats = `-- name: ListArchivedChats :many
 SELECT
-    c.id, c.title, c.project_id, c.user_id, c.state, c.workflow_id, c.run_id, c.created_at, c.updated_at, c.last_active, c.worktree_id, c.workflow_name, c.selected_presets, c.archived_worktree_name, c.unread, c.active_daemon_id, c.adopted_at, c.daemon_blocked_at, c.last_message_at, c.activity, c.root_workflow_state, c.root_workflow_stop_reason, c.launch_kind, c.trigger_id, c.list_in_sidebar, c.display_state,
+    c.id, c.title, c.project_id, c.user_id, c.state, c.workflow_id, c.run_id, c.created_at, c.updated_at, c.last_active, c.worktree_id, c.workflow_name, c.selected_presets, c.archived_worktree_name, c.unread, c.active_daemon_id, c.adopted_at, c.daemon_blocked_at, c.no_machine, c.last_message_at, c.activity, c.root_workflow_state, c.root_workflow_stop_reason, c.launch_kind, c.trigger_id, c.list_in_sidebar, c.display_state,
     COALESCE(w.name, c.archived_worktree_name, p.name) as worktree_name,
     w.deleted_at as worktree_deleted_at
 FROM chats_with_activity c
@@ -178,6 +182,7 @@ type ListArchivedChatsRow struct {
 	ActiveDaemonID         sql.NullString `json:"active_daemon_id"`
 	AdoptedAt              sql.NullTime   `json:"adopted_at"`
 	DaemonBlockedAt        sql.NullTime   `json:"daemon_blocked_at"`
+	NoMachine              bool           `json:"no_machine"`
 	LastMessageAt          interface{}    `json:"last_message_at"`
 	Activity               int32          `json:"activity"`
 	RootWorkflowState      sql.NullInt32  `json:"root_workflow_state"`
@@ -221,6 +226,7 @@ func (q *Queries) ListArchivedChats(ctx context.Context, userID string) ([]ListA
 			&i.ActiveDaemonID,
 			&i.AdoptedAt,
 			&i.DaemonBlockedAt,
+			&i.NoMachine,
 			&i.LastMessageAt,
 			&i.Activity,
 			&i.RootWorkflowState,
@@ -246,7 +252,7 @@ func (q *Queries) ListArchivedChats(ctx context.Context, userID string) ([]ListA
 }
 
 const listChats = `-- name: ListChats :many
-SELECT id, title, project_id, user_id, state, workflow_id, run_id, created_at, updated_at, last_active, worktree_id, workflow_name, selected_presets, archived_worktree_name, unread, active_daemon_id, adopted_at, daemon_blocked_at, last_message_at, activity, root_workflow_state, root_workflow_stop_reason, launch_kind, trigger_id, list_in_sidebar, display_state FROM chats_with_activity
+SELECT id, title, project_id, user_id, state, workflow_id, run_id, created_at, updated_at, last_active, worktree_id, workflow_name, selected_presets, archived_worktree_name, unread, active_daemon_id, adopted_at, daemon_blocked_at, no_machine, last_message_at, activity, root_workflow_state, root_workflow_stop_reason, launch_kind, trigger_id, list_in_sidebar, display_state FROM chats_with_activity
 WHERE
     user_id = $1
     AND ($2::text IS NULL OR project_id = $2::text)
@@ -305,6 +311,7 @@ func (q *Queries) ListChats(ctx context.Context, arg ListChatsParams) ([]ChatsWi
 			&i.ActiveDaemonID,
 			&i.AdoptedAt,
 			&i.DaemonBlockedAt,
+			&i.NoMachine,
 			&i.LastMessageAt,
 			&i.Activity,
 			&i.RootWorkflowState,
@@ -328,7 +335,7 @@ func (q *Queries) ListChats(ctx context.Context, arg ListChatsParams) ([]ChatsWi
 }
 
 const searchChats = `-- name: SearchChats :many
-SELECT DISTINCT cws.id, cws.title, cws.project_id, cws.user_id, cws.state, cws.workflow_id, cws.run_id, cws.created_at, cws.updated_at, cws.last_active, cws.worktree_id, cws.workflow_name, cws.selected_presets, cws.archived_worktree_name, cws.unread, cws.active_daemon_id, cws.adopted_at, cws.daemon_blocked_at, cws.last_message_at, cws.activity, cws.root_workflow_state, cws.root_workflow_stop_reason, cws.launch_kind, cws.trigger_id, cws.list_in_sidebar, cws.display_state
+SELECT DISTINCT cws.id, cws.title, cws.project_id, cws.user_id, cws.state, cws.workflow_id, cws.run_id, cws.created_at, cws.updated_at, cws.last_active, cws.worktree_id, cws.workflow_name, cws.selected_presets, cws.archived_worktree_name, cws.unread, cws.active_daemon_id, cws.adopted_at, cws.daemon_blocked_at, cws.no_machine, cws.last_message_at, cws.activity, cws.root_workflow_state, cws.root_workflow_stop_reason, cws.launch_kind, cws.trigger_id, cws.list_in_sidebar, cws.display_state
 FROM chats_with_activity cws
 LEFT JOIN messages m ON cws.id = m.chat_id
 LEFT JOIN message_content_blocks mcb ON m.id = mcb.message_id AND mcb.block_type = 1
@@ -394,6 +401,7 @@ func (q *Queries) SearchChats(ctx context.Context, arg SearchChatsParams) ([]Cha
 			&i.ActiveDaemonID,
 			&i.AdoptedAt,
 			&i.DaemonBlockedAt,
+			&i.NoMachine,
 			&i.LastMessageAt,
 			&i.Activity,
 			&i.RootWorkflowState,

@@ -37,6 +37,8 @@ type RunExecutorContext struct {
 	WorktreeID     string
 	WorktreePath   string
 	DaemonSelector *toolexec.DaemonSelector // Target daemon for execution (optional)
+	// NoMachine is the chat's no-machine fact: a command has nowhere to run.
+	NoMachine bool
 }
 
 // RemoteRunExecutor routes shell commands through the daemon via ToolExecutor.
@@ -181,6 +183,7 @@ func resolveRunExecutorContext(ctx context.Context, repo db.Repository, chatID s
 		ProjectID:   project.ID,
 		ProjectPath: project.Path,
 		ProjectName: project.Name,
+		NoMachine:   chat.NoMachine,
 	}
 
 	// Check if chat has a worktree
