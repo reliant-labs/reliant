@@ -736,6 +736,7 @@ type Trigger struct {
 	ConnectionID        sql.NullString  `json:"connection_id"`
 	WebhookTokenHash    []byte          `json:"webhook_token_hash"`
 	WebhookSecretSealed []byte          `json:"webhook_secret_sealed"`
+	WorkflowTrigger     sql.NullString  `json:"workflow_trigger"`
 }
 
 type TriggerEvent struct {

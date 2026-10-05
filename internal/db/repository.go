@@ -698,6 +698,9 @@ type Repository interface {
 	UpdateTrigger(ctx context.Context, t *core.Trigger) error
 	DeleteTrigger(ctx context.Context, id string) error
 	SetTriggerEnabled(ctx context.Context, id string, enabled bool) error
+	SetTriggerProjection(ctx context.Context, id string, p core.TriggerProjection) error
+	ListWorkflowTriggerActivations(ctx context.Context, userID, workflow string) ([]*core.Trigger, error)
+	ListAllWorkflowTriggerActivations(ctx context.Context) ([]*core.Trigger, error)
 
 	// Trigger events - one row per firing. The insert is ON CONFLICT
 	// (kind, dedupe_key) DO NOTHING, so created=false means a firing for that

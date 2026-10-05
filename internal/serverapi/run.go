@@ -386,7 +386,8 @@ func Run(ctx context.Context, opts Options) error {
 		return fmt.Errorf("integration webhook providers: %w", err)
 	}
 	triggerInbound := webhook.NewInbound(repo,
-		triggers.NewIntake(repo, temporalClient, v2workflow.SharedTaskQueue),
+		triggers.NewIntake(repo, temporalClient, v2workflow.SharedTaskQueue).
+			WithWorkflows(triggers.LaunchWorkflows{Repo: repo}),
 		inboundRegistry, vaultKeys, strings.TrimSpace(os.Getenv("PUBLIC_URL")))
 	// GitHub events are access-gated: each owner's repository access is
 	// refreshed when a trigger is activated and every few minutes while one
@@ -463,9 +464,17 @@ func Run(ctx context.Context, opts Options) error {
 	// In the background with backoff: this races a cold Temporal, and
 	// refusing to serve until schedules converge would turn an ordering
 	// problem into an outage.
-	go triggers.SyncAllOnStartup(ctx, triggers.NewSyncer(
+	scheduleSyncer := triggers.NewSyncer(
 		temporalClient.ScheduleClient(), repo, v2workflow.SharedTaskQueue).
-		WithPolledIntegrations(inboundRegistry.IsPolled))
+		WithPolledIntegrations(inboundRegistry.IsPolled)
+	go triggers.SyncAllOnStartup(ctx, scheduleSyncer)
+
+	// Keep activations of workflow-declared triggers projected from their
+	// workflows: an edited cron reconverges its schedule, an edited source
+	// re-routes. Fires read the declaration themselves, so this bounds only
+	// routing lag. Here, beside SyncAll, because it converges the same
+	// schedules.
+	go triggers.NewReconciler(repo, triggers.LaunchWorkflows{Repo: repo}, scheduleSyncer).Run(ctx)
 
 	// Restart the fire of any inbound trigger event left pending — the
 	// receiver recorded it and its start was lost. The receivers live here,

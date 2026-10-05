@@ -73,7 +73,16 @@ type Intake struct {
 	repo      EventRepo
 	starter   WorkflowStarter
 	taskQueue string
+	workflows WorkflowResolver
 	now       func() time.Time
+}
+
+// WithWorkflows lets the intake read an activation's declaration, whose
+// filter is the one applied. Without it, an activation's events are recorded
+// as failed rather than filtered by a projection that may be stale.
+func (in *Intake) WithWorkflows(workflows WorkflowResolver) *Intake {
+	in.workflows = workflows
+	return in
 }
 
 // NewIntake builds an Intake. taskQueue empty means the shared queue.
@@ -116,8 +125,20 @@ func (in *Intake) Accept(ctx context.Context, trigger *core.Trigger, ev InboundE
 	}
 
 	outcome, detail := core.TriggerEventPending, ""
-	if !opts.Manual {
-		outcome, detail = in.applyFilter(trigger, ev, occurredAt)
+	decl, err := activationFor(ctx, in.workflows, trigger)
+	switch {
+	case err != nil && isVerdict(err):
+		// Recorded, not dropped: "why did my trigger stop firing?" must have
+		// an answer, and this is it.
+		outcome, detail = core.TriggerEventFailed, err.Error()
+	case err != nil:
+		return nil, fmt.Errorf("resolve trigger %s's declaration: %w", trigger.ID, err)
+	case !opts.Manual:
+		filter := trigger.Filter
+		if decl != nil {
+			filter = decl.Filter
+		}
+		outcome, detail = in.applyFilter(filter, trigger, ev, occurredAt)
 	}
 
 	row := &core.TriggerEvent{
@@ -161,11 +182,11 @@ func (in *Intake) Accept(ctx context.Context, trigger *core.Trigger, ev InboundE
 	return res, nil
 }
 
-func (in *Intake) applyFilter(trigger *core.Trigger, ev InboundEvent, occurredAt time.Time) (core.TriggerEventOutcome, string) {
-	if strings.TrimSpace(trigger.Filter) == "" {
+func (in *Intake) applyFilter(expr string, trigger *core.Trigger, ev InboundEvent, occurredAt time.Time) (core.TriggerEventOutcome, string) {
+	if strings.TrimSpace(expr) == "" {
 		return core.TriggerEventPending, ""
 	}
-	filter, err := CompileFilter(trigger.Filter)
+	filter, err := CompileFilter(expr)
 	if err != nil {
 		// Validated on write, so this is a filter stored before a rule
 		// tightened. Record it; never fall back to firing.

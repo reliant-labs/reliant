@@ -16,7 +16,7 @@ func workflowWithTriggers(triggers string) string {
 inputs:
   issue_number:
     type: integer
-    required: false
+    default: 0
 entry: [a]
 nodes:
   - id: a
@@ -97,8 +97,8 @@ func TestEditWorkflowReportsTriggerFindings(t *testing.T) {
 	assert.Contains(t, resp.Content, "Warnings")
 	assert.Contains(t, resp.Content, "triggers[0](new-issue).inputs.issue_number")
 
-	// An edit that breaks a trigger on a complete workflow is rejected and
-	// leaves it as it was.
+	// An integration outside the catalog is shown, not blocked: whether it
+	// delivers events is the deployment's to say, at activation.
 	edit, _ = json.Marshal(EditWorkflowParams{
 		ID:        meta.ID,
 		OldString: `integration: github`,
@@ -106,10 +106,22 @@ func TestEditWorkflowReportsTriggerFindings(t *testing.T) {
 	})
 	resp, err = NewEditWorkflowTool(repo).Run(ctx, ToolCall{ID: "e2", Name: ToolEditWorkflow, Input: string(edit)})
 	require.NoError(t, err)
-	assert.True(t, resp.IsError, resp.Content)
+	assert.False(t, resp.IsError, resp.Content)
 	assert.Contains(t, resp.Content, `"not_a_real_integration" is not in the integration catalog`)
+
+	// An edit that breaks a trigger on a complete workflow is rejected and
+	// leaves it as it was.
+	edit, _ = json.Marshal(EditWorkflowParams{
+		ID:        meta.ID,
+		OldString: `events: [issues.opened]`,
+		NewString: `events: []`,
+	})
+	resp, err = NewEditWorkflowTool(repo).Run(ctx, ToolCall{ID: "e3", Name: ToolEditWorkflow, Input: string(edit)})
+	require.NoError(t, err)
+	assert.True(t, resp.IsError, resp.Content)
+	assert.Contains(t, resp.Content, "triggers[0](new-issue).integration.events")
 
 	stored, err := repo.GetWorkflowDraft(context.Background(), meta.ID)
 	require.NoError(t, err)
-	assert.Contains(t, stored.Definition, "integration: github")
+	assert.Contains(t, stored.Definition, "events: [issues.opened]")
 }

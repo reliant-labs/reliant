@@ -3671,6 +3671,24 @@ func (r *Repo) SetTriggerEnabled(ctx context.Context, id string, enabled bool) e
 	return r.triggers.SetTriggerEnabled(ctx, id, enabled)
 }
 
+func (r *Repo) SetTriggerProjection(ctx context.Context, id string, p core.TriggerProjection) error {
+	if id == "" {
+		return fmt.Errorf("trigger ID cannot be empty")
+	}
+	return r.triggers.SetTriggerProjection(ctx, id, p)
+}
+
+func (r *Repo) ListWorkflowTriggerActivations(ctx context.Context, userID, workflow string) ([]*core.Trigger, error) {
+	if userID == "" {
+		return nil, fmt.Errorf("user ID cannot be empty")
+	}
+	return r.triggers.ListWorkflowTriggerActivations(ctx, userID, workflow)
+}
+
+func (r *Repo) ListAllWorkflowTriggerActivations(ctx context.Context) ([]*core.Trigger, error) {
+	return r.triggers.ListAllWorkflowTriggerActivations(ctx)
+}
+
 func (r *Repo) CreateTriggerEvent(ctx context.Context, ev *core.TriggerEvent) (bool, error) {
 	if ev == nil {
 		return false, fmt.Errorf("trigger event cannot be nil")

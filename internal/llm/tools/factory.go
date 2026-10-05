@@ -47,6 +47,11 @@ type ToolsOptions struct {
 	// RunMessenger delivers a message to a live top-level run for
 	// send_to_run. Optional, same as above.
 	RunMessenger RunMessenger
+	// TriggerActivator activates and lists the calling user's triggers for
+	// activate_trigger and list_triggers. Optional: nil means those tools
+	// report they are unavailable here (the daemon runtime has no trigger
+	// service).
+	TriggerActivator TriggerActivator
 	// ShellPlatform is the shell family of the DAEMON that will execute shell
 	// commands, which is frequently not this process's own platform: the
 	// server and worker run Linux while the daemon may be Windows. The shell
@@ -348,6 +353,14 @@ func (f *ToolsFactory) ControlRun() Tool {
 
 func (f *ToolsFactory) SendToRun() Tool {
 	return NewSendToRunTool(f.opts.Repo, f.opts.RunMessenger)
+}
+
+func (f *ToolsFactory) ActivateTrigger() Tool {
+	return NewActivateTriggerTool(f.opts.Repo, f.opts.TriggerActivator)
+}
+
+func (f *ToolsFactory) ListTriggers() Tool {
+	return NewListTriggersTool(f.opts.Repo, f.opts.TriggerActivator)
 }
 
 // Analysis tools

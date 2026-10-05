@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -43,7 +44,9 @@ import (
 	"github.com/reliant-labs/reliant/internal/temporal/claimcheck"
 	"github.com/reliant-labs/reliant/internal/tokenauthority"
 	"github.com/reliant-labs/reliant/internal/toolexec"
+	"github.com/reliant-labs/reliant/internal/triggers"
 	"github.com/reliant-labs/reliant/internal/triggers/workflowevent"
+	"github.com/reliant-labs/reliant/internal/triggertools"
 	"github.com/reliant-labs/reliant/internal/videojobs"
 	"github.com/reliant-labs/reliant/internal/workersetup"
 	v2workflow "github.com/reliant-labs/reliant/internal/workflow"
@@ -298,6 +301,29 @@ func Run(ctx context.Context, opts Options) error {
 	agentRuns := agentruns.New(runLauncher, services.NewRunService(repo,
 		services.NewChatService(repo, temporalClient, pauseService, v2workflow.SharedTaskQueue, streamingHub, router)))
 
+	// The same registry the api-server builds, so both agree on which
+	// integrations are polled and which deliver events at all.
+	triggerPollers, err := webhook.RegistryFromEnv(os.Getenv)
+	if err != nil {
+		return fmt.Errorf("integration pollers: %w", err)
+	}
+
+	// activate_trigger / list_triggers act as the calling chat's owner
+	// through the same TriggerService the api-server serves, so an agent's
+	// activation is checked exactly like the user's own. Its inbound half
+	// needs the provider registry (which integrations deliver events here)
+	// and the vault (signed webhooks). PUBLIC_URL is read when the worker
+	// has it; without it a webhook's URL is reported as a bare path.
+	triggerService := services.NewTriggerServiceFor(repo, temporalClient, v2workflow.SharedTaskQueue).
+		WithInbound(services.InboundOptions{
+			PublicURL: strings.TrimSpace(os.Getenv("PUBLIC_URL")),
+			Sealer:    vaultKeys,
+			Catalog:   triggerPollers,
+			Intake: triggers.NewIntake(repo, temporalClient, v2workflow.SharedTaskQueue).
+				WithWorkflows(triggers.LaunchWorkflows{Repo: repo}),
+		}).
+		WithPolledIntegrations(triggerPollers.IsPolled)
+
 	toolsFactory := tools.NewToolsFactory(&tools.ToolsOptions{
 		Repo: repo,
 		// The worker is where spawn_send actually executes (inside the
@@ -324,6 +350,8 @@ func Run(ctx context.Context, opts Options) error {
 		RunStarter:   agentRuns,
 		RunLifecycle: agentRuns,
 		RunMessenger: agentRuns,
+		// activate_trigger / list_triggers execute here too.
+		TriggerActivator: triggertools.New(triggerService),
 		// http__request executes here, inside the ExecuteTools activity, and
 		// resolves its `connection` for the run's owner through the same
 		// source the action node uses: saved connections, plus GitHub tokens
@@ -352,13 +380,6 @@ func Run(ctx context.Context, opts Options) error {
 	// greenfield probe, so it is passed for completeness rather than for the
 	// schedule path.
 	triggerLauncher := runLauncher
-
-	// The same registry the api-server builds, so both agree on which
-	// integrations are polled.
-	triggerPollers, err := webhook.RegistryFromEnv(os.Getenv)
-	if err != nil {
-		return fmt.Errorf("integration pollers: %w", err)
-	}
 
 	handle, _, err := workersetup.StartWorker(&workersetup.Config{
 		TemporalClient:         temporalClient,

@@ -16,6 +16,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/triggers"
 	"github.com/reliant-labs/reliant/internal/triggers/runevents"
 )
 
@@ -50,6 +51,9 @@ type Spec struct {
 	// Filter is a CEL bool over the `trigger` root the launched run would
 	// see. Empty matches every event.
 	Filter string
+	// Inputs maps workflow inputs to templates over `trigger`; set for an
+	// activation of a declared trigger.
+	Inputs map[string]string
 }
 
 // SpecOf reads a stored trigger's workflow_event spec: Source from its config,
@@ -66,11 +70,11 @@ func SpecOf(t *core.Trigger) (Spec, error) {
 
 // Dispatcher fires the workflow_event triggers a run event matches.
 type Dispatcher struct {
-	repo     Repo
-	launcher Launcher
-	filter   FilterFunc
-	specOf   func(*core.Trigger) (Spec, error)
-	now      func() time.Time
+	repo      Repo
+	launcher  Launcher
+	filter    FilterFunc
+	workflows triggers.WorkflowResolver
+	now       func() time.Time
 }
 
 // NewDispatcher builds a dispatcher. filter nil uses EvaluateFilter.
@@ -78,7 +82,36 @@ func NewDispatcher(repo Repo, launcher Launcher, filter FilterFunc) *Dispatcher 
 	if filter == nil {
 		filter = EvaluateFilter
 	}
-	return &Dispatcher{repo: repo, launcher: launcher, filter: filter, specOf: SpecOf, now: time.Now}
+	return &Dispatcher{repo: repo, launcher: launcher, filter: filter, now: time.Now}
+}
+
+// WithWorkflows lets the dispatcher read an activation's declaration. Without
+// it, an activation's matches are recorded as failed rather than matched
+// against a projection that may be stale.
+func (d *Dispatcher) WithWorkflows(workflows triggers.WorkflowResolver) *Dispatcher {
+	d.workflows = workflows
+	return d
+}
+
+// specOf is a trigger's effective spec: an activation's from its workflow's
+// declaration, read now; an ad hoc trigger's from its row.
+func (d *Dispatcher) specOf(ctx context.Context, t *core.Trigger) (Spec, error) {
+	if t.WorkflowTrigger == nil || *t.WorkflowTrigger == "" {
+		return SpecOf(t)
+	}
+	if d.workflows == nil {
+		return Spec{}, &triggers.DeclarationError{Workflow: t.Workflow, Name: *t.WorkflowTrigger,
+			Reason: "this server cannot read declared triggers"}
+	}
+	decl, err := triggers.ResolveDeclaration(ctx, d.workflows, t)
+	if err != nil {
+		return Spec{}, err
+	}
+	var src Source
+	if err := json.Unmarshal(decl.Source.Config, &src); err != nil {
+		return Spec{}, fmt.Errorf("trigger %s: declared workflow_event config: %w", t.ID, err)
+	}
+	return Spec{Source: src, Filter: decl.Filter, Inputs: decl.Inputs}, nil
 }
 
 // Result is one trigger's verdict on one run event.
@@ -115,10 +148,26 @@ func (d *Dispatcher) Dispatch(ctx context.Context, ev *core.RunEvent) ([]Result,
 		if trigger.Kind != runevents.TriggerKind || !trigger.Enabled || trigger.UserID != ev.UserID {
 			continue
 		}
-		spec, err := d.specOf(trigger)
+		spec, err := d.specOf(ctx, trigger)
 		if err != nil {
-			res, recErr := d.record(ctx, trigger, ev, nil, core.TriggerEventFailed, "trigger config is invalid: "+err.Error())
-			results, retryable = appendResult(results, retryable, res, recErr)
+			var declErr *triggers.DeclarationError
+			switch {
+			case errors.As(err, &declErr):
+				// A broken activation is recorded on every event it would
+				// have matched under its last projection, so the owner
+				// sees why it went quiet; it never fires.
+				if prev, prevErr := SpecOf(trigger); prevErr == nil && !prev.Source.Matches(ev.WorkflowName, ev.Outcome) {
+					continue
+				}
+				res, recErr := d.record(ctx, trigger, ev, nil, core.TriggerEventFailed, declErr.Error())
+				results, retryable = appendResult(results, retryable, res, recErr)
+			case trigger.WorkflowTrigger != nil:
+				// The workflow could not be READ: retry the dispatch.
+				retryable = append(retryable, fmt.Errorf("resolve trigger %s: %w", trigger.ID, err))
+			default:
+				res, recErr := d.record(ctx, trigger, ev, nil, core.TriggerEventFailed, "trigger config is invalid: "+err.Error())
+				results, retryable = appendResult(results, retryable, res, recErr)
+			}
 			continue
 		}
 		// Kind and workflow mismatches are filtered BEFORE any row is written:
@@ -175,7 +224,7 @@ func (d *Dispatcher) fire(ctx context.Context, trigger *core.Trigger, spec Spec,
 		return d.record(ctx, trigger, ev, lineage, core.TriggerEventSkipped, "filter did not match")
 	}
 
-	launchSpec, err := d.buildSpec(trigger, ev, launchEv.DedupeKey)
+	launchSpec, err := d.buildSpec(trigger, ev, launchEv, spec.Inputs)
 	if err != nil {
 		return d.record(ctx, trigger, ev, lineage, core.TriggerEventFailed, err.Error())
 	}
@@ -242,8 +291,13 @@ func triggerRoot(ev launch.Event) map[string]any {
 // buildSpec is what a workflow-event run is: owned by the trigger's user,
 // unattended, seeded with the trigger's prompt plus a hidden note saying what
 // started it.
-func (d *Dispatcher) buildSpec(trigger *core.Trigger, ev *core.RunEvent, dedupe string) (launch.Spec, error) {
-	params, err := paramsToProto(trigger.Params)
+func (d *Dispatcher) buildSpec(trigger *core.Trigger, ev *core.RunEvent, launchEv launch.Event, inputs map[string]string) (launch.Spec, error) {
+	dedupe := launchEv.DedupeKey
+	values, err := triggers.MergeDeclaredInputs(trigger.Params, inputs, triggerRoot(launchEv))
+	if err != nil {
+		return launch.Spec{}, fmt.Errorf("the declared trigger's inputs could not be read from this event: %w", err)
+	}
+	params, err := paramsToProto(values)
 	if err != nil {
 		return launch.Spec{}, fmt.Errorf("trigger params are not representable: %w", err)
 	}

@@ -143,8 +143,12 @@ func MinimumPermissionForTool(toolName string) string {
 	// sender holds — a message is an instruction to that run, so base-tier
 	// access would let a low-privilege agent steer a higher-privilege one.
 	// list_runs and get_run only read, and sit at the base tier.
+	//
+	// activate_trigger is orchestrator-tier for the same reason as start_run,
+	// and more so: it creates standing work that starts unattended runs on its
+	// own, long after the calling agent is gone. list_triggers only reads.
 	switch toolName {
-	case ToolStartRun, ToolControlRun, ToolSendToRun:
+	case ToolStartRun, ToolControlRun, ToolSendToRun, ToolActivateTrigger:
 		return PermissionOrchestrator
 	}
 

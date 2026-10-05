@@ -5,6 +5,23 @@ package toolcatalog
 // generatedToolParams is the bindable surface of every registered tool,
 // projected from each tool's reflected parameter schema.
 var generatedToolParams = map[string]ToolParams{
+	"activate_trigger": {
+		Bindable: map[string]struct{}{
+			"connection_id":      {},
+			"daemon_id":          {},
+			"disabled":           {},
+			"message":            {},
+			"name":               {},
+			"notify_on_complete": {},
+			"params":             {},
+			"presets":            {},
+			"project_id":         {},
+			"trigger":            {},
+			"workflow":           {},
+			"worktree_id":        {},
+		},
+		Unbindable: map[string]string{},
+	},
 	"add_dependency": {
 		Bindable: map[string]struct{}{
 			"from_task": {},
@@ -260,6 +277,13 @@ var generatedToolParams = map[string]ToolParams{
 	},
 	"list_tasks": {
 		Bindable:   map[string]struct{}{},
+		Unbindable: map[string]string{},
+	},
+	"list_triggers": {
+		Bindable: map[string]struct{}{
+			"project_id": {},
+			"workflow":   {},
+		},
 		Unbindable: map[string]string{},
 	},
 	"list_workflows": {

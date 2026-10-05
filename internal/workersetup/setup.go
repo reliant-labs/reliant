@@ -238,23 +238,27 @@ func StartWorker(cfg *Config) (*Handle, *v2.ActivityRegistry, error) {
 	w.RegisterWorkflowWithOptions(triggers.TriggerPollWorkflow, workflow.RegisterOptions{
 		Name: triggers.PollWorkflowName,
 	})
+	// An activation of a workflow-declared trigger fires from the
+	// declaration as it is now; every fire path reads it through the same
+	// resolution run start uses.
+	declarations := triggers.LaunchWorkflows{Repo: cfg.Database}
 	if cfg.TriggerPollers != nil {
 		if repo, ok := cfg.Database.(*db.Repo); ok {
 			poller := triggers.NewTriggerPoller(
 				triggerPollRepo{Repo: repo, connections: repo.Connections()},
 				cfg.TriggerPollers,
-				triggers.NewIntake(repo, cfg.TemporalClient, cfg.taskQueueName()),
+				triggers.NewIntake(repo, cfg.TemporalClient, cfg.taskQueueName()).WithWorkflows(declarations),
 			)
 			w.RegisterActivityWithOptions(poller.Poll, activity.RegisterOptions{Name: triggers.PollActivityName})
 		}
 	}
 	if cfg.TriggerLauncher != nil {
 		w.RegisterActivityWithOptions(
-			triggers.NewFirer(cfg.Database, cfg.TriggerLauncher).Fire,
+			triggers.NewFirer(cfg.Database, cfg.TriggerLauncher).WithWorkflows(declarations).Fire,
 			activity.RegisterOptions{Name: triggers.FireActivityName},
 		)
 		w.RegisterActivityWithOptions(
-			triggers.NewEventFirer(cfg.Database, cfg.TriggerLauncher).Fire,
+			triggers.NewEventFirer(cfg.Database, cfg.TriggerLauncher).WithWorkflows(declarations).Fire,
 			activity.RegisterOptions{Name: triggers.EventFireActivityName},
 		)
 	} else {
@@ -267,7 +271,7 @@ func StartWorker(cfg *Config) (*Handle, *v2.ActivityRegistry, error) {
 		Name: workflowevent.DispatchWorkflowName,
 	})
 	if cfg.TriggerLauncher != nil {
-		dispatcher := workflowevent.NewDispatcher(cfg.Database, cfg.TriggerLauncher, nil)
+		dispatcher := workflowevent.NewDispatcher(cfg.Database, cfg.TriggerLauncher, nil).WithWorkflows(declarations)
 		w.RegisterActivityWithOptions(
 			workflowevent.NewActivity(cfg.Database, dispatcher).Dispatch,
 			activity.RegisterOptions{Name: workflowevent.DispatchActivityName},

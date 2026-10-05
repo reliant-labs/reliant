@@ -159,6 +159,13 @@ enum TriggerOverlapPolicy {
 //     are neither a success nor a failure and never end a failure streak.
 //
 // The status is then, first match wins:
+//   - BROKEN: the trigger activates a workflow-declared trigger
+//     (Trigger.workflow_trigger) that cannot be used — the workflow is gone
+//     or not runnable, it no longer declares that name, or the declaration
+//     changed in a way this activation cannot follow (another kind, another
+//     integration). Its firings fail until the declaration is restored, or it
+//     is re-activated or deleted; last_failure_detail says why. Computed from
+//     the workflow on read; firings are not consulted.
 //   - FAILING: two or more consecutive failures, newest first. Skipped and
 //     unresolved firings are passed over; a success ends the streak.
 //   - DEGRADED: any failure in the window that did not make it FAILING, or
@@ -173,6 +180,7 @@ enum TriggerHealthStatus {
   TRIGGER_HEALTH_STATUS_DEGRADED = 2;
   TRIGGER_HEALTH_STATUS_FAILING = 3;
   TRIGGER_HEALTH_STATUS_UNKNOWN = 4;
+  TRIGGER_HEALTH_STATUS_BROKEN = 5;
 }
 
 // TriggerHealth is the read-only health summary of a trigger. See
@@ -439,7 +447,10 @@ message Trigger {
   optional string webhook_url = 25;
 
   // The workflow-declared trigger (WorkflowTrigger.name) this row activates,
-  // when it activates one. The source above is then that declaration's.
+  // when it activates one. The source, filter and inputs are then that
+  // declaration's, read from the workflow when the trigger fires: editing the
+  // workflow's `triggers:` changes every activation of it. The source above is
+  // the declaration as of the last save, for display.
   optional string workflow_trigger = 26;
 }
 
@@ -546,8 +557,11 @@ message TriggerDefinition {
     IntegrationSource integration = 22;
     WorkflowEventSource workflow_event = 23;
     // Activate the named trigger the workflow declares (WorkflowTrigger.name)
-    // instead of writing a source inline. Not yet supported: rejected with
-    // Unimplemented until workflow definitions carry `triggers:`.
+    // instead of writing a source inline. The declaration supplies the
+    // source, filter and inputs, and is re-read every time the trigger fires,
+    // so an edit to the workflow applies to every activation. `workflow` is
+    // required and `filter` must be empty: both come from the declaration.
+    // `params` may not set an input the declaration's inputs map.
     string workflow_trigger = 24;
   }
 }

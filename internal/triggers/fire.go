@@ -30,14 +30,22 @@ var chatIDNamespace = uuid.MustParse("2b2e5f21-6c3d-4f8a-9c41-7e5a0d9b3c66")
 
 // Firer executes one scheduled fire. It is the FireTrigger activity.
 type Firer struct {
-	repo     Repo
-	launcher Launcher
-	now      func() time.Time
+	repo      Repo
+	launcher  Launcher
+	workflows WorkflowResolver
+	now       func() time.Time
 }
 
 // NewFirer builds the fire activity's receiver.
 func NewFirer(repo Repo, launcher Launcher) *Firer {
 	return &Firer{repo: repo, launcher: launcher, now: time.Now}
+}
+
+// WithWorkflows lets the firer read an activation's declaration. Without it,
+// an activation's fire is recorded as failed rather than guessed at.
+func (f *Firer) WithWorkflows(workflows WorkflowResolver) *Firer {
+	f.workflows = workflows
+	return f
 }
 
 // Fire is the FireTrigger activity.
@@ -83,6 +91,28 @@ func (f *Firer) Fire(ctx context.Context, req FireRequest) (*FireOutput, error) 
 		return nil, fmt.Errorf("load trigger %s: %w", req.TriggerID, err)
 	}
 
+	// An activation fires from its workflow's declaration as it is NOW: the
+	// row's config is only the projection the schedule was converged from.
+	// A declaration that is gone or changed kind is recorded and stops here;
+	// one whose cron or timezone was edited fires this slot under the new
+	// rules (the reconciler re-converges the Temporal schedule itself).
+	decl, err := activationFor(ctx, f.workflows, trigger)
+	if err != nil {
+		if isVerdict(err) {
+			return f.failPermanently(ctx, trigger, req, err.Error(), err)
+		}
+		return nil, err
+	}
+	if decl != nil {
+		projected := *trigger
+		projected.Config = decl.Source.Config
+		trigger = &projected
+	}
+	inputs := map[string]string(nil)
+	if decl != nil {
+		inputs = decl.Inputs
+	}
+
 	// A stored config that no longer parses cannot tell us its overlap policy
 	// or timezone. Record that as the verdict rather than guessing, so the
 	// owner can see why the trigger stopped producing runs.
@@ -112,7 +142,7 @@ func (f *Firer) Fire(ctx context.Context, req FireRequest) (*FireOutput, error) 
 		return nil, nonRetryable(detail, err)
 	}
 
-	spec, err := f.buildSpec(trigger, sched, req)
+	spec, err := f.buildSpec(trigger, sched, req, inputs)
 	if err != nil {
 		return f.failPermanently(ctx, trigger, req, err.Error(), err)
 	}
@@ -222,11 +252,25 @@ func (f *Firer) previousRunBlocks(ctx context.Context, triggerID string) (string
 
 // buildSpec is what a scheduled run is: owned by the trigger's user,
 // unattended, and seeded with the trigger's prompt.
-func (f *Firer) buildSpec(trigger *core.Trigger, sched *Schedule, req FireRequest) (launch.Spec, error) {
+func (f *Firer) buildSpec(trigger *core.Trigger, sched *Schedule, req FireRequest, inputs map[string]string) (launch.Spec, error) {
 	local := req.ScheduledAt.In(sched.Location)
 	title := fmt.Sprintf("%s · %s", trigger.Name, local.Format("2006-01-02 15:04 MST"))
 
-	params, err := paramsToProto(trigger.Params)
+	values := trigger.Params
+	if len(inputs) > 0 {
+		// The same root the run will see as `trigger`: what a schedule's
+		// inputs can read is its slot (trigger.scheduled_for) and name.
+		root := FilterInput{
+			Kind: string(core.TriggerEventKindSchedule), TriggerID: trigger.ID,
+			OccurredAt: req.ScheduledAt, Payload: f.buildEvent(trigger, req).Payload,
+		}.Root()
+		merged, err := MergeDeclaredInputs(trigger.Params, inputs, root)
+		if err != nil {
+			return launch.Spec{}, fmt.Errorf("the declared trigger's inputs could not be evaluated: %w", err)
+		}
+		values = merged
+	}
+	params, err := paramsToProto(values)
 	if err != nil {
 		return launch.Spec{}, fmt.Errorf("trigger params are not representable: %w", err)
 	}

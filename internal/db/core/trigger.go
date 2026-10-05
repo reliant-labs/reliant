@@ -133,8 +133,15 @@ type Trigger struct {
 	// ConnectionID is the connection an integration trigger listens
 	// through; nil for other kinds, or when the connection was deleted.
 	ConnectionID *string
-	CreatedAt    time.Time
-	UpdatedAt    time.Time
+	// WorkflowTrigger names the declared trigger (WorkflowTrigger.name in
+	// Workflow's `triggers:`) this row activates; nil for an ad hoc trigger
+	// whose source is written inline. For an activation, Kind, Config and
+	// Filter are a projection of the declaration, kept for routing and the
+	// schedule syncer; the declaration is re-read and authoritative at fire
+	// time.
+	WorkflowTrigger *string
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
 
 	// ProjectName and DaemonName are read-only display names joined in by
 	// GetTrigger and ListTriggers. Empty when the project or daemon row is
@@ -305,6 +312,13 @@ type TriggerEventFilters struct {
 	Limit     int
 }
 
+// TriggerProjection is what an activation caches of its declaration, for
+// routing and the schedule syncer.
+type TriggerProjection struct {
+	Config json.RawMessage
+	Filter string
+}
+
 // TriggerFilters narrows ListTriggers. UserID is required: the unscoped
 // listing is ListAllTriggers.
 type TriggerFilters struct {
@@ -330,6 +344,16 @@ type TriggerStore interface {
 	DeleteTrigger(ctx context.Context, id string) error
 	// SetTriggerEnabled returns ErrTriggerNotFound when the id does not resolve.
 	SetTriggerEnabled(ctx context.Context, id string, enabled bool) error
+	// SetTriggerProjection refreshes an activation's projection of its
+	// declaration. It returns ErrTriggerNotFound when the id does not
+	// resolve to an activation.
+	SetTriggerProjection(ctx context.Context, id string, p TriggerProjection) error
+	// ListWorkflowTriggerActivations lists one user's activations of the
+	// triggers a workflow declares.
+	ListWorkflowTriggerActivations(ctx context.Context, userID, workflow string) ([]*Trigger, error)
+	// ListAllWorkflowTriggerActivations lists every activation, for the
+	// periodic reconcile.
+	ListAllWorkflowTriggerActivations(ctx context.Context) ([]*Trigger, error)
 
 	// CreateTriggerEvent inserts the event, doing nothing on a (Kind,
 	// DedupeKey) that already exists. created=false means a row for that key

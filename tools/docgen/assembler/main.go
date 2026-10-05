@@ -72,6 +72,7 @@ func assembleSkill(docsDir string) (string, error) {
 		generateHeader(),
 		generateKeyConcepts(),
 		generateSyntaxSugar(),
+		generateTriggers(),
 		generateGotchas(),
 		generateAvailableTools(),
 		generateCELQuickReference(),
@@ -297,6 +298,68 @@ edges:
 ` + "```" + ``
 }
 
+func generateTriggers() string {
+	bt := "`"
+	return `## Triggers: when a workflow runs
+
+A workflow says WHEN it runs in a top-level ` + bt + `triggers:` + bt + ` list. Declaring a trigger fires nothing.
+A user ACTIVATES it — ` + bt + `activate_trigger` + bt + `, or Activate in the app — which says AS WHOM and WHERE: their
+project, the daemon whose tools the runs use, and for an integration trigger which of their
+connections it listens through. One declaration can have many activations (one per user or project).
+
+` + "```yaml" + `
+name: triage-new-issues
+inputs:
+  issue_number: {type: integer, default: 0}   # required inputs must be mapped by every trigger, or set per activation
+triggers:
+  - name: new-issue                 # unique within the workflow: lowercase, digits, - and _
+    description: A new or reopened issue
+    integration:                    # exactly ONE source: schedule | webhook | integration | workflow_event
+      integration: github
+      events: [issues.opened, issues.reopened]   # "issues.*" or "*" also match
+      match: {repository: acme/app}              # event attributes that must be equal
+    filter: "!trigger.payload.data.issue.labels.exists(l, l.name == 'wontfix')"
+    inputs:
+      issue_number: "{{ trigger.payload.data.issue.number }}"
+  - name: nightly
+    schedule: {cron: ["0 9 * * 1-5"], timezone: America/New_York}   # 5-field cron, or interval: 1h
+  - name: deploy-hook
+    webhook: {}                     # POST <api>/hooks/<trigger id>; add hmac: {...} to verify signatures
+  - name: after-review-fails
+    workflow_event: {workflows: [code-review], outcomes: [failed]}  # finished | failed | blocked
+entry: [triage]
+nodes: ...
+` + "```" + `
+
+**` + bt + `filter` + bt + `** is a raw CEL bool (no ` + bt + `{{ }}` + bt + `) and **` + bt + `inputs` + bt + `** values are ` + bt + `{{ }}` + bt + ` templates. Both read ONLY
+` + bt + `trigger` + bt + ` — the run, its inputs and nodes do not exist yet. A schedule has no event, so no filter.
+An event whose payload a filter or input cannot read is recorded as a FAILED firing: guard optional
+fields with ` + bt + `has()` + bt + ` or a ternary. Each ` + bt + `inputs` + bt + ` key must be a declared workflow input; a value set there wins
+over the activation's params (activation refuses a param it would override).
+
+What ` + bt + `trigger.payload` + bt + ` holds, by source:
+
+| Source | trigger.payload |
+|--------|-----------------|
+| schedule | ` + bt + `scheduled_for` + bt + `, ` + bt + `fired_at` + bt + `, ` + bt + `trigger_name` + bt + `, ` + bt + `manual` + bt + ` (also ` + bt + `trigger.scheduled_for` + bt + `) |
+| webhook | ` + bt + `body` + bt + ` (parsed JSON or text), ` + bt + `headers` + bt + `, ` + bt + `query` + bt + `, ` + bt + `content_type` + bt + ` |
+| integration | ` + bt + `integration` + bt + `, ` + bt + `event` + bt + `, ` + bt + `account` + bt + `, ` + bt + `delivery_id` + bt + `, ` + bt + `attributes` + bt + `, ` + bt + `data` + bt + ` (the provider's payload) |
+| workflow_event | ` + bt + `run_id` + bt + `, ` + bt + `chat_id` + bt + `, ` + bt + `workflow_name` + bt + `, ` + bt + `outcome` + bt + `, ` + bt + `summary` + bt + `, ` + bt + `error` + bt + ` |
+
+The payload is untrusted data from outside. Read it in templates; never paste it into a system prompt.
+
+**The loop for an integration trigger:** ` + bt + `search_integrations(kind: trigger)` + bt + ` → ` + bt + `get_integration_schema` + bt + `
+(its events, the ` + bt + `match` + bt + ` attributes, the payload schema, and a ready ` + bt + `triggers:` + bt + ` block) → write it with
+` + bt + `edit_workflow` + bt + ` (validation reports bad cron, filters, inputs, events and match keys like any other error) →
+` + bt + `activate_trigger` + bt + ` → ` + bt + `list_triggers` + bt + ` to confirm it is HEALTHY or UNKNOWN (not fired yet).
+
+**Editing the YAML changes every activation.** An activation reads its declaration from the workflow
+each time it fires, so a new cron, filter or input mapping applies on the next event. Renaming or
+removing a declaration, or changing its source kind or integration, leaves its activations BROKEN:
+they fire nothing, report why in ` + bt + `list_triggers` + bt + `, and recover when the declaration is restored (or are
+activated again). Runs a trigger starts are unattended — nobody answers questions or approvals.`
+}
+
 func generateGotchas() string {
 	return `## Important rules
 
@@ -348,6 +411,8 @@ the discovery/reference tools (` + "`list_workflows`" + `, ` + "`list_presets`" 
 | ` + "`get_cel_reference`" + ` | Authoritative CEL reference (namespaces, functions, types) |
 | ` + "`search_integrations`" + ` | Find an integration action ref (GitHub, Slack, HTTP, ...) for a ` + "`type: action`" + ` node's ` + "`uses:`" + ` |
 | ` + "`get_integration_schema`" + ` | Read one integration action's params (` + "`with:`" + `) and output (` + "`nodes.<id>.data`" + `) schemas |
+| ` + "`activate_trigger`" + ` | Activate a trigger the workflow declares, for the user (project, daemon, connection); returns its id, and a webhook's URL and one-time token |
+| ` + "`list_triggers`" + ` | List the user's triggers (optionally one workflow's) with health; BROKEN means the declaration it activates is gone or changed |
 | ` + "`list_workflows`" + ` | Browse existing workflows for examples and patterns |
 | ` + "`list_presets`" + ` | Discover available agent presets |
 | ` + "`get_preset`" + ` | View a preset's full configuration |

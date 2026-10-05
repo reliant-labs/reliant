@@ -67,9 +67,9 @@ const createTrigger = `-- name: CreateTrigger :exec
 INSERT INTO triggers (
     id, user_id, project_id, worktree_id, name, kind, enabled,
     workflow, presets, params, message, config, created_at, updated_at,
-    daemon_id, notify_on_complete, filter, connection_id
+    daemon_id, notify_on_complete, filter, connection_id, workflow_trigger
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19
 )
 `
 
@@ -92,6 +92,7 @@ type CreateTriggerParams struct {
 	NotifyOnComplete bool            `json:"notify_on_complete"`
 	Filter           string          `json:"filter"`
 	ConnectionID     sql.NullString  `json:"connection_id"`
+	WorkflowTrigger  sql.NullString  `json:"workflow_trigger"`
 }
 
 func (q *Queries) CreateTrigger(ctx context.Context, arg CreateTriggerParams) error {
@@ -114,6 +115,7 @@ func (q *Queries) CreateTrigger(ctx context.Context, arg CreateTriggerParams) er
 		arg.NotifyOnComplete,
 		arg.Filter,
 		arg.ConnectionID,
+		arg.WorkflowTrigger,
 	)
 	return err
 }
@@ -222,7 +224,7 @@ func (q *Queries) GetLatestTriggerEvent(ctx context.Context, arg GetLatestTrigge
 
 const getTrigger = `-- name: GetTrigger :one
 SELECT
-    t.id, t.user_id, t.project_id, t.worktree_id, t.name, t.kind, t.enabled, t.workflow, t.presets, t.params, t.message, t.config, t.created_at, t.updated_at, t.daemon_id, t.notify_on_complete, t.filter, t.connection_id, t.webhook_token_hash, t.webhook_secret_sealed,
+    t.id, t.user_id, t.project_id, t.worktree_id, t.name, t.kind, t.enabled, t.workflow, t.presets, t.params, t.message, t.config, t.created_at, t.updated_at, t.daemon_id, t.notify_on_complete, t.filter, t.connection_id, t.webhook_token_hash, t.webhook_secret_sealed, t.workflow_trigger,
     COALESCE(p.name, '')::text AS project_name,
     COALESCE(d.hostname, '')::text AS daemon_name
 FROM triggers t
@@ -264,6 +266,7 @@ func (q *Queries) GetTrigger(ctx context.Context, id string) (GetTriggerRow, err
 		&i.Trigger.ConnectionID,
 		&i.Trigger.WebhookTokenHash,
 		&i.Trigger.WebhookSecretSealed,
+		&i.Trigger.WorkflowTrigger,
 		&i.ProjectName,
 		&i.DaemonName,
 	)
@@ -398,7 +401,7 @@ func (q *Queries) GetTriggerWebhookCredentials(ctx context.Context, id string) (
 }
 
 const listAllTriggers = `-- name: ListAllTriggers :many
-SELECT id, user_id, project_id, worktree_id, name, kind, enabled, workflow, presets, params, message, config, created_at, updated_at, daemon_id, notify_on_complete, filter, connection_id, webhook_token_hash, webhook_secret_sealed FROM triggers ORDER BY created_at DESC, id
+SELECT id, user_id, project_id, worktree_id, name, kind, enabled, workflow, presets, params, message, config, created_at, updated_at, daemon_id, notify_on_complete, filter, connection_id, webhook_token_hash, webhook_secret_sealed, workflow_trigger FROM triggers ORDER BY created_at DESC, id
 `
 
 // Every user's triggers. Only the schedule syncer's reconciliation calls this.
@@ -432,6 +435,57 @@ func (q *Queries) ListAllTriggers(ctx context.Context) ([]Trigger, error) {
 			&i.ConnectionID,
 			&i.WebhookTokenHash,
 			&i.WebhookSecretSealed,
+			&i.WorkflowTrigger,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAllWorkflowTriggerActivations = `-- name: ListAllWorkflowTriggerActivations :many
+SELECT id, user_id, project_id, worktree_id, name, kind, enabled, workflow, presets, params, message, config, created_at, updated_at, daemon_id, notify_on_complete, filter, connection_id, webhook_token_hash, webhook_secret_sealed, workflow_trigger FROM triggers WHERE workflow_trigger IS NOT NULL ORDER BY id
+`
+
+// Every activation of a declared trigger, for the periodic reconcile.
+func (q *Queries) ListAllWorkflowTriggerActivations(ctx context.Context) ([]Trigger, error) {
+	rows, err := q.db.QueryContext(ctx, listAllWorkflowTriggerActivations)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Trigger{}
+	for rows.Next() {
+		var i Trigger
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.ProjectID,
+			&i.WorktreeID,
+			&i.Name,
+			&i.Kind,
+			&i.Enabled,
+			&i.Workflow,
+			&i.Presets,
+			&i.Params,
+			&i.Message,
+			&i.Config,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DaemonID,
+			&i.NotifyOnComplete,
+			&i.Filter,
+			&i.ConnectionID,
+			&i.WebhookTokenHash,
+			&i.WebhookSecretSealed,
+			&i.WorkflowTrigger,
 		); err != nil {
 			return nil, err
 		}
@@ -544,7 +598,7 @@ func (q *Queries) ListFiringsSinceLastSuccess(ctx context.Context, arg ListFirin
 
 const listIntegrationTriggers = `-- name: ListIntegrationTriggers :many
 SELECT
-    t.id, t.user_id, t.project_id, t.worktree_id, t.name, t.kind, t.enabled, t.workflow, t.presets, t.params, t.message, t.config, t.created_at, t.updated_at, t.daemon_id, t.notify_on_complete, t.filter, t.connection_id, t.webhook_token_hash, t.webhook_secret_sealed,
+    t.id, t.user_id, t.project_id, t.worktree_id, t.name, t.kind, t.enabled, t.workflow, t.presets, t.params, t.message, t.config, t.created_at, t.updated_at, t.daemon_id, t.notify_on_complete, t.filter, t.connection_id, t.webhook_token_hash, t.webhook_secret_sealed, t.workflow_trigger,
     c.external_account_id AS connection_account,
     c.status AS connection_status
 FROM triggers t
@@ -600,6 +654,7 @@ func (q *Queries) ListIntegrationTriggers(ctx context.Context, integration strin
 			&i.Trigger.ConnectionID,
 			&i.Trigger.WebhookTokenHash,
 			&i.Trigger.WebhookSecretSealed,
+			&i.Trigger.WorkflowTrigger,
 			&i.ConnectionAccount,
 			&i.ConnectionStatus,
 		); err != nil {
@@ -844,7 +899,7 @@ func (q *Queries) ListTriggerEvents(ctx context.Context, arg ListTriggerEventsPa
 
 const listTriggers = `-- name: ListTriggers :many
 SELECT
-    t.id, t.user_id, t.project_id, t.worktree_id, t.name, t.kind, t.enabled, t.workflow, t.presets, t.params, t.message, t.config, t.created_at, t.updated_at, t.daemon_id, t.notify_on_complete, t.filter, t.connection_id, t.webhook_token_hash, t.webhook_secret_sealed,
+    t.id, t.user_id, t.project_id, t.worktree_id, t.name, t.kind, t.enabled, t.workflow, t.presets, t.params, t.message, t.config, t.created_at, t.updated_at, t.daemon_id, t.notify_on_complete, t.filter, t.connection_id, t.webhook_token_hash, t.webhook_secret_sealed, t.workflow_trigger,
     COALESCE(p.name, '')::text AS project_name,
     COALESCE(d.hostname, '')::text AS daemon_name
 FROM triggers t
@@ -899,8 +954,68 @@ func (q *Queries) ListTriggers(ctx context.Context, arg ListTriggersParams) ([]L
 			&i.Trigger.ConnectionID,
 			&i.Trigger.WebhookTokenHash,
 			&i.Trigger.WebhookSecretSealed,
+			&i.Trigger.WorkflowTrigger,
 			&i.ProjectName,
 			&i.DaemonName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listWorkflowTriggerActivations = `-- name: ListWorkflowTriggerActivations :many
+SELECT id, user_id, project_id, worktree_id, name, kind, enabled, workflow, presets, params, message, config, created_at, updated_at, daemon_id, notify_on_complete, filter, connection_id, webhook_token_hash, webhook_secret_sealed, workflow_trigger FROM triggers
+WHERE user_id = $1 AND workflow = $2 AND workflow_trigger IS NOT NULL
+ORDER BY created_at, id
+`
+
+type ListWorkflowTriggerActivationsParams struct {
+	UserID   string `json:"user_id"`
+	Workflow string `json:"workflow"`
+}
+
+// One user's activations of a workflow's declared triggers. The workflow is
+// matched as stored on the row (the slug or builtin:// ref the activation
+// named).
+func (q *Queries) ListWorkflowTriggerActivations(ctx context.Context, arg ListWorkflowTriggerActivationsParams) ([]Trigger, error) {
+	rows, err := q.db.QueryContext(ctx, listWorkflowTriggerActivations, arg.UserID, arg.Workflow)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Trigger{}
+	for rows.Next() {
+		var i Trigger
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.ProjectID,
+			&i.WorktreeID,
+			&i.Name,
+			&i.Kind,
+			&i.Enabled,
+			&i.Workflow,
+			&i.Presets,
+			&i.Params,
+			&i.Message,
+			&i.Config,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DaemonID,
+			&i.NotifyOnComplete,
+			&i.Filter,
+			&i.ConnectionID,
+			&i.WebhookTokenHash,
+			&i.WebhookSecretSealed,
+			&i.WorkflowTrigger,
 		); err != nil {
 			return nil, err
 		}
@@ -939,6 +1054,32 @@ type SetTriggerEnabledParams struct {
 
 func (q *Queries) SetTriggerEnabled(ctx context.Context, arg SetTriggerEnabledParams) (int64, error) {
 	result, err := q.db.ExecContext(ctx, setTriggerEnabled, arg.Enabled, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const setTriggerProjection = `-- name: SetTriggerProjection :execrows
+UPDATE triggers SET
+    config = $1,
+    filter = $2,
+    updated_at = NOW()
+WHERE id = $3 AND workflow_trigger IS NOT NULL
+`
+
+type SetTriggerProjectionParams struct {
+	Config json.RawMessage `json:"config"`
+	Filter string          `json:"filter"`
+	ID     string          `json:"id"`
+}
+
+// Refreshes an activation's projection of its workflow's declaration: the
+// config and filter routing and the schedule syncer read. The kind is not
+// here: an activation whose declaration changed kind is broken (its
+// connection or webhook token belongs to the old kind), never re-projected.
+func (q *Queries) SetTriggerProjection(ctx context.Context, arg SetTriggerProjectionParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, setTriggerProjection, arg.Config, arg.Filter, arg.ID)
 	if err != nil {
 		return 0, err
 	}
@@ -1018,8 +1159,9 @@ UPDATE triggers SET
     daemon_id = $11,
     notify_on_complete = $12,
     filter = $13,
-    connection_id = $14
-WHERE id = $15
+    connection_id = $14,
+    workflow_trigger = $15
+WHERE id = $16
 `
 
 type UpdateTriggerParams struct {
@@ -1037,6 +1179,7 @@ type UpdateTriggerParams struct {
 	NotifyOnComplete bool            `json:"notify_on_complete"`
 	Filter           string          `json:"filter"`
 	ConnectionID     sql.NullString  `json:"connection_id"`
+	WorkflowTrigger  sql.NullString  `json:"workflow_trigger"`
 	ID               string          `json:"id"`
 }
 
@@ -1059,6 +1202,7 @@ func (q *Queries) UpdateTrigger(ctx context.Context, arg UpdateTriggerParams) (i
 		arg.NotifyOnComplete,
 		arg.Filter,
 		arg.ConnectionID,
+		arg.WorkflowTrigger,
 		arg.ID,
 	)
 	if err != nil {
