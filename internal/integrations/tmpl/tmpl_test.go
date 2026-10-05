@@ -32,6 +32,28 @@ func TestSingleExprKeepsNativeType(t *testing.T) {
 	}
 }
 
+// A PATCH body must leave out fields the caller did not pass: sending
+// `"body": null` to GitHub's issue update clears the body. CEL's optional
+// syntax (`?"key": params.?key`) expresses "only if present".
+func TestOptionalSyntaxOmitsAbsentKeys(t *testing.T) {
+	expr := `{"title": params.title, ?"body": params.?body, ?"labels": params.?labels}`
+	if err := ValidateExpr(expr); err != nil {
+		t.Fatalf("optional syntax must compile: %v", err)
+	}
+	got, err := EvalExpr(expr, map[string]any{"params": map[string]any{"title": "t", "labels": []any{"x"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]any{"title": "t", "labels": []any{"x"}}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("got %#v want %#v", got, want)
+	}
+	got, err = EvalExpr(`response.?user.?login.orValue(null)`, map[string]any{"response": map[string]any{"user": nil}})
+	if err != nil || got != nil {
+		t.Fatalf("a null object on the path must yield null, got %#v, %v", got, err)
+	}
+}
+
 func TestMixedExprStringifies(t *testing.T) {
 	got, err := Render("n={{ params.n }}", map[string]any{"params": map[string]any{"n": 3.0}}, Options{})
 	if err != nil || got != "n=3" {

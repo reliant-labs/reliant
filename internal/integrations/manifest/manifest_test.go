@@ -53,6 +53,20 @@ func TestUnknownFieldFailsToLoad(t *testing.T) {
 	}
 }
 
+// An error rule's `when` is CEL, checked at load like every other expression.
+func TestErrorRuleWhenIsValidatedAtLoad(t *testing.T) {
+	rule := func(when string) string {
+		return strings.Replace(validHTTP, "path: /things/{{ params.id }}",
+			"path: /things/{{ params.id }}\n      errors:\n        - { status: 403, retryable: true, when: \""+when+"\" }", 1)
+	}
+	if _, err := Parse([]byte(rule("headers[?'retry-after'].hasValue()")), TrustCurated); err != nil {
+		t.Fatalf("a valid when must load: %v", err)
+	}
+	if _, err := Parse([]byte(rule("headers[")), TrustCurated); err == nil || !strings.Contains(err.Error(), "when") {
+		t.Fatalf("a when that does not compile must fail to load, got %v", err)
+	}
+}
+
 func TestDuplicateYAMLKeyFails(t *testing.T) {
 	doc := strings.Replace(validHTTP, "version: 1", "version: 1\nversion: 2", 1)
 	if _, err := Parse([]byte(doc), TrustCurated); err == nil {

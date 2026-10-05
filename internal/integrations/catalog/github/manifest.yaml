@@ -1,5 +1,6 @@
 # GitHub. Authored from GitHub's REST and OAuth documentation
-# (docs.github.com/en/rest, docs.github.com/en/apps/oauth-apps).
+# (docs.github.com/en/rest, API version 2022-11-28, and
+# docs.github.com/en/apps/oauth-apps).
 #
 # Auth methods, most preferred first:
 #   1. delegated: hosted deployments. control-plane owns the one GitHub App and
@@ -11,9 +12,26 @@
 #      permissions live on the App, so no scope is requested.
 #   3. api_key: a fine-grained personal access token, sent as a bearer token.
 #
-# The action set here is deliberately minimal (the identity call the
-# connection is tested with); the GitHub provider work adds issues, PRs and
-# webhook triggers on top of this auth declaration.
+# Access is the App's permissions intersected with what the user can see, and
+# only on repositories the App is installed on: GitHub answers a repository the
+# App cannot reach with 404, not 403, so the 404 message says so.
+#
+# Every action shares one error vocabulary (the `errors` list is repeated per
+# action because a manifest has no shared rule set):
+#   401          bad or revoked token: reconnect.
+#   403/429 + rate-limit signal: retryable. GitHub signals a primary limit with
+#                `x-ratelimit-remaining: 0` (retry after x-ratelimit-reset) and
+#                a secondary limit with `retry-after` or a "rate limit" message.
+#   403 otherwise: permission (the App lacks it, or the user's role does);
+#                not retryable.
+#   404          not found, or not visible to this connection.
+#   410          the repository has the feature (issues) disabled.
+#   422          validation; the message lists GitHub's `errors[]`.
+#   5xx          retryable (the runner's default).
+#
+# Path params (owner, repo, workflow) carry a `pattern` so a value can never
+# be a dot segment or contain a slash: interpolated path values are
+# percent-escaped, but "." and ".." survive escaping.
 id: github
 version: 1
 display_name: GitHub
@@ -72,16 +90,690 @@ actions:
     request:
       method: GET
       path: /user
+      errors: &github_errors
+        - status: 401
+          retryable: false
+          message: "GitHub rejected the credential ({{ response.?message.orValue('bad credentials') }}): reconnect GitHub in Settings."
+        - status: 403
+          when: >-
+            headers[?'x-ratelimit-remaining'].orValue('') == '0' ||
+            headers[?'retry-after'].hasValue() ||
+            (type(response) == map && type(response.?message.orValue(null)) == string &&
+             response.message.matches('(?i)rate limit'))
+          retryable: true
+          message: &github_rate_limited >-
+            GitHub rate limit exceeded ({{ response.?message.orValue('rate limited') }}).
+            {{ headers[?'retry-after'].hasValue() ? 'Retry after ' + headers['retry-after'] + ' seconds.' :
+               headers[?'x-ratelimit-remaining'].orValue('') == '0' && headers[?'x-ratelimit-reset'].hasValue() ?
+               'Retry after ' + string(timestamp(int(headers['x-ratelimit-reset']))) + '.' :
+               'Retry after at least 60 seconds.' }}
+        - status: 429
+          retryable: true
+          message: *github_rate_limited
+        - status: 403
+          retryable: false
+          message: >-
+            GitHub refused the request: {{ response.?message.orValue('forbidden') }}.
+            The connection lacks permission for this action (the GitHub App's
+            permissions, its installation, or your role on the repository).
+        - status: 404
+          retryable: false
+          message: >-
+            GitHub returned not found: the resource does not exist, or this
+            connection cannot see it (is the Reliant GitHub App installed on the
+            repository?).
+        - status: 410
+          retryable: false
+          message: "GitHub returned gone: {{ response.?message.orValue('this feature is disabled for the repository') }}."
+        - status: 422
+          retryable: false
+          message: >-
+            GitHub validation failed: {{ response.?message.orValue('Validation Failed') }}.
+            Errors: {{ type(response) == map && type(response.?errors.orValue(null)) == list ?
+              response.errors.map(e, type(e) == string ? e :
+                (type(e.?field.orValue(null)) == string ? e.field + ': ' : '') +
+                (type(e.?message.orValue(null)) == string ? e.message :
+                 type(e.?code.orValue(null)) == string ? e.code : 'invalid')) : [] }}
     output:
       select: >-
         {"login": response.login,
-         "id": has(response.id) ? response.id : null,
-         "name": has(response.name) ? response.name : null,
-         "html_url": has(response.html_url) ? response.html_url : null}
+         "id": response.?id.orValue(null),
+         "name": response.?name.orValue(null),
+         "html_url": response.?html_url.orValue(null)}
       schema:
         type: object
         properties:
           login: { type: string }
           id: { type: integer }
-          name: { type: string }
+          name: { type: [string, "null"] }
+          html_url: { type: [string, "null"] }
+
+  # ---------------------------------------------------------------- issues
+
+  - id: issue.create
+    display_name: Create issue
+    summary: Open a new issue in a repository.
+    description: >-
+      Open an issue in owner/repo with a title and optional markdown body,
+      labels and assignees. Labels that do not exist are created; an assignee
+      without access to the repository fails validation. Returns the issue
+      number and URL.
+    keywords: [issue, open, file, bug, ticket, report]
+    placement: server
+    mutates: true
+    tool:
+      expose: true
+    params:
+      type: object
+      additionalProperties: false
+      required: [owner, repo, title]
+      properties:
+        owner: &owner
+          type: string
+          pattern: "^[A-Za-z0-9][A-Za-z0-9-]{0,38}$"
+          description: The account (user or organization) that owns the repository.
+        repo: &repo
+          type: string
+          # Letters, digits, ., -, _ with at least one that is not a dot.
+          pattern: "^[A-Za-z0-9._-]*[A-Za-z0-9_-][A-Za-z0-9._-]*$"
+          maxLength: 100
+          description: The repository name, without the owner or .git.
+        title:
+          type: string
+          minLength: 1
+          description: The issue title.
+        body:
+          type: string
+          description: The issue body, in GitHub-flavored markdown.
+        labels:
+          type: array
+          items: { type: string }
+          description: Label names to apply.
+        assignees:
+          type: array
+          items: { type: string }
+          description: Logins to assign.
+        connection: &connection
+          type: string
+          description: >-
+            Id of a saved GitHub connection to use. Omit to use your default
+            GitHub connection.
+    request:
+      method: POST
+      path: /repos/{{ params.owner }}/{{ params.repo }}/issues
+      body_expr: >-
+        {"title": params.title,
+         ?"body": params.?body,
+         ?"labels": params.?labels,
+         ?"assignees": params.?assignees}
+      errors: *github_errors
+    output:
+      select: >-
+        {"number": response.number,
+         "id": response.id,
+         "title": response.title,
+         "state": response.state,
+         "html_url": response.html_url}
+      schema:
+        type: object
+        properties:
+          number: { type: integer, description: The issue number within the repository. }
+          id: { type: integer }
+          title: { type: string }
+          state: { type: string }
           html_url: { type: string }
+
+  - id: issue.get
+    display_name: Get issue
+    summary: Read an issue (or a pull request's conversation) by number.
+    description: >-
+      Return one issue: title, body, state, author, labels, assignees and
+      timestamps. Pull requests are issues too; is_pull_request says which.
+    keywords: [issue, read, fetch, details, ticket]
+    placement: server
+    mutates: false
+    tool:
+      expose: true
+    params:
+      type: object
+      additionalProperties: false
+      required: [owner, repo, issue_number]
+      properties:
+        owner: *owner
+        repo: *repo
+        issue_number: &issue_number
+          type: integer
+          minimum: 1
+          description: The issue (or pull request) number.
+        connection: *connection
+    request:
+      method: GET
+      path: /repos/{{ params.owner }}/{{ params.repo }}/issues/{{ params.issue_number }}
+      errors: *github_errors
+    output:
+      select: >-
+        {"number": response.number,
+         "id": response.id,
+         "title": response.title,
+         "body": response.?body.orValue(null),
+         "state": response.state,
+         "state_reason": response.?state_reason.orValue(null),
+         "locked": response.?locked.orValue(false),
+         "comments": response.?comments.orValue(0),
+         "html_url": response.html_url,
+         "user": response.?user.?login.orValue(null),
+         "labels": type(response.?labels.orValue(null)) == list ?
+           response.labels.map(l, type(l) == string ? l : l.name) : [],
+         "assignees": type(response.?assignees.orValue(null)) == list ?
+           response.assignees.map(a, a.login) : [],
+         "is_pull_request": response.?pull_request.orValue(null) != null,
+         "created_at": response.?created_at.orValue(null),
+         "updated_at": response.?updated_at.orValue(null),
+         "closed_at": response.?closed_at.orValue(null)}
+      schema:
+        type: object
+        properties:
+          number: { type: integer }
+          id: { type: integer }
+          title: { type: string }
+          body: { type: [string, "null"] }
+          state: { type: string, enum: [open, closed] }
+          state_reason: { type: [string, "null"] }
+          locked: { type: boolean }
+          comments: { type: integer }
+          html_url: { type: string }
+          user: { type: [string, "null"], description: The author's login (null for a deleted account). }
+          labels: { type: array, items: { type: string } }
+          assignees: { type: array, items: { type: string } }
+          is_pull_request: { type: boolean }
+          created_at: { type: [string, "null"] }
+          updated_at: { type: [string, "null"] }
+          closed_at: { type: [string, "null"] }
+
+  - id: issue.comment
+    display_name: Comment on issue or pull request
+    summary: Add a comment to an issue or a pull request's conversation.
+    description: >-
+      Post a markdown comment on an issue, or on a pull request's conversation
+      tab (pull requests share the issue comments API; pass the PR number as
+      issue_number). For a review with a verdict, use pr.review.create.
+    keywords: [comment, reply, issue, pull request, pr, discussion]
+    placement: server
+    mutates: true
+    tool:
+      expose: true
+    params:
+      type: object
+      additionalProperties: false
+      required: [owner, repo, issue_number, body]
+      properties:
+        owner: *owner
+        repo: *repo
+        issue_number: *issue_number
+        body:
+          type: string
+          minLength: 1
+          description: The comment, in GitHub-flavored markdown.
+        connection: *connection
+    request:
+      method: POST
+      path: /repos/{{ params.owner }}/{{ params.repo }}/issues/{{ params.issue_number }}/comments
+      body_expr: '{"body": params.body}'
+      errors: *github_errors
+    output:
+      select: >-
+        {"id": response.id,
+         "html_url": response.html_url,
+         "created_at": response.?created_at.orValue(null)}
+      schema:
+        type: object
+        properties:
+          id: { type: integer }
+          html_url: { type: string }
+          created_at: { type: [string, "null"] }
+
+  - id: issue.update
+    display_name: Update issue
+    summary: Change an issue's state, labels, assignees, title or body.
+    description: >-
+      Edit an issue (or a pull request's issue fields). Only the fields you
+      pass change; pass at least one. labels and assignees REPLACE the current
+      set; pass an empty list to clear them. Close with state closed and an
+      optional state_reason.
+    keywords: [issue, edit, close, reopen, label, assign, triage]
+    placement: server
+    mutates: true
+    tool:
+      expose: true
+    # The params stay a plain object schema (no anyOf / if-then): it is also
+    # the agent tool's input schema, and model providers reject or rewrite
+    # top-level combinators. An update naming no field sends `{}`, which
+    # GitHub answers with the unchanged issue.
+    params:
+      type: object
+      additionalProperties: false
+      required: [owner, repo, issue_number]
+      properties:
+        owner: *owner
+        repo: *repo
+        issue_number: *issue_number
+        title:
+          type: string
+          minLength: 1
+          description: The new title.
+        body:
+          type: string
+          description: The new body, in GitHub-flavored markdown.
+        state:
+          type: string
+          enum: [open, closed]
+          description: Open or close the issue.
+        state_reason:
+          type: string
+          enum: [completed, not_planned, reopened]
+          description: Why the state changed; sent only with state.
+        labels:
+          type: array
+          items: { type: string }
+          description: The complete new set of label names (replaces the current set).
+        assignees:
+          type: array
+          items: { type: string }
+          description: The complete new set of assignee logins (replaces the current set).
+        connection: *connection
+    request:
+      method: PATCH
+      path: /repos/{{ params.owner }}/{{ params.repo }}/issues/{{ params.issue_number }}
+      # Absent params are left out, not sent as null: a null body clears it.
+      body_expr: >-
+        {?"title": params.?title,
+         ?"body": params.?body,
+         ?"state": params.?state,
+         ?"state_reason": params.?state.hasValue() ? params.?state_reason : optional.none(),
+         ?"labels": params.?labels,
+         ?"assignees": params.?assignees}
+      errors: *github_errors
+    output:
+      select: >-
+        {"number": response.number,
+         "id": response.id,
+         "title": response.title,
+         "state": response.state,
+         "state_reason": response.?state_reason.orValue(null),
+         "html_url": response.html_url,
+         "labels": type(response.?labels.orValue(null)) == list ?
+           response.labels.map(l, type(l) == string ? l : l.name) : [],
+         "assignees": type(response.?assignees.orValue(null)) == list ?
+           response.assignees.map(a, a.login) : []}
+      schema:
+        type: object
+        properties:
+          number: { type: integer }
+          id: { type: integer }
+          title: { type: string }
+          state: { type: string, enum: [open, closed] }
+          state_reason: { type: [string, "null"] }
+          html_url: { type: string }
+          labels: { type: array, items: { type: string } }
+          assignees: { type: array, items: { type: string } }
+
+  # ---------------------------------------------------------- pull requests
+
+  - id: pr.get
+    display_name: Get pull request
+    summary: Read a pull request, including its head and base refs and mergeability.
+    description: >-
+      Return one pull request: title, body, state, draft and merged flags, the
+      head and base refs (branch, sha, repository) and mergeability. mergeable
+      is null while GitHub is still computing it; read again shortly.
+      mergeable_state is GitHub's summary (clean, dirty, blocked, behind,
+      unstable, unknown, ...).
+    keywords: [pull request, pr, read, details, branch, mergeable, review]
+    placement: server
+    mutates: false
+    tool:
+      expose: true
+    params:
+      type: object
+      additionalProperties: false
+      required: [owner, repo, pull_number]
+      properties:
+        owner: *owner
+        repo: *repo
+        pull_number: &pull_number
+          type: integer
+          minimum: 1
+          description: The pull request number.
+        connection: *connection
+    request:
+      method: GET
+      path: /repos/{{ params.owner }}/{{ params.repo }}/pulls/{{ params.pull_number }}
+      errors: *github_errors
+    output:
+      select: >-
+        {"number": response.number,
+         "id": response.id,
+         "title": response.title,
+         "body": response.?body.orValue(null),
+         "state": response.state,
+         "draft": response.?draft.orValue(null),
+         "merged": response.?merged.orValue(false),
+         "mergeable": response.?mergeable.orValue(null),
+         "mergeable_state": response.?mergeable_state.orValue(null),
+         "rebaseable": response.?rebaseable.orValue(null),
+         "html_url": response.html_url,
+         "user": response.?user.?login.orValue(null),
+         "head": {"ref": response.head.ref, "sha": response.head.sha,
+                  "label": response.head.?label.orValue(null),
+                  "repo": response.head.?repo.?full_name.orValue(null)},
+         "base": {"ref": response.base.ref, "sha": response.base.sha,
+                  "label": response.base.?label.orValue(null),
+                  "repo": response.base.?repo.?full_name.orValue(null)},
+         "merge_commit_sha": response.?merge_commit_sha.orValue(null),
+         "commits": response.?commits.orValue(null),
+         "additions": response.?additions.orValue(null),
+         "deletions": response.?deletions.orValue(null),
+         "changed_files": response.?changed_files.orValue(null),
+         "created_at": response.?created_at.orValue(null),
+         "updated_at": response.?updated_at.orValue(null),
+         "closed_at": response.?closed_at.orValue(null),
+         "merged_at": response.?merged_at.orValue(null)}
+      schema:
+        type: object
+        properties:
+          number: { type: integer }
+          id: { type: integer }
+          title: { type: string }
+          body: { type: [string, "null"] }
+          state: { type: string, enum: [open, closed] }
+          draft: { type: [boolean, "null"] }
+          merged: { type: boolean }
+          mergeable: { type: [boolean, "null"], description: Null while GitHub computes it. }
+          mergeable_state: { type: [string, "null"] }
+          rebaseable: { type: [boolean, "null"] }
+          html_url: { type: string }
+          user: { type: [string, "null"] }
+          head: &pr_ref
+            type: object
+            properties:
+              ref: { type: string, description: The branch name. }
+              sha: { type: string }
+              label: { type: [string, "null"], description: "owner:branch" }
+              repo: { type: [string, "null"], description: The repository's full_name (null if a fork was deleted). }
+          base: *pr_ref
+          merge_commit_sha: { type: [string, "null"] }
+          commits: { type: [integer, "null"] }
+          additions: { type: [integer, "null"] }
+          deletions: { type: [integer, "null"] }
+          changed_files: { type: [integer, "null"] }
+          created_at: { type: [string, "null"] }
+          updated_at: { type: [string, "null"] }
+          closed_at: { type: [string, "null"] }
+          merged_at: { type: [string, "null"] }
+
+  - id: pr.list_files
+    display_name: List pull request files
+    summary: The files a pull request changes, with per-file diffs, for review.
+    description: >-
+      List the files a pull request changes: filename, status (added,
+      modified, removed, renamed, ...), line counts and the unified diff hunk
+      (patch). patch is null for binary files and very large diffs. Follows
+      GitHub's pagination up to 1000 files; GitHub itself caps the list at
+      3000.
+    keywords: [pull request, pr, diff, files, changes, patch, review]
+    placement: server
+    mutates: false
+    tool:
+      expose: true
+    params:
+      type: object
+      additionalProperties: false
+      required: [owner, repo, pull_number]
+      properties:
+        owner: *owner
+        repo: *repo
+        pull_number: *pull_number
+        connection: *connection
+    request:
+      method: GET
+      path: /repos/{{ params.owner }}/{{ params.repo }}/pulls/{{ params.pull_number }}/files
+      query: { per_page: "100" }
+      pagination: { style: link_header, max_pages: 10 }
+      max_response_bytes: 5242880
+      errors: *github_errors
+    output:
+      select: >-
+        response.map(f, {"filename": f.filename,
+                         "status": f.status,
+                         "additions": f.additions,
+                         "deletions": f.deletions,
+                         "changes": f.changes,
+                         "patch": f.?patch.orValue(null),
+                         "previous_filename": f.?previous_filename.orValue(null),
+                         "sha": f.?sha.orValue(null)})
+      schema:
+        type: object
+        properties:
+          items:
+            type: array
+            items:
+              type: object
+              properties:
+                filename: { type: string }
+                status: { type: string, enum: [added, removed, modified, renamed, copied, changed, unchanged] }
+                additions: { type: integer }
+                deletions: { type: integer }
+                changes: { type: integer }
+                patch: { type: [string, "null"], description: The unified diff hunk; null for binary or oversized files. }
+                previous_filename: { type: [string, "null"], description: Set when status is renamed. }
+                sha: { type: [string, "null"] }
+
+  - id: pr.review.create
+    display_name: Review pull request
+    summary: Submit a pull request review that comments, approves or requests changes.
+    description: >-
+      Submit a review on a pull request with a verdict: COMMENT (the default),
+      APPROVE, or REQUEST_CHANGES. body is required for COMMENT and
+      REQUEST_CHANGES. The review is submitted immediately, never left
+      pending. Pass commit_id to pin the review to the commit you read
+      (pr.get head.sha); otherwise GitHub uses the latest commit.
+    keywords: [pull request, pr, review, approve, request changes, code review]
+    placement: server
+    mutates: true
+    tool:
+      expose: true
+    params:
+      type: object
+      additionalProperties: false
+      # event is not required: its default (COMMENT) fills it in.
+      required: [owner, repo, pull_number]
+      properties:
+        owner: *owner
+        repo: *repo
+        pull_number: *pull_number
+        event:
+          type: string
+          enum: [COMMENT, APPROVE, REQUEST_CHANGES]
+          default: COMMENT
+          description: The review verdict.
+        body:
+          type: string
+          minLength: 1
+          description: The review summary, in GitHub-flavored markdown. Required unless event is APPROVE.
+        commit_id:
+          type: string
+          pattern: "^[0-9a-f]{7,64}$"
+          description: The commit SHA being reviewed. Defaults to the pull request's latest commit.
+        connection: *connection
+    # "body is required for COMMENT and REQUEST_CHANGES" is GitHub's rule, and
+    # its 422 names the field; an if/then here would not survive as a tool
+    # input schema.
+    request:
+      method: POST
+      path: /repos/{{ params.owner }}/{{ params.repo }}/pulls/{{ params.pull_number }}/reviews
+      body_expr: >-
+        {"event": params.event,
+         ?"body": params.?body,
+         ?"commit_id": params.?commit_id}
+      errors: *github_errors
+    output:
+      select: >-
+        {"id": response.id,
+         "state": response.state,
+         "html_url": response.html_url,
+         "submitted_at": response.?submitted_at.orValue(null),
+         "commit_id": response.?commit_id.orValue(null)}
+      schema:
+        type: object
+        properties:
+          id: { type: integer }
+          state: { type: string, description: "APPROVED, CHANGES_REQUESTED or COMMENTED." }
+          html_url: { type: string }
+          submitted_at: { type: [string, "null"] }
+          commit_id: { type: [string, "null"] }
+
+  # ------------------------------------------------------------ repositories
+
+  - id: repo.list_for_user
+    display_name: List repositories
+    summary: Repositories the connection can see, for pickers and lookups.
+    description: >-
+      List the repositories the connected user can access (owned,
+      collaborator, and through organization membership), following
+      pagination up to 1000. With the hosted GitHub App, actions still only
+      reach repositories the App is installed on. can_push says whether the
+      user can write.
+    keywords: [repository, repos, list, picker, projects]
+    placement: server
+    mutates: false
+    tool:
+      expose: true
+    params:
+      type: object
+      additionalProperties: false
+      properties:
+        visibility:
+          type: string
+          enum: [all, public, private]
+          description: Only repositories with this visibility.
+        affiliation:
+          type: string
+          pattern: "^(owner|collaborator|organization_member)(,(owner|collaborator|organization_member))*$"
+          description: >-
+            Comma-separated subset of owner, collaborator,
+            organization_member. Defaults to all three.
+        sort:
+          type: string
+          enum: [created, updated, pushed, full_name]
+          description: Sort order key. Defaults to full_name.
+        direction:
+          type: string
+          enum: [asc, desc]
+          description: Defaults to asc for full_name, otherwise desc.
+        connection: *connection
+    request:
+      method: GET
+      path: /user/repos
+      query: { per_page: "100" }
+      query_expr: >-
+        {?"visibility": params.?visibility,
+         ?"affiliation": params.?affiliation,
+         ?"sort": params.?sort,
+         ?"direction": params.?direction}
+      pagination: { style: link_header, max_pages: 10 }
+      max_response_bytes: 5242880
+      errors: *github_errors
+    output:
+      select: >-
+        response.map(r, {"id": r.id,
+                         "full_name": r.full_name,
+                         "name": r.name,
+                         "owner": r.owner.login,
+                         "private": r.private,
+                         "html_url": r.html_url,
+                         "description": r.?description.orValue(null),
+                         "default_branch": r.?default_branch.orValue(null),
+                         "archived": r.?archived.orValue(false),
+                         "fork": r.?fork.orValue(false),
+                         "pushed_at": r.?pushed_at.orValue(null),
+                         "can_push": r.?permissions.?push.orValue(false)})
+      schema:
+        type: object
+        properties:
+          items:
+            type: array
+            items:
+              type: object
+              properties:
+                id: { type: integer }
+                full_name: { type: string, description: "owner/name" }
+                name: { type: string }
+                owner: { type: string }
+                private: { type: boolean }
+                html_url: { type: string }
+                description: { type: [string, "null"] }
+                default_branch: { type: [string, "null"] }
+                archived: { type: boolean }
+                fork: { type: boolean }
+                pushed_at: { type: [string, "null"] }
+                can_push: { type: boolean }
+
+  # ----------------------------------------------------------------- actions
+
+  - id: workflow.dispatch
+    display_name: Run Actions workflow
+    summary: Trigger a GitHub Actions workflow that has a workflow_dispatch trigger.
+    description: >-
+      Start a GitHub Actions workflow run on a branch or tag. The workflow
+      file must declare `on: workflow_dispatch`, and inputs must match its
+      declared inputs (at most 25, all passed as strings). workflow is the
+      workflow file name (deploy.yml) or its numeric id. Returns the run id and
+      URL when GitHub reports them.
+    keywords: [actions, ci, workflow, dispatch, run, deploy, trigger]
+    placement: server
+    mutates: true
+    tool:
+      expose: true
+    params:
+      type: object
+      additionalProperties: false
+      required: [owner, repo, workflow, ref]
+      properties:
+        owner: *owner
+        repo: *repo
+        workflow:
+          type: string
+          pattern: "^[A-Za-z0-9._-]*[A-Za-z0-9_-][A-Za-z0-9._-]*$"
+          maxLength: 255
+          description: The workflow file name (for example deploy.yml) or numeric id.
+        ref:
+          type: string
+          minLength: 1
+          description: The branch or tag to run the workflow on.
+        inputs:
+          type: object
+          maxProperties: 25
+          additionalProperties: { type: string }
+          description: The workflow's declared inputs, as strings.
+        connection: *connection
+    request:
+      method: POST
+      path: /repos/{{ params.owner }}/{{ params.repo }}/actions/workflows/{{ params.workflow }}/dispatches
+      body_expr: >-
+        {"ref": params.ref,
+         ?"inputs": params.?inputs,
+         "return_run_details": true}
+      errors: *github_errors
+    output:
+      select: >-
+        {"dispatched": true,
+         "workflow_run_id": type(response) == map ? response.?workflow_run_id.orValue(null) : null,
+         "run_url": type(response) == map ? response.?run_url.orValue(null) : null,
+         "html_url": type(response) == map ? response.?html_url.orValue(null) : null}
+      schema:
+        type: object
+        properties:
+          dispatched: { type: boolean }
+          workflow_run_id: { type: [integer, "null"] }
+          run_url: { type: [string, "null"] }
+          html_url: { type: [string, "null"] }

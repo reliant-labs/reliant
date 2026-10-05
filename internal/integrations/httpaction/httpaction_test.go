@@ -156,6 +156,76 @@ func TestErrorMapping(t *testing.T) {
 	}
 }
 
+// One status can mean two things. GitHub answers both an exhausted rate limit
+// and a missing permission with 403, and only the first is worth retrying, so
+// a rule's `when` (CEL over status, headers and response) narrows the match.
+func TestErrorRuleWhenDistinguishesOneStatus(t *testing.T) {
+	var limited atomic.Bool
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if limited.Load() {
+			w.Header().Set("X-RateLimit-Remaining", "0")
+		}
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = w.Write([]byte(`{"message": "denied"}`))
+	}))
+	defer srv.Close()
+	m, a := mustParse(t, manifestFor(srv.URL, `    params: { type: object }
+    request:
+      method: GET
+      path: /x
+      errors:
+        - status: 403
+          when: "headers[?'x-ratelimit-remaining'].orValue('') == '0'"
+          retryable: true
+          message: "rate limited"
+        - { status: 403, retryable: false, message: "forbidden: {{ response.message }}" }
+`))
+	run := func() *Result {
+		r := newRunner()
+		r.client.Transport.(*http.Transport).TLSClientConfig = srv.Client().Transport.(*http.Transport).TLSClientConfig
+		res, err := r.Run(context.Background(), m, a, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return res
+	}
+	if res := run(); !res.IsError || res.Retryable || res.Content != "forbidden: denied" {
+		t.Errorf("403 without the header must fall through to the permission rule: %+v", res)
+	}
+	limited.Store(true)
+	if res := run(); !res.IsError || !res.Retryable || res.Content != "rate limited" {
+		t.Errorf("403 with remaining 0 must match the rate-limit rule: %+v", res)
+	}
+}
+
+// A `when` that fails to evaluate (here: string() of a null message on a body
+// that is not the expected shape) does not match, so the next rule still
+// classifies the failure instead of the error path breaking.
+func TestErrorRuleWhenThatErrorsDoesNotMatch(t *testing.T) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = w.Write([]byte(`{"message": null}`))
+	}))
+	defer srv.Close()
+	m, a := mustParse(t, manifestFor(srv.URL, `    params: { type: object }
+    request:
+      method: GET
+      path: /x
+      errors:
+        - { status: 403, when: "string(response.message).contains('rate')", retryable: true, message: "rate limited" }
+        - { status: 403, retryable: false, message: "forbidden" }
+`))
+	r := newRunner()
+	r.client.Transport.(*http.Transport).TLSClientConfig = srv.Client().Transport.(*http.Transport).TLSClientConfig
+	res, err := r.Run(context.Background(), m, a, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.IsError || res.Retryable || res.Content != "forbidden" {
+		t.Errorf("an erroring guard must fall through to the next rule: %+v", res)
+	}
+}
+
 func TestPaginationCursor(t *testing.T) {
 	var calls int32
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
