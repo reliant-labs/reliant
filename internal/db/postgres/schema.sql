@@ -717,6 +717,33 @@ CREATE TABLE public.inbox_dismissals (
 );
 
 --
+-- Name: integration_access_refresh; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.integration_access_refresh (
+    user_id text NOT NULL,
+    integration_id text NOT NULL,
+    refreshed_at timestamp with time zone,
+    last_error text DEFAULT ''::text NOT NULL,
+    last_attempt_at timestamp with time zone,
+    leased_until timestamp with time zone
+);
+
+--
+-- Name: integration_event_access; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.integration_event_access (
+    user_id text NOT NULL,
+    integration_id text NOT NULL,
+    account_key text NOT NULL,
+    resource_key text NOT NULL,
+    resource_label text DEFAULT ''::text NOT NULL,
+    subject_id text DEFAULT ''::text NOT NULL,
+    refreshed_at timestamp with time zone NOT NULL
+);
+
+--
 -- Name: item_defaults; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1164,6 +1191,23 @@ CREATE TABLE public.user_updates (
 );
 
 --
+-- Name: vault_keys; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.vault_keys (
+    id text NOT NULL,
+    tenant_kind text NOT NULL,
+    tenant_id text NOT NULL,
+    version integer NOT NULL,
+    kek_id text NOT NULL,
+    wrapped_dek bytea NOT NULL,
+    state text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT vault_keys_state_check CHECK ((state = ANY (ARRAY['primary'::text, 'decrypt_only'::text, 'destroyed'::text]))),
+    CONSTRAINT vault_keys_tenant_kind_check CHECK ((tenant_kind = ANY (ARRAY['user'::text, 'org'::text])))
+);
+
+--
 -- Name: video_generation_jobs; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1180,23 +1224,6 @@ CREATE TABLE public.video_generation_jobs (
     error_message text DEFAULT ''::text NOT NULL,
     created_at timestamp with time zone NOT NULL,
     updated_at timestamp with time zone NOT NULL
-);
-
---
--- Name: vault_keys; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.vault_keys (
-    id text NOT NULL,
-    tenant_kind text NOT NULL,
-    tenant_id text NOT NULL,
-    version integer NOT NULL,
-    kek_id text NOT NULL,
-    wrapped_dek bytea NOT NULL,
-    state text NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT vault_keys_state_check CHECK ((state = ANY (ARRAY['primary'::text, 'decrypt_only'::text, 'destroyed'::text]))),
-    CONSTRAINT vault_keys_tenant_kind_check CHECK ((tenant_kind = ANY (ARRAY['user'::text, 'org'::text])))
 );
 
 --
@@ -1562,6 +1589,20 @@ ALTER TABLE ONLY public.inbox_dismissals
     ADD CONSTRAINT inbox_dismissals_pkey PRIMARY KEY (user_id, item_id);
 
 --
+-- Name: integration_access_refresh integration_access_refresh_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.integration_access_refresh
+    ADD CONSTRAINT integration_access_refresh_pkey PRIMARY KEY (user_id, integration_id);
+
+--
+-- Name: integration_event_access integration_event_access_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.integration_event_access
+    ADD CONSTRAINT integration_event_access_pkey PRIMARY KEY (user_id, integration_id, account_key, resource_key);
+
+--
 -- Name: item_defaults item_defaults_item_type_slug_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1849,13 +1890,6 @@ ALTER TABLE ONLY public.user_updates
     ADD CONSTRAINT user_updates_user_id_sequence_number_key UNIQUE (user_id, sequence_number);
 
 --
--- Name: video_generation_jobs video_generation_jobs_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.video_generation_jobs
-    ADD CONSTRAINT video_generation_jobs_pkey PRIMARY KEY (tool_call_id);
-
---
 -- Name: vault_keys vault_keys_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1868,6 +1902,13 @@ ALTER TABLE ONLY public.vault_keys
 
 ALTER TABLE ONLY public.vault_keys
     ADD CONSTRAINT vault_keys_tenant_kind_tenant_id_version_key UNIQUE (tenant_kind, tenant_id, version);
+
+--
+-- Name: video_generation_jobs video_generation_jobs_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.video_generation_jobs
+    ADD CONSTRAINT video_generation_jobs_pkey PRIMARY KEY (tool_call_id);
 
 --
 -- Name: visibility_overrides visibility_overrides_pkey; Type: CONSTRAINT; Schema: public; Owner: -
@@ -2201,6 +2242,18 @@ CREATE INDEX idx_daemon_attachment_user_id ON public.daemon_attachment USING btr
 --
 
 CREATE INDEX idx_daemons_user_id ON public.daemons USING btree (user_id);
+
+--
+-- Name: idx_integration_event_access_resource; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_integration_event_access_resource ON public.integration_event_access USING btree (integration_id, account_key, resource_key);
+
+--
+-- Name: idx_integration_event_access_subject; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_integration_event_access_subject ON public.integration_event_access USING btree (integration_id, subject_id) WHERE (subject_id <> ''::text);
 
 --
 -- Name: idx_messages_chat_activity; Type: INDEX; Schema: public; Owner: -
@@ -2557,16 +2610,16 @@ CREATE UNIQUE INDEX projects_user_remote_url_uniq ON public.projects USING btree
 CREATE UNIQUE INDEX settings_user_key_unique ON public.settings USING btree (user_id, key) WHERE (project_id IS NULL);
 
 --
--- Name: video_generation_jobs_attachment_idx; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX video_generation_jobs_attachment_idx ON public.video_generation_jobs USING btree (attachment_id) WHERE (attachment_id IS NOT NULL);
-
---
 -- Name: vault_keys_one_primary; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE UNIQUE INDEX vault_keys_one_primary ON public.vault_keys USING btree (tenant_kind, tenant_id) WHERE (state = 'primary'::text);
+
+--
+-- Name: video_generation_jobs_attachment_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX video_generation_jobs_attachment_idx ON public.video_generation_jobs USING btree (attachment_id) WHERE (attachment_id IS NOT NULL);
 
 --
 -- Name: agent_messages agent_messages_chat_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -

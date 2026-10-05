@@ -9,6 +9,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"time"
+
+	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
 // TestProvider is the reference provider: what every real one does, in the
@@ -41,6 +43,10 @@ type TestDelivery struct {
 	At         time.Time         `json:"at,omitempty"`
 	Attributes map[string]string `json:"attributes,omitempty"`
 	Data       map[string]any    `json:"data,omitempty"`
+	// Resource, when set, makes the event access-gated (Event.ResourceKey).
+	Resource string `json:"resource,omitempty"`
+	// Revoke are access revocations the delivery carries.
+	Revoke []core.IntegrationAccessRevocation `json:"revoke,omitempty"`
 }
 
 // ID implements Provider.
@@ -79,12 +85,17 @@ func (p *TestProvider) Parse(_ context.Context, req *Request) (*Delivery, error)
 	if d.Challenge != "" {
 		return &Delivery{Respond: &Response{Body: []byte(d.Challenge)}}, nil
 	}
-	return &Delivery{Events: []Event{{
-		Type:       d.Type,
-		AccountKey: d.Account,
-		DeliveryID: d.ID,
-		OccurredAt: d.At,
-		Attributes: d.Attributes,
-		Data:       d.Data,
-	}}}, nil
+	out := &Delivery{Revocations: d.Revoke}
+	if d.Type != "" {
+		out.Events = []Event{{
+			Type:        d.Type,
+			AccountKey:  d.Account,
+			ResourceKey: d.Resource,
+			DeliveryID:  d.ID,
+			OccurredAt:  d.At,
+			Attributes:  d.Attributes,
+			Data:        d.Data,
+		}}
+	}
+	return out, nil
 }

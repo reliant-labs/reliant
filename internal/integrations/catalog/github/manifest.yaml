@@ -777,3 +777,425 @@ actions:
           workflow_run_id: { type: [integer, "null"] }
           run_url: { type: [string, "null"] }
           html_url: { type: [string, "null"] }
+
+# Triggers: what starts a run from GitHub. Delivered by the app-level webhook
+# (internal/integrations/webhook/github) at <PUBLIC_URL>/integrations/github/events,
+# verified with RELIANT_GITHUB_WEBHOOK_SECRET.
+#
+# Routing is access-gated. An event reaches a trigger only when its owner's own
+# GitHub token recently reported the event's repository as visible
+# (GET /user/installations/{id}/repositories), so a member of an org
+# installation never sees events from that org's repositories they cannot
+# see. `events` are the provider's event types; `attributes` are what an
+# IntegrationSource `match:` can require, and every event of a trigger sets
+# each of them. `data` is trigger.payload.data: a trimmed copy of GitHub's
+# webhook body, untrusted, with long text capped at 16 KiB.
+triggers:
+  - id: issue.opened
+    display_name: Issue opened
+    summary: An issue was opened in a repository.
+    description: >-
+      Fires when an issue is opened in a repository the App is installed on and
+      you can see.
+    keywords: [new issue, ticket, bug report]
+    events: [issues.opened]
+    attributes: &issue_attrs
+      - &attr_repository { name: repository, description: "The repository, owner/name.", example: acme/app }
+      - &attr_installation { name: installation_id, description: The GitHub App installation the event came through., example: "98765" }
+      - &attr_sender { name: sender, description: Login of the user who acted., example: octocat }
+      - &attr_action { name: action, description: The webhook action., example: opened }
+    data: &issue_data
+      type: object
+      properties:
+        action: { type: string }
+        issue: &issue_schema
+          type: object
+          properties:
+            number: { type: integer }
+            title: { type: string }
+            body: { type: string }
+            state: { type: string, enum: [open, closed] }
+            state_reason: { type: string }
+            html_url: { type: string }
+            user: &user_schema
+              type: object
+              properties:
+                login: { type: string }
+                id: { type: integer }
+                type: { type: string }
+            labels: { type: array, items: { type: string }, description: Label names. }
+            assignees: { type: array, items: { type: string }, description: Assignee logins. }
+            comments: { type: integer }
+            author_association: { type: string }
+            is_pull_request: { type: boolean }
+            created_at: { type: string }
+            updated_at: { type: string }
+            closed_at: { type: string }
+        repository: &repository_schema
+          type: object
+          properties:
+            id: { type: integer }
+            full_name: { type: string }
+            name: { type: string }
+            owner: { type: string }
+            private: { type: boolean }
+            html_url: { type: string }
+            default_branch: { type: string }
+        sender: *user_schema
+
+  - id: issue.closed
+    display_name: Issue closed
+    summary: An issue was closed.
+    description: Fires when an issue is closed, as completed or as not planned (issue.state_reason).
+    keywords: [resolved, done]
+    events: [issues.closed]
+    attributes: *issue_attrs
+    data: *issue_data
+
+  - id: issue.edited
+    display_name: Issue edited
+    summary: An issue's title or body was edited.
+    description: >-
+      Fires when an issue's title or body changes. data.changes carries the
+      previous title and/or body under `from`.
+    events: [issues.edited]
+    attributes: *issue_attrs
+    data:
+      type: object
+      properties:
+        action: { type: string }
+        issue: *issue_schema
+        changes:
+          type: object
+          properties:
+            title: { type: object, properties: { from: { type: string } } }
+            body: { type: object, properties: { from: { type: string } } }
+        repository: *repository_schema
+        sender: *user_schema
+
+  - id: issue.labeled
+    display_name: Issue labeled
+    summary: A label was added to an issue.
+    description: >-
+      Fires when a label is added to an issue. Match `label` to react to one
+      label, e.g. label: needs-triage.
+    keywords: [label, tag, triage]
+    events: [issues.labeled]
+    attributes:
+      - *attr_repository
+      - *attr_installation
+      - *attr_sender
+      - *attr_action
+      - { name: label, description: The label that was added., example: needs-triage }
+    data:
+      type: object
+      properties:
+        action: { type: string }
+        label: { type: string, description: The label that was added. }
+        issue: *issue_schema
+        repository: *repository_schema
+        sender: *user_schema
+
+  - id: issue.assigned
+    display_name: Issue assigned
+    summary: Someone was assigned to an issue.
+    description: Fires when a user is assigned to an issue. Match `assignee` to react to one person.
+    keywords: [assign, owner]
+    events: [issues.assigned]
+    attributes:
+      - *attr_repository
+      - *attr_installation
+      - *attr_sender
+      - *attr_action
+      - { name: assignee, description: Login of the user who was assigned., example: octocat }
+    data:
+      type: object
+      properties:
+        action: { type: string }
+        assignee: *user_schema
+        issue: *issue_schema
+        repository: *repository_schema
+        sender: *user_schema
+
+  - id: issue_comment.created
+    display_name: Issue or pull request comment
+    summary: A comment was posted on an issue or pull request.
+    description: >-
+      Fires when someone comments on an issue or a pull request's
+      conversation. Match mentions_reliant: "true" to react only to comments
+      that mention @reliant, and is_pull_request to pick issues or pull
+      requests. Comments written by GitHub Apps (including this one) never
+      fire, so a run that comments cannot trigger itself.
+    keywords: [comment, reply, mention, reliant]
+    events: [issue_comment.created]
+    attributes:
+      - *attr_repository
+      - *attr_installation
+      - *attr_sender
+      - *attr_action
+      - { name: mentions_reliant, description: '"true" when the comment mentions @reliant.', example: "true" }
+      - { name: is_pull_request, description: '"true" when the comment is on a pull request.', example: "false" }
+    data:
+      type: object
+      properties:
+        action: { type: string }
+        issue: *issue_schema
+        comment:
+          type: object
+          properties:
+            id: { type: integer }
+            body: { type: string }
+            html_url: { type: string }
+            user: *user_schema
+            author_association: { type: string }
+            created_at: { type: string }
+        repository: *repository_schema
+        sender: *user_schema
+
+  - id: pull_request.opened
+    display_name: Pull request opened
+    summary: A pull request was opened.
+    description: >-
+      Fires when a pull request is opened. Match base_branch to watch one
+      target branch, or branch for the head branch.
+    keywords: [pr, pull request, review, code review]
+    events: [pull_request.opened]
+    attributes: &pr_attrs
+      - *attr_repository
+      - *attr_installation
+      - *attr_sender
+      - *attr_action
+      - &attr_branch { name: branch, description: The pull request's head branch., example: fix-save }
+      - &attr_base_branch { name: base_branch, description: The branch the pull request targets., example: main }
+    data: &pr_data
+      type: object
+      properties:
+        action: { type: string }
+        number: { type: integer }
+        pull_request: &pr_schema
+          type: object
+          properties:
+            number: { type: integer }
+            title: { type: string }
+            body: { type: string }
+            state: { type: string, enum: [open, closed] }
+            draft: { type: boolean }
+            merged: { type: boolean }
+            merged_at: { type: string }
+            merge_commit_sha: { type: string }
+            html_url: { type: string }
+            user: *user_schema
+            head: &ref_schema
+              type: object
+              properties:
+                ref: { type: string }
+                sha: { type: string }
+                label: { type: string }
+            base: *ref_schema
+            labels: { type: array, items: { type: string } }
+            requested_reviewers: { type: array, items: { type: string } }
+            additions: { type: integer }
+            deletions: { type: integer }
+            changed_files: { type: integer }
+            commits: { type: integer }
+            created_at: { type: string }
+            updated_at: { type: string }
+        repository: *repository_schema
+        sender: *user_schema
+
+  - id: pull_request.synchronize
+    display_name: Pull request updated
+    summary: New commits were pushed to a pull request.
+    description: >-
+      Fires when the head branch of a pull request gets new commits.
+      data.before and data.after are the old and new head SHAs.
+    keywords: [pr, push, new commits, synchronize]
+    events: [pull_request.synchronize]
+    attributes: *pr_attrs
+    data:
+      type: object
+      properties:
+        action: { type: string }
+        number: { type: integer }
+        before: { type: string }
+        after: { type: string }
+        pull_request: *pr_schema
+        repository: *repository_schema
+        sender: *user_schema
+
+  - id: pull_request.closed
+    display_name: Pull request closed
+    summary: A pull request was closed or merged.
+    description: >-
+      Fires when a pull request is closed. Match merged: "true" for merges
+      only; pull_request.merged says the same in the payload.
+    keywords: [pr, merged, merge]
+    events: [pull_request.closed]
+    attributes:
+      - *attr_repository
+      - *attr_installation
+      - *attr_sender
+      - *attr_action
+      - *attr_branch
+      - *attr_base_branch
+      - { name: merged, description: '"true" when the pull request was merged.', example: "true" }
+    data: *pr_data
+
+  - id: pull_request.ready_for_review
+    display_name: Pull request ready for review
+    summary: A draft pull request was marked ready for review.
+    events: [pull_request.ready_for_review]
+    keywords: [pr, draft, review]
+    attributes: *pr_attrs
+    data: *pr_data
+
+  - id: pull_request.review_requested
+    display_name: Review requested
+    summary: Someone's review was requested on a pull request.
+    description: >-
+      Fires when a review is requested from a user or a team. Match
+      requested_reviewer (a login, or a team's slug) to react to requests
+      for one reviewer.
+    keywords: [pr, review, reviewer, code review]
+    events: [pull_request.review_requested]
+    attributes:
+      - *attr_repository
+      - *attr_installation
+      - *attr_sender
+      - *attr_action
+      - *attr_branch
+      - *attr_base_branch
+      - { name: requested_reviewer, description: "The requested reviewer's login, or the team's slug.", example: octocat }
+    data:
+      type: object
+      properties:
+        action: { type: string }
+        number: { type: integer }
+        pull_request: *pr_schema
+        requested_reviewer: *user_schema
+        requested_team: { type: object, properties: { name: { type: string }, slug: { type: string } } }
+        repository: *repository_schema
+        sender: *user_schema
+
+  - id: pull_request_review.submitted
+    display_name: Pull request review submitted
+    summary: A review was submitted on a pull request.
+    description: >-
+      Fires when a reviewer submits a review. Match state (approved,
+      changes_requested or commented) to react to one outcome.
+    keywords: [pr, review, approved, changes requested]
+    events: [pull_request_review.submitted]
+    attributes:
+      - *attr_repository
+      - *attr_installation
+      - *attr_sender
+      - *attr_action
+      - *attr_branch
+      - *attr_base_branch
+      - { name: state, description: "The review's state: approved, changes_requested or commented.", example: approved }
+    data:
+      type: object
+      properties:
+        action: { type: string }
+        pull_request: *pr_schema
+        review:
+          type: object
+          properties:
+            id: { type: integer }
+            state: { type: string }
+            body: { type: string }
+            html_url: { type: string }
+            user: *user_schema
+            commit_id: { type: string }
+            submitted_at: { type: string }
+            author_association: { type: string }
+        repository: *repository_schema
+        sender: *user_schema
+
+  - id: push.received
+    display_name: Push
+    summary: Commits or a tag were pushed to a repository.
+    description: >-
+      Fires on every push. A branch push sets `branch` (match branch: main to
+      watch one branch); a tag push sets `tag` instead and has no `branch`.
+      data.commits lists up to 20 commits.
+    keywords: [push, commit, deploy, branch, tag]
+    events: [push]
+    attributes:
+      - *attr_repository
+      - *attr_installation
+      - *attr_sender
+      - { name: ref, description: The full ref pushed., example: refs/heads/main }
+      - { name: branch, description: "The branch pushed, for a branch push only.", example: main }
+      - { name: tag, description: "The tag pushed, for a tag push only.", example: v1.2.0 }
+    data:
+      type: object
+      properties:
+        ref: { type: string }
+        before: { type: string }
+        after: { type: string }
+        created: { type: boolean }
+        deleted: { type: boolean }
+        forced: { type: boolean }
+        compare: { type: string }
+        truncated: { type: boolean, description: Set when commits were cut to fit the size cap. }
+        commits:
+          type: array
+          items: &commit_schema
+            type: object
+            properties:
+              id: { type: string }
+              message: { type: string }
+              timestamp: { type: string }
+              url: { type: string }
+              author: { type: object, properties: { name: { type: string }, username: { type: string } } }
+              added: { type: array, items: { type: string } }
+              removed: { type: array, items: { type: string } }
+              modified: { type: array, items: { type: string } }
+        head_commit: *commit_schema
+        pusher: { type: object, properties: { name: { type: string } } }
+        repository: *repository_schema
+        sender: *user_schema
+
+  - id: workflow_run.completed
+    display_name: Workflow run completed
+    summary: A GitHub Actions workflow run finished.
+    description: >-
+      Fires when a workflow run completes. Match conclusion (success, failure,
+      cancelled, ...) and branch, e.g. conclusion: failure and branch: main to
+      react to a broken main.
+    keywords: [actions, ci, build, failed, workflow]
+    events: [workflow_run.completed]
+    attributes:
+      - *attr_repository
+      - *attr_installation
+      - *attr_sender
+      - *attr_action
+      - { name: conclusion, description: The run's conclusion., example: failure }
+      - { name: branch, description: The branch the run was for., example: main }
+      - { name: workflow, description: The workflow's name., example: CI }
+    data:
+      type: object
+      properties:
+        action: { type: string }
+        workflow: { type: object, properties: { id: { type: integer }, name: { type: string }, path: { type: string } } }
+        workflow_run:
+          type: object
+          properties:
+            id: { type: integer }
+            name: { type: string }
+            run_number: { type: integer }
+            run_attempt: { type: integer }
+            event: { type: string }
+            status: { type: string }
+            conclusion: { type: string }
+            head_branch: { type: string }
+            head_sha: { type: string }
+            html_url: { type: string }
+            actor: *user_schema
+            run_started_at: { type: string }
+            updated_at: { type: string }
+            head_commit: { type: object, properties: { id: { type: string }, message: { type: string } } }
+            pull_requests: { type: array, items: { type: integer } }
+        repository: *repository_schema
+        sender: *user_schema

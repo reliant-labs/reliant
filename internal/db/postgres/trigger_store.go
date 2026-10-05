@@ -422,6 +422,10 @@ func triggerFromPGNamed(row pgdb.Trigger, projectName, daemonName string) (*core
 	return t, nil
 }
 
+// TriggerFromRow maps a triggers row read by a query outside this store (the
+// access-gated routing query joins triggers to integration_event_access).
+func TriggerFromRow(row pgdb.Trigger) (*core.Trigger, error) { return triggerFromPG(row) }
+
 func triggerFromPG(row pgdb.Trigger) (*core.Trigger, error) {
 	presets := map[string]string{}
 	if err := triggerJSONToMap(row.Presets, &presets); err != nil {

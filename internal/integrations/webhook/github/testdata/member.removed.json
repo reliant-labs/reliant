@@ -1,0 +1,38 @@
+{
+  "action": "removed",
+  "member": {
+    "login": "bob",
+    "id": 22,
+    "type": "User"
+  },
+  "changes": {},
+  "repository": {
+    "id": 123456,
+    "node_id": "R_kgDOAB",
+    "name": "app",
+    "full_name": "acme/app",
+    "private": true,
+    "owner": {
+      "login": "acme",
+      "id": 9001,
+      "type": "Organization"
+    },
+    "html_url": "https://github.com/acme/app",
+    "default_branch": "main",
+    "description": "The app",
+    "fork": false
+  },
+  "sender": {
+    "login": "octocat",
+    "id": 1,
+    "node_id": "MDQ6VXNlcjE=",
+    "type": "User",
+    "site_admin": false,
+    "avatar_url": "https://avatars.githubusercontent.com/u/1?v=4",
+    "html_url": "https://github.com/octocat"
+  },
+  "installation": {
+    "id": 98765,
+    "node_id": "MDIzOkludGVncmF0aW9uSW5zdGFsbGF0aW9uOTg3NjU="
+  }
+}

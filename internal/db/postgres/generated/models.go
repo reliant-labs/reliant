@@ -379,6 +379,25 @@ type InboxDismissal struct {
 	DismissedAt time.Time `json:"dismissed_at"`
 }
 
+type IntegrationAccessRefresh struct {
+	UserID        string       `json:"user_id"`
+	IntegrationID string       `json:"integration_id"`
+	RefreshedAt   sql.NullTime `json:"refreshed_at"`
+	LastError     string       `json:"last_error"`
+	LastAttemptAt sql.NullTime `json:"last_attempt_at"`
+	LeasedUntil   sql.NullTime `json:"leased_until"`
+}
+
+type IntegrationEventAccess struct {
+	UserID        string    `json:"user_id"`
+	IntegrationID string    `json:"integration_id"`
+	AccountKey    string    `json:"account_key"`
+	ResourceKey   string    `json:"resource_key"`
+	ResourceLabel string    `json:"resource_label"`
+	SubjectID     string    `json:"subject_id"`
+	RefreshedAt   time.Time `json:"refreshed_at"`
+}
+
 type ItemDefault struct {
 	ID        string         `json:"id"`
 	ItemType  int32          `json:"item_type"`

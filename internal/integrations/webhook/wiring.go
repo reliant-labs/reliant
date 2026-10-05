@@ -6,8 +6,10 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/integrations/webhook/github"
 	"github.com/reliant-labs/reliant/internal/vault"
 )
 
@@ -30,9 +32,21 @@ type Inbound struct {
 	Registry  *Registry
 	Intake    Intake
 	Vault     Vault
+	// Access is the per-integration access refresher for providers whose
+	// events are access-gated (Event.ResourceKey), keyed by integration id.
+	// TriggerService refreshes the owner's access when a trigger of one is
+	// activated. Set by the composition root; nil means none.
+	Access map[string]AccessRefresher
 
 	hooks  *HooksReceiver
 	events *EventsReceiver
+}
+
+// AccessRefresher re-reads one user's access for an access-gated provider.
+type AccessRefresher interface {
+	Refresh(ctx context.Context, userID string) error
+	// IsPermanent reports whether a Refresh error needs the user to act.
+	IsPermanent(err error) bool
 }
 
 // NewInbound wires the receivers. vault may be nil (no signed webhooks).
@@ -67,6 +81,14 @@ func RegistryFromEnv(getenv func(string) string) (*Registry, error) {
 			return nil, err
 		}
 	}
+	// GitHub: the one App's webhook. Without its secret nothing could be
+	// verified, so the route stays 404 and integration triggers for github
+	// are refused at write time.
+	if secret := strings.TrimSpace(getenv(github.SecretEnv)); secret != "" {
+		if err := r.Register(NewGitHubProvider(secret)); err != nil {
+			return nil, err
+		}
+	}
 	if secret := strings.TrimSpace(getenv("RELIANT_TEST_INTEGRATION_SECRET")); secret != "" {
 		if err := r.Register(NewTestProvider(secret)); err != nil {
 			return nil, err
@@ -79,6 +101,8 @@ func RegistryFromEnv(getenv func(string) string) (*Registry, error) {
 }
 
 var _ Store = (interface {
+	ListAccessRoutedTriggers(ctx context.Context, integration, account, resource string, freshAfter time.Time) ([]*core.Trigger, error)
+	RevokeIntegrationAccess(ctx context.Context, integration string, rev core.IntegrationAccessRevocation) (int64, error)
 	GetTrigger(ctx context.Context, id string) (*core.Trigger, error)
 	GetTriggerWebhookCredentials(ctx context.Context, id string) (*core.TriggerWebhookCredentials, error)
 	ListIntegrationTriggers(ctx context.Context, integration string) ([]*core.IntegrationTriggerRoute, error)

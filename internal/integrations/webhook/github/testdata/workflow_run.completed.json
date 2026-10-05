@@ -1,0 +1,80 @@
+{
+  "action": "completed",
+  "workflow_run": {
+    "id": 4004,
+    "name": "CI",
+    "node_id": "WFR_kwDOAB",
+    "head_branch": "main",
+    "head_sha": "eeee000000000000000000000000000000000002",
+    "path": ".github/workflows/ci.yml",
+    "run_number": 88,
+    "run_attempt": 1,
+    "event": "push",
+    "status": "completed",
+    "conclusion": "failure",
+    "workflow_id": 5005,
+    "html_url": "https://github.com/acme/app/actions/runs/4004",
+    "created_at": "2026-10-05T09:01:00Z",
+    "updated_at": "2026-10-05T09:09:00Z",
+    "run_started_at": "2026-10-05T09:01:00Z",
+    "actor": {
+      "login": "octocat",
+      "id": 1
+    },
+    "triggering_actor": {
+      "login": "octocat",
+      "id": 1
+    },
+    "pull_requests": [],
+    "head_commit": {
+      "id": "eeee000000000000000000000000000000000002",
+      "message": "commit 2"
+    },
+    "repository": {
+      "id": 123456,
+      "full_name": "acme/app"
+    },
+    "head_repository": {
+      "id": 123456,
+      "full_name": "acme/app"
+    },
+    "logs_url": "https://api.github.com/repos/acme/app/actions/runs/4004/logs",
+    "check_suite_id": 1,
+    "check_suite_node_id": "x"
+  },
+  "workflow": {
+    "id": 5005,
+    "name": "CI",
+    "path": ".github/workflows/ci.yml",
+    "state": "active"
+  },
+  "repository": {
+    "id": 123456,
+    "node_id": "R_kgDOAB",
+    "name": "app",
+    "full_name": "acme/app",
+    "private": true,
+    "owner": {
+      "login": "acme",
+      "id": 9001,
+      "type": "Organization"
+    },
+    "html_url": "https://github.com/acme/app",
+    "default_branch": "main",
+    "description": "The app",
+    "fork": false
+  },
+  "sender": {
+    "login": "octocat",
+    "id": 1,
+    "node_id": "MDQ6VXNlcjE=",
+    "type": "User",
+    "site_admin": false,
+    "avatar_url": "https://avatars.githubusercontent.com/u/1?v=4",
+    "html_url": "https://github.com/octocat"
+  },
+  "installation": {
+    "id": 98765,
+    "node_id": "MDIzOkludGVncmF0aW9uSW5zdGFsbGF0aW9uOTg3NjU="
+  }
+}

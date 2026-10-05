@@ -26,6 +26,8 @@ import (
 	"net/http"
 	"net/url"
 	"time"
+
+	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
 // Provider is an integration that delivers events through its app-level
@@ -86,6 +88,12 @@ type Delivery struct {
 	Respond *Response
 	// Events are the events the request carries; usually one.
 	Events []Event
+	// Revocations are access the provider says has ended (a repository
+	// removed from an installation, a member removed from an org). The
+	// receiver applies them before routing Events, so an event in the same
+	// delivery is already routed under the reduced access. Each must name an
+	// account or a subject; an unscoped one is ignored.
+	Revocations []core.IntegrationAccessRevocation
 }
 
 // Response is a synchronous reply to the sender.
@@ -102,10 +110,21 @@ type Event struct {
 	// provider has actions, so "issues.*" can select a family.
 	Type string
 	// AccountKey is the provider account the event belongs to. It must
-	// equal the external_account_id that provider's connections record, and
-	// an event only reaches triggers whose connection records exactly it. It
-	// must not be empty.
+	// not be empty.
+	//
+	// Without a ResourceKey it must equal the external_account_id that
+	// provider's connections record, and the event only reaches triggers
+	// whose connection records exactly it.
 	AccountKey string
+	// ResourceKey, when set, makes routing ACCESS-GATED: the event is about
+	// one resource inside the account (a GitHub repository in an App
+	// installation), and it reaches only triggers whose owner holds a fresh
+	// access grant for (AccountKey, ResourceKey) — recorded from the owner's
+	// own provider credential (core.IntegrationAccessGrant). Use it whenever
+	// one account is shared by users who do not all see the same resources,
+	// which is what an org-wide installation is. The connection-account path
+	// is not consulted for such an event.
+	ResourceKey string
 	// DeliveryID is the provider's id for this event, stable across its
 	// redeliveries (X-GitHub-Delivery, Slack event_id, Twilio MessageSid).
 	// It is the dedupe key, so a redelivery never fires twice.

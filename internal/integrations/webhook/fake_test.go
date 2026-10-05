@@ -5,6 +5,7 @@ import (
 	"context"
 	"sort"
 	"sync"
+	"time"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/triggers"
@@ -16,6 +17,10 @@ type fakeStore struct {
 	triggers map[string]*core.Trigger
 	creds    map[string]*core.TriggerWebhookCredentials
 	routes   map[string][]*core.IntegrationTriggerRoute
+
+	access        []accessGrant
+	accessQueries int
+	revocations   []core.IntegrationAccessRevocation
 }
 
 func newFakeStore() *fakeStore {
@@ -103,4 +108,54 @@ type fakeOpener struct{}
 
 func fakeSeal(userID, triggerID, secret string) []byte {
 	return []byte(userID + "|" + string(triggers.WebhookSecretAAD(triggerID)) + "|" + secret)
+}
+
+// accessGrant is one (user, account, resource) the fake store treats as a
+// fresh grant.
+type accessGrant struct{ user, account, resource, subject string }
+
+// grantAccess records that user can see resource in account.
+func (s *fakeStore) grantAccess(user, account, resource, subject string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.access = append(s.access, accessGrant{user, account, resource, subject})
+}
+
+func (s *fakeStore) ListAccessRoutedTriggers(_ context.Context, integration, account, resource string, _ time.Time) ([]*core.Trigger, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.accessQueries++
+	var out []*core.Trigger
+	for _, r := range s.routes[integration] {
+		if r.Trigger == nil || !r.Trigger.Enabled {
+			continue
+		}
+		for _, g := range s.access {
+			if g.user == r.Trigger.UserID && g.account == account && g.resource == resource {
+				out = append(out, r.Trigger)
+				break
+			}
+		}
+	}
+	return out, nil
+}
+
+func (s *fakeStore) RevokeIntegrationAccess(_ context.Context, _ string, rev core.IntegrationAccessRevocation) (int64, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.revocations = append(s.revocations, rev)
+	kept := s.access[:0]
+	var n int64
+	for _, g := range s.access {
+		match := (rev.AccountKey == "" || g.account == rev.AccountKey) &&
+			(rev.ResourceKey == "" || g.resource == rev.ResourceKey) &&
+			(rev.SubjectID == "" || g.subject == rev.SubjectID)
+		if match {
+			n++
+			continue
+		}
+		kept = append(kept, g)
+	}
+	s.access = kept
+	return n, nil
 }

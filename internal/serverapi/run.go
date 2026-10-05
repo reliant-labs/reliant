@@ -27,6 +27,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/drain"
 	grpcserver "github.com/reliant-labs/reliant/internal/grpc"
 	"github.com/reliant-labs/reliant/internal/grpc/services"
+	"github.com/reliant-labs/reliant/internal/integrations/ghaccess"
 	"github.com/reliant-labs/reliant/internal/integrations/webhook"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/models"
@@ -387,6 +388,17 @@ func Run(ctx context.Context, opts Options) error {
 	triggerInbound := webhook.NewInbound(repo,
 		triggers.NewIntake(repo, temporalClient, v2workflow.SharedTaskQueue),
 		inboundRegistry, vaultKeys, strings.TrimSpace(os.Getenv("PUBLIC_URL")))
+	// GitHub events are access-gated: each owner's repository access is
+	// refreshed when a trigger is activated and every few minutes while one
+	// exists. Every replica runs the loop; leases share the work.
+	ghAccess, err := wireGitHubAccess(repo, vaultKeys, os.Getenv)
+	if err != nil {
+		return err
+	}
+	if ghAccess != nil {
+		triggerInbound.Access = map[string]webhook.AccessRefresher{ghaccess.IntegrationID: gitHubAccess{ghAccess}}
+		go ghAccess.Run(ctx)
+	}
 
 	grpcSrv, err := grpcserver.NewServer(&grpcserver.Config{
 		Port:           opts.GRPCPort,

@@ -1,0 +1,29 @@
+{
+  "zen": "Keep it logically awesome.",
+  "hook_id": 123,
+  "hook": {
+    "id": 123,
+    "type": "App",
+    "name": "web",
+    "active": true,
+    "events": [
+      "issues",
+      "push"
+    ],
+    "config": {
+      "content_type": "json",
+      "url": "https://example/integrations/github/events",
+      "insecure_ssl": "0"
+    },
+    "app_id": 42
+  },
+  "sender": {
+    "login": "octocat",
+    "id": 1,
+    "node_id": "MDQ6VXNlcjE=",
+    "type": "User",
+    "site_admin": false,
+    "avatar_url": "https://avatars.githubusercontent.com/u/1?v=4",
+    "html_url": "https://github.com/octocat"
+  }
+}

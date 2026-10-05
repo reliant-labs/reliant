@@ -1,0 +1,141 @@
+{
+  "ref": "refs/heads/main",
+  "before": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "after": "eeee000000000000000000000000000000000002",
+  "created": false,
+  "deleted": false,
+  "forced": false,
+  "base_ref": null,
+  "compare": "https://github.com/acme/app/compare/bbbb...eeee",
+  "commits": [
+    {
+      "id": "eeee000000000000000000000000000000000000",
+      "tree_id": "t",
+      "distinct": true,
+      "message": "commit 0",
+      "timestamp": "2026-10-05T09:00:00Z",
+      "url": "https://github.com/acme/app/commit/x",
+      "author": {
+        "name": "Octo",
+        "email": "octo@example.com",
+        "username": "octocat"
+      },
+      "committer": {
+        "name": "Octo",
+        "email": "octo@example.com"
+      },
+      "added": [
+        "a.go"
+      ],
+      "removed": [],
+      "modified": [
+        "b.go"
+      ]
+    },
+    {
+      "id": "eeee000000000000000000000000000000000001",
+      "tree_id": "t",
+      "distinct": true,
+      "message": "commit 1",
+      "timestamp": "2026-10-05T09:00:00Z",
+      "url": "https://github.com/acme/app/commit/x",
+      "author": {
+        "name": "Octo",
+        "email": "octo@example.com",
+        "username": "octocat"
+      },
+      "committer": {
+        "name": "Octo",
+        "email": "octo@example.com"
+      },
+      "added": [
+        "a.go"
+      ],
+      "removed": [],
+      "modified": [
+        "b.go"
+      ]
+    },
+    {
+      "id": "eeee000000000000000000000000000000000002",
+      "tree_id": "t",
+      "distinct": true,
+      "message": "commit 2",
+      "timestamp": "2026-10-05T09:00:00Z",
+      "url": "https://github.com/acme/app/commit/x",
+      "author": {
+        "name": "Octo",
+        "email": "octo@example.com",
+        "username": "octocat"
+      },
+      "committer": {
+        "name": "Octo",
+        "email": "octo@example.com"
+      },
+      "added": [
+        "a.go"
+      ],
+      "removed": [],
+      "modified": [
+        "b.go"
+      ]
+    }
+  ],
+  "head_commit": {
+    "id": "eeee000000000000000000000000000000000002",
+    "tree_id": "t",
+    "distinct": true,
+    "message": "commit 2",
+    "timestamp": "2026-10-05T09:00:00Z",
+    "url": "https://github.com/acme/app/commit/x",
+    "author": {
+      "name": "Octo",
+      "email": "octo@example.com",
+      "username": "octocat"
+    },
+    "committer": {
+      "name": "Octo",
+      "email": "octo@example.com"
+    },
+    "added": [
+      "a.go"
+    ],
+    "removed": [],
+    "modified": [
+      "b.go"
+    ]
+  },
+  "repository": {
+    "id": 123456,
+    "node_id": "R_kgDOAB",
+    "name": "app",
+    "full_name": "acme/app",
+    "private": true,
+    "owner": {
+      "login": "acme",
+      "id": 9001,
+      "type": "Organization"
+    },
+    "html_url": "https://github.com/acme/app",
+    "default_branch": "main",
+    "description": "The app",
+    "fork": false
+  },
+  "pusher": {
+    "name": "octocat",
+    "email": "octo@example.com"
+  },
+  "sender": {
+    "login": "octocat",
+    "id": 1,
+    "node_id": "MDQ6VXNlcjE=",
+    "type": "User",
+    "site_admin": false,
+    "avatar_url": "https://avatars.githubusercontent.com/u/1?v=4",
+    "html_url": "https://github.com/octocat"
+  },
+  "installation": {
+    "id": 98765,
+    "node_id": "MDIzOkludGVncmF0aW9uSW5zdGFsbGF0aW9uOTg3NjU="
+  }
+}
