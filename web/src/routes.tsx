@@ -73,6 +73,10 @@ const WorkloadInventoryPreview = lazyRouteComponent(
   () => import('./components/Forge/Environments/__preview__/WorkloadInventoryPreview'), 'default')
 const SecretsPreview = lazyRouteComponent(
   () => import('./components/Forge/Secrets/__preview__/SecretsPreview'), 'default')
+// The whole Forge pane against a fake network (control-plane's real state as
+// fixtures) — see ForgePanePreview for why the fake sits at fetch.
+const ForgePanePreview = lazyRouteComponent(
+  () => import('./components/Forge/__preview__/ForgePanePreview'), 'ForgePanePreview')
 const SettingsPage = lazyRouteComponent(
   () => import('./components/Settings/SettingsPage'), 'SettingsPage')
 const ConnectorConsentPage = lazyRouteComponent(
@@ -438,6 +442,12 @@ const forgeSecretsPreviewRoute = createRoute({
   component: () => <DevOnlyRoute><SecretsPreview /></DevOnlyRoute>,
 })
 
+const forgePanePreviewRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/forge-pane-preview',
+  component: () => <DevOnlyRoute><ForgePanePreview /></DevOnlyRoute>,
+})
+
 // (`/checkout/embed` removed with the embedded-checkout path. It existed to
 // host Stripe's hosted checkout page in a bare Electron BrowserWindow, because
 // payment-method domains are registered by HOSTNAME and app://bundle cannot be
@@ -775,6 +785,7 @@ const routeTree = rootRoute.addChildren([
   forgeTokenSandboxRoute,
   forgeWorkloadsPreviewRoute,
   forgeSecretsPreviewRoute,
+  forgePanePreviewRoute,
   projectPickerRedirectRoute,
   mobileIndexRoute,
   authenticatedLayoutRoute.addChildren([

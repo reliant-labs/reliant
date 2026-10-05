@@ -118,6 +118,26 @@ describe("classifyForgeResponse", () => {
     expect(outcome.kind).toBe("report");
   });
 
+  it("reads OUR timeout as unreachable, never as 'no forge.yaml'", () => {
+    // The exact meta forgeDispatch sends when the daemon did not answer in
+    // time: an EMPTY reply (so is_forge_project is false — nobody looked) with
+    // reachability UNREACHABLE and the timeout reason. Ranking is_forge_project
+    // first rendered "control-plane has no forge.yaml at its root" for a
+    // project that has one, because a slow forge render looked like a missing
+    // file.
+    const outcome = classifyForgeResponse(
+      meta({
+        isForgeProject: false,
+        supported: false,
+        reachability: ForgeReachability.UNREACHABLE,
+        unreachableReason:
+          "cluster read did not complete within 45s (forge.env_status); live state is unknown",
+      }),
+      ""
+    );
+    expect(outcome.kind).toBe("unreachable");
+  });
+
   it("survives a missing meta without claiming the project is fine", () => {
     const outcome = classifyForgeResponse(undefined, "");
     expect(outcome.kind).toBe("not-forge-project");

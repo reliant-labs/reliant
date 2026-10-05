@@ -61,6 +61,12 @@ export interface DevStackPanelProps {
   /** Which environment was asked about, for copy when the report omits it. */
   env: string;
   projectName?: string;
+  /**
+   * Lead with the host services. The Running tab passes it: on a local
+   * environment's page "what is running" is the question, and the checks
+   * that measure it come second.
+   */
+  servicesFirst?: boolean;
 }
 
 /**
@@ -98,6 +104,7 @@ export function DevStackPanel({
   error,
   env,
   projectName,
+  servicesFirst = false,
 }: DevStackPanelProps) {
   if (isLoading && !outcome) {
     return (
@@ -140,8 +147,12 @@ export function DevStackPanel({
   const verdict = verdictOf(report);
   const reportEnv = report.env || env;
 
+  const services =
+    report.services && report.services.length > 0 ? <ServiceSummary services={report.services} /> : null;
+
   return (
     <div className="space-y-4" data-testid="forge-env-status">
+      {servicesFirst && services}
       <header className="space-y-3">
         <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
           {/* The env is the page's subject, named in its header — not repeated here. */}
@@ -224,9 +235,7 @@ export function DevStackPanel({
         </div>
       )}
 
-      {report.services && report.services.length > 0 && (
-        <ServiceSummary services={report.services} />
-      )}
+      {!servicesFirst && services}
     </div>
   );
 }

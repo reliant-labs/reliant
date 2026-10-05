@@ -64,7 +64,6 @@ function renderOverviewRow(env: LiveEnv, status?: CloudEnvStatus) {
     <EnvironmentTable
       rows={[{ env, status, statusLoading: false }]}
       onOpen={vi.fn()}
-      onPreview={vi.fn()}
     />
   );
 }

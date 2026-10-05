@@ -66,10 +66,16 @@ export interface EnvDiffCardProps {
    * what the daemon uses when nothing is chosen.
    */
   checkoutPath: string;
+  /**
+   * Open on arrival. The Changes tab passes it for the ONE environment the
+   * page is about: the user navigated to that question, so the render is what
+   * they asked for. Everywhere else the card stays closed until clicked.
+   */
+  defaultOpen?: boolean;
 }
 
-export function EnvDiffCard({ projectId, env, checkoutPath }: EnvDiffCardProps) {
-  const [open, setOpen] = useState(false);
+export function EnvDiffCard({ projectId, env, checkoutPath, defaultOpen = false }: EnvDiffCardProps) {
+  const [open, setOpen] = useState(defaultOpen);
 
   // THE FETCH IS THE DISCLOSURE. `enabled` is the whole lazy contract: until
   // someone opens this card there is no query, and therefore no render on the
@@ -83,7 +89,7 @@ export function EnvDiffCard({ projectId, env, checkoutPath }: EnvDiffCardProps) 
     <section
       data-testid={`env-diff-card-${env}`}
       data-open={open}
-      className="rounded-lg border border-border"
+      className="rounded-lg border border-border bg-card"
     >
       <button
         type="button"
@@ -98,7 +104,9 @@ export function EnvDiffCard({ projectId, env, checkoutPath }: EnvDiffCardProps) 
         ) : (
           <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
         )}
-        <span className="text-sm font-medium text-foreground">{env}</span>
+        <span className="text-sm font-medium text-foreground">
+          What this branch would change in <span className="font-mono">{env}</span>
+        </span>
         <span className="ml-auto text-xs text-muted-foreground">
           {/* A CLOSED CARD MAKES NO CLAIM. It has not asked, so "no changes"
               here would be a statement nobody checked — the one thing the

@@ -1,7 +1,8 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * THE OWNER'S TEST: LIVE MAKES ZERO DAEMON CALLS.
+ * THE OWNER'S TEST: AN ENVIRONMENT THE BACKEND RECORDS MAKES ZERO DAEMON CALLS
+ * ON ITS BACKEND TABS (Overview, Releases, Secrets) — and the Overview list.
  *
  * Not "degrades gracefully", not "renders something useful" — ZERO. The daemon
  * transport is mocked to THROW on any call, and every daemon module is mocked
@@ -34,8 +35,10 @@
  *   prod     persistent, with a promotion. The ordinary case.
  *   staging  self_managed, declared and not built. The platform observes
  *            nothing there, so its Live answer is its declaration.
- *   fresh    never built — no control-plane row at all. A NORMAL state that
- *            must not render as an error.
+ *   fresh    no control-plane row at all. The ONE case that asks the daemon
+ *            (only the checkout knows what an unregistered env is), and it
+ *            must still render — as "not registered", not an error — when
+ *            that asking fails.
  *
  * Plus the write: setting a secret from Live makes zero daemon calls either.
  */
@@ -61,7 +64,7 @@ function daemonTripwire(method: string) {
     daemonCalls.push(method);
     void args;
     throw new Error(
-      `LIVE CALLED THE DAEMON: ${method}. Live must read the control plane only (design §8.0, O-14).`
+      `A BACKEND TAB CALLED THE DAEMON: ${method}. Overview, Releases and Secrets read the control plane only (design §8.0, O-14).`
     );
   };
 }
@@ -323,14 +326,33 @@ describe("the Live tab makes zero daemon calls", () => {
     );
     expect(within(state).getByTestId("live-state-observed")).toHaveTextContent(/confirmed running/i);
 
-    // The timeline, with the decision and the observation of it interleaved.
+    // The header names the release and offers the actions, on every tab.
+    expect(screen.getByTestId("env-page-release")).toHaveTextContent("v12");
+    expect(screen.getByTestId("env-action-deploy")).toBeInTheDocument();
+    expect(screen.getByTestId("env-action-promote")).toBeInTheDocument();
+    expectNoBannerOrError();
+    expect(daemonCalls).toEqual([]);
+  });
+
+  it("renders the Releases tab — intent and observations interleaved — with zero daemon calls", async () => {
+    routeState.env = "prod";
+    routeState.tab = "releases";
+    renderWithQuery(<ForgeEnvPage />);
+
     const releases = await screen.findByTestId("live-releases");
     expect(within(releases).getByTestId("promotion-promo-1")).toBeInTheDocument();
     expect(within(releases).getByTestId("convergence-conv-1")).toBeInTheDocument();
+    expectNoBannerOrError();
+    expect(daemonCalls).toEqual([]);
+  });
 
-    // Secrets, from the managed store joined with the DECLARED shape.
+  it("renders the Secrets tab from the managed store with zero daemon calls", async () => {
+    routeState.env = "prod";
+    routeState.tab = "secrets";
+    renderWithQuery(<ForgeEnvPage />);
+
+    // From the managed store joined with the DECLARED shape.
     await screen.findByText("STRIPE_WEBHOOK_SECRET");
-
     expectNoBannerOrError();
     expect(daemonCalls).toEqual([]);
   });
@@ -354,9 +376,6 @@ describe("the Live tab makes zero daemon calls", () => {
     expect(within(declared).getByText("api")).toBeInTheDocument();
     expect(within(declared).getByText(/not an observation of your cluster/i)).toBeInTheDocument();
 
-    // Its declared secret is a row even though nothing has ever been set.
-    await screen.findByText("DATABASE_URL");
-
     // GetStatus is NOT called for a non-placed env: the platform has no
     // observer on the user's own cluster.
     expect(getEnvironmentStatus).not.toHaveBeenCalled();
@@ -365,23 +384,32 @@ describe("the Live tab makes zero daemon calls", () => {
     expect(daemonCalls).toEqual([]);
   });
 
-  it("renders a never-built env as a normal state, not an error", async () => {
-    routeState.env = "fresh";
+  it("lists a declared-not-built env's secrets on Secrets even though none was ever set", async () => {
+    routeState.env = "staging";
+    routeState.tab = "secrets";
     renderWithQuery(<ForgeEnvPage />);
-
-    const panel = await screen.findByTestId("live-never-built");
-    expect(panel).toHaveTextContent(/not built yet/i);
-    expect(panel).toHaveTextContent("forge env build fresh");
-    // The remedy is offered as a navigation, not as a daemon requirement.
-    expect(screen.getByRole("button", { name: /open preview/i })).toBeInTheDocument();
-
-    expect(screen.queryByTestId("live-section")).not.toBeInTheDocument();
-    expectNoBannerOrError();
+    await screen.findByText("DATABASE_URL");
     expect(daemonCalls).toEqual([]);
   });
 
-  it("sets a secret from Live with zero daemon calls", async () => {
+  it("renders an env Reliant has no record of as 'not registered', even when the daemon throws", async () => {
+    routeState.env = "fresh";
+    renderWithQuery(<ForgeEnvPage />);
+
+    const panel = await screen.findByTestId("env-overview-unregistered", {}, { timeout: 5000 });
+    expect(panel).toHaveTextContent(/not registered in reliant/i);
+    // NOT "not built yet": no record in Reliant says nothing about whether it
+    // was ever built — control-plane's prod is live with no row here.
+    expect(panel).not.toHaveTextContent(/not built yet/i);
+    expect(screen.queryByTestId("live-section")).not.toBeInTheDocument();
+    // Only the checkout can say what an unregistered env is, so this is the
+    // one case allowed to ask — and only for its identity.
+    expect(daemonCalls.every((call) => call === "getTopology" || call === "getEnvStatus")).toBe(true);
+  });
+
+  it("sets a secret from the Secrets tab with zero daemon calls", async () => {
     routeState.env = "prod";
+    routeState.tab = "secrets";
     const user = userEvent.setup();
     renderWithQuery(<ForgeEnvPage />);
 
@@ -402,7 +430,12 @@ describe("the Live tab makes zero daemon calls", () => {
   });
 });
 
-describe("the Overview makes zero daemon calls", () => {
+/**
+ * The Overview TABLE is the backend. The daemon is asked for one thing only —
+ * the checkout's topology, which feeds the separately labelled "not
+ * registered" list — and the table must render in full when that throws.
+ */
+describe("the Overview table needs no daemon", () => {
   it("lists every environment from the control plane, fully rendered", async () => {
     renderWithQuery(<ForgeOverviewPage />);
 
@@ -420,18 +453,19 @@ describe("the Overview makes zero daemon calls", () => {
     expect(screen.queryByText(/start your daemon once to see them/i)).not.toBeInTheDocument();
 
     expectNoBannerOrError();
-    expect(daemonCalls).toEqual([]);
+    expect(daemonCalls.every((call) => call === "getTopology")).toBe(true);
+    expect(screen.queryByTestId("forge-overview-unregistered")).not.toBeInTheDocument();
   });
 
   it("shows no environments as a normal state when the project has none", async () => {
     getLiveView.mockResolvedValue([]);
     renderWithQuery(<ForgeOverviewPage />);
 
-    const empty = await screen.findByTestId("forge-overview-empty");
-    expect(empty).toHaveTextContent(/no environments have been built yet/i);
+    const empty = await screen.findByTestId("forge-overview-empty", {}, { timeout: 5000 });
+    expect(empty).toHaveTextContent(/no environments recorded yet/i);
     expect(empty).toHaveTextContent("forge env build");
 
     expectNoBannerOrError();
-    expect(daemonCalls).toEqual([]);
+    expect(daemonCalls.every((call) => call === "getTopology")).toBe(true);
   });
 });

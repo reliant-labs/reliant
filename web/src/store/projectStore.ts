@@ -74,6 +74,12 @@ function syncProjectUrl(projectId: string | null) {
         isWorkflowSurfacePath(currentPath) ||
         // The Inbox spans projects the same way.
         currentPath === "/inbox" ||
+        // Forge owns its own project scope: the `project` search param, kept
+        // in sync by ForgeLayout. Its header switcher selects a project to
+        // CHANGE that scope, and navigating to /project/$id here threw the
+        // user out of Forge into the chat view on every switch.
+        currentPath === "/forge" ||
+        currentPath.startsWith("/forge/") ||
         currentPath.startsWith("/auth") ||
         currentPath.startsWith("/reset-password") ||
         currentPath.startsWith("/verify-email") ||

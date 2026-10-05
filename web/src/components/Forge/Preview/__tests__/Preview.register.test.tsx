@@ -29,7 +29,7 @@ import { Code, ConnectError } from "@connectrpc/connect";
 
 import type { LiveEnv } from "@/services/forge/live";
 
-const routeState: { env: string; tab?: string } = { env: "staging", tab: "preview" };
+const routeState: { env: string; tab?: string } = { env: "staging", tab: undefined };
 const navigate = vi.fn();
 
 vi.mock("@tanstack/react-router", () => ({
@@ -182,7 +182,7 @@ vi.mock("@/services/forge/cloudEnvs", async (importOriginal) => ({
 }));
 
 import { ForgeEnvPage } from "../../EnvPage/ForgeEnvPage";
-import { DAEMON_OFFLINE_COPY } from "../PreviewSection";
+import { DAEMON_OFFLINE_COPY } from "../../EnvPage/DaemonNeeded";
 
 function renderPage() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
@@ -197,7 +197,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   liveEnvs = [];
   routeState.env = "staging";
-  routeState.tab = "preview";
+  routeState.tab = undefined;
   getTopology.mockImplementation(OFFLINE);
   getEnvShape.mockImplementation(OFFLINE);
   getEnvStatus.mockImplementation(OFFLINE);
@@ -206,31 +206,26 @@ beforeEach(() => {
   listSecrets.mockResolvedValue([]);
 });
 
-describe("Preview with the daemon offline", () => {
-  it("says so in Preview alone, in one short literal line", async () => {
+describe("an environment Reliant has no record of, with the daemon offline", () => {
+  it("says what the daemon-backed tab needs, and offers a retry-free page otherwise", async () => {
+    routeState.tab = "changes";
     renderPage();
 
     // Longer than the default 1s: forgeRetry allows ONE retry on a transport
-    // failure, so a daemon that is down is established on the second attempt,
-    // not the first.
-    const offline = await screen.findByTestId("preview-daemon-offline", {}, { timeout: 5000 });
+    // failure, so a daemon that is down is established on the second attempt.
+    const offline = await screen.findByTestId("daemon-needed", {}, { timeout: 5000 });
     expect(offline).toHaveTextContent(DAEMON_OFFLINE_COPY);
-    expect(DAEMON_OFFLINE_COPY).toBe("Daemon offline. Preview needs it to render your code.");
-
-    // Explanatory framing is NOT the register: it explains the architecture to
-    // someone who only wanted to know why a tab is empty.
-    expect(screen.queryByText(/connect your machine/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/showing what the control plane knows/i)).not.toBeInTheDocument();
+    // It says the backend tabs are unaffected, rather than reading as if the
+    // whole environment were in question.
+    expect(offline).toHaveTextContent(/don't need it/i);
   });
 
-  it("leaves Live with no banner at all on the same page", async () => {
-    routeState.tab = undefined; // the Live tab
+  it("still renders Overview, saying it is not registered rather than 'not built yet'", async () => {
     renderPage();
 
-    await screen.findByTestId("live-never-built", {}, { timeout: 5000 });
-    expect(screen.queryByTestId("preview-daemon-offline")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("forge-daemon-offline")).not.toBeInTheDocument();
-    expect(screen.queryByText(/daemon/i)).not.toBeInTheDocument();
+    const panel = await screen.findByTestId("env-overview-unregistered", {}, { timeout: 5000 });
+    expect(panel).toHaveTextContent(/not registered in reliant/i);
+    expect(panel).not.toHaveTextContent(/not built yet/i);
   });
 });
 
@@ -243,7 +238,7 @@ describe("Register", () => {
     getAudit.mockResolvedValue({ kind: "report", report: {} });
   });
 
-  it("shows a never-built env as 'would be created' and registers forge's shape", async () => {
+  it("shows an unregistered env as 'would be created' and registers forge's shape", async () => {
     const user = userEvent.setup();
     renderPage();
 
@@ -316,13 +311,13 @@ describe("Register", () => {
  * live C-LIVE stack; what is provable here is the part that was broken: that
  * registering an environment makes it fully usable from Live with no daemon.
  */
-describe("acceptance: never built → Register → daemon offline → Live works", () => {
+describe("acceptance: unregistered → Register → daemon offline → Overview and Secrets work", () => {
   // A longer budget than the 5s default: this walks four states, and two of
   // them wait out forgeRetry's one retry against a daemon that is down.
   it("runs the whole flow", async () => {
     const user = userEvent.setup();
 
-    // ── 1. A never-built env appears in Preview as "would be created". ──
+    // ── 1. An unregistered env's Overview offers "would be created". ──
     getTopology.mockResolvedValue({ kind: "report", report: { project: "hounders", environments: [] } });
     getEnvShape.mockResolvedValue({ kind: "report", report: SHAPE_REPORT });
     getEnvStatus.mockResolvedValue({ kind: "report", report: {} });
@@ -344,9 +339,9 @@ describe("acceptance: never built → Register → daemon offline → Live works
     getEnvStatus.mockImplementation(OFFLINE);
     getAudit.mockImplementation(OFFLINE);
 
-    // ── 4. Live shows "Declared, not built yet"… ──
+    // ── 4. Overview shows "Declared, not built yet"… ──
     routeState.tab = undefined;
-    renderPage();
+    const second = renderPage();
 
     await screen.findByTestId("live-section", {}, { timeout: 5000 });
     expect(screen.getByTestId("live-declared-not-built")).toHaveTextContent(
@@ -357,9 +352,13 @@ describe("acceptance: never built → Register → daemon offline → Live works
     // And no banner: the daemon being offline is not this page's problem.
     expect(screen.queryByTestId("forge-daemon-offline")).not.toBeInTheDocument();
 
-    // ── …and a secret can be set, with the daemon still offline. ──
+    second.unmount();
+
+    // ── …and on Secrets a secret can be set, with the daemon still offline. ──
     // DATABASE_URL is a row because the DECLARED SHAPE names it — the row
     // that used to need `forge.secret_list` on the daemon.
+    routeState.tab = "secrets";
+    renderPage();
     await screen.findByText("DATABASE_URL", {}, { timeout: 5000 });
 
     await user.click(screen.getByTestId("add-secret"));

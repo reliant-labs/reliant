@@ -1,19 +1,21 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * WHICH CODE PREVIEW IS ABOUT.
+ * WHICH CODE THE CHANGES TAB IS ABOUT — a dropdown of this project's
+ * checkouts.
  *
- * Preview answers "what would this code do to that environment", and until
- * there was a picker the answer was always "whatever the daemon's main checkout
- * happens to be" — which is rarely the branch anyone is actually working on.
- * The selected checkout drives every Preview call below it.
+ * It was a wrap of clickable tags, one per worktree. A project with a dozen
+ * branches turned that into a wall of chips above the thing the user actually
+ * came to read, and nothing about a chip said "this is a choice of one". A
+ * select is the control for picking one of N, it costs one row however many
+ * branches there are, and the trigger states the current answer.
  *
  * TWO THINGS HERE ARE DELIBERATELY NOT DECORATION.
  *
- * The DIRTY badge: a checkout with uncommitted changes builds from those
- * changes, so the thing deployed would exist on nobody else's machine and in no
- * commit. That is legitimate for a preview and worth knowing before approving a
- * deploy, so it is stated rather than implied.
+ * The DIRTY marker: a checkout with uncommitted changes builds from those
+ * changes, so what would be deployed exists on nobody else's machine and in no
+ * commit. Legitimate for a preview and worth knowing before approving a deploy,
+ * so it is stated on the trigger as well as in the list.
  *
  * The distance from main is OMITTED, not zeroed, when it is unknown. Forge
  * leaves the counts out when it could not compare (no remote, or main never
@@ -21,8 +23,10 @@
  * about how stale the code is — to the one person about to ship it.
  */
 
-import { Check, GitBranch } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Check, ChevronDown, GitBranch } from "lucide-react";
 
+import SkeletonLoader from "@/components/forge-ui/skeleton_loader";
 import { cn } from "@/lib/utils";
 import {
   distanceFromMain,
@@ -39,43 +43,91 @@ export interface CheckoutPickerProps {
   isLoading?: boolean;
 }
 
-export function CheckoutPicker({
-  report,
-  selected,
-  onSelect,
-  isLoading,
-}: CheckoutPickerProps) {
+function labelOf(checkout: ForgeCheckout): string {
+  return checkout.label?.trim() || checkout.branch?.trim() || "this branch";
+}
+
+export function CheckoutPicker({ report, selected, onSelect, isLoading }: CheckoutPickerProps) {
   const checkouts = selectableCheckouts(report);
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // DROPDOWN_STANDARDS: mousedown click-outside, no backdrop.
+  useEffect(() => {
+    if (!open) return;
+    const handleClickOutside = (event: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [open]);
 
   if (isLoading && checkouts.length === 0) {
     return (
-      <p
-        data-testid="checkout-picker-loading"
-        className="rounded-lg border border-dashed border-border px-3 py-2 text-xs text-muted-foreground"
-      >
-        Looking for your branches…
-      </p>
+      <div data-testid="checkout-picker-loading" aria-label="Looking for your branches" className="w-64">
+        <SkeletonLoader variant="form-field" />
+      </div>
     );
   }
 
-  // Nothing to choose between. Rendering a picker with one option would be
-  // asking a question with one answer.
+  // Nothing to choose between. A picker with one option is a question with one
+  // answer.
   if (checkouts.length <= 1) return null;
 
+  // Empty `selected` means the main checkout: whichever one forge marks
+  // selected, else the first.
+  const current =
+    checkouts.find((checkout) => (checkout.path ?? "") === selected) ??
+    checkouts.find((checkout) => checkout.selected === true) ??
+    checkouts[0]!;
+
   return (
-    <section className="space-y-1.5" data-testid="checkout-picker">
-      <p className="text-xs font-medium text-foreground">Preview which branch</p>
-      <div className="flex flex-wrap gap-1.5">
-        {checkouts.map((checkout) => (
-          <CheckoutOption
-            key={checkout.path}
-            checkout={checkout}
-            isSelected={(checkout.path ?? "") === selected}
-            onSelect={() => onSelect(checkout.path ?? "")}
-          />
-        ))}
-      </div>
-    </section>
+    <div className="relative inline-block" ref={containerRef} data-testid="checkout-picker">
+      <span id="checkout-picker-label" className="mb-1 block text-xs font-medium text-muted-foreground">
+        Branch
+      </span>
+      <button
+        type="button"
+        onClick={() => setOpen((previous) => !previous)}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-labelledby="checkout-picker-label checkout-picker-trigger"
+        id="checkout-picker-trigger"
+        data-testid="checkout-picker-trigger"
+        className="flex h-9 min-w-[16rem] max-w-md items-center gap-2 rounded-md border border-border bg-background px-3 text-left text-sm text-foreground transition-colors hover:border-border-strong focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        <GitBranch className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+        <span className="truncate font-mono">{labelOf(current)}</span>
+        {current.dirty === true && (
+          <span className="shrink-0 text-2xs text-warning" data-testid="checkout-trigger-dirty">
+            uncommitted
+          </span>
+        )}
+        <ChevronDown className="ml-auto h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+      </button>
+
+      {open && (
+        <ul
+          role="listbox"
+          aria-labelledby="checkout-picker-label"
+          className="absolute left-0 top-full z-50 mt-1 max-h-72 w-full min-w-[20rem] overflow-y-auto rounded-lg border border-border bg-card p-1 shadow-md"
+        >
+          {checkouts.map((checkout) => (
+            <CheckoutOption
+              key={checkout.path}
+              checkout={checkout}
+              isSelected={checkout === current}
+              onSelect={() => {
+                setOpen(false);
+                onSelect(checkout.path ?? "");
+              }}
+            />
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
 
@@ -89,40 +141,40 @@ function CheckoutOption({
   onSelect: () => void;
 }) {
   const distance = distanceFromMain(checkout);
-  const label = checkout.label?.trim() || checkout.branch?.trim() || "this branch";
-
   return (
-    <button
-      type="button"
+    <li
+      role="option"
+      aria-selected={isSelected}
+      tabIndex={0}
       onClick={onSelect}
-      aria-pressed={isSelected}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onSelect();
+        }
+      }}
       data-testid="checkout-option"
       data-selected={isSelected}
       data-dirty={checkout.dirty === true}
       className={cn(
-        "flex items-center gap-1.5 rounded-md border px-2 py-1 text-left text-2xs transition-colors",
-        isSelected
-          ? "border-primary bg-primary/10 text-foreground"
-          : "border-border text-muted-foreground hover:bg-muted hover:text-foreground"
+        "flex cursor-pointer items-start gap-2 rounded-md px-2.5 py-1.5 text-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        isSelected ? "bg-primary/10" : "hover:bg-muted/70"
       )}
     >
-      {isSelected ? (
-        <Check className="h-3 w-3 shrink-0 text-primary" aria-hidden="true" />
-      ) : (
-        <GitBranch className="h-3 w-3 shrink-0" aria-hidden="true" />
-      )}
-      <span className="font-mono text-foreground">{label}</span>
-
-      {/* Uncommitted changes: this builds from code that is only on this
-          machine. */}
-      {checkout.dirty === true && (
-        <span data-testid="checkout-dirty" className="text-warning">
-          uncommitted changes
+      <Check className={cn("mt-0.5 h-3.5 w-3.5 shrink-0 text-primary", !isSelected && "invisible")} aria-hidden="true" />
+      <span className="flex min-w-0 flex-col">
+        <span className="truncate font-mono text-foreground">{labelOf(checkout)}</span>
+        <span className="flex flex-wrap gap-x-2 text-2xs text-muted-foreground">
+          {/* Uncommitted changes: this builds from code only on this machine. */}
+          {checkout.dirty === true && (
+            <span data-testid="checkout-dirty" className="text-warning">
+              uncommitted changes
+            </span>
+          )}
+          {/* Present only when forge could actually compare. */}
+          {distance && <span>{distance}</span>}
         </span>
-      )}
-
-      {/* Present only when forge could actually compare. */}
-      {distance && <span className="text-muted-foreground">{distance}</span>}
-    </button>
+      </span>
+    </li>
   );
 }

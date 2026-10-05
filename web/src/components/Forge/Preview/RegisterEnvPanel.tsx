@@ -67,23 +67,25 @@ export function RegisterEnvPanel({
 
   return (
     <section
-      className="space-y-3 rounded-lg border border-dashed border-border px-4 py-3"
+      className="space-y-3"
       data-testid="register-env-panel"
-      aria-labelledby="register-env-heading"
+      aria-label={`Register ${envName}`}
     >
-      <div className="flex flex-wrap items-center gap-2">
-        <h3 id="register-env-heading" className="text-sm font-semibold text-foreground">
-          <span className="font-mono">{envName}</span>
-        </h3>
+      {/* The env's name and "not registered" are the page's header and this
+          panel's card title; repeating them here read as a second page. */}
+      <p className="flex items-center gap-2 text-sm text-foreground">
         <Badge label="would be created" variant="neutral" size="sm" />
-      </div>
+        <span>
+          Registering creates <span className="font-mono">{envName}</span> in Reliant.
+        </span>
+      </p>
 
       {/* The customer's nouns (#366): what they get, not where we file it.
           "Reliant has no record of it" is a fact about their project;
           "the control plane has no row" is a fact about our database. */}
       <p className="text-xs text-muted-foreground">
         {declaredHere
-          ? "Your code declares this environment and Reliant hasn't seen it yet. Adding it records what forge renders, so it shows up in Live and you can set its secrets — even with your daemon offline."
+          ? "Your code declares this environment. Registering records what forge renders for it, so its releases and secrets are tracked here — even with your daemon offline."
           : "Reliant hasn't seen this environment yet. Adding it records what forge renders for it."}
       </p>
 
@@ -118,11 +120,6 @@ export function RegisterEnvPanel({
             >
               {register.isPending ? "Registering…" : "Register"}
             </Button>
-            {register.isSuccess && (
-              <span data-testid="register-done" className="text-xs text-muted-foreground">
-                Added. It&apos;s on the Live tab now, declared and not built yet.
-              </span>
-            )}
           </div>
           {register.error && (
             // The server's own words, as `detail`. EnsureEnvironment refuses —
