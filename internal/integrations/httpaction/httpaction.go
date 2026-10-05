@@ -581,6 +581,13 @@ func errorResult(req *reliantv1.HttpRequestSpec, p *page) (*Result, error) {
 			}
 			match = p.status >= int(rule.GetStatusMin()) && p.status <= max
 		}
+		if match && rule.GetWhen() != "" {
+			// A guard that errors (a null where a string was expected) is a
+			// non-match, so the next rule or the defaults still classify it.
+			v, err := tmpl.EvalExpr(rule.GetWhen(), responseVars(p))
+			holds, _ := v.(bool)
+			match = err == nil && holds
+		}
 		if !match {
 			continue
 		}

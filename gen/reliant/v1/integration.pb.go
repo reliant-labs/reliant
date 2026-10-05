@@ -1439,8 +1439,14 @@ type ErrorRule struct {
 	StatusMin int32                  `protobuf:"varint,2,opt,name=status_min,json=statusMin,proto3" json:"status_min,omitempty"`
 	StatusMax int32                  `protobuf:"varint,3,opt,name=status_max,json=statusMax,proto3" json:"status_max,omitempty"`
 	Retryable bool                   `protobuf:"varint,4,opt,name=retryable,proto3" json:"retryable,omitempty"`
-	// Message is a template over `status` and `response`.
-	Message       string `protobuf:"bytes,5,opt,name=message,proto3" json:"message,omitempty"`
+	// Message is a template over `status`, `headers` and `response`.
+	Message string `protobuf:"bytes,5,opt,name=message,proto3" json:"message,omitempty"`
+	// When is an optional CEL bool over `status`, `headers` (lower-cased names)
+	// and `response` that must also hold for the rule to match. It splits one
+	// status that means two things: GitHub answers both an exhausted rate limit
+	// (retryable) and a missing permission (permanent) with 403. A `when` that
+	// fails to evaluate does not match.
+	When          string `protobuf:"bytes,6,opt,name=when,proto3" json:"when,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1506,6 +1512,13 @@ func (x *ErrorRule) GetRetryable() bool {
 func (x *ErrorRule) GetMessage() string {
 	if x != nil {
 		return x.Message
+	}
+	return ""
+}
+
+func (x *ErrorRule) GetWhen() string {
+	if x != nil {
+		return x.When
 	}
 	return ""
 }
@@ -1758,7 +1771,7 @@ const file_reliant_v1_integration_proto_rawDesc = "" +
 	"\n" +
 	"page_param\x18\x05 \x01(\tR\tpageParam\x12\x1d\n" +
 	"\n" +
-	"start_page\x18\x06 \x01(\x05R\tstartPage\"\x99\x01\n" +
+	"start_page\x18\x06 \x01(\x05R\tstartPage\"\xad\x01\n" +
 	"\tErrorRule\x12\x16\n" +
 	"\x06status\x18\x01 \x01(\x05R\x06status\x12\x1d\n" +
 	"\n" +
@@ -1766,7 +1779,8 @@ const file_reliant_v1_integration_proto_rawDesc = "" +
 	"\n" +
 	"status_max\x18\x03 \x01(\x05R\tstatusMax\x12\x1c\n" +
 	"\tretryable\x18\x04 \x01(\bR\tretryable\x12\x18\n" +
-	"\amessage\x18\x05 \x01(\tR\amessage\"U\n" +
+	"\amessage\x18\x05 \x01(\tR\amessage\x12\x12\n" +
+	"\x04when\x18\x06 \x01(\tR\x04when\"U\n" +
 	"\n" +
 	"OutputSpec\x12\x16\n" +
 	"\x06select\x18\x01 \x01(\tR\x06select\x12/\n" +

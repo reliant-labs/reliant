@@ -295,8 +295,14 @@ message ErrorRule {
   int32 status_min = 2;
   int32 status_max = 3;
   bool retryable = 4;
-  // Message is a template over `status` and `response`.
+  // Message is a template over `status`, `headers` and `response`.
   string message = 5;
+  // When is an optional CEL bool over `status`, `headers` (lower-cased names)
+  // and `response` that must also hold for the rule to match. It splits one
+  // status that means two things: GitHub answers both an exhausted rate limit
+  // (retryable) and a missing permission (permanent) with 403. A `when` that
+  // fails to evaluate does not match.
+  string when = 6;
 }
 
 // OutputSpec selects what part of the response becomes the node's data.
