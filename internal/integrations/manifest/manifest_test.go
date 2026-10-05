@@ -114,7 +114,7 @@ func TestOnlyCuratedManifestsMayClaimServer(t *testing.T) {
 func TestReservedAndInvalidRejected(t *testing.T) {
 	for name, doc := range map[string]string{
 		"retired type":   strings.Replace(validHTTP, "connection:\n", "connection:\n  type: none\n", 1),
-		"triggers":       validHTTP + "triggers:\n  - id: x\n",
+		"bare trigger":   validHTTP + "triggers:\n  - id: x\n",
 		"await_external": strings.Replace(validHTTP, "mutates: false", "mutates: false\n    kind: await_external", 1),
 		"bad id":         strings.Replace(validHTTP, "id: demo", "id: Demo!", 1),
 		"zero version":   strings.Replace(validHTTP, "version: 1", "version: 0", 1),

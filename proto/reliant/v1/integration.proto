@@ -27,8 +27,9 @@ message IntegrationManifest {
   string category = 6;
   ConnectionSpec connection = 7;
   repeated ActionSpec actions = 8;
-  // Triggers are reserved for a later phase. A manifest that declares any is
-  // rejected at load until trigger support exists.
+  // Triggers are the trigger types the integration delivers. Declaring one is
+  // a catalog statement; delivery is the provider's (a webhook Provider or a
+  // Poller registered for this id).
   repeated TriggerSpec triggers = 9;
   // Keywords are extra search terms for the catalog index: product names and
   // synonyms ("email" for gmail). Lower-case words, [a-z0-9][a-z0-9_.-]*.
@@ -316,7 +317,49 @@ message OutputSpec {
   google.protobuf.Struct schema = 2;
 }
 
-// TriggerSpec is reserved for the triggers phase.
+// TriggerSpec declares one trigger type the integration delivers: what can
+// start a run from it (`github/issue.opened@1`). It is a CATALOG entry —
+// what search lists, what the editor's trigger picker offers, and the schema a
+// trigger filter is checked against. Delivering the events is the provider's
+// (internal/integrations/webhook): its Event.Type values are what `events`
+// names, and its Event.Attributes keys are what `attributes` names.
+//
+// A trigger row listens through an IntegrationSource, whose `events` and
+// `match` are exactly this spec's events and attribute names, so the editor
+// can build one from a picked spec without knowing the provider.
 message TriggerSpec {
+  // Id is unique within the manifest, e.g. "issue.opened". Same grammar as an
+  // action id, and the same namespace: `<integration>/<id>@<major>` names
+  // exactly one action or trigger, so an id may not be both.
   string id = 1;
+  string display_name = 2;
+  // Summary is one line for search results and pickers; description is the
+  // long form an agent reads.
+  string summary = 3;
+  string description = 4;
+  // Keywords are extra search terms for the catalog index.
+  repeated string keywords = 5;
+  // Events are the provider event types this trigger fires on, as the
+  // provider emits them (Event.Type): "issues.opened". An IntegrationSource
+  // built from this spec lists them in `events`. At least one.
+  repeated string events = 6;
+  // Attributes are the routing facts every event of this trigger carries,
+  // which an IntegrationSource's `match` can require by equality
+  // (repository, branch). An event of this trigger always sets them.
+  repeated TriggerAttribute attributes = 7;
+  // Data is the JSON Schema of the provider's event payload, as recorded on
+  // the event (trigger.payload.data). The full trigger.payload schema wraps
+  // it in the envelope every integration event shares; see
+  // manifest.TriggerPayloadSchema.
+  google.protobuf.Struct data = 8;
+}
+
+// TriggerAttribute is one routing fact a trigger's events carry.
+message TriggerAttribute {
+  // Name is the key in Event.Attributes and IntegrationSource.match:
+  // lower-case, [a-z][a-z0-9_]*.
+  string name = 1;
+  string description = 2;
+  // Example is a representative value for an editor's placeholder.
+  string example = 3;
 }

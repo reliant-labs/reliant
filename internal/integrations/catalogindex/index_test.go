@@ -178,10 +178,10 @@ func TestEmbeddedCatalogRanksTheObviousActionFirst(t *testing.T) {
 	}
 }
 
-// Today no manifest can declare a trigger (the loader refuses them and
-// TriggerSpec is a stub). This pins that the embedded catalog's index is
-// actions-only until stream B lands; when it does, this test changes to
-// assert the trigger entries instead.
+// Manifests can declare triggers, but no embedded manifest does yet: a
+// trigger type is declared together with the provider that delivers it, so
+// the catalog never lists one this server cannot receive. When the first
+// provider lands (GitHub), this test changes to assert its entries.
 func TestEmbeddedCatalogIsActionsOnlyUntilTriggersLand(t *testing.T) {
 	idx, err := Build(catalog.MustBuiltin().Manifests())
 	require.NoError(t, err)
@@ -194,8 +194,7 @@ func TestEmbeddedCatalogIsActionsOnlyUntilTriggersLand(t *testing.T) {
 	}
 }
 
-// A trigger declared in a manifest gets its own entry and kind, so the
-// trigger slot is real even though the embedded catalog has none yet.
+// A trigger declared in a manifest gets its own entry and kind.
 func TestTriggerEntriesAreIndexedUnderTheirOwnKind(t *testing.T) {
 	ms := fixtureCatalog(t)
 	ms[0].Triggers = []*reliantv1.TriggerSpec{{Id: "issue.opened"}}
@@ -445,4 +444,70 @@ func TestQueryTooLong(t *testing.T) {
 	idx := fixtureIndex(t)
 	_, err := idx.Search(Query{Text: strings.Repeat("a", MaxQueryLen+1)})
 	assert.ErrorIs(t, err, ErrQueryTooLong)
+}
+
+const triggerFixture = `
+id: pager
+version: 1
+display_name: Pager
+category: ops
+keywords: [incident]
+connection:
+  base_url: https://api.pager.example
+  auth:
+    - api_key: { in: header, name: X-Api-Key }
+triggers:
+  - id: alert.fired
+    display_name: Alert fired
+    summary: An alert started firing.
+    description: Fires when any alert in the connected account starts firing.
+    keywords: [page, oncall]
+    events: [alert.fired]
+    attributes:
+      - { name: service, description: The alerting service., example: checkout }
+    data:
+      type: object
+      properties:
+        alert: { type: object, properties: { severity: { type: string } } }
+`
+
+// A manifest trigger is indexed with its own display name, summary and
+// keywords, searchable like an action, and its payload schema is the
+// envelope manifest.TriggerPayloadSchema builds.
+func TestManifestTriggersAreIndexedWithTheirDeclaration(t *testing.T) {
+	m, err := manifest.Parse([]byte(triggerFixture), manifest.TrustCurated)
+	require.NoError(t, err)
+	idx, err := Build([]*reliantv1.IntegrationManifest{m})
+	require.NoError(t, err)
+
+	e, ok := idx.Get("pager/alert.fired@1")
+	require.True(t, ok)
+	assert.Equal(t, KindTrigger, e.Kind)
+	assert.Equal(t, "Alert fired", e.DisplayName)
+	assert.Equal(t, "An alert started firing.", e.Summary)
+	assert.Equal(t, "Fires when any alert in the connected account starts firing.", e.Description)
+	assert.True(t, e.ConnectionRequired)
+
+	for _, q := range []string{"oncall", "alert fired", "started firing", "incident"} {
+		r := search(t, idx, Query{Text: q, Kinds: []Kind{KindTrigger}})
+		assert.Equal(t, []string{"pager/alert.fired@1"}, refs(r), "query %q", q)
+	}
+
+	payload := e.PayloadSchema()
+	require.NotNil(t, payload)
+	props := payload["properties"].(map[string]any)
+	assert.Contains(t, props["data"].(map[string]any)["properties"], "alert")
+	assert.Contains(t, props["attributes"].(map[string]any)["properties"], "service")
+	params, output := e.Schemas()
+	assert.Nil(t, params)
+	assert.Nil(t, output)
+
+	action, ok := fixtureIndexEntry(t, "github/issue.create@1")
+	require.True(t, ok)
+	assert.Nil(t, action.PayloadSchema(), "an action has no trigger payload")
+}
+
+func fixtureIndexEntry(t *testing.T, ref string) (*Entry, bool) {
+	t.Helper()
+	return fixtureIndex(t).Get(ref)
 }

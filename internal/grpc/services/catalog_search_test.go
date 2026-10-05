@@ -295,3 +295,53 @@ func TestGetCatalogEntry_EveryEmbeddedEntryConverts(t *testing.T) {
 		assert.NotNil(t, resp.Msg.GetEntry().GetParamsSchema(), s.GetRef())
 	}
 }
+
+const catalogTriggerFixture = `
+id: pager
+version: 1
+display_name: Pager
+category: ops
+connection:
+  base_url: https://api.pager.example
+  auth:
+    - api_key: { in: header, name: X-Api-Key }
+triggers:
+  - id: alert.fired
+    display_name: Alert fired
+    summary: An alert started firing.
+    events: [alert.fired]
+    attributes:
+      - { name: service }
+    data:
+      type: object
+      properties:
+        alert: { type: object, properties: { severity: { type: string } } }
+`
+
+// A trigger entry carries the payload schema (trigger.payload) and no
+// action schemas; the search lists it under the trigger kind.
+func TestGetCatalogEntry_TriggerCarriesItsPayloadSchema(t *testing.T) {
+	m, err := manifest.Parse([]byte(catalogTriggerFixture), manifest.TrustCurated)
+	require.NoError(t, err)
+	idx, err := catalogindex.Build([]*reliantv1.IntegrationManifest{m})
+	require.NoError(t, err)
+	svc := NewCatalogService(nil).WithCatalogSearch(catalogindex.NewService(idx, fakeCatalogConnections{}, nil), nil)
+
+	list, err := svc.SearchCatalog(asUser("bob"), connect.NewRequest(&reliantv1.SearchCatalogRequest{
+		Kinds: []reliantv1.CatalogEntryKind{reliantv1.CatalogEntryKind_CATALOG_ENTRY_KIND_TRIGGER},
+	}))
+	require.NoError(t, err)
+	require.Equal(t, []string{"pager/alert.fired@1"}, entryRefs(list.Msg.GetEntries()))
+	assert.Equal(t, "Alert fired", list.Msg.GetEntries()[0].GetDisplayName())
+
+	resp, err := svc.GetCatalogEntry(asUser("bob"), connect.NewRequest(&reliantv1.GetCatalogEntryRequest{Ref: "pager/alert.fired@1"}))
+	require.NoError(t, err)
+	e := resp.Msg.GetEntry()
+	assert.Equal(t, reliantv1.CatalogEntryKind_CATALOG_ENTRY_KIND_TRIGGER, e.GetSummary().GetKind())
+	assert.Nil(t, e.GetParamsSchema())
+	assert.Nil(t, e.GetOutputSchema())
+	require.NotNil(t, e.GetPayloadSchema())
+	props := e.GetPayloadSchema().AsMap()["properties"].(map[string]any)
+	assert.Contains(t, props["data"].(map[string]any)["properties"], "alert")
+	assert.Equal(t, map[string]any{"type": "string", "const": "pager"}, props["integration"])
+}

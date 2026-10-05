@@ -153,19 +153,17 @@ func Build(ms []*reliantv1.IntegrationManifest) (*Index, error) {
 				return nil, err
 			}
 		}
-		// SEAM (stream B): TriggerSpec is still a reserved stub ({id}) on main
-		// and the manifest loader refuses any manifest that declares triggers,
-		// so no trigger entry exists yet. When TriggerSpec gains display_name /
-		// summary / description / keywords / payload schema, index them here as
-		// actions are above; the KindTrigger slot, the proto kind and the
-		// payload_schema field are already in place.
+		// Trigger types index exactly as actions do. Refs are one namespace
+		// (the loader refuses a trigger id that is also an action id).
 		for _, t := range m.GetTriggers() {
 			e := &Entry{
 				Ref: Ref(m.GetId(), t.GetId(), m.GetVersion()), Kind: KindTrigger, ID: t.GetId(),
-				DisplayName: t.GetId(),
+				DisplayName: orDefault(t.GetDisplayName(), t.GetId()),
+				Summary:     summaryOf(t.GetSummary(), t.GetDescription()),
+				Description: t.GetDescription(),
 				Manifest:    m, Trigger: t, AuthKinds: authKinds, ConnectionRequired: required,
 			}
-			e.index(m.GetKeywords(), integrationText)
+			e.index(append(append([]string{}, t.GetKeywords()...), m.GetKeywords()...), integrationText)
 			if err := idx.add(e); err != nil {
 				return nil, err
 			}

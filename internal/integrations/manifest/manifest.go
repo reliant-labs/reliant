@@ -142,9 +142,6 @@ func Validate(m *reliantv1.IntegrationManifest, trust Trust) error {
 	if m.GetVersion() < 1 {
 		return fmt.Errorf("version must be >= 1 (the manifest major version)")
 	}
-	if len(m.GetTriggers()) > 0 {
-		return fmt.Errorf("triggers are reserved and not yet supported")
-	}
 	if err := validateKeywords("", m.GetKeywords()); err != nil {
 		return err
 	}
@@ -153,8 +150,11 @@ func Validate(m *reliantv1.IntegrationManifest, trust Trust) error {
 	if err != nil {
 		return err
 	}
-	if len(m.GetActions()) == 0 {
-		return fmt.Errorf("at least one action is required")
+	if len(m.GetActions()) == 0 && len(m.GetTriggers()) == 0 {
+		return fmt.Errorf("at least one action or trigger is required")
+	}
+	if err := validateTriggers(m); err != nil {
+		return err
 	}
 	ids := map[string]bool{}
 	tools := map[string]bool{}
