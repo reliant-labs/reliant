@@ -85,9 +85,19 @@ interface InboxItemProps {
    * (a run group) or the automation (an automation group).
    */
   groupedBy?: "run" | "automation";
+  /** What a sibling row in the same group already says (automationGroupOmissions). */
+  omit?: InboxItemOmissions;
 }
 
-export function InboxItem({ item, groupedBy }: InboxItemProps) {
+/** Parts of a row's body that a sibling in its group already shows. */
+export interface InboxItemOmissions {
+  /** The failure detail: a sibling "could not start" row shows it as the reason. */
+  detail?: boolean;
+  /** "Failed N times in a row": a sibling "failing" row states the streak. */
+  streak?: boolean;
+}
+
+export function InboxItem({ item, groupedBy, omit }: InboxItemProps) {
   const [handled, setHandled] = useState(false);
 
   // "Already handled": show it, then take the row out (§8.3).
@@ -133,7 +143,7 @@ export function InboxItem({ item, groupedBy }: InboxItemProps) {
               Already handled
             </p>
           ) : (
-            <ItemAction item={item} onRaceOrError={onRaceOrError} />
+            <ItemAction item={item} omit={omit} onRaceOrError={onRaceOrError} />
           )}
         </div>
       </div>
@@ -237,10 +247,11 @@ function titleLead(item: InboxItemData): ReactNode {
 
 interface ItemActionProps {
   item: InboxItemData;
+  omit?: InboxItemOmissions;
   onRaceOrError: (verb: string) => (error: unknown) => void;
 }
 
-function ItemAction({ item, onRaceOrError }: ItemActionProps) {
+function ItemAction({ item, omit, onRaceOrError }: ItemActionProps) {
   const { payload } = item;
   switch (payload.case) {
     case "approval":
@@ -271,7 +282,7 @@ function ItemAction({ item, onRaceOrError }: ItemActionProps) {
         <FailingAutomationAction
           triggerId={item.triggerId}
           failures={payload.value.health?.consecutiveFailures ?? 0}
-          detail={payload.value.health?.lastFailureDetail ?? ""}
+          detail={omit?.detail ? "" : (payload.value.health?.lastFailureDetail ?? "")}
           lastRunChatId={payload.value.lastRunChatId}
         />
       );
@@ -280,7 +291,7 @@ function ItemAction({ item, onRaceOrError }: ItemActionProps) {
         <LaunchFailedAction
           triggerId={item.triggerId}
           reason={payload.value.reason}
-          failures={payload.value.consecutiveFailures}
+          failures={omit?.streak ? 0 : payload.value.consecutiveFailures}
         />
       );
     case "runFinished":
@@ -496,6 +507,11 @@ export function failedTimesInARow(failures: number): string {
   return `Failed ${failures} times in a row.`;
 }
 
+/** A server error string ("daemon x is offline") shown on its own reads as a sentence. */
+function sentenceCase(text: string): string {
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
 function RunFinishedAction({ chatId }: { chatId: string }) {
   if (!chatId) return null;
   return (
@@ -517,7 +533,7 @@ function LaunchFailedAction({
   return (
     <div className="space-y-2">
       {failures > 1 && <p className="text-sm text-muted-foreground">{failedTimesInARow(failures)}</p>}
-      {reason && <CardInset className="text-sm text-foreground">{reason}</CardInset>}
+      {reason && <CardInset className="text-sm text-foreground">{sentenceCase(reason)}</CardInset>}
       <Link to="/workflows/automations/$triggerId" params={{ triggerId }} className={secondaryLinkClass}>
         Edit automation
       </Link>

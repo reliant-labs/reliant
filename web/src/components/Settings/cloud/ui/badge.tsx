@@ -19,8 +19,10 @@ export interface BadgeProps {
 }
 
 const variantStyles: Record<BadgeVariant, string> = {
-  success: "bg-success/10 text-success ring-success/25",
-  warning: "bg-warning/10 text-warning ring-warning/25",
+  // Text uses the ink token, not the fill: amber or green FILL as text on a
+  // light card is ~2-3:1 (index.css, "FILL vs INK").
+  success: "bg-success/10 text-success-ink ring-success/25",
+  warning: "bg-warning/10 text-warning-ink ring-warning/25",
   error: "bg-destructive/10 text-destructive ring-destructive/25",
   info: "bg-info/10 text-info ring-info/25",
   neutral: "bg-muted text-muted-foreground ring-border",

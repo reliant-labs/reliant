@@ -14,6 +14,7 @@ import { create } from "@bufbuild/protobuf";
 import { Code, ConnectError } from "@connectrpc/connect";
 
 import { ListInboxResponseSchema, type InboxItem } from "@/gen/reliant/v1/inbox_pb";
+import { TriggerHealthSchema, TriggerHealthStatus } from "@/gen/reliant/v1/trigger_pb";
 import {
   approvalItem,
   failingItem,
@@ -195,7 +196,7 @@ describe("InboxPage item kinds", () => {
     respond([launchFailedItem()]);
     const { router } = renderInboxAt(<InboxPage />);
     const row = await screen.findByTestId("inbox-item-evt-5");
-    expect(within(row).getByText("machine was deleted")).toBeInTheDocument();
+    expect(within(row).getByText("Machine was deleted")).toBeInTheDocument();
     await userEvent.click(within(row).getByRole("link", { name: "Edit automation" }));
     await waitFor(() => expect(router.state.location.pathname).toBe("/workflows/automations/trg-2"));
   });
@@ -263,6 +264,33 @@ describe("InboxPage grouping and navigation", () => {
     // The heading opens the automation; each finished run still opens its run.
     await userEvent.click(within(group).getByRole("link", { name: "Nightly triage" }));
     await waitFor(() => expect(router.state.location.pathname).toBe("/workflows/automations/trg-1"));
+  });
+
+  it("says a failure streak's count and reason once across the group's two failure rows", async () => {
+    const health = create(TriggerHealthSchema, {
+      status: TriggerHealthStatus.FAILING,
+      consecutiveFailures: 3,
+      lastFailureDetail: "daemon seans-macbook-pro is offline",
+    });
+    respond([
+      failingItem({ payload: { case: "automationFailing", value: { health, lastRunChatId: "chat-last" } } }),
+      launchFailedItem({
+        triggerId: "trg-1",
+        triggerName: "Nightly triage",
+        itemId: "launch_failed:evt-5",
+        payload: {
+          case: "automationLaunchFailed",
+          value: { reason: "daemon seans-macbook-pro is offline", eventId: "evt-5", consecutiveFailures: 3 },
+        },
+      }),
+    ]);
+    renderInboxAt(<InboxPage />);
+    const group = await screen.findByTestId("inbox-group-trigger:trg-1");
+
+    expect(within(group).getAllByText(/Failed 3 times in a row/)).toHaveLength(1);
+    expect(within(group).getAllByText(/seans-macbook-pro is offline/i)).toHaveLength(1);
+    // A server string shown on its own reads as a sentence.
+    expect(within(group).getByText("Daemon seans-macbook-pro is offline")).toBeInTheDocument();
   });
 
   it("inside an automation group each finished run still links to its run", async () => {

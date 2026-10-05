@@ -585,12 +585,12 @@ function LibrarySection({
       <h2
         className={cn(
           "mb-2 flex items-center gap-1.5 px-1 text-xs font-semibold uppercase tracking-wide",
-          attention ? "text-warning" : "text-muted-foreground",
+          attention ? "text-warning-ink" : "text-muted-foreground",
         )}
       >
         {attention && <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />}
         {label}
-        <span className={cn("ml-0.5 font-medium", attention ? "text-warning/70" : "text-muted-foreground/70")}>
+        <span className={cn("ml-0.5 font-medium", attention ? "text-warning-ink" : "text-muted-foreground")}>
           {count}
         </span>
       </h2>

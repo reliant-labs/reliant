@@ -59,6 +59,7 @@ import {
 } from "./scheduleForm";
 import { errorTextClass, fieldClass, hintClass, labelClass, textareaClass } from "../workflow/run/runFormStyles";
 import { buildDaemonChoices, defaultDaemonId } from "./daemonChoices";
+import { validateTimezone } from "./timezone";
 
 /**
  * Starting values for a NEW automation — a starter template, or "Save as
@@ -197,10 +198,38 @@ function AutomationFormBody({
   );
   const [errors, setErrors] = useState<FieldErrors>({});
   const [attempted, setAttempted] = useState(false);
+  // "Discard your changes?" — shown when the dialog is dismissed while dirty.
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
+
+  // What the dialog opened with, to tell whether the user has changed anything.
+  // The daemon is excluded: the form defaults it on its own once the daemon
+  // list loads, which is not a change the user made (an explicit choice is
+  // tracked by daemonChosen instead).
+  const initialFields = useRef({
+    name,
+    projectId,
+    workflow,
+    message,
+    schedule: JSON.stringify(schedule),
+    timezone,
+    overlap,
+    catchupWindow,
+    notifyOnComplete,
+  });
+  // Workflow inputs change on their own too (RunWorkflowForm applies a
+  // workflow's default presets asynchronously). Until the user interacts with
+  // the inputs region, every change is absorbed into the baseline.
+  const inputsTouched = useRef(false);
+  const inputsBaseline = useRef(JSON.stringify(inputs));
+  if (!inputsTouched.current) inputsBaseline.current = JSON.stringify(inputs);
 
   // The project list loads asynchronously; settle on a project once it does.
+  // That is the form's default, not an edit, so it moves the baseline too.
   useEffect(() => {
-    if (!projectId && projects.length > 0) setProjectId(projects[0]!.id);
+    if (!projectId && projects.length > 0) {
+      setProjectId(projects[0]!.id);
+      initialFields.current.projectId = projects[0]!.id;
+    }
   }, [projectId, projects]);
 
   /** Inputs belong to the workflow (and a workspace to the project): reset both. */
@@ -228,7 +257,12 @@ function AutomationFormBody({
   const workflowsQuery = useProjectWorkflowList(projectId || undefined);
   const workflowOptions = useMemo(() => {
     const seen = new Set<string>();
-    const options = (workflowsQuery.data ?? [])
+    const listed = workflowsQuery.data ?? [];
+    const options = listed
+      // A draft is never runnable, so it is never offered where a runnable
+      // workflow is required (WorkflowDraftStatus in workflow.proto): an
+      // automation pinned to one would fail every firing.
+      .filter((w) => w.status !== "draft")
       .filter((w) => {
         const key = normalizeWorkflowRef(w.name).toLowerCase();
         if (seen.has(key)) return false;
@@ -237,9 +271,14 @@ function AutomationFormBody({
       })
       .map((w) => ({ value: w.name, label: getWorkflowDisplayName(w.name, true) }))
       .sort((a, b) => a.label.localeCompare(b.label));
-    // Keep a stored workflow selectable even if this project no longer lists it.
+    // Keep a stored workflow selectable even if this project no longer lists
+    // it, or it has gone back to draft — saying so, rather than blanking it.
     if (workflow && !options.some((o) => normalizeWorkflowRef(o.value) === normalizeWorkflowRef(workflow))) {
-      options.unshift({ value: workflow, label: getWorkflowDisplayName(workflow, true) });
+      const isDraft = listed.some(
+        (w) => w.status === "draft" && normalizeWorkflowRef(w.name) === normalizeWorkflowRef(workflow),
+      );
+      const label = getWorkflowDisplayName(workflow, true);
+      options.unshift({ value: workflow, label: isDraft ? `${label} (draft, cannot run)` : label });
     }
     return options;
   }, [workflowsQuery.data, workflow]);
@@ -286,9 +325,9 @@ function AutomationFormBody({
   const saving = createMutation.isPending || updateMutation.isPending;
 
   const scheduleError = validateScheduleForm(schedule);
-  const preview = scheduleError
-    ? null
-    : describeSchedule({ ...scheduleFromForm(schedule), timezone });
+  const timezoneError = validateTimezone(timezone);
+  const preview =
+    scheduleError || timezoneError ? null : describeSchedule({ ...scheduleFromForm(schedule), timezone });
 
   const updateSchedule = (patch: Partial<ScheduleFormState>) =>
     setSchedule((prev) => ({ ...prev, ...patch }));
@@ -342,6 +381,7 @@ function AutomationFormBody({
     }
     if (lockedSource?.kind === "unknown") next.form = UNKNOWN_SOURCE_MESSAGE;
     if (scheduleError && !lockedSource) next.schedule = scheduleError;
+    if (timezoneError && !lockedSource) next.timezone = timezoneError;
     const catchup = catchupWindow.trim();
     if (catchup && !lockedSource && !GO_DURATION.test(catchup)) {
       next.catchup = "Use a duration like 10m, 2h or 1h30m.";
@@ -349,7 +389,7 @@ function AutomationFormBody({
     }
     setErrors(next);
     if (Object.keys(next).length > 0) {
-      const first = (["name", "project", "daemon", "message", "inputs", "schedule", "catchup"] as const).find(
+      const first = (["name", "project", "daemon", "message", "inputs", "schedule", "timezone", "catchup"] as const).find(
         (k) => next[k],
       );
       if (first) document.getElementById(fieldId(first))?.focus();
@@ -377,10 +417,42 @@ function AutomationFormBody({
   const describedBy = (...parts: Array<string | false | undefined>) =>
     parts.filter(Boolean).join(" ") || undefined;
 
+  const isDirty = () => {
+    const initial = initialFields.current;
+    return (
+      name !== initial.name ||
+      projectId !== initial.projectId ||
+      workflow !== initial.workflow ||
+      message !== initial.message ||
+      JSON.stringify(schedule) !== initial.schedule ||
+      timezone !== initial.timezone ||
+      overlap !== initial.overlap ||
+      catchupWindow !== initial.catchupWindow ||
+      notifyOnComplete !== initial.notifyOnComplete ||
+      (daemonChosen.current && daemonId !== (trigger?.daemonId ?? "")) ||
+      (inputsTouched.current && JSON.stringify(inputs) !== inputsBaseline.current)
+    );
+  };
+
+  // Escape, the backdrop and the close button all come here. Unsaved input —
+  // above all a long prompt — is never dropped without asking.
+  const requestClose = () => {
+    if (saving) return;
+    if (confirmDiscard) {
+      setConfirmDiscard(false);
+      return;
+    }
+    if (isDirty()) {
+      setConfirmDiscard(true);
+      return;
+    }
+    onClose();
+  };
+
   return (
     <Modal
       isOpen
-      onClose={saving ? () => undefined : onClose}
+      onClose={requestClose}
       title={isEdit ? "Edit automation" : "New automation"}
       size="lg"
     >
@@ -577,7 +649,16 @@ function AutomationFormBody({
           )}
 
           {projectId && (
-            <div id={fieldId("inputs")} tabIndex={-1} className="focus:outline-none">
+            <div
+              id={fieldId("inputs")}
+              tabIndex={-1}
+              className="focus:outline-none"
+              // Any user interaction here makes later input changes count as
+              // edits; before it, changes are the form's own defaults.
+              onChangeCapture={() => (inputsTouched.current = true)}
+              onClickCapture={() => (inputsTouched.current = true)}
+              onKeyDownCapture={() => (inputsTouched.current = true)}
+            >
               <RunWorkflowForm
                 projectId={projectId}
                 workflowRef={workflow}
@@ -659,7 +740,10 @@ function AutomationFormBody({
                 aria-live="polite"
               >
                 <span className="text-muted-foreground">Runs: </span>
-                {preview ?? "Finish the schedule to see when this runs."}
+                {preview ??
+                  (timezoneError && !scheduleError
+                    ? "Fix the time zone to see when this runs."
+                    : "Finish the schedule to see when this runs.")}
               </p>
             </>
           )}
@@ -755,14 +839,45 @@ function AutomationFormBody({
           </div>
         </section>
 
-        <div className="flex justify-end gap-2 border-t border-border/60 pt-4">
-          <Button type="button" variant="ghost" onClick={onClose} disabled={saving}>
-            Cancel
-          </Button>
-          <Button type="submit" variant="primary" loading={saving}>
-            {isEdit ? "Save changes" : "Create automation"}
-          </Button>
-        </div>
+        {confirmDiscard ? (
+          <div
+            role="alertdialog"
+            aria-labelledby={fieldId("discard-title")}
+            aria-describedby={fieldId("discard-description")}
+            className="flex flex-wrap items-center justify-between gap-3 border-t border-border/60 pt-4"
+          >
+            <div className="min-w-0">
+              <p id={fieldId("discard-title")} className="text-sm font-medium text-foreground">
+                Discard your changes?
+              </p>
+              <p id={fieldId("discard-description")} className="text-xs text-muted-foreground">
+                {isEdit ? "Your edits to this automation" : "This new automation"} will be lost.
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant="ghost"
+                autoFocus
+                onClick={() => setConfirmDiscard(false)}
+              >
+                Keep editing
+              </Button>
+              <Button type="button" variant="destructive" onClick={onClose}>
+                Discard
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex justify-end gap-2 border-t border-border/60 pt-4">
+            <Button type="button" variant="ghost" onClick={requestClose} disabled={saving}>
+              Cancel
+            </Button>
+            <Button type="submit" variant="primary" loading={saving}>
+              {isEdit ? "Save changes" : "Create automation"}
+            </Button>
+          </div>
+        )}
       </form>
     </Modal>
   );

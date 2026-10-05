@@ -230,15 +230,12 @@ export function DaemonConnectingGate({
   }
 
   if (phase === "failed") {
-    // In-app: route to the Environments settings section, deep-linking to the
-    // failing daemon's detail view when we know its id (the section reads the
-    // `daemon` search param via useSearch({ strict: false })).
+    // In-app: route to the Machines settings section, straight to the failing
+    // machine's detail view when we know its id.
     const goToEnvironments = () =>
-      navigate({
-        to: "/settings/$section",
-        params: { section: "environments" },
-        search: daemon?.daemonId ? { daemon: daemon.daemonId } : {},
-      });
+      daemon?.daemonId
+        ? navigate({ to: "/settings/environments/$machineId", params: { machineId: daemon.daemonId } })
+        : navigate({ to: "/settings/$section", params: { section: "environments" } });
 
     return (
       <div

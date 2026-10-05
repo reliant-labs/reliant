@@ -43,7 +43,7 @@ function GroupPanel({ group, attention = false }: { group: AutomationGroup; atte
             id={headingId}
             className={cn(
               "flex min-w-0 items-center gap-1.5 truncate text-xs font-semibold uppercase tracking-wide",
-              attention ? "text-warning" : "text-muted-foreground",
+              attention ? "text-warning-ink" : "text-muted-foreground",
             )}
           >
             {attention && <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />}

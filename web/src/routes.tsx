@@ -7,6 +7,7 @@ import { isForgeUIEnabled } from './lib/forgeFeature'
 import { getIsDev } from './lib/constants'
 import { createWorkflowsAreaRoutes } from './workflowsAreaRoutes'
 import { createSettingsConnectorRoutes } from './settingsConnectorRoutes'
+import { createSettingsSectionRoutes } from './settingsSectionRoutes'
 import {
   authSearchSchema,
   githubOAuthCallbackSearchSchema,
@@ -19,7 +20,6 @@ import {
   forgeEnvPageSearchSchema,
   forgeLegacySearchSchema,
   forgeOverviewSearchSchema,
-  settingsParamsSchema,
   settingsSearchSchema,
   upgradeSearchSchema,
   workflowSearchSchema,
@@ -462,20 +462,11 @@ const settingsConnectorRoutes = createSettingsConnectorRoutes(() => authenticate
   consent: ConnectorConsentPage,
 })
 
-const settingsSectionRoute = createRoute({
-  getParentRoute: () => authenticatedLayoutRoute,
-  path: '/settings/$section',
-  // Validate $section against the known settings ids. parseParams throws on a
-  // bad value; the parent rootRoute's notFoundComponent then redirects to /.
-  // SettingsPage also defensively coerces unknown values, so even if the
-  // schema were relaxed the UI wouldn't break — this just keeps bad URLs from
-  // silently rendering a default section.
-  parseParams: (params) => settingsParamsSchema.parse(params),
-  stringifyParams: (params) => ({ section: params.section }),
-  // Billing's sub-tab and Stripe's return marker live here, not in component
-  // state — see settingsSearchSchema for why the tab had to become addressable.
-  validateSearch: settingsSearchSchema,
-  component: SettingsPage,
+// /settings/$section and /settings/environments/$machineId. Defined in
+// settingsSectionRoutes.tsx so the route tests mount the same definitions; an
+// unknown slug redirects to /settings with a notice rather than throwing.
+const settingsSectionRoutes = createSettingsSectionRoutes(() => authenticatedLayoutRoute, {
+  page: SettingsPage,
 })
 
 // The workflow BUILDER keeps its own full-screen chrome (WorkflowHeader):
@@ -814,7 +805,7 @@ const routeTree = rootRoute.addChildren([
     ]),
     settingsRoute,
     ...settingsConnectorRoutes,
-    settingsSectionRoute,
+    ...settingsSectionRoutes,
     workflowNewRoute,
     workflowBuilderRoute,
     ...workflowsAreaRoutes,
