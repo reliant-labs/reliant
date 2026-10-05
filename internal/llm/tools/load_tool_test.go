@@ -352,12 +352,16 @@ func workflowTagToolNames() []string {
 	return names
 }
 
-func TestLoadTool_TagWorkflow_LoadsAllSixteen(t *testing.T) {
+func TestLoadTool_TagWorkflow_LoadsAllEighteen(t *testing.T) {
 	t.Parallel()
 	tool := &loadToolTool{}
 	ctx := newLoadToolTestCtx(t, PermissionOrchestrator)
 	want := workflowTagToolNames()
-	require.Len(t, want, 16)
+	require.Len(t, want, 18)
+	// Integration discovery rides with the workflow tools: an agent writing an
+	// action node needs to find its ref and schema.
+	assert.Contains(t, want, ToolSearchIntegrations)
+	assert.Contains(t, want, ToolGetIntegrationSchema)
 
 	resp, err := tool.Execute(ctx, LoadToolParams{Name: "tag:workflow"})
 	require.NoError(t, err)
@@ -370,7 +374,7 @@ func TestLoadTool_TagWorkflow_LoadsAllSixteen(t *testing.T) {
 
 	again, err := tool.Execute(ctx, LoadToolParams{Name: "tag:workflow"})
 	require.NoError(t, err)
-	assert.Contains(t, again.Content, "16 already loaded")
+	assert.Contains(t, again.Content, "18 already loaded")
 }
 
 func TestLoadTool_TagWorkflow_RestrictedLoadableReportsRefused(t *testing.T) {
@@ -384,7 +388,7 @@ func TestLoadTool_TagWorkflow_RestrictedLoadableReportsRefused(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, resp.IsError, resp.Content)
 	assert.Contains(t, resp.Content, "2 loaded")
-	assert.Contains(t, resp.Content, "14 refused")
+	assert.Contains(t, resp.Content, "16 refused")
 	assert.Contains(t, resp.Content, "not loadable")
 
 	loaded := GetLoadedToolsStore().Get(scopeKey)
@@ -414,7 +418,7 @@ func TestLoadTool_SearchByTagName_ReturnsAllWorkflowTools(t *testing.T) {
 	for _, name := range workflowTagToolNames() {
 		assert.Contains(t, resp.Content, "**"+name+"**")
 	}
-	assert.Contains(t, resp.Content, "Found 16 tools")
+	assert.Contains(t, resp.Content, "Found 18 tools")
 }
 
 func TestLoadTool_TagWithNoRegistryTools_SaysSo(t *testing.T) {
