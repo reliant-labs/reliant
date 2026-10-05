@@ -327,6 +327,10 @@ func (l *Launcher) ValidateWorkflowInputs(ctx context.Context, userID, workflowN
 // LoadWorkflowForValidation loads a workflow by name for input validation.
 // Searches builtin workflows first, then stored project workflows from DB.
 func (l *Launcher) LoadWorkflowForValidation(ctx context.Context, workflowName, projectID string) (*reliantv1.Workflow, error) {
+	return loadBuiltinOrProjectWorkflow(ctx, l.repo, workflowName, projectID)
+}
+
+func loadBuiltinOrProjectWorkflow(ctx context.Context, repo ProjectWorkflowLoader, workflowName, projectID string) (*reliantv1.Workflow, error) {
 	// Handle builtin:// protocol
 	if strings.HasPrefix(workflowName, "builtin://") {
 		name := strings.TrimPrefix(workflowName, "builtin://")
@@ -340,7 +344,7 @@ func (l *Launcher) LoadWorkflowForValidation(ctx context.Context, workflowName, 
 	// Load from stored project config (synced by daemon)
 	// Normalize slug the same way as generateWorkflowSlug in load_workflow.go.
 	slug := NormalizeWorkflowSlug(workflowName)
-	projectWf, _, err := LoadProjectWorkflowBySlugFromDB(l.repo, ctx, projectID, slug)
+	projectWf, _, err := LoadProjectWorkflowBySlugFromDB(repo, ctx, projectID, slug)
 	if err == nil && projectWf != nil {
 		return projectWf, nil
 	}
@@ -348,13 +352,13 @@ func (l *Launcher) LoadWorkflowForValidation(ctx context.Context, workflowName, 
 	return nil, fmt.Errorf("workflow not found: %s", workflowName)
 }
 
-// workflowLookupError marks a failure to READ a workflow, as opposed to a
+// WorkflowLookupError marks a failure to READ a workflow, as opposed to a
 // workflow that is absent or malformed. The first is a store problem and
 // retryable; only the second can never launch.
-type workflowLookupError struct{ Err error }
+type WorkflowLookupError struct{ Err error }
 
-func (e *workflowLookupError) Error() string { return e.Err.Error() }
-func (e *workflowLookupError) Unwrap() error { return e.Err }
+func (e *WorkflowLookupError) Error() string { return e.Err.Error() }
+func (e *WorkflowLookupError) Unwrap() error { return e.Err }
 
 // draftRootFor names the workflow whose saved draft may run without being
 // marked complete: the root of a builder test run, and nothing else. A test run
@@ -367,21 +371,39 @@ func draftRootFor(ev Event, workflowName string) string {
 	return ""
 }
 
+// ResolveRunWorkflow loads the workflow a run of workflowName by userID in
+// projectID executes, exactly as run start resolves it: builtin:// from the
+// embedded catalog, else the owner's COMPLETE workflow of that slug, else the
+// project's synced workflow. A draft that is not marked complete is a
+// *db.WorkflowDraftNotRunnableError; a store failure is a
+// *WorkflowLookupError (retryable); anything else means the workflow does
+// not resolve.
+//
+// It is what a trigger reads its declaration from, so an activation fires
+// against the same definition the run it starts will execute.
+func ResolveRunWorkflow(ctx context.Context, repo WorkflowResolver, userID, workflowName, projectID string) (*reliantv1.Workflow, error) {
+	return resolveRunWorkflow(ctx, repo, userID, workflowName, projectID, "")
+}
+
 func (l *Launcher) loadCreateChatWorkflowForValidation(ctx context.Context, userID, workflowName, projectID, draftRoot string) (*reliantv1.Workflow, error) {
+	return resolveRunWorkflow(ctx, l.repo, userID, workflowName, projectID, draftRoot)
+}
+
+func resolveRunWorkflow(ctx context.Context, repo WorkflowResolver, userID, workflowName, projectID, draftRoot string) (*reliantv1.Workflow, error) {
 	if strings.HasPrefix(workflowName, "builtin://") {
-		return l.LoadWorkflowForValidation(ctx, workflowName, projectID)
+		return loadBuiltinOrProjectWorkflow(ctx, repo, workflowName, projectID)
 	}
 
 	slug := NormalizeWorkflowSlug(workflowName)
 	var draft *db.WorkflowDraft
 	var err error
 	if draftRoot != "" && slug == NormalizeWorkflowSlug(draftRoot) {
-		draft, err = l.repo.GetWorkflowDraftBySlug(ctx, userID, slug)
+		draft, err = repo.GetWorkflowDraftBySlug(ctx, userID, slug)
 		if err == nil && (draft == nil || draft.IsHidden) {
 			return nil, fmt.Errorf("workflow '%s' not found", workflowName)
 		}
 	} else {
-		draft, err = l.repo.GetUsableWorkflowBySlug(ctx, userID, slug)
+		draft, err = repo.GetUsableWorkflowBySlug(ctx, userID, slug)
 	}
 	if err != nil {
 		var notRunnable *db.WorkflowDraftNotRunnableError
@@ -390,7 +412,7 @@ func (l *Launcher) loadCreateChatWorkflowForValidation(ctx context.Context, user
 			// store failure: final, and the message names the remedy.
 			return nil, err
 		}
-		return nil, &workflowLookupError{Err: fmt.Errorf("failed to look up workflow '%s': %w", workflowName, err)}
+		return nil, &WorkflowLookupError{Err: fmt.Errorf("failed to look up workflow '%s': %w", workflowName, err)}
 	}
 	if draft != nil {
 		wf, parseErr := wfyaml.ParseWorkflow([]byte(draft.Definition))
@@ -400,7 +422,7 @@ func (l *Launcher) loadCreateChatWorkflowForValidation(ctx context.Context, user
 		return wf, nil
 	}
 
-	wf, err := l.LoadWorkflowForValidation(ctx, workflowName, projectID)
+	wf, err := loadBuiltinOrProjectWorkflow(ctx, repo, workflowName, projectID)
 	if err != nil {
 		return nil, fmt.Errorf("workflow '%s' not found", workflowName)
 	}
@@ -428,7 +450,7 @@ func (l *Launcher) ValidateCreateChatWorkflowTree(ctx context.Context, userID, w
 func (l *Launcher) validateWorkflowTree(ctx context.Context, userID, workflowName, projectID, draftRoot string) error {
 	wf, err := l.loadCreateChatWorkflowForValidation(ctx, userID, workflowName, projectID, draftRoot)
 	if err != nil {
-		var lookupErr *workflowLookupError
+		var lookupErr *WorkflowLookupError
 		if errors.As(err, &lookupErr) {
 			// The store failed; the workflow may well exist. Retryable.
 			return &InternalError{Reason: "failed to look up workflow", Err: err}

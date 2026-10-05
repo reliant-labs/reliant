@@ -1157,6 +1157,7 @@ CREATE TABLE public.triggers (
     connection_id text,
     webhook_token_hash bytea,
     webhook_secret_sealed bytea,
+    workflow_trigger text,
     CONSTRAINT triggers_kind_check CHECK ((kind = ANY (ARRAY['schedule'::text, 'webhook'::text, 'integration'::text, 'workflow_event'::text])))
 );
 
@@ -2518,6 +2519,12 @@ CREATE INDEX idx_triggers_project ON public.triggers USING btree (project_id);
 --
 
 CREATE INDEX idx_triggers_user ON public.triggers USING btree (user_id);
+
+--
+-- Name: idx_triggers_workflow_trigger; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_triggers_workflow_trigger ON public.triggers USING btree (user_id, workflow) WHERE (workflow_trigger IS NOT NULL);
 
 --
 -- Name: idx_user_updates_chat; Type: INDEX; Schema: public; Owner: -

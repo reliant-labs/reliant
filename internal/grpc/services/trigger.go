@@ -20,6 +20,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/triggers"
 )
@@ -269,9 +270,10 @@ func (s *TriggerService) ListTriggers(
 		recent = nil
 	}
 
+	workflows := triggers.NewCachedWorkflows(triggers.LaunchWorkflows{Repo: s.database})
 	out := make([]*reliantv1.Trigger, 0, len(stored))
 	for _, t := range stored {
-		out = append(out, s.renderWith(ctx, t, recent[t.ID]))
+		out = append(out, s.renderWithWorkflows(ctx, t, recent[t.ID], workflows))
 	}
 	return connect.NewResponse(&reliantv1.ListTriggersResponse{Triggers: out}), nil
 }
@@ -640,28 +642,43 @@ func (s *TriggerService) triggerFromDefinition(
 		}
 	}
 
-	if def.GetWorkflowTrigger() != "" {
-		// The arm exists so a workflow's declared trigger can be activated
-		// by name; resolving it needs workflow definitions that carry
-		// `triggers:`, which is the follow-up.
-		return nil, connect.NewError(connect.CodeUnimplemented,
-			errors.New("activating a workflow-declared trigger is not supported yet; write the source inline"))
-	}
-	// The source arm is what determines the kind, so an absent arm is not a
-	// defaultable field — there is no kind to store. Validated before
-	// storing: the Temporal server would reject a bad cron later as an
-	// opaque RPC error, by which point the row exists with no working
-	// schedule behind it.
-	src, err := triggers.SourceFromDefinition(def)
-	if err != nil {
-		var cfgErr *triggers.ConfigError
-		if errors.As(err, &cfgErr) {
-			return nil, connect.NewError(connect.CodeInvalidArgument, cfgErr)
+	// An activation's source, filter and inputs come from the workflow's
+	// declaration; an ad hoc trigger writes its source inline.
+	var (
+		src  *triggers.Source
+		decl *triggers.Declaration
+		err  error
+	)
+	if name := def.GetWorkflowTrigger(); name != "" {
+		decl, err = s.resolveActivation(ctx, userID, def, name)
+		if err != nil {
+			return nil, err
 		}
-		return nil, connect.NewError(connect.CodeInternal, err)
+		src = decl.Source
+	} else {
+		// The source arm is what determines the kind, so an absent arm is
+		// not a defaultable field — there is no kind to store. Validated
+		// before storing: the Temporal server would reject a bad cron later
+		// as an opaque RPC error, by which point the row exists with no
+		// working schedule behind it.
+		src, err = triggers.SourceFromDefinition(def)
+		if err != nil {
+			var cfgErr *triggers.ConfigError
+			if errors.As(err, &cfgErr) {
+				return nil, connect.NewError(connect.CodeInvalidArgument, cfgErr)
+			}
+			return nil, connect.NewError(connect.CodeInternal, err)
+		}
 	}
-	if existing != nil && existing.Kind != src.Kind {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("a trigger's kind is not updatable"))
+	if existing != nil {
+		wasActivation := existing.WorkflowTrigger != nil
+		if wasActivation != (decl != nil) {
+			return nil, connect.NewError(connect.CodeInvalidArgument, errors.New(
+				"a trigger cannot change between activating a workflow's declared trigger and writing its source inline; delete it and create the other"))
+		}
+		if existing.Kind != src.Kind {
+			return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("a trigger's kind is not updatable"))
+		}
 	}
 	if src.Kind == core.TriggerKindSchedule && strings.TrimSpace(def.Filter) != "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument,
@@ -693,7 +710,64 @@ func (s *TriggerService) triggerFromDefinition(
 			return nil, err
 		}
 	}
+	if decl != nil {
+		name := decl.Name
+		trigger.WorkflowTrigger = &name
+		// The row's filter is the declaration's, as of now: a projection the
+		// fire path re-reads from the workflow.
+		trigger.Filter = decl.Filter
+	}
 	return trigger, nil
+}
+
+// resolveActivation reads the declaration a definition activates and checks
+// what the activation itself may set. The returned declaration's source is
+// then validated and stored like an inline one.
+func (s *TriggerService) resolveActivation(ctx context.Context, userID string, def *reliantv1.TriggerDefinition, name string) (*triggers.Declaration, error) {
+	if strings.TrimSpace(def.Workflow) == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			errors.New("workflow is required: a declared trigger is activated from the workflow that declares it"))
+	}
+	if strings.TrimSpace(def.Filter) != "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			errors.New("filter: an activation's filter is its declaration's; edit the workflow's triggers: block to change it"))
+	}
+	wf, err := launch.ResolveRunWorkflow(ctx, s.database, userID, def.Workflow, def.ProjectId)
+	if err != nil {
+		var lookup *launch.WorkflowLookupError
+		if errors.As(err, &lookup) {
+			return nil, triggerDBError("resolve workflow", err)
+		}
+		return nil, connect.NewError(connect.CodeNotFound,
+			fmt.Errorf("workflow %q does not resolve to a runnable workflow: %w", def.Workflow, err))
+	}
+	if triggers.FindDeclaredTrigger(wf, name) == nil {
+		declared := triggers.DeclaredTriggerNames(wf)
+		msg := fmt.Sprintf("workflow %q does not declare a trigger named %q", def.Workflow, name)
+		if len(declared) > 0 {
+			msg += " (it declares: " + strings.Join(declared, ", ") + ")"
+		}
+		return nil, connect.NewError(connect.CodeNotFound, errors.New(msg))
+	}
+	// Activation has no previous kind to hold the declaration to.
+	decl, err := triggers.DeclarationIn(wf, &core.Trigger{Workflow: def.Workflow, WorkflowTrigger: &name})
+	if err != nil {
+		var declErr *triggers.DeclarationError
+		if errors.As(err, &declErr) {
+			return nil, connect.NewError(connect.CodeFailedPrecondition, declErr)
+		}
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	// A param the declaration's inputs also set would be silently replaced
+	// by the event's value at every fire; refuse it rather than store a
+	// setting that does nothing.
+	for input := range decl.Inputs {
+		if _, ok := def.Params[input]; ok {
+			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf(
+				"params.%s: the declared trigger %q sets this input from each event; remove it from params", input, name))
+		}
+	}
+	return decl, nil
 }
 
 // validateTriggerDaemon checks that the daemon exists, is the caller's, and can
@@ -726,6 +800,33 @@ func (s *TriggerService) render(ctx context.Context, t *core.Trigger) *reliantv1
 
 // renderWith renders a trigger whose recent firings the caller already loaded.
 func (s *TriggerService) renderWith(ctx context.Context, t *core.Trigger, firings []*core.TriggerEventWithRun) *reliantv1.Trigger {
+	return s.renderWithWorkflows(ctx, t, firings, triggers.LaunchWorkflows{Repo: s.database})
+}
+
+// renderWithWorkflows renders a trigger, resolving an activation's
+// declaration through workflows so that a broken one reports BROKEN health.
+// It is computed on read, from the workflow as it is now: a stored verdict
+// would go stale the moment someone fixed the YAML.
+func (s *TriggerService) renderWithWorkflows(ctx context.Context, t *core.Trigger, firings []*core.TriggerEventWithRun, workflows triggers.WorkflowResolver) *reliantv1.Trigger {
+	proto := s.renderFirings(ctx, t, firings)
+	if t.WorkflowTrigger == nil {
+		return proto
+	}
+	if _, err := triggers.ResolveDeclaration(ctx, workflows, t); err != nil {
+		var declErr *triggers.DeclarationError
+		if errors.As(err, &declErr) {
+			proto.Health = triggers.BrokenHealth(declErr)
+		} else {
+			// The workflow could not be read right now; that says nothing
+			// about the trigger, so its firings still describe it.
+			logging.Warn("could not resolve a trigger's declaration", "trigger_id", t.ID, "error", err)
+		}
+	}
+	return proto
+}
+
+// renderFirings renders a trigger from its row and recent firings.
+func (s *TriggerService) renderFirings(ctx context.Context, t *core.Trigger, firings []*core.TriggerEventWithRun) *reliantv1.Trigger {
 	var nextFireAt *time.Time
 	if s.syncer != nil && syncs(t.Kind) {
 		next, err := s.syncer.NextFireAt(ctx, t.ID)

@@ -20,10 +20,10 @@ func triggerWorkflow(t *testing.T, triggers string) *reliantv1.Workflow {
 inputs:
   issue_number:
     type: integer
-    required: false
+    default: 0
   title:
     type: string
-    required: false
+    default: ""
 entry: [a]
 nodes:
   - id: a
@@ -135,8 +135,9 @@ func TestTriggerValidationRules(t *testing.T) {
 			want:     []string{"filtered", "filter", "schedule"},
 		},
 		{
-			name:     "integration exists",
+			name:     "an integration outside the catalog is a warning",
 			triggers: "  - name: nope\n    integration: {integration: no_such_thing, events: [x.y]}\n",
+			severity: SeverityWarning,
 			want:     []string{"nope", "no_such_thing", "catalog"},
 		},
 		{
@@ -193,6 +194,8 @@ func TestTriggerValidationRules(t *testing.T) {
 			requireTriggerFinding(t, result, tc.severity, tc.want...)
 			if tc.severity == SeverityError {
 				assert.True(t, result.HasErrors())
+			} else {
+				assert.False(t, result.HasErrors(), "a warning must not block: %v", result.All())
 			}
 		})
 	}
@@ -247,6 +250,38 @@ func TestWorkflowEventRefsResolve(t *testing.T) {
 	// reported.
 	result = StaticAnalysisWithOptions(wf, nil)
 	assert.Empty(t, triggerFindings(result, SeverityWarning))
+}
+
+// A required plain input the trigger does not map can only come from each
+// activation's params; the author is told, without blocking. Inputs presets
+// or the launch supply (a model, the message) are not flagged.
+func TestUnmappedRequiredInputIsAWarning(t *testing.T) {
+	wf, err := wfyaml.ParseWorkflow([]byte(`name: w
+inputs:
+  repo: {type: string}
+  issue: {type: integer}
+  model: {type: model}
+  note: {type: string, default: ""}
+entry: [a]
+nodes:
+  - id: a
+    type: approval
+    args: {title: ok}
+triggers:
+  - name: hook
+    webhook: {}
+    inputs:
+      issue: "{{ trigger.payload.body.n }}"
+`))
+	require.NoError(t, err)
+	result := StaticAnalysisWithOptions(wf, nil)
+	requireTriggerFinding(t, result, SeverityWarning, "hook", "inputs", "repo")
+	for _, w := range triggerFindings(result, SeverityWarning) {
+		assert.NotContains(t, w, "model", "a model input is supplied by presets")
+		assert.NotContains(t, w, "note", "an input with a default is not required")
+		assert.NotContains(t, w, " issue", "a mapped input is not flagged")
+	}
+	assert.Empty(t, triggerFindings(result, SeverityError))
 }
 
 // Underscores are allowed: get_integration_schema suggests `name: issue_opened`.

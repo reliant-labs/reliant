@@ -300,6 +300,13 @@ func (TriggerOverlapPolicy) EnumDescriptor() ([]byte, []int) {
 //     are neither a success nor a failure and never end a failure streak.
 //
 // The status is then, first match wins:
+//   - BROKEN: the trigger activates a workflow-declared trigger
+//     (Trigger.workflow_trigger) that cannot be used — the workflow is gone
+//     or not runnable, it no longer declares that name, or the declaration
+//     changed in a way this activation cannot follow (another kind, another
+//     integration). Its firings fail until the declaration is restored, or it
+//     is re-activated or deleted; last_failure_detail says why. Computed from
+//     the workflow on read; firings are not consulted.
 //   - FAILING: two or more consecutive failures, newest first. Skipped and
 //     unresolved firings are passed over; a success ends the streak.
 //   - DEGRADED: any failure in the window that did not make it FAILING, or
@@ -316,6 +323,7 @@ const (
 	TriggerHealthStatus_TRIGGER_HEALTH_STATUS_DEGRADED    TriggerHealthStatus = 2
 	TriggerHealthStatus_TRIGGER_HEALTH_STATUS_FAILING     TriggerHealthStatus = 3
 	TriggerHealthStatus_TRIGGER_HEALTH_STATUS_UNKNOWN     TriggerHealthStatus = 4
+	TriggerHealthStatus_TRIGGER_HEALTH_STATUS_BROKEN      TriggerHealthStatus = 5
 )
 
 // Enum value maps for TriggerHealthStatus.
@@ -326,6 +334,7 @@ var (
 		2: "TRIGGER_HEALTH_STATUS_DEGRADED",
 		3: "TRIGGER_HEALTH_STATUS_FAILING",
 		4: "TRIGGER_HEALTH_STATUS_UNKNOWN",
+		5: "TRIGGER_HEALTH_STATUS_BROKEN",
 	}
 	TriggerHealthStatus_value = map[string]int32{
 		"TRIGGER_HEALTH_STATUS_UNSPECIFIED": 0,
@@ -333,6 +342,7 @@ var (
 		"TRIGGER_HEALTH_STATUS_DEGRADED":    2,
 		"TRIGGER_HEALTH_STATUS_FAILING":     3,
 		"TRIGGER_HEALTH_STATUS_UNKNOWN":     4,
+		"TRIGGER_HEALTH_STATUS_BROKEN":      5,
 	}
 )
 
@@ -1124,7 +1134,10 @@ type Trigger struct {
 	// the server has no PUBLIC_URL.
 	WebhookUrl *string `protobuf:"bytes,25,opt,name=webhook_url,json=webhookUrl,proto3,oneof" json:"webhook_url,omitempty"`
 	// The workflow-declared trigger (WorkflowTrigger.name) this row activates,
-	// when it activates one. The source above is then that declaration's.
+	// when it activates one. The source, filter and inputs are then that
+	// declaration's, read from the workflow when the trigger fires: editing the
+	// workflow's `triggers:` changes every activation of it. The source above is
+	// the declaration as of the last save, for display.
 	WorkflowTrigger *string `protobuf:"bytes,26,opt,name=workflow_trigger,json=workflowTrigger,proto3,oneof" json:"workflow_trigger,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
@@ -1766,8 +1779,11 @@ type TriggerDefinition_WorkflowEvent struct {
 
 type TriggerDefinition_WorkflowTrigger struct {
 	// Activate the named trigger the workflow declares (WorkflowTrigger.name)
-	// instead of writing a source inline. Not yet supported: rejected with
-	// Unimplemented until workflow definitions carry `triggers:`.
+	// instead of writing a source inline. The declaration supplies the
+	// source, filter and inputs, and is re-read every time the trigger fires,
+	// so an edit to the workflow applies to every activation. `workflow` is
+	// required and `filter` must be empty: both come from the declaration.
+	// `params` may not set an input the declaration's inputs map.
 	WorkflowTrigger string `protobuf:"bytes,24,opt,name=workflow_trigger,json=workflowTrigger,proto3,oneof"`
 }
 
@@ -3059,13 +3075,14 @@ const file_reliant_v1_trigger_proto_rawDesc = "" +
 	"\x14TriggerOverlapPolicy\x12&\n" +
 	"\"TRIGGER_OVERLAP_POLICY_UNSPECIFIED\x10\x00\x12\x1f\n" +
 	"\x1bTRIGGER_OVERLAP_POLICY_SKIP\x10\x01\x12 \n" +
-	"\x1cTRIGGER_OVERLAP_POLICY_ALLOW\x10\x02*\xc9\x01\n" +
+	"\x1cTRIGGER_OVERLAP_POLICY_ALLOW\x10\x02*\xeb\x01\n" +
 	"\x13TriggerHealthStatus\x12%\n" +
 	"!TRIGGER_HEALTH_STATUS_UNSPECIFIED\x10\x00\x12!\n" +
 	"\x1dTRIGGER_HEALTH_STATUS_HEALTHY\x10\x01\x12\"\n" +
 	"\x1eTRIGGER_HEALTH_STATUS_DEGRADED\x10\x02\x12!\n" +
 	"\x1dTRIGGER_HEALTH_STATUS_FAILING\x10\x03\x12!\n" +
-	"\x1dTRIGGER_HEALTH_STATUS_UNKNOWN\x10\x042\x98\a\n" +
+	"\x1dTRIGGER_HEALTH_STATUS_UNKNOWN\x10\x04\x12 \n" +
+	"\x1cTRIGGER_HEALTH_STATUS_BROKEN\x10\x052\x98\a\n" +
 	"\x0eTriggerService\x12V\n" +
 	"\rCreateTrigger\x12 .reliant.v1.CreateTriggerRequest\x1a!.reliant.v1.CreateTriggerResponse\"\x00\x12M\n" +
 	"\n" +

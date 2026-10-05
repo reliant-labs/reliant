@@ -47,6 +47,7 @@ func (s *triggerStore) CreateTrigger(ctx context.Context, t *core.Trigger) error
 		NotifyOnComplete: t.NotifyOnComplete,
 		Filter:           t.Filter,
 		ConnectionID:     triggerPtrToNullString(t.ConnectionID),
+		WorkflowTrigger:  triggerPtrToNullString(t.WorkflowTrigger),
 	})
 }
 
@@ -132,6 +133,7 @@ func (s *triggerStore) UpdateTrigger(ctx context.Context, t *core.Trigger) error
 		NotifyOnComplete: t.NotifyOnComplete,
 		Filter:           t.Filter,
 		ConnectionID:     triggerPtrToNullString(t.ConnectionID),
+		WorkflowTrigger:  triggerPtrToNullString(t.WorkflowTrigger),
 		ID:               t.ID,
 	})
 	if err != nil {
@@ -460,7 +462,51 @@ func triggerFromPG(row pgdb.Trigger) (*core.Trigger, error) {
 		UpdatedAt:        row.UpdatedAt,
 		DaemonID:         row.DaemonID,
 		NotifyOnComplete: row.NotifyOnComplete,
+		WorkflowTrigger:  triggerNullStringToPtr(row.WorkflowTrigger),
 	}, nil
+}
+
+func (s *triggerStore) SetTriggerProjection(ctx context.Context, id string, p core.TriggerProjection) error {
+	affected, err := s.q.SetTriggerProjection(ctx, pgdb.SetTriggerProjectionParams{
+		Config: triggerConfigToJSON(p.Config),
+		Filter: p.Filter,
+		ID:     id,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to set trigger projection: %w", err)
+	}
+	if affected == 0 {
+		return core.ErrTriggerNotFound
+	}
+	return nil
+}
+
+func (s *triggerStore) ListWorkflowTriggerActivations(ctx context.Context, userID, workflow string) ([]*core.Trigger, error) {
+	rows, err := s.q.ListWorkflowTriggerActivations(ctx, pgdb.ListWorkflowTriggerActivationsParams{UserID: userID, Workflow: workflow})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list workflow trigger activations: %w", err)
+	}
+	return triggersFromPG(rows)
+}
+
+func (s *triggerStore) ListAllWorkflowTriggerActivations(ctx context.Context) ([]*core.Trigger, error) {
+	rows, err := s.q.ListAllWorkflowTriggerActivations(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list workflow trigger activations: %w", err)
+	}
+	return triggersFromPG(rows)
+}
+
+func triggersFromPG(rows []pgdb.Trigger) ([]*core.Trigger, error) {
+	out := make([]*core.Trigger, 0, len(rows))
+	for _, row := range rows {
+		t, err := triggerFromPG(row)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, t)
+	}
+	return out, nil
 }
 
 func (s *triggerStore) SetTriggerWebhookTokenHash(ctx context.Context, id string, hash []byte) error {

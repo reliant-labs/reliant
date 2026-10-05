@@ -10,6 +10,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/integrations/catalog"
 	"github.com/reliant-labs/reliant/internal/triggers/triggerspec"
+	"github.com/reliant-labs/reliant/internal/workflow/model"
 )
 
 // Layer 7: the workflow's `triggers:` block — WHEN it should run.
@@ -114,7 +115,35 @@ func validateTriggers(wf *reliantv1.Workflow, opts *ValidationOptions, integrati
 			validateWorkflowEventRefs(ev, path, opts.WorkflowLoader, result)
 		}
 		validateTriggerInputs(wt.GetInputs(), declaredInputs, path, result)
+		warnUnmappedRequiredInputs(wt.GetInputs(), declaredInputs, path, result)
 	}
+}
+
+// warnUnmappedRequiredInputs points out a required input that only an event
+// or a param can supply and that this trigger does not map: every activation
+// would have to set it in params, or every firing fails input validation.
+// Only plain value inputs are considered; a model, message, preset, group or
+// tools input is normally supplied by presets or the launch itself.
+func warnUnmappedRequiredInputs(mapped map[string]string, declared map[string]*reliantv1.Input, path []string, result *Result) {
+	var missing []string
+	for name, input := range declared {
+		if _, ok := mapped[name]; ok || !model.IsInputRequired(input) {
+			continue
+		}
+		switch input.GetConfig().(type) {
+		case *reliantv1.Input_StringInput, *reliantv1.Input_IntegerInput, *reliantv1.Input_NumberInput,
+			*reliantv1.Input_BooleanInput, *reliantv1.Input_EnumInput, *reliantv1.Input_ArrayInput,
+			*reliantv1.Input_ObjectInput:
+			missing = append(missing, name)
+		}
+	}
+	if len(missing) == 0 {
+		return
+	}
+	sort.Strings(missing)
+	result.AddWarning(CategoryTrigger, path, "inputs", fmt.Sprintf(
+		"required input(s) %s are not mapped from the event, so every activation must set them in params or each firing fails; map them here, or give them a default",
+		strings.Join(missing, ", ")))
 }
 
 // addTriggerSourceError reports a source the shared rules rejected, under
@@ -153,9 +182,16 @@ func validateTriggerIntegration(src *reliantv1.IntegrationSource, path []string,
 	id := strings.TrimSpace(src.GetIntegration())
 	types, attrs, ok := integrations.TriggerTypes(id)
 	if !ok {
-		result.AddErrorWithSuggestion(CategoryTrigger, path, "integration.integration",
-			fmt.Sprintf("%q is not in the integration catalog", id),
-			"search_integrations(kind: trigger) lists what exists")
+		// A warning, not an error: which integrations can DELIVER events is
+		// a fact about the deployment (its registered webhook providers and
+		// pollers), which activation checks; the catalog only says which are
+		// documented. And a declaration is not part of what a run executes,
+		// so it must not make the workflow unrunnable from a chat.
+		result.Add(&Error{
+			Severity: SeverityWarning, Category: CategoryTrigger, Path: path, Field: "integration.integration",
+			Message:    fmt.Sprintf("%q is not in the integration catalog, so its events cannot be checked; activating this trigger will fail unless this server receives %s events", id, id),
+			Suggestion: "search_integrations(kind: trigger) lists what exists",
+		})
 		return
 	}
 	if len(types) == 0 {

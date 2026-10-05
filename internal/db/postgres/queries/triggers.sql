@@ -2,9 +2,9 @@
 INSERT INTO triggers (
     id, user_id, project_id, worktree_id, name, kind, enabled,
     workflow, presets, params, message, config, created_at, updated_at,
-    daemon_id, notify_on_complete, filter, connection_id
+    daemon_id, notify_on_complete, filter, connection_id, workflow_trigger
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19
 );
 
 -- name: SetTriggerWebhookTokenHash :execrows
@@ -141,14 +141,38 @@ UPDATE triggers SET
     daemon_id = $11,
     notify_on_complete = $12,
     filter = $13,
-    connection_id = $14
-WHERE id = $15;
+    connection_id = $14,
+    workflow_trigger = $15
+WHERE id = $16;
 
 -- name: DeleteTrigger :exec
 DELETE FROM triggers WHERE id = $1;
 
 -- name: SetTriggerEnabled :execrows
 UPDATE triggers SET enabled = $1, updated_at = NOW() WHERE id = $2;
+
+-- name: SetTriggerProjection :execrows
+-- Refreshes an activation's projection of its workflow's declaration: the
+-- config and filter routing and the schedule syncer read. The kind is not
+-- here: an activation whose declaration changed kind is broken (its
+-- connection or webhook token belongs to the old kind), never re-projected.
+UPDATE triggers SET
+    config = $1,
+    filter = $2,
+    updated_at = NOW()
+WHERE id = $3 AND workflow_trigger IS NOT NULL;
+
+-- name: ListWorkflowTriggerActivations :many
+-- One user's activations of a workflow's declared triggers. The workflow is
+-- matched as stored on the row (the slug or builtin:// ref the activation
+-- named).
+SELECT * FROM triggers
+WHERE user_id = $1 AND workflow = $2 AND workflow_trigger IS NOT NULL
+ORDER BY created_at, id;
+
+-- name: ListAllWorkflowTriggerActivations :many
+-- Every activation of a declared trigger, for the periodic reconcile.
+SELECT * FROM triggers WHERE workflow_trigger IS NOT NULL ORDER BY id;
 
 -- name: CreateTriggerEvent :execrows
 -- DO NOTHING rather than DO UPDATE: the first row for a (kind, dedupe_key) is

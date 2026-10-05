@@ -81,6 +81,7 @@ func ToProto(t *core.Trigger, nextFireAt *time.Time, firings []*core.TriggerEven
 		Health:           ComputeHealth(firings),
 		Filter:           t.Filter,
 		ConnectionId:     t.ConnectionID,
+		WorkflowTrigger:  t.WorkflowTrigger,
 		CreatedAt:        t.CreatedAt.UTC().Format(time.RFC3339),
 		UpdatedAt:        t.UpdatedAt.UTC().Format(time.RFC3339),
 	}

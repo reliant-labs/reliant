@@ -545,6 +545,8 @@ type Querier interface {
 	ListAccessRoutedTriggers(ctx context.Context, arg ListAccessRoutedTriggersParams) ([]ListAccessRoutedTriggersRow, error)
 	// Every user's triggers. Only the schedule syncer's reconciliation calls this.
 	ListAllTriggers(ctx context.Context) ([]Trigger, error)
+	// Every activation of a declared trigger, for the periodic reconcile.
+	ListAllWorkflowTriggerActivations(ctx context.Context) ([]Trigger, error)
 	// List all approvals for a chat (including resolved)
 	ListApprovalsByChat(ctx context.Context, chatID string) ([]Approval, error)
 	// List archived chats with worktree info. Reads chats_with_activity (not chats)
@@ -891,6 +893,10 @@ type Querier interface {
 	ListWorkflowScenariosByDraft(ctx context.Context, workflowDraftID sql.NullString) ([]WorkflowScenario, error)
 	// List all scenarios for a user
 	ListWorkflowScenariosByUser(ctx context.Context, userID string) ([]WorkflowScenario, error)
+	// One user's activations of a workflow's declared triggers. The workflow is
+	// matched as stored on the row (the slug or builtin:// ref the activation
+	// named).
+	ListWorkflowTriggerActivations(ctx context.Context, arg ListWorkflowTriggerActivationsParams) ([]Trigger, error)
 	ListWorkflowsByChat(ctx context.Context, chatID string) ([]Workflow, error)
 	// List all workflows at a specific lifecycle (e.g. ACTIVE, or STOPPED/PAUSED).
 	// Used for startup recovery to restart workers for active workflows.
@@ -1126,6 +1132,11 @@ type Querier interface {
 	// so callers can run it on every successful forge read.
 	SetProjectForgeName(ctx context.Context, arg SetProjectForgeNameParams) (int64, error)
 	SetTriggerEnabled(ctx context.Context, arg SetTriggerEnabledParams) (int64, error)
+	// Refreshes an activation's projection of its workflow's declaration: the
+	// config and filter routing and the schedule syncer read. The kind is not
+	// here: an activation whose declaration changed kind is broken (its
+	// connection or webhook token belongs to the old kind), never re-projected.
+	SetTriggerProjection(ctx context.Context, arg SetTriggerProjectionParams) (int64, error)
 	// NULL clears the HMAC secret. Sealed by the caller under the owner's tenant.
 	SetTriggerWebhookSecret(ctx context.Context, arg SetTriggerWebhookSecretParams) (int64, error)
 	// The token hash has its own write path: no definition update can touch it,

@@ -71,13 +71,21 @@ func TriggerEventFireWorkflow(ctx workflow.Context, input EventFireInput) (*Fire
 // EventFirer launches recorded inbound events. It is the FireTriggerEvent
 // activity.
 type EventFirer struct {
-	repo     EventRepo
-	launcher Launcher
+	repo      EventRepo
+	launcher  Launcher
+	workflows WorkflowResolver
 }
 
 // NewEventFirer builds the inbound fire activity's receiver.
 func NewEventFirer(repo EventRepo, launcher Launcher) *EventFirer {
 	return &EventFirer{repo: repo, launcher: launcher}
+}
+
+// WithWorkflows lets the firer read an activation's declaration, whose inputs
+// mapping is evaluated against the event at launch.
+func (f *EventFirer) WithWorkflows(workflows WorkflowResolver) *EventFirer {
+	f.workflows = workflows
+	return f
 }
 
 // Fire is the FireTriggerEvent activity: load the recorded event, settle it
@@ -122,7 +130,16 @@ func (f *EventFirer) Fire(ctx context.Context, in EventFireInput) (*FireOutput, 
 		return f.settle(ctx, ev, core.TriggerEventFailed, detail, err)
 	}
 
-	spec, err := f.buildSpec(trigger, ev)
+	// Re-read at launch, not trusted from intake: the workflow may have been
+	// edited in between, and the declaration as it is now is what runs.
+	decl, err := activationFor(ctx, f.workflows, trigger)
+	if err != nil {
+		if isVerdict(err) {
+			return f.settle(ctx, ev, core.TriggerEventFailed, err.Error(), err)
+		}
+		return nil, err
+	}
+	spec, err := f.buildSpec(trigger, ev, decl)
 	if err != nil {
 		return f.settle(ctx, ev, core.TriggerEventFailed, err.Error(), err)
 	}
@@ -183,8 +200,17 @@ func (f *EventFirer) settle(ctx context.Context, ev *core.TriggerEvent, outcome 
 // buildSpec is what an event-launched run is: owned by the trigger's user,
 // unattended, seeded with the trigger's prompt followed by the event as
 // labelled, untrusted data.
-func (f *EventFirer) buildSpec(trigger *core.Trigger, ev *core.TriggerEvent) (launch.Spec, error) {
-	params, err := paramsToProto(trigger.Params)
+func (f *EventFirer) buildSpec(trigger *core.Trigger, ev *core.TriggerEvent, decl *Declaration) (launch.Spec, error) {
+	values := trigger.Params
+	if decl != nil {
+		root := FilterInput{Kind: string(ev.Kind), TriggerID: trigger.ID, EventID: ev.ID, OccurredAt: ev.OccurredAt, Payload: ev.Payload}.Root()
+		merged, err := MergeDeclaredInputs(trigger.Params, decl.Inputs, root)
+		if err != nil {
+			return launch.Spec{}, fmt.Errorf("the declared trigger's inputs could not be read from this event: %w", err)
+		}
+		values = merged
+	}
+	params, err := paramsToProto(values)
 	if err != nil {
 		return launch.Spec{}, fmt.Errorf("trigger params are not representable: %w", err)
 	}
