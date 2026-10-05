@@ -82,7 +82,7 @@ export function LiveWorkloads({
     }
     return (
       <div data-testid="live-workloads-observed">
-        <HostedWorkloadList workloads={workloads} envName={env.name} />
+        <HostedWorkloadList workloads={workloads} envName={env.name} runControls />
       </div>
     );
   }

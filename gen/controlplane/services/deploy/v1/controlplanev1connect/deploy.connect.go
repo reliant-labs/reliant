@@ -79,6 +79,9 @@ const (
 	DeployServicePromoteProcedure = "/controlplane.v1.DeployService/Promote"
 	// DeployServiceScaleProcedure is the fully-qualified name of the DeployService's Scale RPC.
 	DeployServiceScaleProcedure = "/controlplane.v1.DeployService/Scale"
+	// DeployServiceSetEnvironmentRunStateProcedure is the fully-qualified name of the DeployService's
+	// SetEnvironmentRunState RPC.
+	DeployServiceSetEnvironmentRunStateProcedure = "/controlplane.v1.DeployService/SetEnvironmentRunState"
 	// DeployServiceGetStatusProcedure is the fully-qualified name of the DeployService's GetStatus RPC.
 	DeployServiceGetStatusProcedure = "/controlplane.v1.DeployService/GetStatus"
 	// DeployServiceStreamLogsProcedure is the fully-qualified name of the DeployService's StreamLogs
@@ -122,6 +125,9 @@ const (
 	// DeployServicePlanDeployProcedure is the fully-qualified name of the DeployService's PlanDeploy
 	// RPC.
 	DeployServicePlanDeployProcedure = "/controlplane.v1.DeployService/PlanDeploy"
+	// DeployServiceCheckDeployCapacityProcedure is the fully-qualified name of the DeployService's
+	// CheckDeployCapacity RPC.
+	DeployServiceCheckDeployCapacityProcedure = "/controlplane.v1.DeployService/CheckDeployCapacity"
 	// DeployServiceReportLocalSessionProcedure is the fully-qualified name of the DeployService's
 	// ReportLocalSession RPC.
 	DeployServiceReportLocalSessionProcedure = "/controlplane.v1.DeployService/ReportLocalSession"
@@ -196,6 +202,15 @@ type DeployServiceClient interface {
 	// A suspend is the tenant's own. It is NOT the same as the environment's
 	// automatic scale-to-zero, and neither one stops storage.
 	Scale(context.Context, *connect.Request[v1.ScaleDeploymentRequest]) (*connect.Response[v1.ScaleDeploymentResponse], error)
+	// SetEnvironmentRunState suspends or resumes EVERY live deployment of an
+	// environment in one call: the "stop hounders" / "re-up hounders" button.
+	// Same semantics as Scale per deployment — it writes the declared run
+	// state, the tier controllers act on it (replicas to zero, database
+	// hibernated, site unpublished; data is kept) — and the same independence
+	// from billing: resuming never overrides a billing suspension, it is
+	// refused with the billing reason instead. ADMIN, like Scale and
+	// DeleteEnvironment.
+	SetEnvironmentRunState(context.Context, *connect.Request[v1.SetEnvironmentRunStateRequest]) (*connect.Response[v1.SetEnvironmentRunStateResponse], error)
 	// GetStatus returns the deployment with BOTH halves — declared and
 	// observed — plus the derived drift the UI badges. The 15s poll on the
 	// /deploy detail page calls this.
@@ -346,6 +361,15 @@ type DeployServiceClient interface {
 	// the plan rather than trusting the one the caller approved. That is what
 	// makes the digest a guarantee instead of a claim.
 	PlanDeploy(context.Context, *connect.Request[v1.PlanDeployRequest]) (*connect.Response[v1.PlanDeployResponse], error)
+	// CheckDeployCapacity answers "would this org be allowed to run this?" —
+	// a compute plan, and room in it — BEFORE anything is built or pushed.
+	//
+	// A PURE READ, and the same decision (internal/computegate) RecordBundle,
+	// Promote and Scale ENFORCE. The pre-flight exists so a deploy with no plan
+	// fails in seconds with the remedy named, rather than after a build; the
+	// enforcement exists because a pre-flight is advisory and a client may skip
+	// it. Allowed=false is a normal response, not an error.
+	CheckDeployCapacity(context.Context, *connect.Request[v1.CheckDeployCapacityRequest]) (*connect.Response[v1.CheckDeployCapacityResponse], error)
 	// ReportLocalSession upserts one `forge env up` worktree's presence.
 	//
 	// THE SECOND REPORTED-STATE EXCEPTION — see the service header. LOCAL
@@ -491,6 +515,12 @@ func NewDeployServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(deployServiceMethods.ByName("Scale")),
 			connect.WithClientOptions(opts...),
 		),
+		setEnvironmentRunState: connect.NewClient[v1.SetEnvironmentRunStateRequest, v1.SetEnvironmentRunStateResponse](
+			httpClient,
+			baseURL+DeployServiceSetEnvironmentRunStateProcedure,
+			connect.WithSchema(deployServiceMethods.ByName("SetEnvironmentRunState")),
+			connect.WithClientOptions(opts...),
+		),
 		getStatus: connect.NewClient[v1.GetDeploymentStatusRequest, v1.GetDeploymentStatusResponse](
 			httpClient,
 			baseURL+DeployServiceGetStatusProcedure,
@@ -587,6 +617,12 @@ func NewDeployServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(deployServiceMethods.ByName("PlanDeploy")),
 			connect.WithClientOptions(opts...),
 		),
+		checkDeployCapacity: connect.NewClient[v1.CheckDeployCapacityRequest, v1.CheckDeployCapacityResponse](
+			httpClient,
+			baseURL+DeployServiceCheckDeployCapacityProcedure,
+			connect.WithSchema(deployServiceMethods.ByName("CheckDeployCapacity")),
+			connect.WithClientOptions(opts...),
+		),
 		reportLocalSession: connect.NewClient[v1.ReportLocalSessionRequest, v1.ReportLocalSessionResponse](
 			httpClient,
 			baseURL+DeployServiceReportLocalSessionProcedure,
@@ -610,40 +646,42 @@ func NewDeployServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 
 // deployServiceClient implements DeployServiceClient.
 type deployServiceClient struct {
-	getTenant          *connect.Client[v1.GetDeployTenantRequest, v1.GetDeployTenantResponse]
-	createTenant       *connect.Client[v1.CreateDeployTenantRequest, v1.CreateDeployTenantResponse]
-	createEnvironment  *connect.Client[v1.CreateDeployEnvironmentRequest, v1.CreateDeployEnvironmentResponse]
-	getEnvironment     *connect.Client[v1.GetDeployEnvironmentRequest, v1.GetDeployEnvironmentResponse]
-	listEnvironments   *connect.Client[v1.ListDeployEnvironmentsRequest, v1.ListDeployEnvironmentsResponse]
-	updateEnvironment  *connect.Client[v1.UpdateDeployEnvironmentRequest, v1.UpdateDeployEnvironmentResponse]
-	deleteEnvironment  *connect.Client[v1.DeleteDeployEnvironmentRequest, v1.DeleteDeployEnvironmentResponse]
-	ensureEnvironment  *connect.Client[v1.EnsureDeployEnvironmentRequest, v1.EnsureDeployEnvironmentResponse]
-	createDeployment   *connect.Client[v1.CreateDeploymentRequest, v1.CreateDeploymentResponse]
-	getDeployment      *connect.Client[v1.GetDeploymentRequest, v1.GetDeploymentResponse]
-	listDeployments    *connect.Client[v1.ListDeploymentsRequest, v1.ListDeploymentsResponse]
-	updateDeployment   *connect.Client[v1.UpdateDeploymentRequest, v1.UpdateDeploymentResponse]
-	deleteDeployment   *connect.Client[v1.DeleteDeploymentRequest, v1.DeleteDeploymentResponse]
-	promote            *connect.Client[v1.PromoteReleaseRequest, v1.PromoteReleaseResponse]
-	scale              *connect.Client[v1.ScaleDeploymentRequest, v1.ScaleDeploymentResponse]
-	getStatus          *connect.Client[v1.GetDeploymentStatusRequest, v1.GetDeploymentStatusResponse]
-	streamLogs         *connect.Client[v1.StreamDeploymentLogsRequest, v1.StreamDeploymentLogsResponse]
-	cutRelease         *connect.Client[v1.CutReleaseRequest, v1.CutReleaseResponse]
-	listReleases       *connect.Client[v1.ListDeployReleasesRequest, v1.ListDeployReleasesResponse]
-	getRelease         *connect.Client[v1.GetDeployReleaseRequest, v1.GetDeployReleaseResponse]
-	listPromotions     *connect.Client[v1.ListDeployPromotionsRequest, v1.ListDeployPromotionsResponse]
-	getRollout         *connect.Client[v1.GetDeployRolloutRequest, v1.GetDeployRolloutResponse]
-	recordGate         *connect.Client[v1.RecordDeployGateRequest, v1.RecordDeployGateResponse]
-	listGates          *connect.Client[v1.ListDeployGatesRequest, v1.ListDeployGatesResponse]
-	getRun             *connect.Client[v1.GetDeployRunRequest, v1.GetDeployRunResponse]
-	listUsage          *connect.Client[v1.ListDeployUsageRequest, v1.ListDeployUsageResponse]
-	recordBundle       *connect.Client[v1.RecordDeployBundleRequest, v1.RecordDeployBundleResponse]
-	getBundle          *connect.Client[v1.GetDeployBundleRequest, v1.GetDeployBundleResponse]
-	listConvergences   *connect.Client[v1.ListDeployConvergencesRequest, v1.ListDeployConvergencesResponse]
-	getLiveView        *connect.Client[v1.GetDeployLiveViewRequest, v1.GetDeployLiveViewResponse]
-	planDeploy         *connect.Client[v1.PlanDeployRequest, v1.PlanDeployResponse]
-	reportLocalSession *connect.Client[v1.ReportLocalSessionRequest, v1.ReportLocalSessionResponse]
-	importLedger       *connect.Client[v1.ImportLedgerRequest, v1.ImportLedgerResponse]
-	getDrift           *connect.Client[v1.GetDeployDriftRequest, v1.GetDeployDriftResponse]
+	getTenant              *connect.Client[v1.GetDeployTenantRequest, v1.GetDeployTenantResponse]
+	createTenant           *connect.Client[v1.CreateDeployTenantRequest, v1.CreateDeployTenantResponse]
+	createEnvironment      *connect.Client[v1.CreateDeployEnvironmentRequest, v1.CreateDeployEnvironmentResponse]
+	getEnvironment         *connect.Client[v1.GetDeployEnvironmentRequest, v1.GetDeployEnvironmentResponse]
+	listEnvironments       *connect.Client[v1.ListDeployEnvironmentsRequest, v1.ListDeployEnvironmentsResponse]
+	updateEnvironment      *connect.Client[v1.UpdateDeployEnvironmentRequest, v1.UpdateDeployEnvironmentResponse]
+	deleteEnvironment      *connect.Client[v1.DeleteDeployEnvironmentRequest, v1.DeleteDeployEnvironmentResponse]
+	ensureEnvironment      *connect.Client[v1.EnsureDeployEnvironmentRequest, v1.EnsureDeployEnvironmentResponse]
+	createDeployment       *connect.Client[v1.CreateDeploymentRequest, v1.CreateDeploymentResponse]
+	getDeployment          *connect.Client[v1.GetDeploymentRequest, v1.GetDeploymentResponse]
+	listDeployments        *connect.Client[v1.ListDeploymentsRequest, v1.ListDeploymentsResponse]
+	updateDeployment       *connect.Client[v1.UpdateDeploymentRequest, v1.UpdateDeploymentResponse]
+	deleteDeployment       *connect.Client[v1.DeleteDeploymentRequest, v1.DeleteDeploymentResponse]
+	promote                *connect.Client[v1.PromoteReleaseRequest, v1.PromoteReleaseResponse]
+	scale                  *connect.Client[v1.ScaleDeploymentRequest, v1.ScaleDeploymentResponse]
+	setEnvironmentRunState *connect.Client[v1.SetEnvironmentRunStateRequest, v1.SetEnvironmentRunStateResponse]
+	getStatus              *connect.Client[v1.GetDeploymentStatusRequest, v1.GetDeploymentStatusResponse]
+	streamLogs             *connect.Client[v1.StreamDeploymentLogsRequest, v1.StreamDeploymentLogsResponse]
+	cutRelease             *connect.Client[v1.CutReleaseRequest, v1.CutReleaseResponse]
+	listReleases           *connect.Client[v1.ListDeployReleasesRequest, v1.ListDeployReleasesResponse]
+	getRelease             *connect.Client[v1.GetDeployReleaseRequest, v1.GetDeployReleaseResponse]
+	listPromotions         *connect.Client[v1.ListDeployPromotionsRequest, v1.ListDeployPromotionsResponse]
+	getRollout             *connect.Client[v1.GetDeployRolloutRequest, v1.GetDeployRolloutResponse]
+	recordGate             *connect.Client[v1.RecordDeployGateRequest, v1.RecordDeployGateResponse]
+	listGates              *connect.Client[v1.ListDeployGatesRequest, v1.ListDeployGatesResponse]
+	getRun                 *connect.Client[v1.GetDeployRunRequest, v1.GetDeployRunResponse]
+	listUsage              *connect.Client[v1.ListDeployUsageRequest, v1.ListDeployUsageResponse]
+	recordBundle           *connect.Client[v1.RecordDeployBundleRequest, v1.RecordDeployBundleResponse]
+	getBundle              *connect.Client[v1.GetDeployBundleRequest, v1.GetDeployBundleResponse]
+	listConvergences       *connect.Client[v1.ListDeployConvergencesRequest, v1.ListDeployConvergencesResponse]
+	getLiveView            *connect.Client[v1.GetDeployLiveViewRequest, v1.GetDeployLiveViewResponse]
+	planDeploy             *connect.Client[v1.PlanDeployRequest, v1.PlanDeployResponse]
+	checkDeployCapacity    *connect.Client[v1.CheckDeployCapacityRequest, v1.CheckDeployCapacityResponse]
+	reportLocalSession     *connect.Client[v1.ReportLocalSessionRequest, v1.ReportLocalSessionResponse]
+	importLedger           *connect.Client[v1.ImportLedgerRequest, v1.ImportLedgerResponse]
+	getDrift               *connect.Client[v1.GetDeployDriftRequest, v1.GetDeployDriftResponse]
 }
 
 // GetTenant calls controlplane.v1.DeployService.GetTenant.
@@ -719,6 +757,11 @@ func (c *deployServiceClient) Promote(ctx context.Context, req *connect.Request[
 // Scale calls controlplane.v1.DeployService.Scale.
 func (c *deployServiceClient) Scale(ctx context.Context, req *connect.Request[v1.ScaleDeploymentRequest]) (*connect.Response[v1.ScaleDeploymentResponse], error) {
 	return c.scale.CallUnary(ctx, req)
+}
+
+// SetEnvironmentRunState calls controlplane.v1.DeployService.SetEnvironmentRunState.
+func (c *deployServiceClient) SetEnvironmentRunState(ctx context.Context, req *connect.Request[v1.SetEnvironmentRunStateRequest]) (*connect.Response[v1.SetEnvironmentRunStateResponse], error) {
+	return c.setEnvironmentRunState.CallUnary(ctx, req)
 }
 
 // GetStatus calls controlplane.v1.DeployService.GetStatus.
@@ -801,6 +844,11 @@ func (c *deployServiceClient) PlanDeploy(ctx context.Context, req *connect.Reque
 	return c.planDeploy.CallUnary(ctx, req)
 }
 
+// CheckDeployCapacity calls controlplane.v1.DeployService.CheckDeployCapacity.
+func (c *deployServiceClient) CheckDeployCapacity(ctx context.Context, req *connect.Request[v1.CheckDeployCapacityRequest]) (*connect.Response[v1.CheckDeployCapacityResponse], error) {
+	return c.checkDeployCapacity.CallUnary(ctx, req)
+}
+
 // ReportLocalSession calls controlplane.v1.DeployService.ReportLocalSession.
 func (c *deployServiceClient) ReportLocalSession(ctx context.Context, req *connect.Request[v1.ReportLocalSessionRequest]) (*connect.Response[v1.ReportLocalSessionResponse], error) {
 	return c.reportLocalSession.CallUnary(ctx, req)
@@ -880,6 +928,15 @@ type DeployServiceHandler interface {
 	// A suspend is the tenant's own. It is NOT the same as the environment's
 	// automatic scale-to-zero, and neither one stops storage.
 	Scale(context.Context, *connect.Request[v1.ScaleDeploymentRequest]) (*connect.Response[v1.ScaleDeploymentResponse], error)
+	// SetEnvironmentRunState suspends or resumes EVERY live deployment of an
+	// environment in one call: the "stop hounders" / "re-up hounders" button.
+	// Same semantics as Scale per deployment — it writes the declared run
+	// state, the tier controllers act on it (replicas to zero, database
+	// hibernated, site unpublished; data is kept) — and the same independence
+	// from billing: resuming never overrides a billing suspension, it is
+	// refused with the billing reason instead. ADMIN, like Scale and
+	// DeleteEnvironment.
+	SetEnvironmentRunState(context.Context, *connect.Request[v1.SetEnvironmentRunStateRequest]) (*connect.Response[v1.SetEnvironmentRunStateResponse], error)
 	// GetStatus returns the deployment with BOTH halves — declared and
 	// observed — plus the derived drift the UI badges. The 15s poll on the
 	// /deploy detail page calls this.
@@ -1030,6 +1087,15 @@ type DeployServiceHandler interface {
 	// the plan rather than trusting the one the caller approved. That is what
 	// makes the digest a guarantee instead of a claim.
 	PlanDeploy(context.Context, *connect.Request[v1.PlanDeployRequest]) (*connect.Response[v1.PlanDeployResponse], error)
+	// CheckDeployCapacity answers "would this org be allowed to run this?" —
+	// a compute plan, and room in it — BEFORE anything is built or pushed.
+	//
+	// A PURE READ, and the same decision (internal/computegate) RecordBundle,
+	// Promote and Scale ENFORCE. The pre-flight exists so a deploy with no plan
+	// fails in seconds with the remedy named, rather than after a build; the
+	// enforcement exists because a pre-flight is advisory and a client may skip
+	// it. Allowed=false is a normal response, not an error.
+	CheckDeployCapacity(context.Context, *connect.Request[v1.CheckDeployCapacityRequest]) (*connect.Response[v1.CheckDeployCapacityResponse], error)
 	// ReportLocalSession upserts one `forge env up` worktree's presence.
 	//
 	// THE SECOND REPORTED-STATE EXCEPTION — see the service header. LOCAL
@@ -1171,6 +1237,12 @@ func NewDeployServiceHandler(svc DeployServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(deployServiceMethods.ByName("Scale")),
 		connect.WithHandlerOptions(opts...),
 	)
+	deployServiceSetEnvironmentRunStateHandler := connect.NewUnaryHandler(
+		DeployServiceSetEnvironmentRunStateProcedure,
+		svc.SetEnvironmentRunState,
+		connect.WithSchema(deployServiceMethods.ByName("SetEnvironmentRunState")),
+		connect.WithHandlerOptions(opts...),
+	)
 	deployServiceGetStatusHandler := connect.NewUnaryHandler(
 		DeployServiceGetStatusProcedure,
 		svc.GetStatus,
@@ -1267,6 +1339,12 @@ func NewDeployServiceHandler(svc DeployServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(deployServiceMethods.ByName("PlanDeploy")),
 		connect.WithHandlerOptions(opts...),
 	)
+	deployServiceCheckDeployCapacityHandler := connect.NewUnaryHandler(
+		DeployServiceCheckDeployCapacityProcedure,
+		svc.CheckDeployCapacity,
+		connect.WithSchema(deployServiceMethods.ByName("CheckDeployCapacity")),
+		connect.WithHandlerOptions(opts...),
+	)
 	deployServiceReportLocalSessionHandler := connect.NewUnaryHandler(
 		DeployServiceReportLocalSessionProcedure,
 		svc.ReportLocalSession,
@@ -1317,6 +1395,8 @@ func NewDeployServiceHandler(svc DeployServiceHandler, opts ...connect.HandlerOp
 			deployServicePromoteHandler.ServeHTTP(w, r)
 		case DeployServiceScaleProcedure:
 			deployServiceScaleHandler.ServeHTTP(w, r)
+		case DeployServiceSetEnvironmentRunStateProcedure:
+			deployServiceSetEnvironmentRunStateHandler.ServeHTTP(w, r)
 		case DeployServiceGetStatusProcedure:
 			deployServiceGetStatusHandler.ServeHTTP(w, r)
 		case DeployServiceStreamLogsProcedure:
@@ -1349,6 +1429,8 @@ func NewDeployServiceHandler(svc DeployServiceHandler, opts ...connect.HandlerOp
 			deployServiceGetLiveViewHandler.ServeHTTP(w, r)
 		case DeployServicePlanDeployProcedure:
 			deployServicePlanDeployHandler.ServeHTTP(w, r)
+		case DeployServiceCheckDeployCapacityProcedure:
+			deployServiceCheckDeployCapacityHandler.ServeHTTP(w, r)
 		case DeployServiceReportLocalSessionProcedure:
 			deployServiceReportLocalSessionHandler.ServeHTTP(w, r)
 		case DeployServiceImportLedgerProcedure:
@@ -1424,6 +1506,10 @@ func (UnimplementedDeployServiceHandler) Scale(context.Context, *connect.Request
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.Scale is not implemented"))
 }
 
+func (UnimplementedDeployServiceHandler) SetEnvironmentRunState(context.Context, *connect.Request[v1.SetEnvironmentRunStateRequest]) (*connect.Response[v1.SetEnvironmentRunStateResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.SetEnvironmentRunState is not implemented"))
+}
+
 func (UnimplementedDeployServiceHandler) GetStatus(context.Context, *connect.Request[v1.GetDeploymentStatusRequest]) (*connect.Response[v1.GetDeploymentStatusResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.GetStatus is not implemented"))
 }
@@ -1486,6 +1572,10 @@ func (UnimplementedDeployServiceHandler) GetLiveView(context.Context, *connect.R
 
 func (UnimplementedDeployServiceHandler) PlanDeploy(context.Context, *connect.Request[v1.PlanDeployRequest]) (*connect.Response[v1.PlanDeployResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.PlanDeploy is not implemented"))
+}
+
+func (UnimplementedDeployServiceHandler) CheckDeployCapacity(context.Context, *connect.Request[v1.CheckDeployCapacityRequest]) (*connect.Response[v1.CheckDeployCapacityResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.CheckDeployCapacity is not implemented"))
 }
 
 func (UnimplementedDeployServiceHandler) ReportLocalSession(context.Context, *connect.Request[v1.ReportLocalSessionRequest]) (*connect.Response[v1.ReportLocalSessionResponse], error) {

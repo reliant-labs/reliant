@@ -42,9 +42,11 @@ export interface EnvPageHeaderProps {
   /** Null for a local environment — no shipping actions exist. */
   promote: (EnvAction & { target: string | null }) | null;
   deploy: EnvAction | null;
+  /** Stop / start / delete — only for an environment the platform places. */
+  lifecycleControls?: React.ReactNode;
 }
 
-export function EnvPageHeader({ envName, lifecycle, live, forgeRelease, promote, deploy }: EnvPageHeaderProps) {
+export function EnvPageHeader({ envName, lifecycle, live, forgeRelease, promote, deploy, lifecycleControls }: EnvPageHeaderProps) {
   const release = live?.release || forgeRelease || "";
   return (
     <header className="space-y-2" data-testid="env-page-header">
@@ -91,6 +93,7 @@ export function EnvPageHeader({ envName, lifecycle, live, forgeRelease, promote,
                 primary
               />
             )}
+            {lifecycleControls}
           </div>
         )}
       </div>

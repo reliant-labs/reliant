@@ -244,6 +244,10 @@ export interface ForgeHostedWorkload {
   observed_digest?: string;
   /** The digest the published spec asks for. */
   desired_digest?: string;
+  /** The control plane's deployment id — what Scale addresses. Control-plane rows only. */
+  deployment_id?: string;
+  /** What the tenant asked for: running | suspended | unspecified. Control-plane rows only. */
+  declared_run_state?: string;
   /** Forge's own drift call (observed ≠ desired). Read, never re-derived here. */
   drifted?: boolean;
   /** The control plane's last error for this workload, if any. */

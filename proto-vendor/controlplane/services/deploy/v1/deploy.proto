@@ -192,6 +192,18 @@ service DeployService {
     option (forge.v1.method) = {auth_required: true};
   }
 
+  // SetEnvironmentRunState suspends or resumes EVERY live deployment of an
+  // environment in one call: the "stop hounders" / "re-up hounders" button.
+  // Same semantics as Scale per deployment — it writes the declared run
+  // state, the tier controllers act on it (replicas to zero, database
+  // hibernated, site unpublished; data is kept) — and the same independence
+  // from billing: resuming never overrides a billing suspension, it is
+  // refused with the billing reason instead. ADMIN, like Scale and
+  // DeleteEnvironment.
+  rpc SetEnvironmentRunState(SetEnvironmentRunStateRequest) returns (SetEnvironmentRunStateResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+
   // GetStatus returns the deployment with BOTH halves — declared and
   // observed — plus the derived drift the UI badges. The 15s poll on the
   // /deploy detail page calls this.
@@ -429,6 +441,18 @@ service DeployService {
   // the plan rather than trusting the one the caller approved. That is what
   // makes the digest a guarantee instead of a claim.
   rpc PlanDeploy(PlanDeployRequest) returns (PlanDeployResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+
+  // CheckDeployCapacity answers "would this org be allowed to run this?" —
+  // a compute plan, and room in it — BEFORE anything is built or pushed.
+  //
+  // A PURE READ, and the same decision (internal/computegate) RecordBundle,
+  // Promote and Scale ENFORCE. The pre-flight exists so a deploy with no plan
+  // fails in seconds with the remedy named, rather than after a build; the
+  // enforcement exists because a pre-flight is advisory and a client may skip
+  // it. Allowed=false is a normal response, not an error.
+  rpc CheckDeployCapacity(CheckDeployCapacityRequest) returns (CheckDeployCapacityResponse) {
     option (forge.v1.method) = {auth_required: true};
   }
 
@@ -792,6 +816,18 @@ message ScaleDeploymentResponse {
   // the transient the UI needs to render ("scaling to 3, 2 running") instead
   // of optimistically claiming success.
   Deployment deployment = 1;
+}
+
+message SetEnvironmentRunStateRequest {
+  string environment_id = 1;
+  // RUNNING or SUSPENDED. UNSPECIFIED is refused.
+  controlplane.v1.DeployRunState run_state = 2;
+}
+
+message SetEnvironmentRunStateResponse {
+  // Every live deployment of the environment after the write, each with its
+  // new DECLARED run state beside its still-old OBSERVED one.
+  repeated Deployment deployments = 1;
 }
 
 // Exactly one of deployment_id / environment_id. environment_id INSTEAD of a
@@ -1189,6 +1225,62 @@ message PlanDeployRequest {
 
 message PlanDeployResponse {
   DeployPlan plan = 1;
+}
+
+// === Capacity pre-flight ===
+
+// DeployCapacityDemand is what a deploy would run, summed across its objects.
+// The client computes it from its render; the server re-derives it from the
+// recorded bundle when it enforces, so this is never trusted for admission.
+message DeployCapacityDemand {
+  int64 cpu_millicores = 1;
+  int64 memory_bytes = 2;
+  int64 storage_gib = 3;
+  // Services and jobs: anything that runs a pod.
+  int32 workloads = 4;
+  int32 databases = 5;
+  int32 builds = 6;
+  // Static sites this environment would hold. The server adds the org's
+  // sites in OTHER environments, because the free tier is per org.
+  int32 static_sites = 7;
+  int64 static_storage_gib = 8;
+}
+
+message CheckDeployCapacityRequest {
+  // The environment being deployed to. Its OTHER sites are excluded from the
+  // org-wide static count so a redeploy does not count itself twice.
+  string environment_id = 1;
+  DeployCapacityDemand demand = 2;
+}
+
+// DeployCapacityCode is why a verdict came out the way it did.
+enum DeployCapacityCode {
+  DEPLOY_CAPACITY_CODE_UNSPECIFIED = 0;
+  DEPLOY_CAPACITY_CODE_OK = 1;
+  // The deploy runs compute and the org has no active compute plan.
+  DEPLOY_CAPACITY_CODE_NO_COMPUTE_PLAN = 2;
+  // No plan, static sites only, beyond the free tier.
+  DEPLOY_CAPACITY_CODE_STATIC_FREE_TIER_EXCEEDED = 3;
+  // A plan exists and the demand does not fit its compute ceiling.
+  DEPLOY_CAPACITY_CODE_EXCEEDS_CEILING = 4;
+  // The org's spend cap has been reached.
+  DEPLOY_CAPACITY_CODE_SPEND_CAP_REACHED = 5;
+  // The plan could not be determined. Retry.
+  DEPLOY_CAPACITY_CODE_PLAN_UNKNOWN = 6;
+}
+
+message CheckDeployCapacityResponse {
+  bool allowed = 1;
+  DeployCapacityCode code = 2;
+  // One sentence: what was refused and why.
+  string reason = 3;
+  // The literal next step.
+  string fix = 4;
+  bool has_compute_plan = 5;
+  // The compute ceiling that applied; zero without a plan.
+  int64 ceiling_cpu_millicores = 6;
+  int64 ceiling_memory_bytes = 7;
+  int64 ceiling_storage_gib = 8;
 }
 
 // === Local sessions ===

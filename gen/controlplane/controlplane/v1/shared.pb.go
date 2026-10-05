@@ -1521,9 +1521,6 @@ type PlanLimits struct {
 	// Per-GiB-HOUR charge past the allowance, in cents. Shares a unit with
 	// the allowance above; a per-month rate here would be a 730x error.
 	StorageOverageRateCents float64 `protobuf:"fixed64,18,opt,name=storage_overage_rate_cents,json=storageOverageRateCents,proto3" json:"storage_overage_rate_cents,omitempty"`
-	// Maximum concurrently deployed workloads (Workload, StaticSite,
-	// ManagedDatabase) across the tenant.
-	MaxDeployments int32 `protobuf:"varint,29,opt,name=max_deployments,json=maxDeployments,proto3" json:"max_deployments,omitempty"`
 	// The memory:CPU ratio band a deployment's requests must fall inside,
 	// in GiB per vCPU. A request outside the band is rounded UP on the
 	// deficient axis at render time (ask 500m + 8Gi against a 4 GiB/vCPU
@@ -1681,13 +1678,6 @@ func (x *PlanLimits) GetIncludedStorageGibHours() float64 {
 func (x *PlanLimits) GetStorageOverageRateCents() float64 {
 	if x != nil {
 		return x.StorageOverageRateCents
-	}
-	return 0
-}
-
-func (x *PlanLimits) GetMaxDeployments() int32 {
-	if x != nil {
-		return x.MaxDeployments
 	}
 	return 0
 }
@@ -3647,7 +3637,7 @@ const file_controlplane_v1_shared_proto_rawDesc = "" +
 	"\x18notify_threshold_percent\x18\x01 \x01(\x01R\x16notifyThresholdPercent\x12.\n" +
 	"\x13overage_grace_hours\x18\x02 \x01(\x05R\x11overageGraceHours\x12,\n" +
 	"\x12suspend_on_overage\x18\x03 \x01(\bR\x10suspendOnOverage\x12A\n" +
-	"\x1dnon_suspendable_dimension_ids\x18\x04 \x03(\tR\x1anonSuspendableDimensionIds\"\xc9\t\n" +
+	"\x1dnon_suspendable_dimension_ids\x18\x04 \x03(\tR\x1anonSuspendableDimensionIds\"\xb7\t\n" +
 	"\n" +
 	"PlanLimits\x12\x1b\n" +
 	"\tmax_seats\x18\x01 \x01(\x05R\bmaxSeats\x12%\n" +
@@ -3666,12 +3656,11 @@ const file_controlplane_v1_shared_proto_rawDesc = "" +
 	"\x19included_memory_gib_hours\x18\x0f \x01(\x01R\x16includedMemoryGibHours\x129\n" +
 	"\x19memory_overage_rate_cents\x18\x10 \x01(\x01R\x16memoryOverageRateCents\x12;\n" +
 	"\x1aincluded_storage_gib_hours\x18! \x01(\x01R\x17includedStorageGibHours\x12;\n" +
-	"\x1astorage_overage_rate_cents\x18\x12 \x01(\x01R\x17storageOverageRateCents\x12'\n" +
-	"\x0fmax_deployments\x18\x1d \x01(\x05R\x0emaxDeployments\x124\n" +
+	"\x1astorage_overage_rate_cents\x18\x12 \x01(\x01R\x17storageOverageRateCents\x124\n" +
 	"\x17min_memory_gib_per_vcpu\x18\x1e \x01(\x01R\x13minMemoryGibPerVcpu\x124\n" +
 	"\x17max_memory_gib_per_vcpu\x18\x1f \x01(\x01R\x13maxMemoryGibPerVcpu\x12U\n" +
 	"\x14infra_overage_policy\x18  \x01(\v2#.controlplane.v1.InfraOveragePolicyR\x12infraOveragePolicy\x12=\n" +
-	"\x1bincluded_small_daemon_hours\x18\" \x01(\x03R\x18includedSmallDaemonHoursJ\x04\b\x1b\x10\x1cJ\x04\b\x1c\x10\x1dJ\x04\b\x05\x10\x06J\x04\b\x06\x10\aR\rmax_vclustersR\"vcluster_floor_rate_cents_per_hourR\rip_restrictedR\x0fmax_ips_per_key\"\xb4\x01\n" +
+	"\x1bincluded_small_daemon_hours\x18\" \x01(\x03R\x18includedSmallDaemonHoursJ\x04\b\x1b\x10\x1cJ\x04\b\x1c\x10\x1dJ\x04\b\x1d\x10\x1eJ\x04\b\x05\x10\x06J\x04\b\x06\x10\aR\rmax_vclustersR\"vcluster_floor_rate_cents_per_hourR\x0fmax_deploymentsR\rip_restrictedR\x0fmax_ips_per_key\"\xb4\x01\n" +
 	"\rDaemonPricing\x126\n" +
 	"\x05sizes\x18\x01 \x03(\v2 .controlplane.v1.DaemonSizePriceR\x05sizes\x12I\n" +
 	"\"suspended_disk_cents_per_gib_month\x18\x02 \x01(\tR\x1dsuspendedDiskCentsPerGibMonth\x12 \n" +

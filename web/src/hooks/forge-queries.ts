@@ -30,10 +30,14 @@ import type { ForgeAuditReport } from "../services/forge/audit";
 import {
   cloudAvailabilityFromError,
   cloudErrorDetail,
+  deleteEnvironment,
   getEnvironmentStatus,
   hasCloudControlPlane,
   listEnvironmentPromotions,
   listProjectEnvironments,
+  scaleDeployment,
+  setEnvironmentRunState,
+  type RunStateRequest,
   type CloudAvailability,
   type CloudEnv,
   type CloudEnvStatus,
@@ -1254,5 +1258,45 @@ export function useDestroyManagedSecret(
     mutationFn: ({ name, versions }) =>
       destroySecret({ environmentId: requireEnvironmentId(environmentId), name, versions }),
     onSuccess: invalidate,
+  });
+}
+
+
+// ── Stop / start / delete (hosted environments) ─────────────────────────────
+
+/** A run-state write changes what GetStatus and GetLiveView report, so both are refetched. */
+function useInvalidateAfterRunStateWrite() {
+  const queryClient = useQueryClient();
+  return useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: [...forgeKeys.all, "cloud-status"] });
+    void queryClient.invalidateQueries({ queryKey: [...forgeKeys.all, "live-view"] });
+  }, [queryClient]);
+}
+
+export function useSetEnvironmentRunState(environmentId: string | null | undefined) {
+  const invalidate = useInvalidateAfterRunStateWrite();
+  return useMutation<void, Error, RunStateRequest>({
+    mutationFn: (state) => setEnvironmentRunState(environmentId ?? "", state),
+    onSuccess: invalidate,
+  });
+}
+
+export function useScaleDeployment() {
+  const invalidate = useInvalidateAfterRunStateWrite();
+  return useMutation<void, Error, { deploymentId: string; state: RunStateRequest }>({
+    mutationFn: ({ deploymentId, state }) => scaleDeployment(deploymentId, state),
+    onSuccess: invalidate,
+  });
+}
+
+export function useDeleteEnvironment(environmentId: string | null | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation<void, Error, void>({
+    mutationFn: () => deleteEnvironment(environmentId ?? ""),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: [...forgeKeys.all, "live-view"] });
+      void queryClient.invalidateQueries({ queryKey: [...forgeKeys.all, "cloud-envs"] });
+      void queryClient.removeQueries({ queryKey: forgeKeys.cloudStatus(environmentId ?? "") });
+    },
   });
 }
