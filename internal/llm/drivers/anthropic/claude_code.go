@@ -5,7 +5,6 @@ import (
 	"compress/flate"
 	"compress/gzip"
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -149,9 +148,9 @@ func NewClaudeCodeClient(opts llm.DriverOptions) *ClaudeCodeClient {
 		clientOptions = append(clientOptions, option.WithRequestTimeout(10*time.Second))
 	}
 
-	return &ClaudeCodeClient{
-		baseClient: newBase(opts, clientOptions),
-	}
+	base := newBase(opts, clientOptions)
+	base.wireToolPrefix = mcpToolPrefix
+	return &ClaudeCodeClient{baseClient: base}
 }
 
 // tokenRefreshTransport wraps another RoundTripper and transparently refreshes
@@ -506,192 +505,6 @@ func (c *ClaudeCodeClient) applyClaudeCodeExtras(params *anthropic.MessageNewPar
 		extras["fallbacks"] = "default"
 	}
 	params.SetExtraFields(extras)
-}
-
-// toolCalls overrides the base implementation to strip the MCP prefix from tool names
-func (c *ClaudeCodeClient) toolCalls(msg anthropic.Message) ([]message.ToolCall, error) {
-	toolCalls, err := c.baseClient.toolCalls(msg)
-	if err != nil {
-		return nil, err
-	}
-
-	// Strip MCP prefix from tool names
-	for i := range toolCalls {
-		toolCalls[i].Name = strings.TrimPrefix(toolCalls[i].Name, mcpToolPrefix)
-	}
-
-	return toolCalls, nil
-}
-
-// buildCompleteEvent overrides the base implementation to strip MCP prefix from tool names
-// manualThinkingSignature is used as a fallback if SDK accumulation doesn't capture it.
-func (c *ClaudeCodeClient) buildCompleteEvent(accumulatedMessage anthropic.Message, manualThinkingSignature string) llm.DriverEvent {
-	content := ""
-	thinking := ""
-	thinkingSignature := ""
-	redactedThinking := ""
-
-	for _, block := range accumulatedMessage.Content {
-		switch v := block.AsAny().(type) {
-		case anthropic.TextBlock:
-			content += v.Text
-		case anthropic.ThinkingBlock:
-			thinking += v.Thinking
-			if v.Signature != "" {
-				thinkingSignature = v.Signature
-			}
-		case anthropic.RedactedThinkingBlock:
-			// Opaque and encrypted: Data is not readable thinking and must not
-			// be concatenated into `thinking`. Captured so the next request can
-			// replay it unchanged, as the API requires.
-			redactedThinking += v.Data
-		}
-	}
-
-	// Use manual signature as fallback if SDK didn't capture it
-	if thinkingSignature == "" && manualThinkingSignature != "" {
-		thinkingSignature = manualThinkingSignature
-	}
-
-	finishReason := message.FinishReasonUnknown
-	if accumulatedMessage.StopReason != "" {
-		finishReason = c.finishReason(string(accumulatedMessage.StopReason))
-	}
-
-	toolCalls, err := c.toolCalls(accumulatedMessage)
-	if err != nil {
-		logging.Warn("Stream buildCompleteEvent: Tool call JSON validation failed (will retry)",
-			"error", err,
-			"content_blocks", len(accumulatedMessage.Content))
-		return llm.DriverEvent{
-			Type:  llm.EventError,
-			Error: err,
-		}
-	}
-
-	return llm.DriverEvent{
-		Type: llm.EventComplete,
-		Response: &llm.DriverResponse{
-			Content:           content,
-			Thinking:          thinking,
-			ThinkingSignature: thinkingSignature,
-			RedactedThinking:  redactedThinking,
-			ToolCalls:         toolCalls,
-			Usage:             c.usage(accumulatedMessage),
-			FinishReason:      finishReason,
-		},
-	}
-}
-
-// streamResponseInternal handles streaming with MCP prefix stripping for tool names
-func (c *ClaudeCodeClient) streamResponseInternal(ctx context.Context, params anthropic.MessageNewParams) <-chan llm.DriverEvent {
-	eventChan := make(chan llm.DriverEvent)
-
-	go func() {
-		defer close(eventChan)
-
-		stream := c.client.Messages.NewStreaming(ctx, params)
-		accumulated := anthropic.Message{}
-		gotMessageStop := false
-		currentToolID := ""
-		currentToolName := ""
-
-		// Manual accumulation of thinking signature
-		var manualThinkingSignature string
-
-		// Process stream events
-		for stream.Next() {
-			event := stream.Current()
-
-			if err := accumulated.Accumulate(event); err != nil {
-				logging.Warn("Stream accumulation error, will send accumulated message",
-					"error", err, "blocks", len(accumulated.Content))
-				eventChan <- llm.DriverEvent{Type: llm.EventError, Error: err}
-				break
-			}
-
-			switch e := event.AsAny().(type) {
-			case anthropic.ContentBlockStartEvent:
-				if e.ContentBlock.Type == "text" {
-					eventChan <- llm.DriverEvent{Type: llm.EventContentStart}
-					continue
-				}
-				if e.ContentBlock.Type == "tool_use" {
-					currentToolID = e.ContentBlock.ID
-					// Strip MCP prefix from tool name for the event
-					currentToolName = strings.TrimPrefix(e.ContentBlock.Name, mcpToolPrefix)
-					eventChan <- llm.DriverEvent{
-						Type: llm.EventToolUseStart,
-						ToolCall: &message.ToolCall{
-							ID:       e.ContentBlock.ID,
-							Name:     currentToolName,
-							Finished: false,
-						},
-					}
-				}
-
-			case anthropic.ContentBlockDeltaEvent:
-				if e.Delta.Type == "thinking_delta" && e.Delta.Thinking != "" {
-					eventChan <- llm.DriverEvent{Type: llm.EventThinkingDelta, Thinking: e.Delta.Thinking}
-					continue
-				}
-				if e.Delta.Type == "signature_delta" && e.Delta.Signature != "" {
-					manualThinkingSignature += e.Delta.Signature
-					continue
-				}
-				if e.Delta.Type == "text_delta" && e.Delta.Text != "" {
-					eventChan <- llm.DriverEvent{Type: llm.EventContentDelta, Content: e.Delta.Text}
-					continue
-				}
-				if e.Delta.Type == "input_json_delta" && currentToolID != "" {
-					rawInput := e.Delta.PartialJSON
-					eventChan <- llm.DriverEvent{
-						Type: llm.EventToolUseDelta,
-						ToolCall: &message.ToolCall{
-							ID:       currentToolID,
-							Name:     currentToolName,
-							Finished: false,
-							Input:    rawInput,
-						},
-					}
-				}
-
-			case anthropic.ContentBlockStopEvent:
-				if currentToolID != "" {
-					eventChan <- llm.DriverEvent{
-						Type:     llm.EventToolUseStop,
-						ToolCall: &message.ToolCall{ID: currentToolID, Name: currentToolName},
-					}
-					currentToolID = ""
-					currentToolName = ""
-				} else {
-					eventChan <- llm.DriverEvent{Type: llm.EventContentStop}
-				}
-
-			case anthropic.MessageStopEvent:
-				gotMessageStop = true
-				logging.Info("Message stop event",
-					"reason", accumulated.StopReason,
-					"blocks", len(accumulated.Content))
-				eventChan <- c.buildCompleteEvent(accumulated, manualThinkingSignature)
-			}
-		}
-
-		// Check for stream errors
-		if err := stream.Err(); err != nil && !errors.Is(err, io.EOF) {
-			logging.Warn("Stream error", "error", err)
-			eventChan <- llm.DriverEvent{Type: llm.EventError, Error: err}
-		}
-
-		// Always send complete event if not already sent
-		if !gotMessageStop {
-			logging.Warn("Stream ended without MessageStopEvent, using accumulated data",
-				"blocks", len(accumulated.Content))
-			eventChan <- c.buildCompleteEvent(accumulated, manualThinkingSignature)
-		}
-	}()
-
-	return eventChan
 }
 
 // claudeCodeThinkingConfig returns the base thinking config, adding the

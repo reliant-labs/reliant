@@ -53,6 +53,17 @@ type baseClient struct {
 	// it, and empty (the API's 5m default, sent as a bare {type:"ephemeral"}) for
 	// a host that has not been shown to — see NewAnthropicClientWithOptions.
 	cacheTTL anthropic.CacheControlEphemeralTTL
+
+	// wireToolPrefix is the prefix tool names carry on the wire, stripped from
+	// every tool name the model returns so callers only ever see Reliant's own
+	// names. Empty for the plain Anthropic driver; ClaudeCodeClient presents
+	// tools under mcpToolPrefix.
+	//
+	// This is a field rather than an override because Go embedding has no
+	// virtual dispatch: a ClaudeCodeClient.toolCalls is never reached from
+	// baseClient's stream loop. Overriding meant forking the whole loop, and
+	// the fork silently missed the retry ladder in stream_retry.go.
+	wireToolPrefix string
 }
 
 func newBase(opts llm.DriverOptions, clientOptions []option.RequestOption) *baseClient {
@@ -440,6 +451,7 @@ func (b *baseClient) toolCalls(msg anthropic.Message) ([]message.ToolCall, error
 			// which can result in malformed JSON if the stream is interrupted or
 			// the API sends corrupted chunks (e.g., network issues, API glitches).
 			inputStr := string(variant.Input)
+			name := strings.TrimPrefix(variant.Name, b.wireToolPrefix)
 			if !json.Valid(variant.Input) {
 				// Return a transient error that will trigger a retry
 				// Include the tool name and truncated input for debugging
@@ -448,7 +460,7 @@ func (b *baseClient) toolCalls(msg anthropic.Message) ([]message.ToolCall, error
 					truncatedInput = truncatedInput[:100] + "..."
 				}
 				return nil, &MalformedJSONError{
-					ToolName: variant.Name,
+					ToolName: name,
 					ToolID:   variant.ID,
 					Input:    truncatedInput,
 				}
@@ -456,7 +468,7 @@ func (b *baseClient) toolCalls(msg anthropic.Message) ([]message.ToolCall, error
 
 			toolCall := message.ToolCall{
 				ID:       variant.ID,
-				Name:     variant.Name,
+				Name:     name,
 				Input:    inputStr,
 				Type:     string(variant.Type),
 				Finished: true,
@@ -613,8 +625,7 @@ func (b *baseClient) streamResponseInternal(ctx context.Context, params anthropi
 		for ; hasNext; hasNext = stream.Next() {
 			event := stream.Current()
 
-			// Debug: log all event types
-			logging.Info("Stream event received",
+			logging.Debug("Stream event received",
 				"event_type", fmt.Sprintf("%T", event.AsAny()))
 
 			if err := accumulated.Accumulate(event); err != nil {
@@ -632,12 +643,12 @@ func (b *baseClient) streamResponseInternal(ctx context.Context, params anthropi
 				}
 				if e.ContentBlock.Type == "tool_use" {
 					currentToolID = e.ContentBlock.ID
-					currentToolName = e.ContentBlock.Name
+					currentToolName = strings.TrimPrefix(e.ContentBlock.Name, b.wireToolPrefix)
 					eventChan <- llm.DriverEvent{
 						Type: llm.EventToolUseStart,
 						ToolCall: &message.ToolCall{
 							ID:       e.ContentBlock.ID,
-							Name:     e.ContentBlock.Name,
+							Name:     currentToolName,
 							Finished: false,
 						},
 					}
@@ -651,7 +662,7 @@ func (b *baseClient) streamResponseInternal(ctx context.Context, params anthropi
 				if e.Delta.Type == "signature_delta" && e.Delta.Signature != "" {
 					// Manually accumulate signature - SDK's Accumulate may not handle this properly
 					manualThinkingSignature += e.Delta.Signature
-					logging.Info("Received signature_delta",
+					logging.Debug("Received signature_delta",
 						"delta_len", len(e.Delta.Signature),
 						"total_signature_len", len(manualThinkingSignature))
 					continue
