@@ -308,7 +308,7 @@ export function MachineAccess({
             <p className="text-sm font-medium text-foreground">Access for “{created.name}” created</p>
             <CopyField label="Server URL" value={created.mcpUrl} />
             <CopyField label="Credential (Bearer token)" value={created.credential} />
-            <p className="text-xs font-medium text-warning">
+            <p className="text-xs font-medium text-warning-ink">
               This credential is shown only once. Copy it now — it cannot be retrieved later.
             </p>
             <Button variant="ghost" size="sm" onClick={() => setCreated(null)}>
@@ -451,7 +451,7 @@ export function MachineAccess({
               )}
 
               {execModeRequired && (
-                <p className="text-xs text-warning">
+                <p className="text-xs text-warning-ink">
                   You selected a tool that runs shell commands, so shell access cannot be “No commands”.
                 </p>
               )}
@@ -582,7 +582,7 @@ export function MachineAccess({
                         <p className="mt-0.5 text-destructive">Blocked: {a.errorMessage}</p>
                       )}
                       {a.status === "started" && (
-                        <p className="mt-0.5 text-warning">
+                        <p className="mt-0.5 text-warning-ink">
                           Outcome unknown — the server stopped before this call finished, so it may or may not have
                           run.
                         </p>

@@ -12,8 +12,10 @@
  *                                   App access now lives on each machine
  *                                   (Settings → Machines → a machine → Access),
  *                                   so a bookmark or old link redirects there
- *                                   instead of 404ing. `replace`, so Back does
- *                                   not bounce through the dead URL.
+ *                                   instead of 404ing — with `from=connectors`,
+ *                                   which Machines turns into a notice saying
+ *                                   where Connectors went. `replace`, so Back
+ *                                   does not bounce through the dead URL.
  *
  * Both are static paths, so the router ranks them above the generic
  * /settings/$section — which no longer accepts "connectors" at all.
@@ -43,7 +45,7 @@ export function createSettingsConnectorRoutes<TParent extends AnyRoute>(
     getParentRoute,
     path: '/settings/connectors',
     beforeLoad: () => {
-      throw redirect({ href: '/settings/environments', replace: true })
+      throw redirect({ href: '/settings/environments?from=connectors', replace: true })
     },
   })
 

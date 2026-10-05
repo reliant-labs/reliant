@@ -278,9 +278,20 @@ export const SETTINGS_SECTION_IDS = [
 export type SettingsSection = (typeof SETTINGS_SECTION_IDS)[number];
 export const DEFAULT_SETTINGS_SECTION: SettingsSection = "account";
 
-export const settingsParamsSchema = z.object({
-  section: z.enum(SETTINGS_SECTION_IDS),
-});
+export function isSettingsSection(value: string | undefined): value is SettingsSection {
+  return !!value && (SETTINGS_SECTION_IDS as readonly string[]).includes(value);
+}
+
+/**
+ * Slugs that are not section ids but that a person would reasonably type,
+ * mapped to the section they mean. /settings/$section redirects them
+ * (settingsSectionRoutes.tsx). Keys are lower case.
+ */
+export const SETTINGS_SECTION_ALIASES: Readonly<Record<string, SettingsSection>> = {
+  // The nav label of the `environments` section is "Machines".
+  machines: "environments",
+  machine: "environments",
+};
 
 // Billing sub-navigation. This was `useState` inside BillingSection, with a
 // comment arguing the tab "never touches the router" so it composes under the
@@ -336,10 +347,11 @@ export const settingsSearchSchema = z.object({
   // route's params — a string `plan` here makes those updaters fail to compile
   // across the app.
   planId: z.string().optional(),
-  // Where the user came from, so billing can offer a route back. Onboarding
-  // previously had none: `returnTo` hard-coded /settings/billing and a user who
-  // detoured mid-wizard had no way home.
-  from: z.enum(["onboarding"]).optional(),
+  // Where the user came from. `onboarding`: billing offers a route back —
+  // previously `returnTo` hard-coded /settings/billing and a user who detoured
+  // mid-wizard had no way home. `connectors`: the retired /settings/connectors
+  // redirect, so Machines can say where Connectors went.
+  from: z.enum(["onboarding", "connectors"]).optional(),
   // The exact URL to return to, captured at the moment the user left. Carries
   // onboarding's `plan` search param — the wizard's ENTIRE state — so the trip
   // through billing (and Stripe, which is a full cold boot) is resumable.
@@ -348,10 +360,13 @@ export const settingsSearchSchema = z.object({
   // Validated at the point of use, not here: it is a URL from the address bar,
   // so it must be same-origin-checked before being navigated to.
   returnTo: z.string().optional(),
-  // Environments deep-links to a specific daemon's detail view; the section
-  // reads it via useSearch({ strict: false }). Declared here because the route
-  // now validates its search and would otherwise strip it.
+  // The pre-path deep link into one machine. /settings/environments redirects
+  // it to /settings/environments/$machineId (settingsSectionRoutes.tsx);
+  // declared so validation does not strip it before that redirect reads it.
   daemon: z.string().optional(),
+  // The slug of a /settings/<slug> URL that matched no section. Set only by
+  // that redirect; the page explains it and offers to dismiss.
+  notFound: z.string().optional(),
 });
 
 // Search params for `/onboarding`. A strict subset of `indexSearchSchema` —

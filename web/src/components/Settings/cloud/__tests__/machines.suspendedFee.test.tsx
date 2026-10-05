@@ -76,6 +76,7 @@ vi.mock('@/services/controlPlane/capabilities', () => ({
 vi.mock('@tanstack/react-router', () => ({
   useSearch: () => ({}),
   useNavigate: () => mocks.navigate,
+  useParams: () => ({}),
 }))
 
 // The real module exports proto enums at module scope that machines.tsx
