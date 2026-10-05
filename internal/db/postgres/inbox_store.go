@@ -56,6 +56,16 @@ func (s *inboxStore) ListDismissedInboxItemIDs(ctx context.Context, userID strin
 	return out, nil
 }
 
-func (s *inboxStore) DismissInboxItem(ctx context.Context, userID, itemID string, at time.Time) error {
-	return s.q.DismissInboxItem(ctx, pgdb.DismissInboxItemParams{UserID: userID, ItemID: itemID, DismissedAt: at})
+func (s *inboxStore) DismissInboxItems(ctx context.Context, userID string, itemIDs []string, at time.Time) error {
+	if len(itemIDs) == 0 {
+		return nil
+	}
+	return s.q.DismissInboxItems(ctx, pgdb.DismissInboxItemsParams{UserID: userID, ItemIds: itemIDs, DismissedAt: at})
+}
+
+func (s *inboxStore) RestoreInboxItems(ctx context.Context, userID string, itemIDs []string) error {
+	if len(itemIDs) == 0 {
+		return nil
+	}
+	return s.q.RestoreInboxItems(ctx, pgdb.RestoreInboxItemsParams{UserID: userID, ItemIds: itemIDs})
 }

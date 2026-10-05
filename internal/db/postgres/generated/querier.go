@@ -202,7 +202,7 @@ type Querier interface {
 	DeleteWorkflowScenariosByDraft(ctx context.Context, workflowDraftID sql.NullString) error
 	DeleteWorkflowsByChat(ctx context.Context, chatID string) error
 	DeleteWorktree(ctx context.Context, id string) error
-	DismissInboxItem(ctx context.Context, arg DismissInboxItemParams) error
+	DismissInboxItems(ctx context.Context, arg DismissInboxItemsParams) error
 	EnqueueAgentMessage(ctx context.Context, arg EnqueueAgentMessageParams) error
 	// The stranded-background-spawn sweep's write half (spec §7.1). ON CONFLICT
 	// against idx_agent_messages_one_terminal_report_per_spawn is what makes this
@@ -515,11 +515,21 @@ type Querier interface {
 	// the trigger's firings — internal/triggers owns that rule. Archived chats are
 	// not waiting on anyone.
 	//
+	// Every item must be OPENABLE, so every branch INNER-joins its project and
+	// requires the same owner. chats.project_id has no foreign key: deleting a
+	// project leaves its chats (and their pending questions) behind, and the run
+	// page cannot open a chat whose project is gone. A LEFT JOIN here listed those
+	// as dead "This run doesn't exist" items. Likewise a blocking item of a run
+	// that completed (stop_reason 1) or was cancelled (4) can never be answered —
+	// nothing expires it when the run stops — so it is not listed either. A failed
+	// (2) or paused (3) run is resumable and keeps its items.
+	//
 	// Generic payload columns (a_text, b_text, a_int) carry the kind-specific bits:
 	//   approval:        a_text title, b_text metadata JSON, a_int approval_type
 	//   question:        a_text thread_id, b_text metadata JSON
 	//   launch failed:   a_text newest outcome_detail, b_text event kind, a_int failures in the episode
-	//   waiting machine: a_text daemon_id, b_text daemon name
+	//   waiting machine: a_text daemon_id, b_text daemon name; item_key is the chat
+	//                    id and the block's start, so a later block is a new item
 	ListInboxPending(ctx context.Context, userID string) ([]ListInboxPendingRow, error)
 	ListItemDefaults(ctx context.Context, itemType int32) ([]ListItemDefaultsRow, error)
 	// Every background spawn issued anywhere inside one root execution that is
@@ -885,6 +895,7 @@ type Querier interface {
 	// has not ended, and reaping its children would kill a run that is coming back.
 	ReapOrphanedWorkflowDescendants(ctx context.Context) (int64, error)
 	RemoveCommandFavorite(ctx context.Context, arg RemoveCommandFavoriteParams) error
+	RestoreInboxItems(ctx context.Context, arg RestoreInboxItemsParams) error
 	// Resume all paused workflows for a chat.
 	// Used when resuming a chat to ensure child workflows are also resumed.
 	ResumeWorkflowsByChat(ctx context.Context, chatID string) error

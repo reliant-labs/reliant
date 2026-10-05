@@ -9,19 +9,28 @@ import "reliant/v1/trigger.proto";
 option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
 
 // InboxService lists everything waiting on the calling user, across every
-// project and launch kind (research/WORKFLOW_UI.md §8). Scope is always the
-// caller; no request carries a user id.
+// project and launch kind (research/WORKFLOW_UI.md §8), or within one project.
+// Scope is always the caller; no request carries a user id.
+//
+// An item is only listed if it can be opened: its chat's project must still
+// exist and be the caller's, and a blocking item's run must not have completed
+// or been cancelled.
 service InboxService {
   // ListInbox returns the caller's inbox items in priority order. One round
   // trip. With limit = 0 it returns no items, only the counts, which is the
   // cheap call the nav badge makes.
   rpc ListInbox(ListInboxRequest) returns (ListInboxResponse) {}
 
-  // DismissInboxItem hides a failure item. Approvals and questions are not
-  // dismissable (they clear when resolved) and are rejected with
-  // INVALID_ARGUMENT. A newer failure of the same automation has a new item_id,
-  // so it reappears.
+  // DismissInboxItem hides items from the caller's inbox. Every kind can be
+  // dismissed. Hiding an approval or a question does not resolve it: the run
+  // still waits, and the chat still shows it. A newer failure of the same
+  // automation, or a new block on the same machine, has a new item_id and so
+  // appears again. Unknown ids are rejected with INVALID_ARGUMENT.
   rpc DismissInboxItem(DismissInboxItemRequest) returns (DismissInboxItemResponse) {}
+
+  // RestoreInboxItem undoes DismissInboxItem. Restoring an item that was not
+  // dismissed is a no-op.
+  rpc RestoreInboxItem(RestoreInboxItemRequest) returns (RestoreInboxItemResponse) {}
 }
 
 // InboxItemKind is declared in priority order: lower values sort first. The
@@ -48,6 +57,9 @@ enum InboxItemKind {
 message ListInboxRequest {
   // Maximum items returned. 0 returns counts only. Default (unset) is 100.
   optional int32 limit = 1;
+  // Only items of this project. Unset lists every project. The counts follow
+  // the same scope.
+  optional string project_id = 2;
 }
 
 message ListInboxResponse {
@@ -65,16 +77,23 @@ message ListInboxResponse {
 
   // True when limit cut the list short.
   bool truncated = 4;
+
+  // With project_id set: how many items are waiting in the caller's OTHER
+  // projects, so a scoped view can say what it is not showing. 0 when unscoped.
+  int32 other_projects_count = 5;
 }
 
 message InboxItem {
   InboxItemKind kind = 1;
 
-  // Stable key for dismissal and de-duplication. Approvals and questions use
-  // their row id; waiting-for-machine uses the chat id; run-finished uses the
-  // chat id. Automation failure items embed the id of the FIRST failing event
-  // of the current failure episode, so repeated failures stay one item and a
-  // new episode is a new item.
+  // Stable key for dismissal and de-duplication, prefixed by kind
+  // ("approval:", "question:", "waiting_for_machine:", "automation_failing:",
+  // "automation_launch_failed:", "run_finished:"). Approvals and questions
+  // embed their row id; waiting-for-machine embeds the chat id and when the
+  // block began, so a later block is a new item; run-finished embeds the chat
+  // id. Automation failure items embed the id of the FIRST failing event of the
+  // current failure episode, so repeated failures stay one item and a new
+  // episode is a new item.
   string item_id = 2;
 
   // The chat the item belongs to. Empty for automation failure kinds that have
@@ -156,7 +175,16 @@ message InboxAutomationLaunchFailed {
 message InboxRunFinished {}
 
 message DismissInboxItemRequest {
-  string item_id = 1;
+  reserved 1;
+  reserved "item_id";
+  // One row, or a whole section ("Dismiss all").
+  repeated string item_ids = 2;
 }
 
 message DismissInboxItemResponse {}
+
+message RestoreInboxItemRequest {
+  repeated string item_ids = 1;
+}
+
+message RestoreInboxItemResponse {}

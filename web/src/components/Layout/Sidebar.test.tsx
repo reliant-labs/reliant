@@ -63,6 +63,7 @@ vi.mock("../../hooks/chat-queries", () => ({
 // placed and wired.
 vi.mock("../../hooks/inbox-queries", () => ({
   useInboxCounts: () => ({ data: { blockingCount: 2, hasInformational: false }, isError: false }),
+  useInboxProjectId: () => undefined,
 }));
 
 vi.mock("../../hooks/message-queries", () => ({

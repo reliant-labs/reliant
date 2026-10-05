@@ -22,16 +22,18 @@ import { UserUpdateType } from "@/gen/reliant/v1/streaming_pb";
 
 const listInbox = vi.fn();
 const dismissInboxItem = vi.fn();
+const restoreInboxItem = vi.fn();
 vi.mock("@/api/grpc-client", () => ({
-  grpcClient: { inbox: () => ({ listInbox, dismissInboxItem }) },
+  grpcClient: { inbox: () => ({ listInbox, dismissInboxItem, restoreInboxItem }) },
 }));
 
 import {
   inboxInvalidatingUpdate,
   inboxKeys,
-  useDismissInboxItem,
+  useDismissInboxItems,
   useInbox,
   useInboxCounts,
+  useRestoreInboxItems,
 } from "../inbox-queries";
 
 function wrapperFor(queryClient: QueryClient) {
@@ -46,7 +48,7 @@ function newClient() {
 
 const failing = create(InboxItemSchema, {
   kind: InboxItemKind.AUTOMATION_LAUNCH_FAILED,
-  itemId: "launch-failed:evt-1",
+  itemId: "automation_launch_failed:evt-1",
   triggerId: "trg-1",
   triggerName: "Nightly",
   payload: { case: "automationLaunchFailed", value: { reason: "no machine", eventId: "evt-1" } },
@@ -55,6 +57,7 @@ const failing = create(InboxItemSchema, {
 beforeEach(() => {
   listInbox.mockReset();
   dismissInboxItem.mockReset();
+  restoreInboxItem.mockReset();
 });
 
 describe("useInboxCounts", () => {
@@ -65,6 +68,17 @@ describe("useInboxCounts", () => {
     const { result } = renderHook(() => useInboxCounts(), { wrapper: wrapperFor(newClient()) });
     await waitFor(() => expect(result.current.data).toEqual({ blockingCount: 3, hasInformational: true }));
     expect(listInbox.mock.calls[0]![0]).toMatchObject({ limit: 0 });
+    expect(listInbox.mock.calls[0]![0].projectId).toBeUndefined();
+  });
+
+  it("scopes the counts to a project, under its own cache key", async () => {
+    listInbox.mockResolvedValue(create(ListInboxResponseSchema, { blockingCount: 1 }));
+    const queryClient = newClient();
+    const { result } = renderHook(() => useInboxCounts("proj-1"), { wrapper: wrapperFor(queryClient) });
+    await waitFor(() => expect(result.current.data?.blockingCount).toBe(1));
+    expect(listInbox.mock.calls[0]![0]).toMatchObject({ limit: 0, projectId: "proj-1" });
+    expect(queryClient.getQueryData(inboxKeys.counts("proj-1"))).toBeDefined();
+    expect(queryClient.getQueryData(inboxKeys.counts())).toBeUndefined();
   });
 });
 
@@ -81,8 +95,8 @@ describe("useInbox", () => {
   });
 });
 
-describe("useDismissInboxItem", () => {
-  it("calls the RPC and removes the row from the cached list immediately", async () => {
+describe("useDismissInboxItems", () => {
+  it("calls the RPC and removes the rows from every cached scope immediately", async () => {
     listInbox.mockResolvedValue(create(ListInboxResponseSchema, { items: [failing], hasInformational: true }));
     let resolveDismiss: () => void = () => {};
     dismissInboxItem.mockImplementation(() => new Promise<void>((resolve) => (resolveDismiss = resolve)));
@@ -90,14 +104,46 @@ describe("useDismissInboxItem", () => {
     const wrapper = wrapperFor(queryClient);
 
     const list = renderHook(() => useInbox(), { wrapper });
+    const scoped = renderHook(() => useInbox("proj-1"), { wrapper });
     await waitFor(() => expect(list.result.current.data?.items).toHaveLength(1));
+    await waitFor(() => expect(scoped.result.current.data?.items).toHaveLength(1));
 
-    const dismiss = renderHook(() => useDismissInboxItem(), { wrapper });
-    act(() => dismiss.result.current.mutate("launch-failed:evt-1"));
+    const dismiss = renderHook(() => useDismissInboxItems(), { wrapper });
+    act(() => dismiss.result.current.mutate(["automation_launch_failed:evt-1"]));
 
     await waitFor(() => expect(list.result.current.data?.items).toHaveLength(0));
-    expect(dismissInboxItem.mock.calls[0]![0]).toMatchObject({ itemId: "launch-failed:evt-1" });
+    expect(scoped.result.current.data?.items).toHaveLength(0);
+    expect(dismissInboxItem.mock.calls[0]![0]).toMatchObject({ itemIds: ["automation_launch_failed:evt-1"] });
     resolveDismiss();
+  });
+
+  it("puts every scope back when the RPC fails", async () => {
+    listInbox.mockResolvedValue(create(ListInboxResponseSchema, { items: [failing], hasInformational: true }));
+    dismissInboxItem.mockRejectedValue(new Error("nope"));
+    const queryClient = newClient();
+    // Keep the refetch after settle from masking the rollback.
+    listInbox.mockResolvedValueOnce(create(ListInboxResponseSchema, { items: [failing] }));
+    const wrapper = wrapperFor(queryClient);
+    const list = renderHook(() => useInbox(), { wrapper });
+    await waitFor(() => expect(list.result.current.data?.items).toHaveLength(1));
+
+    const dismiss = renderHook(() => useDismissInboxItems(), { wrapper });
+    act(() => dismiss.result.current.mutate(["automation_launch_failed:evt-1"]));
+    await waitFor(() => expect(dismiss.result.current.isError).toBe(true));
+    expect(list.result.current.data?.items).toHaveLength(1);
+  });
+});
+
+describe("useRestoreInboxItems", () => {
+  it("calls Restore with the ids and refetches", async () => {
+    restoreInboxItem.mockResolvedValue({});
+    const queryClient = newClient();
+    queryClient.setQueryData(inboxKeys.list(), create(ListInboxResponseSchema, {}));
+    const restore = renderHook(() => useRestoreInboxItems(), { wrapper: wrapperFor(queryClient) });
+    act(() => restore.result.current.mutate(["approval:a-1"]));
+    await waitFor(() => expect(restore.result.current.isSuccess).toBe(true));
+    expect(restoreInboxItem.mock.calls[0]![0]).toMatchObject({ itemIds: ["approval:a-1"] });
+    expect(queryClient.getQueryState(inboxKeys.list())?.isInvalidated).toBe(true);
   });
 });
 

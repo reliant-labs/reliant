@@ -1,27 +1,41 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * /inbox — everything waiting on the user, across every project and launch
- * kind (WORKFLOW_UI.md §8). Interactive chats awaiting an answer are here too
- * (§14.1 decision 2): the sidebar says *where*, the Inbox says *everything*.
+ * /inbox — everything waiting on the user (WORKFLOW_UI.md §8), in the current
+ * project by default, with every project one click away. Interactive chats
+ * awaiting an answer are here too (§14.1 decision 2): the sidebar says
+ * *where*, the Inbox says *everything*.
  *
- * Items arrive in the server's priority order (blocking kinds first, then
- * longest-waiting). Items of one run collapse under one heading ("3 approvals
- * waiting"), and so do one automation's informational items (§8.2 "by
- * automation for repeated failures"); a group sits where its first item
- * would have.
+ * Items are SECTIONED BY KIND, in the server's priority order (blocking kinds
+ * first). The section heading says once what each row in it asks for —
+ * "Questions · 3" — so a row is just the run's name, a detail, and its action.
+ * An earlier layout put the verb on every row ("Answer a question in …"),
+ * which repeated the same words down the page and spent three lines a row.
+ *
+ * Every row can be dismissed, and so can a whole section. The rows leave at
+ * once and a toast offers Undo, which restores them on the server.
  */
 
-import { Link } from "@tanstack/react-router";
+import { useMemo } from "react";
 
 import { InboxItemKind, type InboxItem as InboxItemData } from "@/gen/reliant/v1/inbox_pb";
-import { useInbox } from "@/hooks/inbox-queries";
+import {
+  useDismissInboxItems,
+  useInbox,
+  useInboxProjectId,
+  useInboxScopeStore,
+  useRestoreInboxItems,
+  type InboxScope,
+} from "@/hooks/inbox-queries";
+import { toast } from "@/lib/toast-manager";
+import { cn } from "@/lib/utils";
+import { useProjectStore } from "@/store/projectStore";
 import Card from "../forge-ui/card";
 import PageHeader from "../forge-ui/page_header";
 import SkeletonLoader from "../forge-ui/skeleton_loader";
 import { Button } from "../ui/Button";
 import { AreaShell } from "../Layout/AreaShell";
-import { InboxItem, type InboxItemOmissions } from "./InboxItem";
+import { InboxItem, subjectName } from "./InboxItem";
 
 export function InboxPage() {
   return (
@@ -31,248 +45,222 @@ export function InboxPage() {
   );
 }
 
-/** A run's items, an automation's, or a single item that belongs to no group. */
-export interface InboxGroup {
-  key: string;
-  /** What the items share: "run" groups blocking items, "automation" the rest. */
-  by: "run" | "automation" | "none";
+/** One kind's items, under one heading. */
+export interface InboxSection {
+  kind: InboxItemKind;
+  /** The heading: what every row in the section asks for. */
+  title: string;
   items: InboxItemData[];
 }
 
-/**
- * The informational kinds an automation produces. The server dedupes each
- * kind to one item per failure episode (#432), but one automation can still
- * leave several rows: a failed launch counts as a failure, so two failed
- * launches make it both Failing and launch-failed; and an automation that
- * opted in to "notify me" leaves one run-finished row per unread run.
- */
-function isAutomationInformational(item: InboxItemData): boolean {
-  return (
-    !!item.triggerId &&
-    (item.kind === InboxItemKind.AUTOMATION_FAILING ||
-      item.kind === InboxItemKind.AUTOMATION_LAUNCH_FAILED ||
-      item.kind === InboxItemKind.RUN_FINISHED)
-  );
-}
-
-/**
- * Group items, keeping the server's order: a group takes the position of its
- * first item.
- *
- *   - An automation's informational items group by trigger_id.
- *   - Everything else that has a run groups by run_id: those items block a
- *     live run, and the run is what the user acts in, so a blocking item of an
- *     automation's run is never folded in with that automation's failures.
- *   - Anything else stands alone.
- */
-export function groupInboxItems(items: InboxItemData[]): InboxGroup[] {
-  const groups: InboxGroup[] = [];
-  const byKey = new Map<string, InboxGroup>();
-  for (const item of items) {
-    const [key, by] = isAutomationInformational(item)
-      ? [`trigger:${item.triggerId}`, "automation" as const]
-      : item.runId
-        ? [item.runId, "run" as const]
-        : [null, "none" as const];
-    if (key === null) {
-      groups.push({ key: `item:${item.itemId}`, by, items: [item] });
-      continue;
-    }
-    const existing = byKey.get(key);
-    if (existing) {
-      existing.items.push(item);
-      continue;
-    }
-    const group = { key, by, items: [item] };
-    byKey.set(key, group);
-    groups.push(group);
-  }
-  return groups;
-}
-
-const normalizeDetail = (text: string) => text.trim().replace(/\s+/g, " ").toLowerCase();
-
-/**
- * What each row in one automation's group can leave out because a sibling
- * already says it. A failed launch counts as a failure, so the same streak
- * yields a "failing" row AND a "could not start" row, and both would read
- * "Failed 3 times in a row. <the same reason>". The failing row keeps the
- * streak count; the launch row keeps the reason; neither repeats the other.
- */
-export function automationGroupOmissions(items: InboxItemData[]): Map<string, InboxItemOmissions> {
-  const omissions = new Map<string, InboxItemOmissions>();
-  const failing = items.find((item) => item.payload.case === "automationFailing");
-  const launch = items.find((item) => item.payload.case === "automationLaunchFailed");
-  if (!failing || !launch) return omissions;
-  if (failing.payload.case !== "automationFailing" || launch.payload.case !== "automationLaunchFailed") return omissions;
-  const detail = failing.payload.value.health?.lastFailureDetail ?? "";
-  const reason = launch.payload.value.reason;
-  if (detail && normalizeDetail(detail) === normalizeDetail(reason)) {
-    omissions.set(failing.itemId, { detail: true });
-  }
-  omissions.set(launch.itemId, { streak: true });
-  return omissions;
-}
-
-/** "Failing · could not start · 2 runs finished": what one automation has waiting. */
-export function automationGroupSummary(items: InboxItemData[]): string {
-  const count = (kind: InboxItemKind) => items.filter((item) => item.kind === kind).length;
-  const finished = count(InboxItemKind.RUN_FINISHED);
-  const parts = [
-    count(InboxItemKind.AUTOMATION_FAILING) > 0 ? "failing" : null,
-    count(InboxItemKind.AUTOMATION_LAUNCH_FAILED) > 0 ? "could not start" : null,
-    finished > 0 ? `${finished} ${finished === 1 ? "run" : "runs"} finished` : null,
-  ].filter((part): part is string => part !== null);
-  const joined = parts.join(" · ");
-  return joined.charAt(0).toUpperCase() + joined.slice(1);
-}
-
-const KIND_NOUN: Partial<Record<InboxItemKind, [string, string]>> = {
-  [InboxItemKind.APPROVAL]: ["approval", "approvals"],
-  [InboxItemKind.QUESTION]: ["question", "questions"],
-  [InboxItemKind.WAITING_FOR_MACHINE]: ["machine wait", "machine waits"],
+const SECTION_TITLE: Record<InboxItemKind, string> = {
+  [InboxItemKind.UNSPECIFIED]: "Other",
+  [InboxItemKind.APPROVAL]: "Approvals",
+  [InboxItemKind.QUESTION]: "Questions",
+  [InboxItemKind.WAITING_FOR_MACHINE]: "Waiting for a machine",
+  [InboxItemKind.AUTOMATION_FAILING]: "Failing automations",
+  [InboxItemKind.AUTOMATION_LAUNCH_FAILED]: "Automations that could not start",
+  [InboxItemKind.RUN_FINISHED]: "Finished runs",
 };
 
-/** "3 approvals waiting", or "2 approvals and 1 question waiting". */
-export function groupSummary(items: InboxItemData[]): string {
-  const counts = new Map<InboxItemKind, number>();
-  for (const item of items) counts.set(item.kind, (counts.get(item.kind) ?? 0) + 1);
-  const parts = [...counts.entries()].map(([kind, count]) => {
-    const [one, many] = KIND_NOUN[kind] ?? ["item", "items"];
-    return `${count} ${count === 1 ? one : many}`;
-  });
-  const joined = parts.length > 1 ? `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}` : parts[0];
-  return `${joined} waiting`;
+/** Section the items by kind, in kind (priority) order, keeping each kind's server order. */
+export function sectionInboxItems(items: InboxItemData[]): InboxSection[] {
+  const byKind = new Map<InboxItemKind, InboxItemData[]>();
+  for (const item of items) {
+    const list = byKind.get(item.kind);
+    if (list) list.push(item);
+    else byKind.set(item.kind, [item]);
+  }
+  return [...byKind.entries()]
+    .sort(([a], [b]) => a - b)
+    .map(([kind, sectionItems]) => ({ kind, title: SECTION_TITLE[kind] ?? "Other", items: sectionItems }));
 }
 
 export function InboxView() {
-  const inbox = useInbox();
+  const scope = useInboxScopeStore((state) => state.scope);
+  const setScope = useInboxScopeStore((state) => state.setScope);
+  const currentProject = useProjectStore((state) => state.currentProject);
+  const projectId = useInboxProjectId();
+  const inbox = useInbox(projectId);
+  const dismiss = useDismissInboxItems();
+  const restore = useRestoreInboxItems();
+
+  const items = useMemo(() => inbox.data?.items ?? [], [inbox.data]);
+  const sections = useMemo(() => sectionInboxItems(items), [items]);
+  const scoped = projectId !== undefined;
+
+  const onDismiss = (dismissed: InboxItemData[], what: string) => {
+    const ids = dismissed.map((item) => item.itemId);
+    dismiss.mutate(ids, {
+      onSuccess: () =>
+        toast.notify(`Dismissed ${what}`, {
+          // Long enough to notice and reach for Undo; the default 4s is not.
+          duration: 8000,
+          action: { label: "Undo", onClick: () => restore.mutate(ids) },
+        }),
+      onError: (error) => void toast.error(error),
+    });
+  };
 
   const header = (
-    <PageHeader title="Inbox" subtitle="Approvals, questions and automation problems, across every project." />
+    <PageHeader
+      title="Inbox"
+      subtitle={scoped ? `Waiting on you in ${currentProject?.name ?? "this project"}.` : "Waiting on you, across every project."}
+      className="mb-0"
+    />
   );
 
+  const toolbar = currentProject ? (
+    <ScopeToggle scope={scope} projectName={currentProject.name} onChange={setScope} />
+  ) : null;
+
+  let body;
   if (inbox.isLoading) {
-    return (
-      <div className="space-y-6">
-        {header}
-        <Card padding="md" aria-busy="true" aria-label="Loading inbox">
-          <SkeletonLoader variant="list-item" count={3} />
-        </Card>
-      </div>
+    body = (
+      <Card padding="sm" aria-busy="true" aria-label="Loading inbox">
+        <SkeletonLoader variant="list-item" count={4} />
+      </Card>
     );
-  }
-
-  if (inbox.isError) {
-    return (
-      <div className="space-y-6">
-        {header}
-        <Card padding="lg" role="alert">
-          <p className="text-sm font-medium text-foreground">The inbox could not be loaded.</p>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {inbox.error instanceof Error ? inbox.error.message : "Something went wrong."}
-          </p>
-          <Button className="mt-4" variant="outline" onClick={() => void inbox.refetch()}>
-            Try again
+  } else if (inbox.isError) {
+    body = (
+      <Card padding="lg" role="alert">
+        <p className="text-sm font-medium text-foreground">The inbox could not be loaded.</p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          {inbox.error instanceof Error ? inbox.error.message : "Something went wrong."}
+        </p>
+        <Button className="mt-4" variant="outline" onClick={() => void inbox.refetch()}>
+          Try again
+        </Button>
+      </Card>
+    );
+  } else if (items.length === 0) {
+    // The success state: calm, nothing to do (§8.3). When scoped, say what
+    // the other projects hold so "empty" is never a false all-clear.
+    const elsewhere = inbox.data?.otherProjectsCount ?? 0;
+    body = (
+      <Card padding="lg">
+        <p className="text-sm font-medium text-foreground">Nothing needs you{scoped ? " in this project" : ""}.</p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Approvals, questions and automation problems show up here.
+        </p>
+        {scoped && elsewhere > 0 && (
+          <Button className="mt-4" size="sm" variant="outline" onClick={() => setScope("all")}>
+            {elsewhere} waiting in other projects
           </Button>
-        </Card>
-      </div>
+        )}
+      </Card>
     );
-  }
-
-  const items = inbox.data?.items ?? [];
-
-  if (items.length === 0) {
-    // The success state: calm, no illustration, nothing to do (§8.3).
-    return (
-      <div className="space-y-6">
-        {header}
-        <Card padding="lg">
-          <p className="text-sm font-medium text-foreground">Nothing needs you.</p>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Approvals, questions and automation problems show up here.
+  } else {
+    body = (
+      <div className="space-y-4">
+        {sections.map((section) => (
+          <SectionCard
+            key={section.kind}
+            section={section}
+            showProject={!scoped}
+            onDismissRow={(item) => onDismiss([item], `“${subjectName(item)}”`)}
+            onDismissAll={() =>
+              onDismiss(section.items, `${section.items.length} ${section.title.toLowerCase()}`)
+            }
+          />
+        ))}
+        {(inbox.data?.truncated || (scoped && (inbox.data?.otherProjectsCount ?? 0) > 0)) && (
+          <p className="text-xs text-muted-foreground">
+            {inbox.data?.truncated && "More items are waiting than are shown. Clear some of these to see the rest. "}
+            {scoped && (inbox.data?.otherProjectsCount ?? 0) > 0 && (
+              <button
+                type="button"
+                onClick={() => setScope("all")}
+                className="font-medium text-foreground underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+              >
+                {inbox.data?.otherProjectsCount} more in other projects
+              </button>
+            )}
           </p>
-        </Card>
+        )}
       </div>
     );
   }
-
-  const groups = groupInboxItems(items);
 
   return (
-    <div className="space-y-6">
-      {header}
-      <Card padding="none">
-        <ul aria-label="Waiting on you" className="divide-y divide-border/60">
-          {groups.map((group) =>
-            group.items.length === 1 ? (
-              <InboxItem key={group.key} item={group.items[0]!} />
-            ) : group.by === "automation" ? (
-              <AutomationGroup key={group.key} group={group} />
-            ) : (
-              <RunGroup key={group.key} group={group} />
-            ),
-          )}
-        </ul>
-      </Card>
-      {inbox.data?.truncated && (
-        <p className="text-sm text-muted-foreground">
-          More items are waiting than are shown. Clear some of these to see the rest.
-        </p>
-      )}
+    <div className="space-y-5">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        {header}
+        {toolbar}
+      </div>
+      {body}
     </div>
   );
 }
 
-function RunGroup({ group }: { group: InboxGroup }) {
-  const first = group.items[0]!;
-  const name = first.chatTitle || first.triggerName || "Untitled run";
+function ScopeToggle({
+  scope,
+  projectName,
+  onChange,
+}: {
+  scope: InboxScope;
+  projectName: string;
+  onChange: (scope: InboxScope) => void;
+}) {
+  const option = (value: InboxScope, label: string, title?: string) => (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={scope === value}
+      onClick={() => onChange(value)}
+      title={title}
+      className={cn(
+        "h-7 max-w-48 truncate rounded px-2.5 text-xs font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
+        scope === value ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
+      )}
+    >
+      {label}
+    </button>
+  );
   return (
-    <li data-testid={`inbox-group-${group.key}`}>
-      <div className="flex items-baseline justify-between gap-3 px-4 pt-3">
-        <Link
-          to="/workflows/runs/$runId"
-          params={{ runId: first.chatId }}
-          className="truncate text-sm font-semibold text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
-        >
-          {name}
-        </Link>
-        <span className="shrink-0 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          {groupSummary(group.items)}
-        </span>
-      </div>
-      <ul aria-label={`${name}: ${groupSummary(group.items)}`} className="divide-y divide-border/60">
-        {group.items.map((item) => (
-          <InboxItem key={item.itemId} item={item} groupedBy="run" />
-        ))}
-      </ul>
-    </li>
+    <div role="radiogroup" aria-label="Show items from" className="inline-flex rounded-md border border-border/60 bg-background p-0.5">
+      {option("project", projectName, `Only ${projectName}`)}
+      {option("all", "All projects")}
+    </div>
   );
 }
 
-/** One automation's failures and finished runs, under the automation's name. */
-function AutomationGroup({ group }: { group: InboxGroup }) {
-  const first = group.items[0]!;
-  const name = first.triggerName || "Automation";
-  const summary = automationGroupSummary(group.items);
-  const omissions = automationGroupOmissions(group.items);
+function SectionCard({
+  section,
+  showProject,
+  onDismissRow,
+  onDismissAll,
+}: {
+  section: InboxSection;
+  showProject: boolean;
+  onDismissRow: (item: InboxItemData) => void;
+  onDismissAll: () => void;
+}) {
+  const headingId = `inbox-section-${section.kind}`;
   return (
-    <li data-testid={`inbox-group-${group.key}`}>
-      <div className="flex items-baseline justify-between gap-3 px-4 pt-3">
-        <Link
-          to="/workflows/automations/$triggerId"
-          params={{ triggerId: first.triggerId }}
-          className="truncate text-sm font-semibold text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
-        >
-          {name}
-        </Link>
-        <span className="shrink-0 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{summary}</span>
+    <section aria-labelledby={headingId} data-testid={`inbox-section-${section.kind}`}>
+      <div className="mb-1.5 flex items-center justify-between gap-3 px-1">
+        <h2 id={headingId} className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          {section.title}
+          <span className="ml-1.5 tabular-nums text-muted-foreground/80">{section.items.length}</span>
+        </h2>
+        {section.items.length > 1 && (
+          <button
+            type="button"
+            onClick={onDismissAll}
+            className="rounded px-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+          >
+            Dismiss all
+          </button>
+        )}
       </div>
-      <ul aria-label={`${name}: ${summary}`} className="divide-y divide-border/60">
-        {group.items.map((item) => (
-          <InboxItem key={item.itemId} item={item} groupedBy="automation" omit={omissions.get(item.itemId)} />
-        ))}
-      </ul>
-    </li>
+      <Card padding="none" className="overflow-hidden">
+        <ul aria-labelledby={headingId} className="divide-y divide-border/60">
+          {section.items.map((item) => (
+            <InboxItem key={item.itemId} item={item} showProject={showProject} onDismiss={onDismissRow} />
+          ))}
+        </ul>
+      </Card>
+    </section>
   );
 }
