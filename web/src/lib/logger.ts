@@ -1,6 +1,11 @@
 // Centralized logger that prevents memory leaks from logging large objects
 import { isDev } from './constants';
 const MAX_STRING_LENGTH = 200;
+// Error lines keep far more: React reports "Maximum update depth exceeded" as
+// console.error(message, componentStack), and the component stack is the only
+// thing that says which component threw. At 200 characters both were cut and
+// 109 such errors reached the log unattributable.
+const MAX_ERROR_STRING_LENGTH = 8000;
 const MAX_ARRAY_PREVIEW = 10;
 
 // Track console log count for periodic clearing
@@ -14,15 +19,26 @@ const isElectron = typeof window !== "undefined" && window.electronAPI;
 const noop = () => {};
 
 // Helper to safely stringify objects without retaining references
-function safeStringify(obj: unknown, seen = new WeakSet()): unknown {
+function safeStringify(
+  obj: unknown,
+  seen = new WeakSet(),
+  maxString = MAX_STRING_LENGTH,
+): unknown {
   if (obj === null || obj === undefined) return obj;
 
   // Primitives are safe
   if (typeof obj !== "object") {
-    if (typeof obj === "string" && obj.length > MAX_STRING_LENGTH) {
-      return obj.substring(0, MAX_STRING_LENGTH) + `...(${obj.length} chars)`;
+    if (typeof obj === "string" && obj.length > maxString) {
+      return obj.substring(0, maxString) + `...(${obj.length} chars)`;
     }
     return obj;
+  }
+
+  // An Error has no own enumerable keys, so the object summary below reduced it
+  // to `{}` and dropped the message and stack — the only parts worth logging.
+  if (obj instanceof Error) {
+    const text = obj.stack ?? `${obj.name}: ${obj.message}`;
+    return safeStringify(text, seen, maxString);
   }
 
   // Prevent circular references
@@ -38,7 +54,7 @@ function safeStringify(obj: unknown, seen = new WeakSet()): unknown {
         .map((item) => (typeof item === "object" ? "{...}" : String(item)))
         .join(", ")}...]`;
     }
-    return obj.map((item) => safeStringify(item, seen));
+    return obj.map((item) => safeStringify(item, seen, maxString));
   }
 
   // Special handling for common objects
@@ -86,6 +102,15 @@ function safeStringify(obj: unknown, seen = new WeakSet()): unknown {
   return summary;
 }
 
+function maxStringFor(level: string): number {
+  return level === "error" ? MAX_ERROR_STRING_LENGTH : MAX_STRING_LENGTH;
+}
+
+function shrinkArgs(level: string, args: unknown[]): unknown[] {
+  const max = maxStringFor(level);
+  return args.map((arg) => safeStringify(arg, new WeakSet(), max));
+}
+
 // Clear console periodically to prevent memory buildup
 function checkAndClearConsole() {
   consoleLogCount++;
@@ -131,7 +156,7 @@ function createLogFunction(level: string, alwaysEnabled = false) {
   }
 
   return (...args: unknown[]) => {
-    const safe = args.map((arg) => safeStringify(arg));
+    const safe = shrinkArgs(level, args);
     sendToElectron(level, safe);
 
     if (level === "error" || isDev) {
@@ -186,7 +211,7 @@ function createRedirectedConsole(
 
     isLogging = true;
     try {
-      const safe = args.map((arg) => safeStringify(arg));
+      const safe = shrinkArgs(level, args);
 
       // Send to Electron for proper log routing
       sendToElectron(level, safe);
