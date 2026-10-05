@@ -10,6 +10,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	llmdrivers "github.com/reliant-labs/reliant/internal/llm/drivers"
 	reliantdriver "github.com/reliant-labs/reliant/internal/llm/drivers/reliant"
+	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -18,10 +19,24 @@ func newCatalogServiceTestContext() context.Context {
 	return context.WithValue(context.Background(), auth.UserIDContextKey, "test-user")
 }
 
-func supportedReliantModelIDs() []string {
+// supportedReliantModelIDs is what ListModels must show for the reliant
+// driver: every gateway model that is user-visible for TEXT output, which is
+// the same gate ListModels applies (registry.GetUserVisibleModels). The
+// gateway list also carries media models — the Veo video models since #462 —
+// which belong to the media pickers, not the chat model list.
+func supportedReliantModelIDs(t *testing.T) []string {
+	t.Helper()
+	registry, err := models.GetRegistry()
+	require.NoError(t, err)
+	visible := map[string]bool{}
+	for _, def := range registry.GetUserVisibleModels() {
+		visible[def.ID] = true
+	}
 	ids := make([]string, 0, len(reliantdriver.SupportedModels))
 	for _, modelID := range reliantdriver.SupportedModels {
-		ids = append(ids, string(modelID))
+		if visible[string(modelID)] {
+			ids = append(ids, string(modelID))
+		}
 	}
 	return ids
 }
@@ -53,7 +68,7 @@ func TestCatalogService_ListModels_ReliantOnlyExposesCuratedAllowlist(t *testing
 		assert.Equal(t, "Reliant", model.Provider)
 	}
 
-	assert.ElementsMatch(t, supportedReliantModelIDs(), reliantIDs)
+	assert.ElementsMatch(t, supportedReliantModelIDs(t), reliantIDs)
 	assert.NotContains(t, reliantIDs, "vertex-claude-4.5-sonnet")
 	assert.NotContains(t, reliantIDs, "vertex-gemini-2.5-pro")
 }
@@ -69,9 +84,19 @@ func TestCatalogService_ListModelsByProvider_ReliantOnlyExposesCuratedAllowlist(
 		assert.Equal(t, "reliant", model.DriverId)
 	}
 
-	assert.ElementsMatch(t, supportedReliantModelIDs(), ids)
+	// ListModelsByProvider lists the whole gateway allowlist, media models
+	// included; only ListModels narrows to text.
+	assert.ElementsMatch(t, allReliantGatewayModelIDs(), ids)
 	assert.NotContains(t, ids, "vertex-claude-4.5-sonnet")
 	assert.NotContains(t, ids, "vertex-gemini-2.5-pro")
+}
+
+func allReliantGatewayModelIDs() []string {
+	ids := make([]string, 0, len(reliantdriver.SupportedModels))
+	for _, modelID := range reliantdriver.SupportedModels {
+		ids = append(ids, string(modelID))
+	}
+	return ids
 }
 
 // A key for a provider whose driver is not registered (xai) must not make its

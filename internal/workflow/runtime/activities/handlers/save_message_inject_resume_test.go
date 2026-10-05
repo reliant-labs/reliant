@@ -49,8 +49,11 @@ func newInjectFixture(t *testing.T) *injectFixture {
 
 	ctx := context.Background()
 	chatID := uuid.New().String()
-	h.CreateTestProject(ctx, uuid.New().String(), uuid.New().String())
-	h.CreateTestChat(ctx, chatID, uuid.New().String(), uuid.New().String())
+	// The chat must belong to the project created here: chats.project_id is a
+	// foreign key (ON DELETE CASCADE) since #464.
+	projectID, userID := uuid.New().String(), uuid.New().String()
+	h.CreateTestProject(ctx, projectID, userID)
+	h.CreateTestChat(ctx, chatID, projectID, userID)
 
 	// The child thread the inject seeds, as ForChild would have created it.
 	threadID := "thread-implement-" + uuid.New().String()[:8]

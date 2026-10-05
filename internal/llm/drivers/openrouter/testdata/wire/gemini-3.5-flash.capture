@@ -1,0 +1,200 @@
+
+>> 13:14:48.872 304
+POST /api/v1/chat/completions HTTP/1.1
+Host: openrouter.ai
+User-Agent: Go-http-client/1.1
+Content-Length: 389
+Authorization: [redacted]
+Content-Type: application/json
+Http-Referer: https://github.com/reliant-labs/reliant
+X-Title: Reliant
+X-User: reliant-cf6d2b7ed8fa40a8
+Accept-Encoding: gzip
+
+
+>> 13:14:48.872 389
+{"max_tokens":65536,"messages":[{"content":"Compute the sum of all integers from 1 to 1000 inclusive that are divisible by exactly one of 7 or 11 (divisible by 7 or by 11, but not by both). Reply with only the final number, nothing else.","role":"user"}],"model":"google/gemini-3.5-flash","reasoning":{"effort":"high"},"stream":true,"stream_options":{"include_usage":true},"temperature":1}
+<< 13:14:50.595 1040
+HTTP/1.1 200 OK
+Date: Sun, 04 Oct 2026 17:14:50 GMT
+Content-Type: text/event-stream
+Transfer-Encoding: chunked
+Connection: keep-alive
+Server-Timing: cfEdge;dur=6,cfOrigin;dur=0,cfWorker;dur=1707
+Access-Control-Allow-Origin: *
+Cache-Control: no-cache
+X-Generation-Id: gen-1791134089-D3sxVXvblNq6X92suNoH
+access-control-expose-headers: X-Generation-Id,X-Provider-Name,request-id,cf-ray
+set-cookie: __cf_bm=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx; HttpOnly; SameSite=None; Secure; Path=/; Domain=openrouter.ai; Expires=Sun, 04 Oct 2026 17:44:50 GMT
+Permissions-Policy: payment=(self "https://checkout.stripe.com" "https://connect-js.stripe.com" "https://js.stripe.com" "https://*.js.stripe.com" "https://hooks.stripe.com")
+Referrer-Policy: no-referrer, strict-origin-when-cross-origin
+X-Content-Type-Options: nosniff
+Server: cloudflare
+CF-RAY: a455d3383b1c7418-MIA
+
+
+<< 13:14:50.600 897
+37a
+data: {"id":"gen-1791134089-D3sxVXvblNq6X92suNoH","object":"chat.completion.chunk","created":1791134089,"model":"google/gemini-3.5-flash","provider":"Google","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":"**Calculating Divisible Sums**\n\nI'm focusing on finding the sum of numbers divisible by 7 and the sum of numbers divisible by 11. My next step is to refine the calculation for numbers divisible by both, ensuring accuracy in the exclusion process.\n\n","reasoning_details":[{"type":"reasoning.text","text":"**Calculating Divisible Sums**\n\nI'm focusing on finding the sum of numbers divisible by 7 and the sum of numbers divisible by 11. My next step is to refine the calculation for numbers divisible by both, ensuring accuracy in the exclusion process.\n\n","format":"google-gemini-v1","index":0}]},"finish_reason":null,"native_finish_reason":null}]}
+
+
+
+<< 13:14:51.000 31
+19
+: OPENROUTER PROCESSING
+
+
+
+<< 13:14:51.405 31
+19
+: OPENROUTER PROCESSING
+
+
+
+<< 13:14:51.817 31
+19
+: OPENROUTER PROCESSING
+
+
+
+<< 13:14:52.231 31
+19
+: OPENROUTER PROCESSING
+
+
+
+<< 13:14:52.649 31
+19
+: OPENROUTER PROCESSING
+
+
+
+<< 13:14:53.024 757
+2ee
+data: {"id":"gen-1791134089-D3sxVXvblNq6X92suNoH","object":"chat.completion.chunk","created":1791134089,"model":"google/gemini-3.5-flash","provider":"Google","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":"**Summing Multiples**\n\nI've calculated the sum of numbers up to 1000 divisible by 7, which is 71071. My next focus is determining the sum of numbers up to 1000 divisible by 11.\n\n","reasoning_details":[{"type":"reasoning.text","text":"**Summing Multiples**\n\nI've calculated the sum of numbers up to 1000 divisible by 7, which is 71071. My next focus is determining the sum of numbers up to 1000 divisible by 11.\n\n","format":"google-gemini-v1","index":0}]},"finish_reason":null,"native_finish_reason":null}]}
+
+
+
+<< 13:14:53.441 31
+19
+: OPENROUTER PROCESSING
+
+
+
+<< 13:14:53.860 31
+19
+: OPENROUTER PROCESSING
+
+
+
+<< 13:14:54.278 31
+19
+: OPENROUTER PROCESSING
+
+
+
+<< 13:14:54.697 31
+19
+: OPENROUTER PROCESSING
+
+
+
+<< 13:14:55.117 31
+19
+: OPENROUTER PROCESSING
+
+
+
+<< 13:14:55.536 31
+19
+: OPENROUTER PROCESSING
+
+
+
+<< 13:14:55.915 977
+3ca
+data: {"id":"gen-1791134089-D3sxVXvblNq6X92suNoH","object":"chat.completion.chunk","created":1791134089,"model":"google/gemini-3.5-flash","provider":"Google","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":"**Refining Exclusion Logic**\n\nI've calculated the sum of multiples of 11 up to 1000 as 45045 and identified the sum of multiples of 77 as 6006. My current focus is on accurately incorporating the exclusion logic for numbers divisible by both 7 and 11, and then finalizing the total sum.\n\n","reasoning_details":[{"type":"reasoning.text","text":"**Refining Exclusion Logic**\n\nI've calculated the sum of multiples of 11 up to 1000 as 45045 and identified the sum of multiples of 77 as 6006. My current focus is on accurately incorporating the exclusion logic for numbers divisible by both 7 and 11, and then finalizing the total sum.\n\n","format":"google-gemini-v1","index":0}]},"finish_reason":null,"native_finish_reason":null}]}
+
+
+
+<< 13:14:56.334 31
+19
+: OPENROUTER PROCESSING
+
+
+
+<< 13:14:56.751 31
+19
+: OPENROUTER PROCESSING
+
+
+
+<< 13:14:57.170 31
+19
+: OPENROUTER PROCESSING
+
+
+
+<< 13:14:57.596 31
+19
+: OPENROUTER PROCESSING
+
+
+
+<< 13:14:58.010 31
+19
+: OPENROUTER PROCESSING
+
+
+
+<< 13:14:58.531 31
+19
+: OPENROUTER PROCESSING
+
+
+
+<< 13:14:58.850 31
+19
+: OPENROUTER PROCESSING
+
+
+
+<< 13:14:58.895 1093
+43e
+data: {"id":"gen-1791134089-D3sxVXvblNq6X92suNoH","object":"chat.completion.chunk","created":1791134089,"model":"google/gemini-3.5-flash","provider":"Google","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":"**Verifying Boundary Cases**\n\nI've confirmed the calculations for the sums of multiples of 7, 11, and 77. My recent thoughts have focused on edge cases and boundary conditions, specifically testing a small range to ensure the exclusion logic for numbers divisible by both 7 and 11 is robust and handles the \"exactly one\" condition accurately.\n\n","reasoning_details":[{"type":"reasoning.text","text":"**Verifying Boundary Cases**\n\nI've confirmed the calculations for the sums of multiples of 7, 11, and 77. My recent thoughts have focused on edge cases and boundary conditions, specifically testing a small range to ensure the exclusion logic for numbers divisible by both 7 and 11 is robust and handles the \"exactly one\" condition accurately.\n\n","format":"google-gemini-v1","index":0}]},"finish_reason":null,"native_finish_reason":null}]}
+
+
+
+<< 13:14:59.351 31
+19
+: OPENROUTER PROCESSING
+
+
+
+<< 13:14:59.351 288
+119
+data: {"id":"gen-1791134089-D3sxVXvblNq6X92suNoH","object":"chat.completion.chunk","created":1791134089,"model":"google/gemini-3.5-flash","provider":"Google","choices":[{"index":0,"delta":{"content":"104104","role":"assistant"},"finish_reason":null,"native_finish_reason":null}]}
+
+
+
+<< 13:14:59.473 303
+128
+data: {"id":"gen-1791134089-D3sxVXvblNq6X92suNoH","object":"chat.completion.chunk","created":1791134089,"model":"google/gemini-3.5-flash","provider":"Google","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":null},"finish_reason":"stop","native_finish_reason":"STOP"}]}
+
+
+
+<< 13:14:59.473 751
+2e8
+data: {"id":"gen-1791134089-D3sxVXvblNq6X92suNoH","object":"chat.completion.chunk","created":1791134089,"model":"google/gemini-3.5-flash","provider":"Google","service_tier":"provisioned","choices":[{"index":0,"delta":{"content":"","role":"assistant"},"finish_reason":"stop","native_finish_reason":"STOP"}],"usage":{"prompt_tokens":56,"completion_tokens":2009,"total_tokens":2065,"cost":0.018165,"is_byok":false,"prompt_tokens_details":{"cached_tokens":0,"cache_write_tokens":0,"audio_tokens":0,"video_tokens":0},"cost_details":{"upstream_inference_cost":0.018165,"upstream_inference_prompt_cost":0.000084,"upstream_inference_completions_cost":0.018081},"completion_tokens_details":{"reasoning_tokens":2003,"image_tokens":0,"audio_tokens":0}}}
+
+
+
+<< 13:14:59.473 19
+e
+data: [DONE]
+
+
+
+<< 13:14:59.473 5
+0
+

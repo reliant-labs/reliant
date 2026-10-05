@@ -197,13 +197,15 @@ nodes:
 		t.Errorf("no tools block should bind nothing, got %v", names)
 	}
 
-	// generate_image's own default binding must survive untouched.
+	// With nothing bound, generate_image keeps its own defaults: `model` is
+	// OPEN by default (media_selection_test.go pins that at the tool level),
+	// so an empty tools block must leave it visible rather than lock it.
 	tool := tools.NewGenerateImageTool(nil, nil)
 	bound, problems := toolbindings.Apply([]tools.Tool{tool}, scopes)
 	if len(problems) != 0 {
 		t.Fatalf("unexpected problems: %v", problems)
 	}
-	if _, present := bound[0].ParamSchema().Properties.Get("model"); present {
-		t.Error("generate_image binds model by default, so it must stay hidden from the model")
+	if _, present := bound[0].ParamSchema().Properties.Get("model"); !present {
+		t.Error("an empty tools block bound generate_image.model; it is open by default and must stay visible")
 	}
 }

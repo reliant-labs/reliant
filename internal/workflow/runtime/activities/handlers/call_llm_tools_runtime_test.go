@@ -373,7 +373,11 @@ func TestCallLLMActivity_UsesWorkingDirForMCPEnumerationScope(t *testing.T) {
 						},
 					},
 					ToolsConfig: &reliantv1.ToolsConfig{
-						PreloadedTools: celStringListLiteral([]string{"mcp__chrome-devtools__new_page"}),
+						// A server that can never be registered. chrome-devtools is a
+						// BUILTIN, connected on any machine with Chrome on disk
+						// (GitHub's ubuntu runners have it), so naming its tool made
+						// this test pass or fail depending on the host.
+						PreloadedTools: celStringListLiteral([]string{"mcp__never-registered-server__some_tool"}),
 					},
 				},
 			},
