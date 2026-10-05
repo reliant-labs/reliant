@@ -159,8 +159,6 @@ export interface Trigger {
   source: TriggerSource;
   /** The workflow-declared trigger this row activates, when it activates one. */
   workflowTrigger?: string;
-  /** Launched runs have no machine (only once the server supports it). */
-  noMachine?: boolean;
   /** The connection an integration trigger listens through. */
   connectionId?: string;
   /**
@@ -230,20 +228,7 @@ export interface TriggerDefinitionInput {
    * means the owner's default for the integration.
    */
   connectionId?: string;
-  /**
-   * Launched runs have no machine (TriggerDefinition.no_machine, daemon-less
-   * runs). Mutually exclusive with daemonId. Sent only when this client's
-   * generated code has the field; see NO_MACHINE_SUPPORTED.
-   */
-  noMachine?: boolean;
 }
-
-/**
- * Whether this build's generated TriggerDefinition carries `no_machine`
- * (research/INTEGRATIONS_V1_BRIEF.md §3c, stream H). Read from the schema,
- * so the "No machine" choice turns on when the proto lands, with no edit.
- */
-export const NO_MACHINE_SUPPORTED: boolean = TriggerDefinitionSchema.fields.some((field) => field.localName === "noMachine");
 
 // ============================================
 // Proto → frontend
@@ -365,7 +350,6 @@ export function triggerFromProto(proto: ProtoTrigger): Trigger {
     workflowTrigger: proto.workflowTrigger || undefined,
     connectionId: proto.connectionId || undefined,
     webhookUrl: proto.webhookUrl || undefined,
-    noMachine: (proto as unknown as { noMachine?: boolean }).noMachine || undefined,
   };
 }
 
@@ -392,10 +376,6 @@ export function definitionToProto(input: TriggerDefinitionInput): ProtoTriggerDe
     notifyOnComplete: input.notifyOnComplete,
     connectionId: input.connectionId || undefined,
   });
-  if (input.noMachine && NO_MACHINE_SUPPORTED) {
-    (definition as unknown as { noMachine: boolean }).noMachine = true;
-    definition.daemonId = "";
-  }
   // Assigned rather than passed to create(): a passthrough arm is the decoded
   // message the server sent, and goes back as that same object.
   definition.source = sourceToProto(input.source);
@@ -449,7 +429,6 @@ export function definitionFromTrigger(trigger: Trigger): TriggerDefinitionInput 
     notifyOnComplete: trigger.notifyOnComplete,
     source: trigger.source,
     connectionId: trigger.connectionId,
-    noMachine: trigger.noMachine,
   };
 }
 

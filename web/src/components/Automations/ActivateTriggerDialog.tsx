@@ -30,7 +30,6 @@ import { useDaemonStatus } from "@/hooks/useDaemonStatus";
 import { useProjectDaemonInstalls, triggerKeys } from "@/hooks/trigger-queries";
 import { useQueryClient } from "@tanstack/react-query";
 import {
-  NO_MACHINE_SUPPORTED,
   triggerErrorMessage,
   triggerGrpc,
   webhookUrlForDisplay,
@@ -213,8 +212,8 @@ function ActivateBody({ onClose, workflowRef, workflowTitle, declared, catalogRe
                   {choice.label} ({choice.statusLabel}{choice.ineligibleReason ? `, ${choice.ineligibleReason}` : ""})
                 </option>
               ))}
-              <option value={NO_MACHINE} disabled={!NO_MACHINE_SUPPORTED}>
-                No machine{NO_MACHINE_SUPPORTED ? " (server tools only)" : " — not available yet"}
+              <option value={NO_MACHINE}>
+                No machine (server tools only)
               </option>
             </select>
             <p id={fieldId("machine-hint")} className={hintClass}>
