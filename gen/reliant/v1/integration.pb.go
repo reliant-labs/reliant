@@ -45,8 +45,9 @@ type IntegrationManifest struct {
 	Category    string          `protobuf:"bytes,6,opt,name=category,proto3" json:"category,omitempty"`
 	Connection  *ConnectionSpec `protobuf:"bytes,7,opt,name=connection,proto3" json:"connection,omitempty"`
 	Actions     []*ActionSpec   `protobuf:"bytes,8,rep,name=actions,proto3" json:"actions,omitempty"`
-	// Triggers are reserved for a later phase. A manifest that declares any is
-	// rejected at load until trigger support exists.
+	// Triggers are the trigger types the integration delivers. Declaring one is
+	// a catalog statement; delivery is the provider's (a webhook Provider or a
+	// Poller registered for this id).
 	Triggers []*TriggerSpec `protobuf:"bytes,9,rep,name=triggers,proto3" json:"triggers,omitempty"`
 	// Keywords are extra search terms for the catalog index: product names and
 	// synonyms ("email" for gmail). Lower-case words, [a-z0-9][a-z0-9_.-]*.
@@ -1581,10 +1582,42 @@ func (x *OutputSpec) GetSchema() *structpb.Struct {
 	return nil
 }
 
-// TriggerSpec is reserved for the triggers phase.
+// TriggerSpec declares one trigger type the integration delivers: what can
+// start a run from it (`github/issue.opened@1`). It is a CATALOG entry —
+// what search lists, what the editor's trigger picker offers, and the schema a
+// trigger filter is checked against. Delivering the events is the provider's
+// (internal/integrations/webhook): its Event.Type values are what `events`
+// names, and its Event.Attributes keys are what `attributes` names.
+//
+// A trigger row listens through an IntegrationSource, whose `events` and
+// `match` are exactly this spec's events and attribute names, so the editor
+// can build one from a picked spec without knowing the provider.
 type TriggerSpec struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Id is unique within the manifest, e.g. "issue.opened". Same grammar as an
+	// action id, and the same namespace: `<integration>/<id>@<major>` names
+	// exactly one action or trigger, so an id may not be both.
+	Id          string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	DisplayName string `protobuf:"bytes,2,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
+	// Summary is one line for search results and pickers; description is the
+	// long form an agent reads.
+	Summary     string `protobuf:"bytes,3,opt,name=summary,proto3" json:"summary,omitempty"`
+	Description string `protobuf:"bytes,4,opt,name=description,proto3" json:"description,omitempty"`
+	// Keywords are extra search terms for the catalog index.
+	Keywords []string `protobuf:"bytes,5,rep,name=keywords,proto3" json:"keywords,omitempty"`
+	// Events are the provider event types this trigger fires on, as the
+	// provider emits them (Event.Type): "issues.opened". An IntegrationSource
+	// built from this spec lists them in `events`. At least one.
+	Events []string `protobuf:"bytes,6,rep,name=events,proto3" json:"events,omitempty"`
+	// Attributes are the routing facts every event of this trigger carries,
+	// which an IntegrationSource's `match` can require by equality
+	// (repository, branch). An event of this trigger always sets them.
+	Attributes []*TriggerAttribute `protobuf:"bytes,7,rep,name=attributes,proto3" json:"attributes,omitempty"`
+	// Data is the JSON Schema of the provider's event payload, as recorded on
+	// the event (trigger.payload.data). The full trigger.payload schema wraps
+	// it in the envelope every integration event shares; see
+	// manifest.TriggerPayloadSchema.
+	Data          *structpb.Struct `protobuf:"bytes,8,opt,name=data,proto3" json:"data,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1622,6 +1655,119 @@ func (*TriggerSpec) Descriptor() ([]byte, []int) {
 func (x *TriggerSpec) GetId() string {
 	if x != nil {
 		return x.Id
+	}
+	return ""
+}
+
+func (x *TriggerSpec) GetDisplayName() string {
+	if x != nil {
+		return x.DisplayName
+	}
+	return ""
+}
+
+func (x *TriggerSpec) GetSummary() string {
+	if x != nil {
+		return x.Summary
+	}
+	return ""
+}
+
+func (x *TriggerSpec) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+func (x *TriggerSpec) GetKeywords() []string {
+	if x != nil {
+		return x.Keywords
+	}
+	return nil
+}
+
+func (x *TriggerSpec) GetEvents() []string {
+	if x != nil {
+		return x.Events
+	}
+	return nil
+}
+
+func (x *TriggerSpec) GetAttributes() []*TriggerAttribute {
+	if x != nil {
+		return x.Attributes
+	}
+	return nil
+}
+
+func (x *TriggerSpec) GetData() *structpb.Struct {
+	if x != nil {
+		return x.Data
+	}
+	return nil
+}
+
+// TriggerAttribute is one routing fact a trigger's events carry.
+type TriggerAttribute struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Name is the key in Event.Attributes and IntegrationSource.match:
+	// lower-case, [a-z][a-z0-9_]*.
+	Name        string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Description string `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
+	// Example is a representative value for an editor's placeholder.
+	Example       string `protobuf:"bytes,3,opt,name=example,proto3" json:"example,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TriggerAttribute) Reset() {
+	*x = TriggerAttribute{}
+	mi := &file_reliant_v1_integration_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TriggerAttribute) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TriggerAttribute) ProtoMessage() {}
+
+func (x *TriggerAttribute) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_integration_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TriggerAttribute.ProtoReflect.Descriptor instead.
+func (*TriggerAttribute) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_integration_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *TriggerAttribute) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *TriggerAttribute) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+func (x *TriggerAttribute) GetExample() string {
+	if x != nil {
+		return x.Example
 	}
 	return ""
 }
@@ -1784,9 +1930,22 @@ const file_reliant_v1_integration_proto_rawDesc = "" +
 	"\n" +
 	"OutputSpec\x12\x16\n" +
 	"\x06select\x18\x01 \x01(\tR\x06select\x12/\n" +
-	"\x06schema\x18\x02 \x01(\v2\x17.google.protobuf.StructR\x06schema\"\x1d\n" +
+	"\x06schema\x18\x02 \x01(\v2\x17.google.protobuf.StructR\x06schema\"\x9b\x02\n" +
 	"\vTriggerSpec\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02idB:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
+	"\x02id\x18\x01 \x01(\tR\x02id\x12!\n" +
+	"\fdisplay_name\x18\x02 \x01(\tR\vdisplayName\x12\x18\n" +
+	"\asummary\x18\x03 \x01(\tR\asummary\x12 \n" +
+	"\vdescription\x18\x04 \x01(\tR\vdescription\x12\x1a\n" +
+	"\bkeywords\x18\x05 \x03(\tR\bkeywords\x12\x16\n" +
+	"\x06events\x18\x06 \x03(\tR\x06events\x12<\n" +
+	"\n" +
+	"attributes\x18\a \x03(\v2\x1c.reliant.v1.TriggerAttributeR\n" +
+	"attributes\x12+\n" +
+	"\x04data\x18\b \x01(\v2\x17.google.protobuf.StructR\x04data\"b\n" +
+	"\x10TriggerAttribute\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
+	"\vdescription\x18\x02 \x01(\tR\vdescription\x12\x18\n" +
+	"\aexample\x18\x03 \x01(\tR\aexampleB:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
 
 var (
 	file_reliant_v1_integration_proto_rawDescOnce sync.Once
@@ -1800,7 +1959,7 @@ func file_reliant_v1_integration_proto_rawDescGZIP() []byte {
 	return file_reliant_v1_integration_proto_rawDescData
 }
 
-var file_reliant_v1_integration_proto_msgTypes = make([]protoimpl.MessageInfo, 22)
+var file_reliant_v1_integration_proto_msgTypes = make([]protoimpl.MessageInfo, 23)
 var file_reliant_v1_integration_proto_goTypes = []any{
 	(*IntegrationManifest)(nil), // 0: reliant.v1.IntegrationManifest
 	(*ConnectionSpec)(nil),      // 1: reliant.v1.ConnectionSpec
@@ -1819,19 +1978,20 @@ var file_reliant_v1_integration_proto_goTypes = []any{
 	(*ErrorRule)(nil),           // 14: reliant.v1.ErrorRule
 	(*OutputSpec)(nil),          // 15: reliant.v1.OutputSpec
 	(*TriggerSpec)(nil),         // 16: reliant.v1.TriggerSpec
-	nil,                         // 17: reliant.v1.ConnectionSpec.DefaultHeadersEntry
-	nil,                         // 18: reliant.v1.OAuth2Auth.AuthorizeParamsEntry
-	nil,                         // 19: reliant.v1.IdentityProbe.HeadersEntry
-	nil,                         // 20: reliant.v1.HttpRequestSpec.QueryEntry
-	nil,                         // 21: reliant.v1.HttpRequestSpec.HeadersEntry
-	(*structpb.Struct)(nil),     // 22: google.protobuf.Struct
-	(*structpb.Value)(nil),      // 23: google.protobuf.Value
+	(*TriggerAttribute)(nil),    // 17: reliant.v1.TriggerAttribute
+	nil,                         // 18: reliant.v1.ConnectionSpec.DefaultHeadersEntry
+	nil,                         // 19: reliant.v1.OAuth2Auth.AuthorizeParamsEntry
+	nil,                         // 20: reliant.v1.IdentityProbe.HeadersEntry
+	nil,                         // 21: reliant.v1.HttpRequestSpec.QueryEntry
+	nil,                         // 22: reliant.v1.HttpRequestSpec.HeadersEntry
+	(*structpb.Struct)(nil),     // 23: google.protobuf.Struct
+	(*structpb.Value)(nil),      // 24: google.protobuf.Value
 }
 var file_reliant_v1_integration_proto_depIdxs = []int32{
 	1,  // 0: reliant.v1.IntegrationManifest.connection:type_name -> reliant.v1.ConnectionSpec
 	10, // 1: reliant.v1.IntegrationManifest.actions:type_name -> reliant.v1.ActionSpec
 	16, // 2: reliant.v1.IntegrationManifest.triggers:type_name -> reliant.v1.TriggerSpec
-	17, // 3: reliant.v1.ConnectionSpec.default_headers:type_name -> reliant.v1.ConnectionSpec.DefaultHeadersEntry
+	18, // 3: reliant.v1.ConnectionSpec.default_headers:type_name -> reliant.v1.ConnectionSpec.DefaultHeadersEntry
 	2,  // 4: reliant.v1.ConnectionSpec.auth:type_name -> reliant.v1.AuthMethod
 	8,  // 5: reliant.v1.ConnectionSpec.connection_params:type_name -> reliant.v1.ConnectionParam
 	9,  // 6: reliant.v1.ConnectionSpec.probe:type_name -> reliant.v1.IdentityProbe
@@ -1839,24 +1999,26 @@ var file_reliant_v1_integration_proto_depIdxs = []int32{
 	5,  // 8: reliant.v1.AuthMethod.api_key:type_name -> reliant.v1.ApiKeyAuth
 	6,  // 9: reliant.v1.AuthMethod.basic:type_name -> reliant.v1.BasicAuth
 	7,  // 10: reliant.v1.AuthMethod.delegated:type_name -> reliant.v1.DelegatedAuth
-	18, // 11: reliant.v1.OAuth2Auth.authorize_params:type_name -> reliant.v1.OAuth2Auth.AuthorizeParamsEntry
+	19, // 11: reliant.v1.OAuth2Auth.authorize_params:type_name -> reliant.v1.OAuth2Auth.AuthorizeParamsEntry
 	4,  // 12: reliant.v1.OAuth2Auth.revoke:type_name -> reliant.v1.RevokeSpec
-	19, // 13: reliant.v1.IdentityProbe.headers:type_name -> reliant.v1.IdentityProbe.HeadersEntry
+	20, // 13: reliant.v1.IdentityProbe.headers:type_name -> reliant.v1.IdentityProbe.HeadersEntry
 	11, // 14: reliant.v1.ActionSpec.tool:type_name -> reliant.v1.ToolSpec
-	22, // 15: reliant.v1.ActionSpec.params:type_name -> google.protobuf.Struct
+	23, // 15: reliant.v1.ActionSpec.params:type_name -> google.protobuf.Struct
 	12, // 16: reliant.v1.ActionSpec.request:type_name -> reliant.v1.HttpRequestSpec
 	15, // 17: reliant.v1.ActionSpec.output:type_name -> reliant.v1.OutputSpec
-	20, // 18: reliant.v1.HttpRequestSpec.query:type_name -> reliant.v1.HttpRequestSpec.QueryEntry
-	21, // 19: reliant.v1.HttpRequestSpec.headers:type_name -> reliant.v1.HttpRequestSpec.HeadersEntry
-	23, // 20: reliant.v1.HttpRequestSpec.body:type_name -> google.protobuf.Value
+	21, // 18: reliant.v1.HttpRequestSpec.query:type_name -> reliant.v1.HttpRequestSpec.QueryEntry
+	22, // 19: reliant.v1.HttpRequestSpec.headers:type_name -> reliant.v1.HttpRequestSpec.HeadersEntry
+	24, // 20: reliant.v1.HttpRequestSpec.body:type_name -> google.protobuf.Value
 	13, // 21: reliant.v1.HttpRequestSpec.pagination:type_name -> reliant.v1.PaginationSpec
 	14, // 22: reliant.v1.HttpRequestSpec.errors:type_name -> reliant.v1.ErrorRule
-	22, // 23: reliant.v1.OutputSpec.schema:type_name -> google.protobuf.Struct
-	24, // [24:24] is the sub-list for method output_type
-	24, // [24:24] is the sub-list for method input_type
-	24, // [24:24] is the sub-list for extension type_name
-	24, // [24:24] is the sub-list for extension extendee
-	0,  // [0:24] is the sub-list for field type_name
+	23, // 23: reliant.v1.OutputSpec.schema:type_name -> google.protobuf.Struct
+	17, // 24: reliant.v1.TriggerSpec.attributes:type_name -> reliant.v1.TriggerAttribute
+	23, // 25: reliant.v1.TriggerSpec.data:type_name -> google.protobuf.Struct
+	26, // [26:26] is the sub-list for method output_type
+	26, // [26:26] is the sub-list for method input_type
+	26, // [26:26] is the sub-list for extension type_name
+	26, // [26:26] is the sub-list for extension extendee
+	0,  // [0:26] is the sub-list for field type_name
 }
 
 func init() { file_reliant_v1_integration_proto_init() }
@@ -1876,7 +2038,7 @@ func file_reliant_v1_integration_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_reliant_v1_integration_proto_rawDesc), len(file_reliant_v1_integration_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   22,
+			NumMessages:   23,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

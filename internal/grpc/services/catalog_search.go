@@ -199,8 +199,12 @@ func CatalogEntryToProto(e *catalogindex.Entry, connected bool) (*reliantv1.Cata
 			return nil, fmt.Errorf("output schema: %w", err)
 		}
 	}
-	// SEAM (stream B): a trigger's payload_schema is filled here once
-	// TriggerSpec carries one.
+	if payload := e.PayloadSchema(); payload != nil {
+		var err error
+		if out.PayloadSchema, err = structpb.NewStruct(payload); err != nil {
+			return nil, fmt.Errorf("payload schema: %w", err)
+		}
+	}
 	return out, nil
 }
 

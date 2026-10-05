@@ -148,12 +148,21 @@ func (s *Service) Usable(ctx context.Context, userID string) (map[string]bool, e
 }
 
 // Schemas returns an action's params and output JSON Schemas; for a trigger
-// both are nil (its payload schema arrives with stream B's TriggerSpec).
+// both are nil (see PayloadSchema).
 func (e *Entry) Schemas() (params, output map[string]any) {
 	if e.Kind != KindAction {
 		return nil, nil
 	}
 	return manifest.ActionSchemas(e.Action)
+}
+
+// PayloadSchema returns a trigger's trigger.payload JSON Schema, a fresh map;
+// nil for an action.
+func (e *Entry) PayloadSchema() map[string]any {
+	if e.Kind != KindTrigger {
+		return nil
+	}
+	return manifest.TriggerPayloadSchema(e.Manifest, e.Trigger)
 }
 
 // ToolName is the agent tool an action is exposed as, or "" when it is not.

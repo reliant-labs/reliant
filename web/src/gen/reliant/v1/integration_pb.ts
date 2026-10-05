@@ -15,7 +15,7 @@ import type { JsonObject, Message } from "@bufbuild/protobuf";
  * Describes the file reliant/v1/integration.proto.
  */
 export const file_reliant_v1_integration: GenFile = /*@__PURE__*/
-  fileDesc("ChxyZWxpYW50L3YxL2ludGVncmF0aW9uLnByb3RvEgpyZWxpYW50LnYxIpMCChNJbnRlZ3JhdGlvbk1hbmlmZXN0EgoKAmlkGAEgASgJEg8KB3ZlcnNpb24YAiABKAUSFAoMZGlzcGxheV9uYW1lGAMgASgJEhMKC2Rlc2NyaXB0aW9uGAQgASgJEgwKBGljb24YBSABKAkSEAoIY2F0ZWdvcnkYBiABKAkSLgoKY29ubmVjdGlvbhgHIAEoCzIaLnJlbGlhbnQudjEuQ29ubmVjdGlvblNwZWMSJwoHYWN0aW9ucxgIIAMoCzIWLnJlbGlhbnQudjEuQWN0aW9uU3BlYxIpCgh0cmlnZ2VycxgJIAMoCzIXLnJlbGlhbnQudjEuVHJpZ2dlclNwZWMSEAoIa2V5d29yZHMYCiADKAkingMKDkNvbm5lY3Rpb25TcGVjEhAKCGJhc2VfdXJsGAIgASgJEhUKDWFsbG93ZWRfaG9zdHMYAyADKAkSRwoPZGVmYXVsdF9oZWFkZXJzGAQgAygLMi4ucmVsaWFudC52MS5Db25uZWN0aW9uU3BlYy5EZWZhdWx0SGVhZGVyc0VudHJ5Eh0KFWFsbG93X2FueV9wdWJsaWNfaG9zdBgFIAEoCBIkCgRhdXRoGAcgAygLMhYucmVsaWFudC52MS5BdXRoTWV0aG9kEhUKDWF1dGhfb3B0aW9uYWwYCCABKAgSNgoRY29ubmVjdGlvbl9wYXJhbXMYCSADKAsyGy5yZWxpYW50LnYxLkNvbm5lY3Rpb25QYXJhbRIoCgVwcm9iZRgKIAEoCzIZLnJlbGlhbnQudjEuSWRlbnRpdHlQcm9iZRo1ChNEZWZhdWx0SGVhZGVyc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAFKBAgBEAJKBAgGEAdSBHR5cGVSE29wdGlvbmFsX2F1dGhfa2luZHMiwwEKCkF1dGhNZXRob2QSKAoGb2F1dGgyGAEgASgLMhYucmVsaWFudC52MS5PQXV0aDJBdXRoSAASKQoHYXBpX2tleRgCIAEoCzIWLnJlbGlhbnQudjEuQXBpS2V5QXV0aEgAEiYKBWJhc2ljGAMgASgLMhUucmVsaWFudC52MS5CYXNpY0F1dGhIABIuCglkZWxlZ2F0ZWQYBCABKAsyGS5yZWxpYW50LnYxLkRlbGVnYXRlZEF1dGhIAEIICgZtZXRob2QilAIKCk9BdXRoMkF1dGgSFQoNYXV0aG9yaXplX3VybBgBIAEoCRIRCgl0b2tlbl91cmwYAiABKAkSDgoGc2NvcGVzGAMgAygJEhcKD3Njb3BlX3NlcGFyYXRvchgEIAEoCRIMCgRwa2NlGAUgASgJEkUKEGF1dGhvcml6ZV9wYXJhbXMYBiADKAsyKy5yZWxpYW50LnYxLk9BdXRoMkF1dGguQXV0aG9yaXplUGFyYW1zRW50cnkSJgoGcmV2b2tlGAcgASgLMhYucmVsaWFudC52MS5SZXZva2VTcGVjGjYKFEF1dGhvcml6ZVBhcmFtc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEiZQoKUmV2b2tlU3BlYxIOCgZtZXRob2QYASABKAkSCwoDdXJsGAIgASgJEhMKC2NsaWVudF9hdXRoGAMgASgJEhAKCHRva2VuX2luGAQgASgJEhMKC3Rva2VuX3BhcmFtGAUgASgJIkUKCkFwaUtleUF1dGgSCgoCaW4YASABKAkSDAoEbmFtZRgCIAEoCRIOCgZwcmVmaXgYAyABKAkSDQoFbGFiZWwYBCABKAkiUwoJQmFzaWNBdXRoEhYKDnVzZXJuYW1lX2xhYmVsGAEgASgJEhYKDnBhc3N3b3JkX2xhYmVsGAIgASgJEhYKDnVzZXJuYW1lX3BhcmFtGAMgASgJIh8KDURlbGVnYXRlZEF1dGgSDgoGYnJva2VyGAEgASgJInIKD0Nvbm5lY3Rpb25QYXJhbRIMCgRuYW1lGAEgASgJEhQKDGRpc3BsYXlfbmFtZRgCIAEoCRITCgtkZXNjcmlwdGlvbhgDIAEoCRIPCgdwYXR0ZXJuGAQgASgJEhUKDWRlZmF1bHRfdmFsdWUYBSABKAki0wEKDUlkZW50aXR5UHJvYmUSDgoGbWV0aG9kGAEgASgJEgsKA3VybBgCIAEoCRIMCgRwYXRoGAMgASgJEjcKB2hlYWRlcnMYBCADKAsyJi5yZWxpYW50LnYxLklkZW50aXR5UHJvYmUuSGVhZGVyc0VudHJ5EgoKAm9rGAUgASgJEhMKC2V4dGVybmFsX2lkGAYgASgJEg0KBWxhYmVsGAcgASgJGi4KDEhlYWRlcnNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIs0CCgpBY3Rpb25TcGVjEgoKAmlkGAEgASgJEhQKDGRpc3BsYXlfbmFtZRgCIAEoCRITCgtkZXNjcmlwdGlvbhgDIAEoCRIMCgRraW5kGAQgASgJEhEKCXBsYWNlbWVudBgFIAEoCRIPCgdtdXRhdGVzGAYgASgIEiIKBHRvb2wYByABKAsyFC5yZWxpYW50LnYxLlRvb2xTcGVjEicKBnBhcmFtcxgIIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3QSLAoHcmVxdWVzdBgJIAEoCzIbLnJlbGlhbnQudjEuSHR0cFJlcXVlc3RTcGVjEiYKBm91dHB1dBgKIAEoCzIWLnJlbGlhbnQudjEuT3V0cHV0U3BlYxIQCghleGVjdXRvchgLIAEoCRIPCgdzdW1tYXJ5GAwgASgJEhAKCGtleXdvcmRzGA0gAygJIjYKCFRvb2xTcGVjEg4KBmV4cG9zZRgBIAEoCBIMCgRuYW1lGAIgASgJEgwKBHRhZ3MYAyADKAki+wMKD0h0dHBSZXF1ZXN0U3BlYxIOCgZtZXRob2QYASABKAkSCwoDdXJsGAIgASgJEgwKBHBhdGgYAyABKAkSNQoFcXVlcnkYBCADKAsyJi5yZWxpYW50LnYxLkh0dHBSZXF1ZXN0U3BlYy5RdWVyeUVudHJ5EjkKB2hlYWRlcnMYBSADKAsyKC5yZWxpYW50LnYxLkh0dHBSZXF1ZXN0U3BlYy5IZWFkZXJzRW50cnkSJAoEYm9keRgGIAEoCzIWLmdvb2dsZS5wcm90b2J1Zi5WYWx1ZRIuCgpwYWdpbmF0aW9uGAcgASgLMhoucmVsaWFudC52MS5QYWdpbmF0aW9uU3BlYxIlCgZlcnJvcnMYCCADKAsyFS5yZWxpYW50LnYxLkVycm9yUnVsZRIXCg90aW1lb3V0X3NlY29uZHMYCSABKAUSGgoSbWF4X3Jlc3BvbnNlX2J5dGVzGAogASgDEhQKDGhlYWRlcnNfZXhwchgLIAEoCRISCgpxdWVyeV9leHByGAwgASgJEhEKCWJvZHlfZXhwchgNIAEoCRosCgpRdWVyeUVudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEaLgoMSGVhZGVyc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEihQEKDlBhZ2luYXRpb25TcGVjEg0KBXN0eWxlGAEgASgJEhEKCW1heF9wYWdlcxgCIAEoBRIUCgxjdXJzb3JfcGFyYW0YAyABKAkSEwoLbmV4dF9jdXJzb3IYBCABKAkSEgoKcGFnZV9wYXJhbRgFIAEoCRISCgpzdGFydF9wYWdlGAYgASgFInUKCUVycm9yUnVsZRIOCgZzdGF0dXMYASABKAUSEgoKc3RhdHVzX21pbhgCIAEoBRISCgpzdGF0dXNfbWF4GAMgASgFEhEKCXJldHJ5YWJsZRgEIAEoCBIPCgdtZXNzYWdlGAUgASgJEgwKBHdoZW4YBiABKAkiRQoKT3V0cHV0U3BlYxIOCgZzZWxlY3QYASABKAkSJwoGc2NoZW1hGAIgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdCIZCgtUcmlnZ2VyU3BlYxIKCgJpZBgBIAEoCUI6WjhnaXRodWIuY29tL3JlbGlhbnQtbGFicy9yZWxpYW50L2dlbi9yZWxpYW50L3YxO3JlbGlhbnR2MWIGcHJvdG8z", [file_google_protobuf_struct]);
+  fileDesc("ChxyZWxpYW50L3YxL2ludGVncmF0aW9uLnByb3RvEgpyZWxpYW50LnYxIpMCChNJbnRlZ3JhdGlvbk1hbmlmZXN0EgoKAmlkGAEgASgJEg8KB3ZlcnNpb24YAiABKAUSFAoMZGlzcGxheV9uYW1lGAMgASgJEhMKC2Rlc2NyaXB0aW9uGAQgASgJEgwKBGljb24YBSABKAkSEAoIY2F0ZWdvcnkYBiABKAkSLgoKY29ubmVjdGlvbhgHIAEoCzIaLnJlbGlhbnQudjEuQ29ubmVjdGlvblNwZWMSJwoHYWN0aW9ucxgIIAMoCzIWLnJlbGlhbnQudjEuQWN0aW9uU3BlYxIpCgh0cmlnZ2VycxgJIAMoCzIXLnJlbGlhbnQudjEuVHJpZ2dlclNwZWMSEAoIa2V5d29yZHMYCiADKAkingMKDkNvbm5lY3Rpb25TcGVjEhAKCGJhc2VfdXJsGAIgASgJEhUKDWFsbG93ZWRfaG9zdHMYAyADKAkSRwoPZGVmYXVsdF9oZWFkZXJzGAQgAygLMi4ucmVsaWFudC52MS5Db25uZWN0aW9uU3BlYy5EZWZhdWx0SGVhZGVyc0VudHJ5Eh0KFWFsbG93X2FueV9wdWJsaWNfaG9zdBgFIAEoCBIkCgRhdXRoGAcgAygLMhYucmVsaWFudC52MS5BdXRoTWV0aG9kEhUKDWF1dGhfb3B0aW9uYWwYCCABKAgSNgoRY29ubmVjdGlvbl9wYXJhbXMYCSADKAsyGy5yZWxpYW50LnYxLkNvbm5lY3Rpb25QYXJhbRIoCgVwcm9iZRgKIAEoCzIZLnJlbGlhbnQudjEuSWRlbnRpdHlQcm9iZRo1ChNEZWZhdWx0SGVhZGVyc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAFKBAgBEAJKBAgGEAdSBHR5cGVSE29wdGlvbmFsX2F1dGhfa2luZHMiwwEKCkF1dGhNZXRob2QSKAoGb2F1dGgyGAEgASgLMhYucmVsaWFudC52MS5PQXV0aDJBdXRoSAASKQoHYXBpX2tleRgCIAEoCzIWLnJlbGlhbnQudjEuQXBpS2V5QXV0aEgAEiYKBWJhc2ljGAMgASgLMhUucmVsaWFudC52MS5CYXNpY0F1dGhIABIuCglkZWxlZ2F0ZWQYBCABKAsyGS5yZWxpYW50LnYxLkRlbGVnYXRlZEF1dGhIAEIICgZtZXRob2QilAIKCk9BdXRoMkF1dGgSFQoNYXV0aG9yaXplX3VybBgBIAEoCRIRCgl0b2tlbl91cmwYAiABKAkSDgoGc2NvcGVzGAMgAygJEhcKD3Njb3BlX3NlcGFyYXRvchgEIAEoCRIMCgRwa2NlGAUgASgJEkUKEGF1dGhvcml6ZV9wYXJhbXMYBiADKAsyKy5yZWxpYW50LnYxLk9BdXRoMkF1dGguQXV0aG9yaXplUGFyYW1zRW50cnkSJgoGcmV2b2tlGAcgASgLMhYucmVsaWFudC52MS5SZXZva2VTcGVjGjYKFEF1dGhvcml6ZVBhcmFtc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEiZQoKUmV2b2tlU3BlYxIOCgZtZXRob2QYASABKAkSCwoDdXJsGAIgASgJEhMKC2NsaWVudF9hdXRoGAMgASgJEhAKCHRva2VuX2luGAQgASgJEhMKC3Rva2VuX3BhcmFtGAUgASgJIkUKCkFwaUtleUF1dGgSCgoCaW4YASABKAkSDAoEbmFtZRgCIAEoCRIOCgZwcmVmaXgYAyABKAkSDQoFbGFiZWwYBCABKAkiUwoJQmFzaWNBdXRoEhYKDnVzZXJuYW1lX2xhYmVsGAEgASgJEhYKDnBhc3N3b3JkX2xhYmVsGAIgASgJEhYKDnVzZXJuYW1lX3BhcmFtGAMgASgJIh8KDURlbGVnYXRlZEF1dGgSDgoGYnJva2VyGAEgASgJInIKD0Nvbm5lY3Rpb25QYXJhbRIMCgRuYW1lGAEgASgJEhQKDGRpc3BsYXlfbmFtZRgCIAEoCRITCgtkZXNjcmlwdGlvbhgDIAEoCRIPCgdwYXR0ZXJuGAQgASgJEhUKDWRlZmF1bHRfdmFsdWUYBSABKAki0wEKDUlkZW50aXR5UHJvYmUSDgoGbWV0aG9kGAEgASgJEgsKA3VybBgCIAEoCRIMCgRwYXRoGAMgASgJEjcKB2hlYWRlcnMYBCADKAsyJi5yZWxpYW50LnYxLklkZW50aXR5UHJvYmUuSGVhZGVyc0VudHJ5EgoKAm9rGAUgASgJEhMKC2V4dGVybmFsX2lkGAYgASgJEg0KBWxhYmVsGAcgASgJGi4KDEhlYWRlcnNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIs0CCgpBY3Rpb25TcGVjEgoKAmlkGAEgASgJEhQKDGRpc3BsYXlfbmFtZRgCIAEoCRITCgtkZXNjcmlwdGlvbhgDIAEoCRIMCgRraW5kGAQgASgJEhEKCXBsYWNlbWVudBgFIAEoCRIPCgdtdXRhdGVzGAYgASgIEiIKBHRvb2wYByABKAsyFC5yZWxpYW50LnYxLlRvb2xTcGVjEicKBnBhcmFtcxgIIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3QSLAoHcmVxdWVzdBgJIAEoCzIbLnJlbGlhbnQudjEuSHR0cFJlcXVlc3RTcGVjEiYKBm91dHB1dBgKIAEoCzIWLnJlbGlhbnQudjEuT3V0cHV0U3BlYxIQCghleGVjdXRvchgLIAEoCRIPCgdzdW1tYXJ5GAwgASgJEhAKCGtleXdvcmRzGA0gAygJIjYKCFRvb2xTcGVjEg4KBmV4cG9zZRgBIAEoCBIMCgRuYW1lGAIgASgJEgwKBHRhZ3MYAyADKAki+wMKD0h0dHBSZXF1ZXN0U3BlYxIOCgZtZXRob2QYASABKAkSCwoDdXJsGAIgASgJEgwKBHBhdGgYAyABKAkSNQoFcXVlcnkYBCADKAsyJi5yZWxpYW50LnYxLkh0dHBSZXF1ZXN0U3BlYy5RdWVyeUVudHJ5EjkKB2hlYWRlcnMYBSADKAsyKC5yZWxpYW50LnYxLkh0dHBSZXF1ZXN0U3BlYy5IZWFkZXJzRW50cnkSJAoEYm9keRgGIAEoCzIWLmdvb2dsZS5wcm90b2J1Zi5WYWx1ZRIuCgpwYWdpbmF0aW9uGAcgASgLMhoucmVsaWFudC52MS5QYWdpbmF0aW9uU3BlYxIlCgZlcnJvcnMYCCADKAsyFS5yZWxpYW50LnYxLkVycm9yUnVsZRIXCg90aW1lb3V0X3NlY29uZHMYCSABKAUSGgoSbWF4X3Jlc3BvbnNlX2J5dGVzGAogASgDEhQKDGhlYWRlcnNfZXhwchgLIAEoCRISCgpxdWVyeV9leHByGAwgASgJEhEKCWJvZHlfZXhwchgNIAEoCRosCgpRdWVyeUVudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEaLgoMSGVhZGVyc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEihQEKDlBhZ2luYXRpb25TcGVjEg0KBXN0eWxlGAEgASgJEhEKCW1heF9wYWdlcxgCIAEoBRIUCgxjdXJzb3JfcGFyYW0YAyABKAkSEwoLbmV4dF9jdXJzb3IYBCABKAkSEgoKcGFnZV9wYXJhbRgFIAEoCRISCgpzdGFydF9wYWdlGAYgASgFInUKCUVycm9yUnVsZRIOCgZzdGF0dXMYASABKAUSEgoKc3RhdHVzX21pbhgCIAEoBRISCgpzdGF0dXNfbWF4GAMgASgFEhEKCXJldHJ5YWJsZRgEIAEoCBIPCgdtZXNzYWdlGAUgASgJEgwKBHdoZW4YBiABKAkiRQoKT3V0cHV0U3BlYxIOCgZzZWxlY3QYASABKAkSJwoGc2NoZW1hGAIgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdCLQAQoLVHJpZ2dlclNwZWMSCgoCaWQYASABKAkSFAoMZGlzcGxheV9uYW1lGAIgASgJEg8KB3N1bW1hcnkYAyABKAkSEwoLZGVzY3JpcHRpb24YBCABKAkSEAoIa2V5d29yZHMYBSADKAkSDgoGZXZlbnRzGAYgAygJEjAKCmF0dHJpYnV0ZXMYByADKAsyHC5yZWxpYW50LnYxLlRyaWdnZXJBdHRyaWJ1dGUSJQoEZGF0YRgIIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3QiRgoQVHJpZ2dlckF0dHJpYnV0ZRIMCgRuYW1lGAEgASgJEhMKC2Rlc2NyaXB0aW9uGAIgASgJEg8KB2V4YW1wbGUYAyABKAlCOlo4Z2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vcmVsaWFudC92MTtyZWxpYW50djFiBnByb3RvMw", [file_google_protobuf_struct]);
 
 /**
  * IntegrationManifest is the declarative description of one integration: how a
@@ -76,8 +76,9 @@ export type IntegrationManifest = Message<"reliant.v1.IntegrationManifest"> & {
   actions: ActionSpec[];
 
   /**
-   * Triggers are reserved for a later phase. A manifest that declares any is
-   * rejected at load until trigger support exists.
+   * Triggers are the trigger types the integration delivers. Declaring one is
+   * a catalog statement; delivery is the provider's (a webhook Provider or a
+   * Poller registered for this id).
    *
    * @generated from field: repeated reliant.v1.TriggerSpec triggers = 9;
    */
@@ -940,15 +941,81 @@ export const OutputSpecSchema: GenMessage<OutputSpec> = /*@__PURE__*/
   messageDesc(file_reliant_v1_integration, 15);
 
 /**
- * TriggerSpec is reserved for the triggers phase.
+ * TriggerSpec declares one trigger type the integration delivers: what can
+ * start a run from it (`github/issue.opened@1`). It is a CATALOG entry —
+ * what search lists, what the editor's trigger picker offers, and the schema a
+ * trigger filter is checked against. Delivering the events is the provider's
+ * (internal/integrations/webhook): its Event.Type values are what `events`
+ * names, and its Event.Attributes keys are what `attributes` names.
+ *
+ * A trigger row listens through an IntegrationSource, whose `events` and
+ * `match` are exactly this spec's events and attribute names, so the editor
+ * can build one from a picked spec without knowing the provider.
  *
  * @generated from message reliant.v1.TriggerSpec
  */
 export type TriggerSpec = Message<"reliant.v1.TriggerSpec"> & {
   /**
+   * Id is unique within the manifest, e.g. "issue.opened". Same grammar as an
+   * action id, and the same namespace: `<integration>/<id>@<major>` names
+   * exactly one action or trigger, so an id may not be both.
+   *
    * @generated from field: string id = 1;
    */
   id: string;
+
+  /**
+   * @generated from field: string display_name = 2;
+   */
+  displayName: string;
+
+  /**
+   * Summary is one line for search results and pickers; description is the
+   * long form an agent reads.
+   *
+   * @generated from field: string summary = 3;
+   */
+  summary: string;
+
+  /**
+   * @generated from field: string description = 4;
+   */
+  description: string;
+
+  /**
+   * Keywords are extra search terms for the catalog index.
+   *
+   * @generated from field: repeated string keywords = 5;
+   */
+  keywords: string[];
+
+  /**
+   * Events are the provider event types this trigger fires on, as the
+   * provider emits them (Event.Type): "issues.opened". An IntegrationSource
+   * built from this spec lists them in `events`. At least one.
+   *
+   * @generated from field: repeated string events = 6;
+   */
+  events: string[];
+
+  /**
+   * Attributes are the routing facts every event of this trigger carries,
+   * which an IntegrationSource's `match` can require by equality
+   * (repository, branch). An event of this trigger always sets them.
+   *
+   * @generated from field: repeated reliant.v1.TriggerAttribute attributes = 7;
+   */
+  attributes: TriggerAttribute[];
+
+  /**
+   * Data is the JSON Schema of the provider's event payload, as recorded on
+   * the event (trigger.payload.data). The full trigger.payload schema wraps
+   * it in the envelope every integration event shares; see
+   * manifest.TriggerPayloadSchema.
+   *
+   * @generated from field: google.protobuf.Struct data = 8;
+   */
+  data?: JsonObject | undefined;
 };
 
 /**
@@ -957,4 +1024,38 @@ export type TriggerSpec = Message<"reliant.v1.TriggerSpec"> & {
  */
 export const TriggerSpecSchema: GenMessage<TriggerSpec> = /*@__PURE__*/
   messageDesc(file_reliant_v1_integration, 16);
+
+/**
+ * TriggerAttribute is one routing fact a trigger's events carry.
+ *
+ * @generated from message reliant.v1.TriggerAttribute
+ */
+export type TriggerAttribute = Message<"reliant.v1.TriggerAttribute"> & {
+  /**
+   * Name is the key in Event.Attributes and IntegrationSource.match:
+   * lower-case, [a-z][a-z0-9_]*.
+   *
+   * @generated from field: string name = 1;
+   */
+  name: string;
+
+  /**
+   * @generated from field: string description = 2;
+   */
+  description: string;
+
+  /**
+   * Example is a representative value for an editor's placeholder.
+   *
+   * @generated from field: string example = 3;
+   */
+  example: string;
+};
+
+/**
+ * Describes the message reliant.v1.TriggerAttribute.
+ * Use `create(TriggerAttributeSchema)` to create a new message.
+ */
+export const TriggerAttributeSchema: GenMessage<TriggerAttribute> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_integration, 17);
 

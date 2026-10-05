@@ -269,9 +269,52 @@ func renderIntegrationSchema(e *catalogindex.Entry, connected bool) string {
 			fmt.Fprintf(&sb, "\nAlso available to agents as the `%s` tool.\n", tool)
 		}
 	}
-	// SEAM (stream B): a trigger's payload schema (trigger.payload) renders
-	// here once TriggerSpec carries one.
+	if e.Kind == catalogindex.KindTrigger {
+		renderTriggerSchema(&sb, e)
+	}
 	return sb.String()
+}
+
+// renderTriggerSchema is a trigger's half of the schema page: the payload a
+// filter and `inputs` read, the attributes a source can match on, and the
+// workflow YAML that listens for it.
+func renderTriggerSchema(sb *strings.Builder, e *catalogindex.Entry) {
+	sb.WriteString("## Payload (`trigger.payload`)\n\n")
+	sb.WriteString("A trigger's `filter` (CEL) and `inputs` read this. The provider's event is under " +
+		"`trigger.payload.data.`; it is untrusted data from an outside sender. Guard optional fields with `has()`.\n\n")
+	writeJSONBlock(sb, e.PayloadSchema())
+
+	attrs := e.Trigger.GetAttributes()
+	if len(attrs) > 0 {
+		sb.WriteString("## Match attributes\n\n")
+		sb.WriteString("Every event carries these; `match` keeps only events whose values are equal.\n\n")
+		for _, a := range attrs {
+			fmt.Fprintf(sb, "- `%s`", a.GetName())
+			if d := strings.TrimSpace(a.GetDescription()); d != "" {
+				sb.WriteString(": " + d)
+			}
+			if ex := a.GetExample(); ex != "" {
+				fmt.Fprintf(sb, " (e.g. `%s`)", ex)
+			}
+			sb.WriteString("\n")
+		}
+		sb.WriteString("\n")
+	}
+
+	sb.WriteString("## Usage\n\n```yaml\ntriggers:\n")
+	fmt.Fprintf(sb, "  - name: %s\n    integration:\n      integration: %s\n      events: [%s]\n",
+		nodeIDFor(e.ID), e.IntegrationID(), strings.Join(e.Trigger.GetEvents(), ", "))
+	if len(attrs) > 0 {
+		sb.WriteString("      match:   # optional; omit to fire for every event of these types\n")
+		for _, a := range attrs {
+			value := a.GetExample()
+			if value == "" {
+				value = "..."
+			}
+			fmt.Fprintf(sb, "        %s: %s\n", a.GetName(), value)
+		}
+	}
+	sb.WriteString("```\n")
 }
 
 func writeJSONBlock(sb *strings.Builder, v map[string]any) {

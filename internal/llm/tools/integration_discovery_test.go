@@ -189,3 +189,48 @@ func TestIntegrationDiscoveryTools_AreRegisteredWithTheWorkflowTools(t *testing.
 		assert.True(t, names.IsValidToolName(name), "%s must be a valid tool name in workflow YAML", name)
 	}
 }
+
+const discoveryTriggerFixture = `
+id: pager
+version: 1
+display_name: Pager
+connection:
+  base_url: https://api.pager.example
+  auth:
+    - api_key: { in: header, name: X-Api-Key }
+triggers:
+  - id: alert.fired
+    display_name: Alert fired
+    summary: An alert started firing.
+    events: [alert.fired, alert.refired]
+    attributes:
+      - { name: service, description: The alerting service., example: checkout }
+    data:
+      type: object
+      properties:
+        alert: { type: object, properties: { severity: { type: string } } }
+`
+
+// A trigger's schema page shows the payload a filter reads and a YAML usage
+// block for a workflow's `triggers:`, built from the declaration: its events
+// and the attributes `match` can require.
+func TestGetIntegrationSchemaTool_RendersATriggersPayloadAndUsage(t *testing.T) {
+	m, err := manifest.Parse([]byte(discoveryTriggerFixture), manifest.TrustCurated)
+	require.NoError(t, err)
+	idx, err := catalogindex.Build([]*reliantv1.IntegrationManifest{m})
+	require.NoError(t, err)
+	tool := NewGetIntegrationSchemaTool(catalogindex.NewService(idx, discoveryConnections{}, nil))
+
+	resp := runDiscoveryTool(t, tool, "bob", GetIntegrationSchemaParams{Ref: "pager/alert.fired@1"})
+	require.False(t, resp.IsError, resp.Content)
+	c := resp.Content
+	assert.Contains(t, c, "# Alert fired (`pager/alert.fired@1`)")
+	assert.Contains(t, c, "## Payload (`trigger.payload`)")
+	assert.Contains(t, c, `"severity": {`)
+	assert.Contains(t, c, "## Match attributes")
+	assert.Contains(t, c, "`service`: The alerting service. (e.g. `checkout`)")
+	assert.Contains(t, c, "triggers:\n  - name: alert_fired\n    integration:\n      integration: pager\n      events: [alert.fired, alert.refired]\n")
+	assert.Contains(t, c, "      match:   # optional; omit to fire for every event of these types\n        service: checkout\n")
+	assert.Contains(t, c, "trigger.payload.data.")
+	assert.NotContains(t, c, "## Params")
+}
