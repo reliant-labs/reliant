@@ -35,6 +35,11 @@ type ActivateTriggerRequest struct {
 	ProjectID       string
 	WorktreeID      string
 	DaemonID        string
+	// NoMachine is inherited from a calling chat that has no machine, exactly
+	// as start_run does: such a chat has no daemon to pin, so its automations
+	// run server-only (CreateTrigger refuses one whose workflow needs a
+	// machine, so this never weakens the check).
+	NoMachine       bool
 	ConnectionID    string
 	Message         string
 	Params          map[string]any
@@ -176,7 +181,11 @@ func (a *activateTriggerTool) Execute(rctx *rctx.ToolContext, params ActivateTri
 		req.ProjectID = caller.chat.ProjectID
 	}
 	if req.DaemonID == "" {
-		req.DaemonID = callerDaemonID(caller.chat)
+		if caller.chat.NoMachine {
+			req.NoMachine = true
+		} else {
+			req.DaemonID = callerDaemonID(caller.chat)
+		}
 	}
 
 	activated, err := a.activator.ActivateTrigger(rctx.Context, req)

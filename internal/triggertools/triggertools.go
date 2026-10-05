@@ -69,6 +69,7 @@ func (t *Triggers) ActivateTrigger(ctx context.Context, req tools.ActivateTrigge
 		Params:           params,
 		Message:          req.Message,
 		DaemonId:         req.DaemonID,
+		NoMachine:        req.NoMachine,
 		NotifyOnComplete: req.NotifyOnSuccess,
 		Enabled:          &enabled,
 		Source:           &reliantv1.TriggerDefinition_WorkflowTrigger{WorkflowTrigger: req.WorkflowTrigger},
