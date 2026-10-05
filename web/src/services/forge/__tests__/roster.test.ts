@@ -81,4 +81,31 @@ describe("lifecycleOf", () => {
     expect(lifecycleOf(null, { destination: "compose" })).toBe("local");
     expect(lifecycleOf(null, { destination: "host" })).toBe("local");
   });
+
+  it("reads forge's declared lifecycle off the topology row on first load", () => {
+    // No env status read, no backend row: the label comes from the topology alone.
+    expect(lifecycleOf(null, { destination: "mixed", lifecycle: "local" })).toBe("local");
+    expect(lifecycleOf(null, { destination: "mixed", lifecycle: "" })).toBe("deployed");
+  });
+
+  it("treats a non-local declared lifecycle as deployed even on a host destination", () => {
+    expect(lifecycleOf(null, { destination: "host", lifecycle: "ephemeral" })).toBe("deployed");
+  });
+
+  it("the backend's kind still outranks forge's declaration", () => {
+    expect(lifecycleOf(live("prod", "persistent"), { lifecycle: "local" })).toBe("deployed");
+  });
+});
+
+describe("forgeEnvRoster lifecycle labelling", () => {
+  it("files unregistered envs under their declared lifecycle without any status read", () => {
+    const roster = forgeEnvRoster([], [
+      { env: "dev", declared: true, destination: "mixed", lifecycle: "local" },
+      { env: "prod", declared: true, destination: "mixed", lifecycle: "" },
+    ]);
+    expect(roster.map((env) => [env.name, env.source, env.lifecycle])).toEqual([
+      ["dev", "checkout", "local"],
+      ["prod", "checkout", "deployed"],
+    ]);
+  });
 });

@@ -524,8 +524,9 @@ export function useForgeEnvironments(projectId: string | null | undefined): Forg
  *
  * Lifecycle hints come from env-status reports ALREADY IN THE CACHE — this
  * hook never asks the daemon for one. An env page that read dev's status
- * (forge says `lifecycle: local`) is what lets the sidebar file dev under
- * "Local" afterwards; forge's topology row does not carry the field.
+ * (forge says `lifecycle: local`) re-files dev under "Local" too. The topology
+ * row itself carries the declared lifecycle (forge >= f219804d), so a fresh
+ * load already labels envs correctly without either.
  */
 export function useForgeRoster(projectId: string | null | undefined) {
   const persistedName = useProjectStore((state) => persistedForgeProjectName(state, projectId));
