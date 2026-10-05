@@ -50,7 +50,7 @@ export function PromoteRefusalNotice({
       data-reason={refusal.reason}
       className="space-y-3 rounded-lg border border-solid border-warning/50 bg-warning/10 px-4 py-3"
     >
-      <div className="flex items-center gap-2 text-warning">
+      <div className="flex items-center gap-2 text-warning-ink">
         <ShieldAlert className="h-4 w-4 shrink-0" aria-hidden="true" />
         {/* The headline fact. Nothing was written. */}
         <h3 className="text-sm font-medium" data-testid="promote-refusal-heading">

@@ -228,7 +228,7 @@ export function ProjectPickerStep({ plan, updatePlan, onBack }: StepProps) {
       </div>
       )}
 
-      {error && <p className="text-center text-xs text-destructive">{error}</p>}
+      {error && <p className="text-center text-xs text-destructive-ink">{error}</p>}
 
       {completing && (
         <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">

@@ -121,7 +121,7 @@ export function ResumeDaemonPill({ placement = "absolute" }: ResumeDaemonPillPro
           </button>
         </div>
         {error && (
-          <div className="max-w-[min(560px,calc(100vw-3rem))] rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-center text-xs leading-relaxed text-destructive shadow-sm backdrop-blur">
+          <div className="max-w-[min(560px,calc(100vw-3rem))] rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-center text-xs leading-relaxed text-destructive-ink shadow-sm backdrop-blur">
             <span>{error}</span>
             <button
               type="button"

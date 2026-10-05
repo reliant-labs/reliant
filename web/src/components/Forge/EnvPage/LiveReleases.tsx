@@ -250,7 +250,7 @@ function ObservationRow({ convergence }: { convergence: LiveConvergence }) {
           {convergence.cluster && <span className="font-mono">{convergence.cluster}</span>}
         </span>
         {convergence.reason && (
-          <span className={failed ? "font-mono text-destructive" : "font-mono"}>
+          <span className={failed ? "font-mono text-destructive-ink" : "font-mono"}>
             {convergence.reason}
             {convergence.message && ` — ${convergence.message}`}
           </span>

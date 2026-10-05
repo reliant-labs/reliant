@@ -94,7 +94,7 @@ export function PlanStaleNotice({ approved, current }: PlanStaleNoticeProps) {
               added/removed lists. A deletion that appeared after approval is
               the single most important thing on this screen. */}
           {change.newStopCodes.length > 0 && (
-            <p data-testid="plan-stale-new-stop" className="text-2xs font-medium text-destructive">
+            <p data-testid="plan-stale-new-stop" className="text-2xs font-medium text-destructive-ink">
               It now destroys something it did not before. You will be asked to accept that
               separately.
             </p>

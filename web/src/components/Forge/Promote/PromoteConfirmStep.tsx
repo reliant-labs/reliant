@@ -110,7 +110,7 @@ export function PromoteConfirmStep({
         // would be authorising a write against an unknown current state.
         <p
           data-testid="promote-no-token"
-          className="rounded-lg border border-dashed border-destructive/50 px-3 py-2 text-xs text-destructive"
+          className="rounded-lg border border-dashed border-destructive/50 px-3 py-2 text-xs text-destructive-ink"
         >
           This plan does not say what {env || "the environment"} is currently bound to, so a promote
           cannot be authorised from it. Re-plan to try again.
@@ -124,7 +124,7 @@ export function PromoteConfirmStep({
       {rollback && token && (
         <p
           data-testid="promote-rollback-warning"
-          className="flex items-center gap-1.5 rounded-lg border border-solid border-destructive/50 bg-destructive/10 px-3 py-2 text-xs font-medium text-destructive"
+          className="flex items-center gap-1.5 rounded-lg border border-solid border-destructive/50 bg-destructive/10 px-3 py-2 text-xs font-medium text-destructive-ink"
         >
           <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
           This is a rollback. It moves {env} backwards.

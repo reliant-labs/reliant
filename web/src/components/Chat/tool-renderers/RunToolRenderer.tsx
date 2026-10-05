@@ -90,7 +90,7 @@ function RunToolRendererComponent({ ctx }: ToolContentProps) {
         </p>
       )}
       {isError && result?.content && (
-        <p className="mt-1 text-warning">{formatErrorMessage(result.content)}</p>
+        <p className="mt-1 text-warning-ink">{formatErrorMessage(result.content)}</p>
       )}
     </div>
   );

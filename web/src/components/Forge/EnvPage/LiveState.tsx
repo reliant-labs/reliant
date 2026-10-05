@@ -80,7 +80,7 @@ export function LiveState({ env }: { env: LiveEnv }) {
         data-testid="live-state-observed"
         className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground"
       >
-        <span className={failed ? "text-destructive" : undefined}>{observed}</span>
+        <span className={failed ? "text-destructive-ink" : undefined}>{observed}</span>
         {env.observed.observedAt && <span>{formatTimestamp(env.observed.observedAt)}</span>}
         {drift !== "" && <Badge label={drift} variant="neutral" size="sm" />}
       </p>

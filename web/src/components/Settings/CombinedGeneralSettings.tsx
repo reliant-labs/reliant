@@ -961,8 +961,8 @@ export function CombinedGeneralSettings({
                       className={cn(
                         "flex items-start gap-2 p-3 rounded-md",
                         validationMessage.valid
-                          ? "bg-success/10 text-success border border-success/20"
-                          : "bg-destructive/10 text-destructive border border-destructive/20"
+                          ? "bg-success/10 text-success-ink border border-success/20"
+                          : "bg-destructive/10 text-destructive-ink border border-destructive/20"
                       )}
                     >
                       {validationMessage.valid ? (
@@ -1086,7 +1086,7 @@ export function CombinedGeneralSettings({
                           {provider.displayName}
                         </h4>
                         <div className="flex items-center gap-3 mt-1">
-                          <span className="flex items-center gap-1 text-sm text-success">
+                          <span className="flex items-center gap-1 text-sm text-success-ink">
                             <Check className="h-3 w-3" />
                             Connected
                           </span>
@@ -1130,7 +1130,7 @@ export function CombinedGeneralSettings({
                         </button>
                       )}
                       <button
-                        className="px-3 py-1.5 text-sm border border-destructive/20 text-destructive rounded-md hover:bg-destructive/10 transition-colors flex items-center gap-1"
+                        className="px-3 py-1.5 text-sm border border-destructive/20 text-destructive-ink rounded-md hover:bg-destructive/10 transition-colors flex items-center gap-1"
                         onClick={() => handleDeleteProvider(provider.provider)}
                         disabled={deletingProvider === provider.provider}
                       >

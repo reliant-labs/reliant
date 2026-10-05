@@ -48,17 +48,17 @@ const STATE_STYLES: Record<DomainState, StateStyle> = {
     spin: true,
   },
   live: {
-    container: "bg-success/15 border border-solid border-success/40 text-success",
+    container: "bg-success/15 border border-solid border-success/40 text-success-ink",
     icon: CheckCircle2,
   },
   failed: {
-    container: "bg-destructive/15 border border-solid border-destructive/40 text-destructive",
+    container: "bg-destructive/15 border border-solid border-destructive/40 text-destructive-ink",
     icon: AlertTriangle,
   },
   // A different glyph from `failed` on purpose: the fix is a human dispute,
   // not a retry, and a tenant should not read it as "try again".
   conflict: {
-    container: "bg-destructive/15 border border-solid border-destructive/40 text-destructive",
+    container: "bg-destructive/15 border border-solid border-destructive/40 text-destructive-ink",
     icon: ShieldAlert,
   },
   unknown: {

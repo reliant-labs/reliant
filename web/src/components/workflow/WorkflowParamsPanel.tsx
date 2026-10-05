@@ -498,7 +498,7 @@ export function WorkflowParamsPanel({
     return (
       <div className="mt-3 pt-2 border-t border-border/30">
         {saveError && saveMode?.group === group.group && (
-          <p className="text-xs text-destructive mb-2">{saveError}</p>
+          <p className="text-xs text-destructive-ink mb-2">{saveError}</p>
         )}
 
         {isInSaveMode && saveMode.mode === "new" ? (
@@ -700,7 +700,7 @@ export function WorkflowParamsPanel({
                 )}
               />
               {saveError && (
-                <p className="text-xs text-destructive">{saveError}</p>
+                <p className="text-xs text-destructive-ink">{saveError}</p>
               )}
             </div>
           )}

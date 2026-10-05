@@ -129,7 +129,7 @@ export function CommitHistory({ worktreeId, className = "", limit = 20, initialD
               </span>
             ) : (
               data.total > 0 && (
-                <span className="text-warning text-xs">
+                <span className="text-warning-ink text-xs">
                   (showing all commits - no base branch)
                 </span>
               )
@@ -141,7 +141,7 @@ export function CommitHistory({ worktreeId, className = "", limit = 20, initialD
             </p>
           )}
           {!data.comparison_mode && data.total > 0 && (
-            <p className="text-xs text-warning font-mono pl-5">
+            <p className="text-xs text-warning-ink font-mono pl-5">
               ⚠ Base branch not found. Showing all commits on {data.current_branch || data.branch}.
             </p>
           )}

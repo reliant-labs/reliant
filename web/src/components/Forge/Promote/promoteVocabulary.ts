@@ -80,7 +80,7 @@ export const DIRECTION_STYLES: Record<PromoteDirection, DirectionStyle> = {
   // A ROLLBACK. Destructive treatment, its own icon, and the word in the label.
   behind: {
     container: "border border-solid border-destructive/50 bg-destructive/10",
-    foreground: "text-destructive",
+    foreground: "text-destructive-ink",
     label: "Rollback — moves backwards",
     blurb:
       "The target release was cut BEFORE the one this environment runs now. This moves the environment backwards.",
@@ -139,7 +139,7 @@ export const CHANGE_STYLES: Record<PromoteImageChange, ChangeStyle> = {
   // STRUCTURAL: the binding gains an image it did not declare.
   added: {
     row: "border-l-2 border-solid border-success bg-success/10",
-    foreground: "text-success",
+    foreground: "text-success-ink",
     sigil: "+",
     label: "Added",
     icon: Plus,
@@ -149,7 +149,7 @@ export const CHANGE_STYLES: Record<PromoteImageChange, ChangeStyle> = {
   // nothing is deleted from a cluster by a promote.
   removed: {
     row: "border-l-2 border-solid border-destructive bg-destructive/10",
-    foreground: "text-destructive",
+    foreground: "text-destructive-ink",
     sigil: "−",
     label: "Removed",
     icon: Minus,
@@ -159,7 +159,7 @@ export const CHANGE_STYLES: Record<PromoteImageChange, ChangeStyle> = {
   // A version move under an image that stays. No sigil, no left rule.
   changed: {
     row: "border-l-2 border-transparent",
-    foreground: "text-warning",
+    foreground: "text-warning-ink",
     sigil: "",
     label: "Changed",
     icon: ArrowDownCircle,

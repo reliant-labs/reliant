@@ -228,9 +228,9 @@ export function AddRepoModal({ isOpen, onClose, daemonId }: AddRepoModalProps) {
             </div>
           )}
           {error && (
-            <div className="p-4 bg-destructive/10 border border-destructive/30 text-destructive rounded-lg text-sm">
+            <div className="p-4 bg-destructive/10 border border-destructive/30 text-destructive-ink rounded-lg text-sm">
               <div className="flex items-start gap-2">
-                <span className="text-destructive mt-0.5">⚠️</span>
+                <span className="text-destructive-ink mt-0.5">⚠️</span>
                 <span className="flex-1">{error}</span>
               </div>
             </div>
@@ -250,7 +250,7 @@ export function AddRepoModal({ isOpen, onClose, daemonId }: AddRepoModalProps) {
             {/* Repo URL */}
             <div className="space-y-2">
               <label className="block text-sm font-semibold text-foreground">
-                Repository URL <span className="text-destructive">*</span>
+                Repository URL <span className="text-destructive-ink">*</span>
               </label>
               <div className="relative">
                 <Link className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />

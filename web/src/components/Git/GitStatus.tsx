@@ -63,7 +63,7 @@ export function GitStatus({ worktreeId, className = "" }: GitStatusProps) {
 
   if (error) {
     return (
-      <div className={cn("flex items-center gap-2 text-xs text-destructive font-mono", className)}>
+      <div className={cn("flex items-center gap-2 text-xs text-destructive-ink font-mono", className)}>
         <AlertCircle className="w-3 h-3" />
         <span>Git not initialized</span>
       </div>

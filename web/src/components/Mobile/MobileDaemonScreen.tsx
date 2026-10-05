@@ -144,7 +144,7 @@ function LifecycleActions({ daemon }: { daemon: DaemonInfo }) {
             type="button"
             onClick={() => setConfirmDelete(true)}
             disabled={busy}
-            className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-lg border border-destructive/40 px-5 text-sm font-medium text-destructive active:bg-destructive/10 disabled:opacity-60"
+            className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-lg border border-destructive/40 px-5 text-sm font-medium text-destructive-ink active:bg-destructive/10 disabled:opacity-60"
           >
             <Trash2 className="h-4 w-4" />
             Delete
@@ -152,8 +152,8 @@ function LifecycleActions({ daemon }: { daemon: DaemonInfo }) {
         ) : (
           <div className="space-y-3 rounded-lg border border-destructive/30 bg-destructive/10 p-3">
             <div className="flex items-start gap-2">
-              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
-              <p className="text-sm text-destructive">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive-ink" />
+              <p className="text-sm text-destructive-ink">
                 Delete this machine? This action cannot be undone.
               </p>
             </div>
@@ -188,7 +188,7 @@ function LifecycleActions({ daemon }: { daemon: DaemonInfo }) {
       </div>
 
       {error && (
-        <p className="text-center text-xs text-destructive">{error}</p>
+        <p className="text-center text-xs text-destructive-ink">{error}</p>
       )}
     </div>
   );

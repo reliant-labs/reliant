@@ -39,14 +39,14 @@ function TokenHealthLine({
 }) {
   if (health === "needsReconnect") {
     return (
-      <p className="mt-1 text-xs font-medium text-destructive">
+      <p className="mt-1 text-xs font-medium text-destructive-ink">
         Access expired — reconnect GitHub to keep cloning private repos.
       </p>
     );
   }
   if (health === "expired") {
     return (
-      <p className="mt-1 text-xs font-medium text-destructive">
+      <p className="mt-1 text-xs font-medium text-destructive-ink">
         Token expired and can&apos;t be renewed automatically. Reconnect GitHub.
       </p>
     );

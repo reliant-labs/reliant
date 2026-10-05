@@ -138,7 +138,7 @@ export function ContextMenu({ items, position, onClose }: ContextMenuProps) {
                 item.disabled
                   ? "opacity-50 cursor-not-allowed"
                   : item.danger
-                  ? "hover:bg-destructive/10 hover:text-destructive"
+                  ? "hover:bg-destructive/10 hover:text-destructive-ink"
                   : "hover:bg-muted/80 hover:text-foreground",
                 "disabled:pointer-events-none"
               )}

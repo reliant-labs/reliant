@@ -79,7 +79,7 @@ export function DeployRefusalNotice({
       data-reason={refusal.reason}
       className="space-y-3 rounded-lg border border-solid border-warning/50 bg-warning/10 px-4 py-3"
     >
-      <div className="flex items-center gap-2 text-warning">
+      <div className="flex items-center gap-2 text-warning-ink">
         <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
         <h3 className="text-sm font-medium" data-testid="deploy-refusal-heading">
           {copy.heading}
@@ -117,7 +117,7 @@ export function DeployRefusalNotice({
             {refusal.expectedDeclaredContext || "an unnamed cluster"}
           </dd>
           <dt className="text-muted-foreground">It now declares</dt>
-          <dd className="font-mono text-destructive" data-testid="deploy-refusal-actual-context">
+          <dd className="font-mono text-destructive-ink" data-testid="deploy-refusal-actual-context">
             {refusal.actualDeclaredContext || "no cluster at all"}
           </dd>
         </dl>

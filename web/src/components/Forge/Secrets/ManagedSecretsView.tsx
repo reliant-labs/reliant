@@ -307,7 +307,7 @@ function WithCode({ text }: { text: string }) {
 function Count({ label, value, tone }: { label: string; value: number; tone?: "danger" }) {
   return (
     <span>
-      <span className={cn("font-medium", tone === "danger" ? "text-destructive" : "text-foreground")}>
+      <span className={cn("font-medium", tone === "danger" ? "text-destructive-ink" : "text-foreground")}>
         {value}
       </span>{" "}
       {label}

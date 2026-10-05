@@ -98,7 +98,7 @@ export function ApprovablePlanView({
           </p>
         )}
         {plan.live_basis?.drift_observed === true && (
-          <p className="text-2xs text-warning">
+          <p className="text-2xs text-warning-ink">
             What is running has drifted from what was last deployed. This deploy overwrites
             it.
           </p>
@@ -124,7 +124,7 @@ export function ApprovablePlanView({
         >
           <p className="flex items-center gap-1.5 text-xs font-medium text-foreground">
             <AlertTriangle
-              className="h-3.5 w-3.5 shrink-0 text-destructive"
+              className="h-3.5 w-3.5 shrink-0 text-destructive-ink"
               aria-hidden="true"
             />
             This deploy destroys something that cannot be brought back.
@@ -151,7 +151,7 @@ export function ApprovablePlanView({
               data-testid="approvable-plan-unacknowledgeable"
               className="space-y-0.5 rounded-md border border-destructive/40 px-2 py-1.5"
             >
-              <p className="text-2xs font-medium text-destructive">
+              <p className="text-2xs font-medium text-destructive-ink">
                 This plan cannot be approved from here.
               </p>
               <p className="text-2xs text-muted-foreground">

@@ -262,7 +262,7 @@ export function ResponseToolsEditor({ tool, onChange, isReadOnly = false }: Resp
           <button
             type="button"
             onClick={removeTool}
-            className="text-xs text-muted-foreground hover:text-destructive transition-colors"
+            className="text-xs text-muted-foreground hover:text-destructive-ink transition-colors"
           >
             Remove
           </button>
@@ -396,7 +396,7 @@ export function ResponseToolsEditor({ tool, onChange, isReadOnly = false }: Resp
                     spellCheck={false}
                   />
                   {jsonError && (
-                    <p className="mt-1 text-xs text-destructive">{jsonError}</p>
+                    <p className="mt-1 text-xs text-destructive-ink">{jsonError}</p>
                   )}
                   <p className="mt-2 text-xs text-muted-foreground/70">
                     Define a JSON Schema to structure LLM responses. The LLM will produce output matching this schema.
@@ -506,7 +506,7 @@ function OptionRow({ optionKey, optionValue, onUpdate, onRemove, canRemove, isRe
           type="button"
           onClick={onRemove}
           disabled={!canRemove}
-          className="p-1 text-muted-foreground hover:text-destructive disabled:opacity-30 disabled:cursor-not-allowed flex-shrink-0"
+          className="p-1 text-muted-foreground hover:text-destructive-ink disabled:opacity-30 disabled:cursor-not-allowed flex-shrink-0"
           title={canRemove ? "Remove option" : "At least one option required"}
         >
           <Trash2 className="w-3.5 h-3.5" />

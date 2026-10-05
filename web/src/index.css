@@ -172,7 +172,8 @@
   --color-on-danger: hsl(var(--destructive-foreground));
   --color-danger-surface: hsl(var(--destructive) / 0.12);
   --color-danger-border: hsl(var(--destructive) / 0.38);
-  --color-danger-ink: hsl(var(--destructive));
+  --color-danger-ink: hsl(var(--destructive-ink));
+  --color-destructive-ink: hsl(var(--destructive-ink));
   /* Success → reliant's success. */
   --color-success: hsl(var(--success));
   --color-success-surface: hsl(var(--success) / 0.12);
@@ -297,6 +298,7 @@
     --accent: 210 40% 96%;           /* Light blue accent */
     --accent-foreground: 217 91% 60%;
     --destructive: 0 70% 50%;
+    --destructive-ink: 0 70% 40%;
     --destructive-foreground: 0 0% 100%;
     --border: 214 32% 91%;           /* Light blue-gray border */
     --input: 214 32% 91%;
@@ -318,7 +320,7 @@
        page or on a 10-12% tint of the fill. Light mode needs them apart:
        amber at 50% is ~2:1 on white. Inks are ≥5.2:1 on every scheme's
        background and card, tinted or not (WCAG AA is 4.5:1). Use
-       `text-warning-ink` / `text-success-ink` for words. */
+       `text-warning-ink` / `text-success-ink` for words. Same for destructive: `text-destructive-ink`. */
     --success: 142 76% 28%;          /* Green; white text on it is 5.2:1 */
     --success-foreground: 0 0% 100%;
     --success-ink: 142 76% 24%;
@@ -403,6 +405,7 @@
     --accent: 217 33% 21%;           /* Kept in step with --muted */
     --accent-foreground: 210 40% 98%;
     --destructive: 0 70% 55%;
+    --destructive-ink: 0 90% 74%;
     --destructive-foreground: 0 0% 100%;
     --border: 217 33% 32%;           /* Carries the card edge on its own */
     --input: 217 33% 32%;

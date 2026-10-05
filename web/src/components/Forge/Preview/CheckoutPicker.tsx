@@ -101,7 +101,7 @@ export function CheckoutPicker({ report, selected, onSelect, isLoading }: Checko
         <GitBranch className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
         <span className="truncate font-mono">{labelOf(current)}</span>
         {current.dirty === true && (
-          <span className="shrink-0 text-2xs text-warning" data-testid="checkout-trigger-dirty">
+          <span className="shrink-0 text-2xs text-warning-ink" data-testid="checkout-trigger-dirty">
             uncommitted
           </span>
         )}
@@ -167,7 +167,7 @@ function CheckoutOption({
         <span className="flex flex-wrap gap-x-2 text-2xs text-muted-foreground">
           {/* Uncommitted changes: this builds from code only on this machine. */}
           {checkout.dirty === true && (
-            <span data-testid="checkout-dirty" className="text-warning">
+            <span data-testid="checkout-dirty" className="text-warning-ink">
               uncommitted changes
             </span>
           )}

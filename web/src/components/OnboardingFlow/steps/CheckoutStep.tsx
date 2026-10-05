@@ -434,7 +434,7 @@ export function CheckoutStep({ plan, updatePlan, onNext }: StepProps) {
           />
         )}
 
-        {error && <p className="text-center text-xs text-destructive">{error}</p>}
+        {error && <p className="text-center text-xs text-destructive-ink">{error}</p>}
       </div>
     </div>
   );

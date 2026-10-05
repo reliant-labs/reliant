@@ -96,7 +96,7 @@ function surfaces(mode: 'light' | 'dark'): Array<[string, Rgb]> {
 describe.each(['light', 'dark'] as const)('status ink contrast (%s)', (mode) => {
   const base = mode === 'light' ? lightBase : darkBase
 
-  it.each(['warning', 'success'])('%s-ink is AA on every surface and on its own badge tint', (kind) => {
+  it.each(['warning', 'success', 'destructive'])('%s-ink is AA on every surface and on its own badge tint', (kind) => {
     const ink = toRgb(hsl(base, `${kind}-ink`))
     const fill = toRgb(hsl(base, kind))
     for (const [name, surface] of surfaces(mode)) {
@@ -114,5 +114,6 @@ describe('status ink is what the utilities resolve to', () => {
   it('maps text-*-ink onto the ink tokens, not the fills', () => {
     expect(INDEX_CSS).toContain('--color-warning-ink: hsl(var(--warning-ink));')
     expect(INDEX_CSS).toContain('--color-success-ink: hsl(var(--success-ink));')
+    expect(INDEX_CSS).toContain('--color-danger-ink: hsl(var(--destructive-ink));')
   })
 })

@@ -255,7 +255,7 @@ export function SetSecretModal({
               A secret&apos;s name is its identity in the store and cannot be changed.
             </p>
           ) : nameError && touched ? (
-            <p id={`${nameId}-error`} className="text-xs text-destructive">
+            <p id={`${nameId}-error`} className="text-xs text-destructive-ink">
               {nameError}
             </p>
           ) : (
@@ -364,8 +364,8 @@ function SubmitError({ error, isUpdate }: { error: Error; isUpdate: boolean }) {
       data-testid="set-secret-error"
       className="flex gap-2.5 rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2.5"
     >
-      <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-destructive" aria-hidden="true" />
-      <p className="text-xs leading-relaxed text-destructive">
+      <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-destructive-ink" aria-hidden="true" />
+      <p className="text-xs leading-relaxed text-destructive-ink">
         {isCas
           ? isUpdate
             ? "Someone else wrote a new version of this secret while this form was open, so nothing was saved. Close this, re-read the current version, and try again."

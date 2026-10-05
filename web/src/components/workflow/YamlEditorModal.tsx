@@ -151,7 +151,7 @@ export function YamlEditorModal({
 
         {/* Error Banner */}
         {parseError && mode === 'edit' && (
-          <div className="flex items-start gap-2 p-3 mt-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm">
+          <div className="flex items-start gap-2 p-3 mt-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive-ink text-sm">
             <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
             <div>
               <div className="font-medium">YAML Parse Error</div>

@@ -148,12 +148,12 @@ export function DeveloperSettings() {
                 {backendStatus?.isRunning ? (
                   <>
                     <CheckCircle className="w-4 h-4 text-success" />
-                    <span className="text-sm text-success">Running on port {backendStatus.port}</span>
+                    <span className="text-sm text-success-ink">Running on port {backendStatus.port}</span>
                   </>
                 ) : (
                   <>
-                    <AlertCircle className="w-4 h-4 text-destructive" />
-                    <span className="text-sm text-destructive">Not running</span>
+                    <AlertCircle className="w-4 h-4 text-destructive-ink" />
+                    <span className="text-sm text-destructive-ink">Not running</span>
                   </>
                 )}
               </div>

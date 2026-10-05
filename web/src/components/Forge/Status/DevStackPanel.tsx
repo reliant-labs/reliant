@@ -79,9 +79,9 @@ export interface DevStackPanelProps {
  * glance about what kind of answer this is.
  */
 const VERDICT_STYLES: Record<EnvStatusVerdict, string> = {
-  failing: "border-solid border-destructive/40 bg-destructive/10 text-destructive",
-  degraded: "border-solid border-warning/40 bg-warning/10 text-warning",
-  "all-good": "border-solid border-success/40 bg-success/10 text-success",
+  failing: "border-solid border-destructive/40 bg-destructive/10 text-destructive-ink",
+  degraded: "border-solid border-warning/40 bg-warning/10 text-warning-ink",
+  "all-good": "border-solid border-success/40 bg-success/10 text-success-ink",
   incomplete:
     "border-dashed border-muted-foreground/60 bg-transparent text-muted-foreground ring-1 ring-inset ring-muted-foreground/30",
   "no-checks": "border-dashed border-border bg-transparent text-muted-foreground",
@@ -127,7 +127,7 @@ export function DevStackPanel({
         variant="outlined"
         size="lg"
         hover={false}
-        className="border border-destructive/40 bg-destructive/10 text-center text-sm text-destructive"
+        className="border border-destructive/40 bg-destructive/10 text-center text-sm text-destructive-ink"
       >
         Could not reach your daemon to run forge&apos;s runtime checks: {error.message}
       </Card>
@@ -309,8 +309,8 @@ function ServiceSummary({
                       className={cn(
                         "inline-flex items-center rounded-md border border-solid px-2 py-0.5 text-xs",
                         service.listening
-                          ? "border-success/40 bg-success/15 text-success"
-                          : "border-destructive/40 bg-destructive/15 text-destructive"
+                          ? "border-success/40 bg-success/15 text-success-ink"
+                          : "border-destructive/40 bg-destructive/15 text-destructive-ink"
                       )}
                     >
                       {service.listening ? "Listening" : "Down"}
@@ -338,12 +338,12 @@ function ServiceSummary({
                     {hasNote ? (
                       <div className="flex flex-wrap justify-end gap-1">
                         {stale && (
-                          <span className="rounded-md border border-solid border-warning/40 bg-warning/15 px-2 py-0.5 text-xs text-warning">
+                          <span className="rounded-md border border-solid border-warning/40 bg-warning/15 px-2 py-0.5 text-xs text-warning-ink">
                             Stale build
                           </span>
                         )}
                         {service.duplicate && (
-                          <span className="rounded-md border border-solid border-warning/40 bg-warning/15 px-2 py-0.5 text-xs text-warning">
+                          <span className="rounded-md border border-solid border-warning/40 bg-warning/15 px-2 py-0.5 text-xs text-warning-ink">
                             Duplicate process
                           </span>
                         )}

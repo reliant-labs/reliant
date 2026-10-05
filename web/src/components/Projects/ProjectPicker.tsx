@@ -402,7 +402,7 @@ function NoActiveDaemonState() {
                       <div className="text-sm font-medium text-foreground truncate">
                         {daemon.hostname || "daemon"}
                       </div>
-                      <div className="text-xs text-destructive">
+                      <div className="text-xs text-destructive-ink">
                         {reason
                           ? `Failed to start: ${reason}`
                           : "Failed to start. No reason was reported."}
@@ -415,7 +415,7 @@ function NoActiveDaemonState() {
                       type="button"
                       onClick={() => handleDeleteFailed(daemon)}
                       disabled={isDeleting}
-                      className="px-2.5 py-1 rounded-md border border-border text-xs text-muted-foreground transition-colors hover:border-destructive/50 hover:text-destructive disabled:opacity-60"
+                      className="px-2.5 py-1 rounded-md border border-border text-xs text-muted-foreground transition-colors hover:border-destructive/50 hover:text-destructive-ink disabled:opacity-60"
                     >
                       {isDeleting ? "Deleting…" : "Delete"}
                     </button>
@@ -447,7 +447,7 @@ function NoActiveDaemonState() {
                       <div
                         className={
                           statusLabel === "failed"
-                            ? "text-xs text-destructive"
+                            ? "text-xs text-destructive-ink"
                             : "text-xs text-muted-foreground truncate"
                         }
                       >
@@ -466,7 +466,7 @@ function NoActiveDaemonState() {
         </div>
       )}
 
-      {error && <p className="mt-3 text-xs text-destructive">{error}</p>}
+      {error && <p className="mt-3 text-xs text-destructive-ink">{error}</p>}
 
       <button
         type="button"
@@ -1227,7 +1227,7 @@ function ProjectPickerComponent({ onProjectSelected }: ProjectPickerProps) {
                             projects.filter((p) => selectedIds.has(p.id)),
                           )
                         }
-                        className="inline-flex items-center gap-1.5 rounded-md border border-destructive/40 px-2.5 py-1.5 text-sm font-medium text-destructive transition-colors hover:bg-destructive/10"
+                        className="inline-flex items-center gap-1.5 rounded-md border border-destructive/40 px-2.5 py-1.5 text-sm font-medium text-destructive-ink transition-colors hover:bg-destructive/10"
                         data-testid="project-bulk-remove"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
@@ -1425,7 +1425,7 @@ function ProjectPickerComponent({ onProjectSelected }: ProjectPickerProps) {
                                           setPendingRemoval([project]);
                                         }}
                                         aria-label={`Remove ${project.name}`}
-                                        className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                                        className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive-ink"
                                         data-testid="project-remove"
                                       >
                                         <Trash2 className="h-3.5 w-3.5" />

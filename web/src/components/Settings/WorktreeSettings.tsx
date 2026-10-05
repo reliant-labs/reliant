@@ -214,7 +214,7 @@ function PreferenceToggleRow({
         <div className="min-w-0">
           <p className="text-sm font-medium text-foreground">{title}</p>
           <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{description}</p>
-          {warning && <p className="mt-1 text-xs font-medium text-warning">{warning}</p>}
+          {warning && <p className="mt-1 text-xs font-medium text-warning-ink">{warning}</p>}
         </div>
       </div>
       <Toggle

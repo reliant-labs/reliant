@@ -196,7 +196,7 @@ function KeyInput({
         </div>
 
         {conflictWarning && (
-          <div className="flex items-center gap-1 text-xs text-destructive sm:hidden">
+          <div className="flex items-center gap-1 text-xs text-destructive-ink sm:hidden">
             <AlertTriangle className="w-3 h-3" />
             <span>Conflict</span>
           </div>
@@ -204,7 +204,7 @@ function KeyInput({
 
         <div className="flex items-center gap-2 justify-end">
           {conflictWarning && (
-            <div className="hidden sm:flex items-center gap-1 text-xs text-destructive">
+            <div className="hidden sm:flex items-center gap-1 text-xs text-destructive-ink">
               <AlertTriangle className="w-3 h-3" />
               <span>Conflict</span>
             </div>
@@ -401,7 +401,7 @@ function ShortcutRow({ shortcutId }: { shortcutId: string }) {
         </div>
 
         {conflictWarning && (
-          <div className="text-xs text-destructive flex items-center gap-1">
+          <div className="text-xs text-destructive-ink flex items-center gap-1">
             <AlertTriangle className="w-3 h-3" />
             {conflictWarning}
           </div>

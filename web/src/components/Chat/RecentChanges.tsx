@@ -1370,7 +1370,7 @@ function RepoChangesPanel({
           </div>
         )}
         <div className="flex items-center justify-center flex-1">
-          <div className="text-sm text-destructive">{error}</div>
+          <div className="text-sm text-destructive-ink">{error}</div>
         </div>
       </div>
     );
@@ -1384,7 +1384,7 @@ function RepoChangesPanel({
       <div className="flex flex-col gap-2 p-2 bg-background/95 border-b border-border">
         {/* Error Display */}
         {error && (
-          <div className="text-xs text-destructive bg-destructive/10 px-2 py-1 rounded border border-destructive/20">
+          <div className="text-xs text-destructive-ink bg-destructive/10 px-2 py-1 rounded border border-destructive/20">
             {error}
           </div>
         )}
@@ -1649,7 +1649,7 @@ function RepoChangesPanel({
 
       {/* Error display for inline mode */}
       {inline && error && (
-        <div className="px-3 py-1.5 text-xs text-destructive bg-destructive/10 border-b border-destructive/20">
+        <div className="px-3 py-1.5 text-xs text-destructive-ink bg-destructive/10 border-b border-destructive/20">
           {error}
         </div>
       )}
@@ -1703,7 +1703,7 @@ function MultiRepoSection({
           <ChevronRight className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
         )}
         {hasError ? (
-          <AlertCircle className="w-3.5 h-3.5 text-destructive flex-shrink-0" />
+          <AlertCircle className="w-3.5 h-3.5 text-destructive-ink flex-shrink-0" />
         ) : null}
         <span className="text-sm font-medium truncate">
           {status.repo_name || status.repo_relative_path || status.repo_id}
@@ -1743,7 +1743,7 @@ function MultiRepoSection({
       {expanded && (
         <>
           {hasError ? (
-            <div className="px-3 py-2 text-xs text-destructive bg-destructive/10 border-t border-destructive/20">
+            <div className="px-3 py-2 text-xs text-destructive-ink bg-destructive/10 border-t border-destructive/20">
               {status.error}
             </div>
           ) : (

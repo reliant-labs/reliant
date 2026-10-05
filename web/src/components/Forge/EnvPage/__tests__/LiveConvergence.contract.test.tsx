@@ -192,7 +192,7 @@ describe("the observed half of the state line", () => {
    */
   it("renders an unobserved environment in the quiet register", () => {
     const { container } = render(<LiveState env={NOT_REPORTED} />);
-    expect(container.querySelector(".text-destructive")).toBeNull();
+    expect(container.querySelector(".text-destructive-ink")).toBeNull();
     expect(container.textContent ?? "").not.toMatch(/error|failed|problem|warning/i);
   });
 

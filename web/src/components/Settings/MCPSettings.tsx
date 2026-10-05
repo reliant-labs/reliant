@@ -114,7 +114,7 @@ function MCPRefreshStatus({
 }) {
   if (loadError) {
     return (
-      <div className="flex flex-col gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive-ink sm:flex-row sm:items-center sm:justify-between">
         <div className="flex min-w-0 items-center gap-2">
           <AlertCircle className="h-4 w-4 shrink-0" />
           <span className="truncate">
@@ -125,7 +125,7 @@ function MCPRefreshStatus({
           type="button"
           variant="ghost"
           size="xs"
-          className="self-start text-destructive hover:bg-destructive/10 hover:text-destructive sm:self-auto"
+          className="self-start text-destructive-ink hover:bg-destructive/10 hover:text-destructive-ink sm:self-auto"
           onClick={onRetry}
         >
           Retry

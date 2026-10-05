@@ -244,7 +244,7 @@ export function DaemonConnectingGate({
         aria-live="assertive"
         data-testid="daemon-gate-failed"
       >
-        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-destructive/15 text-destructive">
+        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-destructive/15 text-destructive-ink">
           <AlertCircle className="h-7 w-7" />
         </div>
         <div className="space-y-1">

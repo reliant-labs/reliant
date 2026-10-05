@@ -429,7 +429,7 @@ function EnumInput({ param, onUpdate }: TypeSpecificInputProps) {
     <>
       <div>
         <label className="block text-xs font-medium text-foreground mb-1">
-          Allowed Values <span className="text-destructive">*</span>
+          Allowed Values <span className="text-destructive-ink">*</span>
         </label>
         <input
           type="text"
@@ -1078,7 +1078,7 @@ function ObjectPropertyEditor({
               {schema.type || 'string'}
             </span>
             {isRequired && (
-              <span className="text-xs px-1 py-0.5 rounded bg-destructive/10 text-destructive font-medium">
+              <span className="text-xs px-1 py-0.5 rounded bg-destructive/10 text-destructive-ink font-medium">
                 Required
               </span>
             )}
@@ -1088,7 +1088,7 @@ function ObjectPropertyEditor({
         <button
           type="button"
           onClick={onRemove}
-          className="p-0.5 hover:bg-destructive/10 hover:text-destructive rounded transition-colors"
+          className="p-0.5 hover:bg-destructive/10 hover:text-destructive-ink rounded transition-colors"
           title="Remove property"
         >
           <Trash2 className="w-3 h-3" />

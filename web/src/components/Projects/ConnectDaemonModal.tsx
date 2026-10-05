@@ -287,7 +287,7 @@ export function ConnectDaemonModal({
           </div>
           {cloudError && (
             <div className="space-y-2">
-              <p className="text-xs text-destructive">{cloudError}</p>
+              <p className="text-xs text-destructive-ink">{cloudError}</p>
               <button
                 type="button"
                 onClick={() => void startCloudDaemon()}

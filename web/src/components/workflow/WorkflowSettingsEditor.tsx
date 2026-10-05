@@ -241,7 +241,7 @@ function OutputsEditor({
                 </label>
                 <button
                   onClick={() => removeOutput(key)}
-                  className="p-1 text-muted-foreground hover:text-destructive transition-colors"
+                  className="p-1 text-muted-foreground hover:text-destructive-ink transition-colors"
                 >
                   <Trash2 className="w-4 h-4" />
                 </button>

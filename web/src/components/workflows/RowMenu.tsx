@@ -53,7 +53,7 @@ export function RowMenu({ label, actions }: { label: string; actions: RowMenuAct
             }}
             className={cn(
               "flex w-full items-center px-3 py-1.5 text-left text-sm transition-colors hover:bg-muted/60 focus:bg-muted/60 focus:outline-none",
-              action.destructive ? "text-destructive" : "text-foreground",
+              action.destructive ? "text-destructive-ink" : "text-foreground",
             )}
           >
             {action.label}

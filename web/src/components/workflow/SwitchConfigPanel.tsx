@@ -262,7 +262,7 @@ export function SwitchConfigPanel({
               {canDelete && !isReadOnly && (
                 <button
                   onClick={() => deleteCase(index)}
-                  className="p-1 text-muted-foreground hover:text-destructive transition-colors"
+                  className="p-1 text-muted-foreground hover:text-destructive-ink transition-colors"
                   title="Delete case"
                 >
                   <Trash2 className="w-3.5 h-3.5" />

@@ -369,7 +369,7 @@ const inputCls =
 function ErrorNote({ message }: { message?: string }) {
   if (!message) return null;
   return (
-    <div className="mb-4 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+    <div className="mb-4 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive-ink">
       {message}
     </div>
   );
@@ -602,7 +602,7 @@ function EnvironmentsList({ cloud, onOpenDetail }: { cloud: boolean; onOpenDetai
       ) : daemonsQ.error ? (
         <Card>
           <CardContent>
-            <p className="text-sm font-medium text-destructive">Failed to load machines</p>
+            <p className="text-sm font-medium text-destructive-ink">Failed to load machines</p>
             <p className="mt-1 text-sm text-muted-foreground">{describeError(daemonsQ.error)}</p>
             <Button variant="outline" size="sm" className="mt-3" onClick={() => daemonsQ.refetch()}>
               <RefreshCw className="h-3.5 w-3.5" /> Retry
@@ -780,7 +780,7 @@ function ManagedMachinesTable({
                   <p
                     className={cn(
                       "mt-1 max-w-xs text-xs",
-                      status === "suspended" ? "text-muted-foreground" : "text-destructive",
+                      status === "suspended" ? "text-muted-foreground" : "text-destructive-ink",
                     )}
                   >
                     {failureReason}
@@ -1392,7 +1392,7 @@ function EnvironmentDetail({
       {loading ? (
         <Card><CardContent className="text-sm text-muted-foreground">Loading machine…</CardContent></Card>
       ) : loadError ? (
-        <Card><CardContent className="text-sm text-destructive">{describeError(loadError)}</CardContent></Card>
+        <Card><CardContent className="text-sm text-destructive-ink">{describeError(loadError)}</CardContent></Card>
       ) : !daemon ? (
         <Card><CardContent className="text-sm text-muted-foreground">Machine not found.</CardContent></Card>
       ) : (

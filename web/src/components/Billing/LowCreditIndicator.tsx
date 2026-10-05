@@ -75,7 +75,7 @@ export function LowCreditIndicator({ className }: { className?: string }) {
           // deliberately not red: red for a week's notice is the crying-wolf
           // that makes the empty state unreadable when it arrives.
           empty
-            ? "text-destructive hover:bg-destructive/10"
+            ? "text-destructive-ink hover:bg-destructive/10"
             : "text-yellow-600 hover:bg-yellow-500/10 dark:text-yellow-500",
           className,
         )}

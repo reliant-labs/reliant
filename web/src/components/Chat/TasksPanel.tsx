@@ -8,13 +8,13 @@ import { SidebarSection, SidebarEmptyState } from "../RightSidebar/shared";
 function statusBadge(status: TaskItem["status"]) {
   switch (status) {
     case "completed":
-      return <CheckCircle2 className="w-4 h-4 text-success" />;
+      return <CheckCircle2 className="w-4 h-4 text-success-ink" />;
     case "in_progress":
       return <Zap className="w-4 h-4 text-primary animate-pulse" />;
     case "blocked":
-      return <AlertOctagon className="w-4 h-4 text-warning" />;
+      return <AlertOctagon className="w-4 h-4 text-warning-ink" />;
     case "failed":
-      return <AlertOctagon className="w-4 h-4 text-destructive" />;
+      return <AlertOctagon className="w-4 h-4 text-destructive-ink" />;
     case "skipped":
       return <CircleDashed className="w-4 h-4 text-muted-foreground" />;
     case "cancelled":

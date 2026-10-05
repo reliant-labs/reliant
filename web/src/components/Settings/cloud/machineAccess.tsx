@@ -114,7 +114,7 @@ function CopyField({ label, value }: { label: string; value: string }) {
       <div className="flex items-center gap-2">
         <input id={id} value={value} readOnly className={cn(inputCls, "font-mono")} />
         <Button variant="outline" size="sm" onClick={copy} aria-label={`Copy ${label}`}>
-          {copied ? <Check className="h-4 w-4 text-success" /> : <Copy className="h-4 w-4" />}
+          {copied ? <Check className="h-4 w-4 text-success-ink" /> : <Copy className="h-4 w-4" />}
         </Button>
       </div>
     </div>
@@ -298,7 +298,7 @@ export function MachineAccess({
       </CardHeader>
       <CardContent className="space-y-4">
         {error && (
-          <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive-ink">
             {error}
           </div>
         )}
@@ -389,7 +389,7 @@ export function MachineAccess({
               {toolsQ.isLoading ? (
                 <p className="text-xs text-muted-foreground">Loading tools…</p>
               ) : toolsQ.error ? (
-                <p className="text-xs text-destructive">Could not load the tool list.</p>
+                <p className="text-xs text-destructive-ink">Could not load the tool list.</p>
               ) : (
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   {tools.map((t) => (
@@ -482,7 +482,7 @@ export function MachineAccess({
         {connectorsQ.isLoading ? (
           <p className="text-sm text-muted-foreground">Loading access…</p>
         ) : connectorsQ.error ? (
-          <p className="text-sm text-destructive">Could not load which apps have access to this machine.</p>
+          <p className="text-sm text-destructive-ink">Could not load which apps have access to this machine.</p>
         ) : orderedGrants.length === 0 ? (
           <p className="text-sm text-muted-foreground">No apps have access to this machine.</p>
         ) : (
@@ -569,7 +569,7 @@ export function MachineAccess({
                     className="flex items-start justify-between gap-3 border-b border-border/40 px-3 py-1.5 text-xs last:border-0"
                   >
                     <div className="min-w-0">
-                      <span className={cn("font-mono", a.denied && "text-destructive")}>{a.toolName}</span>
+                      <span className={cn("font-mono", a.denied && "text-destructive-ink")}>{a.toolName}</span>
                       {grants.length > 1 && (
                         <span className="ml-2 text-muted-foreground">{grantNames.get(a.grantId)}</span>
                       )}
@@ -579,7 +579,7 @@ export function MachineAccess({
                         </span>
                       )}
                       {a.denied && a.errorMessage && (
-                        <p className="mt-0.5 text-destructive">Blocked: {a.errorMessage}</p>
+                        <p className="mt-0.5 text-destructive-ink">Blocked: {a.errorMessage}</p>
                       )}
                       {a.status === "started" && (
                         <p className="mt-0.5 text-warning-ink">

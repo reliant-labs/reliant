@@ -129,7 +129,7 @@ function ChecklistItemRow({
       {/* Checkbox icon */}
       <div className="mt-0.5 shrink-0">
         {isComplete ? (
-          <CheckCircle2 className="size-5 text-success" />
+          <CheckCircle2 className="size-5 text-success-ink" />
         ) : (
           <Circle className="size-5 text-muted-foreground/50" />
         )}

@@ -154,7 +154,7 @@ export function CreditBand({
       </div>
 
       {warning && (
-        <div className="mt-4 rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning">
+        <div className="mt-4 rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning-ink">
           <p className="font-semibold">{warning.title}</p>
           <p>{warning.message}</p>
         </div>

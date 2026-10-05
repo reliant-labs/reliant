@@ -71,9 +71,9 @@ import {
  * greyscale screenshot and which Badge has no variant for.
  */
 const SEVERITY_STYLES: Record<AuditSeverity, string> = {
-  clean: "border-solid border-success/40 bg-success/15 text-success",
-  notice: "border-solid border-warning/40 bg-warning/15 text-warning",
-  problem: "border-solid border-destructive/40 bg-destructive/15 text-destructive",
+  clean: "border-solid border-success/40 bg-success/15 text-success-ink",
+  notice: "border-solid border-warning/40 bg-warning/15 text-warning-ink",
+  problem: "border-solid border-destructive/40 bg-destructive/15 text-destructive-ink",
   unreadable:
     "border-dashed border-muted-foreground/60 bg-transparent text-muted-foreground ring-1 ring-inset ring-muted-foreground/30",
 };
@@ -132,7 +132,7 @@ export function AuditStrip({ outcome, isLoading, error, projectName }: AuditStri
     return (
       <div
         data-testid="forge-audit-error"
-        className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+        className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive-ink"
       >
         Could not reach your daemon to audit this project: {error.message}
       </div>
