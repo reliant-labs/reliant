@@ -38,6 +38,7 @@ import { timestampDate, type Timestamp } from "@bufbuild/protobuf/wkt";
 import {
   DeployEnvironmentKind,
   DeployObservedState,
+  DeployRunState,
   DeployPromotionKind,
   DeployTier,
   DeployVerdict,
@@ -258,7 +259,15 @@ function toWorkload(msg: DeploymentStatus): ForgeHostedWorkload {
     desired_digest: msg.desiredDigest,
     drifted: msg.drifted === true,
     last_error: observed?.lastError ?? "",
+    deployment_id: deployment?.id ?? "",
+    declared_run_state: runStateOf(deployment?.runState),
   };
+}
+
+function runStateOf(state: DeployRunState | undefined): "running" | "suspended" | "unspecified" {
+  if (state === DeployRunState.RUNNING) return "running";
+  if (state === DeployRunState.SUSPENDED) return "suspended";
+  return "unspecified";
 }
 
 export function toCloudEnvStatus(msg: GetDeploymentStatusResponse): CloudEnvStatus {
@@ -311,4 +320,37 @@ export async function listEnvironmentPromotions(
 ): Promise<CloudPromotion[]> {
   const res = await client().listPromotions({ environmentId, limit });
   return (res.promotions ?? []).map(toCloudPromotion);
+}
+
+// ── Run state and teardown ──────────────────────────────────────────────────
+
+export type RunStateRequest = "running" | "suspended";
+
+function runStateEnum(state: RunStateRequest): DeployRunState {
+  return state === "running" ? DeployRunState.RUNNING : DeployRunState.SUSPENDED;
+}
+
+/**
+ * Stop or start EVERY deployment of an environment. Resume is refused by the
+ * server (FailedPrecondition, billing reason in the message) when any
+ * deployment is not entitled — nothing is written then. The caller shows
+ * `cloudErrorDetail(err)` verbatim.
+ */
+export async function setEnvironmentRunState(environmentId: string, state: RunStateRequest): Promise<void> {
+  await client().setEnvironmentRunState({ environmentId, runState: runStateEnum(state) });
+}
+
+/** Stop or start ONE deployment. */
+export async function scaleDeployment(deploymentId: string, state: RunStateRequest): Promise<void> {
+  await client().scale({ deploymentId, runState: runStateEnum(state) });
+}
+
+/** Tear the environment down. `force` removes its deployments with it. */
+export async function deleteEnvironment(environmentId: string): Promise<void> {
+  await client().deleteEnvironment({ environmentId, force: true });
+}
+
+/** True when the control plane refused for a reason the user can act on (billing, permission). */
+export function isRefusal(err: unknown): boolean {
+  return err instanceof ConnectError && (err.code === Code.FailedPrecondition || err.code === Code.PermissionDenied);
 }

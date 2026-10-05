@@ -422,9 +422,10 @@ message PlanLimits {
   reserved 27, 28;
   reserved "max_vclusters", "vcluster_floor_rate_cents_per_hour";
 
-  // Maximum concurrently deployed workloads (Workload, StaticSite,
-  // ManagedDatabase) across the tenant.
-  int32 max_deployments = 29;
+  // Field 29 was max_deployments, removed: limits are compute-based (CPU,
+  // memory, storage), never a count of deployments.
+  reserved 29;
+  reserved "max_deployments";
 
   // The memory:CPU ratio band a deployment's requests must fall inside,
   // in GiB per vCPU. A request outside the band is rounded UP on the

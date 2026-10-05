@@ -21,7 +21,7 @@
  *   version  forge's drift call, as its own chip
  */
 
-import { AlertTriangle, CheckCircle2, CircleDashed, ExternalLink, Loader2 } from "lucide-react";
+import { AlertTriangle, CheckCircle2, CircleDashed, ExternalLink, Loader2, Play, Square } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 import { Tooltip } from "@/components/ui/Tooltip";
@@ -38,6 +38,10 @@ import {
   type HostedVerdict,
 } from "@/services/forge/topology";
 
+import { useScaleDeployment } from "@/hooks/forge-queries";
+import { cloudErrorDetail } from "@/services/forge/cloudEnvs";
+
+import { runStateOf } from "./runStateVocabulary";
 import { CERTAINTY_STYLES } from "./stateVocabulary";
 
 /**
@@ -49,10 +53,13 @@ export function HostedWorkloadList({
   envName,
   workloads,
   inert,
+  runControls,
 }: {
   envName: string;
   workloads: ForgeHostedWorkload[];
   inert?: boolean;
+  /** Show per-workload Stop / Start (control-plane-placed environments only). */
+  runControls?: boolean;
 }) {
   return (
     <ul className="flex min-w-0 flex-col gap-1.5" aria-label={`Hosted workloads in ${envName}`}>
@@ -73,12 +80,14 @@ export function HostedWorkloadList({
                 {name}
               </span>
               <VerdictChip verdict={verdict} reason={workload.verdict_reason} />
+              {runControls && <RunStateChip workload={workload} />}
               {workload.drifted === true && <DriftChip workload={workload} />}
               {link ? (
                 <WorkloadUrl envName={envName} name={name} link={link} inert={inert} />
               ) : (
                 <span className="text-2xs text-muted-foreground">no public URL</span>
               )}
+              {runControls && workload.deployment_id && <RunToggle workload={workload} envName={envName} />}
             </span>
             {lastError && (
               <span
@@ -219,5 +228,60 @@ function DriftChip({ workload }: { workload: ForgeHostedWorkload }) {
         Wrong version
       </span>
     </Tooltip>
+  );
+}
+
+/** The owner's stop, a billing suspension, or a start/stop in flight — said in words, not as a health verdict. */
+function RunStateChip({ workload }: { workload: ForgeHostedWorkload }) {
+  const view = runStateOf(workload);
+  if (view.kind === "unknown" || view.kind === "running") return null;
+  const style = CERTAINTY_STYLES[view.kind === "billing" ? "known-bad" : "unknown"];
+  return (
+    <Tooltip content={view.detail}>
+      <span
+        className={cn(
+          "inline-flex shrink-0 items-center gap-1 rounded px-1.5 text-2xs font-medium leading-5 text-foreground",
+          style.container
+        )}
+        data-run-state={view.kind}
+      >
+        {view.label}
+      </span>
+    </Tooltip>
+  );
+}
+
+function RunToggle({ workload, envName }: { workload: ForgeHostedWorkload; envName: string }) {
+  const scale = useScaleDeployment();
+  const stopped = workload.declared_run_state === "suspended";
+  const name = workload.name ?? "workload";
+  return (
+    <>
+      <button
+        type="button"
+        disabled={scale.isPending}
+        onClick={() =>
+          scale.mutate({ deploymentId: workload.deployment_id ?? "", state: stopped ? "running" : "suspended" })
+        }
+        className={cn(
+          "inline-flex shrink-0 items-center gap-1 rounded border border-border px-1.5 text-2xs leading-5 text-foreground",
+          "hover:bg-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+        )}
+        data-testid={`hosted-run-toggle-${name}`}
+        aria-label={`${stopped ? "Start" : "Stop"} ${name}`}
+      >
+        {stopped ? <Play className="h-3 w-3" aria-hidden="true" /> : <Square className="h-3 w-3" aria-hidden="true" />}
+        {stopped ? "Start" : "Stop"}
+      </button>
+      {scale.isError && (
+        <span
+          role="alert"
+          className="basis-full pl-[6.5rem] text-2xs text-foreground"
+          data-testid={`hosted-run-error-${envName}-${name}`}
+        >
+          {cloudErrorDetail(scale.error)}
+        </span>
+      )}
+    </>
   );
 }

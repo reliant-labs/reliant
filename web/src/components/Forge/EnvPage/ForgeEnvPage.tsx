@@ -58,6 +58,7 @@ import { useProjectStore, type Project } from "@/store/projectStore";
 import { DeployDialog } from "../Deploy/DeployDialog";
 import { PromoteDialog } from "../Promote/PromoteDialog";
 import { CloudNotice } from "../SourceNotices";
+import { EnvLifecycleControls } from "./EnvLifecycleControls";
 import { EnvPageHeader } from "./EnvPageHeader";
 import {
   ChangesTab,
@@ -215,6 +216,16 @@ export function ForgeEnvPage() {
   return (
     <div className="space-y-6" data-testid="forge-env-page" data-tab={tab} data-lifecycle={lifecycle}>
       <EnvPageHeader
+        lifecycleControls={
+          liveEnv && placedId ? (
+            <EnvLifecycleControls
+              environmentId={liveEnv.id}
+              envName={envName}
+              status={cloudStatus.data}
+              onDeleted={() => void navigate({ to: "/forge" })}
+            />
+          ) : null
+        }
         envName={envName}
         lifecycle={lifecycle}
         live={liveEnv}
