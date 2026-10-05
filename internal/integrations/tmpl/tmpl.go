@@ -43,6 +43,10 @@ func celEnv() (*cel.Env, error) {
 			cel.Variable("status", cel.DynType),
 			cel.Variable("headers", cel.DynType),
 			cel.Variable("raw", cel.StringType),
+			// Optional syntax: `{?"body": params.?body}` leaves a key out
+			// when the param is absent (a PATCH must not send null), and
+			// `headers[?'retry-after']` reads a header that may be missing.
+			cel.OptionalTypes(),
 		)
 	})
 	return env, envErr

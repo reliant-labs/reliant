@@ -324,6 +324,11 @@ func validateRequest(req *reliantv1.HttpRequestSpec) error {
 		if err := tmpl.Validate(rule.GetMessage()); err != nil {
 			return fmt.Errorf("request.errors[%d].message: %w", i, err)
 		}
+		if when := rule.GetWhen(); when != "" {
+			if err := tmpl.ValidateExpr(when); err != nil {
+				return fmt.Errorf("request.errors[%d].when: %w", i, err)
+			}
+		}
 	}
 	if p := req.GetPagination(); p != nil {
 		if err := validatePagination(p); err != nil {
