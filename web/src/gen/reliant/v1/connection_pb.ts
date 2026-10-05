@@ -13,7 +13,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file reliant/v1/connection.proto.
  */
 export const file_reliant_v1_connection: GenFile = /*@__PURE__*/
-  fileDesc("ChtyZWxpYW50L3YxL2Nvbm5lY3Rpb24ucHJvdG8SCnJlbGlhbnQudjEi5wIKCkNvbm5lY3Rpb24SCgoCaWQYASABKAkSFgoOaW50ZWdyYXRpb25faWQYAiABKAkSMQoJYXV0aF9raW5kGAMgASgOMh4ucmVsaWFudC52MS5Db25uZWN0aW9uQXV0aEtpbmQSDAoEbmFtZRgEIAEoCRIVCg1hY2NvdW50X2xhYmVsGAUgASgJEhsKE2V4dGVybmFsX2FjY291bnRfaWQYBiABKAkSDgoGc2NvcGVzGAcgAygJEiwKBnN0YXR1cxgIIAEoDjIcLnJlbGlhbnQudjEuQ29ubmVjdGlvblN0YXR1cxIVCg1zdGF0dXNfcmVhc29uGAkgASgJEhIKCmlzX2RlZmF1bHQYCiABKAgSGQoRYWNjZXNzX2V4cGlyZXNfYXQYCyABKAkSFAoMbGFzdF91c2VkX2F0GAwgASgJEhIKCmNyZWF0ZWRfYXQYDSABKAkSEgoKdXBkYXRlZF9hdBgOIAEoCSKRAQoLSW50ZWdyYXRpb24SCgoCaWQYASABKAkSFAoMZGlzcGxheV9uYW1lGAIgASgJEjEKCWF1dGhfa2luZBgDIAEoDjIeLnJlbGlhbnQudjEuQ29ubmVjdGlvbkF1dGhLaW5kEhEKCWF2YWlsYWJsZRgEIAEoCBIaChJ1bmF2YWlsYWJsZV9yZWFzb24YBSABKAkiGQoXTGlzdEludGVncmF0aW9uc1JlcXVlc3QiSQoYTGlzdEludGVncmF0aW9uc1Jlc3BvbnNlEi0KDGludGVncmF0aW9ucxgBIAMoCzIXLnJlbGlhbnQudjEuSW50ZWdyYXRpb24iMAoWTGlzdENvbm5lY3Rpb25zUmVxdWVzdBIWCg5pbnRlZ3JhdGlvbl9pZBgBIAEoCSJGChdMaXN0Q29ubmVjdGlvbnNSZXNwb25zZRIrCgtjb25uZWN0aW9ucxgBIAMoCzIWLnJlbGlhbnQudjEuQ29ubmVjdGlvbiIiChRHZXRDb25uZWN0aW9uUmVxdWVzdBIKCgJpZBgBIAEoCSJDChVHZXRDb25uZWN0aW9uUmVzcG9uc2USKgoKY29ubmVjdGlvbhgBIAEoCzIWLnJlbGlhbnQudjEuQ29ubmVjdGlvbiLwAQodQ3JlYXRlQXBpS2V5Q29ubmVjdGlvblJlcXVlc3QSFgoOaW50ZWdyYXRpb25faWQYASABKAkSDAoEbmFtZRgCIAEoCRIuCgRraW5kGAMgASgOMiAucmVsaWFudC52MS5BcGlLZXlDb25uZWN0aW9uS2luZBJKCgZmaWVsZHMYBCADKAsyNS5yZWxpYW50LnYxLkNyZWF0ZUFwaUtleUNvbm5lY3Rpb25SZXF1ZXN0LkZpZWxkc0VudHJ5QgOAAQEaLQoLRmllbGRzRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASJMCh5DcmVhdGVBcGlLZXlDb25uZWN0aW9uUmVzcG9uc2USKgoKY29ubmVjdGlvbhgBIAEoCzIWLnJlbGlhbnQudjEuQ29ubmVjdGlvbiJnChFTdGFydE9BdXRoUmVxdWVzdBIWCg5pbnRlZ3JhdGlvbl9pZBgBIAEoCRIMCgRuYW1lGAIgASgJEhQKDHJlY29ubmVjdF9pZBgDIAEoCRIWCg5yZWRpcmVjdF9hZnRlchgEIAEoCSIrChJTdGFydE9BdXRoUmVzcG9uc2USFQoNYXV0aG9yaXplX3VybBgBIAEoCSI9ChRDb21wbGV0ZU9BdXRoUmVxdWVzdBISCgVzdGF0ZRgBIAEoCUIDgAEBEhEKBGNvZGUYAiABKAlCA4ABASJbChVDb21wbGV0ZU9BdXRoUmVzcG9uc2USKgoKY29ubmVjdGlvbhgBIAEoCzIWLnJlbGlhbnQudjEuQ29ubmVjdGlvbhIWCg5yZWRpcmVjdF9hZnRlchgCIAEoCSIjChVUZXN0Q29ubmVjdGlvblJlcXVlc3QSCgoCaWQYASABKAkiYAoWVGVzdENvbm5lY3Rpb25SZXNwb25zZRIKCgJvaxgBIAEoCBIOCgZwcm9iZWQYAiABKAgSFQoNYWNjb3VudF9sYWJlbBgDIAEoCRITCgtlcnJvcl9jbGFzcxgEIAEoCSIzChdSZW5hbWVDb25uZWN0aW9uUmVxdWVzdBIKCgJpZBgBIAEoCRIMCgRuYW1lGAIgASgJIkYKGFJlbmFtZUNvbm5lY3Rpb25SZXNwb25zZRIqCgpjb25uZWN0aW9uGAEgASgLMhYucmVsaWFudC52MS5Db25uZWN0aW9uIikKG1NldERlZmF1bHRDb25uZWN0aW9uUmVxdWVzdBIKCgJpZBgBIAEoCSJKChxTZXREZWZhdWx0Q29ubmVjdGlvblJlc3BvbnNlEioKCmNvbm5lY3Rpb24YASABKAsyFi5yZWxpYW50LnYxLkNvbm5lY3Rpb24iJQoXRGVsZXRlQ29ubmVjdGlvblJlcXVlc3QSCgoCaWQYASABKAkiGgoYRGVsZXRlQ29ubmVjdGlvblJlc3BvbnNlIpQBCg9Db25uZWN0aW9uRXZlbnQSCgoCaWQYASABKAMSFQoNY29ubmVjdGlvbl9pZBgCIAEoCRIMCgRraW5kGAMgASgJEg4KBnJ1bl9pZBgEIAEoCRIPCgdub2RlX2lkGAUgASgJEhQKDHRvb2xfY2FsbF9pZBgGIAEoCRINCgVhY3RvchgHIAEoCRIKCgJhdBgIIAEoCSJLChtMaXN0Q29ubmVjdGlvbkV2ZW50c1JlcXVlc3QSCgoCaWQYASABKAkSDQoFbGltaXQYAiABKAUSEQoJYmVmb3JlX2lkGAMgASgDIksKHExpc3RDb25uZWN0aW9uRXZlbnRzUmVzcG9uc2USKwoGZXZlbnRzGAEgAygLMhsucmVsaWFudC52MS5Db25uZWN0aW9uRXZlbnQq5gEKEkNvbm5lY3Rpb25BdXRoS2luZBIkCiBDT05ORUNUSU9OX0FVVEhfS0lORF9VTlNQRUNJRklFRBAAEh8KG0NPTk5FQ1RJT05fQVVUSF9LSU5EX09BVVRIMhABEigKJENPTk5FQ1RJT05fQVVUSF9LSU5EX0dJVEhVQl9BUFBfVVNFUhACEiAKHENPTk5FQ1RJT05fQVVUSF9LSU5EX0FQSV9LRVkQAxIeChpDT05ORUNUSU9OX0FVVEhfS0lORF9CQVNJQxAEEh0KGUNPTk5FQ1RJT05fQVVUSF9LSU5EX05PTkUQBSqWAQoQQ29ubmVjdGlvblN0YXR1cxIhCh1DT05ORUNUSU9OX1NUQVRVU19VTlNQRUNJRklFRBAAEhwKGENPTk5FQ1RJT05fU1RBVFVTX0FDVElWRRABEiIKHkNPTk5FQ1RJT05fU1RBVFVTX05FRURTX1JFQVVUSBACEh0KGUNPTk5FQ1RJT05fU1RBVFVTX1JFVk9LRUQQAyqHAQoUQXBpS2V5Q29ubmVjdGlvbktpbmQSJwojQVBJX0tFWV9DT05ORUNUSU9OX0tJTkRfVU5TUEVDSUZJRUQQABIjCh9BUElfS0VZX0NPTk5FQ1RJT05fS0lORF9BUElfS0VZEAESIQodQVBJX0tFWV9DT05ORUNUSU9OX0tJTkRfQkFTSUMQAjK7CAoRQ29ubmVjdGlvblNlcnZpY2USXwoQTGlzdEludGVncmF0aW9ucxIjLnJlbGlhbnQudjEuTGlzdEludGVncmF0aW9uc1JlcXVlc3QaJC5yZWxpYW50LnYxLkxpc3RJbnRlZ3JhdGlvbnNSZXNwb25zZSIAElwKD0xpc3RDb25uZWN0aW9ucxIiLnJlbGlhbnQudjEuTGlzdENvbm5lY3Rpb25zUmVxdWVzdBojLnJlbGlhbnQudjEuTGlzdENvbm5lY3Rpb25zUmVzcG9uc2UiABJWCg1HZXRDb25uZWN0aW9uEiAucmVsaWFudC52MS5HZXRDb25uZWN0aW9uUmVxdWVzdBohLnJlbGlhbnQudjEuR2V0Q29ubmVjdGlvblJlc3BvbnNlIgAScQoWQ3JlYXRlQXBpS2V5Q29ubmVjdGlvbhIpLnJlbGlhbnQudjEuQ3JlYXRlQXBpS2V5Q29ubmVjdGlvblJlcXVlc3QaKi5yZWxpYW50LnYxLkNyZWF0ZUFwaUtleUNvbm5lY3Rpb25SZXNwb25zZSIAEk0KClN0YXJ0T0F1dGgSHS5yZWxpYW50LnYxLlN0YXJ0T0F1dGhSZXF1ZXN0Gh4ucmVsaWFudC52MS5TdGFydE9BdXRoUmVzcG9uc2UiABJWCg1Db21wbGV0ZU9BdXRoEiAucmVsaWFudC52MS5Db21wbGV0ZU9BdXRoUmVxdWVzdBohLnJlbGlhbnQudjEuQ29tcGxldGVPQXV0aFJlc3BvbnNlIgASWQoOVGVzdENvbm5lY3Rpb24SIS5yZWxpYW50LnYxLlRlc3RDb25uZWN0aW9uUmVxdWVzdBoiLnJlbGlhbnQudjEuVGVzdENvbm5lY3Rpb25SZXNwb25zZSIAEl8KEFJlbmFtZUNvbm5lY3Rpb24SIy5yZWxpYW50LnYxLlJlbmFtZUNvbm5lY3Rpb25SZXF1ZXN0GiQucmVsaWFudC52MS5SZW5hbWVDb25uZWN0aW9uUmVzcG9uc2UiABJrChRTZXREZWZhdWx0Q29ubmVjdGlvbhInLnJlbGlhbnQudjEuU2V0RGVmYXVsdENvbm5lY3Rpb25SZXF1ZXN0GigucmVsaWFudC52MS5TZXREZWZhdWx0Q29ubmVjdGlvblJlc3BvbnNlIgASXwoQRGVsZXRlQ29ubmVjdGlvbhIjLnJlbGlhbnQudjEuRGVsZXRlQ29ubmVjdGlvblJlcXVlc3QaJC5yZWxpYW50LnYxLkRlbGV0ZUNvbm5lY3Rpb25SZXNwb25zZSIAEmsKFExpc3RDb25uZWN0aW9uRXZlbnRzEicucmVsaWFudC52MS5MaXN0Q29ubmVjdGlvbkV2ZW50c1JlcXVlc3QaKC5yZWxpYW50LnYxLkxpc3RDb25uZWN0aW9uRXZlbnRzUmVzcG9uc2UiAEI6WjhnaXRodWIuY29tL3JlbGlhbnQtbGFicy9yZWxpYW50L2dlbi9yZWxpYW50L3YxO3JlbGlhbnR2MWIGcHJvdG8z");
+  fileDesc("ChtyZWxpYW50L3YxL2Nvbm5lY3Rpb24ucHJvdG8SCnJlbGlhbnQudjEiygMKCkNvbm5lY3Rpb24SCgoCaWQYASABKAkSFgoOaW50ZWdyYXRpb25faWQYAiABKAkSMQoJYXV0aF9raW5kGAMgASgOMh4ucmVsaWFudC52MS5Db25uZWN0aW9uQXV0aEtpbmQSDAoEbmFtZRgEIAEoCRIVCg1hY2NvdW50X2xhYmVsGAUgASgJEhsKE2V4dGVybmFsX2FjY291bnRfaWQYBiABKAkSDgoGc2NvcGVzGAcgAygJEiwKBnN0YXR1cxgIIAEoDjIcLnJlbGlhbnQudjEuQ29ubmVjdGlvblN0YXR1cxIVCg1zdGF0dXNfcmVhc29uGAkgASgJEhIKCmlzX2RlZmF1bHQYCiABKAgSGQoRYWNjZXNzX2V4cGlyZXNfYXQYCyABKAkSFAoMbGFzdF91c2VkX2F0GAwgASgJEhIKCmNyZWF0ZWRfYXQYDSABKAkSEgoKdXBkYXRlZF9hdBgOIAEoCRIyCgZwYXJhbXMYDyADKAsyIi5yZWxpYW50LnYxLkNvbm5lY3Rpb24uUGFyYW1zRW50cnkaLQoLUGFyYW1zRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASLiAQoLSW50ZWdyYXRpb24SCgoCaWQYASABKAkSFAoMZGlzcGxheV9uYW1lGAIgASgJEjIKB21ldGhvZHMYBiADKAsyIS5yZWxpYW50LnYxLkludGVncmF0aW9uQXV0aE1ldGhvZBJBChFjb25uZWN0aW9uX3BhcmFtcxgHIAMoCzImLnJlbGlhbnQudjEuSW50ZWdyYXRpb25Db25uZWN0aW9uUGFyYW1KBAgDEARKBAgEEAVKBAgFEAZSCWF1dGhfa2luZFIJYXZhaWxhYmxlUhJ1bmF2YWlsYWJsZV9yZWFzb24i8gEKFUludGVncmF0aW9uQXV0aE1ldGhvZBIsCgRraW5kGAEgASgOMh4ucmVsaWFudC52MS5Db25uZWN0aW9uQXV0aEtpbmQSEQoJYXZhaWxhYmxlGAIgASgIEhoKEnVuYXZhaWxhYmxlX3JlYXNvbhgDIAEoCRJICgxmaWVsZF9sYWJlbHMYBCADKAsyMi5yZWxpYW50LnYxLkludGVncmF0aW9uQXV0aE1ldGhvZC5GaWVsZExhYmVsc0VudHJ5GjIKEEZpZWxkTGFiZWxzRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASKPAQoaSW50ZWdyYXRpb25Db25uZWN0aW9uUGFyYW0SDAoEbmFtZRgBIAEoCRIUCgxkaXNwbGF5X25hbWUYAiABKAkSEwoLZGVzY3JpcHRpb24YAyABKAkSDwoHcGF0dGVybhgEIAEoCRIVCg1kZWZhdWx0X3ZhbHVlGAUgASgJEhAKCHJlcXVpcmVkGAYgASgIIhkKF0xpc3RJbnRlZ3JhdGlvbnNSZXF1ZXN0IkkKGExpc3RJbnRlZ3JhdGlvbnNSZXNwb25zZRItCgxpbnRlZ3JhdGlvbnMYASADKAsyFy5yZWxpYW50LnYxLkludGVncmF0aW9uIjAKFkxpc3RDb25uZWN0aW9uc1JlcXVlc3QSFgoOaW50ZWdyYXRpb25faWQYASABKAkiRgoXTGlzdENvbm5lY3Rpb25zUmVzcG9uc2USKwoLY29ubmVjdGlvbnMYASADKAsyFi5yZWxpYW50LnYxLkNvbm5lY3Rpb24iIgoUR2V0Q29ubmVjdGlvblJlcXVlc3QSCgoCaWQYASABKAkiQwoVR2V0Q29ubmVjdGlvblJlc3BvbnNlEioKCmNvbm5lY3Rpb24YASABKAsyFi5yZWxpYW50LnYxLkNvbm5lY3Rpb24i5gIKHUNyZWF0ZUFwaUtleUNvbm5lY3Rpb25SZXF1ZXN0EhYKDmludGVncmF0aW9uX2lkGAEgASgJEgwKBG5hbWUYAiABKAkSLgoEa2luZBgDIAEoDjIgLnJlbGlhbnQudjEuQXBpS2V5Q29ubmVjdGlvbktpbmQSSgoGZmllbGRzGAQgAygLMjUucmVsaWFudC52MS5DcmVhdGVBcGlLZXlDb25uZWN0aW9uUmVxdWVzdC5GaWVsZHNFbnRyeUIDgAEBEkUKBnBhcmFtcxgFIAMoCzI1LnJlbGlhbnQudjEuQ3JlYXRlQXBpS2V5Q29ubmVjdGlvblJlcXVlc3QuUGFyYW1zRW50cnkaLQoLRmllbGRzRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ARotCgtQYXJhbXNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIkwKHkNyZWF0ZUFwaUtleUNvbm5lY3Rpb25SZXNwb25zZRIqCgpjb25uZWN0aW9uGAEgASgLMhYucmVsaWFudC52MS5Db25uZWN0aW9uItEBChFTdGFydE9BdXRoUmVxdWVzdBIWCg5pbnRlZ3JhdGlvbl9pZBgBIAEoCRIMCgRuYW1lGAIgASgJEhQKDHJlY29ubmVjdF9pZBgDIAEoCRIWCg5yZWRpcmVjdF9hZnRlchgEIAEoCRI5CgZwYXJhbXMYBSADKAsyKS5yZWxpYW50LnYxLlN0YXJ0T0F1dGhSZXF1ZXN0LlBhcmFtc0VudHJ5Gi0KC1BhcmFtc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEiKwoSU3RhcnRPQXV0aFJlc3BvbnNlEhUKDWF1dGhvcml6ZV91cmwYASABKAkiPQoUQ29tcGxldGVPQXV0aFJlcXVlc3QSEgoFc3RhdGUYASABKAlCA4ABARIRCgRjb2RlGAIgASgJQgOAAQEiWwoVQ29tcGxldGVPQXV0aFJlc3BvbnNlEioKCmNvbm5lY3Rpb24YASABKAsyFi5yZWxpYW50LnYxLkNvbm5lY3Rpb24SFgoOcmVkaXJlY3RfYWZ0ZXIYAiABKAkiIwoVVGVzdENvbm5lY3Rpb25SZXF1ZXN0EgoKAmlkGAEgASgJImAKFlRlc3RDb25uZWN0aW9uUmVzcG9uc2USCgoCb2sYASABKAgSDgoGcHJvYmVkGAIgASgIEhUKDWFjY291bnRfbGFiZWwYAyABKAkSEwoLZXJyb3JfY2xhc3MYBCABKAkiMwoXUmVuYW1lQ29ubmVjdGlvblJlcXVlc3QSCgoCaWQYASABKAkSDAoEbmFtZRgCIAEoCSJGChhSZW5hbWVDb25uZWN0aW9uUmVzcG9uc2USKgoKY29ubmVjdGlvbhgBIAEoCzIWLnJlbGlhbnQudjEuQ29ubmVjdGlvbiIpChtTZXREZWZhdWx0Q29ubmVjdGlvblJlcXVlc3QSCgoCaWQYASABKAkiSgocU2V0RGVmYXVsdENvbm5lY3Rpb25SZXNwb25zZRIqCgpjb25uZWN0aW9uGAEgASgLMhYucmVsaWFudC52MS5Db25uZWN0aW9uIiUKF0RlbGV0ZUNvbm5lY3Rpb25SZXF1ZXN0EgoKAmlkGAEgASgJIhoKGERlbGV0ZUNvbm5lY3Rpb25SZXNwb25zZSKUAQoPQ29ubmVjdGlvbkV2ZW50EgoKAmlkGAEgASgDEhUKDWNvbm5lY3Rpb25faWQYAiABKAkSDAoEa2luZBgDIAEoCRIOCgZydW5faWQYBCABKAkSDwoHbm9kZV9pZBgFIAEoCRIUCgx0b29sX2NhbGxfaWQYBiABKAkSDQoFYWN0b3IYByABKAkSCgoCYXQYCCABKAkiSwobTGlzdENvbm5lY3Rpb25FdmVudHNSZXF1ZXN0EgoKAmlkGAEgASgJEg0KBWxpbWl0GAIgASgFEhEKCWJlZm9yZV9pZBgDIAEoAyJLChxMaXN0Q29ubmVjdGlvbkV2ZW50c1Jlc3BvbnNlEisKBmV2ZW50cxgBIAMoCzIbLnJlbGlhbnQudjEuQ29ubmVjdGlvbkV2ZW50KowCChJDb25uZWN0aW9uQXV0aEtpbmQSJAogQ09OTkVDVElPTl9BVVRIX0tJTkRfVU5TUEVDSUZJRUQQABIfChtDT05ORUNUSU9OX0FVVEhfS0lORF9PQVVUSDIQARIgChxDT05ORUNUSU9OX0FVVEhfS0lORF9BUElfS0VZEAMSHgoaQ09OTkVDVElPTl9BVVRIX0tJTkRfQkFTSUMQBBIdChlDT05ORUNUSU9OX0FVVEhfS0lORF9OT05FEAUSIgoeQ09OTkVDVElPTl9BVVRIX0tJTkRfREVMRUdBVEVEEAYiBAgCEAIqJENPTk5FQ1RJT05fQVVUSF9LSU5EX0dJVEhVQl9BUFBfVVNFUiqWAQoQQ29ubmVjdGlvblN0YXR1cxIhCh1DT05ORUNUSU9OX1NUQVRVU19VTlNQRUNJRklFRBAAEhwKGENPTk5FQ1RJT05fU1RBVFVTX0FDVElWRRABEiIKHkNPTk5FQ1RJT05fU1RBVFVTX05FRURTX1JFQVVUSBACEh0KGUNPTk5FQ1RJT05fU1RBVFVTX1JFVk9LRUQQAyqHAQoUQXBpS2V5Q29ubmVjdGlvbktpbmQSJwojQVBJX0tFWV9DT05ORUNUSU9OX0tJTkRfVU5TUEVDSUZJRUQQABIjCh9BUElfS0VZX0NPTk5FQ1RJT05fS0lORF9BUElfS0VZEAESIQodQVBJX0tFWV9DT05ORUNUSU9OX0tJTkRfQkFTSUMQAjK7CAoRQ29ubmVjdGlvblNlcnZpY2USXwoQTGlzdEludGVncmF0aW9ucxIjLnJlbGlhbnQudjEuTGlzdEludGVncmF0aW9uc1JlcXVlc3QaJC5yZWxpYW50LnYxLkxpc3RJbnRlZ3JhdGlvbnNSZXNwb25zZSIAElwKD0xpc3RDb25uZWN0aW9ucxIiLnJlbGlhbnQudjEuTGlzdENvbm5lY3Rpb25zUmVxdWVzdBojLnJlbGlhbnQudjEuTGlzdENvbm5lY3Rpb25zUmVzcG9uc2UiABJWCg1HZXRDb25uZWN0aW9uEiAucmVsaWFudC52MS5HZXRDb25uZWN0aW9uUmVxdWVzdBohLnJlbGlhbnQudjEuR2V0Q29ubmVjdGlvblJlc3BvbnNlIgAScQoWQ3JlYXRlQXBpS2V5Q29ubmVjdGlvbhIpLnJlbGlhbnQudjEuQ3JlYXRlQXBpS2V5Q29ubmVjdGlvblJlcXVlc3QaKi5yZWxpYW50LnYxLkNyZWF0ZUFwaUtleUNvbm5lY3Rpb25SZXNwb25zZSIAEk0KClN0YXJ0T0F1dGgSHS5yZWxpYW50LnYxLlN0YXJ0T0F1dGhSZXF1ZXN0Gh4ucmVsaWFudC52MS5TdGFydE9BdXRoUmVzcG9uc2UiABJWCg1Db21wbGV0ZU9BdXRoEiAucmVsaWFudC52MS5Db21wbGV0ZU9BdXRoUmVxdWVzdBohLnJlbGlhbnQudjEuQ29tcGxldGVPQXV0aFJlc3BvbnNlIgASWQoOVGVzdENvbm5lY3Rpb24SIS5yZWxpYW50LnYxLlRlc3RDb25uZWN0aW9uUmVxdWVzdBoiLnJlbGlhbnQudjEuVGVzdENvbm5lY3Rpb25SZXNwb25zZSIAEl8KEFJlbmFtZUNvbm5lY3Rpb24SIy5yZWxpYW50LnYxLlJlbmFtZUNvbm5lY3Rpb25SZXF1ZXN0GiQucmVsaWFudC52MS5SZW5hbWVDb25uZWN0aW9uUmVzcG9uc2UiABJrChRTZXREZWZhdWx0Q29ubmVjdGlvbhInLnJlbGlhbnQudjEuU2V0RGVmYXVsdENvbm5lY3Rpb25SZXF1ZXN0GigucmVsaWFudC52MS5TZXREZWZhdWx0Q29ubmVjdGlvblJlc3BvbnNlIgASXwoQRGVsZXRlQ29ubmVjdGlvbhIjLnJlbGlhbnQudjEuRGVsZXRlQ29ubmVjdGlvblJlcXVlc3QaJC5yZWxpYW50LnYxLkRlbGV0ZUNvbm5lY3Rpb25SZXNwb25zZSIAEmsKFExpc3RDb25uZWN0aW9uRXZlbnRzEicucmVsaWFudC52MS5MaXN0Q29ubmVjdGlvbkV2ZW50c1JlcXVlc3QaKC5yZWxpYW50LnYxLkxpc3RDb25uZWN0aW9uRXZlbnRzUmVzcG9uc2UiAEI6WjhnaXRodWIuY29tL3JlbGlhbnQtbGFicy9yZWxpYW50L2dlbi9yZWxpYW50L3YxO3JlbGlhbnR2MWIGcHJvdG8z");
 
 /**
  * Connection is metadata only. There is deliberately no field that could hold
@@ -97,6 +97,14 @@ export type Connection = Message<"reliant.v1.Connection"> & {
    * @generated from field: string updated_at = 14;
    */
   updatedAt: string;
+
+  /**
+   * The connection's non-secret settings (a Shopify shop), as declared by the
+   * integration's connection_params.
+   *
+   * @generated from field: map<string, string> params = 15;
+   */
+  params: { [key: string]: string };
 };
 
 /**
@@ -107,6 +115,8 @@ export const ConnectionSchema: GenMessage<Connection> = /*@__PURE__*/
   messageDesc(file_reliant_v1_connection, 0);
 
 /**
+ * Integration is one catalog integration a connection can be made to.
+ *
  * @generated from message reliant.v1.Integration
  */
 export type Integration = Message<"reliant.v1.Integration"> & {
@@ -121,23 +131,18 @@ export type Integration = Message<"reliant.v1.Integration"> & {
   displayName: string;
 
   /**
-   * @generated from field: reliant.v1.ConnectionAuthKind auth_kind = 3;
+   * Methods are the ways to connect, most preferred first.
+   *
+   * @generated from field: repeated reliant.v1.IntegrationAuthMethod methods = 6;
    */
-  authKind: ConnectionAuthKind;
+  methods: IntegrationAuthMethod[];
 
   /**
-   * False when the deployment has not configured this integration.
+   * ConnectionParams are the non-secret settings a new connection asks for.
    *
-   * @generated from field: bool available = 4;
+   * @generated from field: repeated reliant.v1.IntegrationConnectionParam connection_params = 7;
    */
-  available: boolean;
-
-  /**
-   * Why it is unavailable, in words for an operator ("RELIANT_GITHUB_APP_CLIENT_ID is not set").
-   *
-   * @generated from field: string unavailable_reason = 5;
-   */
-  unavailableReason: string;
+  connectionParams: IntegrationConnectionParam[];
 };
 
 /**
@@ -146,6 +151,90 @@ export type Integration = Message<"reliant.v1.Integration"> & {
  */
 export const IntegrationSchema: GenMessage<Integration> = /*@__PURE__*/
   messageDesc(file_reliant_v1_connection, 1);
+
+/**
+ * @generated from message reliant.v1.IntegrationAuthMethod
+ */
+export type IntegrationAuthMethod = Message<"reliant.v1.IntegrationAuthMethod"> & {
+  /**
+   * @generated from field: reliant.v1.ConnectionAuthKind kind = 1;
+   */
+  kind: ConnectionAuthKind;
+
+  /**
+   * False when the deployment has not configured this method.
+   *
+   * @generated from field: bool available = 2;
+   */
+  available: boolean;
+
+  /**
+   * Why it is unavailable, in words for an operator
+   * ("RELIANT_OAUTH_SLACK_CLIENT_ID and RELIANT_OAUTH_SLACK_CLIENT_SECRET are not set").
+   *
+   * @generated from field: string unavailable_reason = 3;
+   */
+  unavailableReason: string;
+
+  /**
+   * FieldLabels names the form fields a pasted credential needs, keyed by the
+   * CreateApiKeyConnectionRequest.fields key. Empty for oauth2 and delegated.
+   *
+   * @generated from field: map<string, string> field_labels = 4;
+   */
+  fieldLabels: { [key: string]: string };
+};
+
+/**
+ * Describes the message reliant.v1.IntegrationAuthMethod.
+ * Use `create(IntegrationAuthMethodSchema)` to create a new message.
+ */
+export const IntegrationAuthMethodSchema: GenMessage<IntegrationAuthMethod> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_connection, 2);
+
+/**
+ * @generated from message reliant.v1.IntegrationConnectionParam
+ */
+export type IntegrationConnectionParam = Message<"reliant.v1.IntegrationConnectionParam"> & {
+  /**
+   * @generated from field: string name = 1;
+   */
+  name: string;
+
+  /**
+   * @generated from field: string display_name = 2;
+   */
+  displayName: string;
+
+  /**
+   * @generated from field: string description = 3;
+   */
+  description: string;
+
+  /**
+   * Pattern is the RE2 expression a value must match in full.
+   *
+   * @generated from field: string pattern = 4;
+   */
+  pattern: string;
+
+  /**
+   * @generated from field: string default_value = 5;
+   */
+  defaultValue: string;
+
+  /**
+   * @generated from field: bool required = 6;
+   */
+  required: boolean;
+};
+
+/**
+ * Describes the message reliant.v1.IntegrationConnectionParam.
+ * Use `create(IntegrationConnectionParamSchema)` to create a new message.
+ */
+export const IntegrationConnectionParamSchema: GenMessage<IntegrationConnectionParam> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_connection, 3);
 
 /**
  * @generated from message reliant.v1.ListIntegrationsRequest
@@ -158,7 +247,7 @@ export type ListIntegrationsRequest = Message<"reliant.v1.ListIntegrationsReques
  * Use `create(ListIntegrationsRequestSchema)` to create a new message.
  */
 export const ListIntegrationsRequestSchema: GenMessage<ListIntegrationsRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_connection, 2);
+  messageDesc(file_reliant_v1_connection, 4);
 
 /**
  * @generated from message reliant.v1.ListIntegrationsResponse
@@ -175,7 +264,7 @@ export type ListIntegrationsResponse = Message<"reliant.v1.ListIntegrationsRespo
  * Use `create(ListIntegrationsResponseSchema)` to create a new message.
  */
 export const ListIntegrationsResponseSchema: GenMessage<ListIntegrationsResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_connection, 3);
+  messageDesc(file_reliant_v1_connection, 5);
 
 /**
  * @generated from message reliant.v1.ListConnectionsRequest
@@ -192,7 +281,7 @@ export type ListConnectionsRequest = Message<"reliant.v1.ListConnectionsRequest"
  * Use `create(ListConnectionsRequestSchema)` to create a new message.
  */
 export const ListConnectionsRequestSchema: GenMessage<ListConnectionsRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_connection, 4);
+  messageDesc(file_reliant_v1_connection, 6);
 
 /**
  * @generated from message reliant.v1.ListConnectionsResponse
@@ -209,7 +298,7 @@ export type ListConnectionsResponse = Message<"reliant.v1.ListConnectionsRespons
  * Use `create(ListConnectionsResponseSchema)` to create a new message.
  */
 export const ListConnectionsResponseSchema: GenMessage<ListConnectionsResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_connection, 5);
+  messageDesc(file_reliant_v1_connection, 7);
 
 /**
  * @generated from message reliant.v1.GetConnectionRequest
@@ -226,7 +315,7 @@ export type GetConnectionRequest = Message<"reliant.v1.GetConnectionRequest"> & 
  * Use `create(GetConnectionRequestSchema)` to create a new message.
  */
 export const GetConnectionRequestSchema: GenMessage<GetConnectionRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_connection, 6);
+  messageDesc(file_reliant_v1_connection, 8);
 
 /**
  * @generated from message reliant.v1.GetConnectionResponse
@@ -243,15 +332,14 @@ export type GetConnectionResponse = Message<"reliant.v1.GetConnectionResponse"> 
  * Use `create(GetConnectionResponseSchema)` to create a new message.
  */
 export const GetConnectionResponseSchema: GenMessage<GetConnectionResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_connection, 7);
+  messageDesc(file_reliant_v1_connection, 9);
 
 /**
  * @generated from message reliant.v1.CreateApiKeyConnectionRequest
  */
 export type CreateApiKeyConnectionRequest = Message<"reliant.v1.CreateApiKeyConnectionRequest"> & {
   /**
-   * A free-form id for the service this credential is for ("linear"). It may
-   * not be an integration that has its own OAuth flow.
+   * A catalog integration that declares this kind of credential.
    *
    * @generated from field: string integration_id = 1;
    */
@@ -273,6 +361,13 @@ export type CreateApiKeyConnectionRequest = Message<"reliant.v1.CreateApiKeyConn
    * @generated from field: map<string, string> fields = 4;
    */
   fields: { [key: string]: string };
+
+  /**
+   * Values for the integration's connection_params. Not secret.
+   *
+   * @generated from field: map<string, string> params = 5;
+   */
+  params: { [key: string]: string };
 };
 
 /**
@@ -280,7 +375,7 @@ export type CreateApiKeyConnectionRequest = Message<"reliant.v1.CreateApiKeyConn
  * Use `create(CreateApiKeyConnectionRequestSchema)` to create a new message.
  */
 export const CreateApiKeyConnectionRequestSchema: GenMessage<CreateApiKeyConnectionRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_connection, 8);
+  messageDesc(file_reliant_v1_connection, 10);
 
 /**
  * @generated from message reliant.v1.CreateApiKeyConnectionResponse
@@ -297,7 +392,7 @@ export type CreateApiKeyConnectionResponse = Message<"reliant.v1.CreateApiKeyCon
  * Use `create(CreateApiKeyConnectionResponseSchema)` to create a new message.
  */
 export const CreateApiKeyConnectionResponseSchema: GenMessage<CreateApiKeyConnectionResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_connection, 9);
+  messageDesc(file_reliant_v1_connection, 11);
 
 /**
  * @generated from message reliant.v1.StartOAuthRequest
@@ -328,6 +423,14 @@ export type StartOAuthRequest = Message<"reliant.v1.StartOAuthRequest"> & {
    * @generated from field: string redirect_after = 4;
    */
   redirectAfter: string;
+
+  /**
+   * Values for the integration's connection_params (a new connection only;
+   * a reconnect keeps the connection's own). Not secret.
+   *
+   * @generated from field: map<string, string> params = 5;
+   */
+  params: { [key: string]: string };
 };
 
 /**
@@ -335,7 +438,7 @@ export type StartOAuthRequest = Message<"reliant.v1.StartOAuthRequest"> & {
  * Use `create(StartOAuthRequestSchema)` to create a new message.
  */
 export const StartOAuthRequestSchema: GenMessage<StartOAuthRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_connection, 10);
+  messageDesc(file_reliant_v1_connection, 12);
 
 /**
  * @generated from message reliant.v1.StartOAuthResponse
@@ -352,7 +455,7 @@ export type StartOAuthResponse = Message<"reliant.v1.StartOAuthResponse"> & {
  * Use `create(StartOAuthResponseSchema)` to create a new message.
  */
 export const StartOAuthResponseSchema: GenMessage<StartOAuthResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_connection, 11);
+  messageDesc(file_reliant_v1_connection, 13);
 
 /**
  * @generated from message reliant.v1.CompleteOAuthRequest
@@ -374,7 +477,7 @@ export type CompleteOAuthRequest = Message<"reliant.v1.CompleteOAuthRequest"> & 
  * Use `create(CompleteOAuthRequestSchema)` to create a new message.
  */
 export const CompleteOAuthRequestSchema: GenMessage<CompleteOAuthRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_connection, 12);
+  messageDesc(file_reliant_v1_connection, 14);
 
 /**
  * @generated from message reliant.v1.CompleteOAuthResponse
@@ -396,7 +499,7 @@ export type CompleteOAuthResponse = Message<"reliant.v1.CompleteOAuthResponse"> 
  * Use `create(CompleteOAuthResponseSchema)` to create a new message.
  */
 export const CompleteOAuthResponseSchema: GenMessage<CompleteOAuthResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_connection, 13);
+  messageDesc(file_reliant_v1_connection, 15);
 
 /**
  * @generated from message reliant.v1.TestConnectionRequest
@@ -413,7 +516,7 @@ export type TestConnectionRequest = Message<"reliant.v1.TestConnectionRequest"> 
  * Use `create(TestConnectionRequestSchema)` to create a new message.
  */
 export const TestConnectionRequestSchema: GenMessage<TestConnectionRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_connection, 14);
+  messageDesc(file_reliant_v1_connection, 16);
 
 /**
  * @generated from message reliant.v1.TestConnectionResponse
@@ -450,7 +553,7 @@ export type TestConnectionResponse = Message<"reliant.v1.TestConnectionResponse"
  * Use `create(TestConnectionResponseSchema)` to create a new message.
  */
 export const TestConnectionResponseSchema: GenMessage<TestConnectionResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_connection, 15);
+  messageDesc(file_reliant_v1_connection, 17);
 
 /**
  * @generated from message reliant.v1.RenameConnectionRequest
@@ -472,7 +575,7 @@ export type RenameConnectionRequest = Message<"reliant.v1.RenameConnectionReques
  * Use `create(RenameConnectionRequestSchema)` to create a new message.
  */
 export const RenameConnectionRequestSchema: GenMessage<RenameConnectionRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_connection, 16);
+  messageDesc(file_reliant_v1_connection, 18);
 
 /**
  * @generated from message reliant.v1.RenameConnectionResponse
@@ -489,7 +592,7 @@ export type RenameConnectionResponse = Message<"reliant.v1.RenameConnectionRespo
  * Use `create(RenameConnectionResponseSchema)` to create a new message.
  */
 export const RenameConnectionResponseSchema: GenMessage<RenameConnectionResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_connection, 17);
+  messageDesc(file_reliant_v1_connection, 19);
 
 /**
  * @generated from message reliant.v1.SetDefaultConnectionRequest
@@ -506,7 +609,7 @@ export type SetDefaultConnectionRequest = Message<"reliant.v1.SetDefaultConnecti
  * Use `create(SetDefaultConnectionRequestSchema)` to create a new message.
  */
 export const SetDefaultConnectionRequestSchema: GenMessage<SetDefaultConnectionRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_connection, 18);
+  messageDesc(file_reliant_v1_connection, 20);
 
 /**
  * @generated from message reliant.v1.SetDefaultConnectionResponse
@@ -523,7 +626,7 @@ export type SetDefaultConnectionResponse = Message<"reliant.v1.SetDefaultConnect
  * Use `create(SetDefaultConnectionResponseSchema)` to create a new message.
  */
 export const SetDefaultConnectionResponseSchema: GenMessage<SetDefaultConnectionResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_connection, 19);
+  messageDesc(file_reliant_v1_connection, 21);
 
 /**
  * @generated from message reliant.v1.DeleteConnectionRequest
@@ -540,7 +643,7 @@ export type DeleteConnectionRequest = Message<"reliant.v1.DeleteConnectionReques
  * Use `create(DeleteConnectionRequestSchema)` to create a new message.
  */
 export const DeleteConnectionRequestSchema: GenMessage<DeleteConnectionRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_connection, 20);
+  messageDesc(file_reliant_v1_connection, 22);
 
 /**
  * @generated from message reliant.v1.DeleteConnectionResponse
@@ -553,7 +656,7 @@ export type DeleteConnectionResponse = Message<"reliant.v1.DeleteConnectionRespo
  * Use `create(DeleteConnectionResponseSchema)` to create a new message.
  */
 export const DeleteConnectionResponseSchema: GenMessage<DeleteConnectionResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_connection, 21);
+  messageDesc(file_reliant_v1_connection, 23);
 
 /**
  * @generated from message reliant.v1.ConnectionEvent
@@ -610,7 +713,7 @@ export type ConnectionEvent = Message<"reliant.v1.ConnectionEvent"> & {
  * Use `create(ConnectionEventSchema)` to create a new message.
  */
 export const ConnectionEventSchema: GenMessage<ConnectionEvent> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_connection, 22);
+  messageDesc(file_reliant_v1_connection, 24);
 
 /**
  * @generated from message reliant.v1.ListConnectionEventsRequest
@@ -639,7 +742,7 @@ export type ListConnectionEventsRequest = Message<"reliant.v1.ListConnectionEven
  * Use `create(ListConnectionEventsRequestSchema)` to create a new message.
  */
 export const ListConnectionEventsRequestSchema: GenMessage<ListConnectionEventsRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_connection, 23);
+  messageDesc(file_reliant_v1_connection, 25);
 
 /**
  * @generated from message reliant.v1.ListConnectionEventsResponse
@@ -656,7 +759,7 @@ export type ListConnectionEventsResponse = Message<"reliant.v1.ListConnectionEve
  * Use `create(ListConnectionEventsResponseSchema)` to create a new message.
  */
 export const ListConnectionEventsResponseSchema: GenMessage<ListConnectionEventsResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_connection, 24);
+  messageDesc(file_reliant_v1_connection, 26);
 
 /**
  * @generated from enum reliant.v1.ConnectionAuthKind
@@ -668,17 +771,12 @@ export enum ConnectionAuthKind {
   UNSPECIFIED = 0,
 
   /**
+   * Authorization code + PKCE, with refresh. A GitHub App user-to-server
+   * token is one of these.
+   *
    * @generated from enum value: CONNECTION_AUTH_KIND_OAUTH2 = 1;
    */
   OAUTH2 = 1,
-
-  /**
-   * A GitHub App user-to-server credential: expiring access tokens with a
-   * rotating refresh token.
-   *
-   * @generated from enum value: CONNECTION_AUTH_KIND_GITHUB_APP_USER = 2;
-   */
-  GITHUB_APP_USER = 2,
 
   /**
    * @generated from enum value: CONNECTION_AUTH_KIND_API_KEY = 3;
@@ -694,6 +792,15 @@ export enum ConnectionAuthKind {
    * @generated from enum value: CONNECTION_AUTH_KIND_NONE = 5;
    */
   NONE = 5,
+
+  /**
+   * The token comes from an external authority at call time (GitHub through
+   * the control plane). It is an Integration method only: no connection row
+   * is ever of this kind.
+   *
+   * @generated from enum value: CONNECTION_AUTH_KIND_DELEGATED = 6;
+   */
+  DELEGATED = 6,
 }
 
 /**
@@ -745,15 +852,18 @@ export enum ApiKeyConnectionKind {
   UNSPECIFIED = 0,
 
   /**
-   * fields: "api_key" (required), "header" (optional; one of "bearer",
-   * "x-api-key", "api-key", "x-auth-token"; default "bearer").
+   * fields: "api_key" (required). Where the key goes is the integration's
+   * declaration; only an integration that leaves it open (the generic HTTP
+   * one) takes "header" (one of "bearer", "x-api-key", "api-key",
+   * "x-auth-token"; default "bearer").
    *
    * @generated from enum value: API_KEY_CONNECTION_KIND_API_KEY = 1;
    */
   API_KEY = 1,
 
   /**
-   * fields: "username" and "password", both required.
+   * fields: "username" and "password". An integration whose username is a
+   * connection param (an account id) takes only "password".
    *
    * @generated from enum value: API_KEY_CONNECTION_KIND_BASIC = 2;
    */

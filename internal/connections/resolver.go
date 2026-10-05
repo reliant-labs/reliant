@@ -66,7 +66,8 @@ type Resolver struct {
 	tokens *TokenSource
 }
 
-// NewResolver builds the resolver.
+// NewResolver builds the resolver. Credential placement comes from the
+// integrations the token source's registry was compiled from.
 func NewResolver(owners runOwners, store resolverStore, tokens *TokenSource) *Resolver {
 	return &Resolver{owners: owners, store: store, tokens: tokens}
 }
@@ -82,6 +83,16 @@ type Resolved struct {
 
 	auth   Authenticator
 	secret vault.Secret
+	params map[string]string
+}
+
+// Params are the connection's non-secret settings (a Shopify shop).
+func (r *Resolved) Params() map[string]string {
+	out := make(map[string]string, len(r.params))
+	for k, v := range r.params {
+		out[k] = v
+	}
+	return out
 }
 
 // Value receivers, so both Resolved and *Resolved redact. fmt cannot call
@@ -162,11 +173,11 @@ func (r *Resolver) ForCall(ctx context.Context, call CallSite, ref Ref) (*Resolv
 		return nil, noConnection(ref)
 	}
 
-	header := ""
-	if conn.AuthHeader != nil {
-		header = *conn.AuthHeader
+	prov, ok := r.tokens.providers.Get(conn.IntegrationID)
+	if !ok {
+		return nil, newError(CodeFailedPrecondition, "integration %q is not in this deployment's catalog", conn.IntegrationID)
 	}
-	auth, err := AuthenticatorFor(conn.AuthKind, header)
+	auth, err := authenticatorFor(prov, conn)
 	if err != nil {
 		return nil, err
 	}
@@ -185,7 +196,7 @@ func (r *Resolver) ForCall(ctx context.Context, call CallSite, ref Ref) (*Resolv
 	})
 	_ = r.store.TouchConnectionUsed(context.WithoutCancel(ctx), owner, conn.ID)
 
-	return &Resolved{ConnectionID: conn.ID, IntegrationID: conn.IntegrationID, Redactor: NewRedactor(), auth: auth, secret: secret}, nil
+	return &Resolved{ConnectionID: conn.ID, IntegrationID: conn.IntegrationID, Redactor: NewRedactor(), auth: auth, secret: secret, params: conn.Params}, nil
 }
 
 func noConnection(ref Ref) error {

@@ -27,13 +27,16 @@ type ConnectionAuthKind int32
 
 const (
 	ConnectionAuthKind_CONNECTION_AUTH_KIND_UNSPECIFIED ConnectionAuthKind = 0
-	ConnectionAuthKind_CONNECTION_AUTH_KIND_OAUTH2      ConnectionAuthKind = 1
-	// A GitHub App user-to-server credential: expiring access tokens with a
-	// rotating refresh token.
-	ConnectionAuthKind_CONNECTION_AUTH_KIND_GITHUB_APP_USER ConnectionAuthKind = 2
-	ConnectionAuthKind_CONNECTION_AUTH_KIND_API_KEY         ConnectionAuthKind = 3
-	ConnectionAuthKind_CONNECTION_AUTH_KIND_BASIC           ConnectionAuthKind = 4
-	ConnectionAuthKind_CONNECTION_AUTH_KIND_NONE            ConnectionAuthKind = 5
+	// Authorization code + PKCE, with refresh. A GitHub App user-to-server
+	// token is one of these.
+	ConnectionAuthKind_CONNECTION_AUTH_KIND_OAUTH2  ConnectionAuthKind = 1
+	ConnectionAuthKind_CONNECTION_AUTH_KIND_API_KEY ConnectionAuthKind = 3
+	ConnectionAuthKind_CONNECTION_AUTH_KIND_BASIC   ConnectionAuthKind = 4
+	ConnectionAuthKind_CONNECTION_AUTH_KIND_NONE    ConnectionAuthKind = 5
+	// The token comes from an external authority at call time (GitHub through
+	// the control plane). It is an Integration method only: no connection row
+	// is ever of this kind.
+	ConnectionAuthKind_CONNECTION_AUTH_KIND_DELEGATED ConnectionAuthKind = 6
 )
 
 // Enum value maps for ConnectionAuthKind.
@@ -41,18 +44,18 @@ var (
 	ConnectionAuthKind_name = map[int32]string{
 		0: "CONNECTION_AUTH_KIND_UNSPECIFIED",
 		1: "CONNECTION_AUTH_KIND_OAUTH2",
-		2: "CONNECTION_AUTH_KIND_GITHUB_APP_USER",
 		3: "CONNECTION_AUTH_KIND_API_KEY",
 		4: "CONNECTION_AUTH_KIND_BASIC",
 		5: "CONNECTION_AUTH_KIND_NONE",
+		6: "CONNECTION_AUTH_KIND_DELEGATED",
 	}
 	ConnectionAuthKind_value = map[string]int32{
-		"CONNECTION_AUTH_KIND_UNSPECIFIED":     0,
-		"CONNECTION_AUTH_KIND_OAUTH2":          1,
-		"CONNECTION_AUTH_KIND_GITHUB_APP_USER": 2,
-		"CONNECTION_AUTH_KIND_API_KEY":         3,
-		"CONNECTION_AUTH_KIND_BASIC":           4,
-		"CONNECTION_AUTH_KIND_NONE":            5,
+		"CONNECTION_AUTH_KIND_UNSPECIFIED": 0,
+		"CONNECTION_AUTH_KIND_OAUTH2":      1,
+		"CONNECTION_AUTH_KIND_API_KEY":     3,
+		"CONNECTION_AUTH_KIND_BASIC":       4,
+		"CONNECTION_AUTH_KIND_NONE":        5,
+		"CONNECTION_AUTH_KIND_DELEGATED":   6,
 	}
 )
 
@@ -140,10 +143,13 @@ type ApiKeyConnectionKind int32
 
 const (
 	ApiKeyConnectionKind_API_KEY_CONNECTION_KIND_UNSPECIFIED ApiKeyConnectionKind = 0
-	// fields: "api_key" (required), "header" (optional; one of "bearer",
-	// "x-api-key", "api-key", "x-auth-token"; default "bearer").
+	// fields: "api_key" (required). Where the key goes is the integration's
+	// declaration; only an integration that leaves it open (the generic HTTP
+	// one) takes "header" (one of "bearer", "x-api-key", "api-key",
+	// "x-auth-token"; default "bearer").
 	ApiKeyConnectionKind_API_KEY_CONNECTION_KIND_API_KEY ApiKeyConnectionKind = 1
-	// fields: "username" and "password", both required.
+	// fields: "username" and "password". An integration whose username is a
+	// connection param (an account id) takes only "password".
 	ApiKeyConnectionKind_API_KEY_CONNECTION_KIND_BASIC ApiKeyConnectionKind = 2
 )
 
@@ -209,8 +215,11 @@ type Connection struct {
 	LastUsedAt      string `protobuf:"bytes,12,opt,name=last_used_at,json=lastUsedAt,proto3" json:"last_used_at,omitempty"`
 	CreatedAt       string `protobuf:"bytes,13,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	UpdatedAt       string `protobuf:"bytes,14,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// The connection's non-secret settings (a Shopify shop), as declared by the
+	// integration's connection_params.
+	Params        map[string]string `protobuf:"bytes,15,rep,name=params,proto3" json:"params,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Connection) Reset() {
@@ -341,17 +350,24 @@ func (x *Connection) GetUpdatedAt() string {
 	return ""
 }
 
+func (x *Connection) GetParams() map[string]string {
+	if x != nil {
+		return x.Params
+	}
+	return nil
+}
+
+// Integration is one catalog integration a connection can be made to.
 type Integration struct {
 	state       protoimpl.MessageState `protogen:"open.v1"`
 	Id          string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	DisplayName string                 `protobuf:"bytes,2,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
-	AuthKind    ConnectionAuthKind     `protobuf:"varint,3,opt,name=auth_kind,json=authKind,proto3,enum=reliant.v1.ConnectionAuthKind" json:"auth_kind,omitempty"`
-	// False when the deployment has not configured this integration.
-	Available bool `protobuf:"varint,4,opt,name=available,proto3" json:"available,omitempty"`
-	// Why it is unavailable, in words for an operator ("RELIANT_GITHUB_APP_CLIENT_ID is not set").
-	UnavailableReason string `protobuf:"bytes,5,opt,name=unavailable_reason,json=unavailableReason,proto3" json:"unavailable_reason,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	// Methods are the ways to connect, most preferred first.
+	Methods []*IntegrationAuthMethod `protobuf:"bytes,6,rep,name=methods,proto3" json:"methods,omitempty"`
+	// ConnectionParams are the non-secret settings a new connection asks for.
+	ConnectionParams []*IntegrationConnectionParam `protobuf:"bytes,7,rep,name=connection_params,json=connectionParams,proto3" json:"connection_params,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *Integration) Reset() {
@@ -398,25 +414,176 @@ func (x *Integration) GetDisplayName() string {
 	return ""
 }
 
-func (x *Integration) GetAuthKind() ConnectionAuthKind {
+func (x *Integration) GetMethods() []*IntegrationAuthMethod {
 	if x != nil {
-		return x.AuthKind
+		return x.Methods
+	}
+	return nil
+}
+
+func (x *Integration) GetConnectionParams() []*IntegrationConnectionParam {
+	if x != nil {
+		return x.ConnectionParams
+	}
+	return nil
+}
+
+type IntegrationAuthMethod struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Kind  ConnectionAuthKind     `protobuf:"varint,1,opt,name=kind,proto3,enum=reliant.v1.ConnectionAuthKind" json:"kind,omitempty"`
+	// False when the deployment has not configured this method.
+	Available bool `protobuf:"varint,2,opt,name=available,proto3" json:"available,omitempty"`
+	// Why it is unavailable, in words for an operator
+	// ("RELIANT_OAUTH_SLACK_CLIENT_ID and RELIANT_OAUTH_SLACK_CLIENT_SECRET are not set").
+	UnavailableReason string `protobuf:"bytes,3,opt,name=unavailable_reason,json=unavailableReason,proto3" json:"unavailable_reason,omitempty"`
+	// FieldLabels names the form fields a pasted credential needs, keyed by the
+	// CreateApiKeyConnectionRequest.fields key. Empty for oauth2 and delegated.
+	FieldLabels   map[string]string `protobuf:"bytes,4,rep,name=field_labels,json=fieldLabels,proto3" json:"field_labels,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *IntegrationAuthMethod) Reset() {
+	*x = IntegrationAuthMethod{}
+	mi := &file_reliant_v1_connection_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *IntegrationAuthMethod) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*IntegrationAuthMethod) ProtoMessage() {}
+
+func (x *IntegrationAuthMethod) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_connection_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use IntegrationAuthMethod.ProtoReflect.Descriptor instead.
+func (*IntegrationAuthMethod) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *IntegrationAuthMethod) GetKind() ConnectionAuthKind {
+	if x != nil {
+		return x.Kind
 	}
 	return ConnectionAuthKind_CONNECTION_AUTH_KIND_UNSPECIFIED
 }
 
-func (x *Integration) GetAvailable() bool {
+func (x *IntegrationAuthMethod) GetAvailable() bool {
 	if x != nil {
 		return x.Available
 	}
 	return false
 }
 
-func (x *Integration) GetUnavailableReason() string {
+func (x *IntegrationAuthMethod) GetUnavailableReason() string {
 	if x != nil {
 		return x.UnavailableReason
 	}
 	return ""
+}
+
+func (x *IntegrationAuthMethod) GetFieldLabels() map[string]string {
+	if x != nil {
+		return x.FieldLabels
+	}
+	return nil
+}
+
+type IntegrationConnectionParam struct {
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	Name        string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	DisplayName string                 `protobuf:"bytes,2,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
+	Description string                 `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
+	// Pattern is the RE2 expression a value must match in full.
+	Pattern       string `protobuf:"bytes,4,opt,name=pattern,proto3" json:"pattern,omitempty"`
+	DefaultValue  string `protobuf:"bytes,5,opt,name=default_value,json=defaultValue,proto3" json:"default_value,omitempty"`
+	Required      bool   `protobuf:"varint,6,opt,name=required,proto3" json:"required,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *IntegrationConnectionParam) Reset() {
+	*x = IntegrationConnectionParam{}
+	mi := &file_reliant_v1_connection_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *IntegrationConnectionParam) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*IntegrationConnectionParam) ProtoMessage() {}
+
+func (x *IntegrationConnectionParam) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_connection_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use IntegrationConnectionParam.ProtoReflect.Descriptor instead.
+func (*IntegrationConnectionParam) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *IntegrationConnectionParam) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *IntegrationConnectionParam) GetDisplayName() string {
+	if x != nil {
+		return x.DisplayName
+	}
+	return ""
+}
+
+func (x *IntegrationConnectionParam) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+func (x *IntegrationConnectionParam) GetPattern() string {
+	if x != nil {
+		return x.Pattern
+	}
+	return ""
+}
+
+func (x *IntegrationConnectionParam) GetDefaultValue() string {
+	if x != nil {
+		return x.DefaultValue
+	}
+	return ""
+}
+
+func (x *IntegrationConnectionParam) GetRequired() bool {
+	if x != nil {
+		return x.Required
+	}
+	return false
 }
 
 type ListIntegrationsRequest struct {
@@ -427,7 +594,7 @@ type ListIntegrationsRequest struct {
 
 func (x *ListIntegrationsRequest) Reset() {
 	*x = ListIntegrationsRequest{}
-	mi := &file_reliant_v1_connection_proto_msgTypes[2]
+	mi := &file_reliant_v1_connection_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -439,7 +606,7 @@ func (x *ListIntegrationsRequest) String() string {
 func (*ListIntegrationsRequest) ProtoMessage() {}
 
 func (x *ListIntegrationsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_connection_proto_msgTypes[2]
+	mi := &file_reliant_v1_connection_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -452,7 +619,7 @@ func (x *ListIntegrationsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListIntegrationsRequest.ProtoReflect.Descriptor instead.
 func (*ListIntegrationsRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{2}
+	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{4}
 }
 
 type ListIntegrationsResponse struct {
@@ -464,7 +631,7 @@ type ListIntegrationsResponse struct {
 
 func (x *ListIntegrationsResponse) Reset() {
 	*x = ListIntegrationsResponse{}
-	mi := &file_reliant_v1_connection_proto_msgTypes[3]
+	mi := &file_reliant_v1_connection_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -476,7 +643,7 @@ func (x *ListIntegrationsResponse) String() string {
 func (*ListIntegrationsResponse) ProtoMessage() {}
 
 func (x *ListIntegrationsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_connection_proto_msgTypes[3]
+	mi := &file_reliant_v1_connection_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -489,7 +656,7 @@ func (x *ListIntegrationsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListIntegrationsResponse.ProtoReflect.Descriptor instead.
 func (*ListIntegrationsResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{3}
+	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *ListIntegrationsResponse) GetIntegrations() []*Integration {
@@ -508,7 +675,7 @@ type ListConnectionsRequest struct {
 
 func (x *ListConnectionsRequest) Reset() {
 	*x = ListConnectionsRequest{}
-	mi := &file_reliant_v1_connection_proto_msgTypes[4]
+	mi := &file_reliant_v1_connection_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -520,7 +687,7 @@ func (x *ListConnectionsRequest) String() string {
 func (*ListConnectionsRequest) ProtoMessage() {}
 
 func (x *ListConnectionsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_connection_proto_msgTypes[4]
+	mi := &file_reliant_v1_connection_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -533,7 +700,7 @@ func (x *ListConnectionsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListConnectionsRequest.ProtoReflect.Descriptor instead.
 func (*ListConnectionsRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{4}
+	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *ListConnectionsRequest) GetIntegrationId() string {
@@ -552,7 +719,7 @@ type ListConnectionsResponse struct {
 
 func (x *ListConnectionsResponse) Reset() {
 	*x = ListConnectionsResponse{}
-	mi := &file_reliant_v1_connection_proto_msgTypes[5]
+	mi := &file_reliant_v1_connection_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -564,7 +731,7 @@ func (x *ListConnectionsResponse) String() string {
 func (*ListConnectionsResponse) ProtoMessage() {}
 
 func (x *ListConnectionsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_connection_proto_msgTypes[5]
+	mi := &file_reliant_v1_connection_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -577,7 +744,7 @@ func (x *ListConnectionsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListConnectionsResponse.ProtoReflect.Descriptor instead.
 func (*ListConnectionsResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{5}
+	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *ListConnectionsResponse) GetConnections() []*Connection {
@@ -596,7 +763,7 @@ type GetConnectionRequest struct {
 
 func (x *GetConnectionRequest) Reset() {
 	*x = GetConnectionRequest{}
-	mi := &file_reliant_v1_connection_proto_msgTypes[6]
+	mi := &file_reliant_v1_connection_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -608,7 +775,7 @@ func (x *GetConnectionRequest) String() string {
 func (*GetConnectionRequest) ProtoMessage() {}
 
 func (x *GetConnectionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_connection_proto_msgTypes[6]
+	mi := &file_reliant_v1_connection_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -621,7 +788,7 @@ func (x *GetConnectionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetConnectionRequest.ProtoReflect.Descriptor instead.
 func (*GetConnectionRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{6}
+	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *GetConnectionRequest) GetId() string {
@@ -640,7 +807,7 @@ type GetConnectionResponse struct {
 
 func (x *GetConnectionResponse) Reset() {
 	*x = GetConnectionResponse{}
-	mi := &file_reliant_v1_connection_proto_msgTypes[7]
+	mi := &file_reliant_v1_connection_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -652,7 +819,7 @@ func (x *GetConnectionResponse) String() string {
 func (*GetConnectionResponse) ProtoMessage() {}
 
 func (x *GetConnectionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_connection_proto_msgTypes[7]
+	mi := &file_reliant_v1_connection_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -665,7 +832,7 @@ func (x *GetConnectionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetConnectionResponse.ProtoReflect.Descriptor instead.
 func (*GetConnectionResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{7}
+	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *GetConnectionResponse) GetConnection() *Connection {
@@ -677,20 +844,21 @@ func (x *GetConnectionResponse) GetConnection() *Connection {
 
 type CreateApiKeyConnectionRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// A free-form id for the service this credential is for ("linear"). It may
-	// not be an integration that has its own OAuth flow.
+	// A catalog integration that declares this kind of credential.
 	IntegrationId string               `protobuf:"bytes,1,opt,name=integration_id,json=integrationId,proto3" json:"integration_id,omitempty"`
 	Name          string               `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
 	Kind          ApiKeyConnectionKind `protobuf:"varint,3,opt,name=kind,proto3,enum=reliant.v1.ApiKeyConnectionKind" json:"kind,omitempty"`
 	// WRITE-ONLY. The only message in this API that carries a secret.
-	Fields        map[string]string `protobuf:"bytes,4,rep,name=fields,proto3" json:"fields,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	Fields map[string]string `protobuf:"bytes,4,rep,name=fields,proto3" json:"fields,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	// Values for the integration's connection_params. Not secret.
+	Params        map[string]string `protobuf:"bytes,5,rep,name=params,proto3" json:"params,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *CreateApiKeyConnectionRequest) Reset() {
 	*x = CreateApiKeyConnectionRequest{}
-	mi := &file_reliant_v1_connection_proto_msgTypes[8]
+	mi := &file_reliant_v1_connection_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -702,7 +870,7 @@ func (x *CreateApiKeyConnectionRequest) String() string {
 func (*CreateApiKeyConnectionRequest) ProtoMessage() {}
 
 func (x *CreateApiKeyConnectionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_connection_proto_msgTypes[8]
+	mi := &file_reliant_v1_connection_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -715,7 +883,7 @@ func (x *CreateApiKeyConnectionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateApiKeyConnectionRequest.ProtoReflect.Descriptor instead.
 func (*CreateApiKeyConnectionRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{8}
+	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *CreateApiKeyConnectionRequest) GetIntegrationId() string {
@@ -746,6 +914,13 @@ func (x *CreateApiKeyConnectionRequest) GetFields() map[string]string {
 	return nil
 }
 
+func (x *CreateApiKeyConnectionRequest) GetParams() map[string]string {
+	if x != nil {
+		return x.Params
+	}
+	return nil
+}
+
 type CreateApiKeyConnectionResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Connection    *Connection            `protobuf:"bytes,1,opt,name=connection,proto3" json:"connection,omitempty"`
@@ -755,7 +930,7 @@ type CreateApiKeyConnectionResponse struct {
 
 func (x *CreateApiKeyConnectionResponse) Reset() {
 	*x = CreateApiKeyConnectionResponse{}
-	mi := &file_reliant_v1_connection_proto_msgTypes[9]
+	mi := &file_reliant_v1_connection_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -767,7 +942,7 @@ func (x *CreateApiKeyConnectionResponse) String() string {
 func (*CreateApiKeyConnectionResponse) ProtoMessage() {}
 
 func (x *CreateApiKeyConnectionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_connection_proto_msgTypes[9]
+	mi := &file_reliant_v1_connection_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -780,7 +955,7 @@ func (x *CreateApiKeyConnectionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateApiKeyConnectionResponse.ProtoReflect.Descriptor instead.
 func (*CreateApiKeyConnectionResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{9}
+	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *CreateApiKeyConnectionResponse) GetConnection() *Connection {
@@ -799,13 +974,16 @@ type StartOAuthRequest struct {
 	ReconnectId string `protobuf:"bytes,3,opt,name=reconnect_id,json=reconnectId,proto3" json:"reconnect_id,omitempty"`
 	// Where the client wants to land afterwards: a relative path only.
 	RedirectAfter string `protobuf:"bytes,4,opt,name=redirect_after,json=redirectAfter,proto3" json:"redirect_after,omitempty"`
+	// Values for the integration's connection_params (a new connection only;
+	// a reconnect keeps the connection's own). Not secret.
+	Params        map[string]string `protobuf:"bytes,5,rep,name=params,proto3" json:"params,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *StartOAuthRequest) Reset() {
 	*x = StartOAuthRequest{}
-	mi := &file_reliant_v1_connection_proto_msgTypes[10]
+	mi := &file_reliant_v1_connection_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -817,7 +995,7 @@ func (x *StartOAuthRequest) String() string {
 func (*StartOAuthRequest) ProtoMessage() {}
 
 func (x *StartOAuthRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_connection_proto_msgTypes[10]
+	mi := &file_reliant_v1_connection_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -830,7 +1008,7 @@ func (x *StartOAuthRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StartOAuthRequest.ProtoReflect.Descriptor instead.
 func (*StartOAuthRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{10}
+	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *StartOAuthRequest) GetIntegrationId() string {
@@ -861,6 +1039,13 @@ func (x *StartOAuthRequest) GetRedirectAfter() string {
 	return ""
 }
 
+func (x *StartOAuthRequest) GetParams() map[string]string {
+	if x != nil {
+		return x.Params
+	}
+	return nil
+}
+
 type StartOAuthResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	AuthorizeUrl  string                 `protobuf:"bytes,1,opt,name=authorize_url,json=authorizeUrl,proto3" json:"authorize_url,omitempty"`
@@ -870,7 +1055,7 @@ type StartOAuthResponse struct {
 
 func (x *StartOAuthResponse) Reset() {
 	*x = StartOAuthResponse{}
-	mi := &file_reliant_v1_connection_proto_msgTypes[11]
+	mi := &file_reliant_v1_connection_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -882,7 +1067,7 @@ func (x *StartOAuthResponse) String() string {
 func (*StartOAuthResponse) ProtoMessage() {}
 
 func (x *StartOAuthResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_connection_proto_msgTypes[11]
+	mi := &file_reliant_v1_connection_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -895,7 +1080,7 @@ func (x *StartOAuthResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StartOAuthResponse.ProtoReflect.Descriptor instead.
 func (*StartOAuthResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{11}
+	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *StartOAuthResponse) GetAuthorizeUrl() string {
@@ -915,7 +1100,7 @@ type CompleteOAuthRequest struct {
 
 func (x *CompleteOAuthRequest) Reset() {
 	*x = CompleteOAuthRequest{}
-	mi := &file_reliant_v1_connection_proto_msgTypes[12]
+	mi := &file_reliant_v1_connection_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -927,7 +1112,7 @@ func (x *CompleteOAuthRequest) String() string {
 func (*CompleteOAuthRequest) ProtoMessage() {}
 
 func (x *CompleteOAuthRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_connection_proto_msgTypes[12]
+	mi := &file_reliant_v1_connection_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -940,7 +1125,7 @@ func (x *CompleteOAuthRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CompleteOAuthRequest.ProtoReflect.Descriptor instead.
 func (*CompleteOAuthRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{12}
+	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *CompleteOAuthRequest) GetState() string {
@@ -967,7 +1152,7 @@ type CompleteOAuthResponse struct {
 
 func (x *CompleteOAuthResponse) Reset() {
 	*x = CompleteOAuthResponse{}
-	mi := &file_reliant_v1_connection_proto_msgTypes[13]
+	mi := &file_reliant_v1_connection_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -979,7 +1164,7 @@ func (x *CompleteOAuthResponse) String() string {
 func (*CompleteOAuthResponse) ProtoMessage() {}
 
 func (x *CompleteOAuthResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_connection_proto_msgTypes[13]
+	mi := &file_reliant_v1_connection_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -992,7 +1177,7 @@ func (x *CompleteOAuthResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CompleteOAuthResponse.ProtoReflect.Descriptor instead.
 func (*CompleteOAuthResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{13}
+	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *CompleteOAuthResponse) GetConnection() *Connection {
@@ -1018,7 +1203,7 @@ type TestConnectionRequest struct {
 
 func (x *TestConnectionRequest) Reset() {
 	*x = TestConnectionRequest{}
-	mi := &file_reliant_v1_connection_proto_msgTypes[14]
+	mi := &file_reliant_v1_connection_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1030,7 +1215,7 @@ func (x *TestConnectionRequest) String() string {
 func (*TestConnectionRequest) ProtoMessage() {}
 
 func (x *TestConnectionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_connection_proto_msgTypes[14]
+	mi := &file_reliant_v1_connection_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1043,7 +1228,7 @@ func (x *TestConnectionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TestConnectionRequest.ProtoReflect.Descriptor instead.
 func (*TestConnectionRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{14}
+	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *TestConnectionRequest) GetId() string {
@@ -1068,7 +1253,7 @@ type TestConnectionResponse struct {
 
 func (x *TestConnectionResponse) Reset() {
 	*x = TestConnectionResponse{}
-	mi := &file_reliant_v1_connection_proto_msgTypes[15]
+	mi := &file_reliant_v1_connection_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1080,7 +1265,7 @@ func (x *TestConnectionResponse) String() string {
 func (*TestConnectionResponse) ProtoMessage() {}
 
 func (x *TestConnectionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_connection_proto_msgTypes[15]
+	mi := &file_reliant_v1_connection_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1093,7 +1278,7 @@ func (x *TestConnectionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TestConnectionResponse.ProtoReflect.Descriptor instead.
 func (*TestConnectionResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{15}
+	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *TestConnectionResponse) GetOk() bool {
@@ -1134,7 +1319,7 @@ type RenameConnectionRequest struct {
 
 func (x *RenameConnectionRequest) Reset() {
 	*x = RenameConnectionRequest{}
-	mi := &file_reliant_v1_connection_proto_msgTypes[16]
+	mi := &file_reliant_v1_connection_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1146,7 +1331,7 @@ func (x *RenameConnectionRequest) String() string {
 func (*RenameConnectionRequest) ProtoMessage() {}
 
 func (x *RenameConnectionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_connection_proto_msgTypes[16]
+	mi := &file_reliant_v1_connection_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1159,7 +1344,7 @@ func (x *RenameConnectionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RenameConnectionRequest.ProtoReflect.Descriptor instead.
 func (*RenameConnectionRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{16}
+	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *RenameConnectionRequest) GetId() string {
@@ -1185,7 +1370,7 @@ type RenameConnectionResponse struct {
 
 func (x *RenameConnectionResponse) Reset() {
 	*x = RenameConnectionResponse{}
-	mi := &file_reliant_v1_connection_proto_msgTypes[17]
+	mi := &file_reliant_v1_connection_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1197,7 +1382,7 @@ func (x *RenameConnectionResponse) String() string {
 func (*RenameConnectionResponse) ProtoMessage() {}
 
 func (x *RenameConnectionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_connection_proto_msgTypes[17]
+	mi := &file_reliant_v1_connection_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1210,7 +1395,7 @@ func (x *RenameConnectionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RenameConnectionResponse.ProtoReflect.Descriptor instead.
 func (*RenameConnectionResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{17}
+	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *RenameConnectionResponse) GetConnection() *Connection {
@@ -1229,7 +1414,7 @@ type SetDefaultConnectionRequest struct {
 
 func (x *SetDefaultConnectionRequest) Reset() {
 	*x = SetDefaultConnectionRequest{}
-	mi := &file_reliant_v1_connection_proto_msgTypes[18]
+	mi := &file_reliant_v1_connection_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1241,7 +1426,7 @@ func (x *SetDefaultConnectionRequest) String() string {
 func (*SetDefaultConnectionRequest) ProtoMessage() {}
 
 func (x *SetDefaultConnectionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_connection_proto_msgTypes[18]
+	mi := &file_reliant_v1_connection_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1254,7 +1439,7 @@ func (x *SetDefaultConnectionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetDefaultConnectionRequest.ProtoReflect.Descriptor instead.
 func (*SetDefaultConnectionRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{18}
+	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *SetDefaultConnectionRequest) GetId() string {
@@ -1273,7 +1458,7 @@ type SetDefaultConnectionResponse struct {
 
 func (x *SetDefaultConnectionResponse) Reset() {
 	*x = SetDefaultConnectionResponse{}
-	mi := &file_reliant_v1_connection_proto_msgTypes[19]
+	mi := &file_reliant_v1_connection_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1285,7 +1470,7 @@ func (x *SetDefaultConnectionResponse) String() string {
 func (*SetDefaultConnectionResponse) ProtoMessage() {}
 
 func (x *SetDefaultConnectionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_connection_proto_msgTypes[19]
+	mi := &file_reliant_v1_connection_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1298,7 +1483,7 @@ func (x *SetDefaultConnectionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetDefaultConnectionResponse.ProtoReflect.Descriptor instead.
 func (*SetDefaultConnectionResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{19}
+	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *SetDefaultConnectionResponse) GetConnection() *Connection {
@@ -1317,7 +1502,7 @@ type DeleteConnectionRequest struct {
 
 func (x *DeleteConnectionRequest) Reset() {
 	*x = DeleteConnectionRequest{}
-	mi := &file_reliant_v1_connection_proto_msgTypes[20]
+	mi := &file_reliant_v1_connection_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1329,7 +1514,7 @@ func (x *DeleteConnectionRequest) String() string {
 func (*DeleteConnectionRequest) ProtoMessage() {}
 
 func (x *DeleteConnectionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_connection_proto_msgTypes[20]
+	mi := &file_reliant_v1_connection_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1342,7 +1527,7 @@ func (x *DeleteConnectionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteConnectionRequest.ProtoReflect.Descriptor instead.
 func (*DeleteConnectionRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{20}
+	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *DeleteConnectionRequest) GetId() string {
@@ -1360,7 +1545,7 @@ type DeleteConnectionResponse struct {
 
 func (x *DeleteConnectionResponse) Reset() {
 	*x = DeleteConnectionResponse{}
-	mi := &file_reliant_v1_connection_proto_msgTypes[21]
+	mi := &file_reliant_v1_connection_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1372,7 +1557,7 @@ func (x *DeleteConnectionResponse) String() string {
 func (*DeleteConnectionResponse) ProtoMessage() {}
 
 func (x *DeleteConnectionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_connection_proto_msgTypes[21]
+	mi := &file_reliant_v1_connection_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1385,7 +1570,7 @@ func (x *DeleteConnectionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteConnectionResponse.ProtoReflect.Descriptor instead.
 func (*DeleteConnectionResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{21}
+	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{23}
 }
 
 type ConnectionEvent struct {
@@ -1407,7 +1592,7 @@ type ConnectionEvent struct {
 
 func (x *ConnectionEvent) Reset() {
 	*x = ConnectionEvent{}
-	mi := &file_reliant_v1_connection_proto_msgTypes[22]
+	mi := &file_reliant_v1_connection_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1419,7 +1604,7 @@ func (x *ConnectionEvent) String() string {
 func (*ConnectionEvent) ProtoMessage() {}
 
 func (x *ConnectionEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_connection_proto_msgTypes[22]
+	mi := &file_reliant_v1_connection_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1432,7 +1617,7 @@ func (x *ConnectionEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConnectionEvent.ProtoReflect.Descriptor instead.
 func (*ConnectionEvent) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{22}
+	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *ConnectionEvent) GetId() int64 {
@@ -1503,7 +1688,7 @@ type ListConnectionEventsRequest struct {
 
 func (x *ListConnectionEventsRequest) Reset() {
 	*x = ListConnectionEventsRequest{}
-	mi := &file_reliant_v1_connection_proto_msgTypes[23]
+	mi := &file_reliant_v1_connection_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1515,7 +1700,7 @@ func (x *ListConnectionEventsRequest) String() string {
 func (*ListConnectionEventsRequest) ProtoMessage() {}
 
 func (x *ListConnectionEventsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_connection_proto_msgTypes[23]
+	mi := &file_reliant_v1_connection_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1528,7 +1713,7 @@ func (x *ListConnectionEventsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListConnectionEventsRequest.ProtoReflect.Descriptor instead.
 func (*ListConnectionEventsRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{23}
+	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *ListConnectionEventsRequest) GetId() string {
@@ -1561,7 +1746,7 @@ type ListConnectionEventsResponse struct {
 
 func (x *ListConnectionEventsResponse) Reset() {
 	*x = ListConnectionEventsResponse{}
-	mi := &file_reliant_v1_connection_proto_msgTypes[24]
+	mi := &file_reliant_v1_connection_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1573,7 +1758,7 @@ func (x *ListConnectionEventsResponse) String() string {
 func (*ListConnectionEventsResponse) ProtoMessage() {}
 
 func (x *ListConnectionEventsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_connection_proto_msgTypes[24]
+	mi := &file_reliant_v1_connection_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1586,7 +1771,7 @@ func (x *ListConnectionEventsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListConnectionEventsResponse.ProtoReflect.Descriptor instead.
 func (*ListConnectionEventsResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{24}
+	return file_reliant_v1_connection_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *ListConnectionEventsResponse) GetEvents() []*ConnectionEvent {
@@ -1601,7 +1786,7 @@ var File_reliant_v1_connection_proto protoreflect.FileDescriptor
 const file_reliant_v1_connection_proto_rawDesc = "" +
 	"\n" +
 	"\x1breliant/v1/connection.proto\x12\n" +
-	"reliant.v1\"\x87\x04\n" +
+	"reliant.v1\"\xfe\x04\n" +
 	"\n" +
 	"Connection\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12%\n" +
@@ -1622,13 +1807,31 @@ const file_reliant_v1_connection_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\r \x01(\tR\tcreatedAt\x12\x1d\n" +
 	"\n" +
-	"updated_at\x18\x0e \x01(\tR\tupdatedAt\"\xca\x01\n" +
+	"updated_at\x18\x0e \x01(\tR\tupdatedAt\x12:\n" +
+	"\x06params\x18\x0f \x03(\v2\".reliant.v1.Connection.ParamsEntryR\x06params\x1a9\n" +
+	"\vParamsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x8e\x02\n" +
 	"\vIntegration\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12!\n" +
 	"\fdisplay_name\x18\x02 \x01(\tR\vdisplayName\x12;\n" +
-	"\tauth_kind\x18\x03 \x01(\x0e2\x1e.reliant.v1.ConnectionAuthKindR\bauthKind\x12\x1c\n" +
-	"\tavailable\x18\x04 \x01(\bR\tavailable\x12-\n" +
-	"\x12unavailable_reason\x18\x05 \x01(\tR\x11unavailableReason\"\x19\n" +
+	"\amethods\x18\x06 \x03(\v2!.reliant.v1.IntegrationAuthMethodR\amethods\x12S\n" +
+	"\x11connection_params\x18\a \x03(\v2&.reliant.v1.IntegrationConnectionParamR\x10connectionParamsJ\x04\b\x03\x10\x04J\x04\b\x04\x10\x05J\x04\b\x05\x10\x06R\tauth_kindR\tavailableR\x12unavailable_reason\"\xaf\x02\n" +
+	"\x15IntegrationAuthMethod\x122\n" +
+	"\x04kind\x18\x01 \x01(\x0e2\x1e.reliant.v1.ConnectionAuthKindR\x04kind\x12\x1c\n" +
+	"\tavailable\x18\x02 \x01(\bR\tavailable\x12-\n" +
+	"\x12unavailable_reason\x18\x03 \x01(\tR\x11unavailableReason\x12U\n" +
+	"\ffield_labels\x18\x04 \x03(\v22.reliant.v1.IntegrationAuthMethod.FieldLabelsEntryR\vfieldLabels\x1a>\n" +
+	"\x10FieldLabelsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xd0\x01\n" +
+	"\x1aIntegrationConnectionParam\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12!\n" +
+	"\fdisplay_name\x18\x02 \x01(\tR\vdisplayName\x12 \n" +
+	"\vdescription\x18\x03 \x01(\tR\vdescription\x12\x18\n" +
+	"\apattern\x18\x04 \x01(\tR\apattern\x12#\n" +
+	"\rdefault_value\x18\x05 \x01(\tR\fdefaultValue\x12\x1a\n" +
+	"\brequired\x18\x06 \x01(\bR\brequired\"\x19\n" +
 	"\x17ListIntegrationsRequest\"W\n" +
 	"\x18ListIntegrationsResponse\x12;\n" +
 	"\fintegrations\x18\x01 \x03(\v2\x17.reliant.v1.IntegrationR\fintegrations\"?\n" +
@@ -1641,24 +1844,32 @@ const file_reliant_v1_connection_proto_rawDesc = "" +
 	"\x15GetConnectionResponse\x126\n" +
 	"\n" +
 	"connection\x18\x01 \x01(\v2\x16.reliant.v1.ConnectionR\n" +
-	"connection\"\x9f\x02\n" +
+	"connection\"\xa9\x03\n" +
 	"\x1dCreateApiKeyConnectionRequest\x12%\n" +
 	"\x0eintegration_id\x18\x01 \x01(\tR\rintegrationId\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x124\n" +
 	"\x04kind\x18\x03 \x01(\x0e2 .reliant.v1.ApiKeyConnectionKindR\x04kind\x12R\n" +
-	"\x06fields\x18\x04 \x03(\v25.reliant.v1.CreateApiKeyConnectionRequest.FieldsEntryB\x03\x80\x01\x01R\x06fields\x1a9\n" +
+	"\x06fields\x18\x04 \x03(\v25.reliant.v1.CreateApiKeyConnectionRequest.FieldsEntryB\x03\x80\x01\x01R\x06fields\x12M\n" +
+	"\x06params\x18\x05 \x03(\v25.reliant.v1.CreateApiKeyConnectionRequest.ParamsEntryR\x06params\x1a9\n" +
 	"\vFieldsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1a9\n" +
+	"\vParamsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"X\n" +
 	"\x1eCreateApiKeyConnectionResponse\x126\n" +
 	"\n" +
 	"connection\x18\x01 \x01(\v2\x16.reliant.v1.ConnectionR\n" +
-	"connection\"\x98\x01\n" +
+	"connection\"\x96\x02\n" +
 	"\x11StartOAuthRequest\x12%\n" +
 	"\x0eintegration_id\x18\x01 \x01(\tR\rintegrationId\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12!\n" +
 	"\freconnect_id\x18\x03 \x01(\tR\vreconnectId\x12%\n" +
-	"\x0eredirect_after\x18\x04 \x01(\tR\rredirectAfter\"9\n" +
+	"\x0eredirect_after\x18\x04 \x01(\tR\rredirectAfter\x12A\n" +
+	"\x06params\x18\x05 \x03(\v2).reliant.v1.StartOAuthRequest.ParamsEntryR\x06params\x1a9\n" +
+	"\vParamsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"9\n" +
 	"\x12StartOAuthResponse\x12#\n" +
 	"\rauthorize_url\x18\x01 \x01(\tR\fauthorizeUrl\"J\n" +
 	"\x14CompleteOAuthRequest\x12\x19\n" +
@@ -1708,14 +1919,14 @@ const file_reliant_v1_connection_proto_rawDesc = "" +
 	"\x05limit\x18\x02 \x01(\x05R\x05limit\x12\x1b\n" +
 	"\tbefore_id\x18\x03 \x01(\x03R\bbeforeId\"S\n" +
 	"\x1cListConnectionEventsResponse\x123\n" +
-	"\x06events\x18\x01 \x03(\v2\x1b.reliant.v1.ConnectionEventR\x06events*\xe6\x01\n" +
+	"\x06events\x18\x01 \x03(\v2\x1b.reliant.v1.ConnectionEventR\x06events*\x8c\x02\n" +
 	"\x12ConnectionAuthKind\x12$\n" +
 	" CONNECTION_AUTH_KIND_UNSPECIFIED\x10\x00\x12\x1f\n" +
-	"\x1bCONNECTION_AUTH_KIND_OAUTH2\x10\x01\x12(\n" +
-	"$CONNECTION_AUTH_KIND_GITHUB_APP_USER\x10\x02\x12 \n" +
+	"\x1bCONNECTION_AUTH_KIND_OAUTH2\x10\x01\x12 \n" +
 	"\x1cCONNECTION_AUTH_KIND_API_KEY\x10\x03\x12\x1e\n" +
 	"\x1aCONNECTION_AUTH_KIND_BASIC\x10\x04\x12\x1d\n" +
-	"\x19CONNECTION_AUTH_KIND_NONE\x10\x05*\x96\x01\n" +
+	"\x19CONNECTION_AUTH_KIND_NONE\x10\x05\x12\"\n" +
+	"\x1eCONNECTION_AUTH_KIND_DELEGATED\x10\x06\"\x04\b\x02\x10\x02*$CONNECTION_AUTH_KIND_GITHUB_APP_USER*\x96\x01\n" +
 	"\x10ConnectionStatus\x12!\n" +
 	"\x1dCONNECTION_STATUS_UNSPECIFIED\x10\x00\x12\x1c\n" +
 	"\x18CONNECTION_STATUS_ACTIVE\x10\x01\x12\"\n" +
@@ -1752,79 +1963,91 @@ func file_reliant_v1_connection_proto_rawDescGZIP() []byte {
 }
 
 var file_reliant_v1_connection_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_reliant_v1_connection_proto_msgTypes = make([]protoimpl.MessageInfo, 26)
+var file_reliant_v1_connection_proto_msgTypes = make([]protoimpl.MessageInfo, 32)
 var file_reliant_v1_connection_proto_goTypes = []any{
 	(ConnectionAuthKind)(0),                // 0: reliant.v1.ConnectionAuthKind
 	(ConnectionStatus)(0),                  // 1: reliant.v1.ConnectionStatus
 	(ApiKeyConnectionKind)(0),              // 2: reliant.v1.ApiKeyConnectionKind
 	(*Connection)(nil),                     // 3: reliant.v1.Connection
 	(*Integration)(nil),                    // 4: reliant.v1.Integration
-	(*ListIntegrationsRequest)(nil),        // 5: reliant.v1.ListIntegrationsRequest
-	(*ListIntegrationsResponse)(nil),       // 6: reliant.v1.ListIntegrationsResponse
-	(*ListConnectionsRequest)(nil),         // 7: reliant.v1.ListConnectionsRequest
-	(*ListConnectionsResponse)(nil),        // 8: reliant.v1.ListConnectionsResponse
-	(*GetConnectionRequest)(nil),           // 9: reliant.v1.GetConnectionRequest
-	(*GetConnectionResponse)(nil),          // 10: reliant.v1.GetConnectionResponse
-	(*CreateApiKeyConnectionRequest)(nil),  // 11: reliant.v1.CreateApiKeyConnectionRequest
-	(*CreateApiKeyConnectionResponse)(nil), // 12: reliant.v1.CreateApiKeyConnectionResponse
-	(*StartOAuthRequest)(nil),              // 13: reliant.v1.StartOAuthRequest
-	(*StartOAuthResponse)(nil),             // 14: reliant.v1.StartOAuthResponse
-	(*CompleteOAuthRequest)(nil),           // 15: reliant.v1.CompleteOAuthRequest
-	(*CompleteOAuthResponse)(nil),          // 16: reliant.v1.CompleteOAuthResponse
-	(*TestConnectionRequest)(nil),          // 17: reliant.v1.TestConnectionRequest
-	(*TestConnectionResponse)(nil),         // 18: reliant.v1.TestConnectionResponse
-	(*RenameConnectionRequest)(nil),        // 19: reliant.v1.RenameConnectionRequest
-	(*RenameConnectionResponse)(nil),       // 20: reliant.v1.RenameConnectionResponse
-	(*SetDefaultConnectionRequest)(nil),    // 21: reliant.v1.SetDefaultConnectionRequest
-	(*SetDefaultConnectionResponse)(nil),   // 22: reliant.v1.SetDefaultConnectionResponse
-	(*DeleteConnectionRequest)(nil),        // 23: reliant.v1.DeleteConnectionRequest
-	(*DeleteConnectionResponse)(nil),       // 24: reliant.v1.DeleteConnectionResponse
-	(*ConnectionEvent)(nil),                // 25: reliant.v1.ConnectionEvent
-	(*ListConnectionEventsRequest)(nil),    // 26: reliant.v1.ListConnectionEventsRequest
-	(*ListConnectionEventsResponse)(nil),   // 27: reliant.v1.ListConnectionEventsResponse
-	nil,                                    // 28: reliant.v1.CreateApiKeyConnectionRequest.FieldsEntry
+	(*IntegrationAuthMethod)(nil),          // 5: reliant.v1.IntegrationAuthMethod
+	(*IntegrationConnectionParam)(nil),     // 6: reliant.v1.IntegrationConnectionParam
+	(*ListIntegrationsRequest)(nil),        // 7: reliant.v1.ListIntegrationsRequest
+	(*ListIntegrationsResponse)(nil),       // 8: reliant.v1.ListIntegrationsResponse
+	(*ListConnectionsRequest)(nil),         // 9: reliant.v1.ListConnectionsRequest
+	(*ListConnectionsResponse)(nil),        // 10: reliant.v1.ListConnectionsResponse
+	(*GetConnectionRequest)(nil),           // 11: reliant.v1.GetConnectionRequest
+	(*GetConnectionResponse)(nil),          // 12: reliant.v1.GetConnectionResponse
+	(*CreateApiKeyConnectionRequest)(nil),  // 13: reliant.v1.CreateApiKeyConnectionRequest
+	(*CreateApiKeyConnectionResponse)(nil), // 14: reliant.v1.CreateApiKeyConnectionResponse
+	(*StartOAuthRequest)(nil),              // 15: reliant.v1.StartOAuthRequest
+	(*StartOAuthResponse)(nil),             // 16: reliant.v1.StartOAuthResponse
+	(*CompleteOAuthRequest)(nil),           // 17: reliant.v1.CompleteOAuthRequest
+	(*CompleteOAuthResponse)(nil),          // 18: reliant.v1.CompleteOAuthResponse
+	(*TestConnectionRequest)(nil),          // 19: reliant.v1.TestConnectionRequest
+	(*TestConnectionResponse)(nil),         // 20: reliant.v1.TestConnectionResponse
+	(*RenameConnectionRequest)(nil),        // 21: reliant.v1.RenameConnectionRequest
+	(*RenameConnectionResponse)(nil),       // 22: reliant.v1.RenameConnectionResponse
+	(*SetDefaultConnectionRequest)(nil),    // 23: reliant.v1.SetDefaultConnectionRequest
+	(*SetDefaultConnectionResponse)(nil),   // 24: reliant.v1.SetDefaultConnectionResponse
+	(*DeleteConnectionRequest)(nil),        // 25: reliant.v1.DeleteConnectionRequest
+	(*DeleteConnectionResponse)(nil),       // 26: reliant.v1.DeleteConnectionResponse
+	(*ConnectionEvent)(nil),                // 27: reliant.v1.ConnectionEvent
+	(*ListConnectionEventsRequest)(nil),    // 28: reliant.v1.ListConnectionEventsRequest
+	(*ListConnectionEventsResponse)(nil),   // 29: reliant.v1.ListConnectionEventsResponse
+	nil,                                    // 30: reliant.v1.Connection.ParamsEntry
+	nil,                                    // 31: reliant.v1.IntegrationAuthMethod.FieldLabelsEntry
+	nil,                                    // 32: reliant.v1.CreateApiKeyConnectionRequest.FieldsEntry
+	nil,                                    // 33: reliant.v1.CreateApiKeyConnectionRequest.ParamsEntry
+	nil,                                    // 34: reliant.v1.StartOAuthRequest.ParamsEntry
 }
 var file_reliant_v1_connection_proto_depIdxs = []int32{
 	0,  // 0: reliant.v1.Connection.auth_kind:type_name -> reliant.v1.ConnectionAuthKind
 	1,  // 1: reliant.v1.Connection.status:type_name -> reliant.v1.ConnectionStatus
-	0,  // 2: reliant.v1.Integration.auth_kind:type_name -> reliant.v1.ConnectionAuthKind
-	4,  // 3: reliant.v1.ListIntegrationsResponse.integrations:type_name -> reliant.v1.Integration
-	3,  // 4: reliant.v1.ListConnectionsResponse.connections:type_name -> reliant.v1.Connection
-	3,  // 5: reliant.v1.GetConnectionResponse.connection:type_name -> reliant.v1.Connection
-	2,  // 6: reliant.v1.CreateApiKeyConnectionRequest.kind:type_name -> reliant.v1.ApiKeyConnectionKind
-	28, // 7: reliant.v1.CreateApiKeyConnectionRequest.fields:type_name -> reliant.v1.CreateApiKeyConnectionRequest.FieldsEntry
-	3,  // 8: reliant.v1.CreateApiKeyConnectionResponse.connection:type_name -> reliant.v1.Connection
-	3,  // 9: reliant.v1.CompleteOAuthResponse.connection:type_name -> reliant.v1.Connection
-	3,  // 10: reliant.v1.RenameConnectionResponse.connection:type_name -> reliant.v1.Connection
-	3,  // 11: reliant.v1.SetDefaultConnectionResponse.connection:type_name -> reliant.v1.Connection
-	25, // 12: reliant.v1.ListConnectionEventsResponse.events:type_name -> reliant.v1.ConnectionEvent
-	5,  // 13: reliant.v1.ConnectionService.ListIntegrations:input_type -> reliant.v1.ListIntegrationsRequest
-	7,  // 14: reliant.v1.ConnectionService.ListConnections:input_type -> reliant.v1.ListConnectionsRequest
-	9,  // 15: reliant.v1.ConnectionService.GetConnection:input_type -> reliant.v1.GetConnectionRequest
-	11, // 16: reliant.v1.ConnectionService.CreateApiKeyConnection:input_type -> reliant.v1.CreateApiKeyConnectionRequest
-	13, // 17: reliant.v1.ConnectionService.StartOAuth:input_type -> reliant.v1.StartOAuthRequest
-	15, // 18: reliant.v1.ConnectionService.CompleteOAuth:input_type -> reliant.v1.CompleteOAuthRequest
-	17, // 19: reliant.v1.ConnectionService.TestConnection:input_type -> reliant.v1.TestConnectionRequest
-	19, // 20: reliant.v1.ConnectionService.RenameConnection:input_type -> reliant.v1.RenameConnectionRequest
-	21, // 21: reliant.v1.ConnectionService.SetDefaultConnection:input_type -> reliant.v1.SetDefaultConnectionRequest
-	23, // 22: reliant.v1.ConnectionService.DeleteConnection:input_type -> reliant.v1.DeleteConnectionRequest
-	26, // 23: reliant.v1.ConnectionService.ListConnectionEvents:input_type -> reliant.v1.ListConnectionEventsRequest
-	6,  // 24: reliant.v1.ConnectionService.ListIntegrations:output_type -> reliant.v1.ListIntegrationsResponse
-	8,  // 25: reliant.v1.ConnectionService.ListConnections:output_type -> reliant.v1.ListConnectionsResponse
-	10, // 26: reliant.v1.ConnectionService.GetConnection:output_type -> reliant.v1.GetConnectionResponse
-	12, // 27: reliant.v1.ConnectionService.CreateApiKeyConnection:output_type -> reliant.v1.CreateApiKeyConnectionResponse
-	14, // 28: reliant.v1.ConnectionService.StartOAuth:output_type -> reliant.v1.StartOAuthResponse
-	16, // 29: reliant.v1.ConnectionService.CompleteOAuth:output_type -> reliant.v1.CompleteOAuthResponse
-	18, // 30: reliant.v1.ConnectionService.TestConnection:output_type -> reliant.v1.TestConnectionResponse
-	20, // 31: reliant.v1.ConnectionService.RenameConnection:output_type -> reliant.v1.RenameConnectionResponse
-	22, // 32: reliant.v1.ConnectionService.SetDefaultConnection:output_type -> reliant.v1.SetDefaultConnectionResponse
-	24, // 33: reliant.v1.ConnectionService.DeleteConnection:output_type -> reliant.v1.DeleteConnectionResponse
-	27, // 34: reliant.v1.ConnectionService.ListConnectionEvents:output_type -> reliant.v1.ListConnectionEventsResponse
-	24, // [24:35] is the sub-list for method output_type
-	13, // [13:24] is the sub-list for method input_type
-	13, // [13:13] is the sub-list for extension type_name
-	13, // [13:13] is the sub-list for extension extendee
-	0,  // [0:13] is the sub-list for field type_name
+	30, // 2: reliant.v1.Connection.params:type_name -> reliant.v1.Connection.ParamsEntry
+	5,  // 3: reliant.v1.Integration.methods:type_name -> reliant.v1.IntegrationAuthMethod
+	6,  // 4: reliant.v1.Integration.connection_params:type_name -> reliant.v1.IntegrationConnectionParam
+	0,  // 5: reliant.v1.IntegrationAuthMethod.kind:type_name -> reliant.v1.ConnectionAuthKind
+	31, // 6: reliant.v1.IntegrationAuthMethod.field_labels:type_name -> reliant.v1.IntegrationAuthMethod.FieldLabelsEntry
+	4,  // 7: reliant.v1.ListIntegrationsResponse.integrations:type_name -> reliant.v1.Integration
+	3,  // 8: reliant.v1.ListConnectionsResponse.connections:type_name -> reliant.v1.Connection
+	3,  // 9: reliant.v1.GetConnectionResponse.connection:type_name -> reliant.v1.Connection
+	2,  // 10: reliant.v1.CreateApiKeyConnectionRequest.kind:type_name -> reliant.v1.ApiKeyConnectionKind
+	32, // 11: reliant.v1.CreateApiKeyConnectionRequest.fields:type_name -> reliant.v1.CreateApiKeyConnectionRequest.FieldsEntry
+	33, // 12: reliant.v1.CreateApiKeyConnectionRequest.params:type_name -> reliant.v1.CreateApiKeyConnectionRequest.ParamsEntry
+	3,  // 13: reliant.v1.CreateApiKeyConnectionResponse.connection:type_name -> reliant.v1.Connection
+	34, // 14: reliant.v1.StartOAuthRequest.params:type_name -> reliant.v1.StartOAuthRequest.ParamsEntry
+	3,  // 15: reliant.v1.CompleteOAuthResponse.connection:type_name -> reliant.v1.Connection
+	3,  // 16: reliant.v1.RenameConnectionResponse.connection:type_name -> reliant.v1.Connection
+	3,  // 17: reliant.v1.SetDefaultConnectionResponse.connection:type_name -> reliant.v1.Connection
+	27, // 18: reliant.v1.ListConnectionEventsResponse.events:type_name -> reliant.v1.ConnectionEvent
+	7,  // 19: reliant.v1.ConnectionService.ListIntegrations:input_type -> reliant.v1.ListIntegrationsRequest
+	9,  // 20: reliant.v1.ConnectionService.ListConnections:input_type -> reliant.v1.ListConnectionsRequest
+	11, // 21: reliant.v1.ConnectionService.GetConnection:input_type -> reliant.v1.GetConnectionRequest
+	13, // 22: reliant.v1.ConnectionService.CreateApiKeyConnection:input_type -> reliant.v1.CreateApiKeyConnectionRequest
+	15, // 23: reliant.v1.ConnectionService.StartOAuth:input_type -> reliant.v1.StartOAuthRequest
+	17, // 24: reliant.v1.ConnectionService.CompleteOAuth:input_type -> reliant.v1.CompleteOAuthRequest
+	19, // 25: reliant.v1.ConnectionService.TestConnection:input_type -> reliant.v1.TestConnectionRequest
+	21, // 26: reliant.v1.ConnectionService.RenameConnection:input_type -> reliant.v1.RenameConnectionRequest
+	23, // 27: reliant.v1.ConnectionService.SetDefaultConnection:input_type -> reliant.v1.SetDefaultConnectionRequest
+	25, // 28: reliant.v1.ConnectionService.DeleteConnection:input_type -> reliant.v1.DeleteConnectionRequest
+	28, // 29: reliant.v1.ConnectionService.ListConnectionEvents:input_type -> reliant.v1.ListConnectionEventsRequest
+	8,  // 30: reliant.v1.ConnectionService.ListIntegrations:output_type -> reliant.v1.ListIntegrationsResponse
+	10, // 31: reliant.v1.ConnectionService.ListConnections:output_type -> reliant.v1.ListConnectionsResponse
+	12, // 32: reliant.v1.ConnectionService.GetConnection:output_type -> reliant.v1.GetConnectionResponse
+	14, // 33: reliant.v1.ConnectionService.CreateApiKeyConnection:output_type -> reliant.v1.CreateApiKeyConnectionResponse
+	16, // 34: reliant.v1.ConnectionService.StartOAuth:output_type -> reliant.v1.StartOAuthResponse
+	18, // 35: reliant.v1.ConnectionService.CompleteOAuth:output_type -> reliant.v1.CompleteOAuthResponse
+	20, // 36: reliant.v1.ConnectionService.TestConnection:output_type -> reliant.v1.TestConnectionResponse
+	22, // 37: reliant.v1.ConnectionService.RenameConnection:output_type -> reliant.v1.RenameConnectionResponse
+	24, // 38: reliant.v1.ConnectionService.SetDefaultConnection:output_type -> reliant.v1.SetDefaultConnectionResponse
+	26, // 39: reliant.v1.ConnectionService.DeleteConnection:output_type -> reliant.v1.DeleteConnectionResponse
+	29, // 40: reliant.v1.ConnectionService.ListConnectionEvents:output_type -> reliant.v1.ListConnectionEventsResponse
+	30, // [30:41] is the sub-list for method output_type
+	19, // [19:30] is the sub-list for method input_type
+	19, // [19:19] is the sub-list for extension type_name
+	19, // [19:19] is the sub-list for extension extendee
+	0,  // [0:19] is the sub-list for field type_name
 }
 
 func init() { file_reliant_v1_connection_proto_init() }
@@ -1838,7 +2061,7 @@ func file_reliant_v1_connection_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_reliant_v1_connection_proto_rawDesc), len(file_reliant_v1_connection_proto_rawDesc)),
 			NumEnums:      3,
-			NumMessages:   26,
+			NumMessages:   32,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

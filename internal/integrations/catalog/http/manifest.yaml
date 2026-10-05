@@ -9,12 +9,18 @@ description: Make an HTTP request to a public URL.
 icon: globe
 category: core
 
+keywords: [api, rest, webhook, request, fetch, zapier]
+
 connection:
-  type: none
   allow_any_public_host: true
   # A saved api_key or basic connection for integration `http` may be named per
-  # call. It is only ever sent to the host the call started at.
-  optional_auth_kinds: [api_key, basic]
+  # call; without one the request is unauthenticated. The credential is only
+  # ever sent to the host the call started at. This integration knows no
+  # particular API, so an api_key connection picks its header from a fixed list.
+  auth_optional: true
+  auth:
+    - api_key: { label: API key }
+    - basic: {}
 
 actions:
   - id: request

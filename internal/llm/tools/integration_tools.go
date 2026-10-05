@@ -19,14 +19,15 @@ import (
 // a workflow can grant them as a group (`tag:integration`).
 const TagIntegration ToolTag = "integration"
 
-// ConnectionAvailable reports whether the run's owner can use the connection
-// an integration needs. Integrations with connection type "none" never ask.
-// Until the connections phase lands there is nothing to resolve a connection
-// against, so the default is "no": a tool whose manifest needs a connection is
-// absent rather than present-and-401ing.
+// ConnectionAvailable reports whether an integration's tools may be offered.
+// One that needs no credential (no auth, or auth_optional) always may. One
+// that requires a connection is withheld until the registry can ask whether
+// the RUN OWNER has one (or a delegated authority): the tool list is built
+// without an owner today, and a tool that is present-and-401ing is worse than
+// absent (INTEGRATIONS.md §3.2). Its action node works regardless.
 var ConnectionAvailable = func(m *reliantv1.IntegrationManifest) bool {
-	t := m.GetConnection().GetType()
-	return t == "" || t == manifest.ConnectionNone
+	conn := m.GetConnection()
+	return len(conn.GetAuth()) == 0 || conn.GetAuthOptional()
 }
 
 var (

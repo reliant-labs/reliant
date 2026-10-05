@@ -30,27 +30,169 @@ message IntegrationManifest {
   // Triggers are reserved for a later phase. A manifest that declares any is
   // rejected at load until trigger support exists.
   repeated TriggerSpec triggers = 9;
+  // Keywords are extra search terms for the catalog index: product names and
+  // synonyms ("email" for gmail). Lower-case words, [a-z0-9][a-z0-9_.-]*.
+  repeated string keywords = 10;
 }
 
 // ConnectionSpec says how requests are authenticated and where they may go.
+// Adding a provider is data: the auth methods, the identity probe and the
+// per-connection params below are everything the connections layer needs.
 message ConnectionSpec {
-  // Type is "none" today. "api_key", "oauth2", "oauth_app" and "basic" are
-  // reserved for the connections phase and rejected at load.
-  string type = 1;
+  reserved 1, 6;
+  reserved "type", "optional_auth_kinds";
+
   // BaseUrl is the https origin (and optional path prefix) request `path`s
   // resolve against. Every request host must be this host or in allowed_hosts.
+  //
+  // It may interpolate connection params, and nothing else. The leftmost host
+  // label may be exactly {{ connection.params.<name> }} followed by a literal
+  // domain of at least two labels
+  // (https://{{ connection.params.shop }}.myshopify.com), so a user-supplied
+  // value can pick a tenant but never the domain. Path segments may also
+  // interpolate params; they are percent-escaped.
   string base_url = 2;
   repeated string allowed_hosts = 3;
   map<string, string> default_headers = 4;
   // AllowAnyPublicHost lets request.url name any host. It exists for the
-  // generic HTTP integration only; the loader accepts it solely with type
-  // "none", and the runtime still refuses private addresses after DNS.
+  // generic HTTP integration only: it requires auth_optional, and the runtime
+  // still refuses private addresses after DNS and pins a credential to the
+  // host a call started at.
   bool allow_any_public_host = 5;
-  // OptionalAuthKinds lets a connection of type "none" still accept a saved
-  // credential when the caller names one. Values: "api_key", "basic". The
-  // credential must belong to a connection for THIS integration id, so a token
-  // saved for another service can never be pointed at an arbitrary host.
-  repeated string optional_auth_kinds = 6;
+  // Auth lists the ways a user can connect, most preferred first. Empty means
+  // the integration takes no credential. Each kind appears at most once; a
+  // connection records which kind it was made with.
+  repeated AuthMethod auth = 7;
+  // AuthOptional lets an action run with no connection and attach one only
+  // when the caller names it (the generic HTTP integration). Without it every
+  // action needs a connection: the one named, else the owner's default, else
+  // a delegated authority.
+  bool auth_optional = 8;
+  // ConnectionParams are per-connection, non-secret settings the user supplies
+  // when connecting (a Shopify shop, a Zendesk subdomain). Templates reach
+  // them as connection.params.<name>.
+  repeated ConnectionParam connection_params = 9;
+  // Probe asks the provider who a credential acts as. It labels a new OAuth
+  // connection (and is required for oauth2, whose dedupe key is the external
+  // id) and backs TestConnection for every kind.
+  IdentityProbe probe = 10;
+}
+
+// AuthMethod is one way to connect. Exactly one arm is set.
+message AuthMethod {
+  oneof method {
+    OAuth2Auth oauth2 = 1;
+    ApiKeyAuth api_key = 2;
+    BasicAuth basic = 3;
+    DelegatedAuth delegated = 4;
+  }
+}
+
+// OAuth2Auth is the authorization-code grant with PKCE.
+//
+// The client id and secret are deployment config, read from
+// RELIANT_OAUTH_<ID>_CLIENT_ID and RELIANT_OAUTH_<ID>_CLIENT_SECRET, where <ID>
+// is the integration id upper-cased. They are never in a manifest or the
+// database. A deployment without them lists the method as unavailable.
+message OAuth2Auth {
+  // AuthorizeUrl and TokenUrl are https, fixed by the catalog. They may
+  // interpolate connection params under the same rule as base_url.
+  string authorize_url = 1;
+  string token_url = 2;
+  repeated string scopes = 3;
+  // ScopeSeparator joins scopes: " " (the default, RFC 6749) or ",".
+  string scope_separator = 4;
+  // Pkce is the code challenge method: "S256" (the default) or "plain". PKCE
+  // is always sent: RFC 6749 §3.1 has a server ignore parameters it does not
+  // recognise, so sending it never breaks a provider that lacks it.
+  string pkce = 5;
+  // AuthorizeParams are extra authorization request parameters
+  // (access_type: offline). The parameters the flow itself sets are refused.
+  map<string, string> authorize_params = 6;
+  // Revoke, when set, is called best-effort when a connection is deleted.
+  RevokeSpec revoke = 7;
+}
+
+// RevokeSpec describes the provider's token revocation call.
+message RevokeSpec {
+  // Method is POST (the default), DELETE or GET.
+  string method = 1;
+  // Url is https and catalog-fixed. Besides connection params it may
+  // interpolate {{ client_id }}.
+  string url = 2;
+  // ClientAuth is "none" (the default) or "basic" (client id and secret as
+  // HTTP Basic credentials).
+  string client_auth = 3;
+  // TokenIn is where the access token goes: "form" (the default, RFC 7009),
+  // "json", "query" or "bearer".
+  string token_in = 4;
+  // TokenParam names the token field for form, json and query (default
+  // "token").
+  string token_param = 5;
+}
+
+// ApiKeyAuth is a pasted key, placed in a header or a query parameter.
+message ApiKeyAuth {
+  // In is "header" or "query". Leaving in and name both empty lets the user
+  // choose the header per connection from a fixed list; only an
+  // allow_any_public_host integration may do that, since it knows no API.
+  string in = 1;
+  // Name is the header or query parameter that carries the key.
+  string name = 2;
+  // Prefix is written before the key ("Bearer ", "Token ").
+  string prefix = 3;
+  // Label names the key field in the connect form ("API token").
+  string label = 4;
+}
+
+// BasicAuth is HTTP Basic: a username (often an account id) and a secret.
+message BasicAuth {
+  string username_label = 1;
+  string password_label = 2;
+  // UsernameParam, when set, names a connection param whose value is the
+  // username (an account id the base_url also uses), so the user pastes only
+  // the secret.
+  string username_param = 3;
+}
+
+// DelegatedAuth takes the token from an external authority at call time, such
+// as GitHub through the control plane. Broker names a broker that Go code
+// registers with the connections layer; no connection row is stored. A
+// deployment that registered none lists the method as unavailable.
+message DelegatedAuth {
+  string broker = 1;
+}
+
+// ConnectionParam is one non-secret per-connection setting.
+message ConnectionParam {
+  // Name is [a-z][a-z0-9_]*; templates reach it as connection.params.<name>.
+  string name = 1;
+  string display_name = 2;
+  string description = 3;
+  // Pattern is an RE2 expression every value must match in full.
+  string pattern = 4;
+  // DefaultValue is used when the user supplies none. A param without one is
+  // required.
+  string default_value = 5;
+}
+
+// IdentityProbe is one request that names the account a credential acts as.
+// The connection's default_headers and its credential are applied.
+message IdentityProbe {
+  // Method is GET (the default) or POST.
+  string method = 1;
+  // Url is absolute (same template rule as base_url); path is relative to
+  // base_url. Exactly one is set.
+  string url = 2;
+  string path = 3;
+  map<string, string> headers = 4;
+  // Ok is CEL over `response` (the parsed body). False means the credential
+  // was refused even though the status was 2xx, as Slack reports it.
+  string ok = 5;
+  // ExternalId is CEL over `response` yielding the account's stable id.
+  string external_id = 6;
+  // Label is CEL over `response` yielding a human label (a login, an email).
+  string label = 7;
 }
 
 // ActionSpec is one operation: usable as a workflow node and, optionally, as
@@ -71,8 +213,21 @@ message ActionSpec {
   ToolSpec tool = 7;
   // Params is a JSON Schema for the action's parameters.
   google.protobuf.Struct params = 8;
+  // Request is the declarative HTTP call. Required unless executor is set.
   HttpRequestSpec request = 9;
   OutputSpec output = 10;
+  // Executor is empty for the declarative `request`, or "go:<name>": a Go
+  // function registered under <name> with the same params and output
+  // contract. It is the escape hatch for what a declaration cannot express
+  // (MIME assembly, request signing). The params and output schemas stay in
+  // the manifest, so forms and tool definitions never depend on code. It is
+  // manifest-only and never appears in workflow YAML.
+  string executor = 11;
+  // Summary is one line for search results and pickers; description is the
+  // long form an agent reads.
+  string summary = 12;
+  // Keywords are extra search terms for the catalog index.
+  repeated string keywords = 13;
 }
 
 // ToolSpec controls exposing an action to agents as a tool.

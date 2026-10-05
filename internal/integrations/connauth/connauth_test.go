@@ -52,7 +52,7 @@ func newEnv(t *testing.T) *env {
 	ring, err := crypto.ParseKeyring("v1:" + base64.StdEncoding.EncodeToString(k))
 	require.NoError(t, err)
 	v := vault.New(raw, vault.NewEnvKeyWrapper(ring))
-	providers, err := connections.NewRegistry()
+	providers, err := connections.ProvidersFromCatalog(catalog.MustBuiltin().Manifests(), func(string) string { return "" })
 	require.NoError(t, err)
 	store := repo.Connections()
 	tokens := connections.NewTokenSource(store, v, providers, nil)
@@ -82,6 +82,18 @@ func (e *env) apiKey(userID, integration, name, header string) string {
 	}
 	conn, err := e.svc.CreateAPIKey(context.Background(), connections.CreateAPIKeyParams{
 		UserID: userID, IntegrationID: integration, Name: name, Kind: connections.APIKeyKindAPIKey, Fields: fields,
+	})
+	require.NoError(e.t, err)
+	return conn.ID
+}
+
+// githubPAT saves a GitHub personal access token: a credential for a different
+// integration than http, whose manifest pins it to api.github.com.
+func (e *env) githubPAT(userID string) string {
+	e.t.Helper()
+	conn, err := e.svc.CreateAPIKey(context.Background(), connections.CreateAPIKeyParams{
+		UserID: userID, IntegrationID: "github", Name: "pat", Kind: connections.APIKeyKindAPIKey,
+		Fields: map[string]string{"api_key": canary},
 	})
 	require.NoError(e.t, err)
 	return conn.ID
@@ -235,9 +247,9 @@ func TestConnectionForAnotherIntegrationIsRefused(t *testing.T) {
 	u, runner, seen := serve(t, false)
 	a, params := httpRequest(t)
 	params["url"] = u
-	params["connection"] = e.apiKey("alice", "stripe", "s", "")
+	params["connection"] = e.githubPAT("alice")
 	_, err := runner.RunAuthenticated(context.Background(), a.Manifest, a.Spec, params, e.source, httpaction.CallSite{RunID: e.newRun("alice")})
-	require.Error(t, err, "a token saved for stripe must not be sent through the http integration")
+	require.Error(t, err, "a token saved for github must not be sent through the http integration")
 	assert.Empty(t, seen.Get("Authorization"))
 }
 

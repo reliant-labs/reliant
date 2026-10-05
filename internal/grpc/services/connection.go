@@ -81,8 +81,8 @@ func connectionAuthKindToProto(k string) reliantv1.ConnectionAuthKind {
 	switch k {
 	case core.ConnectionAuthOAuth2:
 		return reliantv1.ConnectionAuthKind_CONNECTION_AUTH_KIND_OAUTH2
-	case core.ConnectionAuthGitHubAppUser:
-		return reliantv1.ConnectionAuthKind_CONNECTION_AUTH_KIND_GITHUB_APP_USER
+	case connections.MethodDelegated:
+		return reliantv1.ConnectionAuthKind_CONNECTION_AUTH_KIND_DELEGATED
 	case core.ConnectionAuthAPIKey:
 		return reliantv1.ConnectionAuthKind_CONNECTION_AUTH_KIND_API_KEY
 	case core.ConnectionAuthBasic:
@@ -130,6 +130,7 @@ func connectionToProto(c *core.Connection) *reliantv1.Connection {
 		Scopes: scopes, Status: connectionStatusToProto(c.Status), StatusReason: derefStr(c.StatusReason),
 		IsDefault: c.IsDefault, AccessExpiresAt: rfc3339Ptr(c.AccessExpiresAt), LastUsedAt: rfc3339Ptr(c.LastUsedAt),
 		CreatedAt: c.CreatedAt.UTC().Format(time.RFC3339), UpdatedAt: c.UpdatedAt.UTC().Format(time.RFC3339),
+		Params: c.Params,
 	}
 }
 
@@ -139,10 +140,20 @@ func (s *ConnectionService) ListIntegrations(ctx context.Context, _ *connect.Req
 	}
 	out := []*reliantv1.Integration{}
 	for _, i := range s.svc.ListIntegrations() {
-		out = append(out, &reliantv1.Integration{
-			Id: i.ID, DisplayName: i.DisplayName, AuthKind: connectionAuthKindToProto(i.AuthKind),
-			Available: i.Available, UnavailableReason: i.UnavailableReason,
-		})
+		in := &reliantv1.Integration{Id: i.ID, DisplayName: i.DisplayName}
+		for _, m := range i.Methods {
+			in.Methods = append(in.Methods, &reliantv1.IntegrationAuthMethod{
+				Kind: connectionAuthKindToProto(m.Kind), Available: m.Available,
+				UnavailableReason: m.Reason, FieldLabels: m.FieldLabels,
+			})
+		}
+		for _, p := range i.Params {
+			in.ConnectionParams = append(in.ConnectionParams, &reliantv1.IntegrationConnectionParam{
+				Name: p.GetName(), DisplayName: p.GetDisplayName(), Description: p.GetDescription(),
+				Pattern: p.GetPattern(), DefaultValue: p.GetDefaultValue(), Required: p.GetDefaultValue() == "",
+			})
+		}
+		out = append(out, in)
 	}
 	return connect.NewResponse(&reliantv1.ListIntegrationsResponse{Integrations: out}), nil
 }
@@ -189,7 +200,7 @@ func (s *ConnectionService) CreateApiKeyConnection(ctx context.Context, req *con
 	}
 	c, err := s.svc.CreateAPIKey(ctx, connections.CreateAPIKeyParams{
 		UserID: userID, IntegrationID: req.Msg.GetIntegrationId(), Name: req.Msg.GetName(),
-		Kind: kind, Fields: req.Msg.GetFields(),
+		Kind: kind, Fields: req.Msg.GetFields(), Params: req.Msg.GetParams(),
 	})
 	if err != nil {
 		return nil, connectionError(err)
@@ -205,6 +216,7 @@ func (s *ConnectionService) StartOAuth(ctx context.Context, req *connect.Request
 	url, err := s.svc.StartOAuth(ctx, connections.StartParams{
 		UserID: userID, IntegrationID: req.Msg.GetIntegrationId(), Name: req.Msg.GetName(),
 		ReconnectID: req.Msg.GetReconnectId(), RedirectAfter: req.Msg.GetRedirectAfter(),
+		Params: req.Msg.GetParams(),
 	})
 	if err != nil {
 		return nil, connectionError(err)

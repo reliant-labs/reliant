@@ -1,6 +1,8 @@
 // Package tmpl renders the {{ expr }} templates used by integration manifests.
 // Expressions are CEL, the engine's expression language, over the variables
-// params, response (parsed JSON body), raw (body text), status and headers.
+// params, connection (the resolved connection's non-secret params, as
+// connection.params.<name>), response (parsed JSON body), raw (body text),
+// status and headers.
 package tmpl
 
 import (
@@ -36,6 +38,7 @@ func celEnv() (*cel.Env, error) {
 	envOnce.Do(func() {
 		env, envErr = cel.NewEnv(
 			cel.Variable("params", cel.DynType),
+			cel.Variable("connection", cel.DynType),
 			cel.Variable("response", cel.DynType),
 			cel.Variable("status", cel.DynType),
 			cel.Variable("headers", cel.DynType),
@@ -118,7 +121,7 @@ func EvalExpr(expr string, vars map[string]any) (any, error) {
 }
 
 func eval(prg cel.Program, expr string, vars map[string]any) (any, error) {
-	full := map[string]any{"params": map[string]any{}, "response": nil, "status": int64(0), "headers": map[string]any{}, "raw": ""}
+	full := map[string]any{"params": map[string]any{}, "connection": map[string]any{"params": map[string]any{}}, "response": nil, "status": int64(0), "headers": map[string]any{}, "raw": ""}
 	for k, v := range vars {
 		full[k] = v
 	}

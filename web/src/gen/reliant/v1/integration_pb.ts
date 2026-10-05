@@ -15,7 +15,7 @@ import type { JsonObject, Message } from "@bufbuild/protobuf";
  * Describes the file reliant/v1/integration.proto.
  */
 export const file_reliant_v1_integration: GenFile = /*@__PURE__*/
-  fileDesc("ChxyZWxpYW50L3YxL2ludGVncmF0aW9uLnByb3RvEgpyZWxpYW50LnYxIoECChNJbnRlZ3JhdGlvbk1hbmlmZXN0EgoKAmlkGAEgASgJEg8KB3ZlcnNpb24YAiABKAUSFAoMZGlzcGxheV9uYW1lGAMgASgJEhMKC2Rlc2NyaXB0aW9uGAQgASgJEgwKBGljb24YBSABKAkSEAoIY2F0ZWdvcnkYBiABKAkSLgoKY29ubmVjdGlvbhgHIAEoCzIaLnJlbGlhbnQudjEuQ29ubmVjdGlvblNwZWMSJwoHYWN0aW9ucxgIIAMoCzIWLnJlbGlhbnQudjEuQWN0aW9uU3BlYxIpCgh0cmlnZ2VycxgJIAMoCzIXLnJlbGlhbnQudjEuVHJpZ2dlclNwZWMigwIKDkNvbm5lY3Rpb25TcGVjEgwKBHR5cGUYASABKAkSEAoIYmFzZV91cmwYAiABKAkSFQoNYWxsb3dlZF9ob3N0cxgDIAMoCRJHCg9kZWZhdWx0X2hlYWRlcnMYBCADKAsyLi5yZWxpYW50LnYxLkNvbm5lY3Rpb25TcGVjLkRlZmF1bHRIZWFkZXJzRW50cnkSHQoVYWxsb3dfYW55X3B1YmxpY19ob3N0GAUgASgIEhsKE29wdGlvbmFsX2F1dGhfa2luZHMYBiADKAkaNQoTRGVmYXVsdEhlYWRlcnNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIpgCCgpBY3Rpb25TcGVjEgoKAmlkGAEgASgJEhQKDGRpc3BsYXlfbmFtZRgCIAEoCRITCgtkZXNjcmlwdGlvbhgDIAEoCRIMCgRraW5kGAQgASgJEhEKCXBsYWNlbWVudBgFIAEoCRIPCgdtdXRhdGVzGAYgASgIEiIKBHRvb2wYByABKAsyFC5yZWxpYW50LnYxLlRvb2xTcGVjEicKBnBhcmFtcxgIIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3QSLAoHcmVxdWVzdBgJIAEoCzIbLnJlbGlhbnQudjEuSHR0cFJlcXVlc3RTcGVjEiYKBm91dHB1dBgKIAEoCzIWLnJlbGlhbnQudjEuT3V0cHV0U3BlYyI2CghUb29sU3BlYxIOCgZleHBvc2UYASABKAgSDAoEbmFtZRgCIAEoCRIMCgR0YWdzGAMgAygJIvsDCg9IdHRwUmVxdWVzdFNwZWMSDgoGbWV0aG9kGAEgASgJEgsKA3VybBgCIAEoCRIMCgRwYXRoGAMgASgJEjUKBXF1ZXJ5GAQgAygLMiYucmVsaWFudC52MS5IdHRwUmVxdWVzdFNwZWMuUXVlcnlFbnRyeRI5CgdoZWFkZXJzGAUgAygLMigucmVsaWFudC52MS5IdHRwUmVxdWVzdFNwZWMuSGVhZGVyc0VudHJ5EiQKBGJvZHkYBiABKAsyFi5nb29nbGUucHJvdG9idWYuVmFsdWUSLgoKcGFnaW5hdGlvbhgHIAEoCzIaLnJlbGlhbnQudjEuUGFnaW5hdGlvblNwZWMSJQoGZXJyb3JzGAggAygLMhUucmVsaWFudC52MS5FcnJvclJ1bGUSFwoPdGltZW91dF9zZWNvbmRzGAkgASgFEhoKEm1heF9yZXNwb25zZV9ieXRlcxgKIAEoAxIUCgxoZWFkZXJzX2V4cHIYCyABKAkSEgoKcXVlcnlfZXhwchgMIAEoCRIRCglib2R5X2V4cHIYDSABKAkaLAoKUXVlcnlFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBGi4KDEhlYWRlcnNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIoUBCg5QYWdpbmF0aW9uU3BlYxINCgVzdHlsZRgBIAEoCRIRCgltYXhfcGFnZXMYAiABKAUSFAoMY3Vyc29yX3BhcmFtGAMgASgJEhMKC25leHRfY3Vyc29yGAQgASgJEhIKCnBhZ2VfcGFyYW0YBSABKAkSEgoKc3RhcnRfcGFnZRgGIAEoBSJnCglFcnJvclJ1bGUSDgoGc3RhdHVzGAEgASgFEhIKCnN0YXR1c19taW4YAiABKAUSEgoKc3RhdHVzX21heBgDIAEoBRIRCglyZXRyeWFibGUYBCABKAgSDwoHbWVzc2FnZRgFIAEoCSJFCgpPdXRwdXRTcGVjEg4KBnNlbGVjdBgBIAEoCRInCgZzY2hlbWEYAiABKAsyFy5nb29nbGUucHJvdG9idWYuU3RydWN0IhkKC1RyaWdnZXJTcGVjEgoKAmlkGAEgASgJQjpaOGdpdGh1Yi5jb20vcmVsaWFudC1sYWJzL3JlbGlhbnQvZ2VuL3JlbGlhbnQvdjE7cmVsaWFudHYxYgZwcm90bzM", [file_google_protobuf_struct]);
+  fileDesc("ChxyZWxpYW50L3YxL2ludGVncmF0aW9uLnByb3RvEgpyZWxpYW50LnYxIpMCChNJbnRlZ3JhdGlvbk1hbmlmZXN0EgoKAmlkGAEgASgJEg8KB3ZlcnNpb24YAiABKAUSFAoMZGlzcGxheV9uYW1lGAMgASgJEhMKC2Rlc2NyaXB0aW9uGAQgASgJEgwKBGljb24YBSABKAkSEAoIY2F0ZWdvcnkYBiABKAkSLgoKY29ubmVjdGlvbhgHIAEoCzIaLnJlbGlhbnQudjEuQ29ubmVjdGlvblNwZWMSJwoHYWN0aW9ucxgIIAMoCzIWLnJlbGlhbnQudjEuQWN0aW9uU3BlYxIpCgh0cmlnZ2VycxgJIAMoCzIXLnJlbGlhbnQudjEuVHJpZ2dlclNwZWMSEAoIa2V5d29yZHMYCiADKAkingMKDkNvbm5lY3Rpb25TcGVjEhAKCGJhc2VfdXJsGAIgASgJEhUKDWFsbG93ZWRfaG9zdHMYAyADKAkSRwoPZGVmYXVsdF9oZWFkZXJzGAQgAygLMi4ucmVsaWFudC52MS5Db25uZWN0aW9uU3BlYy5EZWZhdWx0SGVhZGVyc0VudHJ5Eh0KFWFsbG93X2FueV9wdWJsaWNfaG9zdBgFIAEoCBIkCgRhdXRoGAcgAygLMhYucmVsaWFudC52MS5BdXRoTWV0aG9kEhUKDWF1dGhfb3B0aW9uYWwYCCABKAgSNgoRY29ubmVjdGlvbl9wYXJhbXMYCSADKAsyGy5yZWxpYW50LnYxLkNvbm5lY3Rpb25QYXJhbRIoCgVwcm9iZRgKIAEoCzIZLnJlbGlhbnQudjEuSWRlbnRpdHlQcm9iZRo1ChNEZWZhdWx0SGVhZGVyc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAFKBAgBEAJKBAgGEAdSBHR5cGVSE29wdGlvbmFsX2F1dGhfa2luZHMiwwEKCkF1dGhNZXRob2QSKAoGb2F1dGgyGAEgASgLMhYucmVsaWFudC52MS5PQXV0aDJBdXRoSAASKQoHYXBpX2tleRgCIAEoCzIWLnJlbGlhbnQudjEuQXBpS2V5QXV0aEgAEiYKBWJhc2ljGAMgASgLMhUucmVsaWFudC52MS5CYXNpY0F1dGhIABIuCglkZWxlZ2F0ZWQYBCABKAsyGS5yZWxpYW50LnYxLkRlbGVnYXRlZEF1dGhIAEIICgZtZXRob2QilAIKCk9BdXRoMkF1dGgSFQoNYXV0aG9yaXplX3VybBgBIAEoCRIRCgl0b2tlbl91cmwYAiABKAkSDgoGc2NvcGVzGAMgAygJEhcKD3Njb3BlX3NlcGFyYXRvchgEIAEoCRIMCgRwa2NlGAUgASgJEkUKEGF1dGhvcml6ZV9wYXJhbXMYBiADKAsyKy5yZWxpYW50LnYxLk9BdXRoMkF1dGguQXV0aG9yaXplUGFyYW1zRW50cnkSJgoGcmV2b2tlGAcgASgLMhYucmVsaWFudC52MS5SZXZva2VTcGVjGjYKFEF1dGhvcml6ZVBhcmFtc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEiZQoKUmV2b2tlU3BlYxIOCgZtZXRob2QYASABKAkSCwoDdXJsGAIgASgJEhMKC2NsaWVudF9hdXRoGAMgASgJEhAKCHRva2VuX2luGAQgASgJEhMKC3Rva2VuX3BhcmFtGAUgASgJIkUKCkFwaUtleUF1dGgSCgoCaW4YASABKAkSDAoEbmFtZRgCIAEoCRIOCgZwcmVmaXgYAyABKAkSDQoFbGFiZWwYBCABKAkiUwoJQmFzaWNBdXRoEhYKDnVzZXJuYW1lX2xhYmVsGAEgASgJEhYKDnBhc3N3b3JkX2xhYmVsGAIgASgJEhYKDnVzZXJuYW1lX3BhcmFtGAMgASgJIh8KDURlbGVnYXRlZEF1dGgSDgoGYnJva2VyGAEgASgJInIKD0Nvbm5lY3Rpb25QYXJhbRIMCgRuYW1lGAEgASgJEhQKDGRpc3BsYXlfbmFtZRgCIAEoCRITCgtkZXNjcmlwdGlvbhgDIAEoCRIPCgdwYXR0ZXJuGAQgASgJEhUKDWRlZmF1bHRfdmFsdWUYBSABKAki0wEKDUlkZW50aXR5UHJvYmUSDgoGbWV0aG9kGAEgASgJEgsKA3VybBgCIAEoCRIMCgRwYXRoGAMgASgJEjcKB2hlYWRlcnMYBCADKAsyJi5yZWxpYW50LnYxLklkZW50aXR5UHJvYmUuSGVhZGVyc0VudHJ5EgoKAm9rGAUgASgJEhMKC2V4dGVybmFsX2lkGAYgASgJEg0KBWxhYmVsGAcgASgJGi4KDEhlYWRlcnNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIs0CCgpBY3Rpb25TcGVjEgoKAmlkGAEgASgJEhQKDGRpc3BsYXlfbmFtZRgCIAEoCRITCgtkZXNjcmlwdGlvbhgDIAEoCRIMCgRraW5kGAQgASgJEhEKCXBsYWNlbWVudBgFIAEoCRIPCgdtdXRhdGVzGAYgASgIEiIKBHRvb2wYByABKAsyFC5yZWxpYW50LnYxLlRvb2xTcGVjEicKBnBhcmFtcxgIIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3QSLAoHcmVxdWVzdBgJIAEoCzIbLnJlbGlhbnQudjEuSHR0cFJlcXVlc3RTcGVjEiYKBm91dHB1dBgKIAEoCzIWLnJlbGlhbnQudjEuT3V0cHV0U3BlYxIQCghleGVjdXRvchgLIAEoCRIPCgdzdW1tYXJ5GAwgASgJEhAKCGtleXdvcmRzGA0gAygJIjYKCFRvb2xTcGVjEg4KBmV4cG9zZRgBIAEoCBIMCgRuYW1lGAIgASgJEgwKBHRhZ3MYAyADKAki+wMKD0h0dHBSZXF1ZXN0U3BlYxIOCgZtZXRob2QYASABKAkSCwoDdXJsGAIgASgJEgwKBHBhdGgYAyABKAkSNQoFcXVlcnkYBCADKAsyJi5yZWxpYW50LnYxLkh0dHBSZXF1ZXN0U3BlYy5RdWVyeUVudHJ5EjkKB2hlYWRlcnMYBSADKAsyKC5yZWxpYW50LnYxLkh0dHBSZXF1ZXN0U3BlYy5IZWFkZXJzRW50cnkSJAoEYm9keRgGIAEoCzIWLmdvb2dsZS5wcm90b2J1Zi5WYWx1ZRIuCgpwYWdpbmF0aW9uGAcgASgLMhoucmVsaWFudC52MS5QYWdpbmF0aW9uU3BlYxIlCgZlcnJvcnMYCCADKAsyFS5yZWxpYW50LnYxLkVycm9yUnVsZRIXCg90aW1lb3V0X3NlY29uZHMYCSABKAUSGgoSbWF4X3Jlc3BvbnNlX2J5dGVzGAogASgDEhQKDGhlYWRlcnNfZXhwchgLIAEoCRISCgpxdWVyeV9leHByGAwgASgJEhEKCWJvZHlfZXhwchgNIAEoCRosCgpRdWVyeUVudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEaLgoMSGVhZGVyc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEihQEKDlBhZ2luYXRpb25TcGVjEg0KBXN0eWxlGAEgASgJEhEKCW1heF9wYWdlcxgCIAEoBRIUCgxjdXJzb3JfcGFyYW0YAyABKAkSEwoLbmV4dF9jdXJzb3IYBCABKAkSEgoKcGFnZV9wYXJhbRgFIAEoCRISCgpzdGFydF9wYWdlGAYgASgFImcKCUVycm9yUnVsZRIOCgZzdGF0dXMYASABKAUSEgoKc3RhdHVzX21pbhgCIAEoBRISCgpzdGF0dXNfbWF4GAMgASgFEhEKCXJldHJ5YWJsZRgEIAEoCBIPCgdtZXNzYWdlGAUgASgJIkUKCk91dHB1dFNwZWMSDgoGc2VsZWN0GAEgASgJEicKBnNjaGVtYRgCIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3QiGQoLVHJpZ2dlclNwZWMSCgoCaWQYASABKAlCOlo4Z2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vcmVsaWFudC92MTtyZWxpYW50djFiBnByb3RvMw", [file_google_protobuf_struct]);
 
 /**
  * IntegrationManifest is the declarative description of one integration: how a
@@ -82,6 +82,14 @@ export type IntegrationManifest = Message<"reliant.v1.IntegrationManifest"> & {
    * @generated from field: repeated reliant.v1.TriggerSpec triggers = 9;
    */
   triggers: TriggerSpec[];
+
+  /**
+   * Keywords are extra search terms for the catalog index: product names and
+   * synonyms ("email" for gmail). Lower-case words, [a-z0-9][a-z0-9_.-]*.
+   *
+   * @generated from field: repeated string keywords = 10;
+   */
+  keywords: string[];
 };
 
 /**
@@ -93,21 +101,22 @@ export const IntegrationManifestSchema: GenMessage<IntegrationManifest> = /*@__P
 
 /**
  * ConnectionSpec says how requests are authenticated and where they may go.
+ * Adding a provider is data: the auth methods, the identity probe and the
+ * per-connection params below are everything the connections layer needs.
  *
  * @generated from message reliant.v1.ConnectionSpec
  */
 export type ConnectionSpec = Message<"reliant.v1.ConnectionSpec"> & {
   /**
-   * Type is "none" today. "api_key", "oauth2", "oauth_app" and "basic" are
-   * reserved for the connections phase and rejected at load.
-   *
-   * @generated from field: string type = 1;
-   */
-  type: string;
-
-  /**
    * BaseUrl is the https origin (and optional path prefix) request `path`s
    * resolve against. Every request host must be this host or in allowed_hosts.
+   *
+   * It may interpolate connection params, and nothing else. The leftmost host
+   * label may be exactly {{ connection.params.<name> }} followed by a literal
+   * domain of at least two labels
+   * (https://{{ connection.params.shop }}.myshopify.com), so a user-supplied
+   * value can pick a tenant but never the domain. Path segments may also
+   * interpolate params; they are percent-escaped.
    *
    * @generated from field: string base_url = 2;
    */
@@ -125,22 +134,50 @@ export type ConnectionSpec = Message<"reliant.v1.ConnectionSpec"> & {
 
   /**
    * AllowAnyPublicHost lets request.url name any host. It exists for the
-   * generic HTTP integration only; the loader accepts it solely with type
-   * "none", and the runtime still refuses private addresses after DNS.
+   * generic HTTP integration only: it requires auth_optional, and the runtime
+   * still refuses private addresses after DNS and pins a credential to the
+   * host a call started at.
    *
    * @generated from field: bool allow_any_public_host = 5;
    */
   allowAnyPublicHost: boolean;
 
   /**
-   * OptionalAuthKinds lets a connection of type "none" still accept a saved
-   * credential when the caller names one. Values: "api_key", "basic". The
-   * credential must belong to a connection for THIS integration id, so a token
-   * saved for another service can never be pointed at an arbitrary host.
+   * Auth lists the ways a user can connect, most preferred first. Empty means
+   * the integration takes no credential. Each kind appears at most once; a
+   * connection records which kind it was made with.
    *
-   * @generated from field: repeated string optional_auth_kinds = 6;
+   * @generated from field: repeated reliant.v1.AuthMethod auth = 7;
    */
-  optionalAuthKinds: string[];
+  auth: AuthMethod[];
+
+  /**
+   * AuthOptional lets an action run with no connection and attach one only
+   * when the caller names it (the generic HTTP integration). Without it every
+   * action needs a connection: the one named, else the owner's default, else
+   * a delegated authority.
+   *
+   * @generated from field: bool auth_optional = 8;
+   */
+  authOptional: boolean;
+
+  /**
+   * ConnectionParams are per-connection, non-secret settings the user supplies
+   * when connecting (a Shopify shop, a Zendesk subdomain). Templates reach
+   * them as connection.params.<name>.
+   *
+   * @generated from field: repeated reliant.v1.ConnectionParam connection_params = 9;
+   */
+  connectionParams: ConnectionParam[];
+
+  /**
+   * Probe asks the provider who a credential acts as. It labels a new OAuth
+   * connection (and is required for oauth2, whose dedupe key is the external
+   * id) and backs TestConnection for every kind.
+   *
+   * @generated from field: reliant.v1.IdentityProbe probe = 10;
+   */
+  probe?: IdentityProbe | undefined;
 };
 
 /**
@@ -149,6 +186,377 @@ export type ConnectionSpec = Message<"reliant.v1.ConnectionSpec"> & {
  */
 export const ConnectionSpecSchema: GenMessage<ConnectionSpec> = /*@__PURE__*/
   messageDesc(file_reliant_v1_integration, 1);
+
+/**
+ * AuthMethod is one way to connect. Exactly one arm is set.
+ *
+ * @generated from message reliant.v1.AuthMethod
+ */
+export type AuthMethod = Message<"reliant.v1.AuthMethod"> & {
+  /**
+   * @generated from oneof reliant.v1.AuthMethod.method
+   */
+  method: {
+    /**
+     * @generated from field: reliant.v1.OAuth2Auth oauth2 = 1;
+     */
+    value: OAuth2Auth;
+    case: "oauth2";
+  } | {
+    /**
+     * @generated from field: reliant.v1.ApiKeyAuth api_key = 2;
+     */
+    value: ApiKeyAuth;
+    case: "apiKey";
+  } | {
+    /**
+     * @generated from field: reliant.v1.BasicAuth basic = 3;
+     */
+    value: BasicAuth;
+    case: "basic";
+  } | {
+    /**
+     * @generated from field: reliant.v1.DelegatedAuth delegated = 4;
+     */
+    value: DelegatedAuth;
+    case: "delegated";
+  } | { case: undefined; value?: undefined };
+};
+
+/**
+ * Describes the message reliant.v1.AuthMethod.
+ * Use `create(AuthMethodSchema)` to create a new message.
+ */
+export const AuthMethodSchema: GenMessage<AuthMethod> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_integration, 2);
+
+/**
+ * OAuth2Auth is the authorization-code grant with PKCE.
+ *
+ * The client id and secret are deployment config, read from
+ * RELIANT_OAUTH_<ID>_CLIENT_ID and RELIANT_OAUTH_<ID>_CLIENT_SECRET, where <ID>
+ * is the integration id upper-cased. They are never in a manifest or the
+ * database. A deployment without them lists the method as unavailable.
+ *
+ * @generated from message reliant.v1.OAuth2Auth
+ */
+export type OAuth2Auth = Message<"reliant.v1.OAuth2Auth"> & {
+  /**
+   * AuthorizeUrl and TokenUrl are https, fixed by the catalog. They may
+   * interpolate connection params under the same rule as base_url.
+   *
+   * @generated from field: string authorize_url = 1;
+   */
+  authorizeUrl: string;
+
+  /**
+   * @generated from field: string token_url = 2;
+   */
+  tokenUrl: string;
+
+  /**
+   * @generated from field: repeated string scopes = 3;
+   */
+  scopes: string[];
+
+  /**
+   * ScopeSeparator joins scopes: " " (the default, RFC 6749) or ",".
+   *
+   * @generated from field: string scope_separator = 4;
+   */
+  scopeSeparator: string;
+
+  /**
+   * Pkce is the code challenge method: "S256" (the default) or "plain". PKCE
+   * is always sent: RFC 6749 §3.1 has a server ignore parameters it does not
+   * recognise, so sending it never breaks a provider that lacks it.
+   *
+   * @generated from field: string pkce = 5;
+   */
+  pkce: string;
+
+  /**
+   * AuthorizeParams are extra authorization request parameters
+   * (access_type: offline). The parameters the flow itself sets are refused.
+   *
+   * @generated from field: map<string, string> authorize_params = 6;
+   */
+  authorizeParams: { [key: string]: string };
+
+  /**
+   * Revoke, when set, is called best-effort when a connection is deleted.
+   *
+   * @generated from field: reliant.v1.RevokeSpec revoke = 7;
+   */
+  revoke?: RevokeSpec | undefined;
+};
+
+/**
+ * Describes the message reliant.v1.OAuth2Auth.
+ * Use `create(OAuth2AuthSchema)` to create a new message.
+ */
+export const OAuth2AuthSchema: GenMessage<OAuth2Auth> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_integration, 3);
+
+/**
+ * RevokeSpec describes the provider's token revocation call.
+ *
+ * @generated from message reliant.v1.RevokeSpec
+ */
+export type RevokeSpec = Message<"reliant.v1.RevokeSpec"> & {
+  /**
+   * Method is POST (the default), DELETE or GET.
+   *
+   * @generated from field: string method = 1;
+   */
+  method: string;
+
+  /**
+   * Url is https and catalog-fixed. Besides connection params it may
+   * interpolate {{ client_id }}.
+   *
+   * @generated from field: string url = 2;
+   */
+  url: string;
+
+  /**
+   * ClientAuth is "none" (the default) or "basic" (client id and secret as
+   * HTTP Basic credentials).
+   *
+   * @generated from field: string client_auth = 3;
+   */
+  clientAuth: string;
+
+  /**
+   * TokenIn is where the access token goes: "form" (the default, RFC 7009),
+   * "json", "query" or "bearer".
+   *
+   * @generated from field: string token_in = 4;
+   */
+  tokenIn: string;
+
+  /**
+   * TokenParam names the token field for form, json and query (default
+   * "token").
+   *
+   * @generated from field: string token_param = 5;
+   */
+  tokenParam: string;
+};
+
+/**
+ * Describes the message reliant.v1.RevokeSpec.
+ * Use `create(RevokeSpecSchema)` to create a new message.
+ */
+export const RevokeSpecSchema: GenMessage<RevokeSpec> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_integration, 4);
+
+/**
+ * ApiKeyAuth is a pasted key, placed in a header or a query parameter.
+ *
+ * @generated from message reliant.v1.ApiKeyAuth
+ */
+export type ApiKeyAuth = Message<"reliant.v1.ApiKeyAuth"> & {
+  /**
+   * In is "header" or "query". Leaving in and name both empty lets the user
+   * choose the header per connection from a fixed list; only an
+   * allow_any_public_host integration may do that, since it knows no API.
+   *
+   * @generated from field: string in = 1;
+   */
+  in: string;
+
+  /**
+   * Name is the header or query parameter that carries the key.
+   *
+   * @generated from field: string name = 2;
+   */
+  name: string;
+
+  /**
+   * Prefix is written before the key ("Bearer ", "Token ").
+   *
+   * @generated from field: string prefix = 3;
+   */
+  prefix: string;
+
+  /**
+   * Label names the key field in the connect form ("API token").
+   *
+   * @generated from field: string label = 4;
+   */
+  label: string;
+};
+
+/**
+ * Describes the message reliant.v1.ApiKeyAuth.
+ * Use `create(ApiKeyAuthSchema)` to create a new message.
+ */
+export const ApiKeyAuthSchema: GenMessage<ApiKeyAuth> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_integration, 5);
+
+/**
+ * BasicAuth is HTTP Basic: a username (often an account id) and a secret.
+ *
+ * @generated from message reliant.v1.BasicAuth
+ */
+export type BasicAuth = Message<"reliant.v1.BasicAuth"> & {
+  /**
+   * @generated from field: string username_label = 1;
+   */
+  usernameLabel: string;
+
+  /**
+   * @generated from field: string password_label = 2;
+   */
+  passwordLabel: string;
+
+  /**
+   * UsernameParam, when set, names a connection param whose value is the
+   * username (an account id the base_url also uses), so the user pastes only
+   * the secret.
+   *
+   * @generated from field: string username_param = 3;
+   */
+  usernameParam: string;
+};
+
+/**
+ * Describes the message reliant.v1.BasicAuth.
+ * Use `create(BasicAuthSchema)` to create a new message.
+ */
+export const BasicAuthSchema: GenMessage<BasicAuth> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_integration, 6);
+
+/**
+ * DelegatedAuth takes the token from an external authority at call time, such
+ * as GitHub through the control plane. Broker names a broker that Go code
+ * registers with the connections layer; no connection row is stored. A
+ * deployment that registered none lists the method as unavailable.
+ *
+ * @generated from message reliant.v1.DelegatedAuth
+ */
+export type DelegatedAuth = Message<"reliant.v1.DelegatedAuth"> & {
+  /**
+   * @generated from field: string broker = 1;
+   */
+  broker: string;
+};
+
+/**
+ * Describes the message reliant.v1.DelegatedAuth.
+ * Use `create(DelegatedAuthSchema)` to create a new message.
+ */
+export const DelegatedAuthSchema: GenMessage<DelegatedAuth> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_integration, 7);
+
+/**
+ * ConnectionParam is one non-secret per-connection setting.
+ *
+ * @generated from message reliant.v1.ConnectionParam
+ */
+export type ConnectionParam = Message<"reliant.v1.ConnectionParam"> & {
+  /**
+   * Name is [a-z][a-z0-9_]*; templates reach it as connection.params.<name>.
+   *
+   * @generated from field: string name = 1;
+   */
+  name: string;
+
+  /**
+   * @generated from field: string display_name = 2;
+   */
+  displayName: string;
+
+  /**
+   * @generated from field: string description = 3;
+   */
+  description: string;
+
+  /**
+   * Pattern is an RE2 expression every value must match in full.
+   *
+   * @generated from field: string pattern = 4;
+   */
+  pattern: string;
+
+  /**
+   * DefaultValue is used when the user supplies none. A param without one is
+   * required.
+   *
+   * @generated from field: string default_value = 5;
+   */
+  defaultValue: string;
+};
+
+/**
+ * Describes the message reliant.v1.ConnectionParam.
+ * Use `create(ConnectionParamSchema)` to create a new message.
+ */
+export const ConnectionParamSchema: GenMessage<ConnectionParam> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_integration, 8);
+
+/**
+ * IdentityProbe is one request that names the account a credential acts as.
+ * The connection's default_headers and its credential are applied.
+ *
+ * @generated from message reliant.v1.IdentityProbe
+ */
+export type IdentityProbe = Message<"reliant.v1.IdentityProbe"> & {
+  /**
+   * Method is GET (the default) or POST.
+   *
+   * @generated from field: string method = 1;
+   */
+  method: string;
+
+  /**
+   * Url is absolute (same template rule as base_url); path is relative to
+   * base_url. Exactly one is set.
+   *
+   * @generated from field: string url = 2;
+   */
+  url: string;
+
+  /**
+   * @generated from field: string path = 3;
+   */
+  path: string;
+
+  /**
+   * @generated from field: map<string, string> headers = 4;
+   */
+  headers: { [key: string]: string };
+
+  /**
+   * Ok is CEL over `response` (the parsed body). False means the credential
+   * was refused even though the status was 2xx, as Slack reports it.
+   *
+   * @generated from field: string ok = 5;
+   */
+  ok: string;
+
+  /**
+   * ExternalId is CEL over `response` yielding the account's stable id.
+   *
+   * @generated from field: string external_id = 6;
+   */
+  externalId: string;
+
+  /**
+   * Label is CEL over `response` yielding a human label (a login, an email).
+   *
+   * @generated from field: string label = 7;
+   */
+  label: string;
+};
+
+/**
+ * Describes the message reliant.v1.IdentityProbe.
+ * Use `create(IdentityProbeSchema)` to create a new message.
+ */
+export const IdentityProbeSchema: GenMessage<IdentityProbe> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_integration, 9);
 
 /**
  * ActionSpec is one operation: usable as a workflow node and, optionally, as
@@ -210,6 +618,8 @@ export type ActionSpec = Message<"reliant.v1.ActionSpec"> & {
   params?: JsonObject | undefined;
 
   /**
+   * Request is the declarative HTTP call. Required unless executor is set.
+   *
    * @generated from field: reliant.v1.HttpRequestSpec request = 9;
    */
   request?: HttpRequestSpec | undefined;
@@ -218,6 +628,33 @@ export type ActionSpec = Message<"reliant.v1.ActionSpec"> & {
    * @generated from field: reliant.v1.OutputSpec output = 10;
    */
   output?: OutputSpec | undefined;
+
+  /**
+   * Executor is empty for the declarative `request`, or "go:<name>": a Go
+   * function registered under <name> with the same params and output
+   * contract. It is the escape hatch for what a declaration cannot express
+   * (MIME assembly, request signing). The params and output schemas stay in
+   * the manifest, so forms and tool definitions never depend on code. It is
+   * manifest-only and never appears in workflow YAML.
+   *
+   * @generated from field: string executor = 11;
+   */
+  executor: string;
+
+  /**
+   * Summary is one line for search results and pickers; description is the
+   * long form an agent reads.
+   *
+   * @generated from field: string summary = 12;
+   */
+  summary: string;
+
+  /**
+   * Keywords are extra search terms for the catalog index.
+   *
+   * @generated from field: repeated string keywords = 13;
+   */
+  keywords: string[];
 };
 
 /**
@@ -225,7 +662,7 @@ export type ActionSpec = Message<"reliant.v1.ActionSpec"> & {
  * Use `create(ActionSpecSchema)` to create a new message.
  */
 export const ActionSpecSchema: GenMessage<ActionSpec> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_integration, 2);
+  messageDesc(file_reliant_v1_integration, 10);
 
 /**
  * ToolSpec controls exposing an action to agents as a tool.
@@ -257,7 +694,7 @@ export type ToolSpec = Message<"reliant.v1.ToolSpec"> & {
  * Use `create(ToolSpecSchema)` to create a new message.
  */
 export const ToolSpecSchema: GenMessage<ToolSpec> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_integration, 3);
+  messageDesc(file_reliant_v1_integration, 11);
 
 /**
  * HttpRequestSpec is the declarative request template. String values may embed
@@ -360,7 +797,7 @@ export type HttpRequestSpec = Message<"reliant.v1.HttpRequestSpec"> & {
  * Use `create(HttpRequestSpecSchema)` to create a new message.
  */
 export const HttpRequestSpecSchema: GenMessage<HttpRequestSpec> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_integration, 4);
+  messageDesc(file_reliant_v1_integration, 12);
 
 /**
  * PaginationSpec follows pages and concatenates each page's selected list.
@@ -417,7 +854,7 @@ export type PaginationSpec = Message<"reliant.v1.PaginationSpec"> & {
  * Use `create(PaginationSpecSchema)` to create a new message.
  */
 export const PaginationSpecSchema: GenMessage<PaginationSpec> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_integration, 5);
+  messageDesc(file_reliant_v1_integration, 13);
 
 /**
  * ErrorRule maps one status (or an inclusive range) to an error outcome.
@@ -458,7 +895,7 @@ export type ErrorRule = Message<"reliant.v1.ErrorRule"> & {
  * Use `create(ErrorRuleSchema)` to create a new message.
  */
 export const ErrorRuleSchema: GenMessage<ErrorRule> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_integration, 6);
+  messageDesc(file_reliant_v1_integration, 14);
 
 /**
  * OutputSpec selects what part of the response becomes the node's data.
@@ -489,7 +926,7 @@ export type OutputSpec = Message<"reliant.v1.OutputSpec"> & {
  * Use `create(OutputSpecSchema)` to create a new message.
  */
 export const OutputSpecSchema: GenMessage<OutputSpec> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_integration, 7);
+  messageDesc(file_reliant_v1_integration, 15);
 
 /**
  * TriggerSpec is reserved for the triggers phase.
@@ -508,5 +945,5 @@ export type TriggerSpec = Message<"reliant.v1.TriggerSpec"> & {
  * Use `create(TriggerSpecSchema)` to create a new message.
  */
 export const TriggerSpecSchema: GenMessage<TriggerSpec> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_integration, 8);
+  messageDesc(file_reliant_v1_integration, 16);
 

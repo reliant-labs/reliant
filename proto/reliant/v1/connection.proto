@@ -59,14 +59,19 @@ service ConnectionService {
 }
 
 enum ConnectionAuthKind {
+  reserved 2;
+  reserved "CONNECTION_AUTH_KIND_GITHUB_APP_USER";
   CONNECTION_AUTH_KIND_UNSPECIFIED = 0;
+  // Authorization code + PKCE, with refresh. A GitHub App user-to-server
+  // token is one of these.
   CONNECTION_AUTH_KIND_OAUTH2 = 1;
-  // A GitHub App user-to-server credential: expiring access tokens with a
-  // rotating refresh token.
-  CONNECTION_AUTH_KIND_GITHUB_APP_USER = 2;
   CONNECTION_AUTH_KIND_API_KEY = 3;
   CONNECTION_AUTH_KIND_BASIC = 4;
   CONNECTION_AUTH_KIND_NONE = 5;
+  // The token comes from an external authority at call time (GitHub through
+  // the control plane). It is an Integration method only: no connection row
+  // is ever of this kind.
+  CONNECTION_AUTH_KIND_DELEGATED = 6;
 }
 
 enum ConnectionStatus {
@@ -97,16 +102,43 @@ message Connection {
   string last_used_at = 12;
   string created_at = 13;
   string updated_at = 14;
+  // The connection's non-secret settings (a Shopify shop), as declared by the
+  // integration's connection_params.
+  map<string, string> params = 15;
 }
 
+// Integration is one catalog integration a connection can be made to.
 message Integration {
+  reserved 3, 4, 5;
+  reserved "auth_kind", "available", "unavailable_reason";
   string id = 1;
   string display_name = 2;
-  ConnectionAuthKind auth_kind = 3;
-  // False when the deployment has not configured this integration.
-  bool available = 4;
-  // Why it is unavailable, in words for an operator ("RELIANT_GITHUB_APP_CLIENT_ID is not set").
-  string unavailable_reason = 5;
+  // Methods are the ways to connect, most preferred first.
+  repeated IntegrationAuthMethod methods = 6;
+  // ConnectionParams are the non-secret settings a new connection asks for.
+  repeated IntegrationConnectionParam connection_params = 7;
+}
+
+message IntegrationAuthMethod {
+  ConnectionAuthKind kind = 1;
+  // False when the deployment has not configured this method.
+  bool available = 2;
+  // Why it is unavailable, in words for an operator
+  // ("RELIANT_OAUTH_SLACK_CLIENT_ID and RELIANT_OAUTH_SLACK_CLIENT_SECRET are not set").
+  string unavailable_reason = 3;
+  // FieldLabels names the form fields a pasted credential needs, keyed by the
+  // CreateApiKeyConnectionRequest.fields key. Empty for oauth2 and delegated.
+  map<string, string> field_labels = 4;
+}
+
+message IntegrationConnectionParam {
+  string name = 1;
+  string display_name = 2;
+  string description = 3;
+  // Pattern is the RE2 expression a value must match in full.
+  string pattern = 4;
+  string default_value = 5;
+  bool required = 6;
 }
 
 message ListIntegrationsRequest {}
@@ -130,21 +162,25 @@ message GetConnectionResponse {
 
 enum ApiKeyConnectionKind {
   API_KEY_CONNECTION_KIND_UNSPECIFIED = 0;
-  // fields: "api_key" (required), "header" (optional; one of "bearer",
-  // "x-api-key", "api-key", "x-auth-token"; default "bearer").
+  // fields: "api_key" (required). Where the key goes is the integration's
+  // declaration; only an integration that leaves it open (the generic HTTP
+  // one) takes "header" (one of "bearer", "x-api-key", "api-key",
+  // "x-auth-token"; default "bearer").
   API_KEY_CONNECTION_KIND_API_KEY = 1;
-  // fields: "username" and "password", both required.
+  // fields: "username" and "password". An integration whose username is a
+  // connection param (an account id) takes only "password".
   API_KEY_CONNECTION_KIND_BASIC = 2;
 }
 
 message CreateApiKeyConnectionRequest {
-  // A free-form id for the service this credential is for ("linear"). It may
-  // not be an integration that has its own OAuth flow.
+  // A catalog integration that declares this kind of credential.
   string integration_id = 1;
   string name = 2;
   ApiKeyConnectionKind kind = 3;
   // WRITE-ONLY. The only message in this API that carries a secret.
   map<string, string> fields = 4 [debug_redact = true];
+  // Values for the integration's connection_params. Not secret.
+  map<string, string> params = 5;
 }
 message CreateApiKeyConnectionResponse {
   Connection connection = 1;
@@ -158,6 +194,9 @@ message StartOAuthRequest {
   string reconnect_id = 3;
   // Where the client wants to land afterwards: a relative path only.
   string redirect_after = 4;
+  // Values for the integration's connection_params (a new connection only;
+  // a reconnect keeps the connection's own). Not secret.
+  map<string, string> params = 5;
 }
 message StartOAuthResponse {
   string authorize_url = 1;

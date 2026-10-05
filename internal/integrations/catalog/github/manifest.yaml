@@ -1,0 +1,87 @@
+# GitHub. Authored from GitHub's REST and OAuth documentation
+# (docs.github.com/en/rest, docs.github.com/en/apps/oauth-apps).
+#
+# Auth methods, most preferred first:
+#   1. delegated: hosted deployments. control-plane owns the one GitHub App and
+#      each user's App user token; the worker asks it for the run owner's
+#      current token at call time (internal/integrations/ghdelegated). No
+#      connection row is stored.
+#   2. oauth2: self-hosted deployments with their own GitHub App, configured
+#      with RELIANT_OAUTH_GITHUB_CLIENT_ID / _CLIENT_SECRET. A GitHub App's
+#      permissions live on the App, so no scope is requested.
+#   3. api_key: a fine-grained personal access token, sent as a bearer token.
+#
+# The action set here is deliberately minimal (the identity call the
+# connection is tested with); the GitHub provider work adds issues, PRs and
+# webhook triggers on top of this auth declaration.
+id: github
+version: 1
+display_name: GitHub
+description: Act on GitHub repositories, issues and pull requests as the connected user.
+icon: github
+category: engineering
+keywords: [git, repository, issues, pull requests, code]
+
+connection:
+  base_url: https://api.github.com
+  default_headers:
+    Accept: application/vnd.github+json
+    X-GitHub-Api-Version: "2022-11-28"
+  auth:
+    - delegated: { broker: controlplane-github }
+    - oauth2:
+        authorize_url: https://github.com/login/oauth/authorize
+        token_url: https://github.com/login/oauth/access_token
+        revoke:
+          method: DELETE
+          url: "https://api.github.com/applications/{{ client_id }}/token"
+          client_auth: basic
+          token_in: json
+          token_param: access_token
+    - api_key:
+        in: header
+        name: Authorization
+        prefix: "Bearer "
+        label: Personal access token
+  probe:
+    path: /user
+    external_id: string(response.id)
+    label: response.login
+
+actions:
+  - id: user.get
+    display_name: Get authenticated user
+    summary: The GitHub account the connection acts as.
+    description: >-
+      Return the GitHub user the connection authenticates as: login, id, name
+      and profile URL.
+    keywords: [whoami, account, profile]
+    placement: server
+    mutates: false
+    tool:
+      expose: true
+    params:
+      type: object
+      additionalProperties: false
+      properties:
+        connection:
+          type: string
+          description: >-
+            Id of a saved GitHub connection to use. Omit to use your default
+            GitHub connection.
+    request:
+      method: GET
+      path: /user
+    output:
+      select: >-
+        {"login": response.login,
+         "id": has(response.id) ? response.id : null,
+         "name": has(response.name) ? response.name : null,
+         "html_url": has(response.html_url) ? response.html_url : null}
+      schema:
+        type: object
+        properties:
+          login: { type: string }
+          id: { type: integer }
+          name: { type: string }
+          html_url: { type: string }

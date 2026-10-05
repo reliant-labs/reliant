@@ -13,11 +13,10 @@ const (
 	ConnectionOwnerUser = "user"
 	ConnectionOwnerOrg  = "org"
 
-	ConnectionAuthOAuth2        = "oauth2"
-	ConnectionAuthGitHubAppUser = "github_app_user"
-	ConnectionAuthAPIKey        = "api_key"
-	ConnectionAuthBasic         = "basic"
-	ConnectionAuthNone          = "none"
+	ConnectionAuthOAuth2 = "oauth2"
+	ConnectionAuthAPIKey = "api_key"
+	ConnectionAuthBasic  = "basic"
+	ConnectionAuthNone   = "none"
 
 	ConnectionStatusActive      = "active"
 	ConnectionStatusNeedsReauth = "needs_reauth"
@@ -69,14 +68,17 @@ type Connection struct {
 	Scopes            []string
 	OAuthClient       *string
 	AuthHeader        *string
-	Status            string
-	StatusReason      *string
-	IsDefault         bool
-	AccessExpiresAt   *time.Time
-	LastUsedAt        *time.Time
-	CreatedAt         time.Time
-	UpdatedAt         time.Time
-	DeletedAt         *time.Time
+	// Params are the connection's non-secret settings, declared by the
+	// integration's connection_params. Never a secret.
+	Params          map[string]string
+	Status          string
+	StatusReason    *string
+	IsDefault       bool
+	AccessExpiresAt *time.Time
+	LastUsedAt      *time.Time
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
+	DeletedAt       *time.Time
 }
 
 // ConnectionSecret is one sealed field of a connection.
@@ -112,7 +114,10 @@ type OAuthFlow struct {
 	RedirectAfter         string
 	ReconnectConnectionID string
 	ConnectionName        string
-	ExpiresAt             time.Time
+	// Params are the connection params the user supplied when starting a new
+	// connection; a reconnect keeps the connection's own.
+	Params    map[string]string
+	ExpiresAt time.Time
 }
 
 // ConnectionUpdate is what a successful (re)authorization writes onto an

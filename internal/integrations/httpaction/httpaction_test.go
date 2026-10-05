@@ -33,7 +33,7 @@ func mustParse(t *testing.T, doc string) (*reliantv1.IntegrationManifest, *relia
 }
 
 func manifestFor(base, action string) string {
-	return "id: t\nversion: 1\ndisplay_name: T\nconnection:\n  type: none\n  base_url: " + base + "\nactions:\n  - id: a\n    placement: server\n" + action
+	return "id: t\nversion: 1\ndisplay_name: T\nconnection:\n  base_url: " + base + "\nactions:\n  - id: a\n    placement: server\n" + action
 }
 
 func TestRendersRequestFromParams(t *testing.T) {
@@ -308,7 +308,7 @@ func TestSSRFGuardRefusesPrivateTargets(t *testing.T) {
 id: web
 version: 1
 display_name: Web
-connection: { type: none, allow_any_public_host: true }
+connection: { allow_any_public_host: true }
 actions:
   - id: request
     placement: server
@@ -344,7 +344,7 @@ func TestOffHostURLRefusedAtRuntime(t *testing.T) {
 id: t
 version: 1
 display_name: T
-connection: { type: none, base_url: "https://api.example.com" }
+connection: { base_url: "https://api.example.com" }
 actions:
   - id: a
     placement: server
@@ -354,7 +354,11 @@ actions:
 	m, a := mustParse(t, doc)
 	r := NewRunner(netguard.New())
 	// Path-escaping keeps a smuggled host inside the path, so the URL host stays api.example.com.
-	u, err := r.buildURL(m, a.GetRequest(), map[string]any{"p": "@evil.example.org/x"})
+	base, err := baseURL(m, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	u, err := r.buildURL(base, a.GetRequest(), map[string]any{"params": map[string]any{"p": "@evil.example.org/x"}})
 	if err != nil {
 		t.Fatal(err)
 	}

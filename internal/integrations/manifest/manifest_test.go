@@ -10,7 +10,6 @@ id: demo
 version: 1
 display_name: Demo
 connection:
-  type: none
   base_url: https://api.example.com/v1
 actions:
   - id: thing.get
@@ -81,7 +80,7 @@ func TestLiteralURLOnAllowedHostAccepted(t *testing.T) {
 	if _, err := Parse([]byte(doc), TrustCurated); err != nil {
 		t.Fatalf("url on base_url host should load: %v", err)
 	}
-	doc = strings.Replace(validHTTP, "type: none", "type: none\n  allowed_hosts: [uploads.example.com]", 1)
+	doc = strings.Replace(validHTTP, "connection:\n", "connection:\n  allowed_hosts: [uploads.example.com]\n", 1)
 	doc = strings.Replace(doc, "path: /things/{{ params.id }}", "url: https://uploads.example.com/up", 1)
 	if _, err := Parse([]byte(doc), TrustCurated); err != nil {
 		t.Fatalf("url on allowed_hosts host should load: %v", err)
@@ -100,18 +99,18 @@ func TestOnlyCuratedManifestsMayClaimServer(t *testing.T) {
 
 func TestReservedAndInvalidRejected(t *testing.T) {
 	for name, doc := range map[string]string{
-		"oauth connection": strings.Replace(validHTTP, "type: none", "type: oauth2", 1),
-		"triggers":         validHTTP + "triggers:\n  - id: x\n",
-		"await_external":   strings.Replace(validHTTP, "mutates: false", "mutates: false\n    kind: await_external", 1),
-		"bad id":           strings.Replace(validHTTP, "id: demo", "id: Demo!", 1),
-		"zero version":     strings.Replace(validHTTP, "version: 1", "version: 0", 1),
-		"no placement":     strings.Replace(validHTTP, "placement: server\n", "", 1),
-		"bad placement":    strings.Replace(validHTTP, "placement: server", "placement: cloud", 1),
-		"dup action":       validHTTP[:strings.Index(validHTTP, "actions:")] + "actions:\n  - id: a\n    placement: server\n    params: {type: object}\n    request: {method: GET, path: /a}\n  - id: a\n    placement: server\n    params: {type: object}\n    request: {method: GET, path: /a}\n",
-		"bad method":       strings.Replace(validHTTP, "method: GET", "method: TRACE", 1),
-		"bad cel":          strings.Replace(validHTTP, "{{ params.id }}", "{{ params.id + }}", 1),
-		"params not obj":   strings.Replace(validHTTP, "type: object\n      required", "type: string\n      required", 1),
-		"bad tool name":    strings.Replace(validHTTP, "tool: { expose: true }", "tool: { expose: true, name: \"bad name\" }", 1),
+		"retired type":   strings.Replace(validHTTP, "connection:\n", "connection:\n  type: none\n", 1),
+		"triggers":       validHTTP + "triggers:\n  - id: x\n",
+		"await_external": strings.Replace(validHTTP, "mutates: false", "mutates: false\n    kind: await_external", 1),
+		"bad id":         strings.Replace(validHTTP, "id: demo", "id: Demo!", 1),
+		"zero version":   strings.Replace(validHTTP, "version: 1", "version: 0", 1),
+		"no placement":   strings.Replace(validHTTP, "placement: server\n", "", 1),
+		"bad placement":  strings.Replace(validHTTP, "placement: server", "placement: cloud", 1),
+		"dup action":     validHTTP[:strings.Index(validHTTP, "actions:")] + "actions:\n  - id: a\n    placement: server\n    params: {type: object}\n    request: {method: GET, path: /a}\n  - id: a\n    placement: server\n    params: {type: object}\n    request: {method: GET, path: /a}\n",
+		"bad method":     strings.Replace(validHTTP, "method: GET", "method: TRACE", 1),
+		"bad cel":        strings.Replace(validHTTP, "{{ params.id }}", "{{ params.id + }}", 1),
+		"params not obj": strings.Replace(validHTTP, "type: object\n      required", "type: string\n      required", 1),
+		"bad tool name":  strings.Replace(validHTTP, "tool: { expose: true }", "tool: { expose: true, name: \"bad name\" }", 1),
 	} {
 		if _, err := Parse([]byte(doc), TrustCurated); err == nil {
 			t.Errorf("%s: must be rejected", name)
@@ -119,12 +118,12 @@ func TestReservedAndInvalidRejected(t *testing.T) {
 	}
 }
 
-func TestAllowAnyPublicHostOnlyForConnectionNone(t *testing.T) {
+func TestAllowAnyPublicHostShape(t *testing.T) {
 	doc := `
 id: web
 version: 1
 display_name: Web
-connection: { type: none, allow_any_public_host: true }
+connection: { allow_any_public_host: true, auth_optional: true, auth: [{ api_key: {} }, { basic: {} }] }
 actions:
   - id: request
     placement: server

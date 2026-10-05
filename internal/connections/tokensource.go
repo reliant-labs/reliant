@@ -82,7 +82,7 @@ func (s *TokenSource) Token(ctx context.Context, userID, connectionID string) (v
 		return vault.Secret{}, newError(CodeFailedPrecondition, "connection %q is not active", conn.Name)
 	}
 
-	if conn.AuthKind == core.ConnectionAuthOAuth2 || conn.AuthKind == core.ConnectionAuthGitHubAppUser {
+	if conn.AuthKind == core.ConnectionAuthOAuth2 {
 		return s.oauthToken(ctx, conn)
 	}
 	secrets, err := s.store.GetSecrets(ctx, userID, connectionID)
@@ -212,12 +212,16 @@ func (s *TokenSource) refresh(ctx context.Context, conn *core.Connection, seenGe
 
 func (s *TokenSource) refreshLocked(ctx context.Context, conn *core.Connection, seenGeneration int64) (vault.Secret, error) {
 	provider, ok := s.providers.Get(conn.IntegrationID)
-	if !ok || !provider.Available() {
+	if !ok || !provider.OAuthAvailable() {
 		return vault.Secret{}, newError(CodeFailedPrecondition, "integration %q is not configured on this deployment", conn.IntegrationID)
+	}
+	tokenURL, err := provider.endpoint(oauthSpec(provider).GetTokenUrl(), conn.Params)
+	if err != nil {
+		return vault.Secret{}, err
 	}
 	var result vault.Secret
 	var permanent error
-	err := s.store.WithSecretsLock(ctx, conn.UserID, conn.ID, func(tx core.SecretsTx) error {
+	err = s.store.WithSecretsLock(ctx, conn.UserID, conn.ID, func(tx core.SecretsTx) error {
 		secrets := tx.Secrets()
 		access := secrets[core.SecretFieldAccessToken]
 		// Another worker may have refreshed while we waited for the lock: use
@@ -254,7 +258,7 @@ func (s *TokenSource) refreshLocked(ctx context.Context, conn *core.Connection, 
 		_ = provider.ClientSecret.Use(func(b []byte) error { clientSecret = string(b); return nil })
 		ex := &oauth2.Exchanger{Client: s.doer, UserAgent: "reliant-connections"}
 		refreshed, err := ex.Refresh(ctx, oauth2.RefreshRequest{
-			Endpoint:     provider.TokenURL,
+			Endpoint:     tokenURL,
 			ClientID:     provider.ClientID,
 			ClientSecret: clientSecret,
 			RefreshToken: token,

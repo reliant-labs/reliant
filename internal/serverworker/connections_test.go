@@ -8,8 +8,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/reliant/internal/integrations/catalog"
 	"github.com/reliant-labs/reliant/internal/integrations/connauth"
 	"github.com/reliant-labs/reliant/internal/integrations/ghdelegated"
+	"github.com/reliant-labs/reliant/internal/integrations/manifest"
 )
 
 func envOf(vars map[string]string) func(string) string {
@@ -24,7 +26,10 @@ func TestIntegrationCredentials_HostedUsesControlPlane(t *testing.T) {
 		"INTERNAL_SERVICE_SECRET":   "s",
 	}))
 	require.NoError(t, err)
-	assert.IsType(t, &ghdelegated.Source{}, src)
+	cs, ok := src.(*connauth.Source)
+	require.True(t, ok)
+	_, registered := cs.Brokers().Get(ghdelegated.BrokerID)
+	assert.True(t, registered, "hosted registers the control-plane GitHub broker under the id the github manifest names")
 }
 
 // Hosted without the secret is a boot error, never a silent fall-back to
@@ -42,5 +47,18 @@ func TestIntegrationCredentials_HostedWithoutSecretFailsBoot(t *testing.T) {
 func TestIntegrationCredentials_SelfHostedIsSavedConnections(t *testing.T) {
 	src, err := newIntegrationCredentials(nil, envOf(nil))
 	require.NoError(t, err)
-	assert.IsType(t, &connauth.Source{}, src)
+	cs, ok := src.(*connauth.Source)
+	require.True(t, ok)
+	_, registered := cs.Brokers().Get(ghdelegated.BrokerID)
+	assert.False(t, registered, "self-hosted has no control plane to delegate to")
+}
+
+// The broker id the worker registers is the one the embedded github manifest
+// declares; a rename on either side would silently disable hosted GitHub.
+func TestGitHubManifestNamesTheRegisteredBroker(t *testing.T) {
+	a, err := catalog.MustBuiltin().Resolve("github/user.get@1")
+	require.NoError(t, err)
+	m, ok := manifest.Method(a.Manifest.GetConnection(), manifest.AuthDelegated)
+	require.True(t, ok)
+	assert.Equal(t, ghdelegated.BrokerID, m.GetDelegated().GetBroker())
 }

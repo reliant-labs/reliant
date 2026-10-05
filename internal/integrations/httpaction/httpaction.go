@@ -21,6 +21,7 @@ import (
 	"time"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/integrations/manifest"
 	"github.com/reliant-labs/reliant/internal/integrations/tmpl"
 	"github.com/reliant-labs/reliant/internal/netguard"
 
@@ -49,9 +50,11 @@ type Result struct {
 	ConnectionID string
 }
 
-// Runner executes actions through a guarded HTTP client.
+// Runner executes actions through a guarded HTTP client, and dispatches
+// `executor: go:<name>` actions to registered Go functions.
 type Runner struct {
-	client *http.Client
+	client    *http.Client
+	executors *ExecutorRegistry
 }
 
 // WithRootCAs returns a Runner that trusts pool for TLS, for tests that talk to
@@ -59,12 +62,13 @@ type Runner struct {
 func (r *Runner) WithRootCAs(pool *x509.CertPool) *Runner {
 	tr := r.client.Transport.(*http.Transport).Clone()
 	tr.TLSClientConfig = &tls.Config{RootCAs: pool, MinVersion: tls.VersionTLS12}
-	return &Runner{client: &http.Client{Transport: tr}}
+	return &Runner{client: &http.Client{Transport: tr}, executors: r.executors}
 }
 
-// NewRunner builds a Runner whose every connection goes through guard.
+// NewRunner builds a Runner whose every connection goes through guard and
+// whose go: actions dispatch through the process registry (Executors).
 func NewRunner(guard *netguard.Guard) *Runner {
-	return &Runner{client: &http.Client{Transport: guard.Transport()}}
+	return &Runner{client: &http.Client{Transport: guard.Transport()}, executors: defaultExecutors}
 }
 
 // Run validates params against the action's schema, then performs the request.
@@ -84,9 +88,15 @@ func (r *Runner) run(ctx context.Context, m *reliantv1.IntegrationManifest, a *r
 	if params == nil {
 		params = map[string]any{}
 	}
+	// The connection reference is resolved by RunAuthenticated; it is never a
+	// request parameter of the action itself unless the schema declares it.
 	if err := validateParams(a, &params); err != nil {
 		return nil, err
 	}
+	if name, ok := manifest.ExecutorName(a); ok {
+		return r.runExecutor(ctx, m, a, name, params, cred)
+	}
+	connVars, connValues := connectionVars(m, cred)
 	req := a.GetRequest()
 	timeout := defaultTimeout
 	if s := req.GetTimeoutSeconds(); s > 0 {
@@ -99,7 +109,7 @@ func (r *Runner) run(ctx context.Context, m *reliantv1.IntegrationManifest, a *r
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	vars := map[string]any{"params": params}
+	vars := map[string]any{"params": params, "connection": connVars}
 	method, err := tmpl.RenderString(req.GetMethod(), vars, tmpl.Options{})
 	if err != nil {
 		return nil, fmt.Errorf("request.method: %w", err)
@@ -108,7 +118,11 @@ func (r *Runner) run(ctx context.Context, m *reliantv1.IntegrationManifest, a *r
 	if method != "GET" && method != "POST" && method != "PUT" && method != "PATCH" && method != "DELETE" {
 		return nil, fmt.Errorf("request.method %q is not allowed", method)
 	}
-	target, err := r.buildURL(m, req, params)
+	base, err := baseURL(m, connValues)
+	if err != nil {
+		return nil, err
+	}
+	target, err := r.buildURL(base, req, vars)
 	if err != nil {
 		return nil, err
 	}
@@ -176,7 +190,7 @@ func (r *Runner) run(ctx context.Context, m *reliantv1.IntegrationManifest, a *r
 	}
 	headers.Set("User-Agent", userAgent)
 
-	allowed := allowedHosts(m)
+	allowed := allowedHosts(m, base)
 	anyHost := m.GetConnection().GetAllowAnyPublicHost()
 	// A credential must never reach a host other than the one the call started
 	// at: custom auth headers (X-Api-Key) survive a redirect, so a redirect or a
@@ -351,12 +365,25 @@ func validateParams(a *reliantv1.ActionSpec, params *map[string]any) error {
 	return nil
 }
 
-func allowedHosts(m *reliantv1.IntegrationManifest) map[string]bool {
+// baseURL is the connection's base_url with its connection params expanded.
+// A templated host can only ever expand to one DNS label under the catalog's
+// domain (manifest.ExpandURL), so the params pick a tenant, never a host.
+func baseURL(m *reliantv1.IntegrationManifest, connValues map[string]string) (*url.URL, error) {
+	raw := m.GetConnection().GetBaseUrl()
+	if raw == "" {
+		return nil, nil
+	}
+	u, err := manifest.ExpandURL(raw, connValues)
+	if err != nil {
+		return nil, fmt.Errorf("connection.base_url: %w", err)
+	}
+	return u, nil
+}
+
+func allowedHosts(m *reliantv1.IntegrationManifest, base *url.URL) map[string]bool {
 	allowed := map[string]bool{}
-	if b := m.GetConnection().GetBaseUrl(); b != "" {
-		if u, err := url.Parse(b); err == nil {
-			allowed[strings.ToLower(u.Host)] = true
-		}
+	if base != nil {
+		allowed[strings.ToLower(base.Host)] = true
 	}
 	for _, h := range m.GetConnection().GetAllowedHosts() {
 		allowed[strings.ToLower(h)] = true
@@ -384,8 +411,7 @@ func checkURL(u *url.URL, allowed map[string]bool, anyHost bool) error {
 	return nil
 }
 
-func (r *Runner) buildURL(m *reliantv1.IntegrationManifest, req *reliantv1.HttpRequestSpec, params map[string]any) (*url.URL, error) {
-	vars := map[string]any{"params": params}
+func (r *Runner) buildURL(base *url.URL, req *reliantv1.HttpRequestSpec, vars map[string]any) (*url.URL, error) {
 	if req.GetUrl() != "" {
 		s, err := tmpl.RenderString(req.GetUrl(), vars, tmpl.Options{})
 		if err != nil {
@@ -397,9 +423,8 @@ func (r *Runner) buildURL(m *reliantv1.IntegrationManifest, req *reliantv1.HttpR
 		}
 		return u, nil
 	}
-	base, err := url.Parse(m.GetConnection().GetBaseUrl())
-	if err != nil {
-		return nil, err
+	if base == nil {
+		return nil, fmt.Errorf("request.path needs connection.base_url")
 	}
 	p, err := tmpl.RenderString(req.GetPath(), vars, tmpl.Options{EscapePath: true})
 	if err != nil {
@@ -528,11 +553,14 @@ func asObject(v any) map[string]any {
 
 func success(p *page, data map[string]any) *Result {
 	content, _ := json.Marshal(data)
-	text := string(content)
+	return &Result{Content: truncate(string(content)), StatusCode: p.status, Data: data}
+}
+
+func truncate(text string) string {
 	if len(text) > maxContentChars {
-		text = text[:maxContentChars] + "…(truncated)"
+		return text[:maxContentChars] + "…(truncated)"
 	}
-	return &Result{Content: text, StatusCode: p.status, Data: data}
+	return text
 }
 
 func errorResult(req *reliantv1.HttpRequestSpec, p *page) (*Result, error) {
