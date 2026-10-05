@@ -1,9 +1,14 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * One Inbox row (WORKFLOW_UI.md §8.2): a kind icon, a one-line title that
- * links to the run, a context line (project · workflow · how long it has
- * waited), then the item's inline action.
+ * One Inbox row (WORKFLOW_UI.md §8.2). The SECTION a row sits in already says
+ * what kind of item it is and what to do ("Questions · 3"), so the row does not
+ * repeat it: it is the run's (or automation's) name as a link, a short detail
+ * (the tool and its arguments, the question, the failure), the project when the
+ * Inbox spans projects, how long it has waited, and the inline action.
+ *
+ * A row is one line by default. Anything taller — an answer form, a failure's
+ * full reason — opens on demand, so ten waiting items fit on one screen.
  *
  * The actions reuse the chat's own pieces, through their store-free cores:
  * ApprovalActions for approve/deny, QuestionPrompt + answerQuestion for an
@@ -21,25 +26,24 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { Code, ConnectError } from "@connectrpc/connect";
-import { AlertTriangle, CalendarX, CheckCircle2, HelpCircle, MonitorPause, Shield, X } from "lucide-react";
+import { AlertTriangle, CalendarX, CheckCircle2, ChevronDown, HelpCircle, MonitorPause, Shield, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { api } from "@/api/client";
 import { InboxItemKind, type InboxItem as InboxItemData } from "@/gen/reliant/v1/inbox_pb";
 import { ApprovalType } from "@/gen/reliant/v1/approval_pb";
 import { answerQuestion } from "@/hooks/approval-queries";
-import { inboxKeys, removeInboxItems, useDismissInboxItem } from "@/hooks/inbox-queries";
+import { inboxKeys, removeInboxItems } from "@/hooks/inbox-queries";
 import { useResumeDaemon } from "@/hooks/useOnboardingQueries";
 import { useSetTriggerEnabled } from "@/hooks/trigger-queries";
 import { useGoToBilling } from "@/hooks/useGoToBilling";
 import { isQuotaResumeError, resumeErrorMessage } from "@/lib/daemon-resume";
-import { formatRelativeTime } from "@/lib/relativeTime";
+import { formatAbsoluteTime, formatRelativeTime } from "@/lib/relativeTime";
 import { cn } from "@/lib/utils";
 import { CardInset } from "../forge-ui/card";
 import { ApprovalActions } from "../Chat/ApprovalActions";
 import { QuestionPrompt, type QuestionAnswer } from "../Chat/QuestionPrompt";
 import { askUserQuestionItems } from "../Chat/askUserUtils";
-import { getWorkflowDisplayName } from "../workflow/useWorkflowInputs";
 
 /** How long "Already handled" shows before the row leaves. */
 export const ALREADY_HANDLED_MS = 2000;
@@ -50,15 +54,6 @@ export function isBlockingKind(kind: InboxItemKind): boolean {
     kind === InboxItemKind.APPROVAL ||
     kind === InboxItemKind.QUESTION ||
     kind === InboxItemKind.WAITING_FOR_MACHINE
-  );
-}
-
-/** Failure and run-finished items are dismissable; the rest clear when resolved. */
-export function isDismissableKind(kind: InboxItemKind): boolean {
-  return (
-    kind === InboxItemKind.AUTOMATION_FAILING ||
-    kind === InboxItemKind.AUTOMATION_LAUNCH_FAILED ||
-    kind === InboxItemKind.RUN_FINISHED
   );
 }
 
@@ -78,27 +73,27 @@ export function machineName(daemonName: string, daemonId: string): string {
   return daemonName || (daemonId ? `machine ${daemonId.slice(0, 8)}` : "this machine");
 }
 
+/** "Failed 3 times in a row": one Inbox item counts the whole failure streak. */
+export function failedTimesInARow(failures: number): string {
+  return `Failed ${failures} times in a row.`;
+}
+
+/** A server error string ("daemon x is offline") shown on its own reads as a sentence. */
+function sentenceCase(text: string): string {
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
 interface InboxItemProps {
   item: InboxItemData;
-  /**
-   * The group the row sits in, whose heading already names and links the run
-   * (a run group) or the automation (an automation group).
-   */
-  groupedBy?: "run" | "automation";
-  /** What a sibling row in the same group already says (automationGroupOmissions). */
-  omit?: InboxItemOmissions;
+  /** Show the project beside the name: the Inbox is spanning projects. */
+  showProject: boolean;
+  /** Hide this row; the page owns the mutation and the Undo toast. */
+  onDismiss: (item: InboxItemData) => void;
 }
 
-/** Parts of a row's body that a sibling in its group already shows. */
-export interface InboxItemOmissions {
-  /** The failure detail: a sibling "could not start" row shows it as the reason. */
-  detail?: boolean;
-  /** "Failed N times in a row": a sibling "failing" row states the streak. */
-  streak?: boolean;
-}
-
-export function InboxItem({ item, groupedBy, omit }: InboxItemProps) {
+export function InboxItem({ item, showProject, onDismiss }: InboxItemProps) {
   const [handled, setHandled] = useState(false);
+  const [expanded, setExpanded] = useState(false);
 
   // "Already handled": show it, then take the row out (§8.3).
   useEffect(() => {
@@ -115,38 +110,75 @@ export function InboxItem({ item, groupedBy, omit }: InboxItemProps) {
     toast.error(`Could not ${verb}`, { description: errorText(error) });
   };
 
-  const waitedFor = formatRelativeTime(item.waitingSince);
-  const context = [
-    item.projectName,
-    item.workflowName ? getWorkflowDisplayName(item.workflowName, true) : undefined,
-    waitedFor ? `waiting since ${waitedFor}` : undefined,
-  ]
-    .filter(Boolean)
-    .join(" · ");
+  const detail = rowDetail(item);
+  const expandable = hasExpansion(item);
+  const waited = formatRelativeTime(item.waitingSince);
 
   return (
-    <li className="px-4 py-3" data-testid={`inbox-item-${item.itemId}`}>
-      <div className="flex items-start gap-3">
-        <span className="mt-0.5 shrink-0 text-muted-foreground">
+    <li
+      className="group/row relative px-3 py-2 transition-colors hover:bg-muted/40 focus-within:bg-muted/40"
+      data-testid={`inbox-item-${item.itemId}`}
+    >
+      <div className="flex min-h-7 items-center gap-2.5">
+        <span className="shrink-0 text-muted-foreground">
           <KindIcon kind={item.kind} />
         </span>
-        <div className="min-w-0 flex-1 space-y-2">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <ItemTitle item={item} groupedBy={groupedBy} />
-              {context && <p className="mt-0.5 truncate text-xs text-muted-foreground">{context}</p>}
-            </div>
-            {isDismissableKind(item.kind) && !handled && <DismissButton itemId={item.itemId} />}
-          </div>
-          {handled ? (
-            <p className="text-sm text-muted-foreground" role="status">
-              Already handled
-            </p>
-          ) : (
-            <ItemAction item={item} omit={omit} onRaceOrError={onRaceOrError} />
+        <div className="flex min-w-0 flex-1 items-baseline gap-2">
+          <SubjectLink item={item} />
+          {detail && (
+            <span className="min-w-0 truncate text-xs text-muted-foreground" title={detail.title}>
+              {detail.node}
+            </span>
           )}
         </div>
+        {showProject && item.projectName && (
+          <span className="hidden max-w-36 shrink-0 truncate text-xs text-muted-foreground sm:inline" title={item.projectName}>
+            {item.projectName}
+          </span>
+        )}
+        {handled ? (
+          <span className="shrink-0 text-xs text-muted-foreground" role="status">
+            Already handled
+          </span>
+        ) : (
+          <InlineAction
+            item={item}
+            expanded={expanded}
+            onToggle={expandable ? () => setExpanded((open) => !open) : undefined}
+            onRaceOrError={onRaceOrError}
+          />
+        )}
+        <time
+          dateTime={item.waitingSince}
+          title={formatAbsoluteTime(item.waitingSince)}
+          className="w-20 shrink-0 text-right text-xs tabular-nums text-muted-foreground"
+        >
+          {waited}
+        </time>
+        {!handled && (
+          <button
+            type="button"
+            onClick={() => onDismiss(item)}
+            aria-label={`Dismiss ${subjectName(item)}`}
+            title="Dismiss"
+            className={cn(
+              "inline-flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground transition",
+              "hover:bg-muted hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
+              // Hidden until the row is hovered or anything in it has focus;
+              // always shown where there is no hover (touch).
+              "opacity-0 group-hover/row:opacity-100 group-focus-within/row:opacity-100 focus-visible:opacity-100",
+              "[@media(hover:none)]:opacity-100",
+            )}
+          >
+            <X className="h-3.5 w-3.5" aria-hidden="true" />
+          </button>
+        )}
       </div>
+      {expanded && !handled && (
+        <div className="mt-2 pl-7">
+          <Expansion item={item} onRaceOrError={onRaceOrError} />
+        </div>
+      )}
     </li>
   );
 }
@@ -163,7 +195,7 @@ function KindIcon({ kind }: { kind: InboxItemKind }) {
     case InboxItemKind.AUTOMATION_FAILING:
       return <AlertTriangle className={cn(className, "text-destructive")} aria-label="Automation failing" />;
     case InboxItemKind.AUTOMATION_LAUNCH_FAILED:
-      return <CalendarX className={cn(className, "text-destructive")} aria-label="Automation launch failed" />;
+      return <CalendarX className={cn(className, "text-destructive")} aria-label="Automation could not start" />;
     case InboxItemKind.RUN_FINISHED:
       return <CheckCircle2 className={cn(className, "text-success")} aria-label="Run finished" />;
     default:
@@ -172,145 +204,164 @@ function KindIcon({ kind }: { kind: InboxItemKind }) {
 }
 
 /** The run's (or the automation's) display name. */
-function subjectName(item: InboxItemData): string {
+export function subjectName(item: InboxItemData): string {
   return item.chatTitle || item.triggerName || "Untitled run";
 }
 
-/** The one-line title; the run's name links to run detail (§8.2). */
-function ItemTitle({ item, groupedBy }: { item: InboxItemData; groupedBy?: "run" | "automation" }) {
-  const name = subjectName(item);
-  const lead = titleLead(item);
-  const runLink = item.chatId ? (
-    <Link
-      to="/workflows/runs/$runId"
-      params={{ runId: item.chatId }}
-      className="font-semibold text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
-    >
-      {name}
-    </Link>
-  ) : item.triggerId ? (
-    <Link
-      to="/workflows/automations/$triggerId"
-      params={{ triggerId: item.triggerId }}
-      className="font-semibold text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
-    >
-      {name}
-    </Link>
-  ) : (
-    <span className="font-semibold text-foreground">{name}</span>
-  );
+const subjectClass =
+  "min-w-0 max-w-[45%] shrink-0 truncate text-sm font-medium text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 rounded-sm";
 
-  return (
-    <p className="text-sm text-foreground">
-      {lead}
-      {/* A group's heading already names and links what it groups: the run,
-          or the automation. Inside an automation group a run-finished row
-          still links its own run, since each is a different run. */}
-      {(groupedBy === "run" ? !item.chatId : groupedBy === "automation" ? !!item.chatId : true) && (
-        <>
-          {" in "}
-          {runLink}
-        </>
-      )}
-    </p>
-  );
+/**
+ * The name links to what the item is about: the run for anything that has one,
+ * otherwise the automation.
+ */
+function SubjectLink({ item }: { item: InboxItemData }) {
+  const name = subjectName(item);
+  if (item.chatId) {
+    return (
+      <Link to="/workflows/runs/$runId" params={{ runId: item.chatId }} className={subjectClass} title={name}>
+        {name}
+      </Link>
+    );
+  }
+  if (item.triggerId) {
+    return (
+      <Link to="/workflows/automations/$triggerId" params={{ triggerId: item.triggerId }} className={subjectClass} title={name}>
+        {name}
+      </Link>
+    );
+  }
+  return <span className={subjectClass}>{name}</span>;
 }
 
-function titleLead(item: InboxItemData): ReactNode {
+/** The one-line detail after the name, and its full text for the tooltip. */
+function rowDetail(item: InboxItemData): { node: ReactNode; title: string } | null {
   const { payload } = item;
   switch (payload.case) {
     case "approval": {
       const approval = payload.value;
+      const args = approval.argumentSummary || approval.title;
       if (approval.approvalType === ApprovalType.TOOL && approval.toolName) {
-        return (
-          <>
-            Approve <code className="rounded bg-background px-1 font-mono text-xs">{approval.toolName}</code>
-          </>
-        );
+        return {
+          node: (
+            <>
+              <code className="font-mono text-foreground/80">{approval.toolName}</code>
+              {args ? <span className="font-mono"> {args}</span> : null}
+            </>
+          ),
+          title: `${approval.toolName} ${args}`.trim(),
+        };
       }
-      return <>Approve {approval.title ? `“${approval.title}”` : "a step"}</>;
+      return args ? { node: args, title: args } : null;
     }
     case "question":
-      return <>Answer a question</>;
-    case "waitingForMachine":
-      return <>{machineName(payload.value.daemonName, payload.value.daemonId)} is needed</>;
-    case "automationFailing":
-      return <>Automation failing</>;
-    case "automationLaunchFailed":
-      return <>Automation could not start</>;
-    case "runFinished":
-      return <>Run finished</>;
-    default:
-      return <>Waiting on you</>;
-  }
-}
-
-interface ItemActionProps {
-  item: InboxItemData;
-  omit?: InboxItemOmissions;
-  onRaceOrError: (verb: string) => (error: unknown) => void;
-}
-
-function ItemAction({ item, omit, onRaceOrError }: ItemActionProps) {
-  const { payload } = item;
-  switch (payload.case) {
-    case "approval":
-      return (
-        <ApprovalRowAction
-          approvalId={payload.value.approvalId}
-          title={payload.value.title}
-          argumentSummary={payload.value.argumentSummary}
-          itemId={item.itemId}
-          onFailure={onRaceOrError}
-        />
-      );
-    case "question":
-      return (
-        <QuestionRowAction
-          chatId={item.chatId}
-          itemId={item.itemId}
-          questionId={payload.value.questionId}
-          prompt={payload.value.prompt}
-          metadata={payload.value.metadata}
-          onFailure={onRaceOrError("send the answer")}
-        />
-      );
-    case "waitingForMachine":
-      return <WakeMachineAction daemonId={payload.value.daemonId} daemonName={payload.value.daemonName} />;
-    case "automationFailing":
-      return (
-        <FailingAutomationAction
-          triggerId={item.triggerId}
-          failures={payload.value.health?.consecutiveFailures ?? 0}
-          detail={omit?.detail ? "" : (payload.value.health?.lastFailureDetail ?? "")}
-          lastRunChatId={payload.value.lastRunChatId}
-        />
-      );
-    case "automationLaunchFailed":
-      return (
-        <LaunchFailedAction
-          triggerId={item.triggerId}
-          reason={payload.value.reason}
-          failures={omit?.streak ? 0 : payload.value.consecutiveFailures}
-        />
-      );
-    case "runFinished":
-      return <RunFinishedAction chatId={item.chatId} />;
+      return payload.value.prompt ? { node: payload.value.prompt, title: payload.value.prompt } : null;
+    case "waitingForMachine": {
+      const text = `${machineName(payload.value.daemonName, payload.value.daemonId)} is asleep`;
+      return { node: text, title: text };
+    }
+    case "automationFailing": {
+      const health = payload.value.health;
+      const failures = health?.consecutiveFailures ?? 0;
+      const text = [failures > 1 ? `${failures} in a row` : "", health?.lastFailureDetail ?? ""]
+        .filter(Boolean)
+        .join(" · ");
+      return text ? { node: text, title: text } : null;
+    }
+    case "automationLaunchFailed": {
+      const { reason, consecutiveFailures } = payload.value;
+      const text = [consecutiveFailures > 1 ? `${consecutiveFailures} in a row` : "", reason ? sentenceCase(reason) : ""]
+        .filter(Boolean)
+        .join(" · ");
+      return text ? { node: text, title: text } : null;
+    }
     default:
       return null;
   }
 }
 
+/** A row opens downward only when its action needs more than a line. */
+function hasExpansion(item: InboxItemData): boolean {
+  return item.payload.case === "question" && askUserQuestionItems(item.payload.value.metadata) !== null;
+}
+
+const actionButtonClass =
+  "inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-border px-2.5 text-xs font-medium text-foreground transition-colors hover:bg-muted/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 disabled:opacity-60";
+
+interface InlineActionProps {
+  item: InboxItemData;
+  expanded: boolean;
+  onToggle?: () => void;
+  onRaceOrError: (verb: string) => (error: unknown) => void;
+}
+
+function InlineAction({ item, expanded, onToggle, onRaceOrError }: InlineActionProps) {
+  const { payload } = item;
+  switch (payload.case) {
+    case "approval":
+      return <ApprovalRowAction approvalId={payload.value.approvalId} itemId={item.itemId} onFailure={onRaceOrError} />;
+    case "question":
+      if (onToggle) {
+        return (
+          <button type="button" className={actionButtonClass} aria-expanded={expanded} onClick={onToggle}>
+            Answer
+            <ChevronDown className={cn("h-3 w-3 transition-transform", expanded && "rotate-180")} aria-hidden="true" />
+          </button>
+        );
+      }
+      // Not an ask_user form (e.g. a workflow step question): its own UI in
+      // the run answers it.
+      return item.chatId ? (
+        <Link to="/workflows/runs/$runId" params={{ runId: item.chatId }} className={actionButtonClass}>
+          Open
+        </Link>
+      ) : null;
+    case "waitingForMachine":
+      return <WakeMachineAction daemonId={payload.value.daemonId} daemonName={payload.value.daemonName} />;
+    case "automationFailing":
+      return <FailingAutomationAction triggerId={item.triggerId} lastRunChatId={payload.value.lastRunChatId} />;
+    case "automationLaunchFailed":
+      return (
+        <Link to="/workflows/automations/$triggerId" params={{ triggerId: item.triggerId }} className={actionButtonClass}>
+          Edit automation
+        </Link>
+      );
+    case "runFinished":
+      return item.chatId ? (
+        <Link to="/workflows/runs/$runId" params={{ runId: item.chatId }} className={actionButtonClass}>
+          Open
+        </Link>
+      ) : null;
+    default:
+      return null;
+  }
+}
+
+function Expansion({
+  item,
+  onRaceOrError,
+}: {
+  item: InboxItemData;
+  onRaceOrError: (verb: string) => (error: unknown) => void;
+}) {
+  if (item.payload.case !== "question") return null;
+  return (
+    <QuestionAnswerForm
+      chatId={item.chatId}
+      itemId={item.itemId}
+      questionId={item.payload.value.questionId}
+      metadata={item.payload.value.metadata}
+      onFailure={onRaceOrError("send the answer")}
+    />
+  );
+}
+
 function ApprovalRowAction({
   approvalId,
-  title,
-  argumentSummary,
   itemId,
   onFailure,
 }: {
   approvalId: string;
-  title: string;
-  argumentSummary: string;
   itemId: string;
   onFailure: (verb: string) => (error: unknown) => void;
 }) {
@@ -327,15 +378,10 @@ function ApprovalRowAction({
       setBusy(false);
     }
   };
-  const summary = argumentSummary || title;
   return (
-    <div className="space-y-2">
-      {summary && (
-        <CardInset className="truncate font-mono text-xs text-foreground" title={summary}>
-          {summary}
-        </CardInset>
-      )}
+    <div className="shrink-0">
       <ApprovalActions
+        compact
         approveLabel="Approve"
         denyLabel="Deny"
         disabled={busy}
@@ -346,18 +392,16 @@ function ApprovalRowAction({
   );
 }
 
-function QuestionRowAction({
+function QuestionAnswerForm({
   chatId,
   itemId,
   questionId,
-  prompt,
   metadata,
   onFailure,
 }: {
   chatId: string;
   itemId: string;
   questionId: string;
-  prompt: string;
   metadata?: string;
   onFailure: (error: unknown) => void;
 }) {
@@ -365,12 +409,7 @@ function QuestionRowAction({
   // QuestionPrompt locks itself after submit; a remount (new key) re-arms it
   // if the reply failed for a reason worth retrying.
   const [attempt, setAttempt] = useState(0);
-
-  if (!questions) {
-    // Not an ask_user form (e.g. a workflow step question): show the prompt
-    // and send the user to the run, where its own UI answers it.
-    return prompt ? <p className="text-sm text-muted-foreground">{prompt}</p> : null;
-  }
+  if (!questions) return null;
 
   const onSubmit = async (answers: { answers: QuestionAnswer[] }) => {
     try {
@@ -412,12 +451,20 @@ export function WakeMachineAction({
   const busy = resume.isPending && resume.variables === daemonId;
   const name = machineName(daemonName, daemonId);
 
-  if (!daemonId) {
-    return <p className="text-sm text-muted-foreground">The machine for this run is not known.</p>;
-  }
+  if (!daemonId) return null;
 
   return (
-    <div className="space-y-2">
+    <span className="flex shrink-0 items-center gap-2">
+      {error && (
+        <span className="max-w-64 truncate text-xs text-destructive" role="alert" title={resumeErrorMessage(new Error(error))}>
+          {resumeErrorMessage(new Error(error))}
+          {isQuotaResumeError(error) ? (
+            <button type="button" onClick={goToBilling} className="ml-1.5 font-medium underline-offset-2 hover:underline">
+              Billing
+            </button>
+          ) : null}
+        </span>
+      )}
       <button
         type="button"
         disabled={busy}
@@ -425,138 +472,44 @@ export function WakeMachineAction({
           setError("");
           resume.mutate(daemonId);
         }}
-        className="inline-flex h-8 items-center rounded-md border border-border px-3 text-sm font-medium text-foreground transition-colors hover:bg-muted/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 disabled:opacity-60"
+        className={actionButtonClass}
       >
         {busy ? "Waking…" : (label ?? `Wake ${name}`)}
       </button>
-      {error && (
-        <p className="text-sm text-destructive" role="alert">
-          {resumeErrorMessage(new Error(error))}
-          {isQuotaResumeError(error) ? (
-            <button
-              type="button"
-              onClick={goToBilling}
-              className="ml-2 font-medium underline-offset-2 hover:underline"
-            >
-              Billing
-            </button>
-          ) : null}
-        </p>
-      )}
-    </div>
+    </span>
   );
 }
 
-const secondaryLinkClass =
-  "inline-flex h-8 items-center rounded-md border border-border px-3 text-sm font-medium text-foreground transition-colors hover:bg-muted/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 disabled:opacity-60";
-
-function FailingAutomationAction({
-  triggerId,
-  failures,
-  detail,
-  lastRunChatId,
-}: {
-  triggerId: string;
-  failures: number;
-  detail: string;
-  lastRunChatId?: string;
-}) {
+function FailingAutomationAction({ triggerId, lastRunChatId }: { triggerId: string; lastRunChatId?: string }) {
   const setEnabled = useSetTriggerEnabled();
   const queryClient = useQueryClient();
-  const description =
-    failures > 1 ? failedTimesInARow(failures) : failures === 1 ? "Its last run failed." : "It is failing.";
   return (
-    <div className="space-y-2">
-      <p className="text-sm text-muted-foreground">
-        {description}
-        {detail ? ` ${detail}` : ""}
-      </p>
-      <div className="flex flex-wrap items-center gap-2">
-        {lastRunChatId && (
-          <Link to="/workflows/runs/$runId" params={{ runId: lastRunChatId }} className={secondaryLinkClass}>
-            Open last run
-          </Link>
-        )}
-        <button
-          type="button"
-          className={secondaryLinkClass}
-          disabled={setEnabled.isPending}
-          onClick={() =>
-            setEnabled.mutate(
-              { id: triggerId, enabled: false },
-              {
-                onSuccess: () => {
-                  toast.success("Automation paused");
-                  // A paused automation is no longer listed as failing.
-                  void queryClient.invalidateQueries({ queryKey: inboxKeys.all });
-                },
-                onError: (error) => toast.error("Could not pause the automation", { description: errorText(error) }),
+    <span className="flex shrink-0 items-center gap-1.5">
+      {lastRunChatId && (
+        <Link to="/workflows/runs/$runId" params={{ runId: lastRunChatId }} className={actionButtonClass}>
+          Open last run
+        </Link>
+      )}
+      <button
+        type="button"
+        className={actionButtonClass}
+        disabled={setEnabled.isPending}
+        onClick={() =>
+          setEnabled.mutate(
+            { id: triggerId, enabled: false },
+            {
+              onSuccess: () => {
+                toast.success("Automation paused");
+                // A paused automation is no longer listed as failing.
+                void queryClient.invalidateQueries({ queryKey: inboxKeys.all });
               },
-            )
-          }
-        >
-          Pause automation
-        </button>
-      </div>
-    </div>
-  );
-}
-
-/** "Failed 3 times in a row": one Inbox item counts the whole failure streak. */
-export function failedTimesInARow(failures: number): string {
-  return `Failed ${failures} times in a row.`;
-}
-
-/** A server error string ("daemon x is offline") shown on its own reads as a sentence. */
-function sentenceCase(text: string): string {
-  return text.charAt(0).toUpperCase() + text.slice(1);
-}
-
-function RunFinishedAction({ chatId }: { chatId: string }) {
-  if (!chatId) return null;
-  return (
-    <Link to="/workflows/runs/$runId" params={{ runId: chatId }} className={secondaryLinkClass}>
-      Open
-    </Link>
-  );
-}
-
-function LaunchFailedAction({
-  triggerId,
-  reason,
-  failures,
-}: {
-  triggerId: string;
-  reason: string;
-  failures: number;
-}) {
-  return (
-    <div className="space-y-2">
-      {failures > 1 && <p className="text-sm text-muted-foreground">{failedTimesInARow(failures)}</p>}
-      {reason && <CardInset className="text-sm text-foreground">{sentenceCase(reason)}</CardInset>}
-      <Link to="/workflows/automations/$triggerId" params={{ triggerId }} className={secondaryLinkClass}>
-        Edit automation
-      </Link>
-    </div>
-  );
-}
-
-function DismissButton({ itemId }: { itemId: string }) {
-  const dismiss = useDismissInboxItem();
-  return (
-    <button
-      type="button"
-      onClick={() =>
-        dismiss.mutate(itemId, {
-          onError: (error) => toast.error("Could not dismiss", { description: errorText(error) }),
-        })
-      }
-      disabled={dismiss.isPending}
-      aria-label="Dismiss"
-      className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md px-2 text-xs text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
-    >
-      <X className="h-3.5 w-3.5" aria-hidden="true" />
-      Dismiss
-    </button>
+              onError: (error) => toast.error("Could not pause the automation", { description: errorText(error) }),
+            },
+          )
+        }
+      >
+        Pause
+      </button>
+    </span>
   );
 }
