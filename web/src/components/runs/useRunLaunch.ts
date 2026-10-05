@@ -15,6 +15,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { api } from "@/api/client";
 import type { LaunchEvent } from "@/api/run-grpc";
+import { triggerSchedule } from "@/api/trigger-grpc";
 import { chatKeys } from "@/hooks/chat-queries";
 import { useLaunchEvent } from "@/hooks/run-queries";
 import { useTriggerById } from "@/hooks/trigger-queries";
@@ -52,6 +53,6 @@ export function useRunLaunch(chat: { id: string; launchKind?: string; triggerId?
     event: launch.isError ? undefined : event,
     parent: parentChatId && parent.data ? { chatId: parentChatId, title: parent.data.title } : undefined,
     triggerName: trigger?.name,
-    timezone: trigger?.schedule?.timezone,
+    timezone: trigger ? triggerSchedule(trigger)?.timezone : undefined,
   };
 }

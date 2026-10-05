@@ -23,10 +23,10 @@ import StatusDot from "../forge-ui/status_dot";
 import { Toggle } from "../ui/Toggle";
 import { Tooltip } from "../ui/Tooltip";
 import { RunStatusBadge } from "../ui/RunStatusIndicator";
-import { triggerErrorMessage, type Trigger } from "@/api/trigger-grpc";
+import { sourceKindLabel, triggerErrorMessage, type Trigger } from "@/api/trigger-grpc";
 import { useSetTriggerEnabled } from "@/hooks/trigger-queries";
 import { automationHealth, type AutomationHealthDisplay } from "@/lib/automationHealth";
-import { describeSchedule } from "@/lib/cronText";
+import { describeTriggerSource } from "@/lib/cronText";
 import { formatAbsoluteTime, formatRelativeTime } from "@/lib/relativeTime";
 import { runStatusFromDisplayState } from "@/lib/runStatus";
 import { cn } from "@/lib/utils";
@@ -43,7 +43,7 @@ export function automationLocation(trigger: Trigger): string {
 export function AutomationRow({ trigger }: { trigger: Trigger }) {
   const setEnabled = useSetTriggerEnabled();
   const health = automationHealth(trigger);
-  const scheduleText = trigger.schedule ? describeSchedule(trigger.schedule) : "Unknown source";
+  const scheduleText = describeTriggerSource(trigger.source);
 
   const onToggle = (enabled: boolean) => {
     setEnabled.mutate(
@@ -119,11 +119,11 @@ export function AutomationRow({ trigger }: { trigger: Trigger }) {
 }
 
 function KindIcon({ trigger }: { trigger: Trigger }) {
-  const Icon = trigger.schedule ? CalendarClock : CircleHelp;
+  const Icon = trigger.source.kind === "schedule" ? CalendarClock : CircleHelp;
   return (
     <span className="flex h-8 w-8 items-center justify-center rounded-md border border-border/60 bg-background text-muted-foreground">
       <Icon className="h-4 w-4" aria-hidden="true" />
-      <span className="sr-only">{trigger.schedule ? "Schedule" : "Unknown kind"}</span>
+      <span className="sr-only">{sourceKindLabel(trigger.source)}</span>
     </span>
   );
 }

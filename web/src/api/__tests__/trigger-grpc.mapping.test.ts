@@ -17,10 +17,11 @@ import {
   TriggerHealthSchema,
   TriggerHealthStatus,
   TriggerSchema,
+  type Trigger as ProtoTrigger,
 } from "@/gen/reliant/v1/trigger_pb";
 import { RunDisplayState } from "@/gen/reliant/v1/run_pb";
 import { WorkflowState, WorkflowStopReason } from "@/gen/reliant/v1/chat_pb";
-import { triggerFromProto } from "../trigger-grpc";
+import { definitionFromTrigger, definitionToProto, triggerFromProto } from "../trigger-grpc";
 
 function proto(overrides: Partial<Parameters<typeof create<typeof TriggerSchema>>[1]> = {}) {
   return create(TriggerSchema, {
@@ -100,5 +101,50 @@ describe("triggerFromProto", () => {
       proto({ lastEvent: create(TriggerEventSchema, { id: "ev-1", outcome: TriggerEventOutcome.SKIPPED }) }),
     );
     expect(trigger.lastEvent?.runDisplayState).toBeUndefined();
+  });
+});
+
+/**
+ * UpdateTrigger replaces the whole row, so an edit sends the source back. A
+ * source the client does not edit must go back exactly as it came, or saving
+ * a rename would silently turn (say) a webhook into an empty schedule.
+ */
+describe("source round-trip", () => {
+  // A non-schedule arm, built by hand: the arms beyond `schedule` are added
+  // to trigger.proto on another branch, so this checkout's generated code
+  // cannot construct one. The mapping must never look inside an arm it does
+  // not edit, so the shape of `value` is irrelevant to it.
+  const webhookArm = {
+    case: "webhook",
+    value: { $typeName: "reliant.v1.WebhookSource", path: "/hooks/abc123", secretPrefix: "whsec_9f" },
+  } as unknown as ProtoTrigger["source"];
+
+  function storedWithSource(source: ProtoTrigger["source"]) {
+    const stored = proto();
+    stored.source = source;
+    return stored;
+  }
+
+  it("sends a non-schedule source back unchanged when another field is edited", () => {
+    const trigger = triggerFromProto(storedWithSource(webhookArm));
+    const definition = definitionToProto({ ...definitionFromTrigger(trigger), name: "Renamed" });
+
+    expect(definition.name).toBe("Renamed");
+    expect(definition.source).toEqual(webhookArm);
+  });
+
+  it("still edits a schedule source", () => {
+    const trigger = triggerFromProto(proto());
+    const definition = definitionToProto(definitionFromTrigger(trigger));
+
+    expect(definition.source.case).toBe("schedule");
+    expect(definition.source.value).toMatchObject({ cron: ["0 9 * * *"], timezone: "UTC" });
+  });
+
+  it("refuses to write a source it could not decode rather than inventing one", () => {
+    // An arm this client's generated code does not know arrives with no case.
+    const trigger = triggerFromProto(storedWithSource({ case: undefined }));
+
+    expect(() => definitionToProto(definitionFromTrigger(trigger))).toThrow(/newer version/);
   });
 });

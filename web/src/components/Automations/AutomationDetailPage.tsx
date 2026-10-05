@@ -25,6 +25,7 @@ import { getWorkflowDisplayName } from "../workflow/useWorkflowInputs";
 import {
   isTriggerNotFound,
   triggerErrorMessage,
+  triggerSchedule,
   type Trigger,
   type TriggerEvent,
 } from "@/api/trigger-grpc";
@@ -35,7 +36,7 @@ import {
   useTrigger,
   useTriggerEvents,
 } from "@/hooks/trigger-queries";
-import { describeSchedule } from "@/lib/cronText";
+import { describeSchedule, describeTriggerSource } from "@/lib/cronText";
 import { formatAbsoluteTime, formatRelativeTime } from "@/lib/relativeTime";
 import { AutomationFormDialog } from "./AutomationFormDialog";
 import { OutcomeBadge } from "./OutcomeBadge";
@@ -181,7 +182,7 @@ export function AutomationDetail({ triggerId }: { triggerId: string }) {
               trigger.daemonId,
             )}{" "}
             ·{" "}
-            {trigger.schedule ? describeSchedule(trigger.schedule) : "Unknown source"}
+            {describeTriggerSource(trigger.source)}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -263,7 +264,7 @@ export function AutomationDetail({ triggerId }: { triggerId: string }) {
 }
 
 function DefinitionList({ trigger }: { trigger: Trigger }) {
-  const schedule = trigger.schedule;
+  const schedule = triggerSchedule(trigger);
   const { daemons } = useDaemonStatus();
   const daemon = daemons.find((d) => d.daemonId === trigger.daemonId);
   const inputCount = Object.keys(trigger.presets).length + Object.keys(trigger.params).length;
@@ -285,7 +286,7 @@ function DefinitionList({ trigger }: { trigger: Trigger }) {
       ),
     },
     {
-      label: "Schedule",
+      label: schedule ? "Schedule" : "Trigger",
       value: schedule ? (
         <span>
           {describeSchedule(schedule)}
@@ -295,7 +296,7 @@ function DefinitionList({ trigger }: { trigger: Trigger }) {
           </span>
         </span>
       ) : (
-        "Unknown source"
+        describeTriggerSource(trigger.source)
       ),
     },
     {
@@ -310,14 +311,18 @@ function DefinitionList({ trigger }: { trigger: Trigger }) {
         "No upcoming run"
       ),
     },
-    {
+  ];
+  // The overlap policy lives on the schedule source; another kind's is not
+  // readable here, so it is not guessed at.
+  if (schedule) {
+    rows.push({
       label: "If still running",
       value:
-        schedule?.overlap === "allow"
+        schedule.overlap === "allow"
           ? "Start another run anyway"
           : "Skip — nothing starts while the previous run is active or paused",
-    },
-  ];
+    });
+  }
   if (inputCount > 0) {
     rows.push({
       label: "Workflow inputs",

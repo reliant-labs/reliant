@@ -21,6 +21,7 @@ import {
   TriggerOverlapPolicy,
   TriggerSchema,
   UpdateTriggerResponseSchema,
+  type Trigger as ProtoTrigger,
 } from "@/gen/reliant/v1/trigger_pb";
 import { jsToProtoValue } from "@/api/proto-utils";
 import { DaemonInfoSchema, DaemonStatus } from "@/gen/reliant/v1/daemon_registry_pb";
@@ -316,6 +317,50 @@ describe("AutomationFormDialog", () => {
       overlap: TriggerOverlapPolicy.ALLOW,
       catchupWindow: "30m",
     });
+  });
+
+  it("edits a non-schedule trigger's other fields and sends its source back untouched", async () => {
+    // Built by hand: arms beyond `schedule` land in trigger.proto on another
+    // branch. The dialog must not look inside an arm it has no editor for.
+    const webhookArm = {
+      case: "webhook",
+      value: { $typeName: "reliant.v1.WebhookSource", path: "/hooks/abc123" },
+    } as unknown as ProtoTrigger["source"];
+    const stored = storedTrigger();
+    stored.source = webhookArm;
+    updateTrigger.mockResolvedValue(create(UpdateTriggerResponseSchema, { trigger: stored }));
+    const user = userEvent.setup();
+
+    renderAtRoute(<AutomationFormDialog open onClose={vi.fn()} trigger={triggerFromProto(stored)} />);
+
+    expect(await screen.findByText("Webhook trigger.")).toBeInTheDocument();
+    // No schedule editor to accidentally overwrite the source with.
+    expect(screen.queryByLabelText("Repeat")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Time zone")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Catch-up window")).not.toBeInTheDocument();
+
+    await screen.findByRole("option", { name: /cloud-box/ });
+    fill(screen.getByLabelText("Name"), "Renamed hook");
+    fill(screen.getByLabelText("Prompt"), "New prompt");
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+
+    await waitFor(() => expect(updateTrigger).toHaveBeenCalledTimes(1));
+    const request = updateTrigger.mock.calls[0]![0];
+    expect(request.trigger).toMatchObject({ name: "Renamed hook", message: "New prompt" });
+    expect(request.trigger.source).toEqual(webhookArm);
+  });
+
+  it("refuses to save a trigger whose source this build cannot read", async () => {
+    const stored = storedTrigger();
+    stored.source = { case: undefined };
+    const user = userEvent.setup();
+
+    renderAtRoute(<AutomationFormDialog open onClose={vi.fn()} trigger={triggerFromProto(stored)} />);
+    await screen.findByRole("option", { name: /cloud-box/ });
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/newer version of Reliant/);
+    expect(updateTrigger).not.toHaveBeenCalled();
   });
 
   it("lets an edit change the daemon, and sends the new one", async () => {
