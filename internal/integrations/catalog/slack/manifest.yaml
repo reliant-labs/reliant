@@ -50,9 +50,12 @@ connection:
           - chat:write          # chat.postMessage / chat.update / thread replies
           - channels:read       # conversations.list (public channels)
           - groups:read         # conversations.list (private channels the bot is in)
+          - im:read             # conversations.list types=im
+          - mpim:read           # conversations.list types=mpim
           - channels:history    # conversations.history + message.channels events
           - groups:history      # message.groups events
           - im:history          # message.im events
+          - mpim:history        # message.mpim events (group DMs)
           - reactions:read      # reaction_added events
           - reactions:write     # reactions.add
           - users:read          # users.lookupByEmail
