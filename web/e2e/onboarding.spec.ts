@@ -93,6 +93,19 @@ async function mockGrpcRoutes(page: Page) {
     }),
   );
 
+  // Managed Reliant key — the commit's `grant_ai_access` task for a
+  // `reliant_credits` plan (commitLaunchPlan.ts). The real handler
+  // (internal/grpc/services/settings.go SyncReliantProvider) answers success
+  // with `synced: true`; the `{}` fallback above reads as `synced: false`,
+  // which is a FAILED grant — a state the server never reports on success.
+  await page.route('**/reliant.v1.SettingsService/SyncReliantProvider', (route: Route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ success: true, synced: true }),
+    }),
+  );
+
   // Cloud user + eligibility — a fresh, not-yet-onboarded, cloud-eligible user.
   //
   // GetCurrentUser is STATEFUL: it starts as not-onboarded and flips once
@@ -189,6 +202,36 @@ async function loginWithApiKey(page: Page) {
   await page.addInitScript(() => {
     localStorage.setItem('reliant-api-key', 'test-key-123');
   });
+}
+
+/**
+ * Answer every call to `url` with `body`, but only once `release()` is called.
+ *
+ * The local finish step (FinishStep.tsx) has no question to ask: it finalizes
+ * on mount, and "Setting up your project…" is only its loading state. Against
+ * these mocks the whole sequence settles in tens of milliseconds — usually
+ * before `page.goto` has even resolved — so asserting on that text without
+ * holding anything is a race the test loses whenever the page's `load` event
+ * is late. Holding the RPC the step is waiting on keeps it on screen for
+ * exactly as long as the test needs, and `release()` then lets the step
+ * finish so the test can assert where it ends up.
+ */
+async function holdRpc(page: Page, url: string, body: unknown) {
+  let release!: () => void;
+  const released = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const requests: Record<string, unknown>[] = [];
+  await page.route(url, async (route: Route) => {
+    requests.push(route.request().postDataJSON() as Record<string, unknown>);
+    await released;
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(body),
+    });
+  });
+  return { release, requests };
 }
 
 /** Navigate straight to `/onboarding` and wait for the dialog to mount. */
@@ -362,6 +405,11 @@ test.describe('Onboarding Flow', () => {
   });
 
   test('Model: saving a BYO key on the local path advances to the finish step', async ({ page }) => {
+    // Held so the finish step's loading state stays on screen — see holdRpc.
+    const createProject = await holdRpc(page, '**/reliant.v1.ProjectService/CreateProject', {
+      project: { id: 'proj_default', name: 'my-project', path: '~/Projects/my-project' },
+    });
+
     await gotoOnboardingWithPlan(page, { compute: 'local_daemon' });
     const dialog = page.getByRole('dialog', { name: 'Onboarding setup' });
     await expect(dialog.getByText('Which AI should Reliant use?')).toBeVisible();
@@ -373,6 +421,10 @@ test.describe('Onboarding Flow', () => {
     // Local path skips project-choice/github-connect and lands directly on
     // finish ("Setting up your project") — see deriveStep in stepConfig.ts.
     await expect(dialog.getByText('Setting up your project')).toBeVisible({ timeout: 10_000 });
+
+    // Own key + local compute: nothing to provision, so the step exits itself.
+    createProject.release();
+    await expect(page).not.toHaveURL(/\/onboarding/, { timeout: 10_000 });
   });
 
   // ── Project-choice (cloud): Start new vs Connect GitHub ─────
@@ -428,35 +480,40 @@ test.describe('Onboarding Flow', () => {
   // ── Finish (local): auto-finalizes onto the existing project ───────────
 
   test('Finish: local compute reuses an existing project and exits without a picker', async ({ page }) => {
-    await page.route('**/reliant.v1.ProjectService/ListProjects', (route: Route) =>
-      route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          projects: [
-            {
-              id: 'proj_existing',
-              name: 'my-proj',
-              path: '/home/me/my-proj',
-              is_git_repo: false,
-              worktree_count: 0,
-              last_active: new Date().toISOString(),
-              created_at: new Date().toISOString(),
-              updated_at: new Date().toISOString(),
-            },
-          ],
-        }),
-      }),
-    );
+    // Held, or the step finishes and leaves before the dialog can be waited
+    // for — see holdRpc.
+    const listProjects = await holdRpc(page, '**/reliant.v1.ProjectService/ListProjects', {
+      projects: [
+        {
+          id: 'proj_existing',
+          name: 'my-proj',
+          path: '/home/me/my-proj',
+          is_git_repo: false,
+          worktree_count: 0,
+          last_active: new Date().toISOString(),
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        },
+      ],
+    });
+    const createProjectCalls: unknown[] = [];
+    await page.route('**/reliant.v1.ProjectService/CreateProject', (route: Route) => {
+      createProjectCalls.push(route.request().postDataJSON());
+      return route.fulfill({ status: 500, contentType: 'application/json', body: '{}' });
+    });
 
     await gotoOnboardingWithPlan(page, { compute: 'local_daemon', modelProvider: 'anthropic' });
     const dialog = page.getByRole('dialog', { name: 'Onboarding setup' });
+    await expect(dialog.getByText('Setting up your project')).toBeVisible();
+
     // No click: the finish step selects the existing project itself. Local
     // compute + own key leaves the commit nothing to provision, so
     // ProvisioningGate's "nothing to do" branch exits onboarding by itself
     // (#289); no Continue button is rendered on this path.
-    await expect(page).not.toHaveURL(/\/onboarding/, { timeout: 10_000 });
+    listProjects.release();
+    await expect(page).toHaveURL(/\/project\/proj_existing/, { timeout: 10_000 });
     await expect(dialog).toBeHidden();
+    expect(createProjectCalls).toEqual([]);
   });
 
   // ── Back button ─────────────────────────────────────────────
@@ -751,11 +808,36 @@ test.describe('Onboarding – Project-choice branch selection', () => {
 
   // Local daemon -> always finish regardless of intent (see
   // getStepsForPlan / deriveStep: isCloud gates the branch, not intent).
+  //
+  // The finish step has no picker: with no projects it creates the default
+  // one itself, then completes and commits. Where it ends depends on whether
+  // the commit had work to do. Own key: nothing to provision, so
+  // ProvisioningGate exits by itself. Reliant credits: the commit grants AI
+  // access, so the gate reports that task and waits for Continue.
   for (const modelProvider of ['anthropic', 'openai', 'reliant_credits'] as const) {
     test(`Local daemon + ${modelProvider}: lands on the finish step (default project, no picker)`, async ({ page }) => {
+      const createProject = await holdRpc(page, '**/reliant.v1.ProjectService/CreateProject', {
+        project: { id: 'proj_default', name: 'my-project', path: '~/Projects/my-project' },
+      });
+
       await gotoOnboardingWithPlan(page, { compute: 'local_daemon', modelProvider });
       const dialog = page.getByRole('dialog', { name: 'Onboarding setup' });
       await expect(dialog.getByText('Setting up your project')).toBeVisible({ timeout: 10_000 });
+      await expect
+        .poll(() => createProject.requests)
+        .toEqual([expect.objectContaining({ name: 'my-project' })]);
+
+      createProject.release();
+
+      if (modelProvider === 'reliant_credits') {
+        await expect(dialog.getByText('Setting up your workspace')).toBeVisible({ timeout: 10_000 });
+        await expect(dialog.getByText('AI access ready.')).toBeVisible();
+        await expect(dialog.getByRole('button', { name: 'Try again' })).toHaveCount(0);
+        await dialog.getByRole('button', { name: 'Continue' }).click();
+      }
+
+      await expect(page).toHaveURL(/\/project\/proj_default/, { timeout: 10_000 });
+      await expect(dialog).toBeHidden();
     });
   }
 });
