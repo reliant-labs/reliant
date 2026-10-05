@@ -255,7 +255,7 @@ function ReliantAIPanel() {
       />
 
       {fatalError && (
-        <div className="rounded-md border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive">
+        <div className="rounded-md border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive-ink">
           {fatalError}
         </div>
       )}
@@ -668,7 +668,7 @@ function LLMKeysCard({
       </CardHeader>
       <CardContent>
         {error && (
-          <div className="mb-4 rounded-md border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          <div className="mb-4 rounded-md border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive-ink">
             {error}
           </div>
         )}
@@ -887,7 +887,7 @@ function CreateKeyForm({
         </div>
       </div>
 
-      {formError && <p className="text-sm text-destructive">{formError}</p>}
+      {formError && <p className="text-sm text-destructive-ink">{formError}</p>}
 
       <div className="flex justify-end">
         <Button onClick={submit} isLoading={creating} disabled={creating}>

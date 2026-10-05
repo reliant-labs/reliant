@@ -155,7 +155,7 @@ function extractActivityContext(step: StepExecution): ActivityContext {
           </pre>
         )}
         {stderr && (
-          <pre className="bg-destructive/10 rounded p-2 overflow-x-auto max-h-32 text-destructive/80 whitespace-pre-wrap">
+          <pre className="bg-destructive/10 rounded p-2 overflow-x-auto max-h-32 text-destructive-ink/80 whitespace-pre-wrap">
             {stderr.slice(0, 500)}{stderr.length > 500 ? "..." : ""}
           </pre>
         )}
@@ -298,7 +298,7 @@ export const ActivityIndicator = memo(function ActivityIndicator({
         
         {/* Exit code */}
         {showExitCode && (
-          <span className="text-xs px-1.5 py-0.5 rounded bg-destructive/10 text-destructive flex-shrink-0">
+          <span className="text-xs px-1.5 py-0.5 rounded bg-destructive/10 text-destructive-ink flex-shrink-0">
             exit {exitCode}
           </span>
         )}

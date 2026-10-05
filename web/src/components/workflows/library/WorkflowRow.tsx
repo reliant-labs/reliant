@@ -151,7 +151,7 @@ function AutomationsCell({ row }: { row: LibraryTableRow }) {
     <span data-testid="workflow-row-automations" className="block truncate text-xs text-muted-foreground" title={summary}>
       {`${row.automationCount} ${row.automationCount === 1 ? "automation" : "automations"}`}
       {row.failingAutomationCount > 0 && (
-        <span className="text-destructive" data-testid="workflow-row-failing">
+        <span className="text-destructive-ink" data-testid="workflow-row-failing">
           {` · ${row.failingAutomationCount} failing`}
         </span>
       )}

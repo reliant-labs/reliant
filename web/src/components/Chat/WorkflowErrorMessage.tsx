@@ -126,7 +126,7 @@ export function WorkflowErrorMessage({ error }: WorkflowErrorMessageProps) {
       >
         <Icon className={cn(
           "w-3.5 h-3.5 flex-shrink-0",
-          isRetrying ? "text-warning animate-spin" : "text-destructive"
+          isRetrying ? "text-warning animate-spin" : "text-destructive-ink"
         )} data-testid={isRetrying ? "rotate-cw" : "alert-triangle"} />
         <span className="text-xs font-medium text-foreground truncate min-w-0 flex-1">
           {summary}
@@ -135,8 +135,8 @@ export function WorkflowErrorMessage({ error }: WorkflowErrorMessageProps) {
           <span className={cn(
             "text-xs font-normal px-1.5 rounded-full whitespace-nowrap flex-shrink-0",
             isRetrying
-              ? "bg-warning/20 text-warning"
-              : "bg-destructive/20 text-destructive"
+              ? "bg-warning/20 text-warning-ink"
+              : "bg-destructive/20 text-destructive-ink"
           )}>
             {isRetrying ? `Retrying (${retryLabel})` : retryLabel}
           </span>

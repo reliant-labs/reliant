@@ -237,7 +237,7 @@ export function TerminalPanel(_props: TerminalPanelProps) {
                     handleKillTerminal(activeSessionId, e);
                   }
                 }}
-                className="p-1 hover:bg-destructive/20 hover:text-destructive rounded transition-colors"
+                className="p-1 hover:bg-destructive/20 hover:text-destructive-ink rounded transition-colors"
               >
                 <Trash2 className="w-4 h-4" />
               </button>

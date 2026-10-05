@@ -122,9 +122,9 @@ export function BranchToExistingWorktreeModal({
         </p>
 
         {error && (
-          <div className="p-4 bg-destructive/10 border border-destructive/30 text-destructive rounded-lg text-sm">
+          <div className="p-4 bg-destructive/10 border border-destructive/30 text-destructive-ink rounded-lg text-sm">
             <div className="flex items-start gap-2">
-              <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0 text-destructive" aria-hidden />
+              <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0 text-destructive-ink" aria-hidden />
               <span className="flex-1">{error}</span>
             </div>
           </div>

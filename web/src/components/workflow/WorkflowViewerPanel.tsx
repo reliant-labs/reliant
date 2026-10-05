@@ -264,7 +264,7 @@ export function WorkflowViewerPanel({
         )}
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center">
-            <p className="text-sm text-destructive">{currentLevel.error}</p>
+            <p className="text-sm text-destructive-ink">{currentLevel.error}</p>
             {navStack.length > 1 ? (
               <button
                 onClick={() => handleNavigate(navStack.length - 2)}

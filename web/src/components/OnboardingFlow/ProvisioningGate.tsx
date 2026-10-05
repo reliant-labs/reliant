@@ -55,7 +55,7 @@ function TaskRow({ task }: { task: CommitTask }) {
         <span
           className={cn(
             "block text-sm font-medium",
-            task.status === "failed" ? "text-destructive" : "text-foreground",
+            task.status === "failed" ? "text-destructive-ink" : "text-foreground",
           )}
         >
           {TASK_LABELS[task.name]}

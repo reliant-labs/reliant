@@ -720,7 +720,7 @@ function ChatMessageComponent({
         className={cn(
           "rounded p-1 text-foreground/70 transition-colors duration-150 hover:bg-muted hover:text-foreground focus:outline-none focus:ring-1 focus:ring-ring/40",
           revealedControl,
-          copied && "text-success"
+          copied && "text-success-ink"
         )}
         type="button"
       >

@@ -282,7 +282,7 @@ function SpawnPreview({ ctx }: ToolContentProps) {
         <div
           className={cn(
             "flex items-center gap-1.5 px-2 py-1 border-b border-border/10 text-2xs",
-            isCancelledChild ? "text-muted-foreground" : "text-warning",
+            isCancelledChild ? "text-muted-foreground" : "text-warning-ink",
           )}
         >
           <AlertCircle className="w-2.5 h-2.5 shrink-0" />
@@ -308,7 +308,7 @@ function SpawnPreview({ ctx }: ToolContentProps) {
                       key={i}
                       className={cn(
                         "flex items-center gap-1.5 text-2xs font-mono py-0.5",
-                        tc.failed ? "text-warning" : tc.completed ? "text-muted-foreground" : "text-primary",
+                        tc.failed ? "text-warning-ink" : tc.completed ? "text-muted-foreground" : "text-primary",
                       )}
                     >
                       {tc.failed ? (

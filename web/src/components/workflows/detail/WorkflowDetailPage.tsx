@@ -340,7 +340,7 @@ function DefinitionCard({
             <p className="text-sm font-medium text-foreground">This definition has errors.</p>
             <ul className="mt-1.5 space-y-0.5">
               {brokenErrors.map((error, index) => (
-                <li key={index} className="text-xs text-destructive">{error}</li>
+                <li key={index} className="text-xs text-destructive-ink">{error}</li>
               ))}
             </ul>
           </CardInset>

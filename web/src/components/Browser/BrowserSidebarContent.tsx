@@ -184,7 +184,7 @@ export function BrowserSidebarContent({ worktreeId }: BrowserSidebarContentProps
                 <Tooltip content="Close all tabs" placement="left">
                   <button
                     onClick={handleCloseAllTabs}
-                    className="p-1 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded transition-colors"
+                    className="p-1 text-muted-foreground hover:text-destructive-ink hover:bg-destructive/10 rounded transition-colors"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
@@ -252,7 +252,7 @@ export function BrowserSidebarContent({ worktreeId }: BrowserSidebarContentProps
                     <Tooltip content="Close tab" placement="left">
                       <button
                         onClick={(e) => handleCloseTab(e, tab.id)}
-                        className="p-1 rounded hover:bg-destructive/20 hover:text-destructive"
+                        className="p-1 rounded hover:bg-destructive/20 hover:text-destructive-ink"
                       >
                         <X className="w-3 h-3" />
                       </button>
@@ -318,7 +318,7 @@ export function BrowserSidebarContent({ worktreeId }: BrowserSidebarContentProps
                     <Tooltip content="Remove bookmark" placement="left">
                       <button
                         onClick={(e) => handleRemoveBookmark(e, bookmark.id)}
-                        className="p-1 rounded hover:bg-destructive/20 hover:text-destructive"
+                        className="p-1 rounded hover:bg-destructive/20 hover:text-destructive-ink"
                       >
                         <Trash2 className="w-3 h-3" />
                       </button>

@@ -347,7 +347,7 @@ export function QueuedMessages({
                   onClick={() => void handleCancel(message.id)}
                   className={cn(
                     "flex h-6 w-6 items-center justify-center rounded-full transition-colors",
-                    "text-muted-foreground hover:bg-accent hover:text-destructive",
+                    "text-muted-foreground hover:bg-accent hover:text-destructive-ink",
                     isBusy && "cursor-default opacity-60 hover:bg-transparent",
                   )}
                 >

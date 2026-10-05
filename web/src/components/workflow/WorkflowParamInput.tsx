@@ -937,7 +937,7 @@ function ModelInput({
         hasDefault={hasDefaultValue(schema)}
         className={className}
       >
-        <div className="cpv2-field-input text-xs text-destructive">
+        <div className="cpv2-field-input text-xs text-destructive-ink">
           ModelInput received non-model schema ({String(schema?.config?.case ?? "unknown")})
         </div>
       </ParamWrapper>
@@ -1271,7 +1271,7 @@ function ParamWrapper({ name, description, hasDefault, defaultValue: _defaultVal
         <div className="flex items-center justify-between gap-3">
           <label className="flex min-w-0 items-center gap-1.5 text-sm font-medium text-foreground">
             <span className="truncate">{displayName}</span>
-            {!hasDefault && <span className="text-destructive">*</span>}
+            {!hasDefault && <span className="text-destructive-ink">*</span>}
             {description && (
               <Tooltip content={description} placement="top" delay={200}>
                 <Info className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
@@ -1290,7 +1290,7 @@ function ParamWrapper({ name, description, hasDefault, defaultValue: _defaultVal
       <div className="flex items-center gap-2">
         <label className="flex min-w-0 items-center gap-1.5 text-sm font-medium text-foreground">
           <span className="truncate">{displayName}</span>
-          {!hasDefault && <span className="text-destructive">*</span>}
+          {!hasDefault && <span className="text-destructive-ink">*</span>}
           {description && (
             <Tooltip content={description} placement="top" delay={200}>
               <Info className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />

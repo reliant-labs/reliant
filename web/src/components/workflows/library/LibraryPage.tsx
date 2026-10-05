@@ -537,10 +537,10 @@ function LibraryControls({ search, onChange }: { search: LibrarySearch; onChange
 function InvalidSection({ workflows }: { workflows: InvalidWorkflow[] }) {
   return (
     <section aria-label="Failed to load" className="pt-2">
-      <h2 className="mb-1.5 flex items-center gap-1.5 px-1 text-xs font-semibold uppercase tracking-wide text-destructive">
+      <h2 className="mb-1.5 flex items-center gap-1.5 px-1 text-xs font-semibold uppercase tracking-wide text-destructive-ink">
         <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
         Failed to load
-        <span className="ml-0.5 font-medium text-destructive/70">{workflows.length}</span>
+        <span className="ml-0.5 font-medium text-destructive-ink/70">{workflows.length}</span>
       </h2>
       <Card padding="none" className="border-destructive/40">
         <ul aria-label="Failed to load" className="divide-y divide-border/60">
@@ -552,7 +552,7 @@ function InvalidSection({ workflows }: { workflows: InvalidWorkflow[] }) {
               </p>
               <ul className="mt-1.5 space-y-0.5">
                 {workflow.errors.map((error, index) => (
-                  <li key={index} className="text-xs text-destructive">
+                  <li key={index} className="text-xs text-destructive-ink">
                     {typeof error === "string" ? error : JSON.stringify(error)}
                   </li>
                 ))}

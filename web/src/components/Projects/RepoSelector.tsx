@@ -218,7 +218,7 @@ export function RepoSelector({ onSelect, oauthReturnTo, analyticsPhase }: RepoSe
         </div>
       )}
 
-      {error && <p className="text-xs text-destructive">{error}</p>}
+      {error && <p className="text-xs text-destructive-ink">{error}</p>}
 
       {/* Leads when there is nothing to pick from. An empty list caused by a
           narrow installation is indistinguishable from "you have no repos"
@@ -278,7 +278,7 @@ export function RepoSelector({ onSelect, oauthReturnTo, analyticsPhase }: RepoSe
           </button>
         </div>
         {manualError ? (
-          <p className="text-xs text-destructive">{manualError}</p>
+          <p className="text-xs text-destructive-ink">{manualError}</p>
         ) : (
           <p className="text-xs text-muted-foreground">
             Paste any GitHub repo URL your connected credential can access.
@@ -317,7 +317,7 @@ export function RepoSelector({ onSelect, oauthReturnTo, analyticsPhase }: RepoSe
       {/* Repo list */}
       <div className="max-h-64 overflow-y-auto rounded-lg border border-border/40">
         {reposError && !reposCredentialMissing && (
-          <div className="flex items-center gap-2 border-b border-destructive/20 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+          <div className="flex items-center gap-2 border-b border-destructive/20 bg-destructive/5 px-3 py-2 text-xs text-destructive-ink">
             {reposError}
           </div>
         )}

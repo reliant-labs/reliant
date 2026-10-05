@@ -195,7 +195,7 @@ export function ForgotPassword({ onBackToSignIn }: ForgotPasswordProps) {
                 />
               </div>
               {error && (
-                <p className="text-sm text-destructive">
+                <p className="text-sm text-destructive-ink">
                   {error}
                 </p>
               )}
@@ -277,7 +277,7 @@ export function ForgotPassword({ onBackToSignIn }: ForgotPasswordProps) {
               />
             </div>
             {error && (
-              <p className="text-sm text-destructive">
+              <p className="text-sm text-destructive-ink">
                 {error}
               </p>
             )}

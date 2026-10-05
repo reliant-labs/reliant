@@ -27,12 +27,12 @@ function LoadToolRendererComponent({ ctx }: ToolContentProps) {
         </span>
         {result && (
           isError ? (
-            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-3xs font-medium bg-warning/10 text-warning border border-warning/20">
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-3xs font-medium bg-warning/10 text-warning-ink border border-warning/20">
               {isDenied ? <XCircle className="w-2.5 h-2.5" /> : <AlertCircle className="w-2.5 h-2.5" />}
               {isDenied ? 'denied' : 'warning'}
             </span>
           ) : (
-            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-3xs font-medium bg-success/10 text-success border border-success/20">
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-3xs font-medium bg-success/10 text-success-ink border border-success/20">
               <CheckCircle className="w-2.5 h-2.5" />
               loaded
             </span>

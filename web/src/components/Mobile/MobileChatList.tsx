@@ -186,7 +186,7 @@ function ChatRow({ chat, isLast }: { chat: Chat; isLast: boolean }) {
 
           <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
             {attention ? (
-              <span className="flex items-center gap-1 rounded-full bg-destructive/10 px-1.5 py-0.5 font-medium text-destructive">
+              <span className="flex items-center gap-1 rounded-full bg-destructive/10 px-1.5 py-0.5 font-medium text-destructive-ink">
                 <AlertCircle className="h-3 w-3" />
                 Needs you
               </span>
@@ -270,7 +270,7 @@ function GroupHeader({ group, isCollapsed, onToggle, onNewChat, onArchive }: Gro
             className={cn(
               "shrink-0 rounded-full px-2 py-0.5 text-xs font-medium",
               group.hasActivity
-                ? "bg-destructive/10 text-destructive"
+                ? "bg-destructive/10 text-destructive-ink"
                 : "bg-primary/10 text-primary",
             )}
           >

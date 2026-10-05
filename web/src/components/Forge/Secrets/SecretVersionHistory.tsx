@@ -244,7 +244,7 @@ function RowAction({
       className={cn(
         "inline-flex items-center gap-1.5 rounded px-2 py-1 text-xs transition-colors",
         "text-muted-foreground",
-        danger ? "hover:text-destructive" : "hover:text-foreground",
+        danger ? "hover:text-destructive-ink" : "hover:text-foreground",
         "disabled:cursor-not-allowed disabled:opacity-40"
       )}
     >

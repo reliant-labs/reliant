@@ -87,7 +87,7 @@ export function HostedWorkloadList({
                 className="flex min-w-0 items-start gap-1 pl-[6.5rem] text-2xs text-foreground"
                 data-testid={`hosted-error-${envName}-${name}`}
               >
-                <AlertTriangle className="mt-px h-3 w-3 shrink-0 text-destructive" aria-hidden="true" />
+                <AlertTriangle className="mt-px h-3 w-3 shrink-0 text-destructive-ink" aria-hidden="true" />
                 <span className="sr-only">Last error: </span>
                 <span className="line-clamp-2 break-words" title={lastError}>
                   {lastError}

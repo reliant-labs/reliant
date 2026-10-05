@@ -499,7 +499,7 @@ export function SelfHostedDaemonConnect({
         </div>
       </section>
 
-      {error && <p className="text-center text-xs text-destructive">{error}</p>}
+      {error && <p className="text-center text-xs text-destructive-ink">{error}</p>}
 
       {/* Flow control, not instruction: only a caller that is waiting on a
           daemon wants a spinner and a "check connection" button. In reference

@@ -358,9 +358,9 @@ export function CreateWorktreeModal({
     >
       <form onSubmit={handleSubmit} className="space-y-6">
         {error && (
-          <div className="p-4 bg-destructive/10 border border-destructive/30 text-destructive rounded-lg text-sm">
+          <div className="p-4 bg-destructive/10 border border-destructive/30 text-destructive-ink rounded-lg text-sm">
             <div className="flex items-start gap-2">
-              <span className="text-destructive mt-0.5">⚠️</span>
+              <span className="text-destructive-ink mt-0.5">⚠️</span>
               <span className="flex-1">{error}</span>
             </div>
           </div>
@@ -369,7 +369,7 @@ export function CreateWorktreeModal({
         <div className="space-y-5">
           <div className="space-y-2">
             <label className="block text-sm font-semibold text-foreground">
-              Name <span className="text-destructive">*</span>
+              Name <span className="text-destructive-ink">*</span>
             </label>
             <div className="relative">
               <FolderGit2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -508,7 +508,7 @@ export function CreateWorktreeModal({
                       className="w-full"
                     />
                     {branchesError ? (
-                      <p className="text-xs text-destructive flex items-center gap-1">
+                      <p className="text-xs text-destructive-ink flex items-center gap-1">
                         <span>⚠️</span>
                         <span>{branchesError}</span>
                       </p>

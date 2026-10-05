@@ -97,12 +97,12 @@ export function DomainDetail({
           role="alert"
           data-testid="domain-last-error"
         >
-          <span className="flex items-center gap-1.5 text-xs font-medium text-destructive">
+          <span className="flex items-center gap-1.5 text-xs font-medium text-destructive-ink">
             <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
             What went wrong
           </span>
           {/* The checker's own words. See the header comment. */}
-          <p className="break-words text-xs text-destructive">{domain.lastError}</p>
+          <p className="break-words text-xs text-destructive-ink">{domain.lastError}</p>
         </section>
       )}
 
@@ -131,7 +131,7 @@ export function DomainDetail({
       </section>
 
       {actionError && (
-        <p className="text-xs text-destructive" role="alert">
+        <p className="text-xs text-destructive-ink" role="alert">
           {actionError}
         </p>
       )}
@@ -170,7 +170,7 @@ export function DomainDetail({
         <button
           type="button"
           onClick={onRemove}
-          className="ml-auto inline-flex items-center gap-1.5 rounded-lg border border-destructive/40 px-3 py-1.5 text-xs text-destructive transition hover:bg-destructive/10"
+          className="ml-auto inline-flex items-center gap-1.5 rounded-lg border border-destructive/40 px-3 py-1.5 text-xs text-destructive-ink transition hover:bg-destructive/10"
         >
           <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
           Remove domain

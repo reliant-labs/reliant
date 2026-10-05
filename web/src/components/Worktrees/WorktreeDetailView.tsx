@@ -99,7 +99,7 @@ export function WorktreeDetailView() {
       case WorktreeStatus.COMPLETED:
         return "text-status-completed";
       case WorktreeStatus.ABANDONED:
-        return "text-warning";
+        return "text-warning-ink";
       case WorktreeStatus.MERGING:
         return "text-status-merging";
       default:
@@ -326,7 +326,7 @@ export function WorktreeDetailView() {
               className={cn(workspaceIconButton, "h-6 w-6 border-border/60 shadow-none")}
               title="Copy path to clipboard"
             >
-              {copiedPath ? <Check className="h-3.5 w-3.5 text-success" /> : <Copy className="h-3.5 w-3.5" />}
+              {copiedPath ? <Check className="h-3.5 w-3.5 text-success-ink" /> : <Copy className="h-3.5 w-3.5" />}
             </button>
           </div>
         </div>

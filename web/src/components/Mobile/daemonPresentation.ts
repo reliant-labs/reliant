@@ -41,7 +41,7 @@ const UNKNOWN: DaemonPresentation = {
 const BY_STATUS: Record<number, DaemonPresentation> = {
   [DaemonStatus.ACTIVE]: {
     label: "Active",
-    pillClassName: "bg-success/10 text-success ring-success/25",
+    pillClassName: "bg-success/10 text-success-ink ring-success/25",
     resumable: false,
   },
   [DaemonStatus.PENDING]: {
@@ -52,17 +52,17 @@ const BY_STATUS: Record<number, DaemonPresentation> = {
   },
   [DaemonStatus.SUSPENDED]: {
     label: "Suspended",
-    pillClassName: "bg-warning/10 text-warning ring-warning/25",
+    pillClassName: "bg-warning/10 text-warning-ink ring-warning/25",
     resumable: true,
   },
   [DaemonStatus.DISCONNECTED]: {
     label: "Disconnected",
-    pillClassName: "bg-destructive/10 text-destructive ring-destructive/25",
+    pillClassName: "bg-destructive/10 text-destructive-ink ring-destructive/25",
     resumable: true,
   },
   [DaemonStatus.FAILED]: {
     label: "Failed",
-    pillClassName: "bg-destructive/10 text-destructive ring-destructive/25",
+    pillClassName: "bg-destructive/10 text-destructive-ink ring-destructive/25",
     // A failed daemon needs deletion or a fresh machine. Resume would just fail again.
     resumable: false,
   },

@@ -319,7 +319,7 @@ export function MobileBillingScreen({ onBack }: { onBack: () => void }) {
                 // Semantic `warning` tokens, not a hardcoded amber pair. The
                 // literal `amber-500` here was a brand colour by another name:
                 // it ignored the theme and needed a `dark:` twin to stay legible.
-                <div className="mt-3 rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning">
+                <div className="mt-3 rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning-ink">
                   <p className="font-semibold">{walletUi.warning.title}</p>
                   <p>{walletUi.warning.message}</p>
                 </div>

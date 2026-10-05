@@ -651,23 +651,23 @@ function ToolExecutionComponent({
   // Get status icon
   const getStatusIcon = () => {
     if (toolResult?.is_error && toolResult?.content?.includes("blocked")) {
-      return <Shield className="w-3.5 h-3.5 text-warning" />;
+      return <Shield className="w-3.5 h-3.5 text-warning-ink" />;
     }
     if (isCancelled) return <X className="w-3.5 h-3.5 text-destructive" />;
-    if (isCancelling) return <Square className="w-3.5 h-3.5 text-warning animate-pulse" />;
-    if (hasFailed) return <AlertCircle className="w-3.5 h-3.5 text-warning" />;
+    if (isCancelling) return <Square className="w-3.5 h-3.5 text-warning-ink animate-pulse" />;
+    if (hasFailed) return <AlertCircle className="w-3.5 h-3.5 text-warning-ink" />;
     if (isBackgrounded) return <Play className="w-3.5 h-3.5 text-primary" />;
     if (isCompleted) {
       if (isTaskToolFlag && taskTargetStatus) {
         const statusIcons: Record<string, React.ReactNode> = {
-          completed: <CheckCircle className="w-3.5 h-3.5 text-success" />,
+          completed: <CheckCircle className="w-3.5 h-3.5 text-success-ink" />,
           in_progress: <Loader2 className="w-3.5 h-3.5 text-info" />,
           failed: <XCircle className="w-3.5 h-3.5 text-destructive" />,
-          blocked: <AlertCircle className="w-3.5 h-3.5 text-warning" />,
+          blocked: <AlertCircle className="w-3.5 h-3.5 text-warning-ink" />,
         };
         return statusIcons[taskTargetStatus] || <CheckCircle className="w-3.5 h-3.5 text-muted-foreground" />;
       }
-      return <CheckCircle className="w-3.5 h-3.5 text-success" />;
+      return <CheckCircle className="w-3.5 h-3.5 text-success-ink" />;
     }
     if (needsApproval) return <Shield className="w-3.5 h-3.5 text-info" />;
     if (isDenied) return <X className="w-3.5 h-3.5 text-destructive" />;
@@ -804,9 +804,9 @@ function ToolExecutionComponent({
     const statusStyles: Record<string, { icon: typeof CheckCircle; color: string }> = {
       pending: { icon: Clock, color: "text-muted-foreground" },
       in_progress: { icon: Zap, color: "text-primary" },
-      completed: { icon: CheckCircle, color: "text-success" },
-      failed: { icon: XCircle, color: "text-destructive" },
-      blocked: { icon: AlertCircle, color: "text-warning" },
+      completed: { icon: CheckCircle, color: "text-success-ink" },
+      failed: { icon: XCircle, color: "text-destructive-ink" },
+      blocked: { icon: AlertCircle, color: "text-warning-ink" },
     };
     const style = statusStyles[currentTaskStatus] || statusStyles.pending;
 
@@ -823,7 +823,7 @@ function ToolExecutionComponent({
             ) : isExecuting ? (
               <Loader2 className="w-3.5 h-3.5 text-primary animate-spin" />
             ) : hasFailed ? (
-              <AlertCircle className="w-3.5 h-3.5 text-warning" />
+              <AlertCircle className="w-3.5 h-3.5 text-warning-ink" />
             ) : (
               <style.icon className={cn("w-3.5 h-3.5", style.color)} />
             )}
@@ -885,11 +885,11 @@ function ToolExecutionComponent({
             </span>
             <span className={cn(
               "px-1.5 py-0.5 rounded text-xs font-medium shrink-0",
-              toolResult?.is_error ? "bg-warning/10 text-warning"
-                : hasFailed ? "bg-warning/10 text-warning"
+              toolResult?.is_error ? "bg-warning/10 text-warning-ink"
+                : hasFailed ? "bg-warning/10 text-warning-ink"
                 : isCancelled ? "bg-muted text-muted-foreground"
-                : isCompleted ? "bg-success/5 text-success/70"
-                : needsApproval ? "bg-warning/10 text-warning"
+                : isCompleted ? "bg-success/5 text-success-ink/70"
+                : needsApproval ? "bg-warning/10 text-warning-ink"
                 : isExecuting ? "bg-primary/10 text-primary"
                 : "bg-muted text-muted-foreground"
             )}>
@@ -934,7 +934,7 @@ function ToolExecutionComponent({
                 title="Cancel" aria-label="Cancel tool execution"
                 disabled={isCancelling}
               >
-                <Square className={cn("w-3.5 h-3.5", isCancelling ? "text-warning animate-pulse" : "text-destructive")} />
+                <Square className={cn("w-3.5 h-3.5", isCancelling ? "text-warning-ink animate-pulse" : "text-destructive")} />
               </button>
             )}
             {isExpandable && (
@@ -951,7 +951,7 @@ function ToolExecutionComponent({
         {shouldShowApprovalUI && (
           <div className="px-2 py-2 border-t border-warning/20 bg-warning/5">
             {showRichContent && toolCall.input && <ToolContentArea ctx={renderContext} />}
-            <p className="text-xs font-medium text-warning mb-1.5">Approval required</p>
+            <p className="text-xs font-medium text-warning-ink mb-1.5">Approval required</p>
             <div className={cn("flex gap-2", surface !== "desktop" && "flex-col")}>
               <button
                 onClick={handleApprove} aria-label="Approve tool execution"
@@ -977,7 +977,7 @@ function ToolExecutionComponent({
 
         {/* Denial reason */}
         {approval?.status === ApprovalStatus.DENIED && approval.denial_reason && (
-          <div className="px-2 py-1 border-t border-destructive/20 bg-destructive/5 text-xs text-destructive">
+          <div className="px-2 py-1 border-t border-destructive/20 bg-destructive/5 text-xs text-destructive-ink">
             Denied: {approval.denial_reason}
           </div>
         )}

@@ -41,7 +41,7 @@ const buttonVariants = {
     active:scale-[0.98] active:shadow-sm transition-all duration-150 ease-out
   `,
   destructive: `
-    bg-destructive/10 text-destructive hover:bg-destructive/20
+    bg-destructive/10 text-destructive-ink hover:bg-destructive/20
     border border-destructive/20
     shadow-sm shadow-destructive/10 hover:shadow-md hover:shadow-destructive/15
     focus:ring-2 focus:ring-destructive/50 focus:ring-offset-2

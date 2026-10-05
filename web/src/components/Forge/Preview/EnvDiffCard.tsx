@@ -230,7 +230,7 @@ function EnvDiffBody({
           cannot be deployed at all. Stated before the categories so it is not
           read as one more item in the list. */}
       {kindChange && (
-        <p className="text-sm text-destructive" data-testid={`env-diff-kind-changed-${env}`}>
+        <p className="text-sm text-destructive-ink" data-testid={`env-diff-kind-changed-${env}`}>
           This environment is {kindChange.live ?? "unknown"} and cannot become{" "}
           {kindChange.candidate ?? "unknown"}. An environment's kind cannot be changed.
         </p>

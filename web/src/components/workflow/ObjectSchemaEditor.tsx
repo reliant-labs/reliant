@@ -209,7 +209,7 @@ function PropertyEditor({
             <div className="flex items-center gap-2">
               <span className="font-medium text-sm font-mono">{name}</span>
               {isRequired && (
-                <span className="text-xs px-1.5 py-0.5 rounded bg-destructive/10 text-destructive font-medium">
+                <span className="text-xs px-1.5 py-0.5 rounded bg-destructive/10 text-destructive-ink font-medium">
                   Required
                 </span>
               )}
@@ -229,7 +229,7 @@ function PropertyEditor({
             <button
               type="button"
               onClick={onRemove}
-              className="p-1 hover:bg-destructive/10 hover:text-destructive rounded transition-colors"
+              className="p-1 hover:bg-destructive/10 hover:text-destructive-ink rounded transition-colors"
               title="Remove property"
             >
               <X className="w-4 h-4" />

@@ -125,8 +125,8 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
           
           {/* Right Icon or State Icon */}
           <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-            {state === 'error' && <AlertCircle className="w-4 h-4 text-destructive" />}
-            {state === 'success' && <Check className="w-4 h-4 text-success" />}
+            {state === 'error' && <AlertCircle className="w-4 h-4 text-destructive-ink" />}
+            {state === 'success' && <Check className="w-4 h-4 text-success-ink" />}
             {state === 'default' && rightIcon && (
               <span className="text-muted-foreground">{rightIcon}</span>
             )}
@@ -140,7 +140,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
         
         {/* Error Message */}
         {error && (
-          <p className="text-xs text-destructive mt-1 flex items-center gap-1">
+          <p className="text-xs text-destructive-ink mt-1 flex items-center gap-1">
             <AlertCircle className="w-3 h-3" />
             {error}
           </p>

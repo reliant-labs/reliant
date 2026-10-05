@@ -22,7 +22,7 @@ function TrendIndicator({
   trend: { direction: "up" | "down" | "flat"; value: string };
 }) {
   const colors: Record<string, string> = {
-    up: "text-success bg-success-surface",
+    up: "text-success-ink bg-success-surface",
     down: "text-danger bg-danger-surface",
     flat: "text-ink-muted bg-surface-muted",
   };

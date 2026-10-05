@@ -616,7 +616,7 @@ function PresetOption({
                   onDelete(preset);
                   setShowActions(false);
                 }}
-                className="w-full px-3 py-1.5 text-left text-xs hover:bg-destructive/10 text-destructive transition-colors flex items-center gap-2"
+                className="w-full px-3 py-1.5 text-left text-xs hover:bg-destructive/10 text-destructive-ink transition-colors flex items-center gap-2"
               >
                 <Trash2 className="w-3.5 h-3.5" />
                 Delete

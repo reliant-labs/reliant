@@ -55,8 +55,8 @@ export const WORKLOAD_STATUS_BLURBS: Record<ForgeCheckStatus, string> = {
 /** Text tint, used for the label beside the dot and for a finding line. */
 export const WORKLOAD_STATUS_FOREGROUND: Record<ForgeCheckStatus, string> = {
   pass: "text-foreground",
-  warn: "text-warning",
-  fail: "text-destructive",
+  warn: "text-warning-ink",
+  fail: "text-destructive-ink",
   unknown: "text-muted-foreground",
   skip: "text-muted-foreground",
 };

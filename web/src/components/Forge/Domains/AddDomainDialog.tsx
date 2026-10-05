@@ -195,7 +195,7 @@ export function AddDomainDialog({
             className={cn(fieldClass, touched && hostnameProblem && "border-destructive")}
           />
           {touched && hostnameProblem ? (
-            <p className="text-xs text-destructive">{hostnameProblem}</p>
+            <p className="text-xs text-destructive-ink">{hostnameProblem}</p>
           ) : (
             <p className="text-xs text-muted-foreground">
               An apex (hounders.club) and its www are two separate domains. Add both, and bind the
@@ -321,7 +321,7 @@ export function AddDomainDialog({
 
         {error && (
           <div
-            className="flex items-start gap-2 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-xs text-destructive"
+            className="flex items-start gap-2 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-xs text-destructive-ink"
             role="alert"
           >
             <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />

@@ -33,11 +33,11 @@ const dotTint: Record<StatusDotVariant, string> = {
 };
 
 const labelTint: Record<StatusDotVariant, string> = {
-  active: "text-success",
-  paused: "text-warning",
+  active: "text-success-ink",
+  paused: "text-warning-ink",
   pending: "text-info",
-  error: "text-destructive",
-  warning: "text-warning",
+  error: "text-destructive-ink",
+  warning: "text-warning-ink",
   neutral: "text-muted-foreground",
 };
 

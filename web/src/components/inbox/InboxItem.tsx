@@ -159,13 +159,13 @@ function KindIcon({ kind }: { kind: InboxItemKind }) {
     case InboxItemKind.QUESTION:
       return <HelpCircle className={className} aria-label="Question" />;
     case InboxItemKind.WAITING_FOR_MACHINE:
-      return <MonitorPause className={cn(className, "text-warning")} aria-label="Waiting for machine" />;
+      return <MonitorPause className={cn(className, "text-warning-ink")} aria-label="Waiting for machine" />;
     case InboxItemKind.AUTOMATION_FAILING:
-      return <AlertTriangle className={cn(className, "text-destructive")} aria-label="Automation failing" />;
+      return <AlertTriangle className={cn(className, "text-destructive-ink")} aria-label="Automation failing" />;
     case InboxItemKind.AUTOMATION_LAUNCH_FAILED:
       return <CalendarX className={cn(className, "text-destructive")} aria-label="Automation launch failed" />;
     case InboxItemKind.RUN_FINISHED:
-      return <CheckCircle2 className={cn(className, "text-success")} aria-label="Run finished" />;
+      return <CheckCircle2 className={cn(className, "text-success-ink")} aria-label="Run finished" />;
     default:
       return <CheckCircle2 className={className} aria-hidden="true" />;
   }
@@ -430,7 +430,7 @@ export function WakeMachineAction({
         {busy ? "Waking…" : (label ?? `Wake ${name}`)}
       </button>
       {error && (
-        <p className="text-sm text-destructive" role="alert">
+        <p className="text-sm text-destructive-ink" role="alert">
           {resumeErrorMessage(new Error(error))}
           {isQuotaResumeError(error) ? (
             <button

@@ -1053,8 +1053,8 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(function FileT
     return (
       <div className="flex items-center justify-center h-full p-4">
         <div className="text-center space-y-2">
-          <AlertCircle className="w-8 h-8 text-destructive mx-auto" />
-          <p className="text-sm text-destructive">{error}</p>
+          <AlertCircle className="w-8 h-8 text-destructive-ink mx-auto" />
+          <p className="text-sm text-destructive-ink">{error}</p>
           <button
             onClick={() => loadFileTree()}
             className="text-xs text-primary hover:underline"

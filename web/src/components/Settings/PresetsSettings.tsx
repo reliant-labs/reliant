@@ -93,7 +93,7 @@ export function PresetsSettings() {
                     <p className="text-sm font-medium text-foreground">{preset.name}</p>
                     <p className="truncate font-mono text-xs text-muted-foreground" title={preset.path}>{preset.path}</p>
                     {preset.errors.map((err, index) => (
-                      <p key={index} className="text-xs text-destructive">{err}</p>
+                      <p key={index} className="text-xs text-destructive-ink">{err}</p>
                     ))}
                   </li>
                 ))}
@@ -122,7 +122,7 @@ function PresetGroup({
       <h3
         className={cn(
           "mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide",
-          danger ? "text-destructive" : "text-muted-foreground",
+          danger ? "text-destructive-ink" : "text-muted-foreground",
         )}
       >
         {danger && <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />}

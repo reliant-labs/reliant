@@ -51,7 +51,7 @@ export function ApiKeyLogin() {
             </div>
 
             {error && (
-              <p className="text-sm text-destructive">{error}</p>
+              <p className="text-sm text-destructive-ink">{error}</p>
             )}
 
             <button

@@ -116,7 +116,7 @@ export function DeployUsageSection({
           <div className="flex items-start gap-3">
             <AlertTriangle
               aria-hidden
-              className="mt-0.5 h-4 w-4 shrink-0 text-destructive"
+              className="mt-0.5 h-4 w-4 shrink-0 text-destructive-ink"
             />
             <div>
               <p className="text-sm font-medium text-foreground">
@@ -239,7 +239,7 @@ export function DeployUsageSection({
               className={cn(
                 "text-2xl font-semibold tabular-nums",
                 summary.accruedOverageCents > 0
-                  ? "text-destructive"
+                  ? "text-destructive-ink"
                   : "text-foreground",
               )}
             >
@@ -253,7 +253,7 @@ export function DeployUsageSection({
                   : "You are inside your included allowance on every dimension."}
             </p>
             {summary.budgetCapReached ? (
-              <p className="text-xs font-medium text-destructive">
+              <p className="text-xs font-medium text-destructive-ink">
                 You have reached your ceiling — new deployments are refused.
               </p>
             ) : null}

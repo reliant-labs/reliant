@@ -23,7 +23,7 @@ const variantStyles: Record<BadgeVariant, string> = {
   // light card is ~2-3:1 (index.css, "FILL vs INK").
   success: "bg-success/10 text-success-ink ring-success/25",
   warning: "bg-warning/10 text-warning-ink ring-warning/25",
-  error: "bg-destructive/10 text-destructive ring-destructive/25",
+  error: "bg-destructive/10 text-destructive-ink ring-destructive/25",
   info: "bg-info/10 text-info ring-info/25",
   neutral: "bg-muted text-muted-foreground ring-border",
 };

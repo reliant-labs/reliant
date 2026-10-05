@@ -172,7 +172,7 @@ export function InputsEditor({
             <div key={field.name}>
               <label className="block text-xs font-medium text-foreground mb-1">
                 {field.name}
-                {field.required && <span className="text-destructive ml-1">*</span>}
+                {field.required && <span className="text-destructive-ink ml-1">*</span>}
               </label>
               {renderInput(field.name, inputs?.[field.name], field)}
               {field.description && (
@@ -194,7 +194,7 @@ export function InputsEditor({
               {renderInput(key, value)}
               <button
                 onClick={() => removeInput(key)}
-                className="p-1.5 text-muted-foreground hover:text-destructive transition-colors"
+                className="p-1.5 text-muted-foreground hover:text-destructive-ink transition-colors"
                 title="Remove"
               >
                 <Trash2 className="w-4 h-4" />

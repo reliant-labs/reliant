@@ -226,7 +226,7 @@ export function UpdateModal({
           <div className="space-y-6">
             <div className="flex items-start gap-4">
               <div className="p-3 rounded-full bg-destructive/10">
-                <AlertCircle className="w-6 h-6 text-destructive" />
+                <AlertCircle className="w-6 h-6 text-destructive-ink" />
               </div>
               <div className="flex-1">
                 <h3 className="text-lg font-semibold text-foreground mb-2">
@@ -236,7 +236,7 @@ export function UpdateModal({
                   An error occurred while checking for updates.
                 </p>
                 <div className="p-4 bg-destructive/5 rounded-lg border border-destructive/20">
-                  <p className="text-xs font-mono text-destructive">
+                  <p className="text-xs font-mono text-destructive-ink">
                     {updateStatus.error}
                   </p>
                 </div>

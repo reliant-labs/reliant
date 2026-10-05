@@ -6,9 +6,9 @@ export const workspaceButton = {
   subtle:
     "rounded-lg border-border/70 bg-card text-foreground shadow-sm hover:border-primary/40 hover:bg-muted hover:text-foreground dark:bg-muted/40 dark:hover:bg-muted",
   warning:
-    "rounded-lg border-warning/50 bg-warning/15 text-warning shadow-sm hover:border-warning hover:bg-warning hover:text-warning-foreground focus-visible:ring-warning/60 disabled:hover:border-warning/50 disabled:hover:bg-warning/15 disabled:hover:text-warning",
+    "rounded-lg border-warning/50 bg-warning/15 text-warning-ink shadow-sm hover:border-warning hover:bg-warning hover:text-warning-foreground focus-visible:ring-warning/60 disabled:hover:border-warning/50 disabled:hover:bg-warning/15 disabled:hover:text-warning-ink",
   destructive:
-    "rounded-lg border-destructive/50 bg-destructive/15 text-destructive shadow-sm hover:border-destructive hover:bg-destructive hover:text-destructive-foreground focus-visible:ring-destructive/60",
+    "rounded-lg border-destructive/50 bg-destructive/15 text-destructive-ink shadow-sm hover:border-destructive hover:bg-destructive hover:text-destructive-foreground focus-visible:ring-destructive/60",
 } as const;
 
 export const workspaceIconButton =

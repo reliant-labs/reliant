@@ -385,7 +385,7 @@ function EventHistory({ events, isLoading, error }: EventHistoryProps) {
   }
   if (error) {
     return (
-      <p className="px-5 py-6 text-sm text-destructive" role="alert">
+      <p className="px-5 py-6 text-sm text-destructive-ink" role="alert">
         History could not be loaded: {error}
       </p>
     );

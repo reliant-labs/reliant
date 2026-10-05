@@ -80,7 +80,7 @@ export function AutomationActivityPill({ listedChatIds, onOpenRuns, onOpenInbox 
           onClick={() => onOpenInbox?.()}
           disabled={!onOpenInbox}
           className={cn(
-            "inline-flex h-6 items-center gap-1.5 rounded-full border border-warning/40 bg-warning/10 px-2.5 text-2xs font-medium text-warning",
+            "inline-flex h-6 items-center gap-1.5 rounded-full border border-warning/40 bg-warning/10 px-2.5 text-2xs font-medium text-warning-ink",
             "transition-colors hover:bg-warning/15 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
             "disabled:cursor-default",
           )}

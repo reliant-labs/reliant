@@ -176,7 +176,7 @@ export function ProjectChoiceStep({ plan, updatePlan }: StepProps) {
         </button>
       </div>
 
-      {error && <p className="text-center text-xs text-destructive">{error}</p>}
+      {error && <p className="text-center text-xs text-destructive-ink">{error}</p>}
     </div>
   );
 }

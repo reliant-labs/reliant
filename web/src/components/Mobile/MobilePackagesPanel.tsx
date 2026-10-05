@@ -31,7 +31,7 @@ function statusIcon(status: BackgroundProcessStatus) {
     case BackgroundProcessStatus.RUNNING:
       return <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />;
     case BackgroundProcessStatus.COMPLETED:
-      return <CheckCircle2 className="h-3.5 w-3.5 text-success" />;
+      return <CheckCircle2 className="h-3.5 w-3.5 text-success-ink" />;
     case BackgroundProcessStatus.FAILED:
       return <XCircle className="h-3.5 w-3.5 text-destructive" />;
     case BackgroundProcessStatus.KILLED:

@@ -45,7 +45,7 @@ function PermissionStatus({
       );
     case "denied":
       return (
-        <div className="flex items-center gap-2 text-destructive">
+        <div className="flex items-center gap-2 text-destructive-ink">
           <XCircle className="h-4 w-4 shrink-0" />
           <span className="text-sm">Permission denied — enable in system settings</span>
         </div>

@@ -48,7 +48,7 @@ const spawnCall = (id: string, childWorkflowId: string) => ({
   status: "completed" as const, // the dispatch itself is "completed" under async spawn
 });
 
-// The running pill is styled `text-primary`, the completed pill `text-success/60`
+// The running pill is styled `text-primary`, the completed pill `text-success-ink/60`
 // (see ToolExecutionGroup.tsx summary render) — the color class is what
 // distinguishes which bucket a count landed in, since both render "1".
 function pillText(container: HTMLElement, colorClass: string): string | undefined {
@@ -63,7 +63,7 @@ describe("ToolExecutionGroup rollup counts a spawn by its child workflow's statu
     const { container } = render(<ToolExecutionGroup executions={[spawnCall("1", "wf-1")]} />);
 
     expect(pillText(container, "text-primary")).toBe("1");
-    expect(pillText(container, "text-success\\/60")).toBeUndefined();
+    expect(pillText(container, "text-success-ink\\/60")).toBeUndefined();
   });
 
   it("counts a spawn whose child has completed as completed, not running", () => {
@@ -72,6 +72,6 @@ describe("ToolExecutionGroup rollup counts a spawn by its child workflow's statu
     const { container } = render(<ToolExecutionGroup executions={[spawnCall("2", "wf-2")]} />);
 
     expect(pillText(container, "text-primary")).toBeUndefined();
-    expect(pillText(container, "text-success\\/60")).toBe("1");
+    expect(pillText(container, "text-success-ink\\/60")).toBe("1");
   });
 });

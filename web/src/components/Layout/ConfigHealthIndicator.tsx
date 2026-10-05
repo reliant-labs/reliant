@@ -128,7 +128,7 @@ export function ConfigHealthIndicator({ className }: ConfigHealthIndicatorProps)
           className={cn(
             "relative p-1.5 rounded text-xs transition-colors",
             hasErrors
-              ? "text-destructive hover:bg-destructive/10"
+              ? "text-destructive-ink hover:bg-destructive/10"
               : "text-yellow-500 hover:bg-yellow-500/10"
           )}
           style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
@@ -167,7 +167,7 @@ export function ConfigHealthIndicator({ className }: ConfigHealthIndicatorProps)
           <div className="flex items-center justify-between px-3 py-2 border-b border-border bg-muted/30">
             <div className="flex items-center gap-2">
               {hasErrors ? (
-                <AlertCircle className="w-4 h-4 text-destructive" />
+                <AlertCircle className="w-4 h-4 text-destructive-ink" />
               ) : (
                 <AlertTriangle className="w-4 h-4 text-yellow-500" />
               )}
@@ -184,7 +184,7 @@ export function ConfigHealthIndicator({ className }: ConfigHealthIndicatorProps)
           {/* Summary */}
           <div className="px-3 py-2 text-xs text-muted-foreground border-b border-border/50">
             {health.error_count > 0 && (
-              <span className="text-destructive font-medium">
+              <span className="text-destructive-ink font-medium">
                 {health.error_count} error{health.error_count !== 1 ? "s" : ""}
               </span>
             )}
@@ -214,7 +214,7 @@ export function ConfigHealthIndicator({ className }: ConfigHealthIndicatorProps)
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       {error.severity === ConfigSeverity.ERROR ? (
-                        <AlertCircle className="w-3.5 h-3.5 text-destructive flex-shrink-0" />
+                        <AlertCircle className="w-3.5 h-3.5 text-destructive-ink flex-shrink-0" />
                       ) : (
                         <AlertTriangle className="w-3.5 h-3.5 text-yellow-500 flex-shrink-0" />
                       )}

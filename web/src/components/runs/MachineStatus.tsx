@@ -137,7 +137,7 @@ export function MachineStatus({ daemonId, automation, className }: MachineStatus
       <div className="min-w-0 space-y-1">
         {body}
         {resumeError && (
-          <p className="text-sm text-destructive" role="alert">
+          <p className="text-sm text-destructive-ink" role="alert">
             {formatResumeError(resumeError)}
           </p>
         )}
