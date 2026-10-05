@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from "react";
+import { Tooltip } from "../ui/Tooltip";
 import { Globe, Plus, X, ChevronLeft, ChevronRight, RotateCw, Search, Lock, Code } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { useBrowserStore } from "../../store/browserStore";
@@ -336,20 +337,21 @@ export function SimpleBrowserView({ worktreeId }: SimpleBrowserViewProps) {
         </div>
 
         {/* New Tab Button */}
-        <button
+        <Tooltip content="New Tab" placement="bottom" delay={300} wrapperClassName="inline-flex flex-shrink-0">
+<button
           onClick={handleCreateTab}
-          className="px-3 py-1.5 hover:bg-accent transition-colors border-l border-border flex-shrink-0"
-          title="New Tab"
-        >
+          className="px-3 py-1.5 hover:bg-accent transition-colors border-l border-border flex-shrink-0" aria-label="New Tab">
           <Plus className="w-3.5 h-3.5" />
         </button>
+</Tooltip>
       </div>
 
       {/* Navigation Controls and Address Bar */}
       {selectedTab && (
         <div className="flex items-center gap-2 px-2 py-1.5 bg-muted/10 border-b border-border flex-shrink-0">
           {/* Navigation Buttons */}
-          <button
+          <Tooltip content="Go Back" placement="bottom" delay={300} wrapperClassName="inline-flex">
+<button
             onClick={handleGoBack}
             disabled={!selectedTab.canGoBack}
             className={cn(
@@ -357,13 +359,13 @@ export function SimpleBrowserView({ worktreeId }: SimpleBrowserViewProps) {
               selectedTab.canGoBack
                 ? "hover:bg-accent text-foreground"
                 : "text-muted-foreground/40 cursor-not-allowed"
-            )}
-            title="Go Back"
-          >
+            )} aria-label="Go Back">
             <ChevronLeft className="w-4 h-4" />
           </button>
+</Tooltip>
 
-          <button
+          <Tooltip content="Go Forward" placement="bottom" delay={300} wrapperClassName="inline-flex">
+<button
             onClick={handleGoForward}
             disabled={!selectedTab.canGoForward}
             className={cn(
@@ -371,21 +373,20 @@ export function SimpleBrowserView({ worktreeId }: SimpleBrowserViewProps) {
               selectedTab.canGoForward
                 ? "hover:bg-accent text-foreground"
                 : "text-muted-foreground/40 cursor-not-allowed"
-            )}
-            title="Go Forward"
-          >
+            )} aria-label="Go Forward">
             <ChevronRight className="w-4 h-4" />
           </button>
+</Tooltip>
 
-          <button
+          <Tooltip content="Reload" placement="bottom" delay={300} wrapperClassName="inline-flex">
+<button
             onClick={handleReload}
-            className="p-1.5 rounded hover:bg-accent transition-colors"
-            title="Reload"
-          >
+            className="p-1.5 rounded hover:bg-accent transition-colors" aria-label="Reload">
             <RotateCw
               className={cn("w-4 h-4", selectedTab.isLoading && "animate-spin")}
             />
           </button>
+</Tooltip>
 
           {/* Address Bar */}
           <form onSubmit={handleNavigate} className="flex-1 flex items-center">
@@ -419,13 +420,13 @@ export function SimpleBrowserView({ worktreeId }: SimpleBrowserViewProps) {
             </div>
           </form>
 
-          <button
+          <Tooltip content="Open DevTools" placement="bottom" delay={300} wrapperClassName="inline-flex">
+<button
             onClick={handleOpenDevTools}
-            className="p-1.5 rounded hover:bg-accent transition-colors"
-            title="Open DevTools"
-          >
+            className="p-1.5 rounded hover:bg-accent transition-colors" aria-label="Open DevTools">
             <Code className="w-4 h-4" />
           </button>
+</Tooltip>
         </div>
       )}
 

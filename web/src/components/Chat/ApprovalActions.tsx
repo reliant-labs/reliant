@@ -7,6 +7,7 @@
  * shortcut.
  */
 
+import { Tooltip } from "../ui/Tooltip";
 import { cn } from "../../lib/utils";
 import { useSurface } from "../../lib/surfaceContext";
 
@@ -40,7 +41,8 @@ export function ApprovalActions({
 
   return (
     <div className={cn("flex items-center gap-2", isNarrow && "flex-1 flex-wrap")}>
-      <button
+      <Tooltip content={approveLabel} placement="bottom" delay={300} wrapperClassName={isNarrow ? "flex flex-1" : "inline-flex"}>
+<button
         type="button"
         onClick={onApprove}
         disabled={disabled}
@@ -48,7 +50,6 @@ export function ApprovalActions({
           "flex items-center justify-center gap-2 rounded font-medium bg-success hover:bg-success/90 text-success-foreground transition-colors disabled:opacity-60",
           size
         )}
-        title={approveLabel}
       >
         {approveLabel}
         {!isNarrow && shortcutKey && (
@@ -60,19 +61,20 @@ export function ApprovalActions({
           </span>
         )}
       </button>
+</Tooltip>
 
-      <button
+      <Tooltip content={denyLabel} placement="bottom" delay={300} wrapperClassName={isNarrow ? "flex flex-1" : "inline-flex"}>
+<button
         type="button"
         onClick={onDeny}
         disabled={disabled}
         className={cn(
           "rounded font-medium bg-destructive hover:bg-destructive/90 text-destructive-foreground transition-colors disabled:opacity-60",
           size
-        )}
-        title={denyLabel}
-      >
+        )} aria-label={denyLabel}>
         {denyLabel}
       </button>
+</Tooltip>
     </div>
   );
 }

@@ -41,7 +41,8 @@ import { AutomationFormDialog } from "../../Automations/AutomationFormDialog";
 import { RunList } from "../../runs/RunList";
 import { RunWorkflowDialog } from "../../workflow/run/RunWorkflowDialog";
 import { WorkflowViewerPanel } from "../../workflow/WorkflowViewerPanel";
-import { getWorkflowDisplayName, normalizeWorkflowRef } from "../../workflow/useWorkflowInputs";
+import { workflowDisplayName } from "../../../lib/workflowDisplayName";
+import { normalizeWorkflowRef } from "../../workflow/useWorkflowInputs";
 import { useWorkflowDefinition } from "../../workflow/useWorkflowDefinition";
 import { WorkflowBadge, WorkflowSourceBadge } from "../WorkflowSourceBadge";
 import { WorkflowPresetsSection } from "./WorkflowPresetsSection";
@@ -76,7 +77,7 @@ export function WorkflowDetail({ projectId, workflowRef }: { projectId: string; 
   if (library.isLoading) return <DetailSkeleton />;
   if (library.data && !listing && !invalid) return <WorkflowNotFound workflowRef={workflowRef} />;
 
-  const displayName = getWorkflowDisplayName(workflowRef, true);
+  const displayName = workflowDisplayName({ name: workflowRef, title: listing?.title });
   const isDraft = listing?.status === "draft";
   const runBlockedReason = invalid
     ? "This workflow failed to load, so it cannot run."
@@ -198,7 +199,7 @@ function UsedByCard({ workflowRef, workflows }: { workflowRef: string; workflows
                   params={{ workflowRef: workflow.name }}
                   className="truncate rounded-sm text-sm font-medium text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
                 >
-                  {getWorkflowDisplayName(workflow.name, true)}
+                  {workflowDisplayName(workflow)}
                 </Link>
                 <WorkflowSourceBadge source={workflow.source} />
               </li>

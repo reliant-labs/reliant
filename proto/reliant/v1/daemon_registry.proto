@@ -24,6 +24,19 @@ service DaemonRegistryService {
   // ResumeDaemon wakes up a suspended or idle daemon. Used by routers when
   // the resolved daemon is not currently active.
   rpc ResumeDaemon(ResumeDaemonRequest) returns (ResumeDaemonResponse) {}
+
+  // RefreshLocalModels asks an online daemon to re-probe its local model
+  // servers and waits (bounded) for the new inventory. Backs the UI's
+  // "Test connection" / "Refresh". Fails with Unavailable when the daemon is
+  // offline.
+  rpc RefreshLocalModels(RefreshLocalModelsRequest) returns (RefreshLocalModelsResponse) {}
+
+  // SetLocalModelEndpoints replaces the user-configured local model
+  // endpoints on an online daemon (persisted in that machine's
+  // ~/.reliant/config.yaml, models.providers.local) and returns the
+  // re-probed inventory. Auto-detected well-known ports need no
+  // configuration and are not listed here.
+  rpc SetLocalModelEndpoints(SetLocalModelEndpointsRequest) returns (SetLocalModelEndpointsResponse) {}
 }
 
 message ListDaemonsRequest {}
@@ -59,6 +72,26 @@ message ResumeDaemonRequest {
 message ResumeDaemonResponse {
   bool resumed = 1;
   string error_message = 2; // Non-empty on failure
+}
+
+message RefreshLocalModelsRequest {
+  string daemon_id = 1;
+}
+
+message RefreshLocalModelsResponse {
+  LocalModelInventory local_models = 1;
+}
+
+message SetLocalModelEndpointsRequest {
+  string daemon_id = 1;
+  // Base URLs as seen from the daemon's machine, e.g.
+  // "http://localhost:11434/v1" or "http://gpu-box.lan:8000/v1". Empty
+  // clears all configured endpoints (auto-detection still runs).
+  repeated string base_urls = 2;
+}
+
+message SetLocalModelEndpointsResponse {
+  LocalModelInventory local_models = 1;
 }
 
 message DaemonInfo {
@@ -142,6 +175,13 @@ message DaemonInfo {
   // unknown recency sorts a brand-new machine last, which is the opposite of
   // what the user means.
   google.protobuf.Timestamp created_at = 20;
+
+  // Local model servers (Ollama, LM Studio, …) on this daemon's machine and
+  // the models they serve, as last published by the daemon. Unset when the
+  // daemon has never published one. The inventory is kept while the daemon is
+  // offline so the UI can show what WOULD be available; callers gate on
+  // `status` before offering a model for use.
+  LocalModelInventory local_models = 21;
 }
 
 // DaemonStatus is the SINGLE status vocabulary for a daemon in this registry.

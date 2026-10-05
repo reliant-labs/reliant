@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
-import { GitBranch, RefreshCw, AlertCircle } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { ArrowDown, ArrowUp, GitBranch, RefreshCw } from 'lucide-react';
 import { worktreeGrpc } from '../../api/worktree-grpc';
 import { cn } from '../../lib/utils';
+import { Tooltip } from '../ui/Tooltip';
 
 interface GitStatusProps {
   worktreeId: string;
@@ -18,17 +19,28 @@ interface GitStatusData {
   behind: number;
 }
 
+// Same letters and colours as the Changes panel rows, so the two read alike.
+const GROUPS = [
+  { key: 'staged', label: 'staged', letter: 'S', className: 'text-success' },
+  { key: 'modified', label: 'modified', letter: 'M', className: 'text-warning' },
+  { key: 'untracked', label: 'untracked', letter: 'U', className: 'text-muted-foreground' },
+] as const;
+
+/** Read-only git status for a workspace: branch, sync counts, and the changed
+ *  files grouped by state. */
 export function GitStatus({ worktreeId, className = "" }: GitStatusProps) {
   const [status, setStatus] = useState<GitStatusData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const requestIdRef = useRef(0);
 
-  const fetchStatus = async () => {
+  const fetchStatus = useCallback(async () => {
+    const requestId = ++requestIdRef.current;
     setIsLoading(true);
     setError(null);
     try {
       const grpcStatus = await worktreeGrpc.getGitStatus(worktreeId);
-      // Convert gRPC response to component's expected format
+      if (requestIdRef.current !== requestId) return;
       setStatus({
         branch: grpcStatus.current_branch,
         clean: grpcStatus.is_clean,
@@ -39,128 +51,115 @@ export function GitStatus({ worktreeId, className = "" }: GitStatusProps) {
         behind: grpcStatus.behind,
       });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch git status');
+      if (requestIdRef.current === requestId) {
+        setError(err instanceof Error ? err.message : 'Failed to fetch git status');
+      }
     } finally {
-      setIsLoading(false);
+      if (requestIdRef.current === requestId) setIsLoading(false);
     }
-  };
-
-  useEffect(() => {
-    if (worktreeId) {
-      fetchStatus();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [worktreeId]);
 
-  if (isLoading) {
+  useEffect(() => {
+    if (worktreeId) void fetchStatus();
+  }, [worktreeId, fetchStatus]);
+
+  if (isLoading && !status) {
     return (
-      <div className={cn("flex items-center gap-2 text-xs text-muted-foreground font-mono", className)}>
-        <RefreshCw className="w-3 h-3 animate-spin" />
-        <span>Loading status...</span>
+      <div className={cn("flex flex-col gap-2", className)} aria-busy="true" aria-label="Loading git status">
+        <div className="h-3 w-32 animate-pulse rounded bg-border motion-reduce:animate-none" />
+        <div className="h-3 w-24 animate-pulse rounded bg-border motion-reduce:animate-none" />
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className={cn("flex items-center gap-2 text-xs text-destructive-ink font-mono", className)}>
-        <AlertCircle className="w-3 h-3" />
-        <span>Git not initialized</span>
+      <div className={cn("flex items-center justify-between gap-2 text-xs", className)}>
+        <span className="min-w-0 truncate text-destructive-ink" title={error}>Couldn't read git status.</span>
+        <button
+          type="button"
+          onClick={() => void fetchStatus()}
+          className="shrink-0 font-medium text-foreground underline-offset-2 hover:underline"
+        >
+          Retry
+        </button>
       </div>
     );
   }
 
-  if (!status) {
-    return null;
-  }
+  if (!status) return null;
 
-  const totalChanges = 
-    (status.modified?.length || 0) + 
-    (status.untracked?.length || 0) + 
-    (status.staged?.length || 0);
+  const counts = GROUPS.map((g) => ({ ...g, files: status[g.key] ?? [] })).filter((g) => g.files.length > 0);
+  const totalChanges = counts.reduce((acc, g) => acc + g.files.length, 0);
 
   return (
     <div className={cn("flex flex-col gap-2", className)}>
-      {/* Branch Info */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2 text-xs font-mono">
-          <GitBranch className="w-3 h-3 text-muted-foreground" />
-          <span className="font-medium">{status.branch}</span>
-          {status.ahead > 0 && (
-            <span className="text-green-600 dark:text-green-400">
-              ↑{status.ahead}
-            </span>
-          )}
-          {status.behind > 0 && (
-            <span className="text-orange-600 dark:text-orange-400">
-              ↓{status.behind}
-            </span>
-          )}
-        </div>
-        <button
-          onClick={fetchStatus}
-          className="p-1 hover:bg-accent rounded transition-colors"
-          aria-label="Refresh status"
-        >
-          <RefreshCw className="w-3 h-3 text-muted-foreground" />
-        </button>
-      </div>
-
-      {/* Status Summary */}
-      <div className="text-xs font-mono">
-        {status.clean ? (
-          <div className="flex items-center gap-2 text-green-600 dark:text-green-400">
-            <span className="w-2 h-2 bg-green-500 rounded-full" />
-            <span>Working tree clean</span>
-          </div>
-        ) : (
-          <div className="space-y-1">
-            {status.modified?.length > 0 && (
-              <div className="flex items-center gap-2 text-yellow-600 dark:text-yellow-400">
-                <span className="w-2 h-2 bg-yellow-500 rounded-full" />
-                <span>{status.modified.length} modified</span>
-              </div>
+      <div className="flex items-center gap-2">
+        <GitBranch className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+        <span className="min-w-0 truncate font-mono text-xs font-medium text-foreground" title={status.branch}>
+          {status.branch}
+        </span>
+        {(status.ahead > 0 || status.behind > 0) && (
+          <span className="flex shrink-0 items-center gap-1.5 font-mono text-2xs tabular-nums text-muted-foreground">
+            {status.ahead > 0 && (
+              <span className="flex items-center" aria-label={`${status.ahead} ahead`}>
+                <ArrowUp className="h-3 w-3" aria-hidden="true" />
+                {status.ahead}
+              </span>
             )}
-            {status.staged?.length > 0 && (
-              <div className="flex items-center gap-2 text-green-600 dark:text-green-400">
-                <span className="w-2 h-2 bg-green-500 rounded-full" />
-                <span>{status.staged.length} staged</span>
-              </div>
+            {status.behind > 0 && (
+              <span className="flex items-center" aria-label={`${status.behind} behind`}>
+                <ArrowDown className="h-3 w-3" aria-hidden="true" />
+                {status.behind}
+              </span>
             )}
-            {status.untracked?.length > 0 && (
-              <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
-                <span className="w-2 h-2 bg-gray-500 rounded-full" />
-                <span>{status.untracked.length} untracked</span>
-              </div>
-            )}
-          </div>
+          </span>
         )}
+        <Tooltip content="Refresh status" delay={300} wrapperClassName="ml-auto flex">
+          <button
+            type="button"
+            onClick={() => void fetchStatus()}
+            aria-label="Refresh status"
+            className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          >
+            <RefreshCw className={cn("h-3 w-3", isLoading && "animate-spin")} />
+          </button>
+        </Tooltip>
       </div>
 
-      {/* File List (collapsible) */}
-      {totalChanges > 0 && (
-        <details className="text-xs font-mono">
-          <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
-            {totalChanges} file{totalChanges !== 1 ? 's' : ''} changed
-          </summary>
-          <div className="mt-2 space-y-1 pl-4">
-            {status.modified?.map(file => (
-              <div key={file} className="text-yellow-600 dark:text-yellow-400">
-                M {file}
-              </div>
+      {status.clean || totalChanges === 0 ? (
+        <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <span className="inline-block h-1.5 w-1.5 rounded-full bg-success" aria-hidden="true" />
+          Working tree clean
+        </p>
+      ) : (
+        <>
+          <p className="text-xs text-muted-foreground">
+            {counts.map((g, i) => (
+              <span key={g.key}>
+                {i > 0 && " · "}
+                <span className={cn("font-medium tabular-nums", g.className)}>{g.files.length}</span> {g.label}
+              </span>
             ))}
-            {status.staged?.map(file => (
-              <div key={file} className="text-green-600 dark:text-green-400">
-                A {file}
-              </div>
-            ))}
-            {status.untracked?.map(file => (
-              <div key={file} className="text-gray-600 dark:text-gray-400">
-                ? {file}
-              </div>
-            ))}
-          </div>
-        </details>
+          </p>
+          <details className="group text-xs">
+            <summary className="cursor-pointer select-none text-muted-foreground transition-colors hover:text-foreground">
+              {totalChanges === 1 ? "Show 1 file" : `Show ${totalChanges} files`}
+            </summary>
+            <ul className="mt-1.5 flex flex-col gap-0.5">
+              {counts.flatMap((g) =>
+                g.files.map((file) => (
+                  <li key={`${g.key}:${file}`} className="flex min-w-0 items-center gap-2">
+                    <span className={cn("w-3 shrink-0 text-center font-mono font-semibold", g.className)} title={g.label}>
+                      {g.letter}
+                    </span>
+                    <span className="truncate font-mono text-foreground/80" title={file}>{file}</span>
+                  </li>
+                )),
+              )}
+            </ul>
+          </details>
+        </>
       )}
     </div>
   );

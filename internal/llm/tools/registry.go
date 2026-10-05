@@ -34,6 +34,7 @@ const (
 
 	// Media tools
 	ToolGenerateImage = "generate_image"
+	ToolGenerateVideo = "generate_video"
 
 	// Planning tools
 	ToolCreatePlan = "create_plan"
@@ -570,6 +571,9 @@ func GetToolRegistry() []ToolDefinition {
 		// user's disk — through the daemon client on the tool context, the
 		// same way every other server-run tool does.
 		{ToolGenerateImage, (*ToolsFactory).GenerateImage, []ToolTag{TagMedia}, PlacementServer},
+		// Server-located for the same reason, plus it holds a render open for
+		// minutes and must write its job record before polling.
+		{ToolGenerateVideo, (*ToolsFactory).GenerateVideo, []ToolTag{TagMedia}, PlacementServer},
 
 		// Planning tools
 		{ToolCreatePlan, (*ToolsFactory).CreatePlan, []ToolTag{TagPlanning, TagCodingPlan, TagCodingDefault}, PlacementServer},

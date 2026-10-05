@@ -33,15 +33,32 @@ const availabilityTTL = 5 * time.Minute
 // it in GitHub Copilot settings before requests succeed.
 type copilotModelsResponse struct {
 	Data []struct {
-		ID     string `json:"id"`
+		ID                 string   `json:"id"`
+		SupportedEndpoints []string `json:"supported_endpoints"`
+		Capabilities       struct {
+			Limits struct {
+				MaxContextWindowTokens int `json:"max_context_window_tokens"`
+			} `json:"limits"`
+		} `json:"capabilities"`
 		Policy *struct {
 			State string `json:"state"`
 		} `json:"policy"`
 	} `json:"data"`
 }
 
+// availabilityFailureTTL bounds how long a failed /models fetch is remembered, so
+// an unreachable endpoint costs one timed-out request per window rather than one
+// per LLM call. While it holds, resolution fails open (every model servable).
+const availabilityFailureTTL = 30 * time.Second
+
+// availabilityFetchTimeout caps the cache-miss fetch on the resolution path.
+const availabilityFetchTimeout = 4 * time.Second
+
 type availabilityEntry struct {
-	enabled   map[string]bool // api_model id -> enabled
+	enabled   map[string]bool     // api_model id -> enabled
+	limits    map[string]int      // api_model id -> context window, when reported
+	endpoints map[string][]string // api_model id -> supported_endpoints, when reported
+	err       error               // non-nil: a remembered failed fetch
 	fetchedAt time.Time
 }
 
@@ -61,30 +78,47 @@ func tokenKey(githubToken string) string {
 // keyed by api_model id with a bool value. Results are cached per token for
 // availabilityTTL. A model is enabled iff its policy.state is not "disabled".
 func EnabledModels(ctx context.Context, githubToken string) (map[string]bool, error) {
+	entry, err := accountModels(ctx, githubToken)
+	if err != nil {
+		return nil, err
+	}
+	return entry.enabled, nil
+}
+
+// accountModels returns the cached per-account /models view, fetching on a
+// miss. A failed fetch is cached for availabilityFailureTTL and returned as an
+// error each time it is read, so callers decide whether to fail open.
+func accountModels(ctx context.Context, githubToken string) (availabilityEntry, error) {
 	githubToken = strings.TrimSpace(githubToken)
 	if githubToken == "" {
-		return nil, fmt.Errorf("github token is required to query copilot model availability")
+		return availabilityEntry{}, fmt.Errorf("github token is required to query copilot model availability")
 	}
 
 	key := tokenKey(githubToken)
 
 	availabilityMu.Lock()
-	if entry, ok := availabilityCache[key]; ok && time.Since(entry.fetchedAt) < availabilityTTL {
-		availabilityMu.Unlock()
-		return entry.enabled, nil
+	if entry, ok := availabilityCache[key]; ok {
+		ttl := availabilityTTL
+		if entry.err != nil {
+			ttl = availabilityFailureTTL
+		}
+		if time.Since(entry.fetchedAt) < ttl {
+			availabilityMu.Unlock()
+			return entry, entry.err
+		}
 	}
 	availabilityMu.Unlock()
 
-	enabled, err := fetchEnabledModels(ctx, githubToken)
-	if err != nil {
-		return nil, err
-	}
+	fetchCtx, cancel := context.WithTimeout(ctx, availabilityFetchTimeout)
+	defer cancel()
+	enabled, limits, endpoints, err := fetchEnabledModels(fetchCtx, githubToken)
+	entry := availabilityEntry{enabled: enabled, limits: limits, endpoints: endpoints, err: err, fetchedAt: time.Now()}
 
 	availabilityMu.Lock()
-	availabilityCache[key] = availabilityEntry{enabled: enabled, fetchedAt: time.Now()}
+	availabilityCache[key] = entry
 	availabilityMu.Unlock()
 
-	return enabled, nil
+	return entry, err
 }
 
 // IsModelEnabled reports whether the given Copilot api_model is enabled for the
@@ -103,10 +137,10 @@ func IsModelEnabled(ctx context.Context, githubToken, apiModel string) (bool, er
 	return state, nil
 }
 
-func fetchEnabledModels(ctx context.Context, githubToken string) (map[string]bool, error) {
+func fetchEnabledModels(ctx context.Context, githubToken string) (map[string]bool, map[string]int, map[string][]string, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, modelsEndpoint, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to build copilot models request: %w", err)
+		return nil, nil, nil, fmt.Errorf("failed to build copilot models request: %w", err)
 	}
 	req.Header.Set("authorization", "Bearer "+githubToken)
 	req.Header.Set("accept", "application/json")
@@ -117,28 +151,37 @@ func fetchEnabledModels(ctx context.Context, githubToken string) (map[string]boo
 
 	resp, err := llm.StreamingHTTPClient().Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("copilot models request failed: %w", err)
+		return nil, nil, nil, fmt.Errorf("copilot models request failed: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read copilot models response: %w", err)
+		return nil, nil, nil, fmt.Errorf("failed to read copilot models response: %w", err)
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("copilot models request returned status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+		return nil, nil, nil, fmt.Errorf("copilot models request returned status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
 	}
 
-	return parseEnabledModels(body)
+	return parseModels(body)
 }
 
 // parseEnabledModels maps a GET /models body to api_model -> enabled.
 func parseEnabledModels(body []byte) (map[string]bool, error) {
+	enabled, _, _, err := parseModels(body)
+	return enabled, err
+}
+
+// parseModels maps a GET /models body to api_model -> enabled and, where the
+// account reports one, api_model -> context window.
+func parseModels(body []byte) (map[string]bool, map[string]int, map[string][]string, error) {
 	var parsed copilotModelsResponse
 	if err := json.Unmarshal(body, &parsed); err != nil {
-		return nil, fmt.Errorf("failed to parse copilot models response: %w", err)
+		return nil, nil, nil, fmt.Errorf("failed to parse copilot models response: %w", err)
 	}
 	out := make(map[string]bool, len(parsed.Data))
+	limits := make(map[string]int, len(parsed.Data))
+	endpoints := make(map[string][]string, len(parsed.Data))
 	for _, m := range parsed.Data {
 		id := strings.TrimSpace(m.ID)
 		if id == "" {
@@ -150,8 +193,14 @@ func parseEnabledModels(body []byte) (map[string]bool, error) {
 			enabled = false
 		}
 		out[id] = enabled
+		if w := m.Capabilities.Limits.MaxContextWindowTokens; w > 0 {
+			limits[id] = w
+		}
+		if len(m.SupportedEndpoints) > 0 {
+			endpoints[id] = m.SupportedEndpoints
+		}
 	}
-	return out, nil
+	return out, limits, endpoints, nil
 }
 
 // EvictAvailabilityCache drops any cached availability for the token. Call after
@@ -163,4 +212,18 @@ func EvictAvailabilityCache(githubToken string) {
 	delete(availabilityCache, key)
 	availabilityMu.Unlock()
 	logging.Debug("copilot availability cache evicted")
+}
+
+// cachedEndpoints returns the account's supported_endpoints for an api_model from
+// the availability cache WITHOUT fetching: resolution has already warmed it
+// (accountAvailability), and client construction must not add a network call.
+// nil means unknown (cold cache, failed fetch, or model not listed).
+func cachedEndpoints(githubToken, apiModel string) []string {
+	availabilityMu.Lock()
+	defer availabilityMu.Unlock()
+	entry, ok := availabilityCache[tokenKey(githubToken)]
+	if !ok || entry.err != nil {
+		return nil
+	}
+	return entry.endpoints[strings.TrimSpace(apiModel)]
 }

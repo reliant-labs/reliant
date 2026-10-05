@@ -169,6 +169,56 @@ func TestSendToolRequestGoesToTheConnectionThatIsWaiting(t *testing.T) {
 	}
 }
 
+// A tool response must carry the identity of the daemon that ran it.
+//
+// A backgrounded call's process lives in that one daemon's memory, and a user
+// can have several daemons. The server records this id on the tool call so it
+// can later ask THAT daemon whether the process ended; without it, every
+// backgrounded call stayed "running" forever. The id comes from the
+// gateway-assigned connection, never from anything the daemon asserts.
+func TestToolResponseIsStampedWithTheAnsweringDaemon(t *testing.T) {
+	svc := newDaemonlessService(t)
+	daemonID := uuid.NewString()
+	stream := newParkedStream()
+	conn := newTestConn("user-1", daemonID, stream)
+	svc.mu.Lock()
+	registerTestConn(svc, conn)
+	svc.mu.Unlock()
+
+	go func() { _ = svc.handleIncoming(context.Background(), conn) }()
+	defer close(stream.recv)
+
+	respCh := make(chan *toolexec.ToolExecutionResponse, 1)
+	go func() {
+		resp, err := svc.sendToolRequestToConn(context.Background(), conn, &toolexec.ToolExecutionRequest{
+			RequestID: "req-bg",
+			ToolName:  "shell",
+			ToolInput: `{"command":"npm run dev","run_in_background":true}`,
+			TimeoutMs: 5000,
+		})
+		if err == nil {
+			respCh <- resp
+		}
+	}()
+
+	select {
+	case <-conn.sendCh:
+	case <-time.After(3 * time.Second):
+		t.Fatal("tool request was never sent")
+	}
+	stream.recv <- &reliantv1.DaemonMessage{Message: &reliantv1.DaemonMessage_ToolResponse{
+		ToolResponse: &reliantv1.ToolResponse{RequestId: "req-bg", Success: true, Backgrounded: true},
+	}}
+
+	select {
+	case resp := <-respCh:
+		require.True(t, resp.Backgrounded)
+		require.Equal(t, daemonID, resp.DaemonID, "the response must name the daemon whose connection answered")
+	case <-time.After(3 * time.Second):
+		t.Fatal("tool response never arrived")
+	}
+}
+
 // A tool request whose connection dies must fail as soon as the connection
 // does, so the caller is not left waiting out the full tool timeout.
 func TestSendToolRequestFailsAsSoonAsItsConnectionEnds(t *testing.T) {

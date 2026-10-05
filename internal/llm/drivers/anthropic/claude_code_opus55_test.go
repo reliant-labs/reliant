@@ -176,8 +176,8 @@ func TestClaudeCodeThinkingConfig_Opus55(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal thinking: %v", err)
 	}
-	if !jsonEquivalent(t, raw, []byte(`{"type":"adaptive","display":"updates"}`)) {
-		t.Fatalf("thinking = %s, want {\"type\":\"adaptive\",\"display\":\"updates\"}", raw)
+	if !jsonEquivalent(t, raw, []byte(`{"type":"adaptive","display":"summarized"}`)) {
+		t.Fatalf("thinking = %s, want {\"type\":\"adaptive\",\"display\":\"summarized\"}", raw)
 	}
 }
 

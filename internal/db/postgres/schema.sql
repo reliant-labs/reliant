@@ -78,6 +78,7 @@ CREATE TABLE public.agent_messages (
     delivered_at timestamp with time zone,
     delivered_message_id text,
     attachments jsonb,
+    synthesized boolean DEFAULT false NOT NULL,
     CONSTRAINT agent_messages_delivered_has_time CHECK (((status <> 2) OR (delivered_at IS NOT NULL)))
 );
 
@@ -307,8 +308,8 @@ CREATE TABLE public.trigger_events (
     outcome_detail text DEFAULT ''::text NOT NULL,
     chat_id text,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT trigger_events_kind_check CHECK ((kind = ANY (ARRAY['chat.start'::text, 'schedule'::text, 'agent.start_run'::text, 'builder.test'::text]))),
-    CONSTRAINT trigger_events_outcome_check CHECK ((outcome = ANY (ARRAY['launched'::text, 'skipped'::text, 'failed'::text])))
+    CONSTRAINT trigger_events_kind_check CHECK ((kind = ANY (ARRAY['chat.start'::text, 'schedule'::text, 'agent.start_run'::text, 'builder.test'::text, 'webhook'::text, 'integration'::text, 'workflow_event'::text]))),
+    CONSTRAINT trigger_events_outcome_check CHECK ((outcome = ANY (ARRAY['pending'::text, 'launched'::text, 'skipped'::text, 'failed'::text])))
 );
 
 --
@@ -688,6 +689,7 @@ CREATE TABLE public.daemons (
     last_status_changed_at timestamp with time zone,
     last_oom_killed_at timestamp with time zone,
     oom_kill_count integer DEFAULT 0 NOT NULL,
+    local_models text DEFAULT ''::text NOT NULL,
     CONSTRAINT daemons_lifecycle_phase_check CHECK (((lifecycle_phase IS NULL) OR (lifecycle_phase = ANY (ARRAY['provisioning'::text, 'cloning'::text, 'ready'::text, 'suspending'::text, 'suspended'::text, 'failed'::text]))))
 );
 
@@ -763,6 +765,27 @@ CREATE TABLE public.message_order_counters (
     scope_id text NOT NULL,
     last_assigned bigint NOT NULL,
     CONSTRAINT message_order_counters_kind_check CHECK ((counter_kind = ANY (ARRAY['ordinal'::text, 'seq'::text])))
+);
+
+--
+-- Name: model_endpoints; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.model_endpoints (
+    id text NOT NULL,
+    user_id text NOT NULL,
+    name text NOT NULL,
+    base_url text NOT NULL,
+    route text NOT NULL,
+    daemon_id text,
+    credential_connection_id text,
+    header_names text[] DEFAULT '{}'::text[] NOT NULL,
+    models_json text DEFAULT '[]'::text NOT NULL,
+    probe_json text DEFAULT ''::text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT model_endpoints_check CHECK (((route = 'via_daemon'::text) = (daemon_id IS NOT NULL))),
+    CONSTRAINT model_endpoints_route_check CHECK ((route = ANY (ARRAY['direct'::text, 'via_daemon'::text])))
 );
 
 --
@@ -911,6 +934,25 @@ CREATE TABLE public.repos (
 );
 
 --
+-- Name: run_events; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.run_events (
+    id text NOT NULL,
+    user_id text NOT NULL,
+    chat_id text NOT NULL,
+    workflow_name text DEFAULT ''::text NOT NULL,
+    outcome text NOT NULL,
+    dedupe_key text NOT NULL,
+    payload jsonb DEFAULT '{}'::jsonb NOT NULL,
+    occurred_at timestamp with time zone NOT NULL,
+    claimed_until timestamp with time zone,
+    dispatched_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT run_events_outcome_check CHECK ((outcome = ANY (ARRAY['finished'::text, 'failed'::text, 'blocked'::text])))
+);
+
+--
 -- Name: settings; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1042,7 +1084,25 @@ CREATE TABLE public.tool_calls (
     completed_at timestamp with time zone,
     created_at timestamp with time zone NOT NULL,
     updated_at timestamp with time zone NOT NULL,
+    daemon_id text,
     CONSTRAINT tool_calls_completed_has_completed_at CHECK (((status <> 3) OR (completed_at IS NOT NULL)))
+);
+
+--
+-- Name: trigger_registrations; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.trigger_registrations (
+    trigger_id text NOT NULL,
+    provider text NOT NULL,
+    registration_id text DEFAULT ''::text NOT NULL,
+    cursor text DEFAULT ''::text NOT NULL,
+    last_polled_at timestamp with time zone,
+    status text DEFAULT 'active'::text NOT NULL,
+    status_detail text DEFAULT ''::text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT trigger_registrations_status_check CHECK ((status = ANY (ARRAY['active'::text, 'error'::text])))
 );
 
 --
@@ -1066,7 +1126,11 @@ CREATE TABLE public.triggers (
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     daemon_id text NOT NULL,
     notify_on_complete boolean DEFAULT false NOT NULL,
-    CONSTRAINT triggers_kind_check CHECK ((kind = 'schedule'::text))
+    filter text DEFAULT ''::text NOT NULL,
+    connection_id text,
+    webhook_token_hash bytea,
+    webhook_secret_sealed bytea,
+    CONSTRAINT triggers_kind_check CHECK ((kind = ANY (ARRAY['schedule'::text, 'webhook'::text, 'integration'::text, 'workflow_event'::text])))
 );
 
 --
@@ -1097,6 +1161,25 @@ CREATE TABLE public.user_updates (
     entity_id text NOT NULL,
     data text NOT NULL,
     created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL
+);
+
+--
+-- Name: video_generation_jobs; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.video_generation_jobs (
+    tool_call_id text NOT NULL,
+    user_id text NOT NULL,
+    chat_id text DEFAULT ''::text NOT NULL,
+    driver text NOT NULL,
+    model_id text NOT NULL,
+    api_model text NOT NULL,
+    provider_job text NOT NULL,
+    state text NOT NULL,
+    attachment_id text,
+    error_message text DEFAULT ''::text NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    updated_at timestamp with time zone NOT NULL
 );
 
 --
@@ -1528,6 +1611,13 @@ ALTER TABLE ONLY public.messages
     ADD CONSTRAINT messages_thread_ordinal_key UNIQUE (thread_id, ordinal);
 
 --
+-- Name: model_endpoints model_endpoints_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.model_endpoints
+    ADD CONSTRAINT model_endpoints_pkey PRIMARY KEY (id);
+
+--
 -- Name: oauth_flows oauth_flows_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1619,6 +1709,20 @@ ALTER TABLE ONLY public.repos
     ADD CONSTRAINT repos_project_id_relative_path_key UNIQUE (project_id, relative_path);
 
 --
+-- Name: run_events run_events_dedupe_key_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.run_events
+    ADD CONSTRAINT run_events_dedupe_key_key UNIQUE (dedupe_key);
+
+--
+-- Name: run_events run_events_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.run_events
+    ADD CONSTRAINT run_events_pkey PRIMARY KEY (id);
+
+--
 -- Name: settings settings_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1703,6 +1807,13 @@ ALTER TABLE ONLY public.trigger_events
     ADD CONSTRAINT trigger_events_pkey PRIMARY KEY (id);
 
 --
+-- Name: trigger_registrations trigger_registrations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.trigger_registrations
+    ADD CONSTRAINT trigger_registrations_pkey PRIMARY KEY (trigger_id);
+
+--
 -- Name: triggers triggers_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1736,6 +1847,13 @@ ALTER TABLE ONLY public.user_updates
 
 ALTER TABLE ONLY public.user_updates
     ADD CONSTRAINT user_updates_user_id_sequence_number_key UNIQUE (user_id, sequence_number);
+
+--
+-- Name: video_generation_jobs video_generation_jobs_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.video_generation_jobs
+    ADD CONSTRAINT video_generation_jobs_pkey PRIMARY KEY (tool_call_id);
 
 --
 -- Name: vault_keys vault_keys_pkey; Type: CONSTRAINT; Schema: public; Owner: -
@@ -1953,6 +2071,12 @@ CREATE INDEX idx_chat_updates_created ON public.chat_updates USING btree (create
 CREATE INDEX idx_chat_updates_snapshot_heads ON public.chat_updates USING btree (chat_id, entity_id, sequence_number DESC) WHERE (update_type <> ALL (ARRAY[1, 4, 19]));
 
 --
+-- Name: idx_chat_updates_snapshot_rekeyed; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_chat_updates_snapshot_rekeyed ON public.chat_updates USING btree (chat_id, sequence_number) WHERE (update_type = ANY (ARRAY[3, 18]));
+
+--
 -- Name: idx_chats_user_created_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2109,6 +2233,18 @@ CREATE INDEX idx_messages_context_window_ordinal ON public.messages USING btree 
 CREATE INDEX idx_messages_thread_ordinal ON public.messages USING btree (thread_id, ordinal);
 
 --
+-- Name: idx_model_endpoints_user; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_model_endpoints_user ON public.model_endpoints USING btree (user_id);
+
+--
+-- Name: idx_model_endpoints_user_name; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_model_endpoints_user_name ON public.model_endpoints USING btree (user_id, name);
+
+--
 -- Name: idx_plans_project; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2173,6 +2309,24 @@ CREATE INDEX idx_questions_workflow_id ON public.questions USING btree (workflow
 --
 
 CREATE INDEX idx_repos_project ON public.repos USING btree (project_id);
+
+--
+-- Name: idx_run_events_chat; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_run_events_chat ON public.run_events USING btree (chat_id);
+
+--
+-- Name: idx_run_events_dispatched_at; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_run_events_dispatched_at ON public.run_events USING btree (dispatched_at) WHERE (dispatched_at IS NOT NULL);
+
+--
+-- Name: idx_run_events_undispatched; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_run_events_undispatched ON public.run_events USING btree (created_at, id) WHERE (dispatched_at IS NULL);
 
 --
 -- Name: idx_step_executions_chat_read; Type: INDEX; Schema: public; Owner: -
@@ -2277,10 +2431,28 @@ CREATE INDEX idx_trigger_events_failed ON public.trigger_events USING btree (tri
 CREATE INDEX idx_trigger_events_parent_chat ON public.trigger_events USING btree (((payload ->> 'parent_chat_id'::text))) WHERE (kind = 'agent.start_run'::text);
 
 --
+-- Name: idx_trigger_events_pending; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_trigger_events_pending ON public.trigger_events USING btree (created_at) WHERE (outcome = 'pending'::text);
+
+--
 -- Name: idx_trigger_events_trigger_occurred_id; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_trigger_events_trigger_occurred_id ON public.trigger_events USING btree (trigger_id, occurred_at DESC, id DESC);
+
+--
+-- Name: idx_triggers_connection; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_triggers_connection ON public.triggers USING btree (connection_id) WHERE (connection_id IS NOT NULL);
+
+--
+-- Name: idx_triggers_integration; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_triggers_integration ON public.triggers USING btree (((config ->> 'integration'::text))) WHERE ((kind = 'integration'::text) AND enabled);
 
 --
 -- Name: idx_triggers_project; Type: INDEX; Schema: public; Owner: -
@@ -2385,6 +2557,12 @@ CREATE UNIQUE INDEX projects_user_remote_url_uniq ON public.projects USING btree
 CREATE UNIQUE INDEX settings_user_key_unique ON public.settings USING btree (user_id, key) WHERE (project_id IS NULL);
 
 --
+-- Name: video_generation_jobs_attachment_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX video_generation_jobs_attachment_idx ON public.video_generation_jobs USING btree (attachment_id) WHERE (attachment_id IS NOT NULL);
+
+--
 -- Name: vault_keys_one_primary; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2452,6 +2630,13 @@ ALTER TABLE ONLY public.background_processes
 
 ALTER TABLE ONLY public.background_processes
     ADD CONSTRAINT background_processes_worktree_id_fkey FOREIGN KEY (worktree_id) REFERENCES public.worktrees(id) ON DELETE SET NULL;
+
+--
+-- Name: chats chats_project_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.chats
+    ADD CONSTRAINT chats_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(id) ON DELETE CASCADE;
 
 --
 -- Name: connection_secrets connection_secrets_connection_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
@@ -2545,6 +2730,13 @@ ALTER TABLE ONLY public.repos
     ADD CONSTRAINT repos_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(id) ON DELETE CASCADE;
 
 --
+-- Name: run_events run_events_chat_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.run_events
+    ADD CONSTRAINT run_events_chat_id_fkey FOREIGN KEY (chat_id) REFERENCES public.chats(id) ON DELETE CASCADE;
+
+--
 -- Name: task_dependencies task_dependencies_from_task_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2622,6 +2814,20 @@ ALTER TABLE ONLY public.trigger_events
     ADD CONSTRAINT trigger_events_trigger_id_fkey FOREIGN KEY (trigger_id) REFERENCES public.triggers(id) ON DELETE SET NULL;
 
 --
+-- Name: trigger_registrations trigger_registrations_trigger_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.trigger_registrations
+    ADD CONSTRAINT trigger_registrations_trigger_id_fkey FOREIGN KEY (trigger_id) REFERENCES public.triggers(id) ON DELETE CASCADE;
+
+--
+-- Name: triggers triggers_connection_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.triggers
+    ADD CONSTRAINT triggers_connection_id_fkey FOREIGN KEY (connection_id) REFERENCES public.connections(id) ON DELETE SET NULL;
+
+--
 -- Name: triggers triggers_project_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2655,6 +2861,13 @@ ALTER TABLE ONLY public.user_updates
 
 ALTER TABLE ONLY public.user_updates
     ADD CONSTRAINT user_updates_worktree_id_fkey FOREIGN KEY (worktree_id) REFERENCES public.worktrees(id) ON DELETE CASCADE;
+
+--
+-- Name: worktrees worktrees_project_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.worktrees
+    ADD CONSTRAINT worktrees_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(id) ON DELETE CASCADE;
 
 --
 -- PostgreSQL database dump complete

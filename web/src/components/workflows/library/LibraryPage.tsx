@@ -44,7 +44,8 @@ import PageHeader from "../../forge-ui/page_header";
 import { Button } from "../../ui/Button";
 import { Modal } from "../../ui/Modal";
 import { RunWorkflowDialog } from "../../workflow/run/RunWorkflowDialog";
-import { getWorkflowDisplayName, normalizeWorkflowRef } from "../../workflow/useWorkflowInputs";
+import { workflowDisplayName } from "../../../lib/workflowDisplayName";
+import { normalizeWorkflowRef } from "../../workflow/useWorkflowInputs";
 import { splitFindings } from "../../workflow/workflowDraftStatus";
 import { FilterSearch, SelectFilter } from "../FilterMenu";
 import { libraryColumns, type LibraryTableRow, type WorkflowRowAction, type WorkflowRowItem } from "./WorkflowRow";
@@ -317,6 +318,7 @@ function LibraryBody({ projectId }: { projectId: string }) {
 
   const toItem = (workflow: WorkflowResponse): WorkflowRowItem => ({
     name: workflow.name,
+    title: workflow.title,
     description: workflow.description,
     source: workflow.source,
     isDraft: workflow.status === "draft",
@@ -326,7 +328,7 @@ function LibraryBody({ projectId }: { projectId: string }) {
   });
 
   const actionsFor = (workflow: WorkflowResponse): WorkflowRowAction[] => {
-    const displayName = normalizeWorkflowRef(workflow.name);
+    const displayName = workflowDisplayName(workflow);
     const actions: WorkflowRowAction[] = [
       {
         label: "Edit",
@@ -403,7 +405,7 @@ function LibraryBody({ projectId }: { projectId: string }) {
     return actions;
   };
 
-  const tableRows: LibraryTableRow[] = view.rows.map(({ workflow, attention }) => {
+  const toTableRow = (workflow: WorkflowResponse, attention = false): LibraryTableRow => {
     const ref = normalizeWorkflowRef(workflow.name);
     return {
       workflow: toItem(workflow),
@@ -414,7 +416,8 @@ function LibraryBody({ projectId }: { projectId: string }) {
       onRun: workflow.status === "draft" ? undefined : () => setRunRef(workflow.name),
       actions: actionsFor(workflow),
     };
-  });
+  };
+  const tableRows: LibraryTableRow[] = view.rows.map(({ workflow, attention }) => toTableRow(workflow, attention));
   const attentionCount = view.rows.filter((row) => row.attention).length;
 
   const clearNarrowing = () => setSearch({ ...search, q: undefined, source: undefined });
@@ -471,6 +474,28 @@ function LibraryBody({ projectId }: { projectId: string }) {
               </button>
               .
             </p>
+          )}
+          {view.buildingBlocks.length > 0 && (
+            <details className="group" data-testid="building-blocks">
+              <summary className="mb-2 cursor-pointer select-none px-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Building blocks
+                <span className="ml-1.5 font-medium text-muted-foreground/70">{view.buildingBlocks.length}</span>
+              </summary>
+              <p className="mb-2 px-1 text-xs text-muted-foreground">
+                Used by other workflows. You can run them directly, but they are not offered in the composer.
+              </p>
+              <div className="forge-ui">
+                <DataTable<LibraryTableRow>
+                  ariaLabel="Building blocks"
+                  columns={libraryColumns(search.project)}
+                  data={view.buildingBlocks.map((workflow) => toTableRow(workflow))}
+                  layout="fixed"
+                  compact
+                  getRowKey={(row) => row.workflow.name}
+                  getRowProps={(row) => ({ "data-testid": `workflow-row-${row.workflow.name}` })}
+                />
+              </div>
+            </details>
           )}
           {view.invalid.length > 0 && <InvalidSection workflows={view.invalid} />}
         </>
@@ -546,7 +571,7 @@ function InvalidSection({ workflows }: { workflows: InvalidWorkflow[] }) {
         <ul aria-label="Failed to load" className="divide-y divide-border/60">
           {workflows.map((workflow) => (
             <li key={`${workflow.source}-${workflow.name}`} className="px-4 py-2.5" data-testid={`invalid-workflow-${workflow.name}`}>
-              <p className="text-sm font-medium text-foreground">{getWorkflowDisplayName(workflow.name, true)}</p>
+              <p className="text-sm font-medium text-foreground">{workflowDisplayName(workflow)}</p>
               <p className="mt-0.5 truncate font-mono text-xs text-muted-foreground" title={workflow.path}>
                 {workflow.path}
               </p>

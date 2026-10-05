@@ -5,6 +5,7 @@ import { LogOut, User, CheckCircle, Trash2 } from 'lucide-react'
 import { Button } from '../ui/Button'
 import { LinkedAccounts } from '../LinkedAccounts'
 import { DeleteAccountDialog } from './DeleteAccountDialog'
+import { SettingsPageHeader } from "./SettingsPageHeader";
 
 export function AccountSettings() {
   const {
@@ -97,12 +98,10 @@ export function AccountSettings() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-lg font-semibold mb-2">Account</h2>
-        <p className="text-sm text-muted-foreground">
-          Manage your account settings and authentication
-        </p>
-      </div>
+      <SettingsPageHeader
+        title="Account"
+        description="Your sign-in details and linked login methods. Come here to link another way of signing in, sign out, or delete your account."
+      />
 
       <div className="border border-border/40 rounded-lg p-6 space-y-4 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.03)]">
         {linkSuccess && (

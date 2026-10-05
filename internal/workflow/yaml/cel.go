@@ -264,6 +264,20 @@ func unmarshalModelSelector(node *yaml.Node, ms *reliantv1.ModelSelector) error 
 			if err := val.Decode(&ms.Providers); err != nil {
 				return fmt.Errorf("model.providers: %w", err)
 			}
+		case "thinking_level":
+			ms.ThinkingLevel = val.Value
+		case "temperature":
+			var t float64
+			if err := val.Decode(&t); err != nil {
+				return fmt.Errorf("model.temperature: %w", err)
+			}
+			ms.Temperature = &t
+		case "compaction_threshold":
+			var ct int32
+			if err := val.Decode(&ct); err != nil {
+				return fmt.Errorf("model.compaction_threshold: %w", err)
+			}
+			ms.CompactionThreshold = &ct
 		}
 	}
 	return nil
@@ -304,6 +318,15 @@ func marshalModelSelector(ms *reliantv1.ModelSelector) (*yaml.Node, error) {
 			seq.Content = append(seq.Content, scalarNode(p, ""))
 		}
 		m.Content = append(m.Content, scalarNode("providers", ""), seq)
+	}
+	if ms.ThinkingLevel != "" {
+		m.Content = append(m.Content, scalarNode("thinking_level", ""), scalarNode(ms.ThinkingLevel, ""))
+	}
+	if ms.Temperature != nil {
+		m.Content = append(m.Content, scalarNode("temperature", ""), scalarNode(strconv.FormatFloat(*ms.Temperature, 'g', -1, 64), "!!float"))
+	}
+	if ms.CompactionThreshold != nil {
+		m.Content = append(m.Content, scalarNode("compaction_threshold", ""), scalarNode(strconv.Itoa(int(*ms.CompactionThreshold)), "!!int"))
 	}
 	return m, nil
 }

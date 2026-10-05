@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { applyToolCallStateUpdates } from "../chatStreamReducers";
+import {
+  applyToolCallStateUpdates,
+  toolStatusSurvivesStreamAbort,
+} from "../chatStreamReducers";
 import type { ToolCallState, ToolExecutionStateUpdate } from "../../store/chatStore";
 
 const CHAT_ID = "chat-1";
@@ -87,5 +90,59 @@ describe("applyToolCallStateUpdates terminal guards", () => {
 
     expect(next.get("running")?.status).toBe("cancelled");
     expect(next.get("done")?.status).toBe("completed");
+  });
+
+  // "backgrounded" is a promise of a later outcome, not an outcome. When the
+  // backgrounded process exits, the server closes the call and streams its
+  // real status — and that update has to land. Treating "backgrounded" as
+  // terminal threw the completion away, so an open chat kept showing a running
+  // process for a command that had finished, until the next reload.
+  it("lets a backgrounded tool's real outcome replace it", () => {
+    const completed = applyToolCallStateUpdates(
+      state("bg", "backgrounded"),
+      [update("bg", "completed")],
+      CHAT_ID,
+    );
+    expect(completed.get("bg")?.status).toBe("completed");
+
+    const failed = applyToolCallStateUpdates(
+      state("bg", "backgrounded"),
+      [update("bg", "failed")],
+      CHAT_ID,
+    );
+    expect(failed.get("bg")?.status).toBe("failed");
+  });
+
+  // ...but ONLY a reported outcome. A stale "executing" or the abort pass's
+  // inferred cancel says nothing about a process that outlives the stream.
+  it("keeps a backgrounded tool backgrounded against stale or inferred updates", () => {
+    const stale = applyToolCallStateUpdates(
+      state("bg", "backgrounded"),
+      [update("bg", "executing")],
+      CHAT_ID,
+    );
+    expect(stale.get("bg")?.status).toBe("backgrounded");
+
+    const inferred = applyToolCallStateUpdates(
+      state("bg", "backgrounded"),
+      [{ ...update("bg", "cancelled"), inferred: true }],
+      CHAT_ID,
+    );
+    expect(inferred.get("bg")?.status).toBe("backgrounded");
+
+    // A reported cancel (the server closing a killed process) does land.
+    const reported = applyToolCallStateUpdates(
+      state("bg", "backgrounded"),
+      [update("bg", "cancelled")],
+      CHAT_ID,
+    );
+    expect(reported.get("bg")?.status).toBe("cancelled");
+  });
+
+  // Backgrounded still survives a stream ending underneath it: the user asked
+  // the process to outlive the turn, so the turn stopping says nothing about it.
+  it("still treats backgrounded as surviving a stream abort", () => {
+    expect(toolStatusSurvivesStreamAbort("backgrounded")).toBe(true);
+    expect(toolStatusSurvivesStreamAbort("executing")).toBe(false);
   });
 });

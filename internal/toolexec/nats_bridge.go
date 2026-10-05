@@ -52,6 +52,13 @@ type NATSToolBridge struct {
 	// connected daemons. Chunk ids are globally unique inboxes, so sharing
 	// one map across subjects cannot collide.
 	requestChunks *chunkAssembler
+
+	// localModelInFlight bounds concurrent relayed local-model requests,
+	// separately from inFlight so long generations cannot starve tool calls.
+	// localModelRelays tracks them by request id (see localmodel_bridge.go).
+	localModelInFlight chan struct{}
+	localModelMu       sync.Mutex
+	localModelRelays   map[string]*localModelRelayState
 }
 
 // maxInFlightRequests bounds concurrent request/reply handlers across all
@@ -73,6 +80,9 @@ func NewNATSToolBridge(nc *nats.Conn, js jetstream.JetStream, mgr DaemonConnecti
 		cancel:        cancel,
 		inFlight:      make(chan struct{}, maxInFlightRequests),
 		requestChunks: newChunkAssembler(),
+
+		localModelInFlight: make(chan struct{}, maxInFlightLocalModelRequests),
+		localModelRelays:   make(map[string]*localModelRelayState),
 	}
 }
 
@@ -520,6 +530,8 @@ func (b *NATSToolBridge) OnDaemonConnected(userID, daemonID string) {
 			b.respondToolRequestSync(ctx, msg, userID, &request)
 		})
 	})))
+
+	subs = append(subs, b.localModelSubscriptions(userID, daemonID)...)
 
 	b.finishDaemonConnected(daemonCtx, userID, daemonID, subs)
 }

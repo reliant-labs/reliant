@@ -163,6 +163,12 @@ export interface ForgeTopologyEnv {
    * `cluster`.
    */
   destination?: string;
+  /**
+   * The env's declared Bundle.lifecycle: "local", "ephemeral", or empty when
+   * unset or not declared in this checkout. Absent from a forge older than
+   * f219804d. Read it through lifecycleOf (services/forge/roster.ts).
+   */
+  lifecycle?: string;
   /** Hosted only: the control plane's normalized base URL. */
   endpoint?: string;
   /**

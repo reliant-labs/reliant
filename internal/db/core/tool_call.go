@@ -79,11 +79,16 @@ type ToolCall struct {
 	ChildWorkflowID *string
 	// BackgroundProcessID is set for calls moved to background execution.
 	BackgroundProcessID *string
-	RequestedAt         time.Time
-	StartedAt           *time.Time
-	CompletedAt         *time.Time
-	CreatedAt           time.Time
-	UpdatedAt           time.Time
+	// DaemonID is the daemon running a backgrounded call's process: the only
+	// party that can say when that process ends. Stamped by the daemon gateway
+	// from the connection that answered, so it names the machine that actually
+	// ran the tool rather than the user's default one.
+	DaemonID    *string
+	RequestedAt time.Time
+	StartedAt   *time.Time
+	CompletedAt *time.Time
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
 }
 
 // ToolCallResult is the result the tool produced, keyed by the call it
@@ -154,11 +159,16 @@ type ToolCallStore interface {
 	// anchored on the mailbox instead — see the SQL comment for the full
 	// reasoning (spec: async-spawn-and-agent-messaging.md, §7.1).
 	ListStrandedBackgroundSpawnToolCalls(ctx context.Context) ([]*StrandedBackgroundSpawn, error)
+	// ListBackgroundedProcessToolCalls reads every backgrounded call whose
+	// outcome lives in a daemon's process table (status 6, no child
+	// workflow), for the reconciler sweep that closes them once the process
+	// has ended.
+	ListBackgroundedProcessToolCalls(ctx context.Context) ([]*BackgroundedProcessCall, error)
 }
 
 // StrandedBackgroundSpawn is one backgrounded spawn call whose child
-// workflow reached a terminal status without ever reporting back to the
-// parent's mailbox.
+// workflow reached a terminal status while the call itself is still marked
+// backgrounded.
 type StrandedBackgroundSpawn struct {
 	ToolCallID string
 	ChatID     string
@@ -169,4 +179,25 @@ type StrandedBackgroundSpawn struct {
 	ParentThreadID *string
 	ChildThreadID  string
 	WorkflowStatus WorkflowStatus
+	// HasReport is true when the parent's mailbox already holds a terminal
+	// report for this call. The report then must not be written again, but
+	// the call still has to be closed: the two are written by different code,
+	// so a delivered report never implied a closed row.
+	HasReport bool
+}
+
+// BackgroundedProcessCall is one backgrounded tool call whose outcome lives
+// in a daemon's process table, and the facts needed to ask that daemon about
+// it.
+type BackgroundedProcessCall struct {
+	ToolCallID string
+	ChatID     string
+	ToolName   string
+	// UserID owns the chat, and therefore the daemon the process runs on.
+	UserID string
+	// BackgroundProcessID and DaemonID say which process on which daemon.
+	// Either may be nil on a row written before it was recorded.
+	BackgroundProcessID *string
+	DaemonID            *string
+	RequestedAt         time.Time
 }

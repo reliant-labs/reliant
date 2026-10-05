@@ -110,49 +110,24 @@ func (s *messageStore) ListMessages(ctx context.Context, chatID string, opts cor
 	return messagesFromPG(sqlcMsgs[start:end]), nil
 }
 
-// ListRecentMessages bounds the read in SQL. ListMessages above fetches the
-// chat's entire history and slices it in Go, so its Limit costs a full scan
-// plus a full materialization no matter how small the window; this one lets
-// postgres stop early against idx_messages_chat_id.
-func (s *messageStore) ListRecentMessages(ctx context.Context, chatID string, limit int) ([]*core.Message, error) {
-	if limit <= 0 {
-		return []*core.Message{}, nil
-	}
-
-	// ORDER BY ordinal DESC keeps the NEWEST rows under the LIMIT; reverse to
-	// restore the ascending order every consumer expects.
-	sqlcMsgs, err := s.q.ListRecentMessages(ctx, pgdb.ListRecentMessagesParams{
-		ChatID: chatID,
-		Limit:  int32(limit),
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to list recent messages: %w", err)
-	}
-
-	for i, j := 0, len(sqlcMsgs)-1; i < j; i, j = i+1, j-1 {
-		sqlcMsgs[i], sqlcMsgs[j] = sqlcMsgs[j], sqlcMsgs[i]
-	}
-	return messagesFromPG(sqlcMsgs), nil
-}
-
-// ListRecentChatWindow returns the initial snapshot's window: the newest
-// `limit` messages on mainThreadID, plus every sibling-thread message inside
-// that seq range. See the query comment in messages.sql for why the window is
-// measured on the main thread rather than across the whole chat.
-func (s *messageStore) ListRecentChatWindow(ctx context.Context, chatID, mainThreadID string, limit int) ([]*core.Message, error) {
+// ListRecentTranscriptSiblingMessages bounds the read in SQL, against
+// messages_chat_seq_key walked backward. See the query comment in messages.sql
+// for why spawn threads are excluded.
+func (s *messageStore) ListRecentTranscriptSiblingMessages(ctx context.Context, chatID, mainThreadID string, fromSeq int64, limit int) ([]*core.Message, error) {
 	if limit <= 0 {
 		return []*core.Message{}, nil
 	}
 
 	// Returned DESC so the LIMIT keeps the newest rows; reverse to restore the
 	// ascending order every consumer expects.
-	sqlcMsgs, err := s.q.ListRecentChatWindow(ctx, pgdb.ListRecentChatWindowParams{
-		ChatID:   chatID,
-		ThreadID: mainThreadID,
-		Limit:    int32(limit),
+	sqlcMsgs, err := s.q.ListRecentTranscriptSiblingMessages(ctx, pgdb.ListRecentTranscriptSiblingMessagesParams{
+		ChatID:       chatID,
+		MainThreadID: mainThreadID,
+		FromSeq:      fromSeq,
+		RowLimit:     int32(limit),
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to list recent chat window: %w", err)
+		return nil, fmt.Errorf("failed to list recent transcript sibling messages: %w", err)
 	}
 
 	for i, j := 0, len(sqlcMsgs)-1; i < j; i, j = i+1, j-1 {

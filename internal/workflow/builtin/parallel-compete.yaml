@@ -1,4 +1,5 @@
 name: parallel-compete
+title: Best of Three
 apiVersion: "0.0.5"
 description: |
   3 agents implement in parallel worktrees, reviewer picks winner or synthesizes.
@@ -49,17 +50,6 @@ inputs:
         description: Model override for implementer agents
         default:
           tags: ["flagship"]
-      temperature:
-        type: number
-        default: 1.0
-        min: 0
-        max: 1
-        description: Temperature for implementers
-      compaction_threshold:
-        type: integer
-        default: 0
-        min: 0
-        description: Token count to trigger context compaction (0 = derive from the model's context window)
       max_turns:
         type: integer
         default: 200
@@ -83,11 +73,6 @@ inputs:
           - Follow project conventions and best practices
           - Handle edge cases appropriately
         description: System prompt override for implementers
-      thinking_level:
-        type: enum
-        enum: [low, medium, high, xhigh]
-        default: low
-        description: Extended thinking level for implementers (support is model/provider dependent)
       spawn_presets:
         type: preset
         tags: [agent]
@@ -176,12 +161,9 @@ nodes:
           args:
             mode: "{{inputs.mode}}"
             model: "{{inputs.implementer.model != '' ? inputs.implementer.model : inputs.model}}"
-            temperature: "{{inputs.implementer.temperature}}"
-            compaction_threshold: "{{inputs.implementer.compaction_threshold}}"
             max_turns: "{{inputs.implementer.max_turns}}"
             tools: "{{inputs.implementer.tools}}"
             system_prompt: "{{inputs.implementer.system_prompt}}"
-            thinking_level: "{{inputs.implementer.thinking_level}}"
             spawn_presets: "{{inputs.implementer.spawn_presets}}"
             skills: "{{inputs.implementer.skills}}"
 

@@ -170,7 +170,6 @@ vi.mock("../OnboardingChecklist", () => ({
     React.createElement("div", { "data-testid": "setup-guide" }, "Setup Guide"),
 }));
 
-vi.mock("../steps", () => ({ CompletionStep: (_props: any) => null }));
 
 import { OnboardingWizard } from "../OnboardingWizard";
 

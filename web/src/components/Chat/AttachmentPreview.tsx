@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Tooltip } from "../ui/Tooltip";
 import { X } from 'lucide-react';
 import { FileIcon } from '../ui/FileIcon';
 import { ImagePreviewModal } from '../ui/ImagePreviewModal';
@@ -59,7 +60,8 @@ export function AttachmentPreview({ attachments, onRemove, className = '' }: Att
                 onClick={() => setPreviewImage({ url: imageUrl, filename: attachment.filename })}
                 title={attachment.filename}
               />
-              <button
+              <Tooltip content="Remove attachment" placement="top" delay={300} wrapperClassName="inline-flex">
+<button
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
@@ -72,11 +74,11 @@ export function AttachmentPreview({ attachments, onRemove, className = '' }: Att
                 style={{
                   pointerEvents: 'auto',
                 }}
-                title="Remove attachment"
                 aria-label="Remove attachment"
               >
                 <X className="w-3.5 h-3.5 text-white" strokeWidth={2.5} />
               </button>
+</Tooltip>
             </div>
           ) : (
             <div

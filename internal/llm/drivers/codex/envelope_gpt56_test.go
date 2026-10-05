@@ -160,14 +160,14 @@ func TestNewGPT56ReasoningParam_IncludesSummaryWhenRequested(t *testing.T) {
 	}
 }
 
-// `ultra` is above xhigh and unknown to the SDK's enum. It must survive as a
+// `max` is above xhigh and unknown to the SDK's enum. It must survive as a
 // raw string rather than being clamped to a value the SDK happens to know.
-func TestBuildParams_GPT56PassesThroughUltraEffort(t *testing.T) {
-	payload := marshalParams(t, gpt56Model(models.GPT56Terra, "gpt-5.6-terra"), "ultra", nil)
+func TestBuildParams_GPT56PassesThroughMaxEffort(t *testing.T) {
+	payload := marshalParams(t, gpt56Model(models.GPT56Terra, "gpt-5.6-terra"), "max", nil)
 
 	reasoning, _ := payload["reasoning"].(map[string]any)
-	if reasoning["effort"] != "ultra" {
-		t.Errorf("expected effort=ultra to survive serialization, got %v", reasoning["effort"])
+	if reasoning["effort"] != "max" {
+		t.Errorf("expected effort=max to survive serialization, got %v", reasoning["effort"])
 	}
 }
 
@@ -211,9 +211,9 @@ func TestBuildParams_PreGPT56KeepsLegacyEnvelope(t *testing.T) {
 // pinning — particularly for 5.6, where the reasoning block and the tool list
 // are raw override payloads that typed field access cannot see.
 func TestDescribeReasoning_ReadsRawOverrideFields(t *testing.T) {
-	effort, summary, context := describeReasoning(newAdditionalToolsReasoningParam("ultra", ""))
-	if effort != "ultra" {
-		t.Errorf("expected effort=ultra, got %q", effort)
+	effort, summary, context := describeReasoning(newAdditionalToolsReasoningParam("max", ""))
+	if effort != "max" {
+		t.Errorf("expected effort=max, got %q", effort)
 	}
 	if context != "all_turns" {
 		t.Errorf("expected context=all_turns, got %q", context)
@@ -347,8 +347,8 @@ func TestRoutingHint(t *testing.T) {
 	}
 }
 
-// Astra's top effort is `max` (its thinking_levels stop there, unlike sol and
-// terra which also declare ultra). The SDK enum stops at xhigh, so this pins
+// Astra's top effort is `max` (its thinking_levels stop there, like sol and
+// terra). The SDK enum stops at xhigh, so this pins
 // that `max` reaches the wire verbatim rather than being clamped.
 func TestBuildParams_AstraPassesThroughMaxEffort(t *testing.T) {
 	payload := marshalParams(t, gpt56Model(models.GPT6Astra, "gpt-6-astra"), "max", nil)

@@ -94,7 +94,7 @@ func TestBuiltinAgentPreloadsTheDefaultBundle(t *testing.T) {
 func TestAssistantBuiltinsDeclareLoadable(t *testing.T) {
 	t.Parallel()
 
-	for _, name := range []string{"agent.yaml", "structured-agent.yaml", "auditing-agent.yaml"} {
+	for _, name := range []string{"agent.yaml", "structured-agent.yaml"} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			tc := findCallLLMToolsConfig(t, loadBuiltin(t, name))

@@ -1,7 +1,8 @@
 import { useEffect } from "react";
 import { usePrivacyStore } from "../../store/privacyStore";
-import { Shield, AlertTriangle } from "lucide-react";
+import { AlertTriangle } from "lucide-react";
 import { Toggle } from "../ui/Toggle";
+import { SettingsPageHeader } from "./SettingsPageHeader";
 
 export function PrivacySettings() {
   const {
@@ -21,15 +22,10 @@ export function PrivacySettings() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <div className="flex items-center gap-2 mb-2">
-          <Shield className="w-5 h-5" />
-          <h2 className="text-lg font-semibold">Privacy Settings</h2>
-        </div>
-        <p className="text-sm text-muted-foreground">
-          Control what data you share with us to improve the application.
-        </p>
-      </div>
+      <SettingsPageHeader
+        title="Privacy"
+        description="Choose what diagnostic and usage data Reliant sends to us. Both options are optional and can be turned off at any time."
+      />
 
       <div className="space-y-4">
         {/* Crash Reporting Setting */}

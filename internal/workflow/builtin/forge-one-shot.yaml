@@ -1,4 +1,5 @@
 name: forge-one-shot
+title: Build an App
 apiVersion: "0.0.5"
 description: |
   Build a production Forge app from a conversation, in ONE get-it-right loop:

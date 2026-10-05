@@ -52,7 +52,6 @@ export function STEP_EXPECTED_PATH(stepId: OnboardingStepId): string | null {
     case "workflow-hub":
       return WORKFLOWS_LIBRARY_PATH;
     case "workflow-builder":
-    case "workflow-builder-chat":
       return "/workflow/";
     default:
       return null;

@@ -67,7 +67,7 @@ type (
 	usageMetadata = agywire.UsageMetadata
 )
 
-// unboundedThinkingBudget is the capture's thinkingBudget: let the server
+// unboundedThinkingBudget is the capture's thinkingBudget, still sent for models with no effort variants: let the server
 // decide how much thinking the selected effort level warrants.
 const unboundedThinkingBudget = agywire.UnboundedThinkingBudget
 

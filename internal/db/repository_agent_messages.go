@@ -29,7 +29,9 @@ func (r *Repo) EnqueueAgentMessage(ctx context.Context, msg *AgentMessage) error
 }
 
 // EnqueueAgentMessageIfAbsent is EnqueueAgentMessage's conditional sibling,
-// used only by the stranded-background-spawn reconciler sweep: msg.Kind must
+// used only by the stranded-background-spawn reconciler sweep to write
+// Synthesized placeholders (a real report later supersedes them via
+// EnqueueSpawnReport): msg.Kind must
 // be a terminal kind (Completion, Cancelled, or Failed), and msg.ToolCallID
 // must be set — those are exactly the rows the unique constraint
 // (idx_agent_messages_one_terminal_report_per_spawn) applies to.
@@ -58,6 +60,39 @@ func (r *Repo) EnqueueAgentMessageIfAbsent(ctx context.Context, msg *AgentMessag
 		return false, fmt.Errorf("kind must be a terminal kind (completion, cancelled, or failed), got %d", msg.Kind)
 	}
 	return r.agentMessages.EnqueueAgentMessageIfAbsent(ctx, msg)
+}
+
+// EnqueueSpawnReport writes a real terminal spawn report: it inserts,
+// supersedes a reconciler-synthesized placeholder, or no-ops when a real report
+// already exists. See core.AgentMessageStore.EnqueueSpawnReport.
+func (r *Repo) EnqueueSpawnReport(ctx context.Context, msg *AgentMessage) (SpawnReportOutcome, error) {
+	if msg == nil {
+		return 0, fmt.Errorf("agent message cannot be nil")
+	}
+	if msg.ID == "" {
+		return 0, fmt.Errorf("agent message ID is required")
+	}
+	if msg.ChatID == "" {
+		return 0, fmt.Errorf("chat ID is required")
+	}
+	if msg.FromThreadID == "" {
+		return 0, fmt.Errorf("from thread ID is required")
+	}
+	if msg.ToThreadID == "" {
+		return 0, fmt.Errorf("to thread ID is required")
+	}
+	if msg.ToolCallID == nil || *msg.ToolCallID == "" {
+		return 0, fmt.Errorf("tool call ID is required")
+	}
+	switch msg.Kind {
+	case core.AgentMessageKindCompletion, core.AgentMessageKindCancelled, core.AgentMessageKindFailed:
+	default:
+		return 0, fmt.Errorf("kind must be a terminal kind (completion, cancelled, or failed), got %d", msg.Kind)
+	}
+	if msg.Synthesized {
+		return 0, fmt.Errorf("a synthesized report cannot supersede; use EnqueueAgentMessageIfAbsent")
+	}
+	return r.agentMessages.EnqueueSpawnReport(ctx, msg)
 }
 
 func (r *Repo) ListQueuedAgentMessagesForThread(ctx context.Context, toThreadID string) ([]*AgentMessage, error) {

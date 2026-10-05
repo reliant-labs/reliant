@@ -302,6 +302,7 @@ func CustomFunctions() []cel.EnvOption {
 		celToJsonFunction(),
 		celCoalesceFunction(),
 		celGetOrDefaultFunction(),
+		celMergeFunction(),
 		celParseDurationFunction(),
 		celNowFunction(),
 		celSpawnFunction(),
@@ -456,6 +457,37 @@ func celGetOrDefaultFunction() cel.EnvOption {
 				}
 
 				return result
+			}),
+		),
+	)
+}
+
+// celMergeFunction shallow-merges two maps; keys in the right map win. A null
+// side is treated as an empty map.
+// Usage in CEL: merge(inputs.model, {'thinking_level': 'high'})
+func celMergeFunction() cel.EnvOption {
+	return cel.Function("merge",
+		cel.Overload("merge_dyn_dyn",
+			[]*cel.Type{cel.DynType, cel.DynType},
+			cel.DynType,
+			cel.BinaryBinding(func(base, overrides ref.Val) ref.Val {
+				merged := map[string]interface{}{}
+				for i, side := range []ref.Val{base, overrides} {
+					if side.Type() == types.NullType {
+						continue
+					}
+					if _, ok := side.(traits.Mapper); !ok {
+						return types.NewErr("merge() argument %d must be a map, got %s", i+1, side.Type().TypeName())
+					}
+					native, err := side.ConvertToNative(reflect.TypeOf(map[string]interface{}{}))
+					if err != nil {
+						return types.NewErr("merge() argument %d: %v", i+1, err)
+					}
+					for k, v := range native.(map[string]interface{}) {
+						merged[k] = v
+					}
+				}
+				return types.DefaultTypeAdapter.NativeToValue(merged)
 			}),
 		),
 	)

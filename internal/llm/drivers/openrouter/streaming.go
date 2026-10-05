@@ -70,6 +70,8 @@ func (c *Client) streamWithCacheControl(ctx context.Context, prompts []string, m
 			}
 		}
 
+		c.applyClaudeReasoning(request)
+
 		requestBody, err := json.Marshal(request)
 		if err != nil {
 			eventChan <- llm.DriverEvent{Type: llm.EventError, Error: fmt.Errorf("failed to marshal request: %w", err)}
@@ -138,6 +140,7 @@ func (c *Client) streamWithCacheControl(ctx context.Context, prompts []string, m
 		toolCallsByIndex := make([]*message.ToolCall, 0)
 		var allToolCalls []message.ToolCall
 		var streamUsage llm.TokenUsage
+		var reasoning reasoningAccumulator
 
 		for scanner.Scan() {
 			line := scanner.Text()
@@ -165,15 +168,7 @@ func (c *Client) streamWithCacheControl(ctx context.Context, prompts []string, m
 
 				// Parse usage from final chunk (when stream_options.include_usage is set)
 				if usage, ok := event["usage"].(map[string]interface{}); ok {
-					if pt, ok := usage["prompt_tokens"].(float64); ok {
-						streamUsage.InputTokens = int64(pt)
-					}
-					if ct, ok := usage["completion_tokens"].(float64); ok {
-						streamUsage.OutputTokens = int64(ct)
-					}
-					if tt, ok := usage["total_tokens"].(float64); ok {
-						streamUsage.TokenCount = int64(tt)
-					}
+					parseStreamUsage(usage, &streamUsage)
 				}
 
 				// Process the event
@@ -181,6 +176,10 @@ func (c *Client) streamWithCacheControl(ctx context.Context, prompts []string, m
 					choice := choices[0].(map[string]interface{})
 
 					if delta, ok := choice["delta"].(map[string]interface{}); ok {
+						if chunk := reasoning.consume(delta); chunk != "" {
+							eventChan <- llm.DriverEvent{Type: llm.EventThinkingDelta, Thinking: chunk}
+						}
+
 						// Content delta
 						if content, ok := delta["content"].(string); ok {
 							currentContent.WriteString(content)
@@ -265,15 +264,14 @@ func (c *Client) streamWithCacheControl(ctx context.Context, prompts []string, m
 						toolCallsByIndex = make([]*message.ToolCall, 0)
 
 						// Send complete event
-						eventChan <- llm.DriverEvent{
-							Type: llm.EventComplete,
-							Response: &llm.DriverResponse{
-								Content:      currentContent.String(),
-								ToolCalls:    allToolCalls,
-								FinishReason: mapFinishReason(finishReason),
-								Usage:        streamUsage,
-							},
+						complete := &llm.DriverResponse{
+							Content:      currentContent.String(),
+							ToolCalls:    allToolCalls,
+							FinishReason: mapFinishReason(finishReason),
+							Usage:        streamUsage,
 						}
+						reasoning.applyReasoning(complete)
+						eventChan <- llm.DriverEvent{Type: llm.EventComplete, Response: complete}
 					}
 				}
 			}
@@ -415,6 +413,7 @@ func (c *Client) streamWithGeminiSupport(ctx context.Context, prompts []string, 
 		var streamUsage llm.TokenUsage
 		// Track reasoning_details for Gemini thought signatures
 		reasoningByID := make(map[string]ReasoningDetail)
+		var reasoning reasoningAccumulator
 
 		for scanner.Scan() {
 			line := scanner.Text()
@@ -442,15 +441,7 @@ func (c *Client) streamWithGeminiSupport(ctx context.Context, prompts []string, 
 
 				// Parse usage from final chunk (when stream_options.include_usage is set)
 				if usage, ok := event["usage"].(map[string]interface{}); ok {
-					if pt, ok := usage["prompt_tokens"].(float64); ok {
-						streamUsage.InputTokens = int64(pt)
-					}
-					if ct, ok := usage["completion_tokens"].(float64); ok {
-						streamUsage.OutputTokens = int64(ct)
-					}
-					if tt, ok := usage["total_tokens"].(float64); ok {
-						streamUsage.TokenCount = int64(tt)
-					}
+					parseStreamUsage(usage, &streamUsage)
 				}
 
 				// Process the event
@@ -458,6 +449,10 @@ func (c *Client) streamWithGeminiSupport(ctx context.Context, prompts []string, 
 					choice := choices[0].(map[string]interface{})
 
 					if delta, ok := choice["delta"].(map[string]interface{}); ok {
+						if chunk := reasoning.consume(delta); chunk != "" {
+							eventChan <- llm.DriverEvent{Type: llm.EventThinkingDelta, Thinking: chunk}
+						}
+
 						// Content delta
 						if content, ok := delta["content"].(string); ok {
 							currentContent.WriteString(content)
@@ -588,15 +583,14 @@ func (c *Client) streamWithGeminiSupport(ctx context.Context, prompts []string, 
 						toolCallsByIndex = make([]*message.ToolCall, 0)
 
 						// Send complete event
-						eventChan <- llm.DriverEvent{
-							Type: llm.EventComplete,
-							Response: &llm.DriverResponse{
-								Content:      currentContent.String(),
-								ToolCalls:    allToolCalls,
-								FinishReason: mapFinishReason(finishReason),
-								Usage:        streamUsage,
-							},
+						complete := &llm.DriverResponse{
+							Content:      currentContent.String(),
+							ToolCalls:    allToolCalls,
+							FinishReason: mapFinishReason(finishReason),
+							Usage:        streamUsage,
 						}
+						reasoning.applyReasoning(complete)
+						eventChan <- llm.DriverEvent{Type: llm.EventComplete, Response: complete}
 					}
 				}
 			}

@@ -43,6 +43,7 @@ type AgentMessage struct {
 	DeliveredAt        sql.NullTime          `json:"delivered_at"`
 	DeliveredMessageID sql.NullString        `json:"delivered_message_id"`
 	Attachments        pqtype.NullRawMessage `json:"attachments"`
+	Synthesized        bool                  `json:"synthesized"`
 }
 
 type AntigravityAuthToken struct {
@@ -346,6 +347,7 @@ type Daemon struct {
 	LastStatusChangedAt sql.NullTime   `json:"last_status_changed_at"`
 	LastOomKilledAt     sql.NullTime   `json:"last_oom_killed_at"`
 	OomKillCount        int32          `json:"oom_kill_count"`
+	LocalModels         string         `json:"local_models"`
 }
 
 type DaemonAttachment struct {
@@ -435,6 +437,21 @@ type MessageOrderCounter struct {
 	CounterKind  string `json:"counter_kind"`
 	ScopeID      string `json:"scope_id"`
 	LastAssigned int64  `json:"last_assigned"`
+}
+
+type ModelEndpoint struct {
+	ID                     string         `json:"id"`
+	UserID                 string         `json:"user_id"`
+	Name                   string         `json:"name"`
+	BaseUrl                string         `json:"base_url"`
+	Route                  string         `json:"route"`
+	DaemonID               sql.NullString `json:"daemon_id"`
+	CredentialConnectionID sql.NullString `json:"credential_connection_id"`
+	HeaderNames            []string       `json:"header_names"`
+	ModelsJson             string         `json:"models_json"`
+	ProbeJson              string         `json:"probe_json"`
+	CreatedAt              time.Time      `json:"created_at"`
+	UpdatedAt              time.Time      `json:"updated_at"`
 }
 
 type OauthFlow struct {
@@ -566,6 +583,20 @@ type Repo struct {
 	UpdatedAt    time.Time      `json:"updated_at"`
 }
 
+type RunEvent struct {
+	ID           string          `json:"id"`
+	UserID       string          `json:"user_id"`
+	ChatID       string          `json:"chat_id"`
+	WorkflowName string          `json:"workflow_name"`
+	Outcome      string          `json:"outcome"`
+	DedupeKey    string          `json:"dedupe_key"`
+	Payload      json.RawMessage `json:"payload"`
+	OccurredAt   time.Time       `json:"occurred_at"`
+	ClaimedUntil sql.NullTime    `json:"claimed_until"`
+	DispatchedAt sql.NullTime    `json:"dispatched_at"`
+	CreatedAt    time.Time       `json:"created_at"`
+}
+
 type Setting struct {
 	ID        string         `json:"id"`
 	UserID    string         `json:"user_id"`
@@ -653,6 +684,7 @@ type ToolCall struct {
 	CompletedAt         sql.NullTime   `json:"completed_at"`
 	CreatedAt           time.Time      `json:"created_at"`
 	UpdatedAt           time.Time      `json:"updated_at"`
+	DaemonID            sql.NullString `json:"daemon_id"`
 }
 
 type ToolCallResult struct {
@@ -665,22 +697,26 @@ type ToolCallResult struct {
 }
 
 type Trigger struct {
-	ID               string          `json:"id"`
-	UserID           string          `json:"user_id"`
-	ProjectID        string          `json:"project_id"`
-	WorktreeID       sql.NullString  `json:"worktree_id"`
-	Name             string          `json:"name"`
-	Kind             string          `json:"kind"`
-	Enabled          bool            `json:"enabled"`
-	Workflow         string          `json:"workflow"`
-	Presets          json.RawMessage `json:"presets"`
-	Params           json.RawMessage `json:"params"`
-	Message          string          `json:"message"`
-	Config           json.RawMessage `json:"config"`
-	CreatedAt        time.Time       `json:"created_at"`
-	UpdatedAt        time.Time       `json:"updated_at"`
-	DaemonID         string          `json:"daemon_id"`
-	NotifyOnComplete bool            `json:"notify_on_complete"`
+	ID                  string          `json:"id"`
+	UserID              string          `json:"user_id"`
+	ProjectID           string          `json:"project_id"`
+	WorktreeID          sql.NullString  `json:"worktree_id"`
+	Name                string          `json:"name"`
+	Kind                string          `json:"kind"`
+	Enabled             bool            `json:"enabled"`
+	Workflow            string          `json:"workflow"`
+	Presets             json.RawMessage `json:"presets"`
+	Params              json.RawMessage `json:"params"`
+	Message             string          `json:"message"`
+	Config              json.RawMessage `json:"config"`
+	CreatedAt           time.Time       `json:"created_at"`
+	UpdatedAt           time.Time       `json:"updated_at"`
+	DaemonID            string          `json:"daemon_id"`
+	NotifyOnComplete    bool            `json:"notify_on_complete"`
+	Filter              string          `json:"filter"`
+	ConnectionID        sql.NullString  `json:"connection_id"`
+	WebhookTokenHash    []byte          `json:"webhook_token_hash"`
+	WebhookSecretSealed []byte          `json:"webhook_secret_sealed"`
 }
 
 type TriggerEvent struct {
@@ -695,6 +731,18 @@ type TriggerEvent struct {
 	OutcomeDetail string          `json:"outcome_detail"`
 	ChatID        sql.NullString  `json:"chat_id"`
 	CreatedAt     time.Time       `json:"created_at"`
+}
+
+type TriggerRegistration struct {
+	TriggerID      string       `json:"trigger_id"`
+	Provider       string       `json:"provider"`
+	RegistrationID string       `json:"registration_id"`
+	Cursor         string       `json:"cursor"`
+	LastPolledAt   sql.NullTime `json:"last_polled_at"`
+	Status         string       `json:"status"`
+	StatusDetail   string       `json:"status_detail"`
+	CreatedAt      time.Time    `json:"created_at"`
+	UpdatedAt      time.Time    `json:"updated_at"`
 }
 
 type UpdateStreamCounter struct {
@@ -726,6 +774,21 @@ type VaultKey struct {
 	WrappedDek []byte    `json:"wrapped_dek"`
 	State      string    `json:"state"`
 	CreatedAt  time.Time `json:"created_at"`
+}
+
+type VideoGenerationJob struct {
+	ToolCallID   string         `json:"tool_call_id"`
+	UserID       string         `json:"user_id"`
+	ChatID       string         `json:"chat_id"`
+	Driver       string         `json:"driver"`
+	ModelID      string         `json:"model_id"`
+	ApiModel     string         `json:"api_model"`
+	ProviderJob  string         `json:"provider_job"`
+	State        string         `json:"state"`
+	AttachmentID sql.NullString `json:"attachment_id"`
+	ErrorMessage string         `json:"error_message"`
+	CreatedAt    time.Time      `json:"created_at"`
+	UpdatedAt    time.Time      `json:"updated_at"`
 }
 
 type VisibilityOverride struct {

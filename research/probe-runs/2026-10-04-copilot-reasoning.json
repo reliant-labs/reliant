@@ -1,0 +1,981 @@
+{
+  "outcomes": [
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "claude-5-sonnet",
+        "provider": "copilot",
+        "level": ""
+      },
+      "label": "claude-5-sonnet@copilot reasoning level=default",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "claude-5-sonnet@copilot",
+      "resolved_provider": "copilot",
+      "api_model": "claude-sonnet-5",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 2080,
+      "input_tokens": 79,
+      "output_tokens": 173,
+      "has_signature": true,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 1,
+        "content_start": 1,
+        "content_stop": 2
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "claude-5-sonnet",
+        "provider": "copilot",
+        "level": "low"
+      },
+      "label": "claude-5-sonnet@copilot reasoning level=low",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "claude-5-sonnet@copilot",
+      "resolved_provider": "copilot",
+      "api_model": "claude-sonnet-5",
+      "effective_thinking": "low",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1752,
+      "input_tokens": 79,
+      "output_tokens": 152,
+      "has_signature": true,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "content_start": 1,
+        "content_stop": 2
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "claude-5-sonnet",
+        "provider": "copilot",
+        "level": "xhigh"
+      },
+      "label": "claude-5-sonnet@copilot reasoning level=xhigh",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "claude-5-sonnet@copilot",
+      "resolved_provider": "copilot",
+      "api_model": "claude-sonnet-5",
+      "effective_thinking": "xhigh",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 2613,
+      "input_tokens": 79,
+      "output_tokens": 256,
+      "has_signature": true,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "content_start": 1,
+        "content_stop": 2
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "claude-5.5-sonnet",
+        "provider": "copilot",
+        "level": ""
+      },
+      "label": "claude-5.5-sonnet@copilot reasoning level=default",
+      "status": "pass",
+      "text_excerpt": "Multiples of 7: floor(1000/7)=142, sum = 7·142·143/2 = 7·10153 = 71071. Multi…",
+      "resolved_model": "claude-5.5-sonnet@copilot",
+      "resolved_provider": "copilot",
+      "api_model": "claude-sonnet-5.5",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1863,
+      "input_tokens": 4,
+      "output_tokens": 173,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 30,
+        "content_start": 1,
+        "content_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "claude-5.5-sonnet",
+        "provider": "copilot",
+        "level": "low"
+      },
+      "label": "claude-5.5-sonnet@copilot reasoning level=low",
+      "status": "pass",
+      "text_excerpt": "Multiples of 7: floor(1000/7)=142, sum = 7*142*143/2 = 7*10153 = 71071. Multiple…",
+      "resolved_model": "claude-5.5-sonnet@copilot",
+      "resolved_provider": "copilot",
+      "api_model": "claude-sonnet-5.5",
+      "effective_thinking": "low",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1950,
+      "input_tokens": 4,
+      "output_tokens": 173,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 32,
+        "content_start": 1,
+        "content_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "claude-5.5-sonnet",
+        "provider": "copilot",
+        "level": "xhigh"
+      },
+      "label": "claude-5.5-sonnet@copilot reasoning level=xhigh",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "claude-5.5-sonnet@copilot",
+      "resolved_provider": "copilot",
+      "api_model": "claude-sonnet-5.5",
+      "effective_thinking": "xhigh",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 2361,
+      "input_tokens": 4,
+      "output_tokens": 210,
+      "has_signature": true,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "content_start": 1,
+        "content_stop": 2
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gemini-3.7-flash",
+        "provider": "copilot",
+        "level": ""
+      },
+      "label": "gemini-3.7-flash@copilot reasoning level=default",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gemini-3.7-flash@copilot",
+      "resolved_provider": "copilot",
+      "api_model": "gemini-3.7-flash",
+      "effective_thinking": "medium",
+      "effective_temperature": 1,
+      "latency_ms": 4229,
+      "input_tokens": 56,
+      "output_tokens": 669,
+      "thinking_chars": 225,
+      "correct": true,
+      "thinking_delta_events": 1,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 2,
+        "content_delta": 4,
+        "thinking_delta": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gemini-3.7-flash",
+        "provider": "copilot",
+        "level": "low"
+      },
+      "label": "gemini-3.7-flash@copilot reasoning level=low",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gemini-3.7-flash@copilot",
+      "resolved_provider": "copilot",
+      "api_model": "gemini-3.7-flash",
+      "effective_thinking": "low",
+      "effective_temperature": 1,
+      "latency_ms": 3192,
+      "input_tokens": 56,
+      "output_tokens": 426,
+      "thinking_chars": 226,
+      "correct": true,
+      "thinking_delta_events": 1,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 2,
+        "content_delta": 4,
+        "thinking_delta": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gemini-3.7-flash",
+        "provider": "copilot",
+        "level": "high"
+      },
+      "label": "gemini-3.7-flash@copilot reasoning level=high",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gemini-3.7-flash@copilot",
+      "resolved_provider": "copilot",
+      "api_model": "gemini-3.7-flash",
+      "effective_thinking": "high",
+      "effective_temperature": 1,
+      "latency_ms": 7094,
+      "input_tokens": 56,
+      "output_tokens": 1296,
+      "thinking_chars": 558,
+      "correct": true,
+      "thinking_delta_events": 2,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 2,
+        "content_delta": 5,
+        "thinking_delta": 2
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gemini-3.8-flash",
+        "provider": "copilot",
+        "level": ""
+      },
+      "label": "gemini-3.8-flash@copilot reasoning level=default",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gemini-3.8-flash@copilot",
+      "resolved_provider": "copilot",
+      "api_model": "gemini-3.8-flash",
+      "effective_thinking": "medium",
+      "effective_temperature": 1,
+      "latency_ms": 4230,
+      "input_tokens": 57,
+      "output_tokens": 1292,
+      "thinking_chars": 425,
+      "has_signature": true,
+      "correct": true,
+      "thinking_delta_events": 1,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 1,
+        "content_start": 1,
+        "content_stop": 1,
+        "thinking_delta": 1,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gemini-3.8-flash",
+        "provider": "copilot",
+        "level": "low"
+      },
+      "label": "gemini-3.8-flash@copilot reasoning level=low",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gemini-3.8-flash@copilot",
+      "resolved_provider": "copilot",
+      "api_model": "gemini-3.8-flash",
+      "effective_thinking": "low",
+      "effective_temperature": 1,
+      "latency_ms": 3435,
+      "input_tokens": 57,
+      "output_tokens": 1368,
+      "thinking_chars": 304,
+      "has_signature": true,
+      "correct": true,
+      "thinking_delta_events": 1,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 1,
+        "content_start": 1,
+        "content_stop": 1,
+        "thinking_delta": 1,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gemini-3.8-flash",
+        "provider": "copilot",
+        "level": "high"
+      },
+      "label": "gemini-3.8-flash@copilot reasoning level=high",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gemini-3.8-flash@copilot",
+      "resolved_provider": "copilot",
+      "api_model": "gemini-3.8-flash",
+      "effective_thinking": "high",
+      "effective_temperature": 1,
+      "latency_ms": 3768,
+      "input_tokens": 57,
+      "output_tokens": 1337,
+      "thinking_chars": 315,
+      "has_signature": true,
+      "correct": true,
+      "thinking_delta_events": 1,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 1,
+        "content_start": 1,
+        "content_stop": 1,
+        "thinking_delta": 1,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gpt-5-mini",
+        "provider": "copilot",
+        "level": ""
+      },
+      "label": "gpt-5-mini@copilot reasoning level=default",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gpt-5-mini@copilot",
+      "resolved_provider": "copilot",
+      "api_model": "gpt-5-mini",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 6116,
+      "input_tokens": 4407,
+      "output_tokens": 681,
+      "thinking_chars": 96,
+      "correct": true,
+      "thinking_delta_events": 2,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_delta": 2,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gpt-5-mini",
+        "provider": "copilot",
+        "level": "low"
+      },
+      "label": "gpt-5-mini@copilot reasoning level=low",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gpt-5-mini@copilot",
+      "resolved_provider": "copilot",
+      "api_model": "gpt-5-mini",
+      "effective_thinking": "low",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 6128,
+      "input_tokens": 4407,
+      "output_tokens": 471,
+      "thinking_chars": 73,
+      "correct": true,
+      "thinking_delta_events": 2,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_delta": 2,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gpt-5-mini",
+        "provider": "copilot",
+        "level": "high"
+      },
+      "label": "gpt-5-mini@copilot reasoning level=high",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gpt-5-mini@copilot",
+      "resolved_provider": "copilot",
+      "api_model": "gpt-5-mini",
+      "effective_thinking": "high",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 7409,
+      "input_tokens": 4407,
+      "output_tokens": 713,
+      "thinking_chars": 80,
+      "correct": true,
+      "thinking_delta_events": 2,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_delta": 2,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gpt-5.3-codex",
+        "provider": "copilot",
+        "level": ""
+      },
+      "label": "gpt-5.3-codex@copilot reasoning level=default",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gpt-5.3-codex@copilot",
+      "resolved_provider": "copilot",
+      "api_model": "gpt-5.3-codex",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 3168,
+      "input_tokens": 4407,
+      "output_tokens": 259,
+      "thinking_chars": 36,
+      "correct": true,
+      "thinking_delta_events": 1,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_delta": 1,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gpt-5.3-codex",
+        "provider": "copilot",
+        "level": "low"
+      },
+      "label": "gpt-5.3-codex@copilot reasoning level=low",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gpt-5.3-codex@copilot",
+      "resolved_provider": "copilot",
+      "api_model": "gpt-5.3-codex",
+      "effective_thinking": "low",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 2680,
+      "input_tokens": 4407,
+      "output_tokens": 181,
+      "thinking_chars": 42,
+      "correct": true,
+      "thinking_delta_events": 1,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_delta": 1,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gpt-5.3-codex",
+        "provider": "copilot",
+        "level": "xhigh"
+      },
+      "label": "gpt-5.3-codex@copilot reasoning level=xhigh",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gpt-5.3-codex@copilot",
+      "resolved_provider": "copilot",
+      "api_model": "gpt-5.3-codex",
+      "effective_thinking": "xhigh",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 3410,
+      "input_tokens": 4407,
+      "output_tokens": 311,
+      "thinking_chars": 37,
+      "correct": true,
+      "thinking_delta_events": 1,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_delta": 1,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gpt-5.4",
+        "provider": "copilot",
+        "level": ""
+      },
+      "label": "gpt-5.4@copilot reasoning level=default",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gpt-5.4@copilot",
+      "resolved_provider": "copilot",
+      "api_model": "gpt-5.4",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 3488,
+      "input_tokens": 4407,
+      "output_tokens": 179,
+      "thinking_chars": 32,
+      "correct": true,
+      "thinking_delta_events": 1,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_delta": 1,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gpt-5.4",
+        "provider": "copilot",
+        "level": "low"
+      },
+      "label": "gpt-5.4@copilot reasoning level=low",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gpt-5.4@copilot",
+      "resolved_provider": "copilot",
+      "api_model": "gpt-5.4",
+      "effective_thinking": "low",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 3604,
+      "input_tokens": 4407,
+      "output_tokens": 197,
+      "thinking_chars": 39,
+      "correct": true,
+      "thinking_delta_events": 1,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_delta": 1,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gpt-5.4",
+        "provider": "copilot",
+        "level": "xhigh"
+      },
+      "label": "gpt-5.4@copilot reasoning level=xhigh",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gpt-5.4@copilot",
+      "resolved_provider": "copilot",
+      "api_model": "gpt-5.4",
+      "effective_thinking": "xhigh",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 4084,
+      "input_tokens": 4407,
+      "output_tokens": 271,
+      "thinking_chars": 49,
+      "correct": true,
+      "thinking_delta_events": 1,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_delta": 1,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gpt-5.4-mini",
+        "provider": "copilot",
+        "level": ""
+      },
+      "label": "gpt-5.4-mini@copilot reasoning level=default",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gpt-5.4-mini@copilot",
+      "resolved_provider": "copilot",
+      "api_model": "gpt-5.4-mini",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1599,
+      "input_tokens": 4407,
+      "output_tokens": 219,
+      "thinking_chars": 57,
+      "correct": true,
+      "thinking_delta_events": 1,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_delta": 1,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gpt-5.4-mini",
+        "provider": "copilot",
+        "level": "low"
+      },
+      "label": "gpt-5.4-mini@copilot reasoning level=low",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gpt-5.4-mini@copilot",
+      "resolved_provider": "copilot",
+      "api_model": "gpt-5.4-mini",
+      "effective_thinking": "low",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1986,
+      "input_tokens": 4407,
+      "output_tokens": 180,
+      "thinking_chars": 44,
+      "correct": true,
+      "thinking_delta_events": 1,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_delta": 1,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gpt-5.4-mini",
+        "provider": "copilot",
+        "level": "xhigh"
+      },
+      "label": "gpt-5.4-mini@copilot reasoning level=xhigh",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gpt-5.4-mini@copilot",
+      "resolved_provider": "copilot",
+      "api_model": "gpt-5.4-mini",
+      "effective_thinking": "xhigh",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 3002,
+      "input_tokens": 4407,
+      "output_tokens": 495,
+      "thinking_chars": 69,
+      "correct": true,
+      "thinking_delta_events": 2,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_delta": 2,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gpt-5.6-luna",
+        "provider": "copilot",
+        "level": ""
+      },
+      "label": "gpt-5.6-luna@copilot reasoning level=default",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gpt-5.6-luna@copilot",
+      "resolved_provider": "copilot",
+      "api_model": "gpt-5.6-luna",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 4591,
+      "input_tokens": 4407,
+      "output_tokens": 131,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gpt-5.6-luna",
+        "provider": "copilot",
+        "level": "low"
+      },
+      "label": "gpt-5.6-luna@copilot reasoning level=low",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gpt-5.6-luna@copilot",
+      "resolved_provider": "copilot",
+      "api_model": "gpt-5.6-luna",
+      "effective_thinking": "low",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 5392,
+      "input_tokens": 4407,
+      "output_tokens": 102,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gpt-5.6-luna",
+        "provider": "copilot",
+        "level": "max"
+      },
+      "label": "gpt-5.6-luna@copilot reasoning level=max",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gpt-5.6-luna@copilot",
+      "resolved_provider": "copilot",
+      "api_model": "gpt-5.6-luna",
+      "effective_thinking": "max",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 7133,
+      "input_tokens": 4407,
+      "output_tokens": 190,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gpt-5.6-terra",
+        "provider": "copilot",
+        "level": ""
+      },
+      "label": "gpt-5.6-terra@copilot reasoning level=default",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gpt-5.6-terra@copilot",
+      "resolved_provider": "copilot",
+      "api_model": "gpt-5.6-terra",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 2840,
+      "input_tokens": 4407,
+      "output_tokens": 95,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gpt-5.6-terra",
+        "provider": "copilot",
+        "level": "low"
+      },
+      "label": "gpt-5.6-terra@copilot reasoning level=low",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gpt-5.6-terra@copilot",
+      "resolved_provider": "copilot",
+      "api_model": "gpt-5.6-terra",
+      "effective_thinking": "low",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 3275,
+      "input_tokens": 4407,
+      "output_tokens": 93,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gpt-5.6-terra",
+        "provider": "copilot",
+        "level": "max"
+      },
+      "label": "gpt-5.6-terra@copilot reasoning level=max",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gpt-5.6-terra@copilot",
+      "resolved_provider": "copilot",
+      "api_model": "gpt-5.6-terra",
+      "effective_thinking": "max",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 4100,
+      "input_tokens": 4407,
+      "output_tokens": 167,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gpt-6-luna",
+        "provider": "copilot",
+        "level": ""
+      },
+      "label": "gpt-6-luna@copilot reasoning level=default",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gpt-6-luna@copilot",
+      "resolved_provider": "copilot",
+      "api_model": "gpt-6-luna",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 2580,
+      "input_tokens": 58,
+      "output_tokens": 184,
+      "thinking_chars": 32,
+      "correct": true,
+      "thinking_delta_events": 1,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_delta": 1,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gpt-6-luna",
+        "provider": "copilot",
+        "level": "low"
+      },
+      "label": "gpt-6-luna@copilot reasoning level=low",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gpt-6-luna@copilot",
+      "resolved_provider": "copilot",
+      "api_model": "gpt-6-luna",
+      "effective_thinking": "low",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1924,
+      "input_tokens": 58,
+      "output_tokens": 114,
+      "thinking_chars": 32,
+      "correct": true,
+      "thinking_delta_events": 1,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_delta": 1,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gpt-6-luna",
+        "provider": "copilot",
+        "level": "max"
+      },
+      "label": "gpt-6-luna@copilot reasoning level=max",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gpt-6-luna@copilot",
+      "resolved_provider": "copilot",
+      "api_model": "gpt-6-luna",
+      "effective_thinking": "max",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 2524,
+      "input_tokens": 58,
+      "output_tokens": 228,
+      "thinking_chars": 41,
+      "correct": true,
+      "thinking_delta_events": 1,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_delta": 1,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    }
+  ],
+  "providers": [
+    "anthropic",
+    "antigravity",
+    "codex",
+    "copilot",
+    "openrouter"
+  ],
+  "run_at": "2026-10-04T20:02:47Z",
+  "uncredentialed": [
+    "gemini",
+    "mock",
+    "openai",
+    "reliant",
+    "vertexai",
+    "xai"
+  ]
+}

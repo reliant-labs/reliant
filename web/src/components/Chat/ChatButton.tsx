@@ -21,10 +21,11 @@ export function ChatButton({
   compact = false,
 }: ChatButtonProps) {
   return (
-    <Tooltip content={tooltip} placement="top">
+    <Tooltip content={tooltip} placement="top" delay={300} wrapperClassName="inline-flex">
       <button
         onClick={onClick}
         disabled={disabled}
+        aria-label={tooltip}
         className={`chat-button flex items-center justify-center rounded-full text-2xs font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
           compact
             ? "p-1 h-6 w-6"

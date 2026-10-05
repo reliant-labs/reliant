@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -79,6 +80,13 @@ func TestRemoteExecutor_SetDaemonRouterPanicsWhenNil(t *testing.T) {
 	require.Panics(t, func() {
 		exec.SetDaemonRouter(nil)
 	})
+}
+
+func (r *routerStub) OpenLocalModelHTTP(context.Context, string, string, *reliantv1.LocalModelHTTPRequest) (*LocalModelHTTPStream, error) {
+	return nil, nil
+}
+func (r *routerStub) RefreshLocalModels(context.Context, string, string) (*reliantv1.LocalModelInventory, error) {
+	return nil, nil
 }
 
 type recordingDaemonRouter struct {

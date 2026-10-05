@@ -34,7 +34,6 @@ var curatedDrivers = map[string]string{
 	"copilot": "gated on per-account GitHub Copilot model policy; see copilot/models.go",
 	"codex":   "a ChatGPT account serves a subset of the GPT catalog; see codex/models.go",
 	"mock":    "test fixtures; no driver package participates in resolution",
-	"xai":     "package is not wired into the resolver (no blank import in resolver.go)",
 }
 
 // TestEveryCatalogProviderMappingIsRegistered is the drift gate that this

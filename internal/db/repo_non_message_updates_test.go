@@ -244,6 +244,34 @@ func TestGetLatestNonMessageUpdatesPerEntity_ExcludesStreamFinalized(t *testing.
 	require.Equal(t, "approval-1", updates[0].EntityID)
 }
 
+// AGENT_MESSAGES_DRAINED announces mailbox rows that just became transcript
+// messages, so the pending-queue strip can retire them in the same commit. Its
+// entity_id is unique per drain, so the per-entity dedup keeps EVERY drain the
+// chat ever had: 624 rows / 90KB of a 1.7MB snapshot on a real chat. A fresh
+// snapshot has no strip to retire rows from — the mailbox hook re-reads
+// ListQueuedAgentMessages on mount — so a historical id tombstones nothing.
+func TestGetLatestNonMessageUpdatesPerEntity_ExcludesAgentMessagesDrained(t *testing.T) {
+	repo, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	chatID := seedChatForUpdates(t, repo, ctx)
+
+	require.NoError(t, repo.EmitAgentMessagesDrainedUpdate(ctx, chatID, AgentMessagesDrainedUpdate{
+		Thread: chatID, MessageIDs: []string{"agent-msg-1"},
+	}))
+	require.NoError(t, repo.EmitAgentMessagesDrainedUpdate(ctx, chatID, AgentMessagesDrainedUpdate{
+		Thread: chatID, MessageIDs: []string{"agent-msg-2"},
+	}))
+	require.NoError(t, repo.CreateChatUpdate(ctx, chatID, UpdateTypeApproval, "approval-1", `{"k":"v"}`))
+
+	updates, err := repo.GetLatestNonMessageUpdatesPerEntity(ctx, chatID)
+	require.NoError(t, err)
+
+	require.Len(t, updates, 1)
+	require.Equal(t, "approval-1", updates[0].EntityID)
+}
+
 // The skip-scan collapses by entity_id, but thread updates share their entity_id
 // (the workflow id) with workflow_status rows. Reading both through the
 // skip-scan would let the newest evict the other (measured: 198 workflow_status

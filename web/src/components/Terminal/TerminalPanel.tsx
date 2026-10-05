@@ -230,8 +230,9 @@ export function TerminalPanel(_props: TerminalPanelProps) {
         <div className="flex items-center gap-1">
           {/* Kill Active Terminal Button - only show if active session is in current worktree */}
           {activeSessionId && sessions.some((s) => s.id === activeSessionId) && (
-            <Tooltip content="Kill Active Terminal" placement="bottom">
+            <Tooltip content="Kill active terminal" placement="bottom" delay={300}>
               <button
+                aria-label="Kill active terminal"
                 onClick={(e) => {
                   if (activeSessionId) {
                     handleKillTerminal(activeSessionId, e);
@@ -245,8 +246,9 @@ export function TerminalPanel(_props: TerminalPanelProps) {
           )}
 
           {/* New Terminal Button */}
-          <Tooltip content="New Terminal (Cmd+Shift+J)" placement="bottom">
+          <Tooltip content="New terminal (Cmd+Shift+J)" placement="bottom" delay={300}>
             <button
+              aria-label="New terminal"
               onClick={handleNewTerminal}
               disabled={workingDir.kind !== "ready"}
               className="p-1 hover:bg-accent/20 rounded transition-colors disabled:opacity-50 disabled:pointer-events-none"
@@ -256,7 +258,7 @@ export function TerminalPanel(_props: TerminalPanelProps) {
           </Tooltip>
 
           {/* Collapse Panel Button */}
-          <Tooltip content="Hide Terminal Panel (Cmd+J)" placement="bottom">
+          <Tooltip content="Hide terminal panel (Cmd+J)" placement="bottom" delay={300}>
             <button
               onClick={hideTerminal}
               className="p-1 hover:bg-accent/20 rounded transition-all"

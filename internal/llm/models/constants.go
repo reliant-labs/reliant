@@ -54,16 +54,6 @@ const (
 	Gemini25FlashLite             ModelID = "gemini-2.5-flash-lite"
 )
 
-// XAI/Grok model IDs
-const (
-	Grok3Beta         ModelID = "grok-3-beta"
-	Grok3MiniBeta     ModelID = "grok-3-mini-beta"
-	Grok3FastBeta     ModelID = "grok-3-fast-beta"
-	Grok3MiniFastBeta ModelID = "grok-3-mini-fast-beta"
-	Grok4             ModelID = "grok-4"
-	GrokCodeFast      ModelID = "grok-code-fast"
-)
-
 // Vertex AI model IDs
 const (
 	VertexGemini25Pro    ModelID = "vertex-gemini-2.5-pro"

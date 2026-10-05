@@ -3,6 +3,8 @@ package runtime
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -31,6 +33,9 @@ import (
 func builtinSaveMessage(t *testing.T, file, nodeID string) *reliantv1.SaveMessageConfig {
 	t.Helper()
 	data, err := builtin.BuiltinWorkflowsFS.ReadFile(file)
+	if err != nil {
+		data, err = os.ReadFile(filepath.Join("testdata", "workflows", file))
+	}
 	require.NoError(t, err)
 	wf, err := wfyaml.ParseWorkflow(data)
 	require.NoError(t, err)

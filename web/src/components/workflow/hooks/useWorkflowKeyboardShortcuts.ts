@@ -50,7 +50,6 @@ export interface UseWorkflowKeyboardShortcutsArgs {
   /** Modal flags — Escape defers to modals when they're open. */
   showTemplateModal: boolean;
   showExitConfirmModal: boolean;
-  showActiveChatModal: boolean;
 }
 
 export function useWorkflowKeyboardShortcuts({
@@ -68,7 +67,6 @@ export function useWorkflowKeyboardShortcuts({
   setShowSettingsEditor,
   showTemplateModal,
   showExitConfirmModal,
-  showActiveChatModal,
 }: UseWorkflowKeyboardShortcutsArgs): void {
   // Keyboard shortcuts for undo/redo
   useEffect(() => {
@@ -111,7 +109,7 @@ export function useWorkflowKeyboardShortcuts({
       }
 
       // Skip if modals are open - let them handle ESC
-      if (showTemplateModal || showExitConfirmModal || showActiveChatModal) {
+      if (showTemplateModal || showExitConfirmModal) {
         return;
       }
 
@@ -155,8 +153,7 @@ export function useWorkflowKeyboardShortcuts({
     showSettingsEditor,
     showTemplateModal,
     showExitConfirmModal,
-    showActiveChatModal,
-    onEscape,
+      onEscape,
     isBuiltinWorkflow,
     setSelectedNodeId,
     setSelectedEdgeId,

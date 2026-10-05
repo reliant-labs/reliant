@@ -623,9 +623,19 @@ type ModelSelector struct {
 	// Tag-based model resolution (e.g., ["flagship", "fast"]).
 	Tags []string `protobuf:"bytes,2,rep,name=tags,proto3" json:"tags,omitempty"`
 	// Ordered list of preferred providers. Empty = system default.
-	Providers     []string `protobuf:"bytes,3,rep,name=providers,proto3" json:"providers,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Providers []string `protobuf:"bytes,3,rep,name=providers,proto3" json:"providers,omitempty"`
+	// Per-call thinking level chosen on the model page (e.g. "low", "high").
+	// Precedence: explicit call_llm node arg (author pinned) > this field >
+	// user tag preference > tier/model default. Empty = unset.
+	ThinkingLevel string `protobuf:"bytes,4,opt,name=thinking_level,json=thinkingLevel,proto3" json:"thinking_level,omitempty"`
+	// Per-call sampling temperature. Presence matters: 0 is a real value, unset
+	// means "use the tier/model default". Same precedence as thinking_level.
+	Temperature *float64 `protobuf:"fixed64,5,opt,name=temperature,proto3,oneof" json:"temperature,omitempty"`
+	// Compaction threshold in tokens. Unset or <= 0 = derive from the model.
+	// An explicit call_llm node arg wins over this field.
+	CompactionThreshold *int32 `protobuf:"varint,6,opt,name=compaction_threshold,json=compactionThreshold,proto3,oneof" json:"compaction_threshold,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *ModelSelector) Reset() {
@@ -677,6 +687,27 @@ func (x *ModelSelector) GetProviders() []string {
 		return x.Providers
 	}
 	return nil
+}
+
+func (x *ModelSelector) GetThinkingLevel() string {
+	if x != nil {
+		return x.ThinkingLevel
+	}
+	return ""
+}
+
+func (x *ModelSelector) GetTemperature() float64 {
+	if x != nil && x.Temperature != nil {
+		return *x.Temperature
+	}
+	return 0
+}
+
+func (x *ModelSelector) GetCompactionThreshold() int32 {
+	if x != nil && x.CompactionThreshold != nil {
+		return *x.CompactionThreshold
+	}
+	return 0
 }
 
 // DaemonSelectorProto specifies criteria for selecting which daemon executes tools.
@@ -6943,7 +6974,23 @@ type Workflow struct {
 	// a plain interactive agent so the user can keep talking after the pipeline
 	// ends. Must resolve to a real workflow and must not reference this workflow
 	// itself (no self-cycle).
-	TransitionTo  string `protobuf:"bytes,14,opt,name=transition_to,json=transitionTo,proto3" json:"transition_to,omitempty"`
+	TransitionTo string `protobuf:"bytes,14,opt,name=transition_to,json=transitionTo,proto3" json:"transition_to,omitempty"`
+	// Triggers declares WHEN this workflow should run: schedules, webhooks,
+	// integration events and other workflows' outcomes, each with an optional
+	// CEL filter and input mapping. A declaration is inert until a trigger row
+	// activates it (TriggerDefinition.workflow_trigger), which supplies whose
+	// run it is and where it executes.
+	Triggers []*WorkflowTrigger `protobuf:"bytes,15,rep,name=triggers,proto3" json:"triggers,omitempty"`
+	// Title is the human-facing display name ("Get It Right"). The `name` stays
+	// the stable identifier that refs, saved chats and the CLI address; Title is
+	// presentation only, so it can change without breaking any of them. When
+	// empty, UIs derive a title from the name.
+	Title string `protobuf:"bytes,16,opt,name=title,proto3" json:"title,omitempty"`
+	// Hidden keeps this workflow out of pickers and the library's default view.
+	// It stays fully runnable and referenceable — this is for building blocks
+	// other workflows `ref:` (structured-agent, scope-conversation), not for
+	// retiring a workflow. Delete a workflow to retire it.
+	Hidden        bool `protobuf:"varint,17,opt,name=hidden,proto3" json:"hidden,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -7069,12 +7116,33 @@ func (x *Workflow) GetTransitionTo() string {
 	return ""
 }
 
+func (x *Workflow) GetTriggers() []*WorkflowTrigger {
+	if x != nil {
+		return x.Triggers
+	}
+	return nil
+}
+
+func (x *Workflow) GetTitle() string {
+	if x != nil {
+		return x.Title
+	}
+	return ""
+}
+
+func (x *Workflow) GetHidden() bool {
+	if x != nil {
+		return x.Hidden
+	}
+	return false
+}
+
 var File_reliant_v1_workflow_v2_proto protoreflect.FileDescriptor
 
 const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\n" +
 	"\x1creliant/v1/workflow_v2.proto\x12\n" +
-	"reliant.v1\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1creliant/v1/annotations.proto\"F\n" +
+	"reliant.v1\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1creliant/v1/annotations.proto\x1a\x18reliant/v1/trigger.proto\"F\n" +
 	"\tCelString\x12\x1a\n" +
 	"\aliteral\x18\x01 \x01(\tH\x00R\aliteral\x12\x14\n" +
 	"\x04expr\x18\x02 \x01(\tH\x00R\x04exprB\a\n" +
@@ -7103,11 +7171,16 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\x04expr\x18\x01 \x01(\tR\x04expr\"$\n" +
 	"\n" +
 	"StringList\x12\x16\n" +
-	"\x06values\x18\x01 \x03(\tR\x06values\"Q\n" +
+	"\x06values\x18\x01 \x03(\tR\x06values\"\x80\x02\n" +
 	"\rModelSelector\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04tags\x18\x02 \x03(\tR\x04tags\x12\x1c\n" +
-	"\tproviders\x18\x03 \x03(\tR\tproviders\"\xcd\x01\n" +
+	"\tproviders\x18\x03 \x03(\tR\tproviders\x12%\n" +
+	"\x0ethinking_level\x18\x04 \x01(\tR\rthinkingLevel\x12%\n" +
+	"\vtemperature\x18\x05 \x01(\x01H\x00R\vtemperature\x88\x01\x01\x126\n" +
+	"\x14compaction_threshold\x18\x06 \x01(\x05H\x01R\x13compactionThreshold\x88\x01\x01B\x0e\n" +
+	"\f_temperatureB\x17\n" +
+	"\x15_compaction_threshold\"\xcd\x01\n" +
 	"\x13DaemonSelectorProto\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +
@@ -7747,7 +7820,7 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\v2\x14.reliant.v1.PositionR\x05value:\x028\x01\x1aW\n" +
 	"\rSwitchesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x120\n" +
-	"\x05value\x18\x02 \x01(\v2\x1a.reliant.v1.SwitchMetadataR\x05value:\x028\x01\"\xa8\x05\n" +
+	"\x05value\x18\x02 \x01(\v2\x1a.reliant.v1.SwitchMetadataR\x05value:\x028\x01\"\x8f\x06\n" +
 	"\bWorkflow\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12&\n" +
 	"\x05nodes\x18\x02 \x03(\v2\x10.reliant.v1.NodeR\x05nodes\x12&\n" +
@@ -7764,7 +7837,10 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\x06daemon\x18\f \x01(\v2\x1d.reliant.v1.CelDaemonSelectorR\x06daemon\x12\x1f\n" +
 	"\vresume_node\x18\r \x01(\tR\n" +
 	"resumeNode\x12#\n" +
-	"\rtransition_to\x18\x0e \x01(\tR\ftransitionTo\x1aL\n" +
+	"\rtransition_to\x18\x0e \x01(\tR\ftransitionTo\x127\n" +
+	"\btriggers\x18\x0f \x03(\v2\x1b.reliant.v1.WorkflowTriggerR\btriggers\x12\x14\n" +
+	"\x05title\x18\x10 \x01(\tR\x05title\x12\x16\n" +
+	"\x06hidden\x18\x11 \x01(\bR\x06hidden\x1aL\n" +
 	"\vInputsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12'\n" +
 	"\x05value\x18\x02 \x01(\v2\x11.reliant.v1.InputR\x05value:\x028\x01\x1a:\n" +
@@ -7889,6 +7965,7 @@ var file_reliant_v1_workflow_v2_proto_goTypes = []any{
 	nil,                             // 100: reliant.v1.Workflow.OutputsEntry
 	(*structpb.Struct)(nil),         // 101: google.protobuf.Struct
 	(*structpb.Value)(nil),          // 102: google.protobuf.Value
+	(*WorkflowTrigger)(nil),         // 103: reliant.v1.WorkflowTrigger
 }
 var file_reliant_v1_workflow_v2_proto_depIdxs = []int32{
 	7,   // 0: reliant.v1.CelStringList.literal:type_name -> reliant.v1.StringList
@@ -8076,24 +8153,25 @@ var file_reliant_v1_workflow_v2_proto_depIdxs = []int32{
 	80,  // 182: reliant.v1.Workflow.ui:type_name -> reliant.v1.WorkflowUI
 	16,  // 183: reliant.v1.Workflow.presets:type_name -> reliant.v1.PresetsConfig
 	10,  // 184: reliant.v1.Workflow.daemon:type_name -> reliant.v1.CelDaemonSelector
-	101, // 185: reliant.v1.ToolsConfig.ToolsEntry.value:type_name -> google.protobuf.Struct
-	101, // 186: reliant.v1.ExecuteToolsArgs.ResponseToolSchemasEntry.value:type_name -> google.protobuf.Struct
-	102, // 187: reliant.v1.InvokeToolArgs.ParamsEntry.value:type_name -> google.protobuf.Value
-	102, // 188: reliant.v1.ActionArgs.WithEntry.value:type_name -> google.protobuf.Value
-	102, // 189: reliant.v1.SubWorkflowArgs.ArgsEntry.value:type_name -> google.protobuf.Value
-	102, // 190: reliant.v1.LoopArgs.ArgsEntry.value:type_name -> google.protobuf.Value
-	55,  // 191: reliant.v1.ObjectInputConfig.PropertiesEntry.value:type_name -> reliant.v1.PropertySchema
-	55,  // 192: reliant.v1.PropertySchema.PropertiesEntry.value:type_name -> reliant.v1.PropertySchema
-	42,  // 193: reliant.v1.GroupInputConfig.InputsEntry.value:type_name -> reliant.v1.Input
-	101, // 194: reliant.v1.LoopOutput.ResultsEntry.value:type_name -> google.protobuf.Struct
-	77,  // 195: reliant.v1.WorkflowUI.PositionsEntry.value:type_name -> reliant.v1.Position
-	79,  // 196: reliant.v1.WorkflowUI.SwitchesEntry.value:type_name -> reliant.v1.SwitchMetadata
-	42,  // 197: reliant.v1.Workflow.InputsEntry.value:type_name -> reliant.v1.Input
-	198, // [198:198] is the sub-list for method output_type
-	198, // [198:198] is the sub-list for method input_type
-	198, // [198:198] is the sub-list for extension type_name
-	198, // [198:198] is the sub-list for extension extendee
-	0,   // [0:198] is the sub-list for field type_name
+	103, // 185: reliant.v1.Workflow.triggers:type_name -> reliant.v1.WorkflowTrigger
+	101, // 186: reliant.v1.ToolsConfig.ToolsEntry.value:type_name -> google.protobuf.Struct
+	101, // 187: reliant.v1.ExecuteToolsArgs.ResponseToolSchemasEntry.value:type_name -> google.protobuf.Struct
+	102, // 188: reliant.v1.InvokeToolArgs.ParamsEntry.value:type_name -> google.protobuf.Value
+	102, // 189: reliant.v1.ActionArgs.WithEntry.value:type_name -> google.protobuf.Value
+	102, // 190: reliant.v1.SubWorkflowArgs.ArgsEntry.value:type_name -> google.protobuf.Value
+	102, // 191: reliant.v1.LoopArgs.ArgsEntry.value:type_name -> google.protobuf.Value
+	55,  // 192: reliant.v1.ObjectInputConfig.PropertiesEntry.value:type_name -> reliant.v1.PropertySchema
+	55,  // 193: reliant.v1.PropertySchema.PropertiesEntry.value:type_name -> reliant.v1.PropertySchema
+	42,  // 194: reliant.v1.GroupInputConfig.InputsEntry.value:type_name -> reliant.v1.Input
+	101, // 195: reliant.v1.LoopOutput.ResultsEntry.value:type_name -> google.protobuf.Struct
+	77,  // 196: reliant.v1.WorkflowUI.PositionsEntry.value:type_name -> reliant.v1.Position
+	79,  // 197: reliant.v1.WorkflowUI.SwitchesEntry.value:type_name -> reliant.v1.SwitchMetadata
+	42,  // 198: reliant.v1.Workflow.InputsEntry.value:type_name -> reliant.v1.Input
+	199, // [199:199] is the sub-list for method output_type
+	199, // [199:199] is the sub-list for method input_type
+	199, // [199:199] is the sub-list for extension type_name
+	199, // [199:199] is the sub-list for extension extendee
+	0,   // [0:199] is the sub-list for field type_name
 }
 
 func init() { file_reliant_v1_workflow_v2_proto_init() }
@@ -8102,6 +8180,7 @@ func file_reliant_v1_workflow_v2_proto_init() {
 		return
 	}
 	file_reliant_v1_annotations_proto_init()
+	file_reliant_v1_trigger_proto_init()
 	file_reliant_v1_workflow_v2_proto_msgTypes[0].OneofWrappers = []any{
 		(*CelString_Literal)(nil),
 		(*CelString_Expr)(nil),
@@ -8126,6 +8205,7 @@ func file_reliant_v1_workflow_v2_proto_init() {
 		(*CelModelSelector_Literal)(nil),
 		(*CelModelSelector_Expr)(nil),
 	}
+	file_reliant_v1_workflow_v2_proto_msgTypes[8].OneofWrappers = []any{}
 	file_reliant_v1_workflow_v2_proto_msgTypes[10].OneofWrappers = []any{
 		(*CelDaemonSelector_Literal)(nil),
 		(*CelDaemonSelector_Expr)(nil),

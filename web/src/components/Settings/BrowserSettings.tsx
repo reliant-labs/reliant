@@ -4,6 +4,7 @@ import { Button } from "../ui/Button";
 import { toast } from "../../lib/toast-manager";
 import { api } from "../../api/client";
 import { cn } from "../../lib/utils";
+import { SettingsPageHeader } from "./SettingsPageHeader";
 
 export function BrowserSettings() {
   const [defaultPage, setDefaultPage] = useState("https://www.google.com");
@@ -88,12 +89,10 @@ export function BrowserSettings() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-base font-semibold mb-2">Web Browser</h2>
-        <p className="text-sm text-muted-foreground">
-          Configure your web browser settings and default homepage.
-        </p>
-      </div>
+      <SettingsPageHeader
+        title="Web Browser"
+        description="Controls Reliant's built-in browser, which you and agents use to preview and test pages. Choose where links open and which page new browser tabs start on."
+      />
 
       {/* Link Opening Preference */}
       <div className="space-y-4">

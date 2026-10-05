@@ -1,72 +1,68 @@
-import { useState, useEffect, memo, useMemo, useCallback } from "react";
-import {
-  FolderOpen,
-  GitBranch,
-  GitFork,
-  Cloud,
-  Loader2,
-  ArrowLeft,
-  Search,
-  X,
-  Pencil,
-  Trash2,
-  ChevronUp,
-  ChevronDown,
-  ChevronsUpDown,
-} from "lucide-react";
+import { useState, useEffect, memo, useMemo, useCallback, type ReactNode } from "react";
+import { ArrowLeft, FolderOpen, FolderPlus, GitFork, Loader2, Search, X } from "lucide-react";
 import { ConnectError, Code } from "@connectrpc/connect";
-import { useMutation, useQuery } from "@tanstack/react-query";
+
 import { useProjectStore } from "../../store/projectStore";
 import type { Project as StoreProject } from "../../store/projectStore";
 import { useApiKeySetupStore } from "../../store/apiKeySetupStore";
 import { cn } from "../../lib/utils";
-import {
-  basename,
-  collapseHomePath,
-  splitPathForDisplay as splitDisplayPathAtLastSegment,
-} from "../../lib/pathUtils";
-import { ProjectPickerModal } from "./ProjectPickerModal";
-import { RemoveProjectsModal } from "./RemoveProjectsModal";
-import { DirectoryPicker } from "./DirectoryPicker";
-import { Modal } from "../ui/Modal";
-import { RepoSelector } from "./RepoSelector";
-import { CloneTargetPicker } from "./CloneTargetPicker";
-import { addProjectLead } from "./addProjectActions";
-
+import { basename } from "../../lib/pathUtils";
 import { toast } from "../../lib/toast-manager";
 import { useDaemonStatus } from "../../hooks/useDaemonStatus";
-import { useResumeDaemon } from "../../hooks/useOnboardingQueries";
-import { ConnectDaemonModal } from "./ConnectDaemonModal";
-import { create } from "@bufbuild/protobuf";
-import { grpcClient } from "../../api/grpc-client";
-import {
-  DaemonStatus,
-  ListDaemonsRequestSchema,
-} from "../../gen/reliant/v1/daemon_registry_pb";
 import { useGitHubCredential } from "../../hooks/useGitHubCredential";
 import { capabilities } from "../../services/controlPlane/capabilities";
-import { deleteDaemon } from "../../services/controlPlane/daemon";
-import type { DaemonInfo as CloudDaemon } from "../../gen/reliant/v1/daemon_registry_pb";
-import {
-  cloneAvailability,
-  pickCloneTarget,
-  cloneDescription,
-  failureReason,
-  isFailedDaemon,
-} from "./cloneTargets";
-import { cloudDaemonStatusLabel } from "./cloudDaemonStatusLabel";
 import type { GitRepo } from "../../services/controlPlane/git";
 import { projectGrpc } from "../../api/project-grpc";
 import { cloudPathForRepo, repoNameFromUrl } from "../../lib/cloudProjectPath";
-
 import { settingsSync, SETTINGS_KEYS } from "../../services/settingsSync";
-import { GradientBackground } from "../GradientBackground";
-import { BrandMark } from "../icons/BrandMark";
+import { Modal } from "../ui/Modal";
+import { Tooltip } from "../ui/Tooltip";
+
+import { ProjectPickerModal } from "./ProjectPickerModal";
+import { RemoveProjectsModal } from "./RemoveProjectsModal";
+import { DirectoryPicker } from "./DirectoryPicker";
+import { RepoSelector } from "./RepoSelector";
+import { CloneTargetPicker } from "./CloneTargetPicker";
+import { addProjectLead } from "./addProjectActions";
+import { cloneAvailability, pickCloneTarget, cloneDescription } from "./cloneTargets";
+import {
+  SORT_DEFAULT_DIR,
+  isCloudDaemon,
+  projectMatchesQuery,
+  sortProjects,
+  type SortDir,
+  type SortMode,
+} from "./picker/format";
+import { pickerButton } from "./picker/buttonStyles";
+import type { AddProjectAction } from "./picker/addProjectActionModel";
+import { HeaderActions } from "./picker/HeaderActions";
+import { StartOptions } from "./picker/StartOptions";
+import { ProjectTable } from "./picker/ProjectTable";
+import {
+  MachineStatusPending,
+  MachineStatusStrip,
+  NoActiveMachinePanel,
+} from "./picker/MachineStatus";
+
+/**
+ * The project picker — the full page shown when no project is selected
+ * (ModernApp renders it under the app Header, which owns the Electron title
+ * bar and drag region, so this page needs none of its own).
+ *
+ * Layout, top to bottom, in forge's vocabulary:
+ *
+ *   header        "Projects" + one line, add-project actions on the right
+ *   machine       one status strip — or, with no active machine, a panel
+ *                 with the actions each machine supports
+ *   projects      toolbar (search, count, select) above a sortable table;
+ *                 with zero projects, a start panel offering each way in
+ *
+ * The page is a fixed-height column: the table is the only thing that
+ * scrolls when the list is long, so the header and toolbar never leave view.
+ */
 
 // Use the store's Project type so refs from useProjectStore.getState().projects
-// flow through without lossy widening. ProjectPicker accepts Partial fields in
-// a few code paths (existing project shape from the legacy callbacks) so we
-// alias rather than redefine.
+// flow through without lossy widening.
 type Project = StoreProject;
 
 type CloneTarget = {
@@ -83,408 +79,13 @@ interface ProjectPickerProps {
 // headers, which cost nothing extra.)
 const LIST_CONTROLS_MIN_PROJECTS = 5;
 
-type SortMode = "recent" | "name" | "path";
-type SortDir = "asc" | "desc";
-
-// Each sortable column's default direction. Recency wants newest-first, but
-// text columns want A→Z, so the first click on a header shouldn't be a
-// uniform "ascending".
-const SORT_DEFAULT_DIR: Record<SortMode, SortDir> = {
-  recent: "desc",
-  name: "asc",
-  path: "asc",
-};
-
-// Relative "last active" stamp. Deliberately coarse — in a project picker the
-// useful signal is "today vs. last week", not a precise timestamp.
-function formatLastActive(iso: string): string {
-  const then = new Date(iso).getTime();
-  if (!Number.isFinite(then)) return "—";
-  const mins = Math.floor((Date.now() - then) / 60000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  if (days < 7) return `${days}d ago`;
-  const weeks = Math.floor(days / 7);
-  if (weeks < 5) return `${weeks}w ago`;
-  const months = Math.floor(days / 30);
-  if (months < 12) return `${months}mo ago`;
-  return `${Math.floor(days / 365)}y ago`;
-}
-
-// Collapse the user's home directory to "~". The daemon may be on any OS, so
-// this covers macOS/Linux (/Users/x, /home/x) and Windows (C:\Users\x) alike.
-const displayPath = collapseHomePath;
-
-/**
- * Split a path for middle-ellipsis rendering.
- *
- * Long project paths used to overflow the row and push the name out of view.
- * CSS alone can only truncate at the end, which hides the leaf directory —
- * exactly the part that distinguishes two checkouts of the same repo. So we
- * hand the head to a `truncate` span and pin the last segment beside it,
- * giving "~/src/very/long/…/my-project".
- */
-function splitPathForDisplay(path: string): { head: string; tail: string } {
-  return splitDisplayPathAtLastSegment(displayPath(path));
-}
-
-// Case-insensitive substring match over the fields a user would search by.
-// Deliberately not fuzzy: with a handful of projects, substring matching is
-// predictable and never surprises you with a "close" hit.
-function projectMatchesQuery(project: Project, needle: string): boolean {
-  if (!needle) return true;
-  const haystack = `${project.name} ${displayPath(project.path)} ${project.path}`;
-  return haystack.toLowerCase().includes(needle);
-}
-
-// Treat reliant.v1.DaemonInfo.daemon_type "managed" as a cloud daemon. Only
-// cloud daemons are valid clone targets — local/self-hosted daemons have
-// their own filesystem and aren't reachable through the control-plane clone
-// path. The string set matches normalizeRegisteredDaemonType in reliant's
-// tools_daemon.go.
-const CLOUD_DAEMON_TYPES = new Set(["managed", "cloud"]);
-function isCloudDaemon(daemonType: string | undefined): boolean {
-  return CLOUD_DAEMON_TYPES.has((daemonType ?? "").toLowerCase());
-}
-
-// A daemon's status rendered as a dot + sentence-case word, rather than the
-// shouty uppercase monospace it used to be. Colour carries the meaning; the
-// text is there to name it.
-const DAEMON_STATUS_DOT: Record<string, string> = {
-  active: "bg-emerald-500",
-  starting: "bg-amber-500",
-  resuming: "bg-amber-500",
-  suspended: "bg-muted-foreground/50",
-  failed: "bg-destructive",
-  disconnected: "bg-destructive/70",
-};
-
-function DaemonStatusBadge({ label }: { label: string }) {
-  const dot = DAEMON_STATUS_DOT[label] ?? "bg-muted-foreground/50";
+function isAlreadyExistsError(error: unknown): boolean {
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-muted/40 px-2 py-0.5 text-xs font-medium capitalize text-muted-foreground">
-      <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${dot}`} aria-hidden="true" />
-      {label}
-    </span>
+    (error instanceof ConnectError && error.code === Code.AlreadyExists) ||
+    (error instanceof Error &&
+      (error.message.includes("already exists") || error.message.includes("409")))
   );
 }
-
-// A sortable column header. Clicking the active column flips direction;
-// clicking another switches to it. aria-sort keeps that legible to screen
-// readers, which a styled <div> row never would.
-function SortableHeader({
-  mode,
-  label,
-  activeMode,
-  dir,
-  onSort,
-}: {
-  mode: SortMode;
-  label: string;
-  activeMode: SortMode;
-  dir: SortDir;
-  onSort: (mode: SortMode) => void;
-}) {
-  const isActive = mode === activeMode;
-  return (
-    <th
-      scope="col"
-      aria-sort={isActive ? (dir === "asc" ? "ascending" : "descending") : "none"}
-      className="px-3 py-2 font-medium"
-    >
-      <button
-        type="button"
-        onClick={() => onSort(mode)}
-        className={cn(
-          "group inline-flex items-center gap-1 text-xs uppercase tracking-wide transition-colors",
-          isActive
-            ? "text-foreground"
-            : "text-muted-foreground hover:text-foreground",
-        )}
-        data-testid={`project-sort-${mode}`}
-      >
-        {label}
-        {isActive ? (
-          dir === "asc" ? (
-            <ChevronUp className="h-3 w-3" aria-hidden="true" />
-          ) : (
-            <ChevronDown className="h-3 w-3" aria-hidden="true" />
-          )
-        ) : (
-          // Reserve the caret's space on inactive headers so the labels don't
-          // shift horizontally when the sort column changes.
-          <ChevronsUpDown
-            className="h-3 w-3 opacity-0 transition-opacity group-hover:opacity-60"
-            aria-hidden="true"
-          />
-        )}
-      </button>
-    </th>
-  );
-}
-
-// NoCloudDaemonsState — rendered when the user is in web mode with no active
-// local daemon. Two sub-cases:
-//   - No cloud daemons exist for the user → CTA routes to onboarding ComputeStep.
-//   - Cloud daemon(s) exist but none active → list Resume buttons; secondary
-//     link still routes to onboarding for "connect a new daemon".
-function NoActiveDaemonState() {
-  const [error, setError] = useState<string | null>(null);
-  const [connectOpen, setConnectOpen] = useState(false);
-  const hasCloud = capabilities.cloudDaemons;
-
-  // One list, from the registry — the service that knows both whether a
-  // machine has actually attached AND what it is doing (see
-  // docs/design/one-daemon-list.md). This used to read control-plane's
-  // ListDaemons, which could answer the second question and not the first.
-  const {
-    data: cloudDaemons,
-    isLoading,
-    refetch,
-  } = useQuery<CloudDaemon[]>({
-    queryKey: ["projectPicker", "cloudDaemons"],
-    queryFn: async () => {
-      const resp = await grpcClient
-        .daemonRegistry()
-        .listDaemons(create(ListDaemonsRequestSchema));
-      return resp.daemons.filter((d) => isCloudDaemon(d.daemonType));
-    },
-    enabled: hasCloud,
-    refetchInterval: 8_000,
-    refetchIntervalInBackground: false,
-    staleTime: 5_000,
-  });
-
-  // The hook owns the ResourceExhausted-with-reason suppression (the global
-  // upgradeInterceptor already opened the modal); we only see non-reasoned
-  // errors here and surface them as the inline banner + toast.
-  const resumeDaemonMutation = useResumeDaemon({
-    onSuccess: async () => {
-      // Refetch so the user sees the status flip toward ACTIVE; the picker
-      // page itself will rerender once useDaemonStatus picks up the new
-      // active daemon and the showConnectionInstructions branch flips off.
-      await refetch();
-    },
-    onError: (err) => {
-      const msg = err instanceof Error ? err.message : "Failed to resume daemon";
-      setError(msg);
-      toast.error(msg);
-    },
-  });
-  const resumingId =
-    resumeDaemonMutation.isPending && typeof resumeDaemonMutation.variables === "string"
-      ? resumeDaemonMutation.variables
-      : null;
-
-  const handleResume = (daemon: CloudDaemon) => {
-    if (daemon.status !== DaemonStatus.SUSPENDED) return;
-    setError(null);
-    resumeDaemonMutation.mutate(daemon.daemonId);
-  };
-
-  // A FAILED machine cannot be resumed — provisioning never completed, so
-  // there is nothing to wake. The only recovery the product offers is to
-  // delete it and create a new one, which is exactly what Settings → Machines
-  // does; without this branch a failed machine rendered with no action at
-  // all, which is the dead end this fixes.
-  const deleteDaemonMutation = useMutation({
-    mutationFn: (daemonId: string) => deleteDaemon(daemonId),
-    onSuccess: async () => {
-      setError(null);
-      await refetch();
-    },
-    onError: (err) => {
-      const msg = err instanceof Error ? err.message : "Failed to delete machine";
-      setError(msg);
-      toast.error(msg);
-    },
-  });
-  const deletingId =
-    deleteDaemonMutation.isPending && typeof deleteDaemonMutation.variables === "string"
-      ? deleteDaemonMutation.variables
-      : null;
-
-  const handleDeleteFailed = (daemon: CloudDaemon) => {
-    if (!isFailedDaemon(daemon)) return;
-    if (
-      !window.confirm(
-        `Delete ${daemon.hostname || "this machine"}? It failed to start and can't be recovered. You can create a new one afterwards.`,
-      )
-    ) {
-      return;
-    }
-    setError(null);
-    deleteDaemonMutation.mutate(daemon.daemonId);
-  };
-
-  if (!hasCloud) {
-    // Local-only deployment: nothing to resume; surface the self-hosted
-    // connect instructions in-place instead of bouncing into onboarding.
-    return (
-      <div className="relative backdrop-blur-2xl bg-card/90 border border-border/50 rounded-2xl mb-6 overflow-hidden p-6">
-        <h3 className="text-lg font-semibold text-foreground mb-1">
-          Connect a daemon
-        </h3>
-        <p className="text-sm text-muted-foreground mb-4">
-          Reliant needs a running daemon to access your projects. Connect one
-          here — no onboarding required.
-        </p>
-        <button
-          onClick={() => setConnectOpen(true)}
-          className="w-full px-4 py-2.5 bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg text-sm font-semibold transition-colors"
-        >
-          Connect a daemon
-        </button>
-        <ConnectDaemonModal
-          isOpen={connectOpen}
-          onClose={() => setConnectOpen(false)}
-        />
-      </div>
-    );
-  }
-
-  const daemons = cloudDaemons ?? [];
-  const hasAnyCloudDaemon = daemons.length > 0;
-  // "Resume a daemon" is a lie when every machine failed — there is nothing
-  // resumable, and the user's next step is to replace one.
-  const allFailed = hasAnyCloudDaemon && daemons.every(isFailedDaemon);
-
-  return (
-    <div className="relative backdrop-blur-2xl bg-card/90 border border-border/50 rounded-2xl mb-6 overflow-hidden p-6">
-      <h3 className="text-lg font-semibold text-foreground mb-1">
-        {allFailed
-          ? "Your machine needs attention"
-          : hasAnyCloudDaemon
-            ? "Resume a daemon"
-            : "Start a daemon"}
-      </h3>
-      <p className="text-sm text-muted-foreground mb-4">
-        {allFailed
-          ? "Every machine on your account failed to start. Delete the failed one and connect a new one to carry on."
-          : hasAnyCloudDaemon
-            ? "Pick a daemon to wake up. The picker will refresh once it's connected."
-            : "You don't have a daemon yet. Onboarding will create one in the cloud."}
-      </p>
-
-      {isLoading && (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
-          <Loader2 className="w-4 h-4 animate-spin" />
-          Loading daemons...
-        </div>
-      )}
-
-      {hasAnyCloudDaemon && (
-        <div className="space-y-2">
-          {daemons.map((daemon) => {
-            const isResuming = resumingId === daemon.daemonId;
-            const isSuspended = daemon.status === DaemonStatus.SUSPENDED;
-            const failed = isFailedDaemon(daemon);
-            const isDeleting = deletingId === daemon.daemonId;
-            const statusLabel = cloudDaemonStatusLabel(daemon, isResuming);
-
-            // A failed machine is not a resume button with the label
-            // changed: the action is different (delete), and the reason it
-            // failed is the most useful thing on the row.
-            if (failed) {
-              const reason = failureReason(daemon);
-              return (
-                <div
-                  key={daemon.daemonId}
-                  className="w-full flex items-center justify-between gap-3 px-4 py-3 rounded-lg bg-background/80 border border-destructive/40"
-                  data-testid={`failed-daemon-${daemon.daemonId}`}
-                >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <Cloud className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                    <div className="min-w-0">
-                      <div className="text-sm font-medium text-foreground truncate">
-                        {daemon.hostname || "daemon"}
-                      </div>
-                      <div className="text-xs text-destructive-ink">
-                        {reason
-                          ? `Failed to start: ${reason}`
-                          : "Failed to start. No reason was reported."}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    <DaemonStatusBadge label={statusLabel} />
-                    <button
-                      type="button"
-                      onClick={() => handleDeleteFailed(daemon)}
-                      disabled={isDeleting}
-                      className="px-2.5 py-1 rounded-md border border-border text-xs text-muted-foreground transition-colors hover:border-destructive/50 hover:text-destructive-ink disabled:opacity-60"
-                    >
-                      {isDeleting ? "Deleting…" : "Delete"}
-                    </button>
-                  </div>
-                </div>
-              );
-            }
-
-            return (
-              <button
-                key={daemon.daemonId}
-                type="button"
-                onClick={() => handleResume(daemon)}
-                disabled={isResuming || !isSuspended}
-                className="w-full flex items-center justify-between gap-3 px-4 py-3 rounded-lg bg-background/80 border border-border/60 hover:border-primary/40 disabled:opacity-60 disabled:cursor-not-allowed transition-colors text-left"
-              >
-                <div className="flex items-center gap-3 min-w-0">
-                  <Cloud className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                  <div className="min-w-0">
-                    <div className="text-sm font-medium text-foreground truncate">
-                      Resume {daemon.hostname || "daemon"}
-                    </div>
-                    {daemon.lastStatusMessage && (
-                      // A failed machine's message is the REASON it failed
-                      // ("Storage request 20Gi exceeds your plan's limit of
-                      // 5Gi"), so it is rendered in the destructive colour
-                      // and allowed to wrap. Muted-and-truncated hid exactly
-                      // the half of the sentence carrying the remedy.
-                      <div
-                        className={
-                          statusLabel === "failed"
-                            ? "text-xs text-destructive-ink"
-                            : "text-xs text-muted-foreground truncate"
-                        }
-                      >
-                        {daemon.lastStatusMessage}
-                      </div>
-                    )}
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 flex-shrink-0">
-                  {isResuming && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />}
-                  <DaemonStatusBadge label={statusLabel} />
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      )}
-
-      {error && <p className="mt-3 text-xs text-destructive-ink">{error}</p>}
-
-      <button
-        type="button"
-        onClick={() => setConnectOpen(true)}
-        className="mt-4 w-full text-center text-xs text-muted-foreground hover:text-primary transition-colors py-1"
-      >
-        {hasAnyCloudDaemon ? "Connect a new daemon" : "Connect a daemon"}
-      </button>
-
-      <ConnectDaemonModal
-        isOpen={connectOpen}
-        onClose={() => setConnectOpen(false)}
-      />
-    </div>
-  );
-}
-
-
 
 function ProjectPickerComponent({ onProjectSelected }: ProjectPickerProps) {
   const projects = useProjectStore((state) => state.projects);
@@ -498,15 +99,14 @@ function ProjectPickerComponent({ onProjectSelected }: ProjectPickerProps) {
   const [isDirectoryPickerOpen, setIsDirectoryPickerOpen] = useState(false);
   const [isCloneModalOpen, setIsCloneModalOpen] = useState(false);
   const [cloneStatus, setCloneStatus] = useState<string | null>(null);
-  const [isOpenButtonHovered, setIsOpenButtonHovered] = useState(false);
-  const [isCloneButtonHovered, setIsCloneButtonHovered] = useState(false);
   const [query, setQuery] = useState("");
   const [sortMode, setSortMode] = useState<SortMode>("recent");
   const [sortDir, setSortDir] = useState<SortDir>(SORT_DEFAULT_DIR.recent);
-  // Management mode. Off by default so the picker stays a one-click "open a
-  // project" surface; turning it on swaps row clicks from "open" to "select"
-  // and reveals the rename / remove affordances.
-  const [isManaging, setIsManaging] = useState(false);
+  // Selection mode, for bulk remove. Off by default so the picker stays a
+  // one-click "open a project" surface; turning it on swaps row clicks from
+  // "open" to "select". Single-row rename / remove don't need it — they sit on
+  // each row.
+  const [isSelecting, setIsSelecting] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState("");
@@ -533,8 +133,6 @@ function ProjectPickerComponent({ onProjectSelected }: ProjectPickerProps) {
     ensureApiKeyOrShowModal();
   }, [ensureApiKeyOrShowModal]);
 
-
-
   const handleProjectClick = (project: Project) => {
     // Always attempt to open the project. Daemon resolution happens at open
     // time inside onProjectSelected (and downstream), so the picker never
@@ -543,10 +141,10 @@ function ProjectPickerComponent({ onProjectSelected }: ProjectPickerProps) {
     onProjectSelected(project);
   };
 
-  // Leaving management mode drops any selection and in-flight rename, so the
+  // Leaving selection mode drops any selection and in-flight rename, so the
   // picker can't come back with stale checkboxes ticked.
-  const exitManageMode = useCallback(() => {
-    setIsManaging(false);
+  const exitSelectMode = useCallback(() => {
+    setIsSelecting(false);
     setSelectedIds(new Set());
     setRenamingId(null);
   }, []);
@@ -556,6 +154,17 @@ function ProjectPickerComponent({ onProjectSelected }: ProjectPickerProps) {
       const next = new Set(prev);
       if (next.has(projectId)) next.delete(projectId);
       else next.add(projectId);
+      return next;
+    });
+  }, []);
+
+  const setSelected = useCallback((projectIds: string[], selected: boolean) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      for (const id of projectIds) {
+        if (selected) next.add(id);
+        else next.delete(id);
+      }
       return next;
     });
   }, []);
@@ -631,16 +240,14 @@ function ProjectPickerComponent({ onProjectSelected }: ProjectPickerProps) {
   const showConnectionInstructions = isWebMode && !activeDaemon && !daemonLoading;
 
   const { hasToken: hasGitHubCredential } = useGitHubCredential();
-  // Cloud daemons are the only valid clone targets. Self-hosted daemons can
-  // still be "viewed" via the switcher (you see which projects live on
-  // them), but the clone affordances stay disabled — cloning requires a
-  // managed daemon that the control plane can reach.
+  // Cloud machines are the only valid clone targets — cloning requires a
+  // managed machine the control plane can reach.
   const cloudDaemons = useMemo(
     () => daemons.filter((d) => isCloudDaemon(d.daemonType)),
     [daemons],
   );
-  // Hostname lookup for naming daemons in the clone status toast. Falls back
-  // to a short id slice when the daemon row hasn't loaded yet.
+  // Hostname lookup for naming machines in the clone status toast. Falls back
+  // to a short id slice when the row hasn't loaded yet.
   const hostnameFor = useCallback(
     (daemonId: string) => {
       const d = daemons.find((x) => x.daemonId === daemonId);
@@ -649,19 +256,8 @@ function ProjectPickerComponent({ onProjectSelected }: ProjectPickerProps) {
     [daemons],
   );
 
-  // selectedCloneDaemon — the cloud daemon the top-level "Clone repo" flow
-  // installs onto by default.
-  //
-  // This used to be "the first ACTIVE cloud daemon the server listed", which
-  // is indistinguishable from correct with one machine and wrong with
-  // several: the checkout lands on whichever row sorted first, and nothing
-  // told the user which that was. The default is now the most recently used
-  // machine (pickCloneTarget), and CloneTargetPicker lets them change it.
-  //
-  // It used to take attachment from the registry list and clone-eligibility
-  // from a second control-plane list, because neither could answer both. One
-  // list now answers both, so there is nothing left to reconcile and
-  // pickCloneTarget decides alone.
+  // The cloud machine a clone installs onto by default: the most recently
+  // used one (pickCloneTarget). CloneTargetPicker lets the user change it.
   const selectedCloneDaemon = useMemo<CloneTarget | null>(() => {
     const preferred = pickCloneTarget(cloudDaemons);
     if (!preferred) return null;
@@ -676,38 +272,23 @@ function ProjectPickerComponent({ onProjectSelected }: ProjectPickerProps) {
   // that choice must win over the default for as long as the modal is open.
   const [chosenCloneDaemonId, setChosenCloneDaemonId] = useState<string | null>(null);
 
-  // The picker's top "Clone repo" affordance. It is VISIBLE whenever the
-  // account has cloud daemons at all, and merely DISABLED (carrying the
-  // reason) when no machine can take a clone right now.
-  //
-  // Hiding it is what produced the reported dead end: with every machine
-  // FAILED there was no add-project entry point anywhere in the app. A
-  // disabled control that explains itself is recoverable; an absent one is
-  // not. RepoSelector owns the GitHub-credential-missing state separately.
+  // "Clone" is VISIBLE whenever the account can have cloud machines at all,
+  // and merely DISABLED (carrying the reason) when none can take a clone right
+  // now. Hiding it is what produced the reported dead end: with every machine
+  // FAILED there was no add-project entry point anywhere in the app.
   const cloneState = useMemo(() => cloneAvailability(cloudDaemons), [cloudDaemons]);
   const showCloneAction = capabilities.cloudDaemons;
 
   // Which add-project action leads. A cloud user's code is never on the
   // browser host's filesystem, so leading them at the directory picker sends
-  // them somewhere that cannot work; a local-daemon user's filesystem IS
-  // theirs, so browsing is the faster route. See addProjectActions.ts.
+  // them somewhere that cannot work; a local-machine user's filesystem IS
+  // theirs. See addProjectActions.ts.
   const cloneLeads =
     showCloneAction &&
     addProjectLead({
       hasCloudDaemons: cloudDaemons.length > 0,
       activeDaemonType: activeDaemon?.daemonType,
     }) === "clone";
-
-  // The actions actually rendered, in order. "Open folder" is dropped only
-  // when there is no local filesystem to browse at all (web mode with no
-  // attached daemon) — the case that used to blank the entire card.
-  const orderedAddProjectActions = useMemo<Array<"clone" | "open">>(() => {
-    const actions: Array<"clone" | "open"> = [];
-    if (cloneLeads && showCloneAction) actions.push("clone");
-    if (!showConnectionInstructions) actions.push("open");
-    if (!cloneLeads && showCloneAction) actions.push("clone");
-    return actions;
-  }, [cloneLeads, showCloneAction, showConnectionInstructions]);
 
   // Which machine the next clone actually lands on: the user's explicit
   // choice when they made one, else the recency default, else any machine
@@ -717,18 +298,13 @@ function ProjectPickerComponent({ onProjectSelected }: ProjectPickerProps) {
     selectedCloneDaemon?.daemonId ??
     (cloneState.kind === "ready" ? cloneState.target.daemonId : null);
 
-  // Add a repo as a project on a target daemon, in ONE server call.
-  //
-  // This used to be four calls from here — cloneRepo, createProject,
-  // markProjectInstalled, plus an already-exists recovery — each able to fail
-  // on its own and leave a project with no checkout or a checkout with no
-  // project. CreateProjectFromRepo owns that sequence server-side now, so
-  // this function's whole job is to ask, report, and open.
+  // Add a repo as a project on a target machine, in ONE server call.
+  // CreateProjectFromRepo owns clone + create + install server-side, so this
+  // function's whole job is to ask, report, and open.
   //
   // It returns as soon as the clone is QUEUED: the machine may still be
   // asleep, so the checkout does not exist yet and the copy must not pretend
-  // it does. The real outcome arrives over the updates stream (the daemon's
-  // FileSystemChanged / DaemonCommandFailed, replayed via user_updates).
+  // it does. The real outcome arrives over the updates stream.
   const cloneAndOpen = useCallback(
     async (
       repo: { cloneUrl: string; defaultBranch: string; fullName?: string },
@@ -774,9 +350,6 @@ function ProjectPickerComponent({ onProjectSelected }: ProjectPickerProps) {
     [hostnameFor, loadProjects, onProjectSelected, selectProject],
   );
 
-  // Modal "Clone repo" → user picks a fresh repo to install on the active
-  // cloud daemon. The clone target may come from the local registry or the
-  // control-plane daemon list.
   const handleRepoSelectedFromModal = async (repo: GitRepo) => {
     setIsCloneModalOpen(false);
     // The machine the user chose in the modal, or the recency default. A
@@ -802,6 +375,50 @@ function ProjectPickerComponent({ onProjectSelected }: ProjectPickerProps) {
     }
   };
 
+  // Create (or reopen) a project for a folder the user picked, by either the
+  // native Electron dialog or the in-app DirectoryPicker.
+  const openFolderAsProject = async (selectedPath: string) => {
+    const projectName = basename(selectedPath) || selectedPath || "Untitled Project";
+    const projectData = {
+      name: projectName,
+      path: selectedPath,
+      description: "",
+      is_git_repo: false, // Determined by the backend
+      default_branch: "main",
+    };
+
+    const loadingToast = toast.loading(`Opening project "${projectName}"...`);
+    try {
+      const createdProject = await createProject(projectData);
+      toast.dismiss(loadingToast);
+      // Reload to pick up initialization status
+      await loadProjects();
+      if (createdProject) {
+        handleProjectClick(createdProject);
+      }
+    } catch (error) {
+      toast.dismiss(loadingToast);
+      // A project already registered at this path: open it instead.
+      if (isAlreadyExistsError(error)) {
+        const existing = projects.find((p) => p.path === selectedPath);
+        if (existing) {
+          toast.success(`Opening existing project "${existing.name}"`);
+          handleProjectClick(existing);
+          return;
+        }
+        // Might not be in our loaded list yet; reload and try again
+        await loadProjects();
+        const found = useProjectStore.getState().projects.find((p) => p.path === selectedPath);
+        if (found) {
+          toast.success(`Opening existing project "${found.name}"`);
+          handleProjectClick(found);
+          return;
+        }
+      }
+      console.error("Failed to create project:", error);
+    }
+  };
+
   const handleOpenExistingProject = async () => {
     // In browser mode, open the directory picker to browse the filesystem
     if (!isElectron) {
@@ -815,122 +432,68 @@ function ProjectPickerComponent({ onProjectSelected }: ProjectPickerProps) {
     } catch (err) {
       console.error("Failed to select directory via Electron:", err);
     }
-    
-    if (selectedPath) {
-      // Create a project for the selected directory
-      const projectName = basename(selectedPath) || selectedPath || "Untitled Project";
-      const projectData = {
-        name: projectName,
-        path: selectedPath,
-        description: "",
-        is_git_repo: false, // Will be determined by the backend
-        default_branch: "main",
-      };
-
-      // Create the project in the store with toast notification
-      const loadingToast = toast.loading(
-        `Opening project "${projectName}"...`
-      );
-      try {
-        const createdProject = await createProject(projectData);
-        toast.dismiss(loadingToast);
-
-        // Reload the projects list to get initialization status
-        await loadProjects();
-
-        // Select the newly created project (it will go through initialization check)
-        if (createdProject) {
-          handleProjectClick(createdProject);
-        }
-      } catch (error) {
-        toast.dismiss(loadingToast);
-        // If project already exists at this path, find and open it
-        const isAlreadyExists =
-          (error instanceof ConnectError && error.code === Code.AlreadyExists) ||
-          (error instanceof Error && (error.message.includes("already exists") || error.message.includes("409")));
-        if (isAlreadyExists) {
-          const existing = projects.find((p) => p.path === selectedPath);
-          if (existing) {
-            toast.success(`Opening existing project "${existing.name}"`);
-            handleProjectClick(existing);
-            return;
-          }
-          // Project might not be in our loaded list yet; reload and try again
-          await loadProjects();
-          const refreshed = useProjectStore.getState().projects;
-          const found = refreshed.find((p) => p.path === selectedPath);
-          if (found) {
-            toast.success(`Opening existing project "${found.name}"`);
-            handleProjectClick(found);
-            return;
-          }
-        }
-        console.error("Failed to create project:", error);
-      }
-    }
+    if (selectedPath) await openFolderAsProject(selectedPath);
   };
 
-  const handleDirectoryPickerSelect = async (selectedPath: string) => {
-    const projectName = basename(selectedPath) || selectedPath || "Untitled Project";
-    const projectData = {
-      name: projectName,
-      path: selectedPath,
-      description: "",
-      is_git_repo: false,
-      default_branch: "main",
-    };
-
-    const loadingToast = toast.loading(`Opening project "${projectName}"...`);
-    try {
-      const createdProject = await createProject(projectData);
-      toast.dismiss(loadingToast);
-      await loadProjects();
-      if (createdProject) {
-        handleProjectClick(createdProject);
-      }
-    } catch (error) {
-      toast.dismiss(loadingToast);
-      const isAlreadyExists =
-        (error instanceof ConnectError && error.code === Code.AlreadyExists) ||
-        (error instanceof Error && (error.message.includes("already exists") || error.message.includes("409")));
-      if (isAlreadyExists) {
-        const existing = projects.find((p) => p.path === selectedPath);
-        if (existing) {
-          toast.success(`Opening existing project "${existing.name}"`);
-          handleProjectClick(existing);
-          return;
+  // The add-project actions, in lead order. "Open folder" and "New project"
+  // are dropped only when there is no filesystem to reach at all (web mode
+  // with no attached machine); "Clone" stays whenever the account can have
+  // cloud machines, disabled with a reason when none can take a clone.
+  // Recomputed every render rather than memoized: it is a handful of object
+  // literals, and memoizing would freeze handleOpenExistingProject's closure
+  // over a stale project list.
+  const addProjectActions: AddProjectAction[] = (() => {
+    const clone: AddProjectAction | null = showCloneAction
+      ? {
+          kind: "clone",
+          label: cloneLeads ? "Clone from GitHub" : "Clone repository",
+          description: cloneDescription({
+            cloneState,
+            hasGitHubCredential,
+            fallbackHost: selectedCloneDaemon?.hostname,
+          }),
+          icon: GitFork,
+          onClick: () => setIsCloneModalOpen(true),
+          disabled: cloneState.kind === "blocked",
+          lead: cloneLeads,
+          testId: "project-picker-clone-repo",
         }
-        await loadProjects();
-        const refreshed = useProjectStore.getState().projects;
-        const found = refreshed.find((p) => p.path === selectedPath);
-        if (found) {
-          toast.success(`Opening existing project "${found.name}"`);
-          handleProjectClick(found);
-          return;
+      : null;
+    const machineReachable = !showConnectionInstructions;
+    const open: AddProjectAction | null = machineReachable
+      ? {
+          kind: "open",
+          label: "Open folder",
+          description: isElectron
+            ? "Choose a folder on this computer and open it as a project."
+            : "Browse to a folder on your machine and open it as a project.",
+          icon: FolderOpen,
+          onClick: () => void handleOpenExistingProject(),
+          disabled: false,
+          lead: !cloneLeads,
+          testId: "project-picker-open-folder",
         }
-      }
-      console.error("Failed to create project:", error);
-    }
-  };
+      : null;
+    const create: AddProjectAction | null = machineReachable
+      ? {
+          kind: "new",
+          label: "New project",
+          description: "Add a folder by its full path, with a name and default branch.",
+          icon: FolderPlus,
+          onClick: () => setIsCreateModalOpen(true),
+          disabled: false,
+          lead: false,
+          testId: "project-picker-new-project",
+        }
+      : null;
+    const ordered = cloneLeads ? [clone, open, create] : [open, clone, create];
+    return ordered.filter((a): a is AddProjectAction => a !== null);
+  })();
 
-  // Sort projects by the active column. "recent" is the default because the
-  // picker's job is usually "get me back where I was". Each comparator is
-  // written ascending and flipped for "desc", so direction is one rule
-  // rather than three.
-  const sortedProjects = useMemo(() => {
-    const ascending: Record<SortMode, (a: Project, b: Project) => number> = {
-      recent: (a, b) =>
-        new Date(a.last_active).getTime() - new Date(b.last_active).getTime(),
-      name: (a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }),
-      path: (a, b) =>
-        displayPath(a.path).localeCompare(displayPath(b.path), undefined, {
-          sensitivity: "base",
-        }),
-    };
-    const compare = ascending[sortMode];
-    const sign = sortDir === "asc" ? 1 : -1;
-    return [...projects].sort((a, b) => sign * compare(a, b));
-  }, [projects, sortMode, sortDir]);
+  const sortedProjects = useMemo(
+    () => sortProjects(projects, sortMode, sortDir),
+    [projects, sortMode, sortDir],
+  );
 
   // Clicking the active column flips direction; clicking a new one switches
   // to it at that column's natural default.
@@ -949,20 +512,15 @@ function ProjectPickerComponent({ onProjectSelected }: ProjectPickerProps) {
   const normalizedQuery = query.trim().toLowerCase();
   const isSearching = normalizedQuery.length > 0;
 
-  // The list is never truncated: it scrolls instead. Hiding projects behind a
-  // "View all" toggle made them unreachable and meant search had to special-
-  // case the cap; showing everything in a scroll container is simpler and
-  // strictly more useful.
+  // The list is never truncated: it scrolls instead.
   const displayedProjects = useMemo(
     () => sortedProjects.filter((p) => projectMatchesQuery(p, normalizedQuery)),
     [sortedProjects, normalizedQuery],
   );
 
-  // The most recently active project — the "main app / workspace" the user
-  // would expect to return to. Used by the "Back to <project>" affordance;
-  // when there are no projects (genuine first-run) it's undefined and the
-  // affordance hides. Computed independently of sortMode/query so changing
-  // the list's sort or typing a search never retargets "Back to …".
+  // The most recently active project — the workspace the user would expect
+  // to return to. Computed independently of sort/search so neither retargets
+  // "Back to …". Undefined on a genuine first run, which hides the affordance.
   const mostRecentProject = useMemo(() => {
     let best: Project | undefined;
     for (const p of projects) {
@@ -974,8 +532,7 @@ function ProjectPickerComponent({ onProjectSelected }: ProjectPickerProps) {
   }, [projects]);
 
   // Re-select the most recent project to leave the picker and restore the
-  // workspace/chat shell. We route through handleProjectClick so cross-daemon
-  // state (clone-on-other-daemon) is respected exactly as a normal row click.
+  // workspace/chat shell, through the same path as a row click.
   const handleBackToApp = useCallback(() => {
     if (mostRecentProject) handleProjectClick(mostRecentProject);
     // handleProjectClick is a stable-enough closure over store setters; the
@@ -984,465 +541,190 @@ function ProjectPickerComponent({ onProjectSelected }: ProjectPickerProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mostRecentProject]);
 
+  const hasProjects = projects.length > 0;
+
+  let machineSection: ReactNode;
+  if (showConnectionInstructions) {
+    machineSection = <NoActiveMachinePanel />;
+  } else if (activeDaemon) {
+    machineSection = (
+      <MachineStatusStrip hostname={activeDaemon.hostname} daemonType={activeDaemon.daemonType} />
+    );
+  } else if (daemonLoading) {
+    machineSection = <MachineStatusPending message="Checking your machine…" />;
+  } else {
+    // Electron with its bundled machine not attached yet — it starts with the
+    // app, so this is a wait, not an action.
+    machineSection = (
+      <MachineStatusPending message="Waiting for the machine on this computer to connect…" />
+    );
+  }
+
   return (
-    <div
-      className="h-full bg-background relative overflow-hidden"
-      data-testid="project-picker"
-    >
-      {/* Background ambient glow effects - Mesh Grid Pattern */}
-      <GradientBackground />
-
-      {/* Content. The scroll container is this element, not the page: the
-          picker is mounted inside a fixed-height flex shell, so an
-          unconstrained child would overflow off-screen with no way to reach
-          it. `justify-center` (not `items-center`) keeps the card group
-          optically centered when it fits, and lets it grow past the fold —
-          scrolling instead of clipping — when it doesn't. */}
-      <div className="relative z-10 h-full min-h-0 overflow-y-auto overscroll-contain">
-        <div className="min-h-full flex flex-col justify-center px-6 py-12">
-          <div className="w-full max-w-3xl mx-auto">
-              {/* Header. "Back" sits above the brand and hard-left, where a
-                  back affordance belongs — reading order puts the escape
-                  hatch before the content it escapes from. It used to be
-                  right-aligned on the brand row, which read as a primary
-                  action and collided with the logo on narrow widths. */}
-              <div className="mb-8">
-                {/* Back to the active workspace. The picker is reached by
-                    deselecting the current project (handleNavigateToProjectPicker
-                    in ModernApp clears currentProject); re-selecting the most
-                    recently active project restores the chat/workspace shell.
-                    Hidden on genuine first-run (no projects yet) — there's
-                    nothing to return to. */}
-                {mostRecentProject && (
-                  <button
-                    type="button"
-                    onClick={handleBackToApp}
-                    className="-ml-2 mb-4 inline-flex items-center gap-1.5 rounded-md px-2 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
-                    data-testid="project-picker-back-to-app"
-                  >
-                    <ArrowLeft className="w-4 h-4" />
-                    Back to {mostRecentProject.name}
-                  </button>
-                )}
-                <div className="flex items-center gap-4">
-                  <BrandMark className="w-16 h-16" />
-                  <h1 className="text-4xl font-bold text-foreground">Reliant</h1>
-                </div>
+    <div className="forge-ui h-full bg-background" data-testid="project-picker">
+      {/* The page scrolls only when the window is too short for the column's
+          minimum height; otherwise the table is the one scrolling region. */}
+      <div className="h-full overflow-y-auto overscroll-contain">
+        <div className="mx-auto flex h-full min-h-[34rem] w-full max-w-5xl flex-col gap-6 px-6 py-8">
+          <header className="flex shrink-0 flex-col gap-3">
+            {/* Back to the active workspace. The picker is reached by
+                deselecting the current project; re-selecting the most
+                recently active one restores the workspace shell. */}
+            {mostRecentProject && (
+              <button
+                type="button"
+                onClick={handleBackToApp}
+                className={pickerButton("ghost", "sm", "-ml-2.5 self-start")}
+                data-testid="project-picker-back-to-app"
+              >
+                <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />
+                Back to {mostRecentProject.name}
+              </button>
+            )}
+            <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
+              <div className="min-w-0">
+                <h1 className="text-balance text-2xl font-semibold tracking-tight text-ink">
+                  Projects
+                </h1>
+                <p className="mt-1 text-pretty text-sm text-ink-muted">
+                  {hasProjects
+                    ? "Repositories and folders Reliant works in. Open one to pick up where you left off."
+                    : "Add a repository or folder for Reliant to work in."}
+                </p>
               </div>
-              {/* The daemon state and the add-project actions coexist. They
-                  used to be mutually exclusive, so a web user with no ACTIVE
-                  daemon lost BOTH "Open Project" and "Clone repo" — with a
-                  failed machine that left no way to add a project at all. */}
-              {showConnectionInstructions && <NoActiveDaemonState />}
-              {(!showConnectionInstructions || showCloneAction) && (
-                <>
-                  {/* The two add-project actions. WHICH ONE LEADS depends on
-                      where the user's code lives (addProjectLead): a cloud
-                      user is led to "Clone from GitHub", because the
-                      directory picker reads the browser host's filesystem and
-                      cannot see a cloud machine's disk at all. A local daemon
-                      user is led to "Open folder", whose filesystem is
-                      genuinely theirs. The non-leading action stays present
-                      and reachable underneath — demoted, never hidden. */}
-                  <div className="relative backdrop-blur-2xl bg-card/90 border border-border/50 rounded-2xl mb-6 overflow-hidden">
-                    {orderedAddProjectActions.map((action, index) =>
-                      action === "clone" ? (
-                        <button
-                          key="clone"
-                          onClick={() => setIsCloneModalOpen(true)}
-                          disabled={cloneState.kind === "blocked"}
-                          data-testid="project-picker-clone-repo"
-                          onMouseEnter={() => setIsCloneButtonHovered(true)}
-                          onMouseLeave={() => setIsCloneButtonHovered(false)}
-                          className={cn(
-                            "group w-full p-6 text-left transition-all duration-150 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60 disabled:active:scale-100",
-                            index > 0 && "border-t border-border/50",
-                          )}
-                          style={{
-                            backgroundColor: cloneLeads
-                              ? isCloneButtonHovered && cloneState.kind === "ready"
-                                ? "hsl(var(--primary) / 0.15)"
-                                : "hsl(var(--primary) / 0.1)"
-                              : isCloneButtonHovered && cloneState.kind === "ready"
-                                ? "hsl(var(--primary) / 0.08)"
-                                : "transparent",
-                          }}
-                        >
-                          <div className="flex items-center gap-4">
-                            <div
-                              className={cn(
-                                "flex h-12 w-12 items-center justify-center rounded-xl",
-                                cloneLeads ? "bg-primary/20" : "bg-muted",
-                              )}
-                            >
-                              <GitFork
-                                className={cn(
-                                  "h-6 w-6",
-                                  cloneLeads ? "text-primary" : "text-foreground",
-                                )}
-                              />
-                            </div>
-                            <div className="text-left">
-                              <h3
-                                className={cn(
-                                  "text-xl font-bold",
-                                  cloneLeads ? "text-primary" : "text-foreground",
-                                )}
-                              >
-                                {cloneLeads ? "Clone from GitHub" : "Clone repo"}
-                              </h3>
-                              <p className="text-sm text-muted-foreground">
-                                {cloneDescription({
-                                  cloneState,
-                                  hasGitHubCredential,
-                                  fallbackHost: selectedCloneDaemon?.hostname,
-                                })}
-                              </p>
-                            </div>
-                          </div>
-                        </button>
-                      ) : (
-                        <button
-                          key="open"
-                          onClick={handleOpenExistingProject}
-                          data-testid="project-picker-open-folder"
-                          onMouseEnter={() => setIsOpenButtonHovered(true)}
-                          onMouseLeave={() => setIsOpenButtonHovered(false)}
-                          className={cn(
-                            "group w-full p-6 text-left transition-all duration-150 active:scale-[0.99]",
-                            index > 0 && "border-t border-border/50",
-                          )}
-                          style={{
-                            backgroundColor: cloneLeads
-                              ? isOpenButtonHovered
-                                ? "hsl(var(--primary) / 0.08)"
-                                : "transparent"
-                              : isOpenButtonHovered
-                                ? "hsl(var(--primary) / 0.15)"
-                                : "hsl(var(--primary) / 0.1)",
-                          }}
-                        >
-                          <div className="flex items-center gap-4">
-                            <div
-                              className={cn(
-                                "flex h-12 w-12 items-center justify-center rounded-xl",
-                                cloneLeads ? "bg-muted" : "bg-primary/20",
-                              )}
-                            >
-                              <FolderOpen
-                                className={cn(
-                                  "h-6 w-6",
-                                  cloneLeads ? "text-foreground" : "text-primary",
-                                )}
-                              />
-                            </div>
-                            <div className="text-left">
-                              <h3
-                                className={cn(
-                                  "text-xl font-bold",
-                                  cloneLeads ? "text-foreground" : "text-primary",
-                                )}
-                              >
-                                {cloneLeads ? "Open folder" : "Open Project"}
-                              </h3>
-                              <p className="text-sm text-muted-foreground">
-                                {cloneLeads
-                                  ? "Browse a folder on this machine"
-                                  : "Browse and select your project directory"}
-                              </p>
-                            </div>
-                          </div>
-                        </button>
-                      ),
-                    )}
-                  </div>
-                </>
-              )}
-
-              {/* Projects list — searchable, sortable, and independently
-                  scrollable so a large project count can never push the rest
-                  of the picker off-screen. */}
-              {projects.length > 0 && (
-                <div className="relative backdrop-blur-2xl bg-card/90 border border-border/50 rounded-2xl p-6">
-                  <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-                    <h2 className="text-base font-semibold text-foreground">
-                      Projects
-                      <span className="ml-2 text-sm font-normal text-muted-foreground">
-                        {isSearching
-                          ? `${displayedProjects.length} of ${projects.length}`
-                          : projects.length}
-                      </span>
-                    </h2>
-                    <button
-                      type="button"
-                      onClick={() => (isManaging ? exitManageMode() : setIsManaging(true))}
-                      className="text-sm text-muted-foreground transition-colors hover:text-primary"
-                      data-testid="project-manage-toggle"
-                    >
-                      {isManaging ? "Done" : "Manage"}
-                    </button>
-                  </div>
-
-                  {/* Search + sort. Shown once the list is long enough to be
-                      worth filtering; below that they'd be pure noise. */}
-                  {projects.length >= LIST_CONTROLS_MIN_PROJECTS && (
-                    <div className="flex flex-wrap items-center gap-2 mb-3">
-                      <div className="relative min-w-0 flex-1">
-                        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/70" />
-                        <input
-                          type="text"
-                          value={query}
-                          onChange={(e) => setQuery(e.target.value)}
-                          placeholder="Search projects by name or path"
-                          aria-label="Search projects"
-                          className="w-full rounded-lg border border-border/60 bg-background/80 py-2 pl-9 pr-9 text-sm text-foreground placeholder:text-muted-foreground/70 transition-colors focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
-                          data-testid="project-search"
-                        />
-                        {query && (
-                          <button
-                            type="button"
-                            onClick={() => setQuery("")}
-                            aria-label="Clear search"
-                            className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                          >
-                            <X className="h-3.5 w-3.5" />
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Bulk action bar. Appears only once something is selected
-                      — select-all itself lives in the table's header column,
-                      so an always-present toolbar would just be chrome. */}
-                  {isManaging && selectedIds.size > 0 && (
-                    <div className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border/60 bg-muted/40 px-3 py-2">
-                      <span className="text-sm text-muted-foreground">
-                        {selectedIds.size} selected
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setPendingRemoval(
-                            projects.filter((p) => selectedIds.has(p.id)),
-                          )
-                        }
-                        className="inline-flex items-center gap-1.5 rounded-md border border-destructive/40 px-2.5 py-1.5 text-sm font-medium text-destructive-ink transition-colors hover:bg-destructive/10"
-                        data-testid="project-bulk-remove"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                        Remove
-                      </button>
-                    </div>
-                  )}
-
-                  {displayedProjects.length === 0 ? (
-                    <p className="py-6 text-center text-sm text-muted-foreground">
-                      No projects match “{query.trim()}”.
-                    </p>
-                  ) : (
-                    /* A real table: aligned columns, sortable headers, one row
-                       per project. max-h caps it at roughly nine rows and the
-                       header stays stuck to the top while the body scrolls, so
-                       the column meanings never scroll away. */
-                    <div className="max-h-[22rem] overflow-y-auto overscroll-contain rounded-lg border border-border/50">
-                      <table className="w-full table-fixed border-collapse text-sm">
-                        <colgroup>
-                          {isManaging && <col className="w-10" />}
-                          <col className="w-[38%]" />
-                          <col />
-                          <col className="w-28" />
-                          {isManaging && <col className="w-20" />}
-                        </colgroup>
-                        <thead className="sticky top-0 z-10 bg-card">
-                          <tr className="border-b border-border/60 text-left">
-                            {isManaging && (
-                              <th scope="col" className="px-3 py-2">
-                                <input
-                                  type="checkbox"
-                                  className="h-4 w-4 align-middle accent-[hsl(var(--primary))]"
-                                  aria-label="Select all projects"
-                                  checked={
-                                    displayedProjects.length > 0 &&
-                                    displayedProjects.every((p) => selectedIds.has(p.id))
-                                  }
-                                  onChange={(e) => {
-                                    // Select-all applies to what's currently
-                                    // visible, so it composes with search
-                                    // instead of silently selecting
-                                    // filtered-out projects.
-                                    const visible = displayedProjects.map((p) => p.id);
-                                    setSelectedIds((prev) => {
-                                      const next = new Set(prev);
-                                      if (e.target.checked)
-                                        visible.forEach((id) => next.add(id));
-                                      else visible.forEach((id) => next.delete(id));
-                                      return next;
-                                    });
-                                  }}
-                                  data-testid="project-select-all"
-                                />
-                              </th>
-                            )}
-                            <SortableHeader
-                              mode="name"
-                              label="Name"
-                              activeMode={sortMode}
-                              dir={sortDir}
-                              onSort={handleSort}
-                            />
-                            <SortableHeader
-                              mode="path"
-                              label="Location"
-                              activeMode={sortMode}
-                              dir={sortDir}
-                              onSort={handleSort}
-                            />
-                            <SortableHeader
-                              mode="recent"
-                              label="Last used"
-                              activeMode={sortMode}
-                              dir={sortDir}
-                              onSort={handleSort}
-                            />
-                            {isManaging && (
-                              <th scope="col" className="px-3 py-2">
-                                <span className="sr-only">Actions</span>
-                              </th>
-                            )}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {displayedProjects.map((project) => {
-                            const isSelected = selectedIds.has(project.id);
-                            const isRenaming = renamingId === project.id;
-                            const { head, tail } = splitPathForDisplay(project.path);
-
-                            return (
-                              <tr
-                                key={project.id}
-                                className={cn(
-                                  "border-b border-border/30 last:border-0 transition-colors",
-                                  isSelected ? "bg-primary/10" : "hover:bg-primary/[0.06]",
-                                  // Outside management mode the whole row opens
-                                  // the project; inside it, it toggles
-                                  // selection so a mis-click during cleanup
-                                  // can't yank you into a workspace.
-                                  !isRenaming && "cursor-pointer",
-                                )}
-                                onClick={() => {
-                                  if (isRenaming) return;
-                                  if (isManaging) toggleSelected(project.id);
-                                  else handleProjectClick(project);
-                                }}
-                                data-testid="project-item"
-                              >
-                                {isManaging && (
-                                  <td className="px-3 py-2 align-middle">
-                                    <input
-                                      type="checkbox"
-                                      checked={isSelected}
-                                      onChange={() => toggleSelected(project.id)}
-                                      onClick={(e) => e.stopPropagation()}
-                                      aria-label={`Select ${project.name}`}
-                                      className="h-4 w-4 align-middle accent-[hsl(var(--primary))]"
-                                      data-testid="project-select"
-                                    />
-                                  </td>
-                                )}
-
-                                <td className="px-3 py-2 align-middle">
-                                  {isRenaming ? (
-                                    <input
-                                      autoFocus
-                                      value={renameDraft}
-                                      onChange={(e) => setRenameDraft(e.target.value)}
-                                      onClick={(e) => e.stopPropagation()}
-                                      onBlur={() => void commitRename(project)}
-                                      onKeyDown={(e) => {
-                                        if (e.key === "Enter") void commitRename(project);
-                                        if (e.key === "Escape") setRenamingId(null);
-                                      }}
-                                      aria-label={`Rename ${project.name}`}
-                                      className="w-full rounded border border-primary/60 bg-background px-2 py-1 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
-                                      data-testid="project-rename-input"
-                                    />
-                                  ) : (
-                                    <div className="flex items-center gap-2">
-                                      <span
-                                        className="truncate font-medium text-foreground"
-                                        title={project.name}
-                                      >
-                                        {project.name}
-                                      </span>
-                                      {project.is_git_repo && (
-                                        <GitBranch
-                                          className="h-3 w-3 shrink-0 text-muted-foreground/50"
-                                          aria-label="Git repository"
-                                        />
-                                      )}
-                                    </div>
-                                  )}
-                                </td>
-
-                                {/* Path, middle-truncated: the head collapses
-                                    under pressure while the leaf directory is
-                                    pinned, so two checkouts of the same repo
-                                    stay distinguishable. */}
-                                <td
-                                  className="px-3 py-2 align-middle"
-                                  title={displayPath(project.path)}
-                                >
-                                  <div className="flex min-w-0 items-baseline font-mono text-xs text-muted-foreground/80">
-                                    <span className="truncate">{head}</span>
-                                    <span className="shrink-0">{tail}</span>
-                                  </div>
-                                </td>
-
-                                <td className="px-3 py-2 align-middle text-xs tabular-nums text-muted-foreground">
-                                  {formatLastActive(project.last_active)}
-                                </td>
-
-                                {isManaging && (
-                                  <td className="px-3 py-2 align-middle">
-                                    <div className="flex items-center justify-end gap-0.5">
-                                      <button
-                                        type="button"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          beginRename(project);
-                                        }}
-                                        aria-label={`Rename ${project.name}`}
-                                        className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                                        data-testid="project-rename"
-                                      >
-                                        <Pencil className="h-3.5 w-3.5" />
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          setPendingRemoval([project]);
-                                        }}
-                                        aria-label={`Remove ${project.name}`}
-                                        className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive-ink"
-                                        data-testid="project-remove"
-                                      >
-                                        <Trash2 className="h-3.5 w-3.5" />
-                                      </button>
-                                    </div>
-                                  </td>
-                                )}
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </div>
+              {/* With no projects the start panel below carries these same
+                  actions; a second copy up here would only compete with it. */}
+              {hasProjects && addProjectActions.length > 0 && (
+                <HeaderActions actions={addProjectActions} />
               )}
             </div>
+          </header>
+
+          <div className="shrink-0">{machineSection}</div>
+
+          {hasProjects ? (
+            <section
+              className="flex min-h-0 flex-1 flex-col gap-3"
+              aria-labelledby="project-picker-list-title"
+            >
+              <h2 id="project-picker-list-title" className="sr-only">
+                Your projects
+              </h2>
+              <div className="flex shrink-0 flex-wrap items-center gap-2">
+                {/* Search is shown once the list is long enough to be worth
+                    filtering. The spacer keeps the right cluster right-aligned
+                    when it's absent. */}
+                {projects.length >= LIST_CONTROLS_MIN_PROJECTS ? (
+                  <div className="relative min-w-[12rem] max-w-sm flex-1">
+                    <Search
+                      className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-subtle"
+                      aria-hidden="true"
+                    />
+                    <input
+                      type="search"
+                      value={query}
+                      onChange={(e) => setQuery(e.target.value)}
+                      placeholder="Search by name or path"
+                      aria-label="Search projects"
+                      className="h-8 w-full rounded-md border border-border-strong bg-background pl-8 pr-8 text-sm text-ink placeholder:text-ink-subtle focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30 [&::-webkit-search-cancel-button]:hidden"
+                      data-testid="project-search"
+                    />
+                    {query && (
+                      <Tooltip
+                        content="Clear search"
+                        placement="top"
+                        delay={300}
+                        wrapperClassName="absolute right-1 top-1/2 -translate-y-1/2"
+                      >
+                        <button
+                          type="button"
+                          onClick={() => setQuery("")}
+                          aria-label="Clear search"
+                          className="inline-flex h-6 w-6 items-center justify-center rounded text-ink-muted transition-colors hover:bg-muted hover:text-ink"
+                        >
+                          <X className="h-3.5 w-3.5" aria-hidden="true" />
+                        </button>
+                      </Tooltip>
+                    )}
+                  </div>
+                ) : null}
+                <div className="ml-auto flex items-center gap-2">
+                  {isSelecting ? (
+                    selectedIds.size > 0 ? (
+                      <>
+                        <span className="text-xs tabular-nums text-ink-muted">
+                          {selectedIds.size} selected
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setPendingRemoval(projects.filter((p) => selectedIds.has(p.id)))
+                          }
+                          className={pickerButton("danger", "sm")}
+                          data-testid="project-bulk-remove"
+                        >
+                          Remove
+                        </button>
+                      </>
+                    ) : (
+                      <span className="text-xs text-ink-muted">Select projects to remove</span>
+                    )
+                  ) : (
+                    <span className="text-xs tabular-nums text-ink-muted">
+                      {isSearching
+                        ? `${displayedProjects.length} of ${projects.length}`
+                        : `${projects.length} ${projects.length === 1 ? "project" : "projects"}`}
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => (isSelecting ? exitSelectMode() : setIsSelecting(true))}
+                    aria-pressed={isSelecting}
+                    className={pickerButton(isSelecting ? "secondary" : "ghost", "sm")}
+                    data-testid="project-manage-toggle"
+                  >
+                    {isSelecting ? "Done" : "Select"}
+                  </button>
+                </div>
+              </div>
+
+              {displayedProjects.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-border-strong px-6 py-10 text-center">
+                  <p className="text-sm text-ink">No projects match “{query.trim()}”.</p>
+                  <button
+                    type="button"
+                    onClick={() => setQuery("")}
+                    className={pickerButton("ghost", "sm", "mt-2")}
+                  >
+                    Clear search
+                  </button>
+                </div>
+              ) : (
+                // Natural height up to the space left in the column, then it
+                // scrolls (min-h-0 lets the flex item shrink below content).
+                <ProjectTable
+                  projects={displayedProjects}
+                  sortMode={sortMode}
+                  sortDir={sortDir}
+                  onSort={handleSort}
+                  onOpen={handleProjectClick}
+                  isSelecting={isSelecting}
+                  selectedIds={selectedIds}
+                  onToggleSelected={toggleSelected}
+                  onSetSelected={setSelected}
+                  renamingId={renamingId}
+                  renameDraft={renameDraft}
+                  onRenameDraftChange={setRenameDraft}
+                  onBeginRename={beginRename}
+                  onCommitRename={(project) => void commitRename(project)}
+                  onCancelRename={() => setRenamingId(null)}
+                  onRemove={(project) => setPendingRemoval([project])}
+                />
+              )}
+            </section>
+          ) : (
+            <StartOptions actions={addProjectActions} />
+          )}
         </div>
       </div>
 
@@ -1454,7 +736,6 @@ function ProjectPickerComponent({ onProjectSelected }: ProjectPickerProps) {
         onConfirm={() => void confirmRemoval()}
       />
 
-      {/* Create Project Modal */}
       <ProjectPickerModal
         isOpen={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
@@ -1465,10 +746,10 @@ function ProjectPickerComponent({ onProjectSelected }: ProjectPickerProps) {
       <DirectoryPicker
         isOpen={isDirectoryPickerOpen}
         onClose={() => setIsDirectoryPickerOpen(false)}
-        onSelect={handleDirectoryPickerSelect}
+        onSelect={(path) => void openFolderAsProject(path)}
       />
 
-      {/* Clone GitHub repo onto the active daemon */}
+      {/* Clone a GitHub repo onto a cloud machine */}
       <Modal
         isOpen={isCloneModalOpen}
         onClose={() => setIsCloneModalOpen(false)}
@@ -1493,8 +774,14 @@ function ProjectPickerComponent({ onProjectSelected }: ProjectPickerProps) {
       </Modal>
 
       {cloneStatus && (
-        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 rounded-lg border border-border bg-card/95 px-4 py-2 text-sm text-foreground shadow-lg">
-          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+        <div
+          role="status"
+          className={cn(
+            "fixed bottom-4 left-1/2 z-50 flex -translate-x-1/2 items-center gap-2",
+            "rounded-lg border border-border bg-card px-3 py-2 text-sm text-ink shadow-lg",
+          )}
+        >
+          <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
           {cloneStatus}
         </div>
       )}

@@ -13,6 +13,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/attachment"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/models/message"
 	"github.com/reliant-labs/reliant/internal/ptr"
 )
@@ -204,14 +205,24 @@ func (s *Service) SaveMessage(ctx context.Context, opts SaveMessageOpts) (*SaveM
 		return nil, fmt.Errorf("failed to count messages: %w", err)
 	}
 
-	// Get thread token count from opts (context size from LLM response)
+	// Get thread token count from opts (context size from LLM response), and
+	// the compaction threshold that goes with it. Both ride on the message's
+	// chat_update, which keeps the client's compaction indicator current
+	// between snapshots, so they must be what a snapshot would report
+	// (GetContextUsage): the threshold of the model that produced the count.
 	threadTokenCount := opts.TokenCount
-	if threadTokenCount == 0 {
+	compactionThreshold := DefaultCompactionThreshold
+	if threadTokenCount > 0 {
+		// This message carries the count, so it is the latest token-bearing
+		// message and its model is the one GetContextUsage would resolve.
+		compactionThreshold = models.CompactionThresholdForModel(opts.Model)
+	} else {
 		contextUsage, err := s.repo.GetContextUsage(ctx, opts.ChatID, opts.Thread)
 		if err != nil {
 			slog.Warn("Failed to get context usage for token count", "error", err)
 		} else if contextUsage != nil {
 			threadTokenCount = int(contextUsage.ThreadTokenCount)
+			compactionThreshold = int(contextUsage.CompactionThreshold)
 		}
 	}
 
@@ -258,7 +269,7 @@ func (s *Service) SaveMessage(ctx context.Context, opts SaveMessageOpts) (*SaveM
 		// ordinal and seq are not known until the statement allocates them,
 		// so the payload is rendered from the RETURNING values.
 		ChatUpdateData: func(ordinal, seq, _ int64) (string, error) {
-			return s.buildChatUpdateData(ctx, opts, messageID, blocks, ordinal, seq, cw.Sequence, threadTokenCount, timestamp)
+			return s.buildChatUpdateData(ctx, opts, messageID, blocks, ordinal, seq, cw.Sequence, threadTokenCount, compactionThreshold, timestamp)
 		},
 	}
 
@@ -749,8 +760,11 @@ func (s *Service) buildToolAttachmentBlock(ctx context.Context, messageID, attac
 		return db.MessageContentBlock{}, false
 	}
 
-	if att.AttachmentType != string(attachment.TypeImage) {
-		slog.Warn("[SaveMessage] Tool result attachment is not an image; skipping its content block",
+	// A generated video rides in an IMAGE-typed block like an image does: the
+	// block type only says "render this attachment", and the UI splits the two
+	// by MIME. Replay to the model drops it (see messageconv.ContentBlockToPart).
+	if att.AttachmentType != string(attachment.TypeImage) && att.AttachmentType != string(attachment.TypeVideo) {
+		slog.Warn("[SaveMessage] Tool result attachment is not an image or video; skipping its content block",
 			"attachment_id", attachmentID, "attachment_type", att.AttachmentType, "message_id", messageID)
 		return db.MessageContentBlock{}, false
 	}
@@ -797,7 +811,7 @@ func (s *Service) buildSystemContentBlocks(messageID string, opts SaveMessageOpt
 // ordinal and seq arrive as parameters because they do not exist until the
 // write statement allocates them; the caller supplies them from its RETURNING
 // values.
-func (s *Service) buildChatUpdateData(ctx context.Context, opts SaveMessageOpts, messageID string, blocks []db.MessageContentBlock, ordinal int64, seq int64, contextSequence int, threadTokenCount int, timestamp time.Time) (string, error) {
+func (s *Service) buildChatUpdateData(ctx context.Context, opts SaveMessageOpts, messageID string, blocks []db.MessageContentBlock, ordinal int64, seq int64, contextSequence int, threadTokenCount int, compactionThreshold int, timestamp time.Time) (string, error) {
 	blockPtrs := make([]*db.MessageContentBlock, len(blocks))
 	for i := range blocks {
 		blockPtrs[i] = &blocks[i]
@@ -851,7 +865,6 @@ func (s *Service) buildChatUpdateData(ctx context.Context, opts SaveMessageOpts,
 	}
 
 	// Build update data
-	compactionThreshold := DefaultCompactionThreshold
 	// seq is the chat-global order the client sorts by. This is the primary
 	// live-message path, so omitting it means every message a user sends or
 	// receives arrives with seq 0 and sorts to the TOP of the transcript

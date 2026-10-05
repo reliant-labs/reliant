@@ -1,5 +1,12 @@
-import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import React, { useId, useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
+
+const WRAP_THRESHOLD = 40;
+const MAX_TOOLTIP_WIDTH = 320;
+
+export function estimateTooltipWidth(content: string): number {
+  return Math.min(content.length * 8, MAX_TOOLTIP_WIDTH);
+}
 
 interface TooltipProps {
   content: string;
@@ -23,6 +30,8 @@ function TooltipInner({
   const [isInteractionActive, setIsInteractionActive] = useState(false);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
   const targetRef = useRef<HTMLDivElement>(null);
+  const tooltipId = useId();
+  const wraps = content.length > WRAP_THRESHOLD;
 
   const showTooltip = useCallback(() => {
     // Don't show tooltip if user is interacting (dropdown open, etc)
@@ -46,7 +55,7 @@ function TooltipInner({
         let y = rect.top + scrollTop;
 
         // Estimate tooltip dimensions (rough approximation)
-        const tooltipWidth = content.length * 8; // ~8px per character
+        const tooltipWidth = estimateTooltipWidth(content);
         const tooltipHeight = 32; // Rough height estimate
 
         switch (placement) {
@@ -200,7 +209,7 @@ function TooltipInner({
   const tooltipClasses = useMemo(() => `
     absolute z-50 px-2 py-1 text-xs rounded-md pointer-events-none
     shadow-lg
-    whitespace-nowrap tooltip-themed
+    ${wraps ? "max-w-xs whitespace-normal text-balance" : "whitespace-nowrap"} tooltip-themed
     transition-opacity duration-150
     ${placement === "top" ? "transform -translate-x-1/2 -translate-y-full" : ""}
     ${placement === "bottom" ? "transform -translate-x-1/2" : ""}
@@ -209,7 +218,7 @@ function TooltipInner({
     }
     ${placement === "right" ? "transform -translate-y-1/2" : ""}
     ${className}
-  `, [placement, className]);
+  `, [placement, className, wraps]);
 
   return (
     <>
@@ -220,6 +229,7 @@ function TooltipInner({
         onFocus={showTooltip}
         onBlur={hideTooltip}
         onClick={handleClick}
+        aria-describedby={isVisible ? tooltipId : undefined}
         className={wrapperClassName}
       >
         {children}
@@ -227,6 +237,8 @@ function TooltipInner({
       {isVisible &&
         createPortal(
           <div
+            id={tooltipId}
+            role="tooltip"
             className={tooltipClasses}
             style={{
               left: position.x,

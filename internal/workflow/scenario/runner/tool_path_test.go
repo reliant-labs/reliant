@@ -71,8 +71,9 @@ edges:
     to: done
 `
 
-// seedScenarioDraft creates a chat and a workflow draft bound to it, so the
-// scenario tools resolve the draft implicitly the way they do in production.
+// seedScenarioDraft creates a chat and a workflow draft. The draft is NOT bound
+// to the chat — workflows never are — so the scenario tools are handed the
+// draft's id explicitly, the way an agent in any chat calls them.
 func seedScenarioDraft(t *testing.T, repo db.Repository, definition string) (*db.WorkflowDraft, string) {
 	t.Helper()
 	ctx := context.Background()
@@ -87,7 +88,7 @@ func seedScenarioDraft(t *testing.T, repo db.Repository, definition string) (*db
 	draft := &db.WorkflowDraft{
 		ID: uuid.New().String(), UserID: "test-user",
 		Name: "skip-probe-" + suffix, Slug: "skip-probe-" + suffix,
-		Definition: definition, ChatID: &chatID, CreatedAt: now, UpdatedAt: now,
+		Definition: definition, CreatedAt: now, UpdatedAt: now,
 	}
 	require.NoError(t, repo.CreateWorkflowDraft(ctx, draft))
 	return draft, chatID
@@ -95,9 +96,9 @@ func seedScenarioDraft(t *testing.T, repo db.Repository, definition string) (*db
 
 // writeScenario drives the real write_scenario tool, which saves the scenario,
 // runs it on the runner, and returns the formatted result.
-func writeScenario(t *testing.T, repo db.Repository, chatID, name, content string) string {
+func writeScenario(t *testing.T, repo db.Repository, draft *db.WorkflowDraft, chatID, name, content string) string {
 	t.Helper()
-	input, err := json.Marshal(tools.WriteScenarioParams{Name: name, Content: content})
+	input, err := json.Marshal(tools.WriteScenarioParams{ID: draft.ID, Name: name, Content: content})
 	require.NoError(t, err)
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "test-user")
 	resp, err := tools.NewWriteScenarioTool(repo, RunScenario).Run(
@@ -125,9 +126,9 @@ func TestToolPath_CompletedAssertionIsEnforced(t *testing.T) {
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 
-	_, chatID := seedScenarioDraft(t, repo, workflowWithSkippedNode)
+	draft, chatID := seedScenarioDraft(t, repo, workflowWithSkippedNode)
 
-	out := writeScenario(t, repo, chatID, "completed_must_fail", `name: completed_must_fail
+	out := writeScenario(t, repo, draft, chatID, "completed_must_fail", `name: completed_must_fail
 description: asserts a skipped node completed, which must fail
 events: []
 expect:
@@ -150,10 +151,10 @@ func TestToolPath_SkippedAssertionIsEnforced(t *testing.T) {
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 
-	_, chatID := seedScenarioDraft(t, repo, workflowWithSkippedNode)
+	draft, chatID := seedScenarioDraft(t, repo, workflowWithSkippedNode)
 
 	// `maybe` really is skipped, so this must PASS.
-	out := writeScenario(t, repo, chatID, "skipped_true", `name: skipped_true
+	out := writeScenario(t, repo, draft, chatID, "skipped_true", `name: skipped_true
 description: maybe is genuinely skipped
 events: []
 expect:
@@ -164,7 +165,7 @@ expect:
 	require.Contains(t, out, "PASSED", "a true skipped: assertion must pass:\n%s", out)
 
 	// `start` completed, so asserting it was skipped must FAIL.
-	out = writeScenario(t, repo, chatID, "skipped_false", `name: skipped_false
+	out = writeScenario(t, repo, draft, chatID, "skipped_false", `name: skipped_false
 description: asserts a completed node was skipped, which must fail
 events: []
 expect:
@@ -196,11 +197,11 @@ nodes:
       model: mock
 edges: []
 `
-	_, chatID := seedScenarioDraft(t, repo, workflow)
+	draft, chatID := seedScenarioDraft(t, repo, workflow)
 
 	// node_outputs asserts on the event's payload, so this can only pass if the
 	// typed fields survived. A dropped `text:` yields an empty response_text.
-	out := writeScenario(t, repo, chatID, "typed_event", `name: typed_event
+	out := writeScenario(t, repo, draft, chatID, "typed_event", `name: typed_event
 description: typed llm_response event must reach the runner intact
 events:
   - node: call_llm
@@ -236,9 +237,9 @@ edges: []
 outputs:
   answer: "nodes.call_llm.response_text"
 `
-	_, chatID := seedScenarioDraft(t, repo, workflow)
+	draft, chatID := seedScenarioDraft(t, repo, workflow)
 
-	out := writeScenario(t, repo, chatID, "outputs_must_fail", `name: outputs_must_fail
+	out := writeScenario(t, repo, draft, chatID, "outputs_must_fail", `name: outputs_must_fail
 description: asserts a workflow output value that is wrong, which must fail
 events:
   - node: call_llm
@@ -266,10 +267,10 @@ func TestCompletedDistinguishesExecutedFromSkipped(t *testing.T) {
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 
-	_, chatID := seedScenarioDraft(t, repo, workflowWithSkippedNode)
+	draft, chatID := seedScenarioDraft(t, repo, workflowWithSkippedNode)
 
 	// `start` and `done` genuinely execute, so asserting they completed passes.
-	out := writeScenario(t, repo, chatID, "completed_passes_for_executed", `name: completed_passes_for_executed
+	out := writeScenario(t, repo, draft, chatID, "completed_passes_for_executed", `name: completed_passes_for_executed
 description: start and done really do execute
 events: []
 expect:
@@ -282,7 +283,7 @@ expect:
 		"expect.completed must pass for nodes that genuinely executed:\n%s", out)
 
 	// `maybe` is guarded by `condition: "false"`, so it is reached but never runs.
-	out = writeScenario(t, repo, chatID, "completed_fails_for_skipped", `name: completed_fails_for_skipped
+	out = writeScenario(t, repo, draft, chatID, "completed_fails_for_skipped", `name: completed_fails_for_skipped
 description: asserts a skipped node completed, which must fail
 events: []
 expect:
@@ -309,9 +310,9 @@ func TestErrorStateIsRecordedForFailingNode(t *testing.T) {
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 
-	_, chatID := seedScenarioDraft(t, repo, workflowWithFailingNode)
+	draft, chatID := seedScenarioDraft(t, repo, workflowWithFailingNode)
 
-	out := writeScenario(t, repo, chatID, "boom_errors", `name: boom_errors
+	out := writeScenario(t, repo, draft, chatID, "boom_errors", `name: boom_errors
 description: boom fails config evaluation and is attributed as the error node
 events: []
 expect:

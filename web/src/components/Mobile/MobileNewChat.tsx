@@ -46,9 +46,9 @@ import {
   usePreferencesStore,
 } from "../../store/preferencesStore";
 import {
-  getWorkflowDisplayName,
   normalizeWorkflowRef,
 } from "../workflow/useWorkflowInputs";
+import { workflowDisplayName } from "../../lib/workflowDisplayName";
 import { trackEvent } from "../../lib/analytics";
 import { cn } from "../../lib/utils";
 import { MobileCardGroup, MobileScreenHeader } from "./MobileChrome";
@@ -192,7 +192,7 @@ export function MobileNewChat() {
               sheetTitle="Choose a workflow"
               options={visibleWorkflows.map((workflow) => ({
                 value: workflow.name,
-                label: getWorkflowDisplayName(workflow.name, true),
+                label: workflowDisplayName(workflow),
                 description: workflow.description || undefined,
               }))}
               onChange={setSelectedWorkflow}

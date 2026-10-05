@@ -15,17 +15,17 @@ import (
 	_ "github.com/reliant-labs/reliant/internal/workflow/runtime/activities"
 )
 
-// TestOneRingCopyValidation verifies that copying a builtin workflow
+// TestGetItRightCopyValidation verifies that copying a builtin workflow
 // preserves all inputs through the YAML→proto→proto.Clone→proto→YAML roundtrip
 // and that validation passes on the copy.
-func TestOneRingCopyValidation(t *testing.T) {
-	data, err := builtin.BuiltinWorkflowsFS.ReadFile("one-ring.yaml")
+func TestGetItRightCopyValidation(t *testing.T) {
+	data, err := builtin.BuiltinWorkflowsFS.ReadFile("get-it-right.yaml")
 	require.NoError(t, err)
 
 	t.Run("builtin_yaml_validates", func(t *testing.T) {
 		result, err := v2.ValidateYAMLResult(data, nil)
 		require.NoError(t, err)
-		require.False(t, result.HasErrors(), "builtin one-ring.yaml should validate cleanly")
+		require.False(t, result.HasErrors(), "builtin get-it-right.yaml should validate cleanly")
 	})
 
 	t.Run("copy_roundtrip_validates", func(t *testing.T) {
@@ -33,7 +33,7 @@ func TestOneRingCopyValidation(t *testing.T) {
 		require.NoError(t, err)
 
 		copyWf := proto.Clone(proto1).(*reliantv1.Workflow)
-		copyWf.Name = "one-ring-copy-abc123"
+		copyWf.Name = "get-it-right-copy-abc123"
 
 		yamlBytes, err := wfyaml.MarshalWorkflow(copyWf)
 		require.NoError(t, err)
@@ -53,7 +53,7 @@ func TestOneRingCopyValidation(t *testing.T) {
 		require.NoError(t, err)
 
 		copyWf := proto.Clone(proto1).(*reliantv1.Workflow)
-		copyWf.Name = "one-ring-copy-direct"
+		copyWf.Name = "get-it-right-copy-direct"
 
 		result := validation.StaticAnalysisWithOptions(copyWf, nil)
 		if result.HasErrors() {
@@ -68,7 +68,7 @@ func TestOneRingCopyValidation(t *testing.T) {
 		require.NoError(t, err)
 
 		copyWf := proto.Clone(proto1).(*reliantv1.Workflow)
-		copyWf.Name = "one-ring-copy-roundtrip"
+		copyWf.Name = "get-it-right-copy-roundtrip"
 
 		yamlBytes, err := wfyaml.MarshalWorkflow(copyWf)
 		require.NoError(t, err)

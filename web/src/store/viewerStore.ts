@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { getCachedWorkflowDisplayName } from "../lib/workflowDisplayName";
 import type { FileChange } from "../components/Chat/RecentChanges";
 import type { FileNode } from "../components/FileBrowser";
 import { useBrowserStore } from "./browserStore";
@@ -415,9 +416,7 @@ export const useViewerStore = create<ViewerState>()((set, get) => ({
         
         const viewerId = generateViewerId();
         // Extract friendly name from workflow name (e.g., "builtin://agent" -> "agent")
-        const friendlyName = workflowName.includes('://') 
-          ? workflowName.split('://').pop() || workflowName
-          : workflowName;
+        const friendlyName = getCachedWorkflowDisplayName(workflowName);
         const newViewer: WorkflowViewer = {
           id: viewerId,
           type: "workflow",
@@ -806,9 +805,7 @@ export const useViewerStore = create<ViewerState>()((set, get) => ({
             case "workflow":
               if (serialized.chatId && serialized.workflowName) {
                 // Extract friendly name from workflow name
-                const friendlyName = serialized.workflowName.includes('://')
-                  ? serialized.workflowName.split('://').pop() || serialized.workflowName
-                  : serialized.workflowName;
+                const friendlyName = getCachedWorkflowDisplayName(serialized.workflowName);
                 restoredViewers.push({
                   id: viewerId,
                   type: "workflow",

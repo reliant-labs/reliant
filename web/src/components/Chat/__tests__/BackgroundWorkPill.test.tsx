@@ -172,7 +172,6 @@ describe("BackgroundWorkPill", () => {
 
     const stop = screen.getByLabelText("Cancel background agent researcher");
     expect(stop).toBeDisabled();
-    expect(stop.getAttribute("title")).toContain("cannot be cancelled");
 
     fireEvent.click(stop);
     expect(cancelToolCall).not.toHaveBeenCalled();

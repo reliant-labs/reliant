@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/triggers/runevents"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
 	"go.temporal.io/sdk/activity"
 )
@@ -211,6 +212,18 @@ func (a *QuestionCreateActivity) Execute(ctx context.Context, input QuestionCrea
 			Metadata:   metadata,
 		}); err != nil {
 			return fmt.Errorf("failed to emit question update: %w", err)
+		}
+
+		// The run is now waiting on a human: a workflow-event "blocked"
+		// transition, recorded with the question it is blocked on.
+		if _, err := runevents.EmitBlocked(txCtx, a.repo, runevents.Blocked{
+			ChatID:      input.ChatID,
+			WorkflowID:  input.WorkflowID,
+			BlockerID:   questionID,
+			BlockerKind: "question",
+			Prompt:      runevents.QuestionPrompt(input.Metadata),
+		}, question.CreatedAt); err != nil {
+			return fmt.Errorf("failed to record run event: %w", err)
 		}
 
 		return nil

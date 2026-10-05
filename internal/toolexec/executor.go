@@ -97,6 +97,10 @@ type ToolResult struct {
 	// RanOnDaemon is true when the call completed a round trip to a daemon. A
 	// success with this set is proof the machine is reachable again.
 	RanOnDaemon bool
+	// DaemonID names the daemon that ran the call, as reported by the gateway
+	// connection that answered. Recorded on a backgrounded call's row, because
+	// that daemon is the only party that can later say the process ended.
+	DaemonID string
 }
 
 // ExecutionMetrics provides telemetry for tool execution

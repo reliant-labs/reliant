@@ -1,0 +1,2953 @@
+{
+  "outcomes": [
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-4.5-haiku",
+        "provider": "copilot",
+        "level": ""
+      },
+      "label": "claude-4.5-haiku@copilot level=default",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-4.5-haiku@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "claude-haiku-4.5",
+      "effective_temperature": 1,
+      "latency_ms": 695,
+      "input_tokens": 14,
+      "output_tokens": 6,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 1,
+        "content_start": 1,
+        "content_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "temp",
+        "model": "claude-4.5-haiku",
+        "provider": "copilot",
+        "level": "",
+        "temperature": 0
+      },
+      "label": "claude-4.5-haiku@copilot temp=0",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-4.5-haiku@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "claude-haiku-4.5",
+      "effective_temperature": 0,
+      "latency_ms": 717,
+      "input_tokens": 14,
+      "output_tokens": 6,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 1,
+        "content_start": 1,
+        "content_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "temp",
+        "model": "claude-4.5-haiku",
+        "provider": "copilot",
+        "level": "",
+        "temperature": 0.7
+      },
+      "label": "claude-4.5-haiku@copilot temp=0.7",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-4.5-haiku@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "claude-haiku-4.5",
+      "effective_temperature": 0.7,
+      "latency_ms": 675,
+      "input_tokens": 14,
+      "output_tokens": 6,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 1,
+        "content_start": 1,
+        "content_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "tool",
+        "model": "claude-4.5-haiku",
+        "provider": "copilot",
+        "level": ""
+      },
+      "label": "claude-4.5-haiku@copilot tool-roundtrip",
+      "status": "pass",
+      "text_excerpt": "The secret word returned by the get_secret_word tool is: **pineapple**",
+      "resolved_model": "claude-4.5-haiku@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "claude-haiku-4.5",
+      "effective_temperature": 1,
+      "latency_ms": 1641,
+      "input_tokens": 1335,
+      "output_tokens": 96,
+      "finish_reason": "tool_use",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 4,
+        "content_start": 1,
+        "content_stop": 1,
+        "tool_use_delta": 8,
+        "tool_use_start": 1,
+        "tool_use_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-5-sonnet",
+        "provider": "copilot",
+        "level": ""
+      },
+      "label": "claude-5-sonnet@copilot level=default",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-5-sonnet@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "claude-sonnet-5",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 613,
+      "input_tokens": 17,
+      "output_tokens": 5,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 1,
+        "content_start": 1,
+        "content_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-5-sonnet",
+        "provider": "copilot",
+        "level": "low"
+      },
+      "label": "claude-5-sonnet@copilot level=low",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-5-sonnet@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "claude-sonnet-5",
+      "effective_thinking": "low",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 603,
+      "input_tokens": 17,
+      "output_tokens": 5,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 1,
+        "content_start": 1,
+        "content_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-5-sonnet",
+        "provider": "copilot",
+        "level": "medium"
+      },
+      "label": "claude-5-sonnet@copilot level=medium",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-5-sonnet@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "claude-sonnet-5",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 603,
+      "input_tokens": 17,
+      "output_tokens": 5,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 1,
+        "content_start": 1,
+        "content_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-5-sonnet",
+        "provider": "copilot",
+        "level": "high"
+      },
+      "label": "claude-5-sonnet@copilot level=high",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-5-sonnet@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "claude-sonnet-5",
+      "effective_thinking": "high",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 599,
+      "input_tokens": 17,
+      "output_tokens": 5,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 1,
+        "content_start": 1,
+        "content_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-5-sonnet",
+        "provider": "copilot",
+        "level": "xhigh"
+      },
+      "label": "claude-5-sonnet@copilot level=xhigh",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-5-sonnet@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "claude-sonnet-5",
+      "effective_thinking": "xhigh",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 660,
+      "input_tokens": 17,
+      "output_tokens": 5,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 1,
+        "content_start": 1,
+        "content_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "tool",
+        "model": "claude-5-sonnet",
+        "provider": "copilot",
+        "level": ""
+      },
+      "label": "claude-5-sonnet@copilot tool-roundtrip",
+      "status": "pass",
+      "text_excerpt": "The secret word is: **pineapple**",
+      "resolved_model": "claude-5-sonnet@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "claude-sonnet-5",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1860,
+      "input_tokens": 1107,
+      "output_tokens": 74,
+      "finish_reason": "tool_use",
+      "event_types": {
+        "complete": 1,
+        "tool_use_delta": 9,
+        "tool_use_start": 1,
+        "tool_use_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-5.5-sonnet",
+        "provider": "copilot",
+        "level": ""
+      },
+      "label": "claude-5.5-sonnet@copilot level=default",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-5.5-sonnet@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "claude-sonnet-5.5",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 811,
+      "input_tokens": 19,
+      "output_tokens": 5,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 1,
+        "content_start": 1,
+        "content_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-5.5-sonnet",
+        "provider": "copilot",
+        "level": "low"
+      },
+      "label": "claude-5.5-sonnet@copilot level=low",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-5.5-sonnet@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "claude-sonnet-5.5",
+      "effective_thinking": "low",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 790,
+      "input_tokens": 19,
+      "output_tokens": 5,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 1,
+        "content_start": 1,
+        "content_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-5.5-sonnet",
+        "provider": "copilot",
+        "level": "medium"
+      },
+      "label": "claude-5.5-sonnet@copilot level=medium",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-5.5-sonnet@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "claude-sonnet-5.5",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 790,
+      "input_tokens": 19,
+      "output_tokens": 5,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 1,
+        "content_start": 1,
+        "content_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-5.5-sonnet",
+        "provider": "copilot",
+        "level": "high"
+      },
+      "label": "claude-5.5-sonnet@copilot level=high",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-5.5-sonnet@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "claude-sonnet-5.5",
+      "effective_thinking": "high",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 864,
+      "input_tokens": 19,
+      "output_tokens": 5,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 1,
+        "content_start": 1,
+        "content_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-5.5-sonnet",
+        "provider": "copilot",
+        "level": "xhigh"
+      },
+      "label": "claude-5.5-sonnet@copilot level=xhigh",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-5.5-sonnet@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "claude-sonnet-5.5",
+      "effective_thinking": "xhigh",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 845,
+      "input_tokens": 19,
+      "output_tokens": 5,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 1,
+        "content_start": 1,
+        "content_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "tool",
+        "model": "claude-5.5-sonnet",
+        "provider": "copilot",
+        "level": ""
+      },
+      "label": "claude-5.5-sonnet@copilot tool-roundtrip",
+      "status": "pass",
+      "text_excerpt": "The secret word it returned is **pineapple**.",
+      "resolved_model": "claude-5.5-sonnet@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "claude-sonnet-5.5",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 2090,
+      "input_tokens": 455,
+      "output_tokens": 74,
+      "finish_reason": "tool_use",
+      "event_types": {
+        "complete": 1,
+        "tool_use_delta": 8,
+        "tool_use_start": 1,
+        "tool_use_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gemini-3.7-flash",
+        "provider": "copilot",
+        "level": ""
+      },
+      "label": "gemini-3.7-flash@copilot level=default",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gemini-3.7-flash@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "gemini-3.7-flash",
+      "effective_thinking": "medium",
+      "effective_temperature": 1,
+      "latency_ms": 1686,
+      "input_tokens": 6,
+      "output_tokens": 2,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gemini-3.7-flash",
+        "provider": "copilot",
+        "level": "low"
+      },
+      "label": "gemini-3.7-flash@copilot level=low",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gemini-3.7-flash@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "gemini-3.7-flash",
+      "effective_thinking": "low",
+      "effective_temperature": 1,
+      "latency_ms": 1744,
+      "input_tokens": 6,
+      "output_tokens": 2,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gemini-3.7-flash",
+        "provider": "copilot",
+        "level": "medium"
+      },
+      "label": "gemini-3.7-flash@copilot level=medium",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gemini-3.7-flash@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "gemini-3.7-flash",
+      "effective_thinking": "medium",
+      "effective_temperature": 1,
+      "latency_ms": 1255,
+      "input_tokens": 6,
+      "output_tokens": 2,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gemini-3.7-flash",
+        "provider": "copilot",
+        "level": "high"
+      },
+      "label": "gemini-3.7-flash@copilot level=high",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gemini-3.7-flash@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "gemini-3.7-flash",
+      "effective_thinking": "high",
+      "effective_temperature": 1,
+      "latency_ms": 1188,
+      "input_tokens": 6,
+      "output_tokens": 2,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "temp",
+        "model": "gemini-3.7-flash",
+        "provider": "copilot",
+        "level": "",
+        "temperature": 0
+      },
+      "label": "gemini-3.7-flash@copilot temp=0",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gemini-3.7-flash@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "gemini-3.7-flash",
+      "effective_thinking": "medium",
+      "effective_temperature": 0,
+      "latency_ms": 1184,
+      "input_tokens": 6,
+      "output_tokens": 2,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "temp",
+        "model": "gemini-3.7-flash",
+        "provider": "copilot",
+        "level": "",
+        "temperature": 0.7
+      },
+      "label": "gemini-3.7-flash@copilot temp=0.7",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gemini-3.7-flash@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "gemini-3.7-flash",
+      "effective_thinking": "medium",
+      "effective_temperature": 0.7,
+      "latency_ms": 1753,
+      "input_tokens": 6,
+      "output_tokens": 2,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "tool",
+        "model": "gemini-3.7-flash",
+        "provider": "copilot",
+        "level": ""
+      },
+      "label": "gemini-3.7-flash@copilot tool-roundtrip",
+      "status": "pass",
+      "text_excerpt": "The secret word returned by the tool is **pineapple**.",
+      "resolved_model": "gemini-3.7-flash@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "gemini-3.7-flash",
+      "effective_thinking": "medium",
+      "effective_temperature": 1,
+      "latency_ms": 2841,
+      "input_tokens": 162,
+      "output_tokens": 33,
+      "finish_reason": "tool_use",
+      "event_types": {
+        "complete": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gemini-3.8-flash",
+        "provider": "copilot",
+        "level": ""
+      },
+      "label": "gemini-3.8-flash@copilot level=default",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gemini-3.8-flash@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "gemini-3.8-flash",
+      "effective_thinking": "medium",
+      "effective_temperature": 1,
+      "latency_ms": 2049,
+      "input_tokens": 6,
+      "output_tokens": 2,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gemini-3.8-flash",
+        "provider": "copilot",
+        "level": "low"
+      },
+      "label": "gemini-3.8-flash@copilot level=low",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gemini-3.8-flash@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "gemini-3.8-flash",
+      "effective_thinking": "low",
+      "effective_temperature": 1,
+      "latency_ms": 1755,
+      "input_tokens": 6,
+      "output_tokens": 2,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gemini-3.8-flash",
+        "provider": "copilot",
+        "level": "medium"
+      },
+      "label": "gemini-3.8-flash@copilot level=medium",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gemini-3.8-flash@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "gemini-3.8-flash",
+      "effective_thinking": "medium",
+      "effective_temperature": 1,
+      "latency_ms": 1359,
+      "input_tokens": 6,
+      "output_tokens": 2,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gemini-3.8-flash",
+        "provider": "copilot",
+        "level": "high"
+      },
+      "label": "gemini-3.8-flash@copilot level=high",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gemini-3.8-flash@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "gemini-3.8-flash",
+      "effective_thinking": "high",
+      "effective_temperature": 1,
+      "latency_ms": 1573,
+      "input_tokens": 6,
+      "output_tokens": 2,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "temp",
+        "model": "gemini-3.8-flash",
+        "provider": "copilot",
+        "level": "",
+        "temperature": 0
+      },
+      "label": "gemini-3.8-flash@copilot temp=0",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gemini-3.8-flash@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "gemini-3.8-flash",
+      "effective_thinking": "medium",
+      "effective_temperature": 0,
+      "latency_ms": 1420,
+      "input_tokens": 6,
+      "output_tokens": 2,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "temp",
+        "model": "gemini-3.8-flash",
+        "provider": "copilot",
+        "level": "",
+        "temperature": 0.7
+      },
+      "label": "gemini-3.8-flash@copilot temp=0.7",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gemini-3.8-flash@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "gemini-3.8-flash",
+      "effective_thinking": "medium",
+      "effective_temperature": 0.7,
+      "latency_ms": 1841,
+      "input_tokens": 6,
+      "output_tokens": 2,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "tool",
+        "model": "gemini-3.8-flash",
+        "provider": "copilot",
+        "level": ""
+      },
+      "label": "gemini-3.8-flash@copilot tool-roundtrip",
+      "status": "pass",
+      "text_excerpt": "The secret word returned by the tool is **pineapple**.",
+      "resolved_model": "gemini-3.8-flash@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "gemini-3.8-flash",
+      "effective_thinking": "medium",
+      "effective_temperature": 1,
+      "latency_ms": 2877,
+      "input_tokens": 162,
+      "output_tokens": 33,
+      "finish_reason": "tool_use",
+      "event_types": {
+        "complete": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-5-mini",
+        "provider": "copilot",
+        "level": ""
+      },
+      "label": "gpt-5-mini@copilot level=default",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-5-mini@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "gpt-5-mini",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 5671,
+      "input_tokens": 4361,
+      "output_tokens": 92,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-5-mini",
+        "provider": "copilot",
+        "level": "low"
+      },
+      "label": "gpt-5-mini@copilot level=low",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-5-mini@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "gpt-5-mini",
+      "effective_thinking": "low",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 2319,
+      "input_tokens": 4361,
+      "output_tokens": 27,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-5-mini",
+        "provider": "copilot",
+        "level": "medium"
+      },
+      "label": "gpt-5-mini@copilot level=medium",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-5-mini@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "gpt-5-mini",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 2157,
+      "input_tokens": 4361,
+      "output_tokens": 77,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-5-mini",
+        "provider": "copilot",
+        "level": "high"
+      },
+      "label": "gpt-5-mini@copilot level=high",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-5-mini@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "gpt-5-mini",
+      "effective_thinking": "high",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 2580,
+      "input_tokens": 4361,
+      "output_tokens": 121,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "tool",
+        "model": "gpt-5-mini",
+        "provider": "copilot",
+        "level": ""
+      },
+      "label": "gpt-5-mini@copilot tool-roundtrip",
+      "status": "pass",
+      "text_excerpt": "The secret word is `pineapple`.",
+      "resolved_model": "gpt-5-mini@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "gpt-5-mini",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 5460,
+      "input_tokens": 8894,
+      "output_tokens": 282,
+      "finish_reason": "tool_use",
+      "event_types": {
+        "complete": 1,
+        "thinking_start": 1,
+        "thinking_stop": 1,
+        "tool_use_delta": 9,
+        "tool_use_start": 10,
+        "tool_use_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-5.3-codex",
+        "provider": "copilot",
+        "level": ""
+      },
+      "label": "gpt-5.3-codex@copilot level=default",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-5.3-codex@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "gpt-5.3-codex",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1481,
+      "input_tokens": 4361,
+      "output_tokens": 22,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-5.3-codex",
+        "provider": "copilot",
+        "level": "low"
+      },
+      "label": "gpt-5.3-codex@copilot level=low",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-5.3-codex@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "gpt-5.3-codex",
+      "effective_thinking": "low",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 702,
+      "input_tokens": 4361,
+      "output_tokens": 6,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2
+      }
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-5.3-codex",
+        "provider": "copilot",
+        "level": "medium"
+      },
+      "label": "gpt-5.3-codex@copilot level=medium",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-5.3-codex@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "gpt-5.3-codex",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 841,
+      "input_tokens": 4361,
+      "output_tokens": 6,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2
+      }
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-5.3-codex",
+        "provider": "copilot",
+        "level": "high"
+      },
+      "label": "gpt-5.3-codex@copilot level=high",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-5.3-codex@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "gpt-5.3-codex",
+      "effective_thinking": "high",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1394,
+      "input_tokens": 4361,
+      "output_tokens": 21,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-5.3-codex",
+        "provider": "copilot",
+        "level": "xhigh"
+      },
+      "label": "gpt-5.3-codex@copilot level=xhigh",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-5.3-codex@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "gpt-5.3-codex",
+      "effective_thinking": "xhigh",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1760,
+      "input_tokens": 4361,
+      "output_tokens": 45,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "tool",
+        "model": "gpt-5.3-codex",
+        "provider": "copilot",
+        "level": ""
+      },
+      "label": "gpt-5.3-codex@copilot tool-roundtrip",
+      "status": "pass",
+      "text_excerpt": "The secret word is `pineapple`.",
+      "resolved_model": "gpt-5.3-codex@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "gpt-5.3-codex",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 2698,
+      "input_tokens": 8897,
+      "output_tokens": 62,
+      "finish_reason": "tool_use",
+      "event_types": {
+        "complete": 1,
+        "thinking_start": 1,
+        "thinking_stop": 1,
+        "tool_use_delta": 9,
+        "tool_use_start": 10,
+        "tool_use_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-5.4",
+        "provider": "copilot",
+        "level": ""
+      },
+      "label": "gpt-5.4@copilot level=default",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-5.4@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "gpt-5.4",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1717,
+      "input_tokens": 4361,
+      "output_tokens": 18,
+      "thinking_chars": 34,
+      "thinking_delta_events": 1,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_delta": 1,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-5.4",
+        "provider": "copilot",
+        "level": "low"
+      },
+      "label": "gpt-5.4@copilot level=low",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-5.4@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "gpt-5.4",
+      "effective_thinking": "low",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1170,
+      "input_tokens": 4361,
+      "output_tokens": 6,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2
+      }
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-5.4",
+        "provider": "copilot",
+        "level": "medium"
+      },
+      "label": "gpt-5.4@copilot level=medium",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-5.4@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "gpt-5.4",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1162,
+      "input_tokens": 4361,
+      "output_tokens": 18,
+      "thinking_chars": 36,
+      "thinking_delta_events": 1,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_delta": 1,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-5.4",
+        "provider": "copilot",
+        "level": "high"
+      },
+      "label": "gpt-5.4@copilot level=high",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-5.4@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "gpt-5.4",
+      "effective_thinking": "high",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1316,
+      "input_tokens": 4361,
+      "output_tokens": 23,
+      "thinking_chars": 27,
+      "thinking_delta_events": 1,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_delta": 1,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-5.4",
+        "provider": "copilot",
+        "level": "xhigh"
+      },
+      "label": "gpt-5.4@copilot level=xhigh",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-5.4@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "gpt-5.4",
+      "effective_thinking": "xhigh",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1261,
+      "input_tokens": 4361,
+      "output_tokens": 33,
+      "thinking_chars": 32,
+      "thinking_delta_events": 1,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_delta": 1,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "tool",
+        "model": "gpt-5.4",
+        "provider": "copilot",
+        "level": ""
+      },
+      "label": "gpt-5.4@copilot tool-roundtrip",
+      "status": "pass",
+      "text_excerpt": "The secret word is `pineapple`.",
+      "resolved_model": "gpt-5.4@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "gpt-5.4",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 2535,
+      "input_tokens": 8898,
+      "output_tokens": 67,
+      "thinking_chars": 42,
+      "thinking_delta_events": 1,
+      "finish_reason": "tool_use",
+      "event_types": {
+        "complete": 1,
+        "thinking_delta": 1,
+        "thinking_start": 1,
+        "thinking_stop": 1,
+        "tool_use_delta": 10,
+        "tool_use_start": 11,
+        "tool_use_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-5.4-mini",
+        "provider": "copilot",
+        "level": ""
+      },
+      "label": "gpt-5.4-mini@copilot level=default",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-5.4-mini@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "gpt-5.4-mini",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 791,
+      "input_tokens": 4361,
+      "output_tokens": 20,
+      "thinking_chars": 28,
+      "thinking_delta_events": 1,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_delta": 1,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-5.4-mini",
+        "provider": "copilot",
+        "level": "low"
+      },
+      "label": "gpt-5.4-mini@copilot level=low",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-5.4-mini@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "gpt-5.4-mini",
+      "effective_thinking": "low",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 761,
+      "input_tokens": 4361,
+      "output_tokens": 16,
+      "thinking_chars": 25,
+      "thinking_delta_events": 1,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_delta": 1,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-5.4-mini",
+        "provider": "copilot",
+        "level": "medium"
+      },
+      "label": "gpt-5.4-mini@copilot level=medium",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-5.4-mini@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "gpt-5.4-mini",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 821,
+      "input_tokens": 4361,
+      "output_tokens": 26,
+      "thinking_chars": 26,
+      "thinking_delta_events": 1,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_delta": 1,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-5.4-mini",
+        "provider": "copilot",
+        "level": "high"
+      },
+      "label": "gpt-5.4-mini@copilot level=high",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-5.4-mini@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "gpt-5.4-mini",
+      "effective_thinking": "high",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 788,
+      "input_tokens": 4361,
+      "output_tokens": 25,
+      "thinking_chars": 30,
+      "thinking_delta_events": 1,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_delta": 1,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-5.4-mini",
+        "provider": "copilot",
+        "level": "xhigh"
+      },
+      "label": "gpt-5.4-mini@copilot level=xhigh",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-5.4-mini@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "gpt-5.4-mini",
+      "effective_thinking": "xhigh",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 856,
+      "input_tokens": 4361,
+      "output_tokens": 49,
+      "thinking_chars": 27,
+      "thinking_delta_events": 1,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_delta": 1,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "tool",
+        "model": "gpt-5.4-mini",
+        "provider": "copilot",
+        "level": ""
+      },
+      "label": "gpt-5.4-mini@copilot tool-roundtrip",
+      "status": "pass",
+      "text_excerpt": "pineapple",
+      "resolved_model": "gpt-5.4-mini@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "gpt-5.4-mini",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1562,
+      "input_tokens": 8898,
+      "output_tokens": 64,
+      "thinking_chars": 28,
+      "thinking_delta_events": 1,
+      "finish_reason": "tool_use",
+      "event_types": {
+        "complete": 1,
+        "thinking_delta": 1,
+        "thinking_start": 1,
+        "thinking_stop": 1,
+        "tool_use_delta": 10,
+        "tool_use_start": 11,
+        "tool_use_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-5.4-nano",
+        "provider": "copilot",
+        "level": ""
+      },
+      "label": "gpt-5.4-nano@copilot level=default",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-5.4-nano@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "gpt-5.4-nano",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 826,
+      "input_tokens": 4361,
+      "output_tokens": 6,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2
+      }
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-5.4-nano",
+        "provider": "copilot",
+        "level": "low"
+      },
+      "label": "gpt-5.4-nano@copilot level=low",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-5.4-nano@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "gpt-5.4-nano",
+      "effective_thinking": "low",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 592,
+      "input_tokens": 4361,
+      "output_tokens": 6,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2
+      }
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-5.4-nano",
+        "provider": "copilot",
+        "level": "medium"
+      },
+      "label": "gpt-5.4-nano@copilot level=medium",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-5.4-nano@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "gpt-5.4-nano",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 732,
+      "input_tokens": 4361,
+      "output_tokens": 6,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2
+      }
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-5.4-nano",
+        "provider": "copilot",
+        "level": "high"
+      },
+      "label": "gpt-5.4-nano@copilot level=high",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-5.4-nano@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "gpt-5.4-nano",
+      "effective_thinking": "high",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 698,
+      "input_tokens": 4361,
+      "output_tokens": 6,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2
+      }
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-5.4-nano",
+        "provider": "copilot",
+        "level": "xhigh"
+      },
+      "label": "gpt-5.4-nano@copilot level=xhigh",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-5.4-nano@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "gpt-5.4-nano",
+      "effective_thinking": "xhigh",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 952,
+      "input_tokens": 4361,
+      "output_tokens": 41,
+      "thinking_chars": 33,
+      "thinking_delta_events": 1,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_delta": 1,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "tool",
+        "model": "gpt-5.4-nano",
+        "provider": "copilot",
+        "level": ""
+      },
+      "label": "gpt-5.4-nano@copilot tool-roundtrip",
+      "status": "pass",
+      "text_excerpt": "The `get_secret_word` tool returned: `pineapple`.",
+      "resolved_model": "gpt-5.4-nano@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "gpt-5.4-nano",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1691,
+      "input_tokens": 8898,
+      "output_tokens": 60,
+      "thinking_chars": 28,
+      "thinking_delta_events": 1,
+      "finish_reason": "tool_use",
+      "event_types": {
+        "complete": 1,
+        "thinking_delta": 1,
+        "thinking_start": 1,
+        "thinking_stop": 1,
+        "tool_use_delta": 10,
+        "tool_use_start": 11,
+        "tool_use_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-5.6-luna",
+        "provider": "copilot",
+        "level": ""
+      },
+      "label": "gpt-5.6-luna@copilot level=default",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-5.6-luna@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "gpt-5.6-luna",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 997,
+      "input_tokens": 4361,
+      "output_tokens": 6,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2
+      }
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-5.6-luna",
+        "provider": "copilot",
+        "level": "low"
+      },
+      "label": "gpt-5.6-luna@copilot level=low",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-5.6-luna@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "gpt-5.6-luna",
+      "effective_thinking": "low",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 926,
+      "input_tokens": 4361,
+      "output_tokens": 6,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2
+      }
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-5.6-luna",
+        "provider": "copilot",
+        "level": "medium"
+      },
+      "label": "gpt-5.6-luna@copilot level=medium",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-5.6-luna@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "gpt-5.6-luna",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 960,
+      "input_tokens": 4361,
+      "output_tokens": 6,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2
+      }
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-5.6-luna",
+        "provider": "copilot",
+        "level": "high"
+      },
+      "label": "gpt-5.6-luna@copilot level=high",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-5.6-luna@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "gpt-5.6-luna",
+      "effective_thinking": "high",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 863,
+      "input_tokens": 4361,
+      "output_tokens": 6,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2
+      }
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-5.6-luna",
+        "provider": "copilot",
+        "level": "xhigh"
+      },
+      "label": "gpt-5.6-luna@copilot level=xhigh",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-5.6-luna@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "gpt-5.6-luna",
+      "effective_thinking": "xhigh",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 931,
+      "input_tokens": 4361,
+      "output_tokens": 6,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2
+      }
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-5.6-luna",
+        "provider": "copilot",
+        "level": "max"
+      },
+      "label": "gpt-5.6-luna@copilot level=max",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-5.6-luna@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "gpt-5.6-luna",
+      "effective_thinking": "max",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 790,
+      "input_tokens": 4361,
+      "output_tokens": 6,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2
+      }
+    },
+    {
+      "cell": {
+        "kind": "tool",
+        "model": "gpt-5.6-luna",
+        "provider": "copilot",
+        "level": ""
+      },
+      "label": "gpt-5.6-luna@copilot tool-roundtrip",
+      "status": "pass",
+      "text_excerpt": "The secret word is `pineapple`.",
+      "resolved_model": "gpt-5.6-luna@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "gpt-5.6-luna",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1900,
+      "input_tokens": 8899,
+      "output_tokens": 37,
+      "finish_reason": "tool_use",
+      "event_types": {
+        "complete": 1,
+        "tool_use_delta": 11,
+        "tool_use_start": 12,
+        "tool_use_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-5.6-terra",
+        "provider": "copilot",
+        "level": ""
+      },
+      "label": "gpt-5.6-terra@copilot level=default",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-5.6-terra@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "gpt-5.6-terra",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 967,
+      "input_tokens": 4361,
+      "output_tokens": 6,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2
+      }
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-5.6-terra",
+        "provider": "copilot",
+        "level": "low"
+      },
+      "label": "gpt-5.6-terra@copilot level=low",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-5.6-terra@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "gpt-5.6-terra",
+      "effective_thinking": "low",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1082,
+      "input_tokens": 4361,
+      "output_tokens": 6,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2
+      }
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-5.6-terra",
+        "provider": "copilot",
+        "level": "medium"
+      },
+      "label": "gpt-5.6-terra@copilot level=medium",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-5.6-terra@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "gpt-5.6-terra",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1037,
+      "input_tokens": 4361,
+      "output_tokens": 6,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2
+      }
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-5.6-terra",
+        "provider": "copilot",
+        "level": "high"
+      },
+      "label": "gpt-5.6-terra@copilot level=high",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-5.6-terra@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "gpt-5.6-terra",
+      "effective_thinking": "high",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1362,
+      "input_tokens": 4361,
+      "output_tokens": 6,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2
+      }
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-5.6-terra",
+        "provider": "copilot",
+        "level": "xhigh"
+      },
+      "label": "gpt-5.6-terra@copilot level=xhigh",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-5.6-terra@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "gpt-5.6-terra",
+      "effective_thinking": "xhigh",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 659,
+      "input_tokens": 4361,
+      "output_tokens": 6,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2
+      }
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-5.6-terra",
+        "provider": "copilot",
+        "level": "max"
+      },
+      "label": "gpt-5.6-terra@copilot level=max",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-5.6-terra@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "gpt-5.6-terra",
+      "effective_thinking": "max",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 844,
+      "input_tokens": 4361,
+      "output_tokens": 6,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2
+      }
+    },
+    {
+      "cell": {
+        "kind": "tool",
+        "model": "gpt-5.6-terra",
+        "provider": "copilot",
+        "level": ""
+      },
+      "label": "gpt-5.6-terra@copilot tool-roundtrip",
+      "status": "pass",
+      "text_excerpt": "The secret word is `pineapple`.",
+      "resolved_model": "gpt-5.6-terra@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "gpt-5.6-terra",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 2085,
+      "input_tokens": 8899,
+      "output_tokens": 47,
+      "thinking_chars": 21,
+      "thinking_delta_events": 1,
+      "finish_reason": "tool_use",
+      "event_types": {
+        "complete": 1,
+        "thinking_delta": 1,
+        "thinking_start": 1,
+        "thinking_stop": 1,
+        "tool_use_delta": 11,
+        "tool_use_start": 12,
+        "tool_use_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-6-luna",
+        "provider": "copilot",
+        "level": ""
+      },
+      "label": "gpt-6-luna@copilot level=default",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-6-luna@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "gpt-6-luna",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 967,
+      "input_tokens": 12,
+      "output_tokens": 6,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2
+      }
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-6-luna",
+        "provider": "copilot",
+        "level": "low"
+      },
+      "label": "gpt-6-luna@copilot level=low",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-6-luna@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "gpt-6-luna",
+      "effective_thinking": "low",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1068,
+      "input_tokens": 12,
+      "output_tokens": 6,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2
+      }
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-6-luna",
+        "provider": "copilot",
+        "level": "medium"
+      },
+      "label": "gpt-6-luna@copilot level=medium",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-6-luna@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "gpt-6-luna",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 909,
+      "input_tokens": 12,
+      "output_tokens": 6,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2
+      }
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-6-luna",
+        "provider": "copilot",
+        "level": "high"
+      },
+      "label": "gpt-6-luna@copilot level=high",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-6-luna@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "gpt-6-luna",
+      "effective_thinking": "high",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 654,
+      "input_tokens": 12,
+      "output_tokens": 6,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2
+      }
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-6-luna",
+        "provider": "copilot",
+        "level": "xhigh"
+      },
+      "label": "gpt-6-luna@copilot level=xhigh",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-6-luna@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "gpt-6-luna",
+      "effective_thinking": "xhigh",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1134,
+      "input_tokens": 12,
+      "output_tokens": 6,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2
+      }
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-6-luna",
+        "provider": "copilot",
+        "level": "max"
+      },
+      "label": "gpt-6-luna@copilot level=max",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-6-luna@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "gpt-6-luna",
+      "effective_thinking": "max",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 683,
+      "input_tokens": 12,
+      "output_tokens": 6,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2
+      }
+    },
+    {
+      "cell": {
+        "kind": "tool",
+        "model": "gpt-6-luna",
+        "provider": "copilot",
+        "level": ""
+      },
+      "label": "gpt-6-luna@copilot tool-roundtrip",
+      "status": "pass",
+      "text_excerpt": "The secret word is **pineapple**.",
+      "resolved_model": "gpt-6-luna@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "gpt-6-luna",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 2069,
+      "input_tokens": 203,
+      "output_tokens": 40,
+      "finish_reason": "tool_use",
+      "event_types": {
+        "complete": 1,
+        "tool_use_delta": 13,
+        "tool_use_start": 14,
+        "tool_use_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "grok-4.5",
+        "provider": "copilot",
+        "level": ""
+      },
+      "label": "grok-4.5@copilot level=default",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "grok-4.5@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "grok-4.5",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1498,
+      "input_tokens": 1531,
+      "output_tokens": 52,
+      "thinking_chars": 41,
+      "thinking_delta_events": 2,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_delta": 2,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "grok-4.5",
+        "provider": "copilot",
+        "level": "low"
+      },
+      "label": "grok-4.5@copilot level=low",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "grok-4.5@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "grok-4.5",
+      "effective_thinking": "low",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 2573,
+      "input_tokens": 1531,
+      "output_tokens": 35,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2
+      }
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "grok-4.5",
+        "provider": "copilot",
+        "level": "medium"
+      },
+      "label": "grok-4.5@copilot level=medium",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "grok-4.5@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "grok-4.5",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1537,
+      "input_tokens": 1531,
+      "output_tokens": 58,
+      "thinking_chars": 39,
+      "thinking_delta_events": 2,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_delta": 2,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "grok-4.5",
+        "provider": "copilot",
+        "level": "high"
+      },
+      "label": "grok-4.5@copilot level=high",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "grok-4.5@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "grok-4.5",
+      "effective_thinking": "high",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1288,
+      "input_tokens": 1531,
+      "output_tokens": 36,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2
+      }
+    },
+    {
+      "cell": {
+        "kind": "tool",
+        "model": "grok-4.5",
+        "provider": "copilot",
+        "level": ""
+      },
+      "label": "grok-4.5@copilot tool-roundtrip",
+      "status": "pass",
+      "text_excerpt": "The secret word is **pineapple**.",
+      "resolved_model": "grok-4.5@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "grok-4.5",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 2959,
+      "input_tokens": 3434,
+      "output_tokens": 119,
+      "thinking_chars": 73,
+      "thinking_delta_events": 1,
+      "finish_reason": "tool_use",
+      "event_types": {
+        "complete": 1,
+        "thinking_delta": 1,
+        "thinking_start": 1,
+        "thinking_stop": 1,
+        "tool_use_delta": 1,
+        "tool_use_start": 2,
+        "tool_use_stop": 2
+      }
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "grok-4.6",
+        "provider": "copilot",
+        "level": ""
+      },
+      "label": "grok-4.6@copilot level=default",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "grok-4.6@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "grok-4.6",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 4397,
+      "input_tokens": 1531,
+      "output_tokens": 269,
+      "thinking_chars": 45,
+      "thinking_delta_events": 2,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_delta": 2,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "grok-4.6",
+        "provider": "copilot",
+        "level": "low"
+      },
+      "label": "grok-4.6@copilot level=low",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "grok-4.6@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "grok-4.6",
+      "effective_thinking": "low",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 2953,
+      "input_tokens": 1531,
+      "output_tokens": 194,
+      "thinking_chars": 49,
+      "thinking_delta_events": 3,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_delta": 3,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "grok-4.6",
+        "provider": "copilot",
+        "level": "medium"
+      },
+      "label": "grok-4.6@copilot level=medium",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "grok-4.6@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "grok-4.6",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 3410,
+      "input_tokens": 1531,
+      "output_tokens": 198,
+      "thinking_chars": 41,
+      "thinking_delta_events": 2,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_delta": 2,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "grok-4.6",
+        "provider": "copilot",
+        "level": "high"
+      },
+      "label": "grok-4.6@copilot level=high",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "grok-4.6@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "grok-4.6",
+      "effective_thinking": "high",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 3893,
+      "input_tokens": 1531,
+      "output_tokens": 179,
+      "thinking_chars": 41,
+      "thinking_delta_events": 2,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_delta": 2,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "grok-4.6",
+        "provider": "copilot",
+        "level": "xhigh"
+      },
+      "label": "grok-4.6@copilot level=xhigh",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "grok-4.6@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "grok-4.6",
+      "effective_thinking": "xhigh",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 4278,
+      "input_tokens": 1532,
+      "output_tokens": 253,
+      "thinking_chars": 115,
+      "thinking_delta_events": 5,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_delta": 5,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "tool",
+        "model": "grok-4.6",
+        "provider": "copilot",
+        "level": ""
+      },
+      "label": "grok-4.6@copilot tool-roundtrip",
+      "status": "pass",
+      "text_excerpt": "The secret word is **pineapple**.",
+      "resolved_model": "grok-4.6@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "grok-4.6",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 12475,
+      "input_tokens": 3436,
+      "output_tokens": 889,
+      "thinking_chars": 239,
+      "thinking_delta_events": 10,
+      "finish_reason": "tool_use",
+      "event_types": {
+        "complete": 1,
+        "thinking_delta": 10,
+        "thinking_start": 1,
+        "thinking_stop": 1,
+        "tool_use_delta": 1,
+        "tool_use_start": 2,
+        "tool_use_stop": 2
+      }
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "grok-4.7",
+        "provider": "copilot",
+        "level": ""
+      },
+      "label": "grok-4.7@copilot level=default",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "grok-4.7@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "grok-4.7",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 983,
+      "input_tokens": 1531,
+      "output_tokens": 30,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "grok-4.7",
+        "provider": "copilot",
+        "level": "low"
+      },
+      "label": "grok-4.7@copilot level=low",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "grok-4.7@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "grok-4.7",
+      "effective_thinking": "low",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1616,
+      "input_tokens": 1531,
+      "output_tokens": 31,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "grok-4.7",
+        "provider": "copilot",
+        "level": "medium"
+      },
+      "label": "grok-4.7@copilot level=medium",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "grok-4.7@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "grok-4.7",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1372,
+      "input_tokens": 1531,
+      "output_tokens": 76,
+      "thinking_chars": 41,
+      "thinking_delta_events": 2,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_delta": 2,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "grok-4.7",
+        "provider": "copilot",
+        "level": "high"
+      },
+      "label": "grok-4.7@copilot level=high",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "grok-4.7@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "grok-4.7",
+      "effective_thinking": "high",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1150,
+      "input_tokens": 1531,
+      "output_tokens": 58,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "grok-4.7",
+        "provider": "copilot",
+        "level": "xhigh"
+      },
+      "label": "grok-4.7@copilot level=xhigh",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "grok-4.7@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "grok-4.7",
+      "effective_thinking": "xhigh",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1349,
+      "input_tokens": 1532,
+      "output_tokens": 59,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "tool",
+        "model": "grok-4.7",
+        "provider": "copilot",
+        "level": ""
+      },
+      "label": "grok-4.7@copilot tool-roundtrip",
+      "status": "pass",
+      "text_excerpt": "The secret word is pineapple.",
+      "resolved_model": "grok-4.7@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "grok-4.7",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 2857,
+      "input_tokens": 3439,
+      "output_tokens": 109,
+      "finish_reason": "tool_use",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 8,
+        "thinking_start": 1,
+        "thinking_stop": 1,
+        "tool_use_delta": 1,
+        "tool_use_start": 2,
+        "tool_use_stop": 2
+      }
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "kimi-k3",
+        "provider": "copilot",
+        "level": ""
+      },
+      "label": "kimi-k3@copilot level=default",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "kimi-k3@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "kimi-k3",
+      "effective_thinking": "max",
+      "effective_temperature": 1,
+      "latency_ms": 1688,
+      "input_tokens": 94,
+      "output_tokens": 66,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2
+      }
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "kimi-k3",
+        "provider": "copilot",
+        "level": "low"
+      },
+      "label": "kimi-k3@copilot level=low",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "kimi-k3@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "kimi-k3",
+      "effective_thinking": "low",
+      "effective_temperature": 1,
+      "latency_ms": 1498,
+      "input_tokens": 95,
+      "output_tokens": 67,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2
+      }
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "kimi-k3",
+        "provider": "copilot",
+        "level": "high"
+      },
+      "label": "kimi-k3@copilot level=high",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "kimi-k3@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "kimi-k3",
+      "effective_thinking": "high",
+      "effective_temperature": 1,
+      "latency_ms": 1699,
+      "input_tokens": 95,
+      "output_tokens": 54,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2
+      }
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "kimi-k3",
+        "provider": "copilot",
+        "level": "max"
+      },
+      "label": "kimi-k3@copilot level=max",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "kimi-k3@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "kimi-k3",
+      "effective_thinking": "max",
+      "effective_temperature": 1,
+      "latency_ms": 3216,
+      "input_tokens": 94,
+      "output_tokens": 45,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2
+      }
+    },
+    {
+      "cell": {
+        "kind": "temp",
+        "model": "kimi-k3",
+        "provider": "copilot",
+        "level": "",
+        "temperature": 0
+      },
+      "label": "kimi-k3@copilot temp=0",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "kimi-k3@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "kimi-k3",
+      "effective_thinking": "max",
+      "effective_temperature": 0,
+      "latency_ms": 4760,
+      "input_tokens": 94,
+      "output_tokens": 63,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2
+      }
+    },
+    {
+      "cell": {
+        "kind": "temp",
+        "model": "kimi-k3",
+        "provider": "copilot",
+        "level": "",
+        "temperature": 0.7
+      },
+      "label": "kimi-k3@copilot temp=0.7",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "kimi-k3@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "kimi-k3",
+      "effective_thinking": "max",
+      "effective_temperature": 0.7,
+      "latency_ms": 4833,
+      "input_tokens": 94,
+      "output_tokens": 48,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2
+      }
+    },
+    {
+      "cell": {
+        "kind": "tool",
+        "model": "kimi-k3",
+        "provider": "copilot",
+        "level": ""
+      },
+      "label": "kimi-k3@copilot tool-roundtrip",
+      "status": "pass",
+      "text_excerpt": "The secret word is: **pineapple**",
+      "resolved_model": "kimi-k3@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "kimi-k3",
+      "effective_thinking": "max",
+      "effective_temperature": 1,
+      "latency_ms": 4749,
+      "input_tokens": 507,
+      "output_tokens": 163,
+      "finish_reason": "tool_use",
+      "event_types": {
+        "complete": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "mai-code-1.1-flash",
+        "provider": "copilot",
+        "level": ""
+      },
+      "label": "mai-code-1.1-flash@copilot level=default",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "mai-code-1.1-flash@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "mai-code-1.1-flash",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1288,
+      "input_tokens": 12,
+      "output_tokens": 6,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2
+      }
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "mai-code-1.1-flash",
+        "provider": "copilot",
+        "level": "low"
+      },
+      "label": "mai-code-1.1-flash@copilot level=low",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "mai-code-1.1-flash@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "mai-code-1.1-flash",
+      "effective_thinking": "low",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 3748,
+      "input_tokens": 12,
+      "output_tokens": 6,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2
+      }
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "mai-code-1.1-flash",
+        "provider": "copilot",
+        "level": "medium"
+      },
+      "label": "mai-code-1.1-flash@copilot level=medium",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "mai-code-1.1-flash@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "mai-code-1.1-flash",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1119,
+      "input_tokens": 12,
+      "output_tokens": 6,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2
+      }
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "mai-code-1.1-flash",
+        "provider": "copilot",
+        "level": "high"
+      },
+      "label": "mai-code-1.1-flash@copilot level=high",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "mai-code-1.1-flash@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "mai-code-1.1-flash",
+      "effective_thinking": "high",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1403,
+      "input_tokens": 12,
+      "output_tokens": 6,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2
+      }
+    },
+    {
+      "cell": {
+        "kind": "tool",
+        "model": "mai-code-1.1-flash",
+        "provider": "copilot",
+        "level": ""
+      },
+      "label": "mai-code-1.1-flash@copilot tool-roundtrip",
+      "status": "pass",
+      "text_excerpt": "The secret word is: pineapple",
+      "resolved_model": "mai-code-1.1-flash@copilot",
+      "resolved_provider": "copilot",
+      "served_by": "copilot",
+      "api_model": "mai-code-1.1-flash",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 2402,
+      "input_tokens": 204,
+      "output_tokens": 41,
+      "finish_reason": "tool_use",
+      "event_types": {
+        "complete": 1,
+        "tool_use_delta": 17,
+        "tool_use_start": 18,
+        "tool_use_stop": 1
+      }
+    }
+  ],
+  "providers": [
+    "anthropic",
+    "antigravity",
+    "codex",
+    "copilot",
+    "openrouter"
+  ],
+  "run_at": "2026-10-04T23:31:06Z",
+  "uncredentialed": [
+    "gemini",
+    "mock",
+    "openai",
+    "reliant",
+    "vertexai"
+  ]
+}

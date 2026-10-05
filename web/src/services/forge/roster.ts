@@ -25,7 +25,8 @@
  * else is deployed. Read from the strongest source available:
  *
  *   1. the control plane's kind (`local`), which is immutable once recorded;
- *   2. forge's own runtime lifecycle, when an env status has been read;
+ *   2. forge's declared lifecycle — on every topology row, so known on first
+ *      load — or its runtime lifecycle once an env status has been read;
  *   3. forge's destination — host or compose processes only — for an env
  *      neither of the above speaks to.
  *
@@ -56,12 +57,19 @@ export interface LifecycleHints {
 
 export function lifecycleOf(
   live: Pick<LiveEnv, "kind"> | null | undefined,
-  forge: Pick<ForgeTopologyEnv, "destination"> | null | undefined,
+  forge: Pick<ForgeTopologyEnv, "destination" | "lifecycle"> | null | undefined,
   forgeSaysLocal = false
 ): EnvLifecycle {
   if (live?.kind === "local") return "local";
   if (live && live.kind !== "unknown") return "deployed";
   if (forgeSaysLocal) return "local";
+  // forge's DECLARED lifecycle, carried on every topology row — known on first
+  // load, before any env status has been read. A non-empty value that is not
+  // "local" (e.g. "ephemeral") is a declaration too: it must not fall through
+  // to the destination guess.
+  const declared = (forge?.lifecycle ?? "").trim().toLowerCase();
+  if (declared === "local") return "local";
+  if (declared !== "") return "deployed";
   const destination = destinationOf(forge);
   return destination === "host" || destination === "compose" ? "local" : "deployed";
 }

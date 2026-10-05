@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useId } from 'react'
 import { Plus, Trash2, ChevronDown, ChevronRight } from 'lucide-react'
 import { ConfigurationPanel } from './ConfigurationPanel'
 import { ToolsSelector } from './ToolsSelector'
@@ -367,19 +367,64 @@ function ParamEditor({ param, onUpdate, onRename, onRemove }: ParamEditorProps) 
       <ValidationSection param={param} onUpdate={onUpdate} />
 
       {/* Visibility selector */}
-      <div>
-        <label className="block text-xs font-medium text-foreground mb-1">
-          Visibility
-        </label>
-        <select
-          value={getInputUI(param as InputDef) || 'config'}
-          onChange={(e) => onUpdate({ ui: e.target.value as 'hidden' | 'config' | undefined })}
-          className="w-full px-3 py-2 border border-input rounded-md text-sm bg-background text-foreground focus:ring-2 focus:ring-ring/40 focus:border-ring transition-colors"
-        >
-          <option value="config">Visible in UI</option>
-          <option value="hidden">Hidden (runtime only)</option>
-        </select>
-      </div>
+      <VisibilitySelect param={param} onUpdate={onUpdate} />
+    </div>
+  )
+}
+
+// ============================================================================
+// VISIBILITY
+// ============================================================================
+
+// Where a param shows up in the chat composer. These map onto the YAML `ui`
+// values the composer actually reads (ChatInput.tsx): "toolbar" renders the
+// param inline under the input, "hidden" never shows it, and anything else —
+// including no value — puts it behind the ⚙ settings popover.
+type Visibility = 'toolbar' | 'settings' | 'hidden'
+
+// Types InlineParamInput can render as a toolbar pill. Others fall back to a
+// label-only pill there, which isn't a usable control.
+const TOOLBAR_TYPES = new Set(['enum', 'boolean', 'string', 'number', 'integer'])
+
+function visibilityOf(ui: string | undefined): Visibility {
+  if (ui === 'toolbar') return 'toolbar'
+  if (ui === 'hidden') return 'hidden'
+  return 'settings'
+}
+
+function VisibilitySelect({ param, onUpdate }: TypeSpecificInputProps) {
+  const selectId = useId()
+  const ui = getInputUI(param as InputDef)
+  const visibility = visibilityOf(ui)
+  // Keep a toolbar param's option even if its type changed, so the select
+  // never shows a value it has no option for.
+  const toolbarAllowed = TOOLBAR_TYPES.has(param.type ?? '') || visibility === 'toolbar'
+
+  const handleChange = (next: Visibility) => {
+    if (next === visibility) return
+    // "settings" is the default placement, so it clears `ui` rather than
+    // writing a value — the YAML stays minimal.
+    onUpdate({ ui: next === 'settings' ? '' : next })
+  }
+
+  return (
+    <div>
+      <label htmlFor={selectId} className="block text-xs font-medium text-foreground mb-1">
+        Visibility in chat
+      </label>
+      <select
+        id={selectId}
+        value={visibility}
+        onChange={(e) => handleChange(e.target.value as Visibility)}
+        className="w-full px-3 py-2 border border-input rounded-md text-sm bg-background text-foreground focus:ring-2 focus:ring-ring/40 focus:border-ring transition-colors"
+      >
+        {toolbarAllowed && <option value="toolbar">Toolbar — under the chat input</option>}
+        <option value="settings">Settings — behind ⚙</option>
+        <option value="hidden">Hidden — runtime only</option>
+      </select>
+      <p className="mt-1 text-xs text-muted-foreground">
+        Sets <code className="font-mono">ui:</code> in the workflow YAML.
+      </p>
     </div>
   )
 }

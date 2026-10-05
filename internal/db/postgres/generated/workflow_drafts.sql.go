@@ -11,42 +11,6 @@ import (
 	"time"
 )
 
-const associateChatWithDraft = `-- name: AssociateChatWithDraft :one
-UPDATE workflow_drafts SET
-    chat_id = $1,
-    updated_at = NOW(),
-    version = version + 1
-WHERE id = $2
-RETURNING id, user_id, name, slug, description, definition, source_path, forked_from, is_hidden, chat_id, created_at, updated_at, version, status
-`
-
-type AssociateChatWithDraftParams struct {
-	ChatID sql.NullString `json:"chat_id"`
-	ID     string         `json:"id"`
-}
-
-func (q *Queries) AssociateChatWithDraft(ctx context.Context, arg AssociateChatWithDraftParams) (WorkflowDraft, error) {
-	row := q.db.QueryRowContext(ctx, associateChatWithDraft, arg.ChatID, arg.ID)
-	var i WorkflowDraft
-	err := row.Scan(
-		&i.ID,
-		&i.UserID,
-		&i.Name,
-		&i.Slug,
-		&i.Description,
-		&i.Definition,
-		&i.SourcePath,
-		&i.ForkedFrom,
-		&i.IsHidden,
-		&i.ChatID,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.Version,
-		&i.Status,
-	)
-	return i, err
-}
-
 const countWorkflowDraftsByUser = `-- name: CountWorkflowDraftsByUser :one
 SELECT COUNT(*) FROM workflow_drafts WHERE user_id = $1
 `
@@ -63,9 +27,9 @@ const createWorkflowDraft = `-- name: CreateWorkflowDraft :one
 INSERT INTO workflow_drafts (
     id, user_id, name, slug, description, definition,
     status, source_path,
-    forked_from, chat_id, created_at, updated_at, is_hidden, version
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 1)
-RETURNING id, user_id, name, slug, description, definition, source_path, forked_from, is_hidden, chat_id, created_at, updated_at, version, status
+    forked_from, created_at, updated_at, is_hidden, version
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 1)
+RETURNING id, user_id, name, slug, description, definition, source_path, forked_from, is_hidden, created_at, updated_at, version, status
 `
 
 type CreateWorkflowDraftParams struct {
@@ -78,10 +42,25 @@ type CreateWorkflowDraftParams struct {
 	Status      string         `json:"status"`
 	SourcePath  sql.NullString `json:"source_path"`
 	ForkedFrom  sql.NullString `json:"forked_from"`
-	ChatID      sql.NullString `json:"chat_id"`
 	CreatedAt   time.Time      `json:"created_at"`
 	UpdatedAt   time.Time      `json:"updated_at"`
 	IsHidden    bool           `json:"is_hidden"`
+}
+
+type CreateWorkflowDraftRow struct {
+	ID          string         `json:"id"`
+	UserID      string         `json:"user_id"`
+	Name        string         `json:"name"`
+	Slug        string         `json:"slug"`
+	Description sql.NullString `json:"description"`
+	Definition  string         `json:"definition"`
+	SourcePath  sql.NullString `json:"source_path"`
+	ForkedFrom  sql.NullString `json:"forked_from"`
+	IsHidden    bool           `json:"is_hidden"`
+	CreatedAt   time.Time      `json:"created_at"`
+	UpdatedAt   time.Time      `json:"updated_at"`
+	Version     int64          `json:"version"`
+	Status      string         `json:"status"`
 }
 
 // Workflow Drafts - Simplified user-owned workflows
@@ -90,7 +69,7 @@ type CreateWorkflowDraftParams struct {
 // A workflow is "usable" (shows in agent selector, can be loaded at runtime)
 // when status = 'complete' AND is_hidden = false. Validity is never stored: it
 // is computed on read and re-checked at run start.
-func (q *Queries) CreateWorkflowDraft(ctx context.Context, arg CreateWorkflowDraftParams) (WorkflowDraft, error) {
+func (q *Queries) CreateWorkflowDraft(ctx context.Context, arg CreateWorkflowDraftParams) (CreateWorkflowDraftRow, error) {
 	row := q.db.QueryRowContext(ctx, createWorkflowDraft,
 		arg.ID,
 		arg.UserID,
@@ -101,12 +80,11 @@ func (q *Queries) CreateWorkflowDraft(ctx context.Context, arg CreateWorkflowDra
 		arg.Status,
 		arg.SourcePath,
 		arg.ForkedFrom,
-		arg.ChatID,
 		arg.CreatedAt,
 		arg.UpdatedAt,
 		arg.IsHidden,
 	)
-	var i WorkflowDraft
+	var i CreateWorkflowDraftRow
 	err := row.Scan(
 		&i.ID,
 		&i.UserID,
@@ -117,7 +95,6 @@ func (q *Queries) CreateWorkflowDraft(ctx context.Context, arg CreateWorkflowDra
 		&i.SourcePath,
 		&i.ForkedFrom,
 		&i.IsHidden,
-		&i.ChatID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Version,
@@ -126,44 +103,30 @@ func (q *Queries) CreateWorkflowDraft(ctx context.Context, arg CreateWorkflowDra
 	return i, err
 }
 
-const deleteWorkflowDraft = `-- name: DeleteWorkflowDraft :exec
+const deleteWorkflowDraft = `-- name: DeleteWorkflowDraft :one
 DELETE FROM workflow_drafts WHERE id = $1
+RETURNING id, user_id, name, slug, description, definition, source_path, forked_from, is_hidden, created_at, updated_at, version, status
 `
 
-func (q *Queries) DeleteWorkflowDraft(ctx context.Context, id string) error {
-	_, err := q.db.ExecContext(ctx, deleteWorkflowDraft, id)
-	return err
+type DeleteWorkflowDraftRow struct {
+	ID          string         `json:"id"`
+	UserID      string         `json:"user_id"`
+	Name        string         `json:"name"`
+	Slug        string         `json:"slug"`
+	Description sql.NullString `json:"description"`
+	Definition  string         `json:"definition"`
+	SourcePath  sql.NullString `json:"source_path"`
+	ForkedFrom  sql.NullString `json:"forked_from"`
+	IsHidden    bool           `json:"is_hidden"`
+	CreatedAt   time.Time      `json:"created_at"`
+	UpdatedAt   time.Time      `json:"updated_at"`
+	Version     int64          `json:"version"`
+	Status      string         `json:"status"`
 }
 
-const deleteWorkflowDraftBySlug = `-- name: DeleteWorkflowDraftBySlug :exec
-DELETE FROM workflow_drafts 
-WHERE user_id = $1 AND slug = $2
-`
-
-type DeleteWorkflowDraftBySlugParams struct {
-	UserID string `json:"user_id"`
-	Slug   string `json:"slug"`
-}
-
-func (q *Queries) DeleteWorkflowDraftBySlug(ctx context.Context, arg DeleteWorkflowDraftBySlugParams) error {
-	_, err := q.db.ExecContext(ctx, deleteWorkflowDraftBySlug, arg.UserID, arg.Slug)
-	return err
-}
-
-const getUsableWorkflowBySlug = `-- name: GetUsableWorkflowBySlug :one
-SELECT id, user_id, name, slug, description, definition, source_path, forked_from, is_hidden, chat_id, created_at, updated_at, version, status FROM workflow_drafts 
-WHERE user_id = $1 AND slug = $2 AND status = 'complete' AND is_hidden = false
-`
-
-type GetUsableWorkflowBySlugParams struct {
-	UserID string `json:"user_id"`
-	Slug   string `json:"slug"`
-}
-
-// Get a usable workflow by slug (for runtime loading)
-func (q *Queries) GetUsableWorkflowBySlug(ctx context.Context, arg GetUsableWorkflowBySlugParams) (WorkflowDraft, error) {
-	row := q.db.QueryRowContext(ctx, getUsableWorkflowBySlug, arg.UserID, arg.Slug)
-	var i WorkflowDraft
+func (q *Queries) DeleteWorkflowDraft(ctx context.Context, id string) (DeleteWorkflowDraftRow, error) {
+	row := q.db.QueryRowContext(ctx, deleteWorkflowDraft, id)
+	var i DeleteWorkflowDraftRow
 	err := row.Scan(
 		&i.ID,
 		&i.UserID,
@@ -174,7 +137,102 @@ func (q *Queries) GetUsableWorkflowBySlug(ctx context.Context, arg GetUsableWork
 		&i.SourcePath,
 		&i.ForkedFrom,
 		&i.IsHidden,
-		&i.ChatID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Version,
+		&i.Status,
+	)
+	return i, err
+}
+
+const deleteWorkflowDraftBySlug = `-- name: DeleteWorkflowDraftBySlug :one
+DELETE FROM workflow_drafts 
+WHERE user_id = $1 AND slug = $2
+RETURNING id, user_id, name, slug, description, definition, source_path, forked_from, is_hidden, created_at, updated_at, version, status
+`
+
+type DeleteWorkflowDraftBySlugParams struct {
+	UserID string `json:"user_id"`
+	Slug   string `json:"slug"`
+}
+
+type DeleteWorkflowDraftBySlugRow struct {
+	ID          string         `json:"id"`
+	UserID      string         `json:"user_id"`
+	Name        string         `json:"name"`
+	Slug        string         `json:"slug"`
+	Description sql.NullString `json:"description"`
+	Definition  string         `json:"definition"`
+	SourcePath  sql.NullString `json:"source_path"`
+	ForkedFrom  sql.NullString `json:"forked_from"`
+	IsHidden    bool           `json:"is_hidden"`
+	CreatedAt   time.Time      `json:"created_at"`
+	UpdatedAt   time.Time      `json:"updated_at"`
+	Version     int64          `json:"version"`
+	Status      string         `json:"status"`
+}
+
+func (q *Queries) DeleteWorkflowDraftBySlug(ctx context.Context, arg DeleteWorkflowDraftBySlugParams) (DeleteWorkflowDraftBySlugRow, error) {
+	row := q.db.QueryRowContext(ctx, deleteWorkflowDraftBySlug, arg.UserID, arg.Slug)
+	var i DeleteWorkflowDraftBySlugRow
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Name,
+		&i.Slug,
+		&i.Description,
+		&i.Definition,
+		&i.SourcePath,
+		&i.ForkedFrom,
+		&i.IsHidden,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Version,
+		&i.Status,
+	)
+	return i, err
+}
+
+const getUsableWorkflowBySlug = `-- name: GetUsableWorkflowBySlug :one
+SELECT id, user_id, name, slug, description, definition, source_path, forked_from, is_hidden, created_at, updated_at, version, status FROM workflow_drafts 
+WHERE user_id = $1 AND slug = $2 AND status = 'complete' AND is_hidden = false
+`
+
+type GetUsableWorkflowBySlugParams struct {
+	UserID string `json:"user_id"`
+	Slug   string `json:"slug"`
+}
+
+type GetUsableWorkflowBySlugRow struct {
+	ID          string         `json:"id"`
+	UserID      string         `json:"user_id"`
+	Name        string         `json:"name"`
+	Slug        string         `json:"slug"`
+	Description sql.NullString `json:"description"`
+	Definition  string         `json:"definition"`
+	SourcePath  sql.NullString `json:"source_path"`
+	ForkedFrom  sql.NullString `json:"forked_from"`
+	IsHidden    bool           `json:"is_hidden"`
+	CreatedAt   time.Time      `json:"created_at"`
+	UpdatedAt   time.Time      `json:"updated_at"`
+	Version     int64          `json:"version"`
+	Status      string         `json:"status"`
+}
+
+// Get a usable workflow by slug (for runtime loading)
+func (q *Queries) GetUsableWorkflowBySlug(ctx context.Context, arg GetUsableWorkflowBySlugParams) (GetUsableWorkflowBySlugRow, error) {
+	row := q.db.QueryRowContext(ctx, getUsableWorkflowBySlug, arg.UserID, arg.Slug)
+	var i GetUsableWorkflowBySlugRow
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Name,
+		&i.Slug,
+		&i.Description,
+		&i.Definition,
+		&i.SourcePath,
+		&i.ForkedFrom,
+		&i.IsHidden,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Version,
@@ -184,38 +242,28 @@ func (q *Queries) GetUsableWorkflowBySlug(ctx context.Context, arg GetUsableWork
 }
 
 const getWorkflowDraft = `-- name: GetWorkflowDraft :one
-SELECT id, user_id, name, slug, description, definition, source_path, forked_from, is_hidden, chat_id, created_at, updated_at, version, status FROM workflow_drafts WHERE id = $1
+SELECT id, user_id, name, slug, description, definition, source_path, forked_from, is_hidden, created_at, updated_at, version, status FROM workflow_drafts WHERE id = $1
 `
 
-func (q *Queries) GetWorkflowDraft(ctx context.Context, id string) (WorkflowDraft, error) {
-	row := q.db.QueryRowContext(ctx, getWorkflowDraft, id)
-	var i WorkflowDraft
-	err := row.Scan(
-		&i.ID,
-		&i.UserID,
-		&i.Name,
-		&i.Slug,
-		&i.Description,
-		&i.Definition,
-		&i.SourcePath,
-		&i.ForkedFrom,
-		&i.IsHidden,
-		&i.ChatID,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.Version,
-		&i.Status,
-	)
-	return i, err
+type GetWorkflowDraftRow struct {
+	ID          string         `json:"id"`
+	UserID      string         `json:"user_id"`
+	Name        string         `json:"name"`
+	Slug        string         `json:"slug"`
+	Description sql.NullString `json:"description"`
+	Definition  string         `json:"definition"`
+	SourcePath  sql.NullString `json:"source_path"`
+	ForkedFrom  sql.NullString `json:"forked_from"`
+	IsHidden    bool           `json:"is_hidden"`
+	CreatedAt   time.Time      `json:"created_at"`
+	UpdatedAt   time.Time      `json:"updated_at"`
+	Version     int64          `json:"version"`
+	Status      string         `json:"status"`
 }
 
-const getWorkflowDraftByChatID = `-- name: GetWorkflowDraftByChatID :one
-SELECT id, user_id, name, slug, description, definition, source_path, forked_from, is_hidden, chat_id, created_at, updated_at, version, status FROM workflow_drafts WHERE chat_id = $1
-`
-
-func (q *Queries) GetWorkflowDraftByChatID(ctx context.Context, chatID sql.NullString) (WorkflowDraft, error) {
-	row := q.db.QueryRowContext(ctx, getWorkflowDraftByChatID, chatID)
-	var i WorkflowDraft
+func (q *Queries) GetWorkflowDraft(ctx context.Context, id string) (GetWorkflowDraftRow, error) {
+	row := q.db.QueryRowContext(ctx, getWorkflowDraft, id)
+	var i GetWorkflowDraftRow
 	err := row.Scan(
 		&i.ID,
 		&i.UserID,
@@ -226,7 +274,6 @@ func (q *Queries) GetWorkflowDraftByChatID(ctx context.Context, chatID sql.NullS
 		&i.SourcePath,
 		&i.ForkedFrom,
 		&i.IsHidden,
-		&i.ChatID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Version,
@@ -236,7 +283,7 @@ func (q *Queries) GetWorkflowDraftByChatID(ctx context.Context, chatID sql.NullS
 }
 
 const getWorkflowDraftByName = `-- name: GetWorkflowDraftByName :one
-SELECT id, user_id, name, slug, description, definition, source_path, forked_from, is_hidden, chat_id, created_at, updated_at, version, status FROM workflow_drafts 
+SELECT id, user_id, name, slug, description, definition, source_path, forked_from, is_hidden, created_at, updated_at, version, status FROM workflow_drafts 
 WHERE user_id = $1 AND LOWER(name) = LOWER($2)
 `
 
@@ -245,11 +292,27 @@ type GetWorkflowDraftByNameParams struct {
 	Lower  string `json:"lower"`
 }
 
+type GetWorkflowDraftByNameRow struct {
+	ID          string         `json:"id"`
+	UserID      string         `json:"user_id"`
+	Name        string         `json:"name"`
+	Slug        string         `json:"slug"`
+	Description sql.NullString `json:"description"`
+	Definition  string         `json:"definition"`
+	SourcePath  sql.NullString `json:"source_path"`
+	ForkedFrom  sql.NullString `json:"forked_from"`
+	IsHidden    bool           `json:"is_hidden"`
+	CreatedAt   time.Time      `json:"created_at"`
+	UpdatedAt   time.Time      `json:"updated_at"`
+	Version     int64          `json:"version"`
+	Status      string         `json:"status"`
+}
+
 // Check if a workflow with this exact name exists for the user
 // Used for duplicate name validation (different from slug check)
-func (q *Queries) GetWorkflowDraftByName(ctx context.Context, arg GetWorkflowDraftByNameParams) (WorkflowDraft, error) {
+func (q *Queries) GetWorkflowDraftByName(ctx context.Context, arg GetWorkflowDraftByNameParams) (GetWorkflowDraftByNameRow, error) {
 	row := q.db.QueryRowContext(ctx, getWorkflowDraftByName, arg.UserID, arg.Lower)
-	var i WorkflowDraft
+	var i GetWorkflowDraftByNameRow
 	err := row.Scan(
 		&i.ID,
 		&i.UserID,
@@ -260,7 +323,6 @@ func (q *Queries) GetWorkflowDraftByName(ctx context.Context, arg GetWorkflowDra
 		&i.SourcePath,
 		&i.ForkedFrom,
 		&i.IsHidden,
-		&i.ChatID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Version,
@@ -270,7 +332,7 @@ func (q *Queries) GetWorkflowDraftByName(ctx context.Context, arg GetWorkflowDra
 }
 
 const getWorkflowDraftBySlug = `-- name: GetWorkflowDraftBySlug :one
-SELECT id, user_id, name, slug, description, definition, source_path, forked_from, is_hidden, chat_id, created_at, updated_at, version, status FROM workflow_drafts 
+SELECT id, user_id, name, slug, description, definition, source_path, forked_from, is_hidden, created_at, updated_at, version, status FROM workflow_drafts 
 WHERE user_id = $1 AND slug = $2
 `
 
@@ -279,10 +341,26 @@ type GetWorkflowDraftBySlugParams struct {
 	Slug   string `json:"slug"`
 }
 
+type GetWorkflowDraftBySlugRow struct {
+	ID          string         `json:"id"`
+	UserID      string         `json:"user_id"`
+	Name        string         `json:"name"`
+	Slug        string         `json:"slug"`
+	Description sql.NullString `json:"description"`
+	Definition  string         `json:"definition"`
+	SourcePath  sql.NullString `json:"source_path"`
+	ForkedFrom  sql.NullString `json:"forked_from"`
+	IsHidden    bool           `json:"is_hidden"`
+	CreatedAt   time.Time      `json:"created_at"`
+	UpdatedAt   time.Time      `json:"updated_at"`
+	Version     int64          `json:"version"`
+	Status      string         `json:"status"`
+}
+
 // Lookup by user and slug (simple, no scope complexity)
-func (q *Queries) GetWorkflowDraftBySlug(ctx context.Context, arg GetWorkflowDraftBySlugParams) (WorkflowDraft, error) {
+func (q *Queries) GetWorkflowDraftBySlug(ctx context.Context, arg GetWorkflowDraftBySlugParams) (GetWorkflowDraftBySlugRow, error) {
 	row := q.db.QueryRowContext(ctx, getWorkflowDraftBySlug, arg.UserID, arg.Slug)
-	var i WorkflowDraft
+	var i GetWorkflowDraftBySlugRow
 	err := row.Scan(
 		&i.ID,
 		&i.UserID,
@@ -293,7 +371,6 @@ func (q *Queries) GetWorkflowDraftBySlug(ctx context.Context, arg GetWorkflowDra
 		&i.SourcePath,
 		&i.ForkedFrom,
 		&i.IsHidden,
-		&i.ChatID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Version,
@@ -303,7 +380,7 @@ func (q *Queries) GetWorkflowDraftBySlug(ctx context.Context, arg GetWorkflowDra
 }
 
 const getWorkflowDraftBySourcePath = `-- name: GetWorkflowDraftBySourcePath :one
-SELECT id, user_id, name, slug, description, definition, source_path, forked_from, is_hidden, chat_id, created_at, updated_at, version, status FROM workflow_drafts 
+SELECT id, user_id, name, slug, description, definition, source_path, forked_from, is_hidden, created_at, updated_at, version, status FROM workflow_drafts 
 WHERE user_id = $1 AND source_path = $2
 `
 
@@ -312,9 +389,25 @@ type GetWorkflowDraftBySourcePathParams struct {
 	SourcePath sql.NullString `json:"source_path"`
 }
 
-func (q *Queries) GetWorkflowDraftBySourcePath(ctx context.Context, arg GetWorkflowDraftBySourcePathParams) (WorkflowDraft, error) {
+type GetWorkflowDraftBySourcePathRow struct {
+	ID          string         `json:"id"`
+	UserID      string         `json:"user_id"`
+	Name        string         `json:"name"`
+	Slug        string         `json:"slug"`
+	Description sql.NullString `json:"description"`
+	Definition  string         `json:"definition"`
+	SourcePath  sql.NullString `json:"source_path"`
+	ForkedFrom  sql.NullString `json:"forked_from"`
+	IsHidden    bool           `json:"is_hidden"`
+	CreatedAt   time.Time      `json:"created_at"`
+	UpdatedAt   time.Time      `json:"updated_at"`
+	Version     int64          `json:"version"`
+	Status      string         `json:"status"`
+}
+
+func (q *Queries) GetWorkflowDraftBySourcePath(ctx context.Context, arg GetWorkflowDraftBySourcePathParams) (GetWorkflowDraftBySourcePathRow, error) {
 	row := q.db.QueryRowContext(ctx, getWorkflowDraftBySourcePath, arg.UserID, arg.SourcePath)
-	var i WorkflowDraft
+	var i GetWorkflowDraftBySourcePathRow
 	err := row.Scan(
 		&i.ID,
 		&i.UserID,
@@ -325,7 +418,6 @@ func (q *Queries) GetWorkflowDraftBySourcePath(ctx context.Context, arg GetWorkf
 		&i.SourcePath,
 		&i.ForkedFrom,
 		&i.IsHidden,
-		&i.ChatID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Version,
@@ -335,7 +427,7 @@ func (q *Queries) GetWorkflowDraftBySourcePath(ctx context.Context, arg GetWorkf
 }
 
 const getWorkflowsForkedFrom = `-- name: GetWorkflowsForkedFrom :many
-SELECT id, user_id, name, slug, description, definition, source_path, forked_from, is_hidden, chat_id, created_at, updated_at, version, status FROM workflow_drafts 
+SELECT id, user_id, name, slug, description, definition, source_path, forked_from, is_hidden, created_at, updated_at, version, status FROM workflow_drafts 
 WHERE user_id = $1 AND forked_from = $2
 `
 
@@ -344,16 +436,32 @@ type GetWorkflowsForkedFromParams struct {
 	ForkedFrom sql.NullString `json:"forked_from"`
 }
 
+type GetWorkflowsForkedFromRow struct {
+	ID          string         `json:"id"`
+	UserID      string         `json:"user_id"`
+	Name        string         `json:"name"`
+	Slug        string         `json:"slug"`
+	Description sql.NullString `json:"description"`
+	Definition  string         `json:"definition"`
+	SourcePath  sql.NullString `json:"source_path"`
+	ForkedFrom  sql.NullString `json:"forked_from"`
+	IsHidden    bool           `json:"is_hidden"`
+	CreatedAt   time.Time      `json:"created_at"`
+	UpdatedAt   time.Time      `json:"updated_at"`
+	Version     int64          `json:"version"`
+	Status      string         `json:"status"`
+}
+
 // Get all workflows that were forked from a specific origin
-func (q *Queries) GetWorkflowsForkedFrom(ctx context.Context, arg GetWorkflowsForkedFromParams) ([]WorkflowDraft, error) {
+func (q *Queries) GetWorkflowsForkedFrom(ctx context.Context, arg GetWorkflowsForkedFromParams) ([]GetWorkflowsForkedFromRow, error) {
 	rows, err := q.db.QueryContext(ctx, getWorkflowsForkedFrom, arg.UserID, arg.ForkedFrom)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []WorkflowDraft{}
+	items := []GetWorkflowsForkedFromRow{}
 	for rows.Next() {
-		var i WorkflowDraft
+		var i GetWorkflowsForkedFromRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.UserID,
@@ -364,7 +472,6 @@ func (q *Queries) GetWorkflowsForkedFrom(ctx context.Context, arg GetWorkflowsFo
 			&i.SourcePath,
 			&i.ForkedFrom,
 			&i.IsHidden,
-			&i.ChatID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.Version,
@@ -384,21 +491,37 @@ func (q *Queries) GetWorkflowsForkedFrom(ctx context.Context, arg GetWorkflowsFo
 }
 
 const listWorkflowDraftsByUser = `-- name: ListWorkflowDraftsByUser :many
-SELECT id, user_id, name, slug, description, definition, source_path, forked_from, is_hidden, chat_id, created_at, updated_at, version, status FROM workflow_drafts 
+SELECT id, user_id, name, slug, description, definition, source_path, forked_from, is_hidden, created_at, updated_at, version, status FROM workflow_drafts 
 WHERE user_id = $1
 ORDER BY updated_at DESC
 `
 
+type ListWorkflowDraftsByUserRow struct {
+	ID          string         `json:"id"`
+	UserID      string         `json:"user_id"`
+	Name        string         `json:"name"`
+	Slug        string         `json:"slug"`
+	Description sql.NullString `json:"description"`
+	Definition  string         `json:"definition"`
+	SourcePath  sql.NullString `json:"source_path"`
+	ForkedFrom  sql.NullString `json:"forked_from"`
+	IsHidden    bool           `json:"is_hidden"`
+	CreatedAt   time.Time      `json:"created_at"`
+	UpdatedAt   time.Time      `json:"updated_at"`
+	Version     int64          `json:"version"`
+	Status      string         `json:"status"`
+}
+
 // List all workflows for a user, ordered by most recently updated
-func (q *Queries) ListWorkflowDraftsByUser(ctx context.Context, userID string) ([]WorkflowDraft, error) {
+func (q *Queries) ListWorkflowDraftsByUser(ctx context.Context, userID string) ([]ListWorkflowDraftsByUserRow, error) {
 	rows, err := q.db.QueryContext(ctx, listWorkflowDraftsByUser, userID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []WorkflowDraft{}
+	items := []ListWorkflowDraftsByUserRow{}
 	for rows.Next() {
-		var i WorkflowDraft
+		var i ListWorkflowDraftsByUserRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.UserID,
@@ -409,7 +532,6 @@ func (q *Queries) ListWorkflowDraftsByUser(ctx context.Context, userID string) (
 			&i.SourcePath,
 			&i.ForkedFrom,
 			&i.IsHidden,
-			&i.ChatID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.Version,
@@ -434,7 +556,7 @@ UPDATE workflow_drafts SET
     updated_at = NOW(),
     version = version + 1
 WHERE id = $2
-RETURNING id, user_id, name, slug, description, definition, source_path, forked_from, is_hidden, chat_id, created_at, updated_at, version, status
+RETURNING id, user_id, name, slug, description, definition, source_path, forked_from, is_hidden, created_at, updated_at, version, status
 `
 
 type SetWorkflowDraftHiddenParams struct {
@@ -442,9 +564,25 @@ type SetWorkflowDraftHiddenParams struct {
 	ID       string `json:"id"`
 }
 
-func (q *Queries) SetWorkflowDraftHidden(ctx context.Context, arg SetWorkflowDraftHiddenParams) (WorkflowDraft, error) {
+type SetWorkflowDraftHiddenRow struct {
+	ID          string         `json:"id"`
+	UserID      string         `json:"user_id"`
+	Name        string         `json:"name"`
+	Slug        string         `json:"slug"`
+	Description sql.NullString `json:"description"`
+	Definition  string         `json:"definition"`
+	SourcePath  sql.NullString `json:"source_path"`
+	ForkedFrom  sql.NullString `json:"forked_from"`
+	IsHidden    bool           `json:"is_hidden"`
+	CreatedAt   time.Time      `json:"created_at"`
+	UpdatedAt   time.Time      `json:"updated_at"`
+	Version     int64          `json:"version"`
+	Status      string         `json:"status"`
+}
+
+func (q *Queries) SetWorkflowDraftHidden(ctx context.Context, arg SetWorkflowDraftHiddenParams) (SetWorkflowDraftHiddenRow, error) {
 	row := q.db.QueryRowContext(ctx, setWorkflowDraftHidden, arg.IsHidden, arg.ID)
-	var i WorkflowDraft
+	var i SetWorkflowDraftHiddenRow
 	err := row.Scan(
 		&i.ID,
 		&i.UserID,
@@ -455,7 +593,6 @@ func (q *Queries) SetWorkflowDraftHidden(ctx context.Context, arg SetWorkflowDra
 		&i.SourcePath,
 		&i.ForkedFrom,
 		&i.IsHidden,
-		&i.ChatID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Version,
@@ -470,7 +607,7 @@ UPDATE workflow_drafts SET
     updated_at = NOW(),
     version = version + 1
 WHERE id = $2
-RETURNING id, user_id, name, slug, description, definition, source_path, forked_from, is_hidden, chat_id, created_at, updated_at, version, status
+RETURNING id, user_id, name, slug, description, definition, source_path, forked_from, is_hidden, created_at, updated_at, version, status
 `
 
 type SetWorkflowDraftStatusParams struct {
@@ -478,11 +615,27 @@ type SetWorkflowDraftStatusParams struct {
 	ID     string `json:"id"`
 }
 
+type SetWorkflowDraftStatusRow struct {
+	ID          string         `json:"id"`
+	UserID      string         `json:"user_id"`
+	Name        string         `json:"name"`
+	Slug        string         `json:"slug"`
+	Description sql.NullString `json:"description"`
+	Definition  string         `json:"definition"`
+	SourcePath  sql.NullString `json:"source_path"`
+	ForkedFrom  sql.NullString `json:"forked_from"`
+	IsHidden    bool           `json:"is_hidden"`
+	CreatedAt   time.Time      `json:"created_at"`
+	UpdatedAt   time.Time      `json:"updated_at"`
+	Version     int64          `json:"version"`
+	Status      string         `json:"status"`
+}
+
 // Move a draft between 'draft' and 'complete'. The caller validates before
 // marking complete; this query only records the decision.
-func (q *Queries) SetWorkflowDraftStatus(ctx context.Context, arg SetWorkflowDraftStatusParams) (WorkflowDraft, error) {
+func (q *Queries) SetWorkflowDraftStatus(ctx context.Context, arg SetWorkflowDraftStatusParams) (SetWorkflowDraftStatusRow, error) {
 	row := q.db.QueryRowContext(ctx, setWorkflowDraftStatus, arg.Status, arg.ID)
-	var i WorkflowDraft
+	var i SetWorkflowDraftStatusRow
 	err := row.Scan(
 		&i.ID,
 		&i.UserID,
@@ -493,7 +646,6 @@ func (q *Queries) SetWorkflowDraftStatus(ctx context.Context, arg SetWorkflowDra
 		&i.SourcePath,
 		&i.ForkedFrom,
 		&i.IsHidden,
-		&i.ChatID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Version,
@@ -513,7 +665,7 @@ UPDATE workflow_drafts SET
     updated_at = NOW(),
     version = version + 1
 WHERE id = $7
-RETURNING id, user_id, name, slug, description, definition, source_path, forked_from, is_hidden, chat_id, created_at, updated_at, version, status
+RETURNING id, user_id, name, slug, description, definition, source_path, forked_from, is_hidden, created_at, updated_at, version, status
 `
 
 type UpdateWorkflowDraftParams struct {
@@ -526,7 +678,23 @@ type UpdateWorkflowDraftParams struct {
 	ID          string         `json:"id"`
 }
 
-func (q *Queries) UpdateWorkflowDraft(ctx context.Context, arg UpdateWorkflowDraftParams) (WorkflowDraft, error) {
+type UpdateWorkflowDraftRow struct {
+	ID          string         `json:"id"`
+	UserID      string         `json:"user_id"`
+	Name        string         `json:"name"`
+	Slug        string         `json:"slug"`
+	Description sql.NullString `json:"description"`
+	Definition  string         `json:"definition"`
+	SourcePath  sql.NullString `json:"source_path"`
+	ForkedFrom  sql.NullString `json:"forked_from"`
+	IsHidden    bool           `json:"is_hidden"`
+	CreatedAt   time.Time      `json:"created_at"`
+	UpdatedAt   time.Time      `json:"updated_at"`
+	Version     int64          `json:"version"`
+	Status      string         `json:"status"`
+}
+
+func (q *Queries) UpdateWorkflowDraft(ctx context.Context, arg UpdateWorkflowDraftParams) (UpdateWorkflowDraftRow, error) {
 	row := q.db.QueryRowContext(ctx, updateWorkflowDraft,
 		arg.Name,
 		arg.Slug,
@@ -536,7 +704,7 @@ func (q *Queries) UpdateWorkflowDraft(ctx context.Context, arg UpdateWorkflowDra
 		arg.IsHidden,
 		arg.ID,
 	)
-	var i WorkflowDraft
+	var i UpdateWorkflowDraftRow
 	err := row.Scan(
 		&i.ID,
 		&i.UserID,
@@ -547,7 +715,6 @@ func (q *Queries) UpdateWorkflowDraft(ctx context.Context, arg UpdateWorkflowDra
 		&i.SourcePath,
 		&i.ForkedFrom,
 		&i.IsHidden,
-		&i.ChatID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Version,
@@ -565,7 +732,7 @@ UPDATE workflow_drafts SET
     updated_at = NOW(),
     version = version + 1
 WHERE id = $5
-RETURNING id, user_id, name, slug, description, definition, source_path, forked_from, is_hidden, chat_id, created_at, updated_at, version, status
+RETURNING id, user_id, name, slug, description, definition, source_path, forked_from, is_hidden, created_at, updated_at, version, status
 `
 
 type UpdateWorkflowDraftDefinitionParams struct {
@@ -576,7 +743,23 @@ type UpdateWorkflowDraftDefinitionParams struct {
 	ID         string `json:"id"`
 }
 
-func (q *Queries) UpdateWorkflowDraftDefinition(ctx context.Context, arg UpdateWorkflowDraftDefinitionParams) (WorkflowDraft, error) {
+type UpdateWorkflowDraftDefinitionRow struct {
+	ID          string         `json:"id"`
+	UserID      string         `json:"user_id"`
+	Name        string         `json:"name"`
+	Slug        string         `json:"slug"`
+	Description sql.NullString `json:"description"`
+	Definition  string         `json:"definition"`
+	SourcePath  sql.NullString `json:"source_path"`
+	ForkedFrom  sql.NullString `json:"forked_from"`
+	IsHidden    bool           `json:"is_hidden"`
+	CreatedAt   time.Time      `json:"created_at"`
+	UpdatedAt   time.Time      `json:"updated_at"`
+	Version     int64          `json:"version"`
+	Status      string         `json:"status"`
+}
+
+func (q *Queries) UpdateWorkflowDraftDefinition(ctx context.Context, arg UpdateWorkflowDraftDefinitionParams) (UpdateWorkflowDraftDefinitionRow, error) {
 	row := q.db.QueryRowContext(ctx, updateWorkflowDraftDefinition,
 		arg.Name,
 		arg.Slug,
@@ -584,7 +767,7 @@ func (q *Queries) UpdateWorkflowDraftDefinition(ctx context.Context, arg UpdateW
 		arg.Status,
 		arg.ID,
 	)
-	var i WorkflowDraft
+	var i UpdateWorkflowDraftDefinitionRow
 	err := row.Scan(
 		&i.ID,
 		&i.UserID,
@@ -595,7 +778,6 @@ func (q *Queries) UpdateWorkflowDraftDefinition(ctx context.Context, arg UpdateW
 		&i.SourcePath,
 		&i.ForkedFrom,
 		&i.IsHidden,
-		&i.ChatID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Version,
@@ -610,7 +792,7 @@ UPDATE workflow_drafts SET
     updated_at = NOW(),
     version = version + 1
 WHERE id = $2
-RETURNING id, user_id, name, slug, description, definition, source_path, forked_from, is_hidden, chat_id, created_at, updated_at, version, status
+RETURNING id, user_id, name, slug, description, definition, source_path, forked_from, is_hidden, created_at, updated_at, version, status
 `
 
 type UpdateWorkflowForkedFromParams struct {
@@ -618,10 +800,26 @@ type UpdateWorkflowForkedFromParams struct {
 	ID         string         `json:"id"`
 }
 
+type UpdateWorkflowForkedFromRow struct {
+	ID          string         `json:"id"`
+	UserID      string         `json:"user_id"`
+	Name        string         `json:"name"`
+	Slug        string         `json:"slug"`
+	Description sql.NullString `json:"description"`
+	Definition  string         `json:"definition"`
+	SourcePath  sql.NullString `json:"source_path"`
+	ForkedFrom  sql.NullString `json:"forked_from"`
+	IsHidden    bool           `json:"is_hidden"`
+	CreatedAt   time.Time      `json:"created_at"`
+	UpdatedAt   time.Time      `json:"updated_at"`
+	Version     int64          `json:"version"`
+	Status      string         `json:"status"`
+}
+
 // Set or update the forked_from origin
-func (q *Queries) UpdateWorkflowForkedFrom(ctx context.Context, arg UpdateWorkflowForkedFromParams) (WorkflowDraft, error) {
+func (q *Queries) UpdateWorkflowForkedFrom(ctx context.Context, arg UpdateWorkflowForkedFromParams) (UpdateWorkflowForkedFromRow, error) {
 	row := q.db.QueryRowContext(ctx, updateWorkflowForkedFrom, arg.ForkedFrom, arg.ID)
-	var i WorkflowDraft
+	var i UpdateWorkflowForkedFromRow
 	err := row.Scan(
 		&i.ID,
 		&i.UserID,
@@ -632,7 +830,6 @@ func (q *Queries) UpdateWorkflowForkedFrom(ctx context.Context, arg UpdateWorkfl
 		&i.SourcePath,
 		&i.ForkedFrom,
 		&i.IsHidden,
-		&i.ChatID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Version,
@@ -645,8 +842,8 @@ const upsertWorkflowDraft = `-- name: UpsertWorkflowDraft :one
 INSERT INTO workflow_drafts (
     id, user_id, name, slug, description, definition,
     status, source_path,
-    forked_from, chat_id, created_at, updated_at, is_hidden, version
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 1)
+    forked_from, created_at, updated_at, is_hidden, version
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 1)
 ON CONFLICT(user_id, slug) DO UPDATE SET
     name = excluded.name,
     description = excluded.description,
@@ -656,7 +853,7 @@ ON CONFLICT(user_id, slug) DO UPDATE SET
     -- Don't update forked_from on upsert to preserve origin
     updated_at = NOW(),
     version = workflow_drafts.version + 1
-RETURNING id, user_id, name, slug, description, definition, source_path, forked_from, is_hidden, chat_id, created_at, updated_at, version, status
+RETURNING id, user_id, name, slug, description, definition, source_path, forked_from, is_hidden, created_at, updated_at, version, status
 `
 
 type UpsertWorkflowDraftParams struct {
@@ -669,15 +866,30 @@ type UpsertWorkflowDraftParams struct {
 	Status      string         `json:"status"`
 	SourcePath  sql.NullString `json:"source_path"`
 	ForkedFrom  sql.NullString `json:"forked_from"`
-	ChatID      sql.NullString `json:"chat_id"`
 	CreatedAt   time.Time      `json:"created_at"`
 	UpdatedAt   time.Time      `json:"updated_at"`
 	IsHidden    bool           `json:"is_hidden"`
 }
 
+type UpsertWorkflowDraftRow struct {
+	ID          string         `json:"id"`
+	UserID      string         `json:"user_id"`
+	Name        string         `json:"name"`
+	Slug        string         `json:"slug"`
+	Description sql.NullString `json:"description"`
+	Definition  string         `json:"definition"`
+	SourcePath  sql.NullString `json:"source_path"`
+	ForkedFrom  sql.NullString `json:"forked_from"`
+	IsHidden    bool           `json:"is_hidden"`
+	CreatedAt   time.Time      `json:"created_at"`
+	UpdatedAt   time.Time      `json:"updated_at"`
+	Version     int64          `json:"version"`
+	Status      string         `json:"status"`
+}
+
 // Create or update a workflow draft
 // Unique on (user_id, slug)
-func (q *Queries) UpsertWorkflowDraft(ctx context.Context, arg UpsertWorkflowDraftParams) (WorkflowDraft, error) {
+func (q *Queries) UpsertWorkflowDraft(ctx context.Context, arg UpsertWorkflowDraftParams) (UpsertWorkflowDraftRow, error) {
 	row := q.db.QueryRowContext(ctx, upsertWorkflowDraft,
 		arg.ID,
 		arg.UserID,
@@ -688,12 +900,11 @@ func (q *Queries) UpsertWorkflowDraft(ctx context.Context, arg UpsertWorkflowDra
 		arg.Status,
 		arg.SourcePath,
 		arg.ForkedFrom,
-		arg.ChatID,
 		arg.CreatedAt,
 		arg.UpdatedAt,
 		arg.IsHidden,
 	)
-	var i WorkflowDraft
+	var i UpsertWorkflowDraftRow
 	err := row.Scan(
 		&i.ID,
 		&i.UserID,
@@ -704,7 +915,6 @@ func (q *Queries) UpsertWorkflowDraft(ctx context.Context, arg UpsertWorkflowDra
 		&i.SourcePath,
 		&i.ForkedFrom,
 		&i.IsHidden,
-		&i.ChatID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Version,

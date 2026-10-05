@@ -65,21 +65,27 @@ These outputs matter most when workflows are composed—when a parent workflow s
 
 ## Beyond the Agent Workflow
 
-While the agent workflow handles most tasks, Reliant includes additional workflows for specialized patterns:
+While the agent workflow handles most tasks, Reliant ships additional workflows for specialized jobs. The selector shows each one's display name; the identifier in parentheses is what you use in a `ref:` or on the command line (`reliant workflow run <name>`).
 
-**plan-debate** uses two agents: a proposer and a critic. The proposer suggests approaches, the critic identifies weaknesses, they iterate while disagreements remain.
+**Get It Right** (`get-it-right`) is for complex changes in an existing codebase, where a first attempt often fails. Each iteration implements, runs lint/test/build checks in parallel, then reviews. A failed check skips review and loops straight back; a bad attempt is undone before the next one. Many of the workflows below are built on it.
 
-**parallel-compete** runs three agents on the same problem, then a reviewer picks the best solution. Good for comparing implementation strategies (SQL vs NoSQL, algorithm choices).
+**Best of Three** (`parallel-compete`) runs three agents on the same task in isolated worktrees, then a reviewer picks the winner or synthesizes the best parts. Good for comparing implementation strategies.
 
-**tdd-loop** implements test-driven development: write failing tests, implement while tests fail, refactor, repeat.
+**Build an App** (`forge-one-shot`) scopes an app with you, scaffolds it with Forge, gets the build green, then fans out sub-agents per part of the app and verifies the running result.
 
-**ux-review** runs a UX improvement loop that takes screenshots, analyzes the UI, suggests improvements, and iterates with visual review.
+**Move to Forge** (`forge-migrate`) migrates an existing codebase into a Forge project, with an approval checkpoint before it starts porting components one at a time.
 
-**smart-route** is an intelligent workflow router that analyzes the user's request and dispatches to the best strategy — research, implementation, debugging, or another specialized workflow.
+**Landing Page** (`landing-page`) and **Pitch Deck** (`pitch-deck`) are content pipelines: a short scoping conversation, a content review loop, a visual review loop, then a handoff that serves the result at a preview URL. When they finish, the chat switches to a plain agent so you can keep iterating.
 
-**one-ring** and **bmad-lite** are multi-phase pipeline workflows that use [node routers](/workflows/routing#node-routing) for phase skipping. Users can jump directly to the relevant phase (planning, implementation, etc.) based on their request.
+**Create a Workflow** (`build-workflow`) turns a conversation about what you want to automate into a workflow, building and testing any integrations it needs first.
 
-For details on these patterns and how to build your own, see [Multi-Agent Patterns](/workflows/patterns).
+**Import from Claude Code / Cursor** (`migrate`) brings configuration across from Claude Code, Cursor, Codex, or Windsurf.
+
+Two more ship as **building blocks**: `structured-agent` (an agent that must answer through a response tool, for structured output) and `scope-conversation` (a reusable scoping conversation). They're hidden from the workflow selector, but any workflow can `ref:` them, and they appear under *Building blocks* in the workflow library.
+
+Multi-phase pipeline workflows can use [node routers](/workflows/routing#node-routing) for phase skipping, letting users jump directly to the relevant phase (planning, implementation, etc.) based on their request.
+
+For patterns you can build yourself, such as plan debates, TDD loops, and triage routers, see [Multi-Agent Patterns](/workflows/patterns).
 
 ## Related Topics
 

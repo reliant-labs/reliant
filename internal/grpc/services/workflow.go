@@ -130,8 +130,16 @@ func (s *WorkflowService) ListWorkflows(
 			continue
 		}
 
+		// Hidden builtins are building blocks other workflows ref:; they stay
+		// runnable and resolvable, just out of the default listing.
+		if protoWf.Hidden && !req.Msg.IncludeHidden {
+			continue
+		}
+
 		workflowsBySlug["builtin://"+protoWf.Name] = &reliantv1.WorkflowListItem{
 			Name:            "builtin://" + protoWf.Name,
+			Title:           protoWf.Title,
+			IsHidden:        protoWf.Hidden,
 			Filename:        filename,
 			Description:     protoWf.Description,
 			StepCount:       int32(len(protoWf.Nodes)),
@@ -250,6 +258,7 @@ func userWorkflowListItem(draft *db.WorkflowDraft, check workflowCheck) (*relian
 	draftID := draft.ID // Copy for pointer
 	item := &reliantv1.WorkflowListItem{
 		Name:             draft.Name,
+		Title:            protoWf.Title,
 		Filename:         draft.Slug,
 		Description:      protoWf.Description,
 		StepCount:        int32(len(protoWf.Nodes)),
@@ -258,7 +267,6 @@ func userWorkflowListItem(draft *db.WorkflowDraft, check workflowCheck) (*relian
 		Edges:            protoWf.Edges,
 		Inputs:           protoWf.Inputs,
 		IsHidden:         draft.IsHidden,
-		BuilderChatId:    draft.ChatID,
 		HasPresetGroups:  rpcWorkflowHasPresetGroups(protoWf),
 		DraftId:          &draftID,
 		Status:           draftStatusToProto(draft.Status),
@@ -307,6 +315,7 @@ func discoverProjectWorkflowsFromDB(repo db.Repository, ctx context.Context, pro
 
 		items = append(items, &reliantv1.WorkflowListItem{
 			Name:            protoWf.Name,
+			Title:           protoWf.Title,
 			Filename:        slug,
 			Description:     protoWf.Description,
 			StepCount:       int32(len(protoWf.Nodes)),
@@ -597,15 +606,6 @@ func (s *WorkflowService) SaveWorkflow(
 		draftID = uuid.New().String()
 	}
 
-	// Handle builder chat ID - use from request, or preserve existing
-	var chatID *string
-	if req.Msg.BuilderChatId != nil && *req.Msg.BuilderChatId != "" {
-		chatID = req.Msg.BuilderChatId
-	} else if existing != nil && existing.ChatID != nil {
-		// Preserve existing chat ID if not provided in request
-		chatID = existing.ChatID
-	}
-
 	draft := &db.WorkflowDraft{
 		ID:          draftID,
 		UserID:      userID,
@@ -616,7 +616,6 @@ func (s *WorkflowService) SaveWorkflow(
 		Status:      status,
 		SourcePath:  nil,
 		ForkedFrom:  nil,
-		ChatID:      chatID,
 		CreatedAt:   now,
 		UpdatedAt:   now,
 	}
@@ -632,6 +631,9 @@ func (s *WorkflowService) SaveWorkflow(
 	if isRename {
 		// Rename case: update by ID to change the slug
 		if err := s.database.UpdateWorkflowDraft(ctx, draft); err != nil {
+			if errors.Is(err, db.ErrWorkflowSlugTaken) {
+				return nil, connect.NewError(connect.CodeAlreadyExists, err)
+			}
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to update workflow: %w", err))
 		}
 		// Fetch the updated draft to get the new version
@@ -673,7 +675,6 @@ func (s *WorkflowService) SaveWorkflow(
 		ValidationErrors: validationErrors,
 		Id:               saved.ID,
 		Slug:             slug,
-		BuilderChatId:    saved.ChatID,
 		Version:          saved.Version,
 		YamlDefinition:   string(definitionYAML),
 		Status:           draftStatusToProto(saved.Status),
@@ -796,7 +797,7 @@ func (s *WorkflowService) CopyWorkflow(
 }
 
 // CreateWorkflowDraft creates an empty draft for the workflow builder.
-// Called when user clicks "New Workflow" to get a draft ID before any chat starts.
+// Called when the user clicks "New Workflow" to give the canvas a draft to edit.
 func (s *WorkflowService) CreateWorkflowDraft(
 	ctx context.Context,
 	req *connect.Request[reliantv1.CreateWorkflowDraftRequest],
@@ -838,6 +839,9 @@ func (s *WorkflowService) CreateWorkflowDraft(
 	}
 
 	if err := s.database.CreateWorkflowDraft(ctx, draft); err != nil {
+		if errors.Is(err, db.ErrWorkflowSlugTaken) {
+			return nil, connect.NewError(connect.CodeAlreadyExists, err)
+		}
 		logging.Error("Failed to create workflow draft", "error", err, "userID", userID)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to create workflow draft"))
 	}
@@ -932,50 +936,6 @@ func (s *WorkflowService) SetWorkflowStatus(
 	}), nil
 }
 
-// AssociateChatWithWorkflowDraft links a chat to a workflow draft.
-// Called after chat creation so tools can find the draft by chat ID.
-func (s *WorkflowService) AssociateChatWithWorkflowDraft(
-	ctx context.Context,
-	req *connect.Request[reliantv1.AssociateChatWithWorkflowDraftRequest],
-) (*connect.Response[reliantv1.AssociateChatWithWorkflowDraftResponse], error) {
-	userID := auth.MustGetUserID(ctx)
-
-	if req.Msg.ChatId == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("chat_id is required"))
-	}
-	if req.Msg.DraftId == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("draft_id is required"))
-	}
-
-	// Verify the draft belongs to this user
-	draft, err := s.database.GetWorkflowDraft(ctx, req.Msg.DraftId)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("draft not found"))
-	}
-	if draft.UserID != userID {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("draft not found"))
-	}
-
-	// Verify the chat belongs to this user
-	chat, err := s.database.GetChat(ctx, req.Msg.ChatId)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("chat not found"))
-	}
-	if chat.UserID != userID {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("chat not found"))
-	}
-
-	_, err = s.database.AssociateChatWithDraft(ctx, req.Msg.DraftId, req.Msg.ChatId)
-	if err != nil {
-		logging.Error("Failed to associate chat with workflow draft", "error", err, "chatID", req.Msg.ChatId, "draftID", req.Msg.DraftId)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to associate chat with draft"))
-	}
-
-	logging.Info("Associated chat with workflow draft", "chatID", req.Msg.ChatId, "draftID", req.Msg.DraftId)
-
-	return connect.NewResponse(&reliantv1.AssociateChatWithWorkflowDraftResponse{}), nil
-}
-
 // GetWorkflow returns a specific workflow by name/slug or draft ID
 // If draft_id is provided, it takes priority over name-based lookup.
 // Otherwise: Priority: 1) builtin, 2) project files, 3) user DB workflows
@@ -1007,7 +967,6 @@ func (s *WorkflowService) GetWorkflow(
 			Workflow:         protoWf,
 			Source:           "user",
 			DraftId:          &draft.ID,
-			BuilderChatId:    draft.ChatID,
 			Version:          draft.Version,
 			YamlDefinition:   draft.Definition,
 			Status:           draftStatusToProto(draft.Status),
@@ -1078,7 +1037,6 @@ func (s *WorkflowService) GetWorkflow(
 		return connect.NewResponse(&reliantv1.GetWorkflowResponse{
 			Source:        "user",
 			DraftId:       &draft.ID,
-			BuilderChatId: draft.ChatID,
 			Version:       draft.Version,
 			ParseError:    &parseErr,
 			RawDefinition: &draft.Definition,
@@ -1090,7 +1048,6 @@ func (s *WorkflowService) GetWorkflow(
 		Workflow:         protoWf,
 		Source:           "user",
 		DraftId:          &draft.ID,
-		BuilderChatId:    draft.ChatID,
 		Version:          draft.Version,
 		YamlDefinition:   draft.Definition,
 		Status:           draftStatusToProto(draft.Status),
@@ -1225,7 +1182,6 @@ func (s *WorkflowService) ImportWorkflow(
 		Status:      status,
 		SourcePath:  nil,
 		ForkedFrom:  nil,
-		ChatID:      nil,
 		CreatedAt:   now,
 		UpdatedAt:   now,
 	}
@@ -1326,65 +1282,6 @@ func (s *WorkflowService) ExportWorkflow(
 		Filename:    draft.Slug + ".yaml",
 		Workflow:    protoWf,
 	}), nil
-}
-
-// BuilderChat handles AI-assisted workflow building
-// It maintains conversation history per session and uses specialized tools
-// to read and modify the workflow.
-func (s *WorkflowService) BuilderChat(
-	ctx context.Context,
-	req *connect.Request[reliantv1.BuilderChatRequest],
-) (*connect.Response[reliantv1.BuilderChatResponse], error) {
-	if req.Msg.ProjectId == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("project_id is required"))
-	}
-	if req.Msg.SessionId == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("session_id is required"))
-	}
-	if req.Msg.Message == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("message is required"))
-	}
-
-	// TODO: Implement the actual LLM integration
-	// This is a placeholder that will be replaced with:
-	// 1. Create/retrieve conversation history for the session
-	// 2. Build tool context with the workflow state
-	// 3. Call LLM with workflow builder system prompt and tools
-	// 4. Process tool calls and update workflow
-	// 5. Return response and updated workflow
-
-	logging.Info("[BuilderChat] Received request",
-		"project_id", req.Msg.ProjectId,
-		"session_id", req.Msg.SessionId,
-		"message_preview", truncateString(req.Msg.Message, 50),
-		"workflow_name", req.Msg.Workflow.GetName(),
-	)
-
-	// Placeholder response
-	// In the real implementation, this would be the LLM's response
-	responseMsg := fmt.Sprintf(
-		"I received your message: %q\n\n"+
-			"This is a placeholder response. The actual implementation will connect to the LLM with workflow-building tools.\n\n"+
-			"Current workflow: **%s** with %d nodes.",
-		truncateString(req.Msg.Message, 100),
-		req.Msg.Workflow.GetName(),
-		len(req.Msg.Workflow.GetNodes()),
-	)
-
-	return connect.NewResponse(&reliantv1.BuilderChatResponse{
-		Message:         responseMsg,
-		WorkflowUpdated: false,
-		Workflow:        req.Msg.Workflow, // Return unchanged workflow
-		ToolCalls:       nil,
-	}), nil
-}
-
-// truncateString truncates a string to maxLen characters
-func truncateString(s string, maxLen int) string {
-	if len(s) <= maxLen {
-		return s
-	}
-	return s[:maxLen] + "..."
 }
 
 // ValidateWorkflow validates a workflow without saving it

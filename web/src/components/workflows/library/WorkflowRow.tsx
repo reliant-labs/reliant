@@ -27,7 +27,7 @@ import { runStatusFromDisplayState } from "@/lib/runStatus";
 import { RunStatusDot } from "../../ui/RunStatusIndicator";
 import { Tooltip } from "../../ui/Tooltip";
 import { DraftStatusBadge } from "../../workflow/DraftStatusBadge";
-import { getWorkflowDisplayName } from "../../workflow/useWorkflowInputs";
+import { workflowDisplayName } from "../../../lib/workflowDisplayName";
 import { RowMenu, type RowMenuAction } from "../RowMenu";
 import { WorkflowBadge, WorkflowSourceBadge, type WorkflowSource } from "../WorkflowSourceBadge";
 import { automationsSummary } from "./libraryView";
@@ -36,6 +36,7 @@ export type WorkflowRowAction = RowMenuAction;
 
 export interface WorkflowRowItem {
   name: string;
+  title?: string;
   description?: string;
   source: WorkflowSource;
   /** A draft cannot run until it validates; absent counts as complete. */
@@ -120,7 +121,7 @@ function NameCell({ row, project }: { row: LibraryTableRow; project?: string }) 
           search={project ? { project } : {}}
           className="truncate rounded-sm text-sm font-medium text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
         >
-          {getWorkflowDisplayName(workflow.name, true)}
+          {workflowDisplayName(workflow)}
         </Link>
         {workflow.isDefault && <WorkflowBadge label="Default" variant="info" testId="workflow-default-badge" />}
         {workflow.isDraft && <DraftStatusBadge errorCount={workflow.draftErrorCount} />}
@@ -160,7 +161,7 @@ function AutomationsCell({ row }: { row: LibraryTableRow }) {
 }
 
 function ActionsCell({ row }: { row: LibraryTableRow }) {
-  const displayName = getWorkflowDisplayName(row.workflow.name, true);
+  const displayName = workflowDisplayName(row.workflow);
   return (
     <div className="flex items-center justify-end gap-1">
       {row.onRun && (

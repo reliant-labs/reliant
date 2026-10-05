@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { RecentChanges } from "../RecentChanges";
 import { FileChangeStatus } from "../../../gen/reliant/v1/common_pb";
@@ -130,7 +130,11 @@ describe("RecentChanges", () => {
       default_branch: "main",
     });
 
-    await Promise.resolve();
+    // Let the stale response settle AND React commit whatever it set, so a
+    // missing guard would actually paint old-file.ts before this assertion.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
 
     expect(screen.queryByText("old-file.ts")).not.toBeInTheDocument();
 
@@ -155,6 +159,7 @@ describe("RecentChanges", () => {
     });
 
     expect(screen.queryByText("old-file.ts")).not.toBeInTheDocument();
-    expect(screen.getByText(/new-branch • 1 files changed/i)).toBeInTheDocument();
+    expect(screen.getByText("new-branch")).toBeInTheDocument();
+    expect(screen.queryByText("old-branch")).not.toBeInTheDocument();
   });
 });

@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Tooltip } from "../ui/Tooltip";
 import { ExternalLink, Globe, Lock } from "lucide-react";
 import { type CSSProperties } from "react";
 
@@ -128,13 +129,13 @@ export function DetectedPortsChip() {
                 Default access for new ports
               </div>
               <div className="flex overflow-hidden rounded border border-border">
-                <button
+                <Tooltip content="Only you (and your org) can open a detected port unless you make it public." placement="bottom" delay={300} wrapperClassName="inline-flex">
+<button
                   type="button"
                   disabled={defaultMut.isPending}
                   onClick={() => {
                     if (isPublicDefault) defaultMut.mutate(PortAccessMode.AUTHENTICATED);
                   }}
-                  title="Only you (and your org) can open a detected port unless you make it public."
                   className={
                     "flex flex-1 items-center justify-center gap-1 px-2 py-1 text-xs font-medium transition-colors disabled:opacity-50 " +
                     (!isPublicDefault
@@ -145,13 +146,14 @@ export function DetectedPortsChip() {
                   <Lock className="h-3 w-3" aria-hidden="true" />
                   Only you
                 </button>
-                <button
+</Tooltip>
+                <Tooltip content="Anyone with the link can open every detected port on this workspace." placement="bottom" delay={300} wrapperClassName="inline-flex">
+<button
                   type="button"
                   disabled={defaultMut.isPending}
                   onClick={() => {
                     if (!isPublicDefault) defaultMut.mutate(PortAccessMode.PUBLIC);
                   }}
-                  title="Anyone with the link can open every detected port on this workspace."
                   className={
                     "flex flex-1 items-center justify-center gap-1 border-l border-border px-2 py-1 text-xs font-medium transition-colors disabled:opacity-50 " +
                     (isPublicDefault
@@ -162,6 +164,7 @@ export function DetectedPortsChip() {
                   <Globe className="h-3 w-3" aria-hidden="true" />
                   Public
                 </button>
+</Tooltip>
               </div>
               {isPublicDefault && (
                 <p className="mt-1.5 text-2xs leading-tight text-amber-600 dark:text-amber-500">
@@ -181,25 +184,26 @@ export function DetectedPortsChip() {
                 key={port}
                 className="flex w-full items-center justify-between gap-2 px-3 py-1.5 text-xs hover:bg-accent"
               >
-                <button
+                <Tooltip content={previewUrl(port)} placement="bottom" delay={300} wrapperClassName="inline-flex">
+<button
                   type="button"
                   onClick={() => openPort(port)}
                   className="flex flex-1 items-center gap-1.5 text-left"
-                  title={previewUrl(port)}
                 >
                   <span className="font-mono">Port {port}</span>
                   <ExternalLink className="h-3 w-3 text-muted-foreground" aria-hidden="true" />
                 </button>
+</Tooltip>
                 {canManageAccess && (
-                  <button
-                    type="button"
-                    disabled={pending}
-                    onClick={() => toggleMut.mutate({ port, makePublic: !isPublic })}
-                    title={
+                  <Tooltip content={
                       isPublic
                         ? "Public — anyone with the link can open this port. Click to make private."
                         : "Only you can open this port. Click to make it public."
-                    }
+                    } placement="bottom" delay={300} wrapperClassName="inline-flex">
+<button
+                    type="button"
+                    disabled={pending}
+                    onClick={() => toggleMut.mutate({ port, makePublic: !isPublic })}
                     className={
                       "inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-2xs font-medium transition-colors disabled:opacity-50 " +
                       (isPublic
@@ -219,6 +223,7 @@ export function DetectedPortsChip() {
                       </>
                     )}
                   </button>
+</Tooltip>
                 )}
               </div>
             );

@@ -60,7 +60,8 @@ import {
 import type { LucideIcon } from "lucide-react";
 import { useWorkflows, type WorkflowDef } from "../../store/globalDataStore";
 import { usePreferencesStore } from "../../store/preferencesStore";
-import { normalizeWorkflowRef, getWorkflowDisplayName } from "../workflow/useWorkflowInputs";
+import { normalizeWorkflowRef } from "../workflow/useWorkflowInputs";
+import { workflowDisplayName } from "../../lib/workflowDisplayName";
 import { MobileMenuButton } from "./MobileMenuButton";
 import {
   MOBILE_ROW,
@@ -166,7 +167,7 @@ export function MobileWorkflowCatalog() {
                     <MobileRowIcon icon={iconForWorkflow(workflow, icon)} />
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-sm font-medium text-foreground">
-                        {getWorkflowDisplayName(workflow.name, true)}
+                        {workflowDisplayName(workflow)}
                       </div>
                       {/* Description leads — it's the one line that actually
                           distinguishes a row. A workflow with no description

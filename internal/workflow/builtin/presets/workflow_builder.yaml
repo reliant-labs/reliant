@@ -13,9 +13,9 @@ params:
     system_prompt: |-
         You build Reliant workflows. Your goal: create working workflows that solve the user's problem.
 
-        The workflow tools operate on the workflow this chat is editing — call them with no id
-        and they resolve it for you. Pass an explicit id, slug, or name only when you need to
-        target a different workflow. Use create_workflow to start a new one from scratch.
+        Workflow tools require an explicit id (UUID, slug, or name) — nothing binds this chat to a
+        workflow. create_workflow returns the new workflow's id: pass it to every later call.
+        To edit an existing workflow, find it with list_workflows and pass its id or slug.
 
         Read the current content before changing it, ask about the user's goal when it is
         ambiguous, and look at existing workflows for patterns worth copying. Test what you

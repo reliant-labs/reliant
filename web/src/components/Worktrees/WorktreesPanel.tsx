@@ -1,73 +1,95 @@
-import { useState, useEffect } from "react";
-import { RefreshCw, Loader2, Search, AlertCircle, FolderGit2, Download, Plus } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import {
+  AlertCircle,
+  Archive,
+  Download,
+  FolderGit2,
+  FolderOpen,
+  Loader2,
+  Plus,
+  RefreshCw,
+  Search,
+} from "lucide-react";
 import { cn } from "../../lib/utils";
-import { useWorktreeStore } from "../../store/worktreeStore";
+import { useWorktreeStore, type Worktree } from "../../store/worktreeStore";
 import { useProjectStore } from "../../store/projectStore";
+import { useChatList } from "../../hooks/chat-queries";
 import { CreateWorktreeModal } from "./CreateWorktreeModal";
 import { DiscoverWorktreesModal } from "./DiscoverWorktreesModal";
+import { DeleteWorktreeModal } from "./DeleteWorktreeModal";
 import { AddRepoModal } from "./AddRepoModal";
 import { InitializeGitModal } from "../Git/InitializeGitModal";
 import { Button } from "../ui/Button";
-import { WorktreeStatus } from "../../gen/reliant/v1/worktree_pb";
-import { workspaceButton } from "./workspaceStyles";
+import EmptyState from "../forge-ui/empty_state";
+import SkeletonLoader from "../forge-ui/skeleton_loader";
+import { chatsForWorkspace, sortActiveWorkspaces } from "./workspaceStatus";
+import { useArchiveWorkspace, useOpenWorkspace } from "./useWorkspaceActions";
+import { workspaceColumn, workspaceTable } from "./workspaceStyles";
+import {
+  BranchCell,
+  GitStateCell,
+  IconAction,
+  TimeCell,
+  WorkspaceNameCell,
+} from "./WorkspaceTableParts";
+import type { Chat } from "../../types/chat";
 
 interface WorktreesPanelProps {
+  /** Padding around the panel. The viewer tab relies on the default. */
   paddingClass?: string;
   daemonId?: string;
   includeArchivedOnLoad?: boolean;
+  /**
+   * Called when a workspace's name is clicked. Without it, clicking a name
+   * switches the app into that workspace (the viewer tab's behaviour, where
+   * the detail pane follows the current workspace).
+   */
+  onSelect?: (worktree: Worktree) => void;
+  /** Highlighted row. Defaults to the app's current workspace. */
+  selectedId?: string | null;
+  /** Called after "Open workspace" / a chat link has switched the app into it. */
+  onOpened?: () => void;
 }
 
+/**
+ * The current project's active workspaces as a table: name, branch, the
+ * working tree's git state, its most recent chat, and when it was last used.
+ * Rendered by Settings → Workspaces and by the Workspaces viewer tab, whose
+ * sidebar is narrow — the table is a container query, so columns drop out by
+ * the width it actually gets rather than by viewport.
+ */
 export function WorktreesPanel({
-  paddingClass = "",
+  paddingClass = "p-3",
   daemonId,
   includeArchivedOnLoad = false,
+  onSelect,
+  selectedId,
+  onOpened,
 }: WorktreesPanelProps) {
   const allWorktrees = useWorktreeStore((state) => state.worktrees);
   const currentWorktree = useWorktreeStore((state) => state.currentWorktree);
   const loadWorktrees = useWorktreeStore((state) => state.loadWorktrees);
-  const switchWorktreeContext = useWorktreeStore((state) => state.switchWorktreeContext);
   const isLoading = useWorktreeStore((state) => state.isLoading);
   const deletingId = useWorktreeStore((state) => state.deletingId);
   const error = useWorktreeStore((state) => state.error);
 
-  const worktrees = allWorktrees.filter((worktree) => !worktree.deleted_at);
-
   const currentProject = useProjectStore((state) => state.currentProject);
   const refreshCurrentProject = useProjectStore((state) => state.refreshCurrentProject);
+  const { data: chats = [] } = useChatList(currentProject?.id);
+
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showDiscoverModal, setShowDiscoverModal] = useState(false);
   const [showAddRepoModal, setShowAddRepoModal] = useState(false);
   const [showInitGitModal, setShowInitGitModal] = useState(false);
 
-  const getStatusColor = (status: WorktreeStatus) => {
-    switch (status) {
-      case WorktreeStatus.ACTIVE:
-        return "bg-status-active";
-      case WorktreeStatus.COMPLETED:
-        return "bg-status-completed";
-      case WorktreeStatus.ABANDONED:
-        return "bg-status-abandoned";
-      case WorktreeStatus.MERGING:
-        return "bg-status-merging";
-      default:
-        return "bg-muted-foreground";
-    }
-  };
+  const archive = useArchiveWorkspace();
+  const { openWorkspace, openChat } = useOpenWorkspace(onOpened);
 
-  const getStatusLabel = (status: WorktreeStatus) => {
-    switch (status) {
-      case WorktreeStatus.ACTIVE:
-        return "Active";
-      case WorktreeStatus.COMPLETED:
-        return "Completed";
-      case WorktreeStatus.ABANDONED:
-        return "Abandoned";
-      case WorktreeStatus.MERGING:
-        return "Merging";
-      default:
-        return "Unknown";
-    }
-  };
+  const worktrees = useMemo(
+    () => sortActiveWorkspaces(allWorktrees.filter((worktree) => !worktree.deleted_at)),
+    [allWorktrees],
+  );
+  const highlightedId = selectedId === undefined ? currentWorktree?.id : selectedId;
 
   const refreshWorktrees = () => {
     if (currentProject) {
@@ -82,81 +104,40 @@ export function WorktreesPanel({
     }
   }, [currentProject, includeArchivedOnLoad, loadWorktrees]);
 
-  const handleCreateWorktree = () => {
-    if (!currentProject) {
-      alert("Please select a project first");
-      return;
-    }
-    setShowCreateModal(true);
-  };
-
-  const handleWorktreeCreated = (_worktreeId: string) => {
-    setShowCreateModal(false);
-    refreshWorktrees();
-  };
-
-  const handleDiscoverWorktrees = () => {
-    if (!currentProject) {
-      alert("Please select a project first");
-      return;
-    }
-    setShowDiscoverModal(true);
-  };
-
-  const handleWorktreesImported = () => {
-    refreshWorktrees();
-  };
-
-  const handleInitGitSuccess = async () => {
-    await refreshCurrentProject();
-    await refreshWorktrees();
+  const handleSelect = (worktree: Worktree) => {
+    if (onSelect) onSelect(worktree);
+    else void openWorkspace(worktree);
   };
 
   if (!currentProject) {
     return (
-      <div className="flex h-full flex-col items-center justify-center p-6 text-center">
-        <FolderGit2 className="mb-3 h-10 w-10 text-muted-foreground/40" />
-        <p className="text-sm font-medium text-foreground">No project selected</p>
-        <p className="mt-1 text-xs text-muted-foreground">
-          Select a project to view its workspaces.
-        </p>
+      <div className={cn("forge-ui", paddingClass)}>
+        <EmptyState
+          icon={<FolderGit2 className="h-6 w-6" />}
+          title="No project open"
+          description="Workspaces belong to a project. Open a project to see the workspaces its chats are using."
+        />
       </div>
     );
   }
 
   if (!currentProject.is_git_repo) {
     return (
-      <div className={cn("flex h-full flex-col", paddingClass)}>
-        <div className="border-b border-border/60 px-4 py-4">
-          <p className="text-sm font-semibold text-foreground">Active workspaces</p>
-          <p className="mt-1 text-xs text-muted-foreground">{currentProject.name}</p>
-        </div>
-
-        <div className="flex flex-1 flex-col items-center justify-center p-6 text-center">
-          <div className="mb-4 rounded-full bg-warning/10 p-4 ring-1 ring-warning/20">
-            <AlertCircle className="h-8 w-8 text-warning" />
-          </div>
-          <h3 className="mb-2 text-sm font-semibold text-foreground">
-            Git repository required
-          </h3>
-          <p className="mb-6 max-w-sm text-sm text-muted-foreground">
-            Workspaces require a git repository. Initialize git for this project to enable workspace management.
-          </p>
-          <Button
-            onClick={() => setShowInitGitModal(true)}
-            leftIcon={<FolderGit2 className="h-4 w-4" />}
-            variant="primary"
-            size="md"
-            className={workspaceButton.primary}
-          >
-            Initialize Git Repository
-          </Button>
-        </div>
-
+      <div className={cn("forge-ui", paddingClass)}>
+        <EmptyState
+          icon={<AlertCircle className="h-6 w-6" />}
+          title="Workspaces need a git repository"
+          description={`Each workspace is a git worktree on its own branch, so ${currentProject.name} has to be a git repository first. Initializing git doesn't change your files.`}
+          actionLabel="Initialize git"
+          onAction={() => setShowInitGitModal(true)}
+        />
         <InitializeGitModal
           isOpen={showInitGitModal}
           onClose={() => setShowInitGitModal(false)}
-          onSuccess={handleInitGitSuccess}
+          onSuccess={async () => {
+            await refreshCurrentProject();
+            await refreshWorktrees();
+          }}
           projectId={currentProject.id}
           projectName={currentProject.name}
         />
@@ -164,161 +145,238 @@ export function WorktreesPanel({
     );
   }
 
-  return (
-    <div className={cn("flex h-full flex-col", paddingClass)}>
-      <div className="flex-shrink-0 border-b border-border/60 px-4 py-4">
-        <div className="mb-3 flex items-center justify-between gap-3">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <h2 className="text-sm font-semibold text-foreground">Active workspaces</h2>
-              <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
-                {worktrees.length}
-              </span>
-            </div>
-            <p className="mt-1 truncate text-xs text-muted-foreground">
-              {currentProject.name}
-            </p>
-          </div>
-          <Button
-            onClick={refreshWorktrees}
-            leftIcon={<RefreshCw className={cn("h-3 w-3", isLoading && "animate-spin")} />}
-            variant="outline"
-            size="xs"
-            disabled={isLoading}
-            className={workspaceButton.subtle}
-          >
-            Refresh
-          </Button>
-        </div>
+  const onlyMain = worktrees.length > 0 && worktrees.every((worktree) => worktree.is_main);
 
-        <div className="grid grid-cols-2 gap-2">
-          <Button
-            onClick={handleCreateWorktree}
-            leftIcon={<Plus className="h-3 w-3" />}
-            variant="secondary"
-            size="sm"
-            className={workspaceButton.secondary}
-          >
-            New
-          </Button>
-          <Button
-            onClick={handleDiscoverWorktrees}
-            leftIcon={<Search className="h-3 w-3" />}
-            variant="secondary"
-            size="sm"
-            className={workspaceButton.secondary}
-          >
-            Import
-          </Button>
+  return (
+    <div className={cn("forge-ui flex flex-col gap-3", paddingClass)} data-testid="active-workspaces">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs text-muted-foreground">
+          {worktrees.length === 1 ? "1 workspace" : `${worktrees.length} workspaces`}
+        </p>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <IconAction
+            label="Refresh workspaces"
+            icon={<RefreshCw className={cn("h-3.5 w-3.5", isLoading && "animate-spin")} />}
+            onClick={() => void refreshWorktrees()}
+            disabled={isLoading}
+          />
           {daemonId && (
             <Button
-              onClick={() => setShowAddRepoModal(true)}
-              leftIcon={<Download className="h-3 w-3" />}
-              variant="secondary"
+              variant="outline"
               size="sm"
-              className={cn("col-span-2", workspaceButton.secondary)}
+              leftIcon={<Download className="h-3.5 w-3.5" />}
+              onClick={() => setShowAddRepoModal(true)}
+              title="Clone a repository onto this machine"
             >
-              Add Repository
+              Clone repository
             </Button>
           )}
+          <Button
+            variant="outline"
+            size="sm"
+            leftIcon={<Search className="h-3.5 w-3.5" />}
+            onClick={() => setShowDiscoverModal(true)}
+            title="Find git worktrees that already exist on disk and add them here"
+          >
+            Import existing
+          </Button>
+          <Button
+            variant="primary"
+            size="sm"
+            leftIcon={<Plus className="h-3.5 w-3.5" />}
+            onClick={() => setShowCreateModal(true)}
+          >
+            New workspace
+          </Button>
         </div>
       </div>
 
       {error && (
-        <div className="mx-4 mt-4 rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-xs text-destructive-ink">
-          {error}
+        <div
+          role="alert"
+          className="flex items-start gap-2 rounded-md border border-danger-border bg-danger-surface px-3 py-2 text-xs text-danger-ink"
+        >
+          <AlertCircle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" aria-hidden="true" />
+          <span>{error}</span>
         </div>
       )}
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-3">
-        {isLoading && worktrees.length === 0 ? (
-          <div className="flex h-32 items-center justify-center">
-            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-          </div>
-        ) : worktrees.length === 0 ? (
-          <div className="flex h-full flex-col items-center justify-center rounded-xl border border-dashed border-border/70 p-6 text-center">
-            <FolderGit2 className="mb-3 h-10 w-10 text-muted-foreground/35" />
-            <p className="text-sm font-medium text-foreground">No workspaces yet</p>
-            <p className="mt-1 max-w-48 text-xs text-muted-foreground">
-              Create a workspace or import an existing git worktree.
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {worktrees.map((worktree) => {
-              const isDeleting = deletingId === worktree.id;
-              const isSelected = currentWorktree?.id === worktree.id;
-
-              return (
-                <button
-                  key={worktree.id}
-                  type="button"
-                  className={cn(
-                    "w-full rounded-xl border p-3 text-left transition-colors focus:outline-none focus:ring-2 focus:ring-primary/50",
-                    isSelected
-                      ? "border-primary/50 bg-primary/5 shadow-sm"
-                      : "border-border/60 bg-background hover:border-primary/30 hover:bg-muted/40",
-                    isDeleting && "cursor-not-allowed opacity-60"
-                  )}
-                  onClick={() => !isDeleting && switchWorktreeContext(currentProject.id, worktree)}
-                  title={`${worktree.name} (${getStatusLabel(worktree.status)})`}
-                  disabled={isDeleting}
-                >
-                  <div className="flex items-start gap-3">
-                    <div className={cn("mt-1.5 h-2.5 w-2.5 flex-shrink-0 rounded-full", getStatusColor(worktree.status))} />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className="truncate text-sm font-medium text-foreground">
-                          {worktree.name}
-                        </span>
-                        {worktree.is_main && (
-                          <span className="rounded-full bg-muted px-1.5 py-0.5 text-2xs font-medium uppercase tracking-wide text-muted-foreground">
-                            Main
-                          </span>
-                        )}
-                      </div>
-                      <p className="mt-1 truncate text-xs text-muted-foreground">
-                        {worktree.branch}
-                        {worktree.base_branch && ` → ${worktree.base_branch}`}
-                      </p>
-                    </div>
-                    {isDeleting ? (
-                      <Loader2 className="h-4 w-4 flex-shrink-0 animate-spin text-muted-foreground" />
-                    ) : (
-                      <span className="flex-shrink-0 rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-                        {getStatusLabel(worktree.status)}
-                      </span>
+      {isLoading && worktrees.length === 0 ? (
+        <div className="rounded-lg border border-border bg-card">
+          <SkeletonLoader variant="table-row" count={3} />
+        </div>
+      ) : worktrees.length === 0 ? (
+        <EmptyState
+          icon={<FolderGit2 className="h-6 w-6" />}
+          title="No workspaces yet"
+          description="When you branch a chat, Reliant gives it its own git worktree on a new branch, so the agent can change code without touching your main checkout. Branch a chat, or create a workspace directly."
+          actionLabel="New workspace"
+          onAction={() => setShowCreateModal(true)}
+        />
+      ) : (
+        <div className={workspaceTable.wrapper}>
+          <table className={workspaceTable.table}>
+            <caption className="sr-only">
+              Active workspaces in {currentProject.name}: branch, git state, linked chat, and when
+              each was last used.
+            </caption>
+            <thead>
+              <tr className={workspaceTable.headRow}>
+                <th scope="col" className={workspaceTable.headCell}>
+                  Workspace
+                </th>
+                <th scope="col" className={cn(workspaceTable.headCell, workspaceColumn.branch)}>
+                  Branch
+                </th>
+                <th scope="col" className={workspaceTable.headCell}>
+                  <span className="sr-only @lg:not-sr-only">Git</span>
+                </th>
+                <th scope="col" className={cn(workspaceTable.headCell, workspaceColumn.chat)}>
+                  Chat
+                </th>
+                <th scope="col" className={cn(workspaceTable.headCell, workspaceColumn.time)}>
+                  Last active
+                </th>
+                <th scope="col" className={cn(workspaceTable.headCell, "text-right")}>
+                  <span className="sr-only">Actions</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {worktrees.map((worktree) => {
+                const isArchiving = deletingId === worktree.id;
+                return (
+                  <tr
+                    key={worktree.id}
+                    data-testid={`workspace-row-${worktree.id}`}
+                    data-selected={highlightedId === worktree.id || undefined}
+                    className={cn(
+                      workspaceTable.row,
+                      highlightedId === worktree.id && "bg-primary/5",
+                      isArchiving && "opacity-60",
                     )}
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        )}
-      </div>
+                  >
+                    <td className={cn(workspaceTable.cell, "max-w-0 w-full @xl:w-auto @xl:max-w-xs")}>
+                      <WorkspaceNameCell
+                        worktree={worktree}
+                        isCurrent={currentWorktree?.id === worktree.id}
+                        onSelect={() => handleSelect(worktree)}
+                      />
+                    </td>
+                    <td className={cn(workspaceTable.cell, workspaceColumn.branch, "max-w-[14rem]")}>
+                      <BranchCell worktree={worktree} />
+                    </td>
+                    <td className={workspaceTable.cell}>
+                      <GitStateCell worktree={worktree} />
+                    </td>
+                    <td className={cn(workspaceTable.cell, workspaceColumn.chat, "max-w-[16rem]")}>
+                      <LinkedChatCell
+                        chats={chatsForWorkspace(chats, worktree.id)}
+                        onOpen={(chat) => void openChat(chat)}
+                      />
+                    </td>
+                    <td className={cn(workspaceTable.cell, workspaceColumn.time)}>
+                      <TimeCell value={worktree.last_active} />
+                    </td>
+                    <td className={cn(workspaceTable.cell, "whitespace-nowrap text-right")}>
+                      <div className="inline-flex items-center gap-0.5">
+                        <IconAction
+                          label={`Open ${worktree.name}`}
+                          hint="Open workspace"
+                          icon={<FolderOpen className="h-3.5 w-3.5" />}
+                          onClick={() => void openWorkspace(worktree)}
+                          testId={`open-workspace-${worktree.id}`}
+                        />
+                        <IconAction
+                          label={`Archive ${worktree.name}`}
+                          hint={
+                            worktree.is_main
+                              ? "The main checkout can't be archived"
+                              : "Archive workspace"
+                          }
+                          icon={
+                            isArchiving ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <Archive className="h-3.5 w-3.5" />
+                            )
+                          }
+                          onClick={() => archive.requestArchive(worktree)}
+                          disabled={worktree.is_main || isArchiving}
+                          testId={`archive-workspace-${worktree.id}`}
+                        />
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
 
-      {currentProject && (
-        <>
-          <CreateWorktreeModal
-            isOpen={showCreateModal}
-            onClose={() => setShowCreateModal(false)}
-            onWorktreeCreated={handleWorktreeCreated}
-            projectId={currentProject.id}
-          />
-          <DiscoverWorktreesModal
-            isOpen={showDiscoverModal}
-            onClose={() => setShowDiscoverModal(false)}
-            onWorktreesImported={handleWorktreesImported}
-            projectId={currentProject.id}
-          />
-          {daemonId && (
-            <AddRepoModal
-              isOpen={showAddRepoModal}
-              onClose={() => setShowAddRepoModal(false)}
-              daemonId={daemonId}
-            />
-          )}
-        </>
+      {onlyMain && (
+        <p className="text-pretty text-xs text-muted-foreground">
+          Only the main checkout so far. Branch a chat, or create a workspace, to have an agent
+          work on something in parallel on its own branch.
+        </p>
+      )}
+
+      <CreateWorktreeModal
+        isOpen={showCreateModal}
+        onClose={() => setShowCreateModal(false)}
+        onWorktreeCreated={() => {
+          setShowCreateModal(false);
+          void refreshWorktrees();
+        }}
+        projectId={currentProject.id}
+      />
+      <DiscoverWorktreesModal
+        isOpen={showDiscoverModal}
+        onClose={() => setShowDiscoverModal(false)}
+        onWorktreesImported={() => refreshWorktrees()}
+        projectId={currentProject.id}
+      />
+      {daemonId && (
+        <AddRepoModal
+          isOpen={showAddRepoModal}
+          onClose={() => setShowAddRepoModal(false)}
+          daemonId={daemonId}
+        />
+      )}
+      <DeleteWorktreeModal
+        key={archive.pending?.id ?? "none"}
+        isOpen={archive.pending !== null}
+        onClose={archive.cancel}
+        worktree={archive.pending}
+        chatCount={archive.pending ? chatsForWorkspace(chats, archive.pending.id).length : 0}
+        onConfirmDelete={archive.confirm}
+      />
+    </div>
+  );
+}
+
+/** The workspace's most recent chat, as a link that opens it. */
+function LinkedChatCell({ chats, onOpen }: { chats: Chat[]; onOpen: (chat: Chat) => void }) {
+  const latest = chats[0];
+  if (!latest) {
+    return <span className="text-xs text-muted-foreground">No chats</span>;
+  }
+  const title = latest.title || "Untitled chat";
+  return (
+    <div className="flex min-w-0 items-center gap-1.5">
+      <button
+        type="button"
+        onClick={() => onOpen(latest)}
+        aria-label={`Open chat ${title}`}
+        className="min-w-0 truncate rounded-sm text-left text-xs text-foreground hover:text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        {title}
+      </button>
+      {chats.length > 1 && (
+        <span className="flex-shrink-0 text-2xs tabular-nums text-muted-foreground">
+          +{chats.length - 1}
+        </span>
       )}
     </div>
   );

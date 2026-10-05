@@ -62,6 +62,13 @@ enum UserUpdateType {
   USER_UPDATE_TYPE_NOTIFICATION = 18;
   USER_UPDATE_TYPE_REFETCH = 19;
   USER_UPDATE_TYPE_DAEMON_HEARTBEAT = 20;
+  // A stored workflow (draft row) changed: its definition, status, name or
+  // visibility. entity_id is the draft id; data_json is
+  // {"draft_id","slug","version"}, plus "deleted": true when the draft was
+  // deleted (version is then the last one, which was not bumped). Lets an open workflow editor follow edits
+  // made from anywhere — an agent in any chat, another tab — without being
+  // bound to the chat that made them.
+  USER_UPDATE_TYPE_WORKFLOW_DRAFT_UPDATED = 21;
 }
 
 // EntityType categorizes the type of entity an update relates to
@@ -72,6 +79,7 @@ enum EntityType {
   ENTITY_TYPE_WORKTREE = 3;
   ENTITY_TYPE_BACKGROUND_PROCESS = 4;
   ENTITY_TYPE_SYSTEM = 5;
+  ENTITY_TYPE_WORKFLOW_DRAFT = 6;
 }
 
 // NodeExecutionEventType categorizes node lifecycle events
@@ -168,7 +176,20 @@ message UserStreamEvent {
     WorkflowExecutionEvent workflow_event = 6; // Workflow lifecycle event
     NodeExecutionEvent node_event = 7;         // Node lifecycle event
     ExecutionLog execution_log = 8;            // Log entry from execution
+    ChatCaughtUp chat_caught_up = 9;           // Initial chat sync complete (sent once per subscription)
   }
+}
+
+// ChatCaughtUp marks the end of a subscription's initial chat sync. It is sent
+// exactly once per subscription, after the snapshot or the replay from
+// chat_since_seq — including a replay of nothing — and before any live chat
+// event. Until it arrives, the client's cached transcript may still be behind
+// the server; no other frame can stand in for it, because a replay of nothing
+// sends no chat frame at all.
+message ChatCaughtUp {
+  // The chat sequence the initial sync delivered up to. Live chat updates
+  // follow strictly after it.
+  int64 latest_sequence = 1;
 }
 
 // UserSyncInfo provides initial sync information
@@ -179,6 +200,15 @@ message UserSyncInfo {
 // UserUpdateBatch contains a batch of user-level updates
 message UserUpdateBatch {
   repeated UserUpdateData updates = 1;
+  // The server has delivered every update relevant to this subscription up to
+  // and including this user sequence. It is the client's resume cursor: user
+  // sequences are per-user, but the server filters by project_id, so the
+  // sequences in `updates` legitimately skip. The server owns gap detection
+  // (it sees every sequence) and backfills anything its hub dropped before
+  // sending later updates, so the client never infers loss from a skip. A
+  // batch may carry no updates at all when its only purpose is to advance the
+  // cursor past updates filtered out of this subscription.
+  int64 latest_sequence = 2;
 }
 
 // UserUpdateData represents a user-level update

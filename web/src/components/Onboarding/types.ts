@@ -8,14 +8,14 @@
 
 export type OnboardingStepId =
   | "chat-and-sidebars"
+  | "workflow-controls"
   | "workspaces"
+  | "deployments"
   | "workflow-intro"
   | "workflow-hub"
-  | "workflow-builder"
-  | "workflow-builder-chat"
-  | "completion";
+  | "workflow-builder";
 
-export type OnboardingStepType = "modal" | "spotlight" | "multi-spotlight";
+export type OnboardingStepType = "spotlight" | "multi-spotlight";
 
 export interface SpotlightConfig {
   /** Padding between the element and the spotlight cutout/border (default: 8) */
@@ -52,6 +52,13 @@ export interface OnboardingStep {
   skippable: boolean;
   /** Spotlight customization */
   spotlightConfig?: SpotlightConfig;
+  /**
+   * Whether the step's target can exist for this user right now. A step that
+   * answers false is left out of the tour entirely — skipped by Next/Back and
+   * not counted in "n / total" — rather than shown over an empty spotlight.
+   * Read at navigation time, so it must be synchronous. Omitted = always.
+   */
+  isAvailable?: () => boolean;
 }
 
 export interface StepProps {

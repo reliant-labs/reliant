@@ -46,6 +46,9 @@ type claudeContentBlock struct {
 	Input        map[string]interface{} `json:"input,omitempty"`
 	IsError      bool                   `json:"is_error,omitempty"`
 	CacheControl *claudeCacheControl    `json:"cache_control,omitempty"`
+	Thinking     string                 `json:"thinking,omitempty"`
+	Signature    string                 `json:"signature,omitempty"`
+	Data         string                 `json:"data,omitempty"`
 }
 
 type claudeImageSource struct {
@@ -88,6 +91,15 @@ type claudeToolChoice struct {
 	Name string `json:"name,omitempty"`
 }
 
+type claudeThinking struct {
+	Type         string `json:"type"`
+	BudgetTokens int    `json:"budget_tokens,omitempty"`
+}
+
+type claudeOutputConfig struct {
+	Effort string `json:"effort"`
+}
+
 type claudeRequest struct {
 	AnthropicVersion string               `json:"anthropic_version"`
 	Messages         []claudeMessage      `json:"messages"`
@@ -96,6 +108,8 @@ type claudeRequest struct {
 	Tools            []claudeTool         `json:"tools,omitempty"`
 	ToolChoice       *claudeToolChoice    `json:"tool_choice,omitempty"`
 	Temperature      *float64             `json:"temperature,omitempty"`
+	Thinking         *claudeThinking      `json:"thinking,omitempty"`
+	OutputConfig     *claudeOutputConfig  `json:"output_config,omitempty"`
 	Stream           bool                 `json:"stream,omitempty"`
 }
 
@@ -129,6 +143,8 @@ type claudeStreamEvent struct {
 type claudeStreamDelta struct {
 	Type         string `json:"type"`
 	Text         string `json:"text,omitempty"`
+	Thinking     string `json:"thinking,omitempty"`
+	Signature    string `json:"signature,omitempty"`
 	PartialJSON  string `json:"partial_json,omitempty"`
 	StopReason   string `json:"stop_reason,omitempty"`
 	StopSequence string `json:"stop_sequence,omitempty"`
@@ -204,6 +220,61 @@ func (c *VertexAIClient) streamResponseClaude(ctx context.Context, prompts []str
 	return eventChan
 }
 
+// isAdaptiveThinking reports whether the model takes thinking:{type:"adaptive"}
+// plus output_config.effort instead of a budget.
+func (c *VertexAIClient) isAdaptiveThinking() bool {
+	return c.options.Model.ThinkingMode == "adaptive"
+}
+
+// thinkingRequested reports whether this request asks for extended thinking.
+// It also gates replaying history thinking blocks: they must be sent exactly
+// when the request enables thinking, and never otherwise.
+func (c *VertexAIClient) thinkingRequested() bool {
+	thinking, _ := c.claudeThinkingConfig()
+	return thinking != nil
+}
+
+// claudeThinkingConfig maps ReasoningEffort onto the Messages API thinking
+// fields. Vertex rawPredict/streamRawPredict take the Anthropic Messages body
+// (anthropic_version "vertex-2023-10-16" in the body), so these fields are the
+// same as the direct API. Source of truth for the policy:
+// drivers/anthropic/base.go getThinkingConfig / getOutputConfig.
+//
+//   - adaptive models: thinking:{type:"adaptive"} + output_config.effort
+//     (default high; xhigh/max pass through); "disabled" sends neither.
+//   - budget models: thinking:{type:"enabled",budget_tokens:N}, no
+//     output_config; N is clamped below max_tokens.
+func (c *VertexAIClient) claudeThinkingConfig() (*claudeThinking, *claudeOutputConfig) {
+	effort := c.options.ReasoningEffort
+	if effort == "disabled" {
+		return nil, nil
+	}
+
+	if c.isAdaptiveThinking() {
+		level := "high"
+		switch effort {
+		case "low", "medium", "high", "xhigh", "max":
+			level = effort
+		}
+		return &claudeThinking{Type: "adaptive"}, &claudeOutputConfig{Effort: level}
+	}
+
+	if !c.options.Model.CanReason || effort == "" || c.options.MaxTokens <= 1024 {
+		return nil, nil
+	}
+	budget := int64(16000)
+	switch effort {
+	case "low":
+		budget = 1024
+	case "high":
+		budget = 31999
+	}
+	if budget >= c.options.MaxTokens {
+		budget = c.options.MaxTokens - 1
+	}
+	return &claudeThinking{Type: "enabled", BudgetTokens: int(budget)}, nil
+}
+
 // buildClaudeRequest builds a Claude API request with caching
 func (c *VertexAIClient) buildClaudeRequest(prompts []string, messages []message.Message, toolsList []tools.Tool, stream bool) *claudeRequest {
 	req := &claudeRequest{
@@ -212,8 +283,11 @@ func (c *VertexAIClient) buildClaudeRequest(prompts []string, messages []message
 		Stream:           stream,
 	}
 
-	// Add temperature if specified
-	if c.options.Temperature != nil {
+	req.Thinking, req.OutputConfig = c.claudeThinkingConfig()
+
+	// Temperature is only sent when it cannot break the request: adaptive
+	// models reject it outright, and extended thinking requires it unset (1).
+	if c.options.Temperature != nil && req.Thinking == nil && !c.isAdaptiveThinking() {
 		req.Temperature = c.options.Temperature
 	}
 
@@ -272,6 +346,19 @@ func (c *VertexAIClient) convertMessagesToClaude(messages []message.Message) []c
 		case message.User:
 			var content []claudeContentBlock
 
+			// Thinking / redacted_thinking must lead the turn, and are only
+			// replayed when this request itself enables thinking.
+			if c.thinkingRequested() {
+				if r := msg.ReasoningContent(); r.Thinking != "" && r.Signature != "" {
+					content = append(content, claudeContentBlock{Type: "thinking", Thinking: r.Thinking, Signature: r.Signature})
+				}
+				for _, redacted := range msg.RedactedReasoningContent() {
+					if redacted.Data != "" {
+						content = append(content, claudeContentBlock{Type: "redacted_thinking", Data: redacted.Data})
+					}
+				}
+			}
+
 			if textContent := msg.Content().String(); textContent != "" {
 				content = append(content, claudeContentBlock{
 					Type: "text",
@@ -317,6 +404,19 @@ func (c *VertexAIClient) convertMessagesToClaude(messages []message.Message) []c
 
 		case message.Assistant:
 			var content []claudeContentBlock
+
+			// Thinking / redacted_thinking must lead the turn, and are only
+			// replayed when this request itself enables thinking.
+			if c.thinkingRequested() {
+				if r := msg.ReasoningContent(); r.Thinking != "" && r.Signature != "" {
+					content = append(content, claudeContentBlock{Type: "thinking", Thinking: r.Thinking, Signature: r.Signature})
+				}
+				for _, redacted := range msg.RedactedReasoningContent() {
+					if redacted.Data != "" {
+						content = append(content, claudeContentBlock{Type: "redacted_thinking", Data: redacted.Data})
+					}
+				}
+			}
 
 			if textContent := msg.Content().String(); textContent != "" {
 				content = append(content, claudeContentBlock{
@@ -543,6 +643,7 @@ func (c *VertexAIClient) processClaudeStream(ctx context.Context, body io.Reader
 	}
 
 	currentToolCall := &message.ToolCall{}
+	inThinkingBlock := false
 
 	for {
 		// Check for context cancellation before each decode
@@ -573,7 +674,13 @@ func (c *VertexAIClient) processClaudeStream(ctx context.Context, body io.Reader
 
 		case "content_block_start":
 			if event.ContentBlock != nil {
+				inThinkingBlock = false
 				switch event.ContentBlock.Type {
+				case "thinking":
+					inThinkingBlock = true
+				case "redacted_thinking":
+					inThinkingBlock = true
+					accumulated.RedactedThinking += event.ContentBlock.Data
 				case "text":
 					eventChan <- llm.DriverEvent{Type: llm.EventContentStart}
 				case "tool_use":
@@ -598,6 +705,11 @@ func (c *VertexAIClient) processClaudeStream(ctx context.Context, body io.Reader
 						Type:    llm.EventContentDelta,
 						Content: event.Delta.Text,
 					}
+				} else if event.Delta.Type == "thinking_delta" && event.Delta.Thinking != "" {
+					accumulated.Thinking += event.Delta.Thinking
+					eventChan <- llm.DriverEvent{Type: llm.EventThinkingDelta, Thinking: event.Delta.Thinking}
+				} else if event.Delta.Type == "signature_delta" && event.Delta.Signature != "" {
+					accumulated.ThinkingSignature += event.Delta.Signature
 				} else if event.Delta.Type == "input_json_delta" && event.Delta.PartialJSON != "" {
 					currentToolCall.Input += event.Delta.PartialJSON
 					eventChan <- llm.DriverEvent{
@@ -620,6 +732,8 @@ func (c *VertexAIClient) processClaudeStream(ctx context.Context, body io.Reader
 					ToolCall: currentToolCall,
 				}
 				currentToolCall = &message.ToolCall{}
+			} else if inThinkingBlock {
+				inThinkingBlock = false
 			} else {
 				eventChan <- llm.DriverEvent{Type: llm.EventContentStop}
 			}
@@ -673,6 +787,13 @@ func (c *VertexAIClient) convertClaudeResponse(resp *claudeResponse) *llm.Driver
 		switch block.Type {
 		case "text":
 			response.Content += block.Text
+		case "thinking":
+			response.Thinking += block.Thinking
+			if block.Signature != "" {
+				response.ThinkingSignature = block.Signature
+			}
+		case "redacted_thinking":
+			response.RedactedThinking += block.Data
 		case "tool_use":
 			inputJSON, _ := json.Marshal(block.Input)
 			response.ToolCalls = append(response.ToolCalls, message.ToolCall{

@@ -2,7 +2,6 @@
 package triggers
 
 import (
-	"encoding/json"
 	"fmt"
 	"time"
 
@@ -104,18 +103,14 @@ func ToProto(t *core.Trigger, nextFireAt *time.Time, firings []*core.TriggerEven
 		ProjectName:      t.ProjectName,
 		DaemonName:       t.DaemonName,
 		Health:           ComputeHealth(firings),
+		Filter:           t.Filter,
+		ConnectionId:     t.ConnectionID,
 		CreatedAt:        t.CreatedAt.UTC().Format(time.RFC3339),
 		UpdatedAt:        t.UpdatedAt.UTC().Format(time.RFC3339),
 	}
 
-	if t.Kind == core.TriggerKindSchedule {
-		var cfg core.ScheduleConfig
-		if len(t.Config) > 0 {
-			if err := json.Unmarshal(t.Config, &cfg); err != nil {
-				return nil, fmt.Errorf("trigger %s config: %w", t.ID, err)
-			}
-		}
-		out.Source = &reliantv1.Trigger_Schedule{Schedule: scheduleConfigToProto(cfg)}
+	if err := sourceToProto(t, out); err != nil {
+		return nil, err
 	}
 
 	if nextFireAt != nil {
@@ -181,6 +176,12 @@ func eventKindToProto(kind core.TriggerEventKind) reliantv1.TriggerEventKind {
 		return reliantv1.TriggerEventKind_TRIGGER_EVENT_KIND_AGENT_START_RUN
 	case core.TriggerEventKindBuilderTest:
 		return reliantv1.TriggerEventKind_TRIGGER_EVENT_KIND_BUILDER_TEST
+	case core.TriggerEventKindWebhook:
+		return reliantv1.TriggerEventKind_TRIGGER_EVENT_KIND_WEBHOOK
+	case core.TriggerEventKindIntegration:
+		return reliantv1.TriggerEventKind_TRIGGER_EVENT_KIND_INTEGRATION
+	case core.TriggerEventKindWorkflowEvent:
+		return reliantv1.TriggerEventKind_TRIGGER_EVENT_KIND_WORKFLOW_EVENT
 	default:
 		return reliantv1.TriggerEventKind_TRIGGER_EVENT_KIND_UNSPECIFIED
 	}
@@ -194,6 +195,8 @@ func outcomeToProto(outcome core.TriggerEventOutcome) reliantv1.TriggerEventOutc
 		return reliantv1.TriggerEventOutcome_TRIGGER_EVENT_OUTCOME_SKIPPED
 	case core.TriggerEventFailed:
 		return reliantv1.TriggerEventOutcome_TRIGGER_EVENT_OUTCOME_FAILED
+	case core.TriggerEventPending:
+		return reliantv1.TriggerEventOutcome_TRIGGER_EVENT_OUTCOME_PENDING
 	default:
 		return reliantv1.TriggerEventOutcome_TRIGGER_EVENT_OUTCOME_UNSPECIFIED
 	}

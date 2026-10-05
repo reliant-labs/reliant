@@ -130,21 +130,19 @@ Load it before designing a workflow's control flow.
 
 ## Approach
 
-The workflow tools (` + "`get_workflow`" + `, ` + "`edit_workflow`" + `, ` + "`write_workflow`" + `, the scenario tools) all take an
-optional ` + "`id`" + ` — a UUID, slug, or name. Omit it and they resolve to the workflow this chat is
-editing; pass it only to target a different workflow. There is no draft ID injected into the
-system message to look for.
+Every workflow tool that targets an existing workflow (` + "`get_workflow`" + `, ` + "`edit_workflow`" + `, ` + "`write_workflow`" + `, and the scenario tools) requires an explicit
+` + "`id`" + ` — a UUID, slug, or name. Nothing binds this chat to a workflow, so there is no "current workflow"; any chat can work on any workflow.
 
-Starting from scratch (no workflow exists yet)? Call ` + "`create_workflow`" + ` first — it returns the new
-draft's ` + "`id`" + `, ` + "`name`" + `, and ` + "`slug`" + `. Omit both ` + "`name`" + ` and ` + "`content`" + ` to get a random name and the
-default agent template; pass ` + "`content`" + ` with complete workflow YAML to start from a specific design.
-After that, the chat is editing this draft, so ` + "`get_workflow`" + `/` + "`edit_workflow`" + `/` + "`write_workflow`" + ` need no
-` + "`id`" + ` either.
+Starting from scratch? Call ` + "`create_workflow`" + ` first — it returns the new draft's ` + "`id`" + `, ` + "`name`" + `, and ` + "`slug`" + `. Pass that ` + "`id`" + ` to every
+subsequent call. Omit both ` + "`name`" + ` and ` + "`content`" + ` to get a random name and the default agent template; pass ` + "`content`" + `
+with complete workflow YAML to start from a specific design.
+
+Editing an existing workflow? Find it with ` + "`list_workflows`" + ` and pass its id or slug. If the user's message names a
+workflow (e.g. "Workflow ` + "`swift-fox-a1b2`" + `: ..."), use that as the ` + "`id`" + `.
 
 Follow this process:
 
-1. **Setup** — New workflow: call ` + "`create_workflow`" + `. Existing workflow: call ` + "`get_workflow()`" + ` (no id
-   needed) to see current content.
+1. **Setup** — New workflow: call ` + "`create_workflow`" + `. Existing workflow: call ` + "`get_workflow`" + ` with its ` + "`id`" + ` to see current content.
 2. **Understand** — Ask clarifying questions about the user's goal
 3. **Learn** — Use ` + "`list_workflows`" + ` to see examples and patterns, ` + "`list_presets`" + `/` + "`get_preset`" + ` to see what
    agent presets exist before inventing a system prompt from scratch. Calling an external service?
@@ -154,7 +152,7 @@ Follow this process:
 6. **Test** — Create and run scenarios (aim for 3+ covering positive, negative, and edge cases). Try to break your workflow. It's frustrating for users to run a workflow for an hour and hit a bug at the end—scenarios catch this early.
 
 Working in a chat that isn't running this preset? These tools are still reachable:
-` + "`load_tool(query=\"workflow\")`" + ` loads them on demand.`
+` + "`load_tool(name=\"tag:workflow\")`" + ` loads all of them on demand.`
 }
 
 func generateKeyConcepts() string {
@@ -337,7 +335,8 @@ func generateAvailableTools() string {
 	return `## Available tools
 
 Granted by ` + "`tag:workflow`" + ` — no ` + "`load_tool`" + ` needed in a workflow-building chat. All take the
-optional ` + "`id`" + ` (UUID/slug/name) described above except ` + "`create_workflow`" + `, which mints one.
+required ` + "`id`" + ` (UUID/slug/name) described above except ` + "`create_workflow`" + `, which mints one, and
+the discovery/reference tools (` + "`list_workflows`" + `, ` + "`list_presets`" + `, ` + "`get_preset`" + `, ` + "`get_schema`" + `, ` + "`get_cel_reference`" + `, ` + "`get_workflow_suggestions`" + `).
 
 | Tool | Purpose |
 |------|---------|
@@ -360,8 +359,9 @@ optional ` + "`id`" + ` (UUID/slug/name) described above except ` + "`create_wor
 | ` + "`delete_scenario`" + ` | Remove a scenario |
 | ` + "`get_workflow_suggestions`" + ` | Get AI-powered suggestions for workflow improvements |
 
-Outside a workflow-building chat, these tools aren't preloaded, but ` + "`load_tool(query=\"workflow\")`" + `
-is always available (it's in ` + "`tag:coding:default`" + `) and loads the full set on demand.`
+Outside a workflow-building chat, these tools aren't preloaded, but ` + "`load_tool(name=\"tag:workflow\")`" + `
+is always available (it's in ` + "`tag:coding:default`" + `) and loads the full set on demand. Every tool that targets an
+existing workflow requires its ` + "`id`" + ` (returned by ` + "`create_workflow`" + `, or listed by ` + "`list_workflows`" + `).`
 }
 
 func generateCELQuickReference() string {
@@ -822,8 +822,8 @@ that never exercised what its name claims to test:
   ` + "```" + `
 
   A corpus survey found 96 of 159 scenarios (60%) black-box at least one sub-workflow, and 27 (17%)
-  have a silently-defaulted router — including every ` + "`one-ring`" + ` scenario, where names like
-  ` + "`implement_only`" + ` and ` + "`plan_only`" + ` assert a routing outcome ` + "`classify`" + ` never actually made.
+  have a silently-defaulted router — including scenarios whose names (e.g.
+  ` + "`implement_only`" + ` or ` + "`plan_only`" + `) assert a routing outcome ` + "`classify`" + ` never actually made.
   Don't let this happen to your scenario: if the point is "task X gets classified as Y," mock ` + "`classify`" + `.
 
 ### Responding to a black-box warning: three options, pick deliberately

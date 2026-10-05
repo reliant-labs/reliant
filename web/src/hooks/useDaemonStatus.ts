@@ -5,7 +5,7 @@ import { grpcClient } from "../api/grpc-client";
 import { DaemonStatus, ListDaemonsRequestSchema } from "../gen/reliant/v1/daemon_registry_pb";
 import type { DaemonInfo } from "../gen/reliant/v1/daemon_registry_pb";
 import { logger } from "../lib/logger";
-const DAEMON_LIST_QUERY_KEY = ["reliant", "daemonRegistry", "list"] as const;
+export const DAEMON_LIST_QUERY_KEY = ["reliant", "daemonRegistry", "list"] as const;
 const POLL_INTERVAL_MS = 5_000;
 
 /**

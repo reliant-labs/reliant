@@ -3,6 +3,7 @@ package reconciliation
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"sync"
 	"testing"
@@ -217,6 +218,42 @@ type mockRepo struct {
 	orphanedMailboxRows       map[string]int64
 	orphanedMailboxResolveErr error
 	resolvedMailboxThreads    []string
+
+	// Backgrounded-process sweep: the calls the query reports, the daemon
+	// rows that exist (absent = deleted), and the status events emitted.
+	backgroundedProcessCalls []*db.BackgroundedProcessCall
+	daemons                  map[string]bool
+	emittedToolCallUpdates   []db.ToolCallUpdate
+}
+
+func (m *mockRepo) ListBackgroundedProcessToolCalls(_ context.Context) ([]*db.BackgroundedProcessCall, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	// Mirror the real query: only rows still at status 6.
+	var out []*db.BackgroundedProcessCall
+	for _, call := range m.backgroundedProcessCalls {
+		if row, ok := m.toolCalls[call.ToolCallID]; ok && row.Status != core.ToolCallStatusBackgrounded {
+			continue
+		}
+		out = append(out, call)
+	}
+	return out, nil
+}
+
+func (m *mockRepo) GetDaemon(_ context.Context, id string) (*db.Daemon, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.daemons[id] {
+		return &db.Daemon{ID: id}, nil
+	}
+	return nil, sql.ErrNoRows
+}
+
+func (m *mockRepo) EmitToolCallUpdate(_ context.Context, _ string, update db.ToolCallUpdate) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.emittedToolCallUpdates = append(m.emittedToolCallUpdates, update)
+	return nil
 }
 
 type savedMessage struct {
@@ -291,11 +328,25 @@ func (m *mockRepo) UpdateWorkflowStatus(_ context.Context, id string, status db.
 	return nil
 }
 
+// RunTx runs f inline: the mock has no transactions, and the reconciler's
+// status repair wraps its CAS in one so the run-event outbox row commits with it.
+func (m *mockRepo) RunTx(ctx context.Context, f func(ctx context.Context) error) error {
+	return f(ctx)
+}
+
+// HasEnabledTriggerOfKind reports no workflow-event triggers, so a repair
+// writes no run event unless a test opts in.
+func (m *mockRepo) HasEnabledTriggerOfKind(context.Context, string, core.TriggerKind) (bool, error) {
+	return false, nil
+}
+
 func (m *mockRepo) GetChat(_ context.Context, id string) (*db.Chat, error) {
 	if chat, ok := m.chats[id]; ok {
 		return chat, nil
 	}
-	return nil, fmt.Errorf("chat not found: %s", id)
+	// Same sentinel the real store wraps, so callers can tell a miss from a
+	// failure.
+	return nil, fmt.Errorf("%w: %s", core.ErrChatNotFound, id)
 }
 
 func (m *mockRepo) CreateUserUpdate(_ context.Context, update *db.UserUpdate) error {

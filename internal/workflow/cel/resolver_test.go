@@ -896,3 +896,34 @@ func TestResolveCELFields_MapStructPBValueTemplates(t *testing.T) {
 		t.Fatalf("expected nested.flag bool true, got %T (%v)", got, got)
 	}
 }
+
+func TestResolveCELFields_ModelValueCarriesSettings(t *testing.T) {
+	node := &reliantv1.Node{
+		Id: "m", Type: "call_llm",
+		Args: &reliantv1.Node_CallLlm{CallLlm: &reliantv1.CallLLMArgs{
+			Model: &reliantv1.CelModelSelector{Value: &reliantv1.CelModelSelector_Expr{Expr: "{{inputs.model}}"}},
+		}},
+	}
+	for name, in := range map[string]map[string]interface{}{
+		"native": {"tags": []interface{}{"flagship"}, "thinking_level": "low", "temperature": float64(0), "compaction_threshold": int64(5000)},
+		"ints":   {"tags": []interface{}{"flagship"}, "thinking_level": "low", "temperature": int64(0), "compaction_threshold": float64(5000)},
+	} {
+		t.Run(name, func(t *testing.T) {
+			res, err := ResolveCELFields(node, newMockEvaluator(map[string]interface{}{"{{inputs.model}}": in}))
+			if err != nil {
+				t.Fatal(err)
+			}
+			ms := res.(*reliantv1.Node).GetCallLlm().Model.GetLiteral()
+			if ms.GetThinkingLevel() != "low" || ms.Temperature == nil || ms.GetTemperature() != 0 || ms.CompactionThreshold == nil || ms.GetCompactionThreshold() != 5000 {
+				t.Errorf("settings lost: %v", ms)
+			}
+		})
+	}
+	res, err := ResolveCELFields(node, newMockEvaluator(map[string]interface{}{"{{inputs.model}}": map[string]interface{}{"tags": []interface{}{"fast"}}}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ms := res.(*reliantv1.Node).GetCallLlm().Model.GetLiteral(); ms.Temperature != nil || ms.CompactionThreshold != nil {
+		t.Errorf("absent settings must stay unset: %v", ms)
+	}
+}

@@ -5,6 +5,7 @@ package reliant.v1;
 
 import "google/protobuf/struct.proto";
 import "reliant/v1/annotations.proto";
+import "reliant/v1/trigger.proto";
 
 option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
 
@@ -95,6 +96,16 @@ message ModelSelector {
   repeated string tags = 2;
   // Ordered list of preferred providers. Empty = system default.
   repeated string providers = 3;
+  // Per-call thinking level chosen on the model page (e.g. "low", "high").
+  // Precedence: explicit call_llm node arg (author pinned) > this field >
+  // user tag preference > tier/model default. Empty = unset.
+  string thinking_level = 4;
+  // Per-call sampling temperature. Presence matters: 0 is a real value, unset
+  // means "use the tier/model default". Same precedence as thinking_level.
+  optional double temperature = 5;
+  // Compaction threshold in tokens. Unset or <= 0 = derive from the model.
+  // An explicit call_llm node arg wins over this field.
+  optional int32 compaction_threshold = 6;
 }
 
 // DaemonSelectorProto specifies criteria for selecting which daemon executes tools.
@@ -1692,4 +1703,20 @@ message Workflow {
   // ends. Must resolve to a real workflow and must not reference this workflow
   // itself (no self-cycle).
   string transition_to = 14;
+  // Triggers declares WHEN this workflow should run: schedules, webhooks,
+  // integration events and other workflows' outcomes, each with an optional
+  // CEL filter and input mapping. A declaration is inert until a trigger row
+  // activates it (TriggerDefinition.workflow_trigger), which supplies whose
+  // run it is and where it executes.
+  repeated WorkflowTrigger triggers = 15;
+  // Title is the human-facing display name ("Get It Right"). The `name` stays
+  // the stable identifier that refs, saved chats and the CLI address; Title is
+  // presentation only, so it can change without breaking any of them. When
+  // empty, UIs derive a title from the name.
+  string title = 16;
+  // Hidden keeps this workflow out of pickers and the library's default view.
+  // It stays fully runnable and referenceable — this is for building blocks
+  // other workflows `ref:` (structured-agent, scope-conversation), not for
+  // retiring a workflow. Delete a workflow to retire it.
+  bool hidden = 17;
 }

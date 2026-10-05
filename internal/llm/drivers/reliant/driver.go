@@ -24,6 +24,7 @@ import (
 	"github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
 	"github.com/openai/openai-go/v3/packages/param"
+	"github.com/openai/openai-go/v3/shared"
 	accesstoken "github.com/reliant-labs/forge/pkg/accesstoken"
 	"github.com/reliant-labs/reliant/internal/chatmarkers"
 	"github.com/reliant-labs/reliant/internal/llm"
@@ -441,6 +442,31 @@ func toolListHasFunction(tools []openai.ChatCompletionToolUnionParam, name strin
 	return false
 }
 
+func isClaudeAPIModel(apiModel string) bool {
+	return strings.HasPrefix(apiModel, "claude-")
+}
+
+// wireReasoningEffort returns the reasoning_effort LiteLLM should receive, or
+// "" to omit it. LiteLLM translates it per upstream: Claude adaptive models get
+// thinking{adaptive}+output_config.effort (low..max), older Claude gets a
+// budget_tokens ladder, Gemini 3+ gets thinkingLevel. Gemini only accepts
+// low/medium/high, as do budget-mode Claude models (xhigh 400s there), so
+// levels above high clamp to high unless the model is adaptive.
+func (c *ReliantClient) wireReasoningEffort() string {
+	if !c.Options.Model.CanReason {
+		return ""
+	}
+	effort := strings.ToLower(strings.TrimSpace(c.Options.ReasoningEffort))
+	switch effort {
+	case "", "disabled", "none", "off":
+		return ""
+	}
+	if c.Options.Model.ThinkingMode != "adaptive" && (effort == "xhigh" || effort == "max") {
+		return "high"
+	}
+	return effort
+}
+
 func (c *ReliantClient) preparedParams(messages []openai.ChatCompletionMessageParamUnion, toolParams []openai.ChatCompletionToolUnionParam) openai.ChatCompletionNewParams {
 	// Marked here rather than inside ConvertMessages/ConvertTools so the
 	// breakpoints are decided once, with the whole request in view: the
@@ -464,12 +490,19 @@ func (c *ReliantClient) preparedParams(messages []openai.ChatCompletionMessagePa
 		}
 	}
 
-	if c.Options.Temperature != nil {
+	effort := c.wireReasoningEffort()
+	if effort != "" {
+		params.ReasoningEffort = shared.ReasoningEffort(effort)
+	}
+
+	// Claude rejects a non-default temperature while thinking is engaged.
+	thinkingOnClaude := effort != "" && isClaudeAPIModel(c.Options.Model.APIModel)
+	if c.Options.Temperature != nil && !thinkingOnClaude {
 		params.Temperature = openai.Float(*c.Options.Temperature)
 	}
 
-	// LiteLLM handles reasoning and max_completion_tokens upstream,
-	// so we always use MaxTokens for simplicity.
+	// LiteLLM handles max_completion_tokens upstream, so we always use
+	// MaxTokens for simplicity.
 	params.MaxTokens = openai.Int(c.Options.MaxTokens)
 
 	return params

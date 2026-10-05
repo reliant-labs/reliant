@@ -7,9 +7,15 @@ import type { ChatUpdate, UserUpdate } from "../../types/streaming";
 // (MAX+1 inside a transaction — internal/db/repo.go CreateChatUpdate), and
 // supports replay from any sequence via chat_since_seq / since_seq
 // (internal/grpc/services/streaming.go). The NATS hub can drop events under
-// load ("slow consumer"), so the client MUST detect sequence gaps and resync
-// by reconnecting from its last contiguous cursor — otherwise a dropped
+// load ("slow consumer"), so the client MUST detect chat sequence gaps and
+// resync by reconnecting from its last contiguous cursor — otherwise a dropped
 // finalization/tool-call event leaves the chat stale until a page refresh.
+//
+// User sequences are different: they are per-user, but the stream is
+// project-filtered, so the sequences the client receives skip BY DESIGN. Only
+// the server sees every sequence, so the server owns user gap detection (it
+// backfills hub drops from the DB) and reports its cursor as each batch's
+// latest_sequence. The client adopts it and never resyncs on a skip.
 //
 // These tests drive the private handleEvent() directly and stub the network
 // (establishConnection) to observe resync behavior.
@@ -95,11 +101,12 @@ function chatDeltaEvent(latestSequence: bigint): UserStreamEvent {
   } as unknown as UserStreamEvent;
 }
 
-function userUpdatesEvent(seqs: number[]): UserStreamEvent {
+function userUpdatesEvent(seqs: number[], latestSequence: bigint): UserStreamEvent {
   return {
     event: {
       case: "updates",
       value: {
+        latestSequence,
         updates: seqs.map((seq) => ({
           id: `uu-${seq}`,
           userId: "user-1",
@@ -205,45 +212,89 @@ describe("chat detail stream gap detection", () => {
   });
 });
 
-describe("user stream gap handling", () => {
+describe("user stream cursor", () => {
   it("applies contiguous user updates and advances the cursor", () => {
     const { internals, onUpdate, reconnectSpy } = makeService();
     internals.lastSequence = 5n;
 
-    internals.handleEvent(userUpdatesEvent([6]));
+    internals.handleEvent(userUpdatesEvent([6], 6n));
 
     expect(onUpdate).toHaveBeenCalledTimes(1);
     expect(internals.lastSequence).toBe(6n);
     expect(reconnectSpy).not.toHaveBeenCalled();
   });
 
-  it("still applies a jumped batch but rewinds and resyncs to fill the gap", () => {
-    // User-update sequences are per-user; the server filters live events by
-    // project, so a jump is only *possibly* a drop. The batch is applied
-    // (it may be all we ever get for this project), and a replay-resync from
-    // the pre-jump cursor fills anything that was really dropped.
+  it("advances across a filtered jump from latest_sequence, with no reconnect", () => {
+    // 685033 belonged to another project. The server filtered it, and its
+    // cursor says so. Every chat open used to trip a jump-resync here: two
+    // extra reconnects, each re-subscribing the chat.
     const { internals, onUpdate, reconnectSpy } = makeService();
-    internals.lastSequence = 5n;
+    internals.lastSequence = 685032n;
 
-    internals.handleEvent(userUpdatesEvent([9]));
+    internals.handleEvent(userUpdatesEvent([685034], 685034n));
 
     expect(onUpdate).toHaveBeenCalledTimes(1);
-    expect(onUpdate.mock.calls[0][0]).toHaveLength(1);
-    expect(reconnectSpy).toHaveBeenCalledTimes(1);
-    // Cursor rewound so the reconnect replays 6..9 from the DB.
-    expect(internals.lastSequence).toBe(5n);
+    expect(internals.lastSequence).toBe(685034n);
+    expect(reconnectSpy).not.toHaveBeenCalled();
   });
 
-  it("throttles user gap resyncs", () => {
-    const { internals, reconnectSpy } = makeService();
-    internals.lastSequence = 5n;
+  it("advances on a cursor-only batch whose updates were all filtered out", () => {
+    const { internals, onUpdate, reconnectSpy } = makeService();
+    internals.lastSequence = 10n;
 
-    internals.handleEvent(userUpdatesEvent([9]));
-    // Replayed catch-up arrives, then another jump right away.
-    internals.handleEvent(userUpdatesEvent([6, 7, 8, 9]));
-    internals.handleEvent(userUpdatesEvent([12]));
+    internals.handleEvent(userUpdatesEvent([], 25n));
 
-    expect(reconnectSpy).toHaveBeenCalledTimes(1);
+    expect(onUpdate).not.toHaveBeenCalled();
+    expect(internals.lastSequence).toBe(25n);
+    expect(reconnectSpy).not.toHaveBeenCalled();
+  });
+
+  it("never moves the cursor backwards", () => {
+    const { internals } = makeService();
+    internals.lastSequence = 30n;
+
+    internals.handleEvent(userUpdatesEvent([], 25n));
+
+    expect(internals.lastSequence).toBe(30n);
+  });
+
+  // A daemon heartbeat is ephemeral: never persisted, so sequence 0. The
+  // server sends it with the cursor as it already stood; the client must apply
+  // it (daemon dot, memory pressure, detected_ports) without touching the
+  // resume cursor, which only ever names persisted updates.
+  it("applies an ephemeral (seq 0) daemon heartbeat without moving the cursor", () => {
+    const { internals, onUpdate, reconnectSpy } = makeService();
+    internals.lastSequence = 30n;
+
+    const heartbeat = {
+      event: {
+        case: "updates",
+        value: {
+          latestSequence: 30n,
+          updates: [
+            {
+              id: "",
+              userId: "user-1",
+              sequenceNumber: 0n,
+              updateType: 20, // USER_UPDATE_TYPE_DAEMON_HEARTBEAT
+              entityType: 5, // ENTITY_TYPE_SYSTEM
+              entityId: "daemon-1",
+              dataJson: JSON.stringify({ daemon_id: "daemon-1", last_heartbeat: 1700000000, detected_ports: [5173] }),
+              createdAt: "",
+            },
+          ],
+        },
+      },
+    } as unknown as UserStreamEvent;
+    internals.handleEvent(heartbeat);
+
+    expect(onUpdate).toHaveBeenCalledTimes(1);
+    const [delivered] = onUpdate.mock.calls[0][0];
+    expect(delivered.sequence_number).toBe(0);
+    expect(delivered.entity_id).toBe("daemon-1");
+    expect(delivered.data).toMatchObject({ detected_ports: [5173] });
+    expect(internals.lastSequence).toBe(30n);
+    expect(reconnectSpy).not.toHaveBeenCalled();
   });
 });
 

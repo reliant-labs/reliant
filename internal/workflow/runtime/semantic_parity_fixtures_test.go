@@ -358,6 +358,9 @@ func semanticParityBuiltinWorkflowLoader() func(string) (*reliantv1.Workflow, er
 		}
 		workflowData, readErr := builtin.BuiltinWorkflowsFS.ReadFile(workflowName + ".yaml")
 		if readErr != nil {
+			workflowData, readErr = os.ReadFile(filepath.Join("testdata", "workflows", workflowName+".yaml"))
+		}
+		if readErr != nil {
 			return nil, fmt.Errorf("workflow not found: %s", ref)
 		}
 		parsedWorkflow, parseErr := wfyaml.ParseWorkflow(workflowData)

@@ -155,64 +155,6 @@ func TestWriteWorkflow_RequiresID(t *testing.T) {
 		assert.Equal(t, "My Custom Name", result.Name)
 		assert.Equal(t, "my-custom-name", result.Slug)
 	})
-
-	t.Run("associates workflow with chat ID", func(t *testing.T) {
-		chatID := "test-chat-" + uuid.New().String()
-		// Create the chat first so FK constraint is satisfied
-		createTestChat(t, repo, chatID)
-		ctxWithChat := createTestContext(t, chatID)
-
-		// First create a draft
-		now := time.Now()
-		uniqueID := uuid.New().String()[:8]
-		draft := &db.WorkflowDraft{
-			ID:        uuid.New().String(),
-			UserID:    "test-user",
-			Name:      "placeholder-" + uniqueID,
-			Slug:      "placeholder-" + uniqueID,
-			ChatID:    &chatID,
-			CreatedAt: now,
-			UpdatedAt: now,
-		}
-		err := repo.CreateWorkflowDraft(context.Background(), draft)
-		require.NoError(t, err)
-
-		// Use a unique workflow name to avoid conflicts with other tests
-		workflowYAML := `name: chat-workflow-` + uniqueID + `
-entry: [agent]
-nodes:
-  - id: agent
-    type: call_llm
-    args:
-      model:
-        tags: [flagship]
-edges: []
-`
-		params := WriteWorkflowParams{
-			ID:      draft.ID,
-			Content: workflowYAML,
-		}
-
-		inputJSON, _ := json.Marshal(params)
-		resp, err := tool.Run(ctxWithChat, ToolCall{
-			ID:    "test-3",
-			Name:  "write_workflow",
-			Input: string(inputJSON),
-		})
-
-		require.NoError(t, err)
-		assert.False(t, resp.IsError, "Should not be an error: %s", resp.Content)
-
-		var result WriteWorkflowResult
-		err = json.Unmarshal([]byte(resp.Metadata), &result)
-		require.NoError(t, err)
-
-		// Verify the draft was associated with the chat
-		updatedDraft, err := repo.GetWorkflowDraft(context.Background(), result.ID)
-		require.NoError(t, err)
-		require.NotNil(t, updatedDraft)
-		assert.Equal(t, &chatID, updatedDraft.ChatID)
-	})
 }
 
 func TestWriteWorkflow_UpdateExisting(t *testing.T) {

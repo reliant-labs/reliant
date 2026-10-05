@@ -14,7 +14,7 @@ import (
 )
 
 const getToolCall = `-- name: GetToolCall :one
-SELECT id, chat_id, thread_id, message_id, tool_name, input, status, error_message, child_workflow_id, background_process_id, requested_at, started_at, completed_at, created_at, updated_at FROM tool_calls WHERE id = $1
+SELECT id, chat_id, thread_id, message_id, tool_name, input, status, error_message, child_workflow_id, background_process_id, requested_at, started_at, completed_at, created_at, updated_at, daemon_id FROM tool_calls WHERE id = $1
 `
 
 func (q *Queries) GetToolCall(ctx context.Context, id string) (ToolCall, error) {
@@ -36,6 +36,7 @@ func (q *Queries) GetToolCall(ctx context.Context, id string) (ToolCall, error) 
 		&i.CompletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DaemonID,
 	)
 	return i, err
 }
@@ -56,6 +57,69 @@ func (q *Queries) GetToolCallResult(ctx context.Context, toolCallID string) (Too
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const listBackgroundedProcessToolCalls = `-- name: ListBackgroundedProcessToolCalls :many
+SELECT tc.id, tc.chat_id, tc.tool_name, tc.background_process_id, tc.daemon_id,
+       tc.requested_at, c.user_id
+FROM tool_calls tc
+JOIN chats c ON c.id = tc.chat_id
+WHERE tc.status = 6
+  AND tc.child_workflow_id IS NULL
+ORDER BY tc.requested_at ASC
+`
+
+type ListBackgroundedProcessToolCallsRow struct {
+	ID                  string         `json:"id"`
+	ChatID              string         `json:"chat_id"`
+	ToolName            string         `json:"tool_name"`
+	BackgroundProcessID sql.NullString `json:"background_process_id"`
+	DaemonID            sql.NullString `json:"daemon_id"`
+	RequestedAt         time.Time      `json:"requested_at"`
+	UserID              string         `json:"user_id"`
+}
+
+// Every backgrounded call whose outcome lives in a daemon's process table:
+// status 6 with no child workflow. Spawns are excluded — their outcome is the
+// child workflow, which ListStrandedBackgroundSpawnToolCalls reconciles.
+//
+// Read by the reconciler's background-process sweep, which asks each owning
+// daemon whether the process is still running and closes the call when it is
+// not. daemon_id and background_process_id are NULL on rows written before
+// they were recorded; the sweep closes those only when the user's daemons
+// prove the process gone, so they are returned too.
+//
+// Served by idx_tool_calls_chat_live (status IN (1,2,6)), which stays small
+// once the sweep keeps status 6 honest.
+func (q *Queries) ListBackgroundedProcessToolCalls(ctx context.Context) ([]ListBackgroundedProcessToolCallsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listBackgroundedProcessToolCalls)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListBackgroundedProcessToolCallsRow{}
+	for rows.Next() {
+		var i ListBackgroundedProcessToolCallsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ChatID,
+			&i.ToolName,
+			&i.BackgroundProcessID,
+			&i.DaemonID,
+			&i.RequestedAt,
+			&i.UserID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listLiveBackgroundSpawnsForWorkflow = `-- name: ListLiveBackgroundSpawnsForWorkflow :many
@@ -141,7 +205,7 @@ func (q *Queries) ListLiveBackgroundSpawnsForWorkflow(ctx context.Context, rootW
 }
 
 const listLiveToolCallsByChat = `-- name: ListLiveToolCallsByChat :many
-SELECT id, chat_id, thread_id, message_id, tool_name, input, status, error_message, child_workflow_id, background_process_id, requested_at, started_at, completed_at, created_at, updated_at FROM tool_calls
+SELECT id, chat_id, thread_id, message_id, tool_name, input, status, error_message, child_workflow_id, background_process_id, requested_at, started_at, completed_at, created_at, updated_at, daemon_id FROM tool_calls
 WHERE chat_id = $1 AND status IN (1, 2, 6)
 ORDER BY requested_at ASC
 `
@@ -176,6 +240,7 @@ func (q *Queries) ListLiveToolCallsByChat(ctx context.Context, chatID string) ([
 			&i.CompletedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.DaemonID,
 		); err != nil {
 			return nil, err
 		}
@@ -351,16 +416,16 @@ SELECT tc.id AS tool_call_id,
        tc.thread_id AS parent_thread_id,
        w.thread AS child_thread_id,
        w.state AS workflow_state,
-       w.stop_reason AS workflow_stop_reason
+       w.stop_reason AS workflow_stop_reason,
+       EXISTS (
+           SELECT 1 FROM agent_messages m
+           WHERE m.tool_call_id = tc.id AND m.kind IN (2, 3, 4)
+       ) AS has_report
 FROM tool_calls tc
 JOIN workflows w ON w.id = tc.child_workflow_id
 WHERE tc.tool_name = 'spawn'
   AND tc.status = 6
   AND w.state = 3 AND w.stop_reason <> 3
-  AND NOT EXISTS (
-      SELECT 1 FROM agent_messages m
-      WHERE m.tool_call_id = tc.id AND m.kind IN (2, 3, 4)
-  )
 ORDER BY tc.requested_at ASC
 `
 
@@ -371,6 +436,7 @@ type ListStrandedBackgroundSpawnToolCallsRow struct {
 	ChildThreadID      string         `json:"child_thread_id"`
 	WorkflowState      int32          `json:"workflow_state"`
 	WorkflowStopReason int32          `json:"workflow_stop_reason"`
+	HasReport          bool           `json:"has_report"`
 }
 
 // The async-spawn counterpart to ListStrandedSpawnToolCalls above (spec:
@@ -394,6 +460,16 @@ type ListStrandedBackgroundSpawnToolCallsRow struct {
 // fabricating a completion for a live spawn writes a lie into the parent's
 // mailbox that no later pass can distinguish from a real one. A missing
 // report is recoverable; an invented one is not.
+//
+// has_report: a terminal child whose report DID land is still returned while
+// its row sits at status 6. The report and the status are written by
+// different code (the detached goroutine enqueues; nothing on that path moves
+// the row), so "reported" never implied "closed" — and filtering reported
+// calls out made the close unreachable for exactly the spawns that finished
+// normally. Observed: toolu_013CJA3i on chat 8bb0a875 still backgrounded two
+// days after its child stopped and its kind=4 report was delivered. The
+// caller enqueues only when has_report is false, and closes the row either
+// way.
 func (q *Queries) ListStrandedBackgroundSpawnToolCalls(ctx context.Context) ([]ListStrandedBackgroundSpawnToolCallsRow, error) {
 	rows, err := q.db.QueryContext(ctx, listStrandedBackgroundSpawnToolCalls)
 	if err != nil {
@@ -410,6 +486,7 @@ func (q *Queries) ListStrandedBackgroundSpawnToolCalls(ctx context.Context) ([]L
 			&i.ChildThreadID,
 			&i.WorkflowState,
 			&i.WorkflowStopReason,
+			&i.HasReport,
 		); err != nil {
 			return nil, err
 		}
@@ -425,7 +502,7 @@ func (q *Queries) ListStrandedBackgroundSpawnToolCalls(ctx context.Context) ([]L
 }
 
 const listStrandedSpawnToolCalls = `-- name: ListStrandedSpawnToolCalls :many
-SELECT tc.id, tc.chat_id, tc.thread_id, tc.message_id, tc.tool_name, tc.input, tc.status, tc.error_message, tc.child_workflow_id, tc.background_process_id, tc.requested_at, tc.started_at, tc.completed_at, tc.created_at, tc.updated_at FROM tool_calls tc
+SELECT tc.id, tc.chat_id, tc.thread_id, tc.message_id, tc.tool_name, tc.input, tc.status, tc.error_message, tc.child_workflow_id, tc.background_process_id, tc.requested_at, tc.started_at, tc.completed_at, tc.created_at, tc.updated_at, tc.daemon_id FROM tool_calls tc
 JOIN workflows w ON w.id = tc.child_workflow_id
 WHERE tc.tool_name = 'spawn'
   AND tc.status IN (1, 2)
@@ -483,6 +560,7 @@ func (q *Queries) ListStrandedSpawnToolCalls(ctx context.Context) ([]ToolCall, e
 			&i.CompletedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.DaemonID,
 		); err != nil {
 			return nil, err
 		}
@@ -534,7 +612,7 @@ func (q *Queries) ListToolCallResultsByMessageIDs(ctx context.Context, messageId
 }
 
 const listToolCallsByChat = `-- name: ListToolCallsByChat :many
-SELECT id, chat_id, thread_id, message_id, tool_name, input, status, error_message, child_workflow_id, background_process_id, requested_at, started_at, completed_at, created_at, updated_at FROM tool_calls
+SELECT id, chat_id, thread_id, message_id, tool_name, input, status, error_message, child_workflow_id, background_process_id, requested_at, started_at, completed_at, created_at, updated_at, daemon_id FROM tool_calls
 WHERE chat_id = $1
 ORDER BY requested_at ASC
 `
@@ -564,6 +642,7 @@ func (q *Queries) ListToolCallsByChat(ctx context.Context, chatID string) ([]Too
 			&i.CompletedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.DaemonID,
 		); err != nil {
 			return nil, err
 		}
@@ -579,7 +658,7 @@ func (q *Queries) ListToolCallsByChat(ctx context.Context, chatID string) ([]Too
 }
 
 const listToolCallsByIDs = `-- name: ListToolCallsByIDs :many
-SELECT id, chat_id, thread_id, message_id, tool_name, input, status, error_message, child_workflow_id, background_process_id, requested_at, started_at, completed_at, created_at, updated_at FROM tool_calls
+SELECT id, chat_id, thread_id, message_id, tool_name, input, status, error_message, child_workflow_id, background_process_id, requested_at, started_at, completed_at, created_at, updated_at, daemon_id FROM tool_calls
 WHERE id = ANY($1::text[])
 ORDER BY requested_at ASC
 `
@@ -612,6 +691,7 @@ func (q *Queries) ListToolCallsByIDs(ctx context.Context, ids []string) ([]ToolC
 			&i.CompletedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.DaemonID,
 		); err != nil {
 			return nil, err
 		}
@@ -627,7 +707,7 @@ func (q *Queries) ListToolCallsByIDs(ctx context.Context, ids []string) ([]ToolC
 }
 
 const listToolCallsByMessageIDs = `-- name: ListToolCallsByMessageIDs :many
-SELECT id, chat_id, thread_id, message_id, tool_name, input, status, error_message, child_workflow_id, background_process_id, requested_at, started_at, completed_at, created_at, updated_at FROM tool_calls
+SELECT id, chat_id, thread_id, message_id, tool_name, input, status, error_message, child_workflow_id, background_process_id, requested_at, started_at, completed_at, created_at, updated_at, daemon_id FROM tool_calls
 WHERE message_id = ANY($1::text[])
 ORDER BY message_id, requested_at ASC
 `
@@ -657,6 +737,7 @@ func (q *Queries) ListToolCallsByMessageIDs(ctx context.Context, messageIds []st
 			&i.CompletedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.DaemonID,
 		); err != nil {
 			return nil, err
 		}
@@ -675,9 +756,10 @@ const upsertToolCall = `-- name: UpsertToolCall :exec
 INSERT INTO tool_calls (
     id, chat_id, thread_id, message_id, tool_name, input, status,
     error_message, child_workflow_id, background_process_id,
-    requested_at, started_at, completed_at, created_at, updated_at
+    requested_at, started_at, completed_at, created_at, updated_at,
+    daemon_id
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16
 )
 ON CONFLICT (id) DO UPDATE SET
     thread_id = EXCLUDED.thread_id,
@@ -688,6 +770,7 @@ ON CONFLICT (id) DO UPDATE SET
     error_message = EXCLUDED.error_message,
     child_workflow_id = EXCLUDED.child_workflow_id,
     background_process_id = EXCLUDED.background_process_id,
+    daemon_id = EXCLUDED.daemon_id,
     started_at = EXCLUDED.started_at,
     completed_at = EXCLUDED.completed_at,
     updated_at = EXCLUDED.updated_at
@@ -709,6 +792,7 @@ type UpsertToolCallParams struct {
 	CompletedAt         sql.NullTime   `json:"completed_at"`
 	CreatedAt           time.Time      `json:"created_at"`
 	UpdatedAt           time.Time      `json:"updated_at"`
+	DaemonID            sql.NullString `json:"daemon_id"`
 }
 
 // Activities that create/update a tool call retry on failure, so the write
@@ -731,6 +815,7 @@ func (q *Queries) UpsertToolCall(ctx context.Context, arg UpsertToolCallParams) 
 		arg.CompletedAt,
 		arg.CreatedAt,
 		arg.UpdatedAt,
+		arg.DaemonID,
 	)
 	return err
 }

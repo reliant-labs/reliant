@@ -158,4 +158,7 @@ func inheritToolCallFields(existing, call *core.ToolCall) {
 	if call.BackgroundProcessID == nil {
 		call.BackgroundProcessID = existing.BackgroundProcessID
 	}
+	if call.DaemonID == nil {
+		call.DaemonID = existing.DaemonID
+	}
 }

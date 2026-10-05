@@ -44,6 +44,11 @@ func (c DriverConfig) IsConfigured() bool {
 type AvailableDrivers struct {
 	// Map of driver ID to its configuration
 	Drivers map[DriverID]DriverConfig
+
+	// Availability reports per-(driver, model) availability for the account that
+	// owns these drivers (e.g. a Copilot model policy=disabled). Nil means every
+	// model of a configured driver is servable.
+	Availability AvailabilityFunc
 }
 
 // GetAvailableDriversForModel returns the list of drivers that support a model AND are properly configured.
@@ -55,6 +60,9 @@ func GetAvailableDriversForModel(modelID ModelID, availableDrivers AvailableDriv
 	var configs []DriverConfig
 	for _, driverID := range supportingDrivers {
 		if config, exists := availableDrivers.Drivers[DriverID(driverID)]; exists && config.IsConfigured() {
+			if availableDrivers.Availability != nil && availableDrivers.Availability(string(driverID), string(modelID)).Disabled {
+				continue
+			}
 			configs = append(configs, config)
 		}
 	}
@@ -103,7 +111,7 @@ func preferDriver(a, b DriverID) bool {
 
 // SelectBestDriver selects the best available driver for a model.
 // Priority order: Uses ProviderPriority from registry_v2.go.
-// Native providers (anthropic, openai, gemini, xai, vertexai) have priority 1,
+// Native providers (anthropic, openai, gemini, vertexai) have priority 1,
 // local providers priority 2, aggregators (openrouter) priority 10.
 //
 // Selection is deterministic: candidates are ranked with preferDriver, so ties

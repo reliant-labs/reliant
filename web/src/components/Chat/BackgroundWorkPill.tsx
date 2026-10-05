@@ -11,6 +11,7 @@
  * its own visible set. This is a transient activity readout.
  */
 
+import { Tooltip } from "../ui/Tooltip";
 import { useEffect, useMemo, useState } from "react";
 import { Bot, ChevronDown, Terminal, HelpCircle, Square } from "lucide-react";
 import { cn } from "../../lib/utils";
@@ -122,20 +123,21 @@ function SpawnRow({
           reported. A disabled control that says why is honest; a live one that
           no-ops would be worse than either.
         */}
-        <button
+        <Tooltip content={
+            spawn.toolCallId
+              ? "Cancel background agent"
+              : "This agent cannot be cancelled from here — it is still starting up, or its originating tool call is not yet recorded"
+          } placement="bottom" delay={300} wrapperClassName="inline-flex">
+<button
           type="button"
           onClick={handleCancel}
           aria-label={`Cancel background agent ${spawn.title}`}
           disabled={isCancelling || !spawn.toolCallId}
           className="rounded p-0.5 transition-colors hover:bg-muted disabled:opacity-60"
-          title={
-            spawn.toolCallId
-              ? "Cancel background agent"
-              : "This agent cannot be cancelled from here — it is still starting up, or its originating tool call is not yet recorded"
-          }
         >
           <Square className={cn("h-3.5 w-3.5", isCancelling ? "animate-pulse text-warning" : "text-destructive")} />
         </button>
+</Tooltip>
       </span>
     </div>
   );

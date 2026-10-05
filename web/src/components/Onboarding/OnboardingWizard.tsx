@@ -12,7 +12,9 @@
  * URL; the wizard reacts. There are no useEffects that push routes.
  *
  * 3-phase flow:
- * 1. Tour active (`?tour=<step>` present): Show guided spotlight tour steps (8 steps)
+ * 1. Tour active (`?tour=<step>` present): Show guided spotlight tour steps.
+ *    The last step's nav button reads "Finish" — there is no closing modal;
+ *    finishing lands the user on their project's chat.
  * 2. Tour completed + checklist not dismissed: Show floating OnboardingChecklist
  * 3. Tour completed + checklist dismissed: Render nothing
  */
@@ -29,6 +31,9 @@ import { useSurface } from "../../lib/surfaceContext";
 
 import {
   ONBOARDING_STEPS,
+  getActiveTourSteps,
+  getNextStepId,
+  getPreviousStepId,
   getStepById,
 } from "./constants";
 import { OnboardingSpotlight } from "./OnboardingSpotlight";
@@ -37,7 +42,6 @@ import { OnboardingModal } from "./OnboardingModal";
 import { OnboardingNavBar } from "./OnboardingNavBar";
 import { OnboardingChecklist } from "./OnboardingChecklist";
 import type { OnboardingStepId, StepProps } from "./types";
-import { CompletionStep } from "./steps";
 import { useTourNavigation, STEP_EXPECTED_PATH } from "./useTourNavigation";
 import { isWorkflowSurfacePath } from "../../lib/workflowsArea";
 
@@ -108,6 +112,33 @@ function ChatAndSidebarsStep(props: StepProps) {
   );
 }
 
+function WorkflowControlsStep(props: StepProps) {
+  const step = getStepById("workflow-controls")!;
+  return (
+    <OnboardingSpotlight
+      targetSelector={step.targetSelector!}
+      title={step.title}
+      description={
+        <div className="space-y-2">
+          <p>{step.description}</p>
+          <p className="text-xs text-muted-foreground/80">
+            Set a param's visibility in the workflow builder, or with{" "}
+            <code className="font-mono">ui: toolbar</code> /{" "}
+            <code className="font-mono">ui: hidden</code> in its YAML.
+          </p>
+        </div>
+      }
+      stepNumber={props.stepNumber}
+      totalSteps={props.totalSteps}
+      onNext={props.onComplete}
+      onBack={props.onBack}
+      onSkipAll={props.onSkipAll}
+      tooltipPosition="top"
+      spotlightConfig={step.spotlightConfig}
+    />
+  );
+}
+
 function WorkspacesStep(props: StepProps) {
   const step = getStepById("workspaces")!;
   return (
@@ -122,6 +153,29 @@ function WorkspacesStep(props: StepProps) {
           </p>
         </div>
       }
+      stepNumber={props.stepNumber}
+      totalSteps={props.totalSteps}
+      onNext={props.onComplete}
+      onBack={props.onBack}
+      onSkipAll={props.onSkipAll}
+      spotlightConfig={step.spotlightConfig}
+    />
+  );
+}
+
+function DeploymentsStep(props: StepProps) {
+  const step = getStepById("deployments")!;
+
+  // The target is a left-sidebar nav entry.
+  useEffect(() => {
+    useWorkspaceStateStore.getState().setLeftSidebarExpandedGlobal(true);
+  }, []);
+
+  return (
+    <OnboardingSpotlight
+      targetSelector={step.targetSelector!}
+      title={step.title}
+      description={step.description}
       stepNumber={props.stepNumber}
       totalSteps={props.totalSteps}
       onNext={props.onComplete}
@@ -194,15 +248,15 @@ function WorkflowHubStep(props: StepProps) {
           <div className="text-xs text-muted-foreground/80 space-y-1">
             <p className="flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-primary flex-shrink-0" />
-              <strong>Agent</strong> — General-purpose coding assistant
+              <strong>Library</strong> — Built-in and project workflows, ready to run
             </p>
             <p className="flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-primary flex-shrink-0" />
-              <strong>Checklist</strong> — Full dev pipeline with planning, TDD, review
+              <strong>Runs</strong> — Every run, live or finished, across projects
             </p>
             <p className="flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-primary flex-shrink-0" />
-              <strong>Auditing Agent</strong> — Agent with per-turn audit oversight
+              <strong>Automations</strong> — Workflows that run on a schedule
             </p>
           </div>
         </div>
@@ -212,8 +266,7 @@ function WorkflowHubStep(props: StepProps) {
       onNext={props.onComplete}
       onBack={props.onBack}
       onSkipAll={props.onSkipAll}
-      tooltipPosition="top"
-      tooltipPadding={80}
+      tooltipPosition="bottom"
       spotlightConfig={step.spotlightConfig}
     />
   );
@@ -238,11 +291,22 @@ function WorkflowBuilderStep(props: StepProps) {
     );
   }
 
+  // One step for both ways of building. The AI assistant panel isn't mounted
+  // on the built-in workflow the tour opens (WorkflowBuilder hides it for
+  // builtins), so it is named here rather than spotlit.
   return (
     <OnboardingSpotlight
       targetSelector={step.targetSelector!}
       title={step.title}
-      description={step.description}
+      description={
+        <div className="space-y-2">
+          <p>{step.description}</p>
+          <p className="text-xs text-muted-foreground/80">
+            Prefer text? Every workflow is YAML underneath — open it from the
+            YAML button in the header.
+          </p>
+        </div>
+      }
       stepNumber={props.stepNumber}
       totalSteps={props.totalSteps}
       onNext={props.onComplete}
@@ -255,50 +319,16 @@ function WorkflowBuilderStep(props: StepProps) {
   );
 }
 
-function WorkflowBuilderChatStep(props: StepProps) {
-  const step = getStepById("workflow-builder-chat")!;
-  const { pathname } = useLocation();
-  const { goToStep } = useTourNavigation();
-  const expected = STEP_EXPECTED_PATH("workflow-builder-chat")!;
-
-  if (!pathname.startsWith(expected)) {
-    return (
-      <OpenPageModal
-        {...props}
-        title={step.title}
-        message="Open the workflow builder to continue this step."
-        actionLabel="Open Workflow Builder"
-        onOpen={() => goToStep("workflow-builder-chat")}
-      />
-    );
-  }
-
-  return (
-    <OnboardingSpotlight
-      targetSelector={step.targetSelector!}
-      title={step.title}
-      description={step.description}
-      stepNumber={props.stepNumber}
-      totalSteps={props.totalSteps}
-      onNext={props.onComplete}
-      onBack={props.onBack}
-      onSkipAll={props.onSkipAll}
-      tooltipPosition="left"
-      spotlightConfig={step.spotlightConfig}
-    />
-  );
-}
-
 // ─── Step Component Map ──────────────────────────────────────────────────────
 
 const STEP_COMPONENTS: Record<OnboardingStepId, React.ComponentType<StepProps>> = {
   "chat-and-sidebars": ChatAndSidebarsStep,
+  "workflow-controls": WorkflowControlsStep,
   "workspaces": WorkspacesStep,
+  "deployments": DeploymentsStep,
   "workflow-intro": WorkflowIntroStep,
   "workflow-hub": WorkflowHubStep,
   "workflow-builder": WorkflowBuilderStep,
-  "workflow-builder-chat": WorkflowBuilderChatStep,
-  "completion": CompletionStep,
 };
 
 // ─── Main Wizard Component ───────────────────────────────────────────────────
@@ -371,7 +401,7 @@ export function OnboardingWizard() {
     if (isWizardActive && currentStepId) {
       tourStartRef.current = Date.now();
       stepStartRef.current = Date.now();
-      trackEvent("tour_started", { totalSteps: ONBOARDING_STEPS.length });
+      trackEvent("tour_started", { totalSteps: getActiveTourSteps().length });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isWizardActive]);
@@ -412,9 +442,24 @@ export function OnboardingWizard() {
     const currentStep = getStepById(currentStepId);
     if (!currentStep) return null;
 
-    const stepIndex = ONBOARDING_STEPS.findIndex((s) => s.id === currentStepId);
+    // Count and order against the steps this user's tour actually contains
+    // (see getActiveTourSteps). A step that went unavailable while open — the
+    // forge UI switched off in another tab — isn't in that list; show it at
+    // the position it would have held so the counter never reads "0 / n".
+    const activeSteps = getActiveTourSteps();
+    const totalSteps = activeSteps.length;
+    const activeIndex = activeSteps.findIndex((s) => s.id === currentStepId);
+    const staticIndex = ONBOARDING_STEPS.findIndex((s) => s.id === currentStepId);
+    const activeStepsBefore = activeSteps.filter(
+      (s) => ONBOARDING_STEPS.findIndex((t) => t.id === s.id) < staticIndex,
+    ).length;
+    const stepIndex = activeIndex === -1
+      ? Math.min(activeStepsBefore, totalSteps - 1)
+      : activeIndex;
     const StepComponent = STEP_COMPONENTS[currentStepId];
     if (!StepComponent) return null;
+
+    const isLastStep = getNextStepId(currentStepId) === null;
 
     const handleComplete = async () => {
       const stepDuration = stepStartRef.current
@@ -424,15 +469,21 @@ export function OnboardingWizard() {
         stepId: currentStepId,
         stepName: currentStep.title,
         stepsCompleted: stepIndex + 1,
-        totalSteps: ONBOARDING_STEPS.length,
+        totalSteps,
         duration_ms: stepDuration,
       });
-      if (stepIndex === ONBOARDING_STEPS.length - 1 && tourStartRef.current) {
-        trackEvent("tour_completed", {
-          totalSteps: ONBOARDING_STEPS.length,
-          duration_ms: Date.now() - tourStartRef.current,
-        });
-        tourStartRef.current = null;
+      if (isLastStep) {
+        if (tourStartRef.current) {
+          trackEvent("tour_completed", {
+            totalSteps,
+            duration_ms: Date.now() - tourStartRef.current,
+          });
+          tourStartRef.current = null;
+        }
+        // Funnel marker. The closing "Ready to go" modal used to emit this on
+        // mount; Finish on the last spotlight is now the moment the tour is
+        // done, and the funnel-stall alert counts on this event existing.
+        trackEvent("onboarding_completed", { totalSteps });
       }
       await completeAndAdvance();
     };
@@ -448,7 +499,7 @@ export function OnboardingWizard() {
         stepId: currentStepId,
         stepName: currentStep.title,
         stepsCompleted: stepIndex,
-        totalSteps: ONBOARDING_STEPS.length,
+        totalSteps,
         duration_ms: stepDuration,
         tour_duration_ms: tourDuration,
       });
@@ -456,9 +507,10 @@ export function OnboardingWizard() {
       await skipAll();
     };
 
-    const handleBack = stepIndex > 0 ? goBack : undefined;
+    const handleBack = getPreviousStepId(currentStepId) ? goBack : undefined;
 
-    const isLastStep = stepIndex === ONBOARDING_STEPS.length - 1;
+    // The last step's button finishes the tour — completeAndAdvance marks it
+    // complete and lands the user on their project's chat.
     const nextLabel = isLastStep ? "Finish" : "Next";
 
     return (
@@ -468,11 +520,11 @@ export function OnboardingWizard() {
           onSkipAll={handleSkipAll}
           onBack={handleBack}
           stepNumber={stepIndex + 1}
-          totalSteps={ONBOARDING_STEPS.length}
+          totalSteps={totalSteps}
         />
         <OnboardingNavBar
           stepNumber={stepIndex + 1}
-          totalSteps={ONBOARDING_STEPS.length}
+          totalSteps={totalSteps}
           stepTitle={currentStep.title}
           onNext={handleComplete}
           onBack={handleBack}

@@ -10,6 +10,7 @@
 package llm
 
 import (
+	"net/http"
 	"strings"
 	"time"
 
@@ -58,7 +59,7 @@ func WithDisableCache() DriverOption {
 
 // WithReasoningEffort sets the reasoning/thinking effort level.
 //
-// Accepted levels are models.KnownThinkingLevels ("low" through "ultra");
+// Accepted levels are models.KnownThinkingLevels ("low" through "max");
 // per-model support is enforced upstream by the model's declared
 // thinking_levels, not here. Empty (the UI's "Auto" choice — preferences that
 // don't pin a level store "") and "auto" mean "no explicit preference" and
@@ -103,6 +104,14 @@ func WithBearerToken(bearerToken string) DriverOption {
 func WithBaseURL(url string) DriverOption {
 	return func(c *DriverOptions) {
 		c.BaseURL = url
+	}
+}
+
+// WithTransport routes the driver's HTTP through rt instead of the network.
+// See DriverOptions.Transport.
+func WithTransport(rt http.RoundTripper) DriverOption {
+	return func(opts *DriverOptions) {
+		opts.Transport = rt
 	}
 }
 

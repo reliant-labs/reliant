@@ -64,8 +64,6 @@ import {
 import { askUserQuestionItems } from "./askUserUtils";
 import { QuestionPrompt } from "./QuestionPrompt";
 import { useQueuedAgentMessages } from "../../hooks/queued-agent-messages";
-import { loadTagModelConfigs } from "../Settings/ModelPreferences";
-import { useGlobalDataStore } from "../../store/globalDataStore";
 
 /** Extract WorkflowInputs schema from a proto Workflow's inputs.
  *  Returns { inputs, groupTags, groupUIs } for use with WorkflowParamsPanel. */
@@ -608,83 +606,8 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
       loadDefaultPresets();
     }, [workflowName, chatId, currentProjectFromStore?.id, presets, workflowTagInfo]);
 
-    // Apply per-tag model preferences (model_id, thinking_level, temperature, compaction)
-    // to new chats that haven't had those values explicitly set yet.
-    const tagPrefsApplied = useRef(false);
-    useEffect(() => {
-      if (!workflowInputs || tagPrefsApplied.current) return;
-      if (chatId && !isPendingChat) return;
-
-      // Find the model key
-      let modelKey: string | null = null;
-      for (const [key, def] of Object.entries(workflowInputs)) {
-        if (def?.type === "model") { modelKey = key; break; }
-      }
-      if (!modelKey) return;
-
-      const applyTagPrefs = async () => {
-        const tagConfigs = await loadTagModelConfigs();
-        if (Object.keys(tagConfigs).length === 0) return;
-
-        const currentParams = chatId
-          ? useChatParamsStore.getState().getChatParams(chatId)
-          : useChatParamsStore.getState().tempNewChatParams;
-        const currentModel = (currentParams[modelKey!] ?? {}) as Record<string, unknown>;
-
-        // Find which tag the current model uses
-        const currentTags = currentModel.tags as string[] | undefined;
-        const currentTag = currentTags?.[0];
-        if (!currentTag) return;
-
-        const tagConfig = tagConfigs[currentTag];
-        if (!tagConfig) return;
-
-        // Merge tag preferences into model value (don't overwrite existing user/preset values)
-        const merged = { ...currentModel };
-        let changed = false;
-        if (tagConfig.model_id && !merged.id) {
-          // Only apply saved model_id if it's still available in the catalog
-          const availableModels = useGlobalDataStore.getState().models;
-          const modelAvailable = availableModels.some(
-            (m) => m.id === tagConfig.model_id || m.id.split("@")[0] === tagConfig.model_id
-          );
-          if (modelAvailable) {
-            merged.id = tagConfig.model_id;
-            changed = true;
-          }
-        }
-        if (tagConfig.thinking_level && !merged.thinking_level) {
-          merged.thinking_level = tagConfig.thinking_level;
-          changed = true;
-        }
-        if (tagConfig.temperature !== undefined && merged.temperature === undefined) {
-          merged.temperature = tagConfig.temperature;
-          changed = true;
-        }
-        if (tagConfig.compaction_threshold !== undefined && merged.compaction_threshold === undefined) {
-          merged.compaction_threshold = tagConfig.compaction_threshold;
-          changed = true;
-        }
-        if (!changed) return;
-
-        tagPrefsApplied.current = true;
-        const newParams = { ...currentParams, [modelKey!]: merged };
-        setWorkflowParams(newParams);
-        if (chatId) {
-          useChatParamsStore.getState().setChatParams(chatId, newParams);
-        } else {
-          useChatParamsStore.getState().setTempNewChatParams(newParams);
-        }
-        logger.info("[ChatInput] Applied tag model preferences", { tag: currentTag, config: tagConfig });
-      };
-
-      applyTagPrefs();
-    }, [workflowInputs, chatId, isPendingChat]);
-
-    // Reset tag prefs flag when workflow changes
-    useEffect(() => {
-      tagPrefsApplied.current = false;
-    }, [workflowName]);
+    // Per-tag model preferences (Settings → Model) are resolved server-side
+    // in resolveLLMCall, so the composer no longer merges them into the model value.
 
     // Handle preset selection for a specific target (workflow or group)
     // targetName is "" for workflow-level, or group name like "Agent A"
@@ -1879,27 +1802,26 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
                             case 'anthropic': return 'bg-orange-400';
                             case 'openai': case 'codex': return 'bg-green-500';
                             case 'gemini': case 'vertexai': return 'bg-blue-400';
-                            case 'xai': return 'bg-red-400';
                             default: return 'bg-gray-400';
                           }
                         };
                         const currentModelProvider = resolvedModel?.driverId || (modelValue?.driver_id as string) || undefined;
                         return (
                           <div className="relative">
-                            <button
+                            <Tooltip content="Model settings" placement="top" delay={300} wrapperClassName="inline-flex">
+<button
                               className={cn(
                                 "flex items-center gap-1 rounded-full transition-colors text-2xs font-medium h-6 px-2.5",
                                 settingsPage === 'model'
                                   ? "bg-primary/20 text-primary hover:bg-primary/30"
                                   : "bg-[var(--chat-button-bg)] text-[var(--chat-button-text)] hover:bg-[var(--chat-button-hover)]"
                               )}
-                              onClick={() => setSettingsPage(settingsPage === 'model' ? null : 'model')}
-                              title="Model settings"
-                            >
+                              onClick={() => setSettingsPage(settingsPage === 'model' ? null : 'model')} aria-label="Model settings">
                               <span className={cn("w-1.5 h-1.5 rounded-full", getProviderColor(currentModelProvider))} />
                               {currentModelDisplayName}
                               <ChevronDown className="w-2.5 h-2.5 opacity-50" />
                             </button>
+</Tooltip>
                             {settingsPage === 'model' && renderSettingsPopover('model')}
                           </div>
                         );
@@ -1918,6 +1840,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
                           >
                             <button
                               data-contextual-tip="params-toggle"
+                              aria-label={settingsPage !== null ? "Hide settings" : "Show all settings"}
                               onClick={() =>
                                 setSettingsPage(settingsPage !== null ? null : 'main')
                               }

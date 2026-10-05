@@ -1,4 +1,5 @@
 import { X, ArrowRightFromLine, ArrowLeftToLine, FolderOpen, Terminal, Globe, FolderGit2, Workflow, Lock } from "lucide-react";
+import { Tooltip } from "../ui/Tooltip";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "../../lib/utils";
 import { isElectron } from "../../lib/constants";
@@ -145,10 +146,11 @@ export function TabbedViewerPanel({
           ))}
         </div>
         {/* Fullscreen Toggle Button */}
+        <Tooltip content={isFullscreen ? "Return to side panel" : "Expand to cover chat"} placement="bottom" delay={300} wrapperClassName="inline-flex flex-shrink-0">
         <button
+          aria-label={isFullscreen ? "Return to side panel" : "Expand to cover chat"}
           onClick={toggleFullscreen}
           className="px-2 py-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors flex-shrink-0 border-l border-border"
-          title={isFullscreen ? "Return to side panel" : "Expand to cover chat"}
         >
           {isFullscreen ? (
             <ArrowRightFromLine className="w-4 h-4" />
@@ -156,12 +158,12 @@ export function TabbedViewerPanel({
             <ArrowLeftToLine className="w-4 h-4" />
           )}
         </button>
+        </Tooltip>
         {/* Close All Button */}
         {viewers.length > 1 && (
           <button
             onClick={closeAllViewers}
             className="px-2 py-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors flex-shrink-0 border-l border-border"
-            title="Close all tabs"
           >
             Close All
           </button>
@@ -304,6 +306,7 @@ function ViewerTab({ viewer, isActive, onSelect, onClose }: ViewerTabProps) {
       )}
 
       {/* Close Button */}
+      <Tooltip content="Close tab (Cmd+W)" placement="bottom" delay={300} wrapperClassName="inline-flex">
       <button
         onMouseDown={(e) => {
           e.stopPropagation();
@@ -319,10 +322,10 @@ function ViewerTab({ viewer, isActive, onSelect, onClose }: ViewerTabProps) {
           isActive ? "opacity-100" : "opacity-0 group-hover:opacity-100"
         )}
         aria-label="Close tab (Cmd+W)"
-        title="Close (Cmd+W)"
       >
         <X className="w-3 h-3 pointer-events-none" />
       </button>
+      </Tooltip>
     </div>
   );
 }

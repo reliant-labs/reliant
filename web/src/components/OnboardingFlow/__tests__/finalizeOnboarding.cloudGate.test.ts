@@ -2,7 +2,7 @@
  * finalizeOnboardingSideEffects must not navigate at all.
  *
  * THE BUG THIS CLOSES: all three terminal steps (ProjectChoiceStep,
- * ProjectPickerStep, GitHubConnectStep) do
+ * FinishStep, GitHubConnectStep) do
  *
  *     await finalizeOnboardingSideEffects(...)
  *     if (isCloud) setShowDaemonGate(true);

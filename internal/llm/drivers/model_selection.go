@@ -144,7 +144,7 @@ func ValidateModelSelector(ctx context.Context, userID string, selector interfac
 	}
 
 	// Try to resolve the model
-	registry := models.MustGetRegistry()
+	registry := models.MustGetRegistry().WithAvailability(availableDrivers.Availability)
 	_, err = registry.Resolve(ms, availableProviders)
 	if err != nil {
 		// Provide actionable error message

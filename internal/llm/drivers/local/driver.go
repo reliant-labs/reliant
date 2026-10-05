@@ -12,12 +12,9 @@ package local
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
 	"fmt"
-	"io"
+	"net/http"
 	"strings"
-	"time"
 
 	"github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
@@ -28,6 +25,13 @@ import (
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/models/message"
 )
+
+// Family is the driver family id for local OpenAI-compatible servers.
+const Family models.Family = "local"
+
+func init() {
+	registry.RegisterDriver(Family, createClient)
+}
 
 // LocalClient implements the registry.Client interface for local model servers.
 // It wraps the OpenAI SDK and points it at a local endpoint (Ollama, LM Studio, etc.)
@@ -44,7 +48,10 @@ func (c *LocalClient) Name() string {
 // NewClient creates a new LocalClient with the given options.
 // The BaseURL option is required for local clients.
 func NewClient(opts llm.DriverOptions) *LocalClient {
-	openaiClientOptions := []option.RequestOption{}
+	// Retries are owned by shouldRetry, which retries only 429/500/503. The
+	// SDK's own retry loop would back off through a refused connection or a
+	// dead relay before the user sees any error.
+	openaiClientOptions := []option.RequestOption{option.WithMaxRetries(0)}
 
 	// BaseURL is required for local clients
 	if opts.BaseURL != "" {
@@ -64,6 +71,13 @@ func NewClient(opts llm.DriverOptions) *LocalClient {
 		for key, value := range opts.ExtraHeaders {
 			openaiClientOptions = append(openaiClientOptions, option.WithHeader(key, value))
 		}
+	}
+
+	// A relay transport carries every byte: the base URL is a placeholder that
+	// is never dialed, and the daemon on the user's machine talks to the real
+	// server. Appended last so it overrides the SDK client's default.
+	if opts.Transport != nil {
+		openaiClientOptions = append(openaiClientOptions, option.WithHTTPClient(&http.Client{Transport: opts.Transport}))
 	}
 
 	client := llm.NewOpenAISDKClient(openaiClientOptions...)
@@ -246,218 +260,21 @@ func (c *LocalClient) preparedParams(messages []openai.ChatCompletionMessagePara
 		params.Temperature = openai.Float(*c.Options.Temperature)
 	}
 
-	// Local models generally don't support reasoning effort or max_completion_tokens
-	// Use the standard max_tokens parameter
+	// Only low/medium/high are ever sent: that is the vocabulary servers that
+	// accept reasoning_effort at all (Ollama gpt-oss, LM Studio) understand.
+	// The caller only sets a level for models that declared support, because
+	// Ollama 400s on any level a model does not take (qwen3 takes none).
+	if effort := serverReasoningEffort(c.Options.ReasoningEffort); effort != "" {
+		params.ReasoningEffort = effort
+	}
+
+	// max_tokens, not max_completion_tokens: the older name is what every
+	// local server implements.
 	if c.Options.MaxTokens > 0 {
 		params.MaxTokens = openai.Int(c.Options.MaxTokens)
 	}
 
 	return params
-}
-
-func (c *LocalClient) SendMessages(ctx context.Context, prompts []string, messages []message.Message, tools []tools.Tool) (response *llm.DriverResponse, err error) {
-	params := c.preparedParams(c.ConvertMessages(prompts, messages), c.ConvertTools(tools))
-
-	// Debug logging temporarily disabled
-	if false {
-		jsonData, _ := json.Marshal(params)
-		logging.Debug("Local driver prepared messages", "messages", string(jsonData))
-	}
-
-	attempts := 0
-	for {
-		attempts++
-		openaiResponse, err := c.Client.Chat.Completions.New(ctx, params)
-		if err != nil {
-			retry, after, retryErr := c.shouldRetry(attempts, err)
-			if retryErr != nil {
-				return nil, retryErr
-			}
-			if retry {
-				logging.Warn(fmt.Sprintf("Retrying local request... attempt %d of %d", attempts, models.MaxRetries))
-				select {
-				case <-ctx.Done():
-					return nil, ctx.Err()
-				case <-time.After(time.Duration(after) * time.Millisecond):
-					continue
-				}
-			}
-			return nil, retryErr
-		}
-
-		if len(openaiResponse.Choices) == 0 {
-			return nil, fmt.Errorf("local model returned no choices")
-		}
-
-		content := ""
-		if openaiResponse.Choices[0].Message.Content != "" {
-			content = openaiResponse.Choices[0].Message.Content
-		}
-
-		toolCalls := c.toolCalls(*openaiResponse)
-		finishReason := c.finishReason(string(openaiResponse.Choices[0].FinishReason))
-
-		if len(toolCalls) > 0 {
-			finishReason = message.FinishReasonToolUse
-		}
-
-		return &llm.DriverResponse{
-			Content:      content,
-			ToolCalls:    toolCalls,
-			Usage:        c.usage(*openaiResponse),
-			FinishReason: finishReason,
-		}, nil
-	}
-}
-
-func (c *LocalClient) StreamResponse(ctx context.Context, prompts []string, messages []message.Message, tools []tools.Tool) <-chan llm.DriverEvent {
-	params := c.preparedParams(c.ConvertMessages(prompts, messages), c.ConvertTools(tools))
-	params.StreamOptions = openai.ChatCompletionStreamOptionsParam{
-		IncludeUsage: openai.Bool(true),
-	}
-
-	eventChan := make(chan llm.DriverEvent)
-
-	go func() {
-		attempts := 0
-		for {
-			attempts++
-			stream := c.Client.Chat.Completions.NewStreaming(ctx, params)
-
-			var currentToolCalls []message.ToolCall
-			var finalUsage llm.TokenUsage
-
-			for stream.Next() {
-				chunk := stream.Current()
-
-				if len(chunk.Choices) > 0 {
-					choice := chunk.Choices[0]
-
-					// Handle content
-					if choice.Delta.Content != "" {
-						eventChan <- llm.DriverEvent{
-							Type:    llm.EventContentDelta,
-							Content: choice.Delta.Content,
-						}
-					}
-
-					// Handle tool calls
-					for _, tc := range choice.Delta.ToolCalls {
-						// Expand currentToolCalls if needed
-						for len(currentToolCalls) <= int(tc.Index) {
-							currentToolCalls = append(currentToolCalls, message.ToolCall{})
-						}
-
-						idx := int(tc.Index)
-						if tc.ID != "" {
-							currentToolCalls[idx].ID = tc.ID
-							currentToolCalls[idx].Type = "function"
-						}
-						if tc.Function.Name != "" {
-							currentToolCalls[idx].Name = tc.Function.Name
-						}
-						if tc.Function.Arguments != "" {
-							currentToolCalls[idx].Input += tc.Function.Arguments
-						}
-					}
-
-					// Check for finish
-					if choice.FinishReason != "" {
-						finishReason := c.finishReason(string(choice.FinishReason))
-						if len(currentToolCalls) > 0 {
-							finishReason = message.FinishReasonToolUse
-							// Mark tool calls as finished
-							for i := range currentToolCalls {
-								currentToolCalls[i].Finished = true
-							}
-						}
-
-						eventChan <- llm.DriverEvent{
-							Type: llm.EventComplete,
-							Response: &llm.DriverResponse{
-								ToolCalls:    currentToolCalls,
-								Usage:        finalUsage,
-								FinishReason: finishReason,
-							},
-						}
-					}
-				}
-
-				// Capture usage from stream
-				if chunk.Usage.PromptTokens > 0 {
-					finalUsage.TokenCount = chunk.Usage.PromptTokens
-				}
-			}
-
-			if err := stream.Err(); err != nil {
-				if errors.Is(err, io.EOF) {
-					close(eventChan)
-					return
-				}
-
-				retry, after, retryErr := c.shouldRetry(attempts, err)
-				if retryErr != nil {
-					eventChan <- llm.DriverEvent{Type: llm.EventError, Error: retryErr}
-					close(eventChan)
-					return
-				}
-				if retry {
-					logging.Warn(fmt.Sprintf("Retrying local stream... attempt %d of %d", attempts, models.MaxRetries))
-					select {
-					case <-ctx.Done():
-						if ctx.Err() != nil {
-							eventChan <- llm.DriverEvent{Type: llm.EventError, Error: ctx.Err()}
-						}
-						close(eventChan)
-						return
-					case <-time.After(time.Duration(after) * time.Millisecond):
-						continue
-					}
-				}
-				eventChan <- llm.DriverEvent{Type: llm.EventError, Error: retryErr}
-				close(eventChan)
-				return
-			}
-
-			close(eventChan)
-			return
-		}
-	}()
-
-	return eventChan
-}
-
-func (c *LocalClient) shouldRetry(attempts int, err error) (bool, int64, error) {
-	var apierr *openai.Error
-	if !errors.As(err, &apierr) {
-		// Not an OpenAI API error - could be network error, retry with backoff
-		if attempts <= models.MaxRetries {
-			backoffMs := 1000 * (1 << (attempts - 1)) // 1s, 2s, 4s...
-			return true, int64(backoffMs), nil
-		}
-		return false, 0, err
-	}
-
-	if apierr.StatusCode != 429 && apierr.StatusCode != 500 && apierr.StatusCode != 503 {
-		return false, 0, err
-	}
-
-	if attempts > models.MaxRetries {
-		return false, 0, fmt.Errorf("maximum retry attempts reached: %d retries", models.MaxRetries)
-	}
-
-	backoffMs := 2000 * (1 << (attempts - 1))
-	jitterMs := int(float64(backoffMs) * 0.2)
-	retryMs := backoffMs + jitterMs
-
-	retryAfterValues := apierr.Response.Header.Values("Retry-After")
-	if len(retryAfterValues) > 0 {
-		if _, scanErr := fmt.Sscanf(retryAfterValues[0], "%d", &retryMs); scanErr == nil {
-			retryMs = retryMs * 1000
-		}
-	}
-
-	return true, int64(retryMs), nil
 }
 
 func (c *LocalClient) toolCalls(completion openai.ChatCompletion) []message.ToolCall {
@@ -484,12 +301,6 @@ func (c *LocalClient) toolCalls(completion openai.ChatCompletion) []message.Tool
 	}
 
 	return toolCalls
-}
-
-func (c *LocalClient) usage(completion openai.ChatCompletion) llm.TokenUsage {
-	return llm.TokenUsage{
-		TokenCount: completion.Usage.PromptTokens,
-	}
 }
 
 func (c *LocalClient) Model() models.Model {

@@ -92,8 +92,14 @@ export function useTimelineVirtualizer(params: {
   getItemKey: (index: number) => string;
   /** Space reserved above the first row (the scroll-back loading header). */
   paddingStart: number;
+  /**
+   * Height of the overlay floating over the top of the viewport (the pinned
+   * user-message header). A jump that aligns a row to the start lands it
+   * below the overlay instead of underneath it.
+   */
+  scrollPaddingStart: number;
 }): TimelineVirtualizer {
-  const { count, getItemKey, paddingStart } = params;
+  const { count, getItemKey, paddingStart, scrollPaddingStart } = params;
   const [scroller, setScroller] = useState<HTMLDivElement | null>(null);
   const [footer, setFooter] = useState<HTMLDivElement | null>(null);
   const [footerHeight, setFooterHeight] = useState(0);
@@ -112,6 +118,7 @@ export function useTimelineVirtualizer(params: {
     getItemKey,
     overscan: OVERSCAN_ROWS,
     paddingStart,
+    scrollPaddingStart,
     // The footer lives in this reserved space, so the end includes it.
     paddingEnd: footerHeight,
     // Bottom-anchored: growth at the end while at the end keeps the end in

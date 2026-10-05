@@ -10,6 +10,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/anthropic"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/openai"
+	"github.com/reliant-labs/reliant/internal/llm/drivers/registry"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	toolsPkg "github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -78,11 +79,18 @@ func NewClient(opts llm.DriverOptions) (*CopilotClient, error) {
 	headers := copilotHeaders(opts)
 
 	client := &CopilotClient{options: opts}
+	endpoints := cachedEndpoints(githubToken, opts.Model.APIModel)
 	dialect := "openai-chat"
-	if isAnthropicModel(opts.Model.APIModel) {
+	switch copilotWireFor(opts.Model, endpoints) {
+	case wireMessages:
 		dialect = "anthropic-messages"
 		client.impl = newAnthropicDialect(opts, githubToken, headers)
-	} else {
+	case wireResponses:
+		dialect = "openai-responses"
+		opts.Model.PreferredEndpoint = "responses"
+		client.impl = newOpenAIDialect(opts, githubToken, headers)
+	default:
+		opts.Model.PreferredEndpoint = "chat_completions"
 		client.impl = newOpenAIDialect(opts, githubToken, headers)
 	}
 
@@ -121,12 +129,27 @@ func copilotHeaders(opts llm.DriverOptions) map[string]string {
 // alone 400s), so we clear ApiKey (to avoid a stray x-api-key) and set the
 // Authorization header explicitly.
 func newAnthropicDialect(opts llm.DriverOptions, githubToken string, headers map[string]string) dialectClient {
+	return newAnthropicDialectAt(individualBaseURL, opts, githubToken, headers)
+}
+
+// newAnthropicDialectAt is newAnthropicDialect against an explicit base URL.
+//
+// Adaptive-thinking models carry their level in output_config.effort, which the
+// shared anthropic client only sets on the Claude Code (OAuth) path. Without it
+// Copilot receives thinking:{type:"adaptive"} alone and every level behaves the
+// same, so the effort is injected here, as GitHub's own client does
+// (vscode-copilot-chat messagesApi.ts: output_config:{effort}).
+func newAnthropicDialectAt(baseURL string, opts llm.DriverOptions, githubToken string, headers map[string]string) dialectClient {
 	sdkOpts := []anthropicopt.RequestOption{
-		anthropicopt.WithBaseURL(individualBaseURL),
+		anthropicopt.WithBaseURL(baseURL),
 		anthropicopt.WithHeader("authorization", "Bearer "+githubToken),
 	}
 	for k, v := range headers {
 		sdkOpts = append(sdkOpts, anthropicopt.WithHeader(k, v))
+	}
+
+	if effort := copilotClaudeEffort(opts); effort != "" {
+		sdkOpts = append(sdkOpts, anthropicopt.WithJSONSet("output_config", map[string]string{"effort": effort}))
 	}
 
 	aopts := opts
@@ -137,12 +160,13 @@ func newAnthropicDialect(opts llm.DriverOptions, githubToken string, headers map
 // newOpenAIDialect builds an OpenAI Chat Completions client pointed at the
 // Copilot host. The OpenAI SDK's WithAPIKey sends `authorization: Bearer <key>`,
 // which is exactly Copilot's auth, so the gho_ token goes in as the API key.
-// PreferredEndpoint is forced to Chat Completions for broad model support.
+// Models Copilot serves only on /responses (gpt-5.3-codex, gpt-5.4-mini,
+// gpt-5.6-*, gpt-6-*) keep their catalog preferred_endpoint; everything else
+// (gemini, claude-via-openai) is forced to Chat Completions.
 func newOpenAIDialect(opts llm.DriverOptions, githubToken string, headers map[string]string) dialectClient {
 	oopts := opts
 	oopts.ApiKey = githubToken
 	oopts.BaseURL = individualBaseURL
-	oopts.Model.PreferredEndpoint = "chat_completions"
 
 	// Merge the Copilot headers into a private copy of ExtraHeaders so we never
 	// mutate the caller's map.
@@ -176,30 +200,102 @@ func (c *CopilotClient) ValidateKey(ctx context.Context) error {
 	return c.impl.ValidateKey(ctx)
 }
 
-// GetAvailableModels implements registry.ModelLister: it reports the Copilot
-// models this account may use for the model picker. GitHub Copilot is a DYNAMIC
-// provider — a model Reliant maps may be disabled by the account's policy (it
-// 400s upstream) — so we start from the registry's curated Copilot list and set
-// each model's Enabled flag from the account's GET /models catalog (cached per
-// token). Unknown models (absent from the catalog) are treated as enabled so a
-// stale/renamed catalog never hides a model Reliant maps.
-//
-// Tags/tag-resolution are intentionally out of scope here: this is the picker
-// view, not workflow tag resolution (which stays registry-driven).
-func (c *CopilotClient) GetAvailableModels(ctx context.Context) ([]models.ModelInfo, error) {
+// ReportAvailability implements registry.AvailabilityReporter from the
+// account's GET /models catalog (cached per token). A model the account reports
+// policy=disabled is not servable; a model absent from the catalog is treated as
+// servable so a stale or renamed catalog never hides a model Reliant maps. If the
+// catalog cannot be fetched the report is empty — fail open, so a Copilot outage
+// cannot make every Copilot model unresolvable.
+func (c *CopilotClient) ReportAvailability(ctx context.Context) (registry.ProviderAvailability, error) {
 	token, err := resolveGitHubToken(c.options)
 	if err != nil {
-		return nil, err
+		return registry.ProviderAvailability{}, err
 	}
-	enabled, err := EnabledModels(ctx, token)
+	entry, err := accountModels(ctx, token)
+	if err != nil {
+		return registry.ProviderAvailability{}, err
+	}
+	report := registry.ProviderAvailability{Models: make(map[string]models.ModelAvailability, len(entry.enabled))}
+	for apiModel, enabled := range entry.enabled {
+		report.Models[apiModel] = models.ModelAvailability{
+			Disabled:      !enabled,
+			Reason:        copilotDisabledReason,
+			ContextWindow: entry.limits[apiModel],
+		}
+	}
+	return report, nil
+}
+
+// copilotDisabledReason is the user-facing explanation for a model the account's
+// Copilot policy disables.
+const copilotDisabledReason = "not enabled on your Copilot plan — enable it in GitHub Copilot settings"
+
+// GetAvailableModels implements registry.ModelLister for the model picker,
+// derived from the same report resolution uses.
+func (c *CopilotClient) GetAvailableModels(ctx context.Context) ([]models.ModelInfo, error) {
+	report, err := c.ReportAvailability(ctx)
 	if err != nil {
 		return nil, err
 	}
+	return registry.ApplyAvailability(models.MustGetRegistry().ModelsForDriver(string(Family)), report), nil
+}
 
-	infos := models.MustGetRegistry().ModelsForDriver(string(Family))
-	for i := range infos {
-		state, known := enabled[infos[i].APIModel]
-		infos[i].Enabled = !known || state
+// copilotClaudeEffort returns the output_config.effort for an adaptive-thinking
+// Claude model, or "" when the model takes no effort (budget-tier models such
+// as haiku-4.5 must not send output_config).
+func copilotClaudeEffort(opts llm.DriverOptions) string {
+	if opts.Model.ThinkingMode != "adaptive" {
+		return ""
 	}
-	return infos, nil
+	switch opts.ReasoningEffort {
+	case "low", "medium", "high", "xhigh", "max":
+		return opts.ReasoningEffort
+	default:
+		return "high"
+	}
+}
+
+type copilotWire int
+
+const (
+	wireChat copilotWire = iota
+	wireResponses
+	wireMessages
+)
+
+// copilotWireFor picks the endpoint a model is called on. Copilot's /models
+// declares supported_endpoints per model, and a model called on an endpoint it
+// does not list 400s ("unsupported_api_for_model"), so that list decides:
+// /v1/messages for Claude, else /responses when listed, else /chat/completions.
+//
+// When /models is unavailable (endpoints == nil) fall back to the vendor/catalog
+// rule: claude-* on Messages; the catalog's preferred_endpoint otherwise,
+// except gemini-* which speaks Chat Completions only.
+func copilotWireFor(m models.Model, endpoints []string) copilotWire {
+	has := func(want string) bool {
+		for _, e := range endpoints {
+			if e == want {
+				return true
+			}
+		}
+		return false
+	}
+	if len(endpoints) > 0 {
+		switch {
+		case isAnthropicModel(m.APIModel) && has("/v1/messages"):
+			return wireMessages
+		case has("/responses"):
+			return wireResponses
+		default:
+			return wireChat
+		}
+	}
+	switch {
+	case isAnthropicModel(m.APIModel):
+		return wireMessages
+	case m.PreferredEndpoint == "responses" && !strings.HasPrefix(strings.ToLower(m.APIModel), "gemini-"):
+		return wireResponses
+	default:
+		return wireChat
+	}
 }

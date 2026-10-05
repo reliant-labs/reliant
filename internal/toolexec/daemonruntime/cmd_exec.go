@@ -24,6 +24,7 @@ func init() {
 	RegisterCommand("exec.bg_output", handleExecBGOutput)
 	RegisterCommand("exec.bg_kill", handleExecBGKill)
 	RegisterCommand("exec.bg_list", handleExecBGList)
+	RegisterCommand("exec.bg_status", handleExecBGStatus)
 }
 
 // =============================================================================
@@ -349,6 +350,61 @@ func handleExecBGKill(ctx context.Context, payload []byte) ([]byte, error) {
 		return nil, fmt.Errorf("kill process: %w", err)
 	}
 	return json.Marshal(struct{}{})
+}
+
+// =============================================================================
+// exec.bg_status — lifecycle state of specific background processes
+// =============================================================================
+
+// handleExecBGStatus reports whether the named background processes are still
+// running. The server's reconciler calls it to close backgrounded tool calls:
+// the process lives only in this daemon's memory, so this is the only place
+// its end can be learned.
+//
+// A process started under a different connector grant is reported Unknown,
+// the same answer a missing one gets, so this cannot be used to probe for the
+// existence of the user's own processes. First-party callers (no grant) see
+// everything, which is the reconciler's case.
+func handleExecBGStatus(ctx context.Context, payload []byte) ([]byte, error) {
+	var req daemon.ProcessStatusRequest
+	if err := json.Unmarshal(payload, &req); err != nil {
+		return nil, fmt.Errorf("invalid payload: %w", err)
+	}
+
+	mgr := shell.GetBackgroundManager()
+	grantID := daemonpolicy.GrantIDFromContext(ctx)
+
+	visible := req.ProcessIDs
+	var hidden []string
+	if grantID != "" {
+		visible = visible[:0:0]
+		for _, id := range req.ProcessIDs {
+			if _, err := mgr.GetProcessForGrant(id, grantID); err != nil {
+				hidden = append(hidden, id)
+				continue
+			}
+			visible = append(visible, id)
+		}
+	}
+
+	outcomes, unknown := mgr.ProcessOutcomes(visible)
+	resp := daemon.ProcessStatusResponse{
+		Processes: make([]daemon.ProcessStatusInfo, 0, len(outcomes)),
+		Unknown:   append(unknown, hidden...),
+	}
+	for _, id := range visible {
+		outcome, ok := outcomes[id]
+		if !ok {
+			continue
+		}
+		resp.Processes = append(resp.Processes, daemon.ProcessStatusInfo{
+			ID:       id,
+			Status:   outcome.Status,
+			ExitCode: outcome.ExitCode,
+			EndTime:  outcome.EndTime,
+		})
+	}
+	return json.Marshal(resp)
 }
 
 // =============================================================================

@@ -35,6 +35,7 @@ func (s *toolCallStore) UpsertToolCall(ctx context.Context, call *core.ToolCall)
 		ErrorMessage:        toolCallPtrToNullString(call.ErrorMessage),
 		ChildWorkflowID:     toolCallPtrToNullString(call.ChildWorkflowID),
 		BackgroundProcessID: toolCallPtrToNullString(call.BackgroundProcessID),
+		DaemonID:            toolCallPtrToNullString(call.DaemonID),
 		RequestedAt:         call.RequestedAt,
 		StartedAt:           toolCallPtrToNullTime(call.StartedAt),
 		CompletedAt:         toolCallPtrToNullTime(call.CompletedAt),
@@ -150,6 +151,29 @@ func (s *toolCallStore) ListStrandedBackgroundSpawnToolCalls(ctx context.Context
 				State:      core.WorkflowState(row.WorkflowState),
 				StopReason: core.WorkflowStopReason(row.WorkflowStopReason),
 			},
+			HasReport: row.HasReport,
+		})
+	}
+	return calls, nil
+}
+
+// ListBackgroundedProcessToolCalls returns backgrounded calls whose outcome
+// lives in a daemon's process table. See the query comment.
+func (s *toolCallStore) ListBackgroundedProcessToolCalls(ctx context.Context) ([]*core.BackgroundedProcessCall, error) {
+	rows, err := s.q.ListBackgroundedProcessToolCalls(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list backgrounded process tool calls: %w", err)
+	}
+	calls := make([]*core.BackgroundedProcessCall, 0, len(rows))
+	for _, row := range rows {
+		calls = append(calls, &core.BackgroundedProcessCall{
+			ToolCallID:          row.ID,
+			ChatID:              row.ChatID,
+			ToolName:            row.ToolName,
+			UserID:              row.UserID,
+			BackgroundProcessID: toolCallNullStringToPtr(row.BackgroundProcessID),
+			DaemonID:            toolCallNullStringToPtr(row.DaemonID),
+			RequestedAt:         row.RequestedAt,
 		})
 	}
 	return calls, nil
@@ -207,6 +231,7 @@ func toolCallFromPG(row pgdb.ToolCall) *core.ToolCall {
 		ErrorMessage:        toolCallNullStringToPtr(row.ErrorMessage),
 		ChildWorkflowID:     toolCallNullStringToPtr(row.ChildWorkflowID),
 		BackgroundProcessID: toolCallNullStringToPtr(row.BackgroundProcessID),
+		DaemonID:            toolCallNullStringToPtr(row.DaemonID),
 		RequestedAt:         row.RequestedAt,
 		StartedAt:           toolCallNullTimeToPtr(row.StartedAt),
 		CompletedAt:         toolCallNullTimeToPtr(row.CompletedAt),

@@ -9,6 +9,7 @@
  * - external: Non-clickable, muted styling
  */
 
+import { Tooltip } from "../ui/Tooltip";
 import { memo, useCallback } from "react";
 import { FileText, Ban } from "lucide-react";
 import { cn } from "../../lib/utils";
@@ -149,14 +150,14 @@ function FileLinkComponent({
   }
 
   return (
-    <button
+    <Tooltip content={tooltipMessage} placement="bottom" delay={300} wrapperClassName="inline-flex">
+<button
       onClick={handleClick}
       className={cn(
         "file-link",
         getClassificationStyles(classification, inline),
         className
       )}
-      title={tooltipMessage}
       type="button"
     >
       {showIcon && <FileText className="w-3 h-3 flex-shrink-0" />}
@@ -168,6 +169,7 @@ function FileLinkComponent({
       )}
       {worktreeBadge}
     </button>
+</Tooltip>
   );
 }
 

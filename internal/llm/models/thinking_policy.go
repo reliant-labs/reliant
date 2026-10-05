@@ -23,7 +23,7 @@ var defaultThinkingLevels = []string{"low", "medium", "high"}
 // KnownThinkingLevels is every effort level any model may declare, ascending.
 // Per-model support is declared by thinking_levels in models.yaml; this is only
 // the vocabulary check for "is this a level at all".
-var KnownThinkingLevels = []string{"low", "medium", "high", "xhigh", "max", "ultra"}
+var KnownThinkingLevels = []string{"low", "medium", "high", "xhigh", "max"}
 
 // IsKnownThinkingLevel reports whether s names a thinking level. It does not
 // imply any particular model supports it — use SupportsThinkingLevel for that.
@@ -69,10 +69,10 @@ func PreferredThinkingLevel(levels []string) string {
 	if slices.Contains(levels, "medium") {
 		return "medium"
 	}
-	// Descending capability order. gpt-5.6 adds "max" and "ultra" above "xhigh";
-	// they sit here rather than ahead of "medium" so the prefer-medium rule wins
+	// Descending capability order. gpt-5.6 adds "max" above "xhigh";
+	// it sits here rather than ahead of "medium" so the prefer-medium rule wins
 	// first and we never silently default a model to its most expensive tier.
-	for _, level := range []string{"xhigh", "ultra", "max", "high", "low"} {
+	for _, level := range []string{"xhigh", "max", "high", "low"} {
 		if slices.Contains(levels, level) {
 			return level
 		}

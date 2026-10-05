@@ -10,7 +10,7 @@
  *
  *   1. Local compute + Reliant's models, empty wallet → checkout. The user buys
  *      AI credit. The plan records that the bill was settled.
- *   2. Back from project-picker clears `modelProvider`.
+ *   2. Back from finish clears `modelProvider`.
  *   3. Back from model clears `compute`.
  *   4. The user now picks CLOUD compute — a monthly subscription they have
  *      never paid for.
@@ -55,7 +55,7 @@ const NEW_USER: OnboardingFactsInput = {
   reliantBillingAvailable: true,
 };
 
-const TERMINAL_STEPS = ["project-choice", "project-picker", "github-connect"];
+const TERMINAL_STEPS = ["project-choice", "finish", "github-connect"];
 
 /** The whole world: the plan the user is building plus the server's facts. */
 interface World {
@@ -162,7 +162,7 @@ describe("F2 — a Back that changes the bill must re-ask for payment", () => {
     // The user buys AI credit. Wallet funded, credit leg settled.
     world = pay.apply(world);
     expect(world.facts.walletFunded).toBe(true);
-    expect(deriveStep(world.plan, world.facts)).toBe("project-picker");
+    expect(deriveStep(world.plan, world.facts)).toBe("finish");
 
     // Back twice: to the model step, then to the compute step.
     world = back.apply(world);

@@ -97,7 +97,6 @@ type WorkflowListItem struct {
 	Outputs         map[string]string `protobuf:"bytes,10,rep,name=outputs,proto3" json:"outputs,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"` // Workflow outputs - CEL expressions
 	UpdatedAt       *string           `protobuf:"bytes,11,opt,name=updated_at,json=updatedAt,proto3,oneof" json:"updated_at,omitempty"`                                                // Last update timestamp
 	IsHidden        bool              `protobuf:"varint,12,opt,name=is_hidden,json=isHidden,proto3" json:"is_hidden,omitempty"`                                                        // Whether the workflow is hidden from the hub
-	BuilderChatId   *string           `protobuf:"bytes,13,opt,name=builder_chat_id,json=builderChatId,proto3,oneof" json:"builder_chat_id,omitempty"`                                  // Chat ID associated with this workflow (if any)
 	HasPresetGroups bool              `protobuf:"varint,14,opt,name=has_preset_groups,json=hasPresetGroups,proto3" json:"has_preset_groups,omitempty"`                                 // True if workflow has any tags (top-level or group) that can have presets
 	DraftId         *string           `protobuf:"bytes,16,opt,name=draft_id,json=draftId,proto3,oneof" json:"draft_id,omitempty"`                                                      // Draft ID for user workflows (stable ID for lookups, not present for builtin/project)
 	// Lifecycle. Builtin and project workflows are always COMPLETE.
@@ -105,8 +104,11 @@ type WorkflowListItem struct {
 	// Current validation findings, computed on read (errors, then warnings typed
 	// "warning:<category>"). Empty for builtin and project workflows.
 	ValidationErrors []*ValidationError `protobuf:"bytes,18,rep,name=validation_errors,json=validationErrors,proto3" json:"validation_errors,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// Human-facing display name from the workflow definition's `title`. Empty
+	// when the definition declares none; UIs then derive one from `name`.
+	Title         string `protobuf:"bytes,19,opt,name=title,proto3" json:"title,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *WorkflowListItem) Reset() {
@@ -216,13 +218,6 @@ func (x *WorkflowListItem) GetIsHidden() bool {
 	return false
 }
 
-func (x *WorkflowListItem) GetBuilderChatId() string {
-	if x != nil && x.BuilderChatId != nil {
-		return *x.BuilderChatId
-	}
-	return ""
-}
-
 func (x *WorkflowListItem) GetHasPresetGroups() bool {
 	if x != nil {
 		return x.HasPresetGroups
@@ -249,6 +244,13 @@ func (x *WorkflowListItem) GetValidationErrors() []*ValidationError {
 		return x.ValidationErrors
 	}
 	return nil
+}
+
+func (x *WorkflowListItem) GetTitle() string {
+	if x != nil {
+		return x.Title
+	}
+	return ""
 }
 
 // HighlightSpan represents a character range to highlight in the condition
@@ -678,14 +680,13 @@ func (x *GetWorkflowRequest) GetDraftId() string {
 type GetWorkflowResponse struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	Workflow       *Workflow              `protobuf:"bytes,1,opt,name=workflow,proto3" json:"workflow,omitempty"`
-	Source         string                 `protobuf:"bytes,2,opt,name=source,proto3" json:"source,omitempty"`                                            // Source of the workflow: "builtin", "project", or "user"
-	DraftId        *string                `protobuf:"bytes,3,opt,name=draft_id,json=draftId,proto3,oneof" json:"draft_id,omitempty"`                     // Draft ID for this workflow (if user-owned)
-	BuilderChatId  *string                `protobuf:"bytes,4,opt,name=builder_chat_id,json=builderChatId,proto3,oneof" json:"builder_chat_id,omitempty"` // Chat ID associated with this workflow (if any)
-	ParseError     *string                `protobuf:"bytes,6,opt,name=parse_error,json=parseError,proto3,oneof" json:"parse_error,omitempty"`            // If the stored YAML couldn't be parsed, contains the error message
-	RawDefinition  *string                `protobuf:"bytes,7,opt,name=raw_definition,json=rawDefinition,proto3,oneof" json:"raw_definition,omitempty"`   // Raw YAML definition (only set when parse_error is present)
-	Version        int64                  `protobuf:"varint,8,opt,name=version,proto3" json:"version,omitempty"`                                         // Current version number for OCC (0 for builtins)
-	SourcePath     *string                `protobuf:"bytes,9,opt,name=source_path,json=sourcePath,proto3,oneof" json:"source_path,omitempty"`            // File path for project workflows (enables save-back-to-file)
-	YamlDefinition string                 `protobuf:"bytes,10,opt,name=yaml_definition,json=yamlDefinition,proto3" json:"yaml_definition,omitempty"`     // Canonical YAML definition of the workflow (always populated)
+	Source         string                 `protobuf:"bytes,2,opt,name=source,proto3" json:"source,omitempty"`                                          // Source of the workflow: "builtin", "project", or "user"
+	DraftId        *string                `protobuf:"bytes,3,opt,name=draft_id,json=draftId,proto3,oneof" json:"draft_id,omitempty"`                   // Draft ID for this workflow (if user-owned)
+	ParseError     *string                `protobuf:"bytes,6,opt,name=parse_error,json=parseError,proto3,oneof" json:"parse_error,omitempty"`          // If the stored YAML couldn't be parsed, contains the error message
+	RawDefinition  *string                `protobuf:"bytes,7,opt,name=raw_definition,json=rawDefinition,proto3,oneof" json:"raw_definition,omitempty"` // Raw YAML definition (only set when parse_error is present)
+	Version        int64                  `protobuf:"varint,8,opt,name=version,proto3" json:"version,omitempty"`                                       // Current version number for OCC (0 for builtins)
+	SourcePath     *string                `protobuf:"bytes,9,opt,name=source_path,json=sourcePath,proto3,oneof" json:"source_path,omitempty"`          // File path for project workflows (enables save-back-to-file)
+	YamlDefinition string                 `protobuf:"bytes,10,opt,name=yaml_definition,json=yamlDefinition,proto3" json:"yaml_definition,omitempty"`   // Canonical YAML definition of the workflow (always populated)
 	// Lifecycle of a user workflow; COMPLETE for builtin and project workflows.
 	Status WorkflowDraftStatus `protobuf:"varint,11,opt,name=status,proto3,enum=reliant.v1.WorkflowDraftStatus" json:"status,omitempty"`
 	// Current validation findings for a user workflow, computed on read (errors,
@@ -742,13 +743,6 @@ func (x *GetWorkflowResponse) GetSource() string {
 func (x *GetWorkflowResponse) GetDraftId() string {
 	if x != nil && x.DraftId != nil {
 		return *x.DraftId
-	}
-	return ""
-}
-
-func (x *GetWorkflowResponse) GetBuilderChatId() string {
-	if x != nil && x.BuilderChatId != nil {
-		return *x.BuilderChatId
 	}
 	return ""
 }
@@ -1018,195 +1012,6 @@ func (x *ValidateWorkflowResponse) GetErrors() []*ValidationError {
 	return nil
 }
 
-type BuilderChatRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ProjectId     string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"` // Required: project ID for context
-	SessionId     string                 `protobuf:"bytes,2,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"` // Required: session ID to maintain conversation history
-	Message       string                 `protobuf:"bytes,3,opt,name=message,proto3" json:"message,omitempty"`                      // User's message to the assistant
-	Workflow      *Workflow              `protobuf:"bytes,4,opt,name=workflow,proto3" json:"workflow,omitempty"`                    // Current workflow state in the builder
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *BuilderChatRequest) Reset() {
-	*x = BuilderChatRequest{}
-	mi := &file_reliant_v1_workflow_proto_msgTypes[12]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *BuilderChatRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*BuilderChatRequest) ProtoMessage() {}
-
-func (x *BuilderChatRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_workflow_proto_msgTypes[12]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use BuilderChatRequest.ProtoReflect.Descriptor instead.
-func (*BuilderChatRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{12}
-}
-
-func (x *BuilderChatRequest) GetProjectId() string {
-	if x != nil {
-		return x.ProjectId
-	}
-	return ""
-}
-
-func (x *BuilderChatRequest) GetSessionId() string {
-	if x != nil {
-		return x.SessionId
-	}
-	return ""
-}
-
-func (x *BuilderChatRequest) GetMessage() string {
-	if x != nil {
-		return x.Message
-	}
-	return ""
-}
-
-func (x *BuilderChatRequest) GetWorkflow() *Workflow {
-	if x != nil {
-		return x.Workflow
-	}
-	return nil
-}
-
-// ToolCallInfo describes a tool call made by the assistant
-type ToolCallInfo struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`     // Tool name (e.g., "update_workflow")
-	Result        string                 `protobuf:"bytes,2,opt,name=result,proto3" json:"result,omitempty"` // Tool result summary
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ToolCallInfo) Reset() {
-	*x = ToolCallInfo{}
-	mi := &file_reliant_v1_workflow_proto_msgTypes[13]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ToolCallInfo) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ToolCallInfo) ProtoMessage() {}
-
-func (x *ToolCallInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_workflow_proto_msgTypes[13]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ToolCallInfo.ProtoReflect.Descriptor instead.
-func (*ToolCallInfo) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{13}
-}
-
-func (x *ToolCallInfo) GetName() string {
-	if x != nil {
-		return x.Name
-	}
-	return ""
-}
-
-func (x *ToolCallInfo) GetResult() string {
-	if x != nil {
-		return x.Result
-	}
-	return ""
-}
-
-type BuilderChatResponse struct {
-	state           protoimpl.MessageState `protogen:"open.v1"`
-	Message         string                 `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`                                         // Assistant's response text
-	WorkflowUpdated bool                   `protobuf:"varint,2,opt,name=workflow_updated,json=workflowUpdated,proto3" json:"workflow_updated,omitempty"` // True if the workflow was modified
-	Workflow        *Workflow              `protobuf:"bytes,3,opt,name=workflow,proto3" json:"workflow,omitempty"`                                       // Updated workflow (if modified)
-	ToolCalls       []*ToolCallInfo        `protobuf:"bytes,4,rep,name=tool_calls,json=toolCalls,proto3" json:"tool_calls,omitempty"`                    // Tools that were called
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
-}
-
-func (x *BuilderChatResponse) Reset() {
-	*x = BuilderChatResponse{}
-	mi := &file_reliant_v1_workflow_proto_msgTypes[14]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *BuilderChatResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*BuilderChatResponse) ProtoMessage() {}
-
-func (x *BuilderChatResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_workflow_proto_msgTypes[14]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use BuilderChatResponse.ProtoReflect.Descriptor instead.
-func (*BuilderChatResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{14}
-}
-
-func (x *BuilderChatResponse) GetMessage() string {
-	if x != nil {
-		return x.Message
-	}
-	return ""
-}
-
-func (x *BuilderChatResponse) GetWorkflowUpdated() bool {
-	if x != nil {
-		return x.WorkflowUpdated
-	}
-	return false
-}
-
-func (x *BuilderChatResponse) GetWorkflow() *Workflow {
-	if x != nil {
-		return x.Workflow
-	}
-	return nil
-}
-
-func (x *BuilderChatResponse) GetToolCalls() []*ToolCallInfo {
-	if x != nil {
-		return x.ToolCalls
-	}
-	return nil
-}
-
 type SaveWorkflowRequest struct {
 	state     protoimpl.MessageState `protogen:"open.v1"`
 	ProjectId string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"` // Required: project ID
@@ -1214,7 +1019,6 @@ type SaveWorkflowRequest struct {
 	// Field 3 removed (was publish)
 	Scope           ConfigScope `protobuf:"varint,4,opt,name=scope,proto3,enum=reliant.v1.ConfigScope" json:"scope,omitempty"`                      // Where to save: global, project, or worktree
 	WorktreeId      *string     `protobuf:"bytes,5,opt,name=worktree_id,json=worktreeId,proto3,oneof" json:"worktree_id,omitempty"`                 // Required if scope is worktree
-	BuilderChatId   *string     `protobuf:"bytes,6,opt,name=builder_chat_id,json=builderChatId,proto3,oneof" json:"builder_chat_id,omitempty"`      // Optional: chat ID from workflow builder assistant
 	ExpectedVersion *int64      `protobuf:"varint,8,opt,name=expected_version,json=expectedVersion,proto3,oneof" json:"expected_version,omitempty"` // OCC: expected version number - fails if workflow was modified since
 	SourcePath      *string     `protobuf:"bytes,9,opt,name=source_path,json=sourcePath,proto3,oneof" json:"source_path,omitempty"`                 // If set, write YAML back to this file (for project workflow edits)
 	DraftId         *string     `protobuf:"bytes,10,opt,name=draft_id,json=draftId,proto3,oneof" json:"draft_id,omitempty"`                         // If provided, update this draft by ID (allows renames)
@@ -1228,7 +1032,7 @@ type SaveWorkflowRequest struct {
 
 func (x *SaveWorkflowRequest) Reset() {
 	*x = SaveWorkflowRequest{}
-	mi := &file_reliant_v1_workflow_proto_msgTypes[15]
+	mi := &file_reliant_v1_workflow_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1240,7 +1044,7 @@ func (x *SaveWorkflowRequest) String() string {
 func (*SaveWorkflowRequest) ProtoMessage() {}
 
 func (x *SaveWorkflowRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_workflow_proto_msgTypes[15]
+	mi := &file_reliant_v1_workflow_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1253,7 +1057,7 @@ func (x *SaveWorkflowRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SaveWorkflowRequest.ProtoReflect.Descriptor instead.
 func (*SaveWorkflowRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{15}
+	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *SaveWorkflowRequest) GetProjectId() string {
@@ -1280,13 +1084,6 @@ func (x *SaveWorkflowRequest) GetScope() ConfigScope {
 func (x *SaveWorkflowRequest) GetWorktreeId() string {
 	if x != nil && x.WorktreeId != nil {
 		return *x.WorktreeId
-	}
-	return ""
-}
-
-func (x *SaveWorkflowRequest) GetBuilderChatId() string {
-	if x != nil && x.BuilderChatId != nil {
-		return *x.BuilderChatId
 	}
 	return ""
 }
@@ -1329,7 +1126,6 @@ type SaveWorkflowResponse struct {
 	ValidationErrors []*ValidationError  `protobuf:"bytes,6,rep,name=validation_errors,json=validationErrors,proto3" json:"validation_errors,omitempty"` // This request's validation findings (errors, then warnings)
 	Id               string              `protobuf:"bytes,7,opt,name=id,proto3" json:"id,omitempty"`                                                     // Database ID of the saved workflow
 	Slug             string              `protobuf:"bytes,8,opt,name=slug,proto3" json:"slug,omitempty"`                                                 // Runtime reference slug
-	BuilderChatId    *string             `protobuf:"bytes,9,opt,name=builder_chat_id,json=builderChatId,proto3,oneof" json:"builder_chat_id,omitempty"`  // Chat ID associated with this workflow (if any)
 	Version          int64               `protobuf:"varint,11,opt,name=version,proto3" json:"version,omitempty"`                                         // Current version number for OCC
 	YamlDefinition   string              `protobuf:"bytes,12,opt,name=yaml_definition,json=yamlDefinition,proto3" json:"yaml_definition,omitempty"`      // Canonical YAML definition of the saved workflow
 	Status           WorkflowDraftStatus `protobuf:"varint,13,opt,name=status,proto3,enum=reliant.v1.WorkflowDraftStatus" json:"status,omitempty"`       // Resulting status (unset when nothing was stored)
@@ -1339,7 +1135,7 @@ type SaveWorkflowResponse struct {
 
 func (x *SaveWorkflowResponse) Reset() {
 	*x = SaveWorkflowResponse{}
-	mi := &file_reliant_v1_workflow_proto_msgTypes[16]
+	mi := &file_reliant_v1_workflow_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1351,7 +1147,7 @@ func (x *SaveWorkflowResponse) String() string {
 func (*SaveWorkflowResponse) ProtoMessage() {}
 
 func (x *SaveWorkflowResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_workflow_proto_msgTypes[16]
+	mi := &file_reliant_v1_workflow_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1364,7 +1160,7 @@ func (x *SaveWorkflowResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SaveWorkflowResponse.ProtoReflect.Descriptor instead.
 func (*SaveWorkflowResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{16}
+	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *SaveWorkflowResponse) GetSuccess() bool {
@@ -1416,13 +1212,6 @@ func (x *SaveWorkflowResponse) GetSlug() string {
 	return ""
 }
 
-func (x *SaveWorkflowResponse) GetBuilderChatId() string {
-	if x != nil && x.BuilderChatId != nil {
-		return *x.BuilderChatId
-	}
-	return ""
-}
-
 func (x *SaveWorkflowResponse) GetVersion() int64 {
 	if x != nil {
 		return x.Version
@@ -1458,7 +1247,7 @@ type ImportWorkflowRequest struct {
 
 func (x *ImportWorkflowRequest) Reset() {
 	*x = ImportWorkflowRequest{}
-	mi := &file_reliant_v1_workflow_proto_msgTypes[17]
+	mi := &file_reliant_v1_workflow_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1470,7 +1259,7 @@ func (x *ImportWorkflowRequest) String() string {
 func (*ImportWorkflowRequest) ProtoMessage() {}
 
 func (x *ImportWorkflowRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_workflow_proto_msgTypes[17]
+	mi := &file_reliant_v1_workflow_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1483,7 +1272,7 @@ func (x *ImportWorkflowRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ImportWorkflowRequest.ProtoReflect.Descriptor instead.
 func (*ImportWorkflowRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{17}
+	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *ImportWorkflowRequest) GetProjectId() string {
@@ -1546,7 +1335,7 @@ type ImportWorkflowResponse struct {
 
 func (x *ImportWorkflowResponse) Reset() {
 	*x = ImportWorkflowResponse{}
-	mi := &file_reliant_v1_workflow_proto_msgTypes[18]
+	mi := &file_reliant_v1_workflow_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1558,7 +1347,7 @@ func (x *ImportWorkflowResponse) String() string {
 func (*ImportWorkflowResponse) ProtoMessage() {}
 
 func (x *ImportWorkflowResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_workflow_proto_msgTypes[18]
+	mi := &file_reliant_v1_workflow_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1571,7 +1360,7 @@ func (x *ImportWorkflowResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ImportWorkflowResponse.ProtoReflect.Descriptor instead.
 func (*ImportWorkflowResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{18}
+	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *ImportWorkflowResponse) GetSuccess() bool {
@@ -1655,7 +1444,7 @@ type ExportWorkflowRequest struct {
 
 func (x *ExportWorkflowRequest) Reset() {
 	*x = ExportWorkflowRequest{}
-	mi := &file_reliant_v1_workflow_proto_msgTypes[19]
+	mi := &file_reliant_v1_workflow_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1667,7 +1456,7 @@ func (x *ExportWorkflowRequest) String() string {
 func (*ExportWorkflowRequest) ProtoMessage() {}
 
 func (x *ExportWorkflowRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_workflow_proto_msgTypes[19]
+	mi := &file_reliant_v1_workflow_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1680,7 +1469,7 @@ func (x *ExportWorkflowRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExportWorkflowRequest.ProtoReflect.Descriptor instead.
 func (*ExportWorkflowRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{19}
+	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *ExportWorkflowRequest) GetProjectId() string {
@@ -1716,7 +1505,7 @@ type ExportWorkflowResponse struct {
 
 func (x *ExportWorkflowResponse) Reset() {
 	*x = ExportWorkflowResponse{}
-	mi := &file_reliant_v1_workflow_proto_msgTypes[20]
+	mi := &file_reliant_v1_workflow_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1728,7 +1517,7 @@ func (x *ExportWorkflowResponse) String() string {
 func (*ExportWorkflowResponse) ProtoMessage() {}
 
 func (x *ExportWorkflowResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_workflow_proto_msgTypes[20]
+	mi := &file_reliant_v1_workflow_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1741,7 +1530,7 @@ func (x *ExportWorkflowResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExportWorkflowResponse.ProtoReflect.Descriptor instead.
 func (*ExportWorkflowResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{20}
+	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *ExportWorkflowResponse) GetSuccess() bool {
@@ -1783,7 +1572,7 @@ type SetWorkflowVisibilityRequest struct {
 
 func (x *SetWorkflowVisibilityRequest) Reset() {
 	*x = SetWorkflowVisibilityRequest{}
-	mi := &file_reliant_v1_workflow_proto_msgTypes[21]
+	mi := &file_reliant_v1_workflow_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1795,7 +1584,7 @@ func (x *SetWorkflowVisibilityRequest) String() string {
 func (*SetWorkflowVisibilityRequest) ProtoMessage() {}
 
 func (x *SetWorkflowVisibilityRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_workflow_proto_msgTypes[21]
+	mi := &file_reliant_v1_workflow_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1808,7 +1597,7 @@ func (x *SetWorkflowVisibilityRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetWorkflowVisibilityRequest.ProtoReflect.Descriptor instead.
 func (*SetWorkflowVisibilityRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{21}
+	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *SetWorkflowVisibilityRequest) GetProjectId() string {
@@ -1843,7 +1632,7 @@ type SetWorkflowVisibilityResponse struct {
 
 func (x *SetWorkflowVisibilityResponse) Reset() {
 	*x = SetWorkflowVisibilityResponse{}
-	mi := &file_reliant_v1_workflow_proto_msgTypes[22]
+	mi := &file_reliant_v1_workflow_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1855,7 +1644,7 @@ func (x *SetWorkflowVisibilityResponse) String() string {
 func (*SetWorkflowVisibilityResponse) ProtoMessage() {}
 
 func (x *SetWorkflowVisibilityResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_workflow_proto_msgTypes[22]
+	mi := &file_reliant_v1_workflow_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1868,7 +1657,7 @@ func (x *SetWorkflowVisibilityResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetWorkflowVisibilityResponse.ProtoReflect.Descriptor instead.
 func (*SetWorkflowVisibilityResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{22}
+	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *SetWorkflowVisibilityResponse) GetSuccess() bool {
@@ -1904,7 +1693,7 @@ type CopyWorkflowRequest struct {
 
 func (x *CopyWorkflowRequest) Reset() {
 	*x = CopyWorkflowRequest{}
-	mi := &file_reliant_v1_workflow_proto_msgTypes[23]
+	mi := &file_reliant_v1_workflow_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1916,7 +1705,7 @@ func (x *CopyWorkflowRequest) String() string {
 func (*CopyWorkflowRequest) ProtoMessage() {}
 
 func (x *CopyWorkflowRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_workflow_proto_msgTypes[23]
+	mi := &file_reliant_v1_workflow_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1929,7 +1718,7 @@ func (x *CopyWorkflowRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CopyWorkflowRequest.ProtoReflect.Descriptor instead.
 func (*CopyWorkflowRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{23}
+	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *CopyWorkflowRequest) GetProjectId() string {
@@ -1973,7 +1762,7 @@ type CopyWorkflowResponse struct {
 
 func (x *CopyWorkflowResponse) Reset() {
 	*x = CopyWorkflowResponse{}
-	mi := &file_reliant_v1_workflow_proto_msgTypes[24]
+	mi := &file_reliant_v1_workflow_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1985,7 +1774,7 @@ func (x *CopyWorkflowResponse) String() string {
 func (*CopyWorkflowResponse) ProtoMessage() {}
 
 func (x *CopyWorkflowResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_workflow_proto_msgTypes[24]
+	mi := &file_reliant_v1_workflow_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1998,7 +1787,7 @@ func (x *CopyWorkflowResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CopyWorkflowResponse.ProtoReflect.Descriptor instead.
 func (*CopyWorkflowResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{24}
+	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *CopyWorkflowResponse) GetSuccess() bool {
@@ -2058,7 +1847,7 @@ type SimulatedEvent struct {
 
 func (x *SimulatedEvent) Reset() {
 	*x = SimulatedEvent{}
-	mi := &file_reliant_v1_workflow_proto_msgTypes[25]
+	mi := &file_reliant_v1_workflow_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2070,7 +1859,7 @@ func (x *SimulatedEvent) String() string {
 func (*SimulatedEvent) ProtoMessage() {}
 
 func (x *SimulatedEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_workflow_proto_msgTypes[25]
+	mi := &file_reliant_v1_workflow_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2083,7 +1872,7 @@ func (x *SimulatedEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SimulatedEvent.ProtoReflect.Descriptor instead.
 func (*SimulatedEvent) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{25}
+	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *SimulatedEvent) GetNode() string {
@@ -2114,7 +1903,7 @@ type ScenarioExpectation struct {
 
 func (x *ScenarioExpectation) Reset() {
 	*x = ScenarioExpectation{}
-	mi := &file_reliant_v1_workflow_proto_msgTypes[26]
+	mi := &file_reliant_v1_workflow_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2126,7 +1915,7 @@ func (x *ScenarioExpectation) String() string {
 func (*ScenarioExpectation) ProtoMessage() {}
 
 func (x *ScenarioExpectation) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_workflow_proto_msgTypes[26]
+	mi := &file_reliant_v1_workflow_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2139,7 +1928,7 @@ func (x *ScenarioExpectation) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ScenarioExpectation.ProtoReflect.Descriptor instead.
 func (*ScenarioExpectation) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{26}
+	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *ScenarioExpectation) GetOutcome() string {
@@ -2191,7 +1980,7 @@ type ScenarioDefinition struct {
 
 func (x *ScenarioDefinition) Reset() {
 	*x = ScenarioDefinition{}
-	mi := &file_reliant_v1_workflow_proto_msgTypes[27]
+	mi := &file_reliant_v1_workflow_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2203,7 +1992,7 @@ func (x *ScenarioDefinition) String() string {
 func (*ScenarioDefinition) ProtoMessage() {}
 
 func (x *ScenarioDefinition) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_workflow_proto_msgTypes[27]
+	mi := &file_reliant_v1_workflow_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2216,7 +2005,7 @@ func (x *ScenarioDefinition) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ScenarioDefinition.ProtoReflect.Descriptor instead.
 func (*ScenarioDefinition) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{27}
+	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *ScenarioDefinition) GetName() string {
@@ -2267,7 +2056,7 @@ type ErrorDetails struct {
 
 func (x *ErrorDetails) Reset() {
 	*x = ErrorDetails{}
-	mi := &file_reliant_v1_workflow_proto_msgTypes[28]
+	mi := &file_reliant_v1_workflow_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2279,7 +2068,7 @@ func (x *ErrorDetails) String() string {
 func (*ErrorDetails) ProtoMessage() {}
 
 func (x *ErrorDetails) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_workflow_proto_msgTypes[28]
+	mi := &file_reliant_v1_workflow_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2292,7 +2081,7 @@ func (x *ErrorDetails) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ErrorDetails.ProtoReflect.Descriptor instead.
 func (*ErrorDetails) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{28}
+	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *ErrorDetails) GetNode() string {
@@ -2336,7 +2125,7 @@ type ExecutionDetails struct {
 
 func (x *ExecutionDetails) Reset() {
 	*x = ExecutionDetails{}
-	mi := &file_reliant_v1_workflow_proto_msgTypes[29]
+	mi := &file_reliant_v1_workflow_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2348,7 +2137,7 @@ func (x *ExecutionDetails) String() string {
 func (*ExecutionDetails) ProtoMessage() {}
 
 func (x *ExecutionDetails) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_workflow_proto_msgTypes[29]
+	mi := &file_reliant_v1_workflow_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2361,7 +2150,7 @@ func (x *ExecutionDetails) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExecutionDetails.ProtoReflect.Descriptor instead.
 func (*ExecutionDetails) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{29}
+	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *ExecutionDetails) GetNodesReached() []string {
@@ -2406,7 +2195,7 @@ type ScenarioResult struct {
 
 func (x *ScenarioResult) Reset() {
 	*x = ScenarioResult{}
-	mi := &file_reliant_v1_workflow_proto_msgTypes[30]
+	mi := &file_reliant_v1_workflow_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2418,7 +2207,7 @@ func (x *ScenarioResult) String() string {
 func (*ScenarioResult) ProtoMessage() {}
 
 func (x *ScenarioResult) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_workflow_proto_msgTypes[30]
+	mi := &file_reliant_v1_workflow_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2431,7 +2220,7 @@ func (x *ScenarioResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ScenarioResult.ProtoReflect.Descriptor instead.
 func (*ScenarioResult) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{30}
+	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *ScenarioResult) GetStatus() string {
@@ -2491,7 +2280,7 @@ type Scenario struct {
 
 func (x *Scenario) Reset() {
 	*x = Scenario{}
-	mi := &file_reliant_v1_workflow_proto_msgTypes[31]
+	mi := &file_reliant_v1_workflow_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2503,7 +2292,7 @@ func (x *Scenario) String() string {
 func (*Scenario) ProtoMessage() {}
 
 func (x *Scenario) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_workflow_proto_msgTypes[31]
+	mi := &file_reliant_v1_workflow_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2516,7 +2305,7 @@ func (x *Scenario) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Scenario.ProtoReflect.Descriptor instead.
 func (*Scenario) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{31}
+	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *Scenario) GetId() string {
@@ -2621,7 +2410,7 @@ type ListScenariosRequest struct {
 
 func (x *ListScenariosRequest) Reset() {
 	*x = ListScenariosRequest{}
-	mi := &file_reliant_v1_workflow_proto_msgTypes[32]
+	mi := &file_reliant_v1_workflow_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2633,7 +2422,7 @@ func (x *ListScenariosRequest) String() string {
 func (*ListScenariosRequest) ProtoMessage() {}
 
 func (x *ListScenariosRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_workflow_proto_msgTypes[32]
+	mi := &file_reliant_v1_workflow_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2646,7 +2435,7 @@ func (x *ListScenariosRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListScenariosRequest.ProtoReflect.Descriptor instead.
 func (*ListScenariosRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{32}
+	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *ListScenariosRequest) GetProjectId() string {
@@ -2673,7 +2462,7 @@ type ListScenariosResponse struct {
 
 func (x *ListScenariosResponse) Reset() {
 	*x = ListScenariosResponse{}
-	mi := &file_reliant_v1_workflow_proto_msgTypes[33]
+	mi := &file_reliant_v1_workflow_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2685,7 +2474,7 @@ func (x *ListScenariosResponse) String() string {
 func (*ListScenariosResponse) ProtoMessage() {}
 
 func (x *ListScenariosResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_workflow_proto_msgTypes[33]
+	mi := &file_reliant_v1_workflow_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2698,7 +2487,7 @@ func (x *ListScenariosResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListScenariosResponse.ProtoReflect.Descriptor instead.
 func (*ListScenariosResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{33}
+	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *ListScenariosResponse) GetScenarios() []*Scenario {
@@ -2730,7 +2519,7 @@ type CreateScenarioRequest struct {
 
 func (x *CreateScenarioRequest) Reset() {
 	*x = CreateScenarioRequest{}
-	mi := &file_reliant_v1_workflow_proto_msgTypes[34]
+	mi := &file_reliant_v1_workflow_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2742,7 +2531,7 @@ func (x *CreateScenarioRequest) String() string {
 func (*CreateScenarioRequest) ProtoMessage() {}
 
 func (x *CreateScenarioRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_workflow_proto_msgTypes[34]
+	mi := &file_reliant_v1_workflow_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2755,7 +2544,7 @@ func (x *CreateScenarioRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateScenarioRequest.ProtoReflect.Descriptor instead.
 func (*CreateScenarioRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{34}
+	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *CreateScenarioRequest) GetProjectId() string {
@@ -2812,7 +2601,7 @@ type CreateScenarioResponse struct {
 
 func (x *CreateScenarioResponse) Reset() {
 	*x = CreateScenarioResponse{}
-	mi := &file_reliant_v1_workflow_proto_msgTypes[35]
+	mi := &file_reliant_v1_workflow_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2824,7 +2613,7 @@ func (x *CreateScenarioResponse) String() string {
 func (*CreateScenarioResponse) ProtoMessage() {}
 
 func (x *CreateScenarioResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_workflow_proto_msgTypes[35]
+	mi := &file_reliant_v1_workflow_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2837,7 +2626,7 @@ func (x *CreateScenarioResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateScenarioResponse.ProtoReflect.Descriptor instead.
 func (*CreateScenarioResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{35}
+	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *CreateScenarioResponse) GetSuccess() bool {
@@ -2882,7 +2671,7 @@ type RunScenarioRequest struct {
 
 func (x *RunScenarioRequest) Reset() {
 	*x = RunScenarioRequest{}
-	mi := &file_reliant_v1_workflow_proto_msgTypes[36]
+	mi := &file_reliant_v1_workflow_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2894,7 +2683,7 @@ func (x *RunScenarioRequest) String() string {
 func (*RunScenarioRequest) ProtoMessage() {}
 
 func (x *RunScenarioRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_workflow_proto_msgTypes[36]
+	mi := &file_reliant_v1_workflow_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2907,7 +2696,7 @@ func (x *RunScenarioRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RunScenarioRequest.ProtoReflect.Descriptor instead.
 func (*RunScenarioRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{36}
+	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *RunScenarioRequest) GetProjectId() string {
@@ -2947,7 +2736,7 @@ type RunScenarioResponse struct {
 
 func (x *RunScenarioResponse) Reset() {
 	*x = RunScenarioResponse{}
-	mi := &file_reliant_v1_workflow_proto_msgTypes[37]
+	mi := &file_reliant_v1_workflow_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2959,7 +2748,7 @@ func (x *RunScenarioResponse) String() string {
 func (*RunScenarioResponse) ProtoMessage() {}
 
 func (x *RunScenarioResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_workflow_proto_msgTypes[37]
+	mi := &file_reliant_v1_workflow_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2972,7 +2761,7 @@ func (x *RunScenarioResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RunScenarioResponse.ProtoReflect.Descriptor instead.
 func (*RunScenarioResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{37}
+	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *RunScenarioResponse) GetResult() *ScenarioResult {
@@ -2993,7 +2782,7 @@ type DeleteScenarioRequest struct {
 
 func (x *DeleteScenarioRequest) Reset() {
 	*x = DeleteScenarioRequest{}
-	mi := &file_reliant_v1_workflow_proto_msgTypes[38]
+	mi := &file_reliant_v1_workflow_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3005,7 +2794,7 @@ func (x *DeleteScenarioRequest) String() string {
 func (*DeleteScenarioRequest) ProtoMessage() {}
 
 func (x *DeleteScenarioRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_workflow_proto_msgTypes[38]
+	mi := &file_reliant_v1_workflow_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3018,7 +2807,7 @@ func (x *DeleteScenarioRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteScenarioRequest.ProtoReflect.Descriptor instead.
 func (*DeleteScenarioRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{38}
+	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *DeleteScenarioRequest) GetProjectId() string {
@@ -3045,7 +2834,7 @@ type DeleteScenarioResponse struct {
 
 func (x *DeleteScenarioResponse) Reset() {
 	*x = DeleteScenarioResponse{}
-	mi := &file_reliant_v1_workflow_proto_msgTypes[39]
+	mi := &file_reliant_v1_workflow_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3057,7 +2846,7 @@ func (x *DeleteScenarioResponse) String() string {
 func (*DeleteScenarioResponse) ProtoMessage() {}
 
 func (x *DeleteScenarioResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_workflow_proto_msgTypes[39]
+	mi := &file_reliant_v1_workflow_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3070,7 +2859,7 @@ func (x *DeleteScenarioResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteScenarioResponse.ProtoReflect.Descriptor instead.
 func (*DeleteScenarioResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{39}
+	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *DeleteScenarioResponse) GetSuccess() bool {
@@ -3100,7 +2889,7 @@ type UploadScenarioRequest struct {
 
 func (x *UploadScenarioRequest) Reset() {
 	*x = UploadScenarioRequest{}
-	mi := &file_reliant_v1_workflow_proto_msgTypes[40]
+	mi := &file_reliant_v1_workflow_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3112,7 +2901,7 @@ func (x *UploadScenarioRequest) String() string {
 func (*UploadScenarioRequest) ProtoMessage() {}
 
 func (x *UploadScenarioRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_workflow_proto_msgTypes[40]
+	mi := &file_reliant_v1_workflow_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3125,7 +2914,7 @@ func (x *UploadScenarioRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UploadScenarioRequest.ProtoReflect.Descriptor instead.
 func (*UploadScenarioRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{40}
+	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *UploadScenarioRequest) GetProjectId() string {
@@ -3168,7 +2957,7 @@ type UploadScenarioResponse struct {
 
 func (x *UploadScenarioResponse) Reset() {
 	*x = UploadScenarioResponse{}
-	mi := &file_reliant_v1_workflow_proto_msgTypes[41]
+	mi := &file_reliant_v1_workflow_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3180,7 +2969,7 @@ func (x *UploadScenarioResponse) String() string {
 func (*UploadScenarioResponse) ProtoMessage() {}
 
 func (x *UploadScenarioResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_workflow_proto_msgTypes[41]
+	mi := &file_reliant_v1_workflow_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3193,7 +2982,7 @@ func (x *UploadScenarioResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UploadScenarioResponse.ProtoReflect.Descriptor instead.
 func (*UploadScenarioResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{41}
+	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *UploadScenarioResponse) GetSuccess() bool {
@@ -3235,7 +3024,7 @@ type ExportScenarioRequest struct {
 
 func (x *ExportScenarioRequest) Reset() {
 	*x = ExportScenarioRequest{}
-	mi := &file_reliant_v1_workflow_proto_msgTypes[42]
+	mi := &file_reliant_v1_workflow_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3247,7 +3036,7 @@ func (x *ExportScenarioRequest) String() string {
 func (*ExportScenarioRequest) ProtoMessage() {}
 
 func (x *ExportScenarioRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_workflow_proto_msgTypes[42]
+	mi := &file_reliant_v1_workflow_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3260,7 +3049,7 @@ func (x *ExportScenarioRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExportScenarioRequest.ProtoReflect.Descriptor instead.
 func (*ExportScenarioRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{42}
+	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *ExportScenarioRequest) GetProjectId() string {
@@ -3287,7 +3076,7 @@ type ExportScenarioResponse struct {
 
 func (x *ExportScenarioResponse) Reset() {
 	*x = ExportScenarioResponse{}
-	mi := &file_reliant_v1_workflow_proto_msgTypes[43]
+	mi := &file_reliant_v1_workflow_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3299,7 +3088,7 @@ func (x *ExportScenarioResponse) String() string {
 func (*ExportScenarioResponse) ProtoMessage() {}
 
 func (x *ExportScenarioResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_workflow_proto_msgTypes[43]
+	mi := &file_reliant_v1_workflow_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3312,7 +3101,7 @@ func (x *ExportScenarioResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExportScenarioResponse.ProtoReflect.Descriptor instead.
 func (*ExportScenarioResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{43}
+	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *ExportScenarioResponse) GetYamlContent() string {
@@ -3343,7 +3132,7 @@ type CreateWorkflowDraftRequest struct {
 
 func (x *CreateWorkflowDraftRequest) Reset() {
 	*x = CreateWorkflowDraftRequest{}
-	mi := &file_reliant_v1_workflow_proto_msgTypes[44]
+	mi := &file_reliant_v1_workflow_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3355,7 +3144,7 @@ func (x *CreateWorkflowDraftRequest) String() string {
 func (*CreateWorkflowDraftRequest) ProtoMessage() {}
 
 func (x *CreateWorkflowDraftRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_workflow_proto_msgTypes[44]
+	mi := &file_reliant_v1_workflow_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3368,7 +3157,7 @@ func (x *CreateWorkflowDraftRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateWorkflowDraftRequest.ProtoReflect.Descriptor instead.
 func (*CreateWorkflowDraftRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{44}
+	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *CreateWorkflowDraftRequest) GetProjectId() string {
@@ -3397,7 +3186,7 @@ type CreateWorkflowDraftResponse struct {
 
 func (x *CreateWorkflowDraftResponse) Reset() {
 	*x = CreateWorkflowDraftResponse{}
-	mi := &file_reliant_v1_workflow_proto_msgTypes[45]
+	mi := &file_reliant_v1_workflow_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3409,7 +3198,7 @@ func (x *CreateWorkflowDraftResponse) String() string {
 func (*CreateWorkflowDraftResponse) ProtoMessage() {}
 
 func (x *CreateWorkflowDraftResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_workflow_proto_msgTypes[45]
+	mi := &file_reliant_v1_workflow_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3422,7 +3211,7 @@ func (x *CreateWorkflowDraftResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateWorkflowDraftResponse.ProtoReflect.Descriptor instead.
 func (*CreateWorkflowDraftResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{45}
+	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{42}
 }
 
 func (x *CreateWorkflowDraftResponse) GetDraftId() string {
@@ -3465,7 +3254,7 @@ type SetWorkflowStatusRequest struct {
 
 func (x *SetWorkflowStatusRequest) Reset() {
 	*x = SetWorkflowStatusRequest{}
-	mi := &file_reliant_v1_workflow_proto_msgTypes[46]
+	mi := &file_reliant_v1_workflow_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3477,7 +3266,7 @@ func (x *SetWorkflowStatusRequest) String() string {
 func (*SetWorkflowStatusRequest) ProtoMessage() {}
 
 func (x *SetWorkflowStatusRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_workflow_proto_msgTypes[46]
+	mi := &file_reliant_v1_workflow_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3490,7 +3279,7 @@ func (x *SetWorkflowStatusRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetWorkflowStatusRequest.ProtoReflect.Descriptor instead.
 func (*SetWorkflowStatusRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{46}
+	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{43}
 }
 
 func (x *SetWorkflowStatusRequest) GetProjectId() string {
@@ -3534,7 +3323,7 @@ type SetWorkflowStatusResponse struct {
 
 func (x *SetWorkflowStatusResponse) Reset() {
 	*x = SetWorkflowStatusResponse{}
-	mi := &file_reliant_v1_workflow_proto_msgTypes[47]
+	mi := &file_reliant_v1_workflow_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3546,7 +3335,7 @@ func (x *SetWorkflowStatusResponse) String() string {
 func (*SetWorkflowStatusResponse) ProtoMessage() {}
 
 func (x *SetWorkflowStatusResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_workflow_proto_msgTypes[47]
+	mi := &file_reliant_v1_workflow_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3559,7 +3348,7 @@ func (x *SetWorkflowStatusResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetWorkflowStatusResponse.ProtoReflect.Descriptor instead.
 func (*SetWorkflowStatusResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{47}
+	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{44}
 }
 
 func (x *SetWorkflowStatusResponse) GetSuccess() bool {
@@ -3597,102 +3386,12 @@ func (x *SetWorkflowStatusResponse) GetVersion() int64 {
 	return 0
 }
 
-// AssociateChatWithWorkflowDraftRequest links a chat to a workflow draft.
-// Called after chat creation so tools can find the draft by chat ID.
-type AssociateChatWithWorkflowDraftRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ChatId        string                 `protobuf:"bytes,1,opt,name=chat_id,json=chatId,proto3" json:"chat_id,omitempty"`    // Required: the chat to associate
-	DraftId       string                 `protobuf:"bytes,2,opt,name=draft_id,json=draftId,proto3" json:"draft_id,omitempty"` // Required: the workflow draft ID
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *AssociateChatWithWorkflowDraftRequest) Reset() {
-	*x = AssociateChatWithWorkflowDraftRequest{}
-	mi := &file_reliant_v1_workflow_proto_msgTypes[48]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *AssociateChatWithWorkflowDraftRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*AssociateChatWithWorkflowDraftRequest) ProtoMessage() {}
-
-func (x *AssociateChatWithWorkflowDraftRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_workflow_proto_msgTypes[48]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use AssociateChatWithWorkflowDraftRequest.ProtoReflect.Descriptor instead.
-func (*AssociateChatWithWorkflowDraftRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{48}
-}
-
-func (x *AssociateChatWithWorkflowDraftRequest) GetChatId() string {
-	if x != nil {
-		return x.ChatId
-	}
-	return ""
-}
-
-func (x *AssociateChatWithWorkflowDraftRequest) GetDraftId() string {
-	if x != nil {
-		return x.DraftId
-	}
-	return ""
-}
-
-type AssociateChatWithWorkflowDraftResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *AssociateChatWithWorkflowDraftResponse) Reset() {
-	*x = AssociateChatWithWorkflowDraftResponse{}
-	mi := &file_reliant_v1_workflow_proto_msgTypes[49]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *AssociateChatWithWorkflowDraftResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*AssociateChatWithWorkflowDraftResponse) ProtoMessage() {}
-
-func (x *AssociateChatWithWorkflowDraftResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_workflow_proto_msgTypes[49]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use AssociateChatWithWorkflowDraftResponse.ProtoReflect.Descriptor instead.
-func (*AssociateChatWithWorkflowDraftResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{49}
-}
-
 var File_reliant_v1_workflow_proto protoreflect.FileDescriptor
 
 const file_reliant_v1_workflow_proto_rawDesc = "" +
 	"\n" +
 	"\x19reliant/v1/workflow.proto\x12\n" +
-	"reliant.v1\x1a\x17reliant/v1/common.proto\x1a\x1creliant/v1/workflow_v2.proto\"\xf9\x06\n" +
+	"reliant.v1\x1a\x17reliant/v1/common.proto\x1a\x1creliant/v1/workflow_v2.proto\"\xe5\x06\n" +
 	"\x10WorkflowListItem\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1a\n" +
 	"\bfilename\x18\x02 \x01(\tR\bfilename\x12 \n" +
@@ -3707,21 +3406,20 @@ const file_reliant_v1_workflow_proto_rawDesc = "" +
 	" \x03(\v2).reliant.v1.WorkflowListItem.OutputsEntryR\aoutputs\x12\"\n" +
 	"\n" +
 	"updated_at\x18\v \x01(\tH\x00R\tupdatedAt\x88\x01\x01\x12\x1b\n" +
-	"\tis_hidden\x18\f \x01(\bR\bisHidden\x12+\n" +
-	"\x0fbuilder_chat_id\x18\r \x01(\tH\x01R\rbuilderChatId\x88\x01\x01\x12*\n" +
+	"\tis_hidden\x18\f \x01(\bR\bisHidden\x12*\n" +
 	"\x11has_preset_groups\x18\x0e \x01(\bR\x0fhasPresetGroups\x12\x1e\n" +
-	"\bdraft_id\x18\x10 \x01(\tH\x02R\adraftId\x88\x01\x01\x127\n" +
+	"\bdraft_id\x18\x10 \x01(\tH\x01R\adraftId\x88\x01\x01\x127\n" +
 	"\x06status\x18\x11 \x01(\x0e2\x1f.reliant.v1.WorkflowDraftStatusR\x06status\x12H\n" +
-	"\x11validation_errors\x18\x12 \x03(\v2\x1b.reliant.v1.ValidationErrorR\x10validationErrors\x1aL\n" +
+	"\x11validation_errors\x18\x12 \x03(\v2\x1b.reliant.v1.ValidationErrorR\x10validationErrors\x12\x14\n" +
+	"\x05title\x18\x13 \x01(\tR\x05title\x1aL\n" +
 	"\vInputsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12'\n" +
 	"\x05value\x18\x02 \x01(\v2\x11.reliant.v1.InputR\x05value:\x028\x01\x1a:\n" +
 	"\fOutputsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\r\n" +
-	"\v_updated_atB\x12\n" +
-	"\x10_builder_chat_idB\v\n" +
-	"\t_draft_idJ\x04\b\x0f\x10\x10R\bis_valid\"O\n" +
+	"\v_updated_atB\v\n" +
+	"\t_draft_idJ\x04\b\r\x10\x0eJ\x04\b\x0f\x10\x10R\x0fbuilder_chat_idR\bis_valid\"O\n" +
 	"\rHighlightSpan\x12\x14\n" +
 	"\x05start\x18\x01 \x01(\x05R\x05start\x12\x10\n" +
 	"\x03end\x18\x02 \x01(\x05R\x03end\x12\x16\n" +
@@ -3764,27 +3462,25 @@ const file_reliant_v1_workflow_proto_rawDesc = "" +
 	"worktreeId\x88\x01\x01\x12\x1e\n" +
 	"\bdraft_id\x18\x04 \x01(\tH\x01R\adraftId\x88\x01\x01B\x0e\n" +
 	"\f_worktree_idB\v\n" +
-	"\t_draft_id\"\xc4\x04\n" +
+	"\t_draft_id\"\x9a\x04\n" +
 	"\x13GetWorkflowResponse\x120\n" +
 	"\bworkflow\x18\x01 \x01(\v2\x14.reliant.v1.WorkflowR\bworkflow\x12\x16\n" +
 	"\x06source\x18\x02 \x01(\tR\x06source\x12\x1e\n" +
-	"\bdraft_id\x18\x03 \x01(\tH\x00R\adraftId\x88\x01\x01\x12+\n" +
-	"\x0fbuilder_chat_id\x18\x04 \x01(\tH\x01R\rbuilderChatId\x88\x01\x01\x12$\n" +
-	"\vparse_error\x18\x06 \x01(\tH\x02R\n" +
+	"\bdraft_id\x18\x03 \x01(\tH\x00R\adraftId\x88\x01\x01\x12$\n" +
+	"\vparse_error\x18\x06 \x01(\tH\x01R\n" +
 	"parseError\x88\x01\x01\x12*\n" +
-	"\x0eraw_definition\x18\a \x01(\tH\x03R\rrawDefinition\x88\x01\x01\x12\x18\n" +
+	"\x0eraw_definition\x18\a \x01(\tH\x02R\rrawDefinition\x88\x01\x01\x12\x18\n" +
 	"\aversion\x18\b \x01(\x03R\aversion\x12$\n" +
-	"\vsource_path\x18\t \x01(\tH\x04R\n" +
+	"\vsource_path\x18\t \x01(\tH\x03R\n" +
 	"sourcePath\x88\x01\x01\x12'\n" +
 	"\x0fyaml_definition\x18\n" +
 	" \x01(\tR\x0eyamlDefinition\x127\n" +
 	"\x06status\x18\v \x01(\x0e2\x1f.reliant.v1.WorkflowDraftStatusR\x06status\x12H\n" +
 	"\x11validation_errors\x18\f \x03(\v2\x1b.reliant.v1.ValidationErrorR\x10validationErrorsB\v\n" +
-	"\t_draft_idB\x12\n" +
-	"\x10_builder_chat_idB\x0e\n" +
+	"\t_draft_idB\x0e\n" +
 	"\f_parse_errorB\x11\n" +
 	"\x0f_raw_definitionB\x0e\n" +
-	"\f_source_pathJ\x04\b\x05\x10\x06\"\x80\x01\n" +
+	"\f_source_pathJ\x04\b\x04\x10\x05J\x04\b\x05\x10\x06R\x0fbuilder_chat_id\"\x80\x01\n" +
 	"\x15DeleteWorkflowRequest\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x12\n" +
@@ -3801,42 +3497,24 @@ const file_reliant_v1_workflow_proto_rawDesc = "" +
 	"\bworkflow\x18\x02 \x01(\v2\x14.reliant.v1.WorkflowR\bworkflow\"e\n" +
 	"\x18ValidateWorkflowResponse\x12\x14\n" +
 	"\x05valid\x18\x01 \x01(\bR\x05valid\x123\n" +
-	"\x06errors\x18\x02 \x03(\v2\x1b.reliant.v1.ValidationErrorR\x06errors\"\x9e\x01\n" +
-	"\x12BuilderChatRequest\x12\x1d\n" +
-	"\n" +
-	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x1d\n" +
-	"\n" +
-	"session_id\x18\x02 \x01(\tR\tsessionId\x12\x18\n" +
-	"\amessage\x18\x03 \x01(\tR\amessage\x120\n" +
-	"\bworkflow\x18\x04 \x01(\v2\x14.reliant.v1.WorkflowR\bworkflow\":\n" +
-	"\fToolCallInfo\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\x12\x16\n" +
-	"\x06result\x18\x02 \x01(\tR\x06result\"\xc5\x01\n" +
-	"\x13BuilderChatResponse\x12\x18\n" +
-	"\amessage\x18\x01 \x01(\tR\amessage\x12)\n" +
-	"\x10workflow_updated\x18\x02 \x01(\bR\x0fworkflowUpdated\x120\n" +
-	"\bworkflow\x18\x03 \x01(\v2\x14.reliant.v1.WorkflowR\bworkflow\x127\n" +
-	"\n" +
-	"tool_calls\x18\x04 \x03(\v2\x18.reliant.v1.ToolCallInfoR\ttoolCalls\"\xf3\x03\n" +
+	"\x06errors\x18\x02 \x03(\v2\x1b.reliant.v1.ValidationErrorR\x06errors\"\xc9\x03\n" +
 	"\x13SaveWorkflowRequest\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x120\n" +
 	"\bworkflow\x18\x02 \x01(\v2\x14.reliant.v1.WorkflowR\bworkflow\x12-\n" +
 	"\x05scope\x18\x04 \x01(\x0e2\x17.reliant.v1.ConfigScopeR\x05scope\x12$\n" +
 	"\vworktree_id\x18\x05 \x01(\tH\x00R\n" +
-	"worktreeId\x88\x01\x01\x12+\n" +
-	"\x0fbuilder_chat_id\x18\x06 \x01(\tH\x01R\rbuilderChatId\x88\x01\x01\x12.\n" +
-	"\x10expected_version\x18\b \x01(\x03H\x02R\x0fexpectedVersion\x88\x01\x01\x12$\n" +
-	"\vsource_path\x18\t \x01(\tH\x03R\n" +
+	"worktreeId\x88\x01\x01\x12.\n" +
+	"\x10expected_version\x18\b \x01(\x03H\x01R\x0fexpectedVersion\x88\x01\x01\x12$\n" +
+	"\vsource_path\x18\t \x01(\tH\x02R\n" +
 	"sourcePath\x88\x01\x01\x12\x1e\n" +
 	"\bdraft_id\x18\n" +
-	" \x01(\tH\x04R\adraftId\x88\x01\x01\x127\n" +
+	" \x01(\tH\x03R\adraftId\x88\x01\x01\x127\n" +
 	"\x06status\x18\v \x01(\x0e2\x1f.reliant.v1.WorkflowDraftStatusR\x06statusB\x0e\n" +
-	"\f_worktree_idB\x12\n" +
-	"\x10_builder_chat_idB\x13\n" +
+	"\f_worktree_idB\x13\n" +
 	"\x11_expected_versionB\x0e\n" +
 	"\f_source_pathB\v\n" +
-	"\t_draft_idJ\x04\b\a\x10\b\"\xc8\x03\n" +
+	"\t_draft_idJ\x04\b\x06\x10\aJ\x04\b\a\x10\bR\x0fbuilder_chat_id\"\x9e\x03\n" +
 	"\x14SaveWorkflowResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\x120\n" +
@@ -3844,13 +3522,12 @@ const file_reliant_v1_workflow_proto_rawDesc = "" +
 	"\bis_valid\x18\x05 \x01(\bR\aisValid\x12H\n" +
 	"\x11validation_errors\x18\x06 \x03(\v2\x1b.reliant.v1.ValidationErrorR\x10validationErrors\x12\x0e\n" +
 	"\x02id\x18\a \x01(\tR\x02id\x12\x12\n" +
-	"\x04slug\x18\b \x01(\tR\x04slug\x12+\n" +
-	"\x0fbuilder_chat_id\x18\t \x01(\tH\x00R\rbuilderChatId\x88\x01\x01\x12\x18\n" +
+	"\x04slug\x18\b \x01(\tR\x04slug\x12\x18\n" +
 	"\aversion\x18\v \x01(\x03R\aversion\x12'\n" +
 	"\x0fyaml_definition\x18\f \x01(\tR\x0eyamlDefinition\x127\n" +
-	"\x06status\x18\r \x01(\x0e2\x1f.reliant.v1.WorkflowDraftStatusR\x06statusB\x12\n" +
-	"\x10_builder_chat_idJ\x04\b\n" +
-	"\x10\v\"\x95\x02\n" +
+	"\x06status\x18\r \x01(\x0e2\x1f.reliant.v1.WorkflowDraftStatusR\x06statusJ\x04\b\t\x10\n" +
+	"J\x04\b\n" +
+	"\x10\vR\x0fbuilder_chat_id\"\x95\x02\n" +
 	"\x15ImportWorkflowRequest\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12!\n" +
@@ -4045,15 +3722,11 @@ const file_reliant_v1_workflow_proto_rawDesc = "" +
 	"\amessage\x18\x02 \x01(\tR\amessage\x127\n" +
 	"\x06status\x18\x03 \x01(\x0e2\x1f.reliant.v1.WorkflowDraftStatusR\x06status\x12H\n" +
 	"\x11validation_errors\x18\x04 \x03(\v2\x1b.reliant.v1.ValidationErrorR\x10validationErrors\x12\x18\n" +
-	"\aversion\x18\x05 \x01(\x03R\aversion\"[\n" +
-	"%AssociateChatWithWorkflowDraftRequest\x12\x17\n" +
-	"\achat_id\x18\x01 \x01(\tR\x06chatId\x12\x19\n" +
-	"\bdraft_id\x18\x02 \x01(\tR\adraftId\"(\n" +
-	"&AssociateChatWithWorkflowDraftResponse*\x81\x01\n" +
+	"\aversion\x18\x05 \x01(\x03R\aversion*\x81\x01\n" +
 	"\x13WorkflowDraftStatus\x12%\n" +
 	"!WORKFLOW_DRAFT_STATUS_UNSPECIFIED\x10\x00\x12\x1f\n" +
 	"\x1bWORKFLOW_DRAFT_STATUS_DRAFT\x10\x01\x12\"\n" +
-	"\x1eWORKFLOW_DRAFT_STATUS_COMPLETE\x10\x022\xf3\t\n" +
+	"\x1eWORKFLOW_DRAFT_STATUS_COMPLETE\x10\x022\x95\b\n" +
 	"\x0fWorkflowService\x12V\n" +
 	"\rListWorkflows\x12 .reliant.v1.ListWorkflowsRequest\x1a!.reliant.v1.ListWorkflowsResponse\"\x00\x12S\n" +
 	"\fSaveWorkflow\x12\x1f.reliant.v1.SaveWorkflowRequest\x1a .reliant.v1.SaveWorkflowResponse\"\x00\x12P\n" +
@@ -4063,10 +3736,8 @@ const file_reliant_v1_workflow_proto_rawDesc = "" +
 	"\x0eImportWorkflow\x12!.reliant.v1.ImportWorkflowRequest\x1a\".reliant.v1.ImportWorkflowResponse\"\x00\x12Y\n" +
 	"\x0eExportWorkflow\x12!.reliant.v1.ExportWorkflowRequest\x1a\".reliant.v1.ExportWorkflowResponse\"\x00\x12n\n" +
 	"\x15SetWorkflowVisibility\x12(.reliant.v1.SetWorkflowVisibilityRequest\x1a).reliant.v1.SetWorkflowVisibilityResponse\"\x00\x12S\n" +
-	"\fCopyWorkflow\x12\x1f.reliant.v1.CopyWorkflowRequest\x1a .reliant.v1.CopyWorkflowResponse\"\x00\x12P\n" +
-	"\vBuilderChat\x12\x1e.reliant.v1.BuilderChatRequest\x1a\x1f.reliant.v1.BuilderChatResponse\"\x00\x12h\n" +
-	"\x13CreateWorkflowDraft\x12&.reliant.v1.CreateWorkflowDraftRequest\x1a'.reliant.v1.CreateWorkflowDraftResponse\"\x00\x12\x89\x01\n" +
-	"\x1eAssociateChatWithWorkflowDraft\x121.reliant.v1.AssociateChatWithWorkflowDraftRequest\x1a2.reliant.v1.AssociateChatWithWorkflowDraftResponse\"\x00\x12b\n" +
+	"\fCopyWorkflow\x12\x1f.reliant.v1.CopyWorkflowRequest\x1a .reliant.v1.CopyWorkflowResponse\"\x00\x12h\n" +
+	"\x13CreateWorkflowDraft\x12&.reliant.v1.CreateWorkflowDraftRequest\x1a'.reliant.v1.CreateWorkflowDraftResponse\"\x00\x12b\n" +
 	"\x11SetWorkflowStatus\x12$.reliant.v1.SetWorkflowStatusRequest\x1a%.reliant.v1.SetWorkflowStatusResponse\"\x002\xa7\x04\n" +
 	"\x0fScenarioService\x12V\n" +
 	"\rListScenarios\x12 .reliant.v1.ListScenariosRequest\x1a!.reliant.v1.ListScenariosResponse\"\x00\x12Y\n" +
@@ -4089,163 +3760,151 @@ func file_reliant_v1_workflow_proto_rawDescGZIP() []byte {
 }
 
 var file_reliant_v1_workflow_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_reliant_v1_workflow_proto_msgTypes = make([]protoimpl.MessageInfo, 52)
+var file_reliant_v1_workflow_proto_msgTypes = make([]protoimpl.MessageInfo, 47)
 var file_reliant_v1_workflow_proto_goTypes = []any{
-	(WorkflowDraftStatus)(0),                       // 0: reliant.v1.WorkflowDraftStatus
-	(*WorkflowListItem)(nil),                       // 1: reliant.v1.WorkflowListItem
-	(*HighlightSpan)(nil),                          // 2: reliant.v1.HighlightSpan
-	(*ValidationError)(nil),                        // 3: reliant.v1.ValidationError
-	(*ListWorkflowsRequest)(nil),                   // 4: reliant.v1.ListWorkflowsRequest
-	(*ListWorkflowsResponse)(nil),                  // 5: reliant.v1.ListWorkflowsResponse
-	(*InvalidWorkflow)(nil),                        // 6: reliant.v1.InvalidWorkflow
-	(*GetWorkflowRequest)(nil),                     // 7: reliant.v1.GetWorkflowRequest
-	(*GetWorkflowResponse)(nil),                    // 8: reliant.v1.GetWorkflowResponse
-	(*DeleteWorkflowRequest)(nil),                  // 9: reliant.v1.DeleteWorkflowRequest
-	(*DeleteWorkflowResponse)(nil),                 // 10: reliant.v1.DeleteWorkflowResponse
-	(*ValidateWorkflowRequest)(nil),                // 11: reliant.v1.ValidateWorkflowRequest
-	(*ValidateWorkflowResponse)(nil),               // 12: reliant.v1.ValidateWorkflowResponse
-	(*BuilderChatRequest)(nil),                     // 13: reliant.v1.BuilderChatRequest
-	(*ToolCallInfo)(nil),                           // 14: reliant.v1.ToolCallInfo
-	(*BuilderChatResponse)(nil),                    // 15: reliant.v1.BuilderChatResponse
-	(*SaveWorkflowRequest)(nil),                    // 16: reliant.v1.SaveWorkflowRequest
-	(*SaveWorkflowResponse)(nil),                   // 17: reliant.v1.SaveWorkflowResponse
-	(*ImportWorkflowRequest)(nil),                  // 18: reliant.v1.ImportWorkflowRequest
-	(*ImportWorkflowResponse)(nil),                 // 19: reliant.v1.ImportWorkflowResponse
-	(*ExportWorkflowRequest)(nil),                  // 20: reliant.v1.ExportWorkflowRequest
-	(*ExportWorkflowResponse)(nil),                 // 21: reliant.v1.ExportWorkflowResponse
-	(*SetWorkflowVisibilityRequest)(nil),           // 22: reliant.v1.SetWorkflowVisibilityRequest
-	(*SetWorkflowVisibilityResponse)(nil),          // 23: reliant.v1.SetWorkflowVisibilityResponse
-	(*CopyWorkflowRequest)(nil),                    // 24: reliant.v1.CopyWorkflowRequest
-	(*CopyWorkflowResponse)(nil),                   // 25: reliant.v1.CopyWorkflowResponse
-	(*SimulatedEvent)(nil),                         // 26: reliant.v1.SimulatedEvent
-	(*ScenarioExpectation)(nil),                    // 27: reliant.v1.ScenarioExpectation
-	(*ScenarioDefinition)(nil),                     // 28: reliant.v1.ScenarioDefinition
-	(*ErrorDetails)(nil),                           // 29: reliant.v1.ErrorDetails
-	(*ExecutionDetails)(nil),                       // 30: reliant.v1.ExecutionDetails
-	(*ScenarioResult)(nil),                         // 31: reliant.v1.ScenarioResult
-	(*Scenario)(nil),                               // 32: reliant.v1.Scenario
-	(*ListScenariosRequest)(nil),                   // 33: reliant.v1.ListScenariosRequest
-	(*ListScenariosResponse)(nil),                  // 34: reliant.v1.ListScenariosResponse
-	(*CreateScenarioRequest)(nil),                  // 35: reliant.v1.CreateScenarioRequest
-	(*CreateScenarioResponse)(nil),                 // 36: reliant.v1.CreateScenarioResponse
-	(*RunScenarioRequest)(nil),                     // 37: reliant.v1.RunScenarioRequest
-	(*RunScenarioResponse)(nil),                    // 38: reliant.v1.RunScenarioResponse
-	(*DeleteScenarioRequest)(nil),                  // 39: reliant.v1.DeleteScenarioRequest
-	(*DeleteScenarioResponse)(nil),                 // 40: reliant.v1.DeleteScenarioResponse
-	(*UploadScenarioRequest)(nil),                  // 41: reliant.v1.UploadScenarioRequest
-	(*UploadScenarioResponse)(nil),                 // 42: reliant.v1.UploadScenarioResponse
-	(*ExportScenarioRequest)(nil),                  // 43: reliant.v1.ExportScenarioRequest
-	(*ExportScenarioResponse)(nil),                 // 44: reliant.v1.ExportScenarioResponse
-	(*CreateWorkflowDraftRequest)(nil),             // 45: reliant.v1.CreateWorkflowDraftRequest
-	(*CreateWorkflowDraftResponse)(nil),            // 46: reliant.v1.CreateWorkflowDraftResponse
-	(*SetWorkflowStatusRequest)(nil),               // 47: reliant.v1.SetWorkflowStatusRequest
-	(*SetWorkflowStatusResponse)(nil),              // 48: reliant.v1.SetWorkflowStatusResponse
-	(*AssociateChatWithWorkflowDraftRequest)(nil),  // 49: reliant.v1.AssociateChatWithWorkflowDraftRequest
-	(*AssociateChatWithWorkflowDraftResponse)(nil), // 50: reliant.v1.AssociateChatWithWorkflowDraftResponse
-	nil,              // 51: reliant.v1.WorkflowListItem.InputsEntry
-	nil,              // 52: reliant.v1.WorkflowListItem.OutputsEntry
-	(*Node)(nil),     // 53: reliant.v1.Node
-	(*Edge)(nil),     // 54: reliant.v1.Edge
-	(*Workflow)(nil), // 55: reliant.v1.Workflow
-	(ConfigScope)(0), // 56: reliant.v1.ConfigScope
-	(*Input)(nil),    // 57: reliant.v1.Input
+	(WorkflowDraftStatus)(0),              // 0: reliant.v1.WorkflowDraftStatus
+	(*WorkflowListItem)(nil),              // 1: reliant.v1.WorkflowListItem
+	(*HighlightSpan)(nil),                 // 2: reliant.v1.HighlightSpan
+	(*ValidationError)(nil),               // 3: reliant.v1.ValidationError
+	(*ListWorkflowsRequest)(nil),          // 4: reliant.v1.ListWorkflowsRequest
+	(*ListWorkflowsResponse)(nil),         // 5: reliant.v1.ListWorkflowsResponse
+	(*InvalidWorkflow)(nil),               // 6: reliant.v1.InvalidWorkflow
+	(*GetWorkflowRequest)(nil),            // 7: reliant.v1.GetWorkflowRequest
+	(*GetWorkflowResponse)(nil),           // 8: reliant.v1.GetWorkflowResponse
+	(*DeleteWorkflowRequest)(nil),         // 9: reliant.v1.DeleteWorkflowRequest
+	(*DeleteWorkflowResponse)(nil),        // 10: reliant.v1.DeleteWorkflowResponse
+	(*ValidateWorkflowRequest)(nil),       // 11: reliant.v1.ValidateWorkflowRequest
+	(*ValidateWorkflowResponse)(nil),      // 12: reliant.v1.ValidateWorkflowResponse
+	(*SaveWorkflowRequest)(nil),           // 13: reliant.v1.SaveWorkflowRequest
+	(*SaveWorkflowResponse)(nil),          // 14: reliant.v1.SaveWorkflowResponse
+	(*ImportWorkflowRequest)(nil),         // 15: reliant.v1.ImportWorkflowRequest
+	(*ImportWorkflowResponse)(nil),        // 16: reliant.v1.ImportWorkflowResponse
+	(*ExportWorkflowRequest)(nil),         // 17: reliant.v1.ExportWorkflowRequest
+	(*ExportWorkflowResponse)(nil),        // 18: reliant.v1.ExportWorkflowResponse
+	(*SetWorkflowVisibilityRequest)(nil),  // 19: reliant.v1.SetWorkflowVisibilityRequest
+	(*SetWorkflowVisibilityResponse)(nil), // 20: reliant.v1.SetWorkflowVisibilityResponse
+	(*CopyWorkflowRequest)(nil),           // 21: reliant.v1.CopyWorkflowRequest
+	(*CopyWorkflowResponse)(nil),          // 22: reliant.v1.CopyWorkflowResponse
+	(*SimulatedEvent)(nil),                // 23: reliant.v1.SimulatedEvent
+	(*ScenarioExpectation)(nil),           // 24: reliant.v1.ScenarioExpectation
+	(*ScenarioDefinition)(nil),            // 25: reliant.v1.ScenarioDefinition
+	(*ErrorDetails)(nil),                  // 26: reliant.v1.ErrorDetails
+	(*ExecutionDetails)(nil),              // 27: reliant.v1.ExecutionDetails
+	(*ScenarioResult)(nil),                // 28: reliant.v1.ScenarioResult
+	(*Scenario)(nil),                      // 29: reliant.v1.Scenario
+	(*ListScenariosRequest)(nil),          // 30: reliant.v1.ListScenariosRequest
+	(*ListScenariosResponse)(nil),         // 31: reliant.v1.ListScenariosResponse
+	(*CreateScenarioRequest)(nil),         // 32: reliant.v1.CreateScenarioRequest
+	(*CreateScenarioResponse)(nil),        // 33: reliant.v1.CreateScenarioResponse
+	(*RunScenarioRequest)(nil),            // 34: reliant.v1.RunScenarioRequest
+	(*RunScenarioResponse)(nil),           // 35: reliant.v1.RunScenarioResponse
+	(*DeleteScenarioRequest)(nil),         // 36: reliant.v1.DeleteScenarioRequest
+	(*DeleteScenarioResponse)(nil),        // 37: reliant.v1.DeleteScenarioResponse
+	(*UploadScenarioRequest)(nil),         // 38: reliant.v1.UploadScenarioRequest
+	(*UploadScenarioResponse)(nil),        // 39: reliant.v1.UploadScenarioResponse
+	(*ExportScenarioRequest)(nil),         // 40: reliant.v1.ExportScenarioRequest
+	(*ExportScenarioResponse)(nil),        // 41: reliant.v1.ExportScenarioResponse
+	(*CreateWorkflowDraftRequest)(nil),    // 42: reliant.v1.CreateWorkflowDraftRequest
+	(*CreateWorkflowDraftResponse)(nil),   // 43: reliant.v1.CreateWorkflowDraftResponse
+	(*SetWorkflowStatusRequest)(nil),      // 44: reliant.v1.SetWorkflowStatusRequest
+	(*SetWorkflowStatusResponse)(nil),     // 45: reliant.v1.SetWorkflowStatusResponse
+	nil,                                   // 46: reliant.v1.WorkflowListItem.InputsEntry
+	nil,                                   // 47: reliant.v1.WorkflowListItem.OutputsEntry
+	(*Node)(nil),                          // 48: reliant.v1.Node
+	(*Edge)(nil),                          // 49: reliant.v1.Edge
+	(*Workflow)(nil),                      // 50: reliant.v1.Workflow
+	(ConfigScope)(0),                      // 51: reliant.v1.ConfigScope
+	(*Input)(nil),                         // 52: reliant.v1.Input
 }
 var file_reliant_v1_workflow_proto_depIdxs = []int32{
-	53, // 0: reliant.v1.WorkflowListItem.nodes:type_name -> reliant.v1.Node
-	54, // 1: reliant.v1.WorkflowListItem.edges:type_name -> reliant.v1.Edge
-	51, // 2: reliant.v1.WorkflowListItem.inputs:type_name -> reliant.v1.WorkflowListItem.InputsEntry
-	52, // 3: reliant.v1.WorkflowListItem.outputs:type_name -> reliant.v1.WorkflowListItem.OutputsEntry
+	48, // 0: reliant.v1.WorkflowListItem.nodes:type_name -> reliant.v1.Node
+	49, // 1: reliant.v1.WorkflowListItem.edges:type_name -> reliant.v1.Edge
+	46, // 2: reliant.v1.WorkflowListItem.inputs:type_name -> reliant.v1.WorkflowListItem.InputsEntry
+	47, // 3: reliant.v1.WorkflowListItem.outputs:type_name -> reliant.v1.WorkflowListItem.OutputsEntry
 	0,  // 4: reliant.v1.WorkflowListItem.status:type_name -> reliant.v1.WorkflowDraftStatus
 	3,  // 5: reliant.v1.WorkflowListItem.validation_errors:type_name -> reliant.v1.ValidationError
 	2,  // 6: reliant.v1.ValidationError.highlights:type_name -> reliant.v1.HighlightSpan
 	1,  // 7: reliant.v1.ListWorkflowsResponse.workflows:type_name -> reliant.v1.WorkflowListItem
 	6,  // 8: reliant.v1.ListWorkflowsResponse.invalid_workflows:type_name -> reliant.v1.InvalidWorkflow
-	55, // 9: reliant.v1.GetWorkflowResponse.workflow:type_name -> reliant.v1.Workflow
+	50, // 9: reliant.v1.GetWorkflowResponse.workflow:type_name -> reliant.v1.Workflow
 	0,  // 10: reliant.v1.GetWorkflowResponse.status:type_name -> reliant.v1.WorkflowDraftStatus
 	3,  // 11: reliant.v1.GetWorkflowResponse.validation_errors:type_name -> reliant.v1.ValidationError
-	55, // 12: reliant.v1.ValidateWorkflowRequest.workflow:type_name -> reliant.v1.Workflow
+	50, // 12: reliant.v1.ValidateWorkflowRequest.workflow:type_name -> reliant.v1.Workflow
 	3,  // 13: reliant.v1.ValidateWorkflowResponse.errors:type_name -> reliant.v1.ValidationError
-	55, // 14: reliant.v1.BuilderChatRequest.workflow:type_name -> reliant.v1.Workflow
-	55, // 15: reliant.v1.BuilderChatResponse.workflow:type_name -> reliant.v1.Workflow
-	14, // 16: reliant.v1.BuilderChatResponse.tool_calls:type_name -> reliant.v1.ToolCallInfo
-	55, // 17: reliant.v1.SaveWorkflowRequest.workflow:type_name -> reliant.v1.Workflow
-	56, // 18: reliant.v1.SaveWorkflowRequest.scope:type_name -> reliant.v1.ConfigScope
-	0,  // 19: reliant.v1.SaveWorkflowRequest.status:type_name -> reliant.v1.WorkflowDraftStatus
-	55, // 20: reliant.v1.SaveWorkflowResponse.workflow:type_name -> reliant.v1.Workflow
-	3,  // 21: reliant.v1.SaveWorkflowResponse.validation_errors:type_name -> reliant.v1.ValidationError
-	0,  // 22: reliant.v1.SaveWorkflowResponse.status:type_name -> reliant.v1.WorkflowDraftStatus
-	56, // 23: reliant.v1.ImportWorkflowRequest.scope:type_name -> reliant.v1.ConfigScope
-	0,  // 24: reliant.v1.ImportWorkflowRequest.status:type_name -> reliant.v1.WorkflowDraftStatus
-	55, // 25: reliant.v1.ImportWorkflowResponse.workflow:type_name -> reliant.v1.Workflow
-	3,  // 26: reliant.v1.ImportWorkflowResponse.validation_errors:type_name -> reliant.v1.ValidationError
-	0,  // 27: reliant.v1.ImportWorkflowResponse.status:type_name -> reliant.v1.WorkflowDraftStatus
-	55, // 28: reliant.v1.ExportWorkflowResponse.workflow:type_name -> reliant.v1.Workflow
-	1,  // 29: reliant.v1.SetWorkflowVisibilityResponse.workflow:type_name -> reliant.v1.WorkflowListItem
-	55, // 30: reliant.v1.CopyWorkflowResponse.workflow:type_name -> reliant.v1.Workflow
-	26, // 31: reliant.v1.ScenarioDefinition.events:type_name -> reliant.v1.SimulatedEvent
-	27, // 32: reliant.v1.ScenarioDefinition.expect:type_name -> reliant.v1.ScenarioExpectation
-	29, // 33: reliant.v1.ExecutionDetails.error:type_name -> reliant.v1.ErrorDetails
-	30, // 34: reliant.v1.ScenarioResult.execution:type_name -> reliant.v1.ExecutionDetails
-	27, // 35: reliant.v1.ScenarioResult.expected:type_name -> reliant.v1.ScenarioExpectation
-	26, // 36: reliant.v1.Scenario.events:type_name -> reliant.v1.SimulatedEvent
-	27, // 37: reliant.v1.Scenario.expect:type_name -> reliant.v1.ScenarioExpectation
-	31, // 38: reliant.v1.Scenario.last_run_result:type_name -> reliant.v1.ScenarioResult
-	32, // 39: reliant.v1.ListScenariosResponse.scenarios:type_name -> reliant.v1.Scenario
-	28, // 40: reliant.v1.CreateScenarioRequest.scenario:type_name -> reliant.v1.ScenarioDefinition
-	32, // 41: reliant.v1.CreateScenarioResponse.scenario:type_name -> reliant.v1.Scenario
-	31, // 42: reliant.v1.CreateScenarioResponse.result:type_name -> reliant.v1.ScenarioResult
-	28, // 43: reliant.v1.RunScenarioRequest.scenario:type_name -> reliant.v1.ScenarioDefinition
-	31, // 44: reliant.v1.RunScenarioResponse.result:type_name -> reliant.v1.ScenarioResult
-	32, // 45: reliant.v1.UploadScenarioResponse.scenario:type_name -> reliant.v1.Scenario
-	0,  // 46: reliant.v1.CreateWorkflowDraftRequest.status:type_name -> reliant.v1.WorkflowDraftStatus
-	0,  // 47: reliant.v1.CreateWorkflowDraftResponse.status:type_name -> reliant.v1.WorkflowDraftStatus
-	0,  // 48: reliant.v1.SetWorkflowStatusRequest.status:type_name -> reliant.v1.WorkflowDraftStatus
-	0,  // 49: reliant.v1.SetWorkflowStatusResponse.status:type_name -> reliant.v1.WorkflowDraftStatus
-	3,  // 50: reliant.v1.SetWorkflowStatusResponse.validation_errors:type_name -> reliant.v1.ValidationError
-	57, // 51: reliant.v1.WorkflowListItem.InputsEntry.value:type_name -> reliant.v1.Input
-	4,  // 52: reliant.v1.WorkflowService.ListWorkflows:input_type -> reliant.v1.ListWorkflowsRequest
-	16, // 53: reliant.v1.WorkflowService.SaveWorkflow:input_type -> reliant.v1.SaveWorkflowRequest
-	7,  // 54: reliant.v1.WorkflowService.GetWorkflow:input_type -> reliant.v1.GetWorkflowRequest
-	9,  // 55: reliant.v1.WorkflowService.DeleteWorkflow:input_type -> reliant.v1.DeleteWorkflowRequest
-	11, // 56: reliant.v1.WorkflowService.ValidateWorkflow:input_type -> reliant.v1.ValidateWorkflowRequest
-	18, // 57: reliant.v1.WorkflowService.ImportWorkflow:input_type -> reliant.v1.ImportWorkflowRequest
-	20, // 58: reliant.v1.WorkflowService.ExportWorkflow:input_type -> reliant.v1.ExportWorkflowRequest
-	22, // 59: reliant.v1.WorkflowService.SetWorkflowVisibility:input_type -> reliant.v1.SetWorkflowVisibilityRequest
-	24, // 60: reliant.v1.WorkflowService.CopyWorkflow:input_type -> reliant.v1.CopyWorkflowRequest
-	13, // 61: reliant.v1.WorkflowService.BuilderChat:input_type -> reliant.v1.BuilderChatRequest
-	45, // 62: reliant.v1.WorkflowService.CreateWorkflowDraft:input_type -> reliant.v1.CreateWorkflowDraftRequest
-	49, // 63: reliant.v1.WorkflowService.AssociateChatWithWorkflowDraft:input_type -> reliant.v1.AssociateChatWithWorkflowDraftRequest
-	47, // 64: reliant.v1.WorkflowService.SetWorkflowStatus:input_type -> reliant.v1.SetWorkflowStatusRequest
-	33, // 65: reliant.v1.ScenarioService.ListScenarios:input_type -> reliant.v1.ListScenariosRequest
-	35, // 66: reliant.v1.ScenarioService.CreateScenario:input_type -> reliant.v1.CreateScenarioRequest
-	37, // 67: reliant.v1.ScenarioService.RunScenario:input_type -> reliant.v1.RunScenarioRequest
-	39, // 68: reliant.v1.ScenarioService.DeleteScenario:input_type -> reliant.v1.DeleteScenarioRequest
-	41, // 69: reliant.v1.ScenarioService.UploadScenario:input_type -> reliant.v1.UploadScenarioRequest
-	43, // 70: reliant.v1.ScenarioService.ExportScenario:input_type -> reliant.v1.ExportScenarioRequest
-	5,  // 71: reliant.v1.WorkflowService.ListWorkflows:output_type -> reliant.v1.ListWorkflowsResponse
-	17, // 72: reliant.v1.WorkflowService.SaveWorkflow:output_type -> reliant.v1.SaveWorkflowResponse
-	8,  // 73: reliant.v1.WorkflowService.GetWorkflow:output_type -> reliant.v1.GetWorkflowResponse
-	10, // 74: reliant.v1.WorkflowService.DeleteWorkflow:output_type -> reliant.v1.DeleteWorkflowResponse
-	12, // 75: reliant.v1.WorkflowService.ValidateWorkflow:output_type -> reliant.v1.ValidateWorkflowResponse
-	19, // 76: reliant.v1.WorkflowService.ImportWorkflow:output_type -> reliant.v1.ImportWorkflowResponse
-	21, // 77: reliant.v1.WorkflowService.ExportWorkflow:output_type -> reliant.v1.ExportWorkflowResponse
-	23, // 78: reliant.v1.WorkflowService.SetWorkflowVisibility:output_type -> reliant.v1.SetWorkflowVisibilityResponse
-	25, // 79: reliant.v1.WorkflowService.CopyWorkflow:output_type -> reliant.v1.CopyWorkflowResponse
-	15, // 80: reliant.v1.WorkflowService.BuilderChat:output_type -> reliant.v1.BuilderChatResponse
-	46, // 81: reliant.v1.WorkflowService.CreateWorkflowDraft:output_type -> reliant.v1.CreateWorkflowDraftResponse
-	50, // 82: reliant.v1.WorkflowService.AssociateChatWithWorkflowDraft:output_type -> reliant.v1.AssociateChatWithWorkflowDraftResponse
-	48, // 83: reliant.v1.WorkflowService.SetWorkflowStatus:output_type -> reliant.v1.SetWorkflowStatusResponse
-	34, // 84: reliant.v1.ScenarioService.ListScenarios:output_type -> reliant.v1.ListScenariosResponse
-	36, // 85: reliant.v1.ScenarioService.CreateScenario:output_type -> reliant.v1.CreateScenarioResponse
-	38, // 86: reliant.v1.ScenarioService.RunScenario:output_type -> reliant.v1.RunScenarioResponse
-	40, // 87: reliant.v1.ScenarioService.DeleteScenario:output_type -> reliant.v1.DeleteScenarioResponse
-	42, // 88: reliant.v1.ScenarioService.UploadScenario:output_type -> reliant.v1.UploadScenarioResponse
-	44, // 89: reliant.v1.ScenarioService.ExportScenario:output_type -> reliant.v1.ExportScenarioResponse
-	71, // [71:90] is the sub-list for method output_type
-	52, // [52:71] is the sub-list for method input_type
-	52, // [52:52] is the sub-list for extension type_name
-	52, // [52:52] is the sub-list for extension extendee
-	0,  // [0:52] is the sub-list for field type_name
+	50, // 14: reliant.v1.SaveWorkflowRequest.workflow:type_name -> reliant.v1.Workflow
+	51, // 15: reliant.v1.SaveWorkflowRequest.scope:type_name -> reliant.v1.ConfigScope
+	0,  // 16: reliant.v1.SaveWorkflowRequest.status:type_name -> reliant.v1.WorkflowDraftStatus
+	50, // 17: reliant.v1.SaveWorkflowResponse.workflow:type_name -> reliant.v1.Workflow
+	3,  // 18: reliant.v1.SaveWorkflowResponse.validation_errors:type_name -> reliant.v1.ValidationError
+	0,  // 19: reliant.v1.SaveWorkflowResponse.status:type_name -> reliant.v1.WorkflowDraftStatus
+	51, // 20: reliant.v1.ImportWorkflowRequest.scope:type_name -> reliant.v1.ConfigScope
+	0,  // 21: reliant.v1.ImportWorkflowRequest.status:type_name -> reliant.v1.WorkflowDraftStatus
+	50, // 22: reliant.v1.ImportWorkflowResponse.workflow:type_name -> reliant.v1.Workflow
+	3,  // 23: reliant.v1.ImportWorkflowResponse.validation_errors:type_name -> reliant.v1.ValidationError
+	0,  // 24: reliant.v1.ImportWorkflowResponse.status:type_name -> reliant.v1.WorkflowDraftStatus
+	50, // 25: reliant.v1.ExportWorkflowResponse.workflow:type_name -> reliant.v1.Workflow
+	1,  // 26: reliant.v1.SetWorkflowVisibilityResponse.workflow:type_name -> reliant.v1.WorkflowListItem
+	50, // 27: reliant.v1.CopyWorkflowResponse.workflow:type_name -> reliant.v1.Workflow
+	23, // 28: reliant.v1.ScenarioDefinition.events:type_name -> reliant.v1.SimulatedEvent
+	24, // 29: reliant.v1.ScenarioDefinition.expect:type_name -> reliant.v1.ScenarioExpectation
+	26, // 30: reliant.v1.ExecutionDetails.error:type_name -> reliant.v1.ErrorDetails
+	27, // 31: reliant.v1.ScenarioResult.execution:type_name -> reliant.v1.ExecutionDetails
+	24, // 32: reliant.v1.ScenarioResult.expected:type_name -> reliant.v1.ScenarioExpectation
+	23, // 33: reliant.v1.Scenario.events:type_name -> reliant.v1.SimulatedEvent
+	24, // 34: reliant.v1.Scenario.expect:type_name -> reliant.v1.ScenarioExpectation
+	28, // 35: reliant.v1.Scenario.last_run_result:type_name -> reliant.v1.ScenarioResult
+	29, // 36: reliant.v1.ListScenariosResponse.scenarios:type_name -> reliant.v1.Scenario
+	25, // 37: reliant.v1.CreateScenarioRequest.scenario:type_name -> reliant.v1.ScenarioDefinition
+	29, // 38: reliant.v1.CreateScenarioResponse.scenario:type_name -> reliant.v1.Scenario
+	28, // 39: reliant.v1.CreateScenarioResponse.result:type_name -> reliant.v1.ScenarioResult
+	25, // 40: reliant.v1.RunScenarioRequest.scenario:type_name -> reliant.v1.ScenarioDefinition
+	28, // 41: reliant.v1.RunScenarioResponse.result:type_name -> reliant.v1.ScenarioResult
+	29, // 42: reliant.v1.UploadScenarioResponse.scenario:type_name -> reliant.v1.Scenario
+	0,  // 43: reliant.v1.CreateWorkflowDraftRequest.status:type_name -> reliant.v1.WorkflowDraftStatus
+	0,  // 44: reliant.v1.CreateWorkflowDraftResponse.status:type_name -> reliant.v1.WorkflowDraftStatus
+	0,  // 45: reliant.v1.SetWorkflowStatusRequest.status:type_name -> reliant.v1.WorkflowDraftStatus
+	0,  // 46: reliant.v1.SetWorkflowStatusResponse.status:type_name -> reliant.v1.WorkflowDraftStatus
+	3,  // 47: reliant.v1.SetWorkflowStatusResponse.validation_errors:type_name -> reliant.v1.ValidationError
+	52, // 48: reliant.v1.WorkflowListItem.InputsEntry.value:type_name -> reliant.v1.Input
+	4,  // 49: reliant.v1.WorkflowService.ListWorkflows:input_type -> reliant.v1.ListWorkflowsRequest
+	13, // 50: reliant.v1.WorkflowService.SaveWorkflow:input_type -> reliant.v1.SaveWorkflowRequest
+	7,  // 51: reliant.v1.WorkflowService.GetWorkflow:input_type -> reliant.v1.GetWorkflowRequest
+	9,  // 52: reliant.v1.WorkflowService.DeleteWorkflow:input_type -> reliant.v1.DeleteWorkflowRequest
+	11, // 53: reliant.v1.WorkflowService.ValidateWorkflow:input_type -> reliant.v1.ValidateWorkflowRequest
+	15, // 54: reliant.v1.WorkflowService.ImportWorkflow:input_type -> reliant.v1.ImportWorkflowRequest
+	17, // 55: reliant.v1.WorkflowService.ExportWorkflow:input_type -> reliant.v1.ExportWorkflowRequest
+	19, // 56: reliant.v1.WorkflowService.SetWorkflowVisibility:input_type -> reliant.v1.SetWorkflowVisibilityRequest
+	21, // 57: reliant.v1.WorkflowService.CopyWorkflow:input_type -> reliant.v1.CopyWorkflowRequest
+	42, // 58: reliant.v1.WorkflowService.CreateWorkflowDraft:input_type -> reliant.v1.CreateWorkflowDraftRequest
+	44, // 59: reliant.v1.WorkflowService.SetWorkflowStatus:input_type -> reliant.v1.SetWorkflowStatusRequest
+	30, // 60: reliant.v1.ScenarioService.ListScenarios:input_type -> reliant.v1.ListScenariosRequest
+	32, // 61: reliant.v1.ScenarioService.CreateScenario:input_type -> reliant.v1.CreateScenarioRequest
+	34, // 62: reliant.v1.ScenarioService.RunScenario:input_type -> reliant.v1.RunScenarioRequest
+	36, // 63: reliant.v1.ScenarioService.DeleteScenario:input_type -> reliant.v1.DeleteScenarioRequest
+	38, // 64: reliant.v1.ScenarioService.UploadScenario:input_type -> reliant.v1.UploadScenarioRequest
+	40, // 65: reliant.v1.ScenarioService.ExportScenario:input_type -> reliant.v1.ExportScenarioRequest
+	5,  // 66: reliant.v1.WorkflowService.ListWorkflows:output_type -> reliant.v1.ListWorkflowsResponse
+	14, // 67: reliant.v1.WorkflowService.SaveWorkflow:output_type -> reliant.v1.SaveWorkflowResponse
+	8,  // 68: reliant.v1.WorkflowService.GetWorkflow:output_type -> reliant.v1.GetWorkflowResponse
+	10, // 69: reliant.v1.WorkflowService.DeleteWorkflow:output_type -> reliant.v1.DeleteWorkflowResponse
+	12, // 70: reliant.v1.WorkflowService.ValidateWorkflow:output_type -> reliant.v1.ValidateWorkflowResponse
+	16, // 71: reliant.v1.WorkflowService.ImportWorkflow:output_type -> reliant.v1.ImportWorkflowResponse
+	18, // 72: reliant.v1.WorkflowService.ExportWorkflow:output_type -> reliant.v1.ExportWorkflowResponse
+	20, // 73: reliant.v1.WorkflowService.SetWorkflowVisibility:output_type -> reliant.v1.SetWorkflowVisibilityResponse
+	22, // 74: reliant.v1.WorkflowService.CopyWorkflow:output_type -> reliant.v1.CopyWorkflowResponse
+	43, // 75: reliant.v1.WorkflowService.CreateWorkflowDraft:output_type -> reliant.v1.CreateWorkflowDraftResponse
+	45, // 76: reliant.v1.WorkflowService.SetWorkflowStatus:output_type -> reliant.v1.SetWorkflowStatusResponse
+	31, // 77: reliant.v1.ScenarioService.ListScenarios:output_type -> reliant.v1.ListScenariosResponse
+	33, // 78: reliant.v1.ScenarioService.CreateScenario:output_type -> reliant.v1.CreateScenarioResponse
+	35, // 79: reliant.v1.ScenarioService.RunScenario:output_type -> reliant.v1.RunScenarioResponse
+	37, // 80: reliant.v1.ScenarioService.DeleteScenario:output_type -> reliant.v1.DeleteScenarioResponse
+	39, // 81: reliant.v1.ScenarioService.UploadScenario:output_type -> reliant.v1.UploadScenarioResponse
+	41, // 82: reliant.v1.ScenarioService.ExportScenario:output_type -> reliant.v1.ExportScenarioResponse
+	66, // [66:83] is the sub-list for method output_type
+	49, // [49:66] is the sub-list for method input_type
+	49, // [49:49] is the sub-list for extension type_name
+	49, // [49:49] is the sub-list for extension extendee
+	0,  // [0:49] is the sub-list for field type_name
 }
 
 func init() { file_reliant_v1_workflow_proto_init() }
@@ -4260,19 +3919,18 @@ func file_reliant_v1_workflow_proto_init() {
 	file_reliant_v1_workflow_proto_msgTypes[6].OneofWrappers = []any{}
 	file_reliant_v1_workflow_proto_msgTypes[7].OneofWrappers = []any{}
 	file_reliant_v1_workflow_proto_msgTypes[8].OneofWrappers = []any{}
-	file_reliant_v1_workflow_proto_msgTypes[15].OneofWrappers = []any{}
+	file_reliant_v1_workflow_proto_msgTypes[12].OneofWrappers = []any{}
+	file_reliant_v1_workflow_proto_msgTypes[14].OneofWrappers = []any{}
 	file_reliant_v1_workflow_proto_msgTypes[16].OneofWrappers = []any{}
-	file_reliant_v1_workflow_proto_msgTypes[17].OneofWrappers = []any{}
-	file_reliant_v1_workflow_proto_msgTypes[19].OneofWrappers = []any{}
-	file_reliant_v1_workflow_proto_msgTypes[23].OneofWrappers = []any{}
-	file_reliant_v1_workflow_proto_msgTypes[46].OneofWrappers = []any{}
+	file_reliant_v1_workflow_proto_msgTypes[20].OneofWrappers = []any{}
+	file_reliant_v1_workflow_proto_msgTypes[43].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_reliant_v1_workflow_proto_rawDesc), len(file_reliant_v1_workflow_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   52,
+			NumMessages:   47,
 			NumExtensions: 0,
 			NumServices:   2,
 		},

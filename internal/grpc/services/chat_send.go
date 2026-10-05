@@ -319,6 +319,7 @@ func (s *ChatService) resurrectGhostWorkflow(
 		TaskQueue:                s.taskQueue,
 		WorkflowIDConflictPolicy: enums.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING,
 		WorkflowExecutionTimeout: workflow.WorkflowExecutionTimeout,
+		WorkflowTaskTimeout:      workflow.DynamicWorkflowTaskTimeout,
 	}
 
 	// Step 4: Build workflow inputs (with presets and model defaults)
@@ -978,6 +979,7 @@ func (s *ChatService) SendMessage(
 		TaskQueue:                s.taskQueue,
 		WorkflowIDConflictPolicy: enums.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING,
 		WorkflowExecutionTimeout: workflow.WorkflowExecutionTimeout,
+		WorkflowTaskTimeout:      workflow.DynamicWorkflowTaskTimeout,
 	}
 
 	// Merge presets: chat presets are base, request presets override

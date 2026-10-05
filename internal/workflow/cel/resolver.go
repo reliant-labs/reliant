@@ -523,6 +523,16 @@ func toModelSelector(v interface{}, path string) (*reliantv1.ModelSelector, erro
 				}
 			}
 		}
+		if tl, ok := val["thinking_level"].(string); ok {
+			ms.ThinkingLevel = tl
+		}
+		if f, ok := modelNumber(val["temperature"]); ok {
+			ms.Temperature = &f
+		}
+		if f, ok := modelNumber(val["compaction_threshold"]); ok {
+			ct := int32(f)
+			ms.CompactionThreshold = &ct
+		}
 		return ms, nil
 	case string:
 		return nil, fmt.Errorf("%s: model selector must be an object (e.g. {id: \"model-name\"}), got string %q — strings are not accepted; convert to {id: string} at the system boundary", path, val)
@@ -577,4 +587,26 @@ func appendPath(base, field string) string {
 		return field
 	}
 	return base + "." + field
+}
+
+// modelNumber reads a numeric model-value field; ok is false when absent or not numeric.
+func modelNumber(v interface{}) (float64, bool) {
+	switch n := v.(type) {
+	case float64:
+		return n, true
+	case float32:
+		return float64(n), true
+	case int:
+		return float64(n), true
+	case int32:
+		return float64(n), true
+	case int64:
+		return float64(n), true
+	case uint64:
+		return float64(n), true
+	case json.Number:
+		f, err := n.Float64()
+		return f, err == nil
+	}
+	return 0, false
 }

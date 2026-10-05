@@ -13,6 +13,7 @@
 # Every claim in the final deck should be sourced or flagged as needing verification.
 
 name: pitch-deck
+title: Pitch Deck
 apiVersion: "0.0.5"
 description: |
   Generate an investor pitch deck from a company website with competitive research
@@ -654,11 +655,9 @@ nodes:
       default: general
     args:
       tools: "{{inputs.tools}}"
-      model: "{{inputs.model}}"
+      model: "{{merge(inputs.model, {'temperature': 0.7, 'thinking_level': 'high'})}}"
       mode: auto
       ask: "{{inputs.ask}}"
-      temperature: 0.7
-      thinking_level: high
       max_turns: 40
       response_tool_name: submit_deck_plan
       response_tool_description: "Submit the deck plan with narrative arc and per-slide specifications"
@@ -1221,9 +1220,7 @@ nodes:
             default: code_reviewer
           args:
             tools: ["tag:readonly"]
-            model: "{{inputs.model}}"
-            temperature: 0.2
-            thinking_level: high
+            model: "{{merge(inputs.model, {'temperature': 0.2, 'thinking_level': 'high'})}}"
             response_tool_name: submit_visual_review
             response_tool_description: "Submit the combined visual + content review of the pitch deck slides"
             response_schema:

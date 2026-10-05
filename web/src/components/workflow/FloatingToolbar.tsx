@@ -1,4 +1,5 @@
 import { Hand, MousePointer2, Undo, Redo, ZoomIn, ZoomOut, Maximize2, Lock, Unlock, Wand2 } from 'lucide-react'
+import { Tooltip } from "../ui/Tooltip";
 import { cn } from '../../lib/utils'
 
 export type InteractionMode = 'pan' | 'select'
@@ -45,58 +46,63 @@ export function FloatingToolbar({
 
   return (
     <div className="flex items-center gap-1 rounded-2xl border border-border/80 bg-card/95 p-1.5 shadow-xl shadow-black/10 backdrop-blur-sm">
-      <button
+      <Tooltip content="Pan Mode (Hand Tool)" placement="top" delay={300} wrapperClassName="inline-flex">
+<button
         onClick={() => onModeChange('pan')}
         className={toolbarButtonClass(mode === 'pan')}
-        title="Pan Mode (Hand Tool)"
         aria-label="Pan Mode"
       >
         <Hand className="w-4 h-4" />
       </button>
+</Tooltip>
 
-      <button
+      <Tooltip content="Selection Mode (Box Select)" placement="top" delay={300} wrapperClassName="inline-flex">
+<button
         onClick={() => onModeChange('select')}
         className={toolbarButtonClass(mode === 'select')}
-        title="Selection Mode (Box Select)"
         aria-label="Selection Mode"
       >
         <MousePointer2 className="w-4 h-4" />
       </button>
+</Tooltip>
 
       {!isReadOnly && (
         <>
           {onLockToggle && (
-            <button
+            <Tooltip content={isLocked ? "Unlock Nodes" : "Lock Nodes"} placement="top" delay={300} wrapperClassName="inline-flex">
+<button
               onClick={onLockToggle}
               className={toolbarButtonClass(isLocked)}
-              title={isLocked ? "Unlock Nodes" : "Lock Nodes"}
               aria-label={isLocked ? "Unlock Nodes" : "Lock Nodes"}
             >
               {isLocked ? <Lock className="w-4 h-4" /> : <Unlock className="w-4 h-4" />}
             </button>
+</Tooltip>
           )}
 
           <div className="mx-1 h-6 w-px bg-border/80" />
 
-          <button
+          <Tooltip content="Undo (Ctrl+Z)" placement="top" delay={300} wrapperClassName="inline-flex">
+<button
             onClick={onUndo}
             disabled={!canUndo}
             className={toolbarButtonClass(false, !canUndo)}
-            title="Undo (Ctrl+Z)"
             aria-label="Undo"
           >
             <Undo className="w-4 h-4" />
           </button>
+</Tooltip>
 
-          <button
+          <Tooltip content="Redo (Ctrl+Shift+Z)" placement="top" delay={300} wrapperClassName="inline-flex">
+<button
             onClick={onRedo}
             disabled={!canRedo}
             className={toolbarButtonClass(false, !canRedo)}
-            title="Redo (Ctrl+Shift+Z)"
             aria-label="Redo"
           >
             <Redo className="w-4 h-4" />
           </button>
+</Tooltip>
         </>
       )}
 
@@ -105,47 +111,51 @@ export function FloatingToolbar({
           <div className="mx-1 h-6 w-px bg-border/80" />
 
           {onZoomOut && (
-            <button
+            <Tooltip content="Zoom Out" placement="top" delay={300} wrapperClassName="inline-flex">
+<button
               onClick={onZoomOut}
               className={toolbarButtonClass()}
-              title="Zoom Out"
               aria-label="Zoom Out"
             >
               <ZoomOut className="w-4 h-4" />
             </button>
+</Tooltip>
           )}
 
           {onZoomIn && (
-            <button
+            <Tooltip content="Zoom In" placement="top" delay={300} wrapperClassName="inline-flex">
+<button
               onClick={onZoomIn}
               className={toolbarButtonClass()}
-              title="Zoom In"
               aria-label="Zoom In"
             >
               <ZoomIn className="w-4 h-4" />
             </button>
+</Tooltip>
           )}
 
           {onFitView && (
-            <button
+            <Tooltip content="Fit to View" placement="top" delay={300} wrapperClassName="inline-flex">
+<button
               onClick={onFitView}
               className={toolbarButtonClass()}
-              title="Fit to View"
               aria-label="Fit to View"
             >
               <Maximize2 className="w-4 h-4" />
             </button>
+</Tooltip>
           )}
 
           {!isReadOnly && onOrganizeNodes && (
-            <button
+            <Tooltip content="Organize Nodes" placement="top" delay={300} wrapperClassName="inline-flex">
+<button
               onClick={onOrganizeNodes}
               className={toolbarButtonClass()}
-              title="Organize Nodes"
               aria-label="Organize Nodes"
             >
               <Wand2 className="w-4 h-4" />
             </button>
+</Tooltip>
           )}
         </>
       )}

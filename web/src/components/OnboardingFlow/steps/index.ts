@@ -4,7 +4,7 @@ import { ModelStep } from "./ModelStep";
 import { CheckoutStep } from "./CheckoutStep";
 import { ProjectChoiceStep } from "./ProjectChoiceStep";
 import { GitHubConnectStep } from "./GitHubConnectStep";
-import { ProjectPickerStep } from "./ProjectPickerStep";
+import { FinishStep } from "./FinishStep";
 
 registerStepComponents({
   'compute': ComputeStep,
@@ -12,5 +12,5 @@ registerStepComponents({
   'checkout': CheckoutStep,
   'project-choice': ProjectChoiceStep,
   'github-connect': GitHubConnectStep,
-  'project-picker': ProjectPickerStep,
+  'finish': FinishStep,
 });

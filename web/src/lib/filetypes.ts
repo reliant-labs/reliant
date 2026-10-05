@@ -5,7 +5,7 @@
  * Must be kept in sync with internal/attachment/filetypes.go
  */
 
-export type AttachmentType = 'image' | 'document' | 'file_reference' | 'unsupported';
+export type AttachmentType = 'image' | 'video' | 'document' | 'file_reference' | 'unsupported';
 
 // Image extensions supported by Claude API (base64 image blocks)
 export const IMAGE_EXTENSIONS = new Set([
@@ -14,6 +14,13 @@ export const IMAGE_EXTENSIONS = new Set([
   '.png',
   '.gif',
   '.webp',
+]);
+
+// Video containers the app can store and play back (generated clips).
+export const VIDEO_EXTENSIONS = new Set([
+  '.mp4',
+  '.webm',
+  '.mov',
 ]);
 
 // Binary document extensions sent to the LLM natively rather than as extracted
@@ -102,6 +109,10 @@ export function getAttachmentType(filename: string): AttachmentType {
   // Check if it's an image
   if (IMAGE_EXTENSIONS.has(ext)) {
     return 'image';
+  }
+
+  if (VIDEO_EXTENSIONS.has(ext)) {
+    return 'video';
   }
 
   // Check if it's a binary document (PDF) sent natively / read on demand

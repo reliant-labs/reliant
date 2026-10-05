@@ -14,6 +14,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -28,6 +29,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/observability"
+	"github.com/reliant-labs/reliant/internal/triggers/runevents"
 	v2workflow "github.com/reliant-labs/reliant/internal/workflow"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/handlers"
 )
@@ -102,6 +104,12 @@ type Reconciler struct {
 	// interventions gates the three destructive paths (see the type doc and
 	// ReconcilerConfig.Interventions). False = detect and log only.
 	interventions bool
+
+	// bgDaemons reaches the daemons that run backgrounded tool calls, for
+	// reconcileBackgroundedProcesses. Unset disables that sweep. Atomic
+	// because the server builds the daemon router after the poll loop has
+	// started, so the set and the loop's read are on different goroutines.
+	bgDaemons atomic.Pointer[backgroundProcessDaemonsHolder]
 
 	// stuckMu guards stuckObservations, the in-memory debounce state for
 	// stuck-task handling. In-memory tracking is acceptable here: a single
@@ -185,6 +193,11 @@ const (
 	// ever read this, and the run lost a sub-agent's result."
 	anomalyStrandedBackgroundSpawnUndeliverable = "stranded_background_spawn_undeliverable"
 	anomalyOrphanedAgentMessagesResolved        = "orphaned_agent_messages_resolved"
+	// anomalyBackgroundedProcessClosed counts backgrounded tool calls moved off
+	// status 6 because their process ended. Not a fault — it is the normal
+	// lifecycle of every backgrounded call — but counted so a spike (a daemon
+	// restart closing many at once) is visible.
+	anomalyBackgroundedProcessClosed = "backgrounded_process_closed"
 	// anomalySilentTerminalDrift is a run that ended terminally in Temporal
 	// without ever reporting it — the DB still said running/paused when this
 	// pass found it. A hard TERMINATE is the archetype: the worker gets no
@@ -859,7 +872,7 @@ func (r *Reconciler) reconcileWorkflow(ctx context.Context, wf *db.Workflow, pol
 
 	if !temporalState.Exists {
 		// Workflow not in Temporal (expired/lost) — repair DB status
-		swapped, err := r.repo.CompareAndSwapWorkflowStatus(ctx, wf.ID, db.Completed(), wf.Status)
+		swapped, err := r.swapStatus(ctx, wf, db.Completed(), temporalState.RunID)
 		if err != nil {
 			result.Error = fmt.Errorf("failed to mark lost workflow as completed: %w", err)
 			return result
@@ -1059,7 +1072,7 @@ func (r *Reconciler) reconcileWorkflow(ctx context.Context, wf *db.Workflow, pol
 		r.clearStuckObservation(wf.ID)
 
 		// Mark workflow as failed in DB (CAS prevents duplicate transitions)
-		swapped, err := r.repo.CompareAndSwapWorkflowStatus(ctx, wf.ID, db.Failed(), wf.Status)
+		swapped, err := r.swapStatus(ctx, wf, db.Failed(), temporalState.RunID)
 		if err != nil {
 			result.Error = fmt.Errorf("failed to mark workflow as failed: %w", err)
 			return result
@@ -1159,7 +1172,7 @@ func (r *Reconciler) reconcileWorkflow(ctx context.Context, wf *db.Workflow, pol
 
 			// Mark failed (CAS prevents duplicate transitions). Failed + kept
 			// position checkpoint = the next user message resumes at position.
-			swapped, err := r.repo.CompareAndSwapWorkflowStatus(ctx, wf.ID, db.Failed(), wf.Status)
+			swapped, err := r.swapStatus(ctx, wf, db.Failed(), temporalState.RunID)
 			if err != nil {
 				result.Error = fmt.Errorf("failed to mark stalled workflow as failed: %w", err)
 				return result
@@ -1203,7 +1216,7 @@ func (r *Reconciler) reconcileWorkflow(ctx context.Context, wf *db.Workflow, pol
 			"temporalStatus", temporalState.Status,
 		)
 
-		swapped, err := r.repo.CompareAndSwapWorkflowStatus(ctx, wf.ID, temporalState.Status, wf.Status)
+		swapped, err := r.swapStatus(ctx, wf, temporalState.Status, temporalState.RunID)
 		if err != nil {
 			result.Error = fmt.Errorf("failed to repair paused workflow status: %w", err)
 			return result
@@ -1242,7 +1255,7 @@ func (r *Reconciler) reconcileWorkflow(ctx context.Context, wf *db.Workflow, pol
 			"temporalStatus", temporalState.Status,
 		)
 
-		swapped, err := r.repo.CompareAndSwapWorkflowStatus(ctx, wf.ID, temporalState.Status, wf.Status)
+		swapped, err := r.swapStatus(ctx, wf, temporalState.Status, temporalState.RunID)
 		if err != nil {
 			result.Error = fmt.Errorf("failed to repair workflow status: %w", err)
 			return result
@@ -1309,7 +1322,7 @@ func (r *Reconciler) terminateWedgedWorkflow(ctx context.Context, wf *db.Workflo
 
 	// Mark failed (CAS prevents duplicate transitions). Failed + kept
 	// position checkpoint = the next user message resumes at position.
-	swapped, err := r.repo.CompareAndSwapWorkflowStatus(ctx, wf.ID, db.Failed(), wf.Status)
+	swapped, err := r.swapStatus(ctx, wf, db.Failed(), temporalState.RunID)
 	if err != nil {
 		result.Error = fmt.Errorf("failed to mark wedged workflow as failed: %w", err)
 		return
@@ -1330,6 +1343,53 @@ func (r *Reconciler) terminateWedgedWorkflow(ctx context.Context, wf *db.Workflo
 
 	result.WasStale = true
 	result.TemporalStatus = db.Failed()
+}
+
+// swapStatus is CompareAndSwapWorkflowStatus plus the workflow-event outbox
+// row, in ONE transaction. The reconciler is the only component that observes
+// a run Temporal killed outright — no workflow code runs again, so the
+// WorkflowStatus activity that normally emits the event never will — and a
+// repair that moved a ROOT run to a terminal state is exactly the transition a
+// workflow_event trigger listens for. The event commits with the repair, or
+// neither does, and only the pass whose CAS wins emits it.
+func (r *Reconciler) swapStatus(ctx context.Context, wf *db.Workflow, to db.WorkflowStatus, temporalRunID string) (bool, error) {
+	var swapped bool
+	err := r.repo.RunTx(ctx, func(txCtx context.Context) error {
+		var err error
+		swapped, err = r.repo.CompareAndSwapWorkflowStatus(txCtx, wf.ID, to, wf.Status)
+		if err != nil || !swapped || wf.ParentID != nil {
+			return err
+		}
+		var outcome core.RunEventOutcome
+		switch to {
+		case db.Completed():
+			outcome = core.RunEventFinished
+		case db.Failed():
+			outcome = core.RunEventFailed
+		default:
+			return nil
+		}
+		_, err = runevents.EmitTerminal(txCtx, r.repo, runevents.Terminal{
+			ChatID:       wf.ChatID,
+			WorkflowID:   wf.ID,
+			WorkflowName: wf.WorkflowName,
+			RunID:        temporalRunID,
+			Outcome:      outcome,
+			Error:        reconciledFailureText(outcome),
+		}, time.Now().UTC())
+		return err
+	})
+	return swapped, err
+}
+
+// reconciledFailureText is the error a reconciler-repaired failure reports. The
+// detailed reason (Temporal's close event) is written to the chat separately;
+// this is what a workflow-event trigger sees.
+func reconciledFailureText(outcome core.RunEventOutcome) string {
+	if outcome != core.RunEventFailed {
+		return ""
+	}
+	return "The workflow was stopped by the system before it could finish."
 }
 
 // transitionChatOnCompletion switches the chat to the completed ROOT workflow's
@@ -1932,6 +1992,20 @@ func (r *Reconciler) repairStrandedBackgroundSpawns(ctx context.Context, stats *
 		if resumable {
 			continue
 		}
+		if call.HasReport {
+			// The parent was already told — by the detached goroutine's own
+			// enqueue, or by an earlier pass — so there is nothing to write
+			// into its mailbox. But the report and the tool call's status are
+			// written by different code, and nothing on the report path moves
+			// the row: before this, a spawn that finished and reported
+			// NORMALLY stayed "backgrounded" forever, because the query
+			// filtered reported calls out and this close was never reached.
+			// Observed: toolu_013CJA3i on chat 8bb0a875, child stopped and
+			// its kind=4 report delivered on 10-01, row still status 6 on
+			// 10-04. Not a repair, so no anomaly is counted.
+			r.closeStrandedBackgroundSpawnCall(ctx, call)
+			continue
+		}
 		if call.ParentThreadID == nil || *call.ParentThreadID == "" {
 			// tool_calls.thread_id is nilable in general (a call can be
 			// recorded before its message is finalized), but a spawn old
@@ -1964,6 +2038,7 @@ func (r *Reconciler) repairStrandedBackgroundSpawns(ctx context.Context, stats *
 			ToolCallID:   &toolCallID,
 			Status:       status,
 			CreatedAt:    time.Now().UTC(),
+			Synthesized:  true,
 		})
 		if err != nil {
 			logging.Error("[Reconciler] Failed to enqueue stranded background spawn completion",
@@ -2246,6 +2321,12 @@ func (r *Reconciler) ReconcileRunningWorkflows(ctx context.Context) (reconciled 
 	// what strands its mailbox, so resolving here catches the rows this very
 	// pass orphaned rather than leaving them until the next one.
 	if _, repairErr := r.resolveOrphanedAgentMessages(ctx, stats); repairErr != nil {
+		errors = append(errors, repairErr)
+	}
+	// Backgrounded processes are independent of every workflow repair above:
+	// their owner is a daemon, not a workflow, so a process outlives the turn
+	// (and the run) that started it, and only its daemon can say it ended.
+	if _, repairErr := r.reconcileBackgroundedProcesses(ctx, stats); repairErr != nil {
 		errors = append(errors, repairErr)
 	}
 

@@ -73,6 +73,7 @@ export type {
 
 import type {
   ChatUpdate,
+  ContextUsageInfo,
   ProtoMessageUpdate,
   NodeExecutionUpdate,
   WorkflowExecutionUpdate,
@@ -84,12 +85,11 @@ import type {
 // Log prefix for filtering/debugging
 const LOG_PREFIX_STREAM = "[📡 gRPCStream]";
 
-// Gap-resync pacing. Chat gaps are exact (per-chat sequences are contiguous),
-// so the interval only guards against reconnect loops. User-update jumps can
-// be legitimate (the server filters live events by project), so their resync
-// is throttled harder.
+// Chat gap-resync pacing. Chat gaps are exact (per-chat sequences are
+// contiguous and never filtered), so the interval only guards against
+// reconnect loops. User sequences need no client-side gap detection at all:
+// the server owns it (see the "updates" case in handleEvent).
 const CHAT_GAP_RESYNC_MIN_INTERVAL_MS = 1_000;
-const USER_GAP_RESYNC_THROTTLE_MS = 5_000;
 
 // Reconnect pacing. This stream is the *only* push path for the whole UI, so
 // there is no state in which giving up permanently is correct — a stream that
@@ -327,6 +327,43 @@ function convertUserUpdateData(update: UserUpdateData): UserUpdate {
   };
 }
 
+/**
+ * The context usage carried by the latest main-thread message in `updates`,
+ * or null when none carries one.
+ *
+ * Persisted message updates carry the thread's token count and the compaction
+ * threshold of the model that produced it (internal/threads/save_message.go),
+ * the same pair a snapshot reports. Only the main thread's — the chat's own,
+ * keyed by the chat id, which is the root workflow's thread id — drives the
+ * chat-level indicator; a spawned thread's context is its own.
+ */
+function latestMainThreadContextUsage(
+  updates: ChatUpdateData[],
+  chatId: string | undefined,
+): ContextUsageInfo | null {
+  if (!chatId) return null;
+  for (let i = updates.length - 1; i >= 0; i--) {
+    const update = updates[i];
+    if (update.updateType !== ChatUpdateType.MESSAGE) continue;
+    let payload: Record<string, unknown>;
+    try {
+      const data = JSON.parse(update.dataJson || "{}") as Record<string, unknown>;
+      payload =
+        typeof data.message === "object" && data.message !== null
+          ? (data.message as Record<string, unknown>)
+          : data;
+    } catch {
+      continue;
+    }
+    if (payload.thread !== chatId) continue;
+    const tokens = payload.thread_token_count;
+    const threshold = payload.compaction_threshold;
+    if (typeof tokens !== "number" || typeof threshold !== "number") continue;
+    return { threadTokenCount: tokens, compactionThreshold: threshold };
+  }
+  return null;
+}
+
 // ============================================================================
 // Workflow Execution Event Converters
 // ============================================================================
@@ -428,7 +465,12 @@ export class UserStreamingService {
   private isConnected_ = false;
   private subscribedChatId: string | undefined = undefined;
   private lastChatGapResyncAt = 0;
-  private lastUserGapResyncAt = 0;
+  // The chat whose initial sync has not arrived yet for the current
+  // subscription, or null. Set when a subscription to a chat begins; cleared
+  // by settleChatSync when the server sends chat_caught_up for it. Survives
+  // reconnects in between, but a reconnect of an already-synced subscription
+  // (gap resync, network blip) does not re-open it.
+  private chatSyncPendingFor: string | null = null;
   // Liveness / lifecycle bookkeeping. `connectAttemptInFlight` and
   // `reconnectTimer` exist so start() can tell "a connection is genuinely being
   // worked on" from "we hold a stale AbortController that will never fire".
@@ -550,10 +592,16 @@ export class UserStreamingService {
 
     this.isIntentionallyClosed = false;
     this.lastSequence = BigInt(fromSeq);
-    this.lastChatSequence = BigInt(chatFromSeq);
+    // An explicit chat cursor wins; otherwise the chat resumes from its cached
+    // cursor exactly as a chat switch would (see subscribeToChatDetails).
+    this.lastChatSequence =
+      chatFromSeq === 0 && subscribeChatId
+        ? (this.callbacks.resolveChatResumeSequence?.(subscribeChatId) ?? 0n)
+        : BigInt(chatFromSeq);
     this.subscribedChatId = subscribeChatId;
     this.projectId = projectId;
     this.reconnectAttempts = 0;
+    this.setChatSyncPendingFor(subscribeChatId ?? null);
     this.bindWakeHandlers();
 
     void this.establishConnection();
@@ -568,9 +616,15 @@ export class UserStreamingService {
    * confirming" without asking this service — so this method has to make
    * that distinction itself, explicitly, rather than always reconnecting:
    *
-   *  - Different chatId (a real chat switch): always reconnect with a fresh
-   *    snapshot. `lastChatSequence` resets to 0 because the server has no
-   *    replay cursor for a chat we've never subscribed to in this session.
+   *  - Different chatId (a real chat switch): always reconnect. The chat
+   *    being left hands its cursor back via `onChatCursorRelease`, and the
+   *    chat being entered resumes from `resolveChatResumeSequence` — the
+   *    owner of its cached state answers with the sequence that state is
+   *    current as of, or 0 when it holds none it can vouch for. A cursor
+   *    asks the server for a replay of (cursor, latest]; 0 asks for a
+   *    snapshot. The server may answer a cursor with a snapshot instead
+   *    (gap too large, cursor ahead of the chat), which replaces state as
+   *    it always has, so either reply is handled.
    *  - Same chatId, already connected to it: true no-op. Nothing changed.
    *  - Same chatId, but not yet confirmed connected (a connection attempt
    *    for this exact chat is already in flight — e.g. triggered a moment
@@ -612,11 +666,59 @@ export class UserStreamingService {
       tabSwitchProfiler.mark("grpc-stream-subscribe-chat", { chatId });
     }
 
+    this.releaseChatCursor();
+    const resumeFrom = this.callbacks.resolveChatResumeSequence?.(chatId) ?? 0n;
     this.subscribedChatId = chatId;
-    this.lastChatSequence = 0n; // Different chat: always request a full snapshot
+    this.lastChatSequence = resumeFrom > 0n ? resumeFrom : 0n;
+    this.setChatSyncPendingFor(chatId);
+    if (this.lastChatSequence > 0n) {
+      logger.info(`${LOG_PREFIX_STREAM} Resuming chat from cached cursor`, {
+        chatId: chatId.slice(0, 8),
+        chatSinceSeq: Number(this.lastChatSequence),
+      });
+    }
 
     // Reconnect with the new subscription
     this.reconnectWithNewSubscription();
+  }
+
+  /**
+   * Hand the cursor of the chat being left back to whoever owns that chat's
+   * cached state. Every exit from a chat — switch, unsubscribe, stop — goes
+   * through here, so the owner always holds the cursor matching its state.
+   */
+  private releaseChatCursor(): void {
+    if (!this.subscribedChatId) return;
+    this.callbacks.onChatCursorRelease?.(
+      this.subscribedChatId,
+      this.lastChatSequence,
+    );
+  }
+
+  private setChatSyncPendingFor(chatId: string | null): void {
+    if (this.chatSyncPendingFor === chatId) return;
+    this.chatSyncPendingFor = chatId;
+    this.callbacks.onChatSyncPending?.(chatId);
+  }
+
+  /**
+   * The current subscription's initial sync is complete. Called only from
+   * the chat_caught_up case: the server sends that exactly once per
+   * subscription, after the snapshot or the replay — including a replay of
+   * nothing, which sends no chat frame at all. No other frame can stand in
+   * for it: a snapshot may still be followed by nothing else, but a replay
+   * batch's latest_sequence is that batch's own max, so "reaching" it says
+   * nothing about whether more batches follow; and a heartbeat proves only
+   * that the socket is alive.
+   */
+  private settleChatSync(latestSequence: bigint): void {
+    if (this.chatSyncPendingFor === null) return;
+    logger.info(`${LOG_PREFIX_STREAM} Chat sync complete`, {
+      chatId: this.chatSyncPendingFor.slice(0, 8),
+      serverSeq: Number(latestSequence),
+      chatSeq: Number(this.lastChatSequence),
+    });
+    this.setChatSyncPendingFor(null);
   }
 
   /**
@@ -629,8 +731,10 @@ export class UserStreamingService {
       chatId: this.subscribedChatId.slice(0, 8),
     });
 
+    this.releaseChatCursor();
     this.subscribedChatId = undefined;
     this.lastChatSequence = 0n;
+    this.setChatSyncPendingFor(null);
 
     // Reconnect without chat subscription
     this.reconnectWithNewSubscription();
@@ -657,34 +761,6 @@ export class UserStreamingService {
         gapSeq: Number(gapSeq),
       },
     );
-    this.reconnectWithNewSubscription();
-  }
-
-  /**
-   * The user-update sequence jumped. Rewind the resume cursor to the last
-   * pre-jump sequence and reconnect: the server replays the range from the
-   * DB (project-filtered), filling any genuinely dropped events. Throttled,
-   * because jumps can also be caused by the server's project filter.
-   */
-  private scheduleUserGapResync(fromSeq: bigint): void {
-    const now = Date.now();
-    if (now - this.lastUserGapResyncAt < USER_GAP_RESYNC_THROTTLE_MS) {
-      logger.debug(
-        `${LOG_PREFIX_STREAM} User update sequence jump — resync throttled`,
-        { fromSeq: Number(fromSeq) },
-      );
-      return;
-    }
-    this.lastUserGapResyncAt = now;
-
-    logger.warn(
-      `${LOG_PREFIX_STREAM} User update sequence jump detected — resyncing`,
-      {
-        fromSeq: Number(fromSeq),
-        currentSeq: Number(this.lastSequence),
-      },
-    );
-    this.lastSequence = fromSeq;
     this.reconnectWithNewSubscription();
   }
 
@@ -868,32 +944,23 @@ export class UserStreamingService {
         // Process events BEFORE advancing the sequence number.
         // If the stream is aborted mid-batch (e.g. chat-switch reconnect),
         // the un-acked sequence ensures the server re-sends on reconnect.
-        const preBatchCursor = this.lastSequence;
-        const wsUpdates = batch.updates.map(convertUserUpdateData);
-        this.callbacks.onUpdate(wsUpdates);
-        let jumped = false;
-        let cursor = preBatchCursor;
-        for (const update of batch.updates) {
-          if (cursor > 0n && update.sequenceNumber > cursor + 1n) {
-            jumped = true;
-          }
-          if (update.sequenceNumber > cursor) {
-            cursor = update.sequenceNumber;
-          }
+        if (batch.updates.length > 0) {
+          this.callbacks.onUpdate(batch.updates.map(convertUserUpdateData));
         }
-        this.lastSequence = cursor;
-        if (jumped) {
-          // User sequences are per-user but the server filters live events by
-          // project, so a jump is only *possibly* a dropped event. The batch
-          // has been applied; a throttled replay-resync from the pre-jump
-          // cursor fills anything that was really dropped (re-delivery of
-          // already-applied updates is idempotent upsert/patching).
-          this.scheduleUserGapResync(preBatchCursor);
+        // latest_sequence is the cursor: the server has delivered everything
+        // this subscription should see up to it. Sequences in `updates` skip
+        // by design (the stream is project-filtered), so a skip says nothing
+        // about loss — the server sees every sequence, backfills anything its
+        // hub dropped before sending later updates, and reports the result
+        // here. A batch with no updates only advances the cursor.
+        if (batch.latestSequence > this.lastSequence) {
+          this.lastSequence = batch.latestSequence;
         }
         break;
       }
 
       case "heartbeat": {
+        // Liveness only (lastEventAt is bumped for every event above).
         break;
       }
 
@@ -992,9 +1059,28 @@ export class UserStreamingService {
           this.callbacks.onChatUpdate?.(updates);
         }
 
+        // A replay resume gets no snapshot, so the compaction indicator would
+        // keep showing the usage from when the chat was last open. Every
+        // persisted main-thread message carries the current usage; the
+        // latest one accepted here is what a snapshot would report now.
+        const contextUsage = latestMainThreadContextUsage(
+          accepted,
+          this.subscribedChatId,
+        );
+        if (contextUsage) {
+          this.callbacks.onChatContextUsage?.(contextUsage);
+        }
+
         if (gapAt !== null) {
           this.resyncChatStreamAfterGap(gapAt);
         }
+        break;
+      }
+
+      case "chatCaughtUp": {
+        // The initial chat sync for this subscription is over — the only
+        // signal that clears the syncing indicator. See settleChatSync.
+        this.settleChatSync(event.event.value.latestSequence);
         break;
       }
 
@@ -1071,6 +1157,8 @@ export class UserStreamingService {
 
   stop(): void {
     logger.info(`${LOG_PREFIX_STREAM} Stopping`);
+    this.releaseChatCursor();
+    this.setChatSyncPendingFor(null);
     this.isIntentionallyClosed = true;
     this.isConnected_ = false;
     this.connectAttemptInFlight = false;

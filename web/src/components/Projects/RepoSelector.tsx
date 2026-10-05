@@ -240,7 +240,7 @@ export function RepoSelector({ onSelect, oauthReturnTo, analyticsPhase }: RepoSe
 
       <form
         onSubmit={handleManualSubmit}
-        className="rounded-lg border border-border/40 bg-muted/20 p-3 space-y-2"
+        className="space-y-2 rounded-md border border-border/60 bg-background p-3"
       >
         <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_120px_auto]">
           <input
@@ -252,7 +252,7 @@ export function RepoSelector({ onSelect, oauthReturnTo, analyticsPhase }: RepoSe
               setManualError("");
             }}
             className={cn(
-              "min-w-0 rounded-lg border border-border/40 bg-background px-3 py-2 text-sm text-foreground",
+              "min-w-0 rounded-md border border-input bg-card px-3 py-2 text-sm text-foreground",
               "placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50",
             )}
           />
@@ -262,7 +262,7 @@ export function RepoSelector({ onSelect, oauthReturnTo, analyticsPhase }: RepoSe
             value={manualBranch}
             onChange={(e) => setManualBranch(e.target.value)}
             className={cn(
-              "min-w-0 rounded-lg border border-border/40 bg-background px-3 py-2 text-sm text-foreground",
+              "min-w-0 rounded-md border border-input bg-card px-3 py-2 text-sm text-foreground",
               "placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50",
             )}
             aria-label="Branch"
@@ -270,7 +270,7 @@ export function RepoSelector({ onSelect, oauthReturnTo, analyticsPhase }: RepoSe
           <button
             type="submit"
             className={cn(
-              "rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-colors",
+              "rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors",
               "hover:bg-primary/90",
             )}
           >
@@ -303,19 +303,20 @@ export function RepoSelector({ onSelect, oauthReturnTo, analyticsPhase }: RepoSe
         </svg>
         <input
           type="text"
-          placeholder="Search repositories..."
+          placeholder="Search repositories"
+          aria-label="Search repositories"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className={cn(
-            "w-full pl-9 pr-3 py-2.5 rounded-lg text-sm transition-colors",
-            "bg-background border border-border/40 text-foreground placeholder:text-muted-foreground/50",
+            "w-full rounded-md py-2 pl-9 pr-3 text-sm transition-colors",
+            "border border-input bg-background text-foreground placeholder:text-muted-foreground/70",
             "focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50",
           )}
         />
       </div>
 
       {/* Repo list */}
-      <div className="max-h-64 overflow-y-auto rounded-lg border border-border/40">
+      <div className="max-h-64 overflow-y-auto rounded-md border border-border bg-card">
         {reposError && !reposCredentialMissing && (
           <div className="flex items-center gap-2 border-b border-destructive/20 bg-destructive/5 px-3 py-2 text-xs text-destructive-ink">
             {reposError}
@@ -334,8 +335,8 @@ export function RepoSelector({ onSelect, oauthReturnTo, analyticsPhase }: RepoSe
             type="button"
             onClick={() => onSelect(repo)}
             className={cn(
-              "flex w-full items-start gap-3 border-b border-border/30 px-3 py-2.5 text-left transition-colors last:border-b-0",
-              "hover:bg-muted/50",
+              "flex w-full items-start gap-3 border-b border-border px-3 py-2.5 text-left transition-colors last:border-b-0",
+              "hover:bg-muted/60 focus:outline-none focus-visible:bg-muted/60",
             )}
           >
             <div className="min-w-0 flex-1">
@@ -344,8 +345,8 @@ export function RepoSelector({ onSelect, oauthReturnTo, analyticsPhase }: RepoSe
                   {repo.fullName}
                 </span>
                 {repo.private && (
-                  <span className="inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-2xs font-medium bg-muted text-muted-foreground">
-                    <Lock className="w-2.5 h-2.5" />
+                  <span className="inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-2xs font-medium text-muted-foreground ring-1 ring-inset ring-border">
+                    <Lock className="w-2.5 h-2.5" aria-hidden="true" />
                     Private
                   </span>
                 )}

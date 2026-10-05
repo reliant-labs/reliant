@@ -44,17 +44,9 @@ service WorkflowService {
   // The copy is saved to the user's DB with forked_from set to track origin
   rpc CopyWorkflow(CopyWorkflowRequest) returns (CopyWorkflowResponse) {}
 
-  // BuilderChat sends a message to the workflow builder AI assistant
-  // The assistant can read and modify the workflow using specialized tools
-  rpc BuilderChat(BuilderChatRequest) returns (BuilderChatResponse) {}
-
   // CreateWorkflowDraft creates an empty draft for the workflow builder
-  // Called when user clicks "New Workflow" - draft ID is needed before chat starts
+  // Called when user clicks "New Workflow" so the canvas has a draft to edit
   rpc CreateWorkflowDraft(CreateWorkflowDraftRequest) returns (CreateWorkflowDraftResponse) {}
-
-  // AssociateChatWithWorkflowDraft links a chat to a workflow draft
-  // Called after chat creation to enable tools to find the draft
-  rpc AssociateChatWithWorkflowDraft(AssociateChatWithWorkflowDraftRequest) returns (AssociateChatWithWorkflowDraftResponse) {}
 
   // SetWorkflowStatus moves a stored workflow between draft and complete.
   // Marking complete validates the current definition and is rejected (with
@@ -99,7 +91,8 @@ message WorkflowListItem {
   map<string, string> outputs = 10; // Workflow outputs - CEL expressions
   optional string updated_at = 11;  // Last update timestamp
   bool is_hidden = 12; // Whether the workflow is hidden from the hub
-  optional string builder_chat_id = 13; // Chat ID associated with this workflow (if any)
+  reserved 13; // Removed: builder_chat_id (workflows are not bound to a chat)
+  reserved "builder_chat_id";
   bool has_preset_groups = 14; // True if workflow has any tags (top-level or group) that can have presets
   reserved 15; // Removed: is_valid (a cached verdict; see status + validation_errors)
   reserved "is_valid";
@@ -109,6 +102,9 @@ message WorkflowListItem {
   // Current validation findings, computed on read (errors, then warnings typed
   // "warning:<category>"). Empty for builtin and project workflows.
   repeated ValidationError validation_errors = 18;
+  // Human-facing display name from the workflow definition's `title`. Empty
+  // when the definition declares none; UIs then derive one from `name`.
+  string title = 19;
 }
 
 // ============================================
@@ -178,7 +174,8 @@ message GetWorkflowResponse {
   Workflow workflow = 1;
   string source = 2;             // Source of the workflow: "builtin", "project", or "user"
   optional string draft_id = 3; // Draft ID for this workflow (if user-owned)
-  optional string builder_chat_id = 4; // Chat ID associated with this workflow (if any)
+  reserved 4;                    // Removed: builder_chat_id (workflows are not bound to a chat)
+  reserved "builder_chat_id";
   reserved 5;                    // Removed: updated_at (replaced by version)
   optional string parse_error = 6; // If the stored YAML couldn't be parsed, contains the error message
   optional string raw_definition = 7; // Raw YAML definition (only set when parse_error is present)
@@ -222,30 +219,6 @@ message ValidateWorkflowResponse {
 }
 
 // ============================================
-// BuilderChat - AI-assisted workflow building
-// ============================================
-
-message BuilderChatRequest {
-  string project_id = 1;         // Required: project ID for context
-  string session_id = 2;         // Required: session ID to maintain conversation history
-  string message = 3;            // User's message to the assistant
-  Workflow workflow = 4;         // Current workflow state in the builder
-}
-
-// ToolCallInfo describes a tool call made by the assistant
-message ToolCallInfo {
-  string name = 1;     // Tool name (e.g., "update_workflow")
-  string result = 2;   // Tool result summary
-}
-
-message BuilderChatResponse {
-  string message = 1;                // Assistant's response text
-  bool workflow_updated = 2;         // True if the workflow was modified
-  Workflow workflow = 3;             // Updated workflow (if modified)
-  repeated ToolCallInfo tool_calls = 4; // Tools that were called
-}
-
-// ============================================
 // SaveWorkflow - Unified create/update
 // ============================================
 
@@ -255,7 +228,8 @@ message SaveWorkflowRequest {
   // Field 3 removed (was publish)
   ConfigScope scope = 4;             // Where to save: global, project, or worktree
   optional string worktree_id = 5;   // Required if scope is worktree
-  optional string builder_chat_id = 6; // Optional: chat ID from workflow builder assistant
+  reserved 6;                        // Removed: builder_chat_id (workflows are not bound to a chat)
+  reserved "builder_chat_id";
   reserved 7;                        // Removed: expected_updated_at (replaced by version)
   optional int64 expected_version = 8; // OCC: expected version number - fails if workflow was modified since
   optional string source_path = 9;   // If set, write YAML back to this file (for project workflow edits)
@@ -275,7 +249,8 @@ message SaveWorkflowResponse {
   repeated ValidationError validation_errors = 6; // This request's validation findings (errors, then warnings)
   string id = 7;                     // Database ID of the saved workflow
   string slug = 8;                   // Runtime reference slug
-  optional string builder_chat_id = 9; // Chat ID associated with this workflow (if any)
+  reserved 9;                        // Removed: builder_chat_id (workflows are not bound to a chat)
+  reserved "builder_chat_id";
   reserved 10;                       // Removed: updated_at (replaced by version)
   int64 version = 11;                // Current version number for OCC
   string yaml_definition = 12;       // Canonical YAML definition of the saved workflow
@@ -572,13 +547,3 @@ message SetWorkflowStatusResponse {
   int64 version = 5;                  // Version after the call (for OCC)
 }
 
-// AssociateChatWithWorkflowDraftRequest links a chat to a workflow draft.
-// Called after chat creation so tools can find the draft by chat ID.
-message AssociateChatWithWorkflowDraftRequest {
-  string chat_id = 1;                 // Required: the chat to associate
-  string draft_id = 2;                // Required: the workflow draft ID
-}
-
-message AssociateChatWithWorkflowDraftResponse {
-  // Empty response - success indicated by lack of error
-}

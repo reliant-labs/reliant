@@ -1,0 +1,101 @@
+{
+  "outcomes": [
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gpt-5.6-sol",
+        "provider": "codex",
+        "level": ""
+      },
+      "label": "gpt-5.6-sol@codex reasoning level=default",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gpt-5.6-sol@codex",
+      "resolved_provider": "codex",
+      "api_model": "gpt-5.6-sol",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 6569,
+      "input_tokens": 4407,
+      "output_tokens": 150,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gpt-5.6-sol",
+        "provider": "codex",
+        "level": "low"
+      },
+      "label": "gpt-5.6-sol@codex reasoning level=low",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gpt-5.6-sol@codex",
+      "resolved_provider": "codex",
+      "api_model": "gpt-5.6-sol",
+      "effective_thinking": "low",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 3446,
+      "input_tokens": 4407,
+      "output_tokens": 102,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gpt-5.6-sol",
+        "provider": "codex",
+        "level": "max"
+      },
+      "label": "gpt-5.6-sol@codex reasoning level=max",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gpt-5.6-sol@codex",
+      "resolved_provider": "codex",
+      "api_model": "gpt-5.6-sol",
+      "effective_thinking": "max",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 6988,
+      "input_tokens": 4407,
+      "output_tokens": 199,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    }
+  ],
+  "providers": [
+    "anthropic",
+    "antigravity",
+    "codex",
+    "openrouter"
+  ],
+  "run_at": "2026-10-04T17:13:58Z",
+  "uncredentialed": [
+    "copilot",
+    "gemini",
+    "mock",
+    "openai",
+    "reliant",
+    "vertexai",
+    "xai"
+  ]
+}

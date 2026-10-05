@@ -27,6 +27,7 @@ import { MCPDiscoverTab } from "./MCPDiscoverTab";
 import { MCPSetupWizard } from "./MCPSetupWizard";
 import { Modal } from "../ui/Modal";
 import { subscribeToRefetch } from "../../store/refetchStore";
+import { SettingsPageHeader } from "./SettingsPageHeader";
 
 type MainTab = "installed" | "discover";
 type WizardMode = "install" | "edit";
@@ -728,31 +729,28 @@ export function MCPSettings() {
   return (
     <div className="space-y-5" data-onboarding="mcp-server">
       <div className="flex flex-col gap-4">
-        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-          <div>
-            <h2 className="mb-1 text-lg font-semibold text-foreground">
-              MCP Servers
-            </h2>
-            <p className="text-sm text-muted-foreground">
-              Install and manage tool servers for this project
-            </p>
-          </div>
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-            <MCPRefreshStatus
-              isRefreshing={isRefreshing}
-              loadError={loadError}
-              lastLoadedAt={lastLoadedAt}
-              onRetry={() => void loadData({ force: true })}
-            />
-            <Button
-              size="sm"
-              onClick={() => setShowCustomServerModal(true)}
-              leftIcon={<Plus className="h-4 w-4" />}
-            >
-              Add Custom Server
-            </Button>
-          </div>
-        </div>
+        <SettingsPageHeader
+          title="MCP Servers"
+          description="Give agents extra tools by connecting Model Context Protocol (MCP) servers. Install one from the Discover tab, or add your own custom server; installed servers are available to this project's agents."
+          className="mb-0"
+          actions={
+            <>
+              <MCPRefreshStatus
+                isRefreshing={isRefreshing}
+                loadError={loadError}
+                lastLoadedAt={lastLoadedAt}
+                onRetry={() => void loadData({ force: true })}
+              />
+              <Button
+                size="sm"
+                onClick={() => setShowCustomServerModal(true)}
+                leftIcon={<Plus className="h-4 w-4" />}
+              >
+                Add Custom Server
+              </Button>
+            </>
+          }
+        />
       </div>
 
       <MCPTabs

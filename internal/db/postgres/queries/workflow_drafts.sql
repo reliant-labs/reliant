@@ -9,34 +9,31 @@
 INSERT INTO workflow_drafts (
     id, user_id, name, slug, description, definition,
     status, source_path,
-    forked_from, chat_id, created_at, updated_at, is_hidden, version
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 1)
-RETURNING *;
+    forked_from, created_at, updated_at, is_hidden, version
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 1)
+RETURNING id, user_id, name, slug, description, definition, source_path, forked_from, is_hidden, created_at, updated_at, version, status;
 
 -- name: GetWorkflowDraft :one
-SELECT * FROM workflow_drafts WHERE id = $1;
+SELECT id, user_id, name, slug, description, definition, source_path, forked_from, is_hidden, created_at, updated_at, version, status FROM workflow_drafts WHERE id = $1;
 
 -- name: GetWorkflowDraftBySlug :one
 -- Lookup by user and slug (simple, no scope complexity)
-SELECT * FROM workflow_drafts 
+SELECT id, user_id, name, slug, description, definition, source_path, forked_from, is_hidden, created_at, updated_at, version, status FROM workflow_drafts 
 WHERE user_id = $1 AND slug = $2;
 
--- name: GetWorkflowDraftByChatID :one
-SELECT * FROM workflow_drafts WHERE chat_id = $1;
-
 -- name: GetWorkflowDraftBySourcePath :one
-SELECT * FROM workflow_drafts 
+SELECT id, user_id, name, slug, description, definition, source_path, forked_from, is_hidden, created_at, updated_at, version, status FROM workflow_drafts 
 WHERE user_id = $1 AND source_path = $2;
 
 -- name: ListWorkflowDraftsByUser :many
 -- List all workflows for a user, ordered by most recently updated
-SELECT * FROM workflow_drafts 
+SELECT id, user_id, name, slug, description, definition, source_path, forked_from, is_hidden, created_at, updated_at, version, status FROM workflow_drafts 
 WHERE user_id = $1
 ORDER BY updated_at DESC;
 
 -- name: GetUsableWorkflowBySlug :one
 -- Get a usable workflow by slug (for runtime loading)
-SELECT * FROM workflow_drafts 
+SELECT id, user_id, name, slug, description, definition, source_path, forked_from, is_hidden, created_at, updated_at, version, status FROM workflow_drafts 
 WHERE user_id = $1 AND slug = $2 AND status = 'complete' AND is_hidden = false;
 
 -- name: UpsertWorkflowDraft :one
@@ -45,8 +42,8 @@ WHERE user_id = $1 AND slug = $2 AND status = 'complete' AND is_hidden = false;
 INSERT INTO workflow_drafts (
     id, user_id, name, slug, description, definition,
     status, source_path,
-    forked_from, chat_id, created_at, updated_at, is_hidden, version
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 1)
+    forked_from, created_at, updated_at, is_hidden, version
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 1)
 ON CONFLICT(user_id, slug) DO UPDATE SET
     name = excluded.name,
     description = excluded.description,
@@ -56,7 +53,7 @@ ON CONFLICT(user_id, slug) DO UPDATE SET
     -- Don't update forked_from on upsert to preserve origin
     updated_at = NOW(),
     version = workflow_drafts.version + 1
-RETURNING *;
+RETURNING id, user_id, name, slug, description, definition, source_path, forked_from, is_hidden, created_at, updated_at, version, status;
 
 -- name: UpdateWorkflowDraft :one
 UPDATE workflow_drafts SET
@@ -69,7 +66,7 @@ UPDATE workflow_drafts SET
     updated_at = NOW(),
     version = version + 1
 WHERE id = $7
-RETURNING *;
+RETURNING id, user_id, name, slug, description, definition, source_path, forked_from, is_hidden, created_at, updated_at, version, status;
 
 -- name: UpdateWorkflowDraftDefinition :one
 UPDATE workflow_drafts SET
@@ -80,14 +77,16 @@ UPDATE workflow_drafts SET
     updated_at = NOW(),
     version = version + 1
 WHERE id = $5
-RETURNING *;
+RETURNING id, user_id, name, slug, description, definition, source_path, forked_from, is_hidden, created_at, updated_at, version, status;
 
--- name: DeleteWorkflowDraft :exec
-DELETE FROM workflow_drafts WHERE id = $1;
+-- name: DeleteWorkflowDraft :one
+DELETE FROM workflow_drafts WHERE id = $1
+RETURNING id, user_id, name, slug, description, definition, source_path, forked_from, is_hidden, created_at, updated_at, version, status;
 
--- name: DeleteWorkflowDraftBySlug :exec
+-- name: DeleteWorkflowDraftBySlug :one
 DELETE FROM workflow_drafts 
-WHERE user_id = $1 AND slug = $2;
+WHERE user_id = $1 AND slug = $2
+RETURNING id, user_id, name, slug, description, definition, source_path, forked_from, is_hidden, created_at, updated_at, version, status;
 
 -- name: CountWorkflowDraftsByUser :one
 SELECT COUNT(*) FROM workflow_drafts WHERE user_id = $1;
@@ -101,20 +100,12 @@ SELECT EXISTS(
 -- name: GetWorkflowDraftByName :one
 -- Check if a workflow with this exact name exists for the user
 -- Used for duplicate name validation (different from slug check)
-SELECT * FROM workflow_drafts 
+SELECT id, user_id, name, slug, description, definition, source_path, forked_from, is_hidden, created_at, updated_at, version, status FROM workflow_drafts 
 WHERE user_id = $1 AND LOWER(name) = LOWER($2);
-
--- name: AssociateChatWithDraft :one
-UPDATE workflow_drafts SET
-    chat_id = $1,
-    updated_at = NOW(),
-    version = version + 1
-WHERE id = $2
-RETURNING *;
 
 -- name: GetWorkflowsForkedFrom :many
 -- Get all workflows that were forked from a specific origin
-SELECT * FROM workflow_drafts 
+SELECT id, user_id, name, slug, description, definition, source_path, forked_from, is_hidden, created_at, updated_at, version, status FROM workflow_drafts 
 WHERE user_id = $1 AND forked_from = $2;
 
 -- name: UpdateWorkflowForkedFrom :one
@@ -124,7 +115,7 @@ UPDATE workflow_drafts SET
     updated_at = NOW(),
     version = version + 1
 WHERE id = $2
-RETURNING *;
+RETURNING id, user_id, name, slug, description, definition, source_path, forked_from, is_hidden, created_at, updated_at, version, status;
 
 -- name: SetWorkflowDraftHidden :one
 UPDATE workflow_drafts SET
@@ -132,7 +123,7 @@ UPDATE workflow_drafts SET
     updated_at = NOW(),
     version = version + 1
 WHERE id = $2
-RETURNING *;
+RETURNING id, user_id, name, slug, description, definition, source_path, forked_from, is_hidden, created_at, updated_at, version, status;
 
 -- name: SetWorkflowDraftStatus :one
 -- Move a draft between 'draft' and 'complete'. The caller validates before
@@ -142,4 +133,9 @@ UPDATE workflow_drafts SET
     updated_at = NOW(),
     version = version + 1
 WHERE id = $2
-RETURNING *;
+RETURNING id, user_id, name, slug, description, definition, source_path, forked_from, is_hidden, created_at, updated_at, version, status;
+
+-- NOTE: workflow_drafts.chat_id is retired: no query reads or writes it, and every
+-- SELECT/RETURNING lists columns explicitly so it is never selected. The column
+-- stays until a follow-up contract migration (the previous release still reads
+-- it during a rolling deploy).

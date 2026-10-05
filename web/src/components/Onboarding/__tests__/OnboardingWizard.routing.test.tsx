@@ -188,10 +188,6 @@ vi.mock("../OnboardingChecklist", () => ({
   OnboardingChecklist: () => null,
 }));
 
-// CompletionStep transitively imports analytics + chat machinery — stub it.
-vi.mock("../steps", () => ({
-  CompletionStep: (_props: any) => null,
-}));
 
 // ─── Lazy wizard import ──────────────────────────────────────────────────────
 
@@ -238,11 +234,19 @@ function makeRouter(initialEntries: string[], Wizard: React.ComponentType<any>) 
     component: () =>
       React.createElement("div", { "data-testid": "workflow-builder-page" }),
   });
+  // Where finishing the tour lands the user (chatRouteAfterTour).
+  const projectRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/project/$projectId",
+    validateSearch: searchSchema,
+    component: () => React.createElement("div", { "data-testid": "project-chat" }),
+  });
 
   const tree = rootRoute.addChildren([
     indexRoute,
     workflowHubRoute,
     workflowBuilderRoute,
+    projectRoute,
   ]);
   return createRouter({
     routeTree: tree as any,
@@ -350,5 +354,67 @@ describe("OnboardingWizard URL gating", () => {
     expect(
       screen.queryByRole("button", { name: /open workflows/i })
     ).toBeNull();
+  });
+
+  // There is no closing "Ready to go" modal: the last spotlight is the end of
+  // the tour, so its button finishes it — and still takes the user home.
+  describe("the last step", () => {
+    const lastStepUrl =
+      "/workflow/builtin%3A%2F%2Fget-it-right?drill=attempt&tour=workflow-builder";
+
+    it("labels its button Finish and offers no Skip tour", async () => {
+      const Wizard = await loadWizard();
+      if (!Wizard) {
+        expect.fail("OnboardingWizard not importable");
+        return;
+      }
+      const router = makeRouter([lastStepUrl], Wizard);
+      render(React.createElement(RouterProvider as any, { router }));
+
+      expect(await screen.findByRole("button", { name: /finish/i })).toBeInTheDocument();
+      expect(screen.getByText(/7 \/ 7/)).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /^next/i })).toBeNull();
+      expect(screen.queryByRole("button", { name: /skip tour/i })).toBeNull();
+    });
+
+    it("Finish records completion and lands the user on their project chat", async () => {
+      const Wizard = await loadWizard();
+      if (!Wizard) {
+        expect.fail("OnboardingWizard not importable");
+        return;
+      }
+      const { trackEvent } = await import("../../../lib/analytics");
+      vi.mocked(trackEvent).mockClear();
+
+      const router = makeRouter([lastStepUrl], Wizard);
+      render(React.createElement(RouterProvider as any, { router }));
+      await userEvent.click(await screen.findByRole("button", { name: /finish/i }));
+
+      await waitFor(() =>
+        expect(router.state.location.pathname).toBe("/project/project-1")
+      );
+      expect(router.state.location.search.tour).toBeUndefined();
+      expect(tourStoreState.state.markTourCompleted).toHaveBeenCalled();
+      // The funnel-stall alert counts this event; the removed modal used to
+      // be its only emitter.
+      expect(trackEvent).toHaveBeenCalledWith(
+        "onboarding_completed",
+        expect.objectContaining({ totalSteps: 7 })
+      );
+    });
+
+    it("earlier steps still say Next", async () => {
+      const Wizard = await loadWizard();
+      if (!Wizard) {
+        expect.fail("OnboardingWizard not importable");
+        return;
+      }
+      const router = makeRouter(["/?tour=workflow-controls"], Wizard);
+      render(React.createElement(RouterProvider as any, { router }));
+
+      expect(await screen.findByRole("button", { name: /^next/i })).toBeInTheDocument();
+      expect(screen.getByText(/2 \/ 7/)).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /finish/i })).toBeNull();
+    });
   });
 });

@@ -226,25 +226,28 @@ func defaultGetDriver(ctx context.Context, userID string, preferences models.Pre
 		var found bool
 
 		if explicitDriverID != "" {
-			// User explicitly selected a driver (e.g., "openrouter" or "local")
-			// Use that driver directly instead of auto-selecting
+			// An explicit "model@driver" is a decision, not a hint: it is how
+			// resolveLLMCall pins the exact provider the registry chose. If that
+			// driver cannot serve the model, FAIL — never auto-select another
+			// provider. A silent switch runs the request on a different bill
+			// with different behaviour while every record still names the
+			// pinned driver; that is how a stale copilot allowlist sent nine
+			// "copilot" models to anthropic/codex/antigravity unnoticed.
 			config, exists := availableDrivers.Drivers[models.DriverID(explicitDriverID)]
-			if exists && config.IsConfigured() {
-				// Verify this driver supports the model
-				if models.CanDriverUseModel(models.Family(explicitDriverID), modelID) {
-					driverConfig = config
-					found = true
-					logging.Debug("using explicit driver", "driver", explicitDriverID, "model", modelID)
-				} else {
-					logging.Warn("explicit driver does not support model", "driver", explicitDriverID, "model", modelID)
-				}
-			} else {
-				logging.Warn("explicit driver not available", "driver", explicitDriverID, "exists", exists, "isConfigured", config.IsConfigured())
+			switch {
+			case !exists || !config.IsConfigured():
+				lastErr = fmt.Errorf("model %q@%s: the %s provider is not connected", modelID, explicitDriverID, explicitDriverID)
+				continue
+			case !models.CanDriverUseModel(models.Family(explicitDriverID), modelID):
+				lastErr = fmt.Errorf("model %q@%s: the %s provider does not serve this model", modelID, explicitDriverID, explicitDriverID)
+				continue
 			}
-		}
-
-		// Fall back to auto-selection if no explicit driver or explicit driver wasn't available
-		if !found {
+			driverConfig = config
+			found = true
+			logging.Debug("using explicit driver", "driver", explicitDriverID, "model", modelID)
+		} else {
+			// No provider named: the caller asked for a model, so pick the
+			// best configured provider for it.
 			driverConfig, found = models.SelectBestDriver(model.ID, availableDrivers)
 			logging.Debug("auto-selected driver", "driverConfig", driverConfig, "found", found)
 		}

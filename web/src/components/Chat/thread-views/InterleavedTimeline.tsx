@@ -30,12 +30,10 @@ import type {
   InfoUpdate,
   RunOutputUpdate,
 } from "../../../types/streaming";
-import type { WorkflowExecution, StepExecution, ThreadOrigin } from "../ExecutionSidebar/types";
+import type { WorkflowExecution, ThreadOrigin } from "../ExecutionSidebar/types";
 import { cn } from "../../../lib/utils";
 import { sortMessagesForDisplay } from "../../../lib/messageOrder";
 import { cleanTemporalErrorMessage } from "../../../lib/temporalErrors";
-import { getActivitySteps } from "./activityIndicators";
-import { ActivityIndicator } from "./ActivityIndicator";
 import { getThreadColor, formatNodeId, resolveThreadNameFromActiveThreads, resolveRouterDecisionFromActiveThreads, isSpawnOrigin } from "./threadUtils";
 import { useActiveThreads } from "../../../store/threadActivityStore";
 import { logger } from "../../../lib/logger";
@@ -104,7 +102,6 @@ type TimelineItem =
   | { type: "message"; message: Message; workflow: WorkflowDisplay }
   | { type: "thread-start"; workflow: WorkflowDisplay; parentName: string }
   | { type: "handoff"; toName: string; color: string }
-  | { type: "activity"; step: StepExecution; workflow: WorkflowDisplay; workflowName: string }
   /**
    * `error` is the representative (earliest) failure and is what renders.
    * `errors` is every failure collapsed into this row — length 1 in the normal
@@ -134,8 +131,6 @@ function timelineItemKey(item: TimelineItem, index: number): string {
       return `thread-${item.workflow.thread}`;
     case "handoff":
       return `handoff-${index}`;
-    case "activity":
-      return `activity-${item.step.id}`;
     case "error":
       // Keyed on the representative plus the group size: a row that absorbs a
       // late sibling must remount rather than reuse the ungrouped row's key.
@@ -332,11 +327,19 @@ const TIMELINE_VARIANTS: ChatTimelineVariant[] = ["compact", "card", "minimal"];
 /**
  * How far past the header's bottom edge an already-pinned user message must
  * travel before it gives the header up. Applied to release only — see the
- * reasoning on PinnedHeaderInput.releaseHysteresisPx. Roughly one text line:
- * large enough to swallow sub-pixel layout corrections, small enough that the
- * handoff still reads as happening at the boundary.
+ * reasoning on PinnedHeaderInput.releaseHysteresisPx. Large enough to swallow
+ * sub-pixel layout corrections, and small on purpose: the first message's
+ * bottom edge has to clear `header + this` for the header to leave at the top
+ * of the transcript, and a full line of slack made that unreachable.
  */
-const PINNED_HEADER_RELEASE_HYSTERESIS_PX = 24;
+const PINNED_HEADER_RELEASE_HYSTERESIS_PX = 8;
+
+/**
+ * The pinned header's height before it has ever been measured: one clamped
+ * line of user text plus the header's padding. Only the first resolve uses
+ * it; every later one reads the last measured height.
+ */
+const PINNED_HEADER_ESTIMATED_PX = 48;
 
 /**
  * Height reserved above the first row for the scroll-back loading indicator.
@@ -614,15 +617,6 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
   const contentMaxWidthClass = timelineVariant === "minimal" ? "max-w-[900px]" : "max-w-[1200px]";
   const timelineHorizontalPaddingClass = timelineVariant === "minimal" ? "px-4 sm:px-8" : "px-4 sm:px-6 lg:px-8";
   const timelineGapClass = timelineVariant === "card" ? "py-1" : timelineVariant === "minimal" ? "py-0.5" : "";
-  // Derived from the execution tree ALONE, so it is memoized on that alone.
-  // Inside timelineItems it re-walked every step of every workflow on each
-  // message and streamed delta, although the tree only changes when the
-  // workflow_executions query refetches — and a long-running chat carries
-  // tens of thousands of steps.
-  const activitySteps = useMemo(
-    () => (workflowExecution ? getActivitySteps(workflowExecution) : []),
-    [workflowExecution],
-  );
   const timelineItems = useMemo(() => {
     // Build workflow lookups from execution tree
     const { byId, displays } = buildWorkflowLookups(workflowExecution, chatId);
@@ -828,53 +822,9 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
       });
     }
 
-    // Insert activities at correct positions
-    if (activitySteps.length > 0) {
-      const activities = activitySteps;
-
-      // Find first user message time to skip setup activities
-      const firstUserItem = items.find(
-        (i) => i.type === "message" && i.message.role === MessageRole.USER
-      );
-      const firstUserTime =
-        firstUserItem?.type === "message"
-          ? new Date(firstUserItem.message.createdAt || "").getTime()
-          : 0;
-
-      // Insert each activity at the right position
-      for (const activity of activities) {
-        if (!isVisible(activity.thread)) continue;
-        if (activity.step.createdAt < firstUserTime) continue;
-
-        const display = displays.get(activity.thread);
-        if (!display || (display.isSpawn && getSpawnDisplayMode() === "preview" && showAll)) continue;
-
-        // Find insertion point: after last message with timestamp <= activity time
-        let insertIdx = items.length;
-        for (let i = items.length - 1; i >= 0; i--) {
-          const item = items[i];
-          if (item.type === "message") {
-            const msgTime = new Date(item.message.createdAt || "").getTime();
-            if (msgTime <= activity.step.createdAt) {
-              insertIdx = i + 1;
-              break;
-            }
-          }
-          if (i === 0) insertIdx = 0;
-        }
-
-        items.splice(insertIdx, 0, {
-          type: "activity",
-          step: activity.step,
-          workflow: display,
-          workflowName: activity.workflowName,
-        });
-      }
-    }
-
     // Insert error events at correct positions based on timestamp.
     //
-    // Scoped to the visible thread, exactly like messages and activity above.
+    // Scoped to the visible thread, exactly like messages above.
     // Without this an error was chat-global: a single "Paused: no machine is
     // connected" from the main thread rendered inside EVERY thread of the chat,
     // including spawns that started 12h later and never saw the outage.
@@ -966,7 +916,7 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
     }
 
     return items;
-  }, [messages, chatId, workflowExecution, activitySteps, selectedThreads, errorEvents, infoEvents, runOutputs, activeThreads]);
+  }, [messages, chatId, workflowExecution, selectedThreads, errorEvents, infoEvents, runOutputs, activeThreads]);
 
   // `timelineItems` IS the list the virtualizer renders. There is deliberately
   // no per-row wrapper carrying `key`/`isLast`: both are derivable from the
@@ -998,6 +948,17 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
   // Track visible range for pinned user message
   const [pinnedUserMessageIdx, setPinnedUserMessageIdx] = useState<number | null>(null);
 
+  // The pinned header's height: the line a user message has to slide under
+  // to be pinned, and the clearance a jump leaves above its target.
+  //
+  // Held while the header is hidden, and only ever raised. The decision must
+  // not read a geometry the decision itself produces: a line that fell to 0
+  // with the header gone made the first message look scrolled away the moment
+  // the header left, and a shorter header (an attachment-only message) would
+  // otherwise move the line and flip the very swap that showed it.
+  const [measuredPinnedHeaderPx, setMeasuredPinnedHeaderPx] = useState<number | null>(null);
+  const pinnedHeaderLine = measuredPinnedHeaderPx ?? PINNED_HEADER_ESTIMATED_PX;
+
   // --- Per-thread scroll position memory ---
   // Derive a stable key for the current thread filter
   const threadKey = useMemo(() => {
@@ -1019,14 +980,14 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
     count: timelineItems.length,
     getItemKey: getTimelineItemKey,
     paddingStart: TIMELINE_HEADER_PX,
+    scrollPaddingStart: pinnedHeaderLine,
   });
   const { virtualizer, scrollToBottom, atBottom, scroller: scrollerEl } = timeline;
   const scrollerElRef = useRef<HTMLElement | null>(null);
   scrollerElRef.current = scrollerEl;
-  // Pinned-header state the scroll handlers below read. Mirrored in refs so
-  // the per-scroll resolver does not re-subscribe on every change.
+  // The pinned index the scroll handlers below read. Mirrored in a ref so the
+  // per-scroll resolver does not re-subscribe on every change.
   const pinnedUserMessageIdxRef = useRef<number | null>(null);
-  const pinnedHeaderHeightRef = useRef(0);
   const setScrollerEl = timeline.scrollerRef;
 
   // Report at-bottom upward for the scroll-to-bottom button.
@@ -1055,14 +1016,15 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
   // --- Pinned user-message header ---
   //
   // Resolved from measured row geometry, re-run on every scroll and whenever
-  // the row-to-section mapping changes (rows inserted above shift indices).
+  // the row-to-section mapping changes (rows inserted above shift indices) or
+  // the header's measured height moves the line.
   const applyPinnedUserMessage = useCallback(() => {
     const scroller = scrollerElRef.current;
     if (!scroller) return;
     const nextPinned = resolvePinnedUserMessage({
       rows: measureRows(scroller),
       userMessageForItem,
-      line: pinnedHeaderHeightRef.current,
+      line: pinnedHeaderLine,
       previousPinned: pinnedUserMessageIdxRef.current,
       releaseHysteresisPx: PINNED_HEADER_RELEASE_HYSTERESIS_PX,
     });
@@ -1070,7 +1032,7 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
       pinnedUserMessageIdxRef.current = nextPinned;
       setPinnedUserMessageIdx(nextPinned);
     }
-  }, [userMessageForItem]);
+  }, [userMessageForItem, pinnedHeaderLine]);
 
   // Scroll-back paging: load the next page when the user nears the top.
   // Prepending needs no compensation here — the virtualizer is anchored to
@@ -1107,8 +1069,9 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
     };
   }, [applyPinnedUserMessage, scrollerEl]);
 
-  // Re-resolve the pin when the mapping changes, not only on scroll: a reply
-  // arriving while you sit still inserts rows and shifts every index.
+  // Re-resolve the pin when the mapping or the line changes, not only on
+  // scroll: a reply arriving while you sit still inserts rows and shifts every
+  // index.
   useEffect(() => {
     applyPinnedUserMessage();
   }, [applyPinnedUserMessage]);
@@ -1171,6 +1134,11 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
 
   // Publish the pinned header's height: per-message hover toolbars stick below
   // it, and it is the crossing line the pin resolver measures against.
+  //
+  // The CSS variable tracks the header as it is — toolbars stick at the very
+  // top when there is no header. The resolver's line keeps the tallest height
+  // seen (see measuredPinnedHeaderPx). A 0 is a pane not laid out, not a
+  // header with no height, so it never lowers anything.
   const pinnedHeaderRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const shell = timelineContainerRef.current;
@@ -1179,14 +1147,17 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
     const header = pinnedHeaderRef.current;
     if (!header) {
       shell.style.removeProperty("--chat-pinned-header-h");
-      pinnedHeaderHeightRef.current = 0;
       return;
     }
 
     const publish = () => {
       const height = header.offsetHeight;
-      pinnedHeaderHeightRef.current = height;
       shell.style.setProperty("--chat-pinned-header-h", `${height}px`);
+      if (height > 0) {
+        setMeasuredPinnedHeaderPx((tallest) =>
+          tallest === null || height > tallest ? height : tallest,
+        );
+      }
     };
     publish();
 
@@ -1220,34 +1191,6 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
           name={item.toName}
           color={item.color}
         />
-      );
-    }
-
-    if (item.type === "activity") {
-      return (
-        <div
-          className={cn(
-            // Colors only — never transition-all. The virtualizer measures row
-            // heights with a ResizeObserver, so an animated height reports a new value
-            // every frame of the animation and each one triggers a re-measure
-            // and a follow-scroll correction.
-            "transition-colors",
-            !item.workflow.isMain && "pl-3",
-            !item.workflow.isMain && timelineVariant !== "minimal" && "ml-1",
-            timelineVariant === "card" && "rounded-xl border border-border/50 bg-card/60 p-2 shadow-sm"
-          )}
-          style={
-            !item.workflow.isMain
-              ? {
-                  borderLeftColor: item.workflow.color,
-                  borderLeftWidth: timelineVariant === "minimal" ? 2 : 3,
-                  borderLeftStyle: "solid",
-                }
-              : undefined
-          }
-        >
-          <ActivityIndicator step={item.step} workflowName={item.workflowName} />
-        </div>
       );
     }
 
@@ -1292,8 +1235,10 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
     return (
       <div
         className={cn(
-          // See the note on the activity row above: animated heights inside a
-          // virtualized list re-trigger measurement on every frame.
+          // Colors only — never transition-all. The virtualizer measures row
+          // heights with a ResizeObserver, so an animated height reports a new value
+          // every frame of the animation and each one triggers a re-measure
+          // and a follow-scroll correction.
           "transition-colors",
           !item.workflow.isMain && "pl-3",
           !item.workflow.isMain && timelineVariant !== "minimal" && "ml-1",
@@ -1406,6 +1351,7 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
       {pinnedUserMsg && (
         <div
           ref={pinnedHeaderRef}
+          data-testid="pinned-user-message-header"
           // Fully opaque and elevated: the timeline scrolls underneath, so any
           // translucency here would let message text show through the gaps
           // around the floating bubble.

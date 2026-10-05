@@ -35,6 +35,7 @@ export const api = {
           step_count: w.stepCount,
           source: w.source,
           is_hidden: w.isHidden || false,
+          title: w.title,
           status: w.status, // "draft" | "complete"; builtin/project are always complete
           // The graph travels on the wire already, and dropping it here made
           // the app contradict itself one tap apart: the catalog row read
@@ -106,6 +107,17 @@ export const api = {
           driverId: m.driverId,
           canReason: m.canReason,
           supportedThinkingLevels: m.supportedThinkingLevels,
+          supportsTemperature: m.supportsTemperature,
+          contextWindow: Number(m.contextWindow),
+          local: m.local
+            ? {
+                daemonId: m.local.daemonId,
+                machineName: m.local.machineName,
+                endpointId: m.local.endpointId,
+                endpointKind: m.local.endpointKind,
+                online: m.local.online,
+              }
+            : undefined,
           capabilities: m.capabilities,
           tags: m.tags || [],
           metadata: undefined,

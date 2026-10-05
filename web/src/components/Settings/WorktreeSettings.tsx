@@ -1,9 +1,37 @@
-import { useState } from "react";
-import { Copy, FileX, FolderGit2, FolderX, Info, Trash2 } from "lucide-react";
+import { useState, type ReactNode } from "react";
 import { cn } from "../../lib/utils";
-import { usePreferences, useUpdatePreferences, useUpdateWorktreePreferences, type WorktreeArchiveMode } from "../../hooks/settings-queries";
+import {
+  usePreferences,
+  useUpdatePreferences,
+  useUpdateWorktreePreferences,
+  type WorktreeArchiveMode,
+} from "../../hooks/settings-queries";
 import { Toggle } from "../ui/Toggle";
+import Card, { CardHeader, CardInset } from "../forge-ui/card";
 
+const ARCHIVE_MODES: Array<{ value: WorktreeArchiveMode; label: string; description: string }> = [
+  {
+    value: "ask_me",
+    label: "Ask every time",
+    description: "Show the cleanup choices each time you archive, defaulting to the options below.",
+  },
+  {
+    value: "always_cleanup",
+    label: "Clean up automatically",
+    description: "Archive straight away and remove the files and branch as set below. No prompt.",
+  },
+  {
+    value: "always_keep",
+    label: "Keep everything",
+    description: "Archive straight away and leave the worktree directory and branch on disk.",
+  },
+];
+
+/**
+ * Cleanup defaults for workspaces: what Archive does to the worktree's files
+ * and branch, and how new workspaces are seeded. Every option carries a line
+ * saying what it changes, because the destructive ones are not undoable.
+ */
 export function WorktreeSettings() {
   const { data: preferences } = usePreferences();
   const updateWorktreePrefs = useUpdateWorktreePreferences();
@@ -19,210 +47,167 @@ export function WorktreeSettings() {
     }
   };
 
-  const handleModeChange = (mode: WorktreeArchiveMode) => {
-    updateSafely(() => updateWorktreePrefs.mutateAsync({ archiveMode: mode }));
-  };
-
-  const modes: Array<{
-    value: WorktreeArchiveMode;
-    label: string;
-    description: string;
-  }> = [
-    {
-      value: "ask_me",
-      label: "Ask every time",
-      description: "Show cleanup choices before archiving.",
-    },
-    {
-      value: "always_cleanup",
-      label: "Clean up",
-      description: "Apply the defaults below automatically.",
-    },
-    {
-      value: "always_keep",
-      label: "Keep files",
-      description: "Archive records without deleting files or branches.",
-    },
-  ];
+  const archiveMode = preferences?.worktree.archiveMode ?? "ask_me";
+  const deleteDirectory = preferences?.worktree.defaultDeleteDirectory ?? true;
+  const deleteBranch = preferences?.worktree.defaultDeleteBranch ?? false;
+  // "Keep everything" never touches files, so its cleanup defaults are moot.
+  const cleanupDefaultsApply = archiveMode !== "always_keep";
 
   return (
-    <div className="space-y-5">
-      <div>
-        <div className="mb-2 flex items-center gap-2">
-          <FolderGit2 className="h-5 w-5 text-muted-foreground" />
-          <h2 className="text-xl font-semibold tracking-tight text-foreground">
-            Workspace preferences
-          </h2>
-        </div>
-        <p className="text-sm text-muted-foreground">
-          Choose safe defaults for archiving, branching, and file deletion.
-        </p>
-      </div>
+    <div className="forge-ui flex flex-col gap-4" data-testid="worktree-settings">
+      <Card>
+        <CardHeader
+          title="When you archive a workspace"
+          description="Archiving always keeps the workspace record and its chats, so you can restore them. These settings decide what else happens to the worktree on disk."
+        />
 
-      <section className="rounded-xl border border-border/60 bg-card p-4 shadow-sm">
-        <div className="mb-4">
-          <h3 className="text-sm font-semibold text-foreground">Archive behavior</h3>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Decide what happens after you click Archive on a workspace.
-          </p>
-        </div>
-
-        <div className="grid gap-2 sm:grid-cols-3">
-          {modes.map((mode) => {
-            const isSelected = preferences?.worktree.archiveMode === mode.value;
-
-            return (
-              <label
-                key={mode.value}
-                className={cn(
-                  "cursor-pointer rounded-xl border p-3 transition-colors focus-within:ring-2 focus-within:ring-primary/50",
-                  isSelected
-                    ? "border-primary/50 bg-primary/5"
-                    : "border-border/60 bg-background hover:border-primary/30 hover:bg-muted/40",
-                  isSaving && "cursor-not-allowed opacity-60"
-                )}
-              >
-                <input
-                  type="radio"
-                  name="archive-mode"
-                  value={mode.value}
-                  checked={isSelected}
-                  onChange={() => handleModeChange(mode.value)}
-                  disabled={isSaving}
-                  className="sr-only"
-                />
-                <span className="flex items-center gap-2 text-sm font-medium text-foreground">
-                  <span
-                    className={cn(
-                      "h-2.5 w-2.5 rounded-full",
-                      isSelected ? "bg-primary" : "bg-muted-foreground/35"
-                    )}
-                  />
-                  {mode.label}
-                </span>
-                <span className="mt-2 block text-xs leading-relaxed text-muted-foreground">
-                  {mode.description}
-                </span>
-              </label>
-            );
-          })}
-        </div>
-
-        {preferences?.worktree.archiveMode === "always_cleanup" && (
-          <div className="mt-4 space-y-2 rounded-xl border border-border/60 bg-background p-3">
-            <PreferenceToggleRow
-              icon={<FolderX className="h-4 w-4" />}
-              title="Delete workspace directory"
-              description="Delete the workspace's files from disk when archiving."
-              checked={preferences?.worktree.defaultDeleteDirectory ?? true}
-              disabled={isSaving}
-              onChange={() =>
-                updateSafely(() =>
-                  updateWorktreePrefs.mutateAsync({
-                    defaultDeleteDirectory: !preferences?.worktree.defaultDeleteDirectory,
-                  })
-                )
-              }
-            />
-            <PreferenceToggleRow
-              icon={<Trash2 className="h-4 w-4" />}
-              title="Delete git branch"
-              description="Permanently remove the branch when cleanup runs."
-              checked={preferences?.worktree.defaultDeleteBranch ?? false}
-              disabled={isSaving}
-              warning={preferences?.worktree.defaultDeleteBranch ? "Only enable this when branches are merged elsewhere." : undefined}
-              onChange={() =>
-                updateSafely(() =>
-                  updateWorktreePrefs.mutateAsync({
-                    defaultDeleteBranch: !preferences?.worktree.defaultDeleteBranch,
-                  })
-                )
-              }
-            />
+        <fieldset className="flex flex-col gap-4" disabled={isSaving}>
+          <legend className="sr-only">Archive behaviour</legend>
+          <div className="grid gap-2 sm:grid-cols-3">
+            {ARCHIVE_MODES.map((mode) => {
+              const isSelected = archiveMode === mode.value;
+              return (
+                <label
+                  key={mode.value}
+                  className={cn(
+                    "flex cursor-pointer flex-col gap-1 rounded-md border p-3 transition-colors focus-within:ring-2 focus-within:ring-ring",
+                    isSelected
+                      ? "border-primary bg-primary/5"
+                      : "border-border bg-background hover:border-border-strong",
+                    isSaving && "cursor-not-allowed opacity-60",
+                  )}
+                >
+                  <span className="flex items-center gap-2 text-sm font-medium text-foreground">
+                    <input
+                      type="radio"
+                      name="archive-mode"
+                      value={mode.value}
+                      checked={isSelected}
+                      onChange={() =>
+                        updateSafely(() => updateWorktreePrefs.mutateAsync({ archiveMode: mode.value }))
+                      }
+                      className="h-3.5 w-3.5 accent-primary"
+                    />
+                    {mode.label}
+                  </span>
+                  <span className="text-pretty text-xs leading-relaxed text-muted-foreground">
+                    {mode.description}
+                  </span>
+                </label>
+              );
+            })}
           </div>
-        )}
-      </section>
 
-      <section className="rounded-xl border border-border/60 bg-card p-4 shadow-sm">
-        <div className="space-y-2">
-          <PreferenceToggleRow
-            icon={<Copy className="h-4 w-4" />}
-            title="Copy uncommitted files to new workspaces"
-            description="Use this default when branching to a new workspace from local changes."
+          <div className="flex flex-col gap-2">
+            <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Cleanup defaults
+            </h4>
+            <CardInset padding="none" className="divide-y divide-border/60">
+              <PreferenceRow
+                title="Delete the worktree directory"
+                description={
+                  <>
+                    Remove the workspace's files from{" "}
+                    <span className="font-mono">~/.reliant/worktrees/</span> when it is archived.
+                    Uncommitted changes in it are lost.
+                  </>
+                }
+                checked={deleteDirectory}
+                disabled={isSaving || !cleanupDefaultsApply}
+                onChange={() =>
+                  updateSafely(() =>
+                    updateWorktreePrefs.mutateAsync({ defaultDeleteDirectory: !deleteDirectory }),
+                  )
+                }
+              />
+              <PreferenceRow
+                title="Delete the git branch"
+                description="Remove the workspace's branch from the repository when it is archived. Only turn this on if you merge or push branches before archiving."
+                warning={
+                  deleteBranch && cleanupDefaultsApply
+                    ? "Unpushed commits on a deleted branch can't be recovered from Reliant."
+                    : undefined
+                }
+                checked={deleteBranch}
+                disabled={isSaving || !cleanupDefaultsApply}
+                onChange={() =>
+                  updateSafely(() =>
+                    updateWorktreePrefs.mutateAsync({ defaultDeleteBranch: !deleteBranch }),
+                  )
+                }
+              />
+            </CardInset>
+            {!cleanupDefaultsApply && (
+              <p className="text-xs text-muted-foreground">
+                Not used while archive is set to Keep everything.
+              </p>
+            )}
+          </div>
+        </fieldset>
+      </Card>
+
+      <Card>
+        <CardHeader
+          title="New workspaces and files"
+          description="Defaults for branching a chat into a new workspace, and for deleting files in the file browser."
+        />
+        <CardInset padding="none" className="divide-y divide-border/60">
+          <PreferenceRow
+            title="Bring uncommitted changes into new workspaces"
+            description="When you branch a chat, copy the source workspace's uncommitted files into the new one, so the agent starts from what you see rather than from the last commit."
             checked={preferences?.worktree.branchCopyUncommittedFilesDefault ?? false}
             disabled={isSaving}
             onChange={() =>
               updateSafely(() =>
                 updateWorktreePrefs.mutateAsync({
-                  branchCopyUncommittedFilesDefault: !preferences?.worktree.branchCopyUncommittedFilesDefault,
-                })
+                  branchCopyUncommittedFilesDefault:
+                    !preferences?.worktree.branchCopyUncommittedFilesDefault,
+                }),
               )
             }
           />
-          <PreferenceToggleRow
-            icon={<FileX className="h-4 w-4" />}
-            title="Skip file delete confirmation"
-            description="Delete files immediately. Undo is still available with Cmd+Z where supported."
+          <PreferenceRow
+            title="Delete files without confirming"
+            description="Skip the confirmation when you delete a file in the file browser. Undo (⌘Z) still works where the editor supports it."
             checked={preferences?.skipDeleteConfirmation ?? false}
             disabled={isSaving}
             onChange={() =>
               updateSafely(() =>
                 updatePrefs.mutateAsync({
                   skipDeleteConfirmation: !preferences?.skipDeleteConfirmation,
-                })
+                }),
               )
             }
           />
-        </div>
-      </section>
-
-      <div className="flex gap-3 rounded-xl border border-border/60 bg-muted/30 p-4 text-xs text-muted-foreground">
-        <Info className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />
-        <p>
-          Archiving always keeps the workspace record so you can restore it later. Cleanup only controls whether local files or git branches are removed during archive.
-        </p>
-      </div>
+        </CardInset>
+      </Card>
     </div>
   );
 }
 
-interface PreferenceToggleRowProps {
-  icon: React.ReactNode;
+interface PreferenceRowProps {
   title: string;
-  description: string;
+  description: ReactNode;
   checked: boolean;
   disabled: boolean;
   warning?: string;
   onChange: () => void;
 }
 
-function PreferenceToggleRow({
-  icon,
-  title,
-  description,
-  checked,
-  disabled,
-  warning,
-  onChange,
-}: PreferenceToggleRowProps) {
+function PreferenceRow({ title, description, checked, disabled, warning, onChange }: PreferenceRowProps) {
   return (
-    <div className="flex items-start justify-between gap-4 rounded-lg p-2 transition-colors hover:bg-muted/40">
-      <div className="flex min-w-0 gap-3">
-        <div className="mt-0.5 rounded-lg bg-muted p-2 text-muted-foreground">
-          {icon}
-        </div>
-        <div className="min-w-0">
-          <p className="text-sm font-medium text-foreground">{title}</p>
-          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{description}</p>
-          {warning && <p className="mt-1 text-xs font-medium text-warning-ink">{warning}</p>}
-        </div>
+    <div className={cn("flex items-start justify-between gap-4 px-3 py-3", disabled && "opacity-60")}>
+      <div className="flex min-w-0 flex-col gap-0.5">
+        <p className="text-sm font-medium text-foreground">{title}</p>
+        <p className="text-pretty text-xs leading-relaxed text-muted-foreground">{description}</p>
+        {warning && <p className="text-xs font-medium text-warning-ink">{warning}</p>}
       </div>
       <Toggle
         checked={checked}
         onChange={onChange}
         disabled={disabled}
         srLabel={title}
-        className="mt-1 flex-shrink-0"
+        className="mt-0.5 flex-shrink-0"
       />
     </div>
   );

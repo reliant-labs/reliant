@@ -11,6 +11,7 @@ import {
   sequencePrefix,
 } from "../../lib/keyboard/chord";
 import { detectPlatform, formatBinding } from "../../lib/keyboard/platform";
+import { SettingsPageHeader } from "./SettingsPageHeader";
 
 /** Render an authored binding ("Cmd+K C") for display. */
 function formatAuthored(authored: string): string {
@@ -458,13 +459,10 @@ export function KeyboardShortcutsSettings() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-base font-semibold mb-2">Keyboard Shortcuts</h2>
-        <p className="text-sm text-muted-foreground">
-          Customize keyboard shortcuts to match your workflow. Click the edit
-          button to record a new key combination.
-        </p>
-      </div>
+      <SettingsPageHeader
+        title="Keyboard Shortcuts"
+        description="See every shortcut in Reliant and change the ones that clash with your habits or other apps. Click the edit button on a row, then press the new key combination."
+      />
 
       {isLoading ? (
         <div className="flex items-center justify-center py-8">

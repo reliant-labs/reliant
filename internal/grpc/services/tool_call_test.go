@@ -156,3 +156,10 @@ func TestCancelToolCall_DeliversCancelToDaemonAndSucceeds(t *testing.T) {
 }
 
 func toolCallTestIntPtr(v int) *int { return &v }
+
+func (f *fakeDaemonRouter) OpenLocalModelHTTP(context.Context, string, string, *reliantv1.LocalModelHTTPRequest) (*toolexec.LocalModelHTTPStream, error) {
+	return nil, nil
+}
+func (f *fakeDaemonRouter) RefreshLocalModels(context.Context, string, string) (*reliantv1.LocalModelInventory, error) {
+	return nil, nil
+}

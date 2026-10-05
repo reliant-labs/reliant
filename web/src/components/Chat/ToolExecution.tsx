@@ -8,6 +8,7 @@
  * - Simpler, cleaner UI with less visual noise
  */
 
+import { Tooltip } from "../ui/Tooltip";
 import { useState, memo, useCallback, useMemo, useEffect } from "react";
 import {
   ChevronDown,
@@ -899,43 +900,47 @@ function ToolExecutionComponent({
 
           <div className="flex items-center gap-1 shrink-0">
             {hasFileOpenAffordance && (
-              <button
+              <Tooltip content="Open file" placement="bottom" delay={300} wrapperClassName="inline-flex">
+<button
                 onClick={openPrimaryFile}
                 className="rounded px-1.5 py-0.5 text-xs font-medium text-primary transition-colors hover:bg-primary/10"
-                title="Open file"
                 aria-label="Open file"
                 type="button"
               >
                 Open
               </button>
+</Tooltip>
             )}
             {(isSpawnToolFlag || toolBaseName === "spawn_status") && spawnThreadId && onSelectThread && (
-              <button
+              <Tooltip content="Open full thread view" placement="bottom" delay={300} wrapperClassName="inline-flex">
+<button
                 onClick={(e) => { e.stopPropagation(); onSelectThread(spawnThreadId); }}
-                className="p-0.5 hover:bg-muted rounded transition-colors"
-                title="Open full thread view" aria-label="Open full thread view"
+                className="p-0.5 hover:bg-muted rounded transition-colors" aria-label="Open full thread view"
               >
                 <Maximize2 className="w-3.5 h-3.5 text-muted-foreground" />
               </button>
+</Tooltip>
             )}
             {isExecuting && !isCancelling && !isSpawnToolFlag && onConvertToBackground && (
-              <button
+              <Tooltip content="Push to background" placement="bottom" delay={300} wrapperClassName="inline-flex">
+<button
                 onClick={(e) => { e.stopPropagation(); onConvertToBackground(toolCall.id); }}
-                className="p-0.5 hover:bg-muted rounded transition-colors"
-                title="Push to background" aria-label="Push tool execution to background"
+                className="p-0.5 hover:bg-muted rounded transition-colors" aria-label="Push tool execution to background"
               >
                 <Play className="w-3.5 h-3.5 text-info" />
               </button>
+</Tooltip>
             )}
             {(isExecuting || isCancelling) && onCancel && (
-              <button
+              <Tooltip content="Cancel" placement="bottom" delay={300} wrapperClassName="inline-flex">
+<button
                 onClick={(e) => { e.stopPropagation(); onCancel(toolCall.id); }}
-                className="p-0.5 hover:bg-muted rounded transition-colors"
-                title="Cancel" aria-label="Cancel tool execution"
+                className="p-0.5 hover:bg-muted rounded transition-colors" aria-label="Cancel tool execution"
                 disabled={isCancelling}
               >
                 <Square className={cn("w-3.5 h-3.5", isCancelling ? "text-warning-ink animate-pulse" : "text-destructive")} />
               </button>
+</Tooltip>
             )}
             {isExpandable && (
               isExpanded 

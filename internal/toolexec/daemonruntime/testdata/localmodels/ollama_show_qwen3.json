@@ -1,0 +1,30 @@
+{
+ "parameters": "top_p                          0.95\nrepeat_penalty                 1\nstop                           \"<|im_start|>\"\nstop                           \"<|im_end|>\"\ntemperature                    0.6\ntop_k                          20",
+ "details": {
+  "parent_model": "",
+  "format": "gguf",
+  "family": "qwen3",
+  "families": [
+   "qwen3"
+  ],
+  "parameter_size": "8.2B",
+  "quantization_level": "Q4_K_M"
+ },
+ "model_info": {
+  "general.architecture": "qwen3",
+  "general.basename": "Qwen3",
+  "general.file_type": 15,
+  "general.license": "apache-2.0",
+  "general.parameter_count": 8190735360,
+  "general.quantization_version": 2,
+  "general.size_label": "8B",
+  "general.type": "model",
+  "qwen3.context_length": 40960
+ },
+ "capabilities": [
+  "completion",
+  "tools",
+  "thinking"
+ ],
+ "modified_at": "2026-01-29T00:10:03.929709073-05:00"
+}

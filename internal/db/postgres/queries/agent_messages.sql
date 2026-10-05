@@ -1,9 +1,9 @@
 -- name: EnqueueAgentMessage :exec
 INSERT INTO agent_messages (
     id, chat_id, from_thread_id, to_thread_id, kind, body, tool_call_id,
-    status, created_at, attachments
+    status, created_at, attachments, synthesized
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
 );
 
 -- name: ListQueuedAgentMessagesForThread :many
@@ -137,11 +137,59 @@ WHERE m.status = 1
 -- Returns no row (id is the zero value) when a terminal report already
 -- existed -- callers must check RowsAffected via the id, not treat sql.ErrNoRows
 -- as failure.
+--
+-- This is the PLACEHOLDER writer: the reconciler passes synthesized = true, and
+-- a real report later supersedes the row via EnqueueSpawnReport.
 INSERT INTO agent_messages (
     id, chat_id, from_thread_id, to_thread_id, kind, body, tool_call_id,
-    status, created_at, attachments
+    status, created_at, attachments, synthesized
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
 )
 ON CONFLICT (tool_call_id) WHERE kind IN (2, 3, 4) DO NOTHING
 RETURNING id;
+
+-- name: EnqueueSpawnReport :one
+-- A REAL terminal spawn report. Unlike EnqueueAgentMessageIfAbsent (the
+-- reconciler's placeholder write, DO NOTHING), a real report replaces a
+-- placeholder the reconciler synthesized for the same tool_call_id -- see
+-- docs/incidents/2026-10-04-spawn-report-collision.md.
+--
+-- It is re-queued even if the placeholder was already delivered: the parent
+-- was told "result lost, go check spawn_status" and should also receive the
+-- outcome.
+--
+-- The row takes the NEW id rather than keeping the placeholder's. A drain
+-- lists queued rows outside its transaction and then claims them by id, so a
+-- drain that listed the placeholder just before this supersede still holds
+-- the placeholder's id and stale body. Keeping the id would let that claim
+-- take the real report, write the placeholder text, and mark the real report
+-- delivered unseen. With a fresh id the stale claim matches nothing, which the
+-- drain already treats as "batch taken, re-read next boundary". Nothing
+-- references agent_messages.id, so the change is safe.
+--
+-- WHERE agent_messages.synthesized is what protects a real report: against one,
+-- the DO UPDATE matches nothing and RETURNING yields no row (sql.ErrNoRows =
+-- already reported, an idempotent no-op). xmax = 0 is true only for a fresh
+-- insert, distinguishing inserted from superseded.
+INSERT INTO agent_messages (
+    id, chat_id, from_thread_id, to_thread_id, kind, body, tool_call_id,
+    status, created_at, attachments, synthesized
+) VALUES (
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, false
+)
+ON CONFLICT (tool_call_id) WHERE kind IN (2, 3, 4) DO UPDATE SET
+    id = EXCLUDED.id,
+    chat_id = EXCLUDED.chat_id,
+    from_thread_id = EXCLUDED.from_thread_id,
+    to_thread_id = EXCLUDED.to_thread_id,
+    kind = EXCLUDED.kind,
+    body = EXCLUDED.body,
+    attachments = EXCLUDED.attachments,
+    status = EXCLUDED.status,
+    created_at = EXCLUDED.created_at,
+    delivered_at = NULL,
+    delivered_message_id = NULL,
+    synthesized = false
+WHERE agent_messages.synthesized
+RETURNING id, (xmax = 0) AS inserted;

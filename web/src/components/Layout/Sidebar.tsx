@@ -1546,6 +1546,7 @@ function SidebarComponent({
               label="Deployments"
               onClick={onOpenForge}
               testId="sidebar-forge-button"
+              onboardingId="deployments-button"
             />
           )}
           <SidebarNavButton

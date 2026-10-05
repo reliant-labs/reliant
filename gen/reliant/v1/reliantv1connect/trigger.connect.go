@@ -62,6 +62,9 @@ const (
 	// TriggerServiceGetLaunchEventProcedure is the fully-qualified name of the TriggerService's
 	// GetLaunchEvent RPC.
 	TriggerServiceGetLaunchEventProcedure = "/reliant.v1.TriggerService/GetLaunchEvent"
+	// TriggerServiceRotateWebhookTokenProcedure is the fully-qualified name of the TriggerService's
+	// RotateWebhookToken RPC.
+	TriggerServiceRotateWebhookTokenProcedure = "/reliant.v1.TriggerService/RotateWebhookToken"
 )
 
 // TriggerServiceClient is a client for the reliant.v1.TriggerService service.
@@ -98,6 +101,9 @@ type TriggerServiceClient interface {
 	// A separate RPC rather than a Chat field because trigger.proto imports
 	// chat.proto, so Chat cannot reference TriggerEvent without a cycle.
 	GetLaunchEvent(context.Context, *connect.Request[v1.GetLaunchEventRequest]) (*connect.Response[v1.GetLaunchEventResponse], error)
+	// RotateWebhookToken replaces a webhook trigger's token. The old token
+	// stops working immediately; the new one is returned once and never again.
+	RotateWebhookToken(context.Context, *connect.Request[v1.RotateWebhookTokenRequest]) (*connect.Response[v1.RotateWebhookTokenResponse], error)
 }
 
 // NewTriggerServiceClient constructs a client for the reliant.v1.TriggerService service. By
@@ -165,20 +171,27 @@ func NewTriggerServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithSchema(triggerServiceMethods.ByName("GetLaunchEvent")),
 			connect.WithClientOptions(opts...),
 		),
+		rotateWebhookToken: connect.NewClient[v1.RotateWebhookTokenRequest, v1.RotateWebhookTokenResponse](
+			httpClient,
+			baseURL+TriggerServiceRotateWebhookTokenProcedure,
+			connect.WithSchema(triggerServiceMethods.ByName("RotateWebhookToken")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // triggerServiceClient implements TriggerServiceClient.
 type triggerServiceClient struct {
-	createTrigger     *connect.Client[v1.CreateTriggerRequest, v1.CreateTriggerResponse]
-	getTrigger        *connect.Client[v1.GetTriggerRequest, v1.GetTriggerResponse]
-	listTriggers      *connect.Client[v1.ListTriggersRequest, v1.ListTriggersResponse]
-	updateTrigger     *connect.Client[v1.UpdateTriggerRequest, v1.UpdateTriggerResponse]
-	deleteTrigger     *connect.Client[v1.DeleteTriggerRequest, v1.DeleteTriggerResponse]
-	setTriggerEnabled *connect.Client[v1.SetTriggerEnabledRequest, v1.SetTriggerEnabledResponse]
-	fireTrigger       *connect.Client[v1.FireTriggerRequest, v1.FireTriggerResponse]
-	listTriggerEvents *connect.Client[v1.ListTriggerEventsRequest, v1.ListTriggerEventsResponse]
-	getLaunchEvent    *connect.Client[v1.GetLaunchEventRequest, v1.GetLaunchEventResponse]
+	createTrigger      *connect.Client[v1.CreateTriggerRequest, v1.CreateTriggerResponse]
+	getTrigger         *connect.Client[v1.GetTriggerRequest, v1.GetTriggerResponse]
+	listTriggers       *connect.Client[v1.ListTriggersRequest, v1.ListTriggersResponse]
+	updateTrigger      *connect.Client[v1.UpdateTriggerRequest, v1.UpdateTriggerResponse]
+	deleteTrigger      *connect.Client[v1.DeleteTriggerRequest, v1.DeleteTriggerResponse]
+	setTriggerEnabled  *connect.Client[v1.SetTriggerEnabledRequest, v1.SetTriggerEnabledResponse]
+	fireTrigger        *connect.Client[v1.FireTriggerRequest, v1.FireTriggerResponse]
+	listTriggerEvents  *connect.Client[v1.ListTriggerEventsRequest, v1.ListTriggerEventsResponse]
+	getLaunchEvent     *connect.Client[v1.GetLaunchEventRequest, v1.GetLaunchEventResponse]
+	rotateWebhookToken *connect.Client[v1.RotateWebhookTokenRequest, v1.RotateWebhookTokenResponse]
 }
 
 // CreateTrigger calls reliant.v1.TriggerService.CreateTrigger.
@@ -226,6 +239,11 @@ func (c *triggerServiceClient) GetLaunchEvent(ctx context.Context, req *connect.
 	return c.getLaunchEvent.CallUnary(ctx, req)
 }
 
+// RotateWebhookToken calls reliant.v1.TriggerService.RotateWebhookToken.
+func (c *triggerServiceClient) RotateWebhookToken(ctx context.Context, req *connect.Request[v1.RotateWebhookTokenRequest]) (*connect.Response[v1.RotateWebhookTokenResponse], error) {
+	return c.rotateWebhookToken.CallUnary(ctx, req)
+}
+
 // TriggerServiceHandler is an implementation of the reliant.v1.TriggerService service.
 type TriggerServiceHandler interface {
 	// CreateTrigger stores a new trigger and converges its schedule.
@@ -260,6 +278,9 @@ type TriggerServiceHandler interface {
 	// A separate RPC rather than a Chat field because trigger.proto imports
 	// chat.proto, so Chat cannot reference TriggerEvent without a cycle.
 	GetLaunchEvent(context.Context, *connect.Request[v1.GetLaunchEventRequest]) (*connect.Response[v1.GetLaunchEventResponse], error)
+	// RotateWebhookToken replaces a webhook trigger's token. The old token
+	// stops working immediately; the new one is returned once and never again.
+	RotateWebhookToken(context.Context, *connect.Request[v1.RotateWebhookTokenRequest]) (*connect.Response[v1.RotateWebhookTokenResponse], error)
 }
 
 // NewTriggerServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -323,6 +344,12 @@ func NewTriggerServiceHandler(svc TriggerServiceHandler, opts ...connect.Handler
 		connect.WithSchema(triggerServiceMethods.ByName("GetLaunchEvent")),
 		connect.WithHandlerOptions(opts...),
 	)
+	triggerServiceRotateWebhookTokenHandler := connect.NewUnaryHandler(
+		TriggerServiceRotateWebhookTokenProcedure,
+		svc.RotateWebhookToken,
+		connect.WithSchema(triggerServiceMethods.ByName("RotateWebhookToken")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/reliant.v1.TriggerService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case TriggerServiceCreateTriggerProcedure:
@@ -343,6 +370,8 @@ func NewTriggerServiceHandler(svc TriggerServiceHandler, opts ...connect.Handler
 			triggerServiceListTriggerEventsHandler.ServeHTTP(w, r)
 		case TriggerServiceGetLaunchEventProcedure:
 			triggerServiceGetLaunchEventHandler.ServeHTTP(w, r)
+		case TriggerServiceRotateWebhookTokenProcedure:
+			triggerServiceRotateWebhookTokenHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -386,4 +415,8 @@ func (UnimplementedTriggerServiceHandler) ListTriggerEvents(context.Context, *co
 
 func (UnimplementedTriggerServiceHandler) GetLaunchEvent(context.Context, *connect.Request[v1.GetLaunchEventRequest]) (*connect.Response[v1.GetLaunchEventResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.TriggerService.GetLaunchEvent is not implemented"))
+}
+
+func (UnimplementedTriggerServiceHandler) RotateWebhookToken(context.Context, *connect.Request[v1.RotateWebhookTokenRequest]) (*connect.Response[v1.RotateWebhookTokenResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.TriggerService.RotateWebhookToken is not implemented"))
 }

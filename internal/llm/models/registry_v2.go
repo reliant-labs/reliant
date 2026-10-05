@@ -24,6 +24,25 @@ type ModelRegistry struct {
 	models []ModelDefinition           // Preserves order from YAML (display priority)
 	byID   map[string]*ModelDefinition // Fast lookup by model ID
 	tags   map[string][]TagEntry       // tag -> ordered entries (resolution order)
+
+	// avail is the per-account availability filter set by WithAvailability.
+	// Nil on the shared global registry.
+	avail AvailabilityFunc
+}
+
+// WithAvailability returns a view of the registry whose Resolve honors a
+// per-(driver, model) availability filter: a provider the filter reports
+// Disabled for a model is skipped for that model only. An explicit id fails
+// with the provider's reason; tag resolution falls through to the next servable
+// candidate. The view shares the (read-only) catalog, so it is cheap to make per
+// request; a nil filter returns the registry unchanged.
+func (r *ModelRegistry) WithAvailability(avail AvailabilityFunc) *ModelRegistry {
+	if avail == nil {
+		return r
+	}
+	view := *r
+	view.avail = avail
+	return &view
 }
 
 // ProviderPriority defines the resolution priority for providers.
@@ -35,7 +54,6 @@ var ProviderPriority = map[string]int{
 	"copilot":     1,
 	"openai":      1,
 	"gemini":      1,
-	"xai":         1,
 	"vertexai":    1,
 	"reliant":     1,
 	"local":       2,
@@ -115,40 +133,15 @@ func SetGlobalRegistry(reg *ModelRegistry) {
 // If cfg is nil, the default embedded registry is used.
 // This should be called once during application startup, before any other code
 // accesses the registry.
-//
-// Note: This does NOT discover local models. Use InitGlobalRegistryWithDiscovery
-// to enable local model discovery.
-//
-// Returns an error if registry initialization fails.
 func InitGlobalRegistryWithUserConfig(cfg *UserModelsConfig) error {
-	return InitGlobalRegistryWithDiscovery(cfg, nil)
-}
-
-// InitGlobalRegistryWithDiscovery initializes the global registry with user configuration
-// and optional local model discovery.
-//
-// If cfg is nil, the default embedded registry is used.
-// If discoverer is non-nil and cfg.Providers.Local is configured, models will be
-// discovered from the local endpoint and added to the registry.
-//
-// This should be called once during application startup, before any other code
-// accesses the registry.
-//
-// Returns an error if registry initialization fails.
-func InitGlobalRegistryWithDiscovery(cfg *UserModelsConfig, discoverer LocalModelDiscoverer) error {
 	if cfg == nil {
-		// No user config - just ensure the default registry is initialized
 		_, err := GetRegistry()
 		return err
 	}
-
-	// Create registry with user config and discovery
-	reg, err := CreateRegistryWithDiscovery(cfg, discoverer)
+	reg, err := CreateRegistryWithUserConfig(cfg)
 	if err != nil {
 		return fmt.Errorf("failed to create registry with user config: %w", err)
 	}
-
-	// Set as global registry
 	SetGlobalRegistry(reg)
 	return nil
 }
@@ -364,9 +357,10 @@ func (r *ModelRegistry) ListAllTags() []string {
 // selector tag listing the model (clamped to what the model supports); for id
 // selection, or an entry declaring none, the model's capability default.
 //
-// Provider priority: native drivers (anthropic, openai, gemini, xai, vertexai) have
+// Provider priority: native drivers (anthropic, openai, gemini, vertexai) have
 // priority 1, openrouter has priority 10.
 func (r *ModelRegistry) Resolve(selector ModelSelector, availableProviders []string) (*ResolvedModel, error) {
+	avail := r.avail
 	if selector.ID == "" && len(selector.Tags) == 0 {
 		return nil, fmt.Errorf("ModelSelector must have either ID or Tags set")
 	}
@@ -411,15 +405,15 @@ func (r *ModelRegistry) Resolve(selector ModelSelector, availableProviders []str
 			hardConstraint = true // @suffix means user explicitly wants this provider
 		}
 
-		provider, err := r.findBestProvider(model, preferredProviders, availableSet, hardConstraint)
+		servable, disabledReason := restrictProviders(model, availableSet, avail)
+		provider, err := r.findBestProvider(model, preferredProviders, servable, hardConstraint)
 		if err != nil {
+			if disabledReason != "" {
+				return nil, fmt.Errorf("model %s is unavailable: %s", model.ID, disabledReason)
+			}
 			return nil, err
 		}
-		return &ResolvedModel{
-			Definition:    *model,
-			Provider:      *provider,
-			ThinkingLevel: ThinkingLevelFor(model),
-		}, nil
+		return resolvedWithAvailability(model, provider, ThinkingLevelFor(model), avail), nil
 	}
 
 	// Case 2: Resolve by tags using best-match scoring
@@ -444,17 +438,14 @@ func (r *ModelRegistry) Resolve(selector ModelSelector, availableProviders []str
 
 	// The first candidate with an available provider wins, at its entry's effort.
 	for _, candidate := range candidates {
-		provider, err := r.findBestProvider(candidate.model, selector.Providers, availableSet, false)
+		servable, _ := restrictProviders(candidate.model, availableSet, avail)
+		provider, err := r.findBestProvider(candidate.model, selector.Providers, servable, false)
 		if err == nil {
 			level := ThinkingLevelFor(candidate.model)
 			if candidate.entry.ThinkingLevel != "" {
 				level = ClampThinkingLevel(ResolveThinkingCapability(candidate.model.Capabilities), candidate.entry.ThinkingLevel)
 			}
-			return &ResolvedModel{
-				Definition:    *candidate.model,
-				Provider:      *provider,
-				ThinkingLevel: level,
-			}, nil
+			return resolvedWithAvailability(candidate.model, provider, level, avail), nil
 		}
 	}
 

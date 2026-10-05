@@ -14,7 +14,7 @@ import (
 // than by which credentials happen to exist.
 var allTestProviders = []string{
 	"anthropic", "openai", "openrouter", "reliant",
-	"gemini", "vertexai", "codex", "copilot", "xai", "ollama",
+	"gemini", "vertexai", "codex", "copilot", "ollama",
 	"antigravity",
 }
 
@@ -70,8 +70,8 @@ func TestPowerfulTagMembership(t *testing.T) {
 	// gpt-6-sol is deliberately ABSENT: it is the GPT-6 flagship pick. Powerful
 	// stays on astra for GPT users, with 5.6 Sol as the codex-only frontier.
 	//
-	// The last two are per-provider coverage, not frontier picks: copilot and
-	// xai serve nothing above them, and a provider that cannot answer
+	// The last is per-provider coverage, not a frontier pick: copilot
+	// serves nothing above it, and a provider that cannot answer
 	// [powerful] fails outright for a user who has only that provider. They sit
 	// at the END, so they are reached only when every real frontier model is
 	// unservable — see TestEveryProviderImplementsEveryCoreTag.
@@ -82,7 +82,6 @@ func TestPowerfulTagMembership(t *testing.T) {
 		"gemini-3.8-flash",
 		"vertex-claude-5.1-fable",
 		"claude-5-sonnet",
-		"grok-4",
 	}, ids)
 }
 
@@ -103,7 +102,7 @@ func TestClaude55OpusProviderMappings(t *testing.T) {
 
 	assert.Equal(t, map[string]string{
 		"anthropic":  "claude-opus-5-5",
-		"openrouter": "anthropic/claude-opus-5-5",
+		"openrouter": "anthropic/claude-opus-5.5",
 		"reliant":    "claude-opus-5-5",
 		"vertexai":   "claude-opus-5-5",
 	}, got)
@@ -139,7 +138,7 @@ func TestFlagshipResolvesToOpus55OnEveryProvider(t *testing.T) {
 			// matters is that both spellings reach the same wire model.
 			assert.Equal(t, "claude-5.5-opus", resolved.Definition.ID)
 			assert.Equal(t, provider, resolved.Provider.Driver)
-			assert.Equal(t, "claude-opus-5-5", resolvedAPIModelSuffix(resolved.Provider.APIModel))
+			assert.Equal(t, "claude-opus-5-5", strings.ReplaceAll(resolvedAPIModelSuffix(resolved.Provider.APIModel), "5.5", "5-5")) // openrouter spells it 5.5
 		})
 	}
 
@@ -266,7 +265,7 @@ func TestNewModelDefinitionsParseWithExpectedCapabilities(t *testing.T) {
 	}
 }
 
-// Astra tops out at `max`. The codex capture's own spawn_agent description
+// Astra tops out at `max` (as does every model now: `ultra` left the vocabulary after Codex's 400). The codex capture's own spawn_agent description
 // claims `ultra` for astra, but that string is written by the client, while
 // OpenAI's API reference lists low/medium/high/xhigh/max. Declaring ultra here
 // would send an effort the model does not accept, so the absence is pinned
@@ -319,7 +318,7 @@ func TestClaude51FableProviderMappings(t *testing.T) {
 
 	assert.Equal(t, map[string]string{
 		"anthropic":  "claude-fable-5-1",
-		"openrouter": "anthropic/claude-fable-5-1",
+		"openrouter": "anthropic/claude-fable-5.1",
 		"reliant":    "claude-fable-5-1",
 		"vertexai":   "claude-fable-5-1",
 	}, got)
@@ -377,4 +376,21 @@ func contains(haystack []string, needle string) bool {
 		}
 	}
 	return false
+}
+
+// Codex rejects any effort outside its own enumeration. Live probe 2026-10-04,
+// HTTP 400: "Invalid value: 'ultra'. Supported values are: none, minimal, low,
+// medium, high, xhigh, max". A codex-served model declaring anything else
+// ships a level that 400s the moment a user picks it.
+func TestCodexModelsDeclareOnlyCodexAcceptedLevels(t *testing.T) {
+	accepted := CodexAcceptedThinkingLevels()
+	reg := MustGetRegistry()
+	checked := 0
+	for _, def := range reg.ListModelsByProvider("codex") {
+		checked++
+		for _, level := range def.Capabilities.ThinkingLevels {
+			assert.Contains(t, accepted, level, "model %s declares level %q that Codex rejects", def.ID, level)
+		}
+	}
+	require.NotZero(t, checked, "no codex-served models found; test is vacuous")
 }

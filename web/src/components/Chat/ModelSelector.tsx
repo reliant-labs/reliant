@@ -60,7 +60,6 @@ function ModelSelectorComponent({
       "google ai": "#3b82f6", // blue-500
       mistral: "#a855f7", // purple-500
       meta: "#06b6d4", // cyan-500
-      xai: "#6b7280", // gray-500
       deepseek: "#ef4444", // red-500
       groq: "#facc15", // yellow-500
       reliant: "#2563eb", // blue-600 (Reliant brand blue)

@@ -1015,6 +1015,12 @@ export function isRunLinkTool(toolName: string): boolean {
   return RUN_LINK_TOOLS.includes(baseName as typeof RUN_LINK_TOOLS[number]);
 }
 
+export function isGenerateVideoTool(toolName: string): boolean {
+  const lower = toolName.toLowerCase();
+  const baseName = lower.startsWith('mcp__') ? lower.split('__').pop() || lower : lower;
+  return baseName === 'generate_video';
+}
+
 export const SPAWN_TOOLS = ['spawn'] as const;
 
 /**

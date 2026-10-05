@@ -1,4 +1,5 @@
 name: agent
+title: Agent
 apiVersion: "0.0.5"
 description: |
   Standard interactive agent. Loops while LLM returns tool calls, returns when LLM responds with no tool calls.
@@ -194,10 +195,6 @@ nodes:
             tool_calls: "{{output.tool_calls}}"
           args:
             model: "{{inputs.model}}"
-            temperature: "{{has(inputs.model.temperature) ? inputs.model.temperature : 0.0}}"
-            thinking_level: "{{has(inputs.model.thinking_level) ? inputs.model.thinking_level : ''}}"
-            # 0 = unset → call_llm resolves the threshold from the model default
-            compaction_threshold: "{{has(inputs.model.compaction_threshold) ? inputs.model.compaction_threshold : 0}}"
             skills: "{{inputs.skills}}"
             # The previous turn was paused by the provider, so history ends
             # with the assistant on purpose — call the provider anyway rather

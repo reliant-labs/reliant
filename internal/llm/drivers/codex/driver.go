@@ -738,6 +738,10 @@ func (c *CodexClient) SendMessages(ctx context.Context, prompts []string, messag
 	usage := llm.TokenUsage{}
 	if resp.Usage.TotalTokens > 0 {
 		usage.TokenCount = resp.Usage.TotalTokens
+		usage.InputTokens = resp.Usage.InputTokens
+		usage.OutputTokens = resp.Usage.OutputTokens
+		usage.ReasoningTokens = resp.Usage.OutputTokensDetails.ReasoningTokens
+		usage.CachedInputTokens = resp.Usage.InputTokensDetails.CachedTokens
 	}
 
 	upstreamRequestID, upstreamProxymanID := extractUpstreamCorrelationHeaders(rawResp)
@@ -823,7 +827,12 @@ func (c *CodexClient) StreamResponse(ctx context.Context, prompts []string, mess
 
 			case responses.ResponseReasoningSummaryPartAddedEvent:
 				if v.Part.Text != "" {
-					eventChan <- llm.DriverEvent{Type: llm.EventThinkingDelta, Content: v.Part.Text}
+					eventChan <- llm.DriverEvent{Type: llm.EventThinkingDelta, Thinking: v.Part.Text}
+				}
+
+			case responses.ResponseReasoningSummaryTextDeltaEvent:
+				if v.Delta != "" {
+					eventChan <- llm.DriverEvent{Type: llm.EventThinkingDelta, Thinking: v.Delta}
 				}
 
 			case responses.ResponseReasoningSummaryPartDoneEvent:
@@ -932,6 +941,10 @@ func (c *CodexClient) StreamResponse(ctx context.Context, prompts []string, mess
 		usage := llm.TokenUsage{}
 		if finalResp != nil && finalResp.Usage.TotalTokens > 0 {
 			usage.TokenCount = finalResp.Usage.TotalTokens
+			usage.InputTokens = finalResp.Usage.InputTokens
+			usage.OutputTokens = finalResp.Usage.OutputTokens
+			usage.ReasoningTokens = finalResp.Usage.OutputTokensDetails.ReasoningTokens
+			usage.CachedInputTokens = finalResp.Usage.InputTokensDetails.CachedTokens
 		}
 
 		upstreamRequestID, upstreamProxymanID := extractUpstreamCorrelationHeaders(streamResp)

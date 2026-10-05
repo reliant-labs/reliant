@@ -9,6 +9,7 @@ import {
   Fragment,
   type JSX,
 } from "react";
+import { Tooltip } from "../ui/Tooltip";
 import { ContentBlockType, MessageRole } from "../../gen/reliant/v1/chat_pb";
 import { GitBranch, FolderSync, Copy, Check, ChevronDown } from "lucide-react";
 import { cn } from "../../lib/utils";
@@ -21,6 +22,7 @@ import { MarkdownRenderer } from "./MarkdownRenderer";
 import { ErrorMessage } from "./ErrorMessage";
 import { MessageAttachments } from "./MessageAttachments";
 import { MessageGeneratedImages } from "./MessageGeneratedImages";
+import { MessageGeneratedVideos, isVideoMimeType } from "./MessageGeneratedVideos";
 import { BranchOptionsMenu } from "./BranchOptionsMenu";
 import { BranchToWorktreeModal } from "./BranchToWorktreeModal";
 import { BranchToExistingWorktreeModal } from "./BranchToExistingWorktreeModal";
@@ -487,8 +489,22 @@ function ChatMessageComponent({
             ? getApprovalStatus(execution.call.content_block_id)
             : undefined);
 
+        // A spawn's child workflow (= the thread its card previews) comes off
+        // the content block on reload, where the snapshot joins it from the
+        // durable row. Live, that block was persisted before the spawn ran
+        // and never has it; the spawn's own status event does. Fill the gap
+        // so every reader of call.childWorkflowId sees the same fact either
+        // way.
+        const childWorkflowId =
+          execution.call.childWorkflowId ?? toolCallState?.childWorkflowId;
+        const call =
+          childWorkflowId === execution.call.childWorkflowId
+            ? execution.call
+            : { ...execution.call, childWorkflowId };
+
         return {
           ...execution,
+          call,
           approval, // Use resolved approval (embedded or from approvals array)
           status: toolCallState?.status,
           onCancel: async (toolCallId: string) => {
@@ -710,12 +726,12 @@ function ChatMessageComponent({
       )}
       {/* Separates the timestamp (information) from the buttons (actions). */}
       {timestampText && <span aria-hidden className="h-3 w-px bg-border" />}
+      <Tooltip content={copied ? "Copied" : "Copy message"} placement="top" delay={300} wrapperClassName="inline-flex">
       <button
         onClick={(e) => {
           e.stopPropagation();
           handleCopy();
         }}
-        title={copied ? "Copied" : "Copy"}
         aria-label={copied ? "Copied" : "Copy message"}
         className={cn(
           "rounded p-1 text-foreground/70 transition-colors duration-150 hover:bg-muted hover:text-foreground focus:outline-none focus:ring-1 focus:ring-ring/40",
@@ -726,13 +742,14 @@ function ChatMessageComponent({
       >
         {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
       </button>
+      </Tooltip>
+      <Tooltip content={isOptimistic ? "Waiting for message to save" : "Branch from this message"} placement="top" delay={300} wrapperClassName="inline-flex">
       <button
         onClick={(e) => {
           e.stopPropagation();
           handleBranchClick(e);
         }}
         disabled={isOptimistic}
-        title={isOptimistic ? "Waiting for message to save" : "Branch"}
         aria-label="Branch from message"
         data-contextual-tip="branch-button"
         className={cn(
@@ -744,6 +761,7 @@ function ChatMessageComponent({
       >
         <GitBranch className="h-3.5 w-3.5" />
       </button>
+      </Tooltip>
     </>
   );
 
@@ -1053,14 +1071,23 @@ function ChatMessageComponent({
                 // Emitting them per-segment rather than once at the end of the
                 // message keeps text -> image -> text ordering intact when a
                 // turn generates an image and then keeps talking.
-                const runImages = runExecutions.flatMap(
+                const runAttachments = runExecutions.flatMap(
                   (exec) => exec.result?.attachments ?? [],
+                );
+                const runVideos = runAttachments.filter((a) =>
+                  isVideoMimeType(a.mimeType),
+                );
+                const runImages = runAttachments.filter(
+                  (a) => !isVideoMimeType(a.mimeType),
                 );
                 return (
                   <Fragment key={`${message.id}-seg-${segIdx}`}>
                     {renderToolRun(runExecutions, `${message.id}-seg-${segIdx}`)}
                     {runImages.length > 0 && (
                       <MessageGeneratedImages attachments={runImages} />
+                    )}
+                    {runVideos.length > 0 && (
+                      <MessageGeneratedVideos attachments={runVideos} />
                     )}
                   </Fragment>
                 );

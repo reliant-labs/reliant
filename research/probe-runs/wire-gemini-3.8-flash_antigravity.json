@@ -1,0 +1,119 @@
+{
+  "outcomes": [
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gemini-3.8-flash",
+        "provider": "antigravity",
+        "level": ""
+      },
+      "label": "gemini-3.8-flash@antigravity reasoning level=default",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gemini-3.8-flash@antigravity",
+      "resolved_provider": "antigravity",
+      "api_model": "gemini-3.8-flash",
+      "effective_thinking": "medium",
+      "effective_temperature": 1,
+      "latency_ms": 3978,
+      "input_tokens": 57,
+      "output_tokens": 6,
+      "thinking_chars": 488,
+      "has_signature": true,
+      "correct": true,
+      "thinking_delta_events": 1,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 1,
+        "content_start": 1,
+        "content_stop": 1,
+        "thinking_delta": 1,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gemini-3.8-flash",
+        "provider": "antigravity",
+        "level": "low"
+      },
+      "label": "gemini-3.8-flash@antigravity reasoning level=low",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gemini-3.8-flash@antigravity",
+      "resolved_provider": "antigravity",
+      "api_model": "gemini-3.8-flash",
+      "effective_thinking": "low",
+      "effective_temperature": 1,
+      "latency_ms": 4731,
+      "input_tokens": 57,
+      "output_tokens": 6,
+      "thinking_chars": 358,
+      "has_signature": true,
+      "correct": true,
+      "thinking_delta_events": 1,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 1,
+        "content_start": 1,
+        "content_stop": 1,
+        "thinking_delta": 1,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gemini-3.8-flash",
+        "provider": "antigravity",
+        "level": "high"
+      },
+      "label": "gemini-3.8-flash@antigravity reasoning level=high",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gemini-3.8-flash@antigravity",
+      "resolved_provider": "antigravity",
+      "api_model": "gemini-3.8-flash",
+      "effective_thinking": "high",
+      "effective_temperature": 1,
+      "latency_ms": 4558,
+      "input_tokens": 57,
+      "output_tokens": 6,
+      "thinking_chars": 432,
+      "has_signature": true,
+      "correct": true,
+      "thinking_delta_events": 1,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "content_start": 1,
+        "content_stop": 1,
+        "thinking_delta": 1,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    }
+  ],
+  "providers": [
+    "anthropic",
+    "antigravity",
+    "codex",
+    "openrouter"
+  ],
+  "run_at": "2026-10-04T17:14:03Z",
+  "uncredentialed": [
+    "copilot",
+    "gemini",
+    "mock",
+    "openai",
+    "reliant",
+    "vertexai",
+    "xai"
+  ]
+}

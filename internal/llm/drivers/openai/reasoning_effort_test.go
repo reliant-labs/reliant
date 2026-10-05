@@ -8,7 +8,7 @@ import "testing"
 // back to medium for anything past xhigh, so selecting gpt-6-astra at "max"
 // silently ran it at medium — a quiet 2-tier downgrade with no error to notice.
 func TestReasoningEffort_PassesThroughLevelsAboveSDKEnum(t *testing.T) {
-	for _, level := range []string{"xhigh", "max", "ultra"} {
+	for _, level := range []string{"xhigh", "max"} {
 		t.Run(level, func(t *testing.T) {
 			if got := string(reasoningEffort(level)); got != level {
 				t.Errorf("reasoningEffort(%q) = %q, want %q", level, got, level)

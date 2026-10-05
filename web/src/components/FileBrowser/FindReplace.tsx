@@ -1,4 +1,5 @@
 // FindReplace - Find and replace text across files in the workspace
+import { Tooltip } from "../ui/Tooltip";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -316,16 +317,16 @@ export function FindReplace({ isOpen, onClose }: FindReplaceProps) {
             className="flex-1 bg-transparent text-sm font-mono outline-none placeholder:text-muted-foreground"
           />
           {isSearching && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />}
-          <button
+          <Tooltip content="Search options" placement="bottom" delay={300} wrapperClassName="inline-flex">
+<button
             onClick={() => setShowOptions(!showOptions)}
             className={cn(
               "p-1 rounded hover:bg-muted transition-colors",
               showOptions && "bg-muted"
-            )}
-            title="Search options"
-          >
+            )} aria-label="Search options">
             <Settings2 className="w-4 h-4 text-muted-foreground" />
           </button>
+</Tooltip>
           <button onClick={onClose} className="p-1 rounded hover:bg-muted transition-colors">
             <X className="w-4 h-4 text-muted-foreground" />
           </button>

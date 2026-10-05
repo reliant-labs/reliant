@@ -7,8 +7,8 @@ interface CatalogModel {
   supportedThinkingLevels?: string[];
 }
 
-// Descending capability order. gpt-5.6 adds "ultra" and "max" above "xhigh".
-const THINKING_ORDER = ["ultra", "max", "xhigh", "high", "medium", "low"] as const;
+// Descending capability order. gpt-5.6 adds "max" above "xhigh".
+const THINKING_ORDER = ["max", "xhigh", "high", "medium", "low"] as const;
 
 export interface ThinkingCapability {
   modelId?: string;
