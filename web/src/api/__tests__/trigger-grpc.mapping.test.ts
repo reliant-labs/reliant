@@ -148,3 +148,45 @@ describe("source round-trip", () => {
     expect(() => definitionToProto(definitionFromTrigger(trigger))).toThrow(/newer version/);
   });
 });
+
+describe("activations of a workflow-declared trigger", () => {
+  it("reads BROKEN health, the declaration name, the connection and the webhook URL", () => {
+    const trigger = triggerFromProto(
+      proto({
+        workflowTrigger: "new-issue",
+        connectionId: "conn-1",
+        webhookUrl: "/hooks/trig-1",
+        health: create(TriggerHealthSchema, { status: TriggerHealthStatus.BROKEN, lastFailureDetail: "declaration removed" }),
+      }),
+    );
+    expect(trigger.workflowTrigger).toBe("new-issue");
+    expect(trigger.connectionId).toBe("conn-1");
+    expect(trigger.webhookUrl).toBe("/hooks/trig-1");
+    expect(trigger.health.status).toBe("broken");
+    expect(trigger.health.lastFailureDetail).toBe("declaration removed");
+  });
+
+  it("writes an activation as the workflow_trigger arm, never an inline source, and keeps it on update", () => {
+    const definition = definitionToProto({
+      name: "Triage new issues",
+      projectId: "proj-1",
+      workflow: "triage-new-issues",
+      presets: {},
+      params: {},
+      message: "Triage it",
+      daemonId: "daemon-1",
+      notifyOnComplete: false,
+      connectionId: "conn-1",
+      source: { kind: "activation", workflowTrigger: "new-issue" },
+    });
+    expect(definition.source).toEqual({ case: "workflowTrigger", value: "new-issue" });
+    expect(definition.connectionId).toBe("conn-1");
+    expect(definition.filter).toBe("");
+
+    // The stored arm is the declaration as of the last save: kept for display,
+    // and an update still sends only the name.
+    const stored = triggerFromProto(proto({ workflowTrigger: "new-issue", workflow: "triage-new-issues" }));
+    expect(stored.source).toMatchObject({ kind: "activation", workflowTrigger: "new-issue", declared: { kind: "schedule" } });
+    expect(definitionToProto(definitionFromTrigger(stored)).source).toEqual({ case: "workflowTrigger", value: "new-issue" });
+  });
+});

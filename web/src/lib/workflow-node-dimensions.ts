@@ -41,8 +41,10 @@ export const NODE_DIMENSIONS: Record<string, NodeDims> = {
   // Event node (workflow start)
   event: { width: 150, height: 60, minHeight: 60 },
   // Trigger rail (the builder's entry): header, the chat line, one line per
-  // trigger, and "Add trigger". Height is for two triggers; it grows downward.
-  triggerRail: { width: 240, height: 150, minHeight: 110 },
+  // declared trigger (name, source, Activate/state) and per ad hoc automation,
+  // and "Add trigger". A fixed width (TriggerRailNode renders exactly this) so
+  // layout keeps steps clear of it; height is for two lines and grows downward.
+  triggerRail: { width: 300, height: 150, minHeight: 110 },
 }
 
 export const DEFAULT_DIMENSIONS: NodeDims = { width: 220, height: 100, minHeight: 70 }

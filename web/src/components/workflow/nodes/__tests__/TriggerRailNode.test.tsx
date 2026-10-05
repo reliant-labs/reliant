@@ -6,7 +6,7 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { screen, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { create } from "@bufbuild/protobuf";
 import { ReactFlowProvider } from "@xyflow/react";
@@ -79,8 +79,14 @@ function renderRail(context: Partial<TriggerRailContextValue> = {}) {
     workflowRef: "nightly-triage",
     projectId: "proj-1",
     canAddTrigger: true,
+    canEditDefinition: true,
+    declared: [],
+    findingsFor: () => [],
+    unsavedDeclared: new Set(),
     onEditTrigger: vi.fn(),
     onAddTrigger: vi.fn(),
+    onEditDeclared: vi.fn(),
+    onActivateDeclared: vi.fn(),
     ...context,
   };
   const result = renderWithQuery(
@@ -120,7 +126,9 @@ describe("TriggerRailNode", () => {
     expect(within(list).queryByText("Other workflow")).not.toBeInTheDocument();
     expect(within(list).queryByText("Other project")).not.toBeInTheDocument();
     expect(within(list).getByText("Every hour")).toBeInTheDocument();
-    expect(listTriggers).toHaveBeenCalledWith(expect.objectContaining({ projectId: "proj-1" }));
+    // Every project: an activation of a declared trigger may live in another
+    // project than the one open; ad hoc lines are still filtered to this one.
+    expect(listTriggers.mock.calls[0]![0].projectId).toBeUndefined();
   });
 
   it('always shows "Someone starts a chat", even with no triggers or no provider data', async () => {
@@ -179,7 +187,7 @@ describe("TriggerRailNode", () => {
 
   it("explains why a trigger cannot be added to an unsaved workflow", async () => {
     listTriggers.mockResolvedValue(create(ListTriggersResponseSchema, { triggers: [] }));
-    renderRail({ canAddTrigger: false });
+    renderRail({ canAddTrigger: false, canEditDefinition: false });
 
     expect(await screen.findByRole("button", { name: "Add trigger" })).toBeDisabled();
     expect(screen.getByText(/Save the workflow to add a trigger/)).toBeInTheDocument();
@@ -200,5 +208,92 @@ describe("TriggerRailNode", () => {
     expect(screen.getByText("Someone starts a chat")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Retry" }));
     expect(await screen.findByText("Nightly triage")).toBeInTheDocument();
+  });
+});
+
+describe("TriggerRailNode: declared triggers", () => {
+  const declared = [
+    {
+      name: "new-issue",
+      filter: "",
+      inputs: {},
+      source: { case: "integration", value: { integration: "github", events: ["issues.opened"], match: {} } },
+    },
+    { name: "nightly", filter: "", inputs: {}, source: { case: "schedule", value: { cron: ["0 9 * * 1-5"], timezone: "UTC" } } },
+  ] as unknown as TriggerRailContextValue["declared"];
+
+  function activation(id: string, name: string, opts: { enabled?: boolean; health?: TriggerHealthStatus; detail?: string; projectId?: string } = {}) {
+    return create(TriggerSchema, {
+      id,
+      name: `activation ${id}`,
+      projectId: opts.projectId ?? "proj-2",
+      enabled: opts.enabled ?? true,
+      workflow: "nightly-triage",
+      workflowTrigger: name,
+      daemonId: "d-1",
+      health: create(TriggerHealthSchema, { status: opts.health ?? TriggerHealthStatus.HEALTHY, lastFailureDetail: opts.detail ?? "" }),
+    });
+  }
+
+  beforeEach(() => listTriggers.mockReset());
+
+  it("lists declared triggers from the definition with their activation state, separate from ad hoc automations", async () => {
+    const user = userEvent.setup();
+    listTriggers.mockResolvedValue(
+      create(ListTriggersResponseSchema, {
+        // nightly is active in ANOTHER project; still shown on its declaration.
+        triggers: [activation("a-1", "nightly"), trigger("t-9", "Ad hoc sweep", { interval: "1h" })],
+      }),
+    );
+    const { context } = renderRail({ declared });
+
+    const issue = await screen.findByTestId("rail-declared-new-issue");
+    const nightly = screen.getByTestId("rail-declared-nightly");
+    await waitFor(() => expect(nightly).toHaveAttribute("data-state", "active"));
+    expect(issue).toHaveAttribute("data-state", "inactive");
+    expect(within(issue).getByText("github: issues.opened")).toBeInTheDocument();
+    expect(within(nightly).getByText("Every weekday at 9:00 AM UTC")).toBeInTheDocument();
+    expect(within(nightly).getByRole("button", { name: /nightly is Active/ })).toBeInTheDocument();
+    // The activation is not ALSO listed as an ad hoc line.
+    expect(screen.queryByText("activation a-1")).not.toBeInTheDocument();
+    expect(screen.getByText("Ad hoc sweep")).toBeInTheDocument();
+
+    await user.click(within(issue).getByRole("button", { name: "Activate new-issue" }));
+    expect(context.onActivateDeclared).toHaveBeenCalledWith(0);
+    await user.click(within(issue).getByRole("button", { name: /new-issue, github: issues.opened, not active. Edit trigger/ }));
+    expect(context.onEditDeclared).toHaveBeenCalledWith(0);
+  });
+
+  it("shows a broken activation and an orphan whose declaration was removed", async () => {
+    listTriggers.mockResolvedValue(
+      create(ListTriggersResponseSchema, {
+        triggers: [
+          activation("a-1", "nightly", { health: TriggerHealthStatus.BROKEN, detail: "the declaration changed kind" }),
+          activation("a-2", "renamed-away", { health: TriggerHealthStatus.BROKEN, detail: 'no longer declares "renamed-away"' }),
+        ],
+      }),
+    );
+    renderRail({ declared });
+
+    const nightly = await screen.findByTestId("rail-declared-nightly");
+    await waitFor(() => expect(nightly).toHaveAttribute("data-state", "broken"));
+    expect(within(nightly).getByRole("button", { name: /nightly is Broken/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /activation a-2, broken: no longer declares "renamed-away". Fix/ })).toBeInTheDocument();
+  });
+
+  it("maps validation findings onto their trigger's line, and blocks activating an unsaved trigger", async () => {
+    listTriggers.mockResolvedValue(create(ListTriggersResponseSchema, { triggers: [] }));
+    renderRail({
+      declared,
+      unsavedDeclared: new Set(["new-issue"]),
+      findingsFor: (index, name) => (index === 1 && name === "nightly" ? [{ field: "schedule.cron", message: '"0 25 * * *" is not a valid cron expression' }] : []),
+    });
+
+    const nightly = await screen.findByTestId("rail-declared-nightly");
+    expect(within(nightly).getByRole("note")).toHaveTextContent('Schedule cron: "0 25 * * *" is not a valid cron expression');
+    expect(within(nightly).getByRole("button", { name: /1 problem/ })).toBeInTheDocument();
+    const issue = screen.getByTestId("rail-declared-new-issue");
+    expect(within(issue).getByRole("button", { name: "Activate new-issue" })).toBeDisabled();
+    expect(within(issue).getByText("Save the workflow to activate this trigger.")).toBeInTheDocument();
   });
 });

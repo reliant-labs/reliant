@@ -36,6 +36,8 @@ import {
   type Step,
 } from "../../types/workflow";
 import type { SwitchNodeData } from "./nodes/SwitchNode";
+import type { Workflow } from "../../types/workflow";
+import type { DeclaredTrigger } from "../../lib/declaredTriggers";
 
 export interface WorkflowMutations {
   /**
@@ -69,6 +71,14 @@ export interface WorkflowMutations {
 
   /** Delete an edge. Takes a snapshot; clears edge selection. */
   removeEdge: (edgeId: string) => void;
+
+  /**
+   * The workflow's declared `triggers:` (its WHEN). They live on the
+   * workflow, not in a node, and save with it. Each marks the workflow dirty.
+   */
+  addTrigger: (trigger: DeclaredTrigger) => void;
+  updateTrigger: (index: number, trigger: DeclaredTrigger) => void;
+  removeTrigger: (index: number) => void;
 }
 
 const WorkflowMutationContext = createContext<WorkflowMutations | null>(null);
@@ -101,6 +111,8 @@ export interface WorkflowMutationProviderProps {
     updater: string | null | ((current: string | null) => string | null),
   ) => void;
   setSelectedEdgeId: (id: string | null) => void;
+  /** The builder's workflow-level state setter (declared triggers live there). */
+  setWorkflow: (updater: (workflow: Workflow) => Workflow) => void;
   children: ReactNode;
 }
 
@@ -113,6 +125,7 @@ export function WorkflowMutationProvider({
   takeSnapshot,
   setSelectedNodeId,
   setSelectedEdgeId,
+  setWorkflow,
   children,
 }: WorkflowMutationProviderProps) {
   // One ref per dep; refreshed every render. Reading through `.current`
@@ -126,6 +139,7 @@ export function WorkflowMutationProvider({
   const takeSnapshotRef = useRef(takeSnapshot);
   const setSelectedNodeIdRef = useRef(setSelectedNodeId);
   const setSelectedEdgeIdRef = useRef(setSelectedEdgeId);
+  const setWorkflowRef = useRef(setWorkflow);
 
   // Sync after every render — `useEffect` (not `useLayoutEffect`) is fine
   // because primitives are invoked in response to user input, never during
@@ -139,6 +153,7 @@ export function WorkflowMutationProvider({
     takeSnapshotRef.current = takeSnapshot;
     setSelectedNodeIdRef.current = setSelectedNodeId;
     setSelectedEdgeIdRef.current = setSelectedEdgeId;
+    setWorkflowRef.current = setWorkflow;
   });
 
   // Built ONCE — `[]` deps. Identity is therefore stable for the provider's
@@ -280,6 +295,24 @@ export function WorkflowMutationProvider({
         setHasModificationsRef.current(true);
         setEdgesRef.current((eds) => eds.filter((e) => e.id !== edgeId));
         setSelectedEdgeIdRef.current(null);
+      },
+
+      addTrigger(trigger) {
+        setHasModificationsRef.current(true);
+        setWorkflowRef.current((wf) => ({ ...wf, triggers: [...(wf.triggers ?? []), trigger] }));
+      },
+
+      updateTrigger(index, trigger) {
+        setHasModificationsRef.current(true);
+        setWorkflowRef.current((wf) => ({
+          ...wf,
+          triggers: (wf.triggers ?? []).map((existing, i) => (i === index ? trigger : existing)),
+        }));
+      },
+
+      removeTrigger(index) {
+        setHasModificationsRef.current(true);
+        setWorkflowRef.current((wf) => ({ ...wf, triggers: (wf.triggers ?? []).filter((_, i) => i !== index) }));
       },
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -104,7 +104,7 @@ export function ConfigurationPanel({
                 type="button"
                 onClick={handleDelete}
                 className="cpv2-header-btn delete"
-                aria-label="Delete"
+                aria-label={deleteLabel}
               >
                 <Trash2 />
               </button>

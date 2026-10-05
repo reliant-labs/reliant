@@ -107,13 +107,24 @@ import {
 import { WorkflowMutationProvider } from "./WorkflowMutationContext";
 import { WorkflowNodeCallbacksProvider } from "./WorkflowNodeCallbacksContext";
 import { StepPalette } from "./palette/StepPalette";
+import { DeclaredTriggerPanel } from "./config/DeclaredTriggerPanel";
+import { ActivateTriggerDialog } from "../Automations/ActivateTriggerDialog";
+import { useTriggers } from "../../hooks/trigger-queries";
+import { declaredRailLines } from "../../lib/triggerRail";
+import {
+  defaultSource,
+  findingsForTrigger,
+  newDeclaredTrigger,
+  uniqueTriggerName,
+  type DeclaredTrigger,
+} from "../../lib/declaredTriggers";
 import { ConnectIntegrationDialog, type ConnectIntegrationTarget } from "./connections/ConnectIntegrationDialog";
 import {
   catalogSearchGrpc,
   type CatalogEntry,
   type CatalogEntrySummary,
 } from "../../api/catalog-search-grpc";
-import { connectionKeys, useActionOutputSchemas } from "../../hooks/connection-queries";
+import { connectionKeys, useActionOutputSchemas, useCatalogEntry, useDeclaredTriggerRef } from "../../hooks/connection-queries";
 import {
   actionNodeIdBase,
   getActionParams,
@@ -266,6 +277,14 @@ function WorkflowBuilderInner({
   // and integration actions. `connectTarget` is the integration a palette
   // row's Connect affordance is connecting.
   const [paletteOpen, setPaletteOpen] = useState(false);
+  // "+ Add trigger" opens the same palette on its Triggers kind.
+  const [paletteKind, setPaletteKind] = useState<"action" | "trigger">("action");
+  // The declared trigger whose editor is open (by index), and the one being
+  // activated. A catalog ref remembered per trigger name gives the editor the
+  // payload schema and event list of the type it was added from.
+  const [selectedDeclared, setSelectedDeclared] = useState<number | null>(null);
+  const [activatingDeclared, setActivatingDeclared] = useState<number | null>(null);
+  const [declaredCatalogRefs, setDeclaredCatalogRefs] = useState<Record<string, string>>({});
   const [connectTarget, setConnectTarget] = useState<ConnectIntegrationTarget | null>(null);
   const queryClient = useQueryClient();
 
@@ -639,7 +658,10 @@ function WorkflowBuilderInner({
 
   const deselectNodeAndStartPanel = useCallback((nodeId: string | null) => {
     setSelectedNodeId(nodeId);
-    if (nodeId === null) setShowStartPanel(false);
+    if (nodeId === null) {
+      setShowStartPanel(false);
+      setSelectedDeclared(null);
+    }
   }, []);
 
   // Keyboard shortcuts (Ctrl/Cmd+Z undo, +Shift+Z / +Y redo, and Escape
@@ -653,7 +675,7 @@ function WorkflowBuilderInner({
     isBuiltinWorkflow,
     // The start panel counts as a selection, so Escape closes it before it
     // falls back to leaving the builder.
-    hasSelectedNode: !!selectedNodeId || showStartPanel,
+    hasSelectedNode: !!selectedNodeId || showStartPanel || selectedDeclared !== null,
     hasSelectedEdge: !!selectedEdgeId,
     showSettingsEditor,
     setSelectedNodeId: deselectNodeAndStartPanel,
@@ -707,6 +729,7 @@ function WorkflowBuilderInner({
   // Handle edge selection
   const onEdgeClick = useCallback((_event: React.MouseEvent, edge: Edge) => {
     setShowSettingsEditor(false);
+    setSelectedDeclared(null);
     setSelectedEdgeId(edge.id);
     setSelectedNodeId(null);
     setChatPanelOpen(false); // Close chat when config panel opens
@@ -714,6 +737,7 @@ function WorkflowBuilderInner({
 
   // Handle clicking on canvas (deselect)
   const onPaneClick = useCallback(() => {
+    setSelectedDeclared(null);
     setSelectedNodeId(null);
     setSelectedEdgeId(null);
     setShowSettingsEditor(false);
@@ -782,6 +806,7 @@ function WorkflowBuilderInner({
   // step to write an expression in.
   const onNodeClick = useCallback((_event: React.MouseEvent, node: Node) => {
     setShowSettingsEditor(false);
+    setSelectedDeclared(null);
     setSelectedEdgeId(null);
     setChatPanelOpen(false); // Close chat when config panel opens
     if (isEntryFlowNodeType(node.type)) {
@@ -843,6 +868,7 @@ function WorkflowBuilderInner({
 
       setLoadedWorkflowName(builtWorkflow.name);
       setHasModifications(false);
+      setSavedTriggersJson(JSON.stringify(builtWorkflow.triggers ?? []));
 
       const savedAsDraft =
         result && typeof result === "object" && result.status === "draft";
@@ -1057,6 +1083,17 @@ function WorkflowBuilderInner({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on the structural fingerprint
   }, [celContextKey]);
   const actionOutputSchemas = useActionOutputSchemas(actionRefsByNode);
+  // `trigger.payload.*` for node expressions, from the first declared
+  // integration trigger (a run is started by one trigger; the first is the
+  // usual one, and the trigger editor narrows to its own).
+  const firstIntegrationTrigger = (workflow.triggers ?? []).find((t) => t.source?.case === "integration");
+  const firstIntegration = firstIntegrationTrigger?.source?.case === "integration" ? firstIntegrationTrigger.source.value : undefined;
+  const firstTriggerRef = useDeclaredTriggerRef(
+    firstIntegration?.integration,
+    (firstIntegration?.events ?? []) as string[],
+    firstIntegrationTrigger ? declaredCatalogRefs[firstIntegrationTrigger.name ?? ""] : undefined,
+  );
+  const triggerPayloadSchema = useCatalogEntry(firstTriggerRef).data?.payloadSchema;
 
   // Build CEL completion context for Monaco editors in config panels.
   // Keyed on the structural fingerprint above so it's stable across edits
@@ -1091,30 +1128,75 @@ function WorkflowBuilderInner({
       }
     }
     const edgeList = edges.map((e) => ({ source: e.source, target: e.target }));
-    return { nodeIds, nodeTypeMap, inputParams, edges: edgeList, nodeDeclaredOutputs, nodeOutputSchemas: actionOutputSchemas };
+    return { nodeIds, nodeTypeMap, inputParams, edges: edgeList, nodeDeclaredOutputs, nodeOutputSchemas: actionOutputSchemas, triggerPayloadSchema };
     // Intentionally keyed on the structural fingerprint to avoid re-init on label/CEL keystrokes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [celContextKey, actionOutputSchemas]);
+  }, [celContextKey, actionOutputSchemas, triggerPayloadSchema]);
 
   // The trigger rail's data (research/WORKFLOW_UI.md §3.2). Keyed on the
   // STORED name: an automation names a saved workflow, so a rename in progress
   // must not re-filter the rail. A new, never-saved workflow cannot have one.
   const savedWorkflowName = initialWorkflow?.name ?? "";
+  // The declared triggers as last stored, to tell which edits are unsaved: an
+  // activation resolves the STORED declaration, so activating an unsaved one
+  // would activate something other than what is on screen.
+  const [savedTriggersJson, setSavedTriggersJson] = useState(() => JSON.stringify(initialWorkflow?.triggers ?? []));
+  useEffect(() => {
+    setSavedTriggersJson(JSON.stringify(initialWorkflow?.triggers ?? []));
+  }, [initialWorkflow]);
+  const declared = useMemo(() => (isEditingLoop ? [] : [...(workflow.triggers ?? [])]) as DeclaredTrigger[], [workflow.triggers, isEditingLoop]);
+  const unsavedDeclared = useMemo(() => {
+    const saved = JSON.parse(savedTriggersJson) as DeclaredTrigger[];
+    const byName = new Map(saved.map((t) => [t.name, JSON.stringify(t)]));
+    return new Set(declared.filter((t) => byName.get(t.name) !== JSON.stringify(t)).map((t) => t.name ?? ""));
+  }, [declared, savedTriggersJson]);
   const handleEditTrigger = useCallback((trigger: Trigger) => {
     setAutomationDialog({ trigger });
   }, []);
+  const canEditDefinition = !isBuiltinWorkflow && !isEditingLoop;
   const handleAddTrigger = useCallback(() => {
+    if (canEditDefinition) {
+      setPaletteKind("trigger");
+      setPaletteOpen(true);
+      return;
+    }
+    // A read-only workflow's definition can't gain a declaration, but the
+    // caller can still schedule it as an ad hoc automation.
     setAutomationDialog({});
+  }, [canEditDefinition]);
+  const handleEditDeclared = useCallback((index: number) => {
+    setSelectedDeclared(index);
+    setSelectedNodeId(null);
+    setSelectedEdgeId(null);
+    setShowSettingsEditor(false);
+    setChatPanelOpen(false);
   }, []);
+  const findingsFor = useCallback(
+    (index: number, name: string) => findingsForTrigger(validationErrors, index, name),
+    [validationErrors],
+  );
   const triggerRail = useMemo<TriggerRailContextValue>(
     () => ({
       workflowRef: savedWorkflowName,
       projectId: currentProject?.id ?? "",
       canAddTrigger: !isNewWorkflow && savedWorkflowName !== "" && !!currentProject?.id,
+      canEditDefinition,
+      declared,
+      findingsFor,
+      unsavedDeclared,
       onEditTrigger: handleEditTrigger,
       onAddTrigger: handleAddTrigger,
+      onEditDeclared: handleEditDeclared,
+      onActivateDeclared: setActivatingDeclared,
     }),
-    [savedWorkflowName, currentProject?.id, isNewWorkflow, handleEditTrigger, handleAddTrigger],
+    [savedWorkflowName, currentProject?.id, isNewWorkflow, canEditDefinition, declared, findingsFor, unsavedDeclared, handleEditTrigger, handleAddTrigger, handleEditDeclared],
+  );
+  // The caller's activations, for the editor's Activations section (the
+  // rail reads the same cached list).
+  const allTriggersQuery = useTriggers(undefined, { enabled: !!savedWorkflowName });
+  const declaredActivations = useMemo(
+    () => declaredRailLines(declared, allTriggersQuery.data ?? [], savedWorkflowName).lines,
+    [declared, allTriggersQuery.data, savedWorkflowName],
   );
 
   // Apply a workflow that changed outside this canvas (an agent edited the
@@ -1482,8 +1564,64 @@ function WorkflowBuilderInner({
 
   const openStepPalette = useCallback(() => {
     if (isBuiltinWorkflow) return;
+    setPaletteKind("action");
     setPaletteOpen(true);
   }, [isBuiltinWorkflow]);
+
+  /** Declare a trigger and open its editor. */
+  const declareTrigger = useCallback(
+    (trigger: DeclaredTrigger, catalogRef?: string) => {
+      const index = (workflow.triggers ?? []).length;
+      setHasModifications(true);
+      setWorkflow((w) => ({ ...w, triggers: [...(w.triggers ?? []), trigger] }));
+      if (catalogRef) setDeclaredCatalogRefs((prev) => ({ ...prev, [trigger.name ?? ""]: catalogRef }));
+      setPaletteOpen(false);
+      handleEditDeclared(index);
+    },
+    [workflow.triggers, handleEditDeclared],
+  );
+
+  const choosePaletteBuiltinTrigger = useCallback(
+    (source: "schedule" | "webhook" | "workflow_event") => {
+      const base = source === "workflow_event" ? "after-workflow" : source;
+      declareTrigger(newDeclaredTrigger({ name: uniqueTriggerName(base, declared), source: defaultSource(source) }));
+    },
+    [declareTrigger, declared],
+  );
+
+  /**
+   * Declare an integration trigger from a catalog trigger type: its events
+   * are the type's event list (the payload schema's `event` enum).
+   */
+  const choosePaletteTrigger = useCallback(
+    async (entry: CatalogEntrySummary) => {
+      let full = queryClient.getQueryData<CatalogEntry>(connectionKeys.catalogEntry(entry.ref));
+      if (!full) {
+        try {
+          full = await queryClient.fetchQuery({
+            queryKey: connectionKeys.catalogEntry(entry.ref),
+            queryFn: () => catalogSearchGrpc.get(entry.ref),
+            staleTime: 5 * 60_000,
+          });
+        } catch {
+          full = undefined;
+        }
+      }
+      const events = ((full?.payloadSchema?.properties?.event?.enum ?? []) as unknown[]).map(String);
+      declareTrigger(
+        newDeclaredTrigger({
+          name: uniqueTriggerName(entry.id.replace(/\./g, "-"), declared),
+          description: entry.summary,
+          source: {
+            case: "integration",
+            value: { integration: entry.integration.id, events, match: {}, pollInterval: "" },
+          } as NonNullable<DeclaredTrigger["source"]>,
+        }),
+        entry.ref,
+      );
+    },
+    [declareTrigger, declared, queryClient],
+  );
 
   useWorkflowBuilderShortcuts({ onOpenStepPalette: openStepPalette });
   const paletteShortcutLabel = useStepPaletteShortcutLabel();
@@ -1529,6 +1667,7 @@ function WorkflowBuilderInner({
       takeSnapshot={takeSnapshot}
       setSelectedNodeId={setSelectedNodeId}
       setSelectedEdgeId={setSelectedEdgeId}
+      setWorkflow={setWorkflow}
     >
     <WorkflowNodeCallbacksProvider
       onExpandLoop={(_loopNodeId, step) => enterLoopEdit(step)}
@@ -2025,6 +2164,28 @@ function WorkflowBuilderInner({
               />
             )}
 
+            {/* A declared trigger's editor: source, filter, inputs, activations. */}
+            {selectedDeclared !== null && declared[selectedDeclared] && !selectedNodeId && !selectedEdgeId && (
+              <DeclaredTriggerPanel
+                key={`${selectedDeclared}-${declared[selectedDeclared]!.name}`}
+                index={selectedDeclared}
+                trigger={declared[selectedDeclared]!}
+                allTriggers={declared}
+                inputs={workflow.inputs}
+                catalogRef={declaredCatalogRefs[declared[selectedDeclared]!.name ?? ""]}
+                findings={findingsFor(selectedDeclared, declared[selectedDeclared]!.name ?? "")}
+                activations={declaredActivations[selectedDeclared]?.activations ?? []}
+                isReadOnly={!canEditDefinition}
+                canActivate={triggerRail.canAddTrigger}
+                unsaved={unsavedDeclared.has(declared[selectedDeclared]!.name ?? "")}
+                onClose={() => setSelectedDeclared(null)}
+                onActivate={() => setActivatingDeclared(selectedDeclared)}
+                onEditActivation={handleEditTrigger}
+                bottomOffset={configPanelBottomOffset}
+                topOffset={configPanelTopOffset}
+              />
+            )}
+
             {/* Test run: saves the draft, runs it, and the canvas shows the run. */}
             {showTestRunPanel && onSaveForTestRun && currentProject?.id && !isBuiltinWorkflow && !isEditingLoop && (
               <BuilderTestRunPanel
@@ -2257,12 +2418,28 @@ function WorkflowBuilderInner({
 
       {/* Step palette: built-in steps and integration actions in one search. */}
       <StepPalette
+        key={paletteKind}
         open={paletteOpen}
+        initialKind={paletteKind}
+        allowKindSwitch={canEditDefinition}
         onClose={() => setPaletteOpen(false)}
         onChooseBuiltin={choosePaletteBuiltin}
         onChooseAction={choosePaletteAction}
+        onChooseTrigger={(entry) => void choosePaletteTrigger(entry)}
+        onChooseBuiltinTrigger={choosePaletteBuiltinTrigger}
         onConnect={connectFromPalette}
       />
+      {activatingDeclared !== null && declared[activatingDeclared] && (
+        <ActivateTriggerDialog
+          open
+          onClose={() => setActivatingDeclared(null)}
+          workflowRef={workflowRefForTrigger(savedWorkflowName, source)}
+          workflowTitle={workflow.title || savedWorkflowName}
+          declared={declared[activatingDeclared]!}
+          catalogRef={declaredCatalogRefs[declared[activatingDeclared]!.name ?? ""]}
+          defaultProjectId={currentProject?.id}
+        />
+      )}
       <ConnectIntegrationDialog target={connectTarget} onClose={() => setConnectTarget(null)} />
 
       {/* Automation dialog, opened from the trigger rail. Allowed for

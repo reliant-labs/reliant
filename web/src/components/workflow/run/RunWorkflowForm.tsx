@@ -84,6 +84,12 @@ export interface RunWorkflowFormProps {
    * not show a second one.
    */
   showMachinePicker?: boolean;
+  /**
+   * Inputs the host sets some other way and this form must neither show nor
+   * require — an activation's inputs a declared trigger maps from each event,
+   * which the server refuses as params (they would be overwritten every fire).
+   */
+  excludeInputs?: readonly string[];
   disabled?: boolean;
 }
 
@@ -96,15 +102,24 @@ export function RunWorkflowForm({
   showValidation = false,
   applyDefaultPresets = false,
   showMachinePicker = false,
+  excludeInputs,
   disabled = false,
 }: RunWorkflowFormProps) {
   const ids = useId();
   const fieldId = (name: string) => `${ids}-${name}`;
 
-  const { loading, error: definitionError, inputGroups } = useWorkflowDefinition(
+  const { loading, error: definitionError, inputGroups: allInputGroups } = useWorkflowDefinition(
     projectId,
     workflowRef,
   );
+  const excludeKey = (excludeInputs ?? []).join("\u0000");
+  const inputGroups = useMemo(() => {
+    if (!excludeKey) return allInputGroups;
+    const excluded = new Set(excludeKey.split("\u0000"));
+    return allInputGroups
+      .map((group) => ({ ...group, inputs: group.inputs.filter((input) => !excluded.has(input.name)) }))
+      .filter((group) => group.inputs.length > 0);
+  }, [allInputGroups, excludeKey]);
   const { presets: availablePresets, loading: presetsLoading } = useWorkflowPresets(
     projectId,
     workflowRef,

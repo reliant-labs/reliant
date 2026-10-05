@@ -124,7 +124,11 @@ export function FloatingWorkflowSidebar({
 
   return (
     <div
-      className="flex max-h-[calc(100vh-200px)] min-w-[190px] flex-col gap-2 overflow-y-auto rounded-2xl border border-border/80 bg-card/95 p-3 shadow-xl shadow-black/10 backdrop-blur-sm"
+      // A fixed width, the 220px useFitViewWithPanels keeps clear: shrink-wrapped
+      // inside the builder's absolute column, the long tooltips' inline-flex
+      // wrappers stretched it to ~770px, covering the canvas's left side and
+      // the start node.
+      className="flex max-h-[calc(100vh-200px)] w-[220px] flex-col gap-2 overflow-y-auto overflow-x-hidden rounded-2xl border border-border/80 bg-card/95 p-3 shadow-xl shadow-black/10 backdrop-blur-sm"
       data-onboarding="workflow-sidebar"
     >
       {onOpenPalette && (

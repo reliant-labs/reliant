@@ -290,5 +290,6 @@ export function describeSchedule(schedule: ScheduleText): string {
  * of source when this client has no editor for it yet.
  */
 export function describeTriggerSource(source: TriggerSource): string {
+  if (source.kind === "activation") return source.declared ? describeTriggerSource(source.declared) : sourceKindLabel(source);
   return source.kind === "schedule" ? describeSchedule(source.schedule) : sourceKindLabel(source);
 }

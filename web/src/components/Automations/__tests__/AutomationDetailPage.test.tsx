@@ -19,6 +19,8 @@ import {
   TriggerEventOutcome,
   TriggerEventRunSchema,
   TriggerEventSchema,
+  TriggerHealthSchema,
+  TriggerHealthStatus,
   TriggerSchema,
 } from "@/gen/reliant/v1/trigger_pb";
 import { RunDisplayState } from "@/gen/reliant/v1/run_pb";
@@ -271,5 +273,33 @@ describe("AutomationDetail", () => {
 
     await waitFor(() => expect(deleteTrigger).toHaveBeenCalledTimes(1));
     expect(deleteTrigger.mock.calls[0]![0]).toMatchObject({ id: "trig-1" });
+  });
+
+  it("explains a broken activation and offers the two fixes", async () => {
+    const user = userEvent.setup();
+    deleteTrigger.mockResolvedValue({});
+    getTrigger.mockResolvedValue(
+      create(GetTriggerResponseSchema, {
+        trigger: create(TriggerSchema, {
+          ...trigger,
+          workflow: "triage-new-issues",
+          workflowTrigger: "nightly",
+          health: create(TriggerHealthSchema, {
+            status: TriggerHealthStatus.BROKEN,
+            lastFailureDetail: 'declared trigger "nightly" of workflow "triage-new-issues": the workflow no longer declares it',
+          }),
+        }),
+      }),
+    );
+    renderAtRoute(<AutomationDetail triggerId="trig-1" />, "/workflows/automations/trig-1");
+
+    const notice = await screen.findByText(/This automation can't run: “nightly” no longer works./);
+    const alert = notice.closest('[role="alert"]') as HTMLElement;
+    expect(within(alert).getByText(/the workflow no longer declares it/)).toBeInTheDocument();
+    expect(within(alert).getByRole("link", { name: "Edit workflow" })).toHaveAttribute("href", "/workflow/triage-new-issues");
+
+    await user.click(within(alert).getByRole("button", { name: "Remove activation" }));
+    await user.click(within(screen.getByRole("dialog", { name: "Remove Morning triage?" })).getByRole("button", { name: "Remove activation" }));
+    await waitFor(() => expect(deleteTrigger).toHaveBeenCalledTimes(1));
   });
 });

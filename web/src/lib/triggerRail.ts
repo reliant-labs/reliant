@@ -1,16 +1,22 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * What the builder's trigger rail lists (research/WORKFLOW_UI.md §3.2): the
- * caller's automations in the current project whose workflow is the one on
- * the canvas. A projection of ListTriggers — nothing here is saved with the
- * workflow.
+ * What the builder's trigger rail lists. Two kinds of line:
+ *
+ *   - DECLARED triggers: the workflow's own `triggers:` (its WHEN, saved in
+ *     the definition; research/INTEGRATIONS_V1_BRIEF.md §3a), each with the
+ *     caller's activations of it — rows whose `workflow_trigger` names it.
+ *     A declaration with no activation is inert: "Activate".
+ *   - AD HOC automations (research/WORKFLOW_UI.md §3.2): the caller's trigger
+ *     rows in this project that run this workflow with an inline source.
+ *     A projection of ListTriggers; nothing about them is in the definition.
  */
 
 import type { Trigger } from "../api/trigger-grpc";
 import { normalizeWorkflowRef } from "../components/workflow/useWorkflowInputs";
 import { automationHealth, type AutomationHealthDisplay } from "./automationHealth";
 import { describeTriggerSource } from "./cronText";
+import type { DeclaredTrigger } from "./declaredTriggers";
 
 export interface TriggerRailLine {
   trigger: Trigger;
@@ -43,6 +49,7 @@ export function triggerRailLines(
   projectId: string,
 ): TriggerRailLine[] {
   return triggers
+    .filter((trigger) => !trigger.workflowTrigger)
     .filter((trigger) => trigger.projectId === projectId && triggerRunsWorkflow(trigger, workflowRef))
     .map((trigger) => {
       const health = automationHealth(trigger);
@@ -67,4 +74,46 @@ export function workflowRefForTrigger(
 ): string {
   const name = normalizeWorkflowRef(workflowName);
   return source === "builtin" ? `builtin://${name}` : name;
+}
+
+/** A workflow's declared trigger with the caller's activations of it. */
+export interface DeclaredRailLine {
+  declared: DeclaredTrigger;
+  index: number;
+  /** The caller's rows activating it, in any project. */
+  activations: Trigger[];
+  /** Rolled up across activations for the line's own dot: broken > failing > active > paused > none. */
+  state: "inactive" | "active" | "paused" | "failing" | "broken";
+  /** The worst activation's health, for the line's tooltip. */
+  health?: AutomationHealthDisplay;
+}
+
+/**
+ * Declared triggers in definition order, each with its activations. An
+ * activation matches by workflow ref AND declared name. An activation naming
+ * a declaration this workflow no longer has is a BROKEN orphan; those are
+ * returned separately so the rail can still show — and fix — them.
+ */
+export function declaredRailLines(
+  declared: readonly DeclaredTrigger[],
+  triggers: readonly Trigger[],
+  workflowRef: string,
+): { lines: DeclaredRailLine[]; orphans: Trigger[] } {
+  const mine = triggers.filter((t) => t.workflowTrigger && triggerRunsWorkflow(t, workflowRef));
+  const names = new Set(declared.map((d) => d.name));
+  const lines = declared.map((d, index): DeclaredRailLine => {
+    const activations = mine.filter((t) => t.workflowTrigger === d.name);
+    const healths = activations.map((t) => automationHealth(t)).sort((a, b) => a.severity - b.severity);
+    const worst = healths[0];
+    let state: DeclaredRailLine["state"] = "inactive";
+    if (worst) {
+      if (worst.key === "broken") state = "broken";
+      else if (worst.key === "failing") state = "failing";
+      else if (activations.some((t) => t.enabled)) state = "active";
+      else state = "paused";
+    }
+    return { declared: d, index, activations, state, health: worst };
+  });
+  const orphans = mine.filter((t) => !names.has(t.workflowTrigger!));
+  return { lines, orphans };
 }
