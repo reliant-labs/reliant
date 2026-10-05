@@ -36,10 +36,15 @@ const (
 	tierKeyword = 2
 	tierPrefix  = 3
 	tierExact   = 4
-	// tierStep separates tiers so the connected boost (< tierStep) can only
-	// reorder entries of equal relevance.
+	// tierStep separates tiers so the connected boost and the name-coverage
+	// bonus (together < tierStep) can only reorder entries of equal tier.
 	tierStep       = 100
 	connectedBoost = tierStep / 2
+	// maxCoverageBonus rewards a display name that is mostly the query ("Get
+	// pull request" over "Comment on issue or pull request" for "pull
+	// request"). It is below connectedBoost, so a connected entry still
+	// outranks a tighter name of the same tier.
+	maxCoverageBonus = 40
 )
 
 // Query is one search.
@@ -266,7 +271,40 @@ func (n normalized) score(e *Entry) (int, bool) {
 		}
 		total += tier * tierStep
 	}
-	return total, true
+	// Only a matched entry pays for the coverage scan.
+	return total + n.coverageBonus(e), true
+}
+
+// coverageBonus is maxCoverageBonus scaled by the share of the display name's
+// words that some query term (or term part) prefixes. Every entry pays the
+// same per-term tier, so this only separates entries already tied on tier.
+func (n normalized) coverageBonus(e *Entry) int {
+	if len(e.nameWords) == 0 {
+		return 0
+	}
+	covered := 0
+	for _, w := range e.nameWords {
+		if n.prefixes(w) {
+			covered++
+		}
+	}
+	return maxCoverageBonus * covered / len(e.nameWords)
+}
+
+// prefixes reports whether any query term, or any part of a punctuated term,
+// is a prefix of w.
+func (n normalized) prefixes(w string) bool {
+	for _, t := range n.terms {
+		if strings.HasPrefix(w, t.text) {
+			return true
+		}
+		for _, p := range t.parts {
+			if strings.HasPrefix(w, p) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // termTier is the strongest tier one query term reaches in an entry, 0 for

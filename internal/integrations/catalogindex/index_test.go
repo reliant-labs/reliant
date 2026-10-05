@@ -159,6 +159,25 @@ func TestBuildRefusesDuplicateRefs(t *testing.T) {
 	assert.Contains(t, err.Error(), "duplicate ref")
 }
 
+// The real embedded catalog, not just the fixture: queries an agent or a
+// picker actually sends must put the obvious action first.
+func TestEmbeddedCatalogRanksTheObviousActionFirst(t *testing.T) {
+	idx, err := Build(catalog.MustBuiltin().Manifests())
+	require.NoError(t, err)
+	for query, want := range map[string]string{
+		"github/issue.create@1": "github/issue.create@1",
+		"create issue":          "github/issue.create@1",
+		"pull request":          "github/pr.get@1",
+		"comment":               "github/issue.comment@1",
+		"dispatch workflow":     "github/workflow.dispatch@1",
+		"http request":          "http/request@1",
+	} {
+		r := search(t, idx, Query{Text: query})
+		require.NotEmpty(t, r.Hits, query)
+		assert.Equal(t, want, r.Hits[0].Entry.Ref, "query %q", query)
+	}
+}
+
 // Today no manifest can declare a trigger (the loader refuses them and
 // TriggerSpec is a stub). This pins that the embedded catalog's index is
 // actions-only until stream B lands; when it does, this test changes to
@@ -231,6 +250,14 @@ func TestRankingTiers(t *testing.T) {
 		// request"), which must rank below the keyword hit.
 		r = search(t, idx, Query{Text: "send"})
 		assert.Equal(t, []string{"slack/message.post@1", "http/request@1"}, refs(r))
+	})
+
+	t.Run("within a tier, a name that is mostly the query wins", func(t *testing.T) {
+		// "issue" is a name word of both "Create issue" (1 of 2 words) and
+		// "Comment on issue" (1 of 3). Equal tier, so the tighter name
+		// ranks first instead of falling to ref order (comment < create).
+		r := search(t, idx, Query{Text: "issue", Integration: "github"})
+		assert.Equal(t, []string{"github/issue.create@1", "github/issue.comment@1"}, refs(r))
 	})
 
 	t.Run("prefix of a word matches", func(t *testing.T) {

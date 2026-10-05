@@ -18,9 +18,11 @@
 //	a keyword (the action's or its integration's)             (keyword)
 //	a word of the summary, description or integration name    (text)
 //
-// Connected entries then get a boost smaller than one tier step, so being
-// connected reorders entries of equal relevance but never lifts a weaker
-// match above a stronger one. Ties break on ref, which is unique, so a page
+// Within a tier two smaller signals order entries, both together smaller than
+// one tier step so neither can lift a weaker match above a stronger one:
+// connected entries get a boost, and below that a display name that is mostly
+// the query ("Get pull request" for "pull request") beats one that merely
+// contains it. Remaining ties break on ref, which is unique, so a page
 // boundary is stable across requests.
 //
 //forge:exclude-contract: reliant is not forge-generated; consumers declare the narrow interfaces they need
