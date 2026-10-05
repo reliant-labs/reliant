@@ -210,6 +210,10 @@ func Run(ctx context.Context, opts Options) error {
 	if err != nil {
 		return err
 	}
+	catalogSearch, err := wireCatalogSearch(repo)
+	if err != nil {
+		return err
+	}
 
 	// API key provider (allows LLM drivers to resolve per-user keys from DB)
 	drivers.InitializeAPIKeyProvider(repo)
@@ -390,6 +394,7 @@ func Run(ctx context.Context, opts Options) error {
 		JWTPublicKey:   jwtPublicKey,
 		JWKSURL:        jwksURL,
 		Connections:    connSvc,
+		CatalogSearch:  catalogSearch,
 		OAuthRoutes:    oauthRoutes,
 		TriggerInbound: triggerInbound,
 		// Connector/MCP surface. PUBLIC_URL is this server's externally

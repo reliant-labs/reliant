@@ -42,9 +42,9 @@ Tools are organized by tags for filtering:
 - [Planning & Task Management](#planning--task-management) (10 tools)
 - [File Operations](#file-operations) (7 tools)
 - [Information Retrieval](#information-retrieval) (6 tools)
-- [Workflow Management](#workflow-management) (16 tools)
+- [Workflow Management](#workflow-management) (18 tools)
 - [System & Execution](#system--execution) (4 tools)
-- [Other Tools](#other-tools) (16 tools)
+- [Other Tools](#other-tools) (17 tools)
 
 ---
 
@@ -1286,6 +1286,7 @@ _Tools for managing and inspecting workflows, presets, and scenarios._
 | [`edit_scenario`](#edit_scenario) | workflow | Make precise text replacements in a scenario's YAML definition. |
 | [`edit_workflow`](#edit_workflow) | workflow | Make precise text replacements in the workflow YAML. |
 | [`get_cel_reference`](#get_cel_reference) | workflow, readonly | Gets the CEL expression reference for workflow development. |
+| [`get_integration_schema`](#get_integration_schema) | workflow, readonly | Get the full schema of one integration action (or trigger type) by ref. |
 | [`get_preset`](#get_preset) | workflow, readonly | Gets the full configuration of a preset. |
 | [`get_schema`](#get_schema) | workflow, readonly | Look up schema documentation for any workflow type by name. |
 | [`get_workflow`](#get_workflow) | workflow, readonly | Gets the full YAML definition of a workflow. |
@@ -1294,6 +1295,7 @@ _Tools for managing and inspecting workflows, presets, and scenarios._
 | [`list_scenarios`](#list_scenarios) | workflow, readonly | List all test scenarios for the current workflow. |
 | [`list_workflows`](#list_workflows) | workflow, readonly | Lists all available workflows (builtin, project, and user-created). |
 | [`run_scenario`](#run_scenario) | workflow | Run an existing test scenario by name. |
+| [`search_integrations`](#search_integrations) | workflow, readonly | Search the integration catalog for actions a workflow can run (and trigger types that can start o... |
 | [`view_scenario`](#view_scenario) | workflow, readonly | View a specific test scenario's full definition. |
 | [`write_scenario`](#write_scenario) | workflow | Create or update a test scenario with YAML content. |
 | [`write_workflow`](#write_workflow) | workflow | Replace an existing workflow draft with YAML content. |
@@ -1422,6 +1424,24 @@ Complete CEL reference including:
 - Field documentation for each namespace
 - Custom functions (parseJson, coalesce, etc.)
 - Common patterns and examples
+
+---
+
+### get_integration_schema
+
+**Tags:** `workflow`, `readonly`
+
+Get the full schema of one integration action (or trigger type) by ref.
+
+WHEN TO USE:
+- After search_integrations, before writing a `type: action` node that uses the ref
+- To learn which keys go in the node's `with:` and which are required
+- To learn the output fields reachable as `nodes.<id>.data.<field>` in later nodes
+
+RETURNS:
+The description, the params JSON Schema (the node's `with:`), the output JSON Schema (`nodes.<id>.data`),
+what connecting the integration requires, and whether the user is connected. A trigger type returns its
+event payload schema (`trigger.payload`) instead of params and output.
 
 ---
 
@@ -1585,6 +1605,34 @@ Use list_scenarios to see available scenario names.
 
 Pass id (required): the workflow UUID, slug, or name, as returned by
 create_workflow or list_workflows.
+
+---
+
+### search_integrations
+
+**Tags:** `workflow`, `readonly`
+
+Search the integration catalog for actions a workflow can run (and trigger types that can start one).
+
+WHEN TO USE:
+- Before writing a workflow node of `type: action`: find the ref to put in its `uses:`
+- To check whether an integration (GitHub, Slack, HTTP, ...) can do something
+- To see which integrations the user has already connected
+
+RETURNS:
+Up to `limit` refs, best match first, each with a one-line summary and whether the user can use it
+now ("connected"). A "not connected" action still works in a workflow once the user connects that
+integration; tell them so.
+
+NEXT STEP:
+Call get_integration_schema with a ref to read its parameters and output before writing the node:
+
+    - id: open_issue
+      type: action
+      uses: github/issue.create@1      # the ref
+      with: { ... }                    # keys from the params schema
+
+Core workflow nodes (call_llm, run, loop, ...) are not integrations; use get_schema for those.
 
 ---
 

@@ -3,6 +3,9 @@ syntax = "proto3";
 
 package reliant.v1;
 
+import "google/protobuf/struct.proto";
+import "reliant/v1/connection.proto";
+
 option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
 
 // CatalogService provides discovery endpoints for models, tools, and activities
@@ -26,6 +29,19 @@ service CatalogService {
 
   // GetCELCompletions returns CEL expression completion data for the workflow builder
   rpc GetCELCompletions(GetCELCompletionsRequest) returns (GetCELCompletionsResponse) {}
+
+  // SearchCatalog searches the integration catalog: every action and trigger
+  // type of every embedded integration manifest, ranked for the query and
+  // marked with whether the caller can use it now. It returns lightweight
+  // entries one page at a time and never the whole catalog; GetCatalogEntry
+  // returns one entry's schemas.
+  rpc SearchCatalog(SearchCatalogRequest) returns (SearchCatalogResponse) {}
+
+  // GetCatalogEntry returns one action or trigger type in full: its
+  // description, its params and output (or trigger payload) JSON Schemas, and
+  // what a connection to its integration requires. An unknown ref is
+  // NOT_FOUND.
+  rpc GetCatalogEntry(GetCatalogEntryRequest) returns (GetCatalogEntryResponse) {}
 }
 
 // ModelInfo represents information about an LLM model
@@ -316,4 +332,137 @@ message GetCELCompletionsResponse {
   repeated CELFunctionInfo functions = 2;
   repeated CELNodeOutputSchema node_output_schemas = 3;
   repeated CELHelperTypeInfo helper_types = 4;
+}
+
+// CatalogEntryKind is what an integration catalog entry describes.
+enum CatalogEntryKind {
+  CATALOG_ENTRY_KIND_UNSPECIFIED = 0;
+  // ACTION is an operation a workflow `action` node runs (`uses: <ref>`).
+  CATALOG_ENTRY_KIND_ACTION = 1;
+  // TRIGGER is an event type that can start a run.
+  CATALOG_ENTRY_KIND_TRIGGER = 2;
+}
+
+// CatalogIntegration is the integration an entry belongs to.
+message CatalogIntegration {
+  // Id is the integration id, e.g. "github".
+  string id = 1;
+  // Version is the manifest major version every ref of this integration pins.
+  int32 version = 2;
+  string display_name = 3;
+  // Icon is an icon hint, e.g. "github" or "globe".
+  string icon = 4;
+  // Category groups integrations, e.g. "engineering" or "core".
+  string category = 5;
+}
+
+// CatalogEntrySummary is one search result: enough to render a picker row.
+message CatalogEntrySummary {
+  // Ref names the entry: "<integration>/<id>@<major>", e.g.
+  // "github/issue.create@1". An action node's `uses` is this ref.
+  string ref = 1;
+  CatalogEntryKind kind = 2;
+  // Id is the action or trigger id within its integration, e.g. "issue.create".
+  string id = 3;
+  string display_name = 4;
+  // Summary is one line for a picker or a search result.
+  string summary = 5;
+  CatalogIntegration integration = 6;
+  // AuthKinds are the ways to connect the integration, most preferred first.
+  // Empty when it takes no credential.
+  repeated ConnectionAuthKind auth_kinds = 7;
+  // ConnectionRequired is false when the integration takes no credential or
+  // makes one optional (the generic HTTP action).
+  bool connection_required = 8;
+  // Connected reports whether the caller can use the entry now without
+  // connecting anything first: no connection is required, the caller has an
+  // active connection to the integration, or a delegated authority serves it
+  // on this deployment (GitHub through the control plane).
+  bool connected = 9;
+  // Mutates is set on an action that changes external state.
+  bool mutates = 10;
+}
+
+// CatalogFacet counts the matches that carry one value of a facet.
+message CatalogFacet {
+  string value = 1;
+  int32 count = 2;
+}
+
+message SearchCatalogRequest {
+  // Query is free text: words, a ref, or the start of either. Every word
+  // must match an entry (as a word or the start of one) for it to be
+  // returned. Empty matches every entry, so the filters alone browse.
+  // At most 256 bytes.
+  string query = 1;
+  // Kinds keeps only entries of these kinds. Empty means every kind.
+  repeated CatalogEntryKind kinds = 2;
+  // Category keeps only entries of integrations in this category. Empty
+  // means every category.
+  string category = 3;
+  // Integration keeps only entries of this integration id. Empty means every
+  // integration.
+  string integration = 4;
+  // ConnectedOnly keeps only entries the caller can use now (see
+  // CatalogEntrySummary.connected).
+  bool connected_only = 5;
+  // PageSize defaults to 20; larger values are capped at 100.
+  int32 page_size = 6;
+  // PageToken is a previous response's next_page_token. It is only valid for
+  // the same query and filters.
+  string page_token = 7;
+}
+
+message SearchCatalogResponse {
+  // Entries are the page, best match first.
+  repeated CatalogEntrySummary entries = 1;
+  // NextPageToken fetches the next page; empty on the last.
+  string next_page_token = 2;
+  // TotalSize is how many entries match the query and every filter.
+  int32 total_size = 3;
+  // CategoryFacets count the matches per integration category, applying
+  // every filter except category, so a picker can show what each category
+  // would hold. Largest first, then by category.
+  repeated CatalogFacet category_facets = 4;
+}
+
+message GetCatalogEntryRequest {
+  // Ref is a CatalogEntrySummary.ref, e.g. "github/user.get@1".
+  string ref = 1;
+}
+
+message GetCatalogEntryResponse {
+  CatalogEntry entry = 1;
+}
+
+// CatalogEntry is one action or trigger type in full.
+message CatalogEntry {
+  CatalogEntrySummary summary = 1;
+  // Description is the long form an agent or a help panel reads.
+  string description = 2;
+  // ParamsSchema is the JSON Schema of an action's parameters, which an
+  // action node's `with:` supplies. Unset for a trigger.
+  google.protobuf.Struct params_schema = 3;
+  // OutputSchema is the JSON Schema of an action's output data, reachable as
+  // nodes.<id>.data. Unset for a trigger.
+  google.protobuf.Struct output_schema = 4;
+  // PayloadSchema is the JSON Schema of a trigger's event, reachable as
+  // trigger.payload. Unset for an action.
+  google.protobuf.Struct payload_schema = 5;
+  CatalogConnectionRequirement connection = 6;
+  // ToolName is the agent tool this action is also exposed as (for example
+  // "github__user_get"); empty when it is not exposed to agents.
+  string tool_name = 7;
+}
+
+// CatalogConnectionRequirement is what using an entry asks of a connection.
+message CatalogConnectionRequirement {
+  // Required is false when the integration takes no credential or makes one
+  // optional.
+  bool required = 1;
+  // Methods are the ways to connect, most preferred first, each with whether
+  // this deployment offers it (the shape ListIntegrations returns).
+  repeated IntegrationAuthMethod methods = 2;
+  // ConnectionParams are the non-secret settings a new connection asks for.
+  repeated IntegrationConnectionParam connection_params = 3;
 }

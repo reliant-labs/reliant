@@ -112,6 +112,10 @@ const (
 	ToolListPresets            = "list_presets"
 	ToolGetPreset              = "get_preset"
 
+	// Integration discovery tools
+	ToolSearchIntegrations   = "search_integrations"
+	ToolGetIntegrationSchema = "get_integration_schema"
+
 	// Scenario tools
 	ToolListScenarios  = "list_scenarios"
 	ToolViewScenario   = "view_scenario"
@@ -650,6 +654,11 @@ func GetToolRegistry() []ToolDefinition {
 		{ToolGetWorkflowSuggestions, (*ToolsFactory).GetWorkflowSuggestions, []ToolTag{TagWorkflow, TagReadOnly}, PlacementServer},
 		{ToolListPresets, (*ToolsFactory).ListPresets, []ToolTag{TagWorkflow, TagReadOnly}, PlacementServer},
 		{ToolGetPreset, (*ToolsFactory).GetPreset, []ToolTag{TagWorkflow, TagReadOnly}, PlacementServer},
+		// Integration discovery: find an action ref, then read its schema,
+		// before writing a `type: action` node. Server-placed because
+		// "connected" reads the caller's connections from the database.
+		{ToolSearchIntegrations, (*ToolsFactory).SearchIntegrations, []ToolTag{TagWorkflow, TagReadOnly}, PlacementServer},
+		{ToolGetIntegrationSchema, (*ToolsFactory).GetIntegrationSchema, []ToolTag{TagWorkflow, TagReadOnly}, PlacementServer},
 
 		// Interaction tools
 		// ask_user is a schema-only tool — execution is intercepted by the workflow

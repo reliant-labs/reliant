@@ -187,6 +187,12 @@ var generatedToolParams = map[string]ToolParams{
 		Bindable:   map[string]struct{}{},
 		Unbindable: map[string]string{},
 	},
+	"get_integration_schema": {
+		Bindable: map[string]struct{}{
+			"ref": {},
+		},
+		Unbindable: map[string]string{},
+	},
 	"get_plan": {
 		Bindable:   map[string]struct{}{},
 		Unbindable: map[string]string{},
@@ -323,6 +329,15 @@ var generatedToolParams = map[string]ToolParams{
 			"attachment_id": "names the one attachment to save, which is chosen per call and cannot be known in advance",
 			"save_to":       "every save would target the same file, so each call destroys the last one's output",
 		},
+	},
+	"search_integrations": {
+		Bindable: map[string]struct{}{
+			"connected_only": {},
+			"kind":           {},
+			"limit":          {},
+			"query":          {},
+		},
+		Unbindable: map[string]string{},
 	},
 	"send_to_run": {
 		Bindable: map[string]struct{}{

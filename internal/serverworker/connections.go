@@ -14,6 +14,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/gitcredentialclient"
 	"github.com/reliant-labs/reliant/internal/integrations/catalog"
+	"github.com/reliant-labs/reliant/internal/integrations/catalogindex"
 	"github.com/reliant-labs/reliant/internal/integrations/connauth"
 	"github.com/reliant-labs/reliant/internal/integrations/ghdelegated"
 	"github.com/reliant-labs/reliant/internal/integrations/httpaction"
@@ -65,6 +66,29 @@ func newIntegrationCredentials(resolver *connections.Resolver, getenv func(strin
 		return nil, fmt.Errorf("integrations: %w", err)
 	}
 	return saved.WithBrokers(brokers), nil
+}
+
+// newCatalogSearch is the caller-aware integration catalog search the
+// search_integrations / get_integration_schema tools read. "Connected" is
+// judged against the brokers this worker ACTUALLY registered on its credential
+// source, so the tool never calls an integration usable that the action node
+// on this same worker could not authenticate.
+func newCatalogSearch(conns catalogindex.ConnectionLister, creds httpaction.CredentialSource) (*catalogindex.Service, error) {
+	idx, err := catalogindex.Builtin()
+	if err != nil {
+		return nil, fmt.Errorf("integration catalog index: %w", err)
+	}
+	var brokers *connauth.Brokers
+	if cs, ok := creds.(*connauth.Source); ok {
+		brokers = cs.Brokers()
+	}
+	delegated := func(brokerID string) (bool, string) {
+		if _, ok := brokers.Get(brokerID); ok {
+			return true, ""
+		}
+		return false, "delegated broker " + brokerID + " is not registered on this worker"
+	}
+	return catalogindex.NewService(idx, conns, delegated), nil
 }
 
 // controlPlaneURLFrom reads the control-plane URL from the same variables, in

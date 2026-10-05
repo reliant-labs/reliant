@@ -53,6 +53,12 @@ const (
 	// CatalogServiceGetCELCompletionsProcedure is the fully-qualified name of the CatalogService's
 	// GetCELCompletions RPC.
 	CatalogServiceGetCELCompletionsProcedure = "/reliant.v1.CatalogService/GetCELCompletions"
+	// CatalogServiceSearchCatalogProcedure is the fully-qualified name of the CatalogService's
+	// SearchCatalog RPC.
+	CatalogServiceSearchCatalogProcedure = "/reliant.v1.CatalogService/SearchCatalog"
+	// CatalogServiceGetCatalogEntryProcedure is the fully-qualified name of the CatalogService's
+	// GetCatalogEntry RPC.
+	CatalogServiceGetCatalogEntryProcedure = "/reliant.v1.CatalogService/GetCatalogEntry"
 )
 
 // CatalogServiceClient is a client for the reliant.v1.CatalogService service.
@@ -71,6 +77,17 @@ type CatalogServiceClient interface {
 	ListNodes(context.Context, *connect.Request[v1.ListNodesRequest]) (*connect.Response[v1.ListNodesResponse], error)
 	// GetCELCompletions returns CEL expression completion data for the workflow builder
 	GetCELCompletions(context.Context, *connect.Request[v1.GetCELCompletionsRequest]) (*connect.Response[v1.GetCELCompletionsResponse], error)
+	// SearchCatalog searches the integration catalog: every action and trigger
+	// type of every embedded integration manifest, ranked for the query and
+	// marked with whether the caller can use it now. It returns lightweight
+	// entries one page at a time and never the whole catalog; GetCatalogEntry
+	// returns one entry's schemas.
+	SearchCatalog(context.Context, *connect.Request[v1.SearchCatalogRequest]) (*connect.Response[v1.SearchCatalogResponse], error)
+	// GetCatalogEntry returns one action or trigger type in full: its
+	// description, its params and output (or trigger payload) JSON Schemas, and
+	// what a connection to its integration requires. An unknown ref is
+	// NOT_FOUND.
+	GetCatalogEntry(context.Context, *connect.Request[v1.GetCatalogEntryRequest]) (*connect.Response[v1.GetCatalogEntryResponse], error)
 }
 
 // NewCatalogServiceClient constructs a client for the reliant.v1.CatalogService service. By
@@ -120,6 +137,18 @@ func NewCatalogServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithSchema(catalogServiceMethods.ByName("GetCELCompletions")),
 			connect.WithClientOptions(opts...),
 		),
+		searchCatalog: connect.NewClient[v1.SearchCatalogRequest, v1.SearchCatalogResponse](
+			httpClient,
+			baseURL+CatalogServiceSearchCatalogProcedure,
+			connect.WithSchema(catalogServiceMethods.ByName("SearchCatalog")),
+			connect.WithClientOptions(opts...),
+		),
+		getCatalogEntry: connect.NewClient[v1.GetCatalogEntryRequest, v1.GetCatalogEntryResponse](
+			httpClient,
+			baseURL+CatalogServiceGetCatalogEntryProcedure,
+			connect.WithSchema(catalogServiceMethods.ByName("GetCatalogEntry")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -131,6 +160,8 @@ type catalogServiceClient struct {
 	listTools            *connect.Client[v1.ListToolsRequest, v1.ListToolsResponse]
 	listNodes            *connect.Client[v1.ListNodesRequest, v1.ListNodesResponse]
 	getCELCompletions    *connect.Client[v1.GetCELCompletionsRequest, v1.GetCELCompletionsResponse]
+	searchCatalog        *connect.Client[v1.SearchCatalogRequest, v1.SearchCatalogResponse]
+	getCatalogEntry      *connect.Client[v1.GetCatalogEntryRequest, v1.GetCatalogEntryResponse]
 }
 
 // ListModels calls reliant.v1.CatalogService.ListModels.
@@ -163,6 +194,16 @@ func (c *catalogServiceClient) GetCELCompletions(ctx context.Context, req *conne
 	return c.getCELCompletions.CallUnary(ctx, req)
 }
 
+// SearchCatalog calls reliant.v1.CatalogService.SearchCatalog.
+func (c *catalogServiceClient) SearchCatalog(ctx context.Context, req *connect.Request[v1.SearchCatalogRequest]) (*connect.Response[v1.SearchCatalogResponse], error) {
+	return c.searchCatalog.CallUnary(ctx, req)
+}
+
+// GetCatalogEntry calls reliant.v1.CatalogService.GetCatalogEntry.
+func (c *catalogServiceClient) GetCatalogEntry(ctx context.Context, req *connect.Request[v1.GetCatalogEntryRequest]) (*connect.Response[v1.GetCatalogEntryResponse], error) {
+	return c.getCatalogEntry.CallUnary(ctx, req)
+}
+
 // CatalogServiceHandler is an implementation of the reliant.v1.CatalogService service.
 type CatalogServiceHandler interface {
 	// ListModels returns all available models filtered by user's configured API keys
@@ -179,6 +220,17 @@ type CatalogServiceHandler interface {
 	ListNodes(context.Context, *connect.Request[v1.ListNodesRequest]) (*connect.Response[v1.ListNodesResponse], error)
 	// GetCELCompletions returns CEL expression completion data for the workflow builder
 	GetCELCompletions(context.Context, *connect.Request[v1.GetCELCompletionsRequest]) (*connect.Response[v1.GetCELCompletionsResponse], error)
+	// SearchCatalog searches the integration catalog: every action and trigger
+	// type of every embedded integration manifest, ranked for the query and
+	// marked with whether the caller can use it now. It returns lightweight
+	// entries one page at a time and never the whole catalog; GetCatalogEntry
+	// returns one entry's schemas.
+	SearchCatalog(context.Context, *connect.Request[v1.SearchCatalogRequest]) (*connect.Response[v1.SearchCatalogResponse], error)
+	// GetCatalogEntry returns one action or trigger type in full: its
+	// description, its params and output (or trigger payload) JSON Schemas, and
+	// what a connection to its integration requires. An unknown ref is
+	// NOT_FOUND.
+	GetCatalogEntry(context.Context, *connect.Request[v1.GetCatalogEntryRequest]) (*connect.Response[v1.GetCatalogEntryResponse], error)
 }
 
 // NewCatalogServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -224,6 +276,18 @@ func NewCatalogServiceHandler(svc CatalogServiceHandler, opts ...connect.Handler
 		connect.WithSchema(catalogServiceMethods.ByName("GetCELCompletions")),
 		connect.WithHandlerOptions(opts...),
 	)
+	catalogServiceSearchCatalogHandler := connect.NewUnaryHandler(
+		CatalogServiceSearchCatalogProcedure,
+		svc.SearchCatalog,
+		connect.WithSchema(catalogServiceMethods.ByName("SearchCatalog")),
+		connect.WithHandlerOptions(opts...),
+	)
+	catalogServiceGetCatalogEntryHandler := connect.NewUnaryHandler(
+		CatalogServiceGetCatalogEntryProcedure,
+		svc.GetCatalogEntry,
+		connect.WithSchema(catalogServiceMethods.ByName("GetCatalogEntry")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/reliant.v1.CatalogService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case CatalogServiceListModelsProcedure:
@@ -238,6 +302,10 @@ func NewCatalogServiceHandler(svc CatalogServiceHandler, opts ...connect.Handler
 			catalogServiceListNodesHandler.ServeHTTP(w, r)
 		case CatalogServiceGetCELCompletionsProcedure:
 			catalogServiceGetCELCompletionsHandler.ServeHTTP(w, r)
+		case CatalogServiceSearchCatalogProcedure:
+			catalogServiceSearchCatalogHandler.ServeHTTP(w, r)
+		case CatalogServiceGetCatalogEntryProcedure:
+			catalogServiceGetCatalogEntryHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -269,4 +337,12 @@ func (UnimplementedCatalogServiceHandler) ListNodes(context.Context, *connect.Re
 
 func (UnimplementedCatalogServiceHandler) GetCELCompletions(context.Context, *connect.Request[v1.GetCELCompletionsRequest]) (*connect.Response[v1.GetCELCompletionsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.CatalogService.GetCELCompletions is not implemented"))
+}
+
+func (UnimplementedCatalogServiceHandler) SearchCatalog(context.Context, *connect.Request[v1.SearchCatalogRequest]) (*connect.Response[v1.SearchCatalogResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.CatalogService.SearchCatalog is not implemented"))
+}
+
+func (UnimplementedCatalogServiceHandler) GetCatalogEntry(context.Context, *connect.Request[v1.GetCatalogEntryRequest]) (*connect.Response[v1.GetCatalogEntryResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.CatalogService.GetCatalogEntry is not implemented"))
 }

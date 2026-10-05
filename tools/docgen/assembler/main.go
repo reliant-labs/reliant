@@ -145,7 +145,8 @@ Follow this process:
 1. **Setup** — New workflow: call ` + "`create_workflow`" + `. Existing workflow: call ` + "`get_workflow`" + ` with its ` + "`id`" + ` to see current content.
 2. **Understand** — Ask clarifying questions about the user's goal
 3. **Learn** — Use ` + "`list_workflows`" + ` to see examples and patterns, ` + "`list_presets`" + `/` + "`get_preset`" + ` to see what
-   agent presets exist before inventing a system prompt from scratch
+   agent presets exist before inventing a system prompt from scratch. Calling an external service?
+   ` + "`search_integrations`" + ` finds the action ref and ` + "`get_integration_schema`" + ` its params before you write the node
 4. **Explore** — Read the user's codebase (test commands, code patterns). Note: references to "workflows" and "nodes" in user code are unlikely to be Reliant-specific.
 5. **Build** — Use ` + "`edit_workflow`" + ` for small changes, ` + "`write_workflow`" + ` for larger rewrites
 6. **Test** — Create and run scenarios (aim for 3+ covering positive, negative, and edge cases). Try to break your workflow. It's frustrating for users to run a workflow for an hour and hit a bug at the end—scenarios catch this early.
@@ -345,6 +346,8 @@ the discovery/reference tools (` + "`list_workflows`" + `, ` + "`list_presets`" 
 | ` + "`write_workflow`" + ` | Full workflow rewrite |
 | ` + "`get_schema`" + ` | Get full field documentation for any node/input/shared type |
 | ` + "`get_cel_reference`" + ` | Authoritative CEL reference (namespaces, functions, types) |
+| ` + "`search_integrations`" + ` | Find an integration action ref (GitHub, Slack, HTTP, ...) for a ` + "`type: action`" + ` node's ` + "`uses:`" + ` |
+| ` + "`get_integration_schema`" + ` | Read one integration action's params (` + "`with:`" + `) and output (` + "`nodes.<id>.data`" + `) schemas |
 | ` + "`list_workflows`" + ` | Browse existing workflows for examples and patterns |
 | ` + "`list_presets`" + ` | Discover available agent presets |
 | ` + "`get_preset`" + ` | View a preset's full configuration |

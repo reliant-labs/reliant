@@ -30,6 +30,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/grpc/interceptors"
 	"github.com/reliant-labs/reliant/internal/grpc/services"
+	"github.com/reliant-labs/reliant/internal/integrations/catalogindex"
 	"github.com/reliant-labs/reliant/internal/integrations/webhook"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -105,6 +106,11 @@ type Config struct {
 	// (a test or CLI composition with no vault).
 	Connections *connections.Service
 
+	// CatalogSearch backs CatalogService.SearchCatalog / GetCatalogEntry:
+	// the integration catalog index plus each caller's connection state. nil
+	// leaves those two RPCs Unimplemented.
+	CatalogSearch *catalogindex.Service
+
 	// OAuthRoutes mounts the browser half of the connection OAuth broker
 	// (/integrations/oauth/{provider}/{start,callback}). nil leaves it off.
 	OAuthRoutes *connections.OAuthHTTP
@@ -169,6 +175,9 @@ func NewServer(cfg *Config) (*Server, error) {
 	planService := services.NewPlanService(database)
 	taskService := services.NewTaskService(database)
 	catalogService := services.NewCatalogService(cfg.ToolsFactory).WithTagPrefs(database)
+	if cfg.CatalogSearch != nil {
+		catalogService.WithCatalogSearch(cfg.CatalogSearch, services.IntegrationMethodsFrom(cfg.Connections))
+	}
 	projectService := services.NewProjectService(database, router)
 	worktreeService := services.NewWorktreeService(database, cfg.TemporalClient, router)
 	repoService := services.NewRepoService(database, router)

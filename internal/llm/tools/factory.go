@@ -32,6 +32,11 @@ type ToolsOptions struct {
 	// (http__request's `connection`). Optional: nil makes a call that names a
 	// connection fail with a FailedPrecondition rather than run unauthenticated.
 	IntegrationCredentials httpaction.CredentialSource
+	// CatalogSearch backs search_integrations / get_integration_schema with
+	// the caller's connection state. Optional: nil searches the embedded
+	// catalog with no connections, so refs and schemas are still found but
+	// nothing that needs a connection reads as connected.
+	CatalogSearch CatalogSearcher
 	// RunStarter launches a new top-level run for start_run. Optional: nil
 	// means start_run reports it is unavailable here (the daemon runtime has
 	// no Temporal connection and no launcher).

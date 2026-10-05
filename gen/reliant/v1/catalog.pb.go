@@ -11,6 +11,7 @@ package reliantv1
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	structpb "google.golang.org/protobuf/types/known/structpb"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
@@ -22,6 +23,58 @@ const (
 	// Verify that runtime/protoimpl is sufficiently up-to-date.
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
+
+// CatalogEntryKind is what an integration catalog entry describes.
+type CatalogEntryKind int32
+
+const (
+	CatalogEntryKind_CATALOG_ENTRY_KIND_UNSPECIFIED CatalogEntryKind = 0
+	// ACTION is an operation a workflow `action` node runs (`uses: <ref>`).
+	CatalogEntryKind_CATALOG_ENTRY_KIND_ACTION CatalogEntryKind = 1
+	// TRIGGER is an event type that can start a run.
+	CatalogEntryKind_CATALOG_ENTRY_KIND_TRIGGER CatalogEntryKind = 2
+)
+
+// Enum value maps for CatalogEntryKind.
+var (
+	CatalogEntryKind_name = map[int32]string{
+		0: "CATALOG_ENTRY_KIND_UNSPECIFIED",
+		1: "CATALOG_ENTRY_KIND_ACTION",
+		2: "CATALOG_ENTRY_KIND_TRIGGER",
+	}
+	CatalogEntryKind_value = map[string]int32{
+		"CATALOG_ENTRY_KIND_UNSPECIFIED": 0,
+		"CATALOG_ENTRY_KIND_ACTION":      1,
+		"CATALOG_ENTRY_KIND_TRIGGER":     2,
+	}
+)
+
+func (x CatalogEntryKind) Enum() *CatalogEntryKind {
+	p := new(CatalogEntryKind)
+	*p = x
+	return p
+}
+
+func (x CatalogEntryKind) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (CatalogEntryKind) Descriptor() protoreflect.EnumDescriptor {
+	return file_reliant_v1_catalog_proto_enumTypes[0].Descriptor()
+}
+
+func (CatalogEntryKind) Type() protoreflect.EnumType {
+	return &file_reliant_v1_catalog_proto_enumTypes[0]
+}
+
+func (x CatalogEntryKind) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use CatalogEntryKind.Descriptor instead.
+func (CatalogEntryKind) EnumDescriptor() ([]byte, []int) {
+	return file_reliant_v1_catalog_proto_rawDescGZIP(), []int{0}
+}
 
 // ModelInfo represents information about an LLM model
 type ModelInfo struct {
@@ -1826,12 +1879,713 @@ func (x *GetCELCompletionsResponse) GetHelperTypes() []*CELHelperTypeInfo {
 	return nil
 }
 
+// CatalogIntegration is the integration an entry belongs to.
+type CatalogIntegration struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Id is the integration id, e.g. "github".
+	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// Version is the manifest major version every ref of this integration pins.
+	Version     int32  `protobuf:"varint,2,opt,name=version,proto3" json:"version,omitempty"`
+	DisplayName string `protobuf:"bytes,3,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
+	// Icon is an icon hint, e.g. "github" or "globe".
+	Icon string `protobuf:"bytes,4,opt,name=icon,proto3" json:"icon,omitempty"`
+	// Category groups integrations, e.g. "engineering" or "core".
+	Category      string `protobuf:"bytes,5,opt,name=category,proto3" json:"category,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CatalogIntegration) Reset() {
+	*x = CatalogIntegration{}
+	mi := &file_reliant_v1_catalog_proto_msgTypes[25]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CatalogIntegration) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CatalogIntegration) ProtoMessage() {}
+
+func (x *CatalogIntegration) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_catalog_proto_msgTypes[25]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CatalogIntegration.ProtoReflect.Descriptor instead.
+func (*CatalogIntegration) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_catalog_proto_rawDescGZIP(), []int{25}
+}
+
+func (x *CatalogIntegration) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *CatalogIntegration) GetVersion() int32 {
+	if x != nil {
+		return x.Version
+	}
+	return 0
+}
+
+func (x *CatalogIntegration) GetDisplayName() string {
+	if x != nil {
+		return x.DisplayName
+	}
+	return ""
+}
+
+func (x *CatalogIntegration) GetIcon() string {
+	if x != nil {
+		return x.Icon
+	}
+	return ""
+}
+
+func (x *CatalogIntegration) GetCategory() string {
+	if x != nil {
+		return x.Category
+	}
+	return ""
+}
+
+// CatalogEntrySummary is one search result: enough to render a picker row.
+type CatalogEntrySummary struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Ref names the entry: "<integration>/<id>@<major>", e.g.
+	// "github/issue.create@1". An action node's `uses` is this ref.
+	Ref  string           `protobuf:"bytes,1,opt,name=ref,proto3" json:"ref,omitempty"`
+	Kind CatalogEntryKind `protobuf:"varint,2,opt,name=kind,proto3,enum=reliant.v1.CatalogEntryKind" json:"kind,omitempty"`
+	// Id is the action or trigger id within its integration, e.g. "issue.create".
+	Id          string `protobuf:"bytes,3,opt,name=id,proto3" json:"id,omitempty"`
+	DisplayName string `protobuf:"bytes,4,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
+	// Summary is one line for a picker or a search result.
+	Summary     string              `protobuf:"bytes,5,opt,name=summary,proto3" json:"summary,omitempty"`
+	Integration *CatalogIntegration `protobuf:"bytes,6,opt,name=integration,proto3" json:"integration,omitempty"`
+	// AuthKinds are the ways to connect the integration, most preferred first.
+	// Empty when it takes no credential.
+	AuthKinds []ConnectionAuthKind `protobuf:"varint,7,rep,packed,name=auth_kinds,json=authKinds,proto3,enum=reliant.v1.ConnectionAuthKind" json:"auth_kinds,omitempty"`
+	// ConnectionRequired is false when the integration takes no credential or
+	// makes one optional (the generic HTTP action).
+	ConnectionRequired bool `protobuf:"varint,8,opt,name=connection_required,json=connectionRequired,proto3" json:"connection_required,omitempty"`
+	// Connected reports whether the caller can use the entry now without
+	// connecting anything first: no connection is required, the caller has an
+	// active connection to the integration, or a delegated authority serves it
+	// on this deployment (GitHub through the control plane).
+	Connected bool `protobuf:"varint,9,opt,name=connected,proto3" json:"connected,omitempty"`
+	// Mutates is set on an action that changes external state.
+	Mutates       bool `protobuf:"varint,10,opt,name=mutates,proto3" json:"mutates,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CatalogEntrySummary) Reset() {
+	*x = CatalogEntrySummary{}
+	mi := &file_reliant_v1_catalog_proto_msgTypes[26]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CatalogEntrySummary) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CatalogEntrySummary) ProtoMessage() {}
+
+func (x *CatalogEntrySummary) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_catalog_proto_msgTypes[26]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CatalogEntrySummary.ProtoReflect.Descriptor instead.
+func (*CatalogEntrySummary) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_catalog_proto_rawDescGZIP(), []int{26}
+}
+
+func (x *CatalogEntrySummary) GetRef() string {
+	if x != nil {
+		return x.Ref
+	}
+	return ""
+}
+
+func (x *CatalogEntrySummary) GetKind() CatalogEntryKind {
+	if x != nil {
+		return x.Kind
+	}
+	return CatalogEntryKind_CATALOG_ENTRY_KIND_UNSPECIFIED
+}
+
+func (x *CatalogEntrySummary) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *CatalogEntrySummary) GetDisplayName() string {
+	if x != nil {
+		return x.DisplayName
+	}
+	return ""
+}
+
+func (x *CatalogEntrySummary) GetSummary() string {
+	if x != nil {
+		return x.Summary
+	}
+	return ""
+}
+
+func (x *CatalogEntrySummary) GetIntegration() *CatalogIntegration {
+	if x != nil {
+		return x.Integration
+	}
+	return nil
+}
+
+func (x *CatalogEntrySummary) GetAuthKinds() []ConnectionAuthKind {
+	if x != nil {
+		return x.AuthKinds
+	}
+	return nil
+}
+
+func (x *CatalogEntrySummary) GetConnectionRequired() bool {
+	if x != nil {
+		return x.ConnectionRequired
+	}
+	return false
+}
+
+func (x *CatalogEntrySummary) GetConnected() bool {
+	if x != nil {
+		return x.Connected
+	}
+	return false
+}
+
+func (x *CatalogEntrySummary) GetMutates() bool {
+	if x != nil {
+		return x.Mutates
+	}
+	return false
+}
+
+// CatalogFacet counts the matches that carry one value of a facet.
+type CatalogFacet struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Value         string                 `protobuf:"bytes,1,opt,name=value,proto3" json:"value,omitempty"`
+	Count         int32                  `protobuf:"varint,2,opt,name=count,proto3" json:"count,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CatalogFacet) Reset() {
+	*x = CatalogFacet{}
+	mi := &file_reliant_v1_catalog_proto_msgTypes[27]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CatalogFacet) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CatalogFacet) ProtoMessage() {}
+
+func (x *CatalogFacet) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_catalog_proto_msgTypes[27]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CatalogFacet.ProtoReflect.Descriptor instead.
+func (*CatalogFacet) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_catalog_proto_rawDescGZIP(), []int{27}
+}
+
+func (x *CatalogFacet) GetValue() string {
+	if x != nil {
+		return x.Value
+	}
+	return ""
+}
+
+func (x *CatalogFacet) GetCount() int32 {
+	if x != nil {
+		return x.Count
+	}
+	return 0
+}
+
+type SearchCatalogRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Query is free text: words, a ref, or the start of either. Every word
+	// must match an entry (as a word or the start of one) for it to be
+	// returned. Empty matches every entry, so the filters alone browse.
+	// At most 256 bytes.
+	Query string `protobuf:"bytes,1,opt,name=query,proto3" json:"query,omitempty"`
+	// Kinds keeps only entries of these kinds. Empty means every kind.
+	Kinds []CatalogEntryKind `protobuf:"varint,2,rep,packed,name=kinds,proto3,enum=reliant.v1.CatalogEntryKind" json:"kinds,omitempty"`
+	// Category keeps only entries of integrations in this category. Empty
+	// means every category.
+	Category string `protobuf:"bytes,3,opt,name=category,proto3" json:"category,omitempty"`
+	// Integration keeps only entries of this integration id. Empty means every
+	// integration.
+	Integration string `protobuf:"bytes,4,opt,name=integration,proto3" json:"integration,omitempty"`
+	// ConnectedOnly keeps only entries the caller can use now (see
+	// CatalogEntrySummary.connected).
+	ConnectedOnly bool `protobuf:"varint,5,opt,name=connected_only,json=connectedOnly,proto3" json:"connected_only,omitempty"`
+	// PageSize defaults to 20; larger values are capped at 100.
+	PageSize int32 `protobuf:"varint,6,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	// PageToken is a previous response's next_page_token. It is only valid for
+	// the same query and filters.
+	PageToken     string `protobuf:"bytes,7,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SearchCatalogRequest) Reset() {
+	*x = SearchCatalogRequest{}
+	mi := &file_reliant_v1_catalog_proto_msgTypes[28]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SearchCatalogRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SearchCatalogRequest) ProtoMessage() {}
+
+func (x *SearchCatalogRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_catalog_proto_msgTypes[28]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SearchCatalogRequest.ProtoReflect.Descriptor instead.
+func (*SearchCatalogRequest) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_catalog_proto_rawDescGZIP(), []int{28}
+}
+
+func (x *SearchCatalogRequest) GetQuery() string {
+	if x != nil {
+		return x.Query
+	}
+	return ""
+}
+
+func (x *SearchCatalogRequest) GetKinds() []CatalogEntryKind {
+	if x != nil {
+		return x.Kinds
+	}
+	return nil
+}
+
+func (x *SearchCatalogRequest) GetCategory() string {
+	if x != nil {
+		return x.Category
+	}
+	return ""
+}
+
+func (x *SearchCatalogRequest) GetIntegration() string {
+	if x != nil {
+		return x.Integration
+	}
+	return ""
+}
+
+func (x *SearchCatalogRequest) GetConnectedOnly() bool {
+	if x != nil {
+		return x.ConnectedOnly
+	}
+	return false
+}
+
+func (x *SearchCatalogRequest) GetPageSize() int32 {
+	if x != nil {
+		return x.PageSize
+	}
+	return 0
+}
+
+func (x *SearchCatalogRequest) GetPageToken() string {
+	if x != nil {
+		return x.PageToken
+	}
+	return ""
+}
+
+type SearchCatalogResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Entries are the page, best match first.
+	Entries []*CatalogEntrySummary `protobuf:"bytes,1,rep,name=entries,proto3" json:"entries,omitempty"`
+	// NextPageToken fetches the next page; empty on the last.
+	NextPageToken string `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
+	// TotalSize is how many entries match the query and every filter.
+	TotalSize int32 `protobuf:"varint,3,opt,name=total_size,json=totalSize,proto3" json:"total_size,omitempty"`
+	// CategoryFacets count the matches per integration category, applying
+	// every filter except category, so a picker can show what each category
+	// would hold. Largest first, then by category.
+	CategoryFacets []*CatalogFacet `protobuf:"bytes,4,rep,name=category_facets,json=categoryFacets,proto3" json:"category_facets,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *SearchCatalogResponse) Reset() {
+	*x = SearchCatalogResponse{}
+	mi := &file_reliant_v1_catalog_proto_msgTypes[29]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SearchCatalogResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SearchCatalogResponse) ProtoMessage() {}
+
+func (x *SearchCatalogResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_catalog_proto_msgTypes[29]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SearchCatalogResponse.ProtoReflect.Descriptor instead.
+func (*SearchCatalogResponse) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_catalog_proto_rawDescGZIP(), []int{29}
+}
+
+func (x *SearchCatalogResponse) GetEntries() []*CatalogEntrySummary {
+	if x != nil {
+		return x.Entries
+	}
+	return nil
+}
+
+func (x *SearchCatalogResponse) GetNextPageToken() string {
+	if x != nil {
+		return x.NextPageToken
+	}
+	return ""
+}
+
+func (x *SearchCatalogResponse) GetTotalSize() int32 {
+	if x != nil {
+		return x.TotalSize
+	}
+	return 0
+}
+
+func (x *SearchCatalogResponse) GetCategoryFacets() []*CatalogFacet {
+	if x != nil {
+		return x.CategoryFacets
+	}
+	return nil
+}
+
+type GetCatalogEntryRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Ref is a CatalogEntrySummary.ref, e.g. "github/user.get@1".
+	Ref           string `protobuf:"bytes,1,opt,name=ref,proto3" json:"ref,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetCatalogEntryRequest) Reset() {
+	*x = GetCatalogEntryRequest{}
+	mi := &file_reliant_v1_catalog_proto_msgTypes[30]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetCatalogEntryRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetCatalogEntryRequest) ProtoMessage() {}
+
+func (x *GetCatalogEntryRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_catalog_proto_msgTypes[30]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetCatalogEntryRequest.ProtoReflect.Descriptor instead.
+func (*GetCatalogEntryRequest) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_catalog_proto_rawDescGZIP(), []int{30}
+}
+
+func (x *GetCatalogEntryRequest) GetRef() string {
+	if x != nil {
+		return x.Ref
+	}
+	return ""
+}
+
+type GetCatalogEntryResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Entry         *CatalogEntry          `protobuf:"bytes,1,opt,name=entry,proto3" json:"entry,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetCatalogEntryResponse) Reset() {
+	*x = GetCatalogEntryResponse{}
+	mi := &file_reliant_v1_catalog_proto_msgTypes[31]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetCatalogEntryResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetCatalogEntryResponse) ProtoMessage() {}
+
+func (x *GetCatalogEntryResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_catalog_proto_msgTypes[31]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetCatalogEntryResponse.ProtoReflect.Descriptor instead.
+func (*GetCatalogEntryResponse) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_catalog_proto_rawDescGZIP(), []int{31}
+}
+
+func (x *GetCatalogEntryResponse) GetEntry() *CatalogEntry {
+	if x != nil {
+		return x.Entry
+	}
+	return nil
+}
+
+// CatalogEntry is one action or trigger type in full.
+type CatalogEntry struct {
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Summary *CatalogEntrySummary   `protobuf:"bytes,1,opt,name=summary,proto3" json:"summary,omitempty"`
+	// Description is the long form an agent or a help panel reads.
+	Description string `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
+	// ParamsSchema is the JSON Schema of an action's parameters, which an
+	// action node's `with:` supplies. Unset for a trigger.
+	ParamsSchema *structpb.Struct `protobuf:"bytes,3,opt,name=params_schema,json=paramsSchema,proto3" json:"params_schema,omitempty"`
+	// OutputSchema is the JSON Schema of an action's output data, reachable as
+	// nodes.<id>.data. Unset for a trigger.
+	OutputSchema *structpb.Struct `protobuf:"bytes,4,opt,name=output_schema,json=outputSchema,proto3" json:"output_schema,omitempty"`
+	// PayloadSchema is the JSON Schema of a trigger's event, reachable as
+	// trigger.payload. Unset for an action.
+	PayloadSchema *structpb.Struct              `protobuf:"bytes,5,opt,name=payload_schema,json=payloadSchema,proto3" json:"payload_schema,omitempty"`
+	Connection    *CatalogConnectionRequirement `protobuf:"bytes,6,opt,name=connection,proto3" json:"connection,omitempty"`
+	// ToolName is the agent tool this action is also exposed as (for example
+	// "github__user_get"); empty when it is not exposed to agents.
+	ToolName      string `protobuf:"bytes,7,opt,name=tool_name,json=toolName,proto3" json:"tool_name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CatalogEntry) Reset() {
+	*x = CatalogEntry{}
+	mi := &file_reliant_v1_catalog_proto_msgTypes[32]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CatalogEntry) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CatalogEntry) ProtoMessage() {}
+
+func (x *CatalogEntry) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_catalog_proto_msgTypes[32]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CatalogEntry.ProtoReflect.Descriptor instead.
+func (*CatalogEntry) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_catalog_proto_rawDescGZIP(), []int{32}
+}
+
+func (x *CatalogEntry) GetSummary() *CatalogEntrySummary {
+	if x != nil {
+		return x.Summary
+	}
+	return nil
+}
+
+func (x *CatalogEntry) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+func (x *CatalogEntry) GetParamsSchema() *structpb.Struct {
+	if x != nil {
+		return x.ParamsSchema
+	}
+	return nil
+}
+
+func (x *CatalogEntry) GetOutputSchema() *structpb.Struct {
+	if x != nil {
+		return x.OutputSchema
+	}
+	return nil
+}
+
+func (x *CatalogEntry) GetPayloadSchema() *structpb.Struct {
+	if x != nil {
+		return x.PayloadSchema
+	}
+	return nil
+}
+
+func (x *CatalogEntry) GetConnection() *CatalogConnectionRequirement {
+	if x != nil {
+		return x.Connection
+	}
+	return nil
+}
+
+func (x *CatalogEntry) GetToolName() string {
+	if x != nil {
+		return x.ToolName
+	}
+	return ""
+}
+
+// CatalogConnectionRequirement is what using an entry asks of a connection.
+type CatalogConnectionRequirement struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Required is false when the integration takes no credential or makes one
+	// optional.
+	Required bool `protobuf:"varint,1,opt,name=required,proto3" json:"required,omitempty"`
+	// Methods are the ways to connect, most preferred first, each with whether
+	// this deployment offers it (the shape ListIntegrations returns).
+	Methods []*IntegrationAuthMethod `protobuf:"bytes,2,rep,name=methods,proto3" json:"methods,omitempty"`
+	// ConnectionParams are the non-secret settings a new connection asks for.
+	ConnectionParams []*IntegrationConnectionParam `protobuf:"bytes,3,rep,name=connection_params,json=connectionParams,proto3" json:"connection_params,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *CatalogConnectionRequirement) Reset() {
+	*x = CatalogConnectionRequirement{}
+	mi := &file_reliant_v1_catalog_proto_msgTypes[33]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CatalogConnectionRequirement) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CatalogConnectionRequirement) ProtoMessage() {}
+
+func (x *CatalogConnectionRequirement) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_catalog_proto_msgTypes[33]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CatalogConnectionRequirement.ProtoReflect.Descriptor instead.
+func (*CatalogConnectionRequirement) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_catalog_proto_rawDescGZIP(), []int{33}
+}
+
+func (x *CatalogConnectionRequirement) GetRequired() bool {
+	if x != nil {
+		return x.Required
+	}
+	return false
+}
+
+func (x *CatalogConnectionRequirement) GetMethods() []*IntegrationAuthMethod {
+	if x != nil {
+		return x.Methods
+	}
+	return nil
+}
+
+func (x *CatalogConnectionRequirement) GetConnectionParams() []*IntegrationConnectionParam {
+	if x != nil {
+		return x.ConnectionParams
+	}
+	return nil
+}
+
 var File_reliant_v1_catalog_proto protoreflect.FileDescriptor
 
 const file_reliant_v1_catalog_proto_rawDesc = "" +
 	"\n" +
 	"\x18reliant/v1/catalog.proto\x12\n" +
-	"reliant.v1\"\xe9\x04\n" +
+	"reliant.v1\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1breliant/v1/connection.proto\"\xe9\x04\n" +
 	"\tModelInfo\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x1a\n" +
@@ -1975,7 +2729,66 @@ const file_reliant_v1_catalog_proto_rawDesc = "" +
 	"namespaces\x129\n" +
 	"\tfunctions\x18\x02 \x03(\v2\x1b.reliant.v1.CELFunctionInfoR\tfunctions\x12O\n" +
 	"\x13node_output_schemas\x18\x03 \x03(\v2\x1f.reliant.v1.CELNodeOutputSchemaR\x11nodeOutputSchemas\x12@\n" +
-	"\fhelper_types\x18\x04 \x03(\v2\x1d.reliant.v1.CELHelperTypeInfoR\vhelperTypes2\xb2\x04\n" +
+	"\fhelper_types\x18\x04 \x03(\v2\x1d.reliant.v1.CELHelperTypeInfoR\vhelperTypes\"\x91\x01\n" +
+	"\x12CatalogIntegration\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x18\n" +
+	"\aversion\x18\x02 \x01(\x05R\aversion\x12!\n" +
+	"\fdisplay_name\x18\x03 \x01(\tR\vdisplayName\x12\x12\n" +
+	"\x04icon\x18\x04 \x01(\tR\x04icon\x12\x1a\n" +
+	"\bcategory\x18\x05 \x01(\tR\bcategory\"\x90\x03\n" +
+	"\x13CatalogEntrySummary\x12\x10\n" +
+	"\x03ref\x18\x01 \x01(\tR\x03ref\x120\n" +
+	"\x04kind\x18\x02 \x01(\x0e2\x1c.reliant.v1.CatalogEntryKindR\x04kind\x12\x0e\n" +
+	"\x02id\x18\x03 \x01(\tR\x02id\x12!\n" +
+	"\fdisplay_name\x18\x04 \x01(\tR\vdisplayName\x12\x18\n" +
+	"\asummary\x18\x05 \x01(\tR\asummary\x12@\n" +
+	"\vintegration\x18\x06 \x01(\v2\x1e.reliant.v1.CatalogIntegrationR\vintegration\x12=\n" +
+	"\n" +
+	"auth_kinds\x18\a \x03(\x0e2\x1e.reliant.v1.ConnectionAuthKindR\tauthKinds\x12/\n" +
+	"\x13connection_required\x18\b \x01(\bR\x12connectionRequired\x12\x1c\n" +
+	"\tconnected\x18\t \x01(\bR\tconnected\x12\x18\n" +
+	"\amutates\x18\n" +
+	" \x01(\bR\amutates\":\n" +
+	"\fCatalogFacet\x12\x14\n" +
+	"\x05value\x18\x01 \x01(\tR\x05value\x12\x14\n" +
+	"\x05count\x18\x02 \x01(\x05R\x05count\"\x81\x02\n" +
+	"\x14SearchCatalogRequest\x12\x14\n" +
+	"\x05query\x18\x01 \x01(\tR\x05query\x122\n" +
+	"\x05kinds\x18\x02 \x03(\x0e2\x1c.reliant.v1.CatalogEntryKindR\x05kinds\x12\x1a\n" +
+	"\bcategory\x18\x03 \x01(\tR\bcategory\x12 \n" +
+	"\vintegration\x18\x04 \x01(\tR\vintegration\x12%\n" +
+	"\x0econnected_only\x18\x05 \x01(\bR\rconnectedOnly\x12\x1b\n" +
+	"\tpage_size\x18\x06 \x01(\x05R\bpageSize\x12\x1d\n" +
+	"\n" +
+	"page_token\x18\a \x01(\tR\tpageToken\"\xdc\x01\n" +
+	"\x15SearchCatalogResponse\x129\n" +
+	"\aentries\x18\x01 \x03(\v2\x1f.reliant.v1.CatalogEntrySummaryR\aentries\x12&\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\x12\x1d\n" +
+	"\n" +
+	"total_size\x18\x03 \x01(\x05R\ttotalSize\x12A\n" +
+	"\x0fcategory_facets\x18\x04 \x03(\v2\x18.reliant.v1.CatalogFacetR\x0ecategoryFacets\"*\n" +
+	"\x16GetCatalogEntryRequest\x12\x10\n" +
+	"\x03ref\x18\x01 \x01(\tR\x03ref\"I\n" +
+	"\x17GetCatalogEntryResponse\x12.\n" +
+	"\x05entry\x18\x01 \x01(\v2\x18.reliant.v1.CatalogEntryR\x05entry\"\x8e\x03\n" +
+	"\fCatalogEntry\x129\n" +
+	"\asummary\x18\x01 \x01(\v2\x1f.reliant.v1.CatalogEntrySummaryR\asummary\x12 \n" +
+	"\vdescription\x18\x02 \x01(\tR\vdescription\x12<\n" +
+	"\rparams_schema\x18\x03 \x01(\v2\x17.google.protobuf.StructR\fparamsSchema\x12<\n" +
+	"\routput_schema\x18\x04 \x01(\v2\x17.google.protobuf.StructR\foutputSchema\x12>\n" +
+	"\x0epayload_schema\x18\x05 \x01(\v2\x17.google.protobuf.StructR\rpayloadSchema\x12H\n" +
+	"\n" +
+	"connection\x18\x06 \x01(\v2(.reliant.v1.CatalogConnectionRequirementR\n" +
+	"connection\x12\x1b\n" +
+	"\ttool_name\x18\a \x01(\tR\btoolName\"\xcc\x01\n" +
+	"\x1cCatalogConnectionRequirement\x12\x1a\n" +
+	"\brequired\x18\x01 \x01(\bR\brequired\x12;\n" +
+	"\amethods\x18\x02 \x03(\v2!.reliant.v1.IntegrationAuthMethodR\amethods\x12S\n" +
+	"\x11connection_params\x18\x03 \x03(\v2&.reliant.v1.IntegrationConnectionParamR\x10connectionParams*u\n" +
+	"\x10CatalogEntryKind\x12\"\n" +
+	"\x1eCATALOG_ENTRY_KIND_UNSPECIFIED\x10\x00\x12\x1d\n" +
+	"\x19CATALOG_ENTRY_KIND_ACTION\x10\x01\x12\x1e\n" +
+	"\x1aCATALOG_ENTRY_KIND_TRIGGER\x10\x022\xe8\x05\n" +
 	"\x0eCatalogService\x12M\n" +
 	"\n" +
 	"ListModels\x12\x1d.reliant.v1.ListModelsRequest\x1a\x1e.reliant.v1.ListModelsResponse\"\x00\x12k\n" +
@@ -1983,7 +2796,9 @@ const file_reliant_v1_catalog_proto_rawDesc = "" +
 	"\x13ListAvailableModels\x12&.reliant.v1.ListAvailableModelsRequest\x1a'.reliant.v1.ListAvailableModelsResponse\"\x00\x12J\n" +
 	"\tListTools\x12\x1c.reliant.v1.ListToolsRequest\x1a\x1d.reliant.v1.ListToolsResponse\"\x00\x12J\n" +
 	"\tListNodes\x12\x1c.reliant.v1.ListNodesRequest\x1a\x1d.reliant.v1.ListNodesResponse\"\x00\x12b\n" +
-	"\x11GetCELCompletions\x12$.reliant.v1.GetCELCompletionsRequest\x1a%.reliant.v1.GetCELCompletionsResponse\"\x00B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
+	"\x11GetCELCompletions\x12$.reliant.v1.GetCELCompletionsRequest\x1a%.reliant.v1.GetCELCompletionsResponse\"\x00\x12V\n" +
+	"\rSearchCatalog\x12 .reliant.v1.SearchCatalogRequest\x1a!.reliant.v1.SearchCatalogResponse\"\x00\x12\\\n" +
+	"\x0fGetCatalogEntry\x12\".reliant.v1.GetCatalogEntryRequest\x1a#.reliant.v1.GetCatalogEntryResponse\"\x00B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
 
 var (
 	file_reliant_v1_catalog_proto_rawDescOnce sync.Once
@@ -1997,69 +2812,102 @@ func file_reliant_v1_catalog_proto_rawDescGZIP() []byte {
 	return file_reliant_v1_catalog_proto_rawDescData
 }
 
-var file_reliant_v1_catalog_proto_msgTypes = make([]protoimpl.MessageInfo, 25)
+var file_reliant_v1_catalog_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_reliant_v1_catalog_proto_msgTypes = make([]protoimpl.MessageInfo, 34)
 var file_reliant_v1_catalog_proto_goTypes = []any{
-	(*ModelInfo)(nil),                    // 0: reliant.v1.ModelInfo
-	(*LocalModelSource)(nil),             // 1: reliant.v1.LocalModelSource
-	(*ListModelsRequest)(nil),            // 2: reliant.v1.ListModelsRequest
-	(*ListModelsResponse)(nil),           // 3: reliant.v1.ListModelsResponse
-	(*TierResolution)(nil),               // 4: reliant.v1.TierResolution
-	(*ListModelsByProviderRequest)(nil),  // 5: reliant.v1.ListModelsByProviderRequest
-	(*ListModelsByProviderResponse)(nil), // 6: reliant.v1.ListModelsByProviderResponse
-	(*AvailableModelInfo)(nil),           // 7: reliant.v1.AvailableModelInfo
-	(*ListAvailableModelsRequest)(nil),   // 8: reliant.v1.ListAvailableModelsRequest
-	(*ListAvailableModelsResponse)(nil),  // 9: reliant.v1.ListAvailableModelsResponse
-	(*ToolInfo)(nil),                     // 10: reliant.v1.ToolInfo
-	(*ListToolsRequest)(nil),             // 11: reliant.v1.ListToolsRequest
-	(*ListToolsResponse)(nil),            // 12: reliant.v1.ListToolsResponse
-	(*NodeInputField)(nil),               // 13: reliant.v1.NodeInputField
-	(*NodeInfo)(nil),                     // 14: reliant.v1.NodeInfo
-	(*NodeCategory)(nil),                 // 15: reliant.v1.NodeCategory
-	(*ListNodesRequest)(nil),             // 16: reliant.v1.ListNodesRequest
-	(*ListNodesResponse)(nil),            // 17: reliant.v1.ListNodesResponse
-	(*GetCELCompletionsRequest)(nil),     // 18: reliant.v1.GetCELCompletionsRequest
-	(*CELFieldInfo)(nil),                 // 19: reliant.v1.CELFieldInfo
-	(*CELNamespaceInfo)(nil),             // 20: reliant.v1.CELNamespaceInfo
-	(*CELFunctionInfo)(nil),              // 21: reliant.v1.CELFunctionInfo
-	(*CELNodeOutputSchema)(nil),          // 22: reliant.v1.CELNodeOutputSchema
-	(*CELHelperTypeInfo)(nil),            // 23: reliant.v1.CELHelperTypeInfo
-	(*GetCELCompletionsResponse)(nil),    // 24: reliant.v1.GetCELCompletionsResponse
+	(CatalogEntryKind)(0),                // 0: reliant.v1.CatalogEntryKind
+	(*ModelInfo)(nil),                    // 1: reliant.v1.ModelInfo
+	(*LocalModelSource)(nil),             // 2: reliant.v1.LocalModelSource
+	(*ListModelsRequest)(nil),            // 3: reliant.v1.ListModelsRequest
+	(*ListModelsResponse)(nil),           // 4: reliant.v1.ListModelsResponse
+	(*TierResolution)(nil),               // 5: reliant.v1.TierResolution
+	(*ListModelsByProviderRequest)(nil),  // 6: reliant.v1.ListModelsByProviderRequest
+	(*ListModelsByProviderResponse)(nil), // 7: reliant.v1.ListModelsByProviderResponse
+	(*AvailableModelInfo)(nil),           // 8: reliant.v1.AvailableModelInfo
+	(*ListAvailableModelsRequest)(nil),   // 9: reliant.v1.ListAvailableModelsRequest
+	(*ListAvailableModelsResponse)(nil),  // 10: reliant.v1.ListAvailableModelsResponse
+	(*ToolInfo)(nil),                     // 11: reliant.v1.ToolInfo
+	(*ListToolsRequest)(nil),             // 12: reliant.v1.ListToolsRequest
+	(*ListToolsResponse)(nil),            // 13: reliant.v1.ListToolsResponse
+	(*NodeInputField)(nil),               // 14: reliant.v1.NodeInputField
+	(*NodeInfo)(nil),                     // 15: reliant.v1.NodeInfo
+	(*NodeCategory)(nil),                 // 16: reliant.v1.NodeCategory
+	(*ListNodesRequest)(nil),             // 17: reliant.v1.ListNodesRequest
+	(*ListNodesResponse)(nil),            // 18: reliant.v1.ListNodesResponse
+	(*GetCELCompletionsRequest)(nil),     // 19: reliant.v1.GetCELCompletionsRequest
+	(*CELFieldInfo)(nil),                 // 20: reliant.v1.CELFieldInfo
+	(*CELNamespaceInfo)(nil),             // 21: reliant.v1.CELNamespaceInfo
+	(*CELFunctionInfo)(nil),              // 22: reliant.v1.CELFunctionInfo
+	(*CELNodeOutputSchema)(nil),          // 23: reliant.v1.CELNodeOutputSchema
+	(*CELHelperTypeInfo)(nil),            // 24: reliant.v1.CELHelperTypeInfo
+	(*GetCELCompletionsResponse)(nil),    // 25: reliant.v1.GetCELCompletionsResponse
+	(*CatalogIntegration)(nil),           // 26: reliant.v1.CatalogIntegration
+	(*CatalogEntrySummary)(nil),          // 27: reliant.v1.CatalogEntrySummary
+	(*CatalogFacet)(nil),                 // 28: reliant.v1.CatalogFacet
+	(*SearchCatalogRequest)(nil),         // 29: reliant.v1.SearchCatalogRequest
+	(*SearchCatalogResponse)(nil),        // 30: reliant.v1.SearchCatalogResponse
+	(*GetCatalogEntryRequest)(nil),       // 31: reliant.v1.GetCatalogEntryRequest
+	(*GetCatalogEntryResponse)(nil),      // 32: reliant.v1.GetCatalogEntryResponse
+	(*CatalogEntry)(nil),                 // 33: reliant.v1.CatalogEntry
+	(*CatalogConnectionRequirement)(nil), // 34: reliant.v1.CatalogConnectionRequirement
+	(ConnectionAuthKind)(0),              // 35: reliant.v1.ConnectionAuthKind
+	(*structpb.Struct)(nil),              // 36: google.protobuf.Struct
+	(*IntegrationAuthMethod)(nil),        // 37: reliant.v1.IntegrationAuthMethod
+	(*IntegrationConnectionParam)(nil),   // 38: reliant.v1.IntegrationConnectionParam
 }
 var file_reliant_v1_catalog_proto_depIdxs = []int32{
-	1,  // 0: reliant.v1.ModelInfo.local:type_name -> reliant.v1.LocalModelSource
-	0,  // 1: reliant.v1.ListModelsResponse.models:type_name -> reliant.v1.ModelInfo
-	4,  // 2: reliant.v1.ListModelsResponse.tiers:type_name -> reliant.v1.TierResolution
-	0,  // 3: reliant.v1.ListModelsByProviderResponse.models:type_name -> reliant.v1.ModelInfo
-	7,  // 4: reliant.v1.ListAvailableModelsResponse.models:type_name -> reliant.v1.AvailableModelInfo
-	10, // 5: reliant.v1.ListToolsResponse.tools:type_name -> reliant.v1.ToolInfo
-	13, // 6: reliant.v1.NodeInfo.input_fields:type_name -> reliant.v1.NodeInputField
-	13, // 7: reliant.v1.NodeInfo.output_fields:type_name -> reliant.v1.NodeInputField
-	14, // 8: reliant.v1.ListNodesResponse.nodes:type_name -> reliant.v1.NodeInfo
-	15, // 9: reliant.v1.ListNodesResponse.categories:type_name -> reliant.v1.NodeCategory
-	19, // 10: reliant.v1.CELNamespaceInfo.fields:type_name -> reliant.v1.CELFieldInfo
-	19, // 11: reliant.v1.CELNodeOutputSchema.fields:type_name -> reliant.v1.CELFieldInfo
-	19, // 12: reliant.v1.CELHelperTypeInfo.fields:type_name -> reliant.v1.CELFieldInfo
-	20, // 13: reliant.v1.GetCELCompletionsResponse.namespaces:type_name -> reliant.v1.CELNamespaceInfo
-	21, // 14: reliant.v1.GetCELCompletionsResponse.functions:type_name -> reliant.v1.CELFunctionInfo
-	22, // 15: reliant.v1.GetCELCompletionsResponse.node_output_schemas:type_name -> reliant.v1.CELNodeOutputSchema
-	23, // 16: reliant.v1.GetCELCompletionsResponse.helper_types:type_name -> reliant.v1.CELHelperTypeInfo
-	2,  // 17: reliant.v1.CatalogService.ListModels:input_type -> reliant.v1.ListModelsRequest
-	5,  // 18: reliant.v1.CatalogService.ListModelsByProvider:input_type -> reliant.v1.ListModelsByProviderRequest
-	8,  // 19: reliant.v1.CatalogService.ListAvailableModels:input_type -> reliant.v1.ListAvailableModelsRequest
-	11, // 20: reliant.v1.CatalogService.ListTools:input_type -> reliant.v1.ListToolsRequest
-	16, // 21: reliant.v1.CatalogService.ListNodes:input_type -> reliant.v1.ListNodesRequest
-	18, // 22: reliant.v1.CatalogService.GetCELCompletions:input_type -> reliant.v1.GetCELCompletionsRequest
-	3,  // 23: reliant.v1.CatalogService.ListModels:output_type -> reliant.v1.ListModelsResponse
-	6,  // 24: reliant.v1.CatalogService.ListModelsByProvider:output_type -> reliant.v1.ListModelsByProviderResponse
-	9,  // 25: reliant.v1.CatalogService.ListAvailableModels:output_type -> reliant.v1.ListAvailableModelsResponse
-	12, // 26: reliant.v1.CatalogService.ListTools:output_type -> reliant.v1.ListToolsResponse
-	17, // 27: reliant.v1.CatalogService.ListNodes:output_type -> reliant.v1.ListNodesResponse
-	24, // 28: reliant.v1.CatalogService.GetCELCompletions:output_type -> reliant.v1.GetCELCompletionsResponse
-	23, // [23:29] is the sub-list for method output_type
-	17, // [17:23] is the sub-list for method input_type
-	17, // [17:17] is the sub-list for extension type_name
-	17, // [17:17] is the sub-list for extension extendee
-	0,  // [0:17] is the sub-list for field type_name
+	2,  // 0: reliant.v1.ModelInfo.local:type_name -> reliant.v1.LocalModelSource
+	1,  // 1: reliant.v1.ListModelsResponse.models:type_name -> reliant.v1.ModelInfo
+	5,  // 2: reliant.v1.ListModelsResponse.tiers:type_name -> reliant.v1.TierResolution
+	1,  // 3: reliant.v1.ListModelsByProviderResponse.models:type_name -> reliant.v1.ModelInfo
+	8,  // 4: reliant.v1.ListAvailableModelsResponse.models:type_name -> reliant.v1.AvailableModelInfo
+	11, // 5: reliant.v1.ListToolsResponse.tools:type_name -> reliant.v1.ToolInfo
+	14, // 6: reliant.v1.NodeInfo.input_fields:type_name -> reliant.v1.NodeInputField
+	14, // 7: reliant.v1.NodeInfo.output_fields:type_name -> reliant.v1.NodeInputField
+	15, // 8: reliant.v1.ListNodesResponse.nodes:type_name -> reliant.v1.NodeInfo
+	16, // 9: reliant.v1.ListNodesResponse.categories:type_name -> reliant.v1.NodeCategory
+	20, // 10: reliant.v1.CELNamespaceInfo.fields:type_name -> reliant.v1.CELFieldInfo
+	20, // 11: reliant.v1.CELNodeOutputSchema.fields:type_name -> reliant.v1.CELFieldInfo
+	20, // 12: reliant.v1.CELHelperTypeInfo.fields:type_name -> reliant.v1.CELFieldInfo
+	21, // 13: reliant.v1.GetCELCompletionsResponse.namespaces:type_name -> reliant.v1.CELNamespaceInfo
+	22, // 14: reliant.v1.GetCELCompletionsResponse.functions:type_name -> reliant.v1.CELFunctionInfo
+	23, // 15: reliant.v1.GetCELCompletionsResponse.node_output_schemas:type_name -> reliant.v1.CELNodeOutputSchema
+	24, // 16: reliant.v1.GetCELCompletionsResponse.helper_types:type_name -> reliant.v1.CELHelperTypeInfo
+	0,  // 17: reliant.v1.CatalogEntrySummary.kind:type_name -> reliant.v1.CatalogEntryKind
+	26, // 18: reliant.v1.CatalogEntrySummary.integration:type_name -> reliant.v1.CatalogIntegration
+	35, // 19: reliant.v1.CatalogEntrySummary.auth_kinds:type_name -> reliant.v1.ConnectionAuthKind
+	0,  // 20: reliant.v1.SearchCatalogRequest.kinds:type_name -> reliant.v1.CatalogEntryKind
+	27, // 21: reliant.v1.SearchCatalogResponse.entries:type_name -> reliant.v1.CatalogEntrySummary
+	28, // 22: reliant.v1.SearchCatalogResponse.category_facets:type_name -> reliant.v1.CatalogFacet
+	33, // 23: reliant.v1.GetCatalogEntryResponse.entry:type_name -> reliant.v1.CatalogEntry
+	27, // 24: reliant.v1.CatalogEntry.summary:type_name -> reliant.v1.CatalogEntrySummary
+	36, // 25: reliant.v1.CatalogEntry.params_schema:type_name -> google.protobuf.Struct
+	36, // 26: reliant.v1.CatalogEntry.output_schema:type_name -> google.protobuf.Struct
+	36, // 27: reliant.v1.CatalogEntry.payload_schema:type_name -> google.protobuf.Struct
+	34, // 28: reliant.v1.CatalogEntry.connection:type_name -> reliant.v1.CatalogConnectionRequirement
+	37, // 29: reliant.v1.CatalogConnectionRequirement.methods:type_name -> reliant.v1.IntegrationAuthMethod
+	38, // 30: reliant.v1.CatalogConnectionRequirement.connection_params:type_name -> reliant.v1.IntegrationConnectionParam
+	3,  // 31: reliant.v1.CatalogService.ListModels:input_type -> reliant.v1.ListModelsRequest
+	6,  // 32: reliant.v1.CatalogService.ListModelsByProvider:input_type -> reliant.v1.ListModelsByProviderRequest
+	9,  // 33: reliant.v1.CatalogService.ListAvailableModels:input_type -> reliant.v1.ListAvailableModelsRequest
+	12, // 34: reliant.v1.CatalogService.ListTools:input_type -> reliant.v1.ListToolsRequest
+	17, // 35: reliant.v1.CatalogService.ListNodes:input_type -> reliant.v1.ListNodesRequest
+	19, // 36: reliant.v1.CatalogService.GetCELCompletions:input_type -> reliant.v1.GetCELCompletionsRequest
+	29, // 37: reliant.v1.CatalogService.SearchCatalog:input_type -> reliant.v1.SearchCatalogRequest
+	31, // 38: reliant.v1.CatalogService.GetCatalogEntry:input_type -> reliant.v1.GetCatalogEntryRequest
+	4,  // 39: reliant.v1.CatalogService.ListModels:output_type -> reliant.v1.ListModelsResponse
+	7,  // 40: reliant.v1.CatalogService.ListModelsByProvider:output_type -> reliant.v1.ListModelsByProviderResponse
+	10, // 41: reliant.v1.CatalogService.ListAvailableModels:output_type -> reliant.v1.ListAvailableModelsResponse
+	13, // 42: reliant.v1.CatalogService.ListTools:output_type -> reliant.v1.ListToolsResponse
+	18, // 43: reliant.v1.CatalogService.ListNodes:output_type -> reliant.v1.ListNodesResponse
+	25, // 44: reliant.v1.CatalogService.GetCELCompletions:output_type -> reliant.v1.GetCELCompletionsResponse
+	30, // 45: reliant.v1.CatalogService.SearchCatalog:output_type -> reliant.v1.SearchCatalogResponse
+	32, // 46: reliant.v1.CatalogService.GetCatalogEntry:output_type -> reliant.v1.GetCatalogEntryResponse
+	39, // [39:47] is the sub-list for method output_type
+	31, // [31:39] is the sub-list for method input_type
+	31, // [31:31] is the sub-list for extension type_name
+	31, // [31:31] is the sub-list for extension extendee
+	0,  // [0:31] is the sub-list for field type_name
 }
 
 func init() { file_reliant_v1_catalog_proto_init() }
@@ -2067,19 +2915,21 @@ func file_reliant_v1_catalog_proto_init() {
 	if File_reliant_v1_catalog_proto != nil {
 		return
 	}
+	file_reliant_v1_connection_proto_init()
 	file_reliant_v1_catalog_proto_msgTypes[13].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_reliant_v1_catalog_proto_rawDesc), len(file_reliant_v1_catalog_proto_rawDesc)),
-			NumEnums:      0,
-			NumMessages:   25,
+			NumEnums:      1,
+			NumMessages:   34,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
 		GoTypes:           file_reliant_v1_catalog_proto_goTypes,
 		DependencyIndexes: file_reliant_v1_catalog_proto_depIdxs,
+		EnumInfos:         file_reliant_v1_catalog_proto_enumTypes,
 		MessageInfos:      file_reliant_v1_catalog_proto_msgTypes,
 	}.Build()
 	File_reliant_v1_catalog_proto = out.File
