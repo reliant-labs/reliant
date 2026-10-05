@@ -17,7 +17,7 @@ project/user config or DB records; `hardcoded` = literal text in Go (or an embed
 | 3 | Multi-repo `repo` param hint | `call_llm.go:2157-2173` | config (`ListReposByProject`, `call_llm.go:1064`) | per-turn | no |
 | 4 | Skills announcement `<system-reminder>` listing every catalog skill | `call_llm.go:2178` → `internal/llm/tools/skill.go:540-566` | config (daemon-synced skill catalog) | per-turn | no |
 | 5 | `args.system_prompt` appended as segment 2 | `call_llm.go:2185-2187` | **declared** | per-turn | n/a |
-| 6 | Temporal-retry `<system-reminder>` appended to segment 1 | `call_llm.go:1101-1106`, text at `call_llm.go:2731-2747` | hardcoded | on retry only | no |
+| 6 | ~~Temporal-retry `<system-reminder>` appended to segment 1~~ **Removed** — it told the model its last response was "too long or got cut off" after every failure, though the failures that reach a retry are network/provider errors; a retry now resends the identical prompts (`call_llm_retry_prompts_test.go`) | ~~`call_llm.go:1101-1106`~~ | hardcoded | on retry only | no |
 | 7 | Claude Code spoof: 4–5 base system blocks prepended *before* all caller prompts | `internal/llm/drivers/anthropic/claude_code.go:710-711`, built in `claude_prompts.go:80-111`, bodies in `ccprompts/*.txt` | hardcoded (byte-captured from claude-cli) | per-request | **yes, heavily** |
 | 8 | OpenAI/GPT-5 family guidance appended as a final system block | `internal/llm/drivers/openai/openai_prompts.go:37-44`; used at `openai/driver.go:76,632` and `codex/driver.go:220` | hardcoded (`openai_prompt.txt`) | per-request | partly |
 | 9 | Global + project memory as a `System` message prefix | `call_llm.go:1132-1137`, formatted `call_llm.go:2843-2876` | config (`~/.reliant/reliant.md`, `<project>/reliant.md`) | per-turn (never persisted) | no |
@@ -78,7 +78,7 @@ prompts with cache control). OpenAI/Codex append `openai_prompt.txt` as a **fina
 >
 > *(then)* `\n\n<system-reminder>\nAvailable skills (use the skill tool to load):\n- <path>: <desc truncated to 77 chars>[ (has sub-skills)]…\n</system-reminder>`
 
-### The retry reminder, verbatim (`call_llm.go:2732-2739`)
+### The retry reminder, verbatim (`call_llm.go:2732-2739`) — removed, kept for the record
 
 > `<system-reminder>`
 > This is retry attempt %d after a previous streaming failure (likely a truncated response from the LLM API). The previous attempt's response was too long or got cut off mid-stream. Please try a different approach:

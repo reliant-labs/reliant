@@ -1192,19 +1192,14 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 		}
 	}
 
-	// On Temporal retry (attempt > 1), inject a hidden system reminder so the LLM
-	// knows the previous attempt failed and can try a different approach.
-	attempt := int32(1)
-	func() {
-		defer func() { _ = recover() }() // safe outside activity context (tests)
-		attempt = activity.GetInfo(ctx).Attempt
-	}()
-	if attempt > 1 {
-		systemPrompts = injectRetryHint(systemPrompts, attempt)
-		activity.GetLogger(ctx).Warn("[CallLLM] Injecting retry hint into system prompt",
-			"chatID", chat.ID,
-			"attempt", attempt)
-	}
+	// A Temporal retry sends exactly the prompts the failed attempt sent. There
+	// is deliberately no "your last response was cut off" reminder: the
+	// failures that reach a retry are dropped connections, idle/stall
+	// timeouts and provider errors, none of which the model caused or can fix
+	// by changing its answer. A turn that genuinely hits max_tokens finishes
+	// successfully and is never retried here. Rewriting the system prompt on
+	// retry also changed the first, cached system block, so every retry paid
+	// for a full prompt-cache miss on top of the failure.
 
 	// Initialize in-memory state for collecting response data
 	streamState := &streamProcessingState{
@@ -2964,28 +2959,6 @@ func trimBashWorkspaceCD(toolInput string, workspaceDir string) string {
 // handleError handles error events from the stream
 func (a *CallLLMActivity) handleError(event llm.DriverEvent) error {
 	return fmt.Errorf("LLM streaming error: %w", event.Error)
-}
-
-// injectRetryHint appends a system-reminder to the prompts when a Temporal
-// activity is being retried after a streaming failure. The hint is appended
-// to the first prompt (not added as a separate prompt) so that prompt
-// caching on the last 2 prompts is not disrupted.
-func injectRetryHint(prompts []string, attempt int32) []string {
-	hint := fmt.Sprintf(
-		"\n\n<system-reminder>\n"+
-			"This is retry attempt %d after a previous streaming failure (likely a truncated response from the LLM API). "+
-			"The previous attempt's response was too long or got cut off mid-stream. Please try a different approach:\n"+
-			"- Use fewer tool calls per response\n"+
-			"- Keep individual tool call inputs shorter\n"+
-			"- Break complex operations into multiple turns rather than one massive response\n"+
-			"</system-reminder>", attempt)
-	if len(prompts) > 0 {
-		result := make([]string, len(prompts))
-		copy(result, prompts)
-		result[0] += hint
-		return result
-	}
-	return []string{hint}
 }
 
 // getLatestUserMessageText extracts the text content from the last user message in history.
