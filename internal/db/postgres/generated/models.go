@@ -679,22 +679,26 @@ type ToolCallResult struct {
 }
 
 type Trigger struct {
-	ID               string          `json:"id"`
-	UserID           string          `json:"user_id"`
-	ProjectID        string          `json:"project_id"`
-	WorktreeID       sql.NullString  `json:"worktree_id"`
-	Name             string          `json:"name"`
-	Kind             string          `json:"kind"`
-	Enabled          bool            `json:"enabled"`
-	Workflow         string          `json:"workflow"`
-	Presets          json.RawMessage `json:"presets"`
-	Params           json.RawMessage `json:"params"`
-	Message          string          `json:"message"`
-	Config           json.RawMessage `json:"config"`
-	CreatedAt        time.Time       `json:"created_at"`
-	UpdatedAt        time.Time       `json:"updated_at"`
-	DaemonID         string          `json:"daemon_id"`
-	NotifyOnComplete bool            `json:"notify_on_complete"`
+	ID                  string          `json:"id"`
+	UserID              string          `json:"user_id"`
+	ProjectID           string          `json:"project_id"`
+	WorktreeID          sql.NullString  `json:"worktree_id"`
+	Name                string          `json:"name"`
+	Kind                string          `json:"kind"`
+	Enabled             bool            `json:"enabled"`
+	Workflow            string          `json:"workflow"`
+	Presets             json.RawMessage `json:"presets"`
+	Params              json.RawMessage `json:"params"`
+	Message             string          `json:"message"`
+	Config              json.RawMessage `json:"config"`
+	CreatedAt           time.Time       `json:"created_at"`
+	UpdatedAt           time.Time       `json:"updated_at"`
+	DaemonID            string          `json:"daemon_id"`
+	NotifyOnComplete    bool            `json:"notify_on_complete"`
+	Filter              string          `json:"filter"`
+	ConnectionID        sql.NullString  `json:"connection_id"`
+	WebhookTokenHash    []byte          `json:"webhook_token_hash"`
+	WebhookSecretSealed []byte          `json:"webhook_secret_sealed"`
 }
 
 type TriggerEvent struct {
@@ -709,6 +713,18 @@ type TriggerEvent struct {
 	OutcomeDetail string          `json:"outcome_detail"`
 	ChatID        sql.NullString  `json:"chat_id"`
 	CreatedAt     time.Time       `json:"created_at"`
+}
+
+type TriggerRegistration struct {
+	TriggerID      string       `json:"trigger_id"`
+	Provider       string       `json:"provider"`
+	RegistrationID string       `json:"registration_id"`
+	Cursor         string       `json:"cursor"`
+	LastPolledAt   sql.NullTime `json:"last_polled_at"`
+	Status         string       `json:"status"`
+	StatusDetail   string       `json:"status_detail"`
+	CreatedAt      time.Time    `json:"created_at"`
+	UpdatedAt      time.Time    `json:"updated_at"`
 }
 
 type UpdateStreamCounter struct {

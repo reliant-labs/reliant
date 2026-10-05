@@ -32,15 +32,11 @@ import (
 
 // TriggerKind is the stored trigger kind that fires on run events, and
 // TriggerEventKind the trigger_events kind its firings record (dedupe key
-// "<trigger id>:<run event id>").
-//
-// Declared here rather than in core so this package does not collide with the
-// trigger-receivers stream, which adds core.TriggerKindWorkflowEvent and
-// core.TriggerEventKindWorkflowEvent with the same spelling. Once that is on
-// main these become aliases of those constants.
+// "<trigger id>:<run event id>"). They are the core kinds, named here for the
+// readers of this package.
 const (
-	TriggerKind      core.TriggerKind      = "workflow_event"
-	TriggerEventKind core.TriggerEventKind = "workflow_event"
+	TriggerKind      = core.TriggerKindWorkflowEvent
+	TriggerEventKind = core.TriggerEventKindWorkflowEvent
 )
 
 // MaxTextBytes bounds every free-text payload field (summary, error, blocked

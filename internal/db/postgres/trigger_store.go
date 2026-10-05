@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
 	pgdb "github.com/reliant-labs/reliant/internal/db/postgres/generated"
@@ -44,6 +45,8 @@ func (s *triggerStore) CreateTrigger(ctx context.Context, t *core.Trigger) error
 		DaemonID:   t.DaemonID,
 
 		NotifyOnComplete: t.NotifyOnComplete,
+		Filter:           t.Filter,
+		ConnectionID:     triggerPtrToNullString(t.ConnectionID),
 	})
 }
 
@@ -127,6 +130,8 @@ func (s *triggerStore) UpdateTrigger(ctx context.Context, t *core.Trigger) error
 		UpdatedAt:        t.UpdatedAt,
 		DaemonID:         t.DaemonID,
 		NotifyOnComplete: t.NotifyOnComplete,
+		Filter:           t.Filter,
+		ConnectionID:     triggerPtrToNullString(t.ConnectionID),
 		ID:               t.ID,
 	})
 	if err != nil {
@@ -445,11 +450,159 @@ func triggerFromPG(row pgdb.Trigger) (*core.Trigger, error) {
 		Params:           params,
 		Message:          row.Message,
 		Config:           config,
+		Filter:           row.Filter,
+		ConnectionID:     triggerNullStringToPtr(row.ConnectionID),
 		CreatedAt:        row.CreatedAt,
 		UpdatedAt:        row.UpdatedAt,
 		DaemonID:         row.DaemonID,
 		NotifyOnComplete: row.NotifyOnComplete,
 	}, nil
+}
+
+func (s *triggerStore) SetTriggerWebhookTokenHash(ctx context.Context, id string, hash []byte) error {
+	affected, err := s.q.SetTriggerWebhookTokenHash(ctx, pgdb.SetTriggerWebhookTokenHashParams{WebhookTokenHash: hash, ID: id})
+	if err != nil {
+		return fmt.Errorf("failed to set webhook token: %w", err)
+	}
+	if affected == 0 {
+		return core.ErrTriggerNotFound
+	}
+	return nil
+}
+
+func (s *triggerStore) SetTriggerWebhookSecret(ctx context.Context, id string, sealed []byte) error {
+	affected, err := s.q.SetTriggerWebhookSecret(ctx, pgdb.SetTriggerWebhookSecretParams{WebhookSecretSealed: sealed, ID: id})
+	if err != nil {
+		return fmt.Errorf("failed to set webhook secret: %w", err)
+	}
+	if affected == 0 {
+		return core.ErrTriggerNotFound
+	}
+	return nil
+}
+
+func (s *triggerStore) GetTriggerWebhookCredentials(ctx context.Context, id string) (*core.TriggerWebhookCredentials, error) {
+	row, err := s.q.GetTriggerWebhookCredentials(ctx, id)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, core.ErrTriggerNotFound
+		}
+		return nil, fmt.Errorf("failed to get webhook credentials: %w", err)
+	}
+	return &core.TriggerWebhookCredentials{TokenHash: row.WebhookTokenHash, SecretSealed: row.WebhookSecretSealed}, nil
+}
+
+func (s *triggerStore) ListIntegrationTriggers(ctx context.Context, integration string) ([]*core.IntegrationTriggerRoute, error) {
+	rows, err := s.q.ListIntegrationTriggers(ctx, integration)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list integration triggers: %w", err)
+	}
+	out := make([]*core.IntegrationTriggerRoute, 0, len(rows))
+	for _, row := range rows {
+		t, err := triggerFromPG(row.Trigger)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, &core.IntegrationTriggerRoute{
+			Trigger:           t,
+			ConnectionAccount: row.ConnectionAccount.String,
+			ConnectionStatus:  row.ConnectionStatus,
+		})
+	}
+	return out, nil
+}
+
+func (s *triggerStore) ListStalePendingTriggerEvents(ctx context.Context, olderThan time.Time, limit int) ([]*core.TriggerEvent, error) {
+	if limit <= 0 {
+		limit = defaultTriggerEventLimit
+	}
+	rows, err := s.q.ListStalePendingTriggerEvents(ctx, pgdb.ListStalePendingTriggerEventsParams{
+		OlderThan: olderThan,
+		RowLimit:  int32(limit),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list pending trigger events: %w", err)
+	}
+	out := make([]*core.TriggerEvent, 0, len(rows))
+	for _, row := range rows {
+		ev, err := triggerEventFromPG(row)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, ev)
+	}
+	return out, nil
+}
+
+func (s *triggerStore) ClaimPendingTriggerEvent(ctx context.Context, id string, payload map[string]any) (bool, error) {
+	encoded, err := triggerMapToJSON(payload)
+	if err != nil {
+		return false, fmt.Errorf("marshal trigger event payload: %w", err)
+	}
+	affected, err := s.q.ClaimPendingTriggerEvent(ctx, pgdb.ClaimPendingTriggerEventParams{Payload: encoded, ID: id})
+	if err != nil {
+		return false, fmt.Errorf("failed to claim pending trigger event: %w", err)
+	}
+	return affected == 1, nil
+}
+
+func (s *triggerStore) SettlePendingTriggerEvent(ctx context.Context, id string, outcome core.TriggerEventOutcome, detail string) (bool, error) {
+	affected, err := s.q.SettlePendingTriggerEvent(ctx, pgdb.SettlePendingTriggerEventParams{
+		Outcome: string(outcome), OutcomeDetail: detail, ID: id,
+	})
+	if err != nil {
+		return false, fmt.Errorf("failed to settle pending trigger event: %w", err)
+	}
+	return affected == 1, nil
+}
+
+func (s *triggerStore) GetTriggerRegistration(ctx context.Context, triggerID string) (*core.TriggerRegistration, error) {
+	row, err := s.q.GetTriggerRegistration(ctx, triggerID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, core.ErrTriggerRegistrationNotFound
+		}
+		return nil, fmt.Errorf("failed to get trigger registration: %w", err)
+	}
+	reg := &core.TriggerRegistration{
+		TriggerID:      row.TriggerID,
+		Provider:       row.Provider,
+		RegistrationID: row.RegistrationID,
+		Cursor:         row.Cursor,
+		Status:         row.Status,
+		StatusDetail:   row.StatusDetail,
+		CreatedAt:      row.CreatedAt,
+		UpdatedAt:      row.UpdatedAt,
+	}
+	if row.LastPolledAt.Valid {
+		at := row.LastPolledAt.Time
+		reg.LastPolledAt = &at
+	}
+	return reg, nil
+}
+
+func (s *triggerStore) UpsertTriggerRegistration(ctx context.Context, reg *core.TriggerRegistration) error {
+	status := reg.Status
+	if status == "" {
+		status = core.TriggerRegistrationActive
+	}
+	var polled sql.NullTime
+	if reg.LastPolledAt != nil {
+		polled = sql.NullTime{Time: *reg.LastPolledAt, Valid: true}
+	}
+	return s.q.UpsertTriggerRegistration(ctx, pgdb.UpsertTriggerRegistrationParams{
+		TriggerID:      reg.TriggerID,
+		Provider:       reg.Provider,
+		RegistrationID: reg.RegistrationID,
+		Cursor:         reg.Cursor,
+		LastPolledAt:   polled,
+		Status:         status,
+		StatusDetail:   reg.StatusDetail,
+	})
+}
+
+func (s *triggerStore) DeleteTriggerRegistration(ctx context.Context, triggerID string) error {
+	return s.q.DeleteTriggerRegistration(ctx, triggerID)
 }
 
 func triggerEventFromPG(row pgdb.TriggerEvent) (*core.TriggerEvent, error) {

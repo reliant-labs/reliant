@@ -722,6 +722,19 @@ type Repository interface {
 	// filtered by outcome, and (nil, nil) when it has never fired.
 	GetLatestTriggerEvent(ctx context.Context, triggerID string, outcome *core.TriggerEventOutcome) (*core.TriggerEvent, error)
 
+	// Inbound triggers: webhook credentials, app-level routing, the pending
+	// redrive, and per-trigger provider state (poll cursors).
+	SetTriggerWebhookTokenHash(ctx context.Context, id string, hash []byte) error
+	SetTriggerWebhookSecret(ctx context.Context, id string, sealed []byte) error
+	GetTriggerWebhookCredentials(ctx context.Context, id string) (*core.TriggerWebhookCredentials, error)
+	ListIntegrationTriggers(ctx context.Context, integration string) ([]*core.IntegrationTriggerRoute, error)
+	ListStalePendingTriggerEvents(ctx context.Context, olderThan time.Time, limit int) ([]*core.TriggerEvent, error)
+	ClaimPendingTriggerEvent(ctx context.Context, id string, payload map[string]any) (bool, error)
+	SettlePendingTriggerEvent(ctx context.Context, id string, outcome core.TriggerEventOutcome, detail string) (bool, error)
+	GetTriggerRegistration(ctx context.Context, triggerID string) (*core.TriggerRegistration, error)
+	UpsertTriggerRegistration(ctx context.Context, reg *core.TriggerRegistration) error
+	DeleteTriggerRegistration(ctx context.Context, triggerID string) error
+
 	// Step Executions (for CEL history queries)
 	CreateStepExecution(ctx context.Context, exec *StepExecution) error
 	GetStepExecution(ctx context.Context, id string) (*StepExecution, error)

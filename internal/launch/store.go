@@ -30,6 +30,9 @@ type TriggerEventStore interface {
 	GetTriggerEventByDedupe(ctx context.Context, kind core.TriggerEventKind, dedupeKey string) (*core.TriggerEvent, error)
 	UpdateTriggerEventOutcome(ctx context.Context, id string, outcome core.TriggerEventOutcome, detail string, chatID *string) error
 	UpdateTriggerEventPayload(ctx context.Context, id string, payload map[string]any) error
+	// ClaimPendingTriggerEvent adopts an inbound event a receiver recorded
+	// as pending; claimed=false means another launch got it first.
+	ClaimPendingTriggerEvent(ctx context.Context, id string, payload map[string]any) (claimed bool, err error)
 }
 
 // WorkflowStore is the root workflow row a launch starts.

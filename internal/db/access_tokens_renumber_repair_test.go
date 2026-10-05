@@ -79,6 +79,9 @@ func rewindToRenumberWindow(t *testing.T, raw *sql.DB) {
 		// VIEW) rebuilds it, so neither needs undoing beyond this.
 		`DROP VIEW IF EXISTS chats_with_activity`,
 		`DROP TABLE IF EXISTS trigger_events`,
+		// 20261005025048_trigger_inbound_sources: a plain CREATE TABLE that
+		// references triggers, so it goes first and is recreated by replay.
+		`DROP TABLE IF EXISTS trigger_registrations`,
 		`DROP TABLE IF EXISTS triggers`,
 		// Only migrations whose SQL would FAIL on a second run — a plain
 		// ADD COLUMN or CREATE TABLE — have to be undone to keep the rewind

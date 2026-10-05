@@ -27,6 +27,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/drain"
 	grpcserver "github.com/reliant-labs/reliant/internal/grpc"
 	"github.com/reliant-labs/reliant/internal/grpc/services"
+	"github.com/reliant-labs/reliant/internal/integrations/webhook"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/local"
 	"github.com/reliant-labs/reliant/internal/llm/models"
@@ -365,13 +366,24 @@ func Run(ctx context.Context, opts Options) error {
 	// Background process provider: always DB-backed
 	bgProvider := services.NewDBBackgroundProcessProvider(repo, daemonRouter)
 
+	// Inbound triggers: the receivers record an event and start its fire on
+	// the worker; launching never happens here.
+	inboundRegistry, err := webhook.RegistryFromEnv(os.Getenv)
+	if err != nil {
+		return fmt.Errorf("integration webhook providers: %w", err)
+	}
+	triggerInbound := webhook.NewInbound(repo,
+		triggers.NewIntake(repo, temporalClient, v2workflow.SharedTaskQueue),
+		inboundRegistry, vaultKeys, strings.TrimSpace(os.Getenv("PUBLIC_URL")))
+
 	grpcSrv, err := grpcserver.NewServer(&grpcserver.Config{
-		Port:         opts.GRPCPort,
-		BindAddress:  opts.BindAddress,
-		JWTPublicKey: jwtPublicKey,
-		JWKSURL:      jwksURL,
-		Connections:  connSvc,
-		OAuthRoutes:  oauthRoutes,
+		Port:           opts.GRPCPort,
+		BindAddress:    opts.BindAddress,
+		JWTPublicKey:   jwtPublicKey,
+		JWKSURL:        jwksURL,
+		Connections:    connSvc,
+		OAuthRoutes:    oauthRoutes,
+		TriggerInbound: triggerInbound,
 		// Connector/MCP surface. PUBLIC_URL is this server's externally
 		// reachable base URL, used to tell a user where to point a
 		// third-party MCP client and to build the OAuth discovery document.
@@ -427,7 +439,13 @@ func Run(ctx context.Context, opts Options) error {
 	// refusing to serve until schedules converge would turn an ordering
 	// problem into an outage.
 	go triggers.SyncAllOnStartup(ctx, triggers.NewSyncer(
-		temporalClient.ScheduleClient(), repo, v2workflow.SharedTaskQueue))
+		temporalClient.ScheduleClient(), repo, v2workflow.SharedTaskQueue).
+		WithPolledIntegrations(inboundRegistry.IsPolled))
+
+	// Restart the fire of any inbound trigger event left pending — the
+	// receiver recorded it and its start was lost. The receivers live here,
+	// so the redrive does too.
+	go triggers.NewRedriver(repo, temporalClient, v2workflow.SharedTaskQueue).Run(ctx)
 
 	// -----------------------------------------------------------------
 	// 4. pprof debug server

@@ -1,0 +1,268 @@
+// Copyright (c) 2025 Reliant Labs
+package triggers
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"time"
+
+	"go.temporal.io/sdk/temporal"
+	"go.temporal.io/sdk/workflow"
+
+	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/logging"
+)
+
+// Polled integration triggers (Gmail's history.list, an RSS feed): a
+// Temporal Schedule per trigger runs PollTrigger, which asks the
+// integration's poller for what is new since the stored cursor and hands each
+// new item to the same Intake a webhook delivery goes through.
+//
+// The first poll is a BASELINE: it records where the feed is now and fires
+// nothing, so enabling a trigger never replays the inbox. Every later item is
+// an event whose dedupe key is "<trigger id>:<item id>", so a re-poll that
+// sees an item again — a cursor that did not advance, a provider that
+// re-lists — cannot fire it twice.
+
+// Names registered with Temporal for polling.
+const (
+	PollWorkflowName = "TriggerPollWorkflow"
+	PollActivityName = "PollTrigger"
+)
+
+// DefaultPollInterval is the poll period when neither the trigger nor the
+// integration names one.
+const DefaultPollInterval = 5 * time.Minute
+
+// Poller is one integration's poll function. Implementations make the
+// outbound calls (through the trigger's connection) and do no bookkeeping:
+// the cursor, dedupe and routing are TriggerPoller's.
+type Poller interface {
+	// Poll returns the items newer than req.Cursor and the cursor to resume
+	// from. An empty req.Cursor is the baseline: return the feed's current
+	// position and NO items. A cursor the provider no longer honours (Gmail's
+	// 404 on a stale history id) should be answered with a fresh baseline
+	// and no items, never a replay.
+	Poll(ctx context.Context, req PollRequest) (*PollResult, error)
+}
+
+// PollRequest is one poll.
+type PollRequest struct {
+	TriggerID    string
+	OwnerUserID  string
+	ConnectionID string
+	// Cursor is what the previous poll returned; empty for the baseline.
+	Cursor string
+	// Config is the trigger's source config, for pollers that narrow the
+	// query (a label, a folder).
+	Config core.IntegrationConfig
+}
+
+// PollResult is what a poll found.
+type PollResult struct {
+	// Cursor is where the next poll resumes. Required.
+	Cursor string
+	Items  []PollItem
+}
+
+// PollItem is one new item.
+type PollItem struct {
+	// ID is stable for the item across polls: it is the dedupe key.
+	ID string
+	// Type is matched against the trigger's events, like Event.Type.
+	Type       string
+	OccurredAt time.Time
+	Attributes map[string]string
+	// Data is untrusted and becomes trigger.payload.data.
+	Data map[string]any
+}
+
+// Pollers looks up an integration's poller. The webhook Registry satisfies it.
+type Pollers interface {
+	Poller(integration string) (Poller, bool)
+}
+
+// PollRepo is what polling reads and writes. *db.Repo satisfies it.
+type PollRepo interface {
+	EventRepo
+	GetTriggerRegistration(ctx context.Context, triggerID string) (*core.TriggerRegistration, error)
+	UpsertTriggerRegistration(ctx context.Context, reg *core.TriggerRegistration) error
+	// GetConnection returns the user's connection; a foreign id is an error.
+	GetConnection(ctx context.Context, userID, id string) (*core.Connection, error)
+}
+
+// PollInput is the poll workflow's and activity's input.
+type PollInput struct {
+	TriggerID string `json:"trigger_id"`
+}
+
+// PollOutput reports what a poll did.
+type PollOutput struct {
+	Baseline bool   `json:"baseline,omitempty"`
+	Skipped  bool   `json:"skipped,omitempty"`
+	Reason   string `json:"reason,omitempty"`
+	Items    int    `json:"items"`
+	Accepted int    `json:"accepted"`
+}
+
+// TriggerPoller runs polls. It is the PollTrigger activity.
+type TriggerPoller struct {
+	repo    PollRepo
+	pollers Pollers
+	intake  *Intake
+	now     func() time.Time
+}
+
+// NewTriggerPoller builds the poll activity's receiver.
+func NewTriggerPoller(repo PollRepo, pollers Pollers, intake *Intake) *TriggerPoller {
+	return &TriggerPoller{repo: repo, pollers: pollers, intake: intake, now: time.Now}
+}
+
+// Poll is the PollTrigger activity.
+func (p *TriggerPoller) Poll(ctx context.Context, in PollInput) (*PollOutput, error) {
+	trigger, err := p.repo.GetTrigger(ctx, in.TriggerID)
+	if err != nil {
+		if errors.Is(err, core.ErrTriggerNotFound) {
+			return &PollOutput{Skipped: true, Reason: "trigger deleted"}, nil
+		}
+		return nil, fmt.Errorf("load trigger %s: %w", in.TriggerID, err)
+	}
+	if !trigger.Enabled {
+		return &PollOutput{Skipped: true, Reason: "trigger is disabled"}, nil
+	}
+	cfg, err := IntegrationConfigFor(trigger)
+	if err != nil {
+		return nil, temporal.NewNonRetryableApplicationError(err.Error(), nonRetryableFireError, err)
+	}
+	poller, ok := p.pollers.Poller(cfg.Integration)
+	if !ok {
+		return &PollOutput{Skipped: true, Reason: cfg.Integration + " is not polled on this server"}, nil
+	}
+	if trigger.ConnectionID == nil {
+		return &PollOutput{Skipped: true, Reason: "the trigger's connection was deleted"}, nil
+	}
+	// The connection must be the owner's own and able to authenticate; a
+	// poll through anything else would read an account the owner does not
+	// hold.
+	conn, err := p.repo.GetConnection(ctx, trigger.UserID, *trigger.ConnectionID)
+	if err != nil || conn == nil || conn.UserID != trigger.UserID || conn.IntegrationID != cfg.Integration {
+		return &PollOutput{Skipped: true, Reason: "the trigger's connection is unavailable"}, nil
+	}
+	if conn.Status != core.ConnectionStatusActive {
+		return &PollOutput{Skipped: true, Reason: "the trigger's connection needs to be reconnected"}, nil
+	}
+
+	reg, err := p.repo.GetTriggerRegistration(ctx, trigger.ID)
+	switch {
+	case errors.Is(err, core.ErrTriggerRegistrationNotFound):
+		reg = &core.TriggerRegistration{TriggerID: trigger.ID, Provider: cfg.Integration}
+	case err != nil:
+		return nil, fmt.Errorf("load registration for %s: %w", trigger.ID, err)
+	}
+	baseline := reg.Cursor == ""
+
+	res, pollErr := poller.Poll(ctx, PollRequest{
+		TriggerID: trigger.ID, OwnerUserID: trigger.UserID, ConnectionID: conn.ID,
+		Cursor: reg.Cursor, Config: cfg,
+	})
+	now := p.now().UTC()
+	reg.LastPolledAt = &now
+	reg.Provider = cfg.Integration
+	if pollErr != nil {
+		// Keep the cursor: advancing past items never delivered loses them.
+		reg.Status, reg.StatusDetail = core.TriggerRegistrationError, truncate(pollErr.Error(), 500)
+		if err := p.repo.UpsertTriggerRegistration(ctx, reg); err != nil {
+			logging.Warn("could not record a poll failure", "trigger_id", trigger.ID, "error", err)
+		}
+		return nil, fmt.Errorf("poll %s for trigger %s: %w", cfg.Integration, trigger.ID, pollErr)
+	}
+	if res == nil || res.Cursor == "" {
+		return nil, fmt.Errorf("poller %s returned no cursor", cfg.Integration)
+	}
+
+	out := &PollOutput{Baseline: baseline}
+	if !baseline {
+		out.Items = len(res.Items)
+		for _, item := range res.Items {
+			if item.ID == "" || !IntegrationEventMatches(cfg, item.Type, item.Attributes) {
+				continue
+			}
+			if _, err := p.intake.Accept(ctx, trigger, pollEvent(trigger, cfg.Integration, conn, item), AcceptOptions{}); err != nil {
+				// Do not advance: the next poll re-lists, and what was
+				// already recorded dedupes.
+				return nil, fmt.Errorf("record polled item %s: %w", item.ID, err)
+			}
+			out.Accepted++
+		}
+	}
+	reg.Cursor = res.Cursor
+	reg.Status, reg.StatusDetail = core.TriggerRegistrationActive, ""
+	if err := p.repo.UpsertTriggerRegistration(ctx, reg); err != nil {
+		return nil, fmt.Errorf("save cursor for %s: %w", trigger.ID, err)
+	}
+	return out, nil
+}
+
+func pollEvent(trigger *core.Trigger, integration string, conn *core.Connection, item PollItem) InboundEvent {
+	attrs := make(map[string]any, len(item.Attributes))
+	for k, v := range item.Attributes {
+		attrs[k] = v
+	}
+	account := ""
+	if conn.ExternalAccountID != nil {
+		account = *conn.ExternalAccountID
+	}
+	return InboundEvent{
+		Kind:       core.TriggerEventKindIntegration,
+		DedupeKey:  trigger.ID + ":" + item.ID,
+		OccurredAt: item.OccurredAt,
+		Payload: map[string]any{
+			"integration": integration,
+			"event":       item.Type,
+			"account":     account,
+			"delivery_id": item.ID,
+			"attributes":  attrs,
+			"data":        item.Data,
+		},
+	}
+}
+
+func truncate(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n]
+}
+
+// TriggerPollWorkflow is one scheduled poll.
+func TriggerPollWorkflow(ctx workflow.Context, input PollInput) (*PollOutput, error) {
+	ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+		StartToCloseTimeout: 2 * time.Minute,
+		RetryPolicy: &temporal.RetryPolicy{
+			InitialInterval:        5 * time.Second,
+			BackoffCoefficient:     2.0,
+			MaximumInterval:        time.Minute,
+			MaximumAttempts:        3,
+			NonRetryableErrorTypes: []string{nonRetryableFireError},
+		},
+	})
+	var out PollOutput
+	if err := workflow.ExecuteActivity(ctx, PollActivityName, input).Get(ctx, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// PollWorkflowID is a scheduled poll's workflow id.
+func PollWorkflowID(triggerID string) string { return schedulePrefix + "poll-" + triggerID }
+
+// pollIntervalFor is a polled trigger's period.
+func pollIntervalFor(cfg core.IntegrationConfig) time.Duration {
+	if cfg.PollInterval != "" {
+		if d, err := time.ParseDuration(cfg.PollInterval); err == nil && d >= minPollInterval {
+			return d
+		}
+	}
+	return DefaultPollInterval
+}

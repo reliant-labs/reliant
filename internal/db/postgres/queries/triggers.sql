@@ -2,10 +2,89 @@
 INSERT INTO triggers (
     id, user_id, project_id, worktree_id, name, kind, enabled,
     workflow, presets, params, message, config, created_at, updated_at,
-    daemon_id, notify_on_complete
+    daemon_id, notify_on_complete, filter, connection_id
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18
 );
+
+-- name: SetTriggerWebhookTokenHash :execrows
+-- The token hash has its own write path: no definition update can touch it,
+-- and rotating it is one statement.
+UPDATE triggers SET webhook_token_hash = $1, updated_at = NOW() WHERE id = $2;
+
+-- name: SetTriggerWebhookSecret :execrows
+-- NULL clears the HMAC secret. Sealed by the caller under the owner's tenant.
+UPDATE triggers SET webhook_secret_sealed = $1, updated_at = NOW() WHERE id = $2;
+
+-- name: GetTriggerWebhookCredentials :one
+-- Only the webhook receiver reads these. They are never rendered.
+SELECT webhook_token_hash, webhook_secret_sealed FROM triggers WHERE id = $1;
+
+-- name: ListIntegrationTriggers :many
+-- Every ENABLED integration trigger for one integration, with its
+-- connection's routing identity. The inner join drops triggers whose
+-- connection is gone, revoked or belongs to someone else: an event can only
+-- reach a trigger through its own owner's live connection. Status is returned
+-- rather than filtered so a caller can tell needs_reauth apart.
+SELECT
+    sqlc.embed(t),
+    c.external_account_id AS connection_account,
+    c.status AS connection_status
+FROM triggers t
+JOIN connections c
+    ON c.id = t.connection_id
+    AND c.user_id = t.user_id
+    AND c.owner_kind = 'user'
+    AND c.deleted_at IS NULL
+WHERE t.kind = 'integration'
+    AND t.enabled
+    AND t.config ->> 'integration' = sqlc.arg('integration')::text
+ORDER BY t.id;
+
+-- name: ListStalePendingTriggerEvents :many
+-- Inbound events recorded but not yet settled, older than the cutoff: the
+-- fire workflow for them was never started (the receiver crashed between the
+-- insert and the start) or died. The redriver restarts their fires.
+SELECT * FROM trigger_events
+WHERE outcome = 'pending' AND created_at < sqlc.arg('older_than')::timestamptz
+ORDER BY created_at
+LIMIT sqlc.arg('row_limit');
+
+-- name: ClaimPendingTriggerEvent :execrows
+-- The launcher adopts an inbound event the receiver recorded: the row moves
+-- from pending to launched (chat attached later in the same transaction) and
+-- takes the launch's start record as its payload. The outcome predicate is
+-- what makes two concurrent fires of one event launch it once: the loser
+-- updates zero rows.
+UPDATE trigger_events SET outcome = 'launched', outcome_detail = '', payload = $1
+WHERE id = $2 AND outcome = 'pending';
+
+-- name: SettlePendingTriggerEvent :execrows
+-- Records the verdict on an inbound event that did NOT launch. Conditional on
+-- pending, so it can never overwrite a launch that won a race.
+UPDATE trigger_events SET outcome = $1, outcome_detail = $2
+WHERE id = $3 AND outcome = 'pending';
+
+-- name: GetTriggerRegistration :one
+SELECT * FROM trigger_registrations WHERE trigger_id = $1;
+
+-- name: UpsertTriggerRegistration :exec
+INSERT INTO trigger_registrations (
+    trigger_id, provider, registration_id, cursor, last_polled_at, status, status_detail, created_at, updated_at
+) VALUES (
+    $1, $2, $3, $4, $5, $6, $7, NOW(), NOW()
+)
+ON CONFLICT (trigger_id) DO UPDATE SET
+    provider = EXCLUDED.provider,
+    registration_id = EXCLUDED.registration_id,
+    cursor = EXCLUDED.cursor,
+    last_polled_at = EXCLUDED.last_polled_at,
+    status = EXCLUDED.status,
+    status_detail = EXCLUDED.status_detail,
+    updated_at = NOW();
+
+-- name: DeleteTriggerRegistration :exec
+DELETE FROM trigger_registrations WHERE trigger_id = $1;
 
 -- name: GetTrigger :one
 -- Joins the display names so a trigger can be shown without a second lookup.
@@ -60,8 +139,10 @@ UPDATE triggers SET
     config = $9,
     updated_at = $10,
     daemon_id = $11,
-    notify_on_complete = $12
-WHERE id = $13;
+    notify_on_complete = $12,
+    filter = $13,
+    connection_id = $14
+WHERE id = $15;
 
 -- name: DeleteTrigger :exec
 DELETE FROM triggers WHERE id = $1;

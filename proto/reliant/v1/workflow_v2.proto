@@ -5,6 +5,7 @@ package reliant.v1;
 
 import "google/protobuf/struct.proto";
 import "reliant/v1/annotations.proto";
+import "reliant/v1/trigger.proto";
 
 option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
 
@@ -1692,4 +1693,10 @@ message Workflow {
   // ends. Must resolve to a real workflow and must not reference this workflow
   // itself (no self-cycle).
   string transition_to = 14;
+  // Triggers declares WHEN this workflow should run: schedules, webhooks,
+  // integration events and other workflows' outcomes, each with an optional
+  // CEL filter and input mapping. A declaration is inert until a trigger row
+  // activates it (TriggerDefinition.workflow_trigger), which supplies whose
+  // run it is and where it executes.
+  repeated WorkflowTrigger triggers = 15;
 }

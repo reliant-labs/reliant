@@ -21,6 +21,26 @@ func outcomeOnly(o core.TriggerEventOutcome, detail string) *core.TriggerEventWi
 	return &core.TriggerEventWithRun{Event: &core.TriggerEvent{Outcome: o, OutcomeDetail: detail}}
 }
 
+// An event-driven trigger's filter skips most of a busy source's events. That
+// is the filter working, so a run of them must not read as DEGRADED the way a
+// schedule that keeps standing down does. A pending event is unresolved.
+func TestEventDrivenSkipsDoNotDegradeHealth(t *testing.T) {
+	inboundSkip := func() *core.TriggerEventWithRun {
+		return &core.TriggerEventWithRun{Event: &core.TriggerEvent{
+			Kind: core.TriggerEventKindIntegration, Outcome: core.TriggerEventSkipped, OutcomeDetail: "filter did not match",
+		}}
+	}
+	firings := []*core.TriggerEventWithRun{inboundSkip(), inboundSkip(), inboundSkip(), inboundSkip(), launched(core.RunDisplayCompleted)}
+
+	health := ComputeHealth(firings)
+	assert.Equal(t, reliantv1.TriggerHealthStatus_TRIGGER_HEALTH_STATUS_HEALTHY, health.Status)
+	assert.Zero(t, health.ConsecutiveSkips)
+
+	pending := &core.TriggerEventWithRun{Event: &core.TriggerEvent{Kind: core.TriggerEventKindWebhook, Outcome: core.TriggerEventPending}}
+	result, _ := resolveFiring(pending)
+	assert.Equal(t, resultUnresolved, result, "a pending event has not resolved either way")
+}
+
 // Firings are listed newest first, as the store returns them.
 func TestComputeHealth(t *testing.T) {
 	const (

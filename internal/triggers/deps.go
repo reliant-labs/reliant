@@ -3,6 +3,7 @@ package triggers
 
 import (
 	"context"
+	"time"
 
 	"go.temporal.io/sdk/client"
 
@@ -32,6 +33,17 @@ type Repo interface {
 	GetDaemon(ctx context.Context, id string) (*db.Daemon, error)
 
 	GetRootWorkflowStatusForChats(ctx context.Context, chatIDs []string) (map[string]core.WorkflowStatus, error)
+}
+
+// EventRepo is what the inbound path — intake, event fire and redriver —
+// reads and writes. *db.Repo satisfies it.
+type EventRepo interface {
+	GetTrigger(ctx context.Context, id string) (*core.Trigger, error)
+	GetDaemon(ctx context.Context, id string) (*db.Daemon, error)
+	CreateTriggerEvent(ctx context.Context, ev *core.TriggerEvent) (created bool, err error)
+	GetTriggerEventByDedupe(ctx context.Context, kind core.TriggerEventKind, dedupeKey string) (*core.TriggerEvent, error)
+	SettlePendingTriggerEvent(ctx context.Context, id string, outcome core.TriggerEventOutcome, detail string) (settled bool, err error)
+	ListStalePendingTriggerEvents(ctx context.Context, olderThan time.Time, limit int) ([]*core.TriggerEvent, error)
 }
 
 // Launcher is the one door that turns an event plus a spec into a running
