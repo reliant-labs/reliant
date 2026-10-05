@@ -40,6 +40,37 @@ export function automationLocation(trigger: Trigger): string {
   return `${project} · ${machine}`;
 }
 
+/**
+ * The automation list's column template, shared by the rows and
+ * AutomationListHeader so every cell sits under its label. Fixed widths, not
+ * fractions of each row's content: a fraction grid put the same column at a
+ * different x on every row. Below lg a row folds to two lines and the header
+ * hides.
+ */
+export const AUTOMATION_ROW_GRID =
+  "grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1.5 px-4 lg:grid-cols-[2rem_minmax(0,1fr)_11rem_7.5rem_10rem_6.5rem_2.75rem]";
+
+/** Column labels over the automation rows, on the rows' own grid. */
+export function AutomationListHeader() {
+  return (
+    <div
+      aria-hidden="true"
+      className={cn(
+        AUTOMATION_ROW_GRID,
+        "hidden border-b border-border/60 bg-background py-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground lg:grid",
+      )}
+    >
+      <span />
+      <span>Automation</span>
+      <span>Schedule</span>
+      <span>Health</span>
+      <span>Last run</span>
+      <span>Next run</span>
+      <span className="text-right">On</span>
+    </div>
+  );
+}
+
 export function AutomationRow({ trigger }: { trigger: Trigger }) {
   const setEnabled = useSetTriggerEnabled();
   const health = automationHealth(trigger);
@@ -59,11 +90,7 @@ export function AutomationRow({ trigger }: { trigger: Trigger }) {
 
   return (
     <li
-      className={cn(
-        "grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-4 gap-y-2 px-5 py-3.5",
-        "lg:grid-cols-[auto_minmax(0,2fr)_minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1.1fr)_minmax(0,0.8fr)_auto]",
-        !trigger.enabled && "text-muted-foreground",
-      )}
+      className={cn(AUTOMATION_ROW_GRID, "py-2.5", !trigger.enabled && "text-muted-foreground")}
       data-testid={`automation-row-${trigger.id}`}
       data-health={health.key}
     >
@@ -85,7 +112,7 @@ export function AutomationRow({ trigger }: { trigger: Trigger }) {
 
       {/* Below lg the row is two lines: identity and switch, then the facts. */}
       <div className="order-last col-span-3 flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1 lg:contents">
-        <p className="min-w-0 truncate text-xs text-muted-foreground lg:text-sm" title={scheduleText}>
+        <p className="min-w-0 truncate text-xs text-muted-foreground" title={scheduleText}>
           <span className="sr-only">Schedule: </span>
           {scheduleText}
         </p>
@@ -100,7 +127,7 @@ export function AutomationRow({ trigger }: { trigger: Trigger }) {
           <LastRun trigger={trigger} />
         </div>
 
-        <div className="min-w-0 text-xs text-muted-foreground">
+        <div className="min-w-0 truncate text-xs text-muted-foreground">
           <NextFire trigger={trigger} />
         </div>
       </div>
@@ -121,7 +148,7 @@ export function AutomationRow({ trigger }: { trigger: Trigger }) {
 function KindIcon({ trigger }: { trigger: Trigger }) {
   const Icon = trigger.source.kind === "schedule" ? CalendarClock : CircleHelp;
   return (
-    <span className="flex h-8 w-8 items-center justify-center rounded-md border border-border/60 bg-background text-muted-foreground">
+    <span className="flex h-7 w-7 items-center justify-center rounded-md border border-border/60 bg-background text-muted-foreground">
       <Icon className="h-4 w-4" aria-hidden="true" />
       <span className="sr-only">{sourceKindLabel(trigger.source)}</span>
     </span>
@@ -193,7 +220,8 @@ function NextFire({ trigger }: { trigger: Trigger }) {
   return (
     <>
       <span className="sr-only">Next run: </span>
-      <span aria-hidden="true">Next </span>
+      {/* The column header says "Next run" from lg up; below it the row folds and needs the word. */}
+      <span aria-hidden="true" className="lg:hidden">Next </span>
       <time dateTime={trigger.nextFireAt} title={formatAbsoluteTime(trigger.nextFireAt)}>
         {formatRelativeTime(trigger.nextFireAt)}
       </time>

@@ -13,6 +13,8 @@ interface Action {
   href?: string;
   variant?: "primary" | "secondary" | "danger";
   icon?: React.ReactNode;
+  /** A button action that cannot run right now. Say why in the subtitle or beside it. */
+  disabled?: boolean;
 }
 
 /**
@@ -29,16 +31,29 @@ interface Action {
  */
 interface PageHeaderProps {
   title: React.ReactNode;
+  /**
+   * Rendered beside the title, outside the h1 — status/kind badges that
+   * describe the record but are not its NAME, so the heading's accessible
+   * name stays the record's name.
+   */
+  titleAccessory?: React.ReactNode;
   subtitle?: React.ReactNode;
   breadcrumbs?: Breadcrumb[];
   actions?: Action[];
+  /**
+   * Replaces the default bottom margin, for a page that spaces its sections
+   * itself (e.g. a `space-y-*` stack) and would otherwise get both.
+   */
+  className?: string;
 }
 
 export default function PageHeader({
   title,
+  titleAccessory,
   subtitle,
   breadcrumbs = [],
   actions = [],
+  className,
 }: PageHeaderProps) {
   const variantStyles: Record<NonNullable<Action["variant"]>, string> = {
     primary: "bg-accent text-on-accent hover:bg-accent-hover shadow-sm",
@@ -49,9 +64,9 @@ export default function PageHeader({
   };
 
   return (
-    <div className="mb-6">
+    <div className={className ?? "mb-6"}>
       {breadcrumbs.length > 0 && (
-        <nav className="mb-3 flex items-center gap-1.5 text-sm text-ink-muted">
+        <nav aria-label="Breadcrumb" className="mb-2 flex items-center gap-1.5 text-sm text-ink-muted">
           {breadcrumbs.map((crumb, i) => (
             <React.Fragment key={i}>
               {i > 0 && (
@@ -81,11 +96,20 @@ export default function PageHeader({
         </nav>
       )}
       <div className="flex items-start justify-between gap-4">
-        <div>
+        <div className="min-w-0">
           {/* tracking-tight: display sizes set at default tracking read loose. */}
-          <h1 className="text-2xl font-semibold tracking-tight text-ink">
-            {title}
-          </h1>
+          {titleAccessory ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="min-w-0 truncate text-2xl font-semibold tracking-tight text-ink">
+                {title}
+              </h1>
+              {titleAccessory}
+            </div>
+          ) : (
+            <h1 className="text-2xl font-semibold tracking-tight text-ink">
+              {title}
+            </h1>
+          )}
           {subtitle ? (
             <p className="mt-1 text-sm text-ink-muted">{subtitle}</p>
           ) : null}
@@ -96,7 +120,7 @@ export default function PageHeader({
               // rounded-md, matching the control radius the theme sets for
               // buttons — rounded-lg is the CONTAINER radius, and a button
               // wearing it reads as a small card.
-              const cls = `inline-flex items-center gap-1.5 rounded-md px-3.5 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 ${
+              const cls = `inline-flex items-center gap-1.5 rounded-md px-3.5 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${
                 variantStyles[action.variant ?? "secondary"]
               }`;
               if (action.href) {
@@ -108,7 +132,13 @@ export default function PageHeader({
                 );
               }
               return (
-                <button key={i} onClick={action.onClick} className={cls}>
+                <button
+                  key={i}
+                  type="button"
+                  onClick={action.onClick}
+                  disabled={action.disabled}
+                  className={cls}
+                >
                   {action.icon}
                   {action.label}
                 </button>

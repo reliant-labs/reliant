@@ -64,6 +64,14 @@ interface WorkflowViewerProps {
   compact?: boolean
   /** Hide the fullscreen/expand button */
   hideFullscreen?: boolean
+  /**
+   * Hide the title bar (name, status, edit pencil). For a host that already
+   * names the workflow and offers Edit itself — the workflow detail page —
+   * where a second header is a second way to do the same thing.
+   */
+  hideHeader?: boolean
+  /** Hide the run-status legend: meaningless for a definition that is not running. */
+  hideLegend?: boolean
   /** Current viewer mode (for inline/side toggle) */
   viewerMode?: 'inline' | 'side'
   /** Callback to toggle between inline and side panel modes */
@@ -95,6 +103,8 @@ function WorkflowViewerInner({
   showMiniMap: _showMiniMap = false,
   compact = false,
   hideFullscreen = false,
+  hideHeader = false,
+  hideLegend = false,
   viewerMode,
   onToggleViewerMode,
   onExpandedChange,
@@ -762,6 +772,7 @@ function WorkflowViewerInner({
       {/* Main content area */}
       <div className="flex-1 flex flex-col min-w-0 min-h-0">
         {/* Header - aligned with chat header (inline) or right sidebar (side) */}
+        {!hideHeader && (
         <div className={`flex items-center justify-between border-b border-border bg-muted/50 ${viewerMode === 'side' ? 'h-10 px-3' : 'px-4 sm:px-6 lg:px-8 py-2 border-t border-border'}`}>
           <div className={`w-full flex items-center justify-between ${viewerMode === 'side' ? '' : 'max-w-[1200px] mx-auto'}`}>
             <div className="flex items-center gap-2">
@@ -852,6 +863,7 @@ function WorkflowViewerInner({
             </div>
           </div>
         </div>
+        )}
 
         {/* ReactFlow Canvas - full width */}
         <div className="flex-1 min-h-0 h-full w-full relative">
@@ -906,6 +918,7 @@ function WorkflowViewerInner({
         </div>
 
         {/* Status Legend */}
+        {!hideLegend && (
         <div className="flex items-center gap-4 px-3 py-2 border-t border-border bg-muted/30 text-xs">
           <div className="flex items-center gap-1.5">
             <div className="w-3 h-3 rounded border-2 border-gray-300 bg-white" />
@@ -924,6 +937,7 @@ function WorkflowViewerInner({
             <span className="text-muted-foreground">Failed</span>
           </div>
         </div>
+        )}
         
         {/* Activity Log (collapsible) */}
         {execution && (

@@ -11,7 +11,18 @@ import { describe, expect, it } from "vitest";
 import type { RunSummary } from "@/api/run-grpc";
 import type { Trigger, TriggerHealthStatusKey } from "@/api/trigger-grpc";
 import type { InvalidWorkflow, WorkflowResponse } from "@/api/workflow-grpc";
-import { libraryView } from "../library/libraryView";
+import { automationsSummary, libraryView } from "../library/libraryView";
+
+describe("automationsSummary (the Library's Automations column)", () => {
+  it("is null for none — the cell's dash under a labelled column", () => {
+    expect(automationsSummary(0)).toBeNull();
+  });
+  it("counts, and names the failing ones", () => {
+    expect(automationsSummary(1)).toBe("1 automation");
+    expect(automationsSummary(2)).toBe("2 automations");
+    expect(automationsSummary(2, 1)).toBe("2 automations · 1 failing");
+  });
+});
 
 function wf(name: string, source: WorkflowResponse["source"], description = ""): WorkflowResponse {
   return { name, filename: name, source, description, stepCount: 1, status: "complete", validationErrors: [], nodes: [], edges: [] };
@@ -137,6 +148,29 @@ describe("libraryView", () => {
     expect(
       libraryView({ workflows: builtinsOnly, invalid: [], triggers: [], q: "agent" }).sections.map((s) => s.key),
     ).toEqual(["builtin"]);
+  });
+
+  it("flattens the sections into one table's rows, attention first and flagged", () => {
+    const triggers = [trigger("t1", "triage", "failing")];
+    const view = libraryView({ workflows, invalid, triggers });
+    expect(view.rows.map((row) => [row.workflow.name, row.attention])).toEqual([
+      ["triage", true],
+      ["release-notes", false],
+      ["builtin://agent", false],
+      ["builtin://planner", false],
+    ]);
+    // Recently run keeps its single order.
+    const lastRuns = new Map([ran("builtin://planner", 5)]);
+    expect(libraryView({ workflows, invalid, triggers: [], lastRuns, sort: "recent" }).rows[0]!.workflow.name).toBe(
+      "builtin://planner",
+    );
+  });
+
+  it("offers create-your-own only when nothing of yours exists and nothing narrowed it", () => {
+    const builtinsOnly = [wf("builtin://agent", "builtin")];
+    expect(libraryView({ workflows: builtinsOnly, invalid: [], triggers: [] }).noWorkflowsOfYourOwn).toBe(true);
+    expect(libraryView({ workflows: builtinsOnly, invalid: [], triggers: [], q: "agent" }).noWorkflowsOfYourOwn).toBe(false);
+    expect(libraryView({ workflows, invalid: [], triggers: [] }).noWorkflowsOfYourOwn).toBe(false);
   });
 
   it("says when a search or source leaves nothing", () => {

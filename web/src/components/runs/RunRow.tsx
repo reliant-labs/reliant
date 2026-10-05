@@ -30,6 +30,33 @@ interface RunRowProps {
 
 export { LaunchKindIcon };
 
+/**
+ * The run list's column template — status dot · run · started by · started ·
+ * duration — shared by the rows and RunListHeader so every cell lines up under
+ * its label. Below md a row folds to two lines and the header hides.
+ */
+export const RUN_ROW_GRID =
+  "grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 px-4 md:grid-cols-[1rem_minmax(0,1fr)_11rem_7rem_4.5rem]";
+
+/** Column labels over the run rows, on the rows' own grid. */
+export function RunListHeader() {
+  return (
+    <div
+      aria-hidden="true"
+      className={cn(
+        RUN_ROW_GRID,
+        "hidden border-b border-border/60 bg-background py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground md:grid",
+      )}
+    >
+      <span />
+      <span>Run</span>
+      <span>Started by</span>
+      <span>Started</span>
+      <span className="text-right">Duration</span>
+    </div>
+  );
+}
+
 export function RunRow({ run, projectName, className }: RunRowProps) {
   const status = runStatusFromDisplayState(run.displayState, run.outcome);
   const launch = launchKindDisplay(run.launchKind);
@@ -50,10 +77,7 @@ export function RunRow({ run, projectName, className }: RunRowProps) {
 
   return (
     <li
-      className={cn(
-        "grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 px-5 py-3 transition-colors hover:bg-muted/40 md:grid-cols-[auto_minmax(0,1fr)_minmax(0,11rem)_6.5rem_4.5rem]",
-        className,
-      )}
+      className={cn(RUN_ROW_GRID, "py-2.5 transition-colors hover:bg-muted/40", className)}
       data-testid={`run-row-${run.chatId}`}
     >
       <RunStatusDot status={status} />
@@ -88,7 +112,7 @@ export function RunRow({ run, projectName, className }: RunRowProps) {
         )}
       </div>
 
-      <div className="col-start-3 row-start-1 text-right text-xs text-muted-foreground md:col-start-auto md:row-start-auto md:text-left">
+      <div className="col-start-3 row-start-1 truncate text-right text-xs text-muted-foreground md:col-start-auto md:row-start-auto md:text-left">
         <span className="sr-only">Started </span>
         <time dateTime={startedIso} title={formatAbsoluteTime(startedIso)}>
           {formatRelativeTime(startedIso)}

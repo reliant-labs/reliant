@@ -13,7 +13,7 @@ import { AlertTriangle } from "lucide-react";
 import Card from "../forge-ui/card";
 import type { Trigger } from "@/api/trigger-grpc";
 import { cn } from "@/lib/utils";
-import { AutomationRow } from "./AutomationRow";
+import { AutomationListHeader, AutomationRow } from "./AutomationRow";
 import {
   groupAutomations,
   groupSummary,
@@ -24,7 +24,7 @@ import {
 export function AutomationGroups({ triggers, groupBy }: { triggers: Trigger[]; groupBy: AutomationGroupBy }) {
   const { attention, groups } = groupAutomations(triggers, groupBy);
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       {attention && <GroupPanel group={attention} attention />}
       {groups.map((group) => (
         <GroupPanel key={group.key} group={group} />
@@ -37,8 +37,8 @@ function GroupPanel({ group, attention = false }: { group: AutomationGroup; atte
   const headingId = useId();
   return (
     <section aria-labelledby={headingId} data-testid={`automation-group-${group.key}`}>
-      <Card padding="none" className={cn(attention && "border-warning/60")}>
-        <div className="flex items-baseline justify-between gap-4 border-b border-border/60 px-5 py-2.5">
+      <Card padding="none" className={cn("overflow-hidden", attention && "border-warning/60")}>
+        <div className="flex items-baseline justify-between gap-4 border-b border-border/60 px-4 py-2">
           <h2
             id={headingId}
             className={cn(
@@ -51,6 +51,7 @@ function GroupPanel({ group, attention = false }: { group: AutomationGroup; atte
           </h2>
           <span className="shrink-0 text-xs text-muted-foreground">{groupSummary(group.entries)}</span>
         </div>
+        <AutomationListHeader />
         <ul aria-labelledby={headingId} className="divide-y divide-border/60">
           {group.entries.map(({ trigger }) => (
             <AutomationRow key={trigger.id} trigger={trigger} />

@@ -15,6 +15,7 @@ import { Link } from "@tanstack/react-router";
 import { CalendarClock, Plus } from "lucide-react";
 
 import Card from "../forge-ui/card";
+import PageHeader from "../forge-ui/page_header";
 import { Button } from "../ui/Button";
 import { triggerErrorMessage } from "@/api/trigger-grpc";
 import { useTriggers } from "@/hooks/trigger-queries";
@@ -32,23 +33,25 @@ export function AutomationsListPage() {
   const hasTriggers = triggers.length > 0;
 
   return (
-    <>
-      <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
-        <div className="min-w-0">
-          <h1 className="text-2xl font-semibold tracking-tight text-foreground">Automations</h1>
-          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-            Runs that start on a schedule, with no one typing. Each run is recorded so you can
-            review it afterwards.
-          </p>
-        </div>
-        {hasTriggers && (
-          <div className="flex flex-wrap items-center gap-3">
-            <GroupBySwitch value={groupBy} onChange={setGroupBy} />
-            <Button variant="primary" leftIcon={<Plus className="h-4 w-4" />} onClick={() => setCreating(true)}>
-              New automation
-            </Button>
-          </div>
-        )}
+    <div className="space-y-4">
+      <div className="forge-ui">
+        <PageHeader
+          className=""
+          title="Automations"
+          subtitle="Runs that start on a schedule, with no one typing. Each run is recorded so you can review it afterwards."
+          actions={
+            hasTriggers
+              ? [
+                  {
+                    label: "New automation",
+                    variant: "primary",
+                    icon: <Plus className="h-4 w-4" aria-hidden="true" />,
+                    onClick: () => setCreating(true),
+                  },
+                ]
+              : []
+          }
+        />
       </div>
 
       {triggersQuery.isLoading ? (
@@ -66,12 +69,16 @@ export function AutomationsListPage() {
       ) : (
         <>
           <ComingUpTimeline triggers={triggers} />
+          {/* The list's own control sits on the list, not in the page header. */}
+          <div className="flex items-center justify-end">
+            <GroupBySwitch value={groupBy} onChange={setGroupBy} />
+          </div>
           <AutomationGroups triggers={triggers} groupBy={groupBy} />
         </>
       )}
 
       <AutomationFormDialog open={creating} onClose={() => setCreating(false)} />
-    </>
+    </div>
   );
 }
 
