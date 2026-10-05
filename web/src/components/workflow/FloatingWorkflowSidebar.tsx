@@ -7,6 +7,7 @@ import {
   GitFork,
   ChevronDown,
   ChevronRight,
+  Search,
 } from 'lucide-react'
 import {
   ensureNodesCached,
@@ -29,12 +30,21 @@ interface FloatingWorkflowSidebarProps {
    * integrations work passes one that prefers the node's integration.
    */
   groupKey?: PaletteGroupKey<NodeInfo>
+  /**
+   * Open the step palette: every built-in step plus every integration action,
+   * searchable. The list below stays as a quick-add shelf of built-ins.
+   */
+  onOpenPalette?: () => void
+  /** The palette's shortcut, as shown to the user ("⌘K"). */
+  paletteShortcutLabel?: string
 }
 
 export function FloatingWorkflowSidebar({
   onAddStep,
   onAddSwitch,
   groupKey = categoryGroupKey,
+  onOpenPalette,
+  paletteShortcutLabel,
 }: FloatingWorkflowSidebarProps) {
   const [nodes, setNodes] = useState<NodeInfo[]>(getCachedNodes)
   const [loadingNodes, setLoadingNodes] = useState(true)
@@ -54,7 +64,12 @@ export function FloatingWorkflowSidebar({
     return () => { cancelled = true }
   }, [])
 
-  const groups = useMemo(() => groupPaletteNodes(nodes, groupKey), [nodes, groupKey])
+  // The generic `action` node is added by choosing an action in the palette,
+  // which sets its `uses`; added bare it would run nothing.
+  const groups = useMemo(
+    () => groupPaletteNodes(nodes.filter((node) => node.id !== 'action'), groupKey),
+    [nodes, groupKey],
+  )
 
   const toggleCategory = (category: string) => {
     setExpandedCategories(prev => ({
@@ -88,9 +103,8 @@ export function FloatingWorkflowSidebar({
               const Icon = getNodeIcon(node.id)
               const bgColor = getNodeBgColor(node.id)
               return (
-                <Tooltip content={node.description} placement="bottom" delay={300} wrapperClassName="inline-flex">
+                <Tooltip key={node.id} content={node.description} placement="bottom" delay={300} wrapperClassName="inline-flex">
 <button
-                  key={node.id}
                   type="button"
                   onClick={() => onAddStep(node.id)}
                   className={nodeButtonClass} aria-label={node.description}>
@@ -113,6 +127,19 @@ export function FloatingWorkflowSidebar({
       className="flex max-h-[calc(100vh-200px)] min-w-[190px] flex-col gap-2 overflow-y-auto rounded-2xl border border-border/80 bg-card/95 p-3 shadow-xl shadow-black/10 backdrop-blur-sm"
       data-onboarding="workflow-sidebar"
     >
+      {onOpenPalette && (
+        <button
+          type="button"
+          onClick={onOpenPalette}
+          className="flex w-full items-center gap-2 rounded-lg border border-border/70 bg-background px-2.5 py-2 text-left text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <Search className="h-4 w-4 flex-shrink-0" aria-hidden />
+          <span className="flex-1 font-medium">Add step…</span>
+          {paletteShortcutLabel && (
+            <kbd className="rounded border border-border/60 px-1 font-mono text-2xs text-muted-foreground">{paletteShortcutLabel}</kbd>
+          )}
+        </button>
+      )}
       <div className="space-y-1.5">
         <button
           type="button"

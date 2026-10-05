@@ -31,6 +31,7 @@ import type { ShortcutDefinition } from './shortcutsStore';
  *   - Terminal
  *   - Chat Control
  *   - Parameters
+ *   - Workflow Builder
  */
 export const defaultShortcuts: Record<string, Omit<ShortcutDefinition, 'currentBinding'>> = {
   newChat: {
@@ -664,5 +665,16 @@ export const defaultShortcuts: Record<string, Omit<ShortcutDefinition, 'currentB
     defaultWebBinding: 'Cmd+K I',
     context: 'global',
     handler: 'onEditWorkflowParams'
+  },
+  openStepPalette: {
+    id: 'openStepPalette',
+    name: 'Add Step',
+    description: 'Search built-in steps and integration actions to add one',
+    category: 'Workflow Builder',
+    defaultBinding: 'Cmd+I',
+    defaultWebBinding: 'Cmd+I',
+    context: 'workflow-canvas',
+    handler: 'onOpenStepPalette',
+    allowInInput: true
   }
 };

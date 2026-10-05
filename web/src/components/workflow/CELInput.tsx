@@ -76,6 +76,8 @@ export function CELInput({
   const resolvedNodeTypeMap = nodeTypeMap ?? ctx?.nodeTypeMap;
   const resolvedInputParams = inputParams ?? ctx?.inputParams;
   const resolvedNodeDeclaredOutputs = ctx?.nodeDeclaredOutputs;
+  const resolvedNodeOutputSchemas = ctx?.nodeOutputSchemas;
+  const resolvedTriggerPayloadSchema = ctx?.triggerPayloadSchema;
 
   return (
     <div className="relative">
@@ -111,6 +113,8 @@ export function CELInput({
         celContext={celContext}
         currentNodeType={currentNodeType}
         nodeDeclaredOutputs={resolvedNodeDeclaredOutputs}
+        nodeOutputSchemas={resolvedNodeOutputSchemas}
+        triggerPayloadSchema={resolvedTriggerPayloadSchema}
         className={className}
       />
 

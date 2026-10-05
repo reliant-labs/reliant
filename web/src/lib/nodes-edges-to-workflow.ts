@@ -42,6 +42,58 @@ export interface NodesEdgesToWorkflowMeta {
   presetDefault: string | undefined;
   apiVersion: string | undefined;
   isLocked: boolean;
+  /**
+   * The workflow-level definition the builder holds. Every field the canvas
+   * does not derive (declared `triggers`, `title`, `hidden`, `daemon`,
+   * `resume_node`, `transition_to`, and any field added to the proto later)
+   * passes through unchanged. Listing fields one by one is what used to drop
+   * them: a save from the builder rewrote the definition without them.
+   */
+  definition?: Workflow;
+}
+
+/** Fields the canvas derives or `meta` names explicitly; never carried from `definition`. */
+const DERIVED_KEYS = new Set([
+  "$typeName",
+  "$unknown",
+  "name",
+  "description",
+  "presets",
+  "apiVersion",
+  "nodes",
+  "edges",
+  "entry",
+  "inputs",
+  "outputs",
+  "ui",
+]);
+
+/**
+ * The fields of a held definition that the canvas does not derive. Also used
+ * when the builder swaps into an inline body and back, so a loop body never
+ * inherits its parent's declared triggers.
+ */
+export function carriedDefinitionFields(definition: Workflow | undefined): Partial<Workflow> {
+  if (!definition) return {};
+  const carried: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(definition)) {
+    if (DERIVED_KEYS.has(key)) continue;
+    // Proto defaults ("" / false / []) are absence; dropping them keeps the
+    // saved shape identical to a definition that never had the field.
+    if (value === undefined || value === "" || value === false) continue;
+    if (Array.isArray(value) && value.length === 0) continue;
+    carried[key] = value;
+  }
+  return carried as Partial<Workflow>;
+}
+
+/** `definition` with every carried field removed, keeping only what the canvas derives. */
+export function withoutCarriedDefinitionFields(definition: Workflow): Workflow {
+  const kept: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(definition)) {
+    if (DERIVED_KEYS.has(key)) kept[key] = value;
+  }
+  return kept as Workflow;
 }
 
 /**
@@ -281,6 +333,7 @@ export function nodesEdgesToWorkflow(
     );
 
   return {
+    ...carriedDefinitionFields(meta.definition),
     name: meta.name,
     description: meta.description || undefined,
     presets:

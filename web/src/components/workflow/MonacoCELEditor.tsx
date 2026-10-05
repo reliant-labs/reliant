@@ -37,6 +37,8 @@ export interface MonacoCELEditorProps {
   celContext?: 'default' | 'loop_while' | 'edge_condition' | 'save_message' | 'thread';
   currentNodeType?: string;
   nodeDeclaredOutputs?: Record<string, string[]>;
+  nodeOutputSchemas?: CELCompletionContext['nodeOutputSchemas'];
+  triggerPayloadSchema?: CELCompletionContext['triggerPayloadSchema'];
   className?: string;
 }
 
@@ -57,6 +59,8 @@ export function MonacoCELEditor({
   celContext = 'default',
   currentNodeType,
   nodeDeclaredOutputs,
+  nodeOutputSchemas,
+  triggerPayloadSchema,
   className,
 }: MonacoCELEditorProps) {
   const monaco = useMonaco();
@@ -106,6 +110,8 @@ export function MonacoCELEditor({
     pureExpression,
     currentNodeType,
     nodeDeclaredOutputs,
+    nodeOutputSchemas,
+    triggerPayloadSchema,
   });
 
   // Update context ref when props change
@@ -118,8 +124,10 @@ export function MonacoCELEditor({
       pureExpression,
       currentNodeType,
       nodeDeclaredOutputs,
+      nodeOutputSchemas,
+      triggerPayloadSchema,
     };
-  }, [nodeIds, nodeTypeMap, inputParams, celContext, pureExpression, currentNodeType, nodeDeclaredOutputs]);
+  }, [nodeIds, nodeTypeMap, inputParams, celContext, pureExpression, currentNodeType, nodeDeclaredOutputs, nodeOutputSchemas, triggerPayloadSchema]);
 
   const height = multiline ? rows * 20 : 32;
 

@@ -31,6 +31,7 @@ import { ForgeService } from "../gen/reliant/v1/forge_pb";
 import { TriggerService } from "../gen/reliant/v1/trigger_pb";
 import { RunService } from "../gen/reliant/v1/run_pb";
 import { InboxService } from "../gen/reliant/v1/inbox_pb";
+import { ConnectionService } from "../gen/reliant/v1/connection_pb";
 import { logger } from "../lib/logger";
 import {
   buildLocalhostUrl,
@@ -128,6 +129,7 @@ const clearClientCache = () => {
   _triggerClient = null;
   _runClient = null;
   _inboxClient = null;
+  _connectionClient = null;
 };
 
 export const getGRPCBaseURLPublic = (): string | null => getGRPCBaseURL();
@@ -371,6 +373,12 @@ export const createTriggerClient = (): Client<typeof TriggerService> => {
   return createClient(TriggerService, getTransport());
 };
 
+// ConnectionService (saved logins to integrations) is served by reliant's
+// api-server, like TriggerService.
+export const createConnectionClient = (): Client<typeof ConnectionService> => {
+  return createClient(ConnectionService, getTransport());
+};
+
 // RunService (the engine's run API, and the cross-cutting run list) is served
 // by reliant's api-server, like TriggerService.
 export const createRunClient = (): Client<typeof RunService> => {
@@ -413,6 +421,7 @@ let _connectorClient: Client<typeof ConnectorService> | null = null;
 let _triggerClient: Client<typeof TriggerService> | null = null;
 let _runClient: Client<typeof RunService> | null = null;
 let _inboxClient: Client<typeof InboxService> | null = null;
+let _connectionClient: Client<typeof ConnectionService> | null = null;
 
 export const getSystemClient = (): Client<typeof SystemService> => {
   if (!_systemClient) {
@@ -626,6 +635,13 @@ export const getInboxClient = (): Client<typeof InboxService> => {
   return _inboxClient;
 };
 
+export const getConnectionClient = (): Client<typeof ConnectionService> => {
+  if (!_connectionClient) {
+    _connectionClient = createConnectionClient();
+  }
+  return _connectionClient;
+};
+
 // Export for convenience
 export const grpcClient = {
   system: () => getSystemClient(),
@@ -658,4 +674,5 @@ export const grpcClient = {
   trigger: () => getTriggerClient(),
   run: () => getRunClient(),
   inbox: () => getInboxClient(),
+  connection: () => getConnectionClient(),
 };

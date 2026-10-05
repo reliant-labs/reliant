@@ -1,9 +1,14 @@
 import { memo } from 'react'
 import { Handle, Position, useNodeConnections } from '@xyflow/react'
+import { useQueryClient } from '@tanstack/react-query'
 import type { Step } from '../../../types/workflow'
 import type { NodeExecutionStatus } from '../../../lib/workflow-flow'
 import { NodeStatusWrapper, buildHandleClassName } from './NodeStatusWrapper'
 import { getNodeIcon, getNodeColor, getNodeDisplayName, getNodeTheme } from '../../../lib/node-metadata'
+import { getActionUses, isIntegrationActionStep } from '../../../lib/actionNodeArgs'
+import { refIntegration, type CatalogEntry } from '../../../api/catalog-search-grpc'
+import { connectionKeys } from '../../../hooks/connection-queries'
+import { IntegrationIcon } from '../palette/IntegrationIcon'
 
 interface ActionNodeProps {
   data: {
@@ -15,13 +20,31 @@ interface ActionNodeProps {
   selected?: boolean
 }
 
+/**
+ * An integration action reads its name and icon from the catalog entry the
+ * palette or config panel already fetched; with nothing cached it falls back
+ * to the ref, which is never wrong, only terser. The canvas never fetches a
+ * catalog entry per node.
+ */
+function useIntegrationHeader(step: Step): { title: string; icon: string } | undefined {
+  const queryClient = useQueryClient()
+  if (!isIntegrationActionStep(step)) return undefined
+  const uses = getActionUses(step)
+  const cached = uses ? queryClient.getQueryData<CatalogEntry>(connectionKeys.catalogEntry(uses)) : undefined
+  if (cached) {
+    return { title: `${cached.summary.integration.displayName} · ${cached.summary.displayName}`, icon: cached.summary.integration.icon }
+  }
+  return { title: uses || 'Action', icon: refIntegration(uses) }
+}
+
 export const ActionNode = memo(({ data, selected }: ActionNodeProps) => {
   const { step, label, executionStatus, layoutDirection = 'horizontal' } = data
   
   // type is snake_case activity name (e.g., "call_llm", "save_message")
   const activityType = step.type || 'action'
 
-  const displayName = getNodeDisplayName(activityType)
+  const integrationHeader = useIntegrationHeader(step)
+  const displayName = integrationHeader?.title ?? getNodeDisplayName(activityType)
   const Icon = getNodeIcon(activityType)
   const colors = getNodeColor(activityType)
   const theme = getNodeTheme(activityType)
@@ -53,11 +76,15 @@ export const ActionNode = memo(({ data, selected }: ActionNodeProps) => {
       <div className="flex flex-col gap-1.5">
         {/* Header with icon and activity type name */}
         <div className="flex items-center gap-2">
-          <div className={`w-8 h-8 rounded-lg ${colors.bg} flex items-center justify-center flex-shrink-0`}>
-            <Icon className="w-4 h-4 text-white" />
-          </div>
+          {integrationHeader ? (
+            <IntegrationIcon hint={integrationHeader.icon} />
+          ) : (
+            <div className={`w-8 h-8 rounded-lg ${colors.bg} flex items-center justify-center flex-shrink-0`}>
+              <Icon className="w-4 h-4 text-white" />
+            </div>
+          )}
           <div className="flex-1 min-w-0">
-            <div className={`text-2xs font-bold uppercase tracking-wide ${colors.text}`}>{displayName}</div>
+            <div className={`text-2xs font-bold uppercase tracking-wide truncate ${integrationHeader ? 'text-foreground' : colors.text}`}>{displayName}</div>
             <div className="font-medium text-muted-foreground text-xs leading-tight truncate">{label}</div>
           </div>
         </div>
