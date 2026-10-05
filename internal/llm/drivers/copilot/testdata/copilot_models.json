@@ -1,0 +1,1471 @@
+{
+ "data": [
+  {
+   "id": "claude-fable-5.1",
+   "name": "Claude Fable 5.1",
+   "policy": {
+    "state": "disabled",
+    "terms": "Enable access to the latest Claude Fable 5.1 model from Anthropic. [Learn more about how GitHub Copilot serves Claude Fable 5.1](https://gh.io/copilot-claude-opus)."
+   },
+   "model_picker_enabled": false,
+   "supported_endpoints": [
+    "/v1/messages",
+    "/chat/completions"
+   ],
+   "capabilities": {
+    "limits": {
+     "max_context_window_tokens": 1000000,
+     "max_non_streaming_output_tokens": 16000,
+     "max_output_tokens": 64000,
+     "max_prompt_tokens": 936000
+    },
+    "supports": {
+     "adaptive_thinking": true,
+     "max_thinking_budget": 32000,
+     "min_thinking_budget": 1024,
+     "parallel_tool_calls": true,
+     "reasoning_effort": [
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max"
+     ],
+     "streaming": true,
+     "structured_outputs": true,
+     "tool_calls": true,
+     "vision": true
+    }
+   }
+  },
+  {
+   "id": "claude-fable-5",
+   "name": "Claude Fable 5",
+   "policy": {
+    "state": "disabled",
+    "terms": "Enable access to the latest Claude Fable 5 model from Anthropic. [Learn more about how GitHub Copilot serves Claude Fable 5](https://gh.io/copilot-claude-opus)."
+   },
+   "model_picker_enabled": false,
+   "supported_endpoints": [
+    "/v1/messages",
+    "/chat/completions"
+   ],
+   "capabilities": {
+    "limits": {
+     "max_context_window_tokens": 1000000,
+     "max_non_streaming_output_tokens": 16000,
+     "max_output_tokens": 64000,
+     "max_prompt_tokens": 936000
+    },
+    "supports": {
+     "adaptive_thinking": true,
+     "max_thinking_budget": 32000,
+     "min_thinking_budget": 1024,
+     "parallel_tool_calls": true,
+     "reasoning_effort": [
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max"
+     ],
+     "streaming": true,
+     "structured_outputs": true,
+     "tool_calls": true,
+     "vision": true
+    }
+   }
+  },
+  {
+   "id": "claude-opus-4.8-fast",
+   "name": "Claude Opus 4.8 (fast mode)",
+   "policy": {
+    "state": "disabled",
+    "terms": "Enable access to the latest Claude Opus 4.8 fast model from Anthropic. [Learn more about how GitHub Copilot serves Claude Opus 4.8 fast](https://gh.io/copilot-claude-opus)."
+   },
+   "model_picker_enabled": false,
+   "supported_endpoints": [
+    "/v1/messages",
+    "/chat/completions"
+   ],
+   "capabilities": {
+    "limits": {
+     "max_context_window_tokens": 1000000,
+     "max_non_streaming_output_tokens": 16000,
+     "max_output_tokens": 64000,
+     "max_prompt_tokens": 936000
+    },
+    "supports": {
+     "adaptive_thinking": true,
+     "max_thinking_budget": 32000,
+     "min_thinking_budget": 1024,
+     "parallel_tool_calls": true,
+     "reasoning_effort": [
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max"
+     ],
+     "streaming": true,
+     "structured_outputs": true,
+     "tool_calls": true,
+     "vision": true
+    }
+   }
+  },
+  {
+   "id": "claude-opus-4.8",
+   "name": "Claude Opus 4.8",
+   "policy": {
+    "state": "disabled",
+    "terms": "Enable access to the latest Claude Opus 4.8 model from Anthropic. [Learn more about how GitHub Copilot serves Claude Opus 4.8](https://gh.io/copilot-claude-opus)."
+   },
+   "model_picker_enabled": false,
+   "supported_endpoints": [
+    "/v1/messages",
+    "/chat/completions"
+   ],
+   "capabilities": {
+    "limits": {
+     "max_context_window_tokens": 1000000,
+     "max_non_streaming_output_tokens": 16000,
+     "max_output_tokens": 64000,
+     "max_prompt_tokens": 936000
+    },
+    "supports": {
+     "adaptive_thinking": true,
+     "max_thinking_budget": 32000,
+     "min_thinking_budget": 1024,
+     "parallel_tool_calls": true,
+     "reasoning_effort": [
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max"
+     ],
+     "streaming": true,
+     "structured_outputs": true,
+     "tool_calls": true,
+     "vision": true
+    }
+   }
+  },
+  {
+   "id": "claude-opus-5.5",
+   "name": "Claude Opus 5.5",
+   "policy": {
+    "state": "disabled",
+    "terms": "Enable access to the latest Claude Opus 5.5 model from Anthropic. [Learn more about how GitHub Copilot serves Claude Opus 5.5](https://gh.io/copilot-claude-opus)."
+   },
+   "model_picker_enabled": false,
+   "supported_endpoints": [
+    "/v1/messages",
+    "/chat/completions"
+   ],
+   "capabilities": {
+    "limits": {
+     "max_context_window_tokens": 1000000,
+     "max_non_streaming_output_tokens": 16000,
+     "max_output_tokens": 128000,
+     "max_prompt_tokens": 1000000
+    },
+    "supports": {
+     "adaptive_thinking": true,
+     "parallel_tool_calls": true,
+     "reasoning_effort": [
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max"
+     ],
+     "streaming": true,
+     "structured_outputs": true,
+     "tool_calls": true,
+     "vision": true
+    }
+   }
+  },
+  {
+   "id": "claude-opus-5",
+   "name": "Claude Opus 5",
+   "policy": {
+    "state": "disabled",
+    "terms": "Enable access to the latest Claude Opus 5 model from Anthropic. [Learn more about how GitHub Copilot serves Claude Opus 5](https://gh.io/copilot-claude-opus)."
+   },
+   "model_picker_enabled": false,
+   "supported_endpoints": [
+    "/v1/messages",
+    "/chat/completions"
+   ],
+   "capabilities": {
+    "limits": {
+     "max_context_window_tokens": 1000000,
+     "max_non_streaming_output_tokens": 16000,
+     "max_output_tokens": 64000,
+     "max_prompt_tokens": 936000
+    },
+    "supports": {
+     "adaptive_thinking": true,
+     "max_thinking_budget": 32000,
+     "min_thinking_budget": 1024,
+     "parallel_tool_calls": true,
+     "reasoning_effort": [
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max"
+     ],
+     "streaming": true,
+     "structured_outputs": true,
+     "tool_calls": true,
+     "vision": true
+    }
+   }
+  },
+  {
+   "id": "claude-sonnet-5.5",
+   "name": "Claude Sonnet 5.5",
+   "policy": {
+    "state": "enabled",
+    "terms": "Enable access to the latest Claude model from Anthropic. [Learn more about how GitHub Copilot serves Claude](https://gh.io/copilot-claude-opus)."
+   },
+   "model_picker_enabled": true,
+   "supported_endpoints": [
+    "/v1/messages",
+    "/chat/completions"
+   ],
+   "capabilities": {
+    "limits": {
+     "max_context_window_tokens": 1000000,
+     "max_non_streaming_output_tokens": 16000,
+     "max_output_tokens": 128000,
+     "max_prompt_tokens": 936000
+    },
+    "supports": {
+     "adaptive_thinking": true,
+     "parallel_tool_calls": true,
+     "reasoning_effort": [
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max"
+     ],
+     "streaming": true,
+     "structured_outputs": true,
+     "tool_calls": true,
+     "vision": true
+    }
+   }
+  },
+  {
+   "id": "claude-sonnet-5",
+   "name": "Claude Sonnet 5",
+   "policy": {
+    "state": "enabled",
+    "terms": "Enable access to the latest Claude model from Anthropic. [Learn more about how GitHub Copilot serves Claude](https://gh.io/copilot-claude-opus)."
+   },
+   "model_picker_enabled": true,
+   "supported_endpoints": [
+    "/v1/messages",
+    "/chat/completions"
+   ],
+   "capabilities": {
+    "limits": {
+     "max_context_window_tokens": 1000000,
+     "max_non_streaming_output_tokens": 16000,
+     "max_output_tokens": 64000,
+     "max_prompt_tokens": 936000
+    },
+    "supports": {
+     "adaptive_thinking": true,
+     "max_thinking_budget": 32000,
+     "min_thinking_budget": 1024,
+     "parallel_tool_calls": true,
+     "reasoning_effort": [
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max"
+     ],
+     "streaming": true,
+     "structured_outputs": true,
+     "tool_calls": true,
+     "vision": true
+    }
+   }
+  },
+  {
+   "id": "copilot-search-a",
+   "name": "Copilot Agent A",
+   "policy": null,
+   "model_picker_enabled": false,
+   "supported_endpoints": [
+    "/chat/completions"
+   ],
+   "capabilities": {
+    "limits": {
+     "max_context_window_tokens": 260000,
+     "max_output_tokens": 16000,
+     "max_prompt_tokens": 244000
+    },
+    "supports": {
+     "parallel_tool_calls": true,
+     "streaming": true,
+     "tool_calls": true
+    }
+   }
+  },
+  {
+   "id": "copilot-search-b",
+   "name": "Copilot Search B",
+   "policy": null,
+   "model_picker_enabled": false,
+   "supported_endpoints": [
+    "/chat/completions"
+   ],
+   "capabilities": {
+    "limits": {
+     "max_context_window_tokens": 260000,
+     "max_output_tokens": 16000,
+     "max_prompt_tokens": 244000
+    },
+    "supports": {
+     "parallel_tool_calls": true,
+     "streaming": true,
+     "tool_calls": true
+    }
+   }
+  },
+  {
+   "id": "copilot-search-c",
+   "name": "Copilot Search C",
+   "policy": null,
+   "model_picker_enabled": false,
+   "supported_endpoints": [
+    "/chat/completions"
+   ],
+   "capabilities": {
+    "limits": {
+     "max_context_window_tokens": 260000,
+     "max_output_tokens": 16000,
+     "max_prompt_tokens": 244000
+    },
+    "supports": {
+     "parallel_tool_calls": true,
+     "streaming": true,
+     "tool_calls": true
+    }
+   }
+  },
+  {
+   "id": "exec-agent-a",
+   "name": "Exec Agent A",
+   "policy": null,
+   "model_picker_enabled": false,
+   "supported_endpoints": [
+    "/chat/completions"
+   ],
+   "capabilities": {
+    "limits": {
+     "max_context_window_tokens": 260000,
+     "max_output_tokens": 16000,
+     "max_prompt_tokens": 244000
+    },
+    "supports": {
+     "parallel_tool_calls": true,
+     "streaming": true,
+     "tool_calls": true
+    }
+   }
+  },
+  {
+   "id": "exec-agent-b",
+   "name": "Exec Agent B",
+   "policy": null,
+   "model_picker_enabled": false,
+   "supported_endpoints": [
+    "/chat/completions"
+   ],
+   "capabilities": {
+    "limits": {
+     "max_context_window_tokens": 260000,
+     "max_output_tokens": 16000,
+     "max_prompt_tokens": 244000
+    },
+    "supports": {
+     "parallel_tool_calls": true,
+     "streaming": true,
+     "tool_calls": true
+    }
+   }
+  },
+  {
+   "id": "exec-agent-c",
+   "name": "Exec Agent C",
+   "policy": null,
+   "model_picker_enabled": false,
+   "supported_endpoints": [
+    "/chat/completions"
+   ],
+   "capabilities": {
+    "limits": {
+     "max_context_window_tokens": 260000,
+     "max_output_tokens": 16000,
+     "max_prompt_tokens": 244000
+    },
+    "supports": {
+     "parallel_tool_calls": true,
+     "streaming": true,
+     "tool_calls": true
+    }
+   }
+  },
+  {
+   "id": "gemini-3.7-flash",
+   "name": "Gemini 3.7 Flash",
+   "policy": {
+    "state": "enabled",
+    "terms": "Enable access to the latest Gemini 3.7 Flash model from Google. [Learn more about how GitHub Copilot serves Gemini 3.7 Flash](https://docs.github.com/en/copilot/reference/ai-models/model-hosting#google-models)."
+   },
+   "model_picker_enabled": true,
+   "supported_endpoints": [
+    "/chat/completions"
+   ],
+   "capabilities": {
+    "limits": {
+     "max_context_window_tokens": 1000000,
+     "max_output_tokens": 64000,
+     "max_prompt_tokens": 936000
+    },
+    "supports": {
+     "parallel_tool_calls": true,
+     "reasoning_effort": [
+      "low",
+      "medium",
+      "high"
+     ],
+     "streaming": true,
+     "tool_calls": true,
+     "vision": true
+    }
+   }
+  },
+  {
+   "id": "gemini-3.8-flash",
+   "name": "Gemini 3.8 Flash",
+   "policy": {
+    "state": "enabled",
+    "terms": "Enable access to the latest Gemini 3.8 Flash model from Google. [Learn more about how GitHub Copilot serves Gemini 3.8 Flash](https://docs.github.com/en/copilot/reference/ai-models/model-hosting#google-models)."
+   },
+   "model_picker_enabled": true,
+   "supported_endpoints": [
+    "/chat/completions"
+   ],
+   "capabilities": {
+    "limits": {
+     "max_context_window_tokens": 1048576,
+     "max_output_tokens": 65536,
+     "max_prompt_tokens": 983040
+    },
+    "supports": {
+     "parallel_tool_calls": true,
+     "reasoning_effort": [
+      "low",
+      "medium",
+      "high"
+     ],
+     "streaming": true,
+     "tool_calls": true,
+     "vision": true
+    }
+   }
+  },
+  {
+   "id": "gpt-5.3-codex",
+   "name": "GPT-5.3-Codex",
+   "policy": null,
+   "model_picker_enabled": true,
+   "supported_endpoints": [
+    "/responses",
+    "ws:/responses"
+   ],
+   "capabilities": {
+    "limits": {
+     "max_context_window_tokens": 400000,
+     "max_output_tokens": 128000,
+     "max_prompt_tokens": 272000
+    },
+    "supports": {
+     "parallel_tool_calls": true,
+     "reasoning_effort": [
+      "low",
+      "medium",
+      "high",
+      "xhigh"
+     ],
+     "streaming": true,
+     "structured_outputs": true,
+     "tool_calls": true,
+     "vision": true
+    }
+   }
+  },
+  {
+   "id": "gpt-5.4-mini",
+   "name": "GPT-5.4 mini",
+   "policy": {
+    "state": "enabled",
+    "terms": "Enable access to the latest GPT-5.4 mini model from OpenAI. [Learn more about how GitHub Copilot serves GPT-5.4 mini](https://gh.io/copilot-openai)."
+   },
+   "model_picker_enabled": true,
+   "supported_endpoints": [
+    "/responses",
+    "ws:/responses"
+   ],
+   "capabilities": {
+    "limits": {
+     "max_context_window_tokens": 400000,
+     "max_output_tokens": 128000,
+     "max_prompt_tokens": 272000
+    },
+    "supports": {
+     "parallel_tool_calls": true,
+     "reasoning_effort": [
+      "none",
+      "low",
+      "medium",
+      "high",
+      "xhigh"
+     ],
+     "streaming": true,
+     "structured_outputs": true,
+     "tool_calls": true,
+     "vision": true
+    }
+   }
+  },
+  {
+   "id": "gpt-5.4-nano",
+   "name": "GPT-5.4 nano",
+   "policy": null,
+   "model_picker_enabled": false,
+   "supported_endpoints": [
+    "/responses",
+    "ws:/responses"
+   ],
+   "capabilities": {
+    "limits": {
+     "max_context_window_tokens": 400000,
+     "max_output_tokens": 128000,
+     "max_prompt_tokens": 272000
+    },
+    "supports": {
+     "parallel_tool_calls": true,
+     "reasoning_effort": [
+      "none",
+      "low",
+      "medium",
+      "high",
+      "xhigh"
+     ],
+     "streaming": true,
+     "structured_outputs": true,
+     "tool_calls": true,
+     "vision": true
+    }
+   }
+  },
+  {
+   "id": "gpt-5.4",
+   "name": "GPT-5.4",
+   "policy": {
+    "state": "enabled",
+    "terms": "Enable access to the latest GPT-5.4 model from OpenAI. [Learn more about how GitHub Copilot serves GPT-5.4](https://gh.io/copilot-openai)."
+   },
+   "model_picker_enabled": true,
+   "supported_endpoints": [
+    "/responses",
+    "/chat/completions",
+    "ws:/responses"
+   ],
+   "capabilities": {
+    "limits": {
+     "max_context_window_tokens": 1050000,
+     "max_output_tokens": 128000,
+     "max_prompt_tokens": 922000
+    },
+    "supports": {
+     "parallel_tool_calls": true,
+     "reasoning_effort": [
+      "none",
+      "low",
+      "medium",
+      "high",
+      "xhigh"
+     ],
+     "streaming": true,
+     "structured_outputs": true,
+     "tool_calls": true,
+     "vision": true
+    }
+   }
+  },
+  {
+   "id": "gpt-5.5",
+   "name": "GPT-5.5",
+   "policy": {
+    "state": "disabled",
+    "terms": "Enable access to the latest GPT-5.5 model from OpenAI. [Learn more about how GitHub Copilot serves GPT-5.5](https://gh.io/copilot-openai)."
+   },
+   "model_picker_enabled": false,
+   "supported_endpoints": [
+    "/responses",
+    "ws:/responses"
+   ],
+   "capabilities": {
+    "limits": {
+     "max_context_window_tokens": 1050000,
+     "max_output_tokens": 128000,
+     "max_prompt_tokens": 922000
+    },
+    "supports": {
+     "parallel_tool_calls": true,
+     "reasoning_effort": [
+      "none",
+      "low",
+      "medium",
+      "high",
+      "xhigh"
+     ],
+     "streaming": true,
+     "structured_outputs": true,
+     "tool_calls": true,
+     "vision": true
+    }
+   }
+  },
+  {
+   "id": "gpt-5.6-luna",
+   "name": "GPT-5.6 Luna",
+   "policy": {
+    "state": "enabled",
+    "terms": "Enable access to the latest GPT-5.6 Luna model from OpenAI. [Learn more about how GitHub Copilot serves GPT-5.6 Luna](https://gh.io/copilot-openai)."
+   },
+   "model_picker_enabled": true,
+   "supported_endpoints": [
+    "/responses",
+    "ws:/responses"
+   ],
+   "capabilities": {
+    "limits": {
+     "max_context_window_tokens": 1050000,
+     "max_output_tokens": 128000,
+     "max_prompt_tokens": 922000
+    },
+    "supports": {
+     "parallel_tool_calls": true,
+     "reasoning_effort": [
+      "none",
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max"
+     ],
+     "streaming": true,
+     "structured_outputs": true,
+     "tool_calls": true,
+     "vision": true
+    }
+   }
+  },
+  {
+   "id": "gpt-5.6-sol",
+   "name": "GPT-5.6 Sol",
+   "policy": {
+    "state": "disabled",
+    "terms": "Enable access to the latest GPT-5.6 Sol model from OpenAI. [Learn more about how GitHub Copilot serves GPT-5.6 Sol](https://gh.io/copilot-openai)."
+   },
+   "model_picker_enabled": false,
+   "supported_endpoints": [
+    "/responses",
+    "ws:/responses"
+   ],
+   "capabilities": {
+    "limits": {
+     "max_context_window_tokens": 1050000,
+     "max_output_tokens": 128000,
+     "max_prompt_tokens": 922000
+    },
+    "supports": {
+     "parallel_tool_calls": true,
+     "reasoning_effort": [
+      "none",
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max"
+     ],
+     "streaming": true,
+     "structured_outputs": true,
+     "tool_calls": true,
+     "vision": true
+    }
+   }
+  },
+  {
+   "id": "gpt-5.6-terra",
+   "name": "GPT-5.6 Terra",
+   "policy": {
+    "state": "enabled",
+    "terms": "Enable access to the latest GPT-5.6 Terra model from OpenAI. [Learn more about how GitHub Copilot serves GPT-5.6 Terra](https://gh.io/copilot-openai)."
+   },
+   "model_picker_enabled": true,
+   "supported_endpoints": [
+    "/responses",
+    "ws:/responses"
+   ],
+   "capabilities": {
+    "limits": {
+     "max_context_window_tokens": 1050000,
+     "max_output_tokens": 128000,
+     "max_prompt_tokens": 922000
+    },
+    "supports": {
+     "parallel_tool_calls": true,
+     "reasoning_effort": [
+      "none",
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max"
+     ],
+     "streaming": true,
+     "structured_outputs": true,
+     "tool_calls": true,
+     "vision": true
+    }
+   }
+  },
+  {
+   "id": "gpt-5.6-luna-utility",
+   "name": "GPT-5.6 Luna Utility",
+   "policy": null,
+   "model_picker_enabled": false,
+   "supported_endpoints": [
+    "/responses",
+    "ws:/responses"
+   ],
+   "capabilities": {
+    "limits": {
+     "max_context_window_tokens": 1050000,
+     "max_output_tokens": 128000,
+     "max_prompt_tokens": 922000
+    },
+    "supports": {
+     "parallel_tool_calls": true,
+     "reasoning_effort": [
+      "none",
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max"
+     ],
+     "streaming": true,
+     "structured_outputs": true,
+     "tool_calls": true,
+     "vision": true
+    }
+   }
+  },
+  {
+   "id": "gpt-6.1-sol",
+   "name": "GPT-6.1 Sol",
+   "policy": {
+    "state": "disabled",
+    "terms": "Enable access to the latest GPT-6.1 Sol model from OpenAI. [Learn more about how GitHub Copilot serves GPT-6.1 Sol](https://gh.io/copilot-openai)."
+   },
+   "model_picker_enabled": false,
+   "supported_endpoints": [
+    "/responses",
+    "ws:/responses"
+   ],
+   "capabilities": {
+    "limits": {
+     "max_context_window_tokens": 1050000,
+     "max_output_tokens": 128000,
+     "max_prompt_tokens": 922000
+    },
+    "supports": {
+     "parallel_tool_calls": true,
+     "reasoning_effort": [
+      "none",
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max"
+     ],
+     "streaming": true,
+     "structured_outputs": true,
+     "tool_calls": true,
+     "vision": true
+    }
+   }
+  },
+  {
+   "id": "gpt-6-astra",
+   "name": "GPT-6 Astra",
+   "policy": {
+    "state": "disabled",
+    "terms": "Enable access to the latest GPT-6 Astra model from OpenAI. [Learn more about how GitHub Copilot serves GPT-6 Astra](https://gh.io/copilot-openai)."
+   },
+   "model_picker_enabled": false,
+   "supported_endpoints": [
+    "/responses",
+    "ws:/responses"
+   ],
+   "capabilities": {
+    "limits": {
+     "max_context_window_tokens": 1050000,
+     "max_output_tokens": 128000,
+     "max_prompt_tokens": 1050000
+    },
+    "supports": {
+     "parallel_tool_calls": true,
+     "reasoning_effort": [
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max"
+     ],
+     "streaming": true,
+     "structured_outputs": true,
+     "tool_calls": true,
+     "vision": true
+    }
+   }
+  },
+  {
+   "id": "gpt-6-luna",
+   "name": "GPT-6 Luna",
+   "policy": {
+    "state": "enabled",
+    "terms": "Enable access to the latest GPT-6 Luna model from OpenAI. [Learn more about how GitHub Copilot serves GPT-6 Luna](https://gh.io/copilot-openai)."
+   },
+   "model_picker_enabled": true,
+   "supported_endpoints": [
+    "/responses",
+    "ws:/responses"
+   ],
+   "capabilities": {
+    "limits": {
+     "max_context_window_tokens": 1000000,
+     "max_output_tokens": 128000,
+     "max_prompt_tokens": 872000
+    },
+    "supports": {
+     "parallel_tool_calls": true,
+     "reasoning_effort": [
+      "none",
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max"
+     ],
+     "streaming": true,
+     "structured_outputs": true,
+     "tool_calls": true,
+     "vision": true
+    }
+   }
+  },
+  {
+   "id": "gpt-6-sol",
+   "name": "GPT-6 Sol",
+   "policy": {
+    "state": "disabled",
+    "terms": "Enable access to the latest GPT-6 Sol model from OpenAI. [Learn more about how GitHub Copilot serves GPT-6 Sol](https://gh.io/copilot-openai)."
+   },
+   "model_picker_enabled": false,
+   "supported_endpoints": [
+    "/responses",
+    "ws:/responses"
+   ],
+   "capabilities": {
+    "limits": {
+     "max_context_window_tokens": 1000000,
+     "max_output_tokens": 128000,
+     "max_prompt_tokens": 872000
+    },
+    "supports": {
+     "parallel_tool_calls": true,
+     "reasoning_effort": [
+      "none",
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max"
+     ],
+     "streaming": true,
+     "structured_outputs": true,
+     "tool_calls": true,
+     "vision": true
+    }
+   }
+  },
+  {
+   "id": "grok-4.5",
+   "name": "Grok 4.5",
+   "policy": null,
+   "model_picker_enabled": true,
+   "supported_endpoints": [
+    "/responses"
+   ],
+   "capabilities": {
+    "limits": {
+     "max_context_window_tokens": 500000,
+     "max_output_tokens": 128000,
+     "max_prompt_tokens": 372000
+    },
+    "supports": {
+     "parallel_tool_calls": true,
+     "reasoning_effort": [
+      "low",
+      "medium",
+      "high"
+     ],
+     "streaming": true,
+     "structured_outputs": true,
+     "tool_calls": true,
+     "vision": true
+    }
+   }
+  },
+  {
+   "id": "grok-4.6",
+   "name": "Grok 4.6",
+   "policy": null,
+   "model_picker_enabled": true,
+   "supported_endpoints": [
+    "/responses"
+   ],
+   "capabilities": {
+    "limits": {
+     "max_context_window_tokens": 500000,
+     "max_output_tokens": 128000,
+     "max_prompt_tokens": 372000
+    },
+    "supports": {
+     "parallel_tool_calls": true,
+     "reasoning_effort": [
+      "low",
+      "medium",
+      "high",
+      "xhigh"
+     ],
+     "streaming": true,
+     "structured_outputs": true,
+     "tool_calls": true,
+     "vision": true
+    }
+   }
+  },
+  {
+   "id": "grok-4.7",
+   "name": "Grok 4.7",
+   "policy": null,
+   "model_picker_enabled": true,
+   "supported_endpoints": [
+    "/responses"
+   ],
+   "capabilities": {
+    "limits": {
+     "max_context_window_tokens": 500000,
+     "max_output_tokens": 128000,
+     "max_prompt_tokens": 372000
+    },
+    "supports": {
+     "parallel_tool_calls": true,
+     "reasoning_effort": [
+      "low",
+      "medium",
+      "high",
+      "xhigh"
+     ],
+     "streaming": true,
+     "structured_outputs": true,
+     "tool_calls": true,
+     "vision": true
+    }
+   }
+  },
+  {
+   "id": "kimi-k3",
+   "name": "Kimi K3",
+   "policy": {
+    "state": "enabled",
+    "terms": "Enable access to Kimi K3 from Moonshot AI."
+   },
+   "model_picker_enabled": true,
+   "supported_endpoints": [
+    "/chat/completions"
+   ],
+   "capabilities": {
+    "limits": {
+     "max_context_window_tokens": 1048576,
+     "max_output_tokens": 131072,
+     "max_prompt_tokens": 917504
+    },
+    "supports": {
+     "parallel_tool_calls": true,
+     "reasoning_effort": [
+      "low",
+      "high",
+      "max"
+     ],
+     "streaming": true,
+     "structured_outputs": true,
+     "tool_calls": true,
+     "vision": true
+    }
+   }
+  },
+  {
+   "id": "mai-code-1.1-flash",
+   "name": "MAI-Code-1.1-Flash",
+   "policy": {
+    "state": "enabled",
+    "terms": ""
+   },
+   "model_picker_enabled": true,
+   "supported_endpoints": [
+    "/responses",
+    "ws:/responses"
+   ],
+   "capabilities": {
+    "limits": {
+     "max_context_window_tokens": 256000,
+     "max_output_tokens": 128000,
+     "max_prompt_tokens": 128000
+    },
+    "supports": {
+     "parallel_tool_calls": true,
+     "reasoning_effort": [
+      "low",
+      "medium",
+      "high"
+     ],
+     "streaming": true,
+     "structured_outputs": true,
+     "tool_calls": true,
+     "vision": true
+    }
+   }
+  },
+  {
+   "id": "trajectory-compaction",
+   "name": "Trajectory Compaction",
+   "policy": null,
+   "model_picker_enabled": false,
+   "supported_endpoints": [
+    "/chat/completions"
+   ],
+   "capabilities": {
+    "limits": {
+     "max_context_window_tokens": 262144,
+     "max_output_tokens": 16384,
+     "max_prompt_tokens": 245760
+    },
+    "supports": {
+     "parallel_tool_calls": true,
+     "streaming": true,
+     "tool_calls": true
+    }
+   }
+  },
+  {
+   "id": "gpt-5-mini",
+   "name": "GPT-5 mini",
+   "policy": {
+    "state": "enabled",
+    "terms": "Enable access to the latest GPT-5 mini model from OpenAI. [Learn more about how GitHub Copilot serves GPT-5 mini](https://gh.io/copilot-openai)."
+   },
+   "model_picker_enabled": true,
+   "supported_endpoints": [
+    "/chat/completions",
+    "/responses",
+    "ws:/responses"
+   ],
+   "capabilities": {
+    "limits": {
+     "max_context_window_tokens": 264000,
+     "max_output_tokens": 64000,
+     "max_prompt_tokens": 128000
+    },
+    "supports": {
+     "parallel_tool_calls": true,
+     "reasoning_effort": [
+      "low",
+      "medium",
+      "high"
+     ],
+     "streaming": true,
+     "structured_outputs": true,
+     "tool_calls": true,
+     "vision": true
+    }
+   }
+  },
+  {
+   "id": "gpt-4o-mini-2024-07-18",
+   "name": "GPT-4o mini",
+   "policy": null,
+   "model_picker_enabled": false,
+   "supported_endpoints": null,
+   "capabilities": {
+    "limits": {
+     "max_context_window_tokens": 128000,
+     "max_output_tokens": 4096,
+     "max_prompt_tokens": 64000
+    },
+    "supports": {
+     "parallel_tool_calls": true,
+     "streaming": true,
+     "tool_calls": true
+    }
+   }
+  },
+  {
+   "id": "gpt-4o-2024-11-20",
+   "name": "GPT-4o",
+   "policy": null,
+   "model_picker_enabled": false,
+   "supported_endpoints": null,
+   "capabilities": {
+    "limits": {
+     "max_context_window_tokens": 128000,
+     "max_output_tokens": 16384,
+     "max_prompt_tokens": 64000
+    },
+    "supports": {
+     "parallel_tool_calls": true,
+     "streaming": true,
+     "tool_calls": true
+    }
+   }
+  },
+  {
+   "id": "gpt-4o-2024-08-06",
+   "name": "GPT-4o",
+   "policy": null,
+   "model_picker_enabled": false,
+   "supported_endpoints": null,
+   "capabilities": {
+    "limits": {
+     "max_context_window_tokens": 128000,
+     "max_output_tokens": 16384,
+     "max_prompt_tokens": 64000
+    },
+    "supports": {
+     "parallel_tool_calls": true,
+     "streaming": true,
+     "tool_calls": true
+    }
+   }
+  },
+  {
+   "id": "text-embedding-3-small",
+   "name": "Embedding V3 small",
+   "policy": null,
+   "model_picker_enabled": false,
+   "supported_endpoints": null,
+   "capabilities": {
+    "limits": {
+     "max_inputs": 512
+    },
+    "supports": {
+     "dimensions": true
+    }
+   }
+  },
+  {
+   "id": "text-embedding-3-small-inference",
+   "name": "Embedding V3 small (Inference)",
+   "policy": null,
+   "model_picker_enabled": false,
+   "supported_endpoints": null,
+   "capabilities": {
+    "limits": {},
+    "supports": {
+     "dimensions": true
+    }
+   }
+  },
+  {
+   "id": "claude-haiku-4.5",
+   "name": "Claude Haiku 4.5",
+   "policy": {
+    "state": "enabled",
+    "terms": "Enable access to the latest Claude Haiku 4.5 model from Anthropic. [Learn more about how GitHub Copilot serves Claude Haiku 4.5](https://gh.io/copilot-anthropic)."
+   },
+   "model_picker_enabled": true,
+   "supported_endpoints": [
+    "/chat/completions",
+    "/v1/messages"
+   ],
+   "capabilities": {
+    "limits": {
+     "max_context_window_tokens": 144000,
+     "max_non_streaming_output_tokens": 16000,
+     "max_output_tokens": 32000,
+     "max_prompt_tokens": 128000
+    },
+    "supports": {
+     "max_thinking_budget": 32000,
+     "min_thinking_budget": 1024,
+     "parallel_tool_calls": true,
+     "streaming": true,
+     "tool_calls": true,
+     "vision": true
+    }
+   }
+  },
+  {
+   "id": "gpt-4.1-2025-04-14",
+   "name": "GPT-4.1",
+   "policy": {
+    "state": "enabled",
+    "terms": "Enable access to the latest GPT-4.1 model from OpenAI. [Learn more about how GitHub Copilot serves GPT-4.1](https://docs.github.com/en/copilot/using-github-copilot/ai-models/choosing-the-right-ai-model-for-your-task#gpt-41)."
+   },
+   "model_picker_enabled": false,
+   "supported_endpoints": null,
+   "capabilities": {
+    "limits": {
+     "max_context_window_tokens": 128000,
+     "max_output_tokens": 16384,
+     "max_prompt_tokens": 64000
+    },
+    "supports": {
+     "parallel_tool_calls": true,
+     "streaming": true,
+     "structured_outputs": true,
+     "tool_calls": true,
+     "vision": true
+    }
+   }
+  },
+  {
+   "id": "gpt-41-copilot",
+   "name": "GPT-4.1 Copilot",
+   "policy": null,
+   "model_picker_enabled": false,
+   "supported_endpoints": null,
+   "capabilities": {
+    "limits": {},
+    "supports": {
+     "streaming": true
+    }
+   }
+  },
+  {
+   "id": "gpt-3.5-turbo-0613",
+   "name": "GPT 3.5 Turbo",
+   "policy": null,
+   "model_picker_enabled": false,
+   "supported_endpoints": null,
+   "capabilities": {
+    "limits": {
+     "max_context_window_tokens": 16384,
+     "max_output_tokens": 4096,
+     "max_prompt_tokens": 16384
+    },
+    "supports": {
+     "streaming": true,
+     "tool_calls": true
+    }
+   }
+  },
+  {
+   "id": "gpt-4",
+   "name": "GPT 4",
+   "policy": null,
+   "model_picker_enabled": false,
+   "supported_endpoints": null,
+   "capabilities": {
+    "limits": {
+     "max_context_window_tokens": 32768,
+     "max_output_tokens": 4096,
+     "max_prompt_tokens": 32768
+    },
+    "supports": {
+     "streaming": true,
+     "tool_calls": true
+    }
+   }
+  },
+  {
+   "id": "gpt-4-0613",
+   "name": "GPT 4",
+   "policy": null,
+   "model_picker_enabled": false,
+   "supported_endpoints": null,
+   "capabilities": {
+    "limits": {
+     "max_context_window_tokens": 32768,
+     "max_output_tokens": 4096,
+     "max_prompt_tokens": 32768
+    },
+    "supports": {
+     "streaming": true,
+     "tool_calls": true
+    }
+   }
+  },
+  {
+   "id": "gpt-4o-2024-05-13",
+   "name": "GPT-4o",
+   "policy": null,
+   "model_picker_enabled": false,
+   "supported_endpoints": null,
+   "capabilities": {
+    "limits": {
+     "max_context_window_tokens": 128000,
+     "max_output_tokens": 4096,
+     "max_prompt_tokens": 64000
+    },
+    "supports": {
+     "parallel_tool_calls": true,
+     "streaming": true,
+     "tool_calls": true,
+     "vision": true
+    }
+   }
+  },
+  {
+   "id": "gpt-4-o-preview",
+   "name": "GPT-4o",
+   "policy": null,
+   "model_picker_enabled": false,
+   "supported_endpoints": null,
+   "capabilities": {
+    "limits": {
+     "max_context_window_tokens": 128000,
+     "max_output_tokens": 4096,
+     "max_prompt_tokens": 64000
+    },
+    "supports": {
+     "parallel_tool_calls": true,
+     "streaming": true,
+     "tool_calls": true
+    }
+   }
+  },
+  {
+   "id": "gpt-4.1",
+   "name": "GPT-4.1",
+   "policy": {
+    "state": "enabled",
+    "terms": "Enable access to the latest GPT-4.1 model from OpenAI. [Learn more about how GitHub Copilot serves GPT-4.1](https://docs.github.com/en/copilot/using-github-copilot/ai-models/choosing-the-right-ai-model-for-your-task#gpt-41)."
+   },
+   "model_picker_enabled": false,
+   "supported_endpoints": null,
+   "capabilities": {
+    "limits": {
+     "max_context_window_tokens": 128000,
+     "max_output_tokens": 16384,
+     "max_prompt_tokens": 64000
+    },
+    "supports": {
+     "parallel_tool_calls": true,
+     "streaming": true,
+     "structured_outputs": true,
+     "tool_calls": true,
+     "vision": true
+    }
+   }
+  },
+  {
+   "id": "gpt-3.5-turbo",
+   "name": "GPT 3.5 Turbo",
+   "policy": null,
+   "model_picker_enabled": false,
+   "supported_endpoints": null,
+   "capabilities": {
+    "limits": {
+     "max_context_window_tokens": 16384,
+     "max_output_tokens": 4096,
+     "max_prompt_tokens": 16384
+    },
+    "supports": {
+     "streaming": true,
+     "tool_calls": true
+    }
+   }
+  },
+  {
+   "id": "gpt-4o-mini",
+   "name": "GPT-4o mini",
+   "policy": null,
+   "model_picker_enabled": false,
+   "supported_endpoints": null,
+   "capabilities": {
+    "limits": {
+     "max_context_window_tokens": 128000,
+     "max_output_tokens": 4096,
+     "max_prompt_tokens": 64000
+    },
+    "supports": {
+     "parallel_tool_calls": true,
+     "streaming": true,
+     "tool_calls": true
+    }
+   }
+  },
+  {
+   "id": "gpt-4o",
+   "name": "GPT-4o",
+   "policy": null,
+   "model_picker_enabled": false,
+   "supported_endpoints": null,
+   "capabilities": {
+    "limits": {
+     "max_context_window_tokens": 128000,
+     "max_output_tokens": 4096,
+     "max_prompt_tokens": 64000
+    },
+    "supports": {
+     "parallel_tool_calls": true,
+     "streaming": true,
+     "tool_calls": true,
+     "vision": true
+    }
+   }
+  },
+  {
+   "id": "text-embedding-ada-002",
+   "name": "Embedding V2 Ada",
+   "policy": null,
+   "model_picker_enabled": false,
+   "supported_endpoints": null,
+   "capabilities": {
+    "limits": {
+     "max_inputs": 512
+    },
+    "supports": {}
+   }
+  }
+ ]
+}

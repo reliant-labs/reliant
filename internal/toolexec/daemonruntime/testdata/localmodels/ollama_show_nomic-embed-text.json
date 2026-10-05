@@ -1,0 +1,23 @@
+{
+ "parameters": "num_ctx                        8192",
+ "details": {
+  "parent_model": "",
+  "format": "gguf",
+  "family": "nomic-bert",
+  "families": [
+   "nomic-bert"
+  ],
+  "parameter_size": "137M",
+  "quantization_level": "F16"
+ },
+ "model_info": {
+  "general.architecture": "nomic-bert",
+  "general.file_type": 1,
+  "general.parameter_count": 136727040,
+  "nomic-bert.context_length": 2048
+ },
+ "capabilities": [
+  "embedding"
+ ],
+ "modified_at": "2026-09-02T20:52:58.990053444-04:00"
+}

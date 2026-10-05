@@ -341,9 +341,10 @@ inputs:
     default: ""
     description: Default model for all agents
 
-groups:
   Implementer:
-    tag: agent
+    type: group
+    presets:
+      tag: agent
     inputs:
       model:
         type: model
@@ -356,7 +357,9 @@ groups:
         default: "You are an implementation agent."
 
   Reviewer:
-    tag: agent
+    type: group
+    presets:
+      tag: agent
     inputs:
       model:
         type: model
@@ -387,8 +390,9 @@ nodes:
 
 **Key points:**
 
-- Groups appear as collapsible sections in UI
-- Use `tag: agent` to enable preset picker
+- A group is an input with `type: group`; its own `inputs:` nest inside it
+- Groups appear as collapsible sections in the UI
+- Set `presets: { tag: agent }` on a group to give it a preset picker
 - Reference group inputs as `inputs.GroupName.field`
 
 ---

@@ -44,8 +44,8 @@ func TestCelSpawn_MultiplePresets(t *testing.T) {
 func TestCelSpawn_SinglePreset(t *testing.T) {
 	env := newSpawnTestCELEnv(t)
 
-	result := evalSpawnCEL(t, env, `spawn("builtin://auditing-agent", ["general"])`, map[string]interface{}{})
-	require.Equal(t, "spawn:builtin://auditing-agent(general)", result)
+	result := evalSpawnCEL(t, env, `spawn("builtin://structured-agent", ["general"])`, map[string]interface{}{})
+	require.Equal(t, "spawn:builtin://structured-agent(general)", result)
 }
 
 func TestCelSpawn_EmptyPresets(t *testing.T) {

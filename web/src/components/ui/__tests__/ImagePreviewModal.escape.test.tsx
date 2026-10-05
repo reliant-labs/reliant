@@ -229,7 +229,7 @@ describe("ImagePreviewModal Escape handling", () => {
     );
 
     act(() => {
-      screen.getByTitle("Close (ESC)").click();
+      screen.getByLabelText("Close (ESC)").click();
     });
 
     expect(onClose).toHaveBeenCalledTimes(1);

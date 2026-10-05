@@ -12,6 +12,7 @@ import { transformWorkflowExecution } from '../Chat/ExecutionSidebar'
 import { Loader2, ChevronLeft } from 'lucide-react'
 import { runStatus } from '../../lib/runStatus'
 import { RunStatusBadge, RunStatusDot } from '../ui/RunStatusIndicator'
+import { getCachedWorkflowDisplayName } from '../../lib/workflowDisplayName'
 
 interface WorkflowViewerTabProps {
   projectId: string
@@ -107,7 +108,7 @@ export function WorkflowViewerTab({ projectId, chatId, workflowName }: WorkflowV
               <RunStatusDot status={statuses[index]!} />
               <div className="flex-1 min-w-0">
                 <div className="font-medium text-sm text-foreground truncate">
-                  {wf.workflowName.replace('builtin://', '')}
+                  {getCachedWorkflowDisplayName(wf.workflowName)}
                 </div>
                 <div className="text-xs text-muted-foreground">
                   {formatRelativeTime(wf.createdAt)}

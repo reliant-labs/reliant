@@ -633,7 +633,6 @@
 .cpv2-provider-dot.anthropic { background: #e8945a; }
 .cpv2-provider-dot.openai { background: #5cb85c; }
 .cpv2-provider-dot.gemini { background: #5b9bd5; }
-.cpv2-provider-dot.xai { background: #d9534f; }
 
 /* --- Drill-in row (clickable, chevron) --- */
 .cpv2-drill-row {

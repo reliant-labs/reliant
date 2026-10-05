@@ -3,7 +3,7 @@ import { test, expect, type Page, type Route } from '@playwright/test';
 // ---------------------------------------------------------------------------
 // Current onboarding model (see web/src/components/OnboardingFlow/stepConfig.ts)
 //
-//   ONBOARDING_STEPS = ['compute', 'model', 'project-choice', 'github-connect', 'project-picker']
+//   ONBOARDING_STEPS = ['compute', 'model', 'checkout', 'project-choice', 'github-connect', 'finish']
 //
 // There is no `?step=` URL param anymore — the current step is *derived* from
 // a `plan` search-param object on `/onboarding` (see deriveStep in
@@ -343,7 +343,7 @@ test.describe('Onboarding Flow', () => {
     await expect(page).toHaveURL(/local_daemon/, { timeout: 10_000 });
   });
 
-  // ── Model → Project-choice / Project-picker ─────────────────
+  // ── Model → Project-choice / Finish ─────────────────
 
   test('Model: saving a BYO Anthropic key on the cloud path advances to What do you want to work on?', async ({ page }) => {
     await gotoOnboardingWithPlan(page, { compute: 'cloud_free_trial' });
@@ -361,7 +361,7 @@ test.describe('Onboarding Flow', () => {
     });
   });
 
-  test('Model: saving a BYO key on the local path advances to Pick a project', async ({ page }) => {
+  test('Model: saving a BYO key on the local path advances to the finish step', async ({ page }) => {
     await gotoOnboardingWithPlan(page, { compute: 'local_daemon' });
     const dialog = page.getByRole('dialog', { name: 'Onboarding setup' });
     await expect(dialog.getByText('Which AI should Reliant use?')).toBeVisible();
@@ -371,8 +371,8 @@ test.describe('Onboarding Flow', () => {
     await dialog.getByRole('button', { name: 'Save key and start' }).click();
 
     // Local path skips project-choice/github-connect and lands directly on
-    // project-picker ("Pick a project") — see deriveStep in stepConfig.ts.
-    await expect(dialog.getByText('Pick a project')).toBeVisible({ timeout: 10_000 });
+    // finish ("Setting up your project") — see deriveStep in stepConfig.ts.
+    await expect(dialog.getByText('Setting up your project')).toBeVisible({ timeout: 10_000 });
   });
 
   // ── Project-choice (cloud): Start new vs Connect GitHub ─────
@@ -425,9 +425,9 @@ test.describe('Onboarding Flow', () => {
     await expect(dialog.getByText('Choose a repository')).toBeVisible({ timeout: 10_000 });
   });
 
-  // ── Project-picker (local): pick existing project ───────────
+  // ── Finish (local): auto-finalizes onto the existing project ───────────
 
-  test('Project-picker: selecting an existing project finishes onboarding', async ({ page }) => {
+  test('Finish: local compute reuses an existing project and exits without a picker', async ({ page }) => {
     await page.route('**/reliant.v1.ProjectService/ListProjects', (route: Route) =>
       route.fulfill({
         status: 200,
@@ -451,15 +451,10 @@ test.describe('Onboarding Flow', () => {
 
     await gotoOnboardingWithPlan(page, { compute: 'local_daemon', modelProvider: 'anthropic' });
     const dialog = page.getByRole('dialog', { name: 'Onboarding setup' });
-    await expect(dialog.getByText('Pick a project')).toBeVisible();
-
-    await dialog.getByRole('button', { name: /my-proj/i }).click();
-
-    // Local compute + own key leaves the commit nothing to provision, so
+    // No click: the finish step selects the existing project itself. Local
+    // compute + own key leaves the commit nothing to provision, so
     // ProvisioningGate's "nothing to do" branch exits onboarding by itself
-    // (#289) — picking the project is the user's last click. No Continue
-    // button is rendered on this path; clicking one here is what made this
-    // test time out after #289 shipped.
+    // (#289); no Continue button is rendered on this path.
     await expect(page).not.toHaveURL(/\/onboarding/, { timeout: 10_000 });
     await expect(dialog).toBeHidden();
   });
@@ -754,13 +749,13 @@ test.describe('Onboarding – Project-choice branch selection', () => {
     await expect(dialog.getByText('Choose a repository')).toBeVisible({ timeout: 10_000 });
   });
 
-  // Local daemon -> always project-picker regardless of intent (see
+  // Local daemon -> always finish regardless of intent (see
   // getStepsForPlan / deriveStep: isCloud gates the branch, not intent).
   for (const modelProvider of ['anthropic', 'openai', 'reliant_credits'] as const) {
-    test(`Local daemon + ${modelProvider}: lands on the project picker`, async ({ page }) => {
+    test(`Local daemon + ${modelProvider}: lands on the finish step (default project, no picker)`, async ({ page }) => {
       await gotoOnboardingWithPlan(page, { compute: 'local_daemon', modelProvider });
       const dialog = page.getByRole('dialog', { name: 'Onboarding setup' });
-      await expect(dialog.getByText('Pick a project')).toBeVisible({ timeout: 10_000 });
+      await expect(dialog.getByText('Setting up your project')).toBeVisible({ timeout: 10_000 });
     });
   }
 });

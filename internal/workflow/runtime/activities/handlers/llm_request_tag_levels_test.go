@@ -64,12 +64,13 @@ func TestResolveLLMCall_AppliesTagThinkingLevel(t *testing.T) {
 			wantThinking: "medium",
 		},
 		{
-			name:      "flagship on copilot runs claude-5-sonnet at high",
+			name:      "flagship on copilot runs claude-5.5-sonnet at high",
 			selector:  models.ModelSelector{Tags: []string{models.TagFlagship}},
 			providers: []string{"copilot"},
-			// Copilot cannot serve the opus entries, so flagship falls through
-			// to claude-5-sonnet's entry and its level.
-			wantModelID:  "claude-5-sonnet@copilot",
+			// Copilot's individual plan reports the opus entries policy=disabled,
+			// so flagship falls through to the first sonnet it serves —
+			// claude-5.5-sonnet (enabled, mapped 2026-10-04) — at its level.
+			wantModelID:  "claude-5.5-sonnet@copilot",
 			wantThinking: "high",
 		},
 		{

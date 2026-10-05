@@ -12,8 +12,12 @@ import { chatKeys } from "./chat-queries";
 export const messageKeys = {
   all: ["messages"] as const,
   list: (chatId: string) => [...messageKeys.all, "list", chatId] as const,
-  thread: (chatId: string, threadId: string) =>
-    [...messageKeys.all, "thread", chatId, threadId] as const,
+  // `recent` is part of the key: a bounded page of a thread and the whole
+  // thread are different reads, and one must never be served as the other.
+  thread: (chatId: string, threadId: string, recent?: number) =>
+    recent
+      ? ([...messageKeys.all, "thread", chatId, threadId, recent] as const)
+      : ([...messageKeys.all, "thread", chatId, threadId] as const),
 };
 
 // ── Message-list cache (the single source of truth for a chat's messages) ────
@@ -261,6 +265,29 @@ export function patchMessagesCache(
   );
 }
 
+/** Upsert `incoming` onto `existing` by id; the incoming copy wins. */
+function upsertMessagesById(existing: Message[], incoming: Message[]): Message[] {
+  const byId = new Map(existing.map((m) => [m.id, m]));
+  for (const message of incoming) byId.set(message.id, message);
+  return Array.from(byId.values());
+}
+
+/**
+ * Streamed messages for a thread whose thread-scoped fetch is still in
+ * flight, keyed by `${chatId}\u0000${threadId}`.
+ *
+ * The page a fetch returns was read a moment before it arrives; a live
+ * thread's newest message can reach the stream inside that window. With no
+ * cache yet the fan-out had nowhere to put it, and the fetch then wrote its
+ * older page over the cache — so the message was gone until something else
+ * wrote that thread. Buffering it here and merging it into the fetch result
+ * closes the window instead of narrowing it. Entries exist only while a fetch
+ * for the thread is in flight.
+ */
+const pendingThreadMessages = new Map<string, Message[]>();
+const inFlightThreadKey = (chatId: string, threadId: string) =>
+  `${chatId}\u0000${threadId}`;
+
 /**
  * Fan streamed messages out to any thread-scoped caches that are currently
  * live (see useThreadMessages).
@@ -276,9 +303,13 @@ export function patchMessagesCache(
  *     from a chat-wide payload would fill it with whatever subset of that
  *     thread the chat-wide window happened to carry, and a partial thread that
  *     looks complete is exactly the failure being removed here. A thread cache
- *     is created only by its own thread-scoped fetch.
- *   - Upsert by id, never replace. The thread-scoped fetch owns the full
- *     history; the stream only ever adds to it.
+ *     is created only by its own thread-scoped fetch. (A thread whose fetch is
+ *     in flight has its messages buffered for that fetch to merge.)
+ *   - Upsert by id, never replace. The thread-scoped fetch owns the history;
+ *     the stream only ever adds to it.
+ *
+ * A thread can have several caches — a bounded preview page and the whole
+ * thread for the thread view — and every one of them is patched.
  */
 export function fanOutMessagesToThreadCaches(
   chatId: string,
@@ -296,15 +327,46 @@ export function fanOutMessagesToThreadCaches(
   }
 
   for (const [threadId, threadMessages] of byThread) {
-    const key = messageKeys.thread(chatId, threadId);
-    const hasCache = queryClient.getQueryData(key) !== undefined;
-    if (!hasCache) continue;
-    queryClient.setQueryData<Message[]>(key, (prev) => {
-      const existing = prev ?? EMPTY_MESSAGES;
-      const byId = new Map(existing.map((m) => [m.id, m]));
-      for (const message of threadMessages) byId.set(message.id, message);
-      return Array.from(byId.values());
+    const pendingKey = inFlightThreadKey(chatId, threadId);
+    const pending = pendingThreadMessages.get(pendingKey);
+    if (pending) pending.push(...threadMessages);
+
+    // Prefix match: covers the whole-thread key and every bounded page of it.
+    const caches = queryClient.getQueriesData<Message[]>({
+      queryKey: messageKeys.thread(chatId, threadId),
     });
+    for (const [key, data] of caches) {
+      if (data === undefined) continue;
+      queryClient.setQueryData<Message[]>(key, (prev) =>
+        upsertMessagesById(prev ?? EMPTY_MESSAGES, threadMessages)
+      );
+    }
+  }
+}
+
+/**
+ * One thread-scoped read: the thread's newest `recent` messages, or the whole
+ * thread when `recent` is undefined, with any message streamed during the
+ * request merged in.
+ */
+async function fetchThreadMessages(
+  chatId: string,
+  threadId: string,
+  recent: number | undefined
+): Promise<Message[]> {
+  const pendingKey = inFlightThreadKey(chatId, threadId);
+  // Two reads of one thread (a preview page and the thread view) can overlap;
+  // they share the buffer, and the last one to finish clears it.
+  const owner = !pendingThreadMessages.has(pendingKey);
+  if (owner) pendingThreadMessages.set(pendingKey, []);
+  try {
+    const result = await api.chatsV2.listMessages(chatId, { threadId, recent });
+    return upsertMessagesById(
+      result.messages,
+      pendingThreadMessages.get(pendingKey) ?? EMPTY_MESSAGES
+    );
+  } finally {
+    if (owner) pendingThreadMessages.delete(pendingKey);
   }
 }
 
@@ -357,18 +419,28 @@ export function useMessages(
  * state. A dedicated query cannot express that: it is pending, or it has the
  * thread.
  *
+ * It is also the ONLY way a spawn thread's messages reach the client: the
+ * chat-open snapshot leaves them out (a spawn renders as one card, and the
+ * card is what loads them, when it is opened). So the read is lazy by
+ * construction — it runs when a component that renders the thread mounts.
+ *
+ * `recent` bounds the read to the thread's newest N messages, for a caller
+ * that only shows the tail (the spawn preview). Omit it to read the whole
+ * thread (the thread view). The two are cached separately.
+ *
  * Live updates arrive via fanOutMessagesToThreadCaches from the chat stream,
- * so an ongoing thread stays current without polling.
+ * so an ongoing thread stays current without polling — including messages
+ * that stream in while the read is in flight.
  */
-export function useThreadMessages(chatId?: string, threadId?: string) {
+export function useThreadMessages(
+  chatId?: string,
+  threadId?: string,
+  options?: { recent?: number }
+) {
+  const recent = options?.recent;
   const query = useQuery({
-    queryKey: messageKeys.thread(chatId!, threadId!),
-    queryFn: async () => {
-      const result = await api.chatsV2.listMessages(chatId!, {
-        threadId: threadId!,
-      });
-      return result.messages;
-    },
+    queryKey: messageKeys.thread(chatId!, threadId!, recent),
+    queryFn: () => fetchThreadMessages(chatId!, threadId!, recent),
     enabled: !!chatId && !!threadId,
     ...messageListQueryOptions,
   });

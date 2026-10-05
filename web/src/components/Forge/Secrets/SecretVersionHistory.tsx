@@ -34,6 +34,7 @@
  * needs. The bytes are gone; the record that they existed is not.
  */
 
+import { Tooltip } from "../../ui/Tooltip";
 import { useState } from "react";
 import { RotateCcw, Trash2, Flame } from "lucide-react";
 
@@ -236,9 +237,9 @@ function RowAction({
   danger?: boolean;
 }) {
   return (
-    <button
+    <Tooltip content={title} placement="bottom" delay={300} wrapperClassName="inline-flex">
+<button
       type="button"
-      title={title}
       onClick={onClick}
       disabled={disabled}
       className={cn(
@@ -246,10 +247,10 @@ function RowAction({
         "text-muted-foreground",
         danger ? "hover:text-destructive-ink" : "hover:text-foreground",
         "disabled:cursor-not-allowed disabled:opacity-40"
-      )}
-    >
+      )} aria-label={title}>
       <Icon className="h-3 w-3" aria-hidden="true" />
       {label}
     </button>
+</Tooltip>
   );
 }

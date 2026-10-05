@@ -62,7 +62,9 @@ vi.mock("../ChatMessagesContainer", () => ({
     <div data-testid="messages-container">{children}</div>
   ),
 }));
-vi.mock("../ScrollToBottomButton", () => ({ ScrollToBottomButton: () => null }));
+vi.mock("../ScrollToBottomButton", () => ({
+  ScrollToBottomButton: () => <div data-testid="scroll-to-bottom" />,
+}));
 vi.mock("../PermissionsPanelWrapper", () => ({
   PermissionsPanelWrapper: ({ children }: { children?: React.ReactNode }) => (
     <>{children}</>
@@ -155,6 +157,23 @@ describe.each(["desktop", "mobile"] as const)(
       expect(
         strip.compareDocumentPosition(pill) & Node.DOCUMENT_POSITION_FOLLOWING,
       ).toBeTruthy();
+    });
+
+    // The band grows and shrinks with what is running, so a button positioned
+    // relative to the composer lands on top of it. Inside the transcript's own
+    // frame, the band can only ever push the button up with the transcript.
+    it("floats the scroll-to-bottom button inside the transcript, clear of the band", async () => {
+      seedRunningSpawn();
+      renderPresenter(surface);
+
+      const strip = await screen.findByTestId("queued-messages");
+      const pill = screen.getByTestId("background-work-pill");
+      const transcript = screen.getByTestId("messages-container");
+      const scrollButton = screen.getByTestId("scroll-to-bottom");
+
+      expect(transcript.contains(scrollButton)).toBe(true);
+      expect(transcript.contains(pill)).toBe(false);
+      expect(transcript.contains(strip)).toBe(false);
     });
 
     it("shows the queued message even with no background work at all", async () => {

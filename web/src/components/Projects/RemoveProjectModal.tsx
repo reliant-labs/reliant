@@ -1,5 +1,6 @@
 import { Modal } from "../ui/Modal";
-import { AlertCircle } from "lucide-react";
+import { Button } from "../ui/Button";
+import { collapseHomePath } from "../../lib/pathUtils";
 import type { Project } from "../../store/projectStore";
 
 interface RemoveProjectModalProps {
@@ -7,56 +8,56 @@ interface RemoveProjectModalProps {
   onClose: () => void;
   onConfirm: () => void;
   project: Project | null;
+  /** True while the removal request is in flight — disables both buttons. */
+  isRemoving?: boolean;
 }
 
+/**
+ * Confirm forgetting ONE project. The consequence the user is worried about is
+ * "will this delete my code" — so the answer leads, in plain words, and the
+ * project being removed is shown as an identifier (name + path) so a user with
+ * two checkouts of the same repo can tell which one this is.
+ */
 export function RemoveProjectModal({
   isOpen,
   onClose,
   onConfirm,
   project,
+  isRemoving = false,
 }: RemoveProjectModalProps) {
   if (!project) return null;
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Remove Project" size="md">
-      <div className="space-y-4">
-        <div className="flex items-start gap-3 p-4 bg-warning/10 border border-warning/20 rounded-lg">
-          <AlertCircle className="w-5 h-5 text-warning mt-0.5 flex-shrink-0" />
-          <div className="flex-1">
-            <p className="text-sm font-medium text-foreground">
-              This will remove the project from Reliant
-            </p>
-            <p className="text-sm text-muted-foreground mt-1">
-              Your repository and all files will remain intact on disk. You can add this project back later if needed.
-            </p>
+    <Modal isOpen={isOpen} onClose={onClose} title={`Remove ${project.name}?`} size="sm">
+      <div className="flex flex-col gap-4">
+        <p className="text-sm leading-relaxed text-muted-foreground text-pretty">
+          {/* Accurate to the schema: project_configs, plans and triggers
+              cascade on project delete; nothing touches the filesystem. */}
+          Reliant forgets this project, along with its project settings and automations.{" "}
+          <span className="font-medium text-foreground">Nothing on disk is deleted</span> — your
+          files and git history stay where they are, and you can add the folder back at any time.
+        </p>
+
+        <div className="rounded-md border border-border/60 bg-background px-3 py-2.5">
+          <div className="truncate text-sm font-medium text-foreground">{project.name}</div>
+          <div className="truncate font-mono text-xs text-muted-foreground" title={project.path}>
+            {collapseHomePath(project.path)}
           </div>
         </div>
 
-        <div className="space-y-2">
-          <div className="text-sm font-medium text-foreground">Project Details:</div>
-          <div className="p-3 bg-muted/30 rounded-lg space-y-1">
-            <div className="text-sm font-mono font-semibold">{project.name}</div>
-            <div className="text-xs text-muted-foreground font-mono">{project.path}</div>
-          </div>
-        </div>
-
-        <div className="text-sm text-muted-foreground">
-          Are you sure you want to remove this project from Reliant?
-        </div>
-
-        <div className="flex justify-end gap-3 pt-4">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 text-sm font-medium text-foreground hover:bg-muted rounded-lg transition-colors"
-          >
+        <div className="flex justify-end gap-2">
+          <Button variant="ghost" size="md" onClick={onClose} disabled={isRemoving}>
             Cancel
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="destructive"
+            size="md"
             onClick={onConfirm}
-            className="px-4 py-2 text-sm font-medium bg-destructive text-destructive-foreground hover:bg-destructive/90 rounded-lg transition-colors"
+            loading={isRemoving}
+            data-testid="remove-project-confirm"
           >
-            Remove Project
-          </button>
+            Remove project
+          </Button>
         </div>
       </div>
     </Modal>

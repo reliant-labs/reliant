@@ -115,13 +115,20 @@ func mergeStoredConfigRecord(record *StoredProjectConfigRecord) (*Config, error)
 		strings.TrimSpace(record.DaemonID) != SeedDaemonID
 
 	// Merge in precedence order: user < project < local.
-	for _, blob := range []*string{record.UserConfigYAML, record.ProjectConfigYAML, record.LocalConfigYAML} {
+	for scope, blob := range []*string{record.UserConfigYAML, record.ProjectConfigYAML, record.LocalConfigYAML} {
 		if blob == nil || *blob == "" {
 			continue
 		}
 		partial := &Config{}
 		if err := yaml.Unmarshal([]byte(*blob), partial); err != nil {
 			return nil, fmt.Errorf("failed to parse stored YAML config: %w", err)
+		}
+		// Only the user (global) scope may set `models`. A repo's checked-in
+		// config must not choose a model endpoint for its collaborators'
+		// workers; this matches the daemon's own loader (configloader
+		// mergeModelsConfig).
+		if scope != 0 {
+			partial.Models = nil
 		}
 
 		mergeConfigInto(cfg, partial)

@@ -37,85 +37,24 @@ func LoadUserModelsConfigFromBytes(data []byte) (*UserModelsConfig, error) {
 	return &cfg, nil
 }
 
-// LocalModelDiscoverer is a function that discovers models from a local endpoint.
-// It returns a list of model definitions or an error.
-// The baseURL is the OpenAI-compatible API endpoint (e.g., http://localhost:11434/v1).
+// MergeUserConfig applies user configuration to the registry:
+//  1. Adds custom models
+//  2. Prepends the user's tag entries to the built-in tag lists
 //
-// Every discovered model is listed under the `local` tag, after any entries
-// already there.
-type LocalModelDiscoverer func(baseURL string) ([]ModelDefinition, error)
-
-// MergeUserConfig applies user configuration to the registry.
-// This:
-//  1. Discovers local models if provider is configured
-//  2. Adds custom models to the registry
-//  3. Prepends the user's tag entries to the built-in tag lists
+// Local models are never merged here: they belong to a user's daemons and are
+// synthesized per request (internal/llm/localmodels), not registered.
 //
 // Note: This modifies the registry in place. Clone first if you need to preserve
 // the original.
 func (r *ModelRegistry) MergeUserConfig(cfg *UserModelsConfig) error {
-	return r.MergeUserConfigWithDiscovery(cfg, nil)
-}
-
-// MergeUserConfigWithDiscovery applies user configuration to the registry with optional
-// local model discovery. If discoverer is non-nil and cfg.Providers.Local is configured,
-// models will be discovered from the local endpoint and added to the registry.
-//
-// This:
-//  1. Discovers local models if provider is configured and discoverer is provided
-//  2. Adds custom models to the registry
-//  3. Prepends the user's tag entries to the built-in tag lists
-//
-// Note: This modifies the registry in place. Clone first if you need to preserve
-// the original.
-func (r *ModelRegistry) MergeUserConfigWithDiscovery(cfg *UserModelsConfig, discoverer LocalModelDiscoverer) error {
 	if cfg == nil {
 		return nil
 	}
-
-	// Step 1: Discover local models if provider is configured
-	if err := r.discoverLocalModels(cfg, discoverer); err != nil {
-		return err
-	}
-
-	// Step 2: Add custom models
 	if err := r.addCustomModels(cfg.Custom); err != nil {
 		return err
 	}
-
-	// Step 3: The user's tag entries go first. Models are all known by now,
-	// so an entry naming a custom or discovered model validates.
-	if err := r.applyUserTags(cfg.Tags); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-// discoverLocalModels discovers and adds local models if the local provider is configured.
-func (r *ModelRegistry) discoverLocalModels(cfg *UserModelsConfig, discoverer LocalModelDiscoverer) error {
-	if discoverer == nil {
-		return nil
-	}
-	if cfg.Providers.Local == nil || cfg.Providers.Local.BaseURL == "" {
-		return nil
-	}
-
-	models, err := discoverer(cfg.Providers.Local.BaseURL)
-	if err != nil {
-		return fmt.Errorf("failed to discover local models: %w", err)
-	}
-
-	for _, model := range models {
-		// Skip if model ID already exists (user may have defined it explicitly)
-		if _, exists := r.byID[model.ID]; exists {
-			continue
-		}
-		r.addModel(model)
-		r.tags[TagLocal] = append(r.tags[TagLocal], TagEntry{Model: model.ID})
-	}
-
-	return nil
+	// Models are all known by now, so a tag entry naming a custom model validates.
+	return r.applyUserTags(cfg.Tags)
 }
 
 // addModel appends a model and re-points the id index. Appending can move
@@ -179,51 +118,25 @@ func (r *ModelRegistry) applyUserTags(userTags map[string][]TagEntry) error {
 	return nil
 }
 
-// CreateRegistryWithUserConfig creates a new registry with user configuration applied.
-// This is the recommended way to get a configured registry:
+// CreateRegistryWithUserConfig creates a new registry with user configuration applied:
 //  1. Parses the embedded YAML
 //  2. Clones the registry
 //  3. Applies user configuration
 //
 // Returns an unmodified registry if cfg is nil.
-// Note: This does not discover local models. Use CreateRegistryWithDiscovery if you
-// need local model discovery.
 func CreateRegistryWithUserConfig(cfg *UserModelsConfig) (*ModelRegistry, error) {
-	return CreateRegistryWithDiscovery(cfg, nil)
-}
-
-// CreateRegistryWithDiscovery creates a new registry with user configuration and
-// optional local model discovery.
-//
-// If discoverer is non-nil and cfg.Providers.Local is configured, models will be
-// discovered from the local endpoint and added to the registry.
-//
-// This is the recommended way to get a fully configured registry:
-//  1. Parses the embedded YAML
-//  2. Clones the registry
-//  3. Discovers local models (if configured)
-//  4. Applies user configuration
-//
-// Returns an unmodified registry if cfg is nil.
-func CreateRegistryWithDiscovery(cfg *UserModelsConfig, discoverer LocalModelDiscoverer) (*ModelRegistry, error) {
-	// Use ParseRegistry() instead of GetRegistry() to create a fresh registry
-	// without affecting the global singleton. This allows callers to use
-	// SetGlobalRegistry() to install the configured registry.
+	// ParseRegistry (not GetRegistry) so the global singleton is untouched.
 	baseReg, err := ParseRegistry()
 	if err != nil {
 		return nil, err
 	}
-
 	if cfg == nil {
 		return baseReg, nil
 	}
-
-	// Clone and apply user config with discovery
 	userReg := baseReg.Clone()
-	if err := userReg.MergeUserConfigWithDiscovery(cfg, discoverer); err != nil {
+	if err := userReg.MergeUserConfig(cfg); err != nil {
 		return nil, fmt.Errorf("failed to apply user config: %w", err)
 	}
-
 	return userReg, nil
 }
 

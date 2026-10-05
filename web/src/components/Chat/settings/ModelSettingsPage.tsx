@@ -3,6 +3,14 @@ import { useNavigate } from "@tanstack/react-router";
 import { ChevronLeft, X, Search, Settings2 } from "lucide-react";
 import { cn } from "../../../lib/utils";
 import { useModels } from "../../../store/globalDataStore";
+import { Tooltip } from "../../ui/Tooltip";
+import {
+  contextSeverity,
+  contextWarningText,
+  formatContextWindow,
+  localGroupLabel,
+  localProviderRef,
+} from "../../Settings/localModels";
 import { preferredThinkingLevel, resolveThinkingCapabilityForModel } from "../../../hooks/useThinkingCapability";
 
 // ---------------------------------------------------------------------------
@@ -38,7 +46,6 @@ const providerColors: Record<string, string> = {
   codex: "#5cb85c",
   gemini: "#5b9bd5",
   vertexai: "#5b9bd5",
-  xai: "#d9534f",
   local: "#a0a0a0",
   openrouter: "#f0ad4e",
 };
@@ -50,7 +57,6 @@ const ALL_THINKING_LEVELS = [
   { value: "high", label: "High" },
   { value: "xhigh", label: "X-High" },
   { value: "max", label: "Max" },
-  { value: "ultra", label: "Ultra" },
 ];
 
 // ---------------------------------------------------------------------------
@@ -67,6 +73,7 @@ function getProviderColor(driverIdOrProvider: string | undefined): string {
 function parseModelValue(value: unknown): {
   tags?: string[];
   id?: string;
+  providers?: string[];
   thinking_level?: string;
   temperature?: number;
   compaction_threshold?: number;
@@ -77,7 +84,7 @@ function parseModelValue(value: unknown): {
 
 /** Build a new value by merging base selection with overrides. */
 function buildModelValue(
-  base: { tags?: string[]; id?: string },
+  base: { tags?: string[]; id?: string; providers?: string[] },
   overrides: Record<string, unknown>,
 ): unknown {
   const result: Record<string, unknown> = { ...base };
@@ -148,7 +155,11 @@ export function ModelSettingsPage({
 
     const groups: Record<string, typeof models> = {};
     for (const model of filtered) {
-      const provider = model.provider || "Other";
+      // A local model is reachable only through one machine's daemon, so each
+      // machine is its own group.
+      const provider = model.local
+        ? localGroupLabel(model.local.machineName)
+        : model.provider || "Other";
       if (!groups[provider]) groups[provider] = [];
       groups[provider].push(model);
     }
@@ -217,15 +228,20 @@ export function ModelSettingsPage({
     onChange(buildModelValue({ tags: [tag] }, newOverrides));
   };
 
-  const handleSelectModel = (modelId: string) => {
-    const newModel = models.find((m) => m.id === modelId) ?? models.find((m) => m.id.split("@")[0] === modelId);
+  const handleSelectModel = (modelId: string, daemonId?: string) => {
+    const newModel = models.find((m) => m.id === modelId && (!daemonId || m.local?.daemonId === daemonId)) ?? models.find((m) => m.id.split("@")[0] === modelId);
     const newLevels = newModel?.supportedThinkingLevels ?? [];
     // Clear thinking_level if the new model doesn't support the current level
     const newOverrides = { ...currentOverrides };
     if (newOverrides.thinking_level && !newLevels.includes(newOverrides.thinking_level as string)) {
       delete newOverrides.thinking_level;
     }
-    onChange(buildModelValue({ id: modelId }, newOverrides));
+    onChange(
+      buildModelValue(
+        daemonId ? { id: modelId, providers: [localProviderRef(daemonId)] } : { id: modelId },
+        newOverrides,
+      ),
+    );
   };
 
   // Handler: change overrides
@@ -233,9 +249,10 @@ export function ModelSettingsPage({
     key: string,
     val: string | number | undefined,
   ) => {
-    const base: { tags?: string[]; id?: string } = {};
+    const base: { tags?: string[]; id?: string; providers?: string[] } = {};
     if (parsed.tags) base.tags = parsed.tags;
     if (parsed.id) base.id = parsed.id;
+    if (parsed.id && parsed.providers) base.providers = parsed.providers;
 
     const newOverrides = { ...currentOverrides };
     if (val === undefined || val === "" || val === null) {
@@ -371,18 +388,24 @@ export function ModelSettingsPage({
                   {provider}
                 </div>
                 {groupedModels[provider].map((model) => {
-                  const isSelected =
-                    selectedModelId === model.id ||
-                    model.id.split("@")[0] === selectedModelId;
-                  return (
+                  const local = model.local;
+                  const isSelected = local
+                    ? selectedModelId === model.id &&
+                      parsed.providers?.includes(localProviderRef(local.daemonId)) === true
+                    : selectedModelId === model.id ||
+                      model.id.split("@")[0] === selectedModelId;
+                  const offline = !!local && !local.online;
+                  const row = (
                     <button
-                      key={model.id}
-                      onClick={() => handleSelectModel(model.id)}
+                      key={`${local?.daemonId ?? ""}:${model.id}`}
+                      disabled={offline}
+                      onClick={() => handleSelectModel(model.id, local?.daemonId)}
                       className={cn(
                         "w-full flex items-center justify-between px-2.5 py-1.5 rounded text-left transition-colors mx-0.5",
                         isSelected
                           ? "bg-primary/15"
                           : "hover:bg-muted/50",
+                        offline && "opacity-50 cursor-not-allowed hover:bg-transparent",
                       )}
                     >
                       <div className="flex items-center gap-2">
@@ -399,6 +422,20 @@ export function ModelSettingsPage({
                         </span>
                       </div>
                       <div className="flex items-center gap-1.5 text-2xs text-muted-foreground/70">
+                        {local && !!model.contextWindow && (
+                          <span
+                            data-testid="local-context"
+                            title={contextWarningText(model.contextWindow) || undefined}
+                            className={cn(
+                              contextSeverity(model.contextWindow) === "warning" && "text-warning font-semibold",
+                              contextSeverity(model.contextWindow) === "soft" && "text-warning/80",
+                            )}
+                          >
+                            {formatContextWindow(BigInt(model.contextWindow))}
+                            {contextSeverity(model.contextWindow) === "warning" && " · too small for agents"}
+                            {contextSeverity(model.contextWindow) === "soft" && " · small"}
+                          </span>
+                        )}
                         {model.canReason && (
                           <span className="inline-flex px-1 py-px rounded-sm text-3xs font-semibold uppercase tracking-tight bg-primary/15 text-primary">
                             reasoning
@@ -411,6 +448,17 @@ export function ModelSettingsPage({
                         )}
                       </div>
                     </button>
+                  );
+                  return offline ? (
+                    <Tooltip
+                      key={`${local?.daemonId}:${model.id}`}
+                      content={`${local?.machineName} is offline — this model is unavailable until it reconnects.`}
+                      wrapperClassName="block w-full"
+                    >
+                      {row}
+                    </Tooltip>
+                  ) : (
+                    row
                   );
                 })}
               </div>
@@ -460,8 +508,9 @@ export function ModelSettingsPage({
           </select>
         </div>
 
-        {/* Temperature */}
-        <div className="flex items-center justify-between mb-2">
+        {/* Temperature: only where the model+driver honors it */}
+        {selectedModel?.supportsTemperature !== false && (
+        <div className="flex items-center justify-between mb-2" data-testid="temperature-control">
           <span className="text-xs text-muted-foreground font-medium">
             Temperature
           </span>
@@ -484,10 +533,11 @@ export function ModelSettingsPage({
             <span className="text-xs text-muted-foreground min-w-7 text-right">
               {currentTemperature !== undefined
                 ? currentTemperature.toFixed(1)
-                : "1.0"}
+                : "Default"}
             </span>
           </div>
         </div>
+        )}
 
         {/* Compaction */}
         <div className="flex items-center justify-between">

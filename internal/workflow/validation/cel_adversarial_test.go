@@ -2,7 +2,6 @@
 package validation
 
 import (
-	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -1097,20 +1096,19 @@ nodes:
 // TestCELAdversarial_BuiltinWorkflows tests real builtin workflows for validation issues.
 func TestCELAdversarial_BuiltinWorkflows(t *testing.T) {
 	t.Parallel()
-	builtinDir := "../../../workflow/builtin"
 	workflows := []string{
-		"agent.yaml",
-		"one-ring.yaml",
-		"auditing-agent.yaml",
-		"parallel-compete.yaml",
-		"parallel-loop-sample.yaml",
-		"structured-agent.yaml",
+		"../../../workflow/builtin/agent.yaml",
+		"testdata/one-ring.yaml",
+		"testdata/auditing-agent.yaml",
+		"../../../workflow/builtin/parallel-compete.yaml",
+		"testdata/parallel-loop-sample.yaml",
+		"../../../workflow/builtin/structured-agent.yaml",
 	}
 
 	for _, filename := range workflows {
 		t.Run(filename, func(t *testing.T) {
 			// Load workflow from YAML
-			data, err := os.ReadFile(fmt.Sprintf("%s/%s", builtinDir, filename))
+			data, err := os.ReadFile(filename)
 			if err != nil {
 				t.Skipf("Could not read workflow: %v", err)
 				return

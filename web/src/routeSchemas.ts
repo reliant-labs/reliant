@@ -234,6 +234,9 @@ export const proxyAuthSearchSchema = z.object({
 export const workflowSearchSchema = z.object({
   drill: z.string().optional(),
   tour: tourParam,
+  // The chat shown in the editor's chat panel. UI state only: nothing on the
+  // server binds a chat to a workflow.
+  chat: z.string().optional(),
 });
 
 // Settings section identifiers — the source of truth for what `/settings/$section`

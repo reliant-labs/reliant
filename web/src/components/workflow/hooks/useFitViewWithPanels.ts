@@ -15,7 +15,7 @@
 
 import { useCallback, type RefObject } from "react";
 import { useReactFlow } from "@xyflow/react";
-import type { PanelSize } from "../WorkflowBuilderChat";
+import type { PanelSize } from "../WorkflowEditorChatPanel";
 
 export interface UseFitViewWithPanelsArgs {
   /** Ref to the ReactFlow canvas wrapper (used to read viewport size). */

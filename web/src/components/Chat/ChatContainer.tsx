@@ -19,6 +19,7 @@ import {
   useStreamingMessages,
   useDiscussMode,
   useHasOlderMessages,
+  useIsChatSyncing,
 } from "../../store/chatStoreHooks";
 import {
   usePendingApprovals,
@@ -95,12 +96,13 @@ export function ChatContainer({ tabId, isFocused = true, hideChatTitle }: ChatCo
   const { data: pendingApprovals = [] } = usePendingApprovals(chatId);
   const isDiscussMode = useDiscussMode(chatId);
   const { data: pendingQuestion } = usePendingQuestion(chatId);
+  const isChatSyncing = useIsChatSyncing(chatId);
 
   // Self-healing subscription invariant: this component renders the active
   // chat, so it's the natural place to assert "the rendered chat is the
   // subscribed chat" — re-checked whenever the chat or the connection state
   // changes, not just once at selection time. Without this, another
-  // component stealing the single subscription slot (e.g. WorkflowBuilderChat
+  // component stealing the single subscription slot (e.g. another panel
   // subscribing to its own chat, or a reconnect forwarding a stale id) leaves
   // this chat silently unsubscribed with no error and no recovery path short
   // of a manual refresh. See globalUpdatesStore.reconcileChatSubscription.
@@ -328,6 +330,7 @@ export function ChatContainer({ tabId, isFocused = true, hideChatTitle }: ChatCo
       onLoadOlderMessages={handleLoadOlderMessages}
       isLoadingOlderMessages={isLoadingOlderMessages}
       hasOlderMessages={hasOlderMessages}
+      isChatSyncing={isChatSyncing}
       hideChatTitle={hideChatTitle}
     />
   );

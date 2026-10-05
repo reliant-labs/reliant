@@ -337,3 +337,113 @@ func TestLoadTool_ImplementsDeferredToolsAware(t *testing.T) {
 	_, ok = u.Unwrap().(DeferredToolsAware)
 	assert.True(t, ok, "inner load_tool must implement DeferredToolsAware")
 }
+
+// ----- Tag loading -----
+
+func workflowTagToolNames() []string {
+	var names []string
+	for _, def := range GetToolRegistry() {
+		for _, tag := range def.Tags {
+			if tag == TagWorkflow {
+				names = append(names, def.Name)
+			}
+		}
+	}
+	return names
+}
+
+func TestLoadTool_TagWorkflow_LoadsAllSixteen(t *testing.T) {
+	t.Parallel()
+	tool := &loadToolTool{}
+	ctx := newLoadToolTestCtx(t, PermissionOrchestrator)
+	want := workflowTagToolNames()
+	require.Len(t, want, 16)
+
+	resp, err := tool.Execute(ctx, LoadToolParams{Name: "tag:workflow"})
+	require.NoError(t, err)
+	require.False(t, resp.IsError, resp.Content)
+
+	loaded := GetLoadedToolsStore().Get(Scope(ctx.ChatID, ctx.Thread))
+	for _, name := range want {
+		assert.Contains(t, loaded, name)
+	}
+
+	again, err := tool.Execute(ctx, LoadToolParams{Name: "tag:workflow"})
+	require.NoError(t, err)
+	assert.Contains(t, again.Content, "16 already loaded")
+}
+
+func TestLoadTool_TagWorkflow_RestrictedLoadableReportsRefused(t *testing.T) {
+	t.Parallel()
+	tool := &loadToolTool{}
+	ctx := newLoadToolTestCtx(t, PermissionOrchestrator)
+	scopeKey := Scope(ctx.ChatID, ctx.Thread)
+	GetLoadedToolsStore().SetToolAccess(scopeKey, ToolAccess{Loadable: []string{ToolGetWorkflow, ToolListWorkflows}})
+
+	resp, err := tool.Execute(ctx, LoadToolParams{Name: "tag:workflow"})
+	require.NoError(t, err)
+	assert.False(t, resp.IsError, resp.Content)
+	assert.Contains(t, resp.Content, "2 loaded")
+	assert.Contains(t, resp.Content, "14 refused")
+	assert.Contains(t, resp.Content, "not loadable")
+
+	loaded := GetLoadedToolsStore().Get(scopeKey)
+	assert.ElementsMatch(t, []string{ToolGetWorkflow, ToolListWorkflows}, loaded)
+}
+
+func TestLoadTool_TagUnknown_NamesKnownTags(t *testing.T) {
+	t.Parallel()
+	tool := &loadToolTool{}
+	ctx := newLoadToolTestCtx(t, PermissionOrchestrator)
+
+	resp, err := tool.Execute(ctx, LoadToolParams{Name: "tag:nope"})
+	require.NoError(t, err)
+	assert.True(t, resp.IsError)
+	assert.Contains(t, resp.Content, "Unknown tag")
+	assert.Contains(t, resp.Content, string(TagWorkflow))
+}
+
+func TestLoadTool_SearchByTagName_ReturnsAllWorkflowTools(t *testing.T) {
+	t.Parallel()
+	tool := &loadToolTool{}
+	ctx := newLoadToolTestCtx(t, PermissionOrchestrator)
+
+	resp, err := tool.Execute(ctx, LoadToolParams{Query: "workflow"})
+	require.NoError(t, err)
+	require.False(t, resp.IsError)
+	for _, name := range workflowTagToolNames() {
+		assert.Contains(t, resp.Content, "**"+name+"**")
+	}
+	assert.Contains(t, resp.Content, "Found 16 tools")
+}
+
+func TestLoadTool_TagWithNoRegistryTools_SaysSo(t *testing.T) {
+	t.Parallel()
+	tool := &loadToolTool{}
+	ctx := newLoadToolTestCtx(t, PermissionOrchestrator)
+
+	resp, err := tool.Execute(ctx, LoadToolParams{Name: "tag:mcp"})
+	require.NoError(t, err)
+	assert.False(t, resp.IsError)
+	assert.Contains(t, resp.Content, "no built-in tools carry it")
+	assert.Contains(t, resp.Content, "mcp__")
+	assert.NotContains(t, resp.Content, "0 loaded")
+}
+
+func TestLoadTool_TagRuns_PermissionLadderRefusesOrchestratorTools(t *testing.T) {
+	t.Parallel()
+	tool := &loadToolTool{}
+	ctx := newLoadToolTestCtx(t, PermissionMutating)
+
+	resp, err := tool.Execute(ctx, LoadToolParams{Name: "tag:runs"})
+	require.NoError(t, err)
+	require.False(t, resp.IsError, resp.Content)
+
+	loaded := GetLoadedToolsStore().Get(Scope(ctx.ChatID, ctx.Thread))
+	for _, name := range []string{ToolStartRun, ToolControlRun, ToolSendToRun} {
+		assert.NotContains(t, loaded, name)
+		assert.Contains(t, resp.Content, name+" (Tool '"+name+"' requires 'orchestrator' permission")
+	}
+	assert.Contains(t, loaded, ToolListRuns)
+	assert.Contains(t, loaded, ToolGetRun)
+}

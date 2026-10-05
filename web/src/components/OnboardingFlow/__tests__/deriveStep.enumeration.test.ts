@@ -33,7 +33,7 @@
  *  A. `compute: "cloud_paid"` is a first-class `ComputeChoice` that
  *     `launchPlanSchema` accepts, but every cloud test in the flow spelled
  *     cloud-ness as `=== "cloud_free_trial"`. A paid plan therefore routed to
- *     `project-picker` and never rendered `DaemonConnectingGate` — precisely
+ *     `finish` and never rendered `DaemonConnectingGate` — precisely
  *     the failure `458a830c` fixed for the free-trial path, still live on the
  *     paid one.
  *
@@ -153,7 +153,7 @@ const ENTITLED_FACTS: OnboardingFactsInput = {
 /** Terminal steps — the ones that own a `completeOnboarding` call. */
 const TERMINAL_STEPS: OnboardingStepId[] = [
   "project-choice",
-  "project-picker",
+  "finish",
   "github-connect",
 ];
 
@@ -716,7 +716,7 @@ describe("cloud-ness is decided in one place", () => {
   it("routes every cloud choice through the step that renders the daemon gate", () => {
     // The concrete consequence of Defect A: a cloud plan whose provider and
     // intent are settled must land on a step that can show
-    // DaemonConnectingGate, never on the local project-picker.
+    // DaemonConnectingGate, never on the local finish.
     //
     // Facts are ENTITLED here on purpose. The question is where a settled
     // cloud plan goes once nothing stands in the way; an un-entitled one goes

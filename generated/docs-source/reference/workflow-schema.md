@@ -31,6 +31,8 @@ Defines a complete workflow with nodes, edges, inputs, and outputs.
 | `resume_node` | string | No | - |
 | `transition_to` | string | No | - |
 | `triggers` | WorkflowTrigger[] | No | - |
+| `title` | string | No | - |
+| `hidden` | boolean | No | - |
 
 ---
 

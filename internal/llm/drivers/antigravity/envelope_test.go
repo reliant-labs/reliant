@@ -221,3 +221,42 @@ func TestModelVersionEchoesBaseID(t *testing.T) {
 		t.Fatal("modelVersion matched the suffixed request id; the suffix convention changed")
 	}
 }
+
+// A dynamic thinkingBudget:-1 overrides the effort variant: live samples of
+// gemini-3.8-flash-{low,high} spent the same thought tokens either way. The
+// level must travel as thinkingConfig.thinkingLevel with no budget.
+func TestBuildEnvelopeThinkingLevelReplacesBudget(t *testing.T) {
+	for _, effort := range []string{"low", "medium", "high"} {
+		client := &Client{}
+		client.options.Model.APIModel = "gemini-3.8-flash"
+		client.options.ReasoningEffort = effort
+		body, err := json.Marshal(client.buildEnvelope(nil, nil, nil))
+		if err != nil {
+			t.Fatalf("marshal: %v", err)
+		}
+		var env struct {
+			Model   string `json:"model"`
+			Request struct {
+				GenerationConfig struct {
+					ThinkingConfig map[string]any `json:"thinkingConfig"`
+				} `json:"generationConfig"`
+			} `json:"request"`
+		}
+		if err := json.Unmarshal(body, &env); err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+		tc := env.Request.GenerationConfig.ThinkingConfig
+		if tc["thinkingLevel"] != effort {
+			t.Errorf("%s: thinkingLevel = %v, want %q", effort, tc["thinkingLevel"], effort)
+		}
+		if _, has := tc["thinkingBudget"]; has {
+			t.Errorf("%s: thinkingBudget must be absent, got %v", effort, tc["thinkingBudget"])
+		}
+		if tc["includeThoughts"] != true {
+			t.Errorf("%s: includeThoughts = %v, want true", effort, tc["includeThoughts"])
+		}
+		if want := "gemini-3.8-flash-" + effort; env.Model != want {
+			t.Errorf("%s: model = %q, want %q", effort, env.Model, want)
+		}
+	}
+}

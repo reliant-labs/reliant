@@ -24,21 +24,19 @@ Load it before designing a workflow's control flow.
 
 ## Approach
 
-The workflow tools (`get_workflow`, `edit_workflow`, `write_workflow`, the scenario tools) all take an
-optional `id` — a UUID, slug, or name. Omit it and they resolve to the workflow this chat is
-editing; pass it only to target a different workflow. There is no draft ID injected into the
-system message to look for.
+Every workflow tool that targets an existing workflow (`get_workflow`, `edit_workflow`, `write_workflow`, and the scenario tools) requires an explicit
+`id` — a UUID, slug, or name. Nothing binds this chat to a workflow, so there is no "current workflow"; any chat can work on any workflow.
 
-Starting from scratch (no workflow exists yet)? Call `create_workflow` first — it returns the new
-draft's `id`, `name`, and `slug`. Omit both `name` and `content` to get a random name and the
-default agent template; pass `content` with complete workflow YAML to start from a specific design.
-After that, the chat is editing this draft, so `get_workflow`/`edit_workflow`/`write_workflow` need no
-`id` either.
+Starting from scratch? Call `create_workflow` first — it returns the new draft's `id`, `name`, and `slug`. Pass that `id` to every
+subsequent call. Omit both `name` and `content` to get a random name and the default agent template; pass `content`
+with complete workflow YAML to start from a specific design.
+
+Editing an existing workflow? Find it with `list_workflows` and pass its id or slug. If the user's message names a
+workflow (e.g. "Workflow `swift-fox-a1b2`: ..."), use that as the `id`.
 
 Follow this process:
 
-1. **Setup** — New workflow: call `create_workflow`. Existing workflow: call `get_workflow()` (no id
-   needed) to see current content.
+1. **Setup** — New workflow: call `create_workflow`. Existing workflow: call `get_workflow` with its `id` to see current content.
 2. **Understand** — Ask clarifying questions about the user's goal
 3. **Learn** — Use `list_workflows` to see examples and patterns, `list_presets`/`get_preset` to see what
    agent presets exist before inventing a system prompt from scratch
@@ -47,7 +45,7 @@ Follow this process:
 6. **Test** — Create and run scenarios (aim for 3+ covering positive, negative, and edge cases). Try to break your workflow. It's frustrating for users to run a workflow for an hour and hit a bug at the end—scenarios catch this early.
 
 Working in a chat that isn't running this preset? These tools are still reachable:
-`load_tool(query="workflow")` loads them on demand.
+`load_tool(name="tag:workflow")` loads all of them on demand.
 
 ## Key concepts
 
@@ -222,7 +220,8 @@ edges:
 ## Available tools
 
 Granted by `tag:workflow` — no `load_tool` needed in a workflow-building chat. All take the
-optional `id` (UUID/slug/name) described above except `create_workflow`, which mints one.
+required `id` (UUID/slug/name) described above except `create_workflow`, which mints one, and
+the discovery/reference tools (`list_workflows`, `list_presets`, `get_preset`, `get_schema`, `get_cel_reference`, `get_workflow_suggestions`).
 
 | Tool | Purpose |
 |------|---------|
@@ -243,8 +242,9 @@ optional `id` (UUID/slug/name) described above except `create_workflow`, which m
 | `delete_scenario` | Remove a scenario |
 | `get_workflow_suggestions` | Get AI-powered suggestions for workflow improvements |
 
-Outside a workflow-building chat, these tools aren't preloaded, but `load_tool(query="workflow")`
-is always available (it's in `tag:coding:default`) and loads the full set on demand.
+Outside a workflow-building chat, these tools aren't preloaded, but `load_tool(name="tag:workflow")`
+is always available (it's in `tag:coding:default`) and loads the full set on demand. Every tool that targets an
+existing workflow requires its `id` (returned by `create_workflow`, or listed by `list_workflows`).
 
 ## CEL Reference
 
@@ -267,7 +267,7 @@ is always available (it's in `tag:coding:default`) and loads the full set on dem
 | `output.*` | Current activity output (for save_message context) | workflow-specific |
 | `outputs.*` | Loop iteration outputs for while condition evaluation | workflow-specific |
 | `thread.*` | Current thread context (token_count, message_count) | workflow-specific |
-| `trigger.*` | Trigger context (message, attachments) for triggered workflows | workflow-specific |
+| `trigger.*` | The event that started this run, fixed at launch (trigger.kind, trigger.name, trigger.scheduled_for, trigger.payload.<x>). Interactive chats have kind chat.start | workflow-specific |
 | `workflow.*` | Workflow execution context (id, name, run_id, etc.) | `id`, `name`, `run_id`, `session_id`, `path`, `worktree_path`, `branch`, `mode` |
 
 #### `iter` fields
@@ -297,6 +297,7 @@ is always available (it's in `tag:coding:default`) and loads the full set on dem
 | `string.format(list) -> string` | Format a string with positional arguments | `"Hello %s, you have %d items".format([name, count])` |
 | `getOrDefault(map, key, default) -> dyn` | Safely access a map key with a fallback default value | `getOrDefault(inputs, "mode", "auto")` |
 | `list.join(string) -> string` | Join list elements with separator | `["a", "b"].join(", ")` |
+| `merge(map, map) -> map` | Shallow-merge two maps; keys in the second map win (e.g. pin one setting on a model value) | `merge(inputs.model, {"thinking_level": "high"})` |
 | `now() -> string` | Return current time as RFC3339 string | `now()` |
 | `parseDuration(string) -> double` | Parse a Go duration string and return seconds as a number | `parseDuration("5m") == 300.0` |
 | `parseJson(string) -> dyn` | Parse a JSON string into a dynamic value | `parseJson(nodes.run.stdout)` |
@@ -355,26 +356,14 @@ condition: "nodes.check.exit_code == 0"
 | Name | Description |
 |------|-------------|
 | `agent` | Standard interactive agent. Loops while LLM returns tool calls, returns when LLM responds with no tool calls. Will always start on a thread that is seeded with the user's message. User interaction occurs outside of the workflow. Uses inline save_message for frontend activity association. |
-| `auditing-agent` | Agent with per-turn audit oversight. Main agent generates response, auditor (cheap model) reviews it. If denied, guidance is injected and tools are NOT executed. If approved, response is saved and tools run. Main agent response is deferred until audit approval to keep thread clean. The auditor replaces the manual approval gate — there is no separate "mode" input because every turn is automatically audited. |
-| `blog-content-pipeline` | Structured content pipeline for producing technical blog posts for Reliant Labs. |
-| `bmad-lite` | BMAD-Lite — Simplified BMAD methodology with persona-driven planning. Inspired by https://github.com/bmad-code-org/BMAD-METHOD |
 | `build-workflow` | Build Workflow — create a custom Reliant workflow from a conversation. |
-| `default-router` | Default workflow router — classifies the user's request and dispatches to the best strategy from a curated set of workflows. |
-| `discovery-relay` | Discovery Relay — iterative waves with progressive knowledge transfer. |
-| `env-setup` | Environment isolation pipeline: [setup → validate] (loop) → complete. Analyzes any codebase, sets up dynamic ports, isolated databases, worktree-named processes, language-appropriate hot-reload, consolidated logging (including browser console capture), and writes all state to .reliant/ephemeral/. Validation agent tests the full setup in a feedback loop until everything works. |
 | `forge-migrate` | Migrate an existing codebase into a Forge project. Distinct from `migrate` (which imports Claude Code/Cursor/Codex config into Reliant) and from `forge-one-shot` (which builds a greenfield app from a conversation). |
 | `forge-one-shot` | Build a production Forge app from a conversation, in ONE get-it-right loop: SCOPE → SCAFFOLD → VERIFY GREEN → FAN OUT → SYNTHESIZE → VERIFY. |
 | `get-it-right` | Get It Right — for complex brownfield codebases where LLMs paper-mache code on top. The insight: sometimes you need to try and fail to truly understand the codebase. |
-| `gsd` | GSD (Get Shit Done) — A pragmatic, no-ceremony workflow focused on rapid parallel execution. Inspired by https://github.com/gsd-build/get-shit-done. |
-| `implement-review` | Generic implement → review loop. Implements changes then reviews them in a structured cycle until the reviewer approves or max iterations are reached. |
 | `landing-page` | Build a polished landing page by chaining two get-it-right review loops and ending in a plain handoff agent that serves the page and hands the user a URL. |
-| `markdown-checklist` | Complete a markdown checklist/task file until all checklist items are done. |
 | `migrate` | Guided migration workflow for importing useful configuration from Claude Code, Cursor, Codex, or Windsurf into Reliant. |
-| `one-ring` | Unified development pipeline: planning → write_tests → [get-it-right loop] → complete. |
 | `parallel-compete` | 3 agents implement in parallel worktrees, reviewer picks winner or synthesizes. Thread mode: new (isolated context). Each worktree is independent. Apply path: use_winner copies via rsync, synthesize merges best parts. |
-| `parallel-loop-sample` | Minimal sample showing a parallel loop over items with a custom key. Each item runs a builtin agent in parallel and the workflow routes based on iteration count, while scenarios assert the keyed aggregate result map. |
 | `pitch-deck` | Generate an investor pitch deck from a company website with competitive research and founder interview. Includes parallel per-slide write+review pipeline and visual review via puppeteer screenshots + image attachments. |
-| `ralph-wiggum` | Ralph Wiggum — brute-force iteration for complex tasks. |
 | `scope-conversation` | Reusable scoping conversation sub-workflow. |
 | `structured-agent` | Agent that requires structured output via response tool. Unlike builtin://agent which returns once the model is done (stop_reason), this loops until the response tool is called. If LLM responds without tools, a reminder is injected. Access output via output.response (structured data) and output.completed (boolean). |
 
@@ -459,6 +448,8 @@ Defines a complete workflow with nodes, edges, inputs, and outputs.
 | `daemon` | CelDaemonSelector | No | - |
 | `resume_node` | string | No | - |
 | `transition_to` | string | No | - |
+| `title` | string | No | - |
+| `hidden` | boolean | No | - |
 
 ## Edge
 
@@ -744,8 +735,8 @@ that never exercised what its name claims to test:
   ```
 
   A corpus survey found 96 of 159 scenarios (60%) black-box at least one sub-workflow, and 27 (17%)
-  have a silently-defaulted router — including every `one-ring` scenario, where names like
-  `implement_only` and `plan_only` assert a routing outcome `classify` never actually made.
+  have a silently-defaulted router — including scenarios whose names (e.g.
+  `implement_only` or `plan_only`) assert a routing outcome `classify` never actually made.
   Don't let this happen to your scenario: if the point is "task X gets classified as Y," mock `classify`.
 
 ### Responding to a black-box warning: three options, pick deliberately

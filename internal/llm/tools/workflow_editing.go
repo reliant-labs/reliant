@@ -2,6 +2,7 @@
 package tools
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -145,6 +146,10 @@ func (t *createWorkflowTool) Execute(ctx *rctx.ToolContext, args CreateWorkflowP
 		return NewTextErrorResponse(rejection), nil
 	}
 
+	if taken, err := t.repo.WorkflowSlugExists(ctx, userID, slug); err == nil && taken {
+		return NewTextErrorResponse(workflowSlugTakenMessage(slug)), nil
+	}
+
 	draft := &db.WorkflowDraft{
 		ID:         draftID,
 		UserID:     userID,
@@ -157,6 +162,9 @@ func (t *createWorkflowTool) Execute(ctx *rctx.ToolContext, args CreateWorkflowP
 	}
 
 	if err := t.repo.CreateWorkflowDraft(ctx, draft); err != nil {
+		if errors.Is(err, db.ErrWorkflowSlugTaken) {
+			return NewTextErrorResponse(workflowSlugTakenMessage(slug)), nil
+		}
 		return NewTextErrorResponse(fmt.Sprintf("Failed to create workflow draft: %v", err)), nil
 	}
 
@@ -168,7 +176,7 @@ func (t *createWorkflowTool) Execute(ctx *rctx.ToolContext, args CreateWorkflowP
 	}
 
 	responseText := check.outcome(fmt.Sprintf(
-		"Workflow '%s' created successfully.\n\nID: %s\nSlug: %s\n\nUse `get_workflow` to view the full definition, or `edit_workflow`/`write_workflow` to modify it.",
+		"Workflow '%s' created successfully.\n\nID: %s\nSlug: %s\n\nPass this `id` (%[2]s) to every subsequent call: `get_workflow` to view the definition, `edit_workflow`/`write_workflow` to modify it, and the scenario tools. Nothing remembers which workflow this chat is working on.",
 		workflowName, draftID, slug,
 	), status)
 
@@ -180,7 +188,7 @@ func (t *createWorkflowTool) Execute(ctx *rctx.ToolContext, args CreateWorkflowP
 // =============================================================================
 
 type EditWorkflowParams struct {
-	ID              string `json:"id,omitempty" jsonschema:"description=Workflow UUID, slug, or name. Optional — defaults to the workflow this chat is editing."`
+	ID              string `json:"id" jsonschema:"required,description=Workflow UUID, slug, or name (from create_workflow or list_workflows)."`
 	OldString       string `json:"old_string" jsonschema:"required,description=The exact text to find and replace in the workflow YAML"`
 	NewString       string `json:"new_string" jsonschema:"required,description=The replacement text"`
 	ExpectedVersion *int64 `json:"expected_version,omitempty" jsonschema:"description=Optional version number from get_workflow for conflict detection"`
@@ -215,7 +223,7 @@ complete once it validates. The response always shows the resulting status and
 every current error and warning.
 
 **Parameters:**
-- id: (optional) Workflow UUID, slug, or name. Omit it to edit the workflow this chat is editing.
+- id: (required) Workflow UUID, slug, or name (the id returned by create_workflow, or from list_workflows).
 - old_string: (required) Exact text to replace.
 - new_string: (required) Replacement text.
 - expected_version: (optional) Version number for conflict detection.
@@ -319,6 +327,9 @@ func (t *editWorkflowTool) Execute(ctx *rctx.ToolContext, args EditWorkflowParam
 
 	// Save the updated draft with synced name
 	if err := t.repo.UpdateWorkflowDraftDefinition(ctx, draft.ID, workflowName, slug, newContent, status); err != nil {
+		if errors.Is(err, db.ErrWorkflowSlugTaken) {
+			return NewTextErrorResponse(workflowSlugTakenMessage(slug)), nil
+		}
 		return NewTextErrorResponse(fmt.Sprintf("Failed to save workflow: %v", err)), nil
 	}
 
@@ -330,9 +341,9 @@ func (t *editWorkflowTool) Execute(ctx *rctx.ToolContext, args EditWorkflowParam
 // =============================================================================
 
 type WriteWorkflowParams struct {
-	// ID selects an EXISTING draft; write_workflow never creates one. Omitted,
-	// it resolves to the draft this chat is editing.
-	ID string `json:"id,omitempty" jsonschema:"description=Workflow UUID, slug, or name. Optional — defaults to the workflow this chat is editing."`
+	// ID selects an EXISTING draft; write_workflow never creates one. Required:
+	// nothing binds a chat to a draft.
+	ID string `json:"id" jsonschema:"required,description=Workflow UUID, slug, or name (from create_workflow or list_workflows)."`
 
 	// Name is optional - overrides name in YAML if provided
 	Name *string `json:"name,omitempty" jsonschema:"description=Workflow name. Overrides name in YAML if provided."`
@@ -379,7 +390,7 @@ complete: false, which saves it as a draft. Pass complete: true to mark it
 complete once it validates.
 
 **Parameters:**
-- id: (optional) Workflow UUID, slug, or name. Omit it to write the workflow this chat is editing.
+- id: (required) Workflow UUID, slug, or name (the id returned by create_workflow, or from list_workflows).
 - name: (optional) Overrides the name in YAML. Used for display name.
 - content: (required) Complete workflow YAML content.
 - expected_version: (optional) Version number for conflict detection.
@@ -471,6 +482,9 @@ func (t *writeWorkflowTool) Execute(ctx *rctx.ToolContext, args WriteWorkflowPar
 
 	// Save the updated draft with synced name/slug
 	if err := t.repo.UpdateWorkflowDraftDefinition(ctx, draft.ID, draft.Name, draft.Slug, args.Content, status); err != nil {
+		if errors.Is(err, db.ErrWorkflowSlugTaken) {
+			return NewTextErrorResponse(workflowSlugTakenMessage(draft.Slug)), nil
+		}
 		return NewTextErrorResponse(fmt.Sprintf("Failed to save workflow: %v", err)), nil
 	}
 	var created bool // always false - we only update
@@ -524,4 +538,12 @@ func generateSlugFromName(name string) string {
 	// Trim leading/trailing hyphens
 	slug = strings.Trim(slug, "-")
 	return slug
+}
+
+// workflowSlugTakenMessage is what the model sees when a name maps to a slug the
+// user already has. Retrying the same name cannot succeed.
+func workflowSlugTakenMessage(slug string) string {
+	return fmt.Sprintf(
+		"A workflow with slug %q already exists. Choose a different name, or call `list_workflows` to find the existing one and pass its `id` to the editing tools.",
+		slug)
 }

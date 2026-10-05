@@ -24,7 +24,8 @@ import type { RunSummary } from "@/api/run-grpc";
 import type { Trigger } from "@/api/trigger-grpc";
 import { automationHealth } from "@/lib/automationHealth";
 import type { LibrarySortKey, LibrarySourceKey } from "@/routeSchemas";
-import { getWorkflowDisplayName, normalizeWorkflowRef } from "../../workflow/useWorkflowInputs";
+import { normalizeWorkflowRef } from "../../workflow/useWorkflowInputs";
+import { workflowDisplayName } from "../../../lib/workflowDisplayName";
 
 export interface LibraryViewInput {
   workflows: WorkflowResponse[];
@@ -68,6 +69,8 @@ export interface LibraryView {
   noWorkflowsOfYourOwn: boolean;
   /** Definitions that failed to load, after search and source. */
   invalid: InvalidWorkflow[];
+  /** Hidden built-ins: run directly, not offered in the composer. Shown collapsed. */
+  buildingBlocks: WorkflowResponse[];
   /** Per workflow ref (normalized): how many automations run it. */
   automationCounts: Map<string, number>;
   /** Per workflow ref (normalized): how many of those are FAILING. */
@@ -118,11 +121,15 @@ export function libraryView({
   }
 
   const query = q?.trim().toLowerCase() ?? "";
+  const visible = workflows.filter((w) => !(w.source === "builtin" && w.isHidden));
+  const buildingBlocks = workflows
+    .filter((w) => w.source === "builtin" && w.isHidden)
+    .filter((w) => !query || matches(query, workflowDisplayName(w), w.name, w.description));
   const searched = query
-    ? workflows.filter((w) => matches(query, getWorkflowDisplayName(w.name, true), w.name, w.description))
-    : workflows;
+    ? visible.filter((w) => matches(query, workflowDisplayName(w), w.name, w.description))
+    : visible;
   const searchedInvalid = query
-    ? invalid.filter((w) => matches(query, getWorkflowDisplayName(w.name, true), w.name, w.path))
+    ? invalid.filter((w) => matches(query, workflowDisplayName(w), w.name, w.path))
     : invalid;
 
   const byName = (a: WorkflowResponse, b: WorkflowResponse) =>
@@ -160,7 +167,7 @@ export function libraryView({
   }
 
   const visibleInvalid = !source || source === "failed" ? searchedInvalid : [];
-  const shown = sections.reduce((total, section) => total + section.workflows.length, 0) + visibleInvalid.length;
+  const shown = sections.reduce((total, section) => total + section.workflows.length, 0) + visibleInvalid.length + buildingBlocks.length;
   const narrowed = Boolean(query) || Boolean(source);
   return {
     sections,
@@ -169,6 +176,7 @@ export function libraryView({
     ),
     noWorkflowsOfYourOwn: sections.some((section) => section.key === "yours" && section.workflows.length === 0),
     invalid: visibleInvalid,
+    buildingBlocks,
     automationCounts,
     failingCounts,
     noMatches: narrowed && shown === 0 && workflows.length + invalid.length > 0,

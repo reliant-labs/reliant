@@ -89,13 +89,12 @@ import { Modal } from "../ui/Modal";
 import { Button } from "../ui/Button";
 
 import type { BackgroundVariant, SelectionMode } from "@xyflow/react";
-import { WorkflowBuilderChat, type PanelSize } from "./WorkflowBuilderChat";
+import { WorkflowEditorChatPanel, type PanelSize } from "./WorkflowEditorChatPanel";
+import { useWorkflowDraftSync, type RemoteWorkflowState } from "./hooks/useWorkflowDraftSync";
 import { ScenarioPanel } from "./ScenarioPanel";
 import { BuilderTestRunPanel } from "./run/BuilderTestRunPanel";
 import { useBuilderTestRun, withTestRunStatus } from "./hooks/useBuilderTestRun";
 import { useProjectStore } from "../../store/projectStore";
-import { useIsChatRunning } from "../../store/activityStore";
-import { useGlobalUpdatesStore } from "../../store/globalUpdatesStore";
 import { normalizeWorkflowRef } from "./useWorkflowInputs";
 import { celString, directCel } from "../../lib/celAdapter";
 import { getInputDescription, type InputDef } from "../../lib/inputHelpers";
@@ -151,19 +150,19 @@ interface WorkflowBuilderProps {
   /** Workflow source type - determines if editable */
   source?: "builtin" | "user" | "project";
   /** Current version number for OCC (0 for new/builtin workflows) */
-  version?: number;
+  version: number;
   /** When the workflow was created */
   createdAt?: string;
-  /** Chat ID associated with this workflow (loaded from database) */
-  builderChatId?: string;
+  /** Chat shown in the editor's chat panel (route search param). Not bound to the workflow server-side. */
+  chatId?: string;
+  /** Called when the panel starts a chat or the user clears it. */
+  onChatIdChange?: (chatId: string | undefined) => void;
+  /** Called when a pushed update changes the draft's lifecycle status. */
+  onDraftStatusChange?: (status: DraftStatus) => void;
   /** Draft ID for this workflow (used for LLM tool calls) */
   draftId?: string;
-  /** Session ID for new/unsaved workflows (for localStorage persistence) */
-  workflowSessionId?: string;
-  /** Callback when a new chat is created */
-  onChatIdChange?: (chatId: string) => void;
-  /** Callback when draft ID changes (when backend creates a new draft) */
-  onDraftIdChange?: (draftId: string) => void;
+  /** Opens the workflow Library (offered when the open draft is deleted elsewhere). */
+  onWorkflowDeleted?: () => void;
   /** Callback when workflow version changes (for OCC) */
   onVersionChange?: (version: number) => void;
   /** Canonical YAML definition from backend (for YAML modal display) */
@@ -197,13 +196,13 @@ function WorkflowBuilderInner({
   isBuiltin = false,
   isNewWorkflow = false,
   source = "user",
-  version: _version,
+  version,
   createdAt,
-  builderChatId,
-  draftId,
-  workflowSessionId,
+  chatId,
   onChatIdChange,
-  onDraftIdChange,
+  onDraftStatusChange,
+  draftId,
+  onWorkflowDeleted,
   onVersionChange,
   yamlDefinition,
   onYamlDefinitionChange,
@@ -284,13 +283,6 @@ function WorkflowBuilderInner({
   // Exit confirmation modal for unsaved changes
   const [showExitConfirmModal, setShowExitConfirmModal] = useState(false);
   const [isSavingBeforeExit, setIsSavingBeforeExit] = useState(false);
-
-  // Active chat exit modal
-  const [showActiveChatModal, setShowActiveChatModal] = useState(false);
-  const isChatBusy = useIsChatRunning(builderChatId ?? "");
-  const unsubscribeFromChatDetails = useGlobalUpdatesStore(
-    (state) => state.unsubscribeFromChatDetails,
-  );
 
   // Track if workflow has been modified (set by mutating handlers; cleared
   // on load / save / agent-update). No ref-dance: every handler that mutates
@@ -602,47 +594,15 @@ function WorkflowBuilderInner({
     return () => window.removeEventListener("beforeunload", handler);
   }, [hasModifications, isBuiltinWorkflow]);
 
-  // Back button handler - check for active chat first, then unsaved changes
+  // Back button handler - warn about unsaved changes
   const handleBackClick = useCallback(() => {
-    // If chat is actively running, warn about that first
-    if (isChatBusy) {
-      setShowActiveChatModal(true);
-      return;
-    }
-    // Show warning if there are any modifications
     // Skip for builtin workflows since they can't be saved anyway
     if (!isBuiltinWorkflow && hasModifications) {
       setShowExitConfirmModal(true);
     } else {
       onBack?.();
     }
-  }, [isChatBusy, hasModifications, onBack, isBuiltinWorkflow]);
-
-  // Handle "Cancel Chat & Exit" from active chat modal
-  const handleCancelChatAndExit = useCallback(() => {
-    if (builderChatId) {
-      unsubscribeFromChatDetails(builderChatId);
-    }
-    setShowActiveChatModal(false);
-    // Fall through to modifications check
-    if (!isBuiltinWorkflow && hasModifications) {
-      setShowExitConfirmModal(true);
-    } else {
-      onBack?.();
-    }
-  }, [
-    builderChatId,
-    unsubscribeFromChatDetails,
-    isBuiltinWorkflow,
-    hasModifications,
-    onBack,
-  ]);
-
-  // Handle "Run in Background" from active chat modal
-  const handleRunInBackground = useCallback(() => {
-    setShowActiveChatModal(false);
-    onBack?.();
-  }, [onBack]);
+  }, [hasModifications, onBack, isBuiltinWorkflow]);
 
   // Discard and exit handler
   const handleDiscardAndExit = useCallback(() => {
@@ -674,7 +634,6 @@ function WorkflowBuilderInner({
     setShowSettingsEditor,
     showTemplateModal,
     showExitConfirmModal,
-    showActiveChatModal,
   });
 
   // Recompute sibling layout info when the edge topology changes. Keying on
@@ -837,6 +796,7 @@ function WorkflowBuilderInner({
 
     const builtWorkflow = buildWorkflow();
 
+    setIsSaving(true);
     try {
       const result = await onSave?.(builtWorkflow, intent);
 
@@ -864,6 +824,8 @@ function WorkflowBuilderInner({
       });
     } catch (error) {
       console.error("Save failed:", error);
+    } finally {
+      setIsSaving(false);
     }
   }, [buildWorkflow, onSave, workflow.name, isBuiltinWorkflow, nodes, edges]);
 
@@ -875,6 +837,7 @@ function WorkflowBuilderInner({
       toast.error("Please give your workflow a name before running it", { duration: 3000 });
       return null;
     }
+    setIsSaving(true);
     try {
       const slug = await onSaveForTestRun(buildWorkflow());
       if (!slug) return null;
@@ -885,12 +848,14 @@ function WorkflowBuilderInner({
       // The page has already told the user why the save failed.
       console.error("Save before test run failed:", error);
       return null;
+    } finally {
+      setIsSaving(false);
     }
   }, [onSaveForTestRun, buildWorkflow, workflow.name]);
 
   // A running test paints its node statuses onto the canvas.
   const nodeIds = useMemo(() => nodes.map((n) => n.id), [nodes]);
-  const testRunStatuses = useBuilderTestRun(testRunChatId, nodeIds, builderChatId);
+  const testRunStatuses = useBuilderTestRun(testRunChatId, nodeIds);
   const displayedNodes = useMemo(() => withTestRunStatus(nodes, testRunStatuses), [nodes, testRunStatuses]);
 
   // Offered by a rejected save of a complete workflow: store the canvas as a
@@ -1107,14 +1072,11 @@ function WorkflowBuilderInner({
     [savedWorkflowName, currentProject?.id, isNewWorkflow, handleEditTrigger, handleAddTrigger],
   );
 
-  // Handle workflow updates from the chat assistant.
-  //
-  // Post-Wave-4 this collapsed from 300+ lines (with ref dancing + 8
-  // mirrored setters) to a small handler: replace the workflow state in
-  // one call, replace the ReactFlow arrays, clear dirty (agent already
-  // saved via edit_workflow). Selection objects are derived during render
-  // so no manual sync is needed.
-  const handleChatWorkflowUpdate = useCallback(
+  // Apply a workflow that changed outside this canvas (an agent edited the
+  // draft): replace the workflow state in one call, replace the ReactFlow
+  // arrays, clear dirty (the writer already persisted it). Selection objects
+  // are derived during render so no manual sync is needed.
+  const applyRemoteWorkflowUpdate = useCallback(
     (updatedWorkflow: Workflow) => {
       if (!updatedWorkflow || !updatedWorkflow.nodes) {
         return;
@@ -1136,7 +1098,7 @@ function WorkflowBuilderInner({
           };
           return next;
         });
-        toast.success("Workflow updated by assistant", { duration: 2000 });
+        toast.success("Workflow updated", { duration: 2000 });
         return;
       }
 
@@ -1160,11 +1122,11 @@ function WorkflowBuilderInner({
       setWorkflow(updatedWorkflow);
       setNodes(allNodes as Node[]);
       setEdges(flowEdges as Edge[]);
-      // Agent already persisted via edit_workflow — this is a clean load.
+      // The writer already persisted this — it is a clean load.
       setHasModifications(false);
 
       if (nodesChanged) {
-        toast.success("Workflow updated by assistant", { duration: 2000 });
+        toast.success("Workflow updated", { duration: 2000 });
       }
     },
     [
@@ -1179,6 +1141,45 @@ function WorkflowBuilderInner({
       canDragNodes,
     ],
   );
+
+  const [isSaving, setIsSaving] = useState(false);
+  useWorkflowDraftSync({
+    projectId: currentProject?.id,
+    draftId,
+    version,
+    hasModifications,
+    isSaving: isSaving || isChangingStatus,
+    onDeleted: useCallback(() => {
+      toast("This workflow was deleted", {
+        id: "workflow-deleted-elsewhere",
+        duration: Infinity,
+        description: "Your unsaved changes are still on the canvas.",
+        action: { label: "Back to Library", onClick: () => onWorkflowDeleted?.() },
+      });
+    }, [onWorkflowDeleted]),
+    onRemoteUpdate: useCallback(
+      (remote: RemoteWorkflowState) => {
+        applyRemoteWorkflowUpdate(remote.workflow);
+        onVersionChange?.(remote.version);
+        onYamlDefinitionChange?.(remote.yamlDefinition);
+        onDraftStatusChange?.(remote.status);
+      },
+      [applyRemoteWorkflowUpdate, onVersionChange, onYamlDefinitionChange, onDraftStatusChange],
+    ),
+    onModifiedElsewhere: useCallback((reload: () => Promise<void>) => {
+      toast("This workflow was updated elsewhere.", {
+        id: "workflow-updated-elsewhere",
+        duration: 15000,
+        description: "Reloading discards your unsaved changes.",
+        action: {
+          label: "Reload",
+          onClick: () => {
+            reload().catch(() => toast.error("Failed to reload workflow"));
+          },
+        },
+      });
+    }, []),
+  });
 
   // Check if two nodes overlap
   const nodesOverlap = (node1: Node, node2: Node): boolean => {
@@ -1675,7 +1676,7 @@ function WorkflowBuilderInner({
                   <Tooltip content="Take this workflow out of service to make edits that may be invalid along the way. It won't run until you mark it complete again.">
                     <button
                       onClick={() => void handleSetStatus("draft")}
-                      disabled={isChangingStatus || isChatBusy}
+                      disabled={isChangingStatus}
                       className={headerButtonClass}
                       data-testid="workflow-move-to-draft"
                     >
@@ -1686,19 +1687,12 @@ function WorkflowBuilderInner({
                 )}
                 <button
                   onClick={() => void handleSave()}
-                  disabled={!hasModifications || isChatBusy}
-                  title={
-                    isChatBusy ? "Wait for assistant to finish" : undefined
-                  }
+                  disabled={!hasModifications}
                   className={
                     draftStatus === "draft" ? secondaryHeaderButtonClass : primaryHeaderButtonClass
                   }
                 >
-                  {isChatBusy
-                    ? "Working..."
-                    : draftStatus === "draft"
-                      ? "Save draft"
-                      : "Save"}
+                  {draftStatus === "draft" ? "Save draft" : "Save"}
                 </button>
                 {onSetStatus && draftStatus === "draft" && (
                   <Tooltip
@@ -1712,7 +1706,7 @@ function WorkflowBuilderInner({
                     <span className="inline-flex">
                       <button
                         onClick={() => void handleSetStatus("complete")}
-                        disabled={markCompleteReasons.length > 0 || isChatBusy}
+                        disabled={markCompleteReasons.length > 0}
                         className={primaryHeaderButtonClass}
                         data-testid="workflow-mark-complete"
                       >
@@ -1963,17 +1957,13 @@ function WorkflowBuilderInner({
         );
       })()}
 
-      {/* AI Chat Assistant - disabled for builtin workflows */}
+      {/* Chat panel - a normal chat; disabled for builtin workflows */}
       {currentProject?.id && !isBuiltinWorkflow && (
-        <WorkflowBuilderChat
-          workflow={
-            isEditingLoop
-              ? loopEditStack[loopEditStack.length - 1].parentWorkflow
-              : currentWorkflow
-          }
-          onWorkflowChange={handleChatWorkflowUpdate}
-          projectId={currentProject.id}
-          isNewWorkflow={isNewWorkflow}
+        <WorkflowEditorChatPanel
+          workflowSlug={initialWorkflow?.name}
+          chatId={chatId}
+          onChatIdChange={(id) => onChatIdChange?.(id)}
+          isStreamYielded={!!testRunChatId && showTestRunPanel}
           isOpen={chatPanelOpen}
           onOpenChange={(open) => {
             setChatPanelOpen(open);
@@ -1987,15 +1977,9 @@ function WorkflowBuilderInner({
           }}
           panelSize={chatPanelSize}
           onPanelSizeChange={setChatPanelSize}
-          builderChatId={builderChatId}
-          draftId={draftId}
-          workflowSessionId={workflowSessionId}
           isConfigPanelOpen={
             !!(selectedNodeId || selectedEdgeId || showSettingsEditor || showStartPanel || showTestRunPanel)
           }
-          onChatIdChange={onChatIdChange}
-          onDraftIdChange={onDraftIdChange}
-          onVersionChange={onVersionChange}
         />
       )}
 
@@ -2043,36 +2027,6 @@ function WorkflowBuilderInner({
               </Button>
               <Button variant="primary" onClick={handleTemplateConfirm}>
                 Create Workflow
-              </Button>
-            </div>
-          </div>
-        </Modal>
-      )}
-
-      {/* Active Chat Modal */}
-      {showActiveChatModal && (
-        <Modal
-          isOpen={true}
-          onClose={() => setShowActiveChatModal(false)}
-          title="Chat in Progress"
-          size="sm"
-        >
-          <div className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              The AI assistant is still working. What would you like to do?
-            </p>
-            <div className="flex flex-col gap-2 pt-4 border-t border-border">
-              <Button variant="primary" onClick={handleRunInBackground}>
-                Run in Background
-              </Button>
-              <Button variant="outline" onClick={handleCancelChatAndExit}>
-                Cancel Chat & Exit
-              </Button>
-              <Button
-                variant="ghost"
-                onClick={() => setShowActiveChatModal(false)}
-              >
-                Go Back
               </Button>
             </div>
           </div>
@@ -2146,7 +2100,7 @@ function WorkflowBuilderInner({
         onClose={() => setShowYamlEditor(false)}
         workflow={currentWorkflow}
         onApply={(w) => {
-          handleChatWorkflowUpdate(w);
+          applyRemoteWorkflowUpdate(w);
           // Clear cached YAML since the user edited it manually;
           // the next save will provide a fresh backend-canonical version.
           onYamlDefinitionChange?.(undefined);

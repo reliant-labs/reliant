@@ -34,6 +34,7 @@ local dev stack.`,
 	}
 
 	root.AddCommand(newWorkflowCmd())
+	root.AddCommand(newModelsCmd())
 
 	return root
 }

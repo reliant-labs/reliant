@@ -2,11 +2,13 @@
  * Shared helpers for onboarding completion.
  */
 
+import { ConnectError, Code } from "@connectrpc/connect";
 import { logger } from "@/lib/logger";
+import type { Project } from "@/store/projectStore";
 import { isCloudCompute } from "./types";
 import type { LaunchPlan } from "./types";
 
-const DEFAULT_PROJECT_NAME = "first_project";
+const DEFAULT_PROJECT_NAME = "my-project";
 const CLOUD_DEFAULT_PROJECT_PATH = `/home/workspace/projects/${DEFAULT_PROJECT_NAME}`;
 
 async function defaultProjectPath(isCloud: boolean): Promise<string> {
@@ -47,13 +49,24 @@ export async function ensureProject(plan: Partial<LaunchPlan>): Promise<string> 
 
   logger.info("[OnboardingComplete] Creating default project", { projectName, projectPath });
 
-  const created = await store.createProject({
-    name: projectName,
-    path: projectPath,
-    description: "",
-    is_git_repo: false,
-    default_branch: "main",
-  });
+  let created: Project;
+  try {
+    created = await store.createProject({
+      name: projectName,
+      path: projectPath,
+      description: "",
+      is_git_repo: false,
+      default_branch: "main",
+    });
+  } catch (err) {
+    // The default folder is already registered (an earlier attempt got as far
+    // as creating it, or another client did). Open that one rather than fail.
+    if (!(err instanceof ConnectError && err.code === Code.AlreadyExists)) throw err;
+    await store.loadProjects();
+    const existing = useProjectStore.getState().projects.find((p) => p.path === projectPath);
+    if (!existing) throw err;
+    created = existing;
+  }
 
   await useProjectStore.getState().selectProject(created);
   await store.loadProjects();
@@ -95,14 +108,13 @@ export async function finalizeOnboardingSideEffects(): Promise<void> {
  * `?tour=<first-step>` in the URL (see leaveOnboarding) — landing there on
  * finish would restart the tour the user just completed.
  *
- * The tour's last steps spotlight the workflow builder, so simply clearing the
+ * The tour's last step spotlights the workflow builder, so simply clearing the
  * `?tour` param left the user sitting on `/workflow/...`. Clearing the active
  * chat (which the finish path already did) only makes sense if we also land
  * them somewhere a chat can be started.
  *
- * Prefers the current project's route, matching CompletionStep's
- * "Let's get started" button, and falls back to `/` when no project is
- * selected — where ModernApp renders the picker.
+ * Prefers the current project's route and falls back to `/` when no project
+ * is selected — where ModernApp renders the picker.
  *
  * Returns navigate options rather than navigating, so the tour hook can drive
  * the router it is actually mounted under while non-React callers use the

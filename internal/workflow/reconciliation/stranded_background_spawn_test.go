@@ -47,6 +47,34 @@ func TestRepairStrandedBackgroundSpawns_EnqueuesCompletion(t *testing.T) {
 	assert.Equal(t, "tc-1", *msg.ToolCallID)
 }
 
+// A spawn that finished and REPORTED normally must still leave status 6.
+//
+// The detached goroutine enqueues the parent's report, but nothing on that
+// path moves the tool call's row — and the stranded query filtered reported
+// calls out, so the close below was unreachable for exactly the spawns that
+// worked. Observed: toolu_013CJA3i on chat 8bb0a875, child stopped 10-02 with
+// its kind=4 report delivered, row still "backgrounded" on 10-04.
+//
+// The report must not be written twice; only the row is closed.
+func TestRepairStrandedBackgroundSpawns_ClosesAReportedSpawnWithoutReReporting(t *testing.T) {
+	before := anomalyCount("stranded_background_spawn_repaired")
+	repo := newMockRepo()
+	repo.withBackgroundedToolCall("tc-reported", "chat-1")
+	reported := strandedBackgroundSpawn("tc-reported", "chat-1", "parent-thread-1", "child-thread-1", db.Failed())
+	reported.HasReport = true
+	repo.strandedBackgroundSpawns = []*db.StrandedBackgroundSpawn{reported}
+	reconciler := NewReconciler(repo, &mockReconcilerTemporalClient{}, DefaultConfig())
+
+	repaired, err := reconciler.repairStrandedBackgroundSpawns(context.Background(), &passStats{})
+	require.NoError(t, err)
+
+	assert.Empty(t, repo.enqueuedAgentMessages, "the parent was already told; it must not be told again")
+	assert.Equal(t, 0, repaired, "closing an already-reported spawn is not a repair")
+	assert.Equal(t, before, anomalyCount("stranded_background_spawn_repaired"))
+	assert.Equal(t, core.ToolCallStatusCancelled, repo.toolCalls["tc-reported"].Status,
+		"the row the UI reads must no longer say backgrounded")
+}
+
 // TestRepairStrandedBackgroundSpawns_MapsTerminalStatusToKind pins the
 // status->kind mapping: cancelled and failed children must not be reported
 // to the parent as if they completed successfully.

@@ -5,6 +5,7 @@
  * Shows first N ports inline, with a dropdown for additional ports.
  */
 
+import { Tooltip } from "../ui/Tooltip";
 import { useState, useEffect, useRef } from "react";
 import { Globe, ChevronDown } from "lucide-react";
 import { cn } from "../../lib/utils";
@@ -46,19 +47,19 @@ export function PortsDisplay({ ports, onOpenPort, maxVisible = 2, compact = fals
   };
 
   const PortButton = ({ port, showIcon = false }: { port: { port: number }; showIcon?: boolean }) => (
-    <button
+    <Tooltip content={onOpenPort ? `Open localhost:${port.port} in browser` : `Port ${port.port}`} placement="bottom" delay={300} wrapperClassName="inline-flex">
+<button
       onClick={(e) => handlePortClick(port.port, e)}
       disabled={!onOpenPort}
       className={cn(
         "flex items-center gap-0.5 font-mono text-primary",
         compact ? "text-xs" : "text-xs",
         onOpenPort && "hover:text-primary/80 hover:underline cursor-pointer"
-      )}
-      title={onOpenPort ? `Open localhost:${port.port} in browser` : `Port ${port.port}`}
-    >
+      )} aria-label={onOpenPort ? `Open localhost:${port.port} in browser` : `Port ${port.port}`}>
       {showIcon && <Globe className={cn(compact ? "w-3 h-3" : "w-3.5 h-3.5", "flex-shrink-0")} />}
       <span>{port.port}</span>
     </button>
+</Tooltip>
   );
 
   return (
@@ -71,7 +72,8 @@ export function PortsDisplay({ ports, onOpenPort, maxVisible = 2, compact = fals
       {/* Overflow dropdown */}
       {hasOverflow && (
         <div className="relative" ref={dropdownRef}>
-          <button
+          <Tooltip content={`${overflowPorts.length} more port${overflowPorts.length > 1 ? 's' : ''}`} placement="bottom" delay={300} wrapperClassName="inline-flex">
+<button
             onClick={(e) => {
               e.stopPropagation();
               setIsOpen(!isOpen);
@@ -79,15 +81,14 @@ export function PortsDisplay({ ports, onOpenPort, maxVisible = 2, compact = fals
             className={cn(
               "flex items-center gap-0.5 font-mono text-xs text-muted-foreground",
               "hover:text-foreground transition-colors"
-            )}
-            title={`${overflowPorts.length} more port${overflowPorts.length > 1 ? 's' : ''}`}
-          >
+            )} aria-label={`${overflowPorts.length} more port${overflowPorts.length > 1 ? 's' : ''}`}>
             <span>+{overflowPorts.length}</span>
             <ChevronDown className={cn(
               "w-3 h-3 transition-transform",
               isOpen && "rotate-180"
             )} />
           </button>
+</Tooltip>
 
           {isOpen && (
             <div className="absolute top-full mt-1 left-0 z-50 min-w-[100px] py-1 rounded-md border bg-popover shadow-md">

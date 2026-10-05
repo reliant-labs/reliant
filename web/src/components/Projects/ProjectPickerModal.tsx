@@ -153,30 +153,30 @@ export function ProjectPickerModal({
     <Modal 
       isOpen={isOpen} 
       onClose={onClose}
-      title="Create New Project"
+      title="New project"
       size="lg"
     >
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <form onSubmit={handleSubmit} className="space-y-5">
         {error && (
-          <div className="p-4 bg-destructive/10 border border-destructive/30 text-destructive-ink rounded-lg">
-            <div className="flex items-start gap-3">
-              <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+          <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-destructive-ink" role="alert">
+            <div className="flex items-start gap-2">
+              <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" aria-hidden="true" />
               <span className="flex-1 text-sm">{error}</span>
             </div>
           </div>
         )}
 
-        <div className="space-y-5">
-          <div className="space-y-2">
-            <label className="block text-sm font-semibold text-foreground">
-              Project Directory <span className="text-destructive-ink">*</span>
+        <div className="space-y-4">
+          <div className="space-y-1.5">
+            <label className="block text-sm font-medium text-foreground">
+              Folder <span className="text-destructive-ink" aria-hidden="true">*</span>
             </label>
-            <div className="flex gap-3">
+            <div className="flex gap-2">
               <input
                 type="text"
                 value={formData.path}
                 onChange={(e) => applyPath(e.target.value)}
-                className="flex-1 px-4 py-3 bg-background border border-border rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
+                className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground/70 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary flex-1 font-mono"
                 placeholder={`Enter full path (e.g., ${examplePath})`}
                 required
                 autoFocus
@@ -184,17 +184,17 @@ export function ProjectPickerModal({
               <button
                 type="button"
                 onClick={handleSelectDirectory}
-                className="px-4 py-3 bg-muted hover:bg-muted/80 border border-border rounded-lg text-sm font-medium transition-all flex items-center gap-2 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background"
+                className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-input bg-card px-4 text-sm font-medium text-foreground transition-colors hover:bg-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:opacity-50"
               >
-                <FolderOpen className="w-4 h-4" />
+                <FolderOpen className="h-4 w-4" aria-hidden="true" />
                 Browse
               </button>
             </div>
           </div>
 
-          <div className="space-y-2">
-            <label className="block text-sm font-semibold text-foreground">
-              Display Name
+          <div className="space-y-1.5">
+            <label className="block text-sm font-medium text-foreground">
+              Name
               <span className="ml-2 text-xs font-normal text-muted-foreground">
                 optional — defaults to the folder name
               </span>
@@ -208,13 +208,13 @@ export function ProjectPickerModal({
                 setNameManuallyEdited(value.trim().length > 0);
                 setFormData((prev) => ({ ...prev, name: value }));
               }}
-              className="w-full px-4 py-3 bg-background border border-border rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
+              className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground/70 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
               placeholder={deriveName(formData.path) || "my-awesome-project"}
             />
           </div>
 
-          <div className="space-y-2">
-            <label className="block text-sm font-semibold text-foreground">
+          <div className="space-y-1.5">
+            <label className="block text-sm font-medium text-foreground">
               Description
             </label>
             <textarea
@@ -225,17 +225,17 @@ export function ProjectPickerModal({
                   description: e.target.value,
                 }))
               }
-              className="w-full px-4 py-3 bg-background border border-border rounded-lg text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
+              className="w-full resize-none rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/70 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
               rows={3}
-              placeholder="Optional project description..."
+              placeholder="Optional"
             />
           </div>
 
-          <div className="p-4 bg-muted/30 rounded-lg border border-border space-y-2">
-            <div className="flex items-center gap-2">
-              <GitBranch className="w-4 h-4 text-muted-foreground" />
-              <span className="text-sm font-medium text-foreground">Default Branch</span>
-            </div>
+          <div className="space-y-1.5">
+            <label className="flex items-center gap-1.5 text-sm font-medium text-foreground">
+              <GitBranch className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
+              Default branch
+            </label>
             <input
               type="text"
               value={formData.default_branch}
@@ -245,30 +245,30 @@ export function ProjectPickerModal({
                   default_branch: e.target.value,
                 }))
               }
-              className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
+              className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground/70 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary font-mono"
               placeholder="main"
             />
-            <p className="text-xs text-muted-foreground mt-2">
-              Git repository will be auto-detected. If the project folder contains a .git directory, git features will be enabled automatically.
+            <p className="text-xs text-muted-foreground">
+              Git is detected automatically: if the folder contains a .git directory, git features turn on.
             </p>
           </div>
         </div>
 
-        <div className="flex gap-3 pt-6 border-t border-border">
+        <div className="flex justify-end gap-2 border-t border-border pt-4">
           <button
             type="button"
             onClick={onClose}
-            className="flex-1 px-5 py-3 bg-muted hover:bg-muted/80 border border-border rounded-lg text-sm font-medium transition-all focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background"
+            className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-input bg-card px-4 text-sm font-medium text-foreground transition-colors hover:bg-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:opacity-50"
             disabled={isCreating}
           >
             Cancel
           </button>
           <button
             type="submit"
-            className="flex-1 px-5 py-3 bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg text-sm font-semibold shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background disabled:opacity-50 disabled:cursor-not-allowed"
+            className="inline-flex h-9 items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:opacity-50 disabled:cursor-not-allowed"
             disabled={isCreating}
           >
-            {isCreating ? "Creating..." : "Create Project"}
+            {isCreating ? "Creating…" : "Create project"}
           </button>
         </div>
       </form>

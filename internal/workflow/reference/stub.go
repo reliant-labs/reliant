@@ -285,6 +285,7 @@ func populateCELFunctions() {
 		{Name: "toJson", Signature: "toJson(dyn) -> string", Description: "Serialize a value to a JSON string", Example: "toJson(nodes.llm.tool_calls)"},
 		{Name: "coalesce", Signature: "coalesce(dyn, dyn) -> dyn", Description: "Return first non-null/non-empty argument", Example: "coalesce(inputs.name, \"default\")"},
 		{Name: "getOrDefault", Signature: "getOrDefault(map, key, default) -> dyn", Description: "Safely access a map key with a fallback default value", Example: "getOrDefault(inputs, \"mode\", \"auto\")"},
+		{Name: "merge", Signature: "merge(map, map) -> map", Description: "Shallow-merge two maps; keys in the second map win (e.g. pin one setting on a model value)", Example: "merge(inputs.model, {\"thinking_level\": \"high\"})"},
 		{Name: "now", Signature: "now() -> string", Description: "Return current time as RFC3339 string", Example: "now()"},
 		{Name: "parseDuration", Signature: "parseDuration(string) -> double", Description: "Parse a Go duration string and return seconds as a number", Example: "parseDuration(\"5m\") == 300.0"},
 		{Name: "spawn", Signature: "spawn(string, list) -> string", Description: "Generate a spawn directive for a child workflow with presets", Example: "spawn(\"builtin://agent\", [\"general\", \"researcher\"])"},

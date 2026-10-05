@@ -1,0 +1,3529 @@
+{
+  "outcomes": [
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "claude-4.5-opus",
+        "provider": "anthropic",
+        "level": ""
+      },
+      "label": "claude-4.5-opus@anthropic reasoning level=default",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "claude-4.5-opus@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-opus-4-5-20251101",
+      "effective_thinking": "medium",
+      "effective_temperature": 1,
+      "latency_ms": 6817,
+      "input_tokens": 10,
+      "output_tokens": 579,
+      "has_signature": true,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "content_start": 1,
+        "content_stop": 2
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "claude-4.5-opus",
+        "provider": "anthropic",
+        "level": "low"
+      },
+      "label": "claude-4.5-opus@anthropic reasoning level=low",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "claude-4.5-opus@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-opus-4-5-20251101",
+      "effective_thinking": "low",
+      "effective_temperature": 1,
+      "latency_ms": 5884,
+      "input_tokens": 10,
+      "output_tokens": 416,
+      "has_signature": true,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "content_start": 1,
+        "content_stop": 2
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "claude-4.5-opus",
+        "provider": "anthropic",
+        "level": "high"
+      },
+      "label": "claude-4.5-opus@anthropic reasoning level=high",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "claude-4.5-opus@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-opus-4-5-20251101",
+      "effective_thinking": "high",
+      "effective_temperature": 1,
+      "latency_ms": 7407,
+      "input_tokens": 10,
+      "output_tokens": 598,
+      "has_signature": true,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "content_start": 1,
+        "content_stop": 2
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "claude-4.5-opus",
+        "provider": "openrouter",
+        "level": ""
+      },
+      "label": "claude-4.5-opus@openrouter reasoning level=default",
+      "status": "pass",
+      "text_excerpt": "65065",
+      "resolved_model": "claude-4.5-opus@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-opus-4.5",
+      "effective_thinking": "medium",
+      "effective_temperature": 1,
+      "latency_ms": 1898,
+      "input_tokens": 66,
+      "output_tokens": 6,
+      "correct": false,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 2,
+        "content_delta": 4
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "claude-4.5-opus",
+        "provider": "openrouter",
+        "level": "low"
+      },
+      "label": "claude-4.5-opus@openrouter reasoning level=low",
+      "status": "pass",
+      "text_excerpt": "78286",
+      "resolved_model": "claude-4.5-opus@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-opus-4.5",
+      "effective_thinking": "low",
+      "effective_temperature": 1,
+      "latency_ms": 1649,
+      "input_tokens": 66,
+      "output_tokens": 6,
+      "correct": false,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 2,
+        "content_delta": 4
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "claude-4.5-opus",
+        "provider": "openrouter",
+        "level": "high"
+      },
+      "label": "claude-4.5-opus@openrouter reasoning level=high",
+      "status": "pass",
+      "text_excerpt": "65071",
+      "resolved_model": "claude-4.5-opus@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-opus-4.5",
+      "effective_thinking": "high",
+      "effective_temperature": 1,
+      "latency_ms": 1418,
+      "input_tokens": 66,
+      "output_tokens": 6,
+      "correct": false,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 2,
+        "content_delta": 4
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "claude-4.5-sonnet",
+        "provider": "anthropic",
+        "level": ""
+      },
+      "label": "claude-4.5-sonnet@anthropic reasoning level=default",
+      "status": "pass",
+      "text_excerpt": "```python sum(i for i in range(1, 1001) if (i % 7 == 0) != (i % 11 == 0)) ``` 10…",
+      "resolved_model": "claude-4.5-sonnet@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-sonnet-4-5-20250929",
+      "effective_thinking": "medium",
+      "effective_temperature": 1,
+      "latency_ms": 7842,
+      "input_tokens": 10,
+      "output_tokens": 680,
+      "has_signature": true,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 13,
+        "content_start": 1,
+        "content_stop": 2
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "claude-4.5-sonnet",
+        "provider": "anthropic",
+        "level": "low"
+      },
+      "label": "claude-4.5-sonnet@anthropic reasoning level=low",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "claude-4.5-sonnet@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-sonnet-4-5-20250929",
+      "effective_thinking": "low",
+      "effective_temperature": 1,
+      "latency_ms": 6121,
+      "input_tokens": 10,
+      "output_tokens": 482,
+      "has_signature": true,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "content_start": 1,
+        "content_stop": 2
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "claude-4.5-sonnet",
+        "provider": "anthropic",
+        "level": "high"
+      },
+      "label": "claude-4.5-sonnet@anthropic reasoning level=high",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "claude-4.5-sonnet@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-sonnet-4-5-20250929",
+      "effective_thinking": "high",
+      "effective_temperature": 1,
+      "latency_ms": 7472,
+      "input_tokens": 10,
+      "output_tokens": 575,
+      "has_signature": true,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "content_start": 1,
+        "content_stop": 2
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "claude-4.5-sonnet",
+        "provider": "openrouter",
+        "level": ""
+      },
+      "label": "claude-4.5-sonnet@openrouter reasoning level=default",
+      "status": "pass",
+      "text_excerpt": "I need to find integers from 1 to 1000 that are divisible by exactly one of 7 or…",
+      "resolved_model": "claude-4.5-sonnet@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-sonnet-4.5",
+      "effective_thinking": "medium",
+      "effective_temperature": 1,
+      "latency_ms": 5722,
+      "input_tokens": 66,
+      "output_tokens": 413,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 2,
+        "content_delta": 84
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "claude-4.5-sonnet",
+        "provider": "openrouter",
+        "level": "low"
+      },
+      "label": "claude-4.5-sonnet@openrouter reasoning level=low",
+      "status": "pass",
+      "text_excerpt": "I need to find integers from 1 to 1000 that are divisible by exactly one of 7 or…",
+      "resolved_model": "claude-4.5-sonnet@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-sonnet-4.5",
+      "effective_thinking": "low",
+      "effective_temperature": 1,
+      "latency_ms": 5543,
+      "input_tokens": 66,
+      "output_tokens": 416,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 2,
+        "content_delta": 82
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "claude-4.5-sonnet",
+        "provider": "openrouter",
+        "level": "high"
+      },
+      "label": "claude-4.5-sonnet@openrouter reasoning level=high",
+      "status": "pass",
+      "text_excerpt": "I need to find integers from 1 to 1000 that are divisible by exactly one of 7 or…",
+      "resolved_model": "claude-4.5-sonnet@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-sonnet-4.5",
+      "effective_thinking": "high",
+      "effective_temperature": 1,
+      "latency_ms": 5919,
+      "input_tokens": 66,
+      "output_tokens": 412,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 2,
+        "content_delta": 82
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "claude-4.6-opus",
+        "provider": "anthropic",
+        "level": ""
+      },
+      "label": "claude-4.6-opus@anthropic reasoning level=default",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "claude-4.6-opus@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-opus-4-6",
+      "effective_thinking": "medium",
+      "effective_temperature": 1,
+      "latency_ms": 9577,
+      "input_tokens": 10,
+      "output_tokens": 487,
+      "has_signature": true,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "content_start": 1,
+        "content_stop": 2
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "claude-4.6-opus",
+        "provider": "anthropic",
+        "level": "low"
+      },
+      "label": "claude-4.6-opus@anthropic reasoning level=low",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "claude-4.6-opus@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-opus-4-6",
+      "effective_thinking": "low",
+      "effective_temperature": 1,
+      "latency_ms": 4608,
+      "input_tokens": 10,
+      "output_tokens": 194,
+      "has_signature": true,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "content_start": 1,
+        "content_stop": 2
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "claude-4.6-opus",
+        "provider": "anthropic",
+        "level": "high"
+      },
+      "label": "claude-4.6-opus@anthropic reasoning level=high",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "claude-4.6-opus@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-opus-4-6",
+      "effective_thinking": "high",
+      "effective_temperature": 1,
+      "latency_ms": 6607,
+      "input_tokens": 10,
+      "output_tokens": 412,
+      "has_signature": true,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "content_start": 1,
+        "content_stop": 2
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "claude-4.6-opus",
+        "provider": "openrouter",
+        "level": ""
+      },
+      "label": "claude-4.6-opus@openrouter reasoning level=default",
+      "status": "pass",
+      "text_excerpt": "I need to find the sum of integers from 1 to 1000 that are divisible by 7 or 11,…",
+      "resolved_model": "claude-4.6-opus@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-opus-4.6",
+      "effective_thinking": "medium",
+      "effective_temperature": 1,
+      "latency_ms": 5734,
+      "input_tokens": 66,
+      "output_tokens": 410,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 2,
+        "content_delta": 9
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "claude-4.6-opus",
+        "provider": "openrouter",
+        "level": "low"
+      },
+      "label": "claude-4.6-opus@openrouter reasoning level=low",
+      "status": "pass",
+      "text_excerpt": "I need to find the sum of integers from 1 to 1000 that are divisible by 7 or 11,…",
+      "resolved_model": "claude-4.6-opus@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-opus-4.6",
+      "effective_thinking": "low",
+      "effective_temperature": 1,
+      "latency_ms": 5333,
+      "input_tokens": 66,
+      "output_tokens": 408,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 2,
+        "content_delta": 11
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "claude-4.6-opus",
+        "provider": "openrouter",
+        "level": "high"
+      },
+      "label": "claude-4.6-opus@openrouter reasoning level=high",
+      "status": "pass",
+      "text_excerpt": "I need to find the sum of integers from 1 to 1000 that are divisible by 7 or 11,…",
+      "resolved_model": "claude-4.6-opus@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-opus-4.6",
+      "effective_thinking": "high",
+      "effective_temperature": 1,
+      "latency_ms": 5080,
+      "input_tokens": 66,
+      "output_tokens": 408,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 2,
+        "content_delta": 9
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "claude-4.6-sonnet",
+        "provider": "anthropic",
+        "level": ""
+      },
+      "label": "claude-4.6-sonnet@anthropic reasoning level=default",
+      "status": "pass",
+      "text_excerpt": "110110",
+      "resolved_model": "claude-4.6-sonnet@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-sonnet-4-6",
+      "effective_thinking": "medium",
+      "effective_temperature": 1,
+      "latency_ms": 4865,
+      "input_tokens": 10,
+      "output_tokens": 496,
+      "has_signature": true,
+      "correct": false,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "content_start": 1,
+        "content_stop": 2
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "claude-4.6-sonnet",
+        "provider": "anthropic",
+        "level": "low"
+      },
+      "label": "claude-4.6-sonnet@anthropic reasoning level=low",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "claude-4.6-sonnet@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-sonnet-4-6",
+      "effective_thinking": "low",
+      "effective_temperature": 1,
+      "latency_ms": 2682,
+      "input_tokens": 10,
+      "output_tokens": 219,
+      "has_signature": true,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "content_start": 1,
+        "content_stop": 2
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "claude-4.6-sonnet",
+        "provider": "anthropic",
+        "level": "high"
+      },
+      "label": "claude-4.6-sonnet@anthropic reasoning level=high",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "claude-4.6-sonnet@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-sonnet-4-6",
+      "effective_thinking": "high",
+      "effective_temperature": 1,
+      "latency_ms": 3885,
+      "input_tokens": 10,
+      "output_tokens": 416,
+      "has_signature": true,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "content_start": 1,
+        "content_stop": 2
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "claude-4.6-sonnet",
+        "provider": "openrouter",
+        "level": ""
+      },
+      "label": "claude-4.6-sonnet@openrouter reasoning level=default",
+      "status": "pass",
+      "text_excerpt": "I need to find the sum of integers from 1 to 1000 that are divisible by 7 or 11,…",
+      "resolved_model": "claude-4.6-sonnet@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-sonnet-4.6",
+      "effective_thinking": "medium",
+      "effective_temperature": 1,
+      "latency_ms": 5436,
+      "input_tokens": 66,
+      "output_tokens": 449,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 2,
+        "content_delta": 10
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "claude-4.6-sonnet",
+        "provider": "openrouter",
+        "level": "low"
+      },
+      "label": "claude-4.6-sonnet@openrouter reasoning level=low",
+      "status": "pass",
+      "text_excerpt": "I need to find the sum of integers from 1 to 1000 divisible by exactly one of 7 …",
+      "resolved_model": "claude-4.6-sonnet@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-sonnet-4.6",
+      "effective_thinking": "low",
+      "effective_temperature": 1,
+      "latency_ms": 4757,
+      "input_tokens": 66,
+      "output_tokens": 348,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 2,
+        "content_delta": 10
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "claude-4.6-sonnet",
+        "provider": "openrouter",
+        "level": "high"
+      },
+      "label": "claude-4.6-sonnet@openrouter reasoning level=high",
+      "status": "pass",
+      "text_excerpt": "I need to find the sum of integers from 1 to 1000 divisible by 7 or 11, but not …",
+      "resolved_model": "claude-4.6-sonnet@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-sonnet-4.6",
+      "effective_thinking": "high",
+      "effective_temperature": 1,
+      "latency_ms": 5294,
+      "input_tokens": 66,
+      "output_tokens": 375,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 2,
+        "content_delta": 10
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "claude-4.8-opus",
+        "provider": "anthropic",
+        "level": ""
+      },
+      "label": "claude-4.8-opus@anthropic reasoning level=default",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "claude-4.8-opus@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-opus-4-8",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 3274,
+      "input_tokens": 2,
+      "output_tokens": 226,
+      "has_signature": true,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 1,
+        "content_start": 1,
+        "content_stop": 2
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "claude-4.8-opus",
+        "provider": "anthropic",
+        "level": "low"
+      },
+      "label": "claude-4.8-opus@anthropic reasoning level=low",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "claude-4.8-opus@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-opus-4-8",
+      "effective_thinking": "low",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 2344,
+      "input_tokens": 2,
+      "output_tokens": 166,
+      "has_signature": true,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "content_start": 1,
+        "content_stop": 2
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "claude-4.8-opus",
+        "provider": "anthropic",
+        "level": "xhigh"
+      },
+      "label": "claude-4.8-opus@anthropic reasoning level=xhigh",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "claude-4.8-opus@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-opus-4-8",
+      "effective_thinking": "xhigh",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 4374,
+      "input_tokens": 2,
+      "output_tokens": 341,
+      "has_signature": true,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "content_start": 1,
+        "content_stop": 2
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "claude-4.8-opus",
+        "provider": "openrouter",
+        "level": ""
+      },
+      "label": "claude-4.8-opus@openrouter reasoning level=default",
+      "status": "pass",
+      "text_excerpt": "I need integers divisible by 7 or 11 but not both. **Divisible by 7:** 7, 14, ..…",
+      "resolved_model": "claude-4.8-opus@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-opus-4.8",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 3505,
+      "input_tokens": 79,
+      "output_tokens": 281,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 2,
+        "content_delta": 7
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "claude-4.8-opus",
+        "provider": "openrouter",
+        "level": "low"
+      },
+      "label": "claude-4.8-opus@openrouter reasoning level=low",
+      "status": "pass",
+      "text_excerpt": "I need integers divisible by exactly one of 7 or 11. **Divisible by 7:** multipl…",
+      "resolved_model": "claude-4.8-opus@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-opus-4.8",
+      "effective_thinking": "low",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 3875,
+      "input_tokens": 79,
+      "output_tokens": 327,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 2,
+        "content_delta": 7
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "claude-4.8-opus",
+        "provider": "openrouter",
+        "level": "xhigh"
+      },
+      "label": "claude-4.8-opus@openrouter reasoning level=xhigh",
+      "status": "pass",
+      "text_excerpt": "I need integers divisible by 7 or 11 but not both. **Divisible by 7:** floor(100…",
+      "resolved_model": "claude-4.8-opus@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-opus-4.8",
+      "effective_thinking": "xhigh",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 3456,
+      "input_tokens": 79,
+      "output_tokens": 285,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 2,
+        "content_delta": 8
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "claude-5-fable",
+        "provider": "anthropic",
+        "level": ""
+      },
+      "label": "claude-5-fable@anthropic reasoning level=default",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "claude-5-fable@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-fable-5",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 2407,
+      "input_tokens": 2,
+      "output_tokens": 145,
+      "has_signature": true,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 1,
+        "content_start": 1,
+        "content_stop": 2
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "claude-5-fable",
+        "provider": "anthropic",
+        "level": "low"
+      },
+      "label": "claude-5-fable@anthropic reasoning level=low",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "claude-5-fable@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-fable-5",
+      "effective_thinking": "low",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 2166,
+      "input_tokens": 2,
+      "output_tokens": 97,
+      "has_signature": true,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 1,
+        "content_start": 1,
+        "content_stop": 2
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "claude-5-fable",
+        "provider": "anthropic",
+        "level": "xhigh"
+      },
+      "label": "claude-5-fable@anthropic reasoning level=xhigh",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "claude-5-fable@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-fable-5",
+      "effective_thinking": "xhigh",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 3001,
+      "input_tokens": 2,
+      "output_tokens": 189,
+      "has_signature": true,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 1,
+        "content_start": 1,
+        "content_stop": 2
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "claude-5-fable",
+        "provider": "openrouter",
+        "level": ""
+      },
+      "label": "claude-5-fable@openrouter reasoning level=default",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "claude-5-fable@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-fable-5",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 4283,
+      "input_tokens": 79,
+      "output_tokens": 157,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 2,
+        "content_delta": 17
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "claude-5-fable",
+        "provider": "openrouter",
+        "level": "low"
+      },
+      "label": "claude-5-fable@openrouter reasoning level=low",
+      "status": "pass",
+      "text_excerpt": "110110",
+      "resolved_model": "claude-5-fable@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-fable-5",
+      "effective_thinking": "low",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 5157,
+      "input_tokens": 79,
+      "output_tokens": 174,
+      "correct": false,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 2,
+        "content_delta": 23
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "claude-5-fable",
+        "provider": "openrouter",
+        "level": "xhigh"
+      },
+      "label": "claude-5-fable@openrouter reasoning level=xhigh",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "claude-5-fable@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-fable-5",
+      "effective_thinking": "xhigh",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 4726,
+      "input_tokens": 79,
+      "output_tokens": 158,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 2,
+        "content_delta": 20
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "claude-5-opus",
+        "provider": "anthropic",
+        "level": ""
+      },
+      "label": "claude-5-opus@anthropic reasoning level=default",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "claude-5-opus@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-opus-5",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 2411,
+      "input_tokens": 2,
+      "output_tokens": 148,
+      "has_signature": true,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "content_start": 1,
+        "content_stop": 2
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "claude-5-opus",
+        "provider": "anthropic",
+        "level": "low"
+      },
+      "label": "claude-5-opus@anthropic reasoning level=low",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "claude-5-opus@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-opus-5",
+      "effective_thinking": "low",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 2535,
+      "input_tokens": 2,
+      "output_tokens": 128,
+      "has_signature": true,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "content_start": 1,
+        "content_stop": 2
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "claude-5-opus",
+        "provider": "anthropic",
+        "level": "xhigh"
+      },
+      "label": "claude-5-opus@anthropic reasoning level=xhigh",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "claude-5-opus@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-opus-5",
+      "effective_thinking": "xhigh",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 3745,
+      "input_tokens": 2,
+      "output_tokens": 257,
+      "has_signature": true,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 1,
+        "content_start": 1,
+        "content_stop": 2
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "claude-5-opus",
+        "provider": "openrouter",
+        "level": ""
+      },
+      "label": "claude-5-opus@openrouter reasoning level=default",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "claude-5-opus@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-opus-5",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 5023,
+      "input_tokens": 79,
+      "output_tokens": 174,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 2,
+        "content_delta": 7
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "claude-5-opus",
+        "provider": "openrouter",
+        "level": "low"
+      },
+      "label": "claude-5-opus@openrouter reasoning level=low",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "claude-5-opus@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-opus-5",
+      "effective_thinking": "low",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 4102,
+      "input_tokens": 79,
+      "output_tokens": 186,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 2,
+        "content_delta": 8
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "claude-5-opus",
+        "provider": "openrouter",
+        "level": "xhigh"
+      },
+      "label": "claude-5-opus@openrouter reasoning level=xhigh",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "claude-5-opus@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-opus-5",
+      "effective_thinking": "xhigh",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 4861,
+      "input_tokens": 79,
+      "output_tokens": 180,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 2,
+        "content_delta": 7
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "claude-5-sonnet",
+        "provider": "anthropic",
+        "level": ""
+      },
+      "label": "claude-5-sonnet@anthropic reasoning level=default",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "claude-5-sonnet@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-sonnet-5",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 2946,
+      "input_tokens": 2,
+      "output_tokens": 173,
+      "has_signature": true,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "content_start": 1,
+        "content_stop": 2
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "claude-5-sonnet",
+        "provider": "anthropic",
+        "level": "low"
+      },
+      "label": "claude-5-sonnet@anthropic reasoning level=low",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "claude-5-sonnet@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-sonnet-5",
+      "effective_thinking": "low",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 2945,
+      "input_tokens": 2,
+      "output_tokens": 167,
+      "has_signature": true,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "content_start": 1,
+        "content_stop": 2
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "claude-5-sonnet",
+        "provider": "anthropic",
+        "level": "xhigh"
+      },
+      "label": "claude-5-sonnet@anthropic reasoning level=xhigh",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "claude-5-sonnet@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-sonnet-5",
+      "effective_thinking": "xhigh",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 3421,
+      "input_tokens": 2,
+      "output_tokens": 239,
+      "has_signature": true,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "content_start": 1,
+        "content_stop": 2
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "claude-5-sonnet",
+        "provider": "openrouter",
+        "level": ""
+      },
+      "label": "claude-5-sonnet@openrouter reasoning level=default",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "claude-5-sonnet@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-sonnet-5",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 3945,
+      "input_tokens": 79,
+      "output_tokens": 187,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 2,
+        "content_delta": 8
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "claude-5-sonnet",
+        "provider": "openrouter",
+        "level": "low"
+      },
+      "label": "claude-5-sonnet@openrouter reasoning level=low",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "claude-5-sonnet@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-sonnet-5",
+      "effective_thinking": "low",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 4524,
+      "input_tokens": 79,
+      "output_tokens": 203,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 2,
+        "content_delta": 8
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "claude-5-sonnet",
+        "provider": "openrouter",
+        "level": "xhigh"
+      },
+      "label": "claude-5-sonnet@openrouter reasoning level=xhigh",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "claude-5-sonnet@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-sonnet-5",
+      "effective_thinking": "xhigh",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 5302,
+      "input_tokens": 79,
+      "output_tokens": 208,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 2,
+        "content_delta": 8
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "claude-5.1-fable",
+        "provider": "anthropic",
+        "level": ""
+      },
+      "label": "claude-5.1-fable@anthropic reasoning level=default",
+      "status": "pass",
+      "text_excerpt": "Sum of multiples of 7 up to 1000: floor(1000/7)=142, sum = 7·142·143/2 = 71071…",
+      "resolved_model": "claude-5.1-fable@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-fable-5-1",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 5057,
+      "input_tokens": 4,
+      "output_tokens": 158,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 24,
+        "content_start": 1,
+        "content_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "claude-5.1-fable",
+        "provider": "anthropic",
+        "level": "low"
+      },
+      "label": "claude-5.1-fable@anthropic reasoning level=low",
+      "status": "pass",
+      "text_excerpt": "Sum of multiples of 7 up to 1000: 7·(142·143/2) = 7·10153 = 71071. Sum of mul…",
+      "resolved_model": "claude-5.1-fable@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-fable-5-1",
+      "effective_thinking": "low",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 4991,
+      "input_tokens": 4,
+      "output_tokens": 151,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 23,
+        "content_start": 1,
+        "content_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "claude-5.1-fable",
+        "provider": "anthropic",
+        "level": "xhigh"
+      },
+      "label": "claude-5.1-fable@anthropic reasoning level=xhigh",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "claude-5.1-fable@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-fable-5-1",
+      "effective_thinking": "xhigh",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 5658,
+      "input_tokens": 4,
+      "output_tokens": 195,
+      "has_signature": true,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 1,
+        "content_start": 1,
+        "content_stop": 2
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "claude-5.1-fable",
+        "provider": "openrouter",
+        "level": ""
+      },
+      "label": "claude-5.1-fable@openrouter reasoning level=default",
+      "status": "pass",
+      "text_excerpt": "Sum of multiples of 7 up to 1000: 7·(142·143/2) = 7·10153 = 71071 Sum of mult…",
+      "resolved_model": "claude-5.1-fable@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-fable-5.1",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 3914,
+      "input_tokens": 81,
+      "output_tokens": 157,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 2,
+        "content_delta": 24
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "claude-5.1-fable",
+        "provider": "openrouter",
+        "level": "low"
+      },
+      "label": "claude-5.1-fable@openrouter reasoning level=low",
+      "status": "pass",
+      "text_excerpt": "Sum divisible by 7: floor(1000/7)=142, sum = 7·142·143/2 = 7·10153 = 71071. S…",
+      "resolved_model": "claude-5.1-fable@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-fable-5.1",
+      "effective_thinking": "low",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 4256,
+      "input_tokens": 81,
+      "output_tokens": 179,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 2,
+        "content_delta": 28
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "claude-5.1-fable",
+        "provider": "openrouter",
+        "level": "xhigh"
+      },
+      "label": "claude-5.1-fable@openrouter reasoning level=xhigh",
+      "status": "pass",
+      "text_excerpt": "Sum of multiples of 7 up to 1000: 7·(142·143/2) = 7·10153 = 71071. Sum of mul…",
+      "resolved_model": "claude-5.1-fable@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-fable-5.1",
+      "effective_thinking": "xhigh",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 4187,
+      "input_tokens": 81,
+      "output_tokens": 151,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 2,
+        "content_delta": 25
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "claude-5.5-opus",
+        "provider": "anthropic",
+        "level": ""
+      },
+      "label": "claude-5.5-opus@anthropic reasoning level=default",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "claude-5.5-opus@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-opus-5-5",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 2468,
+      "input_tokens": 4,
+      "output_tokens": 150,
+      "has_signature": true,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "content_start": 1,
+        "content_stop": 2
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "claude-5.5-opus",
+        "provider": "anthropic",
+        "level": "low"
+      },
+      "label": "claude-5.5-opus@anthropic reasoning level=low",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "claude-5.5-opus@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-opus-5-5",
+      "effective_thinking": "low",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 2448,
+      "input_tokens": 4,
+      "output_tokens": 137,
+      "has_signature": true,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 1,
+        "content_start": 1,
+        "content_stop": 2
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "claude-5.5-opus",
+        "provider": "anthropic",
+        "level": "xhigh"
+      },
+      "label": "claude-5.5-opus@anthropic reasoning level=xhigh",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "claude-5.5-opus@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-opus-5-5",
+      "effective_thinking": "xhigh",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 3110,
+      "input_tokens": 4,
+      "output_tokens": 191,
+      "has_signature": true,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 1,
+        "content_start": 1,
+        "content_stop": 2
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "claude-5.5-opus",
+        "provider": "openrouter",
+        "level": ""
+      },
+      "label": "claude-5.5-opus@openrouter reasoning level=default",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "claude-5.5-opus@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-opus-5.5",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 4488,
+      "input_tokens": 81,
+      "output_tokens": 149,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 2,
+        "content_delta": 7
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "claude-5.5-opus",
+        "provider": "openrouter",
+        "level": "low"
+      },
+      "label": "claude-5.5-opus@openrouter reasoning level=low",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "claude-5.5-opus@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-opus-5.5",
+      "effective_thinking": "low",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 4936,
+      "input_tokens": 81,
+      "output_tokens": 149,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 2,
+        "content_delta": 7
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "claude-5.5-opus",
+        "provider": "openrouter",
+        "level": "xhigh"
+      },
+      "label": "claude-5.5-opus@openrouter reasoning level=xhigh",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "claude-5.5-opus@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-opus-5.5",
+      "effective_thinking": "xhigh",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 4796,
+      "input_tokens": 81,
+      "output_tokens": 150,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 2,
+        "content_delta": 8
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "claude-5.5-sonnet",
+        "provider": "anthropic",
+        "level": ""
+      },
+      "label": "claude-5.5-sonnet@anthropic reasoning level=default",
+      "status": "pass",
+      "text_excerpt": "Multiples of 7: floor(1000/7)=142, sum = 7·142·143/2 = 7·10153 = 71071. Multi…",
+      "resolved_model": "claude-5.5-sonnet@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-sonnet-5-5",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1752,
+      "input_tokens": 4,
+      "output_tokens": 173,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 31,
+        "content_start": 1,
+        "content_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "claude-5.5-sonnet",
+        "provider": "anthropic",
+        "level": "low"
+      },
+      "label": "claude-5.5-sonnet@anthropic reasoning level=low",
+      "status": "pass",
+      "text_excerpt": "Multiples of 7: floor(1000/7)=142, sum = 7·142·143/2 = 7·10153 = 71071. Multi…",
+      "resolved_model": "claude-5.5-sonnet@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-sonnet-5-5",
+      "effective_thinking": "low",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1746,
+      "input_tokens": 4,
+      "output_tokens": 173,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 30,
+        "content_start": 1,
+        "content_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "claude-5.5-sonnet",
+        "provider": "anthropic",
+        "level": "xhigh"
+      },
+      "label": "claude-5.5-sonnet@anthropic reasoning level=xhigh",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "claude-5.5-sonnet@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-sonnet-5-5",
+      "effective_thinking": "xhigh",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 2155,
+      "input_tokens": 4,
+      "output_tokens": 246,
+      "has_signature": true,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "content_start": 1,
+        "content_stop": 2
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "claude-5.5-sonnet",
+        "provider": "openrouter",
+        "level": ""
+      },
+      "label": "claude-5.5-sonnet@openrouter reasoning level=default",
+      "status": "pass",
+      "text_excerpt": "110110",
+      "resolved_model": "claude-5.5-sonnet@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-sonnet-5.5",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 3927,
+      "input_tokens": 81,
+      "output_tokens": 167,
+      "correct": false,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 2,
+        "content_delta": 8
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "claude-5.5-sonnet",
+        "provider": "openrouter",
+        "level": "low"
+      },
+      "label": "claude-5.5-sonnet@openrouter reasoning level=low",
+      "status": "pass",
+      "text_excerpt": "110110",
+      "resolved_model": "claude-5.5-sonnet@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-sonnet-5.5",
+      "effective_thinking": "low",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 4078,
+      "input_tokens": 81,
+      "output_tokens": 156,
+      "correct": false,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 2,
+        "content_delta": 8
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "claude-5.5-sonnet",
+        "provider": "openrouter",
+        "level": "xhigh"
+      },
+      "label": "claude-5.5-sonnet@openrouter reasoning level=xhigh",
+      "status": "pass",
+      "text_excerpt": "110110",
+      "resolved_model": "claude-5.5-sonnet@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-sonnet-5.5",
+      "effective_thinking": "xhigh",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 4139,
+      "input_tokens": 81,
+      "output_tokens": 165,
+      "correct": false,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 2,
+        "content_delta": 8
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gemini-2.5-pro",
+        "provider": "openrouter",
+        "level": ""
+      },
+      "label": "gemini-2.5-pro@openrouter reasoning level=default",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gemini-2.5-pro@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "google/gemini-2.5-pro",
+      "effective_thinking": "medium",
+      "effective_temperature": 1,
+      "latency_ms": 19701,
+      "input_tokens": 56,
+      "output_tokens": 2558,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 2,
+        "content_delta": 9
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gemini-2.5-pro",
+        "provider": "openrouter",
+        "level": "low"
+      },
+      "label": "gemini-2.5-pro@openrouter reasoning level=low",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gemini-2.5-pro@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "google/gemini-2.5-pro",
+      "effective_thinking": "low",
+      "effective_temperature": 1,
+      "latency_ms": 14472,
+      "input_tokens": 56,
+      "output_tokens": 2192,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 2,
+        "content_delta": 9
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gemini-2.5-pro",
+        "provider": "openrouter",
+        "level": "high"
+      },
+      "label": "gemini-2.5-pro@openrouter reasoning level=high",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gemini-2.5-pro@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "google/gemini-2.5-pro",
+      "effective_thinking": "high",
+      "effective_temperature": 1,
+      "latency_ms": 13901,
+      "input_tokens": 56,
+      "output_tokens": 1817,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 2,
+        "content_delta": 8
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gemini-3.1-pro-preview",
+        "provider": "openrouter",
+        "level": ""
+      },
+      "label": "gemini-3.1-pro-preview@openrouter reasoning level=default",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gemini-3.1-pro-preview@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "google/gemini-3.1-pro-preview",
+      "effective_thinking": "high",
+      "effective_temperature": 1,
+      "latency_ms": 11521,
+      "input_tokens": 56,
+      "output_tokens": 1600,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 2,
+        "content_delta": 6
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gemini-3.1-pro-preview",
+        "provider": "openrouter",
+        "level": "low"
+      },
+      "label": "gemini-3.1-pro-preview@openrouter reasoning level=low",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gemini-3.1-pro-preview@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "google/gemini-3.1-pro-preview",
+      "effective_thinking": "low",
+      "effective_temperature": 1,
+      "latency_ms": 6294,
+      "input_tokens": 56,
+      "output_tokens": 788,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 2,
+        "content_delta": 4
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gemini-3.1-pro-preview",
+        "provider": "openrouter",
+        "level": "high"
+      },
+      "label": "gemini-3.1-pro-preview@openrouter reasoning level=high",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gemini-3.1-pro-preview@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "google/gemini-3.1-pro-preview",
+      "effective_thinking": "high",
+      "effective_temperature": 1,
+      "latency_ms": 11915,
+      "input_tokens": 56,
+      "output_tokens": 1759,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 2,
+        "content_delta": 6
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gemini-3.5-flash",
+        "provider": "openrouter",
+        "level": ""
+      },
+      "label": "gemini-3.5-flash@openrouter reasoning level=default",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gemini-3.5-flash@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "google/gemini-3.5-flash",
+      "effective_thinking": "medium",
+      "effective_temperature": 1,
+      "latency_ms": 11987,
+      "input_tokens": 56,
+      "output_tokens": 2305,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 2,
+        "content_delta": 7
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gemini-3.5-flash",
+        "provider": "openrouter",
+        "level": "low"
+      },
+      "label": "gemini-3.5-flash@openrouter reasoning level=low",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gemini-3.5-flash@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "google/gemini-3.5-flash",
+      "effective_thinking": "low",
+      "effective_temperature": 1,
+      "latency_ms": 4649,
+      "input_tokens": 56,
+      "output_tokens": 785,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 2,
+        "content_delta": 6
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gemini-3.5-flash",
+        "provider": "openrouter",
+        "level": "high"
+      },
+      "label": "gemini-3.5-flash@openrouter reasoning level=high",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gemini-3.5-flash@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "google/gemini-3.5-flash",
+      "effective_thinking": "high",
+      "effective_temperature": 1,
+      "latency_ms": 6398,
+      "input_tokens": 56,
+      "output_tokens": 1367,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 2,
+        "content_delta": 6
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gemini-3.6-flash",
+        "provider": "openrouter",
+        "level": ""
+      },
+      "label": "gemini-3.6-flash@openrouter reasoning level=default",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gemini-3.6-flash@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "google/gemini-3.6-flash",
+      "effective_thinking": "medium",
+      "effective_temperature": 1,
+      "latency_ms": 4130,
+      "input_tokens": 56,
+      "output_tokens": 841,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 2,
+        "content_delta": 5
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gemini-3.6-flash",
+        "provider": "openrouter",
+        "level": "low"
+      },
+      "label": "gemini-3.6-flash@openrouter reasoning level=low",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gemini-3.6-flash@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "google/gemini-3.6-flash",
+      "effective_thinking": "low",
+      "effective_temperature": 1,
+      "latency_ms": 2718,
+      "input_tokens": 56,
+      "output_tokens": 511,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 2,
+        "content_delta": 4
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gemini-3.6-flash",
+        "provider": "openrouter",
+        "level": "high"
+      },
+      "label": "gemini-3.6-flash@openrouter reasoning level=high",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gemini-3.6-flash@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "google/gemini-3.6-flash",
+      "effective_thinking": "high",
+      "effective_temperature": 1,
+      "latency_ms": 5210,
+      "input_tokens": 56,
+      "output_tokens": 1116,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 2,
+        "content_delta": 5
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gemini-3.7-flash",
+        "provider": "openrouter",
+        "level": ""
+      },
+      "label": "gemini-3.7-flash@openrouter reasoning level=default",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gemini-3.7-flash@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "google/gemini-3.7-flash",
+      "effective_thinking": "medium",
+      "effective_temperature": 1,
+      "latency_ms": 4735,
+      "input_tokens": 56,
+      "output_tokens": 665,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 2,
+        "content_delta": 4
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gemini-3.7-flash",
+        "provider": "openrouter",
+        "level": "low"
+      },
+      "label": "gemini-3.7-flash@openrouter reasoning level=low",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gemini-3.7-flash@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "google/gemini-3.7-flash",
+      "effective_thinking": "low",
+      "effective_temperature": 1,
+      "latency_ms": 2649,
+      "input_tokens": 56,
+      "output_tokens": 358,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 2,
+        "content_delta": 4
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gemini-3.7-flash",
+        "provider": "openrouter",
+        "level": "high"
+      },
+      "label": "gemini-3.7-flash@openrouter reasoning level=high",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gemini-3.7-flash@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "google/gemini-3.7-flash",
+      "effective_thinking": "high",
+      "effective_temperature": 1,
+      "latency_ms": 7203,
+      "input_tokens": 56,
+      "output_tokens": 1347,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 2,
+        "content_delta": 6
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gemini-3.8-flash",
+        "provider": "antigravity",
+        "level": ""
+      },
+      "label": "gemini-3.8-flash@antigravity reasoning level=default",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gemini-3.8-flash@antigravity",
+      "resolved_provider": "antigravity",
+      "api_model": "gemini-3.8-flash",
+      "effective_thinking": "medium",
+      "effective_temperature": 1,
+      "latency_ms": 4506,
+      "input_tokens": 57,
+      "output_tokens": 6,
+      "thinking_chars": 522,
+      "has_signature": true,
+      "correct": true,
+      "thinking_delta_events": 1,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 1,
+        "content_start": 1,
+        "content_stop": 1,
+        "thinking_delta": 1,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gemini-3.8-flash",
+        "provider": "antigravity",
+        "level": "low"
+      },
+      "label": "gemini-3.8-flash@antigravity reasoning level=low",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gemini-3.8-flash@antigravity",
+      "resolved_provider": "antigravity",
+      "api_model": "gemini-3.8-flash",
+      "effective_thinking": "low",
+      "effective_temperature": 1,
+      "latency_ms": 3878,
+      "input_tokens": 57,
+      "output_tokens": 6,
+      "thinking_chars": 748,
+      "has_signature": true,
+      "correct": true,
+      "thinking_delta_events": 1,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 1,
+        "content_start": 1,
+        "content_stop": 1,
+        "thinking_delta": 1,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gemini-3.8-flash",
+        "provider": "antigravity",
+        "level": "high"
+      },
+      "label": "gemini-3.8-flash@antigravity reasoning level=high",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gemini-3.8-flash@antigravity",
+      "resolved_provider": "antigravity",
+      "api_model": "gemini-3.8-flash",
+      "effective_thinking": "high",
+      "effective_temperature": 1,
+      "latency_ms": 6223,
+      "input_tokens": 57,
+      "output_tokens": 6,
+      "thinking_chars": 605,
+      "has_signature": true,
+      "correct": true,
+      "thinking_delta_events": 2,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 1,
+        "content_start": 1,
+        "content_stop": 1,
+        "thinking_delta": 2,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gemini-3.8-flash",
+        "provider": "openrouter",
+        "level": ""
+      },
+      "label": "gemini-3.8-flash@openrouter reasoning level=default",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gemini-3.8-flash@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "google/gemini-3.8-flash",
+      "effective_thinking": "medium",
+      "effective_temperature": 1,
+      "latency_ms": 4388,
+      "input_tokens": 56,
+      "output_tokens": 665,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 2,
+        "content_delta": 5
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gemini-3.8-flash",
+        "provider": "openrouter",
+        "level": "low"
+      },
+      "label": "gemini-3.8-flash@openrouter reasoning level=low",
+      "status": "pass",
+      "text_excerpt": "102102",
+      "resolved_model": "gemini-3.8-flash@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "google/gemini-3.8-flash",
+      "effective_thinking": "low",
+      "effective_temperature": 1,
+      "latency_ms": 3238,
+      "input_tokens": 56,
+      "output_tokens": 348,
+      "correct": false,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 2,
+        "content_delta": 4
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gemini-3.8-flash",
+        "provider": "openrouter",
+        "level": "high"
+      },
+      "label": "gemini-3.8-flash@openrouter reasoning level=high",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gemini-3.8-flash@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "google/gemini-3.8-flash",
+      "effective_thinking": "high",
+      "effective_temperature": 1,
+      "latency_ms": 7777,
+      "input_tokens": 56,
+      "output_tokens": 1419,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 2,
+        "content_delta": 6
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gpt-5.2",
+        "provider": "openrouter",
+        "level": ""
+      },
+      "label": "gpt-5.2@openrouter reasoning level=default",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gpt-5.2@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-5.2",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 4359,
+      "input_tokens": 4407,
+      "output_tokens": 267,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gpt-5.2",
+        "provider": "openrouter",
+        "level": "low"
+      },
+      "label": "gpt-5.2@openrouter reasoning level=low",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gpt-5.2@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-5.2",
+      "effective_thinking": "low",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 4245,
+      "input_tokens": 4407,
+      "output_tokens": 216,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gpt-5.2",
+        "provider": "openrouter",
+        "level": "high"
+      },
+      "label": "gpt-5.2@openrouter reasoning level=high",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gpt-5.2@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-5.2",
+      "effective_thinking": "high",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 5173,
+      "input_tokens": 4407,
+      "output_tokens": 307,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gpt-5.2-codex",
+        "provider": "openrouter",
+        "level": ""
+      },
+      "label": "gpt-5.2-codex@openrouter reasoning level=default",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gpt-5.2-codex@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-5.2-codex",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 5762,
+      "input_tokens": 4407,
+      "output_tokens": 263,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gpt-5.2-codex",
+        "provider": "openrouter",
+        "level": "low"
+      },
+      "label": "gpt-5.2-codex@openrouter reasoning level=low",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gpt-5.2-codex@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-5.2-codex",
+      "effective_thinking": "low",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 4855,
+      "input_tokens": 4407,
+      "output_tokens": 212,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gpt-5.2-codex",
+        "provider": "openrouter",
+        "level": "xhigh"
+      },
+      "label": "gpt-5.2-codex@openrouter reasoning level=xhigh",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gpt-5.2-codex@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-5.2-codex",
+      "effective_thinking": "xhigh",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 6770,
+      "input_tokens": 4407,
+      "output_tokens": 394,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gpt-5.2-pro",
+        "provider": "openrouter",
+        "level": ""
+      },
+      "label": "gpt-5.2-pro@openrouter reasoning level=default",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gpt-5.2-pro@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-5.2-pro",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 9068,
+      "input_tokens": 4407,
+      "output_tokens": 293,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 1,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gpt-5.2-pro",
+        "provider": "openrouter",
+        "level": "low"
+      },
+      "label": "gpt-5.2-pro@openrouter reasoning level=low",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gpt-5.2-pro@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-5.2-pro",
+      "effective_thinking": "low",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 10037,
+      "input_tokens": 4407,
+      "output_tokens": 258,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 1,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gpt-5.2-pro",
+        "provider": "openrouter",
+        "level": "high"
+      },
+      "label": "gpt-5.2-pro@openrouter reasoning level=high",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gpt-5.2-pro@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-5.2-pro",
+      "effective_thinking": "high",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 11483,
+      "input_tokens": 4407,
+      "output_tokens": 361,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 1,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gpt-5.3-codex",
+        "provider": "openrouter",
+        "level": ""
+      },
+      "label": "gpt-5.3-codex@openrouter reasoning level=default",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gpt-5.3-codex@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-5.3-codex",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 3598,
+      "input_tokens": 4407,
+      "output_tokens": 223,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gpt-5.3-codex",
+        "provider": "openrouter",
+        "level": "low"
+      },
+      "label": "gpt-5.3-codex@openrouter reasoning level=low",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gpt-5.3-codex@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-5.3-codex",
+      "effective_thinking": "low",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 3017,
+      "input_tokens": 4407,
+      "output_tokens": 182,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gpt-5.3-codex",
+        "provider": "openrouter",
+        "level": "xhigh"
+      },
+      "label": "gpt-5.3-codex@openrouter reasoning level=xhigh",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gpt-5.3-codex@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-5.3-codex",
+      "effective_thinking": "xhigh",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 4873,
+      "input_tokens": 4407,
+      "output_tokens": 399,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gpt-5.4",
+        "provider": "openrouter",
+        "level": ""
+      },
+      "label": "gpt-5.4@openrouter reasoning level=default",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gpt-5.4@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-5.4",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 4124,
+      "input_tokens": 4407,
+      "output_tokens": 209,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gpt-5.4",
+        "provider": "openrouter",
+        "level": "low"
+      },
+      "label": "gpt-5.4@openrouter reasoning level=low",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gpt-5.4@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-5.4",
+      "effective_thinking": "low",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 2989,
+      "input_tokens": 4407,
+      "output_tokens": 163,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gpt-5.4",
+        "provider": "openrouter",
+        "level": "xhigh"
+      },
+      "label": "gpt-5.4@openrouter reasoning level=xhigh",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gpt-5.4@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-5.4",
+      "effective_thinking": "xhigh",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 5313,
+      "input_tokens": 4407,
+      "output_tokens": 356,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gpt-5.4-mini",
+        "provider": "openrouter",
+        "level": ""
+      },
+      "label": "gpt-5.4-mini@openrouter reasoning level=default",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gpt-5.4-mini@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-5.4-mini",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 2511,
+      "input_tokens": 4407,
+      "output_tokens": 264,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gpt-5.4-mini",
+        "provider": "openrouter",
+        "level": "low"
+      },
+      "label": "gpt-5.4-mini@openrouter reasoning level=low",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gpt-5.4-mini@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-5.4-mini",
+      "effective_thinking": "low",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1635,
+      "input_tokens": 4407,
+      "output_tokens": 117,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gpt-5.4-mini",
+        "provider": "openrouter",
+        "level": "xhigh"
+      },
+      "label": "gpt-5.4-mini@openrouter reasoning level=xhigh",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gpt-5.4-mini@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-5.4-mini",
+      "effective_thinking": "xhigh",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 3013,
+      "input_tokens": 4407,
+      "output_tokens": 397,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gpt-5.5",
+        "provider": "codex",
+        "level": ""
+      },
+      "label": "gpt-5.5@codex reasoning level=default",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gpt-5.5@codex",
+      "resolved_provider": "codex",
+      "api_model": "gpt-5.5",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 12956,
+      "input_tokens": 4407,
+      "output_tokens": 146,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gpt-5.5",
+        "provider": "codex",
+        "level": "low"
+      },
+      "label": "gpt-5.5@codex reasoning level=low",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gpt-5.5@codex",
+      "resolved_provider": "codex",
+      "api_model": "gpt-5.5",
+      "effective_thinking": "low",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 5847,
+      "input_tokens": 4407,
+      "output_tokens": 125,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gpt-5.5",
+        "provider": "codex",
+        "level": "xhigh"
+      },
+      "label": "gpt-5.5@codex reasoning level=xhigh",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gpt-5.5@codex",
+      "resolved_provider": "codex",
+      "api_model": "gpt-5.5",
+      "effective_thinking": "xhigh",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 6012,
+      "input_tokens": 4407,
+      "output_tokens": 218,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gpt-5.5",
+        "provider": "openrouter",
+        "level": ""
+      },
+      "label": "gpt-5.5@openrouter reasoning level=default",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gpt-5.5@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-5.5",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 2687,
+      "input_tokens": 4407,
+      "output_tokens": 162,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gpt-5.5",
+        "provider": "openrouter",
+        "level": "low"
+      },
+      "label": "gpt-5.5@openrouter reasoning level=low",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gpt-5.5@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-5.5",
+      "effective_thinking": "low",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 3589,
+      "input_tokens": 4407,
+      "output_tokens": 155,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gpt-5.5",
+        "provider": "openrouter",
+        "level": "xhigh"
+      },
+      "label": "gpt-5.5@openrouter reasoning level=xhigh",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gpt-5.5@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-5.5",
+      "effective_thinking": "xhigh",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 3581,
+      "input_tokens": 4407,
+      "output_tokens": 261,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gpt-5.6-luna",
+        "provider": "codex",
+        "level": ""
+      },
+      "label": "gpt-5.6-luna@codex reasoning level=default",
+      "status": "pass",
+      "text_excerpt": "94104",
+      "resolved_model": "gpt-5.6-luna@codex",
+      "resolved_provider": "codex",
+      "api_model": "gpt-5.6-luna",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 3670,
+      "input_tokens": 4407,
+      "output_tokens": 124,
+      "correct": false,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gpt-5.6-luna",
+        "provider": "codex",
+        "level": "low"
+      },
+      "label": "gpt-5.6-luna@codex reasoning level=low",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gpt-5.6-luna@codex",
+      "resolved_provider": "codex",
+      "api_model": "gpt-5.6-luna",
+      "effective_thinking": "low",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 4171,
+      "input_tokens": 4407,
+      "output_tokens": 108,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gpt-5.6-luna",
+        "provider": "codex",
+        "level": "max"
+      },
+      "label": "gpt-5.6-luna@codex reasoning level=max",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gpt-5.6-luna@codex",
+      "resolved_provider": "codex",
+      "api_model": "gpt-5.6-luna",
+      "effective_thinking": "max",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 4556,
+      "input_tokens": 4407,
+      "output_tokens": 164,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gpt-5.6-sol",
+        "provider": "codex",
+        "level": ""
+      },
+      "label": "gpt-5.6-sol@codex reasoning level=default",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gpt-5.6-sol@codex",
+      "resolved_provider": "codex",
+      "api_model": "gpt-5.6-sol",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 4048,
+      "input_tokens": 4407,
+      "output_tokens": 140,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gpt-5.6-sol",
+        "provider": "codex",
+        "level": "low"
+      },
+      "label": "gpt-5.6-sol@codex reasoning level=low",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gpt-5.6-sol@codex",
+      "resolved_provider": "codex",
+      "api_model": "gpt-5.6-sol",
+      "effective_thinking": "low",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 4149,
+      "input_tokens": 4407,
+      "output_tokens": 132,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gpt-5.6-sol",
+        "provider": "codex",
+        "level": "max"
+      },
+      "label": "gpt-5.6-sol@codex reasoning level=max",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gpt-5.6-sol@codex",
+      "resolved_provider": "codex",
+      "api_model": "gpt-5.6-sol",
+      "effective_thinking": "max",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 6469,
+      "input_tokens": 4407,
+      "output_tokens": 164,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gpt-5.6-terra",
+        "provider": "codex",
+        "level": ""
+      },
+      "label": "gpt-5.6-terra@codex reasoning level=default",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gpt-5.6-terra@codex",
+      "resolved_provider": "codex",
+      "api_model": "gpt-5.6-terra",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 2805,
+      "input_tokens": 4407,
+      "output_tokens": 91,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gpt-5.6-terra",
+        "provider": "codex",
+        "level": "low"
+      },
+      "label": "gpt-5.6-terra@codex reasoning level=low",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gpt-5.6-terra@codex",
+      "resolved_provider": "codex",
+      "api_model": "gpt-5.6-terra",
+      "effective_thinking": "low",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 2521,
+      "input_tokens": 4407,
+      "output_tokens": 106,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gpt-5.6-terra",
+        "provider": "codex",
+        "level": "max"
+      },
+      "label": "gpt-5.6-terra@codex reasoning level=max",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gpt-5.6-terra@codex",
+      "resolved_provider": "codex",
+      "api_model": "gpt-5.6-terra",
+      "effective_thinking": "max",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 4554,
+      "input_tokens": 4407,
+      "output_tokens": 177,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gpt-6-astra",
+        "provider": "codex",
+        "level": ""
+      },
+      "label": "gpt-6-astra@codex reasoning level=default",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gpt-6-astra@codex",
+      "resolved_provider": "codex",
+      "api_model": "gpt-6-astra",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 3568,
+      "input_tokens": 58,
+      "output_tokens": 67,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gpt-6-astra",
+        "provider": "codex",
+        "level": "low"
+      },
+      "label": "gpt-6-astra@codex reasoning level=low",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gpt-6-astra@codex",
+      "resolved_provider": "codex",
+      "api_model": "gpt-6-astra",
+      "effective_thinking": "low",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 3631,
+      "input_tokens": 58,
+      "output_tokens": 94,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gpt-6-astra",
+        "provider": "codex",
+        "level": "max"
+      },
+      "label": "gpt-6-astra@codex reasoning level=max",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gpt-6-astra@codex",
+      "resolved_provider": "codex",
+      "api_model": "gpt-6-astra",
+      "effective_thinking": "max",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 5360,
+      "input_tokens": 58,
+      "output_tokens": 140,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gpt-6-astra",
+        "provider": "openrouter",
+        "level": ""
+      },
+      "label": "gpt-6-astra@openrouter reasoning level=default",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gpt-6-astra@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-6-astra",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 2202,
+      "input_tokens": 58,
+      "output_tokens": 73,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gpt-6-astra",
+        "provider": "openrouter",
+        "level": "low"
+      },
+      "label": "gpt-6-astra@openrouter reasoning level=low",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gpt-6-astra@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-6-astra",
+      "effective_thinking": "low",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 2787,
+      "input_tokens": 58,
+      "output_tokens": 80,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gpt-6-astra",
+        "provider": "openrouter",
+        "level": "max"
+      },
+      "label": "gpt-6-astra@openrouter reasoning level=max",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gpt-6-astra@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-6-astra",
+      "effective_thinking": "max",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 5271,
+      "input_tokens": 58,
+      "output_tokens": 211,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gpt-6-luna",
+        "provider": "openrouter",
+        "level": ""
+      },
+      "label": "gpt-6-luna@openrouter reasoning level=default",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gpt-6-luna@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-6-luna",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 2632,
+      "input_tokens": 58,
+      "output_tokens": 182,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gpt-6-luna",
+        "provider": "openrouter",
+        "level": "low"
+      },
+      "label": "gpt-6-luna@openrouter reasoning level=low",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gpt-6-luna@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-6-luna",
+      "effective_thinking": "low",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1941,
+      "input_tokens": 58,
+      "output_tokens": 112,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gpt-6-luna",
+        "provider": "openrouter",
+        "level": "max"
+      },
+      "label": "gpt-6-luna@openrouter reasoning level=max",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gpt-6-luna@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-6-luna",
+      "effective_thinking": "max",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 2462,
+      "input_tokens": 58,
+      "output_tokens": 203,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gpt-6-sol",
+        "provider": "openrouter",
+        "level": ""
+      },
+      "label": "gpt-6-sol@openrouter reasoning level=default",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gpt-6-sol@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-6-sol",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 2316,
+      "input_tokens": 58,
+      "output_tokens": 119,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gpt-6-sol",
+        "provider": "openrouter",
+        "level": "low"
+      },
+      "label": "gpt-6-sol@openrouter reasoning level=low",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gpt-6-sol@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-6-sol",
+      "effective_thinking": "low",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 2003,
+      "input_tokens": 58,
+      "output_tokens": 94,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gpt-6-sol",
+        "provider": "openrouter",
+        "level": "max"
+      },
+      "label": "gpt-6-sol@openrouter reasoning level=max",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gpt-6-sol@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-6-sol",
+      "effective_thinking": "max",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 2479,
+      "input_tokens": 58,
+      "output_tokens": 214,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    }
+  ],
+  "providers": [
+    "anthropic",
+    "antigravity",
+    "codex",
+    "openrouter"
+  ],
+  "run_at": "2026-10-04T17:12:49Z",
+  "uncredentialed": [
+    "copilot",
+    "gemini",
+    "mock",
+    "openai",
+    "reliant",
+    "vertexai",
+    "xai"
+  ]
+}

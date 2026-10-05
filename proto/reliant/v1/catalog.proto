@@ -61,6 +61,28 @@ message ModelInfo {
   bool supports_caching = 14;
   // Supported non-empty thinking levels for this model+driver (e.g., ["low", "medium", "high", "xhigh"])
   repeated string supported_thinking_levels = 15;
+  // Whether a temperature set for this model+driver actually reaches the provider.
+  // False for omit-mode models and drivers that ignore temperature; the UI hides the control.
+  bool supports_temperature = 16;
+
+  // Set only for driver_id "local": the machine whose local model server
+  // serves this model. A local model is reachable only through that daemon,
+  // so the id (e.g. "qwen3:latest@local") is ambiguous without it.
+  LocalModelSource local = 17;
+}
+
+// LocalModelSource locates a local model on a specific daemon's machine.
+message LocalModelSource {
+  string daemon_id = 1;
+  // Display name of the machine (daemon hostname).
+  string machine_name = 2;
+  // LocalModelEndpoint.id on that daemon.
+  string endpoint_id = 3;
+  // LocalModelEndpoint.kind ("ollama", "lmstudio", ...).
+  string endpoint_kind = 4;
+  // False while the daemon is offline: the model is listed so the user can
+  // see it, but it cannot run until the machine comes back.
+  bool online = 5;
 }
 
 // ListModelsRequest is the request for ListModels

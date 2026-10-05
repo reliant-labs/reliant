@@ -1005,6 +1005,23 @@ func (r *Repo) GetLatestNonMessageUpdatesPerEntity(ctx context.Context, chatID s
 	// table: ~3-4s before, ~100ms after, with identical results minus tool
 	// calls.
 	//
+	// "Few" only holds if they can be FOUND without reading the rest:
+	// idx_chat_updates_snapshot_rekeyed is a partial index over exactly the
+	// re-keyed types. Without it the re-keyed read rechecked every row
+	// idx_chat_updates_snapshot_heads holds for the chat (165,843 on chat
+	// 8bb0a875, almost all NODE_EXECUTION) to keep 758: ~350ms of a ~475ms
+	// query. With it, ~3ms.
+	//
+	// AGENT_MESSAGES_DRAINED is excluded too. It is a live-only signal: it
+	// tells an open pending-queue strip to retire mailbox rows in the same
+	// commit as the transcript messages they became. Every drain has its own
+	// entity_id, so per-entity dedup kept the chat's ENTIRE drain history —
+	// 624 rows / 90KB of a 1.72MB snapshot on chat 8bb0a875 — and a snapshot
+	// has no strip to reconcile: the mailbox hook re-reads
+	// ListQueuedAgentMessages when it mounts. Live and replay delivery still
+	// carry it (a client that missed a drain while connected-but-lagging can
+	// still be showing the rows it retires).
+	//
 	// The update types are LITERALS, not bind parameters, and that is
 	// load-bearing. The planner can use a partial index only when it can PROVE
 	// the query's predicate implies the index's, and it can prove that only
@@ -1014,7 +1031,7 @@ func (r *Repo) GetLatestNonMessageUpdatesPerEntity(ctx context.Context, chatID s
 	// lost idx_chat_updates_snapshot_heads and fell back to a per-entity scan
 	// of the chat's whole history: measured >20s (cancelled) on the dev copy.
 	// TestSnapshotHeadsQueryMatchesPartialIndex pins these literals to the
-	// enum values and to the index predicate in the migration.
+	// enum values and to both index predicates in the migrations.
 	query := r.bindQuery(snapshotHeadsQuery)
 
 	rows, err := r.DB.DB(ctx).QueryContext(ctx, query, chatID, chatID, chatID, chatID)
@@ -1027,13 +1044,17 @@ func (r *Repo) GetLatestNonMessageUpdatesPerEntity(ctx context.Context, chatID s
 // snapshotHeadsQuery is GetLatestNonMessageUpdatesPerEntity's SQL. A
 // package-level constant so the partial-index test can read exactly what runs.
 //
-//	1 = MESSAGE, 4 = TOOL_CALL, 19 = STREAM_FINALIZED  (the index excludes these)
-//	3 = THREAD, 18 = QUESTION                          (re-keyed, read separately)
+//	1 = MESSAGE, 4 = TOOL_CALL, 19 = STREAM_FINALIZED  (idx_chat_updates_snapshot_heads excludes these)
+//	3 = THREAD, 18 = QUESTION                          (re-keyed, read separately via idx_chat_updates_snapshot_rekeyed)
+//	20 = AGENT_MESSAGES_DRAINED                        (live-only; still in the index, filtered by the probe)
+//
+// The skip scan's list must stay a SUPERSET of the heads index's predicate,
+// or the planner cannot prove the query implies it and loses the index.
 const snapshotHeadsQuery = `
 		WITH RECURSIVE heads AS (
 			(SELECT entity_id, sequence_number
 			   FROM chat_updates
-			  WHERE chat_id = ? AND update_type NOT IN (1, 4, 19, 3, 18)
+			  WHERE chat_id = ? AND update_type NOT IN (1, 4, 19, 3, 18, 20)
 			  ORDER BY entity_id, sequence_number DESC
 			  LIMIT 1)
 			UNION ALL
@@ -1042,7 +1063,7 @@ const snapshotHeadsQuery = `
 			  CROSS JOIN LATERAL (
 				SELECT entity_id, sequence_number
 				  FROM chat_updates
-				 WHERE chat_id = ? AND update_type NOT IN (1, 4, 19, 3, 18)
+				 WHERE chat_id = ? AND update_type NOT IN (1, 4, 19, 3, 18, 20)
 				   AND entity_id > h.entity_id
 				 ORDER BY entity_id, sequence_number DESC
 				 LIMIT 1) nxt

@@ -120,13 +120,41 @@ type AgentMessage struct {
 	// is drained into the recipient thread's history.
 	DeliveredAt        *time.Time
 	DeliveredMessageID *string
+	// Synthesized marks a terminal report (Completion/Cancelled/Failed) the
+	// reconciler fabricated because the real one never arrived. A real report
+	// for the same ToolCallID supersedes it (EnqueueSpawnReport); a real report
+	// is never overwritten. The column is the contract -- never infer this from
+	// Body. See docs/incidents/2026-10-04-spawn-report-collision.md.
+	Synthesized bool
 }
+
+// SpawnReportOutcome is what EnqueueSpawnReport did with a real terminal report.
+type SpawnReportOutcome int
+
+const (
+	// SpawnReportInserted: no report existed for the spawn; the row was written.
+	SpawnReportInserted SpawnReportOutcome = iota + 1
+	// SpawnReportSuperseded: a reconciler-synthesized placeholder was replaced
+	// and re-queued, even if it had already been delivered, so the parent
+	// receives the actual outcome.
+	SpawnReportSuperseded
+	// SpawnReportAlreadyReported: a real report already existed; nothing changed.
+	SpawnReportAlreadyReported
+)
 
 // AgentMessageStore is the shared contract for mailbox persistence across
 // drivers.
 type AgentMessageStore interface {
 	EnqueueAgentMessage(ctx context.Context, msg *AgentMessage) error
-	// EnqueueAgentMessageIfAbsent inserts msg (which must carry a terminal
+	// EnqueueSpawnReport writes a REAL terminal spawn report (Synthesized must
+	// be false; ToolCallID required). It inserts, supersedes a synthesized
+	// placeholder for the same ToolCallID, or reports SpawnReportAlreadyReported
+	// without error when a real report exists -- so it never trips
+	// idx_agent_messages_one_terminal_report_per_spawn. See
+	// docs/incidents/2026-10-04-spawn-report-collision.md.
+	EnqueueSpawnReport(ctx context.Context, msg *AgentMessage) (SpawnReportOutcome, error)
+	// EnqueueAgentMessageIfAbsent is the reconciler's placeholder write: it
+	// inserts msg (which must carry a terminal
 	// Kind: Completion, Cancelled, or Failed) unless a terminal report for
 	// the same ToolCallID already exists, enforced by a DB constraint so the
 	// check-and-insert is atomic under concurrent callers (see

@@ -417,6 +417,7 @@ describe("ComputeStep — every size says what it gives you", () => {
     fireEvent.click(
       screen.getByRole("button", { name: /use your own computer/i }),
     );
+    fireEvent.click(screen.getByTestId("compute-cloud-toggle"));
 
     expect(
       screen.getByRole("button", { name: /use your own computer/i }),
@@ -508,6 +509,7 @@ describe("ComputeStep — every size says what it gives you", () => {
     fireEvent.click(
       screen.getByRole("button", { name: /use your own computer/i }),
     );
+    fireEvent.click(screen.getByTestId("compute-cloud-toggle"));
     fireEvent.click(screen.getByRole("button", { name: /^Medium / }));
 
     expect(
@@ -548,6 +550,7 @@ describe("ComputeStep — every size says what it gives you", () => {
     fireEvent.click(
       screen.getByRole("button", { name: /use your own computer/i }),
     );
+    fireEvent.click(screen.getByTestId("compute-cloud-toggle"));
     fireEvent.click(screen.getByRole("button", { name: /^Medium / }));
 
     expect(screen.getByTestId("redeem-coupon")).toBeInTheDocument();

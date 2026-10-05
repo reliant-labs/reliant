@@ -23,6 +23,13 @@ var unbindableParams = map[string]map[string]string{
 	"generate_image": {
 		"save_to": "every generated image would overwrite the previous one at the same path",
 	},
+	"generate_video": {
+		"save_to":          "every generated video would overwrite the previous one at the same path",
+		"edit_from":        "names one earlier clip, which is chosen per call and cannot be known in advance",
+		"start_frame":      "names one attachment, which is chosen per call",
+		"end_frame":        "names one attachment, which is chosen per call",
+		"reference_images": "names specific attachments, which are chosen per call",
+	},
 	"save_attachment": {
 		"attachment_id": "names the one attachment to save, which is chosen per call and cannot be known in advance",
 		"save_to":       "every save would target the same file, so each call destroys the last one's output",

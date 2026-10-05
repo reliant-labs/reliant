@@ -18,7 +18,7 @@ func tiersByTag(tiers []*reliantv1.TierResolution) map[string]*reliantv1.TierRes
 }
 
 func TestTierResolutions_ReportModelAndEffortPerTag(t *testing.T) {
-	tiers := tiersByTag(tierResolutions(models.MustGetRegistry(), []string{"anthropic"}))
+	tiers := tiersByTag(tierResolutions(models.MustGetRegistry(), []string{"anthropic"}, nil, nil))
 
 	flagship, ok := tiers["flagship"]
 	require.True(t, ok, "flagship must resolve on anthropic")
@@ -34,9 +34,9 @@ func TestTierResolutions_ReportModelAndEffortPerTag(t *testing.T) {
 func TestTierResolutions_SkipsNonTextAndUnresolvableTags(t *testing.T) {
 	// openai serves image models; image-gen must still never appear as a tier
 	// because the chat picker can only run text models.
-	tiers := tiersByTag(tierResolutions(models.MustGetRegistry(), []string{"openai"}))
+	tiers := tiersByTag(tierResolutions(models.MustGetRegistry(), []string{"openai"}, nil, nil))
 	assert.NotContains(t, tiers, "image-gen")
 
-	assert.Empty(t, tierResolutions(models.MustGetRegistry(), nil),
+	assert.Empty(t, tierResolutions(models.MustGetRegistry(), nil, nil, nil),
 		"no configured providers means no tag resolves")
 }

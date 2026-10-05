@@ -1,30 +1,30 @@
 /**
  * The pinned user-message header, driven through the real component.
  *
- * Both reported defects are reproduced here, and both are the same root cause
- * seen twice: the pin used to be a pure function of the virtualized list's
- * first rendered row index (react-virtuoso's `rangeChanged.startIndex`), and a
- * row is not the unit the handoff happens in.
+ * The pin is a breadcrumb: it names the most recent user message that has
+ * slid entirely under the header. These tests drive row GEOMETRY rather than
+ * indices, because every defect this header has had came from deciding on
+ * something other than measured edges:
  *
- * (a) WRONG HANDOFF LEVEL. The old rule was
- *       layerUserIdx < firstVisible ? layerUserIdx : null
- *     so the moment the heading user message became the first rendered row it
- *     stopped being pinned — including when it was scrolled 95% off the top,
- *     which is exactly when the header is most needed. The header vanished
- *     instead of handing off.
+ * (a) WRONG HANDOFF LEVEL. The pin was once a function of the first rendered
+ *     row index, so it dropped the moment the heading became that row —
+ *     including when it was 95% scrolled off the top.
  *
- * (b) JITTER. `startIndex` is neither monotonic nor a measure of the visual
- *     top: it is the first RENDERED row, inflated by overscan/increaseViewportBy,
- *     and scroll recordings from a real session showed it stepping
- *     115 -> 111 -> 112 -> 105 -> 115 -> 104 between consecutive animation
- *     frames with no user input. Feeding that straight into a visible overlay
- *     toggles the header on and off across frames — the flicker.
+ * (b) JITTER. That first rendered row index is not monotonic (overscan), so
+ *     the header toggled on and off between frames with no input.
  *
- * The fix resolves the pin from measured row geometry instead, so these tests
- * drive geometry rather than indices.
+ * (c) EARLY SWAP. The swap fired when the incoming user message's TOP edge
+ *     reached the header. A user row opens with an empty toolbar band, so at
+ *     that moment the whole bubble was still on screen just below the header,
+ *     which already showed it — the same message twice.
+ *
+ * (d) STUCK AT THE TOP. The first row starts 32px down (the scroll-back
+ *     loader's space), inside the ~48px header band, so a rule keyed on the
+ *     row's top edge could never release it: scrolled all the way up, the
+ *     header sat over the very message it named.
  */
 
-import { describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render } from "@testing-library/react";
 import { act } from "react";
 import { ContentBlockType, MessageRole, StreamingState } from "../../../../types/chat";
@@ -54,28 +54,60 @@ vi.mock("../../ChatMessage", () => ({
   ),
 }));
 
+const { virtualizerOptions } = vi.hoisted(() => ({
+  virtualizerOptions: { current: null as Record<string, unknown> | null },
+}));
+
 // jsdom has no layout, so the real virtualizer would measure every row as
 // 0px and render none of them. Render every row instead: these tests drive
 // the pin from stubbed row GEOMETRY, which is what the pin actually reads, so
 // which rows the virtualizer would have chosen is beside the point.
 vi.mock("@tanstack/react-virtual", () => ({
-  useVirtualizer: (options: { count: number }) => ({
-    getVirtualItems: () =>
-      Array.from({ length: options.count }, (_, index) => ({
-        index,
-        key: index,
-        start: 0,
-        end: 0,
-        size: 0,
-        lane: 0,
-      })),
-    getTotalSize: () => 0,
-    measureElement: () => {},
-    containerRef: () => {},
-    scrollToIndex: () => {},
-    scrollToEnd: () => {},
-  }),
+  useVirtualizer: (options: { count: number }) => {
+    virtualizerOptions.current = options as unknown as Record<string, unknown>;
+    return {
+      getVirtualItems: () =>
+        Array.from({ length: options.count }, (_, index) => ({
+          index,
+          key: index,
+          start: 0,
+          end: 0,
+          size: 0,
+          lane: 0,
+        })),
+      getTotalSize: () => 0,
+      measureElement: () => {},
+      containerRef: () => {},
+      scrollToIndex: () => {},
+      scrollToEnd: () => {},
+    };
+  },
 }));
+
+/** The pinned header's rendered height — one line of text plus its padding. */
+const HEADER_PX = 48;
+
+// jsdom lays nothing out, so every offsetHeight is 0. Give the header its real
+// height: the crossing line is the header's bottom edge, and at 0px the
+// stuck-at-the-top defect cannot be reproduced at all.
+const offsetHeightDescriptor = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "offsetHeight");
+beforeAll(() => {
+  Object.defineProperty(HTMLElement.prototype, "offsetHeight", {
+    configurable: true,
+    get(this: HTMLElement) {
+      return this.getAttribute("data-testid") === "pinned-user-message-header" ? HEADER_PX : 0;
+    },
+  });
+});
+afterAll(() => {
+  if (offsetHeightDescriptor) {
+    Object.defineProperty(HTMLElement.prototype, "offsetHeight", offsetHeightDescriptor);
+  }
+});
+
+beforeEach(() => {
+  virtualizerOptions.current = null;
+});
 
 function message(index: number, role: MessageRole): Message {
   return {
@@ -163,17 +195,14 @@ function renderTimeline() {
 }
 
 describe("pinned header handoff", () => {
-  // Defect (a). The heading user message is the row at the top of the viewport
-  // and is 95% scrolled past it — its own section fills the screen, so it is
-  // precisely what the header should be showing. The old index rule computed
-  // `layerUserIdx < firstVisible` as `2 < 2` and pinned nothing.
-  it("pins the heading user message while it is scrolled off the top", async () => {
+  // Defect (a). u2 is 95% above the viewport top and its section (a3) fills
+  // the screen, so it is precisely what the header should be showing.
+  it("pins the heading user message once it has slid under the header", async () => {
     const { container } = renderTimeline();
 
-    // u2 is 95% above the viewport top; its section (a3) fills the screen.
     applyGeometry(container, {
       0: { top: -3000, height: 100 },
-      1: { top: -2900, height: 2400 },
+      1: { top: -2900, height: 2480 },
       2: { top: -420, height: 440 },
       3: { top: 20, height: 3000 },
     });
@@ -182,14 +211,12 @@ describe("pinned header handoff", () => {
     expect(pinnedMessageId(container)).toBe("m2");
   });
 
-  // The other side of the same rule: while the heading is still visibly in
-  // flow below the viewport top, the section ABOVE it is what the reader is
-  // looking at, so the previous heading stays pinned. Handoff happens when the
-  // incoming heading's top edge crosses the top, not when its row index does.
-  it("keeps the previous heading pinned until the next one crosses the top", async () => {
+  // Defect (c). The header changes hands when the incoming user message has
+  // gone ENTIRELY under it — never while it is still on screen below it.
+  it("swaps only once the incoming user message is fully under the header", async () => {
     const { container } = renderTimeline();
 
-    // u2's top edge is still 60px BELOW the viewport top — not yet its turn.
+    // u2 is still below the header: the reader is in u0's section.
     applyGeometry(container, {
       0: { top: -3000, height: 100 },
       1: { top: -2900, height: 2960 },
@@ -199,8 +226,8 @@ describe("pinned header handoff", () => {
     await scroll(container);
     expect(pinnedMessageId(container)).toBe("m0");
 
-    // Now it has crossed. The header hands off — same rows, different
-    // geometry, which is the whole point.
+    // u2's top edge has crossed into the header but most of it is still on
+    // screen. Swapping here would print u2 twice, one above the other.
     applyGeometry(container, {
       0: { top: -3120, height: 100 },
       1: { top: -3020, height: 2960 },
@@ -208,18 +235,27 @@ describe("pinned header handoff", () => {
       3: { top: 380, height: 3000 },
     });
     await scroll(container);
+    expect(pinnedMessageId(container)).toBe("m0");
+
+    // Now u2's bottom edge is behind the header: it has gone, so it takes over.
+    applyGeometry(container, {
+      0: { top: -3460, height: 100 },
+      1: { top: -3360, height: 2960 },
+      2: { top: -400, height: 440 },
+      3: { top: 40, height: 3000 },
+    });
+    await scroll(container);
     expect(pinnedMessageId(container)).toBe("m2");
   });
 
-  // Defect (b). The pin used to follow the first RENDERED row, which jumps
-  // around between frames as overscan shifts. With the geometry unchanged,
-  // repeated scroll events must not move the header at all.
+  // Defect (b). With the geometry unchanged, repeated scroll events must not
+  // move the header at all.
   it("does not flicker across repeated scrolls when geometry is unchanged", async () => {
     const { container } = renderTimeline();
 
     const stable: Geometry = {
       0: { top: -3000, height: 100 },
-      1: { top: -2900, height: 2400 },
+      1: { top: -2900, height: 2480 },
       2: { top: -420, height: 440 },
       3: { top: 20, height: 3000 },
     };
@@ -240,13 +276,55 @@ describe("pinned header handoff", () => {
     const { container } = renderTimeline();
 
     applyGeometry(container, {
-      0: { top: 10, height: 100 },
-      1: { top: 110, height: 400 },
-      2: { top: 510, height: 100 },
-      3: { top: 610, height: 400 },
+      0: { top: 32, height: 66 },
+      1: { top: 98, height: 400 },
+      2: { top: 498, height: 66 },
+      3: { top: 564, height: 400 },
     });
     await scroll(container);
 
     expect(pinnedMessageId(container)).toBeNull();
+  });
+
+  // Defect (d). Pinned first, then scrolled all the way back up: the header
+  // must give way to the first message rather than cover it.
+  it("clears the header when scrolled back to the top of the transcript", async () => {
+    const { container } = renderTimeline();
+
+    applyGeometry(container, {
+      0: { top: -200, height: 66 },
+      1: { top: -134, height: 3000 },
+      2: { top: 2866, height: 66 },
+      3: { top: 2932, height: 400 },
+    });
+    await scroll(container);
+    expect(pinnedMessageId(container)).toBe("m0");
+
+    applyGeometry(container, {
+      0: { top: 32, height: 66 },
+      1: { top: 98, height: 3000 },
+      2: { top: 3098, height: 66 },
+      3: { top: 3164, height: 400 },
+    });
+    await scroll(container);
+    expect(pinnedMessageId(container)).toBeNull();
+  });
+
+  // "Jump to" aligns the message to the top of the viewport. Without clearance
+  // it lands underneath the header, half hidden by the very thing that was
+  // clicked to reveal it.
+  it("reserves the header's height when jumping to a message", async () => {
+    const { container } = renderTimeline();
+
+    applyGeometry(container, {
+      0: { top: -3000, height: 100 },
+      1: { top: -2900, height: 2480 },
+      2: { top: -420, height: 440 },
+      3: { top: 20, height: 3000 },
+    });
+    await scroll(container);
+    expect(pinnedMessageId(container)).toBe("m2");
+
+    expect(virtualizerOptions.current?.scrollPaddingStart).toBe(HEADER_PX);
   });
 });

@@ -3,9 +3,11 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -83,6 +85,50 @@ func TestEmitToolCallStatus_SpawnLifecycleIsDurable(t *testing.T) {
 	calls, err := h.Repo().ListToolCallsByChat(ctx, chatID)
 	require.NoError(t, err)
 	require.Len(t, calls, 1)
+}
+
+// The LIVE event must carry child_workflow_id, not just the durable row. The
+// assistant message holding the spawn's tool-call block is persisted before
+// the spawn runs, so this event is the only live channel that can tell an open
+// client which thread the spawn owns. Without it the card's preview shows
+// "Starting…" for the whole run, while a reload (which reads the row) shows the
+// child transcript.
+func TestEmitToolCallStatus_LiveEventCarriesChildWorkflowID(t *testing.T) {
+	h, chatID := setupEmitStatusFixture(t)
+	defer h.Cleanup()
+	ctx := context.Background()
+
+	activityInstance := NewEmitToolCallStatusActivity(h.Repo())
+	toolCallID := "toolu_" + uuid.New().String()
+	childWorkflowID := "wf-" + uuid.New().String()
+
+	var out EmitToolCallStatusOutput
+	require.NoError(t, h.ExecuteActivity(activityInstance.Execute, EmitToolCallStatusInput{
+		ChatID:          chatID,
+		ToolCallID:      toolCallID,
+		ToolName:        "spawn",
+		Status:          "backgrounded",
+		ChildWorkflowID: childWorkflowID,
+	}, &out))
+	require.True(t, out.Success)
+
+	updates, err := h.Repo().GetUpdatesSince(ctx, chatID, 0, 100)
+	require.NoError(t, err)
+
+	var payloads []db.ToolCallUpdate
+	for _, update := range updates {
+		if update.UpdateType != db.UpdateTypeToolCall {
+			continue
+		}
+		var payload db.ToolCallUpdate
+		require.NoError(t, json.Unmarshal(update.Data, &payload))
+		payloads = append(payloads, payload)
+	}
+	require.Len(t, payloads, 1, "one status transition emits exactly one live tool_call event")
+	assert.Equal(t, toolCallID, payloads[0].ToolCallID)
+	assert.Equal(t, db.ToolCallStatusBackgrounded, payloads[0].Status)
+	assert.Equal(t, childWorkflowID, payloads[0].ChildWorkflowID,
+		"the live event must name the spawn's child workflow (= its thread) like the snapshot does")
 }
 
 func TestEmitToolCallStatus_SpawnFailureIsDurable(t *testing.T) {

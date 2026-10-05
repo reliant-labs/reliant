@@ -212,10 +212,7 @@ Node routing is a lightweight alternative to workflow routing when all the logic
 
 ### Phase Skipping in Pipelines
 
-Node routers shine in multi-phase pipelines where users may want to start at different points. Several builtin workflows use this pattern:
-
-- **one-ring** — routes to planning, write_tests, or impl_loop
-- **bmad-lite** — routes to ideate, requirements, architecture, or implement
+Node routers shine in multi-phase pipelines where users may want to start at different points. Workflows you build can use this pattern, for example a pipeline whose router routes to `planning`, `write_tests`, or `implement`.
 
 Example:
 

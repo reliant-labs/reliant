@@ -10,6 +10,8 @@ const modalityVisibilityYAML = `
 tags:
   flagship:
     - {model: chat-model}
+  video-gen:
+    - {model: video-only-model}
   image-gen:
     - {model: image-only-model}
     - {model: multimodal-model}
@@ -39,6 +41,18 @@ models:
     providers:
       - driver: openai
         api_model: multimodal
+
+  - id: video-only-model
+    name: Video Only Model
+    visibility: user
+    capabilities:
+      output_modalities: [video]
+      video:
+        durations: [4, 8]
+        resolutions: [720p]
+    providers:
+      - driver: openai
+        api_model: video-only
 
   - id: dev-image-model
     name: Dev Image Model
@@ -138,5 +152,25 @@ func TestGetUserVisibleModels_RealRegistryExcludesImageModels(t *testing.T) {
 	}
 	if !ids["claude-4.5-sonnet"] && !ids["gpt-5"] {
 		t.Errorf("GetUserVisibleModels() returned %d models but no recognizable flagship chat model; filter is too aggressive", len(ids))
+	}
+}
+
+// TestGetUserVisibleModels_ExcludesVideoModels: a video model has no chat
+// endpoint, so it must never reach the chat model picker. It is also not an
+// image model, so the image surface must not list it either.
+func TestGetUserVisibleModels_ExcludesVideoModels(t *testing.T) {
+	reg := modalityVisibilityRegistry(t)
+	if ids := modelIDSet(reg.GetUserVisibleModels()); ids["video-only-model"] {
+		t.Errorf("GetUserVisibleModels() returned video-only-model; video models must not appear in the chat model picker")
+	}
+	if ids := modelIDSet(reg.GetUserVisibleModelsForModality(ModalityImage)); ids["video-only-model"] {
+		t.Errorf("GetUserVisibleModelsForModality(image) returned a video model")
+	}
+	if ids := modelIDSet(reg.GetUserVisibleModelsForModality(ModalityVideo)); !ids["video-only-model"] {
+		t.Errorf("GetUserVisibleModelsForModality(video) missing video-only-model")
+	}
+	def, _ := reg.GetDefinition("video-only-model")
+	if def.Capabilities.Video == nil || len(def.Capabilities.Video.Durations) != 2 {
+		t.Errorf("video capability block did not parse from YAML: %+v", def.Capabilities.Video)
 	}
 }

@@ -168,7 +168,7 @@ func NewServer(cfg *Config) (*Server, error) {
 	systemService := services.NewSystemService(database, cfg.TemporalClient, cfg.NATSChecker, cfg.StreamingHub)
 	planService := services.NewPlanService(database)
 	taskService := services.NewTaskService(database)
-	catalogService := services.NewCatalogService(cfg.ToolsFactory)
+	catalogService := services.NewCatalogService(cfg.ToolsFactory).WithTagPrefs(database)
 	projectService := services.NewProjectService(database, router)
 	worktreeService := services.NewWorktreeService(database, cfg.TemporalClient, router)
 	repoService := services.NewRepoService(database, router)
@@ -192,6 +192,9 @@ func NewServer(cfg *Config) (*Server, error) {
 	presetService := services.NewPresetService(database)
 
 	daemonRegistryService := services.NewDaemonRegistryService(database, router)
+	// Credentials for custom endpoints have one home, the sealed connection
+	// store, which this branch does not have; nil keeps keys unavailable.
+	modelEndpointService := services.NewModelEndpointService(database, router, nil)
 	// TokenService: the ONE token surface (daemon credentials and API
 	// tokens), a facade over the token authority.
 	tokenService := services.NewTokenService(authority)
@@ -384,11 +387,15 @@ func NewServer(cfg *Config) (*Server, error) {
 	mux.Handle(streamingPath, streamingHandler)
 
 	mux.Handle(attachmentPath, attachmentHandler)
+	// Range-capable byte serving for <video>; Connect GetAttachment is whole-blob.
+	mux.Handle(services.AttachmentContentPathPrefix, services.AttachmentContentHandler(database, authInterceptor.AuthenticateHTTP))
 	mux.Handle(presetPath, presetHandler)
 	mux.Handle(triggerPath, triggerHandler)
 	mux.Handle(inboxPath, inboxHandler)
 
 	mux.Handle(daemonRegistryPath, daemonRegistryHandler)
+	modelEndpointPath, modelEndpointHandler := reliantv1connect.NewModelEndpointServiceHandler(modelEndpointService, opts...)
+	mux.Handle(modelEndpointPath, modelEndpointHandler)
 	mux.Handle(tokenPath, tokenHandler)
 	mux.Handle(daemonPath, daemonHandler)
 
@@ -473,8 +480,8 @@ func NewServer(cfg *Config) (*Server, error) {
 	corsHandler := cors.Handler(cors.Options{
 		AllowedOrigins:   corsOrigins,
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "Connect-Protocol-Version", "Connect-Timeout-Ms", "X-CSRF-Token", "traceparent", "tracestate", "sentry-trace", "baggage"},
-		ExposedHeaders:   []string{"Link"},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "Connect-Protocol-Version", "Connect-Timeout-Ms", "X-CSRF-Token", "traceparent", "tracestate", "sentry-trace", "baggage", "Range"},
+		ExposedHeaders:   []string{"Link", "Content-Range", "Accept-Ranges", "Content-Length"},
 		AllowCredentials: allowCreds,
 		MaxAge:           86400,
 	})

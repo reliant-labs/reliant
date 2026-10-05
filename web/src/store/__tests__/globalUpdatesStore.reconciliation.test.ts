@@ -1,5 +1,5 @@
 // Regression test for the "slot theft" variant of the stuck-chat bug: the
-// user has chat A open, some other component (WorkflowBuilderChat, a
+// user has chat A open, some other component (a workflow-editor panel, a
 // reconnect that forwards a stale id) steals the single subscription slot,
 // and nothing re-asserts A afterward. The rendered chat is the source of
 // truth; reconcileChatSubscription is the mechanism that keeps the
@@ -70,7 +70,7 @@ describe("reconcileChatSubscription", () => {
   it("re-subscribes to the rendered chat when another chat holds the slot", () => {
     const svc = makeService();
     // Steady state: A is rendered and was subscribed, then B stole the slot
-    // (e.g. WorkflowBuilderChat subscribing to its own chat) without ever
+    // (e.g. a panel subscribing to its own chat) without ever
     // giving it back.
     useGlobalUpdatesStore.setState({
       wsService: svc as never,

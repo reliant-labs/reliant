@@ -132,15 +132,9 @@ func TestBuiltinWorkflowLoading(t *testing.T) {
 	t.Parallel()
 	testCases := []string{
 		"agent",
-		"auditing-agent",
 		"compact", // Note: compact is now a hardcoded internal workflow
-		"discovery-relay",
 		"get-it-right",
-		"markdown-checklist",
-		"one-ring",
 		"parallel-compete",
-		"parallel-loop-sample",
-		"ralph-wiggum",
 		"structured-agent",
 	}
 

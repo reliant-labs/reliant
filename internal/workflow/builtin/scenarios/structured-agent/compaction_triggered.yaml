@@ -18,7 +18,9 @@ description: Token count exceeds threshold, triggering context compaction before
 inputs:
   mode: "auto"
   response_tool_name: "submit_response"
-  compaction_threshold: 10000  # Low threshold for testing
+  model:
+    tags: [flagship]
+    compaction_threshold: 10000  # Low threshold for testing
 
 events:
   # Iteration 1: LLM reads a large file

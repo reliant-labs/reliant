@@ -11,6 +11,7 @@ import type {
 import { capabilities } from "../../services/controlPlane/capabilities";
 import { supabase } from "../../lib/supabase";
 import { ManageGitHubAccess } from "../Projects/ManageGitHubAccess";
+import { SettingsPageHeader } from "./SettingsPageHeader";
 
 /** Plain-English name for the credential kind. The kind is what determines
  *  whether the token expires and whether its scopes mean anything, so it is
@@ -230,13 +231,10 @@ export function GitConnectionsSettings() {
   if (!capabilities.gitConnections) {
     return (
       <div className="space-y-6">
-        <div>
-          <h2 className="mb-2 text-lg font-semibold">GitHub connection</h2>
-          <p className="text-sm text-muted-foreground">
-            Connect your GitHub account so Reliant can clone private repos and
-            push changes.
-          </p>
-        </div>
+        <SettingsPageHeader
+        title="GitHub"
+        description="Connect your GitHub account so Reliant can clone your private repositories and push changes on your behalf. Come here to connect, or to disconnect and revoke access."
+      />
 
         <div className="rounded-lg border border-border p-6 text-center space-y-3">
           <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-muted">
@@ -255,13 +253,10 @@ export function GitConnectionsSettings() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="mb-2 text-lg font-semibold">GitHub connection</h2>
-        <p className="text-sm text-muted-foreground">
-          Connect your GitHub account so Reliant can clone private repos and
-          push changes.
-        </p>
-      </div>
+      <SettingsPageHeader
+        title="GitHub"
+        description="Connect your GitHub account so Reliant can clone your private repositories and push changes on your behalf. Come here to connect, or to disconnect and revoke access."
+      />
 
       {error && (
         <div className="rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-800 dark:bg-red-950/20">

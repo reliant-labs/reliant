@@ -145,20 +145,6 @@ export const providerConfigs = {
     description: "Gemini Pro, Gemini Ultra, and other Google models",
     usesOAuth: false,
   },
-  azure: {
-    name: "Azure OpenAI",
-    docsUrl: "https://portal.azure.com/",
-    keyFormat: "deployment-specific",
-    description: "OpenAI models hosted on Azure",
-    usesOAuth: false,
-  },
-  bedrock: {
-    name: "AWS Bedrock",
-    docsUrl: "https://console.aws.amazon.com/bedrock/",
-    keyFormat: "AWS credentials",
-    description: "Claude, Llama, and other models on AWS",
-    usesOAuth: false,
-  },
   copilot: {
     name: "GitHub Copilot",
     docsUrl: "https://github.com/settings/copilot",
@@ -167,32 +153,11 @@ export const providerConfigs = {
       "GitHub Copilot models via device-flow OAuth (Enterprise or Individual plan)",
     usesOAuth: "copilot" as const,
   },
-  groq: {
-    name: "Groq",
-    docsUrl: "https://console.groq.com/keys",
-    keyFormat: "gsk_...",
-    description: "Fast inference with Groq LPU",
-    usesOAuth: false,
-  },
   vertexai: {
     name: "Vertex AI",
     docsUrl: "https://console.cloud.google.com/vertex-ai",
     keyFormat: "GCP credentials",
     description: "Google Cloud AI models",
-    usesOAuth: false,
-  },
-  xai: {
-    name: "xAI",
-    docsUrl: "https://x.ai/",
-    keyFormat: "xai-...",
-    description: "Grok and other xAI models",
-    usesOAuth: false,
-  },
-  local: {
-    name: "Local Models",
-    docsUrl: "",
-    keyFormat: "N/A",
-    description: "Ollama, llama.cpp, and other local models",
     usesOAuth: false,
   },
 };
@@ -315,43 +280,6 @@ export const parseErrorMessage = (errorText: string, provider: string): string =
     }
     if (lowerError.includes("quota") || lowerError.includes("limit")) {
       return "Google API quota exceeded. Please check your quota limits in the Google Cloud Console.";
-    }
-  }
-
-  // Groq specific errors
-  if (provider === "groq") {
-    if (lowerError.includes("unauthorized") || lowerError.includes("401")) {
-      return "Invalid Groq API key. Please check your key at https://console.groq.com/keys";
-    }
-    if (lowerError.includes("rate limit") || lowerError.includes("429")) {
-      return "Groq rate limit exceeded. Please wait before trying again.";
-    }
-  }
-
-  // xAI specific errors
-  if (provider === "xai") {
-    if (lowerError.includes("unauthorized") || lowerError.includes("401")) {
-      return "Invalid xAI API key. Please check your account at https://x.ai/";
-    }
-  }
-
-  // Azure specific errors
-  if (provider === "azure") {
-    if (lowerError.includes("unauthorized") || lowerError.includes("401")) {
-      return "Invalid Azure credentials. Please check your Azure OpenAI deployment configuration.";
-    }
-    if (lowerError.includes("deployment")) {
-      return "Azure deployment issue. Please verify your deployment name and region in the Azure portal.";
-    }
-  }
-
-  // AWS Bedrock specific errors
-  if (provider === "bedrock") {
-    if (lowerError.includes("unauthorized") || lowerError.includes("403")) {
-      return "Invalid AWS credentials or insufficient permissions. Please check your IAM permissions for Bedrock.";
-    }
-    if (lowerError.includes("region")) {
-      return "AWS region issue. Please ensure Bedrock is available in your configured region.";
     }
   }
 
@@ -766,10 +694,8 @@ export function CombinedGeneralSettings({
   return (
     <div className="space-y-6">
       <div data-onboarding="ai-providers-settings">
-        <h2 className="text-2xl font-bold tracking-tight">
-          AI Provider Configuration
-        </h2>
-        <p className="text-muted-foreground">
+        <h2 className="text-sm font-semibold">AI Provider Configuration</h2>
+        <p className="text-sm text-muted-foreground">
           Connect your AI providers to enable model access and conversations.
         </p>
       </div>

@@ -28,6 +28,7 @@ Tools are organized by tags for filtering:
 | `tag:media` | Media generation (images, and later audio/video) |
 | `tag:planning` | Planning and task management tools |
 | `tag:readonly` | Does not modify files or code |
+| `tag:runs` | Start, inspect, control and message other top-level runs the user owns |
 | `tag:search` | Search operations |
 | `tag:shell` | Shell tools (bash on Unix, powershell on Windows) |
 | `tag:web` | Web operations |
@@ -42,7 +43,7 @@ Tools are organized by tags for filtering:
 - [Information Retrieval](#information-retrieval) (6 tools)
 - [Workflow Management](#workflow-management) (16 tools)
 - [System & Execution](#system--execution) (4 tools)
-- [Other Tools](#other-tools) (9 tools)
+- [Other Tools](#other-tools) (15 tools)
 
 ---
 
@@ -1350,8 +1351,8 @@ Delete a test scenario.
 
 Permanently removes the scenario from the workflow.
 
-The workflow defaults to the one this chat is editing. Pass id (a workflow UUID,
-slug, or name) only to delete a scenario on a different workflow.
+Pass id (required): the workflow UUID, slug, or name, as returned by
+create_workflow or list_workflows.
 
 ---
 
@@ -1364,8 +1365,8 @@ Make precise text replacements in a scenario's YAML definition.
 Use this for small changes like updating expected values or modifying events.
 The old_string must match exactly (including whitespace and indentation).
 
-The workflow defaults to the one this chat is editing. Pass id (a workflow UUID,
-slug, or name) only to edit a scenario on a different workflow.
+Pass id (required): the workflow UUID, slug, or name, as returned by
+create_workflow or list_workflows.
 
 **Example:**
 ```json
@@ -1404,7 +1405,7 @@ complete once it validates. The response always shows the resulting status and
 every current error and warning.
 
 **Parameters:**
-- id: (optional) Workflow UUID, slug, or name. Omit it to edit the workflow this chat is editing.
+- id: (required) Workflow UUID, slug, or name (the id returned by create_workflow, or from list_workflows).
 - old_string: (required) Exact text to replace.
 - new_string: (required) Replacement text.
 - expected_version: (optional) Version number for conflict detection.
@@ -1501,9 +1502,8 @@ WHEN TO USE:
 - To read a builtin or project workflow as a starting point
 
 PARAMETERS:
-- id: (optional) Workflow UUID, slug, or name — including a builtin or project
-  workflow name straight out of list_workflows. Omit it to get the workflow this
-  chat is editing.
+- id: (required) Workflow UUID, slug, or name — including a builtin or project
+  workflow name straight out of list_workflows, or the id from create_workflow.
 
 RETURNS:
 The complete workflow YAML with validation status. For editable drafts it also
@@ -1564,9 +1564,8 @@ List all test scenarios for the current workflow.
 Returns a summary of each scenario including name, description, and last run status.
 Use this to see what scenarios exist and their current state.
 
-No parameters are required. The workflow defaults to the one this chat is
-editing. Pass id (a workflow UUID, slug, or name) only to list scenarios for a
-different workflow.
+Pass id (required): the workflow UUID, slug, or name, as returned by
+create_workflow or list_workflows.
 
 ---
 
@@ -1600,8 +1599,8 @@ Use this after making changes to verify scenarios still pass.
 
 Use list_scenarios to see available scenario names.
 
-The workflow defaults to the one this chat is editing. Pass id (a workflow UUID,
-slug, or name) only to run a scenario on a different workflow.
+Pass id (required): the workflow UUID, slug, or name, as returned by
+create_workflow or list_workflows.
 
 ---
 
@@ -1614,8 +1613,8 @@ View a specific test scenario's full definition.
 Returns the complete scenario YAML including events, expectations, and last run results.
 Use this to examine a scenario's configuration or debug test failures.
 
-The workflow defaults to the one this chat is editing. Pass id (a workflow UUID,
-slug, or name) only to view a scenario on a different workflow.
+Pass id (required): the workflow UUID, slug, or name, as returned by
+create_workflow or list_workflows.
 
 ---
 
@@ -1671,8 +1670,8 @@ expect:
 - Nested loops: node: "outer_loop.inner_loop.call_llm"
 
 **Workflow selection:**
-Defaults to the workflow this chat is editing. Pass id (a workflow UUID, slug,
-or name) only to write a scenario on a different workflow.
+Pass id (required): the workflow UUID, slug, or name, as returned by
+create_workflow or list_workflows.
 
 **Example:**
 ```json
@@ -1710,7 +1709,7 @@ complete: false, which saves it as a draft. Pass complete: true to mark it
 complete once it validates.
 
 **Parameters:**
-- id: (optional) Workflow UUID, slug, or name. Omit it to write the workflow this chat is editing.
+- id: (required) Workflow UUID, slug, or name (the id returned by create_workflow, or from list_workflows).
 - name: (optional) Overrides the name in YAML. Used for display name.
 - content: (required) Complete workflow YAML content.
 - expected_version: (optional) Version number for conflict detection.
@@ -1932,12 +1931,18 @@ _Miscellaneous tools and utilities._
 |------|------|-------------|
 | [`ask_user`](#ask_user) | - | Ask the user one or more questions and wait for their responses. Use this when you need to: |
 | [`component_library`](#component_library) | readonly, coding:plan | Component library with 61 production-ready React/TypeScript components for building UIs, dashboar... |
+| [`control_run`](#control_run) | runs | Pause, resume or cancel another top-level run the user owns. |
 | [`generate_image`](#generate_image) | media | Generate an image from a text description. |
+| [`get_run`](#get_run) | runs, readonly | Check on one top-level run: its state, title, workflow, when it was created and last active, and ... |
+| [`list_runs`](#list_runs) | runs, readonly | List the user's recent top-level runs (chats), most recently active first, with the state of each... |
 | [`load_tool`](#load_tool) | coding:default, readonly, coding:plan | Dynamically load a tool by name or search for available tools. |
 | [`metadata_writer`](#metadata_writer) | - | Writes and updates project metadata YAML file |
+| [`send_to_run`](#send_to_run) | runs | Send a message to another top-level run that is still going, as if the user had typed it into tha... |
 | [`skill`](#skill) | coding:default, readonly, coding:plan | Load skills — specialized knowledge and instructions for specific tasks. |
 | [`spawn_send`](#spawn_send) | - | Send a message to a running sub-agent you spawned, or to your own parent agent. |
 | [`spawn_status`](#spawn_status) | readonly | Check on the sub-agents you (the calling thread) have spawned — list them all, or inspect and o... |
+| [`spawn_stop`](#spawn_stop) | - | Stop a sub-agent you spawned, when its work is no longer needed. |
+| [`start_run`](#start_run) | runs | Start a NEW top-level run — a separate chat the user can open and watch — and return immediat... |
 | [`worktree`](#worktree) | - | Manage git worktrees for parallel development workflows. |
 
 ### ask_user
@@ -1989,6 +1994,22 @@ CHARTS handle all coordinate math internally — pass data, get pixels. No spati
 
 ---
 
+### control_run
+
+**Tags:** `runs`
+
+Pause, resume or cancel another top-level run the user owns.
+
+- pause: park the run at its next step boundary. It stays alive and resumable.
+- resume: continue a paused (or interrupted) run from where it stopped.
+- cancel: hard-stop the run. This is terminal — a cancelled run is not resumed; sending it a message starts a fresh run in the same chat.
+
+THE RECEIPT IS HONEST: pause and cancel REQUEST the stop. A run in the middle of a long tool call stops when that call returns. Confirm with get_run.
+
+You cannot control the run you are executing in, and you can only touch runs the user owns. To stop a sub-agent you spawned, use spawn_stop.
+
+---
+
 ### generate_image
 
 **Tags:** `media`
@@ -2021,6 +2042,30 @@ NOTES:
 
 ---
 
+### get_run
+
+**Tags:** `runs`, `readonly`
+
+Check on one top-level run: its state, title, workflow, when it was created and last active, and an excerpt of the last thing its agent said.
+
+The state is the run's root workflow: pending, running, paused, completed, failed or cancelled. "completed" means the workflow reached its end, not that the work was right — read the excerpt.
+
+Only runs the user owns can be inspected. To check on a sub-agent you spawned, use spawn_status.
+
+---
+
+### list_runs
+
+**Tags:** `runs`, `readonly`
+
+List the user's recent top-level runs (chats), most recently active first, with the state of each run's root workflow.
+
+These are detached runs — the ones start_run creates and the ones the user starts themselves — not your own sub-agents (spawn_status lists those). Archived chats are not shown.
+
+Each entry has the run id (use it with get_run, control_run and send_to_run), title, workflow, project and state: pending, running, paused, completed, failed or cancelled. The run you are executing in is marked.
+
+---
+
 ### load_tool
 
 **Tags:** `coding:default`, `readonly`, `coding:plan`
@@ -2029,7 +2074,9 @@ Dynamically load a tool by name or search for available tools.
 
 Use this when you need a tool that isn't currently loaded. You can:
 - Load a specific tool by name: `{"name": "sourcegraph"}`
-- Search for tools by keyword: `{"query": "workflow"}`
+- Load every tool carrying a tag in one call: `{"name": "tag:workflow"}`
+  (each tool is still individually checked against what this agent may load)
+- Search for tools by keyword or tag name: `{"query": "workflow"}`
 
 Loaded tools become available immediately on the next turn.
 
@@ -2038,6 +2085,22 @@ Loaded tools become available immediately on the next turn.
 ### metadata_writer
 
 Writes and updates project metadata YAML file
+
+---
+
+### send_to_run
+
+**Tags:** `runs`
+
+Send a message to another top-level run that is still going, as if the user had typed it into that chat.
+
+ONLY LIVE RUNS: a run that is running or paused. If the run has finished, or has not started yet, this delivers nothing and says so (delivered: false) — it never starts or restarts a run. Use start_run for new work.
+
+A PAUSED run is resumed by the message, exactly as if the user had typed into the paused chat. If you do not want that, do not send it.
+
+THE RECEIPT IS HONEST: delivered means the message was saved to the run's thread and the run was nudged to look. It does NOT mean the run has read it or acted on it. Check with get_run.
+
+You cannot message the run you are executing in, and you can only message runs the user owns. To message a sub-agent you spawned, use spawn_send.
 
 ---
 
@@ -2129,6 +2192,53 @@ with timed_out: true and the agent untouched. Call spawn_status again with
 wait: true to keep waiting.
 
 Use spawn_send to message an agent that is still running.
+
+---
+
+### spawn_stop
+
+Stop a sub-agent you spawned, when its work is no longer needed.
+
+THE RECEIPT IS HONEST — READ IT LITERALLY:
+This REQUESTS the stop. The agent is not dead when this returns. A spawn runs
+as a cooperative loop and observes the cancellation at its NEXT STEP BOUNDARY,
+so an agent in the middle of a long tool call — a build, a test run, a wait —
+keeps going until that call returns. Do not treat the work it was doing as
+already abandoned.
+
+To confirm it actually stopped, call spawn_status(agent_id=..., wait: true).
+That blocks until the agent reaches a terminal state, and is the only thing
+that tells you the stop LANDED rather than that it was asked for.
+
+Only a DIRECT sub-agent of yours can be stopped. Your parent, your siblings
+and unrelated agents are rejected — stopping something you did not start is
+not yours to decide.
+
+If the agent has already finished this reports that and does nothing: a
+finished agent has no loop left to stop, and its result (if any) still stands.
+
+Reach for this when a fan-out has already answered the question, when you have
+changed approach and the delegated work is now wrong, or when an agent is
+clearly stuck. Prefer spawn_send to REDIRECT an agent whose work is still
+useful — stopping discards everything it has not reported yet.
+
+---
+
+### start_run
+
+**Tags:** `runs`
+
+Start a NEW top-level run — a separate chat the user can open and watch — and return immediately with its ids.
+
+This is not a sub-agent. A sub-agent (the agent tool) runs inside YOUR execution and reports back to you; a run started here is detached: it has its own chat, its own workflow and its own lifetime, and it keeps going whether or not you do. Use it for standing or parallel work that should outlive this conversation. Use the agent tool for work you need the answer to.
+
+The run belongs to the user, who can see it in the sidebar and stop it. It is NOT unattended: if it asks a question, it waits for the human.
+
+RETURNS the new chat id (also its run id for list_runs, get_run, control_run and send_to_run). The run is started, not finished — check on it with get_run.
+
+Calling this again with the same tool call (a retry) attaches to the run already started instead of starting a second one.
+
+LIMITS: an agent-started run may start further runs, but only 3 levels deep, and the user may have at most 10 agent-started runs live at once. Past either limit this fails; finish or cancel something first.
 
 ---
 

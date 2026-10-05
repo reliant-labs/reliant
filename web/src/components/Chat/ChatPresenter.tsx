@@ -6,7 +6,7 @@
  */
 
 import { useRef, useState, memo, useMemo, useEffect, useCallback } from "react";
-import { GripHorizontal, GripVertical } from "lucide-react";
+import { GripHorizontal, GripVertical, Loader2 } from "lucide-react";
 import { ChatInputWrapper } from "./ChatInputWrapper";
 import { ChatThinkingIndicator } from "./ChatThinkingIndicator";
 import { ChatMessagesContainer } from "./ChatMessagesContainer";
@@ -95,6 +95,12 @@ interface ChatPresenterProps {
   isLoadingOlderMessages?: boolean;
   hasOlderMessages?: boolean;
 
+  /**
+   * The transcript on screen is the chat's cached state and the stream has
+   * not yet delivered what changed since (snapshot or replay outstanding).
+   */
+  isChatSyncing?: boolean;
+
   /** The host shows the chat's title itself; see ChatHeader.hideTitle. */
   hideChatTitle?: boolean;
 }
@@ -125,6 +131,7 @@ export const ChatPresenter = memo(function ChatPresenter({
   onLoadOlderMessages,
   isLoadingOlderMessages,
   hasOlderMessages,
+  isChatSyncing = false,
   hideChatTitle,
 }: ChatPresenterProps) {
   const chatInputRef = useRef<HTMLTextAreaElement>(null);
@@ -571,6 +578,29 @@ export const ChatPresenter = memo(function ChatPresenter({
             errorEvents.length > 0 ||
             infoEvents.length > 0) &&
             renderTimeline()}
+          {/* Cached transcript, live catch-up still in flight. Overlaid
+              rather than inserted, so the transcript never shifts when it
+              appears or clears, and non-interactive so it never blocks
+              scrolling or text selection beneath it. */}
+          {isChatSyncing && (
+            <div
+              role="status"
+              data-testid="chat-syncing-indicator"
+              className="pointer-events-none absolute inset-x-0 top-2 z-10 flex justify-center"
+            >
+              <span className="flex items-center gap-1.5 rounded-full border border-border bg-card/90 px-2.5 py-1 text-xs text-muted-foreground shadow-sm">
+                <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
+                Syncing…
+              </span>
+            </div>
+          )}
+          {/* Inside the transcript frame, anchored to its bottom edge, so the
+              band between the transcript and the composer (queued strip,
+              background-work pill, permissions) can never sit on top of it. */}
+          <ScrollToBottomButton
+            visible={!timelineAtBottom}
+            onClick={scrollToBottom}
+          />
         </ChatMessagesContainer>
         )}
 
@@ -640,12 +670,6 @@ export const ChatPresenter = memo(function ChatPresenter({
           </div>
         )}
 
-
-        {/* Floating scroll-to-bottom button */}
-        <ScrollToBottomButton
-          visible={!timelineAtBottom}
-          onClick={scrollToBottom}
-        />
 
         {/* Input Area - Collapsible when not focused, hidden when workflow viewer is expanded in inline mode */}
         {!(isWorkflowViewerExpanded && workflowViewerMode === 'inline') && isFocused && showTakeOverBar && chatForQueue ? (

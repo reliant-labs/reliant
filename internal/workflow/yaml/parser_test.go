@@ -10,6 +10,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	"google.golang.org/protobuf/proto"
+	yamlv3 "gopkg.in/yaml.v3"
 )
 
 // ---------------------------------------------------------------------------
@@ -1603,32 +1604,32 @@ func builtinDir() string {
 }
 
 func TestBuiltinWorkflow_Agent(t *testing.T) {
-	testBuiltinWorkflowFile(t, "agent.yaml")
+	testBuiltinWorkflowFile(t, filepath.Join(builtinDir(), "agent.yaml"))
 }
 
 func TestBuiltinWorkflow_StructuredAgent(t *testing.T) {
-	testBuiltinWorkflowFile(t, "structured-agent.yaml")
+	testBuiltinWorkflowFile(t, filepath.Join(builtinDir(), "structured-agent.yaml"))
 }
 
 func TestBuiltinWorkflow_OneRing(t *testing.T) {
-	testBuiltinWorkflowFile(t, "one-ring.yaml")
+	testBuiltinWorkflowFile(t, filepath.Join("testdata", "one-ring.yaml"))
 }
 
 func TestBuiltinWorkflow_ParallelCompete(t *testing.T) {
-	testBuiltinWorkflowFile(t, "parallel-compete.yaml")
+	testBuiltinWorkflowFile(t, filepath.Join(builtinDir(), "parallel-compete.yaml"))
 }
 
 func TestBuiltinWorkflow_ParallelLoopSample(t *testing.T) {
-	testBuiltinWorkflowFile(t, "parallel-loop-sample.yaml")
+	testBuiltinWorkflowFile(t, filepath.Join("testdata", "parallel-loop-sample.yaml"))
 }
 
 func TestBuiltinWorkflow_AuditingAgent(t *testing.T) {
-	testBuiltinWorkflowFile(t, "auditing-agent.yaml")
+	testBuiltinWorkflowFile(t, filepath.Join("testdata", "auditing-agent.yaml"))
 }
 
-func testBuiltinWorkflowFile(t *testing.T, filename string) {
+func testBuiltinWorkflowFile(t *testing.T, path string) {
 	t.Helper()
-	path := filepath.Join(builtinDir(), filename)
+	filename := filepath.Base(path)
 	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Skipf("skipping: %v", err)
@@ -1863,4 +1864,57 @@ edges:
 	if wfCamel.GetResumeNode() != "a" {
 		t.Fatalf("resumeNode alias not parsed: got %q", wfCamel.GetResumeNode())
 	}
+}
+
+func TestCelModelSelector_Literal_Settings(t *testing.T) {
+	src := `
+name: test
+nodes:
+  - id: n1
+    type: call_llm
+    args:
+      model:
+        tags: [flagship]
+        thinking_level: low
+        temperature: 0
+        compaction_threshold: 90000
+`
+	wf, err := ParseWorkflow([]byte(src))
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	ms := wf.Nodes[0].GetCallLlm().Model.GetLiteral()
+	if ms.GetThinkingLevel() != "low" || ms.Temperature == nil || ms.GetTemperature() != 0 || ms.CompactionThreshold == nil || ms.GetCompactionThreshold() != 90000 {
+		t.Fatalf("settings not parsed: %v", ms)
+	}
+	node, err := marshalModelSelector(ms)
+	if err != nil {
+		t.Fatal(err)
+	}
+	back := &reliantv1.ModelSelector{}
+	if err := unmarshalModelSelector(node, back); err != nil {
+		t.Fatal(err)
+	}
+	if back.GetThinkingLevel() != "low" || back.Temperature == nil || back.GetCompactionThreshold() != 90000 {
+		t.Errorf("round trip lost settings: %v", back)
+	}
+}
+
+func TestModelInputDefault_Settings(t *testing.T) {
+	cfg, err := unmarshalModelInputConfig(mustNode(t, "type: model\ndefault:\n  tags: [fast]\n  temperature: 0\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Default.Temperature == nil || cfg.Default.GetTemperature() != 0 {
+		t.Errorf("default temperature lost: %v", cfg.Default)
+	}
+}
+
+func mustNode(t *testing.T, src string) *yamlv3.Node {
+	t.Helper()
+	var doc yamlv3.Node
+	if err := yamlv3.Unmarshal([]byte(src), &doc); err != nil {
+		t.Fatal(err)
+	}
+	return doc.Content[0]
 }

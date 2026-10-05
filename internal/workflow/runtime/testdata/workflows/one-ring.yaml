@@ -1,0 +1,500 @@
+name: one-ring
+apiVersion: "0.0.5"
+description: |
+  Unified development pipeline: planning → write_tests → [get-it-right loop] → complete.
+
+  Planning runs in a sub-workflow fork with optional research/criticize/revise steps.
+  Only the final plan summary is saved to the main thread.
+
+  The implementation loop is delegated to get-it-right, which handles:
+    - implement: build the requested changes from scratch each iteration
+    - review: evaluate the implementation, decide: pass, continue, or refactor
+    - refactor: (conditional) undo the problematic work before the next attempt
+
+  Each iteration starts fresh (memo: false). The reviewer's feedback is the only
+  bridge between iterations.
+
+  Thread architecture:
+    Main thread: [user msg] → [final plan] → [test summary] → [impl loop summary]
+    Planning fork: [user msg] → [research?] → [plan conversation] → [criticize?] → [revise?]  (discarded after plan saved)
+    get-it-right manages its own thread architecture internally.
+
+  Strategy enum (from get-it-right):
+    - "pass" — implementation is correct and complete. Break the loop.
+    - "continue" — implementation is incomplete, go back to implement. Skip refactor.
+    - "refactor" — approach is fundamentally wrong. Undo, then fresh attempt.
+
+entry: [classify]
+
+inputs:
+  mode:
+    type: enum
+    ui: toolbar
+    default: auto
+    description: Execution mode for agent steps.
+    enum: [manual, auto, plan]
+
+  model:
+    type: model
+    description: Model used for all LLM sub-agents in this pipeline
+    default:
+      tags: [flagship]
+
+  steps:
+    type: enum
+    ui: toolbar
+    default: [plan, implement]
+    description: Steps to include in the pipeline.
+    multi: true
+    enum:
+      - research    # Research phase before planning
+      - plan
+      - criticize   # Critique the plan
+      - revise      # Revise the plan based on critique
+      - tdd         # Enables write_tests
+      - implement
+      - lint        # Enable linting in the implementation loop
+      - test        # Enable testing in the implementation loop
+      - build       # Enable building in the implementation loop
+      - start_app   # Start dev server for UX review during implementation
+
+  refine_prompt:
+    type: boolean
+    default: false
+    description: |
+      When true, refines the user's request into a clear, unambiguous specification
+      before planning begins. Helps prevent wasted iterations from misinterpretation.
+
+  ask:
+    type: boolean
+    ui: toolbar
+    default: true
+    description: Pause for user review after plan and implement steps.
+
+  max_retries:
+    type: integer
+    default: 10
+    min: 1
+    max: 50
+    description: Maximum implementation loop iterations before giving up.
+
+  temperature:
+    type: number
+    default: 1.0
+    min: 0
+    max: 1
+    description: Response randomness for implementation agents.
+
+  thinking_level:
+    type: enum
+    enum: [low, medium, high, xhigh]
+    default: medium
+    description: Extended thinking level for implementation agents.
+
+  lint_command:
+    type: string
+    default: npm run lint
+    description: Command to run linting.
+
+  lint_log:
+    type: string
+    default: ./.reliant/data/one-ring/lint.log
+    description: File path for lint output.
+
+  test_command:
+    type: string
+    default: npm test
+    description: Command to run tests.
+
+  test_log:
+    type: string
+    default: ./.reliant/data/one-ring/test.log
+    description: File path for test output.
+
+  build_command:
+    type: string
+    default: npm run build
+    description: Command to run builds.
+
+  build_log:
+    type: string
+    default: ./.reliant/data/one-ring/build.log
+    description: File path for build output.
+
+  start_app_command:
+    type: string
+    default: npm run dev
+    description: Command to start the application for UX review.
+
+  context_bridge:
+    type: enum
+    default: feedback_only
+    description: |
+      How much context flows between implementation loop iterations (passed to get-it-right).
+      - feedback_only: Review feedback saved to parent thread. Implement forks fresh each time but sees accumulated feedback.
+      - full: Both implement and review use memo:true, accumulating full conversation.
+      - none: Both fork fresh each time. Relies on sampling diversity.
+    enum: [feedback_only, full, none]
+
+# Thread design:
+# - Planning forks from main thread (gets user msg). Each sub-step forks again.
+#   Only the final plan is saved to main. Research/criticism stays in forks.
+# - write_tests forks from main: sees only [user msg, final plan]. Clean.
+# - impl_loop delegates to get-it-right which manages its own thread architecture.
+
+nodes:
+  # ── Classification router ────────────────────────────────────────────────────
+  #
+  # Routes the user's request to the best starting phase based on complexity
+  # and clarity of the task.
+
+  - id: classify
+    type: router
+    model:
+      tags: [fast, smart]
+    system_prompt: |
+      Classify the user's request to determine the best starting phase.
+      Consider the complexity, clarity, and nature of the task.
+    nodes:
+      - id: refine_prompt
+        description: "Complex task that needs research, planning, and design before implementation. Use for multi-step features, architectural changes, or tasks requiring investigation."
+      - id: write_tests
+        description: "Clear task where TDD approach is appropriate. Use when requirements are well-defined and tests should be written first."
+      - id: impl_loop
+        description: "Simple, well-defined task that can go straight to implementation. Use for bug fixes, small changes, or tasks with clear specifications."
+    fallback: refine_prompt
+
+  # ── Prompt refinement (optional) ─────────────────────────────────────────────
+  #
+  # When refine_prompt is true, refines the user's request into a clear spec
+  # before planning begins. Saves the improved prompt to the thread.
+
+  - id: refine_prompt
+    type: call_llm
+    condition: "inputs.refine_prompt"
+    args:
+      model: "{{inputs.model}}"
+      system_prompt: |
+        You are a prompt engineer. Your job is to take the task description and improve it into a clear, detailed specification that a developer could implement unambiguously.
+
+        Include:
+        - Clear acceptance criteria
+        - Edge cases to handle
+        - Any constraints or requirements
+        - Expected behavior
+
+        Output ONLY the improved prompt, no preamble.
+    save_message:
+      role: assistant
+      content: |
+        ## Refined Specification
+        {{output.message.text}}
+
+  # ── Planning phase (sub-workflow, runs once) ────────────────────────────────
+  #
+  # Forks from main thread. Inner nodes each fork again (double fork).
+  # Only the plan summary is saved to the main thread.
+  # Supports optional research → plan → criticize → revise pipeline.
+
+  - id: planning
+    type: workflow
+    thread:
+      mode: fork
+      memo: false
+    inline:
+      entry: [research]
+
+      outputs:
+        plan_summary: >
+          {{has(nodes.revise) && has(nodes.revise.response_text)
+            ? nodes.revise.response_text
+            : has(nodes.plan) && has(nodes.plan.response_text)
+              ? nodes.plan.response_text
+              : ''}}
+
+      nodes:
+        - id: research
+          type: workflow
+          condition: "'research' in inputs.steps"
+          ref: builtin://agent
+          presets:
+            default: researcher
+          args:
+            model: "{{inputs.model}}"
+            mode: "{{inputs.mode}}"
+          thread:
+            mode: fork
+            memo: false
+            inject:
+              role: user
+              content: |
+                ## Pipeline Step: Research
+                Gather context, constraints, and relevant information before planning.
+                Explore the codebase, read documentation, and identify key patterns.
+          save_message:
+            role: assistant
+            content: |
+              ## Research Findings
+              {{output.response_text}}
+
+        - id: plan
+          type: workflow
+          condition: "'plan' in inputs.steps"
+          ref: builtin://agent
+          presets:
+            default: planner
+          args:
+            model: "{{inputs.model}}"
+            ask: "{{inputs.ask}}"
+            mode: "{{inputs.mode}}"
+          thread:
+            mode: fork
+            memo: false
+            inject:
+              role: user
+              content: |
+                ## Pipeline Step: Plan
+                Produce a concise, actionable plan aligned with the task.
+
+                **Spawn researchers** to investigate the codebase before planning. Delegate all investigation
+                to researcher agents — they use cheaper models and free you to focus on synthesis.
+
+                Structure the plan to maximize parallelization — group independent tasks that can run
+                concurrently and explicitly call out dependencies between tasks.
+          save_message:
+            role: assistant
+            content: |
+              ## Plan
+              {{output.response_text}}
+
+        - id: criticize
+          type: workflow
+          condition: "'criticize' in inputs.steps"
+          ref: builtin://agent
+          presets:
+            default: planner
+          args:
+            model: "{{inputs.model}}"
+            mode: "{{inputs.mode}}"
+          thread:
+            mode: fork
+            memo: false
+            inject:
+              role: user
+              content: |
+                ## Pipeline Step: Criticize
+                Critique the current plan. Identify risks, gaps, overcomplications, and potential issues.
+                Be specific — point to concrete problems, not vague concerns.
+          save_message:
+            role: assistant
+            content: |
+              ## Plan Critique
+              {{output.response_text}}
+
+        - id: revise
+          type: workflow
+          condition: "'revise' in inputs.steps"
+          ref: builtin://agent
+          presets:
+            default: planner
+          args:
+            model: "{{inputs.model}}"
+            mode: "{{inputs.mode}}"
+          thread:
+            mode: fork
+            memo: false
+            inject:
+              role: user
+              content: |
+                ## Pipeline Step: Revise
+                Revise the plan based on the critique. Address the identified risks and gaps.
+                Produce a final, improved plan.
+          save_message:
+            role: assistant
+            content: |
+              ## Revised Plan
+              {{output.response_text}}
+
+      edges:
+        - from: research
+          default: plan
+        - from: plan
+          default: criticize
+        - from: criticize
+          default: revise
+      ui:
+        positions:
+          workflow:
+            x: 50
+            y: 200
+          research:
+            x: 400
+            y: 200
+          plan:
+            x: 750
+            y: 200
+          criticize:
+            x: 1100
+            y: 200
+          revise:
+            x: 1450
+            y: 200
+
+    save_message:
+      role: assistant
+      content: >-
+        {{output.plan_summary != '' ? '## Final Plan\n' + output.plan_summary : ''}}
+
+  # ── TDD (runs once, clean context) ─────────────────────────────────────────
+  #
+  # Forks from main thread which at this point has: [user msg, final plan].
+  # No research details, no criticism — just what the test writer needs.
+
+  - id: write_tests
+    type: workflow
+    condition: "'tdd' in inputs.steps"
+    ref: builtin://agent
+    presets:
+      default: tester
+    args:
+      model: "{{inputs.model}}"
+      mode: "{{inputs.mode}}"
+    thread:
+      mode: fork
+      memo: false
+      inject:
+        role: user
+        content: |
+          ## Pipeline Step: Write Tests (TDD)
+          Write failing tests for the planned functionality before implementation.
+          Focus on:
+          - Unit tests for the core logic
+          - Edge cases and error conditions
+          - Integration points if applicable
+          
+          The tests should fail initially — they will pass after implementation.
+    save_message:
+      role: assistant
+      content: |
+        ## Test Suite Created
+        {{output.response_text}}
+
+  # ── Implementation loop (delegated to get-it-right) ─────────────────────────
+  #
+  # get-it-right handles the full implement → review → [refactor?] → loop.
+  # Each iteration starts fresh with only the reviewer's feedback as context.
+
+  - id: impl_loop
+    type: workflow
+    condition: "'implement' in inputs.steps"
+    ref: builtin://get-it-right
+    args:
+      model: "{{inputs.model}}"
+      mode: "{{inputs.mode}}"
+      max_retries: "{{inputs.max_retries}}"
+      ask: "{{inputs.ask}}"
+      temperature: "{{inputs.temperature}}"
+      thinking_level: "{{inputs.thinking_level}}"
+      context_bridge: "{{inputs.context_bridge}}"
+      lint_command: "{{'lint' in inputs.steps ? inputs.lint_command : ''}}"
+      lint_log: "{{inputs.lint_log}}"
+      test_command: "{{'test' in inputs.steps ? inputs.test_command : ''}}"
+      test_log: "{{inputs.test_log}}"
+      build_command: "{{'build' in inputs.steps ? inputs.build_command : ''}}"
+      build_log: "{{inputs.build_log}}"
+      start_app_command: "{{'start_app' in inputs.steps ? inputs.start_app_command : ''}}"
+    thread:
+      mode: fork
+      memo: false
+      inject:
+        role: user
+        content: |
+          ## Implementation Phase
+
+          Implement the requested changes. The plan and any test setup are in the context above.
+    save_message:
+      role: assistant
+      content: |
+        ## Implementation Complete
+        Strategy: {{has(output.eval_strategy) ? output.eval_strategy : 'N/A'}}
+        Grade: {{has(output.review_grade) ? output.review_grade : 'N/A'}}
+        Iterations: {{has(output.iterations) ? output.iterations : 'N/A'}}
+
+  # ── Completion ──────────────────────────────────────────────────────────────
+
+  - id: success
+    type: save_message
+    outcome: success
+    args:
+      role: assistant
+      content: |
+        ## Pipeline Complete
+        
+        All checks passed and implementation approved.
+
+  - id: max_retries_reached
+    type: save_message
+    # Out of retries with the gate still red — the run ended, the work did not
+    # pass, and the graph reaching this node is the only place that is known.
+    outcome: failure
+    args:
+      role: assistant
+      content: |
+        ## Pipeline Stopped
+
+        Reached maximum retries ({{inputs.max_retries}}).
+
+        Final status:
+        - Lint: {{has(nodes.impl_loop.lint_exit) ? (nodes.impl_loop.lint_exit == 0 ? 'passed' : 'failed (exit ' + string(nodes.impl_loop.lint_exit) + ')') : 'skipped'}}
+        - Test: {{has(nodes.impl_loop.test_exit) ? (nodes.impl_loop.test_exit == 0 ? 'passed' : 'failed (exit ' + string(nodes.impl_loop.test_exit) + ')') : 'skipped'}}
+        - Build: {{has(nodes.impl_loop.build_exit) ? (nodes.impl_loop.build_exit == 0 ? 'passed' : 'failed (exit ' + string(nodes.impl_loop.build_exit) + ')') : 'skipped'}}
+        - Review: {{has(nodes.impl_loop.review_grade) ? nodes.impl_loop.review_grade : 'N/A'}}
+        - Strategy: {{has(nodes.impl_loop.eval_strategy) ? nodes.impl_loop.eval_strategy : 'N/A'}}
+
+outputs:
+  # classify can route straight to impl_loop, so planning may never run.
+  plan_summary: "{{has(nodes.planning) && has(nodes.planning.plan_summary) ? nodes.planning.plan_summary : ''}}"
+  review_grade: "{{has(nodes.impl_loop) && has(nodes.impl_loop.review_grade) ? nodes.impl_loop.review_grade : 'N/A'}}"
+  eval_strategy: "{{has(nodes.impl_loop) && has(nodes.impl_loop.eval_strategy) ? nodes.impl_loop.eval_strategy : 'pass'}}"
+  iterations: "{{has(nodes.impl_loop) && has(nodes.impl_loop.iterations) ? nodes.impl_loop.iterations : 0}}"
+
+edges:
+  - from: refine_prompt
+    default: planning
+  - from: planning
+    default: write_tests
+  - from: write_tests
+    default: impl_loop
+  - from: impl_loop
+    cases:
+      - to: max_retries_reached
+        condition: >
+          has(nodes.impl_loop.eval_strategy) && nodes.impl_loop.eval_strategy != 'pass'
+    default: success
+
+ui:
+  positions:
+    workflow:
+      x: -120
+      y: 830
+    classify:
+      x: 200
+      y: 820
+    refine_prompt:
+      x: 375
+      y: 820
+    planning:
+      x: 550
+      y: 820
+    write_tests:
+      x: 900
+      y: 820
+    impl_loop:
+      x: 1250
+      y: 820
+    success:
+      x: 1600
+      y: 760
+    max_retries_reached:
+      x: 1600
+      y: 920

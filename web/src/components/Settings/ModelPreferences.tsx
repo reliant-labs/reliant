@@ -7,6 +7,7 @@ import {
   deleteSettingIfExists,
 } from "../../lib/settingsPersistence";
 import { cn } from "../../lib/utils";
+import { localSourceGroupLabel, pinnedRefOf, pinRefFor } from "./localModels";
 
 // ---------------------------------------------------------------------------
 // Types & constants
@@ -38,6 +39,31 @@ export interface TagModelConfig {
   thinking_level?: string;     // "" = auto / model default
   temperature?: number;        // undefined = auto / model default
   compaction_threshold?: number;
+  /** Mirrors ModelSelector.providers; ["local:<daemonId>"] pins a local model to its machine. */
+  providers?: string[];
+}
+
+const LOCAL_CHOICE_SEP = "||";
+
+/** Option value for a model in the chooser: local models carry where they are served. */
+export function modelChoiceValue(m: { id: string; local?: { daemonId: string; endpointId: string; machineName: string } }): string {
+  return m.local ? `${pinRefFor(m.local)}${LOCAL_CHOICE_SEP}${m.id}` : m.id;
+}
+
+/** Inverse of modelChoiceValue, as the patch to apply to a tag config. */
+export function parseModelChoice(value: string): Pick<TagModelConfig, "model_id" | "providers"> {
+  const sep = value.indexOf(LOCAL_CHOICE_SEP);
+  if ((value.startsWith("local:") || value.startsWith("endpoint:")) && sep > 0) {
+    return { model_id: value.slice(sep + LOCAL_CHOICE_SEP.length), providers: [value.slice(0, sep)] };
+  }
+  return { model_id: value || undefined, providers: undefined };
+}
+
+/** The chooser value a saved config corresponds to. */
+export function configChoiceValue(config: TagModelConfig): string {
+  const ref = pinnedRefOf(config.providers);
+  if (config.model_id && ref) return `${ref}${LOCAL_CHOICE_SEP}${config.model_id}`;
+  return config.model_id ?? "";
 }
 
 const THINKING_LEVELS = [
@@ -47,7 +73,6 @@ const THINKING_LEVELS = [
   { value: "high", label: "High" },
   { value: "xhigh", label: "Extra High" },
   { value: "max", label: "Max" },
-  { value: "ultra", label: "Ultra" },
 ] as const;
 
 // ---------------------------------------------------------------------------
@@ -157,15 +182,25 @@ export function ModelPreferences({ providers }: ModelPreferencesProps) {
   // Models for a given tag (only from configured providers)
   const getModelsForTag = useCallback(
     (tag: string) =>
-      models.filter((m) => m.tags?.includes(tag) && isConfiguredModel(m)),
+      models.filter((m) => !m.local && m.tags?.includes(tag) && isConfiguredModel(m)),
     [models, isConfiguredModel]
   );
 
   // All models from configured providers (for the explicit picker)
   const allConfiguredModels = useMemo(
-    () => models.filter(isConfiguredModel),
+    () => models.filter((m) => !m.local && isConfiguredModel(m)),
     [models, isConfiguredModel]
   );
+
+  const localModels = useMemo(() => models.filter((m) => m.local), [models]);
+  const localGroups = useMemo(() => {
+    const groups = new Map<string, typeof models>();
+    for (const m of localModels) {
+      const label = localSourceGroupLabel(m.local!);
+      groups.set(label, [...(groups.get(label) ?? []), m]);
+    }
+    return [...groups.entries()].sort(([a], [b]) => a.localeCompare(b));
+  }, [localModels]);
 
   const groupByProvider = useCallback(
     (list: typeof models) => {
@@ -213,6 +248,21 @@ export function ModelPreferences({ providers }: ModelPreferencesProps) {
     }
   };
 
+  const handleModelChange = async (tag: PreferenceTag, value: string) => {
+    const updated: TagModelConfig = { ...(configs[tag] ?? {}), ...parseModelChoice(value) };
+    if (!updated.model_id) delete updated.model_id;
+    if (!updated.providers) delete updated.providers;
+    setConfigs((prev) => ({ ...prev, [tag]: updated }));
+    setSaving((prev) => ({ ...prev, [tag]: true }));
+    try {
+      await saveTagConfig(tag, updated);
+    } catch (e) {
+      console.error(`Failed to save ${tag} config:`, e);
+    } finally {
+      setSaving((prev) => ({ ...prev, [tag]: false }));
+    }
+  };
+
   if (modelsLoading || loading) {
     return (
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -225,8 +275,9 @@ export function ModelPreferences({ providers }: ModelPreferencesProps) {
   return (
     <div>
       <p className="text-sm text-muted-foreground mb-4">
-        These apply to every new chat — override per-chat in the model settings
-        popover.
+        These apply to every run that uses a model tier — new and existing
+        chats, sub-agents and scheduled runs. A model value set explicitly in a
+        chat's model settings popover or by a workflow takes precedence.
       </p>
 
       <div className="space-y-1">
@@ -238,13 +289,26 @@ export function ModelPreferences({ providers }: ModelPreferencesProps) {
           const isSaving = saving[tag] ?? false;
 
           // Display info
-          const resolvedModel = config.model_id
-            ? models.find(
-                (m) =>
-                  m.id === config.model_id ||
-                  m.id.split("@")[0] === config.model_id
+          const pinnedLocalDaemon = pinnedRefOf(config.providers);
+          const pinnedIsEndpoint = !!pinnedLocalDaemon?.startsWith("endpoint:");
+          const pinnedLocalModel = pinnedLocalDaemon
+            ? localModels.find(
+                (m) => m.id === config.model_id && pinRefFor(m.local!) === pinnedLocalDaemon
               )
-            : resolveTag(tag);
+            : undefined;
+          const localOffline =
+            !!pinnedLocalDaemon && !(pinnedLocalModel?.local?.online ?? false);
+          const resolvedModel = pinnedLocalDaemon
+            ? localOffline
+              ? resolveTag(tag)
+              : pinnedLocalModel
+            : config.model_id
+              ? models.find(
+                  (m) =>
+                    m.id === config.model_id ||
+                    m.id.split("@")[0] === config.model_id
+                )
+              : resolveTag(tag);
           const displayName = resolvedModel?.name ?? "auto";
           const hasOverrides =
             !!config.model_id ||
@@ -307,14 +371,8 @@ export function ModelPreferences({ providers }: ModelPreferencesProps) {
                     </label>
                     <div className="relative flex-1">
                       <select
-                        value={config.model_id ?? ""}
-                        onChange={(e) =>
-                          handleFieldChange(
-                            tag,
-                            "model_id",
-                            e.target.value || undefined
-                          )
-                        }
+                        value={configChoiceValue(config)}
+                        onChange={(e) => handleModelChange(tag, e.target.value)}
                         className="w-full px-2.5 py-1.5 pr-8 border border-input bg-background rounded-md appearance-none cursor-pointer text-xs disabled:opacity-50"
                       >
                         <option value="">Auto (first available)</option>
@@ -342,10 +400,42 @@ export function ModelPreferences({ providers }: ModelPreferencesProps) {
                               ))}
                           </optgroup>
                         )}
+                        {localGroups.map(([label, groupModels]) => (
+                          <optgroup key={label} label={label}>
+                            {groupModels.map((m) => (
+                              <option
+                                key={modelChoiceValue(m)}
+                                value={modelChoiceValue(m)}
+                                disabled={!m.local!.online}
+                              >
+                                {m.name}
+                                {m.local!.online ? "" : " (offline)"}
+                              </option>
+                            ))}
+                          </optgroup>
+                        ))}
+                        {pinnedLocalDaemon && !pinnedLocalModel && config.model_id && (
+                          <option value={configChoiceValue(config)} disabled>
+                            {config.model_id} (unavailable)
+                          </option>
+                        )}
                       </select>
                       <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
                     </div>
                   </div>
+                  {localOffline && (
+                    <p
+                      data-testid="local-offline-note"
+                      className="text-2xs text-muted-foreground ml-[6.75rem]"
+                    >
+                      {pinnedIsEndpoint
+                        ? pinnedLocalModel
+                          ? `${pinnedLocalModel.local?.machineName} is offline`
+                          : "That custom endpoint is unavailable"
+                        : `${pinnedLocalModel?.local?.machineName ?? "That machine"} is offline`}
+                      {" — using the default for this tier."}
+                    </p>
+                  )}
 
                   {/* Thinking Level */}
                   <div className="flex items-center gap-3">
@@ -374,8 +464,9 @@ export function ModelPreferences({ providers }: ModelPreferencesProps) {
                     </div>
                   </div>
 
-                  {/* Temperature */}
-                  <div className="flex items-center gap-3">
+                  {/* Temperature: only where the model+driver honors it */}
+                  {resolvedModel?.supportsTemperature !== false && (
+                  <div className="flex items-center gap-3" data-testid="temperature-control">
                     <label className="text-xs font-medium text-muted-foreground w-24 shrink-0">
                       Temperature
                     </label>
@@ -401,7 +492,7 @@ export function ModelPreferences({ providers }: ModelPreferencesProps) {
                       <span className="text-xs text-muted-foreground min-w-8 text-right tabular-nums">
                         {config.temperature !== undefined
                           ? config.temperature.toFixed(1)
-                          : "auto"}
+                          : "Default"}
                       </span>
                       {config.temperature !== undefined && (
                         <button
@@ -415,6 +506,7 @@ export function ModelPreferences({ providers }: ModelPreferencesProps) {
                       )}
                     </div>
                   </div>
+                  )}
 
                   {/* Compaction */}
                   <div className="flex items-center gap-3">

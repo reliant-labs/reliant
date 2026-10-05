@@ -4,6 +4,7 @@ package tools
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/reliant-labs/reliant/internal/rctx"
@@ -28,7 +29,9 @@ const loadToolDescription = `Dynamically load a tool by name or search for avail
 
 Use this when you need a tool that isn't currently loaded. You can:
 - Load a specific tool by name: {"name": "sourcegraph"}
-- Search for tools by keyword: {"query": "workflow"}
+- Load every tool carrying a tag in one call: {"name": "tag:workflow"}
+  (each tool is still individually checked against what this agent may load)
+- Search for tools by keyword or tag name: {"query": "workflow"}
 
 Loaded tools become available immediately on the next turn.`
 
@@ -74,11 +77,81 @@ func (t *loadToolTool) Execute(rctx *rctx.ToolContext, params LoadToolParams) (T
 
 	// Search mode
 	if params.Query != "" {
-		return t.searchTools(scopeKey, params.Query, permission), nil
+		return t.searchTools(rctx, scopeKey, params.Query, permission), nil
 	}
 
 	// Load mode
+	if tag, ok := strings.CutPrefix(params.Name, "tag:"); ok {
+		return t.loadTag(rctx, tag, permission), nil
+	}
 	return t.loadTool(rctx, params.Name, permission), nil
+}
+
+// loadTag loads every registry tool carrying tag. Each tool goes through
+// loadTool, so loadable_tools and the permission ladder apply per tool.
+func (t *loadToolTool) loadTag(rctx *rctx.ToolContext, tag string, permission string) ToolResponse {
+	if _, known := TagDescriptions[ToolTag(tag)]; !known {
+		known := make([]string, 0, len(TagDescriptions))
+		for k := range TagDescriptions {
+			known = append(known, string(k))
+		}
+		sort.Strings(known)
+		return NewTextErrorResponse(fmt.Sprintf("Unknown tag '%s'. Known tags: %s.", tag, strings.Join(known, ", ")))
+	}
+
+	var loaded, already, refused, names []string
+	for _, def := range GetToolRegistry() {
+		for _, dt := range def.Tags {
+			if string(dt) == tag {
+				names = append(names, def.Name)
+				break
+			}
+		}
+	}
+	sort.Strings(names)
+
+	if len(names) == 0 {
+		msg := fmt.Sprintf("Tag '%s' is known but no built-in tools carry it, so nothing was loaded.", tag)
+		if ToolTag(tag) == TagMCP {
+			msg += " MCP tools load individually by their `mcp__...` name, e.g. load_tool(name=\"mcp__server__tool\")."
+		}
+		return NewTextResponse(msg)
+	}
+
+	store := GetLoadedToolsStore()
+	scopeKey := Scope(GetChatID(rctx), rctx.Thread)
+	for _, name := range names {
+		wasLoaded := store.Has(scopeKey, name)
+		resp := t.loadTool(rctx, name, permission)
+		switch {
+		case resp.IsError:
+			refused = append(refused, fmt.Sprintf("%s (%s)", name, resp.Content))
+		case wasLoaded:
+			already = append(already, name)
+		default:
+			loaded = append(loaded, name)
+		}
+	}
+
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "Tag '%s': %d loaded, %d already loaded, %d refused.\n", tag, len(loaded), len(already), len(refused))
+	if len(loaded) > 0 {
+		fmt.Fprintf(&sb, "\nLoaded (available on your next turn): %s\n", strings.Join(loaded, ", "))
+	}
+	if len(already) > 0 {
+		fmt.Fprintf(&sb, "\nAlready loaded: %s\n", strings.Join(already, ", "))
+	}
+	for i, r := range refused {
+		if i == 0 {
+			sb.WriteString("\nRefused:\n")
+		}
+		fmt.Fprintf(&sb, "- %s\n", r)
+	}
+	response := NewTextResponse(sb.String())
+	if len(loaded) > 0 {
+		return WithResponseMetadata(response, LoadToolMetadata{LoadedTools: loaded})
+	}
+	return response
 }
 
 func (t *loadToolTool) loadTool(rctx *rctx.ToolContext, name string, permission string) ToolResponse {
@@ -127,6 +200,12 @@ func (t *loadToolTool) loadTool(rctx *rctx.ToolContext, name string, permission 
 	// Check if already loaded
 	if store.Has(scopeKey, name) {
 		return NewTextResponse(fmt.Sprintf("Tool '%s' is already loaded.", name))
+	}
+
+	// A media tool the user has no provider for would load fine and then fail
+	// at call time. Refuse here, with the fix, instead.
+	if message, _ := mediaToolUnavailable(rctx.Context, name); message != "" {
+		return NewTextErrorResponse(fmt.Sprintf("Tool '%s' was not loaded. %s.", name, message))
 	}
 
 	// Add to loaded tools store
@@ -192,7 +271,7 @@ func mcpToolAvailable(available []MCPToolInfo, name string) bool {
 	return false
 }
 
-func (t *loadToolTool) searchTools(scopeKey, query string, permission string) ToolResponse {
+func (t *loadToolTool) searchTools(rctx *rctx.ToolContext, scopeKey, query string, permission string) ToolResponse {
 	store := GetLoadedToolsStore()
 	mcpTools := store.GetAvailableMCPTools(scopeKey)
 	results := SearchTools(query, permission, mcpTools)
@@ -225,6 +304,10 @@ func (t *loadToolTool) searchTools(scopeKey, query string, permission string) To
 		status := "available"
 		if !r.PermissionAllowed {
 			status = fmt.Sprintf("requires %s permission", r.MinPermission)
+		}
+		// Still listed when unusable, so the agent can tell the user why.
+		if message, modality := mediaToolUnavailable(rctx.Context, r.Name); message != "" {
+			status = fmt.Sprintf("unavailable: no %s-capable provider configured. %s", modality, message)
 		}
 		fmt.Fprintf(&sb, "- **%s** [%s] (%s)\n", r.Name, strings.Join(tags, ", "), status)
 	}

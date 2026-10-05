@@ -1,31 +1,42 @@
-import { useState, useEffect } from "react";
-import { Archive, RefreshCw, Loader2, RotateCcw, Calendar, FolderGit2, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Archive, Loader2, RefreshCw, RotateCcw, Trash2 } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { useWorktreeStore, type Worktree } from "../../store/worktreeStore";
 import { useProjectStore } from "../../store/projectStore";
 import { useChatList } from "../../hooks/chat-queries";
-import { Button } from "../ui/Button";
+import EmptyState from "../forge-ui/empty_state";
+import SkeletonLoader from "../forge-ui/skeleton_loader";
 import { DeleteWorktreeModal } from "./DeleteWorktreeModal";
-import { workspaceButton } from "./workspaceStyles";
-import { format } from "date-fns";
+import { cleanupSummary, sortArchivedWorkspaces } from "./workspaceStatus";
+import { workspaceColumn, workspaceTable } from "./workspaceStyles";
+import { BranchCell, IconAction, TimeCell, WorkspaceNameCell } from "./WorkspaceTableParts";
 
 interface ArchivedWorktreesPanelProps {
+  /** Padding around the panel. The viewer tab relies on the default. */
   paddingClass?: string;
 }
 
-export function ArchivedWorktreesPanel({ paddingClass = "" }: ArchivedWorktreesPanelProps) {
+/**
+ * Archived workspaces: put away, restorable, and deletable for good. Archiving
+ * keeps the record (and, unless cleanup removed them, the files and branch),
+ * so the "Cleanup" column says what is actually left on disk.
+ */
+export function ArchivedWorktreesPanel({ paddingClass = "p-3" }: ArchivedWorktreesPanelProps) {
   const worktrees = useWorktreeStore((state) => state.worktrees);
   const loadWorktrees = useWorktreeStore((state) => state.loadWorktrees);
   const deleteWorktree = useWorktreeStore((state) => state.deleteWorktree);
   const unarchiveWorktree = useWorktreeStore((state) => state.unarchiveWorktree);
   const isLoading = useWorktreeStore((state) => state.isLoading);
+  const deletingId = useWorktreeStore((state) => state.deletingId);
   const currentProject = useProjectStore((state) => state.currentProject);
   const { data: chats = [] } = useChatList(currentProject?.id);
-  const [unarchivingId, setUnarchivingId] = useState<string | null>(null);
-  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [restoringId, setRestoringId] = useState<string | null>(null);
   const [worktreeToDelete, setWorktreeToDelete] = useState<Worktree | null>(null);
 
-  const archivedWorktrees = worktrees.filter((worktree) => worktree.deleted_at);
+  const archivedWorktrees = useMemo(
+    () => sortArchivedWorkspaces(worktrees.filter((worktree) => worktree.deleted_at)),
+    [worktrees],
+  );
 
   useEffect(() => {
     if (currentProject) {
@@ -33,26 +44,24 @@ export function ArchivedWorktreesPanel({ paddingClass = "" }: ArchivedWorktreesP
     }
   }, [currentProject, loadWorktrees]);
 
-  const handleUnarchive = async (id: string) => {
-    setUnarchivingId(id);
+  const handleRestore = async (id: string) => {
+    setRestoringId(id);
     try {
       await unarchiveWorktree(id);
     } catch (error) {
-      console.error("Failed to unarchive:", error);
+      // The store has already toasted the failure.
+      console.error("Failed to restore workspace:", error);
     } finally {
-      setUnarchivingId(null);
+      setRestoringId(null);
     }
   };
 
-  const handleCleanup = (worktree: Worktree) => {
-    setWorktreeToDelete(worktree);
-    setDeleteModalOpen(true);
-  };
-
-  const handleConfirmDelete = async (options?: { deleteGitBranch: boolean; deleteLocalDirectory: boolean }) => {
+  const handleConfirmDelete = async (options?: {
+    deleteGitBranch: boolean;
+    deleteLocalDirectory: boolean;
+  }) => {
     if (worktreeToDelete) {
       await deleteWorktree(worktreeToDelete.id, options);
-      setDeleteModalOpen(false);
       setWorktreeToDelete(null);
     }
   };
@@ -61,148 +70,139 @@ export function ArchivedWorktreesPanel({ paddingClass = "" }: ArchivedWorktreesP
     ? chats.filter((chat) => chat.worktreeId === worktreeToDelete.id).length
     : 0;
 
-  const formatArchivedDate = (dateString?: string | null) => {
-    if (!dateString) return null;
-    try {
-      const date = new Date(dateString);
-      if (isNaN(date.getTime())) return null;
-      return format(date, "MMM d, yyyy 'at' h:mm a");
-    } catch {
-      return null;
-    }
-  };
-
   if (!currentProject) {
     return (
-      <div className="flex h-full flex-col items-center justify-center p-6 text-center">
-        <Archive className="mb-3 h-10 w-10 text-muted-foreground/40" />
-        <p className="text-sm font-medium text-foreground">No project selected</p>
-        <p className="mt-1 text-xs text-muted-foreground">
-          Select a project to view archived workspaces.
-        </p>
+      <div className={cn("forge-ui", paddingClass)}>
+        <EmptyState
+          icon={<Archive className="h-6 w-6" />}
+          title="No project open"
+          description="Open a project to see the workspaces you've archived in it."
+        />
       </div>
     );
   }
 
   return (
-    <div className={cn("flex h-full flex-col", paddingClass)}>
-      <div className="flex-shrink-0 border-b border-border/60 px-4 py-4">
-        <div className="flex items-center justify-between gap-3">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <h2 className="text-sm font-semibold text-foreground">Archived workspaces</h2>
-              <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
-                {archivedWorktrees.length}
-              </span>
-            </div>
-            <p className="mt-1 truncate text-xs text-muted-foreground">
-              Restore old workspaces or clean up remaining files.
-            </p>
-          </div>
-          <Button
-            onClick={() => loadWorktrees(currentProject.id, { includeArchived: true })}
-            leftIcon={<RefreshCw className={cn("h-3 w-3", isLoading && "animate-spin")} />}
-            variant="outline"
-            size="xs"
-            disabled={isLoading}
-            className={workspaceButton.subtle}
-          >
-            Refresh
-          </Button>
+    <div className={cn("forge-ui flex flex-col gap-3", paddingClass)} data-testid="archived-workspaces">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-xs text-muted-foreground">
+          {archivedWorktrees.length === 1
+            ? "1 archived workspace"
+            : `${archivedWorktrees.length} archived workspaces`}
+        </p>
+        <IconAction
+          label="Refresh archived workspaces"
+          icon={<RefreshCw className={cn("h-3.5 w-3.5", isLoading && "animate-spin")} />}
+          onClick={() => void loadWorktrees(currentProject.id, { includeArchived: true })}
+          disabled={isLoading}
+        />
+      </div>
+
+      {isLoading && archivedWorktrees.length === 0 ? (
+        <div className="rounded-lg border border-border bg-card">
+          <SkeletonLoader variant="table-row" count={2} />
         </div>
-      </div>
-
-      <div className="min-h-0 flex-1 overflow-y-auto p-3">
-        {isLoading && archivedWorktrees.length === 0 ? (
-          <div className="flex h-32 items-center justify-center">
-            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-          </div>
-        ) : archivedWorktrees.length === 0 ? (
-          <div className="flex h-full flex-col items-center justify-center rounded-xl border border-dashed border-border/70 p-6 text-center">
-            <Archive className="mb-3 h-10 w-10 text-muted-foreground/35" />
-            <p className="text-sm font-medium text-foreground">Nothing archived</p>
-            <p className="mt-1 max-w-48 text-xs text-muted-foreground">
-              Archived workspaces will appear here when you put them away.
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {archivedWorktrees.map((worktree) => {
-              const archivedDate = formatArchivedDate(worktree.deleted_at);
-              const isRestoring = unarchivingId === worktree.id;
-
-              return (
-                <div
-                  key={worktree.id}
-                  className="rounded-xl border border-border/60 bg-background p-3 transition-colors hover:border-primary/30 hover:bg-muted/30"
-                >
-                  <div className="flex items-start gap-3">
-                    <div className="mt-0.5 rounded-lg bg-muted p-2 text-muted-foreground">
-                      <FolderGit2 className="h-4 w-4" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <h3 className="truncate text-sm font-medium text-foreground">
-                          {worktree.name}
-                        </h3>
-                        {worktree.is_main && (
-                          <span className="rounded-full bg-muted px-1.5 py-0.5 text-2xs font-medium uppercase tracking-wide text-muted-foreground">
-                            Main
-                          </span>
-                        )}
+      ) : archivedWorktrees.length === 0 ? (
+        <EmptyState
+          icon={<Archive className="h-6 w-6" />}
+          title="Nothing archived"
+          description="Archiving a workspace puts it and its chats away without losing them. Archived workspaces land here, where you can restore them or delete them for good."
+        />
+      ) : (
+        <div className={workspaceTable.wrapper}>
+          <table className={workspaceTable.table}>
+            <caption className="sr-only">
+              Archived workspaces in {currentProject.name}: branch, when each was archived, and what
+              cleanup removed.
+            </caption>
+            <thead>
+              <tr className={workspaceTable.headRow}>
+                <th scope="col" className={workspaceTable.headCell}>
+                  Workspace
+                </th>
+                <th scope="col" className={cn(workspaceTable.headCell, workspaceColumn.branch)}>
+                  Branch
+                </th>
+                <th scope="col" className={cn(workspaceTable.headCell, workspaceColumn.time)}>
+                  Archived
+                </th>
+                <th scope="col" className={cn(workspaceTable.headCell, workspaceColumn.cleanup)}>
+                  On disk
+                </th>
+                <th scope="col" className={cn(workspaceTable.headCell, "text-right")}>
+                  <span className="sr-only">Actions</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {archivedWorktrees.map((worktree) => {
+                const isRestoring = restoringId === worktree.id;
+                const isDeleting = deletingId === worktree.id;
+                return (
+                  <tr
+                    key={worktree.id}
+                    data-testid={`archived-row-${worktree.id}`}
+                    className={cn(workspaceTable.row, (isRestoring || isDeleting) && "opacity-60")}
+                  >
+                    <td className={cn(workspaceTable.cell, "max-w-0 w-full @xl:w-auto @xl:max-w-xs")}>
+                      <WorkspaceNameCell worktree={worktree} />
+                    </td>
+                    <td className={cn(workspaceTable.cell, workspaceColumn.branch, "max-w-[14rem]")}>
+                      <BranchCell worktree={worktree} />
+                    </td>
+                    <td className={cn(workspaceTable.cell, workspaceColumn.time)}>
+                      <TimeCell value={worktree.deleted_at} empty="Unknown" />
+                    </td>
+                    <td className={cn(workspaceTable.cell, workspaceColumn.cleanup)}>
+                      <span className="whitespace-nowrap text-xs text-muted-foreground">
+                        {cleanupSummary(worktree)}
+                      </span>
+                    </td>
+                    <td className={cn(workspaceTable.cell, "whitespace-nowrap text-right")}>
+                      <div className="inline-flex items-center gap-0.5">
+                        <IconAction
+                          label={`Restore ${worktree.name}`}
+                          hint="Restore workspace and its chats"
+                          icon={
+                            isRestoring ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <RotateCcw className="h-3.5 w-3.5" />
+                            )
+                          }
+                          onClick={() => void handleRestore(worktree.id)}
+                          disabled={isRestoring || isDeleting}
+                          testId={`restore-workspace-${worktree.id}`}
+                        />
+                        <IconAction
+                          label={`Delete ${worktree.name} permanently`}
+                          hint="Delete permanently"
+                          icon={
+                            isDeleting ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <Trash2 className="h-3.5 w-3.5" />
+                            )
+                          }
+                          onClick={() => setWorktreeToDelete(worktree)}
+                          disabled={isRestoring || isDeleting}
+                          danger
+                          testId={`delete-workspace-${worktree.id}`}
+                        />
                       </div>
-                      <p className="mt-1 truncate text-xs text-muted-foreground">
-                        {worktree.branch}
-                      </p>
-                      {archivedDate && (
-                        <p className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
-                          <Calendar className="h-3 w-3" />
-                          Archived {archivedDate}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="mt-3 grid grid-cols-2 gap-2 border-t border-border/60 pt-3">
-                    <Button
-                      onClick={() => handleUnarchive(worktree.id)}
-                      leftIcon={
-                        isRestoring ? (
-                          <Loader2 className="h-3 w-3 animate-spin" />
-                        ) : (
-                          <RotateCcw className="h-3 w-3" />
-                        )
-                      }
-                      variant="secondary"
-                      size="xs"
-                      disabled={isRestoring}
-                      className={workspaceButton.secondary}
-                    >
-                      {isRestoring ? "Restoring…" : "Restore"}
-                    </Button>
-                    <Button
-                      onClick={() => handleCleanup(worktree)}
-                      leftIcon={<Trash2 className="h-3 w-3" />}
-                      variant="destructive"
-                      size="xs"
-                      className={workspaceButton.destructive}
-                    >
-                      Delete
-                    </Button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       <DeleteWorktreeModal
-        isOpen={deleteModalOpen}
-        onClose={() => {
-          setDeleteModalOpen(false);
-          setWorktreeToDelete(null);
-        }}
+        key={worktreeToDelete?.id ?? "none"}
+        isOpen={worktreeToDelete !== null}
+        onClose={() => setWorktreeToDelete(null)}
         worktree={worktreeToDelete}
         onConfirmDelete={handleConfirmDelete}
         chatCount={chatCount}

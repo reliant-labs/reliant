@@ -47,6 +47,12 @@ const (
 	// DaemonRegistryServiceResumeDaemonProcedure is the fully-qualified name of the
 	// DaemonRegistryService's ResumeDaemon RPC.
 	DaemonRegistryServiceResumeDaemonProcedure = "/reliant.v1.DaemonRegistryService/ResumeDaemon"
+	// DaemonRegistryServiceRefreshLocalModelsProcedure is the fully-qualified name of the
+	// DaemonRegistryService's RefreshLocalModels RPC.
+	DaemonRegistryServiceRefreshLocalModelsProcedure = "/reliant.v1.DaemonRegistryService/RefreshLocalModels"
+	// DaemonRegistryServiceSetLocalModelEndpointsProcedure is the fully-qualified name of the
+	// DaemonRegistryService's SetLocalModelEndpoints RPC.
+	DaemonRegistryServiceSetLocalModelEndpointsProcedure = "/reliant.v1.DaemonRegistryService/SetLocalModelEndpoints"
 )
 
 // DaemonRegistryServiceClient is a client for the reliant.v1.DaemonRegistryService service.
@@ -61,6 +67,17 @@ type DaemonRegistryServiceClient interface {
 	// ResumeDaemon wakes up a suspended or idle daemon. Used by routers when
 	// the resolved daemon is not currently active.
 	ResumeDaemon(context.Context, *connect.Request[v1.ResumeDaemonRequest]) (*connect.Response[v1.ResumeDaemonResponse], error)
+	// RefreshLocalModels asks an online daemon to re-probe its local model
+	// servers and waits (bounded) for the new inventory. Backs the UI's
+	// "Test connection" / "Refresh". Fails with Unavailable when the daemon is
+	// offline.
+	RefreshLocalModels(context.Context, *connect.Request[v1.RefreshLocalModelsRequest]) (*connect.Response[v1.RefreshLocalModelsResponse], error)
+	// SetLocalModelEndpoints replaces the user-configured local model
+	// endpoints on an online daemon (persisted in that machine's
+	// ~/.reliant/config.yaml, models.providers.local) and returns the
+	// re-probed inventory. Auto-detected well-known ports need no
+	// configuration and are not listed here.
+	SetLocalModelEndpoints(context.Context, *connect.Request[v1.SetLocalModelEndpointsRequest]) (*connect.Response[v1.SetLocalModelEndpointsResponse], error)
 }
 
 // NewDaemonRegistryServiceClient constructs a client for the reliant.v1.DaemonRegistryService
@@ -98,15 +115,29 @@ func NewDaemonRegistryServiceClient(httpClient connect.HTTPClient, baseURL strin
 			connect.WithSchema(daemonRegistryServiceMethods.ByName("ResumeDaemon")),
 			connect.WithClientOptions(opts...),
 		),
+		refreshLocalModels: connect.NewClient[v1.RefreshLocalModelsRequest, v1.RefreshLocalModelsResponse](
+			httpClient,
+			baseURL+DaemonRegistryServiceRefreshLocalModelsProcedure,
+			connect.WithSchema(daemonRegistryServiceMethods.ByName("RefreshLocalModels")),
+			connect.WithClientOptions(opts...),
+		),
+		setLocalModelEndpoints: connect.NewClient[v1.SetLocalModelEndpointsRequest, v1.SetLocalModelEndpointsResponse](
+			httpClient,
+			baseURL+DaemonRegistryServiceSetLocalModelEndpointsProcedure,
+			connect.WithSchema(daemonRegistryServiceMethods.ByName("SetLocalModelEndpoints")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // daemonRegistryServiceClient implements DaemonRegistryServiceClient.
 type daemonRegistryServiceClient struct {
-	listDaemons   *connect.Client[v1.ListDaemonsRequest, v1.ListDaemonsResponse]
-	getDaemon     *connect.Client[v1.GetDaemonRequest, v1.GetDaemonResponse]
-	resolveDaemon *connect.Client[v1.ResolveDaemonRequest, v1.ResolveDaemonResponse]
-	resumeDaemon  *connect.Client[v1.ResumeDaemonRequest, v1.ResumeDaemonResponse]
+	listDaemons            *connect.Client[v1.ListDaemonsRequest, v1.ListDaemonsResponse]
+	getDaemon              *connect.Client[v1.GetDaemonRequest, v1.GetDaemonResponse]
+	resolveDaemon          *connect.Client[v1.ResolveDaemonRequest, v1.ResolveDaemonResponse]
+	resumeDaemon           *connect.Client[v1.ResumeDaemonRequest, v1.ResumeDaemonResponse]
+	refreshLocalModels     *connect.Client[v1.RefreshLocalModelsRequest, v1.RefreshLocalModelsResponse]
+	setLocalModelEndpoints *connect.Client[v1.SetLocalModelEndpointsRequest, v1.SetLocalModelEndpointsResponse]
 }
 
 // ListDaemons calls reliant.v1.DaemonRegistryService.ListDaemons.
@@ -129,6 +160,16 @@ func (c *daemonRegistryServiceClient) ResumeDaemon(ctx context.Context, req *con
 	return c.resumeDaemon.CallUnary(ctx, req)
 }
 
+// RefreshLocalModels calls reliant.v1.DaemonRegistryService.RefreshLocalModels.
+func (c *daemonRegistryServiceClient) RefreshLocalModels(ctx context.Context, req *connect.Request[v1.RefreshLocalModelsRequest]) (*connect.Response[v1.RefreshLocalModelsResponse], error) {
+	return c.refreshLocalModels.CallUnary(ctx, req)
+}
+
+// SetLocalModelEndpoints calls reliant.v1.DaemonRegistryService.SetLocalModelEndpoints.
+func (c *daemonRegistryServiceClient) SetLocalModelEndpoints(ctx context.Context, req *connect.Request[v1.SetLocalModelEndpointsRequest]) (*connect.Response[v1.SetLocalModelEndpointsResponse], error) {
+	return c.setLocalModelEndpoints.CallUnary(ctx, req)
+}
+
 // DaemonRegistryServiceHandler is an implementation of the reliant.v1.DaemonRegistryService
 // service.
 type DaemonRegistryServiceHandler interface {
@@ -142,6 +183,17 @@ type DaemonRegistryServiceHandler interface {
 	// ResumeDaemon wakes up a suspended or idle daemon. Used by routers when
 	// the resolved daemon is not currently active.
 	ResumeDaemon(context.Context, *connect.Request[v1.ResumeDaemonRequest]) (*connect.Response[v1.ResumeDaemonResponse], error)
+	// RefreshLocalModels asks an online daemon to re-probe its local model
+	// servers and waits (bounded) for the new inventory. Backs the UI's
+	// "Test connection" / "Refresh". Fails with Unavailable when the daemon is
+	// offline.
+	RefreshLocalModels(context.Context, *connect.Request[v1.RefreshLocalModelsRequest]) (*connect.Response[v1.RefreshLocalModelsResponse], error)
+	// SetLocalModelEndpoints replaces the user-configured local model
+	// endpoints on an online daemon (persisted in that machine's
+	// ~/.reliant/config.yaml, models.providers.local) and returns the
+	// re-probed inventory. Auto-detected well-known ports need no
+	// configuration and are not listed here.
+	SetLocalModelEndpoints(context.Context, *connect.Request[v1.SetLocalModelEndpointsRequest]) (*connect.Response[v1.SetLocalModelEndpointsResponse], error)
 }
 
 // NewDaemonRegistryServiceHandler builds an HTTP handler from the service implementation. It
@@ -175,6 +227,18 @@ func NewDaemonRegistryServiceHandler(svc DaemonRegistryServiceHandler, opts ...c
 		connect.WithSchema(daemonRegistryServiceMethods.ByName("ResumeDaemon")),
 		connect.WithHandlerOptions(opts...),
 	)
+	daemonRegistryServiceRefreshLocalModelsHandler := connect.NewUnaryHandler(
+		DaemonRegistryServiceRefreshLocalModelsProcedure,
+		svc.RefreshLocalModels,
+		connect.WithSchema(daemonRegistryServiceMethods.ByName("RefreshLocalModels")),
+		connect.WithHandlerOptions(opts...),
+	)
+	daemonRegistryServiceSetLocalModelEndpointsHandler := connect.NewUnaryHandler(
+		DaemonRegistryServiceSetLocalModelEndpointsProcedure,
+		svc.SetLocalModelEndpoints,
+		connect.WithSchema(daemonRegistryServiceMethods.ByName("SetLocalModelEndpoints")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/reliant.v1.DaemonRegistryService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case DaemonRegistryServiceListDaemonsProcedure:
@@ -185,6 +249,10 @@ func NewDaemonRegistryServiceHandler(svc DaemonRegistryServiceHandler, opts ...c
 			daemonRegistryServiceResolveDaemonHandler.ServeHTTP(w, r)
 		case DaemonRegistryServiceResumeDaemonProcedure:
 			daemonRegistryServiceResumeDaemonHandler.ServeHTTP(w, r)
+		case DaemonRegistryServiceRefreshLocalModelsProcedure:
+			daemonRegistryServiceRefreshLocalModelsHandler.ServeHTTP(w, r)
+		case DaemonRegistryServiceSetLocalModelEndpointsProcedure:
+			daemonRegistryServiceSetLocalModelEndpointsHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -208,4 +276,12 @@ func (UnimplementedDaemonRegistryServiceHandler) ResolveDaemon(context.Context, 
 
 func (UnimplementedDaemonRegistryServiceHandler) ResumeDaemon(context.Context, *connect.Request[v1.ResumeDaemonRequest]) (*connect.Response[v1.ResumeDaemonResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.DaemonRegistryService.ResumeDaemon is not implemented"))
+}
+
+func (UnimplementedDaemonRegistryServiceHandler) RefreshLocalModels(context.Context, *connect.Request[v1.RefreshLocalModelsRequest]) (*connect.Response[v1.RefreshLocalModelsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.DaemonRegistryService.RefreshLocalModels is not implemented"))
+}
+
+func (UnimplementedDaemonRegistryServiceHandler) SetLocalModelEndpoints(context.Context, *connect.Request[v1.SetLocalModelEndpointsRequest]) (*connect.Response[v1.SetLocalModelEndpointsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.DaemonRegistryService.SetLocalModelEndpoints is not implemented"))
 }

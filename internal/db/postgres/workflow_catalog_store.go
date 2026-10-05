@@ -27,7 +27,7 @@ func (s *workflowCatalogStore) UpsertWorkflowDraft(ctx context.Context, draft *c
 	if err != nil {
 		return nil, err
 	}
-	return workflowDraftFromPG(row), nil
+	return workflowDraftFromPG(workflowDraftRow(row)), nil
 }
 
 func (s *workflowCatalogStore) GetWorkflowDraft(ctx context.Context, id string) (*core.WorkflowDraft, error) {
@@ -38,7 +38,7 @@ func (s *workflowCatalogStore) GetWorkflowDraft(ctx context.Context, id string) 
 		}
 		return nil, err
 	}
-	return workflowDraftFromPG(row), nil
+	return workflowDraftFromPG(workflowDraftRow(row)), nil
 }
 
 func (s *workflowCatalogStore) GetWorkflowDraftBySlug(ctx context.Context, userID, slug string) (*core.WorkflowDraft, error) {
@@ -49,7 +49,7 @@ func (s *workflowCatalogStore) GetWorkflowDraftBySlug(ctx context.Context, userI
 		}
 		return nil, err
 	}
-	return workflowDraftFromPG(row), nil
+	return workflowDraftFromPG(workflowDraftRow(row)), nil
 }
 
 func (s *workflowCatalogStore) GetWorkflowDraftByName(ctx context.Context, userID, name string) (*core.WorkflowDraft, error) {
@@ -60,18 +60,7 @@ func (s *workflowCatalogStore) GetWorkflowDraftByName(ctx context.Context, userI
 		}
 		return nil, err
 	}
-	return workflowDraftFromPG(row), nil
-}
-
-func (s *workflowCatalogStore) GetWorkflowDraftByChatID(ctx context.Context, chatID string) (*core.WorkflowDraft, error) {
-	row, err := s.q.GetWorkflowDraftByChatID(ctx, workflowPtrToNullString(&chatID))
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, nil
-		}
-		return nil, err
-	}
-	return workflowDraftFromPG(row), nil
+	return workflowDraftFromPG(workflowDraftRow(row)), nil
 }
 
 func (s *workflowCatalogStore) GetWorkflowDraftBySourcePath(ctx context.Context, userID, sourcePath string) (*core.WorkflowDraft, error) {
@@ -82,7 +71,7 @@ func (s *workflowCatalogStore) GetWorkflowDraftBySourcePath(ctx context.Context,
 		}
 		return nil, err
 	}
-	return workflowDraftFromPG(row), nil
+	return workflowDraftFromPG(workflowDraftRow(row)), nil
 }
 
 func (s *workflowCatalogStore) GetUsableWorkflowBySlug(ctx context.Context, userID, slug string) (*core.WorkflowDraft, error) {
@@ -93,7 +82,7 @@ func (s *workflowCatalogStore) GetUsableWorkflowBySlug(ctx context.Context, user
 		}
 		return nil, err
 	}
-	return workflowDraftFromPG(row), nil
+	return workflowDraftFromPG(workflowDraftRow(row)), nil
 }
 
 func (s *workflowCatalogStore) ListWorkflowDraftsByUser(ctx context.Context, userID string) ([]*core.WorkflowDraft, error) {
@@ -133,7 +122,7 @@ func (s *workflowCatalogStore) SetWorkflowDraftStatus(ctx context.Context, id st
 	if err != nil {
 		return nil, err
 	}
-	return workflowDraftFromPG(row), nil
+	return workflowDraftFromPG(workflowDraftRow(row)), nil
 }
 
 func (s *workflowCatalogStore) SetWorkflowDraftHidden(ctx context.Context, id string, isHidden bool) (*core.WorkflowDraft, error) {
@@ -141,15 +130,25 @@ func (s *workflowCatalogStore) SetWorkflowDraftHidden(ctx context.Context, id st
 	if err != nil {
 		return nil, err
 	}
-	return workflowDraftFromPG(row), nil
+	return workflowDraftFromPG(workflowDraftRow(row)), nil
 }
 
-func (s *workflowCatalogStore) DeleteWorkflowDraft(ctx context.Context, id string) error {
-	return s.q.DeleteWorkflowDraft(ctx, id)
+// DeleteWorkflowDraft returns the deleted row, or sql.ErrNoRows when none matched.
+func (s *workflowCatalogStore) DeleteWorkflowDraft(ctx context.Context, id string) (*core.WorkflowDraft, error) {
+	row, err := s.q.DeleteWorkflowDraft(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	return workflowDraftFromPG(workflowDraftRow(row)), nil
 }
 
-func (s *workflowCatalogStore) DeleteWorkflowDraftBySlug(ctx context.Context, userID, slug string) error {
-	return s.q.DeleteWorkflowDraftBySlug(ctx, pgdb.DeleteWorkflowDraftBySlugParams{UserID: userID, Slug: slug})
+// DeleteWorkflowDraftBySlug returns the deleted row, or sql.ErrNoRows when none matched.
+func (s *workflowCatalogStore) DeleteWorkflowDraftBySlug(ctx context.Context, userID, slug string) (*core.WorkflowDraft, error) {
+	row, err := s.q.DeleteWorkflowDraftBySlug(ctx, pgdb.DeleteWorkflowDraftBySlugParams{UserID: userID, Slug: slug})
+	if err != nil {
+		return nil, err
+	}
+	return workflowDraftFromPG(workflowDraftRow(row)), nil
 }
 
 func (s *workflowCatalogStore) WorkflowSlugExists(ctx context.Context, userID, slug string) (bool, error) {
@@ -160,20 +159,12 @@ func (s *workflowCatalogStore) CountWorkflowDraftsByUser(ctx context.Context, us
 	return s.q.CountWorkflowDraftsByUser(ctx, userID)
 }
 
-func (s *workflowCatalogStore) AssociateChatWithDraft(ctx context.Context, draftID string, chatID string) (*core.WorkflowDraft, error) {
-	row, err := s.q.AssociateChatWithDraft(ctx, pgdb.AssociateChatWithDraftParams{ChatID: workflowPtrToNullString(&chatID), ID: draftID})
-	if err != nil {
-		return nil, err
-	}
-	return workflowDraftFromPG(row), nil
-}
-
 func (s *workflowCatalogStore) UpdateWorkflowForkedFrom(ctx context.Context, draftID string, forkedFrom string) (*core.WorkflowDraft, error) {
 	row, err := s.q.UpdateWorkflowForkedFrom(ctx, pgdb.UpdateWorkflowForkedFromParams{ForkedFrom: workflowPtrToNullString(&forkedFrom), ID: draftID})
 	if err != nil {
 		return nil, err
 	}
-	return workflowDraftFromPG(row), nil
+	return workflowDraftFromPG(workflowDraftRow(row)), nil
 }
 
 func (s *workflowCatalogStore) CreatePreset(ctx context.Context, preset *core.Preset) (*core.Preset, error) {
@@ -364,7 +355,12 @@ func (s *workflowCatalogStore) DeleteWorkflowScenariosByDraft(ctx context.Contex
 	return s.q.DeleteWorkflowScenariosByDraft(ctx, sql.NullString{String: workflowDraftID, Valid: true})
 }
 
-func workflowDraftFromPG(sw pgdb.WorkflowDraft) *core.WorkflowDraft {
+// workflowDraftRow is the explicit-column projection every workflow_drafts
+// query returns (chat_id is retired and never selected); sqlc emits one
+// identically-shaped Row type per query, converted to this one.
+type workflowDraftRow = pgdb.GetWorkflowDraftRow
+
+func workflowDraftFromPG(sw workflowDraftRow) *core.WorkflowDraft {
 	return &core.WorkflowDraft{
 		ID:          sw.ID,
 		UserID:      sw.UserID,
@@ -375,7 +371,6 @@ func workflowDraftFromPG(sw pgdb.WorkflowDraft) *core.WorkflowDraft {
 		Status:      core.WorkflowDraftStatus(sw.Status),
 		SourcePath:  workflowNullStringToPtr(sw.SourcePath),
 		ForkedFrom:  workflowNullStringToPtr(sw.ForkedFrom),
-		ChatID:      workflowNullStringToPtr(sw.ChatID),
 		CreatedAt:   sw.CreatedAt,
 		UpdatedAt:   sw.UpdatedAt,
 		IsHidden:    sw.IsHidden,
@@ -383,10 +378,10 @@ func workflowDraftFromPG(sw pgdb.WorkflowDraft) *core.WorkflowDraft {
 	}
 }
 
-func workflowDraftsFromPG(rows []pgdb.WorkflowDraft) []*core.WorkflowDraft {
+func workflowDraftsFromPG(rows []pgdb.ListWorkflowDraftsByUserRow) []*core.WorkflowDraft {
 	drafts := make([]*core.WorkflowDraft, len(rows))
 	for i, row := range rows {
-		drafts[i] = workflowDraftFromPG(row)
+		drafts[i] = workflowDraftFromPG(workflowDraftRow(row))
 	}
 	return drafts
 }
@@ -402,7 +397,6 @@ func workflowDraftToCreateParams(draft *core.WorkflowDraft) pgdb.CreateWorkflowD
 		Status:      workflowStatusToPG(draft.Status),
 		SourcePath:  workflowPtrToNullString(draft.SourcePath),
 		ForkedFrom:  workflowPtrToNullString(draft.ForkedFrom),
-		ChatID:      workflowPtrToNullString(draft.ChatID),
 		CreatedAt:   draft.CreatedAt,
 		UpdatedAt:   draft.UpdatedAt,
 		IsHidden:    draft.IsHidden,
@@ -420,7 +414,6 @@ func workflowDraftToUpsertParams(draft *core.WorkflowDraft) pgdb.UpsertWorkflowD
 		Status:      workflowStatusToPG(draft.Status),
 		SourcePath:  workflowPtrToNullString(draft.SourcePath),
 		ForkedFrom:  workflowPtrToNullString(draft.ForkedFrom),
-		ChatID:      workflowPtrToNullString(draft.ChatID),
 		CreatedAt:   draft.CreatedAt,
 		UpdatedAt:   draft.UpdatedAt,
 		IsHidden:    draft.IsHidden,

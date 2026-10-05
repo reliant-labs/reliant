@@ -122,8 +122,8 @@ func modelSupportsReasoningSummaries(id models.ModelID) bool {
 
 // codexReasoningEffort maps our internal effort string onto the wire value.
 //
-// The SDK's ReasoningEffort constants stop at xhigh; gpt-5.6 adds "max" and
-// "ultra" above it. The field is a plain string on the wire, so unknown-to-SDK
+// The SDK's ReasoningEffort constants stop at xhigh; gpt-5.6 adds "max"
+// above it. The field is a plain string on the wire, so unknown-to-SDK
 // values pass through by construction — we validate against the model's
 // declared thinking_levels upstream rather than guessing here.
 func codexReasoningEffort(effort string) shared.ReasoningEffort {

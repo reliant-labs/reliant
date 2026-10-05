@@ -179,7 +179,6 @@ vi.mock("../../../store/projectStore", () => {
 
 vi.mock("../../../lib/analytics", () => ({ trackEvent: vi.fn() }));
 vi.mock("../OnboardingChecklist", () => ({ OnboardingChecklist: () => null }));
-vi.mock("../steps", () => ({ CompletionStep: (_props: any) => null }));
 
 // ── Test router ──────────────────────────────────────────────────────────
 

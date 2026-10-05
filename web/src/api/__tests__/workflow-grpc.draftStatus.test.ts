@@ -44,7 +44,7 @@ describe("workflowGrpc draft lifecycle", () => {
     expect(plain.status).toBe("draft");
     expect(plain.validationErrors).toEqual([nodeOrdering]);
 
-    await workflowGrpc.saveWorkflow("p1", { name: "wf", nodes: [], edges: [] }, undefined, 2, undefined, "d1", "draft");
+    await workflowGrpc.saveWorkflow("p1", { name: "wf", nodes: [], edges: [] }, 2, undefined, "d1", "draft");
     expect(saveWorkflow.mock.calls[1][0].status).toBe(WorkflowDraftStatus.DRAFT);
   });
 

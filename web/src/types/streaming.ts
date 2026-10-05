@@ -106,6 +106,13 @@ export interface ToolCallUpdate {
   started_at?: string;
   completed_at?: string;
   node_id?: string;
+  /**
+   * For a spawn call, the workflow — and therefore the thread — it started.
+   * The live counterpart of ContentBlock.childWorkflowId: the assistant
+   * message holding the spawn's block is persisted before the spawn runs, so
+   * that block never carries it live; this event is the only thing that can.
+   */
+  child_workflow_id?: string;
 }
 
 // ErrorUpdate represents workflow/activity error events from the backend
@@ -400,4 +407,14 @@ export interface GlobalWebSocketCallbacks {
   onChatSnapshot?: (updates: ChatUpdate[]) => void;
   onChatPaginationInfo?: (pagination: MessagePaginationInfo) => void;
   onChatContextUsage?: (contextUsage: ContextUsageInfo) => void;
+  // Per-chat resume. The stream is leaving `chatId`, whose cached state is
+  // current as of chat update `sequence` (0n: no state it can vouch for).
+  onChatCursorRelease?: (chatId: string, sequence: bigint) => void;
+  // The stream is entering `chatId`: the sequence to resume from, or 0n to
+  // request a full snapshot. Only a caller whose cached state for the chat is
+  // exactly the server's state as of that sequence may return non-zero.
+  resolveChatResumeSequence?: (chatId: string) => bigint;
+  // The chat whose initial sync is still outstanding for the current
+  // subscription (until the server's chat_caught_up), or null.
+  onChatSyncPending?: (chatId: string | null) => void;
 }

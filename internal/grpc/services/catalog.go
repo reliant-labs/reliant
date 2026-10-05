@@ -14,9 +14,11 @@ import (
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
+	"github.com/reliant-labs/reliant/internal/llm/drivers/local"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/modelprefs"
 	wfcel "github.com/reliant-labs/reliant/internal/workflow/cel"
 	"github.com/reliant-labs/reliant/internal/workflow/reference"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
@@ -26,6 +28,12 @@ import (
 type CatalogService struct {
 	reliantv1connect.UnimplementedCatalogServiceHandler
 	toolsFactory *tools.ToolsFactory
+	// tagPrefs supplies the user's model.tag_config.<tag> preferences so the
+	// tiers ListModels reports match what a tag selector actually runs on.
+	tagPrefs modelprefs.SettingsReader
+	// localDirectory supplies the user's daemons' published local model
+	// inventories; nil leaves local models out of the catalog.
+	localDirectory local.Directory
 
 	celCompletionsOnce sync.Once
 	celCompletionsResp *reliantv1.GetCELCompletionsResponse
@@ -36,6 +44,22 @@ func NewCatalogService(toolsFactory *tools.ToolsFactory) *CatalogService {
 	return &CatalogService{
 		toolsFactory: toolsFactory,
 	}
+}
+
+// WithTagPrefs wires the settings reader that ListModels tiers consult.
+func (s *CatalogService) WithTagPrefs(reader modelprefs.SettingsReader) *CatalogService {
+	s.tagPrefs = reader
+	if src, ok := reader.(local.Source); ok && s.localDirectory == nil {
+		s.localDirectory = local.NewRepoDirectory(src)
+	}
+	return s
+}
+
+// WithLocalModels wires the source of per-daemon local model inventories.
+// WithTagPrefs also wires it when the reader is a db.Repository.
+func (s *CatalogService) WithLocalModels(dir local.Directory) *CatalogService {
+	s.localDirectory = dir
+	return s
 }
 
 // ListModels returns all available models filtered by user's configured API keys
@@ -66,7 +90,7 @@ func (s *CatalogService) ListModels(
 	}
 
 	// Get all user-visible models from the registry
-	registry := models.MustGetRegistry()
+	registry := models.MustGetRegistry().WithAvailability(availableDrivers.Availability)
 	allModels := registry.GetUserVisibleModels()
 
 	logging.Info("[ListModels] Building model list for user", "userID", userID, "totalModels", len(allModels), "availableDrivers", len(availableDrivers.Drivers))
@@ -82,26 +106,24 @@ func (s *CatalogService) ListModels(
 				continue
 			}
 
-			// Local models don't need API keys - they're available if they exist in the registry
-			isLocalDriver := provider.Driver == "local"
-			if isLocalDriver {
-				logging.Info("[ListModels] Found local model", "modelID", model.ID, "driver", provider.Driver)
+			// Local models are never in the registry: they come from the user's
+			// daemons and are appended below.
+			if provider.Driver == string(local.Family) {
+				continue
 			}
-			if !isLocalDriver {
-				driverConfig, exists := availableDrivers.Drivers[models.DriverID(provider.Driver)]
-				if !exists || !driverConfig.Enabled || driverConfig.APIKey == "" {
-					continue
-				}
+			driverConfig, exists := availableDrivers.Drivers[models.DriverID(provider.Driver)]
+			if !exists || !driverConfig.Enabled || driverConfig.APIKey == "" {
+				continue
+			}
 
-				// Per-account availability: a dynamic provider (e.g. Copilot) may
-				// report a model as disabled for this account (it 400s upstream),
-				// so we hide it from the picker. Static providers report every
-				// model enabled, and the lookup fails open (model absent -> shown),
-				// so this uniformly gates any provider without a special-case.
-				if byModel, ok := enabledByDriver[provider.Driver]; ok {
-					if enabled, present := byModel[model.ID]; present && !enabled {
-						continue
-					}
+			// Per-account availability: a dynamic provider (e.g. Copilot) may
+			// report a model as disabled for this account (it 400s upstream),
+			// so we hide it from the picker. Static providers report every
+			// model enabled, and the lookup fails open (model absent -> shown),
+			// so this uniformly gates any provider without a special-case.
+			if byModel, ok := enabledByDriver[provider.Driver]; ok {
+				if enabled, present := byModel[model.ID]; present && !enabled {
+					continue
 				}
 			}
 
@@ -128,9 +150,12 @@ func (s *CatalogService) ListModels(
 				SupportsTools:           model.Capabilities.SupportsTools,
 				SupportsCaching:         model.Capabilities.SupportsCaching,
 				SupportedThinkingLevels: models.SupportedThinkingLevels(model.Capabilities),
+				SupportsTemperature:     models.SupportsTemperature(model, driverID),
 			})
 		}
 	}
+
+	modelList = append(modelList, s.localModelInfos(ctx, userID)...)
 
 	// Sort models: by provider, then by model priority within each provider
 	sortModelsByProvider(modelList)
@@ -140,9 +165,77 @@ func (s *CatalogService) ListModels(
 	resp := &reliantv1.ListModelsResponse{
 		Models: modelList,
 		Total:  int32(len(modelList)),
-		Tiers:  tierResolutions(registry, configuredProviderIDs(availableDrivers)),
+		Tiers:  tierResolutions(registry, configuredProviderIDs(availableDrivers), s.loadTagPrefs(ctx, userID), s.listLocalModels(ctx, userID)),
 	}
 	return connect.NewResponse(resp), nil
+}
+
+// localModelInfos lists one entry per (daemon, endpoint, chat-capable model),
+// including offline daemons' models (online=false) so the picker can show them
+// disabled. A directory failure omits local models rather than failing the
+// whole catalog.
+func (s *CatalogService) localModelInfos(ctx context.Context, userID string) []*reliantv1.ModelInfo {
+	found := s.listLocalModels(ctx, userID)
+	infos := make([]*reliantv1.ModelInfo, 0, len(found))
+	for _, m := range found {
+		def := m.Definition
+		infos = append(infos, &reliantv1.ModelInfo{
+			Id:                      m.CatalogID(),
+			Name:                    def.Name,
+			Provider:                getDriverDisplayName(string(local.Family)),
+			DriverId:                string(local.Family),
+			Capabilities:            capabilitiesToStrings(def.Capabilities),
+			ContextWindow:           int64(def.Capabilities.MaxContextWindow),
+			DefaultMaxTokens:        int64(def.Capabilities.MaxOutputTokens),
+			CanReason:               def.Capabilities.CanReason,
+			SupportsAttachments:     def.Capabilities.SupportsAttachments,
+			SupportsTools:           def.Capabilities.SupportsTools,
+			SupportedThinkingLevels: models.SupportedThinkingLevels(def.Capabilities),
+			SupportsTemperature:     true,
+			Local:                   localModelSource(m),
+		})
+	}
+	return infos
+}
+
+// localModelSource locates a model for the picker. A configured endpoint is
+// grouped under its own name and carries no daemon id: a "local:<daemonID>"
+// pin means "a model that daemon DETECTED", which a configured endpoint is not,
+// even when that daemon relays it.
+func localModelSource(m local.Model) *reliantv1.LocalModelSource {
+	if m.Custom != nil {
+		return &reliantv1.LocalModelSource{
+			MachineName:  m.Custom.Name,
+			EndpointId:   m.Custom.ID,
+			EndpointKind: m.EndpointKind,
+			Online:       m.Online,
+		}
+	}
+	return &reliantv1.LocalModelSource{
+		DaemonId:     m.DaemonID,
+		MachineName:  m.Machine,
+		EndpointId:   m.EndpointID,
+		EndpointKind: m.EndpointKind,
+		Online:       m.Online,
+	}
+}
+
+func (s *CatalogService) listLocalModels(ctx context.Context, userID string) []local.Model {
+	found, err := local.ListModels(ctx, s.localDirectory, userID)
+	if err != nil {
+		logging.Warn("[ListModels] Could not list local models", "userID", userID, "error", err)
+		return nil
+	}
+	return found
+}
+
+// localTierThinking is the effort a pinned local model runs at: only an
+// explicit level it accepts, since local models have no tier default.
+func localTierThinking(def models.ModelDefinition, level string) string {
+	if level == "" {
+		return ""
+	}
+	return models.ReconcileThinkingLevel(models.ResolveThinkingCapability(def.Capabilities), level)
 }
 
 // configuredProviderIDs returns the driver IDs the user has properly
@@ -158,25 +251,56 @@ func configuredProviderIDs(availableDrivers models.AvailableDrivers) []string {
 	return providers
 }
 
+func (s *CatalogService) loadTagPrefs(ctx context.Context, userID string) map[string]modelprefs.TagPrefs {
+	prefs, err := modelprefs.LoadAll(ctx, s.tagPrefs, userID)
+	if err != nil {
+		logging.Warn("[ListModels] Model tag preferences partially unreadable", "error", err)
+	}
+	return prefs
+}
+
 // tierResolutions resolves every declared tag against the given providers,
-// yielding the model and effort a `{tags: [tag]}` selector runs at. Tags that
-// do not resolve to a text model (unconfigured providers, image-gen) are
-// skipped.
-func tierResolutions(registry *models.ModelRegistry, providers []string) []*reliantv1.TierResolution {
+// yielding the model and effort a `{tags: [tag]}` selector runs at — INCLUDING
+// the user's tag preference (model_id when still available, thinking_level),
+// exactly as resolveLLMCall applies it, so the UI never shows a tier the
+// server will not run. Tags that do not resolve to a text model
+// (unconfigured providers, image-gen) are skipped.
+func tierResolutions(registry *models.ModelRegistry, providers []string, prefs map[string]modelprefs.TagPrefs, localModels []local.Model) []*reliantv1.TierResolution {
 	tags := registry.ListAllTags()
 	tiers := make([]*reliantv1.TierResolution, 0, len(tags))
 	for _, tag := range tags {
-		resolved, err := registry.Resolve(models.ModelSelector{
+		selector := models.ModelSelector{
 			Tags:                  []string{tag},
 			RequireOutputModality: models.ModalityText,
-		}, providers)
-		if err != nil || !resolved.Definition.Capabilities.CanOutput(models.ModalityText) {
+		}
+		tagPrefs := prefs[tag]
+		if pinned, err := local.Resolve(localModels, tagPrefs.LocalSelector(), ""); tagPrefs.IsLocalModel() && err == nil {
+			tiers = append(tiers, &reliantv1.TierResolution{
+				Tag:           tag,
+				ModelId:       pinned.CatalogID(),
+				ThinkingLevel: localTierThinking(pinned.Definition, tagPrefs.ValidThinkingLevel()),
+			})
 			continue
+		}
+		resolved := tagPrefs.PreferredModel(registry, selector, providers)
+		if resolved == nil {
+			var err error
+			resolved, err = registry.Resolve(selector, providers)
+			if err != nil {
+				continue
+			}
+		}
+		if !resolved.Definition.Capabilities.CanOutput(models.ModalityText) {
+			continue
+		}
+		thinking := resolved.ThinkingLevel
+		if level := tagPrefs.ValidThinkingLevel(); level != "" {
+			thinking = models.ReconcileThinkingLevel(models.ResolveThinkingCapability(resolved.Definition.Capabilities), level)
 		}
 		tiers = append(tiers, &reliantv1.TierResolution{
 			Tag:           tag,
 			ModelId:       resolved.Definition.ID + "@" + resolved.Provider.Driver,
-			ThinkingLevel: resolved.ThinkingLevel,
+			ThinkingLevel: thinking,
 		})
 	}
 	return tiers

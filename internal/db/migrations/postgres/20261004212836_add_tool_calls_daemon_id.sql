@@ -1,0 +1,21 @@
+-- +goose Up
+
+-- tool_calls.daemon_id: the daemon a backgrounded call's process runs on.
+--
+-- A backgrounded call (status 6) hands its command to a process that lives in
+-- the memory of ONE daemon, and nothing but that daemon knows when the process
+-- exits. Without the daemon's identity on the row there was no one to ask, and
+-- no code ever asked: every backgrounded shell call stayed at status 6 forever
+-- (4,213 rows across one user's chats, the oldest two months old), and the
+-- chat snapshot shipped each of them as live work on every open.
+--
+-- The reconciler now asks the daemon named here about the process named by
+-- background_process_id and closes the row once the process has exited, was
+-- killed, or is no longer tracked (the daemon restarted). The id is stamped by
+-- the daemon gateway from the connection that actually ran the tool, not
+-- guessed from the user's default daemon, because a user can have several and
+-- asking the wrong one would report a live process as gone.
+--
+-- Nullable: only backgrounded calls carry it, and rows written before this
+-- column existed have no way to recover it.
+ALTER TABLE tool_calls ADD COLUMN IF NOT EXISTS daemon_id text;

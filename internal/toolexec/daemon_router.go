@@ -113,6 +113,10 @@ type ToolExecutionResponse struct {
 	ErrorMessage string `json:"error_message,omitempty"`
 	ErrorCode    string `json:"error_code,omitempty"`
 	Backgrounded bool   `json:"backgrounded,omitempty"`
+	// DaemonID is the daemon that answered, stamped by the gateway from the
+	// connection the response arrived on. A backgrounded call records it: the
+	// process lives in that daemon's memory, and a user can have several.
+	DaemonID string `json:"daemon_id,omitempty"`
 }
 
 // DaemonRouter abstracts all daemon-bound operations behind a transport-agnostic interface.
@@ -197,6 +201,15 @@ type DaemonRouter interface {
 	// If newOnly is true, only new output is delivered (existing buffered output is skipped).
 	// Returns a channel that receives output events, an unsubscribe function, and an error.
 	SubscribeProcessOutput(ctx context.Context, userID string, processID string, newOnly bool) (<-chan *ProcessOutputEvent, func(), error)
+
+	// OpenLocalModelHTTP relays one HTTP request to a local model endpoint on
+	// the named daemon's machine and returns the ordered response chunks.
+	// Closing the stream (or cancelling ctx) aborts the request.
+	OpenLocalModelHTTP(ctx context.Context, userID, daemonID string, req *reliantv1.LocalModelHTTPRequest) (*LocalModelHTTPStream, error)
+
+	// RefreshLocalModels asks the daemon to re-probe its local model servers
+	// and waits (about 10s) for the inventory it sends back.
+	RefreshLocalModels(ctx context.Context, userID, daemonID string) (*reliantv1.LocalModelInventory, error)
 
 	// Close cleans up resources.
 	Close() error

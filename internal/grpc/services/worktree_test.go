@@ -407,3 +407,10 @@ func TestRevertFiles_ReturnsFailedPreconditionWhenAllRequestedFilesFail(t *testi
 	assert.Equal(t, connect.CodeFailedPrecondition, connectErr.Code())
 	assert.Contains(t, connectErr.Message(), "file not in changed state")
 }
+
+func (r *worktreeTestDaemonRouter) OpenLocalModelHTTP(context.Context, string, string, *reliantv1.LocalModelHTTPRequest) (*toolexec.LocalModelHTTPStream, error) {
+	return nil, nil
+}
+func (r *worktreeTestDaemonRouter) RefreshLocalModels(context.Context, string, string) (*reliantv1.LocalModelInventory, error) {
+	return nil, nil
+}

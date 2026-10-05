@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
+	accesstoken "github.com/reliant-labs/forge/pkg/accesstoken"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -123,14 +125,14 @@ func TestBuildAvailableDrivers_ReliantConfiguredViaProviderAPIKey(t *testing.T) 
 	ctx := context.Background()
 	userID := "test-user"
 
-	require.NoError(t, repo.SetProviderAPIKey(ctx, userID, "reliant", "rlnt_abcdef0123456789"))
+	require.NoError(t, repo.SetProviderAPIKey(ctx, userID, "reliant", validRlat))
 
 	availableDrivers, err := BuildAvailableDrivers(ctx, repo, userID)
 	require.NoError(t, err)
 
 	cfg, ok := availableDrivers.Drivers["reliant"]
-	require.True(t, ok, "reliant should be available when rlnt_ key is persisted")
-	assert.Equal(t, "rlnt_abcdef0123456789", cfg.APIKey)
+	require.True(t, ok, "reliant should be available when an rlat_ key is persisted")
+	assert.Equal(t, validRlat, cfg.APIKey)
 	assert.Equal(t, "https://proxy.example.com/v1", cfg.BaseURL)
 	assert.True(t, cfg.Enabled)
 }
@@ -170,4 +172,40 @@ func TestBuildAvailableDrivers_CodexMarkerWithoutTokensIsSkipped(t *testing.T) {
 	anthropic, hasAnthropic := availableDrivers.Drivers["anthropic"]
 	require.True(t, hasAnthropic)
 	assert.Equal(t, "sk-ant-test", anthropic.APIKey)
+}
+
+// A well-formed rlat_ access token: prefix plus base62 padding to TokenLen.
+var validRlat = accesstoken.Prefix + strings.Repeat("a", accesstoken.TokenLen-len(accesstoken.Prefix))
+
+// The gateway answers 401 to anything but an rlat_ token, so a legacy rlnt_ key
+// must not make the reliant provider (and its models) look available.
+func TestBuildAvailableDrivers_ReliantLegacyKeyIsSkippedAndReported(t *testing.T) {
+	repo, cleanup := db.SetupTestDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	userID := "test-user"
+	require.NoError(t, repo.SetProviderAPIKey(ctx, userID, "reliant", "rlnt_abcdef0123456789"))
+
+	available, err := BuildAvailableDrivers(ctx, repo, userID)
+	require.NoError(t, err)
+	_, has := available.Drivers["reliant"]
+	assert.False(t, has, "legacy rlnt_ key must not register the reliant driver")
+
+	stale, err := HasStaleReliantKey(ctx, repo, userID)
+	require.NoError(t, err)
+	assert.True(t, stale)
+
+	require.NoError(t, repo.SetProviderAPIKey(ctx, userID, "reliant", validRlat))
+	stale, err = HasStaleReliantKey(ctx, repo, userID)
+	require.NoError(t, err)
+	assert.False(t, stale, "a valid rlat_ key is not stale")
+}
+
+func TestHasStaleReliantKey_FalseWithoutKey(t *testing.T) {
+	repo, cleanup := db.SetupTestDB(t)
+	defer cleanup()
+	stale, err := HasStaleReliantKey(context.Background(), repo, "test-user")
+	require.NoError(t, err)
+	assert.False(t, stale)
 }

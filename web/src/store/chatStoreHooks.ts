@@ -15,9 +15,8 @@
  * Direct store access is only allowed within the store itself and other stores.
  */
 
-import { useMemo, useRef } from "react";
+import { useMemo } from "react";
 import { useChatStore } from "./chatStore";
-import { useActivityStore, ChatActivity } from "./activityStore";
 import { useChat as useChatQuery } from "../hooks/chat-queries";
 import { useMessages } from "../hooks/message-queries";
 import type {
@@ -97,7 +96,7 @@ export function useChat(chatId: string | undefined): Chat | undefined {
  * plus loadMessages / optimistic writes) via the helpers in message-queries.ts;
  * the queryFn is only a cold-start seed. The in-flight streaming placeholder is
  * NOT here — it lives in the streamingMessages slice and is composed at the
- * render layer (see ChatContainer / WorkflowBuilderChat).
+ * render layer (see ChatContainer).
  */
 export function useChatMessages(chatId: string | undefined): Message[] {
   return useMessages(chatId).data?.messages ?? (EMPTY_ARRAY as Message[]);
@@ -195,6 +194,14 @@ export function useRunOutputs(chatId: string): RunOutputUpdate[] {
 }
 
 /**
+ * Whether a chat is showing cached content whose sync for the current stream
+ * subscription (a snapshot, or a replay catching up) has not arrived yet.
+ */
+export function useIsChatSyncing(chatId: string | null | undefined): boolean {
+  return useChatStore((state) => !!chatId && state.chatSyncPendingId === chatId);
+}
+
+/**
  * Get context usage for a chat's main thread (for compaction indicator)
  * Main thread is identified by chatId itself
  */
@@ -243,50 +250,3 @@ export function useToolCallStates(chatId: string) {
 export function useDiscussMode(chatId: string): boolean {
   return useChatStore((state) => state.discussMode[chatId] ?? false);
 }
-
-// ============================================================================
-// WORKFLOW ACTIVITY SELECTORS (for WorkflowHub)
-// ============================================================================
-
-
-/**
- * Check if workflow builder chats are actively running.
- * Used by WorkflowHub to show an "Editing" indicator when a workflow's
- * builder assistant is active.
- *
- * @param builderChatIds - Map of workflow name to builder chat ID
- * @returns Set of workflow names whose builder chat is currently running
- */
-export function useActiveBuilderChats(
-  builderChatIds: Map<string, string>
-): Set<string> {
-  const prevResultRef = useRef<Set<string>>(EMPTY_BUILDER_SET);
-  const prevKeyRef = useRef<string>("");
-
-  const activities = useActivityStore((state) => state.activities);
-
-  return useMemo(() => {
-    if (builderChatIds.size === 0) {
-      return EMPTY_BUILDER_SET;
-    }
-
-    const active = new Set<string>();
-    for (const [workflowName, chatId] of builderChatIds) {
-      const activity = activities.get(chatId);
-      if (activity !== undefined && activity >= ChatActivity.RUNNING) {
-        active.add(workflowName);
-      }
-    }
-
-    // Stable reference: only return new Set if contents changed
-    const key = [...active].sort().join(",");
-    if (key === prevKeyRef.current) {
-      return prevResultRef.current;
-    }
-    prevKeyRef.current = key;
-    prevResultRef.current = active;
-    return active;
-  }, [builderChatIds, activities]);
-}
-
-const EMPTY_BUILDER_SET = new Set<string>();

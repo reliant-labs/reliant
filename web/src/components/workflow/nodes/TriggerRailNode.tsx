@@ -16,6 +16,7 @@
  * The in-graph event types (message_created, pre_tool_use, …) stay EventNode.
  */
 
+import { Tooltip } from "../../ui/Tooltip";
 import { memo, type MouseEvent } from 'react'
 import { Handle, Position, useNodeConnections } from '@xyflow/react'
 import { Clock, MessageCircle, Plus, Rocket } from 'lucide-react'
@@ -93,12 +94,12 @@ export const TriggerRailNode = memo(({ data, selected }: TriggerRailNodeProps) =
 
         {lines.map(({ trigger, scheduleText, health, paused, failing }) => (
           <li key={trigger.id}>
-            <button
+            <Tooltip content={health.detail ?? health.label} placement="bottom" delay={300} wrapperClassName="inline-flex">
+<button
               type="button"
               onClick={stop(() => rail?.onEditTrigger(trigger))}
               data-paused={paused ? 'true' : undefined}
               aria-label={`${trigger.name}, ${scheduleText}${paused || failing ? `, ${health.label}` : ''}. Edit trigger`}
-              title={health.detail ?? health.label}
               className={cn(
                 nodeControlClass,
                 lineClass,
@@ -117,6 +118,7 @@ export const TriggerRailNode = memo(({ data, selected }: TriggerRailNodeProps) =
                 />
               )}
             </button>
+</Tooltip>
           </li>
         ))}
 

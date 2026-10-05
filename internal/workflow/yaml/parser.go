@@ -66,6 +66,10 @@ func unmarshalWorkflow(node *yaml.Node) (*reliantv1.Workflow, error) {
 		switch key {
 		case "name":
 			wf.Name = val.Value
+		case "title":
+			wf.Title = val.Value
+		case "hidden":
+			err = val.Decode(&wf.Hidden)
 		case "description":
 			var desc string
 			if err := val.Decode(&desc); err == nil {
@@ -368,6 +372,16 @@ func marshalWorkflow(wf *reliantv1.Workflow) (*yaml.Node, error) {
 	// name
 	if wf.Name != "" {
 		m.Content = append(m.Content, scalarNode("name", ""), scalarNode(wf.Name, ""))
+	}
+
+	// title
+	if wf.Title != "" {
+		m.Content = append(m.Content, scalarNode("title", ""), scalarNode(wf.Title, ""))
+	}
+
+	// hidden — emitted only when true; false is the default and noise.
+	if wf.Hidden {
+		m.Content = append(m.Content, scalarNode("hidden", ""), scalarNode("true", "!!bool"))
 	}
 
 	// apiVersion

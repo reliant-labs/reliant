@@ -504,8 +504,9 @@ export function RightSidebar({ onCloseSidebar }: RightSidebarProps = {}) {
     >
       {/* Tabs */}
       <div className="flex justify-center bg-accent border-b border-border h-10 overflow-visible pt-1">
-        <Tooltip content="Files" placement="bottom">
+        <Tooltip content="Files (Cmd+K F)" placement="bottom" delay={300}>
           <button
+            aria-label="Files"
             onClick={handleFilesTabClick}
             tabIndex={-1}
             className={cn(
@@ -522,8 +523,9 @@ export function RightSidebar({ onCloseSidebar }: RightSidebarProps = {}) {
             <Files className="w-4 h-4" />
           </button>
         </Tooltip>
-        <Tooltip content="Changes" placement="bottom">
+        <Tooltip content="Changes (Cmd+K G)" placement="bottom" delay={300}>
           <button
+            aria-label="Changes"
             onClick={() => handleTabClick("changes")}
             tabIndex={-1}
             className={cn(
@@ -540,8 +542,9 @@ export function RightSidebar({ onCloseSidebar }: RightSidebarProps = {}) {
             <GitBranch className="w-4 h-4" />
           </button>
         </Tooltip>
-        <Tooltip content="Monitor running processes" placement="bottom">
+        <Tooltip content="Processes: monitor running commands (Cmd+K R)" placement="bottom" delay={300}>
           <button
+            aria-label="Processes"
             onClick={() => handleTabClick("processes")}
             tabIndex={-1}
             className={cn(
@@ -563,8 +566,9 @@ export function RightSidebar({ onCloseSidebar }: RightSidebarProps = {}) {
             </span>
           </button>
         </Tooltip>
-        <Tooltip content="Tasks" placement="bottom">
+        <Tooltip content="Tasks (Cmd+K K)" placement="bottom" delay={300}>
           <button
+            aria-label="Tasks"
             onClick={() => handleTabClick("tasks")}
             tabIndex={-1}
             className={cn(
@@ -600,8 +604,9 @@ export function RightSidebar({ onCloseSidebar }: RightSidebarProps = {}) {
         {/* The in-app browser is an Electron <webview> — hide its sidebar entirely
             in the web build, where it cannot be mounted. */}
         {isElectron() && (
-          <Tooltip content="Browser" placement="bottom">
+          <Tooltip content="Browser (Cmd+K V)" placement="bottom" delay={300}>
             <button
+            aria-label="Browser"
               onClick={() => handleTabClick("browser")}
               tabIndex={-1}
               className={cn(
@@ -631,7 +636,7 @@ export function RightSidebar({ onCloseSidebar }: RightSidebarProps = {}) {
         {currentProject && (
           <>
             <span className="self-center h-4 w-px bg-border mx-1" />
-            <Tooltip content={isTerminalOpen ? "Hide Terminal" : "Show Terminal"} placement="bottom">
+            <Tooltip content={isTerminalOpen ? "Hide terminal (Cmd+J)" : "Show terminal (Cmd+J)"} placement="bottom" delay={300}>
               <button
                 onClick={toggleTerminal}
                 tabIndex={-1}

@@ -1,4 +1,6 @@
 name: scope-conversation
+title: Scope Conversation
+hidden: true
 apiVersion: "0.0.5"
 description: |
   Reusable scoping conversation sub-workflow.

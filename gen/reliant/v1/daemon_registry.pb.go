@@ -558,6 +558,193 @@ func (x *ResumeDaemonResponse) GetErrorMessage() string {
 	return ""
 }
 
+type RefreshLocalModelsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	DaemonId      string                 `protobuf:"bytes,1,opt,name=daemon_id,json=daemonId,proto3" json:"daemon_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RefreshLocalModelsRequest) Reset() {
+	*x = RefreshLocalModelsRequest{}
+	mi := &file_reliant_v1_daemon_registry_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RefreshLocalModelsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RefreshLocalModelsRequest) ProtoMessage() {}
+
+func (x *RefreshLocalModelsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_daemon_registry_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RefreshLocalModelsRequest.ProtoReflect.Descriptor instead.
+func (*RefreshLocalModelsRequest) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_daemon_registry_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *RefreshLocalModelsRequest) GetDaemonId() string {
+	if x != nil {
+		return x.DaemonId
+	}
+	return ""
+}
+
+type RefreshLocalModelsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	LocalModels   *LocalModelInventory   `protobuf:"bytes,1,opt,name=local_models,json=localModels,proto3" json:"local_models,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RefreshLocalModelsResponse) Reset() {
+	*x = RefreshLocalModelsResponse{}
+	mi := &file_reliant_v1_daemon_registry_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RefreshLocalModelsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RefreshLocalModelsResponse) ProtoMessage() {}
+
+func (x *RefreshLocalModelsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_daemon_registry_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RefreshLocalModelsResponse.ProtoReflect.Descriptor instead.
+func (*RefreshLocalModelsResponse) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_daemon_registry_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *RefreshLocalModelsResponse) GetLocalModels() *LocalModelInventory {
+	if x != nil {
+		return x.LocalModels
+	}
+	return nil
+}
+
+type SetLocalModelEndpointsRequest struct {
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	DaemonId string                 `protobuf:"bytes,1,opt,name=daemon_id,json=daemonId,proto3" json:"daemon_id,omitempty"`
+	// Base URLs as seen from the daemon's machine, e.g.
+	// "http://localhost:11434/v1" or "http://gpu-box.lan:8000/v1". Empty
+	// clears all configured endpoints (auto-detection still runs).
+	BaseUrls      []string `protobuf:"bytes,2,rep,name=base_urls,json=baseUrls,proto3" json:"base_urls,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetLocalModelEndpointsRequest) Reset() {
+	*x = SetLocalModelEndpointsRequest{}
+	mi := &file_reliant_v1_daemon_registry_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetLocalModelEndpointsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetLocalModelEndpointsRequest) ProtoMessage() {}
+
+func (x *SetLocalModelEndpointsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_daemon_registry_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetLocalModelEndpointsRequest.ProtoReflect.Descriptor instead.
+func (*SetLocalModelEndpointsRequest) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_daemon_registry_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *SetLocalModelEndpointsRequest) GetDaemonId() string {
+	if x != nil {
+		return x.DaemonId
+	}
+	return ""
+}
+
+func (x *SetLocalModelEndpointsRequest) GetBaseUrls() []string {
+	if x != nil {
+		return x.BaseUrls
+	}
+	return nil
+}
+
+type SetLocalModelEndpointsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	LocalModels   *LocalModelInventory   `protobuf:"bytes,1,opt,name=local_models,json=localModels,proto3" json:"local_models,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetLocalModelEndpointsResponse) Reset() {
+	*x = SetLocalModelEndpointsResponse{}
+	mi := &file_reliant_v1_daemon_registry_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetLocalModelEndpointsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetLocalModelEndpointsResponse) ProtoMessage() {}
+
+func (x *SetLocalModelEndpointsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_daemon_registry_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetLocalModelEndpointsResponse.ProtoReflect.Descriptor instead.
+func (*SetLocalModelEndpointsResponse) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_daemon_registry_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *SetLocalModelEndpointsResponse) GetLocalModels() *LocalModelInventory {
+	if x != nil {
+		return x.LocalModels
+	}
+	return nil
+}
+
 type DaemonInfo struct {
 	state    protoimpl.MessageState `protogen:"open.v1"`
 	DaemonId string                 `protobuf:"bytes,1,opt,name=daemon_id,json=daemonId,proto3" json:"daemon_id,omitempty"`
@@ -624,14 +811,20 @@ type DaemonInfo struct {
 	// attached — a provisioning one, where connected_at is necessarily unset. An
 	// unknown recency sorts a brand-new machine last, which is the opposite of
 	// what the user means.
-	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,20,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	CreatedAt *timestamppb.Timestamp `protobuf:"bytes,20,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	// Local model servers (Ollama, LM Studio, …) on this daemon's machine and
+	// the models they serve, as last published by the daemon. Unset when the
+	// daemon has never published one. The inventory is kept while the daemon is
+	// offline so the UI can show what WOULD be available; callers gate on
+	// `status` before offering a model for use.
+	LocalModels   *LocalModelInventory `protobuf:"bytes,21,opt,name=local_models,json=localModels,proto3" json:"local_models,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *DaemonInfo) Reset() {
 	*x = DaemonInfo{}
-	mi := &file_reliant_v1_daemon_registry_proto_msgTypes[8]
+	mi := &file_reliant_v1_daemon_registry_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -643,7 +836,7 @@ func (x *DaemonInfo) String() string {
 func (*DaemonInfo) ProtoMessage() {}
 
 func (x *DaemonInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_daemon_registry_proto_msgTypes[8]
+	mi := &file_reliant_v1_daemon_registry_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -656,7 +849,7 @@ func (x *DaemonInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DaemonInfo.ProtoReflect.Descriptor instead.
 func (*DaemonInfo) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_daemon_registry_proto_rawDescGZIP(), []int{8}
+	return file_reliant_v1_daemon_registry_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *DaemonInfo) GetDaemonId() string {
@@ -799,6 +992,13 @@ func (x *DaemonInfo) GetCreatedAt() *timestamppb.Timestamp {
 	return nil
 }
 
+func (x *DaemonInfo) GetLocalModels() *LocalModelInventory {
+	if x != nil {
+		return x.LocalModels
+	}
+	return nil
+}
+
 var File_reliant_v1_daemon_registry_proto protoreflect.FileDescriptor
 
 const file_reliant_v1_daemon_registry_proto_rawDesc = "" +
@@ -829,7 +1029,16 @@ const file_reliant_v1_daemon_registry_proto_rawDesc = "" +
 	"\tdaemon_id\x18\x01 \x01(\tR\bdaemonId\"U\n" +
 	"\x14ResumeDaemonResponse\x12\x18\n" +
 	"\aresumed\x18\x01 \x01(\bR\aresumed\x12#\n" +
-	"\rerror_message\x18\x02 \x01(\tR\ferrorMessage\"\xbe\a\n" +
+	"\rerror_message\x18\x02 \x01(\tR\ferrorMessage\"8\n" +
+	"\x19RefreshLocalModelsRequest\x12\x1b\n" +
+	"\tdaemon_id\x18\x01 \x01(\tR\bdaemonId\"`\n" +
+	"\x1aRefreshLocalModelsResponse\x12B\n" +
+	"\flocal_models\x18\x01 \x01(\v2\x1f.reliant.v1.LocalModelInventoryR\vlocalModels\"Y\n" +
+	"\x1dSetLocalModelEndpointsRequest\x12\x1b\n" +
+	"\tdaemon_id\x18\x01 \x01(\tR\bdaemonId\x12\x1b\n" +
+	"\tbase_urls\x18\x02 \x03(\tR\bbaseUrls\"d\n" +
+	"\x1eSetLocalModelEndpointsResponse\x12B\n" +
+	"\flocal_models\x18\x01 \x01(\v2\x1f.reliant.v1.LocalModelInventoryR\vlocalModels\"\x82\b\n" +
 	"\n" +
 	"DaemonInfo\x12\x1b\n" +
 	"\tdaemon_id\x18\x01 \x01(\tR\bdaemonId\x12\x17\n" +
@@ -854,7 +1063,8 @@ const file_reliant_v1_daemon_registry_proto_rawDesc = "" +
 	"\x12last_oom_killed_at\x18\x12 \x01(\v2\x1a.google.protobuf.TimestampR\x0flastOomKilledAt\x12$\n" +
 	"\x0eoom_kill_count\x18\x13 \x01(\x05R\foomKillCount\x129\n" +
 	"\n" +
-	"created_at\x18\x14 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt*\xd1\x01\n" +
+	"created_at\x18\x14 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x12B\n" +
+	"\flocal_models\x18\x15 \x01(\v2\x1f.reliant.v1.LocalModelInventoryR\vlocalModels*\xd1\x01\n" +
 	"\fDaemonStatus\x12\x1d\n" +
 	"\x19DAEMON_STATUS_UNSPECIFIED\x10\x00\x12\x18\n" +
 	"\x14DAEMON_STATUS_ACTIVE\x10\x01\x12\x16\n" +
@@ -870,12 +1080,14 @@ const file_reliant_v1_daemon_registry_proto_rawDesc = "" +
 	"\x1cDAEMON_LIFECYCLE_PHASE_READY\x10\x03\x12%\n" +
 	"!DAEMON_LIFECYCLE_PHASE_SUSPENDING\x10\x04\x12$\n" +
 	" DAEMON_LIFECYCLE_PHASE_SUSPENDED\x10\x05\x12!\n" +
-	"\x1dDAEMON_LIFECYCLE_PHASE_FAILED\x10\x062\xe2\x02\n" +
+	"\x1dDAEMON_LIFECYCLE_PHASE_FAILED\x10\x062\xbc\x04\n" +
 	"\x15DaemonRegistryService\x12P\n" +
 	"\vListDaemons\x12\x1e.reliant.v1.ListDaemonsRequest\x1a\x1f.reliant.v1.ListDaemonsResponse\"\x00\x12J\n" +
 	"\tGetDaemon\x12\x1c.reliant.v1.GetDaemonRequest\x1a\x1d.reliant.v1.GetDaemonResponse\"\x00\x12V\n" +
 	"\rResolveDaemon\x12 .reliant.v1.ResolveDaemonRequest\x1a!.reliant.v1.ResolveDaemonResponse\"\x00\x12S\n" +
-	"\fResumeDaemon\x12\x1f.reliant.v1.ResumeDaemonRequest\x1a .reliant.v1.ResumeDaemonResponse\"\x00B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
+	"\fResumeDaemon\x12\x1f.reliant.v1.ResumeDaemonRequest\x1a .reliant.v1.ResumeDaemonResponse\"\x00\x12e\n" +
+	"\x12RefreshLocalModels\x12%.reliant.v1.RefreshLocalModelsRequest\x1a&.reliant.v1.RefreshLocalModelsResponse\"\x00\x12q\n" +
+	"\x16SetLocalModelEndpoints\x12).reliant.v1.SetLocalModelEndpointsRequest\x1a*.reliant.v1.SetLocalModelEndpointsResponse\"\x00B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
 
 var (
 	file_reliant_v1_daemon_registry_proto_rawDescOnce sync.Once
@@ -890,49 +1102,61 @@ func file_reliant_v1_daemon_registry_proto_rawDescGZIP() []byte {
 }
 
 var file_reliant_v1_daemon_registry_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_reliant_v1_daemon_registry_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
+var file_reliant_v1_daemon_registry_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
 var file_reliant_v1_daemon_registry_proto_goTypes = []any{
-	(DaemonStatus)(0),             // 0: reliant.v1.DaemonStatus
-	(DaemonLifecyclePhase)(0),     // 1: reliant.v1.DaemonLifecyclePhase
-	(*ListDaemonsRequest)(nil),    // 2: reliant.v1.ListDaemonsRequest
-	(*ListDaemonsResponse)(nil),   // 3: reliant.v1.ListDaemonsResponse
-	(*GetDaemonRequest)(nil),      // 4: reliant.v1.GetDaemonRequest
-	(*GetDaemonResponse)(nil),     // 5: reliant.v1.GetDaemonResponse
-	(*ResolveDaemonRequest)(nil),  // 6: reliant.v1.ResolveDaemonRequest
-	(*ResolveDaemonResponse)(nil), // 7: reliant.v1.ResolveDaemonResponse
-	(*ResumeDaemonRequest)(nil),   // 8: reliant.v1.ResumeDaemonRequest
-	(*ResumeDaemonResponse)(nil),  // 9: reliant.v1.ResumeDaemonResponse
-	(*DaemonInfo)(nil),            // 10: reliant.v1.DaemonInfo
-	nil,                           // 11: reliant.v1.ResolveDaemonRequest.LabelsEntry
-	(*DiscoveredProject)(nil),     // 12: reliant.v1.DiscoveredProject
-	(*timestamppb.Timestamp)(nil), // 13: google.protobuf.Timestamp
+	(DaemonStatus)(0),                      // 0: reliant.v1.DaemonStatus
+	(DaemonLifecyclePhase)(0),              // 1: reliant.v1.DaemonLifecyclePhase
+	(*ListDaemonsRequest)(nil),             // 2: reliant.v1.ListDaemonsRequest
+	(*ListDaemonsResponse)(nil),            // 3: reliant.v1.ListDaemonsResponse
+	(*GetDaemonRequest)(nil),               // 4: reliant.v1.GetDaemonRequest
+	(*GetDaemonResponse)(nil),              // 5: reliant.v1.GetDaemonResponse
+	(*ResolveDaemonRequest)(nil),           // 6: reliant.v1.ResolveDaemonRequest
+	(*ResolveDaemonResponse)(nil),          // 7: reliant.v1.ResolveDaemonResponse
+	(*ResumeDaemonRequest)(nil),            // 8: reliant.v1.ResumeDaemonRequest
+	(*ResumeDaemonResponse)(nil),           // 9: reliant.v1.ResumeDaemonResponse
+	(*RefreshLocalModelsRequest)(nil),      // 10: reliant.v1.RefreshLocalModelsRequest
+	(*RefreshLocalModelsResponse)(nil),     // 11: reliant.v1.RefreshLocalModelsResponse
+	(*SetLocalModelEndpointsRequest)(nil),  // 12: reliant.v1.SetLocalModelEndpointsRequest
+	(*SetLocalModelEndpointsResponse)(nil), // 13: reliant.v1.SetLocalModelEndpointsResponse
+	(*DaemonInfo)(nil),                     // 14: reliant.v1.DaemonInfo
+	nil,                                    // 15: reliant.v1.ResolveDaemonRequest.LabelsEntry
+	(*LocalModelInventory)(nil),            // 16: reliant.v1.LocalModelInventory
+	(*DiscoveredProject)(nil),              // 17: reliant.v1.DiscoveredProject
+	(*timestamppb.Timestamp)(nil),          // 18: google.protobuf.Timestamp
 }
 var file_reliant_v1_daemon_registry_proto_depIdxs = []int32{
-	10, // 0: reliant.v1.ListDaemonsResponse.daemons:type_name -> reliant.v1.DaemonInfo
-	10, // 1: reliant.v1.GetDaemonResponse.daemon:type_name -> reliant.v1.DaemonInfo
-	11, // 2: reliant.v1.ResolveDaemonRequest.labels:type_name -> reliant.v1.ResolveDaemonRequest.LabelsEntry
-	10, // 3: reliant.v1.ResolveDaemonResponse.daemon:type_name -> reliant.v1.DaemonInfo
-	0,  // 4: reliant.v1.DaemonInfo.status:type_name -> reliant.v1.DaemonStatus
-	12, // 5: reliant.v1.DaemonInfo.projects:type_name -> reliant.v1.DiscoveredProject
-	13, // 6: reliant.v1.DaemonInfo.connected_at:type_name -> google.protobuf.Timestamp
-	13, // 7: reliant.v1.DaemonInfo.last_heartbeat:type_name -> google.protobuf.Timestamp
-	1,  // 8: reliant.v1.DaemonInfo.lifecycle_phase:type_name -> reliant.v1.DaemonLifecyclePhase
-	13, // 9: reliant.v1.DaemonInfo.last_status_changed_at:type_name -> google.protobuf.Timestamp
-	13, // 10: reliant.v1.DaemonInfo.last_oom_killed_at:type_name -> google.protobuf.Timestamp
-	13, // 11: reliant.v1.DaemonInfo.created_at:type_name -> google.protobuf.Timestamp
-	2,  // 12: reliant.v1.DaemonRegistryService.ListDaemons:input_type -> reliant.v1.ListDaemonsRequest
-	4,  // 13: reliant.v1.DaemonRegistryService.GetDaemon:input_type -> reliant.v1.GetDaemonRequest
-	6,  // 14: reliant.v1.DaemonRegistryService.ResolveDaemon:input_type -> reliant.v1.ResolveDaemonRequest
-	8,  // 15: reliant.v1.DaemonRegistryService.ResumeDaemon:input_type -> reliant.v1.ResumeDaemonRequest
-	3,  // 16: reliant.v1.DaemonRegistryService.ListDaemons:output_type -> reliant.v1.ListDaemonsResponse
-	5,  // 17: reliant.v1.DaemonRegistryService.GetDaemon:output_type -> reliant.v1.GetDaemonResponse
-	7,  // 18: reliant.v1.DaemonRegistryService.ResolveDaemon:output_type -> reliant.v1.ResolveDaemonResponse
-	9,  // 19: reliant.v1.DaemonRegistryService.ResumeDaemon:output_type -> reliant.v1.ResumeDaemonResponse
-	16, // [16:20] is the sub-list for method output_type
-	12, // [12:16] is the sub-list for method input_type
-	12, // [12:12] is the sub-list for extension type_name
-	12, // [12:12] is the sub-list for extension extendee
-	0,  // [0:12] is the sub-list for field type_name
+	14, // 0: reliant.v1.ListDaemonsResponse.daemons:type_name -> reliant.v1.DaemonInfo
+	14, // 1: reliant.v1.GetDaemonResponse.daemon:type_name -> reliant.v1.DaemonInfo
+	15, // 2: reliant.v1.ResolveDaemonRequest.labels:type_name -> reliant.v1.ResolveDaemonRequest.LabelsEntry
+	14, // 3: reliant.v1.ResolveDaemonResponse.daemon:type_name -> reliant.v1.DaemonInfo
+	16, // 4: reliant.v1.RefreshLocalModelsResponse.local_models:type_name -> reliant.v1.LocalModelInventory
+	16, // 5: reliant.v1.SetLocalModelEndpointsResponse.local_models:type_name -> reliant.v1.LocalModelInventory
+	0,  // 6: reliant.v1.DaemonInfo.status:type_name -> reliant.v1.DaemonStatus
+	17, // 7: reliant.v1.DaemonInfo.projects:type_name -> reliant.v1.DiscoveredProject
+	18, // 8: reliant.v1.DaemonInfo.connected_at:type_name -> google.protobuf.Timestamp
+	18, // 9: reliant.v1.DaemonInfo.last_heartbeat:type_name -> google.protobuf.Timestamp
+	1,  // 10: reliant.v1.DaemonInfo.lifecycle_phase:type_name -> reliant.v1.DaemonLifecyclePhase
+	18, // 11: reliant.v1.DaemonInfo.last_status_changed_at:type_name -> google.protobuf.Timestamp
+	18, // 12: reliant.v1.DaemonInfo.last_oom_killed_at:type_name -> google.protobuf.Timestamp
+	18, // 13: reliant.v1.DaemonInfo.created_at:type_name -> google.protobuf.Timestamp
+	16, // 14: reliant.v1.DaemonInfo.local_models:type_name -> reliant.v1.LocalModelInventory
+	2,  // 15: reliant.v1.DaemonRegistryService.ListDaemons:input_type -> reliant.v1.ListDaemonsRequest
+	4,  // 16: reliant.v1.DaemonRegistryService.GetDaemon:input_type -> reliant.v1.GetDaemonRequest
+	6,  // 17: reliant.v1.DaemonRegistryService.ResolveDaemon:input_type -> reliant.v1.ResolveDaemonRequest
+	8,  // 18: reliant.v1.DaemonRegistryService.ResumeDaemon:input_type -> reliant.v1.ResumeDaemonRequest
+	10, // 19: reliant.v1.DaemonRegistryService.RefreshLocalModels:input_type -> reliant.v1.RefreshLocalModelsRequest
+	12, // 20: reliant.v1.DaemonRegistryService.SetLocalModelEndpoints:input_type -> reliant.v1.SetLocalModelEndpointsRequest
+	3,  // 21: reliant.v1.DaemonRegistryService.ListDaemons:output_type -> reliant.v1.ListDaemonsResponse
+	5,  // 22: reliant.v1.DaemonRegistryService.GetDaemon:output_type -> reliant.v1.GetDaemonResponse
+	7,  // 23: reliant.v1.DaemonRegistryService.ResolveDaemon:output_type -> reliant.v1.ResolveDaemonResponse
+	9,  // 24: reliant.v1.DaemonRegistryService.ResumeDaemon:output_type -> reliant.v1.ResumeDaemonResponse
+	11, // 25: reliant.v1.DaemonRegistryService.RefreshLocalModels:output_type -> reliant.v1.RefreshLocalModelsResponse
+	13, // 26: reliant.v1.DaemonRegistryService.SetLocalModelEndpoints:output_type -> reliant.v1.SetLocalModelEndpointsResponse
+	21, // [21:27] is the sub-list for method output_type
+	15, // [15:21] is the sub-list for method input_type
+	15, // [15:15] is the sub-list for extension type_name
+	15, // [15:15] is the sub-list for extension extendee
+	0,  // [0:15] is the sub-list for field type_name
 }
 
 func init() { file_reliant_v1_daemon_registry_proto_init() }
@@ -947,7 +1171,7 @@ func file_reliant_v1_daemon_registry_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_reliant_v1_daemon_registry_proto_rawDesc), len(file_reliant_v1_daemon_registry_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   10,
+			NumMessages:   14,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

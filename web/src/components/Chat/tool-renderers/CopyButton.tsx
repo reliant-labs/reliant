@@ -3,6 +3,7 @@
  * Shows a subtle copy icon that changes to a checkmark on success.
  */
 
+import { Tooltip } from "../../ui/Tooltip";
 import { memo, useState, useCallback } from 'react';
 import { Copy, Check } from 'lucide-react';
 import { cn } from '../../../lib/utils';
@@ -29,14 +30,14 @@ function CopyButtonComponent({ content, className }: CopyButtonProps) {
   }, [content]);
 
   return (
-    <button
+    <Tooltip content={copied ? 'Copied!' : 'Copy to clipboard'} placement="bottom" delay={300} wrapperClassName="inline-flex">
+<button
       type="button"
       onClick={handleCopy}
       className={cn(
         "p-0.5 rounded hover:bg-muted/80 text-muted-foreground hover:text-foreground transition-colors opacity-0 group-hover/tool-output:opacity-100 focus:opacity-100",
         className,
       )}
-      title={copied ? 'Copied!' : 'Copy to clipboard'}
       aria-label={copied ? 'Copied!' : 'Copy to clipboard'}
     >
       {copied ? (
@@ -45,6 +46,7 @@ function CopyButtonComponent({ content, className }: CopyButtonProps) {
         <Copy className="w-3 h-3" />
       )}
     </button>
+</Tooltip>
   );
 }
 

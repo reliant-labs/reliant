@@ -48,6 +48,7 @@ import {
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { Tooltip } from "@/components/ui/Tooltip";
 import { capabilities } from "@/services/controlPlane/capabilities";
 import {
   Button,
@@ -198,6 +199,21 @@ const EXTERNAL_DAEMON_TYPES = ["self_hosted", "external"];
 
 function isExternalDaemon(d: Pick<Daemon, "daemonType">): boolean {
   return EXTERNAL_DAEMON_TYPES.includes(d.daemonType);
+}
+
+export const CONNECTED_MACHINE_REMOVE_REASON =
+  "Connected machines can't be removed. Disconnect it first.";
+
+// A connected self-hosted machine re-registers itself on its next heartbeat, so
+// "forgetting" it just makes the row vanish and reappear. Cloud machines are
+// deleted as before; a disconnected self-hosted row can still be forgotten.
+export function canRemoveDaemon(
+  d: Pick<Daemon, "daemonType" | "status">,
+): { allowed: boolean; reason?: string } {
+  if (isExternalDaemon(d) && d.status === DaemonStatus.ACTIVE) {
+    return { allowed: false, reason: CONNECTED_MACHINE_REMOVE_REASON };
+  }
+  return { allowed: true };
 }
 
 // A UUID (v4-shaped, 36 chars with dashes at the standard offsets) is not a
@@ -816,7 +832,7 @@ function ManagedMachinesTable({
                       aria-label={`Delete ${daemonDisplayName(d)}`}
                       title="Delete machine"
                     >
-                      <Trash2 className="h-4 w-4 text-destructive" aria-hidden="true" />
+                      <Trash2 className="h-4 w-4 text-destructive-ink" aria-hidden="true" />
                     </Button>
                   </div>
                 )}
@@ -878,11 +894,26 @@ function SelfHostedMachinesTable({
               <Td className="text-muted-foreground">{d.platform || "—"}</Td>
               <Td className="text-muted-foreground">{lastSeen}</Td>
               <Td className="text-right">
-                {onRemove && (
-                  <Button variant="ghost" size="sm" onClick={() => onRemove(d)}>
-                    <Trash2 className="h-4 w-4 text-destructive" /> Remove
-                  </Button>
-                )}
+                {onRemove && (() => {
+                  const removal = canRemoveDaemon(d);
+                  const button = (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={!removal.allowed}
+                      onClick={() => onRemove(d)}
+                    >
+                      <Trash2 className="h-4 w-4 text-destructive-ink" /> Remove
+                    </Button>
+                  );
+                  return removal.allowed ? (
+                    button
+                  ) : (
+                    <Tooltip content={removal.reason ?? ""} placement="left">
+                      {button}
+                    </Tooltip>
+                  );
+                })()}
               </Td>
             </Tr>
           );
@@ -1417,20 +1448,36 @@ function EnvironmentDetail({
               <Badge label={badge.label} variant={badge.variant} />
             </div>
             {cloud && (
-              <div className="flex flex-wrap items-center gap-2">
-                <MachineLifecycleActions
-                  daemon={daemon}
-                  busy={busy}
-                  restartStage={restartStage}
-                  onSuspend={() => suspendMut.mutate()}
-                  onResume={() => resumeMut.mutate()}
-                  onRestart={() => setRestartOpen(true)}
-                />
-                <Button variant="danger" disabled={busy} onClick={() => setDeleteOpen(true)}>
-                  <Trash2 className="h-4 w-4" /> {external ? "Remove" : "Delete"}
-                </Button>
-              </div>
-            )}
+<div className="flex flex-wrap items-center gap-2">
+              <MachineLifecycleActions
+                daemon={daemon}
+                busy={busy}
+                restartStage={restartStage}
+                onSuspend={() => suspendMut.mutate()}
+                onResume={() => resumeMut.mutate()}
+                onRestart={() => setRestartOpen(true)}
+              />
+              {(() => {
+                const removal = canRemoveDaemon(daemon);
+                const button = (
+                  <Button
+                    variant="danger"
+                    disabled={busy || !removal.allowed}
+                    onClick={() => setDeleteOpen(true)}
+                  >
+                    <Trash2 className="h-4 w-4" /> {external ? "Remove" : "Delete"}
+                  </Button>
+                );
+                return removal.allowed ? (
+                  button
+                ) : (
+                  <Tooltip content={removal.reason ?? ""} placement="bottom">
+                    {button}
+                  </Tooltip>
+                );
+              })()}
+            </div>
+)}
           </div>
 
           {/* A self-hosted machine runs on hardware this page does not
@@ -1639,7 +1686,7 @@ function PortAccessPanel({ daemonId, workspaceBaseDomain }: { daemonId: string; 
                       </Td>
                       <Td className="text-right">
                         <Button variant="ghost" size="sm" disabled={removing} onClick={() => removeMut.mutate(r.port)}>
-                          <Trash2 className="h-4 w-4 text-destructive" /> {removing ? "Removing…" : "Remove"}
+                          <Trash2 className="h-4 w-4 text-destructive-ink" /> {removing ? "Removing…" : "Remove"}
                         </Button>
                       </Td>
                     </Tr>
@@ -1669,13 +1716,13 @@ function TokenRevealModal({ token, onClose, title }: { token: string | null; onC
     <Modal open={token !== null} onClose={() => { setCopied(false); onClose(); }} title={title}>
       <div className="space-y-4">
         <div className="flex items-start gap-3 rounded-md border border-warning/30 bg-warning/10 p-3">
-          <AlertTriangle className="mt-0.5 h-5 w-5 flex-shrink-0 text-warning" />
+          <AlertTriangle className="mt-0.5 h-5 w-5 flex-shrink-0 text-warning-ink" />
           <p className="text-sm text-foreground">Copy this token now. You won't be able to see it again.</p>
         </div>
         <div className="flex items-center gap-2">
           <code className="flex-1 overflow-x-auto rounded-md border border-border/60 bg-background px-3 py-2 font-mono text-sm text-foreground">{token}</code>
           <Button variant="outline" onClick={copy}>
-            {copied ? <><Check className="h-4 w-4 text-success" /> Copied</> : <><Copy className="h-4 w-4" /> Copy</>}
+            {copied ? <><Check className="h-4 w-4 text-success-ink" /> Copied</> : <><Copy className="h-4 w-4" /> Copy</>}
           </Button>
         </div>
         <div className="flex justify-end">

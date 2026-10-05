@@ -8,11 +8,14 @@ import (
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/antigravity"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/claude"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/codex"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/local"
+	"github.com/reliant-labs/reliant/internal/llm/drivers/registry"
 	"github.com/reliant-labs/reliant/internal/llm/models"
+	"github.com/reliant-labs/reliant/internal/logging"
 )
 
 // BuildAvailableDrivers creates an AvailableDrivers struct from configured API keys
@@ -34,6 +37,13 @@ func BuildAvailableDrivers(ctx context.Context, repo db.Repository, userID strin
 
 	// For each configured provider, get the credential material needed by the driver.
 	for driverID := range maskedKeys {
+		// A provider is available only if its driver is registered. Credentials
+		// for catalog-only providers (xai, groq, azure, bedrock) must not make
+		// their models selectable: every call would fail at resolution.
+		if !hasRegisteredDriver(driverID) {
+			continue
+		}
+
 		if driverID == "claude" {
 			tokens, err := repo.GetClaudeAuthTokens(ctx, userID)
 			if err != nil || tokens == nil {
@@ -176,6 +186,13 @@ func BuildAvailableDrivers(ctx context.Context, repo db.Repository, userID strin
 		}
 
 		if apiKey != "" && apiKey != "dummy" { // Skip empty or dummy keys
+			// The gateway authenticates only rlat_ access tokens (401 otherwise), so a
+			// legacy-shaped key is not a usable credential. Never log the key.
+			if driverID == "reliant" && !IsReliantLLMKey(apiKey) {
+				logging.Warn("Skipping reliant provider key: not an rlat_ access token; user must reconnect",
+					"user_id", userID, "reason", "legacy_reliant_key_format")
+				continue
+			}
 			config := models.DriverConfig{
 				DriverID: models.DriverID(driverID),
 				APIKey:   apiKey,
@@ -195,20 +212,86 @@ func BuildAvailableDrivers(ctx context.Context, repo db.Repository, userID strin
 		}
 	}
 
-	// Add local driver if configured
-	// Local drivers use BaseURL instead of API key
-	localConfig := local.GetLocalConfig()
-	if localConfig != nil && localConfig.BaseURL != "" {
-		drivers[models.DriverID("local")] = models.DriverConfig{
-			DriverID: models.DriverID("local"),
-			BaseURL:  localConfig.BaseURL,
-			Enabled:  true,
-			// No API key required for local drivers
-		}
-	}
+	return models.AvailableDrivers{
+		Drivers:      drivers,
+		Availability: accountAvailability(ctx, drivers),
+	}, nil
+}
 
-	if len(drivers) == 0 {
-		return models.AvailableDrivers{Drivers: make(map[models.DriverID]models.DriverConfig)}, nil
+// accountAvailability builds the per-(driver, model) availability filter for the
+// account's dynamic providers (Copilot, Codex): the clients that implement
+// registry.AvailabilityReporter. Each report is TTL-cached by its driver, so
+// this adds no network call to a warm resolution. A provider whose report cannot
+// be fetched is left unfiltered (fail open) so an outage never makes its models
+// unresolvable.
+func accountAvailability(ctx context.Context, configured map[models.DriverID]models.DriverConfig) models.AvailabilityFunc {
+	reports := make(map[string]registry.ProviderAvailability)
+	for driverID, cfg := range configured {
+		if !cfg.IsConfigured() {
+			continue
+		}
+		client, err := clientForDriver(driverID, cfg)
+		if err != nil {
+			continue
+		}
+		reporter, ok := client.(registry.AvailabilityReporter)
+		if !ok {
+			continue
+		}
+		report, err := reporter.ReportAvailability(ctx)
+		if err != nil {
+			logging.Warn("provider availability unavailable; treating its models as servable",
+				"driver", string(driverID), "error", err)
+			continue
+		}
+		reports[string(driverID)] = report
 	}
-	return models.AvailableDrivers{Drivers: drivers}, nil
+	reg, err := models.GetRegistry()
+	if err != nil {
+		return nil
+	}
+	return registry.BuildAvailabilityFunc(reg, reports)
+}
+
+// hasRegisteredDriver reports whether a stored provider id has a registered
+// driver factory. The "claude" credential routes to the anthropic driver.
+func hasRegisteredDriver(providerID string) bool {
+	family := models.Family(providerID)
+	if providerID == "claude" {
+		family = models.Family("anthropic")
+	}
+	_, ok := registry.GetDriverFactory(family)
+	return ok
+}
+
+// HasStaleReliantKey reports whether the user has a stored `reliant` provider
+// key that the gateway would reject (not an rlat_ access token). It is the
+// condition under which BuildAvailableDrivers silently drops the provider.
+func HasStaleReliantKey(ctx context.Context, repo db.Repository, userID string) (bool, error) {
+	masked, err := repo.GetProviderAPIKeys(ctx, userID)
+	if err != nil {
+		return false, err
+	}
+	if _, ok := masked["reliant"]; !ok {
+		return false, nil
+	}
+	apiKey, err := repo.GetProviderAPIKey(ctx, userID, "reliant")
+	if err != nil {
+		return false, err
+	}
+	apiKey = strings.TrimSpace(apiKey)
+	return apiKey != "" && apiKey != "dummy" && !IsReliantLLMKey(apiKey), nil
+}
+
+// NewLocalDriver builds a driver for a local model synthesized for this
+// request. Local models are never in the registry or DriverMapping (they
+// belong to a user's daemons), so GetDriverForModel's CanDriverUseModel gate
+// does not apply; the caller supplies the relay via llm.WithTransport.
+func NewLocalDriver(model models.Model, opts ...llm.DriverOption) (llm.Driver, error) {
+	options := llm.DriverOptions{}
+	for _, o := range opts {
+		o(&options)
+	}
+	options.Model = model
+	return &baseDriver{client: local.NewClient(options), model: model}, nil
 }

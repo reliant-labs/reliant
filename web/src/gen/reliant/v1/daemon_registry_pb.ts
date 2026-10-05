@@ -9,7 +9,7 @@ import type { GenEnum, GenFile, GenMessage, GenService } from "@bufbuild/protobu
 import { enumDesc, fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
 import { file_google_protobuf_timestamp } from "@bufbuild/protobuf/wkt";
-import type { DiscoveredProject } from "./tools_daemon_pb";
+import type { DiscoveredProject, LocalModelInventory } from "./tools_daemon_pb";
 import { file_reliant_v1_tools_daemon } from "./tools_daemon_pb";
 import type { Message } from "@bufbuild/protobuf";
 
@@ -17,7 +17,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file reliant/v1/daemon_registry.proto.
  */
 export const file_reliant_v1_daemon_registry: GenFile = /*@__PURE__*/
-  fileDesc("CiByZWxpYW50L3YxL2RhZW1vbl9yZWdpc3RyeS5wcm90bxIKcmVsaWFudC52MSIUChJMaXN0RGFlbW9uc1JlcXVlc3QiPgoTTGlzdERhZW1vbnNSZXNwb25zZRInCgdkYWVtb25zGAEgAygLMhYucmVsaWFudC52MS5EYWVtb25JbmZvIiUKEEdldERhZW1vblJlcXVlc3QSEQoJZGFlbW9uX2lkGAEgASgJIjsKEUdldERhZW1vblJlc3BvbnNlEiYKBmRhZW1vbhgBIAEoCzIWLnJlbGlhbnQudjEuRGFlbW9uSW5mbyLAAQoUUmVzb2x2ZURhZW1vblJlcXVlc3QSEQoJZGFlbW9uX2lkGAEgASgJEhMKC2RhZW1vbl9uYW1lGAIgASgJEhMKC2RhZW1vbl90eXBlGAMgASgJEjwKBmxhYmVscxgEIAMoCzIsLnJlbGlhbnQudjEuUmVzb2x2ZURhZW1vblJlcXVlc3QuTGFiZWxzRW50cnkaLQoLTGFiZWxzRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASJOChVSZXNvbHZlRGFlbW9uUmVzcG9uc2USJgoGZGFlbW9uGAEgASgLMhYucmVsaWFudC52MS5EYWVtb25JbmZvEg0KBWZvdW5kGAIgASgIIigKE1Jlc3VtZURhZW1vblJlcXVlc3QSEQoJZGFlbW9uX2lkGAEgASgJIj4KFFJlc3VtZURhZW1vblJlc3BvbnNlEg8KB3Jlc3VtZWQYASABKAgSFQoNZXJyb3JfbWVzc2FnZRgCIAEoCSK0BQoKRGFlbW9uSW5mbxIRCglkYWVtb25faWQYASABKAkSDwoHdXNlcl9pZBgCIAEoCRIQCghob3N0bmFtZRgDIAEoCRIQCghwbGF0Zm9ybRgEIAEoCRIoCgZzdGF0dXMYBSABKA4yGC5yZWxpYW50LnYxLkRhZW1vblN0YXR1cxIvCghwcm9qZWN0cxgGIAMoCzIdLnJlbGlhbnQudjEuRGlzY292ZXJlZFByb2plY3QSMAoMY29ubmVjdGVkX2F0GAcgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIyCg5sYXN0X2hlYXJ0YmVhdBgIIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEwoLZGFlbW9uX3R5cGUYCSABKAkSGQoRbWVtb3J5X3VzZWRfYnl0ZXMYCiABKAQSGgoSbWVtb3J5X2xpbWl0X2J5dGVzGAsgASgEEhcKD21lbW9yeV9wcmVzc3VyZRgMIAEoCBIWCg5kZXRlY3RlZF9wb3J0cxgNIAMoDRI5Cg9saWZlY3ljbGVfcGhhc2UYDiABKA4yIC5yZWxpYW50LnYxLkRhZW1vbkxpZmVjeWNsZVBoYXNlEgwKBHNpemUYDyABKAkSGwoTbGFzdF9zdGF0dXNfbWVzc2FnZRgQIAEoCRI6ChZsYXN0X3N0YXR1c19jaGFuZ2VkX2F0GBEgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBI2ChJsYXN0X29vbV9raWxsZWRfYXQYEiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhYKDm9vbV9raWxsX2NvdW50GBMgASgFEi4KCmNyZWF0ZWRfYXQYFCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wKtEBCgxEYWVtb25TdGF0dXMSHQoZREFFTU9OX1NUQVRVU19VTlNQRUNJRklFRBAAEhgKFERBRU1PTl9TVEFUVVNfQUNUSVZFEAESFgoSREFFTU9OX1NUQVRVU19JRExFEAISHgoaREFFTU9OX1NUQVRVU19ESVNDT05ORUNURUQQAxIZChVEQUVNT05fU1RBVFVTX1BFTkRJTkcQBBIbChdEQUVNT05fU1RBVFVTX1NVU1BFTkRFRBAFEhgKFERBRU1PTl9TVEFUVVNfRkFJTEVEEAYqnQIKFERhZW1vbkxpZmVjeWNsZVBoYXNlEiYKIkRBRU1PTl9MSUZFQ1lDTEVfUEhBU0VfVU5TUEVDSUZJRUQQABInCiNEQUVNT05fTElGRUNZQ0xFX1BIQVNFX1BST1ZJU0lPTklORxABEiIKHkRBRU1PTl9MSUZFQ1lDTEVfUEhBU0VfQ0xPTklORxACEiAKHERBRU1PTl9MSUZFQ1lDTEVfUEhBU0VfUkVBRFkQAxIlCiFEQUVNT05fTElGRUNZQ0xFX1BIQVNFX1NVU1BFTkRJTkcQBBIkCiBEQUVNT05fTElGRUNZQ0xFX1BIQVNFX1NVU1BFTkRFRBAFEiEKHURBRU1PTl9MSUZFQ1lDTEVfUEhBU0VfRkFJTEVEEAYy4gIKFURhZW1vblJlZ2lzdHJ5U2VydmljZRJQCgtMaXN0RGFlbW9ucxIeLnJlbGlhbnQudjEuTGlzdERhZW1vbnNSZXF1ZXN0Gh8ucmVsaWFudC52MS5MaXN0RGFlbW9uc1Jlc3BvbnNlIgASSgoJR2V0RGFlbW9uEhwucmVsaWFudC52MS5HZXREYWVtb25SZXF1ZXN0Gh0ucmVsaWFudC52MS5HZXREYWVtb25SZXNwb25zZSIAElYKDVJlc29sdmVEYWVtb24SIC5yZWxpYW50LnYxLlJlc29sdmVEYWVtb25SZXF1ZXN0GiEucmVsaWFudC52MS5SZXNvbHZlRGFlbW9uUmVzcG9uc2UiABJTCgxSZXN1bWVEYWVtb24SHy5yZWxpYW50LnYxLlJlc3VtZURhZW1vblJlcXVlc3QaIC5yZWxpYW50LnYxLlJlc3VtZURhZW1vblJlc3BvbnNlIgBCOlo4Z2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vcmVsaWFudC92MTtyZWxpYW50djFiBnByb3RvMw", [file_google_protobuf_timestamp, file_reliant_v1_tools_daemon]);
+  fileDesc("CiByZWxpYW50L3YxL2RhZW1vbl9yZWdpc3RyeS5wcm90bxIKcmVsaWFudC52MSIUChJMaXN0RGFlbW9uc1JlcXVlc3QiPgoTTGlzdERhZW1vbnNSZXNwb25zZRInCgdkYWVtb25zGAEgAygLMhYucmVsaWFudC52MS5EYWVtb25JbmZvIiUKEEdldERhZW1vblJlcXVlc3QSEQoJZGFlbW9uX2lkGAEgASgJIjsKEUdldERhZW1vblJlc3BvbnNlEiYKBmRhZW1vbhgBIAEoCzIWLnJlbGlhbnQudjEuRGFlbW9uSW5mbyLAAQoUUmVzb2x2ZURhZW1vblJlcXVlc3QSEQoJZGFlbW9uX2lkGAEgASgJEhMKC2RhZW1vbl9uYW1lGAIgASgJEhMKC2RhZW1vbl90eXBlGAMgASgJEjwKBmxhYmVscxgEIAMoCzIsLnJlbGlhbnQudjEuUmVzb2x2ZURhZW1vblJlcXVlc3QuTGFiZWxzRW50cnkaLQoLTGFiZWxzRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASJOChVSZXNvbHZlRGFlbW9uUmVzcG9uc2USJgoGZGFlbW9uGAEgASgLMhYucmVsaWFudC52MS5EYWVtb25JbmZvEg0KBWZvdW5kGAIgASgIIigKE1Jlc3VtZURhZW1vblJlcXVlc3QSEQoJZGFlbW9uX2lkGAEgASgJIj4KFFJlc3VtZURhZW1vblJlc3BvbnNlEg8KB3Jlc3VtZWQYASABKAgSFQoNZXJyb3JfbWVzc2FnZRgCIAEoCSIuChlSZWZyZXNoTG9jYWxNb2RlbHNSZXF1ZXN0EhEKCWRhZW1vbl9pZBgBIAEoCSJTChpSZWZyZXNoTG9jYWxNb2RlbHNSZXNwb25zZRI1Cgxsb2NhbF9tb2RlbHMYASABKAsyHy5yZWxpYW50LnYxLkxvY2FsTW9kZWxJbnZlbnRvcnkiRQodU2V0TG9jYWxNb2RlbEVuZHBvaW50c1JlcXVlc3QSEQoJZGFlbW9uX2lkGAEgASgJEhEKCWJhc2VfdXJscxgCIAMoCSJXCh5TZXRMb2NhbE1vZGVsRW5kcG9pbnRzUmVzcG9uc2USNQoMbG9jYWxfbW9kZWxzGAEgASgLMh8ucmVsaWFudC52MS5Mb2NhbE1vZGVsSW52ZW50b3J5IusFCgpEYWVtb25JbmZvEhEKCWRhZW1vbl9pZBgBIAEoCRIPCgd1c2VyX2lkGAIgASgJEhAKCGhvc3RuYW1lGAMgASgJEhAKCHBsYXRmb3JtGAQgASgJEigKBnN0YXR1cxgFIAEoDjIYLnJlbGlhbnQudjEuRGFlbW9uU3RhdHVzEi8KCHByb2plY3RzGAYgAygLMh0ucmVsaWFudC52MS5EaXNjb3ZlcmVkUHJvamVjdBIwCgxjb25uZWN0ZWRfYXQYByABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEjIKDmxhc3RfaGVhcnRiZWF0GAggASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBITCgtkYWVtb25fdHlwZRgJIAEoCRIZChFtZW1vcnlfdXNlZF9ieXRlcxgKIAEoBBIaChJtZW1vcnlfbGltaXRfYnl0ZXMYCyABKAQSFwoPbWVtb3J5X3ByZXNzdXJlGAwgASgIEhYKDmRldGVjdGVkX3BvcnRzGA0gAygNEjkKD2xpZmVjeWNsZV9waGFzZRgOIAEoDjIgLnJlbGlhbnQudjEuRGFlbW9uTGlmZWN5Y2xlUGhhc2USDAoEc2l6ZRgPIAEoCRIbChNsYXN0X3N0YXR1c19tZXNzYWdlGBAgASgJEjoKFmxhc3Rfc3RhdHVzX2NoYW5nZWRfYXQYESABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEjYKEmxhc3Rfb29tX2tpbGxlZF9hdBgSIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASFgoOb29tX2tpbGxfY291bnQYEyABKAUSLgoKY3JlYXRlZF9hdBgUIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASNQoMbG9jYWxfbW9kZWxzGBUgASgLMh8ucmVsaWFudC52MS5Mb2NhbE1vZGVsSW52ZW50b3J5KtEBCgxEYWVtb25TdGF0dXMSHQoZREFFTU9OX1NUQVRVU19VTlNQRUNJRklFRBAAEhgKFERBRU1PTl9TVEFUVVNfQUNUSVZFEAESFgoSREFFTU9OX1NUQVRVU19JRExFEAISHgoaREFFTU9OX1NUQVRVU19ESVNDT05ORUNURUQQAxIZChVEQUVNT05fU1RBVFVTX1BFTkRJTkcQBBIbChdEQUVNT05fU1RBVFVTX1NVU1BFTkRFRBAFEhgKFERBRU1PTl9TVEFUVVNfRkFJTEVEEAYqnQIKFERhZW1vbkxpZmVjeWNsZVBoYXNlEiYKIkRBRU1PTl9MSUZFQ1lDTEVfUEhBU0VfVU5TUEVDSUZJRUQQABInCiNEQUVNT05fTElGRUNZQ0xFX1BIQVNFX1BST1ZJU0lPTklORxABEiIKHkRBRU1PTl9MSUZFQ1lDTEVfUEhBU0VfQ0xPTklORxACEiAKHERBRU1PTl9MSUZFQ1lDTEVfUEhBU0VfUkVBRFkQAxIlCiFEQUVNT05fTElGRUNZQ0xFX1BIQVNFX1NVU1BFTkRJTkcQBBIkCiBEQUVNT05fTElGRUNZQ0xFX1BIQVNFX1NVU1BFTkRFRBAFEiEKHURBRU1PTl9MSUZFQ1lDTEVfUEhBU0VfRkFJTEVEEAYyvAQKFURhZW1vblJlZ2lzdHJ5U2VydmljZRJQCgtMaXN0RGFlbW9ucxIeLnJlbGlhbnQudjEuTGlzdERhZW1vbnNSZXF1ZXN0Gh8ucmVsaWFudC52MS5MaXN0RGFlbW9uc1Jlc3BvbnNlIgASSgoJR2V0RGFlbW9uEhwucmVsaWFudC52MS5HZXREYWVtb25SZXF1ZXN0Gh0ucmVsaWFudC52MS5HZXREYWVtb25SZXNwb25zZSIAElYKDVJlc29sdmVEYWVtb24SIC5yZWxpYW50LnYxLlJlc29sdmVEYWVtb25SZXF1ZXN0GiEucmVsaWFudC52MS5SZXNvbHZlRGFlbW9uUmVzcG9uc2UiABJTCgxSZXN1bWVEYWVtb24SHy5yZWxpYW50LnYxLlJlc3VtZURhZW1vblJlcXVlc3QaIC5yZWxpYW50LnYxLlJlc3VtZURhZW1vblJlc3BvbnNlIgASZQoSUmVmcmVzaExvY2FsTW9kZWxzEiUucmVsaWFudC52MS5SZWZyZXNoTG9jYWxNb2RlbHNSZXF1ZXN0GiYucmVsaWFudC52MS5SZWZyZXNoTG9jYWxNb2RlbHNSZXNwb25zZSIAEnEKFlNldExvY2FsTW9kZWxFbmRwb2ludHMSKS5yZWxpYW50LnYxLlNldExvY2FsTW9kZWxFbmRwb2ludHNSZXF1ZXN0GioucmVsaWFudC52MS5TZXRMb2NhbE1vZGVsRW5kcG9pbnRzUmVzcG9uc2UiAEI6WjhnaXRodWIuY29tL3JlbGlhbnQtbGFicy9yZWxpYW50L2dlbi9yZWxpYW50L3YxO3JlbGlhbnR2MWIGcHJvdG8z", [file_google_protobuf_timestamp, file_reliant_v1_tools_daemon]);
 
 /**
  * @generated from message reliant.v1.ListDaemonsRequest
@@ -187,6 +187,83 @@ export const ResumeDaemonResponseSchema: GenMessage<ResumeDaemonResponse> = /*@_
   messageDesc(file_reliant_v1_daemon_registry, 7);
 
 /**
+ * @generated from message reliant.v1.RefreshLocalModelsRequest
+ */
+export type RefreshLocalModelsRequest = Message<"reliant.v1.RefreshLocalModelsRequest"> & {
+  /**
+   * @generated from field: string daemon_id = 1;
+   */
+  daemonId: string;
+};
+
+/**
+ * Describes the message reliant.v1.RefreshLocalModelsRequest.
+ * Use `create(RefreshLocalModelsRequestSchema)` to create a new message.
+ */
+export const RefreshLocalModelsRequestSchema: GenMessage<RefreshLocalModelsRequest> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_daemon_registry, 8);
+
+/**
+ * @generated from message reliant.v1.RefreshLocalModelsResponse
+ */
+export type RefreshLocalModelsResponse = Message<"reliant.v1.RefreshLocalModelsResponse"> & {
+  /**
+   * @generated from field: reliant.v1.LocalModelInventory local_models = 1;
+   */
+  localModels?: LocalModelInventory | undefined;
+};
+
+/**
+ * Describes the message reliant.v1.RefreshLocalModelsResponse.
+ * Use `create(RefreshLocalModelsResponseSchema)` to create a new message.
+ */
+export const RefreshLocalModelsResponseSchema: GenMessage<RefreshLocalModelsResponse> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_daemon_registry, 9);
+
+/**
+ * @generated from message reliant.v1.SetLocalModelEndpointsRequest
+ */
+export type SetLocalModelEndpointsRequest = Message<"reliant.v1.SetLocalModelEndpointsRequest"> & {
+  /**
+   * @generated from field: string daemon_id = 1;
+   */
+  daemonId: string;
+
+  /**
+   * Base URLs as seen from the daemon's machine, e.g.
+   * "http://localhost:11434/v1" or "http://gpu-box.lan:8000/v1". Empty
+   * clears all configured endpoints (auto-detection still runs).
+   *
+   * @generated from field: repeated string base_urls = 2;
+   */
+  baseUrls: string[];
+};
+
+/**
+ * Describes the message reliant.v1.SetLocalModelEndpointsRequest.
+ * Use `create(SetLocalModelEndpointsRequestSchema)` to create a new message.
+ */
+export const SetLocalModelEndpointsRequestSchema: GenMessage<SetLocalModelEndpointsRequest> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_daemon_registry, 10);
+
+/**
+ * @generated from message reliant.v1.SetLocalModelEndpointsResponse
+ */
+export type SetLocalModelEndpointsResponse = Message<"reliant.v1.SetLocalModelEndpointsResponse"> & {
+  /**
+   * @generated from field: reliant.v1.LocalModelInventory local_models = 1;
+   */
+  localModels?: LocalModelInventory | undefined;
+};
+
+/**
+ * Describes the message reliant.v1.SetLocalModelEndpointsResponse.
+ * Use `create(SetLocalModelEndpointsResponseSchema)` to create a new message.
+ */
+export const SetLocalModelEndpointsResponseSchema: GenMessage<SetLocalModelEndpointsResponse> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_daemon_registry, 11);
+
+/**
  * @generated from message reliant.v1.DaemonInfo
  */
 export type DaemonInfo = Message<"reliant.v1.DaemonInfo"> & {
@@ -345,6 +422,17 @@ export type DaemonInfo = Message<"reliant.v1.DaemonInfo"> & {
    * @generated from field: google.protobuf.Timestamp created_at = 20;
    */
   createdAt?: Timestamp | undefined;
+
+  /**
+   * Local model servers (Ollama, LM Studio, …) on this daemon's machine and
+   * the models they serve, as last published by the daemon. Unset when the
+   * daemon has never published one. The inventory is kept while the daemon is
+   * offline so the UI can show what WOULD be available; callers gate on
+   * `status` before offering a model for use.
+   *
+   * @generated from field: reliant.v1.LocalModelInventory local_models = 21;
+   */
+  localModels?: LocalModelInventory | undefined;
 };
 
 /**
@@ -352,7 +440,7 @@ export type DaemonInfo = Message<"reliant.v1.DaemonInfo"> & {
  * Use `create(DaemonInfoSchema)` to create a new message.
  */
 export const DaemonInfoSchema: GenMessage<DaemonInfo> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_daemon_registry, 8);
+  messageDesc(file_reliant_v1_daemon_registry, 12);
 
 /**
  * DaemonStatus is the SINGLE status vocabulary for a daemon in this registry.
@@ -527,6 +615,33 @@ export const DaemonRegistryService: GenService<{
     methodKind: "unary";
     input: typeof ResumeDaemonRequestSchema;
     output: typeof ResumeDaemonResponseSchema;
+  },
+  /**
+   * RefreshLocalModels asks an online daemon to re-probe its local model
+   * servers and waits (bounded) for the new inventory. Backs the UI's
+   * "Test connection" / "Refresh". Fails with Unavailable when the daemon is
+   * offline.
+   *
+   * @generated from rpc reliant.v1.DaemonRegistryService.RefreshLocalModels
+   */
+  refreshLocalModels: {
+    methodKind: "unary";
+    input: typeof RefreshLocalModelsRequestSchema;
+    output: typeof RefreshLocalModelsResponseSchema;
+  },
+  /**
+   * SetLocalModelEndpoints replaces the user-configured local model
+   * endpoints on an online daemon (persisted in that machine's
+   * ~/.reliant/config.yaml, models.providers.local) and returns the
+   * re-probed inventory. Auto-detected well-known ports need no
+   * configuration and are not listed here.
+   *
+   * @generated from rpc reliant.v1.DaemonRegistryService.SetLocalModelEndpoints
+   */
+  setLocalModelEndpoints: {
+    methodKind: "unary";
+    input: typeof SetLocalModelEndpointsRequestSchema;
+    output: typeof SetLocalModelEndpointsResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_reliant_v1_daemon_registry, 0);

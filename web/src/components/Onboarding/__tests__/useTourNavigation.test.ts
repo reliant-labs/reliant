@@ -294,29 +294,6 @@ describe("useTourNavigation", () => {
       });
     });
 
-    it("navigates to the builder for workflow-builder-chat too", async () => {
-      const useTourNavigation = await loadHook();
-      if (!useTourNavigation) {
-        expect.fail("useTourNavigation hook not implemented yet");
-        return;
-      }
-      const { result, router } = renderHookWithRouter(
-        () => useTourNavigation(),
-        ["/"]
-      );
-      await waitFor(() => expect(result.current).toBeDefined());
-      await act(async () => {
-        await result.current.goToStep("workflow-builder-chat");
-      });
-      expect(router.state.location.pathname).toMatch(
-        /^\/workflow\/builtin(:|%3A)/i
-      );
-      expect(router.state.location.search).toMatchObject({
-        drill: "attempt",
-        tour: "workflow-builder-chat",
-      });
-    });
-
     it("stays on the current pathname for chat-and-sidebars on /project/abc", async () => {
       const useTourNavigation = await loadHook();
       if (!useTourNavigation) {
@@ -380,7 +357,7 @@ describe("useTourNavigation", () => {
   });
 
   describe("goBack", () => {
-    it("steps the ?tour param backwards (workspaces → chat-and-sidebars)", async () => {
+    it("steps the ?tour param backwards (workflow-controls → chat-and-sidebars)", async () => {
       const useTourNavigation = await loadHook();
       if (!useTourNavigation) {
         expect.fail("useTourNavigation hook not implemented yet");
@@ -388,7 +365,7 @@ describe("useTourNavigation", () => {
       }
       const { result, router } = renderHookWithRouter(
         () => useTourNavigation(),
-        ["/?tour=workspaces"]
+        ["/?tour=workflow-controls"]
       );
       await waitFor(() => expect(result.current).toBeDefined());
       await act(async () => {
@@ -457,7 +434,7 @@ describe("useTourNavigation", () => {
       });
     });
 
-    it("on the last step (completion) calls markTourCompleted and drops the tour param", async () => {
+    it("on the last step (workflow-builder) calls markTourCompleted and drops the tour param", async () => {
       const useTourNavigation = await loadHook();
       if (!useTourNavigation) {
         expect.fail("useTourNavigation hook not implemented yet");
@@ -465,7 +442,7 @@ describe("useTourNavigation", () => {
       }
       const { result, router } = renderHookWithRouter(
         () => useTourNavigation(),
-        ["/?tour=completion"]
+        ["/?tour=workflow-builder"]
       );
       await waitFor(() => expect(result.current).toBeDefined());
       await act(async () => {
@@ -481,11 +458,11 @@ describe("useTourNavigation", () => {
         expect.fail("useTourNavigation hook not implemented yet");
         return;
       }
-      // The tour's last spotlight steps live on the workflow builder, so this
+      // The tour's last spotlight step lives on the workflow builder, so this
       // is where a user actually clicks "Finish".
       const { result, router } = renderHookWithRouter(
         () => useTourNavigation(),
-        ["/workflow/builtin%3A%2F%2Fget-it-right?tour=completion"]
+        ["/workflow/builtin%3A%2F%2Fget-it-right?drill=attempt&tour=workflow-builder"]
       );
       await waitFor(() => expect(result.current).toBeDefined());
       await act(async () => {
@@ -507,7 +484,7 @@ describe("useTourNavigation", () => {
       }
       const { result, router } = renderHookWithRouter(
         () => useTourNavigation(),
-        ["/workflows/library?tour=completion"]
+        ["/workflow/builtin%3A%2F%2Fget-it-right?tour=workflow-builder"]
       );
       await waitFor(() => expect(result.current).toBeDefined());
       await act(async () => {

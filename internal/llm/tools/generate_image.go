@@ -5,12 +5,14 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/invopop/jsonschema"
 	"github.com/reliant-labs/reliant/internal/attachment"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -63,17 +65,23 @@ const ImageGenTag = "image-gen"
 // outcome as the parameter not existing at all, which is what this was before,
 // with the configurability added and nothing given away.
 type GenerateImageParams struct {
-	// Model selects which image model backs this call. Bound by default to
-	// tags:[image-gen, flagship]; a human can rebind it to e.g.
-	// {tags: [image-gen], providers: [codex]}.
-	Model      models.ModelSelector `json:"model,omitempty" jsonschema:"description=Which image model to use. Bound by configuration; not settable per call."`
-	Prompt     string               `json:"prompt" jsonschema:"required,description=What to generate. Describe the subject\\, style\\, composition and any text that must appear in the image. Longer and more specific prompts produce markedly better results than short ones."`
-	Size       string               `json:"size,omitempty" jsonschema:"enum=1024x1024,enum=1536x1024,enum=1024x1536,enum=auto,description=Image dimensions. 1536x1024 is landscape\\, 1024x1536 is portrait. Defaults to the model's own default when omitted."`
-	Quality    string               `json:"quality,omitempty" jsonschema:"enum=low,enum=medium,enum=high,enum=auto,description=Rendering effort. Higher quality costs more and takes longer. Defaults to the model's own default when omitted."`
-	Background string               `json:"background,omitempty" jsonschema:"enum=transparent,enum=opaque,enum=auto,description=Use transparent for logos\\, icons and anything to be composited over other content. Ignored by models that do not support it."`
-	SaveTo     string               `json:"save_to,omitempty" jsonschema:"description=Optional path to also write the image file to on disk. Relative paths resolve against the working directory. The image is stored and returned either way; this only additionally materializes it as a file."`
-	Repo       string               `json:"repo,omitempty" jsonschema:"description=Multi-repo only. Which repo save_to is relative to: 'root' for the project root\\, or a repo name. Omit in single-repo projects or when save_to is absolute."`
+	// Model optionally names an exact image model. OPEN by default; a human can
+	// still bind it (to an id, or a selector like {tags: [image-gen],
+	// providers: [codex]}), which locks it and hides it from the agent.
+	Model models.ModelSelector `json:"model,omitempty" jsonschema:"description=Optional exact image model id."`
+	// Tier picks a model tier by intent. Named tier rather than quality because
+	// quality is already the rendering-effort parameter below.
+	Tier       string `json:"tier,omitempty" jsonschema:"enum=fast,enum=standard,description=Which tier of image model to use. standard (default) is the best everyday model; fast is the quicker model for drafts and quick iterations."`
+	Prompt     string `json:"prompt" jsonschema:"required,description=What to generate. Describe the subject\\, style\\, composition and any text that must appear in the image. Longer and more specific prompts produce markedly better results than short ones."`
+	Size       string `json:"size,omitempty" jsonschema:"enum=1024x1024,enum=1536x1024,enum=1024x1536,enum=auto,description=Image dimensions. 1536x1024 is landscape\\, 1024x1536 is portrait. Defaults to the model's own default when omitted."`
+	Quality    string `json:"quality,omitempty" jsonschema:"enum=low,enum=medium,enum=high,enum=auto,description=Rendering effort. Higher quality costs more and takes longer. Defaults to the model's own default when omitted."`
+	Background string `json:"background,omitempty" jsonschema:"enum=transparent,enum=opaque,enum=auto,description=Use transparent for logos\\, icons and anything to be composited over other content. Ignored by models that do not support it."`
+	SaveTo     string `json:"save_to,omitempty" jsonschema:"description=Optional path to also write the image file to on disk. Relative paths resolve against the working directory. The image is stored and returned either way; this only additionally materializes it as a file."`
+	Repo       string `json:"repo,omitempty" jsonschema:"description=Multi-repo only. Which repo save_to is relative to: 'root' for the project root\\, or a repo name. Omit in single-repo projects or when save_to is absolute."`
 }
+
+// JSONSchemaExtend lists the valid model ids on the open `model` parameter.
+func (GenerateImageParams) JSONSchemaExtend(s *jsonschema.Schema) { imageKind.extendMediaSchema(s) }
 
 const generateImageDescription = `Generate an image from a text description.
 
@@ -95,11 +103,19 @@ WHAT YOU GET BACK:
 - An attachment id. Cite that id when referring to this image later, and pass
   it to read_attachment to look at it again in a future turn.
 
+CHOOSING A MODEL (set tier; omit it for standard):
+- standard (default): the best everyday image model. Use it for finals.
+- fast: the quicker model, for drafts, thumbnails and quick iterations.
+- To pin one exact model instead, pass model with an id.
+- Ask the user first when cost matters. The result names the model that ran and
+  why; tell the user, and change tier if it was not what they wanted.
+- tier picks WHICH model; quality (below) is how hard that model works.
+
 NOTES:
 - One image per call. Call again to iterate; say what to change rather than
   repeating the original prompt verbatim.
-- You do not choose the model. It is resolved from the user's configured image
-  model preference.`
+- A model or tier the user's providers cannot serve returns an error naming the
+  tiers that are available.`
 
 // GenerateImageOutput is the structured result of one generation.
 type GenerateImageOutput struct {
@@ -108,6 +124,8 @@ type GenerateImageOutput struct {
 	MimeType     string `json:"mime_type"`
 	Size         int    `json:"size"`
 	Model        string `json:"model"`
+	// Chosen is why this model ran, e.g. "tier=fast".
+	Chosen string `json:"chosen,omitempty"`
 	// SavedTo is the resolved absolute path when save_to was requested and the
 	// write succeeded. Empty otherwise.
 	SavedTo string `json:"saved_to,omitempty"`
@@ -141,19 +159,6 @@ func (t *generateImageTool) Description() string {
 	return generateImageDescription
 }
 
-// DefaultBindings binds the model parameter so the agent never sees it, while
-// leaving it configurable for a human.
-//
-// The default is a TAG STRATEGY, not a model id. Tags re-resolve against the
-// registry on every call, so a retired model stops being selected the moment it
-// leaves the registry; a pinned id keeps being requested until a human notices.
-// We have shipped retired image models by pinning before.
-func (t *generateImageTool) DefaultBindings() Bindings {
-	return Bindings{
-		"model": LiteralBinding(models.ModelSelector{Tags: []string{ImageGenTag, models.TagFlagship}}),
-	}
-}
-
 func (t *generateImageTool) RequiresPermission(params GenerateImageParams) (bool, error) {
 	// Generating costs money and, with save_to, writes a file. Both are the
 	// kind of side effect the permission layer exists for.
@@ -176,9 +181,28 @@ func (t *generateImageTool) Execute(tc *rctx.ToolContext, params GenerateImagePa
 		return NewTextErrorResponse("unable to determine user identity for image generation"), nil
 	}
 
-	generator, err := t.resolve(tc.Context, userID, params.Model)
+	// Tiers resolve to TAG STRATEGIES, never pinned ids: a tag re-resolves
+	// against the registry on every call, so a retired model stops being
+	// selected the moment it leaves, where a pinned id keeps being requested.
+	choice, err := chooseMedia(imageKind, params.Model, params.Tier)
 	if err != nil {
-		return NewTextErrorResponse(fmt.Sprintf("Could not select an image model: %v", err)), nil
+		return NewTextErrorResponse(err.Error()), nil
+	}
+
+	generator, err := t.resolve(tc.Context, userID, choice.Selector)
+	if err != nil {
+		var unavailable *models.MediaUnavailableError
+		if !errors.As(err, &unavailable) {
+			if msg := t.tierUnavailable(tc, userID, choice, ""); msg != "" {
+				return NewTextErrorResponse(msg), nil
+			}
+		}
+		return NewTextErrorResponse(mediaResolveFailure("Could not select an image model", err)), nil
+	}
+	if usedModel := generatorModelID(generator); usedModel != "" {
+		if msg := t.tierUnavailable(tc, userID, choice, usedModel); msg != "" {
+			return NewTextErrorResponse(msg), nil
+		}
 	}
 
 	response, err := generator.GenerateImage(tc.Context, imagegen.Request{
@@ -213,6 +237,7 @@ func (t *generateImageTool) Execute(tc *rctx.ToolContext, params GenerateImagePa
 		Size:          len(image.Bytes),
 		Model:         response.ModelID,
 		RevisedPrompt: image.RevisedPrompt,
+		Chosen:        chosenLine(response.ModelID, choice.Reason),
 	}
 
 	var saveNote string
@@ -240,8 +265,11 @@ func (t *generateImageTool) Execute(tc *rctx.ToolContext, params GenerateImagePa
 		"saved_to", output.SavedTo,
 	)
 
-	summary := fmt.Sprintf("Generated %s (%s, %d bytes) with %s.\nAttachment id: %s%s",
-		filename, image.MIMEType, len(image.Bytes), response.ModelID, attachmentID, saveNote)
+	summary := fmt.Sprintf("Generated %s (%s, %d bytes) with %s.\n", filename, image.MIMEType, len(image.Bytes), response.ModelID)
+	if output.Chosen != "" {
+		summary += output.Chosen + "\n"
+	}
+	summary += fmt.Sprintf("Attachment id: %s%s", attachmentID, saveNote)
 	if image.RevisedPrompt != "" {
 		summary += fmt.Sprintf("\n\nThe model rewrote the prompt as: %s", image.RevisedPrompt)
 	}
@@ -251,6 +279,29 @@ func (t *generateImageTool) Execute(tc *rctx.ToolContext, params GenerateImagePa
 		MIMEType: image.MIMEType,
 		Data:     image.Bytes,
 	}}), output), nil
+}
+
+// generatorModelID reads the model a generator is bound to. Every real client
+// exposes ModelID(); a generator that does not (a test double) reports "" and
+// skips tier verification rather than failing it.
+func generatorModelID(generator ImageGenerator) string {
+	if bound, ok := generator.(interface{ ModelID() string }); ok {
+		return bound.ModelID()
+	}
+	return ""
+}
+
+// tierUnavailable returns a message when the chosen tier cannot be served by the
+// user's providers, naming the tiers that can. usedModel == "" with a nil
+// resolve error means the model is unknown, so nothing is verified.
+func (t *generateImageTool) tierUnavailable(tc *rctx.ToolContext, userID string, choice mediaChoice, usedModel string) string {
+	return imageKind.verifyTier(tc.Context, choice, usedModel, func(ctx context.Context, selector models.ModelSelector) (string, error) {
+		generator, err := t.resolve(ctx, userID, selector)
+		if err != nil {
+			return "", err
+		}
+		return generatorModelID(generator), nil
+	})
 }
 
 // userID reads the caller from the request context, falling back to the chat's

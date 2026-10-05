@@ -4,6 +4,7 @@ package runtime
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -71,6 +72,10 @@ type spawnE2EEnv struct {
 	toolResultsBy map[string][]interface{} // turn index -> tool_results seen by execute_tools
 	statuses      []map[string]interface{}
 	toolStatuses  []map[string]interface{}
+	// events is the shared activity order for spawn report/terminal-status
+	// ordering assertions: "report:<tc>", "child-status:<tc>:<status>",
+	// "tool-status:<tc>:<status>".
+	events []string
 
 	// script is indexed by callLLMCount (the global CallLLM sequence number
 	// across the parent and any spawned child), so the turn a stub serves is
@@ -98,6 +103,9 @@ func newSpawnE2EEnv(t *testing.T, env *testsuite.TestWorkflowEnvironment, script
 		func(_ context.Context, input map[string]interface{}) (map[string]interface{}, error) {
 			e.mu.Lock()
 			e.statuses = append(e.statuses, input)
+			if tc, _ := input["spawned_by_tool_call_id"].(string); tc != "" {
+				e.events = append(e.events, fmt.Sprintf("child-status:%s:%v", tc, input["status"]))
+			}
 			e.mu.Unlock()
 			return map[string]interface{}{"success": true}, nil
 		},
@@ -119,6 +127,7 @@ func newSpawnE2EEnv(t *testing.T, env *testsuite.TestWorkflowEnvironment, script
 		func(_ context.Context, input map[string]interface{}) (map[string]interface{}, error) {
 			e.mu.Lock()
 			e.toolStatuses = append(e.toolStatuses, input)
+			e.events = append(e.events, fmt.Sprintf("tool-status:%v:%v", input["tool_call_id"], input["status"]))
 			e.mu.Unlock()
 			return map[string]interface{}{"success": true}, nil
 		},
@@ -161,6 +170,9 @@ func newSpawnE2EEnv(t *testing.T, env *testsuite.TestWorkflowEnvironment, script
 	)
 	env.RegisterActivityWithOptions(
 		func(_ context.Context, input map[string]interface{}) (map[string]interface{}, error) {
+			e.mu.Lock()
+			e.events = append(e.events, fmt.Sprintf("report:%v", input["tool_call_id"]))
+			e.mu.Unlock()
 			return map[string]interface{}{"id": "am-" + input["tool_call_id"].(string)}, nil
 		},
 		activity.RegisterOptions{Name: "EnqueueAgentMessage"},

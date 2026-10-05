@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
 )
 
@@ -82,9 +83,39 @@ func (a *EnqueueAgentMessageActivity) Execute(ctx context.Context, input Enqueue
 		msg.ToolCallID = &input.ToolCallID
 	}
 
+	// Terminal spawn reports go through EnqueueSpawnReport: a reconciler may
+	// already have synthesized a placeholder for this spawn, and a plain INSERT
+	// would die on idx_agent_messages_one_terminal_report_per_spawn (23505),
+	// leaving the real outcome lost. See
+	// docs/incidents/2026-10-04-spawn-report-collision.md.
+	if input.ToolCallID != "" && isTerminalSpawnReportKind(kind) {
+		outcome, err := a.repo.EnqueueSpawnReport(ctx, msg)
+		if err != nil {
+			return EnqueueAgentMessageOutput{}, fmt.Errorf("failed to enqueue spawn report: %w", err)
+		}
+		switch outcome {
+		case core.SpawnReportSuperseded:
+			logging.Info("[EnqueueAgentMessage] real spawn report superseded a synthesized placeholder",
+				"tool_call_id", input.ToolCallID)
+		case core.SpawnReportAlreadyReported:
+			// Idempotent: also what a retry after a lost commit response sees.
+			logging.Info("[EnqueueAgentMessage] spawn already reported; no-op",
+				"tool_call_id", input.ToolCallID)
+		}
+		return EnqueueAgentMessageOutput{ID: msg.ID}, nil
+	}
+
 	if err := a.repo.EnqueueAgentMessage(ctx, msg); err != nil {
 		return EnqueueAgentMessageOutput{}, fmt.Errorf("failed to enqueue agent message: %w", err)
 	}
 
 	return EnqueueAgentMessageOutput{ID: msg.ID}, nil
+}
+
+func isTerminalSpawnReportKind(kind core.AgentMessageKind) bool {
+	switch kind {
+	case core.AgentMessageKindCompletion, core.AgentMessageKindCancelled, core.AgentMessageKindFailed:
+		return true
+	}
+	return false
 }

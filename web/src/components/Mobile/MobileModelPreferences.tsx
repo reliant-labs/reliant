@@ -16,8 +16,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ChevronDown, Loader2 } from "lucide-react";
 import { useModels } from "../../store/globalDataStore";
+import { isCustomEndpointModel } from "../Settings/localModels";
 import {
+  configChoiceValue,
   loadTagModelConfigs,
+  modelChoiceValue,
+  parseModelChoice,
   saveTagConfig,
   type TagModelConfig,
 } from "../Settings/ModelPreferences";
@@ -82,13 +86,16 @@ export function MobileModelPreferences({
   );
 
   const allConfiguredModels = useMemo(
-    () => models.filter(isConfiguredModel),
+    () => models.filter((m) => !m.local && isConfiguredModel(m)),
     [models, isConfiguredModel],
   );
+  const localModels = useMemo(() => models.filter((m) => m.local), [models]);
 
   const handleModelChange = async (tag: PreferenceTag, modelId: string) => {
     const current = configs[tag] ?? {};
-    const updated: TagModelConfig = { ...current, model_id: modelId || undefined };
+    const updated: TagModelConfig = { ...current, ...parseModelChoice(modelId) };
+    if (!updated.model_id) delete updated.model_id;
+    if (!updated.providers) delete updated.providers;
     setConfigs((prev) => ({ ...prev, [tag]: updated }));
     setSaving((prev) => ({ ...prev, [tag]: true }));
     try {
@@ -129,7 +136,7 @@ export function MobileModelPreferences({
             </label>
             <div className="relative flex-1">
               <select
-                value={config.model_id ?? ""}
+                value={configChoiceValue(config)}
                 onChange={(e) => handleModelChange(tag, e.target.value)}
                 disabled={isSaving}
                 aria-label={`Default ${TAG_LABELS[tag]} model`}
@@ -142,6 +149,16 @@ export function MobileModelPreferences({
                 {allConfiguredModels.map((m) => (
                   <option key={m.id} value={m.id}>
                     {m.name} ({m.provider})
+                  </option>
+                ))}
+                {localModels.map((m) => (
+                  <option
+                    key={modelChoiceValue(m)}
+                    value={modelChoiceValue(m)}
+                    disabled={!m.local!.online}
+                  >
+                    {m.name} ({isCustomEndpointModel(m.local!) ? "" : "Local · "}{m.local!.machineName}
+                    {m.local!.online ? "" : ", offline"})
                   </option>
                 ))}
               </select>

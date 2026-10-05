@@ -16,6 +16,7 @@ import { useProjectStore } from "@/store/projectStore";
 import { cn } from "@/lib/utils";
 import Card from "../forge-ui/card";
 import { PresetList } from "../workflow/presets/PresetList";
+import { SettingsPageHeader } from "./SettingsPageHeader";
 
 export function PresetsSettings() {
   const projectId = useProjectStore((state) => state.currentProject?.id);
@@ -50,13 +51,11 @@ export function PresetsSettings() {
 
   return (
     <div className="space-y-6 px-8 py-8">
-      <div>
-        <h2 className="text-lg font-semibold text-foreground">Presets</h2>
-        <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-          Saved settings for a workflow's inputs. Create one from the chat composer when you configure a
-          workflow; a workflow's own presets and its defaults are also on its page in Workflows.
-        </p>
-      </div>
+      <SettingsPageHeader
+        title="Presets"
+        description="Saved input settings for a workflow, so you can start it the same way each time. Create one from the chat composer while configuring a workflow; a workflow's own presets and defaults are also on its page in Workflows."
+        className="mb-0"
+      />
 
       {!projectId ? (
         <Card padding="lg">

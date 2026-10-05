@@ -1,0 +1,17 @@
+-- +goose Up
+-- The local model servers (Ollama, LM Studio, llama.cpp, vLLM, ...) a daemon
+-- can reach on ITS machine, and the models they serve: the protojson encoding
+-- of reliant.v1.LocalModelInventory, as last published by the daemon.
+--
+-- It lives on daemons, not daemon_attachment, deliberately. An attachment row
+-- is deleted on disconnect; this inventory must outlive a disconnect so the
+-- UI can show a sleeping laptop's models as "offline" rather than forgetting
+-- they exist. Liveness still comes from daemon_attachment, and nothing offers
+-- a model for use unless its daemon is online.
+--
+-- IF NOT EXISTS because migrations are replayed against databases whose schema
+-- was built from schema.sql, and against the #293/#294 renumber window that
+-- rewinds goose's version and re-runs from there (see
+-- access_tokens_renumber_repair_test.go). A plain ADD COLUMN fails those with
+-- SQLSTATE 42701 and wedges startup.
+ALTER TABLE daemons ADD COLUMN IF NOT EXISTS local_models TEXT NOT NULL DEFAULT '';

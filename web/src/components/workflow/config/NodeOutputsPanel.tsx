@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Tooltip } from "../../ui/Tooltip";
 import { Check, Copy, ChevronDown, ChevronRight, Info } from "lucide-react";
 import type { Step } from "../../../types/workflow";
 import {
@@ -63,18 +64,18 @@ function CopyButton({ value }: { value: string }) {
     setTimeout(() => setCopied(false), 1500);
   };
   return (
-    <button
+    <Tooltip content={`Copy: ${value}`} placement="bottom" delay={300} wrapperClassName="inline-flex flex-shrink-0">
+<button
       type="button"
       onClick={handleCopy}
-      title={`Copy: ${value}`}
-      className="shrink-0 p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-    >
+      className="shrink-0 p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors" aria-label={`Copy: ${value}`}>
       {copied ? (
         <Check className="w-3 h-3 text-green-500" />
       ) : (
         <Copy className="w-3 h-3" />
       )}
     </button>
+</Tooltip>
   );
 }
 

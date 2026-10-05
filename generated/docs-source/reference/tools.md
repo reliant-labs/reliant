@@ -1339,8 +1339,8 @@ Delete a test scenario.
 
 Permanently removes the scenario from the workflow.
 
-The workflow defaults to the one this chat is editing. Pass id (a workflow UUID,
-slug, or name) only to delete a scenario on a different workflow.
+Pass id (required): the workflow UUID, slug, or name, as returned by
+create_workflow or list_workflows.
 
 ---
 
@@ -1353,8 +1353,8 @@ Make precise text replacements in a scenario's YAML definition.
 Use this for small changes like updating expected values or modifying events.
 The old_string must match exactly (including whitespace and indentation).
 
-The workflow defaults to the one this chat is editing. Pass id (a workflow UUID,
-slug, or name) only to edit a scenario on a different workflow.
+Pass id (required): the workflow UUID, slug, or name, as returned by
+create_workflow or list_workflows.
 
 **Example:**
 {
@@ -1391,7 +1391,7 @@ complete once it validates. The response always shows the resulting status and
 every current error and warning.
 
 **Parameters:**
-- id: (optional) Workflow UUID, slug, or name. Omit it to edit the workflow this chat is editing.
+- id: (required) Workflow UUID, slug, or name (the id returned by create_workflow, or from list_workflows).
 - old_string: (required) Exact text to replace.
 - new_string: (required) Replacement text.
 - expected_version: (optional) Version number for conflict detection.
@@ -1486,9 +1486,8 @@ WHEN TO USE:
 - To read a builtin or project workflow as a starting point
 
 PARAMETERS:
-- id: (optional) Workflow UUID, slug, or name — including a builtin or project
-  workflow name straight out of list_workflows. Omit it to get the workflow this
-  chat is editing.
+- id: (required) Workflow UUID, slug, or name — including a builtin or project
+  workflow name straight out of list_workflows, or the id from create_workflow.
 
 RETURNS:
 The complete workflow YAML with validation status. For editable drafts it also
@@ -1549,9 +1548,8 @@ List all test scenarios for the current workflow.
 Returns a summary of each scenario including name, description, and last run status.
 Use this to see what scenarios exist and their current state.
 
-No parameters are required. The workflow defaults to the one this chat is
-editing. Pass id (a workflow UUID, slug, or name) only to list scenarios for a
-different workflow.
+Pass id (required): the workflow UUID, slug, or name, as returned by
+create_workflow or list_workflows.
 
 ---
 
@@ -1585,8 +1583,8 @@ Use this after making changes to verify scenarios still pass.
 
 Use list_scenarios to see available scenario names.
 
-The workflow defaults to the one this chat is editing. Pass id (a workflow UUID,
-slug, or name) only to run a scenario on a different workflow.
+Pass id (required): the workflow UUID, slug, or name, as returned by
+create_workflow or list_workflows.
 
 ---
 
@@ -1599,8 +1597,8 @@ View a specific test scenario's full definition.
 Returns the complete scenario YAML including events, expectations, and last run results.
 Use this to examine a scenario's configuration or debug test failures.
 
-The workflow defaults to the one this chat is editing. Pass id (a workflow UUID,
-slug, or name) only to view a scenario on a different workflow.
+Pass id (required): the workflow UUID, slug, or name, as returned by
+create_workflow or list_workflows.
 
 ---
 
@@ -1656,8 +1654,8 @@ expect:
 - Nested loops: node: "outer_loop.inner_loop.call_llm"
 
 **Workflow selection:**
-Defaults to the workflow this chat is editing. Pass id (a workflow UUID, slug,
-or name) only to write a scenario on a different workflow.
+Pass id (required): the workflow UUID, slug, or name, as returned by
+create_workflow or list_workflows.
 
 **Example:**
 {
@@ -1691,7 +1689,7 @@ complete: false, which saves it as a draft. Pass complete: true to mark it
 complete once it validates.
 
 **Parameters:**
-- id: (optional) Workflow UUID, slug, or name. Omit it to write the workflow this chat is editing.
+- id: (required) Workflow UUID, slug, or name (the id returned by create_workflow, or from list_workflows).
 - name: (optional) Overrides the name in YAML. Used for display name.
 - content: (required) Complete workflow YAML content.
 - expected_version: (optional) Version number for conflict detection.
@@ -1915,6 +1913,7 @@ _Miscellaneous tools and utilities._
 | [`component_library`](#component_library) | readonly, coding:plan | Component library with 61 production-ready React/TypeScript components for building UIs, dashboar... |
 | [`control_run`](#control_run) | runs | Pause, resume or cancel another top-level run the user owns. |
 | [`generate_image`](#generate_image) | media | Generate an image from a text description. |
+| [`generate_video`](#generate_video) | media | Generate a short video clip from a text description. |
 | [`get_run`](#get_run) | runs, readonly | Check on one top-level run: its state, title, workflow, when it was created and last active, and ... |
 | [`http__request`](#http__request) | integration | Send an HTTP request to a public http(s) URL and return the status, headers and body. Private, lo... |
 | [`list_runs`](#list_runs) | runs, readonly | List the user's recent top-level runs (chats), most recently active first, with the state of each... |
@@ -2017,11 +2016,73 @@ WHAT YOU GET BACK:
 - An attachment id. Cite that id when referring to this image later, and pass
   it to read_attachment to look at it again in a future turn.
 
+CHOOSING A MODEL (set tier; omit it for standard):
+- standard (default): the best everyday image model. Use it for finals.
+- fast: the quicker model, for drafts, thumbnails and quick iterations.
+- To pin one exact model instead, pass model with an id.
+- Ask the user first when cost matters. The result names the model that ran and
+  why; tell the user, and change tier if it was not what they wanted.
+- tier picks WHICH model; quality (below) is how hard that model works.
+
 NOTES:
 - One image per call. Call again to iterate; say what to change rather than
   repeating the original prompt verbatim.
-- You do not choose the model. It is resolved from the user's configured image
-  model preference.
+- A model or tier the user's providers cannot serve returns an error naming the
+  tiers that are available.
+
+---
+
+### generate_video
+
+**Tags:** `media`
+
+Generate a short video clip from a text description.
+
+CHOOSING A MODEL (set quality; omit it for standard):
+- standard (default): the everyday choice. A multimodal generalist: best for
+  iterating, editing a previous clip (edit_from), keeping characters consistent
+  with reference images, and physically plausible motion. 3–10s. It RENDERS at
+  720p; 1080p and 4K are upscaled from that, so they are not truly sharper.
+- cinematic: a polished one-shot final. A dedicated cinematic engine that
+  renders 1080p and 4K NATIVELY, with native audio and the best clean
+  first-pass quality. Pick it when sharpness or a finished look matters. Costs
+  about 4x more than standard, and cannot be edited conversationally (it can
+  only be extended), so each change is a full re-render.
+- fast: drafts and previews. The cheapest tier; no 4K, no reference images.
+- To pin one exact model instead, pass model with an id.
+- Ask the user first when the trade-off matters, for example cost when they
+  want 4K or a long cinematic clip.
+- The result names the model that actually ran and why. Tell the user, and
+  change quality if it was not what they wanted.
+
+COST AND TIME:
+- Costs roughly $0.05 to $0.60 PER SECOND of video, depending on the model and
+  resolution. Resolution defaults to 720p to keep cost down. Prefer short clips.
+- A render takes 30 seconds to several minutes and blocks this turn until it
+  finishes.
+
+HOW TO USE:
+- Describe the subject, the action, the camera and the style. Mention sound or
+  dialogue if you want it.
+- BY DEFAULT THE MODEL CUTS BETWEEN SEVERAL SHOTS and invents a small narrative.
+  Unless the user wants cuts, write "in a single continuous shot, no scene cuts"
+  (or "single unbroken scene") into the prompt. Without it a request for one
+  moment comes back as a montage.
+- To animate an existing image set start_frame to its attachment id.
+- To refine a clip you already made, pass its edit handle as edit_from and
+  describe ONLY the change ("make it slower, keep everything else the same").
+  Keep edit prompts short: long, descriptive ones change things you did not ask
+  about. Only models that support edits give you an edit handle; otherwise
+  regenerate with the full prompt.
+
+WHAT YOU GET BACK:
+- Text only. YOU CANNOT SEE THE VIDEO. The user can play it in the chat. Say
+  what you asked for, not what the video shows, and invite them to review it.
+- An attachment id, and an edit handle when the model supports edits.
+
+NOTES:
+- A model or quality the user's providers cannot serve returns an error naming
+  the tiers that are available.
 
 ---
 
@@ -2065,7 +2126,9 @@ Dynamically load a tool by name or search for available tools.
 
 Use this when you need a tool that isn't currently loaded. You can:
 - Load a specific tool by name: {"name": "sourcegraph"}
-- Search for tools by keyword: {"query": "workflow"}
+- Load every tool carrying a tag in one call: {"name": "tag:workflow"}
+  (each tool is still individually checked against what this agent may load)
+- Search for tools by keyword or tag name: {"query": "workflow"}
 
 Loaded tools become available immediately on the next turn.
 

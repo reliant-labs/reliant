@@ -20,7 +20,7 @@ import {
   upsertStringSetting,
   deleteSettingIfExists,
 } from "../lib/settingsPersistence";
-import { TOUR_SETTINGS_KEYS, ONBOARDING_STEPS } from "../components/Onboarding/constants";
+import { TOUR_SETTINGS_KEYS, getActiveTourSteps } from "../components/Onboarding/constants";
 import type { OnboardingStepId } from "../components/Onboarding/types";
 
 // ─── Store Interface ──────────────────────────────────────────────────────────
@@ -182,7 +182,9 @@ export const useTourStore = create<TourState>((set, get) => ({
   markRemainingSkipped: () => {
     const { completedSteps, skippedSteps } = get();
     const newSkipped = new Set(skippedSteps);
-    for (const step of ONBOARDING_STEPS) {
+    // Only steps this user's tour contains — an unavailable step was never
+    // shown, so recording it as skipped would be a false analytics signal.
+    for (const step of getActiveTourSteps()) {
       if (!completedSteps.has(step.id) && !newSkipped.has(step.id)) {
         newSkipped.add(step.id);
         trackEvent('tour_step_skipped', { step_id: step.id });

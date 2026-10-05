@@ -98,7 +98,7 @@ func (s *Service) resolveMessagesFromCWOpts(ctx context.Context, cw *db.ContextW
 	if cw.ForkAtMessageID != nil {
 		forkMessageID = *cw.ForkAtMessageID
 	}
-	logging.Info("[FORK-DEBUG] resolveMessagesFromCW visiting CW",
+	logging.Debug("[FORK-DEBUG] resolveMessagesFromCW visiting CW",
 		"cwID", cw.ID,
 		"threadID", cw.ThreadID,
 		"parentContextWindowID", parentCWID,
@@ -188,7 +188,7 @@ func (s *Service) resolveMessagesFromCWOpts(ctx context.Context, cw *db.ContextW
 			}
 		}
 		// FORK-DEBUG: Log filtered parent messages
-		logging.Info("[FORK-DEBUG] resolveMessagesFromCW filtered parent messages",
+		logging.Debug("[FORK-DEBUG] resolveMessagesFromCW filtered parent messages",
 			"cwID", cw.ID,
 			"forkAtMessageID", cw.ForkAtMessageID,
 			"forkSeq", forkSeq,
@@ -304,7 +304,7 @@ func (s *Service) LoadCurrentMessages(ctx context.Context, threadID string) ([]*
 	if latestCW.ForkAtMessageID != nil {
 		forkAtMessageID = *latestCW.ForkAtMessageID
 	}
-	logging.Info("[FORK-DEBUG] LoadCurrentMessages called",
+	logging.Debug("[FORK-DEBUG] LoadCurrentMessages called",
 		"threadID", threadID,
 		"latestCWID", latestCW.ID,
 		"parentContextWindowID", parentCWID,
@@ -319,7 +319,7 @@ func (s *Service) LoadCurrentMessages(ctx context.Context, threadID string) ([]*
 	}
 
 	// FORK-DEBUG: Log LoadCurrentMessages result
-	logging.Info("[FORK-DEBUG] LoadCurrentMessages resolved messages",
+	logging.Debug("[FORK-DEBUG] LoadCurrentMessages resolved messages",
 		"threadID", threadID,
 		"totalMessages", len(messages),
 		"cwsVisited", len(visited))
@@ -370,21 +370,124 @@ func (s *Service) LoadDisplayMessages(ctx context.Context, threadID string) ([]*
 }
 
 // LoadRecentDisplayMessages is the bounded form of LoadDisplayMessages: the
-// newest `limit` messages of the thread's visible history. A suffix of a
-// correct resolution is still correctly resolved, so fork, compaction and
-// visual-thread semantics are identical by construction.
+// newest `limit` messages of the thread's visible history, equal to the tail
+// of LoadDisplayMessages' result.
+//
+// It does not compute that tail by resolving everything and slicing. On a
+// long chat the transcript chain is thousands of messages across several
+// forks and compactions (chat 8bb0a875: seven windows, ~5.9k messages) while
+// the snapshot keeps 200, all of which usually sit in the newest window. See
+// recentDisplayMessagesFromCW for the walk and why it is the same answer.
 //
 // Use this for the initial snapshot; use LoadDisplayMessages when the whole
 // transcript is needed. Neither is safe for LLM context.
 func (s *Service) LoadRecentDisplayMessages(ctx context.Context, threadID string, limit int) ([]*db.Message, error) {
-	messages, err := s.LoadDisplayMessages(ctx, threadID)
+	if limit <= 0 {
+		return s.LoadDisplayMessages(ctx, threadID)
+	}
+	if threadID == "" {
+		return nil, fmt.Errorf("thread ID cannot be empty")
+	}
+
+	latestCW, err := s.repo.GetLatestContextWindow(ctx, threadID)
+	if err != nil {
+		if !isEmptyThread(err) {
+			return nil, fmt.Errorf("failed to load latest context window for thread %s: %w", threadID, err)
+		}
+		return []*db.Message{}, nil
+	}
+
+	messages, err := s.recentDisplayMessagesFromCW(ctx, latestCW, limit)
 	if err != nil {
 		return nil, err
 	}
-	if limit > 0 && len(messages) > limit {
-		messages = messages[len(messages)-limit:]
+	return s.normalizeVisualThread(ctx, threadID, messages), nil
+}
+
+// recentDisplayMessagesFromCW returns the last `limit` messages of what
+// resolveMessagesFromCWOpts(cw, crossCompaction: true) would return, reading
+// only as far back up the chain as it has to.
+//
+// The full resolution is a concatenation, oldest window first, of each
+// window's own messages in seq order, each cut only by the edge to its DIRECT
+// child:
+//
+//   - the newest window contributes all of its messages;
+//   - a window whose child is a compaction contributes all of them (crossing a
+//     compaction inherits the parent whole);
+//   - a window whose child is a fork contributes those with seq <= the fork
+//     message's seq — or none, when the fork has no fork message.
+//
+// Messages a window inherited from further back are never cut again, so every
+// window's contribution depends on that one edge alone. The tail of the
+// concatenation is therefore a walk from the newest window toward the root
+// that takes the newest `need` rows of each window's contribution and stops as
+// soon as `need` is met — one bounded, indexed read per window visited instead
+// of a full read of every window in the chain.
+//
+// Same circular-chain guard as the full walk. It only fires on a cycle the
+// walk actually reaches; a cycle beyond the windows the tail needs is never
+// visited, so it no longer fails the read.
+func (s *Service) recentDisplayMessagesFromCW(ctx context.Context, latest *db.ContextWindow, limit int) ([]*db.Message, error) {
+	// Each window's contribution, collected newest window first.
+	var contributions [][]*db.Message
+	need := limit
+	visited := make(map[string]bool)
+
+	cw := latest
+	contributes := true // false only for a fork with no fork message
+	var beforeSeq int64 // exclusive upper bound on seq; 0 = unbounded
+	for need > 0 {
+		if visited[cw.ID] {
+			return nil, fmt.Errorf("circular reference detected in CW chain at %s", cw.ID)
+		}
+		visited[cw.ID] = true
+
+		if contributes {
+			msgs, err := s.repo.ListRecentMessagesInContextWindowBeforeSeq(ctx, cw.ID, beforeSeq, need)
+			if err != nil {
+				return nil, fmt.Errorf("failed to get messages for CW %s: %w", cw.ID, err)
+			}
+			contributions = append(contributions, msgs)
+			need -= len(msgs)
+			if need <= 0 {
+				break
+			}
+		}
+
+		if cw.ParentContextWindowID == nil {
+			break
+		}
+
+		// What the parent contributes is decided by THIS window's edge to it.
+		contributes, beforeSeq = true, 0
+		if cw.CompactionSummaryMessageID == nil {
+			// A fork: cut the parent's own messages at the fork message.
+			if cw.ForkAtMessageID == nil {
+				contributes = false
+			} else {
+				forkMsg, err := s.repo.GetMessage(ctx, *cw.ForkAtMessageID)
+				if err != nil {
+					return nil, fmt.Errorf("failed to get fork message %s for CW %s: %w", *cw.ForkAtMessageID, cw.ID, err)
+				}
+				// seq <= forkSeq, as an exclusive bound. Seqs are never
+				// negative, so this is >= 1 and never reads as "unbounded".
+				beforeSeq = forkMsg.Seq + 1
+			}
+		}
+
+		parent, err := s.repo.GetContextWindow(ctx, *cw.ParentContextWindowID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get parent CW %s: %w", *cw.ParentContextWindowID, err)
+		}
+		cw = parent
 	}
-	return messages, nil
+
+	out := make([]*db.Message, 0, limit-max(need, 0))
+	for i := len(contributions) - 1; i >= 0; i-- {
+		out = append(out, contributions[i]...)
+	}
+	return out, nil
 }
 
 // normalizeVisualThread stamps every message's ChatID/ThreadID/WorkflowID to

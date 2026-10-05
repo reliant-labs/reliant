@@ -5,9 +5,10 @@
 INSERT INTO tool_calls (
     id, chat_id, thread_id, message_id, tool_name, input, status,
     error_message, child_workflow_id, background_process_id,
-    requested_at, started_at, completed_at, created_at, updated_at
+    requested_at, started_at, completed_at, created_at, updated_at,
+    daemon_id
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16
 )
 ON CONFLICT (id) DO UPDATE SET
     thread_id = EXCLUDED.thread_id,
@@ -18,6 +19,7 @@ ON CONFLICT (id) DO UPDATE SET
     error_message = EXCLUDED.error_message,
     child_workflow_id = EXCLUDED.child_workflow_id,
     background_process_id = EXCLUDED.background_process_id,
+    daemon_id = EXCLUDED.daemon_id,
     started_at = EXCLUDED.started_at,
     completed_at = EXCLUDED.completed_at,
     updated_at = EXCLUDED.updated_at;
@@ -159,21 +161,52 @@ ORDER BY tc.requested_at ASC;
 -- fabricating a completion for a live spawn writes a lie into the parent's
 -- mailbox that no later pass can distinguish from a real one. A missing
 -- report is recoverable; an invented one is not.
+--
+-- has_report: a terminal child whose report DID land is still returned while
+-- its row sits at status 6. The report and the status are written by
+-- different code (the detached goroutine enqueues; nothing on that path moves
+-- the row), so "reported" never implied "closed" — and filtering reported
+-- calls out made the close unreachable for exactly the spawns that finished
+-- normally. Observed: toolu_013CJA3i on chat 8bb0a875 still backgrounded two
+-- days after its child stopped and its kind=4 report was delivered. The
+-- caller enqueues only when has_report is false, and closes the row either
+-- way.
 SELECT tc.id AS tool_call_id,
        tc.chat_id,
        tc.thread_id AS parent_thread_id,
        w.thread AS child_thread_id,
        w.state AS workflow_state,
-       w.stop_reason AS workflow_stop_reason
+       w.stop_reason AS workflow_stop_reason,
+       EXISTS (
+           SELECT 1 FROM agent_messages m
+           WHERE m.tool_call_id = tc.id AND m.kind IN (2, 3, 4)
+       ) AS has_report
 FROM tool_calls tc
 JOIN workflows w ON w.id = tc.child_workflow_id
 WHERE tc.tool_name = 'spawn'
   AND tc.status = 6
   AND w.state = 3 AND w.stop_reason <> 3
-  AND NOT EXISTS (
-      SELECT 1 FROM agent_messages m
-      WHERE m.tool_call_id = tc.id AND m.kind IN (2, 3, 4)
-  )
+ORDER BY tc.requested_at ASC;
+
+-- name: ListBackgroundedProcessToolCalls :many
+-- Every backgrounded call whose outcome lives in a daemon's process table:
+-- status 6 with no child workflow. Spawns are excluded — their outcome is the
+-- child workflow, which ListStrandedBackgroundSpawnToolCalls reconciles.
+--
+-- Read by the reconciler's background-process sweep, which asks each owning
+-- daemon whether the process is still running and closes the call when it is
+-- not. daemon_id and background_process_id are NULL on rows written before
+-- they were recorded; the sweep closes those only when the user's daemons
+-- prove the process gone, so they are returned too.
+--
+-- Served by idx_tool_calls_chat_live (status IN (1,2,6)), which stays small
+-- once the sweep keeps status 6 honest.
+SELECT tc.id, tc.chat_id, tc.tool_name, tc.background_process_id, tc.daemon_id,
+       tc.requested_at, c.user_id
+FROM tool_calls tc
+JOIN chats c ON c.id = tc.chat_id
+WHERE tc.status = 6
+  AND tc.child_workflow_id IS NULL
 ORDER BY tc.requested_at ASC;
 
 -- name: ListSpawnChildrenForThread :many

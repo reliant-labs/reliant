@@ -59,6 +59,22 @@ var WorkflowExecutionTimeout = func() time.Duration {
 	return 14 * 24 * time.Hour // 14 day timeout by default
 }()
 
+// DynamicWorkflowTaskTimeout bounds one workflow task — a replay of the run's
+// history plus the code between two commands — for every DynamicWorkflow.
+//
+// Temporal's 10s default is sized for small histories. A long chat's root
+// run reaches tens of thousands of events, and replaying that on a loaded
+// worker took up to 42.5s per task; at 10s each such task timed out and was
+// retried from scratch, stalling the whole run for minutes. That stall is
+// what let a reconciler pass mistake a finishing background spawn for a lost
+// one (docs/incidents/2026-10-04-spawn-report-collision.md).
+//
+// 60s covers the worst task observed with margin and stays under Temporal's
+// 120s ceiling. Continue-as-new and reset inherit it from the run they
+// replace, so setting it at start covers the whole chain. It does not fix
+// history growth — continue-as-new is what bounds that.
+const DynamicWorkflowTaskTimeout = 60 * time.Second
+
 // Signal names
 const (
 	SignalPause  = "signal.pause"  // Signal to pause workflow at next step boundary

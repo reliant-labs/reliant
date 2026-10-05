@@ -51,7 +51,6 @@ const providerColors: Record<string, string> = {
   codex: "#5cb85c",
   gemini: "#5b9bd5",
   vertexai: "#5b9bd5",
-  xai: "#d9534f",
   local: "#a0a0a0",
   openrouter: "#f0ad4e",
 };

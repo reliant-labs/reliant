@@ -561,14 +561,16 @@ thread:
 
 ### Different Models Per Agent
 
-Use `groups` to configure different settings for different roles:
+Use input groups (`type: group`) to configure different settings for different roles:
 
 ```yaml
-groups:
+inputs:
   Implementer:
+    type: group
     inputs:
       model: { type: model, default: { tags: [moderate] } }
   Reviewer:
+    type: group
     inputs:
       model: { type: model, default: { tags: [flagship] } }
 

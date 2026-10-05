@@ -296,9 +296,9 @@ func TestClaudeCodeThinkingConfig_DisplayUpdates(t *testing.T) {
 		wantJSON string
 	}{
 		{
-			name:     "fable-5.1 sends display updates",
+			name:     "fable-5.1 sends display summarized",
 			opts:     fable51Opts(),
-			wantJSON: `{"type":"adaptive","display":"updates"}`,
+			wantJSON: `{"type":"adaptive","display":"summarized"}`,
 		},
 		{
 			name: "fable-5 sends bare adaptive",

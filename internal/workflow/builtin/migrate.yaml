@@ -1,4 +1,5 @@
 name: migrate
+title: Import from Claude Code / Cursor
 apiVersion: "0.0.5"
 description: |
   Guided migration workflow for importing useful configuration from Claude Code, Cursor,
@@ -22,18 +23,7 @@ inputs:
     default:
       tags: [flagship]
 
-  temperature:
-    type: number
-    default: 0.4
-    min: 0
-    max: 1
-    description: Response randomness
 
-  thinking_level:
-    type: enum
-    enum: [low, medium, high, xhigh]
-    default: medium
-    description: Extended thinking level
 
   system_prompt:
     type: string
@@ -116,8 +106,6 @@ nodes:
     args:
       model: "{{inputs.model}}"
       mode: "{{inputs.mode}}"
-      temperature: "{{inputs.temperature}}"
-      thinking_level: "{{inputs.thinking_level}}"
     thread:
       mode: fork
       memo: false
@@ -195,8 +183,6 @@ nodes:
     args:
       model: "{{inputs.model}}"
       mode: "{{inputs.mode}}"
-      temperature: "{{inputs.temperature}}"
-      thinking_level: "{{inputs.thinking_level}}"
     thread:
       mode: fork
       memo: false
@@ -233,8 +219,6 @@ nodes:
     args:
       model: "{{inputs.model}}"
       mode: "{{inputs.mode}}"
-      temperature: "{{inputs.temperature}}"
-      thinking_level: "{{inputs.thinking_level}}"
     thread:
       mode: fork
       memo: false
@@ -271,8 +255,6 @@ nodes:
     args:
       model: "{{inputs.model}}"
       mode: "{{inputs.mode}}"
-      temperature: "{{inputs.temperature}}"
-      thinking_level: "{{inputs.thinking_level}}"
     thread:
       mode: fork
       memo: false
@@ -310,8 +292,6 @@ nodes:
     args:
       model: "{{inputs.model}}"
       mode: "{{inputs.mode}}"
-      temperature: "{{inputs.temperature}}"
-      thinking_level: "{{inputs.thinking_level}}"
       response_tool_name: submit_workflow_candidates
       response_tool_description: Submit the list of reusable workflow candidates worth building
       response_schema:
@@ -419,8 +399,6 @@ nodes:
           args:
             model: "{{inputs.model}}"
             mode: "{{inputs.mode}}"
-            temperature: "{{inputs.temperature}}"
-            thinking_level: "{{inputs.thinking_level}}"
             tools:
               - create_workflow
             spawn_presets: []
@@ -473,8 +451,6 @@ nodes:
           args:
             model: "{{inputs.model}}"
             mode: auto
-            temperature: "{{inputs.temperature}}"
-            thinking_level: "{{inputs.thinking_level}}"
           thread:
             mode: fork
             memo: false
@@ -520,8 +496,6 @@ nodes:
     args:
       model: "{{inputs.model}}"
       mode: auto
-      temperature: "{{inputs.temperature}}"
-      thinking_level: "{{inputs.thinking_level}}"
       tools: []
       spawn_presets: []
     thread:

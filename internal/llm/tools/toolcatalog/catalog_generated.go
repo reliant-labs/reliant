@@ -157,9 +157,30 @@ var generatedToolParams = map[string]ToolParams{
 			"quality":    {},
 			"repo":       {},
 			"size":       {},
+			"tier":       {},
 		},
 		Unbindable: map[string]string{
 			"save_to": "every generated image would overwrite the previous one at the same path",
+		},
+	},
+	"generate_video": {
+		Bindable: map[string]struct{}{
+			"aspect_ratio":     {},
+			"audio":            {},
+			"duration_seconds": {},
+			"model":            {},
+			"negative_prompt":  {},
+			"prompt":           {},
+			"quality":          {},
+			"repo":             {},
+			"resolution":       {},
+		},
+		Unbindable: map[string]string{
+			"edit_from":        "names one earlier clip, which is chosen per call and cannot be known in advance",
+			"end_frame":        "names one attachment, which is chosen per call",
+			"reference_images": "names specific attachments, which are chosen per call",
+			"save_to":          "every generated video would overwrite the previous one at the same path",
+			"start_frame":      "names one attachment, which is chosen per call",
 		},
 	},
 	"get_cel_reference": {

@@ -1,7 +1,9 @@
 import { lazy, Suspense, useState } from "react";
 import { cn } from "../../lib/utils";
+import { SettingsPageHeader } from "./SettingsPageHeader";
 import { CombinedGeneralSettings } from "./CombinedGeneralSettings";
 import { ToolPreferences } from "./ToolPreferences";
+import { LocalModelsSection } from "./LocalModelsSection";
 import { reliantAIAvailable } from "../../services/controlPlane/reliantAI";
 
 // ReliantAISection is code-split out of the main settings chunk — it's only
@@ -22,7 +24,7 @@ interface AISettingsProps {
   onProvidersUpdate?: () => void;
 }
 
-type AITab = "providers" | "tools" | "reliant";
+type AITab = "providers" | "local" | "tools" | "reliant";
 
 /**
  * Single "AI" settings section with internal tabs:
@@ -41,7 +43,7 @@ export function AISettings({ providers, onProvidersUpdate }: AISettingsProps) {
   // injected heading styles so CombinedGeneralSettings' h2/h3 render as they did
   // when it lived inside SettingsContent's generic card.
   const providersContent = (
-    <div className="mx-auto max-w-[700px] rounded-xl border border-border/50 bg-card p-6 shadow-sm [&_h2]:text-xl [&_h2]:font-bold [&_h2]:tracking-tight [&_h2]:text-foreground [&_h3]:text-sm [&_h3]:font-semibold [&_h3]:text-foreground">
+    <div className="mx-auto max-w-[700px] rounded-xl border border-border/50 bg-card p-6 shadow-sm [&_h3]:text-sm [&_h3]:font-semibold [&_h3]:text-foreground">
       <CombinedGeneralSettings
         providers={providers}
         onProvidersUpdate={onProvidersUpdate}
@@ -65,6 +67,7 @@ export function AISettings({ providers, onProvidersUpdate }: AISettingsProps) {
 
   const tabs: Array<{ id: AITab; label: string }> = [
     { id: "providers", label: "Your providers" },
+    { id: "local", label: "Custom & local models" },
     { id: "tools", label: "Tools" },
     ...(reliantAIAvailable
       ? [{ id: "reliant" as const, label: "Reliant AI" }]
@@ -73,6 +76,13 @@ export function AISettings({ providers, onProvidersUpdate }: AISettingsProps) {
 
   return (
     <>
+      {tab !== "reliant" && (
+      <SettingsPageHeader
+        title="AI"
+        description="Choose which AI models your agents can use. Add your own provider keys, set the models that tools use behind the scenes, or manage Reliant's managed AI credits and spend."
+        className="mb-4 border-b-0 pb-0"
+      />
+      )}
       <div className="mb-6 flex gap-1 border-b border-border">
         {tabs.map((t) => (
           <button
@@ -93,6 +103,10 @@ export function AISettings({ providers, onProvidersUpdate }: AISettingsProps) {
 
       {tab === "providers" ? (
         providersContent
+      ) : tab === "local" ? (
+        <div className="mx-auto max-w-[700px]">
+          <LocalModelsSection />
+        </div>
       ) : tab === "tools" ? (
         toolsContent
       ) : (

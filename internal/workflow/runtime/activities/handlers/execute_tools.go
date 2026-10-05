@@ -548,7 +548,9 @@ func (a *ExecuteToolsActivity) executeSingleTool(
 			"tool_call_id", toolCallID,
 			"tool_name", toolName,
 			"attempt", attemptNumber)
-		return a.buildToolResult(toolCallID, toolName, InterruptedToolResultContent, "", true, nil, nil)
+		result := a.buildToolResult(toolCallID, toolName, InterruptedToolResultContent, "", true, nil, nil)
+		a.recordInterruptedRetry(ctx, chatID, toolCallID, toolName, result.Content)
+		return result
 	}
 
 	// Check for cancellation before starting work
@@ -706,7 +708,15 @@ func (a *ExecuteToolsActivity) handleToolExecutionResult(
 	// Check if tool was backgrounded
 	if execResult.Backgrounded {
 		a.emitToolStatus(ctx, chatID, toolCallID, toolName, "backgrounded")
-		a.upsertToolCall(ctx, tec, core.ToolCallStatusBackgrounded, toolCallUpsertOpts{startedAt: &startedAt})
+		// Record WHERE the process runs. It lives in one daemon's memory, and
+		// that daemon is the only party that can say when it ends; without
+		// both ids on the row the reconciler has no one to ask, and the call
+		// reads as running forever (see reconcileBackgroundedProcesses).
+		a.upsertToolCall(ctx, tec, core.ToolCallStatusBackgrounded, toolCallUpsertOpts{
+			startedAt:           &startedAt,
+			backgroundProcessID: backgroundProcessIDFromMetadata(execResult.Metadata),
+			daemonID:            execResult.DaemonID,
+		})
 		return a.buildToolResult(toolCallID, toolName, execResult.Content, execResult.Metadata, false, execResult.BinaryParts, attachmentIDsFromMetadata(execResult.Metadata))
 	}
 
@@ -1023,6 +1033,64 @@ type toolCallUpsertOpts struct {
 	startedAt    *time.Time
 	completedAt  *time.Time
 	errorMessage string
+	// backgroundProcessID and daemonID say where a backgrounded call's
+	// process runs. Set only on the BACKGROUNDED transition.
+	backgroundProcessID string
+	daemonID            string
+}
+
+// backgroundProcessIDFromMetadata reads the process id a backgrounded shell
+// call reports in its structured metadata (llm/tools.ShellResponseMetadata).
+// Empty when the metadata is absent or carries none.
+func backgroundProcessIDFromMetadata(metadata string) string {
+	if metadata == "" {
+		return ""
+	}
+	var parsed struct {
+		ProcessID string `json:"process_id"`
+	}
+	if err := json.Unmarshal([]byte(metadata), &parsed); err != nil {
+		return ""
+	}
+	return parsed.ProcessID
+}
+
+// recordInterruptedRetry closes the durable row of a call whose activity was
+// re-delivered by Temporal.
+//
+// The retry path tells the model the call was interrupted, and it has to say
+// the same thing durably: before this it returned the interrupted result and
+// left the row at EXECUTING, where it stayed forever — a running tool with a
+// live Cancel button for a call that will never report again. Observed on
+// chat 8bb0a875: three shell calls from 01:46-01:49 still "executing" two days
+// later, each carrying exactly this interrupted result block.
+//
+// Failed, not Cancelled: the call's outcome is unknown, which is an error the
+// model was shown, not a stop anyone asked for.
+//
+// A call attempt 1 already BACKGROUNDED is left alone. That process is still
+// running somewhere, and the reconciler closes it from the process's real
+// outcome; writing Failed here would report a live dev server as dead.
+// UpsertToolCallStatus already refuses to walk a terminal row backwards, so a
+// call attempt 1 finished keeps its real outcome.
+func (a *ExecuteToolsActivity) recordInterruptedRetry(ctx context.Context, chatID, toolCallID, toolName, content string) {
+	if a.repo == nil || chatID == "" || toolCallID == "" {
+		return
+	}
+	if existing, err := a.repo.GetToolCall(ctx, toolCallID); err == nil && existing != nil &&
+		existing.Status == core.ToolCallStatusBackgrounded {
+		return
+	}
+
+	completedAt := time.Now()
+	a.upsertTerminalToolCall(ctx, &toolExecutionContext{
+		chatID:     chatID,
+		toolName:   toolName,
+		toolCallID: toolCallID,
+	}, core.ToolCallStatusFailed, toolCallUpsertOpts{
+		completedAt:  &completedAt,
+		errorMessage: content,
+	}, &toolCallResultWrite{content: content, isError: true})
 }
 
 // upsertToolCall persists a durable tool_calls row alongside the transient
@@ -1073,6 +1141,12 @@ func (a *ExecuteToolsActivity) upsertToolCall(ctx context.Context, tec *toolExec
 	}
 	if opts.errorMessage != "" {
 		call.ErrorMessage = &opts.errorMessage
+	}
+	if opts.backgroundProcessID != "" {
+		call.BackgroundProcessID = &opts.backgroundProcessID
+	}
+	if opts.daemonID != "" {
+		call.DaemonID = &opts.daemonID
 	}
 
 	if err := db.UpsertToolCallStatus(ctx, a.repo, call); err != nil {

@@ -10,7 +10,7 @@ export const ONBOARDING_STEPS = [
   'checkout',
   'project-choice',
   'github-connect',
-  'project-picker',
+  'finish',
 ] as const;
 
 export type OnboardingStepId = typeof ONBOARDING_STEPS[number];
@@ -29,7 +29,7 @@ export const STEP_LABELS: Record<OnboardingStepId, string> = {
   'checkout': 'Payment',
   'project-choice': 'Project',
   'github-connect': 'GitHub',
-  'project-picker': 'Project',
+  'finish': 'Finish',
 };
 
 /** Max width of the onboarding card.
@@ -108,7 +108,7 @@ export function getStepsForPlan(
       steps.push('github-connect');
     }
   } else {
-    steps.push('project-picker');
+    steps.push('finish');
   }
 
   return steps;
@@ -205,7 +205,7 @@ export function deriveStep(
   // /settings/billing here instead; that is what this clause replaces.
   if (checkoutIsOwed(plan, facts)) return 'checkout';
 
-  if (!isCloudCompute(plan.compute)) return 'project-picker';
+  if (!isCloudCompute(plan.compute)) return 'finish';
 
   if (!plan.intent) return 'project-choice';
   if (plan.intent === 'existing_codebase') return 'github-connect';
@@ -270,6 +270,6 @@ export const BACK_CLEARS: Record<OnboardingStepId, (keyof LaunchPlan)[]> = {
     'creditSettled',
   ],
   'project-choice': ['modelProvider'],
-  'project-picker': ['modelProvider'],
+  'finish': ['modelProvider'],
   'github-connect': ['intent'],
 };

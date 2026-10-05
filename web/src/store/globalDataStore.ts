@@ -17,6 +17,7 @@ export interface WorkflowDef {
   step_count: number;
   source: "builtin" | "user" | "project"; // Where the workflow comes from
   updated_at?: string;
+  title?: string; // Definition-level display name
   is_hidden?: boolean; // Whether the workflow is hidden from the workflow dropdown
   status?: "draft" | "complete"; // Lifecycle: drafts are never runnable
 }
@@ -28,6 +29,18 @@ interface Model {
   driverId?: string; // The actual API driver to use (e.g., "openrouter", "anthropic")
   canReason?: boolean;
   supportedThinkingLevels?: string[];
+  /** False when temperature set for this model+driver never reaches the provider. Undefined = unknown (show). */
+  supportsTemperature?: boolean;
+  /** Tokens the model's server honors; 0/undefined = unknown. */
+  contextWindow?: number;
+  /** Set only for driverId "local": the machine whose server runs this model. */
+  local?: {
+    daemonId: string;
+    machineName: string;
+    endpointId: string;
+    endpointKind: string;
+    online: boolean;
+  };
   capabilities: string[];
   tags: string[];
   metadata?: Record<string, unknown>;

@@ -13,7 +13,7 @@ Think of presets as profiles for your agents. A researcher preset configures an 
 
 Presets use tag-based matching to connect with workflows. Every preset declares a `tag` that specifies what kind of workflow inputs it targets. When you load presets for a workflow, Reliant matches the preset's tag against the workflow's tag or a group's tag for multi-agent workflows. Only presets with matching tags appear as options.
 
-A preset with `tag: agent` works with any workflow that has `tag: agent` on its inputs or groups. The same researcher preset can configure a standalone agent workflow, or configure just the research phase of a multi-phase workflow—the tag matching handles it automatically.
+A preset with `tag: agent` works with any workflow whose `presets:` block declares `tag: agent`, or that has a group tagged `agent`. The same researcher preset can configure a standalone agent workflow, or configure just the research phase of a multi-phase workflow—the tag matching handles it automatically.
 
 Presets can be partial. A preset doesn't need to specify every parameter the workflow accepts. It might only set `model` and `temperature`, leaving other parameters to their defaults or to be configured inline.
 

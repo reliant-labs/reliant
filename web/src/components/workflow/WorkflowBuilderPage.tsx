@@ -42,6 +42,10 @@ interface WorkflowBuilderPageProps {
   routeIsNew?: boolean;
   /** One-shot drill target from `?drill=`. Forwarded to WorkflowBuilder. */
   routeDrillIntoNodeId?: string;
+  /** Chat shown in the editor's chat panel, from `?chat=`. */
+  routeChatId?: string;
+  /** Update `?chat=` (undefined clears it). */
+  onChatIdChange?: (chatId: string | undefined) => void;
   /**
    * When true, the onboarding tour is active on a builder step. The page treats
    * the loaded workflow (typically a builtin like `get-it-right`) as editable
@@ -79,6 +83,8 @@ export function WorkflowBuilderPage({
   routeWorkflowName,
   routeIsNew = false,
   routeDrillIntoNodeId,
+  routeChatId,
+  onChatIdChange,
   tourMode = false,
   onClose,
   onNavigateToSettings,
@@ -108,11 +114,6 @@ export function WorkflowBuilderPage({
   // prop).
   const [initialWorkflowName] = useState<string | undefined>(undefined);
 
-  // Track builder chat ID - for chat resumption (separate from draft ID)
-  const [builderChatId, setBuilderChatId] = useState<string | undefined>(
-    undefined,
-  );
-
   // Canonical YAML definition from the backend (used by YAML modal instead of frontend serializer)
   const [yamlDefinition, setYamlDefinition] = useState<string | undefined>(
     undefined,
@@ -132,9 +133,6 @@ export function WorkflowBuilderPage({
   // view any more — the Library (/workflows/library) replaced it.
   const currentView: "builder" | "error" = parseError ? "error" : "builder";
 
-  // Session ID for new/unsaved workflows - used as a stable key for localStorage before workflow is saved
-  // This is a ref to avoid unnecessary re-renders
-  const workflowSessionIdRef = useRef<string | undefined>(undefined);
   // Set by WorkflowBuilder to "save the current canvas as a draft" — the
   // action a rejected save of a complete workflow offers from its toast.
   const saveAsDraftRef = useRef<(() => Promise<void>) | null>(null);
@@ -260,8 +258,6 @@ export function WorkflowBuilderPage({
       setIsNewWorkflow(true);
       setWorkflowSource("user");
       setWorkflowVersion(0);
-      setBuilderChatId(undefined);
-      workflowSessionIdRef.current = crypto.randomUUID();
 
       let cancelled = false;
       const createDraft = async () => {
@@ -288,6 +284,17 @@ export function WorkflowBuilderPage({
             setWorkflowVersion(version);
             setYamlDefinition(newYaml);
             setDraftStatus(newStatus);
+            // Leave /workflow/new so a reload reopens this draft instead of
+            // creating another; ?chat= named the previous draft, so it goes.
+            navigate({
+              to: "/workflow/$workflowName",
+              params: { workflowName: workflow.name },
+              search: (prev: Record<string, unknown>) => {
+                const { chat: _chat, ...rest } = prev;
+                return rest;
+              },
+              replace: true,
+            } as never);
           } else {
             setEditingWorkflow(undefined);
           }
@@ -333,7 +340,6 @@ export function WorkflowBuilderPage({
         const {
           workflow,
           draftId: loadedDraftId,
-          builderChatId: loadedChatId,
           parseError: loadedParseError,
           rawDefinition: loadedRawDefinition,
           yamlDefinition: loadedYamlDef,
@@ -347,7 +353,6 @@ export function WorkflowBuilderPage({
           setRawDefinition(loadedRawDefinition);
           setErrorWorkflowName(workflowName);
           setDraftId(loadedDraftId);
-          setBuilderChatId(loadedChatId);
           return;
         }
 
@@ -379,9 +384,7 @@ export function WorkflowBuilderPage({
                 : "user",
           );
           setDraftId(loadedDraftId);
-          setBuilderChatId(loadedChatId);
           setYamlDefinition(loadedYamlDef);
-          workflowSessionIdRef.current = undefined;
         } else {
           toast.error(`Workflow "${workflowName}" not found`);
           // Workflow was deleted or does not exist - back to the Library
@@ -412,14 +415,13 @@ export function WorkflowBuilderPage({
     }
 
     try {
-      // Pass the builder chat ID, expected version for OCC, and draft ID for ID-based updates (allows renames)
+      // Pass the expected version for OCC, and draft ID for ID-based updates (allows renames)
       // No intent keeps the stored status: drafts stay drafts, and a complete
       // workflow stays complete — so the backend rejects a save that would
       // make it invalid rather than silently taking it out of service.
       const response = await workflowGrpc.saveWorkflow(
         projectId,
         workflow,
-        builderChatId,
         workflowVersion || undefined,
         undefined,
         draftId,
@@ -446,11 +448,6 @@ export function WorkflowBuilderPage({
       }
 
       setDraftStatus(response.status);
-
-      // Update builderChatId from response (may be new or updated)
-      if (response.builderChatId) {
-        setBuilderChatId(response.builderChatId);
-      }
 
       // Update draftId if returned (this is the workflow draft UUID)
       if (response.id) {
@@ -479,9 +476,6 @@ export function WorkflowBuilderPage({
       if (!draftId) {
         trackEvent("workflow_created");
       }
-
-      // After first save, clear the session ID since workflow now has proper identification
-      workflowSessionIdRef.current = undefined;
 
       // Note: No toasts here - WorkflowBuilder handles toasts for explicit button clicks
       // Auto-save uses the SaveStatusIndicator instead
@@ -678,11 +672,6 @@ export function WorkflowBuilderPage({
     await refreshWorkflowList();
   };
 
-  // Callback to update chat ID when chat is created in WorkflowBuilderChat
-  const handleChatIdChange = (newChatId: string) => {
-    setBuilderChatId(newChatId);
-  };
-
   // Handle clearing a corrupted workflow
   const handleClearWorkflow = async () => {
     if (!projectId || !errorWorkflowName) return;
@@ -703,7 +692,6 @@ export function WorkflowBuilderPage({
       setRawDefinition(undefined);
       setErrorWorkflowName(undefined);
       setDraftId(undefined);
-      setBuilderChatId(undefined);
       navigate({ to: "/workflows/library" });
 
       // Refresh workflows.
@@ -723,7 +711,6 @@ export function WorkflowBuilderPage({
       const {
         workflow,
         draftId: loadedDraftId,
-        builderChatId: loadedChatId,
         parseError: loadedParseError,
         yamlDefinition: fixedYaml,
       } = await getWorkflowWithDraftId(projectId, errorWorkflowName);
@@ -747,7 +734,6 @@ export function WorkflowBuilderPage({
         setIsNewWorkflow(false);
         setWorkflowSource("user");
         setDraftId(loadedDraftId);
-        setBuilderChatId(loadedChatId);
         setYamlDefinition(fixedYaml);
 
         toast.success("Workflow loaded successfully");
@@ -766,12 +752,11 @@ export function WorkflowBuilderPage({
         parseError={parseError || "Unknown error"}
         rawDefinition={rawDefinition}
         draftId={draftId}
-        builderChatId={builderChatId}
+        chatId={routeChatId}
+        onChatIdChange={onChatIdChange}
         onBack={handleBack}
         onClear={handleClearWorkflow}
         onFixed={handleWorkflowFixed}
-        onChatIdChange={handleChatIdChange}
-        onDraftIdChange={setDraftId}
       />,
     );
   }
@@ -791,11 +776,11 @@ export function WorkflowBuilderPage({
         isNewWorkflow={isNewWorkflow}
         source={workflowSource}
         version={workflowVersion}
-        builderChatId={builderChatId}
+        chatId={routeChatId}
+        onChatIdChange={onChatIdChange}
+        onDraftStatusChange={setDraftStatus}
         draftId={draftId}
-        workflowSessionId={workflowSessionIdRef.current}
-        onChatIdChange={handleChatIdChange}
-        onDraftIdChange={setDraftId}
+        onWorkflowDeleted={() => navigate({ to: "/workflows/library" })}
         onVersionChange={setWorkflowVersion}
         yamlDefinition={yamlDefinition}
         onYamlDefinitionChange={setYamlDefinition}

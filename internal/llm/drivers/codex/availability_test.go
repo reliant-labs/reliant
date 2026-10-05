@@ -1,0 +1,97 @@
+// Copyright (c) 2025 Reliant Labs
+package codex
+
+import (
+	"os"
+	"testing"
+
+	"github.com/reliant-labs/reliant/internal/llm/drivers/registry"
+	"github.com/reliant-labs/reliant/internal/llm/models"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+// testdata/codex_models.json is GET /codex/models recorded 2026-10-04 with all
+// credentials stripped (only the fields the driver consumes are kept).
+func recordedReport(t *testing.T) registry.ProviderAvailability {
+	t.Helper()
+	body, err := os.ReadFile("testdata/codex_models.json")
+	require.NoError(t, err)
+	report, err := parseCodexModels(body)
+	require.NoError(t, err)
+	return report
+}
+
+func TestParseCodexModels_ReasoningLevelsAreIntersectedWithAcceptedSet(t *testing.T) {
+	report := recordedReport(t)
+
+	// The catalog advertises `ultra` for astra/sol/terra; the API 400s on it.
+	for _, slug := range []string{"gpt-6-astra", "gpt-5.6-sol", "gpt-5.6-terra"} {
+		got := report.Models[slug].ThinkingLevels
+		assert.NotContains(t, got, "ultra", slug)
+		assert.Equal(t, []string{"low", "medium", "high", "xhigh", "max"}, got, slug)
+	}
+	assert.Equal(t, []string{"low", "medium", "high", "xhigh"}, report.Models["gpt-5.5"].ThinkingLevels)
+}
+
+func TestParseCodexModels_ContextWindowOverridesCatalog(t *testing.T) {
+	report := recordedReport(t)
+	assert.Equal(t, 272000, report.Models["gpt-5.6-sol"].ContextWindow)
+
+	// An account window below the catalog's drives EffectiveContextWindow.
+	custom := report
+	custom.Models = map[string]models.ModelAvailability{"gpt-5.6-sol": {ContextWindow: 100000}}
+	avail := registry.BuildAvailabilityFunc(models.MustGetRegistry(), map[string]registry.ProviderAvailability{"codex": custom})
+	got, err := models.MustGetRegistry().WithAvailability(avail).Resolve(models.ModelSelector{ID: "gpt-5.6-sol@codex"}, []string{"codex"})
+	require.NoError(t, err)
+	assert.Equal(t, 100000, models.EffectiveContextWindow(&got.Definition, "codex"))
+}
+
+func TestParseCodexModels_HiddenAndUnknownSlugsAreNotOffered(t *testing.T) {
+	report := recordedReport(t)
+
+	// visibility:"hide" slugs have no catalog entry and are never auto-added.
+	assert.NotContains(t, report.Models, "gpt-reserve")
+	assert.NotContains(t, report.Models, "codex-auto-review")
+
+	// Authoritative: a catalog model the account does not list is not servable.
+	assert.True(t, report.Authoritative)
+	assert.True(t, report.For("gpt-5.2-codex").Disabled)
+	assert.False(t, report.For("gpt-5.5").Disabled)
+}
+
+func TestParseCodexModels_HideDisablesACatalogModel(t *testing.T) {
+	report, err := parseCodexModels([]byte(`{"models":[
+		{"slug":"gpt-5.5","visibility":"hide","context_window":272000,"supported_reasoning_levels":[{"effort":"low"}]},
+		{"slug":"gpt-5.6-terra","visibility":"list","context_window":200000,"supported_reasoning_levels":[{"effort":"ultra"},{"effort":"high"}]}
+	]}`))
+	require.NoError(t, err)
+	assert.True(t, report.For("gpt-5.5").Disabled)
+	assert.False(t, report.For("gpt-5.6-terra").Disabled)
+	assert.Equal(t, []string{"high"}, report.For("gpt-5.6-terra").ThinkingLevels)
+	assert.Equal(t, 200000, report.For("gpt-5.6-terra").ContextWindow)
+}
+
+func TestParseCodexModels_UnknownSlugIsLoggedOnceNotAdded(t *testing.T) {
+	unknownSlugsLogged.Delete("gpt-9-future")
+	body := []byte(`{"models":[{"slug":"gpt-9-future","visibility":"list","context_window":1,"supported_reasoning_levels":[{"effort":"low"}]}]}`)
+
+	first, err := parseCodexModels(body)
+	require.NoError(t, err)
+	assert.NotContains(t, first.Models, "gpt-9-future")
+	_, logged := unknownSlugsLogged.Load("gpt-9-future")
+	assert.True(t, logged, "unknown slug must be recorded as logged")
+
+	_, err = parseCodexModels(body)
+	require.NoError(t, err)
+}
+
+// The listing every catalog codex model must ride is the accepted set: the
+// intersected levels can never contain a level the API rejects.
+func TestCodexReportNeverContainsRejectedLevel(t *testing.T) {
+	for slug, a := range recordedReport(t).Models {
+		for _, level := range a.ThinkingLevels {
+			assert.Contains(t, models.CodexAcceptedThinkingLevels(), level, slug)
+		}
+	}
+}

@@ -100,22 +100,10 @@ func ResolveImageGenerator(ctx context.Context, userID string, selector models.M
 	if selector.ID == "" && len(selector.Tags) == 0 {
 		selector.Tags = []string{DefaultImageGenTag}
 	}
-	selector.RequireOutputModality = models.ModalityImage
 
-	availableDrivers := GetAvailableDrivers(ctx, userID)
-	availableProviders := configuredProviderIDs(availableDrivers)
-	if len(availableProviders) == 0 {
-		return nil, fmt.Errorf("no API keys configured — add a provider key in Settings, or connect Reliant-managed credits, to generate images")
-	}
-
-	registry, err := models.GetRegistry()
+	resolved, availableDrivers, err := resolveMediaModel(ctx, userID, selector, models.ModalityImage)
 	if err != nil {
 		return nil, err
-	}
-
-	resolved, err := registry.Resolve(selector, availableProviders)
-	if err != nil {
-		return nil, fmt.Errorf("no image-generation model available: %w", err)
 	}
 
 	driverID := resolved.Provider.Driver

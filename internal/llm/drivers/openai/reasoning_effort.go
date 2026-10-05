@@ -7,7 +7,7 @@ import "github.com/openai/openai-go/v3/shared"
 //
 // The SDK's ReasoningEffort constants stop at xhigh, but the field is a plain
 // string on the wire, so newer levels pass through by construction. gpt-6-astra
-// adds "max" above xhigh; the gpt-5.6 family adds "max" and "ultra".
+// adds "max" above xhigh; the gpt-5.6 family adds "max".
 //
 // Unknown values are forwarded rather than clamped because the model's declared
 // thinking_levels in models.yaml are what validate an effort, upstream of here.

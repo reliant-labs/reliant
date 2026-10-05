@@ -953,6 +953,7 @@ func (l *Launcher) start(ctx context.Context, p startParams) (*Result, error) {
 		TaskQueue:                l.taskQueue,
 		WorkflowIDConflictPolicy: enums.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
 		WorkflowExecutionTimeout: workflow.WorkflowExecutionTimeout,
+		WorkflowTaskTimeout:      workflow.DynamicWorkflowTaskTimeout,
 	}
 
 	// Inject session daemon if set on chat

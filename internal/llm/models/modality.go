@@ -21,6 +21,10 @@ const (
 	// ModalityImage is a model that emits images, e.g. via an image
 	// generation endpoint rather than chat completions.
 	ModalityImage Modality = "image"
+
+	// ModalityVideo is a model that emits video through a long-running
+	// generation operation (submit, then poll) rather than chat completions.
+	ModalityVideo Modality = "video"
 )
 
 // DefaultOutputModalities is what a model is assumed to produce when its

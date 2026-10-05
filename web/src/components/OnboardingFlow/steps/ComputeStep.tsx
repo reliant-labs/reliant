@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 // with the two-card layout — an icon on one row and none on the others is the
 // shape difference that made the free option read as a different kind of
 // answer.
-import { Check, CheckCircle2, Loader2 } from "lucide-react";
+import { Check, CheckCircle2, ChevronDown, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   PlanTileRow,
@@ -12,6 +12,7 @@ import {
   type ComputePlanOption,
 } from "@/components/Billing/PlanTiles";
 import {
+  formatCentsAsDollars,
   formatSizeLabel,
   isPurchasableComputePlan,
   sortPlansForDisplay,
@@ -96,6 +97,10 @@ export function ComputeStep({
   onNext,
 }: StepProps & { hideHeader?: boolean }) {
   const [showLocal, setShowLocal] = useState(plan.compute === "local_daemon");
+  // While the free option is chosen the hosted rows fold into one disclosure so
+  // the connect instructions sit right under the list. This is only the user's
+  // wish to look at them again; it is meaningless (and ignored) otherwise.
+  const [cloudExpanded, setCloudExpanded] = useState(false);
   const { activeDaemon, daemons, loading: daemonLoading } = useDaemonStatus();
   // A packaged desktop build ships its own daemon, but it does not REGISTER
   // until after sign-in — measured at ~1.2s post-restart on prod, though the
@@ -188,6 +193,10 @@ export function ComputeStep({
   // satisfies the real constraint (do not ask an entitled user for money)
   // without removing the question.
   const showPlanChoice = HAS_CLOUD_DAEMONS && !loading;
+  const showCloudRows = showPlanChoice && (!showLocal || cloudExpanded);
+  const cheapestMonthlyCents = planOptions.length
+    ? Math.min(...planOptions.map((option) => option.monthlyPriceCents))
+    : null;
 
   // Whether this user's machine is already paid for — by a coupon, a grant, or
   // an existing subscription. It decides what the tiles SAY, never whether
@@ -266,7 +275,7 @@ export function ComputeStep({
     // Claim the advance before writing. Without it the local auto-skip effect
     // stays armed, and a bundled desktop daemon appearing on the next render
     // overwrites the cloud choice with `local_daemon` — which is what used to
-    // drop users on project-picker having answered nothing.
+    // drop users on finish having answered nothing.
     hasAdvanced.current = true;
     await updatePlan({
       compute: "cloud_paid",
@@ -420,6 +429,42 @@ export function ComputeStep({
     );
   }
 
+  const cloudRows = (
+    <>
+      {showCloudRows &&
+        planOptions.map((option) => (
+          <PlanTileRow
+            key={option.planId}
+            plan={option}
+            // NOTHING is selected while the user's own computer is the
+            // choice. `selectedPlanId` falls back to the first plan so
+            // that committing cloud always carries a size — harmless
+            // when the tiles were a separate block, but in one list that
+            // default paints Small as selected beside an equally
+            // selected free row, showing two chosen machines for one
+            // question.
+            selected={!showLocal && option.planId === selectedPlanId}
+            covered={option.planId === coveredPlanId}
+            onSelect={() => {
+              // Picking a hosted size is also picking "hosted", so it
+              // closes the free row's expanded instructions. Without
+              // this the connect panel stays open under a row that is no
+              // longer selected.
+              setShowLocal(false);
+              setCloudExpanded(false);
+              void updatePlan({ computePlanId: option.planId });
+            }}
+          />
+        ))}
+
+      {showCloudRows && plansQ.isLoading && (
+        <div className="flex items-center gap-2 px-1 py-2 text-sm text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" /> Loading machines…
+        </div>
+      )}
+    </>
+  );
+
   return (
     <div className="space-y-6">
       {!showLocal && (
@@ -506,7 +551,7 @@ export function ComputeStep({
             of the rows inside it, so it means neither: it is a neutral
             container, and selection is expressed on the ROWS, which is the
             only level at which a selection exists. */}
-        <div className="space-y-4 rounded-xl border border-border/60 bg-muted/20 p-5">
+        <div className="space-y-4 rounded-xl border border-border bg-card p-5">
           {/* ONE heading over ALL the machines, your own included.
           
               "Choose your machine" used to head the hosted tiles alone, which
@@ -610,39 +655,58 @@ export function ComputeStep({
                 Picking a tile records the choice and nothing else — no intent
                 is minted, no card is mounted, nothing exists at Stripe until
                 the single checkout at the end of the flow. */}
-            {showPlanChoice &&
-              planOptions.map((option) => (
-                <PlanTileRow
-                  key={option.planId}
-                  plan={option}
-                  // NOTHING is selected while the user's own computer is the
-                  // choice. `selectedPlanId` falls back to the first plan so
-                  // that committing cloud always carries a size — harmless
-                  // when the tiles were a separate block, but in one list that
-                  // default paints Small as selected beside an equally
-                  // selected free row, showing two chosen machines for one
-                  // question.
-                  selected={!showLocal && option.planId === selectedPlanId}
-                  covered={option.planId === coveredPlanId}
-                  onSelect={() => {
-                    // Picking a hosted size is also picking "hosted", so it
-                    // closes the free row's expanded instructions. Without
-                    // this the connect panel stays open under a row that is no
-                    // longer selected.
-                    setShowLocal(false);
-                    void updatePlan({ computePlanId: option.planId });
-                  }}
-                />
-              ))}
+            {/* With the free row chosen, everything hosted folds into this one
+                disclosure. It stays visible so the user can see the cloud
+                options still exist and reopen them; picking a row inside
+                switches back to hosted exactly as it does when nothing is
+                folded. */}
+            {showPlanChoice && showLocal && (
+              <button
+                type="button"
+                onClick={() => setCloudExpanded((open) => !open)}
+                aria-expanded={cloudExpanded}
+                aria-controls={
+                  cloudExpanded ? "compute-cloud-options" : undefined
+                }
+                data-testid="compute-cloud-toggle"
+                className="flex w-full min-w-0 items-center justify-between gap-4 rounded-lg border border-border bg-background px-4 py-3 text-left transition-colors hover:border-primary/40"
+              >
+                <span className="min-w-0">
+                  <span className="block text-sm font-semibold text-foreground">
+                    Reliant Cloud machines
+                    {cheapestMonthlyCents !== null &&
+                      ` · from ${formatCentsAsDollars(cheapestMonthlyCents)}/mo`}
+                  </span>
+                  <span className="block text-xs text-muted-foreground">
+                    Hosted by us, nothing to install.
+                  </span>
+                </span>
+                <span className="flex flex-shrink-0 items-center gap-1 text-xs font-medium text-muted-foreground">
+                  {cloudExpanded ? "Hide options" : "Show options"}
+                  <ChevronDown
+                    className={cn(
+                      "h-4 w-4 transition-transform",
+                      cloudExpanded && "rotate-180",
+                    )}
+                    aria-hidden
+                  />
+                </span>
+              </button>
+            )}
 
-            {showPlanChoice && plansQ.isLoading && (
-              <div className="flex items-center gap-2 px-1 py-2 text-sm text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" /> Loading machines…
+            {/* Flat siblings of the free row when nothing is folded, so the
+                list stays one list; wrapped (and addressable by the
+                disclosure's aria-controls) only while revealed under it. */}
+            {showLocal && showCloudRows ? (
+              <div id="compute-cloud-options" className="space-y-2">
+                {cloudRows}
               </div>
+            ) : (
+              cloudRows
             )}
           </div>
 
-          {showPlanChoice && (
+          {showCloudRows && (
             <div className="space-y-2">
               {/* What the hosted rows are, said once, under the list.
               
@@ -675,7 +739,10 @@ export function ComputeStep({
                   className="text-xs leading-relaxed text-muted-foreground"
                   data-testid="compute-step-hours-note"
                 >
-                  {describeIncludedHours(planOptions[0], plansQ.data?.daemonPricing)}
+                  {describeIncludedHours(
+                    planOptions[0],
+                    plansQ.data?.daemonPricing,
+                  )}
                 </p>
               )}
               {/* The burst ceiling, said once for the same reason the hours
@@ -686,19 +753,17 @@ export function ComputeStep({
 
                   Absent entirely if the ladder stops being uniform — see
                   machineBurst. */}
-              {MACHINE_BURST &&
-                !plansQ.isLoading &&
-                planOptions.length > 0 && (
-                  <p
-                    className="text-xs leading-relaxed text-muted-foreground"
-                    data-testid="compute-step-burst-note"
-                  >
-                    Those are the reserved figures. When a build needs more, a
-                    machine can burst to {MACHINE_BURST.cpu}× the CPU and{" "}
-                    {MACHINE_BURST.memory}× the memory it reserves, at no extra
-                    cost.
-                  </p>
-                )}
+              {MACHINE_BURST && !plansQ.isLoading && planOptions.length > 0 && (
+                <p
+                  className="text-xs leading-relaxed text-muted-foreground"
+                  data-testid="compute-step-burst-note"
+                >
+                  Those are the reserved figures. When a build needs more, a
+                  machine can burst to {MACHINE_BURST.cpu}× the CPU and{" "}
+                  {MACHINE_BURST.memory}× the memory it reserves, at no extra
+                  cost.
+                </p>
+              )}
               {/* Says what the coupon did, at the moment and place the
                     money used to be. Without this the page still changes
                     under the user on redeem — the price becomes "Covered" —
@@ -842,8 +907,8 @@ export function ComputeStep({
                   Your machine is connected
                 </h3>
                 <p className="mt-0.5 text-xs text-muted-foreground">
-                  Reliant found a machine already running. Continue to pick a
-                  folder to work in.
+                  Reliant found a machine already running. Continue to finish
+                  setting up.
                 </p>
               </div>
             </div>
@@ -858,7 +923,7 @@ export function ComputeStep({
         )}
 
         {showLocal && !activeDaemon && (
-          <div className="rounded-xl border border-border/50 bg-muted/30 p-4">
+          <div className="rounded-xl border border-border/60 bg-background p-4">
             {/* Self-hosted connect instructions are shared with the
                 ProjectPicker's in-place "Connect a new daemon" flow. The
                 onboarding-specific auto-advance still happens via the

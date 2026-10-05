@@ -10,16 +10,21 @@ interface ScrollToBottomButtonProps {
 const IDLE_FADE_MS = 2000;
 
 /**
- * Floating scroll-to-bottom pill that sits above the chat input.
+ * Floating scroll-to-bottom pill over the bottom edge of the transcript.
  *
- * Rendered as a zero-height flex item so it doesn't affect layout.
- * The button uses negative margin to float upward over the messages area.
+ * Render it inside the transcript's positioned frame: it anchors to that
+ * frame's bottom edge. It used to hang off the composer's top edge by a fixed
+ * offset, which put it on whatever sat between the two — the background-work
+ * pill, the queued-message strip, the permissions panel — and that band
+ * changes height with what is running, so no fixed offset can clear it.
+ * Anchored to the transcript, the band can only push it up with the frame.
  *
  * Starts as a small circle, then expands into a labeled pill after a
  * short delay so users notice it during longer scrolls.
  *
- * Fades to low opacity after a couple seconds of inactivity so it
- * doesn't obstruct the view. Hovering brings it back to full opacity.
+ * Dims after a couple seconds of inactivity so it obstructs less of the text
+ * beneath it, but stays plainly visible — it is the only way back to the live
+ * end of the conversation. Hovering brings it back to full opacity.
  */
 export const ScrollToBottomButton = memo(function ScrollToBottomButton({
   visible,
@@ -85,14 +90,15 @@ export const ScrollToBottomButton = memo(function ScrollToBottomButton({
   if (!mounted) return null;
 
   return (
-    <div className="flex-shrink-0 flex justify-center relative z-20" style={{ height: 0 }}>
+    // Non-interactive full-width strip, so only the button itself takes clicks
+    // — the transcript on either side of it stays selectable and clickable.
+    <div className="pointer-events-none absolute inset-x-0 bottom-3 z-30 flex justify-center">
       <button
         onClick={onClick}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
-        style={{ marginTop: -44 }}
         className={cn(
-          "flex items-center justify-center",
+          "pointer-events-auto flex items-center justify-center",
           "rounded-full shadow-lg",
           "bg-primary text-primary-foreground",
           "hover:bg-primary/90 active:scale-95",
@@ -101,7 +107,7 @@ export const ScrollToBottomButton = memo(function ScrollToBottomButton({
           "cursor-pointer select-none",
           visible
             ? idleFaded && !hovered
-              ? "opacity-15 translate-y-0 scale-100"
+              ? "opacity-60 translate-y-0 scale-100"
               : "opacity-100 translate-y-0 scale-100"
             : "opacity-0 translate-y-2 scale-95 pointer-events-none",
           expanded

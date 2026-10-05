@@ -1,4 +1,5 @@
 import { useCallback, useState, useEffect, useRef, useMemo } from "react";
+import { Tooltip } from "../../ui/Tooltip";
 import { Check, X, Info, ChevronDown, ChevronRight } from "lucide-react";
 import { ProtoFieldRenderer } from "../ProtoFieldRenderer";
 import type { ProtoFieldSchema } from "../../../types/workflowFieldSchema";
@@ -439,22 +440,22 @@ export function ConfigPanel({
               className={`cpv2-field-input flex-1 font-mono ${idError ? "!border-destructive" : ""}`}
               placeholder="node-id"
             />
-            <button
+            <Tooltip content="Save" placement="bottom" delay={300} wrapperClassName="inline-flex">
+<button
               type="button"
               onClick={handleIdSave}
-              className="cpv2-header-btn text-success-ink hover:text-success-ink"
-              title="Save"
-            >
+              className="cpv2-header-btn text-success-ink hover:text-success-ink" aria-label="Save">
               <Check />
             </button>
-            <button
+</Tooltip>
+            <Tooltip content="Cancel" placement="bottom" delay={300} wrapperClassName="inline-flex">
+<button
               type="button"
               onClick={handleIdCancel}
-              className="cpv2-header-btn"
-              title="Cancel"
-            >
+              className="cpv2-header-btn" aria-label="Cancel">
               <X />
             </button>
+</Tooltip>
           </div>
           {idError && <p className="cpv2-field-hint !text-destructive-ink">{idError}</p>}
         </div>

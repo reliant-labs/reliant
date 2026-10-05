@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Tooltip } from "../ui/Tooltip";
 import { cn, formatErrorMessage } from '../../lib/utils';
 import { ChevronDown,ChevronRight,AlertCircle,AlertTriangle,X } from 'lucide-react';
 interface ErrorMessageProps {
@@ -67,16 +68,16 @@ export function ErrorMessage({ content, onDismiss }: ErrorMessageProps) {
           </span>
           <div className="ml-auto flex items-center gap-1">
             {onDismiss && (
-              <button
+              <Tooltip content="Dismiss error" placement="bottom" delay={300} wrapperClassName="inline-flex">
+<button
                 onClick={(e) => {
                   e.stopPropagation();
                   onDismiss();
                 }}
-                className="p-1 hover:bg-background/50 rounded transition-colors"
-                title="Dismiss error"
-              >
+                className="p-1 hover:bg-background/50 rounded transition-colors" aria-label="Dismiss error">
                 <X className="w-3 h-3 text-muted-foreground" />
               </button>
+</Tooltip>
             )}
             {isExpanded ? (
               <ChevronDown className="w-4 h-4 text-muted-foreground" />

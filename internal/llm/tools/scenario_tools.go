@@ -51,7 +51,7 @@ import (
 // =============================================================================
 
 type ListScenariosParams struct {
-	ID string `json:"id,omitempty" jsonschema:"description=Workflow UUID, slug, or name. Optional — defaults to the workflow this chat is editing."`
+	ID string `json:"id" jsonschema:"required,description=Workflow UUID, slug, or name (from create_workflow or list_workflows)."`
 }
 
 type listScenariosTool struct {
@@ -65,9 +65,8 @@ const (
 Returns a summary of each scenario including name, description, and last run status.
 Use this to see what scenarios exist and their current state.
 
-No parameters are required. The workflow defaults to the one this chat is
-editing. Pass id (a workflow UUID, slug, or name) only to list scenarios for a
-different workflow.`
+Pass id (required): the workflow UUID, slug, or name, as returned by
+create_workflow or list_workflows.`
 )
 
 func NewListScenariosTool(repo db.Repository) Tool {
@@ -141,7 +140,7 @@ func (t *listScenariosTool) Execute(ctx *rctx.ToolContext, args ListScenariosPar
 // =============================================================================
 
 type ViewScenarioParams struct {
-	ID   string `json:"id,omitempty" jsonschema:"description=Workflow UUID, slug, or name. Optional — defaults to the workflow this chat is editing."`
+	ID   string `json:"id" jsonschema:"required,description=Workflow UUID, slug, or name (from create_workflow or list_workflows)."`
 	Name string `json:"name" jsonschema:"required,description=Name of the scenario to view"`
 }
 
@@ -156,8 +155,8 @@ const (
 Returns the complete scenario YAML including events, expectations, and last run results.
 Use this to examine a scenario's configuration or debug test failures.
 
-The workflow defaults to the one this chat is editing. Pass id (a workflow UUID,
-slug, or name) only to view a scenario on a different workflow.`
+Pass id (required): the workflow UUID, slug, or name, as returned by
+create_workflow or list_workflows.`
 )
 
 func NewViewScenarioTool(repo db.Repository) Tool {
@@ -244,7 +243,7 @@ func (t *viewScenarioTool) Execute(ctx *rctx.ToolContext, args ViewScenarioParam
 // =============================================================================
 
 type EditScenarioParams struct {
-	ID              string `json:"id,omitempty" jsonschema:"description=Workflow UUID, slug, or name. Optional — defaults to the workflow this chat is editing."`
+	ID              string `json:"id" jsonschema:"required,description=Workflow UUID, slug, or name (from create_workflow or list_workflows)."`
 	Name            string `json:"name" jsonschema:"required,description=Name of the scenario to edit"`
 	OldString       string `json:"old_string" jsonschema:"required,description=The exact text to find and replace"`
 	NewString       string `json:"new_string" jsonschema:"required,description=The replacement text"`
@@ -262,8 +261,8 @@ const (
 Use this for small changes like updating expected values or modifying events.
 The old_string must match exactly (including whitespace and indentation).
 
-The workflow defaults to the one this chat is editing. Pass id (a workflow UUID,
-slug, or name) only to edit a scenario on a different workflow.
+Pass id (required): the workflow UUID, slug, or name, as returned by
+create_workflow or list_workflows.
 
 **Example:**
 {
@@ -368,7 +367,7 @@ func (t *editScenarioTool) Execute(ctx *rctx.ToolContext, args EditScenarioParam
 // =============================================================================
 
 type WriteScenarioParams struct {
-	ID              string `json:"id,omitempty" jsonschema:"description=Workflow UUID, slug, or name. Optional — defaults to the workflow this chat is editing."`
+	ID              string `json:"id" jsonschema:"required,description=Workflow UUID, slug, or name (from create_workflow or list_workflows)."`
 	Name            string `json:"name" jsonschema:"required,description=Name of the scenario to create/update"`
 	Content         string `json:"content" jsonschema:"required,description=Complete scenario definition as YAML"`
 	ExpectedVersion *int64 `json:"expected_version,omitempty" jsonschema:"description=Optional version number for conflict detection"`
@@ -429,8 +428,8 @@ expect:
 - Nested loops: node: "outer_loop.inner_loop.call_llm"
 
 **Workflow selection:**
-Defaults to the workflow this chat is editing. Pass id (a workflow UUID, slug,
-or name) only to write a scenario on a different workflow.
+Pass id (required): the workflow UUID, slug, or name, as returned by
+create_workflow or list_workflows.
 
 **Example:**
 {
@@ -548,7 +547,7 @@ func (t *writeScenarioTool) Execute(ctx *rctx.ToolContext, args WriteScenarioPar
 // =============================================================================
 
 type DeleteScenarioParams struct {
-	ID   string `json:"id,omitempty" jsonschema:"description=Workflow UUID, slug, or name. Optional — defaults to the workflow this chat is editing."`
+	ID   string `json:"id" jsonschema:"required,description=Workflow UUID, slug, or name (from create_workflow or list_workflows)."`
 	Name string `json:"name" jsonschema:"required,description=Name of the scenario to delete"`
 }
 
@@ -562,8 +561,8 @@ const (
 
 Permanently removes the scenario from the workflow.
 
-The workflow defaults to the one this chat is editing. Pass id (a workflow UUID,
-slug, or name) only to delete a scenario on a different workflow.`
+Pass id (required): the workflow UUID, slug, or name, as returned by
+create_workflow or list_workflows.`
 )
 
 func NewDeleteScenarioTool(repo db.Repository) Tool {
@@ -617,7 +616,7 @@ func (t *deleteScenarioTool) Execute(ctx *rctx.ToolContext, args DeleteScenarioP
 // =============================================================================
 
 type RunScenarioParams struct {
-	ID   string `json:"id,omitempty" jsonschema:"description=Workflow UUID, slug, or name. Optional — defaults to the workflow this chat is editing."`
+	ID   string `json:"id" jsonschema:"required,description=Workflow UUID, slug, or name (from create_workflow or list_workflows)."`
 	Name string `json:"name" jsonschema:"required,description=Name of the scenario to run"`
 }
 
@@ -641,8 +640,8 @@ Use this after making changes to verify scenarios still pass.
 
 Use list_scenarios to see available scenario names.
 
-The workflow defaults to the one this chat is editing. Pass id (a workflow UUID,
-slug, or name) only to run a scenario on a different workflow.`
+Pass id (required): the workflow UUID, slug, or name, as returned by
+create_workflow or list_workflows.`
 )
 
 func NewRunScenarioTool(repo db.Repository, runner ScenarioRunner) Tool {

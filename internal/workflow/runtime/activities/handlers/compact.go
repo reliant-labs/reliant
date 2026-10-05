@@ -430,8 +430,9 @@ func (a *CompactActivity) generateCompactionSummary(ctx context.Context, chat *d
 // The tier list remains the fallback for nodes that declare no model and for
 // an agent model that no longer resolves against the user's providers.
 func resolveCompactionModel(ctx context.Context, userID string, preferred *reliantv1.ModelSelector) (models.ModelSelector, string, error) {
-	availableProviders := configuredProviderIDs(drivers.GetAvailableDrivers(ctx, userID))
-	registry := models.MustGetRegistry()
+	availableDrivers := drivers.GetAvailableDrivers(ctx, userID)
+	availableProviders := configuredProviderIDs(availableDrivers)
+	registry := models.MustGetRegistry().WithAvailability(availableDrivers.Availability)
 
 	if preferred != nil && (preferred.GetId() != "" || len(preferred.GetTags()) > 0) {
 		selector := models.ModelSelector{

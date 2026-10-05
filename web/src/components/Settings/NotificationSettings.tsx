@@ -1,8 +1,9 @@
 import { useEffect } from "react";
-import { Bell, Volume2, VolumeX, AlertTriangle, CheckCircle, XCircle, AppWindow, MessageSquare, BellRing } from "lucide-react";
+import { Volume2, VolumeX, AlertTriangle, CheckCircle, XCircle, AppWindow, MessageSquare, BellRing } from "lucide-react";
 import { Toggle } from "../ui/Toggle";
 import { useNotificationStore, getNotificationSoundOptions } from "../../store/notificationStore";
 import { showTestNotification } from "../../lib/notifications";
+import { SettingsPageHeader } from "./SettingsPageHeader";
 
 export function NotificationSettings() {
   const {
@@ -104,10 +105,10 @@ export function NotificationSettings() {
   if (!initialized) {
     return (
       <div className="space-y-6">
-        <div className="flex items-center gap-2 mb-2">
-          <Bell className="w-5 h-5" />
-          <h2 className="text-lg font-semibold">Notification Settings</h2>
-        </div>
+        <SettingsPageHeader
+        title="Notifications"
+        description="Get an alert when an agent finishes or needs your approval, so you can work in another window. Choose when alerts appear and whether they play a sound."
+      />
         <p className="text-sm text-muted-foreground">Loading...</p>
       </div>
     );
@@ -115,15 +116,10 @@ export function NotificationSettings() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <div className="flex items-center gap-2 mb-2">
-          <Bell className="w-5 h-5" />
-          <h2 className="text-lg font-semibold">Notification Settings</h2>
-        </div>
-        <p className="text-sm text-muted-foreground">
-          Get notified when workflows complete or need your attention.
-        </p>
-      </div>
+      <SettingsPageHeader
+        title="Notifications"
+        description="Get an alert when an agent finishes or needs your approval, so you can work in another window. Choose when alerts appear and whether they play a sound."
+      />
 
       <div className="space-y-4">
         {/* Permission Status */}
