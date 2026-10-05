@@ -179,6 +179,7 @@ land:
 |---|---|
 | F: YAML + agent tools | `internal/workflow/yaml/`, workflow validation of `triggers:` (CEL filter against the payload schema, refs resolve), `create_workflow`/`edit_workflow` feedback, new `search_integrations` / `get_integration_schema` / `activate_trigger` tools, the trigger-row `workflow_trigger` activation path |
 | G: builder UI + search | `IntegrationService.SearchCatalog` / `GetCatalogEntry` (server + proto), `web/src/components/workflow/**` (node picker, action config, trigger rail editor), `web/src/components/Automations/**` for activation |
+| H: daemon-less runs | Optional `daemon_id` on triggers; placement-aware tool menu (a daemon-less run is offered only server/any tools, and nodes needing a daemon are refused at preflight/validation); a "no machine" mode for chats if the user approves it; preflight surfaced to authoring tools and UI |
 
 ## 3a. Authoring: YAML, agent tools, builder, search (user, 2026-10-05)
 
@@ -252,6 +253,81 @@ nodes: ...
 - Ranking v1 is plain lexical search (name/keywords/description) plus connected
   and recent boosts, in memory; the catalog is embedded and small enough.
   Semantic search is a later improvement, not v1.
+
+## 3b. As built after wave 0 (2026-10-05; code against THESE, not §3)
+
+Merged: A #459 (manifest auth), B #461 (trigger receivers), C #460 (workflow
+events), D CP#601 + #449 (GitHub tokens via control-plane). forge #467
+(oauth2 `ScopeSeparator`) is in review; reliant must re-pin forge to use it.
+
+**Manifest auth (A).** `connection.auth` is a list, most preferred first:
+`delegated{broker}`, `oauth2{authorize_url, token_url, scopes,
+scope_separator, pkce, authorize_params, revoke}`, `api_key{in, name,
+prefix}`, `basic{username_param|username_label, password_label}`. Also
+`connection_params` (one DNS label, fills only the leftmost host label) and
+`probe{path, ok, external_id, label}`. OAuth clients come from env
+`RELIANT_OAUTH_<ID>_CLIENT_ID/_SECRET` (`connections.OAuthClientEnv`).
+Escape hatch: `ActionSpec.executor: go:<name>`, registered in
+`httpaction.Executors()`. Brokers: `connauth.NewBrokers().Register(id, b)`.
+`controlplane-github` is registered on hosted workers. Search fields:
+`keywords` (manifest and action), `summary` (action),
+`manifest.ActionSchemas(action)` → params/output JSON Schema.
+- Comma scopes (Slack): `internal/connections/oauth.go` refuses them until
+  reliant pins a forge containing #467. The Slack stream re-pins
+  (`scripts/pin-forge.sh <sha>`) and lifts the refusal.
+
+**Triggers (B).** Push providers implement `webhook.Provider{ID(),
+Verify(ctx,*Request), Parse(ctx,*Request) (*Delivery, error)}` in
+`internal/integrations/webhook` and are added in `webhook.RegistryFromEnv`,
+each enabled by its own secret (e.g. `RELIANT_GITHUB_WEBHOOK_SECRET`).
+- `Request` carries `PublicURL` (rebuilt from PUBLIC_URL, which is what Twilio
+  signatures verify against), `Header`, raw `Body` (≤1 MiB) and `Form`.
+- `Delivery{Respond *Response /*handshake, no event*/, Events []Event}`.
+- `Event{Type "issues.opened", AccountKey, DeliveryID, OccurredAt,
+  Attributes map[string]string, Data map[string]any}`.
+- **`AccountKey` must EQUAL the connection's `external_account_id`**; that is
+  how an event reaches only that connection owner's triggers.
+- `webhook.VerifyHMAC(cfg, secret, body, sig)` is exported.
+- Pollers implement `triggers.Poller.Poll(ctx, PollRequest{TriggerID,
+  OwnerUserID, ConnectionID, Cursor, Config}) (*PollResult{Cursor, Items})`.
+  An empty cursor is the baseline: return the position and no items.
+- Proto: `WorkflowTrigger{name, description, filter, inputs, oneof
+  source{schedule=20, webhook=21, integration=22, workflow_event=23}}` on
+  `Workflow.triggers = 15`. `IntegrationSource{integration, events, match,
+  poll_interval}`. `Trigger`/`TriggerDefinition` gained `filter`,
+  `connection_id`, `workflow_trigger`, webhook fields. New RPC
+  `RotateWebhookToken`.
+- Filter = raw CEL over the `trigger` root (the same `TriggerInfo.CELValue()`
+  nodes see). False → `skipped` row; an eval error → `failed` with a `has()`
+  hint.
+
+**Known gaps (owned by named wave-1 streams):**
+- Pollers have no credential path: `Resolver.ForCall` needs a run id. The
+  Gmail stream adds a by-connection credential resolution for pollers.
+- GitHub routing key: user connections record a user id, while GitHub
+  webhooks carry `installation.id`. The GitHub-triggers stream decides.
+- Activating a workflow-declared trigger returns Unimplemented, and
+  `WorkflowTrigger.inputs` is unused. Owned by stream F.
+
+## 3c. Daemon-less runs (user, 2026-10-05)
+
+Users must be able to create automations and workflows with NO paired daemon,
+and possibly have ordinary chats with no daemon connected. The design
+requirement is **proper tool-call prevention**: a run that has no daemon must
+never be OFFERED a daemon-placed tool or node, so it never burns turns on
+"no daemon connected" and trips the offline breaker.
+
+Verified facts (`research/DAEMONLESS.md`, `research/TOOL_PLACEMENT.md`):
+- The engine already runs daemon-less: the hermetic e2e harness uses
+  `DaemonRouter: nil`.
+- Every tool has a `Placement` (daemon/server/any). `fetch` and `websearch` are
+  already `PlacementAny`.
+- `runtime.RequiresDaemon(wf, cfg)` is a static analysis that already exists.
+- Today a daemon-less run is still offered daemon tools, fails three times,
+  and then the circuit breaker pauses it.
+- `TriggerDefinition.daemon_id` is REQUIRED (`grpc/services/trigger.go:601`).
+
+Stream H owns this (see §4).
 
 ## 4a. Using n8n as a reference (user direction)
 
