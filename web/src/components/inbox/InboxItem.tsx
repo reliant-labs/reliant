@@ -39,6 +39,7 @@ import { useSetTriggerEnabled } from "@/hooks/trigger-queries";
 import { useGoToBilling } from "@/hooks/useGoToBilling";
 import { isQuotaResumeError, resumeErrorMessage } from "@/lib/daemon-resume";
 import { formatAbsoluteTime, formatRelativeTime } from "@/lib/relativeTime";
+import { relativeTime as compactAge } from "../Mobile/relativeTime";
 import { cn } from "@/lib/utils";
 import { CardInset } from "../forge-ui/card";
 import { ApprovalActions } from "../Chat/ApprovalActions";
@@ -112,67 +113,78 @@ export function InboxItem({ item, showProject, onDismiss }: InboxItemProps) {
 
   const detail = rowDetail(item);
   const expandable = hasExpansion(item);
-  const waited = formatRelativeTime(item.waitingSince);
+  // "2h" in the row (a dense list wants a narrow, fixed column); the long
+  // form and the exact time are the tooltip and the accessible name.
+  const waited = compactAge(item.waitingSince);
+  const waitedLong = formatRelativeTime(item.waitingSince);
 
   return (
     <li
       className="group/row relative px-3 py-2 transition-colors hover:bg-muted/40 focus-within:bg-muted/40"
       data-testid={`inbox-item-${item.itemId}`}
     >
-      <div className="flex min-h-7 items-center gap-2.5">
-        <span className="shrink-0 text-muted-foreground">
-          <KindIcon kind={item.kind} />
-        </span>
-        <div className="flex min-w-0 flex-1 items-baseline gap-2">
-          <SubjectLink item={item} />
-          {detail && (
-            <span className="min-w-0 truncate text-xs text-muted-foreground" title={detail.title}>
-              {detail.node}
+      {/* One line on a desktop. On a narrow screen the controls wrap to a
+          second line rather than squeezing the name to nothing: the subject
+          block holds a minimum width, and the controls group moves as one. */}
+      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
+        <div className="flex min-w-0 flex-[1_1_16rem] items-center gap-2.5">
+          <span className="shrink-0 text-muted-foreground">
+            <KindIcon kind={item.kind} />
+          </span>
+          <div className="flex min-w-0 flex-1 items-baseline gap-2">
+            <SubjectLink item={item} />
+            {detail && (
+              <span className="min-w-0 truncate text-xs text-muted-foreground" title={detail.title}>
+                {detail.node}
+              </span>
+            )}
+          </div>
+        </div>
+        <div className="ml-auto flex min-h-7 shrink-0 items-center gap-2.5">
+          {showProject && item.projectName && (
+            <span className="max-w-36 truncate text-xs text-muted-foreground" title={item.projectName}>
+              {item.projectName}
             </span>
           )}
-        </div>
-        {showProject && item.projectName && (
-          <span className="hidden max-w-36 shrink-0 truncate text-xs text-muted-foreground sm:inline" title={item.projectName}>
-            {item.projectName}
-          </span>
-        )}
-        {handled ? (
-          <span className="shrink-0 text-xs text-muted-foreground" role="status">
-            Already handled
-          </span>
-        ) : (
-          <InlineAction
-            item={item}
-            expanded={expanded}
-            onToggle={expandable ? () => setExpanded((open) => !open) : undefined}
-            onRaceOrError={onRaceOrError}
-          />
-        )}
-        <time
-          dateTime={item.waitingSince}
-          title={formatAbsoluteTime(item.waitingSince)}
-          className="w-20 shrink-0 text-right text-xs tabular-nums text-muted-foreground"
-        >
-          {waited}
-        </time>
-        {!handled && (
-          <button
-            type="button"
-            onClick={() => onDismiss(item)}
-            aria-label={`Dismiss ${subjectName(item)}`}
-            title="Dismiss"
-            className={cn(
-              "inline-flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground transition",
-              "hover:bg-muted hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
-              // Hidden until the row is hovered or anything in it has focus;
-              // always shown where there is no hover (touch).
-              "opacity-0 group-hover/row:opacity-100 group-focus-within/row:opacity-100 focus-visible:opacity-100",
-              "[@media(hover:none)]:opacity-100",
-            )}
+          {handled ? (
+            <span className="text-xs text-muted-foreground" role="status">
+              Already handled
+            </span>
+          ) : (
+            <InlineAction
+              item={item}
+              expanded={expanded}
+              onToggle={expandable ? () => setExpanded((open) => !open) : undefined}
+              onRaceOrError={onRaceOrError}
+            />
+          )}
+          <time
+            dateTime={item.waitingSince}
+            title={`Waiting since ${waitedLong} · ${formatAbsoluteTime(item.waitingSince)}`}
+            className="w-8 whitespace-nowrap text-right text-xs tabular-nums text-muted-foreground"
           >
-            <X className="h-3.5 w-3.5" aria-hidden="true" />
-          </button>
-        )}
+            <span aria-hidden="true">{waited}</span>
+            <span className="sr-only">waiting since {waitedLong}</span>
+          </time>
+          {!handled && (
+            <button
+              type="button"
+              onClick={() => onDismiss(item)}
+              aria-label={`Dismiss ${subjectName(item)}`}
+              title="Dismiss"
+              className={cn(
+                "inline-flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition",
+                "hover:bg-muted hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
+                // Hidden until the row is hovered or anything in it has focus;
+                // always shown where there is no hover (touch).
+                "opacity-0 group-hover/row:opacity-100 group-focus-within/row:opacity-100 focus-visible:opacity-100",
+                "[@media(hover:none)]:opacity-100",
+              )}
+            >
+              <X className="h-3.5 w-3.5" aria-hidden="true" />
+            </button>
+          )}
+        </div>
       </div>
       {expanded && !handled && (
         <div className="mt-2 pl-7">
@@ -209,7 +221,7 @@ export function subjectName(item: InboxItemData): string {
 }
 
 const subjectClass =
-  "min-w-0 max-w-[45%] shrink-0 truncate text-sm font-medium text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 rounded-sm";
+  "min-w-0 max-w-[60%] shrink-0 truncate text-sm font-medium text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 rounded-sm";
 
 /**
  * The name links to what the item is about: the run for anything that has one,

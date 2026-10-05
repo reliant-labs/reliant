@@ -646,3 +646,22 @@ func TestListInbox_WaitingForMachineIsANewItemPerBlock(t *testing.T) {
 	require.Len(t, again, 1)
 	assert.NotEqual(t, first[0].ItemId, again[0].ItemId)
 }
+
+// An approval row has one line for the tool's arguments, so they read as the
+// value (one argument) or "key: value" pairs, never as a JSON object.
+func TestSummarizeArguments_ReadsAsTextNotJSON(t *testing.T) {
+	for name, tc := range map[string]struct {
+		in   any
+		want string
+	}{
+		"one argument is its value":       {map[string]any{"command": "git push origin main"}, "git push origin main"},
+		"several are key: value, sorted":  {map[string]any{"path": "a.go", "line": float64(3)}, "line: 3 · path: a.go"},
+		"nested values stay compact JSON": {map[string]any{"edits": []any{"x"}, "path": "a.go"}, `edits: ["x"] · path: a.go`},
+		"a string is itself":              {"ls -la", "ls -la"},
+		"whitespace collapses":            {map[string]any{"command": "echo  a\n\tb"}, "echo a b"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			assert.Equal(t, tc.want, summarizeArguments(tc.in))
+		})
+	}
+}

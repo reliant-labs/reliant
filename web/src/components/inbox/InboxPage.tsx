@@ -94,6 +94,8 @@ export function InboxView() {
     dismiss.mutate(ids, {
       onSuccess: () =>
         toast.notify(`Dismissed ${what}`, {
+          // Long enough to notice and reach for Undo; the default 4s is not.
+          duration: 8000,
           action: { label: "Undo", onClick: () => restore.mutate(ids) },
         }),
       onError: (error) => void toast.error(error),

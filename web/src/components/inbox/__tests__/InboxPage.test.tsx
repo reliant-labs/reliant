@@ -224,6 +224,17 @@ describe("InboxPage layout", () => {
     await waitFor(() => expect(router.state.location.pathname).toBe("/workflows/runs/chat-9"));
   });
 
+  it("a row is one dense line: compact age shown, the long form for assistive tech", async () => {
+    respond([approvalItem({ waitingSince: new Date(Date.now() - 3 * 60 * 60_000).toISOString() })]);
+    renderInboxAt(<InboxPage />);
+    const row = await screen.findByTestId("inbox-item-approval:appr-1");
+    const time = row.querySelector("time")!;
+    expect(within(time).getByText("3h")).toHaveAttribute("aria-hidden", "true");
+    expect(within(time).getByText(/waiting since 3 hours ago/)).toHaveClass("sr-only");
+    // The answer form and other tall content are not rendered until asked for.
+    expect(row.querySelectorAll("textarea, input")).toHaveLength(0);
+  });
+
   it("an automation item without a run links to the automation", async () => {
     respond([launchFailedItem()]);
     renderInboxAt(<InboxPage />);
