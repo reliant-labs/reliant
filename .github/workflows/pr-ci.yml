@@ -359,6 +359,28 @@ jobs:
     # change would be strictly worse than a slow CI run.
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # A REAL Postgres, for the same reason as the E2E job below. Without it
+    # DATABASE_URL was unset here, every DB-backed unit test skipped (1426 of
+    # them per run), and this job went green regardless. That is how a test
+    # fixture that violated a foreign key added in #464 reached main with CI
+    # green. REQUIRE_TEST_DB makes a skip a failure, so it cannot go dark again.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: reliant
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/reliant?sslmode=disable
+      REQUIRE_TEST_DB: "1"
     steps:
       - uses: actions/checkout@v6
         with:
