@@ -194,6 +194,14 @@ message IdentityProbe {
   string external_id = 6;
   // Label is CEL over `response` yielding a human label (a login, an email).
   string label = 7;
+  // RoutesEvents says the external id is what the integration's inbound
+  // events route on (Event.AccountKey == the connection's external account,
+  // as Twilio's AccountSid). Such an id must be the provider's answer for
+  // the credential, never one the user typed, so a pasted credential is
+  // probed before it is saved and one the provider refuses is not saved.
+  // Leave it unset when events route some other way (GitHub's access
+  // grants) or not at all.
+  bool routes_events = 8;
 }
 
 // ActionSpec is one operation: usable as a workflow node and, optionally, as
@@ -271,11 +279,17 @@ message HttpRequestSpec {
   string headers_expr = 11;
   string query_expr = 12;
   string body_expr = 13;
+  // BodyFormat is how the rendered body is encoded: "json" (the default) or
+  // "form" (application/x-www-form-urlencoded, as Twilio and Stripe take). A
+  // form body must render to an object whose values are scalars or lists of
+  // scalars; a list repeats its key (MediaUrl=a&MediaUrl=b) and a null value
+  // leaves the key out.
+  string body_format = 14;
 }
 
 // PaginationSpec follows pages and concatenates each page's selected list.
 message PaginationSpec {
-  // Style is "link_header", "cursor" or "page".
+  // Style is "link_header", "cursor", "page" or "next_url".
   string style = 1;
   // MaxPages bounds the walk (default 10, max 100).
   int32 max_pages = 2;
@@ -288,6 +302,13 @@ message PaginationSpec {
   string page_param = 5;
   // StartPage is the first page number (default 1).
   int32 start_page = 6;
+  // NextUrl is CEL over `response` yielding the next page's URL, or
+  // empty/null to stop (next_url style): Twilio's next_page_uri, Microsoft
+  // Graph's @odata.nextLink. A relative reference resolves against the URL
+  // of the page it came from. The next page must stay on the call's host,
+  // like a Link header's, and is fetched with the first page's method and
+  // headers.
+  string next_url = 7;
 }
 
 // ErrorRule maps one status (or an inclusive range) to an error outcome.

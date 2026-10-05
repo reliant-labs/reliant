@@ -12,6 +12,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/triggers"
+	"github.com/reliant-labs/reliant/internal/vault"
 )
 
 // EventsStore is what the app-level receiver reads. *db.Repo satisfies it.
@@ -43,6 +44,18 @@ type EventsOptions struct {
 	// Required: a provider signs the URL it was given, and without the base
 	// there is nothing to verify against.
 	PublicURL string
+	// ConnectionSecrets opens a connection's stored credential, for providers
+	// whose deliveries are signed per connection (ConnectionSigned). Nil
+	// means such providers cannot be verified, and their deliveries are
+	// answered 503.
+	ConnectionSecrets ConnectionSecrets
+}
+
+// ConnectionSecrets opens the stored secret of one connection, for its owner
+// only: a connection that is not userID's opens nothing. Satisfied by
+// *connections.TokenSource.
+type ConnectionSecrets interface {
+	Token(ctx context.Context, userID, connectionID string) (vault.Secret, error)
 }
 
 // EventsReceiver serves POST /integrations/{provider}/events.
@@ -97,6 +110,11 @@ func (e *EventsReceiver) serve(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	if signed, ok := provider.(ConnectionSigned); ok {
+		e.serveConnectionSigned(w, r, signed, req)
+		return
+	}
+
 	if err := provider.Verify(ctx, req); err != nil {
 		if errors.Is(err, ErrUnauthorized) {
 			logging.Warn("integration delivery failed verification", "provider", providerID, "error", err)
@@ -121,6 +139,15 @@ func (e *EventsReceiver) serve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	e.recordAndAck(ctx, w, providerID, delivery, nil)
+}
+
+// recordAndAck applies a parsed delivery's revocations, routes its events
+// and answers the sender. verified, when non-nil, is the only set of
+// connection-account routes the events may reach (a ConnectionSigned
+// provider's routes whose connection verified the delivery); nil means
+// every route of the integration.
+func (e *EventsReceiver) recordAndAck(ctx context.Context, w http.ResponseWriter, providerID string, delivery *Delivery, verified []*core.IntegrationTriggerRoute) {
 	// Revocations first: an event in the same delivery routes under the
 	// reduced access. A failure here is a 503 like a routing failure — the
 	// receiver must not ack a revocation it did not apply.
@@ -129,14 +156,110 @@ func (e *EventsReceiver) serve(w http.ResponseWriter, r *http.Request) {
 		writeStatus(w, http.StatusServiceUnavailable, "could not record the delivery; retry")
 		return
 	}
-	if err := e.route(ctx, providerID, delivery.Events); err != nil {
+	if err := e.route(ctx, providerID, delivery.Events, verified); err != nil {
 		// A partial failure still recorded what it could. Asking the sender
 		// to retry is right: the recorded half dedupes.
 		logging.Error("integration delivery could not be fully recorded", "provider", providerID, "error", err)
 		writeStatus(w, http.StatusServiceUnavailable, "could not record the delivery; retry")
 		return
 	}
+	if delivery.Ack != nil {
+		writeResponse(w, delivery.Ack)
+		return
+	}
 	writeStatus(w, http.StatusOK, "ok")
+}
+
+// serveConnectionSigned verifies a delivery signed with a per-connection
+// secret (see ConnectionSigned) and routes it through only the connections
+// whose secret verified it.
+//
+// The candidates are the routes the store returns for this integration —
+// enabled triggers whose connection is their owner's own, live, and records
+// the account the delivery claims. Each distinct connection's secret is
+// opened for its owner and tried; a connection that cannot be opened, or
+// whose secret does not verify, contributes nothing. The claimed account
+// only narrows the search: it is inside the signed payload, so a forged one
+// either names an account whose secrets cannot sign the forgery, or one with
+// no candidates at all — both are a 401.
+func (e *EventsReceiver) serveConnectionSigned(w http.ResponseWriter, r *http.Request, provider ConnectionSigned, req *Request) {
+	ctx := r.Context()
+	providerID := provider.ID()
+	if e.opts.ConnectionSecrets == nil {
+		writeStatus(w, http.StatusServiceUnavailable, "this server cannot open connection secrets, so "+providerID+" deliveries cannot be verified")
+		return
+	}
+	account, err := provider.SignedAccount(req)
+	if err != nil {
+		logging.Warn("integration delivery names no account", "provider", providerID, "error", err)
+		writeStatus(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	routes, err := e.opts.Store.ListIntegrationTriggers(ctx, providerID)
+	if err != nil {
+		logging.Error("integration delivery could not be verified", "provider", providerID, "error", err)
+		writeStatus(w, http.StatusServiceUnavailable, "could not verify the delivery; retry")
+		return
+	}
+
+	type candidate struct{ userID, connectionID string }
+	verdict := map[candidate]bool{}
+	var verified []*core.IntegrationTriggerRoute
+	for _, rt := range routes {
+		t := rt.Trigger
+		if t == nil || !t.Enabled || t.ConnectionID == nil || *t.ConnectionID == "" ||
+			rt.ConnectionStatus != core.ConnectionStatusActive || rt.ConnectionAccount == "" || rt.ConnectionAccount != account {
+			continue
+		}
+		c := candidate{userID: t.UserID, connectionID: *t.ConnectionID}
+		ok, tried := verdict[c]
+		if !tried {
+			ok = e.verifyWithConnection(ctx, provider, req, c.userID, c.connectionID)
+			verdict[c] = ok
+		}
+		if ok {
+			verified = append(verified, rt)
+		}
+	}
+	if len(verified) == 0 {
+		logging.Warn("integration delivery verified against no connection", "provider", providerID,
+			"account", account, "candidates", len(verdict))
+		writeStatus(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	delivery, err := provider.Parse(ctx, req)
+	if err != nil {
+		logging.Warn("integration delivery could not be parsed", "provider", providerID, "error", err)
+		writeStatus(w, http.StatusBadRequest, "could not parse delivery")
+		return
+	}
+	if delivery == nil {
+		delivery = &Delivery{}
+	}
+	if delivery.Respond != nil {
+		writeResponse(w, delivery.Respond)
+		return
+	}
+	// The verified routes all record `account`; an event claiming another
+	// account would be the provider's bug, and routeMatches drops it.
+	e.recordAndAck(ctx, w, providerID, delivery, verified)
+}
+
+func (e *EventsReceiver) verifyWithConnection(ctx context.Context, provider ConnectionSigned, req *Request, userID, connectionID string) bool {
+	secret, err := e.opts.ConnectionSecrets.Token(ctx, userID, connectionID)
+	if err != nil {
+		logging.Warn("connection secret could not be opened to verify a delivery", "provider", provider.ID(),
+			"connection_id", connectionID, "error", err)
+		return false
+	}
+	if err := provider.VerifyWith(req, secret); err != nil {
+		if !errors.Is(err, ErrUnauthorized) {
+			logging.Warn("delivery verification failed", "provider", provider.ID(), "connection_id", connectionID, "error", err)
+		}
+		return false
+	}
+	return true
 }
 
 // route hands each event to every trigger it reaches.
@@ -151,13 +274,17 @@ func (e *EventsReceiver) serve(w http.ResponseWriter, r *http.Request) {
 // An event with a ResourceKey is access-gated instead: it reaches only the
 // triggers whose owner holds a fresh access grant for its (account,
 // resource), and the connection-account routes are not consulted for it.
-func (e *EventsReceiver) route(ctx context.Context, providerID string, events []Event) error {
+//
+// verified, when non-nil, REPLACES the integration's route list: the
+// delivery was verified per connection, and only those connections' routes
+// may hear it. It is never widened to the full list.
+func (e *EventsReceiver) route(ctx context.Context, providerID string, events []Event, verified []*core.IntegrationTriggerRoute) error {
 	if len(events) == 0 {
 		return nil
 	}
 	var (
-		routes       []*core.IntegrationTriggerRoute
-		routesLoaded bool
+		routes       = verified
+		routesLoaded = verified != nil
 		errs         []error
 	)
 	for _, ev := range events {
@@ -167,6 +294,13 @@ func (e *EventsReceiver) route(ctx context.Context, providerID string, events []
 			continue
 		}
 		if ev.ResourceKey != "" {
+			if verified != nil {
+				// Access grants are not the connections that verified this
+				// delivery; routing through them would skip that check.
+				logging.Warn("a per-connection-verified event carries a resource key; dropped",
+					"provider", providerID, "type", ev.Type)
+				continue
+			}
 			errs = append(errs, e.routeByAccess(ctx, providerID, ev))
 			continue
 		}

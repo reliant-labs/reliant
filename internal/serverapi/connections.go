@@ -18,13 +18,23 @@ import (
 	"github.com/reliant-labs/reliant/internal/vault"
 )
 
-// wireConnections builds the connection service and the OAuth broker's HTTP
-// routes. A provider whose client credentials are unset is listed as
-// unavailable; it never fails boot.
-func wireConnections(repo *db.Repo, keys *vault.Vault, jwtPublicKey, jwksURL, publicURL string) (*connections.Service, *connections.OAuthHTTP, error) {
+// wiredConnections is what the api-server serves connections with.
+type wiredConnections struct {
+	service *connections.Service
+	oauth   *connections.OAuthHTTP
+	// tokens opens a connection's stored credential for its owner. The
+	// inbound receiver verifies Twilio deliveries with it (each account
+	// signs with its own Auth Token).
+	tokens *connections.TokenSource
+}
+
+// wireConnections builds the connection service, the token source and the
+// OAuth broker's HTTP routes. A provider whose client credentials are unset
+// is listed as unavailable; it never fails boot.
+func wireConnections(repo *db.Repo, keys *vault.Vault, jwtPublicKey, jwksURL, publicURL string) (*wiredConnections, error) {
 	providers, err := connections.ProvidersFromCatalog(catalog.MustBuiltin().Manifests(), os.Getenv)
 	if err != nil {
-		return nil, nil, fmt.Errorf("connections: %w", err)
+		return nil, fmt.Errorf("connections: %w", err)
 	}
 	store := repo.Connections()
 	tokens := connections.NewTokenSource(store, keys, providers, nil)
@@ -41,10 +51,10 @@ func wireConnections(repo *db.Repo, keys *vault.Vault, jwtPublicKey, jwksURL, pu
 
 	authn, err := auth.NewMiddleware(jwtPublicKey, jwksURL)
 	if err != nil {
-		return nil, nil, fmt.Errorf("connections: http auth: %w", err)
+		return nil, fmt.Errorf("connections: http auth: %w", err)
 	}
 	routes := connections.NewOAuthHTTP(broker, func(next http.Handler) http.Handler { return authn.RequireAuth(next) }, publicURL)
-	return svc, routes, nil
+	return &wiredConnections{service: svc, oauth: routes, tokens: tokens}, nil
 }
 
 // wireCatalogSearch builds the integration catalog search: the embedded

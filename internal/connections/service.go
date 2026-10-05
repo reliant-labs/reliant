@@ -189,6 +189,23 @@ func (s *Service) CreateAPIKey(ctx context.Context, p CreateAPIKeyParams) (*core
 		return nil, newError(CodeInvalidArgument, "kind must be api_key or basic")
 	}
 
+	// An integration whose events route by account (Twilio) delivers an
+	// event only to connections that record its account, so that account
+	// must be the one the provider names for this credential — never one the
+	// user merely typed. Probe before anything is stored: a credential the
+	// provider refuses is a form error, not a connection that silently
+	// never receives anything.
+	if prov.RoutesByAccount() {
+		who, err := s.identifyPasted(ctx, prov, conn, plain)
+		if err != nil {
+			return nil, err
+		}
+		conn.ExternalAccountID = &who.ExternalAccountID
+		if who.AccountLabel != "" {
+			conn.AccountLabel = &who.AccountLabel
+		}
+	}
+
 	secrets := make([]core.ConnectionSecret, 0, len(plain))
 	for _, f := range plain {
 		ct, err := s.vault.Seal(ctx, vault.UserTenant(p.UserID), []byte(f.value), SecretAAD(id, f.field))
@@ -302,6 +319,35 @@ func (s *Service) Events(ctx context.Context, userID, id string, limit int, befo
 	}
 	evs, err := s.store.ListConnectionEvents(ctx, userID, id, limit, beforeID)
 	return evs, mapStoreErr(err)
+}
+
+// identifyPasted runs the integration's identity probe with a credential that
+// has not been stored yet. The plaintext lives only in a vault.Secret for the
+// call; a refusal is InvalidArgument (fix the form), anything else
+// Unavailable (retry).
+func (s *Service) identifyPasted(ctx context.Context, prov *Provider, conn *core.Connection, plain []plainField) (Identity, error) {
+	var secret vault.Secret
+	switch conn.AuthKind {
+	case core.ConnectionAuthBasic:
+		secret = vault.NewSecret([]byte(plain[0].value + "\x00" + plain[1].value))
+	default:
+		secret = vault.NewSecret([]byte(plain[0].value))
+	}
+	auth, err := authenticatorFor(prov, conn)
+	if err != nil {
+		return Identity{}, err
+	}
+	who, err := prov.identify(ctx, s.doer, conn.Params, func(r *http.Request) error {
+		return auth.Apply(r, secret, NewRedactor())
+	})
+	if err == nil {
+		return who, nil
+	}
+	var pe *probeError
+	if errors.As(err, &pe) && pe.class == "unauthorized" {
+		return Identity{}, newError(CodeInvalidArgument, "%s refused these credentials: check the account and the secret", prov.DisplayName)
+	}
+	return Identity{}, newError(CodeUnavailable, "could not reach %s to check these credentials; try again", prov.DisplayName)
 }
 
 // onlyFields refuses a pasted-credential field the method does not take, so a

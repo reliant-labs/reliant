@@ -34,6 +34,10 @@ const (
 	PlacementDaemon = "daemon"
 
 	ConnectionNone = "none"
+
+	// Request body encodings (HttpRequestSpec.body_format).
+	BodyFormatJSON = "json"
+	BodyFormatForm = "form"
 )
 
 var (
@@ -312,6 +316,11 @@ func validateRequest(req *reliantv1.HttpRequestSpec) error {
 	if req.GetBody() != nil && req.GetBodyExpr() != "" {
 		return fmt.Errorf("request.body and request.body_expr are mutually exclusive")
 	}
+	switch req.GetBodyFormat() {
+	case "", BodyFormatJSON, BodyFormatForm:
+	default:
+		return fmt.Errorf("request.body_format %q must be %s or %s", req.GetBodyFormat(), BodyFormatJSON, BodyFormatForm)
+	}
 	if req.GetBody() != nil {
 		if err := validateBodyTemplates(req.GetBody().AsInterface()); err != nil {
 			return fmt.Errorf("request.body: %w", err)
@@ -392,8 +401,15 @@ func validatePagination(p *reliantv1.PaginationSpec) error {
 		if p.GetPageParam() == "" {
 			return fmt.Errorf("page pagination needs page_param")
 		}
+	case "next_url":
+		if p.GetNextUrl() == "" {
+			return fmt.Errorf("next_url pagination needs next_url, the CEL expression naming the next page")
+		}
+		if err := tmpl.ValidateExpr(p.GetNextUrl()); err != nil {
+			return fmt.Errorf("pagination.next_url: %w", err)
+		}
 	default:
-		return fmt.Errorf("pagination.style %q must be link_header, cursor or page", p.GetStyle())
+		return fmt.Errorf("pagination.style %q must be link_header, cursor, page or next_url", p.GetStyle())
 	}
 	return nil
 }

@@ -1,0 +1,530 @@
+# Twilio Programmable Messaging: SMS, MMS and WhatsApp. Authored from Twilio's
+# REST API reference (twilio.com/docs/messaging/api/message-resource,
+# /docs/phone-numbers/api/incomingphonenumber-resource) and its error catalog
+# (twilio.com/docs/api/errors).
+#
+# Auth: HTTP Basic, the Account SID as username (the account_sid connection
+# param, which also fills the URL path) and the account's Auth Token as the
+# password. It is Account SID + Auth Token, not an API key, for two reasons
+# verified against Twilio's docs: Twilio signs every webhook it sends with the
+# account's PRIMARY Auth Token (an API key secret never signs anything, so a
+# key-only connection could not verify an inbound message), and a Standard
+# API key cannot read /Accounts/{Sid}.json, which is the identity probe.
+#
+# A connection is an ACCOUNT: the probe records the account sid as the
+# connection's external account, which is what inbound messages route on
+# (internal/integrations/webhook/twilio.go). A subaccount is its own account
+# with its own Auth Token: connect it with its own sid.
+#
+# Requests are form-encoded (body_format: form), as Twilio's API takes them.
+# Errors are JSON {code, message, more_info, status}; the rules below classify
+# the codes an agent can act on. Twilio sends SOME failures after accepting
+# the message (201, then status failed/undelivered with error_code), notably
+# 63016 (WhatsApp outside the 24-hour window): message.send maps a 201 that is
+# already failed, and message.get reports error_code for one that failed
+# later.
+#
+# Addresses: E.164 (+15551234567) for SMS/MMS; whatsapp:+15551234567 for
+# WhatsApp, on BOTH to and from.
+id: twilio
+version: 1
+display_name: Twilio
+description: Send and read SMS, MMS and WhatsApp messages through your Twilio account, and react to messages your numbers receive.
+icon: twilio
+category: communication
+keywords: [sms, text, texting, whatsapp, mms, phone, messaging, twilio]
+
+connection:
+  base_url: "https://api.twilio.com/2010-04-01/Accounts/{{ connection.params.account_sid }}"
+  connection_params:
+    - name: account_sid
+      display_name: Account SID
+      description: Your Twilio Account SID (AC…), on the Twilio Console dashboard. A subaccount connects with its own SID.
+      pattern: "AC[0-9a-fA-F]{32}"
+  auth:
+    - basic:
+        username_param: account_sid
+        password_label: Auth Token
+  # The account resource itself, /Accounts/{Sid}.json: a sibling of base_url
+  # rather than a path under it, so it is spelled out.
+  probe:
+    url: "https://api.twilio.com/2010-04-01/Accounts/{{ connection.params.account_sid }}.json"
+    external_id: response.sid
+    label: response.friendly_name
+    # Inbound messages route on this sid (AccountSid), so it is Twilio's
+    # answer for the Auth Token, checked before the connection is saved.
+    routes_events: true
+
+actions:
+  - id: message.send
+    display_name: Send message
+    summary: Send an SMS, MMS or WhatsApp message.
+    description: >-
+      Send a message from one of your Twilio senders. For SMS give E.164
+      numbers (+15551234567); for WhatsApp prefix BOTH to and from with
+      "whatsapp:". Send from a number (from) or a Messaging Service
+      (messaging_service_sid). Give body text, media_url, or both. WhatsApp
+      only allows free-form text within 24 hours of the person's last message;
+      outside that window send an approved template with content_sid (and
+      content_variables) instead of body. Returns the message sid and its
+      initial status (queued or accepted); delivery happens after.
+    keywords: [send, text, sms, whatsapp, notify, message, mms]
+    placement: server
+    mutates: true
+    tool:
+      expose: true
+    params:
+      type: object
+      additionalProperties: false
+      required: [to]
+      properties:
+        to:
+          type: string
+          pattern: "^(whatsapp:)?\\+[1-9][0-9]{6,14}$"
+          description: The recipient, E.164 (+15551234567), or whatsapp:+15551234567 for WhatsApp.
+        from:
+          type: string
+          pattern: "^(whatsapp:)?\\+[1-9][0-9]{6,14}$|^[A-Za-z0-9 ]{1,11}$"
+          description: >-
+            Your Twilio sender: an E.164 number, whatsapp:+1… for a WhatsApp
+            sender, or an alphanumeric sender ID where supported. Give this or
+            messaging_service_sid.
+        messaging_service_sid:
+          type: string
+          pattern: "^MG[0-9a-fA-F]{32}$"
+          description: A Messaging Service (MG…) to send from instead of a single number.
+        body:
+          type: string
+          minLength: 1
+          maxLength: 1600
+          description: The message text, up to 1600 characters.
+        media_url:
+          type: array
+          maxItems: 10
+          items: { type: string, format: uri, pattern: "^https?://" }
+          description: Public URLs of media to attach (MMS / WhatsApp media), up to 10.
+        content_sid:
+          type: string
+          pattern: "^HX[0-9a-fA-F]{32}$"
+          description: An approved content template (HX…), required for WhatsApp outside the 24-hour window.
+        content_variables:
+          type: string
+          maxLength: 16000
+          description: 'The template''s variables as a JSON object string, e.g. {"1":"Ada"}.'
+        status_callback:
+          type: string
+          format: uri
+          pattern: "^https://"
+          description: An https URL Twilio POSTs delivery status changes to.
+        connection: &connection
+          type: string
+          description: >-
+            Id of a saved Twilio connection (an account) to use. Omit to use
+            your default Twilio connection.
+    request:
+      method: POST
+      path: /Messages.json
+      body_format: form
+      body_expr: >-
+        {"To": params.to,
+         ?"From": params.?from,
+         ?"MessagingServiceSid": params.?messaging_service_sid,
+         ?"Body": params.?body,
+         ?"MediaUrl": params.?media_url,
+         ?"ContentSid": params.?content_sid,
+         ?"ContentVariables": params.?content_variables,
+         ?"StatusCallback": params.?status_callback}
+      # The shared rules (each anchored, and listed as one set for the read
+      # actions below), then two that only a send has: Twilio accepts some
+      # messages (201) that have already failed, and reports why on the
+      # created message rather than as a 4xx. A lookup that finds a failed
+      # message is a success: the status is the answer.
+      errors:
+        - &rule_429
+          status: 429
+          retryable: true
+          message: &twilio_rate_limited >-
+            Twilio rate limit exceeded ({{ response.?code.orValue(20429) }}); retry after backing off.
+        - &rule_20429
+          status_min: 400
+          status_max: 499
+          when: "response.?code.orValue(0) == 20429"
+          retryable: true
+          message: *twilio_rate_limited
+        - &rule_20003
+          status_min: 400
+          status_max: 499
+          when: "status == 401 || response.?code.orValue(0) == 20003"
+          retryable: false
+          message: >-
+            Twilio rejected the credentials (20003): the Account SID or Auth
+            Token is wrong, or the token was rotated. Reconnect Twilio in
+            Settings with the account's current Auth Token.
+        - &rule_invalid_to
+          status_min: 400
+          status_max: 499
+          when: "response.?code.orValue(0) in [21211, 21614]"
+          retryable: false
+          message: >-
+            Twilio refused the recipient ({{ response.code }}): {{ response.?message.orValue('invalid To number') }}.
+            Give an E.164 mobile number (+15551234567), or whatsapp:+… for WhatsApp.
+        - &rule_21608
+          status_min: 400
+          status_max: 499
+          when: "response.?code.orValue(0) == 21608"
+          retryable: false
+          message: >-
+            Twilio can only send to verified numbers from this account (21608):
+            it is a trial account, or has no approved compliance profile.
+            Verify the recipient in the Twilio Console, or upgrade the account.
+        - &rule_63016
+          status_min: 400
+          status_max: 499
+          when: "response.?code.orValue(0) == 63016"
+          retryable: false
+          message: &window_message >-
+            WhatsApp only allows free-form messages within 24 hours of the
+            person's last message (63016). Outside that window send an approved
+            template: content_sid (and content_variables) instead of body.
+        - &rule_bad_sender
+          status_min: 400
+          status_max: 499
+          when: "response.?code.orValue(0) in [21606, 63007]"
+          retryable: false
+          message: >-
+            The sender is not usable from this account ({{ response.code }}):
+            {{ response.?message.orValue('invalid From') }}. Use one of your
+            Twilio numbers, or whatsapp:+… for a WhatsApp sender.
+        - &rule_63015
+          status_min: 400
+          status_max: 499
+          when: "response.?code.orValue(0) == 63015"
+          retryable: false
+          message: >-
+            The recipient has not joined your WhatsApp Sandbox (63015): they
+            must send "join <your keyword>" to the sandbox number first.
+        - &rule_21610
+          status_min: 400
+          status_max: 499
+          when: "response.?code.orValue(0) == 21610"
+          retryable: false
+          message: The recipient replied STOP to this sender (21610); Twilio will not deliver to them until they reply START.
+        - &rule_404
+          status: 404
+          retryable: false
+          message: "Twilio found no such resource (20404): {{ response.?message.orValue('not found') }}."
+        - &rule_4xx
+          status_min: 400
+          status_max: 499
+          retryable: false
+          message: "Twilio refused the request ({{ response.?code.orValue(status) }}): {{ response.?message.orValue('bad request') }}."
+        - &rule_5xx
+          status_min: 500
+          status_max: 599
+          retryable: true
+          message: "Twilio failed on its side (HTTP {{ status }}); retry."
+        - status_min: 200
+          status_max: 299
+          when: "response.?status.orValue('') in ['failed', 'undelivered'] && response.?error_code.orValue(0) == 63016"
+          retryable: false
+          message: *window_message
+        - status_min: 200
+          status_max: 299
+          when: "response.?status.orValue('') in ['failed', 'undelivered']"
+          retryable: false
+          message: >-
+            Twilio accepted the message but it failed ({{ response.?error_code.orValue('no code') }}):
+            {{ response.?error_message.orValue('see the Twilio Console message log') }}.
+    output:
+      select: &message_select >-
+        {"sid": response.sid,
+         "status": response.?status.orValue(null),
+         "to": response.?to.orValue(null),
+         "from": response.?from.orValue(null),
+         "body": response.?body.orValue(null),
+         "direction": response.?direction.orValue(null),
+         "num_media": response.?num_media.orValue(null),
+         "num_segments": response.?num_segments.orValue(null),
+         "messaging_service_sid": response.?messaging_service_sid.orValue(null),
+         "error_code": response.?error_code.orValue(null),
+         "error_message": response.?error_message.orValue(null),
+         "date_created": response.?date_created.orValue(null),
+         "date_sent": response.?date_sent.orValue(null),
+         "price": response.?price.orValue(null),
+         "price_unit": response.?price_unit.orValue(null)}
+      schema: &message_schema
+        type: object
+        properties:
+          sid: { type: string, description: "The message SID (SM… or MM…)." }
+          status:
+            type: [string, "null"]
+            description: "queued, accepted, sending, sent, delivered, undelivered, failed, receiving, received, read, scheduled or canceled."
+          to: { type: [string, "null"] }
+          from: { type: [string, "null"] }
+          body: { type: [string, "null"] }
+          direction: { type: [string, "null"], description: "inbound, outbound-api, outbound-call or outbound-reply." }
+          num_media: { type: [string, "null"] }
+          num_segments: { type: [string, "null"] }
+          messaging_service_sid: { type: [string, "null"] }
+          error_code: { type: [integer, "null"], description: Twilio's error code when the message failed. }
+          error_message: { type: [string, "null"] }
+          date_created: { type: [string, "null"], description: RFC 2822 timestamp. }
+          date_sent: { type: [string, "null"] }
+          price: { type: [string, "null"] }
+          price_unit: { type: [string, "null"] }
+
+  - id: message.get
+    display_name: Get message
+    summary: Look up one message and its delivery status.
+    description: >-
+      Fetch a message by its SID: its current status (queued → sent →
+      delivered, or failed/undelivered with error_code), body, addresses and
+      price. Use it to check whether a message you sent was delivered.
+    keywords: [message, status, delivery, lookup, get, sms, whatsapp]
+    placement: server
+    mutates: false
+    tool:
+      expose: true
+    params:
+      type: object
+      additionalProperties: false
+      required: [sid]
+      properties:
+        sid:
+          type: string
+          pattern: "^(SM|MM)[0-9a-fA-F]{32}$"
+          description: The message SID (SM… or MM…).
+        connection: *connection
+    request:
+      method: GET
+      path: "/Messages/{{ params.sid }}.json"
+      errors: &twilio_errors
+        - *rule_429
+        - *rule_20429
+        - *rule_20003
+        - *rule_invalid_to
+        - *rule_21608
+        - *rule_63016
+        - *rule_bad_sender
+        - *rule_63015
+        - *rule_21610
+        - *rule_404
+        - *rule_4xx
+        - *rule_5xx
+    output:
+      select: *message_select
+      schema: *message_schema
+
+  - id: message.list
+    display_name: List messages
+    summary: Messages sent and received by the account, newest first.
+    description: >-
+      List the account's messages, newest first, optionally only those to or
+      from one address (E.164, or whatsapp:+… for WhatsApp) or sent on, before
+      or after a date (YYYY-MM-DD). page_size bounds each page; up to
+      max_pages pages are followed.
+    keywords: [messages, history, inbox, list, sms, whatsapp, conversation]
+    placement: server
+    mutates: false
+    tool:
+      expose: true
+    params:
+      type: object
+      additionalProperties: false
+      properties:
+        to:
+          type: string
+          pattern: "^(whatsapp:)?\\+[1-9][0-9]{6,14}$"
+          description: Only messages sent to this address.
+        from:
+          type: string
+          pattern: "^(whatsapp:)?\\+[1-9][0-9]{6,14}$|^[A-Za-z0-9 ]{1,11}$"
+          description: Only messages sent from this address.
+        date_sent:
+          type: string
+          pattern: "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+          description: Only messages sent on this date (YYYY-MM-DD, UTC).
+        date_sent_before:
+          type: string
+          pattern: "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+          description: Only messages sent on or before this date (YYYY-MM-DD).
+        date_sent_after:
+          type: string
+          pattern: "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+          description: Only messages sent on or after this date (YYYY-MM-DD).
+        page_size:
+          type: integer
+          minimum: 1
+          maximum: 1000
+          default: 50
+          description: Messages per page.
+        connection: *connection
+    request:
+      method: GET
+      path: /Messages.json
+      query:
+        PageSize: "{{ params.page_size }}"
+      query_expr: >-
+        {?"To": params.?to,
+         ?"From": params.?from,
+         ?"DateSent": params.?date_sent,
+         ?"DateSent<": params.?date_sent_before,
+         ?"DateSent>": params.?date_sent_after}
+      pagination:
+        style: next_url
+        next_url: "response.?next_page_uri.orValue('')"
+        max_pages: 5
+      max_response_bytes: 5242880
+      errors: *twilio_errors
+    output:
+      select: >-
+        response.messages.map(m, {"sid": m.sid,
+         "status": m.?status.orValue(null),
+         "direction": m.?direction.orValue(null),
+         "to": m.?to.orValue(null),
+         "from": m.?from.orValue(null),
+         "body": m.?body.orValue(null),
+         "num_media": m.?num_media.orValue(null),
+         "error_code": m.?error_code.orValue(null),
+         "date_sent": m.?date_sent.orValue(null)})
+      schema:
+        type: object
+        properties:
+          items:
+            type: array
+            items:
+              type: object
+              properties:
+                sid: { type: string }
+                status: { type: [string, "null"] }
+                direction: { type: [string, "null"] }
+                to: { type: [string, "null"] }
+                from: { type: [string, "null"] }
+                body: { type: [string, "null"] }
+                num_media: { type: [string, "null"] }
+                error_code: { type: [integer, "null"] }
+                date_sent: { type: [string, "null"] }
+
+  - id: phone_number.list
+    display_name: List phone numbers
+    summary: The account's Twilio numbers, for pickers and setup.
+    description: >-
+      List the phone numbers the account owns, with what each can do (sms,
+      mms, voice) and where its incoming messages are sent today (sms_url).
+      Each number whose messages should start a workflow needs its "A message
+      comes in" webhook set to Reliant's Twilio URL (shown on the trigger).
+      WhatsApp senders are managed separately and are not listed here.
+    keywords: [numbers, phone, picker, senders, incoming, sms]
+    placement: server
+    mutates: false
+    tool:
+      expose: true
+    params:
+      type: object
+      additionalProperties: false
+      properties:
+        phone_number:
+          type: string
+          pattern: "^[+0-9]{1,16}$"
+          description: Only numbers containing these digits.
+        connection: *connection
+    request:
+      method: GET
+      path: /IncomingPhoneNumbers.json
+      query:
+        PageSize: "100"
+      query_expr: '{?"PhoneNumber": params.?phone_number}'
+      pagination:
+        style: next_url
+        next_url: "response.?next_page_uri.orValue('')"
+        max_pages: 10
+      max_response_bytes: 5242880
+      errors: *twilio_errors
+    output:
+      select: >-
+        response.incoming_phone_numbers.map(n, {"sid": n.sid,
+         "phone_number": n.phone_number,
+         "friendly_name": n.?friendly_name.orValue(null),
+         "sms": n.?capabilities.?sms.orValue(false),
+         "mms": n.?capabilities.?mms.orValue(false),
+         "voice": n.?capabilities.?voice.orValue(false),
+         "sms_url": n.?sms_url.orValue(null),
+         "sms_method": n.?sms_method.orValue(null)})
+      schema:
+        type: object
+        properties:
+          items:
+            type: array
+            items:
+              type: object
+              properties:
+                sid: { type: string, description: "The number's SID (PN…)." }
+                phone_number: { type: string, description: E.164. }
+                friendly_name: { type: [string, "null"] }
+                sms: { type: boolean }
+                mms: { type: boolean }
+                voice: { type: boolean }
+                sms_url: { type: [string, "null"], description: "Where the number's incoming messages are POSTed today." }
+                sms_method: { type: [string, "null"] }
+
+# Inbound messages. Twilio POSTs each message a number (or WhatsApp sender, or
+# Messaging Service) receives to the webhook configured ON THAT NUMBER, so
+# the user points each number's "A message comes in" webhook at
+# <PUBLIC_URL>/integrations/twilio/events (HTTP POST). The URL is the same for
+# every number and every account; the trigger shows it.
+#
+# A delivery is signed with the account's Auth Token
+# (X-Twilio-Signature), and is verified against the Auth Token of each
+# Twilio connection that records the delivery's AccountSid. It reaches only
+# triggers on connections whose own token verified it; a match on `to`
+# narrows it to one number. internal/integrations/webhook/twilio.go is the
+# provider. Reliant answers with empty TwiML, so Twilio never auto-replies.
+triggers:
+  - id: message.received
+    display_name: Message received
+    summary: One of your Twilio numbers or WhatsApp senders received a message.
+    description: >-
+      Fires when someone texts or WhatsApps one of your Twilio senders. channel
+      says which (sms or whatsapp; MMS is sms with media). Match on to to
+      listen to one number (E.164, or whatsapp:+… for a WhatsApp sender), and
+      on from for one person. Reply with twilio/message.send, swapping to and
+      from — for WhatsApp the reply is free-form only within 24 hours of this
+      message. The number must have its "A message comes in" webhook set to the
+      trigger's webhook URL.
+    keywords: [sms, text, whatsapp, inbound, received, reply, message, incoming]
+    events: [message.received]
+    attributes:
+      - { name: from, description: "The sender: E.164, or whatsapp:+… for WhatsApp.", example: "+15551230000" }
+      - { name: to, description: "Your number or sender that received it: E.164, or whatsapp:+….", example: "+15559870000" }
+      - { name: channel, description: "sms (including MMS) or whatsapp.", example: sms }
+      - { name: num_media, description: "How many media items are attached, as a string (\"0\" for none).", example: "0" }
+    data:
+      type: object
+      required: [message_sid, account_sid, from, to, body, channel, num_media, media]
+      properties:
+        message_sid: { type: string, description: "The message SID (SM… / MM…); look it up with twilio/message.get." }
+        account_sid: { type: string }
+        messaging_service_sid: { type: string, description: The Messaging Service it arrived through, if any. }
+        from: { type: string, description: "The sender, as Twilio sent it (whatsapp:+… for WhatsApp)." }
+        to: { type: string, description: Your number or sender that received it. }
+        body: { type: string, description: The message text (empty for a media-only message). }
+        channel: { type: string, enum: [sms, whatsapp] }
+        num_media: { type: integer, minimum: 0 }
+        num_segments: { type: integer, minimum: 0 }
+        media:
+          type: array
+          description: Attached media. Fetching a URL needs the account's credentials when Twilio's media auth is on.
+          items:
+            type: object
+            properties:
+              url: { type: string }
+              content_type: { type: string }
+        profile_name: { type: string, description: The sender's WhatsApp profile name (WhatsApp only). }
+        wa_id: { type: string, description: The sender's WhatsApp id (WhatsApp only). }
+        from_city: { type: string }
+        from_state: { type: string }
+        from_country: { type: string }
+        from_zip: { type: string }
+        button_text: { type: string, description: The text of a WhatsApp quick-reply button the person pressed. }
+        latitude: { type: string, description: A shared WhatsApp location. }
+        longitude: { type: string }

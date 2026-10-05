@@ -443,11 +443,19 @@ message Trigger {
   // receives nothing until it is edited).
   optional string connection_id = 24;
 
-  // Read-only, webhook triggers: <PUBLIC_URL>/hooks/{id}, the URL to POST to
-  // with `Authorization: Bearer <token>` or an HMAC signature. Append
-  // "/<token>" for a sender that cannot set headers. The token itself is
-  // returned only by CreateTrigger and RotateWebhookToken. A bare path when
-  // the server has no PUBLIC_URL.
+  // Read-only, the URL a sender must be pointed at, when the user has to
+  // configure it themselves.
+  //
+  // Webhook triggers: <PUBLIC_URL>/hooks/{id}, the URL to POST to with
+  // `Authorization: Bearer <token>` or an HMAC signature. Append "/<token>"
+  // for a sender that cannot set headers. The token itself is returned only
+  // by CreateTrigger and RotateWebhookToken. A bare path when the server has
+  // no PUBLIC_URL.
+  //
+  // Integration triggers whose provider is configured per resource by the
+  // user (Twilio: each phone number's "A message comes in" webhook):
+  // <PUBLIC_URL>/integrations/{integration}/events. Unset for providers whose
+  // app-level webhook the operator registers once (GitHub, Slack).
   optional string webhook_url = 25;
 
   // The workflow-declared trigger (WorkflowTrigger.name) this row activates,

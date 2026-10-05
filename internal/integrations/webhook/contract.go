@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/vault"
 )
 
 // Provider is an integration that delivers events through its app-level
@@ -62,6 +63,42 @@ type Provider interface {
 	Parse(ctx context.Context, req *Request) (*Delivery, error)
 }
 
+// ConnectionSigned is a Provider whose deliveries are signed with a
+// PER-CONNECTION secret rather than one deployment-wide secret. Twilio is the
+// case: each account signs with its own Auth Token, which the user saved as
+// their connection's credential, so no deployment config can verify it.
+//
+// For such a provider the receiver does not call Verify. It asks for the
+// account the delivery claims (SignedAccount), opens the stored secret of
+// every live connection that records that account and has an enabled
+// trigger for this integration, and calls VerifyWith once per connection.
+// A delivery that no connection's secret verifies is refused (401), and an
+// event routes ONLY to triggers on connections whose own secret verified it,
+// so a stale or wrong saved secret receives nothing and a request can never
+// choose the secret it is checked against.
+type ConnectionSigned interface {
+	Provider
+
+	// SignedAccount returns the provider account a delivery claims to belong
+	// to: a value inside the signed payload, used only to find candidate
+	// connections. Return an error wrapping ErrUnauthorized when the
+	// request cannot carry one (wrong content type, no account field).
+	SignedAccount(req *Request) (string, error)
+
+	// VerifyWith checks the request against one connection's stored secret
+	// (as the connections layer opens it). Return an error wrapping
+	// ErrUnauthorized for a mismatch.
+	VerifyWith(req *Request, secret vault.Secret) error
+}
+
+// UserConfigured is implemented by a provider whose webhook URL each user
+// points their own resources at (Twilio: every phone number's "A message
+// comes in" webhook), rather than one the operator registers once for the
+// whole app. The trigger API shows such a trigger's URL to its owner.
+type UserConfigured interface {
+	UserConfiguresWebhook() bool
+}
+
 // Request is an inbound delivery as a provider sees it.
 type Request struct {
 	// PublicURL is the URL the sender addressed — PUBLIC_URL plus the path
@@ -94,6 +131,11 @@ type Delivery struct {
 	// delivery is already routed under the reduced access. Each must name an
 	// account or a subject; an unscoped one is ignored.
 	Revocations []core.IntegrationAccessRevocation
+	// Ack, when set, is the reply once Events are recorded, in place of the
+	// default plain "ok": Twilio reads the response body as TwiML and needs
+	// an empty <Response/> so it sends no auto-reply. Unlike Respond it does
+	// not stop the events being recorded.
+	Ack *Response
 }
 
 // Response is a synchronous reply to the sender.

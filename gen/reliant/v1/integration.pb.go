@@ -878,7 +878,15 @@ type IdentityProbe struct {
 	// ExternalId is CEL over `response` yielding the account's stable id.
 	ExternalId string `protobuf:"bytes,6,opt,name=external_id,json=externalId,proto3" json:"external_id,omitempty"`
 	// Label is CEL over `response` yielding a human label (a login, an email).
-	Label         string `protobuf:"bytes,7,opt,name=label,proto3" json:"label,omitempty"`
+	Label string `protobuf:"bytes,7,opt,name=label,proto3" json:"label,omitempty"`
+	// RoutesEvents says the external id is what the integration's inbound
+	// events route on (Event.AccountKey == the connection's external account,
+	// as Twilio's AccountSid). Such an id must be the provider's answer for
+	// the credential, never one the user typed, so a pasted credential is
+	// probed before it is saved and one the provider refuses is not saved.
+	// Leave it unset when events route some other way (GitHub's access
+	// grants) or not at all.
+	RoutesEvents  bool `protobuf:"varint,8,opt,name=routes_events,json=routesEvents,proto3" json:"routes_events,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -960,6 +968,13 @@ func (x *IdentityProbe) GetLabel() string {
 		return x.Label
 	}
 	return ""
+}
+
+func (x *IdentityProbe) GetRoutesEvents() bool {
+	if x != nil {
+		return x.RoutesEvents
+	}
+	return false
 }
 
 // ActionSpec is one operation: usable as a workflow node and, optionally, as
@@ -1213,9 +1228,15 @@ type HttpRequestSpec struct {
 	// whose shape the caller supplies (the generic HTTP action). HeadersExpr and
 	// QueryExpr must yield a map of scalars; BodyExpr any JSON value, or null for
 	// no body. They are merged over the static maps / replace `body`.
-	HeadersExpr   string `protobuf:"bytes,11,opt,name=headers_expr,json=headersExpr,proto3" json:"headers_expr,omitempty"`
-	QueryExpr     string `protobuf:"bytes,12,opt,name=query_expr,json=queryExpr,proto3" json:"query_expr,omitempty"`
-	BodyExpr      string `protobuf:"bytes,13,opt,name=body_expr,json=bodyExpr,proto3" json:"body_expr,omitempty"`
+	HeadersExpr string `protobuf:"bytes,11,opt,name=headers_expr,json=headersExpr,proto3" json:"headers_expr,omitempty"`
+	QueryExpr   string `protobuf:"bytes,12,opt,name=query_expr,json=queryExpr,proto3" json:"query_expr,omitempty"`
+	BodyExpr    string `protobuf:"bytes,13,opt,name=body_expr,json=bodyExpr,proto3" json:"body_expr,omitempty"`
+	// BodyFormat is how the rendered body is encoded: "json" (the default) or
+	// "form" (application/x-www-form-urlencoded, as Twilio and Stripe take). A
+	// form body must render to an object whose values are scalars or lists of
+	// scalars; a list repeats its key (MediaUrl=a&MediaUrl=b) and a null value
+	// leaves the key out.
+	BodyFormat    string `protobuf:"bytes,14,opt,name=body_format,json=bodyFormat,proto3" json:"body_format,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1341,10 +1362,17 @@ func (x *HttpRequestSpec) GetBodyExpr() string {
 	return ""
 }
 
+func (x *HttpRequestSpec) GetBodyFormat() string {
+	if x != nil {
+		return x.BodyFormat
+	}
+	return ""
+}
+
 // PaginationSpec follows pages and concatenates each page's selected list.
 type PaginationSpec struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Style is "link_header", "cursor" or "page".
+	// Style is "link_header", "cursor", "page" or "next_url".
 	Style string `protobuf:"bytes,1,opt,name=style,proto3" json:"style,omitempty"`
 	// MaxPages bounds the walk (default 10, max 100).
 	MaxPages int32 `protobuf:"varint,2,opt,name=max_pages,json=maxPages,proto3" json:"max_pages,omitempty"`
@@ -1356,7 +1384,14 @@ type PaginationSpec struct {
 	// PageParam is the query parameter carrying the page number (page style).
 	PageParam string `protobuf:"bytes,5,opt,name=page_param,json=pageParam,proto3" json:"page_param,omitempty"`
 	// StartPage is the first page number (default 1).
-	StartPage     int32 `protobuf:"varint,6,opt,name=start_page,json=startPage,proto3" json:"start_page,omitempty"`
+	StartPage int32 `protobuf:"varint,6,opt,name=start_page,json=startPage,proto3" json:"start_page,omitempty"`
+	// NextUrl is CEL over `response` yielding the next page's URL, or
+	// empty/null to stop (next_url style): Twilio's next_page_uri, Microsoft
+	// Graph's @odata.nextLink. A relative reference resolves against the URL
+	// of the page it came from. The next page must stay on the call's host,
+	// like a Link header's, and is fetched with the first page's method and
+	// headers.
+	NextUrl       string `protobuf:"bytes,7,opt,name=next_url,json=nextUrl,proto3" json:"next_url,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1431,6 +1466,13 @@ func (x *PaginationSpec) GetStartPage() int32 {
 		return x.StartPage
 	}
 	return 0
+}
+
+func (x *PaginationSpec) GetNextUrl() string {
+	if x != nil {
+		return x.NextUrl
+	}
+	return ""
 }
 
 // ErrorRule maps one status (or an inclusive range) to an error outcome.
@@ -1855,7 +1897,7 @@ const file_reliant_v1_integration_proto_rawDesc = "" +
 	"\fdisplay_name\x18\x02 \x01(\tR\vdisplayName\x12 \n" +
 	"\vdescription\x18\x03 \x01(\tR\vdescription\x12\x18\n" +
 	"\apattern\x18\x04 \x01(\tR\apattern\x12#\n" +
-	"\rdefault_value\x18\x05 \x01(\tR\fdefaultValue\"\x92\x02\n" +
+	"\rdefault_value\x18\x05 \x01(\tR\fdefaultValue\"\xb7\x02\n" +
 	"\rIdentityProbe\x12\x16\n" +
 	"\x06method\x18\x01 \x01(\tR\x06method\x12\x10\n" +
 	"\x03url\x18\x02 \x01(\tR\x03url\x12\x12\n" +
@@ -1864,7 +1906,8 @@ const file_reliant_v1_integration_proto_rawDesc = "" +
 	"\x02ok\x18\x05 \x01(\tR\x02ok\x12\x1f\n" +
 	"\vexternal_id\x18\x06 \x01(\tR\n" +
 	"externalId\x12\x14\n" +
-	"\x05label\x18\a \x01(\tR\x05label\x1a:\n" +
+	"\x05label\x18\a \x01(\tR\x05label\x12#\n" +
+	"\rroutes_events\x18\b \x01(\bR\froutesEvents\x1a:\n" +
 	"\fHeadersEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xc1\x03\n" +
@@ -1887,7 +1930,7 @@ const file_reliant_v1_integration_proto_rawDesc = "" +
 	"\bToolSpec\x12\x16\n" +
 	"\x06expose\x18\x01 \x01(\bR\x06expose\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +
-	"\x04tags\x18\x03 \x03(\tR\x04tags\"\x94\x05\n" +
+	"\x04tags\x18\x03 \x03(\tR\x04tags\"\xb5\x05\n" +
 	"\x0fHttpRequestSpec\x12\x16\n" +
 	"\x06method\x18\x01 \x01(\tR\x06method\x12\x10\n" +
 	"\x03url\x18\x02 \x01(\tR\x03url\x12\x12\n" +
@@ -1905,14 +1948,16 @@ const file_reliant_v1_integration_proto_rawDesc = "" +
 	"\fheaders_expr\x18\v \x01(\tR\vheadersExpr\x12\x1d\n" +
 	"\n" +
 	"query_expr\x18\f \x01(\tR\tqueryExpr\x12\x1b\n" +
-	"\tbody_expr\x18\r \x01(\tR\bbodyExpr\x1a8\n" +
+	"\tbody_expr\x18\r \x01(\tR\bbodyExpr\x12\x1f\n" +
+	"\vbody_format\x18\x0e \x01(\tR\n" +
+	"bodyFormat\x1a8\n" +
 	"\n" +
 	"QueryEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1a:\n" +
 	"\fHeadersEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xc5\x01\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xe0\x01\n" +
 	"\x0ePaginationSpec\x12\x14\n" +
 	"\x05style\x18\x01 \x01(\tR\x05style\x12\x1b\n" +
 	"\tmax_pages\x18\x02 \x01(\x05R\bmaxPages\x12!\n" +
@@ -1922,7 +1967,8 @@ const file_reliant_v1_integration_proto_rawDesc = "" +
 	"\n" +
 	"page_param\x18\x05 \x01(\tR\tpageParam\x12\x1d\n" +
 	"\n" +
-	"start_page\x18\x06 \x01(\x05R\tstartPage\"\xad\x01\n" +
+	"start_page\x18\x06 \x01(\x05R\tstartPage\x12\x19\n" +
+	"\bnext_url\x18\a \x01(\tR\anextUrl\"\xad\x01\n" +
 	"\tErrorRule\x12\x16\n" +
 	"\x06status\x18\x01 \x01(\x05R\x06status\x12\x1d\n" +
 	"\n" +
