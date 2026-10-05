@@ -251,14 +251,18 @@ func TestTriggerKindIsNotUpdatable(t *testing.T) {
 	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
 }
 
-func TestWorkflowTriggerReferenceIsNotYetSupported(t *testing.T) {
+// A reference to a trigger the workflow does not declare is NotFound, and
+// says what the workflow does declare (builtin://agent declares none).
+// Activating real declarations is trigger_activation_test.go.
+func TestWorkflowTriggerReferenceToAnUndeclaredTrigger(t *testing.T) {
 	env, _ := setupInboundTriggerTest(t)
 	_, err := env.svc.CreateTrigger(env.ctx, connect.NewRequest(&reliantv1.CreateTriggerRequest{
 		Trigger: env.definition(func(d *reliantv1.TriggerDefinition) {
 			d.Source = &reliantv1.TriggerDefinition_WorkflowTrigger{WorkflowTrigger: "on-push"}
 		}),
 	}))
-	assert.Equal(t, connect.CodeUnimplemented, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
+	assert.Contains(t, err.Error(), `does not declare a trigger named "on-push"`)
 }
 
 func TestFireInboundTriggerGoesThroughIntake(t *testing.T) {

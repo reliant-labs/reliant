@@ -116,6 +116,11 @@ const (
 	ToolSearchIntegrations   = "search_integrations"
 	ToolGetIntegrationSchema = "get_integration_schema"
 
+	// Trigger activation tools: activate a trigger a workflow declares, and
+	// list the user's triggers.
+	ToolActivateTrigger = "activate_trigger"
+	ToolListTriggers    = "list_triggers"
+
 	// Scenario tools
 	ToolListScenarios  = "list_scenarios"
 	ToolViewScenario   = "view_scenario"
@@ -645,6 +650,11 @@ func GetToolRegistry() []ToolDefinition {
 		{ToolCreateWorkflow, (*ToolsFactory).CreateWorkflow, []ToolTag{TagWorkflow}, PlacementServer},
 		{ToolEditWorkflow, (*ToolsFactory).EditWorkflow, []ToolTag{TagWorkflow}, PlacementServer},
 		{ToolWriteWorkflow, (*ToolsFactory).WriteWorkflow, []ToolTag{TagWorkflow}, PlacementServer},
+		// A workflow declares when it runs; these activate a declaration for
+		// the user and show what is active. Beside the editing tools because
+		// an agent that wrote a triggers: block reaches for them next.
+		{ToolActivateTrigger, (*ToolsFactory).ActivateTrigger, []ToolTag{TagWorkflow}, PlacementServer},
+		{ToolListTriggers, (*ToolsFactory).ListTriggers, []ToolTag{TagWorkflow, TagReadOnly}, PlacementServer},
 
 		// Workflow discovery tools
 		{ToolGetSchema, (*ToolsFactory).GetSchema, []ToolTag{TagWorkflow, TagReadOnly}, PlacementAny},
