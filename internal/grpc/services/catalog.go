@@ -29,6 +29,11 @@ type CatalogService struct {
 
 	celCompletionsOnce sync.Once
 	celCompletionsResp *reliantv1.GetCELCompletionsResponse
+
+	// search and integrationMethods back SearchCatalog / GetCatalogEntry
+	// (catalog_search.go); set by WithCatalogSearch.
+	search             catalogSearcher
+	integrationMethods integrationMethods
 }
 
 // NewCatalogService creates a new CatalogService

@@ -11,6 +11,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/connections"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/integrations/catalog"
+	"github.com/reliant-labs/reliant/internal/integrations/catalogindex"
 	"github.com/reliant-labs/reliant/internal/integrations/ghdelegated"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/tokenauthority"
@@ -44,6 +45,18 @@ func wireConnections(repo *db.Repo, keys *vault.Vault, jwtPublicKey, jwksURL, pu
 	}
 	routes := connections.NewOAuthHTTP(broker, func(next http.Handler) http.Handler { return authn.RequireAuth(next) }, publicURL)
 	return svc, routes, nil
+}
+
+// wireCatalogSearch builds the integration catalog search: the embedded
+// catalog's index (built once, shared) plus each caller's connections, with
+// delegated brokers judged by the same rule ListIntegrations uses.
+func wireCatalogSearch(repo *db.Repo) (*catalogindex.Service, error) {
+	idx, err := catalogindex.Builtin()
+	if err != nil {
+		return nil, fmt.Errorf("integration catalog index: %w", err)
+	}
+	delegated := delegatedAvailable(tokenauthority.ControlPlaneURL() != "")
+	return catalogindex.NewService(idx, repo.Connections(), catalogindex.DelegatedAvailable(delegated)), nil
 }
 
 // delegatedAvailable reports which delegated brokers the worker registers.

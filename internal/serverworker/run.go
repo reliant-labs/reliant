@@ -172,6 +172,10 @@ func Run(ctx context.Context, opts Options) error {
 	if err != nil {
 		return err
 	}
+	catalogSearch, err := newCatalogSearch(repo.Connections(), integrationCredentials)
+	if err != nil {
+		return err
+	}
 
 	// API key provider (allows LLM drivers to resolve per-user keys from DB)
 	drivers.InitializeAPIKeyProvider(repo)
@@ -320,6 +324,9 @@ func Run(ctx context.Context, opts Options) error {
 		// source the action node uses: saved connections, plus GitHub tokens
 		// delegated by control-plane when one is configured.
 		IntegrationCredentials: integrationCredentials,
+		// search_integrations / get_integration_schema execute here too, and
+		// read the run owner's connections to report what is connected.
+		CatalogSearch: catalogSearch,
 	})
 	// Wire server-side tool execution so PlacementServer / PlacementAny
 	// tools execute in the worker process without a daemon round-trip.

@@ -101,6 +101,10 @@ const (
 	ToolGetSchema              = "get_schema"
 	ToolGetCELRef              = "get_cel_reference"
 
+	// Integration discovery tools
+	ToolSearchIntegrations   = "search_integrations"
+	ToolGetIntegrationSchema = "get_integration_schema"
+
 	// Scenario tools
 	ToolListScenarios  = "list_scenarios"
 	ToolViewScenario   = "view_scenario"
@@ -136,6 +140,8 @@ var AllToolNames = []string{
 	ToolCreateWorkflow, ToolEditWorkflow, ToolWriteWorkflow,
 	// Workflow discovery
 	ToolListWorkflows, ToolGetWorkflow, ToolGetWorkflowSuggestions, ToolListPresets, ToolGetPreset, ToolGetSchema, ToolGetCELRef,
+	// Integration discovery
+	ToolSearchIntegrations, ToolGetIntegrationSchema,
 	// Integration manifests (generated from internal/integrations/catalog)
 	"http__request",
 	// Scenarios

@@ -5,15 +5,18 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
-import { fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
-import type { Message } from "@bufbuild/protobuf";
+import type { GenEnum, GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
+import { enumDesc, fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
+import { file_google_protobuf_struct } from "@bufbuild/protobuf/wkt";
+import type { ConnectionAuthKind, IntegrationAuthMethod, IntegrationConnectionParam } from "./connection_pb";
+import { file_reliant_v1_connection } from "./connection_pb";
+import type { JsonObject, Message } from "@bufbuild/protobuf";
 
 /**
  * Describes the file reliant/v1/catalog.proto.
  */
 export const file_reliant_v1_catalog: GenFile = /*@__PURE__*/
-  fileDesc("ChhyZWxpYW50L3YxL2NhdGFsb2cucHJvdG8SCnJlbGlhbnQudjEi1gIKCU1vZGVsSW5mbxIKCgJpZBgBIAEoCRIMCgRuYW1lGAIgASgJEhAKCHByb3ZpZGVyGAMgASgJEhQKDGNhcGFiaWxpdGllcxgEIAMoCRIWCg5jb250ZXh0X3dpbmRvdxgFIAEoAxIaChJkZWZhdWx0X21heF90b2tlbnMYBiABKAMSEgoKY2FuX3JlYXNvbhgJIAEoCBIcChRzdXBwb3J0c19hdHRhY2htZW50cxgKIAEoCBIRCglkcml2ZXJfaWQYCyABKAkSDAoEdGFncxgMIAMoCRIWCg5zdXBwb3J0c190b29scxgNIAEoCBIYChBzdXBwb3J0c19jYWNoaW5nGA4gASgIEiEKGXN1cHBvcnRlZF90aGlua2luZ19sZXZlbHMYDyADKAlKBAgHEAhKBAgIEAlSDmNvc3RfcGVyXzFtX2luUg9jb3N0X3Blcl8xbV9vdXQiEwoRTGlzdE1vZGVsc1JlcXVlc3QidQoSTGlzdE1vZGVsc1Jlc3BvbnNlEiUKBm1vZGVscxgBIAMoCzIVLnJlbGlhbnQudjEuTW9kZWxJbmZvEg0KBXRvdGFsGAIgASgFEikKBXRpZXJzGAMgAygLMhoucmVsaWFudC52MS5UaWVyUmVzb2x1dGlvbiJHCg5UaWVyUmVzb2x1dGlvbhILCgN0YWcYASABKAkSEAoIbW9kZWxfaWQYAiABKAkSFgoOdGhpbmtpbmdfbGV2ZWwYAyABKAkiLwobTGlzdE1vZGVsc0J5UHJvdmlkZXJSZXF1ZXN0EhAKCHByb3ZpZGVyGAEgASgJIkUKHExpc3RNb2RlbHNCeVByb3ZpZGVyUmVzcG9uc2USJQoGbW9kZWxzGAEgAygLMhUucmVsaWFudC52MS5Nb2RlbEluZm8izwIKEkF2YWlsYWJsZU1vZGVsSW5mbxIKCgJpZBgBIAEoCRIUCgxkaXNwbGF5X25hbWUYAiABKAkSEAoIcHJvdmlkZXIYAyABKAkSDgoGZmFtaWx5GAQgASgJEhEKCWFwaV9tb2RlbBgFIAEoCRIWCg5jb250ZXh0X3dpbmRvdxgGIAEoAxIaChJkZWZhdWx0X21heF90b2tlbnMYByABKAMSEgoKY2FuX3JlYXNvbhgKIAEoCBIcChRzdXBwb3J0c19hdHRhY2htZW50cxgLIAEoCBIWCg5zdXBwb3J0c190b29scxgMIAEoCBIYChBzdXBwb3J0c19jYWNoaW5nGA0gASgIEgwKBHRhZ3MYDiADKAkSDwoHZW5hYmxlZBgPIAEoCEoECAgQCUoECAkQClIOY29zdF9wZXJfMW1faW5SD2Nvc3RfcGVyXzFtX291dCIcChpMaXN0QXZhaWxhYmxlTW9kZWxzUmVxdWVzdCJNChtMaXN0QXZhaWxhYmxlTW9kZWxzUmVzcG9uc2USLgoGbW9kZWxzGAEgAygLMh4ucmVsaWFudC52MS5BdmFpbGFibGVNb2RlbEluZm8iPwoIVG9vbEluZm8SDAoEbmFtZRgBIAEoCRITCgtkZXNjcmlwdGlvbhgCIAEoCRIQCghjYXRlZ29yeRgDIAEoCSISChBMaXN0VG9vbHNSZXF1ZXN0IkcKEUxpc3RUb29sc1Jlc3BvbnNlEiMKBXRvb2xzGAEgAygLMhQucmVsaWFudC52MS5Ub29sSW5mbxINCgV0b3RhbBgCIAEoBSKKAwoOTm9kZUlucHV0RmllbGQSDAoEbmFtZRgBIAEoCRIMCgR0eXBlGAIgASgJEhMKC2Rlc2NyaXB0aW9uGAMgASgJEhAKCHJlcXVpcmVkGAQgASgIEhUKDWRlZmF1bHRfdmFsdWUYBSABKAkSEwoLZW51bV92YWx1ZXMYBiADKAkSDwoHdWlfaGludBgHIAEoCRIWCgltaW5fdmFsdWUYCCABKAFIAIgBARIWCgltYXhfdmFsdWUYCSABKAFIAYgBARINCgVsYWJlbBgKIAEoCRIYCgtwbGFjZWhvbGRlchgLIAEoCUgCiAEBEhsKE3Zpc2liaWxpdHlfY29udGV4dHMYDCADKAkSHgoRY2xlYW51cF9zZW1hbnRpY3MYDSABKAlIA4gBARIOCgZpc19jZWwYDiABKAgSEAoIY2F0ZWdvcnkYDyABKAlCDAoKX21pbl92YWx1ZUIMCgpfbWF4X3ZhbHVlQg4KDF9wbGFjZWhvbGRlckIUChJfY2xlYW51cF9zZW1hbnRpY3MiywEKCE5vZGVJbmZvEgoKAmlkGAEgASgJEhQKDGRpc3BsYXlfbmFtZRgCIAEoCRITCgtkZXNjcmlwdGlvbhgDIAEoCRIQCghjYXRlZ29yeRgEIAEoCRIwCgxpbnB1dF9maWVsZHMYBSADKAsyGi5yZWxpYW50LnYxLk5vZGVJbnB1dEZpZWxkEhEKCWljb25faGludBgGIAEoCRIxCg1vdXRwdXRfZmllbGRzGAcgAygLMhoucmVsaWFudC52MS5Ob2RlSW5wdXRGaWVsZCI/CgxOb2RlQ2F0ZWdvcnkSCgoCaWQYASABKAkSFAoMZGlzcGxheV9uYW1lGAIgASgJEg0KBWNvdW50GAMgASgFIj4KEExpc3ROb2Rlc1JlcXVlc3QSEAoIY2F0ZWdvcnkYASABKAkSGAoQaW5jbHVkZV9pbnRlcm5hbBgCIAEoCCJmChFMaXN0Tm9kZXNSZXNwb25zZRIjCgVub2RlcxgBIAMoCzIULnJlbGlhbnQudjEuTm9kZUluZm8SLAoKY2F0ZWdvcmllcxgCIAMoCzIYLnJlbGlhbnQudjEuTm9kZUNhdGVnb3J5IhoKGEdldENFTENvbXBsZXRpb25zUmVxdWVzdCI/CgxDRUxGaWVsZEluZm8SDAoEbmFtZRgBIAEoCRIMCgR0eXBlGAIgASgJEhMKC2Rlc2NyaXB0aW9uGAMgASgJInMKEENFTE5hbWVzcGFjZUluZm8SDAoEbmFtZRgBIAEoCRITCgtkZXNjcmlwdGlvbhgCIAEoCRISCgppc19keW5hbWljGAMgASgIEigKBmZpZWxkcxgEIAMoCzIYLnJlbGlhbnQudjEuQ0VMRmllbGRJbmZvImsKD0NFTEZ1bmN0aW9uSW5mbxIMCgRuYW1lGAEgASgJEhEKCXNpZ25hdHVyZRgCIAEoCRITCgtkZXNjcmlwdGlvbhgDIAEoCRIPCgdleGFtcGxlGAQgASgJEhEKCWlzX21lbWJlchgFIAEoCCJoChNDRUxOb2RlT3V0cHV0U2NoZW1hEhEKCW5vZGVfdHlwZRgBIAEoCRIUCgxkaXNwbGF5X25hbWUYAiABKAkSKAoGZmllbGRzGAMgAygLMhgucmVsaWFudC52MS5DRUxGaWVsZEluZm8idQoRQ0VMSGVscGVyVHlwZUluZm8SDAoEbmFtZRgBIAEoCRITCgtkZXNjcmlwdGlvbhgCIAEoCRITCgthY2Nlc3NfcGF0aBgDIAEoCRIoCgZmaWVsZHMYBCADKAsyGC5yZWxpYW50LnYxLkNFTEZpZWxkSW5mbyLwAQoZR2V0Q0VMQ29tcGxldGlvbnNSZXNwb25zZRIwCgpuYW1lc3BhY2VzGAEgAygLMhwucmVsaWFudC52MS5DRUxOYW1lc3BhY2VJbmZvEi4KCWZ1bmN0aW9ucxgCIAMoCzIbLnJlbGlhbnQudjEuQ0VMRnVuY3Rpb25JbmZvEjwKE25vZGVfb3V0cHV0X3NjaGVtYXMYAyADKAsyHy5yZWxpYW50LnYxLkNFTE5vZGVPdXRwdXRTY2hlbWESMwoMaGVscGVyX3R5cGVzGAQgAygLMh0ucmVsaWFudC52MS5DRUxIZWxwZXJUeXBlSW5mbzKyBAoOQ2F0YWxvZ1NlcnZpY2USTQoKTGlzdE1vZGVscxIdLnJlbGlhbnQudjEuTGlzdE1vZGVsc1JlcXVlc3QaHi5yZWxpYW50LnYxLkxpc3RNb2RlbHNSZXNwb25zZSIAEmsKFExpc3RNb2RlbHNCeVByb3ZpZGVyEicucmVsaWFudC52MS5MaXN0TW9kZWxzQnlQcm92aWRlclJlcXVlc3QaKC5yZWxpYW50LnYxLkxpc3RNb2RlbHNCeVByb3ZpZGVyUmVzcG9uc2UiABJoChNMaXN0QXZhaWxhYmxlTW9kZWxzEiYucmVsaWFudC52MS5MaXN0QXZhaWxhYmxlTW9kZWxzUmVxdWVzdBonLnJlbGlhbnQudjEuTGlzdEF2YWlsYWJsZU1vZGVsc1Jlc3BvbnNlIgASSgoJTGlzdFRvb2xzEhwucmVsaWFudC52MS5MaXN0VG9vbHNSZXF1ZXN0Gh0ucmVsaWFudC52MS5MaXN0VG9vbHNSZXNwb25zZSIAEkoKCUxpc3ROb2RlcxIcLnJlbGlhbnQudjEuTGlzdE5vZGVzUmVxdWVzdBodLnJlbGlhbnQudjEuTGlzdE5vZGVzUmVzcG9uc2UiABJiChFHZXRDRUxDb21wbGV0aW9ucxIkLnJlbGlhbnQudjEuR2V0Q0VMQ29tcGxldGlvbnNSZXF1ZXN0GiUucmVsaWFudC52MS5HZXRDRUxDb21wbGV0aW9uc1Jlc3BvbnNlIgBCOlo4Z2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vcmVsaWFudC92MTtyZWxpYW50djFiBnByb3RvMw");
+  fileDesc("ChhyZWxpYW50L3YxL2NhdGFsb2cucHJvdG8SCnJlbGlhbnQudjEi1gIKCU1vZGVsSW5mbxIKCgJpZBgBIAEoCRIMCgRuYW1lGAIgASgJEhAKCHByb3ZpZGVyGAMgASgJEhQKDGNhcGFiaWxpdGllcxgEIAMoCRIWCg5jb250ZXh0X3dpbmRvdxgFIAEoAxIaChJkZWZhdWx0X21heF90b2tlbnMYBiABKAMSEgoKY2FuX3JlYXNvbhgJIAEoCBIcChRzdXBwb3J0c19hdHRhY2htZW50cxgKIAEoCBIRCglkcml2ZXJfaWQYCyABKAkSDAoEdGFncxgMIAMoCRIWCg5zdXBwb3J0c190b29scxgNIAEoCBIYChBzdXBwb3J0c19jYWNoaW5nGA4gASgIEiEKGXN1cHBvcnRlZF90aGlua2luZ19sZXZlbHMYDyADKAlKBAgHEAhKBAgIEAlSDmNvc3RfcGVyXzFtX2luUg9jb3N0X3Blcl8xbV9vdXQiEwoRTGlzdE1vZGVsc1JlcXVlc3QidQoSTGlzdE1vZGVsc1Jlc3BvbnNlEiUKBm1vZGVscxgBIAMoCzIVLnJlbGlhbnQudjEuTW9kZWxJbmZvEg0KBXRvdGFsGAIgASgFEikKBXRpZXJzGAMgAygLMhoucmVsaWFudC52MS5UaWVyUmVzb2x1dGlvbiJHCg5UaWVyUmVzb2x1dGlvbhILCgN0YWcYASABKAkSEAoIbW9kZWxfaWQYAiABKAkSFgoOdGhpbmtpbmdfbGV2ZWwYAyABKAkiLwobTGlzdE1vZGVsc0J5UHJvdmlkZXJSZXF1ZXN0EhAKCHByb3ZpZGVyGAEgASgJIkUKHExpc3RNb2RlbHNCeVByb3ZpZGVyUmVzcG9uc2USJQoGbW9kZWxzGAEgAygLMhUucmVsaWFudC52MS5Nb2RlbEluZm8izwIKEkF2YWlsYWJsZU1vZGVsSW5mbxIKCgJpZBgBIAEoCRIUCgxkaXNwbGF5X25hbWUYAiABKAkSEAoIcHJvdmlkZXIYAyABKAkSDgoGZmFtaWx5GAQgASgJEhEKCWFwaV9tb2RlbBgFIAEoCRIWCg5jb250ZXh0X3dpbmRvdxgGIAEoAxIaChJkZWZhdWx0X21heF90b2tlbnMYByABKAMSEgoKY2FuX3JlYXNvbhgKIAEoCBIcChRzdXBwb3J0c19hdHRhY2htZW50cxgLIAEoCBIWCg5zdXBwb3J0c190b29scxgMIAEoCBIYChBzdXBwb3J0c19jYWNoaW5nGA0gASgIEgwKBHRhZ3MYDiADKAkSDwoHZW5hYmxlZBgPIAEoCEoECAgQCUoECAkQClIOY29zdF9wZXJfMW1faW5SD2Nvc3RfcGVyXzFtX291dCIcChpMaXN0QXZhaWxhYmxlTW9kZWxzUmVxdWVzdCJNChtMaXN0QXZhaWxhYmxlTW9kZWxzUmVzcG9uc2USLgoGbW9kZWxzGAEgAygLMh4ucmVsaWFudC52MS5BdmFpbGFibGVNb2RlbEluZm8iPwoIVG9vbEluZm8SDAoEbmFtZRgBIAEoCRITCgtkZXNjcmlwdGlvbhgCIAEoCRIQCghjYXRlZ29yeRgDIAEoCSISChBMaXN0VG9vbHNSZXF1ZXN0IkcKEUxpc3RUb29sc1Jlc3BvbnNlEiMKBXRvb2xzGAEgAygLMhQucmVsaWFudC52MS5Ub29sSW5mbxINCgV0b3RhbBgCIAEoBSKKAwoOTm9kZUlucHV0RmllbGQSDAoEbmFtZRgBIAEoCRIMCgR0eXBlGAIgASgJEhMKC2Rlc2NyaXB0aW9uGAMgASgJEhAKCHJlcXVpcmVkGAQgASgIEhUKDWRlZmF1bHRfdmFsdWUYBSABKAkSEwoLZW51bV92YWx1ZXMYBiADKAkSDwoHdWlfaGludBgHIAEoCRIWCgltaW5fdmFsdWUYCCABKAFIAIgBARIWCgltYXhfdmFsdWUYCSABKAFIAYgBARINCgVsYWJlbBgKIAEoCRIYCgtwbGFjZWhvbGRlchgLIAEoCUgCiAEBEhsKE3Zpc2liaWxpdHlfY29udGV4dHMYDCADKAkSHgoRY2xlYW51cF9zZW1hbnRpY3MYDSABKAlIA4gBARIOCgZpc19jZWwYDiABKAgSEAoIY2F0ZWdvcnkYDyABKAlCDAoKX21pbl92YWx1ZUIMCgpfbWF4X3ZhbHVlQg4KDF9wbGFjZWhvbGRlckIUChJfY2xlYW51cF9zZW1hbnRpY3MiywEKCE5vZGVJbmZvEgoKAmlkGAEgASgJEhQKDGRpc3BsYXlfbmFtZRgCIAEoCRITCgtkZXNjcmlwdGlvbhgDIAEoCRIQCghjYXRlZ29yeRgEIAEoCRIwCgxpbnB1dF9maWVsZHMYBSADKAsyGi5yZWxpYW50LnYxLk5vZGVJbnB1dEZpZWxkEhEKCWljb25faGludBgGIAEoCRIxCg1vdXRwdXRfZmllbGRzGAcgAygLMhoucmVsaWFudC52MS5Ob2RlSW5wdXRGaWVsZCI/CgxOb2RlQ2F0ZWdvcnkSCgoCaWQYASABKAkSFAoMZGlzcGxheV9uYW1lGAIgASgJEg0KBWNvdW50GAMgASgFIj4KEExpc3ROb2Rlc1JlcXVlc3QSEAoIY2F0ZWdvcnkYASABKAkSGAoQaW5jbHVkZV9pbnRlcm5hbBgCIAEoCCJmChFMaXN0Tm9kZXNSZXNwb25zZRIjCgVub2RlcxgBIAMoCzIULnJlbGlhbnQudjEuTm9kZUluZm8SLAoKY2F0ZWdvcmllcxgCIAMoCzIYLnJlbGlhbnQudjEuTm9kZUNhdGVnb3J5IhoKGEdldENFTENvbXBsZXRpb25zUmVxdWVzdCI/CgxDRUxGaWVsZEluZm8SDAoEbmFtZRgBIAEoCRIMCgR0eXBlGAIgASgJEhMKC2Rlc2NyaXB0aW9uGAMgASgJInMKEENFTE5hbWVzcGFjZUluZm8SDAoEbmFtZRgBIAEoCRITCgtkZXNjcmlwdGlvbhgCIAEoCRISCgppc19keW5hbWljGAMgASgIEigKBmZpZWxkcxgEIAMoCzIYLnJlbGlhbnQudjEuQ0VMRmllbGRJbmZvImsKD0NFTEZ1bmN0aW9uSW5mbxIMCgRuYW1lGAEgASgJEhEKCXNpZ25hdHVyZRgCIAEoCRITCgtkZXNjcmlwdGlvbhgDIAEoCRIPCgdleGFtcGxlGAQgASgJEhEKCWlzX21lbWJlchgFIAEoCCJoChNDRUxOb2RlT3V0cHV0U2NoZW1hEhEKCW5vZGVfdHlwZRgBIAEoCRIUCgxkaXNwbGF5X25hbWUYAiABKAkSKAoGZmllbGRzGAMgAygLMhgucmVsaWFudC52MS5DRUxGaWVsZEluZm8idQoRQ0VMSGVscGVyVHlwZUluZm8SDAoEbmFtZRgBIAEoCRITCgtkZXNjcmlwdGlvbhgCIAEoCRITCgthY2Nlc3NfcGF0aBgDIAEoCRIoCgZmaWVsZHMYBCADKAsyGC5yZWxpYW50LnYxLkNFTEZpZWxkSW5mbyLwAQoZR2V0Q0VMQ29tcGxldGlvbnNSZXNwb25zZRIwCgpuYW1lc3BhY2VzGAEgAygLMhwucmVsaWFudC52MS5DRUxOYW1lc3BhY2VJbmZvEi4KCWZ1bmN0aW9ucxgCIAMoCzIbLnJlbGlhbnQudjEuQ0VMRnVuY3Rpb25JbmZvEjwKE25vZGVfb3V0cHV0X3NjaGVtYXMYAyADKAsyHy5yZWxpYW50LnYxLkNFTE5vZGVPdXRwdXRTY2hlbWESMwoMaGVscGVyX3R5cGVzGAQgAygLMh0ucmVsaWFudC52MS5DRUxIZWxwZXJUeXBlSW5mbyJnChJDYXRhbG9nSW50ZWdyYXRpb24SCgoCaWQYASABKAkSDwoHdmVyc2lvbhgCIAEoBRIUCgxkaXNwbGF5X25hbWUYAyABKAkSDAoEaWNvbhgEIAEoCRIQCghjYXRlZ29yeRgFIAEoCSKrAgoTQ2F0YWxvZ0VudHJ5U3VtbWFyeRILCgNyZWYYASABKAkSKgoEa2luZBgCIAEoDjIcLnJlbGlhbnQudjEuQ2F0YWxvZ0VudHJ5S2luZBIKCgJpZBgDIAEoCRIUCgxkaXNwbGF5X25hbWUYBCABKAkSDwoHc3VtbWFyeRgFIAEoCRIzCgtpbnRlZ3JhdGlvbhgGIAEoCzIeLnJlbGlhbnQudjEuQ2F0YWxvZ0ludGVncmF0aW9uEjIKCmF1dGhfa2luZHMYByADKA4yHi5yZWxpYW50LnYxLkNvbm5lY3Rpb25BdXRoS2luZBIbChNjb25uZWN0aW9uX3JlcXVpcmVkGAggASgIEhEKCWNvbm5lY3RlZBgJIAEoCBIPCgdtdXRhdGVzGAogASgIIiwKDENhdGFsb2dGYWNldBINCgV2YWx1ZRgBIAEoCRINCgVjb3VudBgCIAEoBSK4AQoUU2VhcmNoQ2F0YWxvZ1JlcXVlc3QSDQoFcXVlcnkYASABKAkSKwoFa2luZHMYAiADKA4yHC5yZWxpYW50LnYxLkNhdGFsb2dFbnRyeUtpbmQSEAoIY2F0ZWdvcnkYAyABKAkSEwoLaW50ZWdyYXRpb24YBCABKAkSFgoOY29ubmVjdGVkX29ubHkYBSABKAgSEQoJcGFnZV9zaXplGAYgASgFEhIKCnBhZ2VfdG9rZW4YByABKAkiqQEKFVNlYXJjaENhdGFsb2dSZXNwb25zZRIwCgdlbnRyaWVzGAEgAygLMh8ucmVsaWFudC52MS5DYXRhbG9nRW50cnlTdW1tYXJ5EhcKD25leHRfcGFnZV90b2tlbhgCIAEoCRISCgp0b3RhbF9zaXplGAMgASgFEjEKD2NhdGVnb3J5X2ZhY2V0cxgEIAMoCzIYLnJlbGlhbnQudjEuQ2F0YWxvZ0ZhY2V0IiUKFkdldENhdGFsb2dFbnRyeVJlcXVlc3QSCwoDcmVmGAEgASgJIkIKF0dldENhdGFsb2dFbnRyeVJlc3BvbnNlEicKBWVudHJ5GAEgASgLMhgucmVsaWFudC52MS5DYXRhbG9nRW50cnkitwIKDENhdGFsb2dFbnRyeRIwCgdzdW1tYXJ5GAEgASgLMh8ucmVsaWFudC52MS5DYXRhbG9nRW50cnlTdW1tYXJ5EhMKC2Rlc2NyaXB0aW9uGAIgASgJEi4KDXBhcmFtc19zY2hlbWEYAyABKAsyFy5nb29nbGUucHJvdG9idWYuU3RydWN0Ei4KDW91dHB1dF9zY2hlbWEYBCABKAsyFy5nb29nbGUucHJvdG9idWYuU3RydWN0Ei8KDnBheWxvYWRfc2NoZW1hGAUgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdBI8Cgpjb25uZWN0aW9uGAYgASgLMigucmVsaWFudC52MS5DYXRhbG9nQ29ubmVjdGlvblJlcXVpcmVtZW50EhEKCXRvb2xfbmFtZRgHIAEoCSKnAQocQ2F0YWxvZ0Nvbm5lY3Rpb25SZXF1aXJlbWVudBIQCghyZXF1aXJlZBgBIAEoCBIyCgdtZXRob2RzGAIgAygLMiEucmVsaWFudC52MS5JbnRlZ3JhdGlvbkF1dGhNZXRob2QSQQoRY29ubmVjdGlvbl9wYXJhbXMYAyADKAsyJi5yZWxpYW50LnYxLkludGVncmF0aW9uQ29ubmVjdGlvblBhcmFtKnUKEENhdGFsb2dFbnRyeUtpbmQSIgoeQ0FUQUxPR19FTlRSWV9LSU5EX1VOU1BFQ0lGSUVEEAASHQoZQ0FUQUxPR19FTlRSWV9LSU5EX0FDVElPThABEh4KGkNBVEFMT0dfRU5UUllfS0lORF9UUklHR0VSEAIy6AUKDkNhdGFsb2dTZXJ2aWNlEk0KCkxpc3RNb2RlbHMSHS5yZWxpYW50LnYxLkxpc3RNb2RlbHNSZXF1ZXN0Gh4ucmVsaWFudC52MS5MaXN0TW9kZWxzUmVzcG9uc2UiABJrChRMaXN0TW9kZWxzQnlQcm92aWRlchInLnJlbGlhbnQudjEuTGlzdE1vZGVsc0J5UHJvdmlkZXJSZXF1ZXN0GigucmVsaWFudC52MS5MaXN0TW9kZWxzQnlQcm92aWRlclJlc3BvbnNlIgASaAoTTGlzdEF2YWlsYWJsZU1vZGVscxImLnJlbGlhbnQudjEuTGlzdEF2YWlsYWJsZU1vZGVsc1JlcXVlc3QaJy5yZWxpYW50LnYxLkxpc3RBdmFpbGFibGVNb2RlbHNSZXNwb25zZSIAEkoKCUxpc3RUb29scxIcLnJlbGlhbnQudjEuTGlzdFRvb2xzUmVxdWVzdBodLnJlbGlhbnQudjEuTGlzdFRvb2xzUmVzcG9uc2UiABJKCglMaXN0Tm9kZXMSHC5yZWxpYW50LnYxLkxpc3ROb2Rlc1JlcXVlc3QaHS5yZWxpYW50LnYxLkxpc3ROb2Rlc1Jlc3BvbnNlIgASYgoRR2V0Q0VMQ29tcGxldGlvbnMSJC5yZWxpYW50LnYxLkdldENFTENvbXBsZXRpb25zUmVxdWVzdBolLnJlbGlhbnQudjEuR2V0Q0VMQ29tcGxldGlvbnNSZXNwb25zZSIAElYKDVNlYXJjaENhdGFsb2cSIC5yZWxpYW50LnYxLlNlYXJjaENhdGFsb2dSZXF1ZXN0GiEucmVsaWFudC52MS5TZWFyY2hDYXRhbG9nUmVzcG9uc2UiABJcCg9HZXRDYXRhbG9nRW50cnkSIi5yZWxpYW50LnYxLkdldENhdGFsb2dFbnRyeVJlcXVlc3QaIy5yZWxpYW50LnYxLkdldENhdGFsb2dFbnRyeVJlc3BvbnNlIgBCOlo4Z2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vcmVsaWFudC92MTtyZWxpYW50djFiBnByb3RvMw", [file_google_protobuf_struct, file_reliant_v1_connection]);
 
 /**
  * ModelInfo represents information about an LLM model
@@ -961,6 +964,439 @@ export const GetCELCompletionsResponseSchema: GenMessage<GetCELCompletionsRespon
   messageDesc(file_reliant_v1_catalog, 23);
 
 /**
+ * CatalogIntegration is the integration an entry belongs to.
+ *
+ * @generated from message reliant.v1.CatalogIntegration
+ */
+export type CatalogIntegration = Message<"reliant.v1.CatalogIntegration"> & {
+  /**
+   * Id is the integration id, e.g. "github".
+   *
+   * @generated from field: string id = 1;
+   */
+  id: string;
+
+  /**
+   * Version is the manifest major version every ref of this integration pins.
+   *
+   * @generated from field: int32 version = 2;
+   */
+  version: number;
+
+  /**
+   * @generated from field: string display_name = 3;
+   */
+  displayName: string;
+
+  /**
+   * Icon is an icon hint, e.g. "github" or "globe".
+   *
+   * @generated from field: string icon = 4;
+   */
+  icon: string;
+
+  /**
+   * Category groups integrations, e.g. "engineering" or "core".
+   *
+   * @generated from field: string category = 5;
+   */
+  category: string;
+};
+
+/**
+ * Describes the message reliant.v1.CatalogIntegration.
+ * Use `create(CatalogIntegrationSchema)` to create a new message.
+ */
+export const CatalogIntegrationSchema: GenMessage<CatalogIntegration> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_catalog, 24);
+
+/**
+ * CatalogEntrySummary is one search result: enough to render a picker row.
+ *
+ * @generated from message reliant.v1.CatalogEntrySummary
+ */
+export type CatalogEntrySummary = Message<"reliant.v1.CatalogEntrySummary"> & {
+  /**
+   * Ref names the entry: "<integration>/<id>@<major>", e.g.
+   * "github/issue.create@1". An action node's `uses` is this ref.
+   *
+   * @generated from field: string ref = 1;
+   */
+  ref: string;
+
+  /**
+   * @generated from field: reliant.v1.CatalogEntryKind kind = 2;
+   */
+  kind: CatalogEntryKind;
+
+  /**
+   * Id is the action or trigger id within its integration, e.g. "issue.create".
+   *
+   * @generated from field: string id = 3;
+   */
+  id: string;
+
+  /**
+   * @generated from field: string display_name = 4;
+   */
+  displayName: string;
+
+  /**
+   * Summary is one line for a picker or a search result.
+   *
+   * @generated from field: string summary = 5;
+   */
+  summary: string;
+
+  /**
+   * @generated from field: reliant.v1.CatalogIntegration integration = 6;
+   */
+  integration?: CatalogIntegration | undefined;
+
+  /**
+   * AuthKinds are the ways to connect the integration, most preferred first.
+   * Empty when it takes no credential.
+   *
+   * @generated from field: repeated reliant.v1.ConnectionAuthKind auth_kinds = 7;
+   */
+  authKinds: ConnectionAuthKind[];
+
+  /**
+   * ConnectionRequired is false when the integration takes no credential or
+   * makes one optional (the generic HTTP action).
+   *
+   * @generated from field: bool connection_required = 8;
+   */
+  connectionRequired: boolean;
+
+  /**
+   * Connected reports whether the caller can use the entry now without
+   * connecting anything first: no connection is required, the caller has an
+   * active connection to the integration, or a delegated authority serves it
+   * on this deployment (GitHub through the control plane).
+   *
+   * @generated from field: bool connected = 9;
+   */
+  connected: boolean;
+
+  /**
+   * Mutates is set on an action that changes external state.
+   *
+   * @generated from field: bool mutates = 10;
+   */
+  mutates: boolean;
+};
+
+/**
+ * Describes the message reliant.v1.CatalogEntrySummary.
+ * Use `create(CatalogEntrySummarySchema)` to create a new message.
+ */
+export const CatalogEntrySummarySchema: GenMessage<CatalogEntrySummary> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_catalog, 25);
+
+/**
+ * CatalogFacet counts the matches that carry one value of a facet.
+ *
+ * @generated from message reliant.v1.CatalogFacet
+ */
+export type CatalogFacet = Message<"reliant.v1.CatalogFacet"> & {
+  /**
+   * @generated from field: string value = 1;
+   */
+  value: string;
+
+  /**
+   * @generated from field: int32 count = 2;
+   */
+  count: number;
+};
+
+/**
+ * Describes the message reliant.v1.CatalogFacet.
+ * Use `create(CatalogFacetSchema)` to create a new message.
+ */
+export const CatalogFacetSchema: GenMessage<CatalogFacet> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_catalog, 26);
+
+/**
+ * @generated from message reliant.v1.SearchCatalogRequest
+ */
+export type SearchCatalogRequest = Message<"reliant.v1.SearchCatalogRequest"> & {
+  /**
+   * Query is free text: words, a ref, or the start of either. Every word
+   * must match an entry (as a word or the start of one) for it to be
+   * returned. Empty matches every entry, so the filters alone browse.
+   * At most 256 bytes.
+   *
+   * @generated from field: string query = 1;
+   */
+  query: string;
+
+  /**
+   * Kinds keeps only entries of these kinds. Empty means every kind.
+   *
+   * @generated from field: repeated reliant.v1.CatalogEntryKind kinds = 2;
+   */
+  kinds: CatalogEntryKind[];
+
+  /**
+   * Category keeps only entries of integrations in this category. Empty
+   * means every category.
+   *
+   * @generated from field: string category = 3;
+   */
+  category: string;
+
+  /**
+   * Integration keeps only entries of this integration id. Empty means every
+   * integration.
+   *
+   * @generated from field: string integration = 4;
+   */
+  integration: string;
+
+  /**
+   * ConnectedOnly keeps only entries the caller can use now (see
+   * CatalogEntrySummary.connected).
+   *
+   * @generated from field: bool connected_only = 5;
+   */
+  connectedOnly: boolean;
+
+  /**
+   * PageSize defaults to 20; larger values are capped at 100.
+   *
+   * @generated from field: int32 page_size = 6;
+   */
+  pageSize: number;
+
+  /**
+   * PageToken is a previous response's next_page_token. It is only valid for
+   * the same query and filters.
+   *
+   * @generated from field: string page_token = 7;
+   */
+  pageToken: string;
+};
+
+/**
+ * Describes the message reliant.v1.SearchCatalogRequest.
+ * Use `create(SearchCatalogRequestSchema)` to create a new message.
+ */
+export const SearchCatalogRequestSchema: GenMessage<SearchCatalogRequest> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_catalog, 27);
+
+/**
+ * @generated from message reliant.v1.SearchCatalogResponse
+ */
+export type SearchCatalogResponse = Message<"reliant.v1.SearchCatalogResponse"> & {
+  /**
+   * Entries are the page, best match first.
+   *
+   * @generated from field: repeated reliant.v1.CatalogEntrySummary entries = 1;
+   */
+  entries: CatalogEntrySummary[];
+
+  /**
+   * NextPageToken fetches the next page; empty on the last.
+   *
+   * @generated from field: string next_page_token = 2;
+   */
+  nextPageToken: string;
+
+  /**
+   * TotalSize is how many entries match the query and every filter.
+   *
+   * @generated from field: int32 total_size = 3;
+   */
+  totalSize: number;
+
+  /**
+   * CategoryFacets count the matches per integration category, applying
+   * every filter except category, so a picker can show what each category
+   * would hold. Largest first, then by category.
+   *
+   * @generated from field: repeated reliant.v1.CatalogFacet category_facets = 4;
+   */
+  categoryFacets: CatalogFacet[];
+};
+
+/**
+ * Describes the message reliant.v1.SearchCatalogResponse.
+ * Use `create(SearchCatalogResponseSchema)` to create a new message.
+ */
+export const SearchCatalogResponseSchema: GenMessage<SearchCatalogResponse> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_catalog, 28);
+
+/**
+ * @generated from message reliant.v1.GetCatalogEntryRequest
+ */
+export type GetCatalogEntryRequest = Message<"reliant.v1.GetCatalogEntryRequest"> & {
+  /**
+   * Ref is a CatalogEntrySummary.ref, e.g. "github/user.get@1".
+   *
+   * @generated from field: string ref = 1;
+   */
+  ref: string;
+};
+
+/**
+ * Describes the message reliant.v1.GetCatalogEntryRequest.
+ * Use `create(GetCatalogEntryRequestSchema)` to create a new message.
+ */
+export const GetCatalogEntryRequestSchema: GenMessage<GetCatalogEntryRequest> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_catalog, 29);
+
+/**
+ * @generated from message reliant.v1.GetCatalogEntryResponse
+ */
+export type GetCatalogEntryResponse = Message<"reliant.v1.GetCatalogEntryResponse"> & {
+  /**
+   * @generated from field: reliant.v1.CatalogEntry entry = 1;
+   */
+  entry?: CatalogEntry | undefined;
+};
+
+/**
+ * Describes the message reliant.v1.GetCatalogEntryResponse.
+ * Use `create(GetCatalogEntryResponseSchema)` to create a new message.
+ */
+export const GetCatalogEntryResponseSchema: GenMessage<GetCatalogEntryResponse> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_catalog, 30);
+
+/**
+ * CatalogEntry is one action or trigger type in full.
+ *
+ * @generated from message reliant.v1.CatalogEntry
+ */
+export type CatalogEntry = Message<"reliant.v1.CatalogEntry"> & {
+  /**
+   * @generated from field: reliant.v1.CatalogEntrySummary summary = 1;
+   */
+  summary?: CatalogEntrySummary | undefined;
+
+  /**
+   * Description is the long form an agent or a help panel reads.
+   *
+   * @generated from field: string description = 2;
+   */
+  description: string;
+
+  /**
+   * ParamsSchema is the JSON Schema of an action's parameters, which an
+   * action node's `with:` supplies. Unset for a trigger.
+   *
+   * @generated from field: google.protobuf.Struct params_schema = 3;
+   */
+  paramsSchema?: JsonObject | undefined;
+
+  /**
+   * OutputSchema is the JSON Schema of an action's output data, reachable as
+   * nodes.<id>.data. Unset for a trigger.
+   *
+   * @generated from field: google.protobuf.Struct output_schema = 4;
+   */
+  outputSchema?: JsonObject | undefined;
+
+  /**
+   * PayloadSchema is the JSON Schema of a trigger's event, reachable as
+   * trigger.payload. Unset for an action.
+   *
+   * @generated from field: google.protobuf.Struct payload_schema = 5;
+   */
+  payloadSchema?: JsonObject | undefined;
+
+  /**
+   * @generated from field: reliant.v1.CatalogConnectionRequirement connection = 6;
+   */
+  connection?: CatalogConnectionRequirement | undefined;
+
+  /**
+   * ToolName is the agent tool this action is also exposed as (for example
+   * "github__user_get"); empty when it is not exposed to agents.
+   *
+   * @generated from field: string tool_name = 7;
+   */
+  toolName: string;
+};
+
+/**
+ * Describes the message reliant.v1.CatalogEntry.
+ * Use `create(CatalogEntrySchema)` to create a new message.
+ */
+export const CatalogEntrySchema: GenMessage<CatalogEntry> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_catalog, 31);
+
+/**
+ * CatalogConnectionRequirement is what using an entry asks of a connection.
+ *
+ * @generated from message reliant.v1.CatalogConnectionRequirement
+ */
+export type CatalogConnectionRequirement = Message<"reliant.v1.CatalogConnectionRequirement"> & {
+  /**
+   * Required is false when the integration takes no credential or makes one
+   * optional.
+   *
+   * @generated from field: bool required = 1;
+   */
+  required: boolean;
+
+  /**
+   * Methods are the ways to connect, most preferred first, each with whether
+   * this deployment offers it (the shape ListIntegrations returns).
+   *
+   * @generated from field: repeated reliant.v1.IntegrationAuthMethod methods = 2;
+   */
+  methods: IntegrationAuthMethod[];
+
+  /**
+   * ConnectionParams are the non-secret settings a new connection asks for.
+   *
+   * @generated from field: repeated reliant.v1.IntegrationConnectionParam connection_params = 3;
+   */
+  connectionParams: IntegrationConnectionParam[];
+};
+
+/**
+ * Describes the message reliant.v1.CatalogConnectionRequirement.
+ * Use `create(CatalogConnectionRequirementSchema)` to create a new message.
+ */
+export const CatalogConnectionRequirementSchema: GenMessage<CatalogConnectionRequirement> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_catalog, 32);
+
+/**
+ * CatalogEntryKind is what an integration catalog entry describes.
+ *
+ * @generated from enum reliant.v1.CatalogEntryKind
+ */
+export enum CatalogEntryKind {
+  /**
+   * @generated from enum value: CATALOG_ENTRY_KIND_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * ACTION is an operation a workflow `action` node runs (`uses: <ref>`).
+   *
+   * @generated from enum value: CATALOG_ENTRY_KIND_ACTION = 1;
+   */
+  ACTION = 1,
+
+  /**
+   * TRIGGER is an event type that can start a run.
+   *
+   * @generated from enum value: CATALOG_ENTRY_KIND_TRIGGER = 2;
+   */
+  TRIGGER = 2,
+}
+
+/**
+ * Describes the enum reliant.v1.CatalogEntryKind.
+ */
+export const CatalogEntryKindSchema: GenEnum<CatalogEntryKind> = /*@__PURE__*/
+  enumDesc(file_reliant_v1_catalog, 0);
+
+/**
  * CatalogService provides discovery endpoints for models, tools, and activities
  *
  * @generated from service reliant.v1.CatalogService
@@ -1027,6 +1463,33 @@ export const CatalogService: GenService<{
     methodKind: "unary";
     input: typeof GetCELCompletionsRequestSchema;
     output: typeof GetCELCompletionsResponseSchema;
+  },
+  /**
+   * SearchCatalog searches the integration catalog: every action and trigger
+   * type of every embedded integration manifest, ranked for the query and
+   * marked with whether the caller can use it now. It returns lightweight
+   * entries one page at a time and never the whole catalog; GetCatalogEntry
+   * returns one entry's schemas.
+   *
+   * @generated from rpc reliant.v1.CatalogService.SearchCatalog
+   */
+  searchCatalog: {
+    methodKind: "unary";
+    input: typeof SearchCatalogRequestSchema;
+    output: typeof SearchCatalogResponseSchema;
+  },
+  /**
+   * GetCatalogEntry returns one action or trigger type in full: its
+   * description, its params and output (or trigger payload) JSON Schemas, and
+   * what a connection to its integration requires. An unknown ref is
+   * NOT_FOUND.
+   *
+   * @generated from rpc reliant.v1.CatalogService.GetCatalogEntry
+   */
+  getCatalogEntry: {
+    methodKind: "unary";
+    input: typeof GetCatalogEntryRequestSchema;
+    output: typeof GetCatalogEntryResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_reliant_v1_catalog, 0);

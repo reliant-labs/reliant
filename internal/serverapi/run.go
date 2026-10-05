@@ -210,6 +210,10 @@ func Run(ctx context.Context, opts Options) error {
 	if err != nil {
 		return err
 	}
+	catalogSearch, err := wireCatalogSearch(repo)
+	if err != nil {
+		return err
+	}
 
 	// API key provider (allows LLM drivers to resolve per-user keys from DB)
 	drivers.InitializeAPIKeyProvider(repo)
@@ -366,12 +370,13 @@ func Run(ctx context.Context, opts Options) error {
 	bgProvider := services.NewDBBackgroundProcessProvider(repo, daemonRouter)
 
 	grpcSrv, err := grpcserver.NewServer(&grpcserver.Config{
-		Port:         opts.GRPCPort,
-		BindAddress:  opts.BindAddress,
-		JWTPublicKey: jwtPublicKey,
-		JWKSURL:      jwksURL,
-		Connections:  connSvc,
-		OAuthRoutes:  oauthRoutes,
+		Port:          opts.GRPCPort,
+		BindAddress:   opts.BindAddress,
+		JWTPublicKey:  jwtPublicKey,
+		JWKSURL:       jwksURL,
+		Connections:   connSvc,
+		CatalogSearch: catalogSearch,
+		OAuthRoutes:   oauthRoutes,
 		// Connector/MCP surface. PUBLIC_URL is this server's externally
 		// reachable base URL, used to tell a user where to point a
 		// third-party MCP client and to build the OAuth discovery document.
