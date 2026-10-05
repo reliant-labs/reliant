@@ -1,0 +1,131 @@
+
+>> 13:15:03.357 347
+POST /api/v1/chat/completions HTTP/1.1
+Host: openrouter.ai
+User-Agent: Go-http-client/1.1
+Content-Length: 438
+Anthropic-Beta: prompt-caching-2024-07-31
+Authorization: [redacted]
+Content-Type: application/json
+Http-Referer: https://github.com/reliant-labs/reliant
+X-Title: Reliant
+X-User: reliant-cf6d2b7ed8fa40a8
+Accept-Encoding: gzip
+
+
+>> 13:15:03.357 438
+{"max_tokens":128000,"messages":[{"content":[{"cache_control":{"ttl":"1h","type":"ephemeral"},"text":"Compute the sum of all integers from 1 to 1000 inclusive that are divisible by exactly one of 7 or 11 (divisible by 7 or by 11, but not by both). Reply with only the final number, nothing else.","type":"text"}],"role":"user"}],"model":"anthropic/claude-opus-5.5","stream":true,"stream_options":{"include_usage":true},"temperature":null}
+<< 13:15:04.634 1039
+HTTP/1.1 200 OK
+Date: Sun, 04 Oct 2026 17:15:04 GMT
+Content-Type: text/event-stream
+Transfer-Encoding: chunked
+Connection: keep-alive
+Server-Timing: cfEdge;dur=3,cfOrigin;dur=0,cfWorker;dur=1264
+Access-Control-Allow-Origin: *
+Cache-Control: no-cache
+X-Generation-Id: gen-1791134103-fY2zxvA2RA477aEwae4h
+access-control-expose-headers: X-Generation-Id,X-Provider-Name,request-id,cf-ray
+set-cookie: __cf_bm=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx; HttpOnly; SameSite=None; Secure; Path=/; Domain=openrouter.ai; Expires=Sun, 04 Oct 2026 17:45:04 GMT
+Permissions-Policy: payment=(self "https://checkout.stripe.com" "https://connect-js.stripe.com" "https://js.stripe.com" "https://*.js.stripe.com" "https://hooks.stripe.com")
+Referrer-Policy: no-referrer, strict-origin-when-cross-origin
+X-Content-Type-Options: nosniff
+Server: cloudflare
+CF-RAY: a455d392bf95e0c1-MIA
+
+
+<< 13:15:05.085 31
+19
+: OPENROUTER PROCESSING
+
+
+
+<< 13:15:05.468 31
+19
+: OPENROUTER PROCESSING
+
+
+
+<< 13:15:05.884 31
+19
+: OPENROUTER PROCESSING
+
+
+
+<< 13:15:06.314 31
+19
+: OPENROUTER PROCESSING
+
+
+
+<< 13:15:06.722 31
+19
+: OPENROUTER PROCESSING
+
+
+
+<< 13:15:07.141 31
+19
+: OPENROUTER PROCESSING
+
+
+
+<< 13:15:07.496 456
+1c1
+data: {"id":"gen-1791134103-fY2zxvA2RA477aEwae4h","object":"chat.completion.chunk","created":1791134103,"model":"anthropic/claude-opus-5.5","provider":"Claude Platform on AWS","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":"I'm computing sums of","reasoning_details":[{"type":"reasoning.text","text":"I'm computing sums of","format":"anthropic-claude-v1","index":0}]},"finish_reason":null,"native_finish_reason":null}]}
+
+
+
+<< 13:15:07.954 31
+19
+: OPENROUTER PROCESSING
+
+
+
+<< 13:15:08.055 756
+2ed
+data: {"id":"gen-1791134103-fY2zxvA2RA477aEwae4h","object":"chat.completion.chunk","created":1791134103,"model":"anthropic/claude-opus-5.5","provider":"Claude Platform on AWS","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":" multiples of 7 and 11 up to 1000, getting 71071 and 45045, then subtracting twice the overlap (multiples of 77, summing to 6006) to find numbers divisible by exactly one,","reasoning_details":[{"type":"reasoning.text","text":" multiples of 7 and 11 up to 1000, getting 71071 and 45045, then subtracting twice the overlap (multiples of 77, summing to 6006) to find numbers divisible by exactly one,","format":"anthropic-claude-v1","index":0}]},"finish_reason":null,"native_finish_reason":null}]}
+
+
+
+<< 13:15:08.109 452
+1bd
+data: {"id":"gen-1791134103-fY2zxvA2RA477aEwae4h","object":"chat.completion.chunk","created":1791134103,"model":"anthropic/claude-opus-5.5","provider":"Claude Platform on AWS","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":" landing on 104104.","reasoning_details":[{"type":"reasoning.text","text":" landing on 104104.","format":"anthropic-claude-v1","index":0}]},"finish_reason":null,"native_finish_reason":null}]}
+
+
+
+<< 13:15:08.125 422
+19f
+data: {"id":"gen-1791134103-fY2zxvA2RA477aEwae4h","object":"chat.completion.chunk","created":1791134103,"model":"anthropic/claude-opus-5.5","provider":"Claude Platform on AWS","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":"\n\n","reasoning_details":[{"type":"reasoning.text","text":"\n\n","format":"anthropic-claude-v1","index":0}]},"finish_reason":null,"native_finish_reason":null}]}
+
+
+
+<< 13:15:08.129 1369
+65d
+data: {"id":"gen-1791134103-fY2zxvA2RA477aEwae4h","object":"chat.completion.chunk","created":1791134103,"model":"anthropic/claude-opus-5.5","provider":"Claude Platform on AWS","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning_details":[{"type":"reasoning.text","signature":"CAQS0AYKEAgSGAI4AUIIdGhpbmtpbmcSDAUPhseWUzvdGn5TEhoMEVMqZmS8H1EmFEJwIjAxobunU0mTN+3SftPg3fJFbm/OKskhN921+8sQ1ijLs9rXqBZvxmuFbTnWkqoTIsEq7QWEQZmJukb43YFQ744cUiveLzOq077MhtmogtPZG8zwsbD0twL3Yb1T3fqqOys4kTjw+H1ZEg8rjP8p/naos9K2PGwZNMyh7X2J3tpuYPRXgmIgg+M9gpNwgF8hfSB7PQbLm/lFV3UUMyXNhBqXbh95JXfXNVhVb6CFuoGcqzskJN+BZFK1SDQzT9GqzSH0TiH8Lv5FE8Hw/HnfX97+dISdglhOIeEKAVEFo+KJ5RBaXTMPs6HwtiKc3/n2yAeINltVNHPEnn1gJSnTqafk1Y/xnlqk9D+u9JdjZaIK0nL4nH6lxVJYEuGa+cqIESAwTLGjwAFZVxmDoPrHYVVH6xtjS55wz079QlQIZKCV/M1GjIX9iTUw+tdD95nVeHWI+InBVvMWiPcGhQyRZmkVSHbHw7qxFw3HsRlKnY70Q4G/w5HckDWEs/c+ovUODGHapR4fwXCR/QahXM45qJsBEIsYIstXL0T9Axxi8PX3kYqoeIQ/Aq4dhyCnog9sal/gK3FzvYVYtlAacFxthGJ9xrFUXwiZp1RqnGcQ76+JCx8X1K+YbF8zrFg5PKN8SRR1iDbJNKpLnd1057QbayqqHXBLE6hJ27TCNcLWtWgUoWdc+7E7ynDnVVzl/jaLZFu7T1CCssxs9x4tBFID1r9WkpQYv70PNamSVo4CDaiPOlRjGzkFUK/Ywjf0HcJtxiriVOxC5tXDYiHY28DRl78BKWiywmwptltxl/v+GaaofZA1GeT6P+caCmBzgGk26FgDIeQUxlzge9HLjqwvK7Ui7XBmc7yC/8i90jCLaEjHb4zRhqmR+RiN2Ft1cvVfQwegC9rXU7BMl/l0AomksZrmVHP1j2mxX3BHpqtmxbf8/kkIGOvimFUON1qJDZ5zcW4kyvxQdJrzoSoViItNjQ1BTp9mBfBjxZqien
+<< 13:15:08.129 267
+2aNl+ZxxmSsm9XXCo1dySWLD9Py2JGJM9mXWJJfKSUVeRF4ckY2SxW0pvZGsbhx3di24vQQBgB.eyJlbmRwb2ludF9zbHVnIjoiYW50aHJvcGljL2NsYXVkZS1vcHVzLTUuNS0yMDI2MDkyMXxjbGF1ZGUtb24tYXdzIn0","format":"anthropic-claude-v1","index":0}]},"finish_reason":null,"native_finish_reason":null}]}
+
+
+
+<< 13:15:08.163 1369
+55f
+data: {"id":"gen-1791134103-fY2zxvA2RA477aEwae4h","object":"chat.completion.chunk","created":1791134103,"model":"anthropic/claude-opus-5.5","provider":"Claude Platform on AWS","choices":[{"index":0,"delta":{"content":"104104","role":"assistant"},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1791134103-fY2zxvA2RA477aEwae4h","object":"chat.completion.chunk","created":1791134103,"model":"anthropic/claude-opus-5.5","provider":"Claude Platform on AWS","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":null},"finish_reason":"stop","native_finish_reason":"end_turn"}]}
+
+data: {"id":"gen-1791134103-fY2zxvA2RA477aEwae4h","object":"chat.completion.chunk","created":1791134103,"model":"anthropic/claude-opus-5.5","provider":"Claude Platform on AWS","service_tier":"default","choices":[{"index":0,"delta":{"content":"","role":"assistant"},"finish_reason":"stop","native_finish_reason":"end_turn"}],"usage":{"prompt_tokens":81,"completion_tokens":149,"total_tokens":230,"cost":0.003304,"is_byok":false,"prompt_tokens_details":{"cached_tokens":0,"cache_write_tokens":0,"audio_tokens":0,"video_tokens":0},"cost_details":{"upstream_inference_cost":0.003304,"upstream_inference_prompt_cost":0.000324,"upstream_inference_completions_cost":0.00298},"completion_tokens_details":{"reasoning_tokens":145,"image_tokens":0,"audio_tok
+<< 13:15:08.163 13
+ens":0}}}
+
+
+
+<< 13:15:08.163 19
+e
+data: [DONE]
+
+
+
+<< 13:15:08.163 5
+0
+

@@ -24,7 +24,9 @@ import (
 )
 
 // captureSSE returns the `data: {...}` lines of the response stream recorded
-// in a research/probe-runs/wire capture. A capture is a sequence of
+// in a probe wire capture (testdata/wire; committed copies of
+// research/probe-runs/wire runs, which *.log keeps out of git, with the
+// Cloudflare cookie values blanked length-for-length). A capture is a sequence of
 // `<< HH:MM:SS.mmm N` (response) / `>> ...` (request) headers, each followed by
 // exactly N raw bytes; the response body is HTTP/1.1 chunked, and SSE lines
 // are split across both segment and chunk boundaries, so reassemble first.
@@ -157,8 +159,8 @@ func TestStreamReasoningText_FromWireCaptures(t *testing.T) {
 		name, model, capture string
 		wantSignature        bool
 	}{
-		{"claude", "anthropic/claude-opus-5.5", "../../../../research/probe-runs/wire/claude-5.5-opus_openrouter/001-openrouter.ai.log", true},
-		{"gemini", "google/gemini-3.5-flash", "../../../../research/probe-runs/wire/gemini-3.5-flash_openrouter/002-openrouter.ai.log", false},
+		{"claude", "anthropic/claude-opus-5.5", "testdata/wire/claude-opus-5.5.capture", true},
+		{"gemini", "google/gemini-3.5-flash", "testdata/wire/gemini-3.5-flash.capture", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			srv := serveCapture(t, captureSSE(t, tc.capture))

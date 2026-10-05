@@ -58,12 +58,10 @@ const ImageGenTag = "image-gen"
 
 // GenerateImageParams describes one image to generate.
 //
-// `model` is a BOUND parameter, not an open one. It is declared here so a
-// human can fix it — to a provider, a tag set, or a specific id — but it is
-// bound by default (see DefaultBindings), so it never appears in the schema
-// the agent sees and the agent can never name a model. That is the same
-// outcome as the parameter not existing at all, which is what this was before,
-// with the configurability added and nothing given away.
+// `model` is OPEN by default: the agent may name an exact image model, and
+// usually picks a `tier` instead. A human can still bind it — to a provider, a
+// tag set, or a specific id — which locks it and removes it from the schema
+// the agent sees.
 type GenerateImageParams struct {
 	// Model optionally names an exact image model. OPEN by default; a human can
 	// still bind it (to an id, or a selector like {tags: [image-gen],
