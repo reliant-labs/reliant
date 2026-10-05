@@ -107,7 +107,7 @@ export function ProxyAuth() {
           <div className="max-w-md w-full bg-background border border-border rounded-lg shadow-xl p-8 space-y-6">
             <div className="flex flex-col items-center gap-4">
               <img src={Logo} alt="Reliant Logo" className="h-8 w-auto" />
-              <h2 className="text-xl font-semibold text-destructive">Workspace Authentication Failed</h2>
+              <h2 className="text-xl font-semibold text-destructive-ink">Workspace Authentication Failed</h2>
             </div>
             <div className="rounded-lg bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 p-4">
               <p className="text-sm text-red-800 dark:text-red-200">{error}</p>

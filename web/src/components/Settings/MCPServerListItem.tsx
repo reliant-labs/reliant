@@ -155,7 +155,7 @@ export function MCPServerListItem({
             </div>
 
             {error && (
-              <div className="mt-2 inline-flex max-w-full items-start gap-1.5 rounded-md border border-destructive/20 bg-destructive/5 px-2 py-1 text-xs text-destructive">
+              <div className="mt-2 inline-flex max-w-full items-start gap-1.5 rounded-md border border-destructive/20 bg-destructive/5 px-2 py-1 text-xs text-destructive-ink">
                 <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                 <span className="line-clamp-2 break-words" data-sentry-mask>{error}</span>
               </div>

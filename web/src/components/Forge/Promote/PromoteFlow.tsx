@@ -85,7 +85,7 @@ export function PromoteFlow({
     return (
       <div
         data-testid="promote-plan-error"
-        className="rounded-lg border border-destructive/40 bg-destructive/10 px-6 py-8 text-center text-sm text-destructive"
+        className="rounded-lg border border-destructive/40 bg-destructive/10 px-6 py-8 text-center text-sm text-destructive-ink"
       >
         Could not reach your daemon to plan this promote: {planError.message}
       </div>
@@ -121,7 +121,7 @@ export function PromoteFlow({
             // re-plan and look.
             <div
               data-testid="promote-apply-error"
-              className="space-y-2 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive"
+              className="space-y-2 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive-ink"
             >
               <p>The promote could not be completed: {applyError.message}</p>
               <p className="text-muted-foreground">
@@ -195,7 +195,7 @@ function AppliedPanel({
 
   return (
     <div className="space-y-4" data-testid="promote-applied">
-      <div className="flex items-center gap-2 text-success">
+      <div className="flex items-center gap-2 text-success-ink">
         <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden="true" />
         <h3 className="text-sm font-medium" data-testid="promote-applied-heading">
           Binding updated — {plan.env} now points at {plan.target?.release ?? plan.release}

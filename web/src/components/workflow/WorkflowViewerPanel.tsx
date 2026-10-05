@@ -83,6 +83,10 @@ interface WorkflowViewerPanelProps {
   compact?: boolean
   /** Hide the fullscreen/expand button */
   hideFullscreen?: boolean
+  /** Hide the viewer's title bar (see WorkflowViewer). */
+  hideHeader?: boolean
+  /** Hide the run-status legend (see WorkflowViewer). */
+  hideLegend?: boolean
   /** Current viewer mode (for inline/side toggle) */
   viewerMode?: 'inline' | 'side'
   /** Callback to toggle between inline and side panel modes */
@@ -100,6 +104,8 @@ export function WorkflowViewerPanel({
   onNodeClick,
   compact = false,
   hideFullscreen = false,
+  hideHeader = false,
+  hideLegend = false,
   viewerMode,
   onToggleViewerMode,
   onExpandedChange,
@@ -258,7 +264,7 @@ export function WorkflowViewerPanel({
         )}
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center">
-            <p className="text-sm text-destructive">{currentLevel.error}</p>
+            <p className="text-sm text-destructive-ink">{currentLevel.error}</p>
             {navStack.length > 1 ? (
               <button
                 onClick={() => handleNavigate(navStack.length - 2)}
@@ -320,6 +326,8 @@ export function WorkflowViewerPanel({
           onViewSubWorkflow={handleViewSubWorkflow}
           compact={compact}
           hideFullscreen={hideFullscreen}
+          hideHeader={hideHeader}
+          hideLegend={hideLegend}
           viewerMode={viewerMode}
           onToggleViewerMode={onToggleViewerMode}
           onExpandedChange={onExpandedChange}

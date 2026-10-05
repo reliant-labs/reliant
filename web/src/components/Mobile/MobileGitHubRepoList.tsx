@@ -142,7 +142,7 @@ export function MobileGitHubRepoList({ onBack }: { onBack: () => void }) {
           </div>
 
           {error && (
-            <p className="shrink-0 px-4 py-2 text-xs text-destructive">{error}</p>
+            <p className="shrink-0 px-4 py-2 text-xs text-destructive-ink">{error}</p>
           )}
 
           {!initialLoaded ? (

@@ -13,9 +13,12 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/triggers"
+	"github.com/reliant-labs/reliant/internal/triggers/runevents"
 	"github.com/reliant-labs/reliant/internal/workflow/builtin"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
+	"go.temporal.io/sdk/activity"
 )
 
 // ============================================================================
@@ -55,6 +58,9 @@ type WorkflowStatusInput struct {
 	// workflow declared no outcome, and the stored value is left untouched —
 	// absence is not failure.
 	Outcome string `json:"outcome,omitempty"`
+	// Error is why the run failed, on a "failed" status. It becomes the
+	// source run's error in a workflow-event trigger's payload.
+	Error string `json:"error,omitempty"`
 }
 
 // WorkflowStatusOutput is the output from WorkflowStatus activity
@@ -459,6 +465,15 @@ func (a *WorkflowStatusActivity) trackWorkflow(ctx context.Context, input Workfl
 					return tErr
 				}
 				transitionedTo = to
+				// The workflow-event outbox row commits with the terminal
+				// status, or not at all: a retry of this activity writes both.
+				outcome := core.RunEventFinished
+				if input.Outcome == model.OutcomeFailure {
+					outcome = core.RunEventFailed
+				}
+				if err := a.emitTerminal(txCtx, input, outcome); err != nil {
+					return err
+				}
 			}
 			return nil
 		}); err != nil {
@@ -491,7 +506,15 @@ func (a *WorkflowStatusActivity) trackWorkflow(ctx context.Context, input Workfl
 	case "failed":
 		// NOTE: the position checkpoint is intentionally KEPT on failure — it
 		// is what lets the next user message resume the run at position.
-		if err := a.repo.UpdateWorkflowStatus(ctx, input.WorkflowID, db.Failed()); err != nil {
+		if err := a.repo.RunTx(ctx, func(txCtx context.Context) error {
+			if err := a.repo.UpdateWorkflowStatus(txCtx, input.WorkflowID, db.Failed()); err != nil {
+				return err
+			}
+			if input.ParentWorkflowID != "" {
+				return nil
+			}
+			return a.emitTerminal(txCtx, input, core.RunEventFailed)
+		}); err != nil {
 			return err
 		}
 		if err := a.repo.CascadeTerminalStatusToDescendants(ctx, input.WorkflowID, db.StopReasonFailed); err != nil {
@@ -533,6 +556,48 @@ func (a *WorkflowStatusActivity) trackWorkflow(ctx context.Context, input Workfl
 		// Unknown status - skip tracking
 		return nil
 	}
+}
+
+// emitTerminal writes the workflow-event outbox row for a ROOT run's terminal
+// status. It must run inside the status write's transaction (see
+// internal/triggers/runevents). The summary is the root thread's final
+// assistant text, read in the same transaction.
+func (a *WorkflowStatusActivity) emitTerminal(ctx context.Context, input WorkflowStatusInput, outcome core.RunEventOutcome) error {
+	summary := ""
+	if outcome == core.RunEventFinished || input.Error == "" {
+		thread := input.Thread
+		if thread == "" {
+			thread = input.WorkflowID
+		}
+		if last, err := threads.NewService(a.repo).LastAssistantMessage(ctx, thread); err == nil {
+			summary = last.Content
+		} else {
+			logging.Warn("[WorkflowStatus] Could not read final assistant text for run event",
+				"chatID", input.ChatID, "error", err)
+		}
+	}
+	_, err := runevents.EmitTerminal(ctx, a.repo, runevents.Terminal{
+		ChatID:       input.ChatID,
+		WorkflowID:   input.WorkflowID,
+		WorkflowName: input.WorkflowName,
+		RunID:        temporalRunID(ctx),
+		Outcome:      outcome,
+		Summary:      summary,
+		Error:        input.Error,
+	}, time.Now().UTC())
+	if err != nil {
+		return fmt.Errorf("record run event: %w", err)
+	}
+	return nil
+}
+
+// temporalRunID is the Temporal run id of the workflow execution this activity
+// belongs to, or "" outside an activity (direct calls in tests).
+func temporalRunID(ctx context.Context) string {
+	if !activity.IsActivity(ctx) {
+		return ""
+	}
+	return activity.GetInfo(ctx).WorkflowExecution.RunID
 }
 
 // clearCheckpoint drops the position checkpoint for a workflow. Best-effort:

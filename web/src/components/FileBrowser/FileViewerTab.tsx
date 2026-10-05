@@ -918,7 +918,7 @@ export function FileViewerTab({ file, worktreeId, isActive, viewerId, embedded =
       return (
         <div className="flex items-center justify-center h-full p-4">
           <div className="text-center space-y-3 max-w-md">
-            <AlertCircle className="w-12 h-12 text-destructive mx-auto" />
+            <AlertCircle className="w-12 h-12 text-destructive-ink mx-auto" />
             <p className="text-sm text-muted-foreground whitespace-pre-line">{error}</p>
             <button
               onClick={() => void loadPreview()}
@@ -1072,7 +1072,7 @@ export function FileViewerTab({ file, worktreeId, isActive, viewerId, embedded =
               <Tooltip content="Undo all changes and revert to saved version" placement="bottom" delay={300} wrapperClassName="inline-flex">
 <button
                 onClick={handleRevert}
-                className="flex items-center gap-1.5 px-2 py-1.5 rounded hover:bg-muted transition-colors text-muted-foreground hover:text-foreground hover:bg-destructive/10 hover:text-destructive"
+                className="flex items-center gap-1.5 px-2 py-1.5 rounded hover:bg-muted transition-colors text-muted-foreground hover:text-foreground hover:bg-destructive/10 hover:text-destructive-ink"
               >
                 <RotateCcw className="w-4 h-4" />
                 <span className="text-xs">Undo</span>

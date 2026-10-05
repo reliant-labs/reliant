@@ -125,6 +125,7 @@ import {
   clearAllMessagesCache,
   fanOutMessagesToThreadCaches,
 } from "../hooks/message-queries";
+import { chatDetailKeys } from "../hooks/chat-detail-keys";
 import { DEFAULT_WORKFLOW } from "./preferencesStore";
 import { tabSwitchProfiler } from "../lib/tabSwitchProfiler";
 import {
@@ -3803,6 +3804,9 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
   evictChat: (chatId: string) => {
     clearStreamingBuffersForChat(chatId);
     clearMessagesCache(chatId);
+    // The execution tree is retained exactly as long as the messages (gcTime:
+    // Infinity, see useWorkflowExecutions), so it is released with them.
+    queryClient.removeQueries({ queryKey: chatDetailKeys.workflowExecutions(chatId) });
     // A page may still be in flight for the evicted chat; its finally-block
     // delete would otherwise be the only thing clearing this, and an aborted
     // teardown would leave a tombstone that blocks paging if the chat returns.

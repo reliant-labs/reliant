@@ -293,7 +293,7 @@ function WorkspaceDetail({
                           hint={copiedPath ? "Copied" : "Copy path to clipboard"}
                           icon={
                             copiedPath ? (
-                              <Check className="h-3.5 w-3.5 text-success" />
+                              <Check className="h-3.5 w-3.5 text-success-ink" />
                             ) : (
                               <Copy className="h-3.5 w-3.5" />
                             )

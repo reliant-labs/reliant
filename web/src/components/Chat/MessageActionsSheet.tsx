@@ -155,7 +155,7 @@ export function MessageActionsSheet({
               }}
               className={cn(
                 "flex min-h-[44px] w-full items-center gap-3 rounded-lg px-3 text-left text-sm font-medium transition-colors active:bg-muted",
-                action.danger ? "text-destructive" : "text-foreground",
+                action.danger ? "text-destructive-ink" : "text-foreground",
                 action.disabled && "opacity-50",
               )}
             >

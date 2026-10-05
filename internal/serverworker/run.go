@@ -28,6 +28,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/debugserver"
 	"github.com/reliant-labs/reliant/internal/drain"
 	"github.com/reliant-labs/reliant/internal/grpc/services"
+	"github.com/reliant-labs/reliant/internal/integrations/webhook"
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/models"
@@ -40,7 +41,9 @@ import (
 	"github.com/reliant-labs/reliant/internal/telemetry"
 	"github.com/reliant-labs/reliant/internal/temporal"
 	"github.com/reliant-labs/reliant/internal/temporal/claimcheck"
+	"github.com/reliant-labs/reliant/internal/tokenauthority"
 	"github.com/reliant-labs/reliant/internal/toolexec"
+	"github.com/reliant-labs/reliant/internal/triggers/workflowevent"
 	"github.com/reliant-labs/reliant/internal/videojobs"
 	"github.com/reliant-labs/reliant/internal/workersetup"
 	v2workflow "github.com/reliant-labs/reliant/internal/workflow"
@@ -155,6 +158,21 @@ func Run(ctx context.Context, opts Options) error {
 		return fmt.Errorf("failed to initialize database: %w", err)
 	}
 	defer func() { _ = repo.Close() }()
+
+	// Credential vault: required when hosted, generated when self-hosted.
+	// Fails startup on a missing or malformed key.
+	vaultKeys, err := db.BootVault(ctx, repo, tokenauthority.ControlPlaneURL() != "", opts.DataDir)
+	if err != nil {
+		return err
+	}
+	connResolver, err := newConnectionResolver(repo, vaultKeys)
+	if err != nil {
+		return err
+	}
+	integrationCredentials, err := newIntegrationCredentials(connResolver, os.Getenv)
+	if err != nil {
+		return err
+	}
 
 	// API key provider (allows LLM drivers to resolve per-user keys from DB)
 	drivers.InitializeAPIKeyProvider(repo)
@@ -302,8 +320,13 @@ func Run(ctx context.Context, opts Options) error {
 		RunStarter:   agentRuns,
 		RunLifecycle: agentRuns,
 		RunMessenger: agentRuns,
+		// http__request executes here, inside the ExecuteTools activity, and
+		// resolves its `connection` for the run's owner through the same
+		// source the action node uses: saved connections, plus GitHub tokens
+		// delegated by control-plane when one is configured.
+		IntegrationCredentials: integrationCredentials,
 	})
-	// Wire server-side tool execution so ToolRunsOnServer / ToolRunsAnywhere
+	// Wire server-side tool execution so PlacementServer / PlacementAny
 	// tools execute in the worker process without a daemon round-trip.
 	serverExecutor := toolexec.NewLocalToolExecutor(toolsFactory)
 	serverExecutor.SetMCPContextBinder(toolexec.NewDaemonMCPContextBinder(router))
@@ -323,20 +346,36 @@ func Run(ctx context.Context, opts Options) error {
 	// schedule path.
 	triggerLauncher := runLauncher
 
+	// The same registry the api-server builds, so both agree on which
+	// integrations are polled.
+	triggerPollers, err := webhook.RegistryFromEnv(os.Getenv)
+	if err != nil {
+		return fmt.Errorf("integration pollers: %w", err)
+	}
+
 	handle, _, err := workersetup.StartWorker(&workersetup.Config{
-		TemporalClient:  temporalClient,
-		Database:        repo,
-		StreamingHub:    streamingHub,
-		ToolsFactory:    toolsFactory,
-		ToolExecutor:    remoteExecutor,
-		DaemonRouter:    remoteExecutor.DaemonRouter(),
-		MCPBinder:       toolexec.NewDaemonMCPContextBinder(router),
-		ConfigProvider:  storedConfigProvider,
-		TriggerLauncher: triggerLauncher,
+		TemporalClient:         temporalClient,
+		Database:               repo,
+		StreamingHub:           streamingHub,
+		ToolsFactory:           toolsFactory,
+		ToolExecutor:           remoteExecutor,
+		DaemonRouter:           remoteExecutor.DaemonRouter(),
+		MCPBinder:              toolexec.NewDaemonMCPContextBinder(router),
+		ConfigProvider:         storedConfigProvider,
+		TriggerLauncher:        triggerLauncher,
+		IntegrationCredentials: integrationCredentials,
+		TriggerPollers:         triggerPollers,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to start worker: %w", err)
 	}
+
+	// Workflow-event triggers: move run-event outbox rows into dispatch
+	// workflows. Every worker runs a relay; rows are leased with SKIP LOCKED,
+	// so they share the queue rather than duplicating it.
+	relayCtx, stopRelay := context.WithCancel(ctx)
+	defer stopRelay()
+	go workflowevent.NewRelay(repo, temporalClient, v2workflow.SharedTaskQueue).Run(relayCtx)
 
 	// -----------------------------------------------------------------
 	// 12. Health endpoint

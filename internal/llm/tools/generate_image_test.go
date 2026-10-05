@@ -360,7 +360,7 @@ func TestGenerateImage_Registration(t *testing.T) {
 		}
 	}
 	require.NotNil(t, found, "generate_image must be registered")
-	assert.Equal(t, ToolRunsOnServer, found.RunsOn,
+	assert.Equal(t, PlacementServer, found.Placement,
 		"generation needs the database and network, which the daemon does not have")
 	assert.Contains(t, found.Tags, TagMedia)
 	assert.NotContains(t, found.Tags, TagCodingDefault,

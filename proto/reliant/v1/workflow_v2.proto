@@ -5,6 +5,7 @@ package reliant.v1;
 
 import "google/protobuf/struct.proto";
 import "reliant/v1/annotations.proto";
+import "reliant/v1/trigger.proto";
 
 option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
 
@@ -296,6 +297,7 @@ message Node {
     JoinArgs join = 23;
     RouterArgs router = 24;
     InvokeToolArgs invoke_tool = 25;
+    ActionArgs action = 26;
   }
 }
 
@@ -657,6 +659,56 @@ message InvokeToolArgs {
   }];
 }
 
+// ActionArgs configures an action node — runs ONE integration action
+// (`uses: "<integration>/<action>@<major>"`) directly from the graph.
+//
+// Like invoke_tool this is one generic node, never one arm per integration:
+// the parameter and output contracts live in the integration manifest, not in
+// proto. Params are validated against the manifest's JSON Schema.
+//
+// Output fields accessible via nodes.<id>.*:
+//   content, is_error, status_code, data.<field>
+message ActionArgs {
+  option (node_meta) = {
+    node_type: "action"
+    display_name: "Action"
+    description: "Run an integration action (for example an HTTP request)"
+    is_structural: false
+    category: "utility"
+    icon: "Plug"
+  };
+
+  // Uses names the action as <integration>/<action>@<major>, e.g.
+  // "http/request@1". The major version pins the manifest.
+  CelString uses = 1 [(reliant) = {
+    description: "Which integration action to run, as integration/action@major"
+    label: "Action"
+    visibility_contexts: "basic"
+    required: true
+  }];
+
+  // With are the action's parameters, keyed as in the manifest's param schema.
+  // Values may be literals or {{expr}} templates resolved before the activity
+  // runs.
+  map<string, google.protobuf.Value> with = 2 [(reliant) = {
+    description: "Action parameters, keyed as in the action's schema"
+    label: "Parameters"
+    visibility_contexts: "basic"
+  }];
+
+  // Connection names the saved connection to authenticate with, by id. Only
+  // the reference travels in the node; the secret is resolved on the worker at
+  // call time and never enters workflow history. Omitted: no authentication.
+  CelString connection = 3 [(reliant) = {
+    description: "Saved connection id to authenticate this action with"
+    label: "Connection"
+    visibility_contexts: "basic"
+  }];
+
+  // Field 4 is reserved for placement narrowing.
+  reserved 4;
+}
+
 // CompactArgs configures a compact node — compacts conversation context to reduce token usage.
 //
 // Output fields accessible via nodes.<id>.*:
@@ -826,8 +878,9 @@ message CreateWorktreeArgs {
   }];
   // BaseBranch is the branch to branch from. Defaults to repo's default branch.
   CelString base_branch = 3 [(reliant) = {description: "Base branch to branch from"}];
-  // CopyFiles lists files to copy from the source repo (searches recursively).
-  repeated string copy_files = 4 [(reliant) = {description: "Files to copy from source repo (e.g. .env)"}];
+  // CopyFiles lists exact paths, relative to the project root, to copy into
+  // the new workspace. Never searched for: ".env" is only the root .env.
+  repeated string copy_files = 4 [(reliant) = {description: "Exact paths from the project root to copy into the workspace (e.g. .env, web/node_modules)"}];
   // Force deletes existing worktree/branch if they exist.
   CelBool force = 5 [(reliant) = {description: "Force creation by deleting existing worktree"}];
 }
@@ -1455,6 +1508,29 @@ message InvokeToolOutput {
   string tool = 5;
 }
 
+// ActionOutput is the output from the action activity.
+message ActionOutput {
+  // Content is the human/model-facing rendering of the result.
+  string content = 1;
+  // IsError reports a failed action. It does NOT fail the node: the graph
+  // decides what to do about it.
+  bool is_error = 2;
+  // StatusCode is the final HTTP status, when the action made a request.
+  int32 status_code = 3;
+  // Data is the selected output, reachable as nodes.<id>.data.<field>.
+  google.protobuf.Struct data = 4;
+  // Uses echoes which action ran.
+  string uses = 5;
+  // Retryable is set on an error the manifest classifies as transient.
+  bool retryable = 6;
+  // ConnectionID is the connection the call was authenticated with, recorded
+  // for audit. Empty when the call was unauthenticated.
+  string connection_id = 7;
+  // ErrorCode classifies a connection failure ("failed_precondition",
+  // "needs_reauth", "unavailable"); empty otherwise.
+  string error_code = 8;
+}
+
 // CompactOutput is the output from the compact activity.
 message CompactOutput {
   MessageOutput message = 1;
@@ -1627,14 +1703,20 @@ message Workflow {
   // ends. Must resolve to a real workflow and must not reference this workflow
   // itself (no self-cycle).
   string transition_to = 14;
+  // Triggers declares WHEN this workflow should run: schedules, webhooks,
+  // integration events and other workflows' outcomes, each with an optional
+  // CEL filter and input mapping. A declaration is inert until a trigger row
+  // activates it (TriggerDefinition.workflow_trigger), which supplies whose
+  // run it is and where it executes.
+  repeated WorkflowTrigger triggers = 15;
   // Title is the human-facing display name ("Get It Right"). The `name` stays
   // the stable identifier that refs, saved chats and the CLI address; Title is
   // presentation only, so it can change without breaking any of them. When
   // empty, UIs derive a title from the name.
-  string title = 15;
+  string title = 16;
   // Hidden keeps this workflow out of pickers and the library's default view.
   // It stays fully runnable and referenceable — this is for building blocks
   // other workflows `ref:` (structured-agent, scope-conversation), not for
   // retiring a workflow. Delete a workflow to retire it.
-  bool hidden = 16;
+  bool hidden = 17;
 }

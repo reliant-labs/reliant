@@ -59,12 +59,13 @@ type AntigravityAuthToken struct {
 }
 
 type ApiKey struct {
-	ID        string    `json:"id"`
-	UserID    string    `json:"user_id"`
-	Provider  string    `json:"provider"`
-	ApiKey    string    `json:"api_key"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID           string    `json:"id"`
+	UserID       string    `json:"user_id"`
+	Provider     string    `json:"provider"`
+	ApiKey       string    `json:"api_key"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
+	ApiKeySealed []byte    `json:"api_key_sealed"`
 }
 
 type Approval struct {
@@ -219,6 +220,52 @@ type CommandFavorite struct {
 	ProjectID  string    `json:"project_id"`
 	CommandKey string    `json:"command_key"`
 	CreatedAt  time.Time `json:"created_at"`
+}
+
+type Connection struct {
+	ID                string         `json:"id"`
+	OwnerKind         string         `json:"owner_kind"`
+	UserID            string         `json:"user_id"`
+	OrgID             sql.NullString `json:"org_id"`
+	IntegrationID     string         `json:"integration_id"`
+	AuthKind          string         `json:"auth_kind"`
+	Name              string         `json:"name"`
+	AccountLabel      sql.NullString `json:"account_label"`
+	ExternalAccountID sql.NullString `json:"external_account_id"`
+	Scopes            []string       `json:"scopes"`
+	OauthClient       sql.NullString `json:"oauth_client"`
+	// api_key connections of an integration that does not declare placement: the allow-listed header choice
+	AuthHeader      sql.NullString  `json:"auth_header"`
+	Status          string          `json:"status"`
+	StatusReason    sql.NullString  `json:"status_reason"`
+	IsDefault       bool            `json:"is_default"`
+	AccessExpiresAt sql.NullTime    `json:"access_expires_at"`
+	LastUsedAt      sql.NullTime    `json:"last_used_at"`
+	CreatedAt       time.Time       `json:"created_at"`
+	UpdatedAt       time.Time       `json:"updated_at"`
+	DeletedAt       sql.NullTime    `json:"deleted_at"`
+	Params          json.RawMessage `json:"params"`
+}
+
+type ConnectionEvent struct {
+	ID           int64          `json:"id"`
+	ConnectionID string         `json:"connection_id"`
+	UserID       string         `json:"user_id"`
+	Kind         string         `json:"kind"`
+	RunID        sql.NullString `json:"run_id"`
+	NodeID       sql.NullString `json:"node_id"`
+	ToolCallID   sql.NullString `json:"tool_call_id"`
+	Actor        string         `json:"actor"`
+	At           time.Time      `json:"at"`
+}
+
+type ConnectionSecret struct {
+	ConnectionID string    `json:"connection_id"`
+	Field        string    `json:"field"`
+	VaultKeyID   string    `json:"vault_key_id"`
+	Ciphertext   []byte    `json:"ciphertext"`
+	Generation   int64     `json:"generation"`
+	UpdatedAt    time.Time `json:"updated_at"`
 }
 
 type ConnectorAuditLog struct {
@@ -407,6 +454,20 @@ type ModelEndpoint struct {
 	UpdatedAt              time.Time      `json:"updated_at"`
 }
 
+type OauthFlow struct {
+	StateHash             []byte          `json:"state_hash"`
+	UserID                string          `json:"user_id"`
+	SessionIDHash         []byte          `json:"session_id_hash"`
+	IntegrationID         string          `json:"integration_id"`
+	PkceVerifierSealed    []byte          `json:"pkce_verifier_sealed"`
+	RedirectAfter         sql.NullString  `json:"redirect_after"`
+	ReconnectConnectionID sql.NullString  `json:"reconnect_connection_id"`
+	ConnectionName        sql.NullString  `json:"connection_name"`
+	ExpiresAt             time.Time       `json:"expires_at"`
+	ConsumedAt            sql.NullTime    `json:"consumed_at"`
+	Params                json.RawMessage `json:"params"`
+}
+
 type Plan struct {
 	ID          string         `json:"id"`
 	Title       string         `json:"title"`
@@ -522,6 +583,20 @@ type Repo struct {
 	UpdatedAt    time.Time      `json:"updated_at"`
 }
 
+type RunEvent struct {
+	ID           string          `json:"id"`
+	UserID       string          `json:"user_id"`
+	ChatID       string          `json:"chat_id"`
+	WorkflowName string          `json:"workflow_name"`
+	Outcome      string          `json:"outcome"`
+	DedupeKey    string          `json:"dedupe_key"`
+	Payload      json.RawMessage `json:"payload"`
+	OccurredAt   time.Time       `json:"occurred_at"`
+	ClaimedUntil sql.NullTime    `json:"claimed_until"`
+	DispatchedAt sql.NullTime    `json:"dispatched_at"`
+	CreatedAt    time.Time       `json:"created_at"`
+}
+
 type Setting struct {
 	ID        string         `json:"id"`
 	UserID    string         `json:"user_id"`
@@ -622,22 +697,26 @@ type ToolCallResult struct {
 }
 
 type Trigger struct {
-	ID               string          `json:"id"`
-	UserID           string          `json:"user_id"`
-	ProjectID        string          `json:"project_id"`
-	WorktreeID       sql.NullString  `json:"worktree_id"`
-	Name             string          `json:"name"`
-	Kind             string          `json:"kind"`
-	Enabled          bool            `json:"enabled"`
-	Workflow         string          `json:"workflow"`
-	Presets          json.RawMessage `json:"presets"`
-	Params           json.RawMessage `json:"params"`
-	Message          string          `json:"message"`
-	Config           json.RawMessage `json:"config"`
-	CreatedAt        time.Time       `json:"created_at"`
-	UpdatedAt        time.Time       `json:"updated_at"`
-	DaemonID         string          `json:"daemon_id"`
-	NotifyOnComplete bool            `json:"notify_on_complete"`
+	ID                  string          `json:"id"`
+	UserID              string          `json:"user_id"`
+	ProjectID           string          `json:"project_id"`
+	WorktreeID          sql.NullString  `json:"worktree_id"`
+	Name                string          `json:"name"`
+	Kind                string          `json:"kind"`
+	Enabled             bool            `json:"enabled"`
+	Workflow            string          `json:"workflow"`
+	Presets             json.RawMessage `json:"presets"`
+	Params              json.RawMessage `json:"params"`
+	Message             string          `json:"message"`
+	Config              json.RawMessage `json:"config"`
+	CreatedAt           time.Time       `json:"created_at"`
+	UpdatedAt           time.Time       `json:"updated_at"`
+	DaemonID            string          `json:"daemon_id"`
+	NotifyOnComplete    bool            `json:"notify_on_complete"`
+	Filter              string          `json:"filter"`
+	ConnectionID        sql.NullString  `json:"connection_id"`
+	WebhookTokenHash    []byte          `json:"webhook_token_hash"`
+	WebhookSecretSealed []byte          `json:"webhook_secret_sealed"`
 }
 
 type TriggerEvent struct {
@@ -652,6 +731,18 @@ type TriggerEvent struct {
 	OutcomeDetail string          `json:"outcome_detail"`
 	ChatID        sql.NullString  `json:"chat_id"`
 	CreatedAt     time.Time       `json:"created_at"`
+}
+
+type TriggerRegistration struct {
+	TriggerID      string       `json:"trigger_id"`
+	Provider       string       `json:"provider"`
+	RegistrationID string       `json:"registration_id"`
+	Cursor         string       `json:"cursor"`
+	LastPolledAt   sql.NullTime `json:"last_polled_at"`
+	Status         string       `json:"status"`
+	StatusDetail   string       `json:"status_detail"`
+	CreatedAt      time.Time    `json:"created_at"`
+	UpdatedAt      time.Time    `json:"updated_at"`
 }
 
 type UpdateStreamCounter struct {
@@ -672,6 +763,17 @@ type UserUpdate struct {
 	EntityID       string         `json:"entity_id"`
 	Data           string         `json:"data"`
 	CreatedAt      time.Time      `json:"created_at"`
+}
+
+type VaultKey struct {
+	ID         string    `json:"id"`
+	TenantKind string    `json:"tenant_kind"`
+	TenantID   string    `json:"tenant_id"`
+	Version    int32     `json:"version"`
+	KekID      string    `json:"kek_id"`
+	WrappedDek []byte    `json:"wrapped_dek"`
+	State      string    `json:"state"`
+	CreatedAt  time.Time `json:"created_at"`
 }
 
 type VideoGenerationJob struct {

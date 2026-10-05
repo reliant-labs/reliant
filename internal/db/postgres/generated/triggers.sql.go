@@ -14,6 +14,29 @@ import (
 	"github.com/lib/pq"
 )
 
+const claimPendingTriggerEvent = `-- name: ClaimPendingTriggerEvent :execrows
+UPDATE trigger_events SET outcome = 'launched', outcome_detail = '', payload = $1
+WHERE id = $2 AND outcome = 'pending'
+`
+
+type ClaimPendingTriggerEventParams struct {
+	Payload json.RawMessage `json:"payload"`
+	ID      string          `json:"id"`
+}
+
+// The launcher adopts an inbound event the receiver recorded: the row moves
+// from pending to launched (chat attached later in the same transaction) and
+// takes the launch's start record as its payload. The outcome predicate is
+// what makes two concurrent fires of one event launch it once: the loser
+// updates zero rows.
+func (q *Queries) ClaimPendingTriggerEvent(ctx context.Context, arg ClaimPendingTriggerEventParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, claimPendingTriggerEvent, arg.Payload, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const countLiveLaunchedRuns = `-- name: CountLiveLaunchedRuns :one
 SELECT count(*) FROM trigger_events e
 JOIN chats c ON c.id = e.chat_id
@@ -44,9 +67,9 @@ const createTrigger = `-- name: CreateTrigger :exec
 INSERT INTO triggers (
     id, user_id, project_id, worktree_id, name, kind, enabled,
     workflow, presets, params, message, config, created_at, updated_at,
-    daemon_id, notify_on_complete
+    daemon_id, notify_on_complete, filter, connection_id
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18
 )
 `
 
@@ -67,6 +90,8 @@ type CreateTriggerParams struct {
 	UpdatedAt        time.Time       `json:"updated_at"`
 	DaemonID         string          `json:"daemon_id"`
 	NotifyOnComplete bool            `json:"notify_on_complete"`
+	Filter           string          `json:"filter"`
+	ConnectionID     sql.NullString  `json:"connection_id"`
 }
 
 func (q *Queries) CreateTrigger(ctx context.Context, arg CreateTriggerParams) error {
@@ -87,6 +112,8 @@ func (q *Queries) CreateTrigger(ctx context.Context, arg CreateTriggerParams) er
 		arg.UpdatedAt,
 		arg.DaemonID,
 		arg.NotifyOnComplete,
+		arg.Filter,
+		arg.ConnectionID,
 	)
 	return err
 }
@@ -148,6 +175,15 @@ func (q *Queries) DeleteTrigger(ctx context.Context, id string) error {
 	return err
 }
 
+const deleteTriggerRegistration = `-- name: DeleteTriggerRegistration :exec
+DELETE FROM trigger_registrations WHERE trigger_id = $1
+`
+
+func (q *Queries) DeleteTriggerRegistration(ctx context.Context, triggerID string) error {
+	_, err := q.db.ExecContext(ctx, deleteTriggerRegistration, triggerID)
+	return err
+}
+
 const getLatestTriggerEvent = `-- name: GetLatestTriggerEvent :one
 SELECT id, trigger_id, user_id, kind, dedupe_key, occurred_at, payload, outcome, outcome_detail, chat_id, created_at FROM trigger_events
 WHERE
@@ -186,7 +222,7 @@ func (q *Queries) GetLatestTriggerEvent(ctx context.Context, arg GetLatestTrigge
 
 const getTrigger = `-- name: GetTrigger :one
 SELECT
-    t.id, t.user_id, t.project_id, t.worktree_id, t.name, t.kind, t.enabled, t.workflow, t.presets, t.params, t.message, t.config, t.created_at, t.updated_at, t.daemon_id, t.notify_on_complete,
+    t.id, t.user_id, t.project_id, t.worktree_id, t.name, t.kind, t.enabled, t.workflow, t.presets, t.params, t.message, t.config, t.created_at, t.updated_at, t.daemon_id, t.notify_on_complete, t.filter, t.connection_id, t.webhook_token_hash, t.webhook_secret_sealed,
     COALESCE(p.name, '')::text AS project_name,
     COALESCE(d.hostname, '')::text AS daemon_name
 FROM triggers t
@@ -224,6 +260,10 @@ func (q *Queries) GetTrigger(ctx context.Context, id string) (GetTriggerRow, err
 		&i.Trigger.UpdatedAt,
 		&i.Trigger.DaemonID,
 		&i.Trigger.NotifyOnComplete,
+		&i.Trigger.Filter,
+		&i.Trigger.ConnectionID,
+		&i.Trigger.WebhookTokenHash,
+		&i.Trigger.WebhookSecretSealed,
 		&i.ProjectName,
 		&i.DaemonName,
 	)
@@ -319,8 +359,46 @@ func (q *Queries) GetTriggerEventByDedupe(ctx context.Context, arg GetTriggerEve
 	return i, err
 }
 
+const getTriggerRegistration = `-- name: GetTriggerRegistration :one
+SELECT trigger_id, provider, registration_id, cursor, last_polled_at, status, status_detail, created_at, updated_at FROM trigger_registrations WHERE trigger_id = $1
+`
+
+func (q *Queries) GetTriggerRegistration(ctx context.Context, triggerID string) (TriggerRegistration, error) {
+	row := q.db.QueryRowContext(ctx, getTriggerRegistration, triggerID)
+	var i TriggerRegistration
+	err := row.Scan(
+		&i.TriggerID,
+		&i.Provider,
+		&i.RegistrationID,
+		&i.Cursor,
+		&i.LastPolledAt,
+		&i.Status,
+		&i.StatusDetail,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getTriggerWebhookCredentials = `-- name: GetTriggerWebhookCredentials :one
+SELECT webhook_token_hash, webhook_secret_sealed FROM triggers WHERE id = $1
+`
+
+type GetTriggerWebhookCredentialsRow struct {
+	WebhookTokenHash    []byte `json:"webhook_token_hash"`
+	WebhookSecretSealed []byte `json:"webhook_secret_sealed"`
+}
+
+// Only the webhook receiver reads these. They are never rendered.
+func (q *Queries) GetTriggerWebhookCredentials(ctx context.Context, id string) (GetTriggerWebhookCredentialsRow, error) {
+	row := q.db.QueryRowContext(ctx, getTriggerWebhookCredentials, id)
+	var i GetTriggerWebhookCredentialsRow
+	err := row.Scan(&i.WebhookTokenHash, &i.WebhookSecretSealed)
+	return i, err
+}
+
 const listAllTriggers = `-- name: ListAllTriggers :many
-SELECT id, user_id, project_id, worktree_id, name, kind, enabled, workflow, presets, params, message, config, created_at, updated_at, daemon_id, notify_on_complete FROM triggers ORDER BY created_at DESC, id
+SELECT id, user_id, project_id, worktree_id, name, kind, enabled, workflow, presets, params, message, config, created_at, updated_at, daemon_id, notify_on_complete, filter, connection_id, webhook_token_hash, webhook_secret_sealed FROM triggers ORDER BY created_at DESC, id
 `
 
 // Every user's triggers. Only the schedule syncer's reconciliation calls this.
@@ -350,6 +428,10 @@ func (q *Queries) ListAllTriggers(ctx context.Context) ([]Trigger, error) {
 			&i.UpdatedAt,
 			&i.DaemonID,
 			&i.NotifyOnComplete,
+			&i.Filter,
+			&i.ConnectionID,
+			&i.WebhookTokenHash,
+			&i.WebhookSecretSealed,
 		); err != nil {
 			return nil, err
 		}
@@ -460,6 +542,80 @@ func (q *Queries) ListFiringsSinceLastSuccess(ctx context.Context, arg ListFirin
 	return items, nil
 }
 
+const listIntegrationTriggers = `-- name: ListIntegrationTriggers :many
+SELECT
+    t.id, t.user_id, t.project_id, t.worktree_id, t.name, t.kind, t.enabled, t.workflow, t.presets, t.params, t.message, t.config, t.created_at, t.updated_at, t.daemon_id, t.notify_on_complete, t.filter, t.connection_id, t.webhook_token_hash, t.webhook_secret_sealed,
+    c.external_account_id AS connection_account,
+    c.status AS connection_status
+FROM triggers t
+JOIN connections c
+    ON c.id = t.connection_id
+    AND c.user_id = t.user_id
+    AND c.owner_kind = 'user'
+    AND c.deleted_at IS NULL
+WHERE t.kind = 'integration'
+    AND t.enabled
+    AND t.config ->> 'integration' = $1::text
+ORDER BY t.id
+`
+
+type ListIntegrationTriggersRow struct {
+	Trigger           Trigger        `json:"trigger"`
+	ConnectionAccount sql.NullString `json:"connection_account"`
+	ConnectionStatus  string         `json:"connection_status"`
+}
+
+// Every ENABLED integration trigger for one integration, with its
+// connection's routing identity. The inner join drops triggers whose
+// connection is gone, revoked or belongs to someone else: an event can only
+// reach a trigger through its own owner's live connection. Status is returned
+// rather than filtered so a caller can tell needs_reauth apart.
+func (q *Queries) ListIntegrationTriggers(ctx context.Context, integration string) ([]ListIntegrationTriggersRow, error) {
+	rows, err := q.db.QueryContext(ctx, listIntegrationTriggers, integration)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListIntegrationTriggersRow{}
+	for rows.Next() {
+		var i ListIntegrationTriggersRow
+		if err := rows.Scan(
+			&i.Trigger.ID,
+			&i.Trigger.UserID,
+			&i.Trigger.ProjectID,
+			&i.Trigger.WorktreeID,
+			&i.Trigger.Name,
+			&i.Trigger.Kind,
+			&i.Trigger.Enabled,
+			&i.Trigger.Workflow,
+			&i.Trigger.Presets,
+			&i.Trigger.Params,
+			&i.Trigger.Message,
+			&i.Trigger.Config,
+			&i.Trigger.CreatedAt,
+			&i.Trigger.UpdatedAt,
+			&i.Trigger.DaemonID,
+			&i.Trigger.NotifyOnComplete,
+			&i.Trigger.Filter,
+			&i.Trigger.ConnectionID,
+			&i.Trigger.WebhookTokenHash,
+			&i.Trigger.WebhookSecretSealed,
+			&i.ConnectionAccount,
+			&i.ConnectionStatus,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRecentTriggerFirings = `-- name: ListRecentTriggerFirings :many
 WITH ranked AS (
     SELECT
@@ -530,6 +686,56 @@ func (q *Queries) ListRecentTriggerFirings(ctx context.Context, arg ListRecentTr
 			&i.RunRootState,
 			&i.RunRootStopReason,
 			&i.RunDisplayState,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listStalePendingTriggerEvents = `-- name: ListStalePendingTriggerEvents :many
+SELECT id, trigger_id, user_id, kind, dedupe_key, occurred_at, payload, outcome, outcome_detail, chat_id, created_at FROM trigger_events
+WHERE outcome = 'pending' AND created_at < $1::timestamptz
+ORDER BY created_at
+LIMIT $2
+`
+
+type ListStalePendingTriggerEventsParams struct {
+	OlderThan time.Time `json:"older_than"`
+	RowLimit  int32     `json:"row_limit"`
+}
+
+// Inbound events recorded but not yet settled, older than the cutoff: the
+// fire workflow for them was never started (the receiver crashed between the
+// insert and the start) or died. The redriver restarts their fires.
+func (q *Queries) ListStalePendingTriggerEvents(ctx context.Context, arg ListStalePendingTriggerEventsParams) ([]TriggerEvent, error) {
+	rows, err := q.db.QueryContext(ctx, listStalePendingTriggerEvents, arg.OlderThan, arg.RowLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []TriggerEvent{}
+	for rows.Next() {
+		var i TriggerEvent
+		if err := rows.Scan(
+			&i.ID,
+			&i.TriggerID,
+			&i.UserID,
+			&i.Kind,
+			&i.DedupeKey,
+			&i.OccurredAt,
+			&i.Payload,
+			&i.Outcome,
+			&i.OutcomeDetail,
+			&i.ChatID,
+			&i.CreatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -638,7 +844,7 @@ func (q *Queries) ListTriggerEvents(ctx context.Context, arg ListTriggerEventsPa
 
 const listTriggers = `-- name: ListTriggers :many
 SELECT
-    t.id, t.user_id, t.project_id, t.worktree_id, t.name, t.kind, t.enabled, t.workflow, t.presets, t.params, t.message, t.config, t.created_at, t.updated_at, t.daemon_id, t.notify_on_complete,
+    t.id, t.user_id, t.project_id, t.worktree_id, t.name, t.kind, t.enabled, t.workflow, t.presets, t.params, t.message, t.config, t.created_at, t.updated_at, t.daemon_id, t.notify_on_complete, t.filter, t.connection_id, t.webhook_token_hash, t.webhook_secret_sealed,
     COALESCE(p.name, '')::text AS project_name,
     COALESCE(d.hostname, '')::text AS daemon_name
 FROM triggers t
@@ -689,6 +895,10 @@ func (q *Queries) ListTriggers(ctx context.Context, arg ListTriggersParams) ([]L
 			&i.Trigger.UpdatedAt,
 			&i.Trigger.DaemonID,
 			&i.Trigger.NotifyOnComplete,
+			&i.Trigger.Filter,
+			&i.Trigger.ConnectionID,
+			&i.Trigger.WebhookTokenHash,
+			&i.Trigger.WebhookSecretSealed,
 			&i.ProjectName,
 			&i.DaemonName,
 		); err != nil {
@@ -735,6 +945,64 @@ func (q *Queries) SetTriggerEnabled(ctx context.Context, arg SetTriggerEnabledPa
 	return result.RowsAffected()
 }
 
+const setTriggerWebhookSecret = `-- name: SetTriggerWebhookSecret :execrows
+UPDATE triggers SET webhook_secret_sealed = $1, updated_at = NOW() WHERE id = $2
+`
+
+type SetTriggerWebhookSecretParams struct {
+	WebhookSecretSealed []byte `json:"webhook_secret_sealed"`
+	ID                  string `json:"id"`
+}
+
+// NULL clears the HMAC secret. Sealed by the caller under the owner's tenant.
+func (q *Queries) SetTriggerWebhookSecret(ctx context.Context, arg SetTriggerWebhookSecretParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, setTriggerWebhookSecret, arg.WebhookSecretSealed, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const setTriggerWebhookTokenHash = `-- name: SetTriggerWebhookTokenHash :execrows
+UPDATE triggers SET webhook_token_hash = $1, updated_at = NOW() WHERE id = $2
+`
+
+type SetTriggerWebhookTokenHashParams struct {
+	WebhookTokenHash []byte `json:"webhook_token_hash"`
+	ID               string `json:"id"`
+}
+
+// The token hash has its own write path: no definition update can touch it,
+// and rotating it is one statement.
+func (q *Queries) SetTriggerWebhookTokenHash(ctx context.Context, arg SetTriggerWebhookTokenHashParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, setTriggerWebhookTokenHash, arg.WebhookTokenHash, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const settlePendingTriggerEvent = `-- name: SettlePendingTriggerEvent :execrows
+UPDATE trigger_events SET outcome = $1, outcome_detail = $2
+WHERE id = $3 AND outcome = 'pending'
+`
+
+type SettlePendingTriggerEventParams struct {
+	Outcome       string `json:"outcome"`
+	OutcomeDetail string `json:"outcome_detail"`
+	ID            string `json:"id"`
+}
+
+// Records the verdict on an inbound event that did NOT launch. Conditional on
+// pending, so it can never overwrite a launch that won a race.
+func (q *Queries) SettlePendingTriggerEvent(ctx context.Context, arg SettlePendingTriggerEventParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, settlePendingTriggerEvent, arg.Outcome, arg.OutcomeDetail, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const updateTrigger = `-- name: UpdateTrigger :execrows
 UPDATE triggers SET
     project_id = $1,
@@ -748,8 +1016,10 @@ UPDATE triggers SET
     config = $9,
     updated_at = $10,
     daemon_id = $11,
-    notify_on_complete = $12
-WHERE id = $13
+    notify_on_complete = $12,
+    filter = $13,
+    connection_id = $14
+WHERE id = $15
 `
 
 type UpdateTriggerParams struct {
@@ -765,6 +1035,8 @@ type UpdateTriggerParams struct {
 	UpdatedAt        time.Time       `json:"updated_at"`
 	DaemonID         string          `json:"daemon_id"`
 	NotifyOnComplete bool            `json:"notify_on_complete"`
+	Filter           string          `json:"filter"`
+	ConnectionID     sql.NullString  `json:"connection_id"`
 	ID               string          `json:"id"`
 }
 
@@ -785,6 +1057,8 @@ func (q *Queries) UpdateTrigger(ctx context.Context, arg UpdateTriggerParams) (i
 		arg.UpdatedAt,
 		arg.DaemonID,
 		arg.NotifyOnComplete,
+		arg.Filter,
+		arg.ConnectionID,
 		arg.ID,
 	)
 	if err != nil {
@@ -836,4 +1110,43 @@ func (q *Queries) UpdateTriggerEventPayload(ctx context.Context, arg UpdateTrigg
 		return 0, err
 	}
 	return result.RowsAffected()
+}
+
+const upsertTriggerRegistration = `-- name: UpsertTriggerRegistration :exec
+INSERT INTO trigger_registrations (
+    trigger_id, provider, registration_id, cursor, last_polled_at, status, status_detail, created_at, updated_at
+) VALUES (
+    $1, $2, $3, $4, $5, $6, $7, NOW(), NOW()
+)
+ON CONFLICT (trigger_id) DO UPDATE SET
+    provider = EXCLUDED.provider,
+    registration_id = EXCLUDED.registration_id,
+    cursor = EXCLUDED.cursor,
+    last_polled_at = EXCLUDED.last_polled_at,
+    status = EXCLUDED.status,
+    status_detail = EXCLUDED.status_detail,
+    updated_at = NOW()
+`
+
+type UpsertTriggerRegistrationParams struct {
+	TriggerID      string       `json:"trigger_id"`
+	Provider       string       `json:"provider"`
+	RegistrationID string       `json:"registration_id"`
+	Cursor         string       `json:"cursor"`
+	LastPolledAt   sql.NullTime `json:"last_polled_at"`
+	Status         string       `json:"status"`
+	StatusDetail   string       `json:"status_detail"`
+}
+
+func (q *Queries) UpsertTriggerRegistration(ctx context.Context, arg UpsertTriggerRegistrationParams) error {
+	_, err := q.db.ExecContext(ctx, upsertTriggerRegistration,
+		arg.TriggerID,
+		arg.Provider,
+		arg.RegistrationID,
+		arg.Cursor,
+		arg.LastPolledAt,
+		arg.Status,
+		arg.StatusDetail,
+	)
+	return err
 }

@@ -80,7 +80,7 @@ export default function KeyValueList({
                     >
                       {copied === field.label ? (
                         <svg
-                          className="h-4 w-4 text-success"
+                          className="h-4 w-4 text-success-ink"
                           fill="none"
                           viewBox="0 0 24 24"
                           strokeWidth={2}

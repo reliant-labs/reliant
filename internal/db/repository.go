@@ -718,11 +718,15 @@ type Repository interface {
 	// ListTriggerEvents returns one page of the trigger's firings newest first,
 	// each with the run it launched, and whether more follow.
 	ListTriggerEvents(ctx context.Context, f core.TriggerEventFilters) ([]*core.TriggerEventWithRun, bool, error)
-	// ListInboxPending, ListDismissedInboxItemIDs and DismissInboxItem back the
-	// Inbox. Each is scoped by an explicit user id.
+	// ListInboxPending, ListDismissedInboxItemIDs, DismissInboxItems and
+	// RestoreInboxItems back the Inbox. Each is scoped by an explicit user id.
 	ListInboxPending(ctx context.Context, userID string) ([]*core.InboxPending, error)
 	ListDismissedInboxItemIDs(ctx context.Context, userID string, itemIDs []string) (map[string]bool, error)
-	DismissInboxItem(ctx context.Context, userID, itemID string, at time.Time) error
+	DismissInboxItems(ctx context.Context, userID string, itemIDs []string, at time.Time) error
+	RestoreInboxItems(ctx context.Context, userID string, itemIDs []string) error
+	// The run-event outbox workflow-event triggers fire from. Writes join the
+	// ambient transaction, so an event commits with the transition it reports.
+	core.RunEventStore
 	// RecentTriggerFirings returns each trigger's newest perTrigger firings in
 	// one query. Used to compute health and last_event for a list of triggers.
 	RecentTriggerFirings(ctx context.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error)
@@ -732,6 +736,19 @@ type Repository interface {
 	// GetLatestTriggerEvent returns the trigger's latest firing, optionally
 	// filtered by outcome, and (nil, nil) when it has never fired.
 	GetLatestTriggerEvent(ctx context.Context, triggerID string, outcome *core.TriggerEventOutcome) (*core.TriggerEvent, error)
+
+	// Inbound triggers: webhook credentials, app-level routing, the pending
+	// redrive, and per-trigger provider state (poll cursors).
+	SetTriggerWebhookTokenHash(ctx context.Context, id string, hash []byte) error
+	SetTriggerWebhookSecret(ctx context.Context, id string, sealed []byte) error
+	GetTriggerWebhookCredentials(ctx context.Context, id string) (*core.TriggerWebhookCredentials, error)
+	ListIntegrationTriggers(ctx context.Context, integration string) ([]*core.IntegrationTriggerRoute, error)
+	ListStalePendingTriggerEvents(ctx context.Context, olderThan time.Time, limit int) ([]*core.TriggerEvent, error)
+	ClaimPendingTriggerEvent(ctx context.Context, id string, payload map[string]any) (bool, error)
+	SettlePendingTriggerEvent(ctx context.Context, id string, outcome core.TriggerEventOutcome, detail string) (bool, error)
+	GetTriggerRegistration(ctx context.Context, triggerID string) (*core.TriggerRegistration, error)
+	UpsertTriggerRegistration(ctx context.Context, reg *core.TriggerRegistration) error
+	DeleteTriggerRegistration(ctx context.Context, triggerID string) error
 
 	// Step Executions (for CEL history queries)
 	CreateStepExecution(ctx context.Context, exec *StepExecution) error

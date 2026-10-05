@@ -175,6 +175,48 @@ const LONG_TIMEOUT_METHODS: Record<string, number> = {
   StreamProcessOutput: 0,
 };
 
+/**
+ * Budgets keyed by FULLY-QUALIFIED procedure (`<service typeName>/<method>`).
+ *
+ * Separate from LONG_TIMEOUT_METHODS because that map is keyed by the bare
+ * method name, and forge's names are not unique: `PlanDeploy` is also a
+ * control-plane DeployService read that should stay on the short default.
+ *
+ * WHY FORGE NEEDS THESE. Each ForgeService call runs a `forge` subprocess on the
+ * user's daemon with its own 15–110s budget (internal/grpc/services/forge.go).
+ * Without an entry here this transport aborted them at 10s — `forge env status`
+ * on control-plane takes about 5s cold and more under load — and the
+ * api-server, seeing the request cancelled, answered with an empty UNREACHABLE
+ * reply that the UI then rendered as "this project has no forge.yaml". These
+ * mirror the server's ForgeRPCDeadlines: dispatch budget plus the 5s headroom.
+ */
+const FORGE = "reliant.v1.ForgeService";
+const PROCEDURE_TIMEOUTS: Record<string, number> = {
+  [`${FORGE}/GetTopology`]: 115_000,
+  [`${FORGE}/VerifyEnv`]: 80_000,
+  [`${FORGE}/ListSecrets`]: 35_000,
+  [`${FORGE}/GetAudit`]: 65_000,
+  [`${FORGE}/GetEnvStatus`]: 50_000,
+  [`${FORGE}/GetEnvShape`]: 50_000,
+  [`${FORGE}/PlanPromote`]: 25_000,
+  [`${FORGE}/ApplyPromote`]: 50_000,
+  [`${FORGE}/PlanDeploy`]: 105_000,
+  [`${FORGE}/StartDeployPlan`]: 115_000,
+  [`${FORGE}/ListCheckouts`]: 105_000,
+  [`${FORGE}/DiffEnv`]: 105_000,
+  [`${FORGE}/StartDeploy`]: 115_000,
+  [`${FORGE}/GetDeployStatus`]: 20_000,
+};
+
+/** The client-side budget for one RPC. Exported for the transport tests. */
+export function timeoutForProcedure(serviceTypeName: string, methodName: string): number {
+  return (
+    PROCEDURE_TIMEOUTS[`${serviceTypeName}/${methodName}`] ??
+    LONG_TIMEOUT_METHODS[methodName] ??
+    DEFAULT_GRPC_TIMEOUT_MS
+  );
+}
+
 // ─── In-flight unary RPC registry (starvation diagnostics) ───────────
 // During the 2026-07-09 incident a hung daemon command (worktree.git_changes)
 // left GetWorktreeChanges pending; every later unary RPC queued behind it and
@@ -244,7 +286,7 @@ function reportRpcTimeout(
 // is consumed by the transport before interceptors run.
 const timeoutInterceptor: Interceptor = (next) => async (req) => {
   const methodName = req.method.name;
-  const timeoutMs = LONG_TIMEOUT_METHODS[methodName] ?? DEFAULT_GRPC_TIMEOUT_MS;
+  const timeoutMs = timeoutForProcedure(req.service.typeName, methodName);
 
   // Skip timeout for streaming methods (timeout = 0)
   if (timeoutMs === 0) {

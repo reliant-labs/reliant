@@ -135,7 +135,7 @@ export function WorkloadInventory({
 
   if (error && !outcome) {
     return (
-      <p data-testid="workloads-error" className="text-sm text-destructive">
+      <p data-testid="workloads-error" className="text-sm text-destructive-ink">
         Could not reach your daemon to ask what {env} deploys: {error.message}
       </p>
     );
@@ -432,7 +432,7 @@ function ReplicaCell({ workload }: { workload: ForgeWorkloadState }) {
       data-replicas="counted"
       className={cn(
         "text-sm tabular-nums",
-        reading.short ? "text-destructive" : "text-muted-foreground"
+        reading.short ? "text-destructive-ink" : "text-muted-foreground"
       )}
     >
       {reading.ready}/{reading.desired}
@@ -461,7 +461,7 @@ function RestartCell({ workload }: { workload: ForgeWorkloadState }) {
     <span
       data-restarts={restarts}
       title="The highest restart count across this workload's pods."
-      className={cn("text-sm tabular-nums", restarts > 5 ? "text-warning" : "text-muted-foreground")}
+      className={cn("text-sm tabular-nums", restarts > 5 ? "text-warning-ink" : "text-muted-foreground")}
     >
       {restarts}
     </span>

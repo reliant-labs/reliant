@@ -1,5 +1,5 @@
 import { cn } from "../../lib/utils";
-import { Sparkles, Keyboard, Info, List, Monitor, Code, User, Shield, FolderOpen, Globe, FolderGit2, Bell, KeyRound, Github, CreditCard, Server, ExternalLink, Plug, Layers } from "lucide-react";
+import { Sparkles, Keyboard, Info, List, Monitor, Code, User, Shield, FolderOpen, Globe, FolderGit2, Bell, KeyRound, Github, CreditCard, Server, ExternalLink, Layers } from "lucide-react";
 import { Tooltip } from "../ui/Tooltip";
 import { McpIcon } from "../icons/McpIcon";
 import { hasControlPlane } from "../../services/controlPlane/config";
@@ -35,9 +35,10 @@ const sectionGroups: SectionGroup[] = [
     label: "Essentials",
     items: [
       { id: "general", label: "AI", icon: Sparkles },
-      ...(hasControlPlane
-        ? [{ id: "environments", label: "Machines", icon: Server }]
-        : []),
+      // Not gated on hasControlPlane: self-hosted machines, and the outside
+      // AI apps granted access to each (its Access section), exist without
+      // one — and Machines is the only place such a grant can be revoked.
+      { id: "environments", label: "Machines", icon: Server },
       { id: "account", label: "Account", icon: User },
     ],
   },
@@ -89,7 +90,6 @@ const sectionGroups: SectionGroup[] = [
     label: "System",
     items: [
       { id: "tokens", label: "Access Tokens", icon: KeyRound },
-      { id: "connectors", label: "Connectors", icon: Plug },
       { id: "about", label: "About", icon: Info },
       { id: "developer", label: "Developer", icon: Code },
     ],

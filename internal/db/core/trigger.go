@@ -21,7 +21,27 @@ type TriggerKind string
 const (
 	// TriggerKindSchedule fires on a cron / interval schedule (Temporal Schedule).
 	TriggerKindSchedule TriggerKind = "schedule"
+	// TriggerKindWebhook fires on a POST to the trigger's own URL
+	// (/hooks/{id}/{token}). Config is WebhookConfig.
+	TriggerKindWebhook TriggerKind = "webhook"
+	// TriggerKindIntegration fires on a provider event received through the
+	// owner's connection: an app-level webhook or a poll. Config is
+	// IntegrationConfig; ConnectionID is set.
+	TriggerKindIntegration TriggerKind = "integration"
+	// TriggerKindWorkflowEvent fires when a run of one of the owner's
+	// workflows finishes, fails or blocks. Config is WorkflowEventConfig.
+	TriggerKindWorkflowEvent TriggerKind = "workflow_event"
 )
+
+// IsEventDriven reports whether a kind fires on an arriving event (and so is
+// recorded as a pending event before its launch) rather than on a schedule.
+func (k TriggerKind) IsEventDriven() bool {
+	return k == TriggerKindWebhook || k == TriggerKindIntegration || k == TriggerKindWorkflowEvent
+}
+
+// EventKind is the trigger_events kind a firing of this trigger kind records.
+// The kinds share their spelling, so this is a cast with a name.
+func (k TriggerKind) EventKind() TriggerEventKind { return TriggerEventKind(k) }
 
 // TriggerEventKind is the kind of a single firing. It is wider than
 // TriggerKind: ad hoc sources (an interactive chat start) produce events
@@ -46,7 +66,23 @@ const (
 	// trigger, and is kept out of the sidebar and the default Runs list. Its
 	// dedupe key is the chat id, like chat.start.
 	TriggerEventKindBuilderTest TriggerEventKind = "builder.test"
+	// TriggerEventKindWebhook is a delivery to a webhook trigger. Its dedupe
+	// key is "<trigger id>:<sender idempotency key>", or a body hash within a
+	// one-minute bucket when the sender gives none.
+	TriggerEventKindWebhook TriggerEventKind = "webhook"
+	// TriggerEventKindIntegration is a provider event. Its dedupe key is
+	// "<trigger id>:<provider delivery id>": one delivery fans out to every
+	// matching trigger, exactly once each.
+	TriggerEventKindIntegration TriggerEventKind = "integration"
+	// TriggerEventKindWorkflowEvent is another run reaching an outcome.
+	TriggerEventKindWorkflowEvent TriggerEventKind = "workflow_event"
 )
+
+// IsInbound reports whether events of this kind are recorded by a receiver as
+// pending and launched later by the fire workflow.
+func (k TriggerEventKind) IsInbound() bool {
+	return k == TriggerEventKindWebhook || k == TriggerEventKindIntegration || k == TriggerEventKindWorkflowEvent
+}
 
 // TriggerEventOutcome records what a firing did.
 type TriggerEventOutcome string
@@ -55,6 +91,9 @@ const (
 	TriggerEventLaunched TriggerEventOutcome = "launched"
 	TriggerEventSkipped  TriggerEventOutcome = "skipped"
 	TriggerEventFailed   TriggerEventOutcome = "failed"
+	// TriggerEventPending is an inbound event that was recorded and passed
+	// its filter but has not been launched yet. The fire activity settles it.
+	TriggerEventPending TriggerEventOutcome = "pending"
 )
 
 // ErrTriggerNotFound is returned when a trigger id does not resolve.
@@ -87,9 +126,15 @@ type Trigger struct {
 	NotifyOnComplete bool
 	// Config is the kind-specific source configuration, e.g. ScheduleConfig
 	// for TriggerKindSchedule. Stored as jsonb.
-	Config    json.RawMessage
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	Config json.RawMessage
+	// Filter is a CEL bool over the `trigger` root that an arriving event
+	// must satisfy. Empty matches everything. Event-driven kinds only.
+	Filter string
+	// ConnectionID is the connection an integration trigger listens
+	// through; nil for other kinds, or when the connection was deleted.
+	ConnectionID *string
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
 
 	// ProjectName and DaemonName are read-only display names joined in by
 	// GetTrigger and ListTriggers. Empty when the project or daemon row is
@@ -97,6 +142,96 @@ type Trigger struct {
 	ProjectName string
 	DaemonName  string
 }
+
+// WebhookConfig is Trigger.Config for TriggerKindWebhook. The token hash and
+// the HMAC secret are NOT here: config is rendered back to clients, and those
+// live in their own columns (see TriggerWebhookCredentials).
+type WebhookConfig struct {
+	// HMAC, when set, accepts deliveries signed with the trigger's secret.
+	HMAC *WebhookHMACConfig `json:"hmac,omitempty"`
+}
+
+// WebhookHMACConfig describes how a sender signs a body.
+type WebhookHMACConfig struct {
+	Header    string `json:"header,omitempty"`    // empty: X-Signature-256
+	Algorithm string `json:"algorithm,omitempty"` // sha256 (default) | sha1 | sha512
+	Prefix    string `json:"prefix,omitempty"`    // e.g. "sha256="
+	Encoding  string `json:"encoding,omitempty"`  // hex (default) | base64
+}
+
+// IntegrationConfig is Trigger.Config for TriggerKindIntegration.
+type IntegrationConfig struct {
+	// Integration is the provider id ("github"); routing indexes it.
+	Integration string `json:"integration"`
+	// Events are the event types to fire on; a trailing ".*" matches every
+	// action of a type.
+	Events []string `json:"events"`
+	// Match are attributes the event must carry with exactly these values.
+	Match map[string]string `json:"match,omitempty"`
+	// PollInterval is a Go duration for polled integrations; empty means the
+	// integration's default.
+	PollInterval string `json:"poll_interval,omitempty"`
+}
+
+// WorkflowEventConfig is Trigger.Config for TriggerKindWorkflowEvent.
+type WorkflowEventConfig struct {
+	// Workflows are the source workflow refs; empty matches any.
+	Workflows []string `json:"workflows,omitempty"`
+	// Outcomes are finished | failed | blocked; empty matches all three.
+	Outcomes []string `json:"outcomes,omitempty"`
+}
+
+// Workflow-event outcomes.
+const (
+	WorkflowEventFinished = "finished"
+	WorkflowEventFailed   = "failed"
+	WorkflowEventBlocked  = "blocked"
+)
+
+// TriggerWebhookCredentials are a webhook trigger's secrets, read only by the
+// receiver. TokenHash is SHA-256 of the token; SecretSealed is the vault-
+// sealed HMAC secret (nil when HMAC is not configured).
+type TriggerWebhookCredentials struct {
+	TokenHash    []byte
+	SecretSealed []byte
+}
+
+// IntegrationTriggerRoute is an enabled integration trigger together with its
+// connection's routing identity, as the app-level router reads it.
+type IntegrationTriggerRoute struct {
+	Trigger *Trigger
+	// ConnectionAccount is the connection's external account id (the
+	// installation, team or account the provider routes by). Empty when the
+	// connection has not recorded one.
+	ConnectionAccount string
+	// ConnectionStatus is the connection's status: only an active one may
+	// deliver.
+	ConnectionStatus string
+}
+
+// TriggerRegistration is a trigger's state at its provider: the poll cursor,
+// or the id of a per-trigger webhook registration.
+type TriggerRegistration struct {
+	TriggerID      string
+	Provider       string
+	RegistrationID string
+	Cursor         string
+	LastPolledAt   *time.Time
+	Status         string // active | error
+	StatusDetail   string
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+}
+
+// Trigger registration statuses.
+const (
+	TriggerRegistrationActive = "active"
+	TriggerRegistrationError  = "error"
+)
+
+// ErrTriggerRegistrationNotFound is returned when a trigger has no
+// registration yet — for a poll, that is "no baseline taken".
+var ErrTriggerRegistrationNotFound = errors.New("trigger registration not found")
 
 // ScheduleConfig is Trigger.Config for TriggerKindSchedule.
 type ScheduleConfig struct {
@@ -234,4 +369,30 @@ type TriggerStore interface {
 	// GetLatestTriggerEvent returns the trigger's latest event, optionally
 	// filtered by outcome, and (nil, nil) when it has none.
 	GetLatestTriggerEvent(ctx context.Context, triggerID string, outcome *TriggerEventOutcome) (*TriggerEvent, error)
+
+	// SetTriggerWebhookTokenHash replaces the webhook token hash. Returns
+	// ErrTriggerNotFound when the id does not resolve.
+	SetTriggerWebhookTokenHash(ctx context.Context, id string, hash []byte) error
+	// SetTriggerWebhookSecret replaces (nil clears) the sealed HMAC secret.
+	SetTriggerWebhookSecret(ctx context.Context, id string, sealed []byte) error
+	// GetTriggerWebhookCredentials returns ErrTriggerNotFound on a miss.
+	GetTriggerWebhookCredentials(ctx context.Context, id string) (*TriggerWebhookCredentials, error)
+	// ListIntegrationTriggers lists every enabled integration trigger for
+	// one integration whose connection is its owner's and not deleted.
+	ListIntegrationTriggers(ctx context.Context, integration string) ([]*IntegrationTriggerRoute, error)
+	// ListStalePendingTriggerEvents lists pending events created before
+	// olderThan, oldest first.
+	ListStalePendingTriggerEvents(ctx context.Context, olderThan time.Time, limit int) ([]*TriggerEvent, error)
+	// ClaimPendingTriggerEvent moves a pending event to launched with the
+	// given payload. claimed=false means it was not pending (another fire
+	// claimed or settled it first).
+	ClaimPendingTriggerEvent(ctx context.Context, id string, payload map[string]any) (claimed bool, err error)
+	// SettlePendingTriggerEvent records a non-launch verdict on a pending
+	// event. settled=false means it was no longer pending.
+	SettlePendingTriggerEvent(ctx context.Context, id string, outcome TriggerEventOutcome, detail string) (settled bool, err error)
+
+	// GetTriggerRegistration returns ErrTriggerRegistrationNotFound on a miss.
+	GetTriggerRegistration(ctx context.Context, triggerID string) (*TriggerRegistration, error)
+	UpsertTriggerRegistration(ctx context.Context, reg *TriggerRegistration) error
+	DeleteTriggerRegistration(ctx context.Context, triggerID string) error
 }

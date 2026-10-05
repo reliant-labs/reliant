@@ -60,6 +60,7 @@ vi.mock("../../hooks/chat-queries", () => ({
 // The Inbox nav item reads its own counts; nothing is waiting here.
 vi.mock("../../hooks/inbox-queries", () => ({
   useInboxCounts: () => ({ data: { blockingCount: 0, hasInformational: false }, isError: false }),
+  useInboxProjectId: () => undefined,
 }));
 vi.mock("../../hooks/message-queries", () => ({
   useMarkUnread: () => ({ mutateAsync: vi.fn() }),

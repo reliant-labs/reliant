@@ -98,7 +98,7 @@ export function DeleteWorktreeModal({
               <span className="font-mono text-foreground">{worktree.name}</span> will be removed from
               Reliant.{" "}
               {chatCount > 0 && `Its ${chatsPhrase} stay in your chat archive. `}
-              <span className="font-medium text-destructive">This can't be undone.</span>
+              <span className="font-medium text-destructive-ink">This can't be undone.</span>
             </>
           ) : (
             <>
@@ -197,7 +197,7 @@ function CleanupOption({
       <span className="flex min-w-0 flex-col gap-0.5">
         <span className="text-sm font-medium text-foreground">{title}</span>
         <span className="text-pretty text-xs text-muted-foreground">{description}</span>
-        {warning && <span className="text-xs font-medium text-destructive">{warning}</span>}
+        {warning && <span className="text-xs font-medium text-destructive-ink">{warning}</span>}
       </span>
     </label>
   );

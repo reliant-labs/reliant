@@ -3,7 +3,6 @@ package activities
 
 import (
 	"reflect"
-	"strings"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
@@ -32,6 +31,7 @@ var nodeTypeActivities = map[string]nodeTypeActivityDef{
 	model.NodeTypeAskQuestion:    {"AskQuestion", reflect.TypeOf(reliantv1.AskQuestionArgs{}), reflect.TypeOf((*reliantv1.AskQuestionOutput)(nil))},
 	model.NodeTypeSaveMessage:    {"SaveMessage", reflect.TypeOf(reliantv1.SaveMessageNodeArgs{}), reflect.TypeOf((*reliantv1.SaveMessageOutput)(nil))},
 	model.NodeTypeInvokeTool:     {"InvokeTool", reflect.TypeOf(reliantv1.InvokeToolArgs{}), reflect.TypeOf((*reliantv1.InvokeToolOutput)(nil))},
+	model.NodeTypeAction:         {"Action", reflect.TypeOf(reliantv1.ActionArgs{}), reflect.TypeOf((*reliantv1.ActionOutput)(nil))},
 }
 
 func init() {
@@ -168,6 +168,7 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 
 	v2.RegisterActivity(registry, handlers.NewExecuteToolsActivity(deps.Repo, deps.ToolExecutor))
 	v2.RegisterActivity(registry, handlers.NewInvokeToolActivity(deps.Repo, deps.ToolExecutor))
+	v2.RegisterActivity(registry, handlers.NewActionActivity(deps.Connections))
 
 	// ========================================================================
 	// CONTEXT MANAGEMENT ACTIVITIES
@@ -241,20 +242,14 @@ func initPreflightConfig() {
 
 // newPreflightConfig builds the production PreflightConfig.
 func newPreflightConfig() *v2.PreflightConfig {
-	// Build daemon tool lookup from the tool registry.
-	registry := tools.GetToolRegistry()
-	daemonTools := make(map[string]bool, len(registry))
-	for _, def := range registry {
-		if def.RunsOn == tools.ToolRunsOnDaemon {
-			daemonTools[def.Name] = true
-		}
-	}
-
 	return &v2.PreflightConfig{
-		// MCP tools execute on the daemon (stdio servers spawn there), and
-		// their names are not in the built-in registry.
+		// Static analysis cannot see which MCP servers a user will have, and
+		// PlacementOf resolves every mcp__ name (including the "mcp__*" probe
+		// below) to its server placement. An unresolvable tool is treated as
+		// daemon-bound: better to check for a daemon than to skip the check.
 		IsDaemonTool: func(name string) bool {
-			return daemonTools[name] || strings.HasPrefix(name, "mcp__")
+			placement, err := tools.PlacementOf(name)
+			return err != nil || placement == tools.PlacementDaemon
 		},
 		ExpandToolFilter: func(filter []string) []string {
 			expanded := tools.ExpandToolFilter(filter, nil)

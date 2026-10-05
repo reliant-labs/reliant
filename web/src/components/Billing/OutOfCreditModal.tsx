@@ -106,7 +106,7 @@ export function OutOfCreditModal({
       onClose={onClose}
       size="md"
       title="You're out of AI credit"
-      titlePrefix={<AlertCircle className="h-5 w-5 text-destructive" />}
+      titlePrefix={<AlertCircle className="h-5 w-5 text-destructive-ink" />}
     >
       <div className="space-y-5 p-1">
         <p className="text-sm text-muted-foreground">
@@ -173,7 +173,7 @@ export function OutOfCreditModal({
             </div>
 
             {error && (
-              <p className="text-xs text-destructive" role="alert">
+              <p className="text-xs text-destructive-ink" role="alert">
                 {error}
               </p>
             )}

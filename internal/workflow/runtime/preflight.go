@@ -3,12 +3,14 @@ package runtime
 
 import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/integrations/catalog"
+	"github.com/reliant-labs/reliant/internal/integrations/manifest"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 )
 
-// ToolLocationChecker determines if a tool name runs on the daemon.
+// DaemonToolChecker determines if a tool name runs on the daemon.
 // Provided by callers to avoid import cycles with the tools package.
-type ToolLocationChecker func(toolName string) bool
+type DaemonToolChecker func(toolName string) bool
 
 // ToolFilterExpander expands a tool filter (tags/globs) into concrete tool names.
 // Provided by callers to avoid import cycles with the tools package.
@@ -18,7 +20,7 @@ type ToolFilterExpander func(filter []string) []string
 // Injected to avoid import cycles between runtime and tools packages.
 type PreflightConfig struct {
 	// IsDaemonTool returns true if the named tool runs on the daemon.
-	IsDaemonTool ToolLocationChecker
+	IsDaemonTool DaemonToolChecker
 	// ExpandToolFilter expands tool filter specs (tags, globs) into tool names.
 	ExpandToolFilter ToolFilterExpander
 }
@@ -45,7 +47,7 @@ func buildPreflightConfig() *PreflightConfig {
 // contains:
 //   - Any "run" type node (shell execution always runs on daemon)
 //   - Any node with an explicit "daemon" field set
-//   - Any call_llm node whose tool_filter includes tools annotated ToolRunsOnDaemon
+//   - Any call_llm node whose tool_filter includes tools annotated PlacementDaemon
 //   - Workflow-level daemon field set
 //
 // This is used for preflight checks to fail fast before starting execution
@@ -91,6 +93,13 @@ func requiresDaemonNode(node *reliantv1.Node, cfg *PreflightConfig) bool {
 		return true
 	}
 
+	// An action node runs where its manifest says. Every curated action is
+	// server/any, so a workflow of only those wakes no daemon. An action we
+	// cannot resolve statically is treated as needing one, like a CEL filter.
+	if nodeType == model.NodeTypeAction {
+		return actionRequiresDaemon(node.GetAction())
+	}
+
 	// Check call_llm nodes for daemon-bound tools.
 	//
 	// BOTH lists count. A tool the model can load on demand still has to run
@@ -134,6 +143,17 @@ func requiresDaemonNode(node *reliantv1.Node, cfg *PreflightConfig) bool {
 	}
 
 	return false
+}
+
+func actionRequiresDaemon(args *reliantv1.ActionArgs) bool {
+	if args == nil || model.CelStringIsExpr(args.GetUses()) {
+		return true
+	}
+	resolved, err := catalog.MustBuiltin().Resolve(model.CelStringRaw(args.GetUses()))
+	if err != nil {
+		return true
+	}
+	return resolved.Spec.GetPlacement() == manifest.PlacementDaemon
 }
 
 // toolFilterHasDaemonTools checks if a CelStringList tool filter contains any

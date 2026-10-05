@@ -26,6 +26,7 @@ vi.mock('@/services/controlPlane/capabilities', () => ({
 }))
 vi.mock('@tanstack/react-router', () => ({
   useSearch: () => ({}),
+  useParams: () => ({}),
   useNavigate: () => vi.fn(),
 }))
 vi.mock('@/services/controlPlane/environments', () => ({

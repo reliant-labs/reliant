@@ -229,7 +229,7 @@ export function OAuthCallback() {
             <div className="flex flex-col items-center gap-4">
               <BrandMark className="h-8 w-8" />
               <h2
-                className={`text-xl font-semibold ${alreadyRegistered ? "text-foreground" : "text-destructive"}`}
+                className={`text-xl font-semibold ${alreadyRegistered ? "text-foreground" : "text-destructive-ink"}`}
               >
                 {alreadyRegistered
                   ? "Account already registered"

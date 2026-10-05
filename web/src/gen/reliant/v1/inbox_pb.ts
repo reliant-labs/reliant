@@ -17,7 +17,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file reliant/v1/inbox.proto.
  */
 export const file_reliant_v1_inbox: GenFile = /*@__PURE__*/
-  fileDesc("ChZyZWxpYW50L3YxL2luYm94LnByb3RvEgpyZWxpYW50LnYxIjAKEExpc3RJbmJveFJlcXVlc3QSEgoFbGltaXQYASABKAVIAIgBAUIICgZfbGltaXQifwoRTGlzdEluYm94UmVzcG9uc2USJAoFaXRlbXMYASADKAsyFS5yZWxpYW50LnYxLkluYm94SXRlbRIWCg5ibG9ja2luZ19jb3VudBgCIAEoBRIZChFoYXNfaW5mb3JtYXRpb25hbBgDIAEoCBIRCgl0cnVuY2F0ZWQYBCABKAgi7QQKCUluYm94SXRlbRInCgRraW5kGAEgASgOMhkucmVsaWFudC52MS5JbmJveEl0ZW1LaW5kEg8KB2l0ZW1faWQYAiABKAkSDwoHY2hhdF9pZBgDIAEoCRIOCgZydW5faWQYBCABKAkSEgoKdHJpZ2dlcl9pZBgFIAEoCRIUCgx0cmlnZ2VyX25hbWUYBiABKAkSEgoKcHJvamVjdF9pZBgHIAEoCRIUCgxwcm9qZWN0X25hbWUYCCABKAkSFQoNd29ya2Zsb3dfbmFtZRgJIAEoCRISCgpjaGF0X3RpdGxlGAogASgJEhUKDXdhaXRpbmdfc2luY2UYCyABKAkSLQoIYXBwcm92YWwYFCABKAsyGS5yZWxpYW50LnYxLkluYm94QXBwcm92YWxIABItCghxdWVzdGlvbhgVIAEoCzIZLnJlbGlhbnQudjEuSW5ib3hRdWVzdGlvbkgAEkEKE3dhaXRpbmdfZm9yX21hY2hpbmUYFiABKAsyIi5yZWxpYW50LnYxLkluYm94V2FpdGluZ0Zvck1hY2hpbmVIABJAChJhdXRvbWF0aW9uX2ZhaWxpbmcYFyABKAsyIi5yZWxpYW50LnYxLkluYm94QXV0b21hdGlvbkZhaWxpbmdIABJLChhhdXRvbWF0aW9uX2xhdW5jaF9mYWlsZWQYGCABKAsyJy5yZWxpYW50LnYxLkluYm94QXV0b21hdGlvbkxhdW5jaEZhaWxlZEgAEjQKDHJ1bl9maW5pc2hlZBgZIAEoCzIcLnJlbGlhbnQudjEuSW5ib3hSdW5GaW5pc2hlZEgAQgkKB3BheWxvYWQi0AEKDUluYm94QXBwcm92YWwSEwoLYXBwcm92YWxfaWQYASABKAkSLwoNYXBwcm92YWxfdHlwZRgCIAEoDjIYLnJlbGlhbnQudjEuQXBwcm92YWxUeXBlEg0KBXRpdGxlGAMgASgJEhYKCXRvb2xfbmFtZRgEIAEoCUgAiAEBEhkKDHRvb2xfY2FsbF9pZBgFIAEoCUgBiAEBEhgKEGFyZ3VtZW50X3N1bW1hcnkYBiABKAlCDAoKX3Rvb2xfbmFtZUIPCg1fdG9vbF9jYWxsX2lkImsKDUluYm94UXVlc3Rpb24SEwoLcXVlc3Rpb25faWQYASABKAkSEQoJdGhyZWFkX2lkGAIgASgJEg4KBnByb21wdBgDIAEoCRIVCghtZXRhZGF0YRgEIAEoCUgAiAEBQgsKCV9tZXRhZGF0YSJAChZJbmJveFdhaXRpbmdGb3JNYWNoaW5lEhEKCWRhZW1vbl9pZBgBIAEoCRITCgtkYWVtb25fbmFtZRgCIAEoCSJ3ChZJbmJveEF1dG9tYXRpb25GYWlsaW5nEikKBmhlYWx0aBgBIAEoCzIZLnJlbGlhbnQudjEuVHJpZ2dlckhlYWx0aBIdChBsYXN0X3J1bl9jaGF0X2lkGAIgASgJSACIAQFCEwoRX2xhc3RfcnVuX2NoYXRfaWQiXQobSW5ib3hBdXRvbWF0aW9uTGF1bmNoRmFpbGVkEg4KBnJlYXNvbhgBIAEoCRIQCghldmVudF9pZBgCIAEoCRIcChRjb25zZWN1dGl2ZV9mYWlsdXJlcxgDIAEoBSISChBJbmJveFJ1bkZpbmlzaGVkIioKF0Rpc21pc3NJbmJveEl0ZW1SZXF1ZXN0Eg8KB2l0ZW1faWQYASABKAkiGgoYRGlzbWlzc0luYm94SXRlbVJlc3BvbnNlKo0CCg1JbmJveEl0ZW1LaW5kEh8KG0lOQk9YX0lURU1fS0lORF9VTlNQRUNJRklFRBAAEhwKGElOQk9YX0lURU1fS0lORF9BUFBST1ZBTBABEhwKGElOQk9YX0lURU1fS0lORF9RVUVTVElPThACEicKI0lOQk9YX0lURU1fS0lORF9XQUlUSU5HX0ZPUl9NQUNISU5FEAMSJgoiSU5CT1hfSVRFTV9LSU5EX0FVVE9NQVRJT05fRkFJTElORxAEEiwKKElOQk9YX0lURU1fS0lORF9BVVRPTUFUSU9OX0xBVU5DSF9GQUlMRUQQBRIgChxJTkJPWF9JVEVNX0tJTkRfUlVOX0ZJTklTSEVEEAYyuwEKDEluYm94U2VydmljZRJKCglMaXN0SW5ib3gSHC5yZWxpYW50LnYxLkxpc3RJbmJveFJlcXVlc3QaHS5yZWxpYW50LnYxLkxpc3RJbmJveFJlc3BvbnNlIgASXwoQRGlzbWlzc0luYm94SXRlbRIjLnJlbGlhbnQudjEuRGlzbWlzc0luYm94SXRlbVJlcXVlc3QaJC5yZWxpYW50LnYxLkRpc21pc3NJbmJveEl0ZW1SZXNwb25zZSIAQjpaOGdpdGh1Yi5jb20vcmVsaWFudC1sYWJzL3JlbGlhbnQvZ2VuL3JlbGlhbnQvdjE7cmVsaWFudHYxYgZwcm90bzM", [file_reliant_v1_approval, file_reliant_v1_trigger]);
+  fileDesc("ChZyZWxpYW50L3YxL2luYm94LnByb3RvEgpyZWxpYW50LnYxIlgKEExpc3RJbmJveFJlcXVlc3QSEgoFbGltaXQYASABKAVIAIgBARIXCgpwcm9qZWN0X2lkGAIgASgJSAGIAQFCCAoGX2xpbWl0Qg0KC19wcm9qZWN0X2lkIp0BChFMaXN0SW5ib3hSZXNwb25zZRIkCgVpdGVtcxgBIAMoCzIVLnJlbGlhbnQudjEuSW5ib3hJdGVtEhYKDmJsb2NraW5nX2NvdW50GAIgASgFEhkKEWhhc19pbmZvcm1hdGlvbmFsGAMgASgIEhEKCXRydW5jYXRlZBgEIAEoCBIcChRvdGhlcl9wcm9qZWN0c19jb3VudBgFIAEoBSLtBAoJSW5ib3hJdGVtEicKBGtpbmQYASABKA4yGS5yZWxpYW50LnYxLkluYm94SXRlbUtpbmQSDwoHaXRlbV9pZBgCIAEoCRIPCgdjaGF0X2lkGAMgASgJEg4KBnJ1bl9pZBgEIAEoCRISCgp0cmlnZ2VyX2lkGAUgASgJEhQKDHRyaWdnZXJfbmFtZRgGIAEoCRISCgpwcm9qZWN0X2lkGAcgASgJEhQKDHByb2plY3RfbmFtZRgIIAEoCRIVCg13b3JrZmxvd19uYW1lGAkgASgJEhIKCmNoYXRfdGl0bGUYCiABKAkSFQoNd2FpdGluZ19zaW5jZRgLIAEoCRItCghhcHByb3ZhbBgUIAEoCzIZLnJlbGlhbnQudjEuSW5ib3hBcHByb3ZhbEgAEi0KCHF1ZXN0aW9uGBUgASgLMhkucmVsaWFudC52MS5JbmJveFF1ZXN0aW9uSAASQQoTd2FpdGluZ19mb3JfbWFjaGluZRgWIAEoCzIiLnJlbGlhbnQudjEuSW5ib3hXYWl0aW5nRm9yTWFjaGluZUgAEkAKEmF1dG9tYXRpb25fZmFpbGluZxgXIAEoCzIiLnJlbGlhbnQudjEuSW5ib3hBdXRvbWF0aW9uRmFpbGluZ0gAEksKGGF1dG9tYXRpb25fbGF1bmNoX2ZhaWxlZBgYIAEoCzInLnJlbGlhbnQudjEuSW5ib3hBdXRvbWF0aW9uTGF1bmNoRmFpbGVkSAASNAoMcnVuX2ZpbmlzaGVkGBkgASgLMhwucmVsaWFudC52MS5JbmJveFJ1bkZpbmlzaGVkSABCCQoHcGF5bG9hZCLQAQoNSW5ib3hBcHByb3ZhbBITCgthcHByb3ZhbF9pZBgBIAEoCRIvCg1hcHByb3ZhbF90eXBlGAIgASgOMhgucmVsaWFudC52MS5BcHByb3ZhbFR5cGUSDQoFdGl0bGUYAyABKAkSFgoJdG9vbF9uYW1lGAQgASgJSACIAQESGQoMdG9vbF9jYWxsX2lkGAUgASgJSAGIAQESGAoQYXJndW1lbnRfc3VtbWFyeRgGIAEoCUIMCgpfdG9vbF9uYW1lQg8KDV90b29sX2NhbGxfaWQiawoNSW5ib3hRdWVzdGlvbhITCgtxdWVzdGlvbl9pZBgBIAEoCRIRCgl0aHJlYWRfaWQYAiABKAkSDgoGcHJvbXB0GAMgASgJEhUKCG1ldGFkYXRhGAQgASgJSACIAQFCCwoJX21ldGFkYXRhIkAKFkluYm94V2FpdGluZ0Zvck1hY2hpbmUSEQoJZGFlbW9uX2lkGAEgASgJEhMKC2RhZW1vbl9uYW1lGAIgASgJIncKFkluYm94QXV0b21hdGlvbkZhaWxpbmcSKQoGaGVhbHRoGAEgASgLMhkucmVsaWFudC52MS5UcmlnZ2VySGVhbHRoEh0KEGxhc3RfcnVuX2NoYXRfaWQYAiABKAlIAIgBAUITChFfbGFzdF9ydW5fY2hhdF9pZCJdChtJbmJveEF1dG9tYXRpb25MYXVuY2hGYWlsZWQSDgoGcmVhc29uGAEgASgJEhAKCGV2ZW50X2lkGAIgASgJEhwKFGNvbnNlY3V0aXZlX2ZhaWx1cmVzGAMgASgFIhIKEEluYm94UnVuRmluaXNoZWQiOgoXRGlzbWlzc0luYm94SXRlbVJlcXVlc3QSEAoIaXRlbV9pZHMYAiADKAlKBAgBEAJSB2l0ZW1faWQiGgoYRGlzbWlzc0luYm94SXRlbVJlc3BvbnNlIisKF1Jlc3RvcmVJbmJveEl0ZW1SZXF1ZXN0EhAKCGl0ZW1faWRzGAEgAygJIhoKGFJlc3RvcmVJbmJveEl0ZW1SZXNwb25zZSqNAgoNSW5ib3hJdGVtS2luZBIfChtJTkJPWF9JVEVNX0tJTkRfVU5TUEVDSUZJRUQQABIcChhJTkJPWF9JVEVNX0tJTkRfQVBQUk9WQUwQARIcChhJTkJPWF9JVEVNX0tJTkRfUVVFU1RJT04QAhInCiNJTkJPWF9JVEVNX0tJTkRfV0FJVElOR19GT1JfTUFDSElORRADEiYKIklOQk9YX0lURU1fS0lORF9BVVRPTUFUSU9OX0ZBSUxJTkcQBBIsCihJTkJPWF9JVEVNX0tJTkRfQVVUT01BVElPTl9MQVVOQ0hfRkFJTEVEEAUSIAocSU5CT1hfSVRFTV9LSU5EX1JVTl9GSU5JU0hFRBAGMpwCCgxJbmJveFNlcnZpY2USSgoJTGlzdEluYm94EhwucmVsaWFudC52MS5MaXN0SW5ib3hSZXF1ZXN0Gh0ucmVsaWFudC52MS5MaXN0SW5ib3hSZXNwb25zZSIAEl8KEERpc21pc3NJbmJveEl0ZW0SIy5yZWxpYW50LnYxLkRpc21pc3NJbmJveEl0ZW1SZXF1ZXN0GiQucmVsaWFudC52MS5EaXNtaXNzSW5ib3hJdGVtUmVzcG9uc2UiABJfChBSZXN0b3JlSW5ib3hJdGVtEiMucmVsaWFudC52MS5SZXN0b3JlSW5ib3hJdGVtUmVxdWVzdBokLnJlbGlhbnQudjEuUmVzdG9yZUluYm94SXRlbVJlc3BvbnNlIgBCOlo4Z2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vcmVsaWFudC92MTtyZWxpYW50djFiBnByb3RvMw", [file_reliant_v1_approval, file_reliant_v1_trigger]);
 
 /**
  * @generated from message reliant.v1.ListInboxRequest
@@ -29,6 +29,14 @@ export type ListInboxRequest = Message<"reliant.v1.ListInboxRequest"> & {
    * @generated from field: optional int32 limit = 1;
    */
   limit?: number | undefined;
+
+  /**
+   * Only items of this project. Unset lists every project. The counts follow
+   * the same scope.
+   *
+   * @generated from field: optional string project_id = 2;
+   */
+  projectId?: string | undefined;
 };
 
 /**
@@ -72,6 +80,14 @@ export type ListInboxResponse = Message<"reliant.v1.ListInboxResponse"> & {
    * @generated from field: bool truncated = 4;
    */
   truncated: boolean;
+
+  /**
+   * With project_id set: how many items are waiting in the caller's OTHER
+   * projects, so a scoped view can say what it is not showing. 0 when unscoped.
+   *
+   * @generated from field: int32 other_projects_count = 5;
+   */
+  otherProjectsCount: number;
 };
 
 /**
@@ -91,11 +107,14 @@ export type InboxItem = Message<"reliant.v1.InboxItem"> & {
   kind: InboxItemKind;
 
   /**
-   * Stable key for dismissal and de-duplication. Approvals and questions use
-   * their row id; waiting-for-machine uses the chat id; run-finished uses the
-   * chat id. Automation failure items embed the id of the FIRST failing event
-   * of the current failure episode, so repeated failures stay one item and a
-   * new episode is a new item.
+   * Stable key for dismissal and de-duplication, prefixed by kind
+   * ("approval:", "question:", "waiting_for_machine:", "automation_failing:",
+   * "automation_launch_failed:", "run_finished:"). Approvals and questions
+   * embed their row id; waiting-for-machine embeds the chat id and when the
+   * block began, so a later block is a new item; run-finished embeds the chat
+   * id. Automation failure items embed the id of the FIRST failing event of the
+   * current failure episode, so repeated failures stay one item and a new
+   * episode is a new item.
    *
    * @generated from field: string item_id = 2;
    */
@@ -395,9 +414,11 @@ export const InboxRunFinishedSchema: GenMessage<InboxRunFinished> = /*@__PURE__*
  */
 export type DismissInboxItemRequest = Message<"reliant.v1.DismissInboxItemRequest"> & {
   /**
-   * @generated from field: string item_id = 1;
+   * One row, or a whole section ("Dismiss all").
+   *
+   * @generated from field: repeated string item_ids = 2;
    */
-  itemId: string;
+  itemIds: string[];
 };
 
 /**
@@ -419,6 +440,36 @@ export type DismissInboxItemResponse = Message<"reliant.v1.DismissInboxItemRespo
  */
 export const DismissInboxItemResponseSchema: GenMessage<DismissInboxItemResponse> = /*@__PURE__*/
   messageDesc(file_reliant_v1_inbox, 10);
+
+/**
+ * @generated from message reliant.v1.RestoreInboxItemRequest
+ */
+export type RestoreInboxItemRequest = Message<"reliant.v1.RestoreInboxItemRequest"> & {
+  /**
+   * @generated from field: repeated string item_ids = 1;
+   */
+  itemIds: string[];
+};
+
+/**
+ * Describes the message reliant.v1.RestoreInboxItemRequest.
+ * Use `create(RestoreInboxItemRequestSchema)` to create a new message.
+ */
+export const RestoreInboxItemRequestSchema: GenMessage<RestoreInboxItemRequest> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_inbox, 11);
+
+/**
+ * @generated from message reliant.v1.RestoreInboxItemResponse
+ */
+export type RestoreInboxItemResponse = Message<"reliant.v1.RestoreInboxItemResponse"> & {
+};
+
+/**
+ * Describes the message reliant.v1.RestoreInboxItemResponse.
+ * Use `create(RestoreInboxItemResponseSchema)` to create a new message.
+ */
+export const RestoreInboxItemResponseSchema: GenMessage<RestoreInboxItemResponse> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_inbox, 12);
 
 /**
  * InboxItemKind is declared in priority order: lower values sort first. The
@@ -486,8 +537,12 @@ export const InboxItemKindSchema: GenEnum<InboxItemKind> = /*@__PURE__*/
 
 /**
  * InboxService lists everything waiting on the calling user, across every
- * project and launch kind (research/WORKFLOW_UI.md §8). Scope is always the
- * caller; no request carries a user id.
+ * project and launch kind (research/WORKFLOW_UI.md §8), or within one project.
+ * Scope is always the caller; no request carries a user id.
+ *
+ * An item is only listed if it can be opened: its chat's project must still
+ * exist and be the caller's, and a blocking item's run must not have completed
+ * or been cancelled.
  *
  * @generated from service reliant.v1.InboxService
  */
@@ -505,10 +560,11 @@ export const InboxService: GenService<{
     output: typeof ListInboxResponseSchema;
   },
   /**
-   * DismissInboxItem hides a failure item. Approvals and questions are not
-   * dismissable (they clear when resolved) and are rejected with
-   * INVALID_ARGUMENT. A newer failure of the same automation has a new item_id,
-   * so it reappears.
+   * DismissInboxItem hides items from the caller's inbox. Every kind can be
+   * dismissed. Hiding an approval or a question does not resolve it: the run
+   * still waits, and the chat still shows it. A newer failure of the same
+   * automation, or a new block on the same machine, has a new item_id and so
+   * appears again. Unknown ids are rejected with INVALID_ARGUMENT.
    *
    * @generated from rpc reliant.v1.InboxService.DismissInboxItem
    */
@@ -516,6 +572,17 @@ export const InboxService: GenService<{
     methodKind: "unary";
     input: typeof DismissInboxItemRequestSchema;
     output: typeof DismissInboxItemResponseSchema;
+  },
+  /**
+   * RestoreInboxItem undoes DismissInboxItem. Restoring an item that was not
+   * dismissed is a no-op.
+   *
+   * @generated from rpc reliant.v1.InboxService.RestoreInboxItem
+   */
+  restoreInboxItem: {
+    methodKind: "unary";
+    input: typeof RestoreInboxItemRequestSchema;
+    output: typeof RestoreInboxItemResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_reliant_v1_inbox, 0);

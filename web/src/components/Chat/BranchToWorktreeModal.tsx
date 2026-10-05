@@ -6,7 +6,9 @@ import { useChatStore } from "../../store/chatStore";
 import { useBranchChat } from "../../hooks/message-queries";
 import { usePreferences, useUpdateWorktreePreferences } from "../../hooks/settings-queries";
 import { worktreeGrpc } from "../../api/worktree-grpc";
+import { repoGrpc, type Repo } from "../../api/repo-grpc";
 import { logger } from "../../lib/logger";
+import { repoPathToWorkspacePath } from "../../lib/worktreeCopyPaths";
 import { cn } from "../../lib/utils";
 import { Tooltip } from "../ui/Tooltip";
 import { toast } from "../../lib/toast-manager";
@@ -84,42 +86,63 @@ export function BranchToWorktreeModal({
     return worktrees.find(w => w.is_main && w.project_id === projectId) || null;
   }, [sourceWorktreeId, worktrees, projectId]);
   
-  // Fetch current branch and changed files when modal opens
+  // Fetch current branch and changed files when modal opens.
+  //
+  // git status is per repo, and its paths are relative to THAT repo, while
+  // copy_files are relative to the workspace root. So ask each repo of the
+  // project separately and prefix its paths with the repo's location. A
+  // multi-repo project used to call this once with no repo id, which the
+  // server rejects — uncommitted files were silently never copied there.
   useEffect(() => {
-    if (isOpen && sourceWorktree?.id) {
-      worktreeGrpc.getGitStatus(sourceWorktree.id)
-        .then((status) => {
-          logger.info("Got git status for new worktree:", { 
-            currentBranch: status.current_branch,
-            worktreeId: sourceWorktree.id,
-            worktreeName: sourceWorktree.name,
-            modifiedFiles: status.modified_files,
-            untrackedFiles: status.untracked_files,
-            stagedFiles: status.staged_files,
-          });
-          setCurrentBranch(status.current_branch);
-          
-          // Collect all uncommitted files (modified, staged, and untracked)
-          // These need to be copied since git worktrees only share committed changes
-          const allChangedFiles = [
-            ...(status.modified_files || []),
-            ...(status.staged_files || []),
-            ...(status.untracked_files || []),
-          ];
-          // Remove duplicates
-          const uniqueFiles = [...new Set(allChangedFiles)];
-          setChangedFiles(uniqueFiles);
-        })
-        .catch((error) => {
-          logger.warn("Failed to fetch git status:", error);
-          setCurrentBranch(undefined);
-          setChangedFiles([]);
-        });
-    } else {
+    if (!isOpen || !sourceWorktree?.id) {
       setCurrentBranch(undefined);
       setChangedFiles([]);
+      return;
     }
-  }, [isOpen, sourceWorktree?.id, sourceWorktree?.name]);
+    let cancelled = false;
+    const worktreeId = sourceWorktree.id;
+    (async () => {
+      const { repos } = await repoGrpc.list(projectId).catch((error) => {
+        logger.warn("Failed to list repos for branch copy:", error);
+        return { repos: [] as Repo[] };
+      });
+      // No registered repo: the workspace root is the repo, and the server
+      // resolves an empty repo id to it.
+      const targets = repos.length > 0 ? repos : [{ id: "", relative_path: "" } as Repo];
+      const statuses = await Promise.all(
+        targets.map((repo) =>
+          worktreeGrpc
+            .getGitStatus(worktreeId, repo.id || undefined)
+            .then((status) => ({ repo, status }))
+            .catch((error) => {
+              logger.warn("Failed to fetch git status:", { repo: repo.relative_path, error });
+              return null;
+            }),
+        ),
+      );
+      if (cancelled) return;
+
+      const files = new Set<string>();
+      for (const result of statuses) {
+        if (!result) continue;
+        for (const file of [
+          ...(result.status.modified_files || []),
+          ...(result.status.staged_files || []),
+          ...(result.status.untracked_files || []),
+        ]) {
+          files.add(repoPathToWorkspacePath(result.repo.relative_path, file));
+        }
+      }
+      // The base branch only means something for one repo; a multi-repo
+      // workspace branches each repo from its own default.
+      const single = statuses.length === 1 ? statuses[0] : null;
+      setCurrentBranch(single?.status.current_branch);
+      setChangedFiles([...files]);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, sourceWorktree?.id, projectId]);
 
   const handleWorktreeCreated = async (worktreeId: string) => {
     try {
@@ -153,7 +176,7 @@ export function BranchToWorktreeModal({
   const filesToCopy = copyUncommittedFiles ? changedFiles : [];
 
   // Git worktrees only share committed changes, so we need to explicitly copy:
-  // 1. gitignored files (.env, .env.local) - handled by CreateWorktreeModal defaults
+  // 1. gitignored files (.env, node_modules, ...) - the paths typed into CreateWorktreeModal
   // 2. modified/untracked files from source worktree - passed via additionalCopyFiles (if enabled)
   return (
     <CreateWorktreeModal
@@ -204,7 +227,7 @@ export function BranchToWorktreeModal({
                   </span>
                 </div>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Include modified and untracked files from the source workspace. Directories are copied recursively.
+                  Include modified and untracked files from the source workspace, in every repo.
                 </p>
               </div>
               {/* Set as default button */}

@@ -111,7 +111,7 @@ export function WorkflowParseErrorView({
           <div className="max-w-2xl mx-auto space-y-6">
             {/* Error alert */}
             <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4">
-              <h2 className="text-lg font-semibold text-destructive mb-2">
+              <h2 className="text-lg font-semibold text-destructive-ink mb-2">
                 Failed to Parse Workflow
               </h2>
               <p className="text-sm text-muted-foreground mb-3">

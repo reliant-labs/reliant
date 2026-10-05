@@ -200,7 +200,7 @@ function PreferenceRow({ title, description, checked, disabled, warning, onChang
       <div className="flex min-w-0 flex-col gap-0.5">
         <p className="text-sm font-medium text-foreground">{title}</p>
         <p className="text-pretty text-xs leading-relaxed text-muted-foreground">{description}</p>
-        {warning && <p className="text-xs font-medium text-warning">{warning}</p>}
+        {warning && <p className="text-xs font-medium text-warning-ink">{warning}</p>}
       </div>
       <Toggle
         checked={checked}

@@ -428,6 +428,20 @@ func NewTimeoutInterceptor() *TimeoutInterceptor {
 	}
 }
 
+// WithMethodTimeouts adds per-procedure budgets owned by another package.
+//
+// A service whose handlers dispatch work with their own budget (the forge
+// daemon commands run 15–110s) must also be granted that budget HERE, or this
+// interceptor's 10s default cancels the request first and the handler's own
+// budget is dead code. Taking the map from the owning package — rather than
+// copying numbers into the table above — keeps the two from drifting.
+func (t *TimeoutInterceptor) WithMethodTimeouts(timeouts map[string]time.Duration) *TimeoutInterceptor {
+	for procedure, timeout := range timeouts {
+		t.longTimeoutMethods[procedure] = timeout
+	}
+	return t
+}
+
 // Interceptor returns a Connect unary interceptor that enforces timeouts
 func (t *TimeoutInterceptor) Interceptor() connect.UnaryInterceptorFunc {
 	return func(next connect.UnaryFunc) connect.UnaryFunc {

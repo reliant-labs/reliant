@@ -257,9 +257,9 @@ export const SETTINGS_SECTION_IDS = [
   "mcp",
   "about",
   "tokens",
-  // Grants for third-party MCP clients (ChatGPT, Claude, mobile) that drive a
-  // cloud workspace. Route: /settings/connectors.
-  "connectors",
+  // (No "connectors": grants for outside AI apps live on each machine, in
+  // Settings → Machines. /settings/connectors redirects there — see
+  // settingsConnectorRoutes.tsx.)
   // Every preset across workflows (WORKFLOW_UI.md §14.1 decision 7). A
   // workflow's own presets live on its detail page in the Workflows area.
   "presets",
@@ -274,14 +274,27 @@ export const SETTINGS_SECTION_IDS = [
   // organization to grant within, so SettingsNavigation gates the entry on
   // hasControlPlane. Route: /settings/member-permissions.
   "member-permissions",
+  // Machines. Shown in every build: registered machines, and the outside AI
+  // apps granted access to each, exist without a control plane too.
   "environments",
 ] as const;
 export type SettingsSection = (typeof SETTINGS_SECTION_IDS)[number];
 export const DEFAULT_SETTINGS_SECTION: SettingsSection = "account";
 
-export const settingsParamsSchema = z.object({
-  section: z.enum(SETTINGS_SECTION_IDS),
-});
+export function isSettingsSection(value: string | undefined): value is SettingsSection {
+  return !!value && (SETTINGS_SECTION_IDS as readonly string[]).includes(value);
+}
+
+/**
+ * Slugs that are not section ids but that a person would reasonably type,
+ * mapped to the section they mean. /settings/$section redirects them
+ * (settingsSectionRoutes.tsx). Keys are lower case.
+ */
+export const SETTINGS_SECTION_ALIASES: Readonly<Record<string, SettingsSection>> = {
+  // The nav label of the `environments` section is "Machines".
+  machines: "environments",
+  machine: "environments",
+};
 
 // Billing sub-navigation. This was `useState` inside BillingSection, with a
 // comment arguing the tab "never touches the router" so it composes under the
@@ -337,10 +350,11 @@ export const settingsSearchSchema = z.object({
   // route's params — a string `plan` here makes those updaters fail to compile
   // across the app.
   planId: z.string().optional(),
-  // Where the user came from, so billing can offer a route back. Onboarding
-  // previously had none: `returnTo` hard-coded /settings/billing and a user who
-  // detoured mid-wizard had no way home.
-  from: z.enum(["onboarding"]).optional(),
+  // Where the user came from. `onboarding`: billing offers a route back —
+  // previously `returnTo` hard-coded /settings/billing and a user who detoured
+  // mid-wizard had no way home. `connectors`: the retired /settings/connectors
+  // redirect, so Machines can say where Connectors went.
+  from: z.enum(["onboarding", "connectors"]).optional(),
   // The exact URL to return to, captured at the moment the user left. Carries
   // onboarding's `plan` search param — the wizard's ENTIRE state — so the trip
   // through billing (and Stripe, which is a full cold boot) is resumable.
@@ -349,10 +363,13 @@ export const settingsSearchSchema = z.object({
   // Validated at the point of use, not here: it is a URL from the address bar,
   // so it must be same-origin-checked before being navigated to.
   returnTo: z.string().optional(),
-  // Environments deep-links to a specific daemon's detail view; the section
-  // reads it via useSearch({ strict: false }). Declared here because the route
-  // now validates its search and would otherwise strip it.
+  // The pre-path deep link into one machine. /settings/environments redirects
+  // it to /settings/environments/$machineId (settingsSectionRoutes.tsx);
+  // declared so validation does not strip it before that redirect reads it.
   daemon: z.string().optional(),
+  // The slug of a /settings/<slug> URL that matched no section. Set only by
+  // that redirect; the page explains it and offers to dismiss.
+  notFound: z.string().optional(),
 });
 
 // Search params for `/onboarding`. A strict subset of `indexSearchSchema` —
@@ -419,19 +436,21 @@ export const forgeEnvPageSearchSchema = z.object({
    */
   secret: z.string().optional(),
   /**
-   * Which of the two tabs is open — `live` (the default) or `preview`.
+   * Which tab is open. In the URL for the same reason `secret` is: people link
+   * each other to an answer ("look at prod's releases"), and a refresh should
+   * not throw you back to the default.
    *
-   * In the URL for the same reason `secret` is: the two answer different
-   * questions and people link each other to the answer ("look at what Preview
-   * says about staging"). It is also what lets Live's "Open Preview" remedy be
-   * a real navigation rather than hidden component state, so a refresh while
-   * reading Preview does not throw you back to Live.
+   * ABSENT means the environment's default tab — `overview` for a deployed
+   * env, `running` for a local one — so a bare link to an environment opens
+   * whatever that environment leads with.
    *
-   * `live` is encoded as ABSENT rather than as the string, so the default view
-   * has the plain URL and a bare link to an environment means "its Live
-   * state" — which is the view that needs no daemon.
+   * `live` and `preview` are the retired two-tab names, still accepted so old
+   * links land somewhere sensible: `live` is the default tab, `preview` is
+   * Changes (what the old Preview tab led with).
    */
-  tab: z.enum(["live", "preview"]).optional(),
+  tab: z
+    .enum(["overview", "running", "releases", "secrets", "changes", "checks", "live", "preview"])
+    .optional(),
 });
 
 /**
@@ -463,6 +482,32 @@ export const workflowsAreaSearchSchema = z.object({
   tour: tourParam.catch(undefined),
 });
 export type WorkflowsAreaSearch = Partial<z.output<typeof workflowsAreaSearchSchema>>;
+
+// ── /workflows/library ──────────────────────────────────────────────────────
+
+/** The Library's source filter. Absent means every source. */
+export const LIBRARY_SOURCE_KEYS = ["yours", "builtin", "failed"] as const;
+export type LibrarySourceKey = (typeof LIBRARY_SOURCE_KEYS)[number];
+
+/**
+ * The Library's sort. Absent means by name: a list that reorders itself when
+ * the last-run data arrives would move rows under the pointer.
+ */
+export const LIBRARY_SORT_KEYS = ["name", "recent"] as const;
+export type LibrarySortKey = (typeof LIBRARY_SORT_KEYS)[number];
+
+/**
+ * /workflows/library (§2.2). The search, source and sort live in the URL like
+ * the Runs filters, so a narrowed library is a link and Back restores it. An
+ * unknown value is dropped rather than failing the route.
+ */
+export const librarySearchSchema = workflowsAreaSearchSchema.extend({
+  q: z.string().optional().catch(undefined),
+  source: z.enum(LIBRARY_SOURCE_KEYS).optional().catch(undefined),
+  sort: z.enum(LIBRARY_SORT_KEYS).optional().catch(undefined),
+});
+/** Every key optional: absent is the default, which is what links omit. */
+export type LibrarySearch = Partial<z.output<typeof librarySearchSchema>>;
 
 // ── /workflows/runs ─────────────────────────────────────────────────────────
 

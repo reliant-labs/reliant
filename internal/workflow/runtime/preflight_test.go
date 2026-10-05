@@ -137,7 +137,7 @@ func TestRequiresDaemon_ServerOnlyWorkflow(t *testing.T) {
 
 func TestRequiresDaemon_CallLLMWithDefaultTools(t *testing.T) {
 	t.Parallel()
-	// tag:coding:default includes bash (ToolRunsOnDaemon)
+	// tag:coding:default includes bash (PlacementDaemon)
 	wf := &reliantv1.Workflow{
 		Nodes: []*reliantv1.Node{
 			{

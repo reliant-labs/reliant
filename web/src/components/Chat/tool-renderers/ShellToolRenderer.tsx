@@ -169,7 +169,7 @@ function ShellToolRendererComponent({ ctx }: ToolContentProps) {
                 )}
               </div>
               {result.is_error ? (
-                <div className="px-2 py-1.5 text-xs text-warning bg-warning/5">
+                <div className="px-2 py-1.5 text-xs text-warning-ink bg-warning/5">
                   {result.content}
                 </div>
               ) : (
@@ -192,7 +192,7 @@ function ShellToolRendererComponent({ ctx }: ToolContentProps) {
               <div className="px-2 py-1 text-3xs text-muted-foreground uppercase tracking-wider bg-muted/40 border-b border-border/20 flex items-center gap-1.5">
                 <span>output</span>
                 {hasNonZeroExit && (
-                  <span className="text-warning font-medium normal-case tracking-normal">
+                  <span className="text-warning-ink font-medium normal-case tracking-normal">
                     exit code {structured.exit_code}
                   </span>
                 )}
@@ -221,7 +221,7 @@ function ShellToolRendererComponent({ ctx }: ToolContentProps) {
                     <span>stderr</span>
                     <CopyButton content={structured.stderr} className="opacity-100" />
                   </div>
-                  <div className="px-2 py-1.5 text-xs text-warning bg-warning/5 whitespace-pre-wrap font-mono max-h-[400px] overflow-y-auto">
+                  <div className="px-2 py-1.5 text-xs text-warning-ink bg-warning/5 whitespace-pre-wrap font-mono max-h-[400px] overflow-y-auto">
                     {structured.stderr}
                   </div>
                 </div>

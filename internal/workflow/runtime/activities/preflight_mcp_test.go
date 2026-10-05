@@ -40,3 +40,19 @@ func TestPreflight_MCPToolsRequireDaemon(t *testing.T) {
 		})
 	}
 }
+
+func TestPreflight_IsDaemonToolUsesPlacement(t *testing.T) {
+	isDaemon := newPreflightConfig().IsDaemonTool
+	for name, want := range map[string]bool{
+		"shell":                    true,
+		"mcp__serena__find":        true,
+		"mcp__*":                   true,
+		"fetch":                    false,
+		"ask_user":                 false,
+		"tool_that_does_not_exist": true, // unresolvable: fail toward needing a daemon
+	} {
+		if got := isDaemon(name); got != want {
+			t.Errorf("IsDaemonTool(%q) = %v, want %v", name, got, want)
+		}
+	}
+}

@@ -24,6 +24,7 @@ Tools are organized by tags for filtering:
 | `tag:coding:plan` | Tools the coding agent's plan mode starts with |
 | `tag:execution` | Command execution |
 | `tag:file` | File operations |
+| `tag:integration` | Actions from integration manifests, exposed as agent tools |
 | `tag:mcp` | Every tool from the chat's connected MCP servers |
 | `tag:media` | Media generation (images, and later audio/video) |
 | `tag:planning` | Planning and task management tools |
@@ -1914,6 +1915,7 @@ _Miscellaneous tools and utilities._
 | [`generate_image`](#generate_image) | media | Generate an image from a text description. |
 | [`generate_video`](#generate_video) | media | Generate a short video clip from a text description. |
 | [`get_run`](#get_run) | runs, readonly | Check on one top-level run: its state, title, workflow, when it was created and last active, and ... |
+| [`http__request`](#http__request) | integration | Send an HTTP request to a public http(s) URL and return the status, headers and body. Private, lo... |
 | [`list_runs`](#list_runs) | runs, readonly | List the user's recent top-level runs (chats), most recently active first, with the state of each... |
 | [`load_tool`](#load_tool) | coding:default, readonly, coding:plan | Dynamically load a tool by name or search for available tools. |
 | [`metadata_writer`](#metadata_writer) | - | Writes and updates project metadata YAML file |
@@ -2093,6 +2095,14 @@ Check on one top-level run: its state, title, workflow, when it was created and 
 The state is the run's root workflow: pending, running, paused, completed, failed or cancelled. "completed" means the workflow reached its end, not that the work was right — read the excerpt.
 
 Only runs the user owns can be inspected. To check on a sub-agent you spawned, use spawn_status.
+
+---
+
+### http__request
+
+**Tags:** `integration`
+
+Send an HTTP request to a public http(s) URL and return the status, headers and body. Private, loopback and link-local addresses are refused.
 
 ---
 
@@ -2312,17 +2322,18 @@ WORKTREE DATA STORAGE:
 - Use in subsequent steps: worktree_data.path, worktree_data.branch, etc.
 
 FILE COPYING:
-- copy_files: Searches recursively for matching files (e.g., ".env" finds all .env files in any directory)
-- Directory structure is preserved (frontend/.env -> worktree/frontend/.env)
+- copy_files: exact paths relative to the repository root, for gitignored files a fresh checkout lacks
+- Nothing is searched for: ".env" copies only the root .env; name "frontend/.env" to copy that one
+- A directory is copied whole (e.g. "web/node_modules"); a missing path is skipped
 
 EXAMPLES:
 
-Create a worktree with recursive file copy:
+Create a worktree that carries over local env files:
 {
   "action": "create",
   "name": "feature-auth",
   "base_branch": "main",
-  "copy_files": [".env", ".env.local"]
+  "copy_files": [".env", "frontend/.env.local"]
 }
 
 List all worktrees:

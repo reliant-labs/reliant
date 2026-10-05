@@ -296,7 +296,7 @@ func newDaemonClient(bootCfg bootstrap.DaemonBootstrapConfig) (*daemonClient, er
 	// (e.g. "kata", "gvisor"); absent for local/self-hosted daemons.
 	runtimeType := strings.TrimSpace(os.Getenv("DAEMON_RUNTIME_TYPE"))
 
-	mcpManager := mcp.NewManager()
+	mcpManager := mcp.NewManager(mcp.RoleDaemon)
 	storedConfigProvider := config.NewStoredConfigProvider(&filesystemConfigStore{})
 	mcpManager.SetProjectConfigResolver(func(ctx context.Context, projectPath string) (*config.Config, error) {
 		// Pass the filesystem path directly as the "projectID" — the
@@ -311,7 +311,7 @@ func newDaemonClient(bootCfg bootstrap.DaemonBootstrapConfig) (*daemonClient, er
 		ShellPlatform: tools.ShellPlatformFromGOOS(runtime.GOOS),
 	})
 
-	caps := toolsFactory.ListAvailableToolsForLocation(tools.ToolRunsOnDaemon)
+	caps := toolsFactory.ListAvailableToolsForPlacement(tools.PlacementDaemon)
 	sort.Strings(caps)
 
 	localExec := toolexec.NewLocalToolExecutor(toolsFactory)

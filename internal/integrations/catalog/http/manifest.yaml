@@ -1,0 +1,80 @@
+# Generic HTTP request. No connection and no credentials: the caller supplies
+# the URL and any headers. It is the escape hatch for APIs without a manifest,
+# so it may name any host, and the runtime still refuses private, loopback,
+# link-local and metadata addresses after DNS resolution.
+id: http
+version: 1
+display_name: HTTP
+description: Make an HTTP request to a public URL.
+icon: globe
+category: core
+
+keywords: [api, rest, webhook, request, fetch, zapier]
+
+connection:
+  allow_any_public_host: true
+  # A saved api_key or basic connection for integration `http` may be named per
+  # call; without one the request is unauthenticated. The credential is only
+  # ever sent to the host the call started at. This integration knows no
+  # particular API, so an api_key connection picks its header from a fixed list.
+  auth_optional: true
+  auth:
+    - api_key: { label: API key }
+    - basic: {}
+
+actions:
+  - id: request
+    display_name: HTTP request
+    description: >-
+      Send an HTTP request to a public http(s) URL and return the status,
+      headers and body. Private, loopback and link-local addresses are refused.
+    placement: server
+    mutates: true
+    tool:
+      expose: true
+    params:
+      type: object
+      additionalProperties: false
+      required: [url]
+      properties:
+        url:
+          type: string
+          description: The http(s) URL to request.
+        method:
+          type: string
+          enum: [GET, POST, PUT, PATCH, DELETE]
+          default: GET
+          description: HTTP method.
+        headers:
+          type: object
+          additionalProperties: { type: string }
+          description: Request headers.
+        query:
+          type: object
+          additionalProperties: { type: string }
+          description: Query parameters appended to the URL.
+        body:
+          description: JSON request body (any JSON value). Omit for no body.
+        connection:
+          type: string
+          description: >-
+            Id of a saved api_key or basic connection for the http integration
+            to authenticate with. Omit for an unauthenticated request. The
+            credential is only sent to the URL's own host.
+    request:
+      method: "{{ params.method }}"
+      url: "{{ params.url }}"
+      headers_expr: "has(params.headers) ? params.headers : {}"
+      query_expr: "has(params.query) ? params.query : {}"
+      body_expr: "has(params.body) ? params.body : null"
+      timeout_seconds: 30
+      max_response_bytes: 1048576
+    output:
+      select: '{"status": status, "headers": headers, "json": response, "text": raw}'
+      schema:
+        type: object
+        properties:
+          status: { type: integer }
+          headers: { type: object }
+          json: {}
+          text: { type: string }

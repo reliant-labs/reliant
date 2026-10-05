@@ -54,14 +54,14 @@ export function ErrorAlert({
         className
       )}>
         <div className="flex items-start gap-2">
-          <AlertCircle className="w-4 h-4 text-destructive flex-shrink-0 mt-0.5" />
+          <AlertCircle className="w-4 h-4 text-destructive-ink flex-shrink-0 mt-0.5" />
           <div className="flex-1">
             {hasCommand ? (
-              <pre className="text-sm text-destructive whitespace-pre-wrap font-mono" data-sentry-mask>
+              <pre className="text-sm text-destructive-ink whitespace-pre-wrap font-mono" data-sentry-mask>
                 {error}
               </pre>
             ) : (
-              <p className="text-sm text-destructive" data-sentry-mask>{error}</p>
+              <p className="text-sm text-destructive-ink" data-sentry-mask>{error}</p>
             )}
           </div>
           {onDismiss && (
@@ -80,7 +80,7 @@ export function ErrorAlert({
   // Default inline variant
   return (
     <div className={cn(
-      "bg-destructive/10 text-destructive rounded text-xs font-mono p-2",
+      "bg-destructive/10 text-destructive-ink rounded text-xs font-mono p-2",
       className
     )}>
       <div className="flex items-center gap-2">

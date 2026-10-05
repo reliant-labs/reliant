@@ -26,10 +26,10 @@ export function ErrorMessage({ content, onDismiss }: ErrorMessageProps) {
   const isClientError = content.includes('400') || content.includes('429');
 
   const getErrorIcon = () => {
-    if (isCritical) return <AlertTriangle className="w-4 h-4 text-destructive" data-testid="alert-triangle" />;
+    if (isCritical) return <AlertTriangle className="w-4 h-4 text-destructive-ink" data-testid="alert-triangle" />;
     if (isAuthError) return <AlertCircle className="w-4 h-4 text-warning" data-testid="alert-circle" />;
     if (isClientError) return <AlertCircle className="w-4 h-4 text-warning" data-testid="alert-circle" />;
-    return <AlertCircle className="w-4 h-4 text-destructive" data-testid="alert-circle" />;
+    return <AlertCircle className="w-4 h-4 text-destructive-ink" data-testid="alert-circle" />;
   };
 
   const getErrorColor = () => {

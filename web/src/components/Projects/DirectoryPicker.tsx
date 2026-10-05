@@ -279,14 +279,14 @@ export function DirectoryPicker({
               </button>
             </div>
             {createError && (
-              <span className="text-xs text-destructive">{createError}</span>
+              <span className="text-xs text-destructive-ink">{createError}</span>
             )}
           </div>
         )}
 
         {/* Error state */}
         {error && (
-          <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-destructive" role="alert">
+          <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-destructive-ink" role="alert">
             <div className="flex items-start gap-2">
               <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
               <span className="text-sm">{error}</span>

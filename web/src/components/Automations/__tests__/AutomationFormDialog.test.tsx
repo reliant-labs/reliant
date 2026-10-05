@@ -21,12 +21,13 @@ import {
   TriggerOverlapPolicy,
   TriggerSchema,
   UpdateTriggerResponseSchema,
+  type Trigger as ProtoTrigger,
 } from "@/gen/reliant/v1/trigger_pb";
 import { jsToProtoValue } from "@/api/proto-utils";
 import { DaemonInfoSchema, DaemonStatus } from "@/gen/reliant/v1/daemon_registry_pb";
 import { ProjectDaemonSchema, ProjectInstallState } from "@/gen/reliant/v1/project_pb";
 import { triggerFromProto } from "@/api/trigger-grpc";
-import { GetWorkflowResponseSchema } from "@/gen/reliant/v1/workflow_pb";
+import { GetWorkflowResponseSchema, WorkflowDraftStatus } from "@/gen/reliant/v1/workflow_pb";
 import { WorkflowSchema } from "@/gen/reliant/v1/workflow_v2_pb";
 import {
   getWorkflowByName,
@@ -132,8 +133,8 @@ describe("AutomationFormDialog", () => {
     listWorkflows.mockReset();
     listWorkflows.mockResolvedValue({
       workflows: [
-        { name: "agent", source: "builtin", stepCount: 1, nodes: [], edges: [], validationErrors: [] },
-        { name: "triage", source: "project", stepCount: 2, nodes: [], edges: [], validationErrors: [] },
+        { name: "agent", source: "builtin", stepCount: 1, nodes: [], edges: [], validationErrors: [], status: WorkflowDraftStatus.COMPLETE },
+        { name: "triage", source: "project", stepCount: 2, nodes: [], edges: [], validationErrors: [], status: WorkflowDraftStatus.COMPLETE },
       ],
       invalidWorkflows: [],
     });
@@ -318,6 +319,50 @@ describe("AutomationFormDialog", () => {
     });
   });
 
+  it("edits a non-schedule trigger's other fields and sends its source back untouched", async () => {
+    // Built by hand: arms beyond `schedule` land in trigger.proto on another
+    // branch. The dialog must not look inside an arm it has no editor for.
+    const webhookArm = {
+      case: "webhook",
+      value: { $typeName: "reliant.v1.WebhookSource", path: "/hooks/abc123" },
+    } as unknown as ProtoTrigger["source"];
+    const stored = storedTrigger();
+    stored.source = webhookArm;
+    updateTrigger.mockResolvedValue(create(UpdateTriggerResponseSchema, { trigger: stored }));
+    const user = userEvent.setup();
+
+    renderAtRoute(<AutomationFormDialog open onClose={vi.fn()} trigger={triggerFromProto(stored)} />);
+
+    expect(await screen.findByText("Webhook trigger.")).toBeInTheDocument();
+    // No schedule editor to accidentally overwrite the source with.
+    expect(screen.queryByLabelText("Repeat")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Time zone")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Catch-up window")).not.toBeInTheDocument();
+
+    await screen.findByRole("option", { name: /cloud-box/ });
+    fill(screen.getByLabelText("Name"), "Renamed hook");
+    fill(screen.getByLabelText("Prompt"), "New prompt");
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+
+    await waitFor(() => expect(updateTrigger).toHaveBeenCalledTimes(1));
+    const request = updateTrigger.mock.calls[0]![0];
+    expect(request.trigger).toMatchObject({ name: "Renamed hook", message: "New prompt" });
+    expect(request.trigger.source).toEqual(webhookArm);
+  });
+
+  it("refuses to save a trigger whose source this build cannot read", async () => {
+    const stored = storedTrigger();
+    stored.source = { case: undefined };
+    const user = userEvent.setup();
+
+    renderAtRoute(<AutomationFormDialog open onClose={vi.fn()} trigger={triggerFromProto(stored)} />);
+    await screen.findByRole("option", { name: /cloud-box/ });
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/newer version of Reliant/);
+    expect(updateTrigger).not.toHaveBeenCalled();
+  });
+
   it("lets an edit change the daemon, and sends the new one", async () => {
     const stored = storedTrigger();
     updateTrigger.mockResolvedValue(create(UpdateTriggerResponseSchema, { trigger: stored }));
@@ -330,6 +375,82 @@ describe("AutomationFormDialog", () => {
 
     await waitFor(() => expect(updateTrigger).toHaveBeenCalledTimes(1));
     expect(updateTrigger.mock.calls[0]![0].trigger.daemonId).toBe("daemon-1");
+  });
+
+  describe("closing", () => {
+    it("asks before Escape discards what the user typed, and keeps it on Keep editing", async () => {
+      const onClose = vi.fn();
+      const user = userEvent.setup();
+      renderAtRoute(<AutomationFormDialog open onClose={onClose} />);
+
+      await screen.findByRole("option", { name: /laptop/ });
+      fill(screen.getByLabelText("Prompt"), "A long, carefully written prompt");
+      fireEvent.keyDown(document, { key: "Escape" });
+
+      expect(onClose).not.toHaveBeenCalled();
+      expect(await screen.findByRole("alertdialog", { name: "Discard your changes?" })).toBeInTheDocument();
+
+      await user.click(screen.getByRole("button", { name: "Keep editing" }));
+      expect(screen.queryByRole("alertdialog", { name: "Discard your changes?" })).not.toBeInTheDocument();
+      expect(screen.getByLabelText("Prompt")).toHaveValue("A long, carefully written prompt");
+      expect(onClose).not.toHaveBeenCalled();
+    });
+
+    it("closes after Discard is confirmed", async () => {
+      const onClose = vi.fn();
+      const user = userEvent.setup();
+      renderAtRoute(<AutomationFormDialog open onClose={onClose} />);
+
+      await screen.findByRole("option", { name: /laptop/ });
+      fill(screen.getByLabelText("Name"), "Morning triage");
+      await user.click(screen.getByRole("button", { name: "Cancel" }));
+      await user.click(await screen.findByRole("button", { name: "Discard" }));
+
+      expect(onClose).toHaveBeenCalledTimes(1);
+    });
+
+    it("closes an untouched form straight away, even after its own defaults load", async () => {
+      const onClose = vi.fn();
+      renderAtRoute(<AutomationFormDialog open onClose={onClose} />);
+
+      // The daemon and project defaults have been applied by now.
+      await screen.findByRole("option", { name: /laptop/ });
+      await waitFor(() => expect(screen.getByLabelText("Runs on")).not.toHaveValue(""));
+      fireEvent.keyDown(document, { key: "Escape" });
+
+      expect(onClose).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it("never offers a draft workflow", async () => {
+    listWorkflows.mockResolvedValue({
+      workflows: [
+        { name: "triage", source: "project", stepCount: 2, nodes: [], edges: [], validationErrors: [], status: WorkflowDraftStatus.COMPLETE },
+        { name: "release-notes", source: "user", stepCount: 2, nodes: [], edges: [], validationErrors: [], status: WorkflowDraftStatus.DRAFT },
+      ],
+      invalidWorkflows: [],
+    });
+    renderAtRoute(<AutomationFormDialog open onClose={vi.fn()} />);
+
+    const picker = await screen.findByLabelText("Workflow");
+    await within(picker).findByRole("option", { name: /triage/i });
+    expect(within(picker).queryByRole("option", { name: /release/i })).not.toBeInTheDocument();
+  });
+
+  it("rejects a time zone that does not exist, inline, without sending", async () => {
+    const user = userEvent.setup();
+    renderAtRoute(<AutomationFormDialog open onClose={vi.fn()} />);
+
+    await screen.findByRole("option", { name: /laptop/ });
+    fill(screen.getByLabelText("Name"), "Morning triage");
+    fill(screen.getByLabelText("Prompt"), "Triage");
+    fill(screen.getByLabelText("Time zone"), "Mars/Olympus");
+    expect(screen.getByText("Fix the time zone to see when this runs.")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Create automation" }));
+
+    expect(await screen.findByText(/"Mars\/Olympus" is not a time zone/)).toBeInTheDocument();
+    expect(screen.getByLabelText("Time zone")).toHaveAttribute("aria-invalid", "true");
+    expect(createTrigger).not.toHaveBeenCalled();
   });
 
   it("blocks submit and explains when the user has no daemon", async () => {
@@ -496,8 +617,8 @@ describe("AutomationFormDialog", () => {
       updateTrigger.mockResolvedValue(create(UpdateTriggerResponseSchema, { trigger: stored }));
       listWorkflows.mockResolvedValue({
         workflows: [
-          { name: "triage", source: "project", stepCount: 2, nodes: [], edges: [], validationErrors: [] },
-          { name: "sweep", source: "project", stepCount: 1, nodes: [], edges: [], validationErrors: [] },
+          { name: "triage", source: "project", stepCount: 2, nodes: [], edges: [], validationErrors: [], status: WorkflowDraftStatus.COMPLETE },
+          { name: "sweep", source: "project", stepCount: 1, nodes: [], edges: [], validationErrors: [], status: WorkflowDraftStatus.COMPLETE },
         ],
         invalidWorkflows: [],
       });

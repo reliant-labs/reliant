@@ -88,3 +88,39 @@ func (r *routerStub) OpenLocalModelHTTP(context.Context, string, string, *relian
 func (r *routerStub) RefreshLocalModels(context.Context, string, string) (*reliantv1.LocalModelInventory, error) {
 	return nil, nil
 }
+
+type recordingDaemonRouter struct {
+	routerStub
+	toolsSent []string
+}
+
+func (r *recordingDaemonRouter) SendToolRequestSync(_ context.Context, _ string, req *ToolExecutionRequest) (*ToolExecutionResponse, error) {
+	r.toolsSent = append(r.toolsSent, req.ToolName)
+	return &ToolExecutionResponse{Success: true}, nil
+}
+
+func placementTestRequest(tool string) *ToolRequest {
+	return &ToolRequest{UserID: "u", ChatID: "c", ProjectID: "p", ToolName: tool, ToolCallID: "tc"}
+}
+
+func TestExecuteTool_UnknownToolIsAnErrorNotAServerRun(t *testing.T) {
+	router := &recordingDaemonRouter{}
+	executor := NewRemoteExecutor(router)
+	executor.SetServerExecutor(&LocalToolExecutor{})
+
+	res, err := executor.ExecuteTool(context.Background(), placementTestRequest("definitely_not_a_tool"))
+	require.Error(t, err)
+	assert.Nil(t, res)
+	assert.Empty(t, router.toolsSent)
+}
+
+func TestExecuteTool_MCPToolsGoToTheDaemon(t *testing.T) {
+	router := &recordingDaemonRouter{}
+	executor := NewRemoteExecutor(router)
+	executor.SetServerExecutor(&LocalToolExecutor{})
+
+	res, err := executor.ExecuteTool(context.Background(), placementTestRequest("mcp__serena__find_symbol"))
+	require.NoError(t, err)
+	assert.True(t, res.RanOnDaemon)
+	assert.Equal(t, []string{"mcp__serena__find_symbol"}, router.toolsSent)
+}

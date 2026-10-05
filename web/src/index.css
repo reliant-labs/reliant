@@ -172,12 +172,13 @@
   --color-on-danger: hsl(var(--destructive-foreground));
   --color-danger-surface: hsl(var(--destructive) / 0.12);
   --color-danger-border: hsl(var(--destructive) / 0.38);
-  --color-danger-ink: hsl(var(--destructive));
+  --color-danger-ink: hsl(var(--destructive-ink));
+  --color-destructive-ink: hsl(var(--destructive-ink));
   /* Success → reliant's success. */
   --color-success: hsl(var(--success));
   --color-success-surface: hsl(var(--success) / 0.12);
   --color-success-border: hsl(var(--success) / 0.38);
-  --color-success-ink: hsl(var(--success));
+  --color-success-ink: hsl(var(--success-ink));
   /* Warning → reliant's warning. */
   --color-warning: hsl(var(--warning));
   /* The hover twin of --color-warning, matching --color-danger-hover's 0.85.
@@ -187,7 +188,7 @@
   --color-on-warning: hsl(var(--warning-foreground));
   --color-warning-surface: hsl(var(--warning) / 0.12);
   --color-warning-border: hsl(var(--warning) / 0.38);
-  --color-warning-ink: hsl(var(--warning));
+  --color-warning-ink: hsl(var(--warning-ink));
 }
 
 /*
@@ -297,6 +298,7 @@
     --accent: 210 40% 96%;           /* Light blue accent */
     --accent-foreground: 217 91% 60%;
     --destructive: 0 70% 50%;
+    --destructive-ink: 0 70% 40%;
     --destructive-foreground: 0 0% 100%;
     --border: 214 32% 91%;           /* Light blue-gray border */
     --input: 214 32% 91%;
@@ -312,11 +314,19 @@
     --config-input-border: 214 32% 82%;
     --radius: 0.5rem;
 
-    /* Semantic colors for status, success, warning, info */
-    --success: 142 76% 36%;          /* Green for success states */
+    /* Semantic colors for status, success, warning, info.
+       FILL vs INK: --success / --warning are FILLS (badge tints, dots, a
+       button's background); --success-ink / --warning-ink are TEXT on the
+       page or on a 10-12% tint of the fill. Light mode needs them apart:
+       amber at 50% is ~2:1 on white. Inks are ≥5.2:1 on every scheme's
+       background and card, tinted or not (WCAG AA is 4.5:1). Use
+       `text-warning-ink` / `text-success-ink` for words. Same for destructive: `text-destructive-ink`. */
+    --success: 142 76% 28%;          /* Green; white text on it is 5.2:1 */
     --success-foreground: 0 0% 100%;
+    --success-ink: 142 76% 24%;
     --warning: 38 92% 50%;           /* Amber/Orange for warnings */
     --warning-foreground: 0 0% 100%;
+    --warning-ink: 38 92% 28%;
     --info: 199 89% 48%;             /* Blue for info states */
     --info-foreground: 0 0% 100%;
 
@@ -395,6 +405,7 @@
     --accent: 217 33% 21%;           /* Kept in step with --muted */
     --accent-foreground: 210 40% 98%;
     --destructive: 0 70% 55%;
+    --destructive-ink: 0 90% 74%;
     --destructive-foreground: 0 0% 100%;
     --border: 217 33% 32%;           /* Carries the card edge on its own */
     --input: 217 33% 32%;
@@ -409,11 +420,15 @@
     --config-input-bg: 217 33% 18%;
     --config-input-border: 217 33% 32%;
 
-    /* Semantic colors for dark mode */
+    /* Semantic colors for dark mode. The bright fills already read as text
+       on dark surfaces (≥4.7:1 tinted), so the inks equal the fills. A
+       bright fill needs DARK text on top: white on 45% green is 2.2:1. */
     --success: 142 76% 45%;
-    --success-foreground: 0 0% 100%;
+    --success-foreground: 142 80% 10%;
+    --success-ink: var(--success);
     --warning: 38 92% 55%;
     --warning-foreground: 0 0% 100%;
+    --warning-ink: var(--warning);
     --info: 199 89% 58%;
     --info-foreground: 0 0% 100%;
 

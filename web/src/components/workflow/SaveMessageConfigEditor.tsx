@@ -205,7 +205,7 @@ export function SaveMessageConfigEditor({
           <button
             type="button"
             onClick={clearConfig}
-            className="text-xs text-muted-foreground hover:text-destructive transition-colors"
+            className="text-xs text-muted-foreground hover:text-destructive-ink transition-colors"
           >
             Clear save_message configuration
           </button>

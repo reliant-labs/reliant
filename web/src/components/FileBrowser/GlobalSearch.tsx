@@ -365,7 +365,7 @@ export function GlobalSearch({ isOpen, onClose }: GlobalSearchProps) {
         >
           {error ? (
             <div className="px-4 py-8 text-center">
-              <p className="text-sm text-destructive font-mono">{error}</p>
+              <p className="text-sm text-destructive-ink font-mono">{error}</p>
             </div>
           ) : results.length === 0 ? (
             <div className="px-4 py-8 text-center">

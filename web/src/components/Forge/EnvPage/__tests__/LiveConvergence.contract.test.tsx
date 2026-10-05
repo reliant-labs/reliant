@@ -44,7 +44,7 @@ import type { LiveConvergence, LiveEnv } from "@/services/forge/live";
 
 import { LiveState } from "../LiveState";
 import { LiveReleases } from "../LiveReleases";
-import { LiveSection, type LiveSectionProps } from "../LiveSection";
+import { OverviewTab, type OverviewTabProps } from "../EnvTabPanels";
 
 // ── Fixtures: one per state of the observed half ────────────────────────────
 
@@ -192,7 +192,7 @@ describe("the observed half of the state line", () => {
    */
   it("renders an unobserved environment in the quiet register", () => {
     const { container } = render(<LiveState env={NOT_REPORTED} />);
-    expect(container.querySelector(".text-destructive")).toBeNull();
+    expect(container.querySelector(".text-destructive-ink")).toBeNull();
     expect(container.textContent ?? "").not.toMatch(/error|failed|problem|warning/i);
   });
 
@@ -382,59 +382,69 @@ describe("the releases timeline merges intent and observations", () => {
   });
 });
 
-// ── The section, end to end ─────────────────────────────────────────────────
+// ── The Overview tab, end to end ────────────────────────────────────────────
 
-function sectionProps(env: LiveEnv | null, overrides: Partial<LiveSectionProps> = {}) {
+function sectionProps(env: LiveEnv | null, overrides: Partial<OverviewTabProps> = {}) {
   return {
     envName: env?.name ?? "fresh",
-    env,
-    forgeProject: "hounders",
-    projectId: "proj-1",
+    live: env,
+    liveLoading: false,
     status: undefined,
     statusLoading: false,
     statusError: null,
     promotions: [],
-    promotionsLoading: false,
-    promotionsError: null,
-    convergences: [],
-    selectedSecret: null,
-    onSelectSecret: () => {},
-    onOpenPreview: () => {},
+    forgeEnv: null,
+    // Offline: an unregistered env must still render, and say what it lacks.
+    daemon: "offline",
+    projectId: "proj-1",
+    forgeProject: "hounders",
+    onOpenReleases: () => {},
     ...overrides,
-  } satisfies LiveSectionProps;
+  } satisfies OverviewTabProps;
 }
 
 /**
- * LiveSection renders the secrets subtree, which owns a React Query of its
- * own. These tests are about the convergence display, so the client exists
- * only to let the subtree mount — nothing here asserts on secrets.
+ * The Overview tab renders subtrees that own React Queries of their own. These
+ * tests are about the convergence display, so the client exists only to let
+ * them mount.
  */
-function renderSection(props: LiveSectionProps) {
+function renderSection(props: OverviewTabProps) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
   return render(
     <QueryClientProvider client={client}>
-      <LiveSection {...props} />
+      <OverviewTab {...props} />
     </QueryClientProvider>
   );
 }
 
-describe("the Live section", () => {
+describe("the Overview tab", () => {
   it("shows the state line once there is an intent to compare against", () => {
     renderSection(sectionProps(CONVERGED));
     expect(screen.getByTestId("live-state")).toHaveAttribute("data-observed", "converged");
   });
 
   /**
-   * UNCHANGED, and asserted because it is the state most easily broken by
-   * adding a state line above it: a never-built environment has no row at all,
-   * and the page points at Preview instead of rendering an empty comparison.
+   * An environment Reliant has no record of is NOT "never built": control-
+   * plane's prod is on a release by forge's own ledger with no row here. The
+   * page says what Reliant lacks and offers to register it — it no longer
+   * tells the user to build something that is already running.
    */
-  it("says not built yet for an environment with no record, and points at Preview", () => {
+  it("says Reliant has no record of an unregistered env, not that it was never built", () => {
     renderSection(sectionProps(null));
-    const panel = screen.getByTestId("live-never-built");
-    expect(panel).toHaveTextContent(/not built yet/i);
-    expect(panel).toHaveTextContent("forge env build fresh");
+    const panel = screen.getByTestId("env-overview-unregistered");
+    expect(panel).toHaveTextContent(/not registered in reliant/i);
+    expect(panel).not.toHaveTextContent(/not built yet/i);
     expect(screen.queryByTestId("live-state")).not.toBeInTheDocument();
+  });
+
+  it("shows forge's own ledger for an unregistered env when the daemon has it", () => {
+    renderSection(
+      sectionProps(null, {
+        envName: "prod",
+        forgeEnv: { env: "prod", declared: true, release: "v1.7.15", promoted_at: "2026-10-04T21:18:54Z" },
+      })
+    );
+    expect(screen.getByTestId("env-forge-ledger")).toHaveTextContent("v1.7.15");
   });
 
   it("omits the state line when nothing has been promoted, rather than comparing against nothing", () => {
@@ -444,12 +454,13 @@ describe("the Live section", () => {
   });
 
   it("no longer claims the platform does not watch a customer's own cluster", () => {
-    // The retired copy. It was true when the only record of such a deploy was
-    // a forge process's own report; the state line above it is now a reading
-    // the platform made, so saying this would contradict the screen.
+    // The retired copy. The state line is now a reading the platform made, so
+    // saying it does not watch would contradict the screen. What remains
+    // kind-specific is only the WORKLOAD list, and its panel says so.
     renderSection(sectionProps(SELF_MANAGED_CONVERGED));
-    const note = screen.getByTestId("live-not-placed");
-    expect(note.textContent ?? "").not.toMatch(/doesn't watch the cluster/i);
+    const workloads = screen.getByTestId("section-workloads");
+    expect(workloads.textContent ?? "").not.toMatch(/doesn't watch the cluster/i);
+    expect(workloads).toHaveTextContent(/does not place workloads on your own cluster/i);
     expect(screen.getByTestId("live-state")).toHaveAttribute("data-observed", "converged");
   });
 });

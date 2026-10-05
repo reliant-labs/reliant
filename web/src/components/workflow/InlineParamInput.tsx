@@ -574,7 +574,7 @@ function InlineStringInput({
         )}
       >
         <span className="text-muted-foreground">{displayName}:</span>
-        <span className={cn("truncate max-w-20", !currentValue && "text-warning")}>
+        <span className={cn("truncate max-w-20", !currentValue && "text-warning-ink")}>
           {currentValue || "required"}
         </span>
       </button>
@@ -685,7 +685,7 @@ function InlineNumberInput({
         )}
       >
         <span className="text-muted-foreground">{displayName}:</span>
-        <span className={cn("tabular-nums", currentValue === undefined && "text-warning")}>
+        <span className={cn("tabular-nums", currentValue === undefined && "text-warning-ink")}>
           {displayValue || "required"}
         </span>
       </button>

@@ -287,7 +287,7 @@ export function OAuthHelperPanel({
               )}
 
               {installError && (
-                <p className="text-xs text-destructive">{installError}</p>
+                <p className="text-xs text-destructive-ink">{installError}</p>
               )}
             </div>
 

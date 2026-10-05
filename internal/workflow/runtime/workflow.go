@@ -4353,6 +4353,25 @@ type workflowStatusOpts struct {
 	// Empty means the workflow declared no outcome and the stored value is left
 	// alone — absence is not failure.
 	Outcome string
+	// Error is why the run failed, on a "failed" notification. It is what a
+	// workflow-event trigger reports as the source run's error.
+	Error string
+}
+
+// maxStatusErrorBytes bounds the error text a status notification carries; it
+// lands in the activity's history event and in a trigger payload.
+const maxStatusErrorBytes = 4096
+
+// failureText is the error a failed run reports, bounded for history.
+func failureText(err error) string {
+	if err == nil {
+		return ""
+	}
+	text := err.Error()
+	if len(text) > maxStatusErrorBytes {
+		text = text[:maxStatusErrorBytes]
+	}
+	return text
 }
 
 // notifyWorkflowStatus sends workflow status updates to chat_updates for UI notifications
@@ -4420,6 +4439,9 @@ func notifyWorkflowStatus(ctx workflow.Context, chatID, workflowID, workflowName
 		}
 		if opts.Outcome != "" {
 			input["outcome"] = opts.Outcome
+		}
+		if opts.Error != "" {
+			input["error"] = opts.Error
 		}
 	}
 
@@ -4682,7 +4704,8 @@ func handleWorkflowCompletion(ctx workflow.Context, workflowID, chatID, workflow
 		// Run cleanup activities
 		runCleanupActivities(cleanupCtx, chatID, workflowID, thread)
 		// Notify UI that workflow failed and update workflow record
-		notifyWorkflowStatus(cleanupCtx, chatID, workflowID, workflowName, "failed", parentWorkflowID, thread, nil)
+		notifyWorkflowStatus(cleanupCtx, chatID, workflowID, workflowName, "failed", parentWorkflowID, thread,
+			&workflowStatusOpts{Error: failureText(fmt.Errorf("panic: %v", r))})
 		panic(r) // Re-panic to maintain Temporal semantics
 	}
 
@@ -4711,7 +4734,8 @@ func handleWorkflowCompletion(ctx workflow.Context, workflowID, chatID, workflow
 		// Run cleanup activities for failed workflows
 		runCleanupActivities(cleanupCtx, chatID, workflowID, thread)
 		// Notify UI that workflow failed and update workflow record
-		notifyWorkflowStatus(cleanupCtx, chatID, workflowID, workflowName, "failed", parentWorkflowID, thread, nil)
+		notifyWorkflowStatus(cleanupCtx, chatID, workflowID, workflowName, "failed", parentWorkflowID, thread,
+			&workflowStatusOpts{Error: failureText(retErr)})
 		return
 	}
 

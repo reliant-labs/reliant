@@ -15,7 +15,7 @@
  *     drawn and the rest are counted.
  */
 
-import type { Trigger } from "@/api/trigger-grpc";
+import { triggerSchedule, type Trigger } from "@/api/trigger-grpc";
 import { nextFireTimes } from "@/lib/cronSchedule";
 
 export const TIMELINE_WINDOW_MS = 24 * 60 * 60 * 1000;
@@ -41,7 +41,7 @@ export interface TimelineModel {
 
 /** The ticks for one trigger, anchored on the server's next fire. */
 export function laneTicks(trigger: Trigger, now: number, end: number): number[] {
-  const schedule = trigger.schedule;
+  const schedule = triggerSchedule(trigger);
   if (!schedule) return [];
   const computed = nextFireTimes(schedule, now, end, MAX_TICKS_PER_LANE);
 
@@ -62,10 +62,13 @@ export function timelineModel(
 ): TimelineModel {
   const end = now + windowMs;
   const lanes = triggers
-    .filter((trigger) => trigger.enabled && trigger.schedule)
-    .map((trigger) => ({
+    .flatMap((trigger) => {
+      const schedule = triggerSchedule(trigger);
+      return trigger.enabled && schedule ? [{ trigger, schedule }] : [];
+    })
+    .map(({ trigger, schedule }) => ({
       trigger,
-      timezone: trigger.schedule!.timezone || "UTC",
+      timezone: schedule.timezone || "UTC",
       ticks: laneTicks(trigger, now, end),
     }))
     .sort(

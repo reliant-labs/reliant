@@ -1128,7 +1128,7 @@ export function CommandsViewerTab({ worktreeId, processId: initialProcessId }: C
       <div className="flex-1 overflow-auto">
         {/* Error message */}
         {error && (
-          <div className="px-4 py-2 bg-destructive/10 text-destructive text-sm">
+          <div className="px-4 py-2 bg-destructive/10 text-destructive-ink text-sm">
             {error}
           </div>
         )}
@@ -1869,7 +1869,7 @@ function ProcessRow({ process, onViewLogs, onKill, onRerun, canRerun, onDismiss,
             disabled={isCanceling}
             className={cn(
               "rounded transition-colors",
-              isCanceling ? "text-yellow-500 cursor-wait" : "hover:bg-destructive/20 text-destructive",
+              isCanceling ? "text-yellow-500 cursor-wait" : "hover:bg-destructive/20 text-destructive-ink",
               isCompact ? "p-1" : "p-1.5"
             )} aria-label={isCanceling ? "Stopping..." : "Stop process"}>
             {isCanceling ? (

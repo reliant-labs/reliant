@@ -147,7 +147,7 @@ export function DeployFlow({
     return (
       <div
         data-testid="deploy-plan-error"
-        className="rounded-lg border border-destructive/40 bg-destructive/10 px-6 py-8 text-center text-sm text-destructive"
+        className="rounded-lg border border-destructive/40 bg-destructive/10 px-6 py-8 text-center text-sm text-destructive-ink"
       >
         Could not reach your daemon to plan this deploy: {planError.message}
       </div>
@@ -214,7 +214,7 @@ export function DeployFlow({
             // genuinely unknown here, so this claims neither.
             <div
               data-testid="deploy-start-error"
-              className="space-y-2 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive"
+              className="space-y-2 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive-ink"
             >
               <p>The deploy could not be started: {startError.message}</p>
               <p className="text-muted-foreground">
@@ -315,7 +315,7 @@ function ApprovalStage({
     return (
       <div
         data-testid="deploy-plan-job-error"
-        className="space-y-2 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive"
+        className="space-y-2 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive-ink"
       >
         <p>The changes could not be worked out: {planJobError.message}</p>
         <p className="text-muted-foreground">
@@ -507,7 +507,7 @@ function BlockedNotice({
       data-testid="deploy-blocked"
       className="space-y-2 rounded-lg border border-solid border-destructive/50 bg-destructive/10 px-4 py-3"
     >
-      <h3 className="text-sm font-medium text-destructive" data-testid="deploy-blocked-heading">
+      <h3 className="text-sm font-medium text-destructive-ink" data-testid="deploy-blocked-heading">
         This deploy cannot be confirmed
       </h3>
       <ul className="space-y-1">
@@ -555,7 +555,7 @@ function DeployNotAuthorized() {
       data-testid="deploy-not-authorized"
       className="space-y-2 rounded-lg border border-solid border-warning/50 bg-warning/10 px-4 py-3"
     >
-      <h3 className="text-sm font-medium text-warning">
+      <h3 className="text-sm font-medium text-warning-ink">
         Forge isn&apos;t signed in to Reliant cloud
       </h3>
       <p className="text-xs text-foreground">
@@ -589,7 +589,7 @@ function DeployPermissionDenied({ permission }: { permission: string }) {
       data-testid="deploy-permission-denied"
       className="space-y-2 rounded-lg border border-solid border-warning/50 bg-warning/10 px-4 py-3"
     >
-      <h3 className="text-sm font-medium text-warning">
+      <h3 className="text-sm font-medium text-warning-ink">
         Your permissions don&apos;t include{" "}
         {permission ? (
           <span className="font-mono">{permission}</span>

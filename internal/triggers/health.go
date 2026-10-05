@@ -83,6 +83,11 @@ func ComputeHealth(firings []*core.TriggerEventWithRun) *reliantv1.TriggerHealth
 func resolveFiring(f *core.TriggerEventWithRun) (firingResult, string) {
 	switch f.Event.Outcome {
 	case core.TriggerEventSkipped:
+		if f.Event.Kind.IsInbound() {
+			// An event trigger's skip is its filter declining an event that
+			// was not for it — the trigger working, not standing down.
+			return resultUnresolved, ""
+		}
 		return resultSkipped, ""
 	case core.TriggerEventFailed:
 		detail := f.Event.OutcomeDetail

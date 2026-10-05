@@ -52,7 +52,7 @@ Each agent has its own files, can install dependencies, run builds, and make com
 
 Many projects have local configuration files that shouldn't be committed but are needed for development—files like `.env`, `.env.local`, or local database configurations. The CreateWorktree activity supports a **copy_files** parameter that handles this automatically.
 
-When you specify files to copy, Reliant searches recursively through the source repository and copies matching files to the new workspace, preserving their directory structure. If your project has `frontend/.env` and `backend/.env`, both get copied to the corresponding locations in the new workspace.
+Each entry is an exact path from the workspace root, copied to the same place in the new workspace. Nothing is searched for: `.env` copies only the `.env` at the root, so a project with `frontend/.env` and `backend/.env` lists both paths. A directory is copied whole, which makes `web/node_modules` a valid entry, and a path that does not exist is skipped. In a multi-repo project, prefix the repo's folder: `api/.env`.
 
 ### Workspace Lifecycle in Workflows
 

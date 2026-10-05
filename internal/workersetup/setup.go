@@ -2,11 +2,14 @@
 package workersetup
 
 import (
+	"context"
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/instanceid"
+	"github.com/reliant-labs/reliant/internal/integrations/httpaction"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -15,6 +18,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/triggers"
+	"github.com/reliant-labs/reliant/internal/triggers/workflowevent"
 	v2workflow "github.com/reliant-labs/reliant/internal/workflow"
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
 	v2activities "github.com/reliant-labs/reliant/internal/workflow/runtime/activities"
@@ -58,6 +62,19 @@ type Config struct {
 	// no launcher fails loudly and is retried on one that has it, instead of
 	// being silently dropped.
 	TriggerLauncher triggers.Launcher
+
+	// TriggerPollers looks up a polled integration's poll function. nil
+	// registers the poll workflow without its activity: a poll that reaches
+	// this worker retries until one that has it picks it up.
+	TriggerPollers triggers.Pollers
+
+	// IntegrationCredentials authenticates the action node's integration
+	// calls (research/CONNECTIONS_VAULT.md §3.1): saved connections, plus
+	// control-plane-delegated GitHub tokens when hosted. It exists on the
+	// worker only: the worker is the one reader of connection secrets. It is
+	// the SAME source the http__request tool uses, so the two doors resolve
+	// a credential identically. nil refuses every authenticated call.
+	IntegrationCredentials httpaction.CredentialSource
 
 	// Optional overrides (for testing)
 	RunExecutorOverride handlers.RunExecutor
@@ -113,6 +130,8 @@ func StartWorker(cfg *Config) (*Handle, *v2.ActivityRegistry, error) {
 	if cfg.DriverResolver != nil {
 		activityDeps.DriverResolver = cfg.DriverResolver
 	}
+
+	activityDeps.Connections = cfg.IntegrationCredentials
 
 	// Register all activities
 	v2activities.RegisterAll(registry, activityDeps)
@@ -208,13 +227,51 @@ func StartWorker(cfg *Config) (*Handle, *v2.ActivityRegistry, error) {
 	w.RegisterWorkflowWithOptions(triggers.TriggerFireWorkflow, workflow.RegisterOptions{
 		Name: triggers.FireWorkflowName,
 	})
+	// Inbound triggers (webhook, integration, workflow event) fire through
+	// their own workflow: the api-server's receiver records the event and
+	// starts it, and its activity launches the recorded event.
+	w.RegisterWorkflowWithOptions(triggers.TriggerEventFireWorkflow, workflow.RegisterOptions{
+		Name: triggers.EventFireWorkflowName,
+	})
+	// Polled integration triggers: the schedule runs the poll workflow; the
+	// activity asks the integration's poller what is new and records it.
+	w.RegisterWorkflowWithOptions(triggers.TriggerPollWorkflow, workflow.RegisterOptions{
+		Name: triggers.PollWorkflowName,
+	})
+	if cfg.TriggerPollers != nil {
+		if repo, ok := cfg.Database.(*db.Repo); ok {
+			poller := triggers.NewTriggerPoller(
+				triggerPollRepo{Repo: repo, connections: repo.Connections()},
+				cfg.TriggerPollers,
+				triggers.NewIntake(repo, cfg.TemporalClient, cfg.taskQueueName()),
+			)
+			w.RegisterActivityWithOptions(poller.Poll, activity.RegisterOptions{Name: triggers.PollActivityName})
+		}
+	}
 	if cfg.TriggerLauncher != nil {
 		w.RegisterActivityWithOptions(
 			triggers.NewFirer(cfg.Database, cfg.TriggerLauncher).Fire,
 			activity.RegisterOptions{Name: triggers.FireActivityName},
 		)
+		w.RegisterActivityWithOptions(
+			triggers.NewEventFirer(cfg.Database, cfg.TriggerLauncher).Fire,
+			activity.RegisterOptions{Name: triggers.EventFireActivityName},
+		)
 	} else {
 		logging.Warn("no trigger launcher configured; this worker will not execute scheduled fires")
+	}
+
+	// Workflow-event triggers: same split as schedules. The dispatch workflow
+	// is always registered; its activity needs the launcher.
+	w.RegisterWorkflowWithOptions(workflowevent.RunEventDispatchWorkflow, workflow.RegisterOptions{
+		Name: workflowevent.DispatchWorkflowName,
+	})
+	if cfg.TriggerLauncher != nil {
+		dispatcher := workflowevent.NewDispatcher(cfg.Database, cfg.TriggerLauncher, nil)
+		w.RegisterActivityWithOptions(
+			workflowevent.NewActivity(cfg.Database, dispatcher).Dispatch,
+			activity.RegisterOptions{Name: workflowevent.DispatchActivityName},
+		)
 	}
 
 	// Start worker with lifecycle management
@@ -235,4 +292,16 @@ func StartWorker(cfg *Config) (*Handle, *v2.ActivityRegistry, error) {
 func TaskQueueName(suffix string) string {
 	cfg := &Config{TaskQueueSuffix: suffix}
 	return cfg.taskQueueName()
+}
+
+// triggerPollRepo gives the poll activity the owner-scoped connection read it
+// checks a polled trigger's connection with, which lives on the connection
+// store rather than the main repository.
+type triggerPollRepo struct {
+	*db.Repo
+	connections core.ConnectionStore
+}
+
+func (r triggerPollRepo) GetConnection(ctx context.Context, userID, id string) (*core.Connection, error) {
+	return r.connections.GetConnection(ctx, userID, id)
 }

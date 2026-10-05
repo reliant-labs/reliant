@@ -106,7 +106,9 @@ export const ONBOARDING_STEPS: OnboardingStep[] = [
     title: "Library, runs, automations",
     description:
       "Start from a ready-made workflow in the Library, follow every run in Runs, and put one on a schedule in Automations.",
-    targetSelector: "[data-onboarding='workflows-tabs']",
+    // The Workflows area's nav is forge-ui's SidebarLayout, which takes no
+    // data attributes; its <nav> carries aria-label={navLabel} instead.
+    targetSelector: "[data-testid='workflows-shell'] nav[aria-label='Workflows']",
     skippable: true,
     spotlightConfig: {
       padding: 6,

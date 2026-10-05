@@ -206,17 +206,17 @@ export function RedeemCouponForm({
         </button>
       </div>
       {error && (
-        <p className={cn("text-destructive", small ? "text-xs" : "text-sm")}>
+        <p className={cn("text-destructive-ink", small ? "text-xs" : "text-sm")}>
           {error}
         </p>
       )}
       {redeemed && (
-        <p className={cn("text-success", small ? "text-xs" : "text-sm")}>
+        <p className={cn("text-success-ink", small ? "text-xs" : "text-sm")}>
           {redeemed}
         </p>
       )}
       {syncWarning && (
-        <p className={cn("text-warning", small ? "text-xs" : "text-sm")}>
+        <p className={cn("text-warning-ink", small ? "text-xs" : "text-sm")}>
           {syncWarning}
         </p>
       )}

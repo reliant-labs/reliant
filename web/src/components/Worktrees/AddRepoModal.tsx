@@ -228,7 +228,7 @@ export function AddRepoModal({ isOpen, onClose, daemonId }: AddRepoModalProps) {
             </div>
           )}
           {error && (
-            <div role="alert" className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            <div role="alert" className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive-ink">
               <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" aria-hidden="true" />
               <span className="flex-1">{error}</span>
             </div>
@@ -236,7 +236,7 @@ export function AddRepoModal({ isOpen, onClose, daemonId }: AddRepoModalProps) {
 
           {/* Success message */}
           {modalState === "success" && clonedPath && (
-            <div className="flex items-center gap-2 rounded-md border border-success/30 bg-success/10 px-3 py-2 text-sm text-success">
+            <div className="flex items-center gap-2 rounded-md border border-success/30 bg-success/10 px-3 py-2 text-sm text-success-ink">
               <CheckCircle2 className="h-4 w-4 flex-shrink-0" aria-hidden="true" />
               <span>
                 Repository cloned to <code className="break-all font-mono text-xs text-foreground">{clonedPath}</code>
@@ -248,7 +248,7 @@ export function AddRepoModal({ isOpen, onClose, daemonId }: AddRepoModalProps) {
             {/* Repo URL */}
             <div className="space-y-2">
               <label className="block text-sm font-semibold text-foreground">
-                Repository URL <span className="text-destructive">*</span>
+                Repository URL <span className="text-destructive-ink">*</span>
               </label>
               <div className="relative">
                 <Link className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />

@@ -1,10 +1,9 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * Chrome for an app area that lives outside the project shell — the Inbox,
- * and the Workflows area, which adds its tab bar through `nav`
- * (workflows/WorkflowsShell.tsx). A title bar with the way out, and the
- * content below it.
+ * Chrome for an app area that lives outside the project shell — the Inbox.
+ * A title bar with the way out, and the content below it. (The Workflows
+ * area has its own sidebar shell, workflows/WorkflowsShell.tsx.)
  *
  * These routes sit under the bare `_authenticated` layout, which renders no
  * app chrome (the same position /settings and /forge are in), so without this
@@ -26,20 +25,12 @@ interface AreaShellProps {
   areaPath: string;
   /** What the detail page's exit returns to, e.g. "All runs". */
   areaLabel: string;
-  /** Lower-case noun for the list page's exit tooltip, e.g. "runs". */
+  /** Lower-case noun for the list page's exit tooltip, e.g. "inbox". */
   areaNoun: string;
-  /**
-   * "column" (default) is a centred, scrolling reading column for lists and
-   * forms. "fill" hands the page the whole remaining height and lets it own
-   * scrolling, for a page hosting a transcript.
-   */
-  layout?: "column" | "fill";
-  /** The area's own navigation (a tab bar), beside the exit. */
-  nav?: ReactNode;
   children: ReactNode;
 }
 
-export function AreaShell({ areaPath, areaLabel, areaNoun, layout = "column", nav, children }: AreaShellProps) {
+export function AreaShell({ areaPath, areaLabel, areaNoun, children }: AreaShellProps) {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const { isElectron, trafficLightPadding, dragRegionStyle, noDragRegionStyle } =
@@ -110,19 +101,17 @@ export function AreaShell({ areaPath, areaLabel, areaNoun, layout = "column", na
                 <span>{exitLabel}</span>
               </button>
             </Tooltip>
-            {nav}
           </div>
         </div>
         <div className="flex-1 self-stretch" style={dragRegionStyle} />
       </header>
 
-      {layout === "fill" ? (
-        <main className="flex min-h-0 flex-1 flex-col">{children}</main>
-      ) : (
-        <main className="flex-1 overflow-y-auto">
-          <div className="mx-auto w-full max-w-5xl px-6 py-8">{children}</div>
-        </main>
-      )}
+      {/* `relative`, so an absolutely positioned descendant (every sr-only
+          span) is contained by the scroller rather than stretching the
+          document — without it the window scrolls past the content. */}
+      <main className="relative flex-1 overflow-y-auto">
+        <div className="mx-auto w-full max-w-5xl px-6 py-8">{children}</div>
+      </main>
     </div>
   );
 }

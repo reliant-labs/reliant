@@ -108,7 +108,8 @@ CREATE TABLE public.api_keys (
     provider text NOT NULL,
     api_key text NOT NULL,
     created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL
+    updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    api_key_sealed bytea
 );
 
 --
@@ -307,8 +308,8 @@ CREATE TABLE public.trigger_events (
     outcome_detail text DEFAULT ''::text NOT NULL,
     chat_id text,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT trigger_events_kind_check CHECK ((kind = ANY (ARRAY['chat.start'::text, 'schedule'::text, 'agent.start_run'::text, 'builder.test'::text]))),
-    CONSTRAINT trigger_events_outcome_check CHECK ((outcome = ANY (ARRAY['launched'::text, 'skipped'::text, 'failed'::text])))
+    CONSTRAINT trigger_events_kind_check CHECK ((kind = ANY (ARRAY['chat.start'::text, 'schedule'::text, 'agent.start_run'::text, 'builder.test'::text, 'webhook'::text, 'integration'::text, 'workflow_event'::text]))),
+    CONSTRAINT trigger_events_outcome_check CHECK ((outcome = ANY (ARRAY['pending'::text, 'launched'::text, 'skipped'::text, 'failed'::text])))
 );
 
 --
@@ -475,6 +476,91 @@ CREATE TABLE public.command_favorites (
     command_key text NOT NULL,
     created_at timestamp with time zone NOT NULL
 );
+
+--
+-- Name: connection_events; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.connection_events (
+    id bigint NOT NULL,
+    connection_id text NOT NULL,
+    user_id text NOT NULL,
+    kind text NOT NULL,
+    run_id text,
+    node_id text,
+    tool_call_id text,
+    actor text NOT NULL,
+    at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+--
+-- Name: connection_events_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.connection_events_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+--
+-- Name: connection_events_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.connection_events_id_seq OWNED BY public.connection_events.id;
+
+--
+-- Name: connection_secrets; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.connection_secrets (
+    connection_id text NOT NULL,
+    field text NOT NULL,
+    vault_key_id text NOT NULL,
+    ciphertext bytea NOT NULL,
+    generation bigint DEFAULT 1 NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT connection_secrets_field_check CHECK ((field = ANY (ARRAY['access_token'::text, 'refresh_token'::text, 'api_key'::text, 'password'::text, 'client_secret'::text])))
+);
+
+--
+-- Name: connections; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.connections (
+    id text NOT NULL,
+    owner_kind text DEFAULT 'user'::text NOT NULL,
+    user_id text NOT NULL,
+    org_id text,
+    integration_id text NOT NULL,
+    auth_kind text NOT NULL,
+    name text NOT NULL,
+    account_label text,
+    external_account_id text,
+    scopes text[] DEFAULT '{}'::text[] NOT NULL,
+    oauth_client text,
+    auth_header text,
+    status text NOT NULL,
+    status_reason text,
+    is_default boolean DEFAULT false NOT NULL,
+    access_expires_at timestamp with time zone,
+    last_used_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    deleted_at timestamp with time zone,
+    params jsonb DEFAULT '{}'::jsonb NOT NULL,
+    CONSTRAINT connections_auth_kind_check CHECK ((auth_kind = ANY (ARRAY['oauth2'::text, 'api_key'::text, 'basic'::text, 'none'::text]))),
+    CONSTRAINT connections_check CHECK ((((owner_kind = 'user'::text) AND (org_id IS NULL)) OR ((owner_kind = 'org'::text) AND (org_id IS NOT NULL)))),
+    CONSTRAINT connections_owner_kind_check CHECK ((owner_kind = ANY (ARRAY['user'::text, 'org'::text]))),
+    CONSTRAINT connections_status_check CHECK ((status = ANY (ARRAY['active'::text, 'needs_reauth'::text, 'revoked'::text])))
+);
+
+--
+-- Name: COLUMN connections.auth_header; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.connections.auth_header IS 'api_key connections of an integration that does not declare placement: the allow-listed header choice';
 
 --
 -- Name: connector_audit_log; Type: TABLE; Schema: public; Owner: -
@@ -703,6 +789,24 @@ CREATE TABLE public.model_endpoints (
 );
 
 --
+-- Name: oauth_flows; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.oauth_flows (
+    state_hash bytea NOT NULL,
+    user_id text NOT NULL,
+    session_id_hash bytea NOT NULL,
+    integration_id text NOT NULL,
+    pkce_verifier_sealed bytea NOT NULL,
+    redirect_after text,
+    reconnect_connection_id text,
+    connection_name text,
+    expires_at timestamp with time zone NOT NULL,
+    consumed_at timestamp with time zone,
+    params jsonb DEFAULT '{}'::jsonb NOT NULL
+);
+
+--
 -- Name: plans; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -827,6 +931,25 @@ CREATE TABLE public.repos (
     remote_url text,
     created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
     updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL
+);
+
+--
+-- Name: run_events; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.run_events (
+    id text NOT NULL,
+    user_id text NOT NULL,
+    chat_id text NOT NULL,
+    workflow_name text DEFAULT ''::text NOT NULL,
+    outcome text NOT NULL,
+    dedupe_key text NOT NULL,
+    payload jsonb DEFAULT '{}'::jsonb NOT NULL,
+    occurred_at timestamp with time zone NOT NULL,
+    claimed_until timestamp with time zone,
+    dispatched_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT run_events_outcome_check CHECK ((outcome = ANY (ARRAY['finished'::text, 'failed'::text, 'blocked'::text])))
 );
 
 --
@@ -966,6 +1089,23 @@ CREATE TABLE public.tool_calls (
 );
 
 --
+-- Name: trigger_registrations; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.trigger_registrations (
+    trigger_id text NOT NULL,
+    provider text NOT NULL,
+    registration_id text DEFAULT ''::text NOT NULL,
+    cursor text DEFAULT ''::text NOT NULL,
+    last_polled_at timestamp with time zone,
+    status text DEFAULT 'active'::text NOT NULL,
+    status_detail text DEFAULT ''::text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT trigger_registrations_status_check CHECK ((status = ANY (ARRAY['active'::text, 'error'::text])))
+);
+
+--
 -- Name: triggers; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -986,7 +1126,11 @@ CREATE TABLE public.triggers (
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     daemon_id text NOT NULL,
     notify_on_complete boolean DEFAULT false NOT NULL,
-    CONSTRAINT triggers_kind_check CHECK ((kind = 'schedule'::text))
+    filter text DEFAULT ''::text NOT NULL,
+    connection_id text,
+    webhook_token_hash bytea,
+    webhook_secret_sealed bytea,
+    CONSTRAINT triggers_kind_check CHECK ((kind = ANY (ARRAY['schedule'::text, 'webhook'::text, 'integration'::text, 'workflow_event'::text])))
 );
 
 --
@@ -1036,6 +1180,23 @@ CREATE TABLE public.video_generation_jobs (
     error_message text DEFAULT ''::text NOT NULL,
     created_at timestamp with time zone NOT NULL,
     updated_at timestamp with time zone NOT NULL
+);
+
+--
+-- Name: vault_keys; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.vault_keys (
+    id text NOT NULL,
+    tenant_kind text NOT NULL,
+    tenant_id text NOT NULL,
+    version integer NOT NULL,
+    kek_id text NOT NULL,
+    wrapped_dek bytea NOT NULL,
+    state text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT vault_keys_state_check CHECK ((state = ANY (ARRAY['primary'::text, 'decrypt_only'::text, 'destroyed'::text]))),
+    CONSTRAINT vault_keys_tenant_kind_check CHECK ((tenant_kind = ANY (ARRAY['user'::text, 'org'::text])))
 );
 
 --
@@ -1136,6 +1297,12 @@ CREATE TABLE public.worktrees (
 ALTER TABLE ONLY public.background_process_output ALTER COLUMN id SET DEFAULT nextval('public.background_process_output_id_seq'::regclass);
 
 --
+-- Name: connection_events id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.connection_events ALTER COLUMN id SET DEFAULT nextval('public.connection_events_id_seq'::regclass);
+
+--
 -- Name: access_tokens access_tokens_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1176,6 +1343,13 @@ ALTER TABLE ONLY public.antigravity_auth_tokens
 
 ALTER TABLE ONLY public.api_keys
     ADD CONSTRAINT api_keys_pkey PRIMARY KEY (id);
+
+--
+-- Name: api_keys api_keys_sealed_not_null; Type: CHECK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE public.api_keys
+    ADD CONSTRAINT api_keys_sealed_not_null CHECK ((api_key_sealed IS NOT NULL)) NOT VALID;
 
 --
 -- Name: api_keys api_keys_user_id_provider_key; Type: CONSTRAINT; Schema: public; Owner: -
@@ -1281,6 +1455,27 @@ ALTER TABLE ONLY public.command_favorites
 
 ALTER TABLE ONLY public.command_favorites
     ADD CONSTRAINT command_favorites_user_id_project_id_command_key_key UNIQUE (user_id, project_id, command_key);
+
+--
+-- Name: connection_events connection_events_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.connection_events
+    ADD CONSTRAINT connection_events_pkey PRIMARY KEY (id);
+
+--
+-- Name: connection_secrets connection_secrets_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.connection_secrets
+    ADD CONSTRAINT connection_secrets_pkey PRIMARY KEY (connection_id, field);
+
+--
+-- Name: connections connections_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.connections
+    ADD CONSTRAINT connections_pkey PRIMARY KEY (id);
 
 --
 -- Name: connector_audit_log connector_audit_log_pkey; Type: CONSTRAINT; Schema: public; Owner: -
@@ -1423,6 +1618,13 @@ ALTER TABLE ONLY public.model_endpoints
     ADD CONSTRAINT model_endpoints_pkey PRIMARY KEY (id);
 
 --
+-- Name: oauth_flows oauth_flows_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.oauth_flows
+    ADD CONSTRAINT oauth_flows_pkey PRIMARY KEY (state_hash);
+
+--
 -- Name: plans plans_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1505,6 +1707,20 @@ ALTER TABLE ONLY public.repos
 
 ALTER TABLE ONLY public.repos
     ADD CONSTRAINT repos_project_id_relative_path_key UNIQUE (project_id, relative_path);
+
+--
+-- Name: run_events run_events_dedupe_key_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.run_events
+    ADD CONSTRAINT run_events_dedupe_key_key UNIQUE (dedupe_key);
+
+--
+-- Name: run_events run_events_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.run_events
+    ADD CONSTRAINT run_events_pkey PRIMARY KEY (id);
 
 --
 -- Name: settings settings_pkey; Type: CONSTRAINT; Schema: public; Owner: -
@@ -1591,6 +1807,13 @@ ALTER TABLE ONLY public.trigger_events
     ADD CONSTRAINT trigger_events_pkey PRIMARY KEY (id);
 
 --
+-- Name: trigger_registrations trigger_registrations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.trigger_registrations
+    ADD CONSTRAINT trigger_registrations_pkey PRIMARY KEY (trigger_id);
+
+--
 -- Name: triggers triggers_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1631,6 +1854,20 @@ ALTER TABLE ONLY public.user_updates
 
 ALTER TABLE ONLY public.video_generation_jobs
     ADD CONSTRAINT video_generation_jobs_pkey PRIMARY KEY (tool_call_id);
+
+--
+-- Name: vault_keys vault_keys_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.vault_keys
+    ADD CONSTRAINT vault_keys_pkey PRIMARY KEY (id);
+
+--
+-- Name: vault_keys vault_keys_tenant_kind_tenant_id_version_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.vault_keys
+    ADD CONSTRAINT vault_keys_tenant_kind_tenant_id_version_key UNIQUE (tenant_kind, tenant_id, version);
 
 --
 -- Name: visibility_overrides visibility_overrides_pkey; Type: CONSTRAINT; Schema: public; Owner: -
@@ -1712,6 +1949,30 @@ CREATE INDEX access_tokens_live_hash ON public.access_tokens USING btree (token_
 --
 
 CREATE INDEX access_tokens_live_resource ON public.access_tokens USING btree (resource_kind, resource_id) WHERE ((revoked_at IS NULL) AND (resource_kind IS NOT NULL));
+
+--
+-- Name: connection_events_conn; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX connection_events_conn ON public.connection_events USING btree (connection_id, id DESC);
+
+--
+-- Name: connections_name; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX connections_name ON public.connections USING btree (user_id, integration_id, name) WHERE (deleted_at IS NULL);
+
+--
+-- Name: connections_one_default; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX connections_one_default ON public.connections USING btree (user_id, integration_id) WHERE (is_default AND (deleted_at IS NULL) AND (owner_kind = 'user'::text));
+
+--
+-- Name: connections_user; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX connections_user ON public.connections USING btree (user_id) WHERE (deleted_at IS NULL);
 
 --
 -- Name: idx_agent_messages_inbox; Type: INDEX; Schema: public; Owner: -
@@ -2050,6 +2311,24 @@ CREATE INDEX idx_questions_workflow_id ON public.questions USING btree (workflow
 CREATE INDEX idx_repos_project ON public.repos USING btree (project_id);
 
 --
+-- Name: idx_run_events_chat; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_run_events_chat ON public.run_events USING btree (chat_id);
+
+--
+-- Name: idx_run_events_dispatched_at; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_run_events_dispatched_at ON public.run_events USING btree (dispatched_at) WHERE (dispatched_at IS NOT NULL);
+
+--
+-- Name: idx_run_events_undispatched; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_run_events_undispatched ON public.run_events USING btree (created_at, id) WHERE (dispatched_at IS NULL);
+
+--
 -- Name: idx_step_executions_chat_read; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2152,10 +2431,28 @@ CREATE INDEX idx_trigger_events_failed ON public.trigger_events USING btree (tri
 CREATE INDEX idx_trigger_events_parent_chat ON public.trigger_events USING btree (((payload ->> 'parent_chat_id'::text))) WHERE (kind = 'agent.start_run'::text);
 
 --
+-- Name: idx_trigger_events_pending; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_trigger_events_pending ON public.trigger_events USING btree (created_at) WHERE (outcome = 'pending'::text);
+
+--
 -- Name: idx_trigger_events_trigger_occurred_id; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_trigger_events_trigger_occurred_id ON public.trigger_events USING btree (trigger_id, occurred_at DESC, id DESC);
+
+--
+-- Name: idx_triggers_connection; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_triggers_connection ON public.triggers USING btree (connection_id) WHERE (connection_id IS NOT NULL);
+
+--
+-- Name: idx_triggers_integration; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_triggers_integration ON public.triggers USING btree (((config ->> 'integration'::text))) WHERE ((kind = 'integration'::text) AND enabled);
 
 --
 -- Name: idx_triggers_project; Type: INDEX; Schema: public; Owner: -
@@ -2236,6 +2533,12 @@ CREATE UNIQUE INDEX idx_worktrees_idempotency_key ON public.worktrees USING btre
 CREATE UNIQUE INDEX messages_chat_activity_key ON public.messages USING btree (chat_id, activity_id) WHERE ((activity_id IS NOT NULL) AND (activity_id <> ''::text));
 
 --
+-- Name: oauth_flows_expires; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX oauth_flows_expires ON public.oauth_flows USING btree (expires_at);
+
+--
 -- Name: project_daemons_daemon_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2258,6 +2561,12 @@ CREATE UNIQUE INDEX settings_user_key_unique ON public.settings USING btree (use
 --
 
 CREATE INDEX video_generation_jobs_attachment_idx ON public.video_generation_jobs USING btree (attachment_id) WHERE (attachment_id IS NOT NULL);
+
+--
+-- Name: vault_keys_one_primary; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX vault_keys_one_primary ON public.vault_keys USING btree (tenant_kind, tenant_id) WHERE (state = 'primary'::text);
 
 --
 -- Name: agent_messages agent_messages_chat_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
@@ -2321,6 +2630,20 @@ ALTER TABLE ONLY public.background_processes
 
 ALTER TABLE ONLY public.background_processes
     ADD CONSTRAINT background_processes_worktree_id_fkey FOREIGN KEY (worktree_id) REFERENCES public.worktrees(id) ON DELETE SET NULL;
+
+--
+-- Name: connection_secrets connection_secrets_connection_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.connection_secrets
+    ADD CONSTRAINT connection_secrets_connection_id_fkey FOREIGN KEY (connection_id) REFERENCES public.connections(id) ON DELETE CASCADE;
+
+--
+-- Name: connection_secrets connection_secrets_vault_key_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.connection_secrets
+    ADD CONSTRAINT connection_secrets_vault_key_id_fkey FOREIGN KEY (vault_key_id) REFERENCES public.vault_keys(id);
 
 --
 -- Name: connector_client_bindings connector_client_bindings_grant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
@@ -2400,6 +2723,13 @@ ALTER TABLE ONLY public.repos
     ADD CONSTRAINT repos_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(id) ON DELETE CASCADE;
 
 --
+-- Name: run_events run_events_chat_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.run_events
+    ADD CONSTRAINT run_events_chat_id_fkey FOREIGN KEY (chat_id) REFERENCES public.chats(id) ON DELETE CASCADE;
+
+--
 -- Name: task_dependencies task_dependencies_from_task_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2475,6 +2805,20 @@ ALTER TABLE ONLY public.trigger_events
 
 ALTER TABLE ONLY public.trigger_events
     ADD CONSTRAINT trigger_events_trigger_id_fkey FOREIGN KEY (trigger_id) REFERENCES public.triggers(id) ON DELETE SET NULL;
+
+--
+-- Name: trigger_registrations trigger_registrations_trigger_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.trigger_registrations
+    ADD CONSTRAINT trigger_registrations_trigger_id_fkey FOREIGN KEY (trigger_id) REFERENCES public.triggers(id) ON DELETE CASCADE;
+
+--
+-- Name: triggers triggers_connection_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.triggers
+    ADD CONSTRAINT triggers_connection_id_fkey FOREIGN KEY (connection_id) REFERENCES public.connections(id) ON DELETE SET NULL;
 
 --
 -- Name: triggers triggers_project_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -

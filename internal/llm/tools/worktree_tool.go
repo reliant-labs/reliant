@@ -27,8 +27,8 @@ type WorktreeParams struct {
 	// Base branch to branch from (optional, defaults to main/master)
 	BaseBranch string `json:"base_branch,omitempty" jsonschema:"description=Base branch to branch from (defaults to repository default branch)"`
 
-	// Files to copy from source repo (e.g., .env, .env.local)
-	CopyFiles []string `json:"copy_files,omitempty" jsonschema:"description=Files to copy from source repository (searches recursively in all directories)"`
+	// Exact paths to copy from the source repo — never searched for.
+	CopyFiles []string `json:"copy_files,omitempty" jsonschema:"description=Exact paths relative to the repository root to copy into the new worktree (e.g. .env or web/node_modules). Each path is copied as-is; nothing is searched for."`
 
 	// Force creation by deleting existing worktree/branch
 	Force bool `json:"force,omitempty" jsonschema:"description=Force creation by deleting existing worktree and branch if they exist"`
@@ -97,17 +97,18 @@ WORKTREE DATA STORAGE:
 - Use in subsequent steps: worktree_data.path, worktree_data.branch, etc.
 
 FILE COPYING:
-- copy_files: Searches recursively for matching files (e.g., ".env" finds all .env files in any directory)
-- Directory structure is preserved (frontend/.env -> worktree/frontend/.env)
+- copy_files: exact paths relative to the repository root, for gitignored files a fresh checkout lacks
+- Nothing is searched for: ".env" copies only the root .env; name "frontend/.env" to copy that one
+- A directory is copied whole (e.g. "web/node_modules"); a missing path is skipped
 
 EXAMPLES:
 
-Create a worktree with recursive file copy:
+Create a worktree that carries over local env files:
 {
   "action": "create",
   "name": "feature-auth",
   "base_branch": "main",
-  "copy_files": [".env", ".env.local"]
+  "copy_files": [".env", "frontend/.env.local"]
 }
 
 List all worktrees:

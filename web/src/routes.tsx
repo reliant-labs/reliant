@@ -6,6 +6,8 @@ import { shouldRedirectToMobileNow } from './lib/mobileRedirect'
 import { isForgeUIEnabled } from './lib/forgeFeature'
 import { getIsDev } from './lib/constants'
 import { createWorkflowsAreaRoutes } from './workflowsAreaRoutes'
+import { createSettingsConnectorRoutes } from './settingsConnectorRoutes'
+import { createSettingsSectionRoutes } from './settingsSectionRoutes'
 import {
   authSearchSchema,
   githubOAuthCallbackSearchSchema,
@@ -18,7 +20,6 @@ import {
   forgeEnvPageSearchSchema,
   forgeLegacySearchSchema,
   forgeOverviewSearchSchema,
-  settingsParamsSchema,
   settingsSearchSchema,
   upgradeSearchSchema,
   workflowSearchSchema,
@@ -72,6 +73,10 @@ const WorkloadInventoryPreview = lazyRouteComponent(
   () => import('./components/Forge/Environments/__preview__/WorkloadInventoryPreview'), 'default')
 const SecretsPreview = lazyRouteComponent(
   () => import('./components/Forge/Secrets/__preview__/SecretsPreview'), 'default')
+// The whole Forge pane against a fake network (control-plane's real state as
+// fixtures) — see ForgePanePreview for why the fake sits at fetch.
+const ForgePanePreview = lazyRouteComponent(
+  () => import('./components/Forge/__preview__/ForgePanePreview'), 'ForgePanePreview')
 const SettingsPage = lazyRouteComponent(
   () => import('./components/Settings/SettingsPage'), 'SettingsPage')
 const ConnectorConsentPage = lazyRouteComponent(
@@ -437,6 +442,12 @@ const forgeSecretsPreviewRoute = createRoute({
   component: () => <DevOnlyRoute><SecretsPreview /></DevOnlyRoute>,
 })
 
+const forgePanePreviewRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/forge-pane-preview',
+  component: () => <DevOnlyRoute><ForgePanePreview /></DevOnlyRoute>,
+})
+
 // (`/checkout/embed` removed with the embedded-checkout path. It existed to
 // host Stripe's hosted checkout page in a bare Electron BrowserWindow, because
 // payment-method domains are registered by HOSTNAME and app://bundle cannot be
@@ -453,30 +464,19 @@ const settingsRoute = createRoute({
   component: SettingsPage,
 })
 
-// OAuth consent: where a third-party application's user chooses which
-// connector it may act through. Under the authenticated layout, so the page
-// already knows who the user is from the existing Supabase session — no new
-// browser-auth path is needed.
-const connectorConsentRoute = createRoute({
-  getParentRoute: () => authenticatedLayoutRoute,
-  path: '/settings/connectors/authorize',
-  component: ConnectorConsentPage,
+// /settings/connectors/authorize (the OAuth consent page third parties
+// redirect to — its path is a contract) and the retired /settings/connectors
+// section, which redirects to Machines. Defined in settingsConnectorRoutes.tsx
+// so the route tests mount the same definitions.
+const settingsConnectorRoutes = createSettingsConnectorRoutes(() => authenticatedLayoutRoute, {
+  consent: ConnectorConsentPage,
 })
 
-const settingsSectionRoute = createRoute({
-  getParentRoute: () => authenticatedLayoutRoute,
-  path: '/settings/$section',
-  // Validate $section against the known settings ids. parseParams throws on a
-  // bad value; the parent rootRoute's notFoundComponent then redirects to /.
-  // SettingsPage also defensively coerces unknown values, so even if the
-  // schema were relaxed the UI wouldn't break — this just keeps bad URLs from
-  // silently rendering a default section.
-  parseParams: (params) => settingsParamsSchema.parse(params),
-  stringifyParams: (params) => ({ section: params.section }),
-  // Billing's sub-tab and Stripe's return marker live here, not in component
-  // state — see settingsSearchSchema for why the tab had to become addressable.
-  validateSearch: settingsSearchSchema,
-  component: SettingsPage,
+// /settings/$section and /settings/environments/$machineId. Defined in
+// settingsSectionRoutes.tsx so the route tests mount the same definitions; an
+// unknown slug redirects to /settings with a notice rather than throwing.
+const settingsSectionRoutes = createSettingsSectionRoutes(() => authenticatedLayoutRoute, {
+  page: SettingsPage,
 })
 
 // The workflow BUILDER keeps its own full-screen chrome (WorkflowHeader):
@@ -785,6 +785,7 @@ const routeTree = rootRoute.addChildren([
   forgeTokenSandboxRoute,
   forgeWorkloadsPreviewRoute,
   forgeSecretsPreviewRoute,
+  forgePanePreviewRoute,
   projectPickerRedirectRoute,
   mobileIndexRoute,
   authenticatedLayoutRoute.addChildren([
@@ -814,8 +815,8 @@ const routeTree = rootRoute.addChildren([
       forgeSecretsRedirectRoute,
     ]),
     settingsRoute,
-    connectorConsentRoute,
-    settingsSectionRoute,
+    ...settingsConnectorRoutes,
+    ...settingsSectionRoutes,
     workflowNewRoute,
     workflowBuilderRoute,
     ...workflowsAreaRoutes,

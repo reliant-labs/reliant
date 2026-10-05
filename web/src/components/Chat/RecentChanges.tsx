@@ -68,7 +68,7 @@ function MultiRepoSection({
           className={cn("h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform", expanded && "rotate-90")}
           aria-hidden="true"
         />
-        {hasError && <AlertCircle className="h-3.5 w-3.5 shrink-0 text-destructive" aria-label="Error" />}
+        {hasError && <AlertCircle className="h-3.5 w-3.5 shrink-0 text-destructive-ink" aria-label="Error" />}
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-semibold text-foreground">{name}</div>
           {!hasError && status.current_branch && (
@@ -92,7 +92,7 @@ function MultiRepoSection({
 
       {expanded &&
         (hasError ? (
-          <div role="alert" className="mx-3 mb-2 rounded-md border border-destructive/30 bg-destructive/10 px-2.5 py-1.5 text-xs text-destructive">
+          <div role="alert" className="mx-3 mb-2 rounded-md border border-destructive/30 bg-destructive/10 px-2.5 py-1.5 text-xs text-destructive-ink">
             {status.error}
           </div>
         ) : (
@@ -202,7 +202,7 @@ export function RecentChanges(props: RecentChangesProps) {
             <span className="font-medium text-foreground">{pluralize(repoStatuses.length, "repo")}</span>
             {" · "}
             {pluralize(totalChanges, "change")}
-            {reposWithErrors > 0 && <span className="text-destructive"> · {reposWithErrors} with errors</span>}
+            {reposWithErrors > 0 && <span className="text-destructive-ink"> · {reposWithErrors} with errors</span>}
           </p>
           {!inline && (
             <IconButton label="Close" onClick={onClose}>

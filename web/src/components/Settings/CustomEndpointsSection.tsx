@@ -24,7 +24,6 @@ import {
   emptyDraft,
   endpointToDraft,
   formatLatency,
-  hasModelErrors,
   mergeProbeIntoDraft,
   validateDraft,
   validateModelDraft,

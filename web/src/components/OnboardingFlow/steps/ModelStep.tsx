@@ -680,7 +680,7 @@ export function ModelStep({ plan, updatePlan, onNext }: StepProps) {
         </div>
       )}
 
-      {error && <p className="text-center text-xs text-destructive">{error}</p>}
+      {error && <p className="text-center text-xs text-destructive-ink">{error}</p>}
     </div>
   );
 }

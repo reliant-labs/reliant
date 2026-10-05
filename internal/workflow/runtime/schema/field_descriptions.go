@@ -7,6 +7,9 @@ package schema
 // init populates FieldDescriptions with descriptions from proto annotations.
 // The map and GetFieldDescription function are defined in field_descriptions_base.go.
 func init() {
+	FieldDescriptions["action.connection"] = "Saved connection id to authenticate this action with"
+	FieldDescriptions["action.uses"] = "Which integration action to run, as integration/action@major"
+	FieldDescriptions["action.with"] = "Action parameters, keyed as in the action's schema"
 	FieldDescriptions["ask_question.metadata"] = "JSON metadata with question text and options"
 	FieldDescriptions["call_llm.model"] = "Model selector using tags (e.g. flagship) or explicit ID"
 	FieldDescriptions["call_llm.skills"] = "Namespaced skill paths to preload for this call (seeded as skill tool-interactions)"
@@ -15,7 +18,7 @@ func init() {
 	FieldDescriptions["call_llm.thinking_level"] = "Extended thinking level for complex reasoning"
 	FieldDescriptions["compact.model"] = "Model used to summarize the conversation (defaults to the built-in summarization tier)"
 	FieldDescriptions["create_worktree.base_branch"] = "Base branch to branch from"
-	FieldDescriptions["create_worktree.copy_files"] = "Files to copy from source repo (e.g. .env)"
+	FieldDescriptions["create_worktree.copy_files"] = "Exact paths from the project root to copy into the workspace (e.g. .env, web/node_modules)"
 	FieldDescriptions["create_worktree.force"] = "Force creation by deleting existing worktree"
 	FieldDescriptions["create_worktree.name"] = "Worktree name, used in path"
 	FieldDescriptions["execute_tools.tool_calls"] = "CEL expression for tool calls to execute"

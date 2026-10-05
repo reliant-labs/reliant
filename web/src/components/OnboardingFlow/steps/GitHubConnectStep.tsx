@@ -328,7 +328,7 @@ export function GitHubConnectStep({ plan, updatePlan, onBack }: StepProps) {
               </button>
             </div>
           ) : (
-            error && <p className="text-xs text-destructive">{error}</p>
+            error && <p className="text-xs text-destructive-ink">{error}</p>
           )}
 
           <button

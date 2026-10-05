@@ -102,8 +102,8 @@ function BannerMessage({ banner }: { banner: Banner }) {
       className={cn(
         "mt-3 flex items-start gap-2 rounded-lg border p-3 text-xs",
         banner.valid
-          ? "border-success/30 bg-success/10 text-success"
-          : "border-destructive/30 bg-destructive/10 text-destructive",
+          ? "border-success/30 bg-success/10 text-success-ink"
+          : "border-destructive/30 bg-destructive/10 text-destructive-ink",
       )}
     >
       {banner.valid ? (
@@ -278,7 +278,7 @@ function ConfiguredProviderRow({
         <div className="truncate text-sm font-medium text-foreground">
           {provider.displayName}
         </div>
-        <div className="flex items-center gap-2 text-xs text-success">
+        <div className="flex items-center gap-2 text-xs text-success-ink">
           <Check className="h-3 w-3 shrink-0" />
           <span>Connected</span>
           {!isReliant && provider.maskedKey && (
@@ -293,7 +293,7 @@ function ConfiguredProviderRow({
         onClick={onDisconnect}
         disabled={disconnecting}
         aria-label={`${label} ${provider.displayName}`}
-        className="flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-md text-destructive active:bg-destructive/10 disabled:opacity-50"
+        className="flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-md text-destructive-ink active:bg-destructive/10 disabled:opacity-50"
       >
         {disconnecting ? (
           <Loader2 className="h-4 w-4 animate-spin" />

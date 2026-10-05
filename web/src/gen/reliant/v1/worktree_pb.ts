@@ -297,8 +297,12 @@ export type CreateWorktreeRequest = Message<"reliant.v1.CreateWorktreeRequest"> 
   chatId?: string | undefined;
 
   /**
-   * copy_files are searched recursively in each repo source dir and copied
-   * to the same relative location in the corresponding worktree checkout.
+   * copy_files are EXACT paths relative to the workspace root (the project
+   * root, or source_worktree_id's root), each copied to the same place in the
+   * new workspace — typically gitignored pieces a checkout lacks. Nothing is
+   * searched for: ".env" is the root .env, "api/.env" the api repo's.
+   * Directories are copied whole; a missing path is skipped. Absolute paths
+   * and paths that leave the root are rejected with INVALID_ARGUMENT.
    *
    * @generated from field: repeated string copy_files = 6;
    */

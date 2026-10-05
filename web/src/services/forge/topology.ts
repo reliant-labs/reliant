@@ -555,10 +555,20 @@ export function classifyForgeResponse<T>(
       unreachableReason: "",
     } as ForgeReportMeta);
 
+  const raw = (reportJson ?? "").trim();
+
+  // NOBODY ANSWERED outranks every claim the meta makes. When the api-server's
+  // own dispatch times out it returns an EMPTY reply stamped UNREACHABLE — so
+  // is_forge_project and supported are false because nothing was read, not
+  // because forge said so. Checking is_forge_project first turned a slow
+  // render into "this project has no forge.yaml" on a project that has one.
+  if (raw === "" && resolved.reachability === ForgeReachability.UNREACHABLE) {
+    return { kind: "unreachable", meta: resolved };
+  }
+
   if (!resolved.isForgeProject) return { kind: "not-forge-project", meta: resolved };
   if (!resolved.supported) return { kind: "unsupported", meta: resolved };
 
-  const raw = (reportJson ?? "").trim();
   if (raw === "") {
     if (resolved.reachability === ForgeReachability.UNREACHABLE) {
       return { kind: "unreachable", meta: resolved };

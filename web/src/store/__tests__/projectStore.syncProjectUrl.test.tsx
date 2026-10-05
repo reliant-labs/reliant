@@ -89,6 +89,16 @@ function makeRouter(initialEntry: string) {
     path: "/inbox",
     component: () => <div>inbox</div>,
   });
+  const forgeRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/forge",
+    component: () => <div>forge</div>,
+  });
+  const forgeEnvRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/forge/env/$env",
+    component: () => <div>forge env</div>,
+  });
 
   return createRouter({
     routeTree: rootRoute.addChildren([
@@ -97,6 +107,8 @@ function makeRouter(initialEntry: string) {
       onboardingRoute,
       workflowsRoute,
       inboxRoute,
+      forgeRoute,
+      forgeEnvRoute,
     ]),
     history: createMemoryHistory({ initialEntries: [initialEntry] }),
   } as any);
@@ -200,6 +212,10 @@ describe("syncProjectUrl — search params survive project selection", () => {
     "/workflows/library",
     "/workflows/library/builtin%3A%2F%2Fagent",
     "/inbox",
+    // Forge's header project switcher selects a project to change Forge's
+    // scope; it must not navigate out of Forge into the chat view.
+    "/forge",
+    "/forge/env/prod",
   ])("leaves the user on %s when a project is selected", async (path) => {
     const { router, useProjectStore } = await withRouterAt(path);
 

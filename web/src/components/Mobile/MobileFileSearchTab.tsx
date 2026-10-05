@@ -181,7 +181,7 @@ export function MobileFileSearchTab({ query }: { query: string }) {
           </div>
         ) : error ? (
           <div className="px-4 py-8 text-center">
-            <p className="text-sm text-destructive">{error}</p>
+            <p className="text-sm text-destructive-ink">{error}</p>
           </div>
         ) : flatMatches.length === 0 ? (
           query.trim() ? (

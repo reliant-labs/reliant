@@ -64,6 +64,12 @@ type Querier interface {
 	// status IN (2, 6) is the same fail-closed guard the workflow cascade
 	// applies: an already-terminal thread is left untouched.
 	CascadeTerminalStatusToThreadSubtree(ctx context.Context, arg CascadeTerminalStatusToThreadSubtreeParams) error
+	// The launcher adopts an inbound event the receiver recorded: the row moves
+	// from pending to launched (chat attached later in the same transaction) and
+	// takes the launch's start record as its payload. The outcome predicate is
+	// what makes two concurrent fires of one event launch it once: the loser
+	// updates zero rows.
+	ClaimPendingTriggerEvent(ctx context.Context, arg ClaimPendingTriggerEventParams) (int64, error)
 	// Atomically take every still-queued HUMAN message for a thread and return
 	// the rows that were actually taken. This is the "flush the queue back into
 	// the composer" primitive behind Send now / Send all.
@@ -79,6 +85,10 @@ type Querier interface {
 	// messages: a peer agent's spawn_send is not the human's to reclaim, and the
 	// UI never offered it.
 	ClaimQueuedAgentMessagesForThread(ctx context.Context, arg ClaimQueuedAgentMessagesForThreadParams) ([]AgentMessage, error)
+	// Leases up to `max` undispatched events whose lease is free or expired.
+	// SKIP LOCKED lets several relays drain the queue without handing the same
+	// row to two of them.
+	ClaimRunEvents(ctx context.Context, arg ClaimRunEventsParams) ([]RunEvent, error)
 	// Atomically update workflow lifecycle only if the current one matches
 	// expected. Returns the updated row if swapped, sql.ErrNoRows if it did not
 	// match.
@@ -105,6 +115,9 @@ type Querier interface {
 	CountMessagesByContextWindowUpToSeq(ctx context.Context, arg CountMessagesByContextWindowUpToSeqParams) (int64, error)
 	// Count messages in a thread (uses denormalized thread_id)
 	CountMessagesByThread(ctx context.Context, threadID string) (int64, error)
+	// Pending approvals and questions in the chat other than exclude_id. Zero
+	// means the item being created is the one that blocks the run.
+	CountOtherPendingBlockers(ctx context.Context, arg CountOtherPendingBlockersParams) (int32, error)
 	CountQueuedAgentMessagesForThread(ctx context.Context, toThreadID string) (int64, error)
 	CountThreadsInConversation(ctx context.Context, chatID string) (int64, error)
 	CountWorkflowDraftsByUser(ctx context.Context, userID string) (int64, error)
@@ -130,6 +143,11 @@ type Querier interface {
 	// own UNIQUE (user_id, project_id, key) constraint is a usable conflict target.
 	CreateProjectSetting(ctx context.Context, arg CreateProjectSettingParams) error
 	CreateRepo(ctx context.Context, arg CreateRepoParams) error
+	// run_events: the outbox for workflow-event triggers. See the migration
+	// 20261005010407_run_events.sql for the model.
+	// DO NOTHING on a dedupe_key that already exists: the first row for a
+	// transition is the record, and an activity retry must not add a second.
+	CreateRunEvent(ctx context.Context, arg CreateRunEventParams) (int64, error)
 	// Upsert, not a plain insert. A setting is identified by (user_id, project_id,
 	// key), so writing the same key twice must REPLACE the value rather than add a
 	// second row.
@@ -171,6 +189,7 @@ type Querier interface {
 	DeleteContextWindow(ctx context.Context, id string) error
 	DeleteContextWindowsByThread(ctx context.Context, threadID string) error
 	DeleteDefaultPresetAssignment(ctx context.Context, arg DeleteDefaultPresetAssignmentParams) error
+	DeleteDispatchedRunEventsBefore(ctx context.Context, dispatchedAt sql.NullTime) (int64, error)
 	DeleteMessage(ctx context.Context, id string) error
 	DeletePlan(ctx context.Context, id string) error
 	DeletePreset(ctx context.Context, id string) error
@@ -191,6 +210,7 @@ type Querier interface {
 	DeleteThread(ctx context.Context, id string) error
 	DeleteThreadsByConversation(ctx context.Context, chatID string) error
 	DeleteTrigger(ctx context.Context, id string) error
+	DeleteTriggerRegistration(ctx context.Context, triggerID string) error
 	DeleteVisibilityOverride(ctx context.Context, arg DeleteVisibilityOverrideParams) error
 	DeleteWorkflow(ctx context.Context, id string) error
 	DeleteWorkflowCheckpoint(ctx context.Context, workflowID string) error
@@ -201,7 +221,7 @@ type Querier interface {
 	DeleteWorkflowScenariosByDraft(ctx context.Context, workflowDraftID sql.NullString) error
 	DeleteWorkflowsByChat(ctx context.Context, chatID string) error
 	DeleteWorktree(ctx context.Context, id string) error
-	DismissInboxItem(ctx context.Context, arg DismissInboxItemParams) error
+	DismissInboxItems(ctx context.Context, arg DismissInboxItemsParams) error
 	EnqueueAgentMessage(ctx context.Context, arg EnqueueAgentMessageParams) error
 	// The stranded-background-spawn sweep's write half (spec §7.1). ON CONFLICT
 	// against idx_agent_messages_one_terminal_report_per_spawn is what makes this
@@ -390,6 +410,8 @@ type Querier interface {
 	// lives on threads.status, so the "thread:*"/"fork:*" name filters this query
 	// used to carry are gone along with the records they excluded.
 	GetRootWorkflowStatusForChat(ctx context.Context, chatID string) (GetRootWorkflowStatusForChatRow, error)
+	GetRunEvent(ctx context.Context, id string) (RunEvent, error)
+	GetRunEventByDedupe(ctx context.Context, dedupeKey string) (RunEvent, error)
 	GetSetting(ctx context.Context, arg GetSettingParams) (Setting, error)
 	GetStepExecution(ctx context.Context, id string) (StepExecution, error)
 	// Get all executions of a specific step in a workflow (for CEL history queries)
@@ -465,6 +487,9 @@ type Querier interface {
 	// idx_trigger_events_chat.
 	GetTriggerEventByChatID(ctx context.Context, chatID sql.NullString) (TriggerEvent, error)
 	GetTriggerEventByDedupe(ctx context.Context, arg GetTriggerEventByDedupeParams) (TriggerEvent, error)
+	GetTriggerRegistration(ctx context.Context, triggerID string) (TriggerRegistration, error)
+	// Only the webhook receiver reads these. They are never rendered.
+	GetTriggerWebhookCredentials(ctx context.Context, id string) (GetTriggerWebhookCredentialsRow, error)
 	// Get a usable workflow by slug (for runtime loading)
 	GetUsableWorkflowBySlug(ctx context.Context, arg GetUsableWorkflowBySlugParams) (GetUsableWorkflowBySlugRow, error)
 	GetVisibilityOverride(ctx context.Context, arg GetVisibilityOverrideParams) (bool, error)
@@ -488,6 +513,10 @@ type Querier interface {
 	// able to use the same key without colliding.
 	GetWorktreeByIdempotencyKey(ctx context.Context, arg GetWorktreeByIdempotencyKeyParams) (Worktree, error)
 	GetWorktreeByPath(ctx context.Context, path string) (Worktree, error)
+	// Whether the user owns at least one enabled trigger of the kind. The emitter
+	// asks this before writing an outbox row, so users without workflow-event
+	// triggers never pay for one.
+	HasEnabledTriggerOfKind(ctx context.Context, arg HasEnabledTriggerOfKindParams) (bool, error)
 	// Whether any message in this context window precedes before_seq. Used to
 	// compute hasMore for the cursor-bounded read without fetching the rows.
 	HasMessagesBeforeInContextWindow(ctx context.Context, arg HasMessagesBeforeInContextWindowParams) (bool, error)
@@ -552,12 +581,28 @@ type Querier interface {
 	// the trigger's firings — internal/triggers owns that rule. Archived chats are
 	// not waiting on anyone.
 	//
+	// Every item must be OPENABLE, so every branch INNER-joins its project and
+	// requires the same owner. chats.project_id has no foreign key: deleting a
+	// project leaves its chats (and their pending questions) behind, and the run
+	// page cannot open a chat whose project is gone. A LEFT JOIN here listed those
+	// as dead "This run doesn't exist" items. Likewise a blocking item of a run
+	// that completed (stop_reason 1) or was cancelled (4) can never be answered —
+	// nothing expires it when the run stops — so it is not listed either. A failed
+	// (2) or paused (3) run is resumable and keeps its items.
+	//
 	// Generic payload columns (a_text, b_text, a_int) carry the kind-specific bits:
 	//   approval:        a_text title, b_text metadata JSON, a_int approval_type
 	//   question:        a_text thread_id, b_text metadata JSON
 	//   launch failed:   a_text newest outcome_detail, b_text event kind, a_int failures in the episode
-	//   waiting machine: a_text daemon_id, b_text daemon name
+	//   waiting machine: a_text daemon_id, b_text daemon name; item_key is the chat
+	//                    id and the block's start, so a later block is a new item
 	ListInboxPending(ctx context.Context, userID string) ([]ListInboxPendingRow, error)
+	// Every ENABLED integration trigger for one integration, with its
+	// connection's routing identity. The inner join drops triggers whose
+	// connection is gone, revoked or belongs to someone else: an event can only
+	// reach a trigger through its own owner's live connection. Status is returned
+	// rather than filtered so a caller can tell needs_reauth apart.
+	ListIntegrationTriggers(ctx context.Context, integration string) ([]ListIntegrationTriggersRow, error)
 	ListItemDefaults(ctx context.Context, itemType int32) ([]ListItemDefaultsRow, error)
 	// Every background spawn issued anywhere inside one root execution that is
 	// still open: tool_calls.status = 6 (backgrounded) and no terminal report in
@@ -712,6 +757,10 @@ type Querier interface {
 	// Measured on the busiest real chat: 60 rows in 1.9ms via
 	// idx_tool_calls_child_workflow_id, against 10,622 tool calls.
 	ListSpawnToolCallIDsByChildThread(ctx context.Context, chatID string) ([]ListSpawnToolCallIDsByChildThreadRow, error)
+	// Inbound events recorded but not yet settled, older than the cutoff: the
+	// fire workflow for them was never started (the receiver crashed between the
+	// insert and the start) or died. The redriver restarts their fires.
+	ListStalePendingTriggerEvents(ctx context.Context, arg ListStalePendingTriggerEventsParams) ([]TriggerEvent, error)
 	// The async-spawn counterpart to ListStrandedSpawnToolCalls above (spec:
 	// async-spawn-and-agent-messaging.md, §7.1). A background=true spawn
 	// (dispatchSpawnBackground/workflow.go) writes tool_calls.status = 6
@@ -824,6 +873,10 @@ type Querier interface {
 	// Used for startup recovery to restart workers for active workflows.
 	ListWorkflowsByStatus(ctx context.Context, arg ListWorkflowsByStatusParams) ([]Workflow, error)
 	ListWorktrees(ctx context.Context, arg ListWorktreesParams) ([]Worktree, error)
+	// Row-locks the chat for the rest of the transaction. Serializes the "was the
+	// run already blocked?" check across concurrent approval and question
+	// creations in the same chat.
+	LockChatForRunEvent(ctx context.Context, id string) (string, error)
 	// Row lock on the trigger for the rest of the transaction. Serializes the
 	// overlap check with the launch it guards across concurrent fires.
 	LockTrigger(ctx context.Context, id string) (string, error)
@@ -868,6 +921,7 @@ type Querier interface {
 	// drain did not win are moved. delivered_at is deliberately left NULL -- the
 	// absence of a delivery time IS the record that no delivery occurred.
 	MarkQueuedAgentMessagesUndeliveredForThread(ctx context.Context, toThreadID string) (int64, error)
+	MarkRunEventDispatched(ctx context.Context, arg MarkRunEventDispatchedParams) error
 	// Pause all active workflows for a chat.
 	// Used when pausing a chat to ensure child workflows (e.g., agent threads) are also paused,
 	// so the chats_with_activity view correctly reports the chat as paused.
@@ -929,6 +983,7 @@ type Querier interface {
 	// has not ended, and reaping its children would kill a run that is coming back.
 	ReapOrphanedWorkflowDescendants(ctx context.Context) (int64, error)
 	RemoveCommandFavorite(ctx context.Context, arg RemoveCommandFavoriteParams) error
+	RestoreInboxItems(ctx context.Context, arg RestoreInboxItemsParams) error
 	// Resume all paused workflows for a chat.
 	// Used when resuming a chat to ensure child workflows are also resumed.
 	ResumeWorkflowsByChat(ctx context.Context, chatID string) error
@@ -1039,6 +1094,11 @@ type Querier interface {
 	// so callers can run it on every successful forge read.
 	SetProjectForgeName(ctx context.Context, arg SetProjectForgeNameParams) (int64, error)
 	SetTriggerEnabled(ctx context.Context, arg SetTriggerEnabledParams) (int64, error)
+	// NULL clears the HMAC secret. Sealed by the caller under the owner's tenant.
+	SetTriggerWebhookSecret(ctx context.Context, arg SetTriggerWebhookSecretParams) (int64, error)
+	// The token hash has its own write path: no definition update can touch it,
+	// and rotating it is one statement.
+	SetTriggerWebhookTokenHash(ctx context.Context, arg SetTriggerWebhookTokenHashParams) (int64, error)
 	SetVisibilityOverride(ctx context.Context, arg SetVisibilityOverrideParams) error
 	SetWorkflowDraftHidden(ctx context.Context, arg SetWorkflowDraftHiddenParams) (SetWorkflowDraftHiddenRow, error)
 	// Move a draft between 'draft' and 'complete'. The caller validates before
@@ -1049,6 +1109,9 @@ type Querier interface {
 	// a graph that routes to its `failed` node is a COMPLETED Temporal execution,
 	// so the verdict has nowhere else to live.
 	SetWorkflowOutcome(ctx context.Context, arg SetWorkflowOutcomeParams) (Workflow, error)
+	// Records the verdict on an inbound event that did NOT launch. Conditional on
+	// pending, so it can never overwrite a launch that won a race.
+	SettlePendingTriggerEvent(ctx context.Context, arg SettlePendingTriggerEventParams) (int64, error)
 	TouchProject(ctx context.Context, arg TouchProjectParams) error
 	UnarchiveWorktree(ctx context.Context, id string) error
 	// Update the status of an approval
@@ -1120,6 +1183,7 @@ type Querier interface {
 	// place instead of erroring on the primary key.
 	UpsertToolCall(ctx context.Context, arg UpsertToolCallParams) error
 	UpsertToolCallResult(ctx context.Context, arg UpsertToolCallResultParams) error
+	UpsertTriggerRegistration(ctx context.Context, arg UpsertTriggerRegistrationParams) error
 	// Workflow position checkpoints (resume-at-position support).
 	// One row per workflow ID. Written at cheap boundaries: top-level node entry
 	// and per loop iteration for top-level loop nodes.

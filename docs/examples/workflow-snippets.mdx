@@ -693,9 +693,9 @@ Include configuration files in new worktree.
 
 **Key points:**
 
-- `copy_files` searches recursively for matching filenames
-- Directory structure is preserved (e.g., `frontend/.env` → `worktree/frontend/.env`)
-- Files are copied from source repo, not current worktree
+- `copy_files` are exact paths from the project root; nothing is searched for (`.env` is only the root `.env` — list `frontend/.env` separately)
+- Each path lands in the same place in the new worktree; a directory is copied whole and a missing path is skipped
+- Files are copied from the project root, not the current worktree
 
 ### Multiple Parallel Worktrees
 

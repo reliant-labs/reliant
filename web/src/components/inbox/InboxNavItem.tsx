@@ -8,6 +8,9 @@
  * for machine) are a solid NUMBER; automation failures add a DOT, not a count.
  * A blocked run is urgent; a failed one is informational.
  *
+ * Counts follow the Inbox's scope (the current project, or every project), so
+ * the badge never counts what the Inbox will not show.
+ *
  * Counts come from `ListInbox({limit: 0})`, invalidated by the same user
  * updates as the Inbox and refetched on focus. If that read fails, the badge
  * falls back to what the client already knows — listed chats awaiting input,
@@ -21,7 +24,7 @@ import { useMemo } from "react";
 import { Inbox } from "lucide-react";
 
 import { ChatActivity } from "@/gen/reliant/v1/chat_pb";
-import { useInboxCounts } from "@/hooks/inbox-queries";
+import { useInboxCounts, useInboxProjectId } from "@/hooks/inbox-queries";
 import { cn } from "@/lib/utils";
 import { useActivityStore } from "@/store/activityStore";
 
@@ -30,7 +33,7 @@ interface InboxNavItemProps {
 }
 
 export function InboxNavItem({ onOpen }: InboxNavItemProps) {
-  const counts = useInboxCounts();
+  const counts = useInboxCounts(useInboxProjectId());
   const activities = useActivityStore((state) => state.activities);
   const knownAwaiting = useMemo(() => {
     let n = 0;

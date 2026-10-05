@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
@@ -35,6 +35,7 @@ const mocks = vi.hoisted(() => ({
   })),
   listDaemonTokens: vi.fn(async () => []),
   navigate: vi.fn(),
+  search: {} as Record<string, string>,
 }))
 
 // The machines gate reads compute eligibility from the server rather than
@@ -65,8 +66,9 @@ vi.mock('@/services/controlPlane/capabilities', () => ({
 
 // useNavigate backs useGoToBilling, which the un-funded prompt routes through.
 vi.mock('@tanstack/react-router', () => ({
-  useSearch: () => ({}),
+  useSearch: () => mocks.search,
   useNavigate: () => mocks.navigate,
+  useParams: () => ({}),
 }))
 
 // The real module exports proto enums at module scope that machines.tsx
@@ -130,6 +132,7 @@ describe('MachinesSection', () => {
   beforeEach(() => {
     mocks.caps.cloudDaemons = true
     vi.clearAllMocks()
+    mocks.search = {}
     mocks.listDaemons.mockResolvedValue({ daemons: [] })
     mocks.getComputeSubscription.mockResolvedValue({})
     mocks.getComputeEligibility.mockResolvedValue({
@@ -156,7 +159,11 @@ describe('MachinesSection', () => {
     ).toBeInTheDocument()
   })
 
-  it('renders the capability-gated fallback when cloud daemons are unavailable', () => {
+  // Without a control plane the section is NOT a dead end: registered
+  // machines (and the app access granted to them, which is reliant's, not
+  // control-plane's) still exist. It lists them, and offers nothing that
+  // would need the control plane to answer.
+  it('renders a registry-only list when cloud daemons are unavailable', async () => {
     mocks.caps.cloudDaemons = false
     renderSection()
 
@@ -164,8 +171,11 @@ describe('MachinesSection', () => {
       screen.getByRole('heading', { level: 1, name: /machines/i }),
     ).toBeInTheDocument()
     expect(
-      screen.getByRole('heading', { level: 3, name: /machines unavailable/i }),
+      await screen.findByRole('heading', { level: 3, name: /no machines/i }),
     ).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /new machine/i })).not.toBeInTheDocument()
+    expect(mocks.getComputeEligibility).not.toHaveBeenCalled()
+    expect(mocks.getComputeSubscription).not.toHaveBeenCalled()
   })
 
   // The self-hosted setup instructions are the SHARED onboarding panel, and
@@ -264,6 +274,33 @@ describe('MachinesSection', () => {
       expect(await screen.findByText('Cloud machines')).toBeInTheDocument()
       expect(screen.queryByText('Self-hosted machines')).not.toBeInTheDocument()
     })
+
+    // The open machine is the URL, so Back, refresh and links work: opening
+    // one navigates rather than flipping local state.
+    it('opens a machine by navigating to its own URL', async () => {
+      mocks.listDaemons.mockResolvedValue({ daemons: [managedDaemon] })
+      renderSection()
+
+      fireEvent.click(await screen.findByText('onboarding-daemon'))
+      expect(mocks.navigate).toHaveBeenCalledWith({
+        to: '/settings/environments/$machineId',
+        params: { machineId: managedDaemon.daemonId },
+      })
+    })
+
+    it('names the icon-only delete button', async () => {
+      mocks.listDaemons.mockResolvedValue({ daemons: [managedDaemon] })
+      renderSection()
+
+      expect(await screen.findByRole('button', { name: 'Delete onboarding-daemon' })).toBeInTheDocument()
+    })
+  })
+
+  it('explains where Connectors went when redirected from the retired page', async () => {
+    mocks.search = { from: 'connectors' }
+    renderSection()
+
+    expect(await screen.findByRole('status')).toHaveTextContent(/Connectors moved here/)
   })
 
   // The registry row has ONE name field — hostname — where control-plane's had

@@ -12,7 +12,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
+import { create } from "@bufbuild/protobuf";
+
 import { RunDisplayState } from "@/gen/reliant/v1/run_pb";
+import { TriggerHealthSchema, TriggerHealthStatus, TriggerSchema } from "@/gen/reliant/v1/trigger_pb";
 import { libraryResponse, protoRun, protoTrigger, renderWorkflowsPage } from "./workflowsTestUtils";
 
 const mocks = vi.hoisted(() => ({
@@ -75,17 +78,37 @@ function renderLibrary() {
 }
 
 describe("LibraryPage", () => {
-  it("keeps the hub's sections: your workflows, built-in, and failed to load", async () => {
+  it("is one table with labelled columns: yours first, then built-in; broken files below", async () => {
     renderLibrary();
-    const mine = await screen.findByRole("list", { name: "Your workflows" });
-    expect(within(mine).getByTestId("workflow-row-triage")).toBeInTheDocument();
-    expect(within(mine).getByTestId("workflow-row-my-draft")).toBeInTheDocument();
-    const builtin = screen.getByRole("list", { name: "Built-in" });
-    expect(within(builtin).getByTestId("workflow-row-builtin://agent")).toBeInTheDocument();
+    const table = await screen.findByRole("table", { name: "Workflows" });
+    expect(within(table).getAllByRole("columnheader").map((th) => th.textContent)).toEqual([
+      "Name",
+      "Source",
+      "Automations",
+      "Last run",
+      "Actions",
+    ]);
+    const order = within(table)
+      .getAllByRole("row")
+      .slice(1)
+      .map((row) => row.getAttribute("data-testid"));
+    expect(order).toEqual(["workflow-row-my-draft", "workflow-row-triage", "workflow-row-builtin://agent"]);
+    // The section survives as the Source column.
+    expect(within(screen.getByTestId("workflow-row-builtin://agent")).getByText("Built-in")).toBeInTheDocument();
+    expect(within(screen.getByTestId("workflow-row-triage")).getByText("Project")).toBeInTheDocument();
     const broken = screen.getByRole("list", { name: "Failed to load" });
     expect(within(broken).getByText("yaml: line 3: bad indent")).toBeInTheDocument();
     // It asked for hidden workflows too: this is the management view.
     expect(mocks.listWorkflows).toHaveBeenCalledWith(expect.objectContaining({ projectId: "proj-1", includeHidden: true }));
+  });
+
+  it("a workflow with no automation shows a dash under the Automations column, named for screen readers", async () => {
+    mocks.listTriggers.mockResolvedValue({ triggers: [] });
+    renderLibrary();
+    const triage = await screen.findByTestId("workflow-row-triage");
+    const cell = within(triage).getByTestId("workflow-row-automations");
+    await waitFor(() => expect(cell).toHaveTextContent("—"));
+    expect(within(cell).getByText("None")).toHaveClass("sr-only");
   });
 
   it("shows each row's last run and automations count", async () => {
@@ -134,6 +157,65 @@ describe("LibraryPage", () => {
     await userEvent.click(within(triage).getByRole("button", { name: "More actions for Triage" }));
     await userEvent.click(await screen.findByRole("menuitem", { name: "Edit" }));
     await waitFor(() => expect(router.state.location.pathname).toBe("/workflow/triage"));
+  });
+
+  it("search filters the rows and lands in the URL; Clear search brings them back", async () => {
+    const { router } = renderLibrary();
+    await screen.findByTestId("workflow-row-triage");
+    await userEvent.type(screen.getByRole("searchbox", { name: "Search workflows" }), "coding agent");
+    await waitFor(() => expect(router.state.location.search).toMatchObject({ q: "coding agent" }));
+    expect(screen.queryByTestId("workflow-row-triage")).toBeNull();
+    expect(screen.getByTestId("workflow-row-builtin://agent")).toBeInTheDocument();
+
+    await userEvent.clear(screen.getByRole("searchbox", { name: "Search workflows" }));
+    await userEvent.type(screen.getByRole("searchbox", { name: "Search workflows" }), "nothing like this");
+    expect(await screen.findByText("No workflows match “nothing like this”.")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Clear search" }));
+    expect(await screen.findByTestId("workflow-row-triage")).toBeInTheDocument();
+    expect(router.state.location.search).not.toHaveProperty("q");
+  });
+
+  it("reads source and sort from the URL: Built-in only, recently run first", async () => {
+    mocks.lastRunPerWorkflow.mockResolvedValue({ runs: [protoRun("builtin://agent", "chat-a")] });
+    renderWorkflowsPage(<LibraryPage />, "/workflows/library?source=%22builtin%22&sort=%22recent%22", "/workflows/library");
+    expect(await screen.findByTestId("workflow-row-builtin://agent")).toBeInTheDocument();
+    expect(screen.queryByTestId("workflow-row-triage")).toBeNull();
+    expect(screen.queryByRole("list", { name: "Failed to load" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Source: Built-in" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Sort: Recently run" })).toBeInTheDocument();
+  });
+
+  it("the Source menu writes the URL", async () => {
+    const { router } = renderLibrary();
+    await screen.findByTestId("workflow-row-triage");
+    await userEvent.click(screen.getByRole("button", { name: "Source: All" }));
+    const menu = await screen.findByRole("menu", { name: "Source" });
+    await userEvent.click(within(menu).getByRole("menuitemradio", { name: "Failed to load" }));
+    await waitFor(() => expect(router.state.location.search).toMatchObject({ source: "failed" }));
+    expect(screen.queryByTestId("workflow-row-triage")).toBeNull();
+    expect(screen.getByRole("list", { name: "Failed to load" })).toBeInTheDocument();
+  });
+
+  it("pins a workflow whose automation is failing to the top, flagged", async () => {
+    mocks.listTriggers.mockResolvedValue({
+      triggers: [
+        protoTrigger("t1", "triage"),
+        create(TriggerSchema, {
+          ...protoTrigger("t2", "triage"),
+          health: create(TriggerHealthSchema, { status: TriggerHealthStatus.FAILING, consecutiveFailures: 3 }),
+        }),
+      ],
+    });
+    renderLibrary();
+    const table = await screen.findByRole("table", { name: "Workflows" });
+    await waitFor(() => expect(screen.getByTestId("workflow-row-triage")).toHaveAttribute("data-attention", "true"));
+    const rows = within(table).getAllByRole("row").slice(1);
+    // First, and listed once.
+    expect(rows[0]).toHaveAttribute("data-testid", "workflow-row-triage");
+    expect(rows.filter((row) => row.getAttribute("data-testid") === "workflow-row-triage")).toHaveLength(1);
+    expect(within(rows[0]!).getByTestId("workflow-row-failing")).toHaveTextContent("1 failing");
+    expect(within(rows[0]!).getByLabelText("Needs attention")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent(/1 workflow needs attention/);
   });
 
   it("a user workflow's menu offers Export and Delete; a built-in's does not", async () => {

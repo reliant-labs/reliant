@@ -149,13 +149,13 @@ export function PRDialog({
         {/* Error State */}
         {error && (
           <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
-            <p className="text-sm text-destructive">{error}</p>
+            <p className="text-sm text-destructive-ink">{error}</p>
           </div>
         )}
 
         {isDefaultBranch && !error && (
           <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
-            <p className="text-sm text-destructive">Cannot create PR from the default branch.</p>
+            <p className="text-sm text-destructive-ink">Cannot create PR from the default branch.</p>
           </div>
         )}
 
@@ -163,7 +163,7 @@ export function PRDialog({
         <div className="space-y-4">
           <div className="space-y-2">
             <label htmlFor="pr-title" className="text-sm font-medium text-foreground">
-              Title <span className="text-destructive">*</span>
+              Title <span className="text-destructive-ink">*</span>
             </label>
             <Input
               id="pr-title"

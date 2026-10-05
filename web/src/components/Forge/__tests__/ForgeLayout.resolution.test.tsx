@@ -110,14 +110,17 @@ vi.mock("../../../hooks/useTitleBarChrome", () => ({
   }),
 }));
 
-// The layout lists environments in the sidebar from the shared joined query.
-// Its data layer is covered on its own; here it only has to name two envs.
+// The layout lists environments in the sidebar from the shared roster. Its
+// data layer is covered on its own (services/forge/__tests__/roster.test.ts);
+// here it only has to name two envs.
 vi.mock("@/hooks/forge-queries", () => ({
-  useForgeEnvironments: () => ({
+  useForgeRoster: () => ({
     envs: [
-      { name: "dev", where: "local", forge: null, cloud: null },
-      { name: "prod", where: "cloud", forge: null, cloud: null },
+      { name: "dev", lifecycle: "local", source: "backend", live: null, forge: null },
+      { name: "prod", lifecycle: "deployed", source: "backend", live: null, forge: null },
     ],
+    isLoading: false,
+    resolvingName: false,
   }),
 }));
 

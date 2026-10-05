@@ -16,9 +16,16 @@ option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
 // kind, dedupe key, when, payload, and what the firing did. Both are described
 // in research/TRIGGERS.md.
 //
-// Only schedule triggers exist today. Webhook, GitHub and manual/form sources
-// become new arms of Trigger.source rather than new services: they differ in
-// what makes them fire, not in what they do once fired.
+// Sources are arms of Trigger.source rather than new services: they differ in
+// what makes them fire, not in what they do once fired. A trigger fires on a
+// schedule, an inbound webhook, an integration event (a provider's app-level
+// webhook or a poll), or another workflow's run reaching an outcome.
+//
+// The source messages (ScheduleSource, WebhookSource, IntegrationSource,
+// WorkflowEventSource) are standalone so a workflow definition can declare
+// the same "when" in its own `triggers:` block (WorkflowTrigger). A Trigger
+// row is the activation: who the run executes as, where, and on which
+// connection and daemon.
 service TriggerService {
   // CreateTrigger stores a new trigger and converges its schedule.
   rpc CreateTrigger(CreateTriggerRequest) returns (CreateTriggerResponse) {}
@@ -60,6 +67,10 @@ service TriggerService {
   // A separate RPC rather than a Chat field because trigger.proto imports
   // chat.proto, so Chat cannot reference TriggerEvent without a cycle.
   rpc GetLaunchEvent(GetLaunchEventRequest) returns (GetLaunchEventResponse) {}
+
+  // RotateWebhookToken replaces a webhook trigger's token. The old token
+  // stops working immediately; the new one is returned once and never again.
+  rpc RotateWebhookToken(RotateWebhookTokenRequest) returns (RotateWebhookTokenResponse) {}
 }
 
 // TriggerKind is the source a stored trigger listens to.
@@ -67,6 +78,14 @@ enum TriggerKind {
   TRIGGER_KIND_UNSPECIFIED = 0;
   // SCHEDULE fires on a cron or interval schedule.
   TRIGGER_KIND_SCHEDULE = 1;
+  // WEBHOOK fires on a POST to the trigger's own URL.
+  TRIGGER_KIND_WEBHOOK = 2;
+  // INTEGRATION fires on a provider event received through one of the
+  // owner's connections (an app-level webhook or a poll).
+  TRIGGER_KIND_INTEGRATION = 3;
+  // WORKFLOW_EVENT fires when a run of one of the owner's workflows
+  // finishes, fails or blocks.
+  TRIGGER_KIND_WORKFLOW_EVENT = 4;
 }
 
 // TriggerEventKind is the kind of a single firing. It is wider than
@@ -88,6 +107,16 @@ enum TriggerEventKind {
   // Attended, with the chat id as its dedupe key. It is hidden from the
   // sidebar and from the default Runs list.
   TRIGGER_EVENT_KIND_BUILDER_TEST = 4;
+  // WEBHOOK is a POST to a webhook trigger's URL. Its dedupe key is
+  // "<trigger id>:<sender's idempotency key>", or a body hash within a
+  // one-minute bucket when the sender gives none.
+  TRIGGER_EVENT_KIND_WEBHOOK = 5;
+  // INTEGRATION is a provider event. Its dedupe key is
+  // "<trigger id>:<provider delivery id>", so one delivery fans out to every
+  // matching trigger exactly once each.
+  TRIGGER_EVENT_KIND_INTEGRATION = 6;
+  // WORKFLOW_EVENT is another run reaching an outcome.
+  TRIGGER_EVENT_KIND_WORKFLOW_EVENT = 7;
 }
 
 // TriggerEventOutcome records what a firing did.
@@ -100,6 +129,9 @@ enum TriggerEventOutcome {
   TRIGGER_EVENT_OUTCOME_SKIPPED = 2;
   // FAILED: the firing tried to launch and could not. outcome_detail says why.
   TRIGGER_EVENT_OUTCOME_FAILED = 3;
+  // PENDING: an inbound event was received and passed its filter; the worker
+  // has not launched it yet. Settles to LAUNCHED, SKIPPED or FAILED.
+  TRIGGER_EVENT_OUTCOME_PENDING = 4;
 }
 
 // TriggerOverlapPolicy decides what a scheduled fire does when this trigger's
@@ -130,7 +162,9 @@ enum TriggerOverlapPolicy {
 //   - FAILING: two or more consecutive failures, newest first. Skipped and
 //     unresolved firings are passed over; a success ends the streak.
 //   - DEGRADED: any failure in the window that did not make it FAILING, or
-//     three or more consecutive skipped firings from the newest back.
+//     three or more consecutive skipped SCHEDULE firings from the newest back.
+//     An event-driven trigger's skips are its filter working (most events of
+//     a busy source are not for it), so they never degrade it.
 //   - HEALTHY: no failure in the window and at least one completed run.
 //   - UNKNOWN: anything else, including a trigger that has never fired.
 enum TriggerHealthStatus {
@@ -196,6 +230,115 @@ message ScheduleSource {
   // Empty means 10m — deliberately not Temporal's one-year default, which
   // would replay a year of missed unattended runs on recovery.
   optional string catchup_window = 5;
+}
+
+// WebhookSource is the trigger.source arm for a trigger that fires on a POST
+// to its own URL. A delivery is accepted when ANY ONE of these holds:
+//
+//   - the URL is <PUBLIC_URL>/hooks/{trigger_id}/{token} with the trigger's
+//     token in the path (what a sender that cannot set headers uses — Zapier);
+//   - the URL is <PUBLIC_URL>/hooks/{trigger_id} with
+//     `Authorization: Bearer <token>`;
+//   - hmac is configured and the body carries a valid signature.
+//
+// The token is generated by the server, stored hashed, shown once at create
+// (and on rotation), and never part of a definition. The event's
+// trigger.payload is {body, headers, query, content_type}: body is the parsed
+// JSON (or the raw text), and headers and query have secret-bearing entries
+// removed.
+message WebhookSource {
+  // Optional HMAC verification for senders that sign their deliveries.
+  // Configuring it adds a way in; it does not disable the token.
+  WebhookHmac hmac = 1;
+}
+
+// WebhookHmac describes how a sender signs a webhook body. The signature is
+// an HMAC of the raw request body under a shared secret. The secret is set on
+// the trigger (TriggerDefinition.webhook_hmac_secret), never here, so a
+// definition can be shared without it.
+message WebhookHmac {
+  // Request header carrying the signature. Empty means "X-Signature-256".
+  string header = 1;
+  // Digest algorithm: "sha256" (the default when empty), "sha1" or "sha512".
+  string algorithm = 2;
+  // Text the sender puts before the digest, removed before comparing, e.g.
+  // "sha256=". Empty means none.
+  string prefix = 3;
+  // How the digest is written: "hex" (the default when empty) or "base64".
+  string encoding = 4;
+}
+
+// IntegrationSource is the trigger.source arm for a trigger that fires on a
+// provider event — a provider's app-level webhook (GitHub, Slack, Twilio) or
+// a poll (Gmail). Which mechanism is the integration's, not the trigger's.
+//
+// An event reaches the trigger only when ALL of these hold: its type is in
+// events; the trigger's connection belongs to the trigger's owner, is
+// active, and covers the event's account; every match entry equals the
+// event's attribute; and the trigger's filter, if any, is true. The event's
+// trigger.payload is {integration, event, account, delivery_id, attributes,
+// data}, where data is the provider's own payload.
+message IntegrationSource {
+  // Integration id, e.g. "github". It must provide an inbound trigger source.
+  string integration = 1;
+
+  // Event types to fire on, as the integration names them, e.g.
+  // "issues.opened". A trailing ".*" matches every action of a type
+  // ("issues.*"). At least one is required.
+  repeated string events = 2;
+
+  // Event attributes that must all equal these values, e.g.
+  // repository: acme/app or channel: C0123. The attribute names are the
+  // integration's. Empty matches any event of the listed types.
+  map<string, string> match = 3;
+
+  // Polled integrations only: how often to poll, as a Go duration. Empty
+  // means the integration's default.
+  string poll_interval = 4;
+}
+
+// WorkflowEventSource is the trigger.source arm for a trigger that fires when
+// a run of one of the owner's workflows reaches an outcome. A trigger never
+// fires on a run it launched itself (or one of that run's descendants).
+message WorkflowEventSource {
+  // Workflow refs whose runs this matches, written as a trigger names its
+  // workflow: a slug, or builtin://<name>. Empty matches a run of any of the
+  // owner's workflows.
+  repeated string workflows = 1;
+
+  // Outcomes to fire on: "finished", "failed", or "blocked" (waiting on an
+  // approval or a question). Empty matches all three.
+  repeated string outcomes = 2;
+}
+
+// WorkflowTrigger is a trigger declared by a workflow definition (the
+// workflow's `triggers:` block): WHEN the workflow should run. It carries no
+// identity — whose run, which project, which connection and daemon — because
+// a definition is shared and those belong to whoever activates it. A Trigger
+// row activates one by name (TriggerDefinition.workflow_trigger).
+message WorkflowTrigger {
+  // Name of this trigger within its workflow; unique there. What an
+  // activation refers to.
+  string name = 1;
+
+  // What this trigger is for, for a human choosing which to activate.
+  string description = 2;
+
+  // CEL bool over the `trigger` root (trigger.kind, trigger.payload.*).
+  // Empty matches every event the source delivers.
+  string filter = 3;
+
+  // Workflow inputs set from the event: input name to a template over
+  // `trigger`, e.g. issue: "{{ trigger.payload.data.issue.number }}".
+  map<string, string> inputs = 4;
+
+  // What makes it fire.
+  oneof source {
+    ScheduleSource schedule = 20;
+    WebhookSource webhook = 21;
+    IntegrationSource integration = 22;
+    WorkflowEventSource workflow_event = 23;
+  }
 }
 
 // Trigger is a stored trigger definition.
@@ -267,12 +410,37 @@ message Trigger {
   // (research/WORKFLOW_UI.md §6.4).
   bool notify_on_complete = 18;
 
-  // What makes this trigger fire. One arm per kind; webhook and GitHub become
-  // new arms. The arm set also determines Trigger.kind, so the two cannot
-  // disagree.
+  // CEL bool over the `trigger` root (trigger.payload.*) that an event must
+  // satisfy to launch a run. Empty matches every event. A miss is recorded as
+  // a SKIPPED firing whose detail names the filter. Webhook, integration and
+  // workflow-event triggers only.
+  string filter = 19;
+
+  // What makes this trigger fire. One arm per kind; the arm set determines
+  // the kind, so the two cannot disagree.
   oneof source {
     ScheduleSource schedule = 20;
+    WebhookSource webhook = 21;
+    IntegrationSource integration = 22;
+    WorkflowEventSource workflow_event = 23;
   }
+
+  // The connection an integration trigger listens through: one of the
+  // owner's connections for IntegrationSource.integration. Unset for other
+  // kinds, and cleared if the connection is deleted (the trigger then
+  // receives nothing until it is edited).
+  optional string connection_id = 24;
+
+  // Read-only, webhook triggers: <PUBLIC_URL>/hooks/{id}, the URL to POST to
+  // with `Authorization: Bearer <token>` or an HMAC signature. Append
+  // "/<token>" for a sender that cannot set headers. The token itself is
+  // returned only by CreateTrigger and RotateWebhookToken. A bare path when
+  // the server has no PUBLIC_URL.
+  optional string webhook_url = 25;
+
+  // The workflow-declared trigger (WorkflowTrigger.name) this row activates,
+  // when it activates one. The source above is then that declaration's.
+  optional string workflow_trigger = 26;
 }
 
 // TriggerEvent is one firing — the durable record of intent to launch, written
@@ -355,11 +523,43 @@ message TriggerDefinition {
   // value back.
   bool notify_on_complete = 10;
 
+  // CEL bool over the `trigger` root that an event must satisfy; see
+  // Trigger.filter. Validated on write: an expression that does not compile
+  // is InvalidArgument. Not allowed on a schedule trigger.
+  string filter = 11;
+
+  // The connection an integration trigger listens through. Unset on create
+  // means the owner's default connection for the integration. Must be one of
+  // the caller's connections for that integration. Ignored for other kinds.
+  optional string connection_id = 12;
+
+  // Write-only, webhook triggers with hmac: the shared signing secret. Set to
+  // configure or replace it; unset on update keeps the stored secret. Stored
+  // sealed and never returned.
+  optional string webhook_hmac_secret = 13;
+
   // What makes this trigger fire. Required on create: a trigger with no source
   // can never fire.
   oneof source {
     ScheduleSource schedule = 20;
+    WebhookSource webhook = 21;
+    IntegrationSource integration = 22;
+    WorkflowEventSource workflow_event = 23;
+    // Activate the named trigger the workflow declares (WorkflowTrigger.name)
+    // instead of writing a source inline. Not yet supported: rejected with
+    // Unimplemented until workflow definitions carry `triggers:`.
+    string workflow_trigger = 24;
   }
+}
+
+// WebhookCredential is a webhook trigger's token, returned exactly once.
+message WebhookCredential {
+  // The bearer token. Shown only in this response; the server keeps a hash.
+  string token = 1;
+
+  // <PUBLIC_URL>/hooks/{trigger_id}/{token}: the whole URL, for a sender
+  // that cannot set headers.
+  string url = 2;
 }
 
 // CreateTriggerRequest is the request for CreateTrigger.
@@ -372,6 +572,24 @@ message CreateTriggerRequest {
 message CreateTriggerResponse {
   // The stored trigger, with its assigned id and computed next fire time.
   Trigger trigger = 1;
+
+  // Webhook triggers only: the token, which is never shown again.
+  WebhookCredential webhook = 2;
+}
+
+// RotateWebhookTokenRequest is the request for RotateWebhookToken.
+message RotateWebhookTokenRequest {
+  // Id of the webhook trigger whose token to replace.
+  string id = 1;
+}
+
+// RotateWebhookTokenResponse is the response for RotateWebhookToken.
+message RotateWebhookTokenResponse {
+  // The trigger after the rotation.
+  Trigger trigger = 1;
+
+  // The new token, which is never shown again.
+  WebhookCredential webhook = 2;
 }
 
 // GetTriggerRequest is the request for GetTrigger.

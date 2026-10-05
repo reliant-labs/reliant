@@ -262,7 +262,7 @@ export function ComputeOverageControl({
             )}
           </div>
           {limitInvalid && (
-            <p className="text-xs text-destructive">
+            <p className="text-xs text-destructive-ink">
               Enter a limit above $0, or choose one of the other options.
             </p>
           )}

@@ -258,12 +258,12 @@ export function UnifiedPillSelector({
                             <span
                               className={`px-1.5 py-0.5 rounded text-2xs capitalize ${
                                 worktree.status === WorktreeStatus.ACTIVE
-                                  ? "bg-success/10 text-success"
+                                  ? "bg-success/10 text-success-ink"
                                   : worktree.status === WorktreeStatus.COMPLETED
                                   ? "bg-primary/10 text-primary"
                                   : worktree.status === WorktreeStatus.MERGING
                                   ? "bg-primary/10 text-primary"
-                                  : "bg-warning/10 text-warning"
+                                  : "bg-warning/10 text-warning-ink"
                               }`}
                             >
                               {getWorktreeStatusLabel(worktree.status)}

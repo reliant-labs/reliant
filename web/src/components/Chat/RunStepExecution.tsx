@@ -91,7 +91,7 @@ function RunStepExecutionComponent({ runOutput }: RunStepExecutionProps) {
     if (isSuccess) {
       return <CheckCircle className="w-3 h-3 text-success" />;
     }
-    return <AlertCircle className="w-3 h-3 text-destructive" />;
+    return <AlertCircle className="w-3 h-3 text-destructive-ink" />;
   };
 
   const getStatusText = () => {
@@ -157,10 +157,10 @@ function RunStepExecutionComponent({ runOutput }: RunStepExecutionProps) {
               className={cn(
                 "text-xs flex-shrink-0",
                 runOutput.interrupted
-                  ? "text-warning"
+                  ? "text-warning-ink"
                   : isSuccess
-                  ? "text-success"
-                  : "text-destructive"
+                  ? "text-success-ink"
+                  : "text-destructive-ink"
               )}
             >
               {getStatusText()}
@@ -214,7 +214,7 @@ function RunStepExecutionComponent({ runOutput }: RunStepExecutionProps) {
             {runOutput.stderr && runOutput.stderr !== runOutput.output && runOutput.stderr !== runOutput.stdout && (
               <div className="mt-2">
                 <div className="px-2 py-1 bg-destructive/10 rounded-t-md border border-b-0 border-destructive/30">
-                  <span className="text-xs font-medium text-destructive">
+                  <span className="text-xs font-medium text-destructive-ink">
                     stderr
                   </span>
                 </div>
@@ -288,7 +288,7 @@ function RunStepExecutionComponent({ runOutput }: RunStepExecutionProps) {
             <div className="flex items-center gap-1">
               <span className={cn(
                 "font-mono",
-                isSuccess ? "text-success" : "text-destructive"
+                isSuccess ? "text-success-ink" : "text-destructive-ink"
               )}>
                 Exit code: {runOutput.exit_code}
               </span>

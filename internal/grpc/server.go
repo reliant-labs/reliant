@@ -25,10 +25,12 @@ import (
 	"github.com/reliant-labs/reliant/internal/accesstokenclient"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/cliauth"
+	"github.com/reliant-labs/reliant/internal/connections"
 	"github.com/reliant-labs/reliant/internal/connectorgrant"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/grpc/interceptors"
 	"github.com/reliant-labs/reliant/internal/grpc/services"
+	"github.com/reliant-labs/reliant/internal/integrations/webhook"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/mcpserver"
@@ -98,6 +100,20 @@ type Config struct {
 	// from the environment (tokenauthority.DepsFromEnv): control-plane when
 	// RELIANT_CONTROL_PLANE_URL is set, else reliant's own store — exactly one.
 	TokenAuthority tokenauthority.Authority
+
+	// Connections backs ConnectionService. nil leaves the service unmounted
+	// (a test or CLI composition with no vault).
+	Connections *connections.Service
+
+	// OAuthRoutes mounts the browser half of the connection OAuth broker
+	// (/integrations/oauth/{provider}/{start,callback}). nil leaves it off.
+	OAuthRoutes *connections.OAuthHTTP
+
+	// TriggerInbound mounts the inbound-trigger receivers
+	// (/hooks/{trigger_id}[/{token}], /integrations/{provider}/events) and
+	// lets TriggerService write webhook and integration triggers. nil leaves
+	// both off: only schedule triggers can be created.
+	TriggerInbound *webhook.Inbound
 }
 
 // NewServer creates a new Connect/gRPC server.
@@ -137,7 +153,8 @@ func NewServer(cfg *Config) (*Server, error) {
 	domainWhitelistInterceptor := interceptors.NewDomainWhitelistInterceptor(cfg.AllowedEmailDomains)
 
 	// Order matters: recovery (outermost) -> error reporter -> timeout -> auth -> domain whitelist (innermost).
-	opts := newHandlerOptions(interceptors.NewTimeoutInterceptor().Interceptor(), authInterceptor, domainWhitelistInterceptor)
+	timeouts := interceptors.NewTimeoutInterceptor().WithMethodTimeouts(services.ForgeRPCDeadlines())
+	opts := newHandlerOptions(timeouts.Interceptor(), authInterceptor, domainWhitelistInterceptor)
 
 	// Build a DaemonRouter for services that need transport-agnostic daemon access.
 	// The api-server itself never accepts daemon bidi streams — daemons connect to
@@ -249,6 +266,13 @@ func NewServer(cfg *Config) (*Server, error) {
 	// handler's own nil checks would pass and it would panic on the first
 	// write. NewTriggerServiceFor keeps that conversion in one place.
 	triggerService := services.NewTriggerServiceFor(database, cfg.TemporalClient, cfg.SharedTaskQueue)
+	if in := cfg.TriggerInbound; in != nil {
+		opts := services.InboundOptions{PublicURL: in.PublicURL, Catalog: in.Registry, Intake: in.Intake}
+		if in.Vault != nil {
+			opts.Sealer = in.Vault
+		}
+		triggerService.WithInbound(opts).WithPolledIntegrations(in.Registry.IsPolled)
+	}
 	inboxPath, inboxHandler := reliantv1connect.NewInboxServiceHandler(services.NewInboxService(database), opts...)
 	triggerPath, triggerHandler := reliantv1connect.NewTriggerServiceHandler(triggerService, opts...)
 
@@ -377,6 +401,21 @@ func NewServer(cfg *Config) (*Server, error) {
 
 	if accountHandler != nil {
 		mux.Handle(accountPath, accountHandler)
+	}
+
+	if cfg.Connections != nil {
+		connectionPath, connectionHandler := reliantv1connect.NewConnectionServiceHandler(
+			services.NewConnectionService(cfg.Connections), opts...)
+		mux.Handle(connectionPath, connectionHandler)
+	}
+	if cfg.OAuthRoutes != nil {
+		cfg.OAuthRoutes.Register(func(pattern string, h http.Handler) { mux.Handle(pattern, h) })
+	}
+	// Inbound trigger receivers: plain HTTP routes outside the Connect
+	// interceptor chain, authenticated by the trigger's own token or the
+	// provider's signature rather than a user's JWT.
+	if cfg.TriggerInbound != nil {
+		cfg.TriggerInbound.Register(func(pattern string, h http.Handler) { mux.Handle(pattern, h) })
 	}
 
 	if connectorHandler != nil {

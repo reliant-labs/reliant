@@ -7,11 +7,13 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/copypath"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -132,7 +134,12 @@ func (a *CreateWorktreeActivity) Execute(ctx context.Context, input ActivityInpu
 	branch := model.CelStringValue(protoArgs.GetBranch())
 	baseBranch := model.CelStringValue(protoArgs.GetBaseBranch())
 	force := model.CelBoolValue(protoArgs.GetForce())
-	copyFiles := protoArgs.GetCopyFiles()
+	// Exact paths relative to the workspace root, validated before any
+	// checkout so a bad entry fails the node instead of a rollback.
+	copyPaths, err := copypath.CleanAll(protoArgs.GetCopyFiles())
+	if err != nil {
+		return CreateWorktreeOutput{}, fmt.Errorf("invalid copy_files: %w", err)
+	}
 
 	// Generate default branch name if not provided (must match daemon-side logic)
 	if branch == "" {
@@ -165,8 +172,7 @@ func (a *CreateWorktreeActivity) Execute(ctx context.Context, input ActivityInpu
 		return reason
 	}
 
-	var workspaceRoot string
-	for _, repo := range repos {
+	createRepo := func(repo *core.Repo) (repoCreateResult, error) {
 		repoPath := filepath.Join(project.Path, repo.RelativePath)
 
 		if force {
@@ -191,38 +197,93 @@ func (a *CreateWorktreeActivity) Execute(ctx context.Context, input ActivityInpu
 				Branch:      branch,
 				BaseBranch:  baseBranch,
 				Force:       force,
-				CopyFiles:   copyFiles,
 			}, worktreeCreateDaemonTimeoutMs,
 		)
 		if err != nil {
 			logging.Error("Failed to create git worktree via daemon", "error", err, "repo", repo.ID)
-			return CreateWorktreeOutput{}, rollback(fmt.Errorf("failed to create worktree for repo %s: %w", repo.Name, err))
+			return repoCreateResult{}, fmt.Errorf("failed to create worktree for repo %s: %w", repo.Name, err)
 		}
 		if !createResp.Success {
 			logging.Error("Failed to create git worktree", "error", createResp.Error, "repo", repo.ID)
-			return CreateWorktreeOutput{}, rollback(fmt.Errorf("failed to create worktree for repo %s: %s", repo.Name, createResp.Error))
+			return repoCreateResult{}, fmt.Errorf("failed to create worktree for repo %s: %s", repo.Name, createResp.Error)
 		}
-
-		// First successful create gives us the absolute workspace root.
-		// daemon returns <HOME>/.reliant/worktrees/<workspace_id>[/<repo.rel>];
-		// strip the trailing repo.RelativePath to get the workspace root.
-		if workspaceRoot == "" {
-			if repo.RelativePath == "" {
-				workspaceRoot = createResp.WorktreePath
-			} else {
-				workspaceRoot = strings.TrimSuffix(createResp.WorktreePath,
-					string(filepath.Separator)+repo.RelativePath)
-				if workspaceRoot == createResp.WorktreePath {
-					workspaceRoot = filepath.Dir(createResp.WorktreePath)
-				}
-			}
-		}
-
-		successes = append(successes, repoCreateResult{
+		return repoCreateResult{
 			repo:         repo,
 			worktreePath: createResp.WorktreePath,
 			baseBranch:   firstNonEmptyWT(createResp.BaseBranch, baseBranch),
-		})
+		}, nil
+	}
+
+	// Concurrent, with the same two rules as WorktreeService.finishWorktreeCreate:
+	// a repo nested in another waits for its container, and a failure lets its
+	// siblings finish so every checkout that exists is known and rolled back.
+	results := make([]repoCreateResult, len(repos))
+	errs := make([]error, len(repos))
+	ran := make([]bool, len(repos))
+	var firstErr error
+	for _, wave := range repopkg.CheckoutWaves(repos) {
+		var wg sync.WaitGroup
+		for _, i := range wave {
+			ran[i] = true
+			wg.Go(func() {
+				results[i], errs[i] = createRepo(repos[i])
+			})
+		}
+		wg.Wait()
+		for _, i := range wave {
+			if errs[i] != nil {
+				firstErr = errs[i]
+				break
+			}
+		}
+		if firstErr != nil {
+			break
+		}
+	}
+	for i := range repos {
+		if ran[i] && errs[i] == nil {
+			successes = append(successes, results[i])
+		}
+	}
+	if firstErr != nil {
+		return CreateWorktreeOutput{}, rollback(firstErr)
+	}
+
+	// The workspace root comes from the first repo: the daemon returns
+	// <HOME>/.reliant/worktrees/<workspace_id>[/<repo.rel>], so strip the
+	// trailing repo.RelativePath.
+	var workspaceRoot string
+	if len(successes) > 0 {
+		first := successes[0]
+		workspaceRoot = first.worktreePath
+		if first.repo.RelativePath != "" {
+			workspaceRoot = strings.TrimSuffix(first.worktreePath,
+				string(filepath.Separator)+first.repo.RelativePath)
+			if workspaceRoot == first.worktreePath {
+				workspaceRoot = filepath.Dir(first.worktreePath)
+			}
+		}
+	}
+
+	// Once for the whole workspace, root to root — see
+	// WorktreeService.finishWorktreeCreate. A failed copy is logged, not
+	// fatal: the checkouts are complete and usable.
+	if len(copyPaths) > 0 && workspaceRoot != "" {
+		copyResp, err := sendWorktreeDaemonCmd[worktreeCopyPathsDaemonResponse](
+			ctx, a.daemonRouter, chat.UserID, "worktree.copy_paths",
+			worktreeCopyPathsDaemonRequest{
+				SourceRoot: project.Path,
+				DestRoot:   workspaceRoot,
+				Paths:      copyPaths,
+			}, worktreeCreateDaemonTimeoutMs,
+		)
+		switch {
+		case err != nil:
+			logging.Error("Failed to copy paths into worktree", "error", err, "workspace", workspaceRoot)
+		case copyResp.Error != "" || len(copyResp.Failed) > 0:
+			logging.Error("Some paths were not copied into worktree", "error", copyResp.Error,
+				"failed", copyResp.Failed, "workspace", workspaceRoot)
+		}
 	}
 
 	// Persist one Worktree row representing the workspace. BaseBranch is the
@@ -469,14 +530,26 @@ func (a *DeleteWorktreeActivity) softDeleteWorktree(ctx context.Context, worktre
 // ============================================================================
 
 type worktreeCreateDaemonRequest struct {
-	ProjectPath string   `json:"project_path"`
-	WorkspaceID string   `json:"workspace_id"`
-	SubPath     string   `json:"sub_path"`
-	Name        string   `json:"name"`
-	Branch      string   `json:"branch"`
-	BaseBranch  string   `json:"base_branch"`
-	Force       bool     `json:"force"`
-	CopyFiles   []string `json:"copy_files,omitempty"`
+	ProjectPath string `json:"project_path"`
+	WorkspaceID string `json:"workspace_id"`
+	SubPath     string `json:"sub_path"`
+	Name        string `json:"name"`
+	Branch      string `json:"branch"`
+	BaseBranch  string `json:"base_branch"`
+	Force       bool   `json:"force"`
+}
+
+type worktreeCopyPathsDaemonRequest struct {
+	SourceRoot string   `json:"source_root"`
+	DestRoot   string   `json:"dest_root"`
+	Paths      []string `json:"paths"`
+}
+
+type worktreeCopyPathsDaemonResponse struct {
+	Copied  []string          `json:"copied,omitempty"`
+	Missing []string          `json:"missing,omitempty"`
+	Failed  map[string]string `json:"failed,omitempty"`
+	Error   string            `json:"error,omitempty"`
 }
 
 type worktreeCreateDaemonResponse struct {

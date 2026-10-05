@@ -104,7 +104,8 @@ func Preview(ctx context.Context, db *sql.DB, userID string) (Counts, error) {
 			 OR EXISTS (SELECT 1 FROM codex_auth_tokens       WHERE user_id = $1)
 			 OR EXISTS (SELECT 1 FROM copilot_auth_tokens     WHERE user_id = $1)
 			 OR EXISTS (SELECT 1 FROM antigravity_auth_tokens WHERE user_id = $1)
-			 OR EXISTS (SELECT 1 FROM api_keys                WHERE user_id = $1))`,
+			 OR EXISTS (SELECT 1 FROM api_keys                WHERE user_id = $1)
+			 OR EXISTS (SELECT 1 FROM connections             WHERE user_id = $1 AND deleted_at IS NULL))`,
 		userID)
 	if err := row.Scan(&c.Projects, &c.Chats, &c.Worktrees, &c.Messages, &c.HasProviderCredentials); err != nil {
 		return Counts{}, fmt.Errorf("accountpurge: preview: %w", err)
@@ -260,6 +261,17 @@ var purgeSteps = []step{
 	{"copilot_auth_tokens", `DELETE FROM copilot_auth_tokens WHERE user_id = $1`},
 	{"antigravity_auth_tokens", `DELETE FROM antigravity_auth_tokens WHERE user_id = $1`},
 	{"api_keys", `DELETE FROM api_keys WHERE user_id = $1`},
+
+	// Connections (credential vault). connection_secrets cascades from
+	// connections. The audit rows go too: they are the user's data, and a
+	// deleted account must leave nothing keyed to it.
+	{"oauth_flows", `DELETE FROM oauth_flows WHERE user_id = $1`},
+	{"connection_events", `DELETE FROM connection_events WHERE user_id = $1`},
+	{"connections", `DELETE FROM connections WHERE user_id = $1`},
+	// Last: dropping the user's wrapped DEK is crypto-shredding. Anything the
+	// purge missed, or a backup, becomes unreadable. Must follow every table
+	// holding data sealed under it (connection_secrets references vault_keys).
+	{"vault_keys", `DELETE FROM vault_keys WHERE tenant_kind = 'user' AND tenant_id = $1`},
 }
 
 // Purge deletes every row owned by userID, in one transaction, and returns the

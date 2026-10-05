@@ -160,9 +160,18 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 	}
 
 	// A retry of an earlier launch: finish it rather than create a second chat.
+	//
+	// The one exception is an inbound event a receiver recorded as PENDING:
+	// that row is not an earlier launch but this launch's own record of
+	// intent, written on the api-server before the worker got here. It is
+	// adopted (claimed inside the launch transaction) rather than inserted.
+	var pending *core.TriggerEvent
 	if ev.DedupeKey != "" {
-		if _, err := l.repo.GetTriggerEventByDedupe(ctx, ev.Kind, ev.DedupeKey); err == nil {
-			return l.finishExisting(ctx, ev, spec, seed)
+		if existing, err := l.repo.GetTriggerEventByDedupe(ctx, ev.Kind, ev.DedupeKey); err == nil {
+			if existing.Outcome != core.TriggerEventPending {
+				return l.finishExisting(ctx, ev, spec, seed)
+			}
+			pending = existing
 		} else if !errors.Is(err, core.ErrTriggerEventNotFound) {
 			return nil, &InternalError{Reason: "failed to check for an earlier launch", Err: err}
 		}
@@ -304,6 +313,12 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 		Params:      spec.Params,
 		Prompt:      seed.userContent,
 	})
+	if pending != nil {
+		// The adopted row keeps its identity and the time the source says
+		// the event happened; only its payload gains the start record.
+		eventRow.ID = pending.ID
+		eventRow.OccurredAt = pending.OccurredAt
+	}
 
 	// The event row is inserted before the chat, so the (kind, dedupe_key)
 	// constraint — not the chat's primary key — decides which of two
@@ -331,12 +346,24 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 			}
 		}
 
-		created, err := l.repo.CreateTriggerEvent(txCtx, &insertRow)
-		if err != nil {
-			return fmt.Errorf("failed to record trigger event: %w", err)
-		}
-		if !created {
-			return errEventExists
+		if pending != nil {
+			// The outcome predicate on the claim is what decides between two
+			// fires of one inbound event, as the unique key does for inserts.
+			claimed, err := l.repo.ClaimPendingTriggerEvent(txCtx, pending.ID, insertRow.Payload)
+			if err != nil {
+				return fmt.Errorf("failed to claim trigger event: %w", err)
+			}
+			if !claimed {
+				return errEventExists
+			}
+		} else {
+			created, err := l.repo.CreateTriggerEvent(txCtx, &insertRow)
+			if err != nil {
+				return fmt.Errorf("failed to record trigger event: %w", err)
+			}
+			if !created {
+				return errEventExists
+			}
 		}
 
 		if err := l.repo.CreateChat(txCtx, chat); err != nil {

@@ -89,7 +89,7 @@ export function ProjectPanel({ onNavigateToProjectPicker, onNavigateToChats }: P
                   onClick={() => setShowRemoveModal(true)}
                   aria-label={`Remove ${currentProject.name} from Reliant`}
                   data-testid="project-panel-remove"
-                  className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   <Trash2 className="h-4 w-4" aria-hidden="true" />
                 </button>

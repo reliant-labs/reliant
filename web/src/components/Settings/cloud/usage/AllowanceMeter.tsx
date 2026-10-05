@@ -27,10 +27,10 @@ import type { DimensionReading } from "./usageModel";
 
 const rungTint: Record<DimensionReading["rung"], { bar: string; text: string }> = {
   none: { bar: "bg-primary", text: "text-muted-foreground" },
-  notify: { bar: "bg-warning", text: "text-warning" },
-  block_scale_up: { bar: "bg-destructive", text: "text-destructive" },
-  throttle: { bar: "bg-destructive", text: "text-destructive" },
-  suspend: { bar: "bg-destructive", text: "text-destructive" },
+  notify: { bar: "bg-warning", text: "text-warning-ink" },
+  block_scale_up: { bar: "bg-destructive", text: "text-destructive-ink" },
+  throttle: { bar: "bg-destructive", text: "text-destructive-ink" },
+  suspend: { bar: "bg-destructive", text: "text-destructive-ink" },
   // A rung this build does not recognise is rendered neutrally rather than
   // tinted as though it were benign — see parseRung.
   unknown: { bar: "bg-muted-foreground", text: "text-muted-foreground" },

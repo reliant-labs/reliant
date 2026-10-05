@@ -2,9 +2,10 @@
 
 /**
  * The Inbox (WORKFLOW_UI.md §8): every item kind renders its inline action and
- * the action calls the right RPC; items of one run group; clicking a row opens
- * run detail; dismiss removes a failure; and the loading / empty / error /
- * truncated states.
+ * the action calls the right RPC; items section by kind with the verb said
+ * once; every row (and every section) can be dismissed, with Undo; the scope
+ * follows the current project with an All projects switch; and the loading /
+ * empty / error / truncated states.
  */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -13,7 +14,9 @@ import userEvent from "@testing-library/user-event";
 import { create } from "@bufbuild/protobuf";
 import { Code, ConnectError } from "@connectrpc/connect";
 
-import { ListInboxResponseSchema, type InboxItem } from "@/gen/reliant/v1/inbox_pb";
+import { InboxItemKind, ListInboxResponseSchema, type InboxItem } from "@/gen/reliant/v1/inbox_pb";
+import { useInboxScopeStore } from "@/hooks/inbox-queries";
+import { useProjectStore } from "@/store/projectStore";
 import {
   approvalItem,
   failingItem,
@@ -27,15 +30,23 @@ import {
 const mocks = vi.hoisted(() => ({
   listInbox: vi.fn(),
   dismissInboxItem: vi.fn(),
+  restoreInboxItem: vi.fn(),
   approve: vi.fn(),
   deny: vi.fn(),
   resolveQuestion: vi.fn(),
   resumeDaemon: vi.fn(),
   setEnabled: vi.fn(),
+  notify: vi.fn(),
 }));
 
 vi.mock("@/api/grpc-client", () => ({
-  grpcClient: { inbox: () => ({ listInbox: mocks.listInbox, dismissInboxItem: mocks.dismissInboxItem }) },
+  grpcClient: {
+    inbox: () => ({
+      listInbox: mocks.listInbox,
+      dismissInboxItem: mocks.dismissInboxItem,
+      restoreInboxItem: mocks.restoreInboxItem,
+    }),
+  },
 }));
 vi.mock("@/api/client", () => ({
   api: { approvals: { approve: mocks.approve, deny: mocks.deny } },
@@ -60,18 +71,26 @@ vi.mock("@/hooks/useTitleBarChrome", () => ({
   useTitleBarChrome: () => ({ isElectron: false, trafficLightPadding: "0", dragRegionStyle: {}, noDragRegionStyle: {} }),
 }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+vi.mock("@/lib/toast-manager", () => ({ toast: { notify: mocks.notify, error: vi.fn() } }));
 
 import { InboxPage } from "../InboxPage";
 
-function respond(items: InboxItem[], extra: { truncated?: boolean } = {}) {
+function respond(items: InboxItem[], extra: { truncated?: boolean; otherProjectsCount?: number } = {}) {
   mocks.listInbox.mockResolvedValue(
     create(ListInboxResponseSchema, {
       items,
       blockingCount: items.filter((i) => i.kind <= 3).length,
       hasInformational: items.some((i) => i.kind >= 4),
       truncated: extra.truncated ?? false,
+      otherProjectsCount: extra.otherProjectsCount ?? 0,
     }),
   );
+}
+
+function selectProject(id: string | null, name = "reliant") {
+  useProjectStore.setState({
+    currentProject: id ? ({ id, name } as ReturnType<typeof useProjectStore.getState>["currentProject"]) : null,
+  });
 }
 
 beforeEach(() => {
@@ -80,16 +99,19 @@ beforeEach(() => {
   mocks.deny.mockResolvedValue({ success: true, message: "" });
   mocks.resolveQuestion.mockResolvedValue({});
   mocks.dismissInboxItem.mockResolvedValue({});
+  mocks.restoreInboxItem.mockResolvedValue({});
   mocks.resumeDaemon.mockResolvedValue({});
+  useInboxScopeStore.setState({ scope: "all" });
+  selectProject(null);
 });
 
 describe("InboxPage item kinds", () => {
-  it("an approval shows its tool, argument summary and Approve / Deny", async () => {
+  it("an approval shows its tool and arguments on one line, with Approve / Deny", async () => {
     respond([approvalItem()]);
     renderInboxAt(<InboxPage />);
-    const row = await screen.findByTestId("inbox-item-appr-1");
-    expect(within(row).getByText("git push origin main")).toBeInTheDocument();
+    const row = await screen.findByTestId("inbox-item-approval:appr-1");
     expect(within(row).getByText("bash")).toBeInTheDocument();
+    expect(within(row).getByText(/git push origin main/)).toBeInTheDocument();
 
     await userEvent.click(within(row).getByRole("button", { name: "Approve" }));
     await waitFor(() => expect(mocks.approve).toHaveBeenCalledWith("appr-1", undefined));
@@ -98,10 +120,14 @@ describe("InboxPage item kinds", () => {
     await waitFor(() => expect(mocks.deny).toHaveBeenCalledWith("appr-1", undefined, undefined));
   });
 
-  it("a question renders the answer form inline and replies with the answers", async () => {
+  it("a question shows its prompt and opens the answer form on demand", async () => {
     respond([questionItem()]);
     renderInboxAt(<InboxPage />);
-    const row = await screen.findByTestId("inbox-item-q-1");
+    const row = await screen.findByTestId("inbox-item-question:q-1");
+    expect(within(row).getByText("Which branch?")).toBeInTheDocument();
+    expect(within(row).queryByRole("radio")).toBeNull();
+
+    await userEvent.click(within(row).getByRole("button", { name: /Answer/ }));
     await userEvent.click(within(row).getByRole("radio", { name: /main/ }));
     await userEvent.click(within(row).getByRole("button", { name: /Submit/ }));
     await waitFor(() =>
@@ -116,7 +142,7 @@ describe("InboxPage item kinds", () => {
   it("waiting for machine offers Wake <machine>, which resumes that daemon", async () => {
     respond([waitingItem()]);
     renderInboxAt(<InboxPage />);
-    const row = await screen.findByTestId("inbox-item-chat-1");
+    const row = await screen.findByTestId("inbox-item-waiting_for_machine:chat-1@1");
     await userEvent.click(within(row).getByRole("button", { name: "Wake MacBook" }));
     expect(mocks.resumeDaemon).toHaveBeenCalledWith("d-1");
   });
@@ -125,127 +151,175 @@ describe("InboxPage item kinds", () => {
     respond([waitingItem()]);
     mocks.resumeDaemon.mockRejectedValue(new Error("[resource_exhausted] compute limit"));
     renderInboxAt(<InboxPage />);
-    const row = await screen.findByTestId("inbox-item-chat-1");
+    const row = await screen.findByTestId("inbox-item-waiting_for_machine:chat-1@1");
     await userEvent.click(within(row).getByRole("button", { name: "Wake MacBook" }));
     expect(await within(row).findByText(/used the compute included with your account/)).toBeInTheDocument();
   });
 
-  it("a failing automation offers Open last run and Pause automation", async () => {
+  it("a failing automation shows its streak and reason, and offers Open last run and Pause", async () => {
     respond([failingItem()]);
     const { router } = renderInboxAt(<InboxPage />);
-    const row = await screen.findByTestId("inbox-item-failing:trg-1:evt-9");
-    expect(within(row).getByText(/Failed 3 times in a row/)).toBeInTheDocument();
+    const row = await screen.findByTestId("inbox-item-automation_failing:evt-9");
+    expect(within(row).getByText("3 in a row · tool error")).toBeInTheDocument();
 
-    await userEvent.click(within(row).getByRole("button", { name: "Pause automation" }));
+    await userEvent.click(within(row).getByRole("button", { name: "Pause" }));
     expect(mocks.setEnabled).toHaveBeenCalledWith({ id: "trg-1", enabled: false }, expect.anything());
 
     await userEvent.click(within(row).getByRole("link", { name: "Open last run" }));
     await waitFor(() => expect(router.state.location.pathname).toBe("/workflows/runs/chat-last"));
   });
 
-  it("a repeated failing automation shows one row counting the streak", async () => {
-    respond([failingItem()]);
-    renderInboxAt(<InboxPage />);
-    const row = await screen.findByTestId("inbox-item-failing:trg-1:evt-9");
-    expect(within(row).getByText("Failed 3 times in a row. tool error")).toBeInTheDocument();
-    expect(screen.getAllByTestId(/^inbox-item-/)).toHaveLength(1);
-  });
-
-  it("a launch-failed episode shows its count", async () => {
-    respond([
-      launchFailedItem({
-        payload: {
-          case: "automationLaunchFailed",
-          value: { reason: "machine was deleted", eventId: "evt-5", consecutiveFailures: 4 },
-        },
-      }),
-    ]);
-    renderInboxAt(<InboxPage />);
-    const row = await screen.findByTestId("inbox-item-evt-5");
-    expect(within(row).getByText("Failed 4 times in a row.")).toBeInTheDocument();
-  });
-
-  it("a single launch failure shows no streak count", async () => {
+  it("a failed launch shows the reason, a single failure no count, and Edit automation", async () => {
     respond([launchFailedItem()]);
-    renderInboxAt(<InboxPage />);
-    const row = await screen.findByTestId("inbox-item-evt-5");
+    const { router } = renderInboxAt(<InboxPage />);
+    const row = await screen.findByTestId("inbox-item-automation_launch_failed:evt-5");
+    expect(within(row).getByText("Machine was deleted")).toBeInTheDocument();
     expect(within(row).queryByText(/in a row/)).toBeNull();
-  });
-
-  it("a finished run renders, opens its run, and can be dismissed without blocking", async () => {
-    respond([runFinishedItem()]);
-    renderInboxAt(<InboxPage />);
-    const row = await screen.findByTestId("inbox-item-run_finished:chat-1");
-    expect(within(row).getByText(/Run finished/)).toBeInTheDocument();
-    expect(within(row).getByLabelText("Run finished")).toBeInTheDocument();
-
-    await userEvent.click(within(row).getByRole("button", { name: /Dismiss/ }));
-    expect(mocks.dismissInboxItem.mock.calls[0]![0]).toMatchObject({ itemId: "run_finished:chat-1" });
-  });
-
-  it("the Open action of a finished run navigates to the run", async () => {
-    respond([runFinishedItem()]);
-    const { router } = renderInboxAt(<InboxPage />);
-    const row = await screen.findByTestId("inbox-item-run_finished:chat-1");
-    await userEvent.click(within(row).getByRole("link", { name: "Open" }));
-    await waitFor(() => expect(router.state.location.pathname).toBe("/workflows/runs/chat-1"));
-  });
-
-  it("a failed launch shows the reason and Edit automation", async () => {
-    respond([launchFailedItem()]);
-    const { router } = renderInboxAt(<InboxPage />);
-    const row = await screen.findByTestId("inbox-item-evt-5");
-    expect(within(row).getByText("machine was deleted")).toBeInTheDocument();
     await userEvent.click(within(row).getByRole("link", { name: "Edit automation" }));
     await waitFor(() => expect(router.state.location.pathname).toBe("/workflows/automations/trg-2"));
   });
 
-  it("only failure kinds offer Dismiss; dismissing calls the RPC and the row leaves", async () => {
-    respond([approvalItem(), launchFailedItem()]);
-    renderInboxAt(<InboxPage />);
-    const approval = await screen.findByTestId("inbox-item-appr-1");
-    expect(within(approval).queryByRole("button", { name: /Dismiss/ })).toBeNull();
-
-    const failed = screen.getByTestId("inbox-item-evt-5");
-    // After the dismissal the server no longer returns it.
-    respond([approvalItem()]);
-    await userEvent.click(within(failed).getByRole("button", { name: /Dismiss/ }));
-    expect(mocks.dismissInboxItem.mock.calls[0]![0]).toMatchObject({ itemId: "evt-5" });
-    await waitFor(() => expect(screen.queryByTestId("inbox-item-evt-5")).toBeNull());
+  it("a finished run opens its run", async () => {
+    respond([runFinishedItem()]);
+    const { router } = renderInboxAt(<InboxPage />);
+    const row = await screen.findByTestId("inbox-item-run_finished:chat-1");
+    expect(within(row).getByLabelText("Run finished")).toBeInTheDocument();
+    await userEvent.click(within(row).getByRole("link", { name: "Open" }));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/workflows/runs/chat-1"));
   });
 
   it("an approval already handled elsewhere says so instead of erroring", async () => {
     respond([approvalItem()]);
     mocks.approve.mockRejectedValue(new ConnectError("approval already processed", Code.FailedPrecondition));
     renderInboxAt(<InboxPage />);
-    const row = await screen.findByTestId("inbox-item-appr-1");
+    const row = await screen.findByTestId("inbox-item-approval:appr-1");
     await userEvent.click(within(row).getByRole("button", { name: "Approve" }));
     expect(await within(row).findByText("Already handled")).toBeInTheDocument();
   });
 });
 
-describe("InboxPage grouping and navigation", () => {
-  it("groups items that share a run_id under one heading", async () => {
+describe("InboxPage layout", () => {
+  it("sections by kind in priority order and says the verb once, not per row", async () => {
     respond([
       approvalItem({}, "appr-1"),
-      approvalItem({}, "appr-2"),
-      approvalItem({}, "appr-3"),
-      approvalItem({ chatId: "chat-2", runId: "wf-chat-2", chatTitle: "Other" }, "appr-4"),
+      questionItem(),
+      questionItem({ itemId: "question:q-2", chatId: "chat-2", runId: "wf-2", chatTitle: "Other run" }),
+      launchFailedItem(),
     ]);
     renderInboxAt(<InboxPage />);
-    const group = await screen.findByTestId("inbox-group-wf-chat-1");
-    expect(within(group).getByText("3 approvals waiting")).toBeInTheDocument();
-    expect(within(group).getAllByTestId(/^inbox-item-/)).toHaveLength(3);
-    expect(screen.queryByTestId("inbox-group-wf-chat-2")).toBeNull();
-    expect(screen.getByTestId("inbox-item-appr-4")).toBeInTheDocument();
+    const questions = await screen.findByTestId(`inbox-section-${InboxItemKind.QUESTION}`);
+    expect(within(questions).getByRole("heading", { name: /Questions\s*2/ })).toBeInTheDocument();
+    expect(within(questions).getAllByTestId(/^inbox-item-/)).toHaveLength(2);
+    expect(screen.queryByText(/Answer a question in/)).toBeNull();
+
+    const headings = screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent);
+    expect(headings).toEqual(["Approvals1", "Questions2", "Automations that could not start1"]);
   });
 
-  it("clicking a row opens run detail by the run's chat id", async () => {
-    respond([waitingItem({ chatId: "chat-9", runId: "wf-root-9", itemId: "chat-9" })]);
+  it("a row's name opens the run by its chat id", async () => {
+    respond([waitingItem({ chatId: "chat-9", runId: "wf-root-9", itemId: "waiting_for_machine:chat-9@1" })]);
     const { router } = renderInboxAt(<InboxPage />);
-    const row = await screen.findByTestId("inbox-item-chat-9");
-    await userEvent.click(within(row).getByRole("link", { name: /Nightly triage/ }));
+    const row = await screen.findByTestId("inbox-item-waiting_for_machine:chat-9@1");
+    await userEvent.click(within(row).getByRole("link", { name: "Nightly triage" }));
     await waitFor(() => expect(router.state.location.pathname).toBe("/workflows/runs/chat-9"));
+  });
+
+  it("a row is one dense line: compact age shown, the long form for assistive tech", async () => {
+    respond([approvalItem({ waitingSince: new Date(Date.now() - 3 * 60 * 60_000).toISOString() })]);
+    renderInboxAt(<InboxPage />);
+    const row = await screen.findByTestId("inbox-item-approval:appr-1");
+    const time = row.querySelector("time")!;
+    expect(within(time).getByText("3h")).toHaveAttribute("aria-hidden", "true");
+    expect(within(time).getByText(/waiting since 3 hours ago/)).toHaveClass("sr-only");
+    // The answer form and other tall content are not rendered until asked for.
+    expect(row.querySelectorAll("textarea, input")).toHaveLength(0);
+  });
+
+  it("an automation item without a run links to the automation", async () => {
+    respond([launchFailedItem()]);
+    renderInboxAt(<InboxPage />);
+    const row = await screen.findByTestId("inbox-item-automation_launch_failed:evt-5");
+    expect(within(row).getByRole("link", { name: "Weekly report" })).toHaveAttribute(
+      "href",
+      "/workflows/automations/trg-2",
+    );
+  });
+});
+
+describe("InboxPage dismiss", () => {
+  it("every kind can be dismissed; the row leaves at once and Undo restores it", async () => {
+    respond([approvalItem(), launchFailedItem()]);
+    renderInboxAt(<InboxPage />);
+    const approval = await screen.findByTestId("inbox-item-approval:appr-1");
+    expect(within(screen.getByTestId("inbox-item-automation_launch_failed:evt-5")).getByRole("button", { name: /Dismiss/ })).toBeInTheDocument();
+
+    respond([launchFailedItem()]);
+    await userEvent.click(within(approval).getByRole("button", { name: "Dismiss Nightly triage" }));
+    expect(mocks.dismissInboxItem.mock.calls[0]![0]).toMatchObject({ itemIds: ["approval:appr-1"] });
+    await waitFor(() => expect(screen.queryByTestId("inbox-item-approval:appr-1")).toBeNull());
+
+    await waitFor(() => expect(mocks.notify).toHaveBeenCalled());
+    const [message, options] = mocks.notify.mock.calls[0]!;
+    expect(message).toBe("Dismissed “Nightly triage”");
+    options.action.onClick();
+    await waitFor(() =>
+      expect(mocks.restoreInboxItem.mock.calls[0]![0]).toMatchObject({ itemIds: ["approval:appr-1"] }),
+    );
+  });
+
+  it("Dismiss all hides a whole section in one call", async () => {
+    respond([
+      questionItem(),
+      questionItem({ itemId: "question:q-2", chatId: "chat-2", runId: "wf-2", chatTitle: "Other run" }),
+      approvalItem(),
+    ]);
+    renderInboxAt(<InboxPage />);
+    const questions = await screen.findByTestId(`inbox-section-${InboxItemKind.QUESTION}`);
+    respond([approvalItem()]);
+    await userEvent.click(within(questions).getByRole("button", { name: "Dismiss all" }));
+    expect(mocks.dismissInboxItem.mock.calls[0]![0]).toMatchObject({ itemIds: ["question:q-1", "question:q-2"] });
+    await waitFor(() => expect(screen.queryByTestId(`inbox-section-${InboxItemKind.QUESTION}`)).toBeNull());
+    // A section of one has nothing to "dismiss all" of.
+    expect(
+      within(screen.getByTestId(`inbox-section-${InboxItemKind.APPROVAL}`)).queryByRole("button", { name: "Dismiss all" }),
+    ).toBeNull();
+  });
+});
+
+describe("InboxPage scope", () => {
+  it("defaults to the current project, hides the project name, and switches to every project", async () => {
+    useInboxScopeStore.setState({ scope: "project" });
+    selectProject("proj-1", "reliant");
+    respond([approvalItem()], { otherProjectsCount: 3 });
+    renderInboxAt(<InboxPage />);
+    const row = await screen.findByTestId("inbox-item-approval:appr-1");
+    expect(mocks.listInbox.mock.calls[0]![0]).toMatchObject({ projectId: "proj-1" });
+    expect(within(row).queryByText("reliant")).toBeNull();
+    expect(screen.getByRole("radio", { name: "reliant" })).toHaveAttribute("aria-checked", "true");
+
+    respond([approvalItem()]);
+    await userEvent.click(screen.getByRole("button", { name: "3 more in other projects" }));
+    await waitFor(() => expect(mocks.listInbox.mock.calls.at(-1)![0].projectId).toBeUndefined());
+    expect(screen.getByRole("radio", { name: "All projects" })).toHaveAttribute("aria-checked", "true");
+    expect(await within(screen.getByTestId("inbox-item-approval:appr-1")).findByText("reliant")).toBeInTheDocument();
+  });
+
+  it("an empty project says what waits elsewhere", async () => {
+    useInboxScopeStore.setState({ scope: "project" });
+    selectProject("proj-1");
+    respond([], { otherProjectsCount: 2 });
+    renderInboxAt(<InboxPage />);
+    expect(await screen.findByText("Nothing needs you in this project.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "2 waiting in other projects" })).toBeInTheDocument();
+  });
+
+  it("with no current project there is no toggle and every project is listed", async () => {
+    useInboxScopeStore.setState({ scope: "project" });
+    respond([approvalItem()]);
+    renderInboxAt(<InboxPage />);
+    await screen.findByTestId("inbox-item-approval:appr-1");
+    expect(mocks.listInbox.mock.calls[0]![0].projectId).toBeUndefined();
+    expect(screen.queryByRole("radiogroup")).toBeNull();
   });
 });
 

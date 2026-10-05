@@ -126,8 +126,8 @@ const TIER_BEHAVIOUR = [
 ];
 
 const TIER_TONE = {
-  danger: "text-destructive",
-  success: "text-success",
+  danger: "text-destructive-ink",
+  success: "text-success-ink",
 };
 
 function formatOverSince(date: Date): string {
@@ -178,7 +178,7 @@ export function EnforcementPanel({ dimensions }: EnforcementPanelProps) {
                 </p>
               ) : null}
               {dimension.withinRestoreFloor ? (
-                <p className="mt-1 text-xs text-warning">
+                <p className="mt-1 text-xs text-warning-ink">
                   Running again for now because it was restarted recently — this
                   reprieve is temporary.
                 </p>

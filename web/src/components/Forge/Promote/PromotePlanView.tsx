@@ -208,7 +208,7 @@ function DirtyBadge({ testId }: { testId: string }) {
     <Tooltip content="This release was cut from a tree with uncommitted changes. The bytes it ships correspond to no reviewable commit, so what is in it cannot be established from git.">
       <span
         data-testid={testId}
-        className="inline-flex items-center gap-1 rounded-full bg-destructive/15 px-2 py-0.5 text-2xs text-destructive"
+        className="inline-flex items-center gap-1 rounded-full bg-destructive/15 px-2 py-0.5 text-2xs text-destructive-ink"
       >
         <AlertTriangle className="h-3 w-3" aria-hidden="true" />
         dirty tree
@@ -360,7 +360,7 @@ function CommitRange({ commits }: { commits: ForgePromoteCommitRange | undefined
           <p data-testid="promote-commits-count" className="text-xs text-foreground">
             {commits?.count ?? 0} commit{(commits?.count ?? 0) === 1 ? "" : "s"}
             {reverts && (
-              <span className="text-destructive"> would be reverted by this rollback</span>
+              <span className="text-destructive-ink"> would be reverted by this rollback</span>
             )}
           </p>
           {(commits?.commits?.length ?? 0) > 0 && (

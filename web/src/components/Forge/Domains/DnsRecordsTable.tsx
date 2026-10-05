@@ -57,7 +57,7 @@ function CopyButton({ value, label }: { value: string; label: string }) {
       className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground transition hover:bg-muted hover:text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
     >
       {copied ? (
-        <Check className="h-3.5 w-3.5 text-success" aria-hidden="true" />
+        <Check className="h-3.5 w-3.5 text-success-ink" aria-hidden="true" />
       ) : (
         <Copy className="h-3.5 w-3.5" aria-hidden="true" />
       )}
@@ -105,8 +105,8 @@ function purposeOf(type: string): string {
  */
 function RecordStatus({ check }: { check?: DnsRecordCheck }) {
   const styles: Record<DnsRecordCheck, { icon: typeof Check; className: string; label: string }> = {
-    ok: { icon: Check, className: "text-success", label: "Found" },
-    failed: { icon: AlertTriangle, className: "text-destructive", label: "Not found" },
+    ok: { icon: Check, className: "text-success-ink", label: "Found" },
+    failed: { icon: AlertTriangle, className: "text-destructive-ink", label: "Not found" },
     unchecked: { icon: CircleDashed, className: "text-muted-foreground", label: "Not checked yet" },
   };
   // ABSENT IS `unchecked`, the same reading the wire conversion gives a
@@ -195,7 +195,7 @@ export function DnsRecordsTable({ records }: { records: DomainDnsRecord[] }) {
                       thing that turns a cross into an action. */}
                   {record.detail && (
                     <p
-                      className="mt-1 max-w-prose text-2xs text-destructive"
+                      className="mt-1 max-w-prose text-2xs text-destructive-ink"
                       data-testid={`dns-record-detail-${record.type.toLowerCase()}`}
                     >
                       {record.detail}

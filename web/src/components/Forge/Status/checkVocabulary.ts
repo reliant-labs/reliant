@@ -98,18 +98,18 @@ export const DISPOSITION_STYLES: Record<CheckDisposition, DispositionStyle> = {
   // Measured, correct. Solid, filled, continuous border.
   "measured-good": {
     container: "bg-success/15 border border-solid border-success/40",
-    foreground: "text-success",
+    foreground: "text-success-ink",
   },
   // Measured, imperfect. Same certainty treatment, warning hue — NOT destructive:
   // a degraded stack and a broken one are different reports.
   "measured-degraded": {
     container: "bg-warning/15 border border-solid border-warning/40",
-    foreground: "text-warning",
+    foreground: "text-warning-ink",
   },
   // Measured, wrong. Solid and destructive: the one treatment that means "act".
   "measured-bad": {
     container: "bg-destructive/15 border border-solid border-destructive/40",
-    foreground: "text-destructive",
+    foreground: "text-destructive-ink",
   },
   // A FINISHED answer that happens to be "not here": dashed and unfilled like
   // undetermined, but DIMMED, because it needs no attention at all.

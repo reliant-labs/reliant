@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	postgresstore "github.com/reliant-labs/reliant/internal/db/postgres"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/logging"
 )
@@ -3749,11 +3750,83 @@ func (r *Repo) ListDismissedInboxItemIDs(ctx context.Context, userID string, ite
 	return r.inbox.ListDismissedInboxItemIDs(ctx, userID, itemIDs)
 }
 
-func (r *Repo) DismissInboxItem(ctx context.Context, userID, itemID string, at time.Time) error {
-	if userID == "" || itemID == "" {
-		return fmt.Errorf("user ID and item ID cannot be empty")
+func (r *Repo) DismissInboxItems(ctx context.Context, userID string, itemIDs []string, at time.Time) error {
+	if userID == "" {
+		return fmt.Errorf("user ID cannot be empty")
 	}
-	return r.inbox.DismissInboxItem(ctx, userID, itemID, at)
+	return r.inbox.DismissInboxItems(ctx, userID, itemIDs, at)
+}
+
+func (r *Repo) RestoreInboxItems(ctx context.Context, userID string, itemIDs []string) error {
+	if userID == "" {
+		return fmt.Errorf("user ID cannot be empty")
+	}
+	return r.inbox.RestoreInboxItems(ctx, userID, itemIDs)
+}
+
+func (r *Repo) CreateRunEvent(ctx context.Context, ev *core.RunEvent) (bool, error) {
+	if ev == nil {
+		return false, fmt.Errorf("run event cannot be nil")
+	}
+	if ev.DedupeKey == "" {
+		// An empty key would collide every transition with every other one,
+		// and the second real event would silently read as a retry.
+		return false, fmt.Errorf("run event dedupe key cannot be empty")
+	}
+	return r.runEvents.CreateRunEvent(ctx, ev)
+}
+
+func (r *Repo) GetRunEvent(ctx context.Context, id string) (*core.RunEvent, error) {
+	if id == "" {
+		return nil, fmt.Errorf("run event ID cannot be empty")
+	}
+	return r.runEvents.GetRunEvent(ctx, id)
+}
+
+func (r *Repo) GetRunEventByDedupe(ctx context.Context, dedupeKey string) (*core.RunEvent, error) {
+	if dedupeKey == "" {
+		return nil, fmt.Errorf("run event dedupe key cannot be empty")
+	}
+	return r.runEvents.GetRunEventByDedupe(ctx, dedupeKey)
+}
+
+func (r *Repo) HasEnabledTriggerOfKind(ctx context.Context, userID string, kind core.TriggerKind) (bool, error) {
+	if userID == "" {
+		return false, fmt.Errorf("user ID cannot be empty")
+	}
+	return r.runEvents.HasEnabledTriggerOfKind(ctx, userID, kind)
+}
+
+func (r *Repo) LockChatForRunEvent(ctx context.Context, chatID string) error {
+	if chatID == "" {
+		return fmt.Errorf("chat ID cannot be empty")
+	}
+	return r.runEvents.LockChatForRunEvent(ctx, chatID)
+}
+
+func (r *Repo) CountOtherPendingBlockers(ctx context.Context, chatID, excludeID string) (int, error) {
+	if chatID == "" {
+		return 0, fmt.Errorf("chat ID cannot be empty")
+	}
+	return r.runEvents.CountOtherPendingBlockers(ctx, chatID, excludeID)
+}
+
+func (r *Repo) ClaimRunEvents(ctx context.Context, now, leaseUntil time.Time, max int) ([]*core.RunEvent, error) {
+	if max <= 0 {
+		return nil, nil
+	}
+	return r.runEvents.ClaimRunEvents(ctx, now, leaseUntil, max)
+}
+
+func (r *Repo) MarkRunEventDispatched(ctx context.Context, id string, at time.Time) error {
+	if id == "" {
+		return fmt.Errorf("run event ID cannot be empty")
+	}
+	return r.runEvents.MarkRunEventDispatched(ctx, id, at)
+}
+
+func (r *Repo) DeleteDispatchedRunEventsBefore(ctx context.Context, cutoff time.Time) (int64, error) {
+	return r.runEvents.DeleteDispatchedRunEventsBefore(ctx, cutoff)
 }
 
 func (r *Repo) RecentTriggerFirings(ctx context.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error) {
@@ -3775,6 +3848,58 @@ func (r *Repo) GetLatestTriggerEvent(ctx context.Context, triggerID string, outc
 		return nil, fmt.Errorf("trigger ID cannot be empty")
 	}
 	return r.triggers.GetLatestTriggerEvent(ctx, triggerID, outcome)
+}
+
+func (r *Repo) SetTriggerWebhookTokenHash(ctx context.Context, id string, hash []byte) error {
+	if id == "" {
+		return fmt.Errorf("trigger ID cannot be empty")
+	}
+	return r.triggers.SetTriggerWebhookTokenHash(ctx, id, hash)
+}
+
+func (r *Repo) SetTriggerWebhookSecret(ctx context.Context, id string, sealed []byte) error {
+	if id == "" {
+		return fmt.Errorf("trigger ID cannot be empty")
+	}
+	return r.triggers.SetTriggerWebhookSecret(ctx, id, sealed)
+}
+
+func (r *Repo) GetTriggerWebhookCredentials(ctx context.Context, id string) (*core.TriggerWebhookCredentials, error) {
+	if id == "" {
+		return nil, core.ErrTriggerNotFound
+	}
+	return r.triggers.GetTriggerWebhookCredentials(ctx, id)
+}
+
+func (r *Repo) ListIntegrationTriggers(ctx context.Context, integration string) ([]*core.IntegrationTriggerRoute, error) {
+	return r.triggers.ListIntegrationTriggers(ctx, integration)
+}
+
+func (r *Repo) ListStalePendingTriggerEvents(ctx context.Context, olderThan time.Time, limit int) ([]*core.TriggerEvent, error) {
+	return r.triggers.ListStalePendingTriggerEvents(ctx, olderThan, limit)
+}
+
+func (r *Repo) ClaimPendingTriggerEvent(ctx context.Context, id string, payload map[string]any) (bool, error) {
+	return r.triggers.ClaimPendingTriggerEvent(ctx, id, payload)
+}
+
+func (r *Repo) SettlePendingTriggerEvent(ctx context.Context, id string, outcome core.TriggerEventOutcome, detail string) (bool, error) {
+	return r.triggers.SettlePendingTriggerEvent(ctx, id, outcome, detail)
+}
+
+func (r *Repo) GetTriggerRegistration(ctx context.Context, triggerID string) (*core.TriggerRegistration, error) {
+	return r.triggers.GetTriggerRegistration(ctx, triggerID)
+}
+
+func (r *Repo) UpsertTriggerRegistration(ctx context.Context, reg *core.TriggerRegistration) error {
+	if reg == nil || reg.TriggerID == "" {
+		return fmt.Errorf("trigger registration needs a trigger ID")
+	}
+	return r.triggers.UpsertTriggerRegistration(ctx, reg)
+}
+
+func (r *Repo) DeleteTriggerRegistration(ctx context.Context, triggerID string) error {
+	return r.triggers.DeleteTriggerRegistration(ctx, triggerID)
 }
 
 // ==================== Step Executions ====================
@@ -4587,4 +4712,51 @@ func (r *Repo) ResolveQuestion(ctx context.Context, id string, responseData *str
 // generateID generates a new UUID string
 func generateID() string {
 	return uuid.New().String()
+}
+
+// apiKeySealing is the optional sealing surface of the api_keys store.
+type apiKeySealing interface {
+	SetSealer(postgresstore.APIKeySealer)
+	BackfillAPIKeys(ctx context.Context, batch int) (int, error)
+	CountUnsealedAPIKeys(ctx context.Context) (int64, error)
+	ValidateAPIKeysSealedConstraint(ctx context.Context) error
+}
+
+// EnableAPIKeySealing gives the api_keys store its vault; without one provider
+// keys cannot be read or written. Call once at boot, before serving.
+func (r *Repo) EnableAPIKeySealing(sealer postgresstore.APIKeySealer) error {
+	s, ok := r.settings.(apiKeySealing)
+	if !ok {
+		return fmt.Errorf("settings store does not support api key sealing")
+	}
+	s.SetSealer(sealer)
+	return nil
+}
+
+// BackfillAPIKeys seals legacy plaintext api_keys rows. Idempotent; returns the
+// number of rows sealed. Requires EnableAPIKeySealing.
+func (r *Repo) BackfillAPIKeys(ctx context.Context, batch int) (int, error) {
+	s, ok := r.settings.(apiKeySealing)
+	if !ok {
+		return 0, fmt.Errorf("settings store does not support api key sealing")
+	}
+	return s.BackfillAPIKeys(ctx, batch)
+}
+
+// CountUnsealedAPIKeys returns count(api_keys WHERE api_key_sealed IS NULL).
+func (r *Repo) CountUnsealedAPIKeys(ctx context.Context) (int64, error) {
+	s, ok := r.settings.(apiKeySealing)
+	if !ok {
+		return 0, fmt.Errorf("settings store does not support api key sealing")
+	}
+	return s.CountUnsealedAPIKeys(ctx)
+}
+
+// ValidateAPIKeysSealedConstraint validates the api_key_sealed NOT NULL check.
+func (r *Repo) ValidateAPIKeysSealedConstraint(ctx context.Context) error {
+	s, ok := r.settings.(apiKeySealing)
+	if !ok {
+		return fmt.Errorf("settings store does not support api key sealing")
+	}
+	return s.ValidateAPIKeysSealedConstraint(ctx)
 }

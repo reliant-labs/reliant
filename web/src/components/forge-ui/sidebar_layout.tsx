@@ -28,6 +28,29 @@ interface SidebarLayoutProps {
   collapsed?: boolean;
   /** Controlled mode: toggle callback. When omitted, uses internal handler. */
   onToggle?: () => void;
+  /**
+   * "padded" (default) is a padded, scrolling content area. "fill" hands the
+   * page the whole remaining height, unpadded, and lets it own scrolling — for
+   * a page that hosts its own scroller (a transcript, an editor).
+   */
+  contentLayout?: "padded" | "fill";
+  /** The nav landmark's accessible name, e.g. the area it navigates. */
+  navLabel?: string;
+  /**
+   * Extra classes for the sidebar alone — e.g. a token scope (`forge-ui`)
+   * that should style the nav without reaching into the page content.
+   */
+  sidebarClassName?: string;
+  /**
+   * Rendered under the brand row, above the nav — a scope switcher, for
+   * example. Hidden while collapsed.
+   */
+  brandAccessory?: React.ReactNode;
+  /**
+   * Rendered after the nav sections — a loading skeleton for a list still
+   * arriving, or a one-line note about it. Hidden while collapsed.
+   */
+  navAppendix?: React.ReactNode;
 }
 
 export default function SidebarLayout({
@@ -38,6 +61,11 @@ export default function SidebarLayout({
   headerContent,
   collapsed: controlledCollapsed,
   onToggle,
+  contentLayout = "padded",
+  navLabel,
+  sidebarClassName,
+  brandAccessory,
+  navAppendix,
 }: SidebarLayoutProps) {
   const [internalCollapsed, setInternalCollapsed] = useState(false);
   const collapsed = controlledCollapsed ?? internalCollapsed;
@@ -57,7 +85,7 @@ export default function SidebarLayout({
       <aside
         className={`flex flex-col border-r border-border bg-surface transition-all duration-200 ${
           collapsed ? "w-16" : "w-64"
-        }`}
+        } ${sidebarClassName ?? ""}`}
       >
         {/* Brand */}
         <div className="flex h-16 shrink-0 items-center justify-between border-b border-border px-4">
@@ -92,8 +120,12 @@ export default function SidebarLayout({
           </button>
         </div>
 
+        {brandAccessory && !collapsed && (
+          <div className="shrink-0 border-b border-border px-3 py-2">{brandAccessory}</div>
+        )}
+
         {/* Navigation */}
-        <nav className="flex-1 overflow-y-auto p-3">
+        <nav className="flex-1 overflow-y-auto p-3" aria-label={navLabel}>
           {Array.from(sections.entries()).map(([section, items], si) => (
             <div key={si} className={si > 0 ? "mt-6" : ""}>
               {section && !collapsed && (
@@ -129,6 +161,7 @@ export default function SidebarLayout({
               </ul>
             </div>
           ))}
+          {navAppendix && !collapsed && <div className="mt-3">{navAppendix}</div>}
         </nav>
 
         {/* User Area */}
@@ -161,13 +194,27 @@ export default function SidebarLayout({
 
       {/* Main */}
       <div className="flex flex-1 flex-col overflow-hidden">
-        {/* Header Bar */}
-        <header className="flex h-16 shrink-0 items-center border-b border-border bg-surface px-6">
-          {headerContent}
-        </header>
+        {/* Header Bar — omitted when there is nothing to put in it, so a
+            page that owns its own header does not sit under an empty bar. */}
+        {headerContent && (
+          <header className="flex h-16 shrink-0 items-center border-b border-border bg-surface px-6">
+            {headerContent}
+          </header>
+        )}
 
-        {/* Content */}
-        <main className="flex-1 overflow-y-auto p-6">{children}</main>
+        {/*
+         * Content. `relative` is load-bearing: it makes the scroller the
+         * containing block for absolutely positioned descendants. Without it
+         * every `sr-only` span (position: absolute) in a long list resolves
+         * against the initial containing block instead, stretches the
+         * DOCUMENT past the viewport, and the whole window scrolls into blank
+         * space below the content.
+         */}
+        {contentLayout === "fill" ? (
+          <main className="relative flex min-h-0 flex-1 flex-col">{children}</main>
+        ) : (
+          <main className="relative flex-1 overflow-y-auto p-6">{children}</main>
+        )}
       </div>
     </div>
   );

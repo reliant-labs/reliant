@@ -22,7 +22,7 @@ function StatusIcon({ status }: { status?: NodeExecutionStatus }) {
     case "running":
       return <Loader2 className="h-4 w-4 shrink-0 animate-spin text-primary" />;
     case "completed":
-      return <CheckCircle2 className="h-4 w-4 shrink-0 text-success" />;
+      return <CheckCircle2 className="h-4 w-4 shrink-0 text-success-ink" />;
     case "failed":
       return <XCircle className="h-4 w-4 shrink-0 text-destructive" />;
     default:

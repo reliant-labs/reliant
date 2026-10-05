@@ -75,7 +75,7 @@ export function GitStatus({ worktreeId, className = "" }: GitStatusProps) {
   if (error) {
     return (
       <div className={cn("flex items-center justify-between gap-2 text-xs", className)}>
-        <span className="min-w-0 truncate text-destructive" title={error}>Couldn't read git status.</span>
+        <span className="min-w-0 truncate text-destructive-ink" title={error}>Couldn't read git status.</span>
         <button
           type="button"
           onClick={() => void fetchStatus()}

@@ -34,7 +34,7 @@ export const workspaceIconButton =
   "inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-40";
 
 export const workspaceIconButtonDanger =
-  "hover:bg-destructive/10 hover:text-destructive";
+  "hover:bg-destructive/10 hover:text-destructive-ink";
 
 /** Quiet context chip (project, machine) in a page header's meta row. */
 export const workspaceChip =

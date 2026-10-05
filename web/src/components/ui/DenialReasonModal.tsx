@@ -70,7 +70,7 @@ export function DenialReasonModal({
             htmlFor="denial-reason"
             className="block text-sm font-semibold text-foreground"
           >
-            Denial Reason <span className="text-destructive">*</span>
+            Denial Reason <span className="text-destructive-ink">*</span>
           </label>
           <textarea
             id="denial-reason"
@@ -94,7 +94,7 @@ export function DenialReasonModal({
             autoFocus
           />
           {error && (
-            <p className="text-sm text-destructive flex items-center gap-2">
+            <p className="text-sm text-destructive-ink flex items-center gap-2">
               <XCircle className="w-4 h-4" />
               {error}
             </p>

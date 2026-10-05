@@ -135,6 +135,37 @@ func (r *fakeRepo) GetRootWorkflowStatusForChats(_ context.Context, chatIDs []st
 	return out, nil
 }
 
+func (r *fakeRepo) SettlePendingTriggerEvent(_ context.Context, id string, outcome core.TriggerEventOutcome, detail string) (bool, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, ev := range r.events {
+		if ev.ID == id {
+			if ev.Outcome != core.TriggerEventPending {
+				return false, nil
+			}
+			ev.Outcome, ev.OutcomeDetail = outcome, detail
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func (r *fakeRepo) ListStalePendingTriggerEvents(_ context.Context, olderThan time.Time, limit int) ([]*core.TriggerEvent, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var out []*core.TriggerEvent
+	for _, ev := range r.events {
+		if ev.Outcome == core.TriggerEventPending && ev.CreatedAt.Before(olderThan) {
+			copied := *ev
+			out = append(out, &copied)
+		}
+	}
+	if limit > 0 && len(out) > limit {
+		out = out[:limit]
+	}
+	return out, nil
+}
+
 func (r *fakeRepo) eventsFor(triggerID string) []*core.TriggerEvent {
 	r.mu.Lock()
 	defer r.mu.Unlock()

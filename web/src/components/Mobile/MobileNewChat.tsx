@@ -202,7 +202,7 @@ export function MobileNewChat() {
       </div>
 
       {error && (
-        <p className="shrink-0 px-4 py-2 text-xs text-destructive">{error}</p>
+        <p className="shrink-0 px-4 py-2 text-xs text-destructive-ink">{error}</p>
       )}
 
       {/* Composer pins to the bottom. This screen has no tab bar, so it

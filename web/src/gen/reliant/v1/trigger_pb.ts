@@ -19,7 +19,7 @@ import type { JsonObject, Message } from "@bufbuild/protobuf";
  * Describes the file reliant/v1/trigger.proto.
  */
 export const file_reliant_v1_trigger: GenFile = /*@__PURE__*/
-  fileDesc("ChhyZWxpYW50L3YxL3RyaWdnZXIucHJvdG8SCnJlbGlhbnQudjEilgEKDVRyaWdnZXJIZWFsdGgSLwoGc3RhdHVzGAEgASgOMh8ucmVsaWFudC52MS5UcmlnZ2VySGVhbHRoU3RhdHVzEhwKFGNvbnNlY3V0aXZlX2ZhaWx1cmVzGAIgASgFEhkKEWNvbnNlY3V0aXZlX3NraXBzGAMgASgFEhsKE2xhc3RfZmFpbHVyZV9kZXRhaWwYBCABKAkiswEKD1RyaWdnZXJFdmVudFJ1bhIyCg1kaXNwbGF5X3N0YXRlGAEgASgOMhsucmVsaWFudC52MS5SdW5EaXNwbGF5U3RhdGUSDQoFdGl0bGUYAiABKAkSKAoFc3RhdGUYAyABKA4yGS5yZWxpYW50LnYxLldvcmtmbG93U3RhdGUSMwoLc3RvcF9yZWFzb24YBCABKA4yHi5yZWxpYW50LnYxLldvcmtmbG93U3RvcFJlYXNvbiK3AQoOU2NoZWR1bGVTb3VyY2USDAoEY3JvbhgBIAMoCRIVCghpbnRlcnZhbBgCIAEoCUgAiAEBEhAKCHRpbWV6b25lGAMgASgJEjEKB292ZXJsYXAYBCABKA4yIC5yZWxpYW50LnYxLlRyaWdnZXJPdmVybGFwUG9saWN5EhsKDmNhdGNodXBfd2luZG93GAUgASgJSAGIAQFCCwoJX2ludGVydmFsQhEKD19jYXRjaHVwX3dpbmRvdyLFBQoHVHJpZ2dlchIKCgJpZBgBIAEoCRIMCgRuYW1lGAIgASgJEhIKCnByb2plY3RfaWQYAyABKAkSGAoLd29ya3RyZWVfaWQYBCABKAlIAYgBARIPCgdlbmFibGVkGAUgASgIEhAKCHdvcmtmbG93GAYgASgJEjEKB3ByZXNldHMYByADKAsyIC5yZWxpYW50LnYxLlRyaWdnZXIuUHJlc2V0c0VudHJ5Ei8KBnBhcmFtcxgIIAMoCzIfLnJlbGlhbnQudjEuVHJpZ2dlci5QYXJhbXNFbnRyeRIPCgdtZXNzYWdlGAkgASgJEhIKCmNyZWF0ZWRfYXQYCiABKAkSEgoKdXBkYXRlZF9hdBgLIAEoCRIZCgxuZXh0X2ZpcmVfYXQYDCABKAlIAogBARIxCgpsYXN0X2V2ZW50GA0gASgLMhgucmVsaWFudC52MS5UcmlnZ2VyRXZlbnRIA4gBARIRCglkYWVtb25faWQYDiABKAkSKQoGaGVhbHRoGA8gASgLMhkucmVsaWFudC52MS5UcmlnZ2VySGVhbHRoEhQKDHByb2plY3RfbmFtZRgQIAEoCRITCgtkYWVtb25fbmFtZRgRIAEoCRIaChJub3RpZnlfb25fY29tcGxldGUYEiABKAgSLgoIc2NoZWR1bGUYFCABKAsyGi5yZWxpYW50LnYxLlNjaGVkdWxlU291cmNlSAAaLgoMUHJlc2V0c0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEaRQoLUGFyYW1zRW50cnkSCwoDa2V5GAEgASgJEiUKBXZhbHVlGAIgASgLMhYuZ29vZ2xlLnByb3RvYnVmLlZhbHVlOgI4AUIICgZzb3VyY2VCDgoMX3dvcmt0cmVlX2lkQg8KDV9uZXh0X2ZpcmVfYXRCDQoLX2xhc3RfZXZlbnQi0AIKDFRyaWdnZXJFdmVudBIKCgJpZBgBIAEoCRIXCgp0cmlnZ2VyX2lkGAIgASgJSACIAQESKgoEa2luZBgDIAEoDjIcLnJlbGlhbnQudjEuVHJpZ2dlckV2ZW50S2luZBITCgtvY2N1cnJlZF9hdBgEIAEoCRIwCgdvdXRjb21lGAUgASgOMh8ucmVsaWFudC52MS5UcmlnZ2VyRXZlbnRPdXRjb21lEhYKDm91dGNvbWVfZGV0YWlsGAYgASgJEhQKB2NoYXRfaWQYByABKAlIAYgBARIoCgdwYXlsb2FkGAggASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdBItCgNydW4YCSABKAsyGy5yZWxpYW50LnYxLlRyaWdnZXJFdmVudFJ1bkgCiAEBQg0KC190cmlnZ2VyX2lkQgoKCF9jaGF0X2lkQgYKBF9ydW4i/AMKEVRyaWdnZXJEZWZpbml0aW9uEgwKBG5hbWUYASABKAkSEgoKcHJvamVjdF9pZBgCIAEoCRIYCgt3b3JrdHJlZV9pZBgDIAEoCUgBiAEBEhQKB2VuYWJsZWQYBCABKAhIAogBARIQCgh3b3JrZmxvdxgFIAEoCRI7CgdwcmVzZXRzGAYgAygLMioucmVsaWFudC52MS5UcmlnZ2VyRGVmaW5pdGlvbi5QcmVzZXRzRW50cnkSOQoGcGFyYW1zGAcgAygLMikucmVsaWFudC52MS5UcmlnZ2VyRGVmaW5pdGlvbi5QYXJhbXNFbnRyeRIPCgdtZXNzYWdlGAggASgJEhEKCWRhZW1vbl9pZBgJIAEoCRIaChJub3RpZnlfb25fY29tcGxldGUYCiABKAgSLgoIc2NoZWR1bGUYFCABKAsyGi5yZWxpYW50LnYxLlNjaGVkdWxlU291cmNlSAAaLgoMUHJlc2V0c0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEaRQoLUGFyYW1zRW50cnkSCwoDa2V5GAEgASgJEiUKBXZhbHVlGAIgASgLMhYuZ29vZ2xlLnByb3RvYnVmLlZhbHVlOgI4AUIICgZzb3VyY2VCDgoMX3dvcmt0cmVlX2lkQgoKCF9lbmFibGVkIkYKFENyZWF0ZVRyaWdnZXJSZXF1ZXN0Ei4KB3RyaWdnZXIYASABKAsyHS5yZWxpYW50LnYxLlRyaWdnZXJEZWZpbml0aW9uIj0KFUNyZWF0ZVRyaWdnZXJSZXNwb25zZRIkCgd0cmlnZ2VyGAEgASgLMhMucmVsaWFudC52MS5UcmlnZ2VyIh8KEUdldFRyaWdnZXJSZXF1ZXN0EgoKAmlkGAEgASgJIjoKEkdldFRyaWdnZXJSZXNwb25zZRIkCgd0cmlnZ2VyGAEgASgLMhMucmVsaWFudC52MS5UcmlnZ2VyIj0KE0xpc3RUcmlnZ2Vyc1JlcXVlc3QSFwoKcHJvamVjdF9pZBgBIAEoCUgAiAEBQg0KC19wcm9qZWN0X2lkIj0KFExpc3RUcmlnZ2Vyc1Jlc3BvbnNlEiUKCHRyaWdnZXJzGAEgAygLMhMucmVsaWFudC52MS5UcmlnZ2VyIlIKFFVwZGF0ZVRyaWdnZXJSZXF1ZXN0EgoKAmlkGAEgASgJEi4KB3RyaWdnZXIYAiABKAsyHS5yZWxpYW50LnYxLlRyaWdnZXJEZWZpbml0aW9uIj0KFVVwZGF0ZVRyaWdnZXJSZXNwb25zZRIkCgd0cmlnZ2VyGAEgASgLMhMucmVsaWFudC52MS5UcmlnZ2VyIiIKFERlbGV0ZVRyaWdnZXJSZXF1ZXN0EgoKAmlkGAEgASgJIhcKFURlbGV0ZVRyaWdnZXJSZXNwb25zZSI3ChhTZXRUcmlnZ2VyRW5hYmxlZFJlcXVlc3QSCgoCaWQYASABKAkSDwoHZW5hYmxlZBgCIAEoCCJBChlTZXRUcmlnZ2VyRW5hYmxlZFJlc3BvbnNlEiQKB3RyaWdnZXIYASABKAsyEy5yZWxpYW50LnYxLlRyaWdnZXIiIAoSRmlyZVRyaWdnZXJSZXF1ZXN0EgoKAmlkGAEgASgJIi8KE0ZpcmVUcmlnZ2VyUmVzcG9uc2USGAoQZmlyZV93b3JrZmxvd19pZBgBIAEoCSKYAQoYTGlzdFRyaWdnZXJFdmVudHNSZXF1ZXN0EhIKCnRyaWdnZXJfaWQYASABKAkSDQoFbGltaXQYAiABKAUSFwoKcGFnZV90b2tlbhgDIAEoCUgAiAEBEjEKCG91dGNvbWVzGAQgAygOMh8ucmVsaWFudC52MS5UcmlnZ2VyRXZlbnRPdXRjb21lQg0KC19wYWdlX3Rva2VuIl4KGUxpc3RUcmlnZ2VyRXZlbnRzUmVzcG9uc2USKAoGZXZlbnRzGAEgAygLMhgucmVsaWFudC52MS5UcmlnZ2VyRXZlbnQSFwoPbmV4dF9wYWdlX3Rva2VuGAIgASgJIigKFUdldExhdW5jaEV2ZW50UmVxdWVzdBIPCgdjaGF0X2lkGAEgASgJIlAKFkdldExhdW5jaEV2ZW50UmVzcG9uc2USLAoFZXZlbnQYASABKAsyGC5yZWxpYW50LnYxLlRyaWdnZXJFdmVudEgAiAEBQggKBl9ldmVudCpGCgtUcmlnZ2VyS2luZBIcChhUUklHR0VSX0tJTkRfVU5TUEVDSUZJRUQQABIZChVUUklHR0VSX0tJTkRfU0NIRURVTEUQASrHAQoQVHJpZ2dlckV2ZW50S2luZBIiCh5UUklHR0VSX0VWRU5UX0tJTkRfVU5TUEVDSUZJRUQQABIhCh1UUklHR0VSX0VWRU5UX0tJTkRfQ0hBVF9TVEFSVBABEh8KG1RSSUdHRVJfRVZFTlRfS0lORF9TQ0hFRFVMRRACEiYKIlRSSUdHRVJfRVZFTlRfS0lORF9BR0VOVF9TVEFSVF9SVU4QAxIjCh9UUklHR0VSX0VWRU5UX0tJTkRfQlVJTERFUl9URVNUEAQqpQEKE1RyaWdnZXJFdmVudE91dGNvbWUSJQohVFJJR0dFUl9FVkVOVF9PVVRDT01FX1VOU1BFQ0lGSUVEEAASIgoeVFJJR0dFUl9FVkVOVF9PVVRDT01FX0xBVU5DSEVEEAESIQodVFJJR0dFUl9FVkVOVF9PVVRDT01FX1NLSVBQRUQQAhIgChxUUklHR0VSX0VWRU5UX09VVENPTUVfRkFJTEVEEAMqgQEKFFRyaWdnZXJPdmVybGFwUG9saWN5EiYKIlRSSUdHRVJfT1ZFUkxBUF9QT0xJQ1lfVU5TUEVDSUZJRUQQABIfChtUUklHR0VSX09WRVJMQVBfUE9MSUNZX1NLSVAQARIgChxUUklHR0VSX09WRVJMQVBfUE9MSUNZX0FMTE9XEAIqyQEKE1RyaWdnZXJIZWFsdGhTdGF0dXMSJQohVFJJR0dFUl9IRUFMVEhfU1RBVFVTX1VOU1BFQ0lGSUVEEAASIQodVFJJR0dFUl9IRUFMVEhfU1RBVFVTX0hFQUxUSFkQARIiCh5UUklHR0VSX0hFQUxUSF9TVEFUVVNfREVHUkFERUQQAhIhCh1UUklHR0VSX0hFQUxUSF9TVEFUVVNfRkFJTElORxADEiEKHVRSSUdHRVJfSEVBTFRIX1NUQVRVU19VTktOT1dOEAQysQYKDlRyaWdnZXJTZXJ2aWNlElYKDUNyZWF0ZVRyaWdnZXISIC5yZWxpYW50LnYxLkNyZWF0ZVRyaWdnZXJSZXF1ZXN0GiEucmVsaWFudC52MS5DcmVhdGVUcmlnZ2VyUmVzcG9uc2UiABJNCgpHZXRUcmlnZ2VyEh0ucmVsaWFudC52MS5HZXRUcmlnZ2VyUmVxdWVzdBoeLnJlbGlhbnQudjEuR2V0VHJpZ2dlclJlc3BvbnNlIgASUwoMTGlzdFRyaWdnZXJzEh8ucmVsaWFudC52MS5MaXN0VHJpZ2dlcnNSZXF1ZXN0GiAucmVsaWFudC52MS5MaXN0VHJpZ2dlcnNSZXNwb25zZSIAElYKDVVwZGF0ZVRyaWdnZXISIC5yZWxpYW50LnYxLlVwZGF0ZVRyaWdnZXJSZXF1ZXN0GiEucmVsaWFudC52MS5VcGRhdGVUcmlnZ2VyUmVzcG9uc2UiABJWCg1EZWxldGVUcmlnZ2VyEiAucmVsaWFudC52MS5EZWxldGVUcmlnZ2VyUmVxdWVzdBohLnJlbGlhbnQudjEuRGVsZXRlVHJpZ2dlclJlc3BvbnNlIgASYgoRU2V0VHJpZ2dlckVuYWJsZWQSJC5yZWxpYW50LnYxLlNldFRyaWdnZXJFbmFibGVkUmVxdWVzdBolLnJlbGlhbnQudjEuU2V0VHJpZ2dlckVuYWJsZWRSZXNwb25zZSIAElAKC0ZpcmVUcmlnZ2VyEh4ucmVsaWFudC52MS5GaXJlVHJpZ2dlclJlcXVlc3QaHy5yZWxpYW50LnYxLkZpcmVUcmlnZ2VyUmVzcG9uc2UiABJiChFMaXN0VHJpZ2dlckV2ZW50cxIkLnJlbGlhbnQudjEuTGlzdFRyaWdnZXJFdmVudHNSZXF1ZXN0GiUucmVsaWFudC52MS5MaXN0VHJpZ2dlckV2ZW50c1Jlc3BvbnNlIgASWQoOR2V0TGF1bmNoRXZlbnQSIS5yZWxpYW50LnYxLkdldExhdW5jaEV2ZW50UmVxdWVzdBoiLnJlbGlhbnQudjEuR2V0TGF1bmNoRXZlbnRSZXNwb25zZSIAQjpaOGdpdGh1Yi5jb20vcmVsaWFudC1sYWJzL3JlbGlhbnQvZ2VuL3JlbGlhbnQvdjE7cmVsaWFudHYxYgZwcm90bzM", [file_google_protobuf_struct, file_reliant_v1_chat, file_reliant_v1_run]);
+  fileDesc("ChhyZWxpYW50L3YxL3RyaWdnZXIucHJvdG8SCnJlbGlhbnQudjEilgEKDVRyaWdnZXJIZWFsdGgSLwoGc3RhdHVzGAEgASgOMh8ucmVsaWFudC52MS5UcmlnZ2VySGVhbHRoU3RhdHVzEhwKFGNvbnNlY3V0aXZlX2ZhaWx1cmVzGAIgASgFEhkKEWNvbnNlY3V0aXZlX3NraXBzGAMgASgFEhsKE2xhc3RfZmFpbHVyZV9kZXRhaWwYBCABKAkiswEKD1RyaWdnZXJFdmVudFJ1bhIyCg1kaXNwbGF5X3N0YXRlGAEgASgOMhsucmVsaWFudC52MS5SdW5EaXNwbGF5U3RhdGUSDQoFdGl0bGUYAiABKAkSKAoFc3RhdGUYAyABKA4yGS5yZWxpYW50LnYxLldvcmtmbG93U3RhdGUSMwoLc3RvcF9yZWFzb24YBCABKA4yHi5yZWxpYW50LnYxLldvcmtmbG93U3RvcFJlYXNvbiK3AQoOU2NoZWR1bGVTb3VyY2USDAoEY3JvbhgBIAMoCRIVCghpbnRlcnZhbBgCIAEoCUgAiAEBEhAKCHRpbWV6b25lGAMgASgJEjEKB292ZXJsYXAYBCABKA4yIC5yZWxpYW50LnYxLlRyaWdnZXJPdmVybGFwUG9saWN5EhsKDmNhdGNodXBfd2luZG93GAUgASgJSAGIAQFCCwoJX2ludGVydmFsQhEKD19jYXRjaHVwX3dpbmRvdyI2Cg1XZWJob29rU291cmNlEiUKBGhtYWMYASABKAsyFy5yZWxpYW50LnYxLldlYmhvb2tIbWFjIlIKC1dlYmhvb2tIbWFjEg4KBmhlYWRlchgBIAEoCRIRCglhbGdvcml0aG0YAiABKAkSDgoGcHJlZml4GAMgASgJEhAKCGVuY29kaW5nGAQgASgJIrYBChFJbnRlZ3JhdGlvblNvdXJjZRITCgtpbnRlZ3JhdGlvbhgBIAEoCRIOCgZldmVudHMYAiADKAkSNwoFbWF0Y2gYAyADKAsyKC5yZWxpYW50LnYxLkludGVncmF0aW9uU291cmNlLk1hdGNoRW50cnkSFQoNcG9sbF9pbnRlcnZhbBgEIAEoCRosCgpNYXRjaEVudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEiOgoTV29ya2Zsb3dFdmVudFNvdXJjZRIRCgl3b3JrZmxvd3MYASADKAkSEAoIb3V0Y29tZXMYAiADKAkihQMKD1dvcmtmbG93VHJpZ2dlchIMCgRuYW1lGAEgASgJEhMKC2Rlc2NyaXB0aW9uGAIgASgJEg4KBmZpbHRlchgDIAEoCRI3CgZpbnB1dHMYBCADKAsyJy5yZWxpYW50LnYxLldvcmtmbG93VHJpZ2dlci5JbnB1dHNFbnRyeRIuCghzY2hlZHVsZRgUIAEoCzIaLnJlbGlhbnQudjEuU2NoZWR1bGVTb3VyY2VIABIsCgd3ZWJob29rGBUgASgLMhkucmVsaWFudC52MS5XZWJob29rU291cmNlSAASNAoLaW50ZWdyYXRpb24YFiABKAsyHS5yZWxpYW50LnYxLkludGVncmF0aW9uU291cmNlSAASOQoOd29ya2Zsb3dfZXZlbnQYFyABKAsyHy5yZWxpYW50LnYxLldvcmtmbG93RXZlbnRTb3VyY2VIABotCgtJbnB1dHNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBQggKBnNvdXJjZSKACAoHVHJpZ2dlchIKCgJpZBgBIAEoCRIMCgRuYW1lGAIgASgJEhIKCnByb2plY3RfaWQYAyABKAkSGAoLd29ya3RyZWVfaWQYBCABKAlIAYgBARIPCgdlbmFibGVkGAUgASgIEhAKCHdvcmtmbG93GAYgASgJEjEKB3ByZXNldHMYByADKAsyIC5yZWxpYW50LnYxLlRyaWdnZXIuUHJlc2V0c0VudHJ5Ei8KBnBhcmFtcxgIIAMoCzIfLnJlbGlhbnQudjEuVHJpZ2dlci5QYXJhbXNFbnRyeRIPCgdtZXNzYWdlGAkgASgJEhIKCmNyZWF0ZWRfYXQYCiABKAkSEgoKdXBkYXRlZF9hdBgLIAEoCRIZCgxuZXh0X2ZpcmVfYXQYDCABKAlIAogBARIxCgpsYXN0X2V2ZW50GA0gASgLMhgucmVsaWFudC52MS5UcmlnZ2VyRXZlbnRIA4gBARIRCglkYWVtb25faWQYDiABKAkSKQoGaGVhbHRoGA8gASgLMhkucmVsaWFudC52MS5UcmlnZ2VySGVhbHRoEhQKDHByb2plY3RfbmFtZRgQIAEoCRITCgtkYWVtb25fbmFtZRgRIAEoCRIaChJub3RpZnlfb25fY29tcGxldGUYEiABKAgSDgoGZmlsdGVyGBMgASgJEi4KCHNjaGVkdWxlGBQgASgLMhoucmVsaWFudC52MS5TY2hlZHVsZVNvdXJjZUgAEiwKB3dlYmhvb2sYFSABKAsyGS5yZWxpYW50LnYxLldlYmhvb2tTb3VyY2VIABI0CgtpbnRlZ3JhdGlvbhgWIAEoCzIdLnJlbGlhbnQudjEuSW50ZWdyYXRpb25Tb3VyY2VIABI5Cg53b3JrZmxvd19ldmVudBgXIAEoCzIfLnJlbGlhbnQudjEuV29ya2Zsb3dFdmVudFNvdXJjZUgAEhoKDWNvbm5lY3Rpb25faWQYGCABKAlIBIgBARIYCgt3ZWJob29rX3VybBgZIAEoCUgFiAEBEh0KEHdvcmtmbG93X3RyaWdnZXIYGiABKAlIBogBARouCgxQcmVzZXRzRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ARpFCgtQYXJhbXNFbnRyeRILCgNrZXkYASABKAkSJQoFdmFsdWUYAiABKAsyFi5nb29nbGUucHJvdG9idWYuVmFsdWU6AjgBQggKBnNvdXJjZUIOCgxfd29ya3RyZWVfaWRCDwoNX25leHRfZmlyZV9hdEINCgtfbGFzdF9ldmVudEIQCg5fY29ubmVjdGlvbl9pZEIOCgxfd2ViaG9va191cmxCEwoRX3dvcmtmbG93X3RyaWdnZXIi0AIKDFRyaWdnZXJFdmVudBIKCgJpZBgBIAEoCRIXCgp0cmlnZ2VyX2lkGAIgASgJSACIAQESKgoEa2luZBgDIAEoDjIcLnJlbGlhbnQudjEuVHJpZ2dlckV2ZW50S2luZBITCgtvY2N1cnJlZF9hdBgEIAEoCRIwCgdvdXRjb21lGAUgASgOMh8ucmVsaWFudC52MS5UcmlnZ2VyRXZlbnRPdXRjb21lEhYKDm91dGNvbWVfZGV0YWlsGAYgASgJEhQKB2NoYXRfaWQYByABKAlIAYgBARIoCgdwYXlsb2FkGAggASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdBItCgNydW4YCSABKAsyGy5yZWxpYW50LnYxLlRyaWdnZXJFdmVudFJ1bkgCiAEBQg0KC190cmlnZ2VyX2lkQgoKCF9jaGF0X2lkQgYKBF9ydW4irwYKEVRyaWdnZXJEZWZpbml0aW9uEgwKBG5hbWUYASABKAkSEgoKcHJvamVjdF9pZBgCIAEoCRIYCgt3b3JrdHJlZV9pZBgDIAEoCUgBiAEBEhQKB2VuYWJsZWQYBCABKAhIAogBARIQCgh3b3JrZmxvdxgFIAEoCRI7CgdwcmVzZXRzGAYgAygLMioucmVsaWFudC52MS5UcmlnZ2VyRGVmaW5pdGlvbi5QcmVzZXRzRW50cnkSOQoGcGFyYW1zGAcgAygLMikucmVsaWFudC52MS5UcmlnZ2VyRGVmaW5pdGlvbi5QYXJhbXNFbnRyeRIPCgdtZXNzYWdlGAggASgJEhEKCWRhZW1vbl9pZBgJIAEoCRIaChJub3RpZnlfb25fY29tcGxldGUYCiABKAgSDgoGZmlsdGVyGAsgASgJEhoKDWNvbm5lY3Rpb25faWQYDCABKAlIA4gBARIgChN3ZWJob29rX2htYWNfc2VjcmV0GA0gASgJSASIAQESLgoIc2NoZWR1bGUYFCABKAsyGi5yZWxpYW50LnYxLlNjaGVkdWxlU291cmNlSAASLAoHd2ViaG9vaxgVIAEoCzIZLnJlbGlhbnQudjEuV2ViaG9va1NvdXJjZUgAEjQKC2ludGVncmF0aW9uGBYgASgLMh0ucmVsaWFudC52MS5JbnRlZ3JhdGlvblNvdXJjZUgAEjkKDndvcmtmbG93X2V2ZW50GBcgASgLMh8ucmVsaWFudC52MS5Xb3JrZmxvd0V2ZW50U291cmNlSAASGgoQd29ya2Zsb3dfdHJpZ2dlchgYIAEoCUgAGi4KDFByZXNldHNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBGkUKC1BhcmFtc0VudHJ5EgsKA2tleRgBIAEoCRIlCgV2YWx1ZRgCIAEoCzIWLmdvb2dsZS5wcm90b2J1Zi5WYWx1ZToCOAFCCAoGc291cmNlQg4KDF93b3JrdHJlZV9pZEIKCghfZW5hYmxlZEIQCg5fY29ubmVjdGlvbl9pZEIWChRfd2ViaG9va19obWFjX3NlY3JldCIvChFXZWJob29rQ3JlZGVudGlhbBINCgV0b2tlbhgBIAEoCRILCgN1cmwYAiABKAkiRgoUQ3JlYXRlVHJpZ2dlclJlcXVlc3QSLgoHdHJpZ2dlchgBIAEoCzIdLnJlbGlhbnQudjEuVHJpZ2dlckRlZmluaXRpb24ibQoVQ3JlYXRlVHJpZ2dlclJlc3BvbnNlEiQKB3RyaWdnZXIYASABKAsyEy5yZWxpYW50LnYxLlRyaWdnZXISLgoHd2ViaG9vaxgCIAEoCzIdLnJlbGlhbnQudjEuV2ViaG9va0NyZWRlbnRpYWwiJwoZUm90YXRlV2ViaG9va1Rva2VuUmVxdWVzdBIKCgJpZBgBIAEoCSJyChpSb3RhdGVXZWJob29rVG9rZW5SZXNwb25zZRIkCgd0cmlnZ2VyGAEgASgLMhMucmVsaWFudC52MS5UcmlnZ2VyEi4KB3dlYmhvb2sYAiABKAsyHS5yZWxpYW50LnYxLldlYmhvb2tDcmVkZW50aWFsIh8KEUdldFRyaWdnZXJSZXF1ZXN0EgoKAmlkGAEgASgJIjoKEkdldFRyaWdnZXJSZXNwb25zZRIkCgd0cmlnZ2VyGAEgASgLMhMucmVsaWFudC52MS5UcmlnZ2VyIj0KE0xpc3RUcmlnZ2Vyc1JlcXVlc3QSFwoKcHJvamVjdF9pZBgBIAEoCUgAiAEBQg0KC19wcm9qZWN0X2lkIj0KFExpc3RUcmlnZ2Vyc1Jlc3BvbnNlEiUKCHRyaWdnZXJzGAEgAygLMhMucmVsaWFudC52MS5UcmlnZ2VyIlIKFFVwZGF0ZVRyaWdnZXJSZXF1ZXN0EgoKAmlkGAEgASgJEi4KB3RyaWdnZXIYAiABKAsyHS5yZWxpYW50LnYxLlRyaWdnZXJEZWZpbml0aW9uIj0KFVVwZGF0ZVRyaWdnZXJSZXNwb25zZRIkCgd0cmlnZ2VyGAEgASgLMhMucmVsaWFudC52MS5UcmlnZ2VyIiIKFERlbGV0ZVRyaWdnZXJSZXF1ZXN0EgoKAmlkGAEgASgJIhcKFURlbGV0ZVRyaWdnZXJSZXNwb25zZSI3ChhTZXRUcmlnZ2VyRW5hYmxlZFJlcXVlc3QSCgoCaWQYASABKAkSDwoHZW5hYmxlZBgCIAEoCCJBChlTZXRUcmlnZ2VyRW5hYmxlZFJlc3BvbnNlEiQKB3RyaWdnZXIYASABKAsyEy5yZWxpYW50LnYxLlRyaWdnZXIiIAoSRmlyZVRyaWdnZXJSZXF1ZXN0EgoKAmlkGAEgASgJIi8KE0ZpcmVUcmlnZ2VyUmVzcG9uc2USGAoQZmlyZV93b3JrZmxvd19pZBgBIAEoCSKYAQoYTGlzdFRyaWdnZXJFdmVudHNSZXF1ZXN0EhIKCnRyaWdnZXJfaWQYASABKAkSDQoFbGltaXQYAiABKAUSFwoKcGFnZV90b2tlbhgDIAEoCUgAiAEBEjEKCG91dGNvbWVzGAQgAygOMh8ucmVsaWFudC52MS5UcmlnZ2VyRXZlbnRPdXRjb21lQg0KC19wYWdlX3Rva2VuIl4KGUxpc3RUcmlnZ2VyRXZlbnRzUmVzcG9uc2USKAoGZXZlbnRzGAEgAygLMhgucmVsaWFudC52MS5UcmlnZ2VyRXZlbnQSFwoPbmV4dF9wYWdlX3Rva2VuGAIgASgJIigKFUdldExhdW5jaEV2ZW50UmVxdWVzdBIPCgdjaGF0X2lkGAEgASgJIlAKFkdldExhdW5jaEV2ZW50UmVzcG9uc2USLAoFZXZlbnQYASABKAsyGC5yZWxpYW50LnYxLlRyaWdnZXJFdmVudEgAiAEBQggKBl9ldmVudCqfAQoLVHJpZ2dlcktpbmQSHAoYVFJJR0dFUl9LSU5EX1VOU1BFQ0lGSUVEEAASGQoVVFJJR0dFUl9LSU5EX1NDSEVEVUxFEAESGAoUVFJJR0dFUl9LSU5EX1dFQkhPT0sQAhIcChhUUklHR0VSX0tJTkRfSU5URUdSQVRJT04QAxIfChtUUklHR0VSX0tJTkRfV09SS0ZMT1dfRVZFTlQQBCqyAgoQVHJpZ2dlckV2ZW50S2luZBIiCh5UUklHR0VSX0VWRU5UX0tJTkRfVU5TUEVDSUZJRUQQABIhCh1UUklHR0VSX0VWRU5UX0tJTkRfQ0hBVF9TVEFSVBABEh8KG1RSSUdHRVJfRVZFTlRfS0lORF9TQ0hFRFVMRRACEiYKIlRSSUdHRVJfRVZFTlRfS0lORF9BR0VOVF9TVEFSVF9SVU4QAxIjCh9UUklHR0VSX0VWRU5UX0tJTkRfQlVJTERFUl9URVNUEAQSHgoaVFJJR0dFUl9FVkVOVF9LSU5EX1dFQkhPT0sQBRIiCh5UUklHR0VSX0VWRU5UX0tJTkRfSU5URUdSQVRJT04QBhIlCiFUUklHR0VSX0VWRU5UX0tJTkRfV09SS0ZMT1dfRVZFTlQQByrIAQoTVHJpZ2dlckV2ZW50T3V0Y29tZRIlCiFUUklHR0VSX0VWRU5UX09VVENPTUVfVU5TUEVDSUZJRUQQABIiCh5UUklHR0VSX0VWRU5UX09VVENPTUVfTEFVTkNIRUQQARIhCh1UUklHR0VSX0VWRU5UX09VVENPTUVfU0tJUFBFRBACEiAKHFRSSUdHRVJfRVZFTlRfT1VUQ09NRV9GQUlMRUQQAxIhCh1UUklHR0VSX0VWRU5UX09VVENPTUVfUEVORElORxAEKoEBChRUcmlnZ2VyT3ZlcmxhcFBvbGljeRImCiJUUklHR0VSX09WRVJMQVBfUE9MSUNZX1VOU1BFQ0lGSUVEEAASHwobVFJJR0dFUl9PVkVSTEFQX1BPTElDWV9TS0lQEAESIAocVFJJR0dFUl9PVkVSTEFQX1BPTElDWV9BTExPVxACKskBChNUcmlnZ2VySGVhbHRoU3RhdHVzEiUKIVRSSUdHRVJfSEVBTFRIX1NUQVRVU19VTlNQRUNJRklFRBAAEiEKHVRSSUdHRVJfSEVBTFRIX1NUQVRVU19IRUFMVEhZEAESIgoeVFJJR0dFUl9IRUFMVEhfU1RBVFVTX0RFR1JBREVEEAISIQodVFJJR0dFUl9IRUFMVEhfU1RBVFVTX0ZBSUxJTkcQAxIhCh1UUklHR0VSX0hFQUxUSF9TVEFUVVNfVU5LTk9XThAEMpgHCg5UcmlnZ2VyU2VydmljZRJWCg1DcmVhdGVUcmlnZ2VyEiAucmVsaWFudC52MS5DcmVhdGVUcmlnZ2VyUmVxdWVzdBohLnJlbGlhbnQudjEuQ3JlYXRlVHJpZ2dlclJlc3BvbnNlIgASTQoKR2V0VHJpZ2dlchIdLnJlbGlhbnQudjEuR2V0VHJpZ2dlclJlcXVlc3QaHi5yZWxpYW50LnYxLkdldFRyaWdnZXJSZXNwb25zZSIAElMKDExpc3RUcmlnZ2VycxIfLnJlbGlhbnQudjEuTGlzdFRyaWdnZXJzUmVxdWVzdBogLnJlbGlhbnQudjEuTGlzdFRyaWdnZXJzUmVzcG9uc2UiABJWCg1VcGRhdGVUcmlnZ2VyEiAucmVsaWFudC52MS5VcGRhdGVUcmlnZ2VyUmVxdWVzdBohLnJlbGlhbnQudjEuVXBkYXRlVHJpZ2dlclJlc3BvbnNlIgASVgoNRGVsZXRlVHJpZ2dlchIgLnJlbGlhbnQudjEuRGVsZXRlVHJpZ2dlclJlcXVlc3QaIS5yZWxpYW50LnYxLkRlbGV0ZVRyaWdnZXJSZXNwb25zZSIAEmIKEVNldFRyaWdnZXJFbmFibGVkEiQucmVsaWFudC52MS5TZXRUcmlnZ2VyRW5hYmxlZFJlcXVlc3QaJS5yZWxpYW50LnYxLlNldFRyaWdnZXJFbmFibGVkUmVzcG9uc2UiABJQCgtGaXJlVHJpZ2dlchIeLnJlbGlhbnQudjEuRmlyZVRyaWdnZXJSZXF1ZXN0Gh8ucmVsaWFudC52MS5GaXJlVHJpZ2dlclJlc3BvbnNlIgASYgoRTGlzdFRyaWdnZXJFdmVudHMSJC5yZWxpYW50LnYxLkxpc3RUcmlnZ2VyRXZlbnRzUmVxdWVzdBolLnJlbGlhbnQudjEuTGlzdFRyaWdnZXJFdmVudHNSZXNwb25zZSIAElkKDkdldExhdW5jaEV2ZW50EiEucmVsaWFudC52MS5HZXRMYXVuY2hFdmVudFJlcXVlc3QaIi5yZWxpYW50LnYxLkdldExhdW5jaEV2ZW50UmVzcG9uc2UiABJlChJSb3RhdGVXZWJob29rVG9rZW4SJS5yZWxpYW50LnYxLlJvdGF0ZVdlYmhvb2tUb2tlblJlcXVlc3QaJi5yZWxpYW50LnYxLlJvdGF0ZVdlYmhvb2tUb2tlblJlc3BvbnNlIgBCOlo4Z2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vcmVsaWFudC92MTtyZWxpYW50djFiBnByb3RvMw", [file_google_protobuf_struct, file_reliant_v1_chat, file_reliant_v1_run]);
 
 /**
  * TriggerHealth is the read-only health summary of a trigger. See
@@ -161,6 +161,256 @@ export type ScheduleSource = Message<"reliant.v1.ScheduleSource"> & {
  */
 export const ScheduleSourceSchema: GenMessage<ScheduleSource> = /*@__PURE__*/
   messageDesc(file_reliant_v1_trigger, 2);
+
+/**
+ * WebhookSource is the trigger.source arm for a trigger that fires on a POST
+ * to its own URL. A delivery is accepted when ANY ONE of these holds:
+ *
+ *   - the URL is <PUBLIC_URL>/hooks/{trigger_id}/{token} with the trigger's
+ *     token in the path (what a sender that cannot set headers uses — Zapier);
+ *   - the URL is <PUBLIC_URL>/hooks/{trigger_id} with
+ *     `Authorization: Bearer <token>`;
+ *   - hmac is configured and the body carries a valid signature.
+ *
+ * The token is generated by the server, stored hashed, shown once at create
+ * (and on rotation), and never part of a definition. The event's
+ * trigger.payload is {body, headers, query, content_type}: body is the parsed
+ * JSON (or the raw text), and headers and query have secret-bearing entries
+ * removed.
+ *
+ * @generated from message reliant.v1.WebhookSource
+ */
+export type WebhookSource = Message<"reliant.v1.WebhookSource"> & {
+  /**
+   * Optional HMAC verification for senders that sign their deliveries.
+   * Configuring it adds a way in; it does not disable the token.
+   *
+   * @generated from field: reliant.v1.WebhookHmac hmac = 1;
+   */
+  hmac?: WebhookHmac | undefined;
+};
+
+/**
+ * Describes the message reliant.v1.WebhookSource.
+ * Use `create(WebhookSourceSchema)` to create a new message.
+ */
+export const WebhookSourceSchema: GenMessage<WebhookSource> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_trigger, 3);
+
+/**
+ * WebhookHmac describes how a sender signs a webhook body. The signature is
+ * an HMAC of the raw request body under a shared secret. The secret is set on
+ * the trigger (TriggerDefinition.webhook_hmac_secret), never here, so a
+ * definition can be shared without it.
+ *
+ * @generated from message reliant.v1.WebhookHmac
+ */
+export type WebhookHmac = Message<"reliant.v1.WebhookHmac"> & {
+  /**
+   * Request header carrying the signature. Empty means "X-Signature-256".
+   *
+   * @generated from field: string header = 1;
+   */
+  header: string;
+
+  /**
+   * Digest algorithm: "sha256" (the default when empty), "sha1" or "sha512".
+   *
+   * @generated from field: string algorithm = 2;
+   */
+  algorithm: string;
+
+  /**
+   * Text the sender puts before the digest, removed before comparing, e.g.
+   * "sha256=". Empty means none.
+   *
+   * @generated from field: string prefix = 3;
+   */
+  prefix: string;
+
+  /**
+   * How the digest is written: "hex" (the default when empty) or "base64".
+   *
+   * @generated from field: string encoding = 4;
+   */
+  encoding: string;
+};
+
+/**
+ * Describes the message reliant.v1.WebhookHmac.
+ * Use `create(WebhookHmacSchema)` to create a new message.
+ */
+export const WebhookHmacSchema: GenMessage<WebhookHmac> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_trigger, 4);
+
+/**
+ * IntegrationSource is the trigger.source arm for a trigger that fires on a
+ * provider event — a provider's app-level webhook (GitHub, Slack, Twilio) or
+ * a poll (Gmail). Which mechanism is the integration's, not the trigger's.
+ *
+ * An event reaches the trigger only when ALL of these hold: its type is in
+ * events; the trigger's connection belongs to the trigger's owner, is
+ * active, and covers the event's account; every match entry equals the
+ * event's attribute; and the trigger's filter, if any, is true. The event's
+ * trigger.payload is {integration, event, account, delivery_id, attributes,
+ * data}, where data is the provider's own payload.
+ *
+ * @generated from message reliant.v1.IntegrationSource
+ */
+export type IntegrationSource = Message<"reliant.v1.IntegrationSource"> & {
+  /**
+   * Integration id, e.g. "github". It must provide an inbound trigger source.
+   *
+   * @generated from field: string integration = 1;
+   */
+  integration: string;
+
+  /**
+   * Event types to fire on, as the integration names them, e.g.
+   * "issues.opened". A trailing ".*" matches every action of a type
+   * ("issues.*"). At least one is required.
+   *
+   * @generated from field: repeated string events = 2;
+   */
+  events: string[];
+
+  /**
+   * Event attributes that must all equal these values, e.g.
+   * repository: acme/app or channel: C0123. The attribute names are the
+   * integration's. Empty matches any event of the listed types.
+   *
+   * @generated from field: map<string, string> match = 3;
+   */
+  match: { [key: string]: string };
+
+  /**
+   * Polled integrations only: how often to poll, as a Go duration. Empty
+   * means the integration's default.
+   *
+   * @generated from field: string poll_interval = 4;
+   */
+  pollInterval: string;
+};
+
+/**
+ * Describes the message reliant.v1.IntegrationSource.
+ * Use `create(IntegrationSourceSchema)` to create a new message.
+ */
+export const IntegrationSourceSchema: GenMessage<IntegrationSource> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_trigger, 5);
+
+/**
+ * WorkflowEventSource is the trigger.source arm for a trigger that fires when
+ * a run of one of the owner's workflows reaches an outcome. A trigger never
+ * fires on a run it launched itself (or one of that run's descendants).
+ *
+ * @generated from message reliant.v1.WorkflowEventSource
+ */
+export type WorkflowEventSource = Message<"reliant.v1.WorkflowEventSource"> & {
+  /**
+   * Workflow refs whose runs this matches, written as a trigger names its
+   * workflow: a slug, or builtin://<name>. Empty matches a run of any of the
+   * owner's workflows.
+   *
+   * @generated from field: repeated string workflows = 1;
+   */
+  workflows: string[];
+
+  /**
+   * Outcomes to fire on: "finished", "failed", or "blocked" (waiting on an
+   * approval or a question). Empty matches all three.
+   *
+   * @generated from field: repeated string outcomes = 2;
+   */
+  outcomes: string[];
+};
+
+/**
+ * Describes the message reliant.v1.WorkflowEventSource.
+ * Use `create(WorkflowEventSourceSchema)` to create a new message.
+ */
+export const WorkflowEventSourceSchema: GenMessage<WorkflowEventSource> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_trigger, 6);
+
+/**
+ * WorkflowTrigger is a trigger declared by a workflow definition (the
+ * workflow's `triggers:` block): WHEN the workflow should run. It carries no
+ * identity — whose run, which project, which connection and daemon — because
+ * a definition is shared and those belong to whoever activates it. A Trigger
+ * row activates one by name (TriggerDefinition.workflow_trigger).
+ *
+ * @generated from message reliant.v1.WorkflowTrigger
+ */
+export type WorkflowTrigger = Message<"reliant.v1.WorkflowTrigger"> & {
+  /**
+   * Name of this trigger within its workflow; unique there. What an
+   * activation refers to.
+   *
+   * @generated from field: string name = 1;
+   */
+  name: string;
+
+  /**
+   * What this trigger is for, for a human choosing which to activate.
+   *
+   * @generated from field: string description = 2;
+   */
+  description: string;
+
+  /**
+   * CEL bool over the `trigger` root (trigger.kind, trigger.payload.*).
+   * Empty matches every event the source delivers.
+   *
+   * @generated from field: string filter = 3;
+   */
+  filter: string;
+
+  /**
+   * Workflow inputs set from the event: input name to a template over
+   * `trigger`, e.g. issue: "{{ trigger.payload.data.issue.number }}".
+   *
+   * @generated from field: map<string, string> inputs = 4;
+   */
+  inputs: { [key: string]: string };
+
+  /**
+   * What makes it fire.
+   *
+   * @generated from oneof reliant.v1.WorkflowTrigger.source
+   */
+  source: {
+    /**
+     * @generated from field: reliant.v1.ScheduleSource schedule = 20;
+     */
+    value: ScheduleSource;
+    case: "schedule";
+  } | {
+    /**
+     * @generated from field: reliant.v1.WebhookSource webhook = 21;
+     */
+    value: WebhookSource;
+    case: "webhook";
+  } | {
+    /**
+     * @generated from field: reliant.v1.IntegrationSource integration = 22;
+     */
+    value: IntegrationSource;
+    case: "integration";
+  } | {
+    /**
+     * @generated from field: reliant.v1.WorkflowEventSource workflow_event = 23;
+     */
+    value: WorkflowEventSource;
+    case: "workflowEvent";
+  } | { case: undefined; value?: undefined };
+};
+
+/**
+ * Describes the message reliant.v1.WorkflowTrigger.
+ * Use `create(WorkflowTriggerSchema)` to create a new message.
+ */
+export const WorkflowTriggerSchema: GenMessage<WorkflowTrigger> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_trigger, 7);
 
 /**
  * Trigger is a stored trigger definition.
@@ -308,9 +558,18 @@ export type Trigger = Message<"reliant.v1.Trigger"> & {
   notifyOnComplete: boolean;
 
   /**
-   * What makes this trigger fire. One arm per kind; webhook and GitHub become
-   * new arms. The arm set also determines Trigger.kind, so the two cannot
-   * disagree.
+   * CEL bool over the `trigger` root (trigger.payload.*) that an event must
+   * satisfy to launch a run. Empty matches every event. A miss is recorded as
+   * a SKIPPED firing whose detail names the filter. Webhook, integration and
+   * workflow-event triggers only.
+   *
+   * @generated from field: string filter = 19;
+   */
+  filter: string;
+
+  /**
+   * What makes this trigger fire. One arm per kind; the arm set determines
+   * the kind, so the two cannot disagree.
    *
    * @generated from oneof reliant.v1.Trigger.source
    */
@@ -320,7 +579,54 @@ export type Trigger = Message<"reliant.v1.Trigger"> & {
      */
     value: ScheduleSource;
     case: "schedule";
+  } | {
+    /**
+     * @generated from field: reliant.v1.WebhookSource webhook = 21;
+     */
+    value: WebhookSource;
+    case: "webhook";
+  } | {
+    /**
+     * @generated from field: reliant.v1.IntegrationSource integration = 22;
+     */
+    value: IntegrationSource;
+    case: "integration";
+  } | {
+    /**
+     * @generated from field: reliant.v1.WorkflowEventSource workflow_event = 23;
+     */
+    value: WorkflowEventSource;
+    case: "workflowEvent";
   } | { case: undefined; value?: undefined };
+
+  /**
+   * The connection an integration trigger listens through: one of the
+   * owner's connections for IntegrationSource.integration. Unset for other
+   * kinds, and cleared if the connection is deleted (the trigger then
+   * receives nothing until it is edited).
+   *
+   * @generated from field: optional string connection_id = 24;
+   */
+  connectionId?: string | undefined;
+
+  /**
+   * Read-only, webhook triggers: <PUBLIC_URL>/hooks/{id}, the URL to POST to
+   * with `Authorization: Bearer <token>` or an HMAC signature. Append
+   * "/<token>" for a sender that cannot set headers. The token itself is
+   * returned only by CreateTrigger and RotateWebhookToken. A bare path when
+   * the server has no PUBLIC_URL.
+   *
+   * @generated from field: optional string webhook_url = 25;
+   */
+  webhookUrl?: string | undefined;
+
+  /**
+   * The workflow-declared trigger (WorkflowTrigger.name) this row activates,
+   * when it activates one. The source above is then that declaration's.
+   *
+   * @generated from field: optional string workflow_trigger = 26;
+   */
+  workflowTrigger?: string | undefined;
 };
 
 /**
@@ -328,7 +634,7 @@ export type Trigger = Message<"reliant.v1.Trigger"> & {
  * Use `create(TriggerSchema)` to create a new message.
  */
 export const TriggerSchema: GenMessage<Trigger> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_trigger, 3);
+  messageDesc(file_reliant_v1_trigger, 8);
 
 /**
  * TriggerEvent is one firing — the durable record of intent to launch, written
@@ -412,7 +718,7 @@ export type TriggerEvent = Message<"reliant.v1.TriggerEvent"> & {
  * Use `create(TriggerEventSchema)` to create a new message.
  */
 export const TriggerEventSchema: GenMessage<TriggerEvent> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_trigger, 4);
+  messageDesc(file_reliant_v1_trigger, 9);
 
 /**
  * TriggerDefinition is the writable half of a Trigger: the fields a caller
@@ -502,6 +808,33 @@ export type TriggerDefinition = Message<"reliant.v1.TriggerDefinition"> & {
   notifyOnComplete: boolean;
 
   /**
+   * CEL bool over the `trigger` root that an event must satisfy; see
+   * Trigger.filter. Validated on write: an expression that does not compile
+   * is InvalidArgument. Not allowed on a schedule trigger.
+   *
+   * @generated from field: string filter = 11;
+   */
+  filter: string;
+
+  /**
+   * The connection an integration trigger listens through. Unset on create
+   * means the owner's default connection for the integration. Must be one of
+   * the caller's connections for that integration. Ignored for other kinds.
+   *
+   * @generated from field: optional string connection_id = 12;
+   */
+  connectionId?: string | undefined;
+
+  /**
+   * Write-only, webhook triggers with hmac: the shared signing secret. Set to
+   * configure or replace it; unset on update keeps the stored secret. Stored
+   * sealed and never returned.
+   *
+   * @generated from field: optional string webhook_hmac_secret = 13;
+   */
+  webhookHmacSecret?: string | undefined;
+
+  /**
    * What makes this trigger fire. Required on create: a trigger with no source
    * can never fire.
    *
@@ -513,6 +846,34 @@ export type TriggerDefinition = Message<"reliant.v1.TriggerDefinition"> & {
      */
     value: ScheduleSource;
     case: "schedule";
+  } | {
+    /**
+     * @generated from field: reliant.v1.WebhookSource webhook = 21;
+     */
+    value: WebhookSource;
+    case: "webhook";
+  } | {
+    /**
+     * @generated from field: reliant.v1.IntegrationSource integration = 22;
+     */
+    value: IntegrationSource;
+    case: "integration";
+  } | {
+    /**
+     * @generated from field: reliant.v1.WorkflowEventSource workflow_event = 23;
+     */
+    value: WorkflowEventSource;
+    case: "workflowEvent";
+  } | {
+    /**
+     * Activate the named trigger the workflow declares (WorkflowTrigger.name)
+     * instead of writing a source inline. Not yet supported: rejected with
+     * Unimplemented until workflow definitions carry `triggers:`.
+     *
+     * @generated from field: string workflow_trigger = 24;
+     */
+    value: string;
+    case: "workflowTrigger";
   } | { case: undefined; value?: undefined };
 };
 
@@ -521,7 +882,36 @@ export type TriggerDefinition = Message<"reliant.v1.TriggerDefinition"> & {
  * Use `create(TriggerDefinitionSchema)` to create a new message.
  */
 export const TriggerDefinitionSchema: GenMessage<TriggerDefinition> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_trigger, 5);
+  messageDesc(file_reliant_v1_trigger, 10);
+
+/**
+ * WebhookCredential is a webhook trigger's token, returned exactly once.
+ *
+ * @generated from message reliant.v1.WebhookCredential
+ */
+export type WebhookCredential = Message<"reliant.v1.WebhookCredential"> & {
+  /**
+   * The bearer token. Shown only in this response; the server keeps a hash.
+   *
+   * @generated from field: string token = 1;
+   */
+  token: string;
+
+  /**
+   * <PUBLIC_URL>/hooks/{trigger_id}/{token}: the whole URL, for a sender
+   * that cannot set headers.
+   *
+   * @generated from field: string url = 2;
+   */
+  url: string;
+};
+
+/**
+ * Describes the message reliant.v1.WebhookCredential.
+ * Use `create(WebhookCredentialSchema)` to create a new message.
+ */
+export const WebhookCredentialSchema: GenMessage<WebhookCredential> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_trigger, 11);
 
 /**
  * CreateTriggerRequest is the request for CreateTrigger.
@@ -542,7 +932,7 @@ export type CreateTriggerRequest = Message<"reliant.v1.CreateTriggerRequest"> & 
  * Use `create(CreateTriggerRequestSchema)` to create a new message.
  */
 export const CreateTriggerRequestSchema: GenMessage<CreateTriggerRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_trigger, 6);
+  messageDesc(file_reliant_v1_trigger, 12);
 
 /**
  * CreateTriggerResponse is the response for CreateTrigger.
@@ -556,6 +946,13 @@ export type CreateTriggerResponse = Message<"reliant.v1.CreateTriggerResponse"> 
    * @generated from field: reliant.v1.Trigger trigger = 1;
    */
   trigger?: Trigger | undefined;
+
+  /**
+   * Webhook triggers only: the token, which is never shown again.
+   *
+   * @generated from field: reliant.v1.WebhookCredential webhook = 2;
+   */
+  webhook?: WebhookCredential | undefined;
 };
 
 /**
@@ -563,7 +960,56 @@ export type CreateTriggerResponse = Message<"reliant.v1.CreateTriggerResponse"> 
  * Use `create(CreateTriggerResponseSchema)` to create a new message.
  */
 export const CreateTriggerResponseSchema: GenMessage<CreateTriggerResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_trigger, 7);
+  messageDesc(file_reliant_v1_trigger, 13);
+
+/**
+ * RotateWebhookTokenRequest is the request for RotateWebhookToken.
+ *
+ * @generated from message reliant.v1.RotateWebhookTokenRequest
+ */
+export type RotateWebhookTokenRequest = Message<"reliant.v1.RotateWebhookTokenRequest"> & {
+  /**
+   * Id of the webhook trigger whose token to replace.
+   *
+   * @generated from field: string id = 1;
+   */
+  id: string;
+};
+
+/**
+ * Describes the message reliant.v1.RotateWebhookTokenRequest.
+ * Use `create(RotateWebhookTokenRequestSchema)` to create a new message.
+ */
+export const RotateWebhookTokenRequestSchema: GenMessage<RotateWebhookTokenRequest> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_trigger, 14);
+
+/**
+ * RotateWebhookTokenResponse is the response for RotateWebhookToken.
+ *
+ * @generated from message reliant.v1.RotateWebhookTokenResponse
+ */
+export type RotateWebhookTokenResponse = Message<"reliant.v1.RotateWebhookTokenResponse"> & {
+  /**
+   * The trigger after the rotation.
+   *
+   * @generated from field: reliant.v1.Trigger trigger = 1;
+   */
+  trigger?: Trigger | undefined;
+
+  /**
+   * The new token, which is never shown again.
+   *
+   * @generated from field: reliant.v1.WebhookCredential webhook = 2;
+   */
+  webhook?: WebhookCredential | undefined;
+};
+
+/**
+ * Describes the message reliant.v1.RotateWebhookTokenResponse.
+ * Use `create(RotateWebhookTokenResponseSchema)` to create a new message.
+ */
+export const RotateWebhookTokenResponseSchema: GenMessage<RotateWebhookTokenResponse> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_trigger, 15);
 
 /**
  * GetTriggerRequest is the request for GetTrigger.
@@ -584,7 +1030,7 @@ export type GetTriggerRequest = Message<"reliant.v1.GetTriggerRequest"> & {
  * Use `create(GetTriggerRequestSchema)` to create a new message.
  */
 export const GetTriggerRequestSchema: GenMessage<GetTriggerRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_trigger, 8);
+  messageDesc(file_reliant_v1_trigger, 16);
 
 /**
  * GetTriggerResponse is the response for GetTrigger.
@@ -605,7 +1051,7 @@ export type GetTriggerResponse = Message<"reliant.v1.GetTriggerResponse"> & {
  * Use `create(GetTriggerResponseSchema)` to create a new message.
  */
 export const GetTriggerResponseSchema: GenMessage<GetTriggerResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_trigger, 9);
+  messageDesc(file_reliant_v1_trigger, 17);
 
 /**
  * ListTriggersRequest is the request for ListTriggers.
@@ -627,7 +1073,7 @@ export type ListTriggersRequest = Message<"reliant.v1.ListTriggersRequest"> & {
  * Use `create(ListTriggersRequestSchema)` to create a new message.
  */
 export const ListTriggersRequestSchema: GenMessage<ListTriggersRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_trigger, 10);
+  messageDesc(file_reliant_v1_trigger, 18);
 
 /**
  * ListTriggersResponse is the response for ListTriggers.
@@ -648,7 +1094,7 @@ export type ListTriggersResponse = Message<"reliant.v1.ListTriggersResponse"> & 
  * Use `create(ListTriggersResponseSchema)` to create a new message.
  */
 export const ListTriggersResponseSchema: GenMessage<ListTriggersResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_trigger, 11);
+  messageDesc(file_reliant_v1_trigger, 19);
 
 /**
  * UpdateTriggerRequest is the request for UpdateTrigger.
@@ -677,7 +1123,7 @@ export type UpdateTriggerRequest = Message<"reliant.v1.UpdateTriggerRequest"> & 
  * Use `create(UpdateTriggerRequestSchema)` to create a new message.
  */
 export const UpdateTriggerRequestSchema: GenMessage<UpdateTriggerRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_trigger, 12);
+  messageDesc(file_reliant_v1_trigger, 20);
 
 /**
  * UpdateTriggerResponse is the response for UpdateTrigger.
@@ -698,7 +1144,7 @@ export type UpdateTriggerResponse = Message<"reliant.v1.UpdateTriggerResponse"> 
  * Use `create(UpdateTriggerResponseSchema)` to create a new message.
  */
 export const UpdateTriggerResponseSchema: GenMessage<UpdateTriggerResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_trigger, 13);
+  messageDesc(file_reliant_v1_trigger, 21);
 
 /**
  * DeleteTriggerRequest is the request for DeleteTrigger.
@@ -719,7 +1165,7 @@ export type DeleteTriggerRequest = Message<"reliant.v1.DeleteTriggerRequest"> & 
  * Use `create(DeleteTriggerRequestSchema)` to create a new message.
  */
 export const DeleteTriggerRequestSchema: GenMessage<DeleteTriggerRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_trigger, 14);
+  messageDesc(file_reliant_v1_trigger, 22);
 
 /**
  * DeleteTriggerResponse is the response for DeleteTrigger.
@@ -734,7 +1180,7 @@ export type DeleteTriggerResponse = Message<"reliant.v1.DeleteTriggerResponse"> 
  * Use `create(DeleteTriggerResponseSchema)` to create a new message.
  */
 export const DeleteTriggerResponseSchema: GenMessage<DeleteTriggerResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_trigger, 15);
+  messageDesc(file_reliant_v1_trigger, 23);
 
 /**
  * SetTriggerEnabledRequest is the request for SetTriggerEnabled.
@@ -762,7 +1208,7 @@ export type SetTriggerEnabledRequest = Message<"reliant.v1.SetTriggerEnabledRequ
  * Use `create(SetTriggerEnabledRequestSchema)` to create a new message.
  */
 export const SetTriggerEnabledRequestSchema: GenMessage<SetTriggerEnabledRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_trigger, 16);
+  messageDesc(file_reliant_v1_trigger, 24);
 
 /**
  * SetTriggerEnabledResponse is the response for SetTriggerEnabled.
@@ -783,7 +1229,7 @@ export type SetTriggerEnabledResponse = Message<"reliant.v1.SetTriggerEnabledRes
  * Use `create(SetTriggerEnabledResponseSchema)` to create a new message.
  */
 export const SetTriggerEnabledResponseSchema: GenMessage<SetTriggerEnabledResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_trigger, 17);
+  messageDesc(file_reliant_v1_trigger, 25);
 
 /**
  * FireTriggerRequest is the request for FireTrigger.
@@ -804,7 +1250,7 @@ export type FireTriggerRequest = Message<"reliant.v1.FireTriggerRequest"> & {
  * Use `create(FireTriggerRequestSchema)` to create a new message.
  */
 export const FireTriggerRequestSchema: GenMessage<FireTriggerRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_trigger, 18);
+  messageDesc(file_reliant_v1_trigger, 26);
 
 /**
  * FireTriggerResponse is the response for FireTrigger.
@@ -826,7 +1272,7 @@ export type FireTriggerResponse = Message<"reliant.v1.FireTriggerResponse"> & {
  * Use `create(FireTriggerResponseSchema)` to create a new message.
  */
 export const FireTriggerResponseSchema: GenMessage<FireTriggerResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_trigger, 19);
+  messageDesc(file_reliant_v1_trigger, 27);
 
 /**
  * ListTriggerEventsRequest is the request for ListTriggerEvents.
@@ -870,7 +1316,7 @@ export type ListTriggerEventsRequest = Message<"reliant.v1.ListTriggerEventsRequ
  * Use `create(ListTriggerEventsRequestSchema)` to create a new message.
  */
 export const ListTriggerEventsRequestSchema: GenMessage<ListTriggerEventsRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_trigger, 20);
+  messageDesc(file_reliant_v1_trigger, 28);
 
 /**
  * ListTriggerEventsResponse is the response for ListTriggerEvents.
@@ -898,7 +1344,7 @@ export type ListTriggerEventsResponse = Message<"reliant.v1.ListTriggerEventsRes
  * Use `create(ListTriggerEventsResponseSchema)` to create a new message.
  */
 export const ListTriggerEventsResponseSchema: GenMessage<ListTriggerEventsResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_trigger, 21);
+  messageDesc(file_reliant_v1_trigger, 29);
 
 /**
  * @generated from message reliant.v1.GetLaunchEventRequest
@@ -915,7 +1361,7 @@ export type GetLaunchEventRequest = Message<"reliant.v1.GetLaunchEventRequest"> 
  * Use `create(GetLaunchEventRequestSchema)` to create a new message.
  */
 export const GetLaunchEventRequestSchema: GenMessage<GetLaunchEventRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_trigger, 22);
+  messageDesc(file_reliant_v1_trigger, 30);
 
 /**
  * @generated from message reliant.v1.GetLaunchEventResponse
@@ -934,7 +1380,7 @@ export type GetLaunchEventResponse = Message<"reliant.v1.GetLaunchEventResponse"
  * Use `create(GetLaunchEventResponseSchema)` to create a new message.
  */
 export const GetLaunchEventResponseSchema: GenMessage<GetLaunchEventResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_trigger, 23);
+  messageDesc(file_reliant_v1_trigger, 31);
 
 /**
  * TriggerKind is the source a stored trigger listens to.
@@ -953,6 +1399,29 @@ export enum TriggerKind {
    * @generated from enum value: TRIGGER_KIND_SCHEDULE = 1;
    */
   SCHEDULE = 1,
+
+  /**
+   * WEBHOOK fires on a POST to the trigger's own URL.
+   *
+   * @generated from enum value: TRIGGER_KIND_WEBHOOK = 2;
+   */
+  WEBHOOK = 2,
+
+  /**
+   * INTEGRATION fires on a provider event received through one of the
+   * owner's connections (an app-level webhook or a poll).
+   *
+   * @generated from enum value: TRIGGER_KIND_INTEGRATION = 3;
+   */
+  INTEGRATION = 3,
+
+  /**
+   * WORKFLOW_EVENT fires when a run of one of the owner's workflows
+   * finishes, fails or blocks.
+   *
+   * @generated from enum value: TRIGGER_KIND_WORKFLOW_EVENT = 4;
+   */
+  WORKFLOW_EVENT = 4,
 }
 
 /**
@@ -1007,6 +1476,31 @@ export enum TriggerEventKind {
    * @generated from enum value: TRIGGER_EVENT_KIND_BUILDER_TEST = 4;
    */
   BUILDER_TEST = 4,
+
+  /**
+   * WEBHOOK is a POST to a webhook trigger's URL. Its dedupe key is
+   * "<trigger id>:<sender's idempotency key>", or a body hash within a
+   * one-minute bucket when the sender gives none.
+   *
+   * @generated from enum value: TRIGGER_EVENT_KIND_WEBHOOK = 5;
+   */
+  WEBHOOK = 5,
+
+  /**
+   * INTEGRATION is a provider event. Its dedupe key is
+   * "<trigger id>:<provider delivery id>", so one delivery fans out to every
+   * matching trigger exactly once each.
+   *
+   * @generated from enum value: TRIGGER_EVENT_KIND_INTEGRATION = 6;
+   */
+  INTEGRATION = 6,
+
+  /**
+   * WORKFLOW_EVENT is another run reaching an outcome.
+   *
+   * @generated from enum value: TRIGGER_EVENT_KIND_WORKFLOW_EVENT = 7;
+   */
+  WORKFLOW_EVENT = 7,
 }
 
 /**
@@ -1047,6 +1541,14 @@ export enum TriggerEventOutcome {
    * @generated from enum value: TRIGGER_EVENT_OUTCOME_FAILED = 3;
    */
   FAILED = 3,
+
+  /**
+   * PENDING: an inbound event was received and passed its filter; the worker
+   * has not launched it yet. Settles to LAUNCHED, SKIPPED or FAILED.
+   *
+   * @generated from enum value: TRIGGER_EVENT_OUTCOME_PENDING = 4;
+   */
+  PENDING = 4,
 }
 
 /**
@@ -1107,7 +1609,9 @@ export const TriggerOverlapPolicySchema: GenEnum<TriggerOverlapPolicy> = /*@__PU
  *   - FAILING: two or more consecutive failures, newest first. Skipped and
  *     unresolved firings are passed over; a success ends the streak.
  *   - DEGRADED: any failure in the window that did not make it FAILING, or
- *     three or more consecutive skipped firings from the newest back.
+ *     three or more consecutive skipped SCHEDULE firings from the newest back.
+ *     An event-driven trigger's skips are its filter working (most events of
+ *     a busy source are not for it), so they never degrade it.
  *   - HEALTHY: no failure in the window and at least one completed run.
  *   - UNKNOWN: anything else, including a trigger that has never fired.
  *
@@ -1154,9 +1658,16 @@ export const TriggerHealthStatusSchema: GenEnum<TriggerHealthStatus> = /*@__PURE
  * kind, dedupe key, when, payload, and what the firing did. Both are described
  * in research/TRIGGERS.md.
  *
- * Only schedule triggers exist today. Webhook, GitHub and manual/form sources
- * become new arms of Trigger.source rather than new services: they differ in
- * what makes them fire, not in what they do once fired.
+ * Sources are arms of Trigger.source rather than new services: they differ in
+ * what makes them fire, not in what they do once fired. A trigger fires on a
+ * schedule, an inbound webhook, an integration event (a provider's app-level
+ * webhook or a poll), or another workflow's run reaching an outcome.
+ *
+ * The source messages (ScheduleSource, WebhookSource, IntegrationSource,
+ * WorkflowEventSource) are standalone so a workflow definition can declare
+ * the same "when" in its own `triggers:` block (WorkflowTrigger). A Trigger
+ * row is the activation: who the run executes as, where, and on which
+ * connection and daemon.
  *
  * @generated from service reliant.v1.TriggerService
  */
@@ -1264,6 +1775,17 @@ export const TriggerService: GenService<{
     methodKind: "unary";
     input: typeof GetLaunchEventRequestSchema;
     output: typeof GetLaunchEventResponseSchema;
+  },
+  /**
+   * RotateWebhookToken replaces a webhook trigger's token. The old token
+   * stops working immediately; the new one is returned once and never again.
+   *
+   * @generated from rpc reliant.v1.TriggerService.RotateWebhookToken
+   */
+  rotateWebhookToken: {
+    methodKind: "unary";
+    input: typeof RotateWebhookTokenRequestSchema;
+    output: typeof RotateWebhookTokenResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_reliant_v1_trigger, 0);

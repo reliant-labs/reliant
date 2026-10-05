@@ -19,7 +19,7 @@
 import { createRoute, redirect, type AnyRoute, type RouteComponent } from '@tanstack/react-router'
 
 import { legacyWorkflowsPath } from './lib/workflowsArea'
-import { runsSearchSchema, workflowsAreaSearchSchema } from './routeSchemas'
+import { librarySearchSchema, runsSearchSchema, workflowsAreaSearchSchema } from './routeSchemas'
 
 export interface WorkflowsAreaComponents {
   layout: RouteComponent
@@ -53,10 +53,11 @@ export function createWorkflowsAreaRoutes<TParent extends AnyRoute>(
     },
   })
 
+  // Search, source and sort are search params (librarySearchSchema).
   const libraryRoute = createRoute({
     getParentRoute: () => layoutRoute,
     path: '/workflows/library',
-    validateSearch: workflowsAreaSearchSchema,
+    validateSearch: librarySearchSchema,
     component: components.library,
   })
 

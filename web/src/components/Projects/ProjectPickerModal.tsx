@@ -158,7 +158,7 @@ export function ProjectPickerModal({
     >
       <form onSubmit={handleSubmit} className="space-y-5">
         {error && (
-          <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-destructive" role="alert">
+          <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-destructive-ink" role="alert">
             <div className="flex items-start gap-2">
               <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" aria-hidden="true" />
               <span className="flex-1 text-sm">{error}</span>
@@ -169,7 +169,7 @@ export function ProjectPickerModal({
         <div className="space-y-4">
           <div className="space-y-1.5">
             <label className="block text-sm font-medium text-foreground">
-              Folder <span className="text-destructive" aria-hidden="true">*</span>
+              Folder <span className="text-destructive-ink" aria-hidden="true">*</span>
             </label>
             <div className="flex gap-2">
               <input

@@ -18,6 +18,7 @@ const (
 	NodeTypeJoin           = "join"
 	NodeTypeRouter         = "router"
 	NodeTypeInvokeTool     = "invoke_tool"
+	NodeTypeAction         = "action"
 )
 
 // Node outcome constants — the VERDICT a node stamps on the run when it

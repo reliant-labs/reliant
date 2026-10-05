@@ -162,7 +162,7 @@ export function PromptsSettings({ projectId }: PromptsSettingsProps) {
       </div>
 
       {error && (
-        <div className="p-3 border border-destructive/40 bg-destructive/10 text-destructive rounded-md text-xs">{error}</div>
+        <div className="p-3 border border-destructive/40 bg-destructive/10 text-destructive-ink rounded-md text-xs">{error}</div>
       )}
 
       <div className="space-y-3">
@@ -192,7 +192,7 @@ export function PromptsSettings({ projectId }: PromptsSettingsProps) {
                 <label className="text-xs flex items-center gap-2 ml-2">
                   <input type="checkbox" checked={!!p.default} onChange={(e) => handleChange(p.id, "default", e.target.checked)} /> Default
                 </label>
-                <button onClick={() => handleDelete(p.id)} className="ml-2 p-2 rounded hover:bg-destructive/10 text-destructive">
+                <button onClick={() => handleDelete(p.id)} className="ml-2 p-2 rounded hover:bg-destructive/10 text-destructive-ink">
                   <Trash2 className="w-4 h-4" />
                 </button>
               </div>

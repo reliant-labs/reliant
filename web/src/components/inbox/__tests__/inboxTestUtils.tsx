@@ -59,7 +59,7 @@ export function approvalItem(overrides: Partial<InboxItem> = {}, id = "appr-1"):
   return create(InboxItemSchema, {
     ...base,
     kind: InboxItemKind.APPROVAL,
-    itemId: id,
+    itemId: `approval:${id}`,
     payload: {
       case: "approval",
       value: {
@@ -78,7 +78,7 @@ export function questionItem(overrides: Partial<InboxItem> = {}): InboxItem {
   return create(InboxItemSchema, {
     ...base,
     kind: InboxItemKind.QUESTION,
-    itemId: "q-1",
+    itemId: "question:q-1",
     payload: {
       case: "question",
       value: {
@@ -99,7 +99,7 @@ export function waitingItem(overrides: Partial<InboxItem> = {}): InboxItem {
   return create(InboxItemSchema, {
     ...base,
     kind: InboxItemKind.WAITING_FOR_MACHINE,
-    itemId: "chat-1",
+    itemId: "waiting_for_machine:chat-1@1",
     payload: { case: "waitingForMachine", value: { daemonId: "d-1", daemonName: "MacBook" } },
     ...overrides,
   });
@@ -108,7 +108,7 @@ export function waitingItem(overrides: Partial<InboxItem> = {}): InboxItem {
 export function failingItem(overrides: Partial<InboxItem> = {}): InboxItem {
   return create(InboxItemSchema, {
     kind: InboxItemKind.AUTOMATION_FAILING,
-    itemId: "failing:trg-1:evt-9",
+    itemId: "automation_failing:evt-9",
     triggerId: "trg-1",
     triggerName: "Nightly triage",
     projectId: "proj-1",
@@ -133,7 +133,7 @@ export function failingItem(overrides: Partial<InboxItem> = {}): InboxItem {
 export function launchFailedItem(overrides: Partial<InboxItem> = {}): InboxItem {
   return create(InboxItemSchema, {
     kind: InboxItemKind.AUTOMATION_LAUNCH_FAILED,
-    itemId: "evt-5",
+    itemId: "automation_launch_failed:evt-5",
     triggerId: "trg-2",
     triggerName: "Weekly report",
     projectId: "proj-1",

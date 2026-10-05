@@ -144,7 +144,7 @@ export function MobileGitHubCloneSheet({
             <div className="space-y-4">
               {state === "error" && (
                 <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3">
-                  <p className="text-sm text-destructive">{error}</p>
+                  <p className="text-sm text-destructive-ink">{error}</p>
                 </div>
               )}
 
