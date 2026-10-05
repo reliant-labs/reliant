@@ -3,7 +3,10 @@ import {
   ContentBlockType,
   MessageRole,
   StreamingState,
+  WorkflowExecutionView,
 } from "../../gen/reliant/v1/chat_pb";
+import { queryClient } from "../../lib/query-client";
+import { chatDetailKeys } from "../../hooks/chat-detail-keys";
 import type { ChatUpdate } from "../../types/streaming";
 import { useChatStore } from "../chatStore";
 import { useThreadActivityStore } from "../threadActivityStore";
@@ -156,6 +159,22 @@ describe("evictChat", () => {
     expect(state.errorEvents[OTHER]).toBeDefined();
     expect(state.toolCallStates[OTHER]).toBeDefined();
     expect(state.contextUsage[OTHER]).toBeDefined();
+  });
+
+  // The execution tree is retained for as long as the messages are (gcTime:
+  // Infinity), so eviction must release it too or an archived chat's tree
+  // leaks until logout.
+  it("drops the evicted chat's execution tree and keeps other chats'", () => {
+    const evictedKey = chatDetailKeys.workflowExecutionsView(CHAT, WorkflowExecutionView.BASIC);
+    const keptKey = chatDetailKeys.workflowExecutionsView(OTHER, WorkflowExecutionView.BASIC);
+    queryClient.setQueryData(evictedKey, { latest: null, all: [] });
+    queryClient.setQueryData(keptKey, { latest: null, all: [] });
+
+    useChatStore.getState().evictChat(CHAT);
+
+    expect(queryClient.getQueryData(evictedKey)).toBeUndefined();
+    expect(queryClient.getQueryData(keptKey)).toBeDefined();
+    queryClient.removeQueries({ queryKey: keptKey });
   });
 
   it("is a no-op for a chat with no state", () => {

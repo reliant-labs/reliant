@@ -3,6 +3,7 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -327,6 +328,160 @@ func TestCreateWorkflowWithThread_MissingChatID(t *testing.T) {
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "chat_id is required")
+}
+
+// A spawned sub-agent's thread must be announced to the UI the moment it is
+// created — before any message on it can exist.
+//
+// The parent creates the child's thread here, then immediately saves the
+// child's seed message (initChildWorkflow, step 2). The thread used to be
+// announced only later, when the CHILD ran its own WorkflowStatus("started").
+// Measured on the dev database: in all 40 of the newest spawns, the first
+// message's chat_update preceded the thread announcement. A client receiving
+// that message has no thread record and (for a brand-new spawn) no tree row
+// either, so InterleavedTimeline could not classify the thread and dropped its
+// messages until the next execution-tree refetch landed.
+func TestCreateWorkflowWithThread_AnnouncesSpawnThreadAtCreation(t *testing.T) {
+	ctx := context.Background()
+	repo := db.NewTestRepo(t)
+	defer repo.Close()
+
+	projectID := uuid.New().String()
+	require.NoError(t, repo.CreateProject(ctx, &db.Project{
+		ID:        projectID,
+		Name:      "Test Project",
+		Path:      "/tmp/test",
+		UserID:    "test-user",
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}))
+	chatID := uuid.New().String()
+	require.NoError(t, repo.CreateChat(ctx, &db.Chat{
+		ID:        chatID,
+		UserID:    "test-user",
+		Title:     "Test Chat",
+		ProjectID: projectID,
+		State:     db.ChatStateIdle,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}))
+
+	threadsService := threads.NewService(repo)
+	parentWorkflowID := uuid.New().String()
+	_, _, _, err := threadsService.CreateWorkflowWithThread(ctx, threads.CreateWorkflowWithThreadOpts{
+		Workflow: &db.Workflow{
+			ID:           parentWorkflowID,
+			ChatID:       chatID,
+			WorkflowName: "builtin://agent",
+			Thread:       chatID,
+			Status:       db.Active(),
+			CreatedAt:    time.Now().UTC(),
+		},
+		ThreadID: chatID,
+		ChatID:   chatID,
+		Origin:   db.ThreadOriginMain,
+	})
+	require.NoError(t, err)
+
+	before, err := repo.GetLatestUpdateSequence(ctx, chatID)
+	require.NoError(t, err)
+
+	activity := NewCreateWorkflowWithThreadActivity(threadsService, repo)
+	suite := &testsuite.WorkflowTestSuite{}
+	env := suite.NewTestActivityEnvironment()
+	env.RegisterActivity(activity.Execute)
+
+	childWorkflowID := uuid.New().String()
+	childThreadID := uuid.New().String()
+	title := "Fix QA findings"
+	origin := db.ThreadOriginSpawn
+	originNodeID := "spawn-toolu_test"
+	_, err = env.ExecuteActivity(activity.Execute, CreateWorkflowWithThreadInput{
+		WorkflowID:       childWorkflowID,
+		WorkflowName:     "builtin://agent",
+		ParentWorkflowID: &parentWorkflowID,
+		ChatID:           chatID,
+		ThreadID:         childThreadID,
+		ThreadTitle:      &title,
+		ParentThread:     &chatID,
+		Origin:           &origin,
+		OriginNodeID:     &originNodeID,
+	})
+	require.NoError(t, err)
+
+	updates, err := repo.GetUpdatesSince(ctx, chatID, before, 100)
+	require.NoError(t, err)
+
+	var announcement map[string]interface{}
+	for _, update := range updates {
+		if update.UpdateType != db.UpdateTypeThread {
+			continue
+		}
+		var data map[string]interface{}
+		require.NoError(t, json.Unmarshal(update.Data, &data))
+		if data["thread"] == childThreadID {
+			announcement = data
+			// Keyed like every other thread announcement, so the snapshot's
+			// per-thread dedup and the stream's merge treat it as one record.
+			assert.Equal(t, childWorkflowID, update.EntityID)
+		}
+	}
+	require.NotNil(t, announcement, "creating a spawn thread must announce it to the chat stream")
+	assert.Equal(t, "thread", announcement["update_type"])
+	assert.Equal(t, "spawn", announcement["origin"], "the origin is what lets the UI classify the thread")
+	assert.Equal(t, childWorkflowID, announcement["workflow_id"])
+	assert.Equal(t, title, announcement["thread_title"])
+	assert.Equal(t, originNodeID, announcement["origin_node_id"])
+	assert.Equal(t, "running", announcement["status"])
+}
+
+// The main thread is the chat itself; the UI classifies it by identity, and
+// the root workflow has its own announcement path. Announcing it here would be
+// noise in every chat's update log.
+func TestCreateWorkflowWithThread_DoesNotAnnounceRootThread(t *testing.T) {
+	ctx := context.Background()
+	repo := db.NewTestRepo(t)
+	defer repo.Close()
+
+	projectID := uuid.New().String()
+	require.NoError(t, repo.CreateProject(ctx, &db.Project{
+		ID:        projectID,
+		Name:      "Test Project",
+		Path:      "/tmp/test",
+		UserID:    "test-user",
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}))
+	chatID := uuid.New().String()
+	require.NoError(t, repo.CreateChat(ctx, &db.Chat{
+		ID:        chatID,
+		UserID:    "test-user",
+		Title:     "Test Chat",
+		ProjectID: projectID,
+		State:     db.ChatStateIdle,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}))
+
+	threadsService := threads.NewService(repo)
+	activity := NewCreateWorkflowWithThreadActivity(threadsService, repo)
+	suite := &testsuite.WorkflowTestSuite{}
+	env := suite.NewTestActivityEnvironment()
+	env.RegisterActivity(activity.Execute)
+
+	_, err := env.ExecuteActivity(activity.Execute, CreateWorkflowWithThreadInput{
+		WorkflowID:   uuid.New().String(),
+		WorkflowName: "builtin://agent",
+		ChatID:       chatID,
+		ThreadID:     chatID,
+	})
+	require.NoError(t, err)
+
+	updates, err := repo.GetUpdatesSince(ctx, chatID, 0, 100)
+	require.NoError(t, err)
+	for _, update := range updates {
+		assert.NotEqual(t, db.UpdateTypeThread, update.UpdateType, "a root workflow's thread is not announced here")
+	}
 }
 
 func TestCreateWorkflowWithThread_DefaultThreadID(t *testing.T) {
