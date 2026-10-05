@@ -481,6 +481,48 @@ No webhook URL is needed for polling.
 - Don't poll faster than about 1/min per connection; it is quota-cheap but
   pointless.
 
+### 3.6 As built (2026-10-05)
+
+- Manifest `internal/integrations/catalog/gmail/manifest.yaml`. Scopes are
+  `gmail.send` and `gmail.readonly` only. `openid email` was not needed:
+  `users.getProfile`'s `emailAddress` is both the external id and the label.
+  Authorize params are `access_type=offline`, `prompt=consent` and
+  `include_granted_scopes=true`, with PKCE S256. Revoke goes to
+  `oauth2.googleapis.com/revoke`.
+- Actions:
+  - `message.send` (`go:gmail.message_send`) builds the RFC 2822 message.
+    Header injection is refused. Non-ASCII is sent as RFC 2047 encoded-words.
+    Text plus HTML is sent as `multipart/alternative`. Replies set
+    `threadId`, `In-Reply-To`/`References`, and a `Re:` subject.
+  - `message.list` is declarative and cursor-paged; `labelIds` is a repeated
+    parameter (the runner gained list-valued `query_expr`).
+  - `message.get` (`go:gmail.message_get`) decodes the part tree. It handles
+    any charset and lists attachments without fetching them.
+  - `label.list`.
+- Trigger `gmail/message.received@1`, polled by `internal/integrations/gmail`
+  (registered when `RELIANT_OAUTH_GMAIL_CLIENT_ID` is set):
+  - The cursor is a `historyId`. The baseline comes from `getProfile`.
+  - Each poll reads at most 100 messages. The cap is applied at page
+    boundaries, and a poll that hits it resumes from the last history
+    record it delivered.
+  - A 404 on a stale cursor re-baselines without firing. The gap is
+    recorded on `trigger_registrations.last_gap_*` and degrades trigger
+    health for 24 hours.
+  - The payload carries headers and the snippet, never the body.
+- Credentials:
+  - Pollers resolve through `connections.Resolver.ForTrigger`.
+  - A 401 on an unexpired token is retried once, after a forced refresh
+    (`httpaction.RejectableCredential`).
+  - A dead grant (`invalid_grant`, the weekly Testing-mode expiry) marks
+    the connection `needs_reauth`. The registration is marked too, and
+    health shows FAILING "reconnect", in the Inbox as well. The trigger is
+    not retried.
+- Deferred:
+  - Pub/Sub push (`users.watch`). The payload and dedupe key would not
+    change.
+  - Attachments.
+  - CASA verification (an operator/legal step).
+
 Sources: https://developers.google.com/gmail/api/guides/sync,
 https://developers.google.com/workspace/gmail/api/auth/scopes,
 https://developers.google.com/workspace/gmail/api/reference/quota,

@@ -3,6 +3,7 @@ package triggers
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 
@@ -104,4 +105,49 @@ func TestComputeHealth_OnlyReadsTheWindow(t *testing.T) {
 	got := ComputeHealth(firings)
 	assert.Equal(t, reliantv1.TriggerHealthStatus_TRIGGER_HEALTH_STATUS_HEALTHY, got.Status)
 	assert.Empty(t, got.LastFailureDetail)
+}
+
+// A polled source that cannot deliver has no firings, so health must read its
+// source state: a dead Gmail connection would otherwise show HEALTHY (or, for
+// a new trigger, "never fired") forever while no email ever arrives.
+func TestWithSourceFoldsInAPolledSourcesState(t *testing.T) {
+	now := time.Date(2026, 10, 5, 12, 0, 0, 0, time.UTC)
+	healthy := func() *reliantv1.TriggerHealth {
+		return ComputeHealth([]*core.TriggerEventWithRun{launched(core.RunDisplayCompleted)})
+	}
+	recent, old := now.Add(-2*time.Hour), now.Add(-3*24*time.Hour)
+
+	// needs_reauth: FAILING, saying what to do, over anything the firings say.
+	h := WithSource(healthy(), &core.TriggerRegistration{Status: core.TriggerRegistrationNeedsReauth, StatusDetail: `connection "work" needs to be reconnected`}, now)
+	assert.Equal(t, reliantv1.TriggerHealthStatus_TRIGGER_HEALTH_STATUS_FAILING, h.Status)
+	assert.Contains(t, h.LastFailureDetail, "Not receiving events")
+	assert.Contains(t, h.LastFailureDetail, "reconnected")
+	h = WithSource(ComputeHealth(nil), &core.TriggerRegistration{Status: core.TriggerRegistrationNeedsReauth}, now)
+	assert.Equal(t, reliantv1.TriggerHealthStatus_TRIGGER_HEALTH_STATUS_FAILING, h.Status, "even a trigger that never fired")
+	assert.Contains(t, h.LastFailureDetail, "reconnect")
+
+	// A failing poll: DEGRADED with the poll's error.
+	h = WithSource(healthy(), &core.TriggerRegistration{Status: core.TriggerRegistrationError, StatusDetail: "Gmail returned HTTP 503"}, now)
+	assert.Equal(t, reliantv1.TriggerHealthStatus_TRIGGER_HEALTH_STATUS_DEGRADED, h.Status)
+	assert.Equal(t, "Polling failed: Gmail returned HTTP 503", h.LastFailureDetail)
+
+	// A recent gap: DEGRADED, naming what was lost and when.
+	h = WithSource(healthy(), &core.TriggerRegistration{Status: core.TriggerRegistrationActive, LastGapAt: &recent, LastGapDetail: "mail in the gap did not fire"}, now)
+	assert.Equal(t, reliantv1.TriggerHealthStatus_TRIGGER_HEALTH_STATUS_DEGRADED, h.Status)
+	assert.Contains(t, h.LastFailureDetail, "Events were missed")
+	assert.Contains(t, h.LastFailureDetail, "2026-10-05 10:00 UTC")
+	assert.Contains(t, h.LastFailureDetail, "did not fire")
+
+	// An old gap no longer degrades; an active source with none changes nothing.
+	h = WithSource(healthy(), &core.TriggerRegistration{Status: core.TriggerRegistrationActive, LastGapAt: &old, LastGapDetail: "x"}, now)
+	assert.Equal(t, reliantv1.TriggerHealthStatus_TRIGGER_HEALTH_STATUS_HEALTHY, h.Status)
+	assert.Equal(t, healthy(), WithSource(healthy(), &core.TriggerRegistration{Status: core.TriggerRegistrationActive}, now))
+	assert.Equal(t, healthy(), WithSource(healthy(), nil, now), "not polled: unchanged")
+
+	// FAILING from the firings stands, with its own detail; a source error does
+	// not paper over it.
+	failing := ComputeHealth([]*core.TriggerEventWithRun{outcomeOnly(core.TriggerEventFailed, "launch broke"), outcomeOnly(core.TriggerEventFailed, "launch broke")})
+	h = WithSource(failing, &core.TriggerRegistration{Status: core.TriggerRegistrationError, StatusDetail: "503", LastGapAt: &recent}, now)
+	assert.Equal(t, reliantv1.TriggerHealthStatus_TRIGGER_HEALTH_STATUS_FAILING, h.Status)
+	assert.Equal(t, "launch broke", h.LastFailureDetail)
 }

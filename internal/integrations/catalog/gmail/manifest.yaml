@@ -1,0 +1,390 @@
+# Gmail. Authored from Google's Gmail API reference (the discovery document
+# at https://gmail.googleapis.com/$discovery/rest?version=v1) and Google's
+# OAuth 2.0 documentation (developers.google.com/identity/protocols/oauth2,
+# accounts.google.com/.well-known/openid-configuration).
+#
+# Auth: Google OAuth 2.0, authorization code + PKCE (S256), OFFLINE. The client
+# is the deployment's one Google OAuth client, in
+# RELIANT_OAUTH_GMAIL_CLIENT_ID / _CLIENT_SECRET (a "Web application" client
+# whose redirect URI is <PUBLIC_URL>/integrations/oauth/gmail/callback).
+#   access_type=offline  is what makes Google issue a refresh token at all.
+#   prompt=consent       re-shows consent on every connect, without which a
+#                        reconnect returns NO refresh token (Google issues one
+#                        only on first consent).
+# Access tokens last about an hour and are refreshed through the token source.
+# While the consent screen is External + "Testing", Google expires refresh
+# tokens after SEVEN DAYS: the refresh then fails with invalid_grant, the
+# connection becomes needs_reauth, and the user reconnects. That is normal
+# until the app is verified, not an outage.
+#
+# Scopes (Google's classification):
+#   gmail.send       sensitive    messages.send only
+#   gmail.readonly   RESTRICTED   messages.list/get, history.list, labels.list
+# Reading is unavoidably restricted: beyond 100 test users it needs Google's
+# verification plus a CASA security assessment (an operator step; see
+# research/INTEGRATIONS_V1_PROVIDERS.md §3).
+#
+# Identity: users.getProfile -> emailAddress, used as both the external
+# account id and the label. A Gmail mailbox's address is its identity for
+# every API call (userId=me), and it is what a user recognises.
+#
+# The new-email trigger is POLLED (internal/integrations/gmail): history.list
+# from a stored historyId, so this file declares the trigger type and Go
+# delivers it. Push via Cloud Pub/Sub (users.watch) is the later upgrade; it
+# still ends in history.list, so the payload below does not change.
+#
+# Errors are Google's JSON error model,
+# {"error": {"code", "message", "status", "errors": [{"reason", "domain"}]}},
+# classified once (anchored) and repeated per action:
+#   401                                   the token was refused: reconnect.
+#   403 rateLimitExceeded,
+#       userRateLimitExceeded             retryable (per-user quota).
+#   403 insufficientPermissions /
+#       ACCESS_TOKEN_SCOPE_INSUFFICIENT   the connection lacks the scope.
+#   403 otherwise                         permission (domain policy, ...).
+#   429                                   retryable (RESOURCE_EXHAUSTED).
+#   400                                   invalid request: Google's message.
+#   404                                   not found (or not this mailbox's).
+#   5xx                                   retryable (the runner's default).
+id: gmail
+version: 1
+display_name: Gmail
+description: Send, search and read email in a Gmail mailbox, as the connected Google account.
+icon: gmail
+category: communication
+keywords: [email, mail, google, inbox, send, messages]
+
+connection:
+  base_url: https://gmail.googleapis.com/gmail/v1/users/me
+  default_headers:
+    Accept: application/json
+  auth:
+    - oauth2:
+        authorize_url: https://accounts.google.com/o/oauth2/v2/auth
+        token_url: https://oauth2.googleapis.com/token
+        pkce: S256
+        scopes:
+          - https://www.googleapis.com/auth/gmail.send
+          - https://www.googleapis.com/auth/gmail.readonly
+        authorize_params:
+          access_type: offline
+          prompt: consent
+          include_granted_scopes: "true"
+        revoke:
+          method: POST
+          url: https://oauth2.googleapis.com/revoke
+          token_in: form
+          token_param: token
+  probe:
+    path: /profile
+    external_id: response.emailAddress
+    label: response.emailAddress
+
+actions:
+  - id: message.send
+    display_name: Send email
+    summary: Send an email (or a reply in a thread) from the connected mailbox.
+    description: >-
+      Send an email as the connected Google account. Give to (and optionally
+      cc and bcc) as addresses, a subject, and a body as plain text, HTML or
+      both. To reply, pass the original message's thread_id and its
+      Message-ID header as in_reply_to (and references when the thread has
+      several), and keep its subject ("Re: " is added if missing): Gmail only
+      threads a reply whose headers and subject match. Returns the sent
+      message's id and thread_id.
+    keywords: [email, send, mail, reply, compose, write, notify]
+    placement: server
+    mutates: true
+    executor: go:gmail.message_send
+    tool:
+      expose: true
+    params:
+      type: object
+      additionalProperties: false
+      required: [to, subject]
+      properties:
+        to: &addresses
+          type: array
+          minItems: 1
+          maxItems: 100
+          items: { type: string, minLength: 3, maxLength: 320 }
+          description: Recipient addresses, as "ann@example.com" or "Ann <ann@example.com>".
+        cc:
+          type: array
+          maxItems: 100
+          items: { type: string, minLength: 3, maxLength: 320 }
+          description: Cc addresses.
+        bcc:
+          type: array
+          maxItems: 100
+          items: { type: string, minLength: 3, maxLength: 320 }
+          description: Bcc addresses. They are delivered to but never shown to the other recipients.
+        subject:
+          type: string
+          maxLength: 998
+          description: The subject line.
+        text:
+          type: string
+          description: The plain-text body. Give text, html or both (a client shows the HTML when it can).
+        html:
+          type: string
+          description: The HTML body.
+        thread_id:
+          type: string
+          pattern: "^[0-9a-f]{1,32}$"
+          description: For a reply, the thread_id of the message replied to.
+        in_reply_to:
+          type: string
+          maxLength: 998
+          description: For a reply, the Message-ID header of the message replied to (e.g. <CAF...@mail.gmail.com>).
+        references:
+          type: string
+          maxLength: 8000
+          description: For a reply, the References chain (space-separated Message-IDs). Defaults to in_reply_to.
+        connection: &connection
+          type: string
+          description: Id of a saved Gmail connection to use. Omit to use your default Gmail connection.
+    output:
+      schema:
+        type: object
+        properties:
+          id: { type: string, description: The sent message's id. }
+          thread_id: { type: string, description: The thread the message is in. }
+          label_ids: { type: array, items: { type: string } }
+
+  - id: message.list
+    display_name: Search email
+    summary: Find messages with Gmail search syntax; returns ids to read with Get email.
+    description: >-
+      List message ids in the mailbox, newest first, matching q (Gmail's
+      search box syntax: "from:ann is:unread newer_than:2d", "subject:invoice
+      has:attachment") and/or labels (all must match; INBOX, UNREAD, STARRED,
+      or a label id from List labels). Returns ids and thread ids only; read a
+      message with Get email. Follows Gmail's paging up to max_results.
+    keywords: [email, search, find, list, inbox, query, unread, messages]
+    placement: server
+    mutates: false
+    tool:
+      expose: true
+    params:
+      type: object
+      additionalProperties: false
+      properties:
+        q:
+          type: string
+          maxLength: 2000
+          description: Gmail search syntax, as typed in Gmail's search box.
+        label_ids:
+          type: array
+          maxItems: 20
+          items: { type: string, pattern: "^[A-Za-z0-9_-]{1,64}$" }
+          description: Only messages carrying ALL of these label ids.
+        include_spam_trash:
+          type: boolean
+          default: false
+          description: Include messages in Spam and Trash.
+        page_size:
+          type: integer
+          minimum: 1
+          maximum: 500
+          default: 100
+          description: Messages per page (Gmail allows up to 500).
+        connection: *connection
+    request:
+      method: GET
+      path: /messages
+      query_expr: >-
+        {"maxResults": string(params.page_size),
+         "includeSpamTrash": string(params.include_spam_trash),
+         ?"q": params.?q,
+         ?"labelIds": params.?label_ids}
+      pagination:
+        style: cursor
+        cursor_param: pageToken
+        next_cursor: "response.?nextPageToken.orValue('')"
+        max_pages: 5
+      errors: &gmail_errors
+        - status: 401
+          retryable: false
+          message: "Google rejected the Gmail credential ({{ response.?error.?message.orValue('invalid credentials') }}): reconnect Gmail in Settings."
+        - status: 403
+          when: >-
+            type(response) == map &&
+            response.?error.?errors.orValue([]).exists(e, type(e) == map &&
+              e.?reason.orValue('') in ['rateLimitExceeded', 'userRateLimitExceeded'])
+          retryable: true
+          message: &gmail_rate_limited "Gmail rate limit exceeded ({{ response.?error.?message.orValue('rate limited') }}). Retry after at least 60 seconds."
+        - status: 403
+          when: >-
+            type(response) == map &&
+            (response.?error.?errors.orValue([]).exists(e, type(e) == map &&
+               e.?reason.orValue('') == 'insufficientPermissions') ||
+             response.?error.?details.orValue([]).exists(d, type(d) == map &&
+               d.?reason.orValue('') == 'ACCESS_TOKEN_SCOPE_INSUFFICIENT'))
+          retryable: false
+          message: >-
+            The Gmail connection was not granted the access this needs
+            ({{ response.?error.?message.orValue('insufficient permission') }}): reconnect Gmail
+            and allow every permission it asks for.
+        - status: 403
+          retryable: false
+          message: "Gmail refused the request: {{ response.?error.?message.orValue('forbidden') }}."
+        - status: 429
+          retryable: true
+          message: *gmail_rate_limited
+        - status: 400
+          retryable: false
+          message: "Gmail rejected the request as invalid: {{ response.?error.?message.orValue('bad request') }}."
+        - status: 404
+          retryable: false
+          message: "Gmail returned not found: {{ response.?error.?message.orValue('the message or label does not exist in this mailbox') }}."
+    output:
+      select: >-
+        response.?messages.orValue([]).map(m, {"id": m.id, "thread_id": m.threadId})
+      schema:
+        type: object
+        properties:
+          items:
+            type: array
+            items:
+              type: object
+              properties:
+                id: { type: string, description: The message id Get email takes. }
+                thread_id: { type: string }
+
+  - id: message.get
+    display_name: Get email
+    summary: Read one message — headers, labels, snippet and (by default) its body text.
+    description: >-
+      Read a message by id. format full (the default) decodes the body into
+      text (and html when the message has an HTML part) and lists
+      attachments by name; metadata returns only headers, labels and the
+      snippet, which is cheaper and avoids pulling a large body. Headers are
+      flattened into from, to, cc, subject, date and message_id (the
+      Message-ID a reply's in_reply_to takes).
+    keywords: [email, read, open, message, body, get, content]
+    placement: server
+    mutates: false
+    executor: go:gmail.message_get
+    tool:
+      expose: true
+    params:
+      type: object
+      additionalProperties: false
+      required: [id]
+      properties:
+        id:
+          type: string
+          pattern: "^[0-9a-f]{1,32}$"
+          description: The message id (from Search email or a trigger's message_id).
+        format:
+          type: string
+          enum: [full, metadata]
+          default: full
+          description: full decodes the body; metadata is headers, labels and snippet only.
+        max_body_chars:
+          type: integer
+          minimum: 1
+          maximum: 200000
+          default: 20000
+          description: Truncate the decoded text and html bodies to this many characters.
+        connection: *connection
+    output:
+      schema:
+        type: object
+        properties:
+          id: { type: string }
+          thread_id: { type: string }
+          label_ids: { type: array, items: { type: string } }
+          snippet: { type: string }
+          internal_date: { type: string, description: When Gmail received the message, RFC 3339. }
+          from: { type: string }
+          to: { type: string }
+          cc: { type: string }
+          subject: { type: string }
+          date: { type: string, description: The Date header as sent. }
+          message_id: { type: string, description: "The Message-ID header; a reply's in_reply_to." }
+          references: { type: string }
+          text: { type: string, description: The plain-text body (format full). }
+          html: { type: string, description: The HTML body when the message has one (format full). }
+          truncated: { type: boolean, description: Whether text or html was cut to max_body_chars. }
+          attachments:
+            type: array
+            items:
+              type: object
+              properties:
+                filename: { type: string }
+                mime_type: { type: string }
+                size: { type: integer }
+
+  - id: label.list
+    display_name: List labels
+    summary: The mailbox's labels and their ids, for filters and searches.
+    description: >-
+      List the mailbox's labels: system labels (INBOX, SENT, UNREAD, STARRED,
+      IMPORTANT, CATEGORY_*) and the user's own, with the id Search email's
+      label_ids and a trigger's label_ids attribute use.
+    keywords: [labels, folders, categories, list, inbox]
+    placement: server
+    mutates: false
+    tool:
+      expose: true
+    params:
+      type: object
+      additionalProperties: false
+      properties:
+        connection: *connection
+    request:
+      method: GET
+      path: /labels
+      errors: *gmail_errors
+    output:
+      select: >-
+        {"labels": response.?labels.orValue([]).map(l, {"id": l.id, "name": l.name,
+          "type": l.?type.orValue('user')})}
+      schema:
+        type: object
+        properties:
+          labels:
+            type: array
+            items:
+              type: object
+              properties:
+                id: { type: string }
+                name: { type: string }
+                type: { type: string, enum: [system, user] }
+
+triggers:
+  - id: message.received
+    display_name: New email
+    summary: A new message arrived in the inbox.
+    description: >-
+      Fires for each new message added to the INBOX (sent and draft messages
+      never fire). Polled from Gmail's history about every five minutes, so
+      expect that delay. Match on from or label_ids, or filter in CEL on
+      trigger.payload.data.subject / .snippet. The payload carries headers and
+      the snippet, not the body: read the full message with Get email
+      (gmail/message.get) using trigger.payload.data.message_id.
+    keywords: [email, new, received, inbox, incoming, mail, arrives]
+    events: [message.received]
+    attributes:
+      - { name: from, description: "The From header as sent, e.g. Ann <ann@example.com>.", example: "Ann <ann@example.com>" }
+      - { name: to, description: The To header as sent., example: me@example.com }
+      - { name: subject, description: The Subject header., example: Invoice 1234 }
+      - { name: label_ids, description: "The message's label ids, comma-separated in Gmail's order.", example: "INBOX,UNREAD,CATEGORY_PERSONAL" }
+      - { name: thread_id, description: The thread the message is in., example: 18c1f0e2a3b4c5d6 }
+    data:
+      type: object
+      required: [message_id, thread_id, label_ids, snippet]
+      properties:
+        message_id: { type: string, description: The message id Get email takes. }
+        thread_id: { type: string }
+        label_ids: { type: array, items: { type: string } }
+        snippet: { type: string, description: "Gmail's short plain-text preview of the body." }
+        from: { type: string }
+        to: { type: string }
+        cc: { type: string }
+        subject: { type: string }
+        date: { type: string, description: The Date header as sent. }
+        rfc822_message_id: { type: string, description: "The Message-ID header; a reply's in_reply_to." }
+        internal_date: { type: string, description: When Gmail received the message, RFC 3339. }

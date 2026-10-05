@@ -366,7 +366,7 @@ func (q *Queries) GetTriggerEventByDedupe(ctx context.Context, arg GetTriggerEve
 }
 
 const getTriggerRegistration = `-- name: GetTriggerRegistration :one
-SELECT trigger_id, provider, registration_id, cursor, last_polled_at, status, status_detail, created_at, updated_at FROM trigger_registrations WHERE trigger_id = $1
+SELECT trigger_id, provider, registration_id, cursor, last_polled_at, status, status_detail, created_at, updated_at, last_gap_at, last_gap_detail, status_since FROM trigger_registrations WHERE trigger_id = $1
 `
 
 func (q *Queries) GetTriggerRegistration(ctx context.Context, triggerID string) (TriggerRegistration, error) {
@@ -382,6 +382,9 @@ func (q *Queries) GetTriggerRegistration(ctx context.Context, triggerID string) 
 		&i.StatusDetail,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.LastGapAt,
+		&i.LastGapDetail,
+		&i.StatusSince,
 	)
 	return i, err
 }
@@ -903,6 +906,57 @@ func (q *Queries) ListTriggerEvents(ctx context.Context, arg ListTriggerEventsPa
 	return items, nil
 }
 
+const listTriggerRegistrations = `-- name: ListTriggerRegistrations :many
+SELECT r.trigger_id, r.provider, r.registration_id, r.cursor, r.last_polled_at, r.status, r.status_detail, r.created_at, r.updated_at, r.last_gap_at, r.last_gap_detail, r.status_since
+FROM trigger_registrations r
+JOIN triggers t ON t.id = r.trigger_id
+WHERE t.user_id = $1::text
+    AND r.trigger_id = ANY($2::text[])
+`
+
+type ListTriggerRegistrationsParams struct {
+	UserID     string   `json:"user_id"`
+	TriggerIds []string `json:"trigger_ids"`
+}
+
+// The named triggers' registrations, for health, in ONE query. Joined through
+// triggers so only the caller's own appear.
+func (q *Queries) ListTriggerRegistrations(ctx context.Context, arg ListTriggerRegistrationsParams) ([]TriggerRegistration, error) {
+	rows, err := q.db.QueryContext(ctx, listTriggerRegistrations, arg.UserID, pq.Array(arg.TriggerIds))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []TriggerRegistration{}
+	for rows.Next() {
+		var i TriggerRegistration
+		if err := rows.Scan(
+			&i.TriggerID,
+			&i.Provider,
+			&i.RegistrationID,
+			&i.Cursor,
+			&i.LastPolledAt,
+			&i.Status,
+			&i.StatusDetail,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.LastGapAt,
+			&i.LastGapDetail,
+			&i.StatusSince,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listTriggers = `-- name: ListTriggers :many
 SELECT
     t.id, t.user_id, t.project_id, t.worktree_id, t.name, t.kind, t.enabled, t.workflow, t.presets, t.params, t.message, t.config, t.created_at, t.updated_at, t.daemon_id, t.notify_on_complete, t.filter, t.connection_id, t.webhook_token_hash, t.webhook_secret_sealed, t.workflow_trigger, t.no_machine,
@@ -1269,17 +1323,22 @@ func (q *Queries) UpdateTriggerEventPayload(ctx context.Context, arg UpdateTrigg
 
 const upsertTriggerRegistration = `-- name: UpsertTriggerRegistration :exec
 INSERT INTO trigger_registrations (
-    trigger_id, provider, registration_id, cursor, last_polled_at, status, status_detail, created_at, updated_at
+    trigger_id, provider, registration_id, cursor, last_polled_at, status, status_detail,
+    last_gap_at, last_gap_detail, status_since, created_at, updated_at
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, NOW(), NOW()
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW(), NOW()
 )
 ON CONFLICT (trigger_id) DO UPDATE SET
     provider = EXCLUDED.provider,
     registration_id = EXCLUDED.registration_id,
     cursor = EXCLUDED.cursor,
     last_polled_at = EXCLUDED.last_polled_at,
+    status_since = CASE WHEN trigger_registrations.status = EXCLUDED.status
+                        THEN trigger_registrations.status_since ELSE NOW() END,
     status = EXCLUDED.status,
     status_detail = EXCLUDED.status_detail,
+    last_gap_at = EXCLUDED.last_gap_at,
+    last_gap_detail = EXCLUDED.last_gap_detail,
     updated_at = NOW()
 `
 
@@ -1291,8 +1350,12 @@ type UpsertTriggerRegistrationParams struct {
 	LastPolledAt   sql.NullTime `json:"last_polled_at"`
 	Status         string       `json:"status"`
 	StatusDetail   string       `json:"status_detail"`
+	LastGapAt      sql.NullTime `json:"last_gap_at"`
+	LastGapDetail  string       `json:"last_gap_detail"`
 }
 
+// status_since moves only when status changes, so it is the start of the
+// current status episode however often the source is polled.
 func (q *Queries) UpsertTriggerRegistration(ctx context.Context, arg UpsertTriggerRegistrationParams) error {
 	_, err := q.db.ExecContext(ctx, upsertTriggerRegistration,
 		arg.TriggerID,
@@ -1302,6 +1365,8 @@ func (q *Queries) UpsertTriggerRegistration(ctx context.Context, arg UpsertTrigg
 		arg.LastPolledAt,
 		arg.Status,
 		arg.StatusDetail,
+		arg.LastGapAt,
+		arg.LastGapDetail,
 	)
 	return err
 }

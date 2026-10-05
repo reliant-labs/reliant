@@ -876,6 +876,9 @@ type Querier interface {
 	// queries/runs.sql (ListRuns) — keep the two in step; a test pins them equal.
 	// user_id scopes the rows even though the handler already checked ownership.
 	ListTriggerEvents(ctx context.Context, arg ListTriggerEventsParams) ([]ListTriggerEventsRow, error)
+	// The named triggers' registrations, for health, in ONE query. Joined through
+	// triggers so only the caller's own appear.
+	ListTriggerRegistrations(ctx context.Context, arg ListTriggerRegistrationsParams) ([]TriggerRegistration, error)
 	// Always scoped to one user; project_id narrows further. The unscoped listing
 	// is ListAllTriggers, a separate query so "no user" can never be reached by
 	// passing an empty string.
@@ -1237,6 +1240,8 @@ type Querier interface {
 	// place instead of erroring on the primary key.
 	UpsertToolCall(ctx context.Context, arg UpsertToolCallParams) error
 	UpsertToolCallResult(ctx context.Context, arg UpsertToolCallResultParams) error
+	// status_since moves only when status changes, so it is the start of the
+	// current status episode however often the source is polled.
 	UpsertTriggerRegistration(ctx context.Context, arg UpsertTriggerRegistrationParams) error
 	// Workflow position checkpoints (resume-at-position support).
 	// One row per workflow ID. Written at cheap boundaries: top-level node entry

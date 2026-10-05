@@ -411,3 +411,40 @@ func TestSyncConvergesAPollScheduleOnlyForPolledTriggers(t *testing.T) {
 	_, err = s.schedules.GetHandle(ctx, ScheduleID(hook.ID)).Describe(ctx)
 	assert.True(t, isNotFound(err), "a stale schedule on a webhook trigger is removed: %v", err)
 }
+
+// A poller that lost its place reports a gap: the activity saves the fresh
+// cursor, records the gap on the registration, fires nothing, and the next
+// clean poll keeps the record (it is history, not state).
+func TestPollGapIsRecordedOnTheRegistration(t *testing.T) {
+	repo, trigger, poller, _, p := newPollEnv(t)
+	ctx := context.Background()
+	_, err := p.Poll(ctx, PollInput{TriggerID: trigger.ID})
+	require.NoError(t, err)
+
+	gapping := &gapPoller{cursor: "fresh-9000", gap: "Gmail no longer had history from 1000; mail that arrived in the gap did not fire"}
+	p.pollers = fakePollers{"feed": gapping}
+	out, err := p.Poll(ctx, PollInput{TriggerID: trigger.ID})
+	require.NoError(t, err)
+	assert.True(t, out.Gap)
+	assert.Zero(t, out.Accepted)
+	reg, err := repo.GetTriggerRegistration(ctx, trigger.ID)
+	require.NoError(t, err)
+	assert.Equal(t, "fresh-9000", reg.Cursor)
+	assert.Equal(t, core.TriggerRegistrationActive, reg.Status, "a source that re-baselined is working again")
+	require.NotNil(t, reg.LastGapAt)
+	assert.Contains(t, reg.LastGapDetail, "did not fire")
+	assert.Empty(t, repo.eventsFor(trigger.ID))
+
+	p.pollers = fakePollers{"feed": poller}
+	poller.add(PollItem{ID: "after", Type: "item.created"})
+	_, err = p.Poll(ctx, PollInput{TriggerID: trigger.ID})
+	require.NoError(t, err)
+	reg, _ = repo.GetTriggerRegistration(ctx, trigger.ID)
+	require.NotNil(t, reg.LastGapAt, "the gap stays on record")
+}
+
+type gapPoller struct{ cursor, gap string }
+
+func (g *gapPoller) Poll(context.Context, PollRequest) (*PollResult, error) {
+	return &PollResult{Cursor: g.cursor, Gap: g.gap}, nil
+}

@@ -766,6 +766,9 @@ type TriggerRegistration struct {
 	StatusDetail   string       `json:"status_detail"`
 	CreatedAt      time.Time    `json:"created_at"`
 	UpdatedAt      time.Time    `json:"updated_at"`
+	LastGapAt      sql.NullTime `json:"last_gap_at"`
+	LastGapDetail  string       `json:"last_gap_detail"`
+	StatusSince    time.Time    `json:"status_since"`
 }
 
 type UpdateStreamCounter struct {

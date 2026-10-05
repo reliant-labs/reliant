@@ -750,6 +750,7 @@ type Repository interface {
 	ClaimPendingTriggerEvent(ctx context.Context, id string, payload map[string]any) (bool, error)
 	SettlePendingTriggerEvent(ctx context.Context, id string, outcome core.TriggerEventOutcome, detail string) (bool, error)
 	GetTriggerRegistration(ctx context.Context, triggerID string) (*core.TriggerRegistration, error)
+	ListTriggerRegistrations(ctx context.Context, userID string, triggerIDs []string) (map[string]*core.TriggerRegistration, error)
 	UpsertTriggerRegistration(ctx context.Context, reg *core.TriggerRegistration) error
 	DeleteTriggerRegistration(ctx context.Context, triggerID string) error
 

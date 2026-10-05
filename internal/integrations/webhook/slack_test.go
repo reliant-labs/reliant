@@ -479,3 +479,25 @@ func TestSlackRegisteredFromEnvOnlyWithASigningSecret(t *testing.T) {
 	body := envelope("T0ACME", "Ev1", `{"type":"app_mention","channel":"C0GEN","ts":"1.2"}`)
 	assert.NoError(t, p.Verify(context.Background(), slackRequest(t, body, time.Now())), "the secret is trimmed")
 }
+
+// Gmail is polled. Its poller is registered when the deployment configured
+// the Google OAuth client — without one nobody can hold a Gmail connection —
+// and never otherwise, so a trigger for it is refused at write time.
+func TestGmailPollerRegisteredFromEnvOnlyWithAnOAuthClient(t *testing.T) {
+	r, err := RegistryFromEnv(func(string) string { return "" })
+	require.NoError(t, err)
+	assert.False(t, r.HasInboundSource("gmail"))
+	assert.False(t, r.IsPolled("gmail"))
+
+	r, err = RegistryFromEnv(func(k string) string {
+		if k == "RELIANT_OAUTH_GMAIL_CLIENT_ID" {
+			return "1234-gmail.apps.googleusercontent.com"
+		}
+		return ""
+	})
+	require.NoError(t, err)
+	assert.True(t, r.IsPolled("gmail"))
+	assert.True(t, r.HasInboundSource("gmail"))
+	_, pushed := r.Provider("gmail")
+	assert.False(t, pushed, "polled, not a webhook")
+}

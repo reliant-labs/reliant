@@ -1132,6 +1132,9 @@ CREATE TABLE public.trigger_registrations (
     status_detail text DEFAULT ''::text NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    last_gap_at timestamp with time zone,
+    last_gap_detail text DEFAULT ''::text NOT NULL,
+    status_since timestamp with time zone DEFAULT now() NOT NULL,
     CONSTRAINT trigger_registrations_status_check CHECK ((status = ANY (ARRAY['active'::text, 'error'::text, 'needs_reauth'::text])))
 );
 

@@ -272,11 +272,17 @@ func (s *TriggerService) ListTriggers(
 		logging.Warn("could not resolve triggers' recent firings", "error", err)
 		recent = nil
 	}
+	// And one for every polled trigger's source state, which health folds in.
+	regs, err := s.database.ListTriggerRegistrations(ctx, userID, ids)
+	if err != nil {
+		logging.Warn("could not resolve triggers' source state", "error", err)
+		regs = nil
+	}
 
 	workflows := triggers.NewCachedWorkflows(triggers.LaunchWorkflows{Repo: s.database})
 	out := make([]*reliantv1.Trigger, 0, len(stored))
 	for _, t := range stored {
-		out = append(out, s.renderWithWorkflows(ctx, t, recent[t.ID], workflows))
+		out = append(out, s.renderWithWorkflows(ctx, t, recent[t.ID], regs[t.ID], workflows))
 	}
 	return connect.NewResponse(&reliantv1.ListTriggersResponse{Triggers: out}), nil
 }
@@ -844,20 +850,19 @@ func (s *TriggerService) render(ctx context.Context, t *core.Trigger) *reliantv1
 	if err != nil {
 		logging.Warn("could not resolve a trigger's recent firings", "trigger_id", t.ID, "error", err)
 	}
-	return s.renderWith(ctx, t, recent[t.ID])
-}
-
-// renderWith renders a trigger whose recent firings the caller already loaded.
-func (s *TriggerService) renderWith(ctx context.Context, t *core.Trigger, firings []*core.TriggerEventWithRun) *reliantv1.Trigger {
-	return s.renderWithWorkflows(ctx, t, firings, triggers.LaunchWorkflows{Repo: s.database})
+	regs, err := s.database.ListTriggerRegistrations(ctx, t.UserID, []string{t.ID})
+	if err != nil {
+		logging.Warn("could not resolve a trigger's source state", "trigger_id", t.ID, "error", err)
+	}
+	return s.renderWithWorkflows(ctx, t, recent[t.ID], regs[t.ID], triggers.LaunchWorkflows{Repo: s.database})
 }
 
 // renderWithWorkflows renders a trigger, resolving an activation's
 // declaration through workflows so that a broken one reports BROKEN health.
 // It is computed on read, from the workflow as it is now: a stored verdict
 // would go stale the moment someone fixed the YAML.
-func (s *TriggerService) renderWithWorkflows(ctx context.Context, t *core.Trigger, firings []*core.TriggerEventWithRun, workflows triggers.WorkflowResolver) *reliantv1.Trigger {
-	proto := s.renderFirings(ctx, t, firings)
+func (s *TriggerService) renderWithWorkflows(ctx context.Context, t *core.Trigger, firings []*core.TriggerEventWithRun, reg *core.TriggerRegistration, workflows triggers.WorkflowResolver) *reliantv1.Trigger {
+	proto := s.renderFirings(ctx, t, firings, reg)
 	if t.WorkflowTrigger == nil {
 		return proto
 	}
@@ -874,8 +879,9 @@ func (s *TriggerService) renderWithWorkflows(ctx context.Context, t *core.Trigge
 	return proto
 }
 
-// renderFirings renders a trigger from its row and recent firings.
-func (s *TriggerService) renderFirings(ctx context.Context, t *core.Trigger, firings []*core.TriggerEventWithRun) *reliantv1.Trigger {
+// renderFirings renders a trigger from its row, recent firings and (for a
+// polled trigger) its source state.
+func (s *TriggerService) renderFirings(ctx context.Context, t *core.Trigger, firings []*core.TriggerEventWithRun, reg *core.TriggerRegistration) *reliantv1.Trigger {
 	var nextFireAt *time.Time
 	if s.syncer != nil && syncs(t.Kind) {
 		next, err := s.syncer.NextFireAt(ctx, t.ID)
@@ -886,7 +892,7 @@ func (s *TriggerService) renderFirings(ctx context.Context, t *core.Trigger, fir
 		}
 	}
 
-	proto, err := triggers.ToProto(t, nextFireAt, firings)
+	proto, err := triggers.ToProto(t, nextFireAt, firings, reg)
 	if err != nil {
 		// Params that will not round-trip through structpb. Report the trigger
 		// without them rather than failing the whole call.

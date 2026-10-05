@@ -138,12 +138,15 @@ func (r *Runner) run(ctx context.Context, m *reliantv1.IntegrationManifest, a *r
 		query.Set(k, scalarString(rendered))
 	}
 	if req.GetQueryExpr() != "" {
-		extra, err := evalScalarMap(req.GetQueryExpr(), vars)
+		extra, err := evalQueryMap(req.GetQueryExpr(), vars)
 		if err != nil {
 			return nil, fmt.Errorf("request.query_expr: %w", err)
 		}
-		for k, v := range extra {
-			query.Set(k, v)
+		for k, vs := range extra {
+			query.Del(k)
+			for _, v := range vs {
+				query.Add(k, v)
+			}
 		}
 	}
 	var body []byte
@@ -443,6 +446,43 @@ func (r *Runner) buildURL(base *url.URL, req *reliantv1.HttpRequestSpec, vars ma
 	}
 	u.Path = decoded
 	return &u, nil
+}
+
+// evalQueryMap is evalScalarMap for query parameters, where a list value is a
+// repeated parameter (labelIds=INBOX&labelIds=UNREAD) and an empty list sends
+// none. List elements must be scalars.
+func evalQueryMap(expr string, vars map[string]any) (map[string][]string, error) {
+	v, err := tmpl.EvalExpr(expr, vars)
+	if err != nil {
+		return nil, err
+	}
+	if v == nil {
+		return nil, nil
+	}
+	obj, ok := v.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("must yield a map, got %T", v)
+	}
+	out := make(map[string][]string, len(obj))
+	for k, val := range obj {
+		list, isList := val.([]any)
+		if !isList {
+			out[k] = []string{scalarString(val)}
+			continue
+		}
+		for i, e := range list {
+			switch e.(type) {
+			case string, float64, bool, int64:
+			default:
+				return nil, fmt.Errorf("%s[%d]: a repeated query parameter takes scalars, got %T", k, i, e)
+			}
+			out[k] = append(out[k], scalarString(e))
+		}
+		if len(list) == 0 {
+			out[k] = nil
+		}
+	}
+	return out, nil
 }
 
 func evalScalarMap(expr string, vars map[string]any) (map[string]string, error) {

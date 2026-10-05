@@ -623,6 +623,25 @@ func (s *triggerStore) GetTriggerRegistration(ctx context.Context, triggerID str
 		}
 		return nil, fmt.Errorf("failed to get trigger registration: %w", err)
 	}
+	return triggerRegistrationFromPG(row), nil
+}
+
+func (s *triggerStore) ListTriggerRegistrations(ctx context.Context, userID string, triggerIDs []string) (map[string]*core.TriggerRegistration, error) {
+	out := map[string]*core.TriggerRegistration{}
+	if len(triggerIDs) == 0 {
+		return out, nil
+	}
+	rows, err := s.q.ListTriggerRegistrations(ctx, pgdb.ListTriggerRegistrationsParams{UserID: userID, TriggerIds: triggerIDs})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list trigger registrations: %w", err)
+	}
+	for _, row := range rows {
+		out[row.TriggerID] = triggerRegistrationFromPG(row)
+	}
+	return out, nil
+}
+
+func triggerRegistrationFromPG(row pgdb.TriggerRegistration) *core.TriggerRegistration {
 	reg := &core.TriggerRegistration{
 		TriggerID:      row.TriggerID,
 		Provider:       row.Provider,
@@ -630,6 +649,8 @@ func (s *triggerStore) GetTriggerRegistration(ctx context.Context, triggerID str
 		Cursor:         row.Cursor,
 		Status:         row.Status,
 		StatusDetail:   row.StatusDetail,
+		StatusSince:    row.StatusSince,
+		LastGapDetail:  row.LastGapDetail,
 		CreatedAt:      row.CreatedAt,
 		UpdatedAt:      row.UpdatedAt,
 	}
@@ -637,7 +658,11 @@ func (s *triggerStore) GetTriggerRegistration(ctx context.Context, triggerID str
 		at := row.LastPolledAt.Time
 		reg.LastPolledAt = &at
 	}
-	return reg, nil
+	if row.LastGapAt.Valid {
+		at := row.LastGapAt.Time
+		reg.LastGapAt = &at
+	}
+	return reg
 }
 
 func (s *triggerStore) UpsertTriggerRegistration(ctx context.Context, reg *core.TriggerRegistration) error {
@@ -645,9 +670,12 @@ func (s *triggerStore) UpsertTriggerRegistration(ctx context.Context, reg *core.
 	if status == "" {
 		status = core.TriggerRegistrationActive
 	}
-	var polled sql.NullTime
+	var polled, gap sql.NullTime
 	if reg.LastPolledAt != nil {
 		polled = sql.NullTime{Time: *reg.LastPolledAt, Valid: true}
+	}
+	if reg.LastGapAt != nil {
+		gap = sql.NullTime{Time: *reg.LastGapAt, Valid: true}
 	}
 	return s.q.UpsertTriggerRegistration(ctx, pgdb.UpsertTriggerRegistrationParams{
 		TriggerID:      reg.TriggerID,
@@ -657,6 +685,8 @@ func (s *triggerStore) UpsertTriggerRegistration(ctx context.Context, reg *core.
 		LastPolledAt:   polled,
 		Status:         status,
 		StatusDetail:   reg.StatusDetail,
+		LastGapAt:      gap,
+		LastGapDetail:  reg.LastGapDetail,
 	})
 }
 

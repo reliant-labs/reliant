@@ -210,3 +210,58 @@ func TestResolved_AppliesOnlyToTheIntegrationsHosts(t *testing.T) {
 		require.NoError(t, got.Apply(req), "%s: host match is case-insensitive", name)
 	}
 }
+
+// A token refused before it expired (revoked at the provider) is replaced by a
+// refresh, through the same single-flight and generation rules as an expiry
+// refresh; a refused refresh grant marks the connection needs_reauth.
+func TestResolved_RefreshAfterRejection(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	conn := e.connect("alice", "a")
+	trigger := e.newTrigger("alice", "github", &conn.ID)
+	got, err := e.resolver.ForTrigger(ctx, serverSite(trigger))
+	require.NoError(t, err)
+	refreshesBefore := e.gh.refreshCalls.Load()
+
+	e.gh.nextAccess, e.gh.nextRefresh = "ghu_AFTER_REVOKE", "ghr_AFTER_REVOKE"
+	next, err := got.RefreshAfterRejection(ctx)
+	require.NoError(t, err, "the token had not expired; a rejection still refreshes")
+	require.Equal(t, refreshesBefore+1, e.gh.refreshCalls.Load())
+	req, _ := http.NewRequest(http.MethodGet, "https://api.github.com/user", nil)
+	require.NoError(t, next.Apply(req))
+	require.Equal(t, "Bearer ghu_AFTER_REVOKE", req.Header.Get("Authorization"))
+	bad, _ := http.NewRequest(http.MethodGet, "https://evil.example/", nil)
+	require.Error(t, next.Apply(bad), "the replacement keeps the host pin")
+
+	// A second caller that saw the SAME rejected token gets the replacement
+	// without another provider call (two pollers racing on one revocation).
+	again, err := got.RefreshAfterRejection(ctx)
+	require.NoError(t, err)
+	require.Equal(t, refreshesBefore+1, e.gh.refreshCalls.Load(), "one rejection, one refresh")
+	req2, _ := http.NewRequest(http.MethodGet, "https://api.github.com/user", nil)
+	require.NoError(t, again.Apply(req2))
+	require.Equal(t, "Bearer ghu_AFTER_REVOKE", req2.Header.Get("Authorization"))
+
+	// The replacement is refused too, and the grant is dead.
+	e.gh.refreshStatus, e.gh.refreshBody = 400, `{"error":"invalid_grant"}`
+	_, err = next.RefreshAfterRejection(ctx)
+	require.ErrorIs(t, err, connections.ErrNeedsReauth)
+	require.Equal(t, "needs_reauth", mustStatus(t, e, conn.ID))
+}
+
+// An API key cannot be refreshed: a refused one marks the connection
+// needs_reauth, because sending it again would only be refused again.
+func TestResolved_RejectedAPIKeyNeedsReauth(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	pat, err := e.svc.CreateAPIKey(ctx, connections.CreateAPIKeyParams{
+		UserID: "alice", IntegrationID: "github", Name: "pat", Kind: connections.APIKeyKindAPIKey,
+		Fields: map[string]string{"api_key": "ghp_revoked"},
+	})
+	require.NoError(t, err)
+	got, err := e.resolver.ForTrigger(ctx, serverSite(e.newTrigger("alice", "github", &pat.ID)))
+	require.NoError(t, err)
+	_, err = got.RefreshAfterRejection(ctx)
+	require.ErrorIs(t, err, connections.ErrNeedsReauth)
+	require.Equal(t, "needs_reauth", mustStatus(t, e, pat.ID))
+}

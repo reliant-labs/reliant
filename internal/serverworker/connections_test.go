@@ -64,6 +64,13 @@ func TestTriggerCredentialsIsTheIntegrationSource(t *testing.T) {
 	assert.Nil(t, triggerCredentials(nil), "no source, no poll credentials: polls skip")
 }
 
+// Every go: executor a shipped manifest names is registered in the worker
+// binary (gmail's send and get, linked in through webhook), so the boot check
+// passes — and would fail boot, not a user's first call, if one went missing.
+func TestEveryShippedExecutorIsRegistered(t *testing.T) {
+	require.NoError(t, checkExecutors())
+}
+
 // The broker id the worker registers is the one the embedded github manifest
 // declares; a rename on either side would silently disable hosted GitHub.
 func TestGitHubManifestNamesTheRegisteredBroker(t *testing.T) {

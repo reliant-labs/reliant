@@ -8,8 +8,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/connections"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/integrations/catalog"
+	"github.com/reliant-labs/reliant/internal/integrations/gmail"
+	"github.com/reliant-labs/reliant/internal/integrations/httpaction"
 	"github.com/reliant-labs/reliant/internal/integrations/webhook/github"
+	"github.com/reliant-labs/reliant/internal/netguard"
 	"github.com/reliant-labs/reliant/internal/vault"
 )
 
@@ -69,8 +74,13 @@ func (in *Inbound) Register(handle func(pattern string, handler http.Handler)) {
 
 // RegistryFromEnv builds the provider registry this deployment receives for.
 // Wave-1 providers (GitHub, Slack, Twilio) register here, each gated on its
-// own deployment secret. The test provider is registered only when
+// own deployment secret; polled integrations (Gmail) on the OAuth client their
+// connections need. The test provider is registered only when
 // RELIANT_TEST_INTEGRATION_SECRET is set — an e2e stack, never production.
+//
+// The api-server and the worker both build it, so they agree on which
+// integrations deliver events: the api-server refuses a trigger whose
+// integration has no source, and the worker runs the polls.
 func RegistryFromEnv(getenv func(string) string) (*Registry, error) {
 	if getenv == nil {
 		getenv = os.Getenv
@@ -86,6 +96,22 @@ func RegistryFromEnv(getenv func(string) string) (*Registry, error) {
 	// are refused at write time.
 	if secret := strings.TrimSpace(getenv(github.SecretEnv)); secret != "" {
 		if err := r.Register(NewGitHubProvider(secret)); err != nil {
+			return nil, err
+		}
+	}
+	// Gmail is polled, not pushed: there is no webhook to verify. It is
+	// registered when the deployment configured the Google OAuth client,
+	// without which no one can hold a Gmail connection to poll through.
+	if clientIDVar, _ := connections.OAuthClientEnv(gmail.ID); strings.TrimSpace(getenv(clientIDVar)) != "" {
+		m, err := catalog.MustBuiltin().Manifest(gmail.ID, 1)
+		if err != nil {
+			return nil, err
+		}
+		p, err := gmail.NewPoller(m, httpaction.NewRunner(netguard.New()))
+		if err != nil {
+			return nil, err
+		}
+		if err := r.RegisterPoller(gmail.ID, p); err != nil {
 			return nil, err
 		}
 	}

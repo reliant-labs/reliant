@@ -96,7 +96,11 @@ type Resolved struct {
 
 	auth   Authenticator
 	secret vault.Secret
-	params map[string]string
+	// owner and generation identify the token for RefreshAfterRejection.
+	owner      string
+	generation int64
+	tokens     *TokenSource
+	params     map[string]string
 	// hosts are the hosts this integration's catalog entry lets a request
 	// reach: base_url's (with the connection's params expanded) and
 	// allowed_hosts. Apply refuses any other. Empty means the integration
@@ -137,6 +141,25 @@ func (r *Resolved) Apply(req *http.Request) error {
 		return newError(CodeFailedPrecondition, "a %s credential is never sent to %q: it is not one of the integration's hosts", r.IntegrationID, req.URL.Host)
 	}
 	return r.auth.Apply(req, r.secret, r.Redactor)
+}
+
+// RefreshAfterRejection replaces a credential the provider refused (a 401 for
+// a token that had not expired) and returns the replacement, held to the same
+// hosts and scrubbing into the same Redactor (so text that echoed the old
+// token is still scrubbed). A grant that is dead returns CodeNeedsReauth and
+// marks the connection. Call it once per rejection: a second 401 with the
+// replacement means the connection is not usable.
+func (r *Resolved) RefreshAfterRejection(ctx context.Context) (*Resolved, error) {
+	if r.tokens == nil {
+		return nil, newError(CodeNeedsReauth, "connection %q was refused and cannot be refreshed", r.ConnectionID)
+	}
+	secret, gen, err := r.tokens.RefreshAfterRejection(ctx, r.owner, r.ConnectionID, r.generation)
+	if err != nil {
+		return nil, err
+	}
+	next := *r
+	next.secret, next.generation = secret, gen
+	return &next, nil
 }
 
 // OwnerOf returns the user a run belongs to, read from the database. It tries
@@ -271,7 +294,7 @@ func (r *Resolver) resolve(ctx context.Context, owner string, ref Ref, use core.
 	if err != nil {
 		return nil, err
 	}
-	secret, err := r.tokens.Token(ctx, owner, conn.ID)
+	secret, gen, err := r.tokens.token(ctx, owner, conn.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -282,7 +305,8 @@ func (r *Resolver) resolve(ctx context.Context, owner string, ref Ref, use core.
 
 	return &Resolved{
 		ConnectionID: conn.ID, IntegrationID: conn.IntegrationID, Redactor: NewRedactor(),
-		auth: auth, secret: secret, params: conn.Params, hosts: hosts,
+		auth: auth, secret: secret, owner: owner, generation: gen, tokens: r.tokens,
+		params: conn.Params, hosts: hosts,
 	}, nil
 }
 

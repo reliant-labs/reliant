@@ -77,6 +77,11 @@ type PollResult struct {
 	// Cursor is where the next poll resumes. Required.
 	Cursor string
 	Items  []PollItem
+	// Gap, when set, says the poller lost its place (the provider no longer
+	// honoured the cursor) and re-baselined: Cursor is a fresh position and
+	// what arrived in between will never fire. It is recorded on the
+	// registration and shown in trigger health; the text says what was lost.
+	Gap string
 }
 
 // PollItem is one new item.
@@ -113,6 +118,7 @@ type PollInput struct {
 // PollOutput reports what a poll did.
 type PollOutput struct {
 	Baseline bool   `json:"baseline,omitempty"`
+	Gap      bool   `json:"gap,omitempty"`
 	Skipped  bool   `json:"skipped,omitempty"`
 	Reason   string `json:"reason,omitempty"`
 	Items    int    `json:"items"`
@@ -254,6 +260,11 @@ func (p *TriggerPoller) Poll(ctx context.Context, in PollInput) (*PollOutput, er
 	}
 	reg.Cursor = res.Cursor
 	reg.Status, reg.StatusDetail = core.TriggerRegistrationActive, ""
+	if res.Gap != "" {
+		reg.LastGapAt, reg.LastGapDetail = &now, truncate(res.Gap, 500)
+		out.Gap = true
+		logging.Warn("polled trigger lost its place and re-baselined", "trigger_id", trigger.ID, "integration", cfg.Integration, "detail", reg.LastGapDetail)
+	}
 	if err := p.repo.UpsertTriggerRegistration(ctx, reg); err != nil {
 		return nil, fmt.Errorf("save cursor for %s: %w", trigger.ID, err)
 	}
