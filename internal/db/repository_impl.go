@@ -3732,6 +3732,71 @@ func (r *Repo) RestoreInboxItems(ctx context.Context, userID string, itemIDs []s
 	return r.inbox.RestoreInboxItems(ctx, userID, itemIDs)
 }
 
+func (r *Repo) CreateRunEvent(ctx context.Context, ev *core.RunEvent) (bool, error) {
+	if ev == nil {
+		return false, fmt.Errorf("run event cannot be nil")
+	}
+	if ev.DedupeKey == "" {
+		// An empty key would collide every transition with every other one,
+		// and the second real event would silently read as a retry.
+		return false, fmt.Errorf("run event dedupe key cannot be empty")
+	}
+	return r.runEvents.CreateRunEvent(ctx, ev)
+}
+
+func (r *Repo) GetRunEvent(ctx context.Context, id string) (*core.RunEvent, error) {
+	if id == "" {
+		return nil, fmt.Errorf("run event ID cannot be empty")
+	}
+	return r.runEvents.GetRunEvent(ctx, id)
+}
+
+func (r *Repo) GetRunEventByDedupe(ctx context.Context, dedupeKey string) (*core.RunEvent, error) {
+	if dedupeKey == "" {
+		return nil, fmt.Errorf("run event dedupe key cannot be empty")
+	}
+	return r.runEvents.GetRunEventByDedupe(ctx, dedupeKey)
+}
+
+func (r *Repo) HasEnabledTriggerOfKind(ctx context.Context, userID string, kind core.TriggerKind) (bool, error) {
+	if userID == "" {
+		return false, fmt.Errorf("user ID cannot be empty")
+	}
+	return r.runEvents.HasEnabledTriggerOfKind(ctx, userID, kind)
+}
+
+func (r *Repo) LockChatForRunEvent(ctx context.Context, chatID string) error {
+	if chatID == "" {
+		return fmt.Errorf("chat ID cannot be empty")
+	}
+	return r.runEvents.LockChatForRunEvent(ctx, chatID)
+}
+
+func (r *Repo) CountOtherPendingBlockers(ctx context.Context, chatID, excludeID string) (int, error) {
+	if chatID == "" {
+		return 0, fmt.Errorf("chat ID cannot be empty")
+	}
+	return r.runEvents.CountOtherPendingBlockers(ctx, chatID, excludeID)
+}
+
+func (r *Repo) ClaimRunEvents(ctx context.Context, now, leaseUntil time.Time, max int) ([]*core.RunEvent, error) {
+	if max <= 0 {
+		return nil, nil
+	}
+	return r.runEvents.ClaimRunEvents(ctx, now, leaseUntil, max)
+}
+
+func (r *Repo) MarkRunEventDispatched(ctx context.Context, id string, at time.Time) error {
+	if id == "" {
+		return fmt.Errorf("run event ID cannot be empty")
+	}
+	return r.runEvents.MarkRunEventDispatched(ctx, id, at)
+}
+
+func (r *Repo) DeleteDispatchedRunEventsBefore(ctx context.Context, cutoff time.Time) (int64, error) {
+	return r.runEvents.DeleteDispatchedRunEventsBefore(ctx, cutoff)
+}
+
 func (r *Repo) RecentTriggerFirings(ctx context.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error) {
 	if userID == "" {
 		return nil, fmt.Errorf("user ID cannot be empty")

@@ -709,6 +709,9 @@ type Repository interface {
 	ListDismissedInboxItemIDs(ctx context.Context, userID string, itemIDs []string) (map[string]bool, error)
 	DismissInboxItems(ctx context.Context, userID string, itemIDs []string, at time.Time) error
 	RestoreInboxItems(ctx context.Context, userID string, itemIDs []string) error
+	// The run-event outbox workflow-event triggers fire from. Writes join the
+	// ambient transaction, so an event commits with the transition it reports.
+	core.RunEventStore
 	// RecentTriggerFirings returns each trigger's newest perTrigger firings in
 	// one query. Used to compute health and last_event for a list of triggers.
 	RecentTriggerFirings(ctx context.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error)

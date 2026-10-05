@@ -566,6 +566,20 @@ type Repo struct {
 	UpdatedAt    time.Time      `json:"updated_at"`
 }
 
+type RunEvent struct {
+	ID           string          `json:"id"`
+	UserID       string          `json:"user_id"`
+	ChatID       string          `json:"chat_id"`
+	WorkflowName string          `json:"workflow_name"`
+	Outcome      string          `json:"outcome"`
+	DedupeKey    string          `json:"dedupe_key"`
+	Payload      json.RawMessage `json:"payload"`
+	OccurredAt   time.Time       `json:"occurred_at"`
+	ClaimedUntil sql.NullTime    `json:"claimed_until"`
+	DispatchedAt sql.NullTime    `json:"dispatched_at"`
+	CreatedAt    time.Time       `json:"created_at"`
+}
+
 type Setting struct {
 	ID        string         `json:"id"`
 	UserID    string         `json:"user_id"`
