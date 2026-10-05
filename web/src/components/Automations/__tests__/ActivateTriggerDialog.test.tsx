@@ -140,12 +140,26 @@ describe("ActivateTriggerDialog", () => {
     expect(createTrigger).not.toHaveBeenCalled();
   });
 
-  it("offers No machine only once the server supports it", async () => {
+  it("activates with No machine: sends no_machine and no daemon", async () => {
+    const user = userEvent.setup();
+    createTrigger.mockResolvedValue(create(CreateTriggerResponseSchema, { trigger: create(TriggerSchema, { id: "t-2", name: "Triage · nightly", workflowTrigger: "nightly" }) }));
     render(scheduleDeclared);
+
     const option = await screen.findByRole("option", { name: /No machine/ });
-    // This build's TriggerDefinition has no `no_machine` field yet (stream H).
-    expect(option).toBeDisabled();
-    expect(option).toHaveTextContent("not available yet");
+    // The server's no-machine check (it refuses a workflow that needs a
+    // machine) is the gate; the option itself is always offered.
+    expect(option).toBeEnabled();
+    expect(option).toHaveTextContent("No machine (server tools only)");
+
+    await waitFor(() => expect(screen.getByLabelText("Runs on")).toHaveValue("daemon-1"));
+    fireEvent.change(screen.getByLabelText("Runs on"), { target: { value: (option as HTMLOptionElement).value } });
+    fireEvent.change(screen.getByLabelText("Prompt"), { target: { value: "Summarize" } });
+    await user.click(screen.getByRole("button", { name: "Activate" }));
+
+    await waitFor(() => expect(createTrigger).toHaveBeenCalledTimes(1));
+    const definition = (createTrigger.mock.calls[0]![0] as CreateTriggerRequest).trigger!;
+    expect(definition.noMachine).toBe(true);
+    expect(definition.daemonId).toBe("");
   });
 
   it("shows a webhook activation's URL and one-time token, resolving a bare path against the API origin, and rotates it", async () => {
